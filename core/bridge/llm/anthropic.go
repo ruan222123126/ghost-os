@@ -1,7 +1,6 @@
 package llm
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -50,10 +49,10 @@ type anthropicUsage struct {
 	OutputTokens int `json:"output_tokens"`
 }
 
-func (c *Client) completeAnthropic(ctx context.Context, messages []ChatMessage, tools []ToolDef) (*ChatResponse, error) {
-	request, err := buildAnthropicRequest(c.opts.Model, c.opts.AnthropicMaxTokens, messages, tools)
+func (c *Client) buildAnthropicProviderRequest(request CompletionRequest) (providerRequest, error) {
+	body, err := toAnthropicRequest(c.opts.Model, c.opts.AnthropicMaxTokens, request)
 	if err != nil {
-		return nil, err
+		return providerRequest{}, err
 	}
 
 	headers := make(map[string]string, len(c.opts.Headers)+2)
@@ -63,89 +62,91 @@ func (c *Client) completeAnthropic(ctx context.Context, messages []ChatMessage, 
 	headers["anthropic-version"] = c.opts.AnthropicVersion
 	mergeStringHeaders(headers, c.opts.Headers)
 
-	raw, statusCode, err := c.postJSON(ctx, c.opts.ChatPath, request, headers)
-	if err != nil {
-		return nil, err
-	}
-	if err := ensureSuccessStatus(statusCode, raw); err != nil {
-		return nil, err
-	}
+	return providerRequest{
+		path:    c.opts.ChatPath,
+		body:    body,
+		headers: headers,
+	}, nil
+}
 
+func (c *Client) parseAnthropicProviderResponse(raw []byte) (*CompletionResponse, error) {
 	var response anthropicResponse
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return nil, fmt.Errorf("decode anthropic response: %w", err)
 	}
-
-	return anthropicToChatResponse(response)
+	return anthropicToCompletionResponse(response)
 }
 
-func buildAnthropicRequest(model string, maxTokens int, messages []ChatMessage, tools []ToolDef) (anthropicRequest, error) {
-	convertedMessages := make([]anthropicMessage, 0, len(messages))
+// toAnthropicRequest 把统一请求转换为 Anthropic messages/tool_use 协议。
+func toAnthropicRequest(model string, maxTokens int, request CompletionRequest) (anthropicRequest, error) {
+	convertedMessages := make([]anthropicMessage, 0, len(request.Messages))
 	systemParts := make([]string, 0, 2)
 
-	for _, msg := range messages {
+	for _, msg := range request.Messages {
 		switch msg.Role {
-		case "system":
-			system := strings.TrimSpace(ContentText(msg.Content))
+		case RoleSystem:
+			system := strings.TrimSpace(msg.Text)
 			if system != "" {
 				systemParts = append(systemParts, system)
 			}
-		case "user":
+		case RoleUser:
 			convertedMessages = append(convertedMessages, anthropicMessage{
 				Role:    "user",
-				Content: ContentText(msg.Content),
+				Content: msg.Text,
 			})
-		case "assistant":
+		case RoleAssistant:
 			assistantMessage, err := toAnthropicAssistantMessage(msg)
 			if err != nil {
 				return anthropicRequest{}, err
 			}
 			convertedMessages = append(convertedMessages, assistantMessage)
-		case "tool":
+		case RoleTool:
 			convertedMessages = append(convertedMessages, anthropicMessage{
 				Role: "user",
 				Content: []anthropicContentBlock{
 					{
 						Type:      "tool_result",
 						ToolUseID: msg.ToolCallID,
-						Content:   ContentText(msg.Content),
+						Content:   msg.Text,
 					},
 				},
 			})
 		default:
-			return anthropicRequest{}, fmt.Errorf("unsupported chat role for anthropic: %q", msg.Role)
+			return anthropicRequest{}, fmt.Errorf("unsupported message role for anthropic: %q", msg.Role)
 		}
 	}
 
-	convertedTools := make([]anthropicTool, 0, len(tools))
-	for _, tool := range tools {
-		if tool.Type != "function" {
-			continue
+	convertedTools := make([]anthropicTool, 0, len(request.Tools))
+	for _, tool := range request.Tools {
+		schema, err := decodeJSONObject(tool.Parameters)
+		if err != nil {
+			return anthropicRequest{}, fmt.Errorf("decode schema for tool %q: %w", tool.Name, err)
 		}
 		convertedTools = append(convertedTools, anthropicTool{
-			Name:        tool.Function.Name,
-			Description: tool.Function.Description,
-			InputSchema: tool.Function.Parameters,
+			Name:        tool.Name,
+			Description: tool.Description,
+			InputSchema: schema,
 		})
 	}
 
-	request := anthropicRequest{
+	out := anthropicRequest{
 		Model:     model,
 		MaxTokens: maxTokens,
 		Messages:  convertedMessages,
 		Tools:     convertedTools,
 	}
 	if len(systemParts) > 0 {
-		request.System = strings.Join(systemParts, "\n\n")
+		out.System = strings.Join(systemParts, "\n\n")
 	}
 
-	return request, nil
+	return out, nil
 }
 
-func toAnthropicAssistantMessage(msg ChatMessage) (anthropicMessage, error) {
+// toAnthropicAssistantMessage 将 assistant 文本与 tool calls 编码为 content blocks。
+func toAnthropicAssistantMessage(msg Message) (anthropicMessage, error) {
 	blocks := make([]anthropicContentBlock, 0, len(msg.ToolCalls)+1)
 
-	text := strings.TrimSpace(ContentText(msg.Content))
+	text := strings.TrimSpace(msg.Text)
 	if text != "" {
 		blocks = append(blocks, anthropicContentBlock{
 			Type: "text",
@@ -154,15 +155,14 @@ func toAnthropicAssistantMessage(msg ChatMessage) (anthropicMessage, error) {
 	}
 
 	for _, call := range msg.ToolCalls {
-		input, err := parseToolArguments(call.Function.Arguments)
+		input, err := decodeJSONObject(call.Arguments)
 		if err != nil {
-			return anthropicMessage{}, fmt.Errorf("parse tool arguments for %q: %w", call.Function.Name, err)
+			return anthropicMessage{}, fmt.Errorf("decode arguments for tool %q: %w", call.Name, err)
 		}
-
 		blocks = append(blocks, anthropicContentBlock{
 			Type:  "tool_use",
 			ID:    call.ID,
-			Name:  call.Function.Name,
+			Name:  call.Name,
 			Input: input,
 		})
 	}
@@ -187,22 +187,10 @@ func toAnthropicAssistantMessage(msg ChatMessage) (anthropicMessage, error) {
 	}, nil
 }
 
-func parseToolArguments(arguments string) (map[string]any, error) {
-	raw := strings.TrimSpace(arguments)
-	if raw == "" {
-		return map[string]any{}, nil
-	}
-
-	var parsed map[string]any
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, err
-	}
-	return parsed, nil
-}
-
-func anthropicToChatResponse(response anthropicResponse) (*ChatResponse, error) {
-	message := ChatMessage{
-		Role: "assistant",
+// anthropicToCompletionResponse 把 Anthropic content blocks 还原为统一消息结构。
+func anthropicToCompletionResponse(response anthropicResponse) (*CompletionResponse, error) {
+	message := Message{
+		Role: RoleAssistant,
 	}
 
 	textParts := make([]string, 0, 1)
@@ -214,41 +202,37 @@ func anthropicToChatResponse(response anthropicResponse) (*ChatResponse, error) 
 				textParts = append(textParts, block.Text)
 			}
 		case "tool_use":
-			argumentsJSON := []byte("{}")
+			args := json.RawMessage(`{}`)
 			if block.Input != nil {
 				encoded, err := json.Marshal(block.Input)
 				if err != nil {
 					return nil, fmt.Errorf("encode anthropic tool input for %q: %w", block.Name, err)
 				}
-				argumentsJSON = encoded
+				args = encoded
 			}
+
 			toolCalls = append(toolCalls, ToolCall{
-				ID:   block.ID,
-				Type: "function",
-				Function: FunctionCall{
-					Name:      block.Name,
-					Arguments: string(argumentsJSON),
-				},
+				ID:        block.ID,
+				Name:      block.Name,
+				Arguments: normalizeJSONObject(args),
 			})
 		}
 	}
 
 	if len(textParts) > 0 {
-		message.Content = strings.Join(textParts, "\n")
+		message.Text = strings.Join(textParts, "\n")
 	}
 	if len(toolCalls) > 0 {
 		message.ToolCalls = toolCalls
 	}
+	finishReason, err := anthropicFinishReason(response.StopReason)
+	if err != nil {
+		return nil, err
+	}
 
-	return &ChatResponse{
-		ID: response.ID,
-		Choices: []Choice{
-			{
-				Index:        0,
-				Message:      message,
-				FinishReason: anthropicStopReasonToFinishReason(response.StopReason),
-			},
-		},
+	return &CompletionResponse{
+		Message:      message,
+		FinishReason: finishReason,
 		Usage: Usage{
 			PromptTokens:     response.Usage.InputTokens,
 			CompletionTokens: response.Usage.OutputTokens,
@@ -257,15 +241,26 @@ func anthropicToChatResponse(response anthropicResponse) (*ChatResponse, error) 
 	}, nil
 }
 
-func anthropicStopReasonToFinishReason(reason string) string {
+// anthropicFinishReason 使用严格映射，未知 stop_reason 直接报错。
+func anthropicFinishReason(reason string) (FinishReason, error) {
 	switch strings.TrimSpace(reason) {
-	case "tool_use":
-		return "tool_calls"
 	case "end_turn", "stop_sequence":
-		return "stop"
+		return FinishStop, nil
+	case "tool_use":
+		return FinishToolCalls, nil
 	case "max_tokens":
-		return "length"
+		return FinishLength, nil
 	default:
-		return "stop"
+		return "", fmt.Errorf("unsupported anthropic stop_reason %q", reason)
 	}
+}
+
+// decodeJSONObject 确保 schema/arguments 统一按 JSON object 解码。
+func decodeJSONObject(raw json.RawMessage) (map[string]any, error) {
+	normalized := normalizeJSONObject(raw)
+	out := make(map[string]any)
+	if err := json.Unmarshal(normalized, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }

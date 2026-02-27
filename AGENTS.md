@@ -50,3 +50,9 @@ Always choose implementation path in this order:
 2. Explicit over implicit; avoid over-abstraction.
 3. Keep a minimal, functional style.
 4. Default dark mode for Web/terminal output.
+
+## Commenting Guidelines
+
+1. Add concise comments at key logic boundaries, non-obvious decisions, and cross-module contracts.
+2. Do not write line-by-line comments for obvious code.
+3. Keep comments short and readable so they improve clarity without adding noise.

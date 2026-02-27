@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -10,18 +10,20 @@ import (
 	"ghost-os/bridge/llm"
 )
 
+// Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider            llm.Provider
-	APIKey              string
-	BaseURL             string
-	Model               string
-	ChatPath            string
-	ProviderHeaders     map[string]string
-	AnthropicVersion    string
-	AnthropicMaxTokens  int
-	MaxTurns            int
+	Provider           llm.Provider
+	APIKey             string
+	BaseURL            string
+	Model              string
+	ChatPath           string
+	ProviderHeaders    map[string]string
+	AnthropicVersion   string
+	AnthropicMaxTokens int
+	MaxTurns           int
 }
 
+// LoadConfig 从环境变量加载配置并做基础校验与归一化。
 func LoadConfig() (Config, error) {
 	provider := llm.Provider(strings.ToLower(getenvDefault("GHOST_PROVIDER", "openai")))
 	if !provider.Valid() {
@@ -34,6 +36,7 @@ func LoadConfig() (Config, error) {
 	}
 
 	cfg := Config{
+		// 默认保持 OpenAI 兼容路径，避免本地最小链路启动失败。
 		Provider:           provider,
 		APIKey:             strings.TrimSpace(os.Getenv("GHOST_API_KEY")),
 		BaseURL:            getenvDefault("GHOST_BASE_URL", "https://api.openai.com/v1"),
@@ -47,11 +50,12 @@ func LoadConfig() (Config, error) {
 
 	switch cfg.Provider {
 	case llm.ProviderOpenAI, llm.ProviderAnthropic:
+		// 官方 provider 默认要求 API Key。
 		if cfg.APIKey == "" {
 			return Config{}, fmt.Errorf("GHOST_API_KEY is required for provider %q", cfg.Provider)
 		}
 	case llm.ProviderCustom:
-		// API key is optional for custom providers.
+		// custom provider 默认允许不传 API Key。
 	}
 
 	if raw := strings.TrimSpace(os.Getenv("GHOST_MAX_TURNS")); raw != "" {
@@ -73,6 +77,7 @@ func LoadConfig() (Config, error) {
 	return cfg, nil
 }
 
+// getenvDefault 在环境变量为空时回落默认值。
 func getenvDefault(name, fallback string) string {
 	v := strings.TrimSpace(os.Getenv(name))
 	if v == "" {
@@ -81,6 +86,7 @@ func getenvDefault(name, fallback string) string {
 	return v
 }
 
+// parseProviderHeaders 解析自定义 Header JSON，并做 key 空值防护。
 func parseProviderHeaders(raw string) (map[string]string, error) {
 	text := strings.TrimSpace(raw)
 	if text == "" {
@@ -100,5 +106,6 @@ func parseProviderHeaders(raw string) (map[string]string, error) {
 		}
 		out[k] = strings.TrimSpace(value)
 	}
+
 	return out, nil
 }

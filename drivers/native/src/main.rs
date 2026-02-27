@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 
+// Request 对齐 core/shared/schema.json 的请求结构。
 #[derive(Deserialize)]
 struct Request {
     action: String,
@@ -11,6 +12,7 @@ struct Request {
     trace_id: String,
 }
 
+// Response 是 native 层统一返回格式。
 #[derive(Serialize)]
 struct Response {
     status: String,
@@ -19,6 +21,7 @@ struct Response {
 }
 
 impl Response {
+    // success 构造成功响应。
     fn success(payload: Value) -> Self {
         Self {
             status: "success".to_string(),
@@ -27,6 +30,7 @@ impl Response {
         }
     }
 
+    // error 构造失败响应。
     fn error(message: String) -> Self {
         Self {
             status: "error".to_string(),
@@ -37,6 +41,7 @@ impl Response {
 }
 
 fn main() {
+    // 读取整段 stdin，保持最小协议处理路径。
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {
         emit(Response::error("failed to read stdin".to_string()));
@@ -57,6 +62,7 @@ fn main() {
         }
     };
 
+    // 当前最小能力只支持 PING，用于桥接连通性验证。
     if request.action == "PING" {
         emit(Response::success(json!({
             "message": "PONG",
@@ -71,6 +77,7 @@ fn main() {
     )));
 }
 
+// emit 负责写出单行 JSON 响应，失败时静默返回。
 fn emit(response: Response) {
     let mut stdout = io::stdout();
     if let Ok(mut bytes) = serde_json::to_vec(&response) {

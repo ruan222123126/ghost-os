@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// BashExecTool 提供最小 shell 执行能力（当前为 stub）。
 type BashExecTool struct{}
 
 type bashExecArgs struct {
@@ -25,23 +26,24 @@ func (BashExecTool) Description() string {
 	return "Execute a shell command on the host machine."
 }
 
-func (BashExecTool) Parameters() map[string]any {
-	return map[string]any{
+func (BashExecTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{
 		"type": "object",
-		"properties": map[string]any{
-			"command": map[string]any{
-				"type":        "string",
-				"description": "Shell command to run.",
-			},
+		"properties": {
+			"command": {
+				"type": "string",
+				"description": "Shell command to run."
+			}
 		},
-		"required":             []string{"command"},
-		"additionalProperties": false,
-	}
+		"required": ["command"],
+		"additionalProperties": false
+	}`)
 }
 
-func (BashExecTool) Execute(_ context.Context, argsJSON string) (string, error) {
+// Execute 解析参数并返回 stub 结果，保留未来真实执行扩展点。
+func (BashExecTool) Execute(_ context.Context, argsJSON json.RawMessage) (string, error) {
 	var args bashExecArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+	if err := json.Unmarshal(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("decode args: %w", err)
 	}
 

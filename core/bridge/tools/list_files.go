@@ -8,6 +8,7 @@ import (
 	"strings"
 )
 
+// ListFilesTool 用于列出目录项，作为最小文件系统感知能力。
 type ListFilesTool struct{}
 
 type listFilesArgs struct {
@@ -26,23 +27,24 @@ func (ListFilesTool) Description() string {
 	return "List files and directories for a given path."
 }
 
-func (ListFilesTool) Parameters() map[string]any {
-	return map[string]any{
+func (ListFilesTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{
 		"type": "object",
-		"properties": map[string]any{
-			"path": map[string]any{
-				"type":        "string",
+		"properties": {
+			"path": {
+				"type": "string",
 				"description": "Directory path to list. Defaults to current directory.",
-				"default":     ".",
-			},
+				"default": "."
+			}
 		},
-		"additionalProperties": false,
-	}
+		"additionalProperties": false
+	}`)
 }
 
-func (ListFilesTool) Execute(_ context.Context, argsJSON string) (string, error) {
+// Execute 读取目录并返回换行分隔列表，目录项以 "/" 标识。
+func (ListFilesTool) Execute(_ context.Context, argsJSON json.RawMessage) (string, error) {
 	var args listFilesArgs
-	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+	if err := json.Unmarshal(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("decode args: %w", err)
 	}
 

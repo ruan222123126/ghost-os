@@ -7,6 +7,7 @@ import (
 	"ghost-os/bridge/llm"
 )
 
+// Registry 按名称管理工具，并提供给 LLM 的工具定义列表。
 type Registry struct {
 	tools map[string]Tool
 }
@@ -17,6 +18,7 @@ func NewRegistry() *Registry {
 	}
 }
 
+// Register 只允许非空且不重复的工具名，启动期尽早失败。
 func (r *Registry) Register(t Tool) {
 	if t == nil {
 		panic("tool is nil")
@@ -32,10 +34,12 @@ func (r *Registry) Register(t Tool) {
 	r.tools[name] = t
 }
 
+// Get 按名称查找工具；不存在返回 nil。
 func (r *Registry) Get(name string) Tool {
 	return r.tools[name]
 }
 
+// ToolDefs 返回稳定排序后的工具定义，减少模型上下文抖动。
 func (r *Registry) ToolDefs() []llm.ToolDef {
 	names := make([]string, 0, len(r.tools))
 	for name := range r.tools {
@@ -47,12 +51,9 @@ func (r *Registry) ToolDefs() []llm.ToolDef {
 	for _, name := range names {
 		t := r.tools[name]
 		defs = append(defs, llm.ToolDef{
-			Type: "function",
-			Function: llm.FunctionSpec{
-				Name:        t.Name(),
-				Description: t.Description(),
-				Parameters:  t.Parameters(),
-			},
+			Name:        t.Name(),
+			Description: t.Description(),
+			Parameters:  t.Parameters(),
 		})
 	}
 	return defs
