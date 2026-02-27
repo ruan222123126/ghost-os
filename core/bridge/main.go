@@ -22,13 +22,12 @@ type Response struct {
 }
 
 func main() {
-	nativeDir, err := locateNativeDir()
+	nativeBin, err := locateNativeBinary()
 	if err != nil {
 		fatal(err)
 	}
 
-	cmd := exec.Command("cargo", "run", "--quiet")
-	cmd.Dir = nativeDir
+	cmd := exec.Command(nativeBin)
 	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
@@ -77,16 +76,23 @@ func main() {
 	fmt.Println(response.Payload["message"])
 }
 
-func locateNativeDir() (string, error) {
-	candidates := []string{"../../drivers/native", "drivers/native"}
+func locateNativeBinary() (string, error) {
+	candidates := []string{
+		"../../drivers/native/target/debug/native",
+		"drivers/native/target/debug/native",
+		"../../drivers/native/target/debug/native.exe",
+		"drivers/native/target/debug/native.exe",
+	}
+
 	for _, candidate := range candidates {
 		path := filepath.Clean(candidate)
 		info, err := os.Stat(path)
-		if err == nil && info.IsDir() {
+		if err == nil && !info.IsDir() {
 			return path, nil
 		}
 	}
-	return "", errors.New("drivers/native not found")
+
+	return "", errors.New("native binary not found, run `cargo build` in drivers/native first")
 }
 
 func fatal(err error) {
