@@ -1,66 +1,68 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository.
 
-## Project Overview
+## Mission
 
-Ghost-OS is an AI-driven "digital twin execution layer" — not a remote desktop tool. Users command AI to complete tasks on remote machines via Web/CLI. The project follows a strict three-tier architecture with clear separation of concerns.
+Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital twin execution layer. Users should be able to command AI via Web/CLI as if operating their own hands on a remote machine.
 
-## Build Commands
+## Core Philosophy
+
+1. **Minimalist**: prefer native, lightweight, high-performance Rust/Go implementations.
+2. **Bash-First**: default to scriptable operations (Bash/PowerShell/Python); use visual fallback only when GUI cannot be scripted.
+3. **Seamless Ecosystem**: browser, CLI, and backend are one coordinated system.
+4. **Clean & Aesthetic**: code stays concise and explicit; UX defaults to high-contrast dark style.
+
+## The Trinity (Strict Boundaries)
+
+1. **Execution Layer** (`drivers/native`, Rust)
+   - Stateless and atomic.
+   - Handles screenshot, input simulation, window tree/query.
+   - Must not contain business decisions.
+
+2. **Central Layer** (`core/bridge`, Go)
+   - Manages state, protocol routing, AI orchestration, safety checks.
+   - Must not implement concrete OS system calls.
+
+3. **Perception Layer** (`apps/web`, `apps/cli`)
+   - Interaction and feedback.
+   - Web rendering, browser structure access, immersive CLI control.
+
+## Decision Priority
+
+Always choose implementation path in this order:
+1. **Level 1 (Scripting)**: solve with local scripts first.
+2. **Level 2 (API/Native)**: use native system/browser APIs.
+3. **Level 3 (Vision)**: screenshot-recognize-click as last resort only.
+
+## Communication and Contract Rules
+
+1. Components communicate through a standardized message bus.
+2. No cross-layer direct coupling.
+3. Every operation must be traceable (trace log with `trace_id`).
+4. Cross-process payloads must strictly follow [`core/shared/schema.json`](core/shared/schema.json):
+   - Request: `{ "action": "string", "params": "object", "trace_id": "string" }`
+   - Response: `{ "status": "success|error", "payload": "object", "error": "string" }`
+
+## Build and Dev Commands
 
 ```bash
-python task.py build      # Compile Rust drivers + Go bridge
-python task.py init-web   # Initialize Next.js web console (first-time setup)
+python3 task.py build
+python3 task.py ping
+python3 task.py init-web
 ```
 
-Individual builds:
+Direct commands:
+
 ```bash
-cd drivers/native && cargo build --release   # Rust execution layer
-cd core/bridge && go build -o ../../bin/ghost-bridge  # Go bridge
+cd drivers/native && cargo build --release
+cd drivers/native && cargo build
+cd core/bridge && go run .
 ```
 
-## Architecture: The Trinity
+## Engineering Aesthetics
 
-Three layers with strict boundaries — never cross-reference between them:
-
-1. **Execution Layer** (`drivers/native/`, Rust) — Stateless atomic operations: screenshots (`xcap`), input simulation (`enigo`), window queries. No business logic allowed here.
-
-2. **Central Bridge** (`core/bridge/`, Go) — State management, LLM orchestration, protocol dispatch, security review. Never makes direct system calls.
-
-3. **Perception Layer** (`apps/web/` Next.js, `apps/cli/`) — Web UI (dark mode), browser integration, CLI control. Interaction and feedback only.
-
-## IPC Contract
-
-All cross-process communication must follow `core/shared/schema.json`:
-- Request: `{ action, params, trace_id }`
-- Response: `{ status, payload, error }`
-- Supported actions: `BASH_EXEC`, `SCREEN_SHOT`, `MOUSE_CLICK`, `BROWSER_QUERY`
-
-## Agent Constitution (from AGENTS.md)
-
-1. Rust layer must NOT contain business logic — only atomic interfaces
-2. Go layer must NOT handle system calls — only forwarding and orchestration
-3. All IPC must strictly follow `core/shared/schema.json`
-4. Code must stay minimal and functional in style
-
-## AI Decision Priority
-
-When implementing a feature, follow this order:
-1. **Scripting first** — write a local script (Bash/Python) to solve it
-2. **API/Native** — use system or browser native interfaces
-3. **Vision last resort** — screenshot + OCR + simulated clicks only when nothing else works
-
-## Code Style
-
-- Write only necessary code. If 10 lines solve it, don't write 11.
-- Explicit over implicit — no over-abstraction.
-- All operations must be traceable (logged with trace IDs).
-- Dark mode default for all UI and terminal output.
-
-## Tech Stack
-
-| Layer | Language | Key Deps |
-|-------|----------|----------|
-| Execution | Rust 2024 edition | `xcap`, `enigo`, `tokio`, `serde` |
-| Bridge | Go 1.25 | — |
-| Web | Next.js + TypeScript + Tailwind | — |
+1. Write only necessary code.
+2. Explicit over implicit; avoid over-abstraction.
+3. Keep a minimal, functional style.
+4. Default dark mode for Web/terminal output.
