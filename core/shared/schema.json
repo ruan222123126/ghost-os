@@ -1,0 +1,9 @@
+{
+  "version": "1.0",
+  "project": "Ghost-OS",
+  "contract": {
+    "request": { "action": "string", "params": "object", "trace_id": "string" },
+    "response": { "status": "success|error", "payload": "object", "error": "string" }
+  },
+  "supported_actions": ["BASH_EXEC", "SCREEN_SHOT", "MOUSE_CLICK", "BROWSER_QUERY"]
+}
