@@ -1,12 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	"ghost-os/bridge/agent"
+	"ghost-os/bridge/llm"
+	"ghost-os/bridge/tools"
 )
 
 type Request struct {
@@ -22,9 +28,71 @@ type Response struct {
 }
 
 func main() {
+	args := os.Args[1:]
+	if len(args) == 0 {
+		if err := runAgent(context.Background(), "Hello, what can you do?"); err != nil {
+			fatal(err)
+		}
+		return
+	}
+
+	switch args[0] {
+	case "ping":
+		if err := runPing(); err != nil {
+			fatal(err)
+		}
+	case "agent":
+		message := "Hello, what can you do?"
+		if len(args) > 1 {
+			message = strings.Join(args[1:], " ")
+		}
+		if err := runAgent(context.Background(), message); err != nil {
+			fatal(err)
+		}
+	default:
+		// If command is unknown, treat all args as the user prompt and run agent mode.
+		if err := runAgent(context.Background(), strings.Join(args, " ")); err != nil {
+			fatal(err)
+		}
+	}
+}
+
+func runAgent(ctx context.Context, userMessage string) error {
+	cfg, err := LoadConfig()
+	if err != nil {
+		return err
+	}
+
+	client := llm.NewClientWithOptions(llm.ClientOptions{
+		Provider:           cfg.Provider,
+		BaseURL:            cfg.BaseURL,
+		APIKey:             cfg.APIKey,
+		Model:              cfg.Model,
+		ChatPath:           cfg.ChatPath,
+		Headers:            cfg.ProviderHeaders,
+		AnthropicVersion:   cfg.AnthropicVersion,
+		AnthropicMaxTokens: cfg.AnthropicMaxTokens,
+	})
+	registry := tools.NewRegistry()
+	registry.Register(tools.NewBashExecTool())
+	registry.Register(tools.NewListFilesTool())
+
+	systemPrompt := "You are Ghost-OS bridge agent. Use tools when needed and keep answers concise."
+	a := agent.NewAgent(client, registry, systemPrompt, cfg.MaxTurns)
+
+	reply, err := a.Run(ctx, userMessage)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(reply)
+	return nil
+}
+
+func runPing() error {
 	nativeBin, err := locateNativeBinary()
 	if err != nil {
-		fatal(err)
+		return err
 	}
 
 	cmd := exec.Command(nativeBin)
@@ -32,16 +100,16 @@ func main() {
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		fatal(err)
+		return err
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		fatal(err)
+		return err
 	}
 
 	if err := cmd.Start(); err != nil {
-		fatal(err)
+		return err
 	}
 
 	request := Request{
@@ -52,28 +120,29 @@ func main() {
 
 	if err := json.NewEncoder(stdin).Encode(request); err != nil {
 		_ = cmd.Wait()
-		fatal(err)
+		return err
 	}
 	if err := stdin.Close(); err != nil {
 		_ = cmd.Wait()
-		fatal(err)
+		return err
 	}
 
 	var response Response
 	if err := json.NewDecoder(stdout).Decode(&response); err != nil {
 		_ = cmd.Wait()
-		fatal(err)
+		return err
 	}
 
 	if err := cmd.Wait(); err != nil {
-		fatal(err)
+		return err
 	}
 
 	if response.Status != "success" {
-		fatal(fmt.Errorf("native error: %s", response.Error))
+		return fmt.Errorf("native error: %s", response.Error)
 	}
 
 	fmt.Println(response.Payload["message"])
+	return nil
 }
 
 func locateNativeBinary() (string, error) {

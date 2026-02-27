@@ -1,0 +1,104 @@
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
+	"ghost-os/bridge/llm"
+)
+
+type Config struct {
+	Provider            llm.Provider
+	APIKey              string
+	BaseURL             string
+	Model               string
+	ChatPath            string
+	ProviderHeaders     map[string]string
+	AnthropicVersion    string
+	AnthropicMaxTokens  int
+	MaxTurns            int
+}
+
+func LoadConfig() (Config, error) {
+	provider := llm.Provider(strings.ToLower(getenvDefault("GHOST_PROVIDER", "openai")))
+	if !provider.Valid() {
+		return Config{}, fmt.Errorf("invalid GHOST_PROVIDER=%q, expected one of: openai|anthropic|custom", provider)
+	}
+
+	headers, err := parseProviderHeaders(os.Getenv("GHOST_PROVIDER_HEADERS"))
+	if err != nil {
+		return Config{}, err
+	}
+
+	cfg := Config{
+		Provider:           provider,
+		APIKey:             strings.TrimSpace(os.Getenv("GHOST_API_KEY")),
+		BaseURL:            getenvDefault("GHOST_BASE_URL", "https://api.openai.com/v1"),
+		Model:              getenvDefault("GHOST_MODEL", "gpt-4o"),
+		ChatPath:           strings.TrimSpace(os.Getenv("GHOST_CHAT_PATH")),
+		ProviderHeaders:    headers,
+		AnthropicVersion:   getenvDefault("GHOST_ANTHROPIC_VERSION", "2023-06-01"),
+		AnthropicMaxTokens: 1024,
+		MaxTurns:           20,
+	}
+
+	switch cfg.Provider {
+	case llm.ProviderOpenAI, llm.ProviderAnthropic:
+		if cfg.APIKey == "" {
+			return Config{}, fmt.Errorf("GHOST_API_KEY is required for provider %q", cfg.Provider)
+		}
+	case llm.ProviderCustom:
+		// API key is optional for custom providers.
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("GHOST_MAX_TURNS")); raw != "" {
+		maxTurns, err := strconv.Atoi(raw)
+		if err != nil || maxTurns <= 0 {
+			return Config{}, fmt.Errorf("invalid GHOST_MAX_TURNS=%q, expected positive integer", raw)
+		}
+		cfg.MaxTurns = maxTurns
+	}
+
+	if raw := strings.TrimSpace(os.Getenv("GHOST_ANTHROPIC_MAX_TOKENS")); raw != "" {
+		maxTokens, err := strconv.Atoi(raw)
+		if err != nil || maxTokens <= 0 {
+			return Config{}, fmt.Errorf("invalid GHOST_ANTHROPIC_MAX_TOKENS=%q, expected positive integer", raw)
+		}
+		cfg.AnthropicMaxTokens = maxTokens
+	}
+
+	return cfg, nil
+}
+
+func getenvDefault(name, fallback string) string {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return fallback
+	}
+	return v
+}
+
+func parseProviderHeaders(raw string) (map[string]string, error) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return nil, nil
+	}
+
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
+		return nil, fmt.Errorf("invalid GHOST_PROVIDER_HEADERS: expected JSON object of string values: %w", err)
+	}
+
+	out := make(map[string]string, len(parsed))
+	for key, value := range parsed {
+		k := strings.TrimSpace(key)
+		if k == "" {
+			return nil, fmt.Errorf("invalid GHOST_PROVIDER_HEADERS: header key cannot be empty")
+		}
+		out[k] = strings.TrimSpace(value)
+	}
+	return out, nil
+}
