@@ -19,12 +19,18 @@ enum ParsedCommand<'a> {
     Exit,
     Clear,
     Config,
+    Session,
+    NewSession,
     Model(&'a str),
     Provider(&'a str),
     LiteralHint,
 }
 
-pub fn handle_command(input: &str, client: &BridgeClient) -> Result<CommandAction> {
+pub fn handle_command(
+    input: &str,
+    client: &BridgeClient,
+    current_session_id: &mut Option<String>,
+) -> Result<CommandAction> {
     match parse_command(input)? {
         ParsedCommand::Help => {
             print_help();
@@ -53,6 +59,23 @@ pub fn handle_command(input: &str, client: &BridgeClient) -> Result<CommandActio
                 } else {
                     "not set".yellow()
                 }
+            );
+            Ok(CommandAction::Continue)
+        }
+        ParsedCommand::Session => {
+            match current_session_id.as_deref() {
+                Some(session_id) if !session_id.trim().is_empty() => {
+                    println!("Current session: {}", session_id.bright_cyan());
+                }
+                _ => println!("{}", "No active session".dimmed()),
+            }
+            Ok(CommandAction::Continue)
+        }
+        ParsedCommand::NewSession => {
+            *current_session_id = None;
+            println!(
+                "{}",
+                "Session cleared. Next message will start a new conversation.".dimmed()
             );
             Ok(CommandAction::Continue)
         }
@@ -96,6 +119,8 @@ fn parse_command(input: &str) -> Result<ParsedCommand<'_>> {
         "/exit" | "/quit" | "/q" => expect_no_args(command, parts).map(|_| ParsedCommand::Exit),
         "/clear" => expect_no_args(command, parts).map(|_| ParsedCommand::Clear),
         "/config" => expect_no_args(command, parts).map(|_| ParsedCommand::Config),
+        "/session" => expect_no_args(command, parts).map(|_| ParsedCommand::Session),
+        "/new-session" => expect_no_args(command, parts).map(|_| ParsedCommand::NewSession),
         "/model" => expect_single_arg(command, parts, "<name>").map(ParsedCommand::Model),
         "/provider" => expect_single_arg(command, parts, "<name>").map(ParsedCommand::Provider),
         "/literal" | "/l" => expect_no_args(command, parts).map(|_| ParsedCommand::LiteralHint),
@@ -187,13 +212,18 @@ fn print_help() {
     println!("{}", "Commands".bright_black());
     println!("/help, /h            Show help");
     println!("/config              Show current bridge configuration");
+    println!("/session             Show current conversation session id");
+    println!("/new-session         Start a fresh conversation session");
     println!("/model <name>        Switch model");
     println!("/provider <name>     Switch provider (openai|anthropic|custom)");
     println!("/clear               Clear terminal");
     println!("/literal, /l         Show slash-literal usage");
     println!("/exit, /quit, /q     Exit CLI");
     println!();
-    println!("{}", "Tip: use //text to send /text as a normal message.".dimmed());
+    println!(
+        "{}",
+        "Tip: use //text to send /text as a normal message.".dimmed()
+    );
 }
 
 #[cfg(test)]
@@ -215,6 +245,14 @@ mod tests {
         assert!(parse_command("/provider openai").is_ok());
         assert!(parse_command("/provider").is_err());
         assert!(parse_command("/provider openai extra").is_err());
+    }
+
+    #[test]
+    fn parse_session_commands_require_no_args() {
+        assert!(parse_command("/session").is_ok());
+        assert!(parse_command("/new-session").is_ok());
+        assert!(parse_command("/session extra").is_err());
+        assert!(parse_command("/new-session extra").is_err());
     }
 
     #[test]

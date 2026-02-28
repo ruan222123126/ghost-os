@@ -3,6 +3,7 @@ import type {
   ApiEnvelope,
   BridgeConfig,
   ConfigUpdate,
+  HumanResponseRequest,
   SessionDetail,
   SessionMetadata,
 } from '@/lib/types';
@@ -40,6 +41,23 @@ export async function sendMessage(message: string, sessionId?: string): Promise<
   return request<AgentSendResponse>('/api/agent', {
     method: 'POST',
     body: JSON.stringify(body),
+  });
+}
+
+export async function sendHumanResponse(sessionId: string, questionId: string, answer: string): Promise<void> {
+  const body: HumanResponseRequest = {
+    session_id: sessionId.trim(),
+    question_id: questionId.trim(),
+    answer: answer.trim(),
+  };
+
+  await request<{ accepted: boolean }>('/api/bus', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'HUMAN_RESPONSE',
+      params: body,
+      trace_id: `web-${Date.now()}`,
+    }),
   });
 }
 

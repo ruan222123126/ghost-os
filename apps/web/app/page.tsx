@@ -25,12 +25,22 @@ const HomePage: FC = () => {
     createNewSession,
     setCurrentSessionId,
   } = useSessions();
-  const { messages, loading, historyLoading, chatError, sendChatMessage, loadSessionHistory, clearMessages } = useBridgeChat({
+  const {
+    messages,
+    loading,
+    historyLoading,
+    chatError,
+    hasPendingQuestion,
+    sendChatMessage,
+    answerQuestion,
+    loadSessionHistory,
+    clearMessages,
+  } = useBridgeChat({
     currentSessionId,
     onSessionResolved: setCurrentSessionId,
   });
   const { config, configLoading, savingConfig, configError, modelValue, saveConfig, selectModel } = useBridgeConfig();
-  const inputDisabled = configLoading || historyLoading || !config;
+  const inputDisabled = configLoading || historyLoading || !config || hasPendingQuestion;
 
   const handleSendChatMessage = useCallback(
     async (message: string) => {
@@ -121,7 +131,7 @@ const HomePage: FC = () => {
           )}
 
           <section className="min-h-[360px]">
-            <MessageList messages={messages} loading={loading} />
+            <MessageList messages={messages} loading={loading} onAnswerQuestion={answerQuestion} />
           </section>
 
           {chatError && (

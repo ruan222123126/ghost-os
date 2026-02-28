@@ -11,9 +11,11 @@ use serde_json::Value;
 use crate::config::Config;
 use crate::types::{
     AgentParams, AgentPayload, ApiRequest, ApiResponse, ConfigResponse, ConfigUpdate, EmptyParams,
+    HumanResponseParams,
 };
 
 const ACTION_AGENT_SEND: &str = "AGENT_SEND";
+const ACTION_HUMAN_RESPONSE: &str = "HUMAN_RESPONSE";
 const ACTION_CONFIG_GET: &str = "CONFIG_GET";
 const ACTION_CONFIG_UPDATE: &str = "CONFIG_UPDATE";
 
@@ -43,16 +45,51 @@ impl BridgeClient {
         self.get_config().map(|_| ())
     }
 
-    pub fn send_message(&self, message: &str) -> Result<String> {
+    pub fn send_message(&self, message: &str, session_id: Option<&str>) -> Result<AgentPayload> {
         let trimmed = message.trim();
-        if trimmed.is_empty() {
+        let session_id = session_id.map(str::trim).filter(|value| !value.is_empty());
+
+        if trimmed.is_empty() && session_id.is_none() {
             bail!("message is required");
         }
 
-        let payload = self.call_bus::<_, AgentPayload>(ACTION_AGENT_SEND, &AgentParams {
-            message: trimmed,
-        })?;
-        Ok(payload.message)
+        self.call_bus::<_, AgentPayload>(
+            ACTION_AGENT_SEND,
+            &AgentParams {
+                message: trimmed,
+                session_id,
+            },
+        )
+    }
+
+    pub fn send_human_response(
+        &self,
+        session_id: &str,
+        question_id: &str,
+        answer: &str,
+    ) -> Result<()> {
+        let session_id = session_id.trim();
+        let question_id = question_id.trim();
+        let answer = answer.trim();
+        if session_id.is_empty() {
+            bail!("session_id is required");
+        }
+        if question_id.is_empty() {
+            bail!("question_id is required");
+        }
+        if answer.is_empty() {
+            bail!("answer is required");
+        }
+
+        self.call_bus::<_, Value>(
+            ACTION_HUMAN_RESPONSE,
+            &HumanResponseParams {
+                session_id,
+                question_id,
+                answer,
+            },
+        )?;
+        Ok(())
     }
 
     pub fn get_config(&self) -> Result<ConfigResponse> {
@@ -196,7 +233,8 @@ mod tests {
 
     #[test]
     fn parse_api_response_invalid_json_on_success_http() {
-        let err = parse_api_response::<MessagePayload>(StatusCode::OK, "{", "/api/bus").unwrap_err();
+        let err =
+            parse_api_response::<MessagePayload>(StatusCode::OK, "{", "/api/bus").unwrap_err();
         assert!(err.to_string().contains("invalid JSON from bridge"));
     }
 }

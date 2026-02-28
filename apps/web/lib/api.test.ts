@@ -1,4 +1,4 @@
-import { deleteSession, getConfig, getSession, listSessions, sendMessage, updateConfig } from './api';
+import { deleteSession, getConfig, getSession, listSessions, sendHumanResponse, sendMessage, updateConfig } from './api';
 import type { BridgeConfig, ConfigUpdate, SessionDetail, SessionMetadata } from './types';
 
 describe('lib/api', () => {
@@ -55,6 +55,39 @@ describe('lib/api', () => {
         body: JSON.stringify({ message: 'hello again', session_id: 'session-abc' }),
       })
     );
+  });
+
+  it('sendHumanResponse posts HUMAN_RESPONSE action to /api/bus', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        status: 'success',
+        payload: { accepted: true },
+        error: '',
+      }),
+    });
+
+    await sendHumanResponse(' session-1 ', ' q-1 ', '  PostgreSQL  ');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/bus',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.any(String),
+      })
+    );
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body).toEqual({
+      action: 'HUMAN_RESPONSE',
+      params: {
+        session_id: 'session-1',
+        question_id: 'q-1',
+        answer: 'PostgreSQL',
+      },
+      trace_id: expect.stringMatching(/^web-\d+$/),
+    });
   });
 
   it('getConfig reads /api/config with GET', async () => {

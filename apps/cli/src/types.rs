@@ -5,11 +5,29 @@ pub use crate::envelope_generated::{ApiRequest, ApiResponse};
 #[derive(Debug, Serialize)]
 pub struct AgentParams<'a> {
     pub message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<&'a str>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct AgentPayload {
+    #[serde(default)]
     pub message: String,
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub question_id: String,
+    #[serde(default)]
+    pub prompt: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HumanResponseParams<'a> {
+    pub session_id: &'a str,
+    pub question_id: &'a str,
+    pub answer: &'a str,
 }
 
 #[derive(Debug, Deserialize, Clone)]

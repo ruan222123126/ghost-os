@@ -2,14 +2,16 @@
 
 import type { FC } from 'react';
 import { useEffect, useRef } from 'react';
+import { QuestionInput } from '@/components/QuestionInput';
 import type { ChatMessage } from '@/lib/types';
 
 interface MessageListProps {
   messages: ChatMessage[];
   loading: boolean;
+  onAnswerQuestion: (questionId: string, answer: string) => Promise<void>;
 }
 
-export const MessageList: FC<MessageListProps> = ({ messages, loading }) => {
+export const MessageList: FC<MessageListProps> = ({ messages, loading, onAnswerQuestion }) => {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,7 +31,8 @@ export const MessageList: FC<MessageListProps> = ({ messages, loading }) => {
       {messages.map((message) => {
         const isUser = message.kind === 'user';
         const isError = message.kind === 'error';
-        const label = isUser ? 'You' : isError ? 'Error' : 'Assistant';
+        const isPendingQuestion = message.kind === 'pending_question';
+        const label = isUser ? 'You' : isError ? 'Error' : isPendingQuestion ? 'Question' : 'Assistant';
 
         return (
           <div key={message.id} className={`flex animate-rise ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -39,11 +42,19 @@ export const MessageList: FC<MessageListProps> = ({ messages, loading }) => {
                   ? 'border border-emerald-300/25 bg-emerald-300/10 text-emerald-100'
                   : isError
                     ? 'border border-rose-300/40 bg-rose-300/10 text-rose-200'
-                  : 'border border-app-border bg-[#10192b] text-app-text'
+                    : isPendingQuestion
+                      ? 'border border-amber-300/45 bg-amber-300/10 text-amber-100'
+                    : 'border border-app-border bg-[#10192b] text-app-text'
               }`}
             >
               <div className="mb-1 text-[11px] uppercase tracking-wide text-app-muted">{label}</div>
               <p className="whitespace-pre-wrap">{message.content}</p>
+              {isPendingQuestion && (
+                <QuestionInput
+                  loading={loading}
+                  onAnswer={(answer) => onAnswerQuestion(message.questionId, answer)}
+                />
+              )}
             </div>
           </div>
         );

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 )
@@ -350,6 +351,42 @@ func TestAgentEndpointPassesSessionIDAndReturnsIt(t *testing.T) {
 	}
 }
 
+func TestAgentEndpointAllowsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
+	const sessionID = "session-continue-1"
+	handler := newTestHandler(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		if message != "" {
+			t.Fatalf("unexpected message: got %q want empty", message)
+		}
+		if requestSessionID != sessionID {
+			t.Fatalf("unexpected session_id: got %q want %q", requestSessionID, sessionID)
+		}
+		return "continued", requestSessionID, nil
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		fmt.Sprintf(`{"message":"","session_id":"%s"}`, sessionID),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["message"] != "continued" {
+		t.Fatalf("unexpected message: got %v want %q", payload["message"], "continued")
+	}
+	if payload["session_id"] != sessionID {
+		t.Fatalf("unexpected session_id: got %v want %q", payload["session_id"], sessionID)
+	}
+}
+
 func TestAgentEndpointReturnsBadRequestOnInvalidSessionID(t *testing.T) {
 	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
 		return "", "", fmt.Errorf("%w: invalid characters", session.ErrInvalidSessionID)
@@ -365,6 +402,74 @@ func TestAgentEndpointReturnsBadRequestOnInvalidSessionID(t *testing.T) {
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusBadRequest)
+	}
+}
+
+func TestAgentEndpointReturnsAcceptedWhenAwaitingHuman(t *testing.T) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		return "", "session-awaiting-1", &agent.ErrAwaitingHuman{
+			QuestionID: "q-awaiting-1",
+			Prompt:     "Which database should we use?",
+		}
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		`{"message":"Choose DB"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusAccepted)
+	}
+
+	body := decodeResponseBody(t, recorder)
+	if body.Status != "success" {
+		t.Fatalf("unexpected status field: got %q want %q", body.Status, "success")
+	}
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["status"] != "awaiting_human" {
+		t.Fatalf("unexpected awaiting status: got %v want %q", payload["status"], "awaiting_human")
+	}
+	if payload["question_id"] != "q-awaiting-1" {
+		t.Fatalf("unexpected question_id: got %v want %q", payload["question_id"], "q-awaiting-1")
+	}
+}
+
+func TestBusHumanResponseStoresAnswer(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+	sess := session.NewSession("system")
+	sess.ID = "session-human-response"
+	sess.AddPendingQuestion("q-1", session.PendingHumanQuestion{
+		Prompt:     "Which database should we use?",
+		ToolCallID: "call-ask-1",
+		TraceID:    "trace-ask",
+	})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"HUMAN_RESPONSE","params":{"session_id":"session-human-response","question_id":"q-1","answer":"PostgreSQL"},"trace_id":"trace-human-response"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	loaded, err := sessionStore.Load(sess.ID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.HumanAnswers["q-1"] != "PostgreSQL" {
+		t.Fatalf("unexpected stored answer: %+v", loaded.HumanAnswers)
 	}
 }
 

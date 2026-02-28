@@ -19,7 +19,15 @@ export interface ErrorChatMessage {
   error: string;
 }
 
-export type ChatMessage = UserChatMessage | AssistantChatMessage | ErrorChatMessage;
+export interface PendingQuestionMessage {
+  id: string;
+  kind: 'pending_question';
+  content: string;
+  questionId: string;
+  sessionId: string;
+}
+
+export type ChatMessage = UserChatMessage | AssistantChatMessage | ErrorChatMessage | PendingQuestionMessage;
 
 export interface SessionMetadata {
   id: string;
@@ -44,9 +52,26 @@ export interface SessionDetail {
   token_count: number;
 }
 
-export interface AgentSendResponse {
+export interface AgentSendSuccessResponse {
   message: string;
   session_id: string;
+  status?: 'success';
+}
+
+export interface AgentSendAwaitingHumanResponse {
+  session_id: string;
+  status: 'awaiting_human';
+  question_id: string;
+  prompt: string;
+  message?: string;
+}
+
+export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;
+
+export interface HumanResponseRequest {
+  session_id: string;
+  question_id: string;
+  answer: string;
 }
 
 export interface BridgeConfig {
