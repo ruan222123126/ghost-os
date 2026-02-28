@@ -1,43 +1,135 @@
 {
-  "version": "1.0",
-  "project": "Ghost-OS",
-  "contract": {
-    "request": { "action": "string", "params": "object", "trace_id": "string" },
-    "response": { "status": "success|error", "payload": "object", "error": "string" }
-  },
-  "supported_actions": [
-    "PING",
-    "AGENT_SEND",
-    "CONFIG_GET",
-    "CONFIG_UPDATE",
-    "LIST_FILES",
-    "BASH_EXEC",
-    "SCRIPT_EXEC",
-    "SCREEN_SHOT",
-    "MOUSE_CLICK",
-    "BROWSER_QUERY"
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ghost-os.dev/schemas/bus-envelope.schema.json",
+  "title": "Ghost-OS Bus Contract",
+  "description": "Single source of truth for cross-process request/response envelopes and core action schemas.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/requestEnvelope"
+    },
+    {
+      "$ref": "#/$defs/responseEnvelope"
+    }
   ],
-  "action_schemas": {
-    "SCRIPT_EXEC": {
-      "description": "Execute a Python script in a sandboxed environment with tool access (bash/list/read/write/diff/search/web)",
-      "params": {
-        "script": "string (required) - Python script to execute",
-        "timeout_ms": "number (optional, default 30000) - execution timeout in milliseconds",
-        "max_memory_mb": "number (optional, default 256) - maximum memory usage in MB"
-      },
-      "tool_surface": {
-        "tools.bash_exec": "Execute shell command; stdout is auto-truncated for long output",
-        "tools.list_files": "List entries in a directory",
-        "tools.read_file": "Read file with optional line range (max 200 lines per call)",
-        "tools.write_file": "Write or append file content (max 1MB per call)",
-        "tools.apply_diff": "Apply unified diff text to a file",
-        "tools.search_files": "Regex search across files, returns grep-style matches",
-        "tools.fetch_webpage": "Fetch HTTPS webpage and return cleaned markdown"
-      },
-      "response": {
-        "output": "string - script stdout output",
-        "tool_calls_log": "array - log of tool calls made during execution"
+  "$defs": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "PING",
+        "AGENT_SEND",
+        "CONFIG_GET",
+        "CONFIG_UPDATE",
+        "LIST_FILES",
+        "BASH_EXEC",
+        "SCRIPT_EXEC",
+        "SCREEN_SHOT",
+        "MOUSE_CLICK",
+        "BROWSER_QUERY"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "error"
+      ]
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "params",
+        "trace_id"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "params": {
+          "type": "object"
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "payload",
+        "error"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "scriptExecParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "script"
+      ],
+      "properties": {
+        "script": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000,
+          "default": 30000
+        },
+        "max_memory_mb": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 512,
+          "default": 256
+        }
+      }
+    },
+    "scriptExecPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output",
+        "tool_calls_log"
+      ],
+      "properties": {
+        "output": {
+          "type": "string"
+        },
+        "tool_calls_log": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  },
+  "x-ghost-os": {
+    "version": "1.0",
+    "tool_surface": {
+      "tools.bash_exec": "Execute shell command; stdout is auto-truncated for long output",
+      "tools.list_files": "List entries in a directory",
+      "tools.read_file": "Read file with optional line range (max 200 lines per call)",
+      "tools.write_file": "Write or append file content (max 1MB per call)",
+      "tools.apply_diff": "Apply unified diff text to a file",
+      "tools.search_files": "Regex search across files, returns grep-style matches",
+      "tools.fetch_webpage": "Fetch HTTPS webpage and return cleaned markdown"
     }
   }
 }

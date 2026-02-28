@@ -48,6 +48,26 @@ func decodeStatusCode(err error) int {
 	return http.StatusBadRequest
 }
 
+func writeMethodNotAllowed(w http.ResponseWriter) {
+	writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
+}
+
+func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
+	if r.Method != method {
+		writeMethodNotAllowed(w)
+		return false
+	}
+	return true
+}
+
+func decodeBodyOrWriteError(w http.ResponseWriter, r *http.Request, maxBytes int64, target any) bool {
+	if err := decodeJSONBody(w, r, maxBytes, target); err != nil {
+		writeError(w, decodeStatusCode(err), err.Error(), "")
+		return false
+	}
+	return true
+}
+
 func resolveTraceID(candidate string, r *http.Request) string {
 	if traceID := strings.TrimSpace(candidate); traceID != "" {
 		return traceID
@@ -65,7 +85,7 @@ func nextTraceID() string {
 
 func writeSuccess(w http.ResponseWriter, code int, payload any, traceID string) {
 	writeEnvelope(w, code, apiResponse{
-		Status:  "success",
+		Status:  busStatusSuccess,
 		Payload: payload,
 		Error:   "",
 	}, traceID)
@@ -73,10 +93,29 @@ func writeSuccess(w http.ResponseWriter, code int, payload any, traceID string) 
 
 func writeError(w http.ResponseWriter, code int, message string, traceID string) {
 	writeEnvelope(w, code, apiResponse{
-		Status:  "error",
+		Status:  busStatusError,
 		Payload: map[string]any{},
 		Error:   message,
 	}, traceID)
+}
+
+func respondServiceResult(w http.ResponseWriter, traceID string, payload any, code int, err error) bool {
+	if err != nil {
+		writeError(w, code, err.Error(), traceID)
+		return false
+	}
+	writeSuccess(w, http.StatusOK, payload, traceID)
+	return true
+}
+
+func respondActionResult(w http.ResponseWriter, traceID string, action string, payload any, code int, err error) bool {
+	if err != nil {
+		logAction(traceID, action, "error", err)
+		writeError(w, code, err.Error(), traceID)
+		return false
+	}
+	writeSuccess(w, http.StatusOK, payload, traceID)
+	return true
 }
 
 func writeEnvelope(w http.ResponseWriter, code int, response apiResponse, traceID string) {

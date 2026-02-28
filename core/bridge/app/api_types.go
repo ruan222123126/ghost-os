@@ -1,8 +1,6 @@
 package app
 
 import (
-	"encoding/json"
-
 	"ghost-os/bridge/llm"
 )
 
@@ -13,18 +11,6 @@ const (
 )
 
 const defaultMaxRequestBodyBytes int64 = 1 << 20
-
-type apiRequest struct {
-	Action  string          `json:"action"`
-	Params  json.RawMessage `json:"params"`
-	TraceID string          `json:"trace_id"`
-}
-
-type apiResponse struct {
-	Status  string `json:"status"`
-	Payload any    `json:"payload"`
-	Error   string `json:"error"`
-}
 
 type agentRequest struct {
 	Message   string `json:"message"`

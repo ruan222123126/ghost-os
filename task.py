@@ -78,6 +78,67 @@ def agent() -> int:
     return run([resolve_go_bin(), "run", ".", "agent", msg], ROOT / "core/bridge")
 
 
+# serve 启动 bridge HTTP 服务，默认监听 8080。
+def serve() -> int:
+    port = sys.argv[2] if len(sys.argv) > 2 else "8080"
+    print(f"run bridge http server on :{port}...")
+    return run([resolve_go_bin(), "run", ".", "serve", port], ROOT / "core/bridge")
+
+
+# web_dev 启动 Next.js Web 开发服务。
+def web_dev() -> int:
+    print("run web dev server...")
+    return run(["pnpm", "--dir", "apps/web", "dev"], ROOT)
+
+
+# web_build 构建 Next.js Web 应用（production）。
+def web_build() -> int:
+    print("build web app...")
+    return run(["pnpm", "--dir", "apps/web", "build"], ROOT)
+
+
+# web_test 执行 Web 测试。
+def web_test() -> int:
+    print("test web app...")
+    return run(["pnpm", "--dir", "apps/web", "test"], ROOT)
+
+
+# web_lint 执行 Web lint。
+def web_lint() -> int:
+    print("lint web app...")
+    return run(["pnpm", "--dir", "apps/web", "lint"], ROOT)
+
+
+# gen_contracts 从 core/shared/schema.json 生成三端 envelope 类型。
+def gen_contracts() -> int:
+    print("generate shared contract types...")
+    return run(["python3", "core/shared/generate_envelope_types.py"], ROOT)
+
+
+# build_cli 编译 Rust CLI 二进制（release）。
+def build_cli() -> int:
+    print("build rust cli...")
+    return run(["cargo", "build", "--release"], ROOT / "apps/cli")
+
+
+# run_cli 启动 Rust CLI（默认交互模式）。
+def run_cli() -> int:
+    print("run rust cli...")
+    return run(["cargo", "run"], ROOT / "apps/cli")
+
+
+# check_cli 执行 Rust CLI 最小编译检查。
+def check_cli() -> int:
+    print("check rust cli...")
+    return run(["cargo", "check"], ROOT / "apps/cli")
+
+
+# install_cli 安装 Rust CLI 到 cargo bin。
+def install_cli() -> int:
+    print("install rust cli...")
+    return run(["cargo", "install", "--path", "apps/cli"], ROOT)
+
+
 # init_web 初始化 Next.js Web 控制台脚手架。
 def init_web() -> int:
     print("init web console...")
@@ -104,10 +165,32 @@ def main() -> int:
         return ping()
     if action == "agent":
         return agent()
+    if action == "serve":
+        return serve()
+    if action == "web-dev":
+        return web_dev()
+    if action == "web-build":
+        return web_build()
+    if action == "web-test":
+        return web_test()
+    if action == "web-lint":
+        return web_lint()
+    if action == "gen-contracts":
+        return gen_contracts()
+    if action == "build-cli":
+        return build_cli()
+    if action == "run-cli":
+        return run_cli()
+    if action == "check-cli":
+        return check_cli()
+    if action == "install-cli":
+        return install_cli()
     if action == "init-web":
         return init_web()
 
-    print("usage: python task.py [build | ping | agent | init-web]")
+    print(
+        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | gen-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
+    )
     return 0
 
 

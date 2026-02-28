@@ -1,0 +1,109 @@
+name: trinity-check
+
+on:
+  pull_request:
+    paths:
+      - "core/bridge/**"
+      - "drivers/native/**"
+      - "apps/web/**"
+      - ".github/workflows/trinity-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "core/bridge/**"
+      - "drivers/native/**"
+      - "apps/web/**"
+      - ".github/workflows/trinity-check.yml"
+  workflow_dispatch:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      bridge: ${{ steps.filter.outputs.bridge }}
+      native: ${{ steps.filter.outputs.native }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed layers
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            bridge:
+              - 'core/bridge/**'
+            native:
+              - 'drivers/native/**'
+            web:
+              - 'apps/web/**'
+
+  bridge-check:
+    name: Bridge (Go)
+    needs: changes
+    if: ${{ needs.changes.outputs.bridge == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: core/bridge/go.mod
+
+      - name: Run tests
+        working-directory: core/bridge
+        run: go test ./...
+
+  native-check:
+    name: Native (Rust)
+    needs: changes
+    if: ${{ needs.changes.outputs.native == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        run: cargo test --manifest-path drivers/native/Cargo.toml
+
+  web-check:
+    name: Web (pnpm)
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm --dir apps/web install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm --dir apps/web lint
+
+      - name: Test
+        run: pnpm --dir apps/web test
+
+      - name: Build
+        run: pnpm --dir apps/web build

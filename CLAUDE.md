@@ -1,6 +1,14 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Current Project Status
+
+See [`PROJECT_PROGRESS.md`](PROJECT_PROGRESS.md) before implementation. Current baseline is MVP skeleton:
+- Bridge main flow is usable (`core/bridge`).
+- Web Console MVP is usable (`apps/web`).
+- CLI baseline is in place (`apps/cli`).
+- Native atomic capabilities in `drivers/native` are still incomplete and should not be assumed production-ready.
 
 ## Mission
 
@@ -12,6 +20,12 @@ Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital tw
 2. **Bash-First**: default to scriptable operations (Bash/PowerShell/Python); use visual fallback only when GUI cannot be scripted.
 3. **Seamless Ecosystem**: browser, CLI, and backend are one coordinated system.
 4. **Clean & Aesthetic**: code stays concise and explicit; UX defaults to high-contrast dark style.
+
+## Package Management
+
+1. Web app package manager is **pnpm** (`apps/web`).
+2. Use `pnpm install` and `pnpm run <script>` for Web dependency and script operations.
+3. Commit `pnpm-lock.yaml`; do not introduce `package-lock.json` or `yarn.lock`.
 
 ## The Trinity (Strict Boundaries)
 
@@ -49,7 +63,17 @@ Always choose implementation path in this order:
 ```bash
 python3 task.py build
 python3 task.py ping
-python3 task.py init-web
+python3 task.py serve 8080
+python3 task.py agent "Hello, what can you do?"
+python3 task.py web-dev
+python3 task.py web-build
+python3 task.py web-lint
+python3 task.py web-test
+python3 task.py gen-contracts
+python3 task.py build-cli
+python3 task.py run-cli
+python3 task.py check-cli
+python3 task.py install-cli
 ```
 
 Direct commands:
@@ -57,7 +81,19 @@ Direct commands:
 ```bash
 cd drivers/native && cargo build --release
 cd drivers/native && cargo build
-cd core/bridge && go run .
+cd core/bridge && go run . serve
+cd core/bridge && go run . ping
+cd apps/cli && cargo run
+```
+
+Testing:
+
+```bash
+cd core/bridge && go test ./...
+cd drivers/native && cargo test
+cd apps/cli && cargo check
+cd apps/web && pnpm run lint
+cd apps/web && pnpm run test
 ```
 
 ## Engineering Aesthetics

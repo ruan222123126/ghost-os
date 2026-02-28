@@ -1,0 +1,33 @@
+name: cli-check
+
+on:
+  pull_request:
+    paths:
+      - "apps/cli/**"
+      - ".github/workflows/cli-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/cli/**"
+      - ".github/workflows/cli-check.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cargo check (apps/cli)
+        run: cargo check --manifest-path apps/cli/Cargo.toml
+
+      - name: Install ghost-cli
+        run: cargo install --path apps/cli
+
+      - name: Smoke test ghost-cli --version
+        run: ~/.cargo/bin/ghost-cli --version

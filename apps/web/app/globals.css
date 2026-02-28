@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 7 9 15;
+  --panel: 12 16 27;
+  --border: 42 51 69;
+  --text: 245 247 255;
+  --text-muted: 154 164 187;
+  --accent: 72 244 170;
+  --font-heading: 'Avenir Next', 'Segoe UI', 'Helvetica Neue', sans-serif;
+  --font-mono: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-heading), sans-serif;
+  background:
+    radial-gradient(900px circle at 10% -10%, rgb(var(--accent) / 0.18), transparent 42%),
+    radial-gradient(860px circle at 100% 0%, rgb(96 173 255 / 0.16), transparent 40%),
+    linear-gradient(160deg, #03050a 0%, #090d16 100%);
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #2c3850 #0c111c;
+}
+
+code,
+pre,
+.mono {
+  font-family: var(--font-mono), monospace;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2c3850;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0c111c;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
