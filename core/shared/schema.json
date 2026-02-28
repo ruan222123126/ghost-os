@@ -5,5 +5,39 @@
     "request": { "action": "string", "params": "object", "trace_id": "string" },
     "response": { "status": "success|error", "payload": "object", "error": "string" }
   },
-  "supported_actions": ["BASH_EXEC", "SCREEN_SHOT", "MOUSE_CLICK", "BROWSER_QUERY"]
+  "supported_actions": [
+    "PING",
+    "AGENT_SEND",
+    "CONFIG_GET",
+    "CONFIG_UPDATE",
+    "LIST_FILES",
+    "BASH_EXEC",
+    "SCRIPT_EXEC",
+    "SCREEN_SHOT",
+    "MOUSE_CLICK",
+    "BROWSER_QUERY"
+  ],
+  "action_schemas": {
+    "SCRIPT_EXEC": {
+      "description": "Execute a Python script in a sandboxed environment with tool access (bash/list/read/write/diff/search/web)",
+      "params": {
+        "script": "string (required) - Python script to execute",
+        "timeout_ms": "number (optional, default 30000) - execution timeout in milliseconds",
+        "max_memory_mb": "number (optional, default 256) - maximum memory usage in MB"
+      },
+      "tool_surface": {
+        "tools.bash_exec": "Execute shell command; stdout is auto-truncated for long output",
+        "tools.list_files": "List entries in a directory",
+        "tools.read_file": "Read file with optional line range (max 200 lines per call)",
+        "tools.write_file": "Write or append file content (max 1MB per call)",
+        "tools.apply_diff": "Apply unified diff text to a file",
+        "tools.search_files": "Regex search across files, returns grep-style matches",
+        "tools.fetch_webpage": "Fetch HTTPS webpage and return cleaned markdown"
+      },
+      "response": {
+        "output": "string - script stdout output",
+        "tool_calls_log": "array - log of tool calls made during execution"
+      }
+    }
+  }
 }

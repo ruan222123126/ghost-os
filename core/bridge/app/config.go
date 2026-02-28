@@ -17,17 +17,46 @@ type Config struct {
 	BaseURL            string
 	Model              string
 	ChatPath           string
+	PromptsPath        string
+	SessionsPath       string
 	ProviderHeaders    map[string]string
 	AnthropicVersion   string
 	AnthropicMaxTokens int
 	MaxTurns           int
 }
 
+type runtimeConfig struct {
+	Provider llm.Provider
+	APIKey   string
+	BaseURL  string
+	Model    string
+	ChatPath string
+}
+
+const (
+	defaultProvider           = llm.ProviderOpenAI
+	defaultBaseURL            = "https://api.openai.com/v1"
+	defaultModel              = "gpt-4o"
+	defaultPromptsPath        = "prompts.yaml"
+	defaultSessionsPath       = "~/.ghost-os/sessions"
+	defaultAnthropicVersion   = "2023-06-01"
+	defaultAnthropicMaxTokens = 1024
+	defaultMaxTurns           = 20
+)
+
 // LoadConfig 从环境变量加载配置并做基础校验与归一化。
 func LoadConfig() (Config, error) {
-	provider := llm.Provider(strings.ToLower(getenvDefault("GHOST_PROVIDER", "openai")))
-	if !provider.Valid() {
-		return Config{}, fmt.Errorf("invalid GHOST_PROVIDER=%q, expected one of: openai|anthropic|custom", provider)
+	runtime, err := runtimeConfigFromEnv()
+	if err != nil {
+		return Config{}, err
+	}
+	return loadConfigWithRuntime(runtime)
+}
+
+func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
+	runtime = normalizeRuntimeConfig(runtime)
+	if err := validateRuntimeForExecution(runtime); err != nil {
+		return Config{}, err
 	}
 
 	headers, err := parseProviderHeaders(os.Getenv("GHOST_PROVIDER_HEADERS"))
@@ -36,26 +65,17 @@ func LoadConfig() (Config, error) {
 	}
 
 	cfg := Config{
-		// 默认保持 OpenAI 兼容路径，避免本地最小链路启动失败。
-		Provider:           provider,
-		APIKey:             strings.TrimSpace(os.Getenv("GHOST_API_KEY")),
-		BaseURL:            getenvDefault("GHOST_BASE_URL", "https://api.openai.com/v1"),
-		Model:              getenvDefault("GHOST_MODEL", "gpt-4o"),
-		ChatPath:           strings.TrimSpace(os.Getenv("GHOST_CHAT_PATH")),
+		Provider:           runtime.Provider,
+		APIKey:             runtime.APIKey,
+		BaseURL:            runtime.BaseURL,
+		Model:              runtime.Model,
+		ChatPath:           runtime.ChatPath,
+		PromptsPath:        getenvDefault("GHOST_PROMPTS_PATH", defaultPromptsPath),
+		SessionsPath:       sessionsPathFromEnv(),
 		ProviderHeaders:    headers,
-		AnthropicVersion:   getenvDefault("GHOST_ANTHROPIC_VERSION", "2023-06-01"),
-		AnthropicMaxTokens: 1024,
-		MaxTurns:           20,
-	}
-
-	switch cfg.Provider {
-	case llm.ProviderOpenAI, llm.ProviderAnthropic:
-		// 官方 provider 默认要求 API Key。
-		if cfg.APIKey == "" {
-			return Config{}, fmt.Errorf("GHOST_API_KEY is required for provider %q", cfg.Provider)
-		}
-	case llm.ProviderCustom:
-		// custom provider 默认允许不传 API Key。
+		AnthropicVersion:   getenvDefault("GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
+		AnthropicMaxTokens: defaultAnthropicMaxTokens,
+		MaxTurns:           defaultMaxTurns,
 	}
 
 	if raw := strings.TrimSpace(os.Getenv("GHOST_MAX_TURNS")); raw != "" {
@@ -77,6 +97,59 @@ func LoadConfig() (Config, error) {
 	return cfg, nil
 }
 
+func runtimeConfigFromEnv() (runtimeConfig, error) {
+	provider := normalizeProvider(getenvDefault("GHOST_PROVIDER", string(defaultProvider)))
+	if !provider.Valid() {
+		return runtimeConfig{}, fmt.Errorf("invalid GHOST_PROVIDER=%q, expected one of: openai|anthropic|custom", provider)
+	}
+
+	return normalizeRuntimeConfig(runtimeConfig{
+		Provider: provider,
+		APIKey:   strings.TrimSpace(os.Getenv("GHOST_API_KEY")),
+		BaseURL:  strings.TrimSpace(os.Getenv("GHOST_BASE_URL")),
+		Model:    strings.TrimSpace(os.Getenv("GHOST_MODEL")),
+		ChatPath: strings.TrimSpace(os.Getenv("GHOST_CHAT_PATH")),
+	}), nil
+}
+
+func normalizeProvider(raw string) llm.Provider {
+	return llm.Provider(strings.ToLower(strings.TrimSpace(raw)))
+}
+
+func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
+	out := runtime
+	if out.Provider == "" {
+		out.Provider = defaultProvider
+	}
+	out.APIKey = strings.TrimSpace(out.APIKey)
+	if strings.TrimSpace(out.BaseURL) == "" {
+		out.BaseURL = defaultBaseURL
+	} else {
+		out.BaseURL = strings.TrimSpace(out.BaseURL)
+	}
+	if strings.TrimSpace(out.Model) == "" {
+		out.Model = defaultModel
+	} else {
+		out.Model = strings.TrimSpace(out.Model)
+	}
+	out.ChatPath = strings.TrimSpace(out.ChatPath)
+	return out
+}
+
+func validateRuntimeForExecution(runtime runtimeConfig) error {
+	switch runtime.Provider {
+	case llm.ProviderOpenAI, llm.ProviderAnthropic:
+		if runtime.APIKey == "" {
+			return fmt.Errorf("GHOST_API_KEY is required for provider %q", runtime.Provider)
+		}
+	case llm.ProviderCustom:
+		// custom provider 默认允许不传 API Key。
+	default:
+		return fmt.Errorf("invalid GHOST_PROVIDER=%q, expected one of: openai|anthropic|custom", runtime.Provider)
+	}
+	return nil
+}
+
 // getenvDefault 在环境变量为空时回落默认值。
 func getenvDefault(name, fallback string) string {
 	v := strings.TrimSpace(os.Getenv(name))
@@ -84,6 +157,10 @@ func getenvDefault(name, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func sessionsPathFromEnv() string {
+	return getenvDefault("GHOST_SESSIONS_PATH", defaultSessionsPath)
 }
 
 // parseProviderHeaders 解析自定义 Header JSON，并做 key 空值防护。

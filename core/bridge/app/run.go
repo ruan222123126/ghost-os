@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -16,6 +18,16 @@ func Run(ctx context.Context, args []string) (string, error) {
 	switch args[0] {
 	case "ping":
 		return runPing()
+	case "serve":
+		port := 8080
+		if len(args) > 1 {
+			parsed, err := strconv.Atoi(strings.TrimSpace(args[1]))
+			if err != nil || parsed <= 0 || parsed > 65535 {
+				return "", fmt.Errorf("invalid port %q, expected 1-65535", args[1])
+			}
+			port = parsed
+		}
+		return runServer(ctx, port)
 	case "agent":
 		message := defaultUserMessage
 		if len(args) > 1 {
