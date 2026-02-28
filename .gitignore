@@ -1,1 +1,20 @@
-core/bridge/*.tmp.*
+# Runtime and temporary files.
+*.tmp.*
+**/*.tmp.*
+__pycache__/
+
+# Build outputs.
+**/target/
+**/dist/
+bin/
+core/bridge/bridge
+
+# Node/PNPM artifacts.
+**/node_modules/
+**/.next/
+**/.next.bak*/
+.pnpm-store/
+**/.pnpm-store/
+
+# Runtime logs.
+data/logs/*
