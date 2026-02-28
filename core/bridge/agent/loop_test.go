@@ -81,8 +81,10 @@ func (f *fakeToolCatalog) Get(name string) tools.Tool {
 type fakeTool struct {
 	name      string
 	execute   func(context.Context, json.RawMessage) (string, error)
+	executeV2 func(context.Context, json.RawMessage, string) (string, error)
 	callCount int
 	lastArgs  json.RawMessage
+	lastTrace string
 }
 
 func (f *fakeTool) Name() string {
@@ -97,9 +99,13 @@ func (f *fakeTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)
 }
 
-func (f *fakeTool) Execute(ctx context.Context, argsJSON json.RawMessage) (string, error) {
+func (f *fakeTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
 	f.callCount++
 	f.lastArgs = cloneRawJSON(argsJSON)
+	f.lastTrace = traceID
+	if f.executeV2 != nil {
+		return f.executeV2(ctx, argsJSON, traceID)
+	}
 	if f.execute == nil {
 		return "", nil
 	}
@@ -136,6 +142,42 @@ func lastMessage(t *testing.T, request llm.CompletionRequest) llm.Message {
 
 func newTestAgent(completer *fakeCompleter, catalog *fakeToolCatalog, maxTurns int) *Agent {
 	return NewAgent(completer, catalog, "system prompt", maxTurns)
+}
+
+func TestGetNewMessagesWithPreloadedHistory(t *testing.T) {
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "follow-up",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{}
+	preloaded := NewHistoryFromMessages([]llm.Message{
+		{Role: llm.RoleSystem, Text: "system prompt"},
+		{Role: llm.RoleUser, Text: "old user message"},
+		{Role: llm.RoleAssistant, Text: "old assistant message"},
+	})
+
+	agent := NewAgentWithHistory(completer, catalog, preloaded, 3)
+	if _, err := agent.Run(context.Background(), "new user message"); err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	newMessages := agent.GetNewMessages()
+	if len(newMessages) != 2 {
+		t.Fatalf("unexpected new message count: got %d want %d", len(newMessages), 2)
+	}
+	if newMessages[0].Role != llm.RoleUser || newMessages[0].Text != "new user message" {
+		t.Fatalf("unexpected first new message: %+v", newMessages[0])
+	}
+	if newMessages[1].Role != llm.RoleAssistant || newMessages[1].Text != "follow-up" {
+		t.Fatalf("unexpected second new message: %+v", newMessages[1])
+	}
 }
 
 // 场景：模型直接 stop，Agent 返回 assistant 文本。
@@ -498,5 +540,93 @@ func TestRunInvalidToolArgumentsWritesErrorEnvelope(t *testing.T) {
 	}
 	if !strings.Contains(toolResult.Error, "must be a JSON object") {
 		t.Fatalf("unexpected error: %q", toolResult.Error)
+	}
+}
+
+func TestRunWithTraceIDPassesTraceToTool(t *testing.T) {
+	tool := &fakeTool{
+		name: "echo",
+		executeV2: func(_ context.Context, _ json.RawMessage, traceID string) (string, error) {
+			if traceID != "trace-propagation" {
+				t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-propagation")
+			}
+			return "ok", nil
+		},
+	}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-1",
+							Name:      "echo",
+							Arguments: json.RawMessage(`{}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "done",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"echo": tool,
+		},
+	}
+
+	agent := newTestAgent(completer, catalog, 3)
+	got, err := agent.RunWithTraceID(context.Background(), "hello", "trace-propagation")
+	if err != nil {
+		t.Fatalf("RunWithTraceID returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+}
+
+func TestRunMissingToolCallIDReturnsError(t *testing.T) {
+	tool := &fakeTool{name: "echo"}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "",
+							Name:      "echo",
+							Arguments: json.RawMessage(`{}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"echo": tool,
+		},
+	}
+
+	agent := newTestAgent(completer, catalog, 2)
+	_, err := agent.Run(context.Background(), "hello")
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "tool_call.id is empty") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tool.callCount != 0 {
+		t.Fatalf("tool should not be called when id is missing, got %d calls", tool.callCount)
 	}
 }

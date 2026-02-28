@@ -28,24 +28,45 @@ type Agent struct {
 	tools     ToolCatalog
 	history   *History
 	maxTurns  int
+
+	initialHistoryLen int
 }
 
+var errToolCallIDRequired = errors.New("tool_call.id is empty")
+
 func NewAgent(completer Completer, toolCatalog ToolCatalog, systemPrompt string, maxTurns int) *Agent {
+	return NewAgentWithHistory(completer, toolCatalog, NewHistory(systemPrompt), maxTurns)
+}
+
+// NewAgentWithHistory 使用预加载历史初始化 Agent，适用于跨请求会话。
+func NewAgentWithHistory(completer Completer, toolCatalog ToolCatalog, history *History, maxTurns int) *Agent {
 	if maxTurns <= 0 {
 		maxTurns = 20
 	}
+	if history == nil {
+		history = NewHistory("")
+	}
 
 	return &Agent{
-		completer: completer,
-		tools:     toolCatalog,
-		history:   NewHistory(systemPrompt),
-		maxTurns:  maxTurns,
+		completer:         completer,
+		tools:             toolCatalog,
+		history:           history,
+		maxTurns:          maxTurns,
+		initialHistoryLen: history.Len(),
 	}
 }
 
 // Run 负责循环与退出条件；单步逻辑拆到私有方法里，便于测试与扩展。
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
-	traceID := fmt.Sprintf("agent-%d", time.Now().UnixNano())
+	return a.RunWithTraceID(ctx, userMessage, "")
+}
+
+// RunWithTraceID 允许调用方注入请求级 trace_id，保障跨层链路追踪一致。
+func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID string) (string, error) {
+	traceID = strings.TrimSpace(traceID)
+	if traceID == "" {
+		traceID = fmt.Sprintf("agent-%d", time.Now().UnixNano())
+	}
 	a.appendUserMessage(userMessage)
 
 	for turn := 0; turn < a.maxTurns; turn++ {
@@ -115,6 +136,9 @@ func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm
 	for _, call := range calls {
 		toolCallID, toolName, args, err := validateToolCall(call)
 		if err != nil {
+			if errors.Is(err, errToolCallIDRequired) {
+				return fmt.Errorf("invalid tool call: %w", err)
+			}
 			fmt.Fprintf(os.Stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, strings.TrimSpace(call.ID), strings.TrimSpace(call.Name), err)
 			a.appendToolResult(toolCallID, toolName, traceID, "", err)
 			continue
@@ -128,7 +152,7 @@ func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm
 			continue
 		}
 
-		output, execErr := tool.Execute(ctx, args)
+		output, execErr := tool.Execute(ctx, args, traceID)
 		if execErr != nil {
 			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q error: %w", toolName, execErr))
 			continue
@@ -184,7 +208,7 @@ func formatToolResult(toolName, traceID, output string, toolErr error) string {
 func validateToolCall(call llm.ToolCall) (toolCallID string, toolName string, args json.RawMessage, err error) {
 	toolCallID = strings.TrimSpace(call.ID)
 	if toolCallID == "" {
-		return "", "", nil, errors.New("tool_call.id is empty")
+		return "", "", nil, errToolCallIDRequired
 	}
 
 	toolName = strings.TrimSpace(call.Name)
@@ -219,4 +243,21 @@ func normalizedToolArguments(raw json.RawMessage) (json.RawMessage, error) {
 		return nil, fmt.Errorf("normalize tool_call.arguments: %w", err)
 	}
 	return normalized, nil
+}
+
+// GetNewMessages 返回 Agent 初始化后新增的会话消息。
+func (a *Agent) GetNewMessages() []llm.Message {
+	if a == nil || a.history == nil {
+		return nil
+	}
+
+	messages := a.history.Messages()
+	if a.initialHistoryLen <= 0 {
+		return messages
+	}
+	if a.initialHistoryLen >= len(messages) {
+		return nil
+	}
+
+	return llm.CloneMessages(messages[a.initialHistoryLen:])
 }

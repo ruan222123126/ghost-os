@@ -7,15 +7,17 @@ import (
 	"strings"
 )
 
-// BashExecTool 提供最小 shell 执行能力（当前为 stub）。
-type BashExecTool struct{}
+// BashExecTool 提供 shell 执行入口，具体执行下沉到 execution layer。
+type BashExecTool struct {
+	execution ExecutionClient
+}
 
 type bashExecArgs struct {
 	Command string `json:"command"`
 }
 
-func NewBashExecTool() Tool {
-	return BashExecTool{}
+func NewBashExecTool(client ExecutionClient) Tool {
+	return BashExecTool{execution: client}
 }
 
 func (BashExecTool) Name() string {
@@ -40,8 +42,11 @@ func (BashExecTool) Parameters() json.RawMessage {
 	}`)
 }
 
-// Execute 解析参数并返回 stub 结果，保留未来真实执行扩展点。
-func (BashExecTool) Execute(_ context.Context, argsJSON json.RawMessage) (string, error) {
+func (t BashExecTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
+	if t.execution == nil {
+		return "", fmt.Errorf("execution client is not configured")
+	}
+
 	var args bashExecArgs
 	if err := json.Unmarshal(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("decode args: %w", err)
@@ -52,5 +57,14 @@ func (BashExecTool) Execute(_ context.Context, argsJSON json.RawMessage) (string
 		return "", fmt.Errorf("command is required")
 	}
 
-	return fmt.Sprintf("[stub] would execute: %s", command), nil
+	payload, err := t.execution.Call(ctx, "BASH_EXEC", map[string]any{"command": command}, traceID)
+	if err != nil {
+		return "", fmt.Errorf("execution BASH_EXEC failed: %w", err)
+	}
+
+	output, ok := payload["output"].(string)
+	if !ok {
+		return "", fmt.Errorf("invalid BASH_EXEC payload: output must be a string")
+	}
+	return output, nil
 }

@@ -10,5 +10,5 @@ type Tool interface {
 	Name() string
 	Description() string
 	Parameters() json.RawMessage
-	Execute(ctx context.Context, argsJSON json.RawMessage) (string, error)
+	Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error)
 }
