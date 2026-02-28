@@ -27,6 +27,13 @@ func NewHistory(systemPrompt string) *History {
 	return h
 }
 
+// NewHistoryFromMessages 使用已有消息初始化历史。
+func NewHistoryFromMessages(messages []llm.Message) *History {
+	return &History{
+		messages: llm.CloneMessages(messages),
+	}
+}
+
 // Append 追加单条消息。
 func (h *History) Append(msg llm.Message) {
 	h.messages = append(h.messages, msg)
