@@ -1,13 +1,17 @@
+// Sandbox module entrypoint; re-exports executor, restrictions, and tool adapters.
+
 pub mod executor;
 pub mod restrictions;
 pub mod tools;
+
+mod diff_engine;
+mod path_policy;
+mod web_security;
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SandboxConfig {
-    pub timeout_ms: u64,
-    pub max_memory_mb: u64,
     pub allowed_modules: Vec<String>,
     pub max_file_read_lines: usize,
     pub max_file_write_bytes: usize,
@@ -24,8 +28,6 @@ pub struct SandboxConfig {
 impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
-            timeout_ms: 30_000,
-            max_memory_mb: 256,
             allowed_modules: vec![
                 "json".to_string(),
                 "re".to_string(),

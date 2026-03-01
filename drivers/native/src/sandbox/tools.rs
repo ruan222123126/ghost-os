@@ -1,20 +1,19 @@
-use glob::Pattern;
+// Native sandbox tool adapters that translate bridge tool calls into atomic operations.
+
 use ignore::WalkBuilder;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
-use regex::{Regex, RegexBuilder};
-use reqwest::Url;
-use reqwest::blocking::Client;
+use regex::RegexBuilder;
 use serde_json::{json, to_string};
 use std::fs::{self, OpenOptions};
-use std::io::{Read, Write};
-use std::net::{IpAddr, ToSocketAddrs};
-use std::path::{Path, PathBuf};
+use std::io::Write;
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
+use super::diff_engine::apply_unified_patch;
+use super::path_policy::{is_blocked_path, resolve_read_path, resolve_write_path};
+use super::web_security::{fetch_and_convert_webpage, validate_https_url};
 use super::{SandboxConfig, ToolCallLog};
 
 const MAX_BASH_OUTPUT_CHARS: usize = 2_000;
@@ -364,17 +363,12 @@ impl ToolsProxy {
             }
         };
 
-        let hunks = match parse_unified_diff(&diff_text) {
-            Ok(hunks) => hunks,
+        let patch = match apply_unified_patch(&original, &diff_text) {
+            Ok(patch) => patch,
             Err(err) => return Err(self.log_tool_error("apply_diff", args, err)),
         };
 
-        let updated = match apply_unified_diff(&original, &hunks) {
-            Ok(updated) => updated,
-            Err(err) => return Err(self.log_tool_error("apply_diff", args, err)),
-        };
-
-        if updated.as_bytes().len() > self.config.max_file_write_bytes {
+        if patch.updated.as_bytes().len() > self.config.max_file_write_bytes {
             return Err(self.log_tool_error(
                 "apply_diff",
                 args,
@@ -385,7 +379,7 @@ impl ToolsProxy {
             ));
         }
 
-        if let Err(err) = fs::write(&canonical, updated.as_bytes()) {
+        if let Err(err) = fs::write(&canonical, patch.updated.as_bytes()) {
             return Err(self.log_tool_error(
                 "apply_diff",
                 args,
@@ -393,7 +387,11 @@ impl ToolsProxy {
             ));
         }
 
-        let result = format!("applied {} hunks to {}", hunks.len(), canonical.display());
+        let result = format!(
+            "applied {} hunks to {}",
+            patch.hunk_count,
+            canonical.display()
+        );
         push_tool_log(
             &self.tool_calls_log,
             ToolCallLog {
@@ -542,7 +540,7 @@ impl ToolsProxy {
             ));
         }
 
-        let parsed = match validate_url(&url) {
+        let parsed = match validate_https_url(&url) {
             Ok(parsed) => parsed,
             Err(err) => return Err(self.log_tool_error("fetch_webpage", args, err)),
         };
@@ -618,377 +616,6 @@ fn truncate_to_bytes(text: &str, max_bytes: usize) -> String {
         }
     }
     text[..end].to_string()
-}
-
-fn resolve_read_path(path: &str, config: &SandboxConfig) -> Result<PathBuf, String> {
-    let canonical = canonicalize_for_read(path)?;
-    ensure_path_allowed(&canonical, &config.allowed_read_paths)?;
-    ensure_not_blocked(&canonical, &config.blocked_patterns)?;
-    Ok(canonical)
-}
-
-fn resolve_write_path(path: &str, config: &SandboxConfig) -> Result<PathBuf, String> {
-    let canonical = canonicalize_for_write(path)?;
-    ensure_path_allowed(&canonical, &config.allowed_write_paths)?;
-    ensure_not_blocked(&canonical, &config.blocked_patterns)?;
-    Ok(canonical)
-}
-
-fn canonicalize_for_read(path: &str) -> Result<PathBuf, String> {
-    let absolute = to_absolute_path(path)?;
-    if !absolute.exists() {
-        return Err(format!("path does not exist: {}", absolute.display()));
-    }
-    fs::canonicalize(&absolute).map_err(|err| format!("invalid path {}: {err}", absolute.display()))
-}
-
-fn canonicalize_for_write(path: &str) -> Result<PathBuf, String> {
-    let absolute = to_absolute_path(path)?;
-    if absolute.exists() {
-        return fs::canonicalize(&absolute)
-            .map_err(|err| format!("invalid path {}: {err}", absolute.display()));
-    }
-
-    let (ancestor, suffix) = split_existing_ancestor(&absolute)?;
-    let canonical_ancestor = fs::canonicalize(&ancestor)
-        .map_err(|err| format!("invalid path {}: {err}", ancestor.display()))?;
-    Ok(canonical_ancestor.join(suffix))
-}
-
-fn to_absolute_path(path: &str) -> Result<PathBuf, String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err("path is required".to_string());
-    }
-
-    let candidate = PathBuf::from(trimmed);
-    if candidate.is_absolute() {
-        Ok(candidate)
-    } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(candidate))
-            .map_err(|err| format!("failed to resolve current directory: {err}"))
-    }
-}
-
-fn split_existing_ancestor(path: &Path) -> Result<(PathBuf, PathBuf), String> {
-    let mut ancestor = path.to_path_buf();
-    let mut suffix = PathBuf::new();
-
-    while !ancestor.exists() {
-        let file_name = ancestor
-            .file_name()
-            .ok_or_else(|| format!("invalid path: {}", path.display()))?;
-        let mut next_suffix = PathBuf::from(file_name);
-        if !suffix.as_os_str().is_empty() {
-            next_suffix.push(&suffix);
-        }
-        suffix = next_suffix;
-
-        ancestor = ancestor
-            .parent()
-            .ok_or_else(|| format!("invalid path: {}", path.display()))?
-            .to_path_buf();
-    }
-
-    Ok((ancestor, suffix))
-}
-
-fn ensure_path_allowed(path: &Path, allowed_dirs: &[String]) -> Result<(), String> {
-    let mut canonical_allowed = Vec::new();
-    for dir in allowed_dirs {
-        let absolute = to_absolute_path(dir)?;
-        let canonical = fs::canonicalize(&absolute)
-            .map_err(|err| format!("invalid allowed directory {}: {err}", absolute.display()))?;
-        canonical_allowed.push(canonical);
-    }
-
-    if canonical_allowed.is_empty() {
-        return Err("no allowed directories configured".to_string());
-    }
-
-    let is_allowed = canonical_allowed
-        .iter()
-        .any(|allowed| path.starts_with(allowed));
-    if !is_allowed {
-        return Err("path not in allowed directories".to_string());
-    }
-
-    Ok(())
-}
-
-fn ensure_not_blocked(path: &Path, blocked_patterns: &[String]) -> Result<(), String> {
-    if is_blocked_path(path, blocked_patterns) {
-        return Err("access to sensitive file blocked".to_string());
-    }
-    Ok(())
-}
-
-fn is_blocked_path(path: &Path, blocked_patterns: &[String]) -> bool {
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("");
-    blocked_patterns.iter().any(|pattern| {
-        Pattern::new(pattern)
-            .map(|glob| glob.matches(file_name) || glob.matches_path(path))
-            .unwrap_or(false)
-    })
-}
-
-#[derive(Debug, Clone)]
-struct DiffHunk {
-    old_start: usize,
-    lines: Vec<DiffLine>,
-}
-
-#[derive(Debug, Clone)]
-enum DiffLine {
-    Context(String),
-    Add(String),
-    Remove(String),
-}
-
-fn hunk_header_regex() -> &'static Regex {
-    static HUNK_RE: OnceLock<Regex> = OnceLock::new();
-    HUNK_RE.get_or_init(|| {
-        Regex::new(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@").expect("valid hunk regex")
-    })
-}
-
-fn parse_unified_diff(diff_text: &str) -> Result<Vec<DiffHunk>, String> {
-    let mut lines = diff_text.lines().peekable();
-    let mut hunks = Vec::new();
-    let hunk_re = hunk_header_regex();
-
-    while let Some(raw_line) = lines.next() {
-        let line = raw_line.strip_suffix('\r').unwrap_or(raw_line);
-        let captures = match hunk_re.captures(line) {
-            Some(captures) => captures,
-            None => continue,
-        };
-
-        let old_start = captures
-            .get(1)
-            .and_then(|value| value.as_str().parse::<usize>().ok())
-            .ok_or_else(|| format!("invalid hunk header: {line}"))?;
-
-        let mut hunk_lines = Vec::new();
-        while let Some(next) = lines.peek() {
-            let candidate = next.strip_suffix('\r').unwrap_or(next);
-            if hunk_re.is_match(candidate) {
-                break;
-            }
-
-            let next = lines.next().unwrap_or_default();
-            let candidate = next.strip_suffix('\r').unwrap_or(next);
-            if candidate == "\\ No newline at end of file" {
-                continue;
-            }
-
-            let mut chars = candidate.chars();
-            let marker = chars
-                .next()
-                .ok_or_else(|| "malformed diff line".to_string())?;
-            let value: String = chars.collect();
-            match marker {
-                ' ' => hunk_lines.push(DiffLine::Context(value)),
-                '+' => hunk_lines.push(DiffLine::Add(value)),
-                '-' => hunk_lines.push(DiffLine::Remove(value)),
-                _ => return Err(format!("malformed diff line: {candidate}")),
-            }
-        }
-
-        if hunk_lines.is_empty() {
-            return Err("diff hunk has no body".to_string());
-        }
-
-        hunks.push(DiffHunk {
-            old_start,
-            lines: hunk_lines,
-        });
-    }
-
-    if hunks.is_empty() {
-        return Err("no diff hunks found".to_string());
-    }
-
-    Ok(hunks)
-}
-
-fn apply_unified_diff(original: &str, hunks: &[DiffHunk]) -> Result<String, String> {
-    let source_lines: Vec<&str> = original.lines().collect();
-    let had_trailing_newline = original.ends_with('\n');
-
-    let mut result = Vec::new();
-    let mut source_index = 0usize;
-
-    for hunk in hunks {
-        let hunk_start = hunk.old_start.saturating_sub(1);
-        if hunk_start < source_index {
-            return Err("invalid diff order: overlapping hunks".to_string());
-        }
-        if hunk_start > source_lines.len() {
-            return Err(format!(
-                "hunk start {} exceeds file length {}",
-                hunk.old_start,
-                source_lines.len()
-            ));
-        }
-
-        for line in &source_lines[source_index..hunk_start] {
-            result.push((*line).to_string());
-        }
-
-        let mut cursor = hunk_start;
-        for line in &hunk.lines {
-            match line {
-                DiffLine::Context(expected) => {
-                    let actual = source_lines
-                        .get(cursor)
-                        .ok_or_else(|| "diff context exceeds file length".to_string())?;
-                    if actual != &expected.as_str() {
-                        return Err(format!(
-                            "diff context mismatch at line {}",
-                            cursor.saturating_add(1)
-                        ));
-                    }
-                    result.push(expected.clone());
-                    cursor = cursor.saturating_add(1);
-                }
-                DiffLine::Remove(expected) => {
-                    let actual = source_lines
-                        .get(cursor)
-                        .ok_or_else(|| "diff removal exceeds file length".to_string())?;
-                    if actual != &expected.as_str() {
-                        return Err(format!(
-                            "diff removal mismatch at line {}",
-                            cursor.saturating_add(1)
-                        ));
-                    }
-                    cursor = cursor.saturating_add(1);
-                }
-                DiffLine::Add(value) => {
-                    result.push(value.clone());
-                }
-            }
-        }
-
-        source_index = cursor;
-    }
-
-    for line in &source_lines[source_index..] {
-        result.push((*line).to_string());
-    }
-
-    let mut patched = result.join("\n");
-    if had_trailing_newline {
-        patched.push('\n');
-    }
-    Ok(patched)
-}
-
-fn validate_url(raw_url: &str) -> Result<Url, String> {
-    let trimmed = raw_url.trim();
-    if trimmed.is_empty() {
-        return Err("url is required".to_string());
-    }
-
-    let parsed = Url::parse(trimmed).map_err(|err| format!("invalid URL: {err}"))?;
-    if parsed.scheme() != "https" {
-        return Err("only HTTPS URLs allowed".to_string());
-    }
-
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| "URL must include host".to_string())?;
-    if host.eq_ignore_ascii_case("localhost") || host.ends_with(".localhost") {
-        return Err("private IP addresses blocked".to_string());
-    }
-
-    if let Ok(ip) = host.parse::<IpAddr>() {
-        if is_private_ip(ip) {
-            return Err("private IP addresses blocked".to_string());
-        }
-    } else {
-        let port = parsed.port_or_known_default().unwrap_or(443);
-        let mut resolved_any = false;
-        for addr in (host, port)
-            .to_socket_addrs()
-            .map_err(|err| format!("host resolution failed: {err}"))?
-        {
-            resolved_any = true;
-            if is_private_ip(addr.ip()) {
-                return Err("private IP addresses blocked".to_string());
-            }
-        }
-
-        if !resolved_any {
-            return Err("host resolution failed".to_string());
-        }
-    }
-
-    Ok(parsed)
-}
-
-fn is_private_ip(ip: IpAddr) -> bool {
-    match ip {
-        IpAddr::V4(ipv4) => {
-            let octets = ipv4.octets();
-            let in_cgnat = octets[0] == 100 && (octets[1] & 0b1100_0000) == 0b0100_0000;
-            ipv4.is_private()
-                || ipv4.is_loopback()
-                || ipv4.is_link_local()
-                || ipv4.is_multicast()
-                || ipv4.is_broadcast()
-                || ipv4.is_documentation()
-                || in_cgnat
-                || octets[0] == 0
-        }
-        IpAddr::V6(ipv6) => {
-            ipv6.is_loopback()
-                || ipv6.is_unspecified()
-                || ipv6.is_unique_local()
-                || ipv6.is_multicast()
-                || ipv6.is_unicast_link_local()
-        }
-    }
-}
-
-fn fetch_and_convert_webpage(url: &Url, max_bytes: usize) -> Result<String, String> {
-    let client = Client::builder()
-        .timeout(Duration::from_secs(10))
-        .user_agent("Ghost-OS/1.0")
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .map_err(|err| format!("failed to initialize HTTP client: {err}"))?;
-
-    let response = client
-        .get(url.clone())
-        .send()
-        .map_err(|err| format!("request failed: {err}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("request failed with status {}", response.status()));
-    }
-
-    if let Some(content_length) = response.content_length() {
-        if content_length > max_bytes as u64 {
-            return Err(format!("response too large (max {} bytes)", max_bytes));
-        }
-    }
-
-    let mut body = Vec::new();
-    response
-        .take(max_bytes as u64 + 1)
-        .read_to_end(&mut body)
-        .map_err(|err| format!("failed to read response body: {err}"))?;
-
-    if body.len() > max_bytes {
-        return Err(format!("response too large (max {} bytes)", max_bytes));
-    }
-
-    Ok(html2text::from_read(body.as_slice(), 100))
 }
 
 fn push_tool_log(tool_calls_log: &Arc<Mutex<Vec<ToolCallLog>>>, log: ToolCallLog) {

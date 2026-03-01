@@ -1,3 +1,5 @@
+// Restriction rules and validation helpers used by the native sandbox runtime.
+
 use pyo3::prelude::*;
 use pyo3::types::PyModule;
 
@@ -66,26 +68,31 @@ for _builtin_name in ("open", "eval", "exec", "compile", "input"):
 }
 
 pub fn validate_script_safety(script: &str) -> Result<(), String> {
-    if script.len() > 10 * 1024 {
-        return Err("script too long (max 10KB)".to_string());
+    // 放宽长度限制到 50KB，适应更复杂的合法脚本。
+    if script.len() > 50 * 1024 {
+        return Err("script too long (max 50KB)".to_string());
     }
 
-    let dangerous_functions = [
+    // 运行时已通过 setup_restricted_imports 禁用危险内置函数，
+    // 此处仅做函数调用级别的快速检查作为第一道防线，不作为唯一安全保障。
+    let dangerous_calls = [
         "eval",
         "exec",
         "compile",
         "__import__",
         "open",
         "input",
-        "globals",
-        "locals",
-        "vars",
-        "dir",
+        "getattr", // 防止 getattr(builtins, 'eval') 绕过
+        "setattr",
+        "delattr",
     ];
 
-    for function_name in &dangerous_functions {
-        if contains_forbidden_call(script, function_name) {
-            return Err(format!("dangerous pattern detected: {}(", function_name));
+    for call in &dangerous_calls {
+        if contains_forbidden_call(script, call) {
+            return Err(format!(
+                "potentially dangerous pattern detected: {}",
+                format_args!("{call}(")
+            ));
         }
     }
 

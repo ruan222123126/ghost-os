@@ -1,3 +1,5 @@
+// Build script wiring for native driver dependencies and compile-time flags.
+
 use std::collections::BTreeSet;
 use std::env;
 use std::path::Path;
