@@ -110,7 +110,7 @@ func TestScriptExecToolExecuteSuccess(t *testing.T) {
 	}
 }
 
-func TestScriptExecToolExecuteDefaultLimits(t *testing.T) {
+func TestScriptExecToolExecuteOmitsUnsetResourceLimits(t *testing.T) {
 	var capturedParams map[string]any
 	mockClient := mockExecutionClient{
 		callFunc: func(_ context.Context, _ string, params map[string]any, _ string) (map[string]any, error) {
@@ -127,11 +127,40 @@ func TestScriptExecToolExecuteDefaultLimits(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if got, want := capturedParams["timeout_ms"], 30_000; got != want {
-		t.Fatalf("unexpected timeout default: got %v want %v", got, want)
+	if _, ok := capturedParams["timeout_ms"]; ok {
+		t.Fatal("timeout_ms should be omitted when unset")
 	}
-	if got, want := capturedParams["max_memory_mb"], 256; got != want {
-		t.Fatalf("unexpected memory default: got %v want %v", got, want)
+	if _, ok := capturedParams["max_memory_mb"]; ok {
+		t.Fatal("max_memory_mb should be omitted when unset")
+	}
+}
+
+func TestScriptExecToolExecuteForwardsResourceLimitsWithoutClamping(t *testing.T) {
+	var capturedParams map[string]any
+	mockClient := mockExecutionClient{
+		callFunc: func(_ context.Context, _ string, params map[string]any, _ string) (map[string]any, error) {
+			capturedParams = params
+			return map[string]any{
+				"output":         "",
+				"tool_calls_log": []any{},
+			}, nil
+		},
+	}
+
+	tool := NewScriptExecTool(mockClient)
+	if _, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"script":"print('ok')","timeout_ms":120000,"max_memory_mb":2048}`),
+		"trace-test",
+	); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := capturedParams["timeout_ms"], 120000; got != want {
+		t.Fatalf("unexpected timeout_ms forwarding: got %v want %v", got, want)
+	}
+	if got, want := capturedParams["max_memory_mb"], 2048; got != want {
+		t.Fatalf("unexpected max_memory_mb forwarding: got %v want %v", got, want)
 	}
 }
 

@@ -26,14 +26,22 @@ type anthropicTool struct {
 }
 
 type anthropicContentBlock struct {
-	Type      string         `json:"type"`
-	Text      string         `json:"text,omitempty"`
-	ID        string         `json:"id,omitempty"`
-	Name      string         `json:"name,omitempty"`
-	Input     map[string]any `json:"input,omitempty"`
-	ToolUseID string         `json:"tool_use_id,omitempty"`
-	Content   any            `json:"content,omitempty"`
-	IsError   bool           `json:"is_error,omitempty"`
+	Type      string                `json:"type"`
+	Text      string                `json:"text,omitempty"`
+	Source    *anthropicImageSource `json:"source,omitempty"`
+	ID        string                `json:"id,omitempty"`
+	Name      string                `json:"name,omitempty"`
+	Input     map[string]any        `json:"input,omitempty"`
+	ToolUseID string                `json:"tool_use_id,omitempty"`
+	Content   any                   `json:"content,omitempty"`
+	IsError   bool                  `json:"is_error,omitempty"`
+}
+
+type anthropicImageSource struct {
+	Type      string `json:"type"`
+	MediaType string `json:"media_type,omitempty"`
+	Data      string `json:"data,omitempty"`
+	URL       string `json:"url,omitempty"`
 }
 
 type anthropicResponse struct {
@@ -101,13 +109,17 @@ func toAnthropicRequest(model string, maxTokens int, request CompletionRequest) 
 			}
 			convertedMessages = append(convertedMessages, assistantMessage)
 		case RoleTool:
+			content, err := toAnthropicToolResultContent(msg)
+			if err != nil {
+				return anthropicRequest{}, err
+			}
 			convertedMessages = append(convertedMessages, anthropicMessage{
 				Role: "user",
 				Content: []anthropicContentBlock{
 					{
 						Type:      "tool_result",
 						ToolUseID: msg.ToolCallID,
-						Content:   msg.Text,
+						Content:   content,
 					},
 				},
 			})
@@ -184,6 +196,56 @@ func toAnthropicAssistantMessage(msg Message) (anthropicMessage, error) {
 	return anthropicMessage{
 		Role:    "assistant",
 		Content: blocks,
+	}, nil
+}
+
+func toAnthropicToolResultContent(msg Message) (any, error) {
+	if len(msg.Content) == 0 {
+		return msg.Text, nil
+	}
+
+	blocks := make([]anthropicContentBlock, 0, len(msg.Content)+1)
+	text := strings.TrimSpace(msg.Text)
+	if text != "" {
+		blocks = append(blocks, anthropicContentBlock{
+			Type: "text",
+			Text: text,
+		})
+	}
+	for _, part := range msg.Content {
+		if part.Image == nil {
+			continue
+		}
+		source, err := toAnthropicImageSource(part.Image)
+		if err != nil {
+			return nil, err
+		}
+		blocks = append(blocks, anthropicContentBlock{
+			Type:   "image",
+			Source: source,
+		})
+	}
+	if len(blocks) == 0 {
+		return msg.Text, nil
+	}
+	return blocks, nil
+}
+
+func toAnthropicImageSource(image *ImageContent) (*anthropicImageSource, error) {
+	source, err := resolveImageSource(image)
+	if err != nil {
+		return nil, err
+	}
+	if source.URL != "" {
+		return &anthropicImageSource{
+			Type: "url",
+			URL:  source.URL,
+		}, nil
+	}
+	return &anthropicImageSource{
+		Type:      "base64",
+		MediaType: source.MediaType,
+		Data:      source.Base64Data,
 	}, nil
 }
 

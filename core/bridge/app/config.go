@@ -19,6 +19,8 @@ type Config struct {
 	ChatPath           string
 	PromptsPath        string
 	SessionsPath       string
+	MemoryWarmPath     string
+	MemoryColdPath     string
 	ProviderHeaders    map[string]string
 	AnthropicVersion   string
 	AnthropicMaxTokens int
@@ -39,6 +41,8 @@ const (
 	defaultModel              = "gpt-4o"
 	defaultPromptsPath        = "prompts.yaml"
 	defaultSessionsPath       = "~/.ghost-os/sessions"
+	defaultMemoryWarmPath     = "~/.ghost-os/memory/warm.json"
+	defaultMemoryColdPath     = "~/.ghost-os/memory/cold"
 	defaultAnthropicVersion   = "2023-06-01"
 	defaultAnthropicMaxTokens = 1024
 	defaultMaxTurns           = 20
@@ -53,6 +57,7 @@ func LoadConfig() (Config, error) {
 	return loadConfigWithRuntime(runtime)
 }
 
+// loadConfigWithRuntime 在 runtimeConfig 基础上补齐环境默认值与执行期约束。
 func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 	runtime = normalizeRuntimeConfig(runtime)
 	if err := validateRuntimeForExecution(runtime); err != nil {
@@ -72,6 +77,8 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 		ChatPath:           runtime.ChatPath,
 		PromptsPath:        getenvDefault("GHOST_PROMPTS_PATH", defaultPromptsPath),
 		SessionsPath:       sessionsPathFromEnv(),
+		MemoryWarmPath:     memoryWarmPathFromEnv(),
+		MemoryColdPath:     memoryColdPathFromEnv(),
 		ProviderHeaders:    headers,
 		AnthropicVersion:   getenvDefault("GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
 		AnthropicMaxTokens: defaultAnthropicMaxTokens,
@@ -97,6 +104,7 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 	return cfg, nil
 }
 
+// runtimeConfigFromEnv 仅读取可热更新字段，便于 ConfigStore 复用。
 func runtimeConfigFromEnv() (runtimeConfig, error) {
 	provider := normalizeProvider(getenvDefault("GHOST_PROVIDER", string(defaultProvider)))
 	if !provider.Valid() {
@@ -112,10 +120,12 @@ func runtimeConfigFromEnv() (runtimeConfig, error) {
 	}), nil
 }
 
+// normalizeProvider 统一 provider 大小写与空白字符。
 func normalizeProvider(raw string) llm.Provider {
 	return llm.Provider(strings.ToLower(strings.TrimSpace(raw)))
 }
 
+// normalizeRuntimeConfig 回填默认值并清理字符串字段。
 func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	out := runtime
 	if out.Provider == "" {
@@ -136,6 +146,7 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	return out
 }
 
+// validateRuntimeForExecution 校验当前 provider 的最小执行前置条件。
 func validateRuntimeForExecution(runtime runtimeConfig) error {
 	switch runtime.Provider {
 	case llm.ProviderOpenAI, llm.ProviderAnthropic:
@@ -159,8 +170,19 @@ func getenvDefault(name, fallback string) string {
 	return v
 }
 
+// sessionsPathFromEnv 返回会话持久化目录。
 func sessionsPathFromEnv() string {
 	return getenvDefault("GHOST_SESSIONS_PATH", defaultSessionsPath)
+}
+
+// memoryWarmPathFromEnv 返回 warm memory 持久化文件路径。
+func memoryWarmPathFromEnv() string {
+	return getenvDefault("GHOST_MEMORY_WARM_PATH", defaultMemoryWarmPath)
+}
+
+// memoryColdPathFromEnv 返回 cold memory 根目录路径。
+func memoryColdPathFromEnv() string {
+	return getenvDefault("GHOST_MEMORY_COLD_PATH", defaultMemoryColdPath)
 }
 
 // parseProviderHeaders 解析自定义 Header JSON，并做 key 空值防护。

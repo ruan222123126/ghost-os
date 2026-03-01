@@ -6,16 +6,19 @@ package app
 import "encoding/json"
 
 const (
-	busActionPing         = "PING"
-	busActionAgentSend    = "AGENT_SEND"
-	busActionConfigGet    = "CONFIG_GET"
-	busActionConfigUpdate = "CONFIG_UPDATE"
-	busActionListFiles    = "LIST_FILES"
-	busActionBashExec     = "BASH_EXEC"
-	busActionScriptExec   = "SCRIPT_EXEC"
-	busActionScreenShot   = "SCREEN_SHOT"
-	busActionMouseClick   = "MOUSE_CLICK"
-	busActionBrowserQuery = "BROWSER_QUERY"
+	busActionPing          = "PING"
+	busActionAgentSend     = "AGENT_SEND"
+	busActionHumanResponse = "HUMAN_RESPONSE"
+	busActionConfigGet     = "CONFIG_GET"
+	busActionConfigUpdate  = "CONFIG_UPDATE"
+	busActionMemoryQuery   = "MEMORY_QUERY"
+	busActionMemoryArchive = "MEMORY_ARCHIVE"
+	busActionListFiles     = "LIST_FILES"
+	busActionBashExec      = "BASH_EXEC"
+	busActionScriptExec    = "SCRIPT_EXEC"
+	busActionScreenShot    = "SCREEN_SHOT"
+	busActionMouseClick    = "MOUSE_CLICK"
+	busActionBrowserQuery  = "BROWSER_QUERY"
 )
 
 const (

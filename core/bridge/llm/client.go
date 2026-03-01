@@ -29,15 +29,6 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(baseURL, apiKey, model string) *Client {
-	return NewClientWithOptions(ClientOptions{
-		Provider: ProviderOpenAI,
-		BaseURL:  baseURL,
-		APIKey:   apiKey,
-		Model:    model,
-	})
-}
-
 // NewClientWithOptions 创建带默认值归一化的客户端实例。
 func NewClientWithOptions(opts ClientOptions) *Client {
 	normalized := normalizeOptions(opts)

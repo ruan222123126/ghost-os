@@ -27,6 +27,15 @@ type Store struct {
 	mu      sync.Mutex
 }
 
+// SessionMetadata 表示列表场景需要的轻量会话信息。
+type SessionMetadata struct {
+	ID           string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+	MessageCount int
+	TokenCount   int
+}
+
 // NewStore 初始化存储目录，并返回文件会话存储实例。
 func NewStore(baseDir string) (*Store, error) {
 	resolved, err := resolveBaseDir(baseDir)
@@ -166,6 +175,95 @@ func (s *Store) List() ([]string, error) {
 
 	sort.Strings(ids)
 	return ids, nil
+}
+
+// ListMetadata 返回全部会话的轻量元数据，避免上层逐个 Load 组装。
+func (s *Store) ListMetadata() ([]SessionMetadata, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("read sessions directory %q: %w", s.baseDir, err)
+	}
+
+	now := time.Now().UTC()
+	metadata := make([]SessionMetadata, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+
+		id := strings.TrimSuffix(name, ".json")
+		if !isValidSessionID(id) {
+			continue
+		}
+
+		path := filepath.Join(s.baseDir, name)
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			if errors.Is(readErr, os.ErrNotExist) {
+				continue
+			}
+			return nil, fmt.Errorf("read session %q: %w", id, readErr)
+		}
+
+		summary, decodeErr := decodeSessionMetadata(id, data, now)
+		if decodeErr != nil {
+			return nil, decodeErr
+		}
+		metadata = append(metadata, summary)
+	}
+
+	sort.Slice(metadata, func(i, j int) bool {
+		return metadata[i].ID < metadata[j].ID
+	})
+	return metadata, nil
+}
+
+type sessionMetadataEnvelope struct {
+	ID         string     `json:"id"`
+	Messages   []struct{} `json:"messages"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	TokenCount int        `json:"token_count"`
+}
+
+func decodeSessionMetadata(expectedID string, data []byte, now time.Time) (SessionMetadata, error) {
+	var envelope sessionMetadataEnvelope
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		return SessionMetadata{}, fmt.Errorf("%w: id=%s: %v", ErrSessionCorrupted, expectedID, err)
+	}
+
+	loadedID := strings.TrimSpace(envelope.ID)
+	if loadedID == "" {
+		loadedID = expectedID
+	}
+	if loadedID != expectedID {
+		return SessionMetadata{}, fmt.Errorf("%w: id mismatch file=%q payload=%q", ErrSessionCorrupted, expectedID, envelope.ID)
+	}
+
+	createdAt := envelope.CreatedAt.UTC()
+	if createdAt.IsZero() {
+		createdAt = now
+	}
+	updatedAt := envelope.UpdatedAt.UTC()
+	if updatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+
+	return SessionMetadata{
+		ID:           expectedID,
+		CreatedAt:    createdAt,
+		UpdatedAt:    updatedAt,
+		MessageCount: len(envelope.Messages),
+		TokenCount:   envelope.TokenCount,
+	}, nil
 }
 
 func (s *Store) pathForSession(sessionID string) (string, error) {

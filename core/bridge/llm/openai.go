@@ -19,6 +19,16 @@ type openAIMessage struct {
 	ToolCallID string           `json:"tool_call_id,omitempty"`
 }
 
+type openAIContentPart struct {
+	Type     string           `json:"type"`
+	Text     string           `json:"text,omitempty"`
+	ImageURL *openAIImagePart `json:"image_url,omitempty"`
+}
+
+type openAIImagePart struct {
+	URL string `json:"url"`
+}
+
 type openAITool struct {
 	Type     string         `json:"type"`
 	Function openAIFunction `json:"function"`
@@ -145,13 +155,52 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 			out.ToolCalls = toolCalls
 		}
 	case RoleTool:
-		out.Content = msg.Text
+		content, err := toOpenAIToolContent(msg.Text, msg.Content)
+		if err != nil {
+			return openAIMessage{}, err
+		}
+		out.Content = content
 		out.ToolCallID = msg.ToolCallID
 	default:
 		return openAIMessage{}, fmt.Errorf("unsupported message role for openai-compatible provider: %q", msg.Role)
 	}
 
 	return out, nil
+}
+
+func toOpenAIToolContent(text string, content []ContentPart) (any, error) {
+	if len(content) == 0 {
+		return text, nil
+	}
+
+	parts := make([]openAIContentPart, 0, len(content)+1)
+	text = strings.TrimSpace(text)
+	if text != "" {
+		parts = append(parts, openAIContentPart{
+			Type: "text",
+			Text: text,
+		})
+	}
+	for _, part := range content {
+		if part.Image == nil {
+			continue
+		}
+		imageURL, err := resolveOpenAIImageURL(part.Image)
+		if err != nil {
+			return nil, err
+		}
+		parts = append(parts, openAIContentPart{
+			Type: "image_url",
+			ImageURL: &openAIImagePart{
+				URL: imageURL,
+			},
+		})
+	}
+
+	if len(parts) == 0 {
+		return text, nil
+	}
+	return parts, nil
 }
 
 // openAIToCompletionResponse 把 provider 响应映射回统一结构。
@@ -165,7 +214,7 @@ func openAIToCompletionResponse(response openAIResponse) (*CompletionResponse, e
 	if err != nil {
 		return nil, err
 	}
-	finishReason, err := openAIFinishReason(choice.FinishReason)
+	finishReason, err := openAIFinishReason(normalizeOpenAIFinishReason(choice.FinishReason, message))
 	if err != nil {
 		return nil, err
 	}
@@ -198,14 +247,26 @@ func openAIToMessage(msg openAIMessage) (Message, error) {
 			out.ToolCalls = append(out.ToolCalls, ToolCall{
 				ID:   call.ID,
 				Name: call.Function.Name,
-				Arguments: normalizeJSONObject(
-					json.RawMessage(call.Function.Arguments),
-				),
+				// 保留 provider 原始 arguments，避免把空字符串静默归一化为 {}。
+				// 空/非法参数应在 agent 层按无效 tool call 处理。
+				Arguments: json.RawMessage(call.Function.Arguments),
 			})
 		}
 	}
 
 	return out, nil
+}
+
+// normalizeOpenAIFinishReason 为不规范的 OpenAI 兼容实现提供最小兜底。
+// 当 finish_reason 缺失时，优先按 tool_calls 判定，否则回落为 stop。
+func normalizeOpenAIFinishReason(reason string, message Message) string {
+	if strings.TrimSpace(reason) != "" {
+		return reason
+	}
+	if len(message.ToolCalls) > 0 {
+		return "tool_calls"
+	}
+	return "stop"
 }
 
 // openAIFinishReason 采用严格映射，未知值直接返回错误避免静默降级。

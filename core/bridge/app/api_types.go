@@ -1,3 +1,5 @@
+// API-facing bridge types used by handlers, codecs, and external clients.
+
 package app
 
 import (
@@ -5,9 +7,12 @@ import (
 )
 
 const (
-	actionAgentSend    = "AGENT_SEND"
-	actionConfigGet    = "CONFIG_GET"
-	actionConfigUpdate = "CONFIG_UPDATE"
+	actionAgentSend     = "AGENT_SEND"
+	actionHumanResponse = "HUMAN_RESPONSE"
+	actionConfigGet     = "CONFIG_GET"
+	actionConfigUpdate  = "CONFIG_UPDATE"
+	actionMemoryQuery   = "MEMORY_QUERY"
+	actionMemoryArchive = "MEMORY_ARCHIVE"
 )
 
 const defaultMaxRequestBodyBytes int64 = 1 << 20
@@ -26,6 +31,25 @@ type agentParams struct {
 type agentResponse struct {
 	Message   string `json:"message"`
 	SessionID string `json:"session_id"`
+}
+
+type askHumanAwaitingResponse struct {
+	Status     string `json:"status"`
+	SessionID  string `json:"session_id"`
+	QuestionID string `json:"question_id"`
+	Prompt     string `json:"prompt"`
+}
+
+type humanResponseParams struct {
+	SessionID  string `json:"session_id"`
+	QuestionID string `json:"question_id"`
+	Answer     string `json:"answer"`
+}
+
+type humanResponseAck struct {
+	SessionID  string `json:"session_id"`
+	QuestionID string `json:"question_id"`
+	Accepted   bool   `json:"accepted"`
 }
 
 type sessionIDParams struct {
@@ -68,4 +92,26 @@ type configUpdateRequest struct {
 	Model    *string `json:"model"`
 	ChatPath *string `json:"chat_path"`
 	TraceID  string  `json:"trace_id,omitempty"`
+}
+
+type memoryTimeRangeParams struct {
+	Start string `json:"start,omitempty"`
+	End   string `json:"end,omitempty"`
+}
+
+type memoryQueryParams struct {
+	SessionID string                 `json:"session_id,omitempty"`
+	TimeRange *memoryTimeRangeParams `json:"time_range,omitempty"`
+	Limit     int                    `json:"limit,omitempty"`
+	Keywords  []string               `json:"keywords,omitempty"`
+	Metadata  map[string]any         `json:"metadata,omitempty"`
+}
+
+type memoryArchiveParams struct {
+	SessionID string `json:"session_id"`
+}
+
+type memoryArchiveResponse struct {
+	SessionID string `json:"session_id"`
+	Archived  bool   `json:"archived"`
 }

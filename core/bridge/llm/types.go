@@ -28,8 +28,32 @@ const (
 type Message struct {
 	Role       Role
 	Text       string
+	Content    []ContentPart
 	ToolCalls  []ToolCall
 	ToolCallID string
+}
+
+const (
+	ContentTypeText  = "text"
+	ContentTypeImage = "image"
+)
+
+// ContentPart 表示一段可序列化的多模态消息内容。
+type ContentPart struct {
+	Type  string        `json:"type"`
+	Text  string        `json:"text,omitempty"`
+	Image *ImageContent `json:"image,omitempty"`
+}
+
+// ImageContent 使用本地路径或 URL 引用图片，并附带元数据。
+type ImageContent struct {
+	Path     string `json:"path,omitempty"`
+	URL      string `json:"url,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	SHA256   string `json:"sha256,omitempty"`
+	Bytes    int    `json:"bytes,omitempty"`
 }
 
 // ToolCall 描述模型发起的一次工具调用。
@@ -79,11 +103,29 @@ func CloneMessages(messages []Message) []Message {
 			Text:       msg.Text,
 			ToolCallID: msg.ToolCallID,
 		}
+		if len(msg.Content) > 0 {
+			out[i].Content = cloneContentParts(msg.Content)
+		}
 		if len(msg.ToolCalls) > 0 {
 			out[i].ToolCalls = cloneToolCalls(msg.ToolCalls)
 		}
 	}
 
+	return out
+}
+
+func cloneContentParts(parts []ContentPart) []ContentPart {
+	out := make([]ContentPart, len(parts))
+	for i, part := range parts {
+		out[i] = ContentPart{
+			Type: part.Type,
+			Text: part.Text,
+		}
+		if part.Image != nil {
+			image := *part.Image
+			out[i].Image = &image
+		}
+	}
 	return out
 }
 

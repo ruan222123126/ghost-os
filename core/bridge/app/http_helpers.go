@@ -1,3 +1,5 @@
+// Shared HTTP response/request helpers to keep handler behavior consistent.
+
 package app
 
 import (
@@ -17,6 +19,7 @@ var (
 	errRequestBodyTooBig = errors.New("request body too large")
 )
 
+// decodeJSONBody 解码并校验单个 JSON 对象，拒绝未知字段和多段 JSON。
 func decodeJSONBody(w http.ResponseWriter, r *http.Request, maxBytes int64, target any) error {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	decoder := json.NewDecoder(r.Body)
@@ -41,6 +44,7 @@ func decodeJSONBody(w http.ResponseWriter, r *http.Request, maxBytes int64, targ
 	return nil
 }
 
+// decodeStatusCode 将输入解码错误映射为稳定 HTTP 状态码。
 func decodeStatusCode(err error) int {
 	if errors.Is(err, errRequestBodyTooBig) {
 		return http.StatusRequestEntityTooLarge
@@ -48,10 +52,12 @@ func decodeStatusCode(err error) int {
 	return http.StatusBadRequest
 }
 
+// writeMethodNotAllowed 输出统一的 405 envelope。
 func writeMethodNotAllowed(w http.ResponseWriter) {
 	writeError(w, http.StatusMethodNotAllowed, "method not allowed", "")
 }
 
+// requireMethod 要求请求方法匹配，不匹配时直接写错误并短路。
 func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	if r.Method != method {
 		writeMethodNotAllowed(w)
@@ -60,6 +66,7 @@ func requireMethod(w http.ResponseWriter, r *http.Request, method string) bool {
 	return true
 }
 
+// decodeBodyOrWriteError 在 handler 入口执行解码并集中处理错误输出。
 func decodeBodyOrWriteError(w http.ResponseWriter, r *http.Request, maxBytes int64, target any) bool {
 	if err := decodeJSONBody(w, r, maxBytes, target); err != nil {
 		writeError(w, decodeStatusCode(err), err.Error(), "")
@@ -68,6 +75,7 @@ func decodeBodyOrWriteError(w http.ResponseWriter, r *http.Request, maxBytes int
 	return true
 }
 
+// resolveTraceID 依次使用 payload、header，再回退到本地生成值。
 func resolveTraceID(candidate string, r *http.Request) string {
 	if traceID := strings.TrimSpace(candidate); traceID != "" {
 		return traceID
@@ -78,11 +86,13 @@ func resolveTraceID(candidate string, r *http.Request) string {
 	return nextTraceID()
 }
 
+// nextTraceID 生成低冲突 trace id，便于本地日志串联单次调用链。
 func nextTraceID() string {
 	sequence := atomic.AddUint64(&traceCounter, 1)
 	return fmt.Sprintf("bridge-%d-%d", time.Now().UnixMilli(), sequence)
 }
 
+// writeSuccess 输出 bus success envelope。
 func writeSuccess(w http.ResponseWriter, code int, payload any, traceID string) {
 	writeEnvelope(w, code, apiResponse{
 		Status:  busStatusSuccess,
@@ -91,6 +101,7 @@ func writeSuccess(w http.ResponseWriter, code int, payload any, traceID string) 
 	}, traceID)
 }
 
+// writeError 输出 bus error envelope。
 func writeError(w http.ResponseWriter, code int, message string, traceID string) {
 	writeEnvelope(w, code, apiResponse{
 		Status:  busStatusError,
@@ -99,25 +110,34 @@ func writeError(w http.ResponseWriter, code int, message string, traceID string)
 	}, traceID)
 }
 
+// respondServiceResult 处理 service 返回值并写回统一 envelope。
 func respondServiceResult(w http.ResponseWriter, traceID string, payload any, code int, err error) bool {
 	if err != nil {
 		writeError(w, code, err.Error(), traceID)
 		return false
 	}
-	writeSuccess(w, http.StatusOK, payload, traceID)
+	if code <= 0 {
+		code = http.StatusOK
+	}
+	writeSuccess(w, code, payload, traceID)
 	return true
 }
 
+// respondActionResult 附带 action 级日志记录，便于排查分发链路问题。
 func respondActionResult(w http.ResponseWriter, traceID string, action string, payload any, code int, err error) bool {
 	if err != nil {
 		logAction(traceID, action, "error", err)
 		writeError(w, code, err.Error(), traceID)
 		return false
 	}
-	writeSuccess(w, http.StatusOK, payload, traceID)
+	if code <= 0 {
+		code = http.StatusOK
+	}
+	writeSuccess(w, code, payload, traceID)
 	return true
 }
 
+// writeEnvelope 是所有响应的唯一出口，统一 header 与 payload 结构。
 func writeEnvelope(w http.ResponseWriter, code int, response apiResponse, traceID string) {
 	w.Header().Set("Content-Type", "application/json")
 	if traceID != "" {
@@ -130,6 +150,7 @@ func writeEnvelope(w http.ResponseWriter, code int, response apiResponse, traceI
 	_ = json.NewEncoder(w).Encode(response)
 }
 
+// logAction 记录 trace/action/status 三元组，错误时追加 error 字段。
 func logAction(traceID string, action string, status string, err error) {
 	if err != nil {
 		log.Printf("trace_id=%s action=%s status=%s error=%v", traceID, action, status, err)

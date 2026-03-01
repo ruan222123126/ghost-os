@@ -82,6 +82,7 @@ type fakeTool struct {
 	name      string
 	execute   func(context.Context, json.RawMessage) (string, error)
 	executeV2 func(context.Context, json.RawMessage, string) (string, error)
+	interpret func(string) tools.ExecuteMeta
 	callCount int
 	lastArgs  json.RawMessage
 	lastTrace string
@@ -110,6 +111,13 @@ func (f *fakeTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceI
 		return "", nil
 	}
 	return f.execute(ctx, argsJSON)
+}
+
+func (f *fakeTool) InterpretResult(output string) tools.ExecuteMeta {
+	if f.interpret == nil {
+		return tools.ExecuteMeta{}
+	}
+	return f.interpret(output)
 }
 
 type toolResultPayload struct {
@@ -488,6 +496,66 @@ func TestRunMaxTurnsExceeded(t *testing.T) {
 	}
 }
 
+// 场景：模型连续返回不可执行 tool_call 时，提前退出并给出明确错误，避免跑满 max turns。
+func TestRunRepeatedNonExecutableToolCallsReturnsErrorEarly(t *testing.T) {
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-1",
+							Name:      "echo",
+							Arguments: json.RawMessage(`{}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-2",
+							Name:      "echo",
+							Arguments: json.RawMessage(``),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-3",
+							Name:      "echo",
+							Arguments: json.RawMessage(`{}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{}
+
+	agent := newTestAgent(completer, catalog, 20)
+	_, err := agent.Run(context.Background(), "hello")
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "repeated non-executable tool_calls") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(err.Error(), "max turns exceeded") {
+		t.Fatalf("should fail early before max turns: %v", err)
+	}
+}
+
 // 场景：arguments 非 JSON object 时，不执行工具并写 error envelope。
 func TestRunInvalidToolArgumentsWritesErrorEnvelope(t *testing.T) {
 	tool := &fakeTool{name: "echo"}
@@ -543,6 +611,61 @@ func TestRunInvalidToolArgumentsWritesErrorEnvelope(t *testing.T) {
 	}
 }
 
+// 场景：arguments 为空时，不执行工具并写 error envelope。
+func TestRunEmptyToolArgumentsWritesErrorEnvelope(t *testing.T) {
+	tool := &fakeTool{name: "echo"}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-1",
+							Name:      "echo",
+							Arguments: nil,
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "done",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"echo": tool,
+		},
+	}
+
+	agent := newTestAgent(completer, catalog, 2)
+	got, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+	if tool.callCount != 0 {
+		t.Fatalf("tool should not be called for empty arguments, got %d calls", tool.callCount)
+	}
+
+	toolMsg := lastMessage(t, completer.requests[1])
+	toolResult := decodeToolResult(t, toolMsg.Text)
+	if toolResult.Status != "error" {
+		t.Fatalf("unexpected status: got %q want %q", toolResult.Status, "error")
+	}
+	if !strings.Contains(toolResult.Error, "tool_call.arguments is empty") {
+		t.Fatalf("unexpected error: %q", toolResult.Error)
+	}
+}
+
 func TestRunWithTraceIDPassesTraceToTool(t *testing.T) {
 	tool := &fakeTool{
 		name: "echo",
@@ -593,7 +716,7 @@ func TestRunWithTraceIDPassesTraceToTool(t *testing.T) {
 	}
 }
 
-func TestRunMissingToolCallIDReturnsError(t *testing.T) {
+func TestRunMissingToolCallIDWritesErrorEnvelope(t *testing.T) {
 	tool := &fakeTool{name: "echo"}
 	completer := &fakeCompleter{
 		responses: []*llm.CompletionResponse{
@@ -610,6 +733,13 @@ func TestRunMissingToolCallIDReturnsError(t *testing.T) {
 				},
 				FinishReason: llm.FinishToolCalls,
 			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "done",
+				},
+				FinishReason: llm.FinishStop,
+			},
 		},
 	}
 	catalog := &fakeToolCatalog{
@@ -619,14 +749,165 @@ func TestRunMissingToolCallIDReturnsError(t *testing.T) {
 	}
 
 	agent := newTestAgent(completer, catalog, 2)
-	_, err := agent.Run(context.Background(), "hello")
-	if err == nil {
-		t.Fatal("expected error but got nil")
+	got, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "tool_call.id is empty") {
-		t.Fatalf("unexpected error: %v", err)
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
 	}
 	if tool.callCount != 0 {
 		t.Fatalf("tool should not be called when id is missing, got %d calls", tool.callCount)
+	}
+
+	toolMsg := lastMessage(t, completer.requests[1])
+	toolResult := decodeToolResult(t, toolMsg.Text)
+	if toolResult.Status != "error" {
+		t.Fatalf("unexpected status: got %q want %q", toolResult.Status, "error")
+	}
+	if !strings.Contains(toolResult.Error, "tool_call.id is empty") {
+		t.Fatalf("unexpected error: %q", toolResult.Error)
+	}
+}
+
+func TestRunAskHumanReturnsAwaitingError(t *testing.T) {
+	tool := &fakeTool{
+		name: "approval_gate",
+		execute: func(_ context.Context, _ json.RawMessage) (string, error) {
+			return `{"status":"awaiting_human","question_id":"q-123","prompt":"Which database?"}`, nil
+		},
+		interpret: func(output string) tools.ExecuteMeta {
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(output), &payload); err != nil {
+				return tools.ExecuteMeta{}
+			}
+			questionID, _ := payload["question_id"].(string)
+			prompt, _ := payload["prompt"].(string)
+			return tools.ExecuteMeta{
+				AwaitingHuman: &tools.AwaitingHumanSignal{
+					QuestionID: questionID,
+					Prompt:     prompt,
+				},
+			}
+		},
+	}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-ask-1",
+							Name:      "approval_gate",
+							Arguments: json.RawMessage(`{"prompt":"Which database?"}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"approval_gate": tool,
+		},
+	}
+
+	agent := newTestAgent(completer, catalog, 3)
+	_, err := agent.Run(context.Background(), "pick db")
+	if err == nil {
+		t.Fatal("expected awaiting-human error")
+	}
+	var awaitingErr *ErrAwaitingHuman
+	if !errors.As(err, &awaitingErr) {
+		t.Fatalf("expected ErrAwaitingHuman, got: %v", err)
+	}
+	if awaitingErr.QuestionID != "q-123" {
+		t.Fatalf("unexpected question id: got %q want %q", awaitingErr.QuestionID, "q-123")
+	}
+	if awaitingErr.Prompt != "Which database?" {
+		t.Fatalf("unexpected prompt: got %q want %q", awaitingErr.Prompt, "Which database?")
+	}
+}
+
+func TestRunBrowserScreenshotKeepsToolRoleWithImageContent(t *testing.T) {
+	tool := &fakeTool{
+		name: "visual_probe",
+		execute: func(_ context.Context, _ json.RawMessage) (string, error) {
+			return `{"action":"screenshot","artifact":{"type":"image","vision_path":"/tmp/s.png","vision_mime_type":"image/png","width":100,"height":50,"sha256":"hash","vision_bytes":256}}`, nil
+		},
+		interpret: func(_ string) tools.ExecuteMeta {
+			return tools.ExecuteMeta{
+				Content: []llm.ContentPart{
+					{
+						Type: llm.ContentTypeImage,
+						Image: &llm.ImageContent{
+							Path:     "/tmp/s.png",
+							MimeType: "image/png",
+							Width:    100,
+							Height:   50,
+							SHA256:   "hash",
+							Bytes:    256,
+						},
+					},
+				},
+			}
+		},
+	}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-shot-1",
+							Name:      "visual_probe",
+							Arguments: json.RawMessage(`{"action":"screenshot"}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "done",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"visual_probe": tool,
+		},
+	}
+
+	agent := newTestAgent(completer, catalog, 3)
+	got, err := agent.Run(context.Background(), "check")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+	if len(completer.requests) != 2 {
+		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 2)
+	}
+
+	toolMsg := lastMessage(t, completer.requests[1])
+	if toolMsg.Role != llm.RoleTool {
+		t.Fatalf("unexpected role: got %q want %q", toolMsg.Role, llm.RoleTool)
+	}
+	if len(toolMsg.Content) != 1 {
+		t.Fatalf("unexpected tool content count: got %d want %d", len(toolMsg.Content), 1)
+	}
+	if toolMsg.Content[0].Image == nil {
+		t.Fatal("expected image content on tool message")
+	}
+	if toolMsg.Content[0].Image.Path != "/tmp/s.png" {
+		t.Fatalf("unexpected image path: got %q want %q", toolMsg.Content[0].Image.Path, "/tmp/s.png")
 	}
 }

@@ -698,3 +698,52 @@ func TestHandleSessionDeleteNotFound(t *testing.T) {
 		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusNotFound)
 	}
 }
+
+func TestBusMemoryArchiveAndQuery(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("GHOST_MEMORY_WARM_PATH", tempDir+"/warm.json")
+	t.Setenv("GHOST_MEMORY_COLD_PATH", tempDir+"/cold")
+
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+	sess := session.NewSession("system")
+	sess.ID = "session-memory-test"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "remember this fact"})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	archiveResp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"MEMORY_ARCHIVE","params":{"session_id":"session-memory-test"},"trace_id":"trace-memory-archive"}`,
+		nil,
+	)
+	if archiveResp.Code != http.StatusOK {
+		t.Fatalf("unexpected archive status: got %d want %d body=%s", archiveResp.Code, http.StatusOK, archiveResp.Body.String())
+	}
+
+	queryResp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"MEMORY_QUERY","params":{"session_id":"session-memory-test","keywords":["remember"]},"trace_id":"trace-memory-query"}`,
+		nil,
+	)
+	if queryResp.Code != http.StatusOK {
+		t.Fatalf("unexpected query status: got %d want %d body=%s", queryResp.Code, http.StatusOK, queryResp.Body.String())
+	}
+
+	body := decodeResponseBody(t, queryResp)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	entries, ok := payload["entries"].([]any)
+	if !ok {
+		t.Fatalf("unexpected entries type: %T", payload["entries"])
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected at least one memory entry")
+	}
+}

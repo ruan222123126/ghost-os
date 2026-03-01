@@ -20,6 +20,7 @@ type serverOptions struct {
 	auth         apiTokenAuth
 }
 
+// newServerOptionsFromEnv 收敛 server 相关环境配置，避免 runServer 中散落解析逻辑。
 func newServerOptionsFromEnv(port int) serverOptions {
 	return serverOptions{
 		bindAddr:     resolveBindAddr(port),
@@ -29,6 +30,7 @@ func newServerOptionsFromEnv(port int) serverOptions {
 	}
 }
 
+// resolveBindAddr 优先使用显式绑定地址，否则回退到本地回环端口。
 func resolveBindAddr(port int) string {
 	if configured := strings.TrimSpace(getenvDefault("GHOST_BIND_ADDR", "")); configured != "" {
 		return configured
@@ -48,7 +50,7 @@ func runServer(ctx context.Context, port int) (string, error) {
 		return "", err
 	}
 
-	service := newBridgeService(store, sessionStore, runAgentWithSession)
+	service := newBridgeService(store, sessionStore, nil)
 	options := newServerOptionsFromEnv(port)
 	server := &http.Server{
 		Addr:              options.bindAddr,
@@ -80,6 +82,7 @@ type transport struct {
 	maxBodyBytes int64
 }
 
+// newHTTPHandler 注册所有 HTTP 路由并挂载认证/CORS 中间件链。
 func newHTTPHandler(service *bridgeService, options serverOptions) http.Handler {
 	transport := &transport{
 		service:      service,

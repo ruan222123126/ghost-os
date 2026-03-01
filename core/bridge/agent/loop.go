@@ -34,6 +34,18 @@ type Agent struct {
 
 var errToolCallIDRequired = errors.New("tool_call.id is empty")
 
+const maxConsecutiveNonExecutableToolCallTurns = 3
+
+// ErrAwaitingHuman 表示 ask_human 已发起问题，当前回合需要等待用户输入。
+type ErrAwaitingHuman struct {
+	QuestionID string
+	Prompt     string
+}
+
+func (e *ErrAwaitingHuman) Error() string {
+	return fmt.Sprintf("awaiting human input: question_id=%s", strings.TrimSpace(e.QuestionID))
+}
+
 func NewAgent(completer Completer, toolCatalog ToolCatalog, systemPrompt string, maxTurns int) *Agent {
 	return NewAgentWithHistory(completer, toolCatalog, NewHistory(systemPrompt), maxTurns)
 }
@@ -68,6 +80,7 @@ func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID 
 		traceID = fmt.Sprintf("agent-%d", time.Now().UnixNano())
 	}
 	a.appendUserMessage(userMessage)
+	consecutiveNonExecutableToolCallTurns := 0
 
 	for turn := 0; turn < a.maxTurns; turn++ {
 		msg, finishReason, err := a.completeOnce(ctx)
@@ -79,8 +92,18 @@ func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID 
 		case llm.FinishStop:
 			return a.handleAssistantStop(msg), nil
 		case llm.FinishToolCalls:
-			if err := a.handleToolCalls(ctx, traceID, msg.ToolCalls); err != nil {
+			stats, err := a.handleToolCalls(ctx, traceID, msg.ToolCalls)
+			if err != nil {
 				return "", fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
+			}
+			if stats.nonExecutable() {
+				consecutiveNonExecutableToolCallTurns++
+			} else {
+				consecutiveNonExecutableToolCallTurns = 0
+			}
+			// 防止模型反复生成不可执行的 tool_call（空参数/缺失工具）导致无效循环。
+			if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
+				return "", fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
 			}
 		case llm.FinishLength:
 			content := strings.TrimSpace(msg.Text)
@@ -127,20 +150,28 @@ func (a *Agent) handleAssistantStop(msg llm.Message) string {
 	return msg.Text
 }
 
+type toolCallTurnStats struct {
+	totalCalls int
+	executed   int
+}
+
+func (s toolCallTurnStats) nonExecutable() bool {
+	return s.totalCalls > 0 && s.executed == 0
+}
+
 // handleToolCalls 负责执行工具并把结果统一写回历史，供下一轮模型继续推理。
-func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm.ToolCall) error {
+func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm.ToolCall) (toolCallTurnStats, error) {
+	stats := toolCallTurnStats{totalCalls: len(calls)}
 	if len(calls) == 0 {
-		return errors.New("finish_reason=tool_calls but tool_calls is empty")
+		return stats, errors.New("finish_reason=tool_calls but tool_calls is empty")
 	}
 
 	for _, call := range calls {
 		toolCallID, toolName, args, err := validateToolCall(call)
 		if err != nil {
-			if errors.Is(err, errToolCallIDRequired) {
-				return fmt.Errorf("invalid tool call: %w", err)
-			}
+			// 统一降级处理：记录错误并继续，让模型有机会自我纠正。
 			fmt.Fprintf(os.Stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, strings.TrimSpace(call.ID), strings.TrimSpace(call.Name), err)
-			a.appendToolResult(toolCallID, toolName, traceID, "", err)
+			a.appendToolResult(toolCallID, toolName, traceID, "", err, nil)
 			continue
 		}
 
@@ -148,29 +179,44 @@ func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm
 
 		tool := a.tools.Get(toolName)
 		if tool == nil {
-			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q not found", toolName))
+			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q not found", toolName), nil)
 			continue
 		}
 
-		output, execErr := tool.Execute(ctx, args, traceID)
+		toolCtx := tools.WithToolCallID(ctx, toolCallID)
+		stats.executed++
+		output, execErr := tool.Execute(toolCtx, args, traceID)
 		if execErr != nil {
-			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q error: %w", toolName, execErr))
+			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q error: %w", toolName, execErr), nil)
 			continue
 		}
 
-		a.appendToolResult(toolCallID, toolName, traceID, output, nil)
+		meta := tools.InterpretExecuteResult(tool, output)
+		if meta.AwaitingHuman != nil {
+			// 暂停态通过专用错误向上抛，让上层保存现场并等待用户输入。
+			return stats, &ErrAwaitingHuman{
+				QuestionID: strings.TrimSpace(meta.AwaitingHuman.QuestionID),
+				Prompt:     strings.TrimSpace(meta.AwaitingHuman.Prompt),
+			}
+		}
+
+		a.appendToolResult(toolCallID, toolName, traceID, output, nil, meta.Content)
 	}
 
-	return nil
+	return stats, nil
 }
 
 // appendToolResult 统一写入 tool 消息，确保所有路径输出格式一致。
-func (a *Agent) appendToolResult(toolCallID, toolName, traceID, output string, toolErr error) {
-	a.history.Append(llm.Message{
+func (a *Agent) appendToolResult(toolCallID, toolName, traceID, output string, toolErr error, content []llm.ContentPart) {
+	message := llm.Message{
 		Role:       llm.RoleTool,
 		ToolCallID: toolCallID,
 		Text:       formatToolResult(toolName, traceID, output, toolErr),
-	})
+	}
+	if len(content) > 0 && toolErr == nil {
+		message.Content = content
+	}
+	a.history.Append(message)
 }
 
 type toolResultEnvelope struct {
@@ -204,6 +250,11 @@ func formatToolResult(toolName, traceID, output string, toolErr error) string {
 	return string(encoded)
 }
 
+// FormatToolResult 对外暴露统一 tool result 编码，便于跨请求恢复工具结果。
+func FormatToolResult(toolName, traceID, output string, toolErr error) string {
+	return formatToolResult(toolName, traceID, output, toolErr)
+}
+
 // validateToolCall 做最小输入护栏：id/name 必填，arguments 必须是 JSON object。
 func validateToolCall(call llm.ToolCall) (toolCallID string, toolName string, args json.RawMessage, err error) {
 	toolCallID = strings.TrimSpace(call.ID)
@@ -224,10 +275,10 @@ func validateToolCall(call llm.ToolCall) (toolCallID string, toolName string, ar
 	return toolCallID, toolName, args, nil
 }
 
-// normalizedToolArguments 只接受 object；空值归一化为 {}。
+// normalizedToolArguments 只接受非空 JSON object。
 func normalizedToolArguments(raw json.RawMessage) (json.RawMessage, error) {
 	if len(strings.TrimSpace(string(raw))) == 0 {
-		return json.RawMessage(`{}`), nil
+		return nil, errors.New("tool_call.arguments is empty")
 	}
 
 	var decoded any

@@ -1,3 +1,5 @@
+// Request/response codec utilities for validating and normalizing bus envelopes.
+
 package app
 
 import (
@@ -9,6 +11,7 @@ import (
 	"strings"
 )
 
+// decodeActionParams 将 raw params 解码为用例参数类型。
 func decodeActionParams[T any](raw json.RawMessage) (T, error) {
 	var params T
 	if err := decodeParams(raw, &params); err != nil {
@@ -17,12 +20,10 @@ func decodeActionParams[T any](raw json.RawMessage) (T, error) {
 	return params, nil
 }
 
+// validateBusRequest 做 envelope 级别校验，要求 action 存在且 params 为对象。
 func validateBusRequest(req apiRequest) error {
 	if strings.TrimSpace(req.Action) == "" {
 		return errors.New("action is required")
-	}
-	if strings.TrimSpace(req.TraceID) == "" {
-		return errors.New("trace_id is required")
 	}
 
 	source := bytes.TrimSpace(req.Params)
@@ -43,6 +44,7 @@ func validateBusRequest(req apiRequest) error {
 	return nil
 }
 
+// decodeParams 解码 params 并禁止未知字段；空/null 统一按空对象处理。
 func decodeParams(raw json.RawMessage, target any) error {
 	source := bytes.TrimSpace(raw)
 	if len(source) == 0 || bytes.Equal(source, []byte("null")) {

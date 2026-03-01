@@ -12,6 +12,7 @@ type ConfigStore struct {
 	runtime runtimeConfig
 }
 
+// NewConfigStoreFromEnv 用环境变量初始化可热更新配置存储。
 func NewConfigStoreFromEnv() (*ConfigStore, error) {
 	runtime, err := runtimeConfigFromEnv()
 	if err != nil {
@@ -20,12 +21,14 @@ func NewConfigStoreFromEnv() (*ConfigStore, error) {
 	return &ConfigStore{runtime: runtime}, nil
 }
 
+// RuntimeConfig 返回当前运行态配置快照（值语义）。
 func (s *ConfigStore) RuntimeConfig() runtimeConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.runtime
 }
 
+// Snapshot 返回可直接暴露给前端的安全配置视图。
 func (s *ConfigStore) Snapshot() configResponse {
 	runtime := s.RuntimeConfig()
 	return configResponse{
@@ -37,6 +40,7 @@ func (s *ConfigStore) Snapshot() configResponse {
 	}
 }
 
+// Update 仅覆盖请求中显式给出的字段，并在落库前执行归一化。
 func (s *ConfigStore) Update(req configUpdateRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

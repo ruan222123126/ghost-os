@@ -1,42 +1,33 @@
+// Session use cases for create/list/get/update/delete operations.
+
 package app
 
 import (
-	"errors"
 	"net/http"
 	"time"
-
-	"ghost-os/bridge/session"
 )
 
+// executeSessionsListAction 汇总全部会话元数据，并映射为 API 返回结构。
 func (s *bridgeService) executeSessionsListAction(traceID string) (any, int, error) {
 	store, code, err := s.requireSessionStore()
 	if err != nil {
 		return nil, code, err
 	}
 
-	sessionIDs, err := store.List()
+	summaries, err := store.ListMetadata()
 	if err != nil {
 		logAction(traceID, "SESSIONS_LIST", "error", err)
 		return nil, http.StatusInternalServerError, err
 	}
 
-	metadata := make([]sessionMetadata, 0, len(sessionIDs))
-	for _, id := range sessionIDs {
-		sess, loadErr := store.Load(id)
-		if loadErr != nil {
-			if errors.Is(loadErr, session.ErrSessionNotFound) {
-				continue
-			}
-			logAction(traceID, "SESSIONS_LIST", "error", loadErr)
-			return nil, http.StatusInternalServerError, loadErr
-		}
-
+	metadata := make([]sessionMetadata, 0, len(summaries))
+	for _, summary := range summaries {
 		metadata = append(metadata, sessionMetadata{
-			ID:           sess.ID,
-			CreatedAt:    sess.CreatedAt.UTC().Format(time.RFC3339),
-			UpdatedAt:    sess.UpdatedAt.UTC().Format(time.RFC3339),
-			MessageCount: len(sess.Messages),
-			TokenCount:   sess.TokenCount,
+			ID:           summary.ID,
+			CreatedAt:    summary.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:    summary.UpdatedAt.UTC().Format(time.RFC3339),
+			MessageCount: summary.MessageCount,
+			TokenCount:   summary.TokenCount,
 		})
 	}
 
@@ -44,6 +35,7 @@ func (s *bridgeService) executeSessionsListAction(traceID string) (any, int, err
 	return metadata, http.StatusOK, nil
 }
 
+// executeSessionGetAction 读取并返回单会话详情（含完整消息与统计信息）。
 func (s *bridgeService) executeSessionGetAction(params sessionIDParams, traceID string) (any, int, error) {
 	store, code, err := s.requireSessionStore()
 	if err != nil {
@@ -71,6 +63,7 @@ func (s *bridgeService) executeSessionGetAction(params sessionIDParams, traceID 
 	}, http.StatusOK, nil
 }
 
+// executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。
 func (s *bridgeService) executeSessionDeleteAction(params sessionIDParams, traceID string) (any, int, error) {
 	store, code, err := s.requireSessionStore()
 	if err != nil {

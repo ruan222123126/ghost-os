@@ -1,3 +1,5 @@
+// Transport middleware handles cross-cutting concerns like tracing and panic-safe responses.
+
 package app
 
 import (
@@ -10,6 +12,7 @@ type corsPolicy struct {
 	allowedOrigins map[string]struct{}
 }
 
+// newCORSPolicyFromEnv 从 GHOST_CORS_ORIGINS 构建白名单集合（逗号分隔）。
 func newCORSPolicyFromEnv() corsPolicy {
 	raw := strings.TrimSpace(getenvDefault("GHOST_CORS_ORIGINS", ""))
 	allowed := make(map[string]struct{})
@@ -27,6 +30,7 @@ func newCORSPolicyFromEnv() corsPolicy {
 	return corsPolicy{allowedOrigins: allowed}
 }
 
+// allows 判定 origin 是否允许；无 Origin（同源/非浏览器）默认放行。
 func (p corsPolicy) allows(origin string) bool {
 	if origin == "" {
 		return true
@@ -39,14 +43,17 @@ type apiTokenAuth struct {
 	token string
 }
 
+// newAPITokenAuthFromEnv 读取 API Token 认证配置。
 func newAPITokenAuthFromEnv() apiTokenAuth {
 	return apiTokenAuth{token: strings.TrimSpace(getenvDefault("GHOST_API_TOKEN", ""))}
 }
 
+// enabled 表示是否启用 token 认证。
 func (a apiTokenAuth) enabled() bool {
 	return a.token != ""
 }
 
+// authorized 支持 X-API-Token 与 Bearer 两种传参方式，并使用常量时间比较。
 func (a apiTokenAuth) authorized(r *http.Request) bool {
 	if !a.enabled() {
 		return true
@@ -63,6 +70,7 @@ func (a apiTokenAuth) authorized(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(provided), []byte(a.token)) == 1
 }
 
+// parseBearerToken 从 Authorization: Bearer <token> 中提取 token。
 func parseBearerToken(header string) string {
 	parts := strings.Fields(strings.TrimSpace(header))
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
@@ -71,6 +79,7 @@ func parseBearerToken(header string) string {
 	return strings.TrimSpace(parts[1])
 }
 
+// withAuth 为业务路由挂载认证中间件；OPTIONS 请求直接放行。
 func withAuth(auth apiTokenAuth, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodOptions {
@@ -85,6 +94,7 @@ func withAuth(auth apiTokenAuth, next http.Handler) http.Handler {
 	})
 }
 
+// withCORS 统一设置跨域响应头并处理预检请求。
 func withCORS(policy corsPolicy, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := strings.TrimSpace(r.Header.Get("Origin"))

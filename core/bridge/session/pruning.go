@@ -25,6 +25,16 @@ type messageSpan struct {
 // EstimateTokens 基于文本长度做近似估算，避免引入 provider 专属依赖。
 func EstimateTokens(msg llm.Message) int {
 	text := strings.TrimSpace(msg.Text)
+	for _, part := range msg.Content {
+		switch strings.ToLower(strings.TrimSpace(part.Type)) {
+		case llm.ContentTypeText:
+			text += part.Text
+		case llm.ContentTypeImage:
+			if part.Image != nil {
+				text += part.Image.Path + part.Image.URL + part.Image.MimeType + part.Image.SHA256
+			}
+		}
+	}
 	if msg.ToolCallID != "" {
 		text += msg.ToolCallID
 	}
@@ -47,6 +57,12 @@ func EstimateTokens(msg llm.Message) int {
 	}
 	if estimated <= 0 {
 		estimated = 1
+	}
+	for _, part := range msg.Content {
+		if strings.EqualFold(strings.TrimSpace(part.Type), llm.ContentTypeImage) {
+			// 图片输入在 provider 侧开销高于纯文本，按固定开销上调估算，减少上下文低估。
+			estimated += 500
+		}
 	}
 
 	// 加入每条消息固定开销，防止系统性低估。

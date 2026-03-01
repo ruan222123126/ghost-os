@@ -1,3 +1,5 @@
+// Agent/config use cases: query and mutation entrypoints exposed to transport layer.
+
 package app
 
 import (
@@ -10,6 +12,7 @@ import (
 	"ghost-os/bridge/session"
 )
 
+// executeAgentAction 执行一次 Agent 回合，并处理“等待人工回答”的中断状态。
 func (s *bridgeService) executeAgentAction(ctx context.Context, params agentParams, traceID string) (any, int, error) {
 	trimmed := strings.TrimSpace(params.Message)
 	trimmedSessionID := strings.TrimSpace(params.SessionID)
@@ -44,11 +47,13 @@ func (s *bridgeService) executeAgentAction(ctx context.Context, params agentPara
 	}, http.StatusOK, nil
 }
 
+// executeConfigGetAction 返回当前运行态配置快照，不暴露敏感明文字段。
 func (s *bridgeService) executeConfigGetAction(traceID string) (any, int, error) {
 	logAction(traceID, actionConfigGet, "success", nil)
 	return s.configStore.Snapshot(), http.StatusOK, nil
 }
 
+// executeConfigUpdateAction 按请求局部更新运行态配置，并返回更新后快照。
 func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, traceID string) (any, int, error) {
 	logAction(traceID, actionConfigUpdate, "running", nil)
 	if err := s.configStore.Update(req); err != nil {
@@ -59,6 +64,7 @@ func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, trace
 	return s.configStore.Snapshot(), http.StatusOK, nil
 }
 
+// executeHumanResponseAction 接收 HUMAN_RESPONSE，将答案写回会话并解除 pending 状态。
 func (s *bridgeService) executeHumanResponseAction(_ context.Context, params humanResponseParams, traceID string) (any, int, error) {
 	store, code, err := s.requireSessionStore()
 	if err != nil {

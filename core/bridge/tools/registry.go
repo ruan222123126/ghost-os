@@ -12,6 +12,7 @@ type Registry struct {
 	tools map[string]Tool
 }
 
+// NewRegistry 初始化空工具注册表。
 func NewRegistry() *Registry {
 	return &Registry{
 		tools: make(map[string]Tool),

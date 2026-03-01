@@ -18,6 +18,7 @@ type scriptExecArgs struct {
 	MaxMemoryMB int    `json:"max_memory_mb,omitempty"`
 }
 
+// NewScriptExecTool 创建 script_exec 工具并绑定 execution 客户端。
 func NewScriptExecTool(client ExecutionClient) Tool {
 	return ScriptExecTool{execution: client}
 }
@@ -49,11 +50,11 @@ func (ScriptExecTool) Parameters() json.RawMessage {
 			},
 			"timeout_ms": {
 				"type": "integer",
-				"description": "Execution timeout in milliseconds (default: 30000, max: 60000)."
+				"description": "Execution timeout in milliseconds. Limits are enforced by the execution layer."
 			},
 			"max_memory_mb": {
 				"type": "integer",
-				"description": "Maximum memory usage in MB (default: 256, max: 512)."
+				"description": "Maximum memory usage in MB. Limits are enforced by the execution layer."
 			}
 		},
 		"required": ["script"],
@@ -61,6 +62,7 @@ func (ScriptExecTool) Parameters() json.RawMessage {
 	}`)
 }
 
+// Execute 校验脚本参数后调用 execution 层，资源限制由 native 统一裁剪。
 func (t ScriptExecTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
 	if t.execution == nil {
 		return "", fmt.Errorf("execution client is not configured")
@@ -79,27 +81,18 @@ func (t ScriptExecTool) Execute(ctx context.Context, argsJSON json.RawMessage, t
 		return "", fmt.Errorf("script too long (max 10KB)")
 	}
 
-	timeoutMs := args.TimeoutMs
-	if timeoutMs <= 0 {
-		timeoutMs = 30_000
+	// 资源约束在 execution layer 统一裁剪，避免与 native 规则重复漂移。
+	params := map[string]any{
+		"script": script,
 	}
-	if timeoutMs > 60_000 {
-		timeoutMs = 60_000
+	if args.TimeoutMs > 0 {
+		params["timeout_ms"] = args.TimeoutMs
 	}
-
-	maxMemoryMB := args.MaxMemoryMB
-	if maxMemoryMB <= 0 {
-		maxMemoryMB = 256
-	}
-	if maxMemoryMB > 512 {
-		maxMemoryMB = 512
+	if args.MaxMemoryMB > 0 {
+		params["max_memory_mb"] = args.MaxMemoryMB
 	}
 
-	payload, err := t.execution.Call(ctx, "SCRIPT_EXEC", map[string]any{
-		"script":        script,
-		"timeout_ms":    timeoutMs,
-		"max_memory_mb": maxMemoryMB,
-	}, traceID)
+	payload, err := t.execution.Call(ctx, "SCRIPT_EXEC", params, traceID)
 	if err != nil {
 		return "", fmt.Errorf("execution SCRIPT_EXEC failed: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
 )
 
@@ -25,16 +26,30 @@ type agentExecutorFunc func(
 type bridgeService struct {
 	configStore   *ConfigStore
 	sessionStore  *session.Store
+	memoryManager *memory.MemoryManager
 	agentExecutor agentExecutorFunc
 	actions       map[string]actionHandler
 }
 
+// newBridgeService 组装 action -> handler 映射，并初始化会话与记忆依赖。
 func newBridgeService(store *ConfigStore, sessionStore *session.Store, executor agentExecutorFunc) *bridgeService {
+	memoryManager := memory.NewMemoryManager(memory.MemoryConfig{
+		WarmCapacity: agentWarmMemoryCapacity,
+		WarmPath:     memoryWarmPathFromEnv(),
+		ColdBaseDir:  memoryColdPathFromEnv(),
+		SessionStore: sessionStore,
+	})
+
+	if executor == nil {
+		executor = newSessionAgentExecutor(memoryManager)
+	}
+
 	service := &bridgeService{
 		configStore:   store,
 		sessionStore:  sessionStore,
+		memoryManager: memoryManager,
 		agentExecutor: executor,
-		actions:       make(map[string]actionHandler, 3),
+		actions:       make(map[string]actionHandler, 6),
 	}
 
 	registerAction(service, actionAgentSend, func(ctx context.Context, params agentParams, traceID string) (any, int, error) {
@@ -46,9 +61,19 @@ func newBridgeService(store *ConfigStore, sessionStore *session.Store, executor 
 	registerAction(service, actionConfigUpdate, func(_ context.Context, params configUpdateRequest, traceID string) (any, int, error) {
 		return service.executeConfigUpdateAction(params, traceID)
 	})
+	registerAction(service, actionHumanResponse, func(ctx context.Context, params humanResponseParams, traceID string) (any, int, error) {
+		return service.executeHumanResponseAction(ctx, params, traceID)
+	})
+	registerAction(service, actionMemoryQuery, func(ctx context.Context, params memoryQueryParams, traceID string) (any, int, error) {
+		return service.executeMemoryQueryAction(ctx, params, traceID)
+	})
+	registerAction(service, actionMemoryArchive, func(ctx context.Context, params memoryArchiveParams, traceID string) (any, int, error) {
+		return service.executeMemoryArchiveAction(ctx, params, traceID)
+	})
 	return service
 }
 
+// registerAction 负责“先解码参数，再调用用例”，避免每个 action 重复样板代码。
 func registerAction[T any](service *bridgeService, action string, handler func(context.Context, T, string) (any, int, error)) {
 	service.actions[action] = func(ctx context.Context, rawParams json.RawMessage, traceID string) (any, int, error) {
 		params, err := decodeActionParams[T](rawParams)
@@ -59,6 +84,7 @@ func registerAction[T any](service *bridgeService, action string, handler func(c
 	}
 }
 
+// dispatchAction 根据 action 查找处理器；未知 action 返回显式可选列表。
 func (s *bridgeService) dispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (any, int, error) {
 	handler, ok := s.actions[action]
 	if !ok {
@@ -67,6 +93,7 @@ func (s *bridgeService) dispatchAction(ctx context.Context, action string, param
 	return handler(ctx, params, traceID)
 }
 
+// unsupportedActionError 构造稳定错误消息，便于客户端快速定位拼写/版本问题。
 func (s *bridgeService) unsupportedActionError(action string) error {
 	registered := make([]string, 0, len(s.actions))
 	for name := range s.actions {

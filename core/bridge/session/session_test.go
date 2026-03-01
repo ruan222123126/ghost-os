@@ -66,3 +66,52 @@ func TestGetMessagesPrunesWhenLimitReached(t *testing.T) {
 		t.Fatal("system message should be preserved after pruning")
 	}
 }
+
+func TestPendingQuestionsLifecycle(t *testing.T) {
+	s := NewSession("")
+	s.AddPendingQuestion("q-1", PendingHumanQuestion{
+		Prompt:     "Which database?",
+		ToolCallID: "call-1",
+		TraceID:    "trace-1",
+	})
+
+	if !s.HasPendingQuestion("q-1") {
+		t.Fatal("expected q-1 to be pending")
+	}
+	if ok := s.SetHumanAnswer("q-1", "postgres"); !ok {
+		t.Fatal("expected SetHumanAnswer to succeed")
+	}
+
+	resolved := s.PopAnsweredQuestions()
+	if len(resolved) != 1 {
+		t.Fatalf("unexpected resolved question count: got %d want %d", len(resolved), 1)
+	}
+	if resolved[0].QuestionID != "q-1" || resolved[0].Answer != "postgres" {
+		t.Fatalf("unexpected resolved payload: %+v", resolved[0])
+	}
+	if s.HasPendingQuestion("q-1") {
+		t.Fatal("pending question should be cleared after pop")
+	}
+}
+
+func TestMemoryMetadataLifecycle(t *testing.T) {
+	s := NewSession("")
+	if !s.MemoryMetadata.IsZero() {
+		t.Fatalf("memory metadata should be zero value at init: %+v", s.MemoryMetadata)
+	}
+
+	archiveTime := time.Now().UTC().Add(-time.Minute)
+	s.MarkMemoryArchived(archiveTime)
+	if s.MemoryMetadata.ArchivedAt.IsZero() {
+		t.Fatal("archived_at should be set")
+	}
+
+	accessTime := time.Now().UTC()
+	s.MarkMemoryAccess(accessTime)
+	if s.MemoryMetadata.AccessCount != 1 {
+		t.Fatalf("unexpected access count: got %d want %d", s.MemoryMetadata.AccessCount, 1)
+	}
+	if s.MemoryMetadata.LastAccessAt.IsZero() {
+		t.Fatal("last_access_at should be set")
+	}
+}

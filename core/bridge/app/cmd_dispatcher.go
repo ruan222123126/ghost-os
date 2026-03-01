@@ -11,6 +11,7 @@ const defaultUserMessage = "Hello, what can you do?"
 
 type commandDispatcher struct{}
 
+// newCommandDispatcher 返回无状态分发器，便于在 Run 中保持入口纯函数化。
 func newCommandDispatcher() commandDispatcher {
 	return commandDispatcher{}
 }
@@ -37,6 +38,7 @@ func (d commandDispatcher) dispatch(ctx context.Context, args []string) (string,
 	}
 }
 
+// parseServePort 解析 serve 子命令端口，未指定时默认 8080。
 func (commandDispatcher) parseServePort(args []string) (int, error) {
 	if len(args) == 0 {
 		return 8080, nil
@@ -49,6 +51,7 @@ func (commandDispatcher) parseServePort(args []string) (int, error) {
 	return parsed, nil
 }
 
+// parseAgentMessage 将命令行剩余参数拼成一条消息，空输入回退默认问候语。
 func (commandDispatcher) parseAgentMessage(args []string) string {
 	if len(args) == 0 {
 		return defaultUserMessage

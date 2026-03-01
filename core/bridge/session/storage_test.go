@@ -98,6 +98,52 @@ func TestStoreListSessions(t *testing.T) {
 	}
 }
 
+func TestStoreListMetadata(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	first := NewSession("system")
+	first.ID = "session-a"
+	first.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
+	if err := store.Save(first); err != nil {
+		t.Fatalf("save first: %v", err)
+	}
+
+	second := NewSession("system")
+	second.ID = "session-b"
+	second.AddMessage(llm.Message{Role: llm.RoleUser, Text: "task"})
+	second.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "done"})
+	if err := store.Save(second); err != nil {
+		t.Fatalf("save second: %v", err)
+	}
+
+	got, err := store.ListMetadata()
+	if err != nil {
+		t.Fatalf("list metadata: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("unexpected metadata count: got=%d want=2", len(got))
+	}
+
+	if got[0].ID != "session-a" || got[1].ID != "session-b" {
+		t.Fatalf("unexpected metadata order: %+v", got)
+	}
+	if got[0].MessageCount != len(first.Messages) {
+		t.Fatalf("unexpected session-a message count: got=%d want=%d", got[0].MessageCount, len(first.Messages))
+	}
+	if got[1].MessageCount != len(second.Messages) {
+		t.Fatalf("unexpected session-b message count: got=%d want=%d", got[1].MessageCount, len(second.Messages))
+	}
+	if got[0].TokenCount <= 0 || got[1].TokenCount <= 0 {
+		t.Fatalf("token_count should be positive: got=%+v", got)
+	}
+	if got[0].CreatedAt.IsZero() || got[0].UpdatedAt.IsZero() || got[1].CreatedAt.IsZero() || got[1].UpdatedAt.IsZero() {
+		t.Fatalf("timestamps should not be zero: got=%+v", got)
+	}
+}
+
 func TestStoreRejectsInvalidSessionID(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {

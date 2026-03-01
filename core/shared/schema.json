@@ -17,8 +17,11 @@
       "enum": [
         "PING",
         "AGENT_SEND",
+        "HUMAN_RESPONSE",
         "CONFIG_GET",
         "CONFIG_UPDATE",
+        "MEMORY_QUERY",
+        "MEMORY_ARCHIVE",
         "LIST_FILES",
         "BASH_EXEC",
         "SCRIPT_EXEC",

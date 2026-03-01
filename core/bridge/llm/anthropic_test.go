@@ -1,6 +1,9 @@
 package llm
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -71,5 +74,48 @@ func TestAnthropicToCompletionResponseUnknownStopReasonReturnsError(t *testing.T
 	}
 	if !strings.Contains(err.Error(), "unsupported anthropic stop_reason") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
+	tempDir := t.TempDir()
+	imagePath := filepath.Join(tempDir, "tool-shot.jpg")
+	if err := os.WriteFile(imagePath, []byte("fake-tool-jpg"), 0o600); err != nil {
+		t.Fatalf("write temp image: %v", err)
+	}
+
+	request, err := toAnthropicRequest("claude-3-7-sonnet", 1024, CompletionRequest{
+		Messages: []Message{
+			{
+				Role:       RoleTool,
+				ToolCallID: "tool-call-1",
+				Text:       `{"status":"success","tool":"browser_action"}`,
+				Content: []ContentPart{
+					{
+						Type: ContentTypeImage,
+						Image: &ImageContent{
+							Path:     imagePath,
+							MimeType: "image/jpeg",
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toAnthropicRequest returned error: %v", err)
+	}
+	if len(request.Messages) != 1 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 1)
+	}
+	encoded, err := json.Marshal(request.Messages[0].Content)
+	if err != nil {
+		t.Fatalf("marshal tool content: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"type":"tool_result"`) {
+		t.Fatalf("expected tool_result block, got: %s", string(encoded))
+	}
+	if !strings.Contains(string(encoded), `"type":"image"`) {
+		t.Fatalf("expected image block in tool_result, got: %s", string(encoded))
 	}
 }

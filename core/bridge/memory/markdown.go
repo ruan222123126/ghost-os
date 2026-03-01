@@ -1,0 +1,186 @@
+package memory
+
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// MarkdownNode 表示一个 Markdown 记忆节点（带 YAML Frontmatter）。
+type MarkdownNode struct {
+	ID          string    `yaml:"id"`
+	Importance  float64   `yaml:"importance"`
+	CreatedAt   time.Time `yaml:"created_at"`
+	RelatedTo   []string  `yaml:"related_to,omitempty"`
+	Tags        []string  `yaml:"tags,omitempty"`
+	SessionID   string    `yaml:"session_id,omitempty"`
+	Content     string    `yaml:"-"` // Markdown 正文
+}
+
+// MarkdownStore 提供基于 Markdown + YAML Frontmatter 的持久化。
+type MarkdownStore struct {
+	baseDir string
+}
+
+// NewMarkdownStore 创建 Markdown 存储实例。
+func NewMarkdownStore(baseDir string) *MarkdownStore {
+	return &MarkdownStore{
+		baseDir: resolveMemoryPath(baseDir),
+	}
+}
+
+// Save 保存记忆节点为 Markdown 文件。
+func (s *MarkdownStore) Save(node MarkdownNode) error {
+	if node.ID == "" {
+		return fmt.Errorf("node id is required")
+	}
+	if s.baseDir == "" {
+		return fmt.Errorf("markdown store base dir is empty")
+	}
+
+	if err := os.MkdirAll(s.baseDir, 0o700); err != nil {
+		return fmt.Errorf("create markdown store directory: %w", err)
+	}
+
+	filePath := filepath.Join(s.baseDir, node.ID+".md")
+	content, err := s.marshal(node)
+	if err != nil {
+		return fmt.Errorf("marshal markdown node: %w", err)
+	}
+
+	tmpPath := fmt.Sprintf("%s.tmp-%d", filePath, time.Now().UnixNano())
+	if err := os.WriteFile(tmpPath, content, 0o600); err != nil {
+		return fmt.Errorf("write markdown temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("replace markdown file: %w", err)
+	}
+	return nil
+}
+
+// Load 从 Markdown 文件加载记忆节点。
+func (s *MarkdownStore) Load(id string) (MarkdownNode, error) {
+	if id == "" {
+		return MarkdownNode{}, fmt.Errorf("node id is required")
+	}
+	if s.baseDir == "" {
+		return MarkdownNode{}, fmt.Errorf("markdown store base dir is empty")
+	}
+
+	filePath := filepath.Join(s.baseDir, id+".md")
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return MarkdownNode{}, fmt.Errorf("read markdown file: %w", err)
+	}
+
+	return s.unmarshal(data)
+}
+
+// List 列出所有记忆节点 ID。
+func (s *MarkdownStore) List() ([]string, error) {
+	if s.baseDir == "" {
+		return nil, nil
+	}
+
+	entries, err := os.ReadDir(s.baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read markdown store directory: %w", err)
+	}
+
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		id := strings.TrimSuffix(name, ".md")
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// Delete 删除指定记忆节点。
+func (s *MarkdownStore) Delete(id string) error {
+	if id == "" {
+		return fmt.Errorf("node id is required")
+	}
+	if s.baseDir == "" {
+		return nil
+	}
+
+	filePath := filepath.Join(s.baseDir, id+".md")
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("delete markdown file: %w", err)
+	}
+	return nil
+}
+
+// marshal 将节点序列化为 Markdown + YAML Frontmatter。
+func (s *MarkdownStore) marshal(node MarkdownNode) ([]byte, error) {
+	var buf bytes.Buffer
+
+	// 写入 YAML Frontmatter
+	buf.WriteString("---\n")
+	encoder := yaml.NewEncoder(&buf)
+	encoder.SetIndent(2)
+	if err := encoder.Encode(node); err != nil {
+		return nil, err
+	}
+	encoder.Close()
+	buf.WriteString("---\n\n")
+
+	// 写入 Markdown 正文
+	buf.WriteString(strings.TrimSpace(node.Content))
+	buf.WriteString("\n")
+
+	return buf.Bytes(), nil
+}
+
+// unmarshal 从 Markdown + YAML Frontmatter 解析节点。
+func (s *MarkdownStore) unmarshal(data []byte) (MarkdownNode, error) {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+
+	// 检查第一行是否为 "---"
+	if !scanner.Scan() || scanner.Text() != "---" {
+		return MarkdownNode{}, fmt.Errorf("invalid markdown format: missing frontmatter")
+	}
+
+	// 读取 YAML Frontmatter
+	var yamlBuf bytes.Buffer
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "---" {
+			break
+		}
+		yamlBuf.WriteString(line)
+		yamlBuf.WriteString("\n")
+	}
+
+	var node MarkdownNode
+	if err := yaml.Unmarshal(yamlBuf.Bytes(), &node); err != nil {
+		return MarkdownNode{}, fmt.Errorf("unmarshal yaml frontmatter: %w", err)
+	}
+
+	// 读取 Markdown 正文
+	var contentBuf bytes.Buffer
+	for scanner.Scan() {
+		contentBuf.WriteString(scanner.Text())
+		contentBuf.WriteString("\n")
+	}
+	node.Content = strings.TrimSpace(contentBuf.String())
+
+	return node, nil
+}
