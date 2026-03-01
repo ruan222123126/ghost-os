@@ -1,3 +1,5 @@
+// React hook that loads and mutates session collections via bridge APIs.
+
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';

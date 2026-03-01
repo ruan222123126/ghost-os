@@ -1,3 +1,5 @@
+// Next.js API route for reading and updating bridge configuration.
+
 import { bridgeUnavailableResponse, parseJSONBody, passThroughToBridge } from '@/lib/bridgeProxy';
 
 export const dynamic = 'force-dynamic';

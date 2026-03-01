@@ -1,3 +1,5 @@
+// SessionSidebar component used by the web console chat/session interface.
+
 'use client';
 
 import type { FC } from 'react';

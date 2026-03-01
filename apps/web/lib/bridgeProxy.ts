@@ -1,3 +1,5 @@
+// Local proxy utilities for forwarding frontend requests to the bridge service.
+
 import { toErrorMessage } from '@/lib/errors';
 import type { ApiEnvelope } from '@/lib/types';
 

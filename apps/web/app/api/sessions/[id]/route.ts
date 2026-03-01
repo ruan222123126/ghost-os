@@ -1,3 +1,5 @@
+// Module-level helpers and contracts for this file.
+
 import { bridgeUnavailableResponse, passThroughToBridge } from '@/lib/bridgeProxy';
 
 export const dynamic = 'force-dynamic';

@@ -1,3 +1,5 @@
+// ChatInput component used by the web console chat/session interface.
+
 'use client';
 
 import type { FC } from 'react';
@@ -42,7 +44,7 @@ export const ChatInput: FC<ChatInputProps> = ({ loading, disabled, onSend }) => 
       />
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-app-muted">
-          {disabled ? 'Waiting for runtime config...' : 'Enter to send, Shift+Enter for newline'}
+          {disabled && loading ? 'Agent is asking a question, please answer above...' : disabled ? 'Waiting for runtime config...' : 'Enter to send, Shift+Enter for newline'}
         </span>
         <button
           type="button"

@@ -1,3 +1,5 @@
+// SessionItem component used by the web console chat/session interface.
+
 'use client';
 
 import type { FC, MouseEvent } from 'react';

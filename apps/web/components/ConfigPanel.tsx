@@ -1,3 +1,5 @@
+// ConfigPanel component used by the web console chat/session interface.
+
 'use client';
 
 import type { FC, FormEvent } from 'react';

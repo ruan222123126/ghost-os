@@ -1,3 +1,5 @@
+// Main web console page composing session list, messages, and input panels.
+
 'use client';
 
 import type { FC } from 'react';

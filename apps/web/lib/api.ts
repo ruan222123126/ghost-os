@@ -1,3 +1,5 @@
+// Web API client wrappers around Next.js route handlers and bridge proxy calls.
+
 import type {
   AgentSendResponse,
   ApiEnvelope,

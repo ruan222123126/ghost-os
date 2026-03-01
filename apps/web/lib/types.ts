@@ -1,3 +1,5 @@
+// Shared web-side TypeScript contracts aligned with bridge API payloads.
+
 export type { ApiEnvelope, ApiErrorEnvelope, ApiRequest, ApiSuccessEnvelope } from '@/lib/envelope.generated';
 
 export interface UserChatMessage {

@@ -1,3 +1,5 @@
+// React hook for reading and updating bridge runtime configuration.
+
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getConfig, updateConfig } from '@/lib/api';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';

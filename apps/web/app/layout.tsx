@@ -1,3 +1,5 @@
+// Root layout for metadata, global styles, and top-level providers.
+
 import type { Metadata } from 'next';
 import './globals.css';
 

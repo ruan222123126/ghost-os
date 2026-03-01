@@ -1,3 +1,5 @@
+// Normalized error helpers used across web hooks, API calls, and UI state.
+
 export function toErrorMessage(error: unknown, fallback = 'request failed'): string {
   if (error instanceof Error) {
     const message = error.message.trim();

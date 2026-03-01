@@ -1,3 +1,5 @@
+// Global error boundary UI for recoverable runtime errors in the web app.
+
 'use client';
 
 import { useEffect } from 'react';

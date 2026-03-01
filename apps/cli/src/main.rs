@@ -1,3 +1,5 @@
+// CLI entrypoint: parses commands and starts the interactive or one-shot execution flow.
+
 mod client;
 mod commands;
 mod config;

@@ -83,6 +83,14 @@ function buildErrorMessage(messageText: string): ChatMessage {
   };
 }
 
+function buildAssistantMessage(messageText: string): ChatMessage {
+  return {
+    id: nextID(),
+    kind: 'assistant',
+    content: messageText,
+  };
+}
+
 function isAwaitingHumanResponse(response: AgentSendResponse): response is AgentSendAwaitingHumanResponse {
   return response.status === 'awaiting_human';
 }
@@ -95,6 +103,22 @@ function buildPendingQuestionMessage(response: AgentSendAwaitingHumanResponse): 
     questionId: response.question_id,
     sessionId: response.session_id,
   };
+}
+
+function replacePendingQuestionWithUserAnswer(messages: ChatMessage[], questionId: string, answer: string): ChatMessage[] {
+  return messages.flatMap((message) => {
+    if (message.kind === 'pending_question' && message.questionId === questionId) {
+      // 题卡被回答后替换为用户消息，维持对话时间线连续性。
+      return [
+        {
+          id: nextID(),
+          kind: 'user',
+          content: answer,
+        },
+      ];
+    }
+    return [message];
+  });
 }
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
@@ -111,6 +135,29 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   const replaceWithErrorMessage = useCallback((messageText: string) => {
     setMessages([buildErrorMessage(messageText)]);
   }, []);
+
+  const appendReplyMessage = useCallback((reply: AgentSendResponse) => {
+    if (reply.session_id && reply.session_id !== currentSessionId) {
+      onSessionResolved?.(reply.session_id);
+    }
+    if (isAwaitingHumanResponse(reply)) {
+      // 将 ask_human 回合渲染为待回答卡片，避免丢失 question_id/session_id。
+      appendMessage(buildPendingQuestionMessage(reply));
+      return;
+    }
+    appendMessage(buildAssistantMessage(reply.message));
+  }, [appendMessage, currentSessionId, onSessionResolved]);
+
+  const appendErrorFromUnknown = useCallback((error: unknown) => {
+    const messageText = toErrorMessage(error);
+    setChatError(messageText);
+    appendMessage(buildErrorMessage(messageText));
+  }, [appendMessage]);
+
+  const sendAndAppendReply = useCallback(async (message: string, sessionId?: string) => {
+    const reply = await sendMessage(message, sessionId);
+    appendReplyMessage(reply);
+  }, [appendReplyMessage]);
 
   const sendChatMessage = useCallback(async (message: string) => {
     const trimmed = message.trim();
@@ -130,34 +177,22 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     setLoading(true);
 
     try {
-      const reply = await sendMessage(trimmed, currentSessionId || undefined);
-      if (reply.session_id && reply.session_id !== currentSessionId) {
-        onSessionResolved?.(reply.session_id);
-      }
-
-      if (isAwaitingHumanResponse(reply)) {
-        // 将 ask_human 回合渲染为待回答卡片，避免丢失 question_id/session_id。
-        appendMessage(buildPendingQuestionMessage(reply));
-      } else {
-        appendMessage({
-          id: nextID(),
-          kind: 'assistant',
-          content: reply.message,
-        });
-      }
+      await sendAndAppendReply(trimmed, currentSessionId || undefined);
     } catch (error) {
-      const messageText = toErrorMessage(error);
-      setChatError(messageText);
-      appendMessage(buildErrorMessage(messageText));
+      appendErrorFromUnknown(error);
     } finally {
       setLoading(false);
     }
-  }, [appendMessage, currentSessionId, onSessionResolved]);
+  }, [appendErrorFromUnknown, appendMessage, currentSessionId, sendAndAppendReply]);
 
   const answerQuestion = useCallback(async (questionId: string, answer: string) => {
     const trimmedQuestionID = questionId.trim();
     const trimmedAnswer = answer.trim();
-    if (!trimmedQuestionID || !trimmedAnswer) {
+    if (!trimmedQuestionID) {
+      return;
+    }
+    if (!trimmedAnswer) {
+      setChatError('Answer cannot be empty');
       return;
     }
 
@@ -173,45 +208,16 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     setLoading(true);
     try {
       await sendHumanResponse(pending.sessionId, pending.questionId, trimmedAnswer);
-      setMessages((previous) =>
-        previous.flatMap((message) => {
-          if (message.kind === 'pending_question' && message.questionId === trimmedQuestionID) {
-            // 题卡被回答后替换为用户消息，维持对话时间线连续性。
-            return [
-              {
-                id: nextID(),
-                kind: 'user' as const,
-                content: trimmedAnswer,
-              },
-            ];
-          }
-          return [message];
-        })
-      );
+      setMessages((previous) => replacePendingQuestionWithUserAnswer(previous, trimmedQuestionID, trimmedAnswer));
 
       // 发送空消息触发 bridge 继续运行暂停中的 agent 回合。
-      const reply = await sendMessage('', pending.sessionId);
-      if (reply.session_id && reply.session_id !== currentSessionId) {
-        onSessionResolved?.(reply.session_id);
-      }
-
-      if (isAwaitingHumanResponse(reply)) {
-        appendMessage(buildPendingQuestionMessage(reply));
-      } else {
-        appendMessage({
-          id: nextID(),
-          kind: 'assistant',
-          content: reply.message,
-        });
-      }
+      await sendAndAppendReply('', pending.sessionId);
     } catch (error) {
-      const messageText = toErrorMessage(error);
-      setChatError(messageText);
-      appendMessage(buildErrorMessage(messageText));
+      appendErrorFromUnknown(error);
     } finally {
       setLoading(false);
     }
-  }, [appendMessage, currentSessionId, messages, onSessionResolved]);
+  }, [appendErrorFromUnknown, messages, sendAndAppendReply]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();

@@ -1,3 +1,5 @@
+// Next.js API route that starts agent runs and streams execution responses.
+
 import { bridgeUnavailableResponse, parseJSONBody, passThroughToBridge } from '@/lib/bridgeProxy';
 
 export const dynamic = 'force-dynamic';

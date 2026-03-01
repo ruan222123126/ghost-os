@@ -1,3 +1,5 @@
+// CLI-side configuration loading, defaults, and environment overrides.
+
 use std::env;
 
 use anyhow::{Context, Result, bail};

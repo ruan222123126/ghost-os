@@ -1,3 +1,5 @@
+// Shared CLI data structures for request/response payloads and runtime state.
+
 use serde::{Deserialize, Serialize};
 
 pub use crate::envelope_generated::{ApiRequest, ApiResponse};
