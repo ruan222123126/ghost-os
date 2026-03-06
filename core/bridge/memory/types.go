@@ -23,18 +23,23 @@ type MemoryEntry struct {
 	Timestamp   time.Time      `json:"timestamp"`
 	AccessCount int            `json:"access_count"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
+	Importance  float64        `json:"importance,omitempty"`
+	ExpiresAt   time.Time      `json:"expires_at,omitempty"`
+	RelatedTo   []string       `json:"related_to,omitempty"`
+	// TODO(memory): 仅做字段透传，尚未接入向量索引/召回。
+	EmbeddingID string `json:"embedding_id,omitempty"`
 
-	// 预留给后续时间衰减与优先级增强。
+	// Deprecated: 预留字段，当前 API 不会写入该值，仅兼容历史/手工注入场景。
 	DecayFactor float64 `json:"decay_factor,omitempty"`
-	Priority    int     `json:"priority,omitempty"`
+	// Deprecated: 预留字段，当前 API 不会写入该值，仅兼容历史/手工注入场景。
+	Priority int `json:"priority,omitempty"`
 }
 
-// MemoryLayer 定义三层存储统一操作接口。
+// Deprecated: 早期预留的抽象层接口，运行时已直接依赖具体实现。
+// TODO(memory): 确认外部无依赖后移除该接口。
 type MemoryLayer interface {
 	Store(entry MemoryEntry) error
 	Retrieve(query MemoryQuery) ([]MemoryEntry, error)
-	Delete(id string) error
-	Clear() error
 }
 
 // TimeRange 表示查询时间范围（UTC）。
@@ -60,14 +65,17 @@ func (r *TimeRange) Contains(ts time.Time) bool {
 
 // MemoryQuery 是统一检索参数。
 type MemoryQuery struct {
-	TimeRange *TimeRange     `json:"time_range,omitempty"`
-	Limit     int            `json:"limit,omitempty"`
-	Keywords  []string       `json:"keywords,omitempty"`
-	Metadata  map[string]any `json:"metadata,omitempty"`
+	TimeRange       *TimeRange     `json:"time_range,omitempty"`
+	Limit           int            `json:"limit,omitempty"`
+	Keywords        []string       `json:"keywords,omitempty"`
+	Metadata        map[string]any `json:"metadata,omitempty"`
+	IncludeMarkdown bool           `json:"include_markdown,omitempty"`
+	SemanticQuery   string         `json:"semantic_query,omitempty"`
 
-	// 预留字段：后续支持时间衰减与优先级过滤。
+	// Deprecated: 预留字段，当前 API 未暴露该能力，仅兼容手工构造查询。
 	UseTimeDecay bool `json:"use_time_decay,omitempty"`
-	MinPriority  int  `json:"min_priority,omitempty"`
+	// Deprecated: 预留字段，当前 API 未暴露该能力，仅兼容手工构造查询。
+	MinPriority int `json:"min_priority,omitempty"`
 }
 
 func normalizeEntry(entry MemoryEntry) MemoryEntry {
@@ -85,6 +93,32 @@ func normalizeEntry(entry MemoryEntry) MemoryEntry {
 	if out.Metadata == nil {
 		out.Metadata = make(map[string]any, 2)
 	}
+	if out.Importance < 0 {
+		out.Importance = 0
+	}
+	if out.Importance > 1 {
+		out.Importance = 1
+	}
+	if !out.ExpiresAt.IsZero() {
+		out.ExpiresAt = out.ExpiresAt.UTC()
+	}
+	if len(out.RelatedTo) > 0 {
+		seen := make(map[string]struct{}, len(out.RelatedTo))
+		cleaned := make([]string, 0, len(out.RelatedTo))
+		for _, related := range out.RelatedTo {
+			id := strings.TrimSpace(related)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			cleaned = append(cleaned, id)
+		}
+		out.RelatedTo = cleaned
+	}
+	out.EmbeddingID = strings.TrimSpace(out.EmbeddingID)
 	return out
 }
 
@@ -95,6 +129,9 @@ func cloneEntry(entry MemoryEntry) MemoryEntry {
 		for k, v := range entry.Metadata {
 			out.Metadata[k] = v
 		}
+	}
+	if len(entry.RelatedTo) > 0 {
+		out.RelatedTo = append([]string(nil), entry.RelatedTo...)
 	}
 	return out
 }

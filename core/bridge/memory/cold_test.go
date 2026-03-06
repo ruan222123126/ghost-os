@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -62,5 +63,45 @@ func TestColdMemoryListSessionsByTimeRange(t *testing.T) {
 	}
 	if len(oldIDs) != 0 {
 		t.Fatalf("unexpected old sessions: %v", oldIDs)
+	}
+}
+
+func TestColdMemorySaveAndLoadMarkdownNode(t *testing.T) {
+	cold := NewColdMemory(t.TempDir())
+	node := MarkdownNode{
+		ID:          "node_001",
+		Importance:  0.9,
+		CreatedAt:   time.Now().UTC(),
+		RelatedTo:   []string{"node_abc", "user_profile"},
+		Tags:        []string{"ghost-os", "memory"},
+		SessionID:   "session-markdown",
+		EmbeddingID: "emb_001",
+		Content:     "# Preference\nUser prefers Go services.",
+	}
+
+	if err := cold.SaveMarkdownNode(node); err != nil {
+		t.Fatalf("save markdown node: %v", err)
+	}
+
+	loaded, err := cold.LoadMarkdownNode(node.ID)
+	if err != nil {
+		t.Fatalf("load markdown node: %v", err)
+	}
+	if loaded.ID != node.ID {
+		t.Fatalf("unexpected node id: got %q want %q", loaded.ID, node.ID)
+	}
+	if loaded.EmbeddingID != node.EmbeddingID {
+		t.Fatalf("unexpected embedding id: got %q want %q", loaded.EmbeddingID, node.EmbeddingID)
+	}
+	if !strings.Contains(loaded.Content, "Go services") {
+		t.Fatalf("unexpected markdown content: %q", loaded.Content)
+	}
+
+	ids, err := cold.ListMarkdownNodes()
+	if err != nil {
+		t.Fatalf("list markdown nodes: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != node.ID {
+		t.Fatalf("unexpected markdown node ids: %v", ids)
 	}
 }

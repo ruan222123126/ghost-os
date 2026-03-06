@@ -28,13 +28,20 @@ type coldArchiveFile struct {
 
 // ColdMemory 是 L3 冷数据层，负责长期归档与按需检索。
 type ColdMemory struct {
-	baseDir string
-	mu      sync.Mutex
+	baseDir  string
+	markdown *MarkdownStore
+	mu       sync.Mutex
 }
 
 func NewColdMemory(baseDir string) *ColdMemory {
+	resolved := resolveMemoryPath(baseDir)
+	markdownDir := ""
+	if resolved != "" {
+		markdownDir = filepath.Join(resolved, "markdown", "nodes")
+	}
 	return &ColdMemory{
-		baseDir: resolveMemoryPath(baseDir),
+		baseDir:  resolved,
+		markdown: NewMarkdownStore(markdownDir),
 	}
 }
 
@@ -79,10 +86,6 @@ func (c *ColdMemory) Archive(sessionID string, messages []llm.Message) error {
 		return fmt.Errorf("replace cold archive file: %w", err)
 	}
 	return nil
-}
-
-func (c *ColdMemory) Store(entry MemoryEntry) error {
-	return fmt.Errorf("cold memory does not support generic store, use Archive")
 }
 
 // Retrieve 按 query 过滤归档消息，返回统一条目结构。
@@ -139,56 +142,28 @@ func (c *ColdMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
 	return cloneEntries(results), nil
 }
 
-func (c *ColdMemory) Delete(id string) error {
-	sid := strings.TrimSpace(id)
-	if sid == "" {
-		return fmt.Errorf("session id is required")
+// SaveMarkdownNode 将演化后的记忆节点写入 markdown 冷存目录。
+func (c *ColdMemory) SaveMarkdownNode(node MarkdownNode) error {
+	if c.markdown == nil {
+		return fmt.Errorf("markdown store is not configured")
 	}
-	if c.baseDir == "" {
-		return nil
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	removed := false
-	monthDirs, err := os.ReadDir(c.baseDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("read cold memory directory: %w", err)
-	}
-	for _, monthDir := range monthDirs {
-		if !monthDir.IsDir() {
-			continue
-		}
-		target := filepath.Join(c.baseDir, monthDir.Name(), coldFilePrefix+sid+coldFileSuffix)
-		err := os.Remove(target)
-		if err == nil {
-			removed = true
-			continue
-		}
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("delete cold archive %q: %w", target, err)
-		}
-	}
-	if !removed {
-		return nil
-	}
-	return nil
+	return c.markdown.Save(node)
 }
 
-func (c *ColdMemory) Clear() error {
-	if c.baseDir == "" {
-		return nil
+// LoadMarkdownNode 从 markdown 冷存目录读取节点。
+func (c *ColdMemory) LoadMarkdownNode(id string) (MarkdownNode, error) {
+	if c.markdown == nil {
+		return MarkdownNode{}, fmt.Errorf("markdown store is not configured")
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if err := os.RemoveAll(c.baseDir); err != nil {
-		return fmt.Errorf("clear cold memory directory: %w", err)
+	return c.markdown.Load(id)
+}
+
+// ListMarkdownNodes 列出所有 markdown 节点 ID。
+func (c *ColdMemory) ListMarkdownNodes() ([]string, error) {
+	if c.markdown == nil {
+		return nil, nil
 	}
-	return nil
+	return c.markdown.List()
 }
 
 // ListSessions 返回时间范围内存在归档的会话 ID。
@@ -282,65 +257,6 @@ func monthDirMatchesRange(name string, timeRange *TimeRange) bool {
 		return false
 	}
 	return true
-}
-
-// UpdateSummary 更新归档文件的摘要和实体标签。
-func (c *ColdMemory) UpdateSummary(sessionID string, summary string, entities []string) error {
-	sid := strings.TrimSpace(sessionID)
-	if sid == "" {
-		return fmt.Errorf("session id is required")
-	}
-	if c.baseDir == "" {
-		return fmt.Errorf("cold memory base dir is empty")
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// 查找归档文件
-	monthDirs, err := os.ReadDir(c.baseDir)
-	if err != nil {
-		return fmt.Errorf("read cold memory directory: %w", err)
-	}
-
-	for _, monthDir := range monthDirs {
-		if !monthDir.IsDir() {
-			continue
-		}
-		targetPath := filepath.Join(c.baseDir, monthDir.Name(), coldFilePrefix+sid+coldFileSuffix)
-		if _, err := os.Stat(targetPath); os.IsNotExist(err) {
-			continue
-		}
-
-		// 读取现有归档
-		archive, err := c.readArchiveFileLocked(targetPath)
-		if err != nil {
-			return err
-		}
-
-		// 更新摘要和实体
-		archive.Summary = strings.TrimSpace(summary)
-		archive.Entities = entities
-
-		// 写回文件
-		data, err := json.MarshalIndent(archive, "", "  ")
-		if err != nil {
-			return fmt.Errorf("marshal cold archive: %w", err)
-		}
-		data = append(data, '\n')
-
-		tmpPath := fmt.Sprintf("%s.tmp-%d", targetPath, time.Now().UnixNano())
-		if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
-			return fmt.Errorf("write cold archive temp file: %w", err)
-		}
-		if err := os.Rename(tmpPath, targetPath); err != nil {
-			_ = os.Remove(tmpPath)
-			return fmt.Errorf("replace cold archive file: %w", err)
-		}
-		return nil
-	}
-
-	return fmt.Errorf("session %s not found in cold storage", sid)
 }
 
 func (c *ColdMemory) readArchiveFileLocked(path string) (coldArchiveFile, error) {

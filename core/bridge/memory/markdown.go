@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ type MarkdownNode struct {
 	RelatedTo   []string  `yaml:"related_to,omitempty"`
 	Tags        []string  `yaml:"tags,omitempty"`
 	SessionID   string    `yaml:"session_id,omitempty"`
+	EmbeddingID string    `yaml:"embedding_id,omitempty"`
 	Content     string    `yaml:"-"` // Markdown 正文
 }
 
@@ -37,9 +39,18 @@ func NewMarkdownStore(baseDir string) *MarkdownStore {
 
 // Save 保存记忆节点为 Markdown 文件。
 func (s *MarkdownStore) Save(node MarkdownNode) error {
+	node.ID = strings.TrimSpace(node.ID)
+	node.SessionID = strings.TrimSpace(node.SessionID)
+	node.EmbeddingID = strings.TrimSpace(node.EmbeddingID)
 	if node.ID == "" {
 		return fmt.Errorf("node id is required")
 	}
+	if node.CreatedAt.IsZero() {
+		node.CreatedAt = time.Now().UTC()
+	} else {
+		node.CreatedAt = node.CreatedAt.UTC()
+	}
+	node.Importance = clamp01(node.Importance)
 	if s.baseDir == "" {
 		return fmt.Errorf("markdown store base dir is empty")
 	}
@@ -109,23 +120,8 @@ func (s *MarkdownStore) List() ([]string, error) {
 		id := strings.TrimSuffix(name, ".md")
 		ids = append(ids, id)
 	}
+	sort.Strings(ids)
 	return ids, nil
-}
-
-// Delete 删除指定记忆节点。
-func (s *MarkdownStore) Delete(id string) error {
-	if id == "" {
-		return fmt.Errorf("node id is required")
-	}
-	if s.baseDir == "" {
-		return nil
-	}
-
-	filePath := filepath.Join(s.baseDir, id+".md")
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("delete markdown file: %w", err)
-	}
-	return nil
 }
 
 // marshal 将节点序列化为 Markdown + YAML Frontmatter。

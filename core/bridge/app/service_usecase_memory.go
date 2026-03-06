@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"ghost-os/bridge/agent"
 	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
 )
@@ -27,15 +28,47 @@ func (s *bridgeService) executeMemoryQueryAction(_ context.Context, params memor
 	if err != nil {
 		return nil, http.StatusBadRequest, err
 	}
+	scope, err := s.buildMemoryQueryScope(query)
+	if err != nil {
+		logAction(traceID, actionMemoryQuery, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
 
 	logAction(traceID, actionMemoryQuery, "running", nil)
-	entries, err := s.memoryManager.Query(query)
+	entries, err := s.memoryManager.QueryWithScope(query, scope)
 	if err != nil {
 		logAction(traceID, actionMemoryQuery, "error", err)
 		return nil, http.StatusInternalServerError, err
 	}
 	logAction(traceID, actionMemoryQuery, "success", nil)
 	return memoryQueryResponse{Entries: entries}, http.StatusOK, nil
+}
+
+func (s *bridgeService) buildMemoryQueryScope(query memory.MemoryQuery) (memory.SessionScope, error) {
+	if s == nil || s.sessionStore == nil || query.Metadata == nil {
+		return memory.SessionScope{}, nil
+	}
+
+	rawSessionID, ok := query.Metadata["session_id"]
+	if !ok {
+		return memory.SessionScope{}, nil
+	}
+	sessionID, ok := rawSessionID.(string)
+	if !ok || strings.TrimSpace(sessionID) == "" {
+		return memory.SessionScope{}, nil
+	}
+
+	sess, err := s.sessionStore.Load(strings.TrimSpace(sessionID))
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return memory.SessionScope{}, nil
+		}
+		return memory.SessionScope{}, err
+	}
+	return memory.SessionScope{
+		SessionID: strings.TrimSpace(sess.ID),
+		History:   agent.NewHistoryFromMessages(sess.Messages),
+	}, nil
 }
 
 // executeMemoryArchiveAction 将指定会话归档到冷存储，常用于长会话收敛。
@@ -67,9 +100,11 @@ func (s *bridgeService) executeMemoryArchiveAction(_ context.Context, params mem
 // buildMemoryQuery 把 API 参数转换为 MemoryQuery，并补齐 metadata/time_range 语义。
 func buildMemoryQuery(params memoryQueryParams) (memory.MemoryQuery, error) {
 	query := memory.MemoryQuery{
-		Limit:    params.Limit,
-		Keywords: params.Keywords,
-		Metadata: map[string]any{},
+		Limit:           params.Limit,
+		Keywords:        params.Keywords,
+		Metadata:        map[string]any{},
+		IncludeMarkdown: params.IncludeMarkdown,
+		SemanticQuery:   strings.TrimSpace(params.SemanticQuery),
 	}
 
 	if params.Metadata != nil {

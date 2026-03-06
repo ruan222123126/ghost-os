@@ -79,3 +79,53 @@ func TestWarmMemoryPersistAndLoad(t *testing.T) {
 		t.Fatalf("unexpected entry id: got %q want %q", entries[0].ID, "fresh")
 	}
 }
+
+func TestWarmMemoryAssignsImportanceAndExtendedTTLForToolEntries(t *testing.T) {
+	warm := NewWarmMemory(10, filepath.Join(t.TempDir(), "warm.json"))
+	now := time.Now().UTC()
+
+	if err := warm.Store(MemoryEntry{
+		ID:        "tool-entry",
+		Content:   "execute browser action",
+		Timestamp: now,
+		Metadata:  map[string]any{"role": "tool"},
+	}); err != nil {
+		t.Fatalf("store tool entry: %v", err)
+	}
+
+	entries, err := warm.Retrieve(MemoryQuery{Keywords: []string{"browser"}})
+	if err != nil {
+		t.Fatalf("retrieve tool entry: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("unexpected entry count: got %d want 1", len(entries))
+	}
+	if entries[0].Importance < 0.75 {
+		t.Fatalf("expected high tool importance, got %.2f", entries[0].Importance)
+	}
+	if entries[0].ExpiresAt.Before(now.Add(6 * 24 * time.Hour)) {
+		t.Fatalf("expected extended ttl, expires_at=%s", entries[0].ExpiresAt.Format(time.RFC3339))
+	}
+}
+
+func TestWarmMemoryCustomTTLPrunesExpiredEntries(t *testing.T) {
+	warm := NewWarmMemoryWithTTL(10, filepath.Join(t.TempDir(), "warm.json"), time.Hour)
+	now := time.Now().UTC()
+
+	if err := warm.Store(MemoryEntry{
+		ID:        "expired-by-ttl",
+		Content:   "old entry",
+		Timestamp: now.Add(-2 * time.Hour),
+		Metadata:  map[string]any{"role": "assistant"},
+	}); err != nil {
+		t.Fatalf("store old entry: %v", err)
+	}
+
+	entries, err := warm.Retrieve(MemoryQuery{})
+	if err != nil {
+		t.Fatalf("retrieve entries: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("expected expired entry to be pruned, got %d entries", len(entries))
+	}
+}

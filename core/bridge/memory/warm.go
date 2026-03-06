@@ -3,6 +3,7 @@ package memory
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,19 +26,29 @@ type WarmMemory struct {
 	entries   []MemoryEntry
 	index     map[string]int
 	capacity  int
+	ttl       time.Duration
 	storePath string
 	mu        sync.RWMutex
 }
 
 func NewWarmMemory(capacity int, storePath string) *WarmMemory {
+	return NewWarmMemoryWithTTL(capacity, storePath, defaultWarmTTL)
+}
+
+func NewWarmMemoryWithTTL(capacity int, storePath string, ttl time.Duration) *WarmMemory {
 	size := capacity
 	if size <= 0 {
 		size = defaultWarmCapacity
+	}
+	effectiveTTL := ttl
+	if effectiveTTL <= 0 {
+		effectiveTTL = defaultWarmTTL
 	}
 	return &WarmMemory{
 		entries:   make([]MemoryEntry, 0, size),
 		index:     make(map[string]int, size),
 		capacity:  size,
+		ttl:       effectiveTTL,
 		storePath: resolveMemoryPath(storePath),
 	}
 }
@@ -47,6 +58,12 @@ func (w *WarmMemory) Store(entry MemoryEntry) error {
 	normalized := normalizeEntry(entry)
 	if normalized.ID == "" {
 		return fmt.Errorf("memory entry id is required")
+	}
+	if normalized.Importance <= 0 {
+		normalized.Importance = calculateImportance(normalized)
+	}
+	if normalized.ExpiresAt.IsZero() {
+		normalized.ExpiresAt = defaultEntryExpiry(normalized, time.Now().UTC(), w.ttl)
 	}
 
 	w.mu.Lock()
@@ -72,7 +89,8 @@ func (w *WarmMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	w.pruneExpiredLocked(time.Now().UTC())
+	now := time.Now().UTC()
+	w.pruneExpiredLocked(now)
 
 	type scored struct {
 		Entry MemoryEntry
@@ -86,12 +104,12 @@ func (w *WarmMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
 		}
 		candidates = append(candidates, scored{
 			Entry: cloneEntry(entry),
-			Score: warmEntryScore(entry, query.UseTimeDecay),
+			Score: warmEntryScore(entry, query, now),
 		})
 	}
 
 	sort.SliceStable(candidates, func(i, j int) bool {
-		if query.UseTimeDecay && candidates[i].Score != candidates[j].Score {
+		if candidates[i].Score != candidates[j].Score {
 			return candidates[i].Score > candidates[j].Score
 		}
 		return candidates[i].Entry.Timestamp.After(candidates[j].Entry.Timestamp)
@@ -131,13 +149,14 @@ func (w *WarmMemory) Delete(id string) error {
 	return w.Persist()
 }
 
-func (w *WarmMemory) Clear() error {
+// Snapshot 返回当前 warm 层快照，供后台演化流程使用。
+func (w *WarmMemory) Snapshot() []MemoryEntry {
 	w.mu.Lock()
-	w.entries = w.entries[:0]
-	w.index = make(map[string]int, w.capacity)
+	now := time.Now().UTC()
+	w.pruneExpiredLocked(now)
+	out := cloneEntries(w.entries)
 	w.mu.Unlock()
-
-	return w.Persist()
+	return out
 }
 
 // Persist 将温数据写入 JSON，便于进程重启后快速恢复。
@@ -215,10 +234,9 @@ func (w *WarmMemory) Load() error {
 }
 
 func (w *WarmMemory) pruneExpiredLocked(now time.Time) {
-	cutoff := now.Add(-defaultWarmTTL)
 	kept := w.entries[:0]
 	for _, entry := range w.entries {
-		if entry.Timestamp.Before(cutoff) {
+		if isEntryExpired(entry, now, w.ttl) {
 			continue
 		}
 		kept = append(kept, entry)
@@ -273,13 +291,26 @@ func (w *WarmMemory) bumpAccessLocked(id string) {
 	w.touchLocked(id)
 }
 
-func warmEntryScore(entry MemoryEntry, useTimeDecay bool) float64 {
+func warmEntryScore(entry MemoryEntry, query MemoryQuery, now time.Time) float64 {
 	accessScore := float64(max(entry.AccessCount, 1))
-	if !useTimeDecay {
-		return accessScore
+	importance := entry.Importance
+	if importance <= 0 {
+		importance = 0.1
 	}
+	freshness := 1.0
+	if query.UseTimeDecay || len(query.Keywords) > 0 || strings.TrimSpace(query.SemanticQuery) != "" {
+		freshness = warmFreshnessScore(entry, now)
+	}
+	relevance := semanticRelevanceScore(entry, query)
+	score := accessScore * importance * freshness * relevance
+	if score <= 0 {
+		return 0
+	}
+	return score
+}
 
-	ageHours := time.Since(entry.Timestamp).Hours()
+func warmFreshnessScore(entry MemoryEntry, now time.Time) float64 {
+	ageHours := now.Sub(entry.Timestamp).Hours()
 	if ageHours < 0 {
 		ageHours = 0
 	}
@@ -287,7 +318,114 @@ func warmEntryScore(entry MemoryEntry, useTimeDecay bool) float64 {
 	if decay <= 0 {
 		decay = 1 / (1 + ageHours)
 	}
-	return accessScore * decay
+	return decay
+}
+
+func semanticRelevanceScore(entry MemoryEntry, query MemoryQuery) float64 {
+	if len(query.Keywords) == 0 && strings.TrimSpace(query.SemanticQuery) == "" {
+		return 1
+	}
+
+	content := strings.ToLower(entry.Content)
+	if content == "" {
+		return 0.1
+	}
+
+	keywords := make([]string, 0, len(query.Keywords)+1)
+	keywords = append(keywords, query.Keywords...)
+	if semantic := strings.TrimSpace(query.SemanticQuery); semantic != "" {
+		keywords = append(keywords, strings.Fields(semantic)...)
+	}
+
+	matched := 0
+	valid := 0
+	for _, keyword := range keywords {
+		k := strings.ToLower(strings.TrimSpace(keyword))
+		if k == "" {
+			continue
+		}
+		valid++
+		if strings.Contains(content, k) {
+			matched++
+		}
+	}
+	if valid == 0 {
+		return 1
+	}
+	ratio := float64(matched) / float64(valid)
+	return 0.1 + ratio
+}
+
+func calculateImportance(entry MemoryEntry) float64 {
+	role, _ := entry.Metadata["role"].(string)
+	base := 0.4
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "tool":
+		base = 0.8
+	case "user":
+		base = 0.6
+	case "assistant":
+		base = 0.4
+	}
+
+	if strings.TrimSpace(role) == "" && strings.Contains(entry.ID, "tool") {
+		base = 0.8
+	}
+	length := len(strings.TrimSpace(entry.Content))
+	penalty := 0.0
+	switch {
+	case length > 4000:
+		penalty = 0.25
+	case length > 2500:
+		penalty = 0.2
+	case length > 1200:
+		penalty = 0.12
+	case length > 600:
+		penalty = 0.06
+	}
+	return clamp01(base - penalty)
+}
+
+func defaultEntryExpiry(entry MemoryEntry, now time.Time, baseTTL time.Duration) time.Time {
+	ttl := baseTTL
+	if ttl <= 0 {
+		ttl = defaultWarmTTL
+	}
+	if entry.Importance >= 0.8 && ttl < 7*24*time.Hour {
+		ttl = 7 * 24 * time.Hour
+	}
+	start := entry.Timestamp
+	if start.IsZero() || start.After(now) {
+		start = now
+	}
+	return start.Add(ttl).UTC()
+}
+
+func isEntryExpired(entry MemoryEntry, now time.Time, baseTTL time.Duration) bool {
+	if !entry.ExpiresAt.IsZero() {
+		return now.After(entry.ExpiresAt)
+	}
+	if entry.Timestamp.IsZero() {
+		return false
+	}
+	ttl := baseTTL
+	if ttl <= 0 {
+		ttl = defaultWarmTTL
+	}
+	return now.Sub(entry.Timestamp) > ttl
+}
+
+func clamp01(v float64) float64 {
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0
+	}
+	if v < 0 {
+		return 0
+	}
+	if v > 1 {
+		return 1
+	}
+	return v
 }
 
 func max(a int, b int) int {

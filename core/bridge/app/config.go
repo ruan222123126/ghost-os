@@ -6,25 +6,31 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/llm"
 )
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider           llm.Provider
-	APIKey             string
-	BaseURL            string
-	Model              string
-	ChatPath           string
-	PromptsPath        string
-	SessionsPath       string
-	MemoryWarmPath     string
-	MemoryColdPath     string
-	ProviderHeaders    map[string]string
-	AnthropicVersion   string
-	AnthropicMaxTokens int
-	MaxTurns           int
+	Provider                llm.Provider
+	APIKey                  string
+	BaseURL                 string
+	Model                   string
+	ChatPath                string
+	PromptsPath             string
+	SessionsPath            string
+	MemoryWarmPath          string
+	MemoryColdPath          string
+	MemoryAutoRecallEnabled bool
+	MemoryAutoRecallLimit   int
+	MemoryWarmTTL           time.Duration
+	MemoryEvolutionInterval time.Duration
+	MemoryEvolutionEnabled  bool
+	ProviderHeaders         map[string]string
+	AnthropicVersion        string
+	AnthropicMaxTokens      int
+	MaxTurns                int
 }
 
 type runtimeConfig struct {
@@ -36,16 +42,19 @@ type runtimeConfig struct {
 }
 
 const (
-	defaultProvider           = llm.ProviderOpenAI
-	defaultBaseURL            = "https://api.openai.com/v1"
-	defaultModel              = "gpt-4o"
-	defaultPromptsPath        = "prompts.yaml"
-	defaultSessionsPath       = "~/.ghost-os/sessions"
-	defaultMemoryWarmPath     = "~/.ghost-os/memory/warm.json"
-	defaultMemoryColdPath     = "~/.ghost-os/memory/cold"
-	defaultAnthropicVersion   = "2023-06-01"
-	defaultAnthropicMaxTokens = 1024
-	defaultMaxTurns           = 20
+	defaultProvider                = llm.ProviderOpenAI
+	defaultBaseURL                 = "https://api.openai.com/v1"
+	defaultModel                   = "gpt-4o"
+	defaultPromptsPath             = "prompts.yaml"
+	defaultSessionsPath            = "~/.ghost-os/sessions"
+	defaultMemoryWarmPath          = "~/.ghost-os/memory/warm.json"
+	defaultMemoryColdPath          = "~/.ghost-os/memory/cold"
+	defaultMemoryAutoRecallLimit   = 5
+	defaultMemoryWarmTTL           = 24 * time.Hour
+	defaultMemoryEvolutionInterval = time.Hour
+	defaultAnthropicVersion        = "2023-06-01"
+	defaultAnthropicMaxTokens      = 1024
+	defaultMaxTurns                = 20
 )
 
 // LoadConfig 从环境变量加载配置并做基础校验与归一化。
@@ -70,19 +79,24 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 	}
 
 	cfg := Config{
-		Provider:           runtime.Provider,
-		APIKey:             runtime.APIKey,
-		BaseURL:            runtime.BaseURL,
-		Model:              runtime.Model,
-		ChatPath:           runtime.ChatPath,
-		PromptsPath:        getenvDefault("GHOST_PROMPTS_PATH", defaultPromptsPath),
-		SessionsPath:       sessionsPathFromEnv(),
-		MemoryWarmPath:     memoryWarmPathFromEnv(),
-		MemoryColdPath:     memoryColdPathFromEnv(),
-		ProviderHeaders:    headers,
-		AnthropicVersion:   getenvDefault("GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
-		AnthropicMaxTokens: defaultAnthropicMaxTokens,
-		MaxTurns:           defaultMaxTurns,
+		Provider:                runtime.Provider,
+		APIKey:                  runtime.APIKey,
+		BaseURL:                 runtime.BaseURL,
+		Model:                   runtime.Model,
+		ChatPath:                runtime.ChatPath,
+		PromptsPath:             getenvDefault("GHOST_PROMPTS_PATH", defaultPromptsPath),
+		SessionsPath:            sessionsPathFromEnv(),
+		MemoryWarmPath:          memoryWarmPathFromEnv(),
+		MemoryColdPath:          memoryColdPathFromEnv(),
+		MemoryAutoRecallEnabled: memoryAutoRecallEnabledFromEnv(),
+		MemoryAutoRecallLimit:   memoryAutoRecallLimitFromEnv(),
+		MemoryWarmTTL:           memoryWarmTTLFromEnv(),
+		MemoryEvolutionInterval: memoryEvolutionIntervalFromEnv(),
+		MemoryEvolutionEnabled:  memoryEvolutionEnabledFromEnv(),
+		ProviderHeaders:         headers,
+		AnthropicVersion:        getenvDefault("GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
+		AnthropicMaxTokens:      defaultAnthropicMaxTokens,
+		MaxTurns:                defaultMaxTurns,
 	}
 
 	if raw := strings.TrimSpace(os.Getenv("GHOST_MAX_TURNS")); raw != "" {
@@ -185,6 +199,31 @@ func memoryColdPathFromEnv() string {
 	return getenvDefault("GHOST_MEMORY_COLD_PATH", defaultMemoryColdPath)
 }
 
+// memoryAutoRecallEnabledFromEnv 控制 warm 自动召回是否启用。
+func memoryAutoRecallEnabledFromEnv() bool {
+	return parseBoolEnv("GHOST_MEMORY_AUTO_RECALL_ENABLED", true)
+}
+
+// memoryAutoRecallLimitFromEnv 返回自动召回注入条目上限。
+func memoryAutoRecallLimitFromEnv() int {
+	return parsePositiveIntEnv("GHOST_MEMORY_AUTO_RECALL_LIMIT", defaultMemoryAutoRecallLimit)
+}
+
+// memoryWarmTTLFromEnv 返回 warm 层默认 TTL。
+func memoryWarmTTLFromEnv() time.Duration {
+	return parseDurationEnv("GHOST_MEMORY_WARM_TTL", defaultMemoryWarmTTL)
+}
+
+// memoryEvolutionIntervalFromEnv 返回后台演化间隔。
+func memoryEvolutionIntervalFromEnv() time.Duration {
+	return parseDurationEnv("GHOST_MEMORY_EVOLUTION_INTERVAL", defaultMemoryEvolutionInterval)
+}
+
+// memoryEvolutionEnabledFromEnv 控制后台演化协程是否启用。
+func memoryEvolutionEnabledFromEnv() bool {
+	return parseBoolEnv("GHOST_MEMORY_EVOLUTION_ENABLED", false)
+}
+
 // parseProviderHeaders 解析自定义 Header JSON，并做 key 空值防护。
 func parseProviderHeaders(raw string) (map[string]string, error) {
 	text := strings.TrimSpace(raw)
@@ -207,4 +246,40 @@ func parseProviderHeaders(raw string) (map[string]string, error) {
 	}
 
 	return out, nil
+}
+
+func parseBoolEnv(name string, fallback bool) bool {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fallback
+	}
+	return value
+}
+
+func parsePositiveIntEnv(name string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func parseDurationEnv(name string, fallback time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := time.ParseDuration(raw)
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }
