@@ -32,6 +32,7 @@
 - 已完成 Agent Phase 3 stop 与并发保护基础能力：app 层新增 inflight run registry，已有会话支持单 session 串行执行保护，并可通过 `AGENT_STOP` 按 `session_id` 或 `trace_id` 取消正在运行的任务。
 - 已修复共享 `MemoryManager` 的会话热态串味风险：自动召回与 L1 查询改为显式传入 session scope，不再依赖全局可变的 `hotSessionID` / hot history。
 - 已补齐 Dreaming 后台演化生命周期：`MemoryManager` 新增优雅停止能力，bridge 进程在 `SIGINT` / `SIGTERM` 下会停止后台 ticker 并等待协程退出。
+- 已补回 `core/bridge/context.Builder.BuildRequest`，恢复消息/工具定义深拷贝组装逻辑，修复 `context` 包测试编译失败导致的 `trinity-check` Bridge (Go) 红灯。
 
 ## 3) 主要短板（概要）
 

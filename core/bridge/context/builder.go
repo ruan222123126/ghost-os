@@ -33,3 +33,43 @@ func (b *Builder) BuildSystemPrompt(vars map[string]string) string {
 
 	return b.promptManager.Render(vars)
 }
+
+// BuildRequest 复制消息与工具定义，避免请求构建阶段共享可变切片。
+func (b *Builder) BuildRequest(messages []llm.Message) llm.CompletionRequest {
+	return llm.CompletionRequest{
+		Messages: llm.CloneMessages(messages),
+		Tools:    cloneToolDefs(b.toolRegistry),
+	}
+}
+
+func cloneToolDefs(registry ToolRegistry) []llm.ToolDef {
+	if registry == nil {
+		return nil
+	}
+
+	defs := registry.ToolDefs()
+	if len(defs) == 0 {
+		return nil
+	}
+
+	out := make([]llm.ToolDef, len(defs))
+	for i, def := range defs {
+		out[i] = llm.ToolDef{
+			Name:        def.Name,
+			Description: def.Description,
+			Parameters:  cloneRawJSON(def.Parameters),
+		}
+	}
+
+	return out
+}
+
+func cloneRawJSON(raw []byte) []byte {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	return out
+}
