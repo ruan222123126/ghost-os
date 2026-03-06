@@ -19,6 +19,10 @@ func (s *bridgeService) executeAgentAction(ctx context.Context, params agentPara
 	if trimmed == "" && trimmedSessionID == "" {
 		return nil, http.StatusBadRequest, errors.New("message is required")
 	}
+	if code, activeErr := s.ensureSessionActive(trimmedSessionID); activeErr != nil {
+		logAction(traceID, actionAgentSend, "error", activeErr)
+		return nil, code, activeErr
+	}
 
 	logAction(traceID, actionAgentSend, "running", nil)
 	response, sessionID, err := s.agentExecutor(ctx, trimmed, trimmedSessionID, traceID, s.configStore, s.sessionStore)
@@ -34,17 +38,158 @@ func (s *bridgeService) executeAgentAction(ctx context.Context, params agentPara
 			}, http.StatusAccepted, nil
 		}
 
-		logAction(traceID, actionAgentSend, "error", err)
-		if errors.Is(err, session.ErrInvalidSessionID) {
-			return nil, http.StatusBadRequest, err
+		normalizedErr, statusCode := normalizeAgentExecutionError(err)
+		logAction(traceID, actionAgentSend, "error", normalizedErr)
+		return nil, statusCode, normalizedErr
+	}
+	normalizedMessage, sessionEndSignal, parseErr := parseSessionEndSignal(response)
+	if parseErr != nil {
+		logAction(traceID, actionAgentSend, "error", parseErr)
+		return nil, http.StatusInternalServerError, parseErr
+	}
+
+	if sessionEndSignal != nil {
+		if code, markErr := s.markSessionEnded(sessionID); markErr != nil {
+			logAction(traceID, actionAgentSend, "error", markErr)
+			return nil, code, markErr
 		}
-		return nil, http.StatusInternalServerError, err
+	}
+
+	payload, payloadErr := newAgentResponsePayload(normalizedMessage, sessionID, sessionEndSignal)
+	if payloadErr != nil {
+		logAction(traceID, actionAgentSend, "error", payloadErr)
+		return nil, http.StatusInternalServerError, payloadErr
 	}
 	logAction(traceID, actionAgentSend, "success", nil)
-	return agentResponse{
-		Message:   response,
-		SessionID: sessionID,
+	return payload, http.StatusOK, nil
+}
+
+func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params agentParams, traceID string, sink agent.EventSink) (string, string, error) {
+	trimmed := strings.TrimSpace(params.Message)
+	trimmedSessionID := strings.TrimSpace(params.SessionID)
+	trackedSink := newEventTurnTracker(sink)
+
+	if trimmed == "" && trimmedSessionID == "" {
+		err := errors.New("message is required")
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", trimmedSessionID, http.StatusBadRequest, err); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", "", err
+	}
+	if code, activeErr := s.ensureSessionActive(trimmedSessionID); activeErr != nil {
+		logAction(traceID, actionAgentSend, "error", activeErr)
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", trimmedSessionID, code, activeErr); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", "", activeErr
+	}
+
+	logAction(traceID, actionAgentSend, "running", nil)
+	response, sessionID, err := s.agentExecutorStream(ctx, trimmed, trimmedSessionID, traceID, s.configStore, s.sessionStore, trackedSink)
+	if err != nil {
+		var awaitingErr *agent.ErrAwaitingHuman
+		if errors.As(err, &awaitingErr) {
+			logAction(traceID, actionAgentSend, "awaiting_human", nil)
+			return "", sessionID, err
+		}
+
+		normalizedErr, statusCode := normalizeAgentExecutionError(err)
+		if errors.Is(normalizedErr, ErrRunCancelled) {
+			logAction(traceID, actionAgentSend, "cancelled", normalizedErr)
+			return "", sessionID, normalizedErr
+		}
+		logAction(traceID, actionAgentSend, "error", normalizedErr)
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), "", sessionID, statusCode, normalizedErr); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", sessionID, normalizedErr
+	}
+
+	normalizedMessage, sessionEndSignal, parseErr := parseSessionEndSignal(response)
+	finalTurn := trackedSink.finalAssistantTurn()
+	if parseErr != nil {
+		logAction(traceID, actionAgentSend, "error", parseErr)
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, finalTurn, agent.AssistantStepID(finalTurn), sessionID, http.StatusInternalServerError, parseErr); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", "", parseErr
+	}
+
+	if sessionEndSignal != nil {
+		if code, markErr := s.markSessionEnded(sessionID); markErr != nil {
+			logAction(traceID, actionAgentSend, "error", markErr)
+			if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, finalTurn, agent.AssistantStepID(finalTurn), sessionID, code, markErr); emitErr != nil {
+				return "", "", emitErr
+			}
+			return "", "", markErr
+		}
+	}
+
+	if emitErr := emitStreamEvent(ctx, trackedSink, agent.NewEvent(traceID, finalTurn, agent.AssistantStepID(finalTurn), agent.EventMessage, map[string]any{
+		"text":       normalizedMessage,
+		"session_id": strings.TrimSpace(sessionID),
+	})); emitErr != nil {
+		logAction(traceID, actionAgentSend, "error", emitErr)
+		return "", "", emitErr
+	}
+	if emitErr := emitStreamEvent(ctx, trackedSink, agent.NewEvent(traceID, finalTurn, "", agent.EventDone, map[string]any{
+		"session_id":    strings.TrimSpace(sessionID),
+		"session_ended": sessionEndSignal != nil,
+	})); emitErr != nil {
+		logAction(traceID, actionAgentSend, "error", emitErr)
+		return "", "", emitErr
+	}
+
+	logAction(traceID, actionAgentSend, "success", nil)
+	return normalizedMessage, sessionID, nil
+}
+
+func (s *bridgeService) executeAgentStopAction(_ context.Context, params agentStopParams, traceID string) (any, int, error) {
+	sessionID := strings.TrimSpace(params.SessionID)
+	stopTraceID := strings.TrimSpace(params.TraceID)
+	if sessionID == "" && stopTraceID == "" {
+		return nil, http.StatusBadRequest, errors.New("session_id or trace_id is required")
+	}
+	if s.runRegistry == nil {
+		return nil, http.StatusServiceUnavailable, errors.New("run registry is not available")
+	}
+
+	var err error
+	if sessionID != "" {
+		err = s.runRegistry.CancelBySessionID(sessionID)
+	} else {
+		err = s.runRegistry.CancelByTraceID(stopTraceID)
+	}
+	if err != nil {
+		if errors.Is(err, ErrRunNotFound) {
+			logAction(traceID, actionAgentStop, "not_running", nil)
+			return agentStopResponse{
+				Status:  "not_running",
+				Message: "no active run found",
+			}, http.StatusOK, nil
+		}
+		logAction(traceID, actionAgentStop, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
+
+	logAction(traceID, actionAgentStop, "success", nil)
+	return agentStopResponse{
+		Status:  "stopped",
+		Message: "agent run cancelled successfully",
 	}, http.StatusOK, nil
+}
+
+func normalizeAgentExecutionError(err error) (error, int) {
+	switch {
+	case errors.Is(err, session.ErrInvalidSessionID):
+		return err, http.StatusBadRequest
+	case errors.Is(err, ErrSessionInflight):
+		return err, http.StatusConflict
+	case errors.Is(err, context.Canceled):
+		return ErrRunCancelled, http.StatusConflict
+	default:
+		return err, http.StatusInternalServerError
+	}
 }
 
 // executeConfigGetAction 返回当前运行态配置快照，不暴露敏感明文字段。

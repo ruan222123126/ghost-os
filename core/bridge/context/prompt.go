@@ -37,6 +37,8 @@ You can coordinate local execution, web retrieval, browser interaction, and huma
 - Use web_search for internet lookup tasks.
 - Use browser_action only when browser-native interaction is required.
 - Use ask_human when execution is blocked by missing user choice or confirmation.
+- For normal turns, reply with plain natural text.
+- Only when you intentionally end the entire session, output JSON only: {"signal":"END_SESSION","message":"<final reply>"}.
 - Keep actions concise, deterministic, and traceable.`
 
 // PromptConfig 描述 prompts.yaml 的最小结构。

@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
@@ -32,6 +33,16 @@ func newTestHandler(t *testing.T, executor agentExecutorFunc) http.Handler {
 }
 
 func newTestHandlerWithStore(t *testing.T, executor agentExecutorFunc) (http.Handler, *session.Store) {
+	handler, _, sessionStore := newTestHandlerWithService(t, executor, nil)
+	return handler, sessionStore
+}
+
+func newTestHandlerWithStreamExecutor(t *testing.T, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) (http.Handler, *session.Store) {
+	handler, _, sessionStore := newTestHandlerWithService(t, executor, streamExecutor)
+	return handler, sessionStore
+}
+
+func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) (http.Handler, *bridgeService, *session.Store) {
 	t.Helper()
 	if executor == nil {
 		executor = func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
@@ -49,10 +60,51 @@ func newTestHandlerWithStore(t *testing.T, executor agentExecutorFunc) (http.Han
 		t.Fatalf("new session store: %v", err)
 	}
 
-	service := newBridgeService(store, sessionStore, executor)
+	service := newBridgeServiceWithStreamExecutor(store, sessionStore, executor, streamExecutor)
 	options := newServerOptionsFromEnv(8080)
 	options.maxBodyBytes = defaultMaxRequestBodyBytes
-	return newHTTPHandler(service, options), sessionStore
+	return newHTTPHandler(service, options), service, sessionStore
+}
+
+func decodeSSEEvents(t *testing.T, recorder *httptest.ResponseRecorder) []agent.AgentEvent {
+	t.Helper()
+
+	trimmed := strings.TrimSpace(recorder.Body.String())
+	if trimmed == "" {
+		return nil
+	}
+
+	blocks := strings.Split(trimmed, "\n\n")
+	events := make([]agent.AgentEvent, 0, len(blocks))
+	for _, block := range blocks {
+		if strings.TrimSpace(block) == "" {
+			continue
+		}
+
+		var eventName string
+		var dataLine string
+		for _, line := range strings.Split(block, "\n") {
+			switch {
+			case strings.HasPrefix(line, "event: "):
+				eventName = strings.TrimSpace(strings.TrimPrefix(line, "event: "))
+			case strings.HasPrefix(line, "data: "):
+				dataLine = strings.TrimSpace(strings.TrimPrefix(line, "data: "))
+			}
+		}
+		if dataLine == "" {
+			t.Fatalf("missing data line in block: %q", block)
+		}
+
+		var event agent.AgentEvent
+		if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
+			t.Fatalf("decode sse event: %v", err)
+		}
+		if eventName != "" && string(event.Type) != eventName {
+			t.Fatalf("event header mismatch: header=%q payload=%q", eventName, event.Type)
+		}
+		events = append(events, event)
+	}
+	return events
 }
 
 func serveRequest(handler http.Handler, method string, path string, body string, headers map[string]string) *httptest.ResponseRecorder {
@@ -103,6 +155,19 @@ func TestHandleBusMethodNotAllowed(t *testing.T) {
 func TestHandleAgentMethodNotAllowed(t *testing.T) {
 	handler := newTestHandler(t, nil)
 	recorder := serveRequest(handler, http.MethodGet, "/api/agent", "", nil)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusMethodNotAllowed)
+	}
+	body := decodeResponseBody(t, recorder)
+	if body.Status != "error" {
+		t.Fatalf("unexpected status field: got %q want %q", body.Status, "error")
+	}
+}
+
+func TestHandleAgentStreamMethodNotAllowed(t *testing.T) {
+	handler := newTestHandler(t, nil)
+	recorder := serveRequest(handler, http.MethodGet, "/api/agent/stream", "", nil)
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusMethodNotAllowed)
@@ -200,6 +265,294 @@ func TestHandleAgentBodyTooLarge(t *testing.T) {
 	}
 }
 
+func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
+	streamExecutor := func(
+		ctx context.Context,
+		message string,
+		sessionID string,
+		traceID string,
+		_ *ConfigStore,
+		_ *session.Store,
+		sink agent.EventSink,
+	) (string, string, error) {
+		if message != "hello" {
+			t.Fatalf("unexpected message: got %q want %q", message, "hello")
+		}
+		if sessionID != "" {
+			t.Fatalf("unexpected session_id: got %q want empty", sessionID)
+		}
+
+		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, "", agent.EventRunStarted, map[string]any{
+			"session_id": "session-stream",
+		})); err != nil {
+			return "", "", err
+		}
+		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallStarted, map[string]any{
+			"tool":         "web_search",
+			"tool_call_id": "call-1",
+		})); err != nil {
+			return "", "", err
+		}
+		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallFinished, map[string]any{
+			"tool":         "web_search",
+			"tool_call_id": "call-1",
+			"status":       "success",
+		})); err != nil {
+			return "", "", err
+		}
+		return "stream done", "session-stream", nil
+	}
+	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent/stream",
+		`{"message":"hello","trace_id":"trace-stream"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Header().Get("Content-Type"); got != "text/event-stream" {
+		t.Fatalf("unexpected content type: got %q want %q", got, "text/event-stream")
+	}
+	if got := recorder.Header().Get("X-Trace-ID"); got != "trace-stream" {
+		t.Fatalf("unexpected trace header: got %q want %q", got, "trace-stream")
+	}
+	if got := recorder.Header().Get("X-Accel-Buffering"); got != "no" {
+		t.Fatalf("unexpected accel header: got %q want %q", got, "no")
+	}
+
+	events := decodeSSEEvents(t, recorder)
+	if len(events) != 5 {
+		t.Fatalf("unexpected event count: got %d want %d", len(events), 5)
+	}
+	wantOrder := []agent.EventType{
+		agent.EventRunStarted,
+		agent.EventToolCallStarted,
+		agent.EventToolCallFinished,
+		agent.EventMessage,
+		agent.EventDone,
+	}
+	for index, want := range wantOrder {
+		if events[index].Type != want {
+			t.Fatalf("unexpected event[%d]: got %q want %q", index, events[index].Type, want)
+		}
+	}
+	messagePayload, ok := events[3].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected message payload type: %T", events[3].Payload)
+	}
+	if messagePayload["text"] != "stream done" {
+		t.Fatalf("unexpected streamed text: got %v want %q", messagePayload["text"], "stream done")
+	}
+	donePayload, ok := events[4].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected done payload type: %T", events[4].Payload)
+	}
+	if donePayload["session_ended"] != false {
+		t.Fatalf("unexpected session_ended: got %v want %v", donePayload["session_ended"], false)
+	}
+}
+
+func TestHandleAgentStreamValidationErrorEmitsErrorEvent(t *testing.T) {
+	handler := newTestHandler(t, nil)
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent/stream",
+		`{"message":"","session_id":"","trace_id":"trace-invalid"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+	events := decodeSSEEvents(t, recorder)
+	if len(events) != 1 {
+		t.Fatalf("unexpected event count: got %d want %d", len(events), 1)
+	}
+	if events[0].Type != agent.EventError {
+		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, agent.EventError)
+	}
+	payload, ok := events[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", events[0].Payload)
+	}
+	if payload["message"] != "message is required" {
+		t.Fatalf("unexpected error message: got %v want %q", payload["message"], "message is required")
+	}
+}
+
+func TestHandleAgentStreamRejectsInflightSessionBeforeSSE(t *testing.T) {
+	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	if err := service.runRegistry.Register("session-busy", "trace-busy", func() {}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent/stream",
+		`{"message":"hello","session_id":"session-busy","trace_id":"trace-conflict"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusConflict)
+	}
+	body := decodeResponseBody(t, recorder)
+	if !strings.Contains(body.Error, "session is already running") {
+		t.Fatalf("unexpected error: %q", body.Error)
+	}
+}
+
+func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
+	started := make(chan struct{})
+	done := make(chan struct{})
+	streamExecutor := func(
+		ctx context.Context,
+		_ string,
+		_ string,
+		_ string,
+		_ *ConfigStore,
+		_ *session.Store,
+		_ agent.EventSink,
+	) (string, string, error) {
+		close(started)
+		<-ctx.Done()
+		close(done)
+		return "", "", ctx.Err()
+	}
+	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/stream", strings.NewReader(`{"message":"hello"}`)).WithContext(ctx)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	handlerDone := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(recorder, request)
+		close(handlerDone)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("stream executor did not start")
+	}
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("context cancellation did not reach executor")
+	}
+	select {
+	case <-handlerDone:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not return after cancellation")
+	}
+}
+
+func TestBusAgentStopCancelsRunBySessionID(t *testing.T) {
+	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	started := make(chan struct{})
+	stopped := make(chan struct{})
+	service.agentExecutorStream = func(
+		ctx context.Context,
+		_ string,
+		sessionID string,
+		traceID string,
+		_ *ConfigStore,
+		_ *session.Store,
+		_ agent.EventSink,
+	) (string, string, error) {
+		execCtx, cancel := context.WithCancel(ctx)
+		if err := service.runRegistry.Register(sessionID, traceID, cancel); err != nil {
+			cancel()
+			return "", sessionID, err
+		}
+		defer service.runRegistry.Unregister(sessionID)
+		close(started)
+		<-execCtx.Done()
+		close(stopped)
+		return "", sessionID, context.Canceled
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/agent/stream", strings.NewReader(`{"message":"hello","session_id":"session-stop","trace_id":"trace-stop"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	streamDone := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(recorder, request)
+		close(streamDone)
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("stream run did not start")
+	}
+
+	stopRecorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"AGENT_STOP","params":{"session_id":"session-stop"},"trace_id":"trace-stop-request"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if stopRecorder.Code != http.StatusOK {
+		t.Fatalf("unexpected stop status: got %d want %d", stopRecorder.Code, http.StatusOK)
+	}
+	body := decodeResponseBody(t, stopRecorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["status"] != "stopped" {
+		t.Fatalf("unexpected stop status payload: got %v want %q", payload["status"], "stopped")
+	}
+
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("run was not cancelled")
+	}
+	select {
+	case <-streamDone:
+	case <-time.After(time.Second):
+		t.Fatal("stream handler did not exit")
+	}
+}
+
+func TestBusAgentStopReturnsNotRunning(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"AGENT_STOP","params":{"session_id":"missing-session"},"trace_id":"trace-stop-missing"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["status"] != "not_running" {
+		t.Fatalf("unexpected payload status: got %v want %q", payload["status"], "not_running")
+	}
+}
+
 func TestWithCORSAllowlist(t *testing.T) {
 	t.Setenv("GHOST_CORS_ORIGINS", "https://console.ghost.local,http://localhost:5173")
 	handler := newTestHandler(t, nil)
@@ -249,6 +602,12 @@ func TestBusAgentSendRegression(t *testing.T) {
 	}
 	if payload["session_id"] != "session-1" {
 		t.Fatalf("unexpected session_id: got %v want %q", payload["session_id"], "session-1")
+	}
+	if payload["session_ended"] != false {
+		t.Fatalf("unexpected session_ended: got %v want %v", payload["session_ended"], false)
+	}
+	if _, exists := payload["session_end"]; exists {
+		t.Fatalf("session_end should be absent for normal response: %+v", payload["session_end"])
 	}
 }
 
@@ -384,6 +743,96 @@ func TestAgentEndpointAllowsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
 	}
 	if payload["session_id"] != sessionID {
 		t.Fatalf("unexpected session_id: got %v want %q", payload["session_id"], sessionID)
+	}
+	if payload["session_ended"] != false {
+		t.Fatalf("unexpected session_ended: got %v want %v", payload["session_ended"], false)
+	}
+}
+
+func TestAgentEndpointStructuredSessionEndSignalMarksSessionEnded(t *testing.T) {
+	const sessionID = "session-end-1"
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		if requestSessionID != sessionID {
+			t.Fatalf("unexpected session_id: got %q want %q", requestSessionID, sessionID)
+		}
+		return `{"signal":"END_SESSION","message":"bye"}`, requestSessionID, nil
+	})
+
+	sess := session.NewSession("system")
+	sess.ID = sessionID
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		fmt.Sprintf(`{"message":"finish","session_id":"%s"}`, sessionID),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["message"] != "bye" {
+		t.Fatalf("unexpected message: got %v want %q", payload["message"], "bye")
+	}
+	if payload["session_ended"] != true {
+		t.Fatalf("unexpected session_ended: got %v want %v", payload["session_ended"], true)
+	}
+	sessionEnd, ok := payload["session_end"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected session_end type: %T", payload["session_end"])
+	}
+	if sessionEnd["signal"] != busAssistantSessionEndSignal {
+		t.Fatalf("unexpected session_end.signal: got %v want %q", sessionEnd["signal"], busAssistantSessionEndSignal)
+	}
+	if sessionEnd["message"] != "bye" {
+		t.Fatalf("unexpected session_end.message: got %v want %q", sessionEnd["message"], "bye")
+	}
+
+	updated, err := sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load session after end signal: %v", err)
+	}
+	if updated.EndedAt.IsZero() {
+		t.Fatal("session should be marked ended")
+	}
+}
+
+func TestAgentEndpointRejectsAlreadyEndedSession(t *testing.T) {
+	const sessionID = "session-ended-1"
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		t.Fatal("executor should not be called for ended session")
+		return "", "", nil
+	})
+
+	sess := session.NewSession("system")
+	sess.ID = sessionID
+	sess.MarkEnded(time.Now().UTC())
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save ended session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		fmt.Sprintf(`{"message":"hello","session_id":"%s"}`, sessionID),
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusConflict, recorder.Body.String())
+	}
+	body := decodeResponseBody(t, recorder)
+	if !strings.Contains(body.Error, "already ended") {
+		t.Fatalf("unexpected error: %q", body.Error)
 	}
 }
 

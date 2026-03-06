@@ -4,11 +4,15 @@ package app
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/session"
 )
+
+var errSessionEnded = errors.New("session has already ended")
 
 // requireSessionStore 确保当前 service 已配置持久化会话存储。
 func (s *bridgeService) requireSessionStore() (*session.Store, int, error) {
@@ -34,7 +38,74 @@ func mapSessionStorageError(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, session.ErrSessionNotFound):
 		return http.StatusNotFound
+	case errors.Is(err, errSessionEnded):
+		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+// ensureSessionActive 在继续已有会话前校验其可续跑状态。
+func (s *bridgeService) ensureSessionActive(sessionID string) (int, error) {
+	store := s.sessionStore
+	if store == nil {
+		return http.StatusOK, nil
+	}
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return http.StatusOK, nil
+	}
+
+	sess, err := store.Load(id)
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return http.StatusOK, nil
+		}
+		return mapSessionStorageError(err), err
+	}
+	if !sess.IsEnded() {
+		return http.StatusOK, nil
+	}
+	return http.StatusConflict, fmt.Errorf("%w: session_id=%s", errSessionEnded, id)
+}
+
+func (s *bridgeService) ensureSessionNotInflight(sessionID string) (int, error) {
+	if s == nil || s.runRegistry == nil {
+		return http.StatusOK, nil
+	}
+
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return http.StatusOK, nil
+	}
+	if !s.runRegistry.IsInflight(id) {
+		return http.StatusOK, nil
+	}
+	return http.StatusConflict, fmt.Errorf("%w: session_id=%s", ErrSessionInflight, id)
+}
+
+// markSessionEnded 在收到结构化结束信号后把会话状态持久化为 ended。
+func (s *bridgeService) markSessionEnded(sessionID string) (int, error) {
+	store := s.sessionStore
+	if store == nil {
+		return http.StatusInternalServerError, errors.New("session store is not configured")
+	}
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return http.StatusInternalServerError, errors.New("session id is empty")
+	}
+
+	sess, err := store.Load(id)
+	if err != nil {
+		return mapSessionStorageError(err), err
+	}
+	if sess.IsEnded() {
+		return http.StatusOK, nil
+	}
+
+	sess.MarkEnded(time.Now().UTC())
+	if err := store.Save(sess); err != nil {
+		return mapSessionStorageError(err), err
+	}
+	return http.StatusOK, nil
 }

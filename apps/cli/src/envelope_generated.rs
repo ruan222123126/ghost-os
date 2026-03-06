@@ -4,6 +4,8 @@
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
+pub const ASSISTANT_SESSION_END_SIGNAL: &str = "END_SESSION";
+
 #[derive(Debug, Serialize)]
 pub struct ApiRequest<TParams> {
     pub action: &'static str,
@@ -32,4 +34,10 @@ impl<TPayload> ApiResponse<TPayload> {
         }
         Err(anyhow!(message.to_string()))
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssistantSessionEndSignal {
+    pub signal: String,
+    pub message: String,
 }

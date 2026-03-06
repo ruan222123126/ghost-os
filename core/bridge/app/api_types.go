@@ -8,6 +8,7 @@ import (
 
 const (
 	actionAgentSend     = "AGENT_SEND"
+	actionAgentStop     = "AGENT_STOP"
 	actionHumanResponse = "HUMAN_RESPONSE"
 	actionConfigGet     = "CONFIG_GET"
 	actionConfigUpdate  = "CONFIG_UPDATE"
@@ -28,9 +29,21 @@ type agentParams struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
+type agentStopParams struct {
+	SessionID string `json:"session_id,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
+}
+
 type agentResponse struct {
-	Message   string `json:"message"`
-	SessionID string `json:"session_id"`
+	Message      string                            `json:"message"`
+	SessionID    string                            `json:"session_id"`
+	SessionEnded bool                              `json:"session_ended"`
+	SessionEnd   *assistantSessionEndSignalPayload `json:"session_end,omitempty"`
+}
+
+type agentStopResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
 }
 
 type askHumanAwaitingResponse struct {
@@ -100,11 +113,13 @@ type memoryTimeRangeParams struct {
 }
 
 type memoryQueryParams struct {
-	SessionID string                 `json:"session_id,omitempty"`
-	TimeRange *memoryTimeRangeParams `json:"time_range,omitempty"`
-	Limit     int                    `json:"limit,omitempty"`
-	Keywords  []string               `json:"keywords,omitempty"`
-	Metadata  map[string]any         `json:"metadata,omitempty"`
+	SessionID       string                 `json:"session_id,omitempty"`
+	TimeRange       *memoryTimeRangeParams `json:"time_range,omitempty"`
+	Limit           int                    `json:"limit,omitempty"`
+	Keywords        []string               `json:"keywords,omitempty"`
+	Metadata        map[string]any         `json:"metadata,omitempty"`
+	IncludeMarkdown bool                   `json:"include_markdown,omitempty"`
+	SemanticQuery   string                 `json:"semantic_query,omitempty"`
 }
 
 type memoryArchiveParams struct {

@@ -115,3 +115,19 @@ func TestMemoryMetadataLifecycle(t *testing.T) {
 		t.Fatal("last_access_at should be set")
 	}
 }
+
+func TestSessionMarkEnded(t *testing.T) {
+	s := NewSession("")
+	if s.IsEnded() {
+		t.Fatal("new session should not be ended")
+	}
+
+	endAt := time.Now().UTC()
+	s.MarkEnded(endAt)
+	if !s.IsEnded() {
+		t.Fatal("session should be ended after MarkEnded")
+	}
+	if s.EndedAt.IsZero() {
+		t.Fatal("ended_at should be set")
+	}
+}

@@ -16,6 +16,7 @@ type Session struct {
 	Messages         []llm.Message                   `json:"messages"`
 	CreatedAt        time.Time                       `json:"created_at"`
 	UpdatedAt        time.Time                       `json:"updated_at"`
+	EndedAt          time.Time                       `json:"ended_at,omitempty"`
 	TokenCount       int                             `json:"token_count"`
 	MemoryMetadata   MemoryMetadata                  `json:"memory_metadata,omitempty"`
 	PendingQuestions map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
@@ -132,6 +133,27 @@ func (s *Session) MarkMemoryAccess(at time.Time) {
 	s.MemoryMetadata.AccessCount++
 	s.MemoryMetadata.LastAccessAt = when
 	s.UpdatedAt = when
+}
+
+// MarkEnded 标记会话已结束，后续不应再继续使用相同 session id 续跑。
+func (s *Session) MarkEnded(at time.Time) {
+	if s == nil {
+		return
+	}
+	when := at.UTC()
+	if when.IsZero() {
+		when = time.Now().UTC()
+	}
+	s.EndedAt = when
+	s.UpdatedAt = when
+}
+
+// IsEnded 返回会话是否已结束。
+func (s *Session) IsEnded() bool {
+	if s == nil {
+		return false
+	}
+	return !s.EndedAt.IsZero()
 }
 
 // AddPendingQuestion 注册待用户回复的问题。

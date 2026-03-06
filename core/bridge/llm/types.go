@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 )
@@ -83,11 +84,42 @@ type CompletionResponse struct {
 	Usage        Usage
 }
 
+type Completer interface {
+	Complete(context.Context, CompletionRequest) (*CompletionResponse, error)
+}
+
 // Usage 是统一 token 统计结构。
 type Usage struct {
 	PromptTokens     int
 	CompletionTokens int
 	TotalTokens      int
+}
+
+type DeltaKind string
+
+const (
+	DeltaKindText          DeltaKind = "text"
+	DeltaKindToolCallStart DeltaKind = "tool_call_start"
+	DeltaKindToolCallDelta DeltaKind = "tool_call_delta"
+	DeltaKindToolCallEnd   DeltaKind = "tool_call_end"
+)
+
+type LLMDelta struct {
+	Kind              DeltaKind
+	Text              string
+	ToolCallIndex     int
+	ToolCallID        string
+	ToolName          string
+	ArgumentsFragment string
+}
+
+type LLMStreamSink interface {
+	OnDelta(context.Context, LLMDelta) error
+}
+
+type StreamingCompleter interface {
+	Completer
+	CompleteStream(ctx context.Context, request CompletionRequest, sink LLMStreamSink) (*CompletionResponse, error)
 }
 
 // CloneMessages 对消息做深拷贝，避免跨层共享可变切片。

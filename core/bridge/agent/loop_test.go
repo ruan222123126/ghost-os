@@ -28,6 +28,43 @@ func (f *fakeCompleter) Complete(_ context.Context, request llm.CompletionReques
 	return response, nil
 }
 
+type fakeStreamingCompleter struct {
+	completeResponses []*llm.CompletionResponse
+	streamResponses   []*llm.CompletionResponse
+	completeRequests  []llm.CompletionRequest
+	streamRequests    []llm.CompletionRequest
+	streamDeltas      [][]llm.LLMDelta
+}
+
+func (f *fakeStreamingCompleter) Complete(_ context.Context, request llm.CompletionRequest) (*llm.CompletionResponse, error) {
+	f.completeRequests = append(f.completeRequests, cloneCompletionRequest(request))
+	if len(f.completeResponses) == 0 {
+		return nil, errors.New("unexpected complete call")
+	}
+	response := f.completeResponses[0]
+	f.completeResponses = f.completeResponses[1:]
+	return response, nil
+}
+
+func (f *fakeStreamingCompleter) CompleteStream(ctx context.Context, request llm.CompletionRequest, sink llm.LLMStreamSink) (*llm.CompletionResponse, error) {
+	f.streamRequests = append(f.streamRequests, cloneCompletionRequest(request))
+	if len(f.streamResponses) == 0 {
+		return nil, errors.New("unexpected complete stream call")
+	}
+	if len(f.streamDeltas) > 0 {
+		deltas := f.streamDeltas[0]
+		f.streamDeltas = f.streamDeltas[1:]
+		for _, delta := range deltas {
+			if err := sink.OnDelta(ctx, delta); err != nil {
+				return nil, err
+			}
+		}
+	}
+	response := f.streamResponses[0]
+	f.streamResponses = f.streamResponses[1:]
+	return response, nil
+}
+
 func cloneCompletionRequest(request llm.CompletionRequest) llm.CompletionRequest {
 	clonedTools := make([]llm.ToolDef, len(request.Tools))
 	for i, tool := range request.Tools {
@@ -213,6 +250,30 @@ func TestRunStop(t *testing.T) {
 	}
 	if len(completer.requests) != 1 {
 		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 1)
+	}
+}
+
+func TestRunLengthReturnsMessage(t *testing.T) {
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "truncated-final",
+				},
+				FinishReason: llm.FinishLength,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{}
+
+	agent := newTestAgent(completer, catalog, 2)
+	got, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if got != "truncated-final" {
+		t.Fatalf("unexpected output: got %q want %q", got, "truncated-final")
 	}
 }
 
@@ -909,5 +970,271 @@ func TestRunBrowserScreenshotKeepsToolRoleWithImageContent(t *testing.T) {
 	}
 	if toolMsg.Content[0].Image.Path != "/tmp/s.png" {
 		t.Fatalf("unexpected image path: got %q want %q", toolMsg.Content[0].Image.Path, "/tmp/s.png")
+	}
+}
+
+type recordingEventSink struct {
+	events []AgentEvent
+}
+
+func (r *recordingEventSink) Emit(_ context.Context, event AgentEvent) error {
+	r.events = append(r.events, event)
+	return nil
+}
+
+func TestRunStreamEmitsToolEventsInOrder(t *testing.T) {
+	tool := &fakeTool{
+		name: "echo",
+		execute: func(_ context.Context, _ json.RawMessage) (string, error) {
+			return "ok", nil
+		},
+	}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-echo-1",
+							Name:      "echo",
+							Arguments: json.RawMessage(`{"message":"hello"}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "done",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"echo": tool,
+		},
+	}
+	sink := &recordingEventSink{}
+
+	agent := newTestAgent(completer, catalog, 3)
+	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-stream", sink)
+	if err != nil {
+		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 2)
+	}
+	if sink.events[0].Type != EventToolCallStarted || sink.events[1].Type != EventToolCallFinished {
+		t.Fatalf("unexpected event order: %+v", []EventType{sink.events[0].Type, sink.events[1].Type})
+	}
+	if sink.events[0].StepID != ToolStepID(0, 0) || sink.events[1].StepID != ToolStepID(0, 0) {
+		t.Fatalf("unexpected step ids: got %q and %q", sink.events[0].StepID, sink.events[1].StepID)
+	}
+	payload, ok := sink.events[1].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", sink.events[1].Payload)
+	}
+	if payload["status"] != "success" {
+		t.Fatalf("unexpected finish status: got %v want %q", payload["status"], "success")
+	}
+}
+
+func TestRunStreamEmitsAwaitingHumanEvent(t *testing.T) {
+	tool := &fakeTool{
+		name: "approval_gate",
+		execute: func(_ context.Context, _ json.RawMessage) (string, error) {
+			return `{"status":"awaiting_human","question_id":"q-123","prompt":"Which database?"}`, nil
+		},
+		interpret: func(output string) tools.ExecuteMeta {
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(output), &payload); err != nil {
+				return tools.ExecuteMeta{}
+			}
+			questionID, _ := payload["question_id"].(string)
+			prompt, _ := payload["prompt"].(string)
+			return tools.ExecuteMeta{
+				AwaitingHuman: &tools.AwaitingHumanSignal{
+					QuestionID: questionID,
+					Prompt:     prompt,
+				},
+			}
+		},
+	}
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					ToolCalls: []llm.ToolCall{
+						{
+							ID:        "call-ask-1",
+							Name:      "approval_gate",
+							Arguments: json.RawMessage(`{"prompt":"Which database?"}`),
+						},
+					},
+				},
+				FinishReason: llm.FinishToolCalls,
+			},
+		},
+	}
+	catalog := &fakeToolCatalog{
+		toolByKey: map[string]tools.Tool{
+			"approval_gate": tool,
+		},
+	}
+	sink := &recordingEventSink{}
+
+	agent := newTestAgent(completer, catalog, 3)
+	_, err := agent.RunStreamWithTraceID(context.Background(), "pick db", "trace-await", sink)
+	if err == nil {
+		t.Fatal("expected awaiting-human error")
+	}
+	var awaitingErr *ErrAwaitingHuman
+	if !errors.As(err, &awaitingErr) {
+		t.Fatalf("expected ErrAwaitingHuman, got %v", err)
+	}
+	if len(sink.events) != 3 {
+		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 3)
+	}
+	if sink.events[2].Type != EventAwaitingHuman {
+		t.Fatalf("unexpected final event type: got %q want %q", sink.events[2].Type, EventAwaitingHuman)
+	}
+	payload, ok := sink.events[2].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", sink.events[2].Payload)
+	}
+	if payload["question_id"] != "q-123" {
+		t.Fatalf("unexpected question id: got %v want %q", payload["question_id"], "q-123")
+	}
+}
+
+func TestRunStreamEmitsErrorEventOnFatalFailure(t *testing.T) {
+	completer := &fakeCompleter{}
+	catalog := &fakeToolCatalog{}
+	sink := &recordingEventSink{}
+
+	agent := newTestAgent(completer, catalog, 1)
+	_, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-error", sink)
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 1)
+	}
+	event := sink.events[0]
+	if event.Type != EventError {
+		t.Fatalf("unexpected event type: got %q want %q", event.Type, EventError)
+	}
+	if event.StepID != AssistantStepID(0) {
+		t.Fatalf("unexpected step id: got %q want %q", event.StepID, AssistantStepID(0))
+	}
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", event.Payload)
+	}
+	if !strings.Contains(payload["message"].(string), "complete_once") {
+		t.Fatalf("unexpected payload message: %q", payload["message"])
+	}
+}
+
+func TestRunStreamUsesStreamingCompleterAndEmitsCompletionDeltas(t *testing.T) {
+	completer := &fakeStreamingCompleter{
+		streamResponses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "Hello world",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+		streamDeltas: [][]llm.LLMDelta{
+			{
+				{Kind: llm.DeltaKindText, Text: "Hello"},
+				{Kind: llm.DeltaKindText, Text: " world"},
+			},
+		},
+	}
+	sink := &recordingEventSink{}
+	agent := NewAgent(completer, &fakeToolCatalog{}, "system prompt", 3)
+
+	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-streaming", sink)
+	if err != nil {
+		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+	}
+	if got != "Hello world" {
+		t.Fatalf("unexpected output: got %q want %q", got, "Hello world")
+	}
+	if len(completer.streamRequests) != 1 || len(completer.completeRequests) != 0 {
+		t.Fatalf("unexpected completer call counts: stream=%d complete=%d", len(completer.streamRequests), len(completer.completeRequests))
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 2)
+	}
+	if sink.events[0].Type != EventCompletionDelta || sink.events[1].Type != EventCompletionDelta {
+		t.Fatalf("unexpected event types: got %q and %q", sink.events[0].Type, sink.events[1].Type)
+	}
+}
+
+func TestRunFallsBackToCompleteWithoutStreamSink(t *testing.T) {
+	completer := &fakeStreamingCompleter{
+		completeResponses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "done",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	agent := NewAgent(completer, &fakeToolCatalog{}, "system prompt", 3)
+
+	got, err := agent.RunWithTraceID(context.Background(), "hello", "trace-sync")
+	if err != nil {
+		t.Fatalf("RunWithTraceID returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+	if len(completer.completeRequests) != 1 || len(completer.streamRequests) != 0 {
+		t.Fatalf("unexpected completer call counts: complete=%d stream=%d", len(completer.completeRequests), len(completer.streamRequests))
+	}
+}
+
+func TestRunStreamFallsBackToCompleteForNonStreamingCompleter(t *testing.T) {
+	completer := &fakeCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "fallback",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	sink := &recordingEventSink{}
+	agent := NewAgent(completer, &fakeToolCatalog{}, "system prompt", 3)
+
+	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-fallback", sink)
+	if err != nil {
+		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+	}
+	if got != "fallback" {
+		t.Fatalf("unexpected output: got %q want %q", got, "fallback")
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 1)
+	}
+	if len(sink.events) != 0 {
+		t.Fatalf("unexpected streamed events for non-streaming completer: %+v", sink.events)
 	}
 }

@@ -8,6 +8,7 @@ import "encoding/json"
 const (
 	busActionPing          = "PING"
 	busActionAgentSend     = "AGENT_SEND"
+	busActionAgentStop     = "AGENT_STOP"
 	busActionHumanResponse = "HUMAN_RESPONSE"
 	busActionConfigGet     = "CONFIG_GET"
 	busActionConfigUpdate  = "CONFIG_UPDATE"
@@ -25,6 +26,14 @@ const (
 	busStatusSuccess = "success"
 	busStatusError   = "error"
 )
+
+const busAssistantSessionEndSignal = "END_SESSION"
+
+// assistantSessionEndSignalPayload 对齐 core/shared/schema.json 的 assistantSessionEndSignal。
+type assistantSessionEndSignalPayload struct {
+	Signal  string `json:"signal"`
+	Message string `json:"message"`
+}
 
 // apiRequest 对齐 core/shared/schema.json 的 requestEnvelope。
 type apiRequest struct {

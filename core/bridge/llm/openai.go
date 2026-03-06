@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -10,6 +11,7 @@ type openAIRequest struct {
 	Model    string          `json:"model"`
 	Messages []openAIMessage `json:"messages"`
 	Tools    []openAITool    `json:"tools,omitempty"`
+	Stream   bool            `json:"stream,omitempty"`
 }
 
 type openAIMessage struct {
@@ -69,6 +71,52 @@ type openAIUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
+type openAIStreamChunk struct {
+	ID      string               `json:"id"`
+	Choices []openAIStreamChoice `json:"choices"`
+	Usage   *openAIUsage         `json:"usage,omitempty"`
+}
+
+type openAIStreamChoice struct {
+	Index        int               `json:"index"`
+	Delta        openAIStreamDelta `json:"delta"`
+	FinishReason *string           `json:"finish_reason"`
+}
+
+type openAIStreamDelta struct {
+	Role      string                 `json:"role,omitempty"`
+	Content   string                 `json:"content,omitempty"`
+	ToolCalls []openAIStreamToolCall `json:"tool_calls,omitempty"`
+}
+
+type openAIStreamToolCall struct {
+	Index    int                      `json:"index"`
+	ID       string                   `json:"id,omitempty"`
+	Type     string                   `json:"type,omitempty"`
+	Function openAIStreamFunctionCall `json:"function"`
+}
+
+type openAIStreamFunctionCall struct {
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
+}
+
+type openAIStreamAccumulator struct {
+	message      Message
+	finishReason string
+	usage        Usage
+	toolStates   map[int]*openAIStreamToolState
+	toolOrder    []int
+}
+
+type openAIStreamToolState struct {
+	index   int
+	call    ToolCall
+	args    strings.Builder
+	started bool
+	ended   bool
+}
+
 func (c *Client) buildOpenAIProviderRequest(request CompletionRequest) (providerRequest, error) {
 	body, err := toOpenAIRequest(c.opts.Model, request)
 	if err != nil {
@@ -95,6 +143,29 @@ func (c *Client) parseOpenAIProviderResponse(raw []byte) (*CompletionResponse, e
 	}
 
 	return openAIToCompletionResponse(response)
+}
+
+func (c *Client) streamOpenAICompletion(ctx context.Context, request CompletionRequest, sink LLMStreamSink) (*CompletionResponse, error) {
+	body, err := toOpenAIRequest(c.opts.Model, request)
+	if err != nil {
+		return nil, err
+	}
+	body.Stream = true
+
+	headers := make(map[string]string, len(c.opts.Headers)+1)
+	if c.opts.APIKey != "" {
+		headers["Authorization"] = "Bearer " + c.opts.APIKey
+	}
+	mergeStringHeaders(headers, c.opts.Headers)
+
+	accumulator := newOpenAIStreamAccumulator()
+	if err := c.streamJSON(ctx, c.opts.ChatPath, body, headers, func(line []byte) error {
+		return c.processOpenAIStreamChunk(ctx, line, sink, accumulator)
+	}); err != nil {
+		return nil, err
+	}
+
+	return accumulator.CompletionResponse()
 }
 
 // toOpenAIRequest 把内部统一请求模型转换为 OpenAI 兼容协议。
@@ -281,4 +352,152 @@ func openAIFinishReason(reason string) (FinishReason, error) {
 	default:
 		return "", fmt.Errorf("unsupported openai finish_reason %q", reason)
 	}
+}
+
+func (c *Client) processOpenAIStreamChunk(
+	ctx context.Context,
+	line []byte,
+	sink LLMStreamSink,
+	accumulator *openAIStreamAccumulator,
+) error {
+	var chunk openAIStreamChunk
+	if err := json.Unmarshal(line, &chunk); err != nil {
+		return fmt.Errorf("parse openai stream chunk: %w", err)
+	}
+	if chunk.Usage != nil {
+		accumulator.usage = Usage{
+			PromptTokens:     chunk.Usage.PromptTokens,
+			CompletionTokens: chunk.Usage.CompletionTokens,
+			TotalTokens:      chunk.Usage.TotalTokens,
+		}
+	}
+	if len(chunk.Choices) == 0 {
+		return nil
+	}
+
+	choice := chunk.Choices[0]
+	if err := accumulator.ApplyDelta(ctx, sink, choice.Delta); err != nil {
+		return err
+	}
+	if choice.FinishReason != nil && strings.TrimSpace(*choice.FinishReason) != "" {
+		return accumulator.SetFinishReason(ctx, sink, *choice.FinishReason)
+	}
+	return nil
+}
+
+func newOpenAIStreamAccumulator() *openAIStreamAccumulator {
+	return &openAIStreamAccumulator{
+		message: Message{
+			Role: RoleAssistant,
+		},
+		toolStates: make(map[int]*openAIStreamToolState),
+	}
+}
+
+func (a *openAIStreamAccumulator) ApplyDelta(ctx context.Context, sink LLMStreamSink, delta openAIStreamDelta) error {
+	if role := strings.TrimSpace(delta.Role); role != "" {
+		a.message.Role = Role(role)
+	}
+	if text := delta.Content; text != "" {
+		a.message.Text += text
+		if err := sink.OnDelta(ctx, LLMDelta{
+			Kind: DeltaKindText,
+			Text: text,
+		}); err != nil {
+			return err
+		}
+	}
+
+	for _, toolDelta := range delta.ToolCalls {
+		state := a.ensureToolState(toolDelta.Index)
+		if id := strings.TrimSpace(toolDelta.ID); id != "" {
+			state.call.ID = id
+		}
+		if name := strings.TrimSpace(toolDelta.Function.Name); name != "" {
+			state.call.Name = name
+		}
+		if !state.started {
+			if err := sink.OnDelta(ctx, LLMDelta{
+				Kind:          DeltaKindToolCallStart,
+				ToolCallIndex: state.index,
+				ToolCallID:    state.call.ID,
+				ToolName:      state.call.Name,
+			}); err != nil {
+				return err
+			}
+			state.started = true
+		}
+		if fragment := toolDelta.Function.Arguments; fragment != "" {
+			state.args.WriteString(fragment)
+			if err := sink.OnDelta(ctx, LLMDelta{
+				Kind:              DeltaKindToolCallDelta,
+				ToolCallIndex:     state.index,
+				ArgumentsFragment: fragment,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *openAIStreamAccumulator) SetFinishReason(ctx context.Context, sink LLMStreamSink, reason string) error {
+	a.finishReason = strings.TrimSpace(reason)
+	if a.finishReason == "tool_calls" {
+		for _, index := range a.toolOrder {
+			state := a.toolStates[index]
+			if state == nil || state.ended {
+				continue
+			}
+			if err := sink.OnDelta(ctx, LLMDelta{
+				Kind:          DeltaKindToolCallEnd,
+				ToolCallIndex: index,
+			}); err != nil {
+				return err
+			}
+			state.ended = true
+		}
+	}
+	return nil
+}
+
+func (a *openAIStreamAccumulator) CompletionResponse() (*CompletionResponse, error) {
+	if a.message.Role == "" {
+		a.message.Role = RoleAssistant
+	}
+	if len(a.toolOrder) > 0 {
+		a.message.ToolCalls = make([]ToolCall, 0, len(a.toolOrder))
+		for _, index := range a.toolOrder {
+			state := a.toolStates[index]
+			if state == nil {
+				continue
+			}
+			state.call.Arguments = json.RawMessage(state.args.String())
+			a.message.ToolCalls = append(a.message.ToolCalls, ToolCall{
+				ID:        state.call.ID,
+				Name:      state.call.Name,
+				Arguments: cloneRawJSON(state.call.Arguments),
+			})
+		}
+	}
+	finishReason, err := openAIFinishReason(normalizeOpenAIFinishReason(a.finishReason, a.message))
+	if err != nil {
+		return nil, err
+	}
+	return &CompletionResponse{
+		Message:      a.message,
+		FinishReason: finishReason,
+		Usage:        a.usage,
+	}, nil
+}
+
+func (a *openAIStreamAccumulator) ensureToolState(index int) *openAIStreamToolState {
+	if state, ok := a.toolStates[index]; ok {
+		return state
+	}
+	state := &openAIStreamToolState{index: index}
+	a.toolStates[index] = state
+	a.toolOrder = append(a.toolOrder, index)
+	return state
 }

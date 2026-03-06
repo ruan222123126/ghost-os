@@ -51,6 +51,7 @@ func runServer(ctx context.Context, port int) (string, error) {
 	}
 
 	service := newBridgeService(store, sessionStore, nil)
+	defer service.Close()
 	options := newServerOptionsFromEnv(port)
 	server := &http.Server{
 		Addr:              options.bindAddr,
@@ -60,6 +61,7 @@ func runServer(ctx context.Context, port int) (string, error) {
 
 	go func() {
 		<-ctx.Done()
+		service.Close()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
@@ -92,6 +94,7 @@ func newHTTPHandler(service *bridgeService, options serverOptions) http.Handler 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/bus", transport.handleBus)
 	mux.HandleFunc("/api/agent", transport.handleAgent)
+	mux.HandleFunc("/api/agent/stream", transport.handleAgentStream)
 	mux.HandleFunc("/api/config", transport.handleConfig)
 	mux.HandleFunc("/api/sessions", transport.handleSessionsList)
 	mux.HandleFunc("/api/sessions/", transport.handleSessionByID)

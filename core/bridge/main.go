@@ -4,13 +4,18 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"ghost-os/bridge/app"
 )
 
 // main 作为 bridge 进程入口：执行 app.Run 并输出结果。
 func main() {
-	output, err := app.Run(context.Background(), os.Args[1:])
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	output, err := app.Run(ctx, os.Args[1:])
 	if err != nil {
 		fatal(err)
 	}

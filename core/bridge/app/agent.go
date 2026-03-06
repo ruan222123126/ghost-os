@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net/http"
 	"runtime"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ type agentSessionExecutor struct {
 	deps          agentRuntimeDependencies
 	sessionStore  *session.Store
 	memoryManager *memory.MemoryManager
+	runRegistry   *RunRegistry
 	traceID       string
 }
 
@@ -59,11 +61,23 @@ func runAgentWithSession(
 	store *ConfigStore,
 	sessionStore *session.Store,
 ) (string, string, error) {
-	return runAgentWithSessionAndMemory(ctx, userMessage, sessionID, traceID, store, sessionStore, nil)
+	return runAgentWithSessionAndMemory(ctx, userMessage, sessionID, traceID, store, sessionStore, nil, nil)
+}
+
+func runAgentWithSessionStream(
+	ctx context.Context,
+	userMessage string,
+	sessionID string,
+	traceID string,
+	store *ConfigStore,
+	sessionStore *session.Store,
+	sink agent.EventSink,
+) (string, string, error) {
+	return runAgentWithSessionAndMemoryStream(ctx, userMessage, sessionID, traceID, store, sessionStore, nil, nil, sink)
 }
 
 // newSessionAgentExecutor 负责组装服务默认的会话执行器。
-func newSessionAgentExecutor(sharedMemoryManager *memory.MemoryManager) agentExecutorFunc {
+func newSessionAgentExecutor(sharedMemoryManager *memory.MemoryManager, runRegistry *RunRegistry) agentExecutorFunc {
 	return func(
 		ctx context.Context,
 		userMessage string,
@@ -72,7 +86,21 @@ func newSessionAgentExecutor(sharedMemoryManager *memory.MemoryManager) agentExe
 		store *ConfigStore,
 		sessionStore *session.Store,
 	) (string, string, error) {
-		return runAgentWithSessionAndMemory(ctx, userMessage, sessionID, traceID, store, sessionStore, sharedMemoryManager)
+		return runAgentWithSessionAndMemory(ctx, userMessage, sessionID, traceID, store, sessionStore, sharedMemoryManager, runRegistry)
+	}
+}
+
+func newSessionAgentStreamExecutor(sharedMemoryManager *memory.MemoryManager, runRegistry *RunRegistry) agentStreamExecutorFunc {
+	return func(
+		ctx context.Context,
+		userMessage string,
+		sessionID string,
+		traceID string,
+		store *ConfigStore,
+		sessionStore *session.Store,
+		sink agent.EventSink,
+	) (string, string, error) {
+		return runAgentWithSessionAndMemoryStream(ctx, userMessage, sessionID, traceID, store, sessionStore, sharedMemoryManager, runRegistry, sink)
 	}
 }
 
@@ -85,14 +113,35 @@ func runAgentWithSessionAndMemory(
 	store *ConfigStore,
 	sessionStore *session.Store,
 	sharedMemoryManager *memory.MemoryManager,
+	runRegistry *RunRegistry,
 ) (string, string, error) {
 	deps, err := buildAgentRuntimeDependencies(store)
 	if err != nil {
 		return "", "", err
 	}
 
-	executor := newAgentSessionRuntime(deps, sessionStore, sharedMemoryManager, traceID)
+	executor := newAgentSessionRuntime(deps, sessionStore, sharedMemoryManager, runRegistry, traceID)
 	return executor.run(ctx, userMessage, sessionID)
+}
+
+func runAgentWithSessionAndMemoryStream(
+	ctx context.Context,
+	userMessage string,
+	sessionID string,
+	traceID string,
+	store *ConfigStore,
+	sessionStore *session.Store,
+	sharedMemoryManager *memory.MemoryManager,
+	runRegistry *RunRegistry,
+	sink agent.EventSink,
+) (string, string, error) {
+	deps, err := buildAgentRuntimeDependencies(store)
+	if err != nil {
+		return "", "", err
+	}
+
+	executor := newAgentSessionRuntime(deps, sessionStore, sharedMemoryManager, runRegistry, traceID)
+	return executor.runStream(ctx, userMessage, sessionID, sink)
 }
 
 // newAgentSessionRuntime 绑定会话执行依赖，并在缺省时创建本地 memory manager。
@@ -100,15 +149,21 @@ func newAgentSessionRuntime(
 	deps agentRuntimeDependencies,
 	sessionStore *session.Store,
 	sharedMemoryManager *memory.MemoryManager,
+	runRegistry *RunRegistry,
 	traceID string,
 ) *agentSessionExecutor {
 	memoryManager := sharedMemoryManager
 	if memoryManager == nil {
 		memoryManager = memory.NewMemoryManager(memory.MemoryConfig{
-			WarmCapacity: agentWarmMemoryCapacity,
-			WarmPath:     deps.cfg.MemoryWarmPath,
-			ColdBaseDir:  deps.cfg.MemoryColdPath,
-			SessionStore: sessionStore,
+			WarmCapacity:      agentWarmMemoryCapacity,
+			WarmPath:          deps.cfg.MemoryWarmPath,
+			ColdBaseDir:       deps.cfg.MemoryColdPath,
+			AutoRecallEnabled: deps.cfg.MemoryAutoRecallEnabled,
+			AutoRecallLimit:   deps.cfg.MemoryAutoRecallLimit,
+			WarmTTL:           deps.cfg.MemoryWarmTTL,
+			EvolutionInterval: deps.cfg.MemoryEvolutionInterval,
+			EvolutionEnabled:  deps.cfg.MemoryEvolutionEnabled,
+			SessionStore:      sessionStore,
 		})
 	}
 
@@ -116,6 +171,7 @@ func newAgentSessionRuntime(
 		deps:          deps,
 		sessionStore:  sessionStore,
 		memoryManager: memoryManager,
+		runRegistry:   runRegistry,
 		traceID:       strings.TrimSpace(traceID),
 	}
 }
@@ -126,9 +182,14 @@ func (e *agentSessionExecutor) run(ctx context.Context, userMessage string, sess
 	if err != nil {
 		return "", "", err
 	}
+	ctx, cleanup, err := e.registerRun(ctx, sess.ID)
+	if err != nil {
+		return "", "", err
+	}
+	defer cleanup()
 
 	history := e.buildHistory(sess)
-	e.memoryManager.SetHotContext(sess.ID, history)
+	e.injectAutoRecall(history, userMessage, sess.ID)
 	defer e.archiveSession(sess.ID)
 
 	a := agent.NewAgentWithHistory(e.deps.client, e.deps.registry, history, e.deps.cfg.MaxTurns)
@@ -156,6 +217,118 @@ func (e *agentSessionExecutor) run(ctx context.Context, userMessage string, sess
 		return response, "", nil
 	}
 	return response, strings.TrimSpace(sess.ID), nil
+}
+
+func (e *agentSessionExecutor) runStream(ctx context.Context, userMessage string, sessionID string, sink agent.EventSink) (string, string, error) {
+	streamSink := ensureEventSink(sink)
+
+	sess, err := e.loadOrCreateSession(sessionID)
+	if err != nil {
+		if emitErr := emitStreamErrorEvent(ctx, streamSink, e.traceID, 0, "", strings.TrimSpace(sessionID), 0, err); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", "", err
+	}
+	ctx, cleanup, err := e.registerRun(ctx, sess.ID)
+	if err != nil {
+		if emitErr := emitStreamErrorEvent(ctx, streamSink, e.traceID, 0, "", strings.TrimSpace(sess.ID), http.StatusConflict, err); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", "", err
+	}
+	defer cleanup()
+	if emitErr := emitStreamEvent(ctx, streamSink, agent.NewEvent(e.traceID, 0, "", agent.EventRunStarted, map[string]any{
+		"session_id": strings.TrimSpace(sess.ID),
+	})); emitErr != nil {
+		return "", "", emitErr
+	}
+
+	history := e.buildHistory(sess)
+	e.injectAutoRecall(history, userMessage, sess.ID)
+	defer e.archiveSession(sess.ID)
+
+	a := agent.NewAgentWithHistory(e.deps.client, e.deps.registry, history, e.deps.cfg.MaxTurns)
+	execCtx := tools.WithSession(ctx, sess)
+
+	response, err := a.RunStreamWithTraceID(execCtx, userMessage, e.traceID, streamSink)
+	if err != nil {
+		var awaitingErr *agent.ErrAwaitingHuman
+		if errors.As(err, &awaitingErr) {
+			if saveErr := e.persistSessionMessages(sess, a.GetNewMessages()); saveErr != nil {
+				if emitErr := emitStreamErrorEvent(ctx, streamSink, e.traceID, a.LastTurn(), "", strings.TrimSpace(sess.ID), 0, saveErr); emitErr != nil {
+					return "", "", emitErr
+				}
+				return "", "", saveErr
+			}
+			if e.sessionStore == nil {
+				return "", "", err
+			}
+			return "", strings.TrimSpace(sess.ID), err
+		}
+		return "", "", err
+	}
+
+	if saveErr := e.persistSessionMessages(sess, a.GetNewMessages()); saveErr != nil {
+		if emitErr := emitStreamErrorEvent(ctx, streamSink, e.traceID, a.LastTurn(), agent.AssistantStepID(a.LastTurn()), strings.TrimSpace(sess.ID), 0, saveErr); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", "", saveErr
+	}
+	if e.sessionStore == nil {
+		return response, "", nil
+	}
+	return response, strings.TrimSpace(sess.ID), nil
+}
+
+func (e *agentSessionExecutor) registerRun(ctx context.Context, sessionID string) (context.Context, func(), error) {
+	if e == nil || e.runRegistry == nil {
+		return ctx, func() {}, nil
+	}
+
+	trimmedSessionID := strings.TrimSpace(sessionID)
+	if trimmedSessionID == "" {
+		return ctx, func() {}, nil
+	}
+
+	execCtx, cancel := context.WithCancel(ctx)
+	if err := e.runRegistry.Register(trimmedSessionID, e.traceID, cancel); err != nil {
+		cancel()
+		return ctx, func() {}, err
+	}
+
+	return execCtx, func() {
+		e.runRegistry.Unregister(trimmedSessionID)
+		cancel()
+	}, nil
+}
+
+// injectAutoRecall 在执行前把 warm 层召回上下文注入为 system 消息。
+func (e *agentSessionExecutor) injectAutoRecall(history *agent.History, userMessage string, sessionID string) {
+	if e.memoryManager == nil || history == nil {
+		return
+	}
+
+	contextWindow, err := e.memoryManager.BuildContextWindow(sessionID, userMessage)
+	if err != nil {
+		log.Printf(
+			"trace_id=%s action=MEMORY_AUTO_RECALL status=error session_id=%s error=%v",
+			e.traceID,
+			strings.TrimSpace(sessionID),
+			err,
+		)
+		return
+	}
+	for _, msg := range contextWindow {
+		history.Append(msg)
+	}
+	if len(contextWindow) > 0 {
+		log.Printf(
+			"trace_id=%s action=MEMORY_AUTO_RECALL status=success session_id=%s injected=%d",
+			e.traceID,
+			strings.TrimSpace(sessionID),
+			len(contextWindow),
+		)
+	}
 }
 
 // loadOrCreateSession 优先加载已有会话，失败时回退为新会话。
@@ -190,10 +363,25 @@ func (e *agentSessionExecutor) persistSessionMessages(sess *session.Session, mes
 	if e.sessionStore == nil {
 		return nil
 	}
+	startIndex := len(sess.Messages)
 	for _, msg := range messages {
 		sess.AddMessage(msg)
 	}
-	return e.sessionStore.Save(sess)
+	if err := e.sessionStore.Save(sess); err != nil {
+		return err
+	}
+
+	if e.memoryManager != nil {
+		if err := e.memoryManager.StoreWarmMessages(sess.ID, startIndex, messages); err != nil {
+			log.Printf(
+				"trace_id=%s action=MEMORY_WARM_STORE status=error session_id=%s error=%v",
+				e.traceID,
+				strings.TrimSpace(sess.ID),
+				err,
+			)
+		}
+	}
+	return nil
 }
 
 // archiveSession 在回合结束后触发冷存归档；失败仅记录日志不影响主流程。

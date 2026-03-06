@@ -30,6 +30,7 @@ type Agent struct {
 	maxTurns  int
 
 	initialHistoryLen int
+	lastTurn          int
 }
 
 var errToolCallIDRequired = errors.New("tool_call.id is empty")
@@ -70,31 +71,59 @@ func NewAgentWithHistory(completer Completer, toolCatalog ToolCatalog, history *
 
 // Run 负责循环与退出条件；单步逻辑拆到私有方法里，便于测试与扩展。
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
-	return a.RunWithTraceID(ctx, userMessage, "")
+	return a.runWithSink(ctx, userMessage, "", nil)
 }
 
 // RunWithTraceID 允许调用方注入请求级 trace_id，保障跨层链路追踪一致。
 func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID string) (string, error) {
+	return a.runWithSink(ctx, userMessage, traceID, nil)
+}
+
+func (a *Agent) RunStream(ctx context.Context, userMessage string, sink EventSink) (string, error) {
+	return a.runWithSink(ctx, userMessage, "", sink)
+}
+
+func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, traceID string, sink EventSink) (string, error) {
+	return a.runWithSink(ctx, userMessage, traceID, sink)
+}
+
+func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink EventSink) (string, error) {
 	traceID = strings.TrimSpace(traceID)
 	if traceID == "" {
 		traceID = fmt.Sprintf("agent-%d", time.Now().UnixNano())
 	}
+	eventSink := sink
+	if eventSink == nil {
+		eventSink = nopSink{}
+	}
+
 	a.appendUserMessage(userMessage)
 	consecutiveNonExecutableToolCallTurns := 0
+	a.lastTurn = 0
 
 	for turn := 0; turn < a.maxTurns; turn++ {
-		msg, finishReason, err := a.completeOnce(ctx)
+		a.lastTurn = turn
+		msg, finishReason, err := a.completeOnce(ctx, sink, traceID, turn)
 		if err != nil {
-			return "", fmt.Errorf("trace_id=%s turn=%d complete_once: %w", traceID, turn, err)
+			runErr := fmt.Errorf("trace_id=%s turn=%d complete_once: %w", traceID, turn, err)
+			return "", a.emitTerminalError(ctx, eventSink, traceID, turn, AssistantStepID(turn), runErr)
 		}
 
 		switch finishReason {
 		case llm.FinishStop:
 			return a.handleAssistantStop(msg), nil
 		case llm.FinishToolCalls:
-			stats, err := a.handleToolCalls(ctx, traceID, msg.ToolCalls)
+			stats, err := a.handleToolCalls(ctx, traceID, turn, eventSink, msg.ToolCalls)
 			if err != nil {
-				return "", fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
+				if isEventEmitError(err) {
+					return "", err
+				}
+				var awaitingErr *ErrAwaitingHuman
+				if errors.As(err, &awaitingErr) {
+					return "", err
+				}
+				runErr := fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
+				return "", a.emitTerminalError(ctx, eventSink, traceID, turn, AssistantStepID(turn), runErr)
 			}
 			if stats.nonExecutable() {
 				consecutiveNonExecutableToolCallTurns++
@@ -103,20 +132,27 @@ func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID 
 			}
 			// 防止模型反复生成不可执行的 tool_call（空参数/缺失工具）导致无效循环。
 			if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
-				return "", fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
+				runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
+				return "", a.emitTerminalError(ctx, eventSink, traceID, turn, AssistantStepID(turn), runErr)
 			}
 		case llm.FinishLength:
 			content := strings.TrimSpace(msg.Text)
 			if content != "" {
 				return content, nil
 			}
-			return "", fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)
+			runErr := fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)
+			return "", a.emitTerminalError(ctx, eventSink, traceID, turn, AssistantStepID(turn), runErr)
 		default:
-			return "", fmt.Errorf("trace_id=%s turn=%d unsupported finish_reason: %q", traceID, turn, finishReason)
+			runErr := fmt.Errorf("trace_id=%s turn=%d unsupported finish_reason: %q", traceID, turn, finishReason)
+			return "", a.emitTerminalError(ctx, eventSink, traceID, turn, AssistantStepID(turn), runErr)
 		}
 	}
 
-	return "", fmt.Errorf("trace_id=%s max turns exceeded: %d", traceID, a.maxTurns)
+	if a.maxTurns > 0 {
+		a.lastTurn = a.maxTurns - 1
+	}
+	runErr := fmt.Errorf("trace_id=%s max turns exceeded: %d", traceID, a.maxTurns)
+	return "", a.emitTerminalError(ctx, eventSink, traceID, a.lastTurn, AssistantStepID(a.lastTurn), runErr)
 }
 
 // appendUserMessage 只负责把用户输入追加到会话历史。
@@ -128,11 +164,21 @@ func (a *Agent) appendUserMessage(userMessage string) {
 }
 
 // completeOnce 只做一次模型调用 + assistant 消息落历史。
-func (a *Agent) completeOnce(ctx context.Context) (llm.Message, llm.FinishReason, error) {
-	resp, err := a.completer.Complete(ctx, llm.CompletionRequest{
+func (a *Agent) completeOnce(ctx context.Context, sink EventSink, traceID string, turn int) (llm.Message, llm.FinishReason, error) {
+	req := llm.CompletionRequest{
 		Messages: a.history.Messages(),
 		Tools:    a.tools.ToolDefs(),
-	})
+	}
+
+	var (
+		resp *llm.CompletionResponse
+		err  error
+	)
+	if streamingCompleter, ok := a.completer.(llm.StreamingCompleter); ok && sink != nil {
+		resp, err = streamingCompleter.CompleteStream(ctx, req, newLLMDeltaBridge(sink, traceID, turn))
+	} else {
+		resp, err = a.completer.Complete(ctx, req)
+	}
 	if err != nil {
 		return llm.Message{}, "", err
 	}
@@ -160,18 +206,36 @@ func (s toolCallTurnStats) nonExecutable() bool {
 }
 
 // handleToolCalls 负责执行工具并把结果统一写回历史，供下一轮模型继续推理。
-func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm.ToolCall) (toolCallTurnStats, error) {
+func (a *Agent) handleToolCalls(ctx context.Context, traceID string, turn int, sink EventSink, calls []llm.ToolCall) (toolCallTurnStats, error) {
 	stats := toolCallTurnStats{totalCalls: len(calls)}
 	if len(calls) == 0 {
 		return stats, errors.New("finish_reason=tool_calls but tool_calls is empty")
 	}
 
-	for _, call := range calls {
+	for toolIndex, call := range calls {
+		stepID := ToolStepID(turn, toolIndex)
+		rawToolCallID := strings.TrimSpace(call.ID)
+		rawToolName := strings.TrimSpace(call.Name)
+		if err := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventToolCallStarted, map[string]any{
+			"tool":         rawToolName,
+			"tool_call_id": rawToolCallID,
+		})); err != nil {
+			return stats, err
+		}
+
 		toolCallID, toolName, args, err := validateToolCall(call)
 		if err != nil {
 			// 统一降级处理：记录错误并继续，让模型有机会自我纠正。
 			fmt.Fprintf(os.Stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, strings.TrimSpace(call.ID), strings.TrimSpace(call.Name), err)
 			a.appendToolResult(toolCallID, toolName, traceID, "", err, nil)
+			if emitErr := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventToolCallFinished, map[string]any{
+				"tool":         coalesceToolName(toolName, rawToolName),
+				"tool_call_id": coalesceToolCallID(toolCallID, rawToolCallID),
+				"status":       "error",
+				"error":        err.Error(),
+			})); emitErr != nil {
+				return stats, emitErr
+			}
 			continue
 		}
 
@@ -179,7 +243,16 @@ func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm
 
 		tool := a.tools.Get(toolName)
 		if tool == nil {
-			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q not found", toolName), nil)
+			toolErr := fmt.Errorf("tool %q not found", toolName)
+			a.appendToolResult(toolCallID, toolName, traceID, "", toolErr, nil)
+			if emitErr := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventToolCallFinished, map[string]any{
+				"tool":         toolName,
+				"tool_call_id": toolCallID,
+				"status":       "error",
+				"error":        toolErr.Error(),
+			})); emitErr != nil {
+				return stats, emitErr
+			}
 			continue
 		}
 
@@ -187,13 +260,37 @@ func (a *Agent) handleToolCalls(ctx context.Context, traceID string, calls []llm
 		stats.executed++
 		output, execErr := tool.Execute(toolCtx, args, traceID)
 		if execErr != nil {
-			a.appendToolResult(toolCallID, toolName, traceID, "", fmt.Errorf("tool %q error: %w", toolName, execErr), nil)
+			toolErr := fmt.Errorf("tool %q error: %w", toolName, execErr)
+			a.appendToolResult(toolCallID, toolName, traceID, "", toolErr, nil)
+			if emitErr := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventToolCallFinished, map[string]any{
+				"tool":         toolName,
+				"tool_call_id": toolCallID,
+				"status":       "error",
+				"error":        toolErr.Error(),
+			})); emitErr != nil {
+				return stats, emitErr
+			}
 			continue
 		}
 
 		meta := tools.InterpretExecuteResult(tool, output)
+		if emitErr := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventToolCallFinished, map[string]any{
+			"tool":         toolName,
+			"tool_call_id": toolCallID,
+			"status":       "success",
+		})); emitErr != nil {
+			return stats, emitErr
+		}
 		if meta.AwaitingHuman != nil {
 			// 暂停态通过专用错误向上抛，让上层保存现场并等待用户输入。
+			if emitErr := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventAwaitingHuman, map[string]any{
+				"tool":         toolName,
+				"tool_call_id": toolCallID,
+				"question_id":  strings.TrimSpace(meta.AwaitingHuman.QuestionID),
+				"prompt":       strings.TrimSpace(meta.AwaitingHuman.Prompt),
+			})); emitErr != nil {
+				return stats, emitErr
+			}
 			return stats, &ErrAwaitingHuman{
 				QuestionID: strings.TrimSpace(meta.AwaitingHuman.QuestionID),
 				Prompt:     strings.TrimSpace(meta.AwaitingHuman.Prompt),
@@ -311,4 +408,63 @@ func (a *Agent) GetNewMessages() []llm.Message {
 	}
 
 	return llm.CloneMessages(messages[a.initialHistoryLen:])
+}
+
+func (a *Agent) LastTurn() int {
+	if a == nil {
+		return 0
+	}
+	return a.lastTurn
+}
+
+type eventEmitError struct {
+	eventType EventType
+	err       error
+}
+
+func (e *eventEmitError) Error() string {
+	return fmt.Sprintf("emit event %q: %v", e.eventType, e.err)
+}
+
+func (e *eventEmitError) Unwrap() error {
+	return e.err
+}
+
+func isEventEmitError(err error) bool {
+	var emitErr *eventEmitError
+	return errors.As(err, &emitErr)
+}
+
+func emitEvent(ctx context.Context, sink EventSink, event AgentEvent) error {
+	if err := sink.Emit(ctx, event); err != nil {
+		return &eventEmitError{eventType: event.Type, err: err}
+	}
+	return nil
+}
+
+func (a *Agent) emitTerminalError(ctx context.Context, sink EventSink, traceID string, turn int, stepID string, runErr error) error {
+	if emitErr := emitEvent(ctx, sink, NewEvent(traceID, turn, stepID, EventError, map[string]any{
+		"message": runErr.Error(),
+	})); emitErr != nil {
+		return emitErr
+	}
+	return runErr
+}
+
+func coalesceToolName(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func coalesceToolCallID(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

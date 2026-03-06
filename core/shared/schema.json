@@ -17,6 +17,7 @@
       "enum": [
         "PING",
         "AGENT_SEND",
+        "AGENT_STOP",
         "HUMAN_RESPONSE",
         "CONFIG_GET",
         "CONFIG_UPDATE",
@@ -119,6 +120,101 @@
           "items": {
             "type": "object"
           }
+        }
+      }
+    },
+    "assistantSessionEndSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal",
+        "message"
+      ],
+      "properties": {
+        "signal": {
+          "type": "string",
+          "const": "END_SESSION"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "agentResponsePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "session_id",
+        "session_ended"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_ended": {
+          "type": "boolean"
+        },
+        "session_end": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/assistantSessionEndSignal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "session_ended"
+            ],
+            "properties": {
+              "session_ended": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "session_end"
+            ],
+            "properties": {
+              "session_end": {
+                "$ref": "#/$defs/assistantSessionEndSignal"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "agentStopResponsePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "message"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "stopped",
+            "not_running"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }
