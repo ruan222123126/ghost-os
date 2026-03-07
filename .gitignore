@@ -12,6 +12,7 @@ core/bridge/bridge
 # Node/PNPM artifacts.
 **/node_modules/
 **/.next/
+**/.next-dev/
 **/.next.bak*/
 .pnpm-store/
 **/.pnpm-store/
