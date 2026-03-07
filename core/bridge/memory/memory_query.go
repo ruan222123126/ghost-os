@@ -2,7 +2,6 @@ package memory
 
 import (
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -18,27 +17,41 @@ type QueryService struct {
 	decision *DecisionService
 	planner  *IntentPlanner
 	vector   *VectorSidecar
+	truth    *TruthReader
 
-	autoRecallEnabled bool
-	autoRecallLimit   int
-	shadowEnabled     bool
-	scoring           memoryScoringConfig
-	metrics           *memoryCounters
+	autoRecallEnabled         bool
+	autoRecallLimit           int
+	shadowEnabled             bool
+	truthReadEnabled          bool
+	hybridEnabled             bool
+	rerankDebugEnabled        bool
+	recallInjectMinConfidence float64
+	truthMinSupportRefs       int
+	conflictPenalty           float64
+	scoring                   memoryScoringConfig
+	metrics                   *memoryCounters
 }
 
-func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, planner *IntentPlanner, vector *VectorSidecar, metrics *memoryCounters) *QueryService {
+func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, planner *IntentPlanner, vector *VectorSidecar, truth *TruthReader, metrics *memoryCounters) *QueryService {
 	return &QueryService{
-		warm:              warm,
-		cold:              cold,
-		graph:             graph,
-		decision:          decision,
-		planner:           planner,
-		vector:            vector,
-		autoRecallEnabled: config.AutoRecallEnabled,
-		autoRecallLimit:   config.AutoRecallLimit,
-		shadowEnabled:     config.ShadowRecallEnabled,
-		scoring:           newMemoryScoringConfig(config),
-		metrics:           metrics,
+		warm:                      warm,
+		cold:                      cold,
+		graph:                     graph,
+		decision:                  decision,
+		planner:                   planner,
+		vector:                    vector,
+		truth:                     truth,
+		autoRecallEnabled:         config.AutoRecallEnabled,
+		autoRecallLimit:           config.AutoRecallLimit,
+		shadowEnabled:             config.ShadowRecallEnabled,
+		truthReadEnabled:          config.TruthReadEnabled,
+		hybridEnabled:             config.HybridRerankEnabled,
+		rerankDebugEnabled:        config.RerankDebugEnabled,
+		recallInjectMinConfidence: clamp01(config.RecallInjectMinConfidence),
+		truthMinSupportRefs:       max(config.TruthMinSupportRefs, 2),
+		conflictPenalty:           maxFloat(config.ConflictPenalty, 0.12),
+		scoring:                   newMemoryScoringConfig(config),
+		metrics:                   metrics,
 	}
 }
 
@@ -74,6 +87,30 @@ func (s *QueryService) BuildContextWindow(scope SessionScope, userInput string) 
 	entries := result.Entries
 	if len(entries) == 0 {
 		return nil, nil
+	}
+	if s.hybridEnabled {
+		filtered := make([]MemoryEntry, 0, len(entries))
+		for _, entry := range entries {
+			if entry.Confidence < s.recallInjectMinConfidence {
+				if s.metrics != nil {
+					s.metrics.lowConfidenceFiltered.Add(1)
+					s.metrics.contextInjectionFiltered.Add(1)
+				}
+				continue
+			}
+			status := normalizeTruthStatus(entry.TruthStatus)
+			if status == truthStatusConflicted || status == truthStatusCandidate {
+				if s.metrics != nil {
+					s.metrics.contextInjectionFiltered.Add(1)
+				}
+				continue
+			}
+			filtered = append(filtered, entry)
+		}
+		entries = filtered
+		if len(entries) == 0 {
+			return nil, nil
+		}
 	}
 
 	visible := visibleContextFingerprints(scope.History)
@@ -165,136 +202,30 @@ func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]
 }
 
 func (s *QueryService) QueryResultWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
-	results := make([]MemoryEntry, 0, 32)
-	seenIDs := make(map[string]struct{}, 32)
-	seenFingerprints := make(map[string]struct{}, 32)
-	now := time.Now().UTC()
-
-	collect := func(entries []MemoryEntry) {
-		for _, entry := range entries {
-			if _, ok := seenIDs[entry.ID]; ok {
-				continue
-			}
-			seenIDs[entry.ID] = struct{}{}
-			fingerprint := normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))
-			if fingerprint != "" {
-				seenFingerprints[fingerprint] = struct{}{}
-			}
-			results = append(results, entry)
-		}
+	if s.hybridEnabled && s.truth != nil && s.truth.Enabled() {
+		return s.queryResultHybridWithScope(query, scope)
 	}
-	collectDistinct := func(entries []MemoryEntry) {
-		for _, entry := range entries {
-			if _, ok := seenIDs[entry.ID]; ok {
-				continue
-			}
-			fingerprint := normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))
-			if fingerprint != "" {
-				if _, ok := seenFingerprints[fingerprint]; ok {
-					continue
-				}
-				seenFingerprints[fingerprint] = struct{}{}
-			}
-			seenIDs[entry.ID] = struct{}{}
-			results = append(results, entry)
-		}
-	}
-
-	hotEntries := queryHot(scope, query)
-	if len(hotEntries) > 0 {
-		s.metrics.l1Hits.Add(uint64(len(hotEntries)))
-	}
-	collect(hotEntries)
-
-	warmQuery := query
-	warmQuery.Limit = 0
-	warmEntries, err := s.warm.RetrieveCandidates(warmQuery)
+	result, err := s.queryResultWeek2WithScope(query, scope)
 	if err != nil {
 		return MemoryQueryResult{}, err
 	}
-	if len(warmEntries) > 0 {
-		s.metrics.l2Hits.Add(uint64(len(warmEntries)))
+	if !s.truthReadRequested(query) || s.truth == nil || !s.truth.Enabled() {
+		return result, nil
 	}
-	collect(warmEntries)
-
-	var decisionHits []DecisionHit
-	if s.decision != nil && query.IncludeDecision {
-		decisionEntries, hits, err := s.decision.Retrieve(query, scope)
-		if err != nil {
-			log.Printf("[MEMORY] decision recall failed, falling back to other layers: %v", err)
-		} else {
-			collectDistinct(decisionEntries)
-			decisionHits = hits
-		}
-	}
-
-	var graphHits []GraphHit
-	if s.graph != nil && query.IncludeGraph {
-		graphEntries, hits, err := s.graph.Retrieve(query, scope)
-		if err != nil {
-			log.Printf("[MEMORY] graph recall failed, falling back to text layers: %v", err)
-		} else {
-			if len(graphEntries) > 0 {
-				s.metrics.graphHits.Add(uint64(len(graphEntries)))
+	plan := result.IntentPlan
+	if plan == nil && s.planner != nil && s.planner.Enabled() {
+		planned, err := s.planner.Plan(query, scope)
+		if err == nil {
+			planned = normalizeQueryIntentPlan(planned)
+			if hasIntentPlan(planned) {
+				plan = &planned
+				result.IntentPlan = plan
 			}
-			collectDistinct(graphEntries)
-			graphHits = hits
 		}
 	}
-
-	coldQuery := query
-	coldQuery.Limit = 0
-	coldEntries, err := s.cold.Retrieve(coldQuery)
-	if err != nil {
-		return MemoryQueryResult{}, err
-	}
-	if len(coldEntries) > 0 {
-		s.metrics.l3Hits.Add(uint64(len(coldEntries)))
-	}
-	collect(coldEntries)
-
-	if query.IncludeMarkdown {
-		markdownQuery := query
-		markdownQuery.Limit = 0
-		markdownEntries, err := s.queryMarkdown(markdownQuery)
-		if err != nil {
-			return MemoryQueryResult{}, err
-		}
-		if len(markdownEntries) > 0 {
-			s.metrics.markdownHits.Add(uint64(len(markdownEntries)))
-		}
-		collect(markdownEntries)
-	}
-
-	results = rankMemoryEntries(results, query, now, s.scoring)
-	if query.Limit > 0 && len(results) > query.Limit {
-		results = results[:query.Limit]
-	}
-
-	warmHits := make([]string, 0, len(results))
-	decisionMemoHits := make([]string, 0, len(results))
-	for _, entry := range results {
-		if entryLayer(entry) != "warm" {
-			if entryLayer(entry) == "decision" {
-				memoID, _ := entry.Metadata["memo_id"].(string)
-				if strings.TrimSpace(memoID) != "" {
-					decisionMemoHits = append(decisionMemoHits, strings.TrimSpace(memoID))
-				}
-			}
-			continue
-		}
-		warmHits = append(warmHits, entry.ID)
-	}
-	s.warm.RecordAccess(warmHits, now)
-	if s.decision != nil {
-		s.decision.RecordMemoAccess(decisionMemoHits, now)
-	}
-	liveResult := MemoryQueryResult{Entries: results, GraphHits: graphHits, DecisionHits: decisionHits}
-	intentPlan, vectorHits, shadowReport := s.runShadowRecall(query, scope, liveResult)
-	liveResult.IntentPlan = intentPlan
-	liveResult.VectorHits = vectorHits
-	liveResult.ShadowReport = shadowReport
-	return liveResult, nil
+	matches := s.truth.Query(query, plan)
+	result.TruthHits = s.truth.DebugHits(matches)
+	return result, nil
 }
 
 func queryHot(scope SessionScope, query MemoryQuery) []MemoryEntry {

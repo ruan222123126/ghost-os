@@ -31,6 +31,12 @@ type MemoryEntry struct {
 	Summary        string         `json:"summary,omitempty"`
 	Anchors        []MemoryAnchor `json:"anchors,omitempty"`
 	Confidence     float64        `json:"confidence,omitempty"`
+	Freshness      float64        `json:"freshness,omitempty"`
+	EvidenceCount  int            `json:"evidence_count,omitempty"`
+	SourceRefs     []SourceRef    `json:"source_refs,omitempty"`
+	TruthStatus    string         `json:"truth_status,omitempty"`
+	WhyMatched     string         `json:"why_matched,omitempty"`
+	RerankScore    float64        `json:"rerank_score,omitempty"`
 	FreshnessBoost float64        `json:"freshness_boost,omitempty"`
 	// TODO(memory): 仅做字段透传，尚未接入向量索引/召回。
 	EmbeddingID string `json:"embedding_id,omitempty"`
@@ -66,6 +72,7 @@ type MemoryQuery struct {
 	IncludeMarkdown   bool                    `json:"include_markdown,omitempty"`
 	IncludeGraph      bool                    `json:"include_graph,omitempty"`
 	IncludeVector     bool                    `json:"include_vector,omitempty"`
+	IncludeTruth      bool                    `json:"include_truth,omitempty"`
 	SemanticQuery     string                  `json:"semantic_query,omitempty"`
 	AnchorTypes       []string                `json:"anchor_types,omitempty"`
 	MinConfidence     float64                 `json:"min_confidence,omitempty"`
@@ -77,6 +84,8 @@ type MemoryQuery struct {
 	IncludeDecision   bool                    `json:"include_decision,omitempty"`
 	VectorDebug       bool                    `json:"vector_debug,omitempty"`
 	IntentDebug       bool                    `json:"intent_debug,omitempty"`
+	TruthDebug        bool                    `json:"truth_debug,omitempty"`
+	RerankDebug       bool                    `json:"rerank_debug,omitempty"`
 	ShadowDebug       bool                    `json:"shadow_debug,omitempty"`
 	DecisionDebug     bool                    `json:"decision_debug,omitempty"`
 	DecisionReuseOnly bool                    `json:"decision_reuse_only,omitempty"`
@@ -93,6 +102,8 @@ type MemoryQueryResult struct {
 	DecisionHits []DecisionHit       `json:"decision_hits,omitempty"`
 	IntentPlan   *QueryIntentPlan    `json:"intent_plan,omitempty"`
 	VectorHits   []VectorHit         `json:"vector_hits,omitempty"`
+	TruthHits    []TruthHit          `json:"truth_hits,omitempty"`
+	RerankReport *HybridRerankReport `json:"rerank_report,omitempty"`
 	ShadowReport *ShadowRecallReport `json:"shadow_report,omitempty"`
 }
 
@@ -182,6 +193,14 @@ func normalizeEntry(entry MemoryEntry) MemoryEntry {
 	}
 	out.Summary = strings.TrimSpace(out.Summary)
 	out.Confidence = clamp01(out.Confidence)
+	out.Freshness = clamp01(out.Freshness)
+	if out.EvidenceCount < 0 {
+		out.EvidenceCount = 0
+	}
+	out.SourceRefs = normalizeSourceRefs(out.SourceRefs)
+	out.TruthStatus = strings.TrimSpace(out.TruthStatus)
+	out.WhyMatched = strings.TrimSpace(out.WhyMatched)
+	out.RerankScore = clamp01(out.RerankScore)
 	out.FreshnessBoost = clamp01(out.FreshnessBoost)
 	out.Anchors = normalizeAnchors(out.Anchors)
 	out.EmbeddingID = strings.TrimSpace(out.EmbeddingID)
@@ -201,6 +220,9 @@ func cloneEntry(entry MemoryEntry) MemoryEntry {
 	}
 	if len(entry.Anchors) > 0 {
 		out.Anchors = cloneAnchors(entry.Anchors)
+	}
+	if len(entry.SourceRefs) > 0 {
+		out.SourceRefs = append([]SourceRef(nil), entry.SourceRefs...)
 	}
 	return out
 }

@@ -45,6 +45,52 @@ type truthObjectSidecar interface {
 	SyncObject(MemoryObject) error
 }
 
+type truthObjectSidecarMux struct {
+	sidecars []truthObjectSidecar
+}
+
+func (m *truthObjectSidecarMux) Add(sidecar truthObjectSidecar) {
+	if m == nil || sidecar == nil {
+		return
+	}
+	for _, existing := range m.sidecars {
+		if existing == sidecar {
+			return
+		}
+	}
+	m.sidecars = append(m.sidecars, sidecar)
+}
+
+func (m *truthObjectSidecarMux) Replace(sidecar truthObjectSidecar) {
+	if m == nil {
+		return
+	}
+	m.sidecars = m.sidecars[:0]
+	m.Add(sidecar)
+}
+
+func (m *truthObjectSidecarMux) Snapshot() []truthObjectSidecar {
+	if m == nil || len(m.sidecars) == 0 {
+		return nil
+	}
+	return append([]truthObjectSidecar(nil), m.sidecars...)
+}
+
+func (m *truthObjectSidecarMux) SyncObject(object MemoryObject) error {
+	if m == nil {
+		return nil
+	}
+	for _, sidecar := range m.sidecars {
+		if sidecar == nil {
+			continue
+		}
+		if err := sidecar.SyncObject(object); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // TruthWriter 维护 schema v1 的 shadow event log 与快照。
 type TruthWriter struct {
 	enabled        bool
@@ -60,7 +106,7 @@ type TruthWriter struct {
 	mu             sync.Mutex
 	objectSnapshot map[string]MemoryObject
 	claimSnapshot  map[string]MemoryClaim
-	sidecar        truthObjectSidecar
+	sidecars       *truthObjectSidecarMux
 	sidecarWG      sync.WaitGroup
 }
 
@@ -82,6 +128,7 @@ func NewTruthWriter(config MemoryConfig, metrics *memoryCounters) *TruthWriter {
 		metrics:        metrics,
 		objectSnapshot: make(map[string]MemoryObject),
 		claimSnapshot:  make(map[string]MemoryClaim),
+		sidecars:       &truthObjectSidecarMux{},
 	}
 	if err := writer.loadSnapshots(); err != nil {
 		log.Printf("[MEMORY] truth shadow snapshot load failed, starting from empty snapshots: base=%s err=%v", writer.baseDir, err)
@@ -119,7 +166,22 @@ func (w *TruthWriter) SetObjectSidecar(sidecar truthObjectSidecar) {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.sidecar = sidecar
+	if w.sidecars == nil {
+		w.sidecars = &truthObjectSidecarMux{}
+	}
+	w.sidecars.Replace(sidecar)
+}
+
+func (w *TruthWriter) AddObjectSidecar(sidecar truthObjectSidecar) {
+	if w == nil || sidecar == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.sidecars == nil {
+		w.sidecars = &truthObjectSidecarMux{}
+	}
+	w.sidecars.Add(sidecar)
 }
 
 func (w *TruthWriter) AppendEvent(eventType string, object MemoryObject, traceID string) (TruthWriteResult, error) {
@@ -156,7 +218,7 @@ func (w *TruthWriter) AppendEvent(eventType string, object MemoryObject, traceID
 	if w.metrics != nil {
 		w.metrics.truthEventsWritten.Add(1)
 	}
-	w.enqueueSidecarSync(w.sidecar, normalized)
+	w.enqueueSidecarSync(w.sidecars, normalized)
 	return TruthWriteResult{
 		SchemaVersion:  truthSchemaVersion,
 		EventID:        event.EventID,
@@ -189,7 +251,7 @@ func (w *TruthWriter) UpsertObject(object MemoryObject) (TruthWriteResult, error
 	if w.metrics != nil {
 		w.metrics.truthObjectsUpserted.Add(1)
 	}
-	w.enqueueSidecarSync(w.sidecar, normalized)
+	w.enqueueSidecarSync(w.sidecars, normalized)
 	return TruthWriteResult{
 		SchemaVersion:  truthSchemaVersion,
 		ObjectID:       normalized.ObjectID,
