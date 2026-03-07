@@ -34,13 +34,12 @@ type agentStreamExecutorFunc func(
 
 // bridgeService 负责 action 分发，不承载 transport 细节。
 type bridgeService struct {
-	configStore         *ConfigStore
-	sessionStore        *session.Store
-	memoryManager       *memory.MemoryManager
-	agentExecutor       agentExecutorFunc
-	agentExecutorStream agentStreamExecutorFunc
-	runRegistry         *RunRegistry
-	actions             map[string]actionHandler
+	configStore   *ConfigStore
+	sessionStore  *session.Store
+	memoryManager *memory.MemoryManager
+	agentRunner   SessionTurnRunner
+	runRegistry   *RunRegistry
+	actions       map[string]actionHandler
 }
 
 // newBridgeService 组装 action -> handler 映射，并初始化会话与记忆依赖。
@@ -54,70 +53,42 @@ func newBridgeServiceWithStreamExecutor(
 	executor agentExecutorFunc,
 	streamExecutor agentStreamExecutorFunc,
 ) *bridgeService {
-	memoryManager := memory.NewMemoryManager(memory.MemoryConfig{
-		WarmCapacity:      agentWarmMemoryCapacity,
-		WarmPath:          memoryWarmPathFromEnv(),
-		ColdBaseDir:       memoryColdPathFromEnv(),
-		AutoRecallEnabled: memoryAutoRecallEnabledFromEnv(),
-		AutoRecallLimit:   memoryAutoRecallLimitFromEnv(),
-		WarmTTL:           memoryWarmTTLFromEnv(),
-		EvolutionInterval: memoryEvolutionIntervalFromEnv(),
-		EvolutionEnabled:  memoryEvolutionEnabledFromEnv(),
-		SessionStore:      sessionStore,
-	})
+	memoryManager := memory.NewMemoryManager(memoryManagerConfigFromStore(store, sessionStore))
 	runRegistry := NewRunRegistry()
 
-	useDefaultExecutor := executor == nil
-	if useDefaultExecutor {
-		executor = newSessionAgentExecutor(memoryManager, runRegistry)
-	}
-	if streamExecutor == nil {
-		if useDefaultExecutor {
-			streamExecutor = newSessionAgentStreamExecutor(memoryManager, runRegistry)
-		} else {
-			streamExecutor = func(
-				ctx context.Context,
-				message string,
-				sessionID string,
-				traceID string,
-				store *ConfigStore,
-				sessionStore *session.Store,
-				_ agent.EventSink,
-			) (string, string, error) {
-				return executor(ctx, message, sessionID, traceID, store, sessionStore)
-			}
-		}
+	runner := newSessionTurnRunnerAdapter(store, sessionStore, executor, streamExecutor)
+	if runner == nil {
+		runner = NewSessionAgentRunner(newAgentRuntimeFactory(), store, sessionStore, memoryManager, runRegistry)
 	}
 
 	service := &bridgeService{
-		configStore:         store,
-		sessionStore:        sessionStore,
-		memoryManager:       memoryManager,
-		agentExecutor:       executor,
-		agentExecutorStream: streamExecutor,
-		runRegistry:         runRegistry,
-		actions:             make(map[string]actionHandler, 7),
+		configStore:   store,
+		sessionStore:  sessionStore,
+		memoryManager: memoryManager,
+		agentRunner:   runner,
+		runRegistry:   runRegistry,
+		actions:       make(map[string]actionHandler, 7),
 	}
 
-	registerAction(service, actionAgentSend, func(ctx context.Context, params agentParams, traceID string) (any, int, error) {
+	registerAction(service, busActionAgentSend, func(ctx context.Context, params agentParams, traceID string) (any, int, error) {
 		return service.executeAgentAction(ctx, params, traceID)
 	})
-	registerAction(service, actionAgentStop, func(ctx context.Context, params agentStopParams, traceID string) (any, int, error) {
+	registerAction(service, busActionAgentStop, func(ctx context.Context, params agentStopParams, traceID string) (any, int, error) {
 		return service.executeAgentStopAction(ctx, params, traceID)
 	})
-	registerAction(service, actionConfigGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
+	registerAction(service, busActionConfigGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
 		return service.executeConfigGetAction(traceID)
 	})
-	registerAction(service, actionConfigUpdate, func(_ context.Context, params configUpdateRequest, traceID string) (any, int, error) {
+	registerAction(service, busActionConfigUpdate, func(_ context.Context, params configUpdateRequest, traceID string) (any, int, error) {
 		return service.executeConfigUpdateAction(params, traceID)
 	})
-	registerAction(service, actionHumanResponse, func(ctx context.Context, params humanResponseParams, traceID string) (any, int, error) {
+	registerAction(service, busActionHumanResponse, func(ctx context.Context, params humanResponseParams, traceID string) (any, int, error) {
 		return service.executeHumanResponseAction(ctx, params, traceID)
 	})
-	registerAction(service, actionMemoryQuery, func(ctx context.Context, params memoryQueryParams, traceID string) (any, int, error) {
+	registerAction(service, busActionMemoryQuery, func(ctx context.Context, params memoryQueryParams, traceID string) (any, int, error) {
 		return service.executeMemoryQueryAction(ctx, params, traceID)
 	})
-	registerAction(service, actionMemoryArchive, func(ctx context.Context, params memoryArchiveParams, traceID string) (any, int, error) {
+	registerAction(service, busActionMemoryArchive, func(ctx context.Context, params memoryArchiveParams, traceID string) (any, int, error) {
 		return service.executeMemoryArchiveAction(ctx, params, traceID)
 	})
 	return service

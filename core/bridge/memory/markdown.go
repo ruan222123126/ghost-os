@@ -15,14 +15,19 @@ import (
 
 // MarkdownNode 表示一个 Markdown 记忆节点（带 YAML Frontmatter）。
 type MarkdownNode struct {
-	ID          string    `yaml:"id"`
-	Importance  float64   `yaml:"importance"`
-	CreatedAt   time.Time `yaml:"created_at"`
-	RelatedTo   []string  `yaml:"related_to,omitempty"`
-	Tags        []string  `yaml:"tags,omitempty"`
-	SessionID   string    `yaml:"session_id,omitempty"`
-	EmbeddingID string    `yaml:"embedding_id,omitempty"`
-	Content     string    `yaml:"-"` // Markdown 正文
+	ID          string         `yaml:"id"`
+	Importance  float64        `yaml:"importance"`
+	CreatedAt   time.Time      `yaml:"created_at"`
+	RelatedTo   []string       `yaml:"related_to,omitempty"`
+	Tags        []string       `yaml:"tags,omitempty"`
+	SessionID   string         `yaml:"session_id,omitempty"`
+	EmbeddingID string         `yaml:"embedding_id,omitempty"`
+	Summary     string         `yaml:"summary,omitempty"`
+	Anchors     []MemoryAnchor `yaml:"anchors,omitempty"`
+	SourceIDs   []string       `yaml:"source_ids,omitempty"`
+	Confidence  float64        `yaml:"confidence,omitempty"`
+	LastSeenAt  time.Time      `yaml:"last_seen_at,omitempty"`
+	Content     string         `yaml:"-"` // Markdown 正文
 }
 
 // MarkdownStore 提供基于 Markdown + YAML Frontmatter 的持久化。
@@ -39,18 +44,10 @@ func NewMarkdownStore(baseDir string) *MarkdownStore {
 
 // Save 保存记忆节点为 Markdown 文件。
 func (s *MarkdownStore) Save(node MarkdownNode) error {
-	node.ID = strings.TrimSpace(node.ID)
-	node.SessionID = strings.TrimSpace(node.SessionID)
-	node.EmbeddingID = strings.TrimSpace(node.EmbeddingID)
+	node = normalizeMarkdownNode(node)
 	if node.ID == "" {
 		return fmt.Errorf("node id is required")
 	}
-	if node.CreatedAt.IsZero() {
-		node.CreatedAt = time.Now().UTC()
-	} else {
-		node.CreatedAt = node.CreatedAt.UTC()
-	}
-	node.Importance = clamp01(node.Importance)
 	if s.baseDir == "" {
 		return fmt.Errorf("markdown store base dir is empty")
 	}
@@ -177,6 +174,55 @@ func (s *MarkdownStore) unmarshal(data []byte) (MarkdownNode, error) {
 		contentBuf.WriteString("\n")
 	}
 	node.Content = strings.TrimSpace(contentBuf.String())
+	return normalizeMarkdownNode(node), nil
+}
 
-	return node, nil
+func normalizeMarkdownNode(node MarkdownNode) MarkdownNode {
+	out := node
+	out.ID = strings.TrimSpace(out.ID)
+	out.SessionID = strings.TrimSpace(out.SessionID)
+	out.EmbeddingID = strings.TrimSpace(out.EmbeddingID)
+	out.Content = strings.TrimSpace(out.Content)
+	out.Summary = strings.TrimSpace(out.Summary)
+	out.Importance = clamp01(out.Importance)
+	out.Confidence = clamp01(out.Confidence)
+	if out.CreatedAt.IsZero() {
+		out.CreatedAt = time.Now().UTC()
+	} else {
+		out.CreatedAt = out.CreatedAt.UTC()
+	}
+	if !out.LastSeenAt.IsZero() {
+		out.LastSeenAt = out.LastSeenAt.UTC()
+	}
+	out.RelatedTo = uniqueStrings(out.RelatedTo)
+	out.Tags = uniqueStrings(out.Tags)
+	out.SourceIDs = uniqueStrings(out.SourceIDs)
+	out.Anchors = normalizeAnchors(out.Anchors)
+	if len(out.SourceIDs) == 0 && len(out.RelatedTo) > 0 {
+		out.SourceIDs = append([]string(nil), out.RelatedTo...)
+	}
+	if len(out.RelatedTo) == 0 && len(out.SourceIDs) > 0 {
+		out.RelatedTo = append([]string(nil), out.SourceIDs...)
+	}
+	return out
+}
+
+func uniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
 }

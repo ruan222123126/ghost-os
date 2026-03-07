@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -127,5 +128,26 @@ func TestWarmMemoryCustomTTLPrunesExpiredEntries(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("expected expired entry to be pruned, got %d entries", len(entries))
+	}
+}
+
+func TestWarmMemoryLoadLegacyPayloadWithoutStructuredFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "warm.json")
+	now := time.Now().UTC().Format(time.RFC3339)
+	legacy := []byte("{\n  \"entries\": [\n    {\n      \"id\": \"legacy-1\",\n      \"content\": \"legacy memory\",\n      \"type\": \"message\",\n      \"timestamp\": \"" + now + "\",\n      \"metadata\": {\"layer\": \"warm\"}\n    }\n  ]\n}\n")
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatalf("write legacy warm payload: %v", err)
+	}
+
+	warm := NewWarmMemory(4, path)
+	if err := warm.Load(); err != nil {
+		t.Fatalf("load legacy warm payload: %v", err)
+	}
+	entries, err := warm.Retrieve(MemoryQuery{Keywords: []string{"legacy"}})
+	if err != nil {
+		t.Fatalf("retrieve legacy warm payload: %v", err)
+	}
+	if len(entries) != 1 || entries[0].ID != "legacy-1" {
+		t.Fatalf("unexpected legacy entries: %+v", entries)
 	}
 }

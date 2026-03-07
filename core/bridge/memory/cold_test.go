@@ -1,6 +1,8 @@
 package memory
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -103,5 +105,32 @@ func TestColdMemorySaveAndLoadMarkdownNode(t *testing.T) {
 	}
 	if len(ids) != 1 || ids[0] != node.ID {
 		t.Fatalf("unexpected markdown node ids: %v", ids)
+	}
+}
+
+func TestColdMemoryLoadLegacyMarkdownNodeWithoutStructuredFields(t *testing.T) {
+	baseDir := t.TempDir()
+	cold := NewColdMemory(baseDir)
+	markdownDir := filepath.Join(baseDir, "markdown", "nodes")
+	if err := os.MkdirAll(markdownDir, 0o700); err != nil {
+		t.Fatalf("create markdown dir: %v", err)
+	}
+	legacy := "---\nid: legacy_node\nimportance: 0.8\ncreated_at: 2026-03-01T00:00:00Z\nrelated_to:\n  - old-entry\ntags:\n  - legacy\nsession_id: legacy-session\n---\n\n# Legacy Node\nLegacy content body.\n"
+	if err := os.WriteFile(filepath.Join(markdownDir, "legacy_node.md"), []byte(legacy), 0o600); err != nil {
+		t.Fatalf("write legacy markdown node: %v", err)
+	}
+
+	node, err := cold.LoadMarkdownNode("legacy_node")
+	if err != nil {
+		t.Fatalf("load legacy markdown node: %v", err)
+	}
+	if node.ID != "legacy_node" {
+		t.Fatalf("unexpected node id: %q", node.ID)
+	}
+	if len(node.SourceIDs) != 1 || node.SourceIDs[0] != "old-entry" {
+		t.Fatalf("expected related_to to backfill source_ids, got %+v", node.SourceIDs)
+	}
+	if !strings.Contains(node.Content, "Legacy content body") {
+		t.Fatalf("unexpected legacy content: %q", node.Content)
 	}
 }

@@ -113,12 +113,16 @@ func (c *ColdMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
 		}
 		for i, msg := range archive.Messages {
 			entry := MemoryEntry{
-				ID:        fmt.Sprintf("%s:%06d", archive.SessionID, i),
-				Content:   messageToContent(msg),
-				Type:      MemoryTypeMessage,
-				Timestamp: archive.ArchivedAt,
+				ID:         fmt.Sprintf("%s:%06d", archive.SessionID, i),
+				Content:    messageToContent(msg),
+				Type:       MemoryTypeMessage,
+				Timestamp:  archive.ArchivedAt,
+				Source:     "archive",
+				Summary:    summarizeLine(messageToContent(msg), 220),
+				Confidence: 1,
 				Metadata: map[string]any{
 					"layer":        "cold",
+					"source":       "archive",
 					"session_id":   archive.SessionID,
 					"role":         string(msg.Role),
 					"tool_call_id": strings.TrimSpace(msg.ToolCallID),

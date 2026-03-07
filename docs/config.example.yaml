@@ -1,0 +1,70 @@
+# Ghost-OS Bridge config template
+# Copy this file to ~/.ghost-os/config.yaml and adjust values as needed.
+
+# Runtime model config
+provider: openai
+api_key: sk-your-key
+base_url: https://api.openai.com/v1
+model: gpt-4o
+# chat_path: /chat/completions
+
+# OpenAI-compatible local / gateway example
+# provider: custom
+# api_key: local-key-if-needed
+# base_url: http://127.0.0.1:11434/v1
+# model: qwen-coder
+# chat_path: /chat/completions
+
+# Bridge HTTP server
+bind_addr: 127.0.0.1:8080
+api_token: change-me
+cors_origins:
+  - http://localhost:3000
+  - http://localhost:5173
+
+# Persistence
+sessions_path: ~/.ghost-os/sessions
+memory_warm_path: ~/.ghost-os/memory/warm.json
+memory_cold_path: ~/.ghost-os/memory/cold
+
+# Prompt / native execution
+prompts_path: prompts.yaml
+native_persistent: false
+
+# Memory
+memory_auto_recall_enabled: true
+memory_auto_recall_limit: 5
+memory_warm_ttl: 24h
+memory_temporal_decay_enabled: true
+memory_temporal_decay_half_life: 72h
+memory_anchor_enabled: true
+memory_anchor_min_weight: 0.65
+memory_evolution_enabled: false
+memory_evolution_interval: 1h
+memory_evolution_use_worker: true
+memory_evolution_batch_size: 20
+
+# Worker summarizer
+# Leave empty to reuse `model`
+worker_model: ""
+worker_max_concurrency: 4
+worker_max_files: 20
+worker_max_file_chunks: 4
+
+# Anthropic-only options
+anthropic_version: "2023-06-01"
+anthropic_max_tokens: 1024
+
+# Tool selector
+tool_selector_enabled: false
+tool_selector_mode: llm
+# tool_selector_model: gpt-4o-mini
+tool_selector_timeout_ms: 1500
+tool_selector_confidence: 0.75
+tool_selector_shadow: false
+tool_selector_recent_messages: 6
+
+# Extra headers for custom providers
+# provider_headers:
+#   Authorization: Bearer some-token
+#   X-Custom-Header: some-value

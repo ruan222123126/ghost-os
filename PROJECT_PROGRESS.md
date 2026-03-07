@@ -1,52 +1,61 @@
 # Ghost-OS Progress Snapshot
 
-更新日期：2026-03-06  
-分支：main（与 origin/main 同步）  
+更新日期：2026-03-07
+分支：main（与 `origin/main` 同步）
 阶段：MVP 骨架（主链路可用，核心能力持续补齐）
 
-## 1) 三层状态（Trinity）
+## 1) 三层状态
 
 | 层 | 当前状态 | 完成度 |
 |---|---|---|
-| Execution (`drivers/native`) | 原子链路可用，浏览器与系统能力仍在补齐 | 20% |
-| Central (`core/bridge`) | Agent/Session/Tool 主流程稳定，记忆能力已有 MVP 基线 | 72% |
-| Perception (`apps/web`, `apps/cli`) | Web Console 与 CLI 可用，基础交互已贯通 | 40% |
+| Execution (`drivers/native`) | 原子能力可用，跨平台与浏览器能力仍在补齐 | 20% |
+| Central (`core/bridge`) | Agent / Session / Tool 主流程稳定，记忆与流式能力已有 MVP 基线 | 72% |
+| Perception (`apps/web`, `apps/cli`, `apps/android`) | Web Console、CLI、Android 客户端可用，交互体验仍待增强 | 45% |
 
-## 2) 已完成（概要）
+## 2) 已完成（摘要）
 
-- 三层边界、消息契约与 `trace_id` 可追踪链路已稳定。
-- Bridge 主流程已打通：Provider 调用、Tool 路由、会话持久化。
-- 核心工具链路可用：`web_search`、`browser_action`、`ask_human`（含续跑闭环）。
-- 会话终止语义已结构化：仅完整会话结束时使用 `{"signal":"END_SESSION","message":"..."}`，普通回合结束仍允许自然文本回复；契约已下沉到 `core/shared/schema.json` 并通过 `AGENT_SEND` 的 `session_ended/session_end` 字段对外表达。
-- Native 执行层完成一轮职责拆分与语义修正，降低耦合并减少误判风险。
-- 记忆系统完成 MVP 形态：L1/L2/L3 基础读写、查询与归档链路已接入。
-- 记忆系统已完成增强迭代：L2 新增 `importance/expires_at` 与可配置 TTL，支持自动召回上下文注入 Agent 回合。
-- L3 已新增 Markdown 节点（`ColdBaseDir/markdown/nodes`）与 YAML frontmatter 元数据，支持统一查询入口按需纳入 Markdown 命中。
-- 已落地后台演化基础链路（Dreaming）：L2 低重要度旧条目可聚合沉淀为 Markdown 节点并记录结构化演化日志/指标。
-- 截图与多模态输入链路已贯通，避免大体积 payload 直接进入文本历史。
-- 核心模块可读性与回归保障已增强（注释、结构整理、基础回归脚本）。
-- 已清理 Memory 模块当前无调用函数（manager/cold/warm/markdown），并为占位字段补充 `TODO/Deprecated` 说明，降低误导性。
-- 已打通“回合新增消息 -> L2 warm”写入链路：会话持久化成功后同步写入 warm（带稳定 `session_id`/消息序号 ID 元数据），自动召回可直接利用近期真实会话内容。
-- 已完成 Agent Phase 1 SSE 粗粒度事件流：新增 `/api/agent/stream`，贯通 `run_started / tool_call_started / tool_call_finished / awaiting_human / message / done / error` 事件；现有 `/api/agent` 同步接口保持不变。
-- 已完成 Agent Phase 2 token 级流式基础能力：LLM 层新增 `CompleteStream` / `LLMDelta` 抽象，OpenAI 与 Anthropic 已支持文本与 tool-call delta 流式解析，并通过 `completion_delta` 事件桥接到 Agent SSE。
-- 已完成 Agent Phase 3 stop 与并发保护基础能力：app 层新增 inflight run registry，已有会话支持单 session 串行执行保护，并可通过 `AGENT_STOP` 按 `session_id` 或 `trace_id` 取消正在运行的任务。
-- 已修复共享 `MemoryManager` 的会话热态串味风险：自动召回与 L1 查询改为显式传入 session scope，不再依赖全局可变的 `hotSessionID` / hot history。
-- 已补齐 Dreaming 后台演化生命周期：`MemoryManager` 新增优雅停止能力，bridge 进程在 `SIGINT` / `SIGTERM` 下会停止后台 ticker 并等待协程退出。
-- 已补回 `core/bridge/context.Builder.BuildRequest`，恢复消息/工具定义深拷贝组装逻辑，修复 `context` 包测试编译失败导致的 `trinity-check` Bridge (Go) 红灯。
+- 三层边界、消息总线契约、`trace_id` 追踪链路已稳定。
+- Bridge 主流程已打通：Provider 调用、Tool 路由、会话持久化、`ask_human` 续跑闭环。
+- 会话终止语义已结构化：完整结束使用 `END_SESSION` 信号，对外通过 `session_ended/session_end` 表达。
+- Native 执行层完成一轮职责拆分，主入口、action router、脚本沙箱与原子工具面已收口。
+- 文件原子工具已补齐：`list_files`、`read_file`、`search_files`、`apply_diff`、`bash_exec` 可贯通 Bridge ↔ Native。
+- Native persistent mode 与 Bridge persistent client 已落地，支持 framed JSON、超时杀进程重建与 one-shot fallback。
+- Native `browser_query` 已按职责拆分为编排入口、参数解析、CDP 探测、窗口发现与标题匹配子模块，便于后续跨平台扩展与单测。
+- Agent SSE 已落地粗粒度事件流，LLM 层已补充 token delta 流式基础能力。
+- stop / inflight 保护已具备基础能力：同 session 串行保护、按 `session_id` / `trace_id` 取消运行。
+- Memory MVP 已形成：L1/L2/L3 基础读写、自动召回、TTL、Markdown 节点、Dreaming 聚合沉淀已接入。
+- Memory 模块已进一步拆分为 façade + services，降低会话热态串味与后台 ticker 生命周期风险。
+- `read_and_summarize` Worker 工具已落地，可用于大仓库粗筛与分层摘要。
+- Bridge 已接入轻量 LLM Tool Selector 基线：基于工具元数据与近期上下文可在 shadow / real mode 下选择最小工具子集，默认关闭，异常与低置信度统一回退全量工具，并始终保留 `ask_human`。
+- Web / CLI 已接入 `POST /api/questions/answer`，不再需要“双请求续跑”编排。
+- Bus 单一契约源已进一步收口：schema 现生成 AGENT_SEND 成功/等待人工响应类型到 Go/Web/CLI，Bridge 改用生成的 action 常量，客户端已接住 `session_ended` / `session_end`。
+- CLI 公共调用已统一到高层路由：消息走 `/api/agent`，配置走 `/api/config`，`ask_human` 回答走 `/api/questions/answer`；`/api/bus` 仅保留低层兼容定位。
+- Web Console 已收口 Bridge API 代理与 textarea 提交逻辑，减少模板重复。
+- Android 客户端已完成 MVP 骨架：配置管理、连接测试、消息发送、本地持久化可用。
+- Android 客户端已补齐最小资源基线（launcher icon + app theme），`apps/android` 可成功执行 `./gradlew assembleDebug` 产出 Debug APK。
+- Bridge 配置主入口已切到文件优先：默认读取 `~/.ghost-os/config.yaml`（支持 `GHOST_CONFIG_PATH` 覆盖）并回退环境变量；`/api/config` 更新会持久化到该文件，`bind_addr / api_token / cors_origins` 也可由同一文件统一驱动，并补充了 `docs/config.example.yaml` 模板；Web 已增加配置轻量自动刷新，CLI 已补齐 `provider / api_key / base_url / model / chat_path` 运行态配置命令，形成文件与前端/终端双向同步基线。
+- Bridge Agent sync/stream 回合编排已收口共享骨架：统一请求校验、错误分类、`session_end` 后处理，以及 runner 侧的会话装配 / 持久化 / `awaiting_human` 提交路径，降低 stop / retry / token 流后续演进时双分支漏改风险。
 
-## 3) 主要短板（概要）
+## 3) 主要短板
 
-- `drivers/native` 仍非生产就绪，`BROWSER_QUERY` 在非 CDP 场景能力不足。
-- Web/CLI 的 `ask_human` 交互体验仍偏基础。
-- 记忆层已具备自动召回与基础演化，但语义向量检索与图谱化关系推理仍未落地（当前为扩展预留位）。
-- 安全隔离、资源治理与生产级稳定性仍有差距。
+- `drivers/native` 仍未达到生产可用，`BROWSER_QUERY` 在非 CDP 场景能力不足。
+- Web / CLI / Android 的 `ask_human` 与流式交互体验仍偏基础。
+- 记忆层已有自动召回与演化基线，但向量检索、关系图谱、精细化推理尚未落地。
+- 安全隔离、资源治理、压测与生产级稳定性仍有明显差距。
 
-## 4) 下一步（概要）
+## 4) 下一步
 
 - 补齐 Native 跨平台与浏览器查询能力。
-- 继续完善三层记忆（向量语义检索、关系图谱、演化策略精细化）。
-- 强化安全策略、隔离能力与稳态压测。
-- 提升 Web/CLI 交互体验，推动 MVP 向可交付版本演进。
-- 在 Web Console / CLI 接入 SSE 事件消费，并继续推进 Phase 2 token 级流式输出。
-- 视前端实际渲染压力评估是否需要对 `completion_delta` 做批处理/节流优化。
-- 继续完善 stop 体验（前端按钮、取消态提示）并评估是否需要对新建会话的首轮执行增加更细粒度的运行态展示。
+- 推进记忆层向量检索、关系图谱与演化策略精细化。
+- 强化安全策略、隔离能力、资源治理与稳态压测。
+- 提升 Web / CLI / Android 的 SSE、stop、`ask_human` 交互体验。
+- 持续观察 `GHOST_NATIVE_PERSISTENT` 灰度表现，再决定是否默认开启。
+
+- 2026-03-07: 将 `read_and_summarize` 内部拆为 runner / chunk reader / worker client，收紧并发编排、READ_FILE 分块读取与 worker prompt/综合职责边界；补充分块截断与 chunk 聚合单测。
+- 2026-03-07: 继续将 `read_and_summarize` 结果输出收口为独立 formatter，tool 入口进一步收窄为参数校验 + runner/formatter 装配。
+- 2026-03-07: Web `useBridgeChat` 已拆出独立消息/时间线映射层，历史消息保留 `system` / `tool` 结构；`ask_human` 已在前端回放中重建为 Question + User 时间线，为后续工具卡片与更细粒度流式渲染留出扩展位。
+
+- 2026-03-07: Bridge 配置切到 `~/.ghost-os/config.toml` + 多 Provider 列表模型；新增 YAML→TOML 自动迁移、`/api/config/providers` CRUD 与 Web Console Provider 管理面板。
+- 2026-03-07: Android 客户端已对齐 `AGENT_SEND` / `/api/questions/answer` 的联合响应契约，补齐 `awaiting_human` 解析、待回答问题续跑与输入框回答态，避免 `ask_human` 命中时因按单一成功 payload 反序列化而直接不兼容。
+- 2026-03-07: 将 `BridgeConfig` / `SessionDetail` / `ProviderListResponse` / `HumanResponseRequest` 等跨端业务 DTO 并入 `core/shared/schema.json`，扩展生成链统一产出 Go/Web/CLI/Android 契约；Bridge 会话详情改为稳定输出 snake_case `sessionMessage`，Android 移除漂移的 `native_driver_ready` 展示并改为读取真实配置字段。
+- 2026-03-07: 记忆层完成 PR1 基础增强：`MemoryEntry` / Markdown node 新增 summary、anchors、confidence、source_ids 等结构化字段；L1/L2/L3/Markdown 改为统一 temporal + anchor rerank；dreaming 已接上 worker summarizer 与规则/可选 LLM anchor 提炼，并补齐旧 warm JSON / 旧 markdown frontmatter 兼容与配置/排序回归测试。

@@ -17,15 +17,21 @@ const (
 
 // MemoryEntry 是三层记忆统一数据结构。
 type MemoryEntry struct {
-	ID          string         `json:"id"`
-	Content     string         `json:"content"`
-	Type        MemoryType     `json:"type"`
-	Timestamp   time.Time      `json:"timestamp"`
-	AccessCount int            `json:"access_count"`
-	Metadata    map[string]any `json:"metadata,omitempty"`
-	Importance  float64        `json:"importance,omitempty"`
-	ExpiresAt   time.Time      `json:"expires_at,omitempty"`
-	RelatedTo   []string       `json:"related_to,omitempty"`
+	ID             string         `json:"id"`
+	Content        string         `json:"content"`
+	Type           MemoryType     `json:"type"`
+	Timestamp      time.Time      `json:"timestamp"`
+	AccessCount    int            `json:"access_count"`
+	LastAccessedAt time.Time      `json:"last_accessed_at,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+	Importance     float64        `json:"importance,omitempty"`
+	ExpiresAt      time.Time      `json:"expires_at,omitempty"`
+	RelatedTo      []string       `json:"related_to,omitempty"`
+	Source         string         `json:"source,omitempty"`
+	Summary        string         `json:"summary,omitempty"`
+	Anchors        []MemoryAnchor `json:"anchors,omitempty"`
+	Confidence     float64        `json:"confidence,omitempty"`
+	FreshnessBoost float64        `json:"freshness_boost,omitempty"`
 	// TODO(memory): 仅做字段透传，尚未接入向量索引/召回。
 	EmbeddingID string `json:"embedding_id,omitempty"`
 
@@ -71,6 +77,10 @@ type MemoryQuery struct {
 	Metadata        map[string]any `json:"metadata,omitempty"`
 	IncludeMarkdown bool           `json:"include_markdown,omitempty"`
 	SemanticQuery   string         `json:"semantic_query,omitempty"`
+	AnchorTypes     []string       `json:"anchor_types,omitempty"`
+	MinConfidence   float64        `json:"min_confidence,omitempty"`
+	PreferRecent    bool           `json:"prefer_recent,omitempty"`
+	IncludeAnchors  bool           `json:"include_anchors,omitempty"`
 
 	// Deprecated: 预留字段，当前 API 未暴露该能力，仅兼容手工构造查询。
 	UseTimeDecay bool `json:"use_time_decay,omitempty"`
@@ -102,6 +112,9 @@ func normalizeEntry(entry MemoryEntry) MemoryEntry {
 	if !out.ExpiresAt.IsZero() {
 		out.ExpiresAt = out.ExpiresAt.UTC()
 	}
+	if !out.LastAccessedAt.IsZero() {
+		out.LastAccessedAt = out.LastAccessedAt.UTC()
+	}
 	if len(out.RelatedTo) > 0 {
 		seen := make(map[string]struct{}, len(out.RelatedTo))
 		cleaned := make([]string, 0, len(out.RelatedTo))
@@ -118,6 +131,18 @@ func normalizeEntry(entry MemoryEntry) MemoryEntry {
 		}
 		out.RelatedTo = cleaned
 	}
+	out.Source = strings.TrimSpace(out.Source)
+	if out.Source == "" && out.Metadata != nil {
+		if source, ok := out.Metadata["source"].(string); ok {
+			out.Source = strings.TrimSpace(source)
+		} else if layer, ok := out.Metadata["layer"].(string); ok {
+			out.Source = strings.TrimSpace(layer)
+		}
+	}
+	out.Summary = strings.TrimSpace(out.Summary)
+	out.Confidence = clamp01(out.Confidence)
+	out.FreshnessBoost = clamp01(out.FreshnessBoost)
+	out.Anchors = normalizeAnchors(out.Anchors)
 	out.EmbeddingID = strings.TrimSpace(out.EmbeddingID)
 	return out
 }
@@ -132,6 +157,9 @@ func cloneEntry(entry MemoryEntry) MemoryEntry {
 	}
 	if len(entry.RelatedTo) > 0 {
 		out.RelatedTo = append([]string(nil), entry.RelatedTo...)
+	}
+	if len(entry.Anchors) > 0 {
+		out.Anchors = cloneAnchors(entry.Anchors)
 	}
 	return out
 }
@@ -151,25 +179,17 @@ func entryMatchesQuery(entry MemoryEntry, query MemoryQuery) bool {
 	if query.TimeRange != nil && !query.TimeRange.Contains(entry.Timestamp) {
 		return false
 	}
+	if query.MinConfidence > 0 && entry.Confidence > 0 && entry.Confidence < clamp01(query.MinConfidence) {
+		return false
+	}
 	if query.MinPriority > 0 && entry.Priority < query.MinPriority {
 		return false
 	}
-	if len(query.Keywords) > 0 {
-		content := strings.ToLower(entry.Content)
-		matched := false
-		for _, keyword := range query.Keywords {
-			k := strings.ToLower(strings.TrimSpace(keyword))
-			if k == "" {
-				continue
-			}
-			if strings.Contains(content, k) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
+	if len(query.AnchorTypes) > 0 && !entryHasAnchorTypes(entry, query.AnchorTypes, time.Now().UTC()) {
+		return false
+	}
+	if !entryTextMatchesQuery(entry, query) {
+		return false
 	}
 	if len(query.Metadata) == 0 {
 		return true
@@ -184,4 +204,31 @@ func entryMatchesQuery(entry MemoryEntry, query MemoryQuery) bool {
 		}
 	}
 	return true
+}
+
+func entryHasAnchorTypes(entry MemoryEntry, anchorTypes []string, now time.Time) bool {
+	if len(anchorTypes) == 0 {
+		return true
+	}
+	anchors := activeAnchors(entry.Anchors, now)
+	if len(anchors) == 0 {
+		return false
+	}
+	allowed := make(map[string]struct{}, len(anchorTypes))
+	for _, anchorType := range anchorTypes {
+		trimmed := strings.ToLower(strings.TrimSpace(anchorType))
+		if trimmed == "" {
+			continue
+		}
+		allowed[trimmed] = struct{}{}
+	}
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, anchor := range anchors {
+		if _, ok := allowed[anchor.Type]; ok {
+			return true
+		}
+	}
+	return false
 }

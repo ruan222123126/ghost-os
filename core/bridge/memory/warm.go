@@ -6,7 +6,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +26,7 @@ type WarmMemory struct {
 	index     map[string]int
 	capacity  int
 	ttl       time.Duration
+	scoring   memoryScoringConfig
 	storePath string
 	mu        sync.RWMutex
 }
@@ -49,8 +49,18 @@ func NewWarmMemoryWithTTL(capacity int, storePath string, ttl time.Duration) *Wa
 		index:     make(map[string]int, size),
 		capacity:  size,
 		ttl:       effectiveTTL,
+		scoring:   defaultMemoryScoringConfig(),
 		storePath: resolveMemoryPath(storePath),
 	}
+}
+
+func (w *WarmMemory) SetScoringConfig(config memoryScoringConfig) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	w.scoring = config
+	w.mu.Unlock()
 }
 
 // Store 写入或更新条目。命中容量上限时按 LRU 淘汰最旧项。
@@ -70,6 +80,15 @@ func (w *WarmMemory) Store(entry MemoryEntry) error {
 	w.pruneExpiredLocked(time.Now().UTC())
 
 	if idx, ok := w.index[normalized.ID]; ok {
+		if normalized.AccessCount == 0 {
+			normalized.AccessCount = w.entries[idx].AccessCount
+		}
+		if normalized.LastAccessedAt.IsZero() {
+			normalized.LastAccessedAt = w.entries[idx].LastAccessedAt
+		}
+		if normalized.ExpiresAt.IsZero() {
+			normalized.ExpiresAt = w.entries[idx].ExpiresAt
+		}
 		w.entries[idx] = normalized
 		w.touchLocked(normalized.ID)
 	} else {
@@ -86,34 +105,29 @@ func (w *WarmMemory) Store(entry MemoryEntry) error {
 
 // Retrieve 按条件检索温数据，并更新命中条目的访问热度。
 func (w *WarmMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
+	return w.retrieve(query, true)
+}
+
+// RetrieveCandidates 返回命中的 warm 候选，不会更新访问热度。
+func (w *WarmMemory) RetrieveCandidates(query MemoryQuery) ([]MemoryEntry, error) {
+	return w.retrieve(query, false)
+}
+
+func (w *WarmMemory) retrieve(query MemoryQuery, trackAccess bool) ([]MemoryEntry, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
 	now := time.Now().UTC()
 	w.pruneExpiredLocked(now)
 
-	type scored struct {
-		Entry MemoryEntry
-		Score float64
-	}
-
-	candidates := make([]scored, 0, len(w.entries))
+	candidates := make([]MemoryEntry, 0, len(w.entries))
 	for _, entry := range w.entries {
 		if !entryMatchesQuery(entry, query) {
 			continue
 		}
-		candidates = append(candidates, scored{
-			Entry: cloneEntry(entry),
-			Score: warmEntryScore(entry, query, now),
-		})
+		candidates = append(candidates, cloneEntry(entry))
 	}
-
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].Score != candidates[j].Score {
-			return candidates[i].Score > candidates[j].Score
-		}
-		return candidates[i].Entry.Timestamp.After(candidates[j].Entry.Timestamp)
-	})
+	candidates = rankMemoryEntries(candidates, query, now, w.scoring)
 
 	limit := len(candidates)
 	if query.Limit > 0 && query.Limit < limit {
@@ -121,11 +135,13 @@ func (w *WarmMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
 	}
 	selected := make([]MemoryEntry, 0, limit)
 	for i := 0; i < limit; i++ {
-		selected = append(selected, cloneEntry(candidates[i].Entry))
+		selected = append(selected, cloneEntry(candidates[i]))
 	}
 
-	for _, entry := range selected {
-		w.bumpAccessLocked(entry.ID)
+	if trackAccess {
+		for _, entry := range selected {
+			w.bumpAccessLocked(entry.ID, now)
+		}
 	}
 
 	return selected, nil
@@ -147,6 +163,17 @@ func (w *WarmMemory) Delete(id string) error {
 	w.mu.Unlock()
 
 	return w.Persist()
+}
+
+func (w *WarmMemory) RecordAccess(ids []string, accessedAt time.Time) {
+	if w == nil || len(ids) == 0 {
+		return
+	}
+	w.mu.Lock()
+	for _, id := range ids {
+		w.bumpAccessLocked(strings.TrimSpace(id), accessedAt)
+	}
+	w.mu.Unlock()
 }
 
 // Snapshot 返回当前 warm 层快照，供后台演化流程使用。
@@ -282,78 +309,14 @@ func (w *WarmMemory) touchLocked(id string) {
 	w.rebuildIndexLocked()
 }
 
-func (w *WarmMemory) bumpAccessLocked(id string) {
+func (w *WarmMemory) bumpAccessLocked(id string, accessedAt time.Time) {
 	idx, ok := w.index[id]
 	if !ok {
 		return
 	}
 	w.entries[idx].AccessCount++
+	w.entries[idx].LastAccessedAt = accessedAt.UTC()
 	w.touchLocked(id)
-}
-
-func warmEntryScore(entry MemoryEntry, query MemoryQuery, now time.Time) float64 {
-	accessScore := float64(max(entry.AccessCount, 1))
-	importance := entry.Importance
-	if importance <= 0 {
-		importance = 0.1
-	}
-	freshness := 1.0
-	if query.UseTimeDecay || len(query.Keywords) > 0 || strings.TrimSpace(query.SemanticQuery) != "" {
-		freshness = warmFreshnessScore(entry, now)
-	}
-	relevance := semanticRelevanceScore(entry, query)
-	score := accessScore * importance * freshness * relevance
-	if score <= 0 {
-		return 0
-	}
-	return score
-}
-
-func warmFreshnessScore(entry MemoryEntry, now time.Time) float64 {
-	ageHours := now.Sub(entry.Timestamp).Hours()
-	if ageHours < 0 {
-		ageHours = 0
-	}
-	decay := entry.DecayFactor
-	if decay <= 0 {
-		decay = 1 / (1 + ageHours)
-	}
-	return decay
-}
-
-func semanticRelevanceScore(entry MemoryEntry, query MemoryQuery) float64 {
-	if len(query.Keywords) == 0 && strings.TrimSpace(query.SemanticQuery) == "" {
-		return 1
-	}
-
-	content := strings.ToLower(entry.Content)
-	if content == "" {
-		return 0.1
-	}
-
-	keywords := make([]string, 0, len(query.Keywords)+1)
-	keywords = append(keywords, query.Keywords...)
-	if semantic := strings.TrimSpace(query.SemanticQuery); semantic != "" {
-		keywords = append(keywords, strings.Fields(semantic)...)
-	}
-
-	matched := 0
-	valid := 0
-	for _, keyword := range keywords {
-		k := strings.ToLower(strings.TrimSpace(keyword))
-		if k == "" {
-			continue
-		}
-		valid++
-		if strings.Contains(content, k) {
-			matched++
-		}
-	}
-	if valid == 0 {
-		return 1
-	}
-	ratio := float64(matched) / float64(valid)
-	return 0.1 + ratio
 }
 
 func calculateImportance(entry MemoryEntry) float64 {
@@ -393,6 +356,18 @@ func defaultEntryExpiry(entry MemoryEntry, now time.Time, baseTTL time.Duration)
 	}
 	if entry.Importance >= 0.8 && ttl < 7*24*time.Hour {
 		ttl = 7 * 24 * time.Hour
+	}
+	for _, anchor := range activeAnchors(entry.Anchors, now) {
+		switch anchor.Type {
+		case MemoryAnchorPreference, MemoryAnchorIdentity:
+			if ttl < 14*24*time.Hour {
+				ttl = 14 * 24 * time.Hour
+			}
+		case MemoryAnchorAvoidance, MemoryAnchorConstraint:
+			if ttl < 30*24*time.Hour {
+				ttl = 30 * 24 * time.Hour
+			}
+		}
 	}
 	start := entry.Timestamp
 	if start.IsZero() || start.After(now) {

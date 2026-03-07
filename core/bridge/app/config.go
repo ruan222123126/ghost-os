@@ -13,48 +13,78 @@ import (
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider                llm.Provider
-	APIKey                  string
-	BaseURL                 string
-	Model                   string
-	ChatPath                string
-	PromptsPath             string
-	SessionsPath            string
-	MemoryWarmPath          string
-	MemoryColdPath          string
-	MemoryAutoRecallEnabled bool
-	MemoryAutoRecallLimit   int
-	MemoryWarmTTL           time.Duration
-	MemoryEvolutionInterval time.Duration
-	MemoryEvolutionEnabled  bool
-	ProviderHeaders         map[string]string
-	AnthropicVersion        string
-	AnthropicMaxTokens      int
-	MaxTurns                int
+	Provider                    llm.Provider
+	APIKey                      string
+	BaseURL                     string
+	Model                       string
+	NativePersistent            bool
+	WorkerModel                 string
+	ChatPath                    string
+	PromptsPath                 string
+	SessionsPath                string
+	MemoryWarmPath              string
+	MemoryColdPath              string
+	MemoryAutoRecallEnabled     bool
+	MemoryAutoRecallLimit       int
+	MemoryWarmTTL               time.Duration
+	MemoryTemporalDecayEnabled  bool
+	MemoryTemporalDecayHalfLife time.Duration
+	MemoryAnchorEnabled         bool
+	MemoryAnchorMinWeight       float64
+	MemoryEvolutionInterval     time.Duration
+	MemoryEvolutionEnabled      bool
+	MemoryEvolutionUseWorker    bool
+	MemoryEvolutionBatchSize    int
+	ProviderHeaders             map[string]string
+	AnthropicVersion            string
+	AnthropicMaxTokens          int
+	MaxTurns                    int
+	WorkerMaxConcurrency        int
+	WorkerMaxFiles              int
+	WorkerMaxFileChunks         int
+	ToolSelectorEnabled         bool
+	ToolSelectorMode            string
+	ToolSelectorModel           string
+	ToolSelectorTimeoutMS       int
+	ToolSelectorConfidence      float64
+	ToolSelectorShadow          bool
+	ToolSelectorRecentMsgs      int
 }
 
 type runtimeConfig struct {
-	Provider llm.Provider
-	APIKey   string
-	BaseURL  string
-	Model    string
-	ChatPath string
+	ProviderName     string
+	Provider         llm.Provider
+	APIKey           string
+	BaseURL          string
+	Model            string
+	ChatPath         string
+	NativePersistent bool
 }
 
 const (
-	defaultProvider                = llm.ProviderOpenAI
-	defaultBaseURL                 = "https://api.openai.com/v1"
-	defaultModel                   = "gpt-4o"
-	defaultPromptsPath             = "prompts.yaml"
-	defaultSessionsPath            = "~/.ghost-os/sessions"
-	defaultMemoryWarmPath          = "~/.ghost-os/memory/warm.json"
-	defaultMemoryColdPath          = "~/.ghost-os/memory/cold"
-	defaultMemoryAutoRecallLimit   = 5
-	defaultMemoryWarmTTL           = 24 * time.Hour
-	defaultMemoryEvolutionInterval = time.Hour
-	defaultAnthropicVersion        = "2023-06-01"
-	defaultAnthropicMaxTokens      = 1024
-	defaultMaxTurns                = 20
+	defaultProvider                 = llm.ProviderOpenAI
+	defaultBaseURL                  = "https://api.openai.com/v1"
+	defaultAnthropicBaseURL         = "https://api.anthropic.com"
+	defaultModel                    = "gpt-4o"
+	defaultPromptsPath              = "prompts.yaml"
+	defaultSessionsPath             = "~/.ghost-os/sessions"
+	defaultMemoryWarmPath           = "~/.ghost-os/memory/warm.json"
+	defaultMemoryColdPath           = "~/.ghost-os/memory/cold"
+	defaultMemoryAutoRecallLimit    = 5
+	defaultMemoryWarmTTL            = 24 * time.Hour
+	defaultMemoryTemporalHalfLife   = 72 * time.Hour
+	defaultMemoryAnchorMinWeight    = 0.65
+	defaultMemoryEvolutionInterval  = time.Hour
+	defaultMemoryEvolutionBatchSize = 20
+	defaultAnthropicVersion         = "2023-06-01"
+	defaultAnthropicMaxTokens       = 1024
+	defaultMaxTurns                 = 20
+	defaultWorkerMaxConcurrency     = 4
+	defaultWorkerMaxFiles           = 20
+	defaultWorkerMaxFileChunks      = 4
+	defaultToolSelectorTimeoutMS    = 1500
+	defaultToolSelectorConfidence   = 0.75
+	defaultToolSelectorRecentMsgs   = 6
 )
 
 // LoadConfig 从环境变量加载配置并做基础校验与归一化。
@@ -73,65 +103,108 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 		return Config{}, err
 	}
 
-	headers, err := parseProviderHeaders(os.Getenv("GHOST_PROVIDER_HEADERS"))
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return Config{}, err
+	}
+
+	headers, err := headersOrEnv(fileCfg.ProviderHeaders)
 	if err != nil {
 		return Config{}, err
 	}
 
 	cfg := Config{
-		Provider:                runtime.Provider,
-		APIKey:                  runtime.APIKey,
-		BaseURL:                 runtime.BaseURL,
-		Model:                   runtime.Model,
-		ChatPath:                runtime.ChatPath,
-		PromptsPath:             getenvDefault("GHOST_PROMPTS_PATH", defaultPromptsPath),
-		SessionsPath:            sessionsPathFromEnv(),
-		MemoryWarmPath:          memoryWarmPathFromEnv(),
-		MemoryColdPath:          memoryColdPathFromEnv(),
-		MemoryAutoRecallEnabled: memoryAutoRecallEnabledFromEnv(),
-		MemoryAutoRecallLimit:   memoryAutoRecallLimitFromEnv(),
-		MemoryWarmTTL:           memoryWarmTTLFromEnv(),
-		MemoryEvolutionInterval: memoryEvolutionIntervalFromEnv(),
-		MemoryEvolutionEnabled:  memoryEvolutionEnabledFromEnv(),
-		ProviderHeaders:         headers,
-		AnthropicVersion:        getenvDefault("GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
-		AnthropicMaxTokens:      defaultAnthropicMaxTokens,
-		MaxTurns:                defaultMaxTurns,
-	}
-
-	if raw := strings.TrimSpace(os.Getenv("GHOST_MAX_TURNS")); raw != "" {
-		maxTurns, err := strconv.Atoi(raw)
-		if err != nil || maxTurns <= 0 {
-			return Config{}, fmt.Errorf("invalid GHOST_MAX_TURNS=%q, expected positive integer", raw)
-		}
-		cfg.MaxTurns = maxTurns
-	}
-
-	if raw := strings.TrimSpace(os.Getenv("GHOST_ANTHROPIC_MAX_TOKENS")); raw != "" {
-		maxTokens, err := strconv.Atoi(raw)
-		if err != nil || maxTokens <= 0 {
-			return Config{}, fmt.Errorf("invalid GHOST_ANTHROPIC_MAX_TOKENS=%q, expected positive integer", raw)
-		}
-		cfg.AnthropicMaxTokens = maxTokens
+		Provider:                    runtime.Provider,
+		APIKey:                      runtime.APIKey,
+		BaseURL:                     runtime.BaseURL,
+		Model:                       runtime.Model,
+		NativePersistent:            runtime.NativePersistent,
+		WorkerModel:                 valueOrEnv(fileCfg.WorkerModel, "GHOST_WORKER_MODEL", ""),
+		ChatPath:                    runtime.ChatPath,
+		PromptsPath:                 valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
+		SessionsPath:                sessionsPathFromEnv(),
+		MemoryWarmPath:              memoryWarmPathFromEnv(),
+		MemoryColdPath:              memoryColdPathFromEnv(),
+		MemoryAutoRecallEnabled:     memoryAutoRecallEnabledFromEnv(),
+		MemoryAutoRecallLimit:       memoryAutoRecallLimitFromEnv(),
+		MemoryWarmTTL:               memoryWarmTTLFromEnv(),
+		MemoryTemporalDecayEnabled:  memoryTemporalDecayEnabledFromEnv(),
+		MemoryTemporalDecayHalfLife: memoryTemporalDecayHalfLifeFromEnv(),
+		MemoryAnchorEnabled:         memoryAnchorEnabledFromEnv(),
+		MemoryAnchorMinWeight:       memoryAnchorMinWeightFromEnv(),
+		MemoryEvolutionInterval:     memoryEvolutionIntervalFromEnv(),
+		MemoryEvolutionEnabled:      memoryEvolutionEnabledFromEnv(),
+		MemoryEvolutionUseWorker:    memoryEvolutionUseWorkerFromEnv(),
+		MemoryEvolutionBatchSize:    memoryEvolutionBatchSizeFromEnv(),
+		ProviderHeaders:             headers,
+		AnthropicVersion:            valueOrEnv(fileCfg.AnthropicVersion, "GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
+		AnthropicMaxTokens:          intOrEnv(fileCfg.AnthropicMaxTokens, "GHOST_ANTHROPIC_MAX_TOKENS", defaultAnthropicMaxTokens),
+		MaxTurns:                    intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
+		WorkerMaxConcurrency:        intOrEnv(fileCfg.WorkerMaxConcurrency, "GHOST_WORKER_MAX_CONCURRENCY", defaultWorkerMaxConcurrency),
+		WorkerMaxFiles:              intOrEnv(fileCfg.WorkerMaxFiles, "GHOST_WORKER_MAX_FILES", defaultWorkerMaxFiles),
+		WorkerMaxFileChunks:         intOrEnv(fileCfg.WorkerMaxFileChunks, "GHOST_WORKER_MAX_FILE_CHUNKS", defaultWorkerMaxFileChunks),
+		ToolSelectorEnabled:         boolOrEnv(fileCfg.ToolSelectorEnabled, "GHOST_TOOL_SELECTOR_ENABLED", false),
+		ToolSelectorMode:            strings.ToLower(valueOrEnv(fileCfg.ToolSelectorMode, "GHOST_TOOL_SELECTOR_MODE", "llm")),
+		ToolSelectorModel:           valueOrEnv(fileCfg.ToolSelectorModel, "GHOST_TOOL_SELECTOR_MODEL", ""),
+		ToolSelectorTimeoutMS:       intOrEnv(fileCfg.ToolSelectorTimeoutMS, "GHOST_TOOL_SELECTOR_TIMEOUT_MS", defaultToolSelectorTimeoutMS),
+		ToolSelectorConfidence:      floatOrEnv(fileCfg.ToolSelectorConfidence, "GHOST_TOOL_SELECTOR_CONFIDENCE", defaultToolSelectorConfidence),
+		ToolSelectorShadow:          boolOrEnv(fileCfg.ToolSelectorShadow, "GHOST_TOOL_SELECTOR_SHADOW", false),
+		ToolSelectorRecentMsgs:      intOrEnv(fileCfg.ToolSelectorRecentMsgs, "GHOST_TOOL_SELECTOR_RECENT_MESSAGES", defaultToolSelectorRecentMsgs),
 	}
 
 	return cfg, nil
 }
 
-// runtimeConfigFromEnv 仅读取可热更新字段，便于 ConfigStore 复用。
+// runtimeConfigFromEnv 优先读取 ~/.ghost-os/config.toml 中的运行态字段，缺省时回退环境变量。
 func runtimeConfigFromEnv() (runtimeConfig, error) {
-	provider := normalizeProvider(getenvDefault("GHOST_PROVIDER", string(defaultProvider)))
-	if !provider.Valid() {
-		return runtimeConfig{}, fmt.Errorf("invalid GHOST_PROVIDER=%q, expected one of: openai|anthropic|custom", provider)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	return runtimeConfigFromFileConfig(fileCfg)
+}
+
+func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error) {
+	providers := normalizeProviderConfigs(fileCfg.ModelProviders)
+	if len(providers) > 0 {
+		activeName := strings.TrimSpace(valueOrEnv(fileCfg.ModelProvider, "GHOST_PROVIDER", ""))
+		activeIndex := providerIndexByName(providers, activeName)
+		if activeIndex < 0 {
+			activeIndex = 0
+		}
+		active := providers[activeIndex]
+		model := valueOrEnv(fileCfg.Model, "GHOST_MODEL", "")
+		providerType := inferProviderType(active.Name, active.BaseURL, model)
+		return normalizeRuntimeConfig(runtimeConfig{
+			ProviderName:     active.Name,
+			Provider:         providerType,
+			APIKey:           valueOrEnv(active.APIKey, "GHOST_API_KEY", ""),
+			BaseURL:          providerBaseURL(active, providerType),
+			Model:            model,
+			ChatPath:         valueOrEnv(fileCfg.ChatPath, "GHOST_CHAT_PATH", ""),
+			NativePersistent: resolveNativePersistent(fileCfg.NativePersistent),
+		}), nil
 	}
 
+	providerName := strings.TrimSpace(valueOrEnv(fileCfg.Provider, "GHOST_PROVIDER", string(defaultProvider)))
+	providerType := inferProviderType(providerName, valueOrEnv(fileCfg.BaseURL, "GHOST_BASE_URL", ""), valueOrEnv(fileCfg.Model, "GHOST_MODEL", ""))
 	return normalizeRuntimeConfig(runtimeConfig{
-		Provider: provider,
-		APIKey:   strings.TrimSpace(os.Getenv("GHOST_API_KEY")),
-		BaseURL:  strings.TrimSpace(os.Getenv("GHOST_BASE_URL")),
-		Model:    strings.TrimSpace(os.Getenv("GHOST_MODEL")),
-		ChatPath: strings.TrimSpace(os.Getenv("GHOST_CHAT_PATH")),
+		ProviderName:     providerName,
+		Provider:         providerType,
+		APIKey:           valueOrEnv(fileCfg.APIKey, "GHOST_API_KEY", ""),
+		BaseURL:          valueOrEnv(fileCfg.BaseURL, "GHOST_BASE_URL", ""),
+		Model:            valueOrEnv(fileCfg.Model, "GHOST_MODEL", ""),
+		ChatPath:         valueOrEnv(fileCfg.ChatPath, "GHOST_CHAT_PATH", ""),
+		NativePersistent: resolveNativePersistent(fileCfg.NativePersistent),
 	}), nil
+}
+
+func providerBaseURL(provider providerConfig, providerType llm.Provider) string {
+	configured := strings.TrimSpace(provider.BaseURL)
+	if configured != "" {
+		return configured
+	}
+	return getenvDefault("GHOST_BASE_URL", defaultBaseURLForProvider(providerType))
 }
 
 // normalizeProvider 统一 provider 大小写与空白字符。
@@ -139,15 +212,53 @@ func normalizeProvider(raw string) llm.Provider {
 	return llm.Provider(strings.ToLower(strings.TrimSpace(raw)))
 }
 
+func inferProviderType(name, baseURL, model string) llm.Provider {
+	if normalized := normalizeProvider(name).Normalized(); normalized != "" {
+		return normalized
+	}
+
+	lowerBaseURL := strings.ToLower(strings.TrimSpace(baseURL))
+	lowerModel := strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case strings.Contains(lowerModel, "claude"), strings.Contains(lowerBaseURL, "anthropic.com"):
+		return llm.ProviderAnthropic
+	case strings.Contains(lowerBaseURL, "openai.com"):
+		return llm.ProviderOpenAI
+	default:
+		return llm.ProviderCustom
+	}
+}
+
+func defaultBaseURLForProvider(provider llm.Provider) string {
+	if provider.Normalized() == llm.ProviderAnthropic {
+		return defaultAnthropicBaseURL
+	}
+	return defaultBaseURL
+}
+
+func activeProviderLabel(runtime runtimeConfig) string {
+	if value := strings.TrimSpace(runtime.ProviderName); value != "" {
+		return value
+	}
+	return string(runtime.Provider)
+}
+
 // normalizeRuntimeConfig 回填默认值并清理字符串字段。
 func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	out := runtime
+	out.ProviderName = strings.TrimSpace(out.ProviderName)
+	if out.Provider == "" {
+		out.Provider = inferProviderType(out.ProviderName, out.BaseURL, out.Model)
+	}
 	if out.Provider == "" {
 		out.Provider = defaultProvider
 	}
+	if out.ProviderName == "" {
+		out.ProviderName = string(out.Provider)
+	}
 	out.APIKey = strings.TrimSpace(out.APIKey)
 	if strings.TrimSpace(out.BaseURL) == "" {
-		out.BaseURL = defaultBaseURL
+		out.BaseURL = defaultBaseURLForProvider(out.Provider)
 	} else {
 		out.BaseURL = strings.TrimSpace(out.BaseURL)
 	}
@@ -186,42 +297,122 @@ func getenvDefault(name, fallback string) string {
 
 // sessionsPathFromEnv 返回会话持久化目录。
 func sessionsPathFromEnv() string {
-	return getenvDefault("GHOST_SESSIONS_PATH", defaultSessionsPath)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_SESSIONS_PATH", defaultSessionsPath)
+	}
+	return valueOrEnv(fileCfg.SessionsPath, "GHOST_SESSIONS_PATH", defaultSessionsPath)
 }
 
 // memoryWarmPathFromEnv 返回 warm memory 持久化文件路径。
 func memoryWarmPathFromEnv() string {
-	return getenvDefault("GHOST_MEMORY_WARM_PATH", defaultMemoryWarmPath)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_MEMORY_WARM_PATH", defaultMemoryWarmPath)
+	}
+	return valueOrEnv(fileCfg.MemoryWarmPath, "GHOST_MEMORY_WARM_PATH", defaultMemoryWarmPath)
 }
 
 // memoryColdPathFromEnv 返回 cold memory 根目录路径。
 func memoryColdPathFromEnv() string {
-	return getenvDefault("GHOST_MEMORY_COLD_PATH", defaultMemoryColdPath)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_MEMORY_COLD_PATH", defaultMemoryColdPath)
+	}
+	return valueOrEnv(fileCfg.MemoryColdPath, "GHOST_MEMORY_COLD_PATH", defaultMemoryColdPath)
 }
 
 // memoryAutoRecallEnabledFromEnv 控制 warm 自动召回是否启用。
 func memoryAutoRecallEnabledFromEnv() bool {
-	return parseBoolEnv("GHOST_MEMORY_AUTO_RECALL_ENABLED", true)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_AUTO_RECALL_ENABLED", true)
+	}
+	return boolOrEnv(fileCfg.MemoryAutoRecallEnabled, "GHOST_MEMORY_AUTO_RECALL_ENABLED", true)
 }
 
 // memoryAutoRecallLimitFromEnv 返回自动召回注入条目上限。
 func memoryAutoRecallLimitFromEnv() int {
-	return parsePositiveIntEnv("GHOST_MEMORY_AUTO_RECALL_LIMIT", defaultMemoryAutoRecallLimit)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_MEMORY_AUTO_RECALL_LIMIT", defaultMemoryAutoRecallLimit)
+	}
+	return intOrEnv(fileCfg.MemoryAutoRecallLimit, "GHOST_MEMORY_AUTO_RECALL_LIMIT", defaultMemoryAutoRecallLimit)
 }
 
 // memoryWarmTTLFromEnv 返回 warm 层默认 TTL。
 func memoryWarmTTLFromEnv() time.Duration {
-	return parseDurationEnv("GHOST_MEMORY_WARM_TTL", defaultMemoryWarmTTL)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseDurationEnv("GHOST_MEMORY_WARM_TTL", defaultMemoryWarmTTL)
+	}
+	return durationOrEnv(fileCfg.MemoryWarmTTL, "GHOST_MEMORY_WARM_TTL", defaultMemoryWarmTTL)
+}
+
+func memoryTemporalDecayEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_TEMPORAL_DECAY_ENABLED", true)
+	}
+	return boolOrEnv(fileCfg.MemoryTemporalDecayEnabled, "GHOST_MEMORY_TEMPORAL_DECAY_ENABLED", true)
+}
+
+func memoryTemporalDecayHalfLifeFromEnv() time.Duration {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseDurationEnv("GHOST_MEMORY_TEMPORAL_DECAY_HALF_LIFE", defaultMemoryTemporalHalfLife)
+	}
+	return durationOrEnv(fileCfg.MemoryTemporalDecayHalfLife, "GHOST_MEMORY_TEMPORAL_DECAY_HALF_LIFE", defaultMemoryTemporalHalfLife)
+}
+
+func memoryAnchorEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_ANCHOR_ENABLED", true)
+	}
+	return boolOrEnv(fileCfg.MemoryAnchorEnabled, "GHOST_MEMORY_ANCHOR_ENABLED", true)
+}
+
+func memoryAnchorMinWeightFromEnv() float64 {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseFloatEnv("GHOST_MEMORY_ANCHOR_MIN_WEIGHT", defaultMemoryAnchorMinWeight)
+	}
+	return floatOrEnv(fileCfg.MemoryAnchorMinWeight, "GHOST_MEMORY_ANCHOR_MIN_WEIGHT", defaultMemoryAnchorMinWeight)
 }
 
 // memoryEvolutionIntervalFromEnv 返回后台演化间隔。
 func memoryEvolutionIntervalFromEnv() time.Duration {
-	return parseDurationEnv("GHOST_MEMORY_EVOLUTION_INTERVAL", defaultMemoryEvolutionInterval)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseDurationEnv("GHOST_MEMORY_EVOLUTION_INTERVAL", defaultMemoryEvolutionInterval)
+	}
+	return durationOrEnv(fileCfg.MemoryEvolutionInterval, "GHOST_MEMORY_EVOLUTION_INTERVAL", defaultMemoryEvolutionInterval)
 }
 
 // memoryEvolutionEnabledFromEnv 控制后台演化协程是否启用。
 func memoryEvolutionEnabledFromEnv() bool {
-	return parseBoolEnv("GHOST_MEMORY_EVOLUTION_ENABLED", false)
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_EVOLUTION_ENABLED", false)
+	}
+	return boolOrEnv(fileCfg.MemoryEvolutionEnabled, "GHOST_MEMORY_EVOLUTION_ENABLED", false)
+}
+
+func memoryEvolutionUseWorkerFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_EVOLUTION_USE_WORKER", true)
+	}
+	return boolOrEnv(fileCfg.MemoryEvolutionUseWorker, "GHOST_MEMORY_EVOLUTION_USE_WORKER", true)
+}
+
+func memoryEvolutionBatchSizeFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_MEMORY_EVOLUTION_BATCH_SIZE", defaultMemoryEvolutionBatchSize)
+	}
+	return intOrEnv(fileCfg.MemoryEvolutionBatchSize, "GHOST_MEMORY_EVOLUTION_BATCH_SIZE", defaultMemoryEvolutionBatchSize)
 }
 
 // parseProviderHeaders 解析自定义 Header JSON，并做 key 空值防护。
@@ -248,6 +439,32 @@ func parseProviderHeaders(raw string) (map[string]string, error) {
 	return out, nil
 }
 
+func nativePersistentEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err == nil {
+		return resolveNativePersistent(fileCfg.NativePersistent)
+	}
+	return resolveNativePersistent(nil)
+}
+
+func resolveNativePersistent(raw *bool) bool {
+	if raw != nil {
+		return *raw
+	}
+	for _, name := range []string{"GHOST_NATIVE_PERSISTENT", "GHOST_NATIVE_PERSISTENT_ENABLED"} {
+		rawValue := strings.TrimSpace(os.Getenv(name))
+		if rawValue == "" {
+			continue
+		}
+		enabled, err := strconv.ParseBool(rawValue)
+		if err != nil {
+			return false
+		}
+		return enabled
+	}
+	return false
+}
+
 func parseBoolEnv(name string, fallback bool) bool {
 	raw := strings.TrimSpace(os.Getenv(name))
 	if raw == "" {
@@ -267,6 +484,18 @@ func parsePositiveIntEnv(name string, fallback int) int {
 	}
 	value, err := strconv.Atoi(raw)
 	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func parseFloatEnv(name string, fallback float64) float64 {
+	raw := strings.TrimSpace(os.Getenv(name))
+	if raw == "" {
+		return fallback
+	}
+	value, err := strconv.ParseFloat(raw, 64)
+	if err != nil || value < 0 || value > 1 {
 		return fallback
 	}
 	return value
