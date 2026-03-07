@@ -79,6 +79,14 @@ func (d *DecisionService) Retrieve(query MemoryQuery, scope SessionScope) ([]Mem
 	return entries, cloneDecisionHits(hits), nil
 }
 
+func (d *DecisionService) BuildSelectorHint(query MemoryQuery, scope SessionScope) (string, []DecisionHit, error) {
+	_, hits, err := d.Retrieve(query, scope)
+	if err != nil || len(hits) == 0 {
+		return "", hits, err
+	}
+	return d.formatSelectorHint(hits), cloneDecisionHits(hits), nil
+}
+
 func (d *DecisionService) resolveDecisionNamespace(query MemoryQuery, scope SessionScope) string {
 	if query.Metadata != nil {
 		if raw, ok := query.Metadata["namespace"].(string); ok && strings.TrimSpace(raw) != "" {

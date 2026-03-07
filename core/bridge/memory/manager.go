@@ -255,6 +255,27 @@ func (m *MemoryManager) BuildContextWindowWithScope(scope SessionScope, userInpu
 	return m.query.BuildContextWindow(scope, userInput)
 }
 
+// BuildDecisionSelectorHintWithScope 走 decision-only fast path，为 selector 构建 advisory 提示。
+func (m *MemoryManager) BuildDecisionSelectorHintWithScope(scope SessionScope, userInput string) (string, []DecisionHit, error) {
+	if m == nil || m.decision == nil || !m.decision.Enabled() {
+		return "", nil, nil
+	}
+	query := MemoryQuery{
+		Limit:             m.decision.maxHits,
+		Keywords:          extractKeywords(userInput),
+		SemanticQuery:     userInput,
+		IncludeDecision:   true,
+		DecisionReuseOnly: true,
+		DecisionTypes:     []string{DecisionHitTypeRecipe, DecisionHitTypeMemo, DecisionHitTypeWarning},
+		EnvironmentStrict: scope.Environment != nil,
+	}
+	if scope.Environment != nil {
+		env := cloneDecisionEnvFingerprint(*scope.Environment)
+		query.Environment = &env
+	}
+	return m.decision.BuildSelectorHint(query, scope)
+}
+
 // QueryResult 返回 entries 与可选 graph debug hits。
 func (m *MemoryManager) QueryResult(query MemoryQuery) (MemoryQueryResult, error) {
 	return m.query.QueryResult(query)

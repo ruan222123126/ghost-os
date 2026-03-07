@@ -27,6 +27,7 @@ type sessionTurnPreparer struct {
 	sharedMemoryManager *memory.MemoryManager
 	runRegistry         *RunRegistry
 	selectorFactory     func(Config) selectorEngine
+	decisionHintBuilder func(*memory.MemoryManager, memory.SessionScope, string) (string, []memory.DecisionHit, error)
 }
 
 func newSessionTurnPreparer(
@@ -86,7 +87,8 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 	preTurnMessages := llm.CloneMessages(sess.Messages)
 	askHumanContinuation := hasAnsweredHumanResponse(sess)
 	history, answeredQuestions := historyBuilder.BuildHistoryWithResolvedQuestions(sess)
-	catalog, systemPrompt := p.selectToolsForTurn(execCtx, deps, history, userMessage, askHumanContinuation, traceID)
+	selectorEnv := buildDecisionEnvironment(deps.cfg, strings.TrimSpace(userMessage), preTurnMessages, deps.registry)
+	catalog, systemPrompt := p.selectToolsForTurn(execCtx, deps, sess.ID, history, userMessage, askHumanContinuation, traceID, selectorEnv)
 	if systemPrompt != "" {
 		history.UpdateSystemPrompt(systemPrompt)
 	}
@@ -113,10 +115,12 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 func (p *sessionTurnPreparer) selectToolsForTurn(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
+	sessionID string,
 	history *agent.History,
 	userMessage string,
 	askHumanContinuation bool,
 	traceID string,
+	selectorEnv memory.DecisionEnvFingerprint,
 ) (tools.ToolCatalog, string) {
 	if askHumanContinuation {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=ask_human_continuation", strings.TrimSpace(traceID))
@@ -132,9 +136,10 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 	}
 
 	recentMessages := getRecentMessages(history, deps.cfg.ToolSelectorRecentMsgs)
-	result := selector.SelectTools(ctx, userMessage, recentMessages, traceID)
+	decisionHint := p.buildDecisionSelectorHint(deps.cfg, sessionID, history, userMessage, askHumanContinuation, traceID, selectorEnv, p.memoryManager(deps.cfg))
+	result := selector.SelectTools(ctx, userMessage, recentMessages, decisionHint, traceID)
 	if deps.cfg.ToolSelectorShadow {
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=shadow mode=%s tools=%v confidence=%.2f fallback=%t reason=%q error=%v", strings.TrimSpace(traceID), result.Mode, result.Tools, result.Confidence, result.Fallback, result.Reason, result.Error)
+		log.Printf("trace_id=%s action=TOOL_SELECTOR status=shadow mode=%s tools=%v confidence=%.2f fallback=%t reason=%q error=%v hint_present=%t hint_chars=%d hint_lines=%d", strings.TrimSpace(traceID), result.Mode, result.Tools, result.Confidence, result.Fallback, result.Reason, result.Error, strings.TrimSpace(decisionHint) != "", len([]rune(strings.TrimSpace(decisionHint))), selectorHintLineCount(decisionHint))
 		return deps.registry, ""
 	}
 	if result.Mode != "subset" || result.Fallback {
@@ -145,11 +150,51 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 	return scoped, buildSystemPromptForCatalog(deps.cfg, scoped)
 }
 
+func (p *sessionTurnPreparer) buildDecisionSelectorHint(
+	cfg Config,
+	sessionID string,
+	history *agent.History,
+	userMessage string,
+	askHumanContinuation bool,
+	traceID string,
+	selectorEnv memory.DecisionEnvFingerprint,
+	memoryManager *memory.MemoryManager,
+) string {
+	if askHumanContinuation || !cfg.ToolSelectorEnabled || !cfg.MemoryDecisionSelectorHintEnabled || memoryManager == nil {
+		return ""
+	}
+	scope := memory.SessionScope{
+		SessionID:   strings.TrimSpace(sessionID),
+		History:     history,
+		Environment: &selectorEnv,
+	}
+	builder := memoryManager.BuildDecisionSelectorHintWithScope
+	if p != nil && p.decisionHintBuilder != nil {
+		builder = func(scope memory.SessionScope, userInput string) (string, []memory.DecisionHit, error) {
+			return p.decisionHintBuilder(memoryManager, scope, userInput)
+		}
+	}
+	hint, _, err := builder(scope, userMessage)
+	if err != nil {
+		log.Printf("trace_id=%s action=TOOL_SELECTOR_HINT status=error session_id=%s error=%v", strings.TrimSpace(traceID), strings.TrimSpace(sessionID), err)
+		return ""
+	}
+	return strings.TrimSpace(hint)
+}
+
 func (p *sessionTurnPreparer) newSelector(cfg Config) selectorEngine {
 	if p != nil && p.selectorFactory != nil {
 		return p.selectorFactory(cfg)
 	}
 	return newToolSelectorFromConfig(cfg)
+}
+
+func selectorHintLineCount(hint string) int {
+	trimmed := strings.TrimSpace(hint)
+	if trimmed == "" {
+		return 0
+	}
+	return strings.Count(trimmed, "\n") + 1
 }
 
 func getRecentMessages(history *agent.History, limit int) []llm.Message {

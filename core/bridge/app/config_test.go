@@ -72,6 +72,7 @@ func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 	t.Setenv("GHOST_MEMORY_DECISION_RECIPE_INTERVAL", "12h")
 	t.Setenv("GHOST_MEMORY_DECISION_RECIPE_MIN_SUPPORT", "5")
 	t.Setenv("GHOST_MEMORY_DECISION_DEBUG_ENABLED", "true")
+	t.Setenv("GHOST_MEMORY_DECISION_SELECTOR_HINT_ENABLED", "false")
 
 	cfg, err := loadConfigWithRuntime(runtimeConfig{
 		Provider: llm.ProviderCustom,
@@ -111,6 +112,9 @@ func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 	}
 	if !cfg.MemoryDecisionDebugEnabled {
 		t.Fatalf("expected decision debug to be enabled")
+	}
+	if cfg.MemoryDecisionSelectorHintEnabled {
+		t.Fatalf("expected selector hint toggle to be disabled")
 	}
 }
 

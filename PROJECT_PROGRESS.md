@@ -75,3 +75,4 @@
 - 2026-03-07: 记忆层启动 PR3 基础设施，新增 decision memo/recipe schema、文件化 store 与配置壳；capture/query/selector 接线待后续 commit。
 - 2026-03-07: PR3 第二步已接入 decision turn capture；回合完成后会把工具路径、人工阻塞点、answered questions、环境指纹与结构化经验写入 decision memo，仍未接 recall/selector/recipe distill。
 - 2026-03-07: PR3 第三步已把 decision recall 接入统一 Memory Query 链路（hot → warm → decision → graph → cold → markdown），`BuildContextWindow` 会自动注入 concise 的 prior/caution/ask-human recall line；`MEMORY_QUERY` 新增显式 decision opt-in 与 `decision_hits` 返回，仍未接 tool selector / recipe distill / 自动执行 recipe。
+- 2026-03-07: PR3 第四步已为 tool selector 增加 decision-only selector hint fast path：`sessionTurnPreparer` 会在 selector 前按环境指纹检索高置信 decision 命中，并以独立 `Prior similar experience` section 软提示喂给 selector；空命中/查询失败保持旧行为，shadow mode 仍返回全量工具，未改统一 recall 文本策略或自动执行 recipe。

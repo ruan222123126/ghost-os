@@ -18,13 +18,31 @@ import (
 )
 
 type fakeSelectorEngine struct {
-	result ToolSelectorResult
-	calls  int
+	result           ToolSelectorResult
+	calls            int
+	lastDecisionHint string
 }
 
-func (f *fakeSelectorEngine) SelectTools(context.Context, string, []llm.Message, string) ToolSelectorResult {
+func (f *fakeSelectorEngine) SelectTools(_ context.Context, _ string, _ []llm.Message, decisionHint string, _ string) ToolSelectorResult {
 	f.calls++
+	f.lastDecisionHint = strings.TrimSpace(decisionHint)
 	return f.result
+}
+
+type runnerDecisionExtractor struct {
+	memo memory.DecisionMemo
+	err  error
+}
+
+func (e runnerDecisionExtractor) Summarize([]llm.Message) (string, error) {
+	return "", e.err
+}
+
+func (e runnerDecisionExtractor) ExtractDecisionMemo(memory.DecisionCaptureInput) (memory.DecisionMemo, error) {
+	if e.err != nil {
+		return memory.DecisionMemo{}, e.err
+	}
+	return e.memo, nil
 }
 
 type runnerMockTool struct {
@@ -57,13 +75,88 @@ func newRunnerTestDeps(cfg Config) agentRuntimeDependencies {
 	}
 }
 
+func runnerSelectorEnv() memory.DecisionEnvFingerprint {
+	return memory.DecisionEnvFingerprint{
+		WorkspaceRoot:    "/workspace/ghost-os",
+		Platform:         "linux/amd64",
+		GraphNamespace:   "workspace:test",
+		Domain:           "coding",
+		ToolNames:        []string{"ask_human", "read_file", "search_files", "apply_diff", "bash_exec"},
+		ToolsetSignature: "apply_diff,ask_human,bash_exec,read_file,search_files",
+	}
+}
+
+func newRunnerDecisionHintManager(t *testing.T) *memory.MemoryManager {
+	t.Helper()
+	baseDir := t.TempDir()
+	manager := memory.NewMemoryManager(memory.MemoryConfig{
+		WarmCapacity:             32,
+		WarmPath:                 filepath.Join(baseDir, "warm.json"),
+		ColdBaseDir:              filepath.Join(baseDir, "cold"),
+		DecisionEnabled:          true,
+		DecisionCaptureOnTurn:    true,
+		DecisionCaptureOnTurnSet: true,
+		DecisionPath:             filepath.Join(baseDir, "decision"),
+		Summarizer: runnerDecisionExtractor{memo: memory.DecisionMemo{
+			IntentSummary:   "fix config migration",
+			StrategySummary: "inspect target file before patching",
+			Confidence:      0.93,
+			ReuseScore:      0.91,
+		}},
+	})
+	t.Cleanup(manager.StopDreaming)
+	return manager
+}
+
+func captureRunnerDecisionHint(t *testing.T, manager *memory.MemoryManager, env memory.DecisionEnvFingerprint, outcome string, askHumanPrompt string) {
+	t.Helper()
+	now := time.Now().UTC()
+	assistant := llm.Message{
+		Role: llm.RoleAssistant,
+		Text: "Inspecting config before patching.",
+		ToolCalls: []llm.ToolCall{
+			{ID: "call-read", Name: "read_file", Arguments: json.RawMessage(`{"path":"config.toml"}`)},
+			{ID: "call-search", Name: "search_files", Arguments: json.RawMessage(`{"pattern":"migration"}`)},
+			{ID: "call-patch", Name: "apply_diff", Arguments: json.RawMessage(`{"path":"config.toml","diff":"@@"}`)},
+			{ID: "call-bash", Name: "bash_exec", Arguments: json.RawMessage(`{"command":"go test ./core/bridge/app"}`)},
+		},
+	}
+	if strings.TrimSpace(askHumanPrompt) != "" {
+		assistant.ToolCalls = append(assistant.ToolCalls, llm.ToolCall{ID: "call-human", Name: "ask_human", Arguments: json.RawMessage(`{"prompt":"` + askHumanPrompt + `"}`)})
+	}
+	messages := []llm.Message{
+		assistant,
+		{Role: llm.RoleTool, ToolCallID: "call-read", Text: agent.FormatToolResult("read_file", "trace-selector-hint", "file content", nil)},
+		{Role: llm.RoleTool, ToolCallID: "call-search", Text: agent.FormatToolResult("search_files", "trace-selector-hint", "pattern match", nil)},
+		{Role: llm.RoleTool, ToolCallID: "call-patch", Text: agent.FormatToolResult("apply_diff", "trace-selector-hint", "patched config", nil)},
+		{Role: llm.RoleTool, ToolCallID: "call-bash", Text: agent.FormatToolResult("bash_exec", "trace-selector-hint", "tests passed", nil)},
+	}
+	if strings.TrimSpace(askHumanPrompt) != "" {
+		messages = append(messages, llm.Message{Role: llm.RoleTool, ToolCallID: "call-human", Text: agent.FormatToolResult("ask_human", "trace-selector-hint", "", nil)})
+	}
+	if err := manager.CaptureDecisionTurn(memory.DecisionCaptureInput{
+		SessionID:      "runner-selector-session",
+		TraceID:        "trace-selector-hint",
+		TurnID:         "turn-1",
+		Namespace:      env.GraphNamespace,
+		UserMessage:    "fix config migration",
+		Outcome:        outcome,
+		Environment:    env,
+		TurnStartedAt:  now.Add(-time.Minute),
+		TurnFinishedAt: now,
+		NewMessages:    messages,
+	}); err != nil {
+		t.Fatalf("capture decision hint: %v", err)
+	}
+}
+
 func TestSessionTurnPreparer_SelectToolsForTurn_BypassesAskHumanContinuation(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}}}
 	preparer := &sessionTurnPreparer{selectorFactory: func(Config) selectorEngine { return selector }}
 	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 
-	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, history, "resume", true, "trace-ask")
+	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-ask", history, "resume", true, "trace-ask", runnerSelectorEnv())
 	if selector.calls != 0 {
 		t.Fatalf("selector should not run for ask_human continuation, got %d calls", selector.calls)
 	}
@@ -81,7 +174,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_UsesFullRegistryWhenDisabled(t *
 	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: false, MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 
-	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, history, "read config", false, "trace-disabled")
+	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-disabled", history, "read config", false, "trace-disabled", runnerSelectorEnv())
 	if selector.calls != 0 {
 		t.Fatalf("selector should not run when disabled, got %d calls", selector.calls)
 	}
@@ -99,7 +192,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ShadowModeKeepsFullRegistry(t *t
 	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorShadow: true, MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 
-	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, history, "read config", false, "trace-shadow")
+	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-shadow", history, "read config", false, "trace-shadow", runnerSelectorEnv())
 	if selector.calls != 1 {
 		t.Fatalf("expected selector to run in shadow mode, got %d calls", selector.calls)
 	}
@@ -119,7 +212,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_SubsetUpdatesPromptCount(t *test
 	history.Append(llm.Message{Role: llm.RoleUser, Text: "please read config"})
 	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "ok"})
 
-	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, history, "read config.go", false, "trace-subset")
+	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-subset", history, "read config.go", false, "trace-subset", runnerSelectorEnv())
 	if selector.calls != 1 {
 		t.Fatalf("expected selector to run once, got %d calls", selector.calls)
 	}
@@ -134,6 +227,100 @@ func TestSessionTurnPreparer_SelectToolsForTurn_SubsetUpdatesPromptCount(t *test
 	}
 	if !strings.Contains(prompt, "Available tools: 2") {
 		t.Fatalf("expected prompt to reflect filtered tool count, got %q", prompt)
+	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_PassesDecisionHintToSelector(t *testing.T) {
+	env := runnerSelectorEnv()
+	manager := newRunnerDecisionHintManager(t)
+	captureRunnerDecisionHint(t, manager, env, memory.DecisionOutcomeSuccess, "")
+	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.94}}
+	preparer := &sessionTurnPreparer{
+		sharedMemoryManager: manager,
+		selectorFactory:     func(Config) selectorEngine { return selector },
+	}
+	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	history := agent.NewHistory("system prompt")
+
+	preparer.selectToolsForTurn(context.Background(), deps, "runner-selector-hint", history, "fix config migration", false, "trace-selector-hint", env)
+	if selector.calls != 1 {
+		t.Fatalf("expected selector to run once, got %d", selector.calls)
+	}
+	if !strings.Contains(selector.lastDecisionHint, "Similar successful cases used:") {
+		t.Fatalf("expected selector to receive decision hint, got %q", selector.lastDecisionHint)
+	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_NoHitsKeepsExistingBehavior(t *testing.T) {
+	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.96}}
+	preparer := &sessionTurnPreparer{
+		sharedMemoryManager: newRunnerDecisionHintManager(t),
+		selectorFactory:     func(Config) selectorEngine { return selector },
+	}
+	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	history := agent.NewHistory("system prompt")
+
+	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-no-hits", history, "brand new task", false, "trace-no-hits", runnerSelectorEnv())
+	if selector.lastDecisionHint != "" {
+		t.Fatalf("expected empty decision hint when no hits, got %q", selector.lastDecisionHint)
+	}
+	if len(catalog.ToolDefs()) != 2 || !strings.Contains(prompt, "Available tools: 2") {
+		t.Fatalf("expected subset behavior to stay intact, tools=%d prompt=%q", len(catalog.ToolDefs()), prompt)
+	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_HintFailureFallsBackToEmptyHint(t *testing.T) {
+	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.9}}
+	preparer := &sessionTurnPreparer{
+		sharedMemoryManager: newRunnerDecisionHintManager(t),
+		selectorFactory:     func(Config) selectorEngine { return selector },
+		decisionHintBuilder: func(*memory.MemoryManager, memory.SessionScope, string) (string, []memory.DecisionHit, error) {
+			return "", nil, errors.New("boom")
+		},
+	}
+	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+
+	preparer.selectToolsForTurn(context.Background(), deps, "runner-hint-error", agent.NewHistory("system prompt"), "fix config migration", false, "trace-hint-error", runnerSelectorEnv())
+	if selector.lastDecisionHint != "" {
+		t.Fatalf("expected empty decision hint on failure, got %q", selector.lastDecisionHint)
+	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_ShadowModeStillUsesHintInput(t *testing.T) {
+	env := runnerSelectorEnv()
+	manager := newRunnerDecisionHintManager(t)
+	captureRunnerDecisionHint(t, manager, env, memory.DecisionOutcomeSuccess, "")
+	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.92}}
+	preparer := &sessionTurnPreparer{
+		sharedMemoryManager: manager,
+		selectorFactory:     func(Config) selectorEngine { return selector },
+	}
+	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorShadow: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+
+	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-shadow-hint", agent.NewHistory("system prompt"), "fix config migration", false, "trace-shadow-hint", env)
+	if selector.lastDecisionHint == "" {
+		t.Fatal("expected shadow mode to still pass decision hint to selector")
+	}
+	if len(catalog.ToolDefs()) != len(deps.registry.ToolDefs()) || prompt != "" {
+		t.Fatalf("expected shadow mode to keep full registry, tools=%d prompt=%q", len(catalog.ToolDefs()), prompt)
+	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_AskHumanContinuationSkipsHintLookup(t *testing.T) {
+	hintCalls := 0
+	preparer := &sessionTurnPreparer{
+		sharedMemoryManager: newRunnerDecisionHintManager(t),
+		selectorFactory:     func(Config) selectorEngine { return &fakeSelectorEngine{} },
+		decisionHintBuilder: func(*memory.MemoryManager, memory.SessionScope, string) (string, []memory.DecisionHit, error) {
+			hintCalls++
+			return "should not run", nil, nil
+		},
+	}
+	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+
+	preparer.selectToolsForTurn(context.Background(), deps, "runner-ask-skip", agent.NewHistory("system prompt"), "resume", true, "trace-ask-skip", runnerSelectorEnv())
+	if hintCalls != 0 {
+		t.Fatalf("expected ask_human continuation to skip hint lookup, got %d calls", hintCalls)
 	}
 }
 

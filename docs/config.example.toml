@@ -13,7 +13,7 @@ models = ["gpt-4o", "gpt-4.1-mini"]
 
 # OpenAI-compatible gateway example
 # [providers.crs]
-# type = "custom"
+# type = "custom" # OpenAI-Compatible
 # base_url = "https://lldai.online/openai"
 # api_key = "sk-your-key"
 # models = ["gpt-5.4", "gpt-4"]
@@ -59,6 +59,7 @@ memory_decision_recipe_enabled = true
 memory_decision_recipe_interval = "6h"
 memory_decision_recipe_min_support = 3
 memory_decision_debug_enabled = false
+memory_decision_selector_hint_enabled = true
 
 worker_model = ""
 worker_max_concurrency = 4

@@ -101,6 +101,7 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	memoryDecisionRecipeInterval := "6h"
 	memoryDecisionRecipeMinSupport := 5
 	memoryDecisionDebugEnabled := true
+	memoryDecisionSelectorHintEnabled := false
 	maxTurns := 42
 	workerMaxFiles := 8
 	toolSelectorEnabled := true
@@ -117,45 +118,46 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 				APIKey:  optionalStringPointer("file-key"),
 			},
 		},
-		WorkerModel:                    &workerModel,
-		PromptsPath:                    &promptsPath,
-		SessionsPath:                   &sessionsPath,
-		MemoryWarmPath:                 &memoryWarmPath,
-		MemoryColdPath:                 &memoryColdPath,
-		MemoryGraphPath:                &memoryGraphPath,
-		MemoryWarmTTL:                  &memoryWarmTTL,
-		MemoryTemporalDecayEnabled:     &memoryTemporalDecayEnabled,
-		MemoryTemporalDecayHalfLife:    &memoryTemporalHalfLife,
-		MemoryAnchorEnabled:            &memoryAnchorEnabled,
-		MemoryAnchorMinWeight:          &memoryAnchorMinWeight,
-		MemoryEvolutionInterval:        &memoryEvolutionInterval,
-		MemoryEvolutionUseWorker:       &memoryEvolutionUseWorker,
-		MemoryEvolutionBatchSize:       &memoryEvolutionBatchSize,
-		MemoryGraphEnabled:             &memoryGraphEnabled,
-		MemoryGraphExtractOnArchive:    &memoryGraphExtractOnArchive,
-		MemoryGraphExtractOnEvolve:     &memoryGraphExtractOnEvolve,
-		MemoryGraphMaxHops:             &memoryGraphMaxHops,
-		MemoryGraphMaxHits:             &memoryGraphMaxHits,
-		MemoryGraphMinConfidence:       &memoryGraphMinConfidence,
-		MemoryGraphNamespace:           &memoryGraphNamespace,
-		MemoryGraphDebugEnabled:        &memoryGraphDebugEnabled,
-		MemoryDecisionEnabled:          &memoryDecisionEnabled,
-		MemoryDecisionCaptureOnTurn:    &memoryDecisionCaptureOnTurn,
-		MemoryDecisionPath:             &memoryDecisionPath,
-		MemoryDecisionMaxHits:          &memoryDecisionMaxHits,
-		MemoryDecisionMinConfidence:    &memoryDecisionMinConfidence,
-		MemoryDecisionMinReuseScore:    &memoryDecisionMinReuseScore,
-		MemoryDecisionRecipeEnabled:    &memoryDecisionRecipeEnabled,
-		MemoryDecisionRecipeInterval:   &memoryDecisionRecipeInterval,
-		MemoryDecisionRecipeMinSupport: &memoryDecisionRecipeMinSupport,
-		MemoryDecisionDebugEnabled:     &memoryDecisionDebugEnabled,
-		MaxTurns:                       &maxTurns,
-		WorkerMaxFiles:                 &workerMaxFiles,
-		ToolSelectorEnabled:            &toolSelectorEnabled,
-		ToolSelectorMode:               &toolSelectorMode,
-		BindAddr:                       &bindAddr,
-		APIToken:                       &apiToken,
-		CORSOrigins:                    []string{"http://localhost:5173"},
+		WorkerModel:                       &workerModel,
+		PromptsPath:                       &promptsPath,
+		SessionsPath:                      &sessionsPath,
+		MemoryWarmPath:                    &memoryWarmPath,
+		MemoryColdPath:                    &memoryColdPath,
+		MemoryGraphPath:                   &memoryGraphPath,
+		MemoryWarmTTL:                     &memoryWarmTTL,
+		MemoryTemporalDecayEnabled:        &memoryTemporalDecayEnabled,
+		MemoryTemporalDecayHalfLife:       &memoryTemporalHalfLife,
+		MemoryAnchorEnabled:               &memoryAnchorEnabled,
+		MemoryAnchorMinWeight:             &memoryAnchorMinWeight,
+		MemoryEvolutionInterval:           &memoryEvolutionInterval,
+		MemoryEvolutionUseWorker:          &memoryEvolutionUseWorker,
+		MemoryEvolutionBatchSize:          &memoryEvolutionBatchSize,
+		MemoryGraphEnabled:                &memoryGraphEnabled,
+		MemoryGraphExtractOnArchive:       &memoryGraphExtractOnArchive,
+		MemoryGraphExtractOnEvolve:        &memoryGraphExtractOnEvolve,
+		MemoryGraphMaxHops:                &memoryGraphMaxHops,
+		MemoryGraphMaxHits:                &memoryGraphMaxHits,
+		MemoryGraphMinConfidence:          &memoryGraphMinConfidence,
+		MemoryGraphNamespace:              &memoryGraphNamespace,
+		MemoryGraphDebugEnabled:           &memoryGraphDebugEnabled,
+		MemoryDecisionEnabled:             &memoryDecisionEnabled,
+		MemoryDecisionCaptureOnTurn:       &memoryDecisionCaptureOnTurn,
+		MemoryDecisionPath:                &memoryDecisionPath,
+		MemoryDecisionMaxHits:             &memoryDecisionMaxHits,
+		MemoryDecisionMinConfidence:       &memoryDecisionMinConfidence,
+		MemoryDecisionMinReuseScore:       &memoryDecisionMinReuseScore,
+		MemoryDecisionRecipeEnabled:       &memoryDecisionRecipeEnabled,
+		MemoryDecisionRecipeInterval:      &memoryDecisionRecipeInterval,
+		MemoryDecisionRecipeMinSupport:    &memoryDecisionRecipeMinSupport,
+		MemoryDecisionDebugEnabled:        &memoryDecisionDebugEnabled,
+		MemoryDecisionSelectorHintEnabled: &memoryDecisionSelectorHintEnabled,
+		MaxTurns:                          &maxTurns,
+		WorkerMaxFiles:                    &workerMaxFiles,
+		ToolSelectorEnabled:               &toolSelectorEnabled,
+		ToolSelectorMode:                  &toolSelectorMode,
+		BindAddr:                          &bindAddr,
+		APIToken:                          &apiToken,
+		CORSOrigins:                       []string{"http://localhost:5173"},
 	}); err != nil {
 		t.Fatalf("write config file: %v", err)
 	}
@@ -251,6 +253,9 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	if !cfg.MemoryDecisionDebugEnabled {
 		t.Fatalf("expected decision debug to be enabled")
 	}
+	if cfg.MemoryDecisionSelectorHintEnabled {
+		t.Fatalf("expected decision selector hint to be disabled")
+	}
 	if cfg.MaxTurns != maxTurns {
 		t.Fatalf("unexpected max turns: got %d want %d", cfg.MaxTurns, maxTurns)
 	}
@@ -295,6 +300,7 @@ memory_decision_recipe_enabled = false
 memory_decision_recipe_interval = "8h"
 memory_decision_recipe_min_support = 4
 memory_decision_debug_enabled = true
+memory_decision_selector_hint_enabled = false
 
 [[model_providers]]
 name = "custom"
@@ -330,6 +336,9 @@ api_key = "legacy-key"
 	}
 	if cfg.MemoryDecisionCaptureOnTurn == nil || *cfg.MemoryDecisionCaptureOnTurn {
 		t.Fatalf("unexpected migrated decision capture toggle: %#v", cfg.MemoryDecisionCaptureOnTurn)
+	}
+	if cfg.MemoryDecisionSelectorHintEnabled == nil || *cfg.MemoryDecisionSelectorHintEnabled {
+		t.Fatalf("unexpected migrated selector hint toggle: %#v", cfg.MemoryDecisionSelectorHintEnabled)
 	}
 	raw, err := os.ReadFile(configPath)
 	if err != nil {
