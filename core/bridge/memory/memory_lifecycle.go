@@ -3,6 +3,7 @@ package memory
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -11,17 +12,19 @@ import (
 
 // MemoryLifecycle 负责 warm/cold 之间的写入、归档与回填。
 type MemoryLifecycle struct {
-	warm *WarmMemory
-	cold *ColdMemory
+	warm  *WarmMemory
+	cold  *ColdMemory
+	graph *GraphService
 
 	sessionStore SessionStorePort
 	warmCapacity int
 }
 
-func NewMemoryLifecycle(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, sessionStore SessionStorePort) *MemoryLifecycle {
+func NewMemoryLifecycle(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, sessionStore SessionStorePort) *MemoryLifecycle {
 	return &MemoryLifecycle{
 		warm:         warm,
 		cold:         cold,
+		graph:        graph,
 		sessionStore: sessionStore,
 		warmCapacity: config.WarmCapacity,
 	}
@@ -67,7 +70,15 @@ func (l *MemoryLifecycle) ArchiveToCold(sessionID string) error {
 		return nil
 	}
 
-	return l.cold.Archive(sid, messages)
+	if err := l.cold.Archive(sid, messages); err != nil {
+		return err
+	}
+	if l.graph != nil {
+		if err := l.graph.IngestArchiveMessages(sid, messages); err != nil {
+			log.Printf("[MEMORY] graph archive ingest failed, continuing without graph update: session=%s err=%v", sid, err)
+		}
+	}
+	return nil
 }
 
 func (l *MemoryLifecycle) StoreWarmMessages(sessionID string, startIndex int, messages []llm.Message) error {

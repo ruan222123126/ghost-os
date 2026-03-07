@@ -3,6 +3,7 @@ package memory
 import (
 	"log"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ghost-os/bridge/agent"
@@ -36,9 +37,13 @@ type DecisionMemoExtractor interface {
 
 // MemoryConfig 定义三层记忆管理器初始化参数。
 type MemoryConfig struct {
-	WarmCapacity int
-	WarmPath     string
-	ColdBaseDir  string
+	WarmCapacity        int
+	WarmPath            string
+	ColdBaseDir         string
+	TruthEnabled        bool
+	TruthDualWrite      bool
+	TruthBaseDir        string
+	TruthShadowFailOpen bool
 
 	AutoRecallEnabled        bool
 	AutoRecallLimit          int
@@ -93,14 +98,19 @@ type EvolutionStats struct {
 
 // MemoryMetrics 是管理器运行指标快照。
 type MemoryMetrics struct {
-	L1Hits         uint64 `json:"l1_hits"`
-	L2Hits         uint64 `json:"l2_hits"`
-	L3Hits         uint64 `json:"l3_hits"`
-	MarkdownHits   uint64 `json:"markdown_hits"`
-	GraphHits      uint64 `json:"graph_hits"`
-	EvolutionRuns  uint64 `json:"evolution_runs"`
-	NodesCreated   uint64 `json:"nodes_created"`
-	EntriesEvolved uint64 `json:"entries_evolved"`
+	L1Hits               uint64 `json:"l1_hits"`
+	L2Hits               uint64 `json:"l2_hits"`
+	L3Hits               uint64 `json:"l3_hits"`
+	MarkdownHits         uint64 `json:"markdown_hits"`
+	GraphHits            uint64 `json:"graph_hits"`
+	EvolutionRuns        uint64 `json:"evolution_runs"`
+	NodesCreated         uint64 `json:"nodes_created"`
+	EntriesEvolved       uint64 `json:"entries_evolved"`
+	TruthEventsWritten   uint64 `json:"truth_events_written"`
+	TruthObjectsUpserted uint64 `json:"truth_objects_upserted"`
+	TruthClaimsUpserted  uint64 `json:"truth_claims_upserted"`
+	TruthErrors          uint64 `json:"truth_errors"`
+	TruthReplays         uint64 `json:"truth_replays"`
 }
 
 // MemoryManager 保留对外 façade，内部通过 query/lifecycle/evolver 组合职责。
@@ -109,6 +119,8 @@ type MemoryManager struct {
 	cold     *ColdMemory
 	graph    *GraphService
 	decision *DecisionService
+	truth    *TruthWriter
+	verifier *TruthVerifier
 
 	query     *QueryService
 	lifecycle *MemoryLifecycle
@@ -118,26 +130,35 @@ type MemoryManager struct {
 
 func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	normalized := normalizeMemoryConfig(config)
+	metrics := &memoryCounters{}
+	truth := NewTruthWriter(normalized, metrics)
+	truthMapper := NewTruthMapper()
 
 	warm := NewWarmMemoryWithTTL(normalized.WarmCapacity, normalized.WarmPath, normalized.WarmTTL)
 	warm.SetScoringConfig(newMemoryScoringConfig(normalized))
 	_ = warm.Load()
 	cold := NewColdMemory(normalized.ColdBaseDir)
+	cold.SetTruthShadow(truth, truthMapper)
 	graph := NewGraphService(normalized, cold, normalized.Summarizer)
 	decision := NewDecisionService(normalized, cold)
+	decision.SetTruthShadow(truth, truthMapper)
 	if graph.Enabled() {
 		log.Printf("[MEMORY] graph sidecar enabled: path=%s namespace=%s", normalized.GraphPath, normalized.GraphNamespace)
 	}
 	if decision.Enabled() {
 		log.Printf("[MEMORY] decision sidecar enabled: path=%s", normalized.DecisionPath)
 	}
-	metrics := &memoryCounters{}
+	if truth != nil && truth.Enabled() {
+		log.Printf("[MEMORY] truth shadow enabled: base=%s dual_write=%t", truth.BaseDir(), truth.DualWriteEnabled())
+	}
 
 	manager := &MemoryManager{
 		warm:     warm,
 		cold:     cold,
 		graph:    graph,
 		decision: decision,
+		truth:    truth,
+		verifier: NewTruthVerifier(truth),
 		metrics:  metrics,
 	}
 	manager.query = NewQueryService(normalized, warm, cold, graph, decision, metrics)
@@ -158,6 +179,10 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	explicitAnchorDisable := !config.AnchorEnabled && config.AnchorMinWeight < 0
 	if out.WarmCapacity <= 0 {
 		out.WarmCapacity = defaultWarmCapacity
+	}
+	out.TruthEnabled = out.TruthEnabled || out.TruthDualWrite
+	if out.TruthEnabled && !out.TruthShadowFailOpen {
+		out.TruthShadowFailOpen = true
 	}
 	if out.AutoRecallLimit <= 0 {
 		out.AutoRecallLimit = defaultAutoRecallLimit
@@ -211,6 +236,12 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.DecisionPath != "" {
 		out.DecisionPath = filepath.Clean(out.DecisionPath)
 	}
+	if out.TruthEnabled && strings.TrimSpace(out.TruthBaseDir) == "" {
+		out.TruthBaseDir = defaultTruthBaseDir(out.ColdBaseDir)
+	}
+	if out.TruthBaseDir != "" {
+		out.TruthBaseDir = filepath.Clean(out.TruthBaseDir)
+	}
 	if explicitTemporalDisable {
 		out.TemporalDecayEnabled = false
 	} else {
@@ -234,6 +265,20 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 
 func hasSummarizer(summarizer Summarizer) bool {
 	return summarizer != nil
+}
+
+func defaultTruthBaseDir(coldBaseDir string) string {
+	trimmed := strings.TrimSpace(coldBaseDir)
+	if trimmed == "" {
+		return ""
+	}
+	resolved := filepath.Clean(trimmed)
+	parent := filepath.Dir(resolved)
+	name := filepath.Base(resolved)
+	if strings.TrimSpace(name) == "" || name == "." || name == string(filepath.Separator) {
+		name = "cold"
+	}
+	return filepath.Join(parent, name+"-truth-shadow")
 }
 
 // CaptureDecisionTurn 在单轮完成后提取并持久化 decision memo。
@@ -343,6 +388,22 @@ func (m *MemoryManager) Metrics() MemoryMetrics {
 		return MemoryMetrics{}
 	}
 	return m.metrics.snapshot()
+}
+
+// ReplayTruth 从 event log 重建 object/claim snapshot。
+func (m *MemoryManager) ReplayTruth() (TruthWriteResult, error) {
+	if m == nil || m.truth == nil {
+		return TruthWriteResult{}, nil
+	}
+	return m.truth.Replay()
+}
+
+// VerifyTruthReplay 比对 live dual-write 快照与 replay 结果是否一致。
+func (m *MemoryManager) VerifyTruthReplay() (TruthVerifyResult, error) {
+	if m == nil || m.verifier == nil {
+		return TruthVerifyResult{Match: true}, nil
+	}
+	return m.verifier.Verify()
 }
 
 // SaveMarkdownNode 保存记忆节点为 Markdown 文件（人类可读）。

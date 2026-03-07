@@ -82,6 +82,13 @@ type MemoryQuery struct {
 	Environment       *DecisionEnvFingerprint `json:"-"`
 }
 
+// MemoryQueryResult 允许在不破坏旧接口的情况下带回 graph/decision 命中结果。
+type MemoryQueryResult struct {
+	Entries      []MemoryEntry `json:"entries"`
+	GraphHits    []GraphHit    `json:"graph_hits,omitempty"`
+	DecisionHits []DecisionHit `json:"decision_hits,omitempty"`
+}
+
 func normalizeEntry(entry MemoryEntry) MemoryEntry {
 	out := entry
 	out.ID = strings.TrimSpace(out.ID)

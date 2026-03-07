@@ -3,6 +3,7 @@ package memory
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,11 +27,20 @@ type coldArchiveFile struct {
 	Entities   []string      `json:"entities,omitempty"`
 }
 
+// ColdArchive 暴露冷存归档快照，供 graph backfill 等后台任务复用。
+type ColdArchive struct {
+	SessionID  string        `json:"session_id"`
+	ArchivedAt time.Time     `json:"archived_at"`
+	Messages   []llm.Message `json:"messages"`
+}
+
 // ColdMemory 是 L3 冷数据层，负责长期归档与按需检索。
 type ColdMemory struct {
-	baseDir  string
-	markdown *MarkdownStore
-	mu       sync.Mutex
+	baseDir     string
+	markdown    *MarkdownStore
+	truth       *TruthWriter
+	truthMapper *TruthMapper
+	mu          sync.Mutex
 }
 
 func NewColdMemory(baseDir string) *ColdMemory {
@@ -43,6 +53,14 @@ func NewColdMemory(baseDir string) *ColdMemory {
 		baseDir:  resolved,
 		markdown: NewMarkdownStore(markdownDir),
 	}
+}
+
+func (c *ColdMemory) SetTruthShadow(writer *TruthWriter, mapper *TruthMapper) {
+	if c == nil {
+		return
+	}
+	c.truth = writer
+	c.truthMapper = mapper
 }
 
 // Archive 把会话完整消息落盘到按月目录。
@@ -84,6 +102,16 @@ func (c *ColdMemory) Archive(sessionID string, messages []llm.Message) error {
 	if err := os.Rename(tmpPath, targetPath); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("replace cold archive file: %w", err)
+	}
+	if c.truth != nil && c.truth.DualWriteEnabled() && c.truthMapper != nil {
+		for _, object := range c.truthMapper.MapArchiveMessages(sid, now, messages) {
+			if err := writeTruthObjectShadow(c.truth, truthEventTypeArchiveMessage, object, ""); err != nil {
+				if handleErr := handleTruthShadowWriteError(c.truth, "", object.ObjectID, err); handleErr != nil {
+					return handleErr
+				}
+				log.Printf("[MEMORY] truth archive shadow write skipped after error: session_id=%s object_id=%s", sid, object.ObjectID)
+			}
+		}
 	}
 	return nil
 }
@@ -151,7 +179,17 @@ func (c *ColdMemory) SaveMarkdownNode(node MarkdownNode) error {
 	if c.markdown == nil {
 		return fmt.Errorf("markdown store is not configured")
 	}
-	return c.markdown.Save(node)
+	normalized := normalizeMarkdownNode(node)
+	if err := c.markdown.Save(normalized); err != nil {
+		return err
+	}
+	if c.truth != nil && c.truth.DualWriteEnabled() && c.truthMapper != nil {
+		object := c.truthMapper.MapMarkdownNode(normalized)
+		if err := writeTruthObjectShadow(c.truth, truthEventTypeMarkdownNode, object, ""); err != nil {
+			return handleTruthShadowWriteError(c.truth, "", object.ObjectID, err)
+		}
+	}
+	return nil
 }
 
 // LoadMarkdownNode 从 markdown 冷存目录读取节点。
@@ -201,6 +239,43 @@ func (c *ColdMemory) ListSessions(timeRange TimeRange) ([]string, error) {
 		out = append(out, archive.SessionID)
 	}
 	sort.Strings(out)
+	return out, nil
+}
+
+// ListArchives 返回时间窗内的归档会话快照，便于 graph 等 sidecar 做重建。
+func (c *ColdMemory) ListArchives(timeRange *TimeRange) ([]ColdArchive, error) {
+	if c.baseDir == "" {
+		return nil, nil
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	files, err := c.collectArchiveFilesLocked(timeRange)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ColdArchive, 0, len(files))
+	for _, path := range files {
+		archive, err := c.readArchiveFileLocked(path)
+		if err != nil {
+			continue
+		}
+		if timeRange != nil && !timeRange.Contains(archive.ArchivedAt) {
+			continue
+		}
+		out = append(out, ColdArchive{
+			SessionID:  archive.SessionID,
+			ArchivedAt: archive.ArchivedAt.UTC(),
+			Messages:   llm.CloneMessages(archive.Messages),
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].ArchivedAt.Equal(out[j].ArchivedAt) {
+			return out[i].SessionID < out[j].SessionID
+		}
+		return out[i].ArchivedAt.After(out[j].ArchivedAt)
+	})
 	return out, nil
 }
 

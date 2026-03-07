@@ -13,8 +13,9 @@ import (
 
 // Evolver 收口 warm -> markdown 的后台演化任务与摘要策略。
 type Evolver struct {
-	warm *WarmMemory
-	cold *ColdMemory
+	warm  *WarmMemory
+	cold  *ColdMemory
+	graph *GraphService
 
 	summarizer         Summarizer
 	warmTTL            time.Duration
@@ -32,10 +33,11 @@ type Evolver struct {
 	dreamWG       sync.WaitGroup
 }
 
-func NewEvolver(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, summarizer Summarizer, metrics *memoryCounters) *Evolver {
+func NewEvolver(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, summarizer Summarizer, metrics *memoryCounters) *Evolver {
 	return &Evolver{
 		warm:               warm,
 		cold:               cold,
+		graph:              graph,
 		summarizer:         summarizer,
 		warmTTL:            config.WarmTTL,
 		anchorEnabled:      config.AnchorEnabled,
@@ -139,6 +141,11 @@ func (e *Evolver) Evolve() (EvolutionStats, error) {
 
 		if err := e.cold.SaveMarkdownNode(node); err != nil {
 			return stats, err
+		}
+		if e.graph != nil {
+			if err := e.graph.IngestMarkdownNode(node); err != nil {
+				log.Printf("[MEMORY] graph evolve ingest failed, continuing without graph update: node=%s err=%v", node.ID, err)
+			}
 		}
 
 		for _, entry := range group {
@@ -277,13 +284,6 @@ func sortedTagList(tagSet map[string]struct{}) []string {
 	return out
 }
 
-func minInt(a, b int) int {
-	if a <= b {
-		return a
-	}
-	return b
-}
-
 func evolutionMessages(entries []MemoryEntry) []llm.Message {
 	if len(entries) == 0 {
 		return nil
@@ -403,11 +403,4 @@ func mergeAnchorsForEntry(entry MemoryEntry, anchors []MemoryAnchor) []MemoryAnc
 		merged = append(merged, anchors[0])
 	}
 	return normalizeAnchors(merged)
-}
-
-func maxFloat(a, b float64) float64 {
-	if a >= b {
-		return a
-	}
-	return b
 }

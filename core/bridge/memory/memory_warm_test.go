@@ -131,10 +131,10 @@ func TestWarmMemoryCustomTTLPrunesExpiredEntries(t *testing.T) {
 	}
 }
 
-func TestWarmMemoryLoadLegacyPayloadWithoutStructuredFields(t *testing.T) {
+func TestWarmMemoryLoadLegacyPayloadIgnoresRemovedFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "warm.json")
 	now := time.Now().UTC().Format(time.RFC3339)
-	legacy := []byte("{\n  \"entries\": [\n    {\n      \"id\": \"legacy-1\",\n      \"content\": \"legacy memory\",\n      \"type\": \"message\",\n      \"timestamp\": \"" + now + "\",\n      \"metadata\": {\"layer\": \"warm\"}\n    }\n  ]\n}\n")
+	legacy := []byte("{\n  \"entries\": [\n    {\n      \"id\": \"legacy-1\",\n      \"content\": \"legacy memory\",\n      \"type\": \"message\",\n      \"timestamp\": \"" + now + "\",\n      \"decay_factor\": 0.75,\n      \"priority\": 3,\n      \"metadata\": {\"layer\": \"warm\"}\n    }\n  ],\n  \"query\": {\n    \"use_time_decay\": true,\n    \"min_priority\": 2\n  }\n}\n")
 	if err := os.WriteFile(path, legacy, 0o600); err != nil {
 		t.Fatalf("write legacy warm payload: %v", err)
 	}

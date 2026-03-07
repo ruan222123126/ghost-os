@@ -1,0 +1,370 @@
+package memory
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"ghost-os/bridge/llm"
+)
+
+// TruthMapper 负责把现有 sidecar 结构投影到 schema v1。
+type TruthMapper struct{}
+
+func NewTruthMapper() *TruthMapper {
+	return &TruthMapper{}
+}
+
+func (m *TruthMapper) MapArchiveMessages(sessionID string, archivedAt time.Time, messages []llm.Message) []MemoryObject {
+	sid := strings.TrimSpace(sessionID)
+	if sid == "" || len(messages) == 0 {
+		return nil
+	}
+	base := archivedAt.UTC()
+	if base.IsZero() {
+		base = time.Now().UTC()
+	}
+	objects := make([]MemoryObject, 0, len(messages))
+	for index, msg := range messages {
+		content := strings.TrimSpace(messageToContent(msg))
+		if content == "" {
+			continue
+		}
+		sourceID := fmt.Sprintf("%s:%06d", sid, index)
+		timestamp := base.Add(time.Duration(index) * time.Millisecond)
+		primarySource := SourceRef{
+			SessionID:  sid,
+			SourceKind: truthSourceKindArchiveMessage,
+			SourceID:   sourceID,
+		}
+		objectID := buildTruthObjectID(truthObjectTypeEvidenceMessage, sid, fmt.Sprintf("%06d", index))
+		evidence := MemoryEvidence{
+			Kind:       "chat.message",
+			Text:       content,
+			Summary:    summarizeLine(content, 220),
+			Timestamp:  timestamp,
+			Confidence: 1,
+			SourceRefs: []SourceRef{primarySource},
+			Metadata: map[string]any{
+				"role":          string(msg.Role),
+				"tool_call_id":  strings.TrimSpace(msg.ToolCallID),
+				"message_index": index,
+			},
+		}
+		object := MemoryObject{
+			ObjectID:    objectID,
+			ObjectType:  truthObjectTypeEvidenceMessage,
+			Summary:     evidence.Summary,
+			RawEvidence: []MemoryEvidence{evidence},
+			SourceRefs:  []SourceRef{primarySource},
+			CreatedAt:   timestamp,
+			UpdatedAt:   timestamp,
+			Confidence:  1,
+			Metadata: map[string]any{
+				"session_id":    sid,
+				"message_index": index,
+				"role":          string(msg.Role),
+			},
+		}
+		objects = append(objects, normalizeMemoryObject(object))
+	}
+	return objects
+}
+
+func (m *TruthMapper) MapMarkdownNode(node MarkdownNode) MemoryObject {
+	node = normalizeMarkdownNode(node)
+	primarySource := SourceRef{
+		SessionID:  node.SessionID,
+		SourceKind: truthSourceKindMarkdownNode,
+		SourceID:   node.ID,
+	}
+	sourceRefs := []SourceRef{primarySource}
+	for _, sourceID := range node.SourceIDs {
+		sourceRefs = append(sourceRefs, SourceRef{
+			SessionID:  node.SessionID,
+			SourceKind: truthSourceKindMarkdownSource,
+			SourceID:   sourceID,
+		})
+	}
+	objectID := buildTruthObjectID(truthObjectTypeSemanticNote, node.ID)
+	claims := make([]MemoryClaim, 0, len(node.Anchors))
+	for _, anchor := range node.Anchors {
+		normalized := normalizeAnchor(anchor)
+		if normalized.Type == "" || normalized.Value == "" {
+			continue
+		}
+		claim := MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeAnchor,
+			Value:      normalized.Value,
+			AnchorKey:  firstNonEmpty(normalized.Key, truthHashID("anchor", anchorFingerprint(normalized))),
+			Confidence: maxFloat(normalized.Weight, node.Confidence),
+			CreatedAt:  effectiveDecisionTimestamp(normalized.DetectedAt, node.CreatedAt),
+			SourceRefs: []SourceRef{primarySource},
+			Metadata: map[string]any{
+				"anchor_type": normalized.Type,
+				"reason":      normalized.Reason,
+			},
+		}
+		if normalized.Type == MemoryAnchorConstraint {
+			claim.ConstraintType = normalized.Type
+		}
+		if normalized.Type == MemoryAnchorAvoidance {
+			claim.RiskType = normalized.Type
+		}
+		claims = append(claims, claim)
+	}
+	embeddingRefs := make([]EmbeddingRef, 0, 1)
+	if node.EmbeddingID != "" {
+		embeddingRefs = append(embeddingRefs, EmbeddingRef{
+			EmbeddingID: node.EmbeddingID,
+			Source:      "markdown_node",
+			Status:      "linked",
+			SourceRefs:  []SourceRef{primarySource},
+		})
+	}
+	evidenceText := firstNonEmpty(node.Content, node.Summary)
+	object := MemoryObject{
+		ObjectID:      objectID,
+		ObjectType:    truthObjectTypeSemanticNote,
+		Summary:       firstNonEmpty(node.Summary, summarizeLine(evidenceText, 220)),
+		Claims:        claims,
+		EmbeddingRefs: embeddingRefs,
+		SourceRefs:    sourceRefs,
+		CreatedAt:     node.CreatedAt,
+		UpdatedAt:     effectiveDecisionTimestamp(node.LastSeenAt, node.CreatedAt),
+		Confidence:    maxFloat(node.Confidence, strongestAnchorWeight(node.Anchors)),
+		Metadata: map[string]any{
+			"session_id": node.SessionID,
+			"tags":       append([]string(nil), node.Tags...),
+			"source_ids": append([]string(nil), node.SourceIDs...),
+			"related_to": append([]string(nil), node.RelatedTo...),
+		},
+	}
+	if evidenceText != "" {
+		object.RawEvidence = []MemoryEvidence{{
+			Kind:       "markdown.note",
+			Text:       evidenceText,
+			Summary:    object.Summary,
+			Timestamp:  effectiveDecisionTimestamp(node.LastSeenAt, node.CreatedAt),
+			Confidence: object.Confidence,
+			SourceRefs: []SourceRef{primarySource},
+		}}
+	}
+	return normalizeMemoryObject(object)
+}
+
+func (m *TruthMapper) MapDecisionMemo(memo DecisionMemo, input DecisionCaptureInput) MemoryObject {
+	memo = normalizeDecisionMemo(memo)
+	decisionAt := effectiveDecisionTimestamp(memo.LastUsedAt, memo.CreatedAt, input.TurnFinishedAt, input.TurnStartedAt)
+	primarySource := SourceRef{
+		SessionID:  memo.SessionID,
+		TurnID:     memo.TurnID,
+		TraceID:    memo.TraceID,
+		SourceKind: truthSourceKindDecisionMemo,
+		SourceID:   memo.ID,
+	}
+	sourceRefs := []SourceRef{primarySource}
+	inputSourceID := firstNonEmpty(strings.TrimSpace(input.TurnID), strings.TrimSpace(input.TraceID), strings.TrimSpace(input.SessionID))
+	if inputSourceID != "" {
+		sourceRefs = append(sourceRefs, SourceRef{
+			SessionID:  strings.TrimSpace(input.SessionID),
+			TurnID:     strings.TrimSpace(input.TurnID),
+			TraceID:    strings.TrimSpace(input.TraceID),
+			SourceKind: truthSourceKindDecisionInput,
+			SourceID:   inputSourceID,
+		})
+	}
+	objectID := buildTruthObjectID(truthObjectTypeProcedureMemo, memo.ID)
+	claims := buildDecisionTruthClaims(objectID, memo, primarySource, decisionAt)
+	evidence := buildDecisionTruthEvidence(memo, input, primarySource, decisionAt)
+	object := MemoryObject{
+		ObjectID:    objectID,
+		ObjectType:  truthObjectTypeProcedureMemo,
+		Summary:     firstNonEmpty(memo.StrategySummary, memo.OutcomeSummary, memo.IntentSummary, memo.ProblemSummary),
+		RawEvidence: evidence,
+		Claims:      claims,
+		SourceRefs:  sourceRefs,
+		CreatedAt:   effectiveDecisionTimestamp(memo.CreatedAt, input.TurnFinishedAt, input.TurnStartedAt),
+		UpdatedAt:   decisionAt,
+		Confidence:  maxFloat(memo.Confidence, memo.ReuseScore),
+		Metadata: map[string]any{
+			"namespace":          memo.Namespace,
+			"outcome":            memo.Outcome,
+			"human_blocked":      memo.HumanBlocked,
+			"graph_node_refs":    append([]string(nil), memo.GraphNodeRefs...),
+			"graph_edge_refs":    append([]string(nil), memo.GraphEdgeRefs...),
+			"anchor_keys":        append([]string(nil), memo.AnchorKeys...),
+			"environment_domain": memo.Environment.Domain,
+		},
+	}
+	return normalizeMemoryObject(object)
+}
+
+func buildDecisionTruthClaims(objectID string, memo DecisionMemo, source SourceRef, createdAt time.Time) []MemoryClaim {
+	claims := make([]MemoryClaim, 0, 1+len(memo.AnchorKeys)+len(memo.GraphNodeRefs)+len(memo.Constraints)+len(memo.ValidationChecks)+len(memo.AvoidPatterns)+len(memo.FailureReasons)+len(memo.ToolsUsed))
+	if memo.IntentKey != "" {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeIntent,
+			IntentKey:  memo.IntentKey,
+			Value:      firstNonEmpty(memo.IntentSummary, memo.ProblemSummary, memo.StrategySummary),
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+		})
+	}
+	for _, anchorKey := range memo.AnchorKeys {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeAnchor,
+			AnchorKey:  anchorKey,
+			Value:      anchorKey,
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+		})
+	}
+	for _, entityID := range memo.GraphNodeRefs {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeEntity,
+			EntityID:   entityID,
+			Value:      entityID,
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+		})
+	}
+	for _, item := range memo.Constraints {
+		claims = append(claims, MemoryClaim{
+			ObjectID:       objectID,
+			Type:           truthClaimTypeConstraint,
+			ConstraintType: "constraint",
+			Value:          item,
+			Confidence:     memo.Confidence,
+			CreatedAt:      createdAt,
+			SourceRefs:     []SourceRef{source},
+		})
+	}
+	for _, item := range memo.ValidationChecks {
+		claims = append(claims, MemoryClaim{
+			ObjectID:       objectID,
+			Type:           truthClaimTypeConstraint,
+			ConstraintType: "validation_check",
+			Value:          item,
+			Confidence:     memo.Confidence,
+			CreatedAt:      createdAt,
+			SourceRefs:     []SourceRef{source},
+		})
+	}
+	for _, item := range memo.AvoidPatterns {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeRisk,
+			RiskType:   "avoid_pattern",
+			Value:      item,
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+		})
+	}
+	for _, item := range memo.FailureReasons {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeRisk,
+			RiskType:   "failure_reason",
+			Value:      item,
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+		})
+	}
+	for _, tool := range memo.ToolsUsed {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeTool,
+			Value:      tool.Name,
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+			Metadata: map[string]any{
+				"purpose":        tool.Purpose,
+				"input_summary":  tool.InputSummary,
+				"output_summary": tool.OutputSummary,
+			},
+		})
+	}
+	if memo.Outcome != "" || memo.OutcomeSummary != "" {
+		claims = append(claims, MemoryClaim{
+			ObjectID:   objectID,
+			Type:       truthClaimTypeOutcome,
+			Value:      firstNonEmpty(memo.OutcomeSummary, memo.Outcome),
+			Confidence: memo.Confidence,
+			CreatedAt:  createdAt,
+			SourceRefs: []SourceRef{source},
+			Metadata: map[string]any{
+				"outcome": memo.Outcome,
+			},
+		})
+	}
+	return claims
+}
+
+func buildDecisionTruthEvidence(memo DecisionMemo, input DecisionCaptureInput, source SourceRef, decisionAt time.Time) []MemoryEvidence {
+	evidence := make([]MemoryEvidence, 0, 2)
+	memoText := renderDecisionTruthMemoText(memo)
+	if memoText != "" {
+		evidence = append(evidence, MemoryEvidence{
+			Kind:       "decision.memo",
+			Text:       memoText,
+			Summary:    firstNonEmpty(memo.StrategySummary, memo.OutcomeSummary, memo.IntentSummary, memo.ProblemSummary),
+			Timestamp:  decisionAt,
+			Confidence: maxFloat(memo.Confidence, memo.ReuseScore),
+			SourceRefs: []SourceRef{source},
+		})
+	}
+	userMessage := strings.TrimSpace(input.UserMessage)
+	if userMessage != "" {
+		evidence = append(evidence, MemoryEvidence{
+			Kind:       "decision.input",
+			Text:       userMessage,
+			Summary:    summarizeLine(userMessage, 180),
+			Timestamp:  effectiveDecisionTimestamp(input.TurnFinishedAt, input.TurnStartedAt, memo.CreatedAt),
+			Confidence: 1,
+			SourceRefs: []SourceRef{{
+				SessionID:  strings.TrimSpace(input.SessionID),
+				TurnID:     strings.TrimSpace(input.TurnID),
+				TraceID:    strings.TrimSpace(input.TraceID),
+				SourceKind: truthSourceKindDecisionInput,
+				SourceID:   firstNonEmpty(strings.TrimSpace(input.TurnID), strings.TrimSpace(input.TraceID), strings.TrimSpace(input.SessionID)),
+			}},
+		})
+	}
+	return evidence
+}
+
+func renderDecisionTruthMemoText(memo DecisionMemo) string {
+	sections := make([]string, 0, 6)
+	appendSection := func(title string, values ...string) {
+		parts := make([]string, 0, len(values))
+		for _, value := range values {
+			trimmed := strings.TrimSpace(value)
+			if trimmed == "" {
+				continue
+			}
+			parts = append(parts, trimmed)
+		}
+		if len(parts) == 0 {
+			return
+		}
+		sections = append(sections, title+": "+strings.Join(parts, " | "))
+	}
+	appendSection("intent", memo.IntentSummary, memo.IntentKey)
+	appendSection("problem", memo.ProblemSummary)
+	appendSection("context", memo.ContextSummary)
+	appendSection("strategy", memo.StrategySummary)
+	appendSection("outcome", memo.OutcomeSummary, memo.Outcome)
+	appendSection("constraints", strings.Join(memo.Constraints, "; "))
+	return strings.Join(sections, "\n")
+}

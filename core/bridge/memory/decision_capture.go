@@ -59,6 +59,12 @@ func (d *DecisionService) CaptureTurn(input DecisionCaptureInput) error {
 	if err := d.store.Persist(); err != nil {
 		return fmt.Errorf("persist decision memo: %w", err)
 	}
+	if d.truth != nil && d.truth.DualWriteEnabled() && d.truthMapper != nil {
+		object := d.truthMapper.MapDecisionMemo(memo, input)
+		if err := writeTruthObjectShadow(d.truth, truthEventTypeDecisionMemo, object, input.TraceID); err != nil {
+			return handleTruthShadowWriteError(d.truth, input.TraceID, object.ObjectID, err)
+		}
+	}
 	return nil
 }
 

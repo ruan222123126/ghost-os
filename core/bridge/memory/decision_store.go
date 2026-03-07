@@ -52,6 +52,8 @@ type DecisionService struct {
 	captureOnTurn    bool
 	store            *DecisionStore
 	cold             *ColdMemory
+	truth            *TruthWriter
+	truthMapper      *TruthMapper
 	workerExtractor  DecisionMemoExtractor
 	maxHits          int
 	minConfidence    float64
@@ -130,6 +132,14 @@ func NewDecisionService(config MemoryConfig, cold *ColdMemory) *DecisionService 
 
 func (d *DecisionService) Enabled() bool {
 	return d != nil && d.enabled && d.store != nil
+}
+
+func (d *DecisionService) SetTruthShadow(writer *TruthWriter, mapper *TruthMapper) {
+	if d == nil {
+		return
+	}
+	d.truth = writer
+	d.truthMapper = mapper
 }
 
 func (d *DecisionService) Stats(namespace string) DecisionStats {

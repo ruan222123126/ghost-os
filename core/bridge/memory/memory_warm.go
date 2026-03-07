@@ -3,7 +3,6 @@ package memory
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -388,24 +387,4 @@ func isEntryExpired(entry MemoryEntry, now time.Time, baseTTL time.Duration) boo
 		ttl = defaultWarmTTL
 	}
 	return now.Sub(entry.Timestamp) > ttl
-}
-
-func clamp01(v float64) float64 {
-	if math.IsNaN(v) || math.IsInf(v, 0) {
-		return 0
-	}
-	if v < 0 {
-		return 0
-	}
-	if v > 1 {
-		return 1
-	}
-	return v
-}
-
-func max(a int, b int) int {
-	if a >= b {
-		return a
-	}
-	return b
 }
