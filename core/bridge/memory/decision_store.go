@@ -133,6 +133,13 @@ func (d *DecisionService) Stats(namespace string) DecisionStats {
 	return d.store.Stats(namespace)
 }
 
+func (d *DecisionService) RecordMemoAccess(ids []string, accessedAt time.Time) {
+	if d == nil || d.store == nil {
+		return
+	}
+	d.store.RecordMemoAccess(ids, accessedAt)
+}
+
 func (s *DecisionStore) enabled() bool {
 	return s != nil && strings.TrimSpace(s.baseDir) != ""
 }
@@ -372,6 +379,38 @@ func (s *DecisionStore) ListClusters(namespace string) []DecisionCluster {
 		return out[i].UpdatedAt.After(out[j].UpdatedAt)
 	})
 	return out
+}
+
+func (s *DecisionStore) RecordMemoAccess(ids []string, accessedAt time.Time) {
+	if s == nil || len(ids) == 0 {
+		return
+	}
+	when := accessedAt.UTC()
+	if when.IsZero() {
+		when = time.Now().UTC()
+	}
+
+	s.mu.Lock()
+	for _, rawID := range ids {
+		id := strings.TrimSpace(rawID)
+		if id == "" {
+			continue
+		}
+		memo, ok := s.memoByID[id]
+		if !ok {
+			continue
+		}
+		memo.AccessCount++
+		memo.LastUsedAt = when
+		s.memoByID[id] = memo
+		for i := range s.memos {
+			if s.memos[i].ID == id {
+				s.memos[i] = memo
+				break
+			}
+		}
+	}
+	s.mu.Unlock()
 }
 
 func (s *DecisionStore) UpsertMemo(memo DecisionMemo) (bool, error) {

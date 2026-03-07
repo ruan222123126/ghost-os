@@ -5,6 +5,7 @@ package app
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -15,10 +16,12 @@ import (
 )
 
 type memoryQueryResponse struct {
-	Entries []memory.MemoryEntry `json:"entries"`
+	Entries      []memory.MemoryEntry `json:"entries"`
+	GraphHits    []memory.GraphHit    `json:"graph_hits,omitempty"`
+	DecisionHits []memory.DecisionHit `json:"decision_hits,omitempty"`
 }
 
-// executeMemoryQueryAction 统一入口查询 L1/L2/L3 记忆，并返回可序列化结果。
+// executeMemoryQueryAction 统一入口查询 L1/L2/Graph/L3 记忆，并返回可序列化结果。
 func (s *bridgeService) executeMemoryQueryAction(_ context.Context, params memoryQueryParams, traceID string) (any, int, error) {
 	if s.memoryManager == nil {
 		return nil, http.StatusInternalServerError, errors.New("memory manager is not configured")
@@ -30,45 +33,52 @@ func (s *bridgeService) executeMemoryQueryAction(_ context.Context, params memor
 	}
 	scope, err := s.buildMemoryQueryScope(query)
 	if err != nil {
-		logAction(traceID, actionMemoryQuery, "error", err)
+		logAction(traceID, busActionMemoryQuery, "error", err)
 		return nil, http.StatusInternalServerError, err
 	}
 
-	logAction(traceID, actionMemoryQuery, "running", nil)
-	entries, err := s.memoryManager.QueryWithScope(query, scope)
+	logAction(traceID, busActionMemoryQuery, "running", nil)
+	result, err := s.memoryManager.QueryResultWithScope(query, scope)
 	if err != nil {
-		logAction(traceID, actionMemoryQuery, "error", err)
+		logAction(traceID, busActionMemoryQuery, "error", err)
 		return nil, http.StatusInternalServerError, err
 	}
-	logAction(traceID, actionMemoryQuery, "success", nil)
-	return memoryQueryResponse{Entries: entries}, http.StatusOK, nil
+	if err := markSessionsMemoryAccessed(s.sessionStore, result.Entries); err != nil {
+		log.Printf(
+			"trace_id=%s action=MEMORY_QUERY_MARK_ACCESSED status=error error=%v",
+			strings.TrimSpace(traceID),
+			err,
+		)
+	}
+	logAction(traceID, busActionMemoryQuery, "success", nil)
+	return memoryQueryResponse{Entries: result.Entries, GraphHits: result.GraphHits, DecisionHits: result.DecisionHits}, http.StatusOK, nil
 }
 
 func (s *bridgeService) buildMemoryQueryScope(query memory.MemoryQuery) (memory.SessionScope, error) {
+	scope := memory.SessionScope{Environment: query.Environment}
 	if s == nil || s.sessionStore == nil || query.Metadata == nil {
-		return memory.SessionScope{}, nil
+		return scope, nil
 	}
 
 	rawSessionID, ok := query.Metadata["session_id"]
 	if !ok {
-		return memory.SessionScope{}, nil
+		return scope, nil
 	}
 	sessionID, ok := rawSessionID.(string)
 	if !ok || strings.TrimSpace(sessionID) == "" {
-		return memory.SessionScope{}, nil
+		return scope, nil
 	}
 
 	sess, err := s.sessionStore.Load(strings.TrimSpace(sessionID))
 	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
-			return memory.SessionScope{}, nil
+			return scope, nil
 		}
 		return memory.SessionScope{}, err
 	}
-	return memory.SessionScope{
-		SessionID: strings.TrimSpace(sess.ID),
-		History:   agent.NewHistoryFromMessages(sess.Messages),
-	}, nil
+	scope.SessionID = strings.TrimSpace(sess.ID)
+	scope.History = agent.NewHistoryFromMessages(sess.Messages)
+	return scope, nil
 }
 
 // executeMemoryArchiveAction 将指定会话归档到冷存储，常用于长会话收敛。
@@ -82,15 +92,19 @@ func (s *bridgeService) executeMemoryArchiveAction(_ context.Context, params mem
 		return nil, http.StatusBadRequest, errors.New("session_id is required")
 	}
 
-	logAction(traceID, actionMemoryArchive, "running", nil)
+	logAction(traceID, busActionMemoryArchive, "running", nil)
 	if err := s.memoryManager.ArchiveToCold(sessionID); err != nil {
-		logAction(traceID, actionMemoryArchive, "error", err)
+		logAction(traceID, busActionMemoryArchive, "error", err)
 		if errors.Is(err, session.ErrSessionNotFound) {
 			return nil, http.StatusNotFound, err
 		}
 		return nil, http.StatusInternalServerError, err
 	}
-	logAction(traceID, actionMemoryArchive, "success", nil)
+	if err := markSessionMemoryArchived(s.sessionStore, sessionID); err != nil {
+		logAction(traceID, busActionMemoryArchive, "error", err)
+		return nil, mapSessionStorageError(err), err
+	}
+	logAction(traceID, busActionMemoryArchive, "success", nil)
 	return memoryArchiveResponse{
 		SessionID: sessionID,
 		Archived:  true,
@@ -99,12 +113,30 @@ func (s *bridgeService) executeMemoryArchiveAction(_ context.Context, params mem
 
 // buildMemoryQuery 把 API 参数转换为 MemoryQuery，并补齐 metadata/time_range 语义。
 func buildMemoryQuery(params memoryQueryParams) (memory.MemoryQuery, error) {
+	includeGraph := true
+	if params.IncludeGraph != nil {
+		includeGraph = *params.IncludeGraph
+	}
+	includeDecision := false
+	if params.IncludeDecision != nil {
+		includeDecision = *params.IncludeDecision
+	}
 	query := memory.MemoryQuery{
-		Limit:           params.Limit,
-		Keywords:        params.Keywords,
-		Metadata:        map[string]any{},
-		IncludeMarkdown: params.IncludeMarkdown,
-		SemanticQuery:   strings.TrimSpace(params.SemanticQuery),
+		Limit:             params.Limit,
+		Keywords:          params.Keywords,
+		Metadata:          map[string]any{},
+		IncludeMarkdown:   params.IncludeMarkdown,
+		IncludeGraph:      includeGraph || params.GraphDebug,
+		IncludeDecision:   includeDecision || params.DecisionDebug,
+		SemanticQuery:     strings.TrimSpace(params.SemanticQuery),
+		GraphHops:         params.GraphHops,
+		GraphPredicates:   append([]string(nil), params.GraphPredicates...),
+		GraphDebug:        params.GraphDebug,
+		DecisionDebug:     params.DecisionDebug,
+		DecisionReuseOnly: params.DecisionReuseOnly,
+		DecisionTypes:     append([]string(nil), params.DecisionTypes...),
+		EnvironmentStrict: params.EnvironmentStrict,
+		MinReuseScore:     params.MinReuseScore,
 	}
 
 	if params.Metadata != nil {

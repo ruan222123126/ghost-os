@@ -79,8 +79,9 @@ type MemoryConfig struct {
 
 // SessionScope 显式描述一次请求可见的会话热态上下文，避免共享管理器持有可变请求态。
 type SessionScope struct {
-	SessionID string
-	History   *agent.History
+	SessionID   string
+	History     *agent.History
+	Environment *DecisionEnvFingerprint
 }
 
 // EvolutionStats 描述一次后台演化流程的处理结果。
@@ -139,7 +140,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 		decision: decision,
 		metrics:  metrics,
 	}
-	manager.query = NewQueryService(normalized, warm, cold, graph, metrics)
+	manager.query = NewQueryService(normalized, warm, cold, graph, decision, metrics)
 	manager.lifecycle = NewMemoryLifecycle(normalized, warm, cold, graph, normalized.SessionStore)
 	manager.evolver = NewEvolver(normalized, warm, cold, graph, normalized.Summarizer, metrics)
 
@@ -269,7 +270,7 @@ func (m *MemoryManager) QueryWithScope(query MemoryQuery, scope SessionScope) ([
 	return m.query.QueryWithScope(query, scope)
 }
 
-// QueryResultWithScope 在返回 entries 的同时保留 graph debug 信息。
+// QueryResultWithScope 在返回 entries 的同时保留 graph/decision 调试命中信息。
 func (m *MemoryManager) QueryResultWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
 	return m.query.QueryResultWithScope(query, scope)
 }

@@ -74,3 +74,4 @@
 - 2026-03-07: Web Console 收口会话/消息与 Bridge API 代理的重复骨架：`useSessions` 合并重复 setter，`useBridgeChat` 内联一次性包装函数，Provider CRUD 提炼共享异步 helper，API 代理路由改为统一 handler 工厂；同时清理 `drivers/native` 若干 clippy 冗余并确认 `pymethods` 宏展开告警仅做模块级抑制。
 - 2026-03-07: 记忆层启动 PR3 基础设施，新增 decision memo/recipe schema、文件化 store 与配置壳；capture/query/selector 接线待后续 commit。
 - 2026-03-07: PR3 第二步已接入 decision turn capture；回合完成后会把工具路径、人工阻塞点、answered questions、环境指纹与结构化经验写入 decision memo，仍未接 recall/selector/recipe distill。
+- 2026-03-07: PR3 第三步已把 decision recall 接入统一 Memory Query 链路（hot → warm → decision → graph → cold → markdown），`BuildContextWindow` 会自动注入 concise 的 prior/caution/ask-human recall line；`MEMORY_QUERY` 新增显式 decision opt-in 与 `decision_hits` 返回，仍未接 tool selector / recipe distill / 自动执行 recipe。

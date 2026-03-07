@@ -202,3 +202,30 @@ func TestMemoryManagerQueryKeepsOldConstraintsAheadOfPlainMatches(t *testing.T) 
 		t.Fatalf("expected constraint entry first, got %q", entries[0].ID)
 	}
 }
+
+func TestDecisionLayerBiasDoesNotOutrankWarmByDefault(t *testing.T) {
+	now := time.Now().UTC()
+	query := MemoryQuery{SemanticQuery: "fix config migration"}
+	warm := normalizeEntry(MemoryEntry{
+		ID:         "warm-entry",
+		Content:    "Patch config.toml, then run the migration check.",
+		Summary:    "Patch config.toml, then run the migration check.",
+		Timestamp:  now.Add(-time.Hour),
+		Importance: 0.8,
+		Metadata:   map[string]any{"layer": "warm", "source": "warm"},
+	})
+	decision := normalizeEntry(MemoryEntry{
+		ID:         "decision-entry",
+		Content:    "Patch config.toml, then run the migration check.",
+		Summary:    "Patch config.toml, then run the migration check.",
+		Timestamp:  now.Add(-time.Hour),
+		Importance: 0.8,
+		Metadata:   map[string]any{"layer": "decision", "source": "decision"},
+	})
+
+	warmScore := memoryScore(warm, query, now, defaultMemoryScoringConfig())
+	decisionScore := memoryScore(decision, query, now, defaultMemoryScoringConfig())
+	if warmScore <= decisionScore {
+		t.Fatalf("expected warm score to stay above decision by default, got warm=%0.4f decision=%0.4f", warmScore, decisionScore)
+	}
+}

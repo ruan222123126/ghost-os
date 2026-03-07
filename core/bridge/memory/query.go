@@ -2,6 +2,7 @@ package memory
 
 import (
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -11,8 +12,10 @@ import (
 
 // QueryService 收口自动召回与级联查询逻辑。
 type QueryService struct {
-	warm *WarmMemory
-	cold *ColdMemory
+	warm     *WarmMemory
+	cold     *ColdMemory
+	graph    *GraphService
+	decision *DecisionService
 
 	autoRecallEnabled bool
 	autoRecallLimit   int
@@ -20,10 +23,12 @@ type QueryService struct {
 	metrics           *memoryCounters
 }
 
-func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, metrics *memoryCounters) *QueryService {
+func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, metrics *memoryCounters) *QueryService {
 	return &QueryService{
 		warm:              warm,
 		cold:              cold,
+		graph:             graph,
+		decision:          decision,
 		autoRecallEnabled: config.AutoRecallEnabled,
 		autoRecallLimit:   config.AutoRecallLimit,
 		scoring:           newMemoryScoringConfig(config),
@@ -37,21 +42,30 @@ func (s *QueryService) BuildContextWindow(scope SessionScope, userInput string) 
 	}
 
 	query := MemoryQuery{
-		Limit:           max(s.autoRecallLimit*6, s.autoRecallLimit+8),
-		Keywords:        extractKeywords(userInput),
-		SemanticQuery:   strings.TrimSpace(userInput),
-		IncludeMarkdown: true,
-		UseTimeDecay:    true,
-		PreferRecent:    true,
+		Limit:             max(s.autoRecallLimit*6, s.autoRecallLimit+8),
+		Keywords:          extractKeywords(userInput),
+		SemanticQuery:     strings.TrimSpace(userInput),
+		IncludeMarkdown:   true,
+		IncludeGraph:      true,
+		IncludeDecision:   true,
+		DecisionReuseOnly: true,
+		DecisionTypes:     []string{DecisionHitTypeRecipe, DecisionHitTypeMemo, DecisionHitTypeWarning},
+		EnvironmentStrict: scope.Environment != nil,
+		PreferRecent:      true,
+	}
+	if scope.Environment != nil {
+		env := cloneDecisionEnvFingerprint(*scope.Environment)
+		query.Environment = &env
 	}
 	if sid := strings.TrimSpace(scope.SessionID); sid != "" {
 		query.Metadata = map[string]any{"session_id": sid}
 	}
 
-	entries, err := s.QueryWithScope(query, scope)
+	result, err := s.QueryResultWithScope(query, scope)
 	if err != nil {
 		return nil, err
 	}
+	entries := result.Entries
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -112,7 +126,7 @@ func recallEntryVisible(entry MemoryEntry, visible map[string]struct{}) bool {
 	if len(visible) == 0 {
 		return false
 	}
-	_, ok := visible[normalizeRecallText(entry.Content)]
+	_, ok := visible[normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))]
 	return ok
 }
 
@@ -124,21 +138,58 @@ func normalizeRecallText(text string) string {
 	return strings.Join(strings.Fields(normalized), " ")
 }
 
+func (s *QueryService) QueryResult(query MemoryQuery) (MemoryQueryResult, error) {
+	return s.QueryResultWithScope(query, SessionScope{})
+}
+
 func (s *QueryService) Query(query MemoryQuery) ([]MemoryEntry, error) {
-	return s.QueryWithScope(query, SessionScope{})
+	result, err := s.QueryResult(query)
+	if err != nil {
+		return nil, err
+	}
+	return result.Entries, nil
 }
 
 func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]MemoryEntry, error) {
+	result, err := s.QueryResultWithScope(query, scope)
+	if err != nil {
+		return nil, err
+	}
+	return result.Entries, nil
+}
+
+func (s *QueryService) QueryResultWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
 	results := make([]MemoryEntry, 0, 32)
-	seen := make(map[string]struct{}, 32)
+	seenIDs := make(map[string]struct{}, 32)
+	seenFingerprints := make(map[string]struct{}, 32)
 	now := time.Now().UTC()
 
 	collect := func(entries []MemoryEntry) {
 		for _, entry := range entries {
-			if _, ok := seen[entry.ID]; ok {
+			if _, ok := seenIDs[entry.ID]; ok {
 				continue
 			}
-			seen[entry.ID] = struct{}{}
+			seenIDs[entry.ID] = struct{}{}
+			fingerprint := normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))
+			if fingerprint != "" {
+				seenFingerprints[fingerprint] = struct{}{}
+			}
+			results = append(results, entry)
+		}
+	}
+	collectDistinct := func(entries []MemoryEntry) {
+		for _, entry := range entries {
+			if _, ok := seenIDs[entry.ID]; ok {
+				continue
+			}
+			fingerprint := normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))
+			if fingerprint != "" {
+				if _, ok := seenFingerprints[fingerprint]; ok {
+					continue
+				}
+				seenFingerprints[fingerprint] = struct{}{}
+			}
+			seenIDs[entry.ID] = struct{}{}
 			results = append(results, entry)
 		}
 	}
@@ -153,18 +204,43 @@ func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]
 	warmQuery.Limit = 0
 	warmEntries, err := s.warm.RetrieveCandidates(warmQuery)
 	if err != nil {
-		return nil, err
+		return MemoryQueryResult{}, err
 	}
 	if len(warmEntries) > 0 {
 		s.metrics.l2Hits.Add(uint64(len(warmEntries)))
 	}
 	collect(warmEntries)
 
+	var decisionHits []DecisionHit
+	if s.decision != nil && query.IncludeDecision {
+		decisionEntries, hits, err := s.decision.Retrieve(query, scope)
+		if err != nil {
+			log.Printf("[MEMORY] decision recall failed, falling back to other layers: %v", err)
+		} else {
+			collectDistinct(decisionEntries)
+			decisionHits = hits
+		}
+	}
+
+	var graphHits []GraphHit
+	if s.graph != nil && query.IncludeGraph {
+		graphEntries, hits, err := s.graph.Retrieve(query, scope)
+		if err != nil {
+			log.Printf("[MEMORY] graph recall failed, falling back to text layers: %v", err)
+		} else {
+			if len(graphEntries) > 0 {
+				s.metrics.graphHits.Add(uint64(len(graphEntries)))
+			}
+			collectDistinct(graphEntries)
+			graphHits = hits
+		}
+	}
+
 	coldQuery := query
 	coldQuery.Limit = 0
 	coldEntries, err := s.cold.Retrieve(coldQuery)
 	if err != nil {
-		return nil, err
+		return MemoryQueryResult{}, err
 	}
 	if len(coldEntries) > 0 {
 		s.metrics.l3Hits.Add(uint64(len(coldEntries)))
@@ -176,7 +252,7 @@ func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]
 		markdownQuery.Limit = 0
 		markdownEntries, err := s.queryMarkdown(markdownQuery)
 		if err != nil {
-			return nil, err
+			return MemoryQueryResult{}, err
 		}
 		if len(markdownEntries) > 0 {
 			s.metrics.markdownHits.Add(uint64(len(markdownEntries)))
@@ -185,19 +261,29 @@ func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]
 	}
 
 	results = rankMemoryEntries(results, query, now, s.scoring)
-
 	if query.Limit > 0 && len(results) > query.Limit {
 		results = results[:query.Limit]
 	}
+
 	warmHits := make([]string, 0, len(results))
+	decisionMemoHits := make([]string, 0, len(results))
 	for _, entry := range results {
 		if entryLayer(entry) != "warm" {
+			if entryLayer(entry) == "decision" {
+				memoID, _ := entry.Metadata["memo_id"].(string)
+				if strings.TrimSpace(memoID) != "" {
+					decisionMemoHits = append(decisionMemoHits, strings.TrimSpace(memoID))
+				}
+			}
 			continue
 		}
 		warmHits = append(warmHits, entry.ID)
 	}
 	s.warm.RecordAccess(warmHits, now)
-	return results, nil
+	if s.decision != nil {
+		s.decision.RecordMemoAccess(decisionMemoHits, now)
+	}
+	return MemoryQueryResult{Entries: results, GraphHits: graphHits, DecisionHits: decisionHits}, nil
 }
 
 func queryHot(scope SessionScope, query MemoryQuery) []MemoryEntry {

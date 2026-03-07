@@ -34,18 +34,6 @@ type MemoryEntry struct {
 	FreshnessBoost float64        `json:"freshness_boost,omitempty"`
 	// TODO(memory): 仅做字段透传，尚未接入向量索引/召回。
 	EmbeddingID string `json:"embedding_id,omitempty"`
-
-	// Deprecated: 预留字段，当前 API 不会写入该值，仅兼容历史/手工注入场景。
-	DecayFactor float64 `json:"decay_factor,omitempty"`
-	// Deprecated: 预留字段，当前 API 不会写入该值，仅兼容历史/手工注入场景。
-	Priority int `json:"priority,omitempty"`
-}
-
-// Deprecated: 早期预留的抽象层接口，运行时已直接依赖具体实现。
-// TODO(memory): 确认外部无依赖后移除该接口。
-type MemoryLayer interface {
-	Store(entry MemoryEntry) error
-	Retrieve(query MemoryQuery) ([]MemoryEntry, error)
 }
 
 // TimeRange 表示查询时间范围（UTC）。
@@ -71,21 +59,27 @@ func (r *TimeRange) Contains(ts time.Time) bool {
 
 // MemoryQuery 是统一检索参数。
 type MemoryQuery struct {
-	TimeRange       *TimeRange     `json:"time_range,omitempty"`
-	Limit           int            `json:"limit,omitempty"`
-	Keywords        []string       `json:"keywords,omitempty"`
-	Metadata        map[string]any `json:"metadata,omitempty"`
-	IncludeMarkdown bool           `json:"include_markdown,omitempty"`
-	SemanticQuery   string         `json:"semantic_query,omitempty"`
-	AnchorTypes     []string       `json:"anchor_types,omitempty"`
-	MinConfidence   float64        `json:"min_confidence,omitempty"`
-	PreferRecent    bool           `json:"prefer_recent,omitempty"`
-	IncludeAnchors  bool           `json:"include_anchors,omitempty"`
-
-	// Deprecated: 预留字段，当前 API 未暴露该能力，仅兼容手工构造查询。
-	UseTimeDecay bool `json:"use_time_decay,omitempty"`
-	// Deprecated: 预留字段，当前 API 未暴露该能力，仅兼容手工构造查询。
-	MinPriority int `json:"min_priority,omitempty"`
+	TimeRange         *TimeRange              `json:"time_range,omitempty"`
+	Limit             int                     `json:"limit,omitempty"`
+	Keywords          []string                `json:"keywords,omitempty"`
+	Metadata          map[string]any          `json:"metadata,omitempty"`
+	IncludeMarkdown   bool                    `json:"include_markdown,omitempty"`
+	IncludeGraph      bool                    `json:"include_graph,omitempty"`
+	SemanticQuery     string                  `json:"semantic_query,omitempty"`
+	AnchorTypes       []string                `json:"anchor_types,omitempty"`
+	MinConfidence     float64                 `json:"min_confidence,omitempty"`
+	PreferRecent      bool                    `json:"prefer_recent,omitempty"`
+	IncludeAnchors    bool                    `json:"include_anchors,omitempty"`
+	GraphHops         int                     `json:"graph_hops,omitempty"`
+	GraphPredicates   []string                `json:"graph_predicates,omitempty"`
+	GraphDebug        bool                    `json:"graph_debug,omitempty"`
+	IncludeDecision   bool                    `json:"include_decision,omitempty"`
+	DecisionDebug     bool                    `json:"decision_debug,omitempty"`
+	DecisionReuseOnly bool                    `json:"decision_reuse_only,omitempty"`
+	DecisionTypes     []string                `json:"decision_types,omitempty"`
+	EnvironmentStrict bool                    `json:"environment_strict,omitempty"`
+	MinReuseScore     float64                 `json:"min_reuse_score,omitempty"`
+	Environment       *DecisionEnvFingerprint `json:"-"`
 }
 
 func normalizeEntry(entry MemoryEntry) MemoryEntry {
@@ -180,9 +174,6 @@ func entryMatchesQuery(entry MemoryEntry, query MemoryQuery) bool {
 		return false
 	}
 	if query.MinConfidence > 0 && entry.Confidence > 0 && entry.Confidence < clamp01(query.MinConfidence) {
-		return false
-	}
-	if query.MinPriority > 0 && entry.Priority < query.MinPriority {
 		return false
 	}
 	if len(query.AnchorTypes) > 0 && !entryHasAnchorTypes(entry, query.AnchorTypes, time.Now().UTC()) {

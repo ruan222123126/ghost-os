@@ -90,8 +90,8 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 	if systemPrompt != "" {
 		history.UpdateSystemPrompt(systemPrompt)
 	}
-	p.injectAutoRecall(history, userMessage, sess.ID, traceID, persistence.memoryManager)
 	environment := buildDecisionEnvironment(deps.cfg, strings.TrimSpace(userMessage), preTurnMessages, catalog)
+	p.injectAutoRecall(history, userMessage, sess.ID, traceID, environment, persistence.memoryManager)
 
 	return &sessionTurnState{
 		sessionStore:      p.sessionStore,
@@ -209,14 +209,15 @@ func (p *sessionTurnPreparer) memoryManager(cfg Config) *memory.MemoryManager {
 }
 
 // injectAutoRecall 在执行前把 warm 层召回上下文注入为 system 消息。
-func (p *sessionTurnPreparer) injectAutoRecall(history *agent.History, userMessage string, sessionID string, traceID string, memoryManager *memory.MemoryManager) {
+func (p *sessionTurnPreparer) injectAutoRecall(history *agent.History, userMessage string, sessionID string, traceID string, environment memory.DecisionEnvFingerprint, memoryManager *memory.MemoryManager) {
 	if memoryManager == nil || history == nil {
 		return
 	}
 
 	contextWindow, err := memoryManager.BuildContextWindowWithScope(memory.SessionScope{
-		SessionID: sessionID,
-		History:   history,
+		SessionID:   sessionID,
+		History:     history,
+		Environment: &environment,
 	}, userMessage)
 	if err != nil {
 		log.Printf(

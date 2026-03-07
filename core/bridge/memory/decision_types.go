@@ -177,19 +177,23 @@ type DecisionCluster struct {
 
 // DecisionHit 描述未来 query/retrieve 的统一命中视图。
 type DecisionHit struct {
-	Type       string   `json:"type"`
-	Namespace  string   `json:"namespace,omitempty"`
-	IntentKey  string   `json:"intent_key,omitempty"`
-	MemoID     string   `json:"memo_id,omitempty"`
-	RecipeID   string   `json:"recipe_id,omitempty"`
-	Summary    string   `json:"summary,omitempty"`
-	Reason     string   `json:"reason,omitempty"`
-	Outcome    string   `json:"outcome,omitempty"`
-	Score      float64  `json:"score,omitempty"`
-	Confidence float64  `json:"confidence,omitempty"`
-	ReuseScore float64  `json:"reuse_score,omitempty"`
-	GraphRefs  []string `json:"graph_refs,omitempty"`
-	AnchorKeys []string `json:"anchor_keys,omitempty"`
+	Type       string    `json:"type"`
+	Namespace  string    `json:"namespace,omitempty"`
+	IntentKey  string    `json:"intent_key,omitempty"`
+	MemoID     string    `json:"memo_id,omitempty"`
+	RecipeID   string    `json:"recipe_id,omitempty"`
+	SessionID  string    `json:"session_id,omitempty"`
+	Summary    string    `json:"summary,omitempty"`
+	Reason     string    `json:"reason,omitempty"`
+	WhyMatched string    `json:"why_matched,omitempty"`
+	Caution    string    `json:"caution,omitempty"`
+	Outcome    string    `json:"outcome,omitempty"`
+	Score      float64   `json:"score,omitempty"`
+	Confidence float64   `json:"confidence,omitempty"`
+	ReuseScore float64   `json:"reuse_score,omitempty"`
+	Timestamp  time.Time `json:"timestamp,omitempty"`
+	GraphRefs  []string  `json:"graph_refs,omitempty"`
+	AnchorKeys []string  `json:"anchor_keys,omitempty"`
 }
 
 // DecisionStats 描述当前 namespace 下的 sidecar 快照。
@@ -556,12 +560,18 @@ func normalizeDecisionHit(hit DecisionHit) DecisionHit {
 	out.IntentKey = strings.TrimSpace(out.IntentKey)
 	out.MemoID = strings.TrimSpace(out.MemoID)
 	out.RecipeID = strings.TrimSpace(out.RecipeID)
+	out.SessionID = strings.TrimSpace(out.SessionID)
 	out.Summary = strings.TrimSpace(out.Summary)
-	out.Reason = strings.TrimSpace(out.Reason)
+	out.WhyMatched = strings.TrimSpace(firstNonEmpty(out.WhyMatched, out.Reason))
+	out.Reason = strings.TrimSpace(firstNonEmpty(out.Reason, out.WhyMatched))
+	out.Caution = strings.TrimSpace(out.Caution)
 	out.Outcome = normalizeDecisionOutcome(out.Outcome)
 	out.Score = clamp01(out.Score)
 	out.Confidence = clamp01(out.Confidence)
 	out.ReuseScore = clamp01(out.ReuseScore)
+	if !out.Timestamp.IsZero() {
+		out.Timestamp = out.Timestamp.UTC()
+	}
 	out.GraphRefs = uniqueStrings(out.GraphRefs)
 	out.AnchorKeys = uniqueStrings(out.AnchorKeys)
 	return out

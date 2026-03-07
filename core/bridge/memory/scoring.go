@@ -267,8 +267,12 @@ func memoryLayerBias(entry MemoryEntry) float64 {
 		return 0.035
 	case "warm":
 		return 0.025
+	case "decision":
+		return 0.01
 	case "cold":
 		return 0.012
+	case "graph":
+		return 0.008
 	case "markdown":
 		return 0.01
 	default:
