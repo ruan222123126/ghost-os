@@ -22,7 +22,6 @@ const HomePage: FC = () => {
     loading: sessionsLoading,
     error: sessionsError,
     loadSessions,
-    selectSession,
     deleteSession,
     createNewSession,
     setCurrentSessionId,
@@ -35,13 +34,14 @@ const HomePage: FC = () => {
     hasPendingQuestion,
     sendChatMessage,
     answerQuestion,
+    cancelQuestion,
     loadSessionHistory,
     clearMessages,
   } = useBridgeChat({
     currentSessionId,
     onSessionResolved: setCurrentSessionId,
   });
-  const { config, configLoading, savingConfig, configError, modelValue, saveConfig, selectModel } = useBridgeConfig();
+  const { config, configLoading, savingConfig, configError, modelValue, saveConfig, selectModel, refreshConfig } = useBridgeConfig({ autoRefresh: !showConfig });
   const inputDisabled = configLoading || historyLoading || !config || hasPendingQuestion;
 
   const handleSendChatMessage = useCallback(
@@ -54,10 +54,10 @@ const HomePage: FC = () => {
 
   const handleSelectSession = useCallback(
     (id: string) => {
-      selectSession(id);
+      setCurrentSessionId(id);
       ignorePromise(loadSessionHistory(id));
     },
-    [loadSessionHistory, selectSession]
+    [loadSessionHistory, setCurrentSessionId]
   );
 
   const handleDeleteSession = useCallback(
@@ -90,7 +90,7 @@ const HomePage: FC = () => {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="mb-4 animate-rise rounded-2xl border border-app-border bg-app-panel/80 p-4 shadow-xl backdrop-blur sm:p-5">
+        <header className="ui-panel animate-riseSoft mb-4 p-4 sm:p-5">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold tracking-tight text-app-text">Ghost-OS Web Console</h1>
@@ -104,7 +104,7 @@ const HomePage: FC = () => {
                 type="button"
                 onClick={() => setShowConfig((value) => !value)}
                 disabled={configLoading}
-                className="rounded-lg border border-app-border bg-[#0d1526] px-3 py-2 text-sm text-app-text transition hover:border-app-accent/60"
+                className="ui-btn-secondary px-3 py-2 text-sm"
               >
                 {showConfig ? 'Hide Config' : 'Config'}
               </button>
@@ -124,16 +124,22 @@ const HomePage: FC = () => {
             error={configError}
             onClose={() => setShowConfig(false)}
             onSave={saveConfig}
+            onReload={refreshConfig}
           />
 
           {historyLoading && (
-            <div className="animate-rise rounded-xl border border-app-border/70 bg-app-panel/75 px-3 py-2 text-sm text-app-muted">
+            <div className="ui-panel-soft animate-riseSoft px-3 py-2 text-sm text-app-muted">
               Loading session history...
             </div>
           )}
 
           <section className="min-h-[360px]">
-            <MessageList messages={messages} loading={loading} onAnswerQuestion={answerQuestion} />
+            <MessageList
+              messages={messages}
+              loading={loading}
+              onAnswerQuestion={answerQuestion}
+              onCancelQuestion={cancelQuestion}
+            />
           </section>
 
           {chatError && (
@@ -142,7 +148,12 @@ const HomePage: FC = () => {
             </div>
           )}
 
-          <ChatInput loading={loading} disabled={inputDisabled} onSend={handleSendChatMessage} />
+          <ChatInput
+            loading={loading}
+            disabled={inputDisabled}
+            awaitingQuestion={hasPendingQuestion}
+            onSend={handleSendChatMessage}
+          />
         </div>
       </div>
     </main>

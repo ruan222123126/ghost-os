@@ -22,7 +22,7 @@ export const SessionList: FC<SessionListProps> = ({ sessions, currentSessionId, 
         {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={`session-skeleton-${index}`}
-            className="h-[58px] animate-pulse rounded-xl border border-app-border/70 bg-[#0b1220]"
+            className="ui-panel-soft h-[58px] animate-pulse"
           />
         ))}
       </div>
@@ -30,7 +30,7 @@ export const SessionList: FC<SessionListProps> = ({ sessions, currentSessionId, 
   }
 
   if (sessions.length === 0) {
-    return <p className="rounded-xl border border-dashed border-app-border/70 p-3 text-sm text-app-muted">No sessions yet.</p>;
+    return <p className="ui-empty p-3 text-sm">No sessions yet.</p>;
   }
 
   return (

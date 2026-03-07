@@ -30,12 +30,12 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
 
   return (
     <aside className={`shrink-0 transition-all duration-300 ${open ? 'w-[280px]' : 'w-14'}`}>
-      <div className="flex h-full min-h-[520px] flex-col rounded-2xl border border-app-border bg-app-panel/85 p-3 shadow-xl backdrop-blur">
+      <div className="ui-panel animate-riseSoft flex h-full min-h-[520px] flex-col p-3">
         <div className="mb-3 flex items-center justify-between">
           <button
             type="button"
             onClick={() => setOpen((value) => !value)}
-            className="rounded-lg border border-app-border px-2 py-1 text-xs text-app-muted transition hover:border-app-accent/45 hover:text-app-text"
+            className="ui-btn-secondary px-2 py-1 text-xs text-app-muted hover:text-app-text"
           >
             Menu
           </button>
@@ -44,7 +44,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
             <button
               type="button"
               onClick={onNewChat}
-              className="rounded-lg border border-app-accent/40 bg-app-accent/20 px-3 py-1.5 text-xs font-medium text-app-text transition hover:bg-app-accent/30"
+              className="ui-btn px-3 py-1.5 text-xs"
             >
               New Chat
             </button>
@@ -54,7 +54,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         {open && <h2 className="mb-2 text-sm font-semibold tracking-wide text-app-text">Sessions</h2>}
 
         {open ? (
-          <div className="overflow-y-auto">
+          <div className="ui-scroll overflow-y-auto pr-1">
             <SessionList
               sessions={sessions}
               currentSessionId={currentSessionId}
@@ -65,7 +65,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
             />
           </div>
         ) : (
-          <div className="flex flex-1 items-center justify-center text-xs text-app-muted">Open</div>
+          <div className="ui-hint flex flex-1 items-center justify-center">Open</div>
         )}
       </div>
     </aside>

@@ -48,10 +48,10 @@ export const SessionItem: FC<SessionItemProps> = ({ session, isActive, onSelect,
           onSelect(session.id);
         }
       }}
-      className={`group w-full rounded-xl border px-3 py-2 text-left transition ${
+      className={`group ui-panel-soft w-full cursor-pointer px-3 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-app-ring/20 ${
         isActive
-          ? 'border-app-accent/70 bg-app-accent/10'
-          : 'border-app-border/70 bg-[#0b1220] hover:border-app-accent/35'
+          ? 'border-app-accent/70 bg-app-accent/10 shadow-lift'
+          : 'hover:border-app-fieldBorderHover/80 hover:shadow-lift focus-visible:border-app-fieldBorderHover/80'
       }`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -65,7 +65,7 @@ export const SessionItem: FC<SessionItemProps> = ({ session, isActive, onSelect,
             event.stopPropagation();
             onDelete(session.id);
           }}
-          className="rounded-md border border-transparent px-2 py-1 text-xs text-app-muted opacity-0 transition hover:border-rose-300/40 hover:text-rose-200 group-hover:opacity-100"
+          className="ui-btn-secondary border-rose-400/30 px-2 py-1 text-xs text-rose-200 opacity-0 hover:border-rose-300/60 hover:text-rose-100 group-hover:opacity-100 group-focus-within:opacity-100"
           aria-label={`Delete session ${shortID}`}
         >
           Delete

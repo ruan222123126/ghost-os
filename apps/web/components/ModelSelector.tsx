@@ -16,14 +16,14 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ model, disabled, onChang
   const hasPresetModel = MODELS.some((item) => item === model);
 
   return (
-    <label className="flex items-center gap-2 text-sm text-app-muted">
-      Model
+    <label className="flex items-center gap-2">
+      <span className="ui-hint">Model</span>
       <select
         value={model}
         disabled={disabled}
         aria-label="Model selector"
         onChange={(event) => onChange(event.target.value)}
-        className="mono rounded-lg border border-app-border bg-[#090f1d] px-2 py-1 text-sm text-app-text outline-none transition focus:border-app-accent disabled:opacity-60"
+        className="ui-select mono min-w-[210px] text-sm"
       >
         {MODELS.map((item) => (
           <option key={item} value={item}>
