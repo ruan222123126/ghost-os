@@ -19,6 +19,10 @@ type Config struct {
 	SessionsPath                                    string
 	MemoryWarmPath                                  string
 	MemoryColdPath                                  string
+	MemoryLedgerPath                                string
+	MemoryLedgerDualWrite                           bool
+	MemoryLedgerReadEnabled                         bool
+	MemoryLedgerShadowCompare                       bool
 	MemoryAutoRecallEnabled                         bool
 	MemoryAutoRecallLimit                           int
 	MemoryWarmTTL                                   time.Duration

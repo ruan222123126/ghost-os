@@ -1,31 +1,17 @@
 package memory
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"ghost-os/bridge/llm"
 )
-
-const (
-	coldFilePrefix = "session-"
-	coldFileSuffix = ".json"
-)
-
-type coldArchiveFile struct {
-	SessionID  string        `json:"session_id"`
-	ArchivedAt time.Time     `json:"archived_at"`
-	Messages   []llm.Message `json:"messages"`
-	Summary    string        `json:"summary,omitempty"`
-	Entities   []string      `json:"entities,omitempty"`
-}
 
 // ColdArchive 暴露冷存归档快照，供 graph backfill 等后台任务复用。
 type ColdArchive struct {
@@ -34,24 +20,63 @@ type ColdArchive struct {
 	Messages   []llm.Message `json:"messages"`
 }
 
-// ColdMemory 是 L3 冷数据层，负责长期归档与按需检索。
+type ColdReadMode string
+
+const (
+	coldReadModeLegacy ColdReadMode = "legacy"
+	coldReadModeLedger ColdReadMode = "ledger"
+)
+
+type ColdMemoryConfig struct {
+	LedgerBaseDir       string
+	LedgerNamespace     string
+	LedgerWorkspaceID   string
+	LedgerDualWrite     bool
+	LedgerReadEnabled   bool
+	LedgerShadowCompare bool
+	Metrics             *memoryCounters
+}
+
+// ColdMemory 是 L3 冷数据层 façade，内部兼容 legacy snapshot 与 raw ledger 双后端。
 type ColdMemory struct {
-	baseDir     string
-	markdown    *MarkdownStore
-	truth       *TruthWriter
-	truthMapper *TruthMapper
-	mu          sync.Mutex
+	legacy          *LegacyColdStore
+	ledger          *LedgerStore
+	markdown        *MarkdownStore
+	truth           *TruthWriter
+	truthMapper     *TruthMapper
+	ledgerDualWrite bool
+	readMode        ColdReadMode
+	shadowCompare   bool
+	metrics         *memoryCounters
+	mu              sync.RWMutex
 }
 
 func NewColdMemory(baseDir string) *ColdMemory {
+	return NewColdMemoryWithConfig(baseDir, ColdMemoryConfig{})
+}
+
+func NewColdMemoryWithConfig(baseDir string, cfg ColdMemoryConfig) *ColdMemory {
 	resolved := resolveMemoryPath(baseDir)
 	markdownDir := ""
 	if resolved != "" {
 		markdownDir = filepath.Join(resolved, "markdown", "nodes")
 	}
+	ledgerBaseDir := strings.TrimSpace(cfg.LedgerBaseDir)
+	if ledgerBaseDir == "" && resolved != "" {
+		ledgerBaseDir = filepath.Join(resolved, "ledger")
+	}
+	readMode := coldReadModeLegacy
+	if cfg.LedgerReadEnabled {
+		readMode = coldReadModeLedger
+	}
 	return &ColdMemory{
-		baseDir:  resolved,
-		markdown: NewMarkdownStore(markdownDir),
+		legacy:          NewLegacyColdStore(resolved),
+		ledger:          NewLedgerStore(ledgerBaseDir, cfg.LedgerNamespace, cfg.LedgerWorkspaceID, cfg.Metrics),
+		markdown:        NewMarkdownStore(markdownDir),
+		ledgerDualWrite: cfg.LedgerDualWrite,
+		readMode:        readMode,
+		shadowCompare:   cfg.LedgerShadowCompare,
+		metrics:         cfg.Metrics,
 	}
 }
 
@@ -61,122 +86,98 @@ func (c *ColdMemory) SetTruthShadow(writer *TruthWriter, mapper *TruthMapper) {
 	}
 	c.truth = writer
 	c.truthMapper = mapper
+	if c.legacy != nil {
+		c.legacy.SetTruthShadow(writer, mapper)
+	}
 }
 
-// Archive 把会话完整消息落盘到按月目录。
+func (c *ColdMemory) LedgerRuntimeStats() LedgerRuntimeStats {
+	if c == nil {
+		return LedgerRuntimeStats{}
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	stats := LedgerRuntimeStats{
+		DualWrite:     c.ledgerDualWrite,
+		ReadEnabled:   c.readMode == coldReadModeLedger,
+		ShadowCompare: c.shadowCompare,
+	}
+	if c.ledger != nil {
+		stats.BaseDir = c.ledger.BaseDir()
+		stats.Namespace = c.ledger.Namespace()
+		stats.WorkspaceID = c.ledger.WorkspaceID()
+	}
+	return stats
+}
+
+func (c *ColdMemory) ReplayLedgerSession(sessionID string) (LedgerReplaySession, error) {
+	if c == nil || c.ledger == nil {
+		return LedgerReplaySession{SessionID: strings.TrimSpace(sessionID)}, nil
+	}
+	return c.ledger.ReplaySession(sessionID)
+}
+
+func (c *ColdMemory) AppendTurn(sessionID string, turnID string, traceID string, startIndex int, messages []llm.Message, occurredAt time.Time) (LedgerAppendResult, error) {
+	if c == nil || c.ledger == nil {
+		return LedgerAppendResult{}, nil
+	}
+	c.mu.RLock()
+	enabled := c.ledgerDualWrite
+	c.mu.RUnlock()
+	if !enabled {
+		return LedgerAppendResult{}, nil
+	}
+	return c.ledger.AppendTurn(sessionID, turnID, traceID, startIndex, messages, occurredAt)
+}
+
+func (c *ColdMemory) BackfillLedger(opts LedgerBackfillOptions) (LedgerBackfillStats, error) {
+	if c == nil || c.ledger == nil {
+		return LedgerBackfillStats{}, nil
+	}
+	return c.ledger.BackfillLegacy(c.legacy, opts)
+}
+
+// Archive 继续写 legacy cold snapshot，供兼容与回滚使用。
 func (c *ColdMemory) Archive(sessionID string, messages []llm.Message) error {
-	sid := strings.TrimSpace(sessionID)
-	if sid == "" {
-		return fmt.Errorf("session id is required")
+	if c == nil || c.legacy == nil {
+		return nil
 	}
-	if c.baseDir == "" {
-		return fmt.Errorf("cold memory base dir is empty")
-	}
-
-	now := time.Now().UTC()
-	payload := coldArchiveFile{
-		SessionID:  sid,
-		ArchivedAt: now,
-		Messages:   llm.CloneMessages(messages),
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	targetDir := filepath.Join(c.baseDir, now.Format("2006-01"))
-	if err := os.MkdirAll(targetDir, 0o700); err != nil {
-		return fmt.Errorf("create cold memory directory: %w", err)
-	}
-
-	targetPath := filepath.Join(targetDir, coldFilePrefix+sid+coldFileSuffix)
-	data, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal cold archive: %w", err)
-	}
-	data = append(data, '\n')
-
-	tmpPath := fmt.Sprintf("%s.tmp-%d", targetPath, time.Now().UnixNano())
-	if err := os.WriteFile(tmpPath, data, 0o600); err != nil {
-		return fmt.Errorf("write cold archive temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, targetPath); err != nil {
-		_ = os.Remove(tmpPath)
-		return fmt.Errorf("replace cold archive file: %w", err)
-	}
-	if c.truth != nil && c.truth.DualWriteEnabled() && c.truthMapper != nil {
-		for _, object := range c.truthMapper.MapArchiveMessages(sid, now, messages) {
-			if err := writeTruthObjectShadow(c.truth, truthEventTypeArchiveMessage, object, ""); err != nil {
-				if handleErr := handleTruthShadowWriteError(c.truth, "", object.ObjectID, err); handleErr != nil {
-					return handleErr
-				}
-				log.Printf("[MEMORY] truth archive shadow write skipped after error: session_id=%s object_id=%s", sid, object.ObjectID)
-			}
-		}
-	}
-	return nil
+	return c.legacy.Archive(sessionID, messages)
 }
 
-// Retrieve 按 query 过滤归档消息，返回统一条目结构。
+// Retrieve 默认保持 legacy 语义，读切换后由 ledger replay 输出兼容视图。
 func (c *ColdMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
-	if c.baseDir == "" {
+	if c == nil {
 		return nil, nil
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	files, err := c.collectArchiveFilesLocked(query.TimeRange)
+	start := time.Now()
+	primaryMode, shadowEnabled := c.readSettings()
+	primary, err := c.retrieveWithMode(primaryMode, query)
 	if err != nil {
 		return nil, err
 	}
-
-	results := make([]MemoryEntry, 0, 64)
-	for _, path := range files {
-		archive, err := c.readArchiveFileLocked(path)
-		if err != nil {
-			continue
+	if primaryMode == coldReadModeLedger {
+		c.recordLedgerReplayLatency(time.Since(start))
+	}
+	if shadowEnabled {
+		shadowMode := coldReadModeLegacy
+		if primaryMode == coldReadModeLegacy {
+			shadowMode = coldReadModeLedger
 		}
-		if query.TimeRange != nil && !query.TimeRange.Contains(archive.ArchivedAt) {
-			continue
-		}
-		for i, msg := range archive.Messages {
-			entry := MemoryEntry{
-				ID:         fmt.Sprintf("%s:%06d", archive.SessionID, i),
-				Content:    messageToContent(msg),
-				Type:       MemoryTypeMessage,
-				Timestamp:  archive.ArchivedAt,
-				Source:     "archive",
-				Summary:    summarizeLine(messageToContent(msg), 220),
-				Confidence: 1,
-				Metadata: map[string]any{
-					"layer":        "cold",
-					"source":       "archive",
-					"session_id":   archive.SessionID,
-					"role":         string(msg.Role),
-					"tool_call_id": strings.TrimSpace(msg.ToolCallID),
-				},
+		shadow, shadowErr := c.retrieveWithMode(shadowMode, query)
+		if shadowErr == nil {
+			c.compareEntries(primary, shadow)
+			if shadowMode == coldReadModeLedger {
+				c.recordLedgerReplayLatency(time.Since(start))
 			}
-			entry = normalizeEntry(entry)
-			if !entryMatchesQuery(entry, query) {
-				continue
-			}
-			results = append(results, entry)
 		}
 	}
-
-	sort.SliceStable(results, func(i, j int) bool {
-		return results[i].Timestamp.After(results[j].Timestamp)
-	})
-
-	if query.Limit > 0 && len(results) > query.Limit {
-		results = results[:query.Limit]
-	}
-	return cloneEntries(results), nil
+	return primary, nil
 }
 
 // SaveMarkdownNode 将演化后的记忆节点写入 markdown 冷存目录。
 func (c *ColdMemory) SaveMarkdownNode(node MarkdownNode) error {
-	if c.markdown == nil {
+	if c == nil || c.markdown == nil {
 		return fmt.Errorf("markdown store is not configured")
 	}
 	normalized := normalizeMarkdownNode(node)
@@ -194,7 +195,7 @@ func (c *ColdMemory) SaveMarkdownNode(node MarkdownNode) error {
 
 // LoadMarkdownNode 从 markdown 冷存目录读取节点。
 func (c *ColdMemory) LoadMarkdownNode(id string) (MarkdownNode, error) {
-	if c.markdown == nil {
+	if c == nil || c.markdown == nil {
 		return MarkdownNode{}, fmt.Errorf("markdown store is not configured")
 	}
 	return c.markdown.Load(id)
@@ -202,7 +203,7 @@ func (c *ColdMemory) LoadMarkdownNode(id string) (MarkdownNode, error) {
 
 // ListMarkdownNodes 列出所有 markdown 节点 ID。
 func (c *ColdMemory) ListMarkdownNodes() ([]string, error) {
-	if c.markdown == nil {
+	if c == nil || c.markdown == nil {
 		return nil, nil
 	}
 	return c.markdown.List()
@@ -210,156 +211,192 @@ func (c *ColdMemory) ListMarkdownNodes() ([]string, error) {
 
 // ListSessions 返回时间范围内存在归档的会话 ID。
 func (c *ColdMemory) ListSessions(timeRange TimeRange) ([]string, error) {
-	if c.baseDir == "" {
+	if c == nil {
 		return nil, nil
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	files, err := c.collectArchiveFilesLocked(&timeRange)
+	start := time.Now()
+	primaryMode, shadowEnabled := c.readSettings()
+	primary, err := c.listSessionsWithMode(primaryMode, timeRange)
 	if err != nil {
 		return nil, err
 	}
-
-	seen := make(map[string]struct{}, len(files))
-	out := make([]string, 0, len(files))
-	for _, path := range files {
-		archive, err := c.readArchiveFileLocked(path)
-		if err != nil {
-			continue
-		}
-		if !timeRange.Contains(archive.ArchivedAt) {
-			continue
-		}
-		if _, ok := seen[archive.SessionID]; ok {
-			continue
-		}
-		seen[archive.SessionID] = struct{}{}
-		out = append(out, archive.SessionID)
+	if primaryMode == coldReadModeLedger {
+		c.recordLedgerReplayLatency(time.Since(start))
 	}
-	sort.Strings(out)
-	return out, nil
+	if shadowEnabled {
+		shadowMode := coldReadModeLegacy
+		if primaryMode == coldReadModeLegacy {
+			shadowMode = coldReadModeLedger
+		}
+		shadow, shadowErr := c.listSessionsWithMode(shadowMode, timeRange)
+		if shadowErr == nil {
+			c.compareSessionIDs(primary, shadow)
+			if shadowMode == coldReadModeLedger {
+				c.recordLedgerReplayLatency(time.Since(start))
+			}
+		}
+	}
+	return primary, nil
 }
 
 // ListArchives 返回时间窗内的归档会话快照，便于 graph 等 sidecar 做重建。
 func (c *ColdMemory) ListArchives(timeRange *TimeRange) ([]ColdArchive, error) {
-	if c.baseDir == "" {
+	if c == nil {
 		return nil, nil
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	files, err := c.collectArchiveFilesLocked(timeRange)
+	start := time.Now()
+	primaryMode, shadowEnabled := c.readSettings()
+	primary, err := c.listArchivesWithMode(primaryMode, timeRange)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ColdArchive, 0, len(files))
-	for _, path := range files {
-		archive, err := c.readArchiveFileLocked(path)
-		if err != nil {
-			continue
-		}
-		if timeRange != nil && !timeRange.Contains(archive.ArchivedAt) {
-			continue
-		}
-		out = append(out, ColdArchive{
-			SessionID:  archive.SessionID,
-			ArchivedAt: archive.ArchivedAt.UTC(),
-			Messages:   llm.CloneMessages(archive.Messages),
-		})
+	if primaryMode == coldReadModeLedger {
+		c.recordLedgerReplayLatency(time.Since(start))
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].ArchivedAt.Equal(out[j].ArchivedAt) {
-			return out[i].SessionID < out[j].SessionID
+	if shadowEnabled {
+		shadowMode := coldReadModeLegacy
+		if primaryMode == coldReadModeLegacy {
+			shadowMode = coldReadModeLedger
 		}
-		return out[i].ArchivedAt.After(out[j].ArchivedAt)
-	})
-	return out, nil
-}
-
-func (c *ColdMemory) collectArchiveFilesLocked(timeRange *TimeRange) ([]string, error) {
-	monthDirs, err := os.ReadDir(c.baseDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("read cold memory root: %w", err)
-	}
-
-	files := make([]string, 0, 64)
-	for _, monthDir := range monthDirs {
-		if !monthDir.IsDir() {
-			continue
-		}
-		monthName := monthDir.Name()
-		if !monthDirMatchesRange(monthName, timeRange) {
-			continue
-		}
-
-		entries, err := os.ReadDir(filepath.Join(c.baseDir, monthName))
-		if err != nil {
-			return nil, fmt.Errorf("read cold month directory %q: %w", monthName, err)
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
+		shadow, shadowErr := c.listArchivesWithMode(shadowMode, timeRange)
+		if shadowErr == nil {
+			c.compareArchives(primary, shadow)
+			if shadowMode == coldReadModeLedger {
+				c.recordLedgerReplayLatency(time.Since(start))
 			}
-			name := entry.Name()
-			if !strings.HasPrefix(name, coldFilePrefix) || !strings.HasSuffix(name, coldFileSuffix) {
-				continue
+		}
+	}
+	return primary, nil
+}
+
+func (c *ColdMemory) readSettings() (ColdReadMode, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.readMode, c.shadowCompare
+}
+
+func (c *ColdMemory) retrieveWithMode(mode ColdReadMode, query MemoryQuery) ([]MemoryEntry, error) {
+	if mode == coldReadModeLedger && c.ledger != nil {
+		return c.ledger.RetrieveCompat(query)
+	}
+	if c.legacy == nil {
+		return nil, nil
+	}
+	return c.legacy.Retrieve(query)
+}
+
+func (c *ColdMemory) listSessionsWithMode(mode ColdReadMode, timeRange TimeRange) ([]string, error) {
+	if mode == coldReadModeLedger && c.ledger != nil {
+		return c.ledger.ListSessionsCompat(timeRange)
+	}
+	if c.legacy == nil {
+		return nil, nil
+	}
+	return c.legacy.ListSessions(timeRange)
+}
+
+func (c *ColdMemory) listArchivesWithMode(mode ColdReadMode, timeRange *TimeRange) ([]ColdArchive, error) {
+	if mode == coldReadModeLedger && c.ledger != nil {
+		return c.ledger.ReplayArchivesCompat(timeRange)
+	}
+	if c.legacy == nil {
+		return nil, nil
+	}
+	return c.legacy.ListArchives(timeRange)
+}
+
+func (c *ColdMemory) compareEntries(primary []MemoryEntry, shadow []MemoryEntry) {
+	if len(primary) != len(shadow) {
+		c.recordLedgerMismatch()
+		return
+	}
+	for index := range primary {
+		left := primary[index]
+		right := shadow[index]
+		if left.ID != right.ID || strings.TrimSpace(left.Content) != strings.TrimSpace(right.Content) {
+			c.recordLedgerMismatch()
+			return
+		}
+		if left.Timestamp.UTC() != right.Timestamp.UTC() {
+			c.recordLedgerMismatch()
+			return
+		}
+		if fingerprintLedgerEntry(left) != fingerprintLedgerEntry(right) {
+			c.recordLedgerMismatch()
+			return
+		}
+	}
+}
+
+func (c *ColdMemory) compareSessionIDs(primary []string, shadow []string) {
+	if len(primary) != len(shadow) {
+		c.recordLedgerMismatch()
+		return
+	}
+	for index := range primary {
+		if strings.TrimSpace(primary[index]) != strings.TrimSpace(shadow[index]) {
+			c.recordLedgerMismatch()
+			return
+		}
+	}
+}
+
+func (c *ColdMemory) compareArchives(primary []ColdArchive, shadow []ColdArchive) {
+	if len(primary) != len(shadow) {
+		c.recordLedgerMismatch()
+		return
+	}
+	for index := range primary {
+		left := primary[index]
+		right := shadow[index]
+		if left.SessionID != right.SessionID || !left.ArchivedAt.UTC().Equal(right.ArchivedAt.UTC()) || len(left.Messages) != len(right.Messages) {
+			c.recordLedgerMismatch()
+			return
+		}
+		for messageIndex := range left.Messages {
+			if fingerprintLedgerMessage(left.Messages[messageIndex]) != fingerprintLedgerMessage(right.Messages[messageIndex]) {
+				c.recordLedgerMismatch()
+				return
 			}
-			files = append(files, filepath.Join(c.baseDir, monthName, name))
 		}
 	}
-	sort.Strings(files)
-	return files, nil
 }
 
-func monthDirMatchesRange(name string, timeRange *TimeRange) bool {
-	if timeRange == nil {
-		return true
+func (c *ColdMemory) recordLedgerReplayLatency(duration time.Duration) {
+	if c == nil || c.metrics == nil {
+		return
 	}
-
-	monthStart, err := time.Parse("2006-01", name)
-	if err != nil {
-		return true
-	}
-	monthStart = monthStart.UTC()
-	monthEnd := monthStart.AddDate(0, 1, 0).Add(-time.Nanosecond)
-
-	if !timeRange.Start.IsZero() && monthEnd.Before(timeRange.Start.UTC()) {
-		return false
-	}
-	if !timeRange.End.IsZero() && monthStart.After(timeRange.End.UTC()) {
-		return false
-	}
-	return true
+	c.metrics.ledgerReplayQueries.Add(1)
+	c.metrics.ledgerReplayLatencyMs.Add(uint64(duration.Milliseconds()))
 }
 
-func (c *ColdMemory) readArchiveFileLocked(path string) (coldArchiveFile, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return coldArchiveFile{}, err
+func (c *ColdMemory) recordLedgerMismatch() {
+	if c == nil || c.metrics == nil {
+		return
 	}
+	c.metrics.ledgerShadowMismatchTotal.Add(1)
+}
 
-	var archive coldArchiveFile
-	if err := json.Unmarshal(data, &archive); err != nil {
-		return coldArchiveFile{}, err
+func fingerprintLedgerEntry(entry MemoryEntry) string {
+	parts := []string{
+		strings.TrimSpace(entry.ID),
+		strings.TrimSpace(entry.Content),
+		strings.TrimSpace(entry.Summary),
+		fmt.Sprint(entry.Metadata["session_id"]),
+		fmt.Sprint(entry.Metadata["role"]),
+		entry.Timestamp.UTC().Format(time.RFC3339Nano),
 	}
-	if archive.ArchivedAt.IsZero() {
-		info, statErr := os.Stat(path)
-		if statErr == nil {
-			archive.ArchivedAt = info.ModTime().UTC()
-		} else {
-			archive.ArchivedAt = time.Now().UTC()
-		}
-	} else {
-		archive.ArchivedAt = archive.ArchivedAt.UTC()
-	}
-	archive.SessionID = strings.TrimSpace(archive.SessionID)
-	return archive, nil
+	return hashLedgerFingerprint(parts...)
+}
+
+func fingerprintLedgerMessage(message llm.Message) string {
+	payload, _ := json.Marshal(llm.CloneMessages([]llm.Message{message}))
+	return hashLedgerFingerprint(string(payload))
+}
+
+func hashLedgerFingerprint(parts ...string) string {
+	hash := sha1.Sum([]byte(strings.Join(parts, "|")))
+	return hex.EncodeToString(hash[:])
 }
 
 func messageToContent(msg llm.Message) string {

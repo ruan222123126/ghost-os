@@ -57,6 +57,38 @@ func memoryColdPathFromEnv() string {
 	return valueOrEnv(fileCfg.MemoryColdPath, "GHOST_MEMORY_COLD_PATH", defaultMemoryColdPath)
 }
 
+func memoryLedgerPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_MEMORY_LEDGER_PATH", "")
+	}
+	return valueOrEnv(fileCfg.MemoryLedgerPath, "GHOST_MEMORY_LEDGER_PATH", "")
+}
+
+func memoryLedgerDualWriteFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_LEDGER_DUAL_WRITE", false)
+	}
+	return boolOrEnv(fileCfg.MemoryLedgerDualWrite, "GHOST_MEMORY_LEDGER_DUAL_WRITE", false)
+}
+
+func memoryLedgerReadEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_LEDGER_READ_ENABLED", false)
+	}
+	return boolOrEnv(fileCfg.MemoryLedgerReadEnabled, "GHOST_MEMORY_LEDGER_READ_ENABLED", false)
+}
+
+func memoryLedgerShadowCompareFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_LEDGER_SHADOW_COMPARE", false)
+	}
+	return boolOrEnv(fileCfg.MemoryLedgerShadowCompare, "GHOST_MEMORY_LEDGER_SHADOW_COMPARE", false)
+}
+
 // memoryAutoRecallEnabledFromEnv 控制 warm 自动召回是否启用。
 func memoryAutoRecallEnabledFromEnv() bool {
 	fileCfg, _, err := loadBridgeFileConfig()

@@ -40,6 +40,12 @@ type MemoryConfig struct {
 	WarmCapacity              int
 	WarmPath                  string
 	ColdBaseDir               string
+	LedgerBaseDir             string
+	LedgerNamespace           string
+	LedgerWorkspaceID         string
+	LedgerDualWrite           bool
+	LedgerReadEnabled         bool
+	LedgerShadowCompare       bool
 	TruthEnabled              bool
 	TruthDualWrite            bool
 	TruthBaseDir              string
@@ -58,50 +64,50 @@ type MemoryConfig struct {
 	RecallInjectMinConfidence float64
 	ConflictPenalty           float64
 
-	AutoRecallEnabled        bool
-	AutoRecallLimit          int
-	WarmTTL                  time.Duration
-	TemporalDecayEnabled     bool
-	TemporalDecayHalfLife    time.Duration
-	AnchorEnabled            bool
-	AnchorMinWeight          float64
-	EvolutionInterval        time.Duration
-	EvolutionEnabled         bool
-	EvolutionUseWorker       bool
-	EvolutionBatchSize       int
-	GraphEnabled             bool
-	GraphPath                string
-	GraphExtractOnArchive    bool
-	GraphExtractOnEvolve     bool
-	GraphMaxHops             int
-	GraphMaxHits             int
-	GraphMinConfidence       float64
-	GraphNamespace           string
-	GraphDebugEnabled        bool
-	DecisionEnabled          bool
-	DecisionCaptureOnTurn    bool
-	DecisionCaptureOnTurnSet bool
-	DecisionPath             string
-	DecisionMaxHits          int
-	DecisionMinConfidence    float64
-	DecisionMinReuseScore    float64
-	DecisionRecipeEnabled    bool
-	DecisionRecipeInterval   time.Duration
-	DecisionRecipeMinSupport int
-	DecisionDebugEnabled     bool
-	RecipeReuseEnabled             bool
-	RecipeReuseEnabledSet          bool
-	RecipeExecutionTrackingEnabled bool
+	AutoRecallEnabled                 bool
+	AutoRecallLimit                   int
+	WarmTTL                           time.Duration
+	TemporalDecayEnabled              bool
+	TemporalDecayHalfLife             time.Duration
+	AnchorEnabled                     bool
+	AnchorMinWeight                   float64
+	EvolutionInterval                 time.Duration
+	EvolutionEnabled                  bool
+	EvolutionUseWorker                bool
+	EvolutionBatchSize                int
+	GraphEnabled                      bool
+	GraphPath                         string
+	GraphExtractOnArchive             bool
+	GraphExtractOnEvolve              bool
+	GraphMaxHops                      int
+	GraphMaxHits                      int
+	GraphMinConfidence                float64
+	GraphNamespace                    string
+	GraphDebugEnabled                 bool
+	DecisionEnabled                   bool
+	DecisionCaptureOnTurn             bool
+	DecisionCaptureOnTurnSet          bool
+	DecisionPath                      string
+	DecisionMaxHits                   int
+	DecisionMinConfidence             float64
+	DecisionMinReuseScore             float64
+	DecisionRecipeEnabled             bool
+	DecisionRecipeInterval            time.Duration
+	DecisionRecipeMinSupport          int
+	DecisionDebugEnabled              bool
+	RecipeReuseEnabled                bool
+	RecipeReuseEnabledSet             bool
+	RecipeExecutionTrackingEnabled    bool
 	RecipeExecutionTrackingEnabledSet bool
-	RecipeBackfillEnabled          bool
-	RecipeBackfillEnabledSet       bool
-	RecipeDefaultEnabled           bool
-	RecipeDefaultEnabledSet        bool
-	RecipeDefaultGrayPercent       int
-	RecipeMinSelectionConfidence   float64
-	RecipeMinSuccessRate           float64
-	RecipeBackfillBatchSize        int
-	RecipeBackfillInterval         time.Duration
+	RecipeBackfillEnabled             bool
+	RecipeBackfillEnabledSet          bool
+	RecipeDefaultEnabled              bool
+	RecipeDefaultEnabledSet           bool
+	RecipeDefaultGrayPercent          int
+	RecipeMinSelectionConfidence      float64
+	RecipeMinSuccessRate              float64
+	RecipeBackfillBatchSize           int
+	RecipeBackfillInterval            time.Duration
 
 	// 运行态绑定依赖。
 	SessionStore SessionStorePort
@@ -124,48 +130,52 @@ type EvolutionStats struct {
 
 // MemoryMetrics 是管理器运行指标快照。
 type MemoryMetrics struct {
-	L1Hits                   uint64  `json:"l1_hits"`
-	L2Hits                   uint64  `json:"l2_hits"`
-	L3Hits                   uint64  `json:"l3_hits"`
-	MarkdownHits             uint64  `json:"markdown_hits"`
-	GraphHits                uint64  `json:"graph_hits"`
-	EvolutionRuns            uint64  `json:"evolution_runs"`
-	NodesCreated             uint64  `json:"nodes_created"`
-	EntriesEvolved           uint64  `json:"entries_evolved"`
-	PlannerRuns              uint64  `json:"planner_runs"`
-	PlannerErrors            uint64  `json:"planner_errors"`
-	TruthQueries             uint64  `json:"truth_queries"`
-	TruthHits                uint64  `json:"truth_hits"`
-	TruthVerifiedHits        uint64  `json:"truth_verified_hits"`
-	TruthConflictedHits      uint64  `json:"truth_conflicted_hits"`
-	HybridRerankRuns         uint64  `json:"hybrid_rerank_runs"`
-	VectorPromotedHits       uint64  `json:"vector_promoted_hits"`
-	AvgResultConfidence      float64 `json:"avg_result_confidence"`
-	LowConfidenceFiltered    uint64  `json:"low_confidence_filtered"`
-	ContextInjectionFiltered uint64  `json:"context_injection_filtered"`
-	VectorDocsIndexed        uint64  `json:"vector_docs_indexed"`
-	VectorShadowHits         uint64  `json:"vector_shadow_hits"`
-	ShadowOverlapRate        float64 `json:"shadow_overlap_rate"`
-	ShadowOnlyCandidates     uint64  `json:"shadow_only_candidates"`
-	ShadowLatencyMs          uint64  `json:"shadow_latency_ms"`
-	ShadowWouldHelpRate      float64 `json:"shadow_would_help_rate"`
-	TruthEventsWritten       uint64  `json:"truth_events_written"`
-	TruthObjectsUpserted     uint64  `json:"truth_objects_upserted"`
-	TruthClaimsUpserted      uint64  `json:"truth_claims_upserted"`
-	TruthErrors              uint64  `json:"truth_errors"`
-	TruthReplays             uint64  `json:"truth_replays"`
-	RecipeSelectedCount      uint64  `json:"recipe_selected_count"`
-	RecipeAppliedCount       uint64  `json:"recipe_applied_count"`
-	RecipeSuccessRate        float64 `json:"recipe_success_rate"`
-	RecipePartialRate        float64 `json:"recipe_partial_rate"`
-	RecipeFailureRate        float64 `json:"recipe_failure_rate"`
-	RecipeHumanBlockedRate   float64 `json:"recipe_human_blocked_rate"`
-	RecipeDeviationRate      float64 `json:"recipe_deviation_rate"`
-	RecipeFallbackRate       float64 `json:"recipe_fallback_rate"`
-	RecipeBackfillSessionsScanned uint64 `json:"recipe_backfill_sessions_scanned"`
-	RecipeBackfillCreated    uint64  `json:"recipe_backfill_created"`
-	RecipeBackfillUpdated    uint64  `json:"recipe_backfill_updated"`
-	RecipeDefaultGrayHitRate float64 `json:"recipe_default_gray_hit_rate"`
+	L1Hits                        uint64  `json:"l1_hits"`
+	L2Hits                        uint64  `json:"l2_hits"`
+	L3Hits                        uint64  `json:"l3_hits"`
+	MarkdownHits                  uint64  `json:"markdown_hits"`
+	GraphHits                     uint64  `json:"graph_hits"`
+	EvolutionRuns                 uint64  `json:"evolution_runs"`
+	NodesCreated                  uint64  `json:"nodes_created"`
+	EntriesEvolved                uint64  `json:"entries_evolved"`
+	PlannerRuns                   uint64  `json:"planner_runs"`
+	PlannerErrors                 uint64  `json:"planner_errors"`
+	TruthQueries                  uint64  `json:"truth_queries"`
+	TruthHits                     uint64  `json:"truth_hits"`
+	TruthVerifiedHits             uint64  `json:"truth_verified_hits"`
+	TruthConflictedHits           uint64  `json:"truth_conflicted_hits"`
+	HybridRerankRuns              uint64  `json:"hybrid_rerank_runs"`
+	VectorPromotedHits            uint64  `json:"vector_promoted_hits"`
+	AvgResultConfidence           float64 `json:"avg_result_confidence"`
+	LowConfidenceFiltered         uint64  `json:"low_confidence_filtered"`
+	ContextInjectionFiltered      uint64  `json:"context_injection_filtered"`
+	VectorDocsIndexed             uint64  `json:"vector_docs_indexed"`
+	VectorShadowHits              uint64  `json:"vector_shadow_hits"`
+	ShadowOverlapRate             float64 `json:"shadow_overlap_rate"`
+	ShadowOnlyCandidates          uint64  `json:"shadow_only_candidates"`
+	ShadowLatencyMs               uint64  `json:"shadow_latency_ms"`
+	ShadowWouldHelpRate           float64 `json:"shadow_would_help_rate"`
+	TruthEventsWritten            uint64  `json:"truth_events_written"`
+	LedgerEventsWritten           uint64  `json:"ledger_events_written"`
+	LedgerShadowMismatchTotal     uint64  `json:"ledger_shadow_mismatch_total"`
+	LedgerReplayLatencyMs         uint64  `json:"ledger_replay_latency_ms"`
+	LedgerBackfillProgress        uint64  `json:"ledger_backfill_progress"`
+	TruthObjectsUpserted          uint64  `json:"truth_objects_upserted"`
+	TruthClaimsUpserted           uint64  `json:"truth_claims_upserted"`
+	TruthErrors                   uint64  `json:"truth_errors"`
+	TruthReplays                  uint64  `json:"truth_replays"`
+	RecipeSelectedCount           uint64  `json:"recipe_selected_count"`
+	RecipeAppliedCount            uint64  `json:"recipe_applied_count"`
+	RecipeSuccessRate             float64 `json:"recipe_success_rate"`
+	RecipePartialRate             float64 `json:"recipe_partial_rate"`
+	RecipeFailureRate             float64 `json:"recipe_failure_rate"`
+	RecipeHumanBlockedRate        float64 `json:"recipe_human_blocked_rate"`
+	RecipeDeviationRate           float64 `json:"recipe_deviation_rate"`
+	RecipeFallbackRate            float64 `json:"recipe_fallback_rate"`
+	RecipeBackfillSessionsScanned uint64  `json:"recipe_backfill_sessions_scanned"`
+	RecipeBackfillCreated         uint64  `json:"recipe_backfill_created"`
+	RecipeBackfillUpdated         uint64  `json:"recipe_backfill_updated"`
+	RecipeDefaultGrayHitRate      float64 `json:"recipe_default_gray_hit_rate"`
 }
 
 // MemoryManager 保留对外 façade，内部通过 query/lifecycle/evolver 组合职责。
@@ -195,7 +205,15 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	warm := NewWarmMemoryWithTTL(normalized.WarmCapacity, normalized.WarmPath, normalized.WarmTTL)
 	warm.SetScoringConfig(newMemoryScoringConfig(normalized))
 	_ = warm.Load()
-	cold := NewColdMemory(normalized.ColdBaseDir)
+	cold := NewColdMemoryWithConfig(normalized.ColdBaseDir, ColdMemoryConfig{
+		LedgerBaseDir:       normalized.LedgerBaseDir,
+		LedgerNamespace:     normalized.LedgerNamespace,
+		LedgerWorkspaceID:   normalized.LedgerWorkspaceID,
+		LedgerDualWrite:     normalized.LedgerDualWrite,
+		LedgerReadEnabled:   normalized.LedgerReadEnabled,
+		LedgerShadowCompare: normalized.LedgerShadowCompare,
+		Metrics:             metrics,
+	})
 	cold.SetTruthShadow(truth, truthMapper)
 	graph := NewGraphService(normalized, cold, normalized.Summarizer)
 	decision := NewDecisionService(normalized, cold)
@@ -222,6 +240,9 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	}
 	if truthReader != nil && truthReader.Enabled() {
 		log.Printf("[MEMORY] truth live reader enabled: top_k=%d", normalized.TruthTopK)
+	}
+	if stats := cold.LedgerRuntimeStats(); strings.TrimSpace(stats.BaseDir) != "" {
+		log.Printf("[MEMORY] cold ledger enabled: base=%s dual_write=%t read_enabled=%t shadow_compare=%t", stats.BaseDir, stats.DualWrite, stats.ReadEnabled, stats.ShadowCompare)
 	}
 	if truth != nil && truth.Enabled() {
 		log.Printf("[MEMORY] truth shadow enabled: base=%s dual_write=%t", truth.BaseDir(), truth.DualWriteEnabled())
@@ -258,6 +279,8 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.WarmCapacity <= 0 {
 		out.WarmCapacity = defaultWarmCapacity
 	}
+	out.LedgerNamespace = normalizeLedgerNamespace(out.LedgerNamespace)
+	out.LedgerWorkspaceID = strings.TrimSpace(out.LedgerWorkspaceID)
 	if out.ShadowRecallEnabled {
 		out.IntentPlannerEnabled = true
 		out.VectorEnabled = true
@@ -365,6 +388,12 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	out.GraphNamespace = normalizeGraphNamespace(out.GraphNamespace)
 	if out.GraphPath != "" {
 		out.GraphPath = filepath.Clean(out.GraphPath)
+	}
+	if strings.TrimSpace(out.LedgerBaseDir) == "" && strings.TrimSpace(out.ColdBaseDir) != "" {
+		out.LedgerBaseDir = filepath.Join(out.ColdBaseDir, "ledger")
+	}
+	if out.LedgerBaseDir != "" {
+		out.LedgerBaseDir = filepath.Clean(out.LedgerBaseDir)
 	}
 	if out.DecisionPath != "" {
 		out.DecisionPath = filepath.Clean(out.DecisionPath)
@@ -495,6 +524,39 @@ func (m *MemoryManager) ArchiveToCold(sessionID string) error {
 // StoreWarmMessages 将新增会话消息写入 warm 层，供后续自动召回使用。
 func (m *MemoryManager) StoreWarmMessages(sessionID string, startIndex int, messages []llm.Message) error {
 	return m.lifecycle.StoreWarmMessages(sessionID, startIndex, messages)
+}
+
+// AppendLedgerTurn 在每轮持久化后追加原始 ledger 事件。
+func (m *MemoryManager) AppendLedgerTurn(sessionID string, traceID string, startIndex int, messages []llm.Message) error {
+	if m == nil || m.cold == nil {
+		return nil
+	}
+	_, err := m.cold.AppendTurn(sessionID, "", traceID, startIndex, messages, time.Now().UTC())
+	return err
+}
+
+// ReplayLedgerSession 回放单个 session 的 ledger 原始事件并投影为兼容视图。
+func (m *MemoryManager) ReplayLedgerSession(sessionID string) (LedgerReplaySession, error) {
+	if m == nil || m.cold == nil {
+		return LedgerReplaySession{SessionID: strings.TrimSpace(sessionID)}, nil
+	}
+	return m.cold.ReplayLedgerSession(sessionID)
+}
+
+// BackfillLedger 将 legacy cold snapshot 回填到 ledger append-only 账本。
+func (m *MemoryManager) BackfillLedger(opts LedgerBackfillOptions) (LedgerBackfillStats, error) {
+	if m == nil || m.cold == nil {
+		return LedgerBackfillStats{Namespace: normalizeLedgerNamespace(opts.Namespace), WorkspaceID: strings.TrimSpace(opts.WorkspaceID)}, nil
+	}
+	return m.cold.BackfillLedger(opts)
+}
+
+// LedgerStats 返回 cold ledger 的运行时开关与布局信息。
+func (m *MemoryManager) LedgerStats() LedgerRuntimeStats {
+	if m == nil || m.cold == nil {
+		return LedgerRuntimeStats{}
+	}
+	return m.cold.LedgerRuntimeStats()
 }
 
 // Evolve 扫描 warm 层低重要度旧条目，沉淀为 markdown 记忆节点。

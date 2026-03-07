@@ -96,6 +96,7 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.SessionsPath = cloneOptionalStringPointer(out.SessionsPath)
 	out.MemoryWarmPath = cloneOptionalStringPointer(out.MemoryWarmPath)
 	out.MemoryColdPath = cloneOptionalStringPointer(out.MemoryColdPath)
+	out.MemoryLedgerPath = cloneOptionalStringPointer(out.MemoryLedgerPath)
 	out.MemoryGraphPath = cloneOptionalStringPointer(out.MemoryGraphPath)
 	out.MemoryDecisionPath = cloneOptionalStringPointer(out.MemoryDecisionPath)
 	out.MemoryWarmTTL = cloneOptionalStringPointer(out.MemoryWarmTTL)

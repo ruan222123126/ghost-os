@@ -52,6 +52,10 @@ type bridgeFileConfig struct {
 	SessionsPath                                 *string                       `toml:"sessions_path,omitempty"`
 	MemoryWarmPath                               *string                       `toml:"memory_warm_path,omitempty"`
 	MemoryColdPath                               *string                       `toml:"memory_cold_path,omitempty"`
+	MemoryLedgerPath                             *string                       `toml:"memory_ledger_path,omitempty"`
+	MemoryLedgerDualWrite                        *bool                         `toml:"memory_ledger_dual_write,omitempty"`
+	MemoryLedgerReadEnabled                      *bool                         `toml:"memory_ledger_read_enabled,omitempty"`
+	MemoryLedgerShadowCompare                    *bool                         `toml:"memory_ledger_shadow_compare,omitempty"`
 	MemoryAutoRecallEnabled                      *bool                         `toml:"memory_auto_recall_enabled,omitempty"`
 	MemoryAutoRecallLimit                        *int                          `toml:"memory_auto_recall_limit,omitempty"`
 	MemoryWarmTTL                                *string                       `toml:"memory_warm_ttl,omitempty"`
