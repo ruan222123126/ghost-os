@@ -32,12 +32,8 @@ func (d *DecisionService) Rebuild(opts DecisionRebuildOptions) (DecisionRebuildS
 		if err != nil {
 			return stats, err
 		}
-		limit := opts.MaxSessions
-		if limit <= 0 || limit > len(archives) {
-			limit = len(archives)
-		}
-		for index := 0; index < limit; index++ {
-			archive := archives[index]
+		archives, stats.CursorCheckpoint = decisionArchiveWindow(archives, opts)
+		for _, archive := range archives {
 			stats.SessionsScanned++
 			input, ok := d.captureInputFromArchive(stats.Namespace, archive)
 			if !ok {
@@ -98,10 +94,10 @@ func (d *DecisionService) Rebuild(opts DecisionRebuildOptions) (DecisionRebuildS
 	if !opts.IncludeRecipes {
 		return stats, nil
 	}
-	if opts.DryRun {
-		baseMemos := d.store.ListMemos(stats.Namespace)
-		if opts.ResetNamespace {
-			baseMemos = nil
+		if opts.DryRun {
+			baseMemos := d.store.ListMemos(stats.Namespace)
+			if opts.ResetNamespace {
+				baseMemos = nil
 		}
 		if opts.RebuildMemos {
 			baseMemos = normalizeDecisionMemos(append(baseMemos, rebuiltMemos...))
@@ -120,16 +116,25 @@ func (d *DecisionService) Rebuild(opts DecisionRebuildOptions) (DecisionRebuildS
 				existingRecipes[recipe.ID] = struct{}{}
 			}
 		}
-		for _, recipe := range recipes {
-			if _, ok := existingRecipes[recipe.ID]; ok {
-				stats.RecipesUpdated++
-			} else {
-				stats.RecipesCreated++
+			for _, recipe := range recipes {
+				if _, ok := existingRecipes[recipe.ID]; ok {
+					stats.RecipesUpdated++
+				} else {
+					stats.RecipesCreated++
+				}
 			}
+			stats.ClustersUpdated = len(clusters)
+			stats.RecipeRunsCreated, stats.RecipeRunsUpdated, err = d.rebuildHistoricalRecipeRuns(stats.Namespace, baseMemos, true)
+			if err != nil {
+				return stats, err
+			}
+			if d.metrics != nil {
+				d.metrics.recipeBackfillScanned.Add(uint64(stats.SessionsScanned))
+				d.metrics.recipeBackfillCreated.Add(uint64(stats.RecipeRunsCreated))
+				d.metrics.recipeBackfillUpdated.Add(uint64(stats.RecipeRunsUpdated))
+			}
+			return stats, nil
 		}
-		stats.ClustersUpdated = len(clusters)
-		return stats, nil
-	}
 
 	distiller := d.distiller
 	if distiller == nil {
@@ -139,10 +144,19 @@ func (d *DecisionService) Rebuild(opts DecisionRebuildOptions) (DecisionRebuildS
 	if err != nil {
 		return stats, err
 	}
-	stats.RecipesCreated += distillStats.RecipesCreated
-	stats.RecipesUpdated += distillStats.RecipesUpdated
-	stats.ClustersUpdated += distillStats.ClustersBuilt
-	return stats, nil
+		stats.RecipesCreated += distillStats.RecipesCreated
+		stats.RecipesUpdated += distillStats.RecipesUpdated
+		stats.ClustersUpdated += distillStats.ClustersBuilt
+		stats.RecipeRunsCreated, stats.RecipeRunsUpdated, err = d.rebuildHistoricalRecipeRuns(stats.Namespace, d.store.ListMemos(stats.Namespace), false)
+		if err != nil {
+			return stats, err
+		}
+		if d.metrics != nil {
+			d.metrics.recipeBackfillScanned.Add(uint64(stats.SessionsScanned))
+			d.metrics.recipeBackfillCreated.Add(uint64(stats.RecipeRunsCreated))
+			d.metrics.recipeBackfillUpdated.Add(uint64(stats.RecipeRunsUpdated))
+		}
+		return stats, nil
 }
 
 func (d *DecisionService) captureInputFromArchive(namespace string, archive ColdArchive) (DecisionCaptureInput, bool) {

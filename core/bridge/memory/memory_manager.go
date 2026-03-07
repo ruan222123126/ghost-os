@@ -89,6 +89,19 @@ type MemoryConfig struct {
 	DecisionRecipeInterval   time.Duration
 	DecisionRecipeMinSupport int
 	DecisionDebugEnabled     bool
+	RecipeReuseEnabled             bool
+	RecipeReuseEnabledSet          bool
+	RecipeExecutionTrackingEnabled bool
+	RecipeExecutionTrackingEnabledSet bool
+	RecipeBackfillEnabled          bool
+	RecipeBackfillEnabledSet       bool
+	RecipeDefaultEnabled           bool
+	RecipeDefaultEnabledSet        bool
+	RecipeDefaultGrayPercent       int
+	RecipeMinSelectionConfidence   float64
+	RecipeMinSuccessRate           float64
+	RecipeBackfillBatchSize        int
+	RecipeBackfillInterval         time.Duration
 
 	// 运行态绑定依赖。
 	SessionStore SessionStorePort
@@ -141,6 +154,18 @@ type MemoryMetrics struct {
 	TruthClaimsUpserted      uint64  `json:"truth_claims_upserted"`
 	TruthErrors              uint64  `json:"truth_errors"`
 	TruthReplays             uint64  `json:"truth_replays"`
+	RecipeSelectedCount      uint64  `json:"recipe_selected_count"`
+	RecipeAppliedCount       uint64  `json:"recipe_applied_count"`
+	RecipeSuccessRate        float64 `json:"recipe_success_rate"`
+	RecipePartialRate        float64 `json:"recipe_partial_rate"`
+	RecipeFailureRate        float64 `json:"recipe_failure_rate"`
+	RecipeHumanBlockedRate   float64 `json:"recipe_human_blocked_rate"`
+	RecipeDeviationRate      float64 `json:"recipe_deviation_rate"`
+	RecipeFallbackRate       float64 `json:"recipe_fallback_rate"`
+	RecipeBackfillSessionsScanned uint64 `json:"recipe_backfill_sessions_scanned"`
+	RecipeBackfillCreated    uint64  `json:"recipe_backfill_created"`
+	RecipeBackfillUpdated    uint64  `json:"recipe_backfill_updated"`
+	RecipeDefaultGrayHitRate float64 `json:"recipe_default_gray_hit_rate"`
 }
 
 // MemoryManager 保留对外 façade，内部通过 query/lifecycle/evolver 组合职责。
@@ -174,6 +199,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	cold.SetTruthShadow(truth, truthMapper)
 	graph := NewGraphService(normalized, cold, normalized.Summarizer)
 	decision := NewDecisionService(normalized, cold)
+	decision.metrics = metrics
 	decision.SetTruthShadow(truth, truthMapper)
 	planner := NewIntentPlanner(normalized.IntentPlannerEnabled, metrics)
 	vector := NewVectorSidecar(normalized, truth, metrics)
@@ -302,6 +328,39 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	}
 	if out.DecisionRecipeMinSupport <= 0 {
 		out.DecisionRecipeMinSupport = defaultDecisionRecipeMinSupport
+	}
+	if !config.RecipeReuseEnabledSet && out.DecisionRecipeEnabled {
+		out.RecipeReuseEnabled = true
+	}
+	if !config.RecipeExecutionTrackingEnabledSet && out.DecisionRecipeEnabled {
+		out.RecipeExecutionTrackingEnabled = true
+	}
+	if !config.RecipeBackfillEnabledSet && out.DecisionRecipeEnabled {
+		out.RecipeBackfillEnabled = true
+	}
+	if !config.RecipeDefaultEnabledSet && out.DecisionRecipeEnabled {
+		out.RecipeDefaultEnabled = true
+	}
+	if !out.RecipeReuseEnabled {
+		out.RecipeExecutionTrackingEnabled = false
+	}
+	if out.RecipeDefaultGrayPercent <= 0 {
+		out.RecipeDefaultGrayPercent = 10
+	}
+	if out.RecipeDefaultGrayPercent > 100 {
+		out.RecipeDefaultGrayPercent = 100
+	}
+	if out.RecipeMinSelectionConfidence <= 0 {
+		out.RecipeMinSelectionConfidence = 0.72
+	}
+	if out.RecipeMinSuccessRate <= 0 {
+		out.RecipeMinSuccessRate = decisionRecipeMinSuccessRate
+	}
+	if out.RecipeBackfillBatchSize <= 0 {
+		out.RecipeBackfillBatchSize = 50
+	}
+	if out.RecipeBackfillInterval <= 0 {
+		out.RecipeBackfillInterval = 30 * time.Minute
 	}
 	out.GraphNamespace = normalizeGraphNamespace(out.GraphNamespace)
 	if out.GraphPath != "" {
@@ -543,7 +602,16 @@ func (m *MemoryManager) RebuildDecision(opts DecisionRebuildOptions) (DecisionRe
 	if m == nil || m.decision == nil {
 		return DecisionRebuildStats{Namespace: normalizeDecisionNamespace(opts.Namespace)}, nil
 	}
-	return m.decision.Rebuild(opts)
+	stats, err := m.decision.Rebuild(opts)
+	if err != nil {
+		return stats, err
+	}
+	if !opts.DryRun && m.vector != nil && m.vector.Enabled() {
+		if rebuildErr := m.vector.RebuildFromTruthSnapshot(); rebuildErr != nil && m.decision.debugEnabled {
+			log.Printf("[MEMORY] decision rebuild vector refresh failed: %v", rebuildErr)
+		}
+	}
+	return stats, nil
 }
 
 // RebuildGraph 从 cold archive + markdown nodes 重建图谱快照。

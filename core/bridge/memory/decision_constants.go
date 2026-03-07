@@ -9,6 +9,14 @@ const (
 	DecisionOutcomeAwaitingHuman = "awaiting_human"
 	DecisionOutcomeCancelled     = "cancelled"
 
+	RecipeStatusActive     = "active"
+	RecipeStatusDeprecated = "deprecated"
+	RecipeStatusConflicted = "conflicted"
+
+	RecipeValidationPassed  = "passed"
+	RecipeValidationFailed  = "failed"
+	RecipeValidationUnknown = "unknown"
+
 	DecisionHitTypeMemo    = "memo"
 	DecisionHitTypeRecipe  = "recipe"
 	DecisionHitTypeWarning = "warning"
@@ -22,4 +30,5 @@ const (
 	defaultDecisionMemosPathName    = "memos.json"
 	defaultDecisionRecipesPathName  = "recipes.json"
 	defaultDecisionClustersPathName = "clusters.json"
+	defaultDecisionRecipeRunsPath   = "recipe_runs.json"
 )

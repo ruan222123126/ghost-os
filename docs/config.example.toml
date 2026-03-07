@@ -60,6 +60,15 @@ memory_decision_recipe_interval = "6h"
 memory_decision_recipe_min_support = 3
 memory_decision_debug_enabled = false
 memory_decision_selector_hint_enabled = true
+memory_decision_recipe_reuse_enabled = true
+memory_decision_recipe_execution_tracking_enabled = true
+memory_decision_recipe_backfill_enabled = true
+memory_decision_recipe_default_enabled = true
+memory_decision_recipe_default_gray_percent = 10
+memory_decision_recipe_min_selection_confidence = 0.72
+memory_decision_recipe_min_success_rate = 0.66
+memory_decision_recipe_backfill_batch_size = 50
+memory_decision_recipe_backfill_interval = "30m"
 
 worker_model = ""
 worker_max_concurrency = 4

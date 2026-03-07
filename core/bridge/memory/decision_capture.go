@@ -56,6 +56,9 @@ func (d *DecisionService) CaptureTurn(input DecisionCaptureInput) error {
 	if _, err := d.store.UpsertMemo(memo); err != nil {
 		return fmt.Errorf("upsert decision memo: %w", err)
 	}
+	if err := d.captureRecipeFeedback(input, memo); err != nil {
+		return fmt.Errorf("capture recipe feedback: %w", err)
+	}
 	if err := d.store.Persist(); err != nil {
 		return fmt.Errorf("persist decision memo: %w", err)
 	}

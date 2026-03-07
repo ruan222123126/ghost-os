@@ -115,7 +115,21 @@ func (s *QueryService) BuildContextWindow(scope SessionScope, userInput string) 
 
 	visible := visibleContextFingerprints(scope.History)
 	lines := make([]string, 0, minInt(len(entries), s.autoRecallLimit)+1)
+	if result.RecipeAdvisory != nil {
+		for _, advisoryLine := range recipeContextLines(*result.RecipeAdvisory) {
+			if advisoryLine == "" {
+				continue
+			}
+			lines = append(lines, "- "+advisoryLine)
+			if len(lines) >= s.autoRecallLimit {
+				break
+			}
+		}
+	}
 	for _, entry := range entries {
+		if len(lines) >= s.autoRecallLimit {
+			break
+		}
 		if recallEntryVisible(entry, visible) {
 			continue
 		}
@@ -202,15 +216,21 @@ func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]
 }
 
 func (s *QueryService) QueryResultWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
+	var result MemoryQueryResult
 	if s.hybridEnabled && s.truth != nil && s.truth.Enabled() {
-		return s.queryResultHybridWithScope(query, scope)
+		hybridResult, err := s.queryResultHybridWithScope(query, scope)
+		if err != nil {
+			return MemoryQueryResult{}, err
+		}
+		return s.decorateRecipeSelection(hybridResult, query, scope), nil
 	}
-	result, err := s.queryResultWeek2WithScope(query, scope)
+	var err error
+	result, err = s.queryResultWeek2WithScope(query, scope)
 	if err != nil {
 		return MemoryQueryResult{}, err
 	}
 	if !s.truthReadRequested(query) || s.truth == nil || !s.truth.Enabled() {
-		return result, nil
+		return s.decorateRecipeSelection(result, query, scope), nil
 	}
 	plan := result.IntentPlan
 	if plan == nil && s.planner != nil && s.planner.Enabled() {
@@ -225,7 +245,7 @@ func (s *QueryService) QueryResultWithScope(query MemoryQuery, scope SessionScop
 	}
 	matches := s.truth.Query(query, plan)
 	result.TruthHits = s.truth.DebugHits(matches)
-	return result, nil
+	return s.decorateRecipeSelection(result, query, scope), nil
 }
 
 func queryHot(scope SessionScope, query MemoryQuery) []MemoryEntry {

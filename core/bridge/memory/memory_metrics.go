@@ -35,6 +35,18 @@ type memoryCounters struct {
 	truthClaimsUpserted      atomic.Uint64
 	truthErrors              atomic.Uint64
 	truthReplays             atomic.Uint64
+	recipeSelections         atomic.Uint64
+	recipeApplied            atomic.Uint64
+	recipeSuccess            atomic.Uint64
+	recipePartial            atomic.Uint64
+	recipeFailure            atomic.Uint64
+	recipeHumanBlocked       atomic.Uint64
+	recipeDeviations         atomic.Uint64
+	recipeFallbacks          atomic.Uint64
+	recipeBackfillScanned    atomic.Uint64
+	recipeBackfillCreated    atomic.Uint64
+	recipeBackfillUpdated    atomic.Uint64
+	recipeDefaultGrayHits    atomic.Uint64
 }
 
 func (m *memoryCounters) snapshot() MemoryMetrics {
@@ -45,7 +57,14 @@ func (m *memoryCounters) snapshot() MemoryMetrics {
 	shadowOverlapRate := 0.0
 	shadowLatencyMs := uint64(0)
 	shadowWouldHelpRate := 0.0
-	avgResultConfidence := 0.0
+		avgResultConfidence := 0.0
+		recipeSuccessRate := 0.0
+		recipePartialRate := 0.0
+		recipeFailureRate := 0.0
+		recipeHumanBlockedRate := 0.0
+		recipeDeviationRate := 0.0
+		recipeFallbackRate := 0.0
+		recipeDefaultGrayHitRate := 0.0
 	if shadowQueries > 0 {
 		shadowOverlapRate = float64(m.shadowOverlapMilli.Load()) / float64(shadowQueries*1000)
 		shadowLatencyMs = m.shadowLatencyMs.Load() / shadowQueries
@@ -53,6 +72,21 @@ func (m *memoryCounters) snapshot() MemoryMetrics {
 	}
 	if count := m.resultConfidenceCount.Load(); count > 0 {
 		avgResultConfidence = float64(m.resultConfidenceSumMilli.Load()) / float64(count*1000)
+	}
+	recipeApplied := m.recipeApplied.Load()
+	if recipeApplied > 0 {
+		recipeSuccessRate = float64(m.recipeSuccess.Load()) / float64(recipeApplied)
+		recipePartialRate = float64(m.recipePartial.Load()) / float64(recipeApplied)
+		recipeFailureRate = float64(m.recipeFailure.Load()) / float64(recipeApplied)
+		recipeHumanBlockedRate = float64(m.recipeHumanBlocked.Load()) / float64(recipeApplied)
+		recipeDeviationRate = float64(m.recipeDeviations.Load()) / float64(recipeApplied)
+	}
+	recipeSelections := m.recipeSelections.Load()
+	if denominator := recipeSelections + m.recipeFallbacks.Load(); denominator > 0 {
+		recipeFallbackRate = float64(m.recipeFallbacks.Load()) / float64(denominator)
+	}
+	if recipeSelections > 0 {
+		recipeDefaultGrayHitRate = float64(m.recipeDefaultGrayHits.Load()) / float64(recipeSelections)
 	}
 	return MemoryMetrics{
 		L1Hits:                   m.l1Hits.Load(),
@@ -85,5 +119,17 @@ func (m *memoryCounters) snapshot() MemoryMetrics {
 		TruthClaimsUpserted:      m.truthClaimsUpserted.Load(),
 		TruthErrors:              m.truthErrors.Load(),
 		TruthReplays:             m.truthReplays.Load(),
+		RecipeSelectedCount:      recipeSelections,
+		RecipeAppliedCount:       recipeApplied,
+		RecipeSuccessRate:        recipeSuccessRate,
+		RecipePartialRate:        recipePartialRate,
+		RecipeFailureRate:        recipeFailureRate,
+		RecipeHumanBlockedRate:   recipeHumanBlockedRate,
+		RecipeDeviationRate:      recipeDeviationRate,
+		RecipeFallbackRate:       recipeFallbackRate,
+		RecipeBackfillSessionsScanned: m.recipeBackfillScanned.Load(),
+		RecipeBackfillCreated:    m.recipeBackfillCreated.Load(),
+		RecipeBackfillUpdated:    m.recipeBackfillUpdated.Load(),
+		RecipeDefaultGrayHitRate: recipeDefaultGrayHitRate,
 	}
 }

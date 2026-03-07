@@ -24,17 +24,23 @@ type decisionClustersPayload struct {
 	Clusters []DecisionCluster `json:"clusters"`
 }
 
+type decisionRecipeRunsPayload struct {
+	Runs []RecipeRun `json:"runs"`
+}
+
 // DecisionStore 维护 decision sidecar 的内存索引与文件快照。
 type DecisionStore struct {
 	baseDir      string
 	memosPath    string
 	recipesPath  string
 	clustersPath string
+	runsPath     string
 
 	memoByID             map[string]DecisionMemo
 	memoIDsByIntentKey   map[string][]string
 	recipeByID           map[string]DecisionRecipe
 	recipeIDsByIntentKey map[string][]string
+	recipeRunByID        map[string]RecipeRun
 	memosByGraphNode     map[string][]string
 	memosByAnchorKey     map[string][]string
 	memosByToolName      map[string][]string
@@ -43,6 +49,7 @@ type DecisionStore struct {
 	memos    []DecisionMemo
 	recipes  []DecisionRecipe
 	clusters []DecisionCluster
+	runs     []RecipeRun
 	mu       sync.RWMutex
 }
 
@@ -61,8 +68,20 @@ type DecisionService struct {
 	recipeEnabled    bool
 	recipeInterval   time.Duration
 	recipeMinSupport int
+	recipeReuseEnabled             bool
+	recipeExecutionTrackingEnabled bool
+	recipeBackfillEnabled          bool
+	recipeDefaultEnabled           bool
+	recipeDefaultGrayPercent       int
+	recipeMinSelectionConfidence   float64
+	recipeMinSuccessRate           float64
+	recipeBackfillBatchSize        int
+	recipeBackfillInterval         time.Duration
 	debugEnabled     bool
 	distiller        *DecisionDistiller
+	metrics          *memoryCounters
+	pendingMu        sync.Mutex
+	pendingRecipeRuns map[string]RecipeRun
 }
 
 func NewDecisionStore(baseDir string) *DecisionStore {
@@ -73,6 +92,7 @@ func NewDecisionStore(baseDir string) *DecisionStore {
 		memoIDsByIntentKey:   make(map[string][]string),
 		recipeByID:           make(map[string]DecisionRecipe),
 		recipeIDsByIntentKey: make(map[string][]string),
+		recipeRunByID:        make(map[string]RecipeRun),
 		memosByGraphNode:     make(map[string][]string),
 		memosByAnchorKey:     make(map[string][]string),
 		memosByToolName:      make(map[string][]string),
@@ -82,6 +102,7 @@ func NewDecisionStore(baseDir string) *DecisionStore {
 		store.memosPath = filepath.Join(resolvedBaseDir, defaultDecisionMemosPathName)
 		store.recipesPath = filepath.Join(resolvedBaseDir, defaultDecisionRecipesPathName)
 		store.clustersPath = filepath.Join(resolvedBaseDir, defaultDecisionClustersPathName)
+		store.runsPath = filepath.Join(resolvedBaseDir, defaultDecisionRecipeRunsPath)
 	}
 	return store
 }
@@ -102,7 +123,18 @@ func NewDecisionService(config MemoryConfig, cold *ColdMemory) *DecisionService 
 		recipeEnabled:    config.DecisionRecipeEnabled,
 		recipeInterval:   config.DecisionRecipeInterval,
 		recipeMinSupport: config.DecisionRecipeMinSupport,
+		recipeReuseEnabled:             config.RecipeReuseEnabled,
+		recipeExecutionTrackingEnabled: config.RecipeExecutionTrackingEnabled,
+		recipeBackfillEnabled:          config.RecipeBackfillEnabled,
+		recipeDefaultEnabled:           config.RecipeDefaultEnabled,
+		recipeDefaultGrayPercent:       config.RecipeDefaultGrayPercent,
+		recipeMinSelectionConfidence:   clamp01(config.RecipeMinSelectionConfidence),
+		recipeMinSuccessRate:           clamp01(config.RecipeMinSuccessRate),
+		recipeBackfillBatchSize:        config.RecipeBackfillBatchSize,
+		recipeBackfillInterval:         config.RecipeBackfillInterval,
 		debugEnabled:     config.DecisionDebugEnabled,
+		metrics:          nil,
+		pendingRecipeRuns: make(map[string]RecipeRun),
 	}
 	if service.maxHits <= 0 {
 		service.maxHits = defaultDecisionMaxHits
@@ -177,11 +209,16 @@ func (s *DecisionStore) Load() error {
 	if err != nil {
 		return err
 	}
+	runs, err := readDecisionRecipeRuns(s.runsPath)
+	if err != nil {
+		return err
+	}
 
 	s.mu.Lock()
 	s.memos = normalizeDecisionMemos(memos)
 	s.recipes = normalizeDecisionRecipes(recipes)
 	s.clusters = normalizeDecisionClusters(clusters)
+	s.runs = normalizeRecipeRuns(runs)
 	s.rebuildIndexesLocked()
 	s.mu.Unlock()
 	return nil
@@ -232,6 +269,21 @@ func readDecisionClusters(path string) ([]DecisionCluster, error) {
 	return payload.Clusters, nil
 }
 
+func readDecisionRecipeRuns(path string) ([]RecipeRun, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read decision recipe runs: %w", err)
+	}
+	var payload decisionRecipeRunsPayload
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, fmt.Errorf("decode decision recipe runs: %w", err)
+	}
+	return payload.Runs, nil
+}
+
 func (s *DecisionStore) Persist() error {
 	if s == nil || !s.enabled() {
 		return nil
@@ -244,6 +296,7 @@ func (s *DecisionStore) Persist() error {
 	memos := cloneDecisionMemos(s.memos)
 	recipes := cloneDecisionRecipes(s.recipes)
 	clusters := cloneDecisionClusters(s.clusters)
+	runs := cloneRecipeRuns(s.runs)
 	s.mu.RUnlock()
 
 	if memos == nil {
@@ -255,10 +308,14 @@ func (s *DecisionStore) Persist() error {
 	if clusters == nil {
 		clusters = []DecisionCluster{}
 	}
+	if runs == nil {
+		runs = []RecipeRun{}
+	}
 
 	sort.Slice(memos, func(i, j int) bool { return memos[i].ID < memos[j].ID })
 	sort.Slice(recipes, func(i, j int) bool { return recipes[i].ID < recipes[j].ID })
 	sort.Slice(clusters, func(i, j int) bool { return clusters[i].ID < clusters[j].ID })
+	sort.Slice(runs, func(i, j int) bool { return runs[i].ID < runs[j].ID })
 
 	if err := writeDecisionJSON(s.memosPath, decisionMemosPayload{Memos: memos}); err != nil {
 		return err
@@ -267,6 +324,9 @@ func (s *DecisionStore) Persist() error {
 		return err
 	}
 	if err := writeDecisionJSON(s.clustersPath, decisionClustersPayload{Clusters: clusters}); err != nil {
+		return err
+	}
+	if err := writeDecisionJSON(s.runsPath, decisionRecipeRunsPayload{Runs: runs}); err != nil {
 		return err
 	}
 	return nil
@@ -397,6 +457,29 @@ func (s *DecisionStore) ListClusters(namespace string) []DecisionCluster {
 	return out
 }
 
+func (s *DecisionStore) ListRecipeRuns(namespace string) []RecipeRun {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	out := make([]RecipeRun, 0, len(s.runs))
+	ns := normalizeDecisionNamespace(namespace)
+	for _, run := range s.runs {
+		if namespace != "" && run.Namespace != ns {
+			continue
+		}
+		out = append(out, cloneRecipeRun(run))
+	}
+	s.mu.RUnlock()
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SelectedAt.Equal(out[j].SelectedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].SelectedAt.After(out[j].SelectedAt)
+	})
+	return out
+}
+
 func (s *DecisionStore) RecordMemoAccess(ids []string, accessedAt time.Time) {
 	if s == nil || len(ids) == 0 {
 		return
@@ -507,6 +590,32 @@ func (s *DecisionStore) UpsertCluster(cluster DecisionCluster) (bool, error) {
 	return !exists, nil
 }
 
+func (s *DecisionStore) UpsertRecipeRun(run RecipeRun) (bool, error) {
+	if s == nil {
+		return false, fmt.Errorf("decision store is nil")
+	}
+	normalized := normalizeRecipeRun(run)
+	if normalized.ID == "" {
+		return false, fmt.Errorf("recipe run id is required")
+	}
+
+	s.mu.Lock()
+	_, exists := s.recipeRunByID[normalized.ID]
+	if exists {
+		for i := range s.runs {
+			if s.runs[i].ID == normalized.ID {
+				s.runs[i] = normalized
+				break
+			}
+		}
+	} else {
+		s.runs = append(s.runs, normalized)
+	}
+	s.rebuildIndexesLocked()
+	s.mu.Unlock()
+	return !exists, nil
+}
+
 func (s *DecisionStore) ResetNamespace(namespace string) error {
 	if s == nil {
 		return nil
@@ -516,6 +625,7 @@ func (s *DecisionStore) ResetNamespace(namespace string) error {
 	s.memos = filterDecisionMemosByNamespace(s.memos, ns)
 	s.recipes = filterDecisionRecipesByNamespace(s.recipes, ns)
 	s.clusters = filterDecisionClustersByNamespace(s.clusters, ns)
+	s.runs = filterRecipeRunsByNamespace(s.runs, ns)
 	s.rebuildIndexesLocked()
 	s.mu.Unlock()
 	return s.Persist()
@@ -579,6 +689,7 @@ func (s *DecisionStore) rebuildIndexesLocked() {
 	s.memoIDsByIntentKey = make(map[string][]string)
 	s.recipeByID = make(map[string]DecisionRecipe, len(s.recipes))
 	s.recipeIDsByIntentKey = make(map[string][]string)
+	s.recipeRunByID = make(map[string]RecipeRun, len(s.runs))
 	s.memosByGraphNode = make(map[string][]string)
 	s.memosByAnchorKey = make(map[string][]string)
 	s.memosByToolName = make(map[string][]string)
@@ -616,11 +727,19 @@ func (s *DecisionStore) rebuildIndexesLocked() {
 		}
 		s.clustersByID[normalized.ID] = normalized
 	}
+	for _, run := range s.runs {
+		normalized := normalizeRecipeRun(run)
+		if normalized.ID == "" {
+			continue
+		}
+		s.recipeRunByID[normalized.ID] = normalized
+	}
 	s.sortIndexValuesLocked()
 	// 将归一化后的值回写到切片，避免索引与原始快照漂移。
 	s.memos = normalizeDecisionMemos(s.memos)
 	s.recipes = normalizeDecisionRecipes(s.recipes)
 	s.clusters = normalizeDecisionClusters(s.clusters)
+	s.runs = normalizeRecipeRuns(s.runs)
 }
 
 func (s *DecisionStore) sortIndexValuesLocked() {
@@ -704,6 +823,23 @@ func filterDecisionClustersByNamespace(clusters []DecisionCluster, namespace str
 			continue
 		}
 		out = append(out, cluster)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func filterRecipeRunsByNamespace(runs []RecipeRun, namespace string) []RecipeRun {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]RecipeRun, 0, len(runs))
+	for _, run := range runs {
+		if run.Namespace == namespace {
+			continue
+		}
+		out = append(out, run)
 	}
 	if len(out) == 0 {
 		return nil

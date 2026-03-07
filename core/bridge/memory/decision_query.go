@@ -84,6 +84,19 @@ func (d *DecisionService) BuildSelectorHint(query MemoryQuery, scope SessionScop
 	if err != nil || len(hits) == 0 {
 		return "", hits, err
 	}
+	selectedRecipe, report, advisory := d.selectRecipeReuse(recipeSelectionInput{
+		Query: query,
+		Scope: scope,
+		Hits:  hits,
+		Now:   time.Now().UTC(),
+	})
+	if selectedRecipe != nil && report != nil && advisory != nil {
+		d.stageRecipeRun(scope, query.SemanticQuery, *selectedRecipe, *report, *advisory)
+		return d.formatSelectorHintSelection(advisory, report, hits), cloneDecisionHits(hits), nil
+	}
+	if d.metrics != nil && report != nil && strings.TrimSpace(report.FallbackReason) != "" {
+		d.metrics.recipeFallbacks.Add(1)
+	}
 	return d.formatSelectorHint(hits), cloneDecisionHits(hits), nil
 }
 

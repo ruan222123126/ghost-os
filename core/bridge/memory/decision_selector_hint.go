@@ -110,6 +110,65 @@ func (d *DecisionService) formatSelectorHint(hits []DecisionHit) string {
 	return trimSelectorHint(lines)
 }
 
+func (d *DecisionService) formatSelectorHintSelection(advisory *RecipeAdvisory, report *RecipeSelectionReport, hits []DecisionHit) string {
+	lines := make([]string, 0, selectorHintMaxLines)
+	if advisory != nil {
+		prefix := "Selected recipe"
+		if advisory.LowConfidenceOnly {
+			prefix = "Advisory recipe"
+		}
+		if start := selectorHintClause(advisory.StartWith); start != "" {
+			lines = append(lines, summarizeLine(prefix+": start with "+start, 150))
+		}
+		parts := make([]string, 0, 2)
+		if len(advisory.Avoid) > 0 {
+			parts = append(parts, "Avoid: "+selectorHintClause(advisory.Avoid[0]))
+		}
+		if len(advisory.Validate) > 0 {
+			parts = append(parts, "Validate: "+selectorHintClause(advisory.Validate[0]))
+		}
+		if len(parts) > 0 {
+			lines = append(lines, summarizeLine(strings.Join(parts, ". "), 170))
+		}
+		if len(advisory.AskHumanIf) > 0 {
+			lines = append(lines, summarizeLine("Ask human early if "+selectorHintClause(advisory.AskHumanIf[0]), 170))
+		}
+	}
+	if fallback := d.fallbackSelectorHit(hits); fallback != nil {
+		line := d.selectorHintLine(*fallback)
+		if trimmed := selectorHintClause(line); trimmed != "" {
+			label := "Fallback memo"
+			if normalizeDecisionHitType(fallback.Type) == DecisionHitTypeWarning {
+				label = "Fallback caution"
+			}
+			lines = append(lines, summarizeLine(label+": "+trimmed, 170))
+		}
+	}
+	if len(lines) == 0 {
+		if report != nil && strings.TrimSpace(report.FallbackReason) != "" {
+			return summarizeLine("Fallback: "+selectorHintClause(report.FallbackReason), selectorHintMaxChars)
+		}
+		return d.formatSelectorHint(hits)
+	}
+	return trimSelectorHint(lines)
+}
+
+func (d *DecisionService) fallbackSelectorHit(hits []DecisionHit) *DecisionHit {
+	for _, hit := range hits {
+		normalized := normalizeDecisionHit(hit)
+		if normalized.Type == DecisionHitTypeMemo {
+			return &normalized
+		}
+	}
+	for _, hit := range hits {
+		normalized := normalizeDecisionHit(hit)
+		if normalized.Type == DecisionHitTypeWarning {
+			return &normalized
+		}
+	}
+	return nil
+}
+
 func (d *DecisionService) selectorHintLine(hit DecisionHit) string {
 	hit = normalizeDecisionHit(hit)
 	if hit.Type == DecisionHitTypeWarning {

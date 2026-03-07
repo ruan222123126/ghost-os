@@ -103,6 +103,9 @@ type MemoryQueryResult struct {
 	IntentPlan   *QueryIntentPlan    `json:"intent_plan,omitempty"`
 	VectorHits   []VectorHit         `json:"vector_hits,omitempty"`
 	TruthHits    []TruthHit          `json:"truth_hits,omitempty"`
+	SelectedRecipe *DecisionRecipe   `json:"selected_recipe,omitempty"`
+	RecipeAdvisory *RecipeAdvisory   `json:"recipe_advisory,omitempty"`
+	RecipeSelection *RecipeSelectionReport `json:"recipe_selection,omitempty"`
 	RerankReport *HybridRerankReport `json:"rerank_report,omitempty"`
 	ShadowReport *ShadowRecallReport `json:"shadow_report,omitempty"`
 }

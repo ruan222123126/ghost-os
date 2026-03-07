@@ -6,47 +6,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
+	"sort"
 	"strings"
+
+	"ghost-os/bridge/llm"
 
 	"github.com/BurntSushi/toml"
 )
-
-type configPaths struct {
-	Toml string
-	YAML string
-}
-
-func resolveConfigPaths() (configPaths, error) {
-	rawPath := strings.TrimSpace(os.Getenv("GHOST_CONFIG_PATH"))
-	if rawPath == "" {
-		tomlPath, err := resolveUserPath(defaultConfigPath)
-		if err != nil {
-			return configPaths{}, fmt.Errorf("resolve config path: %w", err)
-		}
-		yamlPath, err := resolveUserPath(defaultLegacyConfigPath)
-		if err != nil {
-			return configPaths{}, fmt.Errorf("resolve legacy config path: %w", err)
-		}
-		return configPaths{Toml: tomlPath, YAML: yamlPath}, nil
-	}
-
-	resolvedPath, err := resolveUserPath(rawPath)
-	if err != nil {
-		return configPaths{}, fmt.Errorf("resolve config path: %w", err)
-	}
-
-	ext := strings.ToLower(filepath.Ext(resolvedPath))
-	base := strings.TrimSuffix(resolvedPath, filepath.Ext(resolvedPath))
-	switch ext {
-	case ".yaml", ".yml":
-		return configPaths{Toml: base + ".toml", YAML: resolvedPath}, nil
-	case ".toml":
-		return configPaths{Toml: resolvedPath, YAML: base + ".yaml"}, nil
-	default:
-		return configPaths{Toml: resolvedPath, YAML: resolvedPath + ".yaml"}, nil
-	}
-}
 
 func loadBridgeTomlConfig(path string) (bridgeFileConfig, error) {
 	resolvedPath, err := resolveUserPath(path)
@@ -66,38 +32,33 @@ func loadBridgeTomlConfig(path string) (bridgeFileConfig, error) {
 	if _, err := toml.Decode(string(raw), &cfg); err != nil {
 		return bridgeFileConfig{}, fmt.Errorf("parse config file %s: %w", resolvedPath, err)
 	}
-	return normalizeBridgeFileConfigForWrite(cfg), nil
+	return cfg, nil
 }
 
 func loadBridgeFileConfig() (bridgeFileConfig, string, error) {
-	paths, err := resolveConfigPaths()
-	if err != nil {
-		return bridgeFileConfig{}, "", err
-	}
-
-	cfg, err := loadBridgeTomlConfig(paths.Toml)
+	configPath := configPathFromEnv()
+	rawCfg, err := loadBridgeTomlConfig(configPath)
 	switch {
 	case err == nil:
-		return cfg, paths.Toml, nil
-	case !errors.Is(err, os.ErrNotExist):
-		return bridgeFileConfig{}, paths.Toml, fmt.Errorf("read config file %s: %w", paths.Toml, err)
-	}
-
-	legacyCfg, err := loadLegacyBridgeYAMLConfig(paths.YAML)
-	switch {
-	case err == nil:
-		if reflect.DeepEqual(legacyCfg, bridgeFileConfig{}) {
-			return legacyCfg, paths.Toml, nil
+		resolvedPath, resolveErr := resolveUserPath(configPath)
+		if resolveErr != nil {
+			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
 		}
-		migrated, migrateErr := migrateYamlToToml(paths.Toml, legacyCfg)
-		if migrateErr != nil {
-			return bridgeFileConfig{}, paths.Toml, migrateErr
+		normalized := normalizeBridgeFileConfigForWrite(rawCfg)
+		if hasLegacyProviderLayout(rawCfg) {
+			if err := writeBridgeTomlConfig(configPath, normalized); err != nil {
+				return bridgeFileConfig{}, resolvedPath, err
+			}
 		}
-		return migrated, paths.Toml, nil
+		return normalized, resolvedPath, nil
 	case errors.Is(err, os.ErrNotExist):
-		return bridgeFileConfig{}, paths.Toml, nil
+		resolvedPath, resolveErr := resolveUserPath(configPath)
+		if resolveErr != nil {
+			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
+		}
+		return bridgeFileConfig{}, resolvedPath, nil
 	default:
-		return bridgeFileConfig{}, paths.Toml, fmt.Errorf("read config file %s: %w", paths.YAML, err)
+		return bridgeFileConfig{}, configPath, fmt.Errorf("read config file %s: %w", configPath, err)
 	}
 }
 
@@ -106,9 +67,9 @@ func writeBridgeFileConfig(path string, cfg bridgeFileConfig) error {
 }
 
 func writeBridgeTomlConfig(path string, cfg bridgeFileConfig) error {
-	resolvedPath, err := resolveWriteConfigPath(path)
+	resolvedPath, err := resolveUserPath(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolve config path: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
 		return fmt.Errorf("create config directory: %w", err)
@@ -125,30 +86,9 @@ func writeBridgeTomlConfig(path string, cfg bridgeFileConfig) error {
 	return nil
 }
 
-func migrateYamlToToml(tomlPath string, legacyCfg bridgeFileConfig) (bridgeFileConfig, error) {
-	migrated := normalizeBridgeFileConfigForWrite(legacyCfg)
-	if err := writeBridgeTomlConfig(tomlPath, migrated); err != nil {
-		return bridgeFileConfig{}, fmt.Errorf("migrate yaml config to toml: %w", err)
-	}
-	return migrated, nil
-}
-
-func resolveWriteConfigPath(path string) (string, error) {
-	resolvedPath, err := resolveUserPath(path)
-	if err != nil {
-		return "", fmt.Errorf("resolve config path: %w", err)
-	}
-
-	ext := strings.ToLower(filepath.Ext(resolvedPath))
-	if ext == ".yaml" || ext == ".yml" {
-		return strings.TrimSuffix(resolvedPath, filepath.Ext(resolvedPath)) + ".toml", nil
-	}
-	return resolvedPath, nil
-}
-
 func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out := cfg
-	out.ModelProvider = cloneOptionalStringPointer(out.ModelProvider)
+	out.ActiveProvider = cloneOptionalStringPointer(out.ActiveProvider)
 	out.Model = cloneOptionalStringPointer(out.Model)
 	out.ChatPath = cloneOptionalStringPointer(out.ChatPath)
 	out.WorkerModel = cloneOptionalStringPointer(out.WorkerModel)
@@ -159,9 +99,11 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.MemoryGraphPath = cloneOptionalStringPointer(out.MemoryGraphPath)
 	out.MemoryDecisionPath = cloneOptionalStringPointer(out.MemoryDecisionPath)
 	out.MemoryWarmTTL = cloneOptionalStringPointer(out.MemoryWarmTTL)
+	out.MemoryTemporalDecayHalfLife = cloneOptionalStringPointer(out.MemoryTemporalDecayHalfLife)
 	out.MemoryEvolutionInterval = cloneOptionalStringPointer(out.MemoryEvolutionInterval)
 	out.MemoryGraphNamespace = cloneOptionalStringPointer(out.MemoryGraphNamespace)
 	out.MemoryDecisionRecipeInterval = cloneOptionalStringPointer(out.MemoryDecisionRecipeInterval)
+	out.MemoryDecisionRecipeBackfillInterval = cloneOptionalStringPointer(out.MemoryDecisionRecipeBackfillInterval)
 	out.AnthropicVersion = cloneOptionalStringPointer(out.AnthropicVersion)
 	out.ToolSelectorMode = cloneOptionalStringPointer(out.ToolSelectorMode)
 	out.ToolSelectorModel = cloneOptionalStringPointer(out.ToolSelectorModel)
@@ -169,9 +111,12 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.APIToken = cloneOptionalStringPointer(out.APIToken)
 	out.ProviderHeaders, _ = normalizeProviderHeaders(out.ProviderHeaders)
 	out.CORSOrigins = normalizeOrigins(out.CORSOrigins)
-	out.ModelProviders = normalizeProviderConfigs(out.ModelProviders)
 
-	if len(out.ModelProviders) == 0 {
+	providers := normalizeProviderConfigs(out.Providers, stringValue(out.Model))
+	if len(providers) == 0 {
+		providers = normalizeLegacyProviderConfigs(out.ModelProviders, stringValue(out.Model))
+	}
+	if len(providers) == 0 {
 		legacyName := strings.TrimSpace(stringValue(out.Provider))
 		legacyBaseURL := strings.TrimSpace(stringValue(out.BaseURL))
 		legacyAPIKey := cloneOptionalStringPointer(out.APIKey)
@@ -180,55 +125,140 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 				legacyName = string(defaultProvider)
 			}
 			providerType := inferProviderType(legacyName, legacyBaseURL, stringValue(out.Model))
+			if providerType == "" {
+				providerType = defaultProvider
+			}
 			if legacyBaseURL == "" {
 				legacyBaseURL = defaultBaseURLForProvider(providerType)
 			}
-			out.ModelProviders = []providerConfig{{
+			providers = []providerConfig{{
 				Name:    legacyName,
+				Type:    providerType,
 				BaseURL: legacyBaseURL,
 				APIKey:  legacyAPIKey,
 			}}
-			if out.ModelProvider == nil {
-				out.ModelProvider = stringPointer(legacyName)
-			}
 		}
 	}
 
-	if len(out.ModelProviders) == 0 {
-		out.ModelProvider = nil
-	} else {
-		activeName := strings.TrimSpace(stringValue(out.ModelProvider))
-		activeIndex := providerIndexByName(out.ModelProviders, activeName)
-		if activeIndex < 0 {
-			out.ModelProvider = stringPointer(out.ModelProviders[0].Name)
-		} else {
-			out.ModelProvider = stringPointer(out.ModelProviders[activeIndex].Name)
-		}
-	}
-
+	out.Providers = providerConfigsToFileMap(providers)
+	out.ActiveProvider = normalizedActiveProviderName(providers, out.ActiveProvider, out.ModelProvider)
+	out.ModelProvider = nil
+	out.ModelProviders = nil
 	out.Provider = nil
 	out.APIKey = nil
 	out.BaseURL = nil
 	return out
 }
 
-func normalizeProviderConfigs(providers []providerConfig) []providerConfig {
+func hasLegacyProviderLayout(cfg bridgeFileConfig) bool {
+	return cfg.ModelProvider != nil || len(cfg.ModelProviders) > 0 || cfg.Provider != nil || cfg.APIKey != nil || cfg.BaseURL != nil
+}
+
+func normalizedActiveProviderName(providers []providerConfig, preferred ...*string) *string {
+	if len(providers) == 0 {
+		return nil
+	}
+	for _, candidate := range preferred {
+		name := strings.TrimSpace(stringValue(candidate))
+		if providerIndexByName(providers, name) >= 0 {
+			return stringPointer(name)
+		}
+	}
+	return stringPointer(providers[0].Name)
+}
+
+func normalizeProviderConfigs(raw map[string]providerFileConfig, model string) []providerConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(raw))
+	for name := range raw {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	out := make([]providerConfig, 0, len(names))
+	for _, name := range names {
+		provider, ok := normalizeProviderRecord(name, raw[name].Type, raw[name].BaseURL, raw[name].APIKey, raw[name].Models, model)
+		if !ok {
+			continue
+		}
+		out = append(out, provider)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeLegacyProviderConfigs(raw []legacyProviderConfig, model string) []providerConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]providerConfig, 0, len(raw))
+	for _, provider := range raw {
+		normalized, ok := normalizeProviderRecord(provider.Name, provider.Type, provider.BaseURL, provider.APIKey, provider.Models, model)
+		if !ok {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func normalizeProviderRecord(name string, rawType llm.Provider, baseURL string, apiKey *string, models []string, model string) (providerConfig, bool) {
+	trimmedName := strings.TrimSpace(name)
+	trimmedBaseURL := strings.TrimSpace(baseURL)
+	normalizedType := rawType.Normalized()
+	if normalizedType == "" {
+		normalizedType = inferProviderType(trimmedName, trimmedBaseURL, model)
+	}
+	if normalizedType == "" {
+		normalizedType = defaultProvider
+	}
+	if trimmedName == "" && trimmedBaseURL == "" && cloneOptionalStringPointer(apiKey) == nil && len(normalizeProviderModels(models)) == 0 {
+		return providerConfig{}, false
+	}
+	if trimmedName == "" {
+		return providerConfig{}, false
+	}
+	if trimmedBaseURL == "" {
+		trimmedBaseURL = defaultBaseURLForProvider(normalizedType)
+	}
+	return providerConfig{
+		Name:    trimmedName,
+		Type:    normalizedType,
+		BaseURL: trimmedBaseURL,
+		APIKey:  cloneOptionalStringPointer(apiKey),
+		Models:  normalizeProviderModels(models),
+	}, true
+}
+
+func providerConfigsToFileMap(providers []providerConfig) map[string]providerFileConfig {
 	if len(providers) == 0 {
 		return nil
 	}
 
-	out := make([]providerConfig, 0, len(providers))
+	out := make(map[string]providerFileConfig, len(providers))
 	for _, provider := range providers {
-		normalized := providerConfig{
-			Name:    strings.TrimSpace(provider.Name),
+		name := strings.TrimSpace(provider.Name)
+		if name == "" {
+			continue
+		}
+		out[name] = providerFileConfig{
+			Type:    provider.Type.Normalized(),
 			BaseURL: strings.TrimSpace(provider.BaseURL),
 			APIKey:  cloneOptionalStringPointer(provider.APIKey),
 			Models:  normalizeProviderModels(provider.Models),
 		}
-		if normalized.Name == "" && normalized.BaseURL == "" && normalized.APIKey == nil && len(normalized.Models) == 0 {
-			continue
-		}
-		out = append(out, normalized)
 	}
 	if len(out) == 0 {
 		return nil
@@ -280,13 +310,13 @@ func cloneProviderConfigs(providers []providerConfig) []providerConfig {
 
 	out := make([]providerConfig, 0, len(providers))
 	for _, provider := range providers {
-		cloned := providerConfig{
+		out = append(out, providerConfig{
 			Name:    provider.Name,
+			Type:    provider.Type,
 			BaseURL: provider.BaseURL,
 			APIKey:  cloneOptionalStringPointer(provider.APIKey),
 			Models:  append([]string(nil), provider.Models...),
-		}
-		out = append(out, cloned)
+		})
 	}
 	return out
 }

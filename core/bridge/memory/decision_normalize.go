@@ -43,6 +43,28 @@ func normalizeDecisionHitType(hitType string) string {
 	}
 }
 
+func normalizeRecipeStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case RecipeStatusDeprecated:
+		return RecipeStatusDeprecated
+	case RecipeStatusConflicted:
+		return RecipeStatusConflicted
+	default:
+		return RecipeStatusActive
+	}
+}
+
+func normalizeRecipeValidationResult(result string) string {
+	switch strings.ToLower(strings.TrimSpace(result)) {
+	case RecipeValidationPassed:
+		return RecipeValidationPassed
+	case RecipeValidationFailed:
+		return RecipeValidationFailed
+	default:
+		return RecipeValidationUnknown
+	}
+}
+
 func normalizeDecisionStep(step DecisionStep) DecisionStep {
 	out := step
 	out.Title = strings.TrimSpace(out.Title)
@@ -298,6 +320,7 @@ func normalizeDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 	out.ID = strings.TrimSpace(out.ID)
 	out.Namespace = normalizeDecisionNamespace(out.Namespace)
 	out.IntentKey = strings.TrimSpace(out.IntentKey)
+	out.EnvironmentKey = strings.TrimSpace(out.EnvironmentKey)
 	out.TriggerPhrases = uniqueStrings(out.TriggerPhrases)
 	out.Preconditions = uniqueStrings(out.Preconditions)
 	out.StrategySummary = strings.TrimSpace(out.StrategySummary)
@@ -305,14 +328,32 @@ func normalizeDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 	out.OrderedActions = normalizeRecipeSteps(out.OrderedActions)
 	out.ValidationChecklist = uniqueStrings(out.ValidationChecklist)
 	out.AvoidPatterns = uniqueStrings(out.AvoidPatterns)
+	out.Status = normalizeRecipeStatus(out.Status)
 	if out.SupportCount < 0 {
 		out.SupportCount = 0
 	}
 	out.SuccessRate = clamp01(out.SuccessRate)
 	out.Confidence = clamp01(out.Confidence)
+	out.SelectedCount = max(out.SelectedCount, 0)
+	out.AppliedCount = max(out.AppliedCount, 0)
+	out.SuccessCount = max(out.SuccessCount, 0)
+	out.PartialCount = max(out.PartialCount, 0)
+	out.FailureCount = max(out.FailureCount, 0)
+	out.HumanBlockedCount = max(out.HumanBlockedCount, 0)
+	out.DeviationCount = max(out.DeviationCount, 0)
 	out.SourceMemoIDs = uniqueStrings(out.SourceMemoIDs)
 	out.GraphRefs = uniqueStrings(out.GraphRefs)
 	out.AnchorKeys = uniqueStrings(out.AnchorKeys)
+	if !out.LastSelectedAt.IsZero() {
+		out.LastSelectedAt = out.LastSelectedAt.UTC()
+	}
+	if !out.LastAppliedAt.IsZero() {
+		out.LastAppliedAt = out.LastAppliedAt.UTC()
+	}
+	out.LastOutcome = normalizeDecisionOutcome(out.LastOutcome)
+	if !out.LastOutcomeAt.IsZero() {
+		out.LastOutcomeAt = out.LastOutcomeAt.UTC()
+	}
 	if out.CreatedAt.IsZero() {
 		out.CreatedAt = time.Now().UTC()
 	} else {
@@ -322,6 +363,87 @@ func normalizeDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 		out.UpdatedAt = out.CreatedAt.UTC()
 	} else {
 		out.UpdatedAt = out.UpdatedAt.UTC()
+	}
+	return out
+}
+
+func normalizeRecipeAdvisory(advisory RecipeAdvisory) RecipeAdvisory {
+	out := advisory
+	out.RecipeID = strings.TrimSpace(out.RecipeID)
+	out.Source = strings.TrimSpace(out.Source)
+	out.StartWith = strings.TrimSpace(out.StartWith)
+	out.Avoid = uniqueStrings(out.Avoid)
+	out.Validate = uniqueStrings(out.Validate)
+	out.AskHumanIf = uniqueStrings(out.AskHumanIf)
+	out.RecommendedTools = uniqueStrings(out.RecommendedTools)
+	out.Confidence = clamp01(out.Confidence)
+	return out
+}
+
+func normalizeRecipeRunStep(step RecipeRunStep) RecipeRunStep {
+	out := step
+	out.ExpectedStep = normalizeRecipeStep(out.ExpectedStep)
+	out.ActualTool = strings.TrimSpace(out.ActualTool)
+	out.DeviationReason = strings.TrimSpace(out.DeviationReason)
+	out.ValidationResult = normalizeRecipeValidationResult(out.ValidationResult)
+	return out
+}
+
+func normalizeRecipeRunSteps(steps []RecipeRunStep) []RecipeRunStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]RecipeRunStep, 0, len(steps))
+	for _, step := range steps {
+		normalized := normalizeRecipeRunStep(step)
+		if normalized.ExpectedStep == (RecipeStep{}) && normalized.ActualTool == "" && normalized.DeviationReason == "" {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeRecipeFeedback(feedback RecipeFeedback) RecipeFeedback {
+	out := feedback
+	out.Outcome = normalizeDecisionOutcome(out.Outcome)
+	out.FailureReasons = uniqueStrings(out.FailureReasons)
+	out.ValidationFailures = uniqueStrings(out.ValidationFailures)
+	return out
+}
+
+func normalizeRecipeSelectionReport(report RecipeSelectionReport) RecipeSelectionReport {
+	out := report
+	out.SelectedRecipeID = strings.TrimSpace(out.SelectedRecipeID)
+	out.SelectionScore = clamp01(out.SelectionScore)
+	out.WhySelected = uniqueStrings(out.WhySelected)
+	out.FallbackReason = strings.TrimSpace(out.FallbackReason)
+	return out
+}
+
+func normalizeRecipeRun(run RecipeRun) RecipeRun {
+	out := run
+	out.ID = strings.TrimSpace(out.ID)
+	out.Namespace = normalizeDecisionNamespace(out.Namespace)
+	out.RecipeID = strings.TrimSpace(out.RecipeID)
+	out.SessionID = strings.TrimSpace(out.SessionID)
+	out.TraceID = strings.TrimSpace(out.TraceID)
+	out.TurnID = strings.TrimSpace(out.TurnID)
+	out.IntentKey = strings.TrimSpace(out.IntentKey)
+	out.EnvironmentFingerprint = normalizeDecisionEnvFingerprint(out.EnvironmentFingerprint)
+	out.Selection = normalizeRecipeSelectionReport(out.Selection)
+	out.Advisory = normalizeRecipeAdvisory(out.Advisory)
+	out.Steps = normalizeRecipeRunSteps(out.Steps)
+	out.Feedback = normalizeRecipeFeedback(out.Feedback)
+	out.ActualTools = uniqueStrings(out.ActualTools)
+	if !out.SelectedAt.IsZero() {
+		out.SelectedAt = out.SelectedAt.UTC()
+	}
+	if !out.CompletedAt.IsZero() {
+		out.CompletedAt = out.CompletedAt.UTC()
 	}
 	return out
 }
@@ -458,6 +580,67 @@ func cloneDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 	return out
 }
 
+func cloneRecipeAdvisory(advisory RecipeAdvisory) RecipeAdvisory {
+	out := advisory
+	out.Avoid = append([]string(nil), advisory.Avoid...)
+	out.Validate = append([]string(nil), advisory.Validate...)
+	out.AskHumanIf = append([]string(nil), advisory.AskHumanIf...)
+	out.RecommendedTools = append([]string(nil), advisory.RecommendedTools...)
+	return out
+}
+
+func cloneRecipeRunStep(step RecipeRunStep) RecipeRunStep {
+	out := step
+	out.ExpectedStep = normalizeRecipeStep(step.ExpectedStep)
+	return out
+}
+
+func cloneRecipeRunSteps(steps []RecipeRunStep) []RecipeRunStep {
+	if len(steps) == 0 {
+		return nil
+	}
+	out := make([]RecipeRunStep, len(steps))
+	for i := range steps {
+		out[i] = cloneRecipeRunStep(steps[i])
+	}
+	return out
+}
+
+func cloneRecipeFeedback(feedback RecipeFeedback) RecipeFeedback {
+	out := feedback
+	out.FailureReasons = append([]string(nil), feedback.FailureReasons...)
+	out.ValidationFailures = append([]string(nil), feedback.ValidationFailures...)
+	return out
+}
+
+func cloneRecipeSelectionReport(report RecipeSelectionReport) RecipeSelectionReport {
+	out := report
+	out.WhySelected = append([]string(nil), report.WhySelected...)
+	return out
+}
+
+func cloneRecipeRun(run RecipeRun) RecipeRun {
+	out := run
+	out.EnvironmentFingerprint = cloneDecisionEnvFingerprint(run.EnvironmentFingerprint)
+	out.Selection = cloneRecipeSelectionReport(run.Selection)
+	out.Advisory = cloneRecipeAdvisory(run.Advisory)
+	out.Steps = cloneRecipeRunSteps(run.Steps)
+	out.Feedback = cloneRecipeFeedback(run.Feedback)
+	out.ActualTools = append([]string(nil), run.ActualTools...)
+	return out
+}
+
+func cloneRecipeRuns(runs []RecipeRun) []RecipeRun {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]RecipeRun, len(runs))
+	for i := range runs {
+		out[i] = cloneRecipeRun(runs[i])
+	}
+	return out
+}
+
 func cloneDecisionRecipes(recipes []DecisionRecipe) []DecisionRecipe {
 	if len(recipes) == 0 {
 		return nil
@@ -534,6 +717,30 @@ func normalizeDecisionRecipes(recipes []DecisionRecipe) []DecisionRecipe {
 	indexByID := make(map[string]int, len(recipes))
 	for _, recipe := range recipes {
 		normalized := normalizeDecisionRecipe(recipe)
+		if normalized.ID == "" {
+			continue
+		}
+		if idx, ok := indexByID[normalized.ID]; ok {
+			out[idx] = normalized
+			continue
+		}
+		indexByID[normalized.ID] = len(out)
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeRecipeRuns(runs []RecipeRun) []RecipeRun {
+	if len(runs) == 0 {
+		return nil
+	}
+	out := make([]RecipeRun, 0, len(runs))
+	indexByID := make(map[string]int, len(runs))
+	for _, run := range runs {
+		normalized := normalizeRecipeRun(run)
 		if normalized.ID == "" {
 			continue
 		}
