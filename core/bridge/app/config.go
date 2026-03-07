@@ -45,6 +45,7 @@ type Config struct {
 	MemoryGraphNamespace           string
 	MemoryGraphDebugEnabled        bool
 	MemoryDecisionEnabled          bool
+	MemoryDecisionCaptureOnTurn    bool
 	MemoryDecisionPath             string
 	MemoryDecisionMaxHits          int
 	MemoryDecisionMinConfidence    float64
@@ -101,6 +102,7 @@ const (
 	defaultMemoryGraphNamespace           = "default"
 	defaultMemoryGraphMinConfidence       = 0.72
 	defaultMemoryDecisionMaxHits          = 4
+	defaultMemoryDecisionCaptureOnTurn    = true
 	defaultMemoryDecisionMinConfidence    = 0.75
 	defaultMemoryDecisionMinReuseScore    = 0.70
 	defaultMemoryDecisionRecipeInterval   = 6 * time.Hour
@@ -175,6 +177,7 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 		MemoryGraphNamespace:           memoryGraphNamespaceFromEnv(),
 		MemoryGraphDebugEnabled:        memoryGraphDebugEnabledFromEnv(),
 		MemoryDecisionEnabled:          memoryDecisionEnabledFromEnv(),
+		MemoryDecisionCaptureOnTurn:    memoryDecisionCaptureOnTurnFromEnv(),
 		MemoryDecisionPath:             memoryDecisionPathFromEnv(),
 		MemoryDecisionMaxHits:          memoryDecisionMaxHitsFromEnv(),
 		MemoryDecisionMinConfidence:    memoryDecisionMinConfidenceFromEnv(),
@@ -212,34 +215,34 @@ func runtimeConfigFromEnv() (runtimeConfig, error) {
 }
 
 func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error) {
-	providers := normalizeProviderConfigs(fileCfg.ModelProviders)
+	fileCfg = normalizeBridgeFileConfigForWrite(fileCfg)
+	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
 	if len(providers) > 0 {
-		activeName := strings.TrimSpace(valueOrEnv(fileCfg.ModelProvider, "GHOST_PROVIDER", ""))
+		activeName := strings.TrimSpace(valueOrEnv(fileCfg.ActiveProvider, "GHOST_PROVIDER", ""))
 		activeIndex := providerIndexByName(providers, activeName)
 		if activeIndex < 0 {
 			activeIndex = 0
 		}
 		active := providers[activeIndex]
 		model := valueOrEnv(fileCfg.Model, "GHOST_MODEL", "")
-		providerType := inferProviderType(active.Name, active.BaseURL, model)
 		return normalizeRuntimeConfig(runtimeConfig{
 			ProviderName:     active.Name,
-			Provider:         providerType,
+			Provider:         active.Type.Normalized(),
 			APIKey:           valueOrEnv(active.APIKey, "GHOST_API_KEY", ""),
-			BaseURL:          providerBaseURL(active, providerType),
+			BaseURL:          providerBaseURL(active, active.Type.Normalized()),
 			Model:            model,
 			ChatPath:         valueOrEnv(fileCfg.ChatPath, "GHOST_CHAT_PATH", ""),
 			NativePersistent: resolveNativePersistent(fileCfg.NativePersistent),
 		}), nil
 	}
 
-	providerName := strings.TrimSpace(valueOrEnv(fileCfg.Provider, "GHOST_PROVIDER", string(defaultProvider)))
-	providerType := inferProviderType(providerName, valueOrEnv(fileCfg.BaseURL, "GHOST_BASE_URL", ""), valueOrEnv(fileCfg.Model, "GHOST_MODEL", ""))
+	providerName := strings.TrimSpace(getenvDefault("GHOST_PROVIDER", string(defaultProvider)))
+	providerType := inferProviderType(providerName, getenvDefault("GHOST_BASE_URL", ""), valueOrEnv(fileCfg.Model, "GHOST_MODEL", ""))
 	return normalizeRuntimeConfig(runtimeConfig{
 		ProviderName:     providerName,
 		Provider:         providerType,
-		APIKey:           valueOrEnv(fileCfg.APIKey, "GHOST_API_KEY", ""),
-		BaseURL:          valueOrEnv(fileCfg.BaseURL, "GHOST_BASE_URL", ""),
+		APIKey:           getenvDefault("GHOST_API_KEY", ""),
+		BaseURL:          getenvDefault("GHOST_BASE_URL", ""),
 		Model:            valueOrEnv(fileCfg.Model, "GHOST_MODEL", ""),
 		ChatPath:         valueOrEnv(fileCfg.ChatPath, "GHOST_CHAT_PATH", ""),
 		NativePersistent: resolveNativePersistent(fileCfg.NativePersistent),
@@ -548,6 +551,14 @@ func memoryDecisionPathFromEnv() string {
 		return getenvDefault("GHOST_MEMORY_DECISION_PATH", defaultMemoryDecisionPath)
 	}
 	return valueOrEnv(fileCfg.MemoryDecisionPath, "GHOST_MEMORY_DECISION_PATH", defaultMemoryDecisionPath)
+}
+
+func memoryDecisionCaptureOnTurnFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_DECISION_CAPTURE_ON_TURN", defaultMemoryDecisionCaptureOnTurn)
+	}
+	return boolOrEnv(fileCfg.MemoryDecisionCaptureOnTurn, "GHOST_MEMORY_DECISION_CAPTURE_ON_TURN", defaultMemoryDecisionCaptureOnTurn)
 }
 
 func memoryDecisionMaxHitsFromEnv() int {

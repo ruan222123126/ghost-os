@@ -3,7 +3,10 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"ghost-os/bridge/llm"
 )
 
 func TestRuntimeConfigFromEnvPrefersMultiProviderConfigFile(t *testing.T) {
@@ -20,16 +23,18 @@ func TestRuntimeConfigFromEnvPrefersMultiProviderConfigFile(t *testing.T) {
 	chatPath := "/v1/chat/completions"
 	nativePersistent := true
 	if err := writeBridgeFileConfig(configPathFromEnv(), bridgeFileConfig{
-		ModelProvider:    &modelProvider,
+		ActiveProvider:   &modelProvider,
 		Model:            &model,
 		ChatPath:         &chatPath,
 		NativePersistent: &nativePersistent,
-		ModelProviders: []providerConfig{{
-			Name:    "crs",
-			BaseURL: "https://lldai.online/openai",
-			APIKey:  optionalStringPointer("file-key"),
-			Models:  []string{"gpt-5.4", "gpt-4"},
-		}},
+		Providers: map[string]providerFileConfig{
+			"crs": {
+				Type:    llm.ProviderCustom,
+				BaseURL: "https://lldai.online/openai",
+				APIKey:  optionalStringPointer("file-key"),
+				Models:  []string{"gpt-5.4", "gpt-4"},
+			},
+		},
 	}); err != nil {
 		t.Fatalf("write config file: %v", err)
 	}
@@ -87,6 +92,7 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	memoryGraphNamespace := "workspace:file"
 	memoryGraphDebugEnabled := true
 	memoryDecisionEnabled := true
+	memoryDecisionCaptureOnTurn := false
 	memoryDecisionPath := "/tmp/decision"
 	memoryDecisionMaxHits := 4
 	memoryDecisionMinConfidence := 0.79
@@ -102,13 +108,15 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	bindAddr := "0.0.0.0:9090"
 	apiToken := "secret-token"
 	if err := writeBridgeFileConfig(configPathFromEnv(), bridgeFileConfig{
-		ModelProvider: &modelProvider,
-		Model:         &model,
-		ModelProviders: []providerConfig{{
-			Name:    "openai",
-			BaseURL: defaultBaseURL,
-			APIKey:  optionalStringPointer("file-key"),
-		}},
+		ActiveProvider: &modelProvider,
+		Model:          &model,
+		Providers: map[string]providerFileConfig{
+			"openai": {
+				Type:    llm.ProviderOpenAI,
+				BaseURL: defaultBaseURL,
+				APIKey:  optionalStringPointer("file-key"),
+			},
+		},
 		WorkerModel:                    &workerModel,
 		PromptsPath:                    &promptsPath,
 		SessionsPath:                   &sessionsPath,
@@ -132,6 +140,7 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 		MemoryGraphNamespace:           &memoryGraphNamespace,
 		MemoryGraphDebugEnabled:        &memoryGraphDebugEnabled,
 		MemoryDecisionEnabled:          &memoryDecisionEnabled,
+		MemoryDecisionCaptureOnTurn:    &memoryDecisionCaptureOnTurn,
 		MemoryDecisionPath:             &memoryDecisionPath,
 		MemoryDecisionMaxHits:          &memoryDecisionMaxHits,
 		MemoryDecisionMinConfidence:    &memoryDecisionMinConfidence,
@@ -218,6 +227,9 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	if !cfg.MemoryDecisionEnabled {
 		t.Fatalf("expected decision memory to be enabled")
 	}
+	if cfg.MemoryDecisionCaptureOnTurn {
+		t.Fatalf("expected decision capture on turn to be disabled")
+	}
 	if cfg.MemoryDecisionPath != memoryDecisionPath {
 		t.Fatalf("unexpected decision path: got %q want %q", cfg.MemoryDecisionPath, memoryDecisionPath)
 	}
@@ -267,68 +279,68 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	}
 }
 
-func TestLoadBridgeFileConfigMigratesLegacyYAMLToToml(t *testing.T) {
-	legacyPath := filepath.Join(t.TempDir(), "config.yaml")
-	t.Setenv("GHOST_CONFIG_PATH", legacyPath)
+func TestLoadBridgeFileConfigMigratesLegacyProviderLayoutToNamedTables(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
 
-	provider := "custom"
-	apiKey := "legacy-key"
-	baseURL := "http://localhost:11434/v1"
-	model := "qwen-coder"
-	decisionEnabled := true
-	decisionPath := "~/.ghost-os/memory/decision"
-	decisionMaxHits := 5
-	decisionMinConfidence := 0.76
-	decisionMinReuseScore := 0.71
-	decisionRecipeEnabled := false
-	decisionRecipeInterval := "8h"
-	decisionRecipeMinSupport := 4
-	decisionDebugEnabled := true
-	if err := writeLegacyBridgeYAMLConfig(configPathFromEnv(), bridgeFileConfig{
-		Provider:                       &provider,
-		APIKey:                         &apiKey,
-		BaseURL:                        &baseURL,
-		Model:                          &model,
-		MemoryDecisionEnabled:          &decisionEnabled,
-		MemoryDecisionPath:             &decisionPath,
-		MemoryDecisionMaxHits:          &decisionMaxHits,
-		MemoryDecisionMinConfidence:    &decisionMinConfidence,
-		MemoryDecisionMinReuseScore:    &decisionMinReuseScore,
-		MemoryDecisionRecipeEnabled:    &decisionRecipeEnabled,
-		MemoryDecisionRecipeInterval:   &decisionRecipeInterval,
-		MemoryDecisionRecipeMinSupport: &decisionRecipeMinSupport,
-		MemoryDecisionDebugEnabled:     &decisionDebugEnabled,
-	}); err != nil {
+	legacyConfig := []byte(`model_provider = "custom"
+model = "qwen-coder"
+memory_decision_enabled = true
+memory_decision_capture_on_turn = false
+memory_decision_path = "~/.ghost-os/memory/decision"
+memory_decision_max_hits = 5
+memory_decision_min_confidence = 0.76
+memory_decision_min_reuse_score = 0.71
+memory_decision_recipe_enabled = false
+memory_decision_recipe_interval = "8h"
+memory_decision_recipe_min_support = 4
+memory_decision_debug_enabled = true
+
+[[model_providers]]
+name = "custom"
+base_url = "http://localhost:11434/v1"
+api_key = "legacy-key"
+`)
+	if err := os.WriteFile(configPath, legacyConfig, 0o600); err != nil {
 		t.Fatalf("write legacy config file: %v", err)
 	}
 
-	cfg, configPath, err := loadBridgeFileConfig()
+	cfg, loadedPath, err := loadBridgeFileConfig()
 	if err != nil {
 		t.Fatalf("loadBridgeFileConfig: %v", err)
 	}
-	if filepath.Ext(configPath) != ".toml" {
-		t.Fatalf("unexpected config path: got %q want .toml suffix", configPath)
+	if loadedPath != configPath {
+		t.Fatalf("unexpected config path: got %q want %q", loadedPath, configPath)
 	}
-	if cfg.ModelProvider == nil || *cfg.ModelProvider != provider {
-		t.Fatalf("unexpected model provider: %#v", cfg.ModelProvider)
+	if cfg.ActiveProvider == nil || *cfg.ActiveProvider != "custom" {
+		t.Fatalf("unexpected active provider: %#v", cfg.ActiveProvider)
 	}
-	if len(cfg.ModelProviders) != 1 {
-		t.Fatalf("unexpected provider count: got %d want 1", len(cfg.ModelProviders))
+	providers := normalizeProviderConfigs(cfg.Providers, stringValue(cfg.Model))
+	if len(providers) != 1 {
+		t.Fatalf("unexpected provider count: got %d want 1", len(providers))
 	}
-	if cfg.ModelProviders[0].BaseURL != baseURL {
-		t.Fatalf("unexpected migrated base url: got %q want %q", cfg.ModelProviders[0].BaseURL, baseURL)
+	if providers[0].Type != llm.ProviderCustom {
+		t.Fatalf("unexpected provider type: got %q want %q", providers[0].Type, llm.ProviderCustom)
 	}
-	if cfg.MemoryDecisionEnabled == nil || *cfg.MemoryDecisionEnabled != decisionEnabled {
-		t.Fatalf("unexpected migrated decision enabled: %#v", cfg.MemoryDecisionEnabled)
+	if providers[0].BaseURL != "http://localhost:11434/v1" {
+		t.Fatalf("unexpected migrated base url: got %q", providers[0].BaseURL)
 	}
-	if cfg.MemoryDecisionPath == nil || *cfg.MemoryDecisionPath != decisionPath {
-		t.Fatalf("unexpected migrated decision path: %#v", cfg.MemoryDecisionPath)
-	}
-	if cfg.MemoryDecisionRecipeInterval == nil || *cfg.MemoryDecisionRecipeInterval != decisionRecipeInterval {
+	if cfg.MemoryDecisionRecipeInterval == nil || *cfg.MemoryDecisionRecipeInterval != "8h" {
 		t.Fatalf("unexpected migrated decision recipe interval: %#v", cfg.MemoryDecisionRecipeInterval)
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(legacyPath), "config.toml")); err != nil {
-		t.Fatalf("expected migrated toml config: %v", err)
+	if cfg.MemoryDecisionCaptureOnTurn == nil || *cfg.MemoryDecisionCaptureOnTurn {
+		t.Fatalf("unexpected migrated decision capture toggle: %#v", cfg.MemoryDecisionCaptureOnTurn)
+	}
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read migrated config file: %v", err)
+	}
+	contents := string(raw)
+	if strings.Contains(contents, "[[model_providers]]") || strings.Contains(contents, "model_provider") {
+		t.Fatalf("expected legacy provider layout to be removed, got %s", contents)
+	}
+	if !strings.Contains(contents, "[providers.custom]") {
+		t.Fatalf("expected named provider table, got %s", contents)
 	}
 }
 
@@ -343,6 +355,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 
 	if err := store.AddProvider(providerConfig{
 		Name:    "crs",
+		Type:    llm.ProviderCustom,
 		BaseURL: "https://lldai.online/openai",
 		APIKey:  optionalStringPointer("sk-xxx"),
 		Models:  []string{"gpt-5.4", "gpt-4"},
@@ -351,6 +364,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	}
 	if err := store.AddProvider(providerConfig{
 		Name:    "openai",
+		Type:    llm.ProviderOpenAI,
 		BaseURL: defaultBaseURL,
 		APIKey:  optionalStringPointer("sk-yyy"),
 	}); err != nil {
@@ -361,6 +375,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	}
 	if err := store.UpdateProvider("openai", providerConfig{
 		Name:    "openai",
+		Type:    llm.ProviderOpenAI,
 		BaseURL: "https://api.openai.com/v1",
 		Models:  []string{"gpt-5.4"},
 	}); err != nil {
@@ -374,14 +389,18 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadBridgeFileConfig: %v", err)
 	}
-	if fileCfg.ModelProvider == nil || *fileCfg.ModelProvider != "openai" {
-		t.Fatalf("unexpected active provider: %#v", fileCfg.ModelProvider)
+	if fileCfg.ActiveProvider == nil || *fileCfg.ActiveProvider != "openai" {
+		t.Fatalf("unexpected active provider: %#v", fileCfg.ActiveProvider)
 	}
-	if len(fileCfg.ModelProviders) != 1 {
-		t.Fatalf("unexpected provider count: got %d want 1", len(fileCfg.ModelProviders))
+	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
+	if len(providers) != 1 {
+		t.Fatalf("unexpected provider count: got %d want 1", len(providers))
 	}
-	if fileCfg.ModelProviders[0].APIKey == nil || *fileCfg.ModelProviders[0].APIKey != "sk-yyy" {
-		t.Fatalf("expected update to preserve api key, got %#v", fileCfg.ModelProviders[0].APIKey)
+	if providers[0].APIKey == nil || *providers[0].APIKey != "sk-yyy" {
+		t.Fatalf("expected update to preserve api key, got %#v", providers[0].APIKey)
+	}
+	if providers[0].Type != llm.ProviderOpenAI {
+		t.Fatalf("expected provider type to persist, got %q", providers[0].Type)
 	}
 	if runtime := store.RuntimeConfig(); runtime.ProviderName != "openai" {
 		t.Fatalf("unexpected runtime provider: got %q want %q", runtime.ProviderName, "openai")

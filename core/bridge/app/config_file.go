@@ -8,125 +8,101 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"ghost-os/bridge/llm"
 )
 
-const (
-	defaultConfigPath       = "~/.ghost-os/config.toml"
-	defaultLegacyConfigPath = "~/.ghost-os/config.yaml"
-)
+const defaultConfigPath = "~/.ghost-os/config.toml"
 
 type providerConfig struct {
-	Name    string   `yaml:"name,omitempty" toml:"name,omitempty"`
-	BaseURL string   `yaml:"base_url,omitempty" toml:"base_url,omitempty"`
-	APIKey  *string  `yaml:"api_key,omitempty" toml:"api_key,omitempty"`
-	Models  []string `yaml:"models,omitempty" toml:"models,omitempty"`
+	Name    string
+	Type    llm.Provider
+	BaseURL string
+	APIKey  *string
+	Models  []string
+}
+
+type providerFileConfig struct {
+	Type    llm.Provider `toml:"type,omitempty"`
+	BaseURL string       `toml:"base_url,omitempty"`
+	APIKey  *string      `toml:"api_key,omitempty"`
+	Models  []string     `toml:"models,omitempty"`
+}
+
+type legacyProviderConfig struct {
+	Name    string       `toml:"name,omitempty"`
+	Type    llm.Provider `toml:"type,omitempty"`
+	BaseURL string       `toml:"base_url,omitempty"`
+	APIKey  *string      `toml:"api_key,omitempty"`
+	Models  []string     `toml:"models,omitempty"`
 }
 
 type bridgeFileConfig struct {
-	ModelProvider                  *string           `yaml:"model_provider,omitempty" toml:"model_provider,omitempty"`
-	ModelProviders                 []providerConfig  `yaml:"model_providers,omitempty" toml:"model_providers,omitempty"`
-	Provider                       *string           `yaml:"provider,omitempty" toml:"provider,omitempty"`
-	APIKey                         *string           `yaml:"api_key,omitempty" toml:"api_key,omitempty"`
-	BaseURL                        *string           `yaml:"base_url,omitempty" toml:"base_url,omitempty"`
-	Model                          *string           `yaml:"model,omitempty" toml:"model,omitempty"`
-	ChatPath                       *string           `yaml:"chat_path,omitempty" toml:"chat_path,omitempty"`
-	NativePersistent               *bool             `yaml:"native_persistent,omitempty" toml:"native_persistent,omitempty"`
-	WorkerModel                    *string           `yaml:"worker_model,omitempty" toml:"worker_model,omitempty"`
-	PromptsPath                    *string           `yaml:"prompts_path,omitempty" toml:"prompts_path,omitempty"`
-	SessionsPath                   *string           `yaml:"sessions_path,omitempty" toml:"sessions_path,omitempty"`
-	MemoryWarmPath                 *string           `yaml:"memory_warm_path,omitempty" toml:"memory_warm_path,omitempty"`
-	MemoryColdPath                 *string           `yaml:"memory_cold_path,omitempty" toml:"memory_cold_path,omitempty"`
-	MemoryAutoRecallEnabled        *bool             `yaml:"memory_auto_recall_enabled,omitempty" toml:"memory_auto_recall_enabled,omitempty"`
-	MemoryAutoRecallLimit          *int              `yaml:"memory_auto_recall_limit,omitempty" toml:"memory_auto_recall_limit,omitempty"`
-	MemoryWarmTTL                  *string           `yaml:"memory_warm_ttl,omitempty" toml:"memory_warm_ttl,omitempty"`
-	MemoryTemporalDecayEnabled     *bool             `yaml:"memory_temporal_decay_enabled,omitempty" toml:"memory_temporal_decay_enabled,omitempty"`
-	MemoryTemporalDecayHalfLife    *string           `yaml:"memory_temporal_decay_half_life,omitempty" toml:"memory_temporal_decay_half_life,omitempty"`
-	MemoryAnchorEnabled            *bool             `yaml:"memory_anchor_enabled,omitempty" toml:"memory_anchor_enabled,omitempty"`
-	MemoryAnchorMinWeight          *float64          `yaml:"memory_anchor_min_weight,omitempty" toml:"memory_anchor_min_weight,omitempty"`
-	MemoryEvolutionInterval        *string           `yaml:"memory_evolution_interval,omitempty" toml:"memory_evolution_interval,omitempty"`
-	MemoryEvolutionEnabled         *bool             `yaml:"memory_evolution_enabled,omitempty" toml:"memory_evolution_enabled,omitempty"`
-	MemoryEvolutionUseWorker       *bool             `yaml:"memory_evolution_use_worker,omitempty" toml:"memory_evolution_use_worker,omitempty"`
-	MemoryEvolutionBatchSize       *int              `yaml:"memory_evolution_batch_size,omitempty" toml:"memory_evolution_batch_size,omitempty"`
-	MemoryGraphEnabled             *bool             `yaml:"memory_graph_enabled,omitempty" toml:"memory_graph_enabled,omitempty"`
-	MemoryGraphPath                *string           `yaml:"memory_graph_path,omitempty" toml:"memory_graph_path,omitempty"`
-	MemoryGraphExtractOnArchive    *bool             `yaml:"memory_graph_extract_on_archive,omitempty" toml:"memory_graph_extract_on_archive,omitempty"`
-	MemoryGraphExtractOnEvolve     *bool             `yaml:"memory_graph_extract_on_evolve,omitempty" toml:"memory_graph_extract_on_evolve,omitempty"`
-	MemoryGraphMaxHops             *int              `yaml:"memory_graph_max_hops,omitempty" toml:"memory_graph_max_hops,omitempty"`
-	MemoryGraphMaxHits             *int              `yaml:"memory_graph_max_hits,omitempty" toml:"memory_graph_max_hits,omitempty"`
-	MemoryGraphMinConfidence       *float64          `yaml:"memory_graph_min_confidence,omitempty" toml:"memory_graph_min_confidence,omitempty"`
-	MemoryGraphNamespace           *string           `yaml:"memory_graph_namespace,omitempty" toml:"memory_graph_namespace,omitempty"`
-	MemoryGraphDebugEnabled        *bool             `yaml:"memory_graph_debug_enabled,omitempty" toml:"memory_graph_debug_enabled,omitempty"`
-	MemoryDecisionEnabled          *bool             `yaml:"memory_decision_enabled,omitempty" toml:"memory_decision_enabled,omitempty"`
-	MemoryDecisionPath             *string           `yaml:"memory_decision_path,omitempty" toml:"memory_decision_path,omitempty"`
-	MemoryDecisionMaxHits          *int              `yaml:"memory_decision_max_hits,omitempty" toml:"memory_decision_max_hits,omitempty"`
-	MemoryDecisionMinConfidence    *float64          `yaml:"memory_decision_min_confidence,omitempty" toml:"memory_decision_min_confidence,omitempty"`
-	MemoryDecisionMinReuseScore    *float64          `yaml:"memory_decision_min_reuse_score,omitempty" toml:"memory_decision_min_reuse_score,omitempty"`
-	MemoryDecisionRecipeEnabled    *bool             `yaml:"memory_decision_recipe_enabled,omitempty" toml:"memory_decision_recipe_enabled,omitempty"`
-	MemoryDecisionRecipeInterval   *string           `yaml:"memory_decision_recipe_interval,omitempty" toml:"memory_decision_recipe_interval,omitempty"`
-	MemoryDecisionRecipeMinSupport *int              `yaml:"memory_decision_recipe_min_support,omitempty" toml:"memory_decision_recipe_min_support,omitempty"`
-	MemoryDecisionDebugEnabled     *bool             `yaml:"memory_decision_debug_enabled,omitempty" toml:"memory_decision_debug_enabled,omitempty"`
-	ProviderHeaders                map[string]string `yaml:"provider_headers,omitempty" toml:"provider_headers,omitempty"`
-	AnthropicVersion               *string           `yaml:"anthropic_version,omitempty" toml:"anthropic_version,omitempty"`
-	AnthropicMaxTokens             *int              `yaml:"anthropic_max_tokens,omitempty" toml:"anthropic_max_tokens,omitempty"`
-	MaxTurns                       *int              `yaml:"max_turns,omitempty" toml:"max_turns,omitempty"`
-	WorkerMaxConcurrency           *int              `yaml:"worker_max_concurrency,omitempty" toml:"worker_max_concurrency,omitempty"`
-	WorkerMaxFiles                 *int              `yaml:"worker_max_files,omitempty" toml:"worker_max_files,omitempty"`
-	WorkerMaxFileChunks            *int              `yaml:"worker_max_file_chunks,omitempty" toml:"worker_max_file_chunks,omitempty"`
-	ToolSelectorEnabled            *bool             `yaml:"tool_selector_enabled,omitempty" toml:"tool_selector_enabled,omitempty"`
-	ToolSelectorMode               *string           `yaml:"tool_selector_mode,omitempty" toml:"tool_selector_mode,omitempty"`
-	ToolSelectorModel              *string           `yaml:"tool_selector_model,omitempty" toml:"tool_selector_model,omitempty"`
-	ToolSelectorTimeoutMS          *int              `yaml:"tool_selector_timeout_ms,omitempty" toml:"tool_selector_timeout_ms,omitempty"`
-	ToolSelectorConfidence         *float64          `yaml:"tool_selector_confidence,omitempty" toml:"tool_selector_confidence,omitempty"`
-	ToolSelectorShadow             *bool             `yaml:"tool_selector_shadow,omitempty" toml:"tool_selector_shadow,omitempty"`
-	ToolSelectorRecentMsgs         *int              `yaml:"tool_selector_recent_messages,omitempty" toml:"tool_selector_recent_messages,omitempty"`
-	BindAddr                       *string           `yaml:"bind_addr,omitempty" toml:"bind_addr,omitempty"`
-	APIToken                       *string           `yaml:"api_token,omitempty" toml:"api_token,omitempty"`
-	CORSOrigins                    []string          `yaml:"cors_origins,omitempty" toml:"cors_origins,omitempty"`
+	ActiveProvider                 *string                       `toml:"active_provider,omitempty"`
+	Providers                      map[string]providerFileConfig `toml:"providers,omitempty"`
+	ModelProvider                  *string                       `toml:"model_provider,omitempty"`
+	ModelProviders                 []legacyProviderConfig        `toml:"model_providers,omitempty"`
+	Provider                       *string                       `toml:"provider,omitempty"`
+	APIKey                         *string                       `toml:"api_key,omitempty"`
+	BaseURL                        *string                       `toml:"base_url,omitempty"`
+	Model                          *string                       `toml:"model,omitempty"`
+	ChatPath                       *string                       `toml:"chat_path,omitempty"`
+	NativePersistent               *bool                         `toml:"native_persistent,omitempty"`
+	WorkerModel                    *string                       `toml:"worker_model,omitempty"`
+	PromptsPath                    *string                       `toml:"prompts_path,omitempty"`
+	SessionsPath                   *string                       `toml:"sessions_path,omitempty"`
+	MemoryWarmPath                 *string                       `toml:"memory_warm_path,omitempty"`
+	MemoryColdPath                 *string                       `toml:"memory_cold_path,omitempty"`
+	MemoryAutoRecallEnabled        *bool                         `toml:"memory_auto_recall_enabled,omitempty"`
+	MemoryAutoRecallLimit          *int                          `toml:"memory_auto_recall_limit,omitempty"`
+	MemoryWarmTTL                  *string                       `toml:"memory_warm_ttl,omitempty"`
+	MemoryTemporalDecayEnabled     *bool                         `toml:"memory_temporal_decay_enabled,omitempty"`
+	MemoryTemporalDecayHalfLife    *string                       `toml:"memory_temporal_decay_half_life,omitempty"`
+	MemoryAnchorEnabled            *bool                         `toml:"memory_anchor_enabled,omitempty"`
+	MemoryAnchorMinWeight          *float64                      `toml:"memory_anchor_min_weight,omitempty"`
+	MemoryEvolutionInterval        *string                       `toml:"memory_evolution_interval,omitempty"`
+	MemoryEvolutionEnabled         *bool                         `toml:"memory_evolution_enabled,omitempty"`
+	MemoryEvolutionUseWorker       *bool                         `toml:"memory_evolution_use_worker,omitempty"`
+	MemoryEvolutionBatchSize       *int                          `toml:"memory_evolution_batch_size,omitempty"`
+	MemoryGraphEnabled             *bool                         `toml:"memory_graph_enabled,omitempty"`
+	MemoryGraphPath                *string                       `toml:"memory_graph_path,omitempty"`
+	MemoryGraphExtractOnArchive    *bool                         `toml:"memory_graph_extract_on_archive,omitempty"`
+	MemoryGraphExtractOnEvolve     *bool                         `toml:"memory_graph_extract_on_evolve,omitempty"`
+	MemoryGraphMaxHops             *int                          `toml:"memory_graph_max_hops,omitempty"`
+	MemoryGraphMaxHits             *int                          `toml:"memory_graph_max_hits,omitempty"`
+	MemoryGraphMinConfidence       *float64                      `toml:"memory_graph_min_confidence,omitempty"`
+	MemoryGraphNamespace           *string                       `toml:"memory_graph_namespace,omitempty"`
+	MemoryGraphDebugEnabled        *bool                         `toml:"memory_graph_debug_enabled,omitempty"`
+	MemoryDecisionEnabled          *bool                         `toml:"memory_decision_enabled,omitempty"`
+	MemoryDecisionCaptureOnTurn    *bool                         `toml:"memory_decision_capture_on_turn,omitempty"`
+	MemoryDecisionPath             *string                       `toml:"memory_decision_path,omitempty"`
+	MemoryDecisionMaxHits          *int                          `toml:"memory_decision_max_hits,omitempty"`
+	MemoryDecisionMinConfidence    *float64                      `toml:"memory_decision_min_confidence,omitempty"`
+	MemoryDecisionMinReuseScore    *float64                      `toml:"memory_decision_min_reuse_score,omitempty"`
+	MemoryDecisionRecipeEnabled    *bool                         `toml:"memory_decision_recipe_enabled,omitempty"`
+	MemoryDecisionRecipeInterval   *string                       `toml:"memory_decision_recipe_interval,omitempty"`
+	MemoryDecisionRecipeMinSupport *int                          `toml:"memory_decision_recipe_min_support,omitempty"`
+	MemoryDecisionDebugEnabled     *bool                         `toml:"memory_decision_debug_enabled,omitempty"`
+	ProviderHeaders                map[string]string             `toml:"provider_headers,omitempty"`
+	AnthropicVersion               *string                       `toml:"anthropic_version,omitempty"`
+	AnthropicMaxTokens             *int                          `toml:"anthropic_max_tokens,omitempty"`
+	MaxTurns                       *int                          `toml:"max_turns,omitempty"`
+	WorkerMaxConcurrency           *int                          `toml:"worker_max_concurrency,omitempty"`
+	WorkerMaxFiles                 *int                          `toml:"worker_max_files,omitempty"`
+	WorkerMaxFileChunks            *int                          `toml:"worker_max_file_chunks,omitempty"`
+	ToolSelectorEnabled            *bool                         `toml:"tool_selector_enabled,omitempty"`
+	ToolSelectorMode               *string                       `toml:"tool_selector_mode,omitempty"`
+	ToolSelectorModel              *string                       `toml:"tool_selector_model,omitempty"`
+	ToolSelectorTimeoutMS          *int                          `toml:"tool_selector_timeout_ms,omitempty"`
+	ToolSelectorConfidence         *float64                      `toml:"tool_selector_confidence,omitempty"`
+	ToolSelectorShadow             *bool                         `toml:"tool_selector_shadow,omitempty"`
+	ToolSelectorRecentMsgs         *int                          `toml:"tool_selector_recent_messages,omitempty"`
+	BindAddr                       *string                       `toml:"bind_addr,omitempty"`
+	APIToken                       *string                       `toml:"api_token,omitempty"`
+	CORSOrigins                    []string                      `toml:"cors_origins,omitempty"`
 }
 
 func configPathFromEnv() string {
 	return getenvDefault("GHOST_CONFIG_PATH", defaultConfigPath)
-}
-
-func loadLegacyBridgeYAMLConfig(path string) (bridgeFileConfig, error) {
-	resolvedPath, err := resolveUserPath(path)
-	if err != nil {
-		return bridgeFileConfig{}, fmt.Errorf("resolve config path: %w", err)
-	}
-
-	raw, err := os.ReadFile(resolvedPath)
-	if err != nil {
-		return bridgeFileConfig{}, err
-	}
-	if strings.TrimSpace(string(raw)) == "" {
-		return bridgeFileConfig{}, nil
-	}
-
-	var cfg bridgeFileConfig
-	if err := yaml.Unmarshal(raw, &cfg); err != nil {
-		return bridgeFileConfig{}, fmt.Errorf("parse config file %s: %w", resolvedPath, err)
-	}
-	return cfg, nil
-}
-
-func writeLegacyBridgeYAMLConfig(path string, cfg bridgeFileConfig) error {
-	resolvedPath, err := resolveUserPath(path)
-	if err != nil {
-		return fmt.Errorf("resolve config path: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(resolvedPath), 0o755); err != nil {
-		return fmt.Errorf("create config directory: %w", err)
-	}
-
-	raw, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return fmt.Errorf("encode config file: %w", err)
-	}
-	if err := os.WriteFile(resolvedPath, raw, 0o600); err != nil {
-		return fmt.Errorf("write config file %s: %w", resolvedPath, err)
-	}
-	return nil
 }
 
 func resolveUserPath(pathValue string) (string, error) {

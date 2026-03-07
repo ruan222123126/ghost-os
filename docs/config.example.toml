@@ -1,39 +1,40 @@
 # Ghost-OS Bridge config template
 # Copy this file to ~/.ghost-os/config.toml and adjust values as needed.
 
-# Active runtime selection
-model_provider = "openai"
+active_provider = "openai"
 model = "gpt-4o"
 # chat_path = "/chat/completions"
 
-[[model_providers]]
-name = "openai"
+[providers.openai]
+type = "openai"
 base_url = "https://api.openai.com/v1"
 api_key = "sk-your-key"
 models = ["gpt-4o", "gpt-4.1-mini"]
 
 # OpenAI-compatible gateway example
-# [[model_providers]]
-# name = "crs"
+# [providers.crs]
+# type = "custom"
 # base_url = "https://lldai.online/openai"
 # api_key = "sk-your-key"
 # models = ["gpt-5.4", "gpt-4"]
 
-# Bridge HTTP server
+# Anthropic example
+# [providers.anthropic]
+# type = "anthropic"
+# api_key = "sk-ant-..."
+# models = ["claude-3-7-sonnet-latest"]
+
 bind_addr = "127.0.0.1:8080"
 api_token = "change-me"
 cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 
-# Persistence
 sessions_path = "~/.ghost-os/sessions"
 memory_warm_path = "~/.ghost-os/memory/warm.json"
 memory_cold_path = "~/.ghost-os/memory/cold"
 
-# Prompt / native execution
 prompts_path = "prompts.yaml"
 native_persistent = false
 
-# Memory
 memory_auto_recall_enabled = true
 memory_auto_recall_limit = 5
 memory_warm_ttl = "24h"
@@ -49,6 +50,7 @@ memory_graph_min_confidence = 0.72
 memory_graph_namespace = "default"
 memory_graph_debug_enabled = false
 memory_decision_enabled = false
+memory_decision_capture_on_turn = true
 memory_decision_path = "~/.ghost-os/memory/decision"
 memory_decision_max_hits = 4
 memory_decision_min_confidence = 0.75
@@ -58,17 +60,14 @@ memory_decision_recipe_interval = "6h"
 memory_decision_recipe_min_support = 3
 memory_decision_debug_enabled = false
 
-# Worker summarizer
 worker_model = ""
 worker_max_concurrency = 4
 worker_max_files = 20
 worker_max_file_chunks = 4
 
-# Anthropic-only options
 anthropic_version = "2023-06-01"
 anthropic_max_tokens = 1024
 
-# Tool selector
 tool_selector_enabled = false
 tool_selector_mode = "llm"
 # tool_selector_model = "gpt-4o-mini"

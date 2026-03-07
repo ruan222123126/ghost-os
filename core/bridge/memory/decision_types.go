@@ -3,6 +3,8 @@ package memory
 import (
 	"strings"
 	"time"
+
+	"ghost-os/bridge/llm"
 )
 
 const (
@@ -50,14 +52,47 @@ type DecisionQuestion struct {
 	AnsweredAt time.Time `json:"answered_at,omitempty"`
 }
 
+// DecisionAnsweredQuestion 解耦 session 层的人类问答结果，供 decision capture 使用。
+type DecisionAnsweredQuestion struct {
+	QuestionID string    `json:"question_id,omitempty"`
+	Prompt     string    `json:"prompt,omitempty"`
+	ToolCallID string    `json:"tool_call_id,omitempty"`
+	TraceID    string    `json:"trace_id,omitempty"`
+	Answer     string    `json:"answer,omitempty"`
+	AskedAt    time.Time `json:"asked_at,omitempty"`
+	AnsweredAt time.Time `json:"answered_at,omitempty"`
+}
+
+// DecisionCaptureInput 描述一轮完成后用于提炼 decision memo 的输入。
+type DecisionCaptureInput struct {
+	Namespace         string                     `json:"namespace,omitempty"`
+	SessionID         string                     `json:"session_id,omitempty"`
+	TraceID           string                     `json:"trace_id,omitempty"`
+	TurnID            string                     `json:"turn_id,omitempty"`
+	UserMessage       string                     `json:"user_message,omitempty"`
+	RecentHistory     []llm.Message              `json:"-"`
+	NewMessages       []llm.Message              `json:"-"`
+	Outcome           string                     `json:"outcome,omitempty"`
+	AnsweredQuestions []DecisionAnsweredQuestion `json:"answered_questions,omitempty"`
+	SessionEnded      bool                       `json:"session_ended,omitempty"`
+	TurnStartedAt     time.Time                  `json:"turn_started_at,omitempty"`
+	TurnFinishedAt    time.Time                  `json:"turn_finished_at,omitempty"`
+	Environment       DecisionEnvFingerprint     `json:"environment,omitempty"`
+}
+
 // DecisionEnvFingerprint 保存可复用决策的轻量环境指纹。
 type DecisionEnvFingerprint struct {
 	OS               string   `json:"os,omitempty"`
+	Platform         string   `json:"platform,omitempty"`
 	Shell            string   `json:"shell,omitempty"`
 	WorkspaceRoot    string   `json:"workspace_root,omitempty"`
 	Provider         string   `json:"provider,omitempty"`
 	Model            string   `json:"model,omitempty"`
 	GraphNamespace   string   `json:"graph_namespace,omitempty"`
+	Domain           string   `json:"domain,omitempty"`
+	ToolsetSignature string   `json:"toolset_signature,omitempty"`
+	PathHints        []string `json:"path_hints,omitempty"`
+	TargetAppOrSite  string   `json:"target_app_or_site,omitempty"`
 	NativePersistent bool     `json:"native_persistent,omitempty"`
 	ToolNames        []string `json:"tool_names,omitempty"`
 }
@@ -319,12 +354,65 @@ func normalizeDecisionQuestions(questions []DecisionQuestion) []DecisionQuestion
 func normalizeDecisionEnvFingerprint(env DecisionEnvFingerprint) DecisionEnvFingerprint {
 	out := env
 	out.OS = strings.TrimSpace(out.OS)
+	out.Platform = strings.TrimSpace(out.Platform)
 	out.Shell = strings.TrimSpace(out.Shell)
 	out.WorkspaceRoot = strings.TrimSpace(out.WorkspaceRoot)
 	out.Provider = strings.TrimSpace(out.Provider)
 	out.Model = strings.TrimSpace(out.Model)
 	out.GraphNamespace = strings.TrimSpace(out.GraphNamespace)
+	out.Domain = strings.TrimSpace(out.Domain)
+	out.ToolsetSignature = strings.TrimSpace(out.ToolsetSignature)
+	out.PathHints = uniqueStrings(out.PathHints)
+	out.TargetAppOrSite = strings.TrimSpace(out.TargetAppOrSite)
 	out.ToolNames = uniqueStrings(out.ToolNames)
+	return out
+}
+
+func normalizeDecisionAnsweredQuestion(question DecisionAnsweredQuestion) DecisionAnsweredQuestion {
+	out := question
+	out.QuestionID = strings.TrimSpace(out.QuestionID)
+	out.Prompt = strings.TrimSpace(out.Prompt)
+	out.ToolCallID = strings.TrimSpace(out.ToolCallID)
+	out.TraceID = strings.TrimSpace(out.TraceID)
+	out.Answer = strings.TrimSpace(out.Answer)
+	if !out.AskedAt.IsZero() {
+		out.AskedAt = out.AskedAt.UTC()
+	}
+	if !out.AnsweredAt.IsZero() {
+		out.AnsweredAt = out.AnsweredAt.UTC()
+	}
+	return out
+}
+
+func normalizeDecisionAnsweredQuestions(questions []DecisionAnsweredQuestion) []DecisionAnsweredQuestion {
+	if len(questions) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(questions))
+	out := make([]DecisionAnsweredQuestion, 0, len(questions))
+	for _, question := range questions {
+		normalized := normalizeDecisionAnsweredQuestion(question)
+		if normalized.QuestionID == "" && normalized.Prompt == "" && normalized.ToolCallID == "" && normalized.Answer == "" {
+			continue
+		}
+		fingerprint := strings.Join([]string{
+			normalized.QuestionID,
+			normalized.Prompt,
+			normalized.ToolCallID,
+			normalized.TraceID,
+			normalized.Answer,
+			normalized.AskedAt.UTC().Format(time.RFC3339Nano),
+			normalized.AnsweredAt.UTC().Format(time.RFC3339Nano),
+		}, "|")
+		if _, ok := seen[fingerprint]; ok {
+			continue
+		}
+		seen[fingerprint] = struct{}{}
+		out = append(out, normalized)
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
 }
 
@@ -537,7 +625,17 @@ func cloneDecisionQuestions(questions []DecisionQuestion) []DecisionQuestion {
 
 func cloneDecisionEnvFingerprint(env DecisionEnvFingerprint) DecisionEnvFingerprint {
 	out := env
+	out.PathHints = append([]string(nil), env.PathHints...)
 	out.ToolNames = append([]string(nil), env.ToolNames...)
+	return out
+}
+
+func cloneDecisionAnsweredQuestions(questions []DecisionAnsweredQuestion) []DecisionAnsweredQuestion {
+	if len(questions) == 0 {
+		return nil
+	}
+	out := make([]DecisionAnsweredQuestion, len(questions))
+	copy(out, questions)
 	return out
 }
 

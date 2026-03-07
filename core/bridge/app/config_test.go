@@ -63,6 +63,7 @@ func TestParseFloatEnv_FallsBackOnInvalidValues(t *testing.T) {
 func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
 	t.Setenv("GHOST_MEMORY_DECISION_ENABLED", "true")
+	t.Setenv("GHOST_MEMORY_DECISION_CAPTURE_ON_TURN", "false")
 	t.Setenv("GHOST_MEMORY_DECISION_PATH", "/tmp/decision")
 	t.Setenv("GHOST_MEMORY_DECISION_MAX_HITS", "6")
 	t.Setenv("GHOST_MEMORY_DECISION_MIN_CONFIDENCE", "0.81")
@@ -83,6 +84,9 @@ func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 
 	if !cfg.MemoryDecisionEnabled {
 		t.Fatalf("expected decision memory to be enabled")
+	}
+	if cfg.MemoryDecisionCaptureOnTurn {
+		t.Fatalf("expected decision capture on turn to be disabled")
 	}
 	if cfg.MemoryDecisionPath != "/tmp/decision" {
 		t.Fatalf("unexpected decision path: got %q want %q", cfg.MemoryDecisionPath, "/tmp/decision")
@@ -111,6 +115,7 @@ func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 }
 
 func TestLoadConfigWithRuntime_LoadsMemoryEnhancementSettings(t *testing.T) {
+	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
 	t.Setenv("GHOST_MEMORY_TEMPORAL_DECAY_ENABLED", "true")
 	t.Setenv("GHOST_MEMORY_TEMPORAL_DECAY_HALF_LIFE", "120h")
 	t.Setenv("GHOST_MEMORY_ANCHOR_ENABLED", "true")

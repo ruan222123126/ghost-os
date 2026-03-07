@@ -29,6 +29,11 @@ type GraphFactExtractor interface {
 	ExtractGraphFacts(messages []llm.Message) ([]GraphFact, error)
 }
 
+// DecisionMemoExtractor 为可选的 decision 摘要补全能力提供统一接口。
+type DecisionMemoExtractor interface {
+	ExtractDecisionMemo(input DecisionCaptureInput) (DecisionMemo, error)
+}
+
 // MemoryConfig 定义三层记忆管理器初始化参数。
 type MemoryConfig struct {
 	WarmCapacity int
@@ -56,6 +61,8 @@ type MemoryConfig struct {
 	GraphNamespace           string
 	GraphDebugEnabled        bool
 	DecisionEnabled          bool
+	DecisionCaptureOnTurn    bool
+	DecisionCaptureOnTurnSet bool
 	DecisionPath             string
 	DecisionMaxHits          int
 	DecisionMinConfidence    float64
@@ -179,6 +186,9 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.DecisionMaxHits <= 0 {
 		out.DecisionMaxHits = defaultDecisionMaxHits
 	}
+	if !out.DecisionCaptureOnTurnSet {
+		out.DecisionCaptureOnTurn = true
+	}
 	if out.DecisionMinConfidence <= 0 {
 		out.DecisionMinConfidence = defaultDecisionMinConfidence
 	}
@@ -221,6 +231,17 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 
 func hasSummarizer(summarizer Summarizer) bool {
 	return summarizer != nil
+}
+
+// CaptureDecisionTurn 在单轮完成后提取并持久化 decision memo。
+func (m *MemoryManager) CaptureDecisionTurn(input DecisionCaptureInput) error {
+	if m == nil || m.decision == nil || !m.decision.Enabled() {
+		return nil
+	}
+	if !m.decision.captureOnTurn {
+		return nil
+	}
+	return m.decision.CaptureTurn(input)
 }
 
 // BuildContextWindow 从 warm 层构建自动召回上下文，供 Agent 在当前轮次注入。

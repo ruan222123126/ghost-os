@@ -36,7 +36,7 @@
 - Android 客户端已允许明文 HTTP（便于 Tailscale `100.x` 直连场景），并验证可重新构建安装包。
 - Android 客户端已补齐网络异常可读错误提示，配置页/聊天页不再显示 `null`，并已重新构建 release 安装包。
 - Android 客户端网络请求已切到 `Dispatchers.IO`，修复 `NetworkOnMainThreadException`，并已重新构建 release 安装包。
-- Bridge 配置主入口已切到文件优先：默认读取 `~/.ghost-os/config.yaml`（支持 `GHOST_CONFIG_PATH` 覆盖）并回退环境变量；`/api/config` 更新会持久化到该文件，`bind_addr / api_token / cors_origins` 也可由同一文件统一驱动，并补充了 `docs/config.example.yaml` 模板；Web 已增加配置轻量自动刷新，CLI 已补齐 `provider / api_key / base_url / model / chat_path` 运行态配置命令，形成文件与前端/终端双向同步基线。
+- Bridge 配置主入口已切到文件优先：默认读取 `~/.ghost-os/config.toml`（支持 `GHOST_CONFIG_PATH` 覆盖）并回退环境变量；`/api/config` 更新会持久化到该文件，`bind_addr / api_token / cors_origins` 也可由同一文件统一驱动，并补充了 `docs/config.example.toml` 模板；Web 已增加配置轻量自动刷新，CLI 已补齐 `provider / api_key / base_url / model / chat_path` 运行态配置命令，形成文件与前端/终端双向同步基线。
 - Bridge Agent sync/stream 回合编排已收口共享骨架：统一请求校验、错误分类、`session_end` 后处理，以及 runner 侧的会话装配 / 持久化 / `awaiting_human` 提交路径，降低 stop / retry / token 流后续演进时双分支漏改风险。
 
 ## 3) 主要短板
@@ -60,6 +60,7 @@
 - 2026-03-07: 收口会话历史 tool 对外契约：Bridge 读取内部 tool result envelope 后投影稳定的 `tool_result` / `human_interaction` 字段，`/api/sessions/:id` 不再要求 Web 反解 `message.text` JSON 或理解 `ask_human` 内部输出结构。
 
 - 2026-03-07: Bridge 配置切到 `~/.ghost-os/config.toml` + 多 Provider 列表模型；新增 YAML→TOML 自动迁移、`/api/config/providers` CRUD 与 Web Console Provider 管理面板。
+- 2026-03-07: Bridge 配置进一步收口为纯 TOML：Provider 从 `[[model_providers]]` 改为 `[providers.<id>]` 命名表，显式新增 `type = openai|anthropic|custom`，保留旧 TOML provider 布局一次性自动重写到新格式；Web Provider 面板与跨端 DTO 已同步补齐 `provider_type/type`。
 - 2026-03-07: Android 客户端已对齐 `AGENT_SEND` / `/api/questions/answer` 的联合响应契约，补齐 `awaiting_human` 解析、待回答问题续跑与输入框回答态，避免 `ask_human` 命中时因按单一成功 payload 反序列化而直接不兼容。
 - 2026-03-07: 将 `BridgeConfig` / `SessionDetail` / `ProviderListResponse` / `HumanResponseRequest` 等跨端业务 DTO 并入 `core/shared/schema.json`，扩展生成链统一产出 Go/Web/CLI/Android 契约；Bridge 会话详情改为稳定输出 snake_case `sessionMessage`，Android 移除漂移的 `native_driver_ready` 展示并改为读取真实配置字段。
 - 2026-03-07: 记忆层完成 PR1 基础增强：`MemoryEntry` / Markdown node 新增 summary、anchors、confidence、source_ids 等结构化字段；L1/L2/L3/Markdown 改为统一 temporal + anchor rerank；dreaming 已接上 worker summarizer 与规则/可选 LLM anchor 提炼，并补齐旧 warm JSON / 旧 markdown frontmatter 兼容与配置/排序回归测试。
@@ -72,3 +73,4 @@
 - 2026-03-07: 清理 `core/bridge/memory` 高置信度死代码：删除未被引用的 `MemoryLayer` 接口与未生效的 `DecayFactor / Priority / UseTimeDecay / MinPriority` 残留字段，移除自动召回中的无效写入与查询侧无效过滤，并补充 warm memory 兼容旧字段载荷的回归测试。
 - 2026-03-07: Web Console 收口会话/消息与 Bridge API 代理的重复骨架：`useSessions` 合并重复 setter，`useBridgeChat` 内联一次性包装函数，Provider CRUD 提炼共享异步 helper，API 代理路由改为统一 handler 工厂；同时清理 `drivers/native` 若干 clippy 冗余并确认 `pymethods` 宏展开告警仅做模块级抑制。
 - 2026-03-07: 记忆层启动 PR3 基础设施，新增 decision memo/recipe schema、文件化 store 与配置壳；capture/query/selector 接线待后续 commit。
+- 2026-03-07: PR3 第二步已接入 decision turn capture；回合完成后会把工具路径、人工阻塞点、answered questions、环境指纹与结构化经验写入 decision memo，仍未接 recall/selector/recipe distill。

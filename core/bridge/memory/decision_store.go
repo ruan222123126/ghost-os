@@ -49,7 +49,9 @@ type DecisionStore struct {
 // DecisionService 是后续 capture/query 的最薄 sidecar 壳。
 type DecisionService struct {
 	enabled          bool
+	captureOnTurn    bool
 	store            *DecisionStore
+	workerExtractor  DecisionMemoExtractor
 	maxHits          int
 	minConfidence    float64
 	minReuseScore    float64
@@ -81,8 +83,14 @@ func NewDecisionStore(baseDir string) *DecisionStore {
 }
 
 func NewDecisionService(config MemoryConfig) *DecisionService {
+	var workerExtractor DecisionMemoExtractor
+	if extractor, ok := config.Summarizer.(DecisionMemoExtractor); ok {
+		workerExtractor = extractor
+	}
 	service := &DecisionService{
 		enabled:          config.DecisionEnabled,
+		captureOnTurn:    config.DecisionCaptureOnTurn,
+		workerExtractor:  workerExtractor,
 		maxHits:          config.DecisionMaxHits,
 		minConfidence:    clamp01(maxFloat(config.DecisionMinConfidence, defaultDecisionMinConfidence)),
 		minReuseScore:    clamp01(maxFloat(config.DecisionMinReuseScore, defaultDecisionMinReuseScore)),
@@ -99,6 +107,9 @@ func NewDecisionService(config MemoryConfig) *DecisionService {
 	}
 	if service.recipeMinSupport <= 0 {
 		service.recipeMinSupport = defaultDecisionRecipeMinSupport
+	}
+	if !config.DecisionCaptureOnTurnSet {
+		service.captureOnTurn = true
 	}
 	if !service.enabled {
 		return service

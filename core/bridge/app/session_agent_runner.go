@@ -3,15 +3,15 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
-	"net/http"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
-	"ghost-os/bridge/tools"
 )
 
 const agentWarmMemoryCapacity = 100
@@ -22,7 +22,7 @@ type SessionTurnRunner interface {
 	RunTurnStream(ctx context.Context, message string, sessionID string, traceID string, sink agent.EventSink) (string, string, error)
 }
 
-// SessionAgentRunner 负责串起会话加载、历史恢复、Agent 执行与回合提交。
+// SessionAgentRunner 负责执行单轮 agent；运行时装配下沉到 sessionTurnPreparer。
 type SessionAgentRunner struct {
 	runtimeFactory      AgentRuntimeFactory
 	configStore         *ConfigStore
@@ -53,14 +53,19 @@ func (e *sessionTurnSetupError) Unwrap() error {
 }
 
 type sessionTurnState struct {
-	sessionStore *session.Store
-	deps         agentRuntimeDependencies
-	persistence  *SessionTurnCommitter
-	sess         *session.Session
-	agent        *agent.Agent
-	execCtx      context.Context
-	traceID      string
-	cleanup      func()
+	sessionStore      *session.Store
+	deps              agentRuntimeDependencies
+	persistence       *SessionTurnCommitter
+	sess              *session.Session
+	agent             *agent.Agent
+	execCtx           context.Context
+	traceID           string
+	userMessage       string
+	preTurnMessages   []llm.Message
+	answeredQuestions []memory.DecisionAnsweredQuestion
+	turnStartedAt     time.Time
+	environment       memory.DecisionEnvFingerprint
+	cleanup           func()
 }
 
 func (s *sessionTurnState) close() {
@@ -119,10 +124,62 @@ func (s *sessionTurnState) complete(
 		}
 		return "", "", saveErr
 	}
+	s.captureDecisionTurn(response, awaitingHuman)
 	if awaitingHuman {
 		return "", s.persistedSessionID(), runErr
 	}
 	return response, s.persistedSessionID(), nil
+}
+
+func (s *sessionTurnState) captureDecisionTurn(response string, awaitingHuman bool) {
+	if s == nil || s.persistence == nil || s.persistence.memoryManager == nil || s.agent == nil {
+		return
+	}
+	_, sessionEndSignal, err := parseSessionEndSignal(response)
+	if err != nil {
+		log.Printf(
+			"trace_id=%s action=MEMORY_DECISION_CAPTURE status=skip_invalid_session_end session_id=%s error=%v",
+			strings.TrimSpace(s.traceID),
+			strings.TrimSpace(s.currentSessionID()),
+			err,
+		)
+		return
+	}
+	outcome := memory.DecisionOutcomeSuccess
+	if awaitingHuman {
+		outcome = memory.DecisionOutcomeAwaitingHuman
+	}
+	input := memory.DecisionCaptureInput{
+		Namespace:         strings.TrimSpace(s.environment.GraphNamespace),
+		SessionID:         s.currentSessionID(),
+		TraceID:           strings.TrimSpace(s.traceID),
+		TurnID:            buildDecisionTurnID(s.agent.LastTurn(), s.traceID),
+		UserMessage:       strings.TrimSpace(s.userMessage),
+		RecentHistory:     llm.CloneMessages(s.preTurnMessages),
+		NewMessages:       s.agent.GetNewMessages(),
+		Outcome:           outcome,
+		AnsweredQuestions: append([]memory.DecisionAnsweredQuestion(nil), s.answeredQuestions...),
+		SessionEnded:      sessionEndSignal != nil,
+		TurnStartedAt:     s.turnStartedAt,
+		TurnFinishedAt:    time.Now().UTC(),
+		Environment:       s.environment,
+	}
+	if err := s.persistence.memoryManager.CaptureDecisionTurn(input); err != nil {
+		log.Printf(
+			"trace_id=%s action=MEMORY_DECISION_CAPTURE status=error session_id=%s error=%v",
+			strings.TrimSpace(s.traceID),
+			strings.TrimSpace(s.currentSessionID()),
+			err,
+		)
+	}
+}
+
+func buildDecisionTurnID(turn int, traceID string) string {
+	trimmedTraceID := strings.TrimSpace(traceID)
+	if trimmedTraceID == "" {
+		return fmt.Sprintf("turn-%d", turn)
+	}
+	return fmt.Sprintf("turn-%d-%s", turn, trimmedTraceID)
 }
 
 func NewSessionAgentRunner(
@@ -145,51 +202,21 @@ func NewSessionAgentRunner(
 }
 
 func (r *SessionAgentRunner) prepareTurn(ctx context.Context, userMessage string, sessionID string, traceID string) (*sessionTurnState, error) {
-	deps, err := r.runtimeFactory.Build(r.configStore)
-	if err != nil {
-		return nil, err
+	return r.turnPreparer().prepare(ctx, userMessage, sessionID, traceID)
+}
+
+func (r *SessionAgentRunner) turnPreparer() *sessionTurnPreparer {
+	if r == nil {
+		return newSessionTurnPreparer(nil, nil, nil, nil, nil, nil)
 	}
-
-	historyBuilder := newSessionHistoryBuilder(deps.cfg, deps.systemPrompt, r.sessionStore)
-	persistence := newSessionTurnCommitter(r.sessionStore, r.memoryManager(deps.cfg), traceID)
-
-	sess, err := historyBuilder.LoadOrCreateSession(sessionID)
-	if err != nil {
-		deps.Close()
-		return nil, &sessionTurnSetupError{
-			sessionID: strings.TrimSpace(sessionID),
-			err:       err,
-		}
-	}
-
-	execCtx, cleanup, err := r.registerRun(ctx, sess.ID, traceID)
-	if err != nil {
-		deps.Close()
-		return nil, &sessionTurnSetupError{
-			sessionID:  strings.TrimSpace(sess.ID),
-			statusCode: http.StatusConflict,
-			err:        err,
-		}
-	}
-
-	askHumanContinuation := hasAnsweredHumanResponse(sess)
-	history := historyBuilder.BuildHistory(sess)
-	catalog, systemPrompt := r.selectToolsForTurn(execCtx, deps, history, userMessage, askHumanContinuation, traceID)
-	if systemPrompt != "" {
-		history.UpdateSystemPrompt(systemPrompt)
-	}
-	r.injectAutoRecall(history, userMessage, sess.ID, traceID, persistence.memoryManager)
-
-	return &sessionTurnState{
-		sessionStore: r.sessionStore,
-		deps:         deps,
-		persistence:  persistence,
-		sess:         sess,
-		agent:        agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns),
-		execCtx:      tools.WithSession(execCtx, sess),
-		traceID:      strings.TrimSpace(traceID),
-		cleanup:      cleanup,
-	}, nil
+	return newSessionTurnPreparer(
+		r.runtimeFactory,
+		r.configStore,
+		r.sessionStore,
+		r.sharedMemoryManager,
+		r.runRegistry,
+		r.selectorFactory,
+	)
 }
 
 func (r *SessionAgentRunner) RunTurn(ctx context.Context, userMessage string, sessionID string, traceID string) (string, string, error) {
@@ -232,136 +259,6 @@ func (r *SessionAgentRunner) RunTurnStream(ctx context.Context, userMessage stri
 		}
 		return emitStreamErrorEvent(ctx, streamSink, turn.traceID, turnNumber, stepID, turn.currentSessionID(), 0, err)
 	})
-}
-
-func (r *SessionAgentRunner) selectToolsForTurn(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-	history *agent.History,
-	userMessage string,
-	askHumanContinuation bool,
-	traceID string,
-) (tools.ToolCatalog, string) {
-	if askHumanContinuation {
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=ask_human_continuation", strings.TrimSpace(traceID))
-		return deps.registry, ""
-	}
-	if !deps.cfg.ToolSelectorEnabled {
-		return deps.registry, ""
-	}
-
-	selector := r.newSelector(deps.cfg)
-	if selector == nil {
-		return deps.registry, ""
-	}
-
-	recentMessages := getRecentMessages(history, deps.cfg.ToolSelectorRecentMsgs)
-	result := selector.SelectTools(ctx, userMessage, recentMessages, traceID)
-	if deps.cfg.ToolSelectorShadow {
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=shadow mode=%s tools=%v confidence=%.2f fallback=%t reason=%q error=%v", strings.TrimSpace(traceID), result.Mode, result.Tools, result.Confidence, result.Fallback, result.Reason, result.Error)
-		return deps.registry, ""
-	}
-	if result.Mode != "subset" || result.Fallback {
-		return deps.registry, ""
-	}
-
-	scoped := tools.NewScopedCatalog(deps.registry, result.Tools)
-	return scoped, buildSystemPromptForCatalog(deps.cfg, scoped)
-}
-
-func (r *SessionAgentRunner) newSelector(cfg Config) selectorEngine {
-	if r != nil && r.selectorFactory != nil {
-		return r.selectorFactory(cfg)
-	}
-	return newToolSelectorFromConfig(cfg)
-}
-
-func getRecentMessages(history *agent.History, limit int) []llm.Message {
-	if history == nil || limit <= 0 {
-		return nil
-	}
-
-	messages := history.Messages()
-	filtered := make([]llm.Message, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
-		case llm.RoleUser, llm.RoleAssistant:
-			filtered = append(filtered, msg)
-		}
-	}
-	if len(filtered) <= limit {
-		return llm.CloneMessages(filtered)
-	}
-	return llm.CloneMessages(filtered[len(filtered)-limit:])
-}
-
-func hasAnsweredHumanResponse(sess *session.Session) bool {
-	return sess != nil && len(sess.HumanAnswers) > 0
-}
-
-func (r *SessionAgentRunner) registerRun(ctx context.Context, sessionID string, traceID string) (context.Context, func(), error) {
-	if r == nil || r.runRegistry == nil {
-		return ctx, func() {}, nil
-	}
-
-	trimmedSessionID := strings.TrimSpace(sessionID)
-	if trimmedSessionID == "" {
-		return ctx, func() {}, nil
-	}
-
-	execCtx, cancel := context.WithCancel(ctx)
-	if err := r.runRegistry.Register(trimmedSessionID, strings.TrimSpace(traceID), cancel); err != nil {
-		cancel()
-		return ctx, func() {}, err
-	}
-
-	return execCtx, func() {
-		r.runRegistry.Unregister(trimmedSessionID)
-		cancel()
-	}, nil
-}
-
-func (r *SessionAgentRunner) memoryManager(cfg Config) *memory.MemoryManager {
-	if r == nil {
-		return nil
-	}
-	if r.sharedMemoryManager != nil {
-		return r.sharedMemoryManager
-	}
-
-	return memory.NewMemoryManager(memoryManagerConfigFromAppConfig(cfg, r.sessionStore, newMemoryWorkerSummarizer(r.configStore)))
-}
-
-// injectAutoRecall 在执行前把 warm 层召回上下文注入为 system 消息。
-func (r *SessionAgentRunner) injectAutoRecall(history *agent.History, userMessage string, sessionID string, traceID string, memoryManager *memory.MemoryManager) {
-	if memoryManager == nil || history == nil {
-		return
-	}
-
-	contextWindow, err := memoryManager.BuildContextWindowWithScope(memory.SessionScope{
-		SessionID: sessionID,
-		History:   history,
-	}, userMessage)
-	if err != nil {
-		log.Printf(
-			"trace_id=%s action=MEMORY_AUTO_RECALL status=error session_id=%s error=%v",
-			strings.TrimSpace(traceID),
-			strings.TrimSpace(sessionID),
-			err,
-		)
-		return
-	}
-	for _, msg := range contextWindow {
-		history.Append(msg)
-	}
-	if len(contextWindow) > 0 {
-		log.Printf(
-			"trace_id=%s action=MEMORY_AUTO_RECALL status=success session_id=%s injected=%d",
-			strings.TrimSpace(traceID),
-			strings.TrimSpace(sessionID),
-			len(contextWindow),
-		)
-	}
 }
 
 type sessionTurnRunnerAdapter struct {
