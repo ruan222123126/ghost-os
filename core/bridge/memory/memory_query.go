@@ -16,21 +16,27 @@ type QueryService struct {
 	cold     *ColdMemory
 	graph    *GraphService
 	decision *DecisionService
+	planner  *IntentPlanner
+	vector   *VectorSidecar
 
 	autoRecallEnabled bool
 	autoRecallLimit   int
+	shadowEnabled     bool
 	scoring           memoryScoringConfig
 	metrics           *memoryCounters
 }
 
-func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, metrics *memoryCounters) *QueryService {
+func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, planner *IntentPlanner, vector *VectorSidecar, metrics *memoryCounters) *QueryService {
 	return &QueryService{
 		warm:              warm,
 		cold:              cold,
 		graph:             graph,
 		decision:          decision,
+		planner:           planner,
+		vector:            vector,
 		autoRecallEnabled: config.AutoRecallEnabled,
 		autoRecallLimit:   config.AutoRecallLimit,
+		shadowEnabled:     config.ShadowRecallEnabled,
 		scoring:           newMemoryScoringConfig(config),
 		metrics:           metrics,
 	}
@@ -283,7 +289,12 @@ func (s *QueryService) QueryResultWithScope(query MemoryQuery, scope SessionScop
 	if s.decision != nil {
 		s.decision.RecordMemoAccess(decisionMemoHits, now)
 	}
-	return MemoryQueryResult{Entries: results, GraphHits: graphHits, DecisionHits: decisionHits}, nil
+	liveResult := MemoryQueryResult{Entries: results, GraphHits: graphHits, DecisionHits: decisionHits}
+	intentPlan, vectorHits, shadowReport := s.runShadowRecall(query, scope, liveResult)
+	liveResult.IntentPlan = intentPlan
+	liveResult.VectorHits = vectorHits
+	liveResult.ShadowReport = shadowReport
+	return liveResult, nil
 }
 
 func queryHot(scope SessionScope, query MemoryQuery) []MemoryEntry {

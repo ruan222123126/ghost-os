@@ -65,6 +65,7 @@ type MemoryQuery struct {
 	Metadata          map[string]any          `json:"metadata,omitempty"`
 	IncludeMarkdown   bool                    `json:"include_markdown,omitempty"`
 	IncludeGraph      bool                    `json:"include_graph,omitempty"`
+	IncludeVector     bool                    `json:"include_vector,omitempty"`
 	SemanticQuery     string                  `json:"semantic_query,omitempty"`
 	AnchorTypes       []string                `json:"anchor_types,omitempty"`
 	MinConfidence     float64                 `json:"min_confidence,omitempty"`
@@ -74,6 +75,9 @@ type MemoryQuery struct {
 	GraphPredicates   []string                `json:"graph_predicates,omitempty"`
 	GraphDebug        bool                    `json:"graph_debug,omitempty"`
 	IncludeDecision   bool                    `json:"include_decision,omitempty"`
+	VectorDebug       bool                    `json:"vector_debug,omitempty"`
+	IntentDebug       bool                    `json:"intent_debug,omitempty"`
+	ShadowDebug       bool                    `json:"shadow_debug,omitempty"`
 	DecisionDebug     bool                    `json:"decision_debug,omitempty"`
 	DecisionReuseOnly bool                    `json:"decision_reuse_only,omitempty"`
 	DecisionTypes     []string                `json:"decision_types,omitempty"`
@@ -84,9 +88,45 @@ type MemoryQuery struct {
 
 // MemoryQueryResult 允许在不破坏旧接口的情况下带回 graph/decision 命中结果。
 type MemoryQueryResult struct {
-	Entries      []MemoryEntry `json:"entries"`
-	GraphHits    []GraphHit    `json:"graph_hits,omitempty"`
-	DecisionHits []DecisionHit `json:"decision_hits,omitempty"`
+	Entries      []MemoryEntry       `json:"entries"`
+	GraphHits    []GraphHit          `json:"graph_hits,omitempty"`
+	DecisionHits []DecisionHit       `json:"decision_hits,omitempty"`
+	IntentPlan   *QueryIntentPlan    `json:"intent_plan,omitempty"`
+	VectorHits   []VectorHit         `json:"vector_hits,omitempty"`
+	ShadowReport *ShadowRecallReport `json:"shadow_report,omitempty"`
+}
+
+// QueryIntentPlan 保存 query planner 对任务意图的结构化切面。
+type QueryIntentPlan struct {
+	IntentKey   string   `json:"intent_key,omitempty"`
+	Constraints []string `json:"constraints,omitempty"`
+	Entities    []string `json:"entities,omitempty"`
+	Environment []string `json:"environment,omitempty"`
+	Risks       []string `json:"risks,omitempty"`
+	Terms       []string `json:"terms,omitempty"`
+	Confidence  float64  `json:"confidence,omitempty"`
+}
+
+// VectorHit 描述 vector sidecar 的单条 shadow 命中。
+type VectorHit struct {
+	ObjectID      string      `json:"object_id,omitempty"`
+	ObjectType    string      `json:"object_type,omitempty"`
+	Score         float64     `json:"score,omitempty"`
+	Distance      float64     `json:"distance,omitempty"`
+	Summary       string      `json:"summary,omitempty"`
+	SourceRefs    []SourceRef `json:"source_refs,omitempty"`
+	EvidenceCount int         `json:"evidence_count,omitempty"`
+	Freshness     float64     `json:"freshness,omitempty"`
+}
+
+// ShadowRecallReport 描述 shadow planner/vector 与 live recall 的对比结果。
+type ShadowRecallReport struct {
+	PlannerUsed          bool     `json:"planner_used,omitempty"`
+	VectorHits           int      `json:"vector_hits,omitempty"`
+	TopOverlap           float64  `json:"top_overlap,omitempty"`
+	ShadowOnlyCandidates []string `json:"shadow_only_candidates,omitempty"`
+	WouldPromote         bool     `json:"would_promote,omitempty"`
+	LatencyMs            int64    `json:"latency_ms,omitempty"`
 }
 
 func normalizeEntry(entry MemoryEntry) MemoryEntry {

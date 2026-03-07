@@ -37,13 +37,19 @@ type DecisionMemoExtractor interface {
 
 // MemoryConfig 定义三层记忆管理器初始化参数。
 type MemoryConfig struct {
-	WarmCapacity        int
-	WarmPath            string
-	ColdBaseDir         string
-	TruthEnabled        bool
-	TruthDualWrite      bool
-	TruthBaseDir        string
-	TruthShadowFailOpen bool
+	WarmCapacity         int
+	WarmPath             string
+	ColdBaseDir          string
+	TruthEnabled         bool
+	TruthDualWrite       bool
+	TruthBaseDir         string
+	TruthShadowFailOpen  bool
+	IntentPlannerEnabled bool
+	VectorEnabled        bool
+	VectorPath           string
+	VectorTopK           int
+	VectorMinScore       float64
+	ShadowRecallEnabled  bool
 
 	AutoRecallEnabled        bool
 	AutoRecallLimit          int
@@ -98,19 +104,27 @@ type EvolutionStats struct {
 
 // MemoryMetrics 是管理器运行指标快照。
 type MemoryMetrics struct {
-	L1Hits               uint64 `json:"l1_hits"`
-	L2Hits               uint64 `json:"l2_hits"`
-	L3Hits               uint64 `json:"l3_hits"`
-	MarkdownHits         uint64 `json:"markdown_hits"`
-	GraphHits            uint64 `json:"graph_hits"`
-	EvolutionRuns        uint64 `json:"evolution_runs"`
-	NodesCreated         uint64 `json:"nodes_created"`
-	EntriesEvolved       uint64 `json:"entries_evolved"`
-	TruthEventsWritten   uint64 `json:"truth_events_written"`
-	TruthObjectsUpserted uint64 `json:"truth_objects_upserted"`
-	TruthClaimsUpserted  uint64 `json:"truth_claims_upserted"`
-	TruthErrors          uint64 `json:"truth_errors"`
-	TruthReplays         uint64 `json:"truth_replays"`
+	L1Hits               uint64  `json:"l1_hits"`
+	L2Hits               uint64  `json:"l2_hits"`
+	L3Hits               uint64  `json:"l3_hits"`
+	MarkdownHits         uint64  `json:"markdown_hits"`
+	GraphHits            uint64  `json:"graph_hits"`
+	EvolutionRuns        uint64  `json:"evolution_runs"`
+	NodesCreated         uint64  `json:"nodes_created"`
+	EntriesEvolved       uint64  `json:"entries_evolved"`
+	PlannerRuns          uint64  `json:"planner_runs"`
+	PlannerErrors        uint64  `json:"planner_errors"`
+	VectorDocsIndexed    uint64  `json:"vector_docs_indexed"`
+	VectorShadowHits     uint64  `json:"vector_shadow_hits"`
+	ShadowOverlapRate    float64 `json:"shadow_overlap_rate"`
+	ShadowOnlyCandidates uint64  `json:"shadow_only_candidates"`
+	ShadowLatencyMs      uint64  `json:"shadow_latency_ms"`
+	ShadowWouldHelpRate  float64 `json:"shadow_would_help_rate"`
+	TruthEventsWritten   uint64  `json:"truth_events_written"`
+	TruthObjectsUpserted uint64  `json:"truth_objects_upserted"`
+	TruthClaimsUpserted  uint64  `json:"truth_claims_upserted"`
+	TruthErrors          uint64  `json:"truth_errors"`
+	TruthReplays         uint64  `json:"truth_replays"`
 }
 
 // MemoryManager 保留对外 façade，内部通过 query/lifecycle/evolver 组合职责。
@@ -121,6 +135,8 @@ type MemoryManager struct {
 	decision *DecisionService
 	truth    *TruthWriter
 	verifier *TruthVerifier
+	planner  *IntentPlanner
+	vector   *VectorSidecar
 
 	query     *QueryService
 	lifecycle *MemoryLifecycle
@@ -142,11 +158,22 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	graph := NewGraphService(normalized, cold, normalized.Summarizer)
 	decision := NewDecisionService(normalized, cold)
 	decision.SetTruthShadow(truth, truthMapper)
+	planner := NewIntentPlanner(normalized.IntentPlannerEnabled, metrics)
+	vector := NewVectorSidecar(normalized, truth, metrics)
+	if truth != nil {
+		truth.SetObjectSidecar(vector)
+	}
 	if graph.Enabled() {
 		log.Printf("[MEMORY] graph sidecar enabled: path=%s namespace=%s", normalized.GraphPath, normalized.GraphNamespace)
 	}
 	if decision.Enabled() {
 		log.Printf("[MEMORY] decision sidecar enabled: path=%s", normalized.DecisionPath)
+	}
+	if planner != nil && planner.Enabled() {
+		log.Printf("[MEMORY] intent planner enabled")
+	}
+	if vector != nil && vector.Enabled() {
+		log.Printf("[MEMORY] vector sidecar enabled: path=%s", normalized.VectorPath)
 	}
 	if truth != nil && truth.Enabled() {
 		log.Printf("[MEMORY] truth shadow enabled: base=%s dual_write=%t", truth.BaseDir(), truth.DualWriteEnabled())
@@ -159,9 +186,11 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 		decision: decision,
 		truth:    truth,
 		verifier: NewTruthVerifier(truth),
+		planner:  planner,
+		vector:   vector,
 		metrics:  metrics,
 	}
-	manager.query = NewQueryService(normalized, warm, cold, graph, decision, metrics)
+	manager.query = NewQueryService(normalized, warm, cold, graph, decision, planner, vector, metrics)
 	manager.lifecycle = NewMemoryLifecycle(normalized, warm, cold, graph, normalized.SessionStore)
 	manager.evolver = NewEvolver(normalized, warm, cold, graph, normalized.Summarizer, metrics)
 
@@ -180,9 +209,19 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.WarmCapacity <= 0 {
 		out.WarmCapacity = defaultWarmCapacity
 	}
+	if out.ShadowRecallEnabled {
+		out.IntentPlannerEnabled = true
+		out.VectorEnabled = true
+	}
 	out.TruthEnabled = out.TruthEnabled || out.TruthDualWrite
 	if out.TruthEnabled && !out.TruthShadowFailOpen {
 		out.TruthShadowFailOpen = true
+	}
+	if out.VectorTopK <= 0 {
+		out.VectorTopK = defaultVectorTopK
+	}
+	if out.VectorMinScore <= 0 {
+		out.VectorMinScore = defaultVectorMinScore
 	}
 	if out.AutoRecallLimit <= 0 {
 		out.AutoRecallLimit = defaultAutoRecallLimit
@@ -241,6 +280,12 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	}
 	if out.TruthBaseDir != "" {
 		out.TruthBaseDir = filepath.Clean(out.TruthBaseDir)
+	}
+	if out.VectorEnabled && strings.TrimSpace(out.VectorPath) == "" {
+		out.VectorPath = defaultVectorBaseDir(firstNonEmpty(out.TruthBaseDir, out.ColdBaseDir))
+	}
+	if out.VectorPath != "" {
+		out.VectorPath = filepath.Clean(out.VectorPath)
 	}
 	if explicitTemporalDisable {
 		out.TemporalDecayEnabled = false

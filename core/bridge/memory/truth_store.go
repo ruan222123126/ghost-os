@@ -41,6 +41,10 @@ type truthReplayCheckpoint struct {
 	SourceRefCount int       `json:"source_ref_count,omitempty"`
 }
 
+type truthObjectSidecar interface {
+	SyncObject(MemoryObject) error
+}
+
 // TruthWriter 维护 schema v1 的 shadow event log 与快照。
 type TruthWriter struct {
 	enabled        bool
@@ -56,6 +60,8 @@ type TruthWriter struct {
 	mu             sync.Mutex
 	objectSnapshot map[string]MemoryObject
 	claimSnapshot  map[string]MemoryClaim
+	sidecar        truthObjectSidecar
+	sidecarWG      sync.WaitGroup
 }
 
 func NewTruthWriter(config MemoryConfig, metrics *memoryCounters) *TruthWriter {
@@ -107,6 +113,15 @@ func (w *TruthWriter) BaseDir() string {
 	return w.baseDir
 }
 
+func (w *TruthWriter) SetObjectSidecar(sidecar truthObjectSidecar) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.sidecar = sidecar
+}
+
 func (w *TruthWriter) AppendEvent(eventType string, object MemoryObject, traceID string) (TruthWriteResult, error) {
 	if !w.Enabled() {
 		return TruthWriteResult{}, nil
@@ -141,6 +156,7 @@ func (w *TruthWriter) AppendEvent(eventType string, object MemoryObject, traceID
 	if w.metrics != nil {
 		w.metrics.truthEventsWritten.Add(1)
 	}
+	w.enqueueSidecarSync(w.sidecar, normalized)
 	return TruthWriteResult{
 		SchemaVersion:  truthSchemaVersion,
 		EventID:        event.EventID,
@@ -173,6 +189,7 @@ func (w *TruthWriter) UpsertObject(object MemoryObject) (TruthWriteResult, error
 	if w.metrics != nil {
 		w.metrics.truthObjectsUpserted.Add(1)
 	}
+	w.enqueueSidecarSync(w.sidecar, normalized)
 	return TruthWriteResult{
 		SchemaVersion:  truthSchemaVersion,
 		ObjectID:       normalized.ObjectID,
@@ -182,6 +199,53 @@ func (w *TruthWriter) UpsertObject(object MemoryObject) (TruthWriteResult, error
 		SourceRefCount: truthSingleObjectSourceRefCount(normalized),
 		OccurredAt:     effectiveDecisionTimestamp(normalized.UpdatedAt, normalized.CreatedAt),
 	}, nil
+}
+
+func (w *TruthWriter) UpdateEmbeddingRef(objectID string, ref EmbeddingRef) error {
+	if !w.Enabled() {
+		return nil
+	}
+	trimmedObjectID := strings.TrimSpace(objectID)
+	normalizedRef := normalizeEmbeddingRef(ref, trimmedObjectID)
+	if trimmedObjectID == "" || normalizedRef.EmbeddingID == "" {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := w.ensureLayoutLocked(); err != nil {
+		w.recordErrorLocked()
+		return err
+	}
+	object, ok := w.objectSnapshot[trimmedObjectID]
+	if !ok {
+		return nil
+	}
+	merged := make([]EmbeddingRef, 0, len(object.EmbeddingRefs)+1)
+	replaced := false
+	for _, current := range object.EmbeddingRefs {
+		normalizedCurrent := normalizeEmbeddingRef(current, trimmedObjectID)
+		if normalizedCurrent.RefID == "" {
+			continue
+		}
+		if normalizedCurrent.RefID == normalizedRef.RefID || (normalizedCurrent.Source == normalizedRef.Source && normalizedCurrent.EmbeddingID == normalizedRef.EmbeddingID) {
+			merged = append(merged, normalizedRef)
+			replaced = true
+			continue
+		}
+		merged = append(merged, normalizedCurrent)
+	}
+	if !replaced {
+		merged = append(merged, normalizedRef)
+	}
+	object.EmbeddingRefs = merged
+	object.UpdatedAt = effectiveDecisionTimestamp(time.Now().UTC(), object.UpdatedAt, object.CreatedAt)
+	object = normalizeMemoryObject(object)
+	w.objectSnapshot[trimmedObjectID] = object
+	if err := w.persistSnapshotsLocked(); err != nil {
+		w.recordErrorLocked()
+		return err
+	}
+	return nil
 }
 
 func (w *TruthWriter) UpsertClaims(claims []MemoryClaim) (TruthWriteResult, error) {
@@ -395,6 +459,23 @@ func (w *TruthWriter) snapshotState() (map[string]MemoryObject, map[string]Memor
 	return cloneTruthObjects(w.objectSnapshot), cloneTruthClaims(w.claimSnapshot)
 }
 
+func (w *TruthWriter) waitForSidecar(timeout time.Duration) bool {
+	if w == nil {
+		return true
+	}
+	done := make(chan struct{})
+	go func() {
+		w.sidecarWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
 func (w *TruthWriter) replayState() (map[string]MemoryObject, map[string]MemoryClaim, TruthWriteResult, error) {
 	if !w.Enabled() {
 		return nil, nil, TruthWriteResult{}, nil
@@ -592,6 +673,19 @@ func cloneTruthObjects(objects map[string]MemoryObject) map[string]MemoryObject 
 		out[key] = normalizeMemoryObject(object)
 	}
 	return out
+}
+
+func (w *TruthWriter) enqueueSidecarSync(sidecar truthObjectSidecar, object MemoryObject) {
+	if w == nil || sidecar == nil {
+		return
+	}
+	w.sidecarWG.Add(1)
+	go func() {
+		defer w.sidecarWG.Done()
+		if err := sidecar.SyncObject(object); err != nil {
+			log.Printf("[MEMORY] truth sidecar sync failed, continuing: object_id=%s err=%v", strings.TrimSpace(object.ObjectID), err)
+		}
+	}()
 }
 
 func cloneTruthClaims(claims map[string]MemoryClaim) map[string]MemoryClaim {
