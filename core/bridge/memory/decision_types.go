@@ -210,6 +210,40 @@ type DecisionStats struct {
 	HumanBlockedCount  int    `json:"human_blocked_count"`
 }
 
+// DecisionDistillStats 描述一次 recipe 蒸馏批次的输出摘要。
+type DecisionDistillStats struct {
+	Namespace       string `json:"namespace,omitempty"`
+	MemosScanned    int    `json:"memos_scanned"`
+	ClustersBuilt   int    `json:"clusters_built"`
+	RecipesCreated  int    `json:"recipes_created"`
+	RecipesUpdated  int    `json:"recipes_updated"`
+	WarningsFolded  int    `json:"warnings_folded"`
+	SkippedClusters int    `json:"skipped_clusters"`
+}
+
+// DecisionRebuildOptions 控制 decision memo/recipe 的离线重建流程。
+type DecisionRebuildOptions struct {
+	Namespace      string     `json:"namespace,omitempty"`
+	TimeRange      *TimeRange `json:"time_range,omitempty"`
+	MaxSessions    int        `json:"max_sessions,omitempty"`
+	DryRun         bool       `json:"dry_run,omitempty"`
+	IncludeRecipes bool       `json:"include_recipes,omitempty"`
+	RebuildMemos   bool       `json:"rebuild_memos,omitempty"`
+	ResetNamespace bool       `json:"reset_namespace,omitempty"`
+}
+
+// DecisionRebuildStats 描述一次离线 backfill/rebuild 的处理计数。
+type DecisionRebuildStats struct {
+	Namespace       string `json:"namespace,omitempty"`
+	SessionsScanned int    `json:"sessions_scanned"`
+	MarkdownScanned int    `json:"markdown_scanned"`
+	MemosCaptured   int    `json:"memos_captured"`
+	RecipesCreated  int    `json:"recipes_created"`
+	RecipesUpdated  int    `json:"recipes_updated"`
+	ClustersUpdated int    `json:"clusters_updated"`
+	SkippedEntries  int    `json:"skipped_entries"`
+}
+
 func normalizeDecisionNamespace(namespace string) string {
 	trimmed := strings.TrimSpace(namespace)
 	if trimmed == "" {

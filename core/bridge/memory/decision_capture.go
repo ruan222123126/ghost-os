@@ -52,19 +52,23 @@ func (d *DecisionService) CaptureTurn(input DecisionCaptureInput) error {
 		return nil
 	}
 
-	ruleMemo := d.captureRuleMemo(input)
-	workerDraft, err := d.captureWorkerDraft(input)
-	if err != nil && d.debugEnabled {
-		log.Printf("[MEMORY] decision capture worker fallback to rule-only: session_id=%s trace_id=%s error=%v", strings.TrimSpace(input.SessionID), strings.TrimSpace(input.TraceID), err)
-	}
-	merged := mergeDecisionMemo(ruleMemo, workerDraft)
-	if _, err := d.store.UpsertMemo(merged); err != nil {
+	memo := d.buildDecisionMemo(input)
+	if _, err := d.store.UpsertMemo(memo); err != nil {
 		return fmt.Errorf("upsert decision memo: %w", err)
 	}
 	if err := d.store.Persist(); err != nil {
 		return fmt.Errorf("persist decision memo: %w", err)
 	}
 	return nil
+}
+
+func (d *DecisionService) buildDecisionMemo(input DecisionCaptureInput) DecisionMemo {
+	ruleMemo := d.captureRuleMemo(input)
+	workerDraft, err := d.captureWorkerDraft(input)
+	if err != nil && d.debugEnabled {
+		log.Printf("[MEMORY] decision capture worker fallback to rule-only: session_id=%s trace_id=%s error=%v", strings.TrimSpace(input.SessionID), strings.TrimSpace(input.TraceID), err)
+	}
+	return mergeDecisionMemo(ruleMemo, workerDraft)
 }
 
 func (d *DecisionService) captureRuleMemo(input DecisionCaptureInput) DecisionMemo {
@@ -82,8 +86,9 @@ func (d *DecisionService) captureRuleMemo(input DecisionCaptureInput) DecisionMe
 	}
 
 	questions := make([]DecisionQuestion, 0, len(input.AnsweredQuestions)+1)
+	answeredQuestions := make([]DecisionQuestion, 0, len(input.AnsweredQuestions))
 	for _, item := range normalizeDecisionAnsweredQuestions(input.AnsweredQuestions) {
-		questions = append(questions, DecisionQuestion{
+		answeredQuestions = append(answeredQuestions, DecisionQuestion{
 			Question:   summarizeDecisionText(item.Prompt, decisionQuestionSummaryMaxLen),
 			Answer:     summarizeDecisionText(item.Answer, decisionQuestionSummaryMaxLen),
 			AskedAt:    item.AskedAt,
@@ -166,7 +171,7 @@ func (d *DecisionService) captureRuleMemo(input DecisionCaptureInput) DecisionMe
 	}
 
 	memo.ToolsUsed = normalizeDecisionToolUses(memo.ToolsUsed)
-	memo.QuestionsAsked = normalizeDecisionQuestions(questions)
+	memo.QuestionsAsked = normalizeDecisionQuestions(append(questions, answeredQuestions...))
 	memo.HumanBlocked = humanBlocked
 	memo.NeedsHumanFor = uniqueStrings(summarizeDecisionTexts(needsHumanFor, decisionQuestionSummaryMaxLen))
 	memo.FailureReasons = uniqueStrings(summarizeDecisionTexts(failureReasons, decisionFailureReasonMaxLen))

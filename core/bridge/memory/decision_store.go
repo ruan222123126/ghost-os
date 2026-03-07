@@ -51,6 +51,7 @@ type DecisionService struct {
 	enabled          bool
 	captureOnTurn    bool
 	store            *DecisionStore
+	cold             *ColdMemory
 	workerExtractor  DecisionMemoExtractor
 	maxHits          int
 	minConfidence    float64
@@ -59,6 +60,7 @@ type DecisionService struct {
 	recipeInterval   time.Duration
 	recipeMinSupport int
 	debugEnabled     bool
+	distiller        *DecisionDistiller
 }
 
 func NewDecisionStore(baseDir string) *DecisionStore {
@@ -82,7 +84,7 @@ func NewDecisionStore(baseDir string) *DecisionStore {
 	return store
 }
 
-func NewDecisionService(config MemoryConfig) *DecisionService {
+func NewDecisionService(config MemoryConfig, cold *ColdMemory) *DecisionService {
 	var workerExtractor DecisionMemoExtractor
 	if extractor, ok := config.Summarizer.(DecisionMemoExtractor); ok {
 		workerExtractor = extractor
@@ -90,6 +92,7 @@ func NewDecisionService(config MemoryConfig) *DecisionService {
 	service := &DecisionService{
 		enabled:          config.DecisionEnabled,
 		captureOnTurn:    config.DecisionCaptureOnTurn,
+		cold:             cold,
 		workerExtractor:  workerExtractor,
 		maxHits:          config.DecisionMaxHits,
 		minConfidence:    clamp01(maxFloat(config.DecisionMinConfidence, defaultDecisionMinConfidence)),
@@ -118,6 +121,9 @@ func NewDecisionService(config MemoryConfig) *DecisionService {
 	if err := service.store.Load(); err != nil {
 		log.Printf("[MEMORY] decision sidecar load failed, fallback to empty store: %v", err)
 		service.store = NewDecisionStore(config.DecisionPath)
+	}
+	if service.recipeEnabled {
+		service.distiller = NewDecisionDistiller(service, service.recipeInterval, service.recipeMinSupport)
 	}
 	return service
 }

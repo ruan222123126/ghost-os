@@ -58,3 +58,29 @@ type memoryArchiveResponse struct {
 	SessionID string `json:"session_id"`
 	Archived  bool   `json:"archived"`
 }
+
+type memoryDecisionQueryParams struct {
+	Namespace         string                 `json:"namespace,omitempty"`
+	TimeRange         *memoryTimeRangeParams `json:"time_range,omitempty"`
+	Limit             int                    `json:"limit,omitempty"`
+	SemanticQuery     string                 `json:"semantic_query,omitempty"`
+	Keywords          []string               `json:"keywords,omitempty"`
+	DecisionTypes     []string               `json:"decision_types,omitempty"`
+	DecisionReuseOnly bool                   `json:"decision_reuse_only,omitempty"`
+	EnvironmentStrict bool                   `json:"environment_strict,omitempty"`
+	MinReuseScore     float64                `json:"min_reuse_score,omitempty"`
+}
+
+type memoryDecisionStatsParams struct {
+	Namespace string `json:"namespace,omitempty"`
+}
+
+type memoryDecisionRebuildParams struct {
+	Namespace      string                 `json:"namespace,omitempty"`
+	TimeRange      *memoryTimeRangeParams `json:"time_range,omitempty"`
+	MaxSessions    int                    `json:"max_sessions,omitempty"`
+	DryRun         bool                   `json:"dry_run,omitempty"`
+	IncludeRecipes *bool                  `json:"include_recipes,omitempty"`
+	RebuildMemos   *bool                  `json:"rebuild_memos,omitempty"`
+	ResetNamespace bool                   `json:"reset_namespace,omitempty"`
+}

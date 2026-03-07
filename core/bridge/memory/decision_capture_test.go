@@ -208,7 +208,7 @@ func newDecisionCaptureTestService(t *testing.T, extractor any) (*DecisionServic
 	if summarizer, ok := extractor.(Summarizer); ok {
 		config.Summarizer = summarizer
 	}
-	service := NewDecisionService(config)
+	service := NewDecisionService(config, nil)
 	if !service.Enabled() {
 		t.Fatalf("expected decision service to be enabled")
 	}

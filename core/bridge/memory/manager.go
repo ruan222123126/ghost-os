@@ -124,7 +124,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	_ = warm.Load()
 	cold := NewColdMemory(normalized.ColdBaseDir)
 	graph := NewGraphService(normalized, cold, normalized.Summarizer)
-	decision := NewDecisionService(normalized)
+	decision := NewDecisionService(normalized, cold)
 	if graph.Enabled() {
 		log.Printf("[MEMORY] graph sidecar enabled: path=%s namespace=%s", normalized.GraphPath, normalized.GraphNamespace)
 	}
@@ -146,6 +146,8 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 
 	if normalized.EvolutionEnabled {
 		manager.StartDreaming()
+	} else if decision.Enabled() && normalized.DecisionRecipeEnabled && decision.distiller != nil {
+		decision.distiller.Start()
 	}
 	return manager
 }
@@ -318,6 +320,9 @@ func (m *MemoryManager) Evolve() (EvolutionStats, error) {
 
 // StartDreaming 启动后台演化协程。
 func (m *MemoryManager) StartDreaming() {
+	if m != nil && m.decision != nil && m.decision.distiller != nil {
+		m.decision.distiller.Start()
+	}
 	m.evolver.StartDreaming()
 }
 
@@ -325,6 +330,9 @@ func (m *MemoryManager) StartDreaming() {
 func (m *MemoryManager) StopDreaming() {
 	if m == nil {
 		return
+	}
+	if m.decision != nil && m.decision.distiller != nil {
+		m.decision.distiller.Stop()
 	}
 	m.evolver.StopDreaming()
 }
@@ -358,6 +366,43 @@ func (m *MemoryManager) GraphStats(namespace string) GraphStats {
 		return GraphStats{Namespace: normalizeGraphNamespace(namespace)}
 	}
 	return m.graph.GraphStats(namespace)
+}
+
+// DecisionQuery 仅查询 decision sidecar，方便 debug 与运维动作复用。
+func (m *MemoryManager) DecisionQuery(query MemoryQuery) ([]MemoryEntry, []DecisionHit, error) {
+	return m.DecisionQueryWithScope(query, SessionScope{})
+}
+
+// DecisionQueryWithScope 允许调用方提供显式环境指纹，避免混入其他 memory layer。
+func (m *MemoryManager) DecisionQueryWithScope(query MemoryQuery, scope SessionScope) ([]MemoryEntry, []DecisionHit, error) {
+	if m == nil || m.decision == nil || !m.decision.Enabled() {
+		return nil, nil, nil
+	}
+	return m.decision.Retrieve(query, scope)
+}
+
+// DecisionStats 返回 decision sidecar 的当前统计快照。
+func (m *MemoryManager) DecisionStats(namespace string) DecisionStats {
+	if m == nil || m.decision == nil {
+		return DecisionStats{Namespace: normalizeDecisionNamespace(namespace)}
+	}
+	return m.decision.Stats(namespace)
+}
+
+// DistillDecisionRecipes 手动触发一次 recipe 蒸馏。
+func (m *MemoryManager) DistillDecisionRecipes(namespace string) (DecisionDistillStats, error) {
+	if m == nil || m.decision == nil || m.decision.distiller == nil {
+		return DecisionDistillStats{Namespace: distillStatsNamespace(namespace)}, nil
+	}
+	return m.decision.distiller.DistillAll(namespace)
+}
+
+// RebuildDecision 从 cold archive + markdown nodes 重建 decision memo/recipe。
+func (m *MemoryManager) RebuildDecision(opts DecisionRebuildOptions) (DecisionRebuildStats, error) {
+	if m == nil || m.decision == nil {
+		return DecisionRebuildStats{Namespace: normalizeDecisionNamespace(opts.Namespace)}, nil
+	}
+	return m.decision.Rebuild(opts)
 }
 
 // RebuildGraph 从 cold archive + markdown nodes 重建图谱快照。

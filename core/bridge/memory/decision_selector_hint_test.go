@@ -12,7 +12,7 @@ func newSelectorHintTestService(t *testing.T) *DecisionService {
 	return NewDecisionService(MemoryConfig{
 		DecisionEnabled: true,
 		DecisionPath:    filepath.Join(t.TempDir(), "decision"),
-	})
+	}, nil)
 }
 
 func selectorHintTestQuery(env DecisionEnvFingerprint) MemoryQuery {

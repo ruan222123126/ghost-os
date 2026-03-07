@@ -23,7 +23,13 @@
         "CONFIG_UPDATE",
         "MEMORY_QUERY",
         "MEMORY_ARCHIVE",
+        "MEMORY_DECISION_QUERY",
+        "MEMORY_DECISION_STATS",
+        "MEMORY_DECISION_REBUILD",
         "LIST_FILES",
+        "READ_FILE",
+        "SEARCH_FILES",
+        "APPLY_DIFF",
         "BASH_EXEC",
         "SCRIPT_EXEC",
         "SCREEN_SHOT",
@@ -56,6 +62,10 @@
         "trace_id": {
           "type": "string",
           "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -75,6 +85,45 @@
           "type": "object"
         },
         "error": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "bashExecParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000,
+          "default": 30000
+        }
+      }
+    },
+    "bashExecPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stdout",
+        "stderr"
+      ],
+      "properties": {
+        "stdout": {
+          "type": "string"
+        },
+        "stderr": {
           "type": "string"
         }
       }
@@ -141,6 +190,25 @@
         }
       }
     },
+    "agentRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      }
+    },
     "agentResponsePayload": {
       "type": "object",
       "additionalProperties": false,
@@ -194,6 +262,701 @@
               }
             }
           }
+        }
+      ]
+    },
+    "agentAwaitingHumanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "session_id",
+        "question_id",
+        "prompt"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "awaiting_human"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "humanResponseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "question_id",
+        "answer"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "humanResponseAck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "question_id",
+        "accepted"
+      ],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "accepted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "memoryDecisionQueryRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string"
+        },
+        "time_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "end": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "semantic_query": {
+          "type": "string"
+        },
+        "keywords": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decision_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "memo",
+              "recipe",
+              "warning"
+            ]
+          }
+        },
+        "decision_reuse_only": {
+          "type": "boolean"
+        },
+        "environment_strict": {
+          "type": "boolean"
+        },
+        "min_reuse_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "memoryDecisionStatsRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string"
+        }
+      }
+    },
+    "memoryDecisionRebuildRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string"
+        },
+        "time_range": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "end": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "max_sessions": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "include_recipes": {
+          "type": "boolean"
+        },
+        "rebuild_memos": {
+          "type": "boolean"
+        },
+        "reset_namespace": {
+          "type": "boolean"
+        }
+      }
+    },
+    "memoryDecisionQueryPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "decision_hits": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "memoryDecisionStatsPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string"
+        },
+        "memo_count": {
+          "type": "integer"
+        },
+        "recipe_count": {
+          "type": "integer"
+        },
+        "cluster_count": {
+          "type": "integer"
+        },
+        "success_count": {
+          "type": "integer"
+        },
+        "partial_count": {
+          "type": "integer"
+        },
+        "failure_count": {
+          "type": "integer"
+        },
+        "awaiting_human_count": {
+          "type": "integer"
+        },
+        "cancelled_count": {
+          "type": "integer"
+        },
+        "human_blocked_count": {
+          "type": "integer"
+        }
+      }
+    },
+    "memoryDecisionRebuildPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "namespace": {
+          "type": "string"
+        },
+        "sessions_scanned": {
+          "type": "integer"
+        },
+        "markdown_scanned": {
+          "type": "integer"
+        },
+        "memos_captured": {
+          "type": "integer"
+        },
+        "recipes_created": {
+          "type": "integer"
+        },
+        "recipes_updated": {
+          "type": "integer"
+        },
+        "clusters_updated": {
+          "type": "integer"
+        },
+        "skipped_entries": {
+          "type": "integer"
+        }
+      }
+    },
+    "sessionImageContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer"
+        }
+      }
+    },
+    "sessionContentPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "image": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sessionImageContent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "sessionToolCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "sessionToolResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "tool"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "success",
+            "error"
+          ]
+        },
+        "tool": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        }
+      }
+    },
+    "sessionHumanInteraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question_id",
+        "prompt"
+      ],
+      "properties": {
+        "question_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answer": {
+          "type": "string"
+        }
+      }
+    },
+    "sessionMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionContentPart"
+          }
+        },
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionToolCall"
+          }
+        },
+        "tool_result": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sessionToolResult"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "human_interaction": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sessionHumanInteraction"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_call_id": {
+          "type": "string"
+        }
+      }
+    },
+    "sessionMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "created_at",
+        "updated_at",
+        "message_count",
+        "token_count"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "token_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "sessionDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "messages",
+        "created_at",
+        "updated_at",
+        "token_count"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionMessage"
+          }
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "token_count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "bridgeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "provider_type",
+        "base_url",
+        "model",
+        "chat_path",
+        "api_key_set"
+      ],
+      "properties": {
+        "provider": {
+          "type": "string"
+        },
+        "provider_type": {
+          "$ref": "#/$defs/providerType"
+        },
+        "base_url": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        },
+        "chat_path": {
+          "type": "string"
+        },
+        "api_key_set": {
+          "type": "boolean"
+        }
+      }
+    },
+    "providerType": {
+      "type": "string",
+      "enum": [
+        "openai",
+        "anthropic",
+        "custom"
+      ]
+    },
+    "configUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "x-go-pointer": true
+        },
+        "api_key": {
+          "type": "string",
+          "x-go-pointer": true
+        },
+        "base_url": {
+          "type": "string",
+          "x-go-pointer": true
+        },
+        "model": {
+          "type": "string",
+          "x-go-pointer": true
+        },
+        "chat_path": {
+          "type": "string",
+          "x-go-pointer": true
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      }
+    },
+    "providerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "base_url",
+        "api_key_set"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/providerType"
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "api_key_set": {
+          "type": "boolean"
+        }
+      }
+    },
+    "providerConfigInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/providerType"
+        },
+        "base_url": {
+          "type": "string",
+          "minLength": 1,
+          "x-go-pointer": true
+        },
+        "api_key": {
+          "type": "string",
+          "x-go-pointer": true
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      }
+    },
+    "providerListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providers",
+        "active_provider"
+      ],
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerConfig"
+          }
+        },
+        "active_provider": {
+          "type": "string"
+        }
+      }
+    },
+    "setActiveProviderRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      }
+    },
+    "agentSendResultPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/agentResponsePayload"
+        },
+        {
+          "$ref": "#/$defs/agentAwaitingHumanPayload"
         }
       ]
     },

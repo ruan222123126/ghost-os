@@ -21,6 +21,11 @@ type memoryQueryResponse struct {
 	DecisionHits []memory.DecisionHit `json:"decision_hits,omitempty"`
 }
 
+type memoryDecisionQueryResponse struct {
+	Entries      []memory.MemoryEntry `json:"entries,omitempty"`
+	DecisionHits []memory.DecisionHit `json:"decision_hits,omitempty"`
+}
+
 // executeMemoryQueryAction 统一入口查询 L1/L2/Graph/L3 记忆，并返回可序列化结果。
 func (s *bridgeService) executeMemoryQueryAction(_ context.Context, params memoryQueryParams, traceID string) (any, int, error) {
 	if s.memoryManager == nil {
@@ -111,6 +116,55 @@ func (s *bridgeService) executeMemoryArchiveAction(_ context.Context, params mem
 	}, http.StatusOK, nil
 }
 
+// executeMemoryDecisionQueryAction 只查询 decision sidecar，用于 debug 打分与命中观察。
+func (s *bridgeService) executeMemoryDecisionQueryAction(_ context.Context, params memoryDecisionQueryParams, traceID string) (any, int, error) {
+	if s.memoryManager == nil {
+		return nil, http.StatusInternalServerError, errors.New("memory manager is not configured")
+	}
+	query, err := buildMemoryDecisionQuery(params)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	logAction(traceID, busActionMemoryDecisionQuery, "running", nil)
+	entries, hits, err := s.memoryManager.DecisionQuery(query)
+	if err != nil {
+		logAction(traceID, busActionMemoryDecisionQuery, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
+	logAction(traceID, busActionMemoryDecisionQuery, "success", nil)
+	return memoryDecisionQueryResponse{Entries: entries, DecisionHits: hits}, http.StatusOK, nil
+}
+
+// executeMemoryDecisionStatsAction 返回 decision sidecar 的聚合计数。
+func (s *bridgeService) executeMemoryDecisionStatsAction(_ context.Context, params memoryDecisionStatsParams, traceID string) (any, int, error) {
+	if s.memoryManager == nil {
+		return nil, http.StatusInternalServerError, errors.New("memory manager is not configured")
+	}
+	logAction(traceID, busActionMemoryDecisionStats, "running", nil)
+	stats := s.memoryManager.DecisionStats(params.Namespace)
+	logAction(traceID, busActionMemoryDecisionStats, "success", nil)
+	return stats, http.StatusOK, nil
+}
+
+// executeMemoryDecisionRebuildAction 手动触发 decision memo/recipe rebuild。
+func (s *bridgeService) executeMemoryDecisionRebuildAction(_ context.Context, params memoryDecisionRebuildParams, traceID string) (any, int, error) {
+	if s.memoryManager == nil {
+		return nil, http.StatusInternalServerError, errors.New("memory manager is not configured")
+	}
+	opts, err := buildMemoryDecisionRebuildOptions(params)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	logAction(traceID, busActionMemoryDecisionRebuild, "running", nil)
+	stats, err := s.memoryManager.RebuildDecision(opts)
+	if err != nil {
+		logAction(traceID, busActionMemoryDecisionRebuild, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
+	logAction(traceID, busActionMemoryDecisionRebuild, "success", nil)
+	return stats, http.StatusOK, nil
+}
+
 // buildMemoryQuery 把 API 参数转换为 MemoryQuery，并补齐 metadata/time_range 语义。
 func buildMemoryQuery(params memoryQueryParams) (memory.MemoryQuery, error) {
 	includeGraph := true
@@ -161,6 +215,57 @@ func buildMemoryQuery(params memoryQueryParams) (memory.MemoryQuery, error) {
 	}
 
 	return query, nil
+}
+
+func buildMemoryDecisionQuery(params memoryDecisionQueryParams) (memory.MemoryQuery, error) {
+	query := memory.MemoryQuery{
+		Limit:             params.Limit,
+		Keywords:          append([]string(nil), params.Keywords...),
+		SemanticQuery:     strings.TrimSpace(params.SemanticQuery),
+		IncludeDecision:   true,
+		DecisionReuseOnly: params.DecisionReuseOnly,
+		DecisionTypes:     append([]string(nil), params.DecisionTypes...),
+		EnvironmentStrict: params.EnvironmentStrict,
+		MinReuseScore:     params.MinReuseScore,
+	}
+	if namespace := strings.TrimSpace(params.Namespace); namespace != "" {
+		query.Metadata = map[string]any{"namespace": namespace}
+	}
+	if params.TimeRange != nil {
+		timeRange, err := parseMemoryTimeRange(*params.TimeRange)
+		if err != nil {
+			return memory.MemoryQuery{}, err
+		}
+		query.TimeRange = timeRange
+	}
+	return query, nil
+}
+
+func buildMemoryDecisionRebuildOptions(params memoryDecisionRebuildParams) (memory.DecisionRebuildOptions, error) {
+	rebuildMemos := true
+	if params.RebuildMemos != nil {
+		rebuildMemos = *params.RebuildMemos
+	}
+	includeRecipes := false
+	if params.IncludeRecipes != nil {
+		includeRecipes = *params.IncludeRecipes
+	}
+	opts := memory.DecisionRebuildOptions{
+		Namespace:      strings.TrimSpace(params.Namespace),
+		MaxSessions:    params.MaxSessions,
+		DryRun:         params.DryRun,
+		IncludeRecipes: includeRecipes,
+		RebuildMemos:   rebuildMemos,
+		ResetNamespace: params.ResetNamespace,
+	}
+	if params.TimeRange != nil {
+		timeRange, err := parseMemoryTimeRange(*params.TimeRange)
+		if err != nil {
+			return memory.DecisionRebuildOptions{}, err
+		}
+		opts.TimeRange = timeRange
+	}
+	return opts, nil
 }
 
 // parseMemoryTimeRange 解析 RFC3339 时间窗，并校验起止顺序合法性。
