@@ -69,6 +69,7 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	sessionsPath := "/tmp/sessions"
 	memoryWarmPath := "/tmp/warm.json"
 	memoryColdPath := "/tmp/cold"
+	memoryGraphPath := "/tmp/graph"
 	memoryWarmTTL := "48h"
 	memoryTemporalHalfLife := "96h"
 	memoryTemporalDecayEnabled := true
@@ -77,6 +78,23 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	memoryEvolutionInterval := "2h"
 	memoryEvolutionUseWorker := true
 	memoryEvolutionBatchSize := 12
+	memoryGraphEnabled := true
+	memoryGraphExtractOnArchive := true
+	memoryGraphExtractOnEvolve := false
+	memoryGraphMaxHops := 2
+	memoryGraphMaxHits := 7
+	memoryGraphMinConfidence := 0.8
+	memoryGraphNamespace := "workspace:file"
+	memoryGraphDebugEnabled := true
+	memoryDecisionEnabled := true
+	memoryDecisionPath := "/tmp/decision"
+	memoryDecisionMaxHits := 4
+	memoryDecisionMinConfidence := 0.79
+	memoryDecisionMinReuseScore := 0.74
+	memoryDecisionRecipeEnabled := true
+	memoryDecisionRecipeInterval := "6h"
+	memoryDecisionRecipeMinSupport := 5
+	memoryDecisionDebugEnabled := true
 	maxTurns := 42
 	workerMaxFiles := 8
 	toolSelectorEnabled := true
@@ -91,26 +109,44 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 			BaseURL: defaultBaseURL,
 			APIKey:  optionalStringPointer("file-key"),
 		}},
-		WorkerModel:                 &workerModel,
-		PromptsPath:                 &promptsPath,
-		SessionsPath:                &sessionsPath,
-		MemoryWarmPath:              &memoryWarmPath,
-		MemoryColdPath:              &memoryColdPath,
-		MemoryWarmTTL:               &memoryWarmTTL,
-		MemoryTemporalDecayEnabled:  &memoryTemporalDecayEnabled,
-		MemoryTemporalDecayHalfLife: &memoryTemporalHalfLife,
-		MemoryAnchorEnabled:         &memoryAnchorEnabled,
-		MemoryAnchorMinWeight:       &memoryAnchorMinWeight,
-		MemoryEvolutionInterval:     &memoryEvolutionInterval,
-		MemoryEvolutionUseWorker:    &memoryEvolutionUseWorker,
-		MemoryEvolutionBatchSize:    &memoryEvolutionBatchSize,
-		MaxTurns:                    &maxTurns,
-		WorkerMaxFiles:              &workerMaxFiles,
-		ToolSelectorEnabled:         &toolSelectorEnabled,
-		ToolSelectorMode:            &toolSelectorMode,
-		BindAddr:                    &bindAddr,
-		APIToken:                    &apiToken,
-		CORSOrigins:                 []string{"http://localhost:5173"},
+		WorkerModel:                    &workerModel,
+		PromptsPath:                    &promptsPath,
+		SessionsPath:                   &sessionsPath,
+		MemoryWarmPath:                 &memoryWarmPath,
+		MemoryColdPath:                 &memoryColdPath,
+		MemoryGraphPath:                &memoryGraphPath,
+		MemoryWarmTTL:                  &memoryWarmTTL,
+		MemoryTemporalDecayEnabled:     &memoryTemporalDecayEnabled,
+		MemoryTemporalDecayHalfLife:    &memoryTemporalHalfLife,
+		MemoryAnchorEnabled:            &memoryAnchorEnabled,
+		MemoryAnchorMinWeight:          &memoryAnchorMinWeight,
+		MemoryEvolutionInterval:        &memoryEvolutionInterval,
+		MemoryEvolutionUseWorker:       &memoryEvolutionUseWorker,
+		MemoryEvolutionBatchSize:       &memoryEvolutionBatchSize,
+		MemoryGraphEnabled:             &memoryGraphEnabled,
+		MemoryGraphExtractOnArchive:    &memoryGraphExtractOnArchive,
+		MemoryGraphExtractOnEvolve:     &memoryGraphExtractOnEvolve,
+		MemoryGraphMaxHops:             &memoryGraphMaxHops,
+		MemoryGraphMaxHits:             &memoryGraphMaxHits,
+		MemoryGraphMinConfidence:       &memoryGraphMinConfidence,
+		MemoryGraphNamespace:           &memoryGraphNamespace,
+		MemoryGraphDebugEnabled:        &memoryGraphDebugEnabled,
+		MemoryDecisionEnabled:          &memoryDecisionEnabled,
+		MemoryDecisionPath:             &memoryDecisionPath,
+		MemoryDecisionMaxHits:          &memoryDecisionMaxHits,
+		MemoryDecisionMinConfidence:    &memoryDecisionMinConfidence,
+		MemoryDecisionMinReuseScore:    &memoryDecisionMinReuseScore,
+		MemoryDecisionRecipeEnabled:    &memoryDecisionRecipeEnabled,
+		MemoryDecisionRecipeInterval:   &memoryDecisionRecipeInterval,
+		MemoryDecisionRecipeMinSupport: &memoryDecisionRecipeMinSupport,
+		MemoryDecisionDebugEnabled:     &memoryDecisionDebugEnabled,
+		MaxTurns:                       &maxTurns,
+		WorkerMaxFiles:                 &workerMaxFiles,
+		ToolSelectorEnabled:            &toolSelectorEnabled,
+		ToolSelectorMode:               &toolSelectorMode,
+		BindAddr:                       &bindAddr,
+		APIToken:                       &apiToken,
+		CORSOrigins:                    []string{"http://localhost:5173"},
 	}); err != nil {
 		t.Fatalf("write config file: %v", err)
 	}
@@ -133,6 +169,9 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	}
 	if cfg.MemoryColdPath != memoryColdPath {
 		t.Fatalf("unexpected cold path: got %q want %q", cfg.MemoryColdPath, memoryColdPath)
+	}
+	if cfg.MemoryGraphPath != memoryGraphPath {
+		t.Fatalf("unexpected graph path: got %q want %q", cfg.MemoryGraphPath, memoryGraphPath)
 	}
 	if cfg.MemoryWarmTTL.Hours() != 48 {
 		t.Fatalf("unexpected warm ttl: got %s want 48h", cfg.MemoryWarmTTL)
@@ -157,6 +196,48 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	}
 	if cfg.MemoryEvolutionBatchSize != memoryEvolutionBatchSize {
 		t.Fatalf("unexpected evolution batch size: got %d want %d", cfg.MemoryEvolutionBatchSize, memoryEvolutionBatchSize)
+	}
+	if !cfg.MemoryGraphEnabled {
+		t.Fatalf("expected graph memory to be enabled")
+	}
+	if !cfg.MemoryGraphExtractOnArchive || cfg.MemoryGraphExtractOnEvolve {
+		t.Fatalf("unexpected graph extraction flags: archive=%v evolve=%v", cfg.MemoryGraphExtractOnArchive, cfg.MemoryGraphExtractOnEvolve)
+	}
+	if cfg.MemoryGraphMaxHops != memoryGraphMaxHops || cfg.MemoryGraphMaxHits != memoryGraphMaxHits {
+		t.Fatalf("unexpected graph hops/hits: hops=%d hits=%d", cfg.MemoryGraphMaxHops, cfg.MemoryGraphMaxHits)
+	}
+	if cfg.MemoryGraphMinConfidence != memoryGraphMinConfidence {
+		t.Fatalf("unexpected graph min confidence: got %v want %v", cfg.MemoryGraphMinConfidence, memoryGraphMinConfidence)
+	}
+	if cfg.MemoryGraphNamespace != memoryGraphNamespace {
+		t.Fatalf("unexpected graph namespace: got %q want %q", cfg.MemoryGraphNamespace, memoryGraphNamespace)
+	}
+	if !cfg.MemoryGraphDebugEnabled {
+		t.Fatalf("expected graph debug to be enabled")
+	}
+	if !cfg.MemoryDecisionEnabled {
+		t.Fatalf("expected decision memory to be enabled")
+	}
+	if cfg.MemoryDecisionPath != memoryDecisionPath {
+		t.Fatalf("unexpected decision path: got %q want %q", cfg.MemoryDecisionPath, memoryDecisionPath)
+	}
+	if cfg.MemoryDecisionMaxHits != memoryDecisionMaxHits {
+		t.Fatalf("unexpected decision max hits: got %d want %d", cfg.MemoryDecisionMaxHits, memoryDecisionMaxHits)
+	}
+	if cfg.MemoryDecisionMinConfidence != memoryDecisionMinConfidence || cfg.MemoryDecisionMinReuseScore != memoryDecisionMinReuseScore {
+		t.Fatalf("unexpected decision thresholds: confidence=%v reuse=%v", cfg.MemoryDecisionMinConfidence, cfg.MemoryDecisionMinReuseScore)
+	}
+	if !cfg.MemoryDecisionRecipeEnabled {
+		t.Fatalf("expected decision recipe to be enabled")
+	}
+	if cfg.MemoryDecisionRecipeInterval.Hours() != 6 {
+		t.Fatalf("unexpected decision recipe interval: got %s want 6h", cfg.MemoryDecisionRecipeInterval)
+	}
+	if cfg.MemoryDecisionRecipeMinSupport != memoryDecisionRecipeMinSupport {
+		t.Fatalf("unexpected decision recipe min support: got %d want %d", cfg.MemoryDecisionRecipeMinSupport, memoryDecisionRecipeMinSupport)
+	}
+	if !cfg.MemoryDecisionDebugEnabled {
+		t.Fatalf("expected decision debug to be enabled")
 	}
 	if cfg.MaxTurns != maxTurns {
 		t.Fatalf("unexpected max turns: got %d want %d", cfg.MaxTurns, maxTurns)
@@ -194,11 +275,29 @@ func TestLoadBridgeFileConfigMigratesLegacyYAMLToToml(t *testing.T) {
 	apiKey := "legacy-key"
 	baseURL := "http://localhost:11434/v1"
 	model := "qwen-coder"
+	decisionEnabled := true
+	decisionPath := "~/.ghost-os/memory/decision"
+	decisionMaxHits := 5
+	decisionMinConfidence := 0.76
+	decisionMinReuseScore := 0.71
+	decisionRecipeEnabled := false
+	decisionRecipeInterval := "8h"
+	decisionRecipeMinSupport := 4
+	decisionDebugEnabled := true
 	if err := writeLegacyBridgeYAMLConfig(configPathFromEnv(), bridgeFileConfig{
-		Provider: &provider,
-		APIKey:   &apiKey,
-		BaseURL:  &baseURL,
-		Model:    &model,
+		Provider:                       &provider,
+		APIKey:                         &apiKey,
+		BaseURL:                        &baseURL,
+		Model:                          &model,
+		MemoryDecisionEnabled:          &decisionEnabled,
+		MemoryDecisionPath:             &decisionPath,
+		MemoryDecisionMaxHits:          &decisionMaxHits,
+		MemoryDecisionMinConfidence:    &decisionMinConfidence,
+		MemoryDecisionMinReuseScore:    &decisionMinReuseScore,
+		MemoryDecisionRecipeEnabled:    &decisionRecipeEnabled,
+		MemoryDecisionRecipeInterval:   &decisionRecipeInterval,
+		MemoryDecisionRecipeMinSupport: &decisionRecipeMinSupport,
+		MemoryDecisionDebugEnabled:     &decisionDebugEnabled,
 	}); err != nil {
 		t.Fatalf("write legacy config file: %v", err)
 	}
@@ -218,6 +317,15 @@ func TestLoadBridgeFileConfigMigratesLegacyYAMLToToml(t *testing.T) {
 	}
 	if cfg.ModelProviders[0].BaseURL != baseURL {
 		t.Fatalf("unexpected migrated base url: got %q want %q", cfg.ModelProviders[0].BaseURL, baseURL)
+	}
+	if cfg.MemoryDecisionEnabled == nil || *cfg.MemoryDecisionEnabled != decisionEnabled {
+		t.Fatalf("unexpected migrated decision enabled: %#v", cfg.MemoryDecisionEnabled)
+	}
+	if cfg.MemoryDecisionPath == nil || *cfg.MemoryDecisionPath != decisionPath {
+		t.Fatalf("unexpected migrated decision path: %#v", cfg.MemoryDecisionPath)
+	}
+	if cfg.MemoryDecisionRecipeInterval == nil || *cfg.MemoryDecisionRecipeInterval != decisionRecipeInterval {
+		t.Fatalf("unexpected migrated decision recipe interval: %#v", cfg.MemoryDecisionRecipeInterval)
 	}
 	if _, err := os.Stat(filepath.Join(filepath.Dir(legacyPath), "config.toml")); err != nil {
 		t.Fatalf("expected migrated toml config: %v", err)

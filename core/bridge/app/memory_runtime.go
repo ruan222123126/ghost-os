@@ -25,22 +25,40 @@ func memoryManagerConfigFromStore(store *ConfigStore, sessionStore *session.Stor
 		return memoryManagerConfigFromAppConfig(cfg, sessionStore, summarizer)
 	}
 	return memory.MemoryConfig{
-		WarmCapacity:          agentWarmMemoryCapacity,
-		WarmPath:              memoryWarmPathFromEnv(),
-		ColdBaseDir:           memoryColdPathFromEnv(),
-		AutoRecallEnabled:     memoryAutoRecallEnabledFromEnv(),
-		AutoRecallLimit:       memoryAutoRecallLimitFromEnv(),
-		WarmTTL:               memoryWarmTTLFromEnv(),
-		TemporalDecayEnabled:  memoryTemporalDecayEnabledFromEnv(),
-		TemporalDecayHalfLife: configuredTemporalHalfLife(memoryTemporalDecayEnabledFromEnv(), memoryTemporalDecayHalfLifeFromEnv()),
-		AnchorEnabled:         memoryAnchorEnabledFromEnv(),
-		AnchorMinWeight:       configuredAnchorMinWeight(memoryAnchorEnabledFromEnv(), memoryAnchorMinWeightFromEnv()),
-		EvolutionInterval:     memoryEvolutionIntervalFromEnv(),
-		EvolutionEnabled:      memoryEvolutionEnabledFromEnv(),
-		EvolutionUseWorker:    memoryEvolutionUseWorkerFromEnv(),
-		EvolutionBatchSize:    memoryEvolutionBatchSizeFromEnv(),
-		SessionStore:          sessionStore,
-		Summarizer:            summarizer,
+		WarmCapacity:             agentWarmMemoryCapacity,
+		WarmPath:                 memoryWarmPathFromEnv(),
+		ColdBaseDir:              memoryColdPathFromEnv(),
+		AutoRecallEnabled:        memoryAutoRecallEnabledFromEnv(),
+		AutoRecallLimit:          memoryAutoRecallLimitFromEnv(),
+		WarmTTL:                  memoryWarmTTLFromEnv(),
+		TemporalDecayEnabled:     memoryTemporalDecayEnabledFromEnv(),
+		TemporalDecayHalfLife:    configuredTemporalHalfLife(memoryTemporalDecayEnabledFromEnv(), memoryTemporalDecayHalfLifeFromEnv()),
+		AnchorEnabled:            memoryAnchorEnabledFromEnv(),
+		AnchorMinWeight:          configuredAnchorMinWeight(memoryAnchorEnabledFromEnv(), memoryAnchorMinWeightFromEnv()),
+		EvolutionInterval:        memoryEvolutionIntervalFromEnv(),
+		EvolutionEnabled:         memoryEvolutionEnabledFromEnv(),
+		EvolutionUseWorker:       memoryEvolutionUseWorkerFromEnv(),
+		EvolutionBatchSize:       memoryEvolutionBatchSizeFromEnv(),
+		GraphEnabled:             memoryGraphEnabledFromEnv(),
+		GraphPath:                memoryGraphPathFromEnv(),
+		GraphExtractOnArchive:    memoryGraphExtractOnArchiveFromEnv(),
+		GraphExtractOnEvolve:     memoryGraphExtractOnEvolveFromEnv(),
+		GraphMaxHops:             memoryGraphMaxHopsFromEnv(),
+		GraphMaxHits:             memoryGraphMaxHitsFromEnv(),
+		GraphMinConfidence:       memoryGraphMinConfidenceFromEnv(),
+		GraphNamespace:           memoryGraphNamespaceFromEnv(),
+		GraphDebugEnabled:        memoryGraphDebugEnabledFromEnv(),
+		DecisionEnabled:          memoryDecisionEnabledFromEnv(),
+		DecisionPath:             memoryDecisionPathFromEnv(),
+		DecisionMaxHits:          memoryDecisionMaxHitsFromEnv(),
+		DecisionMinConfidence:    memoryDecisionMinConfidenceFromEnv(),
+		DecisionMinReuseScore:    memoryDecisionMinReuseScoreFromEnv(),
+		DecisionRecipeEnabled:    memoryDecisionRecipeEnabledFromEnv(),
+		DecisionRecipeInterval:   memoryDecisionRecipeIntervalFromEnv(),
+		DecisionRecipeMinSupport: memoryDecisionRecipeMinSupportFromEnv(),
+		DecisionDebugEnabled:     memoryDecisionDebugEnabledFromEnv(),
+		SessionStore:             sessionStore,
+		Summarizer:               summarizer,
 	}
 }
 
@@ -49,22 +67,40 @@ func memoryManagerConfigFromAppConfig(cfg Config, sessionStore *session.Store, s
 		summarizer = nil
 	}
 	return memory.MemoryConfig{
-		WarmCapacity:          agentWarmMemoryCapacity,
-		WarmPath:              cfg.MemoryWarmPath,
-		ColdBaseDir:           cfg.MemoryColdPath,
-		AutoRecallEnabled:     cfg.MemoryAutoRecallEnabled,
-		AutoRecallLimit:       cfg.MemoryAutoRecallLimit,
-		WarmTTL:               cfg.MemoryWarmTTL,
-		TemporalDecayEnabled:  cfg.MemoryTemporalDecayEnabled,
-		TemporalDecayHalfLife: configuredTemporalHalfLife(cfg.MemoryTemporalDecayEnabled, cfg.MemoryTemporalDecayHalfLife),
-		AnchorEnabled:         cfg.MemoryAnchorEnabled,
-		AnchorMinWeight:       configuredAnchorMinWeight(cfg.MemoryAnchorEnabled, cfg.MemoryAnchorMinWeight),
-		EvolutionInterval:     cfg.MemoryEvolutionInterval,
-		EvolutionEnabled:      cfg.MemoryEvolutionEnabled,
-		EvolutionUseWorker:    cfg.MemoryEvolutionUseWorker,
-		EvolutionBatchSize:    cfg.MemoryEvolutionBatchSize,
-		SessionStore:          sessionStore,
-		Summarizer:            summarizer,
+		WarmCapacity:             agentWarmMemoryCapacity,
+		WarmPath:                 cfg.MemoryWarmPath,
+		ColdBaseDir:              cfg.MemoryColdPath,
+		AutoRecallEnabled:        cfg.MemoryAutoRecallEnabled,
+		AutoRecallLimit:          cfg.MemoryAutoRecallLimit,
+		WarmTTL:                  cfg.MemoryWarmTTL,
+		TemporalDecayEnabled:     cfg.MemoryTemporalDecayEnabled,
+		TemporalDecayHalfLife:    configuredTemporalHalfLife(cfg.MemoryTemporalDecayEnabled, cfg.MemoryTemporalDecayHalfLife),
+		AnchorEnabled:            cfg.MemoryAnchorEnabled,
+		AnchorMinWeight:          configuredAnchorMinWeight(cfg.MemoryAnchorEnabled, cfg.MemoryAnchorMinWeight),
+		EvolutionInterval:        cfg.MemoryEvolutionInterval,
+		EvolutionEnabled:         cfg.MemoryEvolutionEnabled,
+		EvolutionUseWorker:       cfg.MemoryEvolutionUseWorker,
+		EvolutionBatchSize:       cfg.MemoryEvolutionBatchSize,
+		GraphEnabled:             cfg.MemoryGraphEnabled,
+		GraphPath:                cfg.MemoryGraphPath,
+		GraphExtractOnArchive:    cfg.MemoryGraphExtractOnArchive,
+		GraphExtractOnEvolve:     cfg.MemoryGraphExtractOnEvolve,
+		GraphMaxHops:             cfg.MemoryGraphMaxHops,
+		GraphMaxHits:             cfg.MemoryGraphMaxHits,
+		GraphMinConfidence:       cfg.MemoryGraphMinConfidence,
+		GraphNamespace:           cfg.MemoryGraphNamespace,
+		GraphDebugEnabled:        cfg.MemoryGraphDebugEnabled,
+		DecisionEnabled:          cfg.MemoryDecisionEnabled,
+		DecisionPath:             cfg.MemoryDecisionPath,
+		DecisionMaxHits:          cfg.MemoryDecisionMaxHits,
+		DecisionMinConfidence:    cfg.MemoryDecisionMinConfidence,
+		DecisionMinReuseScore:    cfg.MemoryDecisionMinReuseScore,
+		DecisionRecipeEnabled:    cfg.MemoryDecisionRecipeEnabled,
+		DecisionRecipeInterval:   cfg.MemoryDecisionRecipeInterval,
+		DecisionRecipeMinSupport: cfg.MemoryDecisionRecipeMinSupport,
+		DecisionDebugEnabled:     cfg.MemoryDecisionDebugEnabled,
+		SessionStore:             sessionStore,
+		Summarizer:               summarizer,
 	}
 }
 
@@ -140,6 +176,34 @@ func (s *memoryWorkerSummarizer) ExtractAnchors(messages []llm.Message) ([]memor
 		return nil, fmt.Errorf("decode memory anchors: %w", err)
 	}
 	return anchors, nil
+}
+
+func (s *memoryWorkerSummarizer) ExtractGraphFacts(messages []llm.Message) ([]memory.GraphFact, error) {
+	if len(messages) == 0 {
+		return nil, nil
+	}
+	client, cfg, err := s.workerClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), memoryWorkerTimeout)
+	defer cancel()
+	resp, err := client.Complete(ctx, llm.CompletionRequest{Messages: []llm.Message{
+		{Role: llm.RoleSystem, Text: "You are Ghost-OS memory worker. Extract only stable graph facts. Return strict JSON array with objects: subject,subject_type,predicate,object,object_type,aliases,confidence,snippet. Allowed predicates: owner_of,member_of,uses,prefers,avoids,depends_on,related_to,blocked_by,works_on. Every fact must include a concise snippet copied from the conversation. Do not include markdown or explanation."},
+		{Role: llm.RoleUser, Text: fmt.Sprintf("Worker model: %s\n\nConversation fragments:\n%s\n\nReturn only JSON.", effectiveWorkerModel(cfg), renderMemoryWorkerMessages(messages))},
+	}})
+	if err != nil {
+		return nil, err
+	}
+	text := stripJSONCodeFence(strings.TrimSpace(resp.Message.Text))
+	if text == "" {
+		return nil, nil
+	}
+	var facts []memory.GraphFact
+	if err := json.Unmarshal([]byte(text), &facts); err != nil {
+		return nil, fmt.Errorf("decode graph facts: %w", err)
+	}
+	return facts, nil
 }
 
 func (s *memoryWorkerSummarizer) workerClient() (*llm.Client, Config, error) {

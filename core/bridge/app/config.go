@@ -13,42 +13,60 @@ import (
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider                    llm.Provider
-	APIKey                      string
-	BaseURL                     string
-	Model                       string
-	NativePersistent            bool
-	WorkerModel                 string
-	ChatPath                    string
-	PromptsPath                 string
-	SessionsPath                string
-	MemoryWarmPath              string
-	MemoryColdPath              string
-	MemoryAutoRecallEnabled     bool
-	MemoryAutoRecallLimit       int
-	MemoryWarmTTL               time.Duration
-	MemoryTemporalDecayEnabled  bool
-	MemoryTemporalDecayHalfLife time.Duration
-	MemoryAnchorEnabled         bool
-	MemoryAnchorMinWeight       float64
-	MemoryEvolutionInterval     time.Duration
-	MemoryEvolutionEnabled      bool
-	MemoryEvolutionUseWorker    bool
-	MemoryEvolutionBatchSize    int
-	ProviderHeaders             map[string]string
-	AnthropicVersion            string
-	AnthropicMaxTokens          int
-	MaxTurns                    int
-	WorkerMaxConcurrency        int
-	WorkerMaxFiles              int
-	WorkerMaxFileChunks         int
-	ToolSelectorEnabled         bool
-	ToolSelectorMode            string
-	ToolSelectorModel           string
-	ToolSelectorTimeoutMS       int
-	ToolSelectorConfidence      float64
-	ToolSelectorShadow          bool
-	ToolSelectorRecentMsgs      int
+	Provider                       llm.Provider
+	APIKey                         string
+	BaseURL                        string
+	Model                          string
+	NativePersistent               bool
+	WorkerModel                    string
+	ChatPath                       string
+	PromptsPath                    string
+	SessionsPath                   string
+	MemoryWarmPath                 string
+	MemoryColdPath                 string
+	MemoryAutoRecallEnabled        bool
+	MemoryAutoRecallLimit          int
+	MemoryWarmTTL                  time.Duration
+	MemoryTemporalDecayEnabled     bool
+	MemoryTemporalDecayHalfLife    time.Duration
+	MemoryAnchorEnabled            bool
+	MemoryAnchorMinWeight          float64
+	MemoryEvolutionInterval        time.Duration
+	MemoryEvolutionEnabled         bool
+	MemoryEvolutionUseWorker       bool
+	MemoryEvolutionBatchSize       int
+	MemoryGraphEnabled             bool
+	MemoryGraphPath                string
+	MemoryGraphExtractOnArchive    bool
+	MemoryGraphExtractOnEvolve     bool
+	MemoryGraphMaxHops             int
+	MemoryGraphMaxHits             int
+	MemoryGraphMinConfidence       float64
+	MemoryGraphNamespace           string
+	MemoryGraphDebugEnabled        bool
+	MemoryDecisionEnabled          bool
+	MemoryDecisionPath             string
+	MemoryDecisionMaxHits          int
+	MemoryDecisionMinConfidence    float64
+	MemoryDecisionMinReuseScore    float64
+	MemoryDecisionRecipeEnabled    bool
+	MemoryDecisionRecipeInterval   time.Duration
+	MemoryDecisionRecipeMinSupport int
+	MemoryDecisionDebugEnabled     bool
+	ProviderHeaders                map[string]string
+	AnthropicVersion               string
+	AnthropicMaxTokens             int
+	MaxTurns                       int
+	WorkerMaxConcurrency           int
+	WorkerMaxFiles                 int
+	WorkerMaxFileChunks            int
+	ToolSelectorEnabled            bool
+	ToolSelectorMode               string
+	ToolSelectorModel              string
+	ToolSelectorTimeoutMS          int
+	ToolSelectorConfidence         float64
+	ToolSelectorShadow             bool
+	ToolSelectorRecentMsgs         int
 }
 
 type runtimeConfig struct {
@@ -62,29 +80,40 @@ type runtimeConfig struct {
 }
 
 const (
-	defaultProvider                 = llm.ProviderOpenAI
-	defaultBaseURL                  = "https://api.openai.com/v1"
-	defaultAnthropicBaseURL         = "https://api.anthropic.com"
-	defaultModel                    = "gpt-4o"
-	defaultPromptsPath              = "prompts.yaml"
-	defaultSessionsPath             = "~/.ghost-os/sessions"
-	defaultMemoryWarmPath           = "~/.ghost-os/memory/warm.json"
-	defaultMemoryColdPath           = "~/.ghost-os/memory/cold"
-	defaultMemoryAutoRecallLimit    = 5
-	defaultMemoryWarmTTL            = 24 * time.Hour
-	defaultMemoryTemporalHalfLife   = 72 * time.Hour
-	defaultMemoryAnchorMinWeight    = 0.65
-	defaultMemoryEvolutionInterval  = time.Hour
-	defaultMemoryEvolutionBatchSize = 20
-	defaultAnthropicVersion         = "2023-06-01"
-	defaultAnthropicMaxTokens       = 1024
-	defaultMaxTurns                 = 20
-	defaultWorkerMaxConcurrency     = 4
-	defaultWorkerMaxFiles           = 20
-	defaultWorkerMaxFileChunks      = 4
-	defaultToolSelectorTimeoutMS    = 1500
-	defaultToolSelectorConfidence   = 0.75
-	defaultToolSelectorRecentMsgs   = 6
+	defaultProvider                       = llm.ProviderOpenAI
+	defaultBaseURL                        = "https://api.openai.com/v1"
+	defaultAnthropicBaseURL               = "https://api.anthropic.com"
+	defaultModel                          = "gpt-4o"
+	defaultPromptsPath                    = "prompts.yaml"
+	defaultSessionsPath                   = "~/.ghost-os/sessions"
+	defaultMemoryWarmPath                 = "~/.ghost-os/memory/warm.json"
+	defaultMemoryColdPath                 = "~/.ghost-os/memory/cold"
+	defaultMemoryGraphPath                = "~/.ghost-os/memory/graph"
+	defaultMemoryDecisionPath             = "~/.ghost-os/memory/decision"
+	defaultMemoryAutoRecallLimit          = 5
+	defaultMemoryWarmTTL                  = 24 * time.Hour
+	defaultMemoryTemporalHalfLife         = 72 * time.Hour
+	defaultMemoryAnchorMinWeight          = 0.65
+	defaultMemoryEvolutionInterval        = time.Hour
+	defaultMemoryEvolutionBatchSize       = 20
+	defaultMemoryGraphMaxHops             = 1
+	defaultMemoryGraphMaxHits             = 6
+	defaultMemoryGraphNamespace           = "default"
+	defaultMemoryGraphMinConfidence       = 0.72
+	defaultMemoryDecisionMaxHits          = 4
+	defaultMemoryDecisionMinConfidence    = 0.75
+	defaultMemoryDecisionMinReuseScore    = 0.70
+	defaultMemoryDecisionRecipeInterval   = 6 * time.Hour
+	defaultMemoryDecisionRecipeMinSupport = 3
+	defaultAnthropicVersion               = "2023-06-01"
+	defaultAnthropicMaxTokens             = 1024
+	defaultMaxTurns                       = 20
+	defaultWorkerMaxConcurrency           = 4
+	defaultWorkerMaxFiles                 = 20
+	defaultWorkerMaxFileChunks            = 4
+	defaultToolSelectorTimeoutMS          = 1500
+	defaultToolSelectorConfidence         = 0.75
+	defaultToolSelectorRecentMsgs         = 6
 )
 
 // LoadConfig 从环境变量加载配置并做基础校验与归一化。
@@ -114,42 +143,60 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 	}
 
 	cfg := Config{
-		Provider:                    runtime.Provider,
-		APIKey:                      runtime.APIKey,
-		BaseURL:                     runtime.BaseURL,
-		Model:                       runtime.Model,
-		NativePersistent:            runtime.NativePersistent,
-		WorkerModel:                 valueOrEnv(fileCfg.WorkerModel, "GHOST_WORKER_MODEL", ""),
-		ChatPath:                    runtime.ChatPath,
-		PromptsPath:                 valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
-		SessionsPath:                sessionsPathFromEnv(),
-		MemoryWarmPath:              memoryWarmPathFromEnv(),
-		MemoryColdPath:              memoryColdPathFromEnv(),
-		MemoryAutoRecallEnabled:     memoryAutoRecallEnabledFromEnv(),
-		MemoryAutoRecallLimit:       memoryAutoRecallLimitFromEnv(),
-		MemoryWarmTTL:               memoryWarmTTLFromEnv(),
-		MemoryTemporalDecayEnabled:  memoryTemporalDecayEnabledFromEnv(),
-		MemoryTemporalDecayHalfLife: memoryTemporalDecayHalfLifeFromEnv(),
-		MemoryAnchorEnabled:         memoryAnchorEnabledFromEnv(),
-		MemoryAnchorMinWeight:       memoryAnchorMinWeightFromEnv(),
-		MemoryEvolutionInterval:     memoryEvolutionIntervalFromEnv(),
-		MemoryEvolutionEnabled:      memoryEvolutionEnabledFromEnv(),
-		MemoryEvolutionUseWorker:    memoryEvolutionUseWorkerFromEnv(),
-		MemoryEvolutionBatchSize:    memoryEvolutionBatchSizeFromEnv(),
-		ProviderHeaders:             headers,
-		AnthropicVersion:            valueOrEnv(fileCfg.AnthropicVersion, "GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
-		AnthropicMaxTokens:          intOrEnv(fileCfg.AnthropicMaxTokens, "GHOST_ANTHROPIC_MAX_TOKENS", defaultAnthropicMaxTokens),
-		MaxTurns:                    intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
-		WorkerMaxConcurrency:        intOrEnv(fileCfg.WorkerMaxConcurrency, "GHOST_WORKER_MAX_CONCURRENCY", defaultWorkerMaxConcurrency),
-		WorkerMaxFiles:              intOrEnv(fileCfg.WorkerMaxFiles, "GHOST_WORKER_MAX_FILES", defaultWorkerMaxFiles),
-		WorkerMaxFileChunks:         intOrEnv(fileCfg.WorkerMaxFileChunks, "GHOST_WORKER_MAX_FILE_CHUNKS", defaultWorkerMaxFileChunks),
-		ToolSelectorEnabled:         boolOrEnv(fileCfg.ToolSelectorEnabled, "GHOST_TOOL_SELECTOR_ENABLED", false),
-		ToolSelectorMode:            strings.ToLower(valueOrEnv(fileCfg.ToolSelectorMode, "GHOST_TOOL_SELECTOR_MODE", "llm")),
-		ToolSelectorModel:           valueOrEnv(fileCfg.ToolSelectorModel, "GHOST_TOOL_SELECTOR_MODEL", ""),
-		ToolSelectorTimeoutMS:       intOrEnv(fileCfg.ToolSelectorTimeoutMS, "GHOST_TOOL_SELECTOR_TIMEOUT_MS", defaultToolSelectorTimeoutMS),
-		ToolSelectorConfidence:      floatOrEnv(fileCfg.ToolSelectorConfidence, "GHOST_TOOL_SELECTOR_CONFIDENCE", defaultToolSelectorConfidence),
-		ToolSelectorShadow:          boolOrEnv(fileCfg.ToolSelectorShadow, "GHOST_TOOL_SELECTOR_SHADOW", false),
-		ToolSelectorRecentMsgs:      intOrEnv(fileCfg.ToolSelectorRecentMsgs, "GHOST_TOOL_SELECTOR_RECENT_MESSAGES", defaultToolSelectorRecentMsgs),
+		Provider:                       runtime.Provider,
+		APIKey:                         runtime.APIKey,
+		BaseURL:                        runtime.BaseURL,
+		Model:                          runtime.Model,
+		NativePersistent:               runtime.NativePersistent,
+		WorkerModel:                    valueOrEnv(fileCfg.WorkerModel, "GHOST_WORKER_MODEL", ""),
+		ChatPath:                       runtime.ChatPath,
+		PromptsPath:                    valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
+		SessionsPath:                   sessionsPathFromEnv(),
+		MemoryWarmPath:                 memoryWarmPathFromEnv(),
+		MemoryColdPath:                 memoryColdPathFromEnv(),
+		MemoryAutoRecallEnabled:        memoryAutoRecallEnabledFromEnv(),
+		MemoryAutoRecallLimit:          memoryAutoRecallLimitFromEnv(),
+		MemoryWarmTTL:                  memoryWarmTTLFromEnv(),
+		MemoryTemporalDecayEnabled:     memoryTemporalDecayEnabledFromEnv(),
+		MemoryTemporalDecayHalfLife:    memoryTemporalDecayHalfLifeFromEnv(),
+		MemoryAnchorEnabled:            memoryAnchorEnabledFromEnv(),
+		MemoryAnchorMinWeight:          memoryAnchorMinWeightFromEnv(),
+		MemoryEvolutionInterval:        memoryEvolutionIntervalFromEnv(),
+		MemoryEvolutionEnabled:         memoryEvolutionEnabledFromEnv(),
+		MemoryEvolutionUseWorker:       memoryEvolutionUseWorkerFromEnv(),
+		MemoryEvolutionBatchSize:       memoryEvolutionBatchSizeFromEnv(),
+		MemoryGraphEnabled:             memoryGraphEnabledFromEnv(),
+		MemoryGraphPath:                memoryGraphPathFromEnv(),
+		MemoryGraphExtractOnArchive:    memoryGraphExtractOnArchiveFromEnv(),
+		MemoryGraphExtractOnEvolve:     memoryGraphExtractOnEvolveFromEnv(),
+		MemoryGraphMaxHops:             memoryGraphMaxHopsFromEnv(),
+		MemoryGraphMaxHits:             memoryGraphMaxHitsFromEnv(),
+		MemoryGraphMinConfidence:       memoryGraphMinConfidenceFromEnv(),
+		MemoryGraphNamespace:           memoryGraphNamespaceFromEnv(),
+		MemoryGraphDebugEnabled:        memoryGraphDebugEnabledFromEnv(),
+		MemoryDecisionEnabled:          memoryDecisionEnabledFromEnv(),
+		MemoryDecisionPath:             memoryDecisionPathFromEnv(),
+		MemoryDecisionMaxHits:          memoryDecisionMaxHitsFromEnv(),
+		MemoryDecisionMinConfidence:    memoryDecisionMinConfidenceFromEnv(),
+		MemoryDecisionMinReuseScore:    memoryDecisionMinReuseScoreFromEnv(),
+		MemoryDecisionRecipeEnabled:    memoryDecisionRecipeEnabledFromEnv(),
+		MemoryDecisionRecipeInterval:   memoryDecisionRecipeIntervalFromEnv(),
+		MemoryDecisionRecipeMinSupport: memoryDecisionRecipeMinSupportFromEnv(),
+		MemoryDecisionDebugEnabled:     memoryDecisionDebugEnabledFromEnv(),
+		ProviderHeaders:                headers,
+		AnthropicVersion:               valueOrEnv(fileCfg.AnthropicVersion, "GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
+		AnthropicMaxTokens:             intOrEnv(fileCfg.AnthropicMaxTokens, "GHOST_ANTHROPIC_MAX_TOKENS", defaultAnthropicMaxTokens),
+		MaxTurns:                       intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
+		WorkerMaxConcurrency:           intOrEnv(fileCfg.WorkerMaxConcurrency, "GHOST_WORKER_MAX_CONCURRENCY", defaultWorkerMaxConcurrency),
+		WorkerMaxFiles:                 intOrEnv(fileCfg.WorkerMaxFiles, "GHOST_WORKER_MAX_FILES", defaultWorkerMaxFiles),
+		WorkerMaxFileChunks:            intOrEnv(fileCfg.WorkerMaxFileChunks, "GHOST_WORKER_MAX_FILE_CHUNKS", defaultWorkerMaxFileChunks),
+		ToolSelectorEnabled:            boolOrEnv(fileCfg.ToolSelectorEnabled, "GHOST_TOOL_SELECTOR_ENABLED", false),
+		ToolSelectorMode:               strings.ToLower(valueOrEnv(fileCfg.ToolSelectorMode, "GHOST_TOOL_SELECTOR_MODE", "llm")),
+		ToolSelectorModel:              valueOrEnv(fileCfg.ToolSelectorModel, "GHOST_TOOL_SELECTOR_MODEL", ""),
+		ToolSelectorTimeoutMS:          intOrEnv(fileCfg.ToolSelectorTimeoutMS, "GHOST_TOOL_SELECTOR_TIMEOUT_MS", defaultToolSelectorTimeoutMS),
+		ToolSelectorConfidence:         floatOrEnv(fileCfg.ToolSelectorConfidence, "GHOST_TOOL_SELECTOR_CONFIDENCE", defaultToolSelectorConfidence),
+		ToolSelectorShadow:             boolOrEnv(fileCfg.ToolSelectorShadow, "GHOST_TOOL_SELECTOR_SHADOW", false),
+		ToolSelectorRecentMsgs:         intOrEnv(fileCfg.ToolSelectorRecentMsgs, "GHOST_TOOL_SELECTOR_RECENT_MESSAGES", defaultToolSelectorRecentMsgs),
 	}
 
 	return cfg, nil
@@ -413,6 +460,150 @@ func memoryEvolutionBatchSizeFromEnv() int {
 		return parsePositiveIntEnv("GHOST_MEMORY_EVOLUTION_BATCH_SIZE", defaultMemoryEvolutionBatchSize)
 	}
 	return intOrEnv(fileCfg.MemoryEvolutionBatchSize, "GHOST_MEMORY_EVOLUTION_BATCH_SIZE", defaultMemoryEvolutionBatchSize)
+}
+
+func memoryGraphEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_GRAPH_ENABLED", false)
+	}
+	return boolOrEnv(fileCfg.MemoryGraphEnabled, "GHOST_MEMORY_GRAPH_ENABLED", false)
+}
+
+func memoryGraphPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_MEMORY_GRAPH_PATH", defaultMemoryGraphPath)
+	}
+	return valueOrEnv(fileCfg.MemoryGraphPath, "GHOST_MEMORY_GRAPH_PATH", defaultMemoryGraphPath)
+}
+
+func memoryGraphExtractOnArchiveFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_GRAPH_EXTRACT_ON_ARCHIVE", true)
+	}
+	return boolOrEnv(fileCfg.MemoryGraphExtractOnArchive, "GHOST_MEMORY_GRAPH_EXTRACT_ON_ARCHIVE", true)
+}
+
+func memoryGraphExtractOnEvolveFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_GRAPH_EXTRACT_ON_EVOLVE", true)
+	}
+	return boolOrEnv(fileCfg.MemoryGraphExtractOnEvolve, "GHOST_MEMORY_GRAPH_EXTRACT_ON_EVOLVE", true)
+}
+
+func memoryGraphMaxHopsFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_MEMORY_GRAPH_MAX_HOPS", defaultMemoryGraphMaxHops)
+	}
+	return intOrEnv(fileCfg.MemoryGraphMaxHops, "GHOST_MEMORY_GRAPH_MAX_HOPS", defaultMemoryGraphMaxHops)
+}
+
+func memoryGraphMaxHitsFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_MEMORY_GRAPH_MAX_HITS", defaultMemoryGraphMaxHits)
+	}
+	return intOrEnv(fileCfg.MemoryGraphMaxHits, "GHOST_MEMORY_GRAPH_MAX_HITS", defaultMemoryGraphMaxHits)
+}
+
+func memoryGraphMinConfidenceFromEnv() float64 {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseFloatEnv("GHOST_MEMORY_GRAPH_MIN_CONFIDENCE", defaultMemoryGraphMinConfidence)
+	}
+	return floatOrEnv(fileCfg.MemoryGraphMinConfidence, "GHOST_MEMORY_GRAPH_MIN_CONFIDENCE", defaultMemoryGraphMinConfidence)
+}
+
+func memoryGraphNamespaceFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_MEMORY_GRAPH_NAMESPACE", defaultMemoryGraphNamespace)
+	}
+	return valueOrEnv(fileCfg.MemoryGraphNamespace, "GHOST_MEMORY_GRAPH_NAMESPACE", defaultMemoryGraphNamespace)
+}
+
+func memoryGraphDebugEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_GRAPH_DEBUG_ENABLED", false)
+	}
+	return boolOrEnv(fileCfg.MemoryGraphDebugEnabled, "GHOST_MEMORY_GRAPH_DEBUG_ENABLED", false)
+}
+
+func memoryDecisionEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_DECISION_ENABLED", false)
+	}
+	return boolOrEnv(fileCfg.MemoryDecisionEnabled, "GHOST_MEMORY_DECISION_ENABLED", false)
+}
+
+func memoryDecisionPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_MEMORY_DECISION_PATH", defaultMemoryDecisionPath)
+	}
+	return valueOrEnv(fileCfg.MemoryDecisionPath, "GHOST_MEMORY_DECISION_PATH", defaultMemoryDecisionPath)
+}
+
+func memoryDecisionMaxHitsFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_MEMORY_DECISION_MAX_HITS", defaultMemoryDecisionMaxHits)
+	}
+	return intOrEnv(fileCfg.MemoryDecisionMaxHits, "GHOST_MEMORY_DECISION_MAX_HITS", defaultMemoryDecisionMaxHits)
+}
+
+func memoryDecisionMinConfidenceFromEnv() float64 {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseFloatEnv("GHOST_MEMORY_DECISION_MIN_CONFIDENCE", defaultMemoryDecisionMinConfidence)
+	}
+	return floatOrEnv(fileCfg.MemoryDecisionMinConfidence, "GHOST_MEMORY_DECISION_MIN_CONFIDENCE", defaultMemoryDecisionMinConfidence)
+}
+
+func memoryDecisionMinReuseScoreFromEnv() float64 {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseFloatEnv("GHOST_MEMORY_DECISION_MIN_REUSE_SCORE", defaultMemoryDecisionMinReuseScore)
+	}
+	return floatOrEnv(fileCfg.MemoryDecisionMinReuseScore, "GHOST_MEMORY_DECISION_MIN_REUSE_SCORE", defaultMemoryDecisionMinReuseScore)
+}
+
+func memoryDecisionRecipeEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_DECISION_RECIPE_ENABLED", true)
+	}
+	return boolOrEnv(fileCfg.MemoryDecisionRecipeEnabled, "GHOST_MEMORY_DECISION_RECIPE_ENABLED", true)
+}
+
+func memoryDecisionRecipeIntervalFromEnv() time.Duration {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseDurationEnv("GHOST_MEMORY_DECISION_RECIPE_INTERVAL", defaultMemoryDecisionRecipeInterval)
+	}
+	return durationOrEnv(fileCfg.MemoryDecisionRecipeInterval, "GHOST_MEMORY_DECISION_RECIPE_INTERVAL", defaultMemoryDecisionRecipeInterval)
+}
+
+func memoryDecisionRecipeMinSupportFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_MEMORY_DECISION_RECIPE_MIN_SUPPORT", defaultMemoryDecisionRecipeMinSupport)
+	}
+	return intOrEnv(fileCfg.MemoryDecisionRecipeMinSupport, "GHOST_MEMORY_DECISION_RECIPE_MIN_SUPPORT", defaultMemoryDecisionRecipeMinSupport)
+}
+
+func memoryDecisionDebugEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_MEMORY_DECISION_DEBUG_ENABLED", false)
+	}
+	return boolOrEnv(fileCfg.MemoryDecisionDebugEnabled, "GHOST_MEMORY_DECISION_DEBUG_ENABLED", false)
 }
 
 // parseProviderHeaders 解析自定义 Header JSON，并做 key 空值防护。

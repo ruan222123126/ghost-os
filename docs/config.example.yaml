@@ -43,6 +43,24 @@ memory_evolution_enabled: false
 memory_evolution_interval: 1h
 memory_evolution_use_worker: true
 memory_evolution_batch_size: 20
+memory_graph_enabled: false
+memory_graph_path: ~/.ghost-os/memory/graph
+memory_graph_extract_on_archive: true
+memory_graph_extract_on_evolve: true
+memory_graph_max_hops: 1
+memory_graph_max_hits: 6
+memory_graph_min_confidence: 0.72
+memory_graph_namespace: default
+memory_graph_debug_enabled: false
+memory_decision_enabled: false
+memory_decision_path: ~/.ghost-os/memory/decision
+memory_decision_max_hits: 4
+memory_decision_min_confidence: 0.75
+memory_decision_min_reuse_score: 0.70
+memory_decision_recipe_enabled: true
+memory_decision_recipe_interval: 6h
+memory_decision_recipe_min_support: 3
+memory_decision_debug_enabled: false
 
 # Worker summarizer
 # Leave empty to reuse `model`

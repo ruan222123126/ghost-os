@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"log"
 	"path/filepath"
 	"time"
 
@@ -23,23 +24,46 @@ type AnchorExtractor interface {
 	ExtractAnchors(messages []llm.Message) ([]MemoryAnchor, error)
 }
 
+// GraphFactExtractor 为可选的 graph 结构化抽取提供统一接口。
+type GraphFactExtractor interface {
+	ExtractGraphFacts(messages []llm.Message) ([]GraphFact, error)
+}
+
 // MemoryConfig 定义三层记忆管理器初始化参数。
 type MemoryConfig struct {
 	WarmCapacity int
 	WarmPath     string
 	ColdBaseDir  string
 
-	AutoRecallEnabled     bool
-	AutoRecallLimit       int
-	WarmTTL               time.Duration
-	TemporalDecayEnabled  bool
-	TemporalDecayHalfLife time.Duration
-	AnchorEnabled         bool
-	AnchorMinWeight       float64
-	EvolutionInterval     time.Duration
-	EvolutionEnabled      bool
-	EvolutionUseWorker    bool
-	EvolutionBatchSize    int
+	AutoRecallEnabled        bool
+	AutoRecallLimit          int
+	WarmTTL                  time.Duration
+	TemporalDecayEnabled     bool
+	TemporalDecayHalfLife    time.Duration
+	AnchorEnabled            bool
+	AnchorMinWeight          float64
+	EvolutionInterval        time.Duration
+	EvolutionEnabled         bool
+	EvolutionUseWorker       bool
+	EvolutionBatchSize       int
+	GraphEnabled             bool
+	GraphPath                string
+	GraphExtractOnArchive    bool
+	GraphExtractOnEvolve     bool
+	GraphMaxHops             int
+	GraphMaxHits             int
+	GraphMinConfidence       float64
+	GraphNamespace           string
+	GraphDebugEnabled        bool
+	DecisionEnabled          bool
+	DecisionPath             string
+	DecisionMaxHits          int
+	DecisionMinConfidence    float64
+	DecisionMinReuseScore    float64
+	DecisionRecipeEnabled    bool
+	DecisionRecipeInterval   time.Duration
+	DecisionRecipeMinSupport int
+	DecisionDebugEnabled     bool
 
 	// 运行态绑定依赖。
 	SessionStore SessionStorePort
@@ -65,6 +89,7 @@ type MemoryMetrics struct {
 	L2Hits         uint64 `json:"l2_hits"`
 	L3Hits         uint64 `json:"l3_hits"`
 	MarkdownHits   uint64 `json:"markdown_hits"`
+	GraphHits      uint64 `json:"graph_hits"`
 	EvolutionRuns  uint64 `json:"evolution_runs"`
 	NodesCreated   uint64 `json:"nodes_created"`
 	EntriesEvolved uint64 `json:"entries_evolved"`
@@ -72,8 +97,10 @@ type MemoryMetrics struct {
 
 // MemoryManager 保留对外 façade，内部通过 query/lifecycle/evolver 组合职责。
 type MemoryManager struct {
-	warm *WarmMemory
-	cold *ColdMemory
+	warm     *WarmMemory
+	cold     *ColdMemory
+	graph    *GraphService
+	decision *DecisionService
 
 	query     *QueryService
 	lifecycle *MemoryLifecycle
@@ -88,16 +115,26 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	warm.SetScoringConfig(newMemoryScoringConfig(normalized))
 	_ = warm.Load()
 	cold := NewColdMemory(normalized.ColdBaseDir)
+	graph := NewGraphService(normalized, cold, normalized.Summarizer)
+	decision := NewDecisionService(normalized)
+	if graph.Enabled() {
+		log.Printf("[MEMORY] graph sidecar enabled: path=%s namespace=%s", normalized.GraphPath, normalized.GraphNamespace)
+	}
+	if decision.Enabled() {
+		log.Printf("[MEMORY] decision sidecar enabled: path=%s", normalized.DecisionPath)
+	}
 	metrics := &memoryCounters{}
 
 	manager := &MemoryManager{
-		warm:    warm,
-		cold:    cold,
-		metrics: metrics,
+		warm:     warm,
+		cold:     cold,
+		graph:    graph,
+		decision: decision,
+		metrics:  metrics,
 	}
-	manager.query = NewQueryService(normalized, warm, cold, metrics)
-	manager.lifecycle = NewMemoryLifecycle(normalized, warm, cold, normalized.SessionStore)
-	manager.evolver = NewEvolver(normalized, warm, cold, normalized.Summarizer, metrics)
+	manager.query = NewQueryService(normalized, warm, cold, graph, metrics)
+	manager.lifecycle = NewMemoryLifecycle(normalized, warm, cold, graph, normalized.SessionStore)
+	manager.evolver = NewEvolver(normalized, warm, cold, graph, normalized.Summarizer, metrics)
 
 	if normalized.EvolutionEnabled {
 		manager.StartDreaming()
@@ -129,6 +166,37 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	}
 	if out.EvolutionBatchSize <= 0 {
 		out.EvolutionBatchSize = defaultEvolutionBatchSize
+	}
+	if out.GraphMaxHops <= 0 {
+		out.GraphMaxHops = defaultGraphMaxHops
+	}
+	if out.GraphMaxHits <= 0 {
+		out.GraphMaxHits = defaultGraphMaxHits
+	}
+	if out.GraphMinConfidence <= 0 {
+		out.GraphMinConfidence = defaultGraphMinConfidence
+	}
+	if out.DecisionMaxHits <= 0 {
+		out.DecisionMaxHits = defaultDecisionMaxHits
+	}
+	if out.DecisionMinConfidence <= 0 {
+		out.DecisionMinConfidence = defaultDecisionMinConfidence
+	}
+	if out.DecisionMinReuseScore <= 0 {
+		out.DecisionMinReuseScore = defaultDecisionMinReuseScore
+	}
+	if out.DecisionRecipeInterval <= 0 {
+		out.DecisionRecipeInterval = defaultDecisionRecipeInterval
+	}
+	if out.DecisionRecipeMinSupport <= 0 {
+		out.DecisionRecipeMinSupport = defaultDecisionRecipeMinSupport
+	}
+	out.GraphNamespace = normalizeGraphNamespace(out.GraphNamespace)
+	if out.GraphPath != "" {
+		out.GraphPath = filepath.Clean(out.GraphPath)
+	}
+	if out.DecisionPath != "" {
+		out.DecisionPath = filepath.Clean(out.DecisionPath)
 	}
 	if explicitTemporalDisable {
 		out.TemporalDecayEnabled = false
@@ -165,6 +233,11 @@ func (m *MemoryManager) BuildContextWindowWithScope(scope SessionScope, userInpu
 	return m.query.BuildContextWindow(scope, userInput)
 }
 
+// QueryResult 返回 entries 与可选 graph debug hits。
+func (m *MemoryManager) QueryResult(query MemoryQuery) (MemoryQueryResult, error) {
+	return m.query.QueryResult(query)
+}
+
 // Query 按 L1 -> L2 -> L3 -> Markdown 顺序级联检索。
 func (m *MemoryManager) Query(query MemoryQuery) ([]MemoryEntry, error) {
 	return m.query.Query(query)
@@ -173,6 +246,11 @@ func (m *MemoryManager) Query(query MemoryQuery) ([]MemoryEntry, error) {
 // QueryWithScope 在统一级联检索中显式接收请求级热态上下文，避免共享状态串味。
 func (m *MemoryManager) QueryWithScope(query MemoryQuery, scope SessionScope) ([]MemoryEntry, error) {
 	return m.query.QueryWithScope(query, scope)
+}
+
+// QueryResultWithScope 在返回 entries 的同时保留 graph debug 信息。
+func (m *MemoryManager) QueryResultWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
+	return m.query.QueryResultWithScope(query, scope)
 }
 
 // PromoteToWarm 手动把冷数据会话提升到温数据层。
@@ -229,4 +307,20 @@ func (m *MemoryManager) LoadMarkdownNode(id string) (MarkdownNode, error) {
 // ListMarkdownNodes 列出所有 Markdown 记忆节点。
 func (m *MemoryManager) ListMarkdownNodes() ([]string, error) {
 	return m.cold.ListMarkdownNodes()
+}
+
+// GraphStats 返回 graph sidecar 的当前统计快照。
+func (m *MemoryManager) GraphStats(namespace string) GraphStats {
+	if m == nil || m.graph == nil {
+		return GraphStats{Namespace: normalizeGraphNamespace(namespace)}
+	}
+	return m.graph.GraphStats(namespace)
+}
+
+// RebuildGraph 从 cold archive + markdown nodes 重建图谱快照。
+func (m *MemoryManager) RebuildGraph(opts GraphRebuildOptions) (GraphRebuildStats, error) {
+	if m == nil || m.graph == nil {
+		return GraphRebuildStats{Namespace: normalizeGraphNamespace(opts.Namespace)}, nil
+	}
+	return m.graph.Rebuild(opts)
 }
