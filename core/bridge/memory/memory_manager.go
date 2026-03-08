@@ -110,6 +110,7 @@ type MemoryManager struct {
 	verifier    *TruthVerifier
 	planner     *IntentPlanner
 	vector      *VectorSidecar
+	hygiene     *HygieneService
 	truthReader *TruthReader
 
 	query     *QueryService

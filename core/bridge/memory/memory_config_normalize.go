@@ -87,6 +87,9 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.Vector.MinScore <= 0 {
 		out.Vector.MinScore = defaultVectorMinScore
 	}
+	if !config.Hygiene.Enabled && !config.HygieneEnabled && strings.TrimSpace(out.Hygiene.Path) == "" {
+		out.Hygiene.Enabled = true
+	}
 	if out.Warm.AutoRecallLimit <= 0 {
 		out.Warm.AutoRecallLimit = defaultAutoRecallLimit
 	}
@@ -205,6 +208,12 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.Vector.Path != "" {
 		out.Vector.Path = filepath.Clean(out.Vector.Path)
 	}
+	if out.Hygiene.Enabled && strings.TrimSpace(out.Hygiene.Path) == "" {
+		out.Hygiene.Path = defaultHygieneBaseDir(firstNonEmpty(out.Cold.BaseDir, out.Truth.BaseDir))
+	}
+	if out.Hygiene.Path != "" {
+		out.Hygiene.Path = filepath.Clean(out.Hygiene.Path)
+	}
 	if explicitTemporalDisable {
 		out.Warm.TemporalDecayEnabled = false
 	} else {
@@ -242,4 +251,17 @@ func defaultTruthBaseDir(coldBaseDir string) string {
 		name = "cold"
 	}
 	return filepath.Join(parent, name+"-truth-shadow")
+}
+
+func defaultHygieneBaseDir(baseDir string) string {
+	trimmed := strings.TrimSpace(baseDir)
+	if trimmed == "" {
+		return ""
+	}
+	resolved := filepath.Clean(trimmed)
+	parent := filepath.Dir(resolved)
+	if strings.TrimSpace(parent) == "" || parent == "." {
+		return filepath.Join(resolved, "hygiene")
+	}
+	return filepath.Join(parent, "hygiene")
 }

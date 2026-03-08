@@ -138,6 +138,11 @@ type VectorConfig struct {
 	MinScore float64
 }
 
+type HygieneConfig struct {
+	Enabled bool
+	Path    string
+}
+
 type RuntimeConfig struct {
 	SessionStore SessionStorePort
 	Summarizer   Summarizer
@@ -154,6 +159,7 @@ type MemoryConfig struct {
 	Graph    GraphConfig
 	Decision DecisionConfig
 	Vector   VectorConfig
+	Hygiene  HygieneConfig
 	Runtime  RuntimeConfig
 
 	WarmCapacity                       int
@@ -181,6 +187,8 @@ type MemoryConfig struct {
 	VectorPath                         string
 	VectorTopK                         int
 	VectorMinScore                     float64
+	HygieneEnabled                     bool
+	HygienePath                        string
 	ShadowRecallEnabled                bool
 	HybridRerankEnabled                bool
 	RerankDebugEnabled                 bool

@@ -165,6 +165,38 @@ func (m *MemoryManager) Metrics() MemoryMetrics {
 	return m.metrics.snapshot()
 }
 
+// GetHygiene 返回指定 target 的 hygiene 侧写状态。
+func (m *MemoryManager) GetHygiene(target HygieneTarget) (HygieneRecord, bool) {
+	if m == nil || m.hygiene == nil {
+		return HygieneRecord{}, false
+	}
+	return m.hygiene.Get(target)
+}
+
+// ScoreGarbage 追加一次垃圾评分，不修改 truth/ledger 原始数据。
+func (m *MemoryManager) ScoreGarbage(input HygieneAssessmentInput) error {
+	if m == nil || m.hygiene == nil {
+		return nil
+	}
+	return m.hygiene.UpsertAssessment(input)
+}
+
+// HygieneStats 返回 hygiene sidecar 的统计快照。
+func (m *MemoryManager) HygieneStats() HygieneStats {
+	if m == nil || m.hygiene == nil {
+		return HygieneStats{}
+	}
+	return m.hygiene.Stats()
+}
+
+// ListQuarantined 列出被隔离的 hygiene 记录。
+func (m *MemoryManager) ListQuarantined(level string, limit int) []HygieneRecord {
+	if m == nil || m.hygiene == nil {
+		return nil
+	}
+	return m.hygiene.ListQuarantined(level, limit)
+}
+
 // ReplayTruth 从 event log 重建 object/claim snapshot。
 func (m *MemoryManager) ReplayTruth() (TruthWriteResult, error) {
 	if m == nil || m.truth == nil {

@@ -56,6 +56,10 @@ func applyLegacyMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.Vector.MinScore == 0 && config.VectorMinScore != 0 {
 		out.Vector.MinScore = config.VectorMinScore
 	}
+	out.Hygiene.Enabled = out.Hygiene.Enabled || config.HygieneEnabled
+	if strings.TrimSpace(out.Hygiene.Path) == "" && strings.TrimSpace(config.HygienePath) != "" {
+		out.Hygiene.Path = config.HygienePath
+	}
 	out.Recall.ShadowEnabled = out.Recall.ShadowEnabled || config.ShadowRecallEnabled
 	out.Recall.HybridRerankEnabled = out.Recall.HybridRerankEnabled || config.HybridRerankEnabled
 	out.Recall.RerankDebugEnabled = out.Recall.RerankDebugEnabled || config.RerankDebugEnabled

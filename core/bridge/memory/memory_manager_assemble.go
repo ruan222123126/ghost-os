@@ -31,6 +31,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	planner := NewIntentPlanner(normalized.Recall.IntentPlannerEnabled, metrics)
 	vector := NewVectorSidecar(normalized, truth, metrics)
 	truthReader := NewTruthReader(normalized, truth, metrics)
+	hygiene := NewHygieneService(normalized.Hygiene)
 	if truth != nil {
 		truth.SetObjectSidecar(vector)
 		truth.AddObjectSidecar(truthReader)
@@ -44,6 +45,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 		verifier:    NewTruthVerifier(truth),
 		planner:     planner,
 		vector:      vector,
+		hygiene:     hygiene,
 		truthReader: truthReader,
 		metrics:     metrics,
 	}
@@ -51,7 +53,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	manager.evolver = NewEvolver(normalized, warm, cold, graph, normalized.Runtime.Summarizer, metrics)
 	manager.indexer = NewIndexRuntime(normalized, warm, cold, graph, decision, vector, manager.evolver, metrics)
 	manager.lifecycle = NewMemoryLifecycle(normalized, warm, cold, graph, manager.indexer, normalized.Runtime.SessionStore)
-	logMemoryAssembly(normalized, cold, truth, graph, decision, planner, vector, truthReader, manager.indexer)
+	logMemoryAssembly(normalized, cold, truth, graph, decision, planner, vector, hygiene, truthReader, manager.indexer)
 
 	if normalized.Warm.EvolutionEnabled || (manager.indexer != nil && manager.indexer.Enabled()) {
 		manager.StartDreaming()
@@ -61,7 +63,7 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 	return manager
 }
 
-func logMemoryAssembly(config MemoryConfig, cold *ColdMemory, truth *TruthWriter, graph *GraphService, decision *DecisionService, planner *IntentPlanner, vector *VectorSidecar, truthReader *TruthReader, index *IndexRuntime) {
+func logMemoryAssembly(config MemoryConfig, cold *ColdMemory, truth *TruthWriter, graph *GraphService, decision *DecisionService, planner *IntentPlanner, vector *VectorSidecar, hygiene *HygieneService, truthReader *TruthReader, index *IndexRuntime) {
 	if graph.Enabled() {
 		log.Printf("[MEMORY] graph sidecar enabled: path=%s namespace=%s", config.Graph.Path, config.Graph.Namespace)
 	}
@@ -73,6 +75,9 @@ func logMemoryAssembly(config MemoryConfig, cold *ColdMemory, truth *TruthWriter
 	}
 	if vector != nil && vector.Enabled() {
 		log.Printf("[MEMORY] vector sidecar enabled: path=%s", config.Vector.Path)
+	}
+	if hygiene != nil && hygiene.Enabled() {
+		log.Printf("[MEMORY] hygiene sidecar enabled: path=%s", config.Hygiene.Path)
 	}
 	if truthReader != nil && truthReader.Enabled() {
 		log.Printf("[MEMORY] truth live reader enabled: top_k=%d", config.Truth.TopK)
