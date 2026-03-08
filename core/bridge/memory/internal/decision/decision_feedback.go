@@ -87,6 +87,34 @@ func (d *DecisionService) captureRecipeFeedback(input DecisionCaptureInput, memo
 	run.Steps = normalizeRecipeRunSteps(steps)
 	run.Feedback = normalizeRecipeFeedback(feedback)
 	run.ActualTools = uniqueStrings(actualTools)
+	run.SelectionClaimIDs = uniqueStrings(append(cloneStrings(run.SelectionClaimIDs), run.Selection.Lineage.SelectionClaimIDs...))
+	run.SelectionEvidenceIDs = uniqueStrings(append(cloneStrings(run.SelectionEvidenceIDs), run.Selection.Lineage.SelectionEvidenceIDs...))
+	run.ExecutionEvidenceIDs = uniqueStrings(append(cloneStrings(run.ExecutionEvidenceIDs), memo.SourceEvidenceIDs...))
+	run.EmittedClaimIDs = uniqueStrings(append(cloneStrings(run.EmittedClaimIDs), memo.DerivedClaimIDs...))
+	if normalizeDecisionOutcome(run.Feedback.Outcome) == DecisionOutcomeFailure || normalizeDecisionOutcome(run.Feedback.Outcome) == DecisionOutcomeCancelled {
+		run.InvalidatedClaimIDs = uniqueStrings(append(append(cloneStrings(run.InvalidatedClaimIDs), run.Selection.Lineage.SelectionClaimIDs...), run.Selection.Lineage.ConflictedClaimIDs...))
+	}
+	run.DecisionLineage = mergeDecisionLineage(run.DecisionLineage, run.Selection.Lineage, DecisionLineage{
+		SelectionClaimIDs:          run.SelectionClaimIDs,
+		SelectionEvidenceIDs:       run.SelectionEvidenceIDs,
+		ExecutionEvidenceIDs:       run.ExecutionEvidenceIDs,
+		EmittedClaimIDs:            run.EmittedClaimIDs,
+		InvalidatedClaimIDs:        run.InvalidatedClaimIDs,
+		LineageSummary:             decisionLineageSummary("run", append(cloneStrings(run.SelectionClaimIDs), run.EmittedClaimIDs...), append(cloneStrings(run.SelectionEvidenceIDs), run.ExecutionEvidenceIDs...), nil),
+		LineageVersion:             decisionLineageVersion,
+		FallbackDueToClaimConflict: run.Selection.Lineage.FallbackDueToClaimConflict,
+	})
+	memo.DecisionLineage = mergeDecisionLineage(memo.DecisionLineage, DecisionLineage{
+		SourceClaimIDs:       run.SelectionClaimIDs,
+		SourceEvidenceIDs:    run.SelectionEvidenceIDs,
+		ExecutionEvidenceIDs: run.ExecutionEvidenceIDs,
+		DerivedClaimIDs:      memo.DerivedClaimIDs,
+		LineageSummary:       decisionLineageSummary("memo", append(cloneStrings(memo.SourceClaimIDs), memo.DerivedClaimIDs...), memo.SourceEvidenceIDs, nil),
+		LineageVersion:       decisionLineageVersion,
+	})
+	if _, err := d.store.UpsertMemo(memo); err != nil {
+		return err
+	}
 	if _, err := d.store.UpsertRecipeRun(run); err != nil {
 		return err
 	}
@@ -275,6 +303,9 @@ func (d *DecisionService) rebuildRecipeStatsFromRuns(namespace string) error {
 		deviationCount := 0
 		avoidPatterns := append([]string(nil), recipe.AvoidPatterns...)
 		validationChecklist := append([]string(nil), recipe.ValidationChecklist...)
+		supportClaimIDs := append([]string(nil), recipe.SourceClaimIDs...)
+		supportEvidenceIDs := append([]string(nil), recipe.SourceEvidenceIDs...)
+		contradictedClaimIDs := append([]string(nil), recipe.ContradictedClaimIDs...)
 		var lastSelectedAt time.Time
 		var lastAppliedAt time.Time
 		var lastOutcomeAt time.Time
@@ -313,6 +344,15 @@ func (d *DecisionService) rebuildRecipeStatsFromRuns(namespace string) error {
 			for _, step := range run.Steps {
 				validationChecklist = append(validationChecklist, step.ExpectedStep.Validation)
 			}
+			supportEvidenceIDs = append(supportEvidenceIDs, run.SelectionEvidenceIDs...)
+			supportEvidenceIDs = append(supportEvidenceIDs, run.ExecutionEvidenceIDs...)
+			supportClaimIDs = append(supportClaimIDs, run.SelectionClaimIDs...)
+			if normalizeDecisionOutcome(run.Feedback.Outcome) == DecisionOutcomeSuccess || normalizeDecisionOutcome(run.Feedback.Outcome) == DecisionOutcomePartial {
+				supportClaimIDs = append(supportClaimIDs, run.EmittedClaimIDs...)
+			} else {
+				contradictedClaimIDs = append(contradictedClaimIDs, run.InvalidatedClaimIDs...)
+				contradictedClaimIDs = append(contradictedClaimIDs, run.ConflictedClaimIDs...)
+			}
 		}
 		if appliedCount > 0 {
 			recipe.SuccessRate = clamp01((float64(successCount) + float64(partialCount)*0.5) / float64(appliedCount))
@@ -331,6 +371,12 @@ func (d *DecisionService) rebuildRecipeStatsFromRuns(namespace string) error {
 		recipe.LastOutcome = normalizeDecisionOutcome(lastOutcome)
 		recipe.AvoidPatterns = uniqueStrings(summarizeDecisionTexts(avoidPatterns, 140))
 		recipe.ValidationChecklist = uniqueStrings(summarizeDecisionTexts(validationChecklist, 140))
+		recipe.SourceClaimIDs = uniqueStrings(supportClaimIDs)
+		recipe.SourceEvidenceIDs = uniqueStrings(supportEvidenceIDs)
+		recipe.ContradictedClaimIDs = uniqueStrings(diffStrings(contradictedClaimIDs, recipe.SourceClaimIDs))
+		recipe.LineageSummary = decisionLineageSummary("recipe", recipe.SourceClaimIDs, recipe.SourceEvidenceIDs, recipe.SourceMemoIDs)
+		recipe.LineageVersion = decisionLineageVersion
+		recipe.DistillerVersion = firstNonEmpty(recipe.DistillerVersion, decisionDistillerVersion)
 		recipe.Status = recipeStatusFromRuns(recipe)
 		recomputedConfidence := rebuildRecipeConfidence(recipe)
 		if recipe.Status == RecipeStatusActive && recipe.FailureCount <= recipe.SuccessCount {

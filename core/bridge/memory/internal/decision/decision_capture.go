@@ -76,23 +76,29 @@ func (d *DecisionService) buildDecisionMemo(input DecisionCaptureInput) Decision
 	if err != nil && d.debugEnabled {
 		log.Printf("[MEMORY] decision capture worker fallback to rule-only: session_id=%s trace_id=%s error=%v", strings.TrimSpace(input.SessionID), strings.TrimSpace(input.TraceID), err)
 	}
-	return mergeDecisionMemo(ruleMemo, workerDraft)
+	memo := mergeDecisionMemo(ruleMemo, workerDraft)
+	memo.DecisionLineage = mergeDecisionLineage(memo.DecisionLineage, decisionCaptureLineage(input), DecisionLineage{
+		DerivedClaimIDs: memo.DerivedClaimIDs,
+		LineageSummary:  decisionLineageSummary("capture", memo.DerivedClaimIDs, memo.SourceEvidenceIDs, nil),
+	})
+	return normalizeDecisionMemo(memo)
 }
 
 func (d *DecisionService) captureRuleMemo(input DecisionCaptureInput) DecisionMemo {
 	finishedAt := effectiveDecisionTimestamp(input.TurnFinishedAt, input.TurnStartedAt)
 	memo := DecisionMemo{
-		ID:          buildDecisionMemoID(input),
-		Namespace:   normalizeDecisionNamespace(input.Namespace),
-		SessionID:   strings.TrimSpace(input.SessionID),
-		TraceID:     strings.TrimSpace(input.TraceID),
-		TurnID:      strings.TrimSpace(input.TurnID),
-		IntentSummary: summarizeDecisionText(input.UserMessage, decisionOutcomeSummaryMaxLen),
-		ProblemSummary: summarizeDecisionText(input.UserMessage, decisionOutcomeSummaryMaxLen),
-		Outcome:     normalizeDecisionOutcome(input.Outcome),
-		CreatedAt:   finishedAt,
-		LastUsedAt:  finishedAt,
-		Environment: normalizeDecisionEnvFingerprint(input.Environment),
+		ID:              buildDecisionMemoID(input),
+		Namespace:       normalizeDecisionNamespace(input.Namespace),
+		SessionID:       strings.TrimSpace(input.SessionID),
+		TraceID:         strings.TrimSpace(input.TraceID),
+		TurnID:          strings.TrimSpace(input.TurnID),
+		DecisionLineage: decisionCaptureLineage(input),
+		IntentSummary:   summarizeDecisionText(input.UserMessage, decisionOutcomeSummaryMaxLen),
+		ProblemSummary:  summarizeDecisionText(input.UserMessage, decisionOutcomeSummaryMaxLen),
+		Outcome:         normalizeDecisionOutcome(input.Outcome),
+		CreatedAt:       finishedAt,
+		LastUsedAt:      finishedAt,
+		Environment:     normalizeDecisionEnvFingerprint(input.Environment),
 	}
 
 	questions := make([]DecisionQuestion, 0, len(input.AnsweredQuestions)+1)

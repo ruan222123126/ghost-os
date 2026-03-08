@@ -300,8 +300,14 @@ func decisionMemoFromMarkdownNode(namespace string, node MarkdownNode) (Decision
 		AnchorKeys:       uniqueStrings(anchorKeys),
 		Confidence:       clamp01(maxFloat(node.Confidence*0.85, 0.52)),
 		ReuseScore:       0.48,
-		CreatedAt:        ts,
-		LastUsedAt:       ts,
+		DecisionLineage: DecisionLineage{
+			SourceEventIDs:    []string{"markdown:" + strings.TrimSpace(node.ID)},
+			SourceEvidenceIDs: uniqueStrings(append([]string(nil), node.SourceIDs...)),
+			LineageVersion:    decisionLineageVersion,
+			LineagePartial:    true,
+		},
+		CreatedAt:  ts,
+		LastUsedAt: ts,
 		Environment: DecisionEnvFingerprint{
 			GraphNamespace: normalizeDecisionNamespace(namespace),
 		},

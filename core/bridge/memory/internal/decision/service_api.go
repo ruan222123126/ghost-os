@@ -61,6 +61,13 @@ func (d *DecisionService) UpsertRecipe(recipe DecisionRecipe) (bool, error) {
 	return d.store.UpsertRecipe(recipe)
 }
 
+func (d *DecisionService) UpsertRecipeRun(run RecipeRun) (bool, error) {
+	if d == nil || d.store == nil {
+		return false, nil
+	}
+	return d.store.UpsertRecipeRun(run)
+}
+
 func (d *DecisionService) ListRecipeRuns(namespace string) []RecipeRun {
 	if d == nil || d.store == nil {
 		return nil
@@ -73,6 +80,27 @@ func (d *DecisionService) Recipe(id string) (DecisionRecipe, bool) {
 		return DecisionRecipe{}, false
 	}
 	return d.store.Recipe(id)
+}
+
+func (d *DecisionService) ExplainMemoLineage(memoID string) (MemoLineageExplanation, bool) {
+	if d == nil || d.store == nil {
+		return MemoLineageExplanation{}, false
+	}
+	return d.store.ExplainMemoLineage(memoID)
+}
+
+func (d *DecisionService) ExplainRecipeLineage(recipeID string) (RecipeLineageExplanation, bool) {
+	if d == nil || d.store == nil {
+		return RecipeLineageExplanation{}, false
+	}
+	return d.store.ExplainRecipeLineage(recipeID)
+}
+
+func (d *DecisionService) ExplainRecipeRunLineage(runID string) (RecipeRunLineageExplanation, bool) {
+	if d == nil || d.store == nil {
+		return RecipeRunLineageExplanation{}, false
+	}
+	return d.store.ExplainRecipeRunLineage(runID)
 }
 
 func (d *DecisionService) RecordNow() time.Time { return time.Now().UTC() }

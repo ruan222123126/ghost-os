@@ -343,6 +343,17 @@ func (d *DecisionService) debugUpsertRecipe(recipe DecisionRecipe) (bool, error)
 	return d.inner.UpsertRecipe(converted)
 }
 
+func (d *DecisionService) debugUpsertRecipeRun(run RecipeRun) (bool, error) {
+	if d == nil || d.inner == nil {
+		return false, nil
+	}
+	converted, err := convertDecisionValue[RecipeRun, idecision.RecipeRun](run)
+	if err != nil {
+		return false, err
+	}
+	return d.inner.UpsertRecipeRun(converted)
+}
+
 func (d *DecisionService) debugListRecipeRuns(namespace string) []RecipeRun {
 	if d == nil || d.inner == nil {
 		return nil
@@ -367,6 +378,51 @@ func (d *DecisionService) debugRecipe(id string) (DecisionRecipe, bool) {
 		return DecisionRecipe{}, false
 	}
 	return value, true
+}
+
+func (d *DecisionService) debugExplainMemoLineage(id string) (MemoLineageExplanation, bool) {
+	if d == nil || d.inner == nil {
+		return MemoLineageExplanation{}, false
+	}
+	value, ok := d.inner.ExplainMemoLineage(id)
+	if !ok {
+		return MemoLineageExplanation{}, false
+	}
+	converted, err := convertDecisionValue[idecision.MemoLineageExplanation, MemoLineageExplanation](value)
+	if err != nil {
+		return MemoLineageExplanation{}, false
+	}
+	return converted, true
+}
+
+func (d *DecisionService) debugExplainRecipeLineage(id string) (RecipeLineageExplanation, bool) {
+	if d == nil || d.inner == nil {
+		return RecipeLineageExplanation{}, false
+	}
+	value, ok := d.inner.ExplainRecipeLineage(id)
+	if !ok {
+		return RecipeLineageExplanation{}, false
+	}
+	converted, err := convertDecisionValue[idecision.RecipeLineageExplanation, RecipeLineageExplanation](value)
+	if err != nil {
+		return RecipeLineageExplanation{}, false
+	}
+	return converted, true
+}
+
+func (d *DecisionService) debugExplainRecipeRunLineage(id string) (RecipeRunLineageExplanation, bool) {
+	if d == nil || d.inner == nil {
+		return RecipeRunLineageExplanation{}, false
+	}
+	value, ok := d.inner.ExplainRecipeRunLineage(id)
+	if !ok {
+		return RecipeRunLineageExplanation{}, false
+	}
+	converted, err := convertDecisionValue[idecision.RecipeRunLineageExplanation, RecipeRunLineageExplanation](value)
+	if err != nil {
+		return RecipeRunLineageExplanation{}, false
+	}
+	return converted, true
 }
 
 func (d *DecisionService) debugDistillerStopCh() <-chan struct{} {

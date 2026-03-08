@@ -239,6 +239,7 @@ func normalizeDecisionAnsweredQuestions(questions []DecisionAnsweredQuestion) []
 
 func normalizeDecisionMemo(memo DecisionMemo) DecisionMemo {
 	out := memo
+	out.DecisionLineage = normalizeDecisionLineage(out.DecisionLineage)
 	out.ID = strings.TrimSpace(out.ID)
 	out.Namespace = normalizeDecisionNamespace(out.Namespace)
 	out.SessionID = strings.TrimSpace(out.SessionID)
@@ -279,6 +280,12 @@ func normalizeDecisionMemo(memo DecisionMemo) DecisionMemo {
 		out.AccessCount = 0
 	}
 	out.Environment = normalizeDecisionEnvFingerprint(out.Environment)
+	if len(out.DerivedClaimIDs) == 0 {
+		out.DerivedClaimIDs = decisionMemoDerivedClaimIDs(out)
+	}
+	if len(out.SourceClaimIDs) == 0 && len(out.SourceEvidenceIDs) == 0 {
+		out.LineagePartial = true
+	}
 	return out
 }
 
@@ -317,6 +324,7 @@ func normalizeRecipeSteps(steps []RecipeStep) []RecipeStep {
 
 func normalizeDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 	out := recipe
+	out.DecisionLineage = normalizeDecisionLineage(out.DecisionLineage)
 	out.ID = strings.TrimSpace(out.ID)
 	out.Namespace = normalizeDecisionNamespace(out.Namespace)
 	out.IntentKey = strings.TrimSpace(out.IntentKey)
@@ -344,6 +352,12 @@ func normalizeDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 	out.SourceMemoIDs = uniqueStrings(out.SourceMemoIDs)
 	out.GraphRefs = uniqueStrings(out.GraphRefs)
 	out.AnchorKeys = uniqueStrings(out.AnchorKeys)
+	if len(out.SourceMemoIDs) > 0 && len(out.SourceClaimIDs) == 0 && len(out.SourceEvidenceIDs) == 0 {
+		out.LineagePartial = true
+	}
+	if out.DistillerVersion == "" && (len(out.SourceClaimIDs) > 0 || len(out.SourceEvidenceIDs) > 0 || len(out.ContradictedClaimIDs) > 0) {
+		out.DistillerVersion = decisionDistillerVersion
+	}
 	if !out.LastSelectedAt.IsZero() {
 		out.LastSelectedAt = out.LastSelectedAt.UTC()
 	}
@@ -421,11 +435,13 @@ func normalizeRecipeSelectionReport(report RecipeSelectionReport) RecipeSelectio
 	out.SelectionScore = clamp01(out.SelectionScore)
 	out.WhySelected = uniqueStrings(out.WhySelected)
 	out.FallbackReason = strings.TrimSpace(out.FallbackReason)
+	out.Lineage = normalizeDecisionLineage(out.Lineage)
 	return out
 }
 
 func normalizeRecipeRun(run RecipeRun) RecipeRun {
 	out := run
+	out.DecisionLineage = normalizeDecisionLineage(out.DecisionLineage)
 	out.ID = strings.TrimSpace(out.ID)
 	out.Namespace = normalizeDecisionNamespace(out.Namespace)
 	out.RecipeID = strings.TrimSpace(out.RecipeID)
@@ -439,6 +455,14 @@ func normalizeRecipeRun(run RecipeRun) RecipeRun {
 	out.Steps = normalizeRecipeRunSteps(out.Steps)
 	out.Feedback = normalizeRecipeFeedback(out.Feedback)
 	out.ActualTools = uniqueStrings(out.ActualTools)
+	out.SelectionClaimIDs = uniqueStrings(append(cloneStrings(out.SelectionClaimIDs), out.Selection.Lineage.SelectionClaimIDs...))
+	out.SelectionEvidenceIDs = uniqueStrings(append(cloneStrings(out.SelectionEvidenceIDs), out.Selection.Lineage.SelectionEvidenceIDs...))
+	out.MatchedClaimIDs = uniqueStrings(append(cloneStrings(out.MatchedClaimIDs), out.Selection.Lineage.MatchedClaimIDs...))
+	out.MatchedEvidenceIDs = uniqueStrings(append(cloneStrings(out.MatchedEvidenceIDs), out.Selection.Lineage.MatchedEvidenceIDs...))
+	out.ConflictedClaimIDs = uniqueStrings(append(cloneStrings(out.ConflictedClaimIDs), out.Selection.Lineage.ConflictedClaimIDs...))
+	if out.RecipeID != "" && len(out.SelectionClaimIDs) == 0 && len(out.SelectionEvidenceIDs) == 0 {
+		out.LineagePartial = true
+	}
 	if !out.SelectedAt.IsZero() {
 		out.SelectedAt = out.SelectedAt.UTC()
 	}
@@ -446,6 +470,38 @@ func normalizeRecipeRun(run RecipeRun) RecipeRun {
 		out.CompletedAt = out.CompletedAt.UTC()
 	}
 	return out
+}
+
+func normalizeDecisionLineage(lineage DecisionLineage) DecisionLineage {
+	out := lineage
+	out.SourceEventIDs = uniqueStrings(out.SourceEventIDs)
+	out.SourceEvidenceIDs = uniqueStrings(out.SourceEvidenceIDs)
+	out.SourceClaimIDs = uniqueStrings(out.SourceClaimIDs)
+	out.DerivedClaimIDs = uniqueStrings(out.DerivedClaimIDs)
+	out.ContradictedClaimIDs = uniqueStrings(out.ContradictedClaimIDs)
+	out.SelectionClaimIDs = uniqueStrings(out.SelectionClaimIDs)
+	out.SelectionEvidenceIDs = uniqueStrings(out.SelectionEvidenceIDs)
+	out.ExecutionEvidenceIDs = uniqueStrings(out.ExecutionEvidenceIDs)
+	out.EmittedClaimIDs = uniqueStrings(out.EmittedClaimIDs)
+	out.InvalidatedClaimIDs = uniqueStrings(out.InvalidatedClaimIDs)
+	out.MatchedClaimIDs = uniqueStrings(out.MatchedClaimIDs)
+	out.MatchedEvidenceIDs = uniqueStrings(out.MatchedEvidenceIDs)
+	out.MissingRequiredClaimIDs = uniqueStrings(out.MissingRequiredClaimIDs)
+	out.ConflictedClaimIDs = uniqueStrings(out.ConflictedClaimIDs)
+	out.LineageSummary = strings.TrimSpace(out.LineageSummary)
+	out.LineageVersion = strings.TrimSpace(out.LineageVersion)
+	out.DistillerVersion = strings.TrimSpace(out.DistillerVersion)
+	if out.LineageVersion == "" && decisionLineageHasIDs(out) {
+		out.LineageVersion = decisionLineageVersion
+	}
+	if out.DistillerVersion == "" && (len(out.SourceClaimIDs) > 0 || len(out.SourceEvidenceIDs) > 0 || len(out.ContradictedClaimIDs) > 0) {
+		out.DistillerVersion = decisionDistillerVersion
+	}
+	return out
+}
+
+func decisionLineageHasIDs(lineage DecisionLineage) bool {
+	return len(lineage.SourceEventIDs) > 0 || len(lineage.SourceEvidenceIDs) > 0 || len(lineage.SourceClaimIDs) > 0 || len(lineage.DerivedClaimIDs) > 0 || len(lineage.ContradictedClaimIDs) > 0 || len(lineage.SelectionClaimIDs) > 0 || len(lineage.SelectionEvidenceIDs) > 0 || len(lineage.ExecutionEvidenceIDs) > 0 || len(lineage.EmittedClaimIDs) > 0 || len(lineage.InvalidatedClaimIDs) > 0 || len(lineage.MatchedClaimIDs) > 0 || len(lineage.MatchedEvidenceIDs) > 0 || len(lineage.MissingRequiredClaimIDs) > 0 || len(lineage.ConflictedClaimIDs) > 0 || strings.TrimSpace(lineage.LineageSummary) != ""
 }
 
 func normalizeDecisionCluster(cluster DecisionCluster) DecisionCluster {
@@ -496,6 +552,7 @@ func normalizeDecisionHit(hit DecisionHit) DecisionHit {
 
 func cloneDecisionMemo(memo DecisionMemo) DecisionMemo {
 	out := memo
+	out.DecisionLineage = cloneDecisionLineage(memo.DecisionLineage)
 	out.Constraints = append([]string(nil), memo.Constraints...)
 	out.Assumptions = append([]string(nil), memo.Assumptions...)
 	out.KeySteps = cloneDecisionSteps(memo.KeySteps)
@@ -568,6 +625,7 @@ func cloneDecisionAnsweredQuestions(questions []DecisionAnsweredQuestion) []Deci
 
 func cloneDecisionRecipe(recipe DecisionRecipe) DecisionRecipe {
 	out := recipe
+	out.DecisionLineage = cloneDecisionLineage(recipe.DecisionLineage)
 	out.TriggerPhrases = append([]string(nil), recipe.TriggerPhrases...)
 	out.Preconditions = append([]string(nil), recipe.Preconditions...)
 	out.RecommendedTools = append([]string(nil), recipe.RecommendedTools...)
@@ -616,17 +674,38 @@ func cloneRecipeFeedback(feedback RecipeFeedback) RecipeFeedback {
 func cloneRecipeSelectionReport(report RecipeSelectionReport) RecipeSelectionReport {
 	out := report
 	out.WhySelected = append([]string(nil), report.WhySelected...)
+	out.Lineage = cloneDecisionLineage(report.Lineage)
 	return out
 }
 
 func cloneRecipeRun(run RecipeRun) RecipeRun {
 	out := run
+	out.DecisionLineage = cloneDecisionLineage(run.DecisionLineage)
 	out.EnvironmentFingerprint = cloneDecisionEnvFingerprint(run.EnvironmentFingerprint)
 	out.Selection = cloneRecipeSelectionReport(run.Selection)
 	out.Advisory = cloneRecipeAdvisory(run.Advisory)
 	out.Steps = cloneRecipeRunSteps(run.Steps)
 	out.Feedback = cloneRecipeFeedback(run.Feedback)
 	out.ActualTools = append([]string(nil), run.ActualTools...)
+	return out
+}
+
+func cloneDecisionLineage(lineage DecisionLineage) DecisionLineage {
+	out := lineage
+	out.SourceEventIDs = append([]string(nil), lineage.SourceEventIDs...)
+	out.SourceEvidenceIDs = append([]string(nil), lineage.SourceEvidenceIDs...)
+	out.SourceClaimIDs = append([]string(nil), lineage.SourceClaimIDs...)
+	out.DerivedClaimIDs = append([]string(nil), lineage.DerivedClaimIDs...)
+	out.ContradictedClaimIDs = append([]string(nil), lineage.ContradictedClaimIDs...)
+	out.SelectionClaimIDs = append([]string(nil), lineage.SelectionClaimIDs...)
+	out.SelectionEvidenceIDs = append([]string(nil), lineage.SelectionEvidenceIDs...)
+	out.ExecutionEvidenceIDs = append([]string(nil), lineage.ExecutionEvidenceIDs...)
+	out.EmittedClaimIDs = append([]string(nil), lineage.EmittedClaimIDs...)
+	out.InvalidatedClaimIDs = append([]string(nil), lineage.InvalidatedClaimIDs...)
+	out.MatchedClaimIDs = append([]string(nil), lineage.MatchedClaimIDs...)
+	out.MatchedEvidenceIDs = append([]string(nil), lineage.MatchedEvidenceIDs...)
+	out.MissingRequiredClaimIDs = append([]string(nil), lineage.MissingRequiredClaimIDs...)
+	out.ConflictedClaimIDs = append([]string(nil), lineage.ConflictedClaimIDs...)
 	return out
 }
 

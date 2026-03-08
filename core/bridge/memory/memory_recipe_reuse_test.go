@@ -328,3 +328,88 @@ func TestBuildContextWindowPrependsRecipeAdvisory(t *testing.T) {
 		t.Fatalf("expected compact advisory only, got %q", text)
 	}
 }
+
+func TestDecisionLineageExplainAPIs(t *testing.T) {
+	manager := newRecipeReuseManager(t)
+	now := time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC)
+	memo := DecisionMemo{
+		ID:            "memo-lineage",
+		Namespace:     "workspace:test",
+		SessionID:     "session-lineage",
+		TraceID:       "trace-lineage",
+		TurnID:        "turn-lineage",
+		IntentKey:     "intent.fix_config_migration",
+		IntentSummary: "fix config migration",
+		Outcome:       DecisionOutcomeSuccess,
+		CreatedAt:     now,
+		LastUsedAt:    now,
+		DecisionLineage: DecisionLineage{
+			SourceEventIDs:    []string{"turn:turn-lineage"},
+			SourceEvidenceIDs: []string{"evd-lineage-input"},
+			SourceClaimIDs:    []string{"clm-lineage-source"},
+			DerivedClaimIDs:   []string{"clm-lineage-derived"},
+		},
+	}
+	if _, err := manager.decision.debugUpsertMemo(memo); err != nil {
+		t.Fatalf("upsert memo lineage: %v", err)
+	}
+	recipe := DecisionRecipe{
+		ID:              "recipe-lineage",
+		Namespace:       "workspace:test",
+		IntentKey:       memo.IntentKey,
+		StrategySummary: "inspect, patch, validate",
+		Status:          RecipeStatusActive,
+		SupportCount:    1,
+		SuccessRate:     1,
+		Confidence:      0.9,
+		SourceMemoIDs:   []string{memo.ID},
+		DecisionLineage: DecisionLineage{
+			SourceEvidenceIDs: []string{"evd-lineage-input"},
+			SourceClaimIDs:    []string{"clm-lineage-source", "clm-lineage-derived"},
+			LineageSummary:    "distilled memos=1 claims=2 evidence=1",
+		},
+	}
+	if _, err := manager.decision.debugUpsertRecipe(recipe); err != nil {
+		t.Fatalf("upsert recipe lineage: %v", err)
+	}
+	run := RecipeRun{
+		ID:          "run-lineage",
+		Namespace:   "workspace:test",
+		RecipeID:    recipe.ID,
+		SessionID:   memo.SessionID,
+		SelectedAt:  now,
+		CompletedAt: now.Add(time.Minute),
+		Selection: RecipeSelectionReport{
+			SelectedRecipeID: recipe.ID,
+			SelectionScore:   0.92,
+			Lineage: DecisionLineage{
+				SelectionClaimIDs:    []string{"clm-lineage-source"},
+				SelectionEvidenceIDs: []string{"evd-lineage-input"},
+			},
+		},
+		DecisionLineage: DecisionLineage{
+			SelectionClaimIDs:    []string{"clm-lineage-source"},
+			SelectionEvidenceIDs: []string{"evd-lineage-input"},
+			ExecutionEvidenceIDs: []string{"evd-lineage-input"},
+			EmittedClaimIDs:      []string{"clm-lineage-derived"},
+		},
+	}
+	if _, err := manager.decision.debugUpsertRecipeRun(run); err != nil {
+		t.Fatalf("upsert run lineage: %v", err)
+	}
+	memoExplain, ok := manager.decision.debugExplainMemoLineage(memo.ID)
+	if !ok || len(memoExplain.RelatedRecipeIDs) != 1 || memoExplain.RelatedRecipeIDs[0] != recipe.ID {
+		t.Fatalf("unexpected memo explain: %+v", memoExplain)
+	}
+	recipeExplain, ok := manager.decision.debugExplainRecipeLineage(recipe.ID)
+	if !ok || len(recipeExplain.SourceMemos) != 1 || recipeExplain.SourceMemos[0].ID != memo.ID {
+		t.Fatalf("unexpected recipe explain: %+v", recipeExplain)
+	}
+	runExplain, ok := manager.decision.debugExplainRecipeRunLineage(run.ID)
+	if !ok || runExplain.Recipe == nil || runExplain.Recipe.ID != recipe.ID {
+		t.Fatalf("unexpected run explain: %+v", runExplain)
+	}
+	if len(runExplain.RelatedMemoIDs) == 0 || runExplain.RelatedMemoIDs[0] != memo.ID {
+		t.Fatalf("expected related memo linkage, got %+v", runExplain)
+	}
+}

@@ -128,6 +128,17 @@ func approximateRecipeRunFromMemo(recipe DecisionRecipe, memo DecisionMemo) Reci
 	}
 	selectionScore := clamp01(recipe.SuccessRate*0.6 + recipe.Confidence*0.4)
 	return normalizeRecipeRun(RecipeRun{
+		DecisionLineage: DecisionLineage{
+			SourceClaimIDs:       append([]string(nil), recipe.SourceClaimIDs...),
+			SourceEvidenceIDs:    append([]string(nil), recipe.SourceEvidenceIDs...),
+			SelectionClaimIDs:    append([]string(nil), recipe.SourceClaimIDs...),
+			SelectionEvidenceIDs: append([]string(nil), recipe.SourceEvidenceIDs...),
+			ExecutionEvidenceIDs: append([]string(nil), memo.SourceEvidenceIDs...),
+			EmittedClaimIDs:      append([]string(nil), memo.DerivedClaimIDs...),
+			LineageSummary:       decisionLineageSummary("backfill", append(append([]string(nil), recipe.SourceClaimIDs...), memo.DerivedClaimIDs...), append(append([]string(nil), recipe.SourceEvidenceIDs...), memo.SourceEvidenceIDs...), []string{memo.ID}),
+			LineageVersion:       decisionLineageVersion,
+			LineagePartial:       true,
+		},
 		ID:                     buildApproximateRecipeRunID(recipe, memo),
 		Namespace:              recipe.Namespace,
 		RecipeID:               recipe.ID,
@@ -142,6 +153,12 @@ func approximateRecipeRunFromMemo(recipe DecisionRecipe, memo DecisionMemo) Reci
 			SelectedRecipeID: recipe.ID,
 			SelectionScore:   selectionScore,
 			WhySelected:      []string{"backfilled from historical memo cluster"},
+			Lineage: DecisionLineage{
+				SelectionClaimIDs:    append([]string(nil), recipe.SourceClaimIDs...),
+				SelectionEvidenceIDs: append([]string(nil), recipe.SourceEvidenceIDs...),
+				LineageVersion:       decisionLineageVersion,
+				LineagePartial:       true,
+			},
 		},
 		Advisory: RecipeAdvisory{
 			RecipeID:          recipe.ID,

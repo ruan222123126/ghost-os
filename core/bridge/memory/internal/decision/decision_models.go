@@ -76,8 +76,32 @@ type DecisionEnvFingerprint struct {
 	ToolNames        []string `json:"tool_names,omitempty"`
 }
 
+// DecisionLineage 保存 decision sidecar 的可追溯主链。
+type DecisionLineage struct {
+	SourceEventIDs             []string `json:"source_event_ids,omitempty"`
+	SourceEvidenceIDs          []string `json:"source_evidence_ids,omitempty"`
+	SourceClaimIDs             []string `json:"source_claim_ids,omitempty"`
+	DerivedClaimIDs            []string `json:"derived_claim_ids,omitempty"`
+	ContradictedClaimIDs       []string `json:"contradicted_claim_ids,omitempty"`
+	SelectionClaimIDs          []string `json:"selection_claim_ids,omitempty"`
+	SelectionEvidenceIDs       []string `json:"selection_evidence_ids,omitempty"`
+	ExecutionEvidenceIDs       []string `json:"execution_evidence_ids,omitempty"`
+	EmittedClaimIDs            []string `json:"emitted_claim_ids,omitempty"`
+	InvalidatedClaimIDs        []string `json:"invalidated_claim_ids,omitempty"`
+	MatchedClaimIDs            []string `json:"matched_claim_ids,omitempty"`
+	MatchedEvidenceIDs         []string `json:"matched_evidence_ids,omitempty"`
+	MissingRequiredClaimIDs    []string `json:"missing_required_claim_ids,omitempty"`
+	ConflictedClaimIDs         []string `json:"conflicted_claim_ids,omitempty"`
+	LineageSummary             string   `json:"lineage_summary,omitempty"`
+	LineageVersion             string   `json:"lineage_version,omitempty"`
+	DistillerVersion           string   `json:"distiller_version,omitempty"`
+	FallbackDueToClaimConflict bool     `json:"fallback_due_to_claim_conflict,omitempty"`
+	LineagePartial             bool     `json:"lineage_partial,omitempty"`
+}
+
 // DecisionMemo 是单次有效决策的结构化快照。
 type DecisionMemo struct {
+	DecisionLineage
 	ID               string                 `json:"id"`
 	Namespace        string                 `json:"namespace,omitempty"`
 	SessionID        string                 `json:"session_id,omitempty"`
@@ -121,6 +145,7 @@ type RecipeStep struct {
 
 // DecisionRecipe 是从多个 memo 聚合出的可复用流程模板。
 type DecisionRecipe struct {
+	DecisionLineage
 	ID                  string       `json:"id"`
 	Namespace           string       `json:"namespace,omitempty"`
 	IntentKey           string       `json:"intent_key,omitempty"`
@@ -189,16 +214,18 @@ type RecipeFeedback struct {
 
 // RecipeSelectionReport 解释为何选中或为何回退。
 type RecipeSelectionReport struct {
-	SelectedRecipeID string   `json:"selected_recipe_id,omitempty"`
-	SelectionScore   float64  `json:"selection_score,omitempty"`
-	WhySelected      []string `json:"why_selected,omitempty"`
-	FallbackReason   string   `json:"fallback_reason,omitempty"`
-	GrayHit          bool     `json:"gray_hit,omitempty"`
-	ApplyByDefault   bool     `json:"apply_by_default,omitempty"`
+	SelectedRecipeID string          `json:"selected_recipe_id,omitempty"`
+	SelectionScore   float64         `json:"selection_score,omitempty"`
+	WhySelected      []string        `json:"why_selected,omitempty"`
+	FallbackReason   string          `json:"fallback_reason,omitempty"`
+	GrayHit          bool            `json:"gray_hit,omitempty"`
+	ApplyByDefault   bool            `json:"apply_by_default,omitempty"`
+	Lineage          DecisionLineage `json:"lineage,omitempty"`
 }
 
 // RecipeRun 描述某次回合对 recipe 的实际复用记录。
 type RecipeRun struct {
+	DecisionLineage
 	ID                     string                 `json:"run_id"`
 	Namespace              string                 `json:"namespace,omitempty"`
 	RecipeID               string                 `json:"recipe_id,omitempty"`
@@ -214,6 +241,28 @@ type RecipeRun struct {
 	Steps                  []RecipeRunStep        `json:"steps,omitempty"`
 	Feedback               RecipeFeedback         `json:"feedback,omitempty"`
 	ActualTools            []string               `json:"actual_tools,omitempty"`
+}
+
+// MemoLineageExplanation 用于 debug/explain memo 的来源链。
+type MemoLineageExplanation struct {
+	Memo             DecisionMemo `json:"memo"`
+	RelatedRecipeIDs []string     `json:"related_recipe_ids,omitempty"`
+	RelatedRunIDs    []string     `json:"related_run_ids,omitempty"`
+}
+
+// RecipeLineageExplanation 用于 debug/explain recipe 的蒸馏链。
+type RecipeLineageExplanation struct {
+	Recipe         DecisionRecipe `json:"recipe"`
+	SourceMemos    []DecisionMemo `json:"source_memos,omitempty"`
+	RelatedRunIDs  []string       `json:"related_run_ids,omitempty"`
+	RelatedMemoIDs []string       `json:"related_memo_ids,omitempty"`
+}
+
+// RecipeRunLineageExplanation 用于 debug/explain recipe run 的执行链。
+type RecipeRunLineageExplanation struct {
+	Run            RecipeRun       `json:"run"`
+	Recipe         *DecisionRecipe `json:"recipe,omitempty"`
+	RelatedMemoIDs []string        `json:"related_memo_ids,omitempty"`
 }
 
 // DecisionCluster 仅作为后续 distill 的持久化壳。

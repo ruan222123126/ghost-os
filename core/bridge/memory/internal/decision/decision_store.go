@@ -36,15 +36,23 @@ type DecisionStore struct {
 	clustersPath string
 	runsPath     string
 
-	memoByID             map[string]DecisionMemo
-	memoIDsByIntentKey   map[string][]string
-	recipeByID           map[string]DecisionRecipe
-	recipeIDsByIntentKey map[string][]string
-	recipeRunByID        map[string]RecipeRun
-	memosByGraphNode     map[string][]string
-	memosByAnchorKey     map[string][]string
-	memosByToolName      map[string][]string
-	clustersByID         map[string]DecisionCluster
+	memoByID              map[string]DecisionMemo
+	memoIDsByIntentKey    map[string][]string
+	memoIDsByEvidenceID   map[string][]string
+	memoIDsByClaimID      map[string][]string
+	recipeByID            map[string]DecisionRecipe
+	recipeIDsByIntentKey  map[string][]string
+	recipeIDsByMemoID     map[string][]string
+	recipeIDsByEvidenceID map[string][]string
+	recipeIDsByClaimID    map[string][]string
+	recipeRunByID         map[string]RecipeRun
+	runIDsByRecipeID      map[string][]string
+	runIDsByEvidenceID    map[string][]string
+	runIDsByClaimID       map[string][]string
+	memosByGraphNode      map[string][]string
+	memosByAnchorKey      map[string][]string
+	memosByToolName       map[string][]string
+	clustersByID          map[string]DecisionCluster
 
 	memos    []DecisionMemo
 	recipes  []DecisionRecipe
@@ -86,16 +94,24 @@ type DecisionService struct {
 func NewDecisionStore(baseDir string) *DecisionStore {
 	resolvedBaseDir := resolveMemoryPath(baseDir)
 	store := &DecisionStore{
-		baseDir:              resolvedBaseDir,
-		memoByID:             make(map[string]DecisionMemo),
-		memoIDsByIntentKey:   make(map[string][]string),
-		recipeByID:           make(map[string]DecisionRecipe),
-		recipeIDsByIntentKey: make(map[string][]string),
-		recipeRunByID:        make(map[string]RecipeRun),
-		memosByGraphNode:     make(map[string][]string),
-		memosByAnchorKey:     make(map[string][]string),
-		memosByToolName:      make(map[string][]string),
-		clustersByID:         make(map[string]DecisionCluster),
+		baseDir:               resolvedBaseDir,
+		memoByID:              make(map[string]DecisionMemo),
+		memoIDsByIntentKey:    make(map[string][]string),
+		memoIDsByEvidenceID:   make(map[string][]string),
+		memoIDsByClaimID:      make(map[string][]string),
+		recipeByID:            make(map[string]DecisionRecipe),
+		recipeIDsByIntentKey:  make(map[string][]string),
+		recipeIDsByMemoID:     make(map[string][]string),
+		recipeIDsByEvidenceID: make(map[string][]string),
+		recipeIDsByClaimID:    make(map[string][]string),
+		recipeRunByID:         make(map[string]RecipeRun),
+		runIDsByRecipeID:      make(map[string][]string),
+		runIDsByEvidenceID:    make(map[string][]string),
+		runIDsByClaimID:       make(map[string][]string),
+		memosByGraphNode:      make(map[string][]string),
+		memosByAnchorKey:      make(map[string][]string),
+		memosByToolName:       make(map[string][]string),
+		clustersByID:          make(map[string]DecisionCluster),
 	}
 	if resolvedBaseDir != "" {
 		store.memosPath = filepath.Join(resolvedBaseDir, defaultDecisionMemosPathName)
@@ -522,6 +538,9 @@ func (s *DecisionStore) UpsertMemo(memo DecisionMemo) (bool, error) {
 	if normalized.ID == "" {
 		return false, fmt.Errorf("decision memo id is required")
 	}
+	if err := validateDecisionMemoLineage(normalized); err != nil {
+		return false, err
+	}
 
 	s.mu.Lock()
 	_, exists := s.memoByID[normalized.ID]
@@ -547,6 +566,9 @@ func (s *DecisionStore) UpsertRecipe(recipe DecisionRecipe) (bool, error) {
 	normalized := normalizeDecisionRecipe(recipe)
 	if normalized.ID == "" {
 		return false, fmt.Errorf("decision recipe id is required")
+	}
+	if err := validateDecisionRecipeLineage(normalized); err != nil {
+		return false, err
 	}
 
 	s.mu.Lock()
@@ -599,6 +621,9 @@ func (s *DecisionStore) UpsertRecipeRun(run RecipeRun) (bool, error) {
 	normalized := normalizeRecipeRun(run)
 	if normalized.ID == "" {
 		return false, fmt.Errorf("recipe run id is required")
+	}
+	if err := validateRecipeRunLineage(normalized); err != nil {
+		return false, err
 	}
 
 	s.mu.Lock()
@@ -689,9 +714,17 @@ func (s *DecisionStore) rebuildIndexes() {
 func (s *DecisionStore) rebuildIndexesLocked() {
 	s.memoByID = make(map[string]DecisionMemo, len(s.memos))
 	s.memoIDsByIntentKey = make(map[string][]string)
+	s.memoIDsByEvidenceID = make(map[string][]string)
+	s.memoIDsByClaimID = make(map[string][]string)
 	s.recipeByID = make(map[string]DecisionRecipe, len(s.recipes))
 	s.recipeIDsByIntentKey = make(map[string][]string)
+	s.recipeIDsByMemoID = make(map[string][]string)
+	s.recipeIDsByEvidenceID = make(map[string][]string)
+	s.recipeIDsByClaimID = make(map[string][]string)
 	s.recipeRunByID = make(map[string]RecipeRun, len(s.runs))
+	s.runIDsByRecipeID = make(map[string][]string)
+	s.runIDsByEvidenceID = make(map[string][]string)
+	s.runIDsByClaimID = make(map[string][]string)
 	s.memosByGraphNode = make(map[string][]string)
 	s.memosByAnchorKey = make(map[string][]string)
 	s.memosByToolName = make(map[string][]string)
@@ -713,6 +746,12 @@ func (s *DecisionStore) rebuildIndexesLocked() {
 		for _, tool := range normalized.ToolsUsed {
 			appendDecisionIndex(s.memosByToolName, tool.Name, normalized.ID)
 		}
+		for _, evidenceID := range normalized.SourceEvidenceIDs {
+			appendDecisionIndex(s.memoIDsByEvidenceID, evidenceID, normalized.ID)
+		}
+		for _, claimID := range append(append([]string(nil), normalized.SourceClaimIDs...), normalized.DerivedClaimIDs...) {
+			appendDecisionIndex(s.memoIDsByClaimID, claimID, normalized.ID)
+		}
 	}
 	for _, recipe := range s.recipes {
 		normalized := normalizeDecisionRecipe(recipe)
@@ -721,6 +760,15 @@ func (s *DecisionStore) rebuildIndexesLocked() {
 		}
 		s.recipeByID[normalized.ID] = normalized
 		appendDecisionIndex(s.recipeIDsByIntentKey, normalized.IntentKey, normalized.ID)
+		for _, memoID := range normalized.SourceMemoIDs {
+			appendDecisionIndex(s.recipeIDsByMemoID, memoID, normalized.ID)
+		}
+		for _, evidenceID := range normalized.SourceEvidenceIDs {
+			appendDecisionIndex(s.recipeIDsByEvidenceID, evidenceID, normalized.ID)
+		}
+		for _, claimID := range append(append([]string(nil), normalized.SourceClaimIDs...), normalized.ContradictedClaimIDs...) {
+			appendDecisionIndex(s.recipeIDsByClaimID, claimID, normalized.ID)
+		}
 	}
 	for _, cluster := range s.clusters {
 		normalized := normalizeDecisionCluster(cluster)
@@ -735,6 +783,13 @@ func (s *DecisionStore) rebuildIndexesLocked() {
 			continue
 		}
 		s.recipeRunByID[normalized.ID] = normalized
+		appendDecisionIndex(s.runIDsByRecipeID, normalized.RecipeID, normalized.ID)
+		for _, evidenceID := range append(append([]string(nil), normalized.SelectionEvidenceIDs...), normalized.ExecutionEvidenceIDs...) {
+			appendDecisionIndex(s.runIDsByEvidenceID, evidenceID, normalized.ID)
+		}
+		for _, claimID := range append(append(append([]string(nil), normalized.SelectionClaimIDs...), normalized.EmittedClaimIDs...), normalized.InvalidatedClaimIDs...) {
+			appendDecisionIndex(s.runIDsByClaimID, claimID, normalized.ID)
+		}
 	}
 	s.sortIndexValuesLocked()
 	// 将归一化后的值回写到切片，避免索引与原始快照漂移。
@@ -765,6 +820,38 @@ func (s *DecisionStore) sortIndexValuesLocked() {
 		sort.Strings(ids)
 		s.memosByToolName[key] = ids
 	}
+	for key, ids := range s.memoIDsByEvidenceID {
+		sort.Strings(ids)
+		s.memoIDsByEvidenceID[key] = ids
+	}
+	for key, ids := range s.memoIDsByClaimID {
+		sort.Strings(ids)
+		s.memoIDsByClaimID[key] = ids
+	}
+	for key, ids := range s.recipeIDsByMemoID {
+		sort.Strings(ids)
+		s.recipeIDsByMemoID[key] = ids
+	}
+	for key, ids := range s.recipeIDsByEvidenceID {
+		sort.Strings(ids)
+		s.recipeIDsByEvidenceID[key] = ids
+	}
+	for key, ids := range s.recipeIDsByClaimID {
+		sort.Strings(ids)
+		s.recipeIDsByClaimID[key] = ids
+	}
+	for key, ids := range s.runIDsByRecipeID {
+		sort.Strings(ids)
+		s.runIDsByRecipeID[key] = ids
+	}
+	for key, ids := range s.runIDsByEvidenceID {
+		sort.Strings(ids)
+		s.runIDsByEvidenceID[key] = ids
+	}
+	for key, ids := range s.runIDsByClaimID {
+		sort.Strings(ids)
+		s.runIDsByClaimID[key] = ids
+	}
 }
 
 func appendDecisionIndex(index map[string][]string, key, id string) {
@@ -779,6 +866,130 @@ func appendDecisionIndex(index map[string][]string, key, id string) {
 		}
 	}
 	index[trimmedKey] = append(index[trimmedKey], trimmedID)
+}
+
+func validateDecisionMemoLineage(memo DecisionMemo) error {
+	if len(memo.DerivedClaimIDs) > 0 && len(memo.SourceClaimIDs) == 0 && len(memo.SourceEvidenceIDs) == 0 && !memo.LineagePartial {
+		return fmt.Errorf("decision memo lineage requires source_claim_ids or source_evidence_ids when derived_claim_ids are present: %s", memo.ID)
+	}
+	return nil
+}
+
+func validateDecisionRecipeLineage(recipe DecisionRecipe) error {
+	if len(recipe.SourceMemoIDs) > 0 && len(recipe.SourceClaimIDs) == 0 && len(recipe.SourceEvidenceIDs) == 0 && !recipe.LineagePartial {
+		return fmt.Errorf("decision recipe lineage requires source_claim_ids or source_evidence_ids when source_memo_ids are present: %s", recipe.ID)
+	}
+	return nil
+}
+
+func validateRecipeRunLineage(run RecipeRun) error {
+	if run.RecipeID != "" && run.Selection.SelectedRecipeID != "" && len(run.SelectionClaimIDs) == 0 && len(run.SelectionEvidenceIDs) == 0 && !run.LineagePartial {
+		return fmt.Errorf("recipe run lineage requires selection_claim_ids or selection_evidence_ids: %s", run.ID)
+	}
+	return nil
+}
+
+func (s *DecisionStore) ExplainMemoLineage(memoID string) (MemoLineageExplanation, bool) {
+	if s == nil {
+		return MemoLineageExplanation{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	memo, ok := s.memoByID[strings.TrimSpace(memoID)]
+	if !ok {
+		return MemoLineageExplanation{}, false
+	}
+	return MemoLineageExplanation{
+		Memo:             cloneDecisionMemo(memo),
+		RelatedRecipeIDs: append([]string(nil), s.recipeIDsByMemoID[memo.ID]...),
+		RelatedRunIDs:    relatedRunIDsForMemoLocked(s, memo),
+	}, true
+}
+
+func (s *DecisionStore) ExplainRecipeLineage(recipeID string) (RecipeLineageExplanation, bool) {
+	if s == nil {
+		return RecipeLineageExplanation{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	recipe, ok := s.recipeByID[strings.TrimSpace(recipeID)]
+	if !ok {
+		return RecipeLineageExplanation{}, false
+	}
+	sourceMemos := make([]DecisionMemo, 0, len(recipe.SourceMemoIDs))
+	for _, memoID := range recipe.SourceMemoIDs {
+		if memo, exists := s.memoByID[memoID]; exists {
+			sourceMemos = append(sourceMemos, cloneDecisionMemo(memo))
+		}
+	}
+	return RecipeLineageExplanation{
+		Recipe:         cloneDecisionRecipe(recipe),
+		SourceMemos:    sourceMemos,
+		RelatedRunIDs:  append([]string(nil), s.runIDsByRecipeID[recipe.ID]...),
+		RelatedMemoIDs: append([]string(nil), recipe.SourceMemoIDs...),
+	}, true
+}
+
+func (s *DecisionStore) ExplainRecipeRunLineage(runID string) (RecipeRunLineageExplanation, bool) {
+	if s == nil {
+		return RecipeRunLineageExplanation{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	run, ok := s.recipeRunByID[strings.TrimSpace(runID)]
+	if !ok {
+		return RecipeRunLineageExplanation{}, false
+	}
+	var recipe *DecisionRecipe
+	if current, exists := s.recipeByID[run.RecipeID]; exists {
+		cloned := cloneDecisionRecipe(current)
+		recipe = &cloned
+	}
+	return RecipeRunLineageExplanation{
+		Run:            cloneRecipeRun(run),
+		Recipe:         recipe,
+		RelatedMemoIDs: relatedMemoIDsForRunLocked(s, run),
+	}, true
+}
+
+func relatedRunIDsForMemoLocked(s *DecisionStore, memo DecisionMemo) []string {
+	seen := make(map[string]struct{})
+	for _, claimID := range append(append([]string(nil), memo.SourceClaimIDs...), memo.DerivedClaimIDs...) {
+		for _, runID := range s.runIDsByClaimID[claimID] {
+			seen[runID] = struct{}{}
+		}
+	}
+	for _, evidenceID := range memo.SourceEvidenceIDs {
+		for _, runID := range s.runIDsByEvidenceID[evidenceID] {
+			seen[runID] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for runID := range seen {
+		out = append(out, runID)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func relatedMemoIDsForRunLocked(s *DecisionStore, run RecipeRun) []string {
+	seen := make(map[string]struct{})
+	for _, claimID := range append(append([]string(nil), run.SelectionClaimIDs...), run.EmittedClaimIDs...) {
+		for _, memoID := range s.memoIDsByClaimID[claimID] {
+			seen[memoID] = struct{}{}
+		}
+	}
+	for _, evidenceID := range append(append([]string(nil), run.SelectionEvidenceIDs...), run.ExecutionEvidenceIDs...) {
+		for _, memoID := range s.memoIDsByEvidenceID[evidenceID] {
+			seen[memoID] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for memoID := range seen {
+		out = append(out, memoID)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func filterDecisionMemosByNamespace(memos []DecisionMemo, namespace string) []DecisionMemo {

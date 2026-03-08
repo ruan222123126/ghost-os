@@ -31,4 +31,6 @@ const (
 	defaultDecisionRecipesPathName  = "recipes.json"
 	defaultDecisionClustersPathName = "clusters.json"
 	defaultDecisionRecipeRunsPath   = "recipe_runs.json"
+	decisionLineageVersion          = "lineage.v1"
+	decisionDistillerVersion        = "distill.claim-evidence.v1"
 )

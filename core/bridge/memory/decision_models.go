@@ -76,8 +76,32 @@ type DecisionEnvFingerprint struct {
 	ToolNames        []string `json:"tool_names,omitempty"`
 }
 
+// DecisionLineage 保存 decision sidecar 的可追溯主链。
+type DecisionLineage struct {
+	SourceEventIDs             []string `json:"source_event_ids,omitempty"`
+	SourceEvidenceIDs          []string `json:"source_evidence_ids,omitempty"`
+	SourceClaimIDs             []string `json:"source_claim_ids,omitempty"`
+	DerivedClaimIDs            []string `json:"derived_claim_ids,omitempty"`
+	ContradictedClaimIDs       []string `json:"contradicted_claim_ids,omitempty"`
+	SelectionClaimIDs          []string `json:"selection_claim_ids,omitempty"`
+	SelectionEvidenceIDs       []string `json:"selection_evidence_ids,omitempty"`
+	ExecutionEvidenceIDs       []string `json:"execution_evidence_ids,omitempty"`
+	EmittedClaimIDs            []string `json:"emitted_claim_ids,omitempty"`
+	InvalidatedClaimIDs        []string `json:"invalidated_claim_ids,omitempty"`
+	MatchedClaimIDs            []string `json:"matched_claim_ids,omitempty"`
+	MatchedEvidenceIDs         []string `json:"matched_evidence_ids,omitempty"`
+	MissingRequiredClaimIDs    []string `json:"missing_required_claim_ids,omitempty"`
+	ConflictedClaimIDs         []string `json:"conflicted_claim_ids,omitempty"`
+	LineageSummary             string   `json:"lineage_summary,omitempty"`
+	LineageVersion             string   `json:"lineage_version,omitempty"`
+	DistillerVersion           string   `json:"distiller_version,omitempty"`
+	FallbackDueToClaimConflict bool     `json:"fallback_due_to_claim_conflict,omitempty"`
+	LineagePartial             bool     `json:"lineage_partial,omitempty"`
+}
+
 // DecisionMemo 是单次有效决策的结构化快照。
 type DecisionMemo struct {
+	DecisionLineage
 	ID               string                 `json:"id"`
 	Namespace        string                 `json:"namespace,omitempty"`
 	SessionID        string                 `json:"session_id,omitempty"`
@@ -121,6 +145,7 @@ type RecipeStep struct {
 
 // DecisionRecipe 是从多个 memo 聚合出的可复用流程模板。
 type DecisionRecipe struct {
+	DecisionLineage
 	ID                  string       `json:"id"`
 	Namespace           string       `json:"namespace,omitempty"`
 	IntentKey           string       `json:"intent_key,omitempty"`
@@ -170,12 +195,12 @@ type RecipeAdvisory struct {
 
 // RecipeRunStep 跟踪预期步骤与实际执行之间的偏差。
 type RecipeRunStep struct {
-	ExpectedStep      RecipeStep `json:"expected_step,omitempty"`
-	ActualTool        string     `json:"actual_tool,omitempty"`
-	Matched           bool       `json:"matched,omitempty"`
-	Skipped           bool       `json:"skipped,omitempty"`
-	DeviationReason   string     `json:"deviation_reason,omitempty"`
-	ValidationResult  string     `json:"validation_result,omitempty"`
+	ExpectedStep     RecipeStep `json:"expected_step,omitempty"`
+	ActualTool       string     `json:"actual_tool,omitempty"`
+	Matched          bool       `json:"matched,omitempty"`
+	Skipped          bool       `json:"skipped,omitempty"`
+	DeviationReason  string     `json:"deviation_reason,omitempty"`
+	ValidationResult string     `json:"validation_result,omitempty"`
 }
 
 // RecipeFeedback 描述一次 recipe 复用后的结果判定。
@@ -189,16 +214,18 @@ type RecipeFeedback struct {
 
 // RecipeSelectionReport 解释为何选中或为何回退。
 type RecipeSelectionReport struct {
-	SelectedRecipeID string   `json:"selected_recipe_id,omitempty"`
-	SelectionScore   float64  `json:"selection_score,omitempty"`
-	WhySelected      []string `json:"why_selected,omitempty"`
-	FallbackReason   string   `json:"fallback_reason,omitempty"`
-	GrayHit          bool     `json:"gray_hit,omitempty"`
-	ApplyByDefault   bool     `json:"apply_by_default,omitempty"`
+	SelectedRecipeID string          `json:"selected_recipe_id,omitempty"`
+	SelectionScore   float64         `json:"selection_score,omitempty"`
+	WhySelected      []string        `json:"why_selected,omitempty"`
+	FallbackReason   string          `json:"fallback_reason,omitempty"`
+	GrayHit          bool            `json:"gray_hit,omitempty"`
+	ApplyByDefault   bool            `json:"apply_by_default,omitempty"`
+	Lineage          DecisionLineage `json:"lineage,omitempty"`
 }
 
 // RecipeRun 描述某次回合对 recipe 的实际复用记录。
 type RecipeRun struct {
+	DecisionLineage
 	ID                     string                 `json:"run_id"`
 	Namespace              string                 `json:"namespace,omitempty"`
 	RecipeID               string                 `json:"recipe_id,omitempty"`
@@ -214,6 +241,28 @@ type RecipeRun struct {
 	Steps                  []RecipeRunStep        `json:"steps,omitempty"`
 	Feedback               RecipeFeedback         `json:"feedback,omitempty"`
 	ActualTools            []string               `json:"actual_tools,omitempty"`
+}
+
+// MemoLineageExplanation 用于 debug/explain memo 的来源链。
+type MemoLineageExplanation struct {
+	Memo             DecisionMemo `json:"memo"`
+	RelatedRecipeIDs []string     `json:"related_recipe_ids,omitempty"`
+	RelatedRunIDs    []string     `json:"related_run_ids,omitempty"`
+}
+
+// RecipeLineageExplanation 用于 debug/explain recipe 的蒸馏链。
+type RecipeLineageExplanation struct {
+	Recipe         DecisionRecipe `json:"recipe"`
+	SourceMemos    []DecisionMemo `json:"source_memos,omitempty"`
+	RelatedRunIDs  []string       `json:"related_run_ids,omitempty"`
+	RelatedMemoIDs []string       `json:"related_memo_ids,omitempty"`
+}
+
+// RecipeRunLineageExplanation 用于 debug/explain recipe run 的执行链。
+type RecipeRunLineageExplanation struct {
+	Run            RecipeRun       `json:"run"`
+	Recipe         *DecisionRecipe `json:"recipe,omitempty"`
+	RelatedMemoIDs []string        `json:"related_memo_ids,omitempty"`
 }
 
 // DecisionCluster 仅作为后续 distill 的持久化壳。
@@ -277,28 +326,28 @@ type DecisionDistillStats struct {
 
 // DecisionRebuildOptions 控制 decision memo/recipe 的离线重建流程。
 type DecisionRebuildOptions struct {
-	Namespace      string     `json:"namespace,omitempty"`
-	TimeRange      *TimeRange `json:"time_range,omitempty"`
-	MaxSessions    int        `json:"max_sessions,omitempty"`
-	BatchSize      int        `json:"batch_size,omitempty"`
-	CursorCheckpoint string   `json:"cursor_checkpoint,omitempty"`
-	DryRun         bool       `json:"dry_run,omitempty"`
-	IncludeRecipes bool       `json:"include_recipes,omitempty"`
-	RebuildMemos   bool       `json:"rebuild_memos,omitempty"`
-	ResetNamespace bool       `json:"reset_namespace,omitempty"`
+	Namespace        string     `json:"namespace,omitempty"`
+	TimeRange        *TimeRange `json:"time_range,omitempty"`
+	MaxSessions      int        `json:"max_sessions,omitempty"`
+	BatchSize        int        `json:"batch_size,omitempty"`
+	CursorCheckpoint string     `json:"cursor_checkpoint,omitempty"`
+	DryRun           bool       `json:"dry_run,omitempty"`
+	IncludeRecipes   bool       `json:"include_recipes,omitempty"`
+	RebuildMemos     bool       `json:"rebuild_memos,omitempty"`
+	ResetNamespace   bool       `json:"reset_namespace,omitempty"`
 }
 
 // DecisionRebuildStats 描述一次离线 backfill/rebuild 的处理计数。
 type DecisionRebuildStats struct {
-	Namespace       string `json:"namespace,omitempty"`
-	SessionsScanned int    `json:"sessions_scanned"`
-	MarkdownScanned int    `json:"markdown_scanned"`
-	MemosCaptured   int    `json:"memos_captured"`
-	RecipesCreated  int    `json:"recipes_created"`
-	RecipesUpdated  int    `json:"recipes_updated"`
-	RecipeRunsCreated int  `json:"recipe_runs_created"`
-	RecipeRunsUpdated int  `json:"recipe_runs_updated"`
-	ClustersUpdated int    `json:"clusters_updated"`
-	SkippedEntries  int    `json:"skipped_entries"`
-	CursorCheckpoint string `json:"cursor_checkpoint,omitempty"`
+	Namespace         string `json:"namespace,omitempty"`
+	SessionsScanned   int    `json:"sessions_scanned"`
+	MarkdownScanned   int    `json:"markdown_scanned"`
+	MemosCaptured     int    `json:"memos_captured"`
+	RecipesCreated    int    `json:"recipes_created"`
+	RecipesUpdated    int    `json:"recipes_updated"`
+	RecipeRunsCreated int    `json:"recipe_runs_created"`
+	RecipeRunsUpdated int    `json:"recipe_runs_updated"`
+	ClustersUpdated   int    `json:"clusters_updated"`
+	SkippedEntries    int    `json:"skipped_entries"`
+	CursorCheckpoint  string `json:"cursor_checkpoint,omitempty"`
 }

@@ -25,6 +25,7 @@ type recipeSelectionCandidate struct {
 	SelectionConfidence float64
 	Reasons             []string
 	AdvisoryOnly        bool
+	Lineage             DecisionLineage
 }
 
 func (d *DecisionService) SelectRecipeReuse(query MemoryQuery, scope SessionScope, hits []DecisionHit, entries []MemoryEntry, plan *QueryIntentPlan, rerankReport *HybridRerankReport, now time.Time) (*DecisionRecipe, *RecipeSelectionReport, *RecipeAdvisory) {
@@ -95,6 +96,7 @@ func (d *DecisionService) SelectRecipeReuse(query MemoryQuery, scope SessionScop
 		WhySelected:      append([]string(nil), best.Reasons...),
 		GrayHit:          grayHit,
 		ApplyByDefault:   advisory.ApplyByDefault,
+		Lineage:          cloneDecisionLineage(best.Lineage),
 	}
 	return &selected, report, advisory
 }
@@ -102,6 +104,11 @@ func (d *DecisionService) SelectRecipeReuse(query MemoryQuery, scope SessionScop
 func (d *DecisionService) scoreRecipeSelectionCandidate(recipe DecisionRecipe, hit DecisionHit, input recipeSelectionInput, now time.Time) recipeSelectionCandidate {
 	recipe = normalizeDecisionRecipe(recipe)
 	hit = normalizeDecisionHit(hit)
+	contextLineage := d.selectionContextLineage(input.Hits)
+	matchedClaimIDs := intersectStrings(contextLineage.SourceClaimIDs, recipe.SourceClaimIDs)
+	matchedEvidenceIDs := intersectStrings(contextLineage.SourceEvidenceIDs, recipe.SourceEvidenceIDs)
+	conflictedClaimIDs := intersectStrings(contextLineage.SourceClaimIDs, recipe.ContradictedClaimIDs)
+	missingRequiredClaimIDs := diffStrings(recipe.SourceClaimIDs, matchedClaimIDs)
 	currentEnv := decisionEnvironmentFromQuery(input.Query, input.Scope)
 	envScore, hasEnvEvidence := d.recipeEnvironmentCompatibility(currentEnv, recipe)
 	hitScore := maxFloat(hit.Score, hit.ReuseScore)
@@ -115,8 +122,14 @@ func (d *DecisionService) scoreRecipeSelectionCandidate(recipe DecisionRecipe, h
 	}
 	score := hitScore*0.34 + envScore*0.18 + successScore*0.18 + supportScore*0.10 + freshnessScore*0.08 + coverageScore*0.07 + hybridBoost*0.05
 	score -= recipeStatusPenalty(recipe.Status)
+	if len(conflictedClaimIDs) > 0 {
+		score -= clamp01(float64(len(conflictedClaimIDs))/float64(max(len(recipe.ContradictedClaimIDs), 1))) * 0.22
+	}
 	selectionConfidence := clamp01(recipe.Confidence*0.55 + score*0.45)
 	advisoryOnly := selectionConfidence < d.recipeSelectionThreshold() || recipe.SuccessRate < d.recipeSuccessThreshold()
+	if len(conflictedClaimIDs) > 0 && len(matchedClaimIDs) == 0 {
+		advisoryOnly = true
+	}
 	if selectionConfidence < 0.35 {
 		return recipeSelectionCandidate{}
 	}
@@ -138,6 +151,12 @@ func (d *DecisionService) scoreRecipeSelectionCandidate(recipe DecisionRecipe, h
 	if coverageScore >= 0.35 {
 		reasons = append(reasons, "risk and validation coverage present")
 	}
+	if len(matchedClaimIDs) > 0 {
+		reasons = append(reasons, "matched supporting claims")
+	}
+	if len(conflictedClaimIDs) > 0 {
+		reasons = append(reasons, "conflicting claims kept selection conservative")
+	}
 	if advisoryOnly {
 		reasons = append(reasons, "kept advisory-only because confidence is still warming up")
 	}
@@ -148,7 +167,41 @@ func (d *DecisionService) scoreRecipeSelectionCandidate(recipe DecisionRecipe, h
 		SelectionConfidence: selectionConfidence,
 		Reasons:             uniqueStrings(reasons),
 		AdvisoryOnly:        advisoryOnly,
+		Lineage: normalizeDecisionLineage(DecisionLineage{
+			SourceClaimIDs:             append([]string(nil), recipe.SourceClaimIDs...),
+			SourceEvidenceIDs:          append([]string(nil), recipe.SourceEvidenceIDs...),
+			ContradictedClaimIDs:       append([]string(nil), recipe.ContradictedClaimIDs...),
+			SelectionClaimIDs:          matchedClaimIDs,
+			SelectionEvidenceIDs:       matchedEvidenceIDs,
+			MatchedClaimIDs:            matchedClaimIDs,
+			MatchedEvidenceIDs:         matchedEvidenceIDs,
+			MissingRequiredClaimIDs:    missingRequiredClaimIDs,
+			ConflictedClaimIDs:         conflictedClaimIDs,
+			LineageSummary:             decisionLineageSummary("selected", matchedClaimIDs, matchedEvidenceIDs, recipe.SourceMemoIDs),
+			LineageVersion:             decisionLineageVersion,
+			DistillerVersion:           firstNonEmpty(recipe.DistillerVersion, decisionDistillerVersion),
+			FallbackDueToClaimConflict: len(conflictedClaimIDs) > 0 && advisoryOnly,
+		}),
 	}
+}
+
+func (d *DecisionService) selectionContextLineage(hits []DecisionHit) DecisionLineage {
+	if d == nil || d.store == nil || len(hits) == 0 {
+		return DecisionLineage{}
+	}
+	context := DecisionLineage{}
+	for _, rawHit := range hits {
+		hit := normalizeDecisionHit(rawHit)
+		if hit.Type != DecisionHitTypeMemo || strings.TrimSpace(hit.MemoID) == "" {
+			continue
+		}
+		memo, ok := d.store.Memo(hit.MemoID)
+		if !ok {
+			continue
+		}
+		context = mergeDecisionLineage(context, decisionLineageFromMemo(memo))
+	}
+	return context
 }
 
 func recipeSelectionCoverage(query MemoryQuery, plan *QueryIntentPlan, recipe DecisionRecipe) float64 {

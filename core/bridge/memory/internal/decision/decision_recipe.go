@@ -250,10 +250,16 @@ func (d *DecisionDistiller) buildRecipe(namespace string, cluster DecisionCluste
 	graphRefs := decisionCollectStableGraphRefs(successMemos, decisionRecipeMaxItems)
 	anchorKeys := decisionCollectStableAnchorKeys(successMemos, decisionRecipeMaxItems)
 	sourceMemoIDs := make([]string, 0, len(successMemos))
+	successClaimObservations := make([]string, 0, len(successMemos)*4)
+	successEvidenceObservations := make([]string, 0, len(successMemos)*4)
+	failureClaimObservations := make([]string, 0, len(warningMemos)*2)
 	createdAt := time.Time{}
 	updatedAt := time.Time{}
 	for _, memo := range successMemos {
 		sourceMemoIDs = append(sourceMemoIDs, memo.ID)
+		successClaimObservations = append(successClaimObservations, memo.SourceClaimIDs...)
+		successClaimObservations = append(successClaimObservations, memo.DerivedClaimIDs...)
+		successEvidenceObservations = append(successEvidenceObservations, memo.SourceEvidenceIDs...)
 		if createdAt.IsZero() || memo.CreatedAt.Before(createdAt) {
 			createdAt = memo.CreatedAt.UTC()
 		}
@@ -262,11 +268,26 @@ func (d *DecisionDistiller) buildRecipe(namespace string, cluster DecisionCluste
 			updatedAt = latest
 		}
 	}
+	for _, memo := range warningMemos {
+		failureClaimObservations = append(failureClaimObservations, memo.SourceClaimIDs...)
+		failureClaimObservations = append(failureClaimObservations, memo.DerivedClaimIDs...)
+	}
 	if strategySummary == "" && len(orderedActions) > 0 {
 		strategySummary = firstNonEmpty(orderedActions[0].Instruction, orderedActions[0].Title)
 	}
 	confidence := decisionRecipeConfidence(successRate, len(successMemos), envStability)
+	sourceClaimIDs := decisionCountStableIDs(successClaimObservations, len(successMemos), 0.5)
+	sourceEvidenceIDs := uniqueStrings(successEvidenceObservations)
+	contradictedClaimIDs := diffStrings(decisionCountStableIDs(failureClaimObservations, len(warningMemos), 0.5), sourceClaimIDs)
 	recipe := DecisionRecipe{
+		DecisionLineage: DecisionLineage{
+			SourceEvidenceIDs:    sourceEvidenceIDs,
+			SourceClaimIDs:       sourceClaimIDs,
+			ContradictedClaimIDs: contradictedClaimIDs,
+			LineageSummary:       decisionLineageSummary("distilled", sourceClaimIDs, sourceEvidenceIDs, sourceMemoIDs),
+			LineageVersion:       decisionLineageVersion,
+			DistillerVersion:     decisionDistillerVersion,
+		},
 		ID:                  buildDecisionRecipeID(namespace, cluster.EnvironmentKey, intentKey, triggerPhrases),
 		Namespace:           normalizeDecisionNamespace(namespace),
 		IntentKey:           firstNonEmpty(intentKey, decisionLookup(strings.Join(triggerPhrases, " "))),
