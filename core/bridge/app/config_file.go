@@ -50,6 +50,12 @@ type bridgeFileConfig struct {
 	WorkerModel                                  *string                       `toml:"worker_model,omitempty"`
 	PromptsPath                                  *string                       `toml:"prompts_path,omitempty"`
 	SessionsPath                                 *string                       `toml:"sessions_path,omitempty"`
+	RSSFeedsPath                                 *string                       `toml:"rss_feeds_path,omitempty"`
+	RSSInboxPath                                 *string                       `toml:"rss_inbox_path,omitempty"`
+	RSSPollEnabled                               *bool                         `toml:"rss_poll_enabled,omitempty"`
+	RSSPollInterval                              *string                       `toml:"rss_poll_interval,omitempty"`
+	RSSPollMaxItemsPerFeed                       *int                          `toml:"rss_poll_max_items_per_feed,omitempty"`
+	RSSAIBatchSize                               *int                          `toml:"rss_ai_batch_size,omitempty"`
 	MemoryWarmPath                               *string                       `toml:"memory_warm_path,omitempty"`
 	MemoryColdPath                               *string                       `toml:"memory_cold_path,omitempty"`
 	MemoryLedgerPath                             *string                       `toml:"memory_ledger_path,omitempty"`

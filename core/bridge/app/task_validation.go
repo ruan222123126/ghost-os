@@ -50,6 +50,12 @@ func validateTaskDefinition(task *ScheduledTask) error {
 				return fmt.Errorf("%w: invalid %s params: %v", ErrInvalidTaskConfig, busActionMemoryHygieneRun, err)
 			}
 			task.ActionParams = memoryHygieneRunParamsToMap(params)
+		case busActionRSSInboxPoll:
+			params, err := decodeRSSInboxPollParams(task.ActionParams)
+			if err != nil {
+				return fmt.Errorf("%w: invalid %s params: %v", ErrInvalidTaskConfig, busActionRSSInboxPoll, err)
+			}
+			task.ActionParams = rssInboxPollParamsToMap(params)
 		default:
 			return fmt.Errorf("%w: unsupported system action %q", ErrInvalidTaskConfig, task.Action)
 		}

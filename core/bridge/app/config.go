@@ -17,6 +17,12 @@ type Config struct {
 	ChatPath                                        string
 	PromptsPath                                     string
 	SessionsPath                                    string
+	RSSFeedsPath                                    string
+	RSSInboxPath                                    string
+	RSSPollEnabled                                  bool
+	RSSPollInterval                                 time.Duration
+	RSSPollMaxItemsPerFeed                          int
+	RSSAIBatchSize                                  int
 	MemoryWarmPath                                  string
 	MemoryColdPath                                  string
 	MemoryLedgerPath                                string
@@ -100,6 +106,12 @@ const (
 	defaultModel                                      = "gpt-4o"
 	defaultPromptsPath                                = "prompts.yaml"
 	defaultSessionsPath                               = "~/.ghost-os/sessions"
+	defaultRSSFeedsPath                               = "~/.ghost-os/rss/feeds.json"
+	defaultRSSInboxPath                               = "~/.ghost-os/rss/inbox.json"
+	defaultRSSPollInterval                            = 15 * time.Minute
+	defaultRSSPollMaxItemsPerFeed                     = 10
+	defaultRSSAIBatchSize                             = 5
+	defaultTasksPath                                  = "~/.ghost-os/tasks"
 	defaultMemoryWarmPath                             = "~/.ghost-os/memory/warm.json"
 	defaultMemoryColdPath                             = "~/.ghost-os/memory/cold"
 	defaultMemoryGraphPath                            = "~/.ghost-os/memory/graph"

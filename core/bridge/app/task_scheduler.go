@@ -338,7 +338,7 @@ func (s *TaskScheduler) executeTask(ctx context.Context, task ScheduledTask, tra
 	}
 	switch normalizeTaskKind(task.TaskKind) {
 	case taskKindSystemAction:
-		return s.executeSystemTaskAction(task, traceID)
+		return s.executeSystemTaskAction(ctx, task, traceID)
 	default:
 		return s.executeAgentTaskAction(ctx, task, traceID)
 	}
@@ -370,7 +370,7 @@ func (s *TaskScheduler) executeAgentTaskAction(ctx context.Context, task Schedul
 	}
 }
 
-func (s *TaskScheduler) executeSystemTaskAction(task ScheduledTask, traceID string) scheduledTaskExecutionResult {
+func (s *TaskScheduler) executeSystemTaskAction(ctx context.Context, task ScheduledTask, traceID string) scheduledTaskExecutionResult {
 	switch strings.TrimSpace(task.Action) {
 	case busActionMemoryHygieneRun:
 		params, err := decodeMemoryHygieneRunParams(task.ActionParams)
@@ -382,6 +382,16 @@ func (s *TaskScheduler) executeSystemTaskAction(task ScheduledTask, traceID stri
 			return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 		}
 		return scheduledTaskExecutionResult{Status: taskRunStatusSuccess, ResponsePreview: formatMemoryHygieneRunPreview(payload)}
+	case busActionRSSInboxPoll:
+		params, err := decodeRSSInboxPollParams(task.ActionParams)
+		if err != nil {
+			return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
+		payload, _, err := s.service.executeRSSInboxPollUsecase(ctx, params, task.ID, traceID)
+		if err != nil {
+			return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
+		return scheduledTaskExecutionResult{Status: taskRunStatusSuccess, ResponsePreview: formatRSSInboxPollPreview(payload)}
 	default:
 		return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: "unsupported system action: " + strings.TrimSpace(task.Action)}
 	}

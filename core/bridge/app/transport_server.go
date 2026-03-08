@@ -20,7 +20,7 @@ type serverOptions struct {
 	auth         apiTokenAuth
 }
 
-// newServerOptionsFromEnv 收敛 server 相关环境配置，避免 runServer 中散落解析逻辑。
+// newServerOptionsFromEnv 收敛 server 相关配置，优先读配置文件并回退环境变量。
 func newServerOptionsFromEnv(port int) serverOptions {
 	return serverOptions{
 		bindAddr:     resolveBindAddr(port),
@@ -32,6 +32,12 @@ func newServerOptionsFromEnv(port int) serverOptions {
 
 // resolveBindAddr 优先使用显式绑定地址，否则回退到本地回环端口。
 func resolveBindAddr(port int) string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err == nil {
+		if configured := strings.TrimSpace(valueOrEnv(fileCfg.BindAddr, "GHOST_BIND_ADDR", "")); configured != "" {
+			return configured
+		}
+	}
 	if configured := strings.TrimSpace(getenvDefault("GHOST_BIND_ADDR", "")); configured != "" {
 		return configured
 	}
@@ -51,6 +57,10 @@ func runServer(ctx context.Context, port int) (string, error) {
 	}
 
 	service := newBridgeService(store, sessionStore, nil)
+	if service.taskInitErr != nil {
+		service.Close()
+		return "", service.taskInitErr
+	}
 	defer service.Close()
 	options := newServerOptionsFromEnv(port)
 	server := &http.Server{
@@ -95,9 +105,17 @@ func newHTTPHandler(service *bridgeService, options serverOptions) http.Handler 
 	mux.HandleFunc("/api/bus", transport.handleBus)
 	mux.HandleFunc("/api/agent", transport.handleAgent)
 	mux.HandleFunc("/api/agent/stream", transport.handleAgentStream)
+	mux.HandleFunc("/api/questions/answer", transport.handleQuestionAnswer)
 	mux.HandleFunc("/api/config", transport.handleConfig)
+	mux.HandleFunc("/api/config/providers", transport.handleConfigProviders)
+	mux.HandleFunc("/api/config/providers/", transport.handleConfigProviderByName)
+	mux.HandleFunc("/api/config/active-provider", transport.handleActiveProvider)
 	mux.HandleFunc("/api/sessions", transport.handleSessionsList)
 	mux.HandleFunc("/api/sessions/", transport.handleSessionByID)
+	mux.HandleFunc("/api/rss/inbox", transport.handleRSSInbox)
+	mux.HandleFunc("/api/rss/inbox/", transport.handleRSSInboxByID)
+	mux.HandleFunc("/api/tasks", transport.handleTasks)
+	mux.HandleFunc("/api/tasks/", transport.handleTaskByID)
 
 	return withCORS(options.cors, withAuth(options.auth, mux))
 }

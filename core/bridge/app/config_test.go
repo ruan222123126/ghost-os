@@ -116,6 +116,46 @@ func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 	if cfg.MemoryDecisionSelectorHintEnabled {
 		t.Fatalf("expected selector hint toggle to be disabled")
 	}
+	if cfg.RSSFeedsPath != defaultRSSFeedsPath {
+		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSSFeedsPath, defaultRSSFeedsPath)
+	}
+}
+
+func TestLoadConfigWithRuntime_LoadsRSSFeedsPath(t *testing.T) {
+	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
+	t.Setenv("GHOST_RSS_FEEDS_PATH", "/tmp/rss-feeds.json")
+	t.Setenv("GHOST_RSS_INBOX_PATH", "/tmp/rss-inbox.json")
+	t.Setenv("GHOST_RSS_POLL_ENABLED", "false")
+	t.Setenv("GHOST_RSS_POLL_INTERVAL", "10m")
+	t.Setenv("GHOST_RSS_POLL_MAX_ITEMS_PER_FEED", "15")
+	t.Setenv("GHOST_RSS_AI_BATCH_SIZE", "7")
+
+	cfg, err := loadConfigWithRuntime(runtimeConfig{
+		Provider: llm.ProviderCustom,
+		BaseURL:  "https://example.com/v1",
+		Model:    "gpt-4o",
+	})
+	if err != nil {
+		t.Fatalf("loadConfigWithRuntime returned error: %v", err)
+	}
+	if cfg.RSSFeedsPath != "/tmp/rss-feeds.json" {
+		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSSFeedsPath, "/tmp/rss-feeds.json")
+	}
+	if cfg.RSSInboxPath != "/tmp/rss-inbox.json" {
+		t.Fatalf("unexpected rss inbox path: got %q want %q", cfg.RSSInboxPath, "/tmp/rss-inbox.json")
+	}
+	if cfg.RSSPollEnabled {
+		t.Fatal("expected rss poll to be disabled")
+	}
+	if cfg.RSSPollInterval != 10*time.Minute {
+		t.Fatalf("unexpected rss poll interval: got %s want %s", cfg.RSSPollInterval, 10*time.Minute)
+	}
+	if cfg.RSSPollMaxItemsPerFeed != 15 {
+		t.Fatalf("unexpected rss max items: got %d want %d", cfg.RSSPollMaxItemsPerFeed, 15)
+	}
+	if cfg.RSSAIBatchSize != 7 {
+		t.Fatalf("unexpected rss ai batch size: got %d want %d", cfg.RSSAIBatchSize, 7)
+	}
 }
 
 func TestLoadConfigWithRuntime_LoadsMemoryEnhancementSettings(t *testing.T) {

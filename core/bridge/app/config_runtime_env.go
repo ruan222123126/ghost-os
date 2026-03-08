@@ -39,6 +39,58 @@ func sessionsPathFromEnv() string {
 	return valueOrEnv(fileCfg.SessionsPath, "GHOST_SESSIONS_PATH", defaultSessionsPath)
 }
 
+func rssFeedsPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
+	}
+	return valueOrEnv(fileCfg.RSSFeedsPath, "GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
+}
+
+func rssInboxPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
+	}
+	return valueOrEnv(fileCfg.RSSInboxPath, "GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
+}
+
+func rssPollEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_RSS_POLL_ENABLED", true)
+	}
+	return boolOrEnv(fileCfg.RSSPollEnabled, "GHOST_RSS_POLL_ENABLED", true)
+}
+
+func rssPollIntervalFromEnv() time.Duration {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseDurationEnv("GHOST_RSS_POLL_INTERVAL", defaultRSSPollInterval)
+	}
+	return durationOrEnv(fileCfg.RSSPollInterval, "GHOST_RSS_POLL_INTERVAL", defaultRSSPollInterval)
+}
+
+func rssPollMaxItemsPerFeedFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_RSS_POLL_MAX_ITEMS_PER_FEED", defaultRSSPollMaxItemsPerFeed)
+	}
+	return intOrEnv(fileCfg.RSSPollMaxItemsPerFeed, "GHOST_RSS_POLL_MAX_ITEMS_PER_FEED", defaultRSSPollMaxItemsPerFeed)
+}
+
+func rssAIBatchSizeFromEnv() int {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parsePositiveIntEnv("GHOST_RSS_AI_BATCH_SIZE", defaultRSSAIBatchSize)
+	}
+	return intOrEnv(fileCfg.RSSAIBatchSize, "GHOST_RSS_AI_BATCH_SIZE", defaultRSSAIBatchSize)
+}
+
+func tasksPathFromEnv() string {
+	return getenvDefault("GHOST_TASKS_PATH", defaultTasksPath)
+}
+
 // memoryWarmPathFromEnv 返回 warm memory 持久化文件路径。
 func memoryWarmPathFromEnv() string {
 	fileCfg, _, err := loadBridgeFileConfig()

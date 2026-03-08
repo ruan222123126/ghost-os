@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/tools"
 )
 
 type actionHandler func(ctx context.Context, params json.RawMessage, traceID string) (any, int, error)
@@ -36,12 +38,16 @@ type agentStreamExecutorFunc func(
 type bridgeService struct {
 	configStore   *ConfigStore
 	sessionStore  *session.Store
+	sessionPush   *sessionPushHub
 	taskStore     *TaskStore
 	taskScheduler *TaskScheduler
 	taskInitErr   error
+	rssInbox      *RSSInboxService
+	rssInitErr    error
 	memoryManager *memory.MemoryManager
 	agentRunner   SessionTurnRunner
 	runRegistry   *RunRegistry
+	feedStore     *tools.FeedStore
 	actions       map[string]actionHandler
 }
 
@@ -59,20 +65,22 @@ func newBridgeServiceWithStreamExecutor(
 	memoryManager := memory.NewMemoryManager(memoryManagerConfigFromStore(store, sessionStore))
 	runRegistry := NewRunRegistry()
 
-	runner := newSessionTurnRunnerAdapter(store, sessionStore, executor, streamExecutor)
-	if runner == nil {
-		runner = NewSessionAgentRunner(newAgentRuntimeFactory(), store, sessionStore, memoryManager, runRegistry)
-	}
-
 	service := &bridgeService{
 		configStore:   store,
 		sessionStore:  sessionStore,
+		sessionPush:   newSessionPushHub(),
 		memoryManager: memoryManager,
-		agentRunner:   runner,
 		runRegistry:   runRegistry,
-		actions:       make(map[string]actionHandler, 18),
+		actions:       make(map[string]actionHandler, 21),
 	}
+	service.initRSSInboxRuntime()
 	service.initTaskRuntime()
+
+	runner := newSessionTurnRunnerAdapter(store, sessionStore, executor, streamExecutor)
+	if runner == nil {
+		runner = NewSessionAgentRunner(newAgentRuntimeFactoryWithTaskManager(service.taskToolManager()), store, sessionStore, memoryManager, runRegistry)
+	}
+	service.agentRunner = runner
 
 	registerAction(service, busActionAgentSend, func(ctx context.Context, params agentParams, traceID string) (any, int, error) {
 		return service.executeAgentAction(ctx, params, traceID)
@@ -128,7 +136,23 @@ func newBridgeServiceWithStreamExecutor(
 	registerAction(service, busActionTaskDelete, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskDeleteAction(params, traceID)
 	})
+	registerAction(service, busActionRSSInboxPoll, func(ctx context.Context, params rssInboxPollParams, traceID string) (any, int, error) {
+		return service.executeRSSInboxPollAction(ctx, params, traceID)
+	})
+	registerAction(service, busActionRSSInboxList, func(_ context.Context, params rssInboxListParams, traceID string) (any, int, error) {
+		return service.executeRSSInboxListAction(params, traceID)
+	})
+	registerAction(service, busActionRSSInboxGet, func(_ context.Context, params rssInboxGetParams, traceID string) (any, int, error) {
+		return service.executeRSSInboxGetAction(params, traceID)
+	})
 	return service
+}
+
+func (s *bridgeService) taskToolManager() tools.TaskManager {
+	if s == nil || s.taskStore == nil || s.taskScheduler == nil {
+		return nil
+	}
+	return s
 }
 
 func (s *bridgeService) initTaskRuntime() {
@@ -147,6 +171,22 @@ func (s *bridgeService) initTaskRuntime() {
 	}
 	s.taskStore = taskStore
 	s.taskScheduler = scheduler
+	if err := s.ensureRSSPollTask(); err != nil {
+		log.Printf("rss inbox poll task init skipped: error=%v", err)
+	}
+}
+
+func (s *bridgeService) initRSSInboxRuntime() {
+	if s == nil {
+		return
+	}
+	service, err := newRSSInboxServiceFromConfig(s.configStore)
+	if err != nil {
+		s.rssInitErr = err
+		return
+	}
+	s.rssInbox = service
+	s.feedStore = service.feedStore
 }
 
 // Close 释放 service 级后台资源。
@@ -156,6 +196,9 @@ func (s *bridgeService) Close() {
 	}
 	if s.taskScheduler != nil {
 		s.taskScheduler.Stop()
+	}
+	if s.sessionPush != nil {
+		s.sessionPush.Close()
 	}
 	if s.memoryManager == nil {
 		return
