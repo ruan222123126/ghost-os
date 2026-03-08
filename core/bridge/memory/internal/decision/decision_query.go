@@ -256,7 +256,7 @@ func (d *DecisionService) scoreDecisionMemo(memo DecisionMemo, query MemoryQuery
 		memo.StrategySummary,
 		memo.OutcomeSummary,
 	)
-	anchorScore := decisionAnchorOverlap(query, scope, memo.AnchorKeys)
+	anchorScore := decisionClaimOrAnchorOverlap(query, scope, append(append([]string(nil), memo.SourceClaimIDs...), memo.DerivedClaimIDs...), memo.AnchorKeys)
 	graphScore := decisionGraphOverlap(query, memo.GraphNodeRefs)
 	toolScore := decisionToolPatternOverlap(currentEnv, decisionToolNamesFromUses(memo.ToolsUsed))
 	recency := scoreDecisionRecency(now, memo.LastUsedAt, memo.CreatedAt)
@@ -305,7 +305,7 @@ func (d *DecisionService) scoreDecisionRecipe(recipe DecisionRecipe, query Memor
 		recipe.StrategySummary,
 		decisionRecipeActionText(recipe),
 	)
-	anchorScore := decisionAnchorOverlap(query, scope, recipe.AnchorKeys)
+	anchorScore := decisionClaimOrAnchorOverlap(query, scope, recipe.SourceClaimIDs, recipe.AnchorKeys)
 	graphScore := decisionGraphOverlap(query, recipe.GraphRefs)
 	toolScore := decisionToolPatternOverlap(currentEnv, recipe.RecommendedTools)
 	recency := scoreDecisionRecency(now, recipe.UpdatedAt, recipe.CreatedAt)
@@ -377,6 +377,59 @@ func decisionGraphOverlap(query MemoryQuery, refs []string) float64 {
 
 func decisionAnchorOverlap(query MemoryQuery, scope SessionScope, keys []string) float64 {
 	return decisionStringSetOverlap(decisionCandidateTerms(query, scope), keys)
+}
+
+func decisionClaimOrAnchorOverlap(query MemoryQuery, scope SessionScope, claimIDs []string, anchorKeys []string) float64 {
+	if score := decisionClaimOverlap(query, claimIDs); score > 0 {
+		return score
+	}
+	return decisionAnchorOverlap(query, scope, anchorKeys)
+}
+
+func decisionClaimOverlap(query MemoryQuery, claimIDs []string) float64 {
+	queryClaimIDs := decisionQueryClaimIDs(query)
+	if len(queryClaimIDs) == 0 || len(claimIDs) == 0 {
+		return 0
+	}
+	return decisionStringSetOverlap(queryClaimIDs, claimIDs)
+}
+
+func decisionQueryClaimIDs(query MemoryQuery) []string {
+	if len(query.Metadata) == 0 {
+		return nil
+	}
+	out := make([]string, 0, 8)
+	for _, key := range []string{"source_claim_ids", "derived_claim_ids", "matched_claim_ids", "selection_claim_ids"} {
+		out = append(out, decisionMetadataStringSlice(query.Metadata, key)...)
+	}
+	return uniqueStrings(out)
+}
+
+func decisionMetadataStringSlice(metadata map[string]any, key string) []string {
+	raw, ok := metadata[key]
+	if !ok {
+		return nil
+	}
+	values, ok := raw.([]string)
+	if ok {
+		return uniqueStrings(values)
+	}
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		value, ok := item.(string)
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		out = append(out, strings.TrimSpace(value))
+	}
+	return uniqueStrings(out)
 }
 
 func decisionToolPatternOverlap(current *DecisionEnvFingerprint, toolNames []string) float64 {

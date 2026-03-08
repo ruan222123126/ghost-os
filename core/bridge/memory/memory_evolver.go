@@ -142,19 +142,33 @@ func (e *Evolver) Evolve() (EvolutionStats, error) {
 		if err := e.cold.SaveMarkdownNode(node); err != nil {
 			return stats, err
 		}
+		persistedNode := node
+		if loaded, err := e.cold.LoadMarkdownNode(node.ID); err == nil {
+			persistedNode = loaded
+		}
 		if e.graph != nil {
-			if err := e.graph.IngestMarkdownNode(node); err != nil {
+			if err := e.graph.IngestMarkdownNode(persistedNode); err != nil {
 				log.Printf("[MEMORY] graph evolve ingest failed, continuing without graph update: node=%s err=%v", node.ID, err)
 			}
 		}
+		warmAnchors := cloneAnchors(persistedNode.Anchors)
+		if len(warmAnchors) == 0 {
+			warmAnchors = cloneAnchors(anchors)
+		}
 
 		for _, entry := range group {
-			if shouldRetainWarmEvidence(entry, anchors, e.anchorMinWeight) {
+			if shouldRetainWarmEvidence(entry, warmAnchors, e.anchorMinWeight) {
 				enriched := cloneEntry(entry)
 				enriched.Summary = summary
-				enriched.Anchors = mergeAnchorsForEntry(entry, anchors)
+				enriched.Anchors = mergeAnchorsForEntry(entry, warmAnchors)
 				enriched.Confidence = maxFloat(enriched.Confidence, confidence)
 				enriched.Source = "dreaming"
+				if enriched.Metadata == nil {
+					enriched.Metadata = make(map[string]any, 4)
+				}
+				enriched.Metadata["source_claim_ids"] = append([]string(nil), persistedNode.SourceClaimIDs...)
+				enriched.Metadata["source_evidence_ids"] = append([]string(nil), persistedNode.SourceEvidenceIDs...)
+				enriched.Metadata["projection_version"] = persistedNode.ProjectionVersion
 				_ = e.warm.Store(enriched)
 				continue
 			}

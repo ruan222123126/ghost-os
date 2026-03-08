@@ -299,7 +299,7 @@ func (s *QueryService) queryMarkdown(query MemoryQuery) ([]MemoryEntry, error) {
 func (s *QueryService) queryMarkdownWithPlan(query MemoryQuery, plan *BucketPlan) ([]MemoryEntry, error) {
 	var (
 		nodes []string
-		err  error
+		err   error
 	)
 	if s.cold != nil && s.cold.markdown != nil && plan != nil && len(plan.SelectedBuckets) > 0 {
 		nodes, err = s.cold.markdown.ListByBucketPlan(plan, query)
@@ -329,20 +329,20 @@ func (s *QueryService) queryMarkdownWithPlan(query MemoryQuery, plan *BucketPlan
 			RelatedTo:      markdownNodeSourceIDs(node),
 			Source:         "markdown",
 			Summary:        strings.TrimSpace(node.Summary),
-			Anchors:        cloneAnchors(node.Anchors),
+			Anchors:        markdownNodeAnchorsForEntry(node, s.truth),
 			Confidence:     node.Confidence,
 			LastAccessedAt: node.LastSeenAt.UTC(),
 			EmbeddingID:    node.EmbeddingID,
 			Metadata: map[string]any{
-				"layer":       "markdown",
-				"namespace":   strings.TrimSpace(node.Namespace),
+				"layer":        "markdown",
+				"namespace":    strings.TrimSpace(node.Namespace),
 				"workspace_id": strings.TrimSpace(node.WorkspaceID),
-				"bucket_key":  strings.TrimSpace(node.BucketKey),
+				"bucket_key":   strings.TrimSpace(node.BucketKey),
 				"bucket_month": bucketMonthFromTime(markdownNodeTimestamp(node)),
-				"session_id":  strings.TrimSpace(node.SessionID),
-				"tags":        append([]string(nil), node.Tags...),
-				"node_id":     node.ID,
-				"source_ids":  markdownNodeSourceIDs(node),
+				"session_id":   strings.TrimSpace(node.SessionID),
+				"tags":         append([]string(nil), node.Tags...),
+				"node_id":      node.ID,
+				"source_ids":   markdownNodeSourceIDs(node),
 			},
 		})
 		if !entryMatchesQuery(entry, query) {
@@ -382,4 +382,35 @@ func markdownNodeSourceIDs(node MarkdownNode) []string {
 		return append([]string(nil), node.RelatedTo...)
 	}
 	return nil
+}
+
+func markdownNodeLineageIDs(node MarkdownNode) []string {
+	lineage := append([]string(nil), node.SourceClaimIDs...)
+	lineage = append(lineage, node.SourceEvidenceIDs...)
+	lineage = append(lineage, node.DerivedClaimIDs...)
+	if len(lineage) > 0 {
+		return uniqueStrings(lineage)
+	}
+	return markdownNodeSourceIDs(node)
+}
+
+func markdownNodeAnchorsForEntry(node MarkdownNode, truth *TruthReader) []MemoryAnchor {
+	if len(node.SourceClaimIDs) > 0 {
+		if projected := projectAnchorsFromClaimIDs(truth, node.SourceClaimIDs, markdownNodeTimestamp(node)); len(projected) > 0 {
+			return projected
+		}
+	}
+	return cloneAnchors(node.Anchors)
+}
+
+func markdownNodeExplain(node MarkdownNode) map[string]any {
+	return map[string]any{
+		"layer":               "markdown",
+		"source_claim_ids":    append([]string(nil), node.SourceClaimIDs...),
+		"source_evidence_ids": append([]string(nil), node.SourceEvidenceIDs...),
+		"derived_claim_ids":   append([]string(nil), node.DerivedClaimIDs...),
+		"legacy_source_ids":   markdownNodeSourceIDs(node),
+		"projection_version":  strings.TrimSpace(node.ProjectionVersion),
+		"projection_partial":  node.ProjectionPartial,
+	}
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -49,6 +51,12 @@ type ColdMemory struct {
 	shadowCompare   bool
 	metrics         *memoryCounters
 	mu              sync.RWMutex
+}
+
+type MarkdownBackfillStats struct {
+	NodesScanned      int `json:"nodes_scanned,omitempty"`
+	NodesUpdated      int `json:"nodes_updated,omitempty"`
+	ProjectionPartial int `json:"projection_partial,omitempty"`
 }
 
 func NewColdMemory(baseDir string) *ColdMemory {
@@ -210,14 +218,15 @@ func (c *ColdMemory) SaveMarkdownNode(node MarkdownNode) error {
 		return fmt.Errorf("markdown store is not configured")
 	}
 	normalized := normalizeMarkdownNode(node)
-	if err := c.markdown.Save(normalized); err != nil {
-		return err
-	}
 	if c.truth != nil && c.truth.DualWriteEnabled() && c.truthMapper != nil {
 		object := c.truthMapper.MapMarkdownNode(normalized)
 		if err := writeTruthObjectShadow(c.truth, truthEventTypeMarkdownNode, object, ""); err != nil {
 			return handleTruthShadowWriteError(c.truth, "", object.ObjectID, err)
 		}
+		normalized = c.projectMarkdownNodeFromTruth(normalized, object.ObjectID)
+	}
+	if err := c.markdown.Save(normalized); err != nil {
+		return err
 	}
 	return nil
 }
@@ -227,7 +236,125 @@ func (c *ColdMemory) LoadMarkdownNode(id string) (MarkdownNode, error) {
 	if c == nil || c.markdown == nil {
 		return MarkdownNode{}, fmt.Errorf("markdown store is not configured")
 	}
-	return c.markdown.Load(id)
+	node, err := c.markdown.Load(id)
+	if err != nil {
+		return MarkdownNode{}, err
+	}
+	projected := c.projectMarkdownNodeFromTruth(node, "")
+	if !reflect.DeepEqual(normalizeMarkdownNode(node), projected) {
+		_ = c.markdown.Save(projected)
+	}
+	return projected, nil
+}
+
+func (c *ColdMemory) BackfillMarkdownLineage() (MarkdownBackfillStats, error) {
+	stats := MarkdownBackfillStats{}
+	if c == nil || c.markdown == nil {
+		return stats, nil
+	}
+	ids, err := c.markdown.List()
+	if err != nil {
+		return stats, err
+	}
+	for _, id := range ids {
+		stats.NodesScanned++
+		stored, err := c.markdown.Load(id)
+		if err != nil {
+			continue
+		}
+		projected := c.projectMarkdownNodeFromTruth(stored, "")
+		if projected.ProjectionPartial {
+			stats.ProjectionPartial++
+		}
+		if reflect.DeepEqual(normalizeMarkdownNode(stored), projected) {
+			continue
+		}
+		if err := c.markdown.Save(projected); err != nil {
+			return stats, err
+		}
+		stats.NodesUpdated++
+	}
+	return stats, nil
+}
+
+func (c *ColdMemory) projectMarkdownNodeFromTruth(node MarkdownNode, objectID string) MarkdownNode {
+	projected := normalizeMarkdownNode(node)
+	if c == nil || c.truth == nil || !c.truth.Enabled() {
+		return projected
+	}
+	resolvedObjectID := strings.TrimSpace(objectID)
+	if resolvedObjectID == "" && projected.ID != "" {
+		resolvedObjectID = buildTruthObjectID(truthObjectTypeSemanticNote, projected.ID)
+	}
+	objects, claims := c.truth.snapshotState()
+	object, ok := objects[resolvedObjectID]
+	if !ok {
+		if projected.ProjectionVersion == "" {
+			projected.ProjectionVersion = markdownProjectionVersion
+		}
+		if len(projected.SourceClaimIDs) == 0 || len(projected.SourceEvidenceIDs) == 0 {
+			projected.ProjectionPartial = true
+		}
+		return normalizeMarkdownNode(projected)
+	}
+	object = normalizeMemoryObject(object)
+	projected.SourceEvidenceIDs = evidenceIDsFromList(object.RawEvidence)
+	projected.SourceClaimIDs = claimIDsFromList(object.Claims)
+	projected.DerivedClaimIDs = claimIDsFromList(claimsForObjectID(claims, object.ObjectID))
+	projected.ProjectionVersion = markdownProjectionVersion
+	projected.ProjectionPartial = len(projected.SourceClaimIDs) == 0 && len(projected.SourceEvidenceIDs) == 0
+	if anchors := projectAnchorsFromClaims(object.Claims, markdownNodeTimestamp(projected)); len(anchors) > 0 {
+		projected.Anchors = anchors
+	}
+	if projected.Summary == "" {
+		projected.Summary = strings.TrimSpace(object.Summary)
+	}
+	return normalizeMarkdownNode(projected)
+}
+
+func claimIDsFromList(claims []MemoryClaim) []string {
+	out := make([]string, 0, len(claims))
+	for _, claim := range claims {
+		normalized := normalizeMemoryClaim(claim, claim.ObjectID)
+		if normalized.ClaimID == "" {
+			continue
+		}
+		out = append(out, normalized.ClaimID)
+	}
+	sort.Strings(out)
+	return uniqueStrings(out)
+}
+
+func evidenceIDsFromList(evidence []MemoryEvidence) []string {
+	out := make([]string, 0, len(evidence))
+	for _, item := range evidence {
+		normalized := normalizeMemoryEvidence(item, "")
+		if normalized.EvidenceID == "" {
+			continue
+		}
+		out = append(out, normalized.EvidenceID)
+	}
+	sort.Strings(out)
+	return uniqueStrings(out)
+}
+
+func claimsForObjectID(claims map[string]MemoryClaim, objectID string) []MemoryClaim {
+	trimmed := strings.TrimSpace(objectID)
+	if trimmed == "" || len(claims) == 0 {
+		return nil
+	}
+	out := make([]MemoryClaim, 0, 4)
+	for _, claim := range claims {
+		normalized := normalizeMemoryClaim(claim, claim.ObjectID)
+		if normalized.ObjectID != trimmed {
+			continue
+		}
+		out = append(out, normalized)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].ClaimID < out[j].ClaimID
+	})
+	return out
 }
 
 // ListMarkdownNodes 列出所有 markdown 节点 ID。

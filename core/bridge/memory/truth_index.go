@@ -7,6 +7,7 @@ import (
 
 type truthIndex struct {
 	objectsByID              map[string]MemoryObject
+	evidenceByID             map[string]MemoryEvidence
 	claimsByID               map[string]MemoryClaim
 	claimsByObjectID         map[string][]MemoryClaim
 	claimsBySubjectPredicate map[string][]MemoryClaim
@@ -27,6 +28,7 @@ type truthIndex struct {
 func buildTruthIndex(objects map[string]MemoryObject, claims map[string]MemoryClaim) truthIndex {
 	idx := truthIndex{
 		objectsByID:              make(map[string]MemoryObject, len(objects)),
+		evidenceByID:             make(map[string]MemoryEvidence),
 		claimsByID:               make(map[string]MemoryClaim, len(claims)),
 		claimsByObjectID:         make(map[string][]MemoryClaim),
 		claimsBySubjectPredicate: make(map[string][]MemoryClaim),
@@ -49,6 +51,13 @@ func buildTruthIndex(objects map[string]MemoryObject, claims map[string]MemoryCl
 			continue
 		}
 		idx.objectsByID[normalized.ObjectID] = normalized
+		for _, evidence := range normalized.RawEvidence {
+			normalizedEvidence := normalizeMemoryEvidence(evidence, normalized.ObjectID)
+			if normalizedEvidence.EvidenceID == "" {
+				continue
+			}
+			idx.evidenceByID[normalizedEvidence.EvidenceID] = normalizedEvidence
+		}
 		appendTruthObjectBucket(idx.objectsByType, truthIndexKey(normalized.ObjectType), normalized)
 		for _, ref := range truthObjectSourceRefs(normalized) {
 			appendTruthObjectBucket(idx.objectsBySourceRef, truthSourceRefFingerprint(ref), normalized)

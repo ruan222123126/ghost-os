@@ -167,6 +167,84 @@ func (r *TruthReader) LookupObject(objectID string) (MemoryObject, bool) {
 	return normalizeMemoryObject(object), true
 }
 
+func (r *TruthReader) LookupClaim(claimID string) (MemoryClaim, bool) {
+	if !r.Enabled() {
+		return MemoryClaim{}, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	claim, ok := r.index.claimsByID[strings.TrimSpace(claimID)]
+	if !ok {
+		return MemoryClaim{}, false
+	}
+	return normalizeMemoryClaim(claim, claim.ObjectID), true
+}
+
+func (r *TruthReader) ResolveClaims(claimIDs []string) []MemoryClaim {
+	if !r.Enabled() || len(claimIDs) == 0 {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]MemoryClaim, 0, len(claimIDs))
+	seen := make(map[string]struct{}, len(claimIDs))
+	for _, claimID := range claimIDs {
+		trimmed := strings.TrimSpace(claimID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		claim, ok := r.index.claimsByID[trimmed]
+		if !ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, normalizeMemoryClaim(claim, claim.ObjectID))
+	}
+	return out
+}
+
+func (r *TruthReader) LookupEvidence(evidenceID string) (MemoryEvidence, bool) {
+	if !r.Enabled() {
+		return MemoryEvidence{}, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	evidence, ok := r.index.evidenceByID[strings.TrimSpace(evidenceID)]
+	if !ok {
+		return MemoryEvidence{}, false
+	}
+	return normalizeMemoryEvidence(evidence, ""), true
+}
+
+func (r *TruthReader) ResolveEvidence(evidenceIDs []string) []MemoryEvidence {
+	if !r.Enabled() || len(evidenceIDs) == 0 {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]MemoryEvidence, 0, len(evidenceIDs))
+	seen := make(map[string]struct{}, len(evidenceIDs))
+	for _, evidenceID := range evidenceIDs {
+		trimmed := strings.TrimSpace(evidenceID)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		evidence, ok := r.index.evidenceByID[trimmed]
+		if !ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, normalizeMemoryEvidence(evidence, ""))
+	}
+	return out
+}
+
 func (r *TruthReader) ResolveObjectIDsBySourceRef(ref SourceRef) []string {
 	if !r.Enabled() {
 		return nil

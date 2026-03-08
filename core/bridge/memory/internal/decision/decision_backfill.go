@@ -274,7 +274,7 @@ func decisionArchiveSessionEnded(messages []llm.Message) bool {
 
 func decisionMemoFromMarkdownNode(namespace string, node MarkdownNode) (DecisionMemo, bool) {
 	summary := summarizeDecisionText(firstNonEmpty(node.Summary, node.Content), decisionOutcomeSummaryMaxLen)
-	if summary == "" && len(node.Anchors) == 0 && len(node.SourceIDs) == 0 {
+	if summary == "" && len(node.Anchors) == 0 && len(node.SourceIDs) == 0 && len(node.SourceClaimIDs) == 0 {
 		return DecisionMemo{}, false
 	}
 	anchorKeys := make([]string, 0, len(node.Anchors)+len(node.Tags))
@@ -301,10 +301,11 @@ func decisionMemoFromMarkdownNode(namespace string, node MarkdownNode) (Decision
 		Confidence:       clamp01(maxFloat(node.Confidence*0.85, 0.52)),
 		ReuseScore:       0.48,
 		DecisionLineage: DecisionLineage{
-			SourceEventIDs:    []string{"markdown:" + strings.TrimSpace(node.ID)},
-			SourceEvidenceIDs: uniqueStrings(append([]string(nil), node.SourceIDs...)),
-			LineageVersion:    decisionLineageVersion,
-			LineagePartial:    true,
+			SourceEventIDs:  []string{"markdown:" + strings.TrimSpace(node.ID)},
+			SourceClaimIDs:  append([]string(nil), node.SourceClaimIDs...),
+			DerivedClaimIDs: append([]string(nil), node.DerivedClaimIDs...),
+			LineageVersion:  decisionLineageVersion,
+			LineagePartial:  node.ProjectionPartial || (len(node.SourceClaimIDs) == 0 && len(node.SourceEvidenceIDs) == 0),
 		},
 		CreatedAt:  ts,
 		LastUsedAt: ts,
@@ -312,6 +313,11 @@ func decisionMemoFromMarkdownNode(namespace string, node MarkdownNode) (Decision
 			GraphNamespace: normalizeDecisionNamespace(namespace),
 		},
 	}
+	evidenceIDs := append([]string(nil), node.SourceEvidenceIDs...)
+	if len(evidenceIDs) == 0 {
+		evidenceIDs = append(evidenceIDs, node.SourceIDs...)
+	}
+	memo.SourceEvidenceIDs = uniqueStrings(evidenceIDs)
 	return normalizeDecisionMemo(memo), true
 }
 

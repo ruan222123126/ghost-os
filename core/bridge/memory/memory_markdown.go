@@ -16,23 +16,30 @@ import (
 
 // MarkdownNode 表示一个 Markdown 记忆节点（带 YAML Frontmatter）。
 type MarkdownNode struct {
-	ID          string         `yaml:"id"`
-	Namespace   string         `yaml:"namespace,omitempty"`
-	WorkspaceID string         `yaml:"workspace_id,omitempty"`
-	BucketKey   string         `yaml:"bucket_key,omitempty"`
-	Importance  float64        `yaml:"importance"`
-	CreatedAt   time.Time      `yaml:"created_at"`
-	RelatedTo   []string       `yaml:"related_to,omitempty"`
-	Tags        []string       `yaml:"tags,omitempty"`
-	SessionID   string         `yaml:"session_id,omitempty"`
-	EmbeddingID string         `yaml:"embedding_id,omitempty"`
-	Summary     string         `yaml:"summary,omitempty"`
-	Anchors     []MemoryAnchor `yaml:"anchors,omitempty"`
-	SourceIDs   []string       `yaml:"source_ids,omitempty"`
-	Confidence  float64        `yaml:"confidence,omitempty"`
-	LastSeenAt  time.Time      `yaml:"last_seen_at,omitempty"`
-	Content     string         `yaml:"-"` // Markdown 正文
+	ID                string         `yaml:"id"`
+	Namespace         string         `yaml:"namespace,omitempty"`
+	WorkspaceID       string         `yaml:"workspace_id,omitempty"`
+	BucketKey         string         `yaml:"bucket_key,omitempty"`
+	Importance        float64        `yaml:"importance"`
+	CreatedAt         time.Time      `yaml:"created_at"`
+	RelatedTo         []string       `yaml:"related_to,omitempty"`
+	Tags              []string       `yaml:"tags,omitempty"`
+	SessionID         string         `yaml:"session_id,omitempty"`
+	EmbeddingID       string         `yaml:"embedding_id,omitempty"`
+	Summary           string         `yaml:"summary,omitempty"`
+	Anchors           []MemoryAnchor `yaml:"anchors,omitempty"`
+	SourceIDs         []string       `yaml:"source_ids,omitempty"`
+	SourceEvidenceIDs []string       `yaml:"source_evidence_ids,omitempty"`
+	SourceClaimIDs    []string       `yaml:"source_claim_ids,omitempty"`
+	DerivedClaimIDs   []string       `yaml:"derived_claim_ids,omitempty"`
+	ProjectionVersion string         `yaml:"projection_version,omitempty"`
+	ProjectionPartial bool           `yaml:"projection_partial,omitempty"`
+	Confidence        float64        `yaml:"confidence,omitempty"`
+	LastSeenAt        time.Time      `yaml:"last_seen_at,omitempty"`
+	Content           string         `yaml:"-"` // Markdown 正文
 }
+
+const markdownProjectionVersion = "claim-projection/v1"
 
 // MarkdownStore 提供基于 Markdown + YAML Frontmatter 的持久化。
 type MarkdownStore struct {
@@ -48,16 +55,16 @@ type markdownManifest struct {
 }
 
 type markdownManifestEntry struct {
-	NodeID       string    `json:"node_id,omitempty"`
-	Namespace    string    `json:"namespace,omitempty"`
-	WorkspaceID  string    `json:"workspace_id,omitempty"`
-	BucketKey    string    `json:"bucket_key,omitempty"`
-	SessionID    string    `json:"session_id,omitempty"`
-	Month        string    `json:"month,omitempty"`
-	CreatedAt    time.Time `json:"created_at,omitempty"`
-	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
-	TagCount     int       `json:"tag_count,omitempty"`
-	AnchorCount  int       `json:"anchor_count,omitempty"`
+	NodeID      string    `json:"node_id,omitempty"`
+	Namespace   string    `json:"namespace,omitempty"`
+	WorkspaceID string    `json:"workspace_id,omitempty"`
+	BucketKey   string    `json:"bucket_key,omitempty"`
+	SessionID   string    `json:"session_id,omitempty"`
+	Month       string    `json:"month,omitempty"`
+	CreatedAt   time.Time `json:"created_at,omitempty"`
+	LastSeenAt  time.Time `json:"last_seen_at,omitempty"`
+	TagCount    int       `json:"tag_count,omitempty"`
+	AnchorCount int       `json:"anchor_count,omitempty"`
 }
 
 // NewMarkdownStore 创建 Markdown 存储实例。
@@ -277,12 +284,19 @@ func normalizeMarkdownNode(node MarkdownNode) MarkdownNode {
 	out.RelatedTo = uniqueStrings(out.RelatedTo)
 	out.Tags = uniqueStrings(out.Tags)
 	out.SourceIDs = uniqueStrings(out.SourceIDs)
+	out.SourceEvidenceIDs = uniqueStrings(out.SourceEvidenceIDs)
+	out.SourceClaimIDs = uniqueStrings(out.SourceClaimIDs)
+	out.DerivedClaimIDs = uniqueStrings(out.DerivedClaimIDs)
+	out.ProjectionVersion = strings.TrimSpace(out.ProjectionVersion)
 	out.Anchors = normalizeAnchors(out.Anchors)
 	if len(out.SourceIDs) == 0 && len(out.RelatedTo) > 0 {
 		out.SourceIDs = append([]string(nil), out.RelatedTo...)
 	}
 	if len(out.RelatedTo) == 0 && len(out.SourceIDs) > 0 {
 		out.RelatedTo = append([]string(nil), out.SourceIDs...)
+	}
+	if out.ProjectionVersion == "" && (len(out.SourceClaimIDs) > 0 || len(out.SourceEvidenceIDs) > 0 || len(out.DerivedClaimIDs) > 0) {
+		out.ProjectionVersion = markdownProjectionVersion
 	}
 	return out
 }

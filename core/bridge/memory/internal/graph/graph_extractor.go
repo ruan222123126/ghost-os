@@ -176,14 +176,37 @@ func (e *GraphExtractor) ExtractFromMarkdownNode(node MarkdownNode, namespace st
 		messages = append(messages, llm.Message{Role: llm.RoleAssistant, Text: content})
 	}
 	facts := e.ExtractFromMessages(messages, opts)
-	for _, anchor := range node.Anchors {
-		fact, ok := graphFactFromAnchor(anchor, opts)
-		if !ok {
-			continue
+	if len(node.SourceClaimIDs) > 0 {
+		for _, anchor := range node.Anchors {
+			fact, ok := graphFactFromAnchor(anchor, opts)
+			if !ok {
+				continue
+			}
+			fact.Metadata = graphMarkdownLineageMetadata(node)
+			facts = append(facts, fact)
 		}
-		facts = append(facts, fact)
+	} else {
+		for _, anchor := range node.Anchors {
+			fact, ok := graphFactFromAnchor(anchor, opts)
+			if !ok {
+				continue
+			}
+			fact.Metadata = map[string]any{"legacy_anchor_fallback": true}
+			facts = append(facts, fact)
+		}
 	}
 	return dedupeGraphFacts(facts, e.minConfidence)
+}
+
+func graphMarkdownLineageMetadata(node MarkdownNode) map[string]any {
+	return map[string]any{
+		"source_claim_ids":    append([]string(nil), node.SourceClaimIDs...),
+		"source_evidence_ids": append([]string(nil), node.SourceEvidenceIDs...),
+		"derived_claim_ids":   append([]string(nil), node.DerivedClaimIDs...),
+		"projection_version":  strings.TrimSpace(node.ProjectionVersion),
+		"projection_partial":  node.ProjectionPartial,
+		"truth_projected":     true,
+	}
 }
 
 func (e *GraphExtractor) extractRuleFacts(messages []llm.Message, opts GraphExtractOptions) []GraphFact {

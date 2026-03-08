@@ -98,18 +98,23 @@ type GraphFactExtractor interface {
 }
 
 type MarkdownNode struct {
-	ID         string         `yaml:"id"`
-	Importance float64        `yaml:"importance"`
-	CreatedAt  time.Time      `yaml:"created_at"`
-	RelatedTo  []string       `yaml:"related_to,omitempty"`
-	Tags       []string       `yaml:"tags,omitempty"`
-	SessionID  string         `yaml:"session_id,omitempty"`
-	Summary    string         `yaml:"summary,omitempty"`
-	Anchors    []MemoryAnchor `yaml:"anchors,omitempty"`
-	SourceIDs  []string       `yaml:"source_ids,omitempty"`
-	Confidence float64        `yaml:"confidence,omitempty"`
-	LastSeenAt time.Time      `yaml:"last_seen_at,omitempty"`
-	Content    string         `yaml:"-"`
+	ID                string         `yaml:"id"`
+	Importance        float64        `yaml:"importance"`
+	CreatedAt         time.Time      `yaml:"created_at"`
+	RelatedTo         []string       `yaml:"related_to,omitempty"`
+	Tags              []string       `yaml:"tags,omitempty"`
+	SessionID         string         `yaml:"session_id,omitempty"`
+	Summary           string         `yaml:"summary,omitempty"`
+	Anchors           []MemoryAnchor `yaml:"anchors,omitempty"`
+	SourceIDs         []string       `yaml:"source_ids,omitempty"`
+	SourceEvidenceIDs []string       `yaml:"source_evidence_ids,omitempty"`
+	SourceClaimIDs    []string       `yaml:"source_claim_ids,omitempty"`
+	DerivedClaimIDs   []string       `yaml:"derived_claim_ids,omitempty"`
+	ProjectionVersion string         `yaml:"projection_version,omitempty"`
+	ProjectionPartial bool           `yaml:"projection_partial,omitempty"`
+	Confidence        float64        `yaml:"confidence,omitempty"`
+	LastSeenAt        time.Time      `yaml:"last_seen_at,omitempty"`
+	Content           string         `yaml:"-"`
 }
 
 type ColdArchive struct {

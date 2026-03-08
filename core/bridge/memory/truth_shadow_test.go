@@ -225,6 +225,49 @@ func TestTruthShadowDualWriteArchiveMarkdownDecision(t *testing.T) {
 	}
 }
 
+func TestSaveMarkdownNodeProjectsClaimLineage(t *testing.T) {
+	manager := newTruthTestManager(t, true, "")
+	if err := manager.SaveMarkdownNode(MarkdownNode{
+		ID:         "node-lineage",
+		SessionID:  "session-lineage",
+		CreatedAt:  time.Date(2026, 3, 8, 9, 0, 0, 0, time.UTC),
+		Summary:    "Remember preferred implementation language",
+		Content:    "Remember preferred implementation language is Go.",
+		SourceIDs:  []string{"session-lineage:000000"},
+		Anchors:    []MemoryAnchor{{Type: MemoryAnchorPreference, Key: "language", Value: "Go", Weight: 0.91, Reason: "user explicitly prefers Go"}},
+		Confidence: 0.91,
+	}); err != nil {
+		t.Fatalf("save markdown node: %v", err)
+	}
+
+	loaded, err := manager.LoadMarkdownNode("node-lineage")
+	if err != nil {
+		t.Fatalf("load markdown node: %v", err)
+	}
+	if loaded.ProjectionVersion != markdownProjectionVersion {
+		t.Fatalf("expected projection version %q, got %q", markdownProjectionVersion, loaded.ProjectionVersion)
+	}
+	if len(loaded.SourceEvidenceIDs) == 0 {
+		t.Fatalf("expected source evidence ids, got %+v", loaded)
+	}
+	if len(loaded.SourceClaimIDs) == 0 {
+		t.Fatalf("expected source claim ids, got %+v", loaded)
+	}
+	if len(loaded.DerivedClaimIDs) == 0 {
+		t.Fatalf("expected derived claim ids, got %+v", loaded)
+	}
+	if len(loaded.Anchors) == 0 || loaded.Anchors[0].Type != MemoryAnchorPreference || loaded.Anchors[0].Value != "Go" {
+		t.Fatalf("expected projected anchors from claims, got %+v", loaded.Anchors)
+	}
+	stats, err := manager.BackfillMarkdownLineage()
+	if err != nil {
+		t.Fatalf("backfill markdown lineage: %v", err)
+	}
+	if stats.NodesScanned == 0 {
+		t.Fatalf("expected backfill to scan nodes, got %+v", stats)
+	}
+}
+
 func TestTruthArchiveDualWriteDoesNotChangeRetrieve(t *testing.T) {
 	baseline := newTruthTestManager(t, false, "")
 	shadow := newTruthTestManager(t, true, "")

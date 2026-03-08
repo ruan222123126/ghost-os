@@ -117,38 +117,9 @@ func (m *TruthMapper) MapMarkdownNode(node MarkdownNode) MemoryObject {
 	subject := truthSubjectFromSource(primarySource, objectID)
 	claims := make([]MemoryClaim, 0, len(node.Anchors))
 	for _, anchor := range node.Anchors {
-		normalized := normalizeAnchor(anchor)
-		if normalized.Type == "" || normalized.Value == "" {
+		claim, ok := mapAnchorToClaim(anchor, objectID, subject, evidenceRefs, sourceRefs, node.Confidence, node.CreatedAt, node.RelatedTo, node.SourceIDs)
+		if !ok {
 			continue
-		}
-		claim := MemoryClaim{
-			ObjectID:     objectID,
-			Subject:      subject,
-			Predicate:    truthAnchorPredicate(normalized),
-			Type:         truthClaimTypeAnchor,
-			Value:        normalized.Value,
-			Datatype:     "string",
-			EvidenceRefs: evidenceRefs,
-			AnchorKey:    firstNonEmpty(normalized.Key, truthHashID("anchor", anchorFingerprint(normalized))),
-			Confidence:   maxFloat(normalized.Weight, node.Confidence),
-			AssertedAt:   effectiveDecisionTimestamp(normalized.DetectedAt, node.CreatedAt),
-			CreatedAt:    effectiveDecisionTimestamp(normalized.DetectedAt, node.CreatedAt),
-			SourceRefs:   sourceRefs,
-			Metadata: map[string]any{
-				"anchor_type": normalized.Type,
-				"reason":      normalized.Reason,
-				"related_to":  append([]string(nil), node.RelatedTo...),
-				"source_ids":  append([]string(nil), node.SourceIDs...),
-			},
-		}
-		if normalized.Type == MemoryAnchorConstraint {
-			claim.ConstraintType = normalized.Type
-		}
-		if normalized.Type == MemoryAnchorAvoidance {
-			claim.RiskType = "avoid_pattern"
-		}
-		if claim.Predicate == "preference.language" {
-			claim.Datatype = "language"
 		}
 		claims = append(claims, claim)
 	}
@@ -173,10 +144,15 @@ func (m *TruthMapper) MapMarkdownNode(node MarkdownNode) MemoryObject {
 		UpdatedAt:     effectiveDecisionTimestamp(node.LastSeenAt, node.CreatedAt),
 		Confidence:    maxFloat(node.Confidence, strongestAnchorWeight(node.Anchors)),
 		Metadata: map[string]any{
-			"session_id": node.SessionID,
-			"tags":       append([]string(nil), node.Tags...),
-			"source_ids": append([]string(nil), node.SourceIDs...),
-			"related_to": append([]string(nil), node.RelatedTo...),
+			"session_id":          node.SessionID,
+			"tags":                append([]string(nil), node.Tags...),
+			"source_ids":          append([]string(nil), node.SourceIDs...),
+			"source_evidence_ids": append([]string(nil), node.SourceEvidenceIDs...),
+			"source_claim_ids":    append([]string(nil), node.SourceClaimIDs...),
+			"derived_claim_ids":   append([]string(nil), node.DerivedClaimIDs...),
+			"projection_version":  node.ProjectionVersion,
+			"projection_partial":  node.ProjectionPartial,
+			"related_to":          append([]string(nil), node.RelatedTo...),
 		},
 	}
 	return normalizeMemoryObject(object)
@@ -478,20 +454,4 @@ func truthEvidenceRefsForObject(objectID string, evidence []MemoryEvidence) []Ev
 		refs = append(refs, EvidenceRef{EvidenceID: normalized.EvidenceID, Role: "support"})
 	}
 	return normalizeEvidenceRefs(refs)
-}
-
-func truthAnchorPredicate(anchor MemoryAnchor) string {
-	switch anchor.Type {
-	case MemoryAnchorPreference:
-		if strings.Contains(truthIndexKey(anchor.Key), "language") {
-			return "preference.language"
-		}
-		return "anchor.preference"
-	case MemoryAnchorConstraint:
-		return "constraint.has"
-	case MemoryAnchorAvoidance:
-		return "avoids_pattern"
-	default:
-		return "anchor." + truthIndexKey(anchor.Type)
-	}
 }

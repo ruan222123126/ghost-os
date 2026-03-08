@@ -196,6 +196,13 @@ func (m *MemoryManager) ListMarkdownNodes() ([]string, error) {
 	return m.cold.ListMarkdownNodes()
 }
 
+func (m *MemoryManager) BackfillMarkdownLineage() (MarkdownBackfillStats, error) {
+	if m == nil || m.cold == nil {
+		return MarkdownBackfillStats{}, nil
+	}
+	return m.cold.BackfillMarkdownLineage()
+}
+
 // GraphStats 返回 graph sidecar 的当前统计快照。
 func (m *MemoryManager) GraphStats(namespace string) GraphStats {
 	if m == nil || m.graph == nil {
