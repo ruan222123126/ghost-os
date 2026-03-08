@@ -34,6 +34,15 @@ func TestIntentPlannerParsesFiveFacets(t *testing.T) {
 	if !containsString(plan.Risks, "避免破坏现有行为") {
 		t.Fatalf("expected risk facet, got %#v", plan.Risks)
 	}
+	if plan.RecallMode != plannerRecallModeProceduralFirst {
+		t.Fatalf("expected procedural-first recall mode, got %#v", plan.RecallMode)
+	}
+	if !containsString(plan.Hydration, "decision") || containsString(plan.Hydration, "graph") {
+		t.Fatalf("expected procedural hydration scope, got %#v", plan.Hydration)
+	}
+	if value := plan.Truth.Value; value != plan.IntentKey {
+		t.Fatalf("expected planner truth value to prefer intent key, got %#v want %#v", value, plan.IntentKey)
+	}
 	if len(plan.Terms) == 0 {
 		t.Fatal("expected planner terms to be populated")
 	}
@@ -64,5 +73,47 @@ func TestIntentPlannerPrefersScopeEnvironment(t *testing.T) {
 	}
 	if containsString(plan.Environment, "platform:darwin/arm64") || containsString(plan.Environment, "workspace:/query-env") {
 		t.Fatalf("expected query environment to be ignored when scope is present, got %#v", plan.Environment)
+	}
+}
+
+func TestIntentPlannerSelectsRecallModes(t *testing.T) {
+	planner := NewIntentPlanner(true, &memoryCounters{})
+	tests := []struct {
+		name  string
+		query MemoryQuery
+		scope SessionScope
+		want  string
+	}{
+		{
+			name:  "semantic first",
+			query: MemoryQuery{SemanticQuery: "explain markdown notes about deploy freeze", IncludeMarkdown: true, IncludeGraph: true},
+			want:  plannerRecallModeSemanticFirst,
+		},
+		{
+			name:  "self first",
+			query: MemoryQuery{SemanticQuery: "remember my preferred language and my role"},
+			want:  plannerRecallModeSelfFirst,
+		},
+		{
+			name:  "episodic first",
+			query: MemoryQuery{SemanticQuery: "what happened in this session just now", PreferRecent: true, Metadata: map[string]any{"session_id": "session-episodic"}},
+			want:  plannerRecallModeEpisodicFirst,
+		},
+		{
+			name:  "mixed",
+			query: MemoryQuery{SemanticQuery: "explain notes and recipes for config migration without breaking API steps", IncludeMarkdown: true, IncludeDecision: true},
+			want:  plannerRecallModeMixed,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			plan, err := planner.Plan(tc.query, tc.scope)
+			if err != nil {
+				t.Fatalf("plan query intent: %v", err)
+			}
+			if plan.RecallMode != tc.want {
+				t.Fatalf("expected recall mode %q, got %#v", tc.want, plan.RecallMode)
+			}
+		})
 	}
 }

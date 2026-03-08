@@ -17,11 +17,18 @@ func (s *QueryService) queryResultHybridWithScope(query MemoryQuery, scope Sessi
 		}
 		shadow, shadowErr := s.queryResultHybridLayers(effectiveQuery, scope, plan, bucketPlan, true)
 		if shadowErr == nil {
-			shadowReport := s.compareBucketShadow(live, shadow, bucketPlan)
-			live.ShadowRead = shadowReport
+			s.compareBucketShadow(live, shadow, bucketPlan)
 		}
-		live.BucketPlan = bucketPlan
-		live.LayerFreshness = s.bucketLayerFreshness(bucketPlan)
+		if debug := live.ensureDebug(); debug != nil {
+			if bucketPlan != nil && query.BucketDebug {
+				cloned := cloneBucketPlan(*bucketPlan)
+				debug.BucketPlan = &cloned
+				debug.LayerFreshness = s.bucketLayerFreshness(bucketPlan)
+			}
+			if !hasMemoryQueryDebug(*debug) {
+				live.debug = nil
+			}
+		}
 		return live, nil
 	}
 	useBuckets := bucketPlan != nil && bucketPlan.Mode == BucketModeBucketed && len(bucketPlan.SelectedBuckets) > 0
@@ -29,13 +36,20 @@ func (s *QueryService) queryResultHybridWithScope(query MemoryQuery, scope Sessi
 	if err != nil {
 		return MemoryQueryResult{}, err
 	}
-	result.BucketPlan = bucketPlan
-	result.LayerFreshness = s.bucketLayerFreshness(bucketPlan)
+	if bucketPlan != nil && query.BucketDebug {
+		debug := result.ensureDebug()
+		cloned := cloneBucketPlan(*bucketPlan)
+		debug.BucketPlan = &cloned
+		debug.LayerFreshness = s.bucketLayerFreshness(bucketPlan)
+	}
 	return result, nil
 }
 
 func (s *QueryService) queryIntentPlan(query MemoryQuery, scope SessionScope) *QueryIntentPlan {
 	if s.planner == nil || !s.planner.Enabled() {
+		return nil
+	}
+	if !s.hybridEnabled && !query.IntentDebug && !query.RerankDebug && !query.BucketDebug && !s.truthReadRequested(query) {
 		return nil
 	}
 	planned, err := s.planner.Plan(query, scope)
@@ -55,19 +69,13 @@ func (s *QueryService) queryIntentPlan(query MemoryQuery, scope SessionScope) *Q
 
 func (s *QueryService) planBuckets(query MemoryQuery, scope SessionScope, intent *QueryIntentPlan) *BucketPlan {
 	if s == nil || s.buckets == nil || !s.buckets.Enabled() {
-		return &BucketPlan{Mode: BucketModeLegacy, Reason: []string{"bucket read disabled"}}
+		return nil
 	}
 	return s.buckets.Plan(query, scope, intent)
 }
 
 func (s *QueryService) applyBucketQueryHints(query MemoryQuery, scope SessionScope, plan *BucketPlan) MemoryQuery {
 	out := query
-	if out.Namespace == "" && s.buckets != nil && s.buckets.ledger != nil {
-		out.Namespace = s.buckets.ledger.Namespace()
-	}
-	if out.WorkspaceID == "" && s.buckets != nil && s.buckets.ledger != nil {
-		out.WorkspaceID = s.buckets.ledger.WorkspaceID()
-	}
 	out.SessionHints = effectiveBucketSessionHints(out, scope)
 	if plan != nil && len(plan.SelectedBuckets) > 0 {
 		months := make([]string, 0, len(plan.SelectedBuckets))
@@ -79,17 +87,60 @@ func (s *QueryService) applyBucketQueryHints(query MemoryQuery, scope SessionSco
 	return out
 }
 
+type queryHydrationScope struct {
+	hot      bool
+	warm     bool
+	cold     bool
+	markdown bool
+	decision bool
+	graph    bool
+}
+
+func hydrationScopeFromPlan(plan *QueryIntentPlan) queryHydrationScope {
+	if plan == nil || len(plan.Hydration) == 0 {
+		return queryHydrationScope{hot: true, warm: true, cold: true, markdown: true, decision: true, graph: true}
+	}
+	all := queryHydrationScope{}
+	for _, layer := range plan.Hydration {
+		switch strings.TrimSpace(layer) {
+		case "hot":
+			all.hot = true
+		case "warm":
+			all.warm = true
+		case "cold":
+			all.cold = true
+		case "markdown":
+			all.markdown = true
+		case "decision":
+			all.decision = true
+		case "graph":
+			all.graph = true
+		}
+	}
+	return all
+}
+
 func (s *QueryService) queryResultHybridLayers(query MemoryQuery, scope SessionScope, plan *QueryIntentPlan, bucketPlan *BucketPlan, useBuckets bool) (MemoryQueryResult, error) {
 	now := time.Now().UTC()
-	hotEntries := queryHot(scope, query)
+	hydration := hydrationScopeFromPlan(plan)
+	var hotEntries []MemoryEntry
+	if hydration.hot {
+		hotEntries = queryHot(scope, query)
+	}
 	if len(hotEntries) > 0 && s.metrics != nil {
 		s.metrics.l1Hits.Add(uint64(len(hotEntries)))
 	}
 	warmQuery := query
 	warmQuery.Limit = 0
-	warmEntries, err := s.warm.RetrieveCandidates(warmQuery)
-	if err != nil {
-		return MemoryQueryResult{}, err
+	var (
+		warmEntries []MemoryEntry
+		err         error
+	)
+	if hydration.warm {
+		warmEntries, err = s.warm.RetrieveCandidates(warmQuery)
+		if err != nil {
+			return MemoryQueryResult{}, err
+		}
 	}
 	if len(warmEntries) > 0 && s.metrics != nil {
 		s.metrics.l2Hits.Add(uint64(len(warmEntries)))
@@ -97,19 +148,21 @@ func (s *QueryService) queryResultHybridLayers(query MemoryQuery, scope SessionS
 	coldQuery := query
 	coldQuery.Limit = 0
 	var coldEntries []MemoryEntry
-	if useBuckets {
-		coldEntries, err = s.cold.RetrieveWithBucketPlan(coldQuery, bucketPlan)
-	} else {
-		coldEntries, err = s.cold.Retrieve(coldQuery)
-	}
-	if err != nil {
-		return MemoryQueryResult{}, err
+	if hydration.cold {
+		if useBuckets {
+			coldEntries, err = s.cold.RetrieveWithBucketPlan(coldQuery, bucketPlan)
+		} else {
+			coldEntries, err = s.cold.Retrieve(coldQuery)
+		}
+		if err != nil {
+			return MemoryQueryResult{}, err
+		}
 	}
 	if len(coldEntries) > 0 && s.metrics != nil {
 		s.metrics.l3Hits.Add(uint64(len(coldEntries)))
 	}
 	var markdownEntries []MemoryEntry
-	if query.IncludeMarkdown {
+	if hydration.markdown && query.IncludeMarkdown {
 		markdownQuery := query
 		markdownQuery.Limit = 0
 		if useBuckets {
@@ -124,46 +177,145 @@ func (s *QueryService) queryResultHybridLayers(query MemoryQuery, scope SessionS
 			s.metrics.markdownHits.Add(uint64(len(markdownEntries)))
 		}
 	}
-	var decisionHits []DecisionHit
-	if s.decision != nil && query.IncludeDecision {
-		_, decisionHits, err = s.decision.Retrieve(query, scope)
+	var (
+		decisionEntries []MemoryEntry
+		decisionHits    []DecisionHit
+	)
+	if hydration.decision && s.decision != nil && query.IncludeDecision {
+		decisionEntries, decisionHits, err = s.decision.Retrieve(query, scope)
 		if err != nil {
 			log.Printf("[MEMORY] decision recall failed, falling back to other layers: %v", err)
+			decisionEntries = nil
 			decisionHits = nil
 		} else if useBuckets {
 			decisionHits = filterDecisionHitsByBucketPlan(decisionHits, bucketPlan)
+			decisionEntries = entriesFromDecisionHits(decisionHits, now)
 		}
 	}
-	var graphHits []GraphHit
-	if s.graph != nil && query.IncludeGraph {
-		_, graphHits, err = s.graph.Retrieve(query, scope)
+	var truthMatches []truthQueryMatch
+	truthPrimary := s.queryTruthPrimaryCandidates(query, plan)
+	if s.truth != nil && s.truth.Enabled() && len(truthPrimary) == 0 && (s.hybridEnabled || s.truthReadRequested(query) || query.RerankDebug || s.rerankDebugEnabled) {
+		truthMatches = s.truth.Query(query, plan)
+	}
+	var (
+		graphEntries []MemoryEntry
+		graphHits    []GraphHit
+	)
+	if hydration.graph && s.graph != nil && query.IncludeGraph {
+		graphQuery := s.graphExplainQuery(query, truthPrimary, truthMatches, hotEntries, warmEntries, coldEntries, markdownEntries, decisionEntries)
+		graphEntries, graphHits, err = s.graph.Retrieve(graphQuery, scope)
 		if err != nil {
 			log.Printf("[MEMORY] graph recall failed, falling back to other layers: %v", err)
+			graphEntries = nil
 			graphHits = nil
 		} else {
+			graphHits = s.enrichGraphHitsWithTruth(graphHits, truthPrimary, truthMatches)
+			graphEntries = entriesFromGraphHits(graphHits, now)
 			if useBuckets {
 				graphHits = filterGraphHitsByBucketPlan(graphHits, bucketPlan)
+				graphEntries = entriesFromGraphHits(graphHits, now)
 			}
 			if len(graphHits) > 0 && s.metrics != nil {
 				s.metrics.graphHits.Add(uint64(len(graphHits)))
 			}
 		}
 	}
-	truthMatches := s.truth.Query(query, plan)
 	vectorHits := s.liveVectorHits(query, plan)
+	primaryVectorHits := vectorHits
+	if !s.useTruthPrimaryRecall(query) {
+		primaryVectorHits = nil
+	}
 	if useBuckets {
+		truthPrimary = s.filterPrimaryCandidatesByBucketPlan(truthPrimary, bucketPlan)
 		truthMatches = filterTruthMatchesByBucketPlan(truthMatches, bucketPlan)
 		vectorHits = filterVectorHitsByBucketPlan(vectorHits, bucketPlan)
+		primaryVectorHits = filterVectorHitsByBucketPlan(primaryVectorHits, bucketPlan)
 	}
-	candidates := make([]RecallCandidate, 0, len(hotEntries)+len(warmEntries)+len(coldEntries)+len(markdownEntries)+len(decisionHits)+len(graphHits)+len(truthMatches)+len(vectorHits))
-	candidates = append(candidates, s.candidatesFromEntries(hotEntries, "hot", query, now)...)
-	candidates = append(candidates, s.candidatesFromEntries(warmEntries, "warm", query, now)...)
-	candidates = append(candidates, s.candidatesFromEntries(coldEntries, "cold", query, now)...)
-	candidates = append(candidates, s.candidatesFromEntries(markdownEntries, "markdown", query, now)...)
-	candidates = append(candidates, s.candidatesFromDecisionHits(decisionHits, query, now)...)
-	candidates = append(candidates, s.candidatesFromGraphHits(graphHits, query, now)...)
-	candidates = append(candidates, s.candidatesFromTruthMatches(truthMatches, query, now)...)
-	candidates = append(candidates, s.candidatesFromVectorHits(vectorHits, query, now)...)
+	if !s.hybridEnabled && len(truthPrimary) == 0 && len(truthMatches) == 0 && len(primaryVectorHits) == 0 {
+		results := make([]MemoryEntry, 0, len(hotEntries)+len(warmEntries)+len(decisionEntries)+len(graphEntries)+len(coldEntries)+len(markdownEntries))
+		seenIDs := make(map[string]struct{}, 32)
+		seenFingerprints := make(map[string]struct{}, 32)
+		collect := func(entries []MemoryEntry) {
+			for _, entry := range entries {
+				if _, ok := seenIDs[entry.ID]; ok {
+					continue
+				}
+				seenIDs[entry.ID] = struct{}{}
+				fingerprint := normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))
+				if fingerprint != "" {
+					seenFingerprints[fingerprint] = struct{}{}
+				}
+				results = append(results, entry)
+			}
+		}
+		collectDistinct := func(entries []MemoryEntry) {
+			for _, entry := range entries {
+				if _, ok := seenIDs[entry.ID]; ok {
+					continue
+				}
+				fingerprint := normalizeRecallText(firstNonEmpty(entry.Summary, entry.Content))
+				if fingerprint != "" {
+					if _, ok := seenFingerprints[fingerprint]; ok {
+						continue
+					}
+					seenFingerprints[fingerprint] = struct{}{}
+				}
+				seenIDs[entry.ID] = struct{}{}
+				results = append(results, entry)
+			}
+		}
+		collect(hotEntries)
+		collect(warmEntries)
+		collectDistinct(decisionEntries)
+		collectDistinct(graphEntries)
+		collect(coldEntries)
+		collect(markdownEntries)
+		results = rankMemoryEntries(results, query, now, s.scoring)
+		if query.Limit > 0 && len(results) > query.Limit {
+			results = results[:query.Limit]
+		}
+		s.recordResultAccess(results, now)
+		result := MemoryQueryResult{Entries: results}
+		debug := result.ensureDebug()
+		if query.GraphDebug && len(graphHits) > 0 {
+			debug.GraphHits = append([]GraphHit(nil), graphHits...)
+		}
+		if (query.IncludeDecision || query.DecisionDebug) && len(decisionHits) > 0 {
+			debug.DecisionHits = append([]DecisionHit(nil), decisionHits...)
+		}
+		if plan != nil && (query.IntentDebug || query.RerankDebug || query.BucketDebug) {
+			cloned := cloneQueryIntentPlan(*plan)
+			debug.IntentPlan = &cloned
+		}
+		if query.IncludeVector || query.VectorDebug || query.RerankDebug || s.rerankDebugEnabled {
+			debug.VectorHits = append([]VectorHit(nil), vectorHits...)
+		}
+		if s.truth != nil && s.truth.Enabled() && (s.truthReadRequested(query) || query.RerankDebug || s.rerankDebugEnabled) {
+			if len(truthPrimary) > 0 {
+				debug.TruthHits = s.truth.DebugHitsFromPrimaryCandidates(truthPrimary)
+			} else {
+				debug.TruthHits = s.truth.DebugHits(truthMatches)
+			}
+		}
+		if !hasMemoryQueryDebug(*debug) {
+			result.debug = nil
+		}
+		return result, nil
+	}
+	primaryCandidates := make([]RecallCandidate, 0, len(truthPrimary)+len(truthMatches)+len(primaryVectorHits))
+	primaryCandidates = append(primaryCandidates, s.candidatesFromPrimaryCandidates(truthPrimary, query, now)...)
+	if len(primaryCandidates) == 0 {
+		primaryCandidates = append(primaryCandidates, s.candidatesFromTruthMatches(truthMatches, query, now)...)
+	}
+	primaryCandidates = append(primaryCandidates, s.candidatesFromVectorHits(primaryVectorHits, query, now)...)
+	candidates := mergeRecallCandidates(primaryCandidates)
+	hasPrimaryRecall := len(candidates) > 0
+	candidates = appendHydratedRecallCandidates(candidates, s.candidatesFromEntries(hotEntries, "hot", query, now), true)
+	candidates = appendHydratedRecallCandidates(candidates, s.candidatesFromEntries(warmEntries, "warm", query, now), true)
+	candidates = appendHydratedRecallCandidates(candidates, s.candidatesFromEntries(coldEntries, "cold", query, now), !hasPrimaryRecall)
+	candidates = appendHydratedRecallCandidates(candidates, s.candidatesFromEntries(markdownEntries, "markdown", query, now), !hasPrimaryRecall)
+	candidates = appendHydratedRecallCandidates(candidates, s.candidatesFromDecisionHits(decisionHits, query, now), !hasPrimaryRecall)
+	candidates = appendHydratedRecallCandidates(candidates, s.candidatesFromGraphHits(graphHits, query, now), !hasPrimaryRecall)
 	candidates = mergeRecallCandidates(candidates)
 	candidates = verifyRecallCandidates(candidates, s.truth, recallVerifyConfig{
 		minSupportRefs:  max(s.truthMinSupportRefs, 2),
@@ -199,21 +351,68 @@ func (s *QueryService) queryResultHybridLayers(query MemoryQuery, scope SessionS
 	}
 	s.recordResultAccess(entries, now)
 	result := MemoryQueryResult{
-		Entries:      entries,
-		GraphHits:    graphHits,
-		DecisionHits: decisionHits,
-		IntentPlan:   plan,
+		Entries: entries,
+	}
+	debug := result.ensureDebug()
+	if query.GraphDebug && len(graphHits) > 0 {
+		debug.GraphHits = append([]GraphHit(nil), graphHits...)
+	}
+	if (query.IncludeDecision || query.DecisionDebug) && len(decisionHits) > 0 {
+		debug.DecisionHits = append([]DecisionHit(nil), decisionHits...)
+	}
+	if plan != nil && (query.IntentDebug || query.RerankDebug || query.BucketDebug) {
+		cloned := cloneQueryIntentPlan(*plan)
+		debug.IntentPlan = &cloned
 	}
 	if query.IncludeVector || query.VectorDebug || query.RerankDebug || s.rerankDebugEnabled {
-		result.VectorHits = append([]VectorHit(nil), vectorHits...)
+		debug.VectorHits = append([]VectorHit(nil), vectorHits...)
 	}
-	if s.truthReadRequested(query) || query.RerankDebug || s.rerankDebugEnabled {
-		result.TruthHits = s.truth.DebugHits(truthMatches)
+	if s.truth != nil && s.truth.Enabled() && (s.truthReadRequested(query) || query.RerankDebug || s.rerankDebugEnabled) {
+		if len(truthPrimary) > 0 {
+			debug.TruthHits = s.truth.DebugHitsFromPrimaryCandidates(truthPrimary)
+		} else {
+			debug.TruthHits = s.truth.DebugHits(truthMatches)
+		}
 	}
-	if query.RerankDebug || s.rerankDebugEnabled || s.hybridEnabled {
-		result.RerankReport = report
+	if query.RerankDebug || s.rerankDebugEnabled {
+		debug.RerankReport = report
+	}
+	if !hasMemoryQueryDebug(*debug) {
+		result.debug = nil
 	}
 	return result, nil
+}
+
+func (s *QueryService) queryTruthPrimaryCandidates(query MemoryQuery, plan *QueryIntentPlan) []PrimaryCandidate {
+	if s == nil || s.truth == nil || !s.truth.Enabled() {
+		return nil
+	}
+	if !s.useTruthPrimaryRecall(query) {
+		return nil
+	}
+	return s.truth.QueryPrimary(truthQueryOptionsFromMemoryQuery(query, plan))
+}
+
+func (s *QueryService) useTruthPrimaryRecall(query MemoryQuery) bool {
+	if s == nil {
+		return false
+	}
+	return s.hybridEnabled || s.truthReadRequested(query) || query.RerankDebug || s.rerankDebugEnabled
+}
+
+func (s *QueryService) filterPrimaryCandidatesByBucketPlan(candidates []PrimaryCandidate, plan *BucketPlan) []PrimaryCandidate {
+	if s == nil || s.truth == nil || !s.truth.Enabled() || plan == nil || len(plan.SelectedBuckets) == 0 || len(candidates) == 0 {
+		return candidates
+	}
+	filtered := make([]PrimaryCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		object, ok := s.truth.LookupObject(candidate.ObjectID)
+		if !ok || !bucketObjectMatchesPlan(object, plan) {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	return filtered
 }
 
 func (s *QueryService) bucketLayerFreshness(plan *BucketPlan) map[string]time.Time {
@@ -396,10 +595,17 @@ func (s *QueryService) liveVectorHits(query MemoryQuery, plan *QueryIntentPlan) 
 	if s.vector == nil || !s.vector.Enabled() {
 		return nil
 	}
+	if !s.hybridEnabled && !query.IncludeVector && !query.VectorDebug && !query.RerankDebug && !s.rerankDebugEnabled {
+		return nil
+	}
 	hits, err := s.vector.Query(query, plan)
 	if err != nil {
 		log.Printf("[MEMORY] vector live recall failed, continuing without vector promotions: err=%v", err)
 		return nil
 	}
 	return hits
+}
+
+func hasIntentPlan(plan QueryIntentPlan) bool {
+	return strings.TrimSpace(plan.IntentKey) != "" || len(plan.Constraints) > 0 || len(plan.Entities) > 0 || len(plan.Environment) > 0 || len(plan.Risks) > 0 || strings.TrimSpace(plan.RecallMode) != "" || len(plan.Hydration) > 0 || plan.Truth != (TruthQueryOptions{}) || len(plan.Terms) > 0
 }

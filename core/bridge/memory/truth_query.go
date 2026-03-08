@@ -18,6 +18,16 @@ type truthQueryMatch struct {
 	WhyMatched string
 }
 
+type truthPrimaryAccumulator struct {
+	Object             MemoryObject
+	Score              float64
+	MatchedBy          []string
+	Reasons            []string
+	MatchedClaimIDs    []string
+	MatchedEvidenceIDs []string
+	ConflictedClaimIDs []string
+}
+
 // TruthReader 基于 truth snapshot 构建 live 读侧索引。
 type TruthReader struct {
 	enabled        bool
@@ -319,6 +329,90 @@ func (r *TruthReader) ConflictCount(objectID string) int {
 	return truthConflictCount(object, r.claims)
 }
 
+func (r *TruthReader) QueryPrimary(options TruthQueryOptions) []PrimaryCandidate {
+	if !r.Enabled() {
+		return nil
+	}
+	options = normalizeTruthQueryOptions(options)
+	if options.Subject == "" && options.Predicate == "" && options.Object == "" && options.Value == "" {
+		return nil
+	}
+	if r.metrics != nil {
+		r.metrics.truthQueries.Add(1)
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if len(r.index.objectsByID) == 0 || len(r.index.claimsByID) == 0 {
+		return nil
+	}
+
+	seedClaims := r.primarySeedClaimsLocked(options)
+	if len(seedClaims) == 0 {
+		return nil
+	}
+
+	matched := make(map[string]*truthPrimaryAccumulator)
+	for _, claim := range seedClaims {
+		normalized := normalizeMemoryClaim(claim, claim.ObjectID)
+		if !truthPrimaryClaimStatusAllowed(normalized, options) || !truthPrimaryClaimMatches(normalized, options) {
+			continue
+		}
+		object, ok := r.index.objectsByClaimID[normalized.ClaimID]
+		if !ok {
+			object, ok = r.index.objectsByID[normalized.ObjectID]
+		}
+		if !ok || object.ObjectID == "" {
+			continue
+		}
+		bucket, ok := matched[object.ObjectID]
+		if !ok {
+			bucket = &truthPrimaryAccumulator{Object: normalizeMemoryObject(object)}
+			matched[object.ObjectID] = bucket
+		}
+		truthPrimaryAccumulateClaim(bucket, normalized, options, r.index.objectsByEvidenceID)
+	}
+
+	results := make([]PrimaryCandidate, 0, len(matched))
+	for _, bucket := range matched {
+		candidate := normalizePrimaryCandidate(PrimaryCandidate{
+			ObjectID:           bucket.Object.ObjectID,
+			MatchedClaimIDs:    bucket.MatchedClaimIDs,
+			MatchedEvidenceIDs: bucket.MatchedEvidenceIDs,
+			ConflictedClaimIDs: bucket.ConflictedClaimIDs,
+			Score:              clamp01(bucket.Score),
+			WhyMatched:         strings.Join(uniqueStrings(bucket.Reasons), "; "),
+			Explain: TruthQueryExplain{
+				MatchedClaimIDs:    bucket.MatchedClaimIDs,
+				MatchedEvidenceIDs: bucket.MatchedEvidenceIDs,
+				ConflictedClaimIDs: bucket.ConflictedClaimIDs,
+				WhyMatched:         strings.Join(uniqueStrings(bucket.Reasons), "; "),
+			},
+		})
+		results = append(results, candidate)
+	}
+	truthSortPrimaryCandidates(results, r.index.objectsByID)
+	if r.topK > 0 && len(results) > r.topK {
+		results = results[:r.topK]
+	}
+	if r.metrics != nil {
+		r.metrics.truthHits.Add(uint64(len(results)))
+		for _, item := range results {
+			object, ok := r.index.objectsByID[item.ObjectID]
+			if !ok {
+				continue
+			}
+			status := truthObjectStatus(object, r.minSupportRefs, truthConflictCount(object, r.claims))
+			switch status {
+			case truthStatusVerified:
+				r.metrics.truthVerifiedHits.Add(1)
+			case truthStatusConflicted:
+				r.metrics.truthConflictedHits.Add(1)
+			}
+		}
+	}
+	return results
+}
+
 func (r *TruthReader) Query(query MemoryQuery, plan *QueryIntentPlan) []truthQueryMatch {
 	if !r.Enabled() {
 		return nil
@@ -398,9 +492,6 @@ func (r *TruthReader) Query(query MemoryQuery, plan *QueryIntentPlan) []truthQue
 	}
 
 	terms := queryTerms(query)
-	if plan != nil {
-		terms = append(terms, plan.Terms...)
-	}
 	terms = uniqueStrings(terms)
 	for _, object := range r.index.objectsByID {
 		if !truthObjectAllowed(object, query.Metadata) {
@@ -484,6 +575,37 @@ func (r *TruthReader) DebugHits(matches []truthQueryMatch) []TruthHit {
 	return hits
 }
 
+func (r *TruthReader) DebugHitsFromPrimaryCandidates(candidates []PrimaryCandidate) []TruthHit {
+	if len(candidates) == 0 || !r.Enabled() {
+		return nil
+	}
+	r.mu.RLock()
+	claims := cloneTruthClaims(r.claims)
+	r.mu.RUnlock()
+	now := time.Now().UTC()
+	hits := make([]TruthHit, 0, len(candidates))
+	for _, candidate := range candidates {
+		object, ok := r.LookupObject(candidate.ObjectID)
+		if !ok {
+			continue
+		}
+		status := truthObjectStatus(object, r.minSupportRefs, truthConflictCount(object, claims))
+		hits = append(hits, TruthHit{
+			ObjectID:      object.ObjectID,
+			ClaimIDs:      append([]string(nil), candidate.MatchedClaimIDs...),
+			ObjectType:    object.ObjectType,
+			Score:         clamp01(maxFloat(candidate.Score, object.Confidence)),
+			Confidence:    truthObjectConfidence(object, status, r.minSupportRefs, claims),
+			Freshness:     truthObjectFreshness(object, now),
+			EvidenceCount: max(len(candidate.MatchedEvidenceIDs), len(object.RawEvidence)),
+			SourceRefs:    truthObjectSourceRefs(object),
+			MatchedBy:     []string{"truth", "truth.primary"},
+			Status:        status,
+		})
+	}
+	return hits
+}
+
 func truthIntentKeys(query MemoryQuery, plan *QueryIntentPlan) []string {
 	values := queryMetadataStrings(query.Metadata, "intent_key")
 	if plan != nil && strings.TrimSpace(plan.IntentKey) != "" {
@@ -538,6 +660,287 @@ func truthObjectAllowed(object MemoryObject, metadata map[string]any) bool {
 
 func truthObjectSummary(object MemoryObject) string {
 	return firstNonEmpty(strings.TrimSpace(object.Summary), summarizeLine(truthObjectText(object), 220))
+}
+
+func (r *TruthReader) primarySeedClaimsLocked(options TruthQueryOptions) []MemoryClaim {
+	buckets := make([][]MemoryClaim, 0, 4)
+	appendBucket := func(claims []MemoryClaim) {
+		if len(claims) == 0 {
+			return
+		}
+		buckets = append(buckets, claims)
+	}
+	if options.Subject != "" && options.Predicate != "" {
+		appendBucket(truthIndexClaimsByKeys(r.index.claimsBySubjectPredicate, truthSubjectPredicateLookupKeys(options.Subject, options.Predicate)))
+	}
+	if options.Subject != "" {
+		appendBucket(truthIndexClaimsByKeys(r.index.claimsBySubject, truthTermLookupKeys(options.Subject)))
+	}
+	if options.Predicate != "" {
+		appendBucket(truthIndexClaimsByKeys(r.index.claimsByPredicate, []string{options.Predicate}))
+	}
+	if options.Object != "" {
+		appendBucket(truthIndexClaimsByKeys(r.index.claimsByObject, truthTermLookupKeys(options.Object)))
+		appendBucket(truthIndexClaimsByKeys(r.index.claimsByValueLookup, []string{options.Object}))
+	}
+	if options.Value != "" {
+		appendBucket(truthIndexClaimsByKeys(r.index.claimsByValueLookup, []string{options.Value}))
+	}
+	if len(buckets) == 0 {
+		return truthIndexAllClaims(r.index.claimsByID)
+	}
+	best := buckets[0]
+	for _, bucket := range buckets[1:] {
+		if len(bucket) == 0 {
+			continue
+		}
+		if len(best) == 0 || len(bucket) < len(best) {
+			best = bucket
+		}
+	}
+	return best
+}
+
+func truthPrimaryAccumulateClaim(bucket *truthPrimaryAccumulator, claim MemoryClaim, options TruthQueryOptions, objectsByEvidenceID map[string]MemoryObject) {
+	if bucket == nil || claim.ClaimID == "" {
+		return
+	}
+	markers := truthPrimaryMatchedBy(claim, options)
+	if len(markers) == 0 {
+		return
+	}
+	bucket.MatchedBy = append(bucket.MatchedBy, markers...)
+	bucket.MatchedClaimIDs = append(bucket.MatchedClaimIDs, claim.ClaimID)
+	if normalizeTruthClaimStatus(claim.Status) == truthClaimStatusConflicted {
+		bucket.ConflictedClaimIDs = append(bucket.ConflictedClaimIDs, claim.ClaimID)
+	}
+	for _, evidenceRef := range claim.EvidenceRefs {
+		evidenceID := strings.TrimSpace(evidenceRef.EvidenceID)
+		if evidenceID == "" {
+			continue
+		}
+		if object, ok := objectsByEvidenceID[evidenceID]; ok && object.ObjectID != bucket.Object.ObjectID {
+			continue
+		}
+		bucket.MatchedEvidenceIDs = append(bucket.MatchedEvidenceIDs, evidenceID)
+	}
+	bucket.Reasons = append(bucket.Reasons, truthPrimaryClaimReason(claim, markers))
+	bucket.Score += truthPrimaryClaimScore(claim, options, markers)
+	bucket.MatchedBy = uniqueStrings(bucket.MatchedBy)
+	bucket.MatchedClaimIDs = uniqueStrings(bucket.MatchedClaimIDs)
+	bucket.MatchedEvidenceIDs = uniqueStrings(bucket.MatchedEvidenceIDs)
+	bucket.ConflictedClaimIDs = uniqueStrings(bucket.ConflictedClaimIDs)
+	bucket.Reasons = uniqueStrings(bucket.Reasons)
+	bucket.Score = clamp01(bucket.Score)
+}
+
+func truthIndexClaimsByKeys(index map[string][]MemoryClaim, keys []string) []MemoryClaim {
+	if len(index) == 0 || len(keys) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(keys))
+	out := make([]MemoryClaim, 0, len(keys))
+	for _, key := range uniqueStrings(keys) {
+		normalizedKey := truthIndexKey(key)
+		if normalizedKey == "" {
+			continue
+		}
+		for _, claim := range index[normalizedKey] {
+			if claim.ClaimID == "" {
+				continue
+			}
+			if _, ok := seen[claim.ClaimID]; ok {
+				continue
+			}
+			seen[claim.ClaimID] = struct{}{}
+			out = append(out, claim)
+		}
+	}
+	return out
+}
+
+func truthIndexAllClaims(claimsByID map[string]MemoryClaim) []MemoryClaim {
+	if len(claimsByID) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(claimsByID))
+	for claimID := range claimsByID {
+		ids = append(ids, claimID)
+	}
+	sort.Strings(ids)
+	out := make([]MemoryClaim, 0, len(ids))
+	for _, claimID := range ids {
+		out = append(out, claimsByID[claimID])
+	}
+	return out
+}
+
+func truthTermLookupKeys(value string) []string {
+	normalized := truthIndexKey(value)
+	if normalized == "" {
+		return nil
+	}
+	return uniqueStrings([]string{normalized, "entity:" + normalized, "subject:" + normalized, "object:" + normalized, "language:" + normalized})
+}
+
+func truthSubjectPredicateLookupKeys(subject string, predicate string) []string {
+	predicateKey := truthIndexKey(predicate)
+	if predicateKey == "" {
+		return nil
+	}
+	keys := make([]string, 0, 4)
+	for _, subjectKey := range truthTermLookupKeys(subject) {
+		key := truthIndexKey(subjectKey)
+		if key == "" {
+			continue
+		}
+		keys = append(keys, key+"|"+predicateKey)
+	}
+	return uniqueStrings(keys)
+}
+
+func truthPrimaryClaimStatusAllowed(claim MemoryClaim, options TruthQueryOptions) bool {
+	switch normalizeTruthClaimStatus(claim.Status) {
+	case truthClaimStatusActive:
+		return true
+	case truthClaimStatusConflicted:
+		return options.ExposeConflicts
+	case truthClaimStatusSuperseded:
+		return options.IncludeHistorical
+	case truthClaimStatusUnverified:
+		return !options.ActiveOnly || options.IncludeHistorical
+	default:
+		return !options.ActiveOnly
+	}
+}
+
+func truthPrimaryClaimMatches(claim MemoryClaim, options TruthQueryOptions) bool {
+	if options.Subject != "" && !truthClaimTermMatches(claim.Subject, options.Subject) {
+		return false
+	}
+	if options.Predicate != "" && truthIndexKey(firstNonEmpty(claim.Predicate, legacyTruthPredicate(claim))) != truthIndexKey(options.Predicate) {
+		return false
+	}
+	if options.Object != "" && !truthClaimTermMatches(claim.Object, options.Object) {
+		return false
+	}
+	if options.Value != "" && !truthClaimValueMatches(claim, options.Value) {
+		return false
+	}
+	return true
+}
+
+func truthClaimTermMatches(term ClaimTerm, query string) bool {
+	term = normalizeClaimTerm(term)
+	needle := truthIndexKey(query)
+	if needle == "" {
+		return false
+	}
+	for _, candidate := range []string{term.ID, term.Label, term.Kind + ":" + term.ID, term.Kind + ":" + term.Label} {
+		if truthIndexKey(candidate) == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func truthClaimValueMatches(claim MemoryClaim, value string) bool {
+	needle := truthIndexKey(value)
+	if needle == "" {
+		return false
+	}
+	for _, candidate := range truthClaimValueLookupKeys(claim) {
+		if truthIndexKey(candidate) == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func truthPrimaryMatchedBy(claim MemoryClaim, options TruthQueryOptions) []string {
+	matchedBy := make([]string, 0, 4)
+	if options.Subject != "" && truthClaimTermMatches(claim.Subject, options.Subject) {
+		if options.Predicate != "" && truthIndexKey(firstNonEmpty(claim.Predicate, legacyTruthPredicate(claim))) == truthIndexKey(options.Predicate) {
+			matchedBy = append(matchedBy, "subject_predicate")
+		} else {
+			matchedBy = append(matchedBy, "subject")
+		}
+	}
+	if options.Predicate != "" && truthIndexKey(firstNonEmpty(claim.Predicate, legacyTruthPredicate(claim))) == truthIndexKey(options.Predicate) {
+		matchedBy = append(matchedBy, "predicate")
+	}
+	if options.Object != "" && truthClaimTermMatches(claim.Object, options.Object) {
+		matchedBy = append(matchedBy, "object")
+	}
+	if options.Value != "" && truthClaimValueMatches(claim, options.Value) {
+		matchedBy = append(matchedBy, "value")
+	}
+	return uniqueStrings(matchedBy)
+}
+
+func truthPrimaryClaimReason(claim MemoryClaim, matchedBy []string) string {
+	parts := make([]string, 0, 5)
+	if label := firstNonEmpty(claim.Subject.Label, claim.Subject.ID); label != "" {
+		parts = append(parts, "subject="+label)
+	}
+	if predicate := firstNonEmpty(claim.Predicate, legacyTruthPredicate(claim)); predicate != "" {
+		parts = append(parts, "predicate="+predicate)
+	}
+	if label := firstNonEmpty(claim.Object.Label, claim.Object.ID); label != "" {
+		parts = append(parts, "object="+label)
+	}
+	if value := firstNonEmpty(claim.Value, claim.IntentKey, claim.AnchorKey, claim.EntityID, claim.ConstraintType, claim.RiskType); value != "" {
+		parts = append(parts, "value="+value)
+	}
+	reason := fmt.Sprintf("claim=%s", claim.ClaimID)
+	if len(parts) > 0 {
+		reason += " (" + strings.Join(parts, ", ") + ")"
+	}
+	if len(matchedBy) > 0 {
+		reason += " via " + strings.Join(uniqueStrings(matchedBy), "+")
+	}
+	return reason
+}
+
+func truthPrimaryClaimScore(claim MemoryClaim, options TruthQueryOptions, matchedBy []string) float64 {
+	filters := 0
+	for _, value := range []string{options.Subject, options.Predicate, options.Object, options.Value} {
+		if strings.TrimSpace(value) != "" {
+			filters++
+		}
+	}
+	if filters == 0 {
+		return 0
+	}
+	coverage := float64(len(uniqueStrings(matchedBy))) / float64(filters)
+	strength := clamp01(truthClaimStrength(claim))
+	bonus := 0.0
+	if len(matchedBy) >= 2 {
+		bonus += 0.08
+	}
+	if normalizeTruthClaimStatus(claim.Status) == truthClaimStatusActive {
+		bonus += 0.04
+	}
+	return clamp01(0.55*coverage + 0.35*strength + bonus)
+}
+
+func truthSortPrimaryCandidates(candidates []PrimaryCandidate, objectsByID map[string]MemoryObject) {
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].Score != candidates[j].Score {
+			return candidates[i].Score > candidates[j].Score
+		}
+		objectI := objectsByID[candidates[i].ObjectID]
+		objectJ := objectsByID[candidates[j].ObjectID]
+		if objectI.Confidence != objectJ.Confidence {
+			return objectI.Confidence > objectJ.Confidence
+		}
+		tsi := effectiveDecisionTimestamp(objectI.UpdatedAt, objectI.CreatedAt)
+		tsj := effectiveDecisionTimestamp(objectJ.UpdatedAt, objectJ.CreatedAt)
+		if !tsi.Equal(tsj) {
+			return tsi.After(tsj)
+		}
+		return candidates[i].ObjectID < candidates[j].ObjectID
+	})
 }
 
 func truthObjectText(object MemoryObject) string {

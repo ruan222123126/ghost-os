@@ -154,12 +154,7 @@ func buildVectorQueryText(query MemoryQuery, plan *QueryIntentPlan) string {
 	}
 	parts = append(parts, query.Keywords...)
 	if plan != nil {
-		parts = append(parts, strings.TrimPrefix(strings.TrimSpace(plan.IntentKey), "intent."))
-		parts = append(parts, plan.Terms...)
-		parts = append(parts, plan.Entities...)
-		parts = append(parts, plan.Constraints...)
-		parts = append(parts, plan.Environment...)
-		parts = append(parts, plan.Risks...)
+		parts = append(parts, strings.TrimSpace(plan.RecallMode))
 	}
 	return strings.Join(uniqueStrings(parts), "\n")
 }

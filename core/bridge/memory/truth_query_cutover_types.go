@@ -155,7 +155,11 @@ func cloneProjectionHits(hits []ProjectionHit) []ProjectionHit {
 }
 
 func truthQueryOptionsFromMemoryQuery(query MemoryQuery, plan *QueryIntentPlan) TruthQueryOptions {
-	options := TruthQueryOptions{
+	options := TruthQueryOptions{}
+	if plan != nil {
+		options = normalizeTruthQueryOptions(plan.Truth)
+	}
+	overlay := TruthQueryOptions{
 		Subject:           firstNonEmpty(metadataString(query.Metadata, "subject"), metadataString(query.Metadata, "truth_subject")),
 		Predicate:         firstNonEmpty(metadataString(query.Metadata, "predicate"), metadataString(query.Metadata, "truth_predicate"), firstNonEmpty(query.DecisionTypes...)),
 		Object:            firstNonEmpty(metadataString(query.Metadata, "object"), metadataString(query.Metadata, "truth_object")),
@@ -164,20 +168,38 @@ func truthQueryOptionsFromMemoryQuery(query MemoryQuery, plan *QueryIntentPlan) 
 		ExposeConflicts:   metadataBool(query.Metadata, "truth_expose_conflicts") || query.TruthDebug,
 		Explain:           query.TruthDebug || query.RerankDebug,
 	}
+	if overlay.Subject != "" {
+		options.Subject = overlay.Subject
+	}
+	if overlay.Predicate != "" {
+		options.Predicate = overlay.Predicate
+	}
+	if overlay.Object != "" {
+		options.Object = overlay.Object
+	}
+	if overlay.Value != "" {
+		options.Value = overlay.Value
+	}
+	if overlay.IncludeHistorical {
+		options.IncludeHistorical = true
+	}
+	if overlay.ExposeConflicts {
+		options.ExposeConflicts = true
+	}
+	if overlay.Explain {
+		options.Explain = true
+	}
 	if activeOnly, ok := metadataBoolOK(query.Metadata, "truth_active_only"); ok {
 		options.ActiveOnly = activeOnly
-	} else {
+	} else if plan == nil || plan.Truth == (TruthQueryOptions{}) {
 		options.ActiveOnly = !options.IncludeHistorical
 	}
 	if plan != nil {
 		if options.Subject == "" {
-			options.Subject = firstNonEmpty(plan.Entities...)
-		}
-		if options.Predicate == "" {
-			options.Predicate = firstNonEmpty(plan.Constraints...)
+			options.Subject = firstNonEmpty(metadataString(query.Metadata, "entity_id"), firstNonEmpty(plan.Entities...))
 		}
 		if options.Value == "" {
-			options.Value = firstNonEmpty(plan.Terms...)
+			options.Value = firstNonEmpty(strings.TrimSpace(plan.IntentKey), firstNonEmpty(plan.Entities...), firstNonEmpty(plan.Constraints...), firstNonEmpty(plan.Risks...))
 		}
 	}
 	return normalizeTruthQueryOptions(options)

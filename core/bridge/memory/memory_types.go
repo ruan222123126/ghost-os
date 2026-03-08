@@ -103,33 +103,164 @@ type MemoryQuery struct {
 	Environment       *DecisionEnvFingerprint `json:"-"`
 }
 
-// MemoryQueryResult 允许在不破坏旧接口的情况下带回 graph/decision 命中结果。
+// MemoryQueryResult 仅暴露稳定查询结果；调试视图降到独立 debug 面。
 type MemoryQueryResult struct {
 	Entries         []MemoryEntry          `json:"entries"`
-	GraphHits       []GraphHit             `json:"graph_hits,omitempty"`
-	DecisionHits    []DecisionHit          `json:"decision_hits,omitempty"`
-	IntentPlan      *QueryIntentPlan       `json:"intent_plan,omitempty"`
-	BucketPlan      *BucketPlan            `json:"bucket_plan,omitempty"`
-	LayerFreshness  map[string]time.Time   `json:"layer_freshness,omitempty"`
-	VectorHits      []VectorHit            `json:"vector_hits,omitempty"`
-	TruthHits       []TruthHit             `json:"truth_hits,omitempty"`
 	SelectedRecipe  *DecisionRecipe        `json:"selected_recipe,omitempty"`
 	RecipeAdvisory  *RecipeAdvisory        `json:"recipe_advisory,omitempty"`
 	RecipeSelection *RecipeSelectionReport `json:"recipe_selection,omitempty"`
-	RerankReport    *HybridRerankReport    `json:"rerank_report,omitempty"`
-	ShadowReport    *ShadowRecallReport    `json:"shadow_report,omitempty"`
-	ShadowRead      *BucketShadowReport    `json:"shadow_read,omitempty"`
+
+	debug *MemoryQueryDebug `json:"-"`
+}
+
+// MemoryQueryDebug 描述 recall 主链的可选调试视图。
+type MemoryQueryDebug struct {
+	GraphHits      []GraphHit           `json:"graph_hits,omitempty"`
+	DecisionHits   []DecisionHit        `json:"decision_hits,omitempty"`
+	IntentPlan     *QueryIntentPlan     `json:"intent_plan,omitempty"`
+	BucketPlan     *BucketPlan          `json:"bucket_plan,omitempty"`
+	LayerFreshness map[string]time.Time `json:"layer_freshness,omitempty"`
+	VectorHits     []VectorHit          `json:"vector_hits,omitempty"`
+	TruthHits      []TruthHit           `json:"truth_hits,omitempty"`
+	RerankReport   *HybridRerankReport  `json:"rerank_report,omitempty"`
+}
+
+func (r *MemoryQueryResult) ensureDebug() *MemoryQueryDebug {
+	if r == nil {
+		return nil
+	}
+	if r.debug == nil {
+		r.debug = &MemoryQueryDebug{}
+	}
+	return r.debug
+}
+
+func (r MemoryQueryResult) Debug() *MemoryQueryDebug {
+	if r.debug == nil {
+		return nil
+	}
+	return cloneMemoryQueryDebug(*r.debug)
+}
+
+func cloneMemoryQueryDebug(debug MemoryQueryDebug) *MemoryQueryDebug {
+	out := MemoryQueryDebug{
+		GraphHits:      cloneGraphHits(debug.GraphHits),
+		DecisionHits:   cloneDecisionHits(debug.DecisionHits),
+		LayerFreshness: cloneTimeMap(debug.LayerFreshness),
+		VectorHits:     append([]VectorHit(nil), debug.VectorHits...),
+		TruthHits:      append([]TruthHit(nil), debug.TruthHits...),
+	}
+	if debug.IntentPlan != nil {
+		cloned := cloneQueryIntentPlan(*debug.IntentPlan)
+		out.IntentPlan = &cloned
+	}
+	if debug.BucketPlan != nil {
+		cloned := cloneBucketPlan(*debug.BucketPlan)
+		out.BucketPlan = &cloned
+	}
+	if debug.RerankReport != nil {
+		cloned := cloneHybridRerankReport(*debug.RerankReport)
+		out.RerankReport = &cloned
+	}
+	if !hasMemoryQueryDebug(out) {
+		return nil
+	}
+	return &out
+}
+
+func cloneQueryIntentPlan(plan QueryIntentPlan) QueryIntentPlan {
+	out := plan
+	out.Constraints = append([]string(nil), plan.Constraints...)
+	out.Entities = append([]string(nil), plan.Entities...)
+	out.Environment = append([]string(nil), plan.Environment...)
+	out.Risks = append([]string(nil), plan.Risks...)
+	out.Hydration = append([]string(nil), plan.Hydration...)
+	out.Truth = normalizeTruthQueryOptions(plan.Truth)
+	out.Terms = append([]string(nil), plan.Terms...)
+	return out
+}
+
+func cloneDecisionHits(hits []DecisionHit) []DecisionHit {
+	if len(hits) == 0 {
+		return nil
+	}
+	out := make([]DecisionHit, len(hits))
+	for i := range hits {
+		out[i] = cloneDecisionHit(hits[i])
+	}
+	return out
+}
+
+func cloneGraphHits(hits []GraphHit) []GraphHit {
+	if len(hits) == 0 {
+		return nil
+	}
+	out := make([]GraphHit, len(hits))
+	for i := range hits {
+		out[i] = cloneGraphHit(hits[i])
+	}
+	return out
+}
+
+func cloneGraphHit(hit GraphHit) GraphHit {
+	out := hit
+	out.SourceIDs = append([]string(nil), hit.SourceIDs...)
+	out.SourceClaimIDs = append([]string(nil), hit.SourceClaimIDs...)
+	out.SourceEvidenceIDs = append([]string(nil), hit.SourceEvidenceIDs...)
+	out.Explain = cloneMetadata(hit.Explain)
+	out.Evidence = append([]GraphEvidence(nil), hit.Evidence...)
+	return out
+}
+
+func hasMemoryQueryDebug(debug MemoryQueryDebug) bool {
+	return len(debug.GraphHits) > 0 ||
+		len(debug.DecisionHits) > 0 ||
+		debug.IntentPlan != nil ||
+		debug.BucketPlan != nil ||
+		len(debug.LayerFreshness) > 0 ||
+		len(debug.VectorHits) > 0 ||
+		len(debug.TruthHits) > 0 ||
+		debug.RerankReport != nil
+}
+
+func cloneTimeMap(input map[string]time.Time) map[string]time.Time {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Time, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
+}
+
+func cloneBucketPlan(plan BucketPlan) BucketPlan {
+	out := plan
+	out.CandidateBuckets = cloneBucketCandidates(plan.CandidateBuckets)
+	out.SelectedBuckets = cloneBucketCandidates(plan.SelectedBuckets)
+	out.DroppedBuckets = cloneBucketCandidates(plan.DroppedBuckets)
+	out.Reason = append([]string(nil), plan.Reason...)
+	return out
+}
+
+func cloneHybridRerankReport(report HybridRerankReport) HybridRerankReport {
+	out := report
+	out.Candidates = append([]HybridRerankItem(nil), report.Candidates...)
+	return out
 }
 
 // QueryIntentPlan 保存 query planner 对任务意图的结构化切面。
 type QueryIntentPlan struct {
-	IntentKey   string   `json:"intent_key,omitempty"`
-	Constraints []string `json:"constraints,omitempty"`
-	Entities    []string `json:"entities,omitempty"`
-	Environment []string `json:"environment,omitempty"`
-	Risks       []string `json:"risks,omitempty"`
-	Terms       []string `json:"terms,omitempty"`
-	Confidence  float64  `json:"confidence,omitempty"`
+	IntentKey   string            `json:"intent_key,omitempty"`
+	Constraints []string          `json:"constraints,omitempty"`
+	Entities    []string          `json:"entities,omitempty"`
+	Environment []string          `json:"environment,omitempty"`
+	Risks       []string          `json:"risks,omitempty"`
+	RecallMode  string            `json:"recall_mode,omitempty"`
+	Hydration   []string          `json:"hydration,omitempty"`
+	Truth       TruthQueryOptions `json:"truth,omitempty"`
+	Terms       []string          `json:"terms,omitempty"`
+	Confidence  float64           `json:"confidence,omitempty"`
 }
 
 // VectorHit 描述 vector sidecar 的单条 shadow 命中。

@@ -10,6 +10,20 @@ var (
 	intentQuotedPattern     = regexp.MustCompile("`([^`]+)`|\"([^\"]+)\"|'([^']+)'")
 	intentPathPattern       = regexp.MustCompile(`(?:~?/[^\s,;:]+|[A-Za-z]:[\\/][^\s,;:]+)`)
 	intentIdentifierPattern = regexp.MustCompile(`(?i)\b[a-z_][a-z0-9_.:/-]{2,}\b`)
+	intentSelfValuePattern  = regexp.MustCompile(`(?i)\b(my|me|mine|myself|profile|identity|preference|prefer|habit|role)\b|我的|我自己|我是|我偏好|我习惯|身份|角色|偏好|习惯`)
+	intentSelfRolePattern   = regexp.MustCompile(`(?i)\b(who am i|my role|identity|profile|about me)\b|我是|我的身份|我的角色|关于我`)
+	intentSelfLangPattern   = regexp.MustCompile(`(?i)\b(prefer(?:red)?\s+language|language preference|favorite language)\b|偏好语言|常用语言|喜欢.*语言`)
+	intentProceduralPattern = regexp.MustCompile(`(?i)\b(step|steps|workflow|runbook|recipe|checklist|migration|deploy|rollback|validate|validation)\b|步骤|流程|方案|迁移|部署|回滚|验证|检查清单`)
+	intentSemanticPattern   = regexp.MustCompile(`(?i)\b(what|why|meaning|explain|summary|note|notes|doc|docs|markdown|graph|fact|knowledge)\b|解释|含义|说明|总结|笔记|文档|事实|知识`)
+	intentEpisodicPattern   = regexp.MustCompile(`(?i)\b(today|yesterday|recent|recently|latest|last|earlier|just now|session|turn|conversation|history)\b|刚才|刚刚|这次|上次|最近|今天|昨天|会话|对话|历史`)
+)
+
+const (
+	plannerRecallModeProceduralFirst = "procedural-first"
+	plannerRecallModeSemanticFirst   = "semantic-first"
+	plannerRecallModeSelfFirst       = "self-first"
+	plannerRecallModeEpisodicFirst   = "episodic-first"
+	plannerRecallModeMixed           = "mixed"
 )
 
 var intentActionRules = []struct {
@@ -94,6 +108,9 @@ func (p *IntentPlanner) Plan(query MemoryQuery, scope SessionScope) (QueryIntent
 	terms = append(terms, plan.Environment...)
 	terms = append(terms, strings.TrimPrefix(plan.IntentKey, "intent."))
 	plan.Terms = uniqueStrings(flattenIntentTerms(terms))
+	plan.RecallMode = plannerRecallMode(query, scope, raw, plan)
+	plan.Hydration = plannerHydrationLayers(plan.RecallMode)
+	plan.Truth = plannerTruthQueryOptions(query, scope, raw, plan)
 
 	signals := 0
 	if plan.IntentKey != "" {
@@ -122,9 +139,178 @@ func normalizeQueryIntentPlan(plan QueryIntentPlan) QueryIntentPlan {
 	out.Entities = uniqueStrings(out.Entities)
 	out.Environment = uniqueStrings(out.Environment)
 	out.Risks = uniqueStrings(out.Risks)
+	out.RecallMode = normalizePlannerRecallMode(out.RecallMode)
+	out.Hydration = uniqueStrings(out.Hydration)
+	out.Truth = normalizeTruthQueryOptions(out.Truth)
 	out.Terms = uniqueStrings(flattenIntentTerms(out.Terms))
 	out.Confidence = clamp01(out.Confidence)
 	return out
+}
+
+func normalizePlannerRecallMode(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case plannerRecallModeProceduralFirst, plannerRecallModeSemanticFirst, plannerRecallModeSelfFirst, plannerRecallModeEpisodicFirst:
+		return strings.TrimSpace(mode)
+	default:
+		return plannerRecallModeMixed
+	}
+}
+
+func plannerRecallMode(query MemoryQuery, scope SessionScope, raw string, plan QueryIntentPlan) string {
+	action := strings.TrimPrefix(strings.TrimSpace(plan.IntentKey), "intent.")
+	action, _, _ = strings.Cut(action, "_")
+	procedural := 0.0
+	semantic := 0.0
+	self := 0.0
+	episodic := 0.0
+
+	switch action {
+	case "fix", "create", "run", "plan":
+		procedural += 1.8
+	case "inspect", "explain", "compare", "recall":
+		semantic += 1.4
+	}
+	if len(plan.Constraints) > 0 || len(plan.Risks) > 0 {
+		procedural += 1.1
+	}
+	if query.IncludeDecision || query.DecisionReuseOnly || len(query.DecisionTypes) > 0 {
+		procedural += 1.2
+	}
+	if intentProceduralPattern.MatchString(raw) {
+		procedural += 0.9
+	}
+
+	if len(plan.Entities) > 0 {
+		semantic += 0.6
+	}
+	if query.IncludeMarkdown {
+		semantic += 1.0
+	}
+	if query.IncludeGraph {
+		semantic += 0.9
+	}
+	if intentSemanticPattern.MatchString(raw) {
+		semantic += 1.0
+	}
+
+	if plannerHasSelfSignal(raw) {
+		self += 2.8
+	}
+	if containsString(plan.Entities, "self") || containsString(plan.Entities, "user") || containsString(plan.Entities, "我") {
+		self += 0.8
+	}
+
+	if query.PreferRecent || query.TimeRange != nil {
+		episodic += 1.2
+	}
+	if strings.TrimSpace(firstNonEmpty(metadataString(query.Metadata, "session_id"), scope.SessionID)) != "" {
+		episodic += 0.9
+	}
+	if len(query.SessionHints) > 0 || len(query.MonthHints) > 0 {
+		episodic += 0.8
+	}
+	if intentEpisodicPattern.MatchString(raw) {
+		episodic += 1.8
+	}
+
+	bestMode := plannerRecallModeMixed
+	bestScore := 1.3
+	secondScore := 0.0
+	for _, candidate := range []struct {
+		mode  string
+		score float64
+	}{
+		{mode: plannerRecallModeProceduralFirst, score: procedural},
+		{mode: plannerRecallModeSemanticFirst, score: semantic},
+		{mode: plannerRecallModeSelfFirst, score: self},
+		{mode: plannerRecallModeEpisodicFirst, score: episodic},
+	} {
+		if candidate.score > bestScore {
+			secondScore = bestScore
+			bestScore = candidate.score
+			bestMode = candidate.mode
+			continue
+		}
+		if candidate.score > secondScore {
+			secondScore = candidate.score
+		}
+	}
+	if bestMode == plannerRecallModeMixed {
+		return bestMode
+	}
+	if query.IncludeMarkdown && query.IncludeDecision && semantic >= 2.0 && procedural >= 1.5 {
+		return plannerRecallModeMixed
+	}
+	if secondScore >= 1.5 && bestScore-secondScore < 0.75 {
+		return plannerRecallModeMixed
+	}
+	return bestMode
+}
+
+func plannerHydrationLayers(mode string) []string {
+	switch normalizePlannerRecallMode(mode) {
+	case plannerRecallModeProceduralFirst:
+		return []string{"decision", "warm"}
+	case plannerRecallModeSemanticFirst:
+		return []string{"markdown", "graph"}
+	case plannerRecallModeSelfFirst:
+		return []string{"decision", "markdown"}
+	case plannerRecallModeEpisodicFirst:
+		return []string{"hot", "warm", "cold"}
+	default:
+		return []string{"hot", "warm", "cold", "markdown", "decision", "graph"}
+	}
+}
+
+func plannerTruthQueryOptions(query MemoryQuery, scope SessionScope, raw string, plan QueryIntentPlan) TruthQueryOptions {
+	options := TruthQueryOptions{ActiveOnly: true}
+	sessionID := strings.TrimSpace(firstNonEmpty(metadataString(query.Metadata, "session_id"), scope.SessionID))
+	switch normalizePlannerRecallMode(plan.RecallMode) {
+	case plannerRecallModeProceduralFirst:
+		options.Value = firstNonEmpty(strings.TrimSpace(plan.IntentKey), firstNonEmpty(plan.Constraints...), firstNonEmpty(plan.Risks...), firstNonEmpty(plan.Entities...))
+	case plannerRecallModeSemanticFirst:
+		options.Value = firstNonEmpty(firstNonEmpty(plan.Entities...), strings.TrimSpace(metadataString(query.Metadata, "entity_id")))
+	case plannerRecallModeSelfFirst:
+		options.Predicate = plannerSelfPredicate(raw)
+		options.Value = firstNonEmpty(firstNonEmpty(plan.Entities...), strings.TrimSpace(metadataString(query.Metadata, "truth_value")))
+	case plannerRecallModeEpisodicFirst:
+		options.Subject = sessionID
+		options.Value = firstNonEmpty(strings.TrimSpace(plan.IntentKey), firstNonEmpty(plan.Entities...), firstNonEmpty(plan.Constraints...), firstNonEmpty(plan.Risks...))
+		options.IncludeHistorical = true
+		options.ActiveOnly = false
+	default:
+		options.Value = firstNonEmpty(strings.TrimSpace(plan.IntentKey), firstNonEmpty(plan.Entities...), firstNonEmpty(plan.Constraints...), firstNonEmpty(plan.Risks...))
+	}
+	return normalizeTruthQueryOptions(options)
+}
+
+func plannerHasSelfSignal(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return false
+	}
+	if intentSelfRolePattern.MatchString(raw) || intentSelfLangPattern.MatchString(raw) {
+		return true
+	}
+	lowered := strings.ToLower(raw)
+	return intentSelfValuePattern.MatchString(raw) && (strings.Contains(lowered, "prefer") || strings.Contains(lowered, "identity") || strings.Contains(lowered, "role") || strings.Contains(raw, "偏好") || strings.Contains(raw, "习惯") || strings.Contains(raw, "身份") || strings.Contains(raw, "角色"))
+}
+
+func plannerSelfPredicate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if intentSelfLangPattern.MatchString(raw) {
+		return "preference.language"
+	}
+	if intentSelfRolePattern.MatchString(raw) {
+		return "identity.self"
+	}
+	if intentSelfValuePattern.MatchString(raw) {
+		return "preference.has"
+	}
+	return ""
 }
 
 func deriveIntentKey(query MemoryQuery) string {
