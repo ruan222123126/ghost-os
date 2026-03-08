@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -26,26 +27,32 @@ type taskSchedulePlan struct {
 }
 
 type taskRegistration struct {
-	cancel   context.CancelFunc
-	loopDone chan struct{}
-	runWG    sync.WaitGroup
-	task     ScheduledTask
-	running  bool
-	mu       sync.Mutex
+	cancel     context.CancelFunc
+	loopDone   chan struct{}
+	loopCtx    context.Context
+	runWG      sync.WaitGroup
+	task       ScheduledTask
+	running    bool
+	runCancel  context.CancelFunc
+	runTraceID string
+	mu         sync.Mutex
 }
 
 type TaskScheduler struct {
 	store   *TaskStore
 	service *bridgeService
 
-	now     func() time.Time
-	traceID func() string
-	execute func(context.Context, ScheduledTask, string) scheduledTaskExecutionResult
+	now              func() time.Time
+	traceID          func() string
+	execute          func(context.Context, ScheduledTask, string) scheduledTaskExecutionResult
+	executionTimeout time.Duration
 
 	mu      sync.Mutex
 	running bool
 	tasks   map[string]*taskRegistration
 }
+
+const defaultTaskExecutionTimeout = 2 * time.Minute
 
 func NewTaskScheduler(store *TaskStore, service *bridgeService) *TaskScheduler {
 	scheduler := &TaskScheduler{
@@ -54,8 +61,9 @@ func NewTaskScheduler(store *TaskStore, service *bridgeService) *TaskScheduler {
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
-		traceID: nextTraceID,
-		tasks:   make(map[string]*taskRegistration),
+		traceID:          nextTraceID,
+		executionTimeout: defaultTaskExecutionTimeout,
+		tasks:            make(map[string]*taskRegistration),
 	}
 	scheduler.execute = scheduler.executeTask
 	return scheduler
@@ -114,7 +122,7 @@ func (s *TaskScheduler) Stop() {
 	registrations := make([]*taskRegistration, 0, len(s.tasks))
 	for id, reg := range s.tasks {
 		registrations = append(registrations, reg)
-		reg.cancel()
+		reg.stop()
 		delete(s.tasks, id)
 	}
 	s.running = false
@@ -146,7 +154,7 @@ func (s *TaskScheduler) Unregister(taskID string) error {
 	s.mu.Lock()
 	reg := s.tasks[id]
 	if reg, ok := s.tasks[id]; ok {
-		reg.cancel()
+		reg.stop()
 		delete(s.tasks, id)
 	}
 	s.mu.Unlock()
@@ -162,13 +170,13 @@ func (s *TaskScheduler) register(task ScheduledTask) error {
 		return err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	reg := &taskRegistration{cancel: cancel, loopDone: make(chan struct{}), task: task}
+	reg := &taskRegistration{cancel: cancel, loopDone: make(chan struct{}), loopCtx: ctx, task: task}
 
 	var existing *taskRegistration
 	s.mu.Lock()
 	if current, ok := s.tasks[task.ID]; ok {
 		existing = current
-		existing.cancel()
+		existing.stop()
 		delete(s.tasks, task.ID)
 	}
 	s.mu.Unlock()
@@ -218,14 +226,14 @@ func (s *TaskScheduler) runTaskLoop(ctx context.Context, reg *taskRegistration, 
 }
 
 func (s *TaskScheduler) fireTask(reg *taskRegistration, scheduledAt time.Time) {
-	task, skipped, _ := reg.beginRun(reg.snapshot())
 	runTraceID := s.traceID()
+	task, runCtx, skipped, _ := reg.beginRun(reg.snapshot(), s.taskExecutionTimeout(), runTraceID)
 	if skipped {
 		_ = s.store.AppendRunLog(skippedTaskRunLog(task, runTraceID, scheduledAt))
 		return
 	}
 	go func() {
-		if _, err := s.executeRun(context.Background(), reg, task, scheduledAt, runTraceID); err != nil {
+		if _, err := s.executeRun(runCtx, reg, task, scheduledAt, runTraceID); err != nil {
 			log.Printf("task scheduler execute run failed: task_id=%s error=%v", task.ID, err)
 		}
 	}()
@@ -242,24 +250,24 @@ func (s *TaskScheduler) RunNow(task ScheduledTask, traceID string) (TaskRunLog, 
 	if reg == nil {
 		reg = &taskRegistration{task: task}
 	}
-	task, skipped, _ := reg.beginRun(task)
 	scheduledAt := s.now().UTC()
 	runTraceID := strings.TrimSpace(traceID)
 	if runTraceID == "" {
 		runTraceID = s.traceID()
 	}
+	task, runCtx, skipped, _ := reg.beginRun(task, s.taskExecutionTimeout(), runTraceID)
 	if skipped {
 		run := skippedTaskRunLog(task, runTraceID, scheduledAt)
 		return run, s.store.AppendRunLog(run)
 	}
-	return s.executeRun(context.Background(), reg, task, scheduledAt, runTraceID)
+	return s.executeRun(runCtx, reg, task, scheduledAt, runTraceID)
 }
 
 func (s *TaskScheduler) executeRun(ctx context.Context, reg *taskRegistration, task ScheduledTask, scheduledAt time.Time, traceID string) (TaskRunLog, error) {
 	defer reg.finishRun()
 
 	startedAt := s.now().UTC()
-	result := s.execute(ctx, task, traceID)
+	result := s.finalizeExecutionResult(ctx, s.execute(ctx, task, traceID))
 	finishedAt := s.now().UTC()
 
 	reg.mu.Lock()
@@ -275,6 +283,8 @@ func (s *TaskScheduler) executeRun(ctx context.Context, reg *taskRegistration, t
 		TaskID:          task.ID,
 		RunID:           newTaskRunID(),
 		TraceID:         traceID,
+		TaskKind:        task.TaskKind,
+		Action:          task.Action,
 		ScheduledAt:     scheduledAt.UTC(),
 		StartedAt:       startedAt,
 		FinishedAt:      finishedAt,
@@ -290,6 +300,30 @@ func (s *TaskScheduler) executeRun(ctx context.Context, reg *taskRegistration, t
 	return run, nil
 }
 
+func (s *TaskScheduler) finalizeExecutionResult(ctx context.Context, result scheduledTaskExecutionResult) scheduledTaskExecutionResult {
+	if strings.TrimSpace(result.Status) == "" {
+		result.Status = taskRunStatusError
+	}
+
+	switch {
+	case errors.Is(ctx.Err(), context.Canceled):
+		result.Status = taskRunStatusCancelled
+		result.Error = "task execution cancelled"
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		result.Status = taskRunStatusError
+		result.Error = fmt.Sprintf("task execution timed out after %s", s.taskExecutionTimeout())
+	}
+
+	return result
+}
+
+func (s *TaskScheduler) taskExecutionTimeout() time.Duration {
+	if s == nil || s.executionTimeout <= 0 {
+		return defaultTaskExecutionTimeout
+	}
+	return s.executionTimeout
+}
+
 func (s *TaskScheduler) persistNextRun(reg *taskRegistration, next time.Time) error {
 	reg.mu.Lock()
 	reg.task.NextRunAt = next.UTC()
@@ -302,6 +336,15 @@ func (s *TaskScheduler) executeTask(ctx context.Context, task ScheduledTask, tra
 	if s == nil || s.service == nil {
 		return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: "task service is not configured"}
 	}
+	switch normalizeTaskKind(task.TaskKind) {
+	case taskKindSystemAction:
+		return s.executeSystemTaskAction(task, traceID)
+	default:
+		return s.executeAgentTaskAction(ctx, task, traceID)
+	}
+}
+
+func (s *TaskScheduler) executeAgentTaskAction(ctx context.Context, task ScheduledTask, traceID string) scheduledTaskExecutionResult {
 	payload, _, err := s.service.executeAgentAction(ctx, agentParams{
 		Message:   task.Message,
 		SessionID: task.SessionID,
@@ -324,6 +367,23 @@ func (s *TaskScheduler) executeTask(ctx context.Context, task ScheduledTask, tra
 		}
 	default:
 		return scheduledTaskExecutionResult{Status: taskRunStatusSuccess}
+	}
+}
+
+func (s *TaskScheduler) executeSystemTaskAction(task ScheduledTask, traceID string) scheduledTaskExecutionResult {
+	switch strings.TrimSpace(task.Action) {
+	case busActionMemoryHygieneRun:
+		params, err := decodeMemoryHygieneRunParams(task.ActionParams)
+		if err != nil {
+			return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
+		payload, _, err := s.service.executeMemoryHygieneRunUsecase(params, task.ID, traceID)
+		if err != nil {
+			return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
+		return scheduledTaskExecutionResult{Status: taskRunStatusSuccess, ResponsePreview: formatMemoryHygieneRunPreview(payload)}
+	default:
+		return scheduledTaskExecutionResult{Status: taskRunStatusError, Error: "unsupported system action: " + strings.TrimSpace(task.Action)}
 	}
 }
 
@@ -402,23 +462,64 @@ func (r *taskRegistration) waitIdle() {
 	r.runWG.Wait()
 }
 
-func (r *taskRegistration) beginRun(task ScheduledTask) (ScheduledTask, bool, string) {
+func (r *taskRegistration) beginRun(task ScheduledTask, timeout time.Duration, traceID string) (ScheduledTask, context.Context, bool, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.task = task
 	if r.running {
-		return r.task, true, "task already running"
+		return r.task, nil, true, "task already running"
+	}
+	parentCtx := r.loopCtx
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	runCtx := parentCtx
+	var cancel context.CancelFunc
+	if timeout > 0 {
+		runCtx, cancel = context.WithTimeout(parentCtx, timeout)
+	} else {
+		runCtx, cancel = context.WithCancel(parentCtx)
 	}
 	r.running = true
+	r.runCancel = cancel
+	r.runTraceID = strings.TrimSpace(traceID)
 	r.runWG.Add(1)
-	return r.task, false, ""
+	return r.task, runCtx, false, ""
 }
 
 func (r *taskRegistration) finishRun() {
 	r.mu.Lock()
+	cancel := r.runCancel
+	r.runCancel = nil
+	r.runTraceID = ""
 	r.running = false
 	r.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	r.runWG.Done()
+}
+
+func (r *taskRegistration) cancelRun() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancel := r.runCancel
+	r.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+func (r *taskRegistration) stop() {
+	if r == nil {
+		return
+	}
+	if r.cancel != nil {
+		r.cancel()
+	}
+	r.cancelRun()
 }
 
 func (s *TaskScheduler) lookupTask(taskID string) *taskRegistration {
@@ -436,6 +537,8 @@ func skippedTaskRunLog(task ScheduledTask, traceID string, scheduledAt time.Time
 		TaskID:         task.ID,
 		RunID:          newTaskRunID(),
 		TraceID:        traceID,
+		TaskKind:       task.TaskKind,
+		Action:         task.Action,
 		ScheduledAt:    scheduledAt.UTC(),
 		Status:         taskRunStatusSkipped,
 		SessionIDInput: task.SessionID,

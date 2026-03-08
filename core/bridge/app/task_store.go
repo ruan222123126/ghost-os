@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -18,7 +19,10 @@ const (
 	taskScheduleTypeInterval = "interval"
 	taskScheduleTypeCron     = "cron"
 
+	defaultTaskRunLogRetention = 100
+
 	taskRunStatusSuccess        = "success"
+	taskRunStatusCancelled      = "cancelled"
 	taskRunStatusError          = "error"
 	taskRunStatusSkipped        = "skipped"
 	taskRunStatusAwaitingHuman  = "awaiting_human"
@@ -37,24 +41,29 @@ var (
 )
 
 type ScheduledTask struct {
-	ID              string    `json:"id"`
-	Message         string    `json:"message"`
-	SessionID       string    `json:"session_id,omitempty"`
-	ScheduleType    string    `json:"schedule_type"`
-	IntervalSeconds int       `json:"interval_seconds,omitempty"`
-	CronExpr        string    `json:"cron_expr,omitempty"`
-	Enabled         bool      `json:"enabled"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
-	LastRunAt       time.Time `json:"last_run_at,omitempty"`
-	NextRunAt       time.Time `json:"next_run_at,omitempty"`
-	LastError       string    `json:"last_error,omitempty"`
+	ID              string         `json:"id"`
+	Message         string         `json:"message"`
+	SessionID       string         `json:"session_id,omitempty"`
+	TaskKind        string         `json:"task_kind,omitempty"`
+	Action          string         `json:"action,omitempty"`
+	ActionParams    map[string]any `json:"action_params,omitempty"`
+	ScheduleType    string         `json:"schedule_type"`
+	IntervalSeconds int            `json:"interval_seconds,omitempty"`
+	CronExpr        string         `json:"cron_expr,omitempty"`
+	Enabled         bool           `json:"enabled"`
+	CreatedAt       time.Time      `json:"created_at"`
+	UpdatedAt       time.Time      `json:"updated_at"`
+	LastRunAt       time.Time      `json:"last_run_at,omitempty"`
+	NextRunAt       time.Time      `json:"next_run_at,omitempty"`
+	LastError       string         `json:"last_error,omitempty"`
 }
 
 type TaskRunLog struct {
 	TaskID          string    `json:"task_id"`
 	RunID           string    `json:"run_id"`
 	TraceID         string    `json:"trace_id"`
+	TaskKind        string    `json:"task_kind,omitempty"`
+	Action          string    `json:"action,omitempty"`
 	ScheduledAt     time.Time `json:"scheduled_at"`
 	StartedAt       time.Time `json:"started_at,omitempty"`
 	FinishedAt      time.Time `json:"finished_at,omitempty"`
@@ -299,6 +308,8 @@ func (s *TaskStore) AppendRunLog(run TaskRunLog) error {
 		run.RunID = newTaskRunID()
 	}
 	run.TraceID = strings.TrimSpace(run.TraceID)
+	run.TaskKind = normalizeTaskKind(run.TaskKind)
+	run.Action = strings.TrimSpace(run.Action)
 	run.Status = strings.TrimSpace(run.Status)
 	run.SessionIDInput = strings.TrimSpace(run.SessionIDInput)
 	run.SessionIDOutput = strings.TrimSpace(run.SessionIDOutput)
@@ -319,6 +330,9 @@ func (s *TaskStore) AppendRunLog(run TaskRunLog) error {
 	path := filepath.Join(logDir, run.RunID+".json")
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write task log %q/%q: %w", run.TaskID, run.RunID, err)
+	}
+	if err := s.pruneRunLogsLocked(run.TaskID, defaultTaskRunLogRetention); err != nil {
+		log.Printf("task store: prune task logs task_id=%q keep=%d err=%v", run.TaskID, defaultTaskRunLogRetention, err)
 	}
 	return nil
 }
@@ -362,20 +376,78 @@ func (s *TaskStore) ListRunLogs(taskID string, limit int) ([]TaskRunLog, error) 
 	}
 
 	sort.Slice(runs, func(i, j int) bool {
-		left := runs[i].StartedAt
-		if left.IsZero() {
-			left = runs[i].ScheduledAt
-		}
-		right := runs[j].StartedAt
-		if right.IsZero() {
-			right = runs[j].ScheduledAt
-		}
+		left := taskRunLogSortTime(runs[i])
+		right := taskRunLogSortTime(runs[j])
 		return left.After(right)
 	})
 	if limit > 0 && len(runs) > limit {
 		runs = runs[:limit]
 	}
 	return runs, nil
+}
+
+func (s *TaskStore) pruneRunLogsLocked(taskID string, keep int) error {
+	id := strings.TrimSpace(taskID)
+	if keep <= 0 {
+		return nil
+	}
+
+	logDir := filepath.Join(s.logsDir, id)
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("read task log directory %q: %w", logDir, err)
+	}
+
+	type logFile struct {
+		name     string
+		path     string
+		sortTime time.Time
+	}
+
+	files := make([]logFile, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		path := filepath.Join(logDir, entry.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return fmt.Errorf("read task log %q/%q: %w", id, entry.Name(), err)
+		}
+		item := logFile{name: entry.Name(), path: path}
+		var run TaskRunLog
+		if err := json.Unmarshal(data, &run); err == nil {
+			normalizeTaskRunLog(&run)
+			item.sortTime = taskRunLogSortTime(run)
+		}
+		files = append(files, item)
+	}
+
+	if len(files) <= keep {
+		return nil
+	}
+
+	sort.Slice(files, func(i, j int) bool {
+		left := files[i].sortTime
+		right := files[j].sortTime
+		if !left.Equal(right) {
+			return left.Before(right)
+		}
+		return files[i].name < files[j].name
+	})
+
+	for _, item := range files[:len(files)-keep] {
+		if err := os.Remove(item.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("delete task log %q/%q: %w", id, item.name, err)
+		}
+	}
+	return nil
 }
 
 func (s *TaskStore) pathForTask(taskID string) (string, error) {
@@ -411,6 +483,9 @@ func normalizeScheduledTask(task *ScheduledTask) error {
 	task.ID = strings.TrimSpace(task.ID)
 	task.Message = strings.TrimSpace(task.Message)
 	task.SessionID = strings.TrimSpace(task.SessionID)
+	task.TaskKind = normalizeTaskKind(task.TaskKind)
+	task.Action = strings.TrimSpace(task.Action)
+	task.ActionParams = cloneTaskActionParams(task.ActionParams)
 	task.ScheduleType = strings.TrimSpace(task.ScheduleType)
 	task.CronExpr = strings.TrimSpace(task.CronExpr)
 	task.LastError = strings.TrimSpace(task.LastError)
@@ -420,8 +495,8 @@ func normalizeScheduledTask(task *ScheduledTask) error {
 	if !isValidTaskID(task.ID) {
 		return fmt.Errorf("%w: %q", ErrInvalidTaskID, task.ID)
 	}
-	if task.Message == "" {
-		return fmt.Errorf("%w: message is required", ErrInvalidTaskConfig)
+	if err := validateTaskDefinition(task); err != nil {
+		return err
 	}
 	if task.CreatedAt.IsZero() {
 		task.CreatedAt = time.Now().UTC()
@@ -456,6 +531,8 @@ func normalizeTaskRunLog(run *TaskRunLog) {
 	run.TaskID = strings.TrimSpace(run.TaskID)
 	run.RunID = strings.TrimSpace(run.RunID)
 	run.TraceID = strings.TrimSpace(run.TraceID)
+	run.TaskKind = normalizeTaskKind(run.TaskKind)
+	run.Action = strings.TrimSpace(run.Action)
 	run.Status = strings.TrimSpace(run.Status)
 	run.SessionIDInput = strings.TrimSpace(run.SessionIDInput)
 	run.SessionIDOutput = strings.TrimSpace(run.SessionIDOutput)
@@ -470,6 +547,13 @@ func normalizeTaskRunLog(run *TaskRunLog) {
 	if !run.FinishedAt.IsZero() {
 		run.FinishedAt = run.FinishedAt.UTC()
 	}
+}
+
+func taskRunLogSortTime(run TaskRunLog) time.Time {
+	if !run.StartedAt.IsZero() {
+		return run.StartedAt
+	}
+	return run.ScheduledAt
 }
 
 func isValidTaskID(taskID string) bool {

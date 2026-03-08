@@ -70,7 +70,7 @@ func newBridgeServiceWithStreamExecutor(
 		memoryManager: memoryManager,
 		agentRunner:   runner,
 		runRegistry:   runRegistry,
-		actions:       make(map[string]actionHandler, 17),
+		actions:       make(map[string]actionHandler, 18),
 	}
 	service.initTaskRuntime()
 
@@ -103,6 +103,9 @@ func newBridgeServiceWithStreamExecutor(
 	})
 	registerAction(service, busActionMemoryDecisionRebuild, func(ctx context.Context, params memoryDecisionRebuildParams, traceID string) (any, int, error) {
 		return service.executeMemoryDecisionRebuildAction(ctx, params, traceID)
+	})
+	registerAction(service, busActionMemoryHygieneRun, func(_ context.Context, params memoryHygieneRunParams, traceID string) (any, int, error) {
+		return service.executeMemoryHygieneRunAction(params, traceID)
 	})
 	registerAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (any, int, error) {
 		return service.executeTaskCreateAction(params, traceID)

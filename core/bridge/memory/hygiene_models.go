@@ -25,6 +25,12 @@ const (
 
 const defaultHygieneRecordsPathName = "records.json"
 
+const (
+	HygieneScopeWarm       = "warm"
+	HygieneScopeProjection = "projection"
+	HygieneScopeReport     = "report"
+)
+
 // HygieneTarget identifies a hygiene sidecar record by object first, then entry.
 type HygieneTarget struct {
 	ObjectID string `json:"object_id,omitempty"`
@@ -73,6 +79,41 @@ type HygieneAssessmentInput struct {
 	Reasons   []HygieneReason `json:"reasons,omitempty"`
 	ScoredAt  time.Time       `json:"scored_at,omitempty"`
 	TraceID   string          `json:"trace_id,omitempty"`
+	TaskID    string          `json:"task_id,omitempty"`
+	Scope     string          `json:"scope,omitempty"`
+}
+
+type HygieneScoreLog struct {
+	TargetKey  string          `json:"target_key"`
+	ObjectID   string          `json:"object_id,omitempty"`
+	EntryID    string          `json:"entry_id,omitempty"`
+	VoteDelta  int             `json:"vote_delta"`
+	Reasons    []HygieneReason `json:"reasons,omitempty"`
+	TraceID    string          `json:"trace_id,omitempty"`
+	TaskID     string          `json:"task_id,omitempty"`
+	Scope      string          `json:"scope,omitempty"`
+	ScoredAt   time.Time       `json:"scored_at,omitempty"`
+	RecordedAt time.Time       `json:"recorded_at,omitempty"`
+}
+
+type HygieneRunOptions struct {
+	Scope          string   `json:"scope,omitempty"`
+	Limit          int      `json:"limit,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
+	MinConfidence  float64  `json:"min_confidence,omitempty"`
+	MaxVotesPerRun int      `json:"max_votes_per_run,omitempty"`
+	ReasonCodes    []string `json:"reason_codes,omitempty"`
+	TraceID        string   `json:"trace_id,omitempty"`
+	TaskID         string   `json:"task_id,omitempty"`
+}
+
+type HygieneRunResult struct {
+	Scanned               int    `json:"scanned"`
+	Scored                int    `json:"scored"`
+	SuppressedCandidates  int    `json:"suppressed_candidates"`
+	QuarantinedCandidates int    `json:"quarantined_candidates"`
+	DryRun                bool   `json:"dry_run"`
+	TraceID               string `json:"trace_id"`
 }
 
 // HygieneStats summarizes the current hygiene snapshot state.

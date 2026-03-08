@@ -14,6 +14,7 @@ import (
 type HygieneStore struct {
 	baseDir     string
 	recordsPath string
+	scoresDir   string
 
 	mu      sync.RWMutex
 	records map[string]HygieneRecord
@@ -31,6 +32,7 @@ func NewHygieneStore(baseDir string) *HygieneStore {
 	}
 	if resolved != "" {
 		store.recordsPath = filepath.Join(resolved, defaultHygieneRecordsPathName)
+		store.scoresDir = filepath.Join(resolved, "scores")
 	}
 	return store
 }
@@ -169,6 +171,41 @@ func (s *HygieneStore) Upsert(record HygieneRecord) error {
 	defer s.mu.Unlock()
 	s.records[normalized.Key] = normalized
 	return s.persistLocked()
+}
+
+func (s *HygieneStore) AppendScoreLog(entry HygieneScoreLog) error {
+	if s == nil || s.baseDir == "" || s.scoresDir == "" {
+		return nil
+	}
+	targetKey := strings.TrimSpace(entry.TargetKey)
+	if targetKey == "" {
+		return fmt.Errorf("score log target key is required")
+	}
+	entry.TargetKey = targetKey
+	entry.ObjectID = strings.TrimSpace(entry.ObjectID)
+	entry.EntryID = strings.TrimSpace(entry.EntryID)
+	entry.TraceID = strings.TrimSpace(entry.TraceID)
+	entry.TaskID = strings.TrimSpace(entry.TaskID)
+	entry.Scope = strings.TrimSpace(entry.Scope)
+	entry.ScoredAt = hygieneScoredAtOrNow(entry.ScoredAt)
+	entry.RecordedAt = hygieneScoredAtOrNow(entry.RecordedAt)
+	entry.Reasons = mergeHygieneReasons(nil, entry.Reasons)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(s.scoresDir, 0o700); err != nil {
+		return fmt.Errorf("create hygiene scores dir: %w", err)
+	}
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal hygiene score log: %w", err)
+	}
+	data = append(data, '\n')
+	path := filepath.Join(s.scoresDir, fmt.Sprintf("%d.json", time.Now().UTC().UnixNano()))
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write hygiene score log: %w", err)
+	}
+	return nil
 }
 
 func (s *HygieneStore) mutate(target HygieneTarget, apply func(current HygieneRecord, exists bool) (HygieneRecord, error)) error {

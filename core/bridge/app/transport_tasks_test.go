@@ -7,9 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"ghost-os/bridge/llm"
+	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
 )
 
@@ -112,6 +115,41 @@ func TestHandleTaskCreateValidation(t *testing.T) {
 	)
 	if cronResp.Code != http.StatusCreated {
 		t.Fatalf("unexpected cron create status: got %d want %d body=%s", cronResp.Code, http.StatusCreated, cronResp.Body.String())
+	}
+}
+
+func TestHandleTaskCreateSystemActionWithoutMessage(t *testing.T) {
+	handler := newTestHandler(t, nil)
+	resp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/tasks",
+		`{"task_kind":"system_action","action":"MEMORY_HYGIENE_RUN","action_params":{"scope":"warm","limit":20,"dry_run":true,"max_votes_per_run":1},"interval_seconds":60}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if resp.Code != http.StatusCreated {
+		t.Fatalf("unexpected create status: got %d want %d body=%s", resp.Code, http.StatusCreated, resp.Body.String())
+	}
+	payload, _ := decodeResponseBody(t, resp).Payload.(map[string]any)
+	if payload["task_kind"] != taskKindSystemAction {
+		t.Fatalf("unexpected task_kind payload: %#v", payload)
+	}
+	if payload["action"] != busActionMemoryHygieneRun {
+		t.Fatalf("unexpected action payload: %#v", payload)
+	}
+}
+
+func TestHandleTaskCreateRejectsInvalidSystemAction(t *testing.T) {
+	handler := newTestHandler(t, nil)
+	resp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/tasks",
+		`{"task_kind":"system_action","action":"NOT_SUPPORTED","action_params":{"scope":"warm","limit":20},"interval_seconds":60}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected create status: got %d want %d body=%s", resp.Code, http.StatusBadRequest, resp.Body.String())
 	}
 }
 
@@ -220,6 +258,21 @@ func TestBusTaskUpdateAndLogs(t *testing.T) {
 	}
 }
 
+func TestBusMemoryHygieneRun(t *testing.T) {
+	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	if err := service.memoryManager.StoreWarmMessages("session-hygiene-bus", 0, []llm.Message{{Role: llm.RoleTool, Text: "stderr tool"}}); err != nil {
+		t.Fatalf("seed warm messages: %v", err)
+	}
+	resp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"MEMORY_HYGIENE_RUN","params":{"scope":"warm","limit":10,"dry_run":true,"max_votes_per_run":1},"trace_id":"trace-hygiene-bus"}`, nil)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("unexpected hygiene run status: got %d want %d body=%s", resp.Code, http.StatusOK, resp.Body.String())
+	}
+	payload, _ := decodeResponseBody(t, resp).Payload.(map[string]any)
+	if scanned, _ := payload["scanned"].(float64); scanned < 1 {
+		t.Fatalf("expected scanned > 0, payload=%#v", payload)
+	}
+}
+
 func TestTaskSchedulerUsesProvidedSessionAndLogsRun(t *testing.T) {
 	_, service, sessionStore := newTestHandlerWithService(t, func(_ context.Context, _ string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
 		return "done", requestSessionID, nil
@@ -316,18 +369,18 @@ func TestTaskSchedulerSkipsConcurrentRun(t *testing.T) {
 	service.taskScheduler.Stop()
 }
 
-func TestTaskSchedulerStopWaitsForRunningTask(t *testing.T) {
+func TestTaskSchedulerStopCancelsRunningTask(t *testing.T) {
 	started := make(chan struct{})
 	finished := make(chan struct{})
-	_, service, _ := newTestHandlerWithService(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	_, service, _ := newTestHandlerWithService(t, func(ctx context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
 		select {
 		case <-started:
 		default:
 			close(started)
 		}
-		time.Sleep(200 * time.Millisecond)
+		<-ctx.Done()
 		close(finished)
-		return "done", "session-task-stop", nil
+		return "", "session-task-stop", ctx.Err()
 	}, nil)
 
 	payload, code, err := service.executeTaskCreateAction(taskCreateParams{
@@ -337,7 +390,7 @@ func TestTaskSchedulerStopWaitsForRunningTask(t *testing.T) {
 	if err != nil || code != http.StatusCreated {
 		t.Fatalf("create task: code=%d err=%v", code, err)
 	}
-	_ = payload.(taskPayload)
+	task := payload.(taskPayload)
 
 	select {
 	case <-started:
@@ -347,14 +400,58 @@ func TestTaskSchedulerStopWaitsForRunningTask(t *testing.T) {
 
 	stopStarted := time.Now()
 	service.taskScheduler.Stop()
-	if time.Since(stopStarted) < 150*time.Millisecond {
-		t.Fatalf("expected stop to wait for running task, duration=%s", time.Since(stopStarted))
+	if elapsed := time.Since(stopStarted); elapsed > time.Second {
+		t.Fatalf("expected stop to return promptly after cancellation, duration=%s", elapsed)
 	}
 	select {
 	case <-finished:
 	default:
-		t.Fatal("task execution should finish before Stop returns")
+		t.Fatal("task execution should receive cancellation before Stop returns")
 	}
+
+	logs := waitForTaskLogs(t, service.taskStore, task.ID, 1, 3*time.Second)
+	logEntry := findTaskLogByStatus(t, logs, taskRunStatusCancelled)
+	if logEntry.Error != "task execution cancelled" {
+		t.Fatalf("unexpected cancellation error: got %q", logEntry.Error)
+	}
+}
+
+func TestTaskSchedulerRunsMemoryHygieneSystemActionAndLogs(t *testing.T) {
+	var agentCalls int32
+	_, service, _ := newTestHandlerWithService(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		atomic.AddInt32(&agentCalls, 1)
+		return "unexpected", "session-unexpected", nil
+	}, nil)
+
+	createdAt := time.Now().UTC().Add(-7 * 24 * time.Hour)
+	if err := service.memoryManager.SaveMarkdownNode(llmHygieneMarkdownNode(createdAt)); err != nil {
+		t.Fatalf("seed markdown hygiene candidate: %v", err)
+	}
+	payload, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindSystemAction,
+		Action:          busActionMemoryHygieneRun,
+		ActionParams:    map[string]any{"scope": "projection", "limit": 50, "dry_run": false, "max_votes_per_run": 1, "min_confidence": 0.5},
+		IntervalSeconds: 1,
+	}, "trace-system-task")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create task: code=%d err=%v", code, err)
+	}
+	task := payload.(taskPayload)
+	logs := waitForTaskLogs(t, service.taskStore, task.ID, 1, 3*time.Second)
+	logEntry := findTaskLogByStatus(t, logs, taskRunStatusSuccess)
+	if logEntry.TaskKind != taskKindSystemAction {
+		t.Fatalf("unexpected task kind in log: %#v", logEntry)
+	}
+	if logEntry.Action != busActionMemoryHygieneRun {
+		t.Fatalf("unexpected action in log: %#v", logEntry)
+	}
+	if got := atomic.LoadInt32(&agentCalls); got != 0 {
+		t.Fatalf("expected agent executor to stay unused, got %d calls", got)
+	}
+	if stats := service.memoryManager.HygieneStats(); stats.TotalRecords == 0 {
+		t.Fatalf("expected hygiene record to be written, stats=%+v", stats)
+	}
+	service.taskScheduler.Stop()
 }
 
 func waitForTaskLogs(t *testing.T, store *TaskStore, taskID string, minCount int, timeout time.Duration) []TaskRunLog {
@@ -418,4 +515,15 @@ func findTaskLogByStatus(t *testing.T, logs []TaskRunLog, status string) TaskRun
 	}
 	t.Fatalf("task log with status %q not found in %#v", status, logs)
 	return TaskRunLog{}
+}
+
+func llmHygieneMarkdownNode(createdAt time.Time) memory.MarkdownNode {
+	return memory.MarkdownNode{
+		ID:         "task-hygiene-markdown",
+		CreatedAt:  createdAt,
+		LastSeenAt: createdAt,
+		Summary:    "Plan next step later",
+		Content:    "TODO: follow up later with the old migration plan.",
+		Confidence: 0.2,
+	}
 }

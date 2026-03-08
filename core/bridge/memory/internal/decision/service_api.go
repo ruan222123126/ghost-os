@@ -68,6 +68,20 @@ func (d *DecisionService) UpsertRecipeRun(run RecipeRun) (bool, error) {
 	return d.store.UpsertRecipeRun(run)
 }
 
+func (d *DecisionService) ListMemos(namespace string) []DecisionMemo {
+	if d == nil || d.store == nil {
+		return nil
+	}
+	return d.store.ListMemos(namespace)
+}
+
+func (d *DecisionService) ListRecipes(namespace string) []DecisionRecipe {
+	if d == nil || d.store == nil {
+		return nil
+	}
+	return d.store.ListRecipes(namespace)
+}
+
 func (d *DecisionService) ListRecipeRuns(namespace string) []RecipeRun {
 	if d == nil || d.store == nil {
 		return nil

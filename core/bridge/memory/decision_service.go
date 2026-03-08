@@ -185,6 +185,28 @@ func (d *DecisionService) Stats(namespace string) DecisionStats {
 	return stats
 }
 
+func (d *DecisionService) ListMemos(namespace string) []DecisionMemo {
+	if d == nil || d.inner == nil {
+		return nil
+	}
+	memos, err := convertDecisionValue[[]idecision.DecisionMemo, []DecisionMemo](d.inner.ListMemos(namespace))
+	if err != nil {
+		return nil
+	}
+	return memos
+}
+
+func (d *DecisionService) ListRecipes(namespace string) []DecisionRecipe {
+	if d == nil || d.inner == nil {
+		return nil
+	}
+	recipes, err := convertDecisionValue[[]idecision.DecisionRecipe, []DecisionRecipe](d.inner.ListRecipes(namespace))
+	if err != nil {
+		return nil
+	}
+	return recipes
+}
+
 func (d *DecisionService) RecordMemoAccess(ids []string, accessedAt time.Time) {
 	if d != nil && d.inner != nil {
 		d.inner.RecordMemoAccess(ids, accessedAt)

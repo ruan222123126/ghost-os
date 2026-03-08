@@ -40,9 +40,15 @@ type memoryQueryParams struct {
 	IncludeGraph      *bool                  `json:"include_graph,omitempty"`
 	IncludeDecision   *bool                  `json:"include_decision,omitempty"`
 	SemanticQuery     string                 `json:"semantic_query,omitempty"`
+	IncludeVector     bool                   `json:"include_vector,omitempty"`
 	GraphHops         int                    `json:"graph_hops,omitempty"`
 	GraphPredicates   []string               `json:"graph_predicates,omitempty"`
 	GraphDebug        bool                   `json:"graph_debug,omitempty"`
+	VectorDebug       bool                   `json:"vector_debug,omitempty"`
+	IntentDebug       bool                   `json:"intent_debug,omitempty"`
+	TruthDebug        bool                   `json:"truth_debug,omitempty"`
+	RerankDebug       bool                   `json:"rerank_debug,omitempty"`
+	BucketDebug       bool                   `json:"bucket_debug,omitempty"`
 	DecisionDebug     bool                   `json:"decision_debug,omitempty"`
 	DecisionReuseOnly bool                   `json:"decision_reuse_only,omitempty"`
 	DecisionTypes     []string               `json:"decision_types,omitempty"`
@@ -83,4 +89,22 @@ type memoryDecisionRebuildParams struct {
 	IncludeRecipes *bool                  `json:"include_recipes,omitempty"`
 	RebuildMemos   *bool                  `json:"rebuild_memos,omitempty"`
 	ResetNamespace bool                   `json:"reset_namespace,omitempty"`
+}
+
+type memoryHygieneRunParams struct {
+	Scope          string   `json:"scope,omitempty"`
+	Limit          int      `json:"limit,omitempty"`
+	DryRun         bool     `json:"dry_run,omitempty"`
+	MinConfidence  float64  `json:"min_confidence,omitempty"`
+	MaxVotesPerRun int      `json:"max_votes_per_run,omitempty"`
+	ReasonCodes    []string `json:"reason_codes,omitempty"`
+}
+
+type memoryHygieneRunPayload struct {
+	Scanned               int    `json:"scanned"`
+	Scored                int    `json:"scored"`
+	SuppressedCandidates  int    `json:"suppressed_candidates"`
+	QuarantinedCandidates int    `json:"quarantined_candidates"`
+	DryRun                bool   `json:"dry_run"`
+	TraceID               string `json:"trace_id"`
 }

@@ -26,6 +26,14 @@
         "MEMORY_DECISION_QUERY",
         "MEMORY_DECISION_STATS",
         "MEMORY_DECISION_REBUILD",
+        "MEMORY_HYGIENE_RUN",
+        "TASK_CREATE",
+        "TASK_LIST",
+        "TASK_GET",
+        "TASK_UPDATE",
+        "TASK_RUN_NOW",
+        "TASK_LOGS",
+        "TASK_DELETE",
         "LIST_FILES",
         "READ_FILE",
         "SEARCH_FILES",
@@ -265,6 +273,99 @@
         }
       ]
     },
+    "memoryHygieneRunRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "limit"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "warm",
+            "projection",
+            "report"
+          ]
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "min_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max_votes_per_run": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "memoryHygieneRunPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scanned",
+        "scored",
+        "suppressed_candidates",
+        "quarantined_candidates",
+        "dry_run",
+        "trace_id"
+      ],
+      "properties": {
+        "scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "scored": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "suppressed_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quarantined_candidates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "askHumanOption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allow_custom": {
+          "type": "boolean"
+        }
+      }
+    },
     "agentAwaitingHumanPayload": {
       "type": "object",
       "additionalProperties": false,
@@ -290,6 +391,19 @@
         "prompt": {
           "type": "string",
           "minLength": 1
+        },
+        "selection_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/askHumanOption"
+          }
         }
       }
     },
@@ -311,8 +425,10 @@
           "minLength": 1
         },
         "answer": {
-          "type": "string",
-          "minLength": 1
+          "type": "string"
+        },
+        "cancelled": {
+          "type": "boolean"
         }
       }
     },
@@ -650,6 +766,19 @@
           "type": "string",
           "minLength": 1
         },
+        "selection_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/askHumanOption"
+          }
+        },
         "answer": {
           "type": "string"
         }
@@ -947,6 +1076,122 @@
         },
         "trace_id": {
           "type": "string"
+        }
+      }
+    },
+    "taskCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cron_expr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      }
+    },
+    "taskIDRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "taskPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "message",
+        "schedule_type",
+        "enabled",
+        "created_at",
+        "updated_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "schedule_type": {
+          "type": "string",
+          "enum": [
+            "interval",
+            "cron"
+          ]
+        },
+        "interval_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cron_expr": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "updated_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "last_run_at": {
+          "type": "string"
+        },
+        "next_run_at": {
+          "type": "string"
+        },
+        "last_error": {
+          "type": "string"
+        }
+      }
+    },
+    "taskDeletePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "deleted"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "deleted": {
+          "type": "boolean"
         }
       }
     },

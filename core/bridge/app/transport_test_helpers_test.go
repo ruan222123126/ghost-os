@@ -40,8 +40,13 @@ func newTestHandlerWithStreamExecutor(t *testing.T, executor agentExecutorFunc, 
 
 func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) (http.Handler, *bridgeService, *session.Store) {
 	t.Helper()
-	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
-	t.Setenv("GHOST_TASKS_PATH", t.TempDir()+"/tasks")
+	tempDir := t.TempDir()
+	t.Setenv("GHOST_CONFIG_PATH", tempDir+"/config.toml")
+	t.Setenv("GHOST_TASKS_PATH", tempDir+"/tasks")
+	t.Setenv("GHOST_MEMORY_WARM_PATH", tempDir+"/memory/warm.json")
+	t.Setenv("GHOST_MEMORY_COLD_PATH", tempDir+"/memory/cold")
+	t.Setenv("GHOST_MEMORY_DECISION_PATH", tempDir+"/memory/decision")
+	t.Setenv("GHOST_MEMORY_HYGIENE_PATH", tempDir+"/memory/hygiene")
 	if executor == nil {
 		executor = func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
 			return "ok", "session-test", nil

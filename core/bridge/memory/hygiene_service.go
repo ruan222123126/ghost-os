@@ -46,7 +46,9 @@ func (s *HygieneService) UpsertAssessment(input HygieneAssessmentInput) error {
 	target := normalizeHygieneTarget(input.Target)
 	scoredAt := hygieneScoredAtOrNow(input.ScoredAt)
 	traceID := strings.TrimSpace(input.TraceID)
-	return s.store.mutate(target, func(current HygieneRecord, exists bool) (HygieneRecord, error) {
+	taskID := strings.TrimSpace(input.TaskID)
+	scope := strings.TrimSpace(input.Scope)
+	if err := s.store.mutate(target, func(current HygieneRecord, exists bool) (HygieneRecord, error) {
 		now := time.Now().UTC()
 		record := current
 		if !exists {
@@ -74,8 +76,27 @@ func (s *HygieneService) UpsertAssessment(input HygieneAssessmentInput) error {
 			record.CreatedAt = now
 		}
 		return record, nil
+	}); err != nil {
+		return err
+	}
+	key, ok := target.Key()
+	if !ok {
+		return fmt.Errorf("invalid hygiene target")
+	}
+	return s.store.AppendScoreLog(HygieneScoreLog{
+		TargetKey: targetKeyOrFallback(key),
+		ObjectID:  target.ObjectID,
+		EntryID:   target.EntryID,
+		VoteDelta: input.VoteDelta,
+		Reasons:   input.Reasons,
+		TraceID:   traceID,
+		TaskID:    taskID,
+		Scope:     scope,
+		ScoredAt:  scoredAt,
 	})
 }
+
+func targetKeyOrFallback(key string) string { return strings.TrimSpace(key) }
 
 func (s *HygieneService) Get(target HygieneTarget) (HygieneRecord, bool) {
 	if !s.Enabled() {

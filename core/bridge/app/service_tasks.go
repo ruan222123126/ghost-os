@@ -10,13 +10,14 @@ import (
 )
 
 const (
-	busActionTaskCreate = "TASK_CREATE"
-	busActionTaskList   = "TASK_LIST"
-	busActionTaskGet    = "TASK_GET"
-	busActionTaskUpdate = "TASK_UPDATE"
-	busActionTaskRunNow = "TASK_RUN_NOW"
-	busActionTaskLogs   = "TASK_LOGS"
-	busActionTaskDelete = "TASK_DELETE"
+	busActionTaskCreate       = "TASK_CREATE"
+	busActionTaskList         = "TASK_LIST"
+	busActionTaskGet          = "TASK_GET"
+	busActionTaskUpdate       = "TASK_UPDATE"
+	busActionTaskRunNow       = "TASK_RUN_NOW"
+	busActionTaskLogs         = "TASK_LOGS"
+	busActionTaskDelete       = "TASK_DELETE"
+	busActionMemoryHygieneRun = "MEMORY_HYGIENE_RUN"
 )
 
 func (s *bridgeService) requireTaskStore() (*TaskStore, int, error) {
@@ -84,6 +85,9 @@ func buildTaskPayload(task ScheduledTask) taskPayload {
 		ID:              task.ID,
 		Message:         task.Message,
 		SessionID:       task.SessionID,
+		TaskKind:        task.TaskKind,
+		Action:          task.Action,
+		ActionParams:    cloneTaskActionParams(task.ActionParams),
 		ScheduleType:    task.ScheduleType,
 		IntervalSeconds: task.IntervalSeconds,
 		CronExpr:        task.CronExpr,
@@ -101,6 +105,8 @@ func buildTaskRunLogPayload(run TaskRunLog) taskRunLogPayload {
 		TaskID:          run.TaskID,
 		RunID:           run.RunID,
 		TraceID:         run.TraceID,
+		TaskKind:        run.TaskKind,
+		Action:          run.Action,
 		ScheduledAt:     run.ScheduledAt,
 		StartedAt:       run.StartedAt,
 		FinishedAt:      run.FinishedAt,
@@ -124,18 +130,15 @@ func (s *bridgeService) executeTaskCreateAction(params taskCreateParams, traceID
 	message := strings.TrimSpace(params.Message)
 	sessionID := strings.TrimSpace(params.SessionID)
 	cronExpr := strings.TrimSpace(params.CronExpr)
-	if message == "" {
-		return nil, http.StatusBadRequest, errors.New("message is required")
-	}
 	if (params.IntervalSeconds > 0 && cronExpr != "") || (params.IntervalSeconds <= 0 && cronExpr == "") {
 		return nil, http.StatusBadRequest, errors.New("exactly one of interval_seconds or cron_expr is required")
-	}
-	if code, err := s.ensureTaskSessionExists(sessionID); err != nil {
-		return nil, code, err
 	}
 	task := ScheduledTask{
 		Message:         message,
 		SessionID:       sessionID,
+		TaskKind:        strings.TrimSpace(params.TaskKind),
+		Action:          strings.TrimSpace(params.Action),
+		ActionParams:    cloneTaskActionParams(params.ActionParams),
 		Enabled:         true,
 		CreatedAt:       time.Now().UTC(),
 		ScheduleType:    taskScheduleTypeInterval,
@@ -145,6 +148,14 @@ func (s *bridgeService) executeTaskCreateAction(params taskCreateParams, traceID
 		task.ScheduleType = taskScheduleTypeCron
 		task.IntervalSeconds = 0
 		task.CronExpr = cronExpr
+	}
+	if err := validateTaskDefinition(&task); err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	if task.TaskKind == taskKindAgentMessage {
+		if code, err := s.ensureTaskSessionExists(task.SessionID); err != nil {
+			return nil, code, err
+		}
 	}
 	nextRunAt, err := nextTaskRunAt(task, time.Now().UTC())
 	if err != nil {
@@ -190,6 +201,15 @@ func (s *bridgeService) executeTaskUpdateAction(params taskUpdateParams, traceID
 	if params.SessionID != nil {
 		task.SessionID = strings.TrimSpace(*params.SessionID)
 	}
+	if params.TaskKind != nil {
+		task.TaskKind = strings.TrimSpace(*params.TaskKind)
+	}
+	if params.Action != nil {
+		task.Action = strings.TrimSpace(*params.Action)
+	}
+	if params.ActionParams != nil {
+		task.ActionParams = cloneTaskActionParams(*params.ActionParams)
+	}
 	if params.Enabled != nil {
 		task.Enabled = *params.Enabled
 	}
@@ -210,9 +230,15 @@ func (s *bridgeService) executeTaskUpdateAction(params taskUpdateParams, traceID
 		task.IntervalSeconds = 0
 		scheduleChanged = true
 	}
-	if code, err := s.ensureTaskSessionExists(task.SessionID); err != nil {
+	if err := validateTaskDefinition(task); err != nil {
 		logAction(traceID, busActionTaskUpdate, "error", err)
-		return nil, code, err
+		return nil, http.StatusBadRequest, err
+	}
+	if task.TaskKind == taskKindAgentMessage {
+		if code, err := s.ensureTaskSessionExists(task.SessionID); err != nil {
+			logAction(traceID, busActionTaskUpdate, "error", err)
+			return nil, code, err
+		}
 	}
 	if !task.Enabled {
 		task.NextRunAt = time.Time{}
