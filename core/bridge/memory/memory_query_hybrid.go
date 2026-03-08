@@ -1,33 +1,88 @@
 package memory
 
 import (
-	"fmt"
 	"log"
-	"sort"
 	"strings"
 	"time"
 )
 
 func (s *QueryService) queryResultHybridWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
-	now := time.Now().UTC()
-	var plan *QueryIntentPlan
-	if s.planner != nil && s.planner.Enabled() {
-		planned, err := s.planner.Plan(query, scope)
+	plan := s.queryIntentPlan(query, scope)
+	bucketPlan := s.planBuckets(query, scope, plan)
+	effectiveQuery := s.applyBucketQueryHints(query, scope, bucketPlan)
+	if bucketPlan != nil && bucketPlan.Mode == BucketModeShadow {
+		live, err := s.queryResultHybridLayers(effectiveQuery, scope, plan, bucketPlan, false)
 		if err != nil {
-			if s.metrics != nil {
-				s.metrics.plannerErrors.Add(1)
-			}
-			log.Printf("[MEMORY] hybrid planner failed, continuing without planner facets: err=%v", err)
-		} else {
-			planned = normalizeQueryIntentPlan(planned)
-			if hasIntentPlan(planned) {
-				plan = &planned
-			}
+			return MemoryQueryResult{}, err
 		}
+		shadow, shadowErr := s.queryResultHybridLayers(effectiveQuery, scope, plan, bucketPlan, true)
+		if shadowErr == nil {
+			shadowReport := s.compareBucketShadow(live, shadow, bucketPlan)
+			live.ShadowRead = shadowReport
+		}
+		live.BucketPlan = bucketPlan
+		live.LayerFreshness = s.bucketLayerFreshness(bucketPlan)
+		return live, nil
 	}
+	useBuckets := bucketPlan != nil && bucketPlan.Mode == BucketModeBucketed && len(bucketPlan.SelectedBuckets) > 0
+	result, err := s.queryResultHybridLayers(effectiveQuery, scope, plan, bucketPlan, useBuckets)
+	if err != nil {
+		return MemoryQueryResult{}, err
+	}
+	result.BucketPlan = bucketPlan
+	result.LayerFreshness = s.bucketLayerFreshness(bucketPlan)
+	return result, nil
+}
 
+func (s *QueryService) queryIntentPlan(query MemoryQuery, scope SessionScope) *QueryIntentPlan {
+	if s.planner == nil || !s.planner.Enabled() {
+		return nil
+	}
+	planned, err := s.planner.Plan(query, scope)
+	if err != nil {
+		if s.metrics != nil {
+			s.metrics.plannerErrors.Add(1)
+		}
+		log.Printf("[MEMORY] hybrid planner failed, continuing without planner facets: err=%v", err)
+		return nil
+	}
+	planned = normalizeQueryIntentPlan(planned)
+	if !hasIntentPlan(planned) {
+		return nil
+	}
+	return &planned
+}
+
+func (s *QueryService) planBuckets(query MemoryQuery, scope SessionScope, intent *QueryIntentPlan) *BucketPlan {
+	if s == nil || s.buckets == nil || !s.buckets.Enabled() {
+		return &BucketPlan{Mode: BucketModeLegacy, Reason: []string{"bucket read disabled"}}
+	}
+	return s.buckets.Plan(query, scope, intent)
+}
+
+func (s *QueryService) applyBucketQueryHints(query MemoryQuery, scope SessionScope, plan *BucketPlan) MemoryQuery {
+	out := query
+	if out.Namespace == "" && s.buckets != nil && s.buckets.ledger != nil {
+		out.Namespace = s.buckets.ledger.Namespace()
+	}
+	if out.WorkspaceID == "" && s.buckets != nil && s.buckets.ledger != nil {
+		out.WorkspaceID = s.buckets.ledger.WorkspaceID()
+	}
+	out.SessionHints = effectiveBucketSessionHints(out, scope)
+	if plan != nil && len(plan.SelectedBuckets) > 0 {
+		months := make([]string, 0, len(plan.SelectedBuckets))
+		for _, bucket := range plan.SelectedBuckets {
+			months = append(months, bucket.Bucket.Key.Month)
+		}
+		out.MonthHints = uniqueStrings(append(out.MonthHints, months...))
+	}
+	return out
+}
+
+func (s *QueryService) queryResultHybridLayers(query MemoryQuery, scope SessionScope, plan *QueryIntentPlan, bucketPlan *BucketPlan, useBuckets bool) (MemoryQueryResult, error) {
+	now := time.Now().UTC()
 	hotEntries := queryHot(scope, query)
-	if len(hotEntries) > 0 {
+	if len(hotEntries) > 0 && s.metrics != nil {
 		s.metrics.l1Hits.Add(uint64(len(hotEntries)))
 	}
 	warmQuery := query
@@ -36,37 +91,47 @@ func (s *QueryService) queryResultHybridWithScope(query MemoryQuery, scope Sessi
 	if err != nil {
 		return MemoryQueryResult{}, err
 	}
-	if len(warmEntries) > 0 {
+	if len(warmEntries) > 0 && s.metrics != nil {
 		s.metrics.l2Hits.Add(uint64(len(warmEntries)))
 	}
 	coldQuery := query
 	coldQuery.Limit = 0
-	coldEntries, err := s.cold.Retrieve(coldQuery)
+	var coldEntries []MemoryEntry
+	if useBuckets {
+		coldEntries, err = s.cold.RetrieveWithBucketPlan(coldQuery, bucketPlan)
+	} else {
+		coldEntries, err = s.cold.Retrieve(coldQuery)
+	}
 	if err != nil {
 		return MemoryQueryResult{}, err
 	}
-	if len(coldEntries) > 0 {
+	if len(coldEntries) > 0 && s.metrics != nil {
 		s.metrics.l3Hits.Add(uint64(len(coldEntries)))
 	}
 	var markdownEntries []MemoryEntry
 	if query.IncludeMarkdown {
 		markdownQuery := query
 		markdownQuery.Limit = 0
-		markdownEntries, err = s.queryMarkdown(markdownQuery)
+		if useBuckets {
+			markdownEntries, err = s.queryMarkdownWithPlan(markdownQuery, bucketPlan)
+		} else {
+			markdownEntries, err = s.queryMarkdown(markdownQuery)
+		}
 		if err != nil {
 			return MemoryQueryResult{}, err
 		}
-		if len(markdownEntries) > 0 {
+		if len(markdownEntries) > 0 && s.metrics != nil {
 			s.metrics.markdownHits.Add(uint64(len(markdownEntries)))
 		}
 	}
-
 	var decisionHits []DecisionHit
 	if s.decision != nil && query.IncludeDecision {
 		_, decisionHits, err = s.decision.Retrieve(query, scope)
 		if err != nil {
 			log.Printf("[MEMORY] decision recall failed, falling back to other layers: %v", err)
 			decisionHits = nil
+		} else if useBuckets {
+			decisionHits = filterDecisionHitsByBucketPlan(decisionHits, bucketPlan)
 		}
 	}
 	var graphHits []GraphHit
@@ -75,13 +140,21 @@ func (s *QueryService) queryResultHybridWithScope(query MemoryQuery, scope Sessi
 		if err != nil {
 			log.Printf("[MEMORY] graph recall failed, falling back to other layers: %v", err)
 			graphHits = nil
-		} else if len(graphHits) > 0 {
-			s.metrics.graphHits.Add(uint64(len(graphHits)))
+		} else {
+			if useBuckets {
+				graphHits = filterGraphHitsByBucketPlan(graphHits, bucketPlan)
+			}
+			if len(graphHits) > 0 && s.metrics != nil {
+				s.metrics.graphHits.Add(uint64(len(graphHits)))
+			}
 		}
 	}
-
 	truthMatches := s.truth.Query(query, plan)
 	vectorHits := s.liveVectorHits(query, plan)
+	if useBuckets {
+		truthMatches = filterTruthMatchesByBucketPlan(truthMatches, bucketPlan)
+		vectorHits = filterVectorHitsByBucketPlan(vectorHits, bucketPlan)
+	}
 	candidates := make([]RecallCandidate, 0, len(hotEntries)+len(warmEntries)+len(coldEntries)+len(markdownEntries)+len(decisionHits)+len(graphHits)+len(truthMatches)+len(vectorHits))
 	candidates = append(candidates, s.candidatesFromEntries(hotEntries, "hot", query, now)...)
 	candidates = append(candidates, s.candidatesFromEntries(warmEntries, "warm", query, now)...)
@@ -143,6 +216,182 @@ func (s *QueryService) queryResultHybridWithScope(query MemoryQuery, scope Sessi
 	return result, nil
 }
 
+func (s *QueryService) bucketLayerFreshness(plan *BucketPlan) map[string]time.Time {
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return nil
+	}
+	freshness := make(map[string]time.Time)
+	for _, selected := range plan.SelectedBuckets {
+		if ts := selected.Bucket.UpdatedAt; !ts.IsZero() && ts.After(freshness["cold"]) {
+			freshness["cold"] = ts
+		}
+		for layer, view := range selected.Bucket.Views {
+			if view.UpdatedAt.After(freshness[layer]) {
+				freshness[layer] = view.UpdatedAt
+			}
+		}
+	}
+	return freshness
+}
+
+func (s *QueryService) compareBucketShadow(live MemoryQueryResult, shadow MemoryQueryResult, plan *BucketPlan) *BucketShadowReport {
+	overlap, shadowOnly := bucketShadowOverlap(live.Entries, shadow.Entries)
+	report := &BucketShadowReport{
+		Mode:             BucketModeShadow,
+		LegacyEntryCount: len(live.Entries),
+		BucketEntryCount: len(shadow.Entries),
+		TopOverlap:       overlap,
+		SelectedBuckets:  selectedBucketKeys(plan),
+		ShadowOnly:       shadowOnly,
+	}
+	if s.metrics != nil {
+		s.metrics.bucketShadowOverlapMilli.Add(uint64(overlap*1000 + 0.5))
+		if len(shadowOnly) > 0 {
+			s.metrics.bucketRecallOnlyHits.Add(uint64(len(shadowOnly)))
+		}
+	}
+	return report
+}
+
+func filterDecisionHitsByBucketPlan(hits []DecisionHit, plan *BucketPlan) []DecisionHit {
+	if plan == nil || len(plan.SelectedBuckets) == 0 || len(hits) == 0 {
+		return hits
+	}
+	selectedSessions := selectedPlanSessions(plan)
+	selectedMonths := selectedPlanMonths(plan)
+	filtered := make([]DecisionHit, 0, len(hits))
+	for _, hit := range hits {
+		if len(selectedSessions) > 0 && hit.SessionID != "" {
+			if _, ok := selectedSessions[strings.TrimSpace(hit.SessionID)]; ok {
+				filtered = append(filtered, hit)
+				continue
+			}
+		}
+		if len(selectedMonths) > 0 && !hit.Timestamp.IsZero() {
+			if _, ok := selectedMonths[bucketMonthFromTime(hit.Timestamp)]; ok {
+				filtered = append(filtered, hit)
+			}
+		}
+	}
+	return filtered
+}
+
+func filterGraphHitsByBucketPlan(hits []GraphHit, plan *BucketPlan) []GraphHit {
+	if plan == nil || len(plan.SelectedBuckets) == 0 || len(hits) == 0 {
+		return hits
+	}
+	selectedSessions := selectedPlanSessions(plan)
+	selectedMonths := selectedPlanMonths(plan)
+	filtered := make([]GraphHit, 0, len(hits))
+	for _, hit := range hits {
+		matched := false
+		for _, evidence := range hit.Evidence {
+			if _, ok := selectedSessions[strings.TrimSpace(evidence.SessionID)]; ok {
+				matched = true
+				break
+			}
+			if _, ok := selectedMonths[bucketMonthFromTime(evidence.Timestamp)]; ok {
+				matched = true
+				break
+			}
+		}
+		if matched || len(hit.Evidence) == 0 {
+			filtered = append(filtered, hit)
+		}
+	}
+	return filtered
+}
+
+func filterTruthMatchesByBucketPlan(matches []truthQueryMatch, plan *BucketPlan) []truthQueryMatch {
+	if plan == nil || len(plan.SelectedBuckets) == 0 || len(matches) == 0 {
+		return matches
+	}
+	filtered := make([]truthQueryMatch, 0, len(matches))
+	for _, match := range matches {
+		if bucketObjectMatchesPlan(match.Object, plan) {
+			filtered = append(filtered, match)
+		}
+	}
+	return filtered
+}
+
+func filterVectorHitsByBucketPlan(hits []VectorHit, plan *BucketPlan) []VectorHit {
+	if plan == nil || len(plan.SelectedBuckets) == 0 || len(hits) == 0 {
+		return hits
+	}
+	filtered := make([]VectorHit, 0, len(hits))
+	for _, hit := range hits {
+		if bucketSourceRefsMatchPlan(hit.SourceRefs, plan) {
+			filtered = append(filtered, hit)
+		}
+	}
+	return filtered
+}
+
+func selectedPlanSessions(plan *BucketPlan) map[string]struct{} {
+	out := make(map[string]struct{})
+	if plan == nil {
+		return out
+	}
+	for _, bucket := range plan.SelectedBuckets {
+		for _, sessionID := range bucket.Bucket.SessionIDs {
+			out[strings.TrimSpace(sessionID)] = struct{}{}
+		}
+		for _, session := range bucket.Bucket.Sessions {
+			out[strings.TrimSpace(session.SessionID)] = struct{}{}
+		}
+	}
+	return out
+}
+
+func selectedPlanMonths(plan *BucketPlan) map[string]struct{} {
+	out := make(map[string]struct{})
+	if plan == nil {
+		return out
+	}
+	for _, bucket := range plan.SelectedBuckets {
+		out[strings.TrimSpace(bucket.Bucket.Key.Month)] = struct{}{}
+	}
+	return out
+}
+
+func bucketSourceRefsMatchPlan(refs []SourceRef, plan *BucketPlan) bool {
+	if len(refs) == 0 {
+		return true
+	}
+	sessions := selectedPlanSessions(plan)
+	months := selectedPlanMonths(plan)
+	for _, ref := range refs {
+		if _, ok := sessions[strings.TrimSpace(ref.SessionID)]; ok {
+			return true
+		}
+		if _, ok := months[strings.TrimSpace(ref.BucketMonth)]; ok {
+			return true
+		}
+		if _, ok := months[bucketMonthFromTime(ref.OccurredAt)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func bucketObjectMatchesPlan(object MemoryObject, plan *BucketPlan) bool {
+	if bucketSourceRefsMatchPlan(object.SourceRefs, plan) {
+		return true
+	}
+	for _, evidence := range object.RawEvidence {
+		if bucketSourceRefsMatchPlan(evidence.SourceRefs, plan) {
+			return true
+		}
+	}
+	for _, claim := range object.Claims {
+		if bucketSourceRefsMatchPlan(claim.SourceRefs, plan) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *QueryService) liveVectorHits(query MemoryQuery, plan *QueryIntentPlan) []VectorHit {
 	if s.vector == nil || !s.vector.Enabled() {
 		return nil
@@ -153,422 +402,4 @@ func (s *QueryService) liveVectorHits(query MemoryQuery, plan *QueryIntentPlan) 
 		return nil
 	}
 	return hits
-}
-
-func (s *QueryService) candidatesFromEntries(entries []MemoryEntry, layer string, query MemoryQuery, now time.Time) []RecallCandidate {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]RecallCandidate, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, s.candidateFromEntry(entry, layer, query, now))
-	}
-	return out
-}
-
-func (s *QueryService) candidateFromEntry(entry MemoryEntry, layer string, query MemoryQuery, now time.Time) RecallCandidate {
-	entry = normalizeEntry(entry)
-	if layer == "" {
-		layer = entryLayer(entry)
-	}
-	sourceRefs := s.entrySourceRefsForHydration(entry)
-	candidate := RecallCandidate{
-		Entry:            entry,
-		Layer:            strings.TrimSpace(layer),
-		ObjectID:         s.objectIDFromEntry(entry),
-		BaseScore:        clamp01(memoryScore(entry, query, now, s.scoring)),
-		LexicalScore:     semanticRelevanceScore(entry, query),
-		GraphScore:       metadataFloat64(entry.Metadata, "graph_score"),
-		DecisionScore:    maxFloat(metadataFloat64(entry.Metadata, "decision_score"), metadataFloat64(entry.Metadata, "reuse_score")),
-		EnvironmentScore: 0,
-		ImportanceScore:  clamp01(entry.Importance),
-		Freshness:        truthlessFreshness(entry, now),
-		EvidenceCount:    max(entry.EvidenceCount, len(sourceRefs)),
-		SourceRefs:       sourceRefs,
-		WhyMatched:       candidateWhyMatched(entry),
-		MatchedBy:        []string{strings.TrimSpace(layer)},
-	}
-	candidate.Entry.SourceRefs = normalizeSourceRefs(append(candidate.Entry.SourceRefs, sourceRefs...))
-	return normalizeRecallCandidate(candidate)
-}
-
-func (s *QueryService) candidatesFromDecisionHits(hits []DecisionHit, query MemoryQuery, now time.Time) []RecallCandidate {
-	if len(hits) == 0 {
-		return nil
-	}
-	out := make([]RecallCandidate, 0, len(hits))
-	for _, hit := range hits {
-		entry := memoryEntryFromDecisionHit(hit)
-		candidate := s.candidateFromEntry(entry, "decision", query, now)
-		candidate.DecisionScore = maxFloat(hit.Score, hit.ReuseScore)
-		candidate.WhyMatched = firstNonEmpty(strings.TrimSpace(hit.WhyMatched), candidate.WhyMatched)
-		candidate.MatchedBy = append(candidate.MatchedBy, hit.Type)
-		out = append(out, normalizeRecallCandidate(candidate))
-	}
-	return out
-}
-
-func (s *QueryService) candidatesFromGraphHits(hits []GraphHit, query MemoryQuery, now time.Time) []RecallCandidate {
-	if len(hits) == 0 {
-		return nil
-	}
-	out := make([]RecallCandidate, 0, len(hits))
-	for _, hit := range hits {
-		entry := memoryEntryFromGraphDebugHit(hit, now)
-		candidate := s.candidateFromEntry(entry, "graph", query, now)
-		candidate.GraphScore = clamp01(hit.Score)
-		candidate.EvidenceCount = max(candidate.EvidenceCount, hit.EvidenceCount)
-		candidate.WhyMatched = summarizeLine(strings.TrimSpace(hit.Content), 180)
-		out = append(out, normalizeRecallCandidate(candidate))
-	}
-	return out
-}
-
-func (s *QueryService) candidatesFromTruthMatches(matches []truthQueryMatch, query MemoryQuery, now time.Time) []RecallCandidate {
-	if len(matches) == 0 {
-		return nil
-	}
-	out := make([]RecallCandidate, 0, len(matches))
-	for _, match := range matches {
-		entry := memoryEntryFromTruthObject(match.Object, "truth", now)
-		candidate := s.candidateFromEntry(entry, "truth", query, now)
-		candidate.ObjectID = match.Object.ObjectID
-		candidate.TruthScore = clamp01(match.Score)
-		candidate.EvidenceCount = max(candidate.EvidenceCount, len(match.Object.RawEvidence))
-		candidate.SourceRefs = normalizeSourceRefs(append(candidate.SourceRefs, truthObjectSourceRefs(match.Object)...))
-		candidate.Freshness = maxFloat(candidate.Freshness, truthObjectFreshness(match.Object, now))
-		candidate.WhyMatched = firstNonEmpty(strings.TrimSpace(match.WhyMatched), candidate.WhyMatched)
-		candidate.MatchedBy = append(candidate.MatchedBy, match.MatchedBy...)
-		out = append(out, normalizeRecallCandidate(candidate))
-	}
-	return out
-}
-
-func (s *QueryService) candidatesFromVectorHits(hits []VectorHit, query MemoryQuery, now time.Time) []RecallCandidate {
-	if len(hits) == 0 || s.truth == nil || !s.truth.Enabled() {
-		return nil
-	}
-	out := make([]RecallCandidate, 0, len(hits))
-	for _, hit := range hits {
-		object, ok := s.truth.LookupObject(hit.ObjectID)
-		if !ok {
-			continue
-		}
-		entry := memoryEntryFromTruthObject(object, "vector", now)
-		candidate := s.candidateFromEntry(entry, "vector", query, now)
-		candidate.ObjectID = hit.ObjectID
-		candidate.SemanticScore = clamp01(hit.Score)
-		candidate.EvidenceCount = max(candidate.EvidenceCount, hit.EvidenceCount)
-		candidate.SourceRefs = normalizeSourceRefs(append(candidate.SourceRefs, hit.SourceRefs...))
-		candidate.Freshness = maxFloat(candidate.Freshness, clamp01(hit.Freshness))
-		candidate.WhyMatched = firstNonEmpty(hit.Summary, candidate.WhyMatched)
-		candidate.MatchedBy = append(candidate.MatchedBy, "vector")
-		out = append(out, normalizeRecallCandidate(candidate))
-		if s.metrics != nil {
-			s.metrics.vectorPromotedHits.Add(1)
-		}
-	}
-	return out
-}
-
-func mergeRecallCandidates(candidates []RecallCandidate) []RecallCandidate {
-	if len(candidates) == 0 {
-		return nil
-	}
-	merged := make(map[string]RecallCandidate, len(candidates))
-	for _, candidate := range candidates {
-		normalized := normalizeRecallCandidate(candidate)
-		key := recallCandidateKey(normalized)
-		if existing, ok := merged[key]; ok {
-			merged[key] = mergeRecallCandidate(existing, normalized)
-			continue
-		}
-		merged[key] = normalized
-	}
-	out := make([]RecallCandidate, 0, len(merged))
-	for _, candidate := range merged {
-		candidate.Layer = primaryRecallLayer(candidate)
-		candidate.Entry.Source = candidate.Layer
-		if candidate.Entry.Metadata == nil {
-			candidate.Entry.Metadata = make(map[string]any, 2)
-		}
-		candidate.Entry.Metadata["layer"] = candidate.Layer
-		candidate.Entry.Metadata["source"] = candidate.Layer
-		out = append(out, normalizeRecallCandidate(candidate))
-	}
-	return out
-}
-
-func mergeRecallCandidate(left RecallCandidate, right RecallCandidate) RecallCandidate {
-	merged := cloneRecallCandidate(left)
-	if recallLayerPriority(right.Layer) > recallLayerPriority(merged.Layer) || right.RerankScore > merged.RerankScore || len(strings.TrimSpace(merged.Entry.Summary)) == 0 {
-		merged.Entry = cloneEntry(right.Entry)
-		merged.Layer = right.Layer
-	}
-	if merged.ObjectID == "" {
-		merged.ObjectID = right.ObjectID
-	}
-	merged.BaseScore = maxFloat(merged.BaseScore, right.BaseScore)
-	merged.LexicalScore = maxFloat(merged.LexicalScore, right.LexicalScore)
-	merged.SemanticScore = maxFloat(merged.SemanticScore, right.SemanticScore)
-	merged.GraphScore = maxFloat(merged.GraphScore, right.GraphScore)
-	merged.DecisionScore = maxFloat(merged.DecisionScore, right.DecisionScore)
-	merged.TruthScore = maxFloat(merged.TruthScore, right.TruthScore)
-	merged.EnvironmentScore = maxFloat(merged.EnvironmentScore, right.EnvironmentScore)
-	merged.ImportanceScore = maxFloat(merged.ImportanceScore, right.ImportanceScore)
-	merged.Freshness = maxFloat(merged.Freshness, right.Freshness)
-	merged.EvidenceCount = max(merged.EvidenceCount, right.EvidenceCount)
-	merged.SourceRefs = normalizeSourceRefs(append(merged.SourceRefs, right.SourceRefs...))
-	merged.ConflictCount = max(merged.ConflictCount, right.ConflictCount)
-	merged.SupportCount = max(merged.SupportCount, right.SupportCount)
-	merged.MatchedBy = uniqueStrings(append(merged.MatchedBy, right.MatchedBy...))
-	merged.WhyMatched = joinCandidateReasons(merged.WhyMatched, right.WhyMatched)
-	merged.TruthStatus = strongerTruthStatus(merged.TruthStatus, right.TruthStatus)
-	return normalizeRecallCandidate(merged)
-}
-
-func finalizeCandidateEntry(candidate RecallCandidate) MemoryEntry {
-	entry := cloneEntry(candidate.Entry)
-	entry.Source = candidate.Layer
-	if entry.Metadata == nil {
-		entry.Metadata = make(map[string]any, 2)
-	}
-	entry.Metadata["layer"] = candidate.Layer
-	entry.Metadata["source"] = candidate.Layer
-	if candidate.ObjectID != "" {
-		entry.Metadata["object_id"] = candidate.ObjectID
-	}
-	entry.Confidence = clamp01(entry.Confidence)
-	entry.Freshness = candidate.Freshness
-	entry.EvidenceCount = candidate.EvidenceCount
-	entry.SourceRefs = normalizeSourceRefs(append(entry.SourceRefs, candidate.SourceRefs...))
-	entry.TruthStatus = normalizeTruthStatus(candidate.TruthStatus)
-	entry.WhyMatched = candidate.WhyMatched
-	entry.RerankScore = candidate.RerankScore
-	return normalizeEntry(entry)
-}
-
-func memoryEntryFromTruthObject(object MemoryObject, layer string, now time.Time) MemoryEntry {
-	metadata := map[string]any{
-		"layer":       strings.TrimSpace(layer),
-		"source":      strings.TrimSpace(layer),
-		"object_id":   strings.TrimSpace(object.ObjectID),
-		"object_type": strings.TrimSpace(object.ObjectType),
-	}
-	summary := truthObjectSummary(object)
-	content := summary
-	if len(object.RawEvidence) > 0 {
-		content = firstNonEmpty(strings.TrimSpace(object.RawEvidence[0].Summary), strings.TrimSpace(object.RawEvidence[0].Text), summary)
-	}
-	return normalizeEntry(MemoryEntry{
-		ID:            strings.TrimSpace(layer) + ":" + strings.TrimSpace(object.ObjectID),
-		Content:       strings.TrimSpace(content),
-		Summary:       summary,
-		Type:          MemoryTypeKnowledge,
-		Timestamp:     effectiveDecisionTimestamp(object.UpdatedAt, object.CreatedAt, now),
-		Importance:    clamp01(maxFloat(object.Confidence, truthObjectFreshness(object, now))),
-		Source:        strings.TrimSpace(layer),
-		Confidence:    clamp01(object.Confidence),
-		Freshness:     truthObjectFreshness(object, now),
-		EvidenceCount: len(object.RawEvidence),
-		SourceRefs:    truthObjectSourceRefs(object),
-		Metadata:      metadata,
-	})
-}
-
-func memoryEntryFromGraphDebugHit(hit GraphHit, now time.Time) MemoryEntry {
-	timestamp := now
-	for _, evidence := range hit.Evidence {
-		timestamp = effectiveDecisionTimestamp(evidence.Timestamp, timestamp)
-	}
-	metadata := map[string]any{
-		"layer":       "graph",
-		"source":      "graph",
-		"edge_id":     strings.TrimSpace(hit.EdgeID),
-		"node_id":     strings.TrimSpace(hit.NodeID),
-		"predicate":   strings.TrimSpace(hit.Predicate),
-		"hop":         hit.Hop,
-		"graph_score": clamp01(hit.Score),
-		"status":      strings.TrimSpace(hit.Status),
-		"subject":     strings.TrimSpace(hit.Subject),
-		"object":      strings.TrimSpace(hit.Object),
-		"source_ids":  append([]string(nil), hit.SourceIDs...),
-	}
-	return normalizeEntry(MemoryEntry{
-		ID:         firstNonEmpty("graph:"+strings.TrimSpace(hit.EdgeID), "graph:"+strings.ReplaceAll(normalizeRecallText(hit.Content), " ", "-")),
-		Content:    strings.TrimSpace(hit.Content),
-		Summary:    summarizeLine(strings.TrimSpace(hit.Content), 180),
-		Type:       MemoryTypeKnowledge,
-		Timestamp:  timestamp,
-		Importance: clamp01(hit.Score),
-		Source:     "graph",
-		Confidence: clamp01(hit.Score),
-		Metadata:   metadata,
-	})
-}
-
-func (s *QueryService) entrySourceRefsForHydration(entry MemoryEntry) []SourceRef {
-	refs := append([]SourceRef(nil), entry.SourceRefs...)
-	sessionID := metadataString(entry.Metadata, "session_id")
-	if memoID := metadataString(entry.Metadata, "memo_id"); memoID != "" {
-		refs = append(refs, SourceRef{SessionID: sessionID, SourceKind: truthSourceKindDecisionMemo, SourceID: memoID})
-	}
-	if nodeID := metadataString(entry.Metadata, "node_id"); nodeID != "" {
-		refs = append(refs, SourceRef{SessionID: sessionID, SourceKind: truthSourceKindMarkdownNode, SourceID: nodeID})
-	}
-	for _, sourceID := range metadataStrings(entry.Metadata, "source_ids") {
-		refs = append(refs,
-			SourceRef{SessionID: sessionID, SourceID: sourceID},
-			SourceRef{SessionID: sessionID, SourceKind: truthSourceKindArchiveMessage, SourceID: sourceID},
-			SourceRef{SessionID: sessionID, SourceKind: truthSourceKindMarkdownSource, SourceID: sourceID},
-		)
-	}
-	if entryLayer(entry) == "cold" || strings.EqualFold(strings.TrimSpace(entry.Source), "archive") {
-		refs = append(refs, SourceRef{SessionID: sessionID, SourceKind: truthSourceKindArchiveMessage, SourceID: entry.ID})
-	}
-	return normalizeSourceRefs(refs)
-}
-
-func (s *QueryService) objectIDFromEntry(entry MemoryEntry) string {
-	if s.truth == nil || !s.truth.Enabled() {
-		return ""
-	}
-	if objectID := metadataString(entry.Metadata, "object_id"); objectID != "" {
-		return objectID
-	}
-	for _, ref := range s.entrySourceRefsForHydration(entry) {
-		if objectID := s.truth.ResolvePrimaryObjectIDBySourceRef(ref); objectID != "" {
-			return objectID
-		}
-	}
-	return ""
-}
-
-func recallCandidateKey(candidate RecallCandidate) string {
-	if candidate.ObjectID != "" {
-		return "object:" + candidate.ObjectID
-	}
-	if memoID := metadataString(candidate.Entry.Metadata, "memo_id"); memoID != "" {
-		return "memo:" + memoID
-	}
-	if nodeID := metadataString(candidate.Entry.Metadata, "node_id"); nodeID != "" {
-		return "node:" + nodeID
-	}
-	if sourceIDs := metadataStrings(candidate.Entry.Metadata, "source_ids"); len(sourceIDs) > 0 {
-		sort.Strings(sourceIDs)
-		return "source:" + strings.Join(sourceIDs, ",")
-	}
-	if sessionID := metadataString(candidate.Entry.Metadata, "session_id"); sessionID != "" {
-		return "session:" + sessionID + ":" + candidate.Entry.ID
-	}
-	return "fingerprint:" + normalizeRecallText(firstNonEmpty(candidate.Entry.Summary, candidate.Entry.Content, candidate.Entry.ID))
-}
-
-func primaryRecallLayer(candidate RecallCandidate) string {
-	layer := strings.TrimSpace(candidate.Layer)
-	for _, marker := range candidate.MatchedBy {
-		if recallLayerPriority(marker) > recallLayerPriority(layer) {
-			layer = marker
-		}
-	}
-	if layer == "" {
-		layer = entryLayer(candidate.Entry)
-	}
-	if layer == "" {
-		layer = "truth"
-	}
-	return layer
-}
-
-func recallLayerPriority(layer string) int {
-	switch strings.TrimSpace(layer) {
-	case "decision":
-		return 80
-	case "graph":
-		return 70
-	case "truth":
-		return 60
-	case "vector":
-		return 50
-	case "markdown":
-		return 40
-	case "warm":
-		return 30
-	case "cold":
-		return 20
-	case "hot":
-		return 10
-	default:
-		return 0
-	}
-}
-
-func strongerTruthStatus(left string, right string) string {
-	left = normalizeTruthStatus(left)
-	right = normalizeTruthStatus(right)
-	weight := func(status string) int {
-		switch status {
-		case truthStatusConflicted:
-			return 4
-		case truthStatusVerified:
-			return 3
-		case truthStatusSupported:
-			return 2
-		default:
-			return 1
-		}
-	}
-	if weight(right) > weight(left) {
-		return right
-	}
-	return left
-}
-
-func joinCandidateReasons(parts ...string) string {
-	items := make([]string, 0, len(parts))
-	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed == "" {
-			continue
-		}
-		items = append(items, trimmed)
-	}
-	return strings.Join(uniqueStrings(items), "; ")
-}
-
-func candidateWhyMatched(entry MemoryEntry) string {
-	if entry.WhyMatched != "" {
-		return strings.TrimSpace(entry.WhyMatched)
-	}
-	if value := metadataString(entry.Metadata, "decision_why_matched"); value != "" {
-		return value
-	}
-	if value := metadataString(entry.Metadata, "predicate"); value != "" {
-		subject := metadataString(entry.Metadata, "subject")
-		object := metadataString(entry.Metadata, "object")
-		return strings.TrimSpace(fmt.Sprintf("%s %s %s", subject, value, object))
-	}
-	return summarizeLine(firstNonEmpty(entry.Summary, entry.Content), 160)
-}
-
-func metadataFloat64(metadata map[string]any, key string) float64 {
-	if len(metadata) == 0 {
-		return 0
-	}
-	raw, ok := metadata[key]
-	if !ok {
-		return 0
-	}
-	switch typed := raw.(type) {
-	case float64:
-		return clamp01(typed)
-	case float32:
-		return clamp01(float64(typed))
-	case int:
-		return clamp01(float64(typed))
-	case int64:
-		return clamp01(float64(typed))
-	default:
-		return 0
-	}
 }

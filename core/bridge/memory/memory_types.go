@@ -69,6 +69,13 @@ type MemoryQuery struct {
 	Limit             int                     `json:"limit,omitempty"`
 	Keywords          []string                `json:"keywords,omitempty"`
 	Metadata          map[string]any          `json:"metadata,omitempty"`
+	Namespace         string                  `json:"namespace,omitempty"`
+	WorkspaceID       string                  `json:"workspace_id,omitempty"`
+	SessionHints      []string                `json:"session_hints,omitempty"`
+	MonthHints        []string                `json:"month_hints,omitempty"`
+	MaxBuckets        int                     `json:"max_buckets,omitempty"`
+	BucketDebug       bool                    `json:"bucket_debug,omitempty"`
+	BucketMode        string                  `json:"bucket_mode,omitempty"`
 	IncludeMarkdown   bool                    `json:"include_markdown,omitempty"`
 	IncludeGraph      bool                    `json:"include_graph,omitempty"`
 	IncludeVector     bool                    `json:"include_vector,omitempty"`
@@ -97,17 +104,20 @@ type MemoryQuery struct {
 
 // MemoryQueryResult 允许在不破坏旧接口的情况下带回 graph/decision 命中结果。
 type MemoryQueryResult struct {
-	Entries      []MemoryEntry       `json:"entries"`
-	GraphHits    []GraphHit          `json:"graph_hits,omitempty"`
-	DecisionHits []DecisionHit       `json:"decision_hits,omitempty"`
-	IntentPlan   *QueryIntentPlan    `json:"intent_plan,omitempty"`
-	VectorHits   []VectorHit         `json:"vector_hits,omitempty"`
-	TruthHits    []TruthHit          `json:"truth_hits,omitempty"`
-	SelectedRecipe *DecisionRecipe   `json:"selected_recipe,omitempty"`
-	RecipeAdvisory *RecipeAdvisory   `json:"recipe_advisory,omitempty"`
+	Entries          []MemoryEntry          `json:"entries"`
+	GraphHits        []GraphHit             `json:"graph_hits,omitempty"`
+	DecisionHits     []DecisionHit          `json:"decision_hits,omitempty"`
+	IntentPlan       *QueryIntentPlan       `json:"intent_plan,omitempty"`
+	BucketPlan       *BucketPlan            `json:"bucket_plan,omitempty"`
+	LayerFreshness   map[string]time.Time   `json:"layer_freshness,omitempty"`
+	VectorHits       []VectorHit            `json:"vector_hits,omitempty"`
+	TruthHits        []TruthHit             `json:"truth_hits,omitempty"`
+	SelectedRecipe   *DecisionRecipe        `json:"selected_recipe,omitempty"`
+	RecipeAdvisory   *RecipeAdvisory        `json:"recipe_advisory,omitempty"`
 	RecipeSelection *RecipeSelectionReport `json:"recipe_selection,omitempty"`
-	RerankReport *HybridRerankReport `json:"rerank_report,omitempty"`
-	ShadowReport *ShadowRecallReport `json:"shadow_report,omitempty"`
+	RerankReport     *HybridRerankReport    `json:"rerank_report,omitempty"`
+	ShadowReport     *ShadowRecallReport    `json:"shadow_report,omitempty"`
+	ShadowRead       *BucketShadowReport    `json:"shadow_read,omitempty"`
 }
 
 // QueryIntentPlan 保存 query planner 对任务意图的结构化切面。
@@ -142,6 +152,12 @@ type ShadowRecallReport struct {
 	WouldPromote         bool     `json:"would_promote,omitempty"`
 	LatencyMs            int64    `json:"latency_ms,omitempty"`
 }
+
+const (
+	BucketModeLegacy   = "legacy"
+	BucketModeShadow   = "shadow"
+	BucketModeBucketed = "bucketed"
+)
 
 func normalizeEntry(entry MemoryEntry) MemoryEntry {
 	out := entry
@@ -244,6 +260,27 @@ func cloneEntries(entries []MemoryEntry) []MemoryEntry {
 func entryMatchesQuery(entry MemoryEntry, query MemoryQuery) bool {
 	if query.TimeRange != nil && !query.TimeRange.Contains(entry.Timestamp) {
 		return false
+	}
+	if namespace := strings.TrimSpace(query.Namespace); namespace != "" {
+		if metadataString(entry.Metadata, "namespace") != "" && metadataString(entry.Metadata, "namespace") != namespace {
+			return false
+		}
+	}
+	if workspaceID := strings.TrimSpace(query.WorkspaceID); workspaceID != "" {
+		if current := metadataString(entry.Metadata, "workspace_id"); current != "" && current != workspaceID {
+			return false
+		}
+	}
+	if len(query.SessionHints) > 0 {
+		if sessionID := metadataString(entry.Metadata, "session_id"); sessionID != "" && !containsString(query.SessionHints, sessionID) {
+			return false
+		}
+	}
+	if len(query.MonthHints) > 0 {
+		month := firstNonEmpty(metadataString(entry.Metadata, "bucket_month"), bucketMonthFromTime(entry.Timestamp))
+		if month != "" && !containsString(query.MonthHints, month) {
+			return false
+		}
 	}
 	if query.MinConfidence > 0 && entry.Confidence > 0 && entry.Confidence < clamp01(query.MinConfidence) {
 		return false

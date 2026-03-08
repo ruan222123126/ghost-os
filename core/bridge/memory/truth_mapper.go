@@ -33,7 +33,10 @@ func (m *TruthMapper) MapArchiveMessages(sessionID string, archivedAt time.Time,
 		sourceID := fmt.Sprintf("%s:%06d", sid, index)
 		timestamp := base.Add(time.Duration(index) * time.Millisecond)
 		primarySource := SourceRef{
+			Namespace:  defaultLedgerNamespace,
 			SessionID:  sid,
+			BucketMonth: bucketMonthFromTime(timestamp),
+			OccurredAt: timestamp,
 			SourceKind: truthSourceKindArchiveMessage,
 			SourceID:   sourceID,
 		}
@@ -74,17 +77,27 @@ func (m *TruthMapper) MapArchiveMessages(sessionID string, archivedAt time.Time,
 func (m *TruthMapper) MapMarkdownNode(node MarkdownNode) MemoryObject {
 	node = normalizeMarkdownNode(node)
 	primarySource := SourceRef{
+		Namespace:  firstNonEmpty(node.Namespace, defaultLedgerNamespace),
+		WorkspaceID: node.WorkspaceID,
+		BucketKey:  node.BucketKey,
+		BucketMonth: bucketMonthFromTime(firstNonZeroTime(node.LastSeenAt, node.CreatedAt)),
 		SessionID:  node.SessionID,
+		OccurredAt: firstNonZeroTime(node.LastSeenAt, node.CreatedAt),
 		SourceKind: truthSourceKindMarkdownNode,
 		SourceID:   node.ID,
 	}
 	sourceRefs := []SourceRef{primarySource}
 	for _, sourceID := range node.SourceIDs {
-		sourceRefs = append(sourceRefs, SourceRef{
-			SessionID:  node.SessionID,
-			SourceKind: truthSourceKindMarkdownSource,
-			SourceID:   sourceID,
-		})
+			sourceRefs = append(sourceRefs, SourceRef{
+				Namespace:  primarySource.Namespace,
+				WorkspaceID: primarySource.WorkspaceID,
+				BucketKey:  primarySource.BucketKey,
+				BucketMonth: primarySource.BucketMonth,
+				SessionID:  node.SessionID,
+				OccurredAt: primarySource.OccurredAt,
+				SourceKind: truthSourceKindMarkdownSource,
+				SourceID:   sourceID,
+			})
 	}
 	objectID := buildTruthObjectID(truthObjectTypeSemanticNote, node.ID)
 	claims := make([]MemoryClaim, 0, len(node.Anchors))
@@ -158,22 +171,28 @@ func (m *TruthMapper) MapDecisionMemo(memo DecisionMemo, input DecisionCaptureIn
 	memo = normalizeDecisionMemo(memo)
 	decisionAt := effectiveDecisionTimestamp(memo.LastUsedAt, memo.CreatedAt, input.TurnFinishedAt, input.TurnStartedAt)
 	primarySource := SourceRef{
+		Namespace:  normalizeDecisionNamespace(firstNonEmpty(memo.Namespace, input.Namespace)),
+		BucketMonth: bucketMonthFromTime(decisionAt),
 		SessionID:  memo.SessionID,
 		TurnID:     memo.TurnID,
 		TraceID:    memo.TraceID,
+		OccurredAt: decisionAt,
 		SourceKind: truthSourceKindDecisionMemo,
 		SourceID:   memo.ID,
 	}
 	sourceRefs := []SourceRef{primarySource}
 	inputSourceID := firstNonEmpty(strings.TrimSpace(input.TurnID), strings.TrimSpace(input.TraceID), strings.TrimSpace(input.SessionID))
 	if inputSourceID != "" {
-		sourceRefs = append(sourceRefs, SourceRef{
-			SessionID:  strings.TrimSpace(input.SessionID),
-			TurnID:     strings.TrimSpace(input.TurnID),
-			TraceID:    strings.TrimSpace(input.TraceID),
-			SourceKind: truthSourceKindDecisionInput,
-			SourceID:   inputSourceID,
-		})
+			sourceRefs = append(sourceRefs, SourceRef{
+				Namespace:  primarySource.Namespace,
+				BucketMonth: primarySource.BucketMonth,
+				SessionID:  strings.TrimSpace(input.SessionID),
+				TurnID:     strings.TrimSpace(input.TurnID),
+				TraceID:    strings.TrimSpace(input.TraceID),
+				OccurredAt: effectiveDecisionTimestamp(input.TurnFinishedAt, input.TurnStartedAt),
+				SourceKind: truthSourceKindDecisionInput,
+				SourceID:   inputSourceID,
+			})
 	}
 	objectID := buildTruthObjectID(truthObjectTypeProcedureMemo, memo.ID)
 	claims := buildDecisionTruthClaims(objectID, memo, primarySource, decisionAt)

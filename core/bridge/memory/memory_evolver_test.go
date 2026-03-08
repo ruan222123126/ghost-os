@@ -20,12 +20,9 @@ func (s testSummarizer) Summarize(_ []llm.Message) (string, error) {
 func TestMemoryManagerEvolveCreatesMarkdownAndRemovesWarm(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity:     10,
-		WarmPath:         filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:      filepath.Join(baseDir, "cold"),
-		WarmTTL:          24 * time.Hour,
-		EvolutionEnabled: false,
-		Summarizer:       testSummarizer{summary: "Summarized memory node content"},
+		Warm:    WarmConfig{Capacity: 10, Path: filepath.Join(baseDir, "warm.json"), TTL: 24 * time.Hour, EvolutionEnabled: false},
+		Cold:    ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
+		Runtime: RuntimeConfig{Summarizer: testSummarizer{summary: "Summarized memory node content"}},
 	})
 
 	oldTS := time.Now().UTC().Add(-7 * time.Hour)
@@ -93,13 +90,15 @@ func TestMemoryManagerEvolveCreatesMarkdownAndRemovesWarm(t *testing.T) {
 func TestMemoryManagerEvolveExtractsStructuredAnchors(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity:     10,
-		WarmPath:         filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:      filepath.Join(baseDir, "cold"),
-		WarmTTL:          24 * time.Hour,
-		EvolutionEnabled: false,
-		AnchorEnabled:    true,
-		AnchorMinWeight:  0.65,
+		Warm: WarmConfig{
+			Capacity:         10,
+			Path:             filepath.Join(baseDir, "warm.json"),
+			TTL:              24 * time.Hour,
+			EvolutionEnabled: false,
+			AnchorEnabled:    true,
+			AnchorMinWeight:  0.65,
+		},
+		Cold: ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
 	})
 
 	oldTS := time.Now().UTC().Add(-7 * time.Hour)
@@ -158,11 +157,13 @@ func TestMemoryManagerEvolveExtractsStructuredAnchors(t *testing.T) {
 func TestMemoryManagerStopDreamingStopsBackgroundEvolution(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity:      10,
-		WarmPath:          filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:       filepath.Join(baseDir, "cold"),
-		EvolutionEnabled:  true,
-		EvolutionInterval: 10 * time.Millisecond,
+		Warm: WarmConfig{
+			Capacity:          10,
+			Path:              filepath.Join(baseDir, "warm.json"),
+			EvolutionEnabled:  true,
+			EvolutionInterval: 10 * time.Millisecond,
+		},
+		Cold: ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
 	})
 
 	deadline := time.Now().Add(500 * time.Millisecond)

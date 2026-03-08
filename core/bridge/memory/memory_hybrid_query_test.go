@@ -11,27 +11,11 @@ func newHybridTruthManager(t *testing.T, hybrid bool) *MemoryManager {
 	t.Helper()
 	baseDir := t.TempDir()
 	return NewMemoryManager(MemoryConfig{
-		WarmCapacity:              24,
-		WarmPath:                  filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:               filepath.Join(baseDir, "cold"),
-		TruthEnabled:              true,
-		TruthDualWrite:            true,
-		TruthBaseDir:              filepath.Join(baseDir, "truth"),
-		TruthShadowFailOpen:       true,
-		TruthReadEnabled:          true,
-		TruthTopK:                 6,
-		TruthMinSupportRefs:       2,
-		IntentPlannerEnabled:      true,
-		VectorEnabled:             true,
-		VectorPath:                filepath.Join(baseDir, "vector"),
-		VectorTopK:                4,
-		VectorMinScore:            0.2,
-		AutoRecallEnabled:         true,
-		AutoRecallLimit:           4,
-		HybridRerankEnabled:       hybrid,
-		RerankDebugEnabled:        true,
-		RecallInjectMinConfidence: 0.7,
-		ConflictPenalty:           0.18,
+		Warm:   WarmConfig{Capacity: 24, Path: filepath.Join(baseDir, "warm.json"), AutoRecallEnabled: true, AutoRecallLimit: 4},
+		Cold:   ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
+		Truth:  TruthConfig{Enabled: true, DualWrite: true, BaseDir: filepath.Join(baseDir, "truth"), ShadowFailOpen: true, ReadEnabled: true, TopK: 6, MinSupportRefs: 2},
+		Recall: RecallConfig{IntentPlannerEnabled: true, HybridRerankEnabled: hybrid, RerankDebugEnabled: true, RecallInjectMinConfidence: 0.7, ConflictPenalty: 0.18},
+		Vector: VectorConfig{Enabled: true, Path: filepath.Join(baseDir, "vector"), TopK: 4, MinScore: 0.2},
 	})
 }
 

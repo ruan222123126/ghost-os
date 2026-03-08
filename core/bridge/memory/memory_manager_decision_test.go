@@ -18,13 +18,13 @@ func TestMemoryManagerStopDreamingStopsDecisionDistiller(t *testing.T) {
 		DecisionRecipeInterval:   10 * time.Millisecond,
 		DecisionRecipeMinSupport: 2,
 	})
-	if manager.decision == nil || manager.decision.distiller == nil {
+	if manager.decision == nil || !manager.decision.HasDistiller() {
 		t.Fatal("expected decision distiller to be configured")
 	}
 
 	manager.StopDreaming()
 	select {
-	case <-manager.decision.distiller.stop:
+	case <-manager.decision.debugDistillerStopCh():
 	default:
 		t.Fatal("expected decision distiller stop channel to be closed")
 	}
@@ -43,7 +43,7 @@ func TestMemoryManagerDoesNotCreateDecisionDistillerWhenRecipeDisabled(t *testin
 	if manager.decision == nil {
 		t.Fatal("expected decision service to be configured")
 	}
-	if manager.decision.distiller != nil {
-		t.Fatalf("expected no decision distiller when recipe feature is disabled, got %+v", manager.decision.distiller)
+	if manager.decision.HasDistiller() {
+		t.Fatal("expected no decision distiller when recipe feature is disabled")
 	}
 }

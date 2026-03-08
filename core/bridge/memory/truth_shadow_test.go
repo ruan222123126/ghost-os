@@ -316,6 +316,31 @@ func TestTruthQueryRegressionBuildContextAndQueryResultsUnchanged(t *testing.T) 
 	if !reflect.DeepEqual(baseResult.DecisionHits, shadowResult.DecisionHits) {
 		t.Fatalf("expected decision hits to stay unchanged, base=%+v shadow=%+v", baseResult.DecisionHits, shadowResult.DecisionHits)
 	}
+	if shadow.truth != nil && !shadow.truth.waitForSidecar(2*time.Second) {
+		t.Fatal("timed out waiting for truth sidecar sync")
+	}
+	truthDebugQuery := MemoryQuery{
+		Keywords:        []string{"week", "truth", "writes"},
+		IncludeMarkdown: true,
+		IncludeDecision: true,
+		SemanticQuery:   "week one keeps read path frozen while shadow truth writes happen in parallel",
+	}
+	shadowSpecificResult, err := shadow.QueryResultWithScope(truthDebugQuery, SessionScope{SessionID: "session-regression"})
+	if err != nil {
+		t.Fatalf("shadow scoped query result: %v", err)
+	}
+	truthDebugQuery.IncludeTruth = true
+	truthDebugQuery.TruthDebug = true
+	shadowDebugResult, err := shadow.QueryResultWithScope(truthDebugQuery, SessionScope{SessionID: "session-regression"})
+	if err != nil {
+		t.Fatalf("shadow truth debug query result: %v", err)
+	}
+	if len(shadowDebugResult.TruthHits) == 0 {
+		t.Fatalf("expected truth debug hits from shadow read path, got %+v", shadowDebugResult)
+	}
+	if !reflect.DeepEqual(stripEntryTimes(shadowSpecificResult.Entries), stripEntryTimes(shadowDebugResult.Entries)) {
+		t.Fatalf("expected truth debug side channel to keep live entries unchanged, base=%+v shadow_debug=%+v", shadowSpecificResult.Entries, shadowDebugResult.Entries)
+	}
 }
 
 func TestTruthShadowWriteFailOpenLogsTraceID(t *testing.T) {

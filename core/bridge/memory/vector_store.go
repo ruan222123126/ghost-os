@@ -55,6 +55,8 @@ type VectorQueryOptions struct {
 	MinConfidence      float64
 	MinFreshness       float64
 	AllowedObjectTypes []string
+	AllowedSessionIDs  []string
+	AllowedMonths      []string
 }
 
 type vectorScoredDocument struct {
@@ -216,6 +218,22 @@ func (s *VectorStore) Query(text string, opts VectorQueryOptions) []vectorScored
 	minScore := clamp01(maxFloat(opts.MinScore, 0))
 	minConfidence := clamp01(opts.MinConfidence)
 	minFreshness := clamp01(opts.MinFreshness)
+	allowedSessions := make(map[string]struct{}, len(opts.AllowedSessionIDs))
+	for _, sessionID := range opts.AllowedSessionIDs {
+		trimmed := strings.TrimSpace(sessionID)
+		if trimmed == "" {
+			continue
+		}
+		allowedSessions[trimmed] = struct{}{}
+	}
+	allowedMonths := make(map[string]struct{}, len(opts.AllowedMonths))
+	for _, month := range opts.AllowedMonths {
+		trimmed := strings.TrimSpace(month)
+		if trimmed == "" {
+			continue
+		}
+		allowedMonths[trimmed] = struct{}{}
+	}
 	topK := opts.TopK
 	if topK <= 0 {
 		topK = defaultVectorTopK
@@ -236,6 +254,11 @@ func (s *VectorStore) Query(text string, opts VectorQueryOptions) []vectorScored
 		doc, ok := s.documents[objectID]
 		if !ok {
 			continue
+		}
+		if len(allowedSessions) > 0 || len(allowedMonths) > 0 {
+			if !vectorDocumentMatchesBuckets(doc, allowedSessions, allowedMonths) {
+				continue
+			}
 		}
 		if len(allowed) > 0 {
 			if _, ok := allowed[doc.ObjectType]; !ok {
@@ -466,6 +489,26 @@ func vectorDocumentFreshness(doc VectorDocument, now time.Time) float64 {
 		return 1
 	}
 	return clamp01(math.Exp2(-age.Hours() / defaultVectorFreshnessHalfLife.Hours()))
+}
+
+func vectorDocumentMatchesBuckets(doc VectorDocument, allowedSessions map[string]struct{}, allowedMonths map[string]struct{}) bool {
+	if len(allowedSessions) == 0 && len(allowedMonths) == 0 {
+		return true
+	}
+	for _, ref := range doc.SourceRefs {
+		if len(allowedSessions) > 0 {
+			if _, ok := allowedSessions[strings.TrimSpace(ref.SessionID)]; ok {
+				return true
+			}
+		}
+		if len(allowedMonths) > 0 {
+			month := firstNonEmpty(strings.TrimSpace(ref.BucketMonth), bucketMonthFromTime(ref.OccurredAt))
+			if _, ok := allowedMonths[month]; ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func defaultVectorBaseDir(baseDir string) string {

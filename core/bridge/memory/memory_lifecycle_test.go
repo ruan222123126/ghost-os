@@ -40,10 +40,9 @@ func TestMemoryManagerArchiveToColdUsesLoadOnlySessionPort(t *testing.T) {
 	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "archive me"})
 
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity: 10,
-		WarmPath:     filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:  filepath.Join(baseDir, "cold"),
-		SessionStore: newLoadOnlySessionStore(sess),
+		Warm:    WarmConfig{Capacity: 10, Path: filepath.Join(baseDir, "warm.json")},
+		Cold:    ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
+		Runtime: RuntimeConfig{SessionStore: newLoadOnlySessionStore(sess)},
 	})
 
 	if err := manager.ArchiveToCold(sess.ID); err != nil {
@@ -62,10 +61,9 @@ func TestMemoryManagerArchiveToColdUsesLoadOnlySessionPort(t *testing.T) {
 func TestMemoryManagerArchiveToColdReturnsLoadError(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity: 10,
-		WarmPath:     filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:  filepath.Join(baseDir, "cold"),
-		SessionStore: &loadOnlySessionStore{sessions: map[string]*session.Session{}},
+		Warm:    WarmConfig{Capacity: 10, Path: filepath.Join(baseDir, "warm.json")},
+		Cold:    ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
+		Runtime: RuntimeConfig{SessionStore: &loadOnlySessionStore{sessions: map[string]*session.Session{}}},
 	})
 
 	err := manager.ArchiveToCold("session-missing")
@@ -77,9 +75,8 @@ func TestMemoryManagerArchiveToColdReturnsLoadError(t *testing.T) {
 func TestMemoryManagerPromoteToWarm(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity: 10,
-		WarmPath:     filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:  filepath.Join(baseDir, "cold"),
+		Warm: WarmConfig{Capacity: 10, Path: filepath.Join(baseDir, "warm.json")},
+		Cold: ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
 	})
 
 	if err := manager.cold.Archive("session-promote", []llm.Message{{Role: llm.RoleUser, Text: "promote from cold"}}); err != nil {
@@ -103,9 +100,8 @@ func TestMemoryManagerPromoteToWarm(t *testing.T) {
 func TestMemoryManagerStoreWarmMessages(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity: 10,
-		WarmPath:     filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:  filepath.Join(baseDir, "cold"),
+		Warm: WarmConfig{Capacity: 10, Path: filepath.Join(baseDir, "warm.json")},
+		Cold: ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
 	})
 
 	messages := []llm.Message{

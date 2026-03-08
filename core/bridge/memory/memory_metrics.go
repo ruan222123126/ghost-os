@@ -52,6 +52,21 @@ type memoryCounters struct {
 	recipeBackfillCreated     atomic.Uint64
 	recipeBackfillUpdated     atomic.Uint64
 	recipeDefaultGrayHits     atomic.Uint64
+	bucketCandidatesTotal     atomic.Uint64
+	bucketSelectedTotal       atomic.Uint64
+	bucketScannedTotal        atomic.Uint64
+	bucketScanLatencyMs       atomic.Uint64
+	bucketRecallOnlyHits      atomic.Uint64
+	bucketShadowOverlapMilli  atomic.Uint64
+	compressionMarkdownRatio  atomic.Uint64
+	compressionDecisionRatio  atomic.Uint64
+	compressionGraphRatio     atomic.Uint64
+	provenanceMissingTotal    atomic.Uint64
+	viewStalenessColdMs       atomic.Uint64
+	viewStalenessMarkdownMs   atomic.Uint64
+	viewStalenessDecisionMs   atomic.Uint64
+	viewStalenessGraphMs      atomic.Uint64
+	viewStalenessVectorMs     atomic.Uint64
 }
 
 func (m *memoryCounters) snapshot() MemoryMetrics {
@@ -71,6 +86,7 @@ func (m *memoryCounters) snapshot() MemoryMetrics {
 	recipeDeviationRate := 0.0
 	recipeFallbackRate := 0.0
 	recipeDefaultGrayHitRate := 0.0
+	bucketShadowOverlapRate := 0.0
 	if shadowQueries > 0 {
 		shadowOverlapRate = float64(m.shadowOverlapMilli.Load()) / float64(shadowQueries*1000)
 		shadowLatencyMs = m.shadowLatencyMs.Load() / shadowQueries
@@ -96,6 +112,9 @@ func (m *memoryCounters) snapshot() MemoryMetrics {
 	}
 	if recipeSelections > 0 {
 		recipeDefaultGrayHitRate = float64(m.recipeDefaultGrayHits.Load()) / float64(recipeSelections)
+	}
+	if selected := m.bucketSelectedTotal.Load(); selected > 0 {
+		bucketShadowOverlapRate = float64(m.bucketShadowOverlapMilli.Load()) / float64(selected*1000)
 	}
 	return MemoryMetrics{
 		L1Hits:                        m.l1Hits.Load(),
@@ -144,5 +163,22 @@ func (m *memoryCounters) snapshot() MemoryMetrics {
 		RecipeBackfillCreated:         m.recipeBackfillCreated.Load(),
 		RecipeBackfillUpdated:         m.recipeBackfillUpdated.Load(),
 		RecipeDefaultGrayHitRate:      recipeDefaultGrayHitRate,
+		BucketCandidatesTotal:         m.bucketCandidatesTotal.Load(),
+		BucketSelectedTotal:           m.bucketSelectedTotal.Load(),
+		BucketScannedTotal:            m.bucketScannedTotal.Load(),
+		BucketScanLatencyMs:           m.bucketScanLatencyMs.Load(),
+		BucketRecallOnlyHits:          m.bucketRecallOnlyHits.Load(),
+		BucketShadowOverlapRate:       bucketShadowOverlapRate,
+		CompressionMarkdownRatio:      float64(m.compressionMarkdownRatio.Load()) / 1000,
+		CompressionDecisionRatio:      float64(m.compressionDecisionRatio.Load()) / 1000,
+		CompressionGraphRatio:         float64(m.compressionGraphRatio.Load()) / 1000,
+		ProvenanceMissingTotal:        m.provenanceMissingTotal.Load(),
+		ViewStalenessMs: map[string]uint64{
+			"cold":     m.viewStalenessColdMs.Load(),
+			"markdown": m.viewStalenessMarkdownMs.Load(),
+			"decision": m.viewStalenessDecisionMs.Load(),
+			"graph":    m.viewStalenessGraphMs.Load(),
+			"vector":   m.viewStalenessVectorMs.Load(),
+		},
 	}
 }

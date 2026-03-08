@@ -72,7 +72,7 @@ func NewColdMemoryWithConfig(baseDir string, cfg ColdMemoryConfig) *ColdMemory {
 	return &ColdMemory{
 		legacy:          NewLegacyColdStore(resolved),
 		ledger:          NewLedgerStore(ledgerBaseDir, cfg.LedgerNamespace, cfg.LedgerWorkspaceID, cfg.Metrics),
-		markdown:        NewMarkdownStore(markdownDir),
+		markdown:        NewMarkdownStoreWithConfig(markdownDir, cfg.LedgerNamespace, cfg.LedgerWorkspaceID),
 		ledgerDualWrite: cfg.LedgerDualWrite,
 		readMode:        readMode,
 		shadowCompare:   cfg.LedgerShadowCompare,
@@ -175,6 +175,35 @@ func (c *ColdMemory) Retrieve(query MemoryQuery) ([]MemoryEntry, error) {
 	return primary, nil
 }
 
+func (c *ColdMemory) RetrieveWithBucketPlan(query MemoryQuery, plan *BucketPlan) ([]MemoryEntry, error) {
+	if c == nil {
+		return nil, nil
+	}
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return c.Retrieve(query)
+	}
+	start := time.Now()
+	primaryMode, shadowEnabled := c.readSettings()
+	primary, err := c.retrieveWithModeAndPlan(primaryMode, query, plan)
+	if err != nil {
+		return nil, err
+	}
+	if primaryMode == coldReadModeLedger {
+		c.recordLedgerReplayLatency(time.Since(start))
+	}
+	if shadowEnabled {
+		shadowMode := coldReadModeLegacy
+		if primaryMode == coldReadModeLegacy {
+			shadowMode = coldReadModeLedger
+		}
+		shadow, shadowErr := c.retrieveWithMode(shadowMode, query)
+		if shadowErr == nil {
+			c.compareEntries(primary, shadow)
+		}
+	}
+	return primary, nil
+}
+
 // SaveMarkdownNode 将演化后的记忆节点写入 markdown 冷存目录。
 func (c *ColdMemory) SaveMarkdownNode(node MarkdownNode) error {
 	if c == nil || c.markdown == nil {
@@ -269,6 +298,17 @@ func (c *ColdMemory) ListArchives(timeRange *TimeRange) ([]ColdArchive, error) {
 	return primary, nil
 }
 
+func (c *ColdMemory) ListArchivesWithBucketPlan(timeRange *TimeRange, plan *BucketPlan) ([]ColdArchive, error) {
+	if c == nil {
+		return nil, nil
+	}
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return c.ListArchives(timeRange)
+	}
+	primaryMode, _ := c.readSettings()
+	return c.listArchivesWithModeAndPlan(primaryMode, timeRange, plan)
+}
+
 func (c *ColdMemory) readSettings() (ColdReadMode, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -278,6 +318,16 @@ func (c *ColdMemory) readSettings() (ColdReadMode, bool) {
 func (c *ColdMemory) retrieveWithMode(mode ColdReadMode, query MemoryQuery) ([]MemoryEntry, error) {
 	if mode == coldReadModeLedger && c.ledger != nil {
 		return c.ledger.RetrieveCompat(query)
+	}
+	if c.legacy == nil {
+		return nil, nil
+	}
+	return c.legacy.Retrieve(query)
+}
+
+func (c *ColdMemory) retrieveWithModeAndPlan(mode ColdReadMode, query MemoryQuery, plan *BucketPlan) ([]MemoryEntry, error) {
+	if mode == coldReadModeLedger && c.ledger != nil {
+		return c.ledger.RetrieveCompatWithPlan(query, plan)
 	}
 	if c.legacy == nil {
 		return nil, nil
@@ -298,6 +348,16 @@ func (c *ColdMemory) listSessionsWithMode(mode ColdReadMode, timeRange TimeRange
 func (c *ColdMemory) listArchivesWithMode(mode ColdReadMode, timeRange *TimeRange) ([]ColdArchive, error) {
 	if mode == coldReadModeLedger && c.ledger != nil {
 		return c.ledger.ReplayArchivesCompat(timeRange)
+	}
+	if c.legacy == nil {
+		return nil, nil
+	}
+	return c.legacy.ListArchives(timeRange)
+}
+
+func (c *ColdMemory) listArchivesWithModeAndPlan(mode ColdReadMode, timeRange *TimeRange, plan *BucketPlan) ([]ColdArchive, error) {
+	if mode == coldReadModeLedger && c.ledger != nil {
+		return c.ledger.ReplayArchivesCompatWithPlan(timeRange, plan)
 	}
 	if c.legacy == nil {
 		return nil, nil

@@ -16,7 +16,7 @@ func TestMemoryManagerQueryResultIncludesDecisionHits(t *testing.T) {
 		ToolsetSignature: "bash_exec",
 		ToolNames:        []string{"bash_exec"},
 	}
-	if _, err := manager.decision.store.UpsertMemo(DecisionMemo{
+	if _, err := manager.decision.debugUpsertMemo(DecisionMemo{
 		ID:              "memo-query-result",
 		Namespace:       "workspace:test",
 		SessionID:       "session-query-result",
@@ -66,7 +66,7 @@ func TestBuildContextWindowInjectsConciseDecisionRecall(t *testing.T) {
 		ToolsetSignature: "bash_exec",
 		ToolNames:        []string{"bash_exec"},
 	}
-	if _, err := manager.decision.store.UpsertMemo(DecisionMemo{
+	if _, err := manager.decision.debugUpsertMemo(DecisionMemo{
 		ID:              "memo-context-window",
 		Namespace:       "workspace:test",
 		SessionID:       "session-context-window",
@@ -134,7 +134,7 @@ func TestBuildContextWindowDecisionRecallSkipsDuplicateSummary(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("store warm duplicate entry: %v", err)
 	}
-	if _, err := manager.decision.store.UpsertMemo(memo); err != nil {
+	if _, err := manager.decision.debugUpsertMemo(memo); err != nil {
 		t.Fatalf("upsert duplicate memo: %v", err)
 	}
 

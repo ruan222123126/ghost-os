@@ -17,23 +17,23 @@ type VectorSidecar struct {
 }
 
 func NewVectorSidecar(config MemoryConfig, truth *TruthWriter, metrics *memoryCounters) *VectorSidecar {
-	if !config.VectorEnabled {
+	if !config.Vector.Enabled {
 		return nil
 	}
-	store := NewVectorStore(config.VectorPath, metrics)
+	store := NewVectorStore(config.Vector.Path, metrics)
 	if store == nil || !store.Enabled() {
 		return nil
 	}
 	if err := store.Load(); err != nil {
-		log.Printf("[MEMORY] vector sidecar load failed, starting from empty index: path=%s err=%v", config.VectorPath, err)
+		log.Printf("[MEMORY] vector sidecar load failed, starting from empty index: path=%s err=%v", config.Vector.Path, err)
 	}
 	sidecar := &VectorSidecar{
 		enabled:  true,
 		truth:    truth,
 		store:    store,
 		metrics:  metrics,
-		topK:     max(config.VectorTopK, defaultVectorTopK),
-		minScore: clamp01(maxFloat(config.VectorMinScore, defaultVectorMinScore)),
+		topK:     max(config.Vector.TopK, defaultVectorTopK),
+		minScore: clamp01(maxFloat(config.Vector.MinScore, defaultVectorMinScore)),
 	}
 	if truth != nil && truth.Enabled() {
 		if err := sidecar.RebuildFromTruthSnapshot(); err != nil {
@@ -85,6 +85,8 @@ func (v *VectorSidecar) Query(query MemoryQuery, plan *QueryIntentPlan) ([]Vecto
 		MinConfidence:      clamp01(query.MinConfidence),
 		MinFreshness:       v.minFreshness(query),
 		AllowedObjectTypes: vectorObjectTypesFromMetadata(query.Metadata),
+		AllowedSessionIDs:  append([]string(nil), query.SessionHints...),
+		AllowedMonths:      append([]string(nil), query.MonthHints...),
 	}), nil
 }
 

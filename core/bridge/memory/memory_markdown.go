@@ -3,6 +3,7 @@ package memory
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,9 @@ import (
 // MarkdownNode 表示一个 Markdown 记忆节点（带 YAML Frontmatter）。
 type MarkdownNode struct {
 	ID          string         `yaml:"id"`
+	Namespace   string         `yaml:"namespace,omitempty"`
+	WorkspaceID string         `yaml:"workspace_id,omitempty"`
+	BucketKey   string         `yaml:"bucket_key,omitempty"`
 	Importance  float64        `yaml:"importance"`
 	CreatedAt   time.Time      `yaml:"created_at"`
 	RelatedTo   []string       `yaml:"related_to,omitempty"`
@@ -32,19 +36,48 @@ type MarkdownNode struct {
 
 // MarkdownStore 提供基于 Markdown + YAML Frontmatter 的持久化。
 type MarkdownStore struct {
-	baseDir string
+	baseDir          string
+	defaultNamespace string
+	defaultWorkspace string
+	manifestPath     string
+}
+
+type markdownManifest struct {
+	UpdatedAt time.Time               `json:"updated_at,omitempty"`
+	Nodes     []markdownManifestEntry `json:"nodes,omitempty"`
+}
+
+type markdownManifestEntry struct {
+	NodeID       string    `json:"node_id,omitempty"`
+	Namespace    string    `json:"namespace,omitempty"`
+	WorkspaceID  string    `json:"workspace_id,omitempty"`
+	BucketKey    string    `json:"bucket_key,omitempty"`
+	SessionID    string    `json:"session_id,omitempty"`
+	Month        string    `json:"month,omitempty"`
+	CreatedAt    time.Time `json:"created_at,omitempty"`
+	LastSeenAt   time.Time `json:"last_seen_at,omitempty"`
+	TagCount     int       `json:"tag_count,omitempty"`
+	AnchorCount  int       `json:"anchor_count,omitempty"`
 }
 
 // NewMarkdownStore 创建 Markdown 存储实例。
 func NewMarkdownStore(baseDir string) *MarkdownStore {
+	return NewMarkdownStoreWithConfig(baseDir, "", "")
+}
+
+func NewMarkdownStoreWithConfig(baseDir string, namespace string, workspaceID string) *MarkdownStore {
+	resolved := resolveMemoryPath(baseDir)
 	return &MarkdownStore{
-		baseDir: resolveMemoryPath(baseDir),
+		baseDir:          resolved,
+		defaultNamespace: normalizeLedgerNamespace(namespace),
+		defaultWorkspace: strings.TrimSpace(workspaceID),
+		manifestPath:     filepath.Join(resolved, "markdown_manifest.json"),
 	}
 }
 
 // Save 保存记忆节点为 Markdown 文件。
 func (s *MarkdownStore) Save(node MarkdownNode) error {
-	node = normalizeMarkdownNode(node)
+	node = s.normalizeForStore(node)
 	if node.ID == "" {
 		return fmt.Errorf("node id is required")
 	}
@@ -69,6 +102,9 @@ func (s *MarkdownStore) Save(node MarkdownNode) error {
 	if err := os.Rename(tmpPath, filePath); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("replace markdown file: %w", err)
+	}
+	if err := s.updateManifest(node); err != nil {
+		return err
 	}
 	return nil
 }
@@ -119,6 +155,44 @@ func (s *MarkdownStore) List() ([]string, error) {
 	}
 	sort.Strings(ids)
 	return ids, nil
+}
+
+func (s *MarkdownStore) ListByBucketPlan(plan *BucketPlan, query MemoryQuery) ([]string, error) {
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return s.List()
+	}
+	manifest, err := s.loadManifest()
+	if err != nil {
+		return nil, err
+	}
+	if len(manifest.Nodes) == 0 {
+		return s.List()
+	}
+	selected := make(map[string]BucketManifest, len(plan.SelectedBuckets))
+	for _, bucket := range plan.SelectedBuckets {
+		selected[bucket.Bucket.Key.String()] = bucket.Bucket
+	}
+	sessionHints := effectiveBucketSessionHints(query, SessionScope{})
+	ids := make([]string, 0, len(manifest.Nodes))
+	for _, node := range manifest.Nodes {
+		key := normalizeBucketKey(BucketKey{Namespace: node.Namespace, WorkspaceID: node.WorkspaceID, Month: node.Month}).String()
+		bucket, ok := selected[key]
+		if !ok {
+			continue
+		}
+		if len(sessionHints) > 0 && !containsString(sessionHints, node.SessionID) && !bucketManifestHasSession(bucket, node.SessionID) {
+			continue
+		}
+		if query.TimeRange != nil {
+			ts := firstNonZeroTime(node.LastSeenAt, node.CreatedAt)
+			if !ts.IsZero() && !query.TimeRange.Contains(ts) {
+				continue
+			}
+		}
+		ids = append(ids, node.NodeID)
+	}
+	sort.Strings(ids)
+	return uniqueStrings(ids), nil
 }
 
 // marshal 将节点序列化为 Markdown + YAML Frontmatter。
@@ -180,6 +254,9 @@ func (s *MarkdownStore) unmarshal(data []byte) (MarkdownNode, error) {
 func normalizeMarkdownNode(node MarkdownNode) MarkdownNode {
 	out := node
 	out.ID = strings.TrimSpace(out.ID)
+	out.Namespace = normalizeLedgerNamespace(out.Namespace)
+	out.WorkspaceID = strings.TrimSpace(out.WorkspaceID)
+	out.BucketKey = strings.TrimSpace(out.BucketKey)
 	out.SessionID = strings.TrimSpace(out.SessionID)
 	out.EmbeddingID = strings.TrimSpace(out.EmbeddingID)
 	out.Content = strings.TrimSpace(out.Content)
@@ -194,6 +271,9 @@ func normalizeMarkdownNode(node MarkdownNode) MarkdownNode {
 	if !out.LastSeenAt.IsZero() {
 		out.LastSeenAt = out.LastSeenAt.UTC()
 	}
+	if out.BucketKey == "" {
+		out.BucketKey = normalizeBucketKey(BucketKey{Namespace: out.Namespace, WorkspaceID: out.WorkspaceID, Month: bucketMonthFromTime(firstNonZeroTime(out.LastSeenAt, out.CreatedAt))}).String()
+	}
 	out.RelatedTo = uniqueStrings(out.RelatedTo)
 	out.Tags = uniqueStrings(out.Tags)
 	out.SourceIDs = uniqueStrings(out.SourceIDs)
@@ -205,4 +285,84 @@ func normalizeMarkdownNode(node MarkdownNode) MarkdownNode {
 		out.RelatedTo = append([]string(nil), out.SourceIDs...)
 	}
 	return out
+}
+
+func (s *MarkdownStore) normalizeForStore(node MarkdownNode) MarkdownNode {
+	out := normalizeMarkdownNode(node)
+	out.Namespace = firstNonEmpty(out.Namespace, s.defaultNamespace)
+	out.WorkspaceID = firstNonEmpty(out.WorkspaceID, s.defaultWorkspace)
+	if out.BucketKey == "" {
+		out.BucketKey = normalizeBucketKey(BucketKey{Namespace: out.Namespace, WorkspaceID: out.WorkspaceID, Month: bucketMonthFromTime(firstNonZeroTime(out.LastSeenAt, out.CreatedAt))}).String()
+	}
+	return normalizeMarkdownNode(out)
+}
+
+func (s *MarkdownStore) updateManifest(node MarkdownNode) error {
+	if s == nil || s.manifestPath == "" {
+		return nil
+	}
+	manifest, err := s.loadManifest()
+	if err != nil {
+		return err
+	}
+	node = s.normalizeForStore(node)
+	entry := markdownManifestEntry{
+		NodeID:      node.ID,
+		Namespace:   node.Namespace,
+		WorkspaceID: node.WorkspaceID,
+		BucketKey:   node.BucketKey,
+		SessionID:   node.SessionID,
+		Month:       bucketMonthFromTime(firstNonZeroTime(node.LastSeenAt, node.CreatedAt)),
+		CreatedAt:   node.CreatedAt,
+		LastSeenAt:  node.LastSeenAt,
+		TagCount:    len(node.Tags),
+		AnchorCount: len(node.Anchors),
+	}
+	replaced := false
+	for index := range manifest.Nodes {
+		if manifest.Nodes[index].NodeID != entry.NodeID {
+			continue
+		}
+		manifest.Nodes[index] = entry
+		replaced = true
+		break
+	}
+	if !replaced {
+		manifest.Nodes = append(manifest.Nodes, entry)
+	}
+	manifest.UpdatedAt = time.Now().UTC()
+	sort.SliceStable(manifest.Nodes, func(i, j int) bool {
+		return manifest.Nodes[i].NodeID < manifest.Nodes[j].NodeID
+	})
+	return writeJSONAtomic(s.manifestPath, manifest)
+}
+
+func (s *MarkdownStore) loadManifest() (markdownManifest, error) {
+	if s == nil || s.manifestPath == "" {
+		return markdownManifest{}, nil
+	}
+	data, err := os.ReadFile(s.manifestPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return markdownManifest{}, nil
+		}
+		return markdownManifest{}, fmt.Errorf("read markdown manifest: %w", err)
+	}
+	var manifest markdownManifest
+	if err := yaml.Unmarshal(data, &manifest); err == nil {
+		return manifest, nil
+	}
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return markdownManifest{}, fmt.Errorf("decode markdown manifest: %w", err)
+	}
+	return manifest, nil
+}
+
+func firstNonZeroTime(values ...time.Time) time.Time {
+	for _, value := range values {
+		if !value.IsZero() {
+			return value.UTC()
+		}
+	}
+	return time.Time{}
 }

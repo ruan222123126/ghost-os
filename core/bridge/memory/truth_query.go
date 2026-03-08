@@ -34,7 +34,7 @@ type TruthReader struct {
 }
 
 func NewTruthReader(config MemoryConfig, writer *TruthWriter, metrics *memoryCounters) *TruthReader {
-	baseDir := strings.TrimSpace(config.TruthBaseDir)
+	baseDir := strings.TrimSpace(config.Truth.BaseDir)
 	if writer != nil && writer.Enabled() {
 		baseDir = firstNonEmpty(writer.BaseDir(), baseDir)
 	}
@@ -45,8 +45,8 @@ func NewTruthReader(config MemoryConfig, writer *TruthWriter, metrics *memoryCou
 	reader := &TruthReader{
 		enabled:        true,
 		baseDir:        baseDir,
-		topK:           max(config.TruthTopK, defaultVectorTopK),
-		minSupportRefs: max(config.TruthMinSupportRefs, 2),
+		topK:           max(config.Truth.TopK, defaultVectorTopK),
+		minSupportRefs: max(config.Truth.MinSupportRefs, 2),
 		writer:         writer,
 		metrics:        metrics,
 		objects:        make(map[string]MemoryObject),

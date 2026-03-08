@@ -40,11 +40,16 @@ const (
 
 // SourceRef 统一描述对象/证据/claim 的来源引用，保证后续可追溯。
 type SourceRef struct {
+	Namespace   string `json:"namespace,omitempty"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	BucketKey   string `json:"bucket_key,omitempty"`
+	BucketMonth string `json:"bucket_month,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
 	TurnID     string `json:"turn_id,omitempty"`
 	TraceID    string `json:"trace_id,omitempty"`
 	SourceKind string `json:"source_kind,omitempty"`
 	SourceID   string `json:"source_id,omitempty"`
+	OccurredAt time.Time `json:"occurred_at,omitempty"`
 }
 
 // MemoryEvidence 保存对象的原始证据视图。
@@ -130,10 +135,15 @@ type truthEvent struct {
 func normalizeSourceRef(ref SourceRef) SourceRef {
 	out := ref
 	out.SessionID = strings.TrimSpace(out.SessionID)
+	out.Namespace = strings.TrimSpace(out.Namespace)
+	out.WorkspaceID = strings.TrimSpace(out.WorkspaceID)
+	out.BucketKey = strings.TrimSpace(out.BucketKey)
+	out.BucketMonth = strings.TrimSpace(out.BucketMonth)
 	out.TurnID = strings.TrimSpace(out.TurnID)
 	out.TraceID = strings.TrimSpace(out.TraceID)
 	out.SourceKind = strings.TrimSpace(out.SourceKind)
 	out.SourceID = strings.TrimSpace(out.SourceID)
+	out.OccurredAt = normalizeLedgerTime(out.OccurredAt)
 	return out
 }
 
@@ -329,11 +339,17 @@ func normalizeMemoryObject(object MemoryObject) MemoryObject {
 }
 
 func truthSourceRefFingerprint(ref SourceRef) string {
+	normalized := normalizeSourceRef(ref)
 	return strings.Join([]string{
-		ref.SessionID,
-		ref.TurnID,
-		ref.TraceID,
-		ref.SourceKind,
-		ref.SourceID,
+		normalized.Namespace,
+		normalized.WorkspaceID,
+		normalized.BucketKey,
+		normalized.BucketMonth,
+		normalized.SessionID,
+		normalized.TurnID,
+		normalized.TraceID,
+		normalized.SourceKind,
+		normalized.SourceID,
+		normalized.OccurredAt.Format(time.RFC3339Nano),
 	}, "|")
 }

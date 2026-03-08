@@ -36,13 +36,13 @@ func defaultMemoryScoringConfig() memoryScoringConfig {
 
 func newMemoryScoringConfig(config MemoryConfig) memoryScoringConfig {
 	out := defaultMemoryScoringConfig()
-	out.TemporalDecayEnabled = config.TemporalDecayEnabled
-	if config.TemporalDecayHalfLife > 0 {
-		out.TemporalDecayHalfLife = config.TemporalDecayHalfLife
+	out.TemporalDecayEnabled = config.Warm.TemporalDecayEnabled
+	if config.Warm.TemporalDecayHalfLife > 0 {
+		out.TemporalDecayHalfLife = config.Warm.TemporalDecayHalfLife
 	}
-	out.AnchorEnabled = config.AnchorEnabled
-	if config.AnchorMinWeight > 0 {
-		out.AnchorMinWeight = clamp01(config.AnchorMinWeight)
+	out.AnchorEnabled = config.Warm.AnchorEnabled
+	if config.Warm.AnchorMinWeight > 0 {
+		out.AnchorMinWeight = clamp01(config.Warm.AnchorMinWeight)
 	}
 	return out
 }

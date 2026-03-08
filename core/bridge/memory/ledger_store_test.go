@@ -155,11 +155,9 @@ func TestColdMemoryLedgerBackfillCompat(t *testing.T) {
 func TestColdMemoryShadowCompareMismatchMetrics(t *testing.T) {
 	baseDir := t.TempDir()
 	manager := NewMemoryManager(MemoryConfig{
-		WarmCapacity:        8,
-		WarmPath:            filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:         filepath.Join(baseDir, "cold"),
-		LedgerDualWrite:     true,
-		LedgerShadowCompare: true,
+		Warm:   WarmConfig{Capacity: 8, Path: filepath.Join(baseDir, "warm.json")},
+		Cold:   ColdConfig{BaseDir: filepath.Join(baseDir, "cold")},
+		Ledger: LedgerConfig{DualWrite: true, ShadowCompare: true},
 	})
 	if err := manager.AppendLedgerTurn("session-shadow-mismatch", "trace-shadow", 0, []llm.Message{{Role: llm.RoleUser, Text: "only ledger copy"}}); err != nil {
 		t.Fatalf("append ledger-only turn: %v", err)

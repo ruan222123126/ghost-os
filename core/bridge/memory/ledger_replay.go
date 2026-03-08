@@ -6,8 +6,57 @@ import (
 	"sort"
 	"strings"
 
+	"ghost-os/bridge/memory/internal/indexer"
 	"ghost-os/bridge/llm"
 )
+
+func (s *LedgerStore) ListBucketManifests(checkpointDir string) ([]BucketManifest, error) {
+	if s == nil || s.baseDir == "" {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	monthDirs, err := listLedgerMonthDirs(s.namespaceRoot(s.Namespace(), s.WorkspaceID()))
+	if err != nil {
+		return nil, err
+	}
+	viewStore := indexer.NewFileCheckpointStore(checkpointDir)
+	manifests := make([]BucketManifest, 0, len(monthDirs))
+	for _, monthDir := range monthDirs {
+		manifest, err := s.ensureManifestLocked(monthDir)
+		if err != nil {
+			return nil, err
+		}
+		bucketManifest := bucketManifestFromLedger(monthDir, manifest)
+		if viewStore != nil {
+			bucket := indexer.Bucket{Namespace: bucketManifest.Key.Namespace, Workspace: bucketManifest.Key.WorkspaceID, Month: bucketManifest.Key.Month, RootDir: monthDir, SegmentPath: filepath.Join(monthDir, defaultLedgerSegmentFileName)}
+			for _, projector := range []string{"graph", "decision", "markdown", "vector"} {
+				view, err := viewStore.LoadViewManifest(projector, bucket)
+				if err != nil || view.Projector == "" {
+					continue
+				}
+				bucketManifest.Views[projector] = BucketViewManifest{
+					Projector:       view.Projector,
+					UpdatedAt:       view.UpdatedAt,
+					SessionCoverage: append([]string(nil), view.SessionCoverage...),
+					EvidenceCount:   view.EvidenceCount,
+					Graph:           view.Graph,
+					Decision:        view.Decision,
+					Markdown:        view.Markdown,
+					Vector:          view.Vector,
+				}
+			}
+		}
+		manifests = append(manifests, bucketManifest)
+	}
+	sort.SliceStable(manifests, func(i, j int) bool {
+		if manifests[i].Key.Month != manifests[j].Key.Month {
+			return manifests[i].Key.Month > manifests[j].Key.Month
+		}
+		return manifests[i].Key.String() < manifests[j].Key.String()
+	})
+	return manifests, nil
+}
 
 func (s *LedgerStore) ReplaySession(sessionID string) (LedgerReplaySession, error) {
 	if s == nil || s.baseDir == "" {
@@ -100,6 +149,25 @@ func (s *LedgerStore) ReplayArchivesCompat(timeRange *TimeRange) ([]ColdArchive,
 	return out, nil
 }
 
+func (s *LedgerStore) ReplayArchivesCompatWithPlan(timeRange *TimeRange, plan *BucketPlan) ([]ColdArchive, error) {
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return s.ReplayArchivesCompat(timeRange)
+	}
+	sessions, err := s.replaySessionsCompatWithPlan(timeRange, plan)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ColdArchive, 0, len(sessions))
+	for _, session := range sessions {
+		out = append(out, ColdArchive{
+			SessionID:  session.SessionID,
+			ArchivedAt: session.ArchivedAt,
+			Messages:   llm.CloneMessages(session.Messages),
+		})
+	}
+	return out, nil
+}
+
 func (s *LedgerStore) RetrieveCompat(query MemoryQuery) ([]MemoryEntry, error) {
 	archives, err := s.ReplayArchivesCompat(query.TimeRange)
 	if err != nil {
@@ -122,6 +190,49 @@ func (s *LedgerStore) RetrieveCompat(query MemoryQuery) ([]MemoryEntry, error) {
 					"session_id":   archive.SessionID,
 					"role":         string(msg.Role),
 					"tool_call_id": strings.TrimSpace(msg.ToolCallID),
+				},
+			})
+			if !entryMatchesQuery(entry, query) {
+				continue
+			}
+			results = append(results, entry)
+		}
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		return results[i].Timestamp.After(results[j].Timestamp)
+	})
+	if query.Limit > 0 && len(results) > query.Limit {
+		results = results[:query.Limit]
+	}
+	return cloneEntries(results), nil
+}
+
+func (s *LedgerStore) RetrieveCompatWithPlan(query MemoryQuery, plan *BucketPlan) ([]MemoryEntry, error) {
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return s.RetrieveCompat(query)
+	}
+	archives, err := s.ReplayArchivesCompatWithPlan(query.TimeRange, plan)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]MemoryEntry, 0, len(archives)*4)
+	for _, archive := range archives {
+		for index, msg := range archive.Messages {
+			entry := normalizeEntry(MemoryEntry{
+				ID:         fmt.Sprintf("%s:%06d", archive.SessionID, index),
+				Content:    messageToContent(msg),
+				Type:       MemoryTypeMessage,
+				Timestamp:  archive.ArchivedAt,
+				Source:     "archive",
+				Summary:    summarizeLine(messageToContent(msg), 220),
+				Confidence: 1,
+				Metadata: map[string]any{
+					"layer":        "cold",
+					"source":       "archive",
+					"session_id":   archive.SessionID,
+					"role":         string(msg.Role),
+					"tool_call_id": strings.TrimSpace(msg.ToolCallID),
+					"bucket_month": bucketMonthFromTime(archive.ArchivedAt),
 				},
 			})
 			if !entryMatchesQuery(entry, query) {
@@ -209,6 +320,85 @@ func (s *LedgerStore) replaySessionsCompat(timeRange *TimeRange) ([]LedgerReplay
 		return sessions[i].ArchivedAt.After(sessions[j].ArchivedAt)
 	})
 	return sessions, nil
+}
+
+func (s *LedgerStore) replaySessionsCompatWithPlan(timeRange *TimeRange, plan *BucketPlan) ([]LedgerReplaySession, error) {
+	if s == nil || s.baseDir == "" {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	selected := selectedBucketsByKey(plan)
+	if len(selected) == 0 {
+		return nil, nil
+	}
+	seenSessions := make(map[string]struct{}, 32)
+	sessionIDs := make([]string, 0, 32)
+	for _, manifest := range selected {
+		if manifest.Count == 0 || !bucketManifestMatchesRange(manifest, timeRange) {
+			continue
+		}
+		for _, sessionID := range manifest.SessionIDs {
+			if _, ok := seenSessions[sessionID]; ok {
+				continue
+			}
+			seenSessions[sessionID] = struct{}{}
+			sessionIDs = append(sessionIDs, sessionID)
+		}
+	}
+	sort.Strings(sessionIDs)
+	sessions := make([]LedgerReplaySession, 0, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		replay, err := s.replaySessionAcrossBucketsLocked(sessionID, selected)
+		if err != nil {
+			return nil, err
+		}
+		if replay.SessionID == "" {
+			continue
+		}
+		if timeRange != nil && !timeRange.Contains(replay.ArchivedAt) {
+			continue
+		}
+		sessions = append(sessions, replay)
+	}
+	sort.SliceStable(sessions, func(i, j int) bool {
+		if sessions[i].ArchivedAt.Equal(sessions[j].ArchivedAt) {
+			return sessions[i].SessionID < sessions[j].SessionID
+		}
+		return sessions[i].ArchivedAt.After(sessions[j].ArchivedAt)
+	})
+	return sessions, nil
+}
+
+func (s *LedgerStore) replaySessionAcrossBucketsLocked(sessionID string, selected map[string]BucketManifest) (LedgerReplaySession, error) {
+	resolvedSessionID := strings.TrimSpace(sessionID)
+	if resolvedSessionID == "" {
+		return LedgerReplaySession{}, nil
+	}
+	events := make([]LedgerEvent, 0, 32)
+	for _, bucket := range selected {
+		segmentEvents, _, err := readLedgerSegment(filepath.Join(bucket.RootDir, defaultLedgerSegmentFileName), true)
+		if err != nil {
+			return LedgerReplaySession{}, err
+		}
+		for _, event := range segmentEvents {
+			if strings.TrimSpace(event.SessionID) == resolvedSessionID {
+				events = append(events, event)
+			}
+		}
+	}
+	return projectLedgerSession(events), nil
+}
+
+func selectedBucketsByKey(plan *BucketPlan) map[string]BucketManifest {
+	if plan == nil || len(plan.SelectedBuckets) == 0 {
+		return nil
+	}
+	out := make(map[string]BucketManifest, len(plan.SelectedBuckets))
+	for _, selected := range plan.SelectedBuckets {
+		out[selected.Bucket.Key.String()] = normalizeBucketManifest(selected.Bucket)
+	}
+	return out
 }
 
 func (s *LedgerStore) ensureManifestLocked(monthDir string) (ledgerManifest, error) {

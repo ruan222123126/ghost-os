@@ -16,6 +16,7 @@ type QueryService struct {
 	graph    *GraphService
 	decision *DecisionService
 	planner  *IntentPlanner
+	buckets  *BucketPlanner
 	vector   *VectorSidecar
 	truth    *TruthReader
 
@@ -39,17 +40,18 @@ func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, gr
 		graph:                     graph,
 		decision:                  decision,
 		planner:                   planner,
+		buckets:                   NewBucketPlanner(config, cold, metrics),
 		vector:                    vector,
 		truth:                     truth,
-		autoRecallEnabled:         config.AutoRecallEnabled,
-		autoRecallLimit:           config.AutoRecallLimit,
-		shadowEnabled:             config.ShadowRecallEnabled,
-		truthReadEnabled:          config.TruthReadEnabled,
-		hybridEnabled:             config.HybridRerankEnabled,
-		rerankDebugEnabled:        config.RerankDebugEnabled,
-		recallInjectMinConfidence: clamp01(config.RecallInjectMinConfidence),
-		truthMinSupportRefs:       max(config.TruthMinSupportRefs, 2),
-		conflictPenalty:           maxFloat(config.ConflictPenalty, 0.12),
+		autoRecallEnabled:         config.Warm.AutoRecallEnabled,
+		autoRecallLimit:           config.Warm.AutoRecallLimit,
+		shadowEnabled:             config.Recall.ShadowEnabled,
+		truthReadEnabled:          config.Truth.ReadEnabled,
+		hybridEnabled:             config.Recall.HybridRerankEnabled,
+		rerankDebugEnabled:        config.Recall.RerankDebugEnabled,
+		recallInjectMinConfidence: clamp01(config.Recall.RecallInjectMinConfidence),
+		truthMinSupportRefs:       max(config.Truth.MinSupportRefs, 2),
+		conflictPenalty:           maxFloat(config.Recall.ConflictPenalty, 0.12),
 		scoring:                   newMemoryScoringConfig(config),
 		metrics:                   metrics,
 	}
@@ -291,7 +293,19 @@ func queryHot(scope SessionScope, query MemoryQuery) []MemoryEntry {
 }
 
 func (s *QueryService) queryMarkdown(query MemoryQuery) ([]MemoryEntry, error) {
-	nodes, err := s.cold.ListMarkdownNodes()
+	return s.queryMarkdownWithPlan(query, nil)
+}
+
+func (s *QueryService) queryMarkdownWithPlan(query MemoryQuery, plan *BucketPlan) ([]MemoryEntry, error) {
+	var (
+		nodes []string
+		err  error
+	)
+	if s.cold != nil && s.cold.markdown != nil && plan != nil && len(plan.SelectedBuckets) > 0 {
+		nodes, err = s.cold.markdown.ListByBucketPlan(plan, query)
+	} else {
+		nodes, err = s.cold.ListMarkdownNodes()
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -320,11 +334,15 @@ func (s *QueryService) queryMarkdown(query MemoryQuery) ([]MemoryEntry, error) {
 			LastAccessedAt: node.LastSeenAt.UTC(),
 			EmbeddingID:    node.EmbeddingID,
 			Metadata: map[string]any{
-				"layer":      "markdown",
-				"session_id": strings.TrimSpace(node.SessionID),
-				"tags":       append([]string(nil), node.Tags...),
-				"node_id":    node.ID,
-				"source_ids": markdownNodeSourceIDs(node),
+				"layer":       "markdown",
+				"namespace":   strings.TrimSpace(node.Namespace),
+				"workspace_id": strings.TrimSpace(node.WorkspaceID),
+				"bucket_key":  strings.TrimSpace(node.BucketKey),
+				"bucket_month": bucketMonthFromTime(markdownNodeTimestamp(node)),
+				"session_id":  strings.TrimSpace(node.SessionID),
+				"tags":        append([]string(nil), node.Tags...),
+				"node_id":     node.ID,
+				"source_ids":  markdownNodeSourceIDs(node),
 			},
 		})
 		if !entryMatchesQuery(entry, query) {

@@ -3,6 +3,7 @@ package memory
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,24 +15,24 @@ func newRecipeReuseManager(t *testing.T) *MemoryManager {
 	t.Helper()
 	baseDir := t.TempDir()
 	return NewMemoryManager(MemoryConfig{
-		WarmCapacity:                     32,
-		WarmPath:                         filepath.Join(baseDir, "warm.json"),
-		ColdBaseDir:                      filepath.Join(baseDir, "cold"),
-		AutoRecallEnabled:                true,
-		AutoRecallLimit:                  4,
-		DecisionEnabled:                  true,
-		DecisionPath:                     filepath.Join(baseDir, "decision"),
-		DecisionRecipeEnabled:            true,
-		DecisionRecipeMinSupport:         2,
-		RecipeReuseEnabled:               true,
-		RecipeReuseEnabledSet:            true,
-		RecipeExecutionTrackingEnabled:   true,
+		WarmCapacity:                      32,
+		WarmPath:                          filepath.Join(baseDir, "warm.json"),
+		ColdBaseDir:                       filepath.Join(baseDir, "cold"),
+		AutoRecallEnabled:                 true,
+		AutoRecallLimit:                   4,
+		DecisionEnabled:                   true,
+		DecisionPath:                      filepath.Join(baseDir, "decision"),
+		DecisionRecipeEnabled:             true,
+		DecisionRecipeMinSupport:          2,
+		RecipeReuseEnabled:                true,
+		RecipeReuseEnabledSet:             true,
+		RecipeExecutionTrackingEnabled:    true,
 		RecipeExecutionTrackingEnabledSet: true,
-		RecipeDefaultEnabled:             true,
-		RecipeDefaultEnabledSet:          true,
-		RecipeDefaultGrayPercent:         100,
-		RecipeMinSelectionConfidence:     0.60,
-		RecipeMinSuccessRate:             0.60,
+		RecipeDefaultEnabled:              true,
+		RecipeDefaultEnabledSet:           true,
+		RecipeDefaultGrayPercent:          100,
+		RecipeMinSelectionConfidence:      0.60,
+		RecipeMinSuccessRate:              0.60,
 	})
 }
 
@@ -52,7 +53,7 @@ func TestRecipeSelectionPrefersEnvironmentMatchedRecipe(t *testing.T) {
 		ToolsetSignature: "apply_diff,bash_exec,read_file",
 		ToolNames:        []string{"read_file", "apply_diff", "bash_exec"},
 	}
-	if _, err := manager.decision.store.UpsertMemo(DecisionMemo{
+	if _, err := manager.decision.debugUpsertMemo(DecisionMemo{
 		ID:            "memo-recipe-match",
 		Namespace:     "workspace:test",
 		SessionID:     "session-match",
@@ -67,7 +68,7 @@ func TestRecipeSelectionPrefersEnvironmentMatchedRecipe(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert matched memo: %v", err)
 	}
-	if _, err := manager.decision.store.UpsertMemo(DecisionMemo{
+	if _, err := manager.decision.debugUpsertMemo(DecisionMemo{
 		ID:            "memo-recipe-mismatch",
 		Namespace:     "workspace:test",
 		SessionID:     "session-mismatch",
@@ -82,14 +83,14 @@ func TestRecipeSelectionPrefersEnvironmentMatchedRecipe(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert mismatched memo: %v", err)
 	}
-	if _, err := manager.decision.store.UpsertRecipe(DecisionRecipe{
-		ID:               "recipe-match",
-		Namespace:        "workspace:test",
-		IntentKey:        "intent.fix_config_migration",
-		EnvironmentKey:   decisionClusterEnvironmentKey(matchedEnv, nil, nil),
-		StrategySummary:  "Inspect config, patch, then verify migration.",
-		RecommendedTools: []string{"read_file", "apply_diff", "bash_exec"},
-		OrderedActions: []RecipeStep{{Title: "Inspect", ToolName: "read_file", Instruction: "Read config.toml"}, {Title: "Patch", ToolName: "apply_diff", Instruction: "Apply the migration patch"}},
+	if _, err := manager.decision.debugUpsertRecipe(DecisionRecipe{
+		ID:                  "recipe-match",
+		Namespace:           "workspace:test",
+		IntentKey:           "intent.fix_config_migration",
+		EnvironmentKey:      decisionClusterEnvironmentKey(matchedEnv, nil, nil),
+		StrategySummary:     "Inspect config, patch, then verify migration.",
+		RecommendedTools:    []string{"read_file", "apply_diff", "bash_exec"},
+		OrderedActions:      []RecipeStep{{Title: "Inspect", ToolName: "read_file", Instruction: "Read config.toml"}, {Title: "Patch", ToolName: "apply_diff", Instruction: "Apply the migration patch"}},
 		ValidationChecklist: []string{"run migration check"},
 		SupportCount:        4,
 		SuccessRate:         0.86,
@@ -101,7 +102,7 @@ func TestRecipeSelectionPrefersEnvironmentMatchedRecipe(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert matched recipe: %v", err)
 	}
-	if _, err := manager.decision.store.UpsertRecipe(DecisionRecipe{
+	if _, err := manager.decision.debugUpsertRecipe(DecisionRecipe{
 		ID:               "recipe-mismatch",
 		Namespace:        "workspace:test",
 		IntentKey:        "intent.fix_config_migration",
@@ -153,7 +154,7 @@ func TestRecipeExecutionTrackingWritesRunAndFeedback(t *testing.T) {
 		ToolsetSignature: "apply_diff,read_file",
 		ToolNames:        []string{"read_file", "apply_diff"},
 	}
-	if _, err := manager.decision.store.UpsertMemo(DecisionMemo{
+	if _, err := manager.decision.debugUpsertMemo(DecisionMemo{
 		ID:            "memo-track-source",
 		Namespace:     "workspace:test",
 		SessionID:     "session-track-source",
@@ -168,7 +169,7 @@ func TestRecipeExecutionTrackingWritesRunAndFeedback(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert source memo: %v", err)
 	}
-	if _, err := manager.decision.store.UpsertRecipe(DecisionRecipe{
+	if _, err := manager.decision.debugUpsertRecipe(DecisionRecipe{
 		ID:               "recipe-track",
 		Namespace:        "workspace:test",
 		IntentKey:        "intent.fix_config_migration",
@@ -219,7 +220,7 @@ func TestRecipeExecutionTrackingWritesRunAndFeedback(t *testing.T) {
 	if err := manager.CaptureDecisionTurn(input); err != nil {
 		t.Fatalf("capture decision turn with recipe feedback: %v", err)
 	}
-	runs := manager.decision.store.ListRecipeRuns("workspace:test")
+	runs := manager.decision.debugListRecipeRuns("workspace:test")
 	if len(runs) != 1 {
 		t.Fatalf("expected one recipe run, got %+v", runs)
 	}
@@ -233,7 +234,7 @@ func TestRecipeExecutionTrackingWritesRunAndFeedback(t *testing.T) {
 	if !recipeRunHasDeviation(run) {
 		t.Fatalf("expected order deviation to be recorded, got %+v", run.Steps)
 	}
-	recipe, ok := manager.decision.store.Recipe("recipe-track")
+	recipe, ok := manager.decision.debugRecipe("recipe-track")
 	if !ok {
 		t.Fatal("expected recipe stats after feedback")
 	}
@@ -249,5 +250,81 @@ func TestRecipeExecutionTrackingWritesRunAndFeedback(t *testing.T) {
 	}
 	if metrics.RecipeDeviationRate <= 0 {
 		t.Fatalf("expected deviation rate > 0, got %+v", metrics)
+	}
+}
+
+func TestBuildContextWindowPrependsRecipeAdvisory(t *testing.T) {
+	manager := newRecipeReuseManager(t)
+	now := time.Date(2026, 3, 8, 9, 0, 0, 0, time.UTC)
+	env := DecisionEnvFingerprint{
+		WorkspaceRoot:    "/workspace/ghost-os",
+		Platform:         "linux/amd64",
+		GraphNamespace:   "workspace:test",
+		ToolsetSignature: "apply_diff,bash_exec,read_file",
+		ToolNames:        []string{"read_file", "apply_diff", "bash_exec"},
+	}
+	if _, err := manager.decision.debugUpsertMemo(DecisionMemo{
+		ID:            "memo-recipe-window",
+		Namespace:     "workspace:test",
+		SessionID:     "session-recipe-window-source",
+		IntentKey:     "intent.fix_config_migration",
+		IntentSummary: "fix config migration",
+		Outcome:       DecisionOutcomeSuccess,
+		Confidence:    0.93,
+		ReuseScore:    0.90,
+		CreatedAt:     now.Add(-2 * time.Hour),
+		LastUsedAt:    now.Add(-time.Hour),
+		Environment:   env,
+	}); err != nil {
+		t.Fatalf("upsert recipe window memo: %v", err)
+	}
+	if _, err := manager.decision.debugUpsertRecipe(DecisionRecipe{
+		ID:                  "recipe-window",
+		Namespace:           "workspace:test",
+		IntentKey:           "intent.fix_config_migration",
+		EnvironmentKey:      decisionClusterEnvironmentKey(env, nil, nil),
+		StrategySummary:     "Inspect config, patch, then verify migration.",
+		RecommendedTools:    []string{"read_file", "apply_diff", "bash_exec"},
+		OrderedActions:      []RecipeStep{{Title: "Inspect", ToolName: "read_file", Instruction: "Read config.toml"}, {Title: "Patch", ToolName: "apply_diff", Instruction: "Apply the migration patch"}},
+		ValidationChecklist: []string{"run migration check"},
+		AvoidPatterns:       []string{"rewrite unrelated files"},
+		SupportCount:        4,
+		SuccessRate:         0.88,
+		Confidence:          0.86,
+		Status:              RecipeStatusActive,
+		SourceMemoIDs:       []string{"memo-recipe-window"},
+		CreatedAt:           now.Add(-2 * time.Hour),
+		UpdatedAt:           now.Add(-20 * time.Minute),
+	}); err != nil {
+		t.Fatalf("upsert recipe window recipe: %v", err)
+	}
+
+	window, err := manager.BuildContextWindowWithScope(SessionScope{
+		SessionID:   "session-recipe-window",
+		Environment: &env,
+	}, "fix config migration")
+	if err != nil {
+		t.Fatalf("build context window with recipe advisory: %v", err)
+	}
+	if len(window) != 1 {
+		t.Fatalf("unexpected context window size: got %d want 1", len(window))
+	}
+	text := window[0].Text
+	selectedIdx := strings.Index(text, "Selected recipe: start with")
+	recallIdx := strings.Index(text, "Prior similar experience:")
+	if selectedIdx < 0 {
+		t.Fatalf("expected recipe advisory line in context window, got %q", text)
+	}
+	if recallIdx < 0 {
+		t.Fatalf("expected decision recall line in context window, got %q", text)
+	}
+	if selectedIdx > recallIdx {
+		t.Fatalf("expected recipe advisory to stay ahead of recall summary, got %q", text)
+	}
+	if !strings.Contains(text, "run migration check") {
+		t.Fatalf("expected recipe validation hint in context window, got %q", text)
+	}
+	if strings.Contains(text, "apply_by_default") || strings.Contains(text, "recommended_tools") {
+		t.Fatalf("expected compact advisory only, got %q", text)
 	}
 }

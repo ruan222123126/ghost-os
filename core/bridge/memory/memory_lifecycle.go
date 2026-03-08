@@ -15,18 +15,20 @@ type MemoryLifecycle struct {
 	warm  *WarmMemory
 	cold  *ColdMemory
 	graph *GraphService
+	index *IndexRuntime
 
 	sessionStore SessionStorePort
 	warmCapacity int
 }
 
-func NewMemoryLifecycle(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, sessionStore SessionStorePort) *MemoryLifecycle {
+func NewMemoryLifecycle(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, index *IndexRuntime, sessionStore SessionStorePort) *MemoryLifecycle {
 	return &MemoryLifecycle{
 		warm:         warm,
 		cold:         cold,
 		graph:        graph,
+		index:        index,
 		sessionStore: sessionStore,
-		warmCapacity: config.WarmCapacity,
+		warmCapacity: config.Warm.Capacity,
 	}
 }
 
@@ -73,7 +75,7 @@ func (l *MemoryLifecycle) ArchiveToCold(sessionID string) error {
 	if err := l.cold.Archive(sid, messages); err != nil {
 		return err
 	}
-	if l.graph != nil {
+	if l.graph != nil && (l.index == nil || !l.index.OwnsProjector("graph")) {
 		if err := l.graph.IngestArchiveMessages(sid, messages); err != nil {
 			log.Printf("[MEMORY] graph archive ingest failed, continuing without graph update: session=%s err=%v", sid, err)
 		}

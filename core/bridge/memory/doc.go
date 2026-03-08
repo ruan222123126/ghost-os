@@ -1,12 +1,14 @@
 // Package memory implements the Bridge memory subsystem.
 //
-// Layout overview:
-//   - `memory_*`: shared L1/L2/L3 manager, query, storage, lifecycle and helpers.
-//   - `anchor*`: structured anchor extraction and ranking signals.
-//   - `graph_*`: graph sidecar models, storage, recall and rebuild flow.
-//   - `decision_*`: decision memo/recipe sidecar capture, recall and distill flow.
-//
-// The package keeps a single public facade (`MemoryManager`) while organizing
-// internal code by concern so query flow, persistence and sidecars can evolve
-// independently without changing the external API surface.
+// Directory contract:
+//   - Root package (`core/bridge/memory`) is the only public façade: `MemoryManager`,
+//     exported DTO/config types, assembly, and façade-level regression tests live here.
+//   - `memory_*`, `graph_service.go`, and `decision_service.go` keep the entry points,
+//     query wiring, lifecycle, and thin adapters that define the package boundary.
+//   - Concrete graph and decision implementations live in `internal/graph` and
+//     `internal/decision`; keep new logic there instead of rebuilding flat copies here.
+//   - Do not keep duplicate root-level implementation snapshots once code has moved into
+//     `internal/*`; delete the old copy instead of letting two versions drift.
+//   - Newcomer map: start with `memory_manager*.go` / `*_service.go`, then read
+//     `internal/*` for implementation details, then `*_test.go` for regression guards.
 package memory
