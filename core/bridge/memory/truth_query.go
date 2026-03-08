@@ -283,6 +283,32 @@ func (r *TruthReader) ResolvePrimaryObjectIDBySourceRef(ref SourceRef) string {
 	return ids[0]
 }
 
+func (r *TruthReader) resolvePrimaryObjectIDByClaimID(claimID string) string {
+	if !r.Enabled() {
+		return ""
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	object, ok := r.index.objectsByClaimID[strings.TrimSpace(claimID)]
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(object.ObjectID)
+}
+
+func (r *TruthReader) resolvePrimaryObjectIDByEvidenceID(evidenceID string) string {
+	if !r.Enabled() {
+		return ""
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	object, ok := r.index.objectsByEvidenceID[strings.TrimSpace(evidenceID)]
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(object.ObjectID)
+}
+
 func (r *TruthReader) ConflictCount(objectID string) int {
 	object, ok := r.LookupObject(objectID)
 	if !ok {

@@ -2,7 +2,6 @@ package memory
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 )
@@ -262,19 +261,6 @@ func memoryEntryFromGraphDebugHit(hit GraphHit, now time.Time) MemoryEntry {
 func (s *QueryService) entrySourceRefsForHydration(entry MemoryEntry) []SourceRef {
 	refs := append([]SourceRef(nil), entry.SourceRefs...)
 	sessionID := metadataString(entry.Metadata, "session_id")
-	if memoID := metadataString(entry.Metadata, "memo_id"); memoID != "" {
-		refs = append(refs, SourceRef{SessionID: sessionID, SourceKind: truthSourceKindDecisionMemo, SourceID: memoID})
-	}
-	if nodeID := metadataString(entry.Metadata, "node_id"); nodeID != "" {
-		refs = append(refs, SourceRef{SessionID: sessionID, SourceKind: truthSourceKindMarkdownNode, SourceID: nodeID})
-	}
-	for _, sourceID := range metadataStrings(entry.Metadata, "source_ids") {
-		refs = append(refs,
-			SourceRef{SessionID: sessionID, SourceID: sourceID},
-			SourceRef{SessionID: sessionID, SourceKind: truthSourceKindArchiveMessage, SourceID: sourceID},
-			SourceRef{SessionID: sessionID, SourceKind: truthSourceKindMarkdownSource, SourceID: sourceID},
-		)
-	}
 	if entryLayer(entry) == "cold" || strings.EqualFold(strings.TrimSpace(entry.Source), "archive") {
 		refs = append(refs, SourceRef{SessionID: sessionID, SourceKind: truthSourceKindArchiveMessage, SourceID: entry.ID})
 	}
@@ -285,8 +271,18 @@ func (s *QueryService) objectIDFromEntry(entry MemoryEntry) string {
 	if s.truth == nil || !s.truth.Enabled() {
 		return ""
 	}
-	if objectID := metadataString(entry.Metadata, "object_id"); objectID != "" {
+	if objectID := firstNonEmpty(metadataString(entry.Metadata, "object_id"), metadataString(entry.Explain, "object_id")); objectID != "" {
 		return objectID
+	}
+	for _, claimID := range entryClaimLineageIDs(entry) {
+		if objectID := s.truth.resolvePrimaryObjectIDByClaimID(claimID); objectID != "" {
+			return objectID
+		}
+	}
+	for _, evidenceID := range entryEvidenceLineageIDs(entry) {
+		if objectID := s.truth.resolvePrimaryObjectIDByEvidenceID(evidenceID); objectID != "" {
+			return objectID
+		}
 	}
 	for _, ref := range s.entrySourceRefsForHydration(entry) {
 		if objectID := s.truth.ResolvePrimaryObjectIDBySourceRef(ref); objectID != "" {
@@ -297,23 +293,49 @@ func (s *QueryService) objectIDFromEntry(entry MemoryEntry) string {
 }
 
 func recallCandidateKey(candidate RecallCandidate) string {
+	if projectionType := recallProjectionType(candidate); projectionType != "" {
+		projectionID := projectionIDFromEntry(candidate.Entry, projectionType)
+		if projectionID != "" {
+			return "projection:" + projectionType + ":" + projectionID
+		}
+	}
 	if candidate.ObjectID != "" {
 		return "object:" + candidate.ObjectID
-	}
-	if memoID := metadataString(candidate.Entry.Metadata, "memo_id"); memoID != "" {
-		return "memo:" + memoID
-	}
-	if nodeID := metadataString(candidate.Entry.Metadata, "node_id"); nodeID != "" {
-		return "node:" + nodeID
-	}
-	if sourceIDs := metadataStrings(candidate.Entry.Metadata, "source_ids"); len(sourceIDs) > 0 {
-		sort.Strings(sourceIDs)
-		return "source:" + strings.Join(sourceIDs, ",")
 	}
 	if sessionID := metadataString(candidate.Entry.Metadata, "session_id"); sessionID != "" {
 		return "session:" + sessionID + ":" + candidate.Entry.ID
 	}
 	return "fingerprint:" + normalizeRecallText(firstNonEmpty(candidate.Entry.Summary, candidate.Entry.Content, candidate.Entry.ID))
+}
+
+func recallProjectionType(candidate RecallCandidate) string {
+	for _, layer := range []string{candidate.Layer, entryLayer(candidate.Entry), candidate.Entry.Source} {
+		switch strings.TrimSpace(layer) {
+		case "markdown", "decision", "graph":
+			return strings.TrimSpace(layer)
+		}
+	}
+	return ""
+}
+
+func entryClaimLineageIDs(entry MemoryEntry) []string {
+	keys := []string{"source_claim_ids", "matched_claim_ids", "derived_claim_ids", "conflicted_claim_ids"}
+	values := make([]string, 0, len(keys)*2)
+	for _, key := range keys {
+		values = append(values, metadataStrings(entry.Metadata, key)...)
+		values = append(values, metadataStrings(entry.Explain, key)...)
+	}
+	return uniqueStrings(values)
+}
+
+func entryEvidenceLineageIDs(entry MemoryEntry) []string {
+	keys := []string{"source_evidence_ids", "matched_evidence_ids"}
+	values := make([]string, 0, len(keys)*2)
+	for _, key := range keys {
+		values = append(values, metadataStrings(entry.Metadata, key)...)
+		values = append(values, metadataStrings(entry.Explain, key)...)
+	}
+	return uniqueStrings(values)
 }
 
 func primaryRecallLayer(candidate RecallCandidate) string {
