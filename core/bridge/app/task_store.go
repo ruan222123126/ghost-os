@@ -72,6 +72,20 @@ type TaskStore struct {
 	mu       sync.Mutex
 }
 
+type TaskLoadIssue struct {
+	Kind   string `json:"kind,omitempty"`
+	TaskID string `json:"task_id,omitempty"`
+	Path   string `json:"path,omitempty"`
+	Error  string `json:"error"`
+}
+
+const (
+	taskLoadIssueReadError     = "read_error"
+	taskLoadIssueDecodeError   = "decode_error"
+	taskLoadIssueInvalidConfig = "invalid_config"
+	taskLoadIssueIDMismatch    = "id_mismatch"
+)
+
 func NewTaskStore(baseDir string) (*TaskStore, error) {
 	resolved, err := resolveTaskBaseDir(baseDir)
 	if err != nil {
@@ -183,14 +197,24 @@ func (s *TaskStore) DeleteTask(taskID string) error {
 }
 
 func (s *TaskStore) ListTasks() ([]ScheduledTask, error) {
+	tasks, _, err := s.scanTasks(false)
+	return tasks, err
+}
+
+func (s *TaskStore) ListTasksTolerant() ([]ScheduledTask, []TaskLoadIssue, error) {
+	return s.scanTasks(true)
+}
+
+func (s *TaskStore) scanTasks(tolerant bool) ([]ScheduledTask, []TaskLoadIssue, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	entries, err := os.ReadDir(s.tasksDir)
 	if err != nil {
-		return nil, fmt.Errorf("read task directory %q: %w", s.tasksDir, err)
+		return nil, nil, fmt.Errorf("read task directory %q: %w", s.tasksDir, err)
 	}
 	tasks := make([]ScheduledTask, 0, len(entries))
+	issues := make([]TaskLoadIssue, 0)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -203,29 +227,65 @@ func (s *TaskStore) ListTasks() ([]ScheduledTask, error) {
 		if !isValidTaskID(id) {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(s.tasksDir, name))
+		path := filepath.Join(s.tasksDir, name)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return nil, fmt.Errorf("read task %q: %w", id, err)
+			readErr := fmt.Errorf("read task %q: %w", id, err)
+			issue := newTaskLoadIssue(taskLoadIssueReadError, id, path, readErr)
+			if tolerant {
+				issues = append(issues, issue)
+				continue
+			}
+			return nil, nil, readErr
 		}
 		var task ScheduledTask
 		if err := json.Unmarshal(data, &task); err != nil {
-			return nil, fmt.Errorf("%w: id=%s: %v", ErrTaskCorrupted, id, err)
+			decodeErr := fmt.Errorf("%w: id=%s: %v", ErrTaskCorrupted, id, err)
+			issue := newTaskLoadIssue(taskLoadIssueDecodeError, id, path, decodeErr)
+			if tolerant {
+				issues = append(issues, issue)
+				continue
+			}
+			return nil, nil, decodeErr
 		}
-		if strings.TrimSpace(task.ID) == "" {
+		storedID := strings.TrimSpace(task.ID)
+		if storedID == "" {
 			task.ID = id
+		} else if storedID != id {
+			mismatchErr := fmt.Errorf("%w: id=%s: payload id %q does not match file name", ErrTaskCorrupted, id, storedID)
+			issue := newTaskLoadIssue(taskLoadIssueIDMismatch, id, path, mismatchErr)
+			if tolerant {
+				issues = append(issues, issue)
+				continue
+			}
+			return nil, nil, mismatchErr
 		}
 		if err := normalizeScheduledTask(&task); err != nil {
-			return nil, err
+			issue := newTaskLoadIssue(taskLoadIssueInvalidConfig, id, path, err)
+			if tolerant {
+				issues = append(issues, issue)
+				continue
+			}
+			return nil, nil, err
 		}
 		tasks = append(tasks, task)
 	}
 	sort.Slice(tasks, func(i, j int) bool {
 		return tasks[i].CreatedAt.Before(tasks[j].CreatedAt)
 	})
-	return tasks, nil
+	return tasks, issues, nil
+}
+
+func newTaskLoadIssue(kind string, taskID string, path string, err error) TaskLoadIssue {
+	return TaskLoadIssue{
+		Kind:   strings.TrimSpace(kind),
+		TaskID: strings.TrimSpace(taskID),
+		Path:   strings.TrimSpace(path),
+		Error:  strings.TrimSpace(err.Error()),
+	}
 }
 
 func (s *TaskStore) AppendRunLog(run TaskRunLog) error {

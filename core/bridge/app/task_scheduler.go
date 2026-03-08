@@ -72,19 +72,37 @@ func (s *TaskScheduler) Start() error {
 	}
 	s.running = true
 	s.mu.Unlock()
+	started := false
+	defer func() {
+		if started {
+			return
+		}
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+	}()
 
-	tasks, err := s.store.ListTasks()
+	tasks, issues, err := s.store.ListTasksTolerant()
 	if err != nil {
 		return err
+	}
+	for _, issue := range issues {
+		log.Printf("task scheduler skipped corrupted task: kind=%s task_id=%s path=%s error=%s", issue.Kind, issue.TaskID, issue.Path, issue.Error)
 	}
 	for _, task := range tasks {
 		if !task.Enabled {
 			continue
 		}
 		if err := s.register(task); err != nil {
-			return err
+			path, pathErr := s.store.pathForTask(task.ID)
+			if pathErr != nil {
+				path = ""
+			}
+			log.Printf("task scheduler skipped invalid task during registration: task_id=%s path=%s error=%v", task.ID, path, err)
+			continue
 		}
 	}
+	started = true
 	return nil
 }
 
