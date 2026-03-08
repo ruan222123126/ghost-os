@@ -12,6 +12,7 @@ const (
 // TruthHit 描述 truth live read 的调试命中视图。
 type TruthHit struct {
 	ObjectID      string      `json:"object_id,omitempty"`
+	ClaimIDs      []string    `json:"claim_ids,omitempty"`
 	ObjectType    string      `json:"object_type,omitempty"`
 	Score         float64     `json:"score,omitempty"`
 	Confidence    float64     `json:"confidence,omitempty"`

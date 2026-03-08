@@ -557,8 +557,11 @@ func truthConflictCount(object MemoryObject, claims map[string]MemoryClaim) int 
 	seen := make(map[string]struct{})
 	count := 0
 	for _, own := range object.Claims {
+		if !truthClaimStatusIsLive(own.Status) {
+			continue
+		}
 		for _, other := range claims {
-			if other.ObjectID == object.ObjectID {
+			if other.ObjectID == object.ObjectID || !truthClaimStatusIsLive(other.Status) {
 				continue
 			}
 			if !truthClaimsConflict(own, other) {
@@ -581,8 +584,11 @@ func truthClaimsConflict(left MemoryClaim, right MemoryClaim) bool {
 	if leftKey == "" || leftKey != rightKey {
 		return false
 	}
-	leftValue := truthIndexKey(firstNonEmpty(left.Value, left.IntentKey, left.EntityID, left.ConstraintType, left.RiskType))
-	rightValue := truthIndexKey(firstNonEmpty(right.Value, right.IntentKey, right.EntityID, right.ConstraintType, right.RiskType))
+	if normalizeTruthPredicateCardinality(truthPredicatePolicyFor(left.Predicate).Cardinality) != truthPredicateCardinalitySingleValue {
+		return false
+	}
+	leftValue := truthClaimValueKey(left)
+	rightValue := truthClaimValueKey(right)
 	if leftValue == "" || rightValue == "" {
 		return false
 	}
@@ -590,6 +596,9 @@ func truthClaimsConflict(left MemoryClaim, right MemoryClaim) bool {
 }
 
 func truthConflictDimension(claim MemoryClaim) string {
+	if key := truthClaimDomainKey(claim); key != "" {
+		return key
+	}
 	switch {
 	case strings.TrimSpace(claim.EntityID) != "":
 		return "entity:" + truthIndexKey(claim.EntityID) + ":" + truthIndexKey(firstNonEmpty(claim.Type, claim.ConstraintType, claim.RiskType))

@@ -27,15 +27,25 @@ func buildTruthEventID(eventType string, object MemoryObject) string {
 }
 
 func buildTruthClaimID(objectID string, claim MemoryClaim) string {
+	subject := normalizeClaimTerm(claim.Subject)
+	objectTerm := normalizeClaimTerm(claim.Object)
 	return truthHashID("clm",
 		strings.TrimSpace(objectID),
 		strings.TrimSpace(claim.Type),
+		strings.TrimSpace(claim.Predicate),
+		subject.Kind,
+		subject.ID,
+		subject.Label,
+		objectTerm.Kind,
+		objectTerm.ID,
+		objectTerm.Label,
 		strings.TrimSpace(claim.IntentKey),
 		strings.TrimSpace(claim.AnchorKey),
 		strings.TrimSpace(claim.EntityID),
 		strings.TrimSpace(claim.ConstraintType),
 		strings.TrimSpace(claim.RiskType),
 		strings.TrimSpace(claim.Value),
+		strings.TrimSpace(claim.Datatype),
 	)
 }
 

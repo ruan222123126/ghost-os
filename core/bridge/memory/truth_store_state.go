@@ -27,6 +27,15 @@ func (w *TruthWriter) loadSnapshots() error {
 		normalized := normalizeMemoryClaim(claim, claim.ObjectID)
 		w.claimSnapshot[normalized.ClaimID] = normalized
 	}
+	if len(w.claimSnapshot) == 0 {
+		w.claimSnapshot = truthClaimsFromObjects(w.objectSnapshot)
+	}
+	if w.claimSnapshot == nil {
+		w.claimSnapshot = make(map[string]MemoryClaim)
+	}
+	if w.claimStatusProjectionEnabled {
+		truthProjectClaimsOntoObjects(w.objectSnapshot, w.claimSnapshot, w.legacyObjectProjectionEnabled)
+	}
 	return nil
 }
 
@@ -104,30 +113,20 @@ func (w *TruthWriter) replayLocked() (map[string]MemoryObject, map[string]Memory
 			return nil, nil, TruthWriteResult{}, truthReplayCheckpoint{}, err
 		}
 		for _, event := range events {
-			normalized := normalizeMemoryObject(event.Object)
-			objects[normalized.ObjectID] = normalized
-			for claimID, existing := range claims {
-				if existing.ObjectID == normalized.ObjectID {
-					delete(claims, claimID)
-				}
-			}
-			for _, claim := range normalized.Claims {
-				normalizedClaim := normalizeMemoryClaim(claim, normalized.ObjectID)
-				claims[normalizedClaim.ClaimID] = normalizedClaim
-			}
+			truthApplyEvent(objects, claims, event)
+			normalizedEvent := normalizeTruthEvent(event)
 			eventCount++
-			lastEventID = event.EventID
-			lastOccurredAt = effectiveDecisionTimestamp(event.OccurredAt, normalized.UpdatedAt, lastOccurredAt)
+			lastEventID = normalizedEvent.EventID
+			lastOccurredAt = effectiveDecisionTimestamp(normalizedEvent.OccurredAt, lastOccurredAt)
 		}
 	}
-	result := TruthWriteResult{
-		SchemaVersion:  truthSchemaVersion,
-		EventID:        lastEventID,
-		ObjectCount:    len(objects),
-		ClaimCount:     len(claims),
-		SourceRefCount: truthSourceRefCount(objects, claims),
-		OccurredAt:     lastOccurredAt,
+	if len(claims) == 0 {
+		claims = truthClaimsFromObjects(objects)
 	}
+	truthProjectClaimsOntoObjects(objects, claims, w.legacyObjectProjectionEnabled)
+	result := truthWriteResultFromSnapshots(objects, claims)
+	result.EventID = lastEventID
+	result.OccurredAt = lastOccurredAt
 	checkpoint := truthReplayCheckpoint{
 		SchemaVersion:  truthSchemaVersion,
 		LastReplayAt:   time.Now().UTC(),

@@ -36,6 +36,7 @@ type MemoryEntry struct {
 	SourceRefs     []SourceRef    `json:"source_refs,omitempty"`
 	TruthStatus    string         `json:"truth_status,omitempty"`
 	WhyMatched     string         `json:"why_matched,omitempty"`
+	Explain        map[string]any `json:"explain,omitempty"`
 	RerankScore    float64        `json:"rerank_score,omitempty"`
 	FreshnessBoost float64        `json:"freshness_boost,omitempty"`
 	// TODO(memory): 仅做字段透传，尚未接入向量索引/召回。
@@ -104,20 +105,20 @@ type MemoryQuery struct {
 
 // MemoryQueryResult 允许在不破坏旧接口的情况下带回 graph/decision 命中结果。
 type MemoryQueryResult struct {
-	Entries          []MemoryEntry          `json:"entries"`
-	GraphHits        []GraphHit             `json:"graph_hits,omitempty"`
-	DecisionHits     []DecisionHit          `json:"decision_hits,omitempty"`
-	IntentPlan       *QueryIntentPlan       `json:"intent_plan,omitempty"`
-	BucketPlan       *BucketPlan            `json:"bucket_plan,omitempty"`
-	LayerFreshness   map[string]time.Time   `json:"layer_freshness,omitempty"`
-	VectorHits       []VectorHit            `json:"vector_hits,omitempty"`
-	TruthHits        []TruthHit             `json:"truth_hits,omitempty"`
-	SelectedRecipe   *DecisionRecipe        `json:"selected_recipe,omitempty"`
-	RecipeAdvisory   *RecipeAdvisory        `json:"recipe_advisory,omitempty"`
+	Entries         []MemoryEntry          `json:"entries"`
+	GraphHits       []GraphHit             `json:"graph_hits,omitempty"`
+	DecisionHits    []DecisionHit          `json:"decision_hits,omitempty"`
+	IntentPlan      *QueryIntentPlan       `json:"intent_plan,omitempty"`
+	BucketPlan      *BucketPlan            `json:"bucket_plan,omitempty"`
+	LayerFreshness  map[string]time.Time   `json:"layer_freshness,omitempty"`
+	VectorHits      []VectorHit            `json:"vector_hits,omitempty"`
+	TruthHits       []TruthHit             `json:"truth_hits,omitempty"`
+	SelectedRecipe  *DecisionRecipe        `json:"selected_recipe,omitempty"`
+	RecipeAdvisory  *RecipeAdvisory        `json:"recipe_advisory,omitempty"`
 	RecipeSelection *RecipeSelectionReport `json:"recipe_selection,omitempty"`
-	RerankReport     *HybridRerankReport    `json:"rerank_report,omitempty"`
-	ShadowReport     *ShadowRecallReport    `json:"shadow_report,omitempty"`
-	ShadowRead       *BucketShadowReport    `json:"shadow_read,omitempty"`
+	RerankReport    *HybridRerankReport    `json:"rerank_report,omitempty"`
+	ShadowReport    *ShadowRecallReport    `json:"shadow_report,omitempty"`
+	ShadowRead      *BucketShadowReport    `json:"shadow_read,omitempty"`
 }
 
 // QueryIntentPlan 保存 query planner 对任务意图的结构化切面。

@@ -84,7 +84,7 @@ func readTruthEvents(path string) ([]truthEvent, error) {
 		if err := json.Unmarshal([]byte(line), &event); err != nil {
 			return nil, fmt.Errorf("decode truth event: %w", err)
 		}
-		events = append(events, event)
+		events = append(events, normalizeTruthEvent(event))
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("scan truth events: %w", err)
@@ -224,13 +224,26 @@ func writeTruthObjectShadow(writer *TruthWriter, eventType string, object Memory
 		return nil
 	}
 	normalized := normalizeMemoryObject(object)
-	if _, err := writer.AppendEvent(eventType, normalized, traceID); err != nil {
+	for _, evidence := range normalized.RawEvidence {
+		if _, err := writer.AppendEvidenceEvent(eventType, normalized, evidence, traceID); err != nil {
+			return err
+		}
+	}
+	for _, claim := range normalized.Claims {
+		if _, err := writer.AppendClaimEvent(claim, traceID); err != nil {
+			return err
+		}
+	}
+	if _, err := writer.UpsertClaims(normalized.Claims); err != nil {
+		return err
+	}
+	projection := normalized
+	projection.Claims = nil
+	projection.RawEvidence = nil
+	if _, err := writer.AppendEvent(truthEventTypeObjectProjected, projection, traceID); err != nil {
 		return err
 	}
 	if _, err := writer.UpsertObject(normalized); err != nil {
-		return err
-	}
-	if _, err := writer.UpsertClaims(normalized.Claims); err != nil {
 		return err
 	}
 	return nil

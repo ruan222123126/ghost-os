@@ -6,30 +6,42 @@ import (
 )
 
 type truthIndex struct {
-	objectsByID            map[string]MemoryObject
-	claimsByID             map[string]MemoryClaim
-	claimsByObjectID       map[string][]MemoryClaim
-	claimsByIntentKey      map[string][]MemoryClaim
-	claimsByEntityID       map[string][]MemoryClaim
-	claimsByAnchorKey      map[string][]MemoryClaim
-	claimsByConstraintType map[string][]MemoryClaim
-	claimsByRiskType       map[string][]MemoryClaim
-	objectsBySourceRef     map[string][]MemoryObject
-	objectsByType          map[string][]MemoryObject
+	objectsByID              map[string]MemoryObject
+	claimsByID               map[string]MemoryClaim
+	claimsByObjectID         map[string][]MemoryClaim
+	claimsBySubjectPredicate map[string][]MemoryClaim
+	claimsByEvidenceID       map[string][]MemoryClaim
+	claimsByStatus           map[string][]MemoryClaim
+	claimsBySubject          map[string][]MemoryClaim
+	claimsByObject           map[string][]MemoryClaim
+	claimsByValidityWindow   map[string][]MemoryClaim
+	claimsByIntentKey        map[string][]MemoryClaim
+	claimsByEntityID         map[string][]MemoryClaim
+	claimsByAnchorKey        map[string][]MemoryClaim
+	claimsByConstraintType   map[string][]MemoryClaim
+	claimsByRiskType         map[string][]MemoryClaim
+	objectsBySourceRef       map[string][]MemoryObject
+	objectsByType            map[string][]MemoryObject
 }
 
 func buildTruthIndex(objects map[string]MemoryObject, claims map[string]MemoryClaim) truthIndex {
 	idx := truthIndex{
-		objectsByID:            make(map[string]MemoryObject, len(objects)),
-		claimsByID:             make(map[string]MemoryClaim, len(claims)),
-		claimsByObjectID:       make(map[string][]MemoryClaim),
-		claimsByIntentKey:      make(map[string][]MemoryClaim),
-		claimsByEntityID:       make(map[string][]MemoryClaim),
-		claimsByAnchorKey:      make(map[string][]MemoryClaim),
-		claimsByConstraintType: make(map[string][]MemoryClaim),
-		claimsByRiskType:       make(map[string][]MemoryClaim),
-		objectsBySourceRef:     make(map[string][]MemoryObject),
-		objectsByType:          make(map[string][]MemoryObject),
+		objectsByID:              make(map[string]MemoryObject, len(objects)),
+		claimsByID:               make(map[string]MemoryClaim, len(claims)),
+		claimsByObjectID:         make(map[string][]MemoryClaim),
+		claimsBySubjectPredicate: make(map[string][]MemoryClaim),
+		claimsByEvidenceID:       make(map[string][]MemoryClaim),
+		claimsByStatus:           make(map[string][]MemoryClaim),
+		claimsBySubject:          make(map[string][]MemoryClaim),
+		claimsByObject:           make(map[string][]MemoryClaim),
+		claimsByValidityWindow:   make(map[string][]MemoryClaim),
+		claimsByIntentKey:        make(map[string][]MemoryClaim),
+		claimsByEntityID:         make(map[string][]MemoryClaim),
+		claimsByAnchorKey:        make(map[string][]MemoryClaim),
+		claimsByConstraintType:   make(map[string][]MemoryClaim),
+		claimsByRiskType:         make(map[string][]MemoryClaim),
+		objectsBySourceRef:       make(map[string][]MemoryObject),
+		objectsByType:            make(map[string][]MemoryObject),
 	}
 	for _, object := range objects {
 		normalized := normalizeMemoryObject(object)
@@ -47,11 +59,19 @@ func buildTruthIndex(objects map[string]MemoryObject, claims map[string]MemoryCl
 	}
 	for _, claim := range claims {
 		normalized := normalizeMemoryClaim(claim, claim.ObjectID)
-		if normalized.ClaimID == "" || normalized.ObjectID == "" {
+		if normalized.ClaimID == "" {
 			continue
 		}
 		idx.claimsByID[normalized.ClaimID] = normalized
-		idx.claimsByObjectID[normalized.ObjectID] = append(idx.claimsByObjectID[normalized.ObjectID], normalized)
+		appendTruthClaimBucket(idx.claimsByObjectID, normalized.ObjectID, normalized)
+		appendTruthClaimBucket(idx.claimsBySubjectPredicate, truthClaimDomainKey(normalized), normalized)
+		appendTruthClaimBucket(idx.claimsByStatus, normalized.Status, normalized)
+		appendTruthClaimBucket(idx.claimsBySubject, truthClaimSubjectIndexKey(normalized), normalized)
+		appendTruthClaimBucket(idx.claimsByObject, truthClaimObjectIndexKey(normalized), normalized)
+		appendTruthClaimBucket(idx.claimsByValidityWindow, truthClaimValidityIndexKey(normalized), normalized)
+		for _, evidenceRef := range normalized.EvidenceRefs {
+			appendTruthClaimBucket(idx.claimsByEvidenceID, evidenceRef.EvidenceID, normalized)
+		}
 		appendTruthClaimBucket(idx.claimsByIntentKey, normalized.IntentKey, normalized)
 		appendTruthClaimBucket(idx.claimsByEntityID, normalized.EntityID, normalized)
 		appendTruthClaimBucket(idx.claimsByAnchorKey, normalized.AnchorKey, normalized)
@@ -59,6 +79,12 @@ func buildTruthIndex(objects map[string]MemoryObject, claims map[string]MemoryCl
 		appendTruthClaimBucket(idx.claimsByRiskType, normalized.RiskType, normalized)
 	}
 	truthSortIndex(idx.claimsByObjectID)
+	truthSortIndex(idx.claimsBySubjectPredicate)
+	truthSortIndex(idx.claimsByEvidenceID)
+	truthSortIndex(idx.claimsByStatus)
+	truthSortIndex(idx.claimsBySubject)
+	truthSortIndex(idx.claimsByObject)
+	truthSortIndex(idx.claimsByValidityWindow)
 	truthSortIndex(idx.claimsByIntentKey)
 	truthSortIndex(idx.claimsByEntityID)
 	truthSortIndex(idx.claimsByAnchorKey)
@@ -141,4 +167,21 @@ func truthClaimsFromObjects(objects map[string]MemoryObject) map[string]MemoryCl
 		}
 	}
 	return out
+}
+
+func truthClaimSubjectIndexKey(claim MemoryClaim) string {
+	subject := normalizeClaimTerm(claim.Subject)
+	return strings.Join([]string{subject.Kind, subject.ID}, "|")
+}
+
+func truthClaimObjectIndexKey(claim MemoryClaim) string {
+	objectTerm := normalizeClaimTerm(claim.Object)
+	return strings.Join([]string{objectTerm.Kind, objectTerm.ID, truthIndexKey(objectTerm.Label)}, "|")
+}
+
+func truthClaimValidityIndexKey(claim MemoryClaim) string {
+	if claim.ValidFrom.IsZero() && claim.ValidTo.IsZero() {
+		return "open"
+	}
+	return claim.ValidFrom.UTC().Format("2006-01-02") + "|" + claim.ValidTo.UTC().Format("2006-01-02")
 }

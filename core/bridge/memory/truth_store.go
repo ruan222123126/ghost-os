@@ -86,17 +86,21 @@ func (m *truthObjectSidecarMux) SyncObject(object MemoryObject) error {
 	return nil
 }
 
-// TruthWriter 维护 schema v1 的 shadow event log 与快照。
+// TruthWriter 维护 truth v2 的 claim/evidence event log 与兼容 projection 快照。
 type TruthWriter struct {
-	enabled        bool
-	dualWrite      bool
-	failOpen       bool
-	baseDir        string
-	eventsDir      string
-	objectsPath    string
-	claimsPath     string
-	checkpointPath string
-	metrics        *memoryCounters
+	enabled                       bool
+	dualWrite                     bool
+	failOpen                      bool
+	schemaVersion                 int
+	claimArbitrationEnabled       bool
+	claimStatusProjectionEnabled  bool
+	legacyObjectProjectionEnabled bool
+	baseDir                       string
+	eventsDir                     string
+	objectsPath                   string
+	claimsPath                    string
+	checkpointPath                string
+	metrics                       *memoryCounters
 
 	mu             sync.Mutex
 	objectSnapshot map[string]MemoryObject
@@ -106,25 +110,29 @@ type TruthWriter struct {
 }
 
 func NewTruthWriter(config MemoryConfig, metrics *memoryCounters) *TruthWriter {
-	config = applyLegacyMemoryConfig(config)
+	config = normalizeMemoryConfig(config)
 	enabled := config.Truth.Enabled || config.Truth.DualWrite
 	baseDir := resolveMemoryPath(config.Truth.BaseDir)
 	if !enabled || strings.TrimSpace(baseDir) == "" {
 		return nil
 	}
 	writer := &TruthWriter{
-		enabled:        true,
-		dualWrite:      config.Truth.DualWrite,
-		failOpen:       config.Truth.ShadowFailOpen,
-		baseDir:        baseDir,
-		eventsDir:      filepath.Join(baseDir, truthEventsDirName),
-		objectsPath:    filepath.Join(baseDir, truthObjectsSnapshotFileName),
-		claimsPath:     filepath.Join(baseDir, truthClaimsSnapshotFileName),
-		checkpointPath: filepath.Join(baseDir, truthReplayCheckpointFileName),
-		metrics:        metrics,
-		objectSnapshot: make(map[string]MemoryObject),
-		claimSnapshot:  make(map[string]MemoryClaim),
-		sidecars:       &truthObjectSidecarMux{},
+		enabled:                       true,
+		dualWrite:                     config.Truth.DualWrite,
+		failOpen:                      config.Truth.ShadowFailOpen,
+		schemaVersion:                 config.Truth.SchemaVersion,
+		claimArbitrationEnabled:       config.Truth.ClaimArbitrationEnabled,
+		claimStatusProjectionEnabled:  config.Truth.ClaimStatusProjectionEnabled,
+		legacyObjectProjectionEnabled: config.Truth.LegacyObjectProjectionEnabled,
+		baseDir:                       baseDir,
+		eventsDir:                     filepath.Join(baseDir, truthEventsDirName),
+		objectsPath:                   filepath.Join(baseDir, truthObjectsSnapshotFileName),
+		claimsPath:                    filepath.Join(baseDir, truthClaimsSnapshotFileName),
+		checkpointPath:                filepath.Join(baseDir, truthReplayCheckpointFileName),
+		metrics:                       metrics,
+		objectSnapshot:                make(map[string]MemoryObject),
+		claimSnapshot:                 make(map[string]MemoryClaim),
+		sidecars:                      &truthObjectSidecarMux{},
 	}
 	if err := writer.loadSnapshots(); err != nil {
 		log.Printf("[MEMORY] truth shadow snapshot load failed, starting from empty snapshots: base=%s err=%v", writer.baseDir, err)
@@ -187,44 +195,29 @@ func (w *TruthWriter) AppendEvent(eventType string, object MemoryObject, traceID
 	normalized := normalizeMemoryObject(object)
 	event := truthEvent{
 		SchemaVersion: truthSchemaVersion,
-		EventType:     strings.TrimSpace(eventType),
+		EventType:     truthEventTypeObjectProjected,
+		Namespace:     truthPrimaryNamespace(normalized, normalized.SourceRefs, nil),
+		WorkspaceID:   truthPrimaryWorkspaceID(normalized, normalized.SourceRefs, nil),
+		SessionID:     truthPrimarySessionID(normalized.SourceRefs, nil, nil),
+		TraceID:       strings.TrimSpace(traceID),
+		OccurredAt:    effectiveDecisionTimestamp(normalized.UpdatedAt, normalized.CreatedAt),
 		ObjectID:      normalized.ObjectID,
 		ObjectType:    normalized.ObjectType,
-		OccurredAt:    effectiveDecisionTimestamp(normalized.UpdatedAt, normalized.CreatedAt),
-		WrittenAt:     time.Now().UTC(),
-		TraceID:       strings.TrimSpace(traceID),
-		Object:        normalized,
+		Payload:       truthEventPayload{Object: &normalized},
 	}
-	if event.OccurredAt.IsZero() {
-		event.OccurredAt = time.Now().UTC()
-	}
-	event.EventID = buildTruthEventID(event.EventType, normalized)
-
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if err := w.ensureLayoutLocked(); err != nil {
 		w.recordErrorLocked()
 		return TruthWriteResult{}, err
 	}
-	path := filepath.Join(w.eventsDir, event.OccurredAt.Format("2006-01-02")+".jsonl")
-	if err := appendJSONLine(path, event); err != nil {
+	result, err := w.appendTruthEventLocked(event)
+	if err != nil {
 		w.recordErrorLocked()
 		return TruthWriteResult{}, err
 	}
-	if w.metrics != nil {
-		w.metrics.truthEventsWritten.Add(1)
-	}
 	w.enqueueSidecarSync(w.sidecars, normalized)
-	return TruthWriteResult{
-		SchemaVersion:  truthSchemaVersion,
-		EventID:        event.EventID,
-		ObjectID:       normalized.ObjectID,
-		ObjectType:     normalized.ObjectType,
-		ObjectCount:    1,
-		ClaimCount:     len(normalized.Claims),
-		SourceRefCount: truthSingleObjectSourceRefCount(normalized),
-		OccurredAt:     event.OccurredAt,
-	}, nil
+	return result, nil
 }
 
 func (w *TruthWriter) UpsertObject(object MemoryObject) (TruthWriteResult, error) {
@@ -239,7 +232,18 @@ func (w *TruthWriter) UpsertObject(object MemoryObject) (TruthWriteResult, error
 		return TruthWriteResult{}, err
 	}
 	w.objectSnapshot[normalized.ObjectID] = normalized
-	w.syncClaimsForObjectLocked(normalized)
+	if w.claimArbitrationEnabled && len(normalized.Claims) > 0 {
+		arbitration := w.upsertClaimsLocked(normalized.Claims)
+		if err := w.appendClaimStatusEventsLocked(arbitration.StatusChanges); err != nil {
+			w.recordErrorLocked()
+			return TruthWriteResult{}, err
+		}
+	} else if !w.claimArbitrationEnabled && w.legacyObjectProjectionEnabled {
+		w.syncClaimsForObjectLocked(normalized)
+	}
+	if w.claimStatusProjectionEnabled {
+		truthProjectClaimsOntoObjects(w.objectSnapshot, w.claimSnapshot, w.legacyObjectProjectionEnabled)
+	}
 	if err := w.persistSnapshotsLocked(); err != nil {
 		w.recordErrorLocked()
 		return TruthWriteResult{}, err
@@ -247,16 +251,13 @@ func (w *TruthWriter) UpsertObject(object MemoryObject) (TruthWriteResult, error
 	if w.metrics != nil {
 		w.metrics.truthObjectsUpserted.Add(1)
 	}
-	w.enqueueSidecarSync(w.sidecars, normalized)
-	return TruthWriteResult{
-		SchemaVersion:  truthSchemaVersion,
-		ObjectID:       normalized.ObjectID,
-		ObjectType:     normalized.ObjectType,
-		ObjectCount:    1,
-		ClaimCount:     len(normalized.Claims),
-		SourceRefCount: truthSingleObjectSourceRefCount(normalized),
-		OccurredAt:     effectiveDecisionTimestamp(normalized.UpdatedAt, normalized.CreatedAt),
-	}, nil
+	projected := w.objectSnapshot[normalized.ObjectID]
+	w.enqueueSidecarSync(w.sidecars, projected)
+	result := truthWriteResultFromSnapshots(w.objectSnapshot, w.claimSnapshot)
+	result.ObjectID = normalized.ObjectID
+	result.ObjectType = normalized.ObjectType
+	result.OccurredAt = effectiveDecisionTimestamp(normalized.UpdatedAt, normalized.CreatedAt)
+	return result, nil
 }
 
 func (w *TruthWriter) UpdateEmbeddingRef(objectID string, ref EmbeddingRef) error {
@@ -316,32 +317,32 @@ func (w *TruthWriter) UpsertClaims(claims []MemoryClaim) (TruthWriteResult, erro
 		w.recordErrorLocked()
 		return TruthWriteResult{}, err
 	}
-	grouped := make(map[string][]MemoryClaim)
-	totalRefs := 0
-	for _, item := range claims {
-		normalized := normalizeMemoryClaim(item, item.ObjectID)
-		if normalized.ObjectID == "" || normalized.ClaimID == "" {
-			continue
+	if w.claimArbitrationEnabled {
+		arbitration := w.upsertClaimsLocked(claims)
+		if err := w.appendClaimStatusEventsLocked(arbitration.StatusChanges); err != nil {
+			w.recordErrorLocked()
+			return TruthWriteResult{}, err
 		}
-		grouped[normalized.ObjectID] = append(grouped[normalized.ObjectID], normalized)
-		totalRefs += len(normalized.SourceRefs)
-	}
-	for objectID, items := range grouped {
-		w.replaceClaimsForObjectIDLocked(objectID, items)
+	} else {
+		grouped := make(map[string][]MemoryClaim)
+		for _, item := range claims {
+			normalized := normalizeMemoryClaim(item, item.ObjectID)
+			if normalized.ObjectID == "" || normalized.ClaimID == "" {
+				continue
+			}
+			grouped[normalized.ObjectID] = append(grouped[normalized.ObjectID], normalized)
+		}
+		for objectID, items := range grouped {
+			w.replaceClaimsForObjectIDLocked(objectID, items)
+		}
 	}
 	if err := w.persistSnapshotsLocked(); err != nil {
 		w.recordErrorLocked()
 		return TruthWriteResult{}, err
 	}
-	if w.metrics != nil {
-		w.metrics.truthClaimsUpserted.Add(uint64(len(claims)))
-	}
-	return TruthWriteResult{
-		SchemaVersion:  truthSchemaVersion,
-		ObjectCount:    len(grouped),
-		ClaimCount:     len(claims),
-		SourceRefCount: totalRefs,
-	}, nil
+	result := truthWriteResultFromSnapshots(w.objectSnapshot, w.claimSnapshot)
+	result.OccurredAt = time.Now().UTC()
+	return result, nil
 }
 
 func (w *TruthWriter) Replay() (TruthWriteResult, error) {

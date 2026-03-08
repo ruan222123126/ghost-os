@@ -6,7 +6,10 @@ import (
 	"time"
 )
 
-const truthSchemaVersion = 1
+const (
+	truthSchemaVersion       = 2
+	truthLegacySchemaVersion = 1
+)
 
 const (
 	truthObjectTypeEvidenceMessage = "evidence.message"
@@ -40,43 +43,57 @@ const (
 
 // SourceRef 统一描述对象/证据/claim 的来源引用，保证后续可追溯。
 type SourceRef struct {
-	Namespace   string `json:"namespace,omitempty"`
-	WorkspaceID string `json:"workspace_id,omitempty"`
-	BucketKey   string `json:"bucket_key,omitempty"`
-	BucketMonth string `json:"bucket_month,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
-	TurnID     string `json:"turn_id,omitempty"`
-	TraceID    string `json:"trace_id,omitempty"`
-	SourceKind string `json:"source_kind,omitempty"`
-	SourceID   string `json:"source_id,omitempty"`
-	OccurredAt time.Time `json:"occurred_at,omitempty"`
+	Namespace   string    `json:"namespace,omitempty"`
+	WorkspaceID string    `json:"workspace_id,omitempty"`
+	BucketKey   string    `json:"bucket_key,omitempty"`
+	BucketMonth string    `json:"bucket_month,omitempty"`
+	SessionID   string    `json:"session_id,omitempty"`
+	TurnID      string    `json:"turn_id,omitempty"`
+	TraceID     string    `json:"trace_id,omitempty"`
+	SourceKind  string    `json:"source_kind,omitempty"`
+	SourceID    string    `json:"source_id,omitempty"`
+	OccurredAt  time.Time `json:"occurred_at,omitempty"`
 }
 
-// MemoryEvidence 保存对象的原始证据视图。
+// MemoryEvidence 保存 claim/object 的原始证据视图。
 type MemoryEvidence struct {
-	EvidenceID string         `json:"evidence_id"`
-	Kind       string         `json:"kind,omitempty"`
-	Text       string         `json:"text,omitempty"`
-	Summary    string         `json:"summary,omitempty"`
-	Timestamp  time.Time      `json:"timestamp,omitempty"`
-	Confidence float64        `json:"confidence,omitempty"`
-	SourceRefs []SourceRef    `json:"source_refs,omitempty"`
-	Metadata   map[string]any `json:"metadata,omitempty"`
+	EvidenceID  string         `json:"evidence_id"`
+	Kind        string         `json:"kind,omitempty"`
+	Text        string         `json:"text,omitempty"`
+	Summary     string         `json:"summary,omitempty"`
+	ContentHash string         `json:"content_hash,omitempty"`
+	ToolName    string         `json:"tool_name,omitempty"`
+	ToolCallID  string         `json:"tool_call_id,omitempty"`
+	ArtifactRef string         `json:"artifact_ref,omitempty"`
+	Timestamp   time.Time      `json:"timestamp,omitempty"`
+	Confidence  float64        `json:"confidence,omitempty"`
+	SourceRefs  []SourceRef    `json:"source_refs,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
-// MemoryClaim 保存对象上的稳定 claim 视图。
+// MemoryClaim 是 truth v2 的标准 claim；旧窄字段仅保留作兼容 mapper 输入/查询索引。
 type MemoryClaim struct {
 	SchemaVersion  int            `json:"schema_version"`
 	ClaimID        string         `json:"claim_id"`
 	ObjectID       string         `json:"object_id,omitempty"`
+	Subject        ClaimTerm      `json:"subject,omitempty"`
+	Predicate      string         `json:"predicate,omitempty"`
+	Object         ClaimTerm      `json:"object,omitempty"`
 	Type           string         `json:"type,omitempty"`
 	Value          string         `json:"value,omitempty"`
+	Datatype       string         `json:"datatype,omitempty"`
+	EvidenceRefs   []EvidenceRef  `json:"evidence_refs,omitempty"`
 	IntentKey      string         `json:"intent_key,omitempty"`
 	AnchorKey      string         `json:"anchor_key,omitempty"`
 	EntityID       string         `json:"entity_id,omitempty"`
 	ConstraintType string         `json:"constraint_type,omitempty"`
 	RiskType       string         `json:"risk_type,omitempty"`
 	Confidence     float64        `json:"confidence,omitempty"`
+	ValidFrom      time.Time      `json:"valid_from,omitempty"`
+	ValidTo        time.Time      `json:"valid_to,omitempty"`
+	Status         string         `json:"status,omitempty"`
+	AssertedAt     time.Time      `json:"asserted_at,omitempty"`
+	Supersedes     []string       `json:"supersedes,omitempty"`
 	CreatedAt      time.Time      `json:"created_at,omitempty"`
 	SourceRefs     []SourceRef    `json:"source_refs,omitempty"`
 	Metadata       map[string]any `json:"metadata,omitempty"`
@@ -92,7 +109,7 @@ type EmbeddingRef struct {
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
-// MemoryObject 是 schema v1 的统一真相对象。
+// MemoryObject 继续保留作兼容 projection；事实主存储迁到独立 claim/evidence 索引。
 type MemoryObject struct {
 	SchemaVersion int              `json:"schema_version"`
 	ObjectID      string           `json:"object_id"`
@@ -116,20 +133,12 @@ type TruthWriteResult struct {
 	ObjectType     string    `json:"object_type,omitempty"`
 	ObjectCount    int       `json:"object_count,omitempty"`
 	ClaimCount     int       `json:"claim_count,omitempty"`
+	ActiveClaims   int       `json:"active_claims,omitempty"`
+	Conflicts      int       `json:"conflicts,omitempty"`
+	Superseded     int       `json:"superseded,omitempty"`
+	Unverified     int       `json:"unverified,omitempty"`
 	SourceRefCount int       `json:"source_ref_count,omitempty"`
 	OccurredAt     time.Time `json:"occurred_at,omitempty"`
-}
-
-type truthEvent struct {
-	SchemaVersion int          `json:"schema_version"`
-	EventID       string       `json:"event_id"`
-	EventType     string       `json:"event_type"`
-	ObjectID      string       `json:"object_id,omitempty"`
-	ObjectType    string       `json:"object_type,omitempty"`
-	OccurredAt    time.Time    `json:"occurred_at,omitempty"`
-	WrittenAt     time.Time    `json:"written_at,omitempty"`
-	TraceID       string       `json:"trace_id,omitempty"`
-	Object        MemoryObject `json:"object"`
 }
 
 func normalizeSourceRef(ref SourceRef) SourceRef {
@@ -191,8 +200,15 @@ func normalizeMemoryEvidence(evidence MemoryEvidence, objectID string) MemoryEvi
 	out.Kind = strings.TrimSpace(out.Kind)
 	out.Text = strings.TrimSpace(out.Text)
 	out.Summary = strings.TrimSpace(out.Summary)
+	out.ContentHash = strings.TrimSpace(out.ContentHash)
+	out.ToolName = strings.TrimSpace(out.ToolName)
+	out.ToolCallID = strings.TrimSpace(out.ToolCallID)
+	out.ArtifactRef = strings.TrimSpace(out.ArtifactRef)
 	if out.Summary == "" {
 		out.Summary = summarizeLine(out.Text, 220)
+	}
+	if out.ContentHash == "" {
+		out.ContentHash = truthHashID("content", out.Kind, out.Summary, out.Text)
 	}
 	out.Confidence = clamp01(out.Confidence)
 	if out.Timestamp.IsZero() {
@@ -212,18 +228,42 @@ func normalizeMemoryClaim(claim MemoryClaim, objectID string) MemoryClaim {
 	out := claim
 	out.SchemaVersion = truthSchemaVersion
 	out.ObjectID = strings.TrimSpace(firstNonEmpty(out.ObjectID, objectID))
+	out.Subject = normalizeClaimTerm(out.Subject)
+	out.Predicate = strings.TrimSpace(out.Predicate)
+	out.Object = normalizeClaimTerm(out.Object)
 	out.Type = strings.TrimSpace(out.Type)
 	out.Value = strings.TrimSpace(out.Value)
+	out.Datatype = strings.TrimSpace(out.Datatype)
+	out.EvidenceRefs = normalizeEvidenceRefs(out.EvidenceRefs)
 	out.IntentKey = strings.TrimSpace(out.IntentKey)
 	out.AnchorKey = strings.TrimSpace(out.AnchorKey)
 	out.EntityID = strings.TrimSpace(out.EntityID)
 	out.ConstraintType = strings.TrimSpace(out.ConstraintType)
 	out.RiskType = strings.TrimSpace(out.RiskType)
 	out.Confidence = clamp01(out.Confidence)
+	out.ValidFrom = normalizeLedgerTime(out.ValidFrom)
+	out.ValidTo = normalizeLedgerTime(out.ValidTo)
+	if strings.TrimSpace(out.Status) != "" {
+		out.Status = normalizeTruthClaimStatus(out.Status)
+	}
+	out.AssertedAt = normalizeLedgerTime(out.AssertedAt)
+	out.Supersedes = uniqueStrings(out.Supersedes)
 	if out.CreatedAt.IsZero() {
 		out.CreatedAt = time.Now().UTC()
 	} else {
 		out.CreatedAt = out.CreatedAt.UTC()
+	}
+	if out.AssertedAt.IsZero() {
+		out.AssertedAt = out.CreatedAt
+	}
+	if out.Predicate == "" {
+		out.Predicate = legacyTruthPredicate(out)
+	}
+	if out.Subject.Kind == "" {
+		out.Subject = truthLegacyClaimSubject(out)
+	}
+	if out.Status == "" {
+		out.Status = truthInitialClaimStatus(out)
 	}
 	out.SourceRefs = normalizeSourceRefs(out.SourceRefs)
 	out.ClaimID = strings.TrimSpace(out.ClaimID)

@@ -106,8 +106,8 @@ func TestTruthWriterSnapshotOverwrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read claim snapshot: %v", err)
 	}
-	if len(claims) != 1 || claims[0].AnchorKey != "b" {
-		t.Fatalf("expected latest claims snapshot, got %+v", claims)
+	if len(claims) != 2 {
+		t.Fatalf("expected claim center to keep both assertions, got %+v", claims)
 	}
 }
 

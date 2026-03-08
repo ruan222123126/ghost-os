@@ -38,6 +38,13 @@ func applyLegacyMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.Truth.MinSupportRefs == 0 && config.TruthMinSupportRefs != 0 {
 		out.Truth.MinSupportRefs = config.TruthMinSupportRefs
 	}
+	if out.Truth.SchemaVersion == 0 && config.TruthSchemaVersion != 0 {
+		out.Truth.SchemaVersion = config.TruthSchemaVersion
+	}
+	out.Truth.ClaimArbitrationEnabled = out.Truth.ClaimArbitrationEnabled || config.TruthClaimArbitrationEnabled
+	out.Truth.ClaimStatusProjectionEnabled = out.Truth.ClaimStatusProjectionEnabled || config.TruthClaimStatusProjectionEnabled
+	out.Truth.LegacyObjectProjectionEnabled = out.Truth.LegacyObjectProjectionEnabled || config.TruthLegacyObjectProjectionEnabled
+
 	out.Recall.IntentPlannerEnabled = out.Recall.IntentPlannerEnabled || config.IntentPlannerEnabled
 	out.Vector.Enabled = out.Vector.Enabled || config.VectorEnabled
 	if strings.TrimSpace(out.Vector.Path) == "" && strings.TrimSpace(config.VectorPath) != "" {

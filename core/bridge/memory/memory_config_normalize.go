@@ -43,6 +43,18 @@ func normalizeMemoryConfig(config MemoryConfig) MemoryConfig {
 	if out.Truth.MinSupportRefs <= 0 {
 		out.Truth.MinSupportRefs = 2
 	}
+	if out.Truth.SchemaVersion <= 0 {
+		out.Truth.SchemaVersion = truthSchemaVersion
+	}
+	if out.Truth.SchemaVersion >= truthSchemaVersion && !config.Truth.ClaimArbitrationEnabled && !config.TruthClaimArbitrationEnabled {
+		out.Truth.ClaimArbitrationEnabled = true
+	}
+	if out.Truth.ClaimArbitrationEnabled && !config.Truth.ClaimStatusProjectionEnabled && !config.TruthClaimStatusProjectionEnabled {
+		out.Truth.ClaimStatusProjectionEnabled = true
+	}
+	if !config.Truth.LegacyObjectProjectionEnabled && !config.TruthLegacyObjectProjectionEnabled {
+		out.Truth.LegacyObjectProjectionEnabled = true
+	}
 	if out.Recall.RecallInjectMinConfidence <= 0 {
 		out.Recall.RecallInjectMinConfidence = 0.7
 	}
