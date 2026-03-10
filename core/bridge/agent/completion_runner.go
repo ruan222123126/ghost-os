@@ -6,7 +6,7 @@ import (
 	"ghost-os/bridge/llm"
 )
 
-// completionRunner 封装一次模型调用与 assistant 消息落历史。
+// completionRunner 封装一次模型调用，不负责 history 提交。
 type completionRunner struct {
 	completer Completer
 	tools     ToolCatalog
@@ -21,7 +21,7 @@ func newCompletionRunner(completer Completer, toolCatalog ToolCatalog, history *
 	}
 }
 
-func (r completionRunner) complete(ctx context.Context, streamSink EventSink, traceID string, turn int) (llm.Message, llm.FinishReason, error) {
+func (r completionRunner) complete(ctx context.Context, streamSink EventSink, traceID string, turn int) (*llm.CompletionResponse, error) {
 	req := llm.CompletionRequest{
 		Messages:          r.history.Messages(),
 		Tools:             r.tools.ToolDefs(),
@@ -38,15 +38,16 @@ func (r completionRunner) complete(ctx context.Context, streamSink EventSink, tr
 		resp, err = r.completer.Complete(ctx, req)
 	}
 	if err != nil {
-		return llm.Message{}, "", err
+		return nil, err
 	}
 
-	msg := resp.Message
-	if msg.Role == "" {
-		msg.Role = llm.RoleAssistant
+	normalized := *resp
+	if cloned := llm.CloneMessages([]llm.Message{resp.Message}); len(cloned) == 1 {
+		normalized.Message = cloned[0]
 	}
-	r.history.Append(msg)
-	r.history.SetConversationState(resp.ConversationState)
+	if normalized.Message.Role == "" {
+		normalized.Message.Role = llm.RoleAssistant
+	}
 
-	return msg, resp.FinishReason, nil
+	return &normalized, nil
 }

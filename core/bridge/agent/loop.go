@@ -99,17 +99,21 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 
 	for turn := 0; turn < a.maxTurns; turn++ {
 		a.lastTurn = turn
-		msg, finishReason, err := completion.complete(ctx, sink, traceID, turn)
+		resp, err := completion.complete(ctx, sink, traceID, turn)
 		if err != nil {
 			runErr := fmt.Errorf("trace_id=%s turn=%d complete_once: %w", traceID, turn, err)
 			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
 		}
 
+		msg := resp.Message
+		finishReason := resp.FinishReason
 		switch finishReason {
 		case llm.FinishStop:
+			acceptAssistantTurn(turnHistory, resp)
 			a.commitTurn(turnHistory)
 			return a.handleAssistantStop(msg), nil
 		case llm.FinishToolCalls:
+			acceptAssistantTurn(turnHistory, resp)
 			stats, err := toolCalls.execute(ctx, traceID, turn, msg.ToolCalls)
 			if err != nil {
 				if isEventEmitError(err) {
@@ -136,6 +140,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 		case llm.FinishLength:
 			content := strings.TrimSpace(msg.Text)
 			if content != "" {
+				acceptAssistantTurn(turnHistory, resp)
 				a.commitTurn(turnHistory)
 				return content, nil
 			}
@@ -176,6 +181,15 @@ func appendUserMessage(history *History, userMessage string) {
 		Role: llm.RoleUser,
 		Text: trimmed,
 	})
+}
+
+func acceptAssistantTurn(history *History, resp *llm.CompletionResponse) {
+	if history == nil || resp == nil {
+		return
+	}
+
+	history.Append(resp.Message)
+	history.SetConversationState(resp.ConversationState)
 }
 
 func (a *Agent) handleAssistantStop(msg llm.Message) string {
