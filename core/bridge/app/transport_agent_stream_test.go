@@ -60,6 +60,18 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 		})); err != nil {
 			return "", "", err
 		}
+		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, agent.AssistantStepID(1), agent.EventMessage, map[string]any{
+			"text":       "stream done",
+			"session_id": "session-stream",
+		})); err != nil {
+			return "", "", err
+		}
+		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, "", agent.EventDone, map[string]any{
+			"session_id":    "session-stream",
+			"session_ended": false,
+		})); err != nil {
+			return "", "", err
+		}
 		return "stream done", "session-stream", nil
 	}
 	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)

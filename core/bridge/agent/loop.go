@@ -26,6 +26,7 @@ type Agent struct {
 
 	initialHistoryLen int
 	lastTurn          int
+	streamLifecycle   StreamLifecyclePayloadBuilder
 }
 
 const maxConsecutiveNonExecutableToolCallTurns = 3
@@ -64,6 +65,13 @@ func NewAgentWithHistory(completer Completer, toolCatalog ToolCatalog, history *
 	}
 }
 
+func (a *Agent) SetStreamLifecyclePayloadBuilder(builder StreamLifecyclePayloadBuilder) {
+	if a == nil {
+		return
+	}
+	a.streamLifecycle = builder
+}
+
 // Run 负责循环与退出条件；单步执行下沉给独立协作者处理。
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
 	return a.runWithSink(ctx, userMessage, "", nil)
@@ -93,6 +101,10 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 	completion := newCompletionRunner(a.completer, a.tools, turnHistory)
 	toolCalls := newToolCallExecutor(a.tools, turnHistory, nil, events)
 
+	if err := events.runStarted(ctx, traceID, a.streamLifecycle); err != nil {
+		return "", err
+	}
+
 	appendUserMessage(turnHistory, userMessage)
 	consecutiveNonExecutableToolCallTurns := 0
 	a.lastTurn = 0
@@ -111,7 +123,11 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 		case llm.FinishStop:
 			acceptAssistantTurn(turnHistory, resp)
 			a.commitTurn(turnHistory)
-			return a.handleAssistantStop(msg), nil
+			output := a.handleAssistantStop(msg)
+			if err := events.terminalSuccess(ctx, traceID, turn, output, a.streamLifecycle); err != nil {
+				return "", err
+			}
+			return output, nil
 		case llm.FinishToolCalls:
 			sanitizedMsg, issues := sanitizeAssistantToolCalls(msg)
 			if len(issues) > 0 {
@@ -170,6 +186,9 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 			if content != "" {
 				acceptAssistantTurn(turnHistory, resp)
 				a.commitTurn(turnHistory)
+				if err := events.terminalSuccess(ctx, traceID, turn, content, a.streamLifecycle); err != nil {
+					return "", err
+				}
 				return content, nil
 			}
 			runErr := fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)

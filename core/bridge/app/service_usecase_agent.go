@@ -98,7 +98,8 @@ func (s *bridgeService) finalizeAgentTurn(response string, sessionID string) (fi
 	}, http.StatusOK, nil
 }
 
-func emitFinalAgentStreamEvents(ctx context.Context, sink agent.EventSink, traceID string, turn int, result finalizedAgentTurn) error {
+// emitDirectAgentStreamResult 只用于未经过 agent.RunStream() 的流式完成路径，例如人工取消后直接结束会话。
+func emitDirectAgentStreamResult(ctx context.Context, sink agent.EventSink, traceID string, turn int, result finalizedAgentTurn) error {
 	if emitErr := emitStreamEvent(ctx, sink, agent.NewEvent(traceID, turn, agent.AssistantStepID(turn), agent.EventMessage, map[string]any{
 		"text":       result.message,
 		"session_id": result.sessionID,
@@ -165,7 +166,7 @@ func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params age
 	logAction(traceID, busActionAgentSend, "running", nil)
 	response, sessionID, err := s.agentRunner.RunTurnStream(ctx, prepared.message, prepared.sessionID, traceID, trackedSink)
 	if err != nil {
-		awaitingErr, normalizedErr, statusCode, cancelled := classifyAgentTurnError(err)
+		awaitingErr, normalizedErr, _, cancelled := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			logAction(traceID, busActionAgentSend, "awaiting_human", nil)
 			s.publishAwaitingHumanSessionPush(traceID, sessionID, awaitingErr)
@@ -176,25 +177,16 @@ func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params age
 			return "", sessionID, normalizedErr
 		}
 		logAction(traceID, busActionAgentSend, "error", normalizedErr)
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), "", sessionID, statusCode, normalizedErr); emitErr != nil {
-			return "", "", emitErr
-		}
 		return "", sessionID, normalizedErr
 	}
 
-	finalTurn := trackedSink.finalAssistantTurn()
 	result, code, err := s.finalizeAgentTurn(response, sessionID)
 	if err != nil {
 		logAction(traceID, busActionAgentSend, "error", err)
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, finalTurn, agent.AssistantStepID(finalTurn), sessionID, code, err); emitErr != nil {
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), agent.AssistantStepID(trackedSink.finalAssistantTurn()), sessionID, code, err); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err
-	}
-
-	if emitErr := emitFinalAgentStreamEvents(ctx, trackedSink, traceID, finalTurn, result); emitErr != nil {
-		logAction(traceID, busActionAgentSend, "error", emitErr)
-		return "", "", emitErr
 	}
 
 	s.publishAssistantSessionPush(traceID, result)

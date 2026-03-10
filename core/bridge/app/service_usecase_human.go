@@ -151,7 +151,7 @@ func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Cont
 			sessionID:  sessionID,
 			sessionEnd: signal,
 		}
-		if emitErr := emitFinalAgentStreamEvents(ctx, sink, traceID, 0, result); emitErr != nil {
+		if emitErr := emitDirectAgentStreamResult(ctx, sink, traceID, 0, result); emitErr != nil {
 			return "", "", emitErr
 		}
 		s.publishAssistantSessionPush(traceID, result)
@@ -190,7 +190,7 @@ func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID s
 	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush, sessionID))
 	response, resumedSessionID, err := s.agentRunner.RunTurnStream(ctx, "", sessionID, traceID, trackedSink)
 	if err != nil {
-		awaitingErr, normalizedErr, statusCode, cancelled := classifyAgentTurnError(err)
+		awaitingErr, normalizedErr, _, cancelled := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			s.publishAwaitingHumanSessionPush(traceID, resumedSessionID, awaitingErr)
 			return "", resumedSessionID, err
@@ -198,23 +198,15 @@ func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID s
 		if cancelled {
 			return "", resumedSessionID, normalizedErr
 		}
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), "", resumedSessionID, statusCode, normalizedErr); emitErr != nil {
-			return "", "", emitErr
-		}
 		return "", resumedSessionID, normalizedErr
 	}
 
-	finalTurn := trackedSink.finalAssistantTurn()
 	result, code, err := s.finalizeAgentTurn(response, resumedSessionID)
 	if err != nil {
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, finalTurn, agent.AssistantStepID(finalTurn), resumedSessionID, code, err); emitErr != nil {
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), agent.AssistantStepID(trackedSink.finalAssistantTurn()), resumedSessionID, code, err); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err
-	}
-
-	if emitErr := emitFinalAgentStreamEvents(ctx, trackedSink, traceID, finalTurn, result); emitErr != nil {
-		return "", "", emitErr
 	}
 
 	s.publishAssistantSessionPush(traceID, result)

@@ -27,6 +27,14 @@ func (e agentEventEmitter) emit(ctx context.Context, event AgentEvent) error {
 	return nil
 }
 
+func (e agentEventEmitter) runStarted(ctx context.Context, traceID string, builder StreamLifecyclePayloadBuilder) error {
+	payload, err := builder.runStartedPayload()
+	if err != nil {
+		return e.terminalError(ctx, traceID, 0, "", fmt.Errorf("build run_started payload: %w", err))
+	}
+	return e.emit(ctx, NewEvent(traceID, 0, "", EventRunStarted, payload))
+}
+
 func (e agentEventEmitter) toolCallStarted(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string) error {
 	return e.emit(ctx, NewEvent(traceID, turn, stepID, EventToolCallStarted, map[string]any{
 		"tool":         toolName,
@@ -60,6 +68,21 @@ func (e agentEventEmitter) awaitingHuman(ctx context.Context, traceID string, tu
 		payload["options"] = options
 	}
 	return e.emit(ctx, NewEvent(traceID, turn, stepID, EventAwaitingHuman, payload))
+}
+
+func (e agentEventEmitter) terminalSuccess(ctx context.Context, traceID string, turn int, response string, builder StreamLifecyclePayloadBuilder) error {
+	messagePayload, err := builder.messagePayload(response)
+	if err != nil {
+		return e.terminalError(ctx, traceID, turn, AssistantStepID(turn), fmt.Errorf("build message payload: %w", err))
+	}
+	donePayload, err := builder.donePayload(response)
+	if err != nil {
+		return e.terminalError(ctx, traceID, turn, AssistantStepID(turn), fmt.Errorf("build done payload: %w", err))
+	}
+	if err := e.emit(ctx, NewEvent(traceID, turn, AssistantStepID(turn), EventMessage, messagePayload)); err != nil {
+		return err
+	}
+	return e.emit(ctx, NewEvent(traceID, turn, "", EventDone, donePayload))
 }
 
 func (e agentEventEmitter) terminalError(ctx context.Context, traceID string, turn int, stepID string, runErr error) error {
