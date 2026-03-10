@@ -10,14 +10,8 @@ import (
 )
 
 const (
-	busActionTaskCreate       = "TASK_CREATE"
-	busActionTaskList         = "TASK_LIST"
-	busActionTaskGet          = "TASK_GET"
-	busActionTaskUpdate       = "TASK_UPDATE"
-	busActionTaskRunNow       = "TASK_RUN_NOW"
-	busActionTaskLogs         = "TASK_LOGS"
-	busActionTaskDelete       = "TASK_DELETE"
-	busActionMemoryHygieneRun = "MEMORY_HYGIENE_RUN"
+	taskListScopeUser   = "user"
+	taskListScopeSystem = "system"
 )
 
 func (s *bridgeService) requireTaskStore() (*TaskStore, int, error) {
@@ -115,6 +109,17 @@ func buildTaskRunLogPayload(run TaskRunLog) taskRunLogPayload {
 		SessionIDOutput: run.SessionIDOutput,
 		ResponsePreview: run.ResponsePreview,
 		Error:           run.Error,
+	}
+}
+
+func includeTaskInScope(task ScheduledTask, scope string) bool {
+	switch strings.TrimSpace(scope) {
+	case "", taskListScopeUser:
+		return normalizeTaskKind(task.TaskKind) == taskKindAgentMessage
+	case taskListScopeSystem:
+		return normalizeTaskKind(task.TaskKind) == taskKindSystemAction
+	default:
+		return false
 	}
 }
 
@@ -262,7 +267,7 @@ func (s *bridgeService) executeTaskUpdateAction(params taskUpdateParams, traceID
 	return buildTaskPayload(*task), http.StatusOK, nil
 }
 
-func (s *bridgeService) executeTaskListAction(traceID string) (any, int, error) {
+func (s *bridgeService) executeTaskListAction(scope string, traceID string) (any, int, error) {
 	store, code, err := s.requireTaskStore()
 	if err != nil {
 		return nil, code, err
@@ -274,6 +279,9 @@ func (s *bridgeService) executeTaskListAction(traceID string) (any, int, error) 
 	}
 	res := make([]taskPayload, 0, len(tasks))
 	for _, task := range tasks {
+		if !includeTaskInScope(task, scope) {
+			continue
+		}
 		res = append(res, buildTaskPayload(task))
 	}
 	logAction(traceID, busActionTaskList, "success", nil)

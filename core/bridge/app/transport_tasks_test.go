@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
 )
@@ -170,6 +169,63 @@ func TestBusTaskCreateAndList(t *testing.T) {
 	}
 }
 
+func TestBootstrapSystemTasksStaysOutOfUserTaskLists(t *testing.T) {
+	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	t.Setenv("GHOST_RSS_POLL_ENABLED", "true")
+	t.Setenv("GHOST_RSS_BRIEFING_ENABLED", "true")
+
+	if err := service.BootstrapSystemTasks(); err != nil {
+		t.Fatalf("bootstrap system tasks: %v", err)
+	}
+
+	listResp := serveRequest(handler, http.MethodGet, "/api/tasks", "", nil)
+	if listResp.Code != http.StatusOK {
+		t.Fatalf("unexpected user list status: got %d want %d body=%s", listResp.Code, http.StatusOK, listResp.Body.String())
+	}
+	userItems, ok := decodeResponseBody(t, listResp).Payload.([]any)
+	if !ok {
+		t.Fatalf("unexpected user list payload: %#v", decodeResponseBody(t, listResp).Payload)
+	}
+	if len(userItems) != 0 {
+		t.Fatalf("expected user task list to exclude system tasks, got %#v", userItems)
+	}
+
+	systemResp := serveRequest(handler, http.MethodGet, "/api/system/tasks", "", nil)
+	if systemResp.Code != http.StatusOK {
+		t.Fatalf("unexpected system list status: got %d want %d body=%s", systemResp.Code, http.StatusOK, systemResp.Body.String())
+	}
+	systemItems, ok := decodeResponseBody(t, systemResp).Payload.([]any)
+	if !ok || len(systemItems) != 2 {
+		t.Fatalf("unexpected system list payload: %#v", decodeResponseBody(t, systemResp).Payload)
+	}
+
+}
+
+func TestBridgeServiceRequiresExplicitSystemTaskBootstrap(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+	t.Setenv("GHOST_RSS_POLL_ENABLED", "true")
+	t.Setenv("GHOST_RSS_BRIEFING_ENABLED", "true")
+
+	tasks, err := service.taskStore.ListTasks()
+	if err != nil {
+		t.Fatalf("list tasks before bootstrap: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Fatalf("expected no tasks before explicit bootstrap, got %#v", tasks)
+	}
+
+	if err := service.BootstrapSystemTasks(); err != nil {
+		t.Fatalf("bootstrap system tasks: %v", err)
+	}
+	tasks, err = service.taskStore.ListTasks()
+	if err != nil {
+		t.Fatalf("list tasks after bootstrap: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Fatalf("expected two system tasks after bootstrap, got %#v", tasks)
+	}
+}
+
 func TestHandleTaskUpdateDisableAndRunLogs(t *testing.T) {
 	handler := newTestHandler(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
 		if requestSessionID == "" {
@@ -260,16 +316,29 @@ func TestBusTaskUpdateAndLogs(t *testing.T) {
 
 func TestBusMemoryHygieneRun(t *testing.T) {
 	handler, service, _ := newTestHandlerWithService(t, nil, nil)
-	if err := service.memoryManager.StoreWarmMessages("session-hygiene-bus", 0, []llm.Message{{Role: llm.RoleTool, Text: "stderr tool"}}); err != nil {
-		t.Fatalf("seed warm messages: %v", err)
+	if err := service.memoryManager.StoreWorkingMemory([]memory.MemoryEntry{{
+		ID:        "work-hygiene-bus-1",
+		Content:   "Always validate config env checks before patching migration files.",
+		Type:      memory.MemoryTypeSummary,
+		Timestamp: time.Now().UTC(),
+		Metadata: map[string]any{
+			"session_id": "session-hygiene-bus",
+			"role":       "assistant",
+			"source":     "working_memory",
+		},
+	}}); err != nil {
+		t.Fatalf("seed working memory: %v", err)
 	}
-	resp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"MEMORY_HYGIENE_RUN","params":{"scope":"warm","limit":10,"dry_run":true,"max_votes_per_run":1},"trace_id":"trace-hygiene-bus"}`, nil)
+	resp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"MEMORY_HYGIENE_RUN","params":{"scope":"working_memory","limit":10,"dry_run":true},"trace_id":"trace-hygiene-bus"}`, nil)
 	if resp.Code != http.StatusOK {
 		t.Fatalf("unexpected hygiene run status: got %d want %d body=%s", resp.Code, http.StatusOK, resp.Body.String())
 	}
 	payload, _ := decodeResponseBody(t, resp).Payload.(map[string]any)
 	if scanned, _ := payload["scanned"].(float64); scanned < 1 {
 		t.Fatalf("expected scanned > 0, payload=%#v", payload)
+	}
+	if selected, _ := payload["selected"].(float64); selected < 1 {
+		t.Fatalf("expected selected > 0, payload=%#v", payload)
 	}
 }
 
@@ -430,7 +499,7 @@ func TestTaskSchedulerRunsMemoryHygieneSystemActionAndLogs(t *testing.T) {
 	payload, code, err := service.executeTaskCreateAction(taskCreateParams{
 		TaskKind:        taskKindSystemAction,
 		Action:          busActionMemoryHygieneRun,
-		ActionParams:    map[string]any{"scope": "projection", "limit": 50, "dry_run": false, "max_votes_per_run": 1, "min_confidence": 0.5},
+		ActionParams:    map[string]any{"scope": "projection", "limit": 50, "dry_run": false, "min_confidence": 0.5},
 		IntervalSeconds: 1,
 	}, "trace-system-task")
 	if err != nil || code != http.StatusCreated {
@@ -448,8 +517,8 @@ func TestTaskSchedulerRunsMemoryHygieneSystemActionAndLogs(t *testing.T) {
 	if got := atomic.LoadInt32(&agentCalls); got != 0 {
 		t.Fatalf("expected agent executor to stay unused, got %d calls", got)
 	}
-	if stats := service.memoryManager.HygieneStats(); stats.TotalRecords == 0 {
-		t.Fatalf("expected hygiene record to be written, stats=%+v", stats)
+	if stats := service.memoryManager.HygieneStats(); stats.TotalCards == 0 {
+		t.Fatalf("expected hygiene card to be written, stats=%+v", stats)
 	}
 	service.taskScheduler.Stop()
 }
@@ -470,7 +539,7 @@ func waitForTaskLogs(t *testing.T, store *TaskStore, taskID string, minCount int
 
 func readTaskLogs(t *testing.T, store *TaskStore, taskID string) []TaskRunLog {
 	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(store.logsDir, taskID))
+	entries, err := os.ReadDir(filepath.Join(store.LogsDir(), taskID))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -482,7 +551,7 @@ func readTaskLogs(t *testing.T, store *TaskStore, taskID string) []TaskRunLog {
 		if entry.IsDir() {
 			continue
 		}
-		data, err := os.ReadFile(filepath.Join(store.logsDir, taskID, entry.Name()))
+		data, err := os.ReadFile(filepath.Join(store.LogsDir(), taskID, entry.Name()))
 		if err != nil {
 			t.Fatalf("read task log file: %v", err)
 		}
@@ -522,8 +591,8 @@ func llmHygieneMarkdownNode(createdAt time.Time) memory.MarkdownNode {
 		ID:         "task-hygiene-markdown",
 		CreatedAt:  createdAt,
 		LastSeenAt: createdAt,
-		Summary:    "Plan next step later",
-		Content:    "TODO: follow up later with the old migration plan.",
-		Confidence: 0.2,
+		Summary:    "Always validate config env checks before patching migration files.",
+		Content:    "Always validate config env checks before patching migration files. This is a stable convention for safe config changes.",
+		Confidence: 0.9,
 	}
 }

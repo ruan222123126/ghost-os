@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -73,8 +72,6 @@ func newBridgeServiceWithStreamExecutor(
 		runRegistry:   runRegistry,
 		actions:       make(map[string]actionHandler, 21),
 	}
-	service.initRSSInboxRuntime()
-	service.initTaskRuntime()
 
 	runner := newSessionTurnRunnerAdapter(store, sessionStore, executor, streamExecutor)
 	if runner == nil {
@@ -115,11 +112,17 @@ func newBridgeServiceWithStreamExecutor(
 	registerAction(service, busActionMemoryHygieneRun, func(_ context.Context, params memoryHygieneRunParams, traceID string) (any, int, error) {
 		return service.executeMemoryHygieneRunAction(params, traceID)
 	})
+	registerAction(service, busActionMemoryDecisionRelationRun, func(_ context.Context, params memoryDecisionRelationRunParams, traceID string) (any, int, error) {
+		return service.executeMemoryDecisionRelationRunAction(params, traceID)
+	})
+	registerAction(service, busActionMemoryPalaceCurateRun, func(_ context.Context, params memoryPalaceCurateRunParams, traceID string) (any, int, error) {
+		return service.executeMemoryPalaceCurateRunAction(params, traceID)
+	})
 	registerAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (any, int, error) {
 		return service.executeTaskCreateAction(params, traceID)
 	})
 	registerAction(service, busActionTaskList, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
-		return service.executeTaskListAction(traceID)
+		return service.executeTaskListAction(taskListScopeUser, traceID)
 	})
 	registerAction(service, busActionTaskGet, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskGetAction(params, traceID)
@@ -145,48 +148,96 @@ func newBridgeServiceWithStreamExecutor(
 	registerAction(service, busActionRSSInboxGet, func(_ context.Context, params rssInboxGetParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxGetAction(params, traceID)
 	})
+	registerAction(service, busActionRSSInboxGroups, func(_ context.Context, params rssInboxGroupsParams, traceID string) (any, int, error) {
+		return service.executeRSSInboxGroupsAction(params, traceID)
+	})
+	registerAction(service, busActionRSSBriefingBuild, func(ctx context.Context, params rssBriefingParams, traceID string) (any, int, error) {
+		return service.executeRSSBriefingBuildAction(ctx, params, traceID)
+	})
+	registerAction(service, busActionRSSBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
+		return service.executeRSSBriefingGetAction(traceID)
+	})
 	return service
 }
 
 func (s *bridgeService) taskToolManager() tools.TaskManager {
-	if s == nil || s.taskStore == nil || s.taskScheduler == nil {
+	if s == nil {
 		return nil
 	}
 	return s
 }
 
-func (s *bridgeService) initTaskRuntime() {
+// StartBackgroundRuntimes 显式初始化 service 依赖的后台 runtime。
+func (s *bridgeService) StartBackgroundRuntimes() error {
 	if s == nil {
-		return
+		return nil
+	}
+	if err := s.initRSSInboxRuntime(); err != nil {
+		return err
+	}
+	return s.initTaskRuntime()
+}
+
+// BootstrapSystemTasks 将系统调度任务同步到 task runtime。
+func (s *bridgeService) BootstrapSystemTasks() error {
+	if s == nil {
+		return nil
+	}
+	if err := s.ensureRSSPollTask(); err != nil {
+		return err
+	}
+	if err := s.ensureRSSBriefingTask(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *bridgeService) initTaskRuntime() error {
+	if s == nil {
+		return nil
+	}
+	if s.taskStore != nil && s.taskScheduler != nil {
+		s.taskInitErr = nil
+		return nil
 	}
 	taskStore, err := NewTaskStore(tasksPathFromEnv())
 	if err != nil {
 		s.taskInitErr = err
-		return
+		return err
 	}
 	scheduler := NewTaskScheduler(taskStore, s)
 	if err := scheduler.Start(); err != nil {
 		s.taskInitErr = err
-		return
+		return err
 	}
 	s.taskStore = taskStore
 	s.taskScheduler = scheduler
-	if err := s.ensureRSSPollTask(); err != nil {
-		log.Printf("rss inbox poll task init skipped: error=%v", err)
-	}
+	s.taskInitErr = nil
+	return nil
 }
 
-func (s *bridgeService) initRSSInboxRuntime() {
+func (s *bridgeService) initRSSInboxRuntime() error {
 	if s == nil {
-		return
+		return nil
+	}
+	return s.reloadRSSInboxRuntime()
+}
+
+func (s *bridgeService) reloadRSSInboxRuntime() error {
+	if s == nil {
+		return nil
 	}
 	service, err := newRSSInboxServiceFromConfig(s.configStore)
 	if err != nil {
 		s.rssInitErr = err
-		return
+		s.rssInbox = nil
+		s.feedStore = nil
+		return err
 	}
 	s.rssInbox = service
 	s.feedStore = service.feedStore
+	s.rssInitErr = nil
+	return nil
 }
 
 // Close 释放 service 级后台资源。

@@ -45,6 +45,7 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	t.Setenv("GHOST_API_KEY", "test-key")
 	t.Setenv("GHOST_TASKS_PATH", tempDir+"/tasks")
 	t.Setenv("GHOST_RSS_POLL_ENABLED", "false")
+	t.Setenv("GHOST_RSS_BRIEFING_ENABLED", "false")
 	t.Setenv("GHOST_RSS_INBOX_PATH", tempDir+"/rss/inbox.json")
 	t.Setenv("GHOST_RSS_FEEDS_PATH", tempDir+"/rss/feeds.json")
 	t.Setenv("GHOST_MEMORY_WARM_PATH", tempDir+"/memory/warm.json")
@@ -68,6 +69,9 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	}
 
 	service := newBridgeServiceWithStreamExecutor(store, sessionStore, executor, streamExecutor)
+	if err := service.StartBackgroundRuntimes(); err != nil {
+		t.Fatalf("start background runtimes: %v", err)
+	}
 	t.Cleanup(service.Close)
 	options := newServerOptionsFromEnv(8080)
 	options.maxBodyBytes = defaultMaxRequestBodyBytes

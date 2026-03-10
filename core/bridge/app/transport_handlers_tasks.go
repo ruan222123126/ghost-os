@@ -11,7 +11,7 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeTaskListAction(traceID)
+		payload, code, err := t.service.executeTaskListAction(taskListScopeUser, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
 		var req taskCreateParams
@@ -24,6 +24,16 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeMethodNotAllowed(w)
 	}
+}
+
+func (t *transport) handleSystemTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+	traceID := resolveTraceID("", r)
+	payload, code, err := t.service.executeTaskListAction(taskListScopeSystem, traceID)
+	respondServiceResult(w, traceID, payload, code, err)
 }
 
 func (t *transport) handleTaskByID(w http.ResponseWriter, r *http.Request) {

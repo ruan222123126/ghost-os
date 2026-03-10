@@ -57,9 +57,13 @@ func runServer(ctx context.Context, port int) (string, error) {
 	}
 
 	service := newBridgeService(store, sessionStore, nil)
-	if service.taskInitErr != nil {
+	if err := service.StartBackgroundRuntimes(); err != nil {
 		service.Close()
-		return "", service.taskInitErr
+		return "", err
+	}
+	if err := service.BootstrapSystemTasks(); err != nil {
+		service.Close()
+		return "", err
 	}
 	defer service.Close()
 	options := newServerOptionsFromEnv(port)
@@ -106,14 +110,18 @@ func newHTTPHandler(service *bridgeService, options serverOptions) http.Handler 
 	mux.HandleFunc("/api/agent", transport.handleAgent)
 	mux.HandleFunc("/api/agent/stream", transport.handleAgentStream)
 	mux.HandleFunc("/api/questions/answer", transport.handleQuestionAnswer)
+	mux.HandleFunc("/api/questions/answer/stream", transport.handleQuestionAnswerStream)
 	mux.HandleFunc("/api/config", transport.handleConfig)
 	mux.HandleFunc("/api/config/providers", transport.handleConfigProviders)
 	mux.HandleFunc("/api/config/providers/", transport.handleConfigProviderByName)
 	mux.HandleFunc("/api/config/active-provider", transport.handleActiveProvider)
 	mux.HandleFunc("/api/sessions", transport.handleSessionsList)
 	mux.HandleFunc("/api/sessions/", transport.handleSessionByID)
+	mux.HandleFunc("/api/rss/briefing", transport.handleRSSBriefing)
+	mux.HandleFunc("/api/rss/inbox/groups", transport.handleRSSInboxGroups)
 	mux.HandleFunc("/api/rss/inbox", transport.handleRSSInbox)
 	mux.HandleFunc("/api/rss/inbox/", transport.handleRSSInboxByID)
+	mux.HandleFunc("/api/system/tasks", transport.handleSystemTasks)
 	mux.HandleFunc("/api/tasks", transport.handleTasks)
 	mux.HandleFunc("/api/tasks/", transport.handleTaskByID)
 
