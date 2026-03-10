@@ -1,4 +1,4 @@
-// Bus transport handlers map actions to concrete service use cases.
+// Bus and agent-facing HTTP handlers.
 
 package app
 
@@ -8,7 +8,6 @@ import (
 	"strings"
 )
 
-// handleBus 处理统一 bus 入口：解码 envelope、校验 action，再分发到 service。
 func (t *transport) handleBus(w http.ResponseWriter, r *http.Request) {
 	if !requireMethod(w, r, http.MethodPost) {
 		return
@@ -50,7 +49,50 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t.dispatchAction(w, r, actionAgentSend, params, traceID)
+	t.dispatchAction(w, r, busActionAgentSend, params, traceID)
+}
+
+// handleQuestionAnswer 以高层接口隐藏 HUMAN_RESPONSE + resume 的底层编排细节。
+func (t *transport) handleQuestionAnswer(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var req humanResponseParams
+	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
+		return
+	}
+
+	traceID := resolveTraceID("", r)
+	payload, code, err := t.service.executeHumanAnswerAndResumeAction(r.Context(), req, traceID)
+	respondServiceResult(w, traceID, payload, code, err)
+}
+
+func (t *transport) handleQuestionAnswerStream(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodPost) {
+		return
+	}
+
+	var req humanResponseParams
+	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported", "")
+		return
+	}
+
+	traceID := resolveTraceID("", r)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("X-Trace-ID", traceID)
+
+	sink := newSSEEventSink(w, flusher, traceID)
+	_, _, _ = t.service.executeHumanAnswerAndResumeStreamAction(r.Context(), req, traceID, sink)
 }
 
 func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
@@ -96,59 +138,4 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 func (t *transport) dispatchAction(w http.ResponseWriter, r *http.Request, action string, params json.RawMessage, traceID string) {
 	payload, code, err := t.service.dispatchAction(r.Context(), action, params, traceID)
 	respondActionResult(w, traceID, action, payload, code, err)
-}
-
-// handleConfig 提供配置读写路由：GET 读取快照，POST 更新并返回最新配置。
-func (t *transport) handleConfig(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeConfigGetAction(traceID)
-		respondServiceResult(w, traceID, payload, code, err)
-	case http.MethodPost:
-		var req configUpdateRequest
-		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
-			return
-		}
-
-		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeConfigUpdateAction(req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
-	default:
-		writeMethodNotAllowed(w)
-	}
-}
-
-// handleSessionsList 列出会话概要，供 Web/CLI 构建侧边栏或历史视图。
-func (t *transport) handleSessionsList(w http.ResponseWriter, r *http.Request) {
-	if !requireMethod(w, r, http.MethodGet) {
-		return
-	}
-
-	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.executeSessionsListAction(traceID)
-	respondServiceResult(w, traceID, payload, code, err)
-}
-
-// handleSessionByID 处理单会话查询与删除，并在路径层面做 session id 基本校验。
-func (t *transport) handleSessionByID(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/sessions/"))
-	if id == "" || strings.Contains(id, "/") {
-		writeError(w, http.StatusBadRequest, "session id is required", "")
-		return
-	}
-
-	params := sessionIDParams{ID: id}
-	traceID := resolveTraceID("", r)
-
-	switch r.Method {
-	case http.MethodGet:
-		payload, code, err := t.service.executeSessionGetAction(params, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
-	case http.MethodDelete:
-		payload, code, err := t.service.executeSessionDeleteAction(params, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
-	default:
-		writeMethodNotAllowed(w)
-	}
 }
