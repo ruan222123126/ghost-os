@@ -17,6 +17,10 @@ type ToolResultEnvelope struct {
 }
 
 func appendToolResult(history *History, toolCallID string, toolName string, traceID string, output string, toolErr error, content []llm.ContentPart) {
+	if history == nil {
+		return
+	}
+
 	message := llm.Message{
 		Role:       llm.RoleTool,
 		ToolCallID: toolCallID,

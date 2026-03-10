@@ -245,7 +245,8 @@ func (a *Agent) handleAssistantStop(msg llm.Message) string {
 	return msg.Text
 }
 
-// GetNewMessages 返回 Agent 初始化后已提交的新增会话消息。
+// GetNewMessages 返回 Agent 初始化以来（或上次 ResetNewMessages 以来）已提交的新增会话消息。
+// 注意：该方法不会“消费”消息；如需按增量消费，请在处理后调用 ResetNewMessages。
 func (a *Agent) GetNewMessages() []llm.Message {
 	if a == nil || a.history == nil {
 		return nil
@@ -260,6 +261,14 @@ func (a *Agent) GetNewMessages() []llm.Message {
 	}
 
 	return llm.CloneMessages(messages[a.initialHistoryLen:])
+}
+
+// ResetNewMessages 将“新增消息”的基准推进到当前历史末尾，用于按增量消费 GetNewMessages。
+func (a *Agent) ResetNewMessages() {
+	if a == nil || a.history == nil {
+		return
+	}
+	a.initialHistoryLen = a.history.Len()
 }
 
 func (a *Agent) LastTurn() int {

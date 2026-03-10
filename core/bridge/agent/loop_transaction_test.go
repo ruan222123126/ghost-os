@@ -103,3 +103,23 @@ func TestRunAwaitingHumanCommitsTurnState(t *testing.T) {
 		t.Fatalf("unexpected committed assistant message: %+v", newMessages[1])
 	}
 }
+
+func TestResetNewMessagesAdvancesBaseline(t *testing.T) {
+	history := NewHistory("system prompt")
+	agent := NewAgentWithHistory(nil, nil, history, 1)
+
+	history.Append(llm.Message{Role: llm.RoleUser, Text: "hello"})
+	if got := agent.GetNewMessages(); len(got) != 1 {
+		t.Fatalf("expected 1 new message, got %d", len(got))
+	}
+
+	agent.ResetNewMessages()
+	if got := agent.GetNewMessages(); len(got) != 0 {
+		t.Fatalf("expected baseline reset to consume new messages, got %d", len(got))
+	}
+
+	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "world"})
+	if got := agent.GetNewMessages(); len(got) != 1 {
+		t.Fatalf("expected 1 new message after reset, got %d", len(got))
+	}
+}

@@ -35,6 +35,9 @@ type toolCallExecutor struct {
 }
 
 func newToolCallExecutor(toolCatalog ToolCatalog, history *History, stderr io.Writer, events agentEventEmitter) toolCallExecutor {
+	if history == nil {
+		history = NewHistory("")
+	}
 	if stderr == nil {
 		stderr = os.Stderr
 	}
@@ -63,8 +66,12 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 		toolCallID, toolName, args, err := validateToolCall(call)
 		if err != nil {
 			fmt.Fprintf(e.stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, strings.TrimSpace(call.ID), strings.TrimSpace(call.Name), err)
-			appendToolResult(e.history, toolCallID, toolName, traceID, "", err, nil)
-			if emitErr := e.events.toolCallFinished(ctx, traceID, turn, stepID, coalesceToolName(toolName, rawToolName), coalesceToolCallID(toolCallID, rawToolCallID), "error", err); emitErr != nil {
+			resolvedToolCallID := coalesceToolCallID(toolCallID, rawToolCallID)
+			if resolvedToolCallID != "" {
+				resolvedToolName := coalesceToolName(toolName, rawToolName, "invalid_tool_call")
+				appendToolResult(e.history, resolvedToolCallID, resolvedToolName, traceID, "", err, nil)
+			}
+			if emitErr := e.events.toolCallFinished(ctx, traceID, turn, stepID, coalesceToolName(toolName, rawToolName, "invalid_tool_call"), resolvedToolCallID, "error", err); emitErr != nil {
 				return stats, emitErr
 			}
 			continue
