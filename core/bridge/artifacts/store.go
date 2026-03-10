@@ -15,6 +15,10 @@ const (
 	sessionArtifactsDir  = "sessions"
 )
 
+// MaxIdentifierLength caps session/artifact identifiers used as path components.
+// Keep this conservative so generated metadata filenames remain cross-platform safe.
+const MaxIdentifierLength = 128
+
 var ErrArtifactNotFound = errors.New("artifact not found")
 
 type SessionFileArtifact struct {
@@ -113,10 +117,7 @@ func (s *SessionArtifactStore) WriteMetadata(artifact SessionFileArtifact) error
 		return errors.New("artifact metadata is incomplete")
 	}
 
-	dir, err := s.SessionDir(sessionID)
-	if err != nil {
-		return err
-	}
+	dir := filepath.Join(s.baseDir, sessionArtifactsDir, sessionID)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create artifact directory: %w", err)
 	}
@@ -172,7 +173,24 @@ func normalizeIdentifier(value string, label string) (string, error) {
 	if trimmed == "" {
 		return "", fmt.Errorf("%s is required", label)
 	}
-	if strings.Contains(trimmed, "/") || strings.Contains(trimmed, string(filepath.Separator)) || trimmed == "." || trimmed == ".." {
+	if len(trimmed) > MaxIdentifierLength {
+		return "", fmt.Errorf("%s is too long", label)
+	}
+	if trimmed == "." || trimmed == ".." {
+		return "", fmt.Errorf("invalid %s", label)
+	}
+	for _, ch := range trimmed {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+		case ch >= 'A' && ch <= 'Z':
+		case ch >= '0' && ch <= '9':
+		case ch == '-' || ch == '_':
+		default:
+			return "", fmt.Errorf("invalid %s", label)
+		}
+	}
+	// Keep legacy separator checks as an extra guardrail.
+	if strings.Contains(trimmed, "/") || strings.Contains(trimmed, string(filepath.Separator)) {
 		return "", fmt.Errorf("invalid %s", label)
 	}
 	return trimmed, nil
