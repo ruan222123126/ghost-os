@@ -2,6 +2,9 @@ package memory
 
 import (
 	"encoding/json"
+	"errors"
+	"log"
+	"strings"
 
 	"ghost-os/bridge/llm"
 	igraph "ghost-os/bridge/memory/internal/graph"
@@ -85,10 +88,16 @@ func (g *GraphService) Enabled() bool {
 }
 
 func (g *GraphService) IngestArchiveMessages(sessionID string, messages []llm.Message) error {
-	if g == nil || g.inner == nil {
-		return nil
+	if g == nil || g.inner == nil || !g.Enabled() {
+		return ErrGraphArchiveIngestDisabled
 	}
-	return g.inner.IngestArchiveMessages(sessionID, messages)
+	if err := g.inner.IngestArchiveMessages(strings.TrimSpace(sessionID), messages); err != nil {
+		if errors.Is(err, igraph.ErrArchiveIngestDisabled) {
+			return ErrGraphArchiveIngestDisabled
+		}
+		return err
+	}
+	return nil
 }
 
 func (g *GraphService) IngestMarkdownNode(node MarkdownNode) error {
@@ -100,6 +109,11 @@ func (g *GraphService) IngestMarkdownNode(node MarkdownNode) error {
 		return err
 	}
 	return g.inner.IngestMarkdownNode(converted)
+}
+
+func (g *GraphService) SyncObject(object MemoryObject) error {
+	_ = object
+	return ErrGraphObjectSyncDisabled
 }
 
 func (g *GraphService) Retrieve(query MemoryQuery, scope SessionScope) ([]MemoryEntry, []GraphHit, error) {
@@ -132,11 +146,12 @@ func (g *GraphService) Retrieve(query MemoryQuery, scope SessionScope) ([]Memory
 
 func (g *GraphService) GraphStats(namespace string) GraphStats {
 	if g == nil || g.inner == nil {
-		return GraphStats{}
+		return GraphStats{Namespace: normalizeGraphNamespace(namespace)}
 	}
 	stats, err := convertGraphValue[igraph.GraphStats, GraphStats](g.inner.GraphStats(namespace))
 	if err != nil {
-		return GraphStats{}
+		log.Printf("[MEMORY] graph stats conversion failed: namespace=%s err=%v", strings.TrimSpace(namespace), err)
+		return GraphStats{Namespace: normalizeGraphNamespace(namespace)}
 	}
 	return stats
 }

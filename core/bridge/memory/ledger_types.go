@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -160,11 +161,42 @@ func normalizeLedgerTime(ts time.Time) time.Time {
 }
 
 func ledgerWorkspacePathPart(workspaceID string) string {
-	trimmed := strings.TrimSpace(workspaceID)
-	if trimmed == "" {
-		return ledgerWorkspacePlaceholder
+	return sanitizeLedgerPathPart("workspace_id", workspaceID, ledgerWorkspacePlaceholder)
+}
+
+func ledgerNamespacePathPart(namespace string) string {
+	return sanitizeLedgerPathPart("namespace", normalizeLedgerNamespace(namespace), defaultLedgerNamespace)
+}
+
+func sanitizeLedgerPathPart(label string, value string, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" || trimmed == "." || trimmed == ".." {
+		return fallback
 	}
-	return trimmed
+	var b strings.Builder
+	b.Grow(len(trimmed))
+	changed := false
+	for _, ch := range trimmed {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+		case ch >= 'A' && ch <= 'Z':
+		case ch >= '0' && ch <= '9':
+		case ch == '-' || ch == '_':
+		default:
+			changed = true
+			b.WriteByte('_')
+			continue
+		}
+		b.WriteRune(ch)
+	}
+	out := b.String()
+	if out == "" || out == "." || out == ".." {
+		return fallback
+	}
+	if changed || out != trimmed {
+		log.Printf("[MEMORY] ledger path part sanitized: field=%s value=%q sanitized=%q", label, trimmed, out)
+	}
+	return out
 }
 
 func buildLedgerEventID(kind string, dedupeKey string) string {

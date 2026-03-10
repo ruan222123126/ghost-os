@@ -2,6 +2,7 @@ package memory
 
 import (
 	"encoding/json"
+	"log"
 	"strings"
 	"time"
 
@@ -533,9 +534,11 @@ func convertDecisionValue[From any, To any](value From) (To, error) {
 	var out To
 	payload, err := json.Marshal(value)
 	if err != nil {
+		log.Printf("[MEMORY] decision conversion marshal failed: from=%T err=%v", value, err)
 		return out, err
 	}
 	if err := json.Unmarshal(payload, &out); err != nil {
+		log.Printf("[MEMORY] decision conversion unmarshal failed: from=%T to=%T err=%v", value, out, err)
 		return out, err
 	}
 	return out, nil

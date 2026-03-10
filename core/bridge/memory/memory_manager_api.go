@@ -215,16 +215,25 @@ func (m *MemoryManager) VerifyTruthReplay() (TruthVerifyResult, error) {
 
 // SaveMarkdownNode 保存记忆节点为 Markdown 文件（人类可读）。
 func (m *MemoryManager) SaveMarkdownNode(node MarkdownNode) error {
+	if m == nil || m.cold == nil {
+		return nil
+	}
 	return m.cold.SaveMarkdownNode(node)
 }
 
 // LoadMarkdownNode 加载 Markdown 记忆节点。
 func (m *MemoryManager) LoadMarkdownNode(id string) (MarkdownNode, error) {
+	if m == nil || m.cold == nil {
+		return MarkdownNode{}, nil
+	}
 	return m.cold.LoadMarkdownNode(id)
 }
 
 // ListMarkdownNodes 列出所有 Markdown 记忆节点。
 func (m *MemoryManager) ListMarkdownNodes() ([]string, error) {
+	if m == nil || m.cold == nil {
+		return nil, nil
+	}
 	return m.cold.ListMarkdownNodes()
 }
 

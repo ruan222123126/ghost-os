@@ -2,6 +2,7 @@ package memory
 
 import (
 	"fmt"
+	"log"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -202,14 +203,32 @@ func (s *LedgerStore) Append(events ...LedgerEvent) (LedgerAppendResult, error) 
 }
 
 func (s *LedgerStore) monthDir(namespace string, workspaceID string, occurredAt time.Time) string {
-	return filepath.Join(
+	return safeLedgerPath(
 		s.baseDir,
-		normalizeLedgerNamespace(namespace),
+		ledgerNamespacePathPart(namespace),
 		ledgerWorkspacePathPart(workspaceID),
 		occurredAt.UTC().Format("2006-01"),
 	)
 }
 
 func (s *LedgerStore) namespaceRoot(namespace string, workspaceID string) string {
-	return filepath.Join(s.baseDir, normalizeLedgerNamespace(namespace), ledgerWorkspacePathPart(workspaceID))
+	return safeLedgerPath(s.baseDir, ledgerNamespacePathPart(namespace), ledgerWorkspacePathPart(workspaceID))
+}
+
+func safeLedgerPath(base string, parts ...string) string {
+	cleanBase := filepath.Clean(strings.TrimSpace(base))
+	if cleanBase == "" {
+		return filepath.Join(parts...)
+	}
+	joined := filepath.Join(append([]string{cleanBase}, parts...)...)
+	cleaned := filepath.Clean(joined)
+	if cleaned == cleanBase {
+		return cleaned
+	}
+	prefix := cleanBase + string(filepath.Separator)
+	if !strings.HasPrefix(cleaned, prefix) {
+		log.Printf("[MEMORY] ledger path escaped base dir: base=%s resolved=%s", cleanBase, cleaned)
+		return cleanBase
+	}
+	return cleaned
 }
