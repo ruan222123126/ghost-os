@@ -13,14 +13,16 @@ const nativeStrictDecoderEnv = "GHOST_NATIVE_STRICT_DECODER"
 
 // NativeClient 通过本地 native 二进制完成 one-shot execution bus 调用。
 type NativeClient struct {
-	locator nativeBinaryLocator
+	locator           nativeBinaryLocator
+	allowedReadPaths  []string
+	allowedWritePaths []string
 }
 
 func NewNativeClient() Client {
 	return newNativeClientWithLocator(nativeBinaryLocator{})
 }
 
-func newNativeClientWithLocator(locator nativeBinaryLocator) Client {
+func newNativeClientWithLocator(locator nativeBinaryLocator) NativeClient {
 	return NativeClient{locator: locator}
 }
 
@@ -30,11 +32,23 @@ func (c NativeClient) Call(ctx context.Context, action string, params map[string
 		return nil, err
 	}
 
-	return callNativeOnceWithCommand(exec.CommandContext(ctx, nativeBin), newRequest(action, params, traceID))
+	return callNativeOnceWithCommand(
+		exec.CommandContext(ctx, nativeBin),
+		newRequest(action, params, traceID),
+		c.allowedReadPaths,
+		c.allowedWritePaths,
+	)
 }
 
-func callNativeOnceWithCommand(cmd *exec.Cmd, req request) (map[string]any, error) {
+func callNativeOnceWithCommand(
+	cmd *exec.Cmd,
+	req request,
+	allowedReadPaths []string,
+	allowedWritePaths []string,
+) (map[string]any, error) {
 	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), cmd.Env...)
+	cmd.Env = append(cmd.Env, buildNativeAllowedPathEnv(allowedReadPaths, allowedWritePaths)...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

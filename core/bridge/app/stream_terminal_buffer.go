@@ -3,25 +3,25 @@ package app
 import (
 	"context"
 
-	"ghost-os/bridge/agent"
+	"ghost-os/bridge/streaming"
 )
 
 type streamTerminalBuffer struct {
-	sink   agent.EventSink
-	events []agent.AgentEvent
+	sink   streaming.Sink
+	events []streaming.Event
 }
 
-func newStreamTerminalBuffer(sink agent.EventSink) *streamTerminalBuffer {
+func newStreamTerminalBuffer(sink streaming.Sink) *streamTerminalBuffer {
 	return &streamTerminalBuffer{sink: ensureEventSink(sink)}
 }
 
-func (b *streamTerminalBuffer) Emit(ctx context.Context, event agent.AgentEvent) error {
+func (b *streamTerminalBuffer) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
 	if b == nil {
-		return nil
+		return event, nil
 	}
 	if isTerminalStreamEvent(event.Type) {
 		b.events = append(b.events, event)
-		return nil
+		return event, nil
 	}
 	return b.sink.Emit(ctx, event)
 }
@@ -31,7 +31,7 @@ func (b *streamTerminalBuffer) Flush(ctx context.Context) error {
 		return nil
 	}
 	for _, event := range b.events {
-		if err := b.sink.Emit(ctx, event); err != nil {
+		if _, err := b.sink.Emit(ctx, event); err != nil {
 			return err
 		}
 	}
@@ -46,9 +46,9 @@ func (b *streamTerminalBuffer) Discard() {
 	b.events = nil
 }
 
-func isTerminalStreamEvent(eventType agent.EventType) bool {
+func isTerminalStreamEvent(eventType streaming.EventType) bool {
 	switch eventType {
-	case agent.EventMessage, agent.EventDone:
+	case streaming.EventMessage, streaming.EventDone:
 		return true
 	default:
 		return false
