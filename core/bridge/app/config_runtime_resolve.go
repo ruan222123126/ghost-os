@@ -62,13 +62,17 @@ func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback 
 			chatPath = fallback.ChatPath
 		}
 		return normalizeRuntimeConfig(runtimeConfig{
-			ProviderName:     active.Name,
-			Provider:         active.Type.Normalized(),
-			APIKey:           apiKey,
-			BaseURL:          baseURL,
-			Model:            model,
-			ChatPath:         chatPath,
-			NativePersistent: nativePersistent,
+			ProviderName:               active.Name,
+			Provider:                   active.Type.Normalized(),
+			APIKey:                     apiKey,
+			BaseURL:                    baseURL,
+			Model:                      model,
+			ChatPath:                   chatPath,
+			NativePersistent:           nativePersistent,
+			ContextWindowTokens:        active.ContextWindowTokens,
+			ResponseReserveTokens:      active.ResponseReserveTokens,
+			ModelContextWindowTokens:   cloneModelTokenOverrides(active.ModelContextWindowTokens),
+			ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
 		}), nil
 	}
 
@@ -90,13 +94,17 @@ func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback 
 	}
 	providerType := inferProviderType(providerName, fallback.BaseURL, model)
 	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:     providerName,
-		Provider:         providerType,
-		APIKey:           fallback.APIKey,
-		BaseURL:          fallback.BaseURL,
-		Model:            model,
-		ChatPath:         chatPath,
-		NativePersistent: nativePersistent,
+		ProviderName:               providerName,
+		Provider:                   providerType,
+		APIKey:                     fallback.APIKey,
+		BaseURL:                    fallback.BaseURL,
+		Model:                      model,
+		ChatPath:                   chatPath,
+		NativePersistent:           nativePersistent,
+		ContextWindowTokens:        fallback.ContextWindowTokens,
+		ResponseReserveTokens:      fallback.ResponseReserveTokens,
+		ModelContextWindowTokens:   cloneModelTokenOverrides(fallback.ModelContextWindowTokens),
+		ModelResponseReserveTokens: cloneModelTokenOverrides(fallback.ModelResponseReserveTokens),
 	}), nil
 }
 

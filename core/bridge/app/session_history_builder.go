@@ -65,7 +65,12 @@ func (b *SessionHistoryBuilder) BuildHistoryWithResolvedQuestions(sess *session.
 		return agent.NewHistoryFromMessages(nil), resolved
 	}
 
-	contextLimit := session.GetContextLimit(b.provider.Type, b.provider.Model)
+	contextLimit := session.GetContextLimit(b.provider.Type, b.provider.Model, session.ContextLimitConfig{
+		ContextWindowTokens:        b.provider.ContextWindowTokens,
+		ResponseReserveTokens:      b.provider.ResponseReserveTokens,
+		ModelContextWindowTokens:   b.provider.ModelContextWindowTokens,
+		ModelResponseReserveTokens: b.provider.ModelResponseReserveTokens,
+	})
 	messages := messagesWithSystemPrompt(sess.GetMessages(contextLimit), b.systemPrompt)
 	history := agent.NewHistoryFromMessages(messages)
 	if sess != nil && !sess.ConversationState.IsZero() && sess.ConversationState.Matches(b.provider.Type, b.provider.BaseURL, b.provider.Model) {

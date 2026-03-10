@@ -52,11 +52,16 @@ func TestPruneMessagesKeepsRecentMessages(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		messages = append(messages, llm.Message{
 			Role: llm.RoleUser,
-			Text: strings.Repeat("message-"+string(rune('a'+(i%26)))+" ", 15),
+			Text: strings.Repeat("message-"+string(rune('a'+(i%26)))+" ", 6),
 		})
 	}
 
-	pruned := PruneMessages(messages, 140)
+	recent := messages[len(messages)-defaultRecentMessagesToKeep:]
+	recentTokens := 0
+	for _, msg := range recent {
+		recentTokens += EstimateTokens(msg)
+	}
+	pruned := PruneMessages(messages, recentTokens+EstimateTokens(messages[0])+10)
 	if len(pruned) == 0 {
 		t.Fatal("pruned messages should not be empty")
 	}
@@ -74,6 +79,58 @@ func TestPruneMessagesKeepsRecentMessages(t *testing.T) {
 		if !found {
 			t.Fatalf("recent message missing after prune: role=%q text=%q", want.Role, want.Text)
 		}
+	}
+}
+
+func TestPruneMessagesDropsRecentWhenStillOverLimit(t *testing.T) {
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Text: "system"},
+	}
+	for i := 0; i < 18; i++ {
+		messages = append(messages, llm.Message{
+			Role: llm.RoleUser,
+			Text: strings.Repeat("oversize ", 40),
+		})
+	}
+
+	pruned := PruneMessages(messages, 180)
+	if len(pruned) == 0 {
+		t.Fatal("pruned messages should not be empty")
+	}
+
+	total := 0
+	for _, msg := range pruned {
+		total += EstimateTokens(msg)
+	}
+	if total > 180 {
+		t.Fatalf("expected pruned messages to fit budget: got %d", total)
+	}
+	if len(pruned) >= defaultRecentMessagesToKeep+1 {
+		t.Fatalf("expected recent messages to be trimmed when oversized: got %d", len(pruned))
+	}
+}
+
+func TestPruneMessagesTruncatesOversizedSpan(t *testing.T) {
+	huge := strings.Repeat("payload ", 200)
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Text: "system"},
+		{Role: llm.RoleUser, Text: huge},
+	}
+
+	pruned := PruneMessages(messages, 120)
+	if len(pruned) < 2 {
+		t.Fatalf("expected pruned messages to keep recent span, got %d", len(pruned))
+	}
+
+	total := 0
+	for _, msg := range pruned {
+		total += EstimateTokens(msg)
+	}
+	if total > 120 {
+		t.Fatalf("expected pruned messages to fit budget: got %d", total)
+	}
+	if len(pruned[1].Text) >= len(huge) {
+		t.Fatalf("expected recent message to be truncated")
 	}
 }
 
@@ -125,13 +182,23 @@ func TestPruneMessagesKeepsToolCallAndToolResultTogether(t *testing.T) {
 }
 
 func TestGetContextLimit(t *testing.T) {
-	if got := GetContextLimit(llm.ProviderOpenAI, "gpt-4o"); got != openAIContextTokens-openAIResponseReserve {
+	if got := GetContextLimit(llm.ProviderOpenAI, "gpt-4o", ContextLimitConfig{}); got != openAIModernContextTokens-openAIResponseReserve {
 		t.Fatalf("unexpected openai limit: got %d", got)
 	}
-	if got := GetContextLimit(llm.ProviderAnthropic, "claude-3-opus"); got != anthropicContextTokens-anthropicResponseReserve {
+	if got := GetContextLimit(llm.ProviderAnthropic, "claude-3-opus", ContextLimitConfig{}); got != anthropicModernContextTokens-anthropicResponseReserve {
 		t.Fatalf("unexpected anthropic limit: got %d", got)
 	}
-	if got := GetContextLimit(llm.ProviderCustom, "local-model"); got != customContextTokens {
+	if got := GetContextLimit(llm.ProviderCodex, "codex-mini-latest", ContextLimitConfig{}); got != openAIModernContextTokens-openAIResponseReserve {
+		t.Fatalf("unexpected codex limit: got %d", got)
+	}
+	if got := GetContextLimit(llm.ProviderCustom, "local-model", ContextLimitConfig{}); got != customContextTokens {
 		t.Fatalf("unexpected custom limit: got %d", got)
+	}
+	override := ContextLimitConfig{
+		ContextWindowTokens:   9000,
+		ResponseReserveTokens: 500,
+	}
+	if got := GetContextLimit(llm.ProviderOpenAI, "gpt-4o", override); got != 8500 {
+		t.Fatalf("unexpected override limit: got %d", got)
 	}
 }

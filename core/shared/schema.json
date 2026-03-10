@@ -1161,6 +1161,28 @@
             "type": "string"
           }
         },
+        "context_window_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "response_reserve_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
         "api_key_set": {
           "type": "boolean"
         }
@@ -1194,6 +1216,28 @@
           "type": "array",
           "items": {
             "type": "string"
+          }
+        },
+        "context_window_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "response_reserve_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "trace_id": {
@@ -1493,7 +1537,8 @@
       "tools.write_file": "Write or append file content (max 1MB per call)",
       "tools.apply_diff": "Apply unified diff text to a file",
       "tools.search_files": "Regex search across files, returns grep-style matches",
-      "tools.fetch_webpage": "Fetch HTTPS webpage and return cleaned markdown"
+      "tools.fetch_webpage": "Fetch HTTPS webpage and return cleaned markdown",
+      "tools.codex_cli": "Run codex CLI asynchronously with status polling"
     }
   }
 }

@@ -141,6 +141,8 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.NativeBinaryPath = cloneOptionalStringPointer(out.NativeBinaryPath)
 	out.NativeBinaryRoots = normalizeConfiguredPathList(out.NativeBinaryRoots)
 	out.NativeBinaryCandidates = normalizeConfiguredPathList(out.NativeBinaryCandidates)
+	out.NativeAllowedReadPaths = normalizeConfiguredPathList(out.NativeAllowedReadPaths)
+	out.NativeAllowedWritePaths = normalizeConfiguredPathList(out.NativeAllowedWritePaths)
 	out.ProviderHeaders, _ = normalizeProviderHeaders(out.ProviderHeaders)
 	out.CORSOrigins = normalizeOrigins(out.CORSOrigins)
 	out.ToolAllowlist = normalizeConfiguredToolNames(out.ToolAllowlist)
@@ -214,7 +216,8 @@ func normalizeProviderConfigs(raw map[string]providerFileConfig, model string) [
 
 	out := make([]providerConfig, 0, len(names))
 	for _, name := range names {
-		provider, ok := normalizeProviderRecord(name, raw[name].Type, raw[name].BaseURL, raw[name].APIKey, raw[name].Models, model)
+		record := raw[name]
+		provider, ok := normalizeProviderRecord(name, record.Type, record.BaseURL, record.APIKey, record.Models, record.ContextWindowTokens, record.ResponseReserveTokens, record.ModelContextWindowTokens, record.ModelResponseReserveTokens, model)
 		if !ok {
 			continue
 		}
@@ -233,7 +236,7 @@ func normalizeLegacyProviderConfigs(raw []legacyProviderConfig, model string) []
 
 	out := make([]providerConfig, 0, len(raw))
 	for _, provider := range raw {
-		normalized, ok := normalizeProviderRecord(provider.Name, provider.Type, provider.BaseURL, provider.APIKey, provider.Models, model)
+		normalized, ok := normalizeProviderRecord(provider.Name, provider.Type, provider.BaseURL, provider.APIKey, provider.Models, 0, 0, nil, nil, model)
 		if !ok {
 			continue
 		}
@@ -248,7 +251,18 @@ func normalizeLegacyProviderConfigs(raw []legacyProviderConfig, model string) []
 	return out
 }
 
-func normalizeProviderRecord(name string, rawType llm.Provider, baseURL string, apiKey *string, models []string, model string) (providerConfig, bool) {
+func normalizeProviderRecord(
+	name string,
+	rawType llm.Provider,
+	baseURL string,
+	apiKey *string,
+	models []string,
+	rawContextWindowTokens int,
+	rawResponseReserveTokens int,
+	rawModelContextWindowTokens map[string]int,
+	rawModelResponseReserveTokens map[string]int,
+	model string,
+) (providerConfig, bool) {
 	trimmedName := strings.TrimSpace(name)
 	trimmedBaseURL := strings.TrimSpace(baseURL)
 	normalizedType := rawType.Normalized()
@@ -268,11 +282,15 @@ func normalizeProviderRecord(name string, rawType llm.Provider, baseURL string, 
 		trimmedBaseURL = defaultBaseURLForProvider(normalizedType)
 	}
 	return providerConfig{
-		Name:    trimmedName,
-		Type:    normalizedType,
-		BaseURL: trimmedBaseURL,
-		APIKey:  cloneOptionalStringPointer(apiKey),
-		Models:  normalizeProviderModels(models),
+		Name:                       trimmedName,
+		Type:                       normalizedType,
+		BaseURL:                    trimmedBaseURL,
+		APIKey:                     cloneOptionalStringPointer(apiKey),
+		Models:                     normalizeProviderModels(models),
+		ContextWindowTokens:        normalizePositiveInt(rawContextWindowTokens),
+		ResponseReserveTokens:      normalizePositiveInt(rawResponseReserveTokens),
+		ModelContextWindowTokens:   normalizeModelTokenOverrides(rawModelContextWindowTokens),
+		ModelResponseReserveTokens: normalizeModelTokenOverrides(rawModelResponseReserveTokens),
 	}, true
 }
 
@@ -288,10 +306,14 @@ func providerConfigsToFileMap(providers []providerConfig) map[string]providerFil
 			continue
 		}
 		out[name] = providerFileConfig{
-			Type:    provider.Type.Normalized(),
-			BaseURL: strings.TrimSpace(provider.BaseURL),
-			APIKey:  cloneOptionalStringPointer(provider.APIKey),
-			Models:  normalizeProviderModels(provider.Models),
+			Type:                       provider.Type.Normalized(),
+			BaseURL:                    strings.TrimSpace(provider.BaseURL),
+			APIKey:                     cloneOptionalStringPointer(provider.APIKey),
+			Models:                     normalizeProviderModels(provider.Models),
+			ContextWindowTokens:        normalizePositiveInt(provider.ContextWindowTokens),
+			ResponseReserveTokens:      normalizePositiveInt(provider.ResponseReserveTokens),
+			ModelContextWindowTokens:   normalizeModelTokenOverrides(provider.ModelContextWindowTokens),
+			ModelResponseReserveTokens: normalizeModelTokenOverrides(provider.ModelResponseReserveTokens),
 		}
 	}
 	if len(out) == 0 {
@@ -345,12 +367,52 @@ func cloneProviderConfigs(providers []providerConfig) []providerConfig {
 	out := make([]providerConfig, 0, len(providers))
 	for _, provider := range providers {
 		out = append(out, providerConfig{
-			Name:    provider.Name,
-			Type:    provider.Type,
-			BaseURL: provider.BaseURL,
-			APIKey:  cloneOptionalStringPointer(provider.APIKey),
-			Models:  append([]string(nil), provider.Models...),
+			Name:                       provider.Name,
+			Type:                       provider.Type,
+			BaseURL:                    provider.BaseURL,
+			APIKey:                     cloneOptionalStringPointer(provider.APIKey),
+			Models:                     append([]string(nil), provider.Models...),
+			ContextWindowTokens:        provider.ContextWindowTokens,
+			ResponseReserveTokens:      provider.ResponseReserveTokens,
+			ModelContextWindowTokens:   cloneModelTokenOverrides(provider.ModelContextWindowTokens),
+			ModelResponseReserveTokens: cloneModelTokenOverrides(provider.ModelResponseReserveTokens),
 		})
+	}
+	return out
+}
+
+func normalizePositiveInt(value int) int {
+	if value > 0 {
+		return value
+	}
+	return 0
+}
+
+func normalizeModelTokenOverrides(raw map[string]int) map[string]int {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(raw))
+	for key, value := range raw {
+		trimmed := strings.ToLower(strings.TrimSpace(key))
+		if trimmed == "" || value <= 0 {
+			continue
+		}
+		out[trimmed] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func cloneModelTokenOverrides(raw map[string]int) map[string]int {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(raw))
+	for key, value := range raw {
+		out[key] = value
 	}
 	return out
 }

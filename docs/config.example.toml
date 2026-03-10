@@ -10,6 +10,10 @@ type = "openai"
 base_url = "https://api.openai.com/v1"
 api_key = "sk-your-key"
 models = ["gpt-4o", "gpt-4.1-mini"]
+# context_window_tokens = 128000
+# response_reserve_tokens = 2000
+# model_context_window_tokens = { "gpt-4o" = 128000, "gpt-4.1-mini" = 128000 }
+# model_response_reserve_tokens = { "gpt-4o" = 2000 }
 
 # Codex / Responses API example
 # chat_path = "/responses"

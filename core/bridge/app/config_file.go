@@ -14,18 +14,26 @@ import (
 const defaultConfigPath = "~/.ghost-os/config.toml"
 
 type providerConfig struct {
-	Name    string
-	Type    llm.Provider
-	BaseURL string
-	APIKey  *string
-	Models  []string
+	Name                       string
+	Type                       llm.Provider
+	BaseURL                    string
+	APIKey                     *string
+	Models                     []string
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
 }
 
 type providerFileConfig struct {
-	Type    llm.Provider `toml:"type,omitempty"`
-	BaseURL string       `toml:"base_url,omitempty"`
-	APIKey  *string      `toml:"api_key,omitempty"`
-	Models  []string     `toml:"models,omitempty"`
+	Type                       llm.Provider   `toml:"type,omitempty"`
+	BaseURL                    string         `toml:"base_url,omitempty"`
+	APIKey                     *string        `toml:"api_key,omitempty"`
+	Models                     []string       `toml:"models,omitempty"`
+	ContextWindowTokens        int            `toml:"context_window_tokens,omitempty"`
+	ResponseReserveTokens      int            `toml:"response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]int `toml:"model_context_window_tokens,omitempty"`
+	ModelResponseReserveTokens map[string]int `toml:"model_response_reserve_tokens,omitempty"`
 }
 
 type legacyProviderConfig struct {
@@ -50,6 +58,8 @@ type bridgeFileConfig struct {
 	NativeBinaryPath                             *string                       `toml:"native_binary_path,omitempty"`
 	NativeBinaryRoots                            []string                      `toml:"native_binary_roots,omitempty"`
 	NativeBinaryCandidates                       []string                      `toml:"native_binary_candidates,omitempty"`
+	NativeAllowedReadPaths                       []string                      `toml:"native_allowed_read_paths,omitempty"`
+	NativeAllowedWritePaths                      []string                      `toml:"native_allowed_write_paths,omitempty"`
 	WorkerModel                                  *string                       `toml:"worker_model,omitempty"`
 	PromptsPath                                  *string                       `toml:"prompts_path,omitempty"`
 	SessionsPath                                 *string                       `toml:"sessions_path,omitempty"`

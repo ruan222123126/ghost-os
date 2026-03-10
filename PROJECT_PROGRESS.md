@@ -21,9 +21,11 @@
 ## 当前工程状态
 
 - `2026-03-10`：提升 session 列表健壮性：`Store.ListMetadata` 遇到坏文件不再 fail-fast，改为跳过并日志统计；`Session` 类型注释明确非并发安全；`AddMessage/MarkEnded` 在 `GHOST_BRIDGE_DEBUG/GHOST_DEBUG/DEBUG` 开启时对 nil receiver 打点，避免静默掩盖调用方 bug；补充 `storage_test.go` 回归覆盖损坏文件跳过。
+- `2026-03-10`：Session 裁剪新增“兜底”收敛：最近消息仍超限时继续按 span 收缩，并对超长消息做截断，确保最终不会超过 token 预算；上下文上限改为可配置/按模型表驱动，provider 配置新增 `context_window_tokens` / `response_reserve_tokens` 与 per-model map，`schema.json` 与 `config.example.toml` 同步更新。
 - `2026-03-10`：memory hybrid 查询拆出 `queryContext` 与 warm/cold/markdown/decision/graph/truth/vector 分层函数，`queryResultHybridLayers` 只做组装排序；同时抽出 `memory/internal/pathutil` 统一 `resolveMemoryPath`，decision/graph/bridge memory 复用以减少漂移；`MemoryEntry.EmbeddingID` 仍保留占位但在对外查询结果中清空，避免误认为已接入向量召回。
 - `2026-03-10`：修正会话裁剪的估算偏差：`EstimateTokens` 改为基于累积字符统计（含 rune 计数）避免 CJK 系统性高估，并去掉循环字符串拼接的额外分配；`Store.Save` 写入在 Windows 下新增“先删后改名”的原子替换 fallback，降低跨平台落盘失败风险。
 - `2026-03-10`：execution 持久客户端在读取响应后统一做一次 `reapExitedProcessLocked()`，确保 error 响应也能及时回收；one-shot 执行新增 `GHOST_NATIVE_STRICT_DECODER` 可选严格解码（`DisallowUnknownFields`）以便在开发/测试时捕获协议漂移。
+- `2026-03-10`：新增 `codex_cli` 工具与 native 异步命令管理：Bridge 支持 `codex_cli` 参数校验、默认 flag 与 allowlist 注册；新增 native `CODEX_CLI_START/STATUS` 原子动作、stdout/stderr 异步 drain 与 session_id 解析；执行层新增 `native_allowed_read_paths/native_allowed_write_paths` 配置与环境变量透传，并在 native sandbox 合并白名单。
 - `2026-03-10`：收紧 Agent 工具执行边界：默认日志仅输出 tool 名与参数键，避免敏感参数泄露；工具执行与后处理加 panic recover，转为 error 写回 tool result，避免单次工具崩溃打断会话；Agent 结构注释明确非并发安全。
 - `2026-03-10`：execution 的 native binary 查找策略提升为 app 配置装配：新增 `native_binary_path/native_binary_roots/native_binary_candidates` 配置与对应环境变量（兼容 `GHOST_NATIVE_BIN`），Bridge 在装配 execution client 时显式传入；locator 默认候选补齐 release 路径与本地 `native(.exe)`，移除库内直接读取 `GHOST_NATIVE_BIN`。
 - `2026-03-10`：收紧 memory “成功但没做事”入口：`PromoteToWarm` 现显式返回 `ErrPromoteToWarmDisabled`，`GraphService.IngestArchiveMessages/SyncObject` 改为返回禁用错误并去掉静默日志，internal graph 归档 ingest 也改为显式禁用错误；`newGraphIndexProjector` 改名为 `newNoopGraphIndexProjector` 以明确 stub，并更新相关测试回归。

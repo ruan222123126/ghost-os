@@ -8,13 +8,17 @@ import (
 )
 
 type ProviderConfig struct {
-	Type               llm.Provider
-	APIKey             string
-	BaseURL            string
-	Model              string
-	Headers            map[string]string
-	AnthropicVersion   string
-	AnthropicMaxTokens int
+	Type                       llm.Provider
+	APIKey                     string
+	BaseURL                    string
+	Model                      string
+	Headers                    map[string]string
+	AnthropicVersion           string
+	AnthropicMaxTokens         int
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
 }
 
 type MemoryRuntimeConfig struct {
@@ -102,30 +106,36 @@ type ToolSelectorConfig struct {
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider               ProviderConfig
-	Memory                 MemoryRuntimeConfig
-	RSS                    RSSConfig
-	Worker                 WorkerConfig
-	ToolSelector           ToolSelectorConfig
-	NativePersistent       bool
-	NativeBinaryPath       string
-	NativeBinaryRoots      []string
-	NativeBinaryCandidates []string
-	ChatPath               string
-	PromptsPath            string
-	SessionsPath           string
-	WebSearchTavilyAPIKey  string
-	MaxTurns               int
+	Provider                ProviderConfig
+	Memory                  MemoryRuntimeConfig
+	RSS                     RSSConfig
+	Worker                  WorkerConfig
+	ToolSelector            ToolSelectorConfig
+	NativePersistent        bool
+	NativeBinaryPath        string
+	NativeBinaryRoots       []string
+	NativeBinaryCandidates  []string
+	NativeAllowedReadPaths  []string
+	NativeAllowedWritePaths []string
+	ChatPath                string
+	PromptsPath             string
+	SessionsPath            string
+	WebSearchTavilyAPIKey   string
+	MaxTurns                int
 }
 
 type runtimeConfig struct {
-	ProviderName     string
-	Provider         llm.Provider
-	APIKey           string
-	BaseURL          string
-	Model            string
-	ChatPath         string
-	NativePersistent bool
+	ProviderName               string
+	Provider                   llm.Provider
+	APIKey                     string
+	BaseURL                    string
+	Model                      string
+	ChatPath                   string
+	NativePersistent           bool
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
 }
 
 const (

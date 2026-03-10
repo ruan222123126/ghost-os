@@ -6,26 +6,41 @@ package app
 import "encoding/json"
 
 const (
-	busActionPing                  = "PING"
-	busActionAgentSend             = "AGENT_SEND"
-	busActionAgentStop             = "AGENT_STOP"
-	busActionHumanResponse         = "HUMAN_RESPONSE"
-	busActionConfigGet             = "CONFIG_GET"
-	busActionConfigUpdate          = "CONFIG_UPDATE"
-	busActionMemoryQuery           = "MEMORY_QUERY"
-	busActionMemoryArchive         = "MEMORY_ARCHIVE"
-	busActionMemoryDecisionQuery   = "MEMORY_DECISION_QUERY"
-	busActionMemoryDecisionStats   = "MEMORY_DECISION_STATS"
-	busActionMemoryDecisionRebuild = "MEMORY_DECISION_REBUILD"
-	busActionListFiles             = "LIST_FILES"
-	busActionReadFile              = "READ_FILE"
-	busActionSearchFiles           = "SEARCH_FILES"
-	busActionApplyDiff             = "APPLY_DIFF"
-	busActionBashExec              = "BASH_EXEC"
-	busActionScriptExec            = "SCRIPT_EXEC"
-	busActionScreenShot            = "SCREEN_SHOT"
-	busActionMouseClick            = "MOUSE_CLICK"
-	busActionBrowserQuery          = "BROWSER_QUERY"
+	busActionPing                      = "PING"
+	busActionAgentSend                 = "AGENT_SEND"
+	busActionAgentStop                 = "AGENT_STOP"
+	busActionHumanResponse             = "HUMAN_RESPONSE"
+	busActionConfigGet                 = "CONFIG_GET"
+	busActionConfigUpdate              = "CONFIG_UPDATE"
+	busActionMemoryQuery               = "MEMORY_QUERY"
+	busActionMemoryArchive             = "MEMORY_ARCHIVE"
+	busActionMemoryDecisionQuery       = "MEMORY_DECISION_QUERY"
+	busActionMemoryDecisionStats       = "MEMORY_DECISION_STATS"
+	busActionMemoryDecisionRebuild     = "MEMORY_DECISION_REBUILD"
+	busActionMemoryHygieneRun          = "MEMORY_HYGIENE_RUN"
+	busActionMemoryDecisionRelationRun = "MEMORY_DECISION_RELATION_RUN"
+	busActionMemoryPalaceCurateRun     = "MEMORY_PALACE_CURATE_RUN"
+	busActionTaskCreate                = "TASK_CREATE"
+	busActionTaskList                  = "TASK_LIST"
+	busActionTaskSystemList            = "TASK_SYSTEM_LIST"
+	busActionTaskGet                   = "TASK_GET"
+	busActionTaskUpdate                = "TASK_UPDATE"
+	busActionTaskRunNow                = "TASK_RUN_NOW"
+	busActionTaskLogs                  = "TASK_LOGS"
+	busActionTaskDelete                = "TASK_DELETE"
+	busActionListFiles                 = "LIST_FILES"
+	busActionReadFile                  = "READ_FILE"
+	busActionSearchFiles               = "SEARCH_FILES"
+	busActionApplyDiff                 = "APPLY_DIFF"
+	busActionExportFile                = "EXPORT_FILE"
+	busActionBashExec                  = "BASH_EXEC"
+	busActionScriptExec                = "SCRIPT_EXEC"
+	busActionScreenShot                = "SCREEN_SHOT"
+	busActionScreenOcr                 = "SCREEN_OCR"
+	busActionTextInput                 = "TEXT_INPUT"
+	busActionMouseClick                = "MOUSE_CLICK"
+	busActionIconMatch                 = "ICON_MATCH"
+	busActionBrowserQuery              = "BROWSER_QUERY"
 )
 
 const (
@@ -48,6 +63,12 @@ type agentRequest struct {
 	TraceID   string `json:"trace_id,omitempty"`
 }
 
+// askHumanOption 对齐 core/shared/schema.json 的 askHumanOption。
+type askHumanOption struct {
+	Label       string `json:"label"`
+	AllowCustom bool   `json:"allow_custom,omitempty"`
+}
+
 // agentResponse 对齐 core/shared/schema.json 的 agentResponsePayload。
 type agentResponse struct {
 	Message      string                            `json:"message"`
@@ -58,10 +79,12 @@ type agentResponse struct {
 
 // askHumanAwaitingResponse 对齐 core/shared/schema.json 的 agentAwaitingHumanPayload。
 type askHumanAwaitingResponse struct {
-	Status     string `json:"status"`
-	SessionID  string `json:"session_id"`
-	QuestionID string `json:"question_id"`
-	Prompt     string `json:"prompt"`
+	Status        string           `json:"status"`
+	SessionID     string           `json:"session_id"`
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []askHumanOption `json:"options,omitempty"`
 }
 
 // agentStopResponse 对齐 core/shared/schema.json 的 agentStopResponsePayload。
@@ -75,6 +98,7 @@ type humanResponseParams struct {
 	SessionID  string `json:"session_id"`
 	QuestionID string `json:"question_id"`
 	Answer     string `json:"answer"`
+	Cancelled  bool   `json:"cancelled,omitempty"`
 }
 
 // humanResponseAck 对齐 core/shared/schema.json 的 humanResponseAck。
@@ -156,11 +180,24 @@ type sessionImageContent struct {
 	Bytes    int    `json:"bytes,omitempty"`
 }
 
+// sessionFileContent 对齐 core/shared/schema.json 的 sessionFileContent。
+type sessionFileContent struct {
+	ArtifactID  string `json:"artifact_id"`
+	Name        string `json:"name"`
+	MimeType    string `json:"mime_type,omitempty"`
+	Bytes       int    `json:"bytes,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
+	DownloadURL string `json:"download_url"`
+	SourcePath  string `json:"source_path,omitempty"`
+	Note        string `json:"note,omitempty"`
+}
+
 // sessionContentPart 对齐 core/shared/schema.json 的 sessionContentPart。
 type sessionContentPart struct {
 	Type  string               `json:"type"`
 	Text  string               `json:"text,omitempty"`
 	Image *sessionImageContent `json:"image,omitempty"`
+	File  *sessionFileContent  `json:"file,omitempty"`
 }
 
 // sessionToolCall 对齐 core/shared/schema.json 的 sessionToolCall。
@@ -181,9 +218,11 @@ type sessionToolResult struct {
 
 // sessionHumanInteraction 对齐 core/shared/schema.json 的 sessionHumanInteraction。
 type sessionHumanInteraction struct {
-	QuestionID string `json:"question_id"`
-	Prompt     string `json:"prompt"`
-	Answer     string `json:"answer,omitempty"`
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []askHumanOption `json:"options,omitempty"`
+	Answer        string           `json:"answer,omitempty"`
 }
 
 // sessionMessage 对齐 core/shared/schema.json 的 sessionMessage。
@@ -237,21 +276,29 @@ type configUpdateRequest struct {
 
 // providerConfigResponse 对齐 core/shared/schema.json 的 providerConfig。
 type providerConfigResponse struct {
-	Name      string   `json:"name"`
-	Type      string   `json:"type"`
-	BaseURL   string   `json:"base_url"`
-	Models    []string `json:"models,omitempty"`
-	APIKeySet bool     `json:"api_key_set"`
+	Name                       string         `json:"name"`
+	Type                       string         `json:"type"`
+	BaseURL                    string         `json:"base_url"`
+	Models                     []string       `json:"models,omitempty"`
+	APIKeySet                  bool           `json:"api_key_set"`
+	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
+	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]int `json:"model_context_window_tokens,omitempty"`
+	ModelResponseReserveTokens map[string]int `json:"model_response_reserve_tokens,omitempty"`
 }
 
 // providerConfigInput 对齐 core/shared/schema.json 的 providerConfigInput。
 type providerConfigInput struct {
-	Name    string   `json:"name"`
-	Type    string   `json:"type"`
-	BaseURL *string  `json:"base_url,omitempty"`
-	APIKey  *string  `json:"api_key,omitempty"`
-	Models  []string `json:"models,omitempty"`
-	TraceID string   `json:"trace_id,omitempty"`
+	Name                       string         `json:"name"`
+	Type                       string         `json:"type"`
+	BaseURL                    *string        `json:"base_url,omitempty"`
+	APIKey                     *string        `json:"api_key,omitempty"`
+	Models                     []string       `json:"models,omitempty"`
+	TraceID                    string         `json:"trace_id,omitempty"`
+	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
+	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]int `json:"model_context_window_tokens,omitempty"`
+	ModelResponseReserveTokens map[string]int `json:"model_response_reserve_tokens,omitempty"`
 }
 
 // providerListResponse 对齐 core/shared/schema.json 的 providerListResponse。

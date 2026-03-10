@@ -96,11 +96,15 @@ func validateProviderConfig(cfg providerConfig) (providerConfig, error) {
 	}
 
 	normalized := providerConfig{
-		Name:    strings.TrimSpace(cfg.Name),
-		Type:    normalizedType,
-		BaseURL: strings.TrimSpace(cfg.BaseURL),
-		APIKey:  cloneOptionalStringPointer(cfg.APIKey),
-		Models:  normalizeProviderModels(cfg.Models),
+		Name:                       strings.TrimSpace(cfg.Name),
+		Type:                       normalizedType,
+		BaseURL:                    strings.TrimSpace(cfg.BaseURL),
+		APIKey:                     cloneOptionalStringPointer(cfg.APIKey),
+		Models:                     normalizeProviderModels(cfg.Models),
+		ContextWindowTokens:        normalizePositiveInt(cfg.ContextWindowTokens),
+		ResponseReserveTokens:      normalizePositiveInt(cfg.ResponseReserveTokens),
+		ModelContextWindowTokens:   normalizeModelTokenOverrides(cfg.ModelContextWindowTokens),
+		ModelResponseReserveTokens: normalizeModelTokenOverrides(cfg.ModelResponseReserveTokens),
 	}
 	if normalized.Name == "" {
 		return providerConfig{}, errProviderNameRequired
