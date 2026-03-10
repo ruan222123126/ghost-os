@@ -3,40 +3,64 @@
 'use client';
 
 import type { FC } from 'react';
-import { TextareaSubmitInput } from '@/components/TextareaSubmitInput';
+import { useCallback, useState } from 'react';
+import { ChatComposer } from '@/components/ChatComposer';
+import { ModelSelector } from '@/components/ModelSelector';
+import type { ProviderModelOption } from '@/lib/types';
 
 interface ChatInputProps {
   loading: boolean;
+  canStop?: boolean;
   disabled: boolean;
   awaitingQuestion?: boolean;
+  modelLoading?: boolean;
+  activeModel?: ProviderModelOption | null;
+  availableModels?: ProviderModelOption[];
   onSend: (message: string) => Promise<void>;
+  onStop?: () => Promise<void>;
+  onSelectModel?: (option: ProviderModelOption) => Promise<boolean>;
 }
 
-export const ChatInput: FC<ChatInputProps> = ({ loading, disabled, awaitingQuestion = false, onSend }) => {
+export const ChatInput: FC<ChatInputProps> = ({
+  loading,
+  canStop = false,
+  disabled,
+  awaitingQuestion = false,
+  modelLoading = false,
+  activeModel = null,
+  availableModels = [],
+  onSend,
+  onStop,
+  onSelectModel,
+}) => {
+  const [draft, setDraft] = useState('');
+  const handleSubmit = useCallback(async (message: string) => {
+    setDraft('');
+    await onSend(message);
+  }, [onSend]);
+
   return (
-    <TextareaSubmitInput
-      loading={loading}
+    <ChatComposer
+      value={draft}
+      onChange={setDraft}
+      onSubmit={handleSubmit}
+      onStop={onStop}
+      sending={loading}
+      canStop={canStop}
       disabled={disabled}
-      onSubmit={onSend}
       ariaLabel="Message input"
       placeholder="Type a task for Ghost-OS..."
-      rows={3}
-      hint={
-        awaitingQuestion
-          ? 'Agent is asking a question, please answer above...'
-          : disabled && loading
-            ? 'Sending...'
-          : disabled
-            ? 'Waiting for runtime config...'
-            : 'Enter to send, Shift+Enter for newline'
-      }
-      submitLabel="Send"
-      submittingLabel="Sending..."
-      containerClassName="ui-panel animate-riseSoft p-4"
-      textareaClassName="ui-textarea mono min-h-[96px] w-full resize-none"
-      actionsClassName="mt-3 flex items-center justify-between gap-3"
-      hintClassName="ui-hint"
-      buttonClassName="ui-btn min-w-[104px]"
+      rows={4}
+      toolbar={onSelectModel ? (
+        <ModelSelector
+          value={activeModel}
+          options={availableModels}
+          loading={modelLoading}
+          disabled={disabled || loading}
+          onChange={onSelectModel}
+        />
+      ) : undefined}
+      status={awaitingQuestion ? '等待问题回答中' : undefined}
     />
   );
 };

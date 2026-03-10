@@ -1,0 +1,231 @@
+/* Message list, status rows, and question card presentation. */
+
+.messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.messages.is-empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.message-row {
+  display: flex;
+}
+
+.message-row.is-user {
+  justify-content: flex-end;
+}
+
+.message-row:not(.is-user) {
+  justify-content: flex-start;
+}
+
+.message {
+  max-width: 86%;
+  padding: 11px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: rise-in 210ms ease-out;
+}
+
+.message.is-user {
+  border-color: rgb(32 30 26 / 0.16);
+  background: rgb(28 26 23 / 0.96);
+  color: rgb(255 251 243);
+}
+
+.message.is-assistant {
+  background: rgb(253 246 230 / 0.96);
+}
+
+.message.is-system {
+  background: rgb(250 241 226 / 0.9);
+  color: rgb(var(--text-muted));
+}
+
+.message.is-tool {
+  background: rgb(243 239 255 / 0.92);
+  border-color: rgb(139 92 246 / 0.18);
+}
+
+.message.is-error {
+  background: rgb(255 241 238 / 0.96);
+  border-color: rgb(233 99 84 / 0.28);
+  color: rgb(152 48 41);
+}
+
+.message.is-question {
+  background: rgb(255 247 224 / 0.98);
+  border-color: rgb(229 164 54 / 0.32);
+}
+
+.message-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.message-label,
+.message-badge {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.message-label {
+  color: inherit;
+  opacity: 0.72;
+}
+
+.message-badge {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgb(28 26 23 / 0.1);
+  background: rgb(255 255 255 / 0.5);
+}
+
+.message-text {
+  margin: 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.attachment-list {
+  display: grid;
+  gap: 10px;
+}
+
+.attachment-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgb(28 26 23 / 0.1);
+  background: rgb(255 255 255 / 0.64);
+}
+
+.attachment-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.attachment-name {
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.attachment-meta,
+.attachment-note {
+  font-size: 12px;
+  color: rgb(var(--text-muted));
+}
+
+.attachment-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.attachment-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgb(28 26 23 / 0.94);
+  color: rgb(255 251 243);
+  text-decoration: none;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.attachment-link.is-secondary {
+  background: transparent;
+  color: rgb(var(--text-strong));
+  border: 1px solid rgb(28 26 23 / 0.12);
+}
+
+.thinking-indicator {
+  display: flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 18px;
+}
+
+.thinking-indicator-text {
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  color: rgb(var(--text-muted));
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.thinking-indicator-text::after {
+  content: '';
+  position: absolute;
+  top: -45%;
+  left: -52%;
+  width: 34%;
+  height: 190%;
+  background: linear-gradient(90deg, rgb(255 255 255 / 0), rgb(255 255 255 / 0.96), rgb(255 255 255 / 0));
+  animation: thinking-sweep 1.15s linear infinite;
+}
+
+.question-card {
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid rgb(229 164 54 / 0.3);
+  border-radius: 16px;
+  background: rgb(255 251 237 / 0.9);
+}
+
+.choice-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.choice-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  cursor: pointer;
+  background: rgb(255 255 255 / 0.7);
+  transition: border-color 140ms ease, background-color 140ms ease, transform 140ms ease;
+}
+
+.choice-option:hover {
+  transform: translateY(-1px);
+  border-color: rgb(229 164 54 / 0.38);
+}
+
+.choice-option.is-selected {
+  border-color: rgb(229 164 54 / 0.46);
+  background: rgb(255 243 211 / 0.96);
+}
+
+.choice-option input {
+  margin-top: 2px;
+  accent-color: rgb(var(--accent));
+}

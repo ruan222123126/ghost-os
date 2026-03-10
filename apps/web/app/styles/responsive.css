@@ -1,0 +1,96 @@
+/* Shared responsive overrides for the MVP console layout. */
+
+@media (max-width: 1400px) {
+  .chat-layout {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  .sidebar {
+    grid-row: 1 / span 2;
+  }
+
+  .briefing-rail {
+    grid-column: 2;
+    border-left: none;
+    border-top: 1px solid rgb(var(--border) / 0.58);
+    min-height: 320px;
+  }
+}
+
+@media (max-width: 1080px) {
+  .chat-layout,
+  .sidebar,
+  .chat,
+  .briefing-rail,
+  .topbar + .chat-layout {
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+
+  .chat-layout,
+  .settings-grid,
+  .settings-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .topbar,
+  .topbar-actions,
+  .panel-head,
+  .settings-panel-head,
+  .section-head,
+  .chat-head-actions,
+  .provider-card-head,
+  .question-actions,
+  .settings-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .topbar-actions,
+  .chat-head-actions {
+    margin-left: 0;
+  }
+
+  .message {
+    max-width: 100%;
+  }
+
+  .settings-popover {
+    padding: 12px;
+  }
+
+  .settings-panel {
+    width: min(100vw - 24px, 960px);
+    max-height: calc(100vh - 24px);
+  }
+
+  .settings-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .model-select {
+    min-width: 0;
+  }
+
+  .composer-model-trigger {
+    max-width: min(100%, calc(100vw - 132px));
+  }
+
+  .composer-model-panel {
+    width: max(220px, 100%);
+    max-width: min(280px, calc(100vw - 36px));
+  }
+}

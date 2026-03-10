@@ -1,0 +1,184 @@
+/* App shell, page layout, and session sidebar sections. */
+
+.ambient {
+  position: fixed;
+  z-index: 0;
+  pointer-events: none;
+  filter: blur(2px);
+}
+
+.ambient-a {
+  top: -140px;
+  right: -110px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(197 79 38 / 0.18) 0%, rgb(197 79 38 / 0) 74%);
+}
+
+.ambient-b {
+  left: -120px;
+  bottom: -110px;
+  width: 520px;
+  height: 260px;
+  border-radius: 46% 54% 39% 61%;
+  background: radial-gradient(circle, rgb(27 87 71 / 0.16) 0%, rgb(27 87 71 / 0) 72%);
+}
+
+.app-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100vh;
+  animation: rise-in 360ms ease-out;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 18px 0;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.chat-layout {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr) 380px;
+  gap: 0;
+  height: 100vh;
+  min-height: 100vh;
+}
+
+.topbar + .chat-layout {
+  height: calc(100vh - 48px);
+  min-height: calc(100vh - 48px);
+}
+
+.chat-layout > .panel,
+.chat-layout > .sidebar {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.sidebar,
+.chat,
+.briefing-rail {
+  height: 100%;
+  min-height: 0;
+  max-height: none;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-right: 1px solid rgb(var(--border) / 0.58);
+  background: rgb(255 251 243 / 0.68);
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: rgb(255 251 243 / 0.52);
+}
+
+.chat-head {
+  gap: 14px;
+}
+
+.chat-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.sidebar-list {
+  flex: 1;
+  min-height: 0;
+  padding: 0 18px 18px;
+  overflow-y: auto;
+}
+
+.sidebar-status {
+  margin: 0 16px 12px;
+}
+
+.session-list {
+  display: grid;
+  gap: 10px;
+}
+
+.session-skeleton {
+  height: 92px;
+  border-radius: 18px;
+  border: 1px solid rgb(var(--border) / 0.56);
+  background: linear-gradient(90deg, rgb(255 255 255 / 0.62), rgb(250 242 230 / 0.92), rgb(255 255 255 / 0.62));
+  background-size: 200% 100%;
+  animation: pulse-shift 1.4s linear infinite;
+}
+
+.session-card {
+  padding: 14px;
+  cursor: pointer;
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.session-card:hover {
+  transform: translateY(-1px);
+  border-color: rgb(var(--ui-field-border-hover) / 0.66);
+}
+
+.session-card.is-active {
+  border-color: rgb(var(--accent) / 0.36);
+  background: linear-gradient(140deg, rgb(var(--accent) / 0.16), rgb(255 251 243 / 0.96));
+}
+
+.session-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.session-card-title {
+  margin: 0;
+  color: rgb(var(--text));
+  font-size: 15px;
+}
+
+.session-card-meta {
+  margin: 8px 0 0;
+  color: rgb(var(--text-muted));
+  font-size: 12px;
+}
+
+.session-card-delete {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 12px;
+  opacity: 0;
+}
+
+.session-card:hover .session-card-delete,
+.session-card:focus-within .session-card-delete,
+.session-card.is-active .session-card-delete {
+  opacity: 1;
+}
