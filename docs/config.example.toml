@@ -11,6 +11,14 @@ base_url = "https://api.openai.com/v1"
 api_key = "sk-your-key"
 models = ["gpt-4o", "gpt-4.1-mini"]
 
+# Codex / Responses API example
+# chat_path = "/responses"
+# [providers.codex]
+# type = "codex"
+# base_url = "https://api.openai.com/v1"
+# api_key = "sk-your-key"
+# models = ["codex-mini-latest"]
+
 # OpenAI-compatible gateway example
 # [providers.crs]
 # type = "custom" # OpenAI-Compatible
@@ -31,9 +39,14 @@ cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 sessions_path = "~/.ghost-os/sessions"
 memory_warm_path = "~/.ghost-os/memory/warm.json"
 memory_cold_path = "~/.ghost-os/memory/cold"
+memory_ledger_path = "~/.ghost-os/memory/cold/ledger"
+memory_ledger_read_enabled = false
 
 prompts_path = "prompts.yaml"
 native_persistent = false
+# native_binary_path = "/abs/path/to/native"
+# native_binary_roots = ["./drivers/native/target/release", "./drivers/native/target/debug"]
+# native_binary_candidates = ["native", "native.exe"]
 
 memory_auto_recall_enabled = true
 memory_auto_recall_limit = 5
@@ -70,6 +83,12 @@ memory_decision_recipe_min_success_rate = 0.66
 memory_decision_recipe_backfill_batch_size = 50
 memory_decision_recipe_backfill_interval = "30m"
 
+# Stable public memory surface: warm + cold/ledger + graph + decision + hygiene.
+# `MEMORY_HYGIENE_RUN` now synthesizes durable rule cards from working memory /
+# markdown / decision sources and feeds recall, instead of writing garbage scores.
+# Experimental internals such as truth/vector/index/shadow stay intentionally out
+# of the public config template during this phase.
+
 worker_model = ""
 worker_max_concurrency = 4
 worker_max_files = 20
@@ -85,6 +104,13 @@ tool_selector_timeout_ms = 1500
 tool_selector_confidence = 0.75
 tool_selector_shadow = false
 tool_selector_recent_messages = 6
+# Highest priority hard constraints for tools:
+# - if both lists are empty, they are inactive and normal selector behavior stays in place
+# - allowlist tools are always forced into the final runnable set
+# - blocklist tools are always removed from the final runnable set
+# - ask_human stays always-on even if listed in tool_blocklist
+# tool_allowlist = ["read_file", "search_files"]
+# tool_blocklist = ["bash_exec", "script_exec"]
 
 # Extra headers for provider requests
 # [provider_headers]

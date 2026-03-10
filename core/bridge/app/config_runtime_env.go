@@ -55,6 +55,22 @@ func rssInboxPathFromEnv() string {
 	return valueOrEnv(fileCfg.RSSInboxPath, "GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
 }
 
+func rssBriefingsPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
+	}
+	return valueOrEnv(fileCfg.RSSBriefingsPath, "GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
+}
+
+func rssReportsPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return getenvDefault("GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
+	}
+	return valueOrEnv(fileCfg.RSSReportsPath, "GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
+}
+
 func rssPollEnabledFromEnv() bool {
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
@@ -87,8 +103,77 @@ func rssAIBatchSizeFromEnv() int {
 	return intOrEnv(fileCfg.RSSAIBatchSize, "GHOST_RSS_AI_BATCH_SIZE", defaultRSSAIBatchSize)
 }
 
+func rssBriefingEnabledFromEnv() bool {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseBoolEnv("GHOST_RSS_BRIEFING_ENABLED", true)
+	}
+	return boolOrEnv(fileCfg.RSSBriefingEnabled, "GHOST_RSS_BRIEFING_ENABLED", true)
+}
+
+func rssBriefingIntervalFromEnv() time.Duration {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return parseDurationEnv("GHOST_RSS_BRIEFING_INTERVAL", defaultRSSBriefingInterval)
+	}
+	return durationOrEnv(fileCfg.RSSBriefingInterval, "GHOST_RSS_BRIEFING_INTERVAL", defaultRSSBriefingInterval)
+}
+
+func webSearchTavilyAPIKeyFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return firstNonEmptyEnv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
+	}
+	if fileCfg.WebSearchTavilyAPIKey != nil {
+		return strings.TrimSpace(*fileCfg.WebSearchTavilyAPIKey)
+	}
+	return firstNonEmptyEnv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
+}
+
 func tasksPathFromEnv() string {
 	return getenvDefault("GHOST_TASKS_PATH", defaultTasksPath)
+}
+
+func nativeBinaryPathFromEnv() string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return firstNonEmptyEnv("GHOST_NATIVE_BINARY_PATH", "GHOST_NATIVE_BIN")
+	}
+	if fileCfg.NativeBinaryPath != nil {
+		return strings.TrimSpace(*fileCfg.NativeBinaryPath)
+	}
+	return firstNonEmptyEnv("GHOST_NATIVE_BINARY_PATH", "GHOST_NATIVE_BIN")
+}
+
+func nativeBinaryRootsFromEnv() []string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_ROOTS", "")))
+	}
+	if fileCfg.NativeBinaryRoots != nil {
+		return normalizeConfiguredPathList(fileCfg.NativeBinaryRoots)
+	}
+	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_ROOTS", "")))
+}
+
+func nativeBinaryCandidatesFromEnv() []string {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_CANDIDATES", "")))
+	}
+	if fileCfg.NativeBinaryCandidates != nil {
+		return normalizeConfiguredPathList(fileCfg.NativeBinaryCandidates)
+	}
+	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_CANDIDATES", "")))
+}
+
+func firstNonEmptyEnv(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // memoryWarmPathFromEnv 返回 warm memory 持久化文件路径。
@@ -117,28 +202,12 @@ func memoryLedgerPathFromEnv() string {
 	return valueOrEnv(fileCfg.MemoryLedgerPath, "GHOST_MEMORY_LEDGER_PATH", "")
 }
 
-func memoryLedgerDualWriteFromEnv() bool {
-	fileCfg, _, err := loadBridgeFileConfig()
-	if err != nil {
-		return parseBoolEnv("GHOST_MEMORY_LEDGER_DUAL_WRITE", false)
-	}
-	return boolOrEnv(fileCfg.MemoryLedgerDualWrite, "GHOST_MEMORY_LEDGER_DUAL_WRITE", false)
-}
-
 func memoryLedgerReadEnabledFromEnv() bool {
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		return parseBoolEnv("GHOST_MEMORY_LEDGER_READ_ENABLED", false)
 	}
 	return boolOrEnv(fileCfg.MemoryLedgerReadEnabled, "GHOST_MEMORY_LEDGER_READ_ENABLED", false)
-}
-
-func memoryLedgerShadowCompareFromEnv() bool {
-	fileCfg, _, err := loadBridgeFileConfig()
-	if err != nil {
-		return parseBoolEnv("GHOST_MEMORY_LEDGER_SHADOW_COMPARE", false)
-	}
-	return boolOrEnv(fileCfg.MemoryLedgerShadowCompare, "GHOST_MEMORY_LEDGER_SHADOW_COMPARE", false)
 }
 
 // memoryAutoRecallEnabledFromEnv 控制 warm 自动召回是否启用。

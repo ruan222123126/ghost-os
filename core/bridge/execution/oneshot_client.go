@@ -12,14 +12,20 @@ import (
 const nativeStrictDecoderEnv = "GHOST_NATIVE_STRICT_DECODER"
 
 // NativeClient 通过本地 native 二进制完成 one-shot execution bus 调用。
-type NativeClient struct{}
-
-func NewNativeClient() Client {
-	return NativeClient{}
+type NativeClient struct {
+	locator nativeBinaryLocator
 }
 
-func (NativeClient) Call(ctx context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
-	nativeBin, err := locateNativeBinary()
+func NewNativeClient() Client {
+	return newNativeClientWithLocator(nativeBinaryLocator{})
+}
+
+func newNativeClientWithLocator(locator nativeBinaryLocator) Client {
+	return NativeClient{locator: locator}
+}
+
+func (c NativeClient) Call(ctx context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
+	nativeBin, err := locateNativeBinary(c.locator)
 	if err != nil {
 		return nil, err
 	}

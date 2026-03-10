@@ -47,21 +47,27 @@ type bridgeFileConfig struct {
 	Model                                        *string                       `toml:"model,omitempty"`
 	ChatPath                                     *string                       `toml:"chat_path,omitempty"`
 	NativePersistent                             *bool                         `toml:"native_persistent,omitempty"`
+	NativeBinaryPath                             *string                       `toml:"native_binary_path,omitempty"`
+	NativeBinaryRoots                            []string                      `toml:"native_binary_roots,omitempty"`
+	NativeBinaryCandidates                       []string                      `toml:"native_binary_candidates,omitempty"`
 	WorkerModel                                  *string                       `toml:"worker_model,omitempty"`
 	PromptsPath                                  *string                       `toml:"prompts_path,omitempty"`
 	SessionsPath                                 *string                       `toml:"sessions_path,omitempty"`
 	RSSFeedsPath                                 *string                       `toml:"rss_feeds_path,omitempty"`
 	RSSInboxPath                                 *string                       `toml:"rss_inbox_path,omitempty"`
+	RSSBriefingsPath                             *string                       `toml:"rss_briefings_path,omitempty"`
+	RSSReportsPath                               *string                       `toml:"rss_reports_path,omitempty"`
 	RSSPollEnabled                               *bool                         `toml:"rss_poll_enabled,omitempty"`
 	RSSPollInterval                              *string                       `toml:"rss_poll_interval,omitempty"`
 	RSSPollMaxItemsPerFeed                       *int                          `toml:"rss_poll_max_items_per_feed,omitempty"`
 	RSSAIBatchSize                               *int                          `toml:"rss_ai_batch_size,omitempty"`
+	RSSBriefingEnabled                           *bool                         `toml:"rss_briefing_enabled,omitempty"`
+	RSSBriefingInterval                          *string                       `toml:"rss_briefing_interval,omitempty"`
+	WebSearchTavilyAPIKey                        *string                       `toml:"web_search_tavily_api_key,omitempty"`
 	MemoryWarmPath                               *string                       `toml:"memory_warm_path,omitempty"`
 	MemoryColdPath                               *string                       `toml:"memory_cold_path,omitempty"`
 	MemoryLedgerPath                             *string                       `toml:"memory_ledger_path,omitempty"`
-	MemoryLedgerDualWrite                        *bool                         `toml:"memory_ledger_dual_write,omitempty"`
 	MemoryLedgerReadEnabled                      *bool                         `toml:"memory_ledger_read_enabled,omitempty"`
-	MemoryLedgerShadowCompare                    *bool                         `toml:"memory_ledger_shadow_compare,omitempty"`
 	MemoryAutoRecallEnabled                      *bool                         `toml:"memory_auto_recall_enabled,omitempty"`
 	MemoryAutoRecallLimit                        *int                          `toml:"memory_auto_recall_limit,omitempty"`
 	MemoryWarmTTL                                *string                       `toml:"memory_warm_ttl,omitempty"`
@@ -116,6 +122,8 @@ type bridgeFileConfig struct {
 	ToolSelectorConfidence                       *float64                      `toml:"tool_selector_confidence,omitempty"`
 	ToolSelectorShadow                           *bool                         `toml:"tool_selector_shadow,omitempty"`
 	ToolSelectorRecentMsgs                       *int                          `toml:"tool_selector_recent_messages,omitempty"`
+	ToolAllowlist                                []string                      `toml:"tool_allowlist,omitempty"`
+	ToolBlocklist                                []string                      `toml:"tool_blocklist,omitempty"`
 	BindAddr                                     *string                       `toml:"bind_addr,omitempty"`
 	APIToken                                     *string                       `toml:"api_token,omitempty"`
 	CORSOrigins                                  []string                      `toml:"cors_origins,omitempty"`
@@ -237,6 +245,41 @@ func parseOriginsCSV(raw string) []string {
 		return nil
 	}
 	return normalizeOrigins(strings.Split(raw, ","))
+}
+
+func parseStringCSV(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	values := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		if value := strings.TrimSpace(item); value != "" {
+			values = append(values, value)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
+func normalizeConfiguredPathList(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, trimmed)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
 }
 
 func cloneStringPointer(raw *string) *string {

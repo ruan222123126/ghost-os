@@ -28,6 +28,7 @@ type PersistentNativeClient struct {
 	stdoutReader     *bufio.Reader
 	waitCh           chan error
 	binaryPath       string
+	locator          nativeBinaryLocator
 	nextReqID        uint64
 	closed           bool
 	fallback         bool
@@ -37,8 +38,13 @@ type PersistentNativeClient struct {
 }
 
 func NewPersistentNativeClient() *PersistentNativeClient {
+	return newPersistentNativeClientWithLocator(nativeBinaryLocator{})
+}
+
+func newPersistentNativeClientWithLocator(locator nativeBinaryLocator) *PersistentNativeClient {
 	return &PersistentNativeClient{
 		handshakeTimeout: persistentHandshakeTimeoutFromEnv(),
+		locator:          locator,
 	}
 }
 
@@ -141,7 +147,7 @@ func (c *PersistentNativeClient) ensureStartedLocked() error {
 
 	nativeBin := c.binaryPath
 	if nativeBin == "" && c.commandFactory == nil {
-		resolved, err := locateNativeBinary()
+		resolved, err := locateNativeBinary(c.locator)
 		if err != nil {
 			return err
 		}
@@ -280,7 +286,7 @@ func (c *PersistentNativeClient) callOneShotLocked(ctx context.Context, req requ
 		return callNativeOnceWithCommand(c.commandFactory(c.binaryPath), req)
 	}
 	if c.binaryPath == "" {
-		resolved, err := locateNativeBinary()
+		resolved, err := locateNativeBinary(c.locator)
 		if err != nil {
 			return nil, err
 		}

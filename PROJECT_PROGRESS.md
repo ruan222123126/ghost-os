@@ -21,7 +21,9 @@
 ## 当前工程状态
 
 - `2026-03-10`：execution 持久客户端在读取响应后统一做一次 `reapExitedProcessLocked()`，确保 error 响应也能及时回收；one-shot 执行新增 `GHOST_NATIVE_STRICT_DECODER` 可选严格解码（`DisallowUnknownFields`）以便在开发/测试时捕获协议漂移。
+- `2026-03-10`：execution 的 native binary 查找策略提升为 app 配置装配：新增 `native_binary_path/native_binary_roots/native_binary_candidates` 配置与对应环境变量（兼容 `GHOST_NATIVE_BIN`），Bridge 在装配 execution client 时显式传入；locator 默认候选补齐 release 路径与本地 `native(.exe)`，移除库内直接读取 `GHOST_NATIVE_BIN`。
 - `2026-03-10`：收紧 memory “成功但没做事”入口：`PromoteToWarm` 现显式返回 `ErrPromoteToWarmDisabled`，`GraphService.IngestArchiveMessages/SyncObject` 改为返回禁用错误并去掉静默日志，internal graph 归档 ingest 也改为显式禁用错误；`newGraphIndexProjector` 改名为 `newNoopGraphIndexProjector` 以明确 stub，并更新相关测试回归。
+- `2026-03-10`：补强 memory 运行时边界：warm 启动加载失败会显式日志；`Save/Load/ListMarkdownNode` 对 nil manager/cold 做安全兜底；graph/decision 的 JSON 转换失败会日志化并返回带命名空间的空结果；ledger namespace/workspace 与 markdown node ID 统一做安全字符校验与基目录边界收口，避免路径穿越或跨平台非法文件名。
 - `2026-03-10`：Web Console 前端侧边栏（SessionSidebar）替换为极简黑白风格，支持折叠与本地搜索过滤；仅做 UI/样式与交互增强，不改动会话数据/接口与 Bridge 主链。相关布局列宽改为自适应，移动端断点下侧边栏强制全宽以保持堆叠体验。
 - `2026-03-10`：修复 persistent native 握手超时导致“粘住式”fallback 的问题：仅在明确的协议不支持时才进入永久 fallback，握手超时不再锁死持久模式；新增 `GHOST_NATIVE_PERSISTENT_HANDSHAKE_TIMEOUT` 可配置握手超时（支持 `500ms`/`2s`/`1500` 毫秒）。同时 `execution` 的错误返回带上 action/trace_id/request_id，提升跨层排障可读性。
 - `2026-03-10`：修复 one-shot execution client 在 `StdoutPipe()` 或 `Start()` 失败时未释放已创建 pipe 的问题，避免潜在 FD 泄漏；与 persistent client 的资源回收策略保持一致。

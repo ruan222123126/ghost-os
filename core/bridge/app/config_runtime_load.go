@@ -122,12 +122,15 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 			Allowlist:  toolNameListOrEnv(fileCfg.ToolAllowlist, "GHOST_TOOL_ALLOWLIST"),
 			Blocklist:  toolNameListOrEnv(fileCfg.ToolBlocklist, "GHOST_TOOL_BLOCKLIST"),
 		},
-		NativePersistent:      runtime.NativePersistent,
-		ChatPath:              runtime.ChatPath,
-		PromptsPath:           valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
-		SessionsPath:          sessionsPathFromEnv(),
-		WebSearchTavilyAPIKey: webSearchTavilyAPIKeyFromEnv(),
-		MaxTurns:              intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
+		NativePersistent:       runtime.NativePersistent,
+		NativeBinaryPath:       nativeBinaryPathFromEnv(),
+		NativeBinaryRoots:      nativeBinaryRootsFromEnv(),
+		NativeBinaryCandidates: nativeBinaryCandidatesFromEnv(),
+		ChatPath:               runtime.ChatPath,
+		PromptsPath:            valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
+		SessionsPath:           sessionsPathFromEnv(),
+		WebSearchTavilyAPIKey:  webSearchTavilyAPIKeyFromEnv(),
+		MaxTurns:               intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
 	}
 	allowlist, blocklist, err := normalizeConfiguredToolLists(cfg.ToolSelector.Allowlist, cfg.ToolSelector.Blocklist)
 	if err != nil {

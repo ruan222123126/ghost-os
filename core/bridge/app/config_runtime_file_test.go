@@ -108,6 +108,9 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	memoryDecisionRecipeMinSupport := 5
 	memoryDecisionDebugEnabled := true
 	memoryDecisionSelectorHintEnabled := false
+	nativeBinaryPath := "/tmp/native-bin"
+	nativeBinaryRoots := []string{"/tmp/native-root", "/opt/native"}
+	nativeBinaryCandidates := []string{"native", "native.exe"}
 	maxTurns := 42
 	workerMaxFiles := 8
 	toolSelectorEnabled := true
@@ -166,6 +169,9 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 		MemoryDecisionRecipeMinSupport:    &memoryDecisionRecipeMinSupport,
 		MemoryDecisionDebugEnabled:        &memoryDecisionDebugEnabled,
 		MemoryDecisionSelectorHintEnabled: &memoryDecisionSelectorHintEnabled,
+		NativeBinaryPath:                  &nativeBinaryPath,
+		NativeBinaryRoots:                 nativeBinaryRoots,
+		NativeBinaryCandidates:            nativeBinaryCandidates,
 		MaxTurns:                          &maxTurns,
 		WorkerMaxFiles:                    &workerMaxFiles,
 		ToolSelectorEnabled:               &toolSelectorEnabled,
@@ -212,6 +218,15 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	}
 	if cfg.WebSearchTavilyAPIKey != webSearchTavilyAPIKey {
 		t.Fatalf("unexpected tavily api key: got %q want %q", cfg.WebSearchTavilyAPIKey, webSearchTavilyAPIKey)
+	}
+	if cfg.NativeBinaryPath != nativeBinaryPath {
+		t.Fatalf("unexpected native binary path: got %q want %q", cfg.NativeBinaryPath, nativeBinaryPath)
+	}
+	if len(cfg.NativeBinaryRoots) != len(nativeBinaryRoots) || cfg.NativeBinaryRoots[0] != nativeBinaryRoots[0] || cfg.NativeBinaryRoots[1] != nativeBinaryRoots[1] {
+		t.Fatalf("unexpected native binary roots: got %v want %v", cfg.NativeBinaryRoots, nativeBinaryRoots)
+	}
+	if len(cfg.NativeBinaryCandidates) != len(nativeBinaryCandidates) || cfg.NativeBinaryCandidates[0] != nativeBinaryCandidates[0] || cfg.NativeBinaryCandidates[1] != nativeBinaryCandidates[1] {
+		t.Fatalf("unexpected native binary candidates: got %v want %v", cfg.NativeBinaryCandidates, nativeBinaryCandidates)
 	}
 	if cfg.Memory.WarmPath != memoryWarmPath {
 		t.Fatalf("unexpected warm path: got %q want %q", cfg.Memory.WarmPath, memoryWarmPath)

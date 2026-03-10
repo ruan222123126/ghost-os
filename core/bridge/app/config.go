@@ -102,17 +102,20 @@ type ToolSelectorConfig struct {
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider              ProviderConfig
-	Memory                MemoryRuntimeConfig
-	RSS                   RSSConfig
-	Worker                WorkerConfig
-	ToolSelector          ToolSelectorConfig
-	NativePersistent      bool
-	ChatPath              string
-	PromptsPath           string
-	SessionsPath          string
-	WebSearchTavilyAPIKey string
-	MaxTurns              int
+	Provider               ProviderConfig
+	Memory                 MemoryRuntimeConfig
+	RSS                    RSSConfig
+	Worker                 WorkerConfig
+	ToolSelector           ToolSelectorConfig
+	NativePersistent       bool
+	NativeBinaryPath       string
+	NativeBinaryRoots      []string
+	NativeBinaryCandidates []string
+	ChatPath               string
+	PromptsPath            string
+	SessionsPath           string
+	WebSearchTavilyAPIKey  string
+	MaxTurns               int
 }
 
 type runtimeConfig struct {

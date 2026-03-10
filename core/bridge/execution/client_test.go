@@ -7,15 +7,14 @@ import (
 	"testing"
 )
 
-func TestLocateNativeBinaryUsesEnvOverride(t *testing.T) {
+func TestLocateNativeBinaryUsesConfiguredPath(t *testing.T) {
 	tmp := t.TempDir()
 	binary := filepath.Join(tmp, "native")
 	if err := writeFile(binary, []byte("stub")); err != nil {
 		t.Fatalf("write binary fixture: %v", err)
 	}
 
-	t.Setenv("GHOST_NATIVE_BIN", binary)
-	got, err := locateNativeBinary()
+	got, err := locateNativeBinary(nativeBinaryLocator{configuredPath: binary})
 	if err != nil {
 		t.Fatalf("locateNativeBinary returned error: %v", err)
 	}
@@ -29,14 +28,14 @@ func TestLocateNativeBinaryUsesEnvOverride(t *testing.T) {
 	}
 }
 
-func TestLocateNativeBinaryRejectsInvalidEnvOverride(t *testing.T) {
-	t.Setenv("GHOST_NATIVE_BIN", filepath.Join(t.TempDir(), "missing-native"))
+func TestLocateNativeBinaryRejectsInvalidConfiguredPath(t *testing.T) {
+	configured := filepath.Join(t.TempDir(), "missing-native")
 
-	_, err := locateNativeBinary()
+	_, err := locateNativeBinary(nativeBinaryLocator{configuredPath: configured})
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
-	if !strings.Contains(err.Error(), "GHOST_NATIVE_BIN") {
+	if !strings.Contains(err.Error(), "native binary path") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

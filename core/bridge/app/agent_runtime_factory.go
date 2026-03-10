@@ -80,7 +80,7 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
-	executionClient := newExecutionClient(cfg.NativePersistent)
+	executionClient := newExecutionClient(executionClientConfigFromConfig(cfg))
 	registry.Register(tools.NewListFilesTool(executionClient))
 	registry.Register(tools.NewReadFileTool(executionClient))
 	registry.Register(tools.NewReadAndSummarizeTool(executionClient, workerClient, tools.ReadAndSummarizeConfig{
