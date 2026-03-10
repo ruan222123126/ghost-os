@@ -20,6 +20,7 @@
 
 ## 当前工程状态
 
+- `2026-03-10`：提升 session 列表健壮性：`Store.ListMetadata` 遇到坏文件不再 fail-fast，改为跳过并日志统计；`Session` 类型注释明确非并发安全；`AddMessage/MarkEnded` 在 `GHOST_BRIDGE_DEBUG/GHOST_DEBUG/DEBUG` 开启时对 nil receiver 打点，避免静默掩盖调用方 bug；补充 `storage_test.go` 回归覆盖损坏文件跳过。
 - `2026-03-10`：memory hybrid 查询拆出 `queryContext` 与 warm/cold/markdown/decision/graph/truth/vector 分层函数，`queryResultHybridLayers` 只做组装排序；同时抽出 `memory/internal/pathutil` 统一 `resolveMemoryPath`，decision/graph/bridge memory 复用以减少漂移；`MemoryEntry.EmbeddingID` 仍保留占位但在对外查询结果中清空，避免误认为已接入向量召回。
 - `2026-03-10`：修正会话裁剪的估算偏差：`EstimateTokens` 改为基于累积字符统计（含 rune 计数）避免 CJK 系统性高估，并去掉循环字符串拼接的额外分配；`Store.Save` 写入在 Windows 下新增“先删后改名”的原子替换 fallback，降低跨平台落盘失败风险。
 - `2026-03-10`：execution 持久客户端在读取响应后统一做一次 `reapExitedProcessLocked()`，确保 error 响应也能及时回收；one-shot 执行新增 `GHOST_NATIVE_STRICT_DECODER` 可选严格解码（`DisallowUnknownFields`）以便在开发/测试时捕获协议漂移。

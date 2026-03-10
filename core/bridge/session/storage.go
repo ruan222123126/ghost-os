@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -190,6 +191,9 @@ func (s *Store) ListMetadata() ([]SessionMetadata, error) {
 
 	now := time.Now().UTC()
 	metadata := make([]SessionMetadata, 0, len(entries))
+	skipped := 0
+	var firstSkippedID string
+	var firstSkippedErr error
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -211,12 +215,22 @@ func (s *Store) ListMetadata() ([]SessionMetadata, error) {
 			if errors.Is(readErr, os.ErrNotExist) {
 				continue
 			}
-			return nil, fmt.Errorf("read session %q: %w", id, readErr)
+			skipped++
+			if firstSkippedErr == nil {
+				firstSkippedID = id
+				firstSkippedErr = readErr
+			}
+			continue
 		}
 
 		summary, decodeErr := decodeSessionMetadata(id, data, now)
 		if decodeErr != nil {
-			return nil, decodeErr
+			skipped++
+			if firstSkippedErr == nil {
+				firstSkippedID = id
+				firstSkippedErr = decodeErr
+			}
+			continue
 		}
 		metadata = append(metadata, summary)
 	}
@@ -224,6 +238,14 @@ func (s *Store) ListMetadata() ([]SessionMetadata, error) {
 	sort.Slice(metadata, func(i, j int) bool {
 		return metadata[i].ID < metadata[j].ID
 	})
+
+	if skipped > 0 {
+		if firstSkippedErr != nil {
+			log.Printf("[SESSION] ListMetadata skipped invalid session files: skipped=%d example_id=%s err=%v", skipped, firstSkippedID, firstSkippedErr)
+		} else {
+			log.Printf("[SESSION] ListMetadata skipped invalid session files: skipped=%d", skipped)
+		}
+	}
 	return metadata, nil
 }
 

@@ -3,6 +3,8 @@ package session
 import (
 	"crypto/rand"
 	"fmt"
+	"log"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -11,6 +13,8 @@ import (
 )
 
 // Session 保存跨请求会话历史及其基础元数据。
+//
+// 注意：Session 非并发安全（包含 slice/map），同一个会话必须由上层保证串行访问。
 type Session struct {
 	ID               string                          `json:"id"`
 	Messages         []llm.Message                   `json:"messages"`
@@ -22,6 +26,8 @@ type Session struct {
 	PendingQuestions map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
 	HumanAnswers     map[string]string               `json:"human_answers,omitempty"`
 }
+
+var debugNilSessionReceiver = envBool("GHOST_BRIDGE_DEBUG") || envBool("GHOST_DEBUG") || envBool("DEBUG")
 
 // MemoryMetadata 记录会话在分层记忆中的状态。
 type MemoryMetadata struct {
@@ -74,6 +80,7 @@ func NewSession(systemPrompt string) *Session {
 // AddMessage 追加消息，并维护更新时间与 token 估算值。
 func (s *Session) AddMessage(msg llm.Message) {
 	if s == nil {
+		debugNilReceiver("AddMessage")
 		return
 	}
 
@@ -138,6 +145,7 @@ func (s *Session) MarkMemoryAccess(at time.Time) {
 // MarkEnded 标记会话已结束，后续不应再继续使用相同 session id 续跑。
 func (s *Session) MarkEnded(at time.Time) {
 	if s == nil {
+		debugNilReceiver("MarkEnded")
 		return
 	}
 	when := at.UTC()
@@ -257,4 +265,24 @@ func newSessionID() string {
 
 func fallbackSessionID() string {
 	return fmt.Sprintf("session-%d", time.Now().UTC().UnixNano())
+}
+
+func debugNilReceiver(method string) {
+	if !debugNilSessionReceiver {
+		return
+	}
+	log.Printf("[SESSION] nil Session receiver (caller bug?): method=%s", strings.TrimSpace(method))
+}
+
+func envBool(key string) bool {
+	value := strings.TrimSpace(os.Getenv(strings.TrimSpace(key)))
+	if value == "" {
+		return false
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
 }

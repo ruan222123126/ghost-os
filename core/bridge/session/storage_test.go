@@ -99,7 +99,8 @@ func TestStoreListSessions(t *testing.T) {
 }
 
 func TestStoreListMetadata(t *testing.T) {
-	store, err := NewStore(t.TempDir())
+	dir := t.TempDir()
+	store, err := NewStore(dir)
 	if err != nil {
 		t.Fatalf("new store: %v", err)
 	}
@@ -117,6 +118,10 @@ func TestStoreListMetadata(t *testing.T) {
 	second.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "done"})
 	if err := store.Save(second); err != nil {
 		t.Fatalf("save second: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "session-c.json"), []byte("{invalid json"), 0o600); err != nil {
+		t.Fatalf("write corrupted session: %v", err)
 	}
 
 	got, err := store.ListMetadata()
