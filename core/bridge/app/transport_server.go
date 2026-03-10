@@ -21,27 +21,38 @@ type serverOptions struct {
 }
 
 // newServerOptionsFromEnv 收敛 server 相关配置，优先读配置文件并回退环境变量。
-func newServerOptionsFromEnv(port int) serverOptions {
-	return serverOptions{
-		bindAddr:     resolveBindAddr(port),
-		maxBodyBytes: defaultMaxRequestBodyBytes,
-		cors:         newCORSPolicyFromEnv(),
-		auth:         newAPITokenAuthFromEnv(),
+func newServerOptionsFromEnv(port int) (serverOptions, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return serverOptions{}, err
 	}
+
+	return serverOptions{
+		bindAddr:     resolveBindAddrFromConfig(fileCfg, port),
+		maxBodyBytes: defaultMaxRequestBodyBytes,
+		cors:         newCORSPolicyFromConfig(fileCfg),
+		auth:         newAPITokenAuthFromConfig(fileCfg),
+	}, nil
 }
 
-// resolveBindAddr 优先使用显式绑定地址，否则回退到本地回环端口。
-func resolveBindAddr(port int) string {
-	fileCfg, _, err := loadBridgeFileConfig()
-	if err == nil {
-		if configured := strings.TrimSpace(valueOrEnv(fileCfg.BindAddr, "GHOST_BIND_ADDR", "")); configured != "" {
-			return configured
-		}
+func resolveBindAddrFromConfig(fileCfg bridgeFileConfig, port int) string {
+	if configured := strings.TrimSpace(valueOrEnv(fileCfg.BindAddr, "GHOST_BIND_ADDR", "")); configured != "" {
+		return configured
 	}
 	if configured := strings.TrimSpace(getenvDefault("GHOST_BIND_ADDR", "")); configured != "" {
 		return configured
 	}
 	return net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", port))
+}
+
+// resolveBindAddr 优先使用显式绑定地址，否则回退到本地回环端口。
+// 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
+func resolveBindAddr(port int) (string, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return "", err
+	}
+	return resolveBindAddrFromConfig(fileCfg, port), nil
 }
 
 // runServer 暴露 bridge HTTP API。
@@ -66,7 +77,11 @@ func runServer(ctx context.Context, port int) (string, error) {
 		return "", err
 	}
 	defer service.Close()
-	options := newServerOptionsFromEnv(port)
+
+	options, err := newServerOptionsFromEnv(port)
+	if err != nil {
+		return "", err
+	}
 	server := &http.Server{
 		Addr:              options.bindAddr,
 		Handler:           newHTTPHandler(service, options),

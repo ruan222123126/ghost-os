@@ -12,15 +12,14 @@ type corsPolicy struct {
 	allowedOrigins map[string]struct{}
 }
 
-// newCORSPolicyFromEnv 从 GHOST_CORS_ORIGINS 构建白名单集合（逗号分隔）。
-func newCORSPolicyFromEnv() corsPolicy {
-	raw := strings.TrimSpace(getenvDefault("GHOST_CORS_ORIGINS", ""))
+func newCORSPolicyFromConfig(fileCfg bridgeFileConfig) corsPolicy {
 	allowed := make(map[string]struct{})
-	if raw == "" {
+	origins := corsOriginsOrEnv(fileCfg.CORSOrigins)
+	if len(origins) == 0 {
 		return corsPolicy{allowedOrigins: allowed}
 	}
 
-	for _, origin := range strings.Split(raw, ",") {
+	for _, origin := range origins {
 		trimmed := strings.TrimSpace(origin)
 		if trimmed == "" {
 			continue
@@ -28,6 +27,16 @@ func newCORSPolicyFromEnv() corsPolicy {
 		allowed[trimmed] = struct{}{}
 	}
 	return corsPolicy{allowedOrigins: allowed}
+}
+
+// newCORSPolicyFromEnv 优先从配置文件读取 CORS 白名单，缺省时回退 GHOST_CORS_ORIGINS。
+// 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
+func newCORSPolicyFromEnv() (corsPolicy, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return corsPolicy{}, err
+	}
+	return newCORSPolicyFromConfig(fileCfg), nil
 }
 
 // allows 判定 origin 是否允许；无 Origin（同源/非浏览器）默认放行。
@@ -43,9 +52,18 @@ type apiTokenAuth struct {
 	token string
 }
 
-// newAPITokenAuthFromEnv 读取 API Token 认证配置。
-func newAPITokenAuthFromEnv() apiTokenAuth {
-	return apiTokenAuth{token: strings.TrimSpace(getenvDefault("GHOST_API_TOKEN", ""))}
+func newAPITokenAuthFromConfig(fileCfg bridgeFileConfig) apiTokenAuth {
+	return apiTokenAuth{token: strings.TrimSpace(valueOrEnv(fileCfg.APIToken, "GHOST_API_TOKEN", ""))}
+}
+
+// newAPITokenAuthFromEnv 优先读取配置文件中的 API Token，缺省时回退 GHOST_API_TOKEN。
+// 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
+func newAPITokenAuthFromEnv() (apiTokenAuth, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return apiTokenAuth{}, err
+	}
+	return newAPITokenAuthFromConfig(fileCfg), nil
 }
 
 // enabled 表示是否启用 token 认证。

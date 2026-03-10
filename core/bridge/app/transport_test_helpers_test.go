@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 )
 
 func decodeResponseBody(t *testing.T, recorder *httptest.ResponseRecorder) apiResponse {
@@ -73,12 +73,15 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 		t.Fatalf("start background runtimes: %v", err)
 	}
 	t.Cleanup(service.Close)
-	options := newServerOptionsFromEnv(8080)
+	options, err := newServerOptionsFromEnv(8080)
+	if err != nil {
+		t.Fatalf("new server options: %v", err)
+	}
 	options.maxBodyBytes = defaultMaxRequestBodyBytes
 	return newHTTPHandler(service, options), service, sessionStore
 }
 
-func decodeSSEEvents(t *testing.T, recorder *httptest.ResponseRecorder) []agent.AgentEvent {
+func decodeSSEEvents(t *testing.T, recorder *httptest.ResponseRecorder) []streaming.Event {
 	t.Helper()
 
 	trimmed := strings.TrimSpace(recorder.Body.String())
@@ -87,7 +90,7 @@ func decodeSSEEvents(t *testing.T, recorder *httptest.ResponseRecorder) []agent.
 	}
 
 	blocks := strings.Split(trimmed, "\n\n")
-	events := make([]agent.AgentEvent, 0, len(blocks))
+	events := make([]streaming.Event, 0, len(blocks))
 	for _, block := range blocks {
 		if strings.TrimSpace(block) == "" {
 			continue
@@ -107,7 +110,7 @@ func decodeSSEEvents(t *testing.T, recorder *httptest.ResponseRecorder) []agent.
 			t.Fatalf("missing data line in block: %q", block)
 		}
 
-		var event agent.AgentEvent
+		var event streaming.Event
 		if err := json.Unmarshal([]byte(dataLine), &event); err != nil {
 			t.Fatalf("decode sse event: %v", err)
 		}

@@ -71,7 +71,6 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 	workerModel := strings.TrimSpace(cfg.Worker.Model)
 	workerClient := llm.NewClientWithOptions(providerClientOptions(cfg, workerModel))
 
-	executionClient := newExecutionClient(cfg.NativePersistent)
 	registry := tools.NewRegistry()
 	artifactStore, err := artifacts.NewSessionArtifactStoreFromEnv()
 	if err != nil {
@@ -81,6 +80,7 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
+	executionClient := newExecutionClient(cfg.NativePersistent)
 	registry.Register(tools.NewListFilesTool(executionClient))
 	registry.Register(tools.NewReadFileTool(executionClient))
 	registry.Register(tools.NewReadAndSummarizeTool(executionClient, workerClient, tools.ReadAndSummarizeConfig{
