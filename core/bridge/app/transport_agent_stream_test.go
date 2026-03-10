@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 )
 
 func TestHandleAgentStreamMethodNotAllowed(t *testing.T) {
@@ -33,7 +33,7 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 		traceID string,
 		_ *ConfigStore,
 		_ *session.Store,
-		sink agent.EventSink,
+		sink streaming.Sink,
 	) (string, string, error) {
 		if message != "hello" {
 			t.Fatalf("unexpected message: got %q want %q", message, "hello")
@@ -42,31 +42,31 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 			t.Fatalf("unexpected session_id: got %q want empty", sessionID)
 		}
 
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, "", agent.EventRunStarted, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 0, "", streaming.EventRunStarted, map[string]any{
 			"session_id": "session-stream",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallStarted, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 0, mustAppToolStepID(t, 0, 0), streaming.EventToolCallStarted, map[string]any{
 			"tool":         "web_search",
 			"tool_call_id": "call-1",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallFinished, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 0, mustAppToolStepID(t, 0, 0), streaming.EventToolCallFinished, map[string]any{
 			"tool":         "web_search",
 			"tool_call_id": "call-1",
 			"status":       "success",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, agent.AssistantStepID(1), agent.EventMessage, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 1, mustAppAssistantStepID(t, 1), streaming.EventMessage, map[string]any{
 			"text":       "stream done",
 			"session_id": "session-stream",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, "", agent.EventDone, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 1, "", streaming.EventDone, map[string]any{
 			"session_id":    "session-stream",
 			"session_ended": false,
 		})); err != nil {
@@ -101,12 +101,12 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 	if len(events) != 5 {
 		t.Fatalf("unexpected event count: got %d want %d", len(events), 5)
 	}
-	wantOrder := []agent.EventType{
-		agent.EventRunStarted,
-		agent.EventToolCallStarted,
-		agent.EventToolCallFinished,
-		agent.EventMessage,
-		agent.EventDone,
+	wantOrder := []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished,
+		streaming.EventMessage,
+		streaming.EventDone,
 	}
 	for index, want := range wantOrder {
 		if events[index].Type != want {
@@ -146,8 +146,8 @@ func TestHandleAgentStreamValidationErrorEmitsErrorEvent(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("unexpected event count: got %d want %d", len(events), 1)
 	}
-	if events[0].Type != agent.EventError {
-		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, agent.EventError)
+	if events[0].Type != streaming.EventError {
+		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, streaming.EventError)
 	}
 	payload, ok := events[0].Payload.(map[string]any)
 	if !ok {
@@ -191,7 +191,7 @@ func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
 		_ string,
 		_ *ConfigStore,
 		_ *session.Store,
-		_ agent.EventSink,
+		_ streaming.Sink,
 	) (string, string, error) {
 		close(started)
 		<-ctx.Done()

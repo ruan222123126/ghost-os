@@ -4,6 +4,9 @@ import "ghost-os/bridge/agent"
 
 func newSessionStreamLifecyclePayloadBuilder(turn *sessionTurnState) agent.StreamLifecyclePayloadBuilder {
 	return agent.StreamLifecyclePayloadBuilder{
+		SessionID: func() string {
+			return turn.currentSessionID()
+		},
 		BuildRunStarted: func() (any, error) {
 			return map[string]any{
 				"session_id": turn.currentSessionID(),

@@ -56,7 +56,10 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 	}
 
 	for toolIndex, call := range calls {
-		stepID := streaming.ToolStepID(turn, toolIndex)
+		stepID, err := streaming.ToolStepID(turn, toolIndex)
+		if err != nil {
+			return stats, err
+		}
 		rawToolCallID := strings.TrimSpace(call.ID)
 		rawToolName := strings.TrimSpace(call.Name)
 		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {
@@ -128,6 +131,15 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 				Options:       options,
 			}
 		}
+		if meta.Iteration != nil {
+			return stats, &ErrIterationHandoff{
+				Did:            strings.TrimSpace(meta.Iteration.Did),
+				Remaining:      strings.TrimSpace(meta.Iteration.Remaining),
+				Completed:      meta.Iteration.Completed,
+				FinalMessage:   strings.TrimSpace(meta.Iteration.FinalMessage),
+				FinalChangeLog: strings.TrimSpace(meta.Iteration.FinalChangeLog),
+			}
+		}
 
 		appendToolResult(e.history, toolCallID, toolName, traceID, output, nil, meta.Content)
 	}
@@ -137,7 +149,10 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 
 func (e toolCallExecutor) reportInvalidCalls(ctx context.Context, traceID string, turn int, issues []invalidToolCallIssue) error {
 	for _, issue := range issues {
-		stepID := streaming.ToolStepID(turn, issue.index)
+		stepID, err := streaming.ToolStepID(turn, issue.index)
+		if err != nil {
+			return err
+		}
 		rawToolCallID := strings.TrimSpace(issue.call.ID)
 		rawToolName := strings.TrimSpace(issue.call.Name)
 		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
@@ -15,7 +15,7 @@ const agentWarmMemoryCapacity = 100
 // SessionTurnRunner 为 service 层暴露瘦执行接口，隐藏运行时装配与会话编排细节。
 type SessionTurnRunner interface {
 	RunTurn(ctx context.Context, message string, sessionID string, traceID string) (string, string, error)
-	RunTurnStream(ctx context.Context, message string, sessionID string, traceID string, sink agent.EventSink) (string, string, error)
+	RunTurnStream(ctx context.Context, message string, sessionID string, traceID string, sink streaming.Sink) (string, string, error)
 }
 
 // SessionAgentRunner 负责执行单轮 agent；运行时装配下沉到 sessionTurnPreparer。
@@ -76,7 +76,7 @@ func (r *SessionAgentRunner) RunTurn(ctx context.Context, userMessage string, se
 	return turn.complete(response, runErr, nil)
 }
 
-func (r *SessionAgentRunner) RunTurnStream(ctx context.Context, userMessage string, sessionID string, traceID string, sink agent.EventSink) (string, string, error) {
+func (r *SessionAgentRunner) RunTurnStream(ctx context.Context, userMessage string, sessionID string, traceID string, sink streaming.Sink) (string, string, error) {
 	streamSink := newStreamTerminalBuffer(ensureEventSink(sink))
 	turn, err := r.prepareTurn(ctx, userMessage, sessionID, traceID)
 	if err != nil {
@@ -95,7 +95,10 @@ func (r *SessionAgentRunner) RunTurnStream(ctx context.Context, userMessage stri
 	response, runErr := turn.agent.RunStreamWithTraceID(turn.execCtx, userMessage, turn.traceID, streamSink)
 	response, persistedSessionID, err := turn.complete(response, runErr, func(err error, awaitingHuman bool) error {
 		turnNumber := turn.agent.LastTurn()
-		stepID := agent.AssistantStepID(turnNumber)
+		stepID, stepErr := streaming.AssistantStepID(turnNumber)
+		if stepErr != nil {
+			return stepErr
+		}
 		if awaitingHuman {
 			stepID = ""
 		}

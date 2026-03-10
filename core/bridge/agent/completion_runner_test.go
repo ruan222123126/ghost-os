@@ -32,7 +32,7 @@ func TestCompletionRunnerCompleteDoesNotMutateHistory(t *testing.T) {
 	})
 
 	runner := newCompletionRunner(completer, newFakeToolCatalog(), history)
-	resp, err := runner.complete(context.Background(), nil, "trace-runner", 0)
+	resp, err := runner.complete(context.Background(), nil, "trace-runner", "", 0)
 	if err != nil {
 		t.Fatalf("complete returned error: %v", err)
 	}

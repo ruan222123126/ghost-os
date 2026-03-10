@@ -9,6 +9,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 )
 
 func TestQuestionAnswerEndpointReturnsFinalReply(t *testing.T) {
@@ -300,7 +301,7 @@ func TestQuestionAnswerStreamEndpointReturnsSSEEvents(t *testing.T) {
 		traceID string,
 		_ *ConfigStore,
 		_ *session.Store,
-		sink agent.EventSink,
+		sink streaming.Sink,
 	) (string, string, error) {
 		if message != "" {
 			t.Fatalf("unexpected message: got %q want empty", message)
@@ -308,19 +309,19 @@ func TestQuestionAnswerStreamEndpointReturnsSSEEvents(t *testing.T) {
 		if incomingSessionID != sessionID {
 			t.Fatalf("unexpected session id: got %q want %q", incomingSessionID, sessionID)
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallStarted, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, sessionID, 0, mustAppToolStepID(t, 0, 0), streaming.EventToolCallStarted, map[string]any{
 			"tool":         "exec",
 			"tool_call_id": "call-answer-1",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, agent.AssistantStepID(1), agent.EventMessage, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, sessionID, 1, mustAppAssistantStepID(t, 1), streaming.EventMessage, map[string]any{
 			"text":       "继续完成",
 			"session_id": sessionID,
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, "", agent.EventDone, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, sessionID, 1, "", streaming.EventDone, map[string]any{
 			"session_id":    sessionID,
 			"session_ended": false,
 		})); err != nil {
@@ -355,13 +356,13 @@ func TestQuestionAnswerStreamEndpointReturnsSSEEvents(t *testing.T) {
 	if len(events) != 3 {
 		t.Fatalf("unexpected event count: got %d want %d", len(events), 3)
 	}
-	if events[0].Type != agent.EventToolCallStarted {
-		t.Fatalf("unexpected first event: got %q want %q", events[0].Type, agent.EventToolCallStarted)
+	if events[0].Type != streaming.EventToolCallStarted {
+		t.Fatalf("unexpected first event: got %q want %q", events[0].Type, streaming.EventToolCallStarted)
 	}
-	if events[1].Type != agent.EventMessage {
-		t.Fatalf("unexpected second event: got %q want %q", events[1].Type, agent.EventMessage)
+	if events[1].Type != streaming.EventMessage {
+		t.Fatalf("unexpected second event: got %q want %q", events[1].Type, streaming.EventMessage)
 	}
-	if events[2].Type != agent.EventDone {
-		t.Fatalf("unexpected third event: got %q want %q", events[2].Type, agent.EventDone)
+	if events[2].Type != streaming.EventDone {
+		t.Fatalf("unexpected third event: got %q want %q", events[2].Type, streaming.EventDone)
 	}
 }

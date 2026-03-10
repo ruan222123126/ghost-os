@@ -4,24 +4,41 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
 // agentEventEmitter 把 EventSink payload 组装和错误包装从对话循环中移走。
 type agentEventEmitter struct {
-	sink EventSink
+	sink      streaming.Sink
+	sessionID func() string
 }
 
-func newAgentEventEmitter(sink EventSink) agentEventEmitter {
+func newAgentEventEmitter(sink streaming.Sink, sessionID func() string) agentEventEmitter {
 	if sink == nil {
-		sink = nopSink{}
+		sink = streaming.NopSink{}
 	}
-	return agentEventEmitter{sink: sink}
+	return agentEventEmitter{
+		sink:      sink,
+		sessionID: sessionID,
+	}
 }
 
-func (e agentEventEmitter) emit(ctx context.Context, event AgentEvent) error {
-	if err := e.sink.Emit(ctx, event); err != nil {
+func (e agentEventEmitter) currentSessionID() string {
+	if e.sessionID == nil {
+		return ""
+	}
+	return strings.TrimSpace(e.sessionID())
+}
+
+func (e agentEventEmitter) newEvent(traceID string, turn int, stepID string, eventType streaming.EventType, payload any) (streaming.Event, error) {
+	return streaming.NewEvent(traceID, e.currentSessionID(), turn, stepID, eventType, payload)
+}
+
+func (e agentEventEmitter) emit(ctx context.Context, event streaming.Event) error {
+	if _, err := e.sink.Emit(ctx, event); err != nil {
 		return &eventEmitError{eventType: event.Type, err: err}
 	}
 	return nil
@@ -32,14 +49,22 @@ func (e agentEventEmitter) runStarted(ctx context.Context, traceID string, build
 	if err != nil {
 		return e.terminalError(ctx, traceID, 0, "", fmt.Errorf("build run_started payload: %w", err))
 	}
-	return e.emit(ctx, NewEvent(traceID, 0, "", EventRunStarted, payload))
+	event, err := streaming.NewEvent(traceID, builder.sessionID(), 0, "", streaming.EventRunStarted, payload)
+	if err != nil {
+		return err
+	}
+	return e.emit(ctx, event)
 }
 
 func (e agentEventEmitter) toolCallStarted(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string) error {
-	return e.emit(ctx, NewEvent(traceID, turn, stepID, EventToolCallStarted, map[string]any{
+	event, err := e.newEvent(traceID, turn, stepID, streaming.EventToolCallStarted, map[string]any{
 		"tool":         toolName,
 		"tool_call_id": toolCallID,
-	}))
+	})
+	if err != nil {
+		return err
+	}
+	return e.emit(ctx, event)
 }
 
 func (e agentEventEmitter) toolCallFinished(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string, status string, toolErr error) error {
@@ -51,7 +76,11 @@ func (e agentEventEmitter) toolCallFinished(ctx context.Context, traceID string,
 	if toolErr != nil {
 		payload["error"] = toolErr.Error()
 	}
-	return e.emit(ctx, NewEvent(traceID, turn, stepID, EventToolCallFinished, payload))
+	event, err := e.newEvent(traceID, turn, stepID, streaming.EventToolCallFinished, payload)
+	if err != nil {
+		return err
+	}
+	return e.emit(ctx, event)
 }
 
 func (e agentEventEmitter) awaitingHuman(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string, questionID string, prompt string, selectionMode string, options []tools.AskHumanOption) error {
@@ -67,35 +96,63 @@ func (e agentEventEmitter) awaitingHuman(ctx context.Context, traceID string, tu
 	if len(options) > 0 {
 		payload["options"] = options
 	}
-	return e.emit(ctx, NewEvent(traceID, turn, stepID, EventAwaitingHuman, payload))
+	event, err := e.newEvent(traceID, turn, stepID, streaming.EventAwaitingHuman, payload)
+	if err != nil {
+		return err
+	}
+	return e.emit(ctx, event)
 }
 
 func (e agentEventEmitter) terminalSuccess(ctx context.Context, traceID string, turn int, response string, builder StreamLifecyclePayloadBuilder) error {
 	messagePayload, err := builder.messagePayload(response)
 	if err != nil {
-		return e.terminalError(ctx, traceID, turn, AssistantStepID(turn), fmt.Errorf("build message payload: %w", err))
+		stepID, stepErr := streaming.AssistantStepID(turn)
+		if stepErr != nil {
+			return stepErr
+		}
+		return e.terminalError(ctx, traceID, turn, stepID, fmt.Errorf("build message payload: %w", err))
 	}
 	donePayload, err := builder.donePayload(response)
 	if err != nil {
-		return e.terminalError(ctx, traceID, turn, AssistantStepID(turn), fmt.Errorf("build done payload: %w", err))
+		stepID, stepErr := streaming.AssistantStepID(turn)
+		if stepErr != nil {
+			return stepErr
+		}
+		return e.terminalError(ctx, traceID, turn, stepID, fmt.Errorf("build done payload: %w", err))
 	}
-	if err := e.emit(ctx, NewEvent(traceID, turn, AssistantStepID(turn), EventMessage, messagePayload)); err != nil {
+	stepID, err := streaming.AssistantStepID(turn)
+	if err != nil {
 		return err
 	}
-	return e.emit(ctx, NewEvent(traceID, turn, "", EventDone, donePayload))
+	messageEvent, err := streaming.NewEvent(traceID, builder.sessionID(), turn, stepID, streaming.EventMessage, messagePayload)
+	if err != nil {
+		return err
+	}
+	if err := e.emit(ctx, messageEvent); err != nil {
+		return err
+	}
+	doneEvent, err := streaming.NewEvent(traceID, builder.sessionID(), turn, "", streaming.EventDone, donePayload)
+	if err != nil {
+		return err
+	}
+	return e.emit(ctx, doneEvent)
 }
 
 func (e agentEventEmitter) terminalError(ctx context.Context, traceID string, turn int, stepID string, runErr error) error {
-	if emitErr := e.emit(ctx, NewEvent(traceID, turn, stepID, EventError, map[string]any{
+	event, err := e.newEvent(traceID, turn, stepID, streaming.EventError, map[string]any{
 		"message": runErr.Error(),
-	})); emitErr != nil {
+	})
+	if err != nil {
+		return err
+	}
+	if emitErr := e.emit(ctx, event); emitErr != nil {
 		return emitErr
 	}
 	return runErr
 }
 
 type eventEmitError struct {
-	eventType EventType
+	eventType streaming.EventType
 	err       error
 }
 

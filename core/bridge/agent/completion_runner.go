@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 )
 
 // completionRunner 封装一次模型调用，不负责 history 提交。
@@ -21,7 +22,7 @@ func newCompletionRunner(completer Completer, toolCatalog ToolCatalog, history *
 	}
 }
 
-func (r completionRunner) complete(ctx context.Context, streamSink EventSink, traceID string, turn int) (*llm.CompletionResponse, error) {
+func (r completionRunner) complete(ctx context.Context, streamSink streaming.Sink, traceID string, sessionID string, turn int) (*llm.CompletionResponse, error) {
 	req := llm.CompletionRequest{
 		Messages:          r.history.Messages(),
 		Tools:             r.tools.ToolDefs(),
@@ -33,7 +34,11 @@ func (r completionRunner) complete(ctx context.Context, streamSink EventSink, tr
 		err  error
 	)
 	if streamingCompleter, ok := r.completer.(llm.StreamingCompleter); ok && streamSink != nil {
-		resp, err = streamingCompleter.CompleteStream(ctx, req, newLLMDeltaBridge(streamSink, traceID, turn))
+		deltaBridge, bridgeErr := newLLMDeltaBridge(streamSink, traceID, sessionID, turn)
+		if bridgeErr != nil {
+			return nil, bridgeErr
+		}
+		resp, err = streamingCompleter.CompleteStream(ctx, req, deltaBridge)
 	} else {
 		resp, err = r.completer.Complete(ctx, req)
 	}

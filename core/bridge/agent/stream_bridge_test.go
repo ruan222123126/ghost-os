@@ -5,13 +5,17 @@ import (
 	"testing"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 )
 
 func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge := newLLMDeltaBridge(sink, "trace-bridge", 2)
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 2)
+	if err != nil {
+		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
+	}
 
-	err := bridge.OnDelta(context.Background(), llm.LLMDelta{
+	err = bridge.OnDelta(context.Background(), llm.LLMDelta{
 		Kind: llm.DeltaKindText,
 		Text: "Hello",
 	})
@@ -22,11 +26,18 @@ func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 1)
 	}
 	event := sink.events[0]
-	if event.Type != EventCompletionDelta {
-		t.Fatalf("unexpected event type: got %q want %q", event.Type, EventCompletionDelta)
+	if event.Type != streaming.EventCompletionDelta {
+		t.Fatalf("unexpected event type: got %q want %q", event.Type, streaming.EventCompletionDelta)
 	}
-	if event.StepID != AssistantStepID(2) {
-		t.Fatalf("unexpected step id: got %q want %q", event.StepID, AssistantStepID(2))
+	stepID, err := streaming.AssistantStepID(2)
+	if err != nil {
+		t.Fatalf("AssistantStepID returned error: %v", err)
+	}
+	if event.StepID != stepID {
+		t.Fatalf("unexpected step id: got %q want %q", event.StepID, stepID)
+	}
+	if event.SessionID != "session-bridge" {
+		t.Fatalf("unexpected session id: got %q want %q", event.SessionID, "session-bridge")
 	}
 	payload := event.Payload.(map[string]any)
 	if payload["kind"] != string(llm.DeltaKindText) || payload["text"] != "Hello" {
@@ -36,9 +47,12 @@ func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 
 func TestLLMDeltaBridgeConvertsToolCallDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge := newLLMDeltaBridge(sink, "trace-bridge", 1)
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1)
+	if err != nil {
+		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
+	}
 
-	err := bridge.OnDelta(context.Background(), llm.LLMDelta{
+	err = bridge.OnDelta(context.Background(), llm.LLMDelta{
 		Kind:              llm.DeltaKindToolCallDelta,
 		ToolCallIndex:     0,
 		ArgumentsFragment: `{"query":`,

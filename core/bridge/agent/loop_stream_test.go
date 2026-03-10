@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 )
 
 func TestRunStreamEmitsToolEventsInOrder(t *testing.T) {
@@ -29,19 +30,23 @@ func TestRunStreamEmitsToolEventsInOrder(t *testing.T) {
 	if len(sink.events) != 5 {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 5)
 	}
-	wantOrder := []EventType{
-		EventRunStarted,
-		EventToolCallStarted,
-		EventToolCallFinished,
-		EventMessage,
-		EventDone,
+	wantOrder := []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished,
+		streaming.EventMessage,
+		streaming.EventDone,
 	}
 	for index, want := range wantOrder {
 		if sink.events[index].Type != want {
 			t.Fatalf("unexpected event[%d]: got %q want %q", index, sink.events[index].Type, want)
 		}
 	}
-	if sink.events[1].StepID != ToolStepID(0, 0) || sink.events[2].StepID != ToolStepID(0, 0) {
+	toolStepID, err := streaming.ToolStepID(0, 0)
+	if err != nil {
+		t.Fatalf("ToolStepID returned error: %v", err)
+	}
+	if sink.events[1].StepID != toolStepID || sink.events[2].StepID != toolStepID {
 		t.Fatalf("unexpected step ids: got %q and %q", sink.events[1].StepID, sink.events[2].StepID)
 	}
 	payload, ok := sink.events[2].Payload.(map[string]any)
@@ -73,8 +78,8 @@ func TestRunStreamEmitsAwaitingHumanEvent(t *testing.T) {
 	if len(sink.events) != 4 {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 4)
 	}
-	if sink.events[3].Type != EventAwaitingHuman {
-		t.Fatalf("unexpected final event type: got %q want %q", sink.events[3].Type, EventAwaitingHuman)
+	if sink.events[3].Type != streaming.EventAwaitingHuman {
+		t.Fatalf("unexpected final event type: got %q want %q", sink.events[3].Type, streaming.EventAwaitingHuman)
 	}
 	payload, ok := sink.events[3].Payload.(map[string]any)
 	if !ok {
@@ -99,11 +104,15 @@ func TestRunStreamEmitsErrorEventOnFatalFailure(t *testing.T) {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 2)
 	}
 	event := sink.events[1]
-	if event.Type != EventError {
-		t.Fatalf("unexpected event type: got %q want %q", event.Type, EventError)
+	if event.Type != streaming.EventError {
+		t.Fatalf("unexpected event type: got %q want %q", event.Type, streaming.EventError)
 	}
-	if event.StepID != AssistantStepID(0) {
-		t.Fatalf("unexpected step id: got %q want %q", event.StepID, AssistantStepID(0))
+	assistantStepID, err := streaming.AssistantStepID(0)
+	if err != nil {
+		t.Fatalf("AssistantStepID returned error: %v", err)
+	}
+	if event.StepID != assistantStepID {
+		t.Fatalf("unexpected step id: got %q want %q", event.StepID, assistantStepID)
 	}
 	payload, ok := event.Payload.(map[string]any)
 	if !ok {
@@ -140,12 +149,12 @@ func TestRunStreamUsesStreamingCompleterAndEmitsCompletionDeltas(t *testing.T) {
 	if len(sink.events) != 5 {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 5)
 	}
-	wantOrder := []EventType{
-		EventRunStarted,
-		EventCompletionDelta,
-		EventCompletionDelta,
-		EventMessage,
-		EventDone,
+	wantOrder := []streaming.EventType{
+		streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventCompletionDelta,
+		streaming.EventMessage,
+		streaming.EventDone,
 	}
 	for index, want := range wantOrder {
 		if sink.events[index].Type != want {
@@ -190,7 +199,7 @@ func TestRunStreamFallsBackToCompleteForNonStreamingCompleter(t *testing.T) {
 	if len(sink.events) != 3 {
 		t.Fatalf("unexpected streamed event count: got %d want %d", len(sink.events), 3)
 	}
-	if sink.events[0].Type != EventRunStarted || sink.events[1].Type != EventMessage || sink.events[2].Type != EventDone {
+	if sink.events[0].Type != streaming.EventRunStarted || sink.events[1].Type != streaming.EventMessage || sink.events[2].Type != streaming.EventDone {
 		t.Fatalf("unexpected streamed events: %+v", sink.events)
 	}
 }

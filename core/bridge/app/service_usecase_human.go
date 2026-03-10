@@ -187,7 +187,7 @@ func (s *bridgeService) resumeAgentAction(ctx context.Context, sessionID string,
 }
 
 func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID string, traceID string, sink streaming.Sink) (string, string, error) {
-	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush, sessionID))
+	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush))
 	response, resumedSessionID, err := s.agentRunner.RunTurnStream(ctx, "", sessionID, traceID, trackedSink)
 	if err != nil {
 		awaitingErr, normalizedErr, _, cancelled := classifyAgentTurnError(err)
@@ -203,7 +203,11 @@ func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID s
 
 	result, code, err := s.finalizeAgentTurn(response, resumedSessionID)
 	if err != nil {
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), streaming.AssistantStepID(trackedSink.finalAssistantTurn()), resumedSessionID, code, err); emitErr != nil {
+		stepID, stepErr := streaming.AssistantStepID(trackedSink.finalAssistantTurn())
+		if stepErr != nil {
+			return "", "", stepErr
+		}
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), stepID, resumedSessionID, code, err); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err

@@ -11,6 +11,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 )
 
 func TestHandleSessionEventsStreamsAssistantMessage(t *testing.T) {
@@ -120,35 +121,43 @@ func TestHandleSessionEventsBroadcastsStreamProgress(t *testing.T) {
 		traceID string,
 		_ *ConfigStore,
 		_ *session.Store,
-		sink agent.EventSink,
+		sink streaming.Sink,
 	) (string, string, error) {
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, "", agent.EventRunStarted, map[string]any{
-			"session_id": "session-stream-push",
+		type runStartedPayload struct {
+			SessionID string `json:"session_id"`
+		}
+		type messagePayload struct {
+			Text string `json:"text"`
+		}
+		type donePayload struct {
+			SessionEnded bool `json:"session_ended"`
+		}
+
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream-push", 0, "", streaming.EventRunStarted, runStartedPayload{
+			SessionID: "session-stream-push",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallStarted, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream-push", 0, mustAppToolStepID(t, 0, 0), streaming.EventToolCallStarted, map[string]any{
 			"tool":         "list_files",
 			"tool_call_id": "call-stream-1",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 0, agent.ToolStepID(0, 0), agent.EventToolCallFinished, map[string]any{
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream-push", 0, mustAppToolStepID(t, 0, 0), streaming.EventToolCallFinished, map[string]any{
 			"tool":         "list_files",
 			"tool_call_id": "call-stream-1",
 			"status":       "success",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, agent.AssistantStepID(1), agent.EventMessage, map[string]any{
-			"text":       "stream finished",
-			"session_id": "session-stream-push",
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream-push", 1, mustAppAssistantStepID(t, 1), streaming.EventMessage, messagePayload{
+			Text: "stream finished",
 		})); err != nil {
 			return "", "", err
 		}
-		if err := sink.Emit(ctx, agent.NewEvent(traceID, 1, "", agent.EventDone, map[string]any{
-			"session_id":    "session-stream-push",
-			"session_ended": false,
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream-push", 1, "", streaming.EventDone, donePayload{
+			SessionEnded: false,
 		})); err != nil {
 			return "", "", err
 		}
