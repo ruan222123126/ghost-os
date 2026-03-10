@@ -3,8 +3,6 @@ package decision
 import (
 	"encoding/json"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"ghost-os/bridge/llm"
@@ -141,24 +139,6 @@ func normalizeRecallText(text string) string {
 		return ""
 	}
 	return strings.Join(strings.Fields(normalized), " ")
-}
-
-func resolveMemoryPath(pathValue string) string {
-	trimmed := strings.TrimSpace(pathValue)
-	if trimmed == "" {
-		return ""
-	}
-	if trimmed == "~" || strings.HasPrefix(trimmed, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return strings.TrimSpace(pathValue)
-		}
-		if trimmed == "~" {
-			return homeDir
-		}
-		return filepath.Join(homeDir, strings.TrimPrefix(trimmed, "~/"))
-	}
-	return filepath.Clean(trimmed)
 }
 
 func messageToContent(msg llm.Message) string {

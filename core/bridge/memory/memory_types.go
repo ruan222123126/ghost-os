@@ -39,7 +39,7 @@ type MemoryEntry struct {
 	Explain        map[string]any `json:"explain,omitempty"`
 	RerankScore    float64        `json:"rerank_score,omitempty"`
 	FreshnessBoost float64        `json:"freshness_boost,omitempty"`
-	// TODO(memory): 仅做字段透传，尚未接入向量索引/召回。
+	// EmbeddingID 仅做占位；查询对外输出会清空，避免误认为已接入向量召回。
 	EmbeddingID string `json:"embedding_id,omitempty"`
 }
 
@@ -66,10 +66,16 @@ func (r *TimeRange) Contains(ts time.Time) bool {
 
 // MemoryQuery 是统一检索参数。
 type MemoryQuery struct {
-	TimeRange         *TimeRange              `json:"time_range,omitempty"`
-	Limit             int                     `json:"limit,omitempty"`
-	Keywords          []string                `json:"keywords,omitempty"`
-	Metadata          map[string]any          `json:"metadata,omitempty"`
+	TimeRange  *TimeRange     `json:"time_range,omitempty"`
+	Limit      int            `json:"limit,omitempty"`
+	Keywords   []string       `json:"keywords,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
+	Explicit   bool           `json:"explicit,omitempty"`
+	Debug      bool           `json:"debug,omitempty"`
+	AutoInject bool           `json:"auto_inject,omitempty"`
+	// HygieneMode 保留为兼容字段；新调用方优先使用 Explicit/Debug/AutoInject。
+	HygieneMode       string                  `json:"hygiene_mode,omitempty"`
+	IncludeQuarantine bool                    `json:"include_quarantine,omitempty"`
 	Namespace         string                  `json:"namespace,omitempty"`
 	WorkspaceID       string                  `json:"workspace_id,omitempty"`
 	SessionHints      []string                `json:"session_hints,omitempty"`
@@ -387,6 +393,13 @@ func cloneEntries(entries []MemoryEntry) []MemoryEntry {
 		out[i] = cloneEntry(entries[i])
 	}
 	return out
+}
+
+func stripEmbeddingIDs(entries []MemoryEntry) []MemoryEntry {
+	for i := range entries {
+		entries[i].EmbeddingID = ""
+	}
+	return entries
 }
 
 func entryMatchesQuery(entry MemoryEntry, query MemoryQuery) bool {

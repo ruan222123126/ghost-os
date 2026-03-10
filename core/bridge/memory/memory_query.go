@@ -11,13 +11,14 @@ import (
 
 // QueryService 收口自动召回与级联查询逻辑。
 type QueryService struct {
-	warm     *WarmMemory
-	cold     *ColdMemory
-	graph    *GraphService
-	decision *DecisionService
-	planner  *IntentPlanner
-	buckets  *BucketPlanner
-	vector   *VectorSidecar
+	warm     warmQueryStore
+	cold     coldQueryStore
+	graph    graphQueryStore
+	decision decisionQueryStore
+	hygiene  hygieneQueryStore
+	planner  intentQueryPlanner
+	buckets  bucketQueryPlanner
+	vector   vectorQueryStore
 	truth    *TruthReader
 
 	autoRecallEnabled         bool
@@ -33,12 +34,13 @@ type QueryService struct {
 	metrics                   *memoryCounters
 }
 
-func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, planner *IntentPlanner, vector *VectorSidecar, truth *TruthReader, metrics *memoryCounters) *QueryService {
+func NewQueryService(config MemoryConfig, warm *WarmMemory, cold *ColdMemory, graph *GraphService, decision *DecisionService, hygiene *HygieneService, planner *IntentPlanner, vector *VectorSidecar, truth *TruthReader, metrics *memoryCounters) *QueryService {
 	return &QueryService{
 		warm:                      warm,
 		cold:                      cold,
 		graph:                     graph,
 		decision:                  decision,
+		hygiene:                   hygiene,
 		planner:                   planner,
 		buckets:                   NewBucketPlanner(config, cold, metrics),
 		vector:                    vector,
@@ -66,6 +68,7 @@ func (s *QueryService) BuildContextWindow(scope SessionScope, userInput string) 
 		Limit:             max(s.autoRecallLimit*6, s.autoRecallLimit+8),
 		Keywords:          extractKeywords(userInput),
 		SemanticQuery:     strings.TrimSpace(userInput),
+		AutoInject:        true,
 		IncludeMarkdown:   true,
 		IncludeGraph:      true,
 		IncludeDecision:   true,
@@ -90,9 +93,17 @@ func (s *QueryService) BuildContextWindow(scope SessionScope, userInput string) 
 	if len(entries) == 0 {
 		return nil, nil
 	}
+	entries = s.filterEntriesByHygiene(entries, query)
+	if len(entries) == 0 {
+		return nil, nil
+	}
 	if s.hybridEnabled {
 		filtered := make([]MemoryEntry, 0, len(entries))
 		for _, entry := range entries {
+			if metadataString(entry.Metadata, "memory_kind") == "hygiene_rule" {
+				filtered = append(filtered, entry)
+				continue
+			}
 			if entry.Confidence < s.recallInjectMinConfidence {
 				if s.metrics != nil {
 					s.metrics.lowConfidenceFiltered.Add(1)
@@ -116,41 +127,63 @@ func (s *QueryService) BuildContextWindow(scope SessionScope, userInput string) 
 	}
 
 	visible := visibleContextFingerprints(scope.History)
-	lines := make([]string, 0, minInt(len(entries), s.autoRecallLimit)+1)
-	if result.RecipeAdvisory != nil {
-		for _, advisoryLine := range recipeContextLines(*result.RecipeAdvisory) {
-			if advisoryLine == "" {
-				continue
-			}
-			lines = append(lines, "- "+advisoryLine)
-			if len(lines) >= s.autoRecallLimit {
-				break
-			}
-		}
-	}
+	ruleLines := make([]string, 0, s.autoRecallLimit)
+	contextLines := make([]string, 0, s.autoRecallLimit)
 	for _, entry := range entries {
-		if len(lines) >= s.autoRecallLimit {
+		if len(ruleLines)+len(contextLines) >= s.autoRecallLimit {
 			break
 		}
 		if recallEntryVisible(entry, visible) {
 			continue
 		}
-		line := compactRecallLine(entry)
-		if line == "" {
+		if metadataString(entry.Metadata, "memory_kind") == "hygiene_rule" {
+			if line := compactHygieneRuleLine(entry); line != "" {
+				ruleLines = append(ruleLines, "- "+line)
+			}
 			continue
 		}
-		lines = append(lines, "- "+line)
-		if len(lines) >= s.autoRecallLimit {
-			break
+		if line := compactRecallLine(entry); line != "" {
+			contextLines = append(contextLines, "- "+line)
 		}
 	}
-	if len(lines) == 0 {
+	advisoryLines := make([]string, 0, s.autoRecallLimit)
+	if result.RecipeAdvisory != nil {
+		for _, advisoryLine := range recipeContextLines(*result.RecipeAdvisory) {
+			if advisoryLine == "" {
+				continue
+			}
+			advisoryLines = append(advisoryLines, "- "+advisoryLine)
+			if len(ruleLines)+len(advisoryLines)+len(contextLines) >= s.autoRecallLimit {
+				break
+			}
+		}
+	}
+	if len(ruleLines) == 0 && len(contextLines) == 0 {
 		return nil, nil
+	}
+	sections := make([]string, 0, 2+s.autoRecallLimit)
+	if len(ruleLines) > 0 {
+		sections = append(sections, "Rules to follow:")
+		sections = append(sections, ruleLines...)
+	}
+	if len(contextLines) > 0 {
+		if len(sections) > 0 {
+			sections = append(sections, "")
+		}
+		sections = append(sections, "Recalled context:")
+		sections = append(sections, advisoryLines...)
+		sections = append(sections, contextLines...)
+	} else if len(advisoryLines) > 0 {
+		if len(sections) > 0 {
+			sections = append(sections, "")
+		}
+		sections = append(sections, "Recalled context:")
+		sections = append(sections, advisoryLines...)
 	}
 
 	return []llm.Message{{
 		Role: llm.RoleSystem,
-		Text: strings.Join(append([]string{"Recalled context:"}, lines...), "\n"),
+		Text: strings.Join(sections, "\n"),
 	}}, nil
 }
 
@@ -218,36 +251,46 @@ func (s *QueryService) QueryWithScope(query MemoryQuery, scope SessionScope) ([]
 }
 
 func (s *QueryService) QueryResultWithScope(query MemoryQuery, scope SessionScope) (MemoryQueryResult, error) {
-	var result MemoryQueryResult
-	if s.hybridEnabled && s.truth != nil && s.truth.Enabled() {
-		hybridResult, err := s.queryResultHybridWithScope(query, scope)
-		if err != nil {
-			return MemoryQueryResult{}, err
-		}
-		return s.decorateRecipeSelection(hybridResult, query, scope), nil
-	}
-	var err error
-	result, err = s.queryResultWeek2WithScope(query, scope)
+	query = normalizeMemoryQueryHygiene(query)
+	result, err := s.queryResultHybridWithScope(query, scope)
 	if err != nil {
 		return MemoryQueryResult{}, err
 	}
-	if !s.truthReadRequested(query) || s.truth == nil || !s.truth.Enabled() {
-		return s.decorateRecipeSelection(result, query, scope), nil
-	}
-	plan := result.IntentPlan
-	if plan == nil && s.planner != nil && s.planner.Enabled() {
-		planned, err := s.planner.Plan(query, scope)
-		if err == nil {
-			planned = normalizeQueryIntentPlan(planned)
-			if hasIntentPlan(planned) {
-				plan = &planned
-				result.IntentPlan = plan
+	result = s.decorateRecipeSelection(result, query, scope)
+	result.Entries = stripEmbeddingIDs(result.Entries)
+	return result, nil
+}
+
+func (s *QueryService) recordResultAccess(entries []MemoryEntry, now time.Time) {
+	warmHits := make([]string, 0, len(entries))
+	decisionMemoHits := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entryLayer(entry) != "warm" {
+			if entryLayer(entry) == "decision" {
+				memoID, _ := entry.Metadata["memo_id"].(string)
+				if strings.TrimSpace(memoID) != "" {
+					decisionMemoHits = append(decisionMemoHits, strings.TrimSpace(memoID))
+				}
 			}
+			continue
 		}
+		warmHits = append(warmHits, entry.ID)
 	}
-	matches := s.truth.Query(query, plan)
-	result.TruthHits = s.truth.DebugHits(matches)
-	return s.decorateRecipeSelection(result, query, scope), nil
+	s.warm.RecordAccess(warmHits, now)
+	if s.decision != nil {
+		s.decision.RecordMemoAccess(decisionMemoHits, now)
+	}
+}
+
+func (s *QueryService) truthReadRequested(query MemoryQuery) bool {
+	return s.truthReadEnabled || query.IncludeTruth || query.TruthDebug
+}
+
+func (s *QueryService) queryHygieneCards(query MemoryQuery, scope SessionScope) ([]MemoryEntry, error) {
+	if s == nil || s.hygiene == nil || !s.hygiene.Enabled() {
+		return nil, nil
+	}
+	return s.hygiene.QueryCards(query, scope)
 }
 
 func queryHot(scope SessionScope, query MemoryQuery) []MemoryEntry {
@@ -297,63 +340,10 @@ func (s *QueryService) queryMarkdown(query MemoryQuery) ([]MemoryEntry, error) {
 }
 
 func (s *QueryService) queryMarkdownWithPlan(query MemoryQuery, plan *BucketPlan) ([]MemoryEntry, error) {
-	var (
-		nodes []string
-		err   error
-	)
-	if s.cold != nil && s.cold.markdown != nil && plan != nil && len(plan.SelectedBuckets) > 0 {
-		nodes, err = s.cold.markdown.ListByBucketPlan(plan, query)
-	} else {
-		nodes, err = s.cold.ListMarkdownNodes()
-	}
-	if err != nil {
-		return nil, err
-	}
-	if len(nodes) == 0 {
+	if s == nil || s.cold == nil {
 		return nil, nil
 	}
-
-	entries := make([]MemoryEntry, 0, len(nodes))
-	for _, id := range nodes {
-		node, err := s.cold.LoadMarkdownNode(id)
-		if err != nil {
-			continue
-		}
-
-		entry := normalizeEntry(MemoryEntry{
-			ID:             "markdown:" + node.ID,
-			Content:        strings.TrimSpace(node.Content),
-			Type:           MemoryTypeKnowledge,
-			Timestamp:      markdownNodeTimestamp(node),
-			Importance:     node.Importance,
-			RelatedTo:      markdownNodeSourceIDs(node),
-			Source:         "markdown",
-			Summary:        strings.TrimSpace(node.Summary),
-			Anchors:        markdownNodeAnchorsForEntry(node, s.truth),
-			Confidence:     node.Confidence,
-			LastAccessedAt: node.LastSeenAt.UTC(),
-			EmbeddingID:    node.EmbeddingID,
-			Metadata: map[string]any{
-				"layer":        "markdown",
-				"namespace":    strings.TrimSpace(node.Namespace),
-				"workspace_id": strings.TrimSpace(node.WorkspaceID),
-				"bucket_key":   strings.TrimSpace(node.BucketKey),
-				"bucket_month": bucketMonthFromTime(markdownNodeTimestamp(node)),
-				"session_id":   strings.TrimSpace(node.SessionID),
-				"tags":         append([]string(nil), node.Tags...),
-				"node_id":      node.ID,
-				"source_ids":   markdownNodeSourceIDs(node),
-			},
-		})
-		if !entryMatchesQuery(entry, query) {
-			continue
-		}
-		entries = append(entries, entry)
-	}
-	if query.Limit > 0 && len(entries) > query.Limit {
-		entries = entries[:query.Limit]
-	}
-	return entries, nil
+	return s.cold.QueryMarkdown(query, plan, s.truth, s.hybridEnabled || s.truthReadRequested(query))
 }
 
 func compactRecallLine(entry MemoryEntry) string {
@@ -365,52 +355,4 @@ func compactRecallLine(entry MemoryEntry) string {
 		return ""
 	}
 	return summarizeLine(text, 180)
-}
-
-func markdownNodeTimestamp(node MarkdownNode) time.Time {
-	if !node.LastSeenAt.IsZero() {
-		return node.LastSeenAt.UTC()
-	}
-	return node.CreatedAt.UTC()
-}
-
-func markdownNodeSourceIDs(node MarkdownNode) []string {
-	if len(node.SourceIDs) > 0 {
-		return append([]string(nil), node.SourceIDs...)
-	}
-	if len(node.RelatedTo) > 0 {
-		return append([]string(nil), node.RelatedTo...)
-	}
-	return nil
-}
-
-func markdownNodeLineageIDs(node MarkdownNode) []string {
-	lineage := append([]string(nil), node.SourceClaimIDs...)
-	lineage = append(lineage, node.SourceEvidenceIDs...)
-	lineage = append(lineage, node.DerivedClaimIDs...)
-	if len(lineage) > 0 {
-		return uniqueStrings(lineage)
-	}
-	return markdownNodeSourceIDs(node)
-}
-
-func markdownNodeAnchorsForEntry(node MarkdownNode, truth *TruthReader) []MemoryAnchor {
-	if len(node.SourceClaimIDs) > 0 {
-		if projected := projectAnchorsFromClaimIDs(truth, node.SourceClaimIDs, markdownNodeTimestamp(node)); len(projected) > 0 {
-			return projected
-		}
-	}
-	return cloneAnchors(node.Anchors)
-}
-
-func markdownNodeExplain(node MarkdownNode) map[string]any {
-	return map[string]any{
-		"layer":               "markdown",
-		"source_claim_ids":    append([]string(nil), node.SourceClaimIDs...),
-		"source_evidence_ids": append([]string(nil), node.SourceEvidenceIDs...),
-		"derived_claim_ids":   append([]string(nil), node.DerivedClaimIDs...),
-		"legacy_source_ids":   markdownNodeSourceIDs(node),
-		"projection_version":  strings.TrimSpace(node.ProjectionVersion),
-		"projection_partial":  node.ProjectionPartial,
-	}
 }

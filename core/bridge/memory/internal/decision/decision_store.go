@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ghost-os/bridge/memory/internal/pathutil"
 )
 
 type decisionMemosPayload struct {
@@ -92,7 +94,7 @@ type DecisionService struct {
 }
 
 func NewDecisionStore(baseDir string) *DecisionStore {
-	resolvedBaseDir := resolveMemoryPath(baseDir)
+	resolvedBaseDir := pathutil.Resolve(baseDir)
 	store := &DecisionStore{
 		baseDir:               resolvedBaseDir,
 		memoByID:              make(map[string]DecisionMemo),

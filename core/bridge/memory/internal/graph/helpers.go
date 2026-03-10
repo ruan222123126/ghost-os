@@ -3,9 +3,9 @@ package graph
 import (
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"strings"
+
+	"ghost-os/bridge/memory/internal/pathutil"
 )
 
 const (
@@ -158,37 +158,8 @@ func queryTerms(query MemoryQuery) []string {
 	return terms
 }
 
-func resolveMemoryPath(pathValue string) string {
-	trimmed := strings.TrimSpace(pathValue)
-	if trimmed == "" {
-		return ""
-	}
-	if trimmed == "~" || strings.HasPrefix(trimmed, "~/") {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return strings.TrimSpace(pathValue)
-		}
-		if trimmed == "~" {
-			return homeDir
-		}
-		return filepath.Join(homeDir, strings.TrimPrefix(trimmed, "~/"))
-	}
-	return filepath.Clean(trimmed)
-}
-
-func resolveMemoryPathWithError(pathValue string) (string, error) {
-	resolved := resolveMemoryPath(pathValue)
-	if strings.TrimSpace(pathValue) == "" {
-		return "", nil
-	}
-	if resolved == strings.TrimSpace(pathValue) {
-		return resolved, nil
-	}
-	return resolved, nil
-}
-
 func ensurePath(value string) (string, error) {
-	resolved := resolveMemoryPath(value)
+	resolved := pathutil.Resolve(value)
 	if resolved == "" {
 		return "", fmt.Errorf("empty path")
 	}

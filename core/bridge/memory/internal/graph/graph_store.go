@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ghost-os/bridge/memory/internal/pathutil"
 )
 
 type graphNodesPayload struct {
@@ -42,7 +44,7 @@ type GraphStore struct {
 
 func NewGraphStore(baseDir string) *GraphStore {
 	return &GraphStore{
-		baseDir:          resolveMemoryPath(baseDir),
+		baseDir:          pathutil.Resolve(baseDir),
 		nodeByID:         make(map[string]GraphNode),
 		edgeByID:         make(map[string]GraphEdge),
 		nodeByCanonical:  make(map[string]string),
@@ -286,6 +288,7 @@ func (s *GraphStore) upsertEdgeLocked(namespace string, subject GraphNode, objec
 		LastSeenAt:  now,
 		SessionIDs:  uniqueStrings([]string{fact.SessionID}),
 		SourceIDs:   uniqueStrings([]string{fact.SourceID}),
+		Metadata:    mergeGraphMetadata(nil, fact.Metadata),
 		Evidence: []GraphEvidence{{
 			SessionID: fact.SessionID,
 			SourceID:  fact.SourceID,
@@ -318,6 +321,7 @@ func mergeGraphEdge(edge GraphEdge, fact GraphFact) GraphEdge {
 	out.Confidence = clamp01(math.Max(out.Confidence, (out.Confidence+fact.Confidence)/2))
 	out.SessionIDs = uniqueStrings(append(out.SessionIDs, fact.SessionID))
 	out.SourceIDs = uniqueStrings(append(out.SourceIDs, fact.SourceID))
+	out.Metadata = mergeGraphMetadata(out.Metadata, fact.Metadata)
 	out.Evidence = normalizeGraphEvidence(append(out.Evidence, GraphEvidence{
 		SessionID: fact.SessionID,
 		SourceID:  fact.SourceID,
@@ -329,6 +333,88 @@ func mergeGraphEdge(edge GraphEdge, fact GraphFact) GraphEdge {
 		out.Status = GraphStatusActive
 	}
 	return normalizeGraphEdge(out)
+}
+
+func mergeGraphMetadata(base map[string]any, incoming map[string]any) map[string]any {
+	if len(base) == 0 && len(incoming) == 0 {
+		return nil
+	}
+	out := cloneGraphMetadata(base)
+	if out == nil {
+		out = make(map[string]any, len(incoming))
+	}
+	for key, value := range incoming {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+		incomingStrings := graphMetadataStrings(value)
+		if len(incomingStrings) > 0 {
+			merged := uniqueStrings(append(graphMetadataStrings(out[trimmedKey]), incomingStrings...))
+			if len(merged) > 0 {
+				out[trimmedKey] = merged
+			}
+			continue
+		}
+		switch typed := value.(type) {
+		case bool:
+			if typed || out[trimmedKey] == nil {
+				out[trimmedKey] = typed
+			}
+		case string:
+			if strings.TrimSpace(typed) == "" {
+				continue
+			}
+			if strings.TrimSpace(graphMetadataString(out[trimmedKey])) == "" {
+				out[trimmedKey] = strings.TrimSpace(typed)
+			}
+		case map[string]any:
+			out[trimmedKey] = mergeGraphMetadata(graphMetadataMap(out[trimmedKey]), typed)
+		default:
+			if out[trimmedKey] == nil {
+				out[trimmedKey] = typed
+			}
+		}
+	}
+	return out
+}
+
+func graphMetadataMap(value any) map[string]any {
+	mapValue, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	return mapValue
+}
+
+func graphMetadataString(value any) string {
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
+}
+
+func graphMetadataStrings(value any) []string {
+	switch typed := value.(type) {
+	case []string:
+		return uniqueStrings(append([]string(nil), typed...))
+	case []any:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				out = append(out, strings.TrimSpace(text))
+			}
+		}
+		return uniqueStrings(out)
+	case string:
+		if strings.TrimSpace(typed) == "" {
+			return nil
+		}
+		return []string{strings.TrimSpace(typed)}
+	default:
+		return nil
+	}
 }
 
 func (s *GraphStore) reconcileSingleValueLocked(edge GraphEdge) GraphEdge {
