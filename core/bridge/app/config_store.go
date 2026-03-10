@@ -1,9 +1,16 @@
 package app
 
 import (
-	"fmt"
-	"strings"
+	"errors"
 	"sync"
+)
+
+var (
+	errProviderNameRequired    = errors.New("provider name is required")
+	errProviderTypeInvalid     = errors.New("provider type must be one of: openai|anthropic|custom|codex")
+	errProviderBaseURLRequired = errors.New("provider base_url is required")
+	errProviderNotFound        = errors.New("provider not found")
+	errProviderExists          = errors.New("provider already exists")
 )
 
 // ConfigStore 管理 bridge 运行态可变配置，避免直接写入进程环境变量。
@@ -12,7 +19,7 @@ type ConfigStore struct {
 	runtime runtimeConfig
 }
 
-// NewConfigStoreFromEnv 用环境变量初始化可热更新配置存储。
+// NewConfigStoreFromEnv 用配置文件 + 环境变量回退初始化可热更新配置存储。
 func NewConfigStoreFromEnv() (*ConfigStore, error) {
 	runtime, err := runtimeConfigFromEnv()
 	if err != nil {
@@ -32,40 +39,22 @@ func (s *ConfigStore) RuntimeConfig() runtimeConfig {
 func (s *ConfigStore) Snapshot() configResponse {
 	runtime := s.RuntimeConfig()
 	return configResponse{
-		Provider:  string(runtime.Provider),
-		BaseURL:   runtime.BaseURL,
-		Model:     runtime.Model,
-		ChatPath:  runtime.ChatPath,
-		APIKeySet: runtime.APIKey != "",
+		Provider:     activeProviderLabel(runtime),
+		ProviderType: string(runtime.Provider),
+		BaseURL:      runtime.BaseURL,
+		Model:        runtime.Model,
+		ChatPath:     runtime.ChatPath,
+		APIKeySet:    runtime.APIKey != "",
 	}
 }
 
-// Update 仅覆盖请求中显式给出的字段，并在落库前执行归一化。
-func (s *ConfigStore) Update(req configUpdateRequest) error {
+func (s *ConfigStore) ListProviders() []providerConfig {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	next := s.runtime
-	if req.Provider != nil {
-		provider := normalizeProvider(*req.Provider)
-		if !provider.Valid() {
-			return fmt.Errorf("invalid provider %q, expected one of: openai|anthropic|custom", strings.TrimSpace(*req.Provider))
-		}
-		next.Provider = provider
+	fileCfg, _, _, err := s.loadMutationStateLocked()
+	if err != nil {
+		return nil
 	}
-	if req.APIKey != nil {
-		next.APIKey = strings.TrimSpace(*req.APIKey)
-	}
-	if req.BaseURL != nil {
-		next.BaseURL = strings.TrimSpace(*req.BaseURL)
-	}
-	if req.Model != nil {
-		next.Model = strings.TrimSpace(*req.Model)
-	}
-	if req.ChatPath != nil {
-		next.ChatPath = strings.TrimSpace(*req.ChatPath)
-	}
-
-	s.runtime = normalizeRuntimeConfig(next)
-	return nil
+	return cloneProviderConfigs(normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)))
 }
