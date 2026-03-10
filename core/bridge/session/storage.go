@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -121,7 +122,7 @@ func (s *Store) Save(session *Session) error {
 		return fmt.Errorf("write temp session file %q: %w", tempPath, err)
 	}
 
-	if err := os.Rename(tempPath, path); err != nil {
+	if err := replaceFileAtomic(tempPath, path); err != nil {
 		_ = os.Remove(tempPath)
 		return fmt.Errorf("replace session file %q: %w", path, err)
 	}
@@ -297,4 +298,19 @@ func resolveBaseDir(pathValue string) (string, error) {
 
 func isValidSessionID(sessionID string) bool {
 	return sessionIDPattern.MatchString(strings.TrimSpace(sessionID))
+}
+
+func replaceFileAtomic(tempPath, path string) error {
+	if err := os.Rename(tempPath, path); err != nil {
+		if runtime.GOOS != "windows" {
+			return err
+		}
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+			return fmt.Errorf("remove existing session file %q: %w", path, removeErr)
+		}
+		if renameErr := os.Rename(tempPath, path); renameErr != nil {
+			return renameErr
+		}
+	}
+	return nil
 }

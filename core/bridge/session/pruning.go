@@ -2,6 +2,7 @@ package session
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"ghost-os/bridge/llm"
 )
@@ -24,33 +25,37 @@ type messageSpan struct {
 
 // EstimateTokens 基于文本长度做近似估算，避免引入 provider 专属依赖。
 func EstimateTokens(msg llm.Message) int {
-	text := strings.TrimSpace(msg.Text)
+	stats := tokenEstimateStats{}
+	stats.addText(strings.TrimSpace(msg.Text))
 	for _, part := range msg.Content {
 		switch strings.ToLower(strings.TrimSpace(part.Type)) {
 		case llm.ContentTypeText:
-			text += part.Text
+			stats.addText(part.Text)
 		case llm.ContentTypeImage:
 			if part.Image != nil {
-				text += part.Image.Path + part.Image.URL + part.Image.MimeType + part.Image.SHA256
+				stats.addText(part.Image.Path)
+				stats.addText(part.Image.URL)
+				stats.addText(part.Image.MimeType)
+				stats.addText(part.Image.SHA256)
 			}
 		}
 	}
 	if msg.ToolCallID != "" {
-		text += msg.ToolCallID
+		stats.addText(msg.ToolCallID)
 	}
 	for _, call := range msg.ToolCalls {
-		text += call.ID
-		text += call.Name
-		text += string(call.Arguments)
+		stats.addText(call.ID)
+		stats.addText(call.Name)
+		stats.addText(string(call.Arguments))
 	}
 
-	if text == "" {
+	if stats.isEmpty() {
 		return 4
 	}
 
-	charCount := len(text)
+	charCount := stats.charCount()
 	var estimated int
-	if containsStructuredContent(text) {
+	if stats.structured {
 		estimated = charCount / 2
 	} else {
 		estimated = charCount / 4
@@ -138,14 +143,14 @@ func GetContextLimit(provider llm.Provider, model string) int {
 	if strings.Contains(modelName, "claude") {
 		return anthropicContextTokens - anthropicResponseReserve
 	}
-	if strings.Contains(modelName, "gpt") || strings.Contains(modelName, "o1") || strings.Contains(modelName, "o3") {
+	if strings.Contains(modelName, "gpt") || strings.Contains(modelName, "o1") || strings.Contains(modelName, "o3") || strings.Contains(modelName, "codex") {
 		return openAIContextTokens - openAIResponseReserve
 	}
 
 	switch normalizedProvider {
 	case llm.ProviderAnthropic:
 		return anthropicContextTokens - anthropicResponseReserve
-	case llm.ProviderOpenAI:
+	case llm.ProviderOpenAI, llm.ProviderCodex:
 		return openAIContextTokens - openAIResponseReserve
 	default:
 		return customContextTokens
@@ -196,4 +201,69 @@ func containsStructuredContent(text string) bool {
 		}
 	}
 	return false
+}
+
+type tokenEstimateStats struct {
+	bytes       int
+	runes       int
+	hasNonASCII bool
+	structured  bool
+	tail        string
+}
+
+func (s *tokenEstimateStats) addText(text string) {
+	if text == "" {
+		return
+	}
+
+	s.bytes += len(text)
+	if !s.hasNonASCII {
+		for i := 0; i < len(text); i++ {
+			if text[i] >= utf8.RuneSelf {
+				s.hasNonASCII = true
+				break
+			}
+		}
+	}
+	if s.hasNonASCII {
+		s.runes += utf8.RuneCountInString(text)
+	} else {
+		s.runes += len(text)
+	}
+
+	if !s.structured {
+		candidate := text
+		if s.tail != "" {
+			candidate = s.tail + text
+		}
+		if containsStructuredContent(candidate) {
+			s.structured = true
+		}
+	}
+
+	s.tail = updateStructuredTail(s.tail, text)
+}
+
+func (s *tokenEstimateStats) isEmpty() bool {
+	return s.bytes == 0 && s.runes == 0
+}
+
+func (s *tokenEstimateStats) charCount() int {
+	if s.hasNonASCII {
+		return s.runes
+	}
+	return s.bytes
+}
+
+func updateStructuredTail(prev, text string) string {
+	if text == "" {
+		return prev
+	}
+
+	const maxMarkerLen = 8
+	combined := prev + text
+	if len(combined) <= maxMarkerLen-1 {
+		return combined
+	}
+	return combined[len(combined)-(maxMarkerLen-1):]
 }
