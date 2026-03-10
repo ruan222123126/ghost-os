@@ -13,12 +13,13 @@ import (
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memory"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/tools"
 )
 
 func TestSessionTurnPreparer_SelectToolsForTurn_BypassesAskHumanContinuation(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(Config) selectorEngine { return selector }}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MaxTurns: 6})
+	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Enabled: true, Mode: "llm"}, MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 
 	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-ask", history, "resume", true, "trace-ask", runnerSelectorEnv())
@@ -35,8 +36,8 @@ func TestSessionTurnPreparer_SelectToolsForTurn_BypassesAskHumanContinuation(t *
 
 func TestSessionTurnPreparer_SelectToolsForTurn_UsesFullRegistryWhenDisabled(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(Config) selectorEngine { return selector }}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: false, MaxTurns: 6})
+	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Enabled: false}, MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 
 	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-disabled", history, "read config", false, "trace-disabled", runnerSelectorEnv())
@@ -53,8 +54,8 @@ func TestSessionTurnPreparer_SelectToolsForTurn_UsesFullRegistryWhenDisabled(t *
 
 func TestSessionTurnPreparer_SelectToolsForTurn_ShadowModeKeepsFullRegistry(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.92}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(Config) selectorEngine { return selector }}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorShadow: true, MaxTurns: 6})
+	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Enabled: true, Shadow: true}, MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 
 	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-shadow", history, "read config", false, "trace-shadow", runnerSelectorEnv())
@@ -71,8 +72,8 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ShadowModeKeepsFullRegistry(t *t
 
 func TestSessionTurnPreparer_SelectToolsForTurn_SubsetUpdatesPromptCount(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.96}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(Config) selectorEngine { return selector }}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MaxTurns: 6})
+	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Enabled: true, Mode: "llm"}, MaxTurns: 6})
 	history := agent.NewHistory("system prompt")
 	history.Append(llm.Message{Role: llm.RoleUser, Text: "please read config"})
 	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "ok"})
@@ -102,9 +103,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesDecisionHintToSelector(t *
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.94}}
 	preparer := &sessionTurnPreparer{
 		sharedMemoryManager: manager,
-		selectorFactory:     func(Config) selectorEngine { return selector },
+		selectorFactory:     func(Config, tools.ToolCatalog) selectorEngine { return selector },
 	}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{Enabled: true, Mode: "llm"},
+		Memory:       MemoryRuntimeConfig{DecisionSelectorHintEnabled: true},
+		MaxTurns:     6,
+	})
 	history := agent.NewHistory("system prompt")
 
 	preparer.selectToolsForTurn(context.Background(), deps, "runner-selector-hint", history, "fix config migration", false, "trace-selector-hint", env)
@@ -120,9 +125,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_NoHitsKeepsExistingBehavior(t *t
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.96}}
 	preparer := &sessionTurnPreparer{
 		sharedMemoryManager: newRunnerDecisionHintManager(t),
-		selectorFactory:     func(Config) selectorEngine { return selector },
+		selectorFactory:     func(Config, tools.ToolCatalog) selectorEngine { return selector },
 	}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{Enabled: true, Mode: "llm"},
+		Memory:       MemoryRuntimeConfig{DecisionSelectorHintEnabled: true},
+		MaxTurns:     6,
+	})
 	history := agent.NewHistory("system prompt")
 
 	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-no-hits", history, "brand new task", false, "trace-no-hits", runnerSelectorEnv())
@@ -138,12 +147,16 @@ func TestSessionTurnPreparer_SelectToolsForTurn_HintFailureFallsBackToEmptyHint(
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.9}}
 	preparer := &sessionTurnPreparer{
 		sharedMemoryManager: newRunnerDecisionHintManager(t),
-		selectorFactory:     func(Config) selectorEngine { return selector },
+		selectorFactory:     func(Config, tools.ToolCatalog) selectorEngine { return selector },
 		decisionHintBuilder: func(*memory.MemoryManager, memory.SessionScope, string) (string, []memory.DecisionHit, error) {
 			return "", nil, errors.New("boom")
 		},
 	}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{Enabled: true, Mode: "llm"},
+		Memory:       MemoryRuntimeConfig{DecisionSelectorHintEnabled: true},
+		MaxTurns:     6,
+	})
 
 	preparer.selectToolsForTurn(context.Background(), deps, "runner-hint-error", agent.NewHistory("system prompt"), "fix config migration", false, "trace-hint-error", runnerSelectorEnv())
 	if selector.lastDecisionHint != "" {
@@ -158,9 +171,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ShadowModeStillUsesHintInput(t *
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"read_file", "ask_human"}, Confidence: 0.92}}
 	preparer := &sessionTurnPreparer{
 		sharedMemoryManager: manager,
-		selectorFactory:     func(Config) selectorEngine { return selector },
+		selectorFactory:     func(Config, tools.ToolCatalog) selectorEngine { return selector },
 	}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorShadow: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{Enabled: true, Shadow: true, Mode: "llm"},
+		Memory:       MemoryRuntimeConfig{DecisionSelectorHintEnabled: true},
+		MaxTurns:     6,
+	})
 
 	catalog, prompt := preparer.selectToolsForTurn(context.Background(), deps, "runner-shadow-hint", agent.NewHistory("system prompt"), "fix config migration", false, "trace-shadow-hint", env)
 	if selector.lastDecisionHint == "" {
@@ -175,13 +192,17 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AskHumanContinuationSkipsHintLoo
 	hintCalls := 0
 	preparer := &sessionTurnPreparer{
 		sharedMemoryManager: newRunnerDecisionHintManager(t),
-		selectorFactory:     func(Config) selectorEngine { return &fakeSelectorEngine{} },
+		selectorFactory:     func(Config, tools.ToolCatalog) selectorEngine { return &fakeSelectorEngine{} },
 		decisionHintBuilder: func(*memory.MemoryManager, memory.SessionScope, string) (string, []memory.DecisionHit, error) {
 			hintCalls++
 			return "should not run", nil, nil
 		},
 	}
-	deps := newRunnerTestDeps(Config{ToolSelectorEnabled: true, ToolSelectorMode: "llm", MemoryDecisionSelectorHintEnabled: true, MaxTurns: 6})
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{Enabled: true, Mode: "llm"},
+		Memory:       MemoryRuntimeConfig{DecisionSelectorHintEnabled: true},
+		MaxTurns:     6,
+	})
 
 	preparer.selectToolsForTurn(context.Background(), deps, "runner-ask-skip", agent.NewHistory("system prompt"), "resume", true, "trace-ask-skip", runnerSelectorEnv())
 	if hintCalls != 0 {
@@ -272,10 +293,12 @@ func TestSessionTurnStateComplete_ReportsPersistFailureViaCallback(t *testing.T)
 func TestSessionTurnStateComplete_CapturesDecisionMemoOnSuccess(t *testing.T) {
 	decisionDir := filepath.Join(t.TempDir(), "decision")
 	manager := memory.NewMemoryManager(memory.MemoryConfig{
-		DecisionEnabled:          true,
-		DecisionCaptureOnTurn:    true,
-		DecisionCaptureOnTurnSet: true,
-		DecisionPath:             decisionDir,
+		Decision: memory.DecisionConfig{
+			Enabled:          true,
+			CaptureOnTurn:    true,
+			CaptureOnTurnSet: true,
+			Path:             decisionDir,
+		},
 	})
 	state, history, _, sess := newDecisionCaptureState(t, manager, "runner-success-1", "trace-success")
 	history.Append(llm.Message{Role: llm.RoleUser, Text: "update config"})
@@ -389,10 +412,12 @@ func TestSessionTurnStateComplete_CapturesDecisionMemoOnSuccess(t *testing.T) {
 func TestSessionTurnStateComplete_CapturesDecisionMemoOnAwaitingHuman(t *testing.T) {
 	decisionDir := filepath.Join(t.TempDir(), "decision")
 	manager := memory.NewMemoryManager(memory.MemoryConfig{
-		DecisionEnabled:          true,
-		DecisionCaptureOnTurn:    true,
-		DecisionCaptureOnTurnSet: true,
-		DecisionPath:             decisionDir,
+		Decision: memory.DecisionConfig{
+			Enabled:          true,
+			CaptureOnTurn:    true,
+			CaptureOnTurnSet: true,
+			Path:             decisionDir,
+		},
 	})
 	state, history, _, _ := newDecisionCaptureState(t, manager, "runner-awaiting-capture", "trace-awaiting-capture")
 	history.Append(llm.Message{Role: llm.RoleUser, Text: "ship it?"})
@@ -425,10 +450,12 @@ func TestSessionTurnStateComplete_CapturesDecisionMemoOnAwaitingHuman(t *testing
 func TestSessionTurnStateComplete_DoesNotCaptureWhenPersistFails(t *testing.T) {
 	decisionDir := filepath.Join(t.TempDir(), "decision")
 	manager := memory.NewMemoryManager(memory.MemoryConfig{
-		DecisionEnabled:          true,
-		DecisionCaptureOnTurn:    true,
-		DecisionCaptureOnTurnSet: true,
-		DecisionPath:             decisionDir,
+		Decision: memory.DecisionConfig{
+			Enabled:          true,
+			CaptureOnTurn:    true,
+			CaptureOnTurnSet: true,
+			Path:             decisionDir,
+		},
 	})
 	state, history, _, _ := newDecisionCaptureState(t, manager, "invalid session id", "trace-persist-no-capture")
 	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "done"})
@@ -450,10 +477,12 @@ func TestSessionTurnStateComplete_CaptureErrorDoesNotAffectReturn(t *testing.T) 
 		t.Fatalf("write blocker file: %v", err)
 	}
 	manager := memory.NewMemoryManager(memory.MemoryConfig{
-		DecisionEnabled:          true,
-		DecisionCaptureOnTurn:    true,
-		DecisionCaptureOnTurnSet: true,
-		DecisionPath:             decisionPath,
+		Decision: memory.DecisionConfig{
+			Enabled:          true,
+			CaptureOnTurn:    true,
+			CaptureOnTurnSet: true,
+			Path:             decisionPath,
+		},
 	})
 	state, history, _, sess := newDecisionCaptureState(t, manager, "runner-capture-error", "trace-capture-error")
 	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "done"})
@@ -471,10 +500,12 @@ func TestSessionTurnStateComplete_CaptureErrorDoesNotAffectReturn(t *testing.T) 
 func TestSessionTurnStateComplete_DoesNotCaptureWhenToggleDisabled(t *testing.T) {
 	decisionDir := filepath.Join(t.TempDir(), "decision")
 	manager := memory.NewMemoryManager(memory.MemoryConfig{
-		DecisionEnabled:          true,
-		DecisionCaptureOnTurn:    false,
-		DecisionCaptureOnTurnSet: true,
-		DecisionPath:             decisionDir,
+		Decision: memory.DecisionConfig{
+			Enabled:          true,
+			CaptureOnTurn:    false,
+			CaptureOnTurnSet: true,
+			Path:             decisionDir,
+		},
 	})
 	state, history, _, _ := newDecisionCaptureState(t, manager, "runner-capture-off", "trace-capture-off")
 	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "done"})
@@ -484,6 +515,29 @@ func TestSessionTurnStateComplete_DoesNotCaptureWhenToggleDisabled(t *testing.T)
 	}
 	if _, statErr := os.Stat(filepath.Join(decisionDir, "memos.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected no memo file when capture toggle is off, stat err=%v", statErr)
+	}
+	t.Cleanup(manager.StopDreaming)
+}
+
+func TestSessionTurnStateComplete_SkipsLowSignalDecisionTurn(t *testing.T) {
+	decisionDir := filepath.Join(t.TempDir(), "decision")
+	manager := memory.NewMemoryManager(memory.MemoryConfig{
+		Decision: memory.DecisionConfig{
+			Enabled:          true,
+			CaptureOnTurn:    true,
+			CaptureOnTurnSet: true,
+			Path:             decisionDir,
+		},
+	})
+	state, history, _, _ := newDecisionCaptureState(t, manager, "runner-low-signal", "trace-low-signal")
+	history.Append(llm.Message{Role: llm.RoleUser, Text: "你好"})
+	history.Append(llm.Message{Role: llm.RoleAssistant, Text: "你好，有什么我可以帮你？"})
+
+	if _, _, err := state.complete("你好，有什么我可以帮你？", nil, nil); err != nil {
+		t.Fatalf("complete returned error: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(decisionDir, "memos.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected low-signal turn to skip decision capture, stat err=%v", statErr)
 	}
 	t.Cleanup(manager.StopDreaming)
 }

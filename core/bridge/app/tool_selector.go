@@ -41,42 +41,41 @@ type ToolSelector struct {
 }
 
 func NewToolSelector(cfg Config, worker toolSelectorCompleter) *ToolSelector {
+	return NewToolSelectorForCatalog(cfg, worker, nil)
+}
+
+func NewToolSelectorForCatalog(cfg Config, worker toolSelectorCompleter, catalog tools.ToolCatalog) *ToolSelector {
+	metadata := tools.FormatMetadataForCatalog(catalog)
+	if strings.TrimSpace(metadata) == "" {
+		metadata = tools.FormatMetadataForSelector()
+	}
 	return &ToolSelector{
 		cfg:      cfg,
 		worker:   worker,
-		metadata: tools.FormatMetadataForSelector(),
+		metadata: metadata,
 	}
 }
 
-func newToolSelectorFromConfig(cfg Config) selectorEngine {
-	if !cfg.ToolSelectorEnabled {
+func newToolSelectorFromConfig(cfg Config, catalog tools.ToolCatalog) selectorEngine {
+	if !cfg.ToolSelector.Enabled {
 		return nil
 	}
-	if mode := strings.ToLower(strings.TrimSpace(cfg.ToolSelectorMode)); mode != "" && mode != "llm" {
+	if mode := strings.ToLower(strings.TrimSpace(cfg.ToolSelector.Mode)); mode != "" && mode != "llm" {
 		return nil
 	}
 
-	client := llm.NewClientWithOptions(llm.ClientOptions{
-		Provider:           cfg.Provider,
-		BaseURL:            cfg.BaseURL,
-		APIKey:             cfg.APIKey,
-		Model:              toolSelectorModel(cfg),
-		ChatPath:           cfg.ChatPath,
-		Headers:            cfg.ProviderHeaders,
-		AnthropicVersion:   cfg.AnthropicVersion,
-		AnthropicMaxTokens: cfg.AnthropicMaxTokens,
-	})
-	return NewToolSelector(cfg, client)
+	client := llm.NewClientWithOptions(providerClientOptions(cfg, toolSelectorModel(cfg)))
+	return NewToolSelectorForCatalog(cfg, client, catalog)
 }
 
 func toolSelectorModel(cfg Config) string {
-	if model := strings.TrimSpace(cfg.ToolSelectorModel); model != "" {
+	if model := strings.TrimSpace(cfg.ToolSelector.Model); model != "" {
 		return model
 	}
-	if model := strings.TrimSpace(cfg.WorkerModel); model != "" {
+	if model := strings.TrimSpace(cfg.Worker.Model); model != "" {
 		return model
 	}
-	return strings.TrimSpace(cfg.Model)
+	return strings.TrimSpace(cfg.Provider.Model)
 }
 
 func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) string {
@@ -93,19 +92,19 @@ func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) string {
 }
 
 func (ts *ToolSelector) SelectTools(ctx context.Context, userMessage string, recentHistory []llm.Message, decisionHint string, traceID string) ToolSelectorResult {
-	if ts == nil || !ts.cfg.ToolSelectorEnabled {
+	if ts == nil || !ts.cfg.ToolSelector.Enabled {
 		return ToolSelectorResult{Mode: "all", Fallback: true}
 	}
-	if mode := strings.ToLower(strings.TrimSpace(ts.cfg.ToolSelectorMode)); mode != "" && mode != "llm" {
-		err := fmt.Errorf("unsupported tool selector mode %q", ts.cfg.ToolSelectorMode)
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=unsupported_mode mode=%q", strings.TrimSpace(traceID), ts.cfg.ToolSelectorMode)
+	if mode := strings.ToLower(strings.TrimSpace(ts.cfg.ToolSelector.Mode)); mode != "" && mode != "llm" {
+		err := fmt.Errorf("unsupported tool selector mode %q", ts.cfg.ToolSelector.Mode)
+		log.Printf("trace_id=%s action=TOOL_SELECTOR status=unsupported_mode mode=%q", strings.TrimSpace(traceID), ts.cfg.ToolSelector.Mode)
 		return ToolSelectorResult{Mode: "all", Fallback: true, Error: err}
 	}
 	if ts.worker == nil {
 		return ToolSelectorResult{Mode: "all", Fallback: true, Error: fmt.Errorf("selector worker is not configured")}
 	}
 
-	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(ts.cfg.ToolSelectorTimeoutMS)*time.Millisecond)
+	timeoutCtx, cancel := context.WithTimeout(ctx, time.Duration(ts.cfg.ToolSelector.TimeoutMS)*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
@@ -219,8 +218,8 @@ func (ts *ToolSelector) parseResponse(response string, traceID string, latencyMS
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=empty_tools latency_ms=%d", trimmedTraceID, latencyMS)
 		return ToolSelectorResult{Mode: "all", Fallback: true, Error: fmt.Errorf("selector returned empty tool list")}
 	}
-	if parsed.Confidence < ts.cfg.ToolSelectorConfidence {
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=low_confidence latency_ms=%d confidence=%.2f threshold=%.2f", trimmedTraceID, latencyMS, parsed.Confidence, ts.cfg.ToolSelectorConfidence)
+	if parsed.Confidence < ts.cfg.ToolSelector.Confidence {
+		log.Printf("trace_id=%s action=TOOL_SELECTOR status=low_confidence latency_ms=%d confidence=%.2f threshold=%.2f", trimmedTraceID, latencyMS, parsed.Confidence, ts.cfg.ToolSelector.Confidence)
 		return ToolSelectorResult{Mode: "all", Fallback: true, Confidence: parsed.Confidence, Reason: parsed.Reason}
 	}
 	if !containsToolName(selected, "ask_human") {

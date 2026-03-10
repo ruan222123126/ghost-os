@@ -1,92 +1,118 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	"ghost-os/bridge/llm"
 )
 
+type ProviderConfig struct {
+	Type               llm.Provider
+	APIKey             string
+	BaseURL            string
+	Model              string
+	Headers            map[string]string
+	AnthropicVersion   string
+	AnthropicMaxTokens int
+}
+
+type MemoryRuntimeConfig struct {
+	WarmPath                                  string
+	ColdPath                                  string
+	LedgerPath                                string
+	LedgerReadEnabled                         bool
+	AutoRecallEnabled                         bool
+	AutoRecallLimit                           int
+	WarmTTL                                   time.Duration
+	TemporalDecayEnabled                      bool
+	TemporalDecayHalfLife                     time.Duration
+	AnchorEnabled                             bool
+	AnchorMinWeight                           float64
+	EvolutionInterval                         time.Duration
+	EvolutionEnabled                          bool
+	EvolutionUseWorker                        bool
+	EvolutionBatchSize                        int
+	GraphEnabled                              bool
+	GraphPath                                 string
+	GraphExtractOnArchive                     bool
+	GraphExtractOnEvolve                      bool
+	GraphMaxHops                              int
+	GraphMaxHits                              int
+	GraphMinConfidence                        float64
+	GraphNamespace                            string
+	GraphDebugEnabled                         bool
+	DecisionEnabled                           bool
+	DecisionCaptureOnTurn                     bool
+	DecisionPath                              string
+	DecisionMaxHits                           int
+	DecisionMinConfidence                     float64
+	DecisionMinReuseScore                     float64
+	DecisionRecipeEnabled                     bool
+	DecisionRecipeInterval                    time.Duration
+	DecisionRecipeMinSupport                  int
+	DecisionDebugEnabled                      bool
+	DecisionSelectorHintEnabled               bool
+	DecisionRecipeReuseEnabled                bool
+	DecisionRecipeReuseEnabledSet             bool
+	DecisionRecipeExecutionTrackingEnabled    bool
+	DecisionRecipeExecutionTrackingEnabledSet bool
+	DecisionRecipeBackfillEnabled             bool
+	DecisionRecipeBackfillEnabledSet          bool
+	DecisionRecipeDefaultEnabled              bool
+	DecisionRecipeDefaultEnabledSet           bool
+	DecisionRecipeDefaultGrayPercent          int
+	DecisionRecipeMinSelectionConfidence      float64
+	DecisionRecipeMinSuccessRate              float64
+	DecisionRecipeBackfillBatchSize           int
+	DecisionRecipeBackfillInterval            time.Duration
+}
+
+type RSSConfig struct {
+	FeedsPath           string
+	InboxPath           string
+	BriefingsPath       string
+	ReportsPath         string
+	PollEnabled         bool
+	PollInterval        time.Duration
+	PollMaxItemsPerFeed int
+	AIBatchSize         int
+	BriefingEnabled     bool
+	BriefingInterval    time.Duration
+}
+
+type WorkerConfig struct {
+	Model          string
+	MaxConcurrency int
+	MaxFiles       int
+	MaxFileChunks  int
+}
+
+type ToolSelectorConfig struct {
+	Enabled    bool
+	Mode       string
+	Model      string
+	TimeoutMS  int
+	Confidence float64
+	Shadow     bool
+	RecentMsgs int
+	Allowlist  []string
+	Blocklist  []string
+}
+
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider                                        llm.Provider
-	APIKey                                          string
-	BaseURL                                         string
-	Model                                           string
-	NativePersistent                                bool
-	WorkerModel                                     string
-	ChatPath                                        string
-	PromptsPath                                     string
-	SessionsPath                                    string
-	RSSFeedsPath                                    string
-	RSSInboxPath                                    string
-	RSSPollEnabled                                  bool
-	RSSPollInterval                                 time.Duration
-	RSSPollMaxItemsPerFeed                          int
-	RSSAIBatchSize                                  int
-	MemoryWarmPath                                  string
-	MemoryColdPath                                  string
-	MemoryLedgerPath                                string
-	MemoryLedgerDualWrite                           bool
-	MemoryLedgerReadEnabled                         bool
-	MemoryLedgerShadowCompare                       bool
-	MemoryAutoRecallEnabled                         bool
-	MemoryAutoRecallLimit                           int
-	MemoryWarmTTL                                   time.Duration
-	MemoryTemporalDecayEnabled                      bool
-	MemoryTemporalDecayHalfLife                     time.Duration
-	MemoryAnchorEnabled                             bool
-	MemoryAnchorMinWeight                           float64
-	MemoryEvolutionInterval                         time.Duration
-	MemoryEvolutionEnabled                          bool
-	MemoryEvolutionUseWorker                        bool
-	MemoryEvolutionBatchSize                        int
-	MemoryGraphEnabled                              bool
-	MemoryGraphPath                                 string
-	MemoryGraphExtractOnArchive                     bool
-	MemoryGraphExtractOnEvolve                      bool
-	MemoryGraphMaxHops                              int
-	MemoryGraphMaxHits                              int
-	MemoryGraphMinConfidence                        float64
-	MemoryGraphNamespace                            string
-	MemoryGraphDebugEnabled                         bool
-	MemoryDecisionEnabled                           bool
-	MemoryDecisionCaptureOnTurn                     bool
-	MemoryDecisionPath                              string
-	MemoryDecisionMaxHits                           int
-	MemoryDecisionMinConfidence                     float64
-	MemoryDecisionMinReuseScore                     float64
-	MemoryDecisionRecipeEnabled                     bool
-	MemoryDecisionRecipeInterval                    time.Duration
-	MemoryDecisionRecipeMinSupport                  int
-	MemoryDecisionDebugEnabled                      bool
-	MemoryDecisionSelectorHintEnabled               bool
-	MemoryDecisionRecipeReuseEnabled                bool
-	MemoryDecisionRecipeReuseEnabledSet             bool
-	MemoryDecisionRecipeExecutionTrackingEnabled    bool
-	MemoryDecisionRecipeExecutionTrackingEnabledSet bool
-	MemoryDecisionRecipeBackfillEnabled             bool
-	MemoryDecisionRecipeBackfillEnabledSet          bool
-	MemoryDecisionRecipeDefaultEnabled              bool
-	MemoryDecisionRecipeDefaultEnabledSet           bool
-	MemoryDecisionRecipeDefaultGrayPercent          int
-	MemoryDecisionRecipeMinSelectionConfidence      float64
-	MemoryDecisionRecipeMinSuccessRate              float64
-	MemoryDecisionRecipeBackfillBatchSize           int
-	MemoryDecisionRecipeBackfillInterval            time.Duration
-	ProviderHeaders                                 map[string]string
-	AnthropicVersion                                string
-	AnthropicMaxTokens                              int
-	MaxTurns                                        int
-	WorkerMaxConcurrency                            int
-	WorkerMaxFiles                                  int
-	WorkerMaxFileChunks                             int
-	ToolSelectorEnabled                             bool
-	ToolSelectorMode                                string
-	ToolSelectorModel                               string
-	ToolSelectorTimeoutMS                           int
-	ToolSelectorConfidence                          float64
-	ToolSelectorShadow                              bool
-	ToolSelectorRecentMsgs                          int
+	Provider              ProviderConfig
+	Memory                MemoryRuntimeConfig
+	RSS                   RSSConfig
+	Worker                WorkerConfig
+	ToolSelector          ToolSelectorConfig
+	NativePersistent      bool
+	ChatPath              string
+	PromptsPath           string
+	SessionsPath          string
+	WebSearchTavilyAPIKey string
+	MaxTurns              int
 }
 
 type runtimeConfig struct {
@@ -108,9 +134,12 @@ const (
 	defaultSessionsPath                               = "~/.ghost-os/sessions"
 	defaultRSSFeedsPath                               = "~/.ghost-os/rss/feeds.json"
 	defaultRSSInboxPath                               = "~/.ghost-os/rss/inbox.json"
+	defaultRSSBriefingsPath                           = "~/.ghost-os/rss/briefings.json"
+	defaultRSSReportsPath                             = "~/.ghost-os/rss/reports/index.json"
 	defaultRSSPollInterval                            = 15 * time.Minute
 	defaultRSSPollMaxItemsPerFeed                     = 10
 	defaultRSSAIBatchSize                             = 5
+	defaultRSSBriefingInterval                        = 30 * time.Minute
 	defaultTasksPath                                  = "~/.ghost-os/tasks"
 	defaultMemoryWarmPath                             = "~/.ghost-os/memory/warm.json"
 	defaultMemoryColdPath                             = "~/.ghost-os/memory/cold"
@@ -148,3 +177,20 @@ const (
 	defaultToolSelectorConfidence                     = 0.75
 	defaultToolSelectorRecentMsgs                     = 6
 )
+
+func providerClientOptions(cfg Config, model string) llm.ClientOptions {
+	resolvedModel := strings.TrimSpace(model)
+	if resolvedModel == "" {
+		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
+	}
+	return llm.ClientOptions{
+		Provider:           cfg.Provider.Type,
+		BaseURL:            cfg.Provider.BaseURL,
+		APIKey:             cfg.Provider.APIKey,
+		Model:              resolvedModel,
+		ChatPath:           cfg.ChatPath,
+		Headers:            cfg.Provider.Headers,
+		AnthropicVersion:   cfg.Provider.AnthropicVersion,
+		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
+	}
+}

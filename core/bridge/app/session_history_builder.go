@@ -14,14 +14,14 @@ import (
 
 // SessionHistoryBuilder 负责会话装载与 Agent 历史恢复。
 type SessionHistoryBuilder struct {
-	cfg          Config
+	provider     ProviderConfig
 	systemPrompt string
 	sessionStore *session.Store
 }
 
-func newSessionHistoryBuilder(cfg Config, systemPrompt string, sessionStore *session.Store) *SessionHistoryBuilder {
+func newSessionHistoryBuilder(provider ProviderConfig, systemPrompt string, sessionStore *session.Store) *SessionHistoryBuilder {
 	return &SessionHistoryBuilder{
-		cfg:          cfg,
+		provider:     provider,
 		systemPrompt: strings.TrimSpace(systemPrompt),
 		sessionStore: sessionStore,
 	}
@@ -64,9 +64,13 @@ func (b *SessionHistoryBuilder) BuildHistoryWithResolvedQuestions(sess *session.
 		return agent.NewHistoryFromMessages(nil), resolved
 	}
 
-	contextLimit := session.GetContextLimit(b.cfg.Provider, b.cfg.Model)
+	contextLimit := session.GetContextLimit(b.provider.Type, b.provider.Model)
 	messages := messagesWithSystemPrompt(sess.GetMessages(contextLimit), b.systemPrompt)
-	return agent.NewHistoryFromMessages(messages), resolved
+	history := agent.NewHistoryFromMessages(messages)
+	if sess != nil && !sess.ConversationState.IsZero() && sess.ConversationState.Matches(b.provider.Type, b.provider.BaseURL, b.provider.Model) {
+		history.SetConversationState(sess.ConversationState)
+	}
+	return history, resolved
 }
 
 // injectAnsweredHumanResponses 将会话中已答复的人类问题转换为 tool result 消息。
@@ -103,6 +107,25 @@ func injectAnsweredHumanResponses(sess *session.Session) []memory.DecisionAnswer
 			"question_id": item.QuestionID,
 			"prompt":      item.Question.Prompt,
 			"answer":      item.Answer,
+		}
+		if selectionMode := strings.TrimSpace(item.Question.SelectionMode); selectionMode != "" {
+			payload["selection_mode"] = selectionMode
+		}
+		if len(item.Question.Options) > 0 {
+			options := make([]map[string]any, 0, len(item.Question.Options))
+			for _, option := range item.Question.Options {
+				label := strings.TrimSpace(option.Label)
+				if label == "" {
+					continue
+				}
+				options = append(options, map[string]any{
+					"label":        label,
+					"allow_custom": option.AllowCustom,
+				})
+			}
+			if len(options) > 0 {
+				payload["options"] = options
+			}
 		}
 		encoded, err := json.Marshal(payload)
 		if err != nil {

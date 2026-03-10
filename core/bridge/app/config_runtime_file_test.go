@@ -77,6 +77,7 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	rssPollInterval := "20m"
 	rssPollMaxItemsPerFeed := 12
 	rssAIBatchSize := 6
+	webSearchTavilyAPIKey := "file-tavily-key"
 	memoryWarmPath := "/tmp/warm.json"
 	memoryColdPath := "/tmp/cold"
 	memoryGraphPath := "/tmp/graph"
@@ -111,6 +112,8 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	workerMaxFiles := 8
 	toolSelectorEnabled := true
 	toolSelectorMode := "rules"
+	toolAllowlist := []string{"search_files", "read_file"}
+	toolBlocklist := []string{"bash_exec"}
 	bindAddr := "0.0.0.0:9090"
 	apiToken := "secret-token"
 	if err := writeBridgeFileConfig(configPathFromEnv(), bridgeFileConfig{
@@ -132,6 +135,7 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 		RSSPollInterval:                   &rssPollInterval,
 		RSSPollMaxItemsPerFeed:            &rssPollMaxItemsPerFeed,
 		RSSAIBatchSize:                    &rssAIBatchSize,
+		WebSearchTavilyAPIKey:             &webSearchTavilyAPIKey,
 		MemoryWarmPath:                    &memoryWarmPath,
 		MemoryColdPath:                    &memoryColdPath,
 		MemoryGraphPath:                   &memoryGraphPath,
@@ -166,6 +170,8 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 		WorkerMaxFiles:                    &workerMaxFiles,
 		ToolSelectorEnabled:               &toolSelectorEnabled,
 		ToolSelectorMode:                  &toolSelectorMode,
+		ToolAllowlist:                     toolAllowlist,
+		ToolBlocklist:                     toolBlocklist,
 		BindAddr:                          &bindAddr,
 		APIToken:                          &apiToken,
 		CORSOrigins:                       []string{"http://localhost:5173"},
@@ -177,8 +183,8 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if cfg.WorkerModel != workerModel {
-		t.Fatalf("unexpected worker model: got %q want %q", cfg.WorkerModel, workerModel)
+	if cfg.Worker.Model != workerModel {
+		t.Fatalf("unexpected worker model: got %q want %q", cfg.Worker.Model, workerModel)
 	}
 	if cfg.PromptsPath != promptsPath {
 		t.Fatalf("unexpected prompts path: got %q want %q", cfg.PromptsPath, promptsPath)
@@ -186,115 +192,124 @@ func TestLoadConfigReadsStaticFieldsFromTomlConfig(t *testing.T) {
 	if cfg.SessionsPath != sessionsPath {
 		t.Fatalf("unexpected sessions path: got %q want %q", cfg.SessionsPath, sessionsPath)
 	}
-	if cfg.RSSFeedsPath != rssFeedsPath {
-		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSSFeedsPath, rssFeedsPath)
+	if cfg.RSS.FeedsPath != rssFeedsPath {
+		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSS.FeedsPath, rssFeedsPath)
 	}
-	if cfg.RSSInboxPath != rssInboxPath {
-		t.Fatalf("unexpected rss inbox path: got %q want %q", cfg.RSSInboxPath, rssInboxPath)
+	if cfg.RSS.InboxPath != rssInboxPath {
+		t.Fatalf("unexpected rss inbox path: got %q want %q", cfg.RSS.InboxPath, rssInboxPath)
 	}
-	if cfg.RSSPollEnabled {
+	if cfg.RSS.PollEnabled {
 		t.Fatalf("expected rss poll to be disabled")
 	}
-	if cfg.RSSPollInterval != 20*time.Minute {
-		t.Fatalf("unexpected rss poll interval: got %s want %s", cfg.RSSPollInterval, 20*time.Minute)
+	if cfg.RSS.PollInterval != 20*time.Minute {
+		t.Fatalf("unexpected rss poll interval: got %s want %s", cfg.RSS.PollInterval, 20*time.Minute)
 	}
-	if cfg.RSSPollMaxItemsPerFeed != rssPollMaxItemsPerFeed {
-		t.Fatalf("unexpected rss poll max items: got %d want %d", cfg.RSSPollMaxItemsPerFeed, rssPollMaxItemsPerFeed)
+	if cfg.RSS.PollMaxItemsPerFeed != rssPollMaxItemsPerFeed {
+		t.Fatalf("unexpected rss poll max items: got %d want %d", cfg.RSS.PollMaxItemsPerFeed, rssPollMaxItemsPerFeed)
 	}
-	if cfg.RSSAIBatchSize != rssAIBatchSize {
-		t.Fatalf("unexpected rss ai batch size: got %d want %d", cfg.RSSAIBatchSize, rssAIBatchSize)
+	if cfg.RSS.AIBatchSize != rssAIBatchSize {
+		t.Fatalf("unexpected rss ai batch size: got %d want %d", cfg.RSS.AIBatchSize, rssAIBatchSize)
 	}
-	if cfg.MemoryWarmPath != memoryWarmPath {
-		t.Fatalf("unexpected warm path: got %q want %q", cfg.MemoryWarmPath, memoryWarmPath)
+	if cfg.WebSearchTavilyAPIKey != webSearchTavilyAPIKey {
+		t.Fatalf("unexpected tavily api key: got %q want %q", cfg.WebSearchTavilyAPIKey, webSearchTavilyAPIKey)
 	}
-	if cfg.MemoryColdPath != memoryColdPath {
-		t.Fatalf("unexpected cold path: got %q want %q", cfg.MemoryColdPath, memoryColdPath)
+	if cfg.Memory.WarmPath != memoryWarmPath {
+		t.Fatalf("unexpected warm path: got %q want %q", cfg.Memory.WarmPath, memoryWarmPath)
 	}
-	if cfg.MemoryGraphPath != memoryGraphPath {
-		t.Fatalf("unexpected graph path: got %q want %q", cfg.MemoryGraphPath, memoryGraphPath)
+	if cfg.Memory.ColdPath != memoryColdPath {
+		t.Fatalf("unexpected cold path: got %q want %q", cfg.Memory.ColdPath, memoryColdPath)
 	}
-	if cfg.MemoryWarmTTL.Hours() != 48 {
-		t.Fatalf("unexpected warm ttl: got %s want 48h", cfg.MemoryWarmTTL)
+	if cfg.Memory.GraphPath != memoryGraphPath {
+		t.Fatalf("unexpected graph path: got %q want %q", cfg.Memory.GraphPath, memoryGraphPath)
 	}
-	if !cfg.MemoryTemporalDecayEnabled {
+	if cfg.Memory.WarmTTL.Hours() != 48 {
+		t.Fatalf("unexpected warm ttl: got %s want 48h", cfg.Memory.WarmTTL)
+	}
+	if !cfg.Memory.TemporalDecayEnabled {
 		t.Fatalf("expected temporal decay to be enabled")
 	}
-	if cfg.MemoryTemporalDecayHalfLife.Hours() != 96 {
-		t.Fatalf("unexpected temporal half life: got %s want 96h", cfg.MemoryTemporalDecayHalfLife)
+	if cfg.Memory.TemporalDecayHalfLife.Hours() != 96 {
+		t.Fatalf("unexpected temporal half life: got %s want 96h", cfg.Memory.TemporalDecayHalfLife)
 	}
-	if !cfg.MemoryAnchorEnabled {
+	if !cfg.Memory.AnchorEnabled {
 		t.Fatalf("expected anchor extraction to be enabled")
 	}
-	if cfg.MemoryAnchorMinWeight != memoryAnchorMinWeight {
-		t.Fatalf("unexpected anchor min weight: got %v want %v", cfg.MemoryAnchorMinWeight, memoryAnchorMinWeight)
+	if cfg.Memory.AnchorMinWeight != memoryAnchorMinWeight {
+		t.Fatalf("unexpected anchor min weight: got %v want %v", cfg.Memory.AnchorMinWeight, memoryAnchorMinWeight)
 	}
-	if cfg.MemoryEvolutionInterval.Hours() != 2 {
-		t.Fatalf("unexpected evolution interval: got %s want 2h", cfg.MemoryEvolutionInterval)
+	if cfg.Memory.EvolutionInterval.Hours() != 2 {
+		t.Fatalf("unexpected evolution interval: got %s want 2h", cfg.Memory.EvolutionInterval)
 	}
-	if !cfg.MemoryEvolutionUseWorker {
+	if !cfg.Memory.EvolutionUseWorker {
 		t.Fatalf("expected evolution worker usage to be enabled")
 	}
-	if cfg.MemoryEvolutionBatchSize != memoryEvolutionBatchSize {
-		t.Fatalf("unexpected evolution batch size: got %d want %d", cfg.MemoryEvolutionBatchSize, memoryEvolutionBatchSize)
+	if cfg.Memory.EvolutionBatchSize != memoryEvolutionBatchSize {
+		t.Fatalf("unexpected evolution batch size: got %d want %d", cfg.Memory.EvolutionBatchSize, memoryEvolutionBatchSize)
 	}
-	if !cfg.MemoryGraphEnabled {
+	if !cfg.Memory.GraphEnabled {
 		t.Fatalf("expected graph memory to be enabled")
 	}
-	if !cfg.MemoryGraphExtractOnArchive || cfg.MemoryGraphExtractOnEvolve {
-		t.Fatalf("unexpected graph extraction flags: archive=%v evolve=%v", cfg.MemoryGraphExtractOnArchive, cfg.MemoryGraphExtractOnEvolve)
+	if !cfg.Memory.GraphExtractOnArchive || cfg.Memory.GraphExtractOnEvolve {
+		t.Fatalf("unexpected graph extraction flags: archive=%v evolve=%v", cfg.Memory.GraphExtractOnArchive, cfg.Memory.GraphExtractOnEvolve)
 	}
-	if cfg.MemoryGraphMaxHops != memoryGraphMaxHops || cfg.MemoryGraphMaxHits != memoryGraphMaxHits {
-		t.Fatalf("unexpected graph hops/hits: hops=%d hits=%d", cfg.MemoryGraphMaxHops, cfg.MemoryGraphMaxHits)
+	if cfg.Memory.GraphMaxHops != memoryGraphMaxHops || cfg.Memory.GraphMaxHits != memoryGraphMaxHits {
+		t.Fatalf("unexpected graph hops/hits: hops=%d hits=%d", cfg.Memory.GraphMaxHops, cfg.Memory.GraphMaxHits)
 	}
-	if cfg.MemoryGraphMinConfidence != memoryGraphMinConfidence {
-		t.Fatalf("unexpected graph min confidence: got %v want %v", cfg.MemoryGraphMinConfidence, memoryGraphMinConfidence)
+	if cfg.Memory.GraphMinConfidence != memoryGraphMinConfidence {
+		t.Fatalf("unexpected graph min confidence: got %v want %v", cfg.Memory.GraphMinConfidence, memoryGraphMinConfidence)
 	}
-	if cfg.MemoryGraphNamespace != memoryGraphNamespace {
-		t.Fatalf("unexpected graph namespace: got %q want %q", cfg.MemoryGraphNamespace, memoryGraphNamespace)
+	if cfg.Memory.GraphNamespace != memoryGraphNamespace {
+		t.Fatalf("unexpected graph namespace: got %q want %q", cfg.Memory.GraphNamespace, memoryGraphNamespace)
 	}
-	if !cfg.MemoryGraphDebugEnabled {
+	if !cfg.Memory.GraphDebugEnabled {
 		t.Fatalf("expected graph debug to be enabled")
 	}
-	if !cfg.MemoryDecisionEnabled {
+	if !cfg.Memory.DecisionEnabled {
 		t.Fatalf("expected decision memory to be enabled")
 	}
-	if cfg.MemoryDecisionCaptureOnTurn {
+	if cfg.Memory.DecisionCaptureOnTurn {
 		t.Fatalf("expected decision capture on turn to be disabled")
 	}
-	if cfg.MemoryDecisionPath != memoryDecisionPath {
-		t.Fatalf("unexpected decision path: got %q want %q", cfg.MemoryDecisionPath, memoryDecisionPath)
+	if cfg.Memory.DecisionPath != memoryDecisionPath {
+		t.Fatalf("unexpected decision path: got %q want %q", cfg.Memory.DecisionPath, memoryDecisionPath)
 	}
-	if cfg.MemoryDecisionMaxHits != memoryDecisionMaxHits {
-		t.Fatalf("unexpected decision max hits: got %d want %d", cfg.MemoryDecisionMaxHits, memoryDecisionMaxHits)
+	if cfg.Memory.DecisionMaxHits != memoryDecisionMaxHits {
+		t.Fatalf("unexpected decision max hits: got %d want %d", cfg.Memory.DecisionMaxHits, memoryDecisionMaxHits)
 	}
-	if cfg.MemoryDecisionMinConfidence != memoryDecisionMinConfidence || cfg.MemoryDecisionMinReuseScore != memoryDecisionMinReuseScore {
-		t.Fatalf("unexpected decision thresholds: confidence=%v reuse=%v", cfg.MemoryDecisionMinConfidence, cfg.MemoryDecisionMinReuseScore)
+	if cfg.Memory.DecisionMinConfidence != memoryDecisionMinConfidence || cfg.Memory.DecisionMinReuseScore != memoryDecisionMinReuseScore {
+		t.Fatalf("unexpected decision thresholds: confidence=%v reuse=%v", cfg.Memory.DecisionMinConfidence, cfg.Memory.DecisionMinReuseScore)
 	}
-	if !cfg.MemoryDecisionRecipeEnabled {
+	if !cfg.Memory.DecisionRecipeEnabled {
 		t.Fatalf("expected decision recipe to be enabled")
 	}
-	if cfg.MemoryDecisionRecipeInterval.Hours() != 6 {
-		t.Fatalf("unexpected decision recipe interval: got %s want 6h", cfg.MemoryDecisionRecipeInterval)
+	if cfg.Memory.DecisionRecipeInterval.Hours() != 6 {
+		t.Fatalf("unexpected decision recipe interval: got %s want 6h", cfg.Memory.DecisionRecipeInterval)
 	}
-	if cfg.MemoryDecisionRecipeMinSupport != memoryDecisionRecipeMinSupport {
-		t.Fatalf("unexpected decision recipe min support: got %d want %d", cfg.MemoryDecisionRecipeMinSupport, memoryDecisionRecipeMinSupport)
+	if cfg.Memory.DecisionRecipeMinSupport != memoryDecisionRecipeMinSupport {
+		t.Fatalf("unexpected decision recipe min support: got %d want %d", cfg.Memory.DecisionRecipeMinSupport, memoryDecisionRecipeMinSupport)
 	}
-	if !cfg.MemoryDecisionDebugEnabled {
+	if !cfg.Memory.DecisionDebugEnabled {
 		t.Fatalf("expected decision debug to be enabled")
 	}
-	if cfg.MemoryDecisionSelectorHintEnabled {
+	if cfg.Memory.DecisionSelectorHintEnabled {
 		t.Fatalf("expected decision selector hint to be disabled")
 	}
 	if cfg.MaxTurns != maxTurns {
 		t.Fatalf("unexpected max turns: got %d want %d", cfg.MaxTurns, maxTurns)
 	}
-	if cfg.WorkerMaxFiles != workerMaxFiles {
-		t.Fatalf("unexpected worker max files: got %d want %d", cfg.WorkerMaxFiles, workerMaxFiles)
+	if cfg.Worker.MaxFiles != workerMaxFiles {
+		t.Fatalf("unexpected worker max files: got %d want %d", cfg.Worker.MaxFiles, workerMaxFiles)
 	}
-	if !cfg.ToolSelectorEnabled {
+	if !cfg.ToolSelector.Enabled {
 		t.Fatalf("expected tool selector to be enabled")
 	}
-	if cfg.ToolSelectorMode != toolSelectorMode {
-		t.Fatalf("unexpected tool selector mode: got %q want %q", cfg.ToolSelectorMode, toolSelectorMode)
+	if cfg.ToolSelector.Mode != toolSelectorMode {
+		t.Fatalf("unexpected tool selector mode: got %q want %q", cfg.ToolSelector.Mode, toolSelectorMode)
+	}
+	if len(cfg.ToolSelector.Allowlist) != 2 || cfg.ToolSelector.Allowlist[0] != "read_file" || cfg.ToolSelector.Allowlist[1] != "search_files" {
+		t.Fatalf("unexpected tool allowlist: %v", cfg.ToolSelector.Allowlist)
+	}
+	if len(cfg.ToolSelector.Blocklist) != 1 || cfg.ToolSelector.Blocklist[0] != "bash_exec" {
+		t.Fatalf("unexpected tool blocklist: %v", cfg.ToolSelector.Blocklist)
 	}
 }

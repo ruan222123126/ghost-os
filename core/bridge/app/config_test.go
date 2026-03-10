@@ -16,6 +16,8 @@ func TestLoadConfigWithRuntime_LoadsToolSelectorSettings(t *testing.T) {
 	t.Setenv("GHOST_TOOL_SELECTOR_CONFIDENCE", "0.88")
 	t.Setenv("GHOST_TOOL_SELECTOR_SHADOW", "true")
 	t.Setenv("GHOST_TOOL_SELECTOR_RECENT_MESSAGES", "4")
+	t.Setenv("GHOST_TOOL_ALLOWLIST", "search_files, read_file")
+	t.Setenv("GHOST_TOOL_BLOCKLIST", "bash_exec, ask_human")
 
 	cfg, err := loadConfigWithRuntime(runtimeConfig{
 		Provider: llm.ProviderCustom,
@@ -26,26 +28,95 @@ func TestLoadConfigWithRuntime_LoadsToolSelectorSettings(t *testing.T) {
 		t.Fatalf("loadConfigWithRuntime returned error: %v", err)
 	}
 
-	if !cfg.ToolSelectorEnabled {
+	if !cfg.ToolSelector.Enabled {
 		t.Fatal("expected ToolSelectorEnabled to be true")
 	}
-	if cfg.ToolSelectorMode != "llm" {
-		t.Fatalf("unexpected ToolSelectorMode: %q", cfg.ToolSelectorMode)
+	if cfg.ToolSelector.Mode != "llm" {
+		t.Fatalf("unexpected ToolSelectorMode: %q", cfg.ToolSelector.Mode)
 	}
-	if cfg.ToolSelectorModel != "gpt-4o-mini" {
-		t.Fatalf("unexpected ToolSelectorModel: %q", cfg.ToolSelectorModel)
+	if cfg.ToolSelector.Model != "gpt-4o-mini" {
+		t.Fatalf("unexpected ToolSelectorModel: %q", cfg.ToolSelector.Model)
 	}
-	if cfg.ToolSelectorTimeoutMS != 900 {
-		t.Fatalf("unexpected ToolSelectorTimeoutMS: %d", cfg.ToolSelectorTimeoutMS)
+	if cfg.ToolSelector.TimeoutMS != 900 {
+		t.Fatalf("unexpected ToolSelectorTimeoutMS: %d", cfg.ToolSelector.TimeoutMS)
 	}
-	if cfg.ToolSelectorConfidence != 0.88 {
-		t.Fatalf("unexpected ToolSelectorConfidence: %v", cfg.ToolSelectorConfidence)
+	if cfg.ToolSelector.Confidence != 0.88 {
+		t.Fatalf("unexpected ToolSelectorConfidence: %v", cfg.ToolSelector.Confidence)
 	}
-	if !cfg.ToolSelectorShadow {
+	if !cfg.ToolSelector.Shadow {
 		t.Fatal("expected ToolSelectorShadow to be true")
 	}
-	if cfg.ToolSelectorRecentMsgs != 4 {
-		t.Fatalf("unexpected ToolSelectorRecentMsgs: %d", cfg.ToolSelectorRecentMsgs)
+	if cfg.ToolSelector.RecentMsgs != 4 {
+		t.Fatalf("unexpected ToolSelectorRecentMsgs: %d", cfg.ToolSelector.RecentMsgs)
+	}
+	if got, want := cfg.ToolSelector.Allowlist, []string{"read_file", "search_files"}; len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("unexpected ToolAllowlist: got %v want %v", got, want)
+	}
+	if got, want := cfg.ToolSelector.Blocklist, []string{"bash_exec"}; len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("unexpected ToolBlocklist: got %v want %v", got, want)
+	}
+}
+
+func TestInferProviderTypeDetectsCodexModel(t *testing.T) {
+	if got := inferProviderType("", "", "codex-mini-latest"); got != llm.ProviderCodex {
+		t.Fatalf("unexpected provider type: got %q want %q", got, llm.ProviderCodex)
+	}
+}
+
+func TestValidateRuntimeForExecutionRequiresAPIKeyForCodex(t *testing.T) {
+	err := validateRuntimeForExecution(runtimeConfig{
+		Provider: llm.ProviderCodex,
+		BaseURL:  "https://api.openai.com/v1",
+		Model:    "codex-mini-latest",
+	})
+	if err == nil {
+		t.Fatal("expected codex api key validation error")
+	}
+}
+
+func TestLoadConfigWithRuntime_RejectsToolListOverlap(t *testing.T) {
+	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
+	t.Setenv("GHOST_TOOL_ALLOWLIST", "read_file")
+	t.Setenv("GHOST_TOOL_BLOCKLIST", "read_file")
+
+	_, err := loadConfigWithRuntime(runtimeConfig{
+		Provider: llm.ProviderCustom,
+		BaseURL:  "https://example.com/v1",
+		Model:    "gpt-4o",
+	})
+	if err == nil {
+		t.Fatal("expected overlap error")
+	}
+}
+
+func TestLoadConfigWithRuntime_RejectsUnknownToolInList(t *testing.T) {
+	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
+	t.Setenv("GHOST_TOOL_ALLOWLIST", "ghost_tool")
+
+	_, err := loadConfigWithRuntime(runtimeConfig{
+		Provider: llm.ProviderCustom,
+		BaseURL:  "https://example.com/v1",
+		Model:    "gpt-4o",
+	})
+	if err == nil {
+		t.Fatal("expected unknown tool error")
+	}
+}
+
+func TestLoadConfigWithRuntime_LoadsWebSearchTavilyAPIKeyFromEnv(t *testing.T) {
+	t.Setenv("GHOST_CONFIG_PATH", t.TempDir()+"/config.toml")
+	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "env-tavily-key")
+
+	cfg, err := loadConfigWithRuntime(runtimeConfig{
+		Provider: llm.ProviderCustom,
+		BaseURL:  "https://example.com/v1",
+		Model:    "gpt-4o",
+	})
+	if err != nil {
+		t.Fatalf("loadConfigWithRuntime returned error: %v", err)
+	}
+	if cfg.WebSearchTavilyAPIKey != "env-tavily-key" {
+		t.Fatalf("unexpected tavily api key: got %q want %q", cfg.WebSearchTavilyAPIKey, "env-tavily-key")
 	}
 }
 
@@ -83,41 +154,41 @@ func TestLoadConfigWithRuntime_LoadsMemoryDecisionSettings(t *testing.T) {
 		t.Fatalf("loadConfigWithRuntime returned error: %v", err)
 	}
 
-	if !cfg.MemoryDecisionEnabled {
+	if !cfg.Memory.DecisionEnabled {
 		t.Fatalf("expected decision memory to be enabled")
 	}
-	if cfg.MemoryDecisionCaptureOnTurn {
+	if cfg.Memory.DecisionCaptureOnTurn {
 		t.Fatalf("expected decision capture on turn to be disabled")
 	}
-	if cfg.MemoryDecisionPath != "/tmp/decision" {
-		t.Fatalf("unexpected decision path: got %q want %q", cfg.MemoryDecisionPath, "/tmp/decision")
+	if cfg.Memory.DecisionPath != "/tmp/decision" {
+		t.Fatalf("unexpected decision path: got %q want %q", cfg.Memory.DecisionPath, "/tmp/decision")
 	}
-	if cfg.MemoryDecisionMaxHits != 6 {
-		t.Fatalf("unexpected decision max hits: got %d want %d", cfg.MemoryDecisionMaxHits, 6)
+	if cfg.Memory.DecisionMaxHits != 6 {
+		t.Fatalf("unexpected decision max hits: got %d want %d", cfg.Memory.DecisionMaxHits, 6)
 	}
-	if cfg.MemoryDecisionMinConfidence != 0.81 {
-		t.Fatalf("unexpected decision min confidence: got %v want %v", cfg.MemoryDecisionMinConfidence, 0.81)
+	if cfg.Memory.DecisionMinConfidence != 0.81 {
+		t.Fatalf("unexpected decision min confidence: got %v want %v", cfg.Memory.DecisionMinConfidence, 0.81)
 	}
-	if cfg.MemoryDecisionMinReuseScore != 0.77 {
-		t.Fatalf("unexpected decision min reuse score: got %v want %v", cfg.MemoryDecisionMinReuseScore, 0.77)
+	if cfg.Memory.DecisionMinReuseScore != 0.77 {
+		t.Fatalf("unexpected decision min reuse score: got %v want %v", cfg.Memory.DecisionMinReuseScore, 0.77)
 	}
-	if cfg.MemoryDecisionRecipeEnabled {
+	if cfg.Memory.DecisionRecipeEnabled {
 		t.Fatalf("expected decision recipe toggle to be false")
 	}
-	if cfg.MemoryDecisionRecipeInterval != 12*time.Hour {
-		t.Fatalf("unexpected decision recipe interval: got %s want %s", cfg.MemoryDecisionRecipeInterval, 12*time.Hour)
+	if cfg.Memory.DecisionRecipeInterval != 12*time.Hour {
+		t.Fatalf("unexpected decision recipe interval: got %s want %s", cfg.Memory.DecisionRecipeInterval, 12*time.Hour)
 	}
-	if cfg.MemoryDecisionRecipeMinSupport != 5 {
-		t.Fatalf("unexpected decision recipe min support: got %d want %d", cfg.MemoryDecisionRecipeMinSupport, 5)
+	if cfg.Memory.DecisionRecipeMinSupport != 5 {
+		t.Fatalf("unexpected decision recipe min support: got %d want %d", cfg.Memory.DecisionRecipeMinSupport, 5)
 	}
-	if !cfg.MemoryDecisionDebugEnabled {
+	if !cfg.Memory.DecisionDebugEnabled {
 		t.Fatalf("expected decision debug to be enabled")
 	}
-	if cfg.MemoryDecisionSelectorHintEnabled {
+	if cfg.Memory.DecisionSelectorHintEnabled {
 		t.Fatalf("expected selector hint toggle to be disabled")
 	}
-	if cfg.RSSFeedsPath != defaultRSSFeedsPath {
-		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSSFeedsPath, defaultRSSFeedsPath)
+	if cfg.RSS.FeedsPath != defaultRSSFeedsPath {
+		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSS.FeedsPath, defaultRSSFeedsPath)
 	}
 }
 
@@ -138,23 +209,23 @@ func TestLoadConfigWithRuntime_LoadsRSSFeedsPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfigWithRuntime returned error: %v", err)
 	}
-	if cfg.RSSFeedsPath != "/tmp/rss-feeds.json" {
-		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSSFeedsPath, "/tmp/rss-feeds.json")
+	if cfg.RSS.FeedsPath != "/tmp/rss-feeds.json" {
+		t.Fatalf("unexpected rss feeds path: got %q want %q", cfg.RSS.FeedsPath, "/tmp/rss-feeds.json")
 	}
-	if cfg.RSSInboxPath != "/tmp/rss-inbox.json" {
-		t.Fatalf("unexpected rss inbox path: got %q want %q", cfg.RSSInboxPath, "/tmp/rss-inbox.json")
+	if cfg.RSS.InboxPath != "/tmp/rss-inbox.json" {
+		t.Fatalf("unexpected rss inbox path: got %q want %q", cfg.RSS.InboxPath, "/tmp/rss-inbox.json")
 	}
-	if cfg.RSSPollEnabled {
+	if cfg.RSS.PollEnabled {
 		t.Fatal("expected rss poll to be disabled")
 	}
-	if cfg.RSSPollInterval != 10*time.Minute {
-		t.Fatalf("unexpected rss poll interval: got %s want %s", cfg.RSSPollInterval, 10*time.Minute)
+	if cfg.RSS.PollInterval != 10*time.Minute {
+		t.Fatalf("unexpected rss poll interval: got %s want %s", cfg.RSS.PollInterval, 10*time.Minute)
 	}
-	if cfg.RSSPollMaxItemsPerFeed != 15 {
-		t.Fatalf("unexpected rss max items: got %d want %d", cfg.RSSPollMaxItemsPerFeed, 15)
+	if cfg.RSS.PollMaxItemsPerFeed != 15 {
+		t.Fatalf("unexpected rss max items: got %d want %d", cfg.RSS.PollMaxItemsPerFeed, 15)
 	}
-	if cfg.RSSAIBatchSize != 7 {
-		t.Fatalf("unexpected rss ai batch size: got %d want %d", cfg.RSSAIBatchSize, 7)
+	if cfg.RSS.AIBatchSize != 7 {
+		t.Fatalf("unexpected rss ai batch size: got %d want %d", cfg.RSS.AIBatchSize, 7)
 	}
 }
 
@@ -184,43 +255,43 @@ func TestLoadConfigWithRuntime_LoadsMemoryEnhancementSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadConfigWithRuntime returned error: %v", err)
 	}
-	if !cfg.MemoryTemporalDecayEnabled {
+	if !cfg.Memory.TemporalDecayEnabled {
 		t.Fatal("expected MemoryTemporalDecayEnabled to be true")
 	}
-	if cfg.MemoryTemporalDecayHalfLife.Hours() != 120 {
-		t.Fatalf("unexpected MemoryTemporalDecayHalfLife: %s", cfg.MemoryTemporalDecayHalfLife)
+	if cfg.Memory.TemporalDecayHalfLife.Hours() != 120 {
+		t.Fatalf("unexpected MemoryTemporalDecayHalfLife: %s", cfg.Memory.TemporalDecayHalfLife)
 	}
-	if !cfg.MemoryAnchorEnabled {
+	if !cfg.Memory.AnchorEnabled {
 		t.Fatal("expected MemoryAnchorEnabled to be true")
 	}
-	if cfg.MemoryAnchorMinWeight != 0.82 {
-		t.Fatalf("unexpected MemoryAnchorMinWeight: %v", cfg.MemoryAnchorMinWeight)
+	if cfg.Memory.AnchorMinWeight != 0.82 {
+		t.Fatalf("unexpected MemoryAnchorMinWeight: %v", cfg.Memory.AnchorMinWeight)
 	}
-	if cfg.MemoryEvolutionUseWorker {
+	if cfg.Memory.EvolutionUseWorker {
 		t.Fatal("expected MemoryEvolutionUseWorker to be false")
 	}
-	if cfg.MemoryEvolutionBatchSize != 9 {
-		t.Fatalf("unexpected MemoryEvolutionBatchSize: %d", cfg.MemoryEvolutionBatchSize)
+	if cfg.Memory.EvolutionBatchSize != 9 {
+		t.Fatalf("unexpected MemoryEvolutionBatchSize: %d", cfg.Memory.EvolutionBatchSize)
 	}
-	if !cfg.MemoryGraphEnabled {
+	if !cfg.Memory.GraphEnabled {
 		t.Fatal("expected MemoryGraphEnabled to be true")
 	}
-	if cfg.MemoryGraphPath != "/tmp/graph" {
-		t.Fatalf("unexpected MemoryGraphPath: %q", cfg.MemoryGraphPath)
+	if cfg.Memory.GraphPath != "/tmp/graph" {
+		t.Fatalf("unexpected MemoryGraphPath: %q", cfg.Memory.GraphPath)
 	}
-	if !cfg.MemoryGraphExtractOnArchive || cfg.MemoryGraphExtractOnEvolve {
-		t.Fatalf("unexpected graph extraction flags: archive=%v evolve=%v", cfg.MemoryGraphExtractOnArchive, cfg.MemoryGraphExtractOnEvolve)
+	if !cfg.Memory.GraphExtractOnArchive || cfg.Memory.GraphExtractOnEvolve {
+		t.Fatalf("unexpected graph extraction flags: archive=%v evolve=%v", cfg.Memory.GraphExtractOnArchive, cfg.Memory.GraphExtractOnEvolve)
 	}
-	if cfg.MemoryGraphMaxHops != 2 || cfg.MemoryGraphMaxHits != 7 {
-		t.Fatalf("unexpected graph hop/hit limits: hops=%d hits=%d", cfg.MemoryGraphMaxHops, cfg.MemoryGraphMaxHits)
+	if cfg.Memory.GraphMaxHops != 2 || cfg.Memory.GraphMaxHits != 7 {
+		t.Fatalf("unexpected graph hop/hit limits: hops=%d hits=%d", cfg.Memory.GraphMaxHops, cfg.Memory.GraphMaxHits)
 	}
-	if cfg.MemoryGraphMinConfidence != 0.8 {
-		t.Fatalf("unexpected MemoryGraphMinConfidence: %v", cfg.MemoryGraphMinConfidence)
+	if cfg.Memory.GraphMinConfidence != 0.8 {
+		t.Fatalf("unexpected MemoryGraphMinConfidence: %v", cfg.Memory.GraphMinConfidence)
 	}
-	if cfg.MemoryGraphNamespace != "workspace:test" {
-		t.Fatalf("unexpected MemoryGraphNamespace: %q", cfg.MemoryGraphNamespace)
+	if cfg.Memory.GraphNamespace != "workspace:test" {
+		t.Fatalf("unexpected MemoryGraphNamespace: %q", cfg.Memory.GraphNamespace)
 	}
-	if !cfg.MemoryGraphDebugEnabled {
+	if !cfg.Memory.GraphDebugEnabled {
 		t.Fatal("expected MemoryGraphDebugEnabled to be true")
 	}
 }

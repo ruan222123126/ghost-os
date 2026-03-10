@@ -28,11 +28,13 @@ func (f *fakeSelectorCompleter) Complete(ctx context.Context, request llm.Comple
 
 func newSelectorTestConfig() Config {
 	return Config{
-		ToolSelectorEnabled:    true,
-		ToolSelectorMode:       "llm",
-		ToolSelectorTimeoutMS:  20,
-		ToolSelectorConfidence: 0.75,
-		ToolSelectorRecentMsgs: 6,
+		ToolSelector: ToolSelectorConfig{
+			Enabled:    true,
+			Mode:       "llm",
+			TimeoutMS:  20,
+			Confidence: 0.75,
+			RecentMsgs: 6,
+		},
 	}
 }
 
@@ -119,7 +121,7 @@ func TestToolSelector_AutoExpandsScriptExec(t *testing.T) {
 
 func TestToolSelector_UsesTimeoutContext(t *testing.T) {
 	cfg := newSelectorTestConfig()
-	cfg.ToolSelectorTimeoutMS = 10
+	cfg.ToolSelector.TimeoutMS = 10
 	completer := &fakeSelectorCompleter{waitForContext: true}
 	selector := NewToolSelector(cfg, completer)
 

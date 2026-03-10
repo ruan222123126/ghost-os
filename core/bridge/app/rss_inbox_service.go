@@ -51,8 +51,12 @@ type rssInboxClassifier interface {
 type RSSInboxService struct {
 	feedStore       *tools.FeedStore
 	inboxStore      *RSSInboxStore
+	briefingStore   *RSSBriefingStore
+	reportStore     *RSSReportStore
 	fetcher         rssInboxFetcher
 	classifier      rssInboxClassifier
+	briefingBuilder rssBriefingBuilder
+	reportBuilder   rssReportBuilder
 	now             func() time.Time
 	maxItemsPerFeed int
 	aiBatchSize     int
@@ -90,18 +94,22 @@ type llmRSSInboxClassifier struct {
 	cfg     Config
 }
 
-func NewRSSInboxService(feedStore *tools.FeedStore, inboxStore *RSSInboxStore, classifier rssInboxClassifier, cfg Config) *RSSInboxService {
+func NewRSSInboxService(feedStore *tools.FeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier rssInboxClassifier, cfg Config) *RSSInboxService {
 	if classifier == nil {
 		classifier = &llmRSSInboxClassifier{store: nil, timeout: defaultRSSClassifierTimeout, cfg: cfg}
 	}
 	service := &RSSInboxService{
 		feedStore:       feedStore,
 		inboxStore:      inboxStore,
+		briefingStore:   briefingStore,
+		reportStore:     reportStore,
 		fetcher:         defaultRSSInboxFetcher{},
 		classifier:      classifier,
+		briefingBuilder: &llmRSSBriefingBuilder{store: nil, timeout: defaultRSSBriefingTimeout, cfg: cfg},
+		reportBuilder:   &agentRSSReportBuilder{store: nil, timeout: defaultRSSReportTimeout},
 		now:             time.Now,
-		maxItemsPerFeed: normalizeRSSPollMaxItems(cfg.RSSPollMaxItemsPerFeed),
-		aiBatchSize:     normalizeRSSAIBatchSize(cfg.RSSAIBatchSize),
+		maxItemsPerFeed: normalizeRSSPollMaxItems(cfg.RSS.PollMaxItemsPerFeed),
+		aiBatchSize:     normalizeRSSAIBatchSize(cfg.RSS.AIBatchSize),
 	}
 	if llmClassifier, ok := classifier.(*llmRSSInboxClassifier); ok && llmClassifier.store == nil && llmClassifier.client == nil {
 		llmClassifier.store = nil
@@ -123,16 +131,27 @@ func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) 
 	if err != nil {
 		return nil, err
 	}
-	feedStore, err := tools.NewFeedStore(cfg.RSSFeedsPath)
+	feedStore, err := tools.NewFeedStore(cfg.RSS.FeedsPath)
 	if err != nil {
 		return nil, err
 	}
-	inboxStore, err := NewRSSInboxStore(cfg.RSSInboxPath)
+	inboxStore, err := NewRSSInboxStore(cfg.RSS.InboxPath)
+	if err != nil {
+		return nil, err
+	}
+	briefingStore, err := NewRSSBriefingStore(cfg.RSS.BriefingsPath)
+	if err != nil {
+		return nil, err
+	}
+	reportStore, err := NewRSSReportStore(cfg.RSS.ReportsPath)
 	if err != nil {
 		return nil, err
 	}
 	classifier := &llmRSSInboxClassifier{store: store, timeout: defaultRSSClassifierTimeout, cfg: cfg}
-	return NewRSSInboxService(feedStore, inboxStore, classifier, cfg), nil
+	service := NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
+	service.briefingBuilder = &llmRSSBriefingBuilder{store: store, timeout: defaultRSSBriefingTimeout, cfg: cfg}
+	service.reportBuilder = &agentRSSReportBuilder{store: store, timeout: defaultRSSReportTimeout}
+	return service, nil
 }
 
 func (s *RSSInboxService) Poll(ctx context.Context, opts RSSInboxPollOptions) (RSSInboxPollResult, error) {
@@ -285,7 +304,7 @@ func (c *llmRSSInboxClassifier) workerClient() (llm.Completer, Config, error) {
 	)
 	if c != nil && c.store != nil {
 		cfg, err = loadConfigWithRuntime(c.store.RuntimeConfig())
-	} else if c != nil && strings.TrimSpace(c.cfg.Model) != "" {
+	} else if c != nil && strings.TrimSpace(c.cfg.Provider.Model) != "" {
 		cfg = c.cfg
 	} else {
 		cfg, err = LoadConfig()
@@ -293,16 +312,7 @@ func (c *llmRSSInboxClassifier) workerClient() (llm.Completer, Config, error) {
 	if err != nil {
 		return nil, Config{}, err
 	}
-	client := llm.NewClientWithOptions(llm.ClientOptions{
-		Provider:           cfg.Provider,
-		BaseURL:            cfg.BaseURL,
-		APIKey:             cfg.APIKey,
-		Model:              effectiveWorkerModel(cfg),
-		ChatPath:           cfg.ChatPath,
-		Headers:            cfg.ProviderHeaders,
-		AnthropicVersion:   cfg.AnthropicVersion,
-		AnthropicMaxTokens: cfg.AnthropicMaxTokens,
-	})
+	client := llm.NewClientWithOptions(providerClientOptions(cfg, effectiveWorkerModel(cfg)))
 	if c != nil {
 		c.cfg = cfg
 	}

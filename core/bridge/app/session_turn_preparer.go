@@ -26,7 +26,7 @@ type sessionTurnPreparer struct {
 	sessionStore        *session.Store
 	sharedMemoryManager *memory.MemoryManager
 	runRegistry         *RunRegistry
-	selectorFactory     func(Config) selectorEngine
+	selectorFactory     func(Config, tools.ToolCatalog) selectorEngine
 	decisionHintBuilder func(*memory.MemoryManager, memory.SessionScope, string) (string, []memory.DecisionHit, error)
 }
 
@@ -36,7 +36,7 @@ func newSessionTurnPreparer(
 	sessionStore *session.Store,
 	sharedMemoryManager *memory.MemoryManager,
 	runRegistry *RunRegistry,
-	selectorFactory func(Config) selectorEngine,
+	selectorFactory func(Config, tools.ToolCatalog) selectorEngine,
 ) *sessionTurnPreparer {
 	if runtimeFactory == nil {
 		runtimeFactory = newAgentRuntimeFactory()
@@ -62,7 +62,7 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		return nil, err
 	}
 
-	historyBuilder := newSessionHistoryBuilder(deps.cfg, deps.systemPrompt, p.sessionStore)
+	historyBuilder := newSessionHistoryBuilder(deps.cfg.Provider, deps.systemPrompt, p.sessionStore)
 	persistence := newSessionTurnCommitter(p.sessionStore, p.memoryManager(deps.cfg), traceID)
 
 	sess, err := historyBuilder.LoadOrCreateSession(sessionID)
@@ -93,6 +93,7 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		history.UpdateSystemPrompt(systemPrompt)
 	}
 	environment := buildDecisionEnvironment(deps.cfg, strings.TrimSpace(userMessage), preTurnMessages, catalog)
+	p.recordEnvironmentSnapshot(sess.ID, traceID, environment, toolCatalogNames(deps.registry), environment.ToolNames, persistence.memoryManager)
 	p.injectAutoRecall(history, userMessage, sess.ID, traceID, environment, persistence.memoryManager)
 
 	return &sessionTurnState{
@@ -122,31 +123,33 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 	traceID string,
 	selectorEnv memory.DecisionEnvFingerprint,
 ) (tools.ToolCatalog, string) {
+	policy := newToolSelectionPolicy(deps.cfg.ToolSelector)
+	baseCatalog := policy.scopeCatalog(deps.registry)
 	if askHumanContinuation {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=ask_human_continuation", strings.TrimSpace(traceID))
-		return deps.registry, ""
+		return baseCatalog, ""
 	}
-	if !deps.cfg.ToolSelectorEnabled {
-		return deps.registry, ""
+	if !deps.cfg.ToolSelector.Enabled {
+		return baseCatalog, ""
 	}
 
-	selector := p.newSelector(deps.cfg)
+	selector := p.newSelector(deps.cfg, baseCatalog)
 	if selector == nil {
-		return deps.registry, ""
+		return baseCatalog, ""
 	}
 
-	recentMessages := getRecentMessages(history, deps.cfg.ToolSelectorRecentMsgs)
+	recentMessages := getRecentMessages(history, deps.cfg.ToolSelector.RecentMsgs)
 	decisionHint := p.buildDecisionSelectorHint(deps.cfg, sessionID, history, userMessage, askHumanContinuation, traceID, selectorEnv, p.memoryManager(deps.cfg))
 	result := selector.SelectTools(ctx, userMessage, recentMessages, decisionHint, traceID)
-	if deps.cfg.ToolSelectorShadow {
+	if deps.cfg.ToolSelector.Shadow {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=shadow mode=%s tools=%v confidence=%.2f fallback=%t reason=%q error=%v hint_present=%t hint_chars=%d hint_lines=%d", strings.TrimSpace(traceID), result.Mode, result.Tools, result.Confidence, result.Fallback, result.Reason, result.Error, strings.TrimSpace(decisionHint) != "", len([]rune(strings.TrimSpace(decisionHint))), selectorHintLineCount(decisionHint))
-		return deps.registry, ""
+		return baseCatalog, ""
 	}
 	if result.Mode != "subset" || result.Fallback {
-		return deps.registry, ""
+		return baseCatalog, ""
 	}
 
-	scoped := tools.NewScopedCatalog(deps.registry, result.Tools)
+	scoped := tools.NewScopedCatalog(baseCatalog, policy.apply(toolCatalogNames(baseCatalog), result.Tools))
 	return scoped, buildSystemPromptForCatalog(deps.cfg, scoped)
 }
 
@@ -160,7 +163,7 @@ func (p *sessionTurnPreparer) buildDecisionSelectorHint(
 	selectorEnv memory.DecisionEnvFingerprint,
 	memoryManager *memory.MemoryManager,
 ) string {
-	if askHumanContinuation || !cfg.ToolSelectorEnabled || !cfg.MemoryDecisionSelectorHintEnabled || memoryManager == nil {
+	if askHumanContinuation || !cfg.ToolSelector.Enabled || !cfg.Memory.DecisionSelectorHintEnabled || memoryManager == nil {
 		return ""
 	}
 	scope := memory.SessionScope{
@@ -182,11 +185,11 @@ func (p *sessionTurnPreparer) buildDecisionSelectorHint(
 	return strings.TrimSpace(hint)
 }
 
-func (p *sessionTurnPreparer) newSelector(cfg Config) selectorEngine {
+func (p *sessionTurnPreparer) newSelector(cfg Config, catalog tools.ToolCatalog) selectorEngine {
 	if p != nil && p.selectorFactory != nil {
-		return p.selectorFactory(cfg)
+		return p.selectorFactory(cfg, catalog)
 	}
-	return newToolSelectorFromConfig(cfg)
+	return newToolSelectorFromConfig(cfg, catalog)
 }
 
 func selectorHintLineCount(hint string) int {
@@ -274,6 +277,9 @@ func (p *sessionTurnPreparer) injectAutoRecall(history *agent.History, userMessa
 		return
 	}
 	for _, msg := range contextWindow {
+		if msg.Role != llm.RoleSystem || strings.TrimSpace(msg.Text) == "" {
+			continue
+		}
 		history.Append(msg)
 	}
 	if len(contextWindow) > 0 {
@@ -286,6 +292,22 @@ func (p *sessionTurnPreparer) injectAutoRecall(history *agent.History, userMessa
 	}
 }
 
+func (p *sessionTurnPreparer) recordEnvironmentSnapshot(sessionID string, traceID string, environment memory.DecisionEnvFingerprint, knownTools []string, availableTools []string, memoryManager *memory.MemoryManager) {
+	if memoryManager == nil {
+		return
+	}
+	if err := memoryManager.RecordEnvironmentSnapshot(memory.EnvironmentSnapshotInput{
+		SessionID:          strings.TrimSpace(sessionID),
+		TraceID:            strings.TrimSpace(traceID),
+		OccurredAt:         time.Now().UTC(),
+		Environment:        environment,
+		KnownToolNames:     append([]string(nil), knownTools...),
+		AvailableToolNames: append([]string(nil), availableTools...),
+	}); err != nil {
+		log.Printf("trace_id=%s action=MEMORY_ENVIRONMENT_SNAPSHOT status=error session_id=%s error=%v", strings.TrimSpace(traceID), strings.TrimSpace(sessionID), err)
+	}
+}
+
 func buildDecisionEnvironment(cfg Config, userMessage string, preTurnMessages []llm.Message, catalog tools.ToolCatalog) memory.DecisionEnvFingerprint {
 	toolNames := toolCatalogNames(catalog)
 	workspaceRoot := currentWorkspaceRoot()
@@ -295,9 +317,9 @@ func buildDecisionEnvironment(cfg Config, userMessage string, preTurnMessages []
 		Platform:         runtime.GOOS + "/" + runtime.GOARCH,
 		Shell:            strings.TrimSpace(os.Getenv("SHELL")),
 		WorkspaceRoot:    workspaceRoot,
-		Provider:         string(cfg.Provider),
-		Model:            strings.TrimSpace(cfg.Model),
-		GraphNamespace:   strings.TrimSpace(cfg.MemoryGraphNamespace),
+		Provider:         string(cfg.Provider.Type),
+		Model:            strings.TrimSpace(cfg.Provider.Model),
+		GraphNamespace:   strings.TrimSpace(cfg.Memory.GraphNamespace),
 		Domain:           inferDecisionDomain(toolNames),
 		ToolsetSignature: strings.Join(toolNames, ","),
 		PathHints:        pathHints,
@@ -330,12 +352,12 @@ func inferDecisionDomain(toolNames []string) string {
 	for _, name := range toolNames {
 		seen[strings.TrimSpace(name)] = struct{}{}
 	}
-	for _, name := range []string{"read_file", "read_and_summarize", "search_files", "apply_diff", "bash_exec", "script_exec", "list_files"} {
+	for _, name := range []string{"read_file", "read_and_summarize", "search_files", "send_file", "apply_diff", "bash_exec", "script_exec", "list_files"} {
 		if _, ok := seen[name]; ok {
 			return "coding"
 		}
 	}
-	for _, name := range []string{"browser_action", "web_search"} {
+	for _, name := range []string{"browser_action", "screen_action", "web_search", "feed_subscribe", "feed_list", "feed_update", "feed_unsubscribe", "rss_fetch"} {
 		if _, ok := seen[name]; ok {
 			return "browser"
 		}

@@ -10,9 +10,12 @@ import (
 )
 
 const (
-	busActionRSSInboxPoll = "RSS_INBOX_POLL"
-	busActionRSSInboxList = "RSS_INBOX_LIST"
-	busActionRSSInboxGet  = "RSS_INBOX_GET"
+	busActionRSSInboxPoll     = "RSS_INBOX_POLL"
+	busActionRSSInboxList     = "RSS_INBOX_LIST"
+	busActionRSSInboxGet      = "RSS_INBOX_GET"
+	busActionRSSInboxGroups   = "RSS_INBOX_GROUPS"
+	busActionRSSBriefingBuild = "RSS_BRIEFING_BUILD"
+	busActionRSSBriefingGet   = "RSS_BRIEFING_GET"
 )
 
 type rssInboxPollParams struct {
@@ -34,6 +37,29 @@ type rssInboxListParams struct {
 
 type rssInboxGetParams struct {
 	ID string `json:"id"`
+}
+
+type rssInboxGroupsParams struct {
+	FeedID        string `json:"feed_id,omitempty"`
+	Tag           string `json:"tag,omitempty"`
+	Importance    string `json:"importance,omitempty"`
+	WindowHours   int    `json:"window_hours,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
+	ItemLimit     int    `json:"item_limit,omitempty"`
+	ItemsPerGroup int    `json:"items_per_group,omitempty"`
+}
+
+type rssBriefingParams struct {
+	FeedID          string `json:"feed_id,omitempty"`
+	Tag             string `json:"tag,omitempty"`
+	Importance      string `json:"importance,omitempty"`
+	WindowHours     int    `json:"window_hours,omitempty"`
+	GroupLimit      int    `json:"group_limit,omitempty"`
+	ItemLimit       int    `json:"item_limit,omitempty"`
+	ItemsPerGroup   int    `json:"items_per_group,omitempty"`
+	HighlightsLimit int    `json:"highlights_limit,omitempty"`
+	TraceID         string `json:"trace_id,omitempty"`
+	TaskID          string `json:"task_id,omitempty"`
 }
 
 func (s *bridgeService) requireRSSInbox() (*RSSInboxService, int, error) {
@@ -110,6 +136,71 @@ func (s *bridgeService) executeRSSInboxGetAction(params rssInboxGetParams, trace
 	return item, http.StatusOK, nil
 }
 
+func (s *bridgeService) executeRSSInboxGroupsAction(params rssInboxGroupsParams, traceID string) (any, int, error) {
+	inbox, code, err := s.requireRSSInbox()
+	if err != nil {
+		return nil, code, err
+	}
+	result, err := inbox.Aggregate(RSSInboxGroupQuery{
+		FeedID:        strings.TrimSpace(params.FeedID),
+		Tag:           strings.TrimSpace(params.Tag),
+		Importance:    strings.TrimSpace(params.Importance),
+		WindowHours:   params.WindowHours,
+		Limit:         params.Limit,
+		ItemLimit:     params.ItemLimit,
+		ItemsPerGroup: params.ItemsPerGroup,
+	})
+	if err != nil {
+		logAction(traceID, busActionRSSInboxGroups, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
+	logAction(traceID, busActionRSSInboxGroups, "success", nil)
+	return result, http.StatusOK, nil
+}
+
+func (s *bridgeService) executeRSSBriefingBuildAction(ctx context.Context, params rssBriefingParams, traceID string) (any, int, error) {
+	inbox, code, err := s.requireRSSInbox()
+	if err != nil {
+		return nil, code, err
+	}
+	result, err := inbox.BuildAndStoreBriefing(ctx, RSSBriefingQuery{
+		FeedID:          strings.TrimSpace(params.FeedID),
+		Tag:             strings.TrimSpace(params.Tag),
+		Importance:      strings.TrimSpace(params.Importance),
+		WindowHours:     params.WindowHours,
+		GroupLimit:      params.GroupLimit,
+		ItemLimit:       params.ItemLimit,
+		ItemsPerGroup:   params.ItemsPerGroup,
+		HighlightsLimit: params.HighlightsLimit,
+		TraceID:         firstNonEmptyString(strings.TrimSpace(traceID), strings.TrimSpace(params.TraceID)),
+		TaskID:          strings.TrimSpace(params.TaskID),
+	})
+	if err != nil {
+		logAction(traceID, busActionRSSBriefingBuild, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
+	logAction(traceID, busActionRSSBriefingBuild, "success", nil)
+	return result, http.StatusOK, nil
+}
+
+func (s *bridgeService) executeRSSBriefingGetAction(traceID string) (any, int, error) {
+	inbox, code, err := s.requireRSSInbox()
+	if err != nil {
+		return nil, code, err
+	}
+	result, err := inbox.LatestBriefing()
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, ErrRSSBriefingNotFound) {
+			status = http.StatusNotFound
+		}
+		logAction(traceID, busActionRSSBriefingGet, "error", err)
+		return nil, status, err
+	}
+	logAction(traceID, busActionRSSBriefingGet, "success", nil)
+	return result, http.StatusOK, nil
+}
+
 func decodeRSSInboxListFilter(params rssInboxListParams) (RSSInboxListFilter, error) {
 	filter := RSSInboxListFilter{
 		FeedID:     strings.TrimSpace(params.FeedID),
@@ -164,14 +255,14 @@ func (s *bridgeService) ensureRSSPollTask() error {
 	if err != nil {
 		return err
 	}
-	if !cfg.RSSPollEnabled {
+	if !cfg.RSS.PollEnabled {
 		_ = s.taskScheduler.Unregister(defaultRSSPollTaskID)
 		if err := s.taskStore.DeleteTask(defaultRSSPollTaskID); err != nil && !errors.Is(err, ErrTaskNotFound) {
 			return err
 		}
 		return nil
 	}
-	task, err := buildRSSPollScheduledTask(cfg)
+	task, err := buildRSSPollScheduledTask(cfg.RSS)
 	if err != nil {
 		return err
 	}
@@ -181,8 +272,44 @@ func (s *bridgeService) ensureRSSPollTask() error {
 	return s.taskScheduler.Upsert(task)
 }
 
-func buildRSSPollScheduledTask(cfg Config) (ScheduledTask, error) {
-	interval := cfg.RSSPollInterval
+func (s *bridgeService) ensureRSSBriefingTask() error {
+	if s == nil || s.taskStore == nil || s.taskScheduler == nil {
+		return nil
+	}
+	if s.rssInitErr != nil {
+		return s.rssInitErr
+	}
+	var (
+		cfg Config
+		err error
+	)
+	if s.configStore != nil {
+		cfg, err = loadConfigWithRuntime(s.configStore.RuntimeConfig())
+	} else {
+		cfg, err = LoadConfig()
+	}
+	if err != nil {
+		return err
+	}
+	if !cfg.RSS.BriefingEnabled {
+		_ = s.taskScheduler.Unregister(defaultRSSBriefingTaskID)
+		if err := s.taskStore.DeleteTask(defaultRSSBriefingTaskID); err != nil && !errors.Is(err, ErrTaskNotFound) {
+			return err
+		}
+		return nil
+	}
+	task, err := buildRSSBriefingScheduledTask(cfg.RSS)
+	if err != nil {
+		return err
+	}
+	if err := s.taskStore.SaveTask(&task); err != nil {
+		return err
+	}
+	return s.taskScheduler.Upsert(task)
+}
+
+func buildRSSPollScheduledTask(cfg RSSConfig) (ScheduledTask, error) {
+	interval := cfg.PollInterval
 	if interval <= 0 {
 		interval = defaultRSSPollInterval
 	}
@@ -190,14 +317,51 @@ func buildRSSPollScheduledTask(cfg Config) (ScheduledTask, error) {
 		ID:           defaultRSSPollTaskID,
 		TaskKind:     taskKindSystemAction,
 		Action:       busActionRSSInboxPoll,
-		ActionParams: rssInboxPollParamsToMap(rssInboxPollParams{MaxItemsPerFeed: cfg.RSSPollMaxItemsPerFeed, AIBatchSize: cfg.RSSAIBatchSize}),
+		ActionParams: rssInboxPollParamsToMap(rssInboxPollParams{MaxItemsPerFeed: cfg.PollMaxItemsPerFeed, AIBatchSize: cfg.AIBatchSize}),
 		ScheduleType: taskScheduleTypeInterval,
-		Enabled:      cfg.RSSPollEnabled,
+		Enabled:      cfg.PollEnabled,
 		CreatedAt:    time.Now().UTC(),
 	}
 	task.IntervalSeconds = int(interval / time.Second)
 	if task.IntervalSeconds <= 0 {
 		task.IntervalSeconds = int(defaultRSSPollInterval / time.Second)
+	}
+	if task.Enabled {
+		nextRun, err := nextTaskRunAt(task, time.Now().UTC())
+		if err != nil {
+			return ScheduledTask{}, err
+		}
+		task.NextRunAt = nextRun
+	}
+	if err := validateTaskDefinition(&task); err != nil {
+		return ScheduledTask{}, err
+	}
+	return task, nil
+}
+
+func buildRSSBriefingScheduledTask(cfg RSSConfig) (ScheduledTask, error) {
+	interval := cfg.BriefingInterval
+	if interval <= 0 {
+		interval = defaultRSSBriefingInterval
+	}
+	task := ScheduledTask{
+		ID:       defaultRSSBriefingTaskID,
+		TaskKind: taskKindSystemAction,
+		Action:   busActionRSSBriefingBuild,
+		ActionParams: rssBriefingParamsToMap(rssBriefingParams{
+			WindowHours:     defaultRSSAggregateWindowHours,
+			GroupLimit:      defaultRSSBriefingGroupLimit,
+			ItemLimit:       defaultRSSAggregateItemLimit,
+			ItemsPerGroup:   3,
+			HighlightsLimit: defaultRSSBriefingHighlightsLimit,
+		}),
+		ScheduleType: taskScheduleTypeInterval,
+		Enabled:      cfg.BriefingEnabled,
+		CreatedAt:    time.Now().UTC(),
+	}
+	task.IntervalSeconds = int(interval / time.Second)
+	if task.IntervalSeconds <= 0 {
+		task.IntervalSeconds = int(defaultRSSBriefingInterval / time.Second)
 	}
 	if task.Enabled {
 		nextRun, err := nextTaskRunAt(task, time.Now().UTC())
@@ -237,6 +401,58 @@ func rssInboxPollParamsToMap(params rssInboxPollParams) map[string]any {
 	return out
 }
 
+func decodeRSSBriefingParams(input map[string]any) (rssBriefingParams, error) {
+	params, err := decodeActionParamsMap[rssBriefingParams](input)
+	if err != nil {
+		return rssBriefingParams{}, err
+	}
+	if params.WindowHours < 0 {
+		return rssBriefingParams{}, fmt.Errorf("window_hours must be >= 0")
+	}
+	if params.GroupLimit < 0 {
+		return rssBriefingParams{}, fmt.Errorf("group_limit must be >= 0")
+	}
+	if params.ItemLimit < 0 {
+		return rssBriefingParams{}, fmt.Errorf("item_limit must be >= 0")
+	}
+	if params.ItemsPerGroup < 0 {
+		return rssBriefingParams{}, fmt.Errorf("items_per_group must be >= 0")
+	}
+	if params.HighlightsLimit < 0 {
+		return rssBriefingParams{}, fmt.Errorf("highlights_limit must be >= 0")
+	}
+	return params, nil
+}
+
+func rssBriefingParamsToMap(params rssBriefingParams) map[string]any {
+	out := map[string]any{}
+	if params.FeedID != "" {
+		out["feed_id"] = strings.TrimSpace(params.FeedID)
+	}
+	if params.Tag != "" {
+		out["tag"] = strings.TrimSpace(params.Tag)
+	}
+	if params.Importance != "" {
+		out["importance"] = strings.TrimSpace(params.Importance)
+	}
+	if params.WindowHours > 0 {
+		out["window_hours"] = params.WindowHours
+	}
+	if params.GroupLimit > 0 {
+		out["group_limit"] = params.GroupLimit
+	}
+	if params.ItemLimit > 0 {
+		out["item_limit"] = params.ItemLimit
+	}
+	if params.ItemsPerGroup > 0 {
+		out["items_per_group"] = params.ItemsPerGroup
+	}
+	if params.HighlightsLimit > 0 {
+		out["highlights_limit"] = params.HighlightsLimit
+	}
+	return out
+}
+
 func formatRSSInboxPollPreview(result RSSInboxPollResult) string {
 	return fmt.Sprintf(
 		"rss poll feeds=%d failed=%d saved=%d discarded=%d",
@@ -245,4 +461,20 @@ func formatRSSInboxPollPreview(result RSSInboxPollResult) string {
 		result.ItemsSaved,
 		result.ItemsDiscarded,
 	)
+}
+
+func formatRSSBriefingPreview(result RSSBriefingResult) string {
+	preview := fmt.Sprintf(
+		"rss briefing highlights=%d groups=%d title=%s",
+		result.HighlightCount,
+		result.ScannedGroups,
+		truncateRunes(strings.TrimSpace(result.Title), 80),
+	)
+	if result.Report != nil && strings.TrimSpace(result.Report.MarkdownPath) != "" {
+		preview += " report=" + truncateRunes(strings.TrimSpace(result.Report.MarkdownPath), 120)
+	}
+	if strings.TrimSpace(result.ReportError) != "" {
+		preview += " report_error=" + truncateRunes(strings.TrimSpace(result.ReportError), 80)
+	}
+	return preview
 }

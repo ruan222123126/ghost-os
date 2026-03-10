@@ -30,128 +30,142 @@ func memoryManagerConfigFromStore(store *ConfigStore, sessionStore *session.Stor
 	recipeBackfillEnabled, recipeBackfillEnabledSet := memoryDecisionRecipeBackfillEnabledFromEnv()
 	recipeDefaultEnabled, recipeDefaultEnabledSet := memoryDecisionRecipeDefaultEnabledFromEnv()
 	return memory.MemoryConfig{
-		WarmCapacity:                      agentWarmMemoryCapacity,
-		WarmPath:                          memoryWarmPathFromEnv(),
-		ColdBaseDir:                       memoryColdPathFromEnv(),
-		LedgerBaseDir:                     memoryLedgerPathFromEnv(),
-		LedgerDualWrite:                   memoryLedgerDualWriteFromEnv(),
-		LedgerReadEnabled:                 memoryLedgerReadEnabledFromEnv(),
-		LedgerShadowCompare:               memoryLedgerShadowCompareFromEnv(),
-		AutoRecallEnabled:                 memoryAutoRecallEnabledFromEnv(),
-		AutoRecallLimit:                   memoryAutoRecallLimitFromEnv(),
-		WarmTTL:                           memoryWarmTTLFromEnv(),
-		TemporalDecayEnabled:              memoryTemporalDecayEnabledFromEnv(),
-		TemporalDecayHalfLife:             configuredTemporalHalfLife(memoryTemporalDecayEnabledFromEnv(), memoryTemporalDecayHalfLifeFromEnv()),
-		AnchorEnabled:                     memoryAnchorEnabledFromEnv(),
-		AnchorMinWeight:                   configuredAnchorMinWeight(memoryAnchorEnabledFromEnv(), memoryAnchorMinWeightFromEnv()),
-		EvolutionInterval:                 memoryEvolutionIntervalFromEnv(),
-		EvolutionEnabled:                  memoryEvolutionEnabledFromEnv(),
-		EvolutionUseWorker:                memoryEvolutionUseWorkerFromEnv(),
-		EvolutionBatchSize:                memoryEvolutionBatchSizeFromEnv(),
-		GraphEnabled:                      memoryGraphEnabledFromEnv(),
-		GraphPath:                         memoryGraphPathFromEnv(),
-		GraphExtractOnArchive:             memoryGraphExtractOnArchiveFromEnv(),
-		GraphExtractOnEvolve:              memoryGraphExtractOnEvolveFromEnv(),
-		GraphMaxHops:                      memoryGraphMaxHopsFromEnv(),
-		GraphMaxHits:                      memoryGraphMaxHitsFromEnv(),
-		GraphMinConfidence:                memoryGraphMinConfidenceFromEnv(),
-		GraphNamespace:                    memoryGraphNamespaceFromEnv(),
-		GraphDebugEnabled:                 memoryGraphDebugEnabledFromEnv(),
-		DecisionEnabled:                   memoryDecisionEnabledFromEnv(),
-		DecisionCaptureOnTurn:             memoryDecisionCaptureOnTurnFromEnv(),
-		DecisionCaptureOnTurnSet:          true,
-		DecisionPath:                      memoryDecisionPathFromEnv(),
-		DecisionMaxHits:                   memoryDecisionMaxHitsFromEnv(),
-		DecisionMinConfidence:             memoryDecisionMinConfidenceFromEnv(),
-		DecisionMinReuseScore:             memoryDecisionMinReuseScoreFromEnv(),
-		DecisionRecipeEnabled:             memoryDecisionRecipeEnabledFromEnv(),
-		DecisionRecipeInterval:            memoryDecisionRecipeIntervalFromEnv(),
-		DecisionRecipeMinSupport:          memoryDecisionRecipeMinSupportFromEnv(),
-		DecisionDebugEnabled:              memoryDecisionDebugEnabledFromEnv(),
-		RecipeReuseEnabled:                recipeReuseEnabled,
-		RecipeReuseEnabledSet:             recipeReuseEnabledSet,
-		RecipeExecutionTrackingEnabled:    recipeExecutionTrackingEnabled,
-		RecipeExecutionTrackingEnabledSet: recipeExecutionTrackingEnabledSet,
-		RecipeBackfillEnabled:             recipeBackfillEnabled,
-		RecipeBackfillEnabledSet:          recipeBackfillEnabledSet,
-		RecipeDefaultEnabled:              recipeDefaultEnabled,
-		RecipeDefaultEnabledSet:           recipeDefaultEnabledSet,
-		RecipeDefaultGrayPercent:          memoryDecisionRecipeDefaultGrayPercentFromEnv(),
-		RecipeMinSelectionConfidence:      memoryDecisionRecipeMinSelectionConfidenceFromEnv(),
-		RecipeMinSuccessRate:              memoryDecisionRecipeMinSuccessRateFromEnv(),
-		RecipeBackfillBatchSize:           memoryDecisionRecipeBackfillBatchSizeFromEnv(),
-		RecipeBackfillInterval:            memoryDecisionRecipeBackfillIntervalFromEnv(),
-		SessionStore:                      sessionStore,
-		Summarizer:                        summarizer,
+		Warm: memory.WarmConfig{
+			Capacity:              agentWarmMemoryCapacity,
+			Path:                  memoryWarmPathFromEnv(),
+			AutoRecallEnabled:     memoryAutoRecallEnabledFromEnv(),
+			AutoRecallLimit:       memoryAutoRecallLimitFromEnv(),
+			TTL:                   memoryWarmTTLFromEnv(),
+			TemporalDecayEnabled:  memoryTemporalDecayEnabledFromEnv(),
+			TemporalDecayHalfLife: configuredTemporalHalfLife(memoryTemporalDecayEnabledFromEnv(), memoryTemporalDecayHalfLifeFromEnv()),
+			AnchorEnabled:         memoryAnchorEnabledFromEnv(),
+			AnchorMinWeight:       configuredAnchorMinWeight(memoryAnchorEnabledFromEnv(), memoryAnchorMinWeightFromEnv()),
+			EvolutionInterval:     memoryEvolutionIntervalFromEnv(),
+			EvolutionEnabled:      memoryEvolutionEnabledFromEnv(),
+			EvolutionUseWorker:    memoryEvolutionUseWorkerFromEnv(),
+			EvolutionBatchSize:    memoryEvolutionBatchSizeFromEnv(),
+		},
+		Cold: memory.ColdConfig{BaseDir: memoryColdPathFromEnv()},
+		Ledger: memory.LedgerConfig{
+			BaseDir:     memoryLedgerPathFromEnv(),
+			ReadEnabled: memoryLedgerReadEnabledFromEnv(),
+		},
+		Graph: memory.GraphConfig{
+			Enabled:          memoryGraphEnabledFromEnv(),
+			Path:             memoryGraphPathFromEnv(),
+			ExtractOnArchive: memoryGraphExtractOnArchiveFromEnv(),
+			ExtractOnEvolve:  memoryGraphExtractOnEvolveFromEnv(),
+			MaxHops:          memoryGraphMaxHopsFromEnv(),
+			MaxHits:          memoryGraphMaxHitsFromEnv(),
+			MinConfidence:    memoryGraphMinConfidenceFromEnv(),
+			Namespace:        memoryGraphNamespaceFromEnv(),
+			DebugEnabled:     memoryGraphDebugEnabledFromEnv(),
+		},
+		Decision: memory.DecisionConfig{
+			Enabled:          memoryDecisionEnabledFromEnv(),
+			CaptureOnTurn:    memoryDecisionCaptureOnTurnFromEnv(),
+			CaptureOnTurnSet: true,
+			Path:             memoryDecisionPathFromEnv(),
+			MaxHits:          memoryDecisionMaxHitsFromEnv(),
+			MinConfidence:    memoryDecisionMinConfidenceFromEnv(),
+			MinReuseScore:    memoryDecisionMinReuseScoreFromEnv(),
+			DebugEnabled:     memoryDecisionDebugEnabledFromEnv(),
+			Recipe: memory.DecisionRecipeConfig{
+				Enabled:                     memoryDecisionRecipeEnabledFromEnv(),
+				Interval:                    memoryDecisionRecipeIntervalFromEnv(),
+				MinSupport:                  memoryDecisionRecipeMinSupportFromEnv(),
+				ReuseEnabled:                recipeReuseEnabled,
+				ReuseEnabledSet:             recipeReuseEnabledSet,
+				ExecutionTrackingEnabled:    recipeExecutionTrackingEnabled,
+				ExecutionTrackingEnabledSet: recipeExecutionTrackingEnabledSet,
+				BackfillEnabled:             recipeBackfillEnabled,
+				BackfillEnabledSet:          recipeBackfillEnabledSet,
+				DefaultEnabled:              recipeDefaultEnabled,
+				DefaultEnabledSet:           recipeDefaultEnabledSet,
+				DefaultGrayPercent:          memoryDecisionRecipeDefaultGrayPercentFromEnv(),
+				MinSelectionConfidence:      memoryDecisionRecipeMinSelectionConfidenceFromEnv(),
+				MinSuccessRate:              memoryDecisionRecipeMinSuccessRateFromEnv(),
+				BackfillBatchSize:           memoryDecisionRecipeBackfillBatchSizeFromEnv(),
+				BackfillInterval:            memoryDecisionRecipeBackfillIntervalFromEnv(),
+			},
+		},
+		Runtime: memory.RuntimeConfig{SessionStore: sessionStore, Summarizer: summarizer},
 	}
 }
 
 func memoryManagerConfigFromAppConfig(cfg Config, sessionStore *session.Store, summarizer memory.Summarizer) memory.MemoryConfig {
-	if !shouldEnableMemoryWorker(cfg) {
+	if !shouldEnableMemoryWorker(cfg.Memory) {
 		summarizer = nil
 	}
 	return memory.MemoryConfig{
-		WarmCapacity:                      agentWarmMemoryCapacity,
-		WarmPath:                          cfg.MemoryWarmPath,
-		ColdBaseDir:                       cfg.MemoryColdPath,
-		LedgerBaseDir:                     cfg.MemoryLedgerPath,
-		LedgerDualWrite:                   cfg.MemoryLedgerDualWrite,
-		LedgerReadEnabled:                 cfg.MemoryLedgerReadEnabled,
-		LedgerShadowCompare:               cfg.MemoryLedgerShadowCompare,
-		AutoRecallEnabled:                 cfg.MemoryAutoRecallEnabled,
-		AutoRecallLimit:                   cfg.MemoryAutoRecallLimit,
-		WarmTTL:                           cfg.MemoryWarmTTL,
-		TemporalDecayEnabled:              cfg.MemoryTemporalDecayEnabled,
-		TemporalDecayHalfLife:             configuredTemporalHalfLife(cfg.MemoryTemporalDecayEnabled, cfg.MemoryTemporalDecayHalfLife),
-		AnchorEnabled:                     cfg.MemoryAnchorEnabled,
-		AnchorMinWeight:                   configuredAnchorMinWeight(cfg.MemoryAnchorEnabled, cfg.MemoryAnchorMinWeight),
-		EvolutionInterval:                 cfg.MemoryEvolutionInterval,
-		EvolutionEnabled:                  cfg.MemoryEvolutionEnabled,
-		EvolutionUseWorker:                cfg.MemoryEvolutionUseWorker,
-		EvolutionBatchSize:                cfg.MemoryEvolutionBatchSize,
-		GraphEnabled:                      cfg.MemoryGraphEnabled,
-		GraphPath:                         cfg.MemoryGraphPath,
-		GraphExtractOnArchive:             cfg.MemoryGraphExtractOnArchive,
-		GraphExtractOnEvolve:              cfg.MemoryGraphExtractOnEvolve,
-		GraphMaxHops:                      cfg.MemoryGraphMaxHops,
-		GraphMaxHits:                      cfg.MemoryGraphMaxHits,
-		GraphMinConfidence:                cfg.MemoryGraphMinConfidence,
-		GraphNamespace:                    cfg.MemoryGraphNamespace,
-		GraphDebugEnabled:                 cfg.MemoryGraphDebugEnabled,
-		DecisionEnabled:                   cfg.MemoryDecisionEnabled,
-		DecisionCaptureOnTurn:             cfg.MemoryDecisionCaptureOnTurn,
-		DecisionCaptureOnTurnSet:          true,
-		DecisionPath:                      cfg.MemoryDecisionPath,
-		DecisionMaxHits:                   cfg.MemoryDecisionMaxHits,
-		DecisionMinConfidence:             cfg.MemoryDecisionMinConfidence,
-		DecisionMinReuseScore:             cfg.MemoryDecisionMinReuseScore,
-		DecisionRecipeEnabled:             cfg.MemoryDecisionRecipeEnabled,
-		DecisionRecipeInterval:            cfg.MemoryDecisionRecipeInterval,
-		DecisionRecipeMinSupport:          cfg.MemoryDecisionRecipeMinSupport,
-		DecisionDebugEnabled:              cfg.MemoryDecisionDebugEnabled,
-		RecipeReuseEnabled:                cfg.MemoryDecisionRecipeReuseEnabled,
-		RecipeReuseEnabledSet:             cfg.MemoryDecisionRecipeReuseEnabledSet,
-		RecipeExecutionTrackingEnabled:    cfg.MemoryDecisionRecipeExecutionTrackingEnabled,
-		RecipeExecutionTrackingEnabledSet: cfg.MemoryDecisionRecipeExecutionTrackingEnabledSet,
-		RecipeBackfillEnabled:             cfg.MemoryDecisionRecipeBackfillEnabled,
-		RecipeBackfillEnabledSet:          cfg.MemoryDecisionRecipeBackfillEnabledSet,
-		RecipeDefaultEnabled:              cfg.MemoryDecisionRecipeDefaultEnabled,
-		RecipeDefaultEnabledSet:           cfg.MemoryDecisionRecipeDefaultEnabledSet,
-		RecipeDefaultGrayPercent:          cfg.MemoryDecisionRecipeDefaultGrayPercent,
-		RecipeMinSelectionConfidence:      cfg.MemoryDecisionRecipeMinSelectionConfidence,
-		RecipeMinSuccessRate:              cfg.MemoryDecisionRecipeMinSuccessRate,
-		RecipeBackfillBatchSize:           cfg.MemoryDecisionRecipeBackfillBatchSize,
-		RecipeBackfillInterval:            cfg.MemoryDecisionRecipeBackfillInterval,
-		SessionStore:                      sessionStore,
-		Summarizer:                        summarizer,
+		Warm: memory.WarmConfig{
+			Capacity:              agentWarmMemoryCapacity,
+			Path:                  cfg.Memory.WarmPath,
+			AutoRecallEnabled:     cfg.Memory.AutoRecallEnabled,
+			AutoRecallLimit:       cfg.Memory.AutoRecallLimit,
+			TTL:                   cfg.Memory.WarmTTL,
+			TemporalDecayEnabled:  cfg.Memory.TemporalDecayEnabled,
+			TemporalDecayHalfLife: configuredTemporalHalfLife(cfg.Memory.TemporalDecayEnabled, cfg.Memory.TemporalDecayHalfLife),
+			AnchorEnabled:         cfg.Memory.AnchorEnabled,
+			AnchorMinWeight:       configuredAnchorMinWeight(cfg.Memory.AnchorEnabled, cfg.Memory.AnchorMinWeight),
+			EvolutionInterval:     cfg.Memory.EvolutionInterval,
+			EvolutionEnabled:      cfg.Memory.EvolutionEnabled,
+			EvolutionUseWorker:    cfg.Memory.EvolutionUseWorker,
+			EvolutionBatchSize:    cfg.Memory.EvolutionBatchSize,
+		},
+		Cold: memory.ColdConfig{BaseDir: cfg.Memory.ColdPath},
+		Ledger: memory.LedgerConfig{
+			BaseDir:     cfg.Memory.LedgerPath,
+			ReadEnabled: cfg.Memory.LedgerReadEnabled,
+		},
+		Graph: memory.GraphConfig{
+			Enabled:          cfg.Memory.GraphEnabled,
+			Path:             cfg.Memory.GraphPath,
+			ExtractOnArchive: cfg.Memory.GraphExtractOnArchive,
+			ExtractOnEvolve:  cfg.Memory.GraphExtractOnEvolve,
+			MaxHops:          cfg.Memory.GraphMaxHops,
+			MaxHits:          cfg.Memory.GraphMaxHits,
+			MinConfidence:    cfg.Memory.GraphMinConfidence,
+			Namespace:        cfg.Memory.GraphNamespace,
+			DebugEnabled:     cfg.Memory.GraphDebugEnabled,
+		},
+		Decision: memory.DecisionConfig{
+			Enabled:          cfg.Memory.DecisionEnabled,
+			CaptureOnTurn:    cfg.Memory.DecisionCaptureOnTurn,
+			CaptureOnTurnSet: true,
+			Path:             cfg.Memory.DecisionPath,
+			MaxHits:          cfg.Memory.DecisionMaxHits,
+			MinConfidence:    cfg.Memory.DecisionMinConfidence,
+			MinReuseScore:    cfg.Memory.DecisionMinReuseScore,
+			DebugEnabled:     cfg.Memory.DecisionDebugEnabled,
+			Recipe: memory.DecisionRecipeConfig{
+				Enabled:                     cfg.Memory.DecisionRecipeEnabled,
+				Interval:                    cfg.Memory.DecisionRecipeInterval,
+				MinSupport:                  cfg.Memory.DecisionRecipeMinSupport,
+				ReuseEnabled:                cfg.Memory.DecisionRecipeReuseEnabled,
+				ReuseEnabledSet:             cfg.Memory.DecisionRecipeReuseEnabledSet,
+				ExecutionTrackingEnabled:    cfg.Memory.DecisionRecipeExecutionTrackingEnabled,
+				ExecutionTrackingEnabledSet: cfg.Memory.DecisionRecipeExecutionTrackingEnabledSet,
+				BackfillEnabled:             cfg.Memory.DecisionRecipeBackfillEnabled,
+				BackfillEnabledSet:          cfg.Memory.DecisionRecipeBackfillEnabledSet,
+				DefaultEnabled:              cfg.Memory.DecisionRecipeDefaultEnabled,
+				DefaultEnabledSet:           cfg.Memory.DecisionRecipeDefaultEnabledSet,
+				DefaultGrayPercent:          cfg.Memory.DecisionRecipeDefaultGrayPercent,
+				MinSelectionConfidence:      cfg.Memory.DecisionRecipeMinSelectionConfidence,
+				MinSuccessRate:              cfg.Memory.DecisionRecipeMinSuccessRate,
+				BackfillBatchSize:           cfg.Memory.DecisionRecipeBackfillBatchSize,
+				BackfillInterval:            cfg.Memory.DecisionRecipeBackfillInterval,
+			},
+		},
+		Runtime: memory.RuntimeConfig{SessionStore: sessionStore, Summarizer: summarizer},
 	}
 }
 
-func shouldEnableMemoryWorker(cfg Config) bool {
-	if cfg.MemoryEvolutionUseWorker {
+func shouldEnableMemoryWorker(cfg MemoryRuntimeConfig) bool {
+	if cfg.EvolutionUseWorker {
 		return true
 	}
-	return cfg.MemoryDecisionEnabled && cfg.MemoryDecisionCaptureOnTurn
+	return cfg.DecisionEnabled && cfg.DecisionCaptureOnTurn
 }
 
 func configuredTemporalHalfLife(enabled bool, halfLife time.Duration) time.Duration {
@@ -281,6 +295,100 @@ func (s *memoryWorkerSummarizer) ExtractDecisionMemo(input memory.DecisionCaptur
 	return sanitizeDecisionWorkerMemo(memo), nil
 }
 
+func (s *memoryWorkerSummarizer) ExtractDecisionRelations(input memory.DecisionRelationExtractionInput) ([]memory.DecisionRelationCandidate, error) {
+	if len(input.Memos) == 0 {
+		return nil, nil
+	}
+	client, cfg, err := s.workerClient()
+	if err != nil {
+		return nil, err
+	}
+	system, user, err := memory.RenderDecisionRelationPrompt(input)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), memoryWorkerTimeout)
+	defer cancel()
+	resp, err := client.Complete(ctx, llm.CompletionRequest{Messages: []llm.Message{
+		{Role: llm.RoleSystem, Text: system},
+		{Role: llm.RoleUser, Text: fmt.Sprintf("Worker model: %s\n\n%s", effectiveWorkerModel(cfg), user)},
+	}})
+	if err != nil {
+		return nil, err
+	}
+	text := stripJSONCodeFence(strings.TrimSpace(resp.Message.Text))
+	if text == "" {
+		return nil, fmt.Errorf("decision relation extractor returned empty content")
+	}
+	var payload struct {
+		Relations []memory.DecisionRelationCandidate `json:"relations"`
+	}
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		return nil, fmt.Errorf("decode decision relations: %w", err)
+	}
+	return payload.Relations, nil
+}
+
+func (s *memoryWorkerSummarizer) DiscoverPalaceTopics(input memory.PalaceTopicDiscoveryInput) ([]memory.PalaceDiscoveryTopic, error) {
+	client, cfg, err := s.workerClient()
+	if err != nil {
+		return nil, err
+	}
+	system, user, err := memory.RenderPalaceDiscoveryPrompt(input)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), memoryWorkerTimeout)
+	defer cancel()
+	resp, err := client.Complete(ctx, llm.CompletionRequest{Messages: []llm.Message{
+		{Role: llm.RoleSystem, Text: system},
+		{Role: llm.RoleUser, Text: fmt.Sprintf("Worker model: %s\n\n%s", effectiveWorkerModel(cfg), user)},
+	}})
+	if err != nil {
+		return nil, err
+	}
+	text := stripJSONCodeFence(strings.TrimSpace(resp.Message.Text))
+	if text == "" {
+		return nil, fmt.Errorf("memory palace discovery returned empty content")
+	}
+	var payload struct {
+		Topics []memory.PalaceDiscoveryTopic `json:"topics"`
+	}
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		return nil, fmt.Errorf("decode memory palace discovery: %w", err)
+	}
+	return payload.Topics, nil
+}
+
+func (s *memoryWorkerSummarizer) JudgePalaceTopic(input memory.PalaceTopicJudgmentInput) (memory.PalaceTopic, error) {
+	client, cfg, err := s.workerClient()
+	if err != nil {
+		return memory.PalaceTopic{}, err
+	}
+	system, user, err := memory.RenderPalaceJudgmentPrompt(input)
+	if err != nil {
+		return memory.PalaceTopic{}, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), memoryWorkerTimeout)
+	defer cancel()
+	resp, err := client.Complete(ctx, llm.CompletionRequest{Messages: []llm.Message{
+		{Role: llm.RoleSystem, Text: system},
+		{Role: llm.RoleUser, Text: fmt.Sprintf("Worker model: %s\n\n%s", effectiveWorkerModel(cfg), user)},
+	}})
+	if err != nil {
+		return memory.PalaceTopic{}, err
+	}
+	text := stripJSONCodeFence(strings.TrimSpace(resp.Message.Text))
+	if text == "" {
+		return memory.PalaceTopic{}, fmt.Errorf("memory palace judgment returned empty content")
+	}
+	var topic memory.PalaceTopic
+	if err := json.Unmarshal([]byte(text), &topic); err != nil {
+		return memory.PalaceTopic{}, fmt.Errorf("decode memory palace judgment: %w", err)
+	}
+	return topic, nil
+}
+
 func (s *memoryWorkerSummarizer) workerClient() (*llm.Client, Config, error) {
 	var cfg Config
 	var err error
@@ -292,24 +400,15 @@ func (s *memoryWorkerSummarizer) workerClient() (*llm.Client, Config, error) {
 	if err != nil {
 		return nil, Config{}, err
 	}
-	return llm.NewClientWithOptions(llm.ClientOptions{
-		Provider:           cfg.Provider,
-		BaseURL:            cfg.BaseURL,
-		APIKey:             cfg.APIKey,
-		Model:              effectiveWorkerModel(cfg),
-		ChatPath:           cfg.ChatPath,
-		Headers:            cfg.ProviderHeaders,
-		AnthropicVersion:   cfg.AnthropicVersion,
-		AnthropicMaxTokens: cfg.AnthropicMaxTokens,
-	}), cfg, nil
+	return llm.NewClientWithOptions(providerClientOptions(cfg, effectiveWorkerModel(cfg))), cfg, nil
 }
 
 func effectiveWorkerModel(cfg Config) string {
-	workerModel := strings.TrimSpace(cfg.WorkerModel)
+	workerModel := strings.TrimSpace(cfg.Worker.Model)
 	if workerModel != "" {
 		return workerModel
 	}
-	return cfg.Model
+	return cfg.Provider.Model
 }
 
 func renderMemoryWorkerMessages(messages []llm.Message) string {

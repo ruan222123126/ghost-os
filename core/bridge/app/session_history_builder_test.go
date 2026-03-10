@@ -22,7 +22,7 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 		t.Fatalf("expected human answer to be accepted")
 	}
 
-	builder := newSessionHistoryBuilder(Config{Provider: llm.ProviderOpenAI, Model: "gpt-4o"}, "system", nil)
+	builder := newSessionHistoryBuilder(ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"}, "system", nil)
 	history, resolved := builder.BuildHistoryWithResolvedQuestions(sess)
 	if len(resolved) != 1 {
 		t.Fatalf("expected 1 resolved question, got %d", len(resolved))
