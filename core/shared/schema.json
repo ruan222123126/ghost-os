@@ -27,8 +27,11 @@
         "MEMORY_DECISION_STATS",
         "MEMORY_DECISION_REBUILD",
         "MEMORY_HYGIENE_RUN",
+        "MEMORY_DECISION_RELATION_RUN",
+        "MEMORY_PALACE_CURATE_RUN",
         "TASK_CREATE",
         "TASK_LIST",
+        "TASK_SYSTEM_LIST",
         "TASK_GET",
         "TASK_UPDATE",
         "TASK_RUN_NOW",
@@ -38,10 +41,14 @@
         "READ_FILE",
         "SEARCH_FILES",
         "APPLY_DIFF",
+        "EXPORT_FILE",
         "BASH_EXEC",
         "SCRIPT_EXEC",
         "SCREEN_SHOT",
+        "SCREEN_OCR",
+        "TEXT_INPUT",
         "MOUSE_CLICK",
+        "ICON_MATCH",
         "BROWSER_QUERY"
       ]
     },
@@ -180,6 +187,81 @@
         }
       }
     },
+    "exportFileParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "session_id",
+        "artifact_root",
+        "artifact_id"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "exportFilePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "filename",
+        "mime_type",
+        "bytes",
+        "sha256",
+        "stored_path",
+        "original_path"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mime_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stored_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "original_path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "assistantSessionEndSignal": {
       "type": "object",
       "additionalProperties": false,
@@ -210,10 +292,12 @@
           "minLength": 1
         },
         "session_id": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional. Omit/empty to start a new session. If provided, must refer to an existing session; otherwise the server returns 404 (omit session_id to start a new session)."
         },
         "trace_id": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."
         }
       }
     },
@@ -284,8 +368,10 @@
         "scope": {
           "type": "string",
           "enum": [
+            "working_memory",
             "warm",
             "projection",
+            "all",
             "report"
           ]
         },
@@ -300,6 +386,18 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "window_start": {
+          "type": "string"
+        },
+        "window_end": {
+          "type": "string"
+        },
+        "force_refresh": {
+          "type": "boolean"
         },
         "max_votes_per_run": {
           "type": "integer",
@@ -318,9 +416,10 @@
       "additionalProperties": false,
       "required": [
         "scanned",
-        "scored",
-        "suppressed_candidates",
-        "quarantined_candidates",
+        "selected",
+        "created",
+        "updated",
+        "skipped_duplicates",
         "dry_run",
         "trace_id"
       ],
@@ -329,15 +428,23 @@
           "type": "integer",
           "minimum": 0
         },
+        "selected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "created": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "updated": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped_duplicates": {
+          "type": "integer",
+          "minimum": 0
+        },
         "scored": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "suppressed_candidates": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "quarantined_candidates": {
           "type": "integer",
           "minimum": 0
         },
@@ -671,6 +778,45 @@
         }
       }
     },
+    "sessionFileContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "name",
+        "download_url"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "download_url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_path": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      }
+    },
     "sessionContentPart": {
       "type": "object",
       "additionalProperties": false,
@@ -689,6 +835,16 @@
           "oneOf": [
             {
               "$ref": "#/$defs/sessionImageContent"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "file": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sessionFileContent"
             },
             {
               "type": "null"
@@ -945,7 +1101,8 @@
       "enum": [
         "openai",
         "anthropic",
-        "custom"
+        "custom",
+        "codex"
       ]
     },
     "configUpdate": {
@@ -1192,6 +1349,106 @@
         },
         "deleted": {
           "type": "boolean"
+        }
+      }
+    },
+    "memoryPalaceCurateRunRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "global",
+            "session"
+          ]
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "window_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_topics": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_evidence_per_topic": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "include_layers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "decision",
+              "warm",
+              "cold",
+              "markdown",
+              "graph",
+              "truth"
+            ]
+          }
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "write_report": {
+          "type": "boolean"
+        },
+        "trace_id": {
+          "type": "string"
+        }
+      }
+    },
+    "memoryPalaceCurateRunPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "topics_scanned",
+        "topics_selected",
+        "stable_count",
+        "candidate_count",
+        "rejected_count",
+        "dry_run"
+      ],
+      "properties": {
+        "report_id": {
+          "type": "string"
+        },
+        "markdown_path": {
+          "type": "string"
+        },
+        "json_path": {
+          "type": "string"
+        },
+        "topics_scanned": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "topics_selected": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "stable_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "candidate_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rejected_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "trace_id": {
+          "type": "string"
         }
       }
     },

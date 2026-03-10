@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -27,26 +28,26 @@ func newSessionHistoryBuilder(provider ProviderConfig, systemPrompt string, sess
 	}
 }
 
-// LoadOrCreateSession 优先加载已有会话，失败时回退为新会话。
+// LoadOrCreateSession 在 session_id 为空（或未启用持久化存储）时创建新会话；否则仅加载已存在会话。
 func (b *SessionHistoryBuilder) LoadOrCreateSession(sessionID string) (*session.Session, error) {
 	trimmedSessionID := strings.TrimSpace(sessionID)
-	if b != nil && b.sessionStore != nil && trimmedSessionID != "" {
-		sess, err := b.sessionStore.Load(trimmedSessionID)
-		if err != nil && !errors.Is(err, session.ErrSessionNotFound) {
-			return nil, err
-		}
-		if err == nil {
-			return sess, nil
-		}
-	}
-
 	prompt := ""
 	if b != nil {
 		prompt = b.systemPrompt
 	}
+	if trimmedSessionID == "" || b == nil || b.sessionStore == nil {
+		// 首次会话没有历史，按当前 system prompt 创建空会话。
+		return session.NewSession(prompt), nil
+	}
 
-	// 首次会话没有历史，按当前 system prompt 创建空会话。
-	return session.NewSession(prompt), nil
+	sess, err := b.sessionStore.Load(trimmedSessionID)
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return nil, fmt.Errorf("%w: session_id=%s", session.ErrSessionNotFound, trimmedSessionID)
+		}
+		return nil, err
+	}
+	return sess, nil
 }
 
 // BuildHistory 基于会话历史恢复 Agent 上下文，并注入已回答的人类反馈。

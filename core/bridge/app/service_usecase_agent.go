@@ -10,6 +10,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 )
 
 var errAgentMessageRequired = errors.New("message is required")
@@ -40,6 +41,9 @@ func (s *bridgeService) validateAgentTurnRequest(params agentParams) (preparedAg
 	prepared, code, err := prepareAgentTurnRequest(params)
 	if err != nil {
 		return preparedAgentTurnRequest{}, code, err
+	}
+	if code, inflightErr := s.ensureSessionNotInflight(prepared.sessionID); inflightErr != nil {
+		return preparedAgentTurnRequest{}, code, inflightErr
 	}
 	if code, activeErr := s.ensureSessionActive(prepared.sessionID); activeErr != nil {
 		return preparedAgentTurnRequest{}, code, activeErr
@@ -99,14 +103,14 @@ func (s *bridgeService) finalizeAgentTurn(response string, sessionID string) (fi
 }
 
 // emitDirectAgentStreamResult 只用于未经过 agent.RunStream() 的流式完成路径，例如人工取消后直接结束会话。
-func emitDirectAgentStreamResult(ctx context.Context, sink agent.EventSink, traceID string, turn int, result finalizedAgentTurn) error {
-	if emitErr := emitStreamEvent(ctx, sink, agent.NewEvent(traceID, turn, agent.AssistantStepID(turn), agent.EventMessage, map[string]any{
+func emitDirectAgentStreamResult(ctx context.Context, sink streaming.Sink, traceID string, turn int, result finalizedAgentTurn) error {
+	if emitErr := emitStreamEvent(ctx, sink, streaming.NewEvent(traceID, turn, streaming.AssistantStepID(turn), streaming.EventMessage, map[string]any{
 		"text":       result.message,
 		"session_id": result.sessionID,
 	})); emitErr != nil {
 		return emitErr
 	}
-	return emitStreamEvent(ctx, sink, agent.NewEvent(traceID, turn, "", agent.EventDone, map[string]any{
+	return emitStreamEvent(ctx, sink, streaming.NewEvent(traceID, turn, "", streaming.EventDone, map[string]any{
 		"session_id":    result.sessionID,
 		"session_ended": result.sessionEnd != nil,
 	}))
@@ -150,7 +154,7 @@ func (s *bridgeService) executeAgentAction(ctx context.Context, params agentPara
 	return payload, http.StatusOK, nil
 }
 
-func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params agentParams, traceID string, sink agent.EventSink) (string, string, error) {
+func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params agentParams, traceID string, sink streaming.Sink) (string, string, error) {
 	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush, params.SessionID))
 	prepared, code, err := s.validateAgentTurnRequest(params)
 	if err != nil {
@@ -183,7 +187,7 @@ func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params age
 	result, code, err := s.finalizeAgentTurn(response, sessionID)
 	if err != nil {
 		logAction(traceID, busActionAgentSend, "error", err)
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), agent.AssistantStepID(trackedSink.finalAssistantTurn()), sessionID, code, err); emitErr != nil {
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), streaming.AssistantStepID(trackedSink.finalAssistantTurn()), sessionID, code, err); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ghost-os/bridge/agent"
+	"ghost-os/bridge/streaming"
 )
 
 const cancelledHumanDialogueMessage = "Conversation cancelled by user."
@@ -80,11 +80,11 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 		return nil, code, err
 	}
 
-	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
-		return nil, code, activeErr
-	}
 	if code, inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
 		return nil, code, inflightErr
+	}
+	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
+		return nil, code, activeErr
 	}
 
 	params.SessionID = sessionID
@@ -112,7 +112,7 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 }
 
 // executeHumanAnswerAndResumeStreamAction 先写入人类答案，再以 SSE 方式续跑被 ask_human 暂停的回合。
-func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Context, params humanResponseParams, traceID string, sink agent.EventSink) (string, string, error) {
+func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Context, params humanResponseParams, traceID string, sink streaming.Sink) (string, string, error) {
 	sessionID, code, err := requireSessionID(params.SessionID)
 	if err != nil {
 		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", params.SessionID, code, err); emitErr != nil {
@@ -121,17 +121,17 @@ func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Cont
 		return "", "", err
 	}
 
-	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
-		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, code, activeErr); emitErr != nil {
-			return "", "", emitErr
-		}
-		return "", sessionID, activeErr
-	}
 	if code, inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
 		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, code, inflightErr); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", sessionID, inflightErr
+	}
+	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
+		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, code, activeErr); emitErr != nil {
+			return "", "", emitErr
+		}
+		return "", sessionID, activeErr
 	}
 
 	params.SessionID = sessionID
@@ -186,7 +186,7 @@ func (s *bridgeService) resumeAgentAction(ctx context.Context, sessionID string,
 	return payload, http.StatusOK, nil
 }
 
-func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID string, traceID string, sink agent.EventSink) (string, string, error) {
+func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID string, traceID string, sink streaming.Sink) (string, string, error) {
 	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush, sessionID))
 	response, resumedSessionID, err := s.agentRunner.RunTurnStream(ctx, "", sessionID, traceID, trackedSink)
 	if err != nil {
@@ -203,7 +203,7 @@ func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID s
 
 	result, code, err := s.finalizeAgentTurn(response, resumedSessionID)
 	if err != nil {
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), agent.AssistantStepID(trackedSink.finalAssistantTurn()), resumedSessionID, code, err); emitErr != nil {
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), streaming.AssistantStepID(trackedSink.finalAssistantTurn()), resumedSessionID, code, err); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err

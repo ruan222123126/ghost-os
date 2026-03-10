@@ -13,6 +13,7 @@ var (
 	ErrSessionInflight = errors.New("session is already running")
 	ErrRunNotFound     = errors.New("run not found")
 	ErrRunCancelled    = errors.New("agent run cancelled")
+	ErrRunRegistryNil  = errors.New("run registry is nil")
 )
 
 type RunHandle struct {
@@ -37,7 +38,7 @@ func NewRunRegistry() *RunRegistry {
 
 func (r *RunRegistry) Register(sessionID string, traceID string, cancel context.CancelFunc) error {
 	if r == nil {
-		return nil
+		return ErrRunRegistryNil
 	}
 	if cancel == nil {
 		return errors.New("cancel func is required")

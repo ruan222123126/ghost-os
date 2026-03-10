@@ -50,6 +50,13 @@ func TestRunRegistryRegisterDuplicate(t *testing.T) {
 	}
 }
 
+func TestRunRegistryRegisterNilReceiverReturnsError(t *testing.T) {
+	var registry *RunRegistry
+	if err := registry.Register("session-1", "trace-1", func() {}); !errors.Is(err, ErrRunRegistryNil) {
+		t.Fatalf("unexpected error: got %v want %v", err, ErrRunRegistryNil)
+	}
+}
+
 func TestRunRegistryUnregister(t *testing.T) {
 	registry := NewRunRegistry()
 	if err := registry.Register("session-1", "trace-1", func() {}); err != nil {

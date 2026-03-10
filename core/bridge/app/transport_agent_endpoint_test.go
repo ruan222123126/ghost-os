@@ -114,7 +114,7 @@ func TestAgentEndpointUsesHeaderTraceID(t *testing.T) {
 
 func TestAgentEndpointPassesSessionIDAndReturnsIt(t *testing.T) {
 	const sessionID = "session-from-client"
-	handler := newTestHandler(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
 		if message != "hello" {
 			t.Fatalf("unexpected message: got %q want %q", message, "hello")
 		}
@@ -123,6 +123,11 @@ func TestAgentEndpointPassesSessionIDAndReturnsIt(t *testing.T) {
 		}
 		return "ok", requestSessionID, nil
 	})
+	sess := session.NewSession("system")
+	sess.ID = sessionID
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
 
 	recorder := serveRequest(
 		handler,
@@ -166,6 +171,31 @@ func TestAgentEndpointRejectsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
 	body := decodeResponseBody(t, recorder)
 	if body.Error != "message is required" {
 		t.Fatalf("unexpected error: got %q want %q", body.Error, "message is required")
+	}
+}
+
+func TestAgentEndpointRejectsMissingSessionID(t *testing.T) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		t.Fatal("executor should not run when session is missing")
+		return "", "", nil
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		`{"message":"hello","session_id":"missing-session"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusNotFound, recorder.Body.String())
+	}
+	body := decodeResponseBody(t, recorder)
+	if body.Status != "error" {
+		t.Fatalf("unexpected status field: got %q want %q", body.Status, "error")
+	}
+	if !strings.Contains(body.Error, "omit session_id") {
+		t.Fatalf("unexpected error message: %q", body.Error)
 	}
 }
 

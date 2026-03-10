@@ -59,7 +59,7 @@ func (s *bridgeService) ensureSessionActive(sessionID string) (int, error) {
 	sess, err := store.Load(id)
 	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
-			return http.StatusOK, nil
+			return http.StatusNotFound, fmt.Errorf("%w: session_id=%s (omit session_id to start a new session)", session.ErrSessionNotFound, id)
 		}
 		return mapSessionStorageError(err), err
 	}

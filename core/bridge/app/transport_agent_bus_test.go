@@ -9,12 +9,18 @@ import (
 	"testing"
 	"time"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 )
 
 func TestBusAgentStopCancelsRunBySessionID(t *testing.T) {
-	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	const sessionID = "session-stop"
+	handler, service, sessionStore := newTestHandlerWithService(t, nil, nil)
+	sess := session.NewSession("system")
+	sess.ID = sessionID
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
 	started := make(chan struct{})
 	stopped := make(chan struct{})
 	service.agentRunner = newSessionTurnRunnerAdapter(service.configStore, service.sessionStore, func(
@@ -33,7 +39,7 @@ func TestBusAgentStopCancelsRunBySessionID(t *testing.T) {
 		traceID string,
 		_ *ConfigStore,
 		_ *session.Store,
-		_ agent.EventSink,
+		_ streaming.Sink,
 	) (string, string, error) {
 		execCtx, cancel := context.WithCancel(ctx)
 		if err := service.runRegistry.Register(sessionID, traceID, cancel); err != nil {
