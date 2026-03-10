@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 )
+
+const nativeStrictDecoderEnv = "GHOST_NATIVE_STRICT_DECODER"
 
 // NativeClient 通过本地 native 二进制完成 one-shot execution bus 调用。
 type NativeClient struct{}
@@ -53,7 +57,11 @@ func callNativeOnceWithCommand(cmd *exec.Cmd, req request) (map[string]any, erro
 	}
 
 	var resp response
-	if err := json.NewDecoder(stdout).Decode(&resp); err != nil {
+	decoder := json.NewDecoder(stdout)
+	if strictDecoderEnabled() {
+		decoder.DisallowUnknownFields()
+	}
+	if err := decoder.Decode(&resp); err != nil {
 		_ = cmd.Wait()
 		return nil, err
 	}
@@ -61,5 +69,17 @@ func callNativeOnceWithCommand(cmd *exec.Cmd, req request) (map[string]any, erro
 		return nil, err
 	}
 
-	return resp.intoResult()
+	return resp.intoResult(req)
+}
+
+func strictDecoderEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv(nativeStrictDecoderEnv))
+	if raw == "" {
+		return false
+	}
+	enabled, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false
+	}
+	return enabled
 }

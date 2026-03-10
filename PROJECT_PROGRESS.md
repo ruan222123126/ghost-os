@@ -20,7 +20,10 @@
 
 ## 当前工程状态
 
+- `2026-03-10`：execution 持久客户端在读取响应后统一做一次 `reapExitedProcessLocked()`，确保 error 响应也能及时回收；one-shot 执行新增 `GHOST_NATIVE_STRICT_DECODER` 可选严格解码（`DisallowUnknownFields`）以便在开发/测试时捕获协议漂移。
+- `2026-03-10`：收紧 memory “成功但没做事”入口：`PromoteToWarm` 现显式返回 `ErrPromoteToWarmDisabled`，`GraphService.IngestArchiveMessages/SyncObject` 改为返回禁用错误并去掉静默日志，internal graph 归档 ingest 也改为显式禁用错误；`newGraphIndexProjector` 改名为 `newNoopGraphIndexProjector` 以明确 stub，并更新相关测试回归。
 - `2026-03-10`：Web Console 前端侧边栏（SessionSidebar）替换为极简黑白风格，支持折叠与本地搜索过滤；仅做 UI/样式与交互增强，不改动会话数据/接口与 Bridge 主链。相关布局列宽改为自适应，移动端断点下侧边栏强制全宽以保持堆叠体验。
+- `2026-03-10`：修复 persistent native 握手超时导致“粘住式”fallback 的问题：仅在明确的协议不支持时才进入永久 fallback，握手超时不再锁死持久模式；新增 `GHOST_NATIVE_PERSISTENT_HANDSHAKE_TIMEOUT` 可配置握手超时（支持 `500ms`/`2s`/`1500` 毫秒）。同时 `execution` 的错误返回带上 action/trace_id/request_id，提升跨层排障可读性。
 - `2026-03-10`：修复 one-shot execution client 在 `StdoutPipe()` 或 `Start()` 失败时未释放已创建 pipe 的问题，避免潜在 FD 泄漏；与 persistent client 的资源回收策略保持一致。
 - `2026-03-10`：将 session artifact 下载的 stored path 路径边界校验下沉到 `core/bridge/artifacts`：新增 `SessionArtifactStore.ResolveStoredPath` / `OpenStoredFile` 统一收口 `Clean + BaseDir` 边界检查与可选 symlink escape 检测；`core/bridge/app/transport_handlers_sessions.go` 下载入口改为复用该 API，并补充 `stored_file_test.go` 覆盖越界与 symlink 逃逸。
 - `2026-03-10`：收紧 artifacts 的 ID 规范：`NormalizeSessionID/NormalizeArtifactID` 仅允许 `[A-Za-z0-9_-]` 且限制长度（`MaxIdentifierLength=128`），避免 Windows 文件系统对 `:`/`*` 等字符不兼容导致写入/下载失败；同步调整 `send_file` 生成的 `artifact_id` 时间戳格式（用 `_` 替代 `.`）并按上限截断，补充 `store_test.go` 回归。
