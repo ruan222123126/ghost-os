@@ -13,7 +13,9 @@ func NewMemoryManager(config MemoryConfig) *MemoryManager {
 
 	warm := NewWarmMemoryWithTTL(normalized.Warm.Capacity, normalized.Warm.Path, normalized.Warm.TTL)
 	warm.SetScoringConfig(newMemoryScoringConfig(normalized))
-	_ = warm.Load()
+	if err := warm.Load(); err != nil {
+		log.Printf("[MEMORY] warm load failed, continuing with empty warm cache: err=%v", err)
+	}
 	cold := NewColdMemoryWithConfig(normalized.Cold.BaseDir, ColdMemoryConfig{
 		LedgerBaseDir:       normalized.Ledger.BaseDir,
 		LedgerNamespace:     normalized.Ledger.Namespace,

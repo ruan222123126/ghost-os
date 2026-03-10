@@ -21,6 +21,7 @@
 ## 当前工程状态
 
 - `2026-03-10`：execution 持久客户端在读取响应后统一做一次 `reapExitedProcessLocked()`，确保 error 响应也能及时回收；one-shot 执行新增 `GHOST_NATIVE_STRICT_DECODER` 可选严格解码（`DisallowUnknownFields`）以便在开发/测试时捕获协议漂移。
+- `2026-03-10`：收紧 Agent 工具执行边界：默认日志仅输出 tool 名与参数键，避免敏感参数泄露；工具执行与后处理加 panic recover，转为 error 写回 tool result，避免单次工具崩溃打断会话；Agent 结构注释明确非并发安全。
 - `2026-03-10`：execution 的 native binary 查找策略提升为 app 配置装配：新增 `native_binary_path/native_binary_roots/native_binary_candidates` 配置与对应环境变量（兼容 `GHOST_NATIVE_BIN`），Bridge 在装配 execution client 时显式传入；locator 默认候选补齐 release 路径与本地 `native(.exe)`，移除库内直接读取 `GHOST_NATIVE_BIN`。
 - `2026-03-10`：收紧 memory “成功但没做事”入口：`PromoteToWarm` 现显式返回 `ErrPromoteToWarmDisabled`，`GraphService.IngestArchiveMessages/SyncObject` 改为返回禁用错误并去掉静默日志，internal graph 归档 ingest 也改为显式禁用错误；`newGraphIndexProjector` 改名为 `newNoopGraphIndexProjector` 以明确 stub，并更新相关测试回归。
 - `2026-03-10`：补强 memory 运行时边界：warm 启动加载失败会显式日志；`Save/Load/ListMarkdownNode` 对 nil manager/cold 做安全兜底；graph/decision 的 JSON 转换失败会日志化并返回带命名空间的空结果；ledger namespace/workspace 与 markdown node ID 统一做安全字符校验与基目录边界收口，避免路径穿越或跨平台非法文件名。

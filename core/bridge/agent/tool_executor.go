@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
@@ -51,7 +53,7 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 	}
 
 	for toolIndex, call := range calls {
-		stepID := ToolStepID(turn, toolIndex)
+		stepID := streaming.ToolStepID(turn, toolIndex)
 		rawToolCallID := strings.TrimSpace(call.ID)
 		rawToolName := strings.TrimSpace(call.Name)
 		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {
@@ -68,7 +70,7 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 			continue
 		}
 
-		fmt.Fprintf(e.stderr, "[%s] tool_call: %s args=%s\n", traceID, toolName, string(args))
+		fmt.Fprintf(e.stderr, "[%s] tool_call: %s %s\n", traceID, toolName, summarizeToolArgs(args))
 
 		tool := e.tools.Get(toolName)
 		if tool == nil {
@@ -82,7 +84,7 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 
 		toolCtx := tools.WithToolCallID(ctx, toolCallID)
 		stats.executed++
-		output, execErr := tool.Execute(toolCtx, args, traceID)
+		output, execErr := e.executeToolSafely(toolCtx, tool, args, traceID, toolName)
 		if execErr != nil {
 			toolErr := fmt.Errorf("tool %q error: %w", toolName, execErr)
 			appendToolResult(e.history, toolCallID, toolName, traceID, "", toolErr, nil)
@@ -92,7 +94,7 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 			continue
 		}
 
-		output, meta, postProcessErr := tools.PostProcessExecuteResult(tool, output, traceID)
+		output, meta, postProcessErr := e.postProcessToolResultSafely(tool, output, traceID, toolName)
 		if postProcessErr != nil {
 			toolErr := fmt.Errorf("tool %q post-process error: %w", toolName, postProcessErr)
 			appendToolResult(e.history, toolCallID, toolName, traceID, "", toolErr, nil)
@@ -128,7 +130,7 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 
 func (e toolCallExecutor) reportInvalidCalls(ctx context.Context, traceID string, turn int, issues []invalidToolCallIssue) error {
 	for _, issue := range issues {
-		stepID := ToolStepID(turn, issue.index)
+		stepID := streaming.ToolStepID(turn, issue.index)
 		rawToolCallID := strings.TrimSpace(issue.call.ID)
 		rawToolName := strings.TrimSpace(issue.call.Name)
 		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {
@@ -140,6 +142,36 @@ func (e toolCallExecutor) reportInvalidCalls(ctx context.Context, traceID string
 		}
 	}
 	return nil
+}
+
+func (e toolCallExecutor) executeToolSafely(ctx context.Context, tool tools.Tool, args json.RawMessage, traceID string, toolName string) (output string, err error) {
+	if tool == nil {
+		return "", errors.New("tool is nil")
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("execute panic: %v", recovered)
+			fmt.Fprintf(e.stderr, "[%s] tool_panic: tool=%s phase=execute error=%v\n", traceID, toolName, err)
+		}
+	}()
+
+	return tool.Execute(ctx, args, traceID)
+}
+
+func (e toolCallExecutor) postProcessToolResultSafely(tool tools.Tool, output string, traceID string, toolName string) (processed string, meta tools.ExecuteMeta, err error) {
+	if tool == nil {
+		return "", tools.ExecuteMeta{}, errors.New("tool is nil")
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("post-process panic: %v", recovered)
+			processed = ""
+			meta = tools.ExecuteMeta{}
+			fmt.Fprintf(e.stderr, "[%s] tool_panic: tool=%s phase=post_process error=%v\n", traceID, toolName, err)
+		}
+	}()
+
+	return tools.PostProcessExecuteResult(tool, output, traceID)
 }
 
 // validateToolCall 做最小输入护栏：id/name 必填，arguments 必须是 JSON object。
@@ -199,4 +231,21 @@ func coalesceToolCallID(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func summarizeToolArgs(args json.RawMessage) string {
+	var decoded map[string]any
+	if err := json.Unmarshal(args, &decoded); err != nil {
+		return "args_keys=<invalid>"
+	}
+	if len(decoded) == 0 {
+		return "args_keys=[]"
+	}
+
+	keys := make([]string, 0, len(decoded))
+	for key := range decoded {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return fmt.Sprintf("args_keys=[%s]", strings.Join(keys, ","))
 }

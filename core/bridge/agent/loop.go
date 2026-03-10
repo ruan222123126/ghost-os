@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
@@ -18,6 +19,7 @@ type Completer interface {
 type ToolCatalog = tools.ToolCatalog
 
 // Agent 只编排对话循环，不绑定具体 Provider/Tool 实现。
+// Agent 非并发安全，调用方需自行串行化或加锁保护。
 type Agent struct {
 	completer Completer
 	tools     ToolCatalog
@@ -82,15 +84,15 @@ func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID 
 	return a.runWithSink(ctx, userMessage, traceID, nil)
 }
 
-func (a *Agent) RunStream(ctx context.Context, userMessage string, sink EventSink) (string, error) {
+func (a *Agent) RunStream(ctx context.Context, userMessage string, sink streaming.Sink) (string, error) {
 	return a.runWithSink(ctx, userMessage, "", sink)
 }
 
-func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, traceID string, sink EventSink) (string, error) {
+func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, traceID string, sink streaming.Sink) (string, error) {
 	return a.runWithSink(ctx, userMessage, traceID, sink)
 }
 
-func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink EventSink) (string, error) {
+func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink streaming.Sink) (string, error) {
 	traceID = strings.TrimSpace(traceID)
 	if traceID == "" {
 		traceID = fmt.Sprintf("agent-%d", time.Now().UnixNano())
@@ -114,7 +116,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 		resp, err := completion.complete(ctx, sink, traceID, turn)
 		if err != nil {
 			runErr := fmt.Errorf("trace_id=%s turn=%d complete_once: %w", traceID, turn, err)
-			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+			return "", events.terminalError(ctx, traceID, turn, streaming.AssistantStepID(turn), runErr)
 		}
 
 		msg := resp.Message
@@ -145,7 +147,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 				consecutiveNonExecutableToolCallTurns++
 				if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
 					runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
-					return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+					return "", events.terminalError(ctx, traceID, turn, streaming.AssistantStepID(turn), runErr)
 				}
 				continue
 			}
@@ -169,7 +171,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 					return "", err
 				}
 				runErr := fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
-				return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+				return "", events.terminalError(ctx, traceID, turn, streaming.AssistantStepID(turn), runErr)
 			}
 			if stats.nonExecutable() {
 				consecutiveNonExecutableToolCallTurns++
@@ -179,7 +181,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 			// 防止模型反复生成不可执行的 tool_call（空参数/缺失工具）导致无效循环。
 			if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
 				runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
-				return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+				return "", events.terminalError(ctx, traceID, turn, streaming.AssistantStepID(turn), runErr)
 			}
 		case llm.FinishLength:
 			content := strings.TrimSpace(msg.Text)
@@ -192,10 +194,10 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 				return content, nil
 			}
 			runErr := fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)
-			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+			return "", events.terminalError(ctx, traceID, turn, streaming.AssistantStepID(turn), runErr)
 		default:
 			runErr := fmt.Errorf("trace_id=%s turn=%d unsupported finish_reason: %q", traceID, turn, finishReason)
-			return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+			return "", events.terminalError(ctx, traceID, turn, streaming.AssistantStepID(turn), runErr)
 		}
 	}
 
@@ -203,7 +205,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 		a.lastTurn = a.maxTurns - 1
 	}
 	runErr := fmt.Errorf("trace_id=%s max turns exceeded: %d", traceID, a.maxTurns)
-	return "", events.terminalError(ctx, traceID, a.lastTurn, AssistantStepID(a.lastTurn), runErr)
+	return "", events.terminalError(ctx, traceID, a.lastTurn, streaming.AssistantStepID(a.lastTurn), runErr)
 }
 
 func (a *Agent) commitTurn(history *History) {
