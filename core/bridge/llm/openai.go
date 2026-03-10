@@ -170,6 +170,10 @@ func (c *Client) streamOpenAICompletion(ctx context.Context, request CompletionR
 
 // toOpenAIRequest 把内部统一请求模型转换为 OpenAI 兼容协议。
 func toOpenAIRequest(model string, request CompletionRequest) (openAIRequest, error) {
+	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
+		return openAIRequest{}, err
+	}
+
 	messages := make([]openAIMessage, 0, len(request.Messages))
 	for _, msg := range request.Messages {
 		converted, err := toOpenAIMessage(msg)

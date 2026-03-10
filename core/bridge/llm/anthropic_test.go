@@ -87,6 +87,16 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 	request, err := toAnthropicRequest("claude-3-7-sonnet", 1024, CompletionRequest{
 		Messages: []Message{
 			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{
+						ID:        "tool-call-1",
+						Name:      "browser_action",
+						Arguments: json.RawMessage(`{"action":"screenshot"}`),
+					},
+				},
+			},
+			{
 				Role:       RoleTool,
 				ToolCallID: "tool-call-1",
 				Text:       `{"status":"success","tool":"browser_action"}`,
@@ -105,10 +115,10 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("toAnthropicRequest returned error: %v", err)
 	}
-	if len(request.Messages) != 1 {
-		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 1)
+	if len(request.Messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 2)
 	}
-	encoded, err := json.Marshal(request.Messages[0].Content)
+	encoded, err := json.Marshal(request.Messages[1].Content)
 	if err != nil {
 		t.Fatalf("marshal tool content: %v", err)
 	}

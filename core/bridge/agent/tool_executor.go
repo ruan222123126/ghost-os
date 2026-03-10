@@ -126,6 +126,22 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 	return stats, nil
 }
 
+func (e toolCallExecutor) reportInvalidCalls(ctx context.Context, traceID string, turn int, issues []invalidToolCallIssue) error {
+	for _, issue := range issues {
+		stepID := ToolStepID(turn, issue.index)
+		rawToolCallID := strings.TrimSpace(issue.call.ID)
+		rawToolName := strings.TrimSpace(issue.call.Name)
+		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {
+			return err
+		}
+		fmt.Fprintf(e.stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, rawToolCallID, rawToolName, issue.err)
+		if err := e.events.toolCallFinished(ctx, traceID, turn, stepID, rawToolName, rawToolCallID, "error", issue.err); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // validateToolCall 做最小输入护栏：id/name 必填，arguments 必须是 JSON object。
 func validateToolCall(call llm.ToolCall) (toolCallID string, toolName string, args json.RawMessage, err error) {
 	toolCallID = strings.TrimSpace(call.ID)

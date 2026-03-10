@@ -148,6 +148,10 @@ func (c *Client) streamAnthropicCompletion(ctx context.Context, request Completi
 
 // toAnthropicRequest 把统一请求转换为 Anthropic messages/tool_use 协议。
 func toAnthropicRequest(model string, maxTokens int, request CompletionRequest) (anthropicRequest, error) {
+	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
+		return anthropicRequest{}, err
+	}
+
 	convertedMessages := make([]anthropicMessage, 0, len(request.Messages))
 	systemParts := make([]string, 0, 2)
 

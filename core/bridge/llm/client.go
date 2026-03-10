@@ -49,8 +49,22 @@ type providerRequest struct {
 	headers map[string]string
 }
 
+type completionStatusError struct {
+	statusCode int
+	body       string
+	raw        []byte
+}
+
+func (e *completionStatusError) Error() string {
+	return fmt.Sprintf("chat completion failed with status %d: %s", e.statusCode, e.body)
+}
+
 // Complete 执行一次完整请求链路：构建请求 -> 发起 HTTP -> 解析响应。
 func (c *Client) Complete(ctx context.Context, request CompletionRequest) (*CompletionResponse, error) {
+	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
+		return nil, err
+	}
+
 	payload, err := c.buildProviderRequest(request)
 	if err != nil {
 		return nil, err
@@ -60,6 +74,16 @@ func (c *Client) Complete(ctx context.Context, request CompletionRequest) (*Comp
 	if err != nil {
 		return nil, err
 	}
+	if c.shouldRetryCodexStateless(request, statusCode, raw) {
+		payload, err = c.buildCodexProviderRequestStateless(request)
+		if err != nil {
+			return nil, err
+		}
+		raw, statusCode, err = c.postJSON(ctx, payload.path, payload.body, payload.headers)
+		if err != nil {
+			return nil, err
+		}
+	}
 	if err := ensureSuccessStatus(statusCode, raw); err != nil {
 		return nil, err
 	}
@@ -67,9 +91,35 @@ func (c *Client) Complete(ctx context.Context, request CompletionRequest) (*Comp
 	return c.parseProviderResponse(raw)
 }
 
+func (c *Client) shouldRetryCodexStateless(request CompletionRequest, statusCode int, raw []byte) bool {
+	if c.opts.Provider != ProviderCodex {
+		return false
+	}
+	if statusCode < 400 || statusCode >= 500 {
+		return false
+	}
+	if strings.TrimSpace(request.ConversationState.PreviousResponseID) == "" {
+		return false
+	}
+
+	body := strings.TrimSpace(string(raw))
+	return strings.Contains(body, `"upstream_error"`) || strings.Contains(strings.ToLower(body), "previous_response_id")
+}
+
+func (c *Client) shouldRetryCodexStatelessForError(request CompletionRequest, err error) bool {
+	var statusErr *completionStatusError
+	if !errors.As(err, &statusErr) {
+		return false
+	}
+	return c.shouldRetryCodexStateless(request, statusErr.statusCode, statusErr.raw)
+}
+
 func (c *Client) CompleteStream(ctx context.Context, request CompletionRequest, sink LLMStreamSink) (*CompletionResponse, error) {
 	if sink == nil {
 		return nil, fmt.Errorf("stream sink is required")
+	}
+	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
+		return nil, err
 	}
 
 	switch c.opts.Provider {
@@ -77,6 +127,12 @@ func (c *Client) CompleteStream(ctx context.Context, request CompletionRequest, 
 		return c.streamOpenAICompletion(ctx, request, sink)
 	case ProviderAnthropic:
 		return c.streamAnthropicCompletion(ctx, request, sink)
+	case ProviderCodex:
+		resp, err := c.streamCodexCompletion(ctx, request, sink)
+		if err != nil && c.shouldRetryCodexStatelessForError(request, err) {
+			return c.streamCodexCompletionStateless(ctx, request, sink)
+		}
+		return resp, err
 	default:
 		return nil, fmt.Errorf("streaming not supported for provider %q", c.opts.Provider)
 	}
@@ -84,11 +140,17 @@ func (c *Client) CompleteStream(ctx context.Context, request CompletionRequest, 
 
 // buildProviderRequest 按 provider 选择协议编码。
 func (c *Client) buildProviderRequest(request CompletionRequest) (providerRequest, error) {
+	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
+		return providerRequest{}, err
+	}
+
 	switch c.opts.Provider {
 	case ProviderOpenAI, ProviderCustom:
 		return c.buildOpenAIProviderRequest(request)
 	case ProviderAnthropic:
 		return c.buildAnthropicProviderRequest(request)
+	case ProviderCodex:
+		return c.buildCodexProviderRequest(request)
 	default:
 		return providerRequest{}, fmt.Errorf("unsupported provider %q", c.opts.Provider)
 	}
@@ -101,6 +163,8 @@ func (c *Client) parseProviderResponse(raw []byte) (*CompletionResponse, error) 
 		return c.parseOpenAIProviderResponse(raw)
 	case ProviderAnthropic:
 		return c.parseAnthropicProviderResponse(raw)
+	case ProviderCodex:
+		return c.parseCodexProviderResponse(raw)
 	default:
 		return nil, fmt.Errorf("unsupported provider %q", c.opts.Provider)
 	}
@@ -247,6 +311,8 @@ func normalizePath(provider Provider, path string) string {
 		switch provider {
 		case ProviderAnthropic:
 			p = "/v1/messages"
+		case ProviderCodex:
+			p = "/responses"
 		default:
 			p = "/chat/completions"
 		}
@@ -300,5 +366,9 @@ func ensureSuccessStatus(statusCode int, raw []byte) error {
 	if body == "" {
 		body = "<empty body>"
 	}
-	return fmt.Errorf("chat completion failed with status %d: %s", statusCode, body)
+	return &completionStatusError{
+		statusCode: statusCode,
+		body:       body,
+		raw:        append([]byte(nil), raw...),
+	}
 }

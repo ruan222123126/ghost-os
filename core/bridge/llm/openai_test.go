@@ -173,6 +173,16 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 	request, err := toOpenAIRequest("gpt-4o", CompletionRequest{
 		Messages: []Message{
 			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{
+						ID:        "call-1",
+						Name:      "browser_action",
+						Arguments: json.RawMessage(`{"action":"screenshot"}`),
+					},
+				},
+			},
+			{
 				Role:       RoleTool,
 				ToolCallID: "call-1",
 				Text:       `{"status":"success","tool":"browser_action"}`,
@@ -192,7 +202,10 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 		t.Fatalf("toOpenAIRequest returned error: %v", err)
 	}
 
-	encoded, err := json.Marshal(request.Messages[0].Content)
+	if len(request.Messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 2)
+	}
+	encoded, err := json.Marshal(request.Messages[1].Content)
 	if err != nil {
 		t.Fatalf("marshal tool content: %v", err)
 	}

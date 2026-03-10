@@ -113,8 +113,36 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 			a.commitTurn(turnHistory)
 			return a.handleAssistantStop(msg), nil
 		case llm.FinishToolCalls:
-			acceptAssistantTurn(turnHistory, resp)
-			stats, err := toolCalls.execute(ctx, traceID, turn, msg.ToolCalls)
+			sanitizedMsg, issues := sanitizeAssistantToolCalls(msg)
+			if len(issues) > 0 {
+				if err := toolCalls.reportInvalidCalls(ctx, traceID, turn, issues); err != nil {
+					return "", err
+				}
+			}
+
+			stats := toolCallTurnStats{totalCalls: len(msg.ToolCalls)}
+			if len(issues) > 0 {
+				turnHistory.SetConversationState(llm.ConversationState{})
+			}
+			if len(sanitizedMsg.ToolCalls) == 0 {
+				turnHistory.Append(invalidToolCallAssistantMessage(msg, issues))
+				consecutiveNonExecutableToolCallTurns++
+				if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
+					runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
+					return "", events.terminalError(ctx, traceID, turn, AssistantStepID(turn), runErr)
+				}
+				continue
+			}
+
+			respToAccept := *resp
+			respToAccept.Message = sanitizedMsg
+			if len(issues) > 0 {
+				respToAccept.ConversationState = llm.ConversationState{}
+			}
+			acceptAssistantTurn(turnHistory, &respToAccept)
+
+			var err error
+			stats, err = toolCalls.execute(ctx, traceID, turn, sanitizedMsg.ToolCalls)
 			if err != nil {
 				if isEventEmitError(err) {
 					return "", err
