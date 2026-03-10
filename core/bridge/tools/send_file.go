@@ -138,15 +138,59 @@ func (t *SendFileTool) Execute(ctx context.Context, argsJSON json.RawMessage, tr
 }
 
 func buildSendFileArtifactID(traceID string, toolCallID string) string {
-	stamp := time.Now().UTC().Format("20060102T150405.000000000Z")
+	// Must remain compatible with artifacts.NormalizeArtifactID: [A-Za-z0-9_-] and length cap.
+	stamp := time.Now().UTC().Format("20060102T150405_000000000Z")
 	tracePart := sanitizeSendFileToken(traceID)
 	callPart := sanitizeSendFileToken(toolCallID)
 	if tracePart == "" {
 		tracePart = "trace"
 	}
+
+	truncate := func(value string, maxLen int) string {
+		if maxLen <= 0 {
+			return ""
+		}
+		if len(value) <= maxLen {
+			return value
+		}
+		return value[:maxLen]
+	}
+
+	maxLen := artifacts.MaxIdentifierLength
 	if callPart == "" {
+		tracePart = truncate(tracePart, maxLen-len(stamp)-1)
+		if tracePart == "" {
+			tracePart = "trace"
+		}
 		return fmt.Sprintf("%s-%s", stamp, tracePart)
 	}
+
+	overhead := len(stamp) + 2
+	remaining := maxLen - overhead
+	if remaining <= 0 {
+		return truncate(stamp, maxLen)
+	}
+
+	callPart = truncate(callPart, remaining-len(tracePart))
+	if callPart == "" {
+		tracePart = truncate(tracePart, maxLen-len(stamp)-1)
+		if tracePart == "" {
+			tracePart = "trace"
+		}
+		return fmt.Sprintf("%s-%s", stamp, tracePart)
+	}
+
+	if len(tracePart)+len(callPart) > remaining {
+		tracePart = truncate(tracePart, remaining-len(callPart))
+	}
+	if len(tracePart)+len(callPart) > remaining {
+		callPart = truncate(callPart, remaining-len(tracePart))
+	}
+	if tracePart == "" {
+		tracePart = "trace"
+		callPart = truncate(callPart, remaining-len(tracePart))
+	}
+
 	return fmt.Sprintf("%s-%s-%s", stamp, tracePart, callPart)
 }
 
