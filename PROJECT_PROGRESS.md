@@ -21,6 +21,7 @@
 ## 当前工程状态
 
 - `2026-03-10`：Web Console 前端侧边栏（SessionSidebar）替换为极简黑白风格，支持折叠与本地搜索过滤；仅做 UI/样式与交互增强，不改动会话数据/接口与 Bridge 主链。相关布局列宽改为自适应，移动端断点下侧边栏强制全宽以保持堆叠体验。
+- `2026-03-10`：修复 one-shot execution client 在 `StdoutPipe()` 或 `Start()` 失败时未释放已创建 pipe 的问题，避免潜在 FD 泄漏；与 persistent client 的资源回收策略保持一致。
 - `2026-03-10`：将 session artifact 下载的 stored path 路径边界校验下沉到 `core/bridge/artifacts`：新增 `SessionArtifactStore.ResolveStoredPath` / `OpenStoredFile` 统一收口 `Clean + BaseDir` 边界检查与可选 symlink escape 检测；`core/bridge/app/transport_handlers_sessions.go` 下载入口改为复用该 API，并补充 `stored_file_test.go` 覆盖越界与 symlink 逃逸。
 - `2026-03-10`：收紧 artifacts 的 ID 规范：`NormalizeSessionID/NormalizeArtifactID` 仅允许 `[A-Za-z0-9_-]` 且限制长度（`MaxIdentifierLength=128`），避免 Windows 文件系统对 `:`/`*` 等字符不兼容导致写入/下载失败；同步调整 `send_file` 生成的 `artifact_id` 时间戳格式（用 `_` 替代 `.`）并按上限截断，补充 `store_test.go` 回归。
 - `2026-03-10`：小的可读性/一致性整理：`SessionArtifactStore.WriteMetadata(...)` 复用已 Normalize 的 `session_id` 避免重复工作；`browseraction` 截图落盘复用 `artifacts.ResolveArtifactsDir(...)` 统一 artifacts 路径规则，避免未来漂移。
