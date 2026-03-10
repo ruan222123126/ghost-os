@@ -56,14 +56,18 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		p = newSessionTurnPreparer(nil, nil, nil, nil, nil, nil)
 	}
 	turnStartedAt := time.Now().UTC()
+	rawUserMessage := userMessage
+	trimmedUserMessage := strings.TrimSpace(userMessage)
+	trimmedTraceID := strings.TrimSpace(traceID)
 
 	deps, err := p.runtimeFactory.Build(p.configStore)
 	if err != nil {
 		return nil, err
 	}
+	memoryManager := p.memoryManager(deps.cfg)
 
 	historyBuilder := newSessionHistoryBuilder(deps.cfg.Provider, deps.systemPrompt, p.sessionStore)
-	persistence := newSessionTurnCommitter(p.sessionStore, p.memoryManager(deps.cfg), traceID)
+	persistence := newSessionTurnCommitter(p.sessionStore, memoryManager, trimmedTraceID)
 
 	sess, err := historyBuilder.LoadOrCreateSession(sessionID)
 	if err != nil {
@@ -74,7 +78,7 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		}
 	}
 
-	execCtx, cleanup, err := p.registerRun(ctx, sess.ID, traceID)
+	execCtx, cleanup, err := p.registerRun(ctx, sess.ID, trimmedTraceID)
 	if err != nil {
 		deps.Close()
 		return nil, &sessionTurnSetupError{
@@ -84,17 +88,7 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		}
 	}
 
-	preTurnMessages := llm.CloneMessages(sess.Messages)
-	askHumanContinuation := hasAnsweredHumanResponse(sess)
-	history, answeredQuestions := historyBuilder.BuildHistoryWithResolvedQuestions(sess)
-	selectorEnv := buildDecisionEnvironment(deps.cfg, strings.TrimSpace(userMessage), preTurnMessages, deps.registry)
-	catalog, systemPrompt := p.selectToolsForTurn(execCtx, deps, sess.ID, history, userMessage, askHumanContinuation, traceID, selectorEnv)
-	if systemPrompt != "" {
-		history.UpdateSystemPrompt(systemPrompt)
-	}
-	environment := buildDecisionEnvironment(deps.cfg, strings.TrimSpace(userMessage), preTurnMessages, catalog)
-	p.recordEnvironmentSnapshot(sess.ID, traceID, environment, toolCatalogNames(deps.registry), environment.ToolNames, persistence.memoryManager)
-	p.injectAutoRecall(history, userMessage, sess.ID, traceID, environment, persistence.memoryManager)
+	history, answeredQuestions, preTurnMessages, catalog, environment := p.prepareHistoryAndEnvironment(execCtx, deps, historyBuilder, sess, rawUserMessage, trimmedUserMessage, trimmedTraceID, memoryManager)
 
 	return &sessionTurnState{
 		sessionStore:      p.sessionStore,
@@ -103,14 +97,40 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		sess:              sess,
 		agent:             agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns),
 		execCtx:           tools.WithSession(execCtx, sess),
-		traceID:           strings.TrimSpace(traceID),
-		userMessage:       strings.TrimSpace(userMessage),
+		traceID:           trimmedTraceID,
+		userMessage:       trimmedUserMessage,
 		preTurnMessages:   preTurnMessages,
 		answeredQuestions: answeredQuestions,
 		turnStartedAt:     turnStartedAt,
 		environment:       environment,
 		cleanup:           cleanup,
 	}, nil
+}
+
+func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
+	ctx context.Context,
+	deps agentRuntimeDependencies,
+	historyBuilder *SessionHistoryBuilder,
+	sess *session.Session,
+	rawUserMessage string,
+	trimmedUserMessage string,
+	traceID string,
+	memoryManager *memory.MemoryManager,
+) (*agent.History, []memory.DecisionAnsweredQuestion, []llm.Message, tools.ToolCatalog, memory.DecisionEnvFingerprint) {
+	preTurnMessages := llm.CloneMessages(sess.Messages)
+	askHumanContinuation := hasAnsweredHumanResponse(sess)
+	history, answeredQuestions := historyBuilder.BuildHistoryWithResolvedQuestions(sess)
+
+	selectorEnv := buildDecisionEnvironment(deps.cfg, trimmedUserMessage, preTurnMessages, deps.registry)
+	catalog, systemPrompt := p.selectToolsForTurn(ctx, deps, sess.ID, history, rawUserMessage, askHumanContinuation, traceID, selectorEnv)
+	if systemPrompt != "" {
+		history.UpdateSystemPrompt(systemPrompt)
+	}
+
+	environment := buildDecisionEnvironment(deps.cfg, trimmedUserMessage, preTurnMessages, catalog)
+	p.recordEnvironmentSnapshot(sess.ID, traceID, environment, toolCatalogNames(deps.registry), environment.ToolNames, memoryManager)
+	p.injectAutoRecall(history, rawUserMessage, sess.ID, traceID, environment, memoryManager)
+	return history, answeredQuestions, preTurnMessages, catalog, environment
 }
 
 func (p *sessionTurnPreparer) selectToolsForTurn(

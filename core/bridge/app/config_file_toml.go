@@ -36,30 +36,54 @@ func loadBridgeTomlConfig(path string) (bridgeFileConfig, error) {
 }
 
 func loadBridgeFileConfig() (bridgeFileConfig, string, error) {
+	cfg, path, _, err := loadBridgeFileConfigWithMigrationInfo()
+	return cfg, path, err
+}
+
+// loadBridgeFileConfigWithMigrationInfo behaves like loadBridgeFileConfig but also reports
+// whether the config file uses a legacy provider layout that can be migrated.
+//
+// IMPORTANT: This function is side-effect free; callers must explicitly invoke migration/write.
+func loadBridgeFileConfigWithMigrationInfo() (bridgeFileConfig, string, bool, error) {
 	configPath := configPathFromEnv()
 	rawCfg, err := loadBridgeTomlConfig(configPath)
 	switch {
 	case err == nil:
 		resolvedPath, resolveErr := resolveUserPath(configPath)
 		if resolveErr != nil {
-			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
+			return bridgeFileConfig{}, "", false, fmt.Errorf("resolve config path: %w", resolveErr)
 		}
+		needsMigration := hasLegacyProviderLayout(rawCfg)
 		normalized := normalizeBridgeFileConfigForWrite(rawCfg)
-		if hasLegacyProviderLayout(rawCfg) {
-			if err := writeBridgeTomlConfig(configPath, normalized); err != nil {
-				return bridgeFileConfig{}, resolvedPath, err
-			}
-		}
-		return normalized, resolvedPath, nil
+		return normalized, resolvedPath, needsMigration, nil
 	case errors.Is(err, os.ErrNotExist):
 		resolvedPath, resolveErr := resolveUserPath(configPath)
 		if resolveErr != nil {
-			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
+			return bridgeFileConfig{}, "", false, fmt.Errorf("resolve config path: %w", resolveErr)
 		}
-		return bridgeFileConfig{}, resolvedPath, nil
+		return bridgeFileConfig{}, resolvedPath, false, nil
 	default:
-		return bridgeFileConfig{}, configPath, fmt.Errorf("read config file %s: %w", configPath, err)
+		return bridgeFileConfig{}, configPath, false, fmt.Errorf("read config file %s: %w", configPath, err)
 	}
+}
+
+// migrateBridgeFileConfigIfLegacy rewrites the configured TOML file to the current provider layout,
+// but only when legacy provider fields are present.
+//
+// This migration is intentionally opt-in to avoid "read == write" surprises across server options
+// and middleware that read config frequently.
+func migrateBridgeFileConfigIfLegacy() (string, bool, error) {
+	cfg, resolvedPath, needsMigration, err := loadBridgeFileConfigWithMigrationInfo()
+	if err != nil {
+		return resolvedPath, false, err
+	}
+	if !needsMigration {
+		return resolvedPath, false, nil
+	}
+	if err := writeBridgeTomlConfig(configPathFromEnv(), cfg); err != nil {
+		return resolvedPath, false, err
+	}
+	return resolvedPath, true, nil
 }
 
 func writeBridgeFileConfig(path string, cfg bridgeFileConfig) error {
@@ -97,6 +121,7 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.RSSFeedsPath = cloneOptionalStringPointer(out.RSSFeedsPath)
 	out.RSSInboxPath = cloneOptionalStringPointer(out.RSSInboxPath)
 	out.RSSPollInterval = cloneOptionalStringPointer(out.RSSPollInterval)
+	out.WebSearchTavilyAPIKey = cloneOptionalStringPointer(out.WebSearchTavilyAPIKey)
 	out.MemoryWarmPath = cloneOptionalStringPointer(out.MemoryWarmPath)
 	out.MemoryColdPath = cloneOptionalStringPointer(out.MemoryColdPath)
 	out.MemoryLedgerPath = cloneOptionalStringPointer(out.MemoryLedgerPath)
@@ -115,6 +140,8 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.APIToken = cloneOptionalStringPointer(out.APIToken)
 	out.ProviderHeaders, _ = normalizeProviderHeaders(out.ProviderHeaders)
 	out.CORSOrigins = normalizeOrigins(out.CORSOrigins)
+	out.ToolAllowlist = normalizeConfiguredToolNames(out.ToolAllowlist)
+	out.ToolBlocklist = normalizeConfiguredToolNames(out.ToolBlocklist)
 
 	providers := normalizeProviderConfigs(out.Providers, stringValue(out.Model))
 	if len(providers) == 0 {
