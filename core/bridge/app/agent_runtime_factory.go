@@ -80,6 +80,10 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
+	memoryTool, err := tools.NewMemoryManageToolFromEnv()
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
 	executionClient := newExecutionClient(executionClientConfigFromConfig(cfg))
 	registry.Register(tools.NewListFilesTool(executionClient))
 	registry.Register(tools.NewReadFileTool(executionClient))
@@ -94,6 +98,9 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 	registry.Register(tools.NewApplyDiffTool(executionClient))
 	registry.Register(tools.NewBashExecTool(executionClient))
 	registry.Register(tools.NewScriptExecTool(executionClient))
+	if containsToolName(cfg.ToolSelector.Allowlist, "codex_cli") {
+		registry.Register(tools.NewCodexCLITool(executionClient, cfg.NativePersistent))
+	}
 	registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{
 		TavilyAPIKey: cfg.WebSearchTavilyAPIKey,
 	}))
@@ -102,8 +109,9 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 	registry.Register(tools.NewFeedUpdateTool(feedStore))
 	registry.Register(tools.NewFeedUnsubscribeTool(feedStore))
 	registry.Register(tools.NewRSSFetchTool())
-	registry.Register(tools.NewBrowserActionTool(executionClient))
+	registry.Register(memoryTool)
 	registry.Register(tools.NewScreenActionTool(executionClient))
+	registry.Register(tools.NewBrowserControlTool(executionClient))
 	registry.Register(tools.NewTextInputTool(executionClient))
 	if taskManager != nil {
 		registry.Register(tools.NewTaskManageTool(taskManager))
@@ -127,6 +135,9 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		registry:     registry,
 		systemPrompt: systemPrompt,
 		cleanup: func() {
+			if memoryTool != nil {
+				_ = memoryTool.Close()
+			}
 			_ = closeExecutionClient(executionClient)
 		},
 	}, nil

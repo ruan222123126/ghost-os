@@ -20,7 +20,21 @@
 
 ## 当前工程状态
 
+- `2026-03-13`：彻底移除 memory 子系统：删除 `core/bridge/memory` 与关联的 query/archive/ledger-backfill CLI、bus action、配置与测试；`Session` 移除 `memory_metadata`；自动召回/归档链路清零，仅保留会话上下文窗口；同步更新 `core/shared/schema.json` 与生成的 envelope 类型，`docs/config.example.toml` 清理 memory 配置段。
+- `2026-03-13`：记忆系统做代码级瘦身：只保留 hot/warm/cold/ledger 主线，移除 decision/graph/markdown/hygiene/evolver/worker 相关实现与内部目录；清理 memory/query DTO、app 配置/环境变量读写、bus/schema/envelope 生成、示例配置与测试基线中的旧字段与 action。
+- `2026-03-13`：新增 `memory_manage` MVP 工具：Bridge 侧引入 SQLite `memorystore`（默认 `~/.ghost-os/memory/memory.db`，支持 `GHOST_MEMORY_PATH` 覆写），提供 URI 语义的 create/read/update/delete/search/list，并实现 `system://index` 与 `system://recent` 只读入口；补齐工具注册、selector 元数据与基础测试覆盖。
+- `2026-03-13`：新增 `browser_control` 工具：基于 CDP 连接/复用浏览器会话，支持 connect/launch/goto/click/type/press/evaluate/content/screenshot/info/close；截图落盘至 `~/.ghost-os/screenshots/browser/<session_id>/`，工具 registry 与 selector metadata 同步更新。
+- `2026-03-10`：收紧流式事件 contract：`streaming.Sink.Emit(...)` 现返回实际发出的 canonical `Event`，SSE sink 统一补全 `trace_id/id/at/session_id` 后向外传递，`sessionStreamBroadcastSink` 改为基于内层返回值广播，避免 SSE 与 session push 看到不同元数据；同时补齐 `streaming/events_test.go` 与 `app/transport_sse_test.go`，覆盖空 `trace_id`、非法 turn/index、事件 helper 约定，以及 wrapper sink 组合下 canonical event 一致性。
+- `2026-03-10`：Web Console 首页移除右侧 RSS/新闻报道展示栏，不再在主聊天布局挂载 `RSSBriefingPanel` 或主动拉取 briefing 数据；主界面恢复为侧边栏 + 聊天区双栏布局。
+- `2026-03-10`：Web Console 聊天区消息样式调整为更轻量的聊天布局，新增工具调用折叠卡片与复制按钮，并更新 `messages.css` 以匹配新视觉，未改动业务逻辑。
+- `2026-03-10`：Web Console 移除聊天区顶部的会话标题/徽章/设置按钮，让聊天内容与输入区直接顶到面板顶部。
+- `2026-03-10`：Web Console 聊天输入区背景与聊天内容区统一为浅白底，保持视觉连续性。
+- `2026-03-10`：简化 memory 运行时：保留 warm/cold+ledger/graph/decision/hygiene 稳定面，移除 truth/vector/index/bucket/intent/hybrid/shadow 与 palace/decision relation 相关代码与测试；ledger 回放改为直接扫描 segment，markdown/bucket 逻辑收口，metrics 与 config 清理为稳定字段；新增基础 SourceRef/JSON 原子写入 helper，并补齐 hygiene warm 投影接线与 StoreWorkingMemory API，相关回归修复通过 `go test ./memory` 验证。
+- `2026-03-10`：增强屏幕操纵稳定性：`screen_action` 新增 `case_insensitive/normalized/fuzzy` 文本匹配与 `max_distance` 参数、OCR 结果短期缓存复用；点击前可传 `ensure_active_window_title/ensure_active_window_class` 做前置校验（不匹配即报错）；ICON 匹配支持 `scale_range` 多尺度模板；native 侧在 Wayland 下为 `TEXT_INPUT/MOUSE_CLICK` 增加 `wtype/ydotool` fallback，且为屏幕点击引入 per-display scale 记录与坐标映射。
+- `2026-03-10`：为 `screen_action` 增加 `screenshot` 动作：调用 `SCREEN_SHOT` 生成截图并写入 `~/.ghost-os/screenshots/<session_id>/`，工具结果附带 image content 供 AI 直接看图。
+- `2026-03-10`：彻底移除浏览器操控工具链：删除 `browser_action` 与 native `BROWSER_QUERY`/`browser_query` 模块，清理 tool registry/selector/prompt/RSS report/e2e 引用，并同步更新 `core/shared/schema.json` 后重生成跨端 envelope 类型。
 - `2026-03-10`：提升 session 列表健壮性：`Store.ListMetadata` 遇到坏文件不再 fail-fast，改为跳过并日志统计；`Session` 类型注释明确非并发安全；`AddMessage/MarkEnded` 在 `GHOST_BRIDGE_DEBUG/GHOST_DEBUG/DEBUG` 开启时对 nil receiver 打点，避免静默掩盖调用方 bug；补充 `storage_test.go` 回归覆盖损坏文件跳过。
+- `2026-03-10`：新增工具白名单模式：Bridge 配置新增 `tool_allowlist_only`（`GHOST_TOOL_ALLOWLIST_ONLY`）启用后，Agent 仅可见 `tool_allowlist` 中工具（`ask_human` 仍保持 always-on），并在 `/api/config` 暴露 `model_selection_enabled=false` 以强制关闭 Web/CLI 运行时模型切换；Web Console 同步隐藏/禁用模型选择入口，后端也拒绝带 `model` 的运行态更新请求。
 - `2026-03-10`：Session 裁剪新增“兜底”收敛：最近消息仍超限时继续按 span 收缩，并对超长消息做截断，确保最终不会超过 token 预算；上下文上限改为可配置/按模型表驱动，provider 配置新增 `context_window_tokens` / `response_reserve_tokens` 与 per-model map，`schema.json` 与 `config.example.toml` 同步更新。
 - `2026-03-10`：memory hybrid 查询拆出 `queryContext` 与 warm/cold/markdown/decision/graph/truth/vector 分层函数，`queryResultHybridLayers` 只做组装排序；同时抽出 `memory/internal/pathutil` 统一 `resolveMemoryPath`，decision/graph/bridge memory 复用以减少漂移；`MemoryEntry.EmbeddingID` 仍保留占位但在对外查询结果中清空，避免误认为已接入向量召回。
 - `2026-03-10`：修正会话裁剪的估算偏差：`EstimateTokens` 改为基于累积字符统计（含 rune 计数）避免 CJK 系统性高估，并去掉循环字符串拼接的额外分配；`Store.Save` 写入在 Windows 下新增“先删后改名”的原子替换 fallback，降低跨平台落盘失败风险。
@@ -31,6 +45,7 @@
 - `2026-03-10`：收紧 memory “成功但没做事”入口：`PromoteToWarm` 现显式返回 `ErrPromoteToWarmDisabled`，`GraphService.IngestArchiveMessages/SyncObject` 改为返回禁用错误并去掉静默日志，internal graph 归档 ingest 也改为显式禁用错误；`newGraphIndexProjector` 改名为 `newNoopGraphIndexProjector` 以明确 stub，并更新相关测试回归。
 - `2026-03-10`：补强 memory 运行时边界：warm 启动加载失败会显式日志；`Save/Load/ListMarkdownNode` 对 nil manager/cold 做安全兜底；graph/decision 的 JSON 转换失败会日志化并返回带命名空间的空结果；ledger namespace/workspace 与 markdown node ID 统一做安全字符校验与基目录边界收口，避免路径穿越或跨平台非法文件名。
 - `2026-03-10`：Web Console 前端侧边栏（SessionSidebar）替换为极简黑白风格，支持折叠与本地搜索过滤；仅做 UI/样式与交互增强，不改动会话数据/接口与 Bridge 主链。相关布局列宽改为自适应，移动端断点下侧边栏强制全宽以保持堆叠体验。
+- `2026-03-10`：Web Console：移除输入框默认蓝色 focus ring，改为仅在聚焦时提升边框色，保持界面更干净。
 - `2026-03-10`：修复 persistent native 握手超时导致“粘住式”fallback 的问题：仅在明确的协议不支持时才进入永久 fallback，握手超时不再锁死持久模式；新增 `GHOST_NATIVE_PERSISTENT_HANDSHAKE_TIMEOUT` 可配置握手超时（支持 `500ms`/`2s`/`1500` 毫秒）。同时 `execution` 的错误返回带上 action/trace_id/request_id，提升跨层排障可读性。
 - `2026-03-10`：修复 one-shot execution client 在 `StdoutPipe()` 或 `Start()` 失败时未释放已创建 pipe 的问题，避免潜在 FD 泄漏；与 persistent client 的资源回收策略保持一致。
 - `2026-03-10`：将 session artifact 下载的 stored path 路径边界校验下沉到 `core/bridge/artifacts`：新增 `SessionArtifactStore.ResolveStoredPath` / `OpenStoredFile` 统一收口 `Clean + BaseDir` 边界检查与可选 symlink escape 检测；`core/bridge/app/transport_handlers_sessions.go` 下载入口改为复用该 API，并补充 `stored_file_test.go` 覆盖越界与 symlink 逃逸。
