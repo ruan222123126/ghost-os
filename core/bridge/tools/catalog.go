@@ -127,6 +127,7 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}},
 		{Name: "screen_action", Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "native"}},
 		{Name: "browser_control", Domain: "browser", Tags: []string{"browser", "automation", "web", "dom"}},
+		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}},
 		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}},
 		{Name: "ask_human", Domain: "human", Tags: []string{"interactive", "safety"}, AlwaysOn: true},
 	}

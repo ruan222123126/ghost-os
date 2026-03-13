@@ -24,6 +24,7 @@
 - `2026-03-13`：记忆系统做代码级瘦身：只保留 hot/warm/cold/ledger 主线，移除 decision/graph/markdown/hygiene/evolver/worker 相关实现与内部目录；清理 memory/query DTO、app 配置/环境变量读写、bus/schema/envelope 生成、示例配置与测试基线中的旧字段与 action。
 - `2026-03-13`：新增 `memory_manage` MVP 工具：Bridge 侧引入 SQLite `memorystore`（默认 `~/.ghost-os/memory/memory.db`，支持 `GHOST_MEMORY_PATH` 覆写），提供 URI 语义的 create/read/update/delete/search/list，并实现 `system://index` 与 `system://recent` 只读入口；补齐工具注册、selector 元数据与基础测试覆盖。
 - `2026-03-13`：新增 `browser_control` 工具：基于 CDP 连接/复用浏览器会话，支持 connect/launch/goto/click/type/press/evaluate/content/screenshot/info/close；截图落盘至 `~/.ghost-os/screenshots/browser/<session_id>/`，工具 registry 与 selector metadata 同步更新。
+- `2026-03-13`：修复 `text_input` 工具为 selector 元数据“孤儿”的问题：补齐 `core/bridge/tools/catalog.go` 元数据条目与 `catalog_metadata_test.go` 期望清单，使 tool selector 与 allowlist/blocklist 可配置此工具。
 - `2026-03-10`：收紧流式事件 contract：`streaming.Sink.Emit(...)` 现返回实际发出的 canonical `Event`，SSE sink 统一补全 `trace_id/id/at/session_id` 后向外传递，`sessionStreamBroadcastSink` 改为基于内层返回值广播，避免 SSE 与 session push 看到不同元数据；同时补齐 `streaming/events_test.go` 与 `app/transport_sse_test.go`，覆盖空 `trace_id`、非法 turn/index、事件 helper 约定，以及 wrapper sink 组合下 canonical event 一致性。
 - `2026-03-10`：Web Console 首页移除右侧 RSS/新闻报道展示栏，不再在主聊天布局挂载 `RSSBriefingPanel` 或主动拉取 briefing 数据；主界面恢复为侧边栏 + 聊天区双栏布局。
 - `2026-03-10`：Web Console 聊天区消息样式调整为更轻量的聊天布局，新增工具调用折叠卡片与复制按钮，并更新 `messages.css` 以匹配新视觉，未改动业务逻辑。

@@ -7,27 +7,28 @@ import (
 
 func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 	metadata := GetToolMetadata()
-	expected := []string{
-		"list_files",
-		"read_file",
-		"read_and_summarize",
-		"search_files",
-		"apply_diff",
-		"bash_exec",
-		"script_exec",
-		"codex_cli",
-		"web_search",
-		"feed_subscribe",
-		"feed_list",
-		"feed_update",
-		"feed_unsubscribe",
-		"rss_fetch",
-		"memory_manage",
-		"screen_action",
-		"browser_control",
-		"task_manage",
-		"ask_human",
-	}
+		expected := []string{
+			"list_files",
+			"read_file",
+			"read_and_summarize",
+			"search_files",
+			"apply_diff",
+			"bash_exec",
+			"script_exec",
+			"codex_cli",
+			"web_search",
+			"feed_subscribe",
+			"feed_list",
+			"feed_update",
+			"feed_unsubscribe",
+			"rss_fetch",
+			"memory_manage",
+			"screen_action",
+			"browser_control",
+			"text_input",
+			"task_manage",
+			"ask_human",
+		}
 	seen := make(map[string]ToolMetadata, len(metadata))
 	alwaysOnCount := 0
 	for _, item := range metadata {
