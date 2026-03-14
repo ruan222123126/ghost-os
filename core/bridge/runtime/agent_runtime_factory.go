@@ -204,12 +204,12 @@ func registerCoreTools(opts coreToolOptions) {
 }
 
 func setupMemoryAugmentation(cfg Config, registry *tools.Registry) (memoryRuntimeResources, error) {
-	settings := memorySettingsFromConfig(cfg.MemoryAugmentation)
+	settings := memorySettingsFromConfig(cfg)
 	if !settings.Enabled {
 		return memoryRuntimeResources{}, nil
 	}
 	store, err := memorystore.NewStoreWithOptions(memorystore.StoreOptions{
-		Path:               cfg.MemoryPath,
+		Path:               strings.TrimSpace(os.Getenv("GHOST_MEMORY_PATH")),
 		DefaultUserScopeID: settings.UserScopeID,
 	})
 	if err != nil {
@@ -230,17 +230,17 @@ func setupMemoryAugmentation(cfg Config, registry *tools.Registry) (memoryRuntim
 	}, nil
 }
 
-func memorySettingsFromConfig(cfg MemoryAugmentationConfig) memoryaug.Settings {
+func memorySettingsFromConfig(cfg Config) memoryaug.Settings {
 	return memoryaug.Settings{
-		Enabled:             cfg.Enabled,
-		LearningEnabled:     cfg.LearningEnabled,
-		RecallEnabled:       cfg.RecallEnabled,
-		MaxRecallItems:      cfg.MaxRecallItems,
-		MinConfidence:       cfg.MinConfidence,
-		SessionScopeEnabled: cfg.SessionScopeEnabled,
-		UserScopeEnabled:    cfg.UserScopeEnabled,
-		LLMModel:            cfg.LLMModel,
-		UserScopeID:         cfg.UserScopeID,
+		Enabled:             cfg.MemoryAugmentation.Enabled,
+		LearningEnabled:     cfg.MemoryAugmentation.LearningEnabled,
+		RecallEnabled:       cfg.MemoryAugmentation.RecallEnabled,
+		MaxRecallItems:      cfg.MemoryAugmentation.MaxRecallItems,
+		MinConfidence:       cfg.MemoryAugmentation.MinConfidence,
+		SessionScopeEnabled: cfg.MemoryAugmentation.SessionScopeEnabled,
+		UserScopeEnabled:    cfg.MemoryAugmentation.UserScopeEnabled,
+		LLMModel:            cfg.MemoryAugmentation.LLMModel,
+		UserScopeID:         cfg.MemoryAugmentation.UserScopeID,
 	}
 }
 
