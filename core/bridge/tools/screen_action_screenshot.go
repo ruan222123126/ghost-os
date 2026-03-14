@@ -10,7 +10,6 @@ import (
 
 	"ghost-os/bridge/tools/internal/toolartifacts"
 	"ghost-os/bridge/tools/internal/tooljson"
-	"ghost-os/bridge/tools/internal/toolparams"
 )
 
 const screenImageMimeType = "image/png"

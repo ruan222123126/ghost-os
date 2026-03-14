@@ -27,8 +27,8 @@ func TestScreenActionToolExecuteScreenshotPersistsImage(t *testing.T) {
 	var capturedParams map[string]any
 	tool := NewScreenActionTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
-			if action != "SCREEN_SHOT" {
-				t.Fatalf("unexpected action: got %q want %q", action, "SCREEN_SHOT")
+			if action != "SCREEN_CAPTURE" {
+				t.Fatalf("unexpected action: got %q want %q", action, "SCREEN_CAPTURE")
 			}
 			if traceID != "trace-shot-1" {
 				t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-shot-1")
@@ -36,8 +36,8 @@ func TestScreenActionToolExecuteScreenshotPersistsImage(t *testing.T) {
 			capturedParams = params
 			return map[string]any{
 				"image_base64": imageBase64,
-				"width":        1,
-				"height":       1,
+				"image_width":  1,
+				"image_height": 1,
 				"display_id":   2,
 			}, nil
 		},
