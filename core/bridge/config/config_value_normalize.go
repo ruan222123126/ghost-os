@@ -6,6 +6,14 @@ import (
 )
 
 func normalizeProviderHeaders(raw map[string]string) (map[string]string, error) {
+	return normalizeNamedHeaders(raw, "provider_headers")
+}
+
+func normalizeGraphQLHeaders(raw map[string]string) (map[string]string, error) {
+	return normalizeNamedHeaders(raw, "graphql_headers")
+}
+
+func normalizeNamedHeaders(raw map[string]string, fieldName string) (map[string]string, error) {
 	if len(raw) == 0 {
 		return nil, nil
 	}
@@ -14,7 +22,7 @@ func normalizeProviderHeaders(raw map[string]string) (map[string]string, error) 
 	for key, value := range raw {
 		trimmedKey := strings.TrimSpace(key)
 		if trimmedKey == "" {
-			return nil, fmt.Errorf("invalid provider_headers: header key cannot be empty")
+			return nil, fmt.Errorf("invalid %s: header key cannot be empty", strings.TrimSpace(fieldName))
 		}
 		out[trimmedKey] = strings.TrimSpace(value)
 	}

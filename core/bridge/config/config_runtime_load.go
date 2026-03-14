@@ -34,6 +34,7 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 		Provider:                buildProviderConfig(runtime, fileCfg, headers),
 		RSS:                     buildRSSConfig(),
 		Worker:                  buildWorkerConfig(fileCfg),
+		GraphQL:                 runtime.GraphQL,
 		ToolSelector:            buildToolSelectorConfig(fileCfg),
 		ToolSearch:              buildToolSearchConfig(fileCfg),
 		MemoryAugmentation:      buildMemoryAugmentationConfig(fileCfg),

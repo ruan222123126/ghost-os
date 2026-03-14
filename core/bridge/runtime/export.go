@@ -1,14 +1,12 @@
 package runtime
 
 import (
-	"sort"
-	"strings"
-
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/execution"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
@@ -16,6 +14,7 @@ type Config = bridgeconfig.Config
 type ConfigStore = bridgeconfig.Store
 type RuntimeConfig = bridgeconfig.RuntimeConfig
 type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
+type ToolSearchConfig = bridgeconfig.ToolSearchConfig
 type runtimeConfig = bridgeconfig.RuntimeConfig
 type Dependencies = agentRuntimeDependencies
 type SelectorEngine = selectorEngine
@@ -56,7 +55,7 @@ func NewAgentRuntimeFactoryWithTaskManager(taskManager tools.TaskManager) AgentR
 	return newAgentRuntimeFactoryWithTaskManager(taskManager)
 }
 
-func NewToolSelectionPolicy(cfg ToolSelectorConfig) SelectionPolicy {
+func NewToolSelectionPolicy(cfg Config) SelectionPolicy {
 	return SelectionPolicy{toolSelectionPolicy: newToolSelectionPolicy(cfg)}
 }
 
@@ -78,6 +77,10 @@ func NewSelectorFromConfig(cfg Config, catalog tools.ToolCatalog) SelectorEngine
 
 func BuildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string, error) {
 	return buildSystemPromptForCatalog(cfg, catalog)
+}
+
+func NewSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *session.Session, idleTurns int, selector bool) tools.ToolCatalog {
+	return newSessionTurnCatalog(catalog, static, sess, idleTurns, selector)
 }
 
 func providerClientOptions(cfg Config, model string) llm.ClientOptions {
@@ -137,19 +140,5 @@ func CloseExecutionClient(client execution.Client) error {
 }
 
 func toolCatalogNames(catalog tools.ToolCatalog) []string {
-	if catalog == nil {
-		return nil
-	}
-	defs := catalog.ToolDefs()
-	if len(defs) == 0 {
-		return nil
-	}
-	names := make([]string, 0, len(defs))
-	for _, def := range defs {
-		if name := strings.TrimSpace(def.Name); name != "" {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
+	return tools.CatalogToolNames(catalog)
 }

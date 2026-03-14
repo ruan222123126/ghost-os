@@ -8,12 +8,19 @@ import (
 	"ghost-os/bridge/llm"
 )
 
+const (
+	AskHumanToolName   = "ask_human"
+	ToolSearchToolName = "tfind"
+)
+
 // ToolMetadata 是供轻量 selector 使用的低成本工具描述，不暴露完整 schema。
 type ToolMetadata struct {
-	Name     string
-	Domain   string
-	Tags     []string
-	AlwaysOn bool
+	Name      string
+	Domain    string
+	Tags      []string
+	ShortDesc string
+	AlwaysOn  bool
+	OnDemand  bool
 }
 
 // Registry 按名称管理工具，并提供给 LLM 的工具定义列表。
@@ -109,50 +116,37 @@ func (sc *ScopedCatalog) ToolDefs() []llm.ToolDef {
 // GetToolMetadata 返回稳定顺序的 selector 元数据清单。
 func GetToolMetadata() []ToolMetadata {
 	return []ToolMetadata{
-		{Name: "read_and_summarize", Domain: "file", Tags: []string{"read", "summarize", "batch", "triage"}},
-		{Name: "send_file", Domain: "file", Tags: []string{"export", "download", "artifact"}},
-		{Name: "set_project_root", Domain: "workspace", Tags: []string{"root", "workspace", "config"}},
-		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}},
-		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}},
-		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}},
-		{Name: "feed_manage", Domain: "web", Tags: []string{"feed", "rss", "manage", "crud"}},
-		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}},
-		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}},
-		{Name: "memory_learned_list", Domain: "memory", Tags: []string{"memory", "learned", "read", "debug"}},
-		{Name: "memory_recall_debug", Domain: "memory", Tags: []string{"memory", "recall", "debug", "read"}},
-		{Name: "screen_action", Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "native"}},
-		{Name: "browser_control", Domain: "browser", Tags: []string{"browser", "automation", "web", "dom"}},
-		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}},
-		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}},
-		{Name: "ask_human", Domain: "human", Tags: []string{"interactive", "safety"}, AlwaysOn: true},
+		{Name: "read_and_summarize", Domain: "file", Tags: []string{"read", "summarize", "batch", "triage"}, ShortDesc: "Read many files and summarize."},
+		{Name: "send_file", Domain: "file", Tags: []string{"export", "download", "artifact"}, ShortDesc: "Export a file artifact."},
+		{Name: "set_project_root", Domain: "workspace", Tags: []string{"root", "workspace", "config"}, ShortDesc: "Set the workspace root."},
+		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
+		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
+		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
+		{Name: "graphql_query", Domain: "data", Tags: []string{"graphql", "query", "read", "structured"}, ShortDesc: "Read-only structured data query.", OnDemand: true},
+		{Name: "graphql_schema_lookup", Domain: "data", Tags: []string{"graphql", "schema", "inspect", "read"}, ShortDesc: "Inspect local GraphQL schema snapshot.", OnDemand: true},
+		{Name: "feed_manage", Domain: "web", Tags: []string{"feed", "rss", "manage", "crud"}, ShortDesc: "Manage RSS/Atom sources."},
+		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}, ShortDesc: "Fetch one RSS/Atom feed."},
+		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}, ShortDesc: "CRUD explicit memory."},
+		{Name: "memory_learned_list", Domain: "memory", Tags: []string{"memory", "learned", "read", "debug"}, ShortDesc: "List learned memory."},
+		{Name: "memory_recall_debug", Domain: "memory", Tags: []string{"memory", "recall", "debug", "read"}, ShortDesc: "Inspect memory recall."},
+		{Name: "screen_action", Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "native"}, ShortDesc: "Use OCR or click on screen."},
+		{Name: "browser_control", Domain: "browser", Tags: []string{"browser", "automation", "web", "dom"}, ShortDesc: "Control a browser tab."},
+		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}, ShortDesc: "Type into the focused field."},
+		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}, ShortDesc: "Manage scheduled tasks."},
+		{Name: ToolSearchToolName, Domain: "tools", Tags: []string{"search", "load", "unload", "catalog"}, ShortDesc: "Find or load optional tools."},
+		{Name: AskHumanToolName, Domain: "human", Tags: []string{"interactive", "safety"}, ShortDesc: "Ask the user when blocked.", AlwaysOn: true},
 	}
 }
 
 // FormatMetadataForSelector 将元数据压缩为易于 LLM 读取的短文本。
 func FormatMetadataForSelector() string {
-	return formatMetadataLines(GetToolMetadata())
+	return formatMetadataLines(selectorVisibleMetadata(nil))
 }
 
 func FormatMetadataForCatalog(catalog ToolCatalog) string {
-	if catalog == nil {
-		return FormatMetadataForSelector()
-	}
-
-	allowed := make(map[string]bool)
-	for _, def := range catalog.ToolDefs() {
-		if name := strings.TrimSpace(def.Name); name != "" {
-			allowed[name] = true
-		}
-	}
-	if len(allowed) == 0 {
+	filtered := selectorVisibleMetadata(catalog)
+	if len(filtered) == 0 {
 		return ""
-	}
-
-	filtered := make([]ToolMetadata, 0, len(allowed))
-	for _, item := range GetToolMetadata() {
-		if allowed[item.Name] {
-			filtered = append(filtered, item)
-		}
 	}
 	return formatMetadataLines(filtered)
 }

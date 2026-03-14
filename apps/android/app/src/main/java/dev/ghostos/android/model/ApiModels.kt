@@ -222,6 +222,18 @@ data class BridgeConfig(
     val apiKeySet: Boolean,
     @SerialName("model_selection_enabled")
     val modelSelectionEnabled: Boolean,
+    @SerialName("graphql_enabled")
+    val graphqlEnabled: Boolean,
+    @SerialName("graphql_endpoint")
+    val graphqlEndpoint: String,
+    @SerialName("graphql_schema_path")
+    val graphqlSchemaPath: String,
+    @SerialName("graphql_timeout_ms")
+    val graphqlTimeoutMs: Int,
+    @SerialName("graphql_max_response_bytes")
+    val graphqlMaxResponseBytes: Int,
+    @SerialName("graphql_api_key_set")
+    val graphqlApiKeySet: Boolean,
     @SerialName("web_search_tavily_api_key_set")
     val webSearchTavilyApiKeySet: Boolean,
     @SerialName("web_search_exa_api_key_set")
@@ -238,6 +250,20 @@ data class ConfigUpdate(
     val model: String? = null,
     @SerialName("chat_path")
     val chatPath: String? = null,
+    @SerialName("graphql_enabled")
+    val graphqlEnabled: Boolean? = null,
+    @SerialName("graphql_endpoint")
+    val graphqlEndpoint: String? = null,
+    @SerialName("graphql_api_key")
+    val graphqlApiKey: String? = null,
+    @SerialName("graphql_schema_path")
+    val graphqlSchemaPath: String? = null,
+    @SerialName("graphql_timeout_ms")
+    val graphqlTimeoutMs: Int? = null,
+    @SerialName("graphql_max_response_bytes")
+    val graphqlMaxResponseBytes: Int? = null,
+    @SerialName("graphql_headers")
+    val graphqlHeaders: JsonObject? = null,
     @SerialName("web_search_tavily_api_key")
     val webSearchTavilyApiKey: String? = null,
     @SerialName("web_search_exa_api_key")

@@ -41,6 +41,16 @@ type WorkerConfig struct {
 	MaxFileChunks  int
 }
 
+type GraphQLConfig struct {
+	Enabled          bool
+	Endpoint         string
+	APIKey           string
+	SchemaPath       string
+	TimeoutMS        int
+	MaxResponseBytes int
+	Headers          map[string]string
+}
+
 type ToolSelectorConfig struct {
 	Enabled    bool
 	Mode       string
@@ -77,6 +87,7 @@ type Config struct {
 	Provider                ProviderConfig
 	RSS                     RSSConfig
 	Worker                  WorkerConfig
+	GraphQL                 GraphQLConfig
 	ToolSelector            ToolSelectorConfig
 	ToolSearch              ToolSearchConfig
 	MemoryAugmentation      MemoryAugmentationConfig
@@ -114,39 +125,42 @@ type runtimeConfig struct {
 	ModelResponseReserveTokens map[string]int
 	WebSearchTavilyAPIKey      string
 	WebSearchExaAPIKey         string
+	GraphQL                    GraphQLConfig
 }
 
 const (
-	defaultProvider               = llm.ProviderOpenAI
-	defaultBaseURL                = "https://api.openai.com/v1"
-	defaultAnthropicBaseURL       = "https://api.anthropic.com"
-	defaultModel                  = "gpt-4o"
-	defaultPromptsPath            = "prompts.yaml"
-	defaultPromptsDir             = "~/.ghost-os/prompts"
-	defaultSessionsPath           = "~/.ghost-os/sessions"
-	defaultRSSFeedsPath           = "~/.ghost-os/rss/feeds.json"
-	defaultRSSInboxPath           = "~/.ghost-os/rss/inbox.json"
-	defaultRSSBriefingsPath       = "~/.ghost-os/rss/briefings.json"
-	defaultRSSReportsPath         = "~/.ghost-os/rss/reports/index.json"
-	defaultRSSPollInterval        = 15 * time.Minute
-	defaultRSSPollMaxItemsPerFeed = 10
-	defaultRSSAIBatchSize         = 5
-	defaultRSSBriefingInterval    = 30 * time.Minute
-	defaultTasksPath              = "~/.ghost-os/tasks"
-	defaultAnthropicVersion       = "2023-06-01"
-	defaultAnthropicMaxTokens     = 1024
-	defaultProMaxIterations       = 20
-	defaultMaxTurns               = 20
-	defaultWorkerMaxConcurrency   = 4
-	defaultWorkerMaxFiles         = 20
-	defaultWorkerMaxFileChunks    = 4
-	defaultToolSelectorTimeoutMS  = 1500
-	defaultToolSelectorConfidence = 0.75
-	defaultToolSelectorRecentMsgs = 6
-	defaultToolSearchIdleTurns    = 3
-	defaultMemoryRecallItems      = 8
-	defaultMemoryMinConfidence    = 0.7
-	defaultMemoryUserScopeID      = "local-user"
+	defaultProvider                = llm.ProviderOpenAI
+	defaultBaseURL                 = "https://api.openai.com/v1"
+	defaultAnthropicBaseURL        = "https://api.anthropic.com"
+	defaultModel                   = "gpt-4o"
+	defaultPromptsPath             = "prompts.yaml"
+	defaultPromptsDir              = "~/.ghost-os/prompts"
+	defaultSessionsPath            = "~/.ghost-os/sessions"
+	defaultRSSFeedsPath            = "~/.ghost-os/rss/feeds.json"
+	defaultRSSInboxPath            = "~/.ghost-os/rss/inbox.json"
+	defaultRSSBriefingsPath        = "~/.ghost-os/rss/briefings.json"
+	defaultRSSReportsPath          = "~/.ghost-os/rss/reports/index.json"
+	defaultRSSPollInterval         = 15 * time.Minute
+	defaultRSSPollMaxItemsPerFeed  = 10
+	defaultRSSAIBatchSize          = 5
+	defaultRSSBriefingInterval     = 30 * time.Minute
+	defaultTasksPath               = "~/.ghost-os/tasks"
+	defaultAnthropicVersion        = "2023-06-01"
+	defaultAnthropicMaxTokens      = 1024
+	defaultProMaxIterations        = 20
+	defaultMaxTurns                = 20
+	defaultWorkerMaxConcurrency    = 4
+	defaultWorkerMaxFiles          = 20
+	defaultWorkerMaxFileChunks     = 4
+	defaultGraphQLTimeoutMS        = 10_000
+	defaultGraphQLMaxResponseBytes = 1 << 20
+	defaultToolSelectorTimeoutMS   = 1500
+	defaultToolSelectorConfidence  = 0.75
+	defaultToolSelectorRecentMsgs  = 6
+	defaultToolSearchIdleTurns     = 3
+	defaultMemoryRecallItems       = 8
+	defaultMemoryMinConfidence     = 0.7
+	defaultMemoryUserScopeID       = "local-user"
 )
 
 func providerClientOptions(cfg Config, model string) llm.ClientOptions {

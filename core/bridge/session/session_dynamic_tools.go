@@ -109,7 +109,7 @@ func (s *Session) VisibleDynamicToolNames(idleTurns int) []string {
 	visible := make([]string, 0, len(s.DynamicToolLoads))
 	for name, record := range s.DynamicToolLoads {
 		record = normalizeDynamicToolLoad(name, record)
-		if !record.visibleForTurn(s.TurnIndex) || record.expiredAtTurn(s.TurnIndex, idleTurns) {
+		if !record.VisibleForTurn(s.TurnIndex) || record.ExpiredAtTurn(s.TurnIndex, idleTurns) {
 			continue
 		}
 		visible = append(visible, name)
@@ -157,7 +157,7 @@ func (s *Session) pruneExpiredDynamicTools(idleTurns int) []string {
 	expired := make([]string, 0, len(s.DynamicToolLoads))
 	for name, record := range s.DynamicToolLoads {
 		record = normalizeDynamicToolLoad(name, record)
-		if !record.expiredAtTurn(s.TurnIndex, idleTurns) {
+		if !record.ExpiredAtTurn(s.TurnIndex, idleTurns) {
 			s.DynamicToolLoads[name] = record
 			continue
 		}
@@ -172,19 +172,20 @@ func (s *Session) pruneExpiredDynamicTools(idleTurns int) []string {
 }
 
 func normalizeDynamicToolLoad(toolName string, record DynamicToolLoad) DynamicToolLoad {
-	record.ToolName = strings.TrimSpace(toolName)
-	if record.ToolName == "" {
-		record.ToolName = strings.TrimSpace(record.ToolName)
+	normalizedName := strings.TrimSpace(toolName)
+	if normalizedName == "" {
+		normalizedName = strings.TrimSpace(record.ToolName)
 	}
+	record.ToolName = normalizedName
 	record.LoadedBy = strings.TrimSpace(record.LoadedBy)
 	return record
 }
 
-func (r DynamicToolLoad) visibleForTurn(currentTurn int) bool {
+func (r DynamicToolLoad) VisibleForTurn(currentTurn int) bool {
 	return r.LoadedAtTurn > 0 && r.LoadedAtTurn < currentTurn
 }
 
-func (r DynamicToolLoad) expiredAtTurn(currentTurn int, idleTurns int) bool {
+func (r DynamicToolLoad) ExpiredAtTurn(currentTurn int, idleTurns int) bool {
 	if currentTurn <= 0 || idleTurns <= 0 {
 		return false
 	}

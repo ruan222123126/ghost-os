@@ -93,6 +93,9 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 		}
 
 		toolCtx := tools.WithToolCallID(ctx, toolCallID)
+		if sess := tools.SessionFromContext(ctx); sess != nil {
+			sess.NoteDynamicToolCall(toolName)
+		}
 		stats.executed++
 		output, execErr := e.executeToolSafely(toolCtx, tool, args, traceID, toolName)
 		if execErr != nil {

@@ -140,3 +140,43 @@ func TestIterationRuntimeLifecycle(t *testing.T) {
 		t.Fatalf("unexpected final change log: %q", s.IterationRuntime.FinalChangeLog)
 	}
 }
+
+func TestDynamicToolLoadLifecycle(t *testing.T) {
+	s := NewSession("")
+	s.AdvanceToolTurn(3)
+
+	loaded := s.EnsureDynamicToolLoaded("web_search", "tfind")
+	if loaded.AlreadyLoaded {
+		t.Fatal("newly loaded tool should not report already_loaded")
+	}
+	if got := s.VisibleDynamicToolNames(3); len(got) != 0 {
+		t.Fatalf("loaded tool should stay hidden until next turn, got %v", got)
+	}
+
+	s.AdvanceToolTurn(3)
+	visible := s.VisibleDynamicToolNames(3)
+	if len(visible) != 1 || visible[0] != "web_search" {
+		t.Fatalf("unexpected visible tools: %v", visible)
+	}
+	snapshot, ok := s.DynamicToolLoadSnapshot("web_search")
+	if !ok {
+		t.Fatal("expected dynamic tool snapshot")
+	}
+	if !snapshot.VisibleForTurn(s.TurnIndex) {
+		t.Fatal("expected tool to be visible on the next turn")
+	}
+	if snapshot.RemainingIdleTurns(s.TurnIndex, 3) != 3 {
+		t.Fatalf("unexpected remaining idle turns: %d", snapshot.RemainingIdleTurns(s.TurnIndex, 3))
+	}
+
+	if !s.NoteDynamicToolCall("web_search") {
+		t.Fatal("expected NoteDynamicToolCall to succeed")
+	}
+	s.AdvanceToolTurn(3)
+	s.AdvanceToolTurn(3)
+	s.AdvanceToolTurn(3)
+	expired := s.AdvanceToolTurn(3)
+	if len(expired) != 1 || expired[0] != "web_search" {
+		t.Fatalf("expected web_search to expire after idle turns, got %v", expired)
+	}
+}

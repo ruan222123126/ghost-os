@@ -7,6 +7,7 @@ type ProviderConfig = bridgeconfig.ProviderConfig
 type RSSConfig = bridgeconfig.RSSConfig
 type WorkerConfig = bridgeconfig.WorkerConfig
 type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
+type ToolSearchConfig = bridgeconfig.ToolSearchConfig
 type MemoryAugmentationConfig = bridgeconfig.MemoryAugmentationConfig
 type runtimeConfig = bridgeconfig.RuntimeConfig
 type providerConfig = bridgeconfig.ProviderRecord
@@ -40,6 +41,7 @@ const (
 	defaultToolSelectorTimeoutMS  = bridgeconfig.DefaultToolSelectorTimeoutMS
 	defaultToolSelectorConfidence = bridgeconfig.DefaultToolSelectorConfidence
 	defaultToolSelectorRecentMsgs = bridgeconfig.DefaultToolSelectorRecentMsgs
+	defaultToolSearchIdleTurns    = bridgeconfig.DefaultToolSearchIdleTurns
 	defaultMemoryRecallItems      = bridgeconfig.DefaultMemoryRecallItems
 	defaultMemoryMinConfidence    = bridgeconfig.DefaultMemoryMinConfidence
 	defaultMemoryUserScopeID      = bridgeconfig.DefaultMemoryUserScopeID
@@ -91,6 +93,12 @@ func (s *ConfigStore) Snapshot() configResponse {
 		ChatPath:                 snapshot.ChatPath,
 		APIKeySet:                snapshot.APIKeySet,
 		ModelSelectionEnabled:    snapshot.ModelSelectionEnabled,
+		GraphqlEnabled:           snapshot.GraphQLEnabled,
+		GraphqlEndpoint:          snapshot.GraphQLEndpoint,
+		GraphqlSchemaPath:        snapshot.GraphQLSchemaPath,
+		GraphqlTimeoutMs:         snapshot.GraphQLTimeoutMS,
+		GraphqlMaxResponseBytes:  snapshot.GraphQLMaxResponseBytes,
+		GraphqlAPIKeySet:         snapshot.GraphQLAPIKeySet,
 		WebSearchTavilyAPIKeySet: snapshot.WebSearchTavilyAPIKeySet,
 		WebSearchExaAPIKeySet:    snapshot.WebSearchExaAPIKeySet,
 	}
@@ -123,14 +131,21 @@ func (s *ConfigStore) SetActiveProvider(name string) error {
 
 func (s *ConfigStore) Update(req configUpdateRequest) error {
 	return s.unwrap().Update(bridgeconfig.UpdateRequest{
-		Provider:              req.Provider,
-		APIKey:                req.APIKey,
-		BaseURL:               req.BaseURL,
-		Model:                 req.Model,
-		ChatPath:              req.ChatPath,
-		WebSearchTavilyAPIKey: req.WebSearchTavilyAPIKey,
-		WebSearchExaAPIKey:    req.WebSearchExaAPIKey,
-		TraceID:               req.TraceID,
+		Provider:                req.Provider,
+		APIKey:                  req.APIKey,
+		BaseURL:                 req.BaseURL,
+		Model:                   req.Model,
+		ChatPath:                req.ChatPath,
+		GraphQLEnabled:          req.GraphqlEnabled,
+		GraphQLEndpoint:         req.GraphqlEndpoint,
+		GraphQLAPIKey:           req.GraphqlAPIKey,
+		GraphQLSchemaPath:       req.GraphqlSchemaPath,
+		GraphQLTimeoutMS:        req.GraphqlTimeoutMs,
+		GraphQLMaxResponseBytes: req.GraphqlMaxResponseBytes,
+		GraphQLHeaders:          stringMapFromAny(req.GraphqlHeaders),
+		WebSearchTavilyAPIKey:   req.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:      req.WebSearchExaAPIKey,
+		TraceID:                 req.TraceID,
 	})
 }
 
@@ -144,4 +159,19 @@ func cloneOptionalStringPointer(raw *string) *string {
 
 func stringValue(raw *string) string {
 	return bridgeconfig.StringValue(raw)
+}
+
+func stringMapFromAny(raw map[string]any) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		text, ok := value.(string)
+		if !ok {
+			return nil
+		}
+		out[key] = text
+	}
+	return out
 }

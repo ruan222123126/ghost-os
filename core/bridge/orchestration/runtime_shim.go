@@ -7,6 +7,7 @@ import (
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
 	bridgeruntime "ghost-os/bridge/runtime"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
@@ -74,7 +75,7 @@ type toolSelectionPolicy struct {
 	inner bridgeruntime.SelectionPolicy
 }
 
-func newToolSelectionPolicy(cfg ToolSelectorConfig) toolSelectionPolicy {
+func newToolSelectionPolicy(cfg Config) toolSelectionPolicy {
 	return toolSelectionPolicy{inner: bridgeruntime.NewToolSelectionPolicy(cfg)}
 }
 
@@ -104,4 +105,8 @@ func newToolSelectorFromConfig(cfg Config, catalog tools.ToolCatalog) selectorEn
 
 func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string, error) {
 	return bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
+}
+
+func newSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *session.Session, idleTurns int, selector bool) tools.ToolCatalog {
+	return bridgeruntime.NewSessionTurnCatalog(catalog, static, sess, idleTurns, selector)
 }

@@ -31,9 +31,10 @@ type ToolSelectorResult struct {
 
 // ToolSelector 使用轻量 prompt 让次级模型挑选最小充分工具集。
 type ToolSelector struct {
-	cfg      Config
-	worker   toolSelectorCompleter
-	metadata string
+	cfg        Config
+	worker     toolSelectorCompleter
+	metadata   string
+	validTools map[string]bool
 }
 
 func NewToolSelector(cfg Config, worker toolSelectorCompleter) *ToolSelector {
@@ -45,10 +46,23 @@ func NewToolSelectorForCatalog(cfg Config, worker toolSelectorCompleter, catalog
 	if strings.TrimSpace(metadata) == "" {
 		metadata = tools.FormatMetadataForSelector()
 	}
+	validTools := make(map[string]bool)
+	for _, name := range tools.CatalogToolNames(catalog) {
+		validTools[name] = true
+	}
+	if len(validTools) == 0 {
+		for _, item := range tools.GetToolMetadata() {
+			if item.Name == tools.ToolSearchToolName || item.OnDemand {
+				continue
+			}
+			validTools[item.Name] = true
+		}
+	}
 	return &ToolSelector{
-		cfg:      cfg,
-		worker:   worker,
-		metadata: metadata,
+		cfg:        cfg,
+		worker:     worker,
+		metadata:   metadata,
+		validTools: validTools,
 	}
 }
 

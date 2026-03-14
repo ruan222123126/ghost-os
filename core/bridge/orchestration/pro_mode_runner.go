@@ -144,7 +144,7 @@ func (r proModeRunner) runIterations(
 	request proModeRequest,
 	traceID string,
 ) (proModeResult, error) {
-	catalog := newProModeCatalog(newToolSelectionPolicy(deps.cfg.ToolSelector).scopeCatalog(deps.registry), request.Mode == proModePro)
+	catalog := newProModeCatalog(newToolSelectionPolicy(deps.cfg).scopeCatalog(deps.registry), request.Mode == proModePro)
 	systemPrompt, err := buildProModeSystemPrompt(deps.cfg, catalog, request)
 	if err != nil {
 		return proModeResult{}, err

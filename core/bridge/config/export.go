@@ -21,55 +21,70 @@ type Snapshot struct {
 	ChatPath                 string `json:"chat_path"`
 	APIKeySet                bool   `json:"api_key_set"`
 	ModelSelectionEnabled    bool   `json:"model_selection_enabled"`
+	GraphQLEnabled           bool   `json:"graphql_enabled"`
+	GraphQLEndpoint          string `json:"graphql_endpoint"`
+	GraphQLSchemaPath        string `json:"graphql_schema_path"`
+	GraphQLTimeoutMS         int    `json:"graphql_timeout_ms"`
+	GraphQLMaxResponseBytes  int    `json:"graphql_max_response_bytes"`
+	GraphQLAPIKeySet         bool   `json:"graphql_api_key_set"`
 	WebSearchTavilyAPIKeySet bool   `json:"web_search_tavily_api_key_set"`
 	WebSearchExaAPIKeySet    bool   `json:"web_search_exa_api_key_set"`
 }
 
 type UpdateRequest struct {
-	Provider              *string `json:"provider,omitempty"`
-	APIKey                *string `json:"api_key,omitempty"`
-	BaseURL               *string `json:"base_url,omitempty"`
-	Model                 *string `json:"model,omitempty"`
-	ChatPath              *string `json:"chat_path,omitempty"`
-	WebSearchTavilyAPIKey *string `json:"web_search_tavily_api_key,omitempty"`
-	WebSearchExaAPIKey    *string `json:"web_search_exa_api_key,omitempty"`
-	TraceID               string  `json:"trace_id,omitempty"`
+	Provider                *string           `json:"provider,omitempty"`
+	APIKey                  *string           `json:"api_key,omitempty"`
+	BaseURL                 *string           `json:"base_url,omitempty"`
+	Model                   *string           `json:"model,omitempty"`
+	ChatPath                *string           `json:"chat_path,omitempty"`
+	GraphQLEnabled          *bool             `json:"graphql_enabled,omitempty"`
+	GraphQLEndpoint         *string           `json:"graphql_endpoint,omitempty"`
+	GraphQLAPIKey           *string           `json:"graphql_api_key,omitempty"`
+	GraphQLSchemaPath       *string           `json:"graphql_schema_path,omitempty"`
+	GraphQLTimeoutMS        *int              `json:"graphql_timeout_ms,omitempty"`
+	GraphQLMaxResponseBytes *int              `json:"graphql_max_response_bytes,omitempty"`
+	GraphQLHeaders          map[string]string `json:"graphql_headers,omitempty"`
+	WebSearchTavilyAPIKey   *string           `json:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey      *string           `json:"web_search_exa_api_key,omitempty"`
+	TraceID                 string            `json:"trace_id,omitempty"`
 }
 
 type configResponse = Snapshot
 type configUpdateRequest = UpdateRequest
 
 const (
-	DefaultProvider               = defaultProvider
-	DefaultBaseURL                = defaultBaseURL
-	DefaultAnthropicBaseURL       = defaultAnthropicBaseURL
-	DefaultModel                  = defaultModel
-	DefaultPromptsPath            = defaultPromptsPath
-	DefaultPromptsDir             = defaultPromptsDir
-	DefaultSessionsPath           = defaultSessionsPath
-	DefaultRSSFeedsPath           = defaultRSSFeedsPath
-	DefaultRSSInboxPath           = defaultRSSInboxPath
-	DefaultRSSBriefingsPath       = defaultRSSBriefingsPath
-	DefaultRSSReportsPath         = defaultRSSReportsPath
-	DefaultRSSPollInterval        = defaultRSSPollInterval
-	DefaultRSSPollMaxItemsPerFeed = defaultRSSPollMaxItemsPerFeed
-	DefaultRSSAIBatchSize         = defaultRSSAIBatchSize
-	DefaultRSSBriefingInterval    = defaultRSSBriefingInterval
-	DefaultTasksPath              = defaultTasksPath
-	DefaultAnthropicVersion       = defaultAnthropicVersion
-	DefaultAnthropicMaxTokens     = defaultAnthropicMaxTokens
-	DefaultProMaxIterations       = defaultProMaxIterations
-	DefaultMaxTurns               = defaultMaxTurns
-	DefaultWorkerMaxConcurrency   = defaultWorkerMaxConcurrency
-	DefaultWorkerMaxFiles         = defaultWorkerMaxFiles
-	DefaultWorkerMaxFileChunks    = defaultWorkerMaxFileChunks
-	DefaultToolSelectorTimeoutMS  = defaultToolSelectorTimeoutMS
-	DefaultToolSelectorConfidence = defaultToolSelectorConfidence
-	DefaultToolSelectorRecentMsgs = defaultToolSelectorRecentMsgs
-	DefaultToolSearchIdleTurns    = defaultToolSearchIdleTurns
-	DefaultMemoryRecallItems      = defaultMemoryRecallItems
-	DefaultMemoryMinConfidence    = defaultMemoryMinConfidence
-	DefaultMemoryUserScopeID      = defaultMemoryUserScopeID
+	DefaultProvider                = defaultProvider
+	DefaultBaseURL                 = defaultBaseURL
+	DefaultAnthropicBaseURL        = defaultAnthropicBaseURL
+	DefaultModel                   = defaultModel
+	DefaultPromptsPath             = defaultPromptsPath
+	DefaultPromptsDir              = defaultPromptsDir
+	DefaultSessionsPath            = defaultSessionsPath
+	DefaultRSSFeedsPath            = defaultRSSFeedsPath
+	DefaultRSSInboxPath            = defaultRSSInboxPath
+	DefaultRSSBriefingsPath        = defaultRSSBriefingsPath
+	DefaultRSSReportsPath          = defaultRSSReportsPath
+	DefaultRSSPollInterval         = defaultRSSPollInterval
+	DefaultRSSPollMaxItemsPerFeed  = defaultRSSPollMaxItemsPerFeed
+	DefaultRSSAIBatchSize          = defaultRSSAIBatchSize
+	DefaultRSSBriefingInterval     = defaultRSSBriefingInterval
+	DefaultTasksPath               = defaultTasksPath
+	DefaultAnthropicVersion        = defaultAnthropicVersion
+	DefaultAnthropicMaxTokens      = defaultAnthropicMaxTokens
+	DefaultProMaxIterations        = defaultProMaxIterations
+	DefaultMaxTurns                = defaultMaxTurns
+	DefaultWorkerMaxConcurrency    = defaultWorkerMaxConcurrency
+	DefaultWorkerMaxFiles          = defaultWorkerMaxFiles
+	DefaultWorkerMaxFileChunks     = defaultWorkerMaxFileChunks
+	DefaultGraphQLTimeoutMS        = defaultGraphQLTimeoutMS
+	DefaultGraphQLMaxResponseBytes = defaultGraphQLMaxResponseBytes
+	DefaultToolSelectorTimeoutMS   = defaultToolSelectorTimeoutMS
+	DefaultToolSelectorConfidence  = defaultToolSelectorConfidence
+	DefaultToolSelectorRecentMsgs  = defaultToolSelectorRecentMsgs
+	DefaultToolSearchIdleTurns     = defaultToolSearchIdleTurns
+	DefaultMemoryRecallItems       = defaultMemoryRecallItems
+	DefaultMemoryMinConfidence     = defaultMemoryMinConfidence
+	DefaultMemoryUserScopeID       = defaultMemoryUserScopeID
 )
 
 var (

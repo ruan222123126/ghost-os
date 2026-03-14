@@ -10,6 +10,14 @@ import (
 )
 
 func parseProviderHeaders(raw string) (map[string]string, error) {
+	return parseNamedHeaders(raw, "GHOST_PROVIDER_HEADERS")
+}
+
+func parseGraphQLHeaders(raw string) (map[string]string, error) {
+	return parseNamedHeaders(raw, "GHOST_GRAPHQL_HEADERS")
+}
+
+func parseNamedHeaders(raw string, envName string) (map[string]string, error) {
 	text := strings.TrimSpace(raw)
 	if text == "" {
 		return nil, nil
@@ -17,14 +25,14 @@ func parseProviderHeaders(raw string) (map[string]string, error) {
 
 	var parsed map[string]string
 	if err := json.Unmarshal([]byte(text), &parsed); err != nil {
-		return nil, fmt.Errorf("invalid GHOST_PROVIDER_HEADERS: expected JSON object of string values: %w", err)
+		return nil, fmt.Errorf("invalid %s: expected JSON object of string values: %w", strings.TrimSpace(envName), err)
 	}
 
 	out := make(map[string]string, len(parsed))
 	for key, value := range parsed {
 		k := strings.TrimSpace(key)
 		if k == "" {
-			return nil, fmt.Errorf("invalid GHOST_PROVIDER_HEADERS: header key cannot be empty")
+			return nil, fmt.Errorf("invalid %s: header key cannot be empty", strings.TrimSpace(envName))
 		}
 		out[k] = strings.TrimSpace(value)
 	}

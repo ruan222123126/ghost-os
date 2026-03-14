@@ -103,6 +103,10 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		resources:   resources,
 		taskManager: taskManager,
 	})
+	if err := registerOptionalGraphQLTools(registry, cfg); err != nil {
+		closeRuntimeToolResources(resources)
+		return agentRuntimeDependencies{}, err
+	}
 	memoryResources, err := setupMemoryAugmentation(cfg, registry)
 	if err != nil {
 		closeRuntimeToolResources(resources)
@@ -186,9 +190,7 @@ func registerCoreTools(opts coreToolOptions) {
 	opts.registry.Register(tools.NewSendFileTool(opts.resources.executionClient, opts.resources.artifactStore))
 	opts.registry.Register(tools.NewScriptExecTool(opts.resources.executionClient))
 	opts.registry.Register(tools.NewSetProjectRootTool(opts.store, opts.resources.executionClient, opts.cfg.NativeAllowedReadPaths, opts.cfg.NativeAllowedWritePaths))
-	if containsToolName(opts.cfg.ToolSelector.Allowlist, "codex_cli") {
-		opts.registry.Register(tools.NewCodexCLITool(opts.resources.executionClient, opts.cfg.NativePersistent))
-	}
+	opts.registry.Register(tools.NewCodexCLITool(opts.resources.executionClient, opts.cfg.NativePersistent))
 	opts.registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{
 		TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey,
 		ExaAPIKey:    opts.cfg.WebSearchExaAPIKey,
@@ -200,6 +202,9 @@ func registerCoreTools(opts coreToolOptions) {
 	opts.registry.Register(tools.NewTextInputTool(opts.resources.executionClient))
 	if opts.taskManager != nil {
 		opts.registry.Register(tools.NewTaskManageTool(opts.taskManager))
+	}
+	if opts.cfg.ToolSearch.Enabled {
+		opts.registry.Register(tools.NewToolSearchTool(opts.registry, toolVisibilityOptions(opts.cfg), opts.cfg.ToolSearch.IdleTurns))
 	}
 	opts.registry.Register(tools.NewAskHumanTool())
 }
@@ -257,10 +262,12 @@ func buildRuntimeSystemPrompt(cfg Config, registry *tools.Registry) (string, err
 		}
 		promptManager = ctxmgr.NewPromptManagerWithDefault()
 	}
-	contextBuilder := ctxmgr.NewBuilder(promptManager, registry)
+	catalog := newToolSelectionPolicy(cfg).scopeCatalog(registry)
+	contextBuilder := ctxmgr.NewBuilder(promptManager, catalog)
 	return contextBuilder.BuildSystemPrompt(map[string]string{
 		"os_type":      goruntime.GOOS,
-		"tools_count":  strconv.Itoa(len(registry.ToolDefs())),
+		"tools_count":  strconv.Itoa(len(catalog.ToolDefs())),
+		"tool_list":    tools.FormatPromptToolsForCatalog(catalog),
 		"max_turns":    strconv.Itoa(cfg.MaxTurns),
 		"project_root": resolvePromptProjectRoot(cfg.ProjectRoot),
 	}), nil

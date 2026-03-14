@@ -12,6 +12,7 @@
 //   - screen_action*.go splits screen screenshot, OCR, matching, and click flows by domain.
 //   - browser_control*.go splits browser session, endpoint discovery, DOM actions, and screenshots by domain.
 //   - text_input.go exposes focused-field text entry.
+//   - tool_search.go exposes session-scoped discovery and dynamic loading of optional tools.
 //   - internal/tooljson, internal/toolparams, and internal/toolartifacts hold shared helper logic for tool payloads, params, and image artifacts.
 //   - internal/readsummarize owns chunk reading, worker prompts, and formatting.
 //   - internal/rss owns feed parsing and normalization.

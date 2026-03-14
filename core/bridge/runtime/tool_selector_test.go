@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/tools"
 )
 
 type fakeSelectorCompleter struct {
@@ -174,5 +175,21 @@ func TestToolSelector_SelectToolsPassesDecisionHintToWorker(t *testing.T) {
 	}
 	if got := completer.requests[0].Messages[1].Text; !strings.Contains(got, "Prior similar experience:\n"+hint) {
 		t.Fatalf("expected worker prompt to include decision hint, got %q", got)
+	}
+}
+
+func TestToolSelector_RejectsHiddenToolOutsideCatalog(t *testing.T) {
+	registry := tools.NewRegistry()
+	for _, name := range []string{"ask_human", "script_exec", "tfind"} {
+		registry.Register(&catalogMockTool{name: name})
+	}
+	catalog := tools.NewScopedCatalog(registry, []string{"ask_human", "script_exec"})
+	selector := NewToolSelectorForCatalog(newSelectorTestConfig(), &fakeSelectorCompleter{
+		response: selectorResponse(`{"mode":"subset","tools":["tfind"],"confidence":0.95,"reason":"bad hidden tool"}`),
+	}, catalog)
+
+	result := selector.SelectTools(context.Background(), "find tools", nil, "", "trace-hidden-tool")
+	if result.Mode != "all" || !result.Fallback {
+		t.Fatalf("expected fallback for hidden tool, got %+v", result)
 	}
 }

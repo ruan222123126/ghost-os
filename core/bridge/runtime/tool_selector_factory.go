@@ -50,6 +50,7 @@ func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string,
 	return contextBuilder.BuildSystemPrompt(map[string]string{
 		"os_type":     runtime.GOOS,
 		"tools_count": strconv.Itoa(len(catalog.ToolDefs())),
+		"tool_list":   tools.FormatPromptToolsForCatalog(catalog),
 		"max_turns":   strconv.Itoa(cfg.MaxTurns),
 	}), nil
 }

@@ -114,9 +114,10 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 ) (*agent.History, []llm.Message, tools.ToolCatalog, error) {
 	preTurnMessages := llm.CloneMessages(sess.Messages)
 	askHumanContinuation := hasAnsweredHumanResponse(sess)
+	sess.AdvanceToolTurn(deps.cfg.ToolSearch.IdleTurns)
 	history := historyBuilder.BuildHistory(sess)
 
-	catalog, systemPrompt, err := p.selectToolsForTurn(ctx, deps, sess.ID, history, rawUserMessage, askHumanContinuation, traceID)
+	catalog, systemPrompt, err := p.selectToolsForTurn(ctx, deps, sess, history, rawUserMessage, askHumanContinuation, traceID)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -180,14 +181,17 @@ func (p *sessionTurnPreparer) buildMemoryBlock(
 func (p *sessionTurnPreparer) selectToolsForTurn(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
-	sessionID string,
+	sess *session.Session,
 	history *agent.History,
 	userMessage string,
 	askHumanContinuation bool,
 	traceID string,
 ) (tools.ToolCatalog, string, error) {
-	policy := newToolSelectionPolicy(deps.cfg.ToolSelector)
-	baseCatalog := policy.scopeCatalog(deps.registry)
+	policy := newToolSelectionPolicy(deps.cfg)
+	staticCatalog := policy.scopeCatalog(deps.registry)
+	staticNames := toolCatalogNames(staticCatalog)
+	baseCatalog := newSessionTurnCatalog(deps.registry, staticNames, sess, deps.cfg.ToolSearch.IdleTurns, false)
+	selectorCatalog := newSessionTurnCatalog(deps.registry, staticNames, sess, deps.cfg.ToolSearch.IdleTurns, true)
 	if askHumanContinuation {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=ask_human_continuation", strings.TrimSpace(traceID))
 		return baseCatalog, "", nil
@@ -196,7 +200,7 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 		return baseCatalog, "", nil
 	}
 
-	selector := p.newSelector(deps.cfg, baseCatalog)
+	selector := p.newSelector(deps.cfg, selectorCatalog)
 	if selector == nil {
 		return baseCatalog, "", nil
 	}

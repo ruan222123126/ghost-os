@@ -47,6 +47,12 @@ func (s *ConfigStore) Snapshot() configResponse {
 		ChatPath:                 runtime.ChatPath,
 		APIKeySet:                runtime.APIKey != "",
 		ModelSelectionEnabled:    runtime.ModelSelectionEnabled,
+		GraphQLEnabled:           runtime.GraphQL.Enabled,
+		GraphQLEndpoint:          runtime.GraphQL.Endpoint,
+		GraphQLSchemaPath:        runtime.GraphQL.SchemaPath,
+		GraphQLTimeoutMS:         runtime.GraphQL.TimeoutMS,
+		GraphQLMaxResponseBytes:  runtime.GraphQL.MaxResponseBytes,
+		GraphQLAPIKeySet:         runtime.GraphQL.APIKey != "",
 		WebSearchTavilyAPIKeySet: runtime.WebSearchTavilyAPIKey != "",
 		WebSearchExaAPIKeySet:    runtime.WebSearchExaAPIKey != "",
 	}

@@ -17,6 +17,10 @@ func runtimeConfigFromEnv() (runtimeConfig, error) {
 
 func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error) {
 	webSearch := envWebSearchSettings()
+	graphql, err := envGraphQLSettings()
+	if err != nil {
+		return runtimeConfig{}, err
+	}
 	return runtimeConfigFromFileConfigWithFallback(fileCfg, runtimeConfig{
 		ProviderName:          getenvDefault("GHOST_PROVIDER", string(defaultProvider)),
 		APIKey:                getenvDefault("GHOST_API_KEY", ""),
@@ -27,6 +31,7 @@ func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error
 		ProjectRoot:           getenvDefault("GHOST_PROJECT_ROOT", ""),
 		WebSearchTavilyAPIKey: webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:    webSearch.ExaAPIKey,
+		GraphQL:               graphql,
 	})
 }
 
@@ -38,12 +43,16 @@ func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback 
 		TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
 		ExaAPIKey:    fallback.WebSearchExaAPIKey,
 	})
+	graphql, err := fileGraphQLSettings(fileCfg, fallback.GraphQL)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
 	allowlistOnly := boolOrEnv(fileCfg.ToolAllowlistOnly, "GHOST_TOOL_ALLOWLIST_ONLY", false)
 	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
 	if len(providers) > 0 {
-		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch), nil
+		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch, graphql), nil
 	}
-	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch), nil
+	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch, graphql), nil
 }
 
 func runtimeConfigWithProviders(
@@ -52,6 +61,7 @@ func runtimeConfigWithProviders(
 	providers []providerConfig,
 	allowlistOnly bool,
 	webSearch webSearchSettings,
+	graphql GraphQLConfig,
 ) runtimeConfig {
 	active := resolveActiveProvider(providers, stringValue(fileCfg.ActiveProvider), fallback)
 	return normalizeRuntimeConfig(runtimeConfig{
@@ -70,6 +80,7 @@ func runtimeConfigWithProviders(
 		ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
 		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
+		GraphQL:                    graphql,
 	})
 }
 
@@ -78,6 +89,7 @@ func runtimeConfigWithoutProviders(
 	fallback runtimeConfig,
 	allowlistOnly bool,
 	webSearch webSearchSettings,
+	graphql GraphQLConfig,
 ) runtimeConfig {
 	providerName := resolveRuntimeProviderName(fallback)
 	return normalizeRuntimeConfig(runtimeConfig{
@@ -96,6 +108,7 @@ func runtimeConfigWithoutProviders(
 		ModelResponseReserveTokens: cloneModelTokenOverrides(fallback.ModelResponseReserveTokens),
 		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
+		GraphQL:                    graphql,
 	})
 }
 
@@ -236,6 +249,7 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	out.ProjectRoot = strings.TrimSpace(out.ProjectRoot)
 	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)
 	out.WebSearchExaAPIKey = strings.TrimSpace(out.WebSearchExaAPIKey)
+	out.GraphQL = normalizeGraphQLConfig(out.GraphQL)
 	return out
 }
 

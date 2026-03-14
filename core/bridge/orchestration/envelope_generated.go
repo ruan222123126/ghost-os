@@ -199,6 +199,12 @@ type configResponse struct {
 	ChatPath string `json:"chat_path"`
 	APIKeySet bool `json:"api_key_set"`
 	ModelSelectionEnabled bool `json:"model_selection_enabled"`
+	GraphqlEnabled bool `json:"graphql_enabled"`
+	GraphqlEndpoint string `json:"graphql_endpoint"`
+	GraphqlSchemaPath string `json:"graphql_schema_path"`
+	GraphqlTimeoutMs int `json:"graphql_timeout_ms"`
+	GraphqlMaxResponseBytes int `json:"graphql_max_response_bytes"`
+	GraphqlAPIKeySet bool `json:"graphql_api_key_set"`
 	WebSearchTavilyAPIKeySet bool `json:"web_search_tavily_api_key_set"`
 	WebSearchExaAPIKeySet bool `json:"web_search_exa_api_key_set"`
 }
@@ -210,6 +216,13 @@ type configUpdateRequest struct {
 	BaseURL *string `json:"base_url,omitempty"`
 	Model *string `json:"model,omitempty"`
 	ChatPath *string `json:"chat_path,omitempty"`
+	GraphqlEnabled *bool `json:"graphql_enabled,omitempty"`
+	GraphqlEndpoint *string `json:"graphql_endpoint,omitempty"`
+	GraphqlAPIKey *string `json:"graphql_api_key,omitempty"`
+	GraphqlSchemaPath *string `json:"graphql_schema_path,omitempty"`
+	GraphqlTimeoutMs *int `json:"graphql_timeout_ms,omitempty"`
+	GraphqlMaxResponseBytes *int `json:"graphql_max_response_bytes,omitempty"`
+	GraphqlHeaders map[string]any `json:"graphql_headers,omitempty"`
 	WebSearchTavilyAPIKey *string `json:"web_search_tavily_api_key,omitempty"`
 	WebSearchExaAPIKey *string `json:"web_search_exa_api_key,omitempty"`
 	TraceID string `json:"trace_id,omitempty"`

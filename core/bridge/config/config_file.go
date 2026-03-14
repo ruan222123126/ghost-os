@@ -67,6 +67,13 @@ type bridgeFileConfig struct {
 	RSSAIBatchSize                        *int                          `toml:"rss_ai_batch_size,omitempty"`
 	RSSBriefingEnabled                    *bool                         `toml:"rss_briefing_enabled,omitempty"`
 	RSSBriefingInterval                   *string                       `toml:"rss_briefing_interval,omitempty"`
+	GraphQLEnabled                        *bool                         `toml:"graphql_enabled,omitempty"`
+	GraphQLEndpoint                       *string                       `toml:"graphql_endpoint,omitempty"`
+	GraphQLAPIKey                         *string                       `toml:"graphql_api_key,omitempty"`
+	GraphQLSchemaPath                     *string                       `toml:"graphql_schema_path,omitempty"`
+	GraphQLTimeoutMS                      *int                          `toml:"graphql_timeout_ms,omitempty"`
+	GraphQLMaxResponseBytes               *int                          `toml:"graphql_max_response_bytes,omitempty"`
+	GraphQLHeaders                        map[string]string             `toml:"graphql_headers,omitempty"`
 	WebSearchTavilyAPIKey                 *string                       `toml:"web_search_tavily_api_key,omitempty"`
 	WebSearchExaAPIKey                    *string                       `toml:"web_search_exa_api_key,omitempty"`
 	ProviderHeaders                       map[string]string             `toml:"provider_headers,omitempty"`

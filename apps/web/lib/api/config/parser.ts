@@ -23,6 +23,12 @@ const BRIDGE_CONFIG_KEYS = [
   'chat_path',
   'api_key_set',
   'model_selection_enabled',
+  'graphql_enabled',
+  'graphql_endpoint',
+  'graphql_schema_path',
+  'graphql_timeout_ms',
+  'graphql_max_response_bytes',
+  'graphql_api_key_set',
   'web_search_tavily_api_key_set',
   'web_search_exa_api_key_set',
 ] as const;
@@ -81,6 +87,15 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
       record.model_selection_enabled,
       'bridge config.model_selection_enabled',
     ),
+    graphql_enabled: expectBoolean(record.graphql_enabled, 'bridge config.graphql_enabled'),
+    graphql_endpoint: expectString(record.graphql_endpoint, 'bridge config.graphql_endpoint'),
+    graphql_schema_path: expectString(record.graphql_schema_path, 'bridge config.graphql_schema_path'),
+    graphql_timeout_ms: expectNumber(record.graphql_timeout_ms, 'bridge config.graphql_timeout_ms'),
+    graphql_max_response_bytes: expectNumber(
+      record.graphql_max_response_bytes,
+      'bridge config.graphql_max_response_bytes',
+    ),
+    graphql_api_key_set: expectBoolean(record.graphql_api_key_set, 'bridge config.graphql_api_key_set'),
     web_search_tavily_api_key_set: expectBoolean(
       record.web_search_tavily_api_key_set,
       'bridge config.web_search_tavily_api_key_set',

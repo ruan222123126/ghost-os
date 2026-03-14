@@ -40,6 +40,105 @@ func TestAgentRuntimeFactorySkipsTaskManageWithoutTaskManager(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
+	setupRuntimeFactoryTestEnv(t)
+	t.Setenv("GHOST_TOOL_SEARCH_ENABLED", "true")
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	if deps.registry.Get("tfind") == nil {
+		t.Fatal("expected tfind to be registered when tool search is enabled")
+	}
+}
+
+func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	t.Setenv("GHOST_TOOL_SEARCH_ENABLED", "true")
+	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
+	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://graphql.test/query")
+	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", writeRuntimeGraphQLSchema(t, tempDir))
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	for _, name := range []string{"graphql_query", "graphql_schema_lookup"} {
+		if deps.registry.Get(name) == nil {
+			t.Fatalf("expected %s to be registered", name)
+		}
+	}
+
+	visible := tools.StaticVisibleToolNames(tools.CatalogToolNames(deps.registry), toolVisibilityOptions(deps.cfg))
+	if containsRuntimeTool(visible, "graphql_query") || containsRuntimeTool(visible, "graphql_schema_lookup") {
+		t.Fatalf("expected graphql tools to stay out of the static tool surface, got %v", visible)
+	}
+	candidates := tools.SearchCandidateToolNames(tools.CatalogToolNames(deps.registry), nil, toolVisibilityOptions(deps.cfg))
+	if !containsRuntimeTool(candidates, "graphql_query") || !containsRuntimeTool(candidates, "graphql_schema_lookup") {
+		t.Fatalf("expected graphql tools to be discoverable via tfind, got %v", candidates)
+	}
+}
+
+func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutEndpoint(t *testing.T) {
+	setupRuntimeFactoryTestEnv(t)
+	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	if deps.registry.Get("graphql_query") != nil || deps.registry.Get("graphql_schema_lookup") != nil {
+		t.Fatal("expected graphql tools to stay unregistered without endpoint")
+	}
+}
+
+func TestAgentRuntimeFactoryRegistersOnlyGraphQLQueryWithoutSchemaSnapshot(t *testing.T) {
+	setupRuntimeFactoryTestEnv(t)
+	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
+	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://graphql.test/query")
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	if deps.registry.Get("graphql_query") == nil {
+		t.Fatal("expected graphql_query to be registered")
+	}
+	if deps.registry.Get("graphql_schema_lookup") != nil {
+		t.Fatal("expected graphql_schema_lookup to stay hidden without schema_path")
+	}
+}
+
+func TestAgentRuntimeFactoryFailsOnInvalidGraphQLSchemaSnapshot(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
+	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://graphql.test/query")
+	badPath := filepath.Join(tempDir, "bad-graphql-schema.json")
+	if err := os.WriteFile(badPath, []byte(`{"root_queries":[{"name":"","return_type":"Viewer"}],"types":[]}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", badPath)
+	store := newRuntimeTestStore(t)
+
+	_, err := newAgentRuntimeFactory().Build(store)
+	if err == nil {
+		t.Fatal("expected invalid graphql schema snapshot error")
+	}
+}
+
 func TestAgentRuntimeFactorySkipsMemoryAugmentationWhenDisabled(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	memoryPath := filepath.Join(tempDir, "disabled-memory", "memory.db")
@@ -112,4 +211,26 @@ func setupRuntimeFactoryTestEnv(t *testing.T) string {
 	t.Setenv("GHOST_MEMORY_PATH", filepath.Join(tempDir, "memory", "memory.db"))
 	t.Setenv("GHOST_RSS_FEEDS_PATH", filepath.Join(tempDir, "rss", "feeds.json"))
 	return tempDir
+}
+
+func writeRuntimeGraphQLSchema(t *testing.T, tempDir string) string {
+	t.Helper()
+
+	path := filepath.Join(tempDir, "graphql-schema.json")
+	if err := os.WriteFile(path, []byte(`{
+  "root_queries": [{"name":"viewer","return_type":"Viewer"}],
+  "types": [{"name":"Viewer","fields":[{"name":"id","return_type":"ID!"}]}]
+}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	return path
+}
+
+func containsRuntimeTool(names []string, target string) bool {
+	for _, name := range names {
+		if name == target {
+			return true
+		}
+	}
+	return false
 }

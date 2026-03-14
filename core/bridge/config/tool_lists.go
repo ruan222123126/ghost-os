@@ -32,7 +32,7 @@ func normalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]str
 		if !valid[name] {
 			return nil, nil, fmt.Errorf("unknown tool in tool_blocklist: %s", name)
 		}
-		if name == "ask_human" {
+		if name == tools.AskHumanToolName || name == tools.ToolSearchToolName {
 			log.Printf("action=TOOL_POLICY status=ignore_blocked_tool tool=%q reason=%q", name, "always_on")
 			continue
 		}

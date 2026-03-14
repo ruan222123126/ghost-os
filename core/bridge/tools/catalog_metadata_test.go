@@ -14,6 +14,8 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		"script_exec",
 		"codex_cli",
 		"web_search",
+		"graphql_query",
+		"graphql_schema_lookup",
 		"feed_manage",
 		"rss_fetch",
 		"memory_manage",
@@ -23,6 +25,7 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		"browser_control",
 		"text_input",
 		"task_manage",
+		"tfind",
 		"ask_human",
 	}
 	seen := make(map[string]ToolMetadata, len(metadata))
@@ -36,6 +39,9 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		}
 		if len(item.Tags) == 0 {
 			t.Fatalf("tool metadata tags should not be empty: %+v", item)
+		}
+		if item.ShortDesc == "" {
+			t.Fatalf("tool metadata short description should not be empty: %+v", item)
 		}
 		seen[item.Name] = item
 		if item.AlwaysOn {
@@ -56,15 +62,26 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 	}
 }
 
-func TestFormatMetadataForSelector_ListsAllTools(t *testing.T) {
+func TestFormatMetadataForSelector_HidesOnDemandTools(t *testing.T) {
 	formatted := FormatMetadataForSelector()
 	if strings.TrimSpace(formatted) == "" {
 		t.Fatal("formatted metadata should not be empty")
 	}
 
 	for _, item := range GetToolMetadata() {
+		if item.Name == ToolSearchToolName || item.OnDemand {
+			continue
+		}
 		if !strings.Contains(formatted, item.Name) {
 			t.Fatalf("formatted metadata should contain %q", item.Name)
+		}
+	}
+	if strings.Contains(formatted, ToolSearchToolName) {
+		t.Fatalf("formatted metadata should exclude %q: %q", ToolSearchToolName, formatted)
+	}
+	for _, name := range []string{"graphql_query", "graphql_schema_lookup"} {
+		if strings.Contains(formatted, name) {
+			t.Fatalf("formatted metadata should exclude on-demand tool %q: %q", name, formatted)
 		}
 	}
 	if !strings.Contains(formatted, "always_on=true") {
@@ -85,5 +102,19 @@ func TestFormatMetadataForCatalog_FiltersToVisibleTools(t *testing.T) {
 		if !strings.Contains(formatted, name) {
 			t.Fatalf("formatted metadata should contain %q", name)
 		}
+	}
+}
+
+func TestFormatPromptToolsForCatalog_UsesShortDescriptions(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: "script_exec"})
+	registry.Register(&mockTool{name: ToolSearchToolName})
+
+	formatted := FormatPromptToolsForCatalog(registry)
+	if !strings.Contains(formatted, "- script_exec: Run a Python script in sandbox.") {
+		t.Fatalf("unexpected prompt tool list: %q", formatted)
+	}
+	if !strings.Contains(formatted, "- tfind: Find or load optional tools.") {
+		t.Fatalf("unexpected prompt tool list: %q", formatted)
 	}
 }

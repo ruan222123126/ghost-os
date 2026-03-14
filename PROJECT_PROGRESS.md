@@ -21,8 +21,28 @@
 
 ## 近期关键进展
 
+### 2026-03-15
+
+- 新增只读 GraphQL 查询工具：
+  - `graphql_query` 仅允许 `query`，在执行前做 GraphQL 文本校验，拒绝 `mutation` / `subscription` / 混合操作。
+  - 请求固定走单一 endpoint，支持配置级 headers / API key、超时与响应体大小限制，HTTP 与 GraphQL errors 均显式失败。
+- 新增本地 GraphQL schema lookup：
+  - `graphql_schema_lookup` 基于本地 schema snapshot 启动时加载，不访问网络，不做运行时 introspection。
+  - 新增 `core/bridge/tools/internal/graphqlschema` 负责 snapshot 读取、校验与只读索引检索。
+- 默认不暴露，支持按需加载：
+  - GraphQL 工具在配置合法时注册到 registry，但默认不进入静态工具面。
+  - `tfind` 可检索并按需加载 `graphql_query` 与 `graphql_schema_lookup`；selector 默认不看到未加载的 GraphQL 工具。
+- 相关测试通过：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./tools ./runtime -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tools/... -timeout 60s`
+
 ### 2026-03-14
 
+- 新增会话级动态工具搜索与装载基线：
+  - `core/bridge` 新增默认关闭的 `tfind` 工具；启用后主 Agent 默认可见，但 `ToolSelector` 不再看到或选择它。
+  - 会话新增 `turn_index` 与 `dynamic_tool_loads`，支持“本轮 load、下轮生效、连续 3 轮未调用自动卸载、Agent 可主动 unload”。
+  - 工具可见性改为“静态默认暴露 + 会话动态装载”双层目录；系统提示词新增当前可用工具最简清单，不再只提供工具数量。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./session ./tools ./runtime ./context ./agent -timeout 60s` 已通过；`./orchestration` 仍受仓库现存 `core/bridge/rss` 重复定义阻塞。
 - 收口 `core/bridge/orchestration` 第一批入口文件：
   - 将 `service_rss_inbox.go`、`service_tasks.go`、`pro_mode.go`、`session_push.go`、`service_usecase_agent.go`、`service_usecase_human.go` 拆成“薄入口 + usecase runner + adapter”结构。
   - RSS inbox / briefing、任务 CRUD / run-now、pro/prox 迭代引擎、ask_human 续跑与 session push 广播已分别下沉到独立协作者；`bridgeService` 现主要保留 action 入口、依赖解析与状态码映射。

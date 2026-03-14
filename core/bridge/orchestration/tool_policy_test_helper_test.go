@@ -32,7 +32,7 @@ func (m *runnerMockTool) Execute(context.Context, json.RawMessage, string) (stri
 
 func newRunnerTestRegistry() *tools.Registry {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "script_exec", "send_file", "web_search"} {
+	for _, name := range []string{"ask_human", "script_exec", "send_file", "web_search", "tfind"} {
 		registry.Register(&runnerMockTool{name: name})
 	}
 	return registry

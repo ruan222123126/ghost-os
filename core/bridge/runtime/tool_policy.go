@@ -1,178 +1,91 @@
 package runtime
 
 import (
-	"fmt"
-	"log"
 	"sort"
-	"strings"
 
 	"ghost-os/bridge/tools"
 )
 
 type toolSelectionPolicy struct {
-	enabled       bool
-	allowlistOnly bool
-	allowlist     []string
-	blocked       map[string]bool
+	visibility tools.VisibilityOptions
 }
 
-func newToolSelectionPolicy(cfg ToolSelectorConfig) toolSelectionPolicy {
-	blocked := make(map[string]bool, len(cfg.Blocklist))
-	for _, name := range cfg.Blocklist {
-		blocked[name] = true
-	}
-	return toolSelectionPolicy{
-		enabled:       cfg.AllowlistOnly || len(cfg.Allowlist) > 0 || len(cfg.Blocklist) > 0,
-		allowlistOnly: cfg.AllowlistOnly,
-		allowlist:     append([]string(nil), cfg.Allowlist...),
-		blocked:       blocked,
-	}
+func newToolSelectionPolicy(cfg Config) toolSelectionPolicy {
+	return toolSelectionPolicy{visibility: toolVisibilityOptions(cfg)}
 }
 
 func (p toolSelectionPolicy) scopeCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	if !p.enabled || catalog == nil {
-		return catalog
+	if catalog == nil {
+		return nil
 	}
-	available := toolCatalogNames(catalog)
-	if p.allowlistOnly {
-		return tools.NewScopedCatalog(catalog, p.allowlistScope(available))
-	}
-	return tools.NewScopedCatalog(catalog, p.apply(available, nil))
+	return tools.NewScopedCatalog(catalog, p.allowlistScope(tools.CatalogToolNames(catalog)))
 }
 
 func (p toolSelectionPolicy) allowlistScope(available []string) []string {
-	if len(available) == 0 {
-		return nil
-	}
-
-	availableSet := make(map[string]bool, len(available))
-	for _, name := range available {
-		availableSet[name] = true
-	}
-
-	resultSet := make(map[string]bool, len(available))
-	result := make([]string, 0, len(p.allowlist)+1)
-	for _, name := range p.allowlist {
-		if !availableSet[name] || p.blocked[name] || resultSet[name] {
-			continue
-		}
-		resultSet[name] = true
-		result = append(result, name)
-	}
-
-	if availableSet["ask_human"] && !p.blocked["ask_human"] && !resultSet["ask_human"] {
-		result = append(result, "ask_human")
-	}
-
-	sort.Strings(result)
-	return result
+	return tools.StaticVisibleToolNames(available, p.visibility)
 }
 
 func (p toolSelectionPolicy) apply(available []string, selected []string) []string {
 	if len(available) == 0 {
 		return nil
 	}
-
-	availableSet := make(map[string]bool, len(available))
-	for _, name := range available {
-		availableSet[name] = true
-	}
-
-	resultSet := make(map[string]bool, len(available))
-	result := make([]string, 0, len(available))
 	if len(selected) == 0 {
-		for _, name := range available {
-			if p.blocked[name] {
-				continue
-			}
-			resultSet[name] = true
-			result = append(result, name)
-		}
-	} else {
-		for _, name := range normalizeToolNames(selected) {
-			if !availableSet[name] || p.blocked[name] || resultSet[name] {
-				continue
-			}
-			resultSet[name] = true
-			result = append(result, name)
-		}
+		return p.allowlistScope(available)
 	}
 
-	for _, name := range p.allowlist {
-		if !availableSet[name] || p.blocked[name] || resultSet[name] {
-			continue
+	availableSet := toolNameSet(available)
+	result := make([]string, 0, len(available))
+	resultSet := make(map[string]bool, len(available))
+	add := func(name string) {
+		if name == "" || !availableSet[name] || resultSet[name] {
+			return
 		}
 		resultSet[name] = true
 		result = append(result, name)
 	}
 
-	if availableSet["ask_human"] && !resultSet["ask_human"] {
-		result = append(result, "ask_human")
+	for _, name := range normalizeToolNames(selected) {
+		if isBlockedTool(name, p.visibility) {
+			continue
+		}
+		add(name)
 	}
-
+	for _, name := range p.allowlistScope(available) {
+		add(name)
+	}
+	result = normalizeToolNames(result)
 	sort.Strings(result)
 	return result
 }
 
-func toolNameListOrEnv(raw []string, envName string) []string {
-	if raw != nil {
-		return normalizeConfiguredToolNames(raw)
+func toolVisibilityOptions(cfg Config) tools.VisibilityOptions {
+	return tools.VisibilityOptions{
+		ToolSearchEnabled: cfg.ToolSearch.Enabled,
+		AllowlistOnly:     cfg.ToolSelector.AllowlistOnly,
+		Allowlist:         append([]string(nil), cfg.ToolSelector.Allowlist...),
+		Blocklist:         append([]string(nil), cfg.ToolSelector.Blocklist...),
 	}
-	return normalizeConfiguredToolNames(parseStringCSV(getenvDefault(envName, "")))
 }
 
-func normalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]string, []string, error) {
-	normalizedAllowlist := normalizeConfiguredToolNames(allowlist)
-	normalizedBlocklist := normalizeConfiguredToolNames(blocklist)
-	valid := validConfiguredToolNames()
-
-	for _, name := range normalizedAllowlist {
-		if !valid[name] {
-			return nil, nil, fmt.Errorf("unknown tool in tool_allowlist: %s", name)
-		}
+func toolNameSet(names []string) map[string]bool {
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
 	}
-
-	filteredBlocklist := make([]string, 0, len(normalizedBlocklist))
-	for _, name := range normalizedBlocklist {
-		if !valid[name] {
-			return nil, nil, fmt.Errorf("unknown tool in tool_blocklist: %s", name)
-		}
-		if name == "ask_human" {
-			log.Printf("action=TOOL_POLICY status=ignore_blocked_tool tool=%q reason=%q", name, "always_on")
-			continue
-		}
-		filteredBlocklist = append(filteredBlocklist, name)
-	}
-
-	allowSet := make(map[string]bool, len(normalizedAllowlist))
-	for _, name := range normalizedAllowlist {
-		allowSet[name] = true
-	}
-	for _, name := range filteredBlocklist {
-		if allowSet[name] {
-			return nil, nil, fmt.Errorf("tool %q cannot appear in both tool_allowlist and tool_blocklist", name)
-		}
-	}
-
-	return normalizedAllowlist, filteredBlocklist, nil
+	return set
 }
 
-func normalizeConfiguredToolNames(names []string) []string {
-	normalized := normalizeToolNames(names)
-	if len(normalized) == 0 {
-		return nil
+func isBlockedTool(name string, visibility tools.VisibilityOptions) bool {
+	if name == tools.AskHumanToolName {
+		return false
 	}
-	sort.Strings(normalized)
-	return normalized
-}
-
-func validConfiguredToolNames() map[string]bool {
-	valid := make(map[string]bool, len(tools.GetToolMetadata()))
-	for _, item := range tools.GetToolMetadata() {
-		name := strings.TrimSpace(item.Name)
-		if name != "" {
-			valid[name] = true
+	if visibility.ToolSearchEnabled && name == tools.ToolSearchToolName {
+		return false
+	}
+	for _, blocked := range visibility.Blocklist {
+		if blocked == name {
+			return true
 		}
 	}
-	return valid
+	return false
 }

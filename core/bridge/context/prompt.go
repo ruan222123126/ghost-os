@@ -43,6 +43,8 @@ const defaultSystemPromptTemplate = `You are Ghost-OS bridge agent, an AI-driven
 ## Operating Context
 - OS: {{os_type}}
 - Available tools: {{tools_count}}
+- Tool list:
+{{tool_list}}
 - Max turns: {{max_turns}}
 - Project root: {{project_root}}
 

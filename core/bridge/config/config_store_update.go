@@ -25,6 +25,7 @@ func (s *ConfigStore) Update(req configUpdateRequest) error {
 	if err := applyProviderRuntimeUpdate(&fileCfg, current, providers, req); err != nil {
 		return err
 	}
+	materializeRuntimeGraphQLIfNeeded(&fileCfg, current, req)
 	materializeRuntimeWebSearchIfNeeded(&fileCfg, current, req)
 	applyConfigRuntimeFields(&fileCfg, req)
 	return s.persistLocked(configPath, fileCfg)
@@ -139,6 +140,7 @@ func applyConfigRuntimeFields(fileCfg *bridgeFileConfig, req configUpdateRequest
 	if req.ChatPath != nil {
 		fileCfg.ChatPath = cloneOptionalStringPointer(req.ChatPath)
 	}
+	applyGraphQLRuntimeFields(fileCfg, req)
 	if req.WebSearchTavilyAPIKey != nil {
 		fileCfg.WebSearchTavilyAPIKey = cloneOptionalStringPointer(req.WebSearchTavilyAPIKey)
 	}

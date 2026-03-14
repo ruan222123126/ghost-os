@@ -79,7 +79,7 @@ func (ts *ToolSelector) resolveSelectedTools(parsed selectorResponseEnvelope, tr
 	}
 
 	selected = ensureAskHuman(selected)
-	if err := validateSelectedTools(selected); err != nil {
+	if err := ts.validateSelectedTools(selected); err != nil {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=unknown_tool latency_ms=%d error=%v", traceID, latencyMS, err)
 		result := ToolSelectorResult{Mode: "all", Fallback: true, Error: err}
 		return nil, &result
@@ -99,8 +99,11 @@ func logSelectorValidationError(traceID string, latencyMS int64, parsed selector
 	log.Printf("trace_id=%s action=TOOL_SELECTOR status=%s latency_ms=%d mode=%q confidence=%.2f error=%v", traceID, status, latencyMS, parsed.Mode, parsed.Confidence, err)
 }
 
-func validateSelectedTools(selected []string) error {
-	valid := validSelectorToolNames()
+func (ts *ToolSelector) validateSelectedTools(selected []string) error {
+	valid := ts.validTools
+	if len(valid) == 0 {
+		valid = validSelectorToolNames()
+	}
 	for _, name := range selected {
 		if !valid[name] {
 			return fmt.Errorf("unknown tool %q", name)
@@ -112,7 +115,7 @@ func validateSelectedTools(selected []string) error {
 func validSelectorToolNames() map[string]bool {
 	valid := make(map[string]bool, len(tools.GetToolMetadata()))
 	for _, item := range tools.GetToolMetadata() {
-		if name := strings.TrimSpace(item.Name); name != "" {
+		if name := strings.TrimSpace(item.Name); name != "" && name != tools.ToolSearchToolName && !item.OnDemand {
 			valid[name] = true
 		}
 	}

@@ -234,6 +234,12 @@ pub struct BridgeConfig {
     pub chat_path: String,
     pub api_key_set: bool,
     pub model_selection_enabled: bool,
+    pub graphql_enabled: bool,
+    pub graphql_endpoint: String,
+    pub graphql_schema_path: String,
+    pub graphql_timeout_ms: i64,
+    pub graphql_max_response_bytes: i64,
+    pub graphql_api_key_set: bool,
     pub web_search_tavily_api_key_set: bool,
     pub web_search_exa_api_key_set: bool,
 }
@@ -250,6 +256,20 @@ pub struct ConfigUpdate {
     pub model: Option<String>,
     #[serde(default)]
     pub chat_path: Option<String>,
+    #[serde(default)]
+    pub graphql_enabled: Option<bool>,
+    #[serde(default)]
+    pub graphql_endpoint: Option<String>,
+    #[serde(default)]
+    pub graphql_api_key: Option<String>,
+    #[serde(default)]
+    pub graphql_schema_path: Option<String>,
+    #[serde(default)]
+    pub graphql_timeout_ms: Option<i64>,
+    #[serde(default)]
+    pub graphql_max_response_bytes: Option<i64>,
+    #[serde(default)]
+    pub graphql_headers: Option<Value>,
     #[serde(default)]
     pub web_search_tavily_api_key: Option<String>,
     #[serde(default)]

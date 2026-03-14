@@ -36,7 +36,7 @@ func TestNormalizeConfiguredToolLists_AllowsCodexCLI(t *testing.T) {
 }
 
 func TestNormalizeConfiguredToolLists_IgnoresAskHumanBlocklist(t *testing.T) {
-	allowlist, blocklist, err := normalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec"})
+	allowlist, blocklist, err := normalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec", "tfind"})
 	if err != nil {
 		t.Fatalf("normalizeConfiguredToolLists: %v", err)
 	}
@@ -49,9 +49,11 @@ func TestNormalizeConfiguredToolLists_IgnoresAskHumanBlocklist(t *testing.T) {
 }
 
 func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) {
-	policy := newToolSelectionPolicy(ToolSelectorConfig{
-		Allowlist: []string{"send_file"},
-		Blocklist: []string{"script_exec"},
+	policy := newToolSelectionPolicy(Config{
+		ToolSelector: ToolSelectorConfig{
+			Allowlist: []string{"send_file"},
+			Blocklist: []string{"script_exec"},
+		},
 	})
 
 	selected := policy.apply([]string{"ask_human", "script_exec", "send_file", "web_search"}, []string{"script_exec", "web_search"})
@@ -70,7 +72,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesBlocklistWhenSelectorDisa
 	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Blocklist: []string{"script_exec"}}, MaxTurns: 6})
 
-	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, "runner-policy-disabled", agent.NewHistory("system prompt"), "read config", false, "trace-policy-disabled")
+	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-disabled")
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -97,7 +99,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 		MaxTurns: 6,
 	})
 
-	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, "runner-policy-subset", agent.NewHistory("system prompt"), "read config", false, "trace-policy-subset")
+	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-subset")
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -129,7 +131,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesPolicyScopedCatalogToSelec
 		MaxTurns: 6,
 	})
 
-	_, _, err := preparer.selectToolsForTurn(context.Background(), deps, "runner-policy-visible", agent.NewHistory("system prompt"), "read config", false, "trace-policy-visible")
+	_, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-visible")
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -150,7 +152,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 		MaxTurns: 6,
 	})
 
-	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, "runner-policy-allowlist-only", agent.NewHistory("system prompt"), "read config", false, "trace-policy-allowlist-only")
+	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-allowlist-only")
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -162,5 +164,34 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 	}
 	if catalog.Get("ask_human") == nil {
 		t.Fatal("expected ask_human to remain available")
+	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *testing.T) {
+	preparer := &sessionTurnPreparer{}
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{
+			Allowlist: []string{"send_file"},
+		},
+		ToolSearch: ToolSearchConfig{
+			Enabled:   true,
+			IdleTurns: 3,
+		},
+		MaxTurns: 6,
+	})
+
+	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "find tools", false, "trace-policy-tool-search")
+	if err != nil {
+		t.Fatalf("selectToolsForTurn returned error: %v", err)
+	}
+	for _, name := range []string{"ask_human", "send_file", "tfind"} {
+		if catalog.Get(name) == nil {
+			t.Fatalf("expected %q to remain visible", name)
+		}
+	}
+	for _, name := range []string{"script_exec", "web_search"} {
+		if catalog.Get(name) != nil {
+			t.Fatalf("expected %q to stay hidden until dynamically loaded", name)
+		}
 	}
 }
