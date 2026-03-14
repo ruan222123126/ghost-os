@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/tools/internal/tooljson"
 )
 
 func TestScreenActionToolExecuteScreenshotPersistsImage(t *testing.T) {
@@ -112,7 +113,7 @@ func TestScreenActionToolInterpretResultBuildsImageContent(t *testing.T) {
 			VisionBytes: 2048,
 		},
 	}
-	output, err := encodeJSON(result)
+	output, err := tooljson.Encode(result)
 	if err != nil {
 		t.Fatalf("encode result: %v", err)
 	}
