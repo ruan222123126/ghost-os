@@ -3,7 +3,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { deleteSession as deleteSessionRequest, listSessions } from '@/lib/api';
+import { deleteSession as deleteSessionRequest, listSessions } from '@/lib/api/sessions/api';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import type { SessionMetadata } from '@/lib/types';
 
@@ -13,7 +13,6 @@ interface UseSessionsResult {
   loading: boolean;
   error: string;
   loadSessions: () => Promise<void>;
-  selectSession: (id: string) => void;
   deleteSession: (id: string) => Promise<void>;
   createNewSession: () => void;
   setCurrentSessionId: (id: string) => void;
@@ -36,10 +35,6 @@ export function useSessions(): UseSessionsResult {
     } finally {
       setLoading(false);
     }
-  }, []);
-
-  const selectSession = useCallback((id: string) => {
-    setCurrentSessionIdState(id.trim());
   }, []);
 
   const setCurrentSessionId = useCallback((id: string) => {
@@ -76,7 +71,6 @@ export function useSessions(): UseSessionsResult {
     loading,
     error,
     loadSessions,
-    selectSession,
     deleteSession,
     createNewSession,
     setCurrentSessionId,

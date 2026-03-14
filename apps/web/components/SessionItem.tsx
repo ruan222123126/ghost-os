@@ -48,24 +48,21 @@ export const SessionItem: FC<SessionItemProps> = ({ session, isActive, onSelect,
           onSelect(session.id);
         }
       }}
-      className={`group ui-panel-soft w-full cursor-pointer px-3 py-2 text-left outline-none transition focus-visible:ring-2 focus-visible:ring-app-ring/20 ${
-        isActive
-          ? 'border-app-accent/70 bg-app-accent/10 shadow-lift'
-          : 'hover:border-app-fieldBorderHover/80 hover:shadow-lift focus-visible:border-app-fieldBorderHover/80'
-      }`}
+      className={`session-card${isActive ? ' is-active' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="mono truncate text-sm text-app-text">{shortID}</p>
-          <p className="mt-1 text-xs text-app-muted">{formatRelativeTime(session.created_at)}</p>
+      <div className="session-card-head">
+        <div>
+          <p className="session-card-title mono">Session {shortID}</p>
+          <p className="session-card-meta">Created {formatRelativeTime(session.created_at)}</p>
         </div>
+
         <button
           type="button"
           onClick={(event: MouseEvent<HTMLButtonElement>) => {
             event.stopPropagation();
             onDelete(session.id);
           }}
-          className="ui-btn-secondary border-rose-400/30 px-2 py-1 text-xs text-rose-200 opacity-0 hover:border-rose-300/60 hover:text-rose-100 group-hover:opacity-100 group-focus-within:opacity-100"
+          className="button-danger session-card-delete"
           aria-label={`Delete session ${shortID}`}
         >
           Delete

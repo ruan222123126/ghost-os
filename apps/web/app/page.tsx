@@ -7,7 +7,6 @@ import { useCallback, useState } from 'react';
 import { ChatInput } from '@/components/ChatInput';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { MessageList } from '@/components/MessageList';
-import { ModelSelector } from '@/components/ModelSelector';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { useBridgeChat } from '@/hooks/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
@@ -32,7 +31,9 @@ const HomePage: FC = () => {
     historyLoading,
     chatError,
     hasPendingQuestion,
+    canStop,
     sendChatMessage,
+    stopCurrentRun,
     answerQuestion,
     cancelQuestion,
     loadSessionHistory,
@@ -41,8 +42,20 @@ const HomePage: FC = () => {
     currentSessionId,
     onSessionResolved: setCurrentSessionId,
   });
-  const { config, configLoading, savingConfig, configError, modelValue, saveConfig, selectModel, refreshConfig } = useBridgeConfig({ autoRefresh: !showConfig });
+  const {
+    config,
+    configLoading,
+    savingConfig,
+    configError,
+    modelOptionsLoading,
+    activeModelOption,
+    modelOptions,
+    saveConfig,
+    selectActiveModel,
+    refreshConfig,
+  } = useBridgeConfig({ autoRefresh: !showConfig });
   const inputDisabled = configLoading || historyLoading || !config || hasPendingQuestion;
+  const topStatusVisible = configLoading || (Boolean(configError) && !showConfig);
 
   const handleSendChatMessage = useCallback(
     async (message: string) => {
@@ -76,87 +89,73 @@ const HomePage: FC = () => {
   }, [clearMessages, createNewSession]);
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-[1220px] gap-4 px-4 pb-6 pt-8 sm:px-6 sm:pt-10">
-      <SessionSidebar
-        sessions={sessions}
-        currentSessionId={currentSessionId}
-        loading={sessionsLoading}
-        error={sessionsError}
-        onSelect={handleSelectSession}
-        onDelete={(id) => {
-          ignorePromise(handleDeleteSession(id));
-        }}
-        onNewChat={handleNewChat}
-      />
+    <>
+      <div className="ambient ambient-a" aria-hidden="true" />
+      <div className="ambient ambient-b" aria-hidden="true" />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="ui-panel animate-riseSoft mb-4 p-4 sm:p-5">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-app-text">Ghost-OS Web Console</h1>
-              <p className="mt-1 text-sm text-app-muted">Drive the existing bridge agent from browser with minimal latency.</p>
+      <main className="app-shell">
+        {topStatusVisible ? (
+          <header className="topbar">
+            <div className="topbar-actions">
+              {configLoading ? <span className="status-chip">Loading runtime…</span> : null}
+              {configError && !showConfig ? <span className="status-chip status-chip-warning">Config needs attention</span> : null}
             </div>
+          </header>
+        ) : null}
 
-            <div className="flex flex-wrap items-center gap-3">
-              {configLoading && <span className="text-xs text-app-muted">Loading runtime config...</span>}
-              <ModelSelector model={modelValue} disabled={savingConfig || configLoading || !config} onChange={selectModel} />
-              <button
-                type="button"
-                onClick={() => setShowConfig((value) => !value)}
-                disabled={configLoading}
-                className="ui-btn-secondary px-3 py-2 text-sm"
-              >
-                {showConfig ? 'Hide Config' : 'Config'}
-              </button>
-            </div>
-          </div>
-          {configError && !showConfig && (
-            <p className="mt-3 rounded-lg border border-rose-300/30 bg-rose-300/10 px-3 py-2 text-sm text-rose-200">{configError}</p>
-          )}
-        </header>
-
-        <div className="grid flex-1 gap-4">
-          <ConfigPanel
-            open={showConfig}
-            loading={configLoading}
-            saving={savingConfig}
-            config={config}
-            error={configError}
-            onClose={() => setShowConfig(false)}
-            onSave={saveConfig}
-            onReload={refreshConfig}
+        <div className="chat-layout">
+          <SessionSidebar
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            loading={sessionsLoading}
+            error={sessionsError}
+            onSelect={handleSelectSession}
+            onDelete={(id) => {
+              ignorePromise(handleDeleteSession(id));
+            }}
+            onNewChat={handleNewChat}
           />
 
-          {historyLoading && (
-            <div className="ui-panel-soft animate-riseSoft px-3 py-2 text-sm text-app-muted">
-              Loading session history...
-            </div>
-          )}
+          <section className="chat panel">
+            {historyLoading ? <div className="status-line info">Loading session history…</div> : null}
+            {configError && !showConfig ? <div className="status-line error">{configError}</div> : null}
 
-          <section className="min-h-[360px]">
             <MessageList
               messages={messages}
               loading={loading}
               onAnswerQuestion={answerQuestion}
               onCancelQuestion={cancelQuestion}
             />
+
+            {chatError ? <div className="status-line error">{chatError}</div> : null}
+
+            <ChatInput
+              loading={loading}
+              disabled={inputDisabled || savingConfig}
+              awaitingQuestion={hasPendingQuestion}
+              modelLoading={modelOptionsLoading || savingConfig}
+              activeModel={activeModelOption}
+              availableModels={modelOptions}
+              canStop={canStop}
+              onSend={handleSendChatMessage}
+              onStop={stopCurrentRun}
+              onSelectModel={config?.model_selection_enabled ? selectActiveModel : undefined}
+            />
           </section>
-
-          {chatError && (
-            <div className="animate-rise rounded-xl border border-rose-300/40 bg-rose-300/10 px-3 py-2 text-sm text-rose-200">
-              {chatError}
-            </div>
-          )}
-
-          <ChatInput
-            loading={loading}
-            disabled={inputDisabled}
-            awaitingQuestion={hasPendingQuestion}
-            onSend={handleSendChatMessage}
-          />
         </div>
-      </div>
-    </main>
+      </main>
+
+      <ConfigPanel
+        open={showConfig}
+        loading={configLoading}
+        saving={savingConfig}
+        config={config}
+        error={configError}
+        onClose={() => setShowConfig(false)}
+        onSave={saveConfig}
+        onReload={refreshConfig}
+      />
+    </>
   );
 };
 

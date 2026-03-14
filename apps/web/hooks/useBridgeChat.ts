@@ -1,16 +1,25 @@
-import { useCallback, useState } from 'react';
-import { getSession, sendHumanResponse, sendMessage } from '@/lib/api';
+import { useCallback, useRef, useState } from 'react';
+import { getSession } from '@/lib/api/sessions/api';
+import { sendHumanResponse, sendMessage, stopAgent } from '@/lib/api/agent/api';
+import { createClientTraceId } from '@/lib/api/trace';
+import {
+  buildErrorMessage,
+  buildUserMessage,
+  findPendingQuestion,
+  hasPendingQuestion,
+  mapAgentReplyToChatMessages,
+  mapSessionMessagesToChat,
+  removePendingQuestion,
+  replacePendingQuestionWithUserAnswer,
+} from '@/lib/chatMessages';
 import { toErrorMessage } from '@/lib/errors';
-import type {
-  AgentSendAwaitingHumanResponse,
-  AgentSendResponse,
-  ChatMessage,
-  PendingQuestionMessage,
-  SessionMessage,
-} from '@/lib/types';
+import type { AgentSendResponse, ChatMessage } from '@/lib/types';
 
-function nextID() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+const AGENT_RUN_CANCELLED_MESSAGE = 'agent run cancelled';
+
+interface ActiveAgentRun {
+  sessionId: string;
+  traceId: string;
 }
 
 interface UseBridgeChatResult {
@@ -19,8 +28,11 @@ interface UseBridgeChatResult {
   historyLoading: boolean;
   chatError: string;
   hasPendingQuestion: boolean;
+  canStop: boolean;
   sendChatMessage: (message: string) => Promise<void>;
+  stopCurrentRun: () => Promise<void>;
   answerQuestion: (questionId: string, answer: string) => Promise<void>;
+  cancelQuestion: (questionId: string) => Promise<void>;
   loadSessionHistory: (sessionId: string) => Promise<void>;
   clearMessages: () => void;
 }
@@ -30,160 +42,114 @@ interface UseBridgeChatOptions {
   onSessionResolved?: (sessionId: string) => void;
 }
 
-function mapSessionRoleToChatMessage(message: SessionMessage): ChatMessage | null {
-  switch (message.role) {
-    case 'user':
-      return {
-        id: nextID(),
-        kind: 'user',
-        content: message.text,
-      };
-    case 'assistant':
-      return {
-        id: nextID(),
-        kind: 'assistant',
-        content: message.text,
-      };
-    case 'system':
-      // Web 聊天流统一只渲染 user/assistant 两类气泡，system/tool 作为 assistant 文本呈现。
-      return {
-        id: nextID(),
-        kind: 'assistant',
-        content: message.text ? `[system] ${message.text}` : '[system]',
-      };
-    case 'tool':
-      return {
-        id: nextID(),
-        kind: 'assistant',
-        content: message.text ? `[tool] ${message.text}` : '[tool]',
-      };
-    default:
-      return null;
-  }
-}
-
-function mapSessionMessagesToChat(messages: SessionMessage[]): ChatMessage[] {
-  const output: ChatMessage[] = [];
-  for (const message of messages) {
-    const mapped = mapSessionRoleToChatMessage(message);
-    if (!mapped) {
-      continue;
-    }
-    output.push(mapped);
-  }
-  return output;
-}
-
-function buildErrorMessage(messageText: string): ChatMessage {
-  return {
-    id: nextID(),
-    kind: 'error',
-    content: messageText,
-    error: messageText,
-  };
-}
-
-function buildAssistantMessage(messageText: string): ChatMessage {
-  return {
-    id: nextID(),
-    kind: 'assistant',
-    content: messageText,
-  };
-}
-
-function isAwaitingHumanResponse(response: AgentSendResponse): response is AgentSendAwaitingHumanResponse {
-  return response.status === 'awaiting_human';
-}
-
-function buildPendingQuestionMessage(response: AgentSendAwaitingHumanResponse): PendingQuestionMessage {
-  return {
-    id: nextID(),
-    kind: 'pending_question',
-    content: response.prompt,
-    questionId: response.question_id,
-    sessionId: response.session_id,
-  };
-}
-
-function replacePendingQuestionWithUserAnswer(messages: ChatMessage[], questionId: string, answer: string): ChatMessage[] {
-  return messages.flatMap((message) => {
-    if (message.kind === 'pending_question' && message.questionId === questionId) {
-      // 题卡被回答后替换为用户消息，维持对话时间线连续性。
-      return [
-        {
-          id: nextID(),
-          kind: 'user',
-          content: answer,
-        },
-      ];
-    }
-    return [message];
-  });
-}
-
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
   const { currentSessionId, onSessionResolved } = options;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [chatError, setChatError] = useState('');
+  const [activeRun, setActiveRunState] = useState<ActiveAgentRun | null>(null);
+  const [stopPending, setStopPendingState] = useState(false);
+  const activeRunRef = useRef<ActiveAgentRun | null>(null);
+  const stopPendingRef = useRef(false);
 
-  const appendMessage = useCallback((message: ChatMessage) => {
-    setMessages((previous) => [...previous, message]);
+  const setActiveRun = useCallback((nextRun: ActiveAgentRun | null) => {
+    activeRunRef.current = nextRun;
+    setActiveRunState(nextRun);
+  }, []);
+
+  const setStopPending = useCallback((value: boolean) => {
+    stopPendingRef.current = value;
+    setStopPendingState(value);
+  }, []);
+
+  const appendMessages = useCallback((nextMessages: ChatMessage[]) => {
+    if (nextMessages.length === 0) {
+      return;
+    }
+    setMessages((previous) => [...previous, ...nextMessages]);
   }, []);
 
   const replaceWithErrorMessage = useCallback((messageText: string) => {
     setMessages([buildErrorMessage(messageText)]);
   }, []);
 
-  const appendReplyMessage = useCallback((reply: AgentSendResponse) => {
-    if (reply.session_id && reply.session_id !== currentSessionId) {
-      onSessionResolved?.(reply.session_id);
-    }
-    if (isAwaitingHumanResponse(reply)) {
-      // 将 ask_human 回合渲染为待回答卡片，避免丢失 question_id/session_id。
-      appendMessage(buildPendingQuestionMessage(reply));
+  const appendErrorMessage = useCallback((messageText: string) => {
+    setChatError(messageText);
+    appendMessages([buildErrorMessage(messageText)]);
+  }, [appendMessages]);
+
+  const hydrateSessionHistory = useCallback(async (sessionId: string) => {
+    const detail = await getSession(sessionId);
+    setMessages(mapSessionMessagesToChat(detail.messages));
+  }, []);
+
+  const handleReply = useCallback(async (reply: AgentSendResponse) => {
+    if (reply.session_id) {
+      const currentRun = activeRunRef.current;
+      if (currentRun && currentRun.sessionId !== reply.session_id) {
+        setActiveRun({ ...currentRun, sessionId: reply.session_id });
+      }
+      if (reply.session_id !== currentSessionId) {
+        onSessionResolved?.(reply.session_id);
+      }
+      await hydrateSessionHistory(reply.session_id);
       return;
     }
-    appendMessage(buildAssistantMessage(reply.message));
-  }, [appendMessage, currentSessionId, onSessionResolved]);
+    appendMessages(mapAgentReplyToChatMessages(reply));
+  }, [appendMessages, currentSessionId, hydrateSessionHistory, onSessionResolved, setActiveRun]);
 
   const appendErrorFromUnknown = useCallback((error: unknown) => {
-    const messageText = toErrorMessage(error);
-    setChatError(messageText);
-    appendMessage(buildErrorMessage(messageText));
-  }, [appendMessage]);
-
-  const sendAndAppendReply = useCallback(async (message: string, sessionId?: string) => {
-    const reply = await sendMessage(message, sessionId);
-    appendReplyMessage(reply);
-  }, [appendReplyMessage]);
+    appendErrorMessage(toErrorMessage(error));
+  }, [appendErrorMessage]);
 
   const sendChatMessage = useCallback(async (message: string) => {
     const trimmed = message.trim();
-    // 新会话下空输入没有意义；已有 session 时允许空消息用于“继续执行”。
-    if (!trimmed && !currentSessionId.trim()) {
+    const normalizedSessionId = currentSessionId.trim();
+    if (!trimmed && !normalizedSessionId) {
       return;
     }
 
+    const traceId = createClientTraceId('agent-run');
+
     setChatError('');
+    setStopPending(false);
+    setActiveRun({ sessionId: normalizedSessionId, traceId });
     if (trimmed) {
-      appendMessage({
-        id: nextID(),
-        kind: 'user',
-        content: trimmed,
-      });
+      appendMessages([buildUserMessage(trimmed)]);
     }
     setLoading(true);
 
     try {
-      await sendAndAppendReply(trimmed, currentSessionId || undefined);
+      const reply = await sendMessage(trimmed, normalizedSessionId || undefined, traceId);
+      await handleReply(reply);
     } catch (error) {
-      appendErrorFromUnknown(error);
+      const messageText = toErrorMessage(error);
+      if (!(stopPendingRef.current && messageText === AGENT_RUN_CANCELLED_MESSAGE)) {
+        appendErrorMessage(messageText);
+      }
     } finally {
       setLoading(false);
+      setActiveRun(null);
+      setStopPending(false);
     }
-  }, [appendErrorFromUnknown, appendMessage, currentSessionId, sendAndAppendReply]);
+  }, [appendErrorMessage, appendMessages, currentSessionId, handleReply, setActiveRun, setStopPending]);
+
+  const stopCurrentRun = useCallback(async () => {
+    const run = activeRunRef.current;
+    if (!run || stopPendingRef.current) {
+      return;
+    }
+
+    setChatError('');
+    setStopPending(true);
+    try {
+      await stopAgent(run.sessionId || undefined, run.traceId || undefined);
+    } catch (error) {
+      setChatError(toErrorMessage(error));
+      setStopPending(false);
+    }
+  }, [setStopPending]);
 
   const answerQuestion = useCallback(async (questionId: string, answer: string) => {
     const trimmedQuestionID = questionId.trim();
@@ -196,10 +162,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
       return;
     }
 
-    const pending = messages.find(
-      (message): message is PendingQuestionMessage =>
-        message.kind === 'pending_question' && message.questionId === trimmedQuestionID
-    );
+    const pending = findPendingQuestion(messages, trimmedQuestionID);
     if (!pending) {
       return;
     }
@@ -207,17 +170,39 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     setChatError('');
     setLoading(true);
     try {
-      await sendHumanResponse(pending.sessionId, pending.questionId, trimmedAnswer);
+      const reply = await sendHumanResponse(pending.sessionId, pending.questionId, trimmedAnswer);
       setMessages((previous) => replacePendingQuestionWithUserAnswer(previous, trimmedQuestionID, trimmedAnswer));
-
-      // 发送空消息触发 bridge 继续运行暂停中的 agent 回合。
-      await sendAndAppendReply('', pending.sessionId);
+      await handleReply(reply);
     } catch (error) {
       appendErrorFromUnknown(error);
     } finally {
       setLoading(false);
     }
-  }, [appendErrorFromUnknown, messages, sendAndAppendReply]);
+  }, [appendErrorFromUnknown, handleReply, messages]);
+
+  const cancelQuestion = useCallback(async (questionId: string) => {
+    const trimmedQuestionID = questionId.trim();
+    if (!trimmedQuestionID) {
+      return;
+    }
+
+    const pending = findPendingQuestion(messages, trimmedQuestionID);
+    if (!pending) {
+      return;
+    }
+
+    setChatError('');
+    setLoading(true);
+    try {
+      const reply = await sendHumanResponse(pending.sessionId, pending.questionId, '', true);
+      setMessages((previous) => removePendingQuestion(previous, trimmedQuestionID));
+      await handleReply(reply);
+    } catch (error) {
+      appendErrorFromUnknown(error);
+    } finally {
+      setLoading(false);
+    }
+  }, [appendErrorFromUnknown, handleReply, messages]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();
@@ -250,9 +235,12 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     loading,
     historyLoading,
     chatError,
-    hasPendingQuestion: messages.some((message) => message.kind === 'pending_question'),
+    hasPendingQuestion: hasPendingQuestion(messages),
+    canStop: loading && activeRun !== null && !stopPending,
     sendChatMessage,
+    stopCurrentRun,
     answerQuestion,
+    cancelQuestion,
     loadSessionHistory,
     clearMessages,
   };

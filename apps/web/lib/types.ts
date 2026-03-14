@@ -1,6 +1,42 @@
-// Shared web-side TypeScript contracts aligned with bridge API payloads.
+// Web UI types plus API contracts generated from core/shared/schema.json.
 
-export type { ApiEnvelope, ApiErrorEnvelope, ApiRequest, ApiSuccessEnvelope } from '@/lib/envelope.generated';
+import type {
+  AskHumanOption,
+  ProviderConfig,
+  SessionFileContent as SharedSessionFileContent,
+  SessionMessage as SharedSessionMessage,
+} from '@/lib/envelope.generated';
+
+export type {
+  AgentRequest,
+  AgentSendAwaitingHumanResponse,
+  AgentSendResponse,
+  AgentStopResponsePayload,
+  AgentSendSuccessResponse,
+  ApiEnvelope,
+  ApiErrorEnvelope,
+  ApiRequest,
+  ApiSuccessEnvelope,
+  AskHumanOption,
+  AssistantSessionEndSignal,
+  BridgeConfig,
+  ConfigUpdate,
+  HumanResponseAck,
+  HumanResponseRequest,
+  ProviderConfig,
+  ProviderConfigInput,
+  ProviderListResponse,
+  SessionContentPart,
+  SessionDetail,
+  SessionFileContent,
+  SessionImageContent,
+  SessionHumanInteraction,
+  SessionMessage,
+  SessionMetadata,
+  SessionToolCall,
+  SessionToolResult,
+  SetActiveProviderRequest,
+} from '@/lib/envelope.generated';
 
 export interface UserChatMessage {
   id: string;
@@ -12,6 +48,36 @@ export interface AssistantChatMessage {
   id: string;
   kind: 'assistant';
   content: string;
+}
+
+export interface SystemChatMessage {
+  id: string;
+  kind: 'system';
+  content: string;
+}
+
+export interface ToolChatMessage {
+  id: string;
+  kind: 'tool';
+  content: string;
+  attachments?: ChatFileAttachment[];
+  toolName?: string;
+  toolStatus?: string;
+  toolCallId?: string;
+  toolCalls?: unknown[];
+  traceId?: string;
+  rawOutput?: string;
+}
+
+export interface ChatFileAttachment {
+  artifactId: string;
+  name: string;
+  downloadUrl: string;
+  mimeType?: string;
+  bytes?: number;
+  sha256?: string;
+  sourcePath?: string;
+  note?: string;
 }
 
 export interface ErrorChatMessage {
@@ -27,67 +93,60 @@ export interface PendingQuestionMessage {
   content: string;
   questionId: string;
   sessionId: string;
+  selectionMode?: 'single' | 'multiple';
+  options?: AskHumanOption[];
 }
 
-export type ChatMessage = UserChatMessage | AssistantChatMessage | ErrorChatMessage | PendingQuestionMessage;
-
-export interface SessionMetadata {
+export interface QuestionChatMessage {
   id: string;
-  created_at: string;
-  updated_at: string;
-  message_count: number;
-  token_count: number;
+  kind: 'question';
+  content: string;
+  questionId?: string;
+  selectionMode?: 'single' | 'multiple';
+  options?: AskHumanOption[];
 }
 
-export interface SessionMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  text: string;
-  tool_calls?: unknown[];
-  tool_results?: unknown[];
-}
+export type ChatMessage =
+  | UserChatMessage
+  | AssistantChatMessage
+  | SystemChatMessage
+  | ToolChatMessage
+  | ErrorChatMessage
+  | QuestionChatMessage
+  | PendingQuestionMessage;
 
-export interface SessionDetail {
-  id: string;
-  messages: SessionMessage[];
-  created_at: string;
-  updated_at: string;
-  token_count: number;
-}
-
-export interface AgentSendSuccessResponse {
-  message: string;
-  session_id: string;
-  status?: 'success';
-}
-
-export interface AgentSendAwaitingHumanResponse {
-  session_id: string;
-  status: 'awaiting_human';
-  question_id: string;
-  prompt: string;
-  message?: string;
-}
-
-export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;
-
-export interface HumanResponseRequest {
-  session_id: string;
-  question_id: string;
-  answer: string;
-}
-
-export interface BridgeConfig {
-  provider: string;
-  base_url: string;
+export interface ProviderModelOption {
+  providerName: string;
+  providerType: ProviderConfig['type'];
   model: string;
-  chat_path: string;
-  api_key_set: boolean;
 }
 
-export interface ConfigUpdate {
-  provider?: string;
-  base_url?: string;
-  model?: string;
-  chat_path?: string;
-  api_key?: string;
+export type SessionMessageRole = NonNullable<SharedSessionMessage['role']>;
+export type SessionFileAttachment = SharedSessionFileContent;
+
+export interface RSSBriefingHighlight {
+  rank: number;
+  group_id: string;
+  topic_label?: string;
+  headline: string;
+  summary?: string;
+  why_it_matters?: string;
+  importance: 'low' | 'normal' | 'high';
+  source_item_count: number;
+  source_feed_count: number;
+  tags?: string[];
+}
+
+export interface RSSBriefing {
+  id?: string;
+  title: string;
+  summary?: string;
+  generated_at: string;
+  saved_at?: string;
+  window_hours: number;
+  scanned_groups: number;
+  highlight_count: number;
+  trace_id?: string;
+  task_id?: string;
+  highlights: RSSBriefingHighlight[];
 }

@@ -211,15 +211,26 @@
 .icon-button:focus-visible,
 .ui-btn:focus-visible,
 .ui-btn-secondary:focus-visible,
+.session-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(var(--ui-field-ring) / 0.18);
+}
+
+.input:focus,
+.textarea:focus,
+.select:focus,
+.ui-input:focus,
+.ui-textarea:focus,
+.ui-select:focus,
 .input:focus-visible,
 .textarea:focus-visible,
 .select:focus-visible,
 .ui-input:focus-visible,
 .ui-textarea:focus-visible,
-.ui-select:focus-visible,
-.session-card:focus-visible {
+.ui-select:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgb(var(--ui-field-ring) / 0.18);
+  box-shadow: none;
+  border-color: rgb(var(--ui-field-border-hover) / 0.92);
 }
 
 .button:disabled,

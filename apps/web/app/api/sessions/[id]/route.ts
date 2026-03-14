@@ -1,31 +1,11 @@
 // Module-level helpers and contracts for this file.
 
-import { bridgeUnavailableResponse, passThroughToBridge } from '@/lib/bridgeProxy';
+import { createParamBridgeRouteHandler } from '@/lib/bridgeProxy';
 
 export const dynamic = 'force-dynamic';
 
-interface RouteContext {
-  params: {
-    id: string;
-  };
-}
+const sessionPath = ({ id }: { id: string }): string => `/api/sessions/${encodeURIComponent(id)}`;
 
-export async function GET(_request: Request, context: RouteContext) {
-  try {
-    return await passThroughToBridge(`/api/sessions/${encodeURIComponent(context.params.id)}`, {
-      method: 'GET',
-    });
-  } catch (error) {
-    return bridgeUnavailableResponse(error);
-  }
-}
+export const GET = createParamBridgeRouteHandler('GET', sessionPath);
 
-export async function DELETE(_request: Request, context: RouteContext) {
-  try {
-    return await passThroughToBridge(`/api/sessions/${encodeURIComponent(context.params.id)}`, {
-      method: 'DELETE',
-    });
-  } catch (error) {
-    return bridgeUnavailableResponse(error);
-  }
-}
+export const DELETE = createParamBridgeRouteHandler('DELETE', sessionPath);

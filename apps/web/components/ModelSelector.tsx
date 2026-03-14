@@ -5,7 +5,7 @@
 import type { FC } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ignorePromise } from '@/lib/errors';
-import type { ProviderConfig, ProviderModelOption } from '@/lib/types';
+import type { ProviderModelOption } from '@/lib/types';
 
 interface ModelSelectorProps {
   value: ProviderModelOption | null;
@@ -17,7 +17,6 @@ interface ModelSelectorProps {
 
 interface ProviderModelGroup {
   providerName: string;
-  providerType: ProviderConfig['type'];
   options: ProviderModelOption[];
 }
 
@@ -73,50 +72,49 @@ export const ModelSelector: FC<ModelSelectorProps> = ({ value, options, loading 
         <span className="composer-model-trigger-chevron" aria-hidden="true" />
       </button>
 
-      {open ? (
-        <div className="composer-model-panel" role="dialog" aria-label="Active model selector">
-          <div className="composer-model-panel-body ui-scroll">
-            {groups.length === 0 ? (
-              <div className="composer-model-empty">当前没有可选模型，请先在 Settings 中为供应商配置模型列表。</div>
-            ) : (
-              groups.map((group) => (
-                <section key={group.providerName} className="composer-model-group">
-                  <div className="composer-model-group-head">
-                    <span>{group.providerName}</span>
-                    <span>{labelForProviderType(group.providerType)}</span>
-                  </div>
+      <div
+        className={`composer-model-panel${open ? ' is-open' : ''}`}
+        role="dialog"
+        aria-label="Active model selector"
+        aria-hidden={!open}
+      >
+        <div className="composer-model-panel-body ui-scroll">
+          {groups.length === 0 ? (
+            <div className="composer-model-empty">当前没有可选模型，请先在 Settings 中为供应商配置模型列表。</div>
+          ) : (
+            groups.map((group) => (
+              <section key={group.providerName} className="composer-model-group">
+                <div className="composer-model-group-head">
+                  <span>{group.providerName}</span>
+                </div>
 
-                  <div className="composer-model-group-options">
-                    {group.options.map((option) => {
-                      const isActive = isSameOption(option, value);
+                <div className="composer-model-group-options">
+                  {group.options.map((option) => {
+                    const isActive = isSameOption(option, value);
 
-                      return (
-                        <button
-                          key={`${option.providerName}:${option.model}`}
-                          type="button"
-                          disabled={disabled}
-                          className={`composer-model-option${isActive ? ' is-active' : ''}`}
-                          onClick={() => {
-                            setOpen(false);
-                            ignorePromise(Promise.resolve(onChange(option)));
-                          }}
-                        >
-                          <span className="composer-model-option-copy">
-                            <span className="composer-model-option-model mono">{option.model}</span>
-                          </span>
-                          <span className="composer-model-option-check" aria-hidden="true">
-                            {isActive ? '●' : ''}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              ))
-            )}
-          </div>
+                    return (
+                      <button
+                        key={`${option.providerName}:${option.model}`}
+                        type="button"
+                        disabled={disabled}
+                        className={`composer-model-option${isActive ? ' is-active' : ''}`}
+                        onClick={() => {
+                          setOpen(false);
+                          ignorePromise(Promise.resolve(onChange(option)));
+                        }}
+                      >
+                        <span className="composer-model-option-copy">
+                          <span className="composer-model-option-model mono">{option.model}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))
+          )}
         </div>
-      ) : null}
+      </div>
     </div>
   );
 };
@@ -131,7 +129,6 @@ function groupProviderModels(options: ProviderModelOption[]): ProviderModelGroup
       order.push(key);
       groups.set(key, {
         providerName: option.providerName,
-        providerType: option.providerType,
         options: [],
       });
     }
@@ -140,19 +137,6 @@ function groupProviderModels(options: ProviderModelOption[]): ProviderModelGroup
   }
 
   return order.map((key) => groups.get(key)).filter((group): group is ProviderModelGroup => group !== undefined);
-}
-
-function labelForProviderType(providerType: ProviderConfig['type']): string {
-  if (providerType === 'openai') {
-    return 'OpenAI';
-  }
-  if (providerType === 'codex') {
-    return 'Codex';
-  }
-  if (providerType === 'anthropic') {
-    return 'Anthropic';
-  }
-  return 'OpenAI-Compatible';
 }
 
 function isSameOption(left: ProviderModelOption, right: ProviderModelOption | null): boolean {

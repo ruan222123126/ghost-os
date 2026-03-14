@@ -49,7 +49,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       canStop={canStop}
       disabled={disabled}
       ariaLabel="Message input"
-      placeholder="Type a task for Ghost-OS..."
+      placeholder={loading ? '正在思考中...' : '输入消息...'}
       rows={4}
       toolbar={onSelectModel ? (
         <ModelSelector

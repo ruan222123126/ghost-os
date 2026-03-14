@@ -15,27 +15,23 @@ interface SessionListProps {
   onDelete: (id: string) => void;
 }
 
-export const SessionList: FC<SessionListProps> = ({ sessions, currentSessionId, loading, error, onSelect, onDelete }) => {
+export const SessionList: FC<SessionListProps> = ({ sessions, currentSessionId, loading, error: _error, onSelect, onDelete }) => {
   if (loading) {
     return (
-      <div className="space-y-2">
+      <div className="session-list">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div
-            key={`session-skeleton-${index}`}
-            className="ui-panel-soft h-[58px] animate-pulse"
-          />
+          <div key={`session-skeleton-${index}`} className="session-skeleton" />
         ))}
       </div>
     );
   }
 
   if (sessions.length === 0) {
-    return <p className="ui-empty p-3 text-sm">No sessions yet.</p>;
+    return <div className="empty-state">No sessions yet. Start a new chat to create the first session.</div>;
   }
 
   return (
-    <div className="space-y-2">
-      {error && <p className="rounded-lg border border-rose-300/30 bg-rose-300/10 px-3 py-2 text-xs text-rose-200">{error}</p>}
+    <div className="session-list">
       {sessions.map((session) => (
         <SessionItem
           key={session.id}

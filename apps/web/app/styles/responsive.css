@@ -1,31 +1,17 @@
 /* Shared responsive overrides for the MVP console layout. */
 
-@media (max-width: 1400px) {
-  .chat-layout {
-    grid-template-columns: 300px minmax(0, 1fr);
-  }
-
-  .sidebar {
-    grid-row: 1 / span 2;
-  }
-
-  .briefing-rail {
-    grid-column: 2;
-    border-left: none;
-    border-top: 1px solid rgb(var(--border) / 0.58);
-    min-height: 320px;
-  }
-}
-
 @media (max-width: 1080px) {
   .chat-layout,
   .sidebar,
   .chat,
-  .briefing-rail,
   .topbar + .chat-layout {
     height: auto;
     min-height: 0;
     max-height: none;
+  }
+
+  .sidebar {
+    width: 100%;
   }
 
   .chat-layout,
