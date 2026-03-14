@@ -1,0 +1,157 @@
+package config
+
+import (
+	"strings"
+	"time"
+
+	"ghost-os/bridge/llm"
+)
+
+type ProviderConfig struct {
+	Type                       llm.Provider
+	APIKey                     string
+	BaseURL                    string
+	Model                      string
+	Headers                    map[string]string
+	AnthropicVersion           string
+	AnthropicMaxTokens         int
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
+}
+
+type RSSConfig struct {
+	FeedsPath           string
+	InboxPath           string
+	BriefingsPath       string
+	ReportsPath         string
+	PollEnabled         bool
+	PollInterval        time.Duration
+	PollMaxItemsPerFeed int
+	AIBatchSize         int
+	BriefingEnabled     bool
+	BriefingInterval    time.Duration
+}
+
+type WorkerConfig struct {
+	Model          string
+	MaxConcurrency int
+	MaxFiles       int
+	MaxFileChunks  int
+}
+
+type ToolSelectorConfig struct {
+	Enabled    bool
+	Mode       string
+	Model      string
+	TimeoutMS  int
+	Confidence float64
+	Shadow     bool
+	RecentMsgs int
+	// AllowlistOnly enables allowlist-mode: the agent is only exposed to tools in Allowlist (plus ask_human if registered).
+	AllowlistOnly bool
+	Allowlist     []string
+	Blocklist     []string
+}
+
+type MemoryAugmentationConfig struct {
+	Enabled             bool
+	LearningEnabled     bool
+	RecallEnabled       bool
+	MaxRecallItems      int
+	MinConfidence       float64
+	SessionScopeEnabled bool
+	UserScopeEnabled    bool
+	LLMModel            string
+	UserScopeID         string
+}
+
+// Config 描述 bridge 在运行时依赖的最小配置集合。
+type Config struct {
+	Provider                ProviderConfig
+	RSS                     RSSConfig
+	Worker                  WorkerConfig
+	ToolSelector            ToolSelectorConfig
+	MemoryAugmentation      MemoryAugmentationConfig
+	NativePersistent        bool
+	NativeBinaryPath        string
+	NativeBinaryRoots       []string
+	NativeBinaryCandidates  []string
+	NativeAllowedReadPaths  []string
+	NativeAllowedWritePaths []string
+	ProjectRoot             string
+	ChatPath                string
+	PromptsPath             string
+	PromptsDir              string
+	PromptsCoreFiles        []string
+	SessionsPath            string
+	WebSearchTavilyAPIKey   string
+	ProMaxIterations        int
+	MaxTurns                int
+}
+
+type runtimeConfig struct {
+	ProviderName               string
+	Provider                   llm.Provider
+	APIKey                     string
+	BaseURL                    string
+	Model                      string
+	ChatPath                   string
+	NativePersistent           bool
+	ProjectRoot                string
+	ModelSelectionEnabled      bool
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
+}
+
+const (
+	defaultProvider               = llm.ProviderOpenAI
+	defaultBaseURL                = "https://api.openai.com/v1"
+	defaultAnthropicBaseURL       = "https://api.anthropic.com"
+	defaultModel                  = "gpt-4o"
+	defaultPromptsPath            = "prompts.yaml"
+	defaultPromptsDir             = "~/.ghost-os/prompts"
+	defaultSessionsPath           = "~/.ghost-os/sessions"
+	defaultRSSFeedsPath           = "~/.ghost-os/rss/feeds.json"
+	defaultRSSInboxPath           = "~/.ghost-os/rss/inbox.json"
+	defaultRSSBriefingsPath       = "~/.ghost-os/rss/briefings.json"
+	defaultRSSReportsPath         = "~/.ghost-os/rss/reports/index.json"
+	defaultRSSPollInterval        = 15 * time.Minute
+	defaultRSSPollMaxItemsPerFeed = 10
+	defaultRSSAIBatchSize         = 5
+	defaultRSSBriefingInterval    = 30 * time.Minute
+	defaultTasksPath              = "~/.ghost-os/tasks"
+	defaultAnthropicVersion       = "2023-06-01"
+	defaultAnthropicMaxTokens     = 1024
+	defaultProMaxIterations       = 20
+	defaultMaxTurns               = 20
+	defaultWorkerMaxConcurrency   = 4
+	defaultWorkerMaxFiles         = 20
+	defaultWorkerMaxFileChunks    = 4
+	defaultToolSelectorTimeoutMS  = 1500
+	defaultToolSelectorConfidence = 0.75
+	defaultToolSelectorRecentMsgs = 6
+	defaultMemoryRecallItems      = 8
+	defaultMemoryMinConfidence    = 0.7
+	defaultMemoryUserScopeID      = "local-user"
+)
+
+func providerClientOptions(cfg Config, model string) llm.ClientOptions {
+	resolvedModel := strings.TrimSpace(model)
+	if resolvedModel == "" {
+		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
+	}
+	return llm.ClientOptions{
+		Provider:           cfg.Provider.Type,
+		BaseURL:            cfg.Provider.BaseURL,
+		APIKey:             cfg.Provider.APIKey,
+		Model:              resolvedModel,
+		ChatPath:           cfg.ChatPath,
+		Headers:            cfg.Provider.Headers,
+		AnthropicVersion:   cfg.Provider.AnthropicVersion,
+		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
+	}
+}

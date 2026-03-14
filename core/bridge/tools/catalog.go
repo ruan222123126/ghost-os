@@ -109,13 +109,9 @@ func (sc *ScopedCatalog) ToolDefs() []llm.ToolDef {
 // GetToolMetadata 返回稳定顺序的 selector 元数据清单。
 func GetToolMetadata() []ToolMetadata {
 	return []ToolMetadata{
-		{Name: "list_files", Domain: "file", Tags: []string{"read", "list", "discover"}},
-		{Name: "read_file", Domain: "file", Tags: []string{"read", "inspect"}},
 		{Name: "read_and_summarize", Domain: "file", Tags: []string{"read", "summarize", "batch", "triage"}},
-		{Name: "search_files", Domain: "file", Tags: []string{"search", "grep", "read"}},
 		{Name: "send_file", Domain: "file", Tags: []string{"export", "download", "artifact"}},
-		{Name: "apply_diff", Domain: "file", Tags: []string{"write", "edit", "patch"}},
-		{Name: "bash_exec", Domain: "sandbox", Tags: []string{"execute", "shell"}},
+		{Name: "set_project_root", Domain: "workspace", Tags: []string{"root", "workspace", "config"}},
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}},
@@ -125,6 +121,8 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "feed_unsubscribe", Domain: "web", Tags: []string{"feed", "rss", "delete", "manage"}},
 		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}},
 		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}},
+		{Name: "memory_learned_list", Domain: "memory", Tags: []string{"memory", "learned", "read", "debug"}},
+		{Name: "memory_recall_debug", Domain: "memory", Tags: []string{"memory", "recall", "debug", "read"}},
 		{Name: "screen_action", Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "native"}},
 		{Name: "browser_control", Domain: "browser", Tags: []string{"browser", "automation", "web", "dom"}},
 		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}},

@@ -41,57 +41,17 @@ api_token = "change-me"
 cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 
 sessions_path = "~/.ghost-os/sessions"
-memory_warm_path = "~/.ghost-os/memory/warm.json"
-memory_cold_path = "~/.ghost-os/memory/cold"
-memory_ledger_path = "~/.ghost-os/memory/cold/ledger"
-memory_ledger_read_enabled = false
+# project_root = "/abs/path/to/project"
 
 prompts_path = "prompts.yaml"
+# Core prompt assembly (optional)
+# prompts_dir = "~/.ghost-os/prompts"
+# prompts_core_files = ["core_job/base.md", "core_job/runtime.md"]
 native_persistent = false
+pro_max_iterations = 20
 # native_binary_path = "/abs/path/to/native"
 # native_binary_roots = ["./drivers/native/target/release", "./drivers/native/target/debug"]
 # native_binary_candidates = ["native", "native.exe"]
-
-memory_auto_recall_enabled = true
-memory_auto_recall_limit = 5
-memory_warm_ttl = "24h"
-memory_evolution_enabled = false
-memory_evolution_interval = "1h"
-memory_graph_enabled = false
-memory_graph_path = "~/.ghost-os/memory/graph"
-memory_graph_extract_on_archive = true
-memory_graph_extract_on_evolve = true
-memory_graph_max_hops = 1
-memory_graph_max_hits = 6
-memory_graph_min_confidence = 0.72
-memory_graph_namespace = "default"
-memory_graph_debug_enabled = false
-memory_decision_enabled = false
-memory_decision_capture_on_turn = true
-memory_decision_path = "~/.ghost-os/memory/decision"
-memory_decision_max_hits = 4
-memory_decision_min_confidence = 0.75
-memory_decision_min_reuse_score = 0.70
-memory_decision_recipe_enabled = true
-memory_decision_recipe_interval = "6h"
-memory_decision_recipe_min_support = 3
-memory_decision_debug_enabled = false
-memory_decision_selector_hint_enabled = true
-memory_decision_recipe_reuse_enabled = true
-memory_decision_recipe_execution_tracking_enabled = true
-memory_decision_recipe_backfill_enabled = true
-memory_decision_recipe_default_enabled = true
-memory_decision_recipe_default_gray_percent = 10
-memory_decision_recipe_min_selection_confidence = 0.72
-memory_decision_recipe_min_success_rate = 0.66
-memory_decision_recipe_backfill_batch_size = 50
-memory_decision_recipe_backfill_interval = "30m"
-
-# Stable public memory surface: warm + cold/ledger + graph + decision + hygiene.
-# `MEMORY_HYGIENE_RUN` now synthesizes durable rule cards from working memory /
-# markdown / decision sources and feeds recall, instead of writing garbage scores.
-# Experimental internals such as truth/vector/index/shadow stay intentionally out
-# of the public config template during this phase.
 
 worker_model = ""
 worker_max_concurrency = 4
@@ -108,13 +68,28 @@ tool_selector_timeout_ms = 1500
 tool_selector_confidence = 0.75
 tool_selector_shadow = false
 tool_selector_recent_messages = 6
+# Allowlist-only mode: when enabled, the agent only sees tools in tool_allowlist (plus ask_human if registered),
+# and runtime model switching from Web/CLI is disabled.
+# This is useful for locked-down deployments that must strictly limit tool exposure.
+# tool_allowlist_only = true
 # Highest priority hard constraints for tools:
 # - if both lists are empty, they are inactive and normal selector behavior stays in place
 # - allowlist tools are always forced into the final runnable set
 # - blocklist tools are always removed from the final runnable set
 # - ask_human stays always-on even if listed in tool_blocklist
-# tool_allowlist = ["read_file", "search_files"]
-# tool_blocklist = ["bash_exec", "script_exec"]
+# tool_allowlist = ["script_exec", "read_and_summarize"]
+# tool_blocklist = ["web_search"]
+
+# mem0-style memory augmentation
+memory_augmentation_enabled = true
+memory_augmentation_learning_enabled = true
+memory_augmentation_recall_enabled = true
+memory_augmentation_max_recall_items = 8
+memory_augmentation_min_confidence = 0.7
+memory_augmentation_session_scope_enabled = true
+memory_augmentation_user_scope_enabled = true
+# memory_augmentation_llm_model = "gpt-4o-mini"
+memory_augmentation_user_scope_id = "local-user"
 
 # Extra headers for provider requests
 # [provider_headers]

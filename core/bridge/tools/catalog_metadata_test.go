@@ -7,28 +7,27 @@ import (
 
 func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 	metadata := GetToolMetadata()
-		expected := []string{
-			"list_files",
-			"read_file",
-			"read_and_summarize",
-			"search_files",
-			"apply_diff",
-			"bash_exec",
-			"script_exec",
-			"codex_cli",
-			"web_search",
-			"feed_subscribe",
-			"feed_list",
-			"feed_update",
-			"feed_unsubscribe",
-			"rss_fetch",
-			"memory_manage",
-			"screen_action",
-			"browser_control",
-			"text_input",
-			"task_manage",
-			"ask_human",
-		}
+	expected := []string{
+		"read_and_summarize",
+		"send_file",
+		"set_project_root",
+		"script_exec",
+		"codex_cli",
+		"web_search",
+		"feed_subscribe",
+		"feed_list",
+		"feed_update",
+		"feed_unsubscribe",
+		"rss_fetch",
+		"memory_manage",
+		"memory_learned_list",
+		"memory_recall_debug",
+		"screen_action",
+		"browser_control",
+		"text_input",
+		"task_manage",
+		"ask_human",
+	}
 	seen := make(map[string]ToolMetadata, len(metadata))
 	alwaysOnCount := 0
 	for _, item := range metadata {
@@ -78,14 +77,14 @@ func TestFormatMetadataForSelector_ListsAllTools(t *testing.T) {
 
 func TestFormatMetadataForCatalog_FiltersToVisibleTools(t *testing.T) {
 	registry := NewRegistry()
-	registry.Register(&mockTool{name: "read_file"})
+	registry.Register(&mockTool{name: "script_exec"})
 	registry.Register(&mockTool{name: "ask_human"})
 
 	formatted := FormatMetadataForCatalog(registry)
-	if strings.Contains(formatted, "bash_exec") {
+	if strings.Contains(formatted, "web_search") {
 		t.Fatalf("formatted metadata should exclude hidden tools: %q", formatted)
 	}
-	for _, name := range []string{"read_file", "ask_human"} {
+	for _, name := range []string{"script_exec", "ask_human"} {
 		if !strings.Contains(formatted, name) {
 			t.Fatalf("formatted metadata should contain %q", name)
 		}
