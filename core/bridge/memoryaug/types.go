@@ -39,6 +39,7 @@ type RecallInput struct {
 type RecallItem struct {
 	Entry     memorystore.MemoryEntry `json:"entry"`
 	TextScore float64                 `json:"text_score"`
+	SlotMatch bool                    `json:"slot_match,omitempty"`
 	Reason    string                  `json:"reason"`
 }
 
@@ -63,6 +64,7 @@ type learningStore interface {
 type recallStore interface {
 	SearchExplicitRecallRecords(ctx context.Context, query string, limit int) ([]memorystore.MemoryEntry, error)
 	ListLearned(ctx context.Context, filter memorystore.LearnedListFilter) ([]memorystore.MemoryEntry, int, error)
+	FindActiveLearnedByMemoryKey(ctx context.Context, scopeType string, scopeID string, memoryKey string) (memorystore.MemoryEntry, error)
 	TouchExplicitRecords(ctx context.Context, uris []string) error
 	TouchLearned(ctx context.Context, ids []string) error
 }
@@ -87,6 +89,7 @@ type ExtractOutput struct {
 type Candidate struct {
 	MemoryType   string   `json:"memory_type"`
 	MemoryKey    string   `json:"memory_key,omitempty"`
+	Value        string   `json:"value,omitempty"`
 	Summary      string   `json:"summary"`
 	Content      string   `json:"content"`
 	ScopeType    string   `json:"scope_type"`

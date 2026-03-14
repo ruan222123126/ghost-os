@@ -39,25 +39,26 @@ func (e *LLMExtractor) Extract(ctx context.Context, input ExtractInput) (Extract
 }
 
 func extractorSystemPrompt() string {
-	return `You extract durable conversation memories for Ghost-OS.
+	return `You extract durable slot memories for Ghost-OS.
 
 Rules:
-- Learn only durable profile, preference, workflow, or fact memories.
+- Learn only durable preferences or workflows that match one of the provided known_slots.
 - Ignore greetings, low-information confirmations, tool noise, one-off tasks, and temporary execution results.
-- Prefer session scope unless the information is clearly stable across sessions.
 - Never emit memories that duplicate explicit memories already provided.
-- Keep summaries stable and slot-like, e.g. "reply language" or "preferred test command".
-- Include memory_key when you can express the memory as a stable snake_case slot.
+- Only emit memory_key values that exactly match a known_slots key.
+- Fill value with the normalized slot value. Use enum values exactly when the slot defines them.
+- Keep summary and content stable for the slot. If the transcript does not match any known slot, return {"items":[]}.
 - Return JSON only.
 
 Schema:
-{"items":[{"memory_type":"profile|preference|workflow|fact","memory_key":"optional_snake_case_slot","summary":"...","content":"...","scope_type":"user|session","scope_id":"...","confidence":0.0,"supersedes_ids":["..."],"reason":"..."}]}`
+{"items":[{"memory_type":"preference|workflow","memory_key":"known_slot_key","value":"normalized slot value","summary":"...","content":"...","scope_type":"user|session","scope_id":"...","confidence":0.0,"supersedes_ids":["..."],"reason":"..."}]}`
 }
 
 func extractorUserPrompt(input ExtractInput) string {
 	payload := map[string]any{
 		"session_id":        input.SessionID,
 		"user_scope_id":     input.UserScopeID,
+		"known_slots":       extractorKnownSlots(),
 		"transcript":        input.Transcript,
 		"existing_explicit": input.ExistingExplicit,
 		"existing_learned":  input.ExistingLearned,

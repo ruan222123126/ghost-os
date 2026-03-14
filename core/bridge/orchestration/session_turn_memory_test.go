@@ -68,7 +68,7 @@ func TestSessionRunnerInjectsRecallOnlyIntoPrompt(t *testing.T) {
 	if len(completer.requests) != 1 {
 		t.Fatalf("expected one completion request, got %d", len(completer.requests))
 	}
-	if !strings.Contains(completer.requests[0].Messages[0].Text, "Memory context:") {
+	if !strings.Contains(completer.requests[0].Messages[0].Text, "Other memory context:") {
 		t.Fatalf("expected memory block in system prompt, got %q", completer.requests[0].Messages[0].Text)
 	}
 	loaded, err := sessionStore.Load(sessionID)
@@ -76,7 +76,7 @@ func TestSessionRunnerInjectsRecallOnlyIntoPrompt(t *testing.T) {
 		t.Fatalf("load session: %v", err)
 	}
 	for _, message := range loaded.Messages {
-		if strings.Contains(message.Text, "Memory context:") {
+		if strings.Contains(message.Text, "Other memory context:") || strings.Contains(message.Text, "Memory slots:") {
 			t.Fatalf("memory context should not persist into session history: %+v", loaded.Messages)
 		}
 	}
@@ -130,7 +130,7 @@ func TestSessionRunnerRecallDoesNotBreakAskHumanContinuation(t *testing.T) {
 	if !containsToolMessage(request.Messages, "call-ask") {
 		t.Fatalf("expected ask_human tool message to remain in resumed history, got %+v", request.Messages)
 	}
-	if !strings.Contains(request.Messages[0].Text, "Memory context:") {
+	if !strings.Contains(request.Messages[0].Text, "Other memory context:") {
 		t.Fatalf("expected memory context in system prompt, got %q", request.Messages[0].Text)
 	}
 }

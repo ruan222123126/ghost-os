@@ -13,18 +13,15 @@ var explicitRememberMarkers = []string{
 
 var stablePreferenceMarkers = []string{
 	"prefer", "preference", "default", "by default", "always", "reply in",
-	"respond in", "concise", "verbose", "tone", "style", "以后", "默认",
-	"习惯", "偏好", "请用", "简洁", "详细", "语气", "风格",
+	"respond in", "concise", "verbose", "tone", "style", "approval",
+	"destructive", "auto apply", "以后", "默认", "习惯", "偏好", "请用",
+	"简洁", "详细", "语气", "风格", "危险操作", "自动应用", "批准",
 }
 
 var stableWorkflowMarkers = []string{
 	"use pnpm", "use npm", "use cargo", "use go test", "run tests first",
 	"build command", "test command", "start command", "workflow", "步骤",
 	"流程", "先跑", "先执行", "命令", "构建命令", "测试命令", "启动命令",
-}
-
-var stableProfileMarkers = []string{
-	"i am", "i'm", "my role", "my team", "我是", "我在", "我的职责", "我的团队",
 }
 
 func deriveLearningPolicy(messages []TurnMessage) learningPolicy {
@@ -46,8 +43,7 @@ func deriveLearningPolicy(messages []TurnMessage) learningPolicy {
 			continue
 		}
 		if hasMarker(text, stablePreferenceMarkers) ||
-			hasMarker(text, stableWorkflowMarkers) ||
-			hasMarker(text, stableProfileMarkers) {
+			hasMarker(text, stableWorkflowMarkers) {
 			policy.shouldLearn = true
 		}
 	}

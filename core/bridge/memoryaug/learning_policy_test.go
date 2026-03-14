@@ -57,16 +57,16 @@ func TestLearningServiceSkipsAutoFactsWithoutRememberSignal(t *testing.T) {
 	}
 }
 
-func TestLearningServiceAllowsFactsWithRememberSignal(t *testing.T) {
+func TestLearningServiceAllowsRegisteredSlotWithRememberSignal(t *testing.T) {
 	store := newTestStore(t)
 	extractor := &scriptedExtractor{
 		outputs: []ExtractOutput{{
 			Items: []Candidate{{
 				MemoryType: "fact",
-				MemoryKey:  "repository_package_manager",
-				Summary:    "repository package manager",
+				MemoryKey:  "package_manager",
+				Value:      "pnpm",
+				Summary:    "package manager",
 				Content:    "This repository uses pnpm.",
-				ScopeType:  "user",
 				Confidence: 0.93,
 			}},
 		}},
@@ -84,7 +84,10 @@ func TestLearningServiceAllowsFactsWithRememberSignal(t *testing.T) {
 		Statuses: []string{memorystore.MemoryStatusActive},
 		Limit:    10,
 	})
-	if len(items) != 1 || items[0].MemoryType != memorystore.MemoryTypeFact {
+	if len(items) != 1 || items[0].MemoryType != memorystore.MemoryTypeWorkflow {
 		t.Fatalf("expected remembered fact to be learned, got %+v", items)
+	}
+	if got := slotValueFromEntry(items[0]); got != "pnpm" {
+		t.Fatalf("expected package_manager slot value pnpm, got %+v", items[0].Metadata)
 	}
 }

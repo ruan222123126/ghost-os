@@ -129,3 +129,46 @@ func TestRecallServiceHonorsBudgetWithStableOrdering(t *testing.T) {
 		t.Fatalf("expected stable confidence ordering under truncation, got %+v", items)
 	}
 }
+
+func TestRecallServiceDirectSlotLookupRanksBeforeFreeText(t *testing.T) {
+	store := newTestStore(t)
+	settings := newTestSettings()
+	recall := NewRecallService(settings, store)
+
+	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
+		ScopeType:  memorystore.ScopeTypeSession,
+		ScopeID:    "session-1",
+		MemoryType: memorystore.MemoryTypeWorkflow,
+		MemoryKey:  "test_command",
+		Summary:    "test command",
+		Content:    "Use `pnpm --dir apps/web test` as the test command.",
+		Metadata:   buildSlotMetadata("pnpm --dir apps/web test", "seed"),
+		Confidence: 0.82,
+	}, nil); err != nil {
+		t.Fatalf("create slot learned: %v", err)
+	}
+	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
+		ScopeType:  memorystore.ScopeTypeSession,
+		ScopeID:    "session-1",
+		MemoryType: memorystore.MemoryTypeFact,
+		Summary:    "test setup",
+		Content:    "The test setup uses Vitest and contract fixtures.",
+		Confidence: 0.99,
+	}, nil); err != nil {
+		t.Fatalf("create free text learned: %v", err)
+	}
+
+	items, err := recall.Recall(context.Background(), RecallInput{
+		SessionID: "session-1",
+		Query:     "Which test command should I run?",
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if len(items) == 0 {
+		t.Fatal("expected recalled items")
+	}
+	if items[0].Entry.MemoryKey != "test_command" || !items[0].SlotMatch {
+		t.Fatalf("expected slot recall to rank first, got %+v", items)
+	}
+}

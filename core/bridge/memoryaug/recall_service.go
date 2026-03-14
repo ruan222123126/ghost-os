@@ -2,8 +2,8 @@ package memoryaug
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"ghost-os/bridge/memorystore"
@@ -51,6 +51,11 @@ func (s *recallService) collectRecallItems(ctx context.Context, input RecallInpu
 	}
 	candidates := make([]RecallItem, 0, len(explicit)+limit)
 	candidates = append(candidates, s.filterExplicitCandidates(input, explicit)...)
+	slotMatches, err := s.loadSlotCandidates(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	candidates = append(candidates, slotMatches...)
 	learned, err := s.loadLearnedCandidates(ctx, input, limit)
 	if err != nil {
 		return nil, err
@@ -59,6 +64,56 @@ func (s *recallService) collectRecallItems(ctx context.Context, input RecallInpu
 		candidates = append(candidates, buildRecallItem(input.Query, entry))
 	}
 	return candidates, nil
+}
+
+func (s *recallService) loadSlotCandidates(ctx context.Context, input RecallInput) ([]RecallItem, error) {
+	specs := matchSlotsForQuery(input.Query)
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	items := make([]RecallItem, 0, len(specs)*2)
+	for _, spec := range specs {
+		matched, err := s.loadSlotCandidate(ctx, input, spec)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, matched...)
+	}
+	return items, nil
+}
+
+func (s *recallService) loadSlotCandidate(ctx context.Context, input RecallInput, spec SlotSpec) ([]RecallItem, error) {
+	scopes := s.slotScopesForRecall(spec, input)
+	items := make([]RecallItem, 0, len(scopes))
+	for _, scope := range scopes {
+		entry, err := s.store.FindActiveLearnedByMemoryKey(ctx, scope.scopeType, scope.scopeID, spec.Key)
+		switch {
+		case err == nil:
+			items = append(items, buildSlotRecallItem(entry))
+		case errors.Is(err, memorystore.ErrNotFound):
+			continue
+		default:
+			return nil, err
+		}
+	}
+	return items, nil
+}
+
+func (s *recallService) slotScopesForRecall(spec SlotSpec, input RecallInput) []scopeRef {
+	if spec.DefaultScope == memorystore.ScopeTypeSession {
+		out := make([]scopeRef, 0, 2)
+		if s.settings.SessionScopeEnabled {
+			out = append(out, scopeRef{scopeType: memorystore.ScopeTypeSession, scopeID: input.SessionID})
+		}
+		if s.settings.UserScopeEnabled {
+			out = append(out, scopeRef{scopeType: memorystore.ScopeTypeUser, scopeID: input.UserScope})
+		}
+		return out
+	}
+	if s.settings.UserScopeEnabled {
+		return []scopeRef{{scopeType: memorystore.ScopeTypeUser, scopeID: input.UserScope}}
+	}
+	return []scopeRef{{scopeType: memorystore.ScopeTypeSession, scopeID: input.SessionID}}
 }
 
 func (s *recallService) filterExplicitCandidates(input RecallInput, items []memorystore.MemoryEntry) []RecallItem {
@@ -104,121 +159,6 @@ func (s *recallService) loadLearnedCandidates(ctx context.Context, input RecallI
 		out = append(out, items...)
 	}
 	return out, nil
-}
-
-func (s *recallService) selectRecallItems(items []RecallItem) []RecallItem {
-	sort.SliceStable(items, func(i int, j int) bool {
-		return compareRecallItem(items[i], items[j])
-	})
-	selected := make([]RecallItem, 0, s.settings.MaxRecallItems)
-	for _, item := range items {
-		if s.isSuppressedByExplicit(item, selected) {
-			continue
-		}
-		selected = append(selected, item)
-		if len(selected) >= s.settings.MaxRecallItems {
-			break
-		}
-	}
-	return selected
-}
-
-func (s *recallService) isSuppressedByExplicit(item RecallItem, selected []RecallItem) bool {
-	if item.Entry.SourceKind != memorystore.SourceKindLearned {
-		return false
-	}
-	for _, existing := range selected {
-		if existing.Entry.SourceKind != memorystore.SourceKindExplicit {
-			continue
-		}
-		if memorySimilarity(item.Entry, existing.Entry) >= 0.88 {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *recallService) touchSelected(ctx context.Context, items []RecallItem) error {
-	explicitIDs := make([]string, 0, len(items))
-	learnedIDs := make([]string, 0, len(items))
-	for _, item := range items {
-		if item.Entry.SourceKind == memorystore.SourceKindExplicit {
-			explicitIDs = append(explicitIDs, strings.TrimPrefix(item.Entry.ID, "explicit:"))
-			continue
-		}
-		learnedIDs = append(learnedIDs, item.Entry.ID)
-	}
-	if err := s.store.TouchExplicitRecords(ctx, explicitIDs); err != nil {
-		return err
-	}
-	return s.store.TouchLearned(ctx, learnedIDs)
-}
-
-func buildRecallItem(query string, entry memorystore.MemoryEntry) RecallItem {
-	score := computeTextScore(query, entry)
-	reason := fmt.Sprintf(
-		"source=%s scope=%s status=%s score=%.2f confidence=%.2f",
-		entry.SourceKind,
-		entry.ScopeType,
-		entry.Status,
-		score,
-		entry.Confidence,
-	)
-	return RecallItem{
-		Entry:     entry,
-		TextScore: score,
-		Reason:    reason,
-	}
-}
-
-func compareRecallItem(left RecallItem, right RecallItem) bool {
-	if sourcePriority(left.Entry) != sourcePriority(right.Entry) {
-		return sourcePriority(left.Entry) < sourcePriority(right.Entry)
-	}
-	if scopePriority(left.Entry) != scopePriority(right.Entry) {
-		return scopePriority(left.Entry) < scopePriority(right.Entry)
-	}
-	if statusPriority(left.Entry) != statusPriority(right.Entry) {
-		return statusPriority(left.Entry) < statusPriority(right.Entry)
-	}
-	if left.Entry.Confidence != right.Entry.Confidence {
-		return left.Entry.Confidence > right.Entry.Confidence
-	}
-	if left.TextScore != right.TextScore {
-		return left.TextScore > right.TextScore
-	}
-	if !left.Entry.LastUsedAt.Equal(right.Entry.LastUsedAt) {
-		return left.Entry.LastUsedAt.After(right.Entry.LastUsedAt)
-	}
-	if !left.Entry.UpdatedAt.Equal(right.Entry.UpdatedAt) {
-		return left.Entry.UpdatedAt.After(right.Entry.UpdatedAt)
-	}
-	return left.Entry.ID < right.Entry.ID
-}
-
-func sourcePriority(entry memorystore.MemoryEntry) int {
-	if entry.SourceKind == memorystore.SourceKindExplicit {
-		return 0
-	}
-	return 1
-}
-
-func scopePriority(entry memorystore.MemoryEntry) int {
-	if entry.ScopeType == memorystore.ScopeTypeSession {
-		return 0
-	}
-	return 1
-}
-
-func statusPriority(entry memorystore.MemoryEntry) int {
-	switch entry.Status {
-	case memorystore.MemoryStatusActive:
-		return 0
-	case memorystore.MemoryStatusSuperseded:
-		return 1
-	default:
-		return 2
-	}
 }
 
 func normalizeRecallInput(input RecallInput, settings Settings) RecallInput {

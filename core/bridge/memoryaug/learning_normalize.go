@@ -2,8 +2,6 @@ package memoryaug
 
 import (
 	"strings"
-
-	"ghost-os/bridge/memorystore"
 )
 
 func normalizeLearnInput(input LearnFromTurnInput, settings Settings) LearnFromTurnInput {
@@ -17,12 +15,4 @@ func normalizeLearnInput(input LearnFromTurnInput, settings Settings) LearnFromT
 		TraceID:   strings.TrimSpace(input.TraceID),
 		Messages:  append([]TurnMessage(nil), input.Messages...),
 	}
-}
-
-func resolveCandidateMemoryKey(candidate Candidate, memoryType string) string {
-	key := memorystore.NormalizeMemoryKey(candidate.MemoryKey)
-	if key != "" {
-		return key
-	}
-	return memorystore.DefaultMemoryKey(memoryType, strings.TrimSpace(candidate.Summary))
 }

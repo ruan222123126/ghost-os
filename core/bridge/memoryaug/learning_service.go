@@ -3,7 +3,6 @@ package memoryaug
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"ghost-os/bridge/memorystore"
 )
@@ -42,7 +41,7 @@ func (s *learningService) learn(ctx context.Context, input LearnFromTurnInput) e
 	}
 	policy := deriveLearningPolicy(filtered)
 	if !policy.shouldLearn {
-		return s.recordSkipped(ctx, input, filtered, "turn is not a stable preference, workflow, or profile signal")
+		return s.recordSkipped(ctx, input, filtered, "turn does not contain a stable slot signal")
 	}
 	explicitContext, learnedContext, err := s.loadLearningContext(ctx, input, filtered)
 	if err != nil {
@@ -58,7 +57,7 @@ func (s *learningService) learn(ctx context.Context, input LearnFromTurnInput) e
 	if err != nil {
 		return s.recordError(ctx, input, filtered, "", err)
 	}
-	outcome, err := s.applyCandidates(ctx, input, output.Items, explicitContext, learnedContext, policy)
+	outcome, err := s.applyCandidates(ctx, input, output.Items, explicitContext, learnedContext)
 	if err != nil {
 		return s.recordError(ctx, input, filtered, output.RawJSON, err)
 	}
@@ -111,15 +110,18 @@ func (s *learningService) applyCandidates(
 	candidates []Candidate,
 	explicit []memorystore.MemoryEntry,
 	existing []memorystore.MemoryEntry,
-	policy learningPolicy,
 ) (applyOutcome, error) {
 	outcome := applyOutcome{}
 	for _, candidate := range candidates {
-		if !s.acceptsCandidate(candidate, policy) {
-			outcome.Skipped = append(outcome.Skipped, strings.TrimSpace(candidate.Summary))
+		if !s.acceptsCandidate(candidate) {
+			outcome.Skipped = append(outcome.Skipped, candidateLabel(candidate))
 			continue
 		}
-		entry, supersedes := s.normalizeCandidate(candidate, input)
+		entry, supersedes, ok := s.normalizeCandidate(candidate, input)
+		if !ok {
+			outcome.Skipped = append(outcome.Skipped, candidateLabel(candidate))
+			continue
+		}
 		if s.duplicatesExplicit(entry, explicit) {
 			outcome.Skipped = append(outcome.Skipped, entry.Summary)
 			continue
@@ -153,137 +155,4 @@ func (s *learningService) applyCandidates(
 		outcome.Superseded = append(outcome.Superseded, validSupersedes...)
 	}
 	return outcome, nil
-}
-
-func (s *learningService) acceptsCandidate(candidate Candidate, policy learningPolicy) bool {
-	memoryType := normalizeCandidateMemoryType(candidate.MemoryType)
-	if memoryType == memorystore.MemoryTypeFact && !policy.allowFact {
-		return false
-	}
-	return strings.TrimSpace(candidate.Summary) != "" &&
-		strings.TrimSpace(candidate.Content) != "" &&
-		candidate.Confidence >= s.settings.MinConfidence
-}
-
-func (s *learningService) normalizeCandidate(candidate Candidate, input LearnFromTurnInput) (memorystore.MemoryEntry, []string) {
-	scopeType := s.resolveCandidateScope(candidate.ScopeType)
-	scopeID := input.UserScope
-	memoryType := normalizeCandidateMemoryType(candidate.MemoryType)
-	if scopeType == memorystore.ScopeTypeSession {
-		scopeID = input.SessionID
-	}
-	return memorystore.MemoryEntry{
-		ScopeType:  scopeType,
-		ScopeID:    scopeID,
-		SourceKind: memorystore.SourceKindLearned,
-		MemoryType: memoryType,
-		MemoryKey:  resolveCandidateMemoryKey(candidate, memoryType),
-		Summary:    strings.TrimSpace(candidate.Summary),
-		Content:    strings.TrimSpace(candidate.Content),
-		Metadata:   map[string]any{"learn_reason": strings.TrimSpace(candidate.Reason)},
-		Confidence: candidate.Confidence,
-		Status:     memorystore.MemoryStatusActive,
-	}, candidate.SupersedesID
-}
-
-func (s *learningService) resolveCandidateScope(raw string) string {
-	scopeType := strings.ToLower(strings.TrimSpace(raw))
-	if scopeType == memorystore.ScopeTypeUser && s.settings.UserScopeEnabled {
-		return memorystore.ScopeTypeUser
-	}
-	if s.settings.SessionScopeEnabled {
-		return memorystore.ScopeTypeSession
-	}
-	return memorystore.ScopeTypeUser
-}
-
-func (s *learningService) duplicatesExplicit(candidate memorystore.MemoryEntry, explicit []memorystore.MemoryEntry) bool {
-	for _, existing := range explicit {
-		if candidate.ScopeType != existing.ScopeType || candidate.ScopeID != existing.ScopeID {
-			continue
-		}
-		if memorySimilarity(candidate, existing) >= 0.88 {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *learningService) findExactLearnedMatch(candidate memorystore.MemoryEntry, existing []memorystore.MemoryEntry) string {
-	for _, item := range existing {
-		if item.ScopeType != candidate.ScopeType || item.ScopeID != candidate.ScopeID {
-			continue
-		}
-		if item.Status != memorystore.MemoryStatusActive {
-			continue
-		}
-		if candidate.MemoryKey != "" && item.MemoryKey == candidate.MemoryKey && memorySimilarity(candidate, item) >= 0.9 {
-			return item.ID
-		}
-		if item.MemoryType != candidate.MemoryType {
-			continue
-		}
-		if memorySimilarity(candidate, item) >= 0.97 {
-			return item.ID
-		}
-	}
-	return ""
-}
-
-func (s *learningService) resolveSupersedes(
-	ctx context.Context,
-	candidate memorystore.MemoryEntry,
-	supersedes []string,
-	existing []memorystore.MemoryEntry,
-) ([]string, error) {
-	candidateIDs := normalizeIDs(supersedes)
-	if len(candidateIDs) == 0 {
-		return s.autoSupersedes(ctx, candidate, existing)
-	}
-	items, err := s.store.GetLearnedByIDs(ctx, candidateIDs)
-	if err != nil {
-		return nil, err
-	}
-	valid := make([]string, 0, len(items))
-	for _, item := range items {
-		if item.ScopeType != candidate.ScopeType || item.ScopeID != candidate.ScopeID {
-			continue
-		}
-		if item.Status != memorystore.MemoryStatusActive {
-			continue
-		}
-		valid = append(valid, item.ID)
-	}
-	return valid, nil
-}
-
-func (s *learningService) autoSupersedes(
-	ctx context.Context,
-	candidate memorystore.MemoryEntry,
-	existing []memorystore.MemoryEntry,
-) ([]string, error) {
-	if candidate.MemoryKey != "" {
-		entry, err := s.store.FindActiveLearnedByMemoryKey(ctx, candidate.ScopeType, candidate.ScopeID, candidate.MemoryKey)
-		switch {
-		case err == nil:
-			return []string{entry.ID}, nil
-		case errors.Is(err, memorystore.ErrNotFound):
-		default:
-			return nil, err
-		}
-	}
-	out := make([]string, 0, 1)
-	for _, item := range existing {
-		if item.ScopeType != candidate.ScopeType || item.ScopeID != candidate.ScopeID {
-			continue
-		}
-		if item.MemoryType != candidate.MemoryType || item.Status != memorystore.MemoryStatusActive {
-			continue
-		}
-		if memorySimilarity(candidate, item) >= 0.8 {
-			out = append(out, item.ID)
-			break
-		}
-	}
-	return out, nil
 }

@@ -2,6 +2,7 @@ package memoryaug
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -9,44 +10,77 @@ func FormatPromptBlock(items []RecallItem) string {
 	if len(items) == 0 {
 		return ""
 	}
-	sections := []struct {
-		title string
-		items []string
-	}{
-		{title: "Explicit memories"},
-		{title: "Session-learned memories"},
-		{title: "User-learned memories"},
+	slotLines := formatSlotLines(items)
+	otherLines := formatOtherMemoryLines(items, len(items) <= 2)
+	lines := make([]string, 0, len(slotLines)+len(otherLines)+4)
+	if len(slotLines) > 0 {
+		lines = append(lines, "Memory slots:")
+		lines = append(lines, slotLines...)
 	}
-	for _, item := range items {
-		switch {
-		case item.Entry.SourceKind == "explicit":
-			sections[0].items = append(sections[0].items, formatPromptLine(item, len(items) <= 2))
-		case item.Entry.ScopeType == "session":
-			sections[1].items = append(sections[1].items, formatPromptLine(item, len(items) <= 2))
-		default:
-			sections[2].items = append(sections[2].items, formatPromptLine(item, len(items) <= 2))
+	if len(otherLines) > 0 {
+		if len(lines) > 0 {
+			lines = append(lines, "")
 		}
-	}
-	lines := make([]string, 0, len(items)+4)
-	lines = append(lines, "Memory context:")
-	for _, section := range sections {
-		lines = append(lines, section.title+":")
-		if len(section.items) == 0 {
-			lines = append(lines, "- (none)")
-			continue
-		}
-		lines = append(lines, section.items...)
+		lines = append(lines, "Other memory context:")
+		lines = append(lines, otherLines...)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatPromptLine(item RecallItem, includeContent bool) string {
+func formatSlotLines(items []RecallItem) []string {
+	bestByKey := make(map[string]RecallItem, len(items))
+	for _, item := range items {
+		spec, ok := slotSpecForKey(item.Entry.MemoryKey)
+		if !ok {
+			continue
+		}
+		if slotValueFromEntry(item.Entry) == "" {
+			continue
+		}
+		existing, found := bestByKey[spec.Key]
+		if !found || compareRecallItem(item, existing) {
+			bestByKey[spec.Key] = item
+		}
+	}
+	if len(bestByKey) == 0 {
+		return nil
+	}
+	specs := make([]SlotSpec, 0, len(bestByKey))
+	for _, spec := range knownSlots {
+		if _, ok := bestByKey[spec.Key]; ok {
+			specs = append(specs, spec)
+		}
+	}
+	sort.SliceStable(specs, func(i int, j int) bool {
+		if specs[i].PromptPriority != specs[j].PromptPriority {
+			return specs[i].PromptPriority < specs[j].PromptPriority
+		}
+		return specs[i].Key < specs[j].Key
+	})
+	lines := make([]string, 0, len(specs))
+	for _, spec := range specs {
+		lines = append(lines, fmt.Sprintf("- %s=%s", spec.Key, slotValueFromEntry(bestByKey[spec.Key].Entry)))
+	}
+	return lines
+}
+
+func formatOtherMemoryLines(items []RecallItem, includeContent bool) []string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		if _, ok := slotSpecForKey(item.Entry.MemoryKey); ok && slotValueFromEntry(item.Entry) != "" {
+			continue
+		}
+		lines = append(lines, formatOtherPromptLine(item, includeContent))
+	}
+	return lines
+}
+
+func formatOtherPromptLine(item RecallItem, includeContent bool) string {
 	line := fmt.Sprintf(
-		"- [%s] %s | source_kind=%s | confidence=%.2f",
+		"- [%s/%s] %s",
+		item.Entry.ScopeType,
 		item.Entry.MemoryType,
 		strings.TrimSpace(item.Entry.Summary),
-		item.Entry.SourceKind,
-		item.Entry.Confidence,
 	)
 	if includeContent && strings.TrimSpace(item.Entry.Content) != "" && item.Entry.Content != item.Entry.Summary {
 		line += " | content=" + trimPromptField(item.Entry.Content)
