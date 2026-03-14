@@ -3,8 +3,8 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -14,9 +14,13 @@ import (
 )
 
 func TestRSSFetchToolExecuteParsesRSSAndDedupes(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+	const feedURL = "https://feeds.test/feed.xml"
+	fixedNow := time.Date(2026, 3, 8, 10, 30, 0, 0, time.UTC)
+	tool := newRSSFetchTestTool(
+		t,
+		feedURL,
+		"application/rss+xml",
+		`<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
     <title>Ghost Feed</title>
@@ -44,21 +48,11 @@ func TestRSSFetchToolExecuteParsesRSSAndDedupes(t *testing.T) {
       <pubDate>Sun, 08 Mar 2026 09:00:00 GMT</pubDate>
     </item>
   </channel>
-</rss>`))
-	}))
-	defer server.Close()
+</rss>`,
+		func() time.Time { return fixedNow },
+	)
 
-	fixedNow := time.Date(2026, 3, 8, 10, 30, 0, 0, time.UTC)
-	tool := &RSSFetchTool{
-		httpClient: server.Client(),
-		validateURL: func(context.Context, *url.URL) error {
-			return nil
-		},
-		now:       func() time.Time { return fixedNow },
-		bodyLimit: defaultRSSBodyLimitBytes,
-	}
-
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+server.URL+`/feed.xml","max_items":5}`), "trace-rss-1")
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+feedURL+`","max_items":5}`), "trace-rss-1")
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -88,9 +82,12 @@ func TestRSSFetchToolExecuteParsesRSSAndDedupes(t *testing.T) {
 }
 
 func TestRSSFetchToolExecuteParsesAtomAndRespectsSummaryToggle(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/atom+xml")
-		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+	const feedURL = "https://feeds.test/atom.xml"
+	tool := newRSSFetchTestTool(
+		t,
+		feedURL,
+		"application/atom+xml",
+		`<?xml version="1.0" encoding="utf-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Ghost Atom</title>
   <subtitle>Atom updates</subtitle>
@@ -102,20 +99,11 @@ func TestRSSFetchToolExecuteParsesAtomAndRespectsSummaryToggle(t *testing.T) {
     <summary>&lt;p&gt;Atom summary&lt;/p&gt;</summary>
     <updated>2026-03-08T11:00:00Z</updated>
   </entry>
-</feed>`))
-	}))
-	defer server.Close()
+</feed>`,
+		func() time.Time { return time.Date(2026, 3, 8, 11, 30, 0, 0, time.UTC) },
+	)
 
-	tool := &RSSFetchTool{
-		httpClient: server.Client(),
-		validateURL: func(context.Context, *url.URL) error {
-			return nil
-		},
-		now:       func() time.Time { return time.Date(2026, 3, 8, 11, 30, 0, 0, time.UTC) },
-		bodyLimit: defaultRSSBodyLimitBytes,
-	}
-
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+server.URL+`/atom.xml","include_summary":false}`), "trace-rss-2")
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+feedURL+`","include_summary":false}`), "trace-rss-2")
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -165,22 +153,16 @@ func TestValidateRSSURLRejectsLocalTargets(t *testing.T) {
 }
 
 func TestRSSFetchToolRejectsInvalidXML(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = w.Write([]byte(`<rss><channel><title>broken</title>`))
-	}))
-	defer server.Close()
+	const feedURL = "https://feeds.test/broken.xml"
+	tool := newRSSFetchTestTool(
+		t,
+		feedURL,
+		"application/rss+xml",
+		`<rss><channel><title>broken</title>`,
+		time.Now,
+	)
 
-	tool := &RSSFetchTool{
-		httpClient: server.Client(),
-		validateURL: func(context.Context, *url.URL) error {
-			return nil
-		},
-		now:       time.Now,
-		bodyLimit: defaultRSSBodyLimitBytes,
-	}
-
-	_, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+server.URL+`/broken.xml"}`), "trace-rss-4")
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+feedURL+`"}`), "trace-rss-4")
 	if err == nil {
 		t.Fatal("expected parse error")
 	}
@@ -190,26 +172,20 @@ func TestRSSFetchToolRejectsInvalidXML(t *testing.T) {
 }
 
 func TestRSSFetchToolCapsMaxItems(t *testing.T) {
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/rss+xml")
-		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>
+	const feedURL = "https://feeds.test/capped.xml"
+	tool := newRSSFetchTestTool(
+		t,
+		feedURL,
+		"application/rss+xml",
+		`<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Ghost Feed</title>
   <item><guid>a</guid><title>A</title><pubDate>Sun, 08 Mar 2026 10:00:00 GMT</pubDate></item>
   <item><guid>b</guid><title>B</title><pubDate>Sun, 08 Mar 2026 09:00:00 GMT</pubDate></item>
-</channel></rss>`))
-	}))
-	defer server.Close()
+</channel></rss>`,
+		time.Now,
+	)
 
-	tool := &RSSFetchTool{
-		httpClient: server.Client(),
-		validateURL: func(context.Context, *url.URL) error {
-			return nil
-		},
-		now:       time.Now,
-		bodyLimit: defaultRSSBodyLimitBytes,
-	}
-
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+server.URL+`/feed.xml","max_items":1}`), "trace-rss-5")
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"`+feedURL+`","max_items":1}`), "trace-rss-5")
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
@@ -220,4 +196,40 @@ func TestRSSFetchToolCapsMaxItems(t *testing.T) {
 	if len(result.Items) != 1 {
 		t.Fatalf("unexpected item count: got %d want %d", len(result.Items), 1)
 	}
+}
+
+func newRSSFetchTestTool(
+	t *testing.T,
+	expectedURL string,
+	contentType string,
+	body string,
+	now func() time.Time,
+) *RSSFetchTool {
+	t.Helper()
+
+	return &RSSFetchTool{
+		httpClient: &http.Client{
+			Transport: rssFetchRoundTripper(func(req *http.Request) (*http.Response, error) {
+				if req.URL.String() != expectedURL {
+					t.Fatalf("unexpected request url: got %q want %q", req.URL.String(), expectedURL)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     http.Header{"Content-Type": []string{contentType}},
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			}),
+		},
+		validateURL: func(context.Context, *url.URL) error {
+			return nil
+		},
+		now:       now,
+		bodyLimit: defaultRSSBodyLimitBytes,
+	}
+}
+
+type rssFetchRoundTripper func(*http.Request) (*http.Response, error)
+
+func (rt rssFetchRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt(req)
 }
