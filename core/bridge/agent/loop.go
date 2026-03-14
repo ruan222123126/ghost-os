@@ -2,10 +2,8 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
@@ -113,189 +111,28 @@ func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, tr
 }
 
 func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink streaming.Sink) (string, error) {
-	traceID = strings.TrimSpace(traceID)
-	if traceID == "" {
-		traceID = fmt.Sprintf("agent-%d", time.Now().UnixNano())
-	}
-
-	events := newAgentEventEmitter(sink, a.streamLifecycle.SessionID)
-	turnHistory := a.history.Clone()
-	completion := newCompletionRunner(a.completer, a.tools, turnHistory)
-	toolCalls := newToolCallExecutor(a.tools, turnHistory, nil, events)
-
-	if err := events.runStarted(ctx, traceID, a.streamLifecycle); err != nil {
+	state := newAgentRunState(a, sink, traceID)
+	if err := state.events.runStarted(ctx, state.traceID, state.lifecycle); err != nil {
 		return "", err
 	}
 
-	appendUserMessage(turnHistory, userMessage)
-	consecutiveNonExecutableToolCallTurns := 0
+	appendUserMessage(state.history, userMessage)
 	a.lastTurn = 0
 
 	for turn := 0; turn < a.maxTurns; turn++ {
-		a.lastTurn = turn
-		resp, err := completion.complete(ctx, sink, traceID, a.streamLifecycle.sessionID(), turn)
+		outcome, err := a.runTurn(ctx, turn, &state)
 		if err != nil {
-			runErr := fmt.Errorf("trace_id=%s turn=%d complete_once: %w", traceID, turn, err)
-			stepID, stepErr := streaming.AssistantStepID(turn)
-			if stepErr != nil {
-				return "", stepErr
-			}
-			return "", events.terminalError(ctx, traceID, turn, stepID, runErr)
+			return "", err
 		}
-
-		msg := resp.Message
-		finishReason := resp.FinishReason
-		switch finishReason {
-		case llm.FinishStop:
-			acceptAssistantTurn(turnHistory, resp)
-			a.commitTurn(turnHistory)
-			output := a.handleAssistantStop(msg)
-			if err := events.terminalSuccess(ctx, traceID, turn, output, a.streamLifecycle); err != nil {
-				return "", err
-			}
-			return output, nil
-		case llm.FinishToolCalls:
-			sanitizedMsg, issues := sanitizeAssistantToolCalls(msg)
-			if len(issues) > 0 {
-				if err := toolCalls.reportInvalidCalls(ctx, traceID, turn, issues); err != nil {
-					return "", err
-				}
-			}
-
-			stats := toolCallTurnStats{totalCalls: len(msg.ToolCalls)}
-			if len(issues) > 0 {
-				turnHistory.SetConversationState(llm.ConversationState{})
-			}
-			if len(sanitizedMsg.ToolCalls) == 0 {
-				turnHistory.Append(invalidToolCallAssistantMessage(msg, issues))
-				consecutiveNonExecutableToolCallTurns++
-				if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
-					runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
-					stepID, stepErr := streaming.AssistantStepID(turn)
-					if stepErr != nil {
-						return "", stepErr
-					}
-					return "", events.terminalError(ctx, traceID, turn, stepID, runErr)
-				}
-				continue
-			}
-
-			respToAccept := *resp
-			respToAccept.Message = sanitizedMsg
-			if len(issues) > 0 {
-				respToAccept.ConversationState = llm.ConversationState{}
-			}
-			acceptAssistantTurn(turnHistory, &respToAccept)
-
-			var err error
-			stats, err = toolCalls.execute(ctx, traceID, turn, sanitizedMsg.ToolCalls)
-			if err != nil {
-				if isEventEmitError(err) {
-					return "", err
-				}
-				var awaitingErr *ErrAwaitingHuman
-				if errors.As(err, &awaitingErr) {
-					a.commitTurn(turnHistory)
-					return "", err
-				}
-				var handoffErr *ErrIterationHandoff
-				if errors.As(err, &handoffErr) {
-					a.commitTurn(turnHistory)
-					return "", err
-				}
-				runErr := fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
-				stepID, stepErr := streaming.AssistantStepID(turn)
-				if stepErr != nil {
-					return "", stepErr
-				}
-				return "", events.terminalError(ctx, traceID, turn, stepID, runErr)
-			}
-			if stats.nonExecutable() {
-				consecutiveNonExecutableToolCallTurns++
-			} else {
-				consecutiveNonExecutableToolCallTurns = 0
-			}
-			// 防止模型反复生成不可执行的 tool_call（空参数/缺失工具）导致无效循环。
-			if consecutiveNonExecutableToolCallTurns >= maxConsecutiveNonExecutableToolCallTurns {
-				runErr := fmt.Errorf("trace_id=%s turn=%d repeated non-executable tool_calls; aborting tool-call loop", traceID, turn)
-				stepID, stepErr := streaming.AssistantStepID(turn)
-				if stepErr != nil {
-					return "", stepErr
-				}
-				return "", events.terminalError(ctx, traceID, turn, stepID, runErr)
-			}
-		case llm.FinishLength:
-			content := strings.TrimSpace(msg.Text)
-			if content != "" {
-				acceptAssistantTurn(turnHistory, resp)
-				a.commitTurn(turnHistory)
-				if err := events.terminalSuccess(ctx, traceID, turn, content, a.streamLifecycle); err != nil {
-					return "", err
-				}
-				return content, nil
-			}
-			runErr := fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)
-			stepID, stepErr := streaming.AssistantStepID(turn)
-			if stepErr != nil {
-				return "", stepErr
-			}
-			return "", events.terminalError(ctx, traceID, turn, stepID, runErr)
-		default:
-			runErr := fmt.Errorf("trace_id=%s turn=%d unsupported finish_reason: %q", traceID, turn, finishReason)
-			stepID, stepErr := streaming.AssistantStepID(turn)
-			if stepErr != nil {
-				return "", stepErr
-			}
-			return "", events.terminalError(ctx, traceID, turn, stepID, runErr)
+		if outcome.done {
+			return outcome.output, nil
 		}
 	}
 
 	if a.maxTurns > 0 {
 		a.lastTurn = a.maxTurns - 1
 	}
-	runErr := fmt.Errorf("trace_id=%s max turns exceeded: %d", traceID, a.maxTurns)
-	stepID, stepErr := streaming.AssistantStepID(a.lastTurn)
-	if stepErr != nil {
-		return "", stepErr
-	}
-	return "", events.terminalError(ctx, traceID, a.lastTurn, stepID, runErr)
-}
-
-func (a *Agent) commitTurn(history *History) {
-	if a == nil || history == nil {
-		return
-	}
-	a.history = history
-}
-
-// appendUserMessage 只负责把用户输入追加到会话历史。
-func appendUserMessage(history *History, userMessage string) {
-	if history == nil {
-		return
-	}
-
-	trimmed := strings.TrimSpace(userMessage)
-	if trimmed == "" {
-		return
-	}
-
-	history.Append(llm.Message{
-		Role: llm.RoleUser,
-		Text: trimmed,
-	})
-}
-
-func acceptAssistantTurn(history *History, resp *llm.CompletionResponse) {
-	if history == nil || resp == nil {
-		return
-	}
-
-	history.Append(resp.Message)
-	history.SetConversationState(resp.ConversationState)
-}
-
-func (a *Agent) handleAssistantStop(msg llm.Message) string {
-	return msg.Text
+	return "", state.maxTurnsExceeded(ctx, a.lastTurn, a.maxTurns)
 }
 
 // GetNewMessages 返回 Agent 初始化以来（或上次 ResetNewMessages 以来）已提交的新增会话消息。

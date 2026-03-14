@@ -23,6 +23,10 @@
 
 ### 2026-03-14
 
+- 收口 `core/bridge/agent` 对话循环实现：
+  - 将 `loop.go` 拆为“薄入口 + 回合处理 / 运行态 / 历史提交 helper”结构，保留 `Agent` 对外接口与错误语义不变。
+  - 本轮未预拆 `loop_tool_test.go`、`task_scheduler_test.go`；仅调整生产代码边界，避免把大测试文件体积误判为首要风险。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s` 已通过。
 - 收口 `core/bridge/session` 会话裁剪职责：
   - 将 `pruning.go` 拆为 context limit resolver、token estimator、message pruner、message truncation 等纯策略组件。
   - 保留 `EstimateTokens`、`PruneMessages`、`GetContextLimit` 作为薄入口，避免影响 `session` 与 `orchestration` 调用面。
