@@ -13,6 +13,7 @@ import (
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
 	"ghost-os/bridge/memorystore"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
 
@@ -45,7 +46,7 @@ type runtimeClients struct {
 type runtimeToolResources struct {
 	artifactStore   *artifacts.SessionArtifactStore
 	executionClient execution.Client
-	feedStore       *tools.FeedStore
+	feedStore       *rsssubscriptions.FeedStore
 }
 
 type memoryRuntimeResources struct {
@@ -164,7 +165,7 @@ func newRuntimeToolResources(cfg Config) (runtimeToolResources, error) {
 	if err != nil {
 		return runtimeToolResources{}, err
 	}
-	feedStore, err := tools.NewFeedStore(cfg.RSS.FeedsPath)
+	feedStore, err := rsssubscriptions.NewFeedStore(cfg.RSS.FeedsPath)
 	if err != nil {
 		return runtimeToolResources{}, err
 	}
@@ -188,11 +189,11 @@ func registerCoreTools(opts coreToolOptions) {
 	if containsToolName(opts.cfg.ToolSelector.Allowlist, "codex_cli") {
 		opts.registry.Register(tools.NewCodexCLITool(opts.resources.executionClient, opts.cfg.NativePersistent))
 	}
-	opts.registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey}))
-	opts.registry.Register(tools.NewFeedSubscribeTool(opts.resources.feedStore))
-	opts.registry.Register(tools.NewFeedListTool(opts.resources.feedStore))
-	opts.registry.Register(tools.NewFeedUpdateTool(opts.resources.feedStore))
-	opts.registry.Register(tools.NewFeedUnsubscribeTool(opts.resources.feedStore))
+	opts.registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{
+		TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey,
+		ExaAPIKey:    opts.cfg.WebSearchExaAPIKey,
+	}))
+	opts.registry.Register(tools.NewFeedManageTool(opts.resources.feedStore))
 	opts.registry.Register(tools.NewRSSFetchTool())
 	opts.registry.Register(tools.NewScreenActionTool(opts.resources.executionClient))
 	opts.registry.Register(tools.NewBrowserControlTool(opts.resources.executionClient))

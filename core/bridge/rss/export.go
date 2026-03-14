@@ -7,6 +7,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/tools"
 )
@@ -23,18 +24,18 @@ type RSSBriefingDraft = rssBriefingDraft
 type RSSBriefingDraftHighlight = rssBriefingDraftHighlight
 
 const (
-	defaultRSSFeedsPath           = bridgeconfig.DefaultRSSFeedsPath
-	defaultRSSInboxPath           = bridgeconfig.DefaultRSSInboxPath
-	defaultRSSBriefingsPath       = bridgeconfig.DefaultRSSBriefingsPath
-	defaultRSSReportsPath         = bridgeconfig.DefaultRSSReportsPath
-	defaultRSSPollInterval        = bridgeconfig.DefaultRSSPollInterval
-	defaultRSSPollMaxItemsPerFeed = bridgeconfig.DefaultRSSPollMaxItemsPerFeed
-	defaultRSSAIBatchSize         = bridgeconfig.DefaultRSSAIBatchSize
-	DefaultRSSPollTaskID          = defaultRSSPollTaskID
-	DefaultRSSBriefingTaskID = defaultRSSBriefingTaskID
-	DefaultRSSAggregateWindowHours = defaultRSSAggregateWindowHours
-	DefaultRSSAggregateItemLimit   = defaultRSSAggregateItemLimit
-	DefaultRSSBriefingGroupLimit   = defaultRSSBriefingGroupLimit
+	defaultRSSFeedsPath               = bridgeconfig.DefaultRSSFeedsPath
+	defaultRSSInboxPath               = bridgeconfig.DefaultRSSInboxPath
+	defaultRSSBriefingsPath           = bridgeconfig.DefaultRSSBriefingsPath
+	defaultRSSReportsPath             = bridgeconfig.DefaultRSSReportsPath
+	defaultRSSPollInterval            = bridgeconfig.DefaultRSSPollInterval
+	defaultRSSPollMaxItemsPerFeed     = bridgeconfig.DefaultRSSPollMaxItemsPerFeed
+	defaultRSSAIBatchSize             = bridgeconfig.DefaultRSSAIBatchSize
+	DefaultRSSPollTaskID              = defaultRSSPollTaskID
+	DefaultRSSBriefingTaskID          = defaultRSSBriefingTaskID
+	DefaultRSSAggregateWindowHours    = defaultRSSAggregateWindowHours
+	DefaultRSSAggregateItemLimit      = defaultRSSAggregateItemLimit
+	DefaultRSSBriefingGroupLimit      = defaultRSSBriefingGroupLimit
 	DefaultRSSBriefingHighlightsLimit = defaultRSSBriefingHighlightsLimit
 )
 
@@ -133,7 +134,7 @@ func NewLLMRSSBriefingBuilder(client llm.Completer, cfg Config) RSSBriefingBuild
 	return &llmRSSBriefingBuilder{client: client, cfg: cfg, timeout: defaultRSSBriefingTimeout}
 }
 
-func (s *RSSInboxService) FeedStore() *tools.FeedStore {
+func (s *RSSInboxService) FeedStore() *rsssubscriptions.FeedStore {
 	if s == nil {
 		return nil
 	}

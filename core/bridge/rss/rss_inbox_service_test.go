@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
 
@@ -33,7 +34,7 @@ type testRSSInboxClassifier struct {
 	errByFeed map[string]error
 }
 
-func (c testRSSInboxClassifier) Classify(_ context.Context, feed tools.FeedSubscription, items []rssInboxCandidate, _ string) ([]rssInboxClassification, error) {
+func (c testRSSInboxClassifier) Classify(_ context.Context, feed rsssubscriptions.FeedSubscription, items []rssInboxCandidate, _ string) ([]rssInboxClassification, error) {
 	if err := c.errByFeed[feed.ID]; err != nil {
 		return nil, err
 	}
@@ -53,11 +54,11 @@ func (c testRSSInboxClassifier) Classify(_ context.Context, feed tools.FeedSubsc
 }
 
 func TestRSSInboxServicePollProcessesNewItemsAndSkipsDuplicates(t *testing.T) {
-	feedStore, err := tools.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	feedStore, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("new feed store: %v", err)
 	}
-	_, _, err = feedStore.Upsert(tools.FeedUpsertInput{URL: "https://example.com/feed.xml", Title: "Example Feed", Tags: []string{"AI"}})
+	_, _, err = feedStore.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/feed.xml", Title: "Example Feed", Tags: []string{"AI"}})
 	if err != nil {
 		t.Fatalf("upsert feed: %v", err)
 	}
@@ -114,13 +115,13 @@ func TestRSSInboxServicePollProcessesNewItemsAndSkipsDuplicates(t *testing.T) {
 }
 
 func TestRSSInboxServicePollContinuesOnFeedAndClassifierFailures(t *testing.T) {
-	feedStore, err := tools.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	feedStore, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("new feed store: %v", err)
 	}
-	_, _, _ = feedStore.Upsert(tools.FeedUpsertInput{URL: "https://example.com/good.xml", Title: "Good"})
-	_, _, _ = feedStore.Upsert(tools.FeedUpsertInput{URL: "https://example.com/bad.xml", Title: "Bad"})
-	_, _, _ = feedStore.Upsert(tools.FeedUpsertInput{URL: "https://example.com/classifier.xml", Title: "Classifier"})
+	_, _, _ = feedStore.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/good.xml", Title: "Good"})
+	_, _, _ = feedStore.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/bad.xml", Title: "Bad"})
+	_, _, _ = feedStore.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/classifier.xml", Title: "Classifier"})
 	inboxStore, err := NewRSSInboxStore(filepath.Join(t.TempDir(), "inbox.json"))
 	if err != nil {
 		t.Fatalf("new inbox store: %v", err)

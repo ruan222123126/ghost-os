@@ -10,16 +10,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
 
 func TestFeedSubscribeToolExecuteCreatesAndListsFeeds(t *testing.T) {
-	store, err := NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	store, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewFeedStore: %v", err)
 	}
-	store.now = func() time.Time { return time.Date(2026, 3, 8, 12, 0, 0, 0, time.UTC) }
 
-	tool := &FeedSubscribeTool{
+	tool := &FeedManageTool{
 		store: store,
 		rssClient: &RSSFetchTool{
 			httpClient:  &http.Client{Transport: staticRSSRoundTripper(`<rss version="2.0"><channel><title>Ghost Feed</title><item><guid>a</guid><title>A</title><pubDate>Sun, 08 Mar 2026 10:00:00 GMT</pubDate></item></channel></rss>`)},
@@ -28,11 +29,11 @@ func TestFeedSubscribeToolExecuteCreatesAndListsFeeds(t *testing.T) {
 			bodyLimit:   defaultRSSBodyLimitBytes,
 		},
 	}
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"https://example.com/feed.xml","tags":["ai"],"priority":"high"}`), "trace-feed-1")
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"operation":"subscribe","url":"https://example.com/feed.xml","tags":["ai"],"priority":"high"}`), "trace-feed-1")
 	if err != nil {
 		t.Fatalf("Execute subscribe: %v", err)
 	}
-	var subscribeResult feedSubscribeResult
+	var subscribeResult feedManageResult
 	if err := json.Unmarshal([]byte(output), &subscribeResult); err != nil {
 		t.Fatalf("decode subscribe result: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestFeedSubscribeToolExecuteCreatesAndListsFeeds(t *testing.T) {
 		t.Fatalf("unexpected feed result: %+v", subscribeResult.Feed)
 	}
 
-	listOutput, err := NewFeedListTool(store).Execute(context.Background(), json.RawMessage(`{"enabled":true}`), "trace-feed-2")
+	listOutput, err := tool.Execute(context.Background(), json.RawMessage(`{"operation":"list","enabled":true}`), "trace-feed-2")
 	if err != nil {
 		t.Fatalf("Execute list: %v", err)
 	}
@@ -57,20 +58,21 @@ func TestFeedSubscribeToolExecuteCreatesAndListsFeeds(t *testing.T) {
 }
 
 func TestFeedUpdateAndUnsubscribeToolsExecute(t *testing.T) {
-	store, err := NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	store, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewFeedStore: %v", err)
 	}
-	feed, _, err := store.Upsert(FeedUpsertInput{URL: "https://example.com/feed.xml", ProbeTitle: "Ghost Feed"})
+	feed, _, err := store.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/feed.xml", ProbeTitle: "Ghost Feed"})
 	if err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 
-	updateOutput, err := NewFeedUpdateTool(store).Execute(context.Background(), json.RawMessage(`{"feed_id":"`+feed.ID+`","title":"Ops Feed","tags":["ops"],"enabled":false}`), "trace-feed-3")
+	tool := NewFeedManageTool(store)
+	updateOutput, err := tool.Execute(context.Background(), json.RawMessage(`{"operation":"update","feed_id":"`+feed.ID+`","title":"Ops Feed","tags":["ops"],"enabled":false}`), "trace-feed-3")
 	if err != nil {
 		t.Fatalf("Execute update: %v", err)
 	}
-	var updateResult feedSubscribeResult
+	var updateResult feedManageResult
 	if err := json.Unmarshal([]byte(updateOutput), &updateResult); err != nil {
 		t.Fatalf("decode update result: %v", err)
 	}
@@ -78,7 +80,7 @@ func TestFeedUpdateAndUnsubscribeToolsExecute(t *testing.T) {
 		t.Fatalf("unexpected updated feed: %+v", updateResult.Feed)
 	}
 
-	deleteOutput, err := NewFeedUnsubscribeTool(store).Execute(context.Background(), json.RawMessage(`{"feed_id":"`+feed.ID+`"}`), "trace-feed-4")
+	deleteOutput, err := tool.Execute(context.Background(), json.RawMessage(`{"operation":"unsubscribe","feed_id":"`+feed.ID+`"}`), "trace-feed-4")
 	if err != nil {
 		t.Fatalf("Execute unsubscribe: %v", err)
 	}
@@ -89,7 +91,7 @@ func TestFeedUpdateAndUnsubscribeToolsExecute(t *testing.T) {
 	if !deleteResult.Deleted || deleteResult.FeedID != feed.ID {
 		t.Fatalf("unexpected delete result: %+v", deleteResult)
 	}
-	deleteOutput, err = NewFeedUnsubscribeTool(store).Execute(context.Background(), json.RawMessage(`{"feed_id":"`+feed.ID+`"}`), "trace-feed-5")
+	deleteOutput, err = tool.Execute(context.Background(), json.RawMessage(`{"operation":"unsubscribe","feed_id":"`+feed.ID+`"}`), "trace-feed-5")
 	if err != nil {
 		t.Fatalf("Execute missing unsubscribe: %v", err)
 	}
@@ -102,12 +104,12 @@ func TestFeedUpdateAndUnsubscribeToolsExecute(t *testing.T) {
 }
 
 func TestFeedSubscribeToolRejectsInvalidSource(t *testing.T) {
-	store, err := NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	store, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("NewFeedStore: %v", err)
 	}
-	tool := NewFeedSubscribeTool(store)
-	_, err = tool.Execute(context.Background(), json.RawMessage(`{"url":"http://example.com/feed.xml"}`), "trace-feed-6")
+	tool := NewFeedManageTool(store)
+	_, err = tool.Execute(context.Background(), json.RawMessage(`{"operation":"subscribe","url":"http://example.com/feed.xml"}`), "trace-feed-6")
 	if err == nil {
 		t.Fatal("expected error for non-https source")
 	}

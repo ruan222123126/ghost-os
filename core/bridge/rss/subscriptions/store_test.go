@@ -1,4 +1,4 @@
-package tools
+package subscriptions
 
 import (
 	"errors"
@@ -125,7 +125,12 @@ func TestFeedStoreListSortsEnabledAndPriority(t *testing.T) {
 	}
 	store.now = func() time.Time { return baseNow.Add(2 * time.Minute) }
 	disabled := false
-	last, _, err := store.Upsert(FeedUpsertInput{URL: "https://example.com/three.xml", ProbeTitle: "Three", Enabled: &disabled, Priority: "high"})
+	last, _, err := store.Upsert(FeedUpsertInput{
+		URL:        "https://example.com/three.xml",
+		ProbeTitle: "Three",
+		Enabled:    &disabled,
+		Priority:   "high",
+	})
 	if err != nil {
 		t.Fatalf("Upsert third: %v", err)
 	}

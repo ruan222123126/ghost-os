@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -44,7 +45,7 @@ type bridgeService struct {
 	rssInitErr     error
 	agentRunner    SessionTurnRunner
 	runRegistry    *RunRegistry
-	feedStore      *tools.FeedStore
+	feedStore      *rsssubscriptions.FeedStore
 	runtimeFactory AgentRuntimeFactory
 	actions        map[string]actionHandler
 }

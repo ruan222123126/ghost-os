@@ -8,51 +8,41 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
 
-type FeedSubscribeTool struct {
-	store     *FeedStore
+const (
+	feedManageOperationSubscribe   = "subscribe"
+	feedManageOperationList        = "list"
+	feedManageOperationUpdate      = "update"
+	feedManageOperationUnsubscribe = "unsubscribe"
+)
+
+type FeedManageTool struct {
+	store     *rsssubscriptions.FeedStore
 	rssClient *RSSFetchTool
 }
 
-type FeedListTool struct{ store *FeedStore }
-type FeedUpdateTool struct{ store *FeedStore }
-type FeedUnsubscribeTool struct{ store *FeedStore }
-
-type feedSubscribeArgs struct {
-	URL      string   `json:"url"`
-	Title    string   `json:"title,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
-	Priority string   `json:"priority,omitempty"`
-	Enabled  *bool    `json:"enabled,omitempty"`
+type feedManageArgs struct {
+	Operation string    `json:"operation"`
+	URL       string    `json:"url,omitempty"`
+	FeedID    string    `json:"feed_id,omitempty"`
+	Title     *string   `json:"title,omitempty"`
+	Tags      *[]string `json:"tags,omitempty"`
+	Priority  *string   `json:"priority,omitempty"`
+	Enabled   *bool     `json:"enabled,omitempty"`
+	Tag       *string   `json:"tag,omitempty"`
 }
 
-type feedListArgs struct {
-	Enabled  *bool  `json:"enabled,omitempty"`
-	Tag      string `json:"tag,omitempty"`
-	Priority string `json:"priority,omitempty"`
-}
-
-type feedUpdateArgs struct {
-	FeedID   string    `json:"feed_id"`
-	Title    *string   `json:"title,omitempty"`
-	Tags     *[]string `json:"tags,omitempty"`
-	Priority *string   `json:"priority,omitempty"`
-	Enabled  *bool     `json:"enabled,omitempty"`
-}
-
-type feedUnsubscribeArgs struct {
-	FeedID string `json:"feed_id"`
-}
-
-type feedSubscribeResult struct {
-	Action string           `json:"action"`
-	Feed   FeedSubscription `json:"feed"`
+type feedManageResult struct {
+	Action string                            `json:"action"`
+	Feed   rsssubscriptions.FeedSubscription `json:"feed"`
 }
 
 type feedListResult struct {
-	Feeds []FeedSubscription `json:"feeds"`
-	Count int                `json:"count"`
+	Feeds []rsssubscriptions.FeedSubscription `json:"feeds"`
+	Count int                                 `json:"count"`
 }
 
 type feedDeleteResult struct {
@@ -60,51 +50,61 @@ type feedDeleteResult struct {
 	FeedID  string `json:"feed_id"`
 }
 
-func NewFeedSubscribeTool(store *FeedStore) Tool {
-	return &FeedSubscribeTool{store: store, rssClient: newDefaultRSSFetchTool()}
+func NewFeedManageTool(store *rsssubscriptions.FeedStore) Tool {
+	return &FeedManageTool{store: store, rssClient: newDefaultRSSFetchTool()}
 }
 
-func NewFeedListTool(store *FeedStore) Tool {
-	return &FeedListTool{store: store}
+func (FeedManageTool) Name() string {
+	return "feed_manage"
 }
 
-func NewFeedUpdateTool(store *FeedStore) Tool {
-	return &FeedUpdateTool{store: store}
+func (FeedManageTool) Description() string {
+	return "Manage shared RSS/Atom feed sources: subscribe, list, update metadata, or unsubscribe."
 }
 
-func NewFeedUnsubscribeTool(store *FeedStore) Tool {
-	return &FeedUnsubscribeTool{store: store}
-}
-
-func (FeedSubscribeTool) Name() string { return "feed_subscribe" }
-
-func (FeedSubscribeTool) Description() string {
-	return "Add or refresh a shared RSS/Atom feed source after HTTPS and feed validation."
-}
-
-func (FeedSubscribeTool) Parameters() json.RawMessage {
+func (FeedManageTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"url":{"type":"string","description":"HTTPS RSS or Atom feed URL."},
-			"title":{"type":"string","description":"Optional custom display title."},
-			"tags":{"type":"array","items":{"type":"string"},"description":"Optional feed tags."},
-			"priority":{"type":"string","enum":["low","normal","high"],"description":"Optional feed priority (default: normal)."},
-			"enabled":{"type":"boolean","description":"Whether the feed should be enabled (default: true)."}
+			"operation":{"type":"string","enum":["subscribe","list","update","unsubscribe"]},
+			"url":{"type":"string","description":"HTTPS RSS or Atom feed URL for subscribe."},
+			"feed_id":{"type":"string","description":"Feed identifier for update or unsubscribe."},
+			"title":{"type":"string","description":"Display title for subscribe, or replacement title for update; empty string clears it on update."},
+			"tags":{"type":"array","items":{"type":"string"},"description":"Tags for subscribe, or full replacement tag list for update."},
+			"priority":{"type":"string","enum":["low","normal","high"],"description":"Priority for subscribe, update, or list filter."},
+			"enabled":{"type":"boolean","description":"Enabled state for subscribe, update, or list filter."},
+			"tag":{"type":"string","description":"Single tag filter for list."}
 		},
-		"required":["url"],
+		"required":["operation"],
 		"additionalProperties":false
 	}`)
 }
 
-func (t *FeedSubscribeTool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {
+func (t *FeedManageTool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {
 	if t == nil || t.store == nil {
 		return "", fmt.Errorf("feed store is not configured")
 	}
-	var args feedSubscribeArgs
+
+	var args feedManageArgs
 	if err := json.Unmarshal(argsJSON, &args); err != nil {
 		return "", fmt.Errorf("decode args: %w", err)
 	}
+
+	switch strings.ToLower(strings.TrimSpace(args.Operation)) {
+	case feedManageOperationSubscribe:
+		return t.executeSubscribe(ctx, args)
+	case feedManageOperationList:
+		return t.executeList(args)
+	case feedManageOperationUpdate:
+		return t.executeUpdate(args)
+	case feedManageOperationUnsubscribe:
+		return t.executeUnsubscribe(args)
+	default:
+		return "", fmt.Errorf("unsupported operation %q", strings.TrimSpace(args.Operation))
+	}
+}
+
+func (t *FeedManageTool) executeSubscribe(ctx context.Context, args feedManageArgs) (string, error) {
 	feedURL, err := parseFeedSubscribeURL(args.URL)
 	if err != nil {
 		return "", err
@@ -115,89 +115,44 @@ func (t *FeedSubscribeTool) Execute(ctx context.Context, argsJSON json.RawMessag
 	if err := t.rssClient.validateRequestURL(ctx, feedURL); err != nil {
 		return "", err
 	}
+
 	result, err := t.rssClient.fetch(ctx, feedURL)
 	if err != nil {
 		return "", err
 	}
-	feed, action, err := t.store.Upsert(FeedUpsertInput{
+	feed, action, err := t.store.Upsert(rsssubscriptions.FeedUpsertInput{
 		URL:        feedURL.String(),
-		Title:      args.Title,
-		Tags:       args.Tags,
-		Priority:   args.Priority,
+		Title:      feedOptionalStringValue(args.Title),
+		Tags:       feedOptionalStringsValue(args.Tags),
+		Priority:   feedOptionalStringValue(args.Priority),
 		Enabled:    args.Enabled,
 		ProbeTitle: result.Feed.Title,
 	})
 	if err != nil {
 		return "", err
 	}
-	return marshalFeedToolResult(feedSubscribeResult{Action: action, Feed: feed})
+	return marshalFeedToolResult(feedManageResult{Action: action, Feed: feed})
 }
 
-func (FeedListTool) Name() string { return "feed_list" }
-
-func (FeedListTool) Description() string {
-	return "List shared RSS/Atom feed sources with optional enabled, tag, and priority filters."
-}
-
-func (FeedListTool) Parameters() json.RawMessage {
-	return json.RawMessage(`{
-		"type":"object",
-		"properties":{
-			"enabled":{"type":"boolean","description":"Filter by enabled state."},
-			"tag":{"type":"string","description":"Filter by a single tag."},
-			"priority":{"type":"string","enum":["low","normal","high"],"description":"Filter by priority."}
-		},
-		"additionalProperties":false
-	}`)
-}
-
-func (t *FeedListTool) Execute(_ context.Context, argsJSON json.RawMessage, _ string) (string, error) {
-	if t == nil || t.store == nil {
-		return "", fmt.Errorf("feed store is not configured")
-	}
-	var args feedListArgs
-	if len(argsJSON) > 0 {
-		if err := json.Unmarshal(argsJSON, &args); err != nil {
-			return "", fmt.Errorf("decode args: %w", err)
-		}
-	}
-	feeds, err := t.store.List(FeedListFilter{Enabled: args.Enabled, Tag: args.Tag, Priority: args.Priority})
+func (t *FeedManageTool) executeList(args feedManageArgs) (string, error) {
+	feeds, err := t.store.List(rsssubscriptions.FeedListFilter{
+		Enabled:  args.Enabled,
+		Tag:      feedOptionalStringValue(args.Tag),
+		Priority: feedOptionalStringValue(args.Priority),
+	})
 	if err != nil {
 		return "", err
 	}
 	return marshalFeedToolResult(feedListResult{Feeds: feeds, Count: len(feeds)})
 }
 
-func (FeedUpdateTool) Name() string { return "feed_update" }
-
-func (FeedUpdateTool) Description() string {
-	return "Update metadata, priority, tags, or enabled state for a shared RSS/Atom feed source."
-}
-
-func (FeedUpdateTool) Parameters() json.RawMessage {
-	return json.RawMessage(`{
-		"type":"object",
-		"properties":{
-			"feed_id":{"type":"string","description":"Feed identifier returned by feed_list or feed_subscribe."},
-			"title":{"type":"string","description":"Optional replacement display title; empty string clears it."},
-			"tags":{"type":"array","items":{"type":"string"},"description":"Optional full replacement tag list."},
-			"priority":{"type":"string","enum":["low","normal","high"],"description":"Optional replacement priority."},
-			"enabled":{"type":"boolean","description":"Optional enabled flag."}
-		},
-		"required":["feed_id"],
-		"additionalProperties":false
-	}`)
-}
-
-func (t *FeedUpdateTool) Execute(_ context.Context, argsJSON json.RawMessage, _ string) (string, error) {
-	if t == nil || t.store == nil {
-		return "", fmt.Errorf("feed store is not configured")
+func (t *FeedManageTool) executeUpdate(args feedManageArgs) (string, error) {
+	feedID := strings.TrimSpace(args.FeedID)
+	if feedID == "" {
+		return "", fmt.Errorf("feed_id is required")
 	}
-	var args feedUpdateArgs
-	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return "", fmt.Errorf("decode args: %w", err)
-	}
-	feed, err := t.store.Update(args.FeedID, FeedUpdatePatch{
+
+	feed, err := t.store.Update(feedID, rsssubscriptions.FeedUpdatePatch{
 		Title:    args.Title,
 		Tags:     args.Tags,
 		Priority: args.Priority,
@@ -206,39 +161,20 @@ func (t *FeedUpdateTool) Execute(_ context.Context, argsJSON json.RawMessage, _ 
 	if err != nil {
 		return "", err
 	}
-	return marshalFeedToolResult(feedSubscribeResult{Action: "updated", Feed: feed})
+	return marshalFeedToolResult(feedManageResult{Action: "updated", Feed: feed})
 }
 
-func (FeedUnsubscribeTool) Name() string { return "feed_unsubscribe" }
-
-func (FeedUnsubscribeTool) Description() string {
-	return "Remove a shared RSS/Atom feed source by feed_id."
-}
-
-func (FeedUnsubscribeTool) Parameters() json.RawMessage {
-	return json.RawMessage(`{
-		"type":"object",
-		"properties":{
-			"feed_id":{"type":"string","description":"Feed identifier returned by feed_list or feed_subscribe."}
-		},
-		"required":["feed_id"],
-		"additionalProperties":false
-	}`)
-}
-
-func (t *FeedUnsubscribeTool) Execute(_ context.Context, argsJSON json.RawMessage, _ string) (string, error) {
-	if t == nil || t.store == nil {
-		return "", fmt.Errorf("feed store is not configured")
+func (t *FeedManageTool) executeUnsubscribe(args feedManageArgs) (string, error) {
+	feedID := strings.TrimSpace(args.FeedID)
+	if feedID == "" {
+		return "", fmt.Errorf("feed_id is required")
 	}
-	var args feedUnsubscribeArgs
-	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return "", fmt.Errorf("decode args: %w", err)
-	}
-	deleted, err := t.store.Delete(args.FeedID)
+
+	deleted, err := t.store.Delete(feedID)
 	if err != nil {
 		return "", err
 	}
-	return marshalFeedToolResult(feedDeleteResult{Deleted: deleted, FeedID: strings.TrimSpace(args.FeedID)})
+	return marshalFeedToolResult(feedDeleteResult{Deleted: deleted, FeedID: feedID})
 }
 
 func parseFeedSubscribeURL(raw string) (*url.URL, error) {
@@ -260,6 +196,20 @@ func marshalFeedToolResult(value any) (string, error) {
 		return "", fmt.Errorf("encode feed tool result: %w", err)
 	}
 	return string(encoded), nil
+}
+
+func feedOptionalStringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
+func feedOptionalStringsValue(values *[]string) []string {
+	if values == nil {
+		return nil
+	}
+	return *values
 }
 
 func newDefaultRSSFetchTool() *RSSFetchTool {

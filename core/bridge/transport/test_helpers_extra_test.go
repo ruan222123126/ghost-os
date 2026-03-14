@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/llm"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
@@ -89,7 +90,7 @@ type testRSSInboxClassifier struct {
 
 func (c testRSSInboxClassifier) Classify(
 	_ context.Context,
-	feed tools.FeedSubscription,
+	feed rsssubscriptions.FeedSubscription,
 	_ []RSSInboxCandidate,
 	_ string,
 ) ([]RSSInboxClassification, error) {

@@ -9,16 +9,17 @@ import (
 	"time"
 
 	"ghost-os/bridge/llm"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
 
 func TestHandleRSSInboxListGetAndPoll(t *testing.T) {
 	handler, service, _ := newTestHandlerWithService(t, nil, nil)
-	feedStore, err := tools.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	feedStore, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("new feed store: %v", err)
 	}
-	feed, _, err := feedStore.Upsert(tools.FeedUpsertInput{URL: "https://example.com/feed.xml", Title: "Example Feed"})
+	feed, _, err := feedStore.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/feed.xml", Title: "Example Feed"})
 	if err != nil {
 		t.Fatalf("upsert feed: %v", err)
 	}
@@ -135,11 +136,11 @@ func TestBusRSSInboxActions(t *testing.T) {
 }
 
 func TestExecuteRSSInboxPollUsecaseUsesTaskID(t *testing.T) {
-	feedStore, err := tools.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
+	feedStore, err := rsssubscriptions.NewFeedStore(filepath.Join(t.TempDir(), "feeds.json"))
 	if err != nil {
 		t.Fatalf("new feed store: %v", err)
 	}
-	feed, _, err := feedStore.Upsert(tools.FeedUpsertInput{URL: "https://example.com/feed.xml", Title: "Example Feed"})
+	feed, _, err := feedStore.Upsert(rsssubscriptions.FeedUpsertInput{URL: "https://example.com/feed.xml", Title: "Example Feed"})
 	if err != nil {
 		t.Fatalf("upsert feed: %v", err)
 	}

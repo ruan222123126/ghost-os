@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/llm"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
 
@@ -45,11 +46,11 @@ type rssInboxFetcher interface {
 }
 
 type rssInboxClassifier interface {
-	Classify(context.Context, tools.FeedSubscription, []rssInboxCandidate, string) ([]rssInboxClassification, error)
+	Classify(context.Context, rsssubscriptions.FeedSubscription, []rssInboxCandidate, string) ([]rssInboxClassification, error)
 }
 
 type RSSInboxService struct {
-	feedStore       *tools.FeedStore
+	feedStore       *rsssubscriptions.FeedStore
 	inboxStore      *RSSInboxStore
 	briefingStore   *RSSBriefingStore
 	reportStore     *RSSReportStore
@@ -94,7 +95,7 @@ type llmRSSInboxClassifier struct {
 	cfg     Config
 }
 
-func NewRSSInboxService(feedStore *tools.FeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier rssInboxClassifier, cfg Config) *RSSInboxService {
+func NewRSSInboxService(feedStore *rsssubscriptions.FeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier rssInboxClassifier, cfg Config) *RSSInboxService {
 	if classifier == nil {
 		classifier = &llmRSSInboxClassifier{store: nil, timeout: defaultRSSClassifierTimeout, cfg: cfg}
 	}
@@ -131,7 +132,7 @@ func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) 
 	if err != nil {
 		return nil, err
 	}
-	feedStore, err := tools.NewFeedStore(cfg.RSS.FeedsPath)
+	feedStore, err := rsssubscriptions.NewFeedStore(cfg.RSS.FeedsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +160,7 @@ func (s *RSSInboxService) Poll(ctx context.Context, opts RSSInboxPollOptions) (R
 		return RSSInboxPollResult{}, fmt.Errorf("rss inbox service is not configured")
 	}
 	enabled := true
-	feeds, err := s.feedStore.List(tools.FeedListFilter{Enabled: &enabled})
+	feeds, err := s.feedStore.List(rsssubscriptions.FeedListFilter{Enabled: &enabled})
 	if err != nil {
 		return RSSInboxPollResult{}, err
 	}
@@ -256,7 +257,7 @@ func (defaultRSSInboxFetcher) Fetch(ctx context.Context, feedURL string, maxItem
 	return tools.FetchRSS(ctx, feedURL, tools.RSSFetchOptions{MaxItems: maxItems, IncludeSummary: true})
 }
 
-func (c *llmRSSInboxClassifier) Classify(ctx context.Context, feed tools.FeedSubscription, items []rssInboxCandidate, traceID string) ([]rssInboxClassification, error) {
+func (c *llmRSSInboxClassifier) Classify(ctx context.Context, feed rsssubscriptions.FeedSubscription, items []rssInboxCandidate, traceID string) ([]rssInboxClassification, error) {
 	if len(items) == 0 {
 		return nil, nil
 	}
@@ -319,7 +320,7 @@ func (c *llmRSSInboxClassifier) workerClient() (llm.Completer, Config, error) {
 	return client, cfg, nil
 }
 
-func renderRSSInboxClassificationPrompt(feed tools.FeedSubscription, items []rssInboxCandidate, cfg Config, traceID string) string {
+func renderRSSInboxClassificationPrompt(feed rsssubscriptions.FeedSubscription, items []rssInboxCandidate, cfg Config, traceID string) string {
 	type promptItem struct {
 		Index       int      `json:"index"`
 		Title       string   `json:"title,omitempty"`
@@ -362,7 +363,7 @@ func renderRSSInboxClassificationPrompt(feed tools.FeedSubscription, items []rss
 	return string(encoded)
 }
 
-func buildRSSInboxCandidate(feed tools.FeedSubscription, item tools.RSSItem, fetchedSourceTitle string) rssInboxCandidate {
+func buildRSSInboxCandidate(feed rsssubscriptions.FeedSubscription, item tools.RSSItem, fetchedSourceTitle string) rssInboxCandidate {
 	publishedAt, _ := parseRSSInboxTime(item.PublishedAt)
 	sourceTitle := strings.TrimSpace(item.SourceTitle)
 	if sourceTitle == "" {

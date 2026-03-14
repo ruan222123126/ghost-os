@@ -5,7 +5,7 @@ import (
 
 	"ghost-os/bridge/llm"
 	bridgerss "ghost-os/bridge/rss"
-	"ghost-os/bridge/tools"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
 
 type RSSInboxPollOptions = bridgerss.RSSInboxPollOptions
@@ -38,11 +38,11 @@ var (
 )
 
 const (
-	defaultRSSPollTaskID             = bridgerss.DefaultRSSPollTaskID
-	defaultRSSBriefingTaskID         = bridgerss.DefaultRSSBriefingTaskID
-	defaultRSSAggregateWindowHours   = bridgerss.DefaultRSSAggregateWindowHours
-	defaultRSSAggregateItemLimit     = bridgerss.DefaultRSSAggregateItemLimit
-	defaultRSSBriefingGroupLimit     = bridgerss.DefaultRSSBriefingGroupLimit
+	defaultRSSPollTaskID              = bridgerss.DefaultRSSPollTaskID
+	defaultRSSBriefingTaskID          = bridgerss.DefaultRSSBriefingTaskID
+	defaultRSSAggregateWindowHours    = bridgerss.DefaultRSSAggregateWindowHours
+	defaultRSSAggregateItemLimit      = bridgerss.DefaultRSSAggregateItemLimit
+	defaultRSSBriefingGroupLimit      = bridgerss.DefaultRSSBriefingGroupLimit
 	defaultRSSBriefingHighlightsLimit = bridgerss.DefaultRSSBriefingHighlightsLimit
 )
 
@@ -53,7 +53,7 @@ func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) 
 	return bridgerss.NewRSSInboxServiceFromConfig(store.Inner())
 }
 
-func NewRSSInboxService(feedStore *tools.FeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg Config) *RSSInboxService {
+func NewRSSInboxService(feedStore *rsssubscriptions.FeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg Config) *RSSInboxService {
 	return bridgerss.NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
 }
 

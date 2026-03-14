@@ -3,7 +3,7 @@ package transport
 import (
 	"ghost-os/bridge/llm"
 	bridgeorchestration "ghost-os/bridge/orchestration"
-	"ghost-os/bridge/tools"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
 
 type RSSInboxService = bridgeorchestration.RSSInboxService
@@ -17,7 +17,7 @@ type RSSReportStore = bridgeorchestration.RSSReportStore
 type RSSBriefingBuilder = bridgeorchestration.RSSBriefingBuilder
 
 func NewRSSInboxService(
-	feedStore *tools.FeedStore,
+	feedStore *rsssubscriptions.FeedStore,
 	inboxStore *RSSInboxStore,
 	briefingStore *RSSBriefingStore,
 	reportStore *RSSReportStore,
