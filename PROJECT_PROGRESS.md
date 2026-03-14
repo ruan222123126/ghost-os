@@ -72,6 +72,10 @@
 - 完成 `core/bridge/app` 编排层拆分：
   - `config`、`runtime`、`rss`、`tasks`、`orchestration`、`transport` 已独立成包。
   - `app` 仅保留启动、装配与薄入口。
+- 拆分 `core/bridge/tasks` 调度器实现：
+  - 将原 `task_scheduler.go` 按职责拆为 `scheduler.go`、`schedule_plan.go`、`registration.go`、`run_executor.go`。
+  - 调度入口、计划计算、并发注册状态与执行结果持久化已解耦，后续调整调度算法不再需要同时穿插锁状态和落库副作用。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tasks -timeout 60s` 已通过。
 - 收紧与清理工具面：
   - Agent 默认暴露面以 `script_exec` 为主入口。
   - `memory_manage`、`browser_control`、`script_exec`、`send_file` 等工具的输出与元数据更稳定。
