@@ -113,6 +113,12 @@
   - 将原 `task_scheduler.go` 按职责拆为 `scheduler.go`、`schedule_plan.go`、`registration.go`、`run_executor.go`。
   - 调度入口、计划计算、并发注册状态与执行结果持久化已解耦，后续调整调度算法不再需要同时穿插锁状态和落库副作用。
   - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tasks -timeout 60s` 已通过。
+- 收口第三批有状态仓储与执行通道：
+  - `core/bridge/rss/rss_inbox_store.go` 现拆为薄仓储入口 + item 归一化 + list query + snapshot 读写，避免 store 再混查询过滤与去重索引细节。
+  - `core/bridge/rss/rss_inbox_aggregate.go` 现拆为聚合入口、query spec、聚合规则、结果组装，避免 aggregate 同时承载参数规整和 group materialize。
+  - `core/bridge/tasks/store.go` 现拆为任务读写、任务扫描查询、run log 仓储，避免任务定义与执行日志继续共享单个巨型 store 文件。
+  - `core/bridge/execution/persistent_client.go` 现拆为协调入口、协议封包交换、进程生命周期、状态轮询，persistent call/fallback/handshake 边界更清晰。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./rss ./tasks ./execution -timeout 60s` 已通过；`env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s` 仍受仓库现存 `./orchestration` allowlist 测试 `TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset` 失败阻塞。
 - 收紧与清理工具面：
   - Agent 默认暴露面以 `script_exec` 为主入口。
   - `memory_manage`、`browser_control`、`script_exec`、`send_file` 等工具的输出与元数据更稳定。
