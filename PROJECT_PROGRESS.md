@@ -23,6 +23,11 @@
 
 ### 2026-03-14
 
+- 收口 `core/bridge/orchestration` 第一批入口文件：
+  - 将 `service_rss_inbox.go`、`service_tasks.go`、`pro_mode.go`、`session_push.go`、`service_usecase_agent.go`、`service_usecase_human.go` 拆成“薄入口 + usecase runner + adapter”结构。
+  - RSS inbox / briefing、任务 CRUD / run-now、pro/prox 迭代引擎、ask_human 续跑与 session push 广播已分别下沉到独立协作者；`bridgeService` 现主要保留 action 入口、依赖解析与状态码映射。
+  - `config_shim.go` 与 `core/bridge/transport/orchestration_shim.go` 已拆分为更小的 shim 文件，避免 transport / orchestration 再承载大块转发代码。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s` 已通过。
 - 收口 `core/bridge/agent` 对话循环实现：
   - 将 `loop.go` 拆为“薄入口 + 回合处理 / 运行态 / 历史提交 helper”结构，保留 `Agent` 对外接口与错误语义不变。
   - 本轮未预拆 `loop_tool_test.go`、`task_scheduler_test.go`；仅调整生产代码边界，避免把大测试文件体积误判为首要风险。

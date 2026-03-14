@@ -108,7 +108,7 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 		return payload, http.StatusOK, nil
 	}
 
-	return s.resumeAgentAction(ctx, sessionID, traceID)
+	return s.sessionResumeRunner().Resume(ctx, sessionID, traceID)
 }
 
 // executeHumanAnswerAndResumeStreamAction 先写入人类答案，再以 SSE 方式续跑被 ask_human 暂停的回合。
@@ -158,61 +158,5 @@ func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Cont
 		return result.message, result.sessionID, nil
 	}
 
-	return s.resumeAgentStreamAction(ctx, sessionID, traceID, sink)
-}
-
-// resumeAgentAction 走 ask_human 专用续跑链路，不复用公开 AGENT_SEND 的空消息语义。
-func (s *bridgeService) resumeAgentAction(ctx context.Context, sessionID string, traceID string) (any, int, error) {
-	response, resumedSessionID, err := s.agentRunner.RunTurn(ctx, "", sessionID, traceID)
-	if err != nil {
-		awaitingErr, normalizedErr, statusCode, _ := classifyAgentTurnError(err)
-		if awaitingErr != nil {
-			s.publishAwaitingHumanSessionPush(traceID, resumedSessionID, awaitingErr)
-			return newAwaitingHumanResponse(resumedSessionID, awaitingErr), http.StatusAccepted, nil
-		}
-		return nil, statusCode, normalizedErr
-	}
-
-	result, code, err := s.finalizeAgentTurn(response, resumedSessionID)
-	if err != nil {
-		return nil, code, err
-	}
-
-	payload, payloadErr := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
-	if payloadErr != nil {
-		return nil, http.StatusInternalServerError, payloadErr
-	}
-	s.publishAssistantSessionPush(traceID, result)
-	return payload, http.StatusOK, nil
-}
-
-func (s *bridgeService) resumeAgentStreamAction(ctx context.Context, sessionID string, traceID string, sink streaming.Sink) (string, string, error) {
-	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush))
-	response, resumedSessionID, err := s.agentRunner.RunTurnStream(ctx, "", sessionID, traceID, trackedSink)
-	if err != nil {
-		awaitingErr, normalizedErr, _, cancelled := classifyAgentTurnError(err)
-		if awaitingErr != nil {
-			s.publishAwaitingHumanSessionPush(traceID, resumedSessionID, awaitingErr)
-			return "", resumedSessionID, err
-		}
-		if cancelled {
-			return "", resumedSessionID, normalizedErr
-		}
-		return "", resumedSessionID, normalizedErr
-	}
-
-	result, code, err := s.finalizeAgentTurn(response, resumedSessionID)
-	if err != nil {
-		stepID, stepErr := streaming.AssistantStepID(trackedSink.finalAssistantTurn())
-		if stepErr != nil {
-			return "", "", stepErr
-		}
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), stepID, resumedSessionID, code, err); emitErr != nil {
-			return "", "", emitErr
-		}
-		return "", "", err
-	}
-
-	s.publishAssistantSessionPush(traceID, result)
-	return result.message, result.sessionID, nil
+	return s.sessionResumeRunner().ResumeStream(ctx, sessionID, traceID, sink)
 }
