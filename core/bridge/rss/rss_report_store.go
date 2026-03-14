@@ -145,6 +145,13 @@ func (s *RSSReportStore) currentTime() time.Time {
 	return time.Now()
 }
 
+func (s *RSSReportStore) RootDir() string {
+	if s == nil {
+		return ""
+	}
+	return filepath.Dir(s.path)
+}
+
 func resolveRSSReportPath(path string) (string, error) {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {

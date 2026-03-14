@@ -32,6 +32,11 @@
   - `feed_manage` 工具现仅保留参数解析、订阅探测与领域 store 调用，不再承载订阅持久化规则。
   - 将 `core/bridge/rss/rss_report.go` 拆为 `report_service.go`、`report_prompt.go`、`report_markdown.go`、`report_dossier.go`，并补独立 `report_sources.go` 以满足文件尺寸约束。
   - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./rss/subscriptions -timeout 60s` 已通过；其余 RSS 相关跨包测试受现存 `core/bridge/llm` 重复定义阻塞。
+- 继续收口 `RSSInboxService`，拆成“薄 service + 纯领域流程”：
+  - `core/bridge/rss/rss_inbox_service.go` 现仅保留依赖装配、默认注入和薄入口，不再承载轮询抓取 / 去重 / 分类细节。
+  - RSS poll、briefing、report 协调分别下沉到独立 workflow，service 方法只做委派，领域流程只依赖显式接口而不是整块 service。
+  - `rss_inbox_service.go`、`rss_briefing.go`、`report_service.go` 已按职责拆到多个小文件，当前相关文件均收敛到 300 行以内。
+  - 当前环境下 `go test -C core/bridge ./... -timeout 60s` 已通过。
 - 拆分 `core/bridge/llm` provider 适配层，但只下沉共享小原语：
   - 保留 `client.go` 总调度入口；新增共享 headers 构造、tool-call stream state 与 JSON/schema 小工具。
   - `openai`、`anthropic`、`codex` 现按请求映射、响应反解、stream 解析拆到独立文件，避免修改 Codex 时连带碰到其他 provider 的流式状态机。

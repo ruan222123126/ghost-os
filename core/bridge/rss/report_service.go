@@ -2,8 +2,6 @@ package rss
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -46,43 +44,6 @@ type agentRSSReportBuilder struct {
 	timeout      time.Duration
 	buildRuntime func(*ConfigStore) (agentRuntimeDependencies, error)
 	allowedTools []string
-}
-
-func (s *RSSInboxService) BuildAndStoreReport(
-	ctx context.Context,
-	briefing RSSBriefingResult,
-	groups []RSSInboxTopicGroup,
-	query RSSReportQuery,
-) (RSSReportResult, error) {
-	if s == nil || s.reportStore == nil {
-		return RSSReportResult{}, fmt.Errorf("rss report store is not configured")
-	}
-	if s.reportBuilder == nil {
-		return RSSReportResult{}, fmt.Errorf("rss report builder is not configured")
-	}
-
-	query = normalizeRSSReportQuery(query)
-	report, err := prepareRSSReportDraft(s.reportStore, briefing, groups, query, s.currentTime().UTC())
-	if err != nil {
-		return RSSReportResult{}, err
-	}
-	if query.DossierPath == "" {
-		query.DossierPath = rssReportDossierPath(filepath.Dir(s.reportStore.path), report.ID)
-	}
-	if err := writeRSSReportDossier(query.DossierPath, renderRSSReportDossier(report, briefing, groups)); err != nil {
-		return RSSReportResult{}, err
-	}
-	markdown, err := s.reportBuilder.Build(ctx, report, briefing, groups, query)
-	if strings.TrimSpace(markdown) == "" {
-		markdown = fallbackRSSReportMarkdown(report, briefing, groups)
-	}
-	if strings.TrimSpace(markdown) == "" {
-		if err != nil {
-			return RSSReportResult{}, err
-		}
-		return RSSReportResult{}, fmt.Errorf("rss report builder returned empty content")
-	}
-	return s.reportStore.Save(report, finalizeRSSReportMarkdown(markdown, briefing, groups))
 }
 
 func (b *agentRSSReportBuilder) Build(
@@ -148,15 +109,12 @@ func normalizeRSSReportQuery(query RSSReportQuery) RSSReportQuery {
 }
 
 func prepareRSSReportDraft(
-	store *RSSReportStore,
 	briefing RSSBriefingResult,
 	groups []RSSInboxTopicGroup,
 	query RSSReportQuery,
 	now time.Time,
+	rootDir string,
 ) (RSSReportResult, error) {
-	if store == nil {
-		return RSSReportResult{}, fmt.Errorf("rss report store is nil")
-	}
 	report := RSSReportResult{
 		BriefingID:     strings.TrimSpace(briefing.ID),
 		Title:          rssReportTitleOrDefault(briefing.Title, now.UTC()),
@@ -169,7 +127,7 @@ func prepareRSSReportDraft(
 		GroupCount:     len(groups),
 		SourceGroupIDs: collectRSSReportSourceGroupIDs(briefing, groups),
 	}
-	return normalizeRSSReportResult(report, now.UTC(), filepath.Dir(store.path))
+	return normalizeRSSReportResult(report, now.UTC(), rootDir)
 }
 
 func collectRSSReportSourceGroupIDs(briefing RSSBriefingResult, groups []RSSInboxTopicGroup) []string {
