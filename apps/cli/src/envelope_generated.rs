@@ -3,14 +3,15 @@
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-
-pub const ASSISTANT_SESSION_END_SIGNAL: &str = "END_SESSION";
+use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub struct ApiRequest<TParams> {
     pub action: &'static str,
     pub params: TParams,
     pub trace_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -36,8 +37,279 @@ impl<TPayload> ApiResponse<TPayload> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AssistantSessionEndSignal {
     pub signal: String,
     pub message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentRequest {
+    pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AskHumanOption {
+    pub label: String,
+    #[serde(default)]
+    pub allow_custom: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentSendSuccessResponse {
+    pub message: String,
+    pub session_id: String,
+    pub session_ended: bool,
+    #[serde(default)]
+    pub mode: Option<String>,
+    #[serde(default)]
+    pub iteration_count: Option<i64>,
+    #[serde(default)]
+    pub stopped_by: Option<String>,
+    #[serde(default)]
+    pub final_change_log: Option<String>,
+    #[serde(default)]
+    pub iteration_summary: Option<Vec<Value>>,
+    #[serde(default)]
+    pub session_end: Option<AssistantSessionEndSignal>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentSendAwaitingHumanResponse {
+    pub status: String,
+    pub session_id: String,
+    pub question_id: String,
+    pub prompt: String,
+    #[serde(default)]
+    pub selection_mode: Option<String>,
+    #[serde(default)]
+    pub options: Option<Vec<AskHumanOption>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentStopResponsePayload {
+    pub status: String,
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct HumanResponseRequest {
+    pub session_id: String,
+    pub question_id: String,
+    pub answer: String,
+    #[serde(default)]
+    pub cancelled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct HumanResponseAck {
+    pub session_id: String,
+    pub question_id: String,
+    pub accepted: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionImageContent {
+    #[serde(default)]
+    pub path: Option<String>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(default)]
+    pub width: Option<i64>,
+    #[serde(default)]
+    pub height: Option<i64>,
+    #[serde(default)]
+    pub sha256: Option<String>,
+    #[serde(default)]
+    pub bytes: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionFileContent {
+    pub artifact_id: String,
+    pub name: String,
+    #[serde(default)]
+    pub mime_type: Option<String>,
+    #[serde(default)]
+    pub bytes: Option<i64>,
+    #[serde(default)]
+    pub sha256: Option<String>,
+    pub download_url: String,
+    #[serde(default)]
+    pub source_path: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionContentPart {
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub image: Option<SessionImageContent>,
+    #[serde(default)]
+    pub file: Option<SessionFileContent>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: Value,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionToolResult {
+    pub status: String,
+    pub tool: String,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub output: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionHumanInteraction {
+    pub question_id: String,
+    pub prompt: String,
+    #[serde(default)]
+    pub selection_mode: Option<String>,
+    #[serde(default)]
+    pub options: Option<Vec<AskHumanOption>>,
+    #[serde(default)]
+    pub answer: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionMessage {
+    pub role: String,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub content: Option<Vec<SessionContentPart>>,
+    #[serde(default)]
+    pub tool_calls: Option<Vec<SessionToolCall>>,
+    #[serde(default)]
+    pub tool_result: Option<SessionToolResult>,
+    #[serde(default)]
+    pub human_interaction: Option<SessionHumanInteraction>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionMetadata {
+    pub id: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub message_count: i64,
+    pub token_count: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionDetail {
+    pub id: String,
+    pub messages: Vec<SessionMessage>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub token_count: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct BridgeConfig {
+    pub provider: String,
+    pub provider_type: String,
+    pub base_url: String,
+    pub model: String,
+    pub chat_path: String,
+    pub api_key_set: bool,
+    pub model_selection_enabled: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ConfigUpdate {
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub chat_path: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderConfig {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub base_url: String,
+    #[serde(default)]
+    pub models: Option<Vec<String>>,
+    #[serde(default)]
+    pub context_window_tokens: Option<i64>,
+    #[serde(default)]
+    pub response_reserve_tokens: Option<i64>,
+    #[serde(default)]
+    pub model_context_window_tokens: Option<Value>,
+    #[serde(default)]
+    pub model_response_reserve_tokens: Option<Value>,
+    pub api_key_set: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderConfigInput {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub models: Option<Vec<String>>,
+    #[serde(default)]
+    pub context_window_tokens: Option<i64>,
+    #[serde(default)]
+    pub response_reserve_tokens: Option<i64>,
+    #[serde(default)]
+    pub model_context_window_tokens: Option<Value>,
+    #[serde(default)]
+    pub model_response_reserve_tokens: Option<Value>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderListResponse {
+    pub providers: Vec<ProviderConfig>,
+    pub active_provider: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SetActiveProviderRequest {
+    pub name: String,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum AgentPayload {
+    Success(AgentSendSuccessResponse),
+    AwaitingHuman(AgentSendAwaitingHumanResponse),
 }

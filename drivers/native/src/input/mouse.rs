@@ -1,0 +1,219 @@
+use super::window_guard::ensure_active_window;
+use crate::Response;
+use crate::display_scale::lookup_display_scale;
+use crate::json_params::{optional_display_id, optional_string, required_i32};
+use crate::screen::types::{sanitize_scale, unscale_coordinate};
+use serde_json::{Value, json};
+use std::process::Command;
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use enigo::{Enigo, MouseButton, MouseControllable};
+
+pub(crate) fn handle_mouse_click(params: &Value) -> Response {
+    let x = match required_i32(params, "x") {
+        Ok(x) => x,
+        Err(err) => return Response::error(err),
+    };
+    let y = match required_i32(params, "y") {
+        Ok(y) => y,
+        Err(err) => return Response::error(err),
+    };
+    let button = match parse_click_button(params) {
+        Ok(button) => button,
+        Err(err) => return Response::error(err),
+    };
+    let display_id = match optional_display_id(params) {
+        Ok(display_id) => display_id,
+        Err(err) => return Response::error(err),
+    };
+    let ensure_title = match optional_string(params, "ensure_active_window_title") {
+        Ok(value) => value,
+        Err(err) => return Response::error(err),
+    };
+    let ensure_class = match optional_string(params, "ensure_active_window_class") {
+        Ok(value) => value,
+        Err(err) => return Response::error(err),
+    };
+    if let Err(err) = ensure_active_window(ensure_title.as_deref(), ensure_class.as_deref()) {
+        return Response::error(err);
+    }
+
+    let (scaled_x, scaled_y, resolved_scale_x, resolved_scale_y) =
+        resolve_target_point(x, y, display_id);
+    if let Err(err) = perform_mouse_click(scaled_x, scaled_y, button) {
+        return Response::error(err);
+    }
+
+    Response::success(json!({
+        "clicked": true,
+        "x": scaled_x,
+        "y": scaled_y,
+        "button": button_name(button),
+        "scale_x": resolved_scale_x,
+        "scale_y": resolved_scale_y,
+    }))
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ClickButton {
+    Left,
+    Right,
+    Middle,
+}
+
+fn parse_click_button(params: &Value) -> Result<ClickButton, String> {
+    let raw = params
+        .get("button")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("left");
+
+    match raw.to_ascii_lowercase().as_str() {
+        "left" => Ok(ClickButton::Left),
+        "right" => Ok(ClickButton::Right),
+        "middle" => Ok(ClickButton::Middle),
+        _ => Err("button must be one of: left, right, middle".to_string()),
+    }
+}
+
+fn resolve_target_point(x: i32, y: i32, display_id: Option<u32>) -> (i32, i32, f64, f64) {
+    let (scale_x, scale_y) = display_id
+        .and_then(lookup_display_scale)
+        .map(|(sx, sy)| (sanitize_scale(sx), sanitize_scale(sy)))
+        .unwrap_or((1.0, 1.0));
+    let scaled_x = unscale_coordinate(x, scale_x);
+    let scaled_y = unscale_coordinate(y, scale_y);
+    (scaled_x, scaled_y, scale_x, scale_y)
+}
+
+fn button_name(button: ClickButton) -> &'static str {
+    match button {
+        ClickButton::Left => "left",
+        ClickButton::Right => "right",
+        ClickButton::Middle => "middle",
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
+    if super::window_guard::is_wayland_session() {
+        return perform_mouse_click_wayland(x, y, button);
+    }
+    let button_id = match button {
+        ClickButton::Left => "1",
+        ClickButton::Middle => "2",
+        ClickButton::Right => "3",
+    };
+    let status = Command::new("xdotool")
+        .args([
+            "mousemove",
+            "--sync",
+            &x.to_string(),
+            &y.to_string(),
+            "click",
+            button_id,
+        ])
+        .status()
+        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
+    if !status.success() {
+        return Err(format!(
+            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn perform_mouse_click_wayland(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
+    let button_id = match button {
+        ClickButton::Left => "1",
+        ClickButton::Middle => "2",
+        ClickButton::Right => "3",
+    };
+
+    let mut move_status = Command::new("ydotool")
+        .args(["mousemove", "--absolute", &x.to_string(), &y.to_string()])
+        .status();
+    if let Ok(status) = move_status {
+        if !status.success() {
+            move_status = Command::new("ydotool")
+                .args(["mousemove", &x.to_string(), &y.to_string()])
+                .status();
+        }
+    }
+    let status = move_status.map_err(|err| {
+        if err.kind() == std::io::ErrorKind::NotFound {
+            "ydotool is not installed (required on Wayland for mouse input)".to_string()
+        } else {
+            format!("spawn ydotool failed: {err}")
+        }
+    })?;
+    if !status.success() {
+        return Err(format!(
+            "ydotool mousemove exited with status {status}; ensure ydotoold is running"
+        ));
+    }
+
+    let status = Command::new("ydotool")
+        .args(["click", button_id])
+        .status()
+        .map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                "ydotool is not installed (required on Wayland for mouse input)".to_string()
+            } else {
+                format!("spawn ydotool failed: {err}")
+            }
+        })?;
+    if !status.success() {
+        return Err(format!(
+            "ydotool click exited with status {status}; ensure ydotoold is running"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
+    let mut enigo = Enigo::new();
+    enigo.mouse_move_to(x, y);
+    let native_button = match button {
+        ClickButton::Left => MouseButton::Left,
+        ClickButton::Right => MouseButton::Right,
+        ClickButton::Middle => MouseButton::Middle,
+    };
+    enigo.mouse_click(native_button);
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn perform_mouse_click(_x: i32, _y: i32, _button: ClickButton) -> Result<(), String> {
+    Err("mouse click is not supported on this platform".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{button_name, parse_click_button, resolve_target_point};
+    use crate::display_scale::record_display_scale;
+    use serde_json::json;
+
+    #[test]
+    fn parse_click_button_defaults_to_left() {
+        let button = parse_click_button(&json!({})).expect("must parse");
+        assert_eq!(button_name(button), "left");
+    }
+
+    #[test]
+    fn parse_click_button_rejects_unsupported_values() {
+        let err = parse_click_button(&json!({"button":"forward"})).expect_err("must fail");
+        assert!(err.contains("button must be one of"));
+    }
+
+    #[test]
+    fn resolve_target_point_uses_cached_display_scale() {
+        record_display_scale(7, 2.0, 1.5);
+        let (x, y, sx, sy) = resolve_target_point(400, 300, Some(7));
+        assert_eq!((x, y), (200, 200));
+        assert_eq!((sx, sy), (2.0, 1.5));
+    }
+}

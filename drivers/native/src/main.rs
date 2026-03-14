@@ -5,10 +5,12 @@ mod codex_cli;
 mod display_scale;
 mod file_actions;
 mod framing;
-mod host_actions;
+mod input;
+mod json_params;
 mod sandbox;
-mod screen_vision;
+mod screen;
 mod script_exec;
+mod shell_actions;
 mod types;
 
 use std::io::{self, BufReader, BufWriter, Read, Write};

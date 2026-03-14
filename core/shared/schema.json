@@ -21,14 +21,6 @@
         "HUMAN_RESPONSE",
         "CONFIG_GET",
         "CONFIG_UPDATE",
-        "MEMORY_QUERY",
-        "MEMORY_ARCHIVE",
-        "MEMORY_DECISION_QUERY",
-        "MEMORY_DECISION_STATS",
-        "MEMORY_DECISION_REBUILD",
-        "MEMORY_HYGIENE_RUN",
-        "MEMORY_DECISION_RELATION_RUN",
-        "MEMORY_PALACE_CURATE_RUN",
         "TASK_CREATE",
         "TASK_LIST",
         "TASK_SYSTEM_LIST",
@@ -44,12 +36,12 @@
         "EXPORT_FILE",
         "BASH_EXEC",
         "SCRIPT_EXEC",
-        "SCREEN_SHOT",
-        "SCREEN_OCR",
+        "SCREEN_CAPTURE",
+        "IMAGE_CROP",
+        "OCR_IMAGE",
         "TEXT_INPUT",
         "MOUSE_CLICK",
-        "ICON_MATCH",
-        "BROWSER_QUERY"
+        "TEMPLATE_MATCH_IMAGE"
       ]
     },
     "status": {
@@ -321,6 +313,61 @@
         "session_ended": {
           "type": "boolean"
         },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "pro",
+            "prox"
+          ]
+        },
+        "iteration_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stopped_by": {
+          "type": "string"
+        },
+        "final_change_log": {
+          "type": "string"
+        },
+        "iteration_summary": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "iteration",
+              "did",
+              "remaining"
+            ],
+            "properties": {
+              "iteration": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "did": {
+                "type": "string",
+                "minLength": 1
+              },
+              "remaining": {
+                "type": "string",
+                "minLength": 1
+              },
+              "completed": {
+                "type": "boolean"
+              },
+              "trace_id": {
+                "type": "string"
+              },
+              "recorded_at": {
+                "type": "string"
+              },
+              "final_change_log": {
+                "type": "string"
+              }
+            }
+          }
+        },
         "session_end": {
           "oneOf": [
             {
@@ -356,106 +403,6 @@
           }
         }
       ]
-    },
-    "memoryHygieneRunRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "scope",
-        "limit"
-      ],
-      "properties": {
-        "scope": {
-          "type": "string",
-          "enum": [
-            "working_memory",
-            "warm",
-            "projection",
-            "all",
-            "report"
-          ]
-        },
-        "limit": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "min_confidence": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "window_start": {
-          "type": "string"
-        },
-        "window_end": {
-          "type": "string"
-        },
-        "force_refresh": {
-          "type": "boolean"
-        },
-        "max_votes_per_run": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "reason_codes": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        }
-      }
-    },
-    "memoryHygieneRunPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "scanned",
-        "selected",
-        "created",
-        "updated",
-        "skipped_duplicates",
-        "dry_run",
-        "trace_id"
-      ],
-      "properties": {
-        "scanned": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "selected": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "created": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "updated": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "skipped_duplicates": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "scored": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "trace_id": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
     },
     "askHumanOption": {
       "type": "object",
@@ -558,196 +505,6 @@
         },
         "accepted": {
           "type": "boolean"
-        }
-      }
-    },
-    "memoryDecisionQueryRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "time_range": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "start": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "end": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
-        },
-        "limit": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "semantic_query": {
-          "type": "string"
-        },
-        "keywords": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "decision_types": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "memo",
-              "recipe",
-              "warning"
-            ]
-          }
-        },
-        "decision_reuse_only": {
-          "type": "boolean"
-        },
-        "environment_strict": {
-          "type": "boolean"
-        },
-        "min_reuse_score": {
-          "type": "number",
-          "minimum": 0,
-          "maximum": 1
-        }
-      }
-    },
-    "memoryDecisionStatsRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        }
-      }
-    },
-    "memoryDecisionRebuildRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "time_range": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "start": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "end": {
-              "type": "string",
-              "format": "date-time"
-            }
-          }
-        },
-        "max_sessions": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "include_recipes": {
-          "type": "boolean"
-        },
-        "rebuild_memos": {
-          "type": "boolean"
-        },
-        "reset_namespace": {
-          "type": "boolean"
-        }
-      }
-    },
-    "memoryDecisionQueryPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        },
-        "decision_hits": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
-        }
-      }
-    },
-    "memoryDecisionStatsPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "memo_count": {
-          "type": "integer"
-        },
-        "recipe_count": {
-          "type": "integer"
-        },
-        "cluster_count": {
-          "type": "integer"
-        },
-        "success_count": {
-          "type": "integer"
-        },
-        "partial_count": {
-          "type": "integer"
-        },
-        "failure_count": {
-          "type": "integer"
-        },
-        "awaiting_human_count": {
-          "type": "integer"
-        },
-        "cancelled_count": {
-          "type": "integer"
-        },
-        "human_blocked_count": {
-          "type": "integer"
-        }
-      }
-    },
-    "memoryDecisionRebuildPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "namespace": {
-          "type": "string"
-        },
-        "sessions_scanned": {
-          "type": "integer"
-        },
-        "markdown_scanned": {
-          "type": "integer"
-        },
-        "memos_captured": {
-          "type": "integer"
-        },
-        "recipes_created": {
-          "type": "integer"
-        },
-        "recipes_updated": {
-          "type": "integer"
-        },
-        "clusters_updated": {
-          "type": "integer"
-        },
-        "skipped_entries": {
-          "type": "integer"
         }
       }
     },
@@ -1073,7 +830,8 @@
         "base_url",
         "model",
         "chat_path",
-        "api_key_set"
+        "api_key_set",
+        "model_selection_enabled"
       ],
       "properties": {
         "provider": {
@@ -1092,6 +850,9 @@
           "type": "string"
         },
         "api_key_set": {
+          "type": "boolean"
+        },
+        "model_selection_enabled": {
           "type": "boolean"
         }
       }
@@ -1393,106 +1154,6 @@
         },
         "deleted": {
           "type": "boolean"
-        }
-      }
-    },
-    "memoryPalaceCurateRunRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "scope": {
-          "type": "string",
-          "enum": [
-            "global",
-            "session"
-          ]
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "window_days": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "max_topics": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "max_evidence_per_topic": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "include_layers": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "decision",
-              "warm",
-              "cold",
-              "markdown",
-              "graph",
-              "truth"
-            ]
-          }
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "write_report": {
-          "type": "boolean"
-        },
-        "trace_id": {
-          "type": "string"
-        }
-      }
-    },
-    "memoryPalaceCurateRunPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "topics_scanned",
-        "topics_selected",
-        "stable_count",
-        "candidate_count",
-        "rejected_count",
-        "dry_run"
-      ],
-      "properties": {
-        "report_id": {
-          "type": "string"
-        },
-        "markdown_path": {
-          "type": "string"
-        },
-        "json_path": {
-          "type": "string"
-        },
-        "topics_scanned": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "topics_selected": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "stable_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "candidate_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "rejected_count": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "dry_run": {
-          "type": "boolean"
-        },
-        "trace_id": {
-          "type": "string"
         }
       }
     },

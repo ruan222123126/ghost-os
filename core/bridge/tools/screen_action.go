@@ -134,14 +134,14 @@ type iconMatchPayload struct {
 }
 
 type screenCapturePayload struct {
-	ImageBase64 string `json:"image_base64"`
-	ImageWidth  int    `json:"image_width"`
-	ImageHeight int    `json:"image_height"`
-	DisplayID   int    `json:"display_id"`
-	ScaleX      float64 `json:"scale_x"`
-	ScaleY      float64 `json:"scale_y"`
-	OriginX     int    `json:"origin_x"`
-	OriginY     int    `json:"origin_y"`
+	ImageBase64 string       `json:"image_base64"`
+	ImageWidth  int          `json:"image_width"`
+	ImageHeight int          `json:"image_height"`
+	DisplayID   int          `json:"display_id"`
+	ScaleX      float64      `json:"scale_x"`
+	ScaleY      float64      `json:"scale_y"`
+	OriginX     int          `json:"origin_x"`
+	OriginY     int          `json:"origin_y"`
 	Region      screenRegion `json:"region"`
 }
 

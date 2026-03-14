@@ -7,7 +7,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SCHEMA_PATH = ROOT / "core" / "shared" / "schema.json"
 _SCHEMA_CACHE: dict | None = None
 
-GO_OUTPUT = ROOT / "core" / "bridge" / "app" / "envelope_generated.go"
+GO_OUTPUT = ROOT / "core" / "bridge" / "orchestration" / "envelope_generated.go"
+GO_PACKAGE = GO_OUTPUT.parent.name
 RUST_OUTPUT = ROOT / "apps" / "cli" / "src" / "envelope_generated.rs"
 TS_OUTPUT = ROOT / "apps" / "web" / "lib" / "envelope.generated.ts"
 KOTLIN_OUTPUT = ROOT / "apps" / "android" / "app" / "src" / "main" / "java" / "dev" / "ghostos" / "android" / "model" / "ApiModels.kt"
@@ -15,18 +16,14 @@ KOTLIN_OUTPUT = ROOT / "apps" / "android" / "app" / "src" / "main" / "java" / "d
 GO_OBJECT_TYPES = {
     "assistantSessionEndSignal": "assistantSessionEndSignalPayload",
     "agentRequest": "agentRequest",
+    "askHumanOption": "askHumanOption",
     "agentResponsePayload": "agentResponse",
     "agentAwaitingHumanPayload": "askHumanAwaitingResponse",
     "agentStopResponsePayload": "agentStopResponse",
     "humanResponseRequest": "humanResponseParams",
     "humanResponseAck": "humanResponseAck",
-    "memoryDecisionQueryRequest": "memoryDecisionQueryRequest",
-    "memoryDecisionStatsRequest": "memoryDecisionStatsRequest",
-    "memoryDecisionRebuildRequest": "memoryDecisionRebuildRequest",
-    "memoryDecisionQueryPayload": "memoryDecisionQueryPayload",
-    "memoryDecisionStatsPayload": "memoryDecisionStatsPayload",
-    "memoryDecisionRebuildPayload": "memoryDecisionRebuildPayload",
     "sessionImageContent": "sessionImageContent",
+    "sessionFileContent": "sessionFileContent",
     "sessionContentPart": "sessionContentPart",
     "sessionToolCall": "sessionToolCall",
     "sessionToolResult": "sessionToolResult",
@@ -44,18 +41,14 @@ GO_OBJECT_TYPES = {
 TS_OBJECT_TYPES = {
     "assistantSessionEndSignal": "AssistantSessionEndSignal",
     "agentRequest": "AgentRequest",
+    "askHumanOption": "AskHumanOption",
     "agentResponsePayload": "AgentSendSuccessResponse",
     "agentAwaitingHumanPayload": "AgentSendAwaitingHumanResponse",
     "agentStopResponsePayload": "AgentStopResponsePayload",
     "humanResponseRequest": "HumanResponseRequest",
     "humanResponseAck": "HumanResponseAck",
-    "memoryDecisionQueryRequest": "MemoryDecisionQueryRequest",
-    "memoryDecisionStatsRequest": "MemoryDecisionStatsRequest",
-    "memoryDecisionRebuildRequest": "MemoryDecisionRebuildRequest",
-    "memoryDecisionQueryPayload": "MemoryDecisionQueryPayload",
-    "memoryDecisionStatsPayload": "MemoryDecisionStatsPayload",
-    "memoryDecisionRebuildPayload": "MemoryDecisionRebuildPayload",
     "sessionImageContent": "SessionImageContent",
+    "sessionFileContent": "SessionFileContent",
     "sessionContentPart": "SessionContentPart",
     "sessionToolCall": "SessionToolCall",
     "sessionToolResult": "SessionToolResult",
@@ -76,18 +69,14 @@ TS_UNION_TYPES = {
 RUST_OBJECT_TYPES = {
     "assistantSessionEndSignal": "AssistantSessionEndSignal",
     "agentRequest": "AgentRequest",
+    "askHumanOption": "AskHumanOption",
     "agentResponsePayload": "AgentSendSuccessResponse",
     "agentAwaitingHumanPayload": "AgentSendAwaitingHumanResponse",
     "agentStopResponsePayload": "AgentStopResponsePayload",
     "humanResponseRequest": "HumanResponseRequest",
     "humanResponseAck": "HumanResponseAck",
-    "memoryDecisionQueryRequest": "MemoryDecisionQueryRequest",
-    "memoryDecisionStatsRequest": "MemoryDecisionStatsRequest",
-    "memoryDecisionRebuildRequest": "MemoryDecisionRebuildRequest",
-    "memoryDecisionQueryPayload": "MemoryDecisionQueryPayload",
-    "memoryDecisionStatsPayload": "MemoryDecisionStatsPayload",
-    "memoryDecisionRebuildPayload": "MemoryDecisionRebuildPayload",
     "sessionImageContent": "SessionImageContent",
+    "sessionFileContent": "SessionFileContent",
     "sessionContentPart": "SessionContentPart",
     "sessionToolCall": "SessionToolCall",
     "sessionToolResult": "SessionToolResult",
@@ -115,18 +104,14 @@ RUST_RESERVED_FIELDS = {"type"}
 KOTLIN_OBJECT_TYPES = {
     "assistantSessionEndSignal": "AssistantSessionEndSignal",
     "agentRequest": "AgentRequest",
+    "askHumanOption": "AskHumanOption",
     "agentResponsePayload": "AgentSendSuccessResponse",
     "agentAwaitingHumanPayload": "AgentAwaitingHumanResponse",
     "agentStopResponsePayload": "AgentStopResponsePayload",
     "humanResponseRequest": "HumanResponseRequest",
     "humanResponseAck": "HumanResponseAck",
-    "memoryDecisionQueryRequest": "MemoryDecisionQueryRequest",
-    "memoryDecisionStatsRequest": "MemoryDecisionStatsRequest",
-    "memoryDecisionRebuildRequest": "MemoryDecisionRebuildRequest",
-    "memoryDecisionQueryPayload": "MemoryDecisionQueryPayload",
-    "memoryDecisionStatsPayload": "MemoryDecisionStatsPayload",
-    "memoryDecisionRebuildPayload": "MemoryDecisionRebuildPayload",
     "sessionImageContent": "SessionImageContent",
+    "sessionFileContent": "SessionFileContent",
     "sessionContentPart": "SessionContentPart",
     "sessionToolCall": "SessionToolCall",
     "sessionToolResult": "SessionToolResult",
@@ -157,18 +142,14 @@ GO_INITIALISMS = {
 SHARED_OBJECT_DEF_ORDER = [
     "assistantSessionEndSignal",
     "agentRequest",
+    "askHumanOption",
     "agentResponsePayload",
     "agentAwaitingHumanPayload",
     "agentStopResponsePayload",
     "humanResponseRequest",
     "humanResponseAck",
-    "memoryDecisionQueryRequest",
-    "memoryDecisionStatsRequest",
-    "memoryDecisionRebuildRequest",
-    "memoryDecisionQueryPayload",
-    "memoryDecisionStatsPayload",
-    "memoryDecisionRebuildPayload",
     "sessionImageContent",
+    "sessionFileContent",
     "sessionContentPart",
     "sessionToolCall",
     "sessionToolResult",
@@ -490,7 +471,7 @@ def render_go(schema: dict) -> str:
     return f'''// Code generated by core/shared/generate_envelope_types.py; DO NOT EDIT.
 // Source: core/shared/schema.json ({schema_id})
 
-package app
+package {GO_PACKAGE}
 
 import "encoding/json"
 
