@@ -91,7 +91,7 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 				ToolCalls: []ToolCall{
 					{
 						ID:        "tool-call-1",
-						Name:      "browser_action",
+						Name:      "screen_action",
 						Arguments: json.RawMessage(`{"action":"screenshot"}`),
 					},
 				},
@@ -99,7 +99,7 @@ func TestToAnthropicRequestBuildsToolImageContentBlocks(t *testing.T) {
 			{
 				Role:       RoleTool,
 				ToolCallID: "tool-call-1",
-				Text:       `{"status":"success","tool":"browser_action"}`,
+				Text:       `{"status":"success","tool":"screen_action"}`,
 				Content: []ContentPart{
 					{
 						Type: ContentTypeImage,

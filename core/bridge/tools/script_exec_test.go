@@ -32,11 +32,16 @@ func TestScriptExecToolDescriptionListsEnhancedMethods(t *testing.T) {
 	description := tool.Description()
 
 	expectedSnippets := []string{
+		"primary local workspace tool",
+		"Allowed helpers:",
+		"tools.bash_exec(",
+		"tools.list_files(",
 		"tools.read_file(",
 		"tools.write_file(",
 		"tools.apply_diff(",
 		"tools.search_files(",
 		"tools.fetch_webpage(",
+		"Sandbox limits are enforced",
 	}
 	for _, snippet := range expectedSnippets {
 		if !strings.Contains(description, snippet) {
@@ -107,6 +112,88 @@ func TestScriptExecToolExecuteSuccess(t *testing.T) {
 	}
 	if output == "" {
 		t.Fatal("expected non-empty output")
+	}
+	var report scriptExecReport
+	if err := json.Unmarshal([]byte(output), &report); err != nil {
+		t.Fatalf("expected JSON report output: %v", err)
+	}
+	if report.ScriptOutput != "Hello from script" {
+		t.Fatalf("unexpected script output: %q", report.ScriptOutput)
+	}
+	if report.Summary.StepCount != 1 || report.Summary.FailedSteps != 0 {
+		t.Fatalf("unexpected summary: %+v", report.Summary)
+	}
+	if len(report.Steps) != 1 {
+		t.Fatalf("unexpected step count: %d", len(report.Steps))
+	}
+	if report.Steps[0].Tool != "bash_exec" || report.Steps[0].Status != "success" {
+		t.Fatalf("unexpected first step: %+v", report.Steps[0])
+	}
+	if report.Steps[0].ResultSummary != "hi" {
+		t.Fatalf("unexpected step result summary: %q", report.Steps[0].ResultSummary)
+	}
+}
+
+func TestScriptExecToolExecuteCapturesApplyDiffWriteSummary(t *testing.T) {
+	mockClient := mockExecutionClient{
+		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
+			return map[string]any{
+				"output": "",
+				"tool_calls_log": []any{
+					map[string]any{
+						"tool": "apply_diff",
+						"args": map[string]any{
+							"path": "/tmp/a.txt",
+							"diff_summary": map[string]any{
+								"hunk_count":    1,
+								"added_lines":   3,
+								"removed_lines": 1,
+								"hunk_ranges": []any{
+									map[string]any{
+										"old_start": 10,
+										"old_count": 2,
+										"new_start": 10,
+										"new_count": 4,
+									},
+								},
+							},
+						},
+						"result": "applied 1 hunks to /tmp/a.txt",
+						"error":  nil,
+					},
+				},
+			}, nil
+		},
+	}
+
+	tool := NewScriptExecTool(mockClient)
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report scriptExecReport
+	if err := json.Unmarshal([]byte(output), &report); err != nil {
+		t.Fatalf("expected JSON report output: %v", err)
+	}
+	if report.Summary.WriteSteps != 1 {
+		t.Fatalf("unexpected write step count: %d", report.Summary.WriteSteps)
+	}
+	if len(report.Steps) != 1 {
+		t.Fatalf("unexpected step count: %d", len(report.Steps))
+	}
+	change := report.Steps[0].WriteChange
+	if change == nil {
+		t.Fatal("expected write_change summary")
+	}
+	if change.Operation != "apply_diff" || change.Path != "/tmp/a.txt" {
+		t.Fatalf("unexpected write_change metadata: %+v", change)
+	}
+	if change.AddedLines != 3 || change.RemovedLines != 1 {
+		t.Fatalf("unexpected line delta: %+v", change)
+	}
+	if len(change.HunkRanges) != 1 || change.HunkRanges[0].OldStart != 10 || change.HunkRanges[0].NewCount != 4 {
+		t.Fatalf("unexpected hunk ranges: %+v", change.HunkRanges)
 	}
 }
 

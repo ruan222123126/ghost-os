@@ -21,20 +21,23 @@ const (
 
 // PersistentNativeClient 通过持久 native 子进程复用 framed RPC 通道。
 type PersistentNativeClient struct {
-	mu               sync.Mutex
-	cmd              *exec.Cmd
-	stdin            io.WriteCloser
-	stdout           io.ReadCloser
-	stdoutReader     *bufio.Reader
-	waitCh           chan error
-	binaryPath       string
-	locator          nativeBinaryLocator
-	nextReqID        uint64
-	closed           bool
-	fallback         bool
-	verified         bool
-	handshakeTimeout time.Duration
-	commandFactory   func(binaryPath string) *exec.Cmd
+	mu                sync.Mutex
+	cmd               *exec.Cmd
+	stdin             io.WriteCloser
+	stdout            io.ReadCloser
+	stdoutReader      *bufio.Reader
+	waitCh            chan error
+	binaryPath        string
+	locator           nativeBinaryLocator
+	nextReqID         uint64
+	closed            bool
+	fallback          bool
+	verified          bool
+	handshakeTimeout  time.Duration
+	commandFactory    func(binaryPath string) *exec.Cmd
+	allowedReadPaths  []string
+	allowedWritePaths []string
+	workingDir        string
 }
 
 func NewPersistentNativeClient() *PersistentNativeClient {
@@ -69,17 +72,18 @@ func (c *PersistentNativeClient) Call(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if !c.verified {
-		if err := c.verifyPersistentProtocolLocked(ctx); err != nil {
-			if errors.Is(err, errPersistentProtocolUnsupported) {
-				c.fallback = true
-				return c.callOneShotLocked(ctx, newRequest(action, params, traceID))
+		if !c.verified {
+			if err := c.verifyPersistentProtocolLocked(ctx); err != nil {
+				if errors.Is(err, errPersistentProtocolUnsupported) {
+					c.fallback = true
+					return c.callOneShotLocked(ctx, newRequest(action, params, traceID))
+				}
+				if errors.Is(err, context.DeadlineExceeded) {
+					c.fallback = true
+					return c.callOneShotLocked(ctx, newRequest(action, params, traceID))
+				}
+				return nil, err
 			}
-			if errors.Is(err, context.DeadlineExceeded) {
-				return c.callOneShotLocked(ctx, newRequest(action, params, traceID))
-			}
-			return nil, err
-		}
 		if c.cmd == nil {
 			if err := c.ensureStartedLocked(); err != nil {
 				return nil, err
@@ -132,6 +136,22 @@ func (c *PersistentNativeClient) Close() error {
 	return c.stopProcessLocked(true)
 }
 
+func (c *PersistentNativeClient) SetWorkingDir(dir string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.closed {
+		return errors.New("persistent native client is closed")
+	}
+	trimmed := strings.TrimSpace(dir)
+	if c.workingDir == trimmed {
+		return nil
+	}
+	c.workingDir = trimmed
+	c.verified = false
+	return c.stopProcessLocked(true)
+}
+
 func (c *PersistentNativeClient) ensureStartedLocked() error {
 	if c.closed {
 		return errors.New("persistent native client is closed")
@@ -156,7 +176,10 @@ func (c *PersistentNativeClient) ensureStartedLocked() error {
 	}
 
 	cmd := c.newCommand(nativeBin)
+	c.applyWorkingDir(cmd)
 	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), cmd.Env...)
+	cmd.Env = append(cmd.Env, buildNativeAllowedPathEnv(c.allowedReadPaths, c.allowedWritePaths)...)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -283,7 +306,14 @@ func (c *PersistentNativeClient) callOneShotLocked(ctx context.Context, req requ
 		return nil, err
 	}
 	if c.commandFactory != nil {
-		return callNativeOnceWithCommand(c.commandFactory(c.binaryPath), req)
+		cmd := c.commandFactory(c.binaryPath)
+		c.applyWorkingDir(cmd)
+		return callNativeOnceWithCommand(
+			cmd,
+			req,
+			c.allowedReadPaths,
+			c.allowedWritePaths,
+		)
 	}
 	if c.binaryPath == "" {
 		resolved, err := locateNativeBinary(c.locator)
@@ -292,7 +322,23 @@ func (c *PersistentNativeClient) callOneShotLocked(ctx context.Context, req requ
 		}
 		c.binaryPath = resolved
 	}
-	return callNativeOnceWithCommand(exec.CommandContext(ctx, c.binaryPath), req)
+	cmd := exec.CommandContext(ctx, c.binaryPath)
+	c.applyWorkingDir(cmd)
+	return callNativeOnceWithCommand(
+		cmd,
+		req,
+		c.allowedReadPaths,
+		c.allowedWritePaths,
+	)
+}
+
+func (c *PersistentNativeClient) applyWorkingDir(cmd *exec.Cmd) {
+	if c == nil || cmd == nil {
+		return
+	}
+	if dir := strings.TrimSpace(c.workingDir); dir != "" {
+		cmd.Dir = dir
+	}
 }
 
 func (c *PersistentNativeClient) verifyPersistentProtocolLocked(ctx context.Context) error {

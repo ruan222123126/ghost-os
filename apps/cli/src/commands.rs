@@ -23,6 +23,10 @@ enum ParsedCommand<'a> {
     NewSession,
     Model(&'a str),
     Provider(&'a str),
+    BaseURL(&'a str),
+    ChatPath(&'a str),
+    APIKey(&'a str),
+    ClearAPIKey,
     LiteralHint,
 }
 
@@ -45,6 +49,10 @@ pub fn handle_command(
             let cfg = client.get_config()?;
             println!("{}", "Bridge Config".bright_black());
             println!("provider  : {}", cfg.provider.white());
+            println!(
+                "type      : {}",
+                provider_type_label(&cfg.provider_type).white()
+            );
             println!("model     : {}", cfg.model.white());
             println!("base_url  : {}", cfg.base_url.white());
             if cfg.chat_path.trim().is_empty() {
@@ -100,6 +108,66 @@ pub fn handle_command(
             );
             Ok(CommandAction::Continue)
         }
+        ParsedCommand::BaseURL(base_url) => {
+            let reset = base_url.eq_ignore_ascii_case("default");
+            let update = ConfigUpdate {
+                base_url: Some(if reset {
+                    String::new()
+                } else {
+                    base_url.to_string()
+                }),
+                ..ConfigUpdate::default()
+            };
+            let cfg = client.update_config(&update)?;
+            if reset {
+                println!("{}", format!("Base URL reset to: {}", cfg.base_url).green());
+            } else {
+                println!(
+                    "{}",
+                    format!("Base URL changed to: {}", cfg.base_url).green()
+                );
+            }
+            Ok(CommandAction::Continue)
+        }
+        ParsedCommand::ChatPath(chat_path) => {
+            let reset = chat_path.eq_ignore_ascii_case("default");
+            let update = ConfigUpdate {
+                chat_path: Some(if reset {
+                    String::new()
+                } else {
+                    chat_path.to_string()
+                }),
+                ..ConfigUpdate::default()
+            };
+            let cfg = client.update_config(&update)?;
+            if cfg.chat_path.trim().is_empty() {
+                println!("{}", "Chat path reset to provider default".green());
+            } else {
+                println!(
+                    "{}",
+                    format!("Chat path changed to: {}", cfg.chat_path).green()
+                );
+            }
+            Ok(CommandAction::Continue)
+        }
+        ParsedCommand::APIKey(api_key) => {
+            let update = ConfigUpdate {
+                api_key: Some(api_key.to_string()),
+                ..ConfigUpdate::default()
+            };
+            client.update_config(&update)?;
+            println!("{}", "API key updated".green());
+            Ok(CommandAction::Continue)
+        }
+        ParsedCommand::ClearAPIKey => {
+            let update = ConfigUpdate {
+                api_key: Some(String::new()),
+                ..ConfigUpdate::default()
+            };
+            client.update_config(&update)?;
+            println!("{}", "API key cleared".green());
+            Ok(CommandAction::Continue)
+        }
         ParsedCommand::LiteralHint => {
             println!(
                 "{}",
@@ -123,6 +191,14 @@ fn parse_command(input: &str) -> Result<ParsedCommand<'_>> {
         "/new-session" => expect_no_args(command, parts).map(|_| ParsedCommand::NewSession),
         "/model" => expect_single_arg(command, parts, "<name>").map(ParsedCommand::Model),
         "/provider" => expect_single_arg(command, parts, "<name>").map(ParsedCommand::Provider),
+        "/base-url" => {
+            expect_single_arg(command, parts, "<url|default>").map(ParsedCommand::BaseURL)
+        }
+        "/chat-path" => {
+            expect_single_arg(command, parts, "<path|default>").map(ParsedCommand::ChatPath)
+        }
+        "/api-key" => expect_single_arg(command, parts, "<value>").map(ParsedCommand::APIKey),
+        "/clear-api-key" => expect_no_args(command, parts).map(|_| ParsedCommand::ClearAPIKey),
         "/literal" | "/l" => expect_no_args(command, parts).map(|_| ParsedCommand::LiteralHint),
         _ => bail!("Unknown command: {command}. Type /help for available commands."),
     }
@@ -208,17 +284,31 @@ fn prefer_ansi_clear() -> bool {
     env::var("TERM").map(|term| term != "dumb").unwrap_or(true)
 }
 
+fn provider_type_label(provider_type: &str) -> &str {
+    match provider_type.trim().to_ascii_lowercase().as_str() {
+        "openai" => "OpenAI",
+        "codex" => "Codex",
+        "anthropic" => "Anthropic",
+        "custom" => "OpenAI-Compatible",
+        _ => provider_type,
+    }
+}
+
 fn print_help() {
     println!("{}", "Commands".bright_black());
-    println!("/help, /h            Show help");
-    println!("/config              Show current bridge configuration");
-    println!("/session             Show current conversation session id");
-    println!("/new-session         Start a fresh conversation session");
-    println!("/model <name>        Switch model");
-    println!("/provider <name>     Switch provider (openai|anthropic|custom)");
-    println!("/clear               Clear terminal");
-    println!("/literal, /l         Show slash-literal usage");
-    println!("/exit, /quit, /q     Exit CLI");
+    println!("/help, /h                Show help");
+    println!("/config                  Show current bridge configuration");
+    println!("/session                 Show current conversation session id");
+    println!("/new-session             Start a fresh conversation session");
+    println!("/model <name>            Switch model");
+    println!("/provider <name>         Switch active provider by saved name");
+    println!("/base-url <url|default>  Change provider base URL or reset default");
+    println!("/chat-path <path|default> Change provider chat path or reset default");
+    println!("/api-key <value>         Update runtime API key");
+    println!("/clear-api-key           Clear runtime API key");
+    println!("/clear                   Clear terminal");
+    println!("/literal, /l             Show slash-literal usage");
+    println!("/exit, /quit, /q         Exit CLI");
     println!();
     println!(
         "{}",
@@ -245,6 +335,18 @@ mod tests {
         assert!(parse_command("/provider openai").is_ok());
         assert!(parse_command("/provider").is_err());
         assert!(parse_command("/provider openai extra").is_err());
+    }
+
+    #[test]
+    fn parse_runtime_config_commands_require_valid_args() {
+        assert!(parse_command("/base-url http://127.0.0.1:11434/v1").is_ok());
+        assert!(parse_command("/chat-path /v1/messages").is_ok());
+        assert!(parse_command("/api-key secret-key").is_ok());
+        assert!(parse_command("/clear-api-key").is_ok());
+        assert!(parse_command("/base-url").is_err());
+        assert!(parse_command("/chat-path").is_err());
+        assert!(parse_command("/api-key").is_err());
+        assert!(parse_command("/clear-api-key extra").is_err());
     }
 
     #[test]

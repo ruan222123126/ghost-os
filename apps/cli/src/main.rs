@@ -48,10 +48,12 @@ fn run() -> Result<()> {
             bail!("--message cannot be empty");
         }
         let payload = client.send_message(text, None)?;
-        if payload.status == "awaiting_human" {
+        if payload.as_awaiting_human().is_some() {
             bail!("--message mode does not support ask_human interactions; use interactive mode");
         }
-        println!("{}", payload.message);
+        if let Some(reply) = payload.into_success() {
+            println!("{}", reply.message);
+        }
         return Ok(());
     }
 

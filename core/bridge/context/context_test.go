@@ -58,6 +58,35 @@ system:
 	}
 }
 
+func TestNewPromptManagerSupportsFoldedStyle(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "prompts.yaml")
+	content := `version: "1.0"
+system:
+  default: >-
+    OS={{os_type}}
+    TOOLS={{tools_count}}
+`
+
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompts file: %v", err)
+	}
+
+	pm, err := NewPromptManager(configPath)
+	if err != nil {
+		t.Fatalf("NewPromptManager returned error: %v", err)
+	}
+
+	rendered := pm.Render(map[string]string{
+		"os_type":     "linux",
+		"tools_count": "2",
+	})
+
+	if got, want := rendered, "OS=linux TOOLS=2"; got != want {
+		t.Fatalf("unexpected rendered prompt: got %q want %q", got, want)
+	}
+}
+
 func TestNewPromptManagerWithoutSystemDefaultFails(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "prompts.yaml")
@@ -94,6 +123,120 @@ func TestNewPromptManagerWithDefault(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Max turns: 20") {
 		t.Fatalf("rendered prompt missing max_turns variable: %q", rendered)
+	}
+}
+
+func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
+	vars := map[string]string{
+		"os_type":     "linux",
+		"tools_count": "9",
+		"max_turns":   "20",
+	}
+	fromFile, err := NewPromptManager(filepath.Join("..", "prompts.yaml"))
+	if err != nil {
+		t.Fatalf("NewPromptManager returned error: %v", err)
+	}
+
+	prompts := []string{
+		fromFile.Render(vars),
+		NewPromptManagerWithDefault().Render(vars),
+	}
+	requiredSnippets := []string{
+		"primary workspace tool",
+		"read_and_summarize",
+		"tools.read_file",
+		"feed_subscribe",
+		"feed_list",
+		"rss_fetch",
+		"screen_action",
+		"## Limits",
+		"END_SESSION",
+	}
+
+	for _, prompt := range prompts {
+		for _, snippet := range requiredSnippets {
+			if !strings.Contains(prompt, snippet) {
+				t.Fatalf("prompt missing %q: %q", snippet, prompt)
+			}
+		}
+	}
+}
+
+func TestNewPromptManagerWithCoreFilesOverridesCoreJob(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "prompts.yaml")
+	content := `version: "1.0"
+system:
+  default: |
+    Core: {{core_job}}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompts file: %v", err)
+	}
+	corePath := filepath.Join(tempDir, "core.txt")
+	if err := os.WriteFile(corePath, []byte("from file"), 0o644); err != nil {
+		t.Fatalf("write core file: %v", err)
+	}
+
+	pm, err := NewPromptManagerWithOptions(PromptLoadOptions{
+		ConfigPath: configPath,
+		CoreDir:    tempDir,
+		CoreFiles:  []string{"core.txt"},
+	})
+	if err != nil {
+		t.Fatalf("NewPromptManagerWithOptions returned error: %v", err)
+	}
+	rendered := pm.Render(nil)
+	if !strings.Contains(rendered, "Core: from file") {
+		t.Fatalf("unexpected rendered prompt: %q", rendered)
+	}
+}
+
+func TestNewPromptManagerWithCoreFilesMissingFileFails(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "prompts.yaml")
+	content := `version: "1.0"
+system:
+  default: |
+    Core: {{core_job}}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompts file: %v", err)
+	}
+
+	_, err := NewPromptManagerWithOptions(PromptLoadOptions{
+		ConfigPath: configPath,
+		CoreDir:    tempDir,
+		CoreFiles:  []string{"missing.txt"},
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestNewPromptManagerWithCoreFilesEmptyFileFails(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "prompts.yaml")
+	content := `version: "1.0"
+system:
+  default: |
+    Core: {{core_job}}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompts file: %v", err)
+	}
+	corePath := filepath.Join(tempDir, "core.txt")
+	if err := os.WriteFile(corePath, []byte("   "), 0o644); err != nil {
+		t.Fatalf("write core file: %v", err)
+	}
+
+	_, err := NewPromptManagerWithOptions(PromptLoadOptions{
+		ConfigPath: configPath,
+		CoreDir:    tempDir,
+		CoreFiles:  []string{"core.txt"},
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
 	}
 }
 
@@ -134,5 +277,16 @@ func TestBuilderBuildRequestClonesMessagesAndTools(t *testing.T) {
 	}
 	if got := string(req.Tools[0].Parameters); got != `{"type":"object"}` {
 		t.Fatalf("tool params should be cloned: got %q want %q", got, `{"type":"object"}`)
+	}
+}
+
+func TestBuilderBuildRequestNilBuilderDoesNotPanic(t *testing.T) {
+	var builder *Builder
+	req := builder.BuildRequest([]llm.Message{{Role: llm.RoleUser, Text: "hello"}})
+	if len(req.Messages) != 1 {
+		t.Fatalf("unexpected message count: got %d want %d", len(req.Messages), 1)
+	}
+	if len(req.Tools) != 0 {
+		t.Fatalf("unexpected tool count: got %d want %d", len(req.Tools), 0)
 	}
 }

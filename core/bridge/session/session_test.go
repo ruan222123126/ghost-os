@@ -94,28 +94,6 @@ func TestPendingQuestionsLifecycle(t *testing.T) {
 	}
 }
 
-func TestMemoryMetadataLifecycle(t *testing.T) {
-	s := NewSession("")
-	if !s.MemoryMetadata.IsZero() {
-		t.Fatalf("memory metadata should be zero value at init: %+v", s.MemoryMetadata)
-	}
-
-	archiveTime := time.Now().UTC().Add(-time.Minute)
-	s.MarkMemoryArchived(archiveTime)
-	if s.MemoryMetadata.ArchivedAt.IsZero() {
-		t.Fatal("archived_at should be set")
-	}
-
-	accessTime := time.Now().UTC()
-	s.MarkMemoryAccess(accessTime)
-	if s.MemoryMetadata.AccessCount != 1 {
-		t.Fatalf("unexpected access count: got %d want %d", s.MemoryMetadata.AccessCount, 1)
-	}
-	if s.MemoryMetadata.LastAccessAt.IsZero() {
-		t.Fatal("last_access_at should be set")
-	}
-}
-
 func TestSessionMarkEnded(t *testing.T) {
 	s := NewSession("")
 	if s.IsEnded() {
@@ -129,5 +107,36 @@ func TestSessionMarkEnded(t *testing.T) {
 	}
 	if s.EndedAt.IsZero() {
 		t.Fatal("ended_at should be set")
+	}
+}
+
+func TestIterationRuntimeLifecycle(t *testing.T) {
+	s := NewSession("")
+	s.StartIterationRuntime("pro", "fix config", 2, false)
+	if s.IterationRuntime == nil {
+		t.Fatal("expected iteration runtime")
+	}
+	if s.IterationRuntime.Mode != "pro" || s.IterationRuntime.OriginalTask != "fix config" {
+		t.Fatalf("unexpected iteration runtime: %+v", s.IterationRuntime)
+	}
+
+	s.AppendIterationRecord(IterationRecord{
+		Iteration: 1,
+		Did:       "inspected config",
+		Remaining: "apply patch",
+	})
+	if len(s.IterationRuntime.Records) != 1 {
+		t.Fatalf("unexpected record count: %d", len(s.IterationRuntime.Records))
+	}
+
+	s.FinishIterationRuntime("completed", "pro_complete", "done", "updated config")
+	if s.IterationRuntime.Status != "completed" {
+		t.Fatalf("unexpected status: %q", s.IterationRuntime.Status)
+	}
+	if s.IterationRuntime.StoppedBy != "pro_complete" {
+		t.Fatalf("unexpected stopped_by: %q", s.IterationRuntime.StoppedBy)
+	}
+	if s.IterationRuntime.FinalChangeLog != "updated config" {
+		t.Fatalf("unexpected final change log: %q", s.IterationRuntime.FinalChangeLog)
 	}
 }

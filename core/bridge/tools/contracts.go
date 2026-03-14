@@ -34,6 +34,11 @@ type ExecutionClient interface {
 	Call(ctx context.Context, action string, params map[string]any, traceID string) (map[string]any, error)
 }
 
+// WorkingDirSetter 允许工具更新 execution 层的工作目录。
+type WorkingDirSetter interface {
+	SetWorkingDir(dir string) error
+}
+
 // AwaitingHumanSignal 表示工具要求 Agent 暂停并等待用户输入。
 type AwaitingHumanSignal struct {
 	QuestionID    string
@@ -42,10 +47,21 @@ type AwaitingHumanSignal struct {
 	Options       []AskHumanOption
 }
 
+// IterationHandoffSignal tells the orchestrator to end the current fresh-memory agent
+// iteration and either hand off to the next agent or finish the pro run.
+type IterationHandoffSignal struct {
+	Did            string
+	Remaining      string
+	Completed      bool
+	FinalMessage   string
+	FinalChangeLog string
+}
+
 // ExecuteMeta 描述工具执行后的附加语义，不影响原始 output envelope。
 type ExecuteMeta struct {
 	Content       []llm.ContentPart
 	AwaitingHuman *AwaitingHumanSignal
+	Iteration     *IterationHandoffSignal
 }
 
 // ResultPostProcessor 允许工具在编排层统一规范化输出，避免把后处理塞进 Execute。

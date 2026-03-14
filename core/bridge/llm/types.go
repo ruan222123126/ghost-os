@@ -71,17 +71,37 @@ type ToolDef struct {
 	Parameters  json.RawMessage
 }
 
+// ConversationState 保存 provider 侧可续跑的会话状态。
+type ConversationState struct {
+	Provider           Provider
+	BaseURL            string
+	Model              string
+	PreviousResponseID string
+}
+
+func (s ConversationState) IsZero() bool {
+	return s.Provider == "" && strings.TrimSpace(s.BaseURL) == "" && strings.TrimSpace(s.Model) == "" && strings.TrimSpace(s.PreviousResponseID) == ""
+}
+
+func (s ConversationState) Matches(provider Provider, baseURL, model string) bool {
+	return s.Provider.Normalized() == provider.Normalized() &&
+		strings.TrimSpace(s.BaseURL) == strings.TrimSpace(baseURL) &&
+		strings.TrimSpace(s.Model) == strings.TrimSpace(model)
+}
+
 // CompletionRequest 是一次模型请求的统一输入。
 type CompletionRequest struct {
-	Messages []Message
-	Tools    []ToolDef
+	Messages          []Message
+	Tools             []ToolDef
+	ConversationState ConversationState
 }
 
 // CompletionResponse 是一次模型请求的统一输出。
 type CompletionResponse struct {
-	Message      Message
-	FinishReason FinishReason
-	Usage        Usage
+	Message           Message
+	FinishReason      FinishReason
+	Usage             Usage
+	ConversationState ConversationState
 }
 
 type Completer interface {

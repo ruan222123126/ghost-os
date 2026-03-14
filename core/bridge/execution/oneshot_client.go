@@ -16,28 +16,48 @@ type NativeClient struct {
 	locator           nativeBinaryLocator
 	allowedReadPaths  []string
 	allowedWritePaths []string
+	workingDir        string
 }
 
 func NewNativeClient() Client {
 	return newNativeClientWithLocator(nativeBinaryLocator{})
 }
 
-func newNativeClientWithLocator(locator nativeBinaryLocator) NativeClient {
-	return NativeClient{locator: locator}
+func newNativeClientWithLocator(locator nativeBinaryLocator) *NativeClient {
+	return &NativeClient{locator: locator}
 }
 
-func (c NativeClient) Call(ctx context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
+func (c *NativeClient) Call(ctx context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
 	nativeBin, err := locateNativeBinary(c.locator)
 	if err != nil {
 		return nil, err
 	}
 
+	cmd := exec.CommandContext(ctx, nativeBin)
+	c.applyWorkingDir(cmd)
 	return callNativeOnceWithCommand(
-		exec.CommandContext(ctx, nativeBin),
+		cmd,
 		newRequest(action, params, traceID),
 		c.allowedReadPaths,
 		c.allowedWritePaths,
 	)
+}
+
+func (c *NativeClient) SetWorkingDir(dir string) error {
+	if c == nil {
+		return nil
+	}
+	c.workingDir = strings.TrimSpace(dir)
+	return nil
+}
+
+func (c *NativeClient) applyWorkingDir(cmd *exec.Cmd) {
+	if c == nil || cmd == nil {
+		return
+	}
+	if dir := strings.TrimSpace(c.workingDir); dir != "" {
+		cmd.Dir = dir
+	}
 }
 
 func callNativeOnceWithCommand(

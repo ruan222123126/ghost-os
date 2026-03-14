@@ -92,9 +92,7 @@ run_live_native_smoke() {
     return 0
   fi
 
-  local window_resp
-  window_resp="$(printf '{"action":"BROWSER_QUERY","params":{"query_type":"window_list"},"trace_id":"e2e-live-window-list"}\n' | "${NATIVE_BIN}")"
-  assert_contains "${window_resp}" '"status":"success"' "window_list should return success in live smoke"
+  echo "live smoke ready: no browser actions are exercised" >&2
 }
 
 main() {
@@ -121,14 +119,6 @@ main() {
   mouse_resp="$(printf '{"action":"MOUSE_CLICK","params":{"y":200},"trace_id":"e2e-mouse-missing-x"}\n' | "${NATIVE_BIN}")"
   assert_contains "${mouse_resp}" '"status":"error"' "MOUSE_CLICK missing x should fail"
   assert_contains "${mouse_resp}" 'x is required' "MOUSE_CLICK error should mention missing x"
-
-  local browser_resp
-  browser_resp="$(printf '{"action":"BROWSER_QUERY","params":{"query_type":"active_tab"},"trace_id":"e2e-browser-active"}\n' | "${NATIVE_BIN}")"
-  assert_contains "${browser_resp}" '"status":' "BROWSER_QUERY should return a structured response"
-  if [[ "${browser_resp}" == *'unsupported action: BROWSER_QUERY'* ]]; then
-    echo "BROWSER_QUERY route is not wired" >&2
-    exit 1
-  fi
 
   log "Starting bridge and running HTTP smoke checks"
   BRIDGE_LOG="$(mktemp -t ghost-bridge-e2e-XXXX.log)"

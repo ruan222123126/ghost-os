@@ -55,8 +55,8 @@ Always choose implementation path in this order:
 2. No cross-layer direct coupling.
 3. Every operation must be traceable (trace log with `trace_id`).
 4. Cross-process payloads must strictly follow [`core/shared/schema.json`](core/shared/schema.json):
-   - Request: `{ "action": "string", "params": "object", "trace_id": "string" }`
-   - Response: `{ "status": "success|error", "payload": "object", "error": "string" }`
+   - Request: `{ "action": "string", "params": "object", "trace_id": "string", "request_id": "string?" }`
+   - Response: `{ "status": "success|error", "payload": "object", "error": "string", "request_id": "string?" }`
 
 ## Build and Dev Commands
 
@@ -69,6 +69,7 @@ python3 task.py web-dev
 python3 task.py web-build
 python3 task.py web-lint
 python3 task.py web-test
+python3 task.py repo-hygiene
 python3 task.py gen-contracts
 python3 task.py build-cli
 python3 task.py run-cli
@@ -83,8 +84,15 @@ cd drivers/native && cargo build --release
 cd drivers/native && cargo build
 cd core/bridge && go run . serve
 cd core/bridge && go run . ping
+cd core/bridge && GHOST_NATIVE_PERSISTENT=true go run . ping
+cd core/bridge && GHOST_NATIVE_PERSISTENT=true go run . serve
 cd apps/cli && cargo run
 ```
+
+Persistent native mode:
+
+- Set `GHOST_NATIVE_PERSISTENT=true` to opt into the framed persistent subprocess bridge.
+- `SCRIPT_EXEC` still uses the isolated `--sandbox-worker` subprocess path.
 
 Testing:
 
@@ -94,7 +102,13 @@ cd drivers/native && cargo test
 cd apps/cli && cargo check
 cd apps/web && pnpm run lint
 cd apps/web && pnpm run test
+python3 task.py repo-hygiene
 ```
+
+Repo hygiene:
+
+- Commit example config files such as `apps/web/.env.example`; do not commit real `.env*` local files.
+- Generated protocol artifacts and lockfiles stay tracked; local build outputs such as `.next/`, `target/`, `build/`, `coverage/`, and `*.tsbuildinfo` do not.
 
 ## Engineering Aesthetics
 

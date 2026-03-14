@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -14,23 +15,28 @@ const (
 	defaultPromptPath    = "prompts.yaml"
 )
 
+var errSystemDefaultRequired = errors.New("system.default is required")
+
+const defaultCoreJob = "You can coordinate local execution, web retrieval, desktop interaction, and human confirmation."
+
 const defaultSystemPromptTemplate = `You are Ghost-OS bridge agent, an AI-driven digital twin execution layer.
 
 ## Core Job
-You can coordinate local execution, web retrieval, browser interaction, and human confirmation.
+{{core_job}}
 
 ## Tool Strategy
-- Prefer atomic tools first: list_files, read_file, search_files, apply_diff, bash_exec.
-- Use read_and_summarize for broad multi-file triage; verify exact code with read_file before editing.
-- Use script_exec only as a fallback sandbox for loops, branching, or complex multi-step work. Never call it with {}.
-- Use feed_subscribe, feed_list, feed_update, and feed_unsubscribe to manage shared RSS sources; use rss_fetch to read a specific RSS/Atom feed; use web_search for broad internet lookup, browser_action for browser-native work, and ask_human only when blocked on required user input.
+- Use script_exec as the primary workspace tool for local file discovery, reading, searching, and patching. Prefer tools.list_files/tools.read_file/tools.search_files/tools.apply_diff inside script_exec for deterministic edits.
+- Use read_and_summarize for broad multi-file triage; verify exact code with script_exec + tools.read_file before editing.
+- Use script_exec for loops, branching, or shell commands. Never call it with {}. For shell commands inside scripts, call tools.bash_exec.
+- Use feed_subscribe, feed_list, feed_update, and feed_unsubscribe to manage shared RSS sources; use rss_fetch to read a specific RSS/Atom feed; use web_search for broad internet lookup, use screen_action for desktop OCR or icon matching, and ask_human only when blocked on required user input.
+- Prefer screen_action.click_text for visible UI labels; use screen_action.click_icon only for unlabeled icons or template-driven clicks.
 - RSS inbox polling and AI filtering run as a backend system pipeline. Do not treat RSS inbox polling as a normal chat-tool chain unless an explicit admin/runtime endpoint is being used.
 - When ask_human needs predefined choices, provide selection_mode and options, and ensure the final option allows custom input.
 
 ## Limits
-- read_file: max 200 lines per call.
-- search_files: max 100 matches per call.
-- apply_diff: one file per call.
+- In script_exec helpers, tools.read_file reads at most 200 lines per call.
+- In script_exec helpers, tools.search_files returns at most 100 matches per call.
+- In script_exec helpers, tools.apply_diff patches one file per call.
 - Execution and sandbox budgets are enforced in the native layer.
 - File access may be restricted to allowlisted paths and may block sensitive files.
 
@@ -38,6 +44,7 @@ You can coordinate local execution, web retrieval, browser interaction, and huma
 - OS: {{os_type}}
 - Available tools: {{tools_count}}
 - Max turns: {{max_turns}}
+- Project root: {{project_root}}
 
 ## Response Rules
 - If no tool is needed, answer directly.
@@ -47,10 +54,11 @@ You can coordinate local execution, web retrieval, browser interaction, and huma
 
 // PromptConfig 描述 prompts.yaml 的最小结构。
 type PromptConfig struct {
-	Version string `json:"version"`
+	Version string `yaml:"version"`
 	System  struct {
-		Default string `json:"default"`
-	} `json:"system"`
+		Default string `yaml:"default"`
+		CoreJob string `yaml:"core_job"`
+	} `yaml:"system"`
 }
 
 // PromptManager 负责加载与渲染系统提示词模板。
@@ -59,9 +67,21 @@ type PromptManager struct {
 	template string
 }
 
+// PromptLoadOptions 描述提示词加载的可选参数。
+type PromptLoadOptions struct {
+	ConfigPath string
+	CoreDir    string
+	CoreFiles  []string
+}
+
 // NewPromptManager 从配置文件加载提示词模板。
 func NewPromptManager(configPath string) (*PromptManager, error) {
-	cfgPath := strings.TrimSpace(configPath)
+	return NewPromptManagerWithOptions(PromptLoadOptions{ConfigPath: configPath})
+}
+
+// NewPromptManagerWithOptions 允许在加载 prompts.yaml 的基础上覆盖核心提示词片段。
+func NewPromptManagerWithOptions(options PromptLoadOptions) (*PromptManager, error) {
+	cfgPath := strings.TrimSpace(options.ConfigPath)
 	if cfgPath == "" {
 		cfgPath = defaultPromptPath
 	}
@@ -71,9 +91,16 @@ func NewPromptManager(configPath string) (*PromptManager, error) {
 		return nil, fmt.Errorf("read prompts config: %w", err)
 	}
 
-	cfg, err := parsePromptYAML(string(raw))
+	cfg, err := parsePromptYAML(raw, len(options.CoreFiles) > 0)
 	if err != nil {
 		return nil, fmt.Errorf("parse prompts config %q: %w", resolvedPath, err)
+	}
+	if len(options.CoreFiles) > 0 {
+		coreJob, err := loadCoreJobFromFiles(options.CoreDir, options.CoreFiles)
+		if err != nil {
+			return nil, fmt.Errorf("load core job: %w", err)
+		}
+		cfg.System.CoreJob = coreJob
 	}
 
 	return &PromptManager{
@@ -88,6 +115,7 @@ func NewPromptManagerWithDefault() *PromptManager {
 		Version: defaultPromptVersion,
 	}
 	cfg.System.Default = defaultSystemPromptTemplate
+	cfg.System.CoreJob = defaultCoreJob
 
 	return &PromptManager{
 		config:   cfg,
@@ -97,11 +125,25 @@ func NewPromptManagerWithDefault() *PromptManager {
 
 // Render 渲染系统提示词并替换模板变量。
 func (pm *PromptManager) Render(vars map[string]string) string {
+	template := ""
+	coreJob := ""
 	if pm == nil || strings.TrimSpace(pm.template) == "" {
-		return strings.TrimSpace(RenderTemplate(defaultSystemPromptTemplate, vars))
+		template = defaultSystemPromptTemplate
+		coreJob = defaultCoreJob
+	} else {
+		template = pm.template
+		coreJob = strings.TrimSpace(pm.config.System.CoreJob)
 	}
 
-	return strings.TrimSpace(RenderTemplate(pm.template, vars))
+	merged := make(map[string]string, len(vars)+1)
+	if coreJob != "" {
+		merged["core_job"] = coreJob
+	}
+	for key, value := range vars {
+		merged[key] = value
+	}
+
+	return strings.TrimSpace(RenderTemplate(template, merged))
 }
 
 func readPromptConfigFile(path string) ([]byte, string, error) {
@@ -139,166 +181,53 @@ func promptPathCandidates(path string) []string {
 	return []string{primary, fallback}
 }
 
-func parsePromptYAML(raw string) (PromptConfig, error) {
-	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
-	lines := strings.Split(normalized, "\n")
-
+func parsePromptYAML(raw []byte, allowMissingCoreJob bool) (PromptConfig, error) {
 	cfg := PromptConfig{}
-	inSystem := false
-	systemIndent := 0
-
-	for i := 0; i < len(lines); {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			i++
-			continue
-		}
-
-		indent := leadingIndent(line)
-		if indent == 0 {
-			inSystem = false
-			switch {
-			case strings.HasPrefix(trimmed, "version:"):
-				cfg.Version = parseYAMLScalar(strings.TrimSpace(strings.TrimPrefix(trimmed, "version:")))
-			case trimmed == "system:":
-				inSystem = true
-				systemIndent = indent
-			}
-			i++
-			continue
-		}
-
-		if !inSystem || indent <= systemIndent {
-			i++
-			continue
-		}
-
-		local := strings.TrimSpace(line)
-		if !strings.HasPrefix(local, "default:") {
-			i++
-			continue
-		}
-
-		value := strings.TrimSpace(strings.TrimPrefix(local, "default:"))
-		if value == "|" || value == "|+" || value == "|-" {
-			blockValue, next := readYAMLBlock(lines, i+1, indent)
-			cfg.System.Default = blockValue
-			i = next
-			continue
-		}
-
-		cfg.System.Default = parseYAMLScalar(value)
-		i++
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		return PromptConfig{}, err
 	}
 
 	if strings.TrimSpace(cfg.Version) == "" {
 		cfg.Version = defaultPromptVersion
 	}
 	if strings.TrimSpace(cfg.System.Default) == "" {
-		return PromptConfig{}, errors.New("system.default is required")
+		return PromptConfig{}, errSystemDefaultRequired
+	}
+	if strings.Contains(cfg.System.Default, "{{core_job}}") && strings.TrimSpace(cfg.System.CoreJob) == "" && !allowMissingCoreJob {
+		return PromptConfig{}, errors.New("system.core_job is required when system.default references {{core_job}}")
 	}
 
 	return cfg, nil
 }
 
-func readYAMLBlock(lines []string, start int, parentIndent int) (string, int) {
-	blockLines := make([]string, 0, len(lines)-start)
-	i := start
-
-	for ; i < len(lines); i++ {
-		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		indent := leadingIndent(line)
-
-		if trimmed != "" && indent <= parentIndent {
-			break
+func loadCoreJobFromFiles(coreDir string, files []string) (string, error) {
+	trimmedDir := strings.TrimSpace(coreDir)
+	if trimmedDir == "" {
+		return "", errors.New("prompts core dir is empty")
+	}
+	baseDir := filepath.Clean(trimmedDir)
+	parts := make([]string, 0, len(files))
+	for _, file := range files {
+		path := strings.TrimSpace(file)
+		if path == "" {
+			return "", errors.New("prompts core file name is empty")
 		}
-		blockLines = append(blockLines, line)
-	}
-
-	return normalizeBlockLines(blockLines), i
-}
-
-func normalizeBlockLines(lines []string) string {
-	start := 0
-	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
-		start++
-	}
-
-	end := len(lines)
-	for end > start && strings.TrimSpace(lines[end-1]) == "" {
-		end--
-	}
-
-	lines = lines[start:end]
-	if len(lines) == 0 {
-		return ""
-	}
-
-	minIndent := -1
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(baseDir, path)
 		}
-		indent := leadingIndent(line)
-		if minIndent == -1 || indent < minIndent {
-			minIndent = indent
+		cleaned := filepath.Clean(path)
+		raw, err := os.ReadFile(cleaned)
+		if err != nil {
+			return "", fmt.Errorf("read core job file %s: %w", cleaned, err)
 		}
-	}
-
-	if minIndent < 0 {
-		return ""
-	}
-
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			out = append(out, "")
-			continue
+		content := strings.TrimSpace(string(raw))
+		if content == "" {
+			return "", fmt.Errorf("core job file %s is empty", cleaned)
 		}
-		if len(line) < minIndent {
-			out = append(out, strings.TrimSpace(line))
-			continue
-		}
-		out = append(out, line[minIndent:])
+		parts = append(parts, content)
 	}
-
-	return strings.Join(out, "\n")
-}
-
-func parseYAMLScalar(raw string) string {
-	value := strings.TrimSpace(raw)
-	if value == "" {
-		return ""
+	if len(parts) == 0 {
+		return "", errors.New("no core job files provided")
 	}
-
-	if strings.HasPrefix(value, "\"") && strings.HasSuffix(value, "\"") {
-		unquoted, err := strconv.Unquote(value)
-		if err == nil {
-			return unquoted
-		}
-	}
-
-	if strings.HasPrefix(value, "'") && strings.HasSuffix(value, "'") && len(value) >= 2 {
-		return strings.ReplaceAll(value[1:len(value)-1], "''", "'")
-	}
-
-	return trimInlineComment(value)
-}
-
-func trimInlineComment(raw string) string {
-	if idx := strings.Index(raw, " #"); idx >= 0 {
-		return strings.TrimSpace(raw[:idx])
-	}
-	return strings.TrimSpace(raw)
-}
-
-func leadingIndent(line string) int {
-	for i, ch := range line {
-		if ch != ' ' && ch != '\t' {
-			return i
-		}
-	}
-	return len(line)
+	return strings.Join(parts, "\n\n"), nil
 }

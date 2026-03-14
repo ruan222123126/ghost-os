@@ -36,6 +36,12 @@ func (b *Builder) BuildSystemPrompt(vars map[string]string) string {
 
 // BuildRequest 复制消息与工具定义，避免请求构建阶段共享可变切片。
 func (b *Builder) BuildRequest(messages []llm.Message) llm.CompletionRequest {
+	if b == nil {
+		return llm.CompletionRequest{
+			Messages: llm.CloneMessages(messages),
+		}
+	}
+
 	return llm.CompletionRequest{
 		Messages: llm.CloneMessages(messages),
 		Tools:    cloneToolDefs(b.toolRegistry),

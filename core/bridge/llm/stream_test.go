@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -245,5 +247,182 @@ func TestCompleteStreamAnthropicToolCallSequence(t *testing.T) {
 		if sink.deltas[index].Kind != want {
 			t.Fatalf("unexpected delta[%d]: got %q want %q", index, sink.deltas[index].Kind, want)
 		}
+	}
+}
+
+func TestCompleteStreamCodexToolCallSequence(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: response.output_item.added`,
+			`data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":""}}`,
+			"",
+			`event: response.function_call_arguments.delta`,
+			`data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"{\"path\":\"con"}`,
+			"",
+			`event: response.function_call_arguments.delta`,
+			`data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"fig.toml\"}"}`,
+			"",
+			`event: response.output_item.done`,
+			`data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":"{\"path\":\"config.toml\"}"}}`,
+			"",
+			`event: response.completed`,
+			`data: {"type":"response.completed","response":{"id":"resp_1","status":"completed","output":[{"type":"function_call","id":"fc_1","call_id":"call_1","name":"read_file","arguments":"{\"path\":\"config.toml\"}"}],"usage":{"input_tokens":8,"output_tokens":4,"total_tokens":12}}}`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderCodex)
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.FinishReason != FinishToolCalls {
+		t.Fatalf("unexpected finish reason: got %q want %q", resp.FinishReason, FinishToolCalls)
+	}
+	if len(resp.Message.ToolCalls) != 1 {
+		t.Fatalf("unexpected tool call count: got %d want 1", len(resp.Message.ToolCalls))
+	}
+	if got := string(resp.Message.ToolCalls[0].Arguments); got != `{"path":"config.toml"}` {
+		t.Fatalf("unexpected tool args: got %q", got)
+	}
+	wantKinds := []DeltaKind{
+		DeltaKindToolCallStart,
+		DeltaKindToolCallDelta,
+		DeltaKindToolCallDelta,
+		DeltaKindToolCallEnd,
+	}
+	if len(sink.deltas) != len(wantKinds) {
+		t.Fatalf("unexpected delta count: got %d want %d", len(sink.deltas), len(wantKinds))
+	}
+	for index, want := range wantKinds {
+		if sink.deltas[index].Kind != want {
+			t.Fatalf("unexpected delta[%d]: got %q want %q", index, sink.deltas[index].Kind, want)
+		}
+	}
+}
+
+func TestCompleteStreamCodexTextDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: response.output_text.delta`,
+			`data: {"type":"response.output_text.delta","delta":"Hel"}`,
+			"",
+			`event: response.output_text.delta`,
+			`data: {"type":"response.output_text.delta","delta":"lo"}`,
+			"",
+			`event: response.completed`,
+			`data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Hello"}]}],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderCodex)
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.Message.Text != "Hello" {
+		t.Fatalf("unexpected text: got %q want %q", resp.Message.Text, "Hello")
+	}
+	if resp.FinishReason != FinishStop {
+		t.Fatalf("unexpected finish reason: got %q want %q", resp.FinishReason, FinishStop)
+	}
+	if len(sink.deltas) != 2 || sink.deltas[0].Text != "Hel" || sink.deltas[1].Text != "lo" {
+		t.Fatalf("unexpected deltas: %+v", sink.deltas)
+	}
+}
+
+func TestCompleteStreamCodexFallsBackToStatelessReplayAfterContinuation400(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+
+		if len(requestBodies) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"上游服务异常，请联系管理员","type":"upstream_error","code":"upstream_error"}}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: response.output_text.delta`,
+			`data: {"type":"response.output_text.delta","delta":"done"}`,
+			"",
+			`event: response.completed`,
+			`data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":9,"output_tokens":2,"total_tokens":11}}}`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderCodex)
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "Need your approval"},
+			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{ID: "call_1", Name: "ask_human", Arguments: json.RawMessage(`{"question":"continue?"}`)},
+				},
+			},
+			{Role: RoleTool, ToolCallID: "call_1", Text: `{"answer":"ai"}`},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            server.URL,
+			Model:              "test-model",
+			PreviousResponseID: "resp_prev",
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.Message.Text != "done" {
+		t.Fatalf("unexpected response text: got %q want %q", resp.Message.Text, "done")
+	}
+	if len(sink.deltas) != 1 || sink.deltas[0].Kind != DeltaKindText || sink.deltas[0].Text != "done" {
+		t.Fatalf("unexpected deltas: %+v", sink.deltas)
+	}
+	if len(requestBodies) != 2 {
+		t.Fatalf("unexpected request count: got %d want 2", len(requestBodies))
+	}
+	if requestBodies[0].PreviousResponseID != "resp_prev" {
+		t.Fatalf("first request should keep previous_response_id, got %q", requestBodies[0].PreviousResponseID)
+	}
+	if requestBodies[1].PreviousResponseID != "" {
+		t.Fatalf("second request should clear previous_response_id, got %q", requestBodies[1].PreviousResponseID)
+	}
+	if len(requestBodies[0].Input) != 1 || requestBodies[0].Input[0].Type != "function_call_output" {
+		t.Fatalf("unexpected continuation payload: %+v", requestBodies[0].Input)
+	}
+	if len(requestBodies[1].Input) != 3 {
+		t.Fatalf("unexpected stateless replay input count: got %d want 3", len(requestBodies[1].Input))
+	}
+	if requestBodies[1].Input[0].Type != "message" || requestBodies[1].Input[0].Role != "user" {
+		t.Fatalf("unexpected stateless synthetic user item: %+v", requestBodies[1].Input[0])
+	}
+	if requestBodies[1].Input[1].Type != "function_call" || requestBodies[1].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected stateless replay tail: %+v", requestBodies[1].Input)
 	}
 }

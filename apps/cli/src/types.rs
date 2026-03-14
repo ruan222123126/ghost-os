@@ -1,8 +1,11 @@
 // Shared CLI data structures for request/response payloads and runtime state.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
-pub use crate::envelope_generated::{ApiRequest, ApiResponse};
+pub use crate::envelope_generated::{
+    AgentPayload, AgentSendAwaitingHumanResponse, AgentSendSuccessResponse, ApiResponse,
+    AskHumanOption,
+};
 
 #[derive(Debug, Serialize)]
 pub struct AgentParams<'a> {
@@ -11,18 +14,27 @@ pub struct AgentParams<'a> {
     pub session_id: Option<&'a str>,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct AgentPayload {
-    #[serde(default)]
-    pub message: String,
-    #[serde(default)]
-    pub session_id: String,
-    #[serde(default)]
-    pub status: String,
-    #[serde(default)]
-    pub question_id: String,
-    #[serde(default)]
-    pub prompt: String,
+impl AgentPayload {
+    pub fn session_id(&self) -> &str {
+        match self {
+            Self::Success(payload) => &payload.session_id,
+            Self::AwaitingHuman(payload) => &payload.session_id,
+        }
+    }
+
+    pub fn as_awaiting_human(&self) -> Option<&AgentSendAwaitingHumanResponse> {
+        match self {
+            Self::AwaitingHuman(payload) => Some(payload),
+            Self::Success(_) => None,
+        }
+    }
+
+    pub fn into_success(self) -> Option<AgentSendSuccessResponse> {
+        match self {
+            Self::Success(payload) => Some(payload),
+            Self::AwaitingHuman(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -30,19 +42,19 @@ pub struct HumanResponseParams<'a> {
     pub session_id: &'a str,
     pub question_id: &'a str,
     pub answer: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cancelled: Option<bool>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, serde::Deserialize, Clone)]
 pub struct ConfigResponse {
     pub provider: String,
+    pub provider_type: String,
     pub base_url: String,
     pub model: String,
     pub chat_path: String,
     pub api_key_set: bool,
 }
-
-#[derive(Debug, Serialize, Default)]
-pub struct EmptyParams {}
 
 #[derive(Debug, Serialize, Default)]
 pub struct ConfigUpdate {

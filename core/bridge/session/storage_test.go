@@ -18,6 +18,12 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 
 	s := NewSession("system")
 	s.ID = "session-roundtrip"
+	s.ConversationState = llm.ConversationState{
+		Provider:           llm.ProviderCodex,
+		BaseURL:            "https://api.openai.com/v1",
+		Model:              "codex-mini-latest",
+		PreviousResponseID: "resp_123",
+	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
 	s.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "hi"})
 
@@ -34,6 +40,9 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.Messages, s.Messages) {
 		t.Fatalf("messages mismatch: got=%+v want=%+v", loaded.Messages, s.Messages)
+	}
+	if !reflect.DeepEqual(loaded.ConversationState, s.ConversationState) {
+		t.Fatalf("conversation state mismatch: got=%+v want=%+v", loaded.ConversationState, s.ConversationState)
 	}
 	if loaded.TokenCount <= 0 {
 		t.Fatalf("unexpected token count: got %d want > 0", loaded.TokenCount)

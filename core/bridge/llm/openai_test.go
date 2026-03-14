@@ -177,7 +177,7 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 				ToolCalls: []ToolCall{
 					{
 						ID:        "call-1",
-						Name:      "browser_action",
+						Name:      "screen_action",
 						Arguments: json.RawMessage(`{"action":"screenshot"}`),
 					},
 				},
@@ -185,7 +185,7 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 			{
 				Role:       RoleTool,
 				ToolCallID: "call-1",
-				Text:       `{"status":"success","tool":"browser_action"}`,
+				Text:       `{"status":"success","tool":"screen_action"}`,
 				Content: []ContentPart{
 					{
 						Type: ContentTypeImage,

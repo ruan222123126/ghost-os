@@ -24,6 +24,12 @@ type ClientOptions struct {
 	NativeBinaryRoots []string
 	// NativeBinaryCandidates 为搜索 native 二进制时使用的候选相对路径。
 	NativeBinaryCandidates []string
+	// AllowedReadPaths 为 native 传递的额外读路径白名单。
+	AllowedReadPaths []string
+	// AllowedWritePaths 为 native 传递的额外写路径白名单。
+	AllowedWritePaths []string
+	// WorkingDir 为每次 native 调用使用的工作目录。
+	WorkingDir string
 }
 
 func NewClientWithOptions(opts ClientOptions) Client {
@@ -33,9 +39,17 @@ func NewClientWithOptions(opts ClientOptions) Client {
 		candidates:     append([]string(nil), opts.NativeBinaryCandidates...),
 	}
 	if opts.Persistent {
-		return newPersistentNativeClientWithLocator(locator)
+		client := newPersistentNativeClientWithLocator(locator)
+		client.allowedReadPaths = append([]string(nil), opts.AllowedReadPaths...)
+		client.allowedWritePaths = append([]string(nil), opts.AllowedWritePaths...)
+		client.workingDir = strings.TrimSpace(opts.WorkingDir)
+		return client
 	}
-	return newNativeClientWithLocator(locator)
+	client := newNativeClientWithLocator(locator)
+	client.allowedReadPaths = append([]string(nil), opts.AllowedReadPaths...)
+	client.allowedWritePaths = append([]string(nil), opts.AllowedWritePaths...)
+	client.workingDir = strings.TrimSpace(opts.WorkingDir)
+	return client
 }
 
 func CloseClient(client Client) error {

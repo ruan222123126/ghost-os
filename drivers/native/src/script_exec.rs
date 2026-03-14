@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::io::{self, BufReader, Read, Write};
-use std::process::{Child, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -12,6 +12,26 @@ use crate::{Response, read_stdin_payload};
 struct ScriptWorkerRequest {
     script: String,
     max_memory_mb: u64,
+    sandbox_config: SandboxConfig,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ScriptExecutionBudget {
+    timeout_ms: u64,
+    max_memory_mb: u64,
+}
+
+struct WorkerProcess {
+    child: Child,
+    stdout_handle: thread::JoinHandle<Vec<u8>>,
+    stderr_handle: thread::JoinHandle<Vec<u8>>,
+}
+
+pub(crate) fn dispatch_action(action: &str, params: &Value) -> Option<Response> {
+    match action {
+        "SCRIPT_EXEC" => Some(handle_script_exec(params)),
+        _ => None,
+    }
 }
 
 pub(crate) fn run_sandbox_worker() {
@@ -48,7 +68,7 @@ pub(crate) fn run_sandbox_worker() {
         return;
     }
 
-    let sandbox = PythonSandbox::new(SandboxConfig::default());
+    let sandbox = PythonSandbox::new(request.sandbox_config);
     let result = sandbox.execute_blocking(&request.script);
     emit_worker_result(result);
 }
@@ -64,29 +84,13 @@ pub(crate) fn handle_script_exec(params: &Value) -> Response {
         return Response::error("script is required".to_string());
     }
 
-    let mut timeout_ms = params
-        .get("timeout_ms")
-        .and_then(Value::as_u64)
-        .unwrap_or(30_000);
-    if timeout_ms == 0 {
-        timeout_ms = 30_000;
-    }
-    if timeout_ms > 60_000 {
-        timeout_ms = 60_000;
-    }
+    let sandbox_config = SandboxConfig::default();
+    let budget = match resolve_script_budget(params, &sandbox_config) {
+        Ok(budget) => budget,
+        Err(err) => return Response::error(err),
+    };
 
-    let mut max_memory_mb = params
-        .get("max_memory_mb")
-        .and_then(Value::as_u64)
-        .unwrap_or(256);
-    if max_memory_mb == 0 {
-        max_memory_mb = 256;
-    }
-    if max_memory_mb > 512 {
-        max_memory_mb = 512;
-    }
-
-    let result = match execute_script_in_subprocess(script, timeout_ms, max_memory_mb) {
+    let result = match execute_script_in_subprocess(script, budget, sandbox_config) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
     };
@@ -103,67 +107,31 @@ pub(crate) fn handle_script_exec(params: &Value) -> Response {
 
 fn execute_script_in_subprocess(
     script: &str,
-    timeout_ms: u64,
-    max_memory_mb: u64,
+    budget: ScriptExecutionBudget,
+    sandbox_config: SandboxConfig,
 ) -> Result<ExecutionResult, String> {
     let worker_request = ScriptWorkerRequest {
         script: script.to_string(),
-        max_memory_mb,
+        max_memory_mb: budget.max_memory_mb,
+        sandbox_config,
     };
 
-    let mut child = std::process::Command::new(
-        std::env::current_exe()
-            .map_err(|err| format!("resolve current executable failed: {err}"))?,
-    )
-    .arg("--sandbox-worker")
-    .stdin(Stdio::piped())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::piped())
-    .spawn()
-    .map_err(|err| format!("spawn sandbox worker failed: {err}"))?;
+    let WorkerProcess {
+        mut child,
+        stdout_handle,
+        stderr_handle,
+    } = spawn_worker_process(&worker_request)?;
 
-    let mut stdin = child
-        .stdin
-        .take()
-        .ok_or_else(|| "sandbox worker stdin is not available".to_string())?;
-    if let Err(err) = serde_json::to_writer(&mut stdin, &worker_request) {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(format!("encode sandbox worker request failed: {err}"));
-    }
-    if let Err(err) = stdin.write_all(b"\n") {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(format!("flush sandbox worker request failed: {err}"));
-    }
-    drop(stdin);
-
-    let stdout = match child.stdout.take() {
-        Some(stdout) => stdout,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("sandbox worker stdout is not available".to_string());
-        }
-    };
-    let stderr = match child.stderr.take() {
-        Some(stderr) => stderr,
-        None => {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err("sandbox worker stderr is not available".to_string());
-        }
-    };
-
-    let stdout_handle = spawn_pipe_reader(stdout);
-    let stderr_handle = spawn_pipe_reader(stderr);
-
-    let status = match wait_child_with_timeout(&mut child, Duration::from_millis(timeout_ms)) {
+    let status = match wait_child_with_timeout(&mut child, Duration::from_millis(budget.timeout_ms))
+    {
         Ok(Some(status)) => status,
         Ok(None) => {
             let _ = stdout_handle.join();
             let _ = stderr_handle.join();
-            return Err(format!("script execution timeout after {}ms", timeout_ms));
+            return Err(format!(
+                "script execution timeout after {}ms",
+                budget.timeout_ms
+            ));
         }
         Err(err) => {
             let _ = stdout_handle.join();
@@ -198,6 +166,97 @@ fn execute_script_in_subprocess(
                 err, stdout_line
             )
         }
+    })
+}
+
+fn resolve_script_budget(
+    params: &Value,
+    config: &SandboxConfig,
+) -> Result<ScriptExecutionBudget, String> {
+    let timeout_ms = clamp_budget(
+        optional_u64(params, "timeout_ms")?,
+        config.default_script_timeout_ms,
+        config.max_script_timeout_ms,
+    );
+    let max_memory_mb = clamp_budget(
+        optional_u64(params, "max_memory_mb")?,
+        config.default_script_memory_mb,
+        config.max_script_memory_mb,
+    );
+
+    Ok(ScriptExecutionBudget {
+        timeout_ms,
+        max_memory_mb,
+    })
+}
+
+fn optional_u64(params: &Value, field: &str) -> Result<Option<u64>, String> {
+    let Some(raw) = params.get(field) else {
+        return Ok(None);
+    };
+
+    raw.as_u64()
+        .map(Some)
+        .ok_or_else(|| format!("{field} must be a non-negative integer"))
+}
+
+fn clamp_budget(requested: Option<u64>, default_value: u64, max_value: u64) -> u64 {
+    let mut value = requested.unwrap_or(default_value);
+    if value == 0 {
+        value = default_value;
+    }
+    value.min(max_value)
+}
+
+fn spawn_worker_process(worker_request: &ScriptWorkerRequest) -> Result<WorkerProcess, String> {
+    let mut child = Command::new(
+        std::env::current_exe()
+            .map_err(|err| format!("resolve current executable failed: {err}"))?,
+    )
+    .arg("--sandbox-worker")
+    .stdin(Stdio::piped())
+    .stdout(Stdio::piped())
+    .stderr(Stdio::piped())
+    .spawn()
+    .map_err(|err| format!("spawn sandbox worker failed: {err}"))?;
+
+    let mut stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "sandbox worker stdin is not available".to_string())?;
+    if let Err(err) = serde_json::to_writer(&mut stdin, worker_request) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(format!("encode sandbox worker request failed: {err}"));
+    }
+    if let Err(err) = stdin.write_all(b"\n") {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(format!("flush sandbox worker request failed: {err}"));
+    }
+    drop(stdin);
+
+    let stdout = match child.stdout.take() {
+        Some(stdout) => stdout,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("sandbox worker stdout is not available".to_string());
+        }
+    };
+    let stderr = match child.stderr.take() {
+        Some(stderr) => stderr,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("sandbox worker stderr is not available".to_string());
+        }
+    };
+
+    Ok(WorkerProcess {
+        child,
+        stdout_handle: spawn_pipe_reader(stdout),
+        stderr_handle: spawn_pipe_reader(stderr),
     })
 }
 
@@ -274,5 +333,61 @@ fn emit_worker_result(result: ExecutionResult) {
         bytes.push(b'\n');
         let _ = stdout.write_all(&bytes);
         let _ = stdout.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{clamp_budget, dispatch_action, optional_u64, resolve_script_budget};
+    use crate::sandbox::SandboxConfig;
+    use serde_json::json;
+
+    #[test]
+    fn resolve_script_budget_uses_defaults_and_caps() {
+        let config = SandboxConfig::default();
+        let budget = resolve_script_budget(
+            &json!({
+                "timeout_ms": 120_000,
+                "max_memory_mb": 2_048
+            }),
+            &config,
+        )
+        .expect("budget should resolve");
+
+        assert_eq!(budget.timeout_ms, config.max_script_timeout_ms);
+        assert_eq!(budget.max_memory_mb, config.max_script_memory_mb);
+    }
+
+    #[test]
+    fn resolve_script_budget_treats_zero_as_default() {
+        let config = SandboxConfig::default();
+        let budget = resolve_script_budget(
+            &json!({
+                "timeout_ms": 0,
+                "max_memory_mb": 0
+            }),
+            &config,
+        )
+        .expect("budget should resolve");
+
+        assert_eq!(budget.timeout_ms, config.default_script_timeout_ms);
+        assert_eq!(budget.max_memory_mb, config.default_script_memory_mb);
+    }
+
+    #[test]
+    fn optional_u64_rejects_invalid_types() {
+        let err = optional_u64(&json!({"timeout_ms": "slow"}), "timeout_ms")
+            .expect_err("string value should fail");
+        assert_eq!(err, "timeout_ms must be a non-negative integer");
+    }
+
+    #[test]
+    fn clamp_budget_returns_default_for_none() {
+        assert_eq!(clamp_budget(None, 10, 20), 10);
+    }
+
+    #[test]
+    fn dispatch_action_returns_none_for_unknown_script_action() {
+        assert!(dispatch_action("BASH_EXEC", &json!({})).is_none());
     }
 }
