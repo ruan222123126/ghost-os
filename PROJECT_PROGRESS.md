@@ -23,6 +23,10 @@
 
 ### 2026-03-14
 
+- 收口 `core/bridge/session` 会话裁剪职责：
+  - 将 `pruning.go` 拆为 context limit resolver、token estimator、message pruner、message truncation 等纯策略组件。
+  - 保留 `EstimateTokens`、`PruneMessages`、`GetContextLimit` 作为薄入口，避免影响 `session` 与 `orchestration` 调用面。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./session ./orchestration -timeout 60s` 已通过。
 - 收口 RSS 源管理工具暴露面：
   - 将 `feed_subscribe`、`feed_list`、`feed_update`、`feed_unsubscribe` 合并为单个 `feed_manage`。
   - `rss_fetch` 继续独立保留，避免“管理订阅”和“读取 feed 内容”语义混杂。

@@ -202,3 +202,54 @@ func TestGetContextLimit(t *testing.T) {
 		t.Fatalf("unexpected override limit: got %d", got)
 	}
 }
+
+func TestGetContextLimitModelOverrides(t *testing.T) {
+	cfg := ContextLimitConfig{
+		ModelContextWindowTokens: map[string]int{
+			"gpt-*":    32000,
+			"gpt-4o":   64000,
+			"claude-*": 120000,
+		},
+		ModelResponseReserveTokens: map[string]int{
+			"gpt-*":    2000,
+			"gpt-4o":   1000,
+			"claude-*": 3000,
+		},
+	}
+
+	if got := GetContextLimit(llm.ProviderOpenAI, "gpt-4o", cfg); got != 63000 {
+		t.Fatalf("unexpected exact override limit: got %d", got)
+	}
+	if got := GetContextLimit(llm.ProviderAnthropic, "claude-3-haiku", cfg); got != 117000 {
+		t.Fatalf("unexpected prefix override limit: got %d", got)
+	}
+}
+
+func TestMessagePrunerUsesInjectedEstimator(t *testing.T) {
+	calls := 0
+	pruner := newMessagePruner(1, func(msg llm.Message) int {
+		calls++
+		if msg.Role == llm.RoleSystem {
+			return 1
+		}
+		return len(msg.Text)
+	})
+
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Text: "system"},
+		{Role: llm.RoleUser, Text: "1111"},
+		{Role: llm.RoleUser, Text: "2222"},
+		{Role: llm.RoleUser, Text: "3333"},
+	}
+
+	pruned := pruner.Prune(messages, 6)
+	if calls == 0 {
+		t.Fatal("expected custom estimator to be used")
+	}
+	if len(pruned) != 2 {
+		t.Fatalf("unexpected pruned size: got %d", len(pruned))
+	}
+	if pruned[0].Role != llm.RoleSystem || pruned[1].Text != "3333" {
+		t.Fatalf("unexpected pruned messages: %+v", pruned)
+	}
+}
