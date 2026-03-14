@@ -2,9 +2,9 @@ import { mkdtemp, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { forwardBridge } from './bridgeProxy';
+import { forwardBridge } from './index';
 
-describe('lib/bridgeProxy', () => {
+describe('lib/server/bridge', () => {
   const fetchMock = jest.fn();
   const originalEnv = { ...process.env };
 

@@ -1,4 +1,4 @@
-import { forwardBridgeDownload } from '@/lib/bridgeProxy';
+import { forwardBridgeDownload } from '@/lib/server/bridge';
 
 export const dynamic = 'force-dynamic';
 

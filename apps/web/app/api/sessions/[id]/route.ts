@@ -1,6 +1,6 @@
 // Module-level helpers and contracts for this file.
 
-import { createParamBridgeRouteHandler } from '@/lib/bridgeProxy';
+import { createParamBridgeRouteHandler } from '@/lib/server/bridge';
 
 export const dynamic = 'force-dynamic';
 

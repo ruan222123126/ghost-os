@@ -1,4 +1,4 @@
-import { createBridgeRouteHandler } from '@/lib/bridgeProxy';
+import { createBridgeRouteHandler } from '@/lib/server/bridge';
 
 export const dynamic = 'force-dynamic';
 

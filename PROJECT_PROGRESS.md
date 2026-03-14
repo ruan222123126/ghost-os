@@ -46,6 +46,10 @@
   - `core/bridge` 新增 `web_search_tavily_api_key`、`web_search_exa_api_key` 持久化与运行态快照。
   - `web_search` 工具新增 Exa provider，并支持在工具参数中显式选择 Tavily / Exa。
   - `apps/web` Runtime 设置页分别保存 Tavily / Exa key，不再提供静态 provider 切换。
+- 收口 Web Console 聊天与 bridge 代理的 feature 边界：
+  - `MessageList` 拆到 `apps/web/components/message/*`，将复制按钮、ToolCard、附件列表、消息分发与空状态分离。
+  - `useBridgeChat` 拆到 `apps/web/hooks/chat/*`，将历史加载、回复处理、运行控制、问答续跑拆成独立 hook。
+  - `bridgeProxy` 拆到 `apps/web/lib/server/bridge/*`，将 auth header 决议、JSON body 处理、route handler 工厂与请求透传分离，并迁移原有测试。
 - 修复 `core/bridge/runtime` memory augmentation 关闭语义与 memory DB 路径透传回归：
   - augmentation 关闭时不再触碰 SQLite。
   - `GHOST_MEMORY_PATH` 可正确覆盖默认 memory DB 路径。
