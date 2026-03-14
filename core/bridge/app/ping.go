@@ -3,13 +3,15 @@ package app
 import (
 	"context"
 	"fmt"
+
+	bridgeruntime "ghost-os/bridge/runtime"
 )
 
 // runPing 启动 native 二进制并完成一次 PING/PONG 往返。
 func runPing() (string, error) {
-	client := newExecutionClient(executionClientConfigFromEnv())
+	client := bridgeruntime.NewExecutionClientFromEnv()
 	defer func() {
-		_ = closeExecutionClient(client)
+		_ = bridgeruntime.CloseExecutionClient(client)
 	}()
 
 	payload, err := client.Call(context.Background(), "PING", map[string]any{}, "bridge-ping-1")

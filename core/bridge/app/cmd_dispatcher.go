@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	bridgetransport "ghost-os/bridge/transport"
 )
 
 const defaultUserMessage = "Hello, what can you do?"
@@ -30,7 +32,7 @@ func (d commandDispatcher) dispatch(ctx context.Context, args []string) (string,
 		if err != nil {
 			return "", err
 		}
-		return runServer(ctx, port)
+		return bridgetransport.RunServer(ctx, port)
 	case "agent":
 		return runAgent(ctx, d.parseAgentMessage(args[1:]))
 	default:

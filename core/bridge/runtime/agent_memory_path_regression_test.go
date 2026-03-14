@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/memorystore"
 )
 
-func TestAgentRuntimeFactoryUsesMemoryPathFromEnv(t *testing.T) {
+func TestAgentRuntimeFactoryUsesMemoryPathFromEnvRegression(t *testing.T) {
 	tempDir := t.TempDir()
 	homeDir := filepath.Join(tempDir, "home")
 	memoryPath := filepath.Join(tempDir, "override-memory", "memory.db")
@@ -20,7 +21,7 @@ func TestAgentRuntimeFactoryUsesMemoryPathFromEnv(t *testing.T) {
 	t.Setenv("GHOST_MEMORY_PATH", memoryPath)
 	makeReadOnlyRuntimeMemoryDB(t, filepath.Join(homeDir, ".ghost-os", "memory", "memory.db"))
 
-	store := newRuntimeTestStore(t)
+	store := newRegressionRuntimeTestStore(t)
 	deps, err := newAgentRuntimeFactory().Build(store)
 	if err != nil {
 		t.Fatalf("build runtime deps: %v", err)
@@ -54,4 +55,14 @@ func makeReadOnlyRuntimeMemoryDB(t *testing.T, path string) {
 		_ = os.Chmod(dir, 0o700)
 		_ = os.Chmod(path, 0o600)
 	})
+}
+
+func newRegressionRuntimeTestStore(t *testing.T) *ConfigStore {
+	t.Helper()
+
+	store, err := bridgeconfig.NewStoreFromEnv()
+	if err != nil {
+		t.Fatalf("new config store: %v", err)
+	}
+	return store
 }
