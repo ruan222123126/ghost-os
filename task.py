@@ -109,6 +109,12 @@ def web_lint() -> int:
     return run(["pnpm", "--dir", "apps/web", "lint"], ROOT)
 
 
+# repo_hygiene 检查被追踪文件中是否混入本地产物或本地配置。
+def repo_hygiene() -> int:
+    print("check repo hygiene...")
+    return run(["bash", "scripts/check_repo_hygiene.sh"], ROOT)
+
+
 # gen_contracts 从 core/shared/schema.json 生成三端 envelope 类型。
 def gen_contracts() -> int:
     print("generate shared contract types...")
@@ -175,6 +181,8 @@ def main() -> int:
         return web_test()
     if action == "web-lint":
         return web_lint()
+    if action == "repo-hygiene":
+        return repo_hygiene()
     if action == "gen-contracts":
         return gen_contracts()
     if action == "build-cli":
@@ -189,7 +197,7 @@ def main() -> int:
         return init_web()
 
     print(
-        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | gen-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
+        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | repo-hygiene | gen-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
     )
     return 0
 
