@@ -16,35 +16,26 @@ import (
 const screenImageMimeType = "image/png"
 
 func (t *ScreenActionTool) executeScreenshot(ctx context.Context, params map[string]any, traceID string) (string, error) {
-	callParams := map[string]any{}
-	if displayID, ok := toolparams.OptionalInt(params, "display_id"); ok {
-		callParams["display_id"] = displayID
-	}
-	payload, err := t.execution.Call(ctx, "SCREEN_SHOT", callParams, traceID)
-	if err != nil {
-		return "", fmt.Errorf("execution SCREEN_SHOT failed: %w", err)
-	}
-
-	shotPayload, err := tooljson.DecodePayload[screenShotPayload](payload)
+	payload, err := t.captureScreen(ctx, params, traceID)
 	if err != nil {
 		return "", err
 	}
-	if shotPayload.ImageBase64 == "" {
-		return "", fmt.Errorf("SCREEN_SHOT returned empty image payload")
+	if payload.ImageBase64 == "" {
+		return "", fmt.Errorf("SCREEN_CAPTURE returned empty image payload")
 	}
 
-	imageBytes, err := base64.StdEncoding.DecodeString(shotPayload.ImageBase64)
+	imageBytes, err := base64.StdEncoding.DecodeString(payload.ImageBase64)
 	if err != nil {
 		return "", fmt.Errorf("decode screenshot image: %w", err)
 	}
 
-	artifact, err := writeScreenArtifact(ctx, traceID, imageBytes, shotPayload)
+	artifact, err := writeScreenArtifact(ctx, traceID, imageBytes, payload)
 	if err != nil {
 		return "", err
 	}
 	return tooljson.Encode(screenActionResult{
 		Action:    "screenshot",
-		DisplayID: shotPayload.DisplayID,
+		DisplayID: payload.DisplayID,
 		Artifact:  artifact,
 	})
 }
@@ -53,7 +44,7 @@ func writeScreenArtifact(
 	ctx context.Context,
 	traceID string,
 	imageBytes []byte,
-	shotPayload screenShotPayload,
+	shotPayload screenCapturePayload,
 ) (*screenActionArtifact, error) {
 	baseDir, err := toolartifacts.ResolveScreenshotsRoot()
 	if err != nil {
@@ -82,8 +73,8 @@ func writeScreenArtifact(
 		Type:        "image",
 		VisionPath:  fullPath,
 		VisionMime:  screenImageMimeType,
-		Width:       shotPayload.Width,
-		Height:      shotPayload.Height,
+		Width:       shotPayload.ImageWidth,
+		Height:      shotPayload.ImageHeight,
 		SHA256:      toolartifacts.SHA256Hex(imageBytes),
 		VisionBytes: len(imageBytes),
 	}, nil

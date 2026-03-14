@@ -64,32 +64,67 @@ func appendActiveWindowConstraints(params map[string]any, payload map[string]any
 	}
 }
 
-func appendDisplayScaleFromOCR(payload screenOCRPayload, clickPayload map[string]any) {
-	clickPayload["display_id"] = payload.DisplayID
-	appendScale(clickPayload, payload.ScaleX, payload.ScaleY)
+func appendDisplayIDFromOCR(payload screenOCRPayload, clickPayload map[string]any) {
+	if payload.DisplayID > 0 {
+		clickPayload["display_id"] = payload.DisplayID
+	}
 }
 
-func appendDisplayScaleFromIcon(payload iconMatchPayload, clickPayload map[string]any) {
-	clickPayload["display_id"] = payload.DisplayID
-	appendScale(clickPayload, payload.ScaleX, payload.ScaleY)
+func appendDisplayIDFromIcon(payload iconMatchPayload, clickPayload map[string]any) {
+	if payload.DisplayID > 0 {
+		clickPayload["display_id"] = payload.DisplayID
+	}
 }
 
-func appendDisplayScaleFromParams(params map[string]any, payload map[string]any) {
+func appendDisplayIDFromParams(params map[string]any, payload map[string]any) {
 	if displayID, ok := toolparams.OptionalInt(params, "display_id"); ok {
 		payload["display_id"] = displayID
 	}
-	scaleX, hasScaleX := toolparams.OptionalFloat(params, "scale_x")
-	scaleY, hasScaleY := toolparams.OptionalFloat(params, "scale_y")
-	if hasScaleX || hasScaleY {
-		appendScale(payload, scaleX, scaleY)
-	}
 }
 
-func appendScale(payload map[string]any, scaleX float64, scaleY float64) {
-	if scaleX > 0 {
-		payload["scale_x"] = scaleX
+func buildScreenCaptureParams(params map[string]any) (map[string]any, error) {
+	payload := map[string]any{}
+	if displayID, ok := toolparams.OptionalInt(params, "display_id"); ok {
+		payload["display_id"] = displayID
 	}
-	if scaleY > 0 {
-		payload["scale_y"] = scaleY
+	if region, ok, err := parseOptionalRegion(params); err != nil {
+		return nil, err
+	} else if ok {
+		payload["region"] = region
 	}
+	return payload, nil
+}
+
+func buildOCRImageParams(capture screenCapturePayload, params map[string]any) map[string]any {
+	payload := map[string]any{
+		"image_base64": capture.ImageBase64,
+		"origin_x":     capture.OriginX,
+		"origin_y":     capture.OriginY,
+	}
+	if raw, ok := params["languages"]; ok {
+		payload["languages"] = raw
+	}
+	if confidence, ok := toolparams.OptionalFloat(params, "min_confidence"); ok {
+		payload["min_confidence"] = confidence
+	}
+	return payload
+}
+
+func buildTemplateMatchParams(capture screenCapturePayload, params map[string]any) map[string]any {
+	payload := map[string]any{
+		"image_base64":  capture.ImageBase64,
+		"origin_x":      capture.OriginX,
+		"origin_y":      capture.OriginY,
+		"template_path": toolparams.OptionalString(params, "template_path", ""),
+	}
+	if threshold, ok := toolparams.OptionalFloat(params, "threshold"); ok {
+		payload["threshold"] = threshold
+	}
+	if maxResults, ok := toolparams.OptionalInt(params, "max_results"); ok {
+		payload["max_results"] = maxResults
+	}
+	if raw, ok := params["scale_range"]; ok && raw != nil {
+		payload["scale_range"] = raw
+	}
+	return payload
 }

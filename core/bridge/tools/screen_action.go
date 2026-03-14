@@ -37,8 +37,6 @@ const screenActionSchema = `{
 				"allow_single_char":{"type":"boolean","description":"Allow click_text to target a single visible character."},
 				"x":{"type":"number","description":"Optional X hint or direct click coordinate."},
 				"y":{"type":"number","description":"Optional Y hint or direct click coordinate."},
-				"scale_x":{"type":"number","minimum":0,"description":"Optional display scale factor for X coordinate."},
-				"scale_y":{"type":"number","minimum":0,"description":"Optional display scale factor for Y coordinate."},
 				"match_mode":{"type":"string","enum":["exact","contains","case_insensitive","normalized","fuzzy"],"description":"Text match mode for click_text."},
 				"max_distance":{"type":"number","minimum":1,"description":"Optional max edit distance for fuzzy match_mode."},
 				"occurrence":{"type":"number","minimum":1,"description":"Select the Nth matching OCR result."},
@@ -110,6 +108,8 @@ type screenOCRPayload struct {
 	ImageHeight int             `json:"image_height"`
 	ScaleX      float64         `json:"scale_x"`
 	ScaleY      float64         `json:"scale_y"`
+	OriginX     int             `json:"origin_x,omitempty"`
+	OriginY     int             `json:"origin_y,omitempty"`
 	Region      screenRegion    `json:"region"`
 	Items       []screenOCRItem `json:"items"`
 }
@@ -127,15 +127,30 @@ type iconMatchPayload struct {
 	ImageHeight int          `json:"image_height"`
 	ScaleX      float64      `json:"scale_x"`
 	ScaleY      float64      `json:"scale_y"`
+	OriginX     int          `json:"origin_x,omitempty"`
+	OriginY     int          `json:"origin_y,omitempty"`
 	Region      screenRegion `json:"region"`
 	Matches     []iconMatch  `json:"matches"`
 }
 
-type screenShotPayload struct {
+type screenCapturePayload struct {
 	ImageBase64 string `json:"image_base64"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
+	ImageWidth  int    `json:"image_width"`
+	ImageHeight int    `json:"image_height"`
 	DisplayID   int    `json:"display_id"`
+	ScaleX      float64 `json:"scale_x"`
+	ScaleY      float64 `json:"scale_y"`
+	OriginX     int    `json:"origin_x"`
+	OriginY     int    `json:"origin_y"`
+	Region      screenRegion `json:"region"`
+}
+
+type ocrImagePayload struct {
+	Items []screenOCRItem `json:"items"`
+}
+
+type iconMatchImagePayload struct {
+	Matches []iconMatch `json:"matches"`
 }
 
 type screenActionArtifact struct {

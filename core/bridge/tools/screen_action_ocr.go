@@ -44,16 +44,67 @@ func (t *ScreenActionTool) executeOCRScan(ctx context.Context, params map[string
 	if err != nil {
 		return "", err
 	}
-	payload, err := t.execution.Call(ctx, "SCREEN_OCR", cloneParams(params), traceID)
-	if err != nil {
-		return "", fmt.Errorf("execution SCREEN_OCR failed: %w", err)
-	}
-	ocrPayload, err := tooljson.DecodePayload[screenOCRPayload](payload)
+	ocrPayload, err := t.captureAndOCR(ctx, params, traceID)
 	if err != nil {
 		return "", err
 	}
 	t.ensureOCRCache().store(cacheKey, ocrPayload)
-	return tooljson.Encode(payload)
+	return tooljson.Encode(ocrPayload)
+}
+
+func (t *ScreenActionTool) captureAndOCR(
+	ctx context.Context,
+	params map[string]any,
+	traceID string,
+) (screenOCRPayload, error) {
+	capture, err := t.captureScreen(ctx, params, traceID)
+	if err != nil {
+		return screenOCRPayload{}, err
+	}
+	result, err := t.runOCRImage(ctx, capture, params, traceID)
+	if err != nil {
+		return screenOCRPayload{}, err
+	}
+	return screenOCRPayload{
+		DisplayID:   capture.DisplayID,
+		ImageWidth:  capture.ImageWidth,
+		ImageHeight: capture.ImageHeight,
+		ScaleX:      capture.ScaleX,
+		ScaleY:      capture.ScaleY,
+		OriginX:     capture.OriginX,
+		OriginY:     capture.OriginY,
+		Region:      capture.Region,
+		Items:       result.Items,
+	}, nil
+}
+
+func (t *ScreenActionTool) captureScreen(
+	ctx context.Context,
+	params map[string]any,
+	traceID string,
+) (screenCapturePayload, error) {
+	callParams, err := buildScreenCaptureParams(params)
+	if err != nil {
+		return screenCapturePayload{}, err
+	}
+	payload, err := t.execution.Call(ctx, "SCREEN_CAPTURE", callParams, traceID)
+	if err != nil {
+		return screenCapturePayload{}, fmt.Errorf("execution SCREEN_CAPTURE failed: %w", err)
+	}
+	return tooljson.DecodePayload[screenCapturePayload](payload)
+}
+
+func (t *ScreenActionTool) runOCRImage(
+	ctx context.Context,
+	capture screenCapturePayload,
+	params map[string]any,
+	traceID string,
+) (ocrImagePayload, error) {
+	payload, err := t.execution.Call(ctx, "OCR_IMAGE", buildOCRImageParams(capture, params), traceID)
+	if err != nil {
+		return ocrImagePayload{}, fmt.Errorf("execution OCR_IMAGE failed: %w", err)
+	}
+	return tooljson.DecodePayload[ocrImagePayload](payload)
 }
 
 func (c *screenOCRCache) load(key screenOCRCacheKey, ttl time.Duration, reuse bool) (screenOCRPayload, bool) {

@@ -53,9 +53,9 @@ func (t *ScreenActionTool) executeClickText(ctx context.Context, params map[stri
 }
 
 func (t *ScreenActionTool) executeFindIcon(ctx context.Context, params map[string]any, traceID string) (string, error) {
-	payload, err := t.execution.Call(ctx, "ICON_MATCH", cloneParams(params), traceID)
+	payload, err := t.captureAndMatchIcon(ctx, params, traceID)
 	if err != nil {
-		return "", fmt.Errorf("execution ICON_MATCH failed: %w", err)
+		return "", err
 	}
 	return tooljson.Encode(payload)
 }
@@ -69,11 +69,7 @@ func (t *ScreenActionTool) executeClickIcon(ctx context.Context, params map[stri
 	}
 	logClickIcon(traceID, false, params)
 
-	payload, err := t.execution.Call(ctx, "ICON_MATCH", cloneParams(params), traceID)
-	if err != nil {
-		return "", fmt.Errorf("execution ICON_MATCH failed: %w", err)
-	}
-	iconPayload, err := tooljson.DecodePayload[iconMatchPayload](payload)
+	iconPayload, err := t.captureAndMatchIcon(ctx, params, traceID)
 	if err != nil {
 		return "", err
 	}
@@ -103,7 +99,7 @@ func (t *ScreenActionTool) clickDirectPoint(ctx context.Context, traceID string,
 	if request.Button != "" {
 		clickPayload["button"] = request.Button
 	}
-	appendDisplayScaleFromParams(request.Extra, clickPayload)
+	appendDisplayIDFromParams(request.Extra, clickPayload)
 	appendActiveWindowConstraints(request.Extra, clickPayload)
 	if _, err := t.execution.Call(ctx, "MOUSE_CLICK", clickPayload, traceID); err != nil {
 		return "", fmt.Errorf("execution MOUSE_CLICK failed: %w", err)
@@ -166,11 +162,7 @@ func (t *ScreenActionTool) loadOCRPayloadForClick(
 		return payload, true, nil
 	}
 
-	payload, err := t.execution.Call(ctx, "SCREEN_OCR", cloneParams(params), traceID)
-	if err != nil {
-		return screenOCRPayload{}, false, fmt.Errorf("execution SCREEN_OCR failed: %w", err)
-	}
-	ocrPayload, err := tooljson.DecodePayload[screenOCRPayload](payload)
+	ocrPayload, err := t.captureAndOCR(ctx, params, traceID)
 	if err != nil {
 		return screenOCRPayload{}, false, err
 	}
@@ -213,7 +205,7 @@ func buildOCRClickPayload(selected screenOCRItem, payload screenOCRPayload, para
 	if button := toolparams.OptionalString(params, "button", ""); button != "" {
 		clickPayload["button"] = button
 	}
-	appendDisplayScaleFromOCR(payload, clickPayload)
+	appendDisplayIDFromOCR(payload, clickPayload)
 	appendActiveWindowConstraints(params, clickPayload)
 	return clickPayload
 }
@@ -248,7 +240,7 @@ func parseDirectClickRequest(params map[string]any) (directClickRequest, bool, e
 	extra := map[string]any{
 		"template_path": toolparams.OptionalString(params, "template_path", ""),
 	}
-	appendDisplayScaleFromParams(params, extra)
+	appendDisplayIDFromParams(params, extra)
 	appendActiveWindowConstraints(params, extra)
 	return directClickRequest{
 		Action: "click_icon",
@@ -273,7 +265,42 @@ func buildIconClickPayload(selected iconMatch, payload iconMatchPayload, params 
 	if button := toolparams.OptionalString(params, "button", ""); button != "" {
 		clickPayload["button"] = button
 	}
-	appendDisplayScaleFromIcon(payload, clickPayload)
+	appendDisplayIDFromIcon(payload, clickPayload)
 	appendActiveWindowConstraints(params, clickPayload)
 	return clickPayload
+}
+
+func (t *ScreenActionTool) captureAndMatchIcon(
+	ctx context.Context,
+	params map[string]any,
+	traceID string,
+) (iconMatchPayload, error) {
+	capture, err := t.captureScreen(ctx, params, traceID)
+	if err != nil {
+		return iconMatchPayload{}, err
+	}
+	payload, err := t.execution.Call(
+		ctx,
+		"TEMPLATE_MATCH_IMAGE",
+		buildTemplateMatchParams(capture, params),
+		traceID,
+	)
+	if err != nil {
+		return iconMatchPayload{}, fmt.Errorf("execution TEMPLATE_MATCH_IMAGE failed: %w", err)
+	}
+	result, err := tooljson.DecodePayload[iconMatchImagePayload](payload)
+	if err != nil {
+		return iconMatchPayload{}, err
+	}
+	return iconMatchPayload{
+		DisplayID:   capture.DisplayID,
+		ImageWidth:  capture.ImageWidth,
+		ImageHeight: capture.ImageHeight,
+		ScaleX:      capture.ScaleX,
+		ScaleY:      capture.ScaleY,
+		OriginX:     capture.OriginX,
+		OriginY:     capture.OriginY,
+		Region:      capture.Region,
+		Matches:     result.Matches,
+	}, nil
 }
