@@ -68,6 +68,9 @@
   - 将截图、裁剪、OCR、模板匹配、坐标换算留在 Native，业务编排保留在 Bridge。
   - 将 `sandbox/file_tools.rs` 拆为 `file_tools/mod.rs` + `bindings/*_py.rs` + `read_write.rs` + `search.rs` + `export.rs`，仅做 FFI 入口与原子文件能力的边界拆分，未重写内部行为。
   - 将 `codex_cli.rs` 收口为 `codex_cli/*` 目录模块，分离 action 分发、参数解析、sandbox 路径决议、进程跟踪、输出缓冲与 session 提取，降低 persistent CLI 改动脆弱性。
+- 收口 `apps/cli` 命令层边界：
+  - 将 `commands.rs` 拆为 `commands/*` 目录模块，分离命令解析、配置更新映射、本地副作用执行与终端渲染，保留 `repl` 侧兼容入口。
+  - 为命令解析、执行结果映射、清屏行为与输出格式新增定向测试；当前环境下 `timeout 60 cargo test --manifest-path apps/cli/Cargo.toml -- --nocapture` 已通过。
 - 完成 `apps/web` API 客户端分层重构，拆出 `agent/config/sessions/rss` 等领域模块，移除巨型 `lib/api.ts`。
 - 完成 `core/bridge/tools` 第一批大文件拆分，重点收口 `screen_action` 与 `browser_control`。
 - 落地第一阶段自动记忆增强：

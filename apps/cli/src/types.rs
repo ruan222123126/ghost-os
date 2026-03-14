@@ -46,7 +46,7 @@ pub struct HumanResponseParams<'a> {
     pub cancelled: Option<bool>,
 }
 
-#[derive(Debug, serde::Deserialize, Clone)]
+#[derive(Debug, serde::Deserialize, Clone, PartialEq, Eq)]
 pub struct ConfigResponse {
     pub provider: String,
     pub provider_type: String,
@@ -56,7 +56,7 @@ pub struct ConfigResponse {
     pub api_key_set: bool,
 }
 
-#[derive(Debug, Serialize, Default)]
+#[derive(Debug, Serialize, Default, Clone, PartialEq, Eq)]
 pub struct ConfigUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
