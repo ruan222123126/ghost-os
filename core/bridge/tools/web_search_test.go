@@ -5,28 +5,37 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"ghost-os/bridge/tools/internal/websearch"
 )
 
 func TestWebSearchToolParsesDuckDuckGoHTML(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(`
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet {
+				t.Fatalf("unexpected method: got %s want %s", req.Method, http.MethodGet)
+			}
+			if req.URL.Path != "/html" {
+				t.Fatalf("unexpected path: %q", req.URL.Path)
+			}
+			if got := req.URL.Query().Get("q"); got != "ghost os" {
+				t.Fatalf("unexpected query: %q", got)
+			}
+			return newWebSearchResponse(http.StatusOK, "text/html; charset=utf-8", `
 <html><body>
   <a class="result__a" href="https://example.com/a">First Result</a>
   <div class="result__snippet">First snippet text.</div>
   <a class="result__a" href="https://example.com/b">Second Result</a>
   <div class="result__snippet">Second snippet text.</div>
-</body></html>`))
-	}))
-	defer server.Close()
+</body></html>`), nil
+		}),
+	}
 
 	tool := &WebSearchTool{
-		httpClient: server.Client(),
-		endpoint:   server.URL,
+		httpClient: client,
+		endpoint:   "https://search.test/html",
 		userAgents: []string{"test-agent"},
 	}
 
@@ -56,29 +65,39 @@ func TestWebSearchToolRequiresQuery(t *testing.T) {
 }
 
 func TestWebSearchToolFallsBackToBingRSS(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/duck":
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			_, _ = w.Write([]byte(`<html><body><p>temporary upstream layout drift</p></body></html>`))
-		case "/bing":
-			w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
-			_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?>
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodGet {
+				t.Fatalf("unexpected method: got %s want %s", req.Method, http.MethodGet)
+			}
+			if got := req.URL.Query().Get("q"); got != "ghost os" {
+				t.Fatalf("unexpected query: %q", got)
+			}
+
+			switch req.URL.Path {
+			case "/duck":
+				return newWebSearchResponse(http.StatusOK, "text/html; charset=utf-8", `<html><body><p>temporary upstream layout drift</p></body></html>`), nil
+			case "/bing":
+				if got := req.URL.Query().Get("format"); got != "rss" {
+					t.Fatalf("unexpected format: %q", got)
+				}
+				return newWebSearchResponse(http.StatusOK, "application/rss+xml; charset=utf-8", `<?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0"><channel>
   <item><title>Ghost OS Search</title><link>https://example.com/search</link><description>Fallback result</description></item>
-</channel></rss>`))
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
+</channel></rss>`), nil
+			default:
+				t.Fatalf("unexpected path: %q", req.URL.Path)
+				return nil, nil
+			}
+		}),
+	}
 
 	tool := &WebSearchTool{
-		httpClient: server.Client(),
+		httpClient: client,
 		userAgents: []string{"test-agent"},
 		providers: []webSearchProvider{
-			{name: "duckduckgo_html", endpoint: server.URL + "/duck", format: webSearchFormatDuckDuckGoHTML},
-			{name: "bing_rss", endpoint: server.URL + "/bing", format: webSearchFormatBingRSS},
+			{name: "duckduckgo_html", endpoint: "https://search.test/duck", format: webSearchFormatDuckDuckGoHTML},
+			{name: "bing_rss", endpoint: "https://search.test/bing", format: webSearchFormatBingRSS},
 		},
 	}
 
@@ -100,49 +119,52 @@ func TestWebSearchToolFallsBackToBingRSS(t *testing.T) {
 }
 
 func TestWebSearchToolUsesTavilyWhenConfigured(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("unexpected method: got %s want %s", r.Method, http.MethodPost)
-		}
-		if got := r.Header.Get("Authorization"); got != "Bearer test-tavily-key" {
-			t.Fatalf("unexpected authorization header: %q", got)
-		}
-		if got := r.Header.Get("Content-Type"); got != "application/json" {
-			t.Fatalf("unexpected content type: %q", got)
-		}
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("unexpected method: got %s want %s", req.Method, http.MethodPost)
+			}
+			if req.URL.Path != "/tavily" {
+				t.Fatalf("unexpected path: %q", req.URL.Path)
+			}
+			if got := req.Header.Get("Authorization"); got != "Bearer test-tavily-key" {
+				t.Fatalf("unexpected authorization header: %q", got)
+			}
+			if got := req.Header.Get("Content-Type"); got != "application/json" {
+				t.Fatalf("unexpected content type: %q", got)
+			}
 
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			t.Fatalf("read body: %v", err)
-		}
-		defer r.Body.Close()
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			defer req.Body.Close()
 
-		var payload map[string]any
-		if err := json.Unmarshal(body, &payload); err != nil {
-			t.Fatalf("decode body: %v", err)
-		}
-		if payload["query"] != "ghost os" {
-			t.Fatalf("unexpected query payload: %#v", payload["query"])
-		}
-		if payload["max_results"] != float64(2) {
-			t.Fatalf("unexpected max_results payload: %#v", payload["max_results"])
-		}
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if payload["query"] != "ghost os" {
+				t.Fatalf("unexpected query payload: %#v", payload["query"])
+			}
+			if payload["max_results"] != float64(2) {
+				t.Fatalf("unexpected max_results payload: %#v", payload["max_results"])
+			}
 
-		w.Header().Set("Content-Type", "application/json; charset=utf-8")
-		_, _ = w.Write([]byte(`{
+			return newWebSearchResponse(http.StatusOK, "application/json; charset=utf-8", `{
   "results": [
     {"title":"Ghost Tavily Result","url":"https://example.com/tavily","content":"Tavily content"}
   ]
-}`))
-	}))
-	defer server.Close()
+}`), nil
+		}),
+	}
 
 	tool := &WebSearchTool{
-		httpClient: server.Client(),
+		httpClient: client,
 		userAgents: []string{"test-agent"},
 		providers: []webSearchProvider{{
 			name:     "tavily",
-			endpoint: server.URL,
+			endpoint: "https://search.test/tavily",
 			format:   webSearchFormatTavilyJSON,
 			apiKey:   "test-tavily-key",
 		}},
@@ -162,5 +184,148 @@ func TestWebSearchToolUsesTavilyWhenConfigured(t *testing.T) {
 	}
 	if results[0].Title != "Ghost Tavily Result" || results[0].URL != "https://example.com/tavily" {
 		t.Fatalf("unexpected tavily result: %+v", results[0])
+	}
+}
+
+func TestWebSearchToolUsesExaWhenConfigured(t *testing.T) {
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.Method != http.MethodPost {
+				t.Fatalf("unexpected method: got %s want %s", req.Method, http.MethodPost)
+			}
+			if req.URL.Path != "/exa" {
+				t.Fatalf("unexpected path: %q", req.URL.Path)
+			}
+			if got := req.Header.Get("x-api-key"); got != "test-exa-key" {
+				t.Fatalf("unexpected x-api-key header: %q", got)
+			}
+			if got := req.Header.Get("Content-Type"); got != "application/json" {
+				t.Fatalf("unexpected content type: %q", got)
+			}
+
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				t.Fatalf("read body: %v", err)
+			}
+			defer req.Body.Close()
+
+			var payload map[string]any
+			if err := json.Unmarshal(body, &payload); err != nil {
+				t.Fatalf("decode body: %v", err)
+			}
+			if payload["query"] != "ghost os" {
+				t.Fatalf("unexpected query payload: %#v", payload["query"])
+			}
+			if payload["numResults"] != float64(2) {
+				t.Fatalf("unexpected numResults payload: %#v", payload["numResults"])
+			}
+
+			return newWebSearchResponse(http.StatusOK, "application/json; charset=utf-8", `{
+  "results": [
+    {
+      "title": "Ghost Exa Result",
+      "url": "https://example.com/exa",
+      "highlights": ["Exa highlight snippet."]
+    }
+  ]
+}`), nil
+		}),
+	}
+
+	tool := &WebSearchTool{
+		httpClient: client,
+		userAgents: []string{"test-agent"},
+		providers: []webSearchProvider{{
+			name:     "exa",
+			endpoint: "https://search.test/exa",
+			format:   webSearchFormatExaJSON,
+			apiKey:   "test-exa-key",
+		}},
+	}
+
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"query":"ghost os","max_results":2}`), "trace-web-5")
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	var results []websearch.Result
+	if err := json.Unmarshal([]byte(output), &results); err != nil {
+		t.Fatalf("decode results: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("unexpected result count: got %d want %d", len(results), 1)
+	}
+	if results[0].Title != "Ghost Exa Result" || results[0].URL != "https://example.com/exa" {
+		t.Fatalf("unexpected exa result: %+v", results[0])
+	}
+}
+
+func TestWebSearchToolRequiresProviderWhenBothAPISearchKeysExist(t *testing.T) {
+	tool := NewWebSearchTool(WebSearchConfig{
+		TavilyAPIKey: "test-tavily-key",
+		ExaAPIKey:    "test-exa-key",
+	})
+
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"query":"ghost os"}`), "trace-web-6")
+	if err == nil {
+		t.Fatal("expected error when provider is omitted and both api providers are configured")
+	}
+	if !strings.Contains(err.Error(), "provider is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWebSearchToolSelectsRequestedProvider(t *testing.T) {
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.URL.Path != "/exa" {
+				t.Fatalf("unexpected path: %q", req.URL.Path)
+			}
+			return newWebSearchResponse(http.StatusOK, "application/json; charset=utf-8", `{
+  "results": [
+    {"title":"Ghost Exa Result","url":"https://example.com/exa","highlights":["Exa highlight snippet."]}
+  ]
+}`), nil
+		}),
+	}
+
+	tool := &WebSearchTool{
+		httpClient: client,
+		userAgents: []string{"test-agent"},
+		config: WebSearchConfig{
+			TavilyAPIKey: "test-tavily-key",
+			ExaAPIKey:    "test-exa-key",
+		},
+		providers: []webSearchProvider{
+			{name: webSearchProviderTavily, endpoint: "https://search.test/tavily", format: webSearchFormatTavilyJSON, apiKey: "test-tavily-key"},
+			{name: webSearchProviderExa, endpoint: "https://search.test/exa", format: webSearchFormatExaJSON, apiKey: "test-exa-key"},
+		},
+	}
+
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"provider":"exa","query":"ghost os"}`), "trace-web-7")
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	var results []websearch.Result
+	if err := json.Unmarshal([]byte(output), &results); err != nil {
+		t.Fatalf("decode results: %v", err)
+	}
+	if len(results) != 1 || results[0].URL != "https://example.com/exa" {
+		t.Fatalf("unexpected selected provider result: %+v", results)
+	}
+}
+
+type webSearchRoundTripper func(*http.Request) (*http.Response, error)
+
+func (rt webSearchRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt(req)
+}
+
+func newWebSearchResponse(status int, contentType, body string) *http.Response {
+	return &http.Response{
+		StatusCode: status,
+		Header:     http.Header{"Content-Type": []string{contentType}},
+		Body:       io.NopCloser(strings.NewReader(body)),
 	}
 }

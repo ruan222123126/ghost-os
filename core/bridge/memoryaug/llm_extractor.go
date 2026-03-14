@@ -46,10 +46,12 @@ Rules:
 - Ignore greetings, low-information confirmations, tool noise, one-off tasks, and temporary execution results.
 - Prefer session scope unless the information is clearly stable across sessions.
 - Never emit memories that duplicate explicit memories already provided.
+- Keep summaries stable and slot-like, e.g. "reply language" or "preferred test command".
+- Include memory_key when you can express the memory as a stable snake_case slot.
 - Return JSON only.
 
 Schema:
-{"items":[{"memory_type":"profile|preference|workflow|fact","summary":"...","content":"...","scope_type":"user|session","scope_id":"...","confidence":0.0,"supersedes_ids":["..."],"reason":"..."}]}`
+{"items":[{"memory_type":"profile|preference|workflow|fact","memory_key":"optional_snake_case_slot","summary":"...","content":"...","scope_type":"user|session","scope_id":"...","confidence":0.0,"supersedes_ids":["..."],"reason":"..."}]}`
 }
 
 func extractorUserPrompt(input ExtractInput) string {

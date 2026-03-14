@@ -40,13 +40,15 @@ func (s *ConfigStore) RuntimeConfig() runtimeConfig {
 func (s *ConfigStore) Snapshot() configResponse {
 	runtime := s.RuntimeConfig()
 	return configResponse{
-		Provider:              activeProviderLabel(runtime),
-		ProviderType:          string(runtime.Provider),
-		BaseURL:               runtime.BaseURL,
-		Model:                 runtime.Model,
-		ChatPath:              runtime.ChatPath,
-		APIKeySet:             runtime.APIKey != "",
-		ModelSelectionEnabled: runtime.ModelSelectionEnabled,
+		Provider:                 activeProviderLabel(runtime),
+		ProviderType:             string(runtime.Provider),
+		BaseURL:                  runtime.BaseURL,
+		Model:                    runtime.Model,
+		ChatPath:                 runtime.ChatPath,
+		APIKeySet:                runtime.APIKey != "",
+		ModelSelectionEnabled:    runtime.ModelSelectionEnabled,
+		WebSearchTavilyAPIKeySet: runtime.WebSearchTavilyAPIKey != "",
+		WebSearchExaAPIKeySet:    runtime.WebSearchExaAPIKey != "",
 	}
 }
 

@@ -55,6 +55,7 @@ type learningStore interface {
 	SearchExplicitRecallRecords(ctx context.Context, query string, limit int) ([]memorystore.MemoryEntry, error)
 	ListLearned(ctx context.Context, filter memorystore.LearnedListFilter) ([]memorystore.MemoryEntry, int, error)
 	GetLearnedByIDs(ctx context.Context, ids []string) ([]memorystore.MemoryEntry, error)
+	FindActiveLearnedByMemoryKey(ctx context.Context, scopeType string, scopeID string, memoryKey string) (memorystore.MemoryEntry, error)
 	CreateLearned(ctx context.Context, input memorystore.LearnedMemoryInput, supersedesIDs []string) (memorystore.MemoryEntry, error)
 	RefreshLearned(ctx context.Context, id string, confidence float64) error
 }
@@ -85,6 +86,7 @@ type ExtractOutput struct {
 
 type Candidate struct {
 	MemoryType   string   `json:"memory_type"`
+	MemoryKey    string   `json:"memory_key,omitempty"`
 	Summary      string   `json:"summary"`
 	Content      string   `json:"content"`
 	ScopeType    string   `json:"scope_type"`

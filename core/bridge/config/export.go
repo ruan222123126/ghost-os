@@ -14,22 +14,26 @@ type FileConfig = bridgeFileConfig
 type MemoryAugmentationSettings = MemoryAugmentationConfig
 
 type Snapshot struct {
-	Provider              string `json:"provider"`
-	ProviderType          string `json:"provider_type"`
-	BaseURL               string `json:"base_url"`
-	Model                 string `json:"model"`
-	ChatPath              string `json:"chat_path"`
-	APIKeySet             bool   `json:"api_key_set"`
-	ModelSelectionEnabled bool   `json:"model_selection_enabled"`
+	Provider                 string `json:"provider"`
+	ProviderType             string `json:"provider_type"`
+	BaseURL                  string `json:"base_url"`
+	Model                    string `json:"model"`
+	ChatPath                 string `json:"chat_path"`
+	APIKeySet                bool   `json:"api_key_set"`
+	ModelSelectionEnabled    bool   `json:"model_selection_enabled"`
+	WebSearchTavilyAPIKeySet bool   `json:"web_search_tavily_api_key_set"`
+	WebSearchExaAPIKeySet    bool   `json:"web_search_exa_api_key_set"`
 }
 
 type UpdateRequest struct {
-	Provider *string `json:"provider,omitempty"`
-	APIKey   *string `json:"api_key,omitempty"`
-	BaseURL  *string `json:"base_url,omitempty"`
-	Model    *string `json:"model,omitempty"`
-	ChatPath *string `json:"chat_path,omitempty"`
-	TraceID  string  `json:"trace_id,omitempty"`
+	Provider              *string `json:"provider,omitempty"`
+	APIKey                *string `json:"api_key,omitempty"`
+	BaseURL               *string `json:"base_url,omitempty"`
+	Model                 *string `json:"model,omitempty"`
+	ChatPath              *string `json:"chat_path,omitempty"`
+	WebSearchTavilyAPIKey *string `json:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey    *string `json:"web_search_exa_api_key,omitempty"`
+	TraceID               string  `json:"trace_id,omitempty"`
 }
 
 type configResponse = Snapshot

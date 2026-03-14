@@ -26,6 +26,16 @@ func (s fixedRecallService) LearnFromTurn(context.Context, memoryaug.LearnFromTu
 	return nil
 }
 
+type capturingRecallService struct {
+	fixedRecallService
+	lastInput memoryaug.RecallInput
+}
+
+func (s *capturingRecallService) Recall(_ context.Context, input memoryaug.RecallInput) ([]memoryaug.RecallItem, error) {
+	s.lastInput = input
+	return s.items, nil
+}
+
 func TestSessionRunnerInjectsRecallOnlyIntoPrompt(t *testing.T) {
 	sessionStore := newTempSessionStore(t)
 	completer := &proTestCompleter{
@@ -125,7 +135,47 @@ func TestSessionRunnerRecallDoesNotBreakAskHumanContinuation(t *testing.T) {
 	}
 }
 
-func buildMemoryTestDeps(completer *proTestCompleter, recall fixedRecallService) agentRuntimeDependencies {
+func TestSessionRunnerBuildsRecallQueryFromRecentContext(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	sess := session.NewSession("base system prompt")
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "Please reply in Chinese."})
+	sess.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "I will reply in Chinese."})
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "We are updating the Android runtime settings screen."})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{{
+			Message:      llm.Message{Role: llm.RoleAssistant, Text: "continuing"},
+			FinishReason: llm.FinishStop,
+		}},
+	}
+	recall := &capturingRecallService{}
+	runner := NewSessionAgentRunner(proTestRuntimeFactory{
+		deps: buildMemoryTestDeps(completer, recall),
+	}, nil, sessionStore, nil)
+
+	if _, _, err := runner.RunTurn(context.Background(), "continue with the runtime change", sess.ID, "trace-query"); err != nil {
+		t.Fatalf("run turn: %v", err)
+	}
+	if !strings.Contains(recall.lastInput.Query, "Please reply in Chinese.") {
+		t.Fatalf("expected recent user context in recall query, got %q", recall.lastInput.Query)
+	}
+	if !strings.Contains(recall.lastInput.Query, "We are updating the Android runtime settings screen.") {
+		t.Fatalf("expected latest session context in recall query, got %q", recall.lastInput.Query)
+	}
+	if !strings.Contains(recall.lastInput.Query, "continue with the runtime change") {
+		t.Fatalf("expected current user message in recall query, got %q", recall.lastInput.Query)
+	}
+}
+
+type fixedMemoryService interface {
+	memoryaug.RecallService
+	memoryaug.LearningService
+}
+
+func buildMemoryTestDeps(completer *proTestCompleter, recall fixedMemoryService) agentRuntimeDependencies {
 	return agentRuntimeDependencies{
 		cfg: Config{
 			MaxTurns:    3,

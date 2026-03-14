@@ -29,6 +29,8 @@ describe('lib/api/config/api', () => {
       chat_path: '',
       api_key_set: true,
       model_selection_enabled: true,
+      web_search_tavily_api_key_set: true,
+      web_search_exa_api_key_set: false,
     };
 
     mockFetchJSON({
@@ -50,6 +52,7 @@ describe('lib/api/config/api', () => {
       base_url: 'https://lldai.online/openai',
       api_key: 'secret',
       chat_path: '/v1/chat',
+      web_search_exa_api_key: 'exa-secret',
     };
 
     const expected: BridgeConfig = {
@@ -60,6 +63,8 @@ describe('lib/api/config/api', () => {
       chat_path: '/v1/chat',
       api_key_set: true,
       model_selection_enabled: true,
+      web_search_tavily_api_key_set: true,
+      web_search_exa_api_key_set: true,
     };
 
     mockFetchJSON({

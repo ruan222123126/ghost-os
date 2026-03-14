@@ -23,6 +23,8 @@ const BRIDGE_CONFIG_KEYS = [
   'chat_path',
   'api_key_set',
   'model_selection_enabled',
+  'web_search_tavily_api_key_set',
+  'web_search_exa_api_key_set',
 ] as const;
 const PROVIDER_CONFIG_KEYS = [
   'name',
@@ -78,6 +80,14 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
     model_selection_enabled: expectBoolean(
       record.model_selection_enabled,
       'bridge config.model_selection_enabled',
+    ),
+    web_search_tavily_api_key_set: expectBoolean(
+      record.web_search_tavily_api_key_set,
+      'bridge config.web_search_tavily_api_key_set',
+    ),
+    web_search_exa_api_key_set: expectBoolean(
+      record.web_search_exa_api_key_set,
+      'bridge config.web_search_exa_api_key_set',
     ),
   };
 }

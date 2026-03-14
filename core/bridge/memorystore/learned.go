@@ -27,14 +27,15 @@ func (s *Store) CreateLearned(ctx context.Context, input LearnedMemoryInput, sup
 		return MemoryEntry{}, err
 	}
 	_, err = tx.ExecContext(ctx, `INSERT INTO learned_memories (
-		id, scope_type, scope_id, source_kind, memory_type, content, summary,
+		id, scope_type, scope_id, source_kind, memory_type, memory_key, content, summary,
 		metadata_json, confidence, status, superseded_by, created_at, updated_at, last_used_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, NULL)`,
 		entry.ID,
 		entry.ScopeType,
 		entry.ScopeID,
 		entry.SourceKind,
 		entry.MemoryType,
+		nullIfEmpty(entry.MemoryKey),
 		entry.Content,
 		entry.Summary,
 		metadataValue,
@@ -63,7 +64,7 @@ func (s *Store) GetLearnedByIDs(ctx context.Context, ids []string) ([]MemoryEntr
 	}
 	filter, args := buildInFilter("id", trimmed)
 	rows, err := s.db.QueryContext(ctx, `SELECT
-		id, scope_type, scope_id, source_kind, memory_type, content, summary,
+		id, scope_type, scope_id, source_kind, memory_type, memory_key, content, summary,
 		metadata_json, confidence, status, created_at, updated_at, last_used_at
 		FROM learned_memories
 		WHERE `+filter+`
@@ -88,7 +89,7 @@ func (s *Store) ListLearned(ctx context.Context, filter LearnedListFilter) ([]Me
 	}
 	args = append(args, filter.Limit, filter.Offset)
 	rows, err := s.db.QueryContext(ctx, `SELECT
-		id, scope_type, scope_id, source_kind, memory_type, content, summary,
+		id, scope_type, scope_id, source_kind, memory_type, memory_key, content, summary,
 		metadata_json, confidence, status, created_at, updated_at, last_used_at
 		FROM learned_memories
 		WHERE `+whereSQL+`
@@ -138,6 +139,7 @@ func normalizeLearnedInput(input LearnedMemoryInput, now time.Time) MemoryEntry 
 		ScopeID:    strings.TrimSpace(input.ScopeID),
 		SourceKind: SourceKindLearned,
 		MemoryType: resolveMemoryType(input.MemoryType),
+		MemoryKey:  resolveLearnedMemoryKey(input),
 		Content:    strings.TrimSpace(input.Content),
 		Summary:    summarizeText(input.Summary, input.Content),
 		Metadata:   cloneMetadata(input.Metadata),
@@ -174,6 +176,14 @@ func buildLearnedFilter(filter LearnedListFilter) (string, []any) {
 		args = append(args, clauseArgs...)
 	}
 	return strings.Join(clauses, " AND "), args
+}
+
+func resolveLearnedMemoryKey(input LearnedMemoryInput) string {
+	key := normalizeMemoryKey(input.MemoryKey)
+	if key != "" {
+		return key
+	}
+	return defaultMemoryKey(input.MemoryType, summarizeText(input.Summary, input.Content))
 }
 
 func supersedeLearnedInTx(ctx context.Context, tx txRunner, ids []string, supersededBy string, now time.Time) error {

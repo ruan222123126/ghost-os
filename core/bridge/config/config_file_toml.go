@@ -125,6 +125,7 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out.RSSInboxPath = cloneOptionalStringPointer(out.RSSInboxPath)
 	out.RSSPollInterval = cloneOptionalStringPointer(out.RSSPollInterval)
 	out.WebSearchTavilyAPIKey = cloneOptionalStringPointer(out.WebSearchTavilyAPIKey)
+	out.WebSearchExaAPIKey = cloneOptionalStringPointer(out.WebSearchExaAPIKey)
 	out.AnthropicVersion = cloneOptionalStringPointer(out.AnthropicVersion)
 	out.ToolSelectorMode = cloneOptionalStringPointer(out.ToolSelectorMode)
 	out.ToolSelectorModel = cloneOptionalStringPointer(out.ToolSelectorModel)

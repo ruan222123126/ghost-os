@@ -120,7 +120,7 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	finalPrompt, err := p.buildSystemPromptWithMemory(ctx, deps, sess.ID, trimmedUserMessage, systemPrompt)
+	finalPrompt, err := p.buildSystemPromptWithMemory(ctx, deps, sess.ID, history, trimmedUserMessage, systemPrompt)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -135,6 +135,7 @@ func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
 	sessionID string,
+	history *agent.History,
 	userMessage string,
 	systemPrompt string,
 ) (string, error) {
@@ -142,7 +143,7 @@ func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 	if basePrompt == "" {
 		basePrompt = strings.TrimSpace(deps.systemPrompt)
 	}
-	memoryBlock, err := p.buildMemoryBlock(ctx, deps, sessionID, userMessage)
+	memoryBlock, err := p.buildMemoryBlock(ctx, deps, sessionID, history, userMessage)
 	if err != nil {
 		return "", err
 	}
@@ -159,14 +160,16 @@ func (p *sessionTurnPreparer) buildMemoryBlock(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
 	sessionID string,
+	history *agent.History,
 	userMessage string,
 ) (string, error) {
 	if deps.memoryRecall == nil {
 		return "", nil
 	}
+	query := buildMemoryRecallQuery(history, userMessage)
 	items, err := deps.memoryRecall.Recall(ctx, memoryaug.RecallInput{
 		SessionID: sessionID,
-		Query:     userMessage,
+		Query:     query,
 	})
 	if err != nil {
 		return "", err

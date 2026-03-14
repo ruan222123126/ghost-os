@@ -221,7 +221,11 @@ data class BridgeConfig(
     @SerialName("api_key_set")
     val apiKeySet: Boolean,
     @SerialName("model_selection_enabled")
-    val modelSelectionEnabled: Boolean
+    val modelSelectionEnabled: Boolean,
+    @SerialName("web_search_tavily_api_key_set")
+    val webSearchTavilyApiKeySet: Boolean,
+    @SerialName("web_search_exa_api_key_set")
+    val webSearchExaApiKeySet: Boolean
 )
 
 @Serializable
@@ -234,6 +238,10 @@ data class ConfigUpdate(
     val model: String? = null,
     @SerialName("chat_path")
     val chatPath: String? = null,
+    @SerialName("web_search_tavily_api_key")
+    val webSearchTavilyApiKey: String? = null,
+    @SerialName("web_search_exa_api_key")
+    val webSearchExaApiKey: String? = null,
     @SerialName("trace_id")
     val traceId: String? = null
 )

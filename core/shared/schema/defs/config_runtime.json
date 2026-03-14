@@ -10,7 +10,9 @@
         "model",
         "chat_path",
         "api_key_set",
-        "model_selection_enabled"
+        "model_selection_enabled",
+        "web_search_tavily_api_key_set",
+        "web_search_exa_api_key_set"
       ],
       "properties": {
         "provider": { "type": "string" },
@@ -19,7 +21,9 @@
         "model": { "type": "string" },
         "chat_path": { "type": "string" },
         "api_key_set": { "type": "boolean" },
-        "model_selection_enabled": { "type": "boolean" }
+        "model_selection_enabled": { "type": "boolean" },
+        "web_search_tavily_api_key_set": { "type": "boolean" },
+        "web_search_exa_api_key_set": { "type": "boolean" }
       },
       "x-codegen": {
         "order": 190,
@@ -38,6 +42,8 @@
         "base_url": { "type": "string", "x-go-pointer": true },
         "model": { "type": "string", "x-go-pointer": true },
         "chat_path": { "type": "string", "x-go-pointer": true },
+        "web_search_tavily_api_key": { "type": "string", "x-go-pointer": true },
+        "web_search_exa_api_key": { "type": "string", "x-go-pointer": true },
         "trace_id": { "type": "string" }
       },
       "x-codegen": {

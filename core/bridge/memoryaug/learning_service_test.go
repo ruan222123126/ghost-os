@@ -112,6 +112,108 @@ func TestLearningServiceDedupesRepeatedPreference(t *testing.T) {
 	}
 }
 
+func TestLearningServiceRefreshesSameMemoryKey(t *testing.T) {
+	store := newTestStore(t)
+	extractor := &scriptedExtractor{
+		outputs: []ExtractOutput{
+			{Items: []Candidate{{
+				MemoryType: "preference",
+				MemoryKey:  "reply_language",
+				Summary:    "reply language",
+				Content:    "Reply in Chinese by default.",
+				ScopeType:  "user",
+				Confidence: 0.9,
+			}}},
+			{Items: []Candidate{{
+				MemoryType: "preference",
+				MemoryKey:  "reply_language",
+				Summary:    "reply language",
+				Content:    "Reply in Chinese by default.",
+				ScopeType:  "user",
+				Confidence: 0.96,
+			}}},
+		},
+	}
+	service := NewLearningService(newTestSettings(), store, extractor)
+
+	for range 2 {
+		err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+			SessionID: "session-1",
+			Messages:  []TurnMessage{{Role: "user", Text: "Please reply in Chinese by default."}},
+		})
+		if err != nil {
+			t.Fatalf("learn from turn: %v", err)
+		}
+	}
+
+	items := mustListLearned(t, store, memorystore.LearnedListFilter{
+		ScopeType: memorystore.ScopeTypeUser,
+		ScopeID:   memorystore.DefaultUserScopeID,
+		Statuses:  []string{memorystore.MemoryStatusActive},
+		Limit:     10,
+	})
+	if len(items) != 1 {
+		t.Fatalf("expected one active memory, got %+v", items)
+	}
+	if items[0].MemoryKey != "reply_language" {
+		t.Fatalf("expected stable memory key, got %+v", items[0])
+	}
+	if items[0].Confidence != 0.96 {
+		t.Fatalf("expected refreshed confidence 0.96, got %.2f", items[0].Confidence)
+	}
+}
+
+func TestLearningServiceSupersedesByMemoryKey(t *testing.T) {
+	store := newTestStore(t)
+	extractor := &scriptedExtractor{
+		outputs: []ExtractOutput{
+			{Items: []Candidate{{
+				MemoryType: "workflow",
+				MemoryKey:  "preferred_response_style",
+				Summary:    "preferred response style",
+				Content:    "Keep responses concise.",
+				ScopeType:  "user",
+				Confidence: 0.9,
+			}}},
+			{Items: []Candidate{{
+				MemoryType: "workflow",
+				MemoryKey:  "preferred_response_style",
+				Summary:    "preferred response style",
+				Content:    "Keep responses very concise.",
+				ScopeType:  "user",
+				Confidence: 0.95,
+			}}},
+		},
+	}
+	service := NewLearningService(newTestSettings(), store, extractor)
+
+	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+		SessionID: "session-1",
+		Messages:  []TurnMessage{{Role: "user", Text: "Keep responses concise."}},
+	})
+	if err != nil {
+		t.Fatalf("first learn: %v", err)
+	}
+	err = service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+		SessionID: "session-2",
+		Messages:  []TurnMessage{{Role: "user", Text: "Keep responses very concise in future responses."}},
+	})
+	if err != nil {
+		t.Fatalf("second learn: %v", err)
+	}
+
+	all := mustListLearned(t, store, memorystore.LearnedListFilter{
+		Statuses: []string{memorystore.MemoryStatusActive, memorystore.MemoryStatusSuperseded},
+		Limit:    10,
+	})
+	if len(all) != 2 {
+		t.Fatalf("expected one refresh lineage with superseded entry, got %+v", all)
+	}
+	if !containsStatus(all, memorystore.MemoryStatusSuperseded) {
+		t.Fatalf("expected older keyed memory to be superseded, got %+v", all)
+	}
+}
+
 func TestLearningServiceSupersedesOlderLearnedMemory(t *testing.T) {
 	store := newTestStore(t)
 	extractor := &scriptedExtractor{

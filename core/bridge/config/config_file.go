@@ -77,6 +77,7 @@ type bridgeFileConfig struct {
 	RSSBriefingEnabled                    *bool                         `toml:"rss_briefing_enabled,omitempty"`
 	RSSBriefingInterval                   *string                       `toml:"rss_briefing_interval,omitempty"`
 	WebSearchTavilyAPIKey                 *string                       `toml:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey                    *string                       `toml:"web_search_exa_api_key,omitempty"`
 	ProviderHeaders                       map[string]string             `toml:"provider_headers,omitempty"`
 	AnthropicVersion                      *string                       `toml:"anthropic_version,omitempty"`
 	AnthropicMaxTokens                    *int                          `toml:"anthropic_max_tokens,omitempty"`

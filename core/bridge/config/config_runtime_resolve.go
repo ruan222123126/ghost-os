@@ -16,14 +16,17 @@ func runtimeConfigFromEnv() (runtimeConfig, error) {
 }
 
 func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error) {
+	webSearch := envWebSearchSettings()
 	return runtimeConfigFromFileConfigWithFallback(fileCfg, runtimeConfig{
-		ProviderName:     getenvDefault("GHOST_PROVIDER", string(defaultProvider)),
-		APIKey:           getenvDefault("GHOST_API_KEY", ""),
-		BaseURL:          getenvDefault("GHOST_BASE_URL", ""),
-		Model:            getenvDefault("GHOST_MODEL", ""),
-		ChatPath:         getenvDefault("GHOST_CHAT_PATH", ""),
-		NativePersistent: resolveNativePersistent(nil),
-		ProjectRoot:      getenvDefault("GHOST_PROJECT_ROOT", ""),
+		ProviderName:          getenvDefault("GHOST_PROVIDER", string(defaultProvider)),
+		APIKey:                getenvDefault("GHOST_API_KEY", ""),
+		BaseURL:               getenvDefault("GHOST_BASE_URL", ""),
+		Model:                 getenvDefault("GHOST_MODEL", ""),
+		ChatPath:              getenvDefault("GHOST_CHAT_PATH", ""),
+		NativePersistent:      resolveNativePersistent(nil),
+		ProjectRoot:           getenvDefault("GHOST_PROJECT_ROOT", ""),
+		WebSearchTavilyAPIKey: webSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:    webSearch.ExaAPIKey,
 	})
 }
 
@@ -31,95 +34,138 @@ func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error
 func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
 	fileCfg = normalizeBridgeFileConfigForWrite(fileCfg)
 	fallback = normalizeRuntimeConfig(fallback)
+	webSearch := fileWebSearchSettings(fileCfg, webSearchSettings{
+		TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
+		ExaAPIKey:    fallback.WebSearchExaAPIKey,
+	})
 	allowlistOnly := boolOrEnv(fileCfg.ToolAllowlistOnly, "GHOST_TOOL_ALLOWLIST_ONLY", false)
 	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
 	if len(providers) > 0 {
-		activeName := strings.TrimSpace(stringValue(fileCfg.ActiveProvider))
-		if activeName == "" {
-			activeName = activeProviderLabel(fallback)
-		}
-		activeIndex := providerIndexByName(providers, activeName)
-		if activeIndex < 0 {
-			activeIndex = 0
-		}
-		active := providers[activeIndex]
-		model := stringValue(fileCfg.Model)
-		if model == "" {
-			model = fallback.Model
-		}
-		apiKey := fallback.APIKey
-		if active.APIKey != nil {
-			apiKey = strings.TrimSpace(*active.APIKey)
-		}
-		baseURL := strings.TrimSpace(active.BaseURL)
-		if baseURL == "" {
-			baseURL = fallback.BaseURL
-		}
-		nativePersistent := fallback.NativePersistent
-		if fileCfg.NativePersistent != nil {
-			nativePersistent = *fileCfg.NativePersistent
-		}
-		projectRoot := stringValue(fileCfg.ProjectRoot)
-		if projectRoot == "" {
-			projectRoot = fallback.ProjectRoot
-		}
-		chatPath := stringValue(fileCfg.ChatPath)
-		if chatPath == "" {
-			chatPath = fallback.ChatPath
-		}
-		return normalizeRuntimeConfig(runtimeConfig{
-			ProviderName:               active.Name,
-			Provider:                   active.Type.Normalized(),
-			APIKey:                     apiKey,
-			BaseURL:                    baseURL,
-			Model:                      model,
-			ChatPath:                   chatPath,
-			NativePersistent:           nativePersistent,
-			ProjectRoot:                projectRoot,
-			ModelSelectionEnabled:      !allowlistOnly,
-			ContextWindowTokens:        active.ContextWindowTokens,
-			ResponseReserveTokens:      active.ResponseReserveTokens,
-			ModelContextWindowTokens:   cloneModelTokenOverrides(active.ModelContextWindowTokens),
-			ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
-		}), nil
+		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch), nil
 	}
+	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch), nil
+}
 
-	providerName := strings.TrimSpace(fallback.ProviderName)
-	if providerName == "" {
-		providerName = string(defaultProvider)
-	}
-	model := stringValue(fileCfg.Model)
-	if model == "" {
-		model = fallback.Model
-	}
-	chatPath := stringValue(fileCfg.ChatPath)
-	if chatPath == "" {
-		chatPath = fallback.ChatPath
-	}
-	nativePersistent := fallback.NativePersistent
-	if fileCfg.NativePersistent != nil {
-		nativePersistent = *fileCfg.NativePersistent
-	}
-	projectRoot := stringValue(fileCfg.ProjectRoot)
-	if projectRoot == "" {
-		projectRoot = fallback.ProjectRoot
-	}
-	providerType := inferProviderType(providerName, fallback.BaseURL, model)
+func runtimeConfigWithProviders(
+	fileCfg bridgeFileConfig,
+	fallback runtimeConfig,
+	providers []providerConfig,
+	allowlistOnly bool,
+	webSearch webSearchSettings,
+) runtimeConfig {
+	active := resolveActiveProvider(providers, stringValue(fileCfg.ActiveProvider), fallback)
+	return normalizeRuntimeConfig(runtimeConfig{
+		ProviderName:               active.Name,
+		Provider:                   active.Type.Normalized(),
+		APIKey:                     resolveRuntimeAPIKey(active, fallback.APIKey),
+		BaseURL:                    resolveRuntimeBaseURL(active.BaseURL, fallback.BaseURL),
+		Model:                      resolveRuntimeModel(fileCfg, fallback),
+		ChatPath:                   resolveRuntimeChatPath(fileCfg, fallback),
+		NativePersistent:           resolveRuntimeNativePersistent(fileCfg, fallback),
+		ProjectRoot:                resolveRuntimeProjectRoot(fileCfg, fallback),
+		ModelSelectionEnabled:      !allowlistOnly,
+		ContextWindowTokens:        active.ContextWindowTokens,
+		ResponseReserveTokens:      active.ResponseReserveTokens,
+		ModelContextWindowTokens:   cloneModelTokenOverrides(active.ModelContextWindowTokens),
+		ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
+		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
+	})
+}
+
+func runtimeConfigWithoutProviders(
+	fileCfg bridgeFileConfig,
+	fallback runtimeConfig,
+	allowlistOnly bool,
+	webSearch webSearchSettings,
+) runtimeConfig {
+	providerName := resolveRuntimeProviderName(fallback)
 	return normalizeRuntimeConfig(runtimeConfig{
 		ProviderName:               providerName,
-		Provider:                   providerType,
+		Provider:                   inferProviderType(providerName, fallback.BaseURL, resolveRuntimeModel(fileCfg, fallback)),
 		APIKey:                     fallback.APIKey,
 		BaseURL:                    fallback.BaseURL,
-		Model:                      model,
-		ChatPath:                   chatPath,
-		NativePersistent:           nativePersistent,
-		ProjectRoot:                projectRoot,
+		Model:                      resolveRuntimeModel(fileCfg, fallback),
+		ChatPath:                   resolveRuntimeChatPath(fileCfg, fallback),
+		NativePersistent:           resolveRuntimeNativePersistent(fileCfg, fallback),
+		ProjectRoot:                resolveRuntimeProjectRoot(fileCfg, fallback),
 		ModelSelectionEnabled:      !allowlistOnly,
 		ContextWindowTokens:        fallback.ContextWindowTokens,
 		ResponseReserveTokens:      fallback.ResponseReserveTokens,
 		ModelContextWindowTokens:   cloneModelTokenOverrides(fallback.ModelContextWindowTokens),
 		ModelResponseReserveTokens: cloneModelTokenOverrides(fallback.ModelResponseReserveTokens),
-	}), nil
+		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
+	})
+}
+
+func resolveActiveProvider(
+	providers []providerConfig,
+	activeName string,
+	fallback runtimeConfig,
+) providerConfig {
+	name := strings.TrimSpace(activeName)
+	if name == "" {
+		name = activeProviderLabel(fallback)
+	}
+	index := providerIndexByName(providers, name)
+	if index < 0 {
+		return providers[0]
+	}
+	return providers[index]
+}
+
+func resolveRuntimeProviderName(fallback runtimeConfig) string {
+	providerName := strings.TrimSpace(fallback.ProviderName)
+	if providerName == "" {
+		return string(defaultProvider)
+	}
+	return providerName
+}
+
+func resolveRuntimeModel(fileCfg bridgeFileConfig, fallback runtimeConfig) string {
+	model := stringValue(fileCfg.Model)
+	if model == "" {
+		return fallback.Model
+	}
+	return model
+}
+
+func resolveRuntimeChatPath(fileCfg bridgeFileConfig, fallback runtimeConfig) string {
+	chatPath := stringValue(fileCfg.ChatPath)
+	if chatPath == "" {
+		return fallback.ChatPath
+	}
+	return chatPath
+}
+
+func resolveRuntimeProjectRoot(fileCfg bridgeFileConfig, fallback runtimeConfig) string {
+	projectRoot := stringValue(fileCfg.ProjectRoot)
+	if projectRoot == "" {
+		return fallback.ProjectRoot
+	}
+	return projectRoot
+}
+
+func resolveRuntimeNativePersistent(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.NativePersistent != nil {
+		return *fileCfg.NativePersistent
+	}
+	return fallback.NativePersistent
+}
+
+func resolveRuntimeAPIKey(active providerConfig, fallbackAPIKey string) string {
+	if active.APIKey != nil {
+		return strings.TrimSpace(*active.APIKey)
+	}
+	return fallbackAPIKey
+}
+
+func resolveRuntimeBaseURL(baseURL, fallbackBaseURL string) string {
+	if strings.TrimSpace(baseURL) == "" {
+		return fallbackBaseURL
+	}
+	return strings.TrimSpace(baseURL)
 }
 
 // normalizeProvider 统一 provider 大小写与空白字符。
@@ -188,6 +234,8 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	}
 	out.ChatPath = strings.TrimSpace(out.ChatPath)
 	out.ProjectRoot = strings.TrimSpace(out.ProjectRoot)
+	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)
+	out.WebSearchExaAPIKey = strings.TrimSpace(out.WebSearchExaAPIKey)
 	return out
 }
 

@@ -234,6 +234,8 @@ pub struct BridgeConfig {
     pub chat_path: String,
     pub api_key_set: bool,
     pub model_selection_enabled: bool,
+    pub web_search_tavily_api_key_set: bool,
+    pub web_search_exa_api_key_set: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -248,6 +250,10 @@ pub struct ConfigUpdate {
     pub model: Option<String>,
     #[serde(default)]
     pub chat_path: Option<String>,
+    #[serde(default)]
+    pub web_search_tavily_api_key: Option<String>,
+    #[serde(default)]
+    pub web_search_exa_api_key: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
 }

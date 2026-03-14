@@ -3,7 +3,6 @@
 package tools
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -20,6 +19,7 @@ const (
 	defaultWebSearchEndpoint = "https://html.duckduckgo.com/html/"
 	defaultWebSearchBingRSS  = "https://www.bing.com/search"
 	defaultWebSearchTavily   = "https://api.tavily.com/search"
+	defaultWebSearchExa      = "https://api.exa.ai/search"
 	defaultWebSearchResults  = 5
 	maxWebSearchResults      = 10
 	maxWebSearchBodyBytes    = 2 << 20
@@ -32,6 +32,7 @@ const (
 	webSearchFormatDuckDuckGoHTML webSearchFormat = "duckduckgo_html"
 	webSearchFormatBingRSS        webSearchFormat = "bing_rss"
 	webSearchFormatTavilyJSON     webSearchFormat = "tavily_json"
+	webSearchFormatExaJSON        webSearchFormat = "exa_json"
 )
 
 type webSearchProvider struct {
@@ -43,6 +44,7 @@ type webSearchProvider struct {
 
 type WebSearchConfig struct {
 	TavilyAPIKey string
+	ExaAPIKey    string
 }
 
 type WebSearchTool struct {
@@ -54,6 +56,7 @@ type WebSearchTool struct {
 }
 
 type webSearchArgs struct {
+	Provider   string `json:"provider,omitempty"`
 	Query      string `json:"query"`
 	MaxResults int    `json:"max_results,omitempty"`
 }
@@ -69,7 +72,6 @@ func NewWebSearchTool(cfg WebSearchConfig) Tool {
 		},
 		config: cfg,
 	}
-	tool.providers = tool.defaultProviders()
 	return tool
 }
 
@@ -78,13 +80,14 @@ func (WebSearchTool) Name() string {
 }
 
 func (WebSearchTool) Description() string {
-	return "Search the web for current information."
+	return "Search the web for current information. When both Tavily and Exa are configured, set provider explicitly so the agent can choose per query."
 }
 
 func (WebSearchTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
+			"provider":{"type":"string","enum":["tavily","exa"],"description":"Optional API provider to use. Set this explicitly when both Tavily and Exa are configured."},
 			"query":{"type":"string","description":"Search query string."},
 			"max_results":{"type":"integer","minimum":1,"maximum":10,"description":"Maximum number of search results to return (default: 5)."}
 		},
@@ -117,7 +120,7 @@ func (t *WebSearchTool) Execute(ctx context.Context, argsJSON json.RawMessage, _
 		maxResults = maxWebSearchResults
 	}
 
-	results, err := t.search(ctx, query, maxResults)
+	results, err := t.search(ctx, query, maxResults, args.Provider)
 	if err != nil {
 		return "", err
 	}
@@ -130,8 +133,11 @@ func (t *WebSearchTool) Execute(ctx context.Context, argsJSON json.RawMessage, _
 }
 
 // search 请求搜索端点并解析 HTML，返回去重后的结果列表。
-func (t *WebSearchTool) search(ctx context.Context, query string, maxResults int) ([]websearch.Result, error) {
-	providers := t.providersForSearch()
+func (t *WebSearchTool) search(ctx context.Context, query string, maxResults int, providerHint string) ([]websearch.Result, error) {
+	providers, err := t.providersForSearch(providerHint)
+	if err != nil {
+		return nil, err
+	}
 	errors := make([]string, 0, len(providers))
 
 	for index, provider := range providers {
@@ -149,32 +155,6 @@ func (t *WebSearchTool) search(ctx context.Context, query string, maxResults int
 		return nil, fmt.Errorf("no search providers configured")
 	}
 	return nil, fmt.Errorf("web search failed after %d provider(s): %s", len(errors), strings.Join(errors, "; "))
-}
-
-func (t *WebSearchTool) providersForSearch() []webSearchProvider {
-	if len(t.providers) > 0 {
-		return t.providers
-	}
-	endpoint := strings.TrimSpace(t.endpoint)
-	if endpoint == "" {
-		return t.defaultProviders()
-	}
-	return []webSearchProvider{{name: "duckduckgo_html", endpoint: endpoint, format: webSearchFormatDuckDuckGoHTML}}
-}
-
-func (t *WebSearchTool) defaultProviders() []webSearchProvider {
-	if apiKey := strings.TrimSpace(t.config.TavilyAPIKey); apiKey != "" {
-		return []webSearchProvider{{
-			name:     "tavily",
-			endpoint: defaultWebSearchTavily,
-			format:   webSearchFormatTavilyJSON,
-			apiKey:   apiKey,
-		}}
-	}
-	return []webSearchProvider{
-		{name: "duckduckgo_html", endpoint: defaultWebSearchEndpoint, format: webSearchFormatDuckDuckGoHTML},
-		{name: "bing_rss", endpoint: defaultWebSearchBingRSS, format: webSearchFormatBingRSS},
-	}
 }
 
 func (t *WebSearchTool) searchProvider(ctx context.Context, provider webSearchProvider, query string, maxResults int, remainingProviders int) ([]websearch.Result, error) {
@@ -245,59 +225,6 @@ func (t *WebSearchTool) providerTimeout(ctx context.Context, remainingProviders 
 		return maxWebSearchAttemptDelay
 	}
 	return perProvider
-}
-
-func acceptHeaderForProvider(format webSearchFormat) string {
-	if format == webSearchFormatTavilyJSON {
-		return "application/json"
-	}
-	if format == webSearchFormatBingRSS {
-		return "application/rss+xml,application/xml,text/xml;q=0.9,*/*;q=0.8"
-	}
-	return "text/html,application/xhtml+xml"
-}
-
-func parseProviderResults(format webSearchFormat, body string, maxResults int) []websearch.Result {
-	switch format {
-	case webSearchFormatTavilyJSON:
-		return websearch.ParseTavilyJSON(body, maxResults)
-	case webSearchFormatBingRSS:
-		return websearch.ParseRSS(body, maxResults)
-	default:
-		return websearch.ParseHTML(body, maxResults)
-	}
-}
-
-func buildWebSearchRequest(ctx context.Context, provider webSearchProvider, requestURL *url.URL, query string, maxResults int) (*http.Request, error) {
-	if provider.format == webSearchFormatTavilyJSON {
-		payload := map[string]any{
-			"query":        query,
-			"topic":        "general",
-			"search_depth": "basic",
-			"max_results":  maxResults,
-		}
-		body, err := json.Marshal(payload)
-		if err != nil {
-			return nil, err
-		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), bytes.NewReader(body))
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-		if apiKey := strings.TrimSpace(provider.apiKey); apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+apiKey)
-		}
-		return req, nil
-	}
-
-	requestQuery := requestURL.Query()
-	requestQuery.Set("q", query)
-	if provider.format == webSearchFormatBingRSS {
-		requestQuery.Set("format", "rss")
-	}
-	requestURL.RawQuery = requestQuery.Encode()
-	return http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
 }
 
 // pickUserAgent 从候选列表轮换 UA，降低被动限流概率。

@@ -166,6 +166,8 @@ export interface BridgeConfig {
   chat_path: string;
   api_key_set: boolean;
   model_selection_enabled: boolean;
+  web_search_tavily_api_key_set: boolean;
+  web_search_exa_api_key_set: boolean;
 }
 
 export interface ConfigUpdate {
@@ -174,6 +176,8 @@ export interface ConfigUpdate {
   base_url?: string;
   model?: string;
   chat_path?: string;
+  web_search_tavily_api_key?: string;
+  web_search_exa_api_key?: string;
   trace_id?: string;
 }
 

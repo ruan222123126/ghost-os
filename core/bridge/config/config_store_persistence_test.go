@@ -152,3 +152,50 @@ func TestConfigStoreUpdateKeepsSnapshotFallbackInsteadOfReloadingEnv(t *testing.
 		t.Fatalf("unexpected persisted base url: got %q want %q", providers[0].BaseURL, newBaseURL)
 	}
 }
+
+func TestConfigStoreUpdatePersistsWebSearchSettings(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "initial-tavily-key")
+
+	store, err := NewConfigStoreFromEnv()
+	if err != nil {
+		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+	}
+
+	webSearchExaAPIKey := "updated-exa-key"
+	if err := store.Update(configUpdateRequest{
+		WebSearchExaAPIKey: &webSearchExaAPIKey,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	runtime := store.RuntimeConfig()
+	if runtime.WebSearchTavilyAPIKey != "initial-tavily-key" {
+		t.Fatalf("unexpected tavily api key: got %q want %q", runtime.WebSearchTavilyAPIKey, "initial-tavily-key")
+	}
+	if runtime.WebSearchExaAPIKey != webSearchExaAPIKey {
+		t.Fatalf("unexpected exa api key: got %q want %q", runtime.WebSearchExaAPIKey, webSearchExaAPIKey)
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.WebSearchTavilyAPIKey == nil || *fileCfg.WebSearchTavilyAPIKey != "initial-tavily-key" {
+		t.Fatalf("unexpected persisted tavily api key: %#v", fileCfg.WebSearchTavilyAPIKey)
+	}
+	if fileCfg.WebSearchExaAPIKey == nil || *fileCfg.WebSearchExaAPIKey != webSearchExaAPIKey {
+		t.Fatalf("unexpected persisted exa api key: %#v", fileCfg.WebSearchExaAPIKey)
+	}
+
+	snapshot := store.Snapshot()
+	if !snapshot.WebSearchTavilyAPIKeySet {
+		t.Fatal("expected tavily api key flag to stay true")
+	}
+	if !snapshot.WebSearchExaAPIKeySet {
+		t.Fatal("expected exa api key flag to be true")
+	}
+}

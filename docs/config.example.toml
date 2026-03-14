@@ -42,6 +42,8 @@ cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 
 sessions_path = "~/.ghost-os/sessions"
 # project_root = "/abs/path/to/project"
+# web_search_tavily_api_key = "tvly-..."
+# web_search_exa_api_key = "exa-..."
 
 prompts_path = "prompts.yaml"
 # Core prompt assembly (optional)

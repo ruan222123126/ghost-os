@@ -87,6 +87,7 @@ type Config struct {
 	PromptsCoreFiles        []string
 	SessionsPath            string
 	WebSearchTavilyAPIKey   string
+	WebSearchExaAPIKey      string
 	ProMaxIterations        int
 	MaxTurns                int
 }
@@ -105,6 +106,8 @@ type runtimeConfig struct {
 	ResponseReserveTokens      int
 	ModelContextWindowTokens   map[string]int
 	ModelResponseReserveTokens map[string]int
+	WebSearchTavilyAPIKey      string
+	WebSearchExaAPIKey         string
 }
 
 const (

@@ -20,6 +20,9 @@ func initSchema(db *sql.DB) error {
 	if err := ensureLearnedColumn(db, "superseded_by", "TEXT"); err != nil {
 		return err
 	}
+	if err := ensureLearnedColumn(db, "memory_key", "TEXT"); err != nil {
+		return err
+	}
 	if err := createIndexes(db); err != nil {
 		return err
 	}
@@ -43,6 +46,7 @@ func createTables(db *sql.DB) error {
 		scope_id TEXT NOT NULL,
 		source_kind TEXT NOT NULL,
 		memory_type TEXT NOT NULL,
+		memory_key TEXT,
 		content TEXT NOT NULL,
 		summary TEXT NOT NULL,
 		metadata_json TEXT,
@@ -77,6 +81,7 @@ func createIndexes(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_memories_updated_at ON memories(updated_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_memories_last_used_at ON memories(last_used_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_learned_scope_status ON learned_memories(scope_type, scope_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_learned_scope_key_status ON learned_memories(scope_type, scope_id, memory_key, status)`,
 		`CREATE INDEX IF NOT EXISTS idx_learned_updated_at ON learned_memories(updated_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_learned_last_used_at ON learned_memories(last_used_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_learning_events_session_created ON memory_learning_events(session_id, created_at DESC)`,
@@ -100,6 +105,7 @@ func recreateRecallView(db *sql.DB) error {
 			COALESCE(json_extract(metadata_json, '$.scope_id'), '%s') AS scope_id,
 			'%s' AS source_kind,
 			COALESCE(json_extract(metadata_json, '$.memory_type'), '%s') AS memory_type,
+			NULL AS memory_key,
 			content AS content,
 			substr(content, 1, 240) AS summary,
 			metadata_json AS metadata_json,
@@ -116,6 +122,7 @@ func recreateRecallView(db *sql.DB) error {
 			scope_id,
 			source_kind,
 			memory_type,
+			memory_key,
 			content,
 			summary,
 			metadata_json,

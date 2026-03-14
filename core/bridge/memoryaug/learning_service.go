@@ -2,9 +2,7 @@ package memoryaug
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	"ghost-os/bridge/memorystore"
@@ -42,6 +40,10 @@ func (s *learningService) learn(ctx context.Context, input LearnFromTurnInput) e
 	if len(filtered) == 0 {
 		return s.recordSkipped(ctx, input, filtered, "no durable candidates after rule filter")
 	}
+	policy := deriveLearningPolicy(filtered)
+	if !policy.shouldLearn {
+		return s.recordSkipped(ctx, input, filtered, "turn is not a stable preference, workflow, or profile signal")
+	}
 	explicitContext, learnedContext, err := s.loadLearningContext(ctx, input, filtered)
 	if err != nil {
 		return s.recordError(ctx, input, filtered, "", err)
@@ -56,7 +58,7 @@ func (s *learningService) learn(ctx context.Context, input LearnFromTurnInput) e
 	if err != nil {
 		return s.recordError(ctx, input, filtered, "", err)
 	}
-	outcome, err := s.applyCandidates(ctx, input, output.Items, explicitContext, learnedContext)
+	outcome, err := s.applyCandidates(ctx, input, output.Items, explicitContext, learnedContext, policy)
 	if err != nil {
 		return s.recordError(ctx, input, filtered, output.RawJSON, err)
 	}
@@ -109,10 +111,11 @@ func (s *learningService) applyCandidates(
 	candidates []Candidate,
 	explicit []memorystore.MemoryEntry,
 	existing []memorystore.MemoryEntry,
+	policy learningPolicy,
 ) (applyOutcome, error) {
 	outcome := applyOutcome{}
 	for _, candidate := range candidates {
-		if !s.acceptsCandidate(candidate) {
+		if !s.acceptsCandidate(candidate, policy) {
 			outcome.Skipped = append(outcome.Skipped, strings.TrimSpace(candidate.Summary))
 			continue
 		}
@@ -136,6 +139,7 @@ func (s *learningService) applyCandidates(
 			ScopeType:  entry.ScopeType,
 			ScopeID:    entry.ScopeID,
 			MemoryType: entry.MemoryType,
+			MemoryKey:  entry.MemoryKey,
 			Content:    entry.Content,
 			Summary:    entry.Summary,
 			Metadata:   entry.Metadata,
@@ -151,7 +155,11 @@ func (s *learningService) applyCandidates(
 	return outcome, nil
 }
 
-func (s *learningService) acceptsCandidate(candidate Candidate) bool {
+func (s *learningService) acceptsCandidate(candidate Candidate, policy learningPolicy) bool {
+	memoryType := normalizeCandidateMemoryType(candidate.MemoryType)
+	if memoryType == memorystore.MemoryTypeFact && !policy.allowFact {
+		return false
+	}
 	return strings.TrimSpace(candidate.Summary) != "" &&
 		strings.TrimSpace(candidate.Content) != "" &&
 		candidate.Confidence >= s.settings.MinConfidence
@@ -160,6 +168,7 @@ func (s *learningService) acceptsCandidate(candidate Candidate) bool {
 func (s *learningService) normalizeCandidate(candidate Candidate, input LearnFromTurnInput) (memorystore.MemoryEntry, []string) {
 	scopeType := s.resolveCandidateScope(candidate.ScopeType)
 	scopeID := input.UserScope
+	memoryType := normalizeCandidateMemoryType(candidate.MemoryType)
 	if scopeType == memorystore.ScopeTypeSession {
 		scopeID = input.SessionID
 	}
@@ -167,7 +176,8 @@ func (s *learningService) normalizeCandidate(candidate Candidate, input LearnFro
 		ScopeType:  scopeType,
 		ScopeID:    scopeID,
 		SourceKind: memorystore.SourceKindLearned,
-		MemoryType: normalizeCandidateMemoryType(candidate.MemoryType),
+		MemoryType: memoryType,
+		MemoryKey:  resolveCandidateMemoryKey(candidate, memoryType),
 		Summary:    strings.TrimSpace(candidate.Summary),
 		Content:    strings.TrimSpace(candidate.Content),
 		Metadata:   map[string]any{"learn_reason": strings.TrimSpace(candidate.Reason)},
@@ -204,7 +214,13 @@ func (s *learningService) findExactLearnedMatch(candidate memorystore.MemoryEntr
 		if item.ScopeType != candidate.ScopeType || item.ScopeID != candidate.ScopeID {
 			continue
 		}
-		if item.MemoryType != candidate.MemoryType || item.Status != memorystore.MemoryStatusActive {
+		if item.Status != memorystore.MemoryStatusActive {
+			continue
+		}
+		if candidate.MemoryKey != "" && item.MemoryKey == candidate.MemoryKey && memorySimilarity(candidate, item) >= 0.9 {
+			return item.ID
+		}
+		if item.MemoryType != candidate.MemoryType {
 			continue
 		}
 		if memorySimilarity(candidate, item) >= 0.97 {
@@ -222,7 +238,7 @@ func (s *learningService) resolveSupersedes(
 ) ([]string, error) {
 	candidateIDs := normalizeIDs(supersedes)
 	if len(candidateIDs) == 0 {
-		return s.autoSupersedes(candidate, existing), nil
+		return s.autoSupersedes(ctx, candidate, existing)
 	}
 	items, err := s.store.GetLearnedByIDs(ctx, candidateIDs)
 	if err != nil {
@@ -241,7 +257,21 @@ func (s *learningService) resolveSupersedes(
 	return valid, nil
 }
 
-func (s *learningService) autoSupersedes(candidate memorystore.MemoryEntry, existing []memorystore.MemoryEntry) []string {
+func (s *learningService) autoSupersedes(
+	ctx context.Context,
+	candidate memorystore.MemoryEntry,
+	existing []memorystore.MemoryEntry,
+) ([]string, error) {
+	if candidate.MemoryKey != "" {
+		entry, err := s.store.FindActiveLearnedByMemoryKey(ctx, candidate.ScopeType, candidate.ScopeID, candidate.MemoryKey)
+		switch {
+		case err == nil:
+			return []string{entry.ID}, nil
+		case errors.Is(err, memorystore.ErrNotFound):
+		default:
+			return nil, err
+		}
+	}
 	out := make([]string, 0, 1)
 	for _, item := range existing {
 		if item.ScopeType != candidate.ScopeType || item.ScopeID != candidate.ScopeID {
@@ -255,90 +285,5 @@ func (s *learningService) autoSupersedes(candidate memorystore.MemoryEntry, exis
 			break
 		}
 	}
-	return out
-}
-
-func (s *learningService) recordSkipped(ctx context.Context, input LearnFromTurnInput, filtered []TurnMessage, reason string) error {
-	_, err := s.store.CreateLearningEvent(ctx, memorystore.LearningEventInput{
-		SessionID:    input.SessionID,
-		TraceID:      input.TraceID,
-		Status:       "skipped",
-		InputJSON:    mustMarshalJSON(input),
-		FilteredJSON: mustMarshalJSON(filtered),
-		ResultJSON:   mustMarshalJSON(map[string]string{"reason": reason}),
-	})
-	return err
-}
-
-func (s *learningService) recordError(ctx context.Context, input LearnFromTurnInput, filtered []TurnMessage, rawJSON string, err error) error {
-	_, recordErr := s.store.CreateLearningEvent(ctx, memorystore.LearningEventInput{
-		SessionID:      input.SessionID,
-		TraceID:        input.TraceID,
-		Status:         "error",
-		InputJSON:      mustMarshalJSON(input),
-		FilteredJSON:   mustMarshalJSON(filtered),
-		CandidatesJSON: strings.TrimSpace(rawJSON),
-		ErrorText:      err.Error(),
-	})
-	if recordErr != nil {
-		return errors.Join(err, recordErr)
-	}
-	return err
-}
-
-func (s *learningService) recordOutcome(
-	ctx context.Context,
-	input LearnFromTurnInput,
-	filtered []TurnMessage,
-	rawJSON string,
-	outcome applyOutcome,
-) error {
-	status := "success"
-	if len(outcome.Created) == 0 && len(outcome.Refreshed) == 0 {
-		status = "skipped"
-	}
-	_, err := s.store.CreateLearningEvent(ctx, memorystore.LearningEventInput{
-		SessionID:      input.SessionID,
-		TraceID:        input.TraceID,
-		Status:         status,
-		InputJSON:      mustMarshalJSON(input),
-		FilteredJSON:   mustMarshalJSON(filtered),
-		CandidatesJSON: strings.TrimSpace(rawJSON),
-		ResultJSON:     mustMarshalJSON(outcome),
-	})
-	return err
-}
-
-func normalizeLearnInput(input LearnFromTurnInput, settings Settings) LearnFromTurnInput {
-	userScope := strings.TrimSpace(input.UserScope)
-	if userScope == "" {
-		userScope = settings.UserScopeID
-	}
-	return LearnFromTurnInput{
-		SessionID: strings.TrimSpace(input.SessionID),
-		UserScope: userScope,
-		TraceID:   strings.TrimSpace(input.TraceID),
-		Messages:  append([]TurnMessage(nil), input.Messages...),
-	}
-}
-
-func normalizeSettings(settings Settings) Settings {
-	if settings.MaxRecallItems <= 0 {
-		settings.MaxRecallItems = 8
-	}
-	if settings.MinConfidence <= 0 {
-		settings.MinConfidence = 0.7
-	}
-	if strings.TrimSpace(settings.UserScopeID) == "" {
-		settings.UserScopeID = memorystore.DefaultUserScopeID
-	}
-	return settings
-}
-
-func mustMarshalJSON(value any) string {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Sprintf(`{"error":"%s"}`, err)
-	}
-	return string(encoded)
+	return out, nil
 }

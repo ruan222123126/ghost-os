@@ -89,13 +89,15 @@ func (s *ConfigStore) RuntimeConfig() runtimeConfig {
 func (s *ConfigStore) Snapshot() configResponse {
 	snapshot := s.unwrap().Snapshot()
 	return configResponse{
-		Provider:              snapshot.Provider,
-		ProviderType:          snapshot.ProviderType,
-		BaseURL:               snapshot.BaseURL,
-		Model:                 snapshot.Model,
-		ChatPath:              snapshot.ChatPath,
-		APIKeySet:             snapshot.APIKeySet,
-		ModelSelectionEnabled: snapshot.ModelSelectionEnabled,
+		Provider:                 snapshot.Provider,
+		ProviderType:             snapshot.ProviderType,
+		BaseURL:                  snapshot.BaseURL,
+		Model:                    snapshot.Model,
+		ChatPath:                 snapshot.ChatPath,
+		APIKeySet:                snapshot.APIKeySet,
+		ModelSelectionEnabled:    snapshot.ModelSelectionEnabled,
+		WebSearchTavilyAPIKeySet: snapshot.WebSearchTavilyAPIKeySet,
+		WebSearchExaAPIKeySet:    snapshot.WebSearchExaAPIKeySet,
 	}
 }
 
@@ -126,12 +128,14 @@ func (s *ConfigStore) SetActiveProvider(name string) error {
 
 func (s *ConfigStore) Update(req configUpdateRequest) error {
 	return s.unwrap().Update(bridgeconfig.UpdateRequest{
-		Provider: req.Provider,
-		APIKey:   req.APIKey,
-		BaseURL:  req.BaseURL,
-		Model:    req.Model,
-		ChatPath: req.ChatPath,
-		TraceID:  req.TraceID,
+		Provider:              req.Provider,
+		APIKey:                req.APIKey,
+		BaseURL:               req.BaseURL,
+		Model:                 req.Model,
+		ChatPath:              req.ChatPath,
+		WebSearchTavilyAPIKey: req.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:    req.WebSearchExaAPIKey,
+		TraceID:               req.TraceID,
 	})
 }
 

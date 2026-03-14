@@ -36,6 +36,7 @@ type MemoryEntry struct {
 	ScopeID    string         `json:"scope_id"`
 	SourceKind string         `json:"source_kind"`
 	MemoryType string         `json:"memory_type"`
+	MemoryKey  string         `json:"memory_key,omitempty"`
 	Content    string         `json:"content"`
 	Summary    string         `json:"summary"`
 	Metadata   map[string]any `json:"metadata_json,omitempty"`
@@ -50,6 +51,7 @@ type LearnedMemoryInput struct {
 	ScopeType  string
 	ScopeID    string
 	MemoryType string
+	MemoryKey  string
 	Content    string
 	Summary    string
 	Metadata   map[string]any
