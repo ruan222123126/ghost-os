@@ -1,0 +1,183 @@
+{
+  "$defs": {
+    "assistantSessionEndSignal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signal",
+        "message"
+      ],
+      "properties": {
+        "signal": {
+          "type": "string",
+          "const": "END_SESSION"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "x-codegen": {
+        "order": 10,
+        "go": { "name": "assistantSessionEndSignalPayload" },
+        "ts": { "name": "AssistantSessionEndSignal" },
+        "rust": { "name": "AssistantSessionEndSignal" },
+        "kotlin": { "name": "AssistantSessionEndSignal" }
+      }
+    },
+    "agentRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "description": "Optional. Omit/empty to start a new session. If provided, must refer to an existing session; otherwise the server returns 404 (omit session_id to start a new session)."
+        },
+        "trace_id": {
+          "type": "string",
+          "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."
+        }
+      },
+      "x-codegen": {
+        "order": 20,
+        "go": { "name": "agentRequest" },
+        "ts": { "name": "AgentRequest" },
+        "rust": { "name": "AgentRequest" },
+        "kotlin": { "name": "AgentRequest" }
+      }
+    },
+    "agentResponsePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "message",
+        "session_id",
+        "session_ended"
+      ],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_ended": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "pro",
+            "prox"
+          ]
+        },
+        "iteration_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stopped_by": {
+          "type": "string"
+        },
+        "final_change_log": {
+          "type": "string"
+        },
+        "iteration_summary": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "iteration",
+              "did",
+              "remaining"
+            ],
+            "properties": {
+              "iteration": { "type": "integer", "minimum": 1 },
+              "did": { "type": "string", "minLength": 1 },
+              "remaining": { "type": "string", "minLength": 1 },
+              "completed": { "type": "boolean" },
+              "trace_id": { "type": "string" },
+              "recorded_at": { "type": "string" },
+              "final_change_log": { "type": "string" }
+            }
+          }
+        },
+        "session_end": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/assistantSessionEndSignal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "session_ended"
+            ],
+            "properties": {
+              "session_ended": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "session_end"
+            ],
+            "properties": {
+              "session_end": {
+                "$ref": "#/$defs/assistantSessionEndSignal"
+              }
+            }
+          }
+        }
+      ],
+      "x-codegen": {
+        "order": 40,
+        "go": { "name": "agentResponse" },
+        "ts": { "name": "AgentSendSuccessResponse" },
+        "rust": { "name": "AgentSendSuccessResponse" },
+        "kotlin": { "name": "AgentSendSuccessResponse" }
+      }
+    },
+    "agentSendResultPayload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/agentResponsePayload"
+        },
+        {
+          "$ref": "./agent_human.json#/$defs/agentAwaitingHumanPayload"
+        }
+      ],
+      "x-codegen": {
+        "order": 90,
+        "ts": { "name": "AgentSendResponse" },
+        "rust": {
+          "name": "AgentPayload",
+          "variants": {
+            "agentAwaitingHumanPayload": "AwaitingHuman",
+            "agentResponsePayload": "Success"
+          }
+        },
+        "kotlin": {
+          "name": "AgentSendResponse",
+          "kind": "sealed_interface"
+        }
+      }
+    }
+  }
+}

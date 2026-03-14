@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from contract_codegen.emitters.go import render as render_go
+from contract_codegen.emitters.kotlin import render as render_kotlin
+from contract_codegen.emitters.rust import render as render_rust
+from contract_codegen.emitters.ts import render as render_ts
+from contract_codegen.schema_loader import load_schema
+
+
+class EmittersTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.schema = load_schema(ROOT / "schema.json")
+
+    def test_go_renderer_uses_schema_metadata(self) -> None:
+        rendered = render_go(self.schema, "orchestration")
+
+        self.assertIn('const busAssistantSessionEndSignal = "END_SESSION"', rendered)
+        self.assertIn("type askHumanOption struct {", rendered)
+        self.assertLess(rendered.index("type askHumanOption struct {"), rendered.index("type agentResponse struct {"))
+
+    def test_ts_renderer_emits_union_and_cross_file_refs(self) -> None:
+        rendered = render_ts(self.schema)
+
+        self.assertIn("export interface SessionHumanInteraction {", rendered)
+        self.assertIn("options?: AskHumanOption[];", rendered)
+        self.assertIn(
+            "export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;",
+            rendered,
+        )
+
+    def test_rust_and_kotlin_render_union_variants(self) -> None:
+        rust = render_rust(self.schema)
+        kotlin = render_kotlin(self.schema)
+
+        self.assertIn("pub enum AgentPayload {", rust)
+        self.assertIn("AwaitingHuman(AgentSendAwaitingHumanResponse)", rust)
+        self.assertIn("sealed interface AgentSendResponse", kotlin)
+        self.assertIn(") : AgentSendResponse", kotlin)
+
+
+if __name__ == "__main__":
+    unittest.main()

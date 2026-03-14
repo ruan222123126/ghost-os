@@ -1,0 +1,165 @@
+{
+  "$defs": {
+    "sessionImageContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "url": { "type": "string" },
+        "mime_type": { "type": "string" },
+        "width": { "type": "integer" },
+        "height": { "type": "integer" },
+        "sha256": { "type": "string" },
+        "bytes": { "type": "integer" }
+      },
+      "x-codegen": {
+        "order": 100,
+        "go": { "name": "sessionImageContent" },
+        "ts": { "name": "SessionImageContent" },
+        "rust": { "name": "SessionImageContent" },
+        "kotlin": { "name": "SessionImageContent" }
+      }
+    },
+    "sessionFileContent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "name",
+        "download_url"
+      ],
+      "properties": {
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "mime_type": { "type": "string" },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string" },
+        "download_url": { "type": "string", "minLength": 1 },
+        "source_path": { "type": "string" },
+        "note": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 110,
+        "go": { "name": "sessionFileContent" },
+        "ts": { "name": "SessionFileContent" },
+        "rust": { "name": "SessionFileContent" },
+        "kotlin": { "name": "SessionFileContent" }
+      }
+    },
+    "sessionContentPart": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "image": {
+          "oneOf": [
+            { "$ref": "#/$defs/sessionImageContent" },
+            { "type": "null" }
+          ]
+        },
+        "file": {
+          "oneOf": [
+            { "$ref": "#/$defs/sessionFileContent" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "x-codegen": {
+        "order": 120,
+        "go": { "name": "sessionContentPart" },
+        "ts": { "name": "SessionContentPart" },
+        "rust": { "name": "SessionContentPart" },
+        "kotlin": { "name": "SessionContentPart" }
+      }
+    },
+    "sessionToolCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "arguments"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "x-codegen": {
+        "order": 130,
+        "go": { "name": "sessionToolCall" },
+        "ts": { "name": "SessionToolCall" },
+        "rust": { "name": "SessionToolCall" },
+        "kotlin": { "name": "SessionToolCall" }
+      }
+    },
+    "sessionToolResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "tool"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "success",
+            "error"
+          ]
+        },
+        "tool": { "type": "string", "minLength": 1 },
+        "trace_id": { "type": "string" },
+        "output": { "type": "string" },
+        "error": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 140,
+        "go": { "name": "sessionToolResult" },
+        "ts": { "name": "SessionToolResult" },
+        "rust": { "name": "SessionToolResult" },
+        "kotlin": { "name": "SessionToolResult" }
+      }
+    },
+    "sessionHumanInteraction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question_id",
+        "prompt"
+      ],
+      "properties": {
+        "question_id": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "selection_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "./agent_human.json#/$defs/askHumanOption"
+          }
+        },
+        "answer": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 150,
+        "go": { "name": "sessionHumanInteraction" },
+        "ts": { "name": "SessionHumanInteraction" },
+        "rust": { "name": "SessionHumanInteraction" },
+        "kotlin": { "name": "SessionHumanInteraction" }
+      }
+    }
+  }
+}

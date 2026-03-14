@@ -1,0 +1,110 @@
+{
+  "$defs": {
+    "sessionMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "system",
+            "user",
+            "assistant",
+            "tool"
+          ]
+        },
+        "text": { "type": "string" },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "./session_content.json#/$defs/sessionContentPart"
+          }
+        },
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "$ref": "./session_content.json#/$defs/sessionToolCall"
+          }
+        },
+        "tool_result": {
+          "oneOf": [
+            { "$ref": "./session_content.json#/$defs/sessionToolResult" },
+            { "type": "null" }
+          ]
+        },
+        "human_interaction": {
+          "oneOf": [
+            { "$ref": "./session_content.json#/$defs/sessionHumanInteraction" },
+            { "type": "null" }
+          ]
+        },
+        "tool_call_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 160,
+        "go": { "name": "sessionMessage" },
+        "ts": { "name": "SessionMessage" },
+        "rust": { "name": "SessionMessage" },
+        "kotlin": { "name": "SessionMessage" }
+      }
+    },
+    "sessionMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "created_at",
+        "updated_at",
+        "message_count",
+        "token_count"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "token_count": { "type": "integer", "minimum": 0 }
+      },
+      "x-codegen": {
+        "order": 170,
+        "go": { "name": "sessionMetadata" },
+        "ts": { "name": "SessionMetadata" },
+        "rust": { "name": "SessionMetadata" },
+        "kotlin": { "name": "SessionMetadata" }
+      }
+    },
+    "sessionDetail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "messages",
+        "created_at",
+        "updated_at",
+        "token_count"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "messages": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionMessage"
+          }
+        },
+        "created_at": { "type": "string", "minLength": 1 },
+        "updated_at": { "type": "string", "minLength": 1 },
+        "token_count": { "type": "integer", "minimum": 0 }
+      },
+      "x-codegen": {
+        "order": 180,
+        "go": { "name": "sessionDetail" },
+        "ts": { "name": "SessionDetail" },
+        "rust": { "name": "SessionDetail" },
+        "kotlin": { "name": "SessionDetail" }
+      }
+    }
+  }
+}

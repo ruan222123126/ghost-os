@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "providerConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "base_url",
+        "api_key_set"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "./base.json#/$defs/providerType" },
+        "base_url": { "type": "string", "minLength": 1 },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "response_reserve_tokens": { "type": "integer", "minimum": 1 },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "api_key_set": { "type": "boolean" }
+      },
+      "x-codegen": {
+        "order": 210,
+        "go": { "name": "providerConfigResponse" },
+        "ts": { "name": "ProviderConfig" },
+        "rust": { "name": "ProviderConfig" },
+        "kotlin": { "name": "ProviderConfig" }
+      }
+    },
+    "providerConfigInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "./base.json#/$defs/providerType" },
+        "base_url": {
+          "type": "string",
+          "minLength": 1,
+          "x-go-pointer": true
+        },
+        "api_key": { "type": "string", "x-go-pointer": true },
+        "models": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "response_reserve_tokens": { "type": "integer", "minimum": 1 },
+        "model_context_window_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "model_response_reserve_tokens": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 220,
+        "go": { "name": "providerConfigInput" },
+        "ts": { "name": "ProviderConfigInput" },
+        "rust": { "name": "ProviderConfigInput" },
+        "kotlin": { "name": "ProviderConfigInput" }
+      }
+    },
+    "providerListResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providers",
+        "active_provider"
+      ],
+      "properties": {
+        "providers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerConfig"
+          }
+        },
+        "active_provider": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 230,
+        "go": { "name": "providerListResponse" },
+        "ts": { "name": "ProviderListResponse" },
+        "rust": { "name": "ProviderListResponse" },
+        "kotlin": { "name": "ProviderListResponse" }
+      }
+    }
+  }
+}

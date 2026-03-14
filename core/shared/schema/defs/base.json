@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "action": {
+      "type": "string",
+      "enum": [
+        "PING",
+        "AGENT_SEND",
+        "AGENT_STOP",
+        "HUMAN_RESPONSE",
+        "CONFIG_GET",
+        "CONFIG_UPDATE",
+        "TASK_CREATE",
+        "TASK_LIST",
+        "TASK_SYSTEM_LIST",
+        "TASK_GET",
+        "TASK_UPDATE",
+        "TASK_RUN_NOW",
+        "TASK_LOGS",
+        "TASK_DELETE",
+        "LIST_FILES",
+        "READ_FILE",
+        "SEARCH_FILES",
+        "APPLY_DIFF",
+        "EXPORT_FILE",
+        "BASH_EXEC",
+        "SCRIPT_EXEC",
+        "SCREEN_CAPTURE",
+        "IMAGE_CROP",
+        "OCR_IMAGE",
+        "TEXT_INPUT",
+        "MOUSE_CLICK",
+        "TEMPLATE_MATCH_IMAGE"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "success",
+        "error"
+      ]
+    },
+    "requestEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "params",
+        "trace_id"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/action"
+        },
+        "params": {
+          "type": "object"
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "payload",
+        "error"
+      ],
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "error": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "providerType": {
+      "type": "string",
+      "enum": [
+        "openai",
+        "anthropic",
+        "custom",
+        "codex"
+      ]
+    }
+  }
+}

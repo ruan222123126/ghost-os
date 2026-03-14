@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "bridgeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "provider_type",
+        "base_url",
+        "model",
+        "chat_path",
+        "api_key_set",
+        "model_selection_enabled"
+      ],
+      "properties": {
+        "provider": { "type": "string" },
+        "provider_type": { "$ref": "./base.json#/$defs/providerType" },
+        "base_url": { "type": "string" },
+        "model": { "type": "string" },
+        "chat_path": { "type": "string" },
+        "api_key_set": { "type": "boolean" },
+        "model_selection_enabled": { "type": "boolean" }
+      },
+      "x-codegen": {
+        "order": 190,
+        "go": { "name": "configResponse" },
+        "ts": { "name": "BridgeConfig" },
+        "rust": { "name": "BridgeConfig" },
+        "kotlin": { "name": "BridgeConfig" }
+      }
+    },
+    "configUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string", "x-go-pointer": true },
+        "api_key": { "type": "string", "x-go-pointer": true },
+        "base_url": { "type": "string", "x-go-pointer": true },
+        "model": { "type": "string", "x-go-pointer": true },
+        "chat_path": { "type": "string", "x-go-pointer": true },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 200,
+        "go": { "name": "configUpdateRequest" },
+        "ts": { "name": "ConfigUpdate" },
+        "rust": { "name": "ConfigUpdate" },
+        "kotlin": { "name": "ConfigUpdate" }
+      }
+    },
+    "setActiveProviderRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 240,
+        "go": { "name": "setActiveProviderRequest" },
+        "ts": { "name": "SetActiveProviderRequest" },
+        "rust": { "name": "SetActiveProviderRequest" },
+        "kotlin": { "name": "SetActiveProviderRequest" }
+      }
+    }
+  }
+}
