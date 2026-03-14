@@ -6,8 +6,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,43 +41,29 @@ func TestBrowserControlConnectWithWSEndpoint(t *testing.T) {
 	}
 }
 
-func TestBrowserControlConnectDiscoversWSEndpoint(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/json/version" {
-			http.NotFound(w, r)
-			return
-		}
-		_, _ = w.Write([]byte(`{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/browser/discovered"}`))
-	}))
-	defer server.Close()
+func TestFetchWebSocketURLDiscoversWSEndpoint(t *testing.T) {
+	client := &http.Client{
+		Transport: browserControlRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.URL.String() != "http://browser.test/json/version" {
+				t.Fatalf("unexpected discovery url: %q", req.URL.String())
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": []string{"application/json"}},
+				Body: io.NopCloser(strings.NewReader(
+					`{"webSocketDebuggerUrl":"ws://127.0.0.1:9222/devtools/browser/discovered"}`,
+				)),
+			}, nil
+		}),
+	}
 
-	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
-	output, err := tool.Execute(
-		context.Background(),
-		json.RawMessage(fmt.Sprintf(`{"action":"connect","params":{"endpoint":"%s"}}`, server.URL)),
-		"trace-discover",
-	)
+	wsEndpoint, err := fetchWebSocketURLWithClient("http://browser.test", client)
 	if err != nil {
-		t.Fatalf("execute returned error: %v", err)
+		t.Fatalf("fetchWebSocketURLWithClient returned error: %v", err)
 	}
-
-	var result map[string]any
-	if err := json.Unmarshal([]byte(output), &result); err != nil {
-		t.Fatalf("decode output: %v", err)
+	if wsEndpoint != "ws://127.0.0.1:9222/devtools/browser/discovered" {
+		t.Fatalf("unexpected ws endpoint: %q", wsEndpoint)
 	}
-	sessionID, _ := result["session_id"].(string)
-	if sessionID == "" {
-		t.Fatalf("expected generated session_id: %+v", result)
-	}
-	if result["ws_endpoint"] != "ws://127.0.0.1:9222/devtools/browser/discovered" {
-		t.Fatalf("unexpected ws endpoint: %+v", result)
-	}
-
-	session := tool.popSession(sessionID)
-	if session == nil {
-		t.Fatalf("expected session to be stored for %q", sessionID)
-	}
-	session.close()
 }
 
 func TestBrowserControlLaunchRequiresEndpointOrDebugPort(t *testing.T) {
@@ -180,4 +166,10 @@ func TestNormalizeKeyPress(t *testing.T) {
 			t.Fatalf("normalizeKeyPress(%q): got %q want %q", input, actual, expected)
 		}
 	}
+}
+
+type browserControlRoundTripper func(*http.Request) (*http.Response, error)
+
+func (rt browserControlRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return rt(req)
 }

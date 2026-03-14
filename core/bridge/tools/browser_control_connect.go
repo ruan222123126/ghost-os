@@ -122,11 +122,17 @@ func waitForWSEndpoint(endpoint string, timeout time.Duration) (string, error) {
 }
 
 func fetchWebSocketURL(base string, timeout time.Duration) (string, error) {
+	return fetchWebSocketURLWithClient(base, &http.Client{Timeout: httpClientTimeout(timeout)})
+}
+
+func fetchWebSocketURLWithClient(base string, client *http.Client) (string, error) {
+	if client == nil {
+		return "", fmt.Errorf("http client is required")
+	}
 	url := strings.TrimRight(base, "/")
 	if !strings.HasSuffix(url, "/json/version") {
 		url += "/json/version"
 	}
-	client := &http.Client{Timeout: httpClientTimeout(timeout)}
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", fmt.Errorf("fetch %s failed: %w", url, err)
