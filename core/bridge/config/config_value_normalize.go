@@ -1,0 +1,58 @@
+package config
+
+import (
+	"fmt"
+	"strings"
+)
+
+func normalizeProviderHeaders(raw map[string]string) (map[string]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			return nil, fmt.Errorf("invalid provider_headers: header key cannot be empty")
+		}
+		out[trimmedKey] = strings.TrimSpace(value)
+	}
+	return out, nil
+}
+
+func normalizeOrigins(origins []string) []string {
+	trimmed := make([]string, 0, len(origins))
+	for _, origin := range origins {
+		value := strings.TrimSpace(origin)
+		if value == "" {
+			continue
+		}
+		trimmed = append(trimmed, value)
+	}
+	return trimmed
+}
+
+func parseOriginsCSV(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	return normalizeOrigins(strings.Split(raw, ","))
+}
+
+func parseStringCSV(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	values := make([]string, 0)
+	for _, item := range strings.Split(raw, ",") {
+		if value := strings.TrimSpace(item); value != "" {
+			values = append(values, value)
+		}
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}

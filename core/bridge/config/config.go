@@ -55,6 +55,11 @@ type ToolSelectorConfig struct {
 	Blocklist     []string
 }
 
+type ToolSearchConfig struct {
+	Enabled   bool
+	IdleTurns int
+}
+
 type MemoryAugmentationConfig struct {
 	Enabled             bool
 	LearningEnabled     bool
@@ -73,6 +78,7 @@ type Config struct {
 	RSS                     RSSConfig
 	Worker                  WorkerConfig
 	ToolSelector            ToolSelectorConfig
+	ToolSearch              ToolSearchConfig
 	MemoryAugmentation      MemoryAugmentationConfig
 	NativePersistent        bool
 	NativeBinaryPath        string
@@ -137,6 +143,7 @@ const (
 	defaultToolSelectorTimeoutMS  = 1500
 	defaultToolSelectorConfidence = 0.75
 	defaultToolSelectorRecentMsgs = 6
+	defaultToolSearchIdleTurns    = 3
 	defaultMemoryRecallItems      = 8
 	defaultMemoryMinConfidence    = 0.7
 	defaultMemoryUserScopeID      = "local-user"

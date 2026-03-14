@@ -35,6 +35,7 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 		RSS:                     buildRSSConfig(),
 		Worker:                  buildWorkerConfig(fileCfg),
 		ToolSelector:            buildToolSelectorConfig(fileCfg),
+		ToolSearch:              buildToolSearchConfig(fileCfg),
 		MemoryAugmentation:      buildMemoryAugmentationConfig(fileCfg),
 		NativePersistent:        runtime.NativePersistent,
 		NativeBinaryPath:        nativeBinaryPathFromEnv(),
@@ -123,6 +124,13 @@ func buildToolSelectorConfig(fileCfg bridgeFileConfig) ToolSelectorConfig {
 	}
 }
 
+func buildToolSearchConfig(fileCfg bridgeFileConfig) ToolSearchConfig {
+	return ToolSearchConfig{
+		Enabled:   boolOrEnv(fileCfg.ToolSearchEnabled, "GHOST_TOOL_SEARCH_ENABLED", false),
+		IdleTurns: intOrEnv(fileCfg.ToolSearchIdleTurns, "GHOST_TOOL_SEARCH_IDLE_TURNS", defaultToolSearchIdleTurns),
+	}
+}
+
 func buildMemoryAugmentationConfig(fileCfg bridgeFileConfig) MemoryAugmentationConfig {
 	return MemoryAugmentationConfig{
 		Enabled:             boolOrEnv(fileCfg.MemoryAugmentationEnabled, "GHOST_MEMORY_AUGMENTATION_ENABLED", true),
@@ -146,6 +154,9 @@ func finalizeLoadedConfig(cfg Config) (Config, error) {
 	cfg.ToolSelector.Blocklist = blocklist
 	if cfg.ToolSelector.AllowlistOnly && len(cfg.ToolSelector.Allowlist) == 0 {
 		return Config{}, errors.New("tool_allowlist_only requires a non-empty tool_allowlist")
+	}
+	if cfg.ToolSearch.IdleTurns <= 0 {
+		return Config{}, errors.New("tool_search_idle_turns must be > 0")
 	}
 	if !cfg.MemoryAugmentation.SessionScopeEnabled && !cfg.MemoryAugmentation.UserScopeEnabled {
 		cfg.MemoryAugmentation.RecallEnabled = false

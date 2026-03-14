@@ -18,11 +18,20 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 
 	s := NewSession("system")
 	s.ID = "session-roundtrip"
+	s.TurnIndex = 3
 	s.ConversationState = llm.ConversationState{
 		Provider:           llm.ProviderCodex,
 		BaseURL:            "https://api.openai.com/v1",
 		Model:              "codex-mini-latest",
 		PreviousResponseID: "resp_123",
+	}
+	s.DynamicToolLoads = map[string]DynamicToolLoad{
+		"web_search": {
+			ToolName:       "web_search",
+			LoadedBy:       "tool_search",
+			LoadedAtTurn:   1,
+			LastCalledTurn: 2,
+		},
 	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
 	s.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "hi"})
@@ -43,6 +52,12 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.ConversationState, s.ConversationState) {
 		t.Fatalf("conversation state mismatch: got=%+v want=%+v", loaded.ConversationState, s.ConversationState)
+	}
+	if loaded.TurnIndex != s.TurnIndex {
+		t.Fatalf("turn index mismatch: got=%d want=%d", loaded.TurnIndex, s.TurnIndex)
+	}
+	if !reflect.DeepEqual(loaded.DynamicToolLoads, s.DynamicToolLoads) {
+		t.Fatalf("dynamic tool loads mismatch: got=%+v want=%+v", loaded.DynamicToolLoads, s.DynamicToolLoads)
 	}
 	if loaded.TokenCount <= 0 {
 		t.Fatalf("unexpected token count: got %d want > 0", loaded.TokenCount)

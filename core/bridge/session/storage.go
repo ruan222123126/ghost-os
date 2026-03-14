@@ -1,14 +1,11 @@
 package session
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -20,8 +17,6 @@ var (
 	ErrSessionCorrupted = errors.New("session corrupted")
 	ErrInvalidSessionID = errors.New("invalid session id")
 )
-
-var sessionIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$`)
 
 // Store 提供会话文件持久化能力。
 type Store struct {
@@ -69,26 +64,7 @@ func (s *Store) Load(sessionID string) (*Session, error) {
 		return nil, fmt.Errorf("read session %q: %w", strings.TrimSpace(sessionID), err)
 	}
 
-	var loaded Session
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		return nil, fmt.Errorf("%w: id=%s: %v", ErrSessionCorrupted, strings.TrimSpace(sessionID), err)
-	}
-
-	if loaded.ID == "" {
-		loaded.ID = strings.TrimSpace(sessionID)
-	}
-	if strings.TrimSpace(loaded.ID) != strings.TrimSpace(sessionID) {
-		return nil, fmt.Errorf("%w: id mismatch file=%q payload=%q", ErrSessionCorrupted, strings.TrimSpace(sessionID), loaded.ID)
-	}
-	if loaded.CreatedAt.IsZero() {
-		loaded.CreatedAt = time.Now().UTC()
-	}
-	if loaded.UpdatedAt.IsZero() {
-		loaded.UpdatedAt = loaded.CreatedAt
-	}
-	loaded.RecalculateTokenCount()
-
-	return &loaded, nil
+	return decodeStoredSession(strings.TrimSpace(sessionID), data, time.Now().UTC())
 }
 
 // Save 将会话原子写入磁盘，防止部分写入导致文件损坏。
@@ -112,11 +88,10 @@ func (s *Store) Save(session *Session) error {
 	session.UpdatedAt = now
 	session.RecalculateTokenCount()
 
-	data, err := json.MarshalIndent(session, "", "  ")
+	data, err := encodeStoredSession(session)
 	if err != nil {
-		return fmt.Errorf("marshal session %q: %w", session.ID, err)
+		return fmt.Errorf("encode session %q: %w", session.ID, err)
 	}
-	data = append(data, '\n')
 
 	tempPath := fmt.Sprintf("%s.tmp-%d", path, time.Now().UnixNano())
 	if err := os.WriteFile(tempPath, data, 0o600); err != nil {
@@ -255,84 +230,4 @@ type sessionMetadataEnvelope struct {
 	CreatedAt  time.Time  `json:"created_at"`
 	UpdatedAt  time.Time  `json:"updated_at"`
 	TokenCount int        `json:"token_count"`
-}
-
-func decodeSessionMetadata(expectedID string, data []byte, now time.Time) (SessionMetadata, error) {
-	var envelope sessionMetadataEnvelope
-	if err := json.Unmarshal(data, &envelope); err != nil {
-		return SessionMetadata{}, fmt.Errorf("%w: id=%s: %v", ErrSessionCorrupted, expectedID, err)
-	}
-
-	loadedID := strings.TrimSpace(envelope.ID)
-	if loadedID == "" {
-		loadedID = expectedID
-	}
-	if loadedID != expectedID {
-		return SessionMetadata{}, fmt.Errorf("%w: id mismatch file=%q payload=%q", ErrSessionCorrupted, expectedID, envelope.ID)
-	}
-
-	createdAt := envelope.CreatedAt.UTC()
-	if createdAt.IsZero() {
-		createdAt = now
-	}
-	updatedAt := envelope.UpdatedAt.UTC()
-	if updatedAt.IsZero() {
-		updatedAt = createdAt
-	}
-
-	return SessionMetadata{
-		ID:           expectedID,
-		CreatedAt:    createdAt,
-		UpdatedAt:    updatedAt,
-		MessageCount: len(envelope.Messages),
-		TokenCount:   envelope.TokenCount,
-	}, nil
-}
-
-func (s *Store) pathForSession(sessionID string) (string, error) {
-	id := strings.TrimSpace(sessionID)
-	if !isValidSessionID(id) {
-		return "", fmt.Errorf("%w: %q", ErrInvalidSessionID, sessionID)
-	}
-	return filepath.Join(s.baseDir, id+".json"), nil
-}
-
-func resolveBaseDir(pathValue string) (string, error) {
-	trimmed := strings.TrimSpace(pathValue)
-	if trimmed == "" {
-		return "", errors.New("sessions path is empty")
-	}
-
-	if strings.HasPrefix(trimmed, "~/") || trimmed == "~" {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("resolve user home directory: %w", err)
-		}
-
-		if trimmed == "~" {
-			return homeDir, nil
-		}
-		return filepath.Join(homeDir, strings.TrimPrefix(trimmed, "~/")), nil
-	}
-
-	return filepath.Clean(trimmed), nil
-}
-
-func isValidSessionID(sessionID string) bool {
-	return sessionIDPattern.MatchString(strings.TrimSpace(sessionID))
-}
-
-func replaceFileAtomic(tempPath, path string) error {
-	if err := os.Rename(tempPath, path); err != nil {
-		if runtime.GOOS != "windows" {
-			return err
-		}
-		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			return fmt.Errorf("remove existing session file %q: %w", path, removeErr)
-		}
-		if renameErr := os.Rename(tempPath, path); renameErr != nil {
-			return renameErr
-		}
-	}
-	return nil
 }
