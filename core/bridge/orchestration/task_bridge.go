@@ -47,10 +47,6 @@ func NewTaskScheduler(store *TaskStore, service *bridgeService) *TaskScheduler {
 	return bridgeTasks.NewTaskScheduler(store, taskExecutorAdapter{service: service})
 }
 
-func normalizeScheduledTask(task *ScheduledTask) error {
-	return bridgeTasks.NormalizeScheduledTask(task, validateTaskDefinition)
-}
-
 func normalizeTaskKind(kind string) string {
 	return bridgeTasks.NormalizeKind(kind)
 }
@@ -61,10 +57,6 @@ func cloneTaskActionParams(input map[string]any) map[string]any {
 
 func decodeActionParamsMap[T any](input map[string]any) (T, error) {
 	return bridgeTasks.DecodeParamsMap[T](input)
-}
-
-func newTaskRunID() string {
-	return bridgeTasks.NewRunID()
 }
 
 func nextTaskRunAt(task ScheduledTask, now time.Time) (time.Time, error) {

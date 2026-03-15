@@ -51,14 +51,6 @@ func normalizeConfiguredPathList(values []string) []string {
 	return normalized
 }
 
-func cloneStringPointer(raw *string) *string {
-	if raw == nil {
-		return nil
-	}
-	value := strings.TrimSpace(*raw)
-	return &value
-}
-
 func cloneOptionalStringPointer(raw *string) *string {
 	if raw == nil {
 		return nil

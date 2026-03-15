@@ -132,19 +132,6 @@ func textTerms(raw string) []string {
 	return strings.Fields(normalized)
 }
 
-func normalizeCandidateMemoryType(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case memorystore.MemoryTypeProfile:
-		return memorystore.MemoryTypeProfile
-	case memorystore.MemoryTypePreference:
-		return memorystore.MemoryTypePreference
-	case memorystore.MemoryTypeWorkflow:
-		return memorystore.MemoryTypeWorkflow
-	default:
-		return memorystore.MemoryTypeFact
-	}
-}
-
 func normalizeIDs(values []string) []string {
 	out := make([]string, 0, len(values))
 	seen := make(map[string]bool, len(values))

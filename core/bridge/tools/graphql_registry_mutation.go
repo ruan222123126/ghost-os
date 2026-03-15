@@ -11,13 +11,6 @@ func (r *GraphQLSourceRegistry) HasMutationPolicies() bool {
 	return r != nil && r.inner != nil && r.inner.HasMutationPolicies()
 }
 
-func (r *GraphQLSourceRegistry) sourceHasMutationPolicies(sourceName string) bool {
-	if r == nil || r.inner == nil {
-		return false
-	}
-	return r.inner.SourceHasMutationPolicies(strings.TrimSpace(sourceName))
-}
-
 func (r *GraphQLSourceRegistry) resolveMutationPolicy(
 	sourceName string,
 	domainName string,

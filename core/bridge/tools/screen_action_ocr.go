@@ -241,14 +241,3 @@ func compactStrings(items []string) []string {
 func parseCacheTTL(params map[string]any) time.Duration {
 	return toolparams.DurationMillis(params, "cache_ttl_ms", defaultScreenOCRCacheTTL)
 }
-
-func cloneParams(params map[string]any) map[string]any {
-	if len(params) == 0 {
-		return map[string]any{}
-	}
-	cloned := make(map[string]any, len(params))
-	for key, value := range params {
-		cloned[key] = value
-	}
-	return cloned
-}

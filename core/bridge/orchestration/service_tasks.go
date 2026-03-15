@@ -28,14 +28,6 @@ func (s *bridgeService) requireTaskScheduler() (*TaskScheduler, int, error) {
 	return s.taskScheduler, http.StatusOK, nil
 }
 
-func requireTaskID(id string) (string, int, error) {
-	trimmed, err := normalizeTaskID(id)
-	if err != nil {
-		return "", http.StatusBadRequest, err
-	}
-	return trimmed, http.StatusOK, nil
-}
-
 func mapTaskError(err error) int {
 	switch {
 	case errors.Is(err, ErrInvalidTaskID), errors.Is(err, ErrInvalidTaskConfig), errors.Is(err, session.ErrInvalidSessionID):
