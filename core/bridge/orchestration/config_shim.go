@@ -166,6 +166,17 @@ func cloneStringMap(raw map[string]string) map[string]string {
 	return out
 }
 
+func cloneModelTokenOverrides(raw map[string]int) map[string]int {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(raw))
+	for key, value := range raw {
+		out[key] = value
+	}
+	return out
+}
+
 func graphQLSourceResponses(raw []bridgeconfig.GraphQLSourceSnapshot) []graphqlSourceResponse {
 	if len(raw) == 0 {
 		return nil
