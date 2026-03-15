@@ -1,7 +1,7 @@
 use anyhow::Result;
 
 use crate::client::BridgeClient;
-use crate::types::{ConfigResponse, ConfigUpdate};
+use crate::types::{BridgeConfig, ConfigUpdate};
 
 use super::clear::clear_screen;
 use super::parse::{CliCommand, ConfigMutation, ResettableValue};
@@ -29,7 +29,7 @@ impl<'a> CommandContext<'a> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CommandExecution {
     pub(crate) action: CommandAction,
     pub(crate) output: CommandOutput,
@@ -51,11 +51,11 @@ impl CommandExecution {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) enum CommandOutput {
     None,
     Help,
-    ConfigSnapshot(ConfigResponse),
+    ConfigSnapshot(BridgeConfig),
     SessionStatus(SessionStatus),
     SessionCleared,
     ConfigUpdated(ConfigUpdateFeedback),
@@ -68,10 +68,10 @@ pub(crate) enum SessionStatus {
     Inactive,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct ConfigUpdateFeedback {
     pub(crate) kind: ConfigChangeKind,
-    pub(crate) config: ConfigResponse,
+    pub(crate) config: BridgeConfig,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

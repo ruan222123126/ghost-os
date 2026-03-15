@@ -10,7 +10,7 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::types::{
-    AgentParams, AgentPayload, ApiResponse, ConfigResponse, ConfigUpdate, HumanResponseParams,
+    AgentParams, AgentPayload, ApiResponse, BridgeConfig, ConfigUpdate, HumanResponseParams,
 };
 
 static TRACE_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -107,11 +107,11 @@ impl BridgeClient {
         )
     }
 
-    pub fn get_config(&self) -> Result<ConfigResponse> {
+    pub fn get_config(&self) -> Result<BridgeConfig> {
         self.get_json("/api/config")
     }
 
-    pub fn update_config(&self, update: &ConfigUpdate) -> Result<ConfigResponse> {
+    pub fn update_config(&self, update: &ConfigUpdate) -> Result<BridgeConfig> {
         self.post_json("/api/config", update)
     }
 

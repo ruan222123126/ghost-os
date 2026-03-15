@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use colored::Colorize;
 
-use crate::types::ConfigResponse;
+use crate::types::BridgeConfig;
 
 use super::execute::{CommandOutput, ConfigChangeKind, ConfigUpdateFeedback, SessionStatus};
 
@@ -110,7 +110,7 @@ fn help_lines() -> Vec<RenderedLine> {
     lines
 }
 
-fn config_lines(config: &ConfigResponse) -> Vec<RenderedLine> {
+fn config_lines(config: &BridgeConfig) -> Vec<RenderedLine> {
     let chat_path = if config.chat_path.trim().is_empty() {
         "(default)"
     } else {
@@ -200,19 +200,25 @@ fn dimmed_line(text: &str) -> RenderedLine {
 #[cfg(test)]
 mod tests {
     use super::{
-        CommandOutput, ConfigChangeKind, ConfigResponse, ConfigUpdateFeedback, LineStyle,
+        BridgeConfig, CommandOutput, ConfigChangeKind, ConfigUpdateFeedback, LineStyle,
         SessionStatus, describe_output,
     };
 
     #[test]
     fn describe_output_formats_config_snapshot() {
-        let config = ConfigResponse {
+        let config = BridgeConfig {
             provider: "local".to_string(),
             provider_type: "custom".to_string(),
             base_url: "http://127.0.0.1:11434/v1".to_string(),
             model: "gpt-4o".to_string(),
             chat_path: String::new(),
             api_key_set: false,
+            model_selection_enabled: false,
+            graphql_default_source: String::new(),
+            graphql_sources: Vec::new(),
+            graphql_mutation_policies: Vec::new(),
+            web_search_tavily_api_key_set: false,
+            web_search_exa_api_key_set: false,
         };
 
         let lines = describe_output(&CommandOutput::ConfigSnapshot(config));
@@ -229,13 +235,19 @@ mod tests {
     fn describe_output_formats_config_update_feedback() {
         let feedback = ConfigUpdateFeedback {
             kind: ConfigChangeKind::ChatPathReset,
-            config: ConfigResponse {
+            config: BridgeConfig {
                 provider: "openai".to_string(),
                 provider_type: "openai".to_string(),
                 base_url: "https://api.openai.com/v1".to_string(),
                 model: "gpt-4o".to_string(),
                 chat_path: String::new(),
                 api_key_set: true,
+                model_selection_enabled: true,
+                graphql_default_source: String::new(),
+                graphql_sources: Vec::new(),
+                graphql_mutation_policies: Vec::new(),
+                web_search_tavily_api_key_set: false,
+                web_search_exa_api_key_set: false,
             },
         };
 

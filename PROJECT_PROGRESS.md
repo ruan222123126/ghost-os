@@ -23,6 +23,13 @@
 
 ### 2026-03-15
 
+- 收口 CLI config DTO 分叉：
+  - `apps/cli` 已删除手写 `ConfigResponse` / `ConfigUpdate`，改为直接复用共享生成的 `BridgeConfig` / `ConfigUpdate`。
+  - `client`、命令执行链与终端渲染测试现统一消费共享契约；后续 config schema 扩字段时，CLI 不再保留独立 DTO 漂移入口。
+  - CLI 侧仅补了一个本地 `ConfigUpdate::default()` 实现用于命令构造；如果共享契约继续增字段，这里会在编译期显式暴露未覆盖项。
+- 本轮验证：
+  - `timeout 60 cargo test --manifest-path apps/cli/Cargo.toml`
+
 - 收口共享契约 codegen 的 object 语义漂移：
   - `core/shared/contract_codegen` 现区分三类 object：具名结构体、`additionalProperties` typed map、以及真正 free-form object；TS/Go/Rust/Kotlin 不再把 `headers`、provider token override 这类 typed map 统一降成 `unknown/any/Value/JsonObject`。
   - `core/shared/schema/defs/agent_core.json` 新增具名 `agentIterationSummaryItem`，补上此前被 inline object 吃掉的迭代摘要结构；各端生成产物现直接暴露强类型迭代摘要。

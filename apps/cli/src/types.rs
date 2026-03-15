@@ -4,7 +4,7 @@ use serde::Serialize;
 
 pub use crate::envelope_generated::{
     AgentPayload, AgentSendAwaitingHumanResponse, AgentSendSuccessResponse, ApiResponse,
-    AskHumanOption,
+    AskHumanOption, BridgeConfig, ConfigUpdate,
 };
 
 #[derive(Debug, Serialize)]
@@ -46,26 +46,21 @@ pub struct HumanResponseParams<'a> {
     pub cancelled: Option<bool>,
 }
 
-#[derive(Debug, serde::Deserialize, Clone, PartialEq, Eq)]
-pub struct ConfigResponse {
-    pub provider: String,
-    pub provider_type: String,
-    pub base_url: String,
-    pub model: String,
-    pub chat_path: String,
-    pub api_key_set: bool,
-}
-
-#[derive(Debug, Serialize, Default, Clone, PartialEq, Eq)]
-pub struct ConfigUpdate {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub provider: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub api_key: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub base_url: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub model: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub chat_path: Option<String>,
+impl Default for ConfigUpdate {
+    fn default() -> Self {
+        Self {
+            provider: None,
+            api_key: None,
+            base_url: None,
+            model: None,
+            chat_path: None,
+            graphql_default_source: None,
+            graphql_sources: None,
+            graphql_source_upsert: None,
+            graphql_mutation_policies: None,
+            web_search_tavily_api_key: None,
+            web_search_exa_api_key: None,
+            trace_id: None,
+        }
+    }
 }
