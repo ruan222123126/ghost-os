@@ -4,12 +4,12 @@ import type {
   AssistantSessionEndSignal,
 } from '@/lib/types';
 import {
-  ensureKnownKeys,
   expectBoolean,
   expectNumber,
   expectRecord,
   expectString,
   expectStringEnum,
+  pickKnownKeys,
   parseOptionalAskHumanOptions,
   parseOptionalSelectionMode,
   parseOptionalString,
@@ -48,8 +48,7 @@ function parseSessionEndSignal(value: unknown): AssistantSessionEndSignal | null
     return null;
   }
 
-  const record = expectRecord(value, 'agent response.session_end');
-  ensureKnownKeys(record, SESSION_END_KEYS, 'agent response.session_end');
+  const record = pickKnownKeys(expectRecord(value, 'agent response.session_end'), SESSION_END_KEYS);
 
   return {
     signal: expectStringEnum(record.signal, SESSION_END_SIGNALS, 'agent response.session_end.signal'),
@@ -58,8 +57,7 @@ function parseSessionEndSignal(value: unknown): AssistantSessionEndSignal | null
 }
 
 function parseAwaitingHumanResponse(payload: unknown): AgentSendResponse {
-  const record = expectRecord(payload, 'agent response');
-  ensureKnownKeys(record, AGENT_AWAITING_KEYS, 'agent response');
+  const record = pickKnownKeys(expectRecord(payload, 'agent response'), AGENT_AWAITING_KEYS);
 
   return {
     status: 'awaiting_human',
@@ -83,8 +81,7 @@ function parseIterationSummary(value: unknown): Record<string, unknown>[] | unde
 }
 
 function parseSuccessResponse(payload: unknown): AgentSendResponse {
-  const record = expectRecord(payload, 'agent response');
-  ensureKnownKeys(record, AGENT_SUCCESS_KEYS, 'agent response');
+  const record = pickKnownKeys(expectRecord(payload, 'agent response'), AGENT_SUCCESS_KEYS);
 
   return {
     message: expectString(record.message, 'agent response.message'),
@@ -111,8 +108,7 @@ export function parseAgentSendResponse(payload: unknown): AgentSendResponse {
 }
 
 export function parseAgentStopResponse(payload: unknown): AgentStopResponsePayload {
-  const record = expectRecord(payload, 'agent stop response');
-  ensureKnownKeys(record, AGENT_STOP_KEYS, 'agent stop response');
+  const record = pickKnownKeys(expectRecord(payload, 'agent stop response'), AGENT_STOP_KEYS);
 
   return {
     status: expectStringEnum(record.status, STOP_STATUSES, 'agent stop response.status'),

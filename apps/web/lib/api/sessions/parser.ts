@@ -10,11 +10,11 @@ import type {
   SessionToolResult,
 } from '@/lib/types';
 import {
-  ensureKnownKeys,
   expectNumber,
   expectRecord,
   expectString,
   expectStringEnum,
+  pickKnownKeys,
   parseOptionalAskHumanOptions,
   parseOptionalNumber,
   parseOptionalSelectionMode,
@@ -74,8 +74,7 @@ function parseSessionImageContent(
     return null;
   }
 
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_IMAGE_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_IMAGE_KEYS);
 
   return {
     path: parseOptionalString(record.path, `${label}.path`),
@@ -99,8 +98,7 @@ function parseSessionFileContent(
     return null;
   }
 
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_FILE_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_FILE_KEYS);
 
   return {
     artifact_id: expectString(record.artifact_id, `${label}.artifact_id`),
@@ -115,8 +113,7 @@ function parseSessionFileContent(
 }
 
 function parseSessionContentPart(value: unknown, label: string): SessionContentPart {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_CONTENT_PART_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_CONTENT_PART_KEYS);
 
   return {
     type: expectString(record.type, `${label}.type`),
@@ -141,8 +138,7 @@ function parseOptionalSessionContent(
 }
 
 function parseSessionToolCall(value: unknown, label: string): SessionToolCall {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_TOOL_CALL_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_TOOL_CALL_KEYS);
 
   return {
     id: expectString(record.id, `${label}.id`),
@@ -176,8 +172,7 @@ function parseOptionalSessionToolResult(
     return null;
   }
 
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_TOOL_RESULT_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_TOOL_RESULT_KEYS);
 
   return {
     status: expectStringEnum(record.status, TOOL_RESULT_STATUSES, `${label}.status`),
@@ -199,8 +194,7 @@ function parseOptionalSessionHumanInteraction(
     return null;
   }
 
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_HUMAN_INTERACTION_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_HUMAN_INTERACTION_KEYS);
 
   return {
     question_id: expectString(record.question_id, `${label}.question_id`),
@@ -212,8 +206,7 @@ function parseOptionalSessionHumanInteraction(
 }
 
 function parseSessionMessage(value: unknown, label: string): SessionMessage {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_MESSAGE_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_MESSAGE_KEYS);
 
   return {
     role: expectStringEnum(record.role, SESSION_ROLES, `${label}.role`),
@@ -230,8 +223,7 @@ function parseSessionMessage(value: unknown, label: string): SessionMessage {
 }
 
 function parseSessionMetadata(value: unknown, label: string): SessionMetadata {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, SESSION_METADATA_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_METADATA_KEYS);
 
   return {
     id: expectString(record.id, `${label}.id`),
@@ -251,8 +243,7 @@ export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
 }
 
 export function parseSessionDetail(payload: unknown): SessionDetail {
-  const record = expectRecord(payload, 'session detail');
-  ensureKnownKeys(record, SESSION_DETAIL_KEYS, 'session detail');
+  const record = pickKnownKeys(expectRecord(payload, 'session detail'), SESSION_DETAIL_KEYS);
   if (!Array.isArray(record.messages)) {
     throw new Error('Invalid session detail.messages: expected array');
   }

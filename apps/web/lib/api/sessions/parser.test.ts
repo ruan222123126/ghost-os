@@ -48,15 +48,35 @@ describe('lib/api/sessions/parser', () => {
     expect(parseSessionDetail(payload)).toEqual(payload);
   });
 
-  it('rejects unexpected fields in session detail messages', () => {
-    expect(() => {
-      parseSessionDetail({
-        id: 'session-1',
-        created_at: '2026-02-28T10:00:00Z',
-        updated_at: '2026-02-28T10:05:00Z',
-        token_count: 128,
-        messages: [{ Role: 'user', text: 'hello' }],
-      });
-    }).toThrow('Invalid session detail.messages[0]: unexpected field "Role"');
+  it('ignores unknown fields in session detail payloads', () => {
+    const payload = {
+      id: 'session-1',
+      created_at: '2026-02-28T10:00:00Z',
+      updated_at: '2026-02-28T10:05:00Z',
+      token_count: 128,
+      future_field: true,
+      messages: [
+        {
+          role: 'user',
+          text: 'hello',
+          extra_message_field: 'ignored',
+          content: [{ type: 'text', text: 'hello', extra_part_field: 'ignored' }],
+        },
+      ],
+    };
+
+    expect(parseSessionDetail(payload)).toEqual({
+      id: 'session-1',
+      created_at: '2026-02-28T10:00:00Z',
+      updated_at: '2026-02-28T10:05:00Z',
+      token_count: 128,
+      messages: [
+        {
+          role: 'user',
+          text: 'hello',
+          content: [{ type: 'text', text: 'hello' }],
+        },
+      ],
+    });
   });
 });

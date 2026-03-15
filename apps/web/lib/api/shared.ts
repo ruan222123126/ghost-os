@@ -7,16 +7,20 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function ensureKnownKeys(
+// Bridge clients are forward-compatible: response parsers ignore fields they do not recognize.
+export function pickKnownKeys<TKey extends string>(
   value: Record<string, unknown>,
-  allowedKeys: readonly string[],
-  label: string,
-) {
-  for (const key of Object.keys(value)) {
-    if (!allowedKeys.includes(key)) {
-      throw new Error(`Invalid ${label}: unexpected field "${key}"`);
+  allowedKeys: readonly TKey[],
+): Partial<Record<TKey, unknown>> {
+  const filtered: Partial<Record<TKey, unknown>> = {};
+
+  for (const key of allowedKeys) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      filtered[key] = value[key];
     }
   }
+
+  return filtered;
 }
 
 export function expectRecord(value: unknown, label: string): Record<string, unknown> {
@@ -127,8 +131,7 @@ export function parseOptionalSelectionMode(
 }
 
 export function parseAskHumanOption(value: unknown, label: string): AskHumanOption {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, ASK_HUMAN_OPTION_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), ASK_HUMAN_OPTION_KEYS);
 
   return {
     label: expectString(record.label, `${label}.label`),

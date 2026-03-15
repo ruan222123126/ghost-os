@@ -7,13 +7,13 @@ import type {
   ProviderListResponse,
 } from '@/lib/types';
 import {
-  ensureKnownKeys,
   expectBoolean,
   expectNumber,
   expectRecord,
   expectString,
   expectStringArray,
   expectStringEnum,
+  pickKnownKeys,
   parseOptionalRecord,
   parseOptionalStringArray,
 } from '@/lib/api/shared';
@@ -86,8 +86,7 @@ const GRAPHQL_MUTATION_POLICY_KEYS = [
 const GRAPHQL_IDEMPOTENCY_MODES = ['header', 'variable_path'] as const;
 
 function parseProviderConfig(value: unknown, label: string): ProviderConfig {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, PROVIDER_CONFIG_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), PROVIDER_CONFIG_KEYS);
 
   return {
     name: expectString(record.name, `${label}.name`),
@@ -113,8 +112,7 @@ function parseProviderConfig(value: unknown, label: string): ProviderConfig {
 }
 
 function parseGraphQLDomainResponse(value: unknown, label: string): GraphQLDomainResponse {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, GRAPHQL_DOMAIN_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_DOMAIN_KEYS);
 
   return {
     name: expectString(record.name, `${label}.name`),
@@ -132,8 +130,7 @@ function parseGraphQLDomainResponse(value: unknown, label: string): GraphQLDomai
 }
 
 function parseGraphQLSourceResponse(value: unknown, label: string): GraphQLSourceResponse {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, GRAPHQL_SOURCE_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_SOURCE_KEYS);
 
   let domains: GraphQLDomainResponse[] | undefined;
   if (record.domains !== undefined) {
@@ -168,8 +165,7 @@ function parseGraphQLMutationPolicyResponse(
   value: unknown,
   label: string,
 ): GraphQLMutationPolicyResponse {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, GRAPHQL_MUTATION_POLICY_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_MUTATION_POLICY_KEYS);
 
   return {
     name: expectString(record.name, `${label}.name`),
@@ -202,8 +198,7 @@ function parseGraphQLMutationPolicyResponse(
 }
 
 export function parseBridgeConfig(payload: unknown): BridgeConfig {
-  const record = expectRecord(payload, 'bridge config');
-  ensureKnownKeys(record, BRIDGE_CONFIG_KEYS, 'bridge config');
+  const record = pickKnownKeys(expectRecord(payload, 'bridge config'), BRIDGE_CONFIG_KEYS);
   if (!Array.isArray(record.graphql_sources)) {
     throw new Error('Invalid bridge config.graphql_sources: expected array');
   }
@@ -244,8 +239,7 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
 }
 
 export function parseProviderListResponse(payload: unknown): ProviderListResponse {
-  const record = expectRecord(payload, 'provider list');
-  ensureKnownKeys(record, PROVIDER_LIST_KEYS, 'provider list');
+  const record = pickKnownKeys(expectRecord(payload, 'provider list'), PROVIDER_LIST_KEYS);
   if (!Array.isArray(record.providers)) {
     throw new Error('Invalid provider list.providers: expected array');
   }

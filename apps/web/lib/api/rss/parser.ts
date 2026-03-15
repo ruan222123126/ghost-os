@@ -1,10 +1,10 @@
 import type { RSSBriefing, RSSBriefingHighlight } from '@/lib/types';
 import {
-  ensureKnownKeys,
   expectNumber,
   expectRecord,
   expectString,
   expectStringEnum,
+  pickKnownKeys,
   parseOptionalString,
   parseOptionalStringArray,
 } from '@/lib/api/shared';
@@ -37,8 +37,7 @@ const RSS_HIGHLIGHT_KEYS = [
 const RSS_IMPORTANCE_LEVELS = ['low', 'normal', 'high'] as const;
 
 function parseRSSBriefingHighlight(value: unknown, label: string): RSSBriefingHighlight {
-  const record = expectRecord(value, label);
-  ensureKnownKeys(record, RSS_HIGHLIGHT_KEYS, label);
+  const record = pickKnownKeys(expectRecord(value, label), RSS_HIGHLIGHT_KEYS);
 
   return {
     rank: expectNumber(record.rank, `${label}.rank`),
@@ -55,8 +54,7 @@ function parseRSSBriefingHighlight(value: unknown, label: string): RSSBriefingHi
 }
 
 export function parseRSSBriefing(payload: unknown): RSSBriefing {
-  const record = expectRecord(payload, 'rss briefing');
-  ensureKnownKeys(record, RSS_BRIEFING_KEYS, 'rss briefing');
+  const record = pickKnownKeys(expectRecord(payload, 'rss briefing'), RSS_BRIEFING_KEYS);
   if (!Array.isArray(record.highlights)) {
     throw new Error('Invalid rss briefing.highlights: expected array');
   }

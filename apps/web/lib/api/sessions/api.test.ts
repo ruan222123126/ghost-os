@@ -95,7 +95,30 @@ describe('lib/api/sessions/api', () => {
     expect(session).toEqual(expected);
   });
 
-  it('getSession rejects legacy-cased session messages', async () => {
+  it('getSession ignores unknown fields added by newer bridge payloads', async () => {
+    mockFetchJSON({
+      status: 'success',
+      payload: {
+        id: 'session-1',
+        created_at: '2026-02-28T10:00:00Z',
+        updated_at: '2026-02-28T10:05:00Z',
+        token_count: 128,
+        schema_version: 'vNext',
+        messages: [{ role: 'user', text: 'hello', extra_field: 'ignored' }],
+      },
+      error: '',
+    });
+
+    await expect(getSession('session-1')).resolves.toEqual({
+      id: 'session-1',
+      created_at: '2026-02-28T10:00:00Z',
+      updated_at: '2026-02-28T10:05:00Z',
+      token_count: 128,
+      messages: [{ role: 'user', text: 'hello' }],
+    });
+  });
+
+  it('getSession still rejects messages missing required canonical fields', async () => {
     mockFetchJSON({
       status: 'success',
       payload: {
@@ -109,7 +132,7 @@ describe('lib/api/sessions/api', () => {
     });
 
     await expect(getSession('session-1')).rejects.toThrow(
-      'Invalid session detail.messages[0]: unexpected field "Role"',
+      'Invalid session detail.messages[0].role: expected string',
     );
   });
 
