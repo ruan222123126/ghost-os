@@ -156,20 +156,20 @@ func buildProModeMaxLimitMessage(request proModeRequest, records []session.Itera
 	)
 }
 
-func buildAgentIterationRecords(records []session.IterationRecord) []map[string]any {
+func buildAgentIterationRecords(records []session.IterationRecord) []agentIterationSummaryItem {
 	if len(records) == 0 {
 		return nil
 	}
-	out := make([]map[string]any, 0, len(records))
+	out := make([]agentIterationSummaryItem, 0, len(records))
 	for _, record := range records {
-		out = append(out, map[string]any{
-			"iteration":        record.Iteration,
-			"did":              record.Did,
-			"remaining":        record.Remaining,
-			"completed":        record.Completed,
-			"trace_id":         record.TraceID,
-			"recorded_at":      record.RecordedAt.Format(time.RFC3339),
-			"final_change_log": record.FinalChangeLog,
+		out = append(out, agentIterationSummaryItem{
+			Iteration:      record.Iteration,
+			Did:            record.Did,
+			Remaining:      record.Remaining,
+			Completed:      record.Completed,
+			TraceID:        record.TraceID,
+			RecordedAt:     record.RecordedAt.Format(time.RFC3339),
+			FinalChangeLog: record.FinalChangeLog,
 		})
 	}
 	return out

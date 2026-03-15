@@ -55,6 +55,17 @@ type agentRequest struct {
 	TraceID   string `json:"trace_id,omitempty"`
 }
 
+// agentIterationSummaryItem 对齐 core/shared/schema.json 的 agentIterationSummaryItem。
+type agentIterationSummaryItem struct {
+	Iteration      int    `json:"iteration"`
+	Did            string `json:"did"`
+	Remaining      string `json:"remaining"`
+	Completed      bool   `json:"completed,omitempty"`
+	TraceID        string `json:"trace_id,omitempty"`
+	RecordedAt     string `json:"recorded_at,omitempty"`
+	FinalChangeLog string `json:"final_change_log,omitempty"`
+}
+
 // askHumanOption 对齐 core/shared/schema.json 的 askHumanOption。
 type askHumanOption struct {
 	Label       string `json:"label"`
@@ -70,7 +81,7 @@ type agentResponse struct {
 	IterationCount   int                               `json:"iteration_count,omitempty"`
 	StoppedBy        string                            `json:"stopped_by,omitempty"`
 	FinalChangeLog   string                            `json:"final_change_log,omitempty"`
-	IterationSummary []map[string]any                  `json:"iteration_summary,omitempty"`
+	IterationSummary []agentIterationSummaryItem       `json:"iteration_summary,omitempty"`
 	SessionEnd       *assistantSessionEndSignalPayload `json:"session_end,omitempty"`
 }
 

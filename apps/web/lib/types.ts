@@ -8,6 +8,7 @@ import type {
 } from '@/lib/envelope.generated';
 
 export type {
+  AgentIterationSummaryItem,
   AgentRequest,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,

@@ -38,6 +38,16 @@ export interface AgentRequest {
   trace_id?: string;
 }
 
+export interface AgentIterationSummaryItem {
+  iteration: number;
+  did: string;
+  remaining: string;
+  completed?: boolean;
+  trace_id?: string;
+  recorded_at?: string;
+  final_change_log?: string;
+}
+
 export interface AskHumanOption {
   label: string;
   allow_custom?: boolean;
@@ -51,7 +61,7 @@ export interface AgentSendSuccessResponse {
   iteration_count?: number;
   stopped_by?: string;
   final_change_log?: string;
-  iteration_summary?: Record<string, unknown>[];
+  iteration_summary?: AgentIterationSummaryItem[];
   session_end?: AssistantSessionEndSignal | null;
 }
 
@@ -209,7 +219,7 @@ export interface GraphQLSourceResponse {
   max_fields: number;
   max_root_fields: number;
   max_fragments: number;
-  headers?: Record<string, unknown>;
+  headers?: Record<string, string>;
   api_key_set: boolean;
   domains?: GraphQLDomainResponse[];
 }
@@ -262,7 +272,7 @@ export interface GraphQLSourceInput {
   schema_path: string;
   timeout_ms?: number;
   max_response_bytes?: number;
-  headers?: Record<string, unknown>;
+  headers?: Record<string, string>;
   max_depth?: number;
   max_fields?: number;
   max_root_fields?: number;
@@ -277,8 +287,8 @@ export interface ProviderConfig {
   models?: string[];
   context_window_tokens?: number;
   response_reserve_tokens?: number;
-  model_context_window_tokens?: Record<string, unknown>;
-  model_response_reserve_tokens?: Record<string, unknown>;
+  model_context_window_tokens?: Record<string, number>;
+  model_response_reserve_tokens?: Record<string, number>;
   api_key_set: boolean;
 }
 
@@ -290,8 +300,8 @@ export interface ProviderConfigInput {
   models?: string[];
   context_window_tokens?: number;
   response_reserve_tokens?: number;
-  model_context_window_tokens?: Record<string, unknown>;
-  model_response_reserve_tokens?: Record<string, unknown>;
+  model_context_window_tokens?: Record<string, number>;
+  model_response_reserve_tokens?: Record<string, number>;
   trace_id?: string;
 }
 

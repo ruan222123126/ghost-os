@@ -1,12 +1,30 @@
 from __future__ import annotations
 
 from contract_codegen.catalog import collect_definitions, dereference_schema, kotlin_union_implementers, target_name_map
-from contract_codegen.common import non_null_one_of_candidates, schema_ref_name
+from contract_codegen.common import (
+    non_null_one_of_candidates,
+    object_additional_properties_schema,
+    object_has_declared_properties,
+    object_is_open,
+    schema_ref_name,
+)
 
 
 def _field_name(name: str) -> str:
     head, *tail = name.split("_")
     return head[:1].lower() + head[1:] + "".join(part[:1].upper() + part[1:] for part in tail)
+
+
+def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if object_has_declared_properties(prop_schema):
+        raise ValueError(f"inline structured Kotlin object must be promoted to $defs: {prop_schema}")
+
+    additional = object_additional_properties_schema(prop_schema)
+    if additional is not None:
+        return f"Map<String, {_type_for_schema(schema, target_names, additional, required=True)}>"
+    if object_is_open(prop_schema):
+        return "JsonObject"
+    raise ValueError(f"unsupported closed Kotlin object schema: {prop_schema}")
 
 
 def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
@@ -30,7 +48,7 @@ def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -
         inner = _type_for_schema(schema, target_names, prop_schema.get("items", {}), required=True)
         return f"List<{inner}>"
     if schema_type == "object":
-        return "JsonObject"
+        return _object_type(schema, target_names, prop_schema)
     raise ValueError(f"unsupported Kotlin schema: {prop_schema}")
 
 
@@ -106,4 +124,3 @@ data class ApiEnvelope<TPayload>(
 
 {objects}
 '''
-

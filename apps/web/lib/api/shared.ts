@@ -111,6 +111,38 @@ export function parseOptionalRecord(
   return expectRecord(value, label);
 }
 
+export function parseOptionalStringRecord(
+  value: unknown,
+  label: string,
+): Record<string, string> | undefined {
+  const record = parseOptionalRecord(value, label);
+  if (record === undefined) {
+    return undefined;
+  }
+
+  const out: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    out[key] = expectString(entry, `${label}.${key}`);
+  }
+  return out;
+}
+
+export function parseOptionalNumberRecord(
+  value: unknown,
+  label: string,
+): Record<string, number> | undefined {
+  const record = parseOptionalRecord(value, label);
+  if (record === undefined) {
+    return undefined;
+  }
+
+  const out: Record<string, number> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    out[key] = expectNumber(entry, `${label}.${key}`);
+  }
+  return out;
+}
+
 export function parseOptionalStringArray(value: unknown, label: string): string[] | undefined {
   if (value === undefined) {
     return undefined;

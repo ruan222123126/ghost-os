@@ -3,6 +3,7 @@
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use serde_json::Value;
 
 #[derive(Debug, Serialize)]
@@ -53,6 +54,21 @@ pub struct AgentRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentIterationSummaryItem {
+    pub iteration: i64,
+    pub did: String,
+    pub remaining: String,
+    #[serde(default)]
+    pub completed: Option<bool>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    #[serde(default)]
+    pub recorded_at: Option<String>,
+    #[serde(default)]
+    pub final_change_log: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AskHumanOption {
     pub label: String,
     #[serde(default)]
@@ -73,7 +89,7 @@ pub struct AgentSendSuccessResponse {
     #[serde(default)]
     pub final_change_log: Option<String>,
     #[serde(default)]
-    pub iteration_summary: Option<Vec<Value>>,
+    pub iteration_summary: Option<Vec<AgentIterationSummaryItem>>,
     #[serde(default)]
     pub session_end: Option<AssistantSessionEndSignal>,
 }
@@ -163,7 +179,7 @@ pub struct SessionContentPart {
 pub struct SessionToolCall {
     pub id: String,
     pub name: String,
-    pub arguments: Value,
+    pub arguments: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -299,7 +315,7 @@ pub struct GraphQLSourceResponse {
     pub max_root_fields: i64,
     pub max_fragments: i64,
     #[serde(default)]
-    pub headers: Option<Value>,
+    pub headers: Option<BTreeMap<String, String>>,
     pub api_key_set: bool,
     #[serde(default)]
     pub domains: Option<Vec<GraphQLDomainResponse>>,
@@ -381,7 +397,7 @@ pub struct GraphQLSourceInput {
     #[serde(default)]
     pub max_response_bytes: Option<i64>,
     #[serde(default)]
-    pub headers: Option<Value>,
+    pub headers: Option<BTreeMap<String, String>>,
     #[serde(default)]
     pub max_depth: Option<i64>,
     #[serde(default)]
@@ -407,9 +423,9 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub response_reserve_tokens: Option<i64>,
     #[serde(default)]
-    pub model_context_window_tokens: Option<Value>,
+    pub model_context_window_tokens: Option<BTreeMap<String, i64>>,
     #[serde(default)]
-    pub model_response_reserve_tokens: Option<Value>,
+    pub model_response_reserve_tokens: Option<BTreeMap<String, i64>>,
     pub api_key_set: bool,
 }
 
@@ -429,9 +445,9 @@ pub struct ProviderConfigInput {
     #[serde(default)]
     pub response_reserve_tokens: Option<i64>,
     #[serde(default)]
-    pub model_context_window_tokens: Option<Value>,
+    pub model_context_window_tokens: Option<BTreeMap<String, i64>>,
     #[serde(default)]
-    pub model_response_reserve_tokens: Option<Value>,
+    pub model_response_reserve_tokens: Option<BTreeMap<String, i64>>,
     #[serde(default)]
     pub trace_id: Option<String>,
 }

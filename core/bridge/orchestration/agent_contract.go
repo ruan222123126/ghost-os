@@ -11,7 +11,7 @@ type agentResponseMeta struct {
 	IterationCount   int
 	StoppedBy        string
 	FinalChangeLog   string
-	IterationSummary []map[string]any
+	IterationSummary []agentIterationSummaryItem
 }
 
 // newAgentResponsePayload 构造并校验 AGENT_SEND 成功响应，确保会话结束契约稳定。
@@ -79,17 +79,11 @@ func validateAgentResponsePayload(payload agentResponse) error {
 	return nil
 }
 
-func cloneIterationSummary(records []map[string]any) []map[string]any {
+func cloneIterationSummary(records []agentIterationSummaryItem) []agentIterationSummaryItem {
 	if len(records) == 0 {
 		return nil
 	}
-	out := make([]map[string]any, 0, len(records))
-	for _, record := range records {
-		cloned := make(map[string]any, len(record))
-		for key, value := range record {
-			cloned[key] = value
-		}
-		out = append(out, cloned)
-	}
+	out := make([]agentIterationSummaryItem, len(records))
+	copy(out, records)
 	return out
 }

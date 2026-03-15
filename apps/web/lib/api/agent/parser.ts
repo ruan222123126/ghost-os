@@ -1,4 +1,5 @@
 import type {
+  AgentIterationSummaryItem,
   AgentSendResponse,
   AgentStopResponsePayload,
   AssistantSessionEndSignal,
@@ -36,6 +37,15 @@ const AGENT_AWAITING_KEYS = [
  ] as const;
 const AGENT_STOP_KEYS = ['status', 'message'] as const;
 const SESSION_END_KEYS = ['signal', 'message'] as const;
+const ITERATION_SUMMARY_KEYS = [
+  'iteration',
+  'did',
+  'remaining',
+  'completed',
+  'trace_id',
+  'recorded_at',
+  'final_change_log',
+] as const;
 const AGENT_MODES = ['pro', 'prox'] as const;
 const STOP_STATUSES = ['stopped', 'not_running'] as const;
 const SESSION_END_SIGNALS = ['END_SESSION'] as const;
@@ -69,7 +79,21 @@ function parseAwaitingHumanResponse(payload: unknown): AgentSendResponse {
   };
 }
 
-function parseIterationSummary(value: unknown): Record<string, unknown>[] | undefined {
+function parseIterationSummaryItem(value: unknown, label: string): AgentIterationSummaryItem {
+  const record = pickKnownKeys(expectRecord(value, label), ITERATION_SUMMARY_KEYS);
+
+  return {
+    iteration: expectNumber(record.iteration, `${label}.iteration`),
+    did: expectString(record.did, `${label}.did`),
+    remaining: expectString(record.remaining, `${label}.remaining`),
+    completed: record.completed === undefined ? undefined : expectBoolean(record.completed, `${label}.completed`),
+    trace_id: parseOptionalString(record.trace_id, `${label}.trace_id`),
+    recorded_at: parseOptionalString(record.recorded_at, `${label}.recorded_at`),
+    final_change_log: parseOptionalString(record.final_change_log, `${label}.final_change_log`),
+  };
+}
+
+function parseIterationSummary(value: unknown): AgentIterationSummaryItem[] | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -77,7 +101,7 @@ function parseIterationSummary(value: unknown): Record<string, unknown>[] | unde
     throw new Error('Invalid agent response.iteration_summary: expected array');
   }
 
-  return value.map((entry, index) => expectRecord(entry, `agent response.iteration_summary[${index}]`));
+  return value.map((entry, index) => parseIterationSummaryItem(entry, `agent response.iteration_summary[${index}]`));
 }
 
 function parseSuccessResponse(payload: unknown): AgentSendResponse {

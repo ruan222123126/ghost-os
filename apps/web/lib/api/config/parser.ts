@@ -13,8 +13,9 @@ import {
   expectString,
   expectStringArray,
   expectStringEnum,
+  parseOptionalNumberRecord,
   pickKnownKeys,
-  parseOptionalRecord,
+  parseOptionalStringRecord,
   parseOptionalStringArray,
 } from '@/lib/api/shared';
 
@@ -99,11 +100,11 @@ function parseProviderConfig(value: unknown, label: string): ProviderConfig {
     response_reserve_tokens: record.response_reserve_tokens === undefined
       ? undefined
       : expectNumber(record.response_reserve_tokens, `${label}.response_reserve_tokens`),
-    model_context_window_tokens: parseOptionalRecord(
+    model_context_window_tokens: parseOptionalNumberRecord(
       record.model_context_window_tokens,
       `${label}.model_context_window_tokens`,
     ),
-    model_response_reserve_tokens: parseOptionalRecord(
+    model_response_reserve_tokens: parseOptionalNumberRecord(
       record.model_response_reserve_tokens,
       `${label}.model_response_reserve_tokens`,
     ),
@@ -155,7 +156,7 @@ function parseGraphQLSourceResponse(value: unknown, label: string): GraphQLSourc
     max_fields: expectNumber(record.max_fields, `${label}.max_fields`),
     max_root_fields: expectNumber(record.max_root_fields, `${label}.max_root_fields`),
     max_fragments: expectNumber(record.max_fragments, `${label}.max_fragments`),
-    headers: parseOptionalRecord(record.headers, `${label}.headers`),
+    headers: parseOptionalStringRecord(record.headers, `${label}.headers`),
     api_key_set: expectBoolean(record.api_key_set, `${label}.api_key_set`),
     domains,
   };

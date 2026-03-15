@@ -40,6 +40,20 @@ data class AgentRequest(
 )
 
 @Serializable
+data class AgentIterationSummaryItem(
+    val iteration: Int,
+    val did: String,
+    val remaining: String,
+    val completed: Boolean? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null,
+    @SerialName("recorded_at")
+    val recordedAt: String? = null,
+    @SerialName("final_change_log")
+    val finalChangeLog: String? = null
+)
+
+@Serializable
 data class AskHumanOption(
     val label: String,
     @SerialName("allow_custom")
@@ -61,7 +75,7 @@ data class AgentSendSuccessResponse(
     @SerialName("final_change_log")
     val finalChangeLog: String? = null,
     @SerialName("iteration_summary")
-    val iterationSummary: List<JsonObject>? = null,
+    val iterationSummary: List<AgentIterationSummaryItem>? = null,
     @SerialName("session_end")
     val sessionEnd: AssistantSessionEndSignal? = null
 ) : AgentSendResponse
@@ -294,7 +308,7 @@ data class GraphQLSourceResponse(
     val maxRootFields: Int,
     @SerialName("max_fragments")
     val maxFragments: Int,
-    val headers: JsonObject? = null,
+    val headers: Map<String, String>? = null,
     @SerialName("api_key_set")
     val apiKeySet: Boolean,
     val domains: List<GraphQLDomainResponse>? = null
@@ -376,7 +390,7 @@ data class GraphQLSourceInput(
     val timeoutMs: Int? = null,
     @SerialName("max_response_bytes")
     val maxResponseBytes: Int? = null,
-    val headers: JsonObject? = null,
+    val headers: Map<String, String>? = null,
     @SerialName("max_depth")
     val maxDepth: Int? = null,
     @SerialName("max_fields")
@@ -400,9 +414,9 @@ data class ProviderConfig(
     @SerialName("response_reserve_tokens")
     val responseReserveTokens: Int? = null,
     @SerialName("model_context_window_tokens")
-    val modelContextWindowTokens: JsonObject? = null,
+    val modelContextWindowTokens: Map<String, Int>? = null,
     @SerialName("model_response_reserve_tokens")
-    val modelResponseReserveTokens: JsonObject? = null,
+    val modelResponseReserveTokens: Map<String, Int>? = null,
     @SerialName("api_key_set")
     val apiKeySet: Boolean
 )
@@ -421,9 +435,9 @@ data class ProviderConfigInput(
     @SerialName("response_reserve_tokens")
     val responseReserveTokens: Int? = null,
     @SerialName("model_context_window_tokens")
-    val modelContextWindowTokens: JsonObject? = null,
+    val modelContextWindowTokens: Map<String, Int>? = null,
     @SerialName("model_response_reserve_tokens")
-    val modelResponseReserveTokens: JsonObject? = null,
+    val modelResponseReserveTokens: Map<String, Int>? = null,
     @SerialName("trace_id")
     val traceId: String? = null
 )

@@ -23,11 +23,28 @@
 
 ### 2026-03-15
 
+- 收口共享契约 codegen 的 object 语义漂移：
+  - `core/shared/contract_codegen` 现区分三类 object：具名结构体、`additionalProperties` typed map、以及真正 free-form object；TS/Go/Rust/Kotlin 不再把 `headers`、provider token override 这类 typed map 统一降成 `unknown/any/Value/JsonObject`。
+  - `core/shared/schema/defs/agent_core.json` 新增具名 `agentIterationSummaryItem`，补上此前被 inline object 吃掉的迭代摘要结构；各端生成产物现直接暴露强类型迭代摘要。
+  - `core/bridge/orchestration` 已移除围绕 GraphQL headers / provider override 的 `any` 中转与手工再解码，直接使用生成后的 `map[string]string` / `map[string]int`；Web parser 也同步改为显式校验 string/number record。
+- 本轮验证：
+  - `python3 -m unittest discover -s core/shared/tests`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./config ./tools -timeout 60s`
+  - `timeout 60 cargo test --manifest-path apps/cli/Cargo.toml`
+  - `pnpm -C apps/web test -- --runTestsByPath lib/api/config/api.test.ts`
+  - `pnpm -C apps/web exec tsc --noEmit`
+
 - 修复 GraphQL 配置更新链路的 header 类型漂移：
   - `core/shared/contract_codegen/emitters/go.py` 现按 `additionalProperties` 生成强类型 map；`graphqlSourceInput.headers` / `graphqlSourceResponse.headers` 已回到 `map[string]string`，无效 header value 会在 orchestration 参数解码阶段显式失败。
   - `core/bridge/orchestration/config_shim.go` 已移除 `any -> string -> nil` 的静默降级路径，GraphQL source header 不再因非法值被整块清空。
   - `core/bridge/orchestration/service_config_runtime_test.go` 新增回归，覆盖“非法非字符串 header 返回 400，且既有 header 保持不变”。
   - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./config -timeout 60s` 已通过。
+
+- 统一 Web 客户端响应解析的前向兼容语义：
+  - `apps/web/lib/api/shared.ts` 新增“只提取已知字段”的 parser helper，`agent/config/rss/sessions` 解析器不再因 bridge 新增字段直接报错，改为忽略未知字段并继续校验已知字段类型与必填项。
+  - `apps/web` 已补 config/rss/sessions 定向回归，覆盖“新增字段不破坏旧客户端”与“缺少 canonical 必填字段仍显式报错”两类边界，和文档及 Android `ignoreUnknownKeys = true` 语义对齐。
+- 本轮验证：
+  - `timeout 60s pnpm -C apps/web test -- --runTestsByPath lib/api/agent/api.test.ts lib/api/config/api.test.ts lib/api/config/parser.test.ts lib/api/rss/api.test.ts lib/api/rss/parser.test.ts lib/api/sessions/api.test.ts lib/api/sessions/parser.test.ts`
 
 - 收口 `tfind` 的模型侧工具面管理语义：
   - `tools.FormatPromptGuidanceForCatalog` 新增 `tfind` 专用 workflow guidance，明确 `search -> load -> next turn use -> list/unload` 的使用顺序与同轮限制。

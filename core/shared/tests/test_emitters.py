@@ -25,12 +25,20 @@ class EmittersTest(unittest.TestCase):
         self.assertIn('const busAssistantSessionEndSignal = "END_SESSION"', rendered)
         self.assertIn("type askHumanOption struct {", rendered)
         self.assertLess(rendered.index("type askHumanOption struct {"), rendered.index("type agentResponse struct {"))
+        self.assertIn("type agentIterationSummaryItem struct {", rendered)
+        self.assertIn("IterationSummary []agentIterationSummaryItem", rendered)
+        self.assertIn("Headers map[string]string", rendered)
+        self.assertIn("ModelContextWindowTokens map[string]int", rendered)
 
     def test_ts_renderer_emits_union_and_cross_file_refs(self) -> None:
         rendered = render_ts(self.schema)
 
         self.assertIn("export interface SessionHumanInteraction {", rendered)
         self.assertIn("options?: AskHumanOption[];", rendered)
+        self.assertIn("export interface AgentIterationSummaryItem {", rendered)
+        self.assertIn("iteration_summary?: AgentIterationSummaryItem[];", rendered)
+        self.assertIn("headers?: Record<string, string>;", rendered)
+        self.assertIn("model_context_window_tokens?: Record<string, number>;", rendered)
         self.assertIn(
             "export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;",
             rendered,
@@ -42,8 +50,16 @@ class EmittersTest(unittest.TestCase):
 
         self.assertIn("pub enum AgentPayload {", rust)
         self.assertIn("AwaitingHuman(AgentSendAwaitingHumanResponse)", rust)
+        self.assertIn("pub struct AgentIterationSummaryItem {", rust)
+        self.assertIn("pub iteration_summary: Option<Vec<AgentIterationSummaryItem>>", rust)
+        self.assertIn("pub headers: Option<BTreeMap<String, String>>", rust)
+        self.assertIn("pub model_context_window_tokens: Option<BTreeMap<String, i64>>", rust)
         self.assertIn("sealed interface AgentSendResponse", kotlin)
         self.assertIn(") : AgentSendResponse", kotlin)
+        self.assertIn("data class AgentIterationSummaryItem(", kotlin)
+        self.assertIn("val iterationSummary: List<AgentIterationSummaryItem>? = null", kotlin)
+        self.assertIn("val headers: Map<String, String>? = null", kotlin)
+        self.assertIn("val modelContextWindowTokens: Map<String, Int>? = null", kotlin)
 
 
 if __name__ == "__main__":

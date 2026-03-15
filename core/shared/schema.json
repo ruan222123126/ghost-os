@@ -2,13 +2,19 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ghost-os.dev/schemas/bus-envelope.schema.json",
   "title": "Ghost-OS Bus Contract",
-  "description": "Single source of truth for cross-process request/response envelopes and core action schemas.",
+  "description": "Single source of truth for cross-process request/response envelopes, stream event envelopes, and core action schemas.",
   "oneOf": [
     {
       "$ref": "#/$defs/requestEnvelope"
     },
     {
       "$ref": "#/$defs/responseEnvelope"
+    },
+    {
+      "$ref": "#/$defs/agentStreamEvent"
+    },
+    {
+      "$ref": "#/$defs/sessionPushEvent"
     }
   ],
   "$defs": {
@@ -51,6 +57,9 @@
     "agentRequest": {
       "$ref": "./schema/defs/agent_core.json#/$defs/agentRequest"
     },
+    "agentIterationSummaryItem": {
+      "$ref": "./schema/defs/agent_core.json#/$defs/agentIterationSummaryItem"
+    },
     "agentResponsePayload": {
       "$ref": "./schema/defs/agent_core.json#/$defs/agentResponsePayload"
     },
@@ -71,6 +80,39 @@
     },
     "agentSendResultPayload": {
       "$ref": "./schema/defs/agent_core.json#/$defs/agentSendResultPayload"
+    },
+    "agentStreamEvent": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamEvent"
+    },
+    "sessionPushEvent": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushEvent"
+    },
+    "agentRunStartedPayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentRunStartedPayload"
+    },
+    "agentCompletionDeltaPayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentCompletionDeltaPayload"
+    },
+    "agentToolCallStartedPayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallStartedPayload"
+    },
+    "agentToolCallFinishedPayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallFinishedPayload"
+    },
+    "agentStreamMessagePayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamMessagePayload"
+    },
+    "agentDonePayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentDonePayload"
+    },
+    "agentErrorPayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/agentErrorPayload"
+    },
+    "sessionPushAssistantMessagePayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAssistantMessagePayload"
+    },
+    "sessionPushAwaitingHumanPayload": {
+      "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAwaitingHumanPayload"
     },
     "sessionImageContent": {
       "$ref": "./schema/defs/session_content.json#/$defs/sessionImageContent"

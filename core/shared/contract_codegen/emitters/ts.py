@@ -1,7 +1,24 @@
 from __future__ import annotations
 
 from contract_codegen.catalog import collect_definitions, dereference_schema, target_name_map
-from contract_codegen.common import schema_ref_name
+from contract_codegen.common import (
+    object_additional_properties_schema,
+    object_has_declared_properties,
+    object_is_open,
+    schema_ref_name,
+)
+
+
+def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if object_has_declared_properties(prop_schema):
+        raise ValueError(f"inline structured TS object must be promoted to $defs: {prop_schema}")
+
+    additional = object_additional_properties_schema(prop_schema)
+    if additional is not None:
+        return f"Record<string, {_type_for_schema(schema, target_names, additional)}>"
+    if object_is_open(prop_schema):
+        return "Record<string, unknown>"
+    raise ValueError(f"unsupported closed TS object schema: {prop_schema}")
 
 
 def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
@@ -26,7 +43,7 @@ def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -
     if schema_type == "array":
         return f'{_type_for_schema(schema, target_names, prop_schema.get("items", {}))}[]'
     if schema_type == "object":
-        return "Record<string, unknown>"
+        return _object_type(schema, target_names, prop_schema)
     raise ValueError(f"unsupported TS schema: {prop_schema}")
 
 
@@ -97,4 +114,3 @@ export type ApiEnvelope<TPayload> = ApiSuccessEnvelope<TPayload> | ApiErrorEnvel
 
 {unions}
 '''
-

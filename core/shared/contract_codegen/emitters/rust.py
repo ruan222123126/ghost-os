@@ -1,13 +1,32 @@
 from __future__ import annotations
 
 from contract_codegen.catalog import collect_definitions, dereference_schema, target_name_map
-from contract_codegen.common import non_null_one_of_candidates, schema_ref_name
+from contract_codegen.common import (
+    non_null_one_of_candidates,
+    object_additional_properties_schema,
+    object_has_declared_properties,
+    object_is_open,
+    schema_ref_name,
+)
 
 RUST_RESERVED_FIELDS = {"type"}
 
 
 def _field_name(name: str) -> str:
     return f"r#{name}" if name in RUST_RESERVED_FIELDS else name
+
+
+def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if object_has_declared_properties(prop_schema):
+        raise ValueError(f"inline structured Rust object must be promoted to $defs: {prop_schema}")
+
+    additional = object_additional_properties_schema(prop_schema)
+    if additional is not None:
+        inner = _type_for_schema(schema, target_names, additional, required=True)
+        return f"BTreeMap<String, {inner}>"
+    if object_is_open(prop_schema):
+        return "BTreeMap<String, Value>"
+    raise ValueError(f"unsupported closed Rust object schema: {prop_schema}")
 
 
 def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
@@ -31,7 +50,7 @@ def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -
         inner = _type_for_schema(schema, target_names, prop_schema.get("items", {}), required=True)
         return f"Vec<{inner}>"
     if schema_type == "object":
-        return "Value"
+        return _object_type(schema, target_names, prop_schema)
     raise ValueError(f"unsupported Rust schema: {prop_schema}")
 
 
@@ -85,6 +104,7 @@ def render(schema: dict) -> str:
 
 use anyhow::{{Result, anyhow}};
 use serde::{{Deserialize, Serialize}};
+use std::collections::BTreeMap;
 use serde_json::Value;
 
 #[derive(Debug, Serialize)]
@@ -123,4 +143,3 @@ impl<TPayload> ApiResponse<TPayload> {{
 
 {unions}
 '''
-
