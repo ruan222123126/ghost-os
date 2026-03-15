@@ -34,6 +34,11 @@
 - 本轮验证：
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -timeout 60s`
 
+- 清理 `core/bridge/runtime/export.go` 未调用私有包装：
+  - 删除 `parseStringCSV`、`getenvDefault`、`toolCatalogNames` 三个仅做转发且无调用点的私有 helper，保留现有公开导出面不变，避免 runtime 导出层继续保留无效包装。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./runtime -timeout 60s`
+
 - 清理 transport SSE 死代码：
   - `core/bridge/transport/transport_sse.go` 已删除未被任何 transport 路径调用的 `eventTurnTracker`、`finalAssistantTurn`、`emitStreamErrorEvent` 及其连带 helper，避免 SSE 入口继续保留误导性分支。
 - 本轮验证：

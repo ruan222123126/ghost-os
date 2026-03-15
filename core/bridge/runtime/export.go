@@ -104,14 +104,6 @@ func loadConfigWithRuntime(runtime RuntimeConfig) (Config, error) {
 	return bridgeconfig.LoadWithRuntime(runtime)
 }
 
-func parseStringCSV(raw string) []string {
-	return bridgeconfig.ParseStringCSV(raw)
-}
-
-func getenvDefault(name, fallback string) string {
-	return bridgeconfig.GetenvDefault(name, fallback)
-}
-
 func nativePersistentEnabledFromEnv() bool {
 	return bridgeconfig.NativePersistentEnabledFromEnv()
 }
@@ -146,8 +138,4 @@ func NewExecutionClientFromEnv() execution.Client {
 
 func CloseExecutionClient(client execution.Client) error {
 	return closeExecutionClient(client)
-}
-
-func toolCatalogNames(catalog tools.ToolCatalog) []string {
-	return tools.CatalogToolNames(catalog)
 }
