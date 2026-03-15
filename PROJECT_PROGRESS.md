@@ -23,6 +23,9 @@
 
 ### 2026-03-15
 
+- 收口 RSS report prompt 的职责边界：
+  - `core/bridge/rss/report_prompt.go` 已移除对 `ghost-os/bridge/tools` 的依赖，prompt 文件只保留“输入 -> 提示词字符串”的模板拼装。
+  - scoped `ToolCatalog` 到提示词文案的适配已迁回 `core/bridge/rss/report_service.go`，避免 RSS prompt 层反向依赖工具目录实现。
 - 清理一组低成本 warning 噪声与冗余导入：
   - `apps/web/lib/api/sessions/parser.ts` 删除未使用的 `parseOptionalStringArray` 导入，避免继续保留可被静态检查直接识别的死代码。
   - `apps/cli` 对 `envelope_generated` 模块局部收口 `dead_code` warning，避免共享契约全量生成的未使用 DTO 持续污染 CLI 的告警基线；同时把 `ConfigUpdate` 的空更新构造改成显式 `ConfigUpdate::empty()`，移除额外的 `derivable_impls` 噪声。
