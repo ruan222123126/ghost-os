@@ -16,6 +16,8 @@ class SchemaLoaderTest(unittest.TestCase):
         schema = load_schema(ROOT / "schema.json")
 
         self.assertIn("agentResponsePayload", schema["$defs"])
+        self.assertIn("agentStreamEvent", schema["$defs"])
+        self.assertIn("sessionPushEvent", schema["$defs"])
         self.assertEqual(
             "./agent_human.json#/$defs/agentAwaitingHumanPayload",
             schema["$defs"]["agentSendResultPayload"]["oneOf"][1]["$ref"],
@@ -23,6 +25,10 @@ class SchemaLoaderTest(unittest.TestCase):
         self.assertEqual(
             "./base.json#/$defs/providerType",
             schema["$defs"]["bridgeConfig"]["properties"]["provider_type"]["$ref"],
+        )
+        self.assertEqual(
+            "AgentStreamEvent",
+            schema["$defs"]["agentStreamEvent"]["x-codegen"]["kotlin"]["name"],
         )
 
     def test_collect_definitions_reads_codegen_metadata(self) -> None:
@@ -33,6 +39,7 @@ class SchemaLoaderTest(unittest.TestCase):
 
         self.assertEqual("assistantSessionEndSignal", ts_objects[0].name)
         self.assertEqual("BridgeConfig", next(spec.target_name for spec in ts_objects if spec.name == "bridgeConfig"))
+        self.assertEqual("AgentStreamEvent", next(spec.target_name for spec in ts_objects if spec.name == "agentStreamEvent"))
         self.assertEqual(["AgentSendResponse"], kotlin_union_implementers(schema)["agentResponsePayload"])
         self.assertEqual(["agentSendResultPayload"], [spec.name for spec in ts_unions])
 

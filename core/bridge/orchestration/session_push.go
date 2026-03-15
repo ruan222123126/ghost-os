@@ -32,19 +32,6 @@ type sessionPushEvent struct {
 	At        time.Time            `json:"at"`
 }
 
-type assistantMessagePushPayload struct {
-	Message      string                            `json:"message"`
-	SessionEnded bool                              `json:"session_ended"`
-	SessionEnd   *assistantSessionEndSignalPayload `json:"session_end,omitempty"`
-}
-
-type awaitingHumanPushPayload struct {
-	QuestionID    string           `json:"question_id"`
-	Prompt        string           `json:"prompt"`
-	SelectionMode string           `json:"selection_mode,omitempty"`
-	Options       []askHumanOption `json:"options,omitempty"`
-}
-
 // sessionPushHub 把同一 session 的完成消息和 ask_human 事件广播给长连接订阅者。
 type sessionPushHub struct {
 	mu          sync.RWMutex

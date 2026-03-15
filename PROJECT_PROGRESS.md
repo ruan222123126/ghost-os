@@ -265,3 +265,12 @@
 - `drivers/native` 仍未达到“所有原子能力都稳定完备”的状态，新增功能时仍应优先走脚本与 API，再考虑视觉回退。
 - Memory 子系统处于持续演进阶段，当前以可用和可验证为先，不宜假设其内部模型已经稳定冻结。
 - `PROJECT_PROGRESS.md` 现改为压缩版快照，不再保留逐次微调的完整流水账；如需追溯细粒度变更，应查看 `git log`。
+
+- 收口流式协议的共享契约来源：
+  - `core/shared/schema.json` 与新增 `core/shared/schema/defs/streaming_events.json` 现纳入 `agent stream` / `session push` 的 envelope 与核心 payload 定义，不再只有 request/response DTO 在共享 schema 内。
+  - 重新生成 Go / TS / Rust / Kotlin 契约后，Android 已删除手写 `SessionPushModels.kt`，直接使用共享生成的 `AgentStreamEvent`、`SessionPushEvent` 及其 payload 模型。
+  - `core/bridge/orchestration` 已移除手写 `assistantMessagePushPayload` / `awaitingHumanPushPayload`，并新增 `stream_contract_test.go` 校验手写实时事件 envelope 仍与共享生成契约兼容。
+- 本轮验证：
+  - `python3 -m unittest core/shared/tests/test_schema_loader.py core/shared/tests/test_emitters.py`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./transport -timeout 60s`
+  - `timeout 180s ./gradlew testDebugUnitTest --tests dev.ghostos.android.network.BridgeClientTest --tests dev.ghostos.android.viewmodel.ChatViewModelTest`

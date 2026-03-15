@@ -129,6 +129,21 @@ pub struct HumanResponseAck {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentStreamEvent {
+    pub id: String,
+    pub step_id: String,
+    pub trace_id: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    pub turn: i64,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub payload: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub at: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionImageContent {
     #[serde(default)]
     pub path: Option<String>,
@@ -164,6 +179,25 @@ pub struct SessionFileContent {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionPushEvent {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+    pub session_id: String,
+    pub payload: BTreeMap<String, Value>,
+    #[serde(default)]
+    pub at: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentRunStartedPayload {
+    #[serde(default)]
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionContentPart {
     #[serde(rename = "type")]
     pub r#type: String,
@@ -176,10 +210,33 @@ pub struct SessionContentPart {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentCompletionDeltaPayload {
+    pub kind: String,
+    #[serde(default)]
+    pub text: Option<String>,
+    #[serde(default)]
+    pub tool_call_index: Option<i64>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub arguments_fragment: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionToolCall {
     pub id: String,
     pub name: String,
     pub arguments: BTreeMap<String, Value>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentToolCallStartedPayload {
+    #[serde(default)]
+    pub tool: Option<String>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -195,6 +252,18 @@ pub struct SessionToolResult {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentToolCallFinishedPayload {
+    #[serde(default)]
+    pub tool: Option<String>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionHumanInteraction {
     pub question_id: String,
     pub prompt: String,
@@ -204,6 +273,13 @@ pub struct SessionHumanInteraction {
     pub options: Option<Vec<AskHumanOption>>,
     #[serde(default)]
     pub answer: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentStreamMessagePayload {
+    pub text: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -224,12 +300,29 @@ pub struct SessionMessage {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentDonePayload {
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub session_ended: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionMetadata {
     pub id: String,
     pub created_at: String,
     pub updated_at: String,
     pub message_count: i64,
     pub token_count: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentErrorPayload {
+    pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub code: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -258,6 +351,14 @@ pub struct BridgeConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionPushAssistantMessagePayload {
+    pub message: String,
+    pub session_ended: bool,
+    #[serde(default)]
+    pub session_end: Option<AssistantSessionEndSignal>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct ConfigUpdate {
     #[serde(default)]
     pub provider: Option<String>,
@@ -283,6 +384,16 @@ pub struct ConfigUpdate {
     pub web_search_exa_api_key: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionPushAwaitingHumanPayload {
+    pub question_id: String,
+    pub prompt: String,
+    #[serde(default)]
+    pub selection_mode: Option<String>,
+    #[serde(default)]
+    pub options: Option<Vec<AskHumanOption>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

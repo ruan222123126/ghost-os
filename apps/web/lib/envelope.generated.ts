@@ -92,6 +92,17 @@ export interface HumanResponseAck {
   accepted: boolean;
 }
 
+export interface AgentStreamEvent {
+  id: string;
+  step_id: string;
+  trace_id: string;
+  session_id?: string;
+  turn: number;
+  type: 'run_started' | 'completion_delta' | 'tool_call_started' | 'tool_call_finished' | 'awaiting_human' | 'message' | 'done' | 'error';
+  payload: Record<string, unknown>;
+  at?: string;
+}
+
 export interface SessionImageContent {
   path?: string;
   url?: string;
@@ -113,6 +124,19 @@ export interface SessionFileContent {
   note?: string;
 }
 
+export interface SessionPushEvent {
+  id: string;
+  type: 'assistant_message' | 'awaiting_human' | 'run_started' | 'completion_delta' | 'tool_call_started' | 'tool_call_finished' | 'error' | 'done';
+  trace_id?: string;
+  session_id: string;
+  payload: Record<string, unknown>;
+  at?: string;
+}
+
+export interface AgentRunStartedPayload {
+  session_id?: string;
+}
+
 export interface SessionContentPart {
   type: string;
   text?: string;
@@ -120,10 +144,24 @@ export interface SessionContentPart {
   file?: SessionFileContent | null;
 }
 
+export interface AgentCompletionDeltaPayload {
+  kind: 'text' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end';
+  text?: string;
+  tool_call_index?: number;
+  tool_call_id?: string;
+  tool_name?: string;
+  arguments_fragment?: string;
+}
+
 export interface SessionToolCall {
   id: string;
   name: string;
   arguments: Record<string, unknown>;
+}
+
+export interface AgentToolCallStartedPayload {
+  tool?: string;
+  tool_call_id?: string;
 }
 
 export interface SessionToolResult {
@@ -134,12 +172,24 @@ export interface SessionToolResult {
   error?: string;
 }
 
+export interface AgentToolCallFinishedPayload {
+  tool?: string;
+  tool_call_id?: string;
+  status?: string;
+  error?: string;
+}
+
 export interface SessionHumanInteraction {
   question_id: string;
   prompt: string;
   selection_mode?: 'single' | 'multiple';
   options?: AskHumanOption[];
   answer?: string;
+}
+
+export interface AgentStreamMessagePayload {
+  text: string;
+  session_id?: string;
 }
 
 export interface SessionMessage {
@@ -152,12 +202,23 @@ export interface SessionMessage {
   tool_call_id?: string;
 }
 
+export interface AgentDonePayload {
+  session_id?: string;
+  session_ended?: boolean;
+}
+
 export interface SessionMetadata {
   id: string;
   created_at: string;
   updated_at: string;
   message_count: number;
   token_count: number;
+}
+
+export interface AgentErrorPayload {
+  message: string;
+  session_id?: string;
+  code?: number;
 }
 
 export interface SessionDetail {
@@ -183,6 +244,12 @@ export interface BridgeConfig {
   web_search_exa_api_key_set: boolean;
 }
 
+export interface SessionPushAssistantMessagePayload {
+  message: string;
+  session_ended: boolean;
+  session_end?: AssistantSessionEndSignal | null;
+}
+
 export interface ConfigUpdate {
   provider?: string;
   api_key?: string;
@@ -196,6 +263,13 @@ export interface ConfigUpdate {
   web_search_tavily_api_key?: string;
   web_search_exa_api_key?: string;
   trace_id?: string;
+}
+
+export interface SessionPushAwaitingHumanPayload {
+  question_id: string;
+  prompt: string;
+  selection_mode?: 'single' | 'multiple';
+  options?: AskHumanOption[];
 }
 
 export interface GraphQLDomainResponse {

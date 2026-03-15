@@ -4,11 +4,13 @@ import dev.ghostos.android.model.AgentStreamEvent
 import dev.ghostos.android.model.AgentSendResponse
 import dev.ghostos.android.model.AskHumanOption
 import dev.ghostos.android.model.BridgeConfig
+import dev.ghostos.android.model.DownloadedArtifact
 import dev.ghostos.android.model.SessionDetail
 import dev.ghostos.android.model.SessionHumanInteraction
 import dev.ghostos.android.model.SessionMessage
 import dev.ghostos.android.model.SessionMetadata
 import dev.ghostos.android.model.SessionPushEvent
+import dev.ghostos.android.model.SessionToolResult
 import dev.ghostos.android.network.BridgeGateway
 import dev.ghostos.android.store.ChatSettingsStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -166,6 +168,20 @@ class ChatViewModelTest {
     @Test
     fun `sendMessage streams assistant output and finalizes one assistant bubble`() = runTest(mainDispatcherRule.dispatcher.scheduler) {
         val bridge = FakeBridgeGateway(
+            sessionDetails = mutableMapOf(
+                "session-stream" to Result.success(
+                    SessionDetail(
+                        id = "session-stream",
+                        messages = listOf(
+                            SessionMessage(role = "user", text = "你好"),
+                            SessionMessage(role = "assistant", text = "正在回复"),
+                        ),
+                        createdAt = "2026-03-15T10:00:00Z",
+                        updatedAt = "2026-03-15T10:01:00Z",
+                        tokenCount = 12,
+                    ),
+                ),
+            ),
             streamMessageFlow = flowOf(
                 streamEvent("trace-1", "run_started", payload("session_id" to "session-stream")),
                 streamEvent("trace-1", "completion_delta", payload("kind" to "text", "text" to "正在")),
@@ -190,6 +206,30 @@ class ChatViewModelTest {
     @Test
     fun `sendMessage shows tool activity and marks status`() = runTest(mainDispatcherRule.dispatcher.scheduler) {
         val bridge = FakeBridgeGateway(
+            sessionDetails = mutableMapOf(
+                "session-tools" to Result.success(
+                    SessionDetail(
+                        id = "session-tools",
+                        messages = listOf(
+                            SessionMessage(role = "user", text = "列一下文件"),
+                            SessionMessage(
+                                role = "tool",
+                                text = "工具完成：list_files",
+                                toolCallId = "call-1",
+                                toolResult = SessionToolResult(
+                                    status = "success",
+                                    tool = "list_files",
+                                    output = "工具完成：list_files",
+                                ),
+                            ),
+                            SessionMessage(role = "assistant", text = "已完成"),
+                        ),
+                        createdAt = "2026-03-15T10:00:00Z",
+                        updatedAt = "2026-03-15T10:01:00Z",
+                        tokenCount = 18,
+                    ),
+                ),
+            ),
             streamMessageFlow = flowOf(
                 streamEvent("trace-2", "run_started", payload("session_id" to "session-tools")),
                 streamEvent("trace-2", "tool_call_started", payload("tool" to "list_files", "tool_call_id" to "call-1")),
@@ -321,6 +361,10 @@ private class FakeBridgeGateway(
 
     override suspend fun getSession(sessionId: String): Result<SessionDetail> {
         return sessionDetails[sessionId] ?: Result.failure(IllegalArgumentException("missing session detail: $sessionId"))
+    }
+
+    override suspend fun downloadSessionArtifact(sessionId: String, artifactId: String): Result<DownloadedArtifact> {
+        return Result.failure(UnsupportedOperationException())
     }
 
     override fun observeSessionEvents(sessionId: String): Flow<SessionPushEvent> = flow {

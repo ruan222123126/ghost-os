@@ -1,0 +1,217 @@
+{
+  "$defs": {
+    "agentStreamEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "step_id", "trace_id", "turn", "type", "payload"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "step_id": { "type": "string" },
+        "trace_id": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string" },
+        "turn": { "type": "integer", "minimum": 0 },
+        "type": {
+          "type": "string",
+          "enum": ["run_started", "completion_delta", "tool_call_started", "tool_call_finished", "awaiting_human", "message", "done", "error"]
+        },
+        "payload": { "type": "object" },
+        "at": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 100,
+        "go": { "name": "agentStreamEventContract" },
+        "ts": { "name": "AgentStreamEvent" },
+        "rust": { "name": "AgentStreamEvent" },
+        "kotlin": { "name": "AgentStreamEvent" }
+      }
+    },
+    "sessionPushEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "session_id", "payload"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["assistant_message", "awaiting_human", "run_started", "completion_delta", "tool_call_started", "tool_call_finished", "error", "done"]
+        },
+        "trace_id": { "type": "string" },
+        "session_id": { "type": "string", "minLength": 1 },
+        "payload": { "type": "object" },
+        "at": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 110,
+        "go": { "name": "sessionPushEventContract" },
+        "ts": { "name": "SessionPushEvent" },
+        "rust": { "name": "SessionPushEvent" },
+        "kotlin": { "name": "SessionPushEvent" }
+      }
+    },
+    "agentRunStartedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 120,
+        "go": { "name": "agentRunStartedPayload" },
+        "ts": { "name": "AgentRunStartedPayload" },
+        "rust": { "name": "AgentRunStartedPayload" },
+        "kotlin": { "name": "AgentRunStartedPayload" }
+      }
+    },
+    "agentCompletionDeltaPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["text", "tool_call_start", "tool_call_delta", "tool_call_end"]
+        },
+        "text": { "type": "string" },
+        "tool_call_index": { "type": "integer", "minimum": 0 },
+        "tool_call_id": { "type": "string" },
+        "tool_name": { "type": "string" },
+        "arguments_fragment": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 130,
+        "go": { "name": "agentCompletionDeltaPayload" },
+        "ts": { "name": "AgentCompletionDeltaPayload" },
+        "rust": { "name": "AgentCompletionDeltaPayload" },
+        "kotlin": { "name": "AgentCompletionDeltaPayload" }
+      }
+    },
+    "agentToolCallStartedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string" },
+        "tool_call_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 140,
+        "go": { "name": "agentToolCallStartedPayload" },
+        "ts": { "name": "AgentToolCallStartedPayload" },
+        "rust": { "name": "AgentToolCallStartedPayload" },
+        "kotlin": { "name": "AgentToolCallStartedPayload" }
+      }
+    },
+    "agentToolCallFinishedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string" },
+        "tool_call_id": { "type": "string" },
+        "status": { "type": "string" },
+        "error": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 150,
+        "go": { "name": "agentToolCallFinishedPayload" },
+        "ts": { "name": "AgentToolCallFinishedPayload" },
+        "rust": { "name": "AgentToolCallFinishedPayload" },
+        "kotlin": { "name": "AgentToolCallFinishedPayload" }
+      }
+    },
+    "agentStreamMessagePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text"],
+      "properties": {
+        "text": { "type": "string" },
+        "session_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 160,
+        "go": { "name": "agentStreamMessagePayload" },
+        "ts": { "name": "AgentStreamMessagePayload" },
+        "rust": { "name": "AgentStreamMessagePayload" },
+        "kotlin": { "name": "AgentStreamMessagePayload" }
+      }
+    },
+    "agentDonePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": { "type": "string" },
+        "session_ended": { "type": "boolean" }
+      },
+      "x-codegen": {
+        "order": 170,
+        "go": { "name": "agentDonePayload" },
+        "ts": { "name": "AgentDonePayload" },
+        "rust": { "name": "AgentDonePayload" },
+        "kotlin": { "name": "AgentDonePayload" }
+      }
+    },
+    "agentErrorPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string", "minLength": 1 },
+        "session_id": { "type": "string" },
+        "code": { "type": "integer" }
+      },
+      "x-codegen": {
+        "order": 180,
+        "go": { "name": "agentErrorPayload" },
+        "ts": { "name": "AgentErrorPayload" },
+        "rust": { "name": "AgentErrorPayload" },
+        "kotlin": { "name": "AgentErrorPayload" }
+      }
+    },
+    "sessionPushAssistantMessagePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message", "session_ended"],
+      "properties": {
+        "message": { "type": "string", "minLength": 1 },
+        "session_ended": { "type": "boolean" },
+        "session_end": {
+          "oneOf": [
+            { "$ref": "./agent_core.json#/$defs/assistantSessionEndSignal" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "x-codegen": {
+        "order": 190,
+        "go": { "name": "assistantMessagePushPayload" },
+        "ts": { "name": "SessionPushAssistantMessagePayload" },
+        "rust": { "name": "SessionPushAssistantMessagePayload" },
+        "kotlin": { "name": "SessionPushAssistantMessagePayload" }
+      }
+    },
+    "sessionPushAwaitingHumanPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question_id", "prompt"],
+      "properties": {
+        "question_id": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "selection_mode": {
+          "type": "string",
+          "enum": ["single", "multiple"]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "./agent_human.json#/$defs/askHumanOption"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 200,
+        "go": { "name": "awaitingHumanPushPayload" },
+        "ts": { "name": "SessionPushAwaitingHumanPayload" },
+        "rust": { "name": "SessionPushAwaitingHumanPayload" },
+        "kotlin": { "name": "SessionPushAwaitingHumanPayload" }
+      }
+    }
+  }
+}
