@@ -17,9 +17,8 @@ Rules:
 - Decision hints are advisory, not mandatory.
 - Prefer the current request and available tools over historical hints when they conflict.
 - Do not infer unavailable tools from hints.
-- Return mode="all" when uncertain, mixed-domain, or broad.
-- Return mode="all" when hints are weak, stale, or not clearly applicable.
-- Return mode="subset" only for focused requests.
+- Return mode="subset" only when the current request is focused and a small tool set is clearly sufficient.
+- Return mode="all" otherwise, especially when uncertain or the hints are weak, stale, or not clearly applicable.
 - Confidence must be 0.0-1.0.
 - Output JSON only.
 

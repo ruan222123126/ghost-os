@@ -161,6 +161,17 @@ func TestToolSelector_BuildPromptOmitsDecisionHintWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestToolSelector_SystemPromptMergesAllFallbackGuidance(t *testing.T) {
+	selector := NewToolSelector(newSelectorTestConfig(), &fakeSelectorCompleter{})
+	prompt := selector.selectorSystemPrompt()
+	if !strings.Contains(prompt, `Return mode="subset" only when the current request is focused and a small tool set is clearly sufficient.`) {
+		t.Fatalf("expected focused subset guidance, got %q", prompt)
+	}
+	if !strings.Contains(prompt, `Return mode="all" otherwise, especially when uncertain or the hints are weak, stale, or not clearly applicable.`) {
+		t.Fatalf("expected merged fallback guidance, got %q", prompt)
+	}
+}
+
 func TestToolSelector_SelectToolsPassesDecisionHintToWorker(t *testing.T) {
 	completer := &fakeSelectorCompleter{response: selectorResponse(`{"mode":"subset","tools":["script_exec"],"confidence":0.93,"reason":"focused edit task"}`)}
 	selector := NewToolSelector(newSelectorTestConfig(), completer)
