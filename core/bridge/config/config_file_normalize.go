@@ -72,6 +72,7 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
 	cfg.NativeAllowedReadPaths = normalizeConfiguredPathList(cfg.NativeAllowedReadPaths)
 	cfg.NativeAllowedWritePaths = normalizeConfiguredPathList(cfg.NativeAllowedWritePaths)
 	cfg.GraphQLSources = normalizeGraphQLSourceFileConfigs(cfg.GraphQLSources)
+	cfg.GraphQLMutationPolicies = normalizeGraphQLMutationPolicyFileConfigs(cfg.GraphQLMutationPolicies)
 	cfg.GraphQLHeaders, _ = normalizeGraphQLHeaders(cfg.GraphQLHeaders)
 	cfg.ProviderHeaders, _ = normalizeProviderHeaders(cfg.ProviderHeaders)
 	cfg.CORSOrigins = normalizeOrigins(cfg.CORSOrigins)
@@ -127,7 +128,9 @@ func clearLegacyProviderFields(cfg *bridgeFileConfig) {
 }
 
 func hasGraphQLSourceLayout(cfg bridgeFileConfig) bool {
-	return cfg.GraphQLDefaultSource != nil || len(cfg.GraphQLSources) > 0
+	return cfg.GraphQLDefaultSource != nil ||
+		len(cfg.GraphQLSources) > 0 ||
+		len(cfg.GraphQLMutationPolicies) > 0
 }
 
 func clearLegacyGraphQLFields(cfg *bridgeFileConfig) {

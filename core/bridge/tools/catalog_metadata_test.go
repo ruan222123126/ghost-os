@@ -16,6 +16,7 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		"web_search",
 		"graphql_query",
 		"graphql_schema_lookup",
+		"graphql_mutation",
 		"feed_manage",
 		"rss_fetch",
 		"memory_manage",
@@ -79,7 +80,7 @@ func TestFormatMetadataForSelector_HidesOnDemandTools(t *testing.T) {
 	if strings.Contains(formatted, ToolSearchToolName) {
 		t.Fatalf("formatted metadata should exclude %q: %q", ToolSearchToolName, formatted)
 	}
-	for _, name := range []string{"graphql_query", "graphql_schema_lookup"} {
+	for _, name := range []string{"graphql_query", "graphql_schema_lookup", "graphql_mutation"} {
 		if strings.Contains(formatted, name) {
 			t.Fatalf("formatted metadata should exclude on-demand tool %q: %q", name, formatted)
 		}

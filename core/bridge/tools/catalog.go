@@ -124,6 +124,7 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
 		{Name: "graphql_query", Domain: "data", Tags: []string{"graphql", "query", "read", "structured"}, ShortDesc: "Read-only structured data query.", OnDemand: true},
 		{Name: "graphql_schema_lookup", Domain: "data", Tags: []string{"graphql", "schema", "inspect", "read"}, ShortDesc: "Inspect local GraphQL schema snapshot.", OnDemand: true},
+		{Name: "graphql_mutation", Domain: "data", Tags: []string{"graphql", "mutation", "write", "approval"}, ShortDesc: "Prepare and commit approved GraphQL writes.", OnDemand: true},
 		{Name: "feed_manage", Domain: "web", Tags: []string{"feed", "rss", "manage", "crud"}, ShortDesc: "Manage RSS/Atom sources."},
 		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}, ShortDesc: "Fetch one RSS/Atom feed."},
 		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}, ShortDesc: "CRUD explicit memory."},

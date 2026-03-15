@@ -121,6 +121,56 @@ func TestRuntimeConfigFromEnvUsesGraphQLSourcesLayout(t *testing.T) {
 	if len(source.Domains) != 1 || source.Domains[0].Name != "orders" {
 		t.Fatalf("unexpected source domains: %+v", source.Domains)
 	}
+	if len(runtime.GraphQL.MutationPolicies) != 0 {
+		t.Fatalf("expected no mutation policies by default, got %+v", runtime.GraphQL.MutationPolicies)
+	}
+}
+
+func TestRuntimeConfigFromEnvLoadsGraphQLMutationPolicies(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		GraphQLDefaultSource: stringPointer("crm"),
+		GraphQLSources: []graphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://crm.example/graphql",
+			SchemaPath:       "/schemas/crm.json",
+			TimeoutMS:        7000,
+			MaxResponseBytes: 16384,
+			MaxDepth:         7,
+			MaxFields:        48,
+			MaxRootFields:    3,
+			MaxFragments:     5,
+			Domains: []graphQLDomainFileConfig{{
+				Name:        "orders",
+				RootQueries: []string{"order"},
+				Types:       []string{"Order"},
+			}},
+		}},
+		GraphQLMutationPolicies: []graphQLMutationPolicyFileConfig{{
+			Name:         "capture_order",
+			Source:       "crm",
+			Domain:       "orders",
+			RootMutation: "captureOrder",
+			MaxDepth:     2,
+			MaxFields:    8,
+		}},
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+
+	runtime, err := runtimeConfigFromEnv()
+	if err != nil {
+		t.Fatalf("runtimeConfigFromEnv: %v", err)
+	}
+	if len(runtime.GraphQL.MutationPolicies) != 1 {
+		t.Fatalf("unexpected mutation policy count: %d", len(runtime.GraphQL.MutationPolicies))
+	}
+	policy := runtime.GraphQL.MutationPolicies[0]
+	if policy.Name != "capture_order" || policy.RootMutation != "captureOrder" {
+		t.Fatalf("unexpected mutation policy: %+v", policy)
+	}
 }
 
 func TestConfigStoreUpdatePersistsGraphQLSourcesAndHidesAPIKeys(t *testing.T) {
@@ -223,6 +273,42 @@ func TestRuntimeConfigFromEnvFailsOnInvalidGraphQLSource(t *testing.T) {
 
 	if _, err := runtimeConfigFromEnv(); err == nil {
 		t.Fatal("expected invalid graphql source config error")
+	}
+}
+
+func TestRuntimeConfigFromEnvFailsOnInvalidGraphQLMutationPolicySource(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		GraphQLDefaultSource: stringPointer("crm"),
+		GraphQLSources: []graphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://crm.example/graphql",
+			SchemaPath:       "/schemas/crm.json",
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         6,
+			MaxFields:        16,
+			MaxRootFields:    2,
+			MaxFragments:     4,
+			Domains: []graphQLDomainFileConfig{{
+				Name:        "orders",
+				RootQueries: []string{"order"},
+			}},
+		}},
+		GraphQLMutationPolicies: []graphQLMutationPolicyFileConfig{{
+			Name:         "bad_policy",
+			Source:       "billing",
+			Domain:       "orders",
+			RootMutation: "captureOrder",
+		}},
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+
+	if _, err := runtimeConfigFromEnv(); err == nil || !strings.Contains(err.Error(), `source "billing"`) {
+		t.Fatalf("expected invalid mutation policy source error, got %v", err)
 	}
 }
 

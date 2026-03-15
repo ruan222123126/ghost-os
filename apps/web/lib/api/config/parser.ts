@@ -1,6 +1,7 @@
 import type {
   BridgeConfig,
   GraphQLDomainResponse,
+  GraphQLMutationPolicyResponse,
   GraphQLSourceResponse,
   ProviderConfig,
   ProviderListResponse,
@@ -28,6 +29,7 @@ const BRIDGE_CONFIG_KEYS = [
   'model_selection_enabled',
   'graphql_default_source',
   'graphql_sources',
+  'graphql_mutation_policies',
   'web_search_tavily_api_key_set',
   'web_search_exa_api_key_set',
 ] as const;
@@ -66,6 +68,17 @@ const GRAPHQL_SOURCE_KEYS = [
   'headers',
   'api_key_set',
   'domains',
+] as const;
+const GRAPHQL_MUTATION_POLICY_KEYS = [
+  'name',
+  'description',
+  'source',
+  'domain',
+  'root_mutation',
+  'max_depth',
+  'max_fields',
+  'max_root_fields',
+  'max_fragments',
 ] as const;
 
 function parseProviderConfig(value: unknown, label: string): ProviderConfig {
@@ -147,11 +160,40 @@ function parseGraphQLSourceResponse(value: unknown, label: string): GraphQLSourc
   };
 }
 
+function parseGraphQLMutationPolicyResponse(
+  value: unknown,
+  label: string,
+): GraphQLMutationPolicyResponse {
+  const record = expectRecord(value, label);
+  ensureKnownKeys(record, GRAPHQL_MUTATION_POLICY_KEYS, label);
+
+  return {
+    name: expectString(record.name, `${label}.name`),
+    description: record.description === undefined
+      ? undefined
+      : expectString(record.description, `${label}.description`),
+    source: expectString(record.source, `${label}.source`),
+    domain: expectString(record.domain, `${label}.domain`),
+    root_mutation: expectString(record.root_mutation, `${label}.root_mutation`),
+    max_depth: record.max_depth === undefined ? undefined : expectNumber(record.max_depth, `${label}.max_depth`),
+    max_fields: record.max_fields === undefined ? undefined : expectNumber(record.max_fields, `${label}.max_fields`),
+    max_root_fields: record.max_root_fields === undefined
+      ? undefined
+      : expectNumber(record.max_root_fields, `${label}.max_root_fields`),
+    max_fragments: record.max_fragments === undefined
+      ? undefined
+      : expectNumber(record.max_fragments, `${label}.max_fragments`),
+  };
+}
+
 export function parseBridgeConfig(payload: unknown): BridgeConfig {
   const record = expectRecord(payload, 'bridge config');
   ensureKnownKeys(record, BRIDGE_CONFIG_KEYS, 'bridge config');
   if (!Array.isArray(record.graphql_sources)) {
     throw new Error('Invalid bridge config.graphql_sources: expected array');
+  }
+  if (!Array.isArray(record.graphql_mutation_policies)) {
+    throw new Error('Invalid bridge config.graphql_mutation_policies: expected array');
   }
 
   return {
@@ -168,6 +210,12 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
     graphql_default_source: expectString(record.graphql_default_source, 'bridge config.graphql_default_source'),
     graphql_sources: record.graphql_sources.map((entry, index) => {
       return parseGraphQLSourceResponse(entry, `bridge config.graphql_sources[${index}]`);
+    }),
+    graphql_mutation_policies: record.graphql_mutation_policies.map((entry, index) => {
+      return parseGraphQLMutationPolicyResponse(
+        entry,
+        `bridge config.graphql_mutation_policies[${index}]`,
+      );
     }),
     web_search_tavily_api_key_set: expectBoolean(
       record.web_search_tavily_api_key_set,

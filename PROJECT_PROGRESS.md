@@ -34,6 +34,17 @@
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./runtime ./tools ./orchestration -timeout 60s`
   - `pnpm -C apps/web test -- --runTestsByPath lib/api/config/api.test.ts`
 
+- 完成 GraphQL 第三步提交链路：
+  - schema snapshot 补齐 `root_mutations`，GraphQL registry 新增 mutation policy allowlist 解析与 source/domain/root mutation 路由；非法 policy 会在 registry 构建阶段显式失败。
+  - `core/bridge/config` 新增 `graphql_mutation_policies[]` 契约，并同步到 runtime snapshot、transport shim、Web parser 与共享 envelope codegen，不引入“默认允许所有 mutation”的模式。
+  - session 新增持久化 `PendingGraphQLMutationIntents`，human question 新增 `ToolName`，已回答问题回放不再硬编码成 `ask_human`；`graphql_mutation` 会把批准结果稳定注入为自身 tool result。
+  - 新增按需加载的 `graphql_mutation` 工具，支持 `prepare` / `commit` / `discard` / `list_pending`；`prepare` 只校验与挂起审批，`commit` 只接受 `intent_id` 并执行 prepare 时冻结的 mutation 文本与变量。
+  - `graphql_schema_lookup` 新增 `list_root_mutations` 与 `describe_mutation_policy`，仅暴露 allowlist 允许的 mutation root 与预算摘要；GraphQL mutation trace 已覆盖 `prepare` / `commit` / `discard`。
+- 第三步相关验证已通过：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./session ./config ./runtime ./tools ./orchestration -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tools/... -timeout 60s`
+  - `pnpm -C apps/web test -- --runTestsByPath lib/api/config/api.test.ts`
+
 - 新增只读 GraphQL 查询工具：
   - `graphql_query` 仅允许 `query`，在执行前做 GraphQL 文本校验，拒绝 `mutation` / `subscription` / 混合操作。
   - 请求固定走单一 endpoint，支持配置级 headers / API key、超时与响应体大小限制，HTTP 与 GraphQL errors 均显式失败。

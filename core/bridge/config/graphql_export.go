@@ -2,6 +2,7 @@ package config
 
 type GraphQLDomainFileConfig = graphQLDomainFileConfig
 type GraphQLSourceFileConfig = graphQLSourceFileConfig
+type GraphQLMutationPolicyFileConfig = graphQLMutationPolicyFileConfig
 
 type GraphQLDomainSnapshot struct {
 	Name          string   `json:"name"`
@@ -29,6 +30,18 @@ type GraphQLSourceSnapshot struct {
 	Domains          []GraphQLDomainSnapshot `json:"domains,omitempty"`
 }
 
+type GraphQLMutationPolicySnapshot struct {
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	Source        string `json:"source"`
+	Domain        string `json:"domain"`
+	RootMutation  string `json:"root_mutation"`
+	MaxDepth      int    `json:"max_depth,omitempty"`
+	MaxFields     int    `json:"max_fields,omitempty"`
+	MaxRootFields int    `json:"max_root_fields,omitempty"`
+	MaxFragments  int    `json:"max_fragments,omitempty"`
+}
+
 type GraphQLDomainInput struct {
 	Name          string   `json:"name"`
 	Description   string   `json:"description,omitempty"`
@@ -53,4 +66,16 @@ type GraphQLSourceInput struct {
 	MaxRootFields    int                  `json:"max_root_fields,omitempty"`
 	MaxFragments     int                  `json:"max_fragments,omitempty"`
 	Domains          []GraphQLDomainInput `json:"domains,omitempty"`
+}
+
+type GraphQLMutationPolicyInput struct {
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	Source        string `json:"source"`
+	Domain        string `json:"domain"`
+	RootMutation  string `json:"root_mutation"`
+	MaxDepth      int    `json:"max_depth,omitempty"`
+	MaxFields     int    `json:"max_fields,omitempty"`
+	MaxRootFields int    `json:"max_root_fields,omitempty"`
+	MaxFragments  int    `json:"max_fragments,omitempty"`
 }

@@ -9,12 +9,14 @@ import (
 )
 
 type Schema struct {
-	RootQueries []Field `json:"root_queries"`
-	Types       []Type  `json:"types"`
+	RootQueries   []Field `json:"root_queries"`
+	RootMutations []Field `json:"root_mutations,omitempty"`
+	Types         []Type  `json:"types"`
 
-	rootIndex  map[string]Field
-	typeIndex  map[string]Type
-	fieldIndex map[string][]FieldLocation
+	rootQueryIndex    map[string]Field
+	rootMutationIndex map[string]Field
+	typeIndex         map[string]Type
+	fieldIndex        map[string][]FieldLocation
 }
 
 type Type struct {
@@ -62,6 +64,9 @@ func parse(raw []byte) (Schema, error) {
 	if err := validateRootQueries(schema.RootQueries); err != nil {
 		return Schema{}, err
 	}
+	if err := validateRootMutations(schema.RootMutations); err != nil {
+		return Schema{}, err
+	}
 	if err := validateTypes(schema.Types); err != nil {
 		return Schema{}, err
 	}
@@ -70,6 +75,10 @@ func parse(raw []byte) (Schema, error) {
 
 func validateRootQueries(rootQueries []Field) error {
 	return validateFields("root_queries", rootQueries)
+}
+
+func validateRootMutations(rootMutations []Field) error {
+	return validateFields("root_mutations", rootMutations)
 }
 
 func validateTypes(types []Type) error {
@@ -132,6 +141,7 @@ func validateArguments(scope string, args []Argument) error {
 func normalizeSchema(schema Schema) Schema {
 	out := schema
 	out.RootQueries = normalizeFields(schema.RootQueries)
+	out.RootMutations = normalizeFields(schema.RootMutations)
 	out.Types = make([]Type, 0, len(schema.Types))
 	for _, item := range schema.Types {
 		out.Types = append(out.Types, Type{
@@ -170,11 +180,15 @@ func normalizeArguments(args []Argument) []Argument {
 }
 
 func buildIndex(schema Schema) *Schema {
-	rootIndex := make(map[string]Field, len(schema.RootQueries))
+	rootQueryIndex := make(map[string]Field, len(schema.RootQueries))
+	rootMutationIndex := make(map[string]Field, len(schema.RootMutations))
 	typeIndex := make(map[string]Type, len(schema.Types))
 	fieldIndex := make(map[string][]FieldLocation)
 	for _, field := range schema.RootQueries {
-		rootIndex[field.Name] = cloneField(field)
+		rootQueryIndex[field.Name] = cloneField(field)
+	}
+	for _, field := range schema.RootMutations {
+		rootMutationIndex[field.Name] = cloneField(field)
 	}
 	for _, item := range schema.Types {
 		typeIndex[item.Name] = cloneType(item)
@@ -192,10 +206,12 @@ func buildIndex(schema Schema) *Schema {
 		})
 	}
 	return &Schema{
-		RootQueries: cloneFields(schema.RootQueries),
-		Types:       cloneTypes(schema.Types),
-		rootIndex:   rootIndex,
-		typeIndex:   typeIndex,
-		fieldIndex:  fieldIndex,
+		RootQueries:       cloneFields(schema.RootQueries),
+		RootMutations:     cloneFields(schema.RootMutations),
+		Types:             cloneTypes(schema.Types),
+		rootQueryIndex:    rootQueryIndex,
+		rootMutationIndex: rootMutationIndex,
+		typeIndex:         typeIndex,
+		fieldIndex:        fieldIndex,
 	}
 }

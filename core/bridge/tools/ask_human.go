@@ -138,6 +138,7 @@ func askHumanExecute(ctx context.Context, question askHumanArgs, traceID string)
 		Prompt:        question.Prompt,
 		SelectionMode: question.SelectionMode,
 		Options:       sessionOptionsFromAskHuman(question.Options),
+		ToolName:      AskHumanToolName,
 		ToolCallID:    toolCallID,
 		TraceID:       strings.TrimSpace(traceID),
 		CreatedAt:     time.Now().UTC(),

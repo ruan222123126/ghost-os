@@ -26,8 +26,9 @@ func fileGraphQLSettings(fileCfg bridgeFileConfig, fallback GraphQLConfig) (Grap
 	switch {
 	case hasGraphQLSourceLayout(fileCfg):
 		return finalizeGraphQLConfig(GraphQLConfig{
-			DefaultSource: stringValue(fileCfg.GraphQLDefaultSource),
-			Sources:       graphQLSourcesFromFile(fileCfg.GraphQLSources),
+			DefaultSource:    stringValue(fileCfg.GraphQLDefaultSource),
+			Sources:          graphQLSourcesFromFile(fileCfg.GraphQLSources),
+			MutationPolicies: graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
 		})
 	case hasLegacyGraphQLConfig(fileCfg):
 		source, ok, err := legacyGraphQLSourceFromFile(fileCfg, legacyGraphQLFallbackSource(settings))
@@ -56,8 +57,9 @@ func finalizeGraphQLConfig(cfg GraphQLConfig) (GraphQLConfig, error) {
 
 func normalizeGraphQLConfig(cfg GraphQLConfig) GraphQLConfig {
 	return GraphQLConfig{
-		DefaultSource: normalizeOptionalString(cfg.DefaultSource),
-		Sources:       normalizeGraphQLSources(cfg.Sources),
+		DefaultSource:    normalizeOptionalString(cfg.DefaultSource),
+		Sources:          normalizeGraphQLSources(cfg.Sources),
+		MutationPolicies: normalizeGraphQLMutationPolicies(cfg.MutationPolicies),
 	}
 }
 

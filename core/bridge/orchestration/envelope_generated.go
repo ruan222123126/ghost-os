@@ -192,32 +192,34 @@ type sessionDetail struct {
 
 // configResponse 对齐 core/shared/schema.json 的 bridgeConfig。
 type configResponse struct {
-	Provider                 string                  `json:"provider"`
-	ProviderType             string                  `json:"provider_type"`
-	BaseURL                  string                  `json:"base_url"`
-	Model                    string                  `json:"model"`
-	ChatPath                 string                  `json:"chat_path"`
-	APIKeySet                bool                    `json:"api_key_set"`
-	ModelSelectionEnabled    bool                    `json:"model_selection_enabled"`
-	GraphqlDefaultSource     string                  `json:"graphql_default_source"`
-	GraphqlSources           []graphqlSourceResponse `json:"graphql_sources"`
-	WebSearchTavilyAPIKeySet bool                    `json:"web_search_tavily_api_key_set"`
-	WebSearchExaAPIKeySet    bool                    `json:"web_search_exa_api_key_set"`
+	Provider                 string                          `json:"provider"`
+	ProviderType             string                          `json:"provider_type"`
+	BaseURL                  string                          `json:"base_url"`
+	Model                    string                          `json:"model"`
+	ChatPath                 string                          `json:"chat_path"`
+	APIKeySet                bool                            `json:"api_key_set"`
+	ModelSelectionEnabled    bool                            `json:"model_selection_enabled"`
+	GraphqlDefaultSource     string                          `json:"graphql_default_source"`
+	GraphqlSources           []graphqlSourceResponse         `json:"graphql_sources"`
+	GraphqlMutationPolicies  []graphqlMutationPolicyResponse `json:"graphql_mutation_policies"`
+	WebSearchTavilyAPIKeySet bool                            `json:"web_search_tavily_api_key_set"`
+	WebSearchExaAPIKeySet    bool                            `json:"web_search_exa_api_key_set"`
 }
 
 // configUpdateRequest 对齐 core/shared/schema.json 的 configUpdate。
 type configUpdateRequest struct {
-	Provider              *string              `json:"provider,omitempty"`
-	APIKey                *string              `json:"api_key,omitempty"`
-	BaseURL               *string              `json:"base_url,omitempty"`
-	Model                 *string              `json:"model,omitempty"`
-	ChatPath              *string              `json:"chat_path,omitempty"`
-	GraphqlDefaultSource  *string              `json:"graphql_default_source,omitempty"`
-	GraphqlSources        []graphqlSourceInput `json:"graphql_sources,omitempty"`
-	GraphqlSourceUpsert   graphqlSourceInput   `json:"graphql_source_upsert,omitempty"`
-	WebSearchTavilyAPIKey *string              `json:"web_search_tavily_api_key,omitempty"`
-	WebSearchExaAPIKey    *string              `json:"web_search_exa_api_key,omitempty"`
-	TraceID               string               `json:"trace_id,omitempty"`
+	Provider                *string                      `json:"provider,omitempty"`
+	APIKey                  *string                      `json:"api_key,omitempty"`
+	BaseURL                 *string                      `json:"base_url,omitempty"`
+	Model                   *string                      `json:"model,omitempty"`
+	ChatPath                *string                      `json:"chat_path,omitempty"`
+	GraphqlDefaultSource    *string                      `json:"graphql_default_source,omitempty"`
+	GraphqlSources          []graphqlSourceInput         `json:"graphql_sources,omitempty"`
+	GraphqlSourceUpsert     graphqlSourceInput           `json:"graphql_source_upsert,omitempty"`
+	GraphqlMutationPolicies []graphqlMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
+	WebSearchTavilyAPIKey   *string                      `json:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey      *string                      `json:"web_search_exa_api_key,omitempty"`
+	TraceID                 string                       `json:"trace_id,omitempty"`
 }
 
 // graphqlDomainResponse 对齐 core/shared/schema.json 的 graphqlDomainResponse。
@@ -257,6 +259,32 @@ type graphqlDomainInput struct {
 	MaxDepth      int      `json:"max_depth,omitempty"`
 	MaxFields     int      `json:"max_fields,omitempty"`
 	MaxRootFields int      `json:"max_root_fields,omitempty"`
+}
+
+// graphqlMutationPolicyResponse 对齐 core/shared/schema.json 的 graphqlMutationPolicyResponse。
+type graphqlMutationPolicyResponse struct {
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	Source        string `json:"source"`
+	Domain        string `json:"domain"`
+	RootMutation  string `json:"root_mutation"`
+	MaxDepth      int    `json:"max_depth,omitempty"`
+	MaxFields     int    `json:"max_fields,omitempty"`
+	MaxRootFields int    `json:"max_root_fields,omitempty"`
+	MaxFragments  int    `json:"max_fragments,omitempty"`
+}
+
+// graphqlMutationPolicyInput 对齐 core/shared/schema.json 的 graphqlMutationPolicyInput。
+type graphqlMutationPolicyInput struct {
+	Name          string `json:"name"`
+	Description   string `json:"description,omitempty"`
+	Source        string `json:"source"`
+	Domain        string `json:"domain"`
+	RootMutation  string `json:"root_mutation"`
+	MaxDepth      int    `json:"max_depth,omitempty"`
+	MaxFields     int    `json:"max_fields,omitempty"`
+	MaxRootFields int    `json:"max_root_fields,omitempty"`
+	MaxFragments  int    `json:"max_fragments,omitempty"`
 }
 
 // graphqlSourceInput 对齐 core/shared/schema.json 的 graphqlSourceInput。

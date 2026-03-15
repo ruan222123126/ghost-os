@@ -8,11 +8,13 @@ import (
 )
 
 const (
-	graphqlSchemaLookupActionListSources     = "list_sources"
-	graphqlSchemaLookupActionListDomains     = "list_domains"
-	graphqlSchemaLookupActionListRootQueries = "list_root_queries"
-	graphqlSchemaLookupActionDescribeType    = "describe_type"
-	graphqlSchemaLookupActionFindField       = "find_field"
+	graphqlSchemaLookupActionListSources            = "list_sources"
+	graphqlSchemaLookupActionListDomains            = "list_domains"
+	graphqlSchemaLookupActionListRootQueries        = "list_root_queries"
+	graphqlSchemaLookupActionListRootMutations      = "list_root_mutations"
+	graphqlSchemaLookupActionDescribeMutationPolicy = "describe_mutation_policy"
+	graphqlSchemaLookupActionDescribeType           = "describe_type"
+	graphqlSchemaLookupActionFindField              = "find_field"
 )
 
 type graphqlSchemaLookupArgs struct {
@@ -62,6 +64,18 @@ type graphqlSchemaTypePayload struct {
 type graphqlSchemaFieldMatchPayload struct {
 	TypeName string                    `json:"type_name"`
 	Field    graphqlSchemaFieldPayload `json:"field"`
+}
+
+type graphqlSchemaMutationPolicyPayload struct {
+	Name          string                    `json:"name"`
+	Description   string                    `json:"description,omitempty"`
+	Domain        string                    `json:"domain"`
+	RootMutation  graphqlSchemaFieldPayload `json:"root_mutation"`
+	MaxDepth      int                       `json:"max_depth"`
+	MaxFields     int                       `json:"max_fields"`
+	MaxRootFields int                       `json:"max_root_fields"`
+	MaxFragments  int                       `json:"max_fragments"`
+	Summary       string                    `json:"summary"`
 }
 
 func newGraphQLSchemaFieldPayload(field graphqlschema.Field) graphqlSchemaFieldPayload {

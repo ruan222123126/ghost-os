@@ -23,6 +23,8 @@ export type {
   ConfigUpdate,
   GraphQLDomainInput,
   GraphQLDomainResponse,
+  GraphQLMutationPolicyInput,
+  GraphQLMutationPolicyResponse,
   GraphQLSourceInput,
   GraphQLSourceResponse,
   HumanResponseAck,

@@ -128,6 +128,59 @@ func TestGraphQLSchemaLookupToolAppliesDomainFilters(t *testing.T) {
 	}
 }
 
+func TestGraphQLSchemaLookupToolListsAllowedRootMutations(t *testing.T) {
+	registry := testGraphQLRegistry(t, GraphQLRegistryConfig{
+		Sources: []GraphQLSourceConfig{{
+			Name:             "crm",
+			Endpoint:         "https://crm.test/query",
+			SchemaPath:       writeGraphQLSchema(t, "crm-mutations"),
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         6,
+			MaxFields:        16,
+			MaxRootFields:    2,
+			MaxFragments:     2,
+			Domains: []GraphQLDomainConfig{{
+				Name:        "people",
+				RootQueries: []string{"viewer"},
+				Types:       []string{"Viewer", "MutationPayload"},
+			}},
+		}},
+		MutationPolicies: []GraphQLMutationPolicyConfig{{
+			Name:         "update_viewer",
+			Source:       "crm",
+			Domain:       "people",
+			RootMutation: "updateViewer",
+		}},
+	})
+	tool := NewGraphQLSchemaLookupTool(registry).(*GraphQLSchemaLookupTool)
+
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"list_root_mutations",
+		"source":"crm",
+		"domain":"people"
+	}`), "trace-schema-mutation-list")
+	if err != nil {
+		t.Fatalf("Execute list_root_mutations: %v", err)
+	}
+	if !strings.Contains(output, `"updateViewer"`) || strings.Contains(output, `"archiveViewer"`) {
+		t.Fatalf("expected only allowlisted mutation in output, got %s", output)
+	}
+
+	output, err = tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"describe_mutation_policy",
+		"source":"crm",
+		"domain":"people",
+		"name":"updateViewer"
+	}`), "trace-schema-mutation-policy")
+	if err != nil {
+		t.Fatalf("Execute describe_mutation_policy: %v", err)
+	}
+	if !strings.Contains(output, `"name":"update_viewer"`) || !strings.Contains(output, `"root_mutation"`) {
+		t.Fatalf("unexpected mutation policy output: %s", output)
+	}
+}
+
 func TestGraphQLSchemaLookupToolLogsSuccessAndFailure(t *testing.T) {
 	registry := testGraphQLRegistry(t, GraphQLRegistryConfig{
 		Sources: []GraphQLSourceConfig{

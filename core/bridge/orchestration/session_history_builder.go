@@ -1,7 +1,6 @@
 package orchestration
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,10 +20,12 @@ type SessionHistoryBuilder struct {
 
 type resolvedHumanQuestion struct {
 	QuestionID string
+	ToolName   string
 	Prompt     string
 	ToolCallID string
 	TraceID    string
 	Answer     string
+	Summary    string
 	AskedAt    time.Time
 	AnsweredAt time.Time
 }
@@ -117,49 +118,25 @@ func injectAnsweredHumanResponses(sess *session.Session) []resolvedHumanQuestion
 		if toolCallID == "" {
 			continue
 		}
-
-		payload := map[string]any{
-			"question_id": item.QuestionID,
-			"prompt":      item.Question.Prompt,
-			"answer":      item.Answer,
-		}
-		if selectionMode := strings.TrimSpace(item.Question.SelectionMode); selectionMode != "" {
-			payload["selection_mode"] = selectionMode
-		}
-		if len(item.Question.Options) > 0 {
-			options := make([]map[string]any, 0, len(item.Question.Options))
-			for _, option := range item.Question.Options {
-				label := strings.TrimSpace(option.Label)
-				if label == "" {
-					continue
-				}
-				options = append(options, map[string]any{
-					"label":        label,
-					"allow_custom": option.AllowCustom,
-				})
-			}
-			if len(options) > 0 {
-				payload["options"] = options
-			}
-		}
-		encoded, err := json.Marshal(payload)
-		if err != nil {
-			encoded = []byte(`{}`)
-		}
-
+		toolName, output, summary := resolvedHumanQuestionToolResult(sess, item)
+		out[len(out)-1].ToolName = toolName
+		out[len(out)-1].Summary = summary
 		traceID := strings.TrimSpace(item.Question.TraceID)
-		// 对齐 agent 侧 tool result envelope，保证后续轮次可无缝推理。
-		sess.AddMessage(agentMessageForAskHuman(toolCallID, traceID, string(encoded)))
+		sess.AddMessage(agentMessageForResolvedHumanTool(toolCallID, toolName, traceID, output))
 	}
 	return out
 }
 
-// agentMessageForAskHuman 构造 ask_human 的 tool 消息，供下一轮继续推理。
-func agentMessageForAskHuman(toolCallID string, traceID string, output string) llm.Message {
+func agentMessageForResolvedHumanTool(
+	toolCallID string,
+	toolName string,
+	traceID string,
+	output string,
+) llm.Message {
 	return llm.Message{
 		Role:       llm.RoleTool,
 		ToolCallID: toolCallID,
-		Text:       agent.FormatToolResult("ask_human", traceID, output, nil),
+		Text:       agent.FormatToolResult(toolName, traceID, output, nil),
 	}
 }
 

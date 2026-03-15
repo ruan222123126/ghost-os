@@ -4,6 +4,8 @@ import (
 	"log"
 	"strings"
 	"time"
+
+	"ghost-os/bridge/session"
 )
 
 func logGraphQLQuery(
@@ -90,4 +92,126 @@ func graphQLQueryOperationLabel(summary graphQLQuerySummary) string {
 		return "anonymous"
 	}
 	return strings.TrimSpace(summary.OperationName)
+}
+
+func logGraphQLMutationPrepare(
+	traceID string,
+	intent session.PendingGraphQLMutationIntent,
+	summary graphQLOperationSummary,
+	latency time.Duration,
+	err error,
+) {
+	status := "success"
+	if err != nil {
+		status = "error"
+	}
+	fields := summary.FieldCount
+	rootFields := summary.RootFieldCount
+	fragments := summary.FragmentCount
+	if err != nil {
+		log.Printf(
+			"trace_id=%s tool=graphql_mutation action=prepare intent_id=%s source=%s domain=%s policy=%s root_mutation=%s depth=%d fields=%d root_fields=%d fragments=%d latency_ms=%d status=%s error=%q",
+			strings.TrimSpace(traceID),
+			strings.TrimSpace(intent.IntentID),
+			strings.TrimSpace(intent.Source),
+			strings.TrimSpace(intent.Domain),
+			strings.TrimSpace(intent.PolicyName),
+			strings.TrimSpace(intent.RootMutation),
+			summary.Depth,
+			fields,
+			rootFields,
+			fragments,
+			latency.Milliseconds(),
+			status,
+			err.Error(),
+		)
+		return
+	}
+	log.Printf(
+		"trace_id=%s tool=graphql_mutation action=prepare intent_id=%s source=%s domain=%s policy=%s root_mutation=%s depth=%d fields=%d root_fields=%d fragments=%d latency_ms=%d status=%s",
+		strings.TrimSpace(traceID),
+		strings.TrimSpace(intent.IntentID),
+		strings.TrimSpace(intent.Source),
+		strings.TrimSpace(intent.Domain),
+		strings.TrimSpace(intent.PolicyName),
+		strings.TrimSpace(intent.RootMutation),
+		summary.Depth,
+		fields,
+		rootFields,
+		fragments,
+		latency.Milliseconds(),
+		status,
+	)
+}
+
+func logGraphQLMutationCommit(
+	traceID string,
+	intent session.PendingGraphQLMutationIntent,
+	responseBytes int,
+	latency time.Duration,
+	err error,
+) {
+	status := "success"
+	if err != nil {
+		status = "error"
+		log.Printf(
+			"trace_id=%s tool=graphql_mutation action=commit intent_id=%s source=%s domain=%s policy=%s root_mutation=%s approved=true response_bytes=%d latency_ms=%d status=%s error=%q",
+			strings.TrimSpace(traceID),
+			strings.TrimSpace(intent.IntentID),
+			strings.TrimSpace(intent.Source),
+			strings.TrimSpace(intent.Domain),
+			strings.TrimSpace(intent.PolicyName),
+			strings.TrimSpace(intent.RootMutation),
+			responseBytes,
+			latency.Milliseconds(),
+			status,
+			err.Error(),
+		)
+		return
+	}
+	log.Printf(
+		"trace_id=%s tool=graphql_mutation action=commit intent_id=%s source=%s domain=%s policy=%s root_mutation=%s approved=true response_bytes=%d latency_ms=%d status=%s",
+		strings.TrimSpace(traceID),
+		strings.TrimSpace(intent.IntentID),
+		strings.TrimSpace(intent.Source),
+		strings.TrimSpace(intent.Domain),
+		strings.TrimSpace(intent.PolicyName),
+		strings.TrimSpace(intent.RootMutation),
+		responseBytes,
+		latency.Milliseconds(),
+		status,
+	)
+}
+
+func logGraphQLMutationDiscard(
+	traceID string,
+	intent session.PendingGraphQLMutationIntent,
+	err error,
+) {
+	status := "discarded"
+	if err != nil {
+		status = "error"
+		log.Printf(
+			"trace_id=%s tool=graphql_mutation action=discard intent_id=%s source=%s domain=%s policy=%s root_mutation=%s status=%s error=%q",
+			strings.TrimSpace(traceID),
+			strings.TrimSpace(intent.IntentID),
+			strings.TrimSpace(intent.Source),
+			strings.TrimSpace(intent.Domain),
+			strings.TrimSpace(intent.PolicyName),
+			strings.TrimSpace(intent.RootMutation),
+			status,
+			err.Error(),
+		)
+		return
+	}
+	log.Printf(
+		"trace_id=%s tool=graphql_mutation action=discard intent_id=%s source=%s domain=%s policy=%s root_mutation=%s status=%s",
+		strings.TrimSpace(traceID),
+		strings.TrimSpace(intent.IntentID),
+		strings.TrimSpace(intent.Source),
+		strings.TrimSpace(intent.Domain),
+		strings.TrimSpace(intent.PolicyName),
+		strings.TrimSpace(intent.RootMutation),
+		status,
+	)
 }

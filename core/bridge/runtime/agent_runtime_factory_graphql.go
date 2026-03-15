@@ -21,6 +21,9 @@ func registerOptionalGraphQLTools(registry *tools.Registry, cfg Config) error {
 	}
 	registry.Register(tools.NewGraphQLQueryTool(graphQLRegistry))
 	registry.Register(tools.NewGraphQLSchemaLookupTool(graphQLRegistry))
+	if graphQLRegistry.HasMutationPolicies() {
+		registry.Register(tools.NewGraphQLMutationTool(graphQLRegistry))
+	}
 	return nil
 }
 
@@ -44,8 +47,9 @@ func graphQLRegistryConfig(cfg Config) tools.GraphQLRegistryConfig {
 		})
 	}
 	return tools.GraphQLRegistryConfig{
-		DefaultSource: cfg.GraphQL.DefaultSource,
-		Sources:       sources,
+		DefaultSource:    cfg.GraphQL.DefaultSource,
+		Sources:          sources,
+		MutationPolicies: graphQLMutationPolicyConfigs(cfg.GraphQL.MutationPolicies),
 	}
 }
 
@@ -76,6 +80,30 @@ func cloneRuntimeHeaders(raw map[string]string) map[string]string {
 	out := make(map[string]string, len(raw))
 	for key, value := range raw {
 		out[key] = value
+	}
+	return out
+}
+
+func graphQLMutationPolicyConfigs(
+	raw []bridgeconfig.GraphQLMutationPolicyConfig,
+) []tools.GraphQLMutationPolicyConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]tools.GraphQLMutationPolicyConfig, 0, len(raw))
+	for _, policy := range raw {
+		out = append(out, tools.GraphQLMutationPolicyConfig{
+			Name:          policy.Name,
+			Description:   policy.Description,
+			Source:        policy.Source,
+			Domain:        policy.Domain,
+			RootMutation:  policy.RootMutation,
+			MaxDepth:      policy.MaxDepth,
+			MaxFields:     policy.MaxFields,
+			MaxRootFields: policy.MaxRootFields,
+			MaxFragments:  policy.MaxFragments,
+		})
 	}
 	return out
 }

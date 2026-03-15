@@ -236,6 +236,7 @@ pub struct BridgeConfig {
     pub model_selection_enabled: bool,
     pub graphql_default_source: String,
     pub graphql_sources: Vec<GraphQLSourceResponse>,
+    pub graphql_mutation_policies: Vec<GraphQLMutationPolicyResponse>,
     pub web_search_tavily_api_key_set: bool,
     pub web_search_exa_api_key_set: bool,
 }
@@ -258,6 +259,8 @@ pub struct ConfigUpdate {
     pub graphql_sources: Option<Vec<GraphQLSourceInput>>,
     #[serde(default)]
     pub graphql_source_upsert: Option<GraphQLSourceInput>,
+    #[serde(default)]
+    pub graphql_mutation_policies: Option<Vec<GraphQLMutationPolicyInput>>,
     #[serde(default)]
     pub web_search_tavily_api_key: Option<String>,
     #[serde(default)]
@@ -316,6 +319,42 @@ pub struct GraphQLDomainInput {
     pub max_fields: Option<i64>,
     #[serde(default)]
     pub max_root_fields: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct GraphQLMutationPolicyResponse {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub source: String,
+    pub domain: String,
+    pub root_mutation: String,
+    #[serde(default)]
+    pub max_depth: Option<i64>,
+    #[serde(default)]
+    pub max_fields: Option<i64>,
+    #[serde(default)]
+    pub max_root_fields: Option<i64>,
+    #[serde(default)]
+    pub max_fragments: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct GraphQLMutationPolicyInput {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub source: String,
+    pub domain: String,
+    pub root_mutation: String,
+    #[serde(default)]
+    pub max_depth: Option<i64>,
+    #[serde(default)]
+    pub max_fields: Option<i64>,
+    #[serde(default)]
+    pub max_root_fields: Option<i64>,
+    #[serde(default)]
+    pub max_fragments: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

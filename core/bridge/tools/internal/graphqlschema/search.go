@@ -13,7 +13,25 @@ func (s *Schema) RootQueryByName(name string) (Field, bool) {
 	if s == nil {
 		return Field{}, false
 	}
-	item, ok := s.rootIndex[strings.TrimSpace(name)]
+	item, ok := s.rootQueryIndex[strings.TrimSpace(name)]
+	if !ok {
+		return Field{}, false
+	}
+	return cloneField(item), true
+}
+
+func (s *Schema) RootMutationList() []Field {
+	if s == nil {
+		return nil
+	}
+	return cloneFields(s.RootMutations)
+}
+
+func (s *Schema) RootMutationByName(name string) (Field, bool) {
+	if s == nil {
+		return Field{}, false
+	}
+	item, ok := s.rootMutationIndex[strings.TrimSpace(name)]
 	if !ok {
 		return Field{}, false
 	}

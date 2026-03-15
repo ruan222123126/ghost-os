@@ -49,6 +49,7 @@ func (s *ConfigStore) Snapshot() configResponse {
 		ModelSelectionEnabled:    runtime.ModelSelectionEnabled,
 		GraphQLDefaultSource:     runtime.GraphQL.DefaultSource,
 		GraphQLSources:           graphQLSourceSnapshots(runtime.GraphQL.Sources),
+		GraphQLMutationPolicies:  graphQLMutationPolicySnapshots(runtime.GraphQL.MutationPolicies),
 		WebSearchTavilyAPIKeySet: runtime.WebSearchTavilyAPIKey != "",
 		WebSearchExaAPIKeySet:    runtime.WebSearchExaAPIKey != "",
 	}

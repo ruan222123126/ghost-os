@@ -39,9 +39,22 @@ type SourceConfig struct {
 	Domains          []DomainConfig
 }
 
+type MutationPolicyConfig struct {
+	Name          string
+	Description   string
+	Source        string
+	Domain        string
+	RootMutation  string
+	MaxDepth      int
+	MaxFields     int
+	MaxRootFields int
+	MaxFragments  int
+}
+
 type RegistryConfig struct {
-	DefaultSource string
-	Sources       []SourceConfig
+	DefaultSource    string
+	Sources          []SourceConfig
+	MutationPolicies []MutationPolicyConfig
 }
 
 type Domain struct {
@@ -72,9 +85,11 @@ type Source struct {
 }
 
 type Registry struct {
-	defaultSource string
-	sources       []Source
-	sourceIndex   map[string]*Source
+	defaultSource      string
+	sources            []Source
+	sourceIndex        map[string]*Source
+	mutationPolicies   []MutationPolicy
+	mutationPolicyKeys map[string]*MutationPolicy
 }
 
 func NewRegistry(cfg RegistryConfig) (*Registry, error) {
@@ -82,10 +97,16 @@ func NewRegistry(cfg RegistryConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
+	policies, policyKeys, err := buildMutationPolicies(cfg.MutationPolicies, index)
+	if err != nil {
+		return nil, err
+	}
 	registry := &Registry{
-		defaultSource: strings.TrimSpace(cfg.DefaultSource),
-		sources:       sources,
-		sourceIndex:   index,
+		defaultSource:      strings.TrimSpace(cfg.DefaultSource),
+		sources:            sources,
+		sourceIndex:        index,
+		mutationPolicies:   policies,
+		mutationPolicyKeys: policyKeys,
 	}
 	if err := validateDefaultSource(registry); err != nil {
 		return nil, err

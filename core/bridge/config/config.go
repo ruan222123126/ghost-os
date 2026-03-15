@@ -67,9 +67,22 @@ type GraphQLSourceConfig struct {
 	Domains          []GraphQLDomainConfig
 }
 
+type GraphQLMutationPolicyConfig struct {
+	Name          string
+	Description   string
+	Source        string
+	Domain        string
+	RootMutation  string
+	MaxDepth      int
+	MaxFields     int
+	MaxRootFields int
+	MaxFragments  int
+}
+
 type GraphQLConfig struct {
-	DefaultSource string
-	Sources       []GraphQLSourceConfig
+	DefaultSource    string
+	Sources          []GraphQLSourceConfig
+	MutationPolicies []GraphQLMutationPolicyConfig
 }
 
 type ToolSelectorConfig struct {

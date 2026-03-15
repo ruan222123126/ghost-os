@@ -197,7 +197,18 @@ func writeGraphQLSchema(t *testing.T, name string) string {
     {"name":"viewer","return_type":"Viewer"},
     {"name":"order","return_type":"Order","args":[{"name":"id","type":"ID!"}]}
   ],
+  "root_mutations": [
+    {"name":"updateViewer","return_type":"MutationPayload","args":[{"name":"input","type":"ViewerInput!"}]},
+    {"name":"archiveViewer","return_type":"MutationPayload","args":[{"name":"id","type":"ID!"}]}
+  ],
   "types": [
+    {
+      "name":"MutationPayload",
+      "fields":[
+        {"name":"ok","return_type":"Boolean!"},
+        {"name":"viewer","return_type":"Viewer"}
+      ]
+    },
     {
       "name":"Order",
       "fields":[

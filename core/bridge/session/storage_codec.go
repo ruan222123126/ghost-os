@@ -91,6 +91,9 @@ func cloneSession(session *Session) Session {
 	cloned.Messages = llm.CloneMessages(session.Messages)
 	cloned.PendingQuestions = clonePendingQuestions(session.PendingQuestions)
 	cloned.HumanAnswers = cloneHumanAnswers(session.HumanAnswers)
+	cloned.PendingGraphQLMutationIntents = clonePendingGraphQLMutationIntents(
+		session.PendingGraphQLMutationIntents,
+	)
 	cloned.DynamicToolLoads = cloneDynamicToolLoads(session.DynamicToolLoads)
 	cloned.IterationRuntime = cloneIterationRuntime(session.IterationRuntime)
 	return cloned
@@ -105,6 +108,20 @@ func clonePendingQuestions(raw map[string]PendingHumanQuestion) map[string]Pendi
 	for id, question := range raw {
 		question.Options = cloneHumanQuestionOptions(question.Options)
 		out[id] = question
+	}
+	return out
+}
+
+func clonePendingGraphQLMutationIntents(
+	raw map[string]PendingGraphQLMutationIntent,
+) map[string]PendingGraphQLMutationIntent {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make(map[string]PendingGraphQLMutationIntent, len(raw))
+	for intentID, intent := range raw {
+		out[intentID] = clonePendingGraphQLMutationIntent(intent)
 	}
 	return out
 }

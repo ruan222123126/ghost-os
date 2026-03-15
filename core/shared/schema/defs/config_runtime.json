@@ -13,6 +13,7 @@
         "model_selection_enabled",
         "graphql_default_source",
         "graphql_sources",
+        "graphql_mutation_policies",
         "web_search_tavily_api_key_set",
         "web_search_exa_api_key_set"
       ],
@@ -28,6 +29,10 @@
         "graphql_sources": {
           "type": "array",
           "items": { "$ref": "#/$defs/graphqlSourceResponse" }
+        },
+        "graphql_mutation_policies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graphqlMutationPolicyResponse" }
         },
         "web_search_tavily_api_key_set": { "type": "boolean" },
         "web_search_exa_api_key_set": { "type": "boolean" }
@@ -55,6 +60,10 @@
           "items": { "$ref": "#/$defs/graphqlSourceInput" }
         },
         "graphql_source_upsert": { "$ref": "#/$defs/graphqlSourceInput" },
+        "graphql_mutation_policies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/graphqlMutationPolicyInput" }
+        },
         "web_search_tavily_api_key": { "type": "string", "x-go-pointer": true },
         "web_search_exa_api_key": { "type": "string", "x-go-pointer": true },
         "trace_id": { "type": "string" }
@@ -171,6 +180,62 @@
         "kotlin": { "name": "GraphQLDomainInput" }
       }
     },
+    "graphqlMutationPolicyResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "domain",
+        "root_mutation"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "source": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "root_mutation": { "type": "string", "minLength": 1 },
+        "max_depth": { "type": "integer", "minimum": 0 },
+        "max_fields": { "type": "integer", "minimum": 0 },
+        "max_root_fields": { "type": "integer", "minimum": 0 },
+        "max_fragments": { "type": "integer", "minimum": 0 }
+      },
+      "x-codegen": {
+        "order": 204,
+        "go": { "name": "graphqlMutationPolicyResponse" },
+        "ts": { "name": "GraphQLMutationPolicyResponse" },
+        "rust": { "name": "GraphQLMutationPolicyResponse" },
+        "kotlin": { "name": "GraphQLMutationPolicyResponse" }
+      }
+    },
+    "graphqlMutationPolicyInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source",
+        "domain",
+        "root_mutation"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "source": { "type": "string", "minLength": 1 },
+        "domain": { "type": "string", "minLength": 1 },
+        "root_mutation": { "type": "string", "minLength": 1 },
+        "max_depth": { "type": "integer", "minimum": 0 },
+        "max_fields": { "type": "integer", "minimum": 0 },
+        "max_root_fields": { "type": "integer", "minimum": 0 },
+        "max_fragments": { "type": "integer", "minimum": 0 }
+      },
+      "x-codegen": {
+        "order": 205,
+        "go": { "name": "graphqlMutationPolicyInput" },
+        "ts": { "name": "GraphQLMutationPolicyInput" },
+        "rust": { "name": "GraphQLMutationPolicyInput" },
+        "kotlin": { "name": "GraphQLMutationPolicyInput" }
+      }
+    },
     "graphqlSourceInput": {
       "type": "object",
       "additionalProperties": false,
@@ -201,7 +266,7 @@
         }
       },
       "x-codegen": {
-        "order": 204,
+        "order": 206,
         "go": { "name": "graphqlSourceInput" },
         "ts": { "name": "GraphQLSourceInput" },
         "rust": { "name": "GraphQLSourceInput" },

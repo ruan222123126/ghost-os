@@ -8,9 +8,10 @@ func TestStaticVisibleToolNames_HidesOnDemandToolsByDefault(t *testing.T) {
 		"script_exec",
 		"graphql_query",
 		"graphql_schema_lookup",
+		"graphql_mutation",
 	}, VisibilityOptions{})
 
-	if containsTool(visible, "graphql_query") || containsTool(visible, "graphql_schema_lookup") {
+	if containsTool(visible, "graphql_query") || containsTool(visible, "graphql_schema_lookup") || containsTool(visible, "graphql_mutation") {
 		t.Fatalf("expected on-demand graphql tools to stay hidden, got %v", visible)
 	}
 	if !containsTool(visible, "script_exec") {
@@ -24,12 +25,13 @@ func TestSearchCandidateToolNames_IncludeOnDemandGraphQLTools(t *testing.T) {
 		"script_exec",
 		"graphql_query",
 		"graphql_schema_lookup",
+		"graphql_mutation",
 		"tfind",
 	}, nil, VisibilityOptions{
 		ToolSearchEnabled: true,
 	})
 
-	if !containsTool(candidates, "graphql_query") || !containsTool(candidates, "graphql_schema_lookup") {
+	if !containsTool(candidates, "graphql_query") || !containsTool(candidates, "graphql_schema_lookup") || !containsTool(candidates, "graphql_mutation") {
 		t.Fatalf("unexpected tfind candidates: %v", candidates)
 	}
 }

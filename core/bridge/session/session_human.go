@@ -16,6 +16,7 @@ type PendingHumanQuestion struct {
 	Prompt        string                `json:"prompt"`
 	SelectionMode string                `json:"selection_mode,omitempty"`
 	Options       []HumanQuestionOption `json:"options,omitempty"`
+	ToolName      string                `json:"tool_name,omitempty"`
 	ToolCallID    string                `json:"tool_call_id"`
 	TraceID       string                `json:"trace_id"`
 	CreatedAt     time.Time             `json:"created_at"`
@@ -56,6 +57,7 @@ func (s *Session) AddPendingQuestion(questionID string, question PendingHumanQue
 	}
 	question.SelectionMode = strings.TrimSpace(question.SelectionMode)
 	question.Options = cloneHumanQuestionOptions(question.Options)
+	question.ToolName = strings.TrimSpace(question.ToolName)
 	s.PendingQuestions[questionID] = question
 	delete(s.HumanAnswers, questionID)
 	s.UpdatedAt = time.Now().UTC()
@@ -80,7 +82,8 @@ func (s *Session) SetHumanAnswer(questionID string, answer string) bool {
 	if questionID == "" {
 		return false
 	}
-	if _, ok := s.PendingQuestions[questionID]; !ok {
+	question, ok := s.PendingQuestions[questionID]
+	if !ok {
 		return false
 	}
 	if s.HumanAnswers == nil {
@@ -88,6 +91,7 @@ func (s *Session) SetHumanAnswer(questionID string, answer string) bool {
 	}
 
 	s.HumanAnswers[questionID] = answer
+	s.applyToolSpecificHumanAnswer(questionID, question, answer)
 	s.UpdatedAt = time.Now().UTC()
 	return true
 }
@@ -110,6 +114,7 @@ func (s *Session) RemovePendingQuestion(questionID string) (PendingHumanQuestion
 
 	delete(s.PendingQuestions, questionID)
 	delete(s.HumanAnswers, questionID)
+	s.handleRemovedPendingQuestion(questionID, question)
 	s.UpdatedAt = time.Now().UTC()
 	return question, true
 }

@@ -111,8 +111,14 @@
     "graphqlSourceResponse": {
       "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceResponse"
     },
+    "graphqlMutationPolicyResponse": {
+      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyResponse"
+    },
     "graphqlDomainInput": {
       "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainInput"
+    },
+    "graphqlMutationPolicyInput": {
+      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyInput"
     },
     "graphqlSourceInput": {
       "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceInput"

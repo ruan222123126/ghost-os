@@ -12,12 +12,16 @@ func materializeRuntimeGraphQLIfNeeded(
 	}
 	fileCfg.GraphQLDefaultSource = optionalStringPointer(current.GraphQL.DefaultSource)
 	fileCfg.GraphQLSources = graphQLSourcesToFileConfigs(current.GraphQL.Sources)
+	fileCfg.GraphQLMutationPolicies = graphQLMutationPoliciesToFileConfigs(
+		current.GraphQL.MutationPolicies,
+	)
 }
 
 func requiresRuntimeGraphQLMaterialization(req configUpdateRequest) bool {
 	return req.GraphQLDefaultSource != nil ||
 		req.GraphQLSources != nil ||
-		req.GraphQLSourceUpsert != nil
+		req.GraphQLSourceUpsert != nil ||
+		req.GraphQLMutationPolicies != nil
 }
 
 func applyGraphQLRuntimeFields(fileCfg *bridgeFileConfig, req configUpdateRequest) error {
@@ -29,6 +33,11 @@ func applyGraphQLRuntimeFields(fileCfg *bridgeFileConfig, req configUpdateReques
 	}
 	if req.GraphQLDefaultSource != nil {
 		fileCfg.GraphQLDefaultSource = cloneOptionalStringPointer(req.GraphQLDefaultSource)
+	}
+	if req.GraphQLMutationPolicies != nil {
+		fileCfg.GraphQLMutationPolicies = graphQLMutationPolicyInputsToFileConfigs(
+			req.GraphQLMutationPolicies,
+		)
 	}
 	if req.GraphQLSources != nil {
 		sources, err := graphQLSourceInputsToFileConfigs(req.GraphQLSources)

@@ -42,6 +42,12 @@ describe('lib/api/config/api', () => {
         max_fragments: 4,
         api_key_set: true,
       }],
+      graphql_mutation_policies: [{
+        name: 'update_viewer',
+        source: 'crm',
+        domain: 'people',
+        root_mutation: 'updateViewer',
+      }],
       web_search_tavily_api_key_set: true,
       web_search_exa_api_key_set: false,
     };
@@ -88,6 +94,12 @@ describe('lib/api/config/api', () => {
         max_root_fields: 2,
         max_fragments: 4,
         api_key_set: true,
+      }],
+      graphql_mutation_policies: [{
+        name: 'update_viewer',
+        source: 'crm',
+        domain: 'people',
+        root_mutation: 'updateViewer',
       }],
       web_search_tavily_api_key_set: true,
       web_search_exa_api_key_set: true,

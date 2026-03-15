@@ -23,16 +23,16 @@ func (GraphQLSchemaLookupTool) Name() string {
 }
 
 func (GraphQLSchemaLookupTool) Description() string {
-	return "Inspect configured GraphQL sources, domains, and local schema snapshots before writing a query. This tool never accesses the network."
+	return "Inspect configured GraphQL sources, domains, local schema snapshots, and allowed mutation policies. This tool never accesses the network."
 }
 
 func (GraphQLSchemaLookupTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"action":{"type":"string","enum":["list_sources","list_domains","list_root_queries","describe_type","find_field"]},
+			"action":{"type":"string","enum":["list_sources","list_domains","list_root_queries","list_root_mutations","describe_mutation_policy","describe_type","find_field"]},
 			"source":{"type":"string","description":"Optional GraphQL source name. Omit only when a single source exists or graphql_default_source is configured."},
-			"domain":{"type":"string","description":"Optional domain name used to clip visible root queries and types."},
+			"domain":{"type":"string","description":"Optional domain name used to clip visible root queries and types. Required for mutation policy actions."},
 			"name":{"type":"string","description":"Type or field name for the selected action."}
 		},
 		"required":["action"],
@@ -78,6 +78,12 @@ func (t *GraphQLSchemaLookupTool) execute(args graphqlSchemaLookupArgs) (string,
 	case graphqlSchemaLookupActionListRootQueries:
 		output, actionErr := listGraphQLRootQueries(source, args.Domain)
 		return output, source.Name, actionErr
+	case graphqlSchemaLookupActionListRootMutations:
+		output, actionErr := listGraphQLRootMutations(source, args.Domain, t.registry)
+		return output, source.Name, actionErr
+	case graphqlSchemaLookupActionDescribeMutationPolicy:
+		output, actionErr := describeGraphQLMutationPolicy(source, args.Domain, args.Name, t.registry)
+		return output, source.Name, actionErr
 	case graphqlSchemaLookupActionDescribeType:
 		output, actionErr := describeGraphQLType(source, args.Domain, args.Name)
 		return output, source.Name, actionErr
@@ -85,7 +91,7 @@ func (t *GraphQLSchemaLookupTool) execute(args graphqlSchemaLookupArgs) (string,
 		output, actionErr := findGraphQLField(source, args.Domain, args.Name)
 		return output, source.Name, actionErr
 	default:
-		return "", source.Name, fmt.Errorf("action must be one of: list_sources, list_domains, list_root_queries, describe_type, find_field")
+		return "", source.Name, fmt.Errorf("action must be one of: list_sources, list_domains, list_root_queries, list_root_mutations, describe_mutation_policy, describe_type, find_field")
 	}
 }
 

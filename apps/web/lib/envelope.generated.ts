@@ -168,6 +168,7 @@ export interface BridgeConfig {
   model_selection_enabled: boolean;
   graphql_default_source: string;
   graphql_sources: GraphQLSourceResponse[];
+  graphql_mutation_policies: GraphQLMutationPolicyResponse[];
   web_search_tavily_api_key_set: boolean;
   web_search_exa_api_key_set: boolean;
 }
@@ -181,6 +182,7 @@ export interface ConfigUpdate {
   graphql_default_source?: string;
   graphql_sources?: GraphQLSourceInput[];
   graphql_source_upsert?: GraphQLSourceInput;
+  graphql_mutation_policies?: GraphQLMutationPolicyInput[];
   web_search_tavily_api_key?: string;
   web_search_exa_api_key?: string;
   trace_id?: string;
@@ -220,6 +222,30 @@ export interface GraphQLDomainInput {
   max_depth?: number;
   max_fields?: number;
   max_root_fields?: number;
+}
+
+export interface GraphQLMutationPolicyResponse {
+  name: string;
+  description?: string;
+  source: string;
+  domain: string;
+  root_mutation: string;
+  max_depth?: number;
+  max_fields?: number;
+  max_root_fields?: number;
+  max_fragments?: number;
+}
+
+export interface GraphQLMutationPolicyInput {
+  name: string;
+  description?: string;
+  source: string;
+  domain: string;
+  root_mutation: string;
+  max_depth?: number;
+  max_fields?: number;
+  max_root_fields?: number;
+  max_fragments?: number;
 }
 
 export interface GraphQLSourceInput {

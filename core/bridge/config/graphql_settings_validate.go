@@ -7,6 +7,9 @@ func validateGraphQLConfig(cfg GraphQLConfig) error {
 		if cfg.DefaultSource != "" {
 			return fmt.Errorf("graphql_default_source %q requires at least one graphql source", cfg.DefaultSource)
 		}
+		if len(cfg.MutationPolicies) > 0 {
+			return fmt.Errorf("graphql_mutation_policies require at least one graphql source")
+		}
 		return nil
 	}
 
@@ -17,7 +20,7 @@ func validateGraphQLConfig(cfg GraphQLConfig) error {
 		}
 	}
 	if cfg.DefaultSource == "" || seen[cfg.DefaultSource] {
-		return nil
+		return validateGraphQLMutationPolicies(cfg)
 	}
 	return fmt.Errorf("graphql_default_source %q was not found in graphql_sources", cfg.DefaultSource)
 }

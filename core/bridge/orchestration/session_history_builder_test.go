@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -57,5 +58,59 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 	}
 	if envelope.TraceID != "trace-q1" {
 		t.Fatalf("unexpected trace id: %q", envelope.TraceID)
+	}
+}
+
+func TestSessionHistoryBuilderInjectsGraphQLMutationResolvedToolResult(t *testing.T) {
+	sess := session.NewSession("system")
+	createdAt := time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC)
+	sess.StorePendingGraphQLMutationIntent(session.PendingGraphQLMutationIntent{
+		IntentID:     "intent-1",
+		Source:       "crm",
+		Domain:       "people",
+		PolicyName:   "update_viewer",
+		RootMutation: "updateViewer",
+		Query:        "mutation { updateViewer { ok } }",
+		QuestionID:   "q-graphql",
+		ToolCallID:   "call-mutation",
+		TraceID:      "trace-mutation",
+		PreparedAt:   createdAt,
+		Status:       session.GraphQLMutationIntentPendingApproval,
+		Summary:      "summary",
+	})
+	sess.AddPendingQuestion("q-graphql", session.PendingHumanQuestion{
+		Prompt:     "Approve mutation?",
+		ToolName:   "graphql_mutation",
+		ToolCallID: "call-mutation",
+		TraceID:    "trace-mutation",
+		CreatedAt:  createdAt,
+	})
+	if !sess.SetHumanAnswer("q-graphql", "Approve") {
+		t.Fatalf("expected human answer to be accepted")
+	}
+
+	builder := newSessionHistoryBuilder(ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"}, "system", nil)
+	history, resolved := builder.BuildHistoryWithResolvedQuestions(sess)
+	if len(resolved) != 1 {
+		t.Fatalf("expected 1 resolved question, got %d", len(resolved))
+	}
+	if resolved[0].ToolName != "graphql_mutation" || resolved[0].Summary != "summary" {
+		t.Fatalf("unexpected resolved question metadata: %+v", resolved[0])
+	}
+
+	last := history.Messages()[len(history.Messages())-1]
+	envelope, ok := agent.ParseToolResultEnvelope(last.Text)
+	if !ok {
+		t.Fatalf("expected tool result envelope, got %q", last.Text)
+	}
+	if envelope.Tool != "graphql_mutation" {
+		t.Fatalf("unexpected tool name: %q", envelope.Tool)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(envelope.Output), &payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	if payload["intent_id"] != "intent-1" || payload["approval_status"] != session.GraphQLMutationIntentApproved {
+		t.Fatalf("unexpected graphql_mutation payload: %+v", payload)
 	}
 }

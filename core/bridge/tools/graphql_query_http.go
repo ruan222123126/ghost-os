@@ -25,12 +25,13 @@ type graphQLRequestPayload struct {
 	OperationName string         `json:"operationName,omitempty"`
 }
 
-func (t *GraphQLQueryTool) executeRequest(
+func executeGraphQLRequest(
 	ctx context.Context,
+	httpClient *http.Client,
 	source *graphqlschema.Source,
-	args graphQLQueryArgs,
+	payload graphQLRequestPayload,
 ) ([]byte, error) {
-	if t == nil || t.httpClient == nil {
+	if httpClient == nil {
 		return nil, fmt.Errorf("graphql http client is not configured")
 	}
 	if source == nil {
@@ -43,11 +44,11 @@ func (t *GraphQLQueryTool) executeRequest(
 	requestCtx, cancel := graphQLRequestContext(ctx, source.TimeoutMS)
 	defer cancel()
 
-	req, err := t.buildRequest(requestCtx, source, args)
+	req, err := buildGraphQLRequest(requestCtx, source, payload)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := t.httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("graphql request failed: %w", err)
 	}
@@ -63,16 +64,27 @@ func (t *GraphQLQueryTool) executeRequest(
 	return body, nil
 }
 
-func (t *GraphQLQueryTool) buildRequest(
+func (t *GraphQLQueryTool) executeRequest(
 	ctx context.Context,
 	source *graphqlschema.Source,
 	args graphQLQueryArgs,
-) (*http.Request, error) {
-	payload := graphQLRequestPayload{
+) ([]byte, error) {
+	var httpClient *http.Client
+	if t != nil {
+		httpClient = t.httpClient
+	}
+	return executeGraphQLRequest(ctx, httpClient, source, graphQLRequestPayload{
 		Query:         args.Query,
 		Variables:     args.Variables,
 		OperationName: args.OperationName,
-	}
+	})
+}
+
+func buildGraphQLRequest(
+	ctx context.Context,
+	source *graphqlschema.Source,
+	payload graphQLRequestPayload,
+) (*http.Request, error) {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode graphql request: %w", err)

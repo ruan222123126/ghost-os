@@ -74,8 +74,14 @@ func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 			Domains: []bridgeconfig.GraphQLDomainFileConfig{{
 				Name:        "viewer",
 				RootQueries: []string{"viewer"},
-				Types:       []string{"Viewer"},
+				Types:       []string{"Viewer", "MutationPayload"},
 			}},
+		}},
+		GraphQLMutationPolicies: []bridgeconfig.GraphQLMutationPolicyFileConfig{{
+			Name:         "update_viewer",
+			Source:       "crm",
+			Domain:       "viewer",
+			RootMutation: "updateViewer",
 		}},
 	})
 	store := newRuntimeTestStore(t)
@@ -86,18 +92,18 @@ func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 	}
 	t.Cleanup(deps.Close)
 
-	for _, name := range []string{"graphql_query", "graphql_schema_lookup"} {
+	for _, name := range []string{"graphql_query", "graphql_schema_lookup", "graphql_mutation"} {
 		if deps.registry.Get(name) == nil {
 			t.Fatalf("expected %s to be registered", name)
 		}
 	}
 
 	visible := tools.StaticVisibleToolNames(tools.CatalogToolNames(deps.registry), toolVisibilityOptions(deps.cfg))
-	if containsRuntimeTool(visible, "graphql_query") || containsRuntimeTool(visible, "graphql_schema_lookup") {
+	if containsRuntimeTool(visible, "graphql_query") || containsRuntimeTool(visible, "graphql_schema_lookup") || containsRuntimeTool(visible, "graphql_mutation") {
 		t.Fatalf("expected graphql tools to stay out of the static tool surface, got %v", visible)
 	}
 	candidates := tools.SearchCandidateToolNames(tools.CatalogToolNames(deps.registry), nil, toolVisibilityOptions(deps.cfg))
-	if !containsRuntimeTool(candidates, "graphql_query") || !containsRuntimeTool(candidates, "graphql_schema_lookup") {
+	if !containsRuntimeTool(candidates, "graphql_query") || !containsRuntimeTool(candidates, "graphql_schema_lookup") || !containsRuntimeTool(candidates, "graphql_mutation") {
 		t.Fatalf("expected graphql tools to be discoverable via tfind, got %v", candidates)
 	}
 }
@@ -161,6 +167,39 @@ func TestAgentRuntimeFactoryFailsOnInvalidGraphQLSchemaSnapshot(t *testing.T) {
 	_, err := newAgentRuntimeFactory().Build(store)
 	if err == nil {
 		t.Fatal("expected invalid graphql schema snapshot error")
+	}
+}
+
+func TestAgentRuntimeFactoryFailsOnInvalidGraphQLMutationPolicy(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
+		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://graphql.test/query",
+			SchemaPath:       writeRuntimeGraphQLSchema(t, tempDir),
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         5,
+			MaxFields:        24,
+			MaxRootFields:    2,
+			MaxFragments:     3,
+			Domains: []bridgeconfig.GraphQLDomainFileConfig{{
+				Name:        "viewer",
+				RootQueries: []string{"viewer"},
+				Types:       []string{"Viewer", "MutationPayload"},
+			}},
+		}},
+		GraphQLMutationPolicies: []bridgeconfig.GraphQLMutationPolicyFileConfig{{
+			Name:         "bad_policy",
+			Source:       "crm",
+			Domain:       "viewer",
+			RootMutation: "archiveViewer",
+		}},
+	})
+	store := newRuntimeTestStore(t)
+
+	if _, err := newAgentRuntimeFactory().Build(store); err == nil {
+		t.Fatal("expected invalid graphql mutation policy error")
 	}
 }
 
@@ -244,7 +283,11 @@ func writeRuntimeGraphQLSchema(t *testing.T, tempDir string) string {
 	path := filepath.Join(tempDir, "graphql-schema.json")
 	if err := os.WriteFile(path, []byte(`{
   "root_queries": [{"name":"viewer","return_type":"Viewer"}],
-  "types": [{"name":"Viewer","fields":[{"name":"id","return_type":"ID!"}]}]
+  "root_mutations": [{"name":"updateViewer","return_type":"MutationPayload"}],
+  "types": [
+    {"name":"Viewer","fields":[{"name":"id","return_type":"ID!"}]},
+    {"name":"MutationPayload","fields":[{"name":"ok","return_type":"Boolean!"}]}
+  ]
 }`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
