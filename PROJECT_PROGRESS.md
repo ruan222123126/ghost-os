@@ -29,6 +29,11 @@
 - 本轮验证：
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./rss ./orchestration -timeout 60s`
 
+- 删除 `core/bridge/orchestration/config_shim_env.go` 遗留空包装：
+  - `rss_inbox_system_tasks.go` 与 `service_router.go` 已改为直接调用 `bridgeconfig.Load()` / `bridgeconfig.LoadWithRuntime()` / `bridgeconfig.TasksPathFromEnv()`，`orchestration` 不再维护仅转发 `core/bridge/config` 的 env shim。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -timeout 60s`
+
 - 清理 transport SSE 死代码：
   - `core/bridge/transport/transport_sse.go` 已删除未被任何 transport 路径调用的 `eventTurnTracker`、`finalAssistantTurn`、`emitStreamErrorEvent` 及其连带 helper，避免 SSE 入口继续保留误导性分支。
 - 本轮验证：
