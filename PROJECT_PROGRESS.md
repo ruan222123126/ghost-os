@@ -23,6 +23,11 @@
 
 ### 2026-03-15
 
+- 清理 transport SSE 死代码：
+  - `core/bridge/transport/transport_sse.go` 已删除未被任何 transport 路径调用的 `eventTurnTracker`、`finalAssistantTurn`、`emitStreamErrorEvent` 及其连带 helper，避免 SSE 入口继续保留误导性分支。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./transport -timeout 60s`
+
 - 收口 CLI config DTO 分叉：
   - `apps/cli` 已删除手写 `ConfigResponse` / `ConfigUpdate`，改为直接复用共享生成的 `BridgeConfig` / `ConfigUpdate`。
   - `client`、命令执行链与终端渲染测试现统一消费共享契约；后续 config schema 扩字段时，CLI 不再保留独立 DTO 漂移入口。
