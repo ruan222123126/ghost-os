@@ -34,15 +34,18 @@ type GraphQLSourceConfig struct {
 }
 
 type GraphQLMutationPolicyConfig struct {
-	Name          string
-	Description   string
-	Source        string
-	Domain        string
-	RootMutation  string
-	MaxDepth      int
-	MaxFields     int
-	MaxRootFields int
-	MaxFragments  int
+	Name                    string
+	Description             string
+	Source                  string
+	Domain                  string
+	RootMutation            string
+	IdempotencyMode         string
+	IdempotencyHeader       string
+	IdempotencyVariablePath string
+	MaxDepth                int
+	MaxFields               int
+	MaxRootFields           int
+	MaxFragments            int
 }
 
 type GraphQLRegistryConfig struct {
@@ -129,15 +132,18 @@ func graphQLMutationPolicyConfigs(raw []GraphQLMutationPolicyConfig) []graphqlsc
 	out := make([]graphqlschema.MutationPolicyConfig, 0, len(raw))
 	for _, policy := range raw {
 		out = append(out, graphqlschema.MutationPolicyConfig{
-			Name:          strings.TrimSpace(policy.Name),
-			Description:   strings.TrimSpace(policy.Description),
-			Source:        strings.TrimSpace(policy.Source),
-			Domain:        strings.TrimSpace(policy.Domain),
-			RootMutation:  strings.TrimSpace(policy.RootMutation),
-			MaxDepth:      policy.MaxDepth,
-			MaxFields:     policy.MaxFields,
-			MaxRootFields: policy.MaxRootFields,
-			MaxFragments:  policy.MaxFragments,
+			Name:                    strings.TrimSpace(policy.Name),
+			Description:             strings.TrimSpace(policy.Description),
+			Source:                  strings.TrimSpace(policy.Source),
+			Domain:                  strings.TrimSpace(policy.Domain),
+			RootMutation:            strings.TrimSpace(policy.RootMutation),
+			IdempotencyMode:         strings.TrimSpace(policy.IdempotencyMode),
+			IdempotencyHeader:       strings.TrimSpace(policy.IdempotencyHeader),
+			IdempotencyVariablePath: strings.TrimSpace(policy.IdempotencyVariablePath),
+			MaxDepth:                policy.MaxDepth,
+			MaxFields:               policy.MaxFields,
+			MaxRootFields:           policy.MaxRootFields,
+			MaxFragments:            policy.MaxFragments,
 		})
 	}
 	return out

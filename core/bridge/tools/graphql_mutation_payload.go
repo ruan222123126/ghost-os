@@ -15,13 +15,13 @@ import (
 const (
 	graphQLMutationActionPrepare     = "prepare"
 	graphQLMutationActionCommit      = "commit"
+	graphQLMutationActionRetryCommit = "retry_commit"
+	graphQLMutationActionStatus      = "status"
 	graphQLMutationActionDiscard     = "discard"
 	graphQLMutationActionListPending = "list_pending"
-
 	graphQLMutationApprovalApprove = "Approve"
 	graphQLMutationApprovalReject  = "Reject"
 	graphQLMutationApprovalEdit    = "Reject and edit"
-
 	graphQLMutationSummaryMaxChars = 240
 	graphQLMutationValueMaxChars   = 72
 )

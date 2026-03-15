@@ -75,11 +75,15 @@ const GRAPHQL_MUTATION_POLICY_KEYS = [
   'source',
   'domain',
   'root_mutation',
+  'idempotency_mode',
+  'idempotency_header',
+  'idempotency_variable_path',
   'max_depth',
   'max_fields',
   'max_root_fields',
   'max_fragments',
 ] as const;
+const GRAPHQL_IDEMPOTENCY_MODES = ['header', 'variable_path'] as const;
 
 function parseProviderConfig(value: unknown, label: string): ProviderConfig {
   const record = expectRecord(value, label);
@@ -175,6 +179,17 @@ function parseGraphQLMutationPolicyResponse(
     source: expectString(record.source, `${label}.source`),
     domain: expectString(record.domain, `${label}.domain`),
     root_mutation: expectString(record.root_mutation, `${label}.root_mutation`),
+    idempotency_mode: expectStringEnum(
+      record.idempotency_mode,
+      GRAPHQL_IDEMPOTENCY_MODES,
+      `${label}.idempotency_mode`,
+    ),
+    idempotency_header: record.idempotency_header === undefined
+      ? undefined
+      : expectString(record.idempotency_header, `${label}.idempotency_header`),
+    idempotency_variable_path: record.idempotency_variable_path === undefined
+      ? undefined
+      : expectString(record.idempotency_variable_path, `${label}.idempotency_variable_path`),
     max_depth: record.max_depth === undefined ? undefined : expectNumber(record.max_depth, `${label}.max_depth`),
     max_fields: record.max_fields === undefined ? undefined : expectNumber(record.max_fields, `${label}.max_fields`),
     max_root_fields: record.max_root_fields === undefined

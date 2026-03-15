@@ -67,15 +67,18 @@ type graphqlSchemaFieldMatchPayload struct {
 }
 
 type graphqlSchemaMutationPolicyPayload struct {
-	Name          string                    `json:"name"`
-	Description   string                    `json:"description,omitempty"`
-	Domain        string                    `json:"domain"`
-	RootMutation  graphqlSchemaFieldPayload `json:"root_mutation"`
-	MaxDepth      int                       `json:"max_depth"`
-	MaxFields     int                       `json:"max_fields"`
-	MaxRootFields int                       `json:"max_root_fields"`
-	MaxFragments  int                       `json:"max_fragments"`
-	Summary       string                    `json:"summary"`
+	Name                    string                    `json:"name"`
+	Description             string                    `json:"description,omitempty"`
+	Domain                  string                    `json:"domain"`
+	RootMutation            graphqlSchemaFieldPayload `json:"root_mutation"`
+	IdempotencyMode         string                    `json:"idempotency_mode"`
+	IdempotencyHeader       string                    `json:"idempotency_header,omitempty"`
+	IdempotencyVariablePath string                    `json:"idempotency_variable_path,omitempty"`
+	MaxDepth                int                       `json:"max_depth"`
+	MaxFields               int                       `json:"max_fields"`
+	MaxRootFields           int                       `json:"max_root_fields"`
+	MaxFragments            int                       `json:"max_fragments"`
+	Summary                 string                    `json:"summary"`
 }
 
 func newGraphQLSchemaFieldPayload(field graphqlschema.Field) graphqlSchemaFieldPayload {

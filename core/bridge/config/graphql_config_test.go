@@ -149,12 +149,14 @@ func TestRuntimeConfigFromEnvLoadsGraphQLMutationPolicies(t *testing.T) {
 			}},
 		}},
 		GraphQLMutationPolicies: []graphQLMutationPolicyFileConfig{{
-			Name:         "capture_order",
-			Source:       "crm",
-			Domain:       "orders",
-			RootMutation: "captureOrder",
-			MaxDepth:     2,
-			MaxFields:    8,
+			Name:              "capture_order",
+			Source:            "crm",
+			Domain:            "orders",
+			RootMutation:      "captureOrder",
+			IdempotencyMode:   "header",
+			IdempotencyHeader: "Idempotency-Key",
+			MaxDepth:          2,
+			MaxFields:         8,
 		}},
 	}); err != nil {
 		t.Fatalf("writeBridgeFileConfig: %v", err)
@@ -298,10 +300,12 @@ func TestRuntimeConfigFromEnvFailsOnInvalidGraphQLMutationPolicySource(t *testin
 			}},
 		}},
 		GraphQLMutationPolicies: []graphQLMutationPolicyFileConfig{{
-			Name:         "bad_policy",
-			Source:       "billing",
-			Domain:       "orders",
-			RootMutation: "captureOrder",
+			Name:              "bad_policy",
+			Source:            "billing",
+			Domain:            "orders",
+			RootMutation:      "captureOrder",
+			IdempotencyMode:   "header",
+			IdempotencyHeader: "Idempotency-Key",
 		}},
 	}); err != nil {
 		t.Fatalf("writeBridgeFileConfig: %v", err)
@@ -309,6 +313,42 @@ func TestRuntimeConfigFromEnvFailsOnInvalidGraphQLMutationPolicySource(t *testin
 
 	if _, err := runtimeConfigFromEnv(); err == nil || !strings.Contains(err.Error(), `source "billing"`) {
 		t.Fatalf("expected invalid mutation policy source error, got %v", err)
+	}
+}
+
+func TestRuntimeConfigFromEnvFailsOnMissingGraphQLMutationIdempotency(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		GraphQLDefaultSource: stringPointer("crm"),
+		GraphQLSources: []graphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://crm.example/graphql",
+			SchemaPath:       "/schemas/crm.json",
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         6,
+			MaxFields:        16,
+			MaxRootFields:    2,
+			MaxFragments:     4,
+			Domains: []graphQLDomainFileConfig{{
+				Name:        "orders",
+				RootQueries: []string{"order"},
+			}},
+		}},
+		GraphQLMutationPolicies: []graphQLMutationPolicyFileConfig{{
+			Name:         "missing_idempotency",
+			Source:       "crm",
+			Domain:       "orders",
+			RootMutation: "captureOrder",
+		}},
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+
+	if _, err := runtimeConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "idempotency_mode") {
+		t.Fatalf("expected missing idempotency error, got %v", err)
 	}
 }
 

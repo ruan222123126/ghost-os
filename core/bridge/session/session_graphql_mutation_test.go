@@ -14,6 +14,8 @@ func TestPendingGraphQLMutationIntentRoundTripAndClone(t *testing.T) {
 		Domain:       "people",
 		PolicyName:   "update_viewer",
 		RootMutation: "updateViewer",
+		DeliveryKey:  "delivery-1",
+		RequestHash:  "request-hash-1",
 		Query:        "mutation { updateViewer { ok } }",
 		Variables: map[string]any{
 			"input": map[string]any{"id": "user-1"},
@@ -70,7 +72,7 @@ func TestSetHumanAnswerUpdatesGraphQLMutationIntentStatus(t *testing.T) {
 		t.Fatalf("expected approve answer to be accepted")
 	}
 	approved, ok := sess.PendingGraphQLMutationIntent("intent-1")
-	if !ok || approved.Status != GraphQLMutationIntentApproved || approved.ApprovedAt.IsZero() {
+	if !ok || approved.Status != GraphQLMutationIntentApproved || approved.CommitState != GraphQLMutationCommitStateApproved || approved.ApprovedAt.IsZero() {
 		t.Fatalf("expected approved intent, got %+v ok=%v", approved, ok)
 	}
 
@@ -107,5 +109,53 @@ func TestRemovePendingQuestionDiscardsGraphQLMutationIntent(t *testing.T) {
 	intent, ok := sess.PendingGraphQLMutationIntent("intent-1")
 	if !ok || intent.Status != GraphQLMutationIntentDiscarded {
 		t.Fatalf("expected discarded intent after question removal, got %+v ok=%v", intent, ok)
+	}
+}
+
+func TestReplacePendingGraphQLMutationIntentStoresReceipts(t *testing.T) {
+	sess := NewSession("system")
+	sess.StorePendingGraphQLMutationIntent(PendingGraphQLMutationIntent{
+		IntentID:     "intent-1",
+		Source:       "crm",
+		Domain:       "people",
+		PolicyName:   "update_viewer",
+		RootMutation: "updateViewer",
+		Status:       GraphQLMutationIntentApproved,
+		CommitState:  GraphQLMutationCommitStateApproved,
+		Query:        "mutation { updateViewer { ok } }",
+		QuestionID:   "q-1",
+	})
+
+	ok := sess.ReplacePendingGraphQLMutationIntent(PendingGraphQLMutationIntent{
+		IntentID:      "intent-1",
+		Source:        "crm",
+		Domain:        "people",
+		PolicyName:    "update_viewer",
+		RootMutation:  "updateViewer",
+		Status:        GraphQLMutationIntentDeliveryUnknown,
+		CommitState:   GraphQLMutationCommitStateDeliveryUnknown,
+		Query:         "mutation { updateViewer { ok } }",
+		QuestionID:    "q-1",
+		AttemptCount:  1,
+		ResponseHash:  "response-hash-1",
+		ResponseBytes: 42,
+		Receipts: []GraphQLMutationReceipt{{
+			Attempt:       1,
+			State:         GraphQLMutationIntentDeliveryUnknown,
+			DeliveryKey:   "delivery-1",
+			RequestHash:   "request-hash-1",
+			ResponseHash:  "response-hash-1",
+			ResponseBytes: 42,
+			HTTPStatus:    0,
+			Error:         "timeout",
+		}},
+	})
+	if !ok {
+		t.Fatal("expected replace to succeed")
+	}
+
+	intent, ok := sess.PendingGraphQLMutationIntent("intent-1")
+	if !ok || len(intent.Receipts) != 1 || intent.Receipts[0].State != GraphQLMutationIntentDeliveryUnknown {
+		t.Fatalf("expected persisted receipt, got %+v ok=%v", intent, ok)
 	}
 }

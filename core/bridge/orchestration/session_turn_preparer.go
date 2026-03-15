@@ -88,13 +88,16 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		}
 	}
 
+	execCtx = tools.WithSession(execCtx, sess)
+	execCtx = tools.WithSessionCheckpoint(execCtx, p.sessionStore)
+
 	return &sessionTurnState{
 		sessionStore:    p.sessionStore,
 		deps:            deps,
 		persistence:     persistence,
 		sess:            sess,
 		agent:           agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns),
-		execCtx:         tools.WithSession(execCtx, sess),
+		execCtx:         execCtx,
 		traceID:         trimmedTraceID,
 		userMessage:     trimmedUserMessage,
 		preTurnMessages: preTurnMessages,

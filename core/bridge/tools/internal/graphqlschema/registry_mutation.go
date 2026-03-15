@@ -7,13 +7,21 @@ import (
 )
 
 type MutationPolicy struct {
-	Name         string
-	Description  string
-	Source       string
-	Domain       string
-	RootMutation string
-	Budget       Budget
+	Name                    string
+	Description             string
+	Source                  string
+	Domain                  string
+	RootMutation            string
+	IdempotencyMode         string
+	IdempotencyHeader       string
+	IdempotencyVariablePath string
+	Budget                  Budget
 }
+
+const (
+	mutationIdempotencyModeHeader       = "header"
+	mutationIdempotencyModeVariablePath = "variable_path"
+)
 
 func (r *Registry) HasMutationPolicies() bool {
 	return r != nil && len(r.mutationPolicies) > 0
@@ -143,6 +151,9 @@ func buildMutationPolicy(
 	if rootMutation == "" {
 		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q root_mutation is required", name)
 	}
+	if err := validateMutationPolicyIdempotency(name, cfg); err != nil {
+		return MutationPolicy{}, err
+	}
 	if seenNames[name] {
 		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q is duplicated", name)
 	}
@@ -195,13 +206,64 @@ func buildMutationPolicy(
 		budget.MaxFragments = cfg.MaxFragments
 	}
 	return MutationPolicy{
-		Name:         name,
-		Description:  strings.TrimSpace(cfg.Description),
-		Source:       sourceName,
-		Domain:       domainName,
-		RootMutation: rootMutation,
-		Budget:       budget,
+		Name:                    name,
+		Description:             strings.TrimSpace(cfg.Description),
+		Source:                  sourceName,
+		Domain:                  domainName,
+		RootMutation:            rootMutation,
+		IdempotencyMode:         strings.TrimSpace(cfg.IdempotencyMode),
+		IdempotencyHeader:       strings.TrimSpace(cfg.IdempotencyHeader),
+		IdempotencyVariablePath: strings.TrimSpace(cfg.IdempotencyVariablePath),
+		Budget:                  budget,
 	}, nil
+}
+
+func validateMutationPolicyIdempotency(
+	name string,
+	cfg MutationPolicyConfig,
+) error {
+	mode := strings.TrimSpace(cfg.IdempotencyMode)
+	switch mode {
+	case mutationIdempotencyModeHeader:
+		if strings.TrimSpace(cfg.IdempotencyHeader) == "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_header is required for idempotency_mode=%q",
+				name,
+				mode,
+			)
+		}
+		if strings.TrimSpace(cfg.IdempotencyVariablePath) != "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_variable_path must be empty for idempotency_mode=%q",
+				name,
+				mode,
+			)
+		}
+		return nil
+	case mutationIdempotencyModeVariablePath:
+		if strings.TrimSpace(cfg.IdempotencyVariablePath) == "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_variable_path is required for idempotency_mode=%q",
+				name,
+				mode,
+			)
+		}
+		if strings.TrimSpace(cfg.IdempotencyHeader) != "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_header must be empty for idempotency_mode=%q",
+				name,
+				mode,
+			)
+		}
+		return nil
+	default:
+		return fmt.Errorf(
+			"graphql mutation policy %q idempotency_mode must be one of: %s|%s",
+			name,
+			mutationIdempotencyModeHeader,
+			mutationIdempotencyModeVariablePath,
+		)
+	}
 }
 
 func mutationPolicyKey(sourceName string, domainName string, rootMutation string) string {
@@ -214,11 +276,14 @@ func mutationPolicyKey(sourceName string, domainName string, rootMutation string
 
 func cloneMutationPolicy(policy MutationPolicy) MutationPolicy {
 	return MutationPolicy{
-		Name:         policy.Name,
-		Description:  policy.Description,
-		Source:       policy.Source,
-		Domain:       policy.Domain,
-		RootMutation: policy.RootMutation,
-		Budget:       policy.Budget,
+		Name:                    policy.Name,
+		Description:             policy.Description,
+		Source:                  policy.Source,
+		Domain:                  policy.Domain,
+		RootMutation:            policy.RootMutation,
+		IdempotencyMode:         policy.IdempotencyMode,
+		IdempotencyHeader:       policy.IdempotencyHeader,
+		IdempotencyVariablePath: policy.IdempotencyVariablePath,
+		Budget:                  policy.Budget,
 	}
 }

@@ -24,20 +24,20 @@ func (GraphQLMutationTool) Name() string {
 }
 
 func (GraphQLMutationTool) Description() string {
-	return "Prepare, commit, discard, or inspect explicitly approved GraphQL mutations. Always inspect allowed policies with graphql_schema_lookup first."
+	return "Prepare, commit, discard, or inspect explicitly approved GraphQL mutations. Review the available mutation policy metadata before prepare when it is available."
 }
 
 func (GraphQLMutationTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"action":{"type":"string","enum":["prepare","commit","discard","list_pending"]},
+			"action":{"type":"string","enum":["prepare","commit","retry_commit","status","discard","list_pending"]},
 			"source":{"type":"string","description":"GraphQL source name for action=prepare."},
 			"domain":{"type":"string","description":"Domain name for action=prepare. Required because mutation policies are domain-scoped."},
 			"mutation":{"type":"string","description":"GraphQL mutation document for action=prepare."},
 			"variables":{"type":"object","description":"Optional GraphQL variables object for action=prepare."},
 			"operation_name":{"type":"string","description":"Optional operation name when the document contains multiple mutation operations."},
-			"intent_id":{"type":"string","description":"Frozen mutation intent id for action=commit or action=discard."}
+			"intent_id":{"type":"string","description":"Frozen mutation intent id for action=commit, retry_commit, status, or discard."}
 		},
 		"required":["action"],
 		"additionalProperties":false
@@ -62,11 +62,15 @@ func (t *GraphQLMutationTool) Execute(
 		return t.prepare(ctx, args, traceID)
 	case graphQLMutationActionCommit:
 		return t.commit(ctx, args, traceID)
+	case graphQLMutationActionRetryCommit:
+		return t.retryCommit(ctx, args, traceID)
+	case graphQLMutationActionStatus:
+		return t.status(ctx, args)
 	case graphQLMutationActionDiscard:
 		return t.discard(ctx, args, traceID)
 	case graphQLMutationActionListPending:
 		return t.listPending(ctx)
 	default:
-		return "", fmt.Errorf("action must be one of: prepare, commit, discard, list_pending")
+		return "", fmt.Errorf("action must be one of: prepare, commit, retry_commit, status, discard, list_pending")
 	}
 }

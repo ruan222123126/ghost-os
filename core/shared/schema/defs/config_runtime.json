@@ -187,7 +187,8 @@
         "name",
         "source",
         "domain",
-        "root_mutation"
+        "root_mutation",
+        "idempotency_mode"
       ],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
@@ -195,6 +196,12 @@
         "source": { "type": "string", "minLength": 1 },
         "domain": { "type": "string", "minLength": 1 },
         "root_mutation": { "type": "string", "minLength": 1 },
+        "idempotency_mode": {
+          "type": "string",
+          "enum": ["header", "variable_path"]
+        },
+        "idempotency_header": { "type": "string", "minLength": 1 },
+        "idempotency_variable_path": { "type": "string", "minLength": 1 },
         "max_depth": { "type": "integer", "minimum": 0 },
         "max_fields": { "type": "integer", "minimum": 0 },
         "max_root_fields": { "type": "integer", "minimum": 0 },
@@ -215,7 +222,8 @@
         "name",
         "source",
         "domain",
-        "root_mutation"
+        "root_mutation",
+        "idempotency_mode"
       ],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
@@ -223,6 +231,12 @@
         "source": { "type": "string", "minLength": 1 },
         "domain": { "type": "string", "minLength": 1 },
         "root_mutation": { "type": "string", "minLength": 1 },
+        "idempotency_mode": {
+          "type": "string",
+          "enum": ["header", "variable_path"]
+        },
+        "idempotency_header": { "type": "string", "minLength": 1 },
+        "idempotency_variable_path": { "type": "string", "minLength": 1 },
         "max_depth": { "type": "integer", "minimum": 0 },
         "max_fields": { "type": "integer", "minimum": 0 },
         "max_root_fields": { "type": "integer", "minimum": 0 },

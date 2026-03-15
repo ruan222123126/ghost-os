@@ -39,6 +39,11 @@ type WorkingDirSetter interface {
 	SetWorkingDir(dir string) error
 }
 
+// SessionCheckpoint 暴露工具可用的最小即时持久化能力。
+type SessionCheckpoint interface {
+	Save(*session.Session) error
+}
+
 // AwaitingHumanSignal 表示工具要求 Agent 暂停并等待用户输入。
 type AwaitingHumanSignal struct {
 	QuestionID    string
@@ -75,6 +80,7 @@ type ResultInterpreter interface {
 }
 
 type sessionContextKey struct{}
+type sessionCheckpointContextKey struct{}
 type toolCallIDContextKey struct{}
 
 // WithSession 把当前会话注入 tool 执行上下文。
@@ -92,6 +98,26 @@ func SessionFromContext(ctx context.Context) *session.Session {
 	}
 	sess, _ := ctx.Value(sessionContextKey{}).(*session.Session)
 	return sess
+}
+
+// WithSessionCheckpoint 注入工具执行中允许使用的最小即时持久化能力。
+func WithSessionCheckpoint(
+	ctx context.Context,
+	checkpoint SessionCheckpoint,
+) context.Context {
+	if checkpoint == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, sessionCheckpointContextKey{}, checkpoint)
+}
+
+// SessionCheckpointFromContext 读取工具执行中绑定的即时持久化能力。
+func SessionCheckpointFromContext(ctx context.Context) SessionCheckpoint {
+	if ctx == nil {
+		return nil
+	}
+	checkpoint, _ := ctx.Value(sessionCheckpointContextKey{}).(SessionCheckpoint)
+	return checkpoint
 }
 
 // WithToolCallID 注入当前工具调用 ID，便于工具写回可追踪状态。

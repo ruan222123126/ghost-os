@@ -61,6 +61,17 @@
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tools/... -timeout 60s`
   - `pnpm -C apps/web test -- --runTestsByPath lib/api/config/api.test.ts`
 
+- 完成 GraphQL 第四步交付安全：
+  - mutation policy 现强制声明 `idempotency_mode`，仅支持 `header` 与 `variable_path`；配置、registry、schema lookup、runtime snapshot 与共享契约已同步幂等字段，无显式策略的写 policy 会显式失败。
+  - `graphql_mutation.prepare` 现冻结 `delivery_key`、注入后的 variables 与 `request_hash`；intent 持久化补齐 `CommitState`、attempt 计数、最新错误摘要、响应 hash/bytes 与统一 `Receipts[]` 回执结构。
+  - 工具上下文新增最小 `SessionCheckpoint`；`commit` / `retry_commit` 会先把 intent 落成 `committing` 再发请求，成功落 `executed`，网络超时/连接中断/响应不确定统一落 `delivery_unknown`，且所有尝试都会追加 receipt。
+  - `graphql_mutation` 新增 `status` 与 `retry_commit`；retry 仅允许 `approved` 或 `delivery_unknown`，并强制复用冻结的 `delivery_key` 与 `request_hash`，已 `executed` 的 intent 仍不可重复提交。
+  - GraphQL mutation trace 现补齐 `delivery_key`、`commit_state`、`attempt`、`request_hash`、`response_hash`、`http_status`；`delivery_unknown` 会单独打点，便于补偿与审计。
+- 第四步相关验证已通过：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./session ./tools ./runtime ./orchestration -timeout 60s`
+  - `pnpm -C apps/web test -- --runTestsByPath lib/api/config/api.test.ts`
+  - `python3 -m unittest discover -s core/shared/tests -p 'test_*.py'`
+
 - 新增只读 GraphQL 查询工具：
   - `graphql_query` 仅允许 `query`，在执行前做 GraphQL 文本校验，拒绝 `mutation` / `subscription` / 混合操作。
   - 请求固定走单一 endpoint，支持配置级 headers / API key、超时与响应体大小限制，HTTP 与 GraphQL errors 均显式失败。

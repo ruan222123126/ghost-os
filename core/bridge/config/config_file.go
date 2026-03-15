@@ -62,15 +62,18 @@ type graphQLSourceFileConfig struct {
 }
 
 type graphQLMutationPolicyFileConfig struct {
-	Name          string `toml:"name,omitempty"`
-	Description   string `toml:"description,omitempty"`
-	Source        string `toml:"source,omitempty"`
-	Domain        string `toml:"domain,omitempty"`
-	RootMutation  string `toml:"root_mutation,omitempty"`
-	MaxDepth      int    `toml:"max_depth,omitempty"`
-	MaxFields     int    `toml:"max_fields,omitempty"`
-	MaxRootFields int    `toml:"max_root_fields,omitempty"`
-	MaxFragments  int    `toml:"max_fragments,omitempty"`
+	Name                    string `toml:"name,omitempty"`
+	Description             string `toml:"description,omitempty"`
+	Source                  string `toml:"source,omitempty"`
+	Domain                  string `toml:"domain,omitempty"`
+	RootMutation            string `toml:"root_mutation,omitempty"`
+	IdempotencyMode         string `toml:"idempotency_mode,omitempty"`
+	IdempotencyHeader       string `toml:"idempotency_header,omitempty"`
+	IdempotencyVariablePath string `toml:"idempotency_variable_path,omitempty"`
+	MaxDepth                int    `toml:"max_depth,omitempty"`
+	MaxFields               int    `toml:"max_fields,omitempty"`
+	MaxRootFields           int    `toml:"max_root_fields,omitempty"`
+	MaxFragments            int    `toml:"max_fragments,omitempty"`
 }
 
 type bridgeFileConfig struct {

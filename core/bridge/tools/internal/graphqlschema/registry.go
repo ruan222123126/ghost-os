@@ -40,15 +40,18 @@ type SourceConfig struct {
 }
 
 type MutationPolicyConfig struct {
-	Name          string
-	Description   string
-	Source        string
-	Domain        string
-	RootMutation  string
-	MaxDepth      int
-	MaxFields     int
-	MaxRootFields int
-	MaxFragments  int
+	Name                    string
+	Description             string
+	Source                  string
+	Domain                  string
+	RootMutation            string
+	IdempotencyMode         string
+	IdempotencyHeader       string
+	IdempotencyVariablePath string
+	MaxDepth                int
+	MaxFields               int
+	MaxRootFields           int
+	MaxFragments            int
 }
 
 type RegistryConfig struct {

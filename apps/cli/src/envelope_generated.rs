@@ -329,6 +329,11 @@ pub struct GraphQLMutationPolicyResponse {
     pub source: String,
     pub domain: String,
     pub root_mutation: String,
+    pub idempotency_mode: String,
+    #[serde(default)]
+    pub idempotency_header: Option<String>,
+    #[serde(default)]
+    pub idempotency_variable_path: Option<String>,
     #[serde(default)]
     pub max_depth: Option<i64>,
     #[serde(default)]
@@ -347,6 +352,11 @@ pub struct GraphQLMutationPolicyInput {
     pub source: String,
     pub domain: String,
     pub root_mutation: String,
+    pub idempotency_mode: String,
+    #[serde(default)]
+    pub idempotency_header: Option<String>,
+    #[serde(default)]
+    pub idempotency_variable_path: Option<String>,
     #[serde(default)]
     pub max_depth: Option<i64>,
     #[serde(default)]

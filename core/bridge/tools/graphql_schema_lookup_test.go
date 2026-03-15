@@ -147,10 +147,12 @@ func TestGraphQLSchemaLookupToolListsAllowedRootMutations(t *testing.T) {
 			}},
 		}},
 		MutationPolicies: []GraphQLMutationPolicyConfig{{
-			Name:         "update_viewer",
-			Source:       "crm",
-			Domain:       "people",
-			RootMutation: "updateViewer",
+			Name:              "update_viewer",
+			Source:            "crm",
+			Domain:            "people",
+			RootMutation:      "updateViewer",
+			IdempotencyMode:   graphQLMutationIdempotencyModeHeader,
+			IdempotencyHeader: "Idempotency-Key",
 		}},
 	})
 	tool := NewGraphQLSchemaLookupTool(registry).(*GraphQLSchemaLookupTool)
@@ -176,7 +178,9 @@ func TestGraphQLSchemaLookupToolListsAllowedRootMutations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute describe_mutation_policy: %v", err)
 	}
-	if !strings.Contains(output, `"name":"update_viewer"`) || !strings.Contains(output, `"root_mutation"`) {
+	if !strings.Contains(output, `"name":"update_viewer"`) ||
+		!strings.Contains(output, `"root_mutation"`) ||
+		!strings.Contains(output, `"idempotency_mode":"header"`) {
 		t.Fatalf("unexpected mutation policy output: %s", output)
 	}
 }

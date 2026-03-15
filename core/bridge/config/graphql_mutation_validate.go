@@ -5,6 +5,11 @@ import (
 	"strings"
 )
 
+const (
+	graphQLMutationIdempotencyModeHeader       = "header"
+	graphQLMutationIdempotencyModeVariablePath = "variable_path"
+)
+
 func validateGraphQLMutationPolicies(cfg GraphQLConfig) error {
 	if len(cfg.MutationPolicies) == 0 {
 		return nil
@@ -37,6 +42,9 @@ func validateGraphQLMutationPolicy(
 	}
 	if policy.RootMutation == "" {
 		return fmt.Errorf("graphql mutation policy %q root_mutation is required", policy.Name)
+	}
+	if err := validateGraphQLMutationPolicyIdempotency(policy); err != nil {
+		return err
 	}
 	if seenNames[policy.Name] {
 		return fmt.Errorf("graphql mutation policy %q is duplicated", policy.Name)
@@ -104,6 +112,53 @@ func validateGraphQLMutationPolicy(
 		policy.Domain,
 		"max_fragments",
 	)
+}
+
+func validateGraphQLMutationPolicyIdempotency(
+	policy GraphQLMutationPolicyConfig,
+) error {
+	mode := strings.TrimSpace(policy.IdempotencyMode)
+	switch mode {
+	case graphQLMutationIdempotencyModeHeader:
+		if strings.TrimSpace(policy.IdempotencyHeader) == "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_header is required for idempotency_mode=%q",
+				policy.Name,
+				mode,
+			)
+		}
+		if strings.TrimSpace(policy.IdempotencyVariablePath) != "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_variable_path must be empty for idempotency_mode=%q",
+				policy.Name,
+				mode,
+			)
+		}
+		return nil
+	case graphQLMutationIdempotencyModeVariablePath:
+		if strings.TrimSpace(policy.IdempotencyVariablePath) == "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_variable_path is required for idempotency_mode=%q",
+				policy.Name,
+				mode,
+			)
+		}
+		if strings.TrimSpace(policy.IdempotencyHeader) != "" {
+			return fmt.Errorf(
+				"graphql mutation policy %q idempotency_header must be empty for idempotency_mode=%q",
+				policy.Name,
+				mode,
+			)
+		}
+		return nil
+	default:
+		return fmt.Errorf(
+			"graphql mutation policy %q idempotency_mode must be one of: %s|%s",
+			policy.Name,
+			graphQLMutationIdempotencyModeHeader,
+			graphQLMutationIdempotencyModeVariablePath,
+		)
+	}
 }
 
 func findGraphQLSourceConfigByName(sources []GraphQLSourceConfig, name string) (GraphQLSourceConfig, bool) {

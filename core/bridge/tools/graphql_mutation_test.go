@@ -286,14 +286,16 @@ func testGraphQLMutationRegistry(t *testing.T) *GraphQLSourceRegistry {
 			}},
 		}},
 		MutationPolicies: []GraphQLMutationPolicyConfig{{
-			Name:          "update_viewer",
-			Source:        "crm",
-			Domain:        "people",
-			RootMutation:  "updateViewer",
-			MaxDepth:      4,
-			MaxFields:     8,
-			MaxRootFields: 1,
-			MaxFragments:  2,
+			Name:              "update_viewer",
+			Source:            "crm",
+			Domain:            "people",
+			RootMutation:      "updateViewer",
+			IdempotencyMode:   graphQLMutationIdempotencyModeHeader,
+			IdempotencyHeader: "Idempotency-Key",
+			MaxDepth:          4,
+			MaxFields:         8,
+			MaxRootFields:     1,
+			MaxFragments:      2,
 		}},
 	})
 }
@@ -323,20 +325,25 @@ func testGraphQLMutationBudgetTool(t *testing.T) *GraphQLMutationTool {
 			}},
 		}},
 		MutationPolicies: []GraphQLMutationPolicyConfig{{
-			Name:          "update_viewer",
-			Source:        "crm",
-			Domain:        "people",
-			RootMutation:  "updateViewer",
-			MaxDepth:      1,
-			MaxFields:     8,
-			MaxRootFields: 1,
-			MaxFragments:  2,
+			Name:              "update_viewer",
+			Source:            "crm",
+			Domain:            "people",
+			RootMutation:      "updateViewer",
+			IdempotencyMode:   graphQLMutationIdempotencyModeHeader,
+			IdempotencyHeader: "Idempotency-Key",
+			MaxDepth:          1,
+			MaxFields:         8,
+			MaxRootFields:     1,
+			MaxFragments:      2,
 		}},
 	})).(*GraphQLMutationTool)
 }
 
 func graphQLMutationContext(sess *session.Session, toolCallID string) context.Context {
 	ctx := WithSession(context.Background(), sess)
+	ctx = WithSessionCheckpoint(ctx, graphQLMutationCheckpointFunc(func(*session.Session) error {
+		return nil
+	}))
 	return WithToolCallID(ctx, toolCallID)
 }
 
@@ -350,4 +357,10 @@ func onlyPendingGraphQLMutationIntent(
 		t.Fatalf("expected one intent, got %+v", intents)
 	}
 	return intents[0]
+}
+
+type graphQLMutationCheckpointFunc func(*session.Session) error
+
+func (fn graphQLMutationCheckpointFunc) Save(sess *session.Session) error {
+	return fn(sess)
 }

@@ -31,15 +31,18 @@ type GraphQLSourceSnapshot struct {
 }
 
 type GraphQLMutationPolicySnapshot struct {
-	Name          string `json:"name"`
-	Description   string `json:"description,omitempty"`
-	Source        string `json:"source"`
-	Domain        string `json:"domain"`
-	RootMutation  string `json:"root_mutation"`
-	MaxDepth      int    `json:"max_depth,omitempty"`
-	MaxFields     int    `json:"max_fields,omitempty"`
-	MaxRootFields int    `json:"max_root_fields,omitempty"`
-	MaxFragments  int    `json:"max_fragments,omitempty"`
+	Name                    string `json:"name"`
+	Description             string `json:"description,omitempty"`
+	Source                  string `json:"source"`
+	Domain                  string `json:"domain"`
+	RootMutation            string `json:"root_mutation"`
+	IdempotencyMode         string `json:"idempotency_mode"`
+	IdempotencyHeader       string `json:"idempotency_header,omitempty"`
+	IdempotencyVariablePath string `json:"idempotency_variable_path,omitempty"`
+	MaxDepth                int    `json:"max_depth,omitempty"`
+	MaxFields               int    `json:"max_fields,omitempty"`
+	MaxRootFields           int    `json:"max_root_fields,omitempty"`
+	MaxFragments            int    `json:"max_fragments,omitempty"`
 }
 
 type GraphQLDomainInput struct {
@@ -69,13 +72,16 @@ type GraphQLSourceInput struct {
 }
 
 type GraphQLMutationPolicyInput struct {
-	Name          string `json:"name"`
-	Description   string `json:"description,omitempty"`
-	Source        string `json:"source"`
-	Domain        string `json:"domain"`
-	RootMutation  string `json:"root_mutation"`
-	MaxDepth      int    `json:"max_depth,omitempty"`
-	MaxFields     int    `json:"max_fields,omitempty"`
-	MaxRootFields int    `json:"max_root_fields,omitempty"`
-	MaxFragments  int    `json:"max_fragments,omitempty"`
+	Name                    string `json:"name"`
+	Description             string `json:"description,omitempty"`
+	Source                  string `json:"source"`
+	Domain                  string `json:"domain"`
+	RootMutation            string `json:"root_mutation"`
+	IdempotencyMode         string `json:"idempotency_mode"`
+	IdempotencyHeader       string `json:"idempotency_header,omitempty"`
+	IdempotencyVariablePath string `json:"idempotency_variable_path,omitempty"`
+	MaxDepth                int    `json:"max_depth,omitempty"`
+	MaxFields               int    `json:"max_fields,omitempty"`
+	MaxRootFields           int    `json:"max_root_fields,omitempty"`
+	MaxFragments            int    `json:"max_fragments,omitempty"`
 }

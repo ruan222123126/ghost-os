@@ -226,15 +226,18 @@ func graphQLMutationPolicyResponses(
 	out := make([]graphqlMutationPolicyResponse, 0, len(raw))
 	for _, policy := range raw {
 		out = append(out, graphqlMutationPolicyResponse{
-			Name:          policy.Name,
-			Description:   policy.Description,
-			Source:        policy.Source,
-			Domain:        policy.Domain,
-			RootMutation:  policy.RootMutation,
-			MaxDepth:      policy.MaxDepth,
-			MaxFields:     policy.MaxFields,
-			MaxRootFields: policy.MaxRootFields,
-			MaxFragments:  policy.MaxFragments,
+			Name:                    policy.Name,
+			Description:             policy.Description,
+			Source:                  policy.Source,
+			Domain:                  policy.Domain,
+			RootMutation:            policy.RootMutation,
+			IdempotencyMode:         policy.IdempotencyMode,
+			IdempotencyHeader:       policy.IdempotencyHeader,
+			IdempotencyVariablePath: policy.IdempotencyVariablePath,
+			MaxDepth:                policy.MaxDepth,
+			MaxFields:               policy.MaxFields,
+			MaxRootFields:           policy.MaxRootFields,
+			MaxFragments:            policy.MaxFragments,
 		})
 	}
 	return out
@@ -318,15 +321,18 @@ func graphQLMutationPolicyInputs(
 	out := make([]bridgeconfig.GraphQLMutationPolicyInput, 0, len(raw))
 	for _, policy := range raw {
 		out = append(out, bridgeconfig.GraphQLMutationPolicyInput{
-			Name:          policy.Name,
-			Description:   policy.Description,
-			Source:        policy.Source,
-			Domain:        policy.Domain,
-			RootMutation:  policy.RootMutation,
-			MaxDepth:      policy.MaxDepth,
-			MaxFields:     policy.MaxFields,
-			MaxRootFields: policy.MaxRootFields,
-			MaxFragments:  policy.MaxFragments,
+			Name:                    policy.Name,
+			Description:             policy.Description,
+			Source:                  policy.Source,
+			Domain:                  policy.Domain,
+			RootMutation:            policy.RootMutation,
+			IdempotencyMode:         policy.IdempotencyMode,
+			IdempotencyHeader:       policy.IdempotencyHeader,
+			IdempotencyVariablePath: policy.IdempotencyVariablePath,
+			MaxDepth:                policy.MaxDepth,
+			MaxFields:               policy.MaxFields,
+			MaxRootFields:           policy.MaxRootFields,
+			MaxFragments:            policy.MaxFragments,
 		})
 	}
 	return out

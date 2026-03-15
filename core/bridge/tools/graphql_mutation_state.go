@@ -2,89 +2,26 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"ghost-os/bridge/session"
-	"ghost-os/bridge/tools/internal/graphqlschema"
+	"ghost-os/bridge/tools/internal/tooljson"
 )
 
-func (t *GraphQLMutationTool) commit(
+func (t *GraphQLMutationTool) status(
 	ctx context.Context,
 	args graphQLMutationArgs,
-	traceID string,
 ) (string, error) {
-	startedAt := time.Now()
-	intent, source, err := t.commitIntent(ctx, args.IntentID)
-	if err != nil {
-		logGraphQLMutationCommit(traceID, session.PendingGraphQLMutationIntent{
-			IntentID: args.IntentID,
-		}, 0, time.Since(startedAt), err)
-		return "", err
-	}
-	body, err := executeGraphQLRequest(ctx, t.httpClient, source, graphQLRequestPayload{
-		Query:         intent.Query,
-		Variables:     cloneGraphQLMutationVariables(intent.Variables),
-		OperationName: intent.OperationName,
-	})
-	if err != nil {
-		logGraphQLMutationCommit(traceID, intent, 0, time.Since(startedAt), err)
-		return "", err
-	}
-	if err := validateGraphQLResponseBody(body); err != nil {
-		logGraphQLMutationCommit(traceID, intent, len(body), time.Since(startedAt), err)
-		return "", err
-	}
-	if !SessionFromContext(ctx).MarkPendingGraphQLMutationIntentExecuted(intent.IntentID, time.Now().UTC()) {
-		return "", fmt.Errorf("failed to mark graphql mutation intent %q executed", intent.IntentID)
-	}
-	intent.Status = session.GraphQLMutationIntentExecuted
-	intent.ExecutedAt = time.Now().UTC()
-	response, err := decodeGraphQLMutationResponse(body)
-	logGraphQLMutationCommit(traceID, intent, len(body), time.Since(startedAt), err)
-	if err != nil {
-		return "", err
-	}
-	return encodeGraphQLMutationCommitPayload(intent, response)
-}
-
-func (t *GraphQLMutationTool) commitIntent(
-	ctx context.Context,
-	intentID string,
-) (session.PendingGraphQLMutationIntent, *graphqlschema.Source, error) {
 	sess := SessionFromContext(ctx)
 	if sess == nil {
-		return session.PendingGraphQLMutationIntent{}, nil, fmt.Errorf("graphql_mutation requires an active session")
+		return "", fmt.Errorf("graphql_mutation requires an active session")
 	}
-	id := strings.TrimSpace(intentID)
-	if id == "" {
-		return session.PendingGraphQLMutationIntent{}, nil, fmt.Errorf("intent_id is required for action=commit")
-	}
-	intent, ok := sess.PendingGraphQLMutationIntent(id)
-	if !ok {
-		return session.PendingGraphQLMutationIntent{}, nil, fmt.Errorf("graphql mutation intent %q was not found", id)
-	}
-	if intent.Status == session.GraphQLMutationIntentExecuted {
-		return session.PendingGraphQLMutationIntent{}, nil, fmt.Errorf("graphql mutation intent %q was already executed", id)
-	}
-	if intent.Status != session.GraphQLMutationIntentApproved {
-		return session.PendingGraphQLMutationIntent{}, nil, fmt.Errorf("graphql mutation intent %q is not approved", id)
-	}
-	source, err := t.registry.resolveSource(intent.Source)
+	intent, err := requireGraphQLMutationIntent(sess, args.IntentID, graphQLMutationActionStatus)
 	if err != nil {
-		return session.PendingGraphQLMutationIntent{}, nil, err
+		return "", err
 	}
-	return intent, source, nil
-}
-
-func decodeGraphQLMutationResponse(body []byte) (any, error) {
-	var payload any
-	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("decode graphql response: %w", err)
-	}
-	return payload, nil
+	return encodeGraphQLMutationStatusPayload(intent)
 }
 
 func (t *GraphQLMutationTool) discard(
@@ -114,6 +51,7 @@ func (t *GraphQLMutationTool) discard(
 		return "", err
 	}
 	intent.Status = session.GraphQLMutationIntentDiscarded
+	intent.CommitState = session.GraphQLMutationCommitStateDiscarded
 	logGraphQLMutationDiscard(traceID, intent, nil)
 	return encodeGraphQLMutationDiscardPayload(intent)
 }
@@ -164,9 +102,54 @@ func graphQLMutationIntentListable(status string) bool {
 	switch strings.TrimSpace(status) {
 	case session.GraphQLMutationIntentPendingApproval,
 		session.GraphQLMutationIntentApproved,
+		session.GraphQLMutationIntentCommitting,
+		session.GraphQLMutationIntentDeliveryUnknown,
 		session.GraphQLMutationIntentRejected:
 		return true
 	default:
 		return false
 	}
+}
+
+func encodeGraphQLMutationCommitResult(
+	action string,
+	intent session.PendingGraphQLMutationIntent,
+	response any,
+) (string, error) {
+	return tooljson.Encode(map[string]any{
+		"action":        action,
+		"intent_id":     intent.IntentID,
+		"source":        intent.Source,
+		"domain":        intent.Domain,
+		"policy":        intent.PolicyName,
+		"root_mutation": intent.RootMutation,
+		"status":        intent.Status,
+		"commit_state":  intent.CommitState,
+		"delivery_key":  intent.DeliveryKey,
+		"request_hash":  intent.RequestHash,
+		"attempt_count": intent.AttemptCount,
+		"receipt":       lastGraphQLMutationReceipt(intent.Receipts),
+		"response":      response,
+	})
+}
+
+func encodeGraphQLMutationStatusPayload(
+	intent session.PendingGraphQLMutationIntent,
+) (string, error) {
+	return tooljson.Encode(map[string]any{
+		"action":          graphQLMutationActionStatus,
+		"intent_id":       intent.IntentID,
+		"source":          intent.Source,
+		"domain":          intent.Domain,
+		"policy":          intent.PolicyName,
+		"root_mutation":   intent.RootMutation,
+		"status":          intent.Status,
+		"commit_state":    intent.CommitState,
+		"delivery_key":    intent.DeliveryKey,
+		"request_hash":    intent.RequestHash,
+		"attempt_count":   intent.AttemptCount,
+		"last_attempt_at": formatOptionalGraphQLMutationTime(intent.LastAttemptAt),
+		"last_error":      strings.TrimSpace(intent.LastError),
+		"receipt":         lastGraphQLMutationReceipt(intent.Receipts),
+	})
 }

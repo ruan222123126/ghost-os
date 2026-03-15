@@ -25,43 +25,82 @@ type graphQLRequestPayload struct {
 	OperationName string         `json:"operationName,omitempty"`
 }
 
+type graphQLRequestOptions struct {
+	Headers map[string]string
+}
+
+type graphQLHTTPResult struct {
+	Body       []byte
+	HTTPStatus int
+}
+
 func executeGraphQLRequest(
 	ctx context.Context,
 	httpClient *http.Client,
 	source *graphqlschema.Source,
 	payload graphQLRequestPayload,
 ) ([]byte, error) {
+	result, err := executeGraphQLRequestDetailed(
+		ctx,
+		httpClient,
+		source,
+		payload,
+		graphQLRequestOptions{},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return result.Body, nil
+}
+
+func executeGraphQLRequestDetailed(
+	ctx context.Context,
+	httpClient *http.Client,
+	source *graphqlschema.Source,
+	payload graphQLRequestPayload,
+	options graphQLRequestOptions,
+) (graphQLHTTPResult, error) {
 	if httpClient == nil {
-		return nil, fmt.Errorf("graphql http client is not configured")
+		return graphQLHTTPResult{}, fmt.Errorf("graphql http client is not configured")
 	}
 	if source == nil {
-		return nil, fmt.Errorf("graphql source is not configured")
+		return graphQLHTTPResult{}, fmt.Errorf("graphql source is not configured")
 	}
 	if source.Endpoint == "" {
-		return nil, fmt.Errorf("graphql source %q endpoint is not configured", source.Name)
+		return graphQLHTTPResult{}, fmt.Errorf("graphql source %q endpoint is not configured", source.Name)
 	}
 
 	requestCtx, cancel := graphQLRequestContext(ctx, source.TimeoutMS)
 	defer cancel()
 
-	req, err := buildGraphQLRequest(requestCtx, source, payload)
+	req, err := buildGraphQLRequest(requestCtx, source, payload, options.Headers)
 	if err != nil {
-		return nil, err
+		return graphQLHTTPResult{}, err
 	}
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("graphql request failed: %w", err)
+		return graphQLHTTPResult{}, fmt.Errorf("graphql request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := readGraphQLResponseBody(resp.Body, source.MaxResponseBytes)
 	if err != nil {
-		return nil, err
+		return graphQLHTTPResult{HTTPStatus: resp.StatusCode}, err
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, fmt.Errorf("graphql request returned status %d: %s", resp.StatusCode, previewGraphQLBody(body))
+		return graphQLHTTPResult{
+				Body:       body,
+				HTTPStatus: resp.StatusCode,
+			}, fmt.Errorf(
+				"graphql request returned status %d: %s",
+				resp.StatusCode,
+				previewGraphQLBody(body),
+			)
 	}
-	return body, nil
+	return graphQLHTTPResult{
+		Body:       body,
+		HTTPStatus: resp.StatusCode,
+	}, nil
 }
 
 func (t *GraphQLQueryTool) executeRequest(
@@ -84,6 +123,7 @@ func buildGraphQLRequest(
 	ctx context.Context,
 	source *graphqlschema.Source,
 	payload graphQLRequestPayload,
+	headers map[string]string,
 ) (*http.Request, error) {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -94,6 +134,9 @@ func buildGraphQLRequest(
 		return nil, fmt.Errorf("build graphql request: %w", err)
 	}
 	applyGraphQLRequestHeaders(req, source)
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
 	return req, nil
 }
 

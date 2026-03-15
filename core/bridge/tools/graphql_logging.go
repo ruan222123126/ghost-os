@@ -105,22 +105,21 @@ func logGraphQLMutationPrepare(
 	if err != nil {
 		status = "error"
 	}
-	fields := summary.FieldCount
-	rootFields := summary.RootFieldCount
-	fragments := summary.FragmentCount
 	if err != nil {
 		log.Printf(
-			"trace_id=%s tool=graphql_mutation action=prepare intent_id=%s source=%s domain=%s policy=%s root_mutation=%s depth=%d fields=%d root_fields=%d fragments=%d latency_ms=%d status=%s error=%q",
+			"trace_id=%s tool=graphql_mutation action=prepare intent_id=%s source=%s domain=%s policy=%s root_mutation=%s delivery_key=%s request_hash=%s depth=%d fields=%d root_fields=%d fragments=%d latency_ms=%d status=%s error=%q",
 			strings.TrimSpace(traceID),
 			strings.TrimSpace(intent.IntentID),
 			strings.TrimSpace(intent.Source),
 			strings.TrimSpace(intent.Domain),
 			strings.TrimSpace(intent.PolicyName),
 			strings.TrimSpace(intent.RootMutation),
+			strings.TrimSpace(intent.DeliveryKey),
+			strings.TrimSpace(intent.RequestHash),
 			summary.Depth,
-			fields,
-			rootFields,
-			fragments,
+			summary.FieldCount,
+			summary.RootFieldCount,
+			summary.FragmentCount,
 			latency.Milliseconds(),
 			status,
 			err.Error(),
@@ -128,17 +127,19 @@ func logGraphQLMutationPrepare(
 		return
 	}
 	log.Printf(
-		"trace_id=%s tool=graphql_mutation action=prepare intent_id=%s source=%s domain=%s policy=%s root_mutation=%s depth=%d fields=%d root_fields=%d fragments=%d latency_ms=%d status=%s",
+		"trace_id=%s tool=graphql_mutation action=prepare intent_id=%s source=%s domain=%s policy=%s root_mutation=%s delivery_key=%s request_hash=%s depth=%d fields=%d root_fields=%d fragments=%d latency_ms=%d status=%s",
 		strings.TrimSpace(traceID),
 		strings.TrimSpace(intent.IntentID),
 		strings.TrimSpace(intent.Source),
 		strings.TrimSpace(intent.Domain),
 		strings.TrimSpace(intent.PolicyName),
 		strings.TrimSpace(intent.RootMutation),
+		strings.TrimSpace(intent.DeliveryKey),
+		strings.TrimSpace(intent.RequestHash),
 		summary.Depth,
-		fields,
-		rootFields,
-		fragments,
+		summary.FieldCount,
+		summary.RootFieldCount,
+		summary.FragmentCount,
 		latency.Milliseconds(),
 		status,
 	)
@@ -147,39 +148,44 @@ func logGraphQLMutationPrepare(
 func logGraphQLMutationCommit(
 	traceID string,
 	intent session.PendingGraphQLMutationIntent,
-	responseBytes int,
+	receipt *session.GraphQLMutationReceipt,
 	latency time.Duration,
 	err error,
 ) {
 	status := "success"
+	commitState := strings.TrimSpace(intent.CommitState)
+	attempt := intent.AttemptCount
+	responseHash := strings.TrimSpace(intent.ResponseHash)
+	responseBytes := intent.ResponseBytes
+	httpStatus := 0
+	if receipt != nil {
+		commitState = strings.TrimSpace(receipt.State)
+		attempt = receipt.Attempt
+		responseHash = strings.TrimSpace(receipt.ResponseHash)
+		responseBytes = receipt.ResponseBytes
+		httpStatus = receipt.HTTPStatus
+	}
 	if err != nil {
 		status = "error"
-		log.Printf(
-			"trace_id=%s tool=graphql_mutation action=commit intent_id=%s source=%s domain=%s policy=%s root_mutation=%s approved=true response_bytes=%d latency_ms=%d status=%s error=%q",
-			strings.TrimSpace(traceID),
-			strings.TrimSpace(intent.IntentID),
-			strings.TrimSpace(intent.Source),
-			strings.TrimSpace(intent.Domain),
-			strings.TrimSpace(intent.PolicyName),
-			strings.TrimSpace(intent.RootMutation),
-			responseBytes,
-			latency.Milliseconds(),
-			status,
-			err.Error(),
-		)
-		return
 	}
 	log.Printf(
-		"trace_id=%s tool=graphql_mutation action=commit intent_id=%s source=%s domain=%s policy=%s root_mutation=%s approved=true response_bytes=%d latency_ms=%d status=%s",
+		"trace_id=%s tool=graphql_mutation action=commit intent_id=%s source=%s domain=%s policy=%s root_mutation=%s commit_state=%s delivery_key=%s attempt=%d request_hash=%s response_hash=%s response_bytes=%d http_status=%d latency_ms=%d status=%s error=%q",
 		strings.TrimSpace(traceID),
 		strings.TrimSpace(intent.IntentID),
 		strings.TrimSpace(intent.Source),
 		strings.TrimSpace(intent.Domain),
 		strings.TrimSpace(intent.PolicyName),
 		strings.TrimSpace(intent.RootMutation),
+		commitState,
+		strings.TrimSpace(intent.DeliveryKey),
+		attempt,
+		strings.TrimSpace(intent.RequestHash),
+		responseHash,
 		responseBytes,
+		httpStatus,
 		latency.Milliseconds(),
 		status,
+		errorString(err),
 	)
 }
 
@@ -192,26 +198,37 @@ func logGraphQLMutationDiscard(
 	if err != nil {
 		status = "error"
 		log.Printf(
-			"trace_id=%s tool=graphql_mutation action=discard intent_id=%s source=%s domain=%s policy=%s root_mutation=%s status=%s error=%q",
+			"trace_id=%s tool=graphql_mutation action=discard intent_id=%s source=%s domain=%s policy=%s root_mutation=%s commit_state=%s delivery_key=%s status=%s error=%q",
 			strings.TrimSpace(traceID),
 			strings.TrimSpace(intent.IntentID),
 			strings.TrimSpace(intent.Source),
 			strings.TrimSpace(intent.Domain),
 			strings.TrimSpace(intent.PolicyName),
 			strings.TrimSpace(intent.RootMutation),
+			strings.TrimSpace(intent.CommitState),
+			strings.TrimSpace(intent.DeliveryKey),
 			status,
 			err.Error(),
 		)
 		return
 	}
 	log.Printf(
-		"trace_id=%s tool=graphql_mutation action=discard intent_id=%s source=%s domain=%s policy=%s root_mutation=%s status=%s",
+		"trace_id=%s tool=graphql_mutation action=discard intent_id=%s source=%s domain=%s policy=%s root_mutation=%s commit_state=%s delivery_key=%s status=%s",
 		strings.TrimSpace(traceID),
 		strings.TrimSpace(intent.IntentID),
 		strings.TrimSpace(intent.Source),
 		strings.TrimSpace(intent.Domain),
 		strings.TrimSpace(intent.PolicyName),
 		strings.TrimSpace(intent.RootMutation),
+		strings.TrimSpace(intent.CommitState),
+		strings.TrimSpace(intent.DeliveryKey),
 		status,
 	)
+}
+
+func errorString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

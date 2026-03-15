@@ -78,10 +78,12 @@ func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 			}},
 		}},
 		GraphQLMutationPolicies: []bridgeconfig.GraphQLMutationPolicyFileConfig{{
-			Name:         "update_viewer",
-			Source:       "crm",
-			Domain:       "viewer",
-			RootMutation: "updateViewer",
+			Name:              "update_viewer",
+			Source:            "crm",
+			Domain:            "viewer",
+			RootMutation:      "updateViewer",
+			IdempotencyMode:   "header",
+			IdempotencyHeader: "Idempotency-Key",
 		}},
 	})
 	store := newRuntimeTestStore(t)
@@ -190,10 +192,12 @@ func TestAgentRuntimeFactoryFailsOnInvalidGraphQLMutationPolicy(t *testing.T) {
 			}},
 		}},
 		GraphQLMutationPolicies: []bridgeconfig.GraphQLMutationPolicyFileConfig{{
-			Name:         "bad_policy",
-			Source:       "crm",
-			Domain:       "viewer",
-			RootMutation: "archiveViewer",
+			Name:              "bad_policy",
+			Source:            "crm",
+			Domain:            "viewer",
+			RootMutation:      "archiveViewer",
+			IdempotencyMode:   "header",
+			IdempotencyHeader: "Idempotency-Key",
 		}},
 	})
 	store := newRuntimeTestStore(t)

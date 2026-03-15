@@ -94,15 +94,18 @@ func graphQLMutationPolicyConfigs(
 	out := make([]tools.GraphQLMutationPolicyConfig, 0, len(raw))
 	for _, policy := range raw {
 		out = append(out, tools.GraphQLMutationPolicyConfig{
-			Name:          policy.Name,
-			Description:   policy.Description,
-			Source:        policy.Source,
-			Domain:        policy.Domain,
-			RootMutation:  policy.RootMutation,
-			MaxDepth:      policy.MaxDepth,
-			MaxFields:     policy.MaxFields,
-			MaxRootFields: policy.MaxRootFields,
-			MaxFragments:  policy.MaxFragments,
+			Name:                    policy.Name,
+			Description:             policy.Description,
+			Source:                  policy.Source,
+			Domain:                  policy.Domain,
+			RootMutation:            policy.RootMutation,
+			IdempotencyMode:         policy.IdempotencyMode,
+			IdempotencyHeader:       policy.IdempotencyHeader,
+			IdempotencyVariablePath: policy.IdempotencyVariablePath,
+			MaxDepth:                policy.MaxDepth,
+			MaxFields:               policy.MaxFields,
+			MaxRootFields:           policy.MaxRootFields,
+			MaxFragments:            policy.MaxFragments,
 		})
 	}
 	return out

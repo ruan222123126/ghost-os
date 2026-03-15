@@ -230,6 +230,9 @@ export interface GraphQLMutationPolicyResponse {
   source: string;
   domain: string;
   root_mutation: string;
+  idempotency_mode: 'header' | 'variable_path';
+  idempotency_header?: string;
+  idempotency_variable_path?: string;
   max_depth?: number;
   max_fields?: number;
   max_root_fields?: number;
@@ -242,6 +245,9 @@ export interface GraphQLMutationPolicyInput {
   source: string;
   domain: string;
   root_mutation: string;
+  idempotency_mode: 'header' | 'variable_path';
+  idempotency_header?: string;
+  idempotency_variable_path?: string;
   max_depth?: number;
   max_fields?: number;
   max_root_fields?: number;

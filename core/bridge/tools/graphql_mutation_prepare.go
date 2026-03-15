@@ -117,26 +117,35 @@ func buildPendingGraphQLMutationIntent(
 	if err != nil {
 		return session.PendingGraphQLMutationIntent{}, "", fmt.Errorf("generate question id: %w", err)
 	}
+	frozen, err := freezeGraphQLMutationRequest(prepared, args)
+	if err != nil {
+		return session.PendingGraphQLMutationIntent{}, "", err
+	}
 	intent := session.PendingGraphQLMutationIntent{
-		IntentID:      intentID,
-		Source:        prepared.Source.Name,
-		Domain:        prepared.Domain,
-		PolicyName:    prepared.Policy.Name,
-		RootMutation:  prepared.Policy.RootMutation,
-		OperationName: args.OperationName,
-		Query:         args.Mutation,
-		Variables:     cloneGraphQLMutationVariables(args.Variables),
-		QuestionID:    questionID,
-		ToolCallID:    toolCallID,
-		TraceID:       strings.TrimSpace(traceID),
-		PreparedAt:    time.Now().UTC(),
-		Status:        session.GraphQLMutationIntentPendingApproval,
+		IntentID:                intentID,
+		Source:                  prepared.Source.Name,
+		Domain:                  prepared.Domain,
+		PolicyName:              prepared.Policy.Name,
+		RootMutation:            prepared.Policy.RootMutation,
+		IdempotencyMode:         prepared.Policy.IdempotencyMode,
+		IdempotencyHeader:       prepared.Policy.IdempotencyHeader,
+		IdempotencyVariablePath: prepared.Policy.IdempotencyVariablePath,
+		OperationName:           args.OperationName,
+		Query:                   prepared.MutationDoc,
+		Variables:               frozen.Variables,
+		DeliveryKey:             frozen.DeliveryKey,
+		RequestHash:             frozen.RequestHash,
+		QuestionID:              questionID,
+		ToolCallID:              toolCallID,
+		TraceID:                 strings.TrimSpace(traceID),
+		PreparedAt:              time.Now().UTC(),
+		Status:                  session.GraphQLMutationIntentPendingApproval,
 		Summary: buildGraphQLMutationSummary(
 			prepared.Source.Name,
 			prepared.Domain,
 			prepared.Policy.Name,
 			prepared.Policy.RootMutation,
-			args.Variables,
+			frozen.Variables,
 		),
 	}
 	return intent, buildGraphQLMutationApprovalPrompt(intent), nil

@@ -61,7 +61,9 @@ func (r proModeRunner) Execute(ctx context.Context, prepared preparedAgentTurnRe
 	}
 	defer cleanup()
 
-	return r.run(tools.WithSession(execCtx, sess), deps, sess, request, prepared.message, traceID)
+	execCtx = tools.WithSession(execCtx, sess)
+	execCtx = tools.WithSessionCheckpoint(execCtx, r.sessionStore)
+	return r.run(execCtx, deps, sess, request, prepared.message, traceID)
 }
 
 func loadOrCreateIterationSession(store *session.Store, sessionID string, systemPrompt string) (*session.Session, error) {

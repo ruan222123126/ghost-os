@@ -323,6 +323,12 @@ data class GraphQLMutationPolicyResponse(
     val domain: String,
     @SerialName("root_mutation")
     val rootMutation: String,
+    @SerialName("idempotency_mode")
+    val idempotencyMode: String,
+    @SerialName("idempotency_header")
+    val idempotencyHeader: String? = null,
+    @SerialName("idempotency_variable_path")
+    val idempotencyVariablePath: String? = null,
     @SerialName("max_depth")
     val maxDepth: Int? = null,
     @SerialName("max_fields")
@@ -341,6 +347,12 @@ data class GraphQLMutationPolicyInput(
     val domain: String,
     @SerialName("root_mutation")
     val rootMutation: String,
+    @SerialName("idempotency_mode")
+    val idempotencyMode: String,
+    @SerialName("idempotency_header")
+    val idempotencyHeader: String? = null,
+    @SerialName("idempotency_variable_path")
+    val idempotencyVariablePath: String? = null,
     @SerialName("max_depth")
     val maxDepth: Int? = null,
     @SerialName("max_fields")
