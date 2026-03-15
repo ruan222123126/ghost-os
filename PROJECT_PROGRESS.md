@@ -23,6 +23,17 @@
 
 ### 2026-03-15
 
+- 清理一组低成本 warning 噪声与冗余导入：
+  - `apps/web/lib/api/sessions/parser.ts` 删除未使用的 `parseOptionalStringArray` 导入，避免继续保留可被静态检查直接识别的死代码。
+  - `apps/cli` 对 `envelope_generated` 模块局部收口 `dead_code` warning，避免共享契约全量生成的未使用 DTO 持续污染 CLI 的告警基线；同时把 `ConfigUpdate` 的空更新构造改成显式 `ConfigUpdate::empty()`，移除额外的 `derivable_impls` 噪声。
+  - `drivers/native` 已折叠 `input/window_guard.rs` 与 `codex_cli/start.rs` 中被 Clippy 点名的嵌套 `if` / `needless return`。
+- 本轮验证：
+  - `cargo clippy --manifest-path apps/cli/Cargo.toml -- -W dead_code`
+  - `timeout 60 cargo test --manifest-path apps/cli/Cargo.toml`
+  - `cargo clippy --manifest-path drivers/native/Cargo.toml -- -W clippy::needless_return -W clippy::collapsible_if`
+  - `pnpm -C apps/web exec tsc --noEmit --pretty false`
+
+
 - 清理 orchestration 与 RSS 间已漂移的重复文本工具实现：
   - 删除 `core/bridge/orchestration/textutil.go` 中未被调用的 `effectiveWorkerModel` 与 `stripJSONCodeFence`，避免与 `core/bridge/rss/export.go` 中仍在实际使用的实现继续双份维护。
   - orchestration 侧仅保留仍有调用点的 `truncateRunes`，RSS 侧继续复用自身导出的文本辅助函数。

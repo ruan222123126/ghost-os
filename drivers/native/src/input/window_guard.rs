@@ -22,21 +22,21 @@ pub(crate) fn ensure_active_window(
         let (title, class_name) = find_window_by_id(&list, active_id)
             .ok_or_else(|| "active window is not found in wmctrl list".to_string())?;
 
-        if let Some(expected) = expected_title {
-            if !contains_case_insensitive(&title, expected) {
-                return Err(format!(
-                    "active window title mismatch: expected to contain {expected:?}, got {title:?}"
-                ));
-            }
+        if let Some(expected) = expected_title
+            && !contains_case_insensitive(&title, expected)
+        {
+            return Err(format!(
+                "active window title mismatch: expected to contain {expected:?}, got {title:?}"
+            ));
         }
-        if let Some(expected) = expected_class {
-            if !contains_case_insensitive(&class_name, expected) {
-                return Err(format!(
-                    "active window class mismatch: expected to contain {expected:?}, got {class_name:?}"
-                ));
-            }
+        if let Some(expected) = expected_class
+            && !contains_case_insensitive(&class_name, expected)
+        {
+            return Err(format!(
+                "active window class mismatch: expected to contain {expected:?}, got {class_name:?}"
+            ));
         }
-        return Ok(());
+        Ok(())
     }
 
     #[cfg(not(target_os = "linux"))]

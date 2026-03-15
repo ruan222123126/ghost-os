@@ -3,6 +3,7 @@
 mod client;
 mod commands;
 mod config;
+#[allow(dead_code)]
 mod envelope_generated;
 mod repl;
 mod types;

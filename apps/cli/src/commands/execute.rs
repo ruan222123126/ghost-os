@@ -146,14 +146,14 @@ fn build_config_update(change: ConfigMutation) -> (ConfigUpdate, ConfigChangeKin
         ConfigMutation::Model(model) => (
             ConfigUpdate {
                 model: Some(model),
-                ..ConfigUpdate::default()
+                ..ConfigUpdate::empty()
             },
             ConfigChangeKind::Model,
         ),
         ConfigMutation::Provider(provider) => (
             ConfigUpdate {
                 provider: Some(provider),
-                ..ConfigUpdate::default()
+                ..ConfigUpdate::empty()
             },
             ConfigChangeKind::Provider,
         ),
@@ -162,14 +162,14 @@ fn build_config_update(change: ConfigMutation) -> (ConfigUpdate, ConfigChangeKin
         ConfigMutation::ApiKey(api_key) => (
             ConfigUpdate {
                 api_key: Some(api_key),
-                ..ConfigUpdate::default()
+                ..ConfigUpdate::empty()
             },
             ConfigChangeKind::ApiKeyUpdated,
         ),
         ConfigMutation::ClearApiKey => (
             ConfigUpdate {
                 api_key: Some(String::new()),
-                ..ConfigUpdate::default()
+                ..ConfigUpdate::empty()
             },
             ConfigChangeKind::ApiKeyCleared,
         ),
@@ -189,7 +189,7 @@ fn resettable_update(
         UpdateTarget::BaseUrl => (
             ConfigUpdate {
                 base_url: Some(value),
-                ..ConfigUpdate::default()
+                ..ConfigUpdate::empty()
             },
             if reset {
                 ConfigChangeKind::BaseUrlReset
@@ -200,7 +200,7 @@ fn resettable_update(
         UpdateTarget::ChatPath => (
             ConfigUpdate {
                 chat_path: Some(value),
-                ..ConfigUpdate::default()
+                ..ConfigUpdate::empty()
             },
             if reset {
                 ConfigChangeKind::ChatPathReset

@@ -88,10 +88,10 @@ fn apply_common_flags(command: &mut Command, request: &StartParams) {
     if request.json_flag {
         command.arg("--json");
     }
-    if let Some(model) = request.model.as_ref() {
-        if !model.trim().is_empty() {
-            command.arg("-m").arg(model.trim());
-        }
+    if let Some(model) = request.model.as_ref()
+        && !model.trim().is_empty()
+    {
+        command.arg("-m").arg(model.trim());
     }
     if let Some(dir) = request.cwd.as_ref() {
         command.arg("-C").arg(dir);

@@ -19,7 +19,6 @@ import {
   parseOptionalNumber,
   parseOptionalSelectionMode,
   parseOptionalString,
-  parseOptionalStringArray,
 } from '@/lib/api/shared';
 
 const SESSION_ROLES = ['system', 'user', 'assistant', 'tool'] as const;

@@ -46,8 +46,8 @@ pub struct HumanResponseParams<'a> {
     pub cancelled: Option<bool>,
 }
 
-impl Default for ConfigUpdate {
-    fn default() -> Self {
+impl ConfigUpdate {
+    pub fn empty() -> Self {
         Self {
             provider: None,
             api_key: None,
