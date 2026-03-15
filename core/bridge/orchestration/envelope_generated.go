@@ -6,264 +6,312 @@ package orchestration
 import "encoding/json"
 
 const (
-	busActionPing = "PING"
-	busActionAgentSend = "AGENT_SEND"
-	busActionAgentStop = "AGENT_STOP"
-	busActionHumanResponse = "HUMAN_RESPONSE"
-	busActionConfigGet = "CONFIG_GET"
-	busActionConfigUpdate = "CONFIG_UPDATE"
-	busActionTaskCreate = "TASK_CREATE"
-	busActionTaskList = "TASK_LIST"
-	busActionTaskSystemList = "TASK_SYSTEM_LIST"
-	busActionTaskGet = "TASK_GET"
-	busActionTaskUpdate = "TASK_UPDATE"
-	busActionTaskRunNow = "TASK_RUN_NOW"
-	busActionTaskLogs = "TASK_LOGS"
-	busActionTaskDelete = "TASK_DELETE"
-	busActionListFiles = "LIST_FILES"
-	busActionReadFile = "READ_FILE"
-	busActionSearchFiles = "SEARCH_FILES"
-	busActionApplyDiff = "APPLY_DIFF"
-	busActionExportFile = "EXPORT_FILE"
-	busActionBashExec = "BASH_EXEC"
-	busActionScriptExec = "SCRIPT_EXEC"
-	busActionScreenCapture = "SCREEN_CAPTURE"
-	busActionImageCrop = "IMAGE_CROP"
-	busActionOcrImage = "OCR_IMAGE"
-	busActionTextInput = "TEXT_INPUT"
-	busActionMouseClick = "MOUSE_CLICK"
+	busActionPing               = "PING"
+	busActionAgentSend          = "AGENT_SEND"
+	busActionAgentStop          = "AGENT_STOP"
+	busActionHumanResponse      = "HUMAN_RESPONSE"
+	busActionConfigGet          = "CONFIG_GET"
+	busActionConfigUpdate       = "CONFIG_UPDATE"
+	busActionTaskCreate         = "TASK_CREATE"
+	busActionTaskList           = "TASK_LIST"
+	busActionTaskSystemList     = "TASK_SYSTEM_LIST"
+	busActionTaskGet            = "TASK_GET"
+	busActionTaskUpdate         = "TASK_UPDATE"
+	busActionTaskRunNow         = "TASK_RUN_NOW"
+	busActionTaskLogs           = "TASK_LOGS"
+	busActionTaskDelete         = "TASK_DELETE"
+	busActionListFiles          = "LIST_FILES"
+	busActionReadFile           = "READ_FILE"
+	busActionSearchFiles        = "SEARCH_FILES"
+	busActionApplyDiff          = "APPLY_DIFF"
+	busActionExportFile         = "EXPORT_FILE"
+	busActionBashExec           = "BASH_EXEC"
+	busActionScriptExec         = "SCRIPT_EXEC"
+	busActionScreenCapture      = "SCREEN_CAPTURE"
+	busActionImageCrop          = "IMAGE_CROP"
+	busActionOcrImage           = "OCR_IMAGE"
+	busActionTextInput          = "TEXT_INPUT"
+	busActionMouseClick         = "MOUSE_CLICK"
 	busActionTemplateMatchImage = "TEMPLATE_MATCH_IMAGE"
 )
 
 const (
 	busStatusSuccess = "success"
-	busStatusError = "error"
+	busStatusError   = "error"
 )
 
 const busAssistantSessionEndSignal = "END_SESSION"
 
 // assistantSessionEndSignalPayload 对齐 core/shared/schema.json 的 assistantSessionEndSignal。
 type assistantSessionEndSignalPayload struct {
-	Signal string `json:"signal"`
+	Signal  string `json:"signal"`
 	Message string `json:"message"`
 }
 
 // agentRequest 对齐 core/shared/schema.json 的 agentRequest。
 type agentRequest struct {
-	Message string `json:"message"`
+	Message   string `json:"message"`
 	SessionID string `json:"session_id,omitempty"`
-	TraceID string `json:"trace_id,omitempty"`
+	TraceID   string `json:"trace_id,omitempty"`
 }
 
 // askHumanOption 对齐 core/shared/schema.json 的 askHumanOption。
 type askHumanOption struct {
-	Label string `json:"label"`
-	AllowCustom bool `json:"allow_custom,omitempty"`
+	Label       string `json:"label"`
+	AllowCustom bool   `json:"allow_custom,omitempty"`
 }
 
 // agentResponse 对齐 core/shared/schema.json 的 agentResponsePayload。
 type agentResponse struct {
-	Message string `json:"message"`
-	SessionID string `json:"session_id"`
-	SessionEnded bool `json:"session_ended"`
-	Mode string `json:"mode,omitempty"`
-	IterationCount int `json:"iteration_count,omitempty"`
-	StoppedBy string `json:"stopped_by,omitempty"`
-	FinalChangeLog string `json:"final_change_log,omitempty"`
-	IterationSummary []map[string]any `json:"iteration_summary,omitempty"`
-	SessionEnd *assistantSessionEndSignalPayload `json:"session_end,omitempty"`
+	Message          string                            `json:"message"`
+	SessionID        string                            `json:"session_id"`
+	SessionEnded     bool                              `json:"session_ended"`
+	Mode             string                            `json:"mode,omitempty"`
+	IterationCount   int                               `json:"iteration_count,omitempty"`
+	StoppedBy        string                            `json:"stopped_by,omitempty"`
+	FinalChangeLog   string                            `json:"final_change_log,omitempty"`
+	IterationSummary []map[string]any                  `json:"iteration_summary,omitempty"`
+	SessionEnd       *assistantSessionEndSignalPayload `json:"session_end,omitempty"`
 }
 
 // askHumanAwaitingResponse 对齐 core/shared/schema.json 的 agentAwaitingHumanPayload。
 type askHumanAwaitingResponse struct {
-	Status string `json:"status"`
-	SessionID string `json:"session_id"`
-	QuestionID string `json:"question_id"`
-	Prompt string `json:"prompt"`
-	SelectionMode string `json:"selection_mode,omitempty"`
-	Options []askHumanOption `json:"options,omitempty"`
+	Status        string           `json:"status"`
+	SessionID     string           `json:"session_id"`
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []askHumanOption `json:"options,omitempty"`
 }
 
 // agentStopResponse 对齐 core/shared/schema.json 的 agentStopResponsePayload。
 type agentStopResponse struct {
-	Status string `json:"status"`
+	Status  string `json:"status"`
 	Message string `json:"message"`
 }
 
 // humanResponseParams 对齐 core/shared/schema.json 的 humanResponseRequest。
 type humanResponseParams struct {
-	SessionID string `json:"session_id"`
+	SessionID  string `json:"session_id"`
 	QuestionID string `json:"question_id"`
-	Answer string `json:"answer"`
-	Cancelled bool `json:"cancelled,omitempty"`
+	Answer     string `json:"answer"`
+	Cancelled  bool   `json:"cancelled,omitempty"`
 }
 
 // humanResponseAck 对齐 core/shared/schema.json 的 humanResponseAck。
 type humanResponseAck struct {
-	SessionID string `json:"session_id"`
+	SessionID  string `json:"session_id"`
 	QuestionID string `json:"question_id"`
-	Accepted bool `json:"accepted"`
+	Accepted   bool   `json:"accepted"`
 }
 
 // sessionImageContent 对齐 core/shared/schema.json 的 sessionImageContent。
 type sessionImageContent struct {
-	Path string `json:"path,omitempty"`
-	URL string `json:"url,omitempty"`
+	Path     string `json:"path,omitempty"`
+	URL      string `json:"url,omitempty"`
 	MimeType string `json:"mime_type,omitempty"`
-	Width int `json:"width,omitempty"`
-	Height int `json:"height,omitempty"`
-	SHA256 string `json:"sha256,omitempty"`
-	Bytes int `json:"bytes,omitempty"`
+	Width    int    `json:"width,omitempty"`
+	Height   int    `json:"height,omitempty"`
+	SHA256   string `json:"sha256,omitempty"`
+	Bytes    int    `json:"bytes,omitempty"`
 }
 
 // sessionFileContent 对齐 core/shared/schema.json 的 sessionFileContent。
 type sessionFileContent struct {
-	ArtifactID string `json:"artifact_id"`
-	Name string `json:"name"`
-	MimeType string `json:"mime_type,omitempty"`
-	Bytes int `json:"bytes,omitempty"`
-	SHA256 string `json:"sha256,omitempty"`
+	ArtifactID  string `json:"artifact_id"`
+	Name        string `json:"name"`
+	MimeType    string `json:"mime_type,omitempty"`
+	Bytes       int    `json:"bytes,omitempty"`
+	SHA256      string `json:"sha256,omitempty"`
 	DownloadURL string `json:"download_url"`
-	SourcePath string `json:"source_path,omitempty"`
-	Note string `json:"note,omitempty"`
+	SourcePath  string `json:"source_path,omitempty"`
+	Note        string `json:"note,omitempty"`
 }
 
 // sessionContentPart 对齐 core/shared/schema.json 的 sessionContentPart。
 type sessionContentPart struct {
-	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Type  string               `json:"type"`
+	Text  string               `json:"text,omitempty"`
 	Image *sessionImageContent `json:"image,omitempty"`
-	File *sessionFileContent `json:"file,omitempty"`
+	File  *sessionFileContent  `json:"file,omitempty"`
 }
 
 // sessionToolCall 对齐 core/shared/schema.json 的 sessionToolCall。
 type sessionToolCall struct {
-	ID string `json:"id"`
-	Name string `json:"name"`
+	ID        string         `json:"id"`
+	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
 }
 
 // sessionToolResult 对齐 core/shared/schema.json 的 sessionToolResult。
 type sessionToolResult struct {
-	Status string `json:"status"`
-	Tool string `json:"tool"`
+	Status  string `json:"status"`
+	Tool    string `json:"tool"`
 	TraceID string `json:"trace_id,omitempty"`
-	Output string `json:"output,omitempty"`
-	Error string `json:"error,omitempty"`
+	Output  string `json:"output,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // sessionHumanInteraction 对齐 core/shared/schema.json 的 sessionHumanInteraction。
 type sessionHumanInteraction struct {
-	QuestionID string `json:"question_id"`
-	Prompt string `json:"prompt"`
-	SelectionMode string `json:"selection_mode,omitempty"`
-	Options []askHumanOption `json:"options,omitempty"`
-	Answer string `json:"answer,omitempty"`
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []askHumanOption `json:"options,omitempty"`
+	Answer        string           `json:"answer,omitempty"`
 }
 
 // sessionMessage 对齐 core/shared/schema.json 的 sessionMessage。
 type sessionMessage struct {
-	Role string `json:"role"`
-	Text string `json:"text,omitempty"`
-	Content []sessionContentPart `json:"content,omitempty"`
-	ToolCalls []sessionToolCall `json:"tool_calls,omitempty"`
-	ToolResult *sessionToolResult `json:"tool_result,omitempty"`
+	Role             string                   `json:"role"`
+	Text             string                   `json:"text,omitempty"`
+	Content          []sessionContentPart     `json:"content,omitempty"`
+	ToolCalls        []sessionToolCall        `json:"tool_calls,omitempty"`
+	ToolResult       *sessionToolResult       `json:"tool_result,omitempty"`
 	HumanInteraction *sessionHumanInteraction `json:"human_interaction,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
+	ToolCallID       string                   `json:"tool_call_id,omitempty"`
 }
 
 // sessionMetadata 对齐 core/shared/schema.json 的 sessionMetadata。
 type sessionMetadata struct {
-	ID string `json:"id"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	MessageCount int `json:"message_count"`
-	TokenCount int `json:"token_count"`
+	ID           string `json:"id"`
+	CreatedAt    string `json:"created_at"`
+	UpdatedAt    string `json:"updated_at"`
+	MessageCount int    `json:"message_count"`
+	TokenCount   int    `json:"token_count"`
 }
 
 // sessionDetail 对齐 core/shared/schema.json 的 sessionDetail。
 type sessionDetail struct {
-	ID string `json:"id"`
-	Messages []sessionMessage `json:"messages"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	TokenCount int `json:"token_count"`
+	ID         string           `json:"id"`
+	Messages   []sessionMessage `json:"messages"`
+	CreatedAt  string           `json:"created_at"`
+	UpdatedAt  string           `json:"updated_at"`
+	TokenCount int              `json:"token_count"`
 }
 
 // configResponse 对齐 core/shared/schema.json 的 bridgeConfig。
 type configResponse struct {
-	Provider string `json:"provider"`
-	ProviderType string `json:"provider_type"`
-	BaseURL string `json:"base_url"`
-	Model string `json:"model"`
-	ChatPath string `json:"chat_path"`
-	APIKeySet bool `json:"api_key_set"`
-	ModelSelectionEnabled bool `json:"model_selection_enabled"`
-	GraphqlEnabled bool `json:"graphql_enabled"`
-	GraphqlEndpoint string `json:"graphql_endpoint"`
-	GraphqlSchemaPath string `json:"graphql_schema_path"`
-	GraphqlTimeoutMs int `json:"graphql_timeout_ms"`
-	GraphqlMaxResponseBytes int `json:"graphql_max_response_bytes"`
-	GraphqlAPIKeySet bool `json:"graphql_api_key_set"`
-	WebSearchTavilyAPIKeySet bool `json:"web_search_tavily_api_key_set"`
-	WebSearchExaAPIKeySet bool `json:"web_search_exa_api_key_set"`
+	Provider                 string                  `json:"provider"`
+	ProviderType             string                  `json:"provider_type"`
+	BaseURL                  string                  `json:"base_url"`
+	Model                    string                  `json:"model"`
+	ChatPath                 string                  `json:"chat_path"`
+	APIKeySet                bool                    `json:"api_key_set"`
+	ModelSelectionEnabled    bool                    `json:"model_selection_enabled"`
+	GraphqlDefaultSource     string                  `json:"graphql_default_source"`
+	GraphqlSources           []graphqlSourceResponse `json:"graphql_sources"`
+	WebSearchTavilyAPIKeySet bool                    `json:"web_search_tavily_api_key_set"`
+	WebSearchExaAPIKeySet    bool                    `json:"web_search_exa_api_key_set"`
 }
 
 // configUpdateRequest 对齐 core/shared/schema.json 的 configUpdate。
 type configUpdateRequest struct {
-	Provider *string `json:"provider,omitempty"`
-	APIKey *string `json:"api_key,omitempty"`
-	BaseURL *string `json:"base_url,omitempty"`
-	Model *string `json:"model,omitempty"`
-	ChatPath *string `json:"chat_path,omitempty"`
-	GraphqlEnabled *bool `json:"graphql_enabled,omitempty"`
-	GraphqlEndpoint *string `json:"graphql_endpoint,omitempty"`
-	GraphqlAPIKey *string `json:"graphql_api_key,omitempty"`
-	GraphqlSchemaPath *string `json:"graphql_schema_path,omitempty"`
-	GraphqlTimeoutMs *int `json:"graphql_timeout_ms,omitempty"`
-	GraphqlMaxResponseBytes *int `json:"graphql_max_response_bytes,omitempty"`
-	GraphqlHeaders map[string]any `json:"graphql_headers,omitempty"`
-	WebSearchTavilyAPIKey *string `json:"web_search_tavily_api_key,omitempty"`
-	WebSearchExaAPIKey *string `json:"web_search_exa_api_key,omitempty"`
-	TraceID string `json:"trace_id,omitempty"`
+	Provider              *string              `json:"provider,omitempty"`
+	APIKey                *string              `json:"api_key,omitempty"`
+	BaseURL               *string              `json:"base_url,omitempty"`
+	Model                 *string              `json:"model,omitempty"`
+	ChatPath              *string              `json:"chat_path,omitempty"`
+	GraphqlDefaultSource  *string              `json:"graphql_default_source,omitempty"`
+	GraphqlSources        []graphqlSourceInput `json:"graphql_sources,omitempty"`
+	GraphqlSourceUpsert   graphqlSourceInput   `json:"graphql_source_upsert,omitempty"`
+	WebSearchTavilyAPIKey *string              `json:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey    *string              `json:"web_search_exa_api_key,omitempty"`
+	TraceID               string               `json:"trace_id,omitempty"`
+}
+
+// graphqlDomainResponse 对齐 core/shared/schema.json 的 graphqlDomainResponse。
+type graphqlDomainResponse struct {
+	Name          string   `json:"name"`
+	Description   string   `json:"description,omitempty"`
+	RootQueries   []string `json:"root_queries"`
+	Types         []string `json:"types,omitempty"`
+	MaxDepth      int      `json:"max_depth,omitempty"`
+	MaxFields     int      `json:"max_fields,omitempty"`
+	MaxRootFields int      `json:"max_root_fields,omitempty"`
+}
+
+// graphqlSourceResponse 对齐 core/shared/schema.json 的 graphqlSourceResponse。
+type graphqlSourceResponse struct {
+	Name             string                  `json:"name"`
+	Description      string                  `json:"description,omitempty"`
+	Endpoint         string                  `json:"endpoint"`
+	SchemaPath       string                  `json:"schema_path"`
+	TimeoutMs        int                     `json:"timeout_ms"`
+	MaxResponseBytes int                     `json:"max_response_bytes"`
+	MaxDepth         int                     `json:"max_depth"`
+	MaxFields        int                     `json:"max_fields"`
+	MaxRootFields    int                     `json:"max_root_fields"`
+	MaxFragments     int                     `json:"max_fragments"`
+	Headers          map[string]any          `json:"headers,omitempty"`
+	APIKeySet        bool                    `json:"api_key_set"`
+	Domains          []graphqlDomainResponse `json:"domains,omitempty"`
+}
+
+// graphqlDomainInput 对齐 core/shared/schema.json 的 graphqlDomainInput。
+type graphqlDomainInput struct {
+	Name          string   `json:"name"`
+	Description   string   `json:"description,omitempty"`
+	RootQueries   []string `json:"root_queries"`
+	Types         []string `json:"types,omitempty"`
+	MaxDepth      int      `json:"max_depth,omitempty"`
+	MaxFields     int      `json:"max_fields,omitempty"`
+	MaxRootFields int      `json:"max_root_fields,omitempty"`
+}
+
+// graphqlSourceInput 对齐 core/shared/schema.json 的 graphqlSourceInput。
+type graphqlSourceInput struct {
+	Name             string               `json:"name"`
+	Description      string               `json:"description,omitempty"`
+	Endpoint         string               `json:"endpoint"`
+	APIKey           *string              `json:"api_key,omitempty"`
+	SchemaPath       string               `json:"schema_path"`
+	TimeoutMs        int                  `json:"timeout_ms,omitempty"`
+	MaxResponseBytes int                  `json:"max_response_bytes,omitempty"`
+	Headers          map[string]any       `json:"headers,omitempty"`
+	MaxDepth         int                  `json:"max_depth,omitempty"`
+	MaxFields        int                  `json:"max_fields,omitempty"`
+	MaxRootFields    int                  `json:"max_root_fields,omitempty"`
+	MaxFragments     int                  `json:"max_fragments,omitempty"`
+	Domains          []graphqlDomainInput `json:"domains,omitempty"`
 }
 
 // providerConfigResponse 对齐 core/shared/schema.json 的 providerConfig。
 type providerConfigResponse struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	BaseURL string `json:"base_url"`
-	Models []string `json:"models,omitempty"`
-	ContextWindowTokens int `json:"context_window_tokens,omitempty"`
-	ResponseReserveTokens int `json:"response_reserve_tokens,omitempty"`
-	ModelContextWindowTokens map[string]any `json:"model_context_window_tokens,omitempty"`
+	Name                       string         `json:"name"`
+	Type                       string         `json:"type"`
+	BaseURL                    string         `json:"base_url"`
+	Models                     []string       `json:"models,omitempty"`
+	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
+	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]any `json:"model_context_window_tokens,omitempty"`
 	ModelResponseReserveTokens map[string]any `json:"model_response_reserve_tokens,omitempty"`
-	APIKeySet bool `json:"api_key_set"`
+	APIKeySet                  bool           `json:"api_key_set"`
 }
 
 // providerConfigInput 对齐 core/shared/schema.json 的 providerConfigInput。
 type providerConfigInput struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-	BaseURL *string `json:"base_url,omitempty"`
-	APIKey *string `json:"api_key,omitempty"`
-	Models []string `json:"models,omitempty"`
-	ContextWindowTokens int `json:"context_window_tokens,omitempty"`
-	ResponseReserveTokens int `json:"response_reserve_tokens,omitempty"`
-	ModelContextWindowTokens map[string]any `json:"model_context_window_tokens,omitempty"`
+	Name                       string         `json:"name"`
+	Type                       string         `json:"type"`
+	BaseURL                    *string        `json:"base_url,omitempty"`
+	APIKey                     *string        `json:"api_key,omitempty"`
+	Models                     []string       `json:"models,omitempty"`
+	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
+	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]any `json:"model_context_window_tokens,omitempty"`
 	ModelResponseReserveTokens map[string]any `json:"model_response_reserve_tokens,omitempty"`
-	TraceID string `json:"trace_id,omitempty"`
+	TraceID                    string         `json:"trace_id,omitempty"`
 }
 
 // providerListResponse 对齐 core/shared/schema.json 的 providerListResponse。
 type providerListResponse struct {
-	Providers []providerConfigResponse `json:"providers"`
-	ActiveProvider string `json:"active_provider"`
+	Providers      []providerConfigResponse `json:"providers"`
+	ActiveProvider string                   `json:"active_provider"`
 }
 
 // setActiveProviderRequest 对齐 core/shared/schema.json 的 setActiveProviderRequest。
 type setActiveProviderRequest struct {
-	Name string `json:"name"`
+	Name    string `json:"name"`
 	TraceID string `json:"trace_id,omitempty"`
 }
 

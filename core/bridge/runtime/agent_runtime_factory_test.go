@@ -59,9 +59,25 @@ func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
 func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	t.Setenv("GHOST_TOOL_SEARCH_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://graphql.test/query")
-	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", writeRuntimeGraphQLSchema(t, tempDir))
+	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
+		GraphQLDefaultSource: bridgeconfig.OptionalStringPointer("crm"),
+		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://graphql.test/query",
+			SchemaPath:       writeRuntimeGraphQLSchema(t, tempDir),
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         5,
+			MaxFields:        24,
+			MaxRootFields:    2,
+			MaxFragments:     3,
+			Domains: []bridgeconfig.GraphQLDomainFileConfig{{
+				Name:        "viewer",
+				RootQueries: []string{"viewer"},
+				Types:       []string{"Viewer"},
+			}},
+		}},
+	})
 	store := newRuntimeTestStore(t)
 
 	deps, err := newAgentRuntimeFactory().Build(store)
@@ -86,9 +102,8 @@ func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutEndpoint(t *testing.T) {
+func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutSources(t *testing.T) {
 	setupRuntimeFactoryTestEnv(t)
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
 	store := newRuntimeTestStore(t)
 
 	deps, err := newAgentRuntimeFactory().Build(store)
@@ -98,39 +113,49 @@ func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutEndpoint(t *testing.T
 	t.Cleanup(deps.Close)
 
 	if deps.registry.Get("graphql_query") != nil || deps.registry.Get("graphql_schema_lookup") != nil {
-		t.Fatal("expected graphql tools to stay unregistered without endpoint")
+		t.Fatal("expected graphql tools to stay unregistered without graphql sources")
 	}
 }
 
-func TestAgentRuntimeFactoryRegistersOnlyGraphQLQueryWithoutSchemaSnapshot(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://graphql.test/query")
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.registry.Get("graphql_query") == nil {
-		t.Fatal("expected graphql_query to be registered")
-	}
-	if deps.registry.Get("graphql_schema_lookup") != nil {
-		t.Fatal("expected graphql_schema_lookup to stay hidden without schema_path")
+func TestAgentRuntimeFactoryFailsOnMissingGraphQLSchemaSnapshot(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
+		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://graphql.test/query",
+			SchemaPath:       "",
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         5,
+			MaxFields:        24,
+			MaxRootFields:    2,
+			MaxFragments:     3,
+		}},
+	})
+	if _, err := bridgeconfig.NewStoreFromEnv(); err == nil {
+		t.Fatal("expected missing graphql schema snapshot error")
 	}
 }
 
 func TestAgentRuntimeFactoryFailsOnInvalidGraphQLSchemaSnapshot(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://graphql.test/query")
 	badPath := filepath.Join(tempDir, "bad-graphql-schema.json")
 	if err := os.WriteFile(badPath, []byte(`{"root_queries":[{"name":"","return_type":"Viewer"}],"types":[]}`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", badPath)
+	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
+		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
+			Name:             "crm",
+			Endpoint:         "https://graphql.test/query",
+			SchemaPath:       badPath,
+			TimeoutMS:        3000,
+			MaxResponseBytes: 4096,
+			MaxDepth:         5,
+			MaxFields:        24,
+			MaxRootFields:    2,
+			MaxFragments:     3,
+		}},
+	})
 	store := newRuntimeTestStore(t)
 
 	_, err := newAgentRuntimeFactory().Build(store)
@@ -224,6 +249,14 @@ func writeRuntimeGraphQLSchema(t *testing.T, tempDir string) string {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	return path
+}
+
+func writeRuntimeGraphQLConfig(t *testing.T, tempDir string, cfg bridgeconfig.FileConfig) {
+	t.Helper()
+	configPath := filepath.Join(tempDir, "config.toml")
+	if err := bridgeconfig.WriteBridgeFileConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteBridgeFileConfig: %v", err)
+	}
 }
 
 func containsRuntimeTool(names []string, target string) bool {

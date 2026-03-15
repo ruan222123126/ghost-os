@@ -9,6 +9,17 @@ func (s *Schema) RootQueryList() []Field {
 	return cloneFields(s.RootQueries)
 }
 
+func (s *Schema) RootQueryByName(name string) (Field, bool) {
+	if s == nil {
+		return Field{}, false
+	}
+	item, ok := s.rootIndex[strings.TrimSpace(name)]
+	if !ok {
+		return Field{}, false
+	}
+	return cloneField(item), true
+}
+
 func (s *Schema) TypeByName(name string) (Type, bool) {
 	if s == nil {
 		return Type{}, false

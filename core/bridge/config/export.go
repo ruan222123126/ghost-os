@@ -14,39 +14,31 @@ type FileConfig = bridgeFileConfig
 type MemoryAugmentationSettings = MemoryAugmentationConfig
 
 type Snapshot struct {
-	Provider                 string `json:"provider"`
-	ProviderType             string `json:"provider_type"`
-	BaseURL                  string `json:"base_url"`
-	Model                    string `json:"model"`
-	ChatPath                 string `json:"chat_path"`
-	APIKeySet                bool   `json:"api_key_set"`
-	ModelSelectionEnabled    bool   `json:"model_selection_enabled"`
-	GraphQLEnabled           bool   `json:"graphql_enabled"`
-	GraphQLEndpoint          string `json:"graphql_endpoint"`
-	GraphQLSchemaPath        string `json:"graphql_schema_path"`
-	GraphQLTimeoutMS         int    `json:"graphql_timeout_ms"`
-	GraphQLMaxResponseBytes  int    `json:"graphql_max_response_bytes"`
-	GraphQLAPIKeySet         bool   `json:"graphql_api_key_set"`
-	WebSearchTavilyAPIKeySet bool   `json:"web_search_tavily_api_key_set"`
-	WebSearchExaAPIKeySet    bool   `json:"web_search_exa_api_key_set"`
+	Provider                 string                  `json:"provider"`
+	ProviderType             string                  `json:"provider_type"`
+	BaseURL                  string                  `json:"base_url"`
+	Model                    string                  `json:"model"`
+	ChatPath                 string                  `json:"chat_path"`
+	APIKeySet                bool                    `json:"api_key_set"`
+	ModelSelectionEnabled    bool                    `json:"model_selection_enabled"`
+	GraphQLDefaultSource     string                  `json:"graphql_default_source"`
+	GraphQLSources           []GraphQLSourceSnapshot `json:"graphql_sources"`
+	WebSearchTavilyAPIKeySet bool                    `json:"web_search_tavily_api_key_set"`
+	WebSearchExaAPIKeySet    bool                    `json:"web_search_exa_api_key_set"`
 }
 
 type UpdateRequest struct {
-	Provider                *string           `json:"provider,omitempty"`
-	APIKey                  *string           `json:"api_key,omitempty"`
-	BaseURL                 *string           `json:"base_url,omitempty"`
-	Model                   *string           `json:"model,omitempty"`
-	ChatPath                *string           `json:"chat_path,omitempty"`
-	GraphQLEnabled          *bool             `json:"graphql_enabled,omitempty"`
-	GraphQLEndpoint         *string           `json:"graphql_endpoint,omitempty"`
-	GraphQLAPIKey           *string           `json:"graphql_api_key,omitempty"`
-	GraphQLSchemaPath       *string           `json:"graphql_schema_path,omitempty"`
-	GraphQLTimeoutMS        *int              `json:"graphql_timeout_ms,omitempty"`
-	GraphQLMaxResponseBytes *int              `json:"graphql_max_response_bytes,omitempty"`
-	GraphQLHeaders          map[string]string `json:"graphql_headers,omitempty"`
-	WebSearchTavilyAPIKey   *string           `json:"web_search_tavily_api_key,omitempty"`
-	WebSearchExaAPIKey      *string           `json:"web_search_exa_api_key,omitempty"`
-	TraceID                 string            `json:"trace_id,omitempty"`
+	Provider              *string              `json:"provider,omitempty"`
+	APIKey                *string              `json:"api_key,omitempty"`
+	BaseURL               *string              `json:"base_url,omitempty"`
+	Model                 *string              `json:"model,omitempty"`
+	ChatPath              *string              `json:"chat_path,omitempty"`
+	GraphQLDefaultSource  *string              `json:"graphql_default_source,omitempty"`
+	GraphQLSources        []GraphQLSourceInput `json:"graphql_sources,omitempty"`
+	GraphQLSourceUpsert   *GraphQLSourceInput  `json:"graphql_source_upsert,omitempty"`
+	WebSearchTavilyAPIKey *string              `json:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey    *string              `json:"web_search_exa_api_key,omitempty"`
+	TraceID               string               `json:"trace_id,omitempty"`
 }
 
 type configResponse = Snapshot
@@ -78,6 +70,11 @@ const (
 	DefaultWorkerMaxFileChunks     = defaultWorkerMaxFileChunks
 	DefaultGraphQLTimeoutMS        = defaultGraphQLTimeoutMS
 	DefaultGraphQLMaxResponseBytes = defaultGraphQLMaxResponseBytes
+	DefaultGraphQLMaxDepth         = defaultGraphQLMaxDepth
+	DefaultGraphQLMaxFields        = defaultGraphQLMaxFields
+	DefaultGraphQLMaxRootFields    = defaultGraphQLMaxRootFields
+	DefaultGraphQLMaxFragments     = defaultGraphQLMaxFragments
+	DefaultGraphQLLegacySourceName = defaultGraphQLLegacySourceName
 	DefaultToolSelectorTimeoutMS   = defaultToolSelectorTimeoutMS
 	DefaultToolSelectorConfidence  = defaultToolSelectorConfidence
 	DefaultToolSelectorRecentMsgs  = defaultToolSelectorRecentMsgs

@@ -10,6 +10,9 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	providers := materializeProvidersForWrite(out)
 	out.Providers = providerConfigsToFileMap(providers)
 	out.ActiveProvider = normalizedActiveProviderName(providers, out.ActiveProvider, out.ModelProvider)
+	if hasGraphQLSourceLayout(out) {
+		clearLegacyGraphQLFields(&out)
+	}
 	clearLegacyProviderFields(&out)
 	return out
 }
@@ -46,6 +49,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.RSSReportsPath = cloneOptionalStringPointer(cfg.RSSReportsPath)
 	cfg.RSSPollInterval = cloneOptionalStringPointer(cfg.RSSPollInterval)
 	cfg.RSSBriefingInterval = cloneOptionalStringPointer(cfg.RSSBriefingInterval)
+	cfg.GraphQLDefaultSource = cloneOptionalStringPointer(cfg.GraphQLDefaultSource)
 	cfg.GraphQLEndpoint = cloneOptionalStringPointer(cfg.GraphQLEndpoint)
 	cfg.GraphQLAPIKey = cloneOptionalStringPointer(cfg.GraphQLAPIKey)
 	cfg.GraphQLSchemaPath = cloneOptionalStringPointer(cfg.GraphQLSchemaPath)
@@ -67,6 +71,7 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
 	cfg.NativeBinaryCandidates = normalizeConfiguredPathList(cfg.NativeBinaryCandidates)
 	cfg.NativeAllowedReadPaths = normalizeConfiguredPathList(cfg.NativeAllowedReadPaths)
 	cfg.NativeAllowedWritePaths = normalizeConfiguredPathList(cfg.NativeAllowedWritePaths)
+	cfg.GraphQLSources = normalizeGraphQLSourceFileConfigs(cfg.GraphQLSources)
 	cfg.GraphQLHeaders, _ = normalizeGraphQLHeaders(cfg.GraphQLHeaders)
 	cfg.ProviderHeaders, _ = normalizeProviderHeaders(cfg.ProviderHeaders)
 	cfg.CORSOrigins = normalizeOrigins(cfg.CORSOrigins)
@@ -119,4 +124,64 @@ func clearLegacyProviderFields(cfg *bridgeFileConfig) {
 	cfg.Provider = nil
 	cfg.APIKey = nil
 	cfg.BaseURL = nil
+}
+
+func hasGraphQLSourceLayout(cfg bridgeFileConfig) bool {
+	return cfg.GraphQLDefaultSource != nil || len(cfg.GraphQLSources) > 0
+}
+
+func clearLegacyGraphQLFields(cfg *bridgeFileConfig) {
+	cfg.GraphQLEnabled = nil
+	cfg.GraphQLEndpoint = nil
+	cfg.GraphQLAPIKey = nil
+	cfg.GraphQLSchemaPath = nil
+	cfg.GraphQLTimeoutMS = nil
+	cfg.GraphQLMaxResponseBytes = nil
+	cfg.GraphQLHeaders = nil
+}
+
+func normalizeGraphQLSourceFileConfigs(raw []graphQLSourceFileConfig) []graphQLSourceFileConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]graphQLSourceFileConfig, 0, len(raw))
+	for _, source := range raw {
+		out = append(out, graphQLSourceFileConfig{
+			Name:             strings.TrimSpace(source.Name),
+			Description:      strings.TrimSpace(source.Description),
+			Endpoint:         strings.TrimSpace(source.Endpoint),
+			APIKey:           cloneOptionalStringPointer(source.APIKey),
+			SchemaPath:       strings.TrimSpace(source.SchemaPath),
+			TimeoutMS:        source.TimeoutMS,
+			MaxResponseBytes: source.MaxResponseBytes,
+			Headers:          cloneStringMap(source.Headers),
+			MaxDepth:         source.MaxDepth,
+			MaxFields:        source.MaxFields,
+			MaxRootFields:    source.MaxRootFields,
+			MaxFragments:     source.MaxFragments,
+			Domains:          normalizeGraphQLDomainFileConfigs(source.Domains),
+		})
+	}
+	return out
+}
+
+func normalizeGraphQLDomainFileConfigs(raw []graphQLDomainFileConfig) []graphQLDomainFileConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]graphQLDomainFileConfig, 0, len(raw))
+	for _, domain := range raw {
+		out = append(out, graphQLDomainFileConfig{
+			Name:          strings.TrimSpace(domain.Name),
+			Description:   strings.TrimSpace(domain.Description),
+			RootQueries:   normalizeConfiguredToolNames(domain.RootQueries),
+			Types:         normalizeConfiguredToolNames(domain.Types),
+			MaxDepth:      domain.MaxDepth,
+			MaxFields:     domain.MaxFields,
+			MaxRootFields: domain.MaxRootFields,
+		})
+	}
+	return out
 }

@@ -35,6 +35,32 @@ type legacyProviderConfig struct {
 	Models  []string     `toml:"models,omitempty"`
 }
 
+type graphQLDomainFileConfig struct {
+	Name          string   `toml:"name,omitempty"`
+	Description   string   `toml:"description,omitempty"`
+	RootQueries   []string `toml:"root_queries,omitempty"`
+	Types         []string `toml:"types,omitempty"`
+	MaxDepth      int      `toml:"max_depth,omitempty"`
+	MaxFields     int      `toml:"max_fields,omitempty"`
+	MaxRootFields int      `toml:"max_root_fields,omitempty"`
+}
+
+type graphQLSourceFileConfig struct {
+	Name             string                    `toml:"name,omitempty"`
+	Description      string                    `toml:"description,omitempty"`
+	Endpoint         string                    `toml:"endpoint,omitempty"`
+	APIKey           *string                   `toml:"api_key,omitempty"`
+	SchemaPath       string                    `toml:"schema_path,omitempty"`
+	TimeoutMS        int                       `toml:"timeout_ms,omitempty"`
+	MaxResponseBytes int                       `toml:"max_response_bytes,omitempty"`
+	Headers          map[string]string         `toml:"headers,omitempty"`
+	MaxDepth         int                       `toml:"max_depth,omitempty"`
+	MaxFields        int                       `toml:"max_fields,omitempty"`
+	MaxRootFields    int                       `toml:"max_root_fields,omitempty"`
+	MaxFragments     int                       `toml:"max_fragments,omitempty"`
+	Domains          []graphQLDomainFileConfig `toml:"domains,omitempty"`
+}
+
 type bridgeFileConfig struct {
 	ActiveProvider                        *string                       `toml:"active_provider,omitempty"`
 	Providers                             map[string]providerFileConfig `toml:"providers,omitempty"`
@@ -67,6 +93,8 @@ type bridgeFileConfig struct {
 	RSSAIBatchSize                        *int                          `toml:"rss_ai_batch_size,omitempty"`
 	RSSBriefingEnabled                    *bool                         `toml:"rss_briefing_enabled,omitempty"`
 	RSSBriefingInterval                   *string                       `toml:"rss_briefing_interval,omitempty"`
+	GraphQLDefaultSource                  *string                       `toml:"graphql_default_source,omitempty"`
+	GraphQLSources                        []graphQLSourceFileConfig     `toml:"graphql_sources,omitempty"`
 	GraphQLEnabled                        *bool                         `toml:"graphql_enabled,omitempty"`
 	GraphQLEndpoint                       *string                       `toml:"graphql_endpoint,omitempty"`
 	GraphQLAPIKey                         *string                       `toml:"graphql_api_key,omitempty"`

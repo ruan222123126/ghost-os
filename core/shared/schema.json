@@ -105,6 +105,18 @@
     "configUpdate": {
       "$ref": "./schema/defs/config_runtime.json#/$defs/configUpdate"
     },
+    "graphqlDomainResponse": {
+      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainResponse"
+    },
+    "graphqlSourceResponse": {
+      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceResponse"
+    },
+    "graphqlDomainInput": {
+      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainInput"
+    },
+    "graphqlSourceInput": {
+      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceInput"
+    },
     "providerConfig": {
       "$ref": "./schema/defs/config_provider.json#/$defs/providerConfig"
     },

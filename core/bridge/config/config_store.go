@@ -47,12 +47,8 @@ func (s *ConfigStore) Snapshot() configResponse {
 		ChatPath:                 runtime.ChatPath,
 		APIKeySet:                runtime.APIKey != "",
 		ModelSelectionEnabled:    runtime.ModelSelectionEnabled,
-		GraphQLEnabled:           runtime.GraphQL.Enabled,
-		GraphQLEndpoint:          runtime.GraphQL.Endpoint,
-		GraphQLSchemaPath:        runtime.GraphQL.SchemaPath,
-		GraphQLTimeoutMS:         runtime.GraphQL.TimeoutMS,
-		GraphQLMaxResponseBytes:  runtime.GraphQL.MaxResponseBytes,
-		GraphQLAPIKeySet:         runtime.GraphQL.APIKey != "",
+		GraphQLDefaultSource:     runtime.GraphQL.DefaultSource,
+		GraphQLSources:           graphQLSourceSnapshots(runtime.GraphQL.Sources),
 		WebSearchTavilyAPIKeySet: runtime.WebSearchTavilyAPIKey != "",
 		WebSearchExaAPIKeySet:    runtime.WebSearchExaAPIKey != "",
 	}
@@ -67,4 +63,50 @@ func (s *ConfigStore) ListProviders() []providerConfig {
 		return nil
 	}
 	return cloneProviderConfigs(normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)))
+}
+
+func graphQLSourceSnapshots(raw []GraphQLSourceConfig) []GraphQLSourceSnapshot {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]GraphQLSourceSnapshot, 0, len(raw))
+	for _, source := range raw {
+		out = append(out, GraphQLSourceSnapshot{
+			Name:             source.Name,
+			Description:      source.Description,
+			Endpoint:         source.Endpoint,
+			SchemaPath:       source.SchemaPath,
+			TimeoutMS:        source.TimeoutMS,
+			MaxResponseBytes: source.MaxResponseBytes,
+			MaxDepth:         source.MaxDepth,
+			MaxFields:        source.MaxFields,
+			MaxRootFields:    source.MaxRootFields,
+			MaxFragments:     source.MaxFragments,
+			Headers:          cloneStringMap(source.Headers),
+			APIKeySet:        source.APIKey != "",
+			Domains:          graphQLDomainSnapshots(source.Domains),
+		})
+	}
+	return out
+}
+
+func graphQLDomainSnapshots(raw []GraphQLDomainConfig) []GraphQLDomainSnapshot {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]GraphQLDomainSnapshot, 0, len(raw))
+	for _, domain := range raw {
+		out = append(out, GraphQLDomainSnapshot{
+			Name:          domain.Name,
+			Description:   domain.Description,
+			RootQueries:   append([]string(nil), domain.RootQueries...),
+			Types:         append([]string(nil), domain.Types...),
+			MaxDepth:      domain.MaxDepth,
+			MaxFields:     domain.MaxFields,
+			MaxRootFields: domain.MaxRootFields,
+		})
+	}
+	return out
 }

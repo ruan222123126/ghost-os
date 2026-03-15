@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestRuntimeConfigFromEnvResolvesGraphQLSettings(t *testing.T) {
+func TestRuntimeConfigFromEnvMaterializesLegacyGraphQLSource(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
@@ -16,7 +16,6 @@ func TestRuntimeConfigFromEnvResolvesGraphQLSettings(t *testing.T) {
 	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", "/env/schema.json")
 	t.Setenv("GHOST_GRAPHQL_TIMEOUT_MS", "9000")
 	t.Setenv("GHOST_GRAPHQL_MAX_RESPONSE_BYTES", "8192")
-	t.Setenv("GHOST_GRAPHQL_HEADERS", `{"X-Env":"env"}`)
 
 	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
 		GraphQLEnabled:    boolPointer(true),
@@ -35,30 +34,96 @@ func TestRuntimeConfigFromEnvResolvesGraphQLSettings(t *testing.T) {
 		t.Fatalf("runtimeConfigFromEnv: %v", err)
 	}
 
-	if !runtime.GraphQL.Enabled {
-		t.Fatal("expected graphql to stay enabled")
+	if runtime.GraphQL.DefaultSource != DefaultGraphQLLegacySourceName {
+		t.Fatalf("unexpected graphql default source: %q", runtime.GraphQL.DefaultSource)
 	}
-	if runtime.GraphQL.Endpoint != "https://file.example/graphql" {
-		t.Fatalf("unexpected graphql endpoint: %q", runtime.GraphQL.Endpoint)
+	source := findGraphQLSource(t, runtime.GraphQL.Sources, DefaultGraphQLLegacySourceName)
+	if source.Endpoint != "https://file.example/graphql" {
+		t.Fatalf("unexpected graphql endpoint: %q", source.Endpoint)
 	}
-	if runtime.GraphQL.APIKey != "env-graphql-key" {
-		t.Fatalf("unexpected graphql api key: %q", runtime.GraphQL.APIKey)
+	if source.APIKey != "env-graphql-key" {
+		t.Fatalf("unexpected graphql api key: %q", source.APIKey)
 	}
-	if runtime.GraphQL.SchemaPath != "/file/schema.json" {
-		t.Fatalf("unexpected graphql schema path: %q", runtime.GraphQL.SchemaPath)
+	if source.SchemaPath != "/file/schema.json" {
+		t.Fatalf("unexpected graphql schema path: %q", source.SchemaPath)
 	}
-	if runtime.GraphQL.TimeoutMS != 5000 {
-		t.Fatalf("unexpected graphql timeout: %d", runtime.GraphQL.TimeoutMS)
+	if source.TimeoutMS != 5000 {
+		t.Fatalf("unexpected graphql timeout: %d", source.TimeoutMS)
 	}
-	if runtime.GraphQL.MaxResponseBytes != 8192 {
-		t.Fatalf("unexpected graphql max bytes: %d", runtime.GraphQL.MaxResponseBytes)
+	if source.MaxResponseBytes != 8192 {
+		t.Fatalf("unexpected graphql max bytes: %d", source.MaxResponseBytes)
 	}
-	if runtime.GraphQL.Headers["X-File"] != "file" {
-		t.Fatalf("unexpected graphql headers: %+v", runtime.GraphQL.Headers)
+	if source.Headers["X-File"] != "file" {
+		t.Fatalf("unexpected graphql headers: %+v", source.Headers)
 	}
 }
 
-func TestConfigStoreUpdatePersistsGraphQLSettingsAndHidesAPIKey(t *testing.T) {
+func TestRuntimeConfigFromEnvUsesGraphQLSourcesLayout(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		GraphQLDefaultSource: stringPointer("crm"),
+		GraphQLSources: []graphQLSourceFileConfig{
+			{
+				Name:             "billing",
+				Endpoint:         "https://billing.example/graphql",
+				SchemaPath:       "/schemas/billing.json",
+				TimeoutMS:        4000,
+				MaxResponseBytes: 4096,
+				MaxDepth:         6,
+				MaxFields:        24,
+				MaxRootFields:    2,
+				MaxFragments:     3,
+			},
+			{
+				Name:             "crm",
+				Description:      "CRM data",
+				Endpoint:         "https://crm.example/graphql",
+				APIKey:           stringPointer("crm-key"),
+				SchemaPath:       "/schemas/crm.json",
+				TimeoutMS:        7000,
+				MaxResponseBytes: 16384,
+				MaxDepth:         7,
+				MaxFields:        48,
+				MaxRootFields:    3,
+				MaxFragments:     5,
+				Domains: []graphQLDomainFileConfig{{
+					Name:        "orders",
+					RootQueries: []string{"order", "orders"},
+					Types:       []string{"Order", "OrderEdge"},
+					MaxDepth:    4,
+				}},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+
+	runtime, err := runtimeConfigFromEnv()
+	if err != nil {
+		t.Fatalf("runtimeConfigFromEnv: %v", err)
+	}
+
+	if runtime.GraphQL.DefaultSource != "crm" {
+		t.Fatalf("unexpected graphql default source: %q", runtime.GraphQL.DefaultSource)
+	}
+	if len(runtime.GraphQL.Sources) != 2 {
+		t.Fatalf("unexpected graphql source count: %d", len(runtime.GraphQL.Sources))
+	}
+	source := findGraphQLSource(t, runtime.GraphQL.Sources, "crm")
+	if source.Description != "CRM data" {
+		t.Fatalf("unexpected source description: %q", source.Description)
+	}
+	if source.MaxFragments != 5 {
+		t.Fatalf("unexpected source max fragments: %d", source.MaxFragments)
+	}
+	if len(source.Domains) != 1 || source.Domains[0].Name != "orders" {
+		t.Fatalf("unexpected source domains: %+v", source.Domains)
+	}
+}
+
+func TestConfigStoreUpdatePersistsGraphQLSourcesAndHidesAPIKeys(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_PROVIDER", "custom")
@@ -67,72 +132,107 @@ func TestConfigStoreUpdatePersistsGraphQLSettingsAndHidesAPIKey(t *testing.T) {
 	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://env.example/graphql")
 	t.Setenv("GHOST_GRAPHQL_API_KEY", "env-graphql-key")
 	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", "/env/schema.json")
-	t.Setenv("GHOST_GRAPHQL_TIMEOUT_MS", "9000")
-	t.Setenv("GHOST_GRAPHQL_MAX_RESPONSE_BYTES", "4096")
 
 	store, err := NewConfigStoreFromEnv()
 	if err != nil {
 		t.Fatalf("NewConfigStoreFromEnv: %v", err)
 	}
 
-	endpoint := "https://persisted.example/graphql"
-	schemaPath := "/persisted/schema.json"
-	timeoutMS := 2500
+	defaultSource := "crm"
+	crmAPIKey := "crm-secret"
 	if err := store.Update(configUpdateRequest{
-		GraphQLEndpoint:   &endpoint,
-		GraphQLSchemaPath: &schemaPath,
-		GraphQLTimeoutMS:  &timeoutMS,
+		GraphQLDefaultSource: &defaultSource,
+		GraphQLSources: []GraphQLSourceInput{{
+			Name:             "crm",
+			Description:      "CRM",
+			Endpoint:         "https://crm.example/graphql",
+			APIKey:           &crmAPIKey,
+			SchemaPath:       "/schemas/crm.json",
+			TimeoutMS:        4500,
+			MaxResponseBytes: 8192,
+			MaxDepth:         5,
+			MaxFields:        32,
+			MaxRootFields:    2,
+			MaxFragments:     4,
+			Headers: map[string]string{
+				"X-Tenant": "tenant-1",
+			},
+			Domains: []GraphQLDomainInput{{
+				Name:        "orders",
+				RootQueries: []string{"order"},
+				Types:       []string{"Order"},
+			}},
+		}},
 	}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
 	runtime := store.RuntimeConfig()
-	if runtime.GraphQL.Endpoint != endpoint {
-		t.Fatalf("unexpected runtime graphql endpoint: %q", runtime.GraphQL.Endpoint)
+	if runtime.GraphQL.DefaultSource != "crm" {
+		t.Fatalf("unexpected runtime graphql default source: %q", runtime.GraphQL.DefaultSource)
 	}
-	if runtime.GraphQL.SchemaPath != schemaPath {
-		t.Fatalf("unexpected runtime graphql schema path: %q", runtime.GraphQL.SchemaPath)
-	}
-	if runtime.GraphQL.TimeoutMS != timeoutMS {
-		t.Fatalf("unexpected runtime graphql timeout: %d", runtime.GraphQL.TimeoutMS)
-	}
-	if runtime.GraphQL.APIKey != "env-graphql-key" {
-		t.Fatalf("expected api key snapshot to survive materialization, got %q", runtime.GraphQL.APIKey)
+	source := findGraphQLSource(t, runtime.GraphQL.Sources, "crm")
+	if source.APIKey != crmAPIKey {
+		t.Fatalf("unexpected runtime graphql api key: %q", source.APIKey)
 	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		t.Fatalf("loadBridgeFileConfig: %v", err)
 	}
-	if fileCfg.GraphQLEndpoint == nil || *fileCfg.GraphQLEndpoint != endpoint {
-		t.Fatalf("unexpected persisted graphql endpoint: %#v", fileCfg.GraphQLEndpoint)
+	if fileCfg.GraphQLEndpoint != nil || fileCfg.GraphQLSchemaPath != nil || fileCfg.GraphQLAPIKey != nil {
+		t.Fatalf("expected legacy graphql fields to be cleared, got %+v", fileCfg)
 	}
-	if fileCfg.GraphQLSchemaPath == nil || *fileCfg.GraphQLSchemaPath != schemaPath {
-		t.Fatalf("unexpected persisted graphql schema path: %#v", fileCfg.GraphQLSchemaPath)
+	if fileCfg.GraphQLDefaultSource == nil || *fileCfg.GraphQLDefaultSource != "crm" {
+		t.Fatalf("unexpected persisted graphql default source: %#v", fileCfg.GraphQLDefaultSource)
 	}
-	if fileCfg.GraphQLTimeoutMS == nil || *fileCfg.GraphQLTimeoutMS != timeoutMS {
-		t.Fatalf("unexpected persisted graphql timeout: %#v", fileCfg.GraphQLTimeoutMS)
+	if len(fileCfg.GraphQLSources) != 1 || fileCfg.GraphQLSources[0].Name != "crm" {
+		t.Fatalf("unexpected persisted graphql sources: %+v", fileCfg.GraphQLSources)
 	}
-	if fileCfg.GraphQLAPIKey == nil || *fileCfg.GraphQLAPIKey != "env-graphql-key" {
-		t.Fatalf("unexpected persisted graphql api key: %#v", fileCfg.GraphQLAPIKey)
+	if fileCfg.GraphQLSources[0].APIKey == nil || *fileCfg.GraphQLSources[0].APIKey != crmAPIKey {
+		t.Fatalf("unexpected persisted graphql api key: %+v", fileCfg.GraphQLSources[0].APIKey)
 	}
 
 	snapshot := store.Snapshot()
-	if !snapshot.GraphQLAPIKeySet {
-		t.Fatal("expected graphql api key flag to stay true")
+	if len(snapshot.GraphQLSources) != 1 || !snapshot.GraphQLSources[0].APIKeySet {
+		t.Fatalf("unexpected graphql source snapshot: %+v", snapshot.GraphQLSources)
 	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if string(encoded) == "" {
-		t.Fatal("expected snapshot json to be non-empty")
-	}
-	if containsJSONString(string(encoded), "graphql_api_key") {
-		t.Fatalf("graphql api key should not leak in snapshot: %s", string(encoded))
+	if strings.Contains(string(encoded), crmAPIKey) {
+		t.Fatalf("graphql source api key should not leak in snapshot: %s", string(encoded))
 	}
 }
 
-func containsJSONString(source string, key string) bool {
-	return strings.Contains(source, `"`+key+`"`)
+func TestRuntimeConfigFromEnvFailsOnInvalidGraphQLSource(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		GraphQLDefaultSource: stringPointer("crm"),
+		GraphQLSources: []graphQLSourceFileConfig{{
+			Name:       "crm",
+			Endpoint:   "https://crm.example/graphql",
+			SchemaPath: "",
+		}},
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+
+	if _, err := runtimeConfigFromEnv(); err == nil {
+		t.Fatal("expected invalid graphql source config error")
+	}
+}
+
+func findGraphQLSource(t *testing.T, sources []GraphQLSourceConfig, name string) GraphQLSourceConfig {
+	t.Helper()
+	for _, source := range sources {
+		if source.Name == name {
+			return source
+		}
+	}
+	t.Fatalf("graphql source %q was not found in %+v", name, sources)
+	return GraphQLSourceConfig{}
 }

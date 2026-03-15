@@ -1,139 +1,171 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
+	"log"
+	"strings"
 	"testing"
-
-	"ghost-os/bridge/tools/internal/graphqlschema"
 )
 
-func TestGraphQLSchemaLookupToolListsRootQueries(t *testing.T) {
-	tool := NewGraphQLSchemaLookupTool(testGraphQLSchema(t)).(*GraphQLSchemaLookupTool)
+func TestGraphQLSchemaLookupToolListsSourcesAndDomains(t *testing.T) {
+	registry := testGraphQLRegistry(t, GraphQLRegistryConfig{
+		DefaultSource: "crm",
+		Sources: []GraphQLSourceConfig{
+			testGraphQLSourceConfig(t, "billing", "https://billing.test/query", GraphQLDomainConfig{
+				Name:        "payments",
+				RootQueries: []string{"order"},
+				Types:       []string{"Order"},
+			}),
+			testGraphQLSourceConfig(t, "crm", "https://crm.test/query", GraphQLDomainConfig{
+				Name:        "people",
+				RootQueries: []string{"viewer"},
+				Types:       []string{"Viewer"},
+			}),
+		},
+	})
+	tool := NewGraphQLSchemaLookupTool(registry).(*GraphQLSchemaLookupTool)
 
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"list_root_queries"}`), "trace-schema-1")
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"list_sources"}`), "trace-schema-1")
 	if err != nil {
-		t.Fatalf("Execute: %v", err)
+		t.Fatalf("Execute list_sources: %v", err)
+	}
+	var sources struct {
+		DefaultSource string                       `json:"default_source"`
+		Sources       []graphqlSchemaSourcePayload `json:"sources"`
+	}
+	if err := json.Unmarshal([]byte(output), &sources); err != nil {
+		t.Fatalf("decode list_sources output: %v", err)
+	}
+	if sources.DefaultSource != "crm" {
+		t.Fatalf("unexpected default source: %q", sources.DefaultSource)
+	}
+	if len(sources.Sources) != 2 || sources.Sources[0].Name != "billing" || sources.Sources[1].Name != "crm" {
+		t.Fatalf("expected stable source order, got %+v", sources.Sources)
 	}
 
-	var payload struct {
-		Action      string                      `json:"action"`
+	output, err = tool.Execute(context.Background(), json.RawMessage(`{"action":"list_domains","source":"crm"}`), "trace-schema-2")
+	if err != nil {
+		t.Fatalf("Execute list_domains: %v", err)
+	}
+	var domains struct {
+		Domains []graphqlSchemaDomainPayload `json:"domains"`
+	}
+	if err := json.Unmarshal([]byte(output), &domains); err != nil {
+		t.Fatalf("decode list_domains output: %v", err)
+	}
+	if len(domains.Domains) != 1 || domains.Domains[0].Name != "people" {
+		t.Fatalf("unexpected domains: %+v", domains.Domains)
+	}
+}
+
+func TestGraphQLSchemaLookupToolAppliesDomainFilters(t *testing.T) {
+	registry := testGraphQLRegistry(t, GraphQLRegistryConfig{
+		DefaultSource: "crm",
+		Sources: []GraphQLSourceConfig{
+			testGraphQLSourceConfig(t, "crm", "https://crm.test/query",
+				GraphQLDomainConfig{
+					Name:        "orders",
+					RootQueries: []string{"order"},
+					Types:       []string{"Order"},
+				},
+				GraphQLDomainConfig{
+					Name:        "people",
+					RootQueries: []string{"viewer"},
+					Types:       []string{"Viewer"},
+				},
+			),
+		},
+	})
+	tool := NewGraphQLSchemaLookupTool(registry).(*GraphQLSchemaLookupTool)
+
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"list_root_queries",
+		"source":"crm",
+		"domain":"orders"
+	}`), "trace-schema-3")
+	if err != nil {
+		t.Fatalf("Execute list_root_queries: %v", err)
+	}
+	var rootQueries struct {
 		RootQueries []graphqlSchemaFieldPayload `json:"root_queries"`
 	}
-	if err := json.Unmarshal([]byte(output), &payload); err != nil {
-		t.Fatalf("decode output: %v", err)
+	if err := json.Unmarshal([]byte(output), &rootQueries); err != nil {
+		t.Fatalf("decode list_root_queries output: %v", err)
 	}
-	if payload.Action != graphqlSchemaLookupActionListRootQueries {
-		t.Fatalf("unexpected action: %q", payload.Action)
+	if len(rootQueries.RootQueries) != 1 || rootQueries.RootQueries[0].Name != "order" {
+		t.Fatalf("unexpected root queries: %+v", rootQueries.RootQueries)
 	}
-	if len(payload.RootQueries) != 1 || payload.RootQueries[0].Signature != "viewer(id: ID!): Viewer" {
-		t.Fatalf("unexpected root queries: %+v", payload.RootQueries)
-	}
-}
 
-func TestGraphQLSchemaLookupToolDescribesTypesAndFields(t *testing.T) {
-	tool := NewGraphQLSchemaLookupTool(testGraphQLSchema(t)).(*GraphQLSchemaLookupTool)
+	_, err = tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"describe_type",
+		"source":"crm",
+		"domain":"orders",
+		"name":"Viewer"
+	}`), "trace-schema-4")
+	if err == nil || !strings.Contains(err.Error(), `domain "orders"`) {
+		t.Fatalf("expected domain describe_type miss, got %v", err)
+	}
 
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"describe_type","name":"Viewer"}`), "trace-schema-2")
+	output, err = tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"find_field",
+		"source":"crm",
+		"domain":"orders",
+		"name":"id"
+	}`), "trace-schema-5")
 	if err != nil {
-		t.Fatalf("Execute: %v", err)
+		t.Fatalf("Execute find_field: %v", err)
 	}
-
-	var payload struct {
-		Type graphqlSchemaTypePayload `json:"type"`
-	}
-	if err := json.Unmarshal([]byte(output), &payload); err != nil {
-		t.Fatalf("decode output: %v", err)
-	}
-	if payload.Type.Name != "Viewer" {
-		t.Fatalf("unexpected type name: %q", payload.Type.Name)
-	}
-	if len(payload.Type.Fields) != 2 || payload.Type.Fields[1].Signature != "projects(limit: Int): [Project!]!" {
-		t.Fatalf("unexpected type fields: %+v", payload.Type.Fields)
-	}
-}
-
-func TestGraphQLSchemaLookupToolFindsFieldsAndReturnsEmptyMisses(t *testing.T) {
-	tool := NewGraphQLSchemaLookupTool(testGraphQLSchema(t)).(*GraphQLSchemaLookupTool)
-
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"find_field","name":"id"}`), "trace-schema-3")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-
-	var payload struct {
+	var matches struct {
 		Matches []graphqlSchemaFieldMatchPayload `json:"matches"`
 	}
-	if err := json.Unmarshal([]byte(output), &payload); err != nil {
-		t.Fatalf("decode output: %v", err)
+	if err := json.Unmarshal([]byte(output), &matches); err != nil {
+		t.Fatalf("decode find_field output: %v", err)
 	}
-	if len(payload.Matches) != 2 {
-		t.Fatalf("unexpected field matches: %+v", payload.Matches)
-	}
-
-	miss, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"find_field","name":"missing"}`), "trace-schema-4")
-	if err != nil {
-		t.Fatalf("Execute miss: %v", err)
-	}
-	var missPayload struct {
-		Matches []graphqlSchemaFieldMatchPayload `json:"matches"`
-	}
-	if err := json.Unmarshal([]byte(miss), &missPayload); err != nil {
-		t.Fatalf("decode miss output: %v", err)
-	}
-	if len(missPayload.Matches) != 0 {
-		t.Fatalf("expected no matches, got %+v", missPayload.Matches)
+	if len(matches.Matches) != 1 || matches.Matches[0].TypeName != "Order" {
+		t.Fatalf("unexpected field matches: %+v", matches.Matches)
 	}
 }
 
-func TestGraphQLSchemaLookupToolRejectsUnknownType(t *testing.T) {
-	tool := NewGraphQLSchemaLookupTool(testGraphQLSchema(t))
+func TestGraphQLSchemaLookupToolLogsSuccessAndFailure(t *testing.T) {
+	registry := testGraphQLRegistry(t, GraphQLRegistryConfig{
+		Sources: []GraphQLSourceConfig{
+			testGraphQLSourceConfig(t, "crm", "https://crm.test/query", GraphQLDomainConfig{
+				Name:        "people",
+				RootQueries: []string{"viewer"},
+				Types:       []string{"Viewer"},
+			}),
+		},
+	})
+	tool := NewGraphQLSchemaLookupTool(registry).(*GraphQLSchemaLookupTool)
+	logs := &bytes.Buffer{}
+	original := log.Writer()
+	log.SetOutput(logs)
+	t.Cleanup(func() {
+		log.SetOutput(original)
+	})
 
-	_, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"describe_type","name":"Missing"}`), "trace-schema-5")
-	if err == nil {
-		t.Fatal("expected error for missing type")
+	if _, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"list_root_queries",
+		"source":"crm",
+		"domain":"people"
+	}`), "trace-schema-log-success"); err != nil {
+		t.Fatalf("Execute success: %v", err)
 	}
-}
-
-func testGraphQLSchema(t *testing.T) *graphqlschema.Schema {
-	t.Helper()
-
-	path := filepath.Join(t.TempDir(), "graphql-schema.json")
-	if err := os.WriteFile(path, []byte(`{
-  "root_queries": [
-    {
-      "name": "viewer",
-      "return_type": "Viewer",
-      "args": [{"name":"id","type":"ID!"}]
-    }
-  ],
-  "types": [
-    {
-      "name": "Project",
-      "fields": [
-        {"name":"id","return_type":"ID!"}
-      ]
-    },
-    {
-      "name": "Viewer",
-      "fields": [
-        {"name":"id","return_type":"ID!"},
-        {
-          "name":"projects",
-          "return_type":"[Project!]!",
-          "args":[{"name":"limit","type":"Int"}]
-        }
-      ]
-    }
-  ]
-}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
+	if _, err := tool.Execute(context.Background(), json.RawMessage(`{
+		"action":"list_domains",
+		"source":"missing"
+	}`), "trace-schema-log-failure"); err == nil {
+		t.Fatal("expected missing source error")
 	}
-	schema, err := graphqlschema.Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
+	if !strings.Contains(logs.String(), "trace_id=trace-schema-log-success tool=graphql_schema_lookup source=crm domain=people action=list_root_queries") {
+		t.Fatalf("expected success lookup log, got %q", logs.String())
 	}
-	return schema
+	if !strings.Contains(logs.String(), "trace_id=trace-schema-log-failure tool=graphql_schema_lookup source=missing domain= action=list_domains") {
+		t.Fatalf("expected failure lookup log, got %q", logs.String())
+	}
+	if !strings.Contains(logs.String(), "status=error") {
+		t.Fatalf("expected error status in logs, got %q", logs.String())
+	}
 }

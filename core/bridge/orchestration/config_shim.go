@@ -93,12 +93,8 @@ func (s *ConfigStore) Snapshot() configResponse {
 		ChatPath:                 snapshot.ChatPath,
 		APIKeySet:                snapshot.APIKeySet,
 		ModelSelectionEnabled:    snapshot.ModelSelectionEnabled,
-		GraphqlEnabled:           snapshot.GraphQLEnabled,
-		GraphqlEndpoint:          snapshot.GraphQLEndpoint,
-		GraphqlSchemaPath:        snapshot.GraphQLSchemaPath,
-		GraphqlTimeoutMs:         snapshot.GraphQLTimeoutMS,
-		GraphqlMaxResponseBytes:  snapshot.GraphQLMaxResponseBytes,
-		GraphqlAPIKeySet:         snapshot.GraphQLAPIKeySet,
+		GraphqlDefaultSource:     snapshot.GraphQLDefaultSource,
+		GraphqlSources:           graphQLSourceResponses(snapshot.GraphQLSources),
 		WebSearchTavilyAPIKeySet: snapshot.WebSearchTavilyAPIKeySet,
 		WebSearchExaAPIKeySet:    snapshot.WebSearchExaAPIKeySet,
 	}
@@ -131,21 +127,17 @@ func (s *ConfigStore) SetActiveProvider(name string) error {
 
 func (s *ConfigStore) Update(req configUpdateRequest) error {
 	return s.unwrap().Update(bridgeconfig.UpdateRequest{
-		Provider:                req.Provider,
-		APIKey:                  req.APIKey,
-		BaseURL:                 req.BaseURL,
-		Model:                   req.Model,
-		ChatPath:                req.ChatPath,
-		GraphQLEnabled:          req.GraphqlEnabled,
-		GraphQLEndpoint:         req.GraphqlEndpoint,
-		GraphQLAPIKey:           req.GraphqlAPIKey,
-		GraphQLSchemaPath:       req.GraphqlSchemaPath,
-		GraphQLTimeoutMS:        req.GraphqlTimeoutMs,
-		GraphQLMaxResponseBytes: req.GraphqlMaxResponseBytes,
-		GraphQLHeaders:          stringMapFromAny(req.GraphqlHeaders),
-		WebSearchTavilyAPIKey:   req.WebSearchTavilyAPIKey,
-		WebSearchExaAPIKey:      req.WebSearchExaAPIKey,
-		TraceID:                 req.TraceID,
+		Provider:              req.Provider,
+		APIKey:                req.APIKey,
+		BaseURL:               req.BaseURL,
+		Model:                 req.Model,
+		ChatPath:              req.ChatPath,
+		GraphQLDefaultSource:  req.GraphqlDefaultSource,
+		GraphQLSources:        graphQLSourceInputs(req.GraphqlSources),
+		GraphQLSourceUpsert:   graphQLSourceInputPointer(req.GraphqlSourceUpsert),
+		WebSearchTavilyAPIKey: req.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:    req.WebSearchExaAPIKey,
+		TraceID:               req.TraceID,
 	})
 }
 
@@ -172,6 +164,132 @@ func stringMapFromAny(raw map[string]any) map[string]string {
 			return nil
 		}
 		out[key] = text
+	}
+	return out
+}
+
+func graphQLSourceResponses(raw []bridgeconfig.GraphQLSourceSnapshot) []graphqlSourceResponse {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]graphqlSourceResponse, 0, len(raw))
+	for _, source := range raw {
+		out = append(out, graphqlSourceResponse{
+			Name:             source.Name,
+			Description:      source.Description,
+			Endpoint:         source.Endpoint,
+			SchemaPath:       source.SchemaPath,
+			TimeoutMs:        source.TimeoutMS,
+			MaxResponseBytes: source.MaxResponseBytes,
+			MaxDepth:         source.MaxDepth,
+			MaxFields:        source.MaxFields,
+			MaxRootFields:    source.MaxRootFields,
+			MaxFragments:     source.MaxFragments,
+			Headers:          anyMapFromString(source.Headers),
+			APIKeySet:        source.APIKeySet,
+			Domains:          graphQLDomainResponses(source.Domains),
+		})
+	}
+	return out
+}
+
+func graphQLDomainResponses(raw []bridgeconfig.GraphQLDomainSnapshot) []graphqlDomainResponse {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]graphqlDomainResponse, 0, len(raw))
+	for _, domain := range raw {
+		out = append(out, graphqlDomainResponse{
+			Name:          domain.Name,
+			Description:   domain.Description,
+			RootQueries:   append([]string(nil), domain.RootQueries...),
+			Types:         append([]string(nil), domain.Types...),
+			MaxDepth:      domain.MaxDepth,
+			MaxFields:     domain.MaxFields,
+			MaxRootFields: domain.MaxRootFields,
+		})
+	}
+	return out
+}
+
+func graphQLSourceInputs(raw []graphqlSourceInput) []bridgeconfig.GraphQLSourceInput {
+	if raw == nil {
+		return nil
+	}
+
+	out := make([]bridgeconfig.GraphQLSourceInput, 0, len(raw))
+	for _, source := range raw {
+		out = append(out, bridgeconfig.GraphQLSourceInput{
+			Name:             source.Name,
+			Description:      source.Description,
+			Endpoint:         source.Endpoint,
+			APIKey:           source.APIKey,
+			SchemaPath:       source.SchemaPath,
+			TimeoutMS:        source.TimeoutMs,
+			MaxResponseBytes: source.MaxResponseBytes,
+			Headers:          stringMapFromAny(source.Headers),
+			MaxDepth:         source.MaxDepth,
+			MaxFields:        source.MaxFields,
+			MaxRootFields:    source.MaxRootFields,
+			MaxFragments:     source.MaxFragments,
+			Domains:          graphQLDomainInputs(source.Domains),
+		})
+	}
+	return out
+}
+
+func graphQLSourceInputPointer(raw graphqlSourceInput) *bridgeconfig.GraphQLSourceInput {
+	if raw.Name == "" {
+		return nil
+	}
+	value := bridgeconfig.GraphQLSourceInput{
+		Name:             raw.Name,
+		Description:      raw.Description,
+		Endpoint:         raw.Endpoint,
+		APIKey:           raw.APIKey,
+		SchemaPath:       raw.SchemaPath,
+		TimeoutMS:        raw.TimeoutMs,
+		MaxResponseBytes: raw.MaxResponseBytes,
+		Headers:          stringMapFromAny(raw.Headers),
+		MaxDepth:         raw.MaxDepth,
+		MaxFields:        raw.MaxFields,
+		MaxRootFields:    raw.MaxRootFields,
+		MaxFragments:     raw.MaxFragments,
+		Domains:          graphQLDomainInputs(raw.Domains),
+	}
+	return &value
+}
+
+func graphQLDomainInputs(raw []graphqlDomainInput) []bridgeconfig.GraphQLDomainInput {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]bridgeconfig.GraphQLDomainInput, 0, len(raw))
+	for _, domain := range raw {
+		out = append(out, bridgeconfig.GraphQLDomainInput{
+			Name:          domain.Name,
+			Description:   domain.Description,
+			RootQueries:   append([]string(nil), domain.RootQueries...),
+			Types:         append([]string(nil), domain.Types...),
+			MaxDepth:      domain.MaxDepth,
+			MaxFields:     domain.MaxFields,
+			MaxRootFields: domain.MaxRootFields,
+		})
+	}
+	return out
+}
+
+func anyMapFromString(raw map[string]string) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make(map[string]any, len(raw))
+	for key, value := range raw {
+		out[key] = value
 	}
 	return out
 }

@@ -12,6 +12,7 @@ type Schema struct {
 	RootQueries []Field `json:"root_queries"`
 	Types       []Type  `json:"types"`
 
+	rootIndex  map[string]Field
 	typeIndex  map[string]Type
 	fieldIndex map[string][]FieldLocation
 }
@@ -169,8 +170,12 @@ func normalizeArguments(args []Argument) []Argument {
 }
 
 func buildIndex(schema Schema) *Schema {
+	rootIndex := make(map[string]Field, len(schema.RootQueries))
 	typeIndex := make(map[string]Type, len(schema.Types))
 	fieldIndex := make(map[string][]FieldLocation)
+	for _, field := range schema.RootQueries {
+		rootIndex[field.Name] = cloneField(field)
+	}
 	for _, item := range schema.Types {
 		typeIndex[item.Name] = cloneType(item)
 		for _, field := range item.Fields {
@@ -189,6 +194,7 @@ func buildIndex(schema Schema) *Schema {
 	return &Schema{
 		RootQueries: cloneFields(schema.RootQueries),
 		Types:       cloneTypes(schema.Types),
+		rootIndex:   rootIndex,
 		typeIndex:   typeIndex,
 		fieldIndex:  fieldIndex,
 	}

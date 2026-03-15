@@ -234,12 +234,8 @@ pub struct BridgeConfig {
     pub chat_path: String,
     pub api_key_set: bool,
     pub model_selection_enabled: bool,
-    pub graphql_enabled: bool,
-    pub graphql_endpoint: String,
-    pub graphql_schema_path: String,
-    pub graphql_timeout_ms: i64,
-    pub graphql_max_response_bytes: i64,
-    pub graphql_api_key_set: bool,
+    pub graphql_default_source: String,
+    pub graphql_sources: Vec<GraphQLSourceResponse>,
     pub web_search_tavily_api_key_set: bool,
     pub web_search_exa_api_key_set: bool,
 }
@@ -257,25 +253,96 @@ pub struct ConfigUpdate {
     #[serde(default)]
     pub chat_path: Option<String>,
     #[serde(default)]
-    pub graphql_enabled: Option<bool>,
+    pub graphql_default_source: Option<String>,
     #[serde(default)]
-    pub graphql_endpoint: Option<String>,
+    pub graphql_sources: Option<Vec<GraphQLSourceInput>>,
     #[serde(default)]
-    pub graphql_api_key: Option<String>,
-    #[serde(default)]
-    pub graphql_schema_path: Option<String>,
-    #[serde(default)]
-    pub graphql_timeout_ms: Option<i64>,
-    #[serde(default)]
-    pub graphql_max_response_bytes: Option<i64>,
-    #[serde(default)]
-    pub graphql_headers: Option<Value>,
+    pub graphql_source_upsert: Option<GraphQLSourceInput>,
     #[serde(default)]
     pub web_search_tavily_api_key: Option<String>,
     #[serde(default)]
     pub web_search_exa_api_key: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct GraphQLDomainResponse {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub root_queries: Vec<String>,
+    #[serde(default)]
+    pub types: Option<Vec<String>>,
+    #[serde(default)]
+    pub max_depth: Option<i64>,
+    #[serde(default)]
+    pub max_fields: Option<i64>,
+    #[serde(default)]
+    pub max_root_fields: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct GraphQLSourceResponse {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub endpoint: String,
+    pub schema_path: String,
+    pub timeout_ms: i64,
+    pub max_response_bytes: i64,
+    pub max_depth: i64,
+    pub max_fields: i64,
+    pub max_root_fields: i64,
+    pub max_fragments: i64,
+    #[serde(default)]
+    pub headers: Option<Value>,
+    pub api_key_set: bool,
+    #[serde(default)]
+    pub domains: Option<Vec<GraphQLDomainResponse>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct GraphQLDomainInput {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub root_queries: Vec<String>,
+    #[serde(default)]
+    pub types: Option<Vec<String>>,
+    #[serde(default)]
+    pub max_depth: Option<i64>,
+    #[serde(default)]
+    pub max_fields: Option<i64>,
+    #[serde(default)]
+    pub max_root_fields: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct GraphQLSourceInput {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub endpoint: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    pub schema_path: String,
+    #[serde(default)]
+    pub timeout_ms: Option<i64>,
+    #[serde(default)]
+    pub max_response_bytes: Option<i64>,
+    #[serde(default)]
+    pub headers: Option<Value>,
+    #[serde(default)]
+    pub max_depth: Option<i64>,
+    #[serde(default)]
+    pub max_fields: Option<i64>,
+    #[serde(default)]
+    pub max_root_fields: Option<i64>,
+    #[serde(default)]
+    pub max_fragments: Option<i64>,
+    #[serde(default)]
+    pub domains: Option<Vec<GraphQLDomainInput>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

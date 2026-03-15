@@ -41,14 +41,35 @@ type WorkerConfig struct {
 	MaxFileChunks  int
 }
 
-type GraphQLConfig struct {
-	Enabled          bool
+type GraphQLDomainConfig struct {
+	Name          string
+	Description   string
+	RootQueries   []string
+	Types         []string
+	MaxDepth      int
+	MaxFields     int
+	MaxRootFields int
+}
+
+type GraphQLSourceConfig struct {
+	Name             string
+	Description      string
 	Endpoint         string
 	APIKey           string
 	SchemaPath       string
 	TimeoutMS        int
 	MaxResponseBytes int
 	Headers          map[string]string
+	MaxDepth         int
+	MaxFields        int
+	MaxRootFields    int
+	MaxFragments     int
+	Domains          []GraphQLDomainConfig
+}
+
+type GraphQLConfig struct {
+	DefaultSource string
+	Sources       []GraphQLSourceConfig
 }
 
 type ToolSelectorConfig struct {
@@ -154,6 +175,11 @@ const (
 	defaultWorkerMaxFileChunks     = 4
 	defaultGraphQLTimeoutMS        = 10_000
 	defaultGraphQLMaxResponseBytes = 1 << 20
+	defaultGraphQLMaxDepth         = 8
+	defaultGraphQLMaxFields        = 64
+	defaultGraphQLMaxRootFields    = 3
+	defaultGraphQLMaxFragments     = 8
+	defaultGraphQLLegacySourceName = "default"
 	defaultToolSelectorTimeoutMS   = 1500
 	defaultToolSelectorConfidence  = 0.75
 	defaultToolSelectorRecentMsgs  = 6

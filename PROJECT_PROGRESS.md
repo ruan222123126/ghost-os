@@ -23,6 +23,17 @@
 
 ### 2026-03-15
 
+- 完成 GraphQL 第二步基线：
+  - `core/bridge/config` 从单 source 升级为 `graphql_default_source + graphql_sources[]`，保留旧单源字段只读迁移入口；旧配置读取时显式物化为 `default` source，经新接口更新后仅持久化新结构。
+  - `core/bridge/runtime` 启动时为所有 GraphQL source 预加载 schema snapshot，并通过共享只读 registry 向 `graphql_query` / `graphql_schema_lookup` 提供多 source 路由能力；工具仍保持 `OnDemand: true`，默认不进入静态工具面。
+  - `graphql_schema_lookup` 新增 `list_sources`、`list_domains`，并支持按 `source/domain` 裁剪 `list_root_queries`、`describe_type`、`find_field` 可见面。
+  - `graphql_query` 升级为 `source/domain` aware，执行前基于 AST 做 operation 选择、domain root field 校验、深度/字段数/root field/fragment 静态预算校验，并拒绝 `__schema` / `__type` introspection 字段。
+  - GraphQL 工具补齐结构化 trace 日志；成功/失败都会记录 `trace_id`、`source`、`domain`、`operation`、query stats、耗时、响应大小与错误摘要。
+  - 共享契约与 Web parser 已同步到多 source 模型；snapshot 仅暴露 `api_key_set`，不返回任何 source 明文 key。
+- 第二步相关验证已通过：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./runtime ./tools ./orchestration -timeout 60s`
+  - `pnpm -C apps/web test -- --runTestsByPath lib/api/config/api.test.ts`
+
 - 新增只读 GraphQL 查询工具：
   - `graphql_query` 仅允许 `query`，在执行前做 GraphQL 文本校验，拒绝 `mutation` / `subscription` / 混合操作。
   - 请求固定走单一 endpoint，支持配置级 headers / API key、超时与响应体大小限制，HTTP 与 GraphQL errors 均显式失败。

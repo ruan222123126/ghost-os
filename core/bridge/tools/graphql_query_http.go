@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"ghost-os/bridge/tools/internal/graphqlschema"
 )
 
 const (
@@ -23,18 +25,25 @@ type graphQLRequestPayload struct {
 	OperationName string         `json:"operationName,omitempty"`
 }
 
-func (t *GraphQLQueryTool) executeRequest(ctx context.Context, args graphQLQueryArgs) ([]byte, error) {
+func (t *GraphQLQueryTool) executeRequest(
+	ctx context.Context,
+	source *graphqlschema.Source,
+	args graphQLQueryArgs,
+) ([]byte, error) {
 	if t == nil || t.httpClient == nil {
 		return nil, fmt.Errorf("graphql http client is not configured")
 	}
-	if t.config.Endpoint == "" {
-		return nil, fmt.Errorf("graphql endpoint is not configured")
+	if source == nil {
+		return nil, fmt.Errorf("graphql source is not configured")
+	}
+	if source.Endpoint == "" {
+		return nil, fmt.Errorf("graphql source %q endpoint is not configured", source.Name)
 	}
 
-	requestCtx, cancel := graphQLRequestContext(ctx, t.config.TimeoutMS)
+	requestCtx, cancel := graphQLRequestContext(ctx, source.TimeoutMS)
 	defer cancel()
 
-	req, err := t.buildRequest(requestCtx, args)
+	req, err := t.buildRequest(requestCtx, source, args)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +53,7 @@ func (t *GraphQLQueryTool) executeRequest(ctx context.Context, args graphQLQuery
 	}
 	defer resp.Body.Close()
 
-	body, err := readGraphQLResponseBody(resp.Body, t.config.MaxResponseBytes)
+	body, err := readGraphQLResponseBody(resp.Body, source.MaxResponseBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -54,21 +63,25 @@ func (t *GraphQLQueryTool) executeRequest(ctx context.Context, args graphQLQuery
 	return body, nil
 }
 
-func (t *GraphQLQueryTool) buildRequest(ctx context.Context, args graphQLQueryArgs) (*http.Request, error) {
+func (t *GraphQLQueryTool) buildRequest(
+	ctx context.Context,
+	source *graphqlschema.Source,
+	args graphQLQueryArgs,
+) (*http.Request, error) {
 	payload := graphQLRequestPayload{
 		Query:         args.Query,
 		Variables:     args.Variables,
-		OperationName: strings.TrimSpace(args.OperationName),
+		OperationName: args.OperationName,
 	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("encode graphql request: %w", err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.config.Endpoint, bytes.NewReader(encoded))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, source.Endpoint, bytes.NewReader(encoded))
 	if err != nil {
 		return nil, fmt.Errorf("build graphql request: %w", err)
 	}
-	applyGraphQLRequestHeaders(req, t.config)
+	applyGraphQLRequestHeaders(req, source)
 	return req, nil
 }
 
@@ -80,14 +93,17 @@ func graphQLRequestContext(ctx context.Context, timeoutMS int) (context.Context,
 	return context.WithTimeout(ctx, timeout)
 }
 
-func applyGraphQLRequestHeaders(req *http.Request, cfg GraphQLQueryConfig) {
+func applyGraphQLRequestHeaders(req *http.Request, source *graphqlschema.Source) {
 	req.Header.Set("Accept", graphQLRequestContentType)
 	req.Header.Set("Content-Type", graphQLRequestContentType)
-	for key, value := range cfg.Headers {
+	if source == nil {
+		return
+	}
+	for key, value := range source.Headers {
 		req.Header.Set(key, value)
 	}
-	if cfg.APIKey != "" && req.Header.Get("Authorization") == "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	if source.APIKey != "" && req.Header.Get("Authorization") == "" {
+		req.Header.Set("Authorization", "Bearer "+source.APIKey)
 	}
 }
 

@@ -1,5 +1,7 @@
 import type {
   BridgeConfig,
+  GraphQLDomainResponse,
+  GraphQLSourceResponse,
   ProviderConfig,
   ProviderListResponse,
 } from '@/lib/types';
@@ -9,6 +11,7 @@ import {
   expectNumber,
   expectRecord,
   expectString,
+  expectStringArray,
   expectStringEnum,
   parseOptionalRecord,
   parseOptionalStringArray,
@@ -23,12 +26,8 @@ const BRIDGE_CONFIG_KEYS = [
   'chat_path',
   'api_key_set',
   'model_selection_enabled',
-  'graphql_enabled',
-  'graphql_endpoint',
-  'graphql_schema_path',
-  'graphql_timeout_ms',
-  'graphql_max_response_bytes',
-  'graphql_api_key_set',
+  'graphql_default_source',
+  'graphql_sources',
   'web_search_tavily_api_key_set',
   'web_search_exa_api_key_set',
 ] as const;
@@ -44,6 +43,30 @@ const PROVIDER_CONFIG_KEYS = [
   'api_key_set',
 ] as const;
 const PROVIDER_LIST_KEYS = ['providers', 'active_provider'] as const;
+const GRAPHQL_DOMAIN_KEYS = [
+  'name',
+  'description',
+  'root_queries',
+  'types',
+  'max_depth',
+  'max_fields',
+  'max_root_fields',
+] as const;
+const GRAPHQL_SOURCE_KEYS = [
+  'name',
+  'description',
+  'endpoint',
+  'schema_path',
+  'timeout_ms',
+  'max_response_bytes',
+  'max_depth',
+  'max_fields',
+  'max_root_fields',
+  'max_fragments',
+  'headers',
+  'api_key_set',
+  'domains',
+] as const;
 
 function parseProviderConfig(value: unknown, label: string): ProviderConfig {
   const record = expectRecord(value, label);
@@ -72,9 +95,64 @@ function parseProviderConfig(value: unknown, label: string): ProviderConfig {
   };
 }
 
+function parseGraphQLDomainResponse(value: unknown, label: string): GraphQLDomainResponse {
+  const record = expectRecord(value, label);
+  ensureKnownKeys(record, GRAPHQL_DOMAIN_KEYS, label);
+
+  return {
+    name: expectString(record.name, `${label}.name`),
+    description: record.description === undefined
+      ? undefined
+      : expectString(record.description, `${label}.description`),
+    root_queries: expectStringArray(record.root_queries, `${label}.root_queries`),
+    types: parseOptionalStringArray(record.types, `${label}.types`),
+    max_depth: record.max_depth === undefined ? undefined : expectNumber(record.max_depth, `${label}.max_depth`),
+    max_fields: record.max_fields === undefined ? undefined : expectNumber(record.max_fields, `${label}.max_fields`),
+    max_root_fields: record.max_root_fields === undefined
+      ? undefined
+      : expectNumber(record.max_root_fields, `${label}.max_root_fields`),
+  };
+}
+
+function parseGraphQLSourceResponse(value: unknown, label: string): GraphQLSourceResponse {
+  const record = expectRecord(value, label);
+  ensureKnownKeys(record, GRAPHQL_SOURCE_KEYS, label);
+
+  let domains: GraphQLDomainResponse[] | undefined;
+  if (record.domains !== undefined) {
+    if (!Array.isArray(record.domains)) {
+      throw new Error(`Invalid ${label}.domains: expected array`);
+    }
+    domains = record.domains.map((entry, index) => {
+      return parseGraphQLDomainResponse(entry, `${label}.domains[${index}]`);
+    });
+  }
+
+  return {
+    name: expectString(record.name, `${label}.name`),
+    description: record.description === undefined
+      ? undefined
+      : expectString(record.description, `${label}.description`),
+    endpoint: expectString(record.endpoint, `${label}.endpoint`),
+    schema_path: expectString(record.schema_path, `${label}.schema_path`),
+    timeout_ms: expectNumber(record.timeout_ms, `${label}.timeout_ms`),
+    max_response_bytes: expectNumber(record.max_response_bytes, `${label}.max_response_bytes`),
+    max_depth: expectNumber(record.max_depth, `${label}.max_depth`),
+    max_fields: expectNumber(record.max_fields, `${label}.max_fields`),
+    max_root_fields: expectNumber(record.max_root_fields, `${label}.max_root_fields`),
+    max_fragments: expectNumber(record.max_fragments, `${label}.max_fragments`),
+    headers: parseOptionalRecord(record.headers, `${label}.headers`),
+    api_key_set: expectBoolean(record.api_key_set, `${label}.api_key_set`),
+    domains,
+  };
+}
+
 export function parseBridgeConfig(payload: unknown): BridgeConfig {
   const record = expectRecord(payload, 'bridge config');
   ensureKnownKeys(record, BRIDGE_CONFIG_KEYS, 'bridge config');
+  if (!Array.isArray(record.graphql_sources)) {
+    throw new Error('Invalid bridge config.graphql_sources: expected array');
+  }
 
   return {
     provider: expectString(record.provider, 'bridge config.provider'),
@@ -87,15 +165,10 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
       record.model_selection_enabled,
       'bridge config.model_selection_enabled',
     ),
-    graphql_enabled: expectBoolean(record.graphql_enabled, 'bridge config.graphql_enabled'),
-    graphql_endpoint: expectString(record.graphql_endpoint, 'bridge config.graphql_endpoint'),
-    graphql_schema_path: expectString(record.graphql_schema_path, 'bridge config.graphql_schema_path'),
-    graphql_timeout_ms: expectNumber(record.graphql_timeout_ms, 'bridge config.graphql_timeout_ms'),
-    graphql_max_response_bytes: expectNumber(
-      record.graphql_max_response_bytes,
-      'bridge config.graphql_max_response_bytes',
-    ),
-    graphql_api_key_set: expectBoolean(record.graphql_api_key_set, 'bridge config.graphql_api_key_set'),
+    graphql_default_source: expectString(record.graphql_default_source, 'bridge config.graphql_default_source'),
+    graphql_sources: record.graphql_sources.map((entry, index) => {
+      return parseGraphQLSourceResponse(entry, `bridge config.graphql_sources[${index}]`);
+    }),
     web_search_tavily_api_key_set: expectBoolean(
       record.web_search_tavily_api_key_set,
       'bridge config.web_search_tavily_api_key_set',

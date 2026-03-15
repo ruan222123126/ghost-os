@@ -9,35 +9,23 @@ import (
 	"time"
 )
 
-const (
-	defaultGraphQLToolTimeoutMS        = 10_000
-	defaultGraphQLToolMaxResponseBytes = 1 << 20
-)
-
-type GraphQLQueryConfig struct {
-	Endpoint         string
-	APIKey           string
-	TimeoutMS        int
-	MaxResponseBytes int
-	Headers          map[string]string
-}
-
 type GraphQLQueryTool struct {
 	httpClient *http.Client
-	config     GraphQLQueryConfig
+	registry   *GraphQLSourceRegistry
 }
 
 type graphQLQueryArgs struct {
+	Source        string         `json:"source,omitempty"`
+	Domain        string         `json:"domain,omitempty"`
 	Query         string         `json:"query"`
 	Variables     map[string]any `json:"variables,omitempty"`
 	OperationName string         `json:"operation_name,omitempty"`
 }
 
-func NewGraphQLQueryTool(cfg GraphQLQueryConfig) Tool {
-	normalized := normalizeGraphQLQueryConfig(cfg)
+func NewGraphQLQueryTool(registry *GraphQLSourceRegistry) Tool {
 	return &GraphQLQueryTool{
-		httpClient: &http.Client{Timeout: time.Duration(normalized.TimeoutMS) * time.Millisecond},
-		config:     normalized,
+		httpClient: &http.Client{},
+		registry:   registry,
 	}
 }
 
@@ -46,13 +34,15 @@ func (GraphQLQueryTool) Name() string {
 }
 
 func (GraphQLQueryTool) Description() string {
-	return "Execute a read-only GraphQL query against the configured endpoint. Use graphql_schema_lookup first, and never invent results when the query fails."
+	return "Execute a read-only GraphQL query against a configured source. First inspect sources and domains with graphql_schema_lookup, then query only the selected source/domain."
 }
 
 func (GraphQLQueryTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
+			"source":{"type":"string","description":"Optional GraphQL source name. Omit only when a single source exists or graphql_default_source is configured."},
+			"domain":{"type":"string","description":"Optional domain name. When set, every top-level root field must belong to that domain."},
 			"query":{"type":"string","description":"GraphQL query text. Only query operations are allowed."},
 			"variables":{"type":"object","description":"Optional GraphQL variables object."},
 			"operation_name":{"type":"string","description":"Optional operation name when the document contains multiple query operations."}
@@ -62,42 +52,51 @@ func (GraphQLQueryTool) Parameters() json.RawMessage {
 	}`)
 }
 
-func (t *GraphQLQueryTool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {
-	var args graphQLQueryArgs
-	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return "", fmt.Errorf("decode args: %w", err)
-	}
-	if strings.TrimSpace(args.Query) == "" {
-		return "", fmt.Errorf("query is required")
-	}
-	if err := validateGraphQLQueryDocument(args.Query, args.OperationName); err != nil {
-		return "", err
-	}
-	body, err := t.executeRequest(ctx, args)
+func (t *GraphQLQueryTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
+	args, err := decodeGraphQLQueryArgs(argsJSON)
 	if err != nil {
 		return "", err
 	}
-	if err := validateGraphQLResponseBody(body); err != nil {
+
+	startedAt := time.Now()
+	source, err := t.registry.resolveSource(args.Source)
+	if err != nil {
+		logGraphQLQuery(traceID, args.Source, args.Domain, graphQLQuerySummary{}, 0, time.Since(startedAt), err)
 		return "", err
 	}
+
+	summary, err := validateGraphQLQueryDocument(args.Query, args.OperationName, source, args.Domain)
+	if err != nil {
+		logGraphQLQuery(traceID, source.Name, args.Domain, summary, 0, time.Since(startedAt), err)
+		return "", err
+	}
+
+	body, err := t.executeRequest(ctx, source, args)
+	if err != nil {
+		logGraphQLQuery(traceID, source.Name, args.Domain, summary, 0, time.Since(startedAt), err)
+		return "", err
+	}
+	if err := validateGraphQLResponseBody(body); err != nil {
+		logGraphQLQuery(traceID, source.Name, args.Domain, summary, len(body), time.Since(startedAt), err)
+		return "", err
+	}
+
+	logGraphQLQuery(traceID, source.Name, args.Domain, summary, len(body), time.Since(startedAt), nil)
 	return string(body), nil
 }
 
-func normalizeGraphQLQueryConfig(cfg GraphQLQueryConfig) GraphQLQueryConfig {
-	out := cfg
-	out.Endpoint = strings.TrimSpace(out.Endpoint)
-	out.APIKey = strings.TrimSpace(out.APIKey)
-	out.TimeoutMS = normalizeGraphQLQueryInt(out.TimeoutMS, defaultGraphQLToolTimeoutMS)
-	out.MaxResponseBytes = normalizeGraphQLQueryInt(out.MaxResponseBytes, defaultGraphQLToolMaxResponseBytes)
-	out.Headers = cloneGraphQLHeaders(out.Headers)
-	return out
-}
-
-func normalizeGraphQLQueryInt(value int, fallback int) int {
-	if value > 0 {
-		return value
+func decodeGraphQLQueryArgs(argsJSON json.RawMessage) (graphQLQueryArgs, error) {
+	var args graphQLQueryArgs
+	if err := json.Unmarshal(argsJSON, &args); err != nil {
+		return graphQLQueryArgs{}, fmt.Errorf("decode args: %w", err)
 	}
-	return fallback
+	if strings.TrimSpace(args.Query) == "" {
+		return graphQLQueryArgs{}, fmt.Errorf("query is required")
+	}
+	args.Source = strings.TrimSpace(args.Source)
+	args.Domain = strings.TrimSpace(args.Domain)
+	args.OperationName = strings.TrimSpace(args.OperationName)
+	return args, nil
 }
 
 func cloneGraphQLHeaders(raw map[string]string) map[string]string {
