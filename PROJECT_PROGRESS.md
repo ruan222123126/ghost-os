@@ -23,6 +23,15 @@
 
 ### 2026-03-15
 
+- 收口主 prompt 模板并消除双份维护：
+  - `core/bridge/prompts.yaml` 现只保留最小骨架，`runtime_constraints` 与 `response_rules` 改为独立 section；默认模板不再常驻写入 RSS pipeline、`screen_action` 细分说明或 `END_SESSION` 协议。
+  - `core/bridge/context` 改为从单一 `prompts.yaml` 真源生成内置默认配置，`prompt.go` 不再手写第二份同构长模板。
+  - `PromptLoadOptions` 与 runtime/config 已新增 `prompts_runtime_constraint_files`、`prompts_response_rule_files`，真正支持把重块 prompt 片段外置拼装。
+  - `tools.FormatPromptGuidanceForCatalog` 现按当前 visible catalog 动态注入 RSS、`ask_human`、`screen_action` 等低频规则，不再把这些说明塞进 every-turn always-on prompt。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./context -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./context ./tools ./runtime -timeout 60s` 仍受当前工作区现有 GraphQL 编译错误阻塞：`tools/graphql_mutation_commit_execute.go:56 source.Headers undefined`
+
 - 收口 memory recall prompt 注入块：
   - `memoryaug.FormatPromptBlock` 现保留 `Memory slots` 与最多 2 条 `Other memory context`，非 slot 记忆只注入 `summary`，每条限制 80 字，不再向 system prompt 追加 `content=`。
   - 已补 formatter 与 session turn 的定向回归，覆盖“只保留短块、不落会话历史、超额条目丢弃、长 summary 截断”。

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -13,56 +14,28 @@ import (
 const (
 	defaultPromptVersion = "1.0"
 	defaultPromptPath    = "prompts.yaml"
+	defaultToolGuidance  = "- Use only the tools included in the structured tool schema for this turn."
 )
 
-var errSystemDefaultRequired = errors.New("system.default is required")
+var (
+	defaultPromptConfig     PromptConfig
+	defaultPromptConfigErr  error
+	defaultPromptConfigOnce sync.Once
 
-const defaultCoreJob = "You can coordinate local execution, web retrieval, desktop interaction, and human confirmation."
+	errSystemDefaultRequired = errors.New("system.default is required")
+)
 
-const defaultSystemPromptTemplate = `You are Ghost-OS bridge agent, an AI-driven digital twin execution layer.
-
-## Core Job
-{{core_job}}
-
-## Tool Strategy
-- Use script_exec as the primary workspace tool for local file discovery, reading, searching, and patching. Prefer tools.list_files/tools.read_file/tools.search_files/tools.apply_diff inside script_exec for deterministic edits.
-- Use read_and_summarize for broad multi-file triage; verify exact code with script_exec + tools.read_file before editing.
-- Use script_exec for loops, branching, or shell commands. Never call it with {}. For shell commands inside scripts, call tools.bash_exec.
-- Use feed_manage to subscribe, list, update, or unsubscribe shared RSS sources; use rss_fetch to read a specific RSS/Atom feed; use web_search for broad internet lookup, use screen_action for desktop OCR or icon matching, and ask_human only when blocked on required user input.
-- Before any GraphQL write, inspect allowed source/domain policy with graphql_schema_lookup, then call graphql_mutation(action="prepare"). Only commit after an explicit user approval tied to the returned intent_id, and never invent approval results.
-- Prefer screen_action.click_text for visible UI labels; use screen_action.click_icon only for unlabeled icons or template-driven clicks.
-- RSS inbox polling and AI filtering run as a backend system pipeline. Do not treat RSS inbox polling as a normal chat-tool chain unless an explicit admin/runtime endpoint is being used.
-- When ask_human needs predefined choices, provide selection_mode and options, and ensure the final option allows custom input.
-- If a GraphQL mutation is rejected or edited, prepare a new intent before any later commit attempt.
-
-## Limits
-- In script_exec helpers, tools.read_file reads at most 200 lines per call.
-- In script_exec helpers, tools.search_files returns at most 100 matches per call.
-- In script_exec helpers, tools.apply_diff patches one file per call.
-- Execution and sandbox budgets are enforced in the native layer.
-- File access may be restricted to allowlisted paths and may block sensitive files.
-
-## Operating Context
-- OS: {{os_type}}
-- Available tools: {{tools_count}}
-- Tool list:
-{{tool_list}}
-- Max turns: {{max_turns}}
-- Project root: {{project_root}}
-
-## Response Rules
-- If no tool is needed, answer directly.
-- For normal turns, reply with plain natural text.
-- Keep actions concise, deterministic, and traceable.
-- Only when you intentionally end the entire session, output JSON only: {"signal":"END_SESSION","message":"<final reply>"}.`
+type PromptSystemConfig struct {
+	Default            string `yaml:"default"`
+	CoreJob            string `yaml:"core_job"`
+	RuntimeConstraints string `yaml:"runtime_constraints"`
+	ResponseRules      string `yaml:"response_rules"`
+}
 
 // PromptConfig 描述 prompts.yaml 的最小结构。
 type PromptConfig struct {
-	Version string `yaml:"version"`
-	System  struct {
-		Default string `yaml:"default"`
-		CoreJob string `yaml:"core_job"`
-	} `yaml:"system"`
+	Version string             `yaml:"version"`
+	System  PromptSystemConfig `yaml:"system"`
 }
 
 // PromptManager 负责加载与渲染系统提示词模板。
@@ -73,9 +46,24 @@ type PromptManager struct {
 
 // PromptLoadOptions 描述提示词加载的可选参数。
 type PromptLoadOptions struct {
-	ConfigPath string
-	CoreDir    string
-	CoreFiles  []string
+	ConfigPath             string
+	CoreDir                string
+	CoreFiles              []string
+	RuntimeConstraintFiles []string
+	ResponseRuleFiles      []string
+}
+
+type promptSectionOptions struct {
+	coreJob            bool
+	runtimeConstraints bool
+	responseRules      bool
+}
+
+type promptSectionRequirement struct {
+	field       string
+	placeholder string
+	value       string
+	optional    bool
 }
 
 // NewPromptManager 从配置文件加载提示词模板。
@@ -83,7 +71,7 @@ func NewPromptManager(configPath string) (*PromptManager, error) {
 	return NewPromptManagerWithOptions(PromptLoadOptions{ConfigPath: configPath})
 }
 
-// NewPromptManagerWithOptions 允许在加载 prompts.yaml 的基础上覆盖核心提示词片段。
+// NewPromptManagerWithOptions 允许在加载 prompts.yaml 的基础上覆盖提示词片段。
 func NewPromptManagerWithOptions(options PromptLoadOptions) (*PromptManager, error) {
 	cfgPath := strings.TrimSpace(options.ConfigPath)
 	if cfgPath == "" {
@@ -95,32 +83,27 @@ func NewPromptManagerWithOptions(options PromptLoadOptions) (*PromptManager, err
 		return nil, fmt.Errorf("read prompts config: %w", err)
 	}
 
-	cfg, err := parsePromptYAML(raw, len(options.CoreFiles) > 0)
+	cfg, err := parsePromptYAML(raw, promptSectionOptions{
+		coreJob:            len(options.CoreFiles) > 0,
+		runtimeConstraints: len(options.RuntimeConstraintFiles) > 0,
+		responseRules:      len(options.ResponseRuleFiles) > 0,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("parse prompts config %q: %w", resolvedPath, err)
 	}
-	if len(options.CoreFiles) > 0 {
-		coreJob, err := loadCoreJobFromFiles(options.CoreDir, options.CoreFiles)
-		if err != nil {
-			return nil, fmt.Errorf("load core job: %w", err)
-		}
-		cfg.System.CoreJob = coreJob
+	if err := applyPromptOverrides(&cfg, options); err != nil {
+		return nil, err
 	}
 
-	return &PromptManager{
-		config:   cfg,
-		template: cfg.System.Default,
-	}, nil
+	return newPromptManager(cfg), nil
 }
 
-// NewPromptManagerWithDefault 使用内置模板，避免配置缺失时阻塞启动。
+// NewPromptManagerWithDefault 使用仓库内置 prompts.yaml，避免配置缺失时阻塞启动。
 func NewPromptManagerWithDefault() *PromptManager {
-	cfg := PromptConfig{
-		Version: defaultPromptVersion,
-	}
-	cfg.System.Default = defaultSystemPromptTemplate
-	cfg.System.CoreJob = defaultCoreJob
+	return newPromptManager(mustDefaultPromptConfig())
+}
 
+func newPromptManager(cfg PromptConfig) *PromptManager {
 	return &PromptManager{
 		config:   cfg,
 		template: cfg.System.Default,
@@ -129,25 +112,71 @@ func NewPromptManagerWithDefault() *PromptManager {
 
 // Render 渲染系统提示词并替换模板变量。
 func (pm *PromptManager) Render(vars map[string]string) string {
-	template := ""
-	coreJob := ""
-	if pm == nil || strings.TrimSpace(pm.template) == "" {
-		template = defaultSystemPromptTemplate
-		coreJob = defaultCoreJob
-	} else {
-		template = pm.template
-		coreJob = strings.TrimSpace(pm.config.System.CoreJob)
+	cfg := mustDefaultPromptConfig()
+	if pm != nil && strings.TrimSpace(pm.template) != "" {
+		cfg = pm.config
 	}
 
-	merged := make(map[string]string, len(vars)+1)
-	if coreJob != "" {
-		merged["core_job"] = coreJob
+	merged := map[string]string{
+		"core_job":            strings.TrimSpace(cfg.System.CoreJob),
+		"tool_guidance":       defaultToolGuidance,
+		"runtime_constraints": strings.TrimSpace(cfg.System.RuntimeConstraints),
+		"response_rules":      strings.TrimSpace(cfg.System.ResponseRules),
 	}
 	for key, value := range vars {
 		merged[key] = value
 	}
 
-	return strings.TrimSpace(RenderTemplate(template, merged))
+	return strings.TrimSpace(RenderTemplate(cfg.System.Default, merged))
+}
+
+func mustDefaultPromptConfig() PromptConfig {
+	defaultPromptConfigOnce.Do(func() {
+		defaultPromptConfig, defaultPromptConfigErr = parsePromptYAML(
+			[]byte(defaultPromptConfigYAML),
+			promptSectionOptions{},
+		)
+	})
+	if defaultPromptConfigErr != nil {
+		panic(fmt.Sprintf("parse bundled prompts config: %v", defaultPromptConfigErr))
+	}
+	return defaultPromptConfig
+}
+
+func applyPromptOverrides(cfg *PromptConfig, options PromptLoadOptions) error {
+	overrides := []struct {
+		files []string
+		name  string
+		set   func(string)
+	}{
+		{
+			files: options.CoreFiles,
+			name:  "core job",
+			set:   func(content string) { cfg.System.CoreJob = content },
+		},
+		{
+			files: options.RuntimeConstraintFiles,
+			name:  "runtime constraints",
+			set:   func(content string) { cfg.System.RuntimeConstraints = content },
+		},
+		{
+			files: options.ResponseRuleFiles,
+			name:  "response rules",
+			set:   func(content string) { cfg.System.ResponseRules = content },
+		},
+	}
+
+	for _, override := range overrides {
+		if len(override.files) == 0 {
+			continue
+		}
+		content, err := loadPromptSectionFromFiles(options.CoreDir, override.files)
+		if err != nil {
+			return fmt.Errorf("load %s: %w", override.name, err)
+		}
+		override.set(content)
+	}
+	return nil
 }
 
 func readPromptConfigFile(path string) ([]byte, string, error) {
@@ -185,53 +214,90 @@ func promptPathCandidates(path string) []string {
 	return []string{primary, fallback}
 }
 
-func parsePromptYAML(raw []byte, allowMissingCoreJob bool) (PromptConfig, error) {
+func parsePromptYAML(raw []byte, optional promptSectionOptions) (PromptConfig, error) {
 	cfg := PromptConfig{}
 	if err := yaml.Unmarshal(raw, &cfg); err != nil {
 		return PromptConfig{}, err
 	}
-
 	if strings.TrimSpace(cfg.Version) == "" {
 		cfg.Version = defaultPromptVersion
 	}
 	if strings.TrimSpace(cfg.System.Default) == "" {
 		return PromptConfig{}, errSystemDefaultRequired
 	}
-	if strings.Contains(cfg.System.Default, "{{core_job}}") && strings.TrimSpace(cfg.System.CoreJob) == "" && !allowMissingCoreJob {
-		return PromptConfig{}, errors.New("system.core_job is required when system.default references {{core_job}}")
-	}
 
+	requirements := []promptSectionRequirement{
+		{
+			field:       "system.core_job",
+			placeholder: "{{core_job}}",
+			value:       cfg.System.CoreJob,
+			optional:    optional.coreJob,
+		},
+		{
+			field:       "system.runtime_constraints",
+			placeholder: "{{runtime_constraints}}",
+			value:       cfg.System.RuntimeConstraints,
+			optional:    optional.runtimeConstraints,
+		},
+		{
+			field:       "system.response_rules",
+			placeholder: "{{response_rules}}",
+			value:       cfg.System.ResponseRules,
+			optional:    optional.responseRules,
+		},
+	}
+	for _, requirement := range requirements {
+		if err := validatePromptSection(cfg.System.Default, requirement); err != nil {
+			return PromptConfig{}, err
+		}
+	}
 	return cfg, nil
 }
 
-func loadCoreJobFromFiles(coreDir string, files []string) (string, error) {
-	trimmedDir := strings.TrimSpace(coreDir)
-	if trimmedDir == "" {
-		return "", errors.New("prompts core dir is empty")
+func validatePromptSection(template string, requirement promptSectionRequirement) error {
+	if !strings.Contains(template, requirement.placeholder) {
+		return nil
 	}
-	baseDir := filepath.Clean(trimmedDir)
+	if requirement.optional || strings.TrimSpace(requirement.value) != "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"%s is required when system.default references %s",
+		requirement.field,
+		requirement.placeholder,
+	)
+}
+
+func loadPromptSectionFromFiles(baseDir string, files []string) (string, error) {
 	parts := make([]string, 0, len(files))
+	root := strings.TrimSpace(baseDir)
+	if root != "" {
+		root = filepath.Clean(root)
+	}
 	for _, file := range files {
 		path := strings.TrimSpace(file)
 		if path == "" {
-			return "", errors.New("prompts core file name is empty")
+			return "", errors.New("prompt section file name is empty")
 		}
 		if !filepath.IsAbs(path) {
-			path = filepath.Join(baseDir, path)
+			if root == "" {
+				return "", errors.New("prompts dir is empty for relative prompt section file")
+			}
+			path = filepath.Join(root, path)
 		}
 		cleaned := filepath.Clean(path)
 		raw, err := os.ReadFile(cleaned)
 		if err != nil {
-			return "", fmt.Errorf("read core job file %s: %w", cleaned, err)
+			return "", fmt.Errorf("read prompt section file %s: %w", cleaned, err)
 		}
 		content := strings.TrimSpace(string(raw))
 		if content == "" {
-			return "", fmt.Errorf("core job file %s is empty", cleaned)
+			return "", fmt.Errorf("prompt section file %s is empty", cleaned)
 		}
 		parts = append(parts, content)
 	}
 	if len(parts) == 0 {
-		return "", errors.New("no core job files provided")
+		return "", errors.New("no prompt section files provided")
 	}
 	return strings.Join(parts, "\n\n"), nil
 }

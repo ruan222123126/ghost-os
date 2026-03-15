@@ -49,11 +49,19 @@ func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 		PromptsPath:             valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
 		PromptsDir:              promptsDir,
 		PromptsCoreFiles:        promptsCoreFiles(fileCfg),
-		SessionsPath:            sessionsPathFromEnv(),
-		WebSearchTavilyAPIKey:   runtime.WebSearchTavilyAPIKey,
-		WebSearchExaAPIKey:      runtime.WebSearchExaAPIKey,
-		ProMaxIterations:        intOrEnv(fileCfg.ProMaxIterations, "GHOST_PRO_MAX_ITERATIONS", defaultProMaxIterations),
-		MaxTurns:                intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
+		PromptsRuntimeConstraintFiles: promptPathList(
+			fileCfg.PromptsRuntimeConstraintFiles,
+			"GHOST_PROMPTS_RUNTIME_CONSTRAINT_FILES",
+		),
+		PromptsResponseRuleFiles: promptPathList(
+			fileCfg.PromptsResponseRuleFiles,
+			"GHOST_PROMPTS_RESPONSE_RULE_FILES",
+		),
+		SessionsPath:          sessionsPathFromEnv(),
+		WebSearchTavilyAPIKey: runtime.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:    runtime.WebSearchExaAPIKey,
+		ProMaxIterations:      intOrEnv(fileCfg.ProMaxIterations, "GHOST_PRO_MAX_ITERATIONS", defaultProMaxIterations),
+		MaxTurns:              intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
 	}
 	return finalizeLoadedConfig(cfg)
 }
@@ -177,8 +185,12 @@ func resolvePromptsDir(fileCfg bridgeFileConfig) (string, error) {
 }
 
 func promptsCoreFiles(fileCfg bridgeFileConfig) []string {
-	if fileCfg.PromptsCoreFiles != nil {
-		return normalizeConfiguredPathList(fileCfg.PromptsCoreFiles)
+	return promptPathList(fileCfg.PromptsCoreFiles, "GHOST_PROMPTS_CORE_FILES")
+}
+
+func promptPathList(raw []string, envName string) []string {
+	if raw != nil {
+		return normalizeConfiguredPathList(raw)
 	}
-	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_PROMPTS_CORE_FILES", "")))
+	return normalizeConfiguredPathList(parseStringCSV(getenvDefault(envName, "")))
 }

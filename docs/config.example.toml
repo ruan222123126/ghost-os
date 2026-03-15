@@ -46,9 +46,11 @@ sessions_path = "~/.ghost-os/sessions"
 # web_search_exa_api_key = "exa-..."
 
 prompts_path = "prompts.yaml"
-# Core prompt assembly (optional)
+# Prompt section assembly (optional)
 # prompts_dir = "~/.ghost-os/prompts"
 # prompts_core_files = ["core_job/base.md", "core_job/runtime.md"]
+# prompts_runtime_constraint_files = ["runtime/base.md"]
+# prompts_response_rule_files = ["response/base.md"]
 native_persistent = false
 pro_max_iterations = 20
 # native_binary_path = "/abs/path/to/native"

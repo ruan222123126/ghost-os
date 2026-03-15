@@ -94,6 +94,8 @@ type bridgeFileConfig struct {
 	PromptsPath                           *string                           `toml:"prompts_path,omitempty"`
 	PromptsDir                            *string                           `toml:"prompts_dir,omitempty"`
 	PromptsCoreFiles                      []string                          `toml:"prompts_core_files,omitempty"`
+	PromptsRuntimeConstraintFiles         []string                          `toml:"prompts_runtime_constraint_files,omitempty"`
+	PromptsResponseRuleFiles              []string                          `toml:"prompts_response_rule_files,omitempty"`
 	SessionsPath                          *string                           `toml:"sessions_path,omitempty"`
 	RSSFeedsPath                          *string                           `toml:"rss_feeds_path,omitempty"`
 	RSSInboxPath                          *string                           `toml:"rss_inbox_path,omitempty"`

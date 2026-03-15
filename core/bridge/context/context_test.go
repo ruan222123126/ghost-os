@@ -110,16 +110,15 @@ system:
 func TestNewPromptManagerWithDefault(t *testing.T) {
 	pm := NewPromptManagerWithDefault()
 	rendered := pm.Render(map[string]string{
-		"os_type":     "darwin",
-		"tools_count": "3",
-		"max_turns":   "20",
+		"os_type":   "darwin",
+		"max_turns": "20",
 	})
 
 	if !strings.Contains(rendered, "OS: darwin") {
 		t.Fatalf("rendered prompt missing os variable: %q", rendered)
 	}
-	if !strings.Contains(rendered, "Available tools: 3") {
-		t.Fatalf("rendered prompt missing tools variable: %q", rendered)
+	if !strings.Contains(rendered, defaultToolGuidance) {
+		t.Fatalf("rendered prompt missing default tool guidance: %q", rendered)
 	}
 	if !strings.Contains(rendered, "Max turns: 20") {
 		t.Fatalf("rendered prompt missing max_turns variable: %q", rendered)
@@ -128,9 +127,8 @@ func TestNewPromptManagerWithDefault(t *testing.T) {
 
 func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 	vars := map[string]string{
-		"os_type":     "linux",
-		"tools_count": "9",
-		"max_turns":   "20",
+		"os_type":   "linux",
+		"max_turns": "20",
 	}
 	fromFile, err := NewPromptManager(filepath.Join("..", "prompts.yaml"))
 	if err != nil {
@@ -141,21 +139,29 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 		fromFile.Render(vars),
 		NewPromptManagerWithDefault().Render(vars),
 	}
-	requiredSnippets := []string{
-		"primary workspace tool",
-		"read_and_summarize",
-		"tools.read_file",
-		"feed_manage",
-		"rss_fetch",
-		"screen_action",
-		"## Limits",
-		"END_SESSION",
-	}
-
 	for _, prompt := range prompts {
-		for _, snippet := range requiredSnippets {
+		for _, snippet := range []string{
+			"## Tool Guidance",
+			defaultToolGuidance,
+			"## Runtime Constraints",
+			"## Response Rules",
+		} {
 			if !strings.Contains(prompt, snippet) {
 				t.Fatalf("prompt missing %q: %q", snippet, prompt)
+			}
+		}
+		for _, snippet := range []string{
+			"END_SESSION",
+			"RSS inbox polling and AI filtering",
+			"Available tools:",
+			"Tool list:",
+			"feed_manage",
+			"rss_fetch",
+			"screen_action.click_text",
+			"tools.read_file reads at most 200 lines",
+		} {
+			if strings.Contains(prompt, snippet) {
+				t.Fatalf("prompt should not include %q: %q", snippet, prompt)
 			}
 		}
 	}
@@ -188,6 +194,50 @@ system:
 	rendered := pm.Render(nil)
 	if !strings.Contains(rendered, "Core: from file") {
 		t.Fatalf("unexpected rendered prompt: %q", rendered)
+	}
+}
+
+func TestNewPromptManagerWithSectionFilesOverridesPromptSections(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "prompts.yaml")
+	content := `version: "1.0"
+system:
+  default: |
+    Core: {{core_job}}
+    Runtime: {{runtime_constraints}}
+    Rules: {{response_rules}}
+  core_job: |
+    inline core
+  runtime_constraints: |
+    inline runtime
+  response_rules: |
+    inline rules
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompts file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "runtime.txt"), []byte("from runtime file"), 0o644); err != nil {
+		t.Fatalf("write runtime file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "rules.txt"), []byte("from rules file"), 0o644); err != nil {
+		t.Fatalf("write rules file: %v", err)
+	}
+
+	pm, err := NewPromptManagerWithOptions(PromptLoadOptions{
+		ConfigPath:             configPath,
+		CoreDir:                tempDir,
+		RuntimeConstraintFiles: []string{"runtime.txt"},
+		ResponseRuleFiles:      []string{"rules.txt"},
+	})
+	if err != nil {
+		t.Fatalf("NewPromptManagerWithOptions returned error: %v", err)
+	}
+
+	rendered := pm.Render(nil)
+	for _, snippet := range []string{"Core: inline core", "Runtime: from runtime file", "Rules: from rules file"} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("unexpected rendered prompt, missing %q: %q", snippet, rendered)
+		}
 	}
 }
 
@@ -233,6 +283,31 @@ system:
 		ConfigPath: configPath,
 		CoreDir:    tempDir,
 		CoreFiles:  []string{"core.txt"},
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestNewPromptManagerWithResponseRuleFilesEmptyFileFails(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "prompts.yaml")
+	content := `version: "1.0"
+system:
+  default: |
+    Rules: {{response_rules}}
+`
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write prompts file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tempDir, "rules.txt"), []byte("  "), 0o644); err != nil {
+		t.Fatalf("write rules file: %v", err)
+	}
+
+	_, err := NewPromptManagerWithOptions(PromptLoadOptions{
+		ConfigPath:        configPath,
+		CoreDir:           tempDir,
+		ResponseRuleFiles: []string{"rules.txt"},
 	})
 	if err == nil {
 		t.Fatal("expected error, got nil")

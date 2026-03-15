@@ -118,29 +118,31 @@ type MemoryAugmentationConfig struct {
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
-	Provider                ProviderConfig
-	RSS                     RSSConfig
-	Worker                  WorkerConfig
-	GraphQL                 GraphQLConfig
-	ToolSelector            ToolSelectorConfig
-	ToolSearch              ToolSearchConfig
-	MemoryAugmentation      MemoryAugmentationConfig
-	NativePersistent        bool
-	NativeBinaryPath        string
-	NativeBinaryRoots       []string
-	NativeBinaryCandidates  []string
-	NativeAllowedReadPaths  []string
-	NativeAllowedWritePaths []string
-	ProjectRoot             string
-	ChatPath                string
-	PromptsPath             string
-	PromptsDir              string
-	PromptsCoreFiles        []string
-	SessionsPath            string
-	WebSearchTavilyAPIKey   string
-	WebSearchExaAPIKey      string
-	ProMaxIterations        int
-	MaxTurns                int
+	Provider                      ProviderConfig
+	RSS                           RSSConfig
+	Worker                        WorkerConfig
+	GraphQL                       GraphQLConfig
+	ToolSelector                  ToolSelectorConfig
+	ToolSearch                    ToolSearchConfig
+	MemoryAugmentation            MemoryAugmentationConfig
+	NativePersistent              bool
+	NativeBinaryPath              string
+	NativeBinaryRoots             []string
+	NativeBinaryCandidates        []string
+	NativeAllowedReadPaths        []string
+	NativeAllowedWritePaths       []string
+	ProjectRoot                   string
+	ChatPath                      string
+	PromptsPath                   string
+	PromptsDir                    string
+	PromptsCoreFiles              []string
+	PromptsRuntimeConstraintFiles []string
+	PromptsResponseRuleFiles      []string
+	SessionsPath                  string
+	WebSearchTavilyAPIKey         string
+	WebSearchExaAPIKey            string
+	ProMaxIterations              int
+	MaxTurns                      int
 }
 
 type runtimeConfig struct {

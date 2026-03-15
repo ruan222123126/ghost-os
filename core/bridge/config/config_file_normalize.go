@@ -67,6 +67,8 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 
 func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
 	cfg.PromptsCoreFiles = normalizeConfiguredPathList(cfg.PromptsCoreFiles)
+	cfg.PromptsRuntimeConstraintFiles = normalizeConfiguredPathList(cfg.PromptsRuntimeConstraintFiles)
+	cfg.PromptsResponseRuleFiles = normalizeConfiguredPathList(cfg.PromptsResponseRuleFiles)
 	cfg.NativeBinaryRoots = normalizeConfiguredPathList(cfg.NativeBinaryRoots)
 	cfg.NativeBinaryCandidates = normalizeConfiguredPathList(cfg.NativeBinaryCandidates)
 	cfg.NativeAllowedReadPaths = normalizeConfiguredPathList(cfg.NativeAllowedReadPaths)
