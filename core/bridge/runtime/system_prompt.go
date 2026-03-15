@@ -5,16 +5,26 @@ import (
 	"strconv"
 
 	ctxmgr "ghost-os/bridge/context"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
 func buildSystemPrompt(cfg Config, catalog tools.ToolCatalog) (string, error) {
+	return buildSystemPromptForSession(cfg, catalog, nil, cfg.ToolSearch.IdleTurns)
+}
+
+func buildSystemPromptForSession(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+) (string, error) {
 	promptManager, err := loadPromptManager(cfg)
 	if err != nil {
 		return "", err
 	}
 	contextBuilder := ctxmgr.NewBuilder(promptManager, catalog)
-	return contextBuilder.BuildSystemPrompt(systemPromptVars(cfg, catalog)), nil
+	return contextBuilder.BuildSystemPrompt(systemPromptVars(cfg, catalog, sess, idleTurns)), nil
 }
 
 func loadPromptManager(cfg Config) (*ctxmgr.PromptManager, error) {
@@ -34,12 +44,18 @@ func loadPromptManager(cfg Config) (*ctxmgr.PromptManager, error) {
 	return ctxmgr.NewPromptManagerWithDefault(), nil
 }
 
-func systemPromptVars(cfg Config, catalog tools.ToolCatalog) map[string]string {
+func systemPromptVars(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+) map[string]string {
 	return map[string]string{
-		"os_type":       goruntime.GOOS,
-		"tool_guidance": tools.FormatPromptGuidanceForCatalog(catalog),
-		"max_turns":     strconv.Itoa(cfg.MaxTurns),
-		"project_root":  resolvePromptProjectRoot(cfg.ProjectRoot),
+		"os_type":            goruntime.GOOS,
+		"tool_guidance":      tools.FormatPromptGuidanceForCatalog(catalog),
+		"dynamic_tool_state": formatDynamicToolState(sess, idleTurns),
+		"max_turns":          strconv.Itoa(cfg.MaxTurns),
+		"project_root":       resolvePromptProjectRoot(cfg.ProjectRoot),
 	}
 }
 

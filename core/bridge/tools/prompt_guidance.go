@@ -9,6 +9,7 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 	}
 	lines = append(lines, rssPromptGuidance(names)...)
 	lines = append(lines, workspacePromptGuidance(names)...)
+	lines = append(lines, toolSearchPromptGuidance(names)...)
 	lines = append(lines, humanPromptGuidance(names)...)
 	lines = append(lines, graphQLPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
@@ -40,6 +41,19 @@ func workspacePromptGuidance(names map[string]bool) []string {
 		}
 	default:
 		return nil
+	}
+}
+
+func toolSearchPromptGuidance(names map[string]bool) []string {
+	if !names[ToolSearchToolName] {
+		return nil
+	}
+	return []string{
+		"- Use `tfind` when the currently visible tools are insufficient.",
+		"- Start with `tfind(action=\"search\")` to find the smallest suitable optional tool.",
+		"- After `tfind(action=\"load\")`, do not call the loaded tool in the same turn; it becomes available next turn.",
+		"- Use `tfind(action=\"list\")` to check whether a loaded tool is pending, active, or expired.",
+		"- Unload tools you no longer need with `tfind(action=\"unload\")`.",
 	}
 }
 

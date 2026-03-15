@@ -79,6 +79,15 @@ func BuildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string,
 	return buildSystemPromptForCatalog(cfg, catalog)
 }
 
+func BuildSystemPromptForSession(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+) (string, error) {
+	return buildSystemPromptForSession(cfg, catalog, sess, idleTurns)
+}
+
 func NewSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *session.Session, idleTurns int, selector bool) tools.ToolCatalog {
 	return newSessionTurnCatalog(catalog, static, sess, idleTurns, selector)
 }

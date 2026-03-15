@@ -56,7 +56,12 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 	if err != nil {
 		return nil, err
 	}
-	historyBuilder := newSessionHistoryBuilder(deps.cfg.Provider, deps.systemPrompt, p.sessionStore)
+	historyBuilder := newSessionHistoryBuilder(
+		deps.cfg.Provider,
+		deps.systemPrompt,
+		p.sessionStore,
+		deps.cfg.ToolSearch.IdleTurns,
+	)
 	persistence := newSessionTurnCommitter(p.sessionStore, deps.memoryLearn)
 
 	sess, err := historyBuilder.LoadOrCreateSession(sessionID)
@@ -124,7 +129,15 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	finalPrompt, err := p.buildSystemPromptWithMemory(ctx, deps, sess.ID, history, trimmedUserMessage, systemPrompt)
+	finalPrompt, err := p.buildSystemPromptWithMemory(
+		ctx,
+		deps,
+		sess,
+		history,
+		trimmedUserMessage,
+		systemPrompt,
+		catalog,
+	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -138,14 +151,31 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
-	sessionID string,
+	sess *session.Session,
 	history *agent.History,
 	userMessage string,
 	systemPrompt string,
+	catalog tools.ToolCatalog,
 ) (string, error) {
 	basePrompt := strings.TrimSpace(systemPrompt)
 	if basePrompt == "" {
+		prompt, err := buildSystemPromptForSession(
+			deps.cfg,
+			catalog,
+			sess,
+			deps.cfg.ToolSearch.IdleTurns,
+		)
+		if err != nil {
+			return "", err
+		}
+		basePrompt = strings.TrimSpace(prompt)
+	}
+	if basePrompt == "" {
 		basePrompt = strings.TrimSpace(deps.systemPrompt)
+	}
+	sessionID := ""
+	if sess != nil {
+		sessionID = sess.ID
 	}
 	memoryBlock, err := p.buildMemoryBlock(ctx, deps, sessionID, history, userMessage)
 	if err != nil {
@@ -219,7 +249,12 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 	}
 
 	scoped := tools.NewScopedCatalog(baseCatalog, policy.apply(toolCatalogNames(baseCatalog), result.Tools))
-	systemPrompt, err := buildSystemPromptForCatalog(deps.cfg, scoped)
+	systemPrompt, err := buildSystemPromptForSession(
+		deps.cfg,
+		scoped,
+		sess,
+		deps.cfg.ToolSearch.IdleTurns,
+	)
 	if err != nil {
 		return nil, "", err
 	}

@@ -11,6 +11,9 @@ system:
     ## Tool Guidance
     {{tool_guidance}}
 
+    ## Dynamic Tool State
+    {{dynamic_tool_state}}
+
     ## Runtime Constraints
     {{runtime_constraints}}
 

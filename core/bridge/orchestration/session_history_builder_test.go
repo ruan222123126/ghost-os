@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +24,12 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 		t.Fatalf("expected human answer to be accepted")
 	}
 
-	builder := newSessionHistoryBuilder(ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"}, "system", nil)
+	builder := newSessionHistoryBuilder(
+		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		"system",
+		nil,
+		3,
+	)
 	history, resolved := builder.BuildHistoryWithResolvedQuestions(sess)
 	if len(resolved) != 1 {
 		t.Fatalf("expected 1 resolved question, got %d", len(resolved))
@@ -89,7 +95,12 @@ func TestSessionHistoryBuilderInjectsGraphQLMutationResolvedToolResult(t *testin
 		t.Fatalf("expected human answer to be accepted")
 	}
 
-	builder := newSessionHistoryBuilder(ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"}, "system", nil)
+	builder := newSessionHistoryBuilder(
+		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		"system",
+		nil,
+		3,
+	)
 	history, resolved := builder.BuildHistoryWithResolvedQuestions(sess)
 	if len(resolved) != 1 {
 		t.Fatalf("expected 1 resolved question, got %d", len(resolved))
@@ -112,5 +123,88 @@ func TestSessionHistoryBuilderInjectsGraphQLMutationResolvedToolResult(t *testin
 	}
 	if payload["intent_id"] != "intent-1" || payload["approval_status"] != session.GraphQLMutationIntentApproved {
 		t.Fatalf("unexpected graphql_mutation payload: %+v", payload)
+	}
+}
+
+func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) {
+	sess := session.NewSession("system")
+	sess.AddMessage(llm.Message{
+		Role: llm.RoleAssistant,
+		ToolCalls: []llm.ToolCall{{
+			ID:        "call-tfind-load",
+			Name:      "tfind",
+			Arguments: []byte(`{"action":"load","tool_names":["web_search"]}`),
+		}},
+	})
+	sess.AddMessage(llm.Message{
+		Role:       llm.RoleTool,
+		ToolCallID: "call-tfind-load",
+		Text: agent.FormatToolResult(
+			"tfind",
+			"trace-tfind-load",
+			`{"action":"load","items":[{"name":"web_search","status":"loaded","available_next_turn":true}]}`,
+			nil,
+		),
+	})
+
+	builder := newSessionHistoryBuilder(
+		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		"system",
+		nil,
+		3,
+	)
+	history := builder.BuildHistory(sess)
+	messages := history.Messages()
+	if len(messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want 2", len(messages))
+	}
+	if messages[1].Role != llm.RoleAssistant {
+		t.Fatalf("expected projected assistant summary, got %+v", messages[1])
+	}
+	if !strings.Contains(messages[1].Text, "Loaded dynamic session tools via tfind: `web_search`.") {
+		t.Fatalf("unexpected projected summary: %q", messages[1].Text)
+	}
+	if !strings.Contains(messages[1].Text, "become available next turn") {
+		t.Fatalf("expected next-turn hint in projected summary, got %q", messages[1].Text)
+	}
+}
+
+func TestSessionHistoryBuilder_KeepsToolSearchSearchSpanUnchanged(t *testing.T) {
+	sess := session.NewSession("system")
+	sess.AddMessage(llm.Message{
+		Role: llm.RoleAssistant,
+		ToolCalls: []llm.ToolCall{{
+			ID:        "call-tfind-search",
+			Name:      "tfind",
+			Arguments: []byte(`{"action":"search","query":"web"}`),
+		}},
+	})
+	sess.AddMessage(llm.Message{
+		Role:       llm.RoleTool,
+		ToolCallID: "call-tfind-search",
+		Text: agent.FormatToolResult(
+			"tfind",
+			"trace-tfind-search",
+			`{"action":"search","items":[{"name":"web_search","summary":"Search the web."}]}`,
+			nil,
+		),
+	})
+
+	builder := newSessionHistoryBuilder(
+		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		"system",
+		nil,
+		3,
+	)
+	history := builder.BuildHistory(sess)
+	messages := history.Messages()
+	if len(messages) != 3 {
+		t.Fatalf("unexpected message count: got %d want 3", len(messages))
+	}
+	if len(messages[1].ToolCalls) != 1 || messages[1].ToolCalls[0].Name != "tfind" {
+		t.Fatalf("expected tfind tool call to remain in history, got %+v", messages[1])
+	}
+	if messages[2].Role != llm.RoleTool || messages[2].ToolCallID != "call-tfind-search" {
+		t.Fatalf("expected tool result to remain in history, got %+v", messages[2])
 	}
 }

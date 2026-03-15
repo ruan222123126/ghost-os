@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
@@ -75,5 +76,59 @@ func TestBuildSystemPromptForCatalogInjectsRSSGuidanceOnlyWhenVisible(t *testing
 	}
 	if strings.Contains(withoutRSS, "END_SESSION") {
 		t.Fatalf("expected default system prompt to exclude END_SESSION protocol, got %q", withoutRSS)
+	}
+}
+
+func TestBuildSystemPromptForCatalogIncludesDynamicToolStateSection(t *testing.T) {
+	registry := tools.NewRegistry()
+	registry.Register(&catalogMockTool{name: "ask_human"})
+
+	prompt, err := buildSystemPromptForCatalog(Config{MaxTurns: 3}, registry)
+	if err != nil {
+		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
+	}
+	for _, snippet := range []string{"## Dynamic Tool State", "No dynamic tools loaded"} {
+		if !strings.Contains(prompt, snippet) {
+			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
+		}
+	}
+}
+
+func TestBuildSystemPromptForSessionIncludesPendingAndActiveDynamicTools(t *testing.T) {
+	registry := tools.NewRegistry()
+	for _, name := range []string{"ask_human", "web_search"} {
+		registry.Register(&catalogMockTool{name: name})
+	}
+	catalog := tools.NewScopedCatalog(registry, []string{"ask_human", "web_search"})
+
+	sess := session.NewSession("")
+	sess.AdvanceToolTurn(3)
+	sess.EnsureDynamicToolLoaded("web_search", "tfind")
+
+	pending, err := buildSystemPromptForSession(
+		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}},
+		catalog,
+		sess,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("buildSystemPromptForSession returned error: %v", err)
+	}
+	if !strings.Contains(pending, "`web_search` was loaded this turn and becomes available next turn.") {
+		t.Fatalf("expected pending dynamic tool state, got %q", pending)
+	}
+
+	sess.AdvanceToolTurn(3)
+	active, err := buildSystemPromptForSession(
+		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}},
+		catalog,
+		sess,
+		3,
+	)
+	if err != nil {
+		t.Fatalf("buildSystemPromptForSession returned error: %v", err)
+	}
+	if !strings.Contains(active, "`web_search` is active in this session; remaining_idle_turns=3.") {
+		t.Fatalf("expected active dynamic tool state, got %q", active)
 	}
 }

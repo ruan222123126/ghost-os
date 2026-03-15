@@ -15,6 +15,7 @@ const (
 	defaultPromptVersion = "1.0"
 	defaultPromptPath    = "prompts.yaml"
 	defaultToolGuidance  = "- Use only the tools included in the structured tool schema for this turn."
+	defaultDynamicState  = "- No dynamic tools loaded."
 )
 
 var (
@@ -120,6 +121,7 @@ func (pm *PromptManager) Render(vars map[string]string) string {
 	merged := map[string]string{
 		"core_job":            strings.TrimSpace(cfg.System.CoreJob),
 		"tool_guidance":       defaultToolGuidance,
+		"dynamic_tool_state":  defaultDynamicState,
 		"runtime_constraints": strings.TrimSpace(cfg.System.RuntimeConstraints),
 		"response_rules":      strings.TrimSpace(cfg.System.ResponseRules),
 	}

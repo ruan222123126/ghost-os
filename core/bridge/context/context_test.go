@@ -123,6 +123,9 @@ func TestNewPromptManagerWithDefault(t *testing.T) {
 	if !strings.Contains(rendered, "Max turns: 20") {
 		t.Fatalf("rendered prompt missing max_turns variable: %q", rendered)
 	}
+	if !strings.Contains(rendered, defaultDynamicState) {
+		t.Fatalf("rendered prompt missing dynamic tool state default: %q", rendered)
+	}
 }
 
 func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
@@ -142,7 +145,9 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 	for _, prompt := range prompts {
 		for _, snippet := range []string{
 			"## Tool Guidance",
+			"## Dynamic Tool State",
 			defaultToolGuidance,
+			defaultDynamicState,
 			"## Runtime Constraints",
 			"## Response Rules",
 		} {
@@ -159,6 +164,7 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			"rss_fetch",
 			"screen_action.click_text",
 			"tools.read_file reads at most 200 lines",
+			"{{dynamic_tool_state}}",
 		} {
 			if strings.Contains(prompt, snippet) {
 				t.Fatalf("prompt should not include %q: %q", snippet, prompt)

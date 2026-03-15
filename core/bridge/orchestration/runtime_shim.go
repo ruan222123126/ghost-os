@@ -107,6 +107,15 @@ func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string,
 	return bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
 }
 
+func buildSystemPromptForSession(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+) (string, error) {
+	return bridgeruntime.BuildSystemPromptForSession(cfg, catalog, sess, idleTurns)
+}
+
 func newSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *session.Session, idleTurns int, selector bool) tools.ToolCatalog {
 	return bridgeruntime.NewSessionTurnCatalog(catalog, static, sess, idleTurns, selector)
 }

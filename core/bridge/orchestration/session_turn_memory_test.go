@@ -135,6 +135,66 @@ func TestSessionRunnerRecallDoesNotBreakAskHumanContinuation(t *testing.T) {
 	}
 }
 
+func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	sess := session.NewSession("base system prompt")
+	sess.AdvanceToolTurn(3)
+	sess.EnsureDynamicToolLoaded("graphql_query", "tfind")
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{{
+			Message:      llm.Message{Role: llm.RoleAssistant, Text: "continuing"},
+			FinishReason: llm.FinishStop,
+		}},
+	}
+	registry := tools.NewRegistry()
+	for _, name := range []string{"ask_human", "tfind", "graphql_query"} {
+		registry.Register(&runnerMockTool{name: name})
+	}
+
+	runner := NewSessionAgentRunner(proTestRuntimeFactory{
+		deps: agentRuntimeDependencies{
+			cfg: Config{
+				MaxTurns:    3,
+				PromptsPath: "",
+				Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+				ToolSearch: ToolSearchConfig{
+					Enabled:   true,
+					IdleTurns: 3,
+				},
+			},
+			client:       completer,
+			registry:     registry,
+			systemPrompt: "base system prompt",
+		},
+	}, nil, sessionStore, nil)
+
+	if _, _, err := runner.RunTurn(context.Background(), "continue", sess.ID, "trace-dynamic-tools"); err != nil {
+		t.Fatalf("run turn: %v", err)
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("expected one completion request, got %d", len(completer.requests))
+	}
+
+	request := completer.requests[0]
+	prompt := request.Messages[0].Text
+	for _, snippet := range []string{
+		"## Dynamic Tool State",
+		"`graphql_query` is active in this session; remaining_idle_turns=3.",
+		"`tfind(action=\"search\")`",
+	} {
+		if !strings.Contains(prompt, snippet) {
+			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
+		}
+	}
+	if !containsToolDef(request.Tools, "graphql_query") {
+		t.Fatalf("expected dynamically loaded tool to be available this turn, got %+v", request.Tools)
+	}
+}
+
 func TestSessionRunnerBuildsRecallQueryFromRecentContext(t *testing.T) {
 	sessionStore := newTempSessionStore(t)
 	sess := session.NewSession("base system prompt")
@@ -202,6 +262,15 @@ func newTempSessionStore(t *testing.T) *session.Store {
 func containsToolMessage(messages []llm.Message, toolCallID string) bool {
 	for _, message := range messages {
 		if message.Role == llm.RoleTool && message.ToolCallID == toolCallID {
+			return true
+		}
+	}
+	return false
+}
+
+func containsToolDef(defs []llm.ToolDef, name string) bool {
+	for _, def := range defs {
+		if def.Name == name {
 			return true
 		}
 	}

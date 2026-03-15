@@ -16,6 +16,7 @@ type SessionHistoryBuilder struct {
 	provider     ProviderConfig
 	systemPrompt string
 	sessionStore *session.Store
+	idleTurns    int
 }
 
 type resolvedHumanQuestion struct {
@@ -30,11 +31,17 @@ type resolvedHumanQuestion struct {
 	AnsweredAt time.Time
 }
 
-func newSessionHistoryBuilder(provider ProviderConfig, systemPrompt string, sessionStore *session.Store) *SessionHistoryBuilder {
+func newSessionHistoryBuilder(
+	provider ProviderConfig,
+	systemPrompt string,
+	sessionStore *session.Store,
+	idleTurns int,
+) *SessionHistoryBuilder {
 	return &SessionHistoryBuilder{
 		provider:     provider,
 		systemPrompt: strings.TrimSpace(systemPrompt),
 		sessionStore: sessionStore,
+		idleTurns:    idleTurns,
 	}
 }
 
@@ -81,7 +88,9 @@ func (b *SessionHistoryBuilder) BuildHistoryWithResolvedQuestions(sess *session.
 		ModelContextWindowTokens:   b.provider.ModelContextWindowTokens,
 		ModelResponseReserveTokens: b.provider.ModelResponseReserveTokens,
 	})
-	messages := messagesWithSystemPrompt(sess.GetMessages(contextLimit), b.systemPrompt)
+	rawMessages := sess.GetMessages(contextLimit)
+	projected := projectMessagesForModel(rawMessages, b.idleTurns)
+	messages := messagesWithSystemPrompt(projected, b.systemPrompt)
 	history := agent.NewHistoryFromMessages(messages)
 	if sess != nil && !sess.ConversationState.IsZero() && sess.ConversationState.Matches(b.provider.Type, b.provider.BaseURL, b.provider.Model) {
 		history.SetConversationState(sess.ConversationState)

@@ -23,6 +23,18 @@
 
 ### 2026-03-15
 
+- 收口 `tfind` 的模型侧工具面管理语义：
+  - `tools.FormatPromptGuidanceForCatalog` 新增 `tfind` 专用 workflow guidance，明确 `search -> load -> next turn use -> list/unload` 的使用顺序与同轮限制。
+  - `core/bridge/orchestration` 新增仅作用于模型输入的 history projection；会话存储仍保留完整 `tfind` assistant/tool 原始 JSON，下一轮喂给模型时只把 `load` / `list` / `unload` span 压成简短 assistant 摘要。
+  - `core/bridge/runtime` 新增 `Dynamic Tool State` prompt 区块，按 session 当前 `dynamic_tool_loads` 注入 pending/active/expired 状态；基础回合与 selector subset 回合现都按当前 session catalog 重建 prompt。
+  - `core/bridge/context` 默认 prompt 渲染已补齐 `dynamic_tool_state` 缺省值，并重新生成内置 `prompts.yaml` 默认模板。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go generate -C core/bridge/context`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./context -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tools -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./runtime -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -timeout 60s`
+
 - 收口主 prompt 模板并消除双份维护：
   - `core/bridge/prompts.yaml` 现只保留最小骨架，`runtime_constraints` 与 `response_rules` 改为独立 section；默认模板不再常驻写入 RSS pipeline、`screen_action` 细分说明或 `END_SESSION` 协议。
   - `core/bridge/context` 改为从单一 `prompts.yaml` 真源生成内置默认配置，`prompt.go` 不再手写第二份同构长模板。
