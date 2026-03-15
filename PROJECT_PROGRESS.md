@@ -23,6 +23,12 @@
 
 ### 2026-03-15
 
+- 清理 orchestration 与 RSS 间已漂移的重复文本工具实现：
+  - 删除 `core/bridge/orchestration/textutil.go` 中未被调用的 `effectiveWorkerModel` 与 `stripJSONCodeFence`，避免与 `core/bridge/rss/export.go` 中仍在实际使用的实现继续双份维护。
+  - orchestration 侧仅保留仍有调用点的 `truncateRunes`，RSS 侧继续复用自身导出的文本辅助函数。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./rss ./orchestration -timeout 60s`
+
 - 清理 transport SSE 死代码：
   - `core/bridge/transport/transport_sse.go` 已删除未被任何 transport 路径调用的 `eventTurnTracker`、`finalAssistantTurn`、`emitStreamErrorEvent` 及其连带 helper，避免 SSE 入口继续保留误导性分支。
 - 本轮验证：
