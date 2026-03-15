@@ -34,10 +34,15 @@ func renderAgentRSSReportPrompt(
 	briefing RSSBriefingResult,
 	groups []RSSInboxTopicGroup,
 	query RSSReportQuery,
+	toolGuidance string,
 ) string {
+	guidance := strings.TrimSpace(toolGuidance)
+	if guidance == "" {
+		guidance = "Use the currently available tools when needed to validate important claims, inspect primary sources, and add missing context."
+	}
 	return strings.TrimSpace(fmt.Sprintf(`Read the dossier file at %s first.
 
-You may use script_exec (with tools.read_file/tools.search_files), read_and_summarize, web_search, and rss_fetch to investigate the topics, validate important claims, inspect primary sources, and add missing context.
+%s
 
 Return the final report in Markdown only.
 Write the entire report in Simplified Chinese.
@@ -51,5 +56,5 @@ Report context:
 - highlight_count: %d
 - group_count: %d
 - trace_id: %s
-- task_id: %s`, query.DossierPath, report.Title, report.Title, report.ID, briefing.ID, len(briefing.Highlights), len(groups), query.TraceID, query.TaskID))
+- task_id: %s`, query.DossierPath, guidance, report.Title, report.Title, report.ID, briefing.ID, len(briefing.Highlights), len(groups), query.TraceID, query.TaskID))
 }

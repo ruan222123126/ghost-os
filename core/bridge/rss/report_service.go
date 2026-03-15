@@ -69,9 +69,10 @@ func (b *agentRSSReportBuilder) Build(
 	}
 	systemPrompt := basePrompt + "\n\n" + rssReportInvestigationSystemPrompt
 	reportAgent := agent.NewAgent(deps.client, scoped, systemPrompt, deps.cfg.MaxTurns)
+	toolGuidance := renderRSSReportToolGuidance(scoped)
 	response, err := reportAgent.RunWithTraceID(
 		runCtx,
-		renderAgentRSSReportPrompt(report, briefing, groups, query),
+		renderAgentRSSReportPrompt(report, briefing, groups, query, toolGuidance),
 		query.TraceID,
 	)
 	if err != nil {
@@ -99,6 +100,23 @@ func (b *agentRSSReportBuilder) allowedToolNames() []string {
 		return append([]string(nil), b.allowedTools...)
 	}
 	return []string{"script_exec", "read_and_summarize", "web_search", "rss_fetch"}
+}
+
+func renderRSSReportToolGuidance(catalog tools.ToolCatalog) string {
+	names := tools.CatalogToolNames(catalog)
+	if len(names) == 0 {
+		return ""
+	}
+	return "Use available tools when needed to validate important claims, inspect primary sources, and add missing context. Investigation tools for this run: " +
+		formatRSSReportToolNames(names) + "."
+}
+
+func formatRSSReportToolNames(names []string) string {
+	formatted := make([]string, 0, len(names))
+	for _, name := range names {
+		formatted = append(formatted, "`"+strings.TrimSpace(name)+"`")
+	}
+	return strings.Join(formatted, ", ")
 }
 
 func normalizeRSSReportQuery(query RSSReportQuery) RSSReportQuery {

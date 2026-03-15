@@ -277,6 +277,12 @@ func TestAgentRSSReportBuilderUsesScopedToolsAndDossier(t *testing.T) {
 	if got := completer.requests[0].Messages[len(completer.requests[0].Messages)-1].Text; !strings.Contains(got, "Do not move sources into a separate appendix section") {
 		t.Fatalf("expected prompt to require inline event sources, got %q", got)
 	}
+	if got := completer.requests[0].Messages[len(completer.requests[0].Messages)-1].Text; !strings.Contains(got, "Investigation tools for this run: `script_exec`, `web_search`.") {
+		t.Fatalf("expected prompt to include scoped tool guidance, got %q", got)
+	}
+	if got := completer.requests[0].Messages[len(completer.requests[0].Messages)-1].Text; strings.Contains(got, "`read_and_summarize`") || strings.Contains(got, "`rss_fetch`") {
+		t.Fatalf("expected prompt to exclude unavailable investigation tools, got %q", got)
+	}
 	lastTools := completer.requests[0].Tools
 	if len(lastTools) != 2 {
 		t.Fatalf("expected scoped tools, got %d tool defs", len(lastTools))
@@ -361,6 +367,7 @@ func TestRenderAgentRSSReportPromptRequiresChinese(t *testing.T) {
 		RSSBriefingResult{ID: "rssb_test"},
 		nil,
 		RSSReportQuery{DossierPath: "/tmp/rssr_test.source.md"},
+		"Use available tools when needed to validate important claims.",
 	)
 	if !strings.Contains(prompt, "Simplified Chinese") {
 		t.Fatalf("expected prompt to require simplified chinese, got %q", prompt)
@@ -370,6 +377,22 @@ func TestRenderAgentRSSReportPromptRequiresChinese(t *testing.T) {
 	}
 	if !strings.Contains(prompt, "Do not move sources into a separate appendix section") {
 		t.Fatalf("expected prompt to require inline sources, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use available tools when needed to validate important claims.") {
+		t.Fatalf("expected prompt to include caller tool guidance, got %q", prompt)
+	}
+}
+
+func TestRenderAgentRSSReportPromptFallsBackToDefaultToolGuidance(t *testing.T) {
+	prompt := renderAgentRSSReportPrompt(
+		RSSReportResult{ID: "rssr_test", Title: "RSS Report - 2026-03-09 12:00 UTC"},
+		RSSBriefingResult{ID: "rssb_test"},
+		nil,
+		RSSReportQuery{DossierPath: "/tmp/rssr_test.source.md"},
+		"",
+	)
+	if !strings.Contains(prompt, "Use the currently available tools when needed to validate important claims, inspect primary sources, and add missing context.") {
+		t.Fatalf("expected prompt to fall back to default tool guidance, got %q", prompt)
 	}
 }
 
