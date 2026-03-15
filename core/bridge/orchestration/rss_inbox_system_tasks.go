@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
 
 type rssSystemTaskCoordinator struct {
@@ -74,9 +76,9 @@ func (c rssSystemTaskCoordinator) loadConfig() (Config, error) {
 		return Config{}, c.rssInitErr
 	}
 	if c.configStore != nil {
-		return loadConfigWithRuntime(c.configStore.RuntimeConfig())
+		return bridgeconfig.LoadWithRuntime(c.configStore.RuntimeConfig())
 	}
-	return LoadConfig()
+	return bridgeconfig.Load()
 }
 
 func (c rssSystemTaskCoordinator) syncTask(id string, task ScheduledTask, enabled bool) error {

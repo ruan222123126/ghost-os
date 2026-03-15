@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	bridgeconfig "ghost-os/bridge/config"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
@@ -175,7 +176,7 @@ func (s *bridgeService) initTaskRuntime() error {
 		s.taskInitErr = nil
 		return nil
 	}
-	taskStore, err := NewTaskStore(tasksPathFromEnv())
+	taskStore, err := NewTaskStore(bridgeconfig.TasksPathFromEnv())
 	if err != nil {
 		s.taskInitErr = err
 		return err
