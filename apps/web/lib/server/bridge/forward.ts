@@ -6,20 +6,17 @@ import type { ForwardBridgeOptions } from './types';
 const BRIDGE_BASE_URL =
   process.env.GHOST_BRIDGE_URL ?? process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8080';
 
-const DOWNLOAD_HEADERS = ['Content-Type', 'Content-Length', 'Content-Disposition', 'ETag', 'X-Artifact-SHA256'];
-
-async function passThroughToBridge(path: string, init: RequestInit): Promise<Response> {
-  const response = await fetch(`${BRIDGE_BASE_URL}${path}`, {
+async function fetchBridge(path: string, init: RequestInit): Promise<Response> {
+  return fetch(`${BRIDGE_BASE_URL}${path}`, {
     ...init,
     cache: 'no-store',
-    headers: withJSONHeaders(init.headers),
   });
-  const text = await response.text();
-  return new Response(text, {
-    status: response.status,
-    headers: {
-      'Content-Type': response.headers.get('Content-Type') ?? 'application/json',
-    },
+}
+
+async function passThroughToBridge(path: string, init: RequestInit): Promise<Response> {
+  return fetchBridge(path, {
+    ...init,
+    headers: withJSONHeaders(init.headers),
   });
 }
 
@@ -47,22 +44,9 @@ export async function forwardBridge(options: ForwardBridgeOptions): Promise<Resp
 
 export async function forwardBridgeDownload(path: string, request: Request): Promise<Response> {
   try {
-    const response = await fetch(`${BRIDGE_BASE_URL}${path}`, {
+    return await fetchBridge(path, {
       method: 'GET',
-      cache: 'no-store',
       headers: await resolveBridgeHeaders(undefined, request),
-    });
-    const body = await response.arrayBuffer();
-    const headers = new Headers();
-    for (const header of DOWNLOAD_HEADERS) {
-      const value = response.headers.get(header);
-      if (value) {
-        headers.set(header, value);
-      }
-    }
-    return new Response(body, {
-      status: response.status,
-      headers,
     });
   } catch (error) {
     return bridgeUnavailableResponse(error);

@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-import { forwardBridge } from './index';
+import { forwardBridge, forwardBridgeDownload } from './index';
 
 describe('lib/server/bridge', () => {
   const fetchMock = jest.fn();
@@ -23,13 +23,19 @@ describe('lib/server/bridge', () => {
     process.env = originalEnv;
   });
 
-  it('forwards direct bridge requests without a request body', async () => {
-    fetchMock.mockResolvedValue(
-      new Response(JSON.stringify({ status: 'success', payload: { provider: 'openai' }, error: '' }), {
+  it('passes bridge responses through without rebuilding headers or body streams', async () => {
+    const upstreamResponse = new Response(
+      JSON.stringify({ status: 'success', payload: { provider: 'openai' }, error: '' }),
+      {
         status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Trace-ID': 'bridge-trace-123',
+          'Cache-Control': 'no-store',
+        },
+      }
     );
+    fetchMock.mockResolvedValue(upstreamResponse);
 
     const response = await forwardBridge({ path: '/api/config', method: 'GET' });
 
@@ -40,6 +46,9 @@ describe('lib/server/bridge', () => {
         cache: 'no-store',
       })
     );
+    expect(response).toBe(upstreamResponse);
+    expect(response.headers.get('X-Trace-ID')).toBe('bridge-trace-123');
+    expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(await response.json()).toEqual({
       status: 'success',
       payload: { provider: 'openai' },
@@ -130,6 +139,38 @@ describe('lib/server/bridge', () => {
     expect(init.body).toBe(JSON.stringify({ message: 'hello' }));
     expect(headers.get('Content-Type')).toBe('application/json');
     expect(headers.get('X-Trace-ID')).toBe('web-123');
+  });
+
+  it('passes download responses through without filtering bridge trace headers', async () => {
+    const upstreamResponse = new Response('artifact-bytes', {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Content-Disposition': 'attachment; filename="trace.log"',
+        ETag: 'artifact-etag',
+        'X-Artifact-SHA256': 'sha256-value',
+        'X-Trace-ID': 'artifact-trace-456',
+      },
+    });
+    fetchMock.mockResolvedValue(upstreamResponse);
+
+    const request = new Request('http://localhost/api/sessions/sess-1/artifacts/art-1', {
+      method: 'GET',
+    });
+
+    const response = await forwardBridgeDownload('/api/sessions/sess-1/artifacts/art-1', request);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8080/api/sessions/sess-1/artifacts/art-1',
+      expect.objectContaining({
+        method: 'GET',
+        cache: 'no-store',
+      })
+    );
+    expect(response).toBe(upstreamResponse);
+    expect(response.headers.get('X-Trace-ID')).toBe('artifact-trace-456');
+    expect(response.headers.get('Content-Disposition')).toBe('attachment; filename="trace.log"');
+    expect(await response.text()).toBe('artifact-bytes');
   });
 
   it('returns a 400 envelope for invalid JSON bodies', async () => {
