@@ -2,8 +2,6 @@ package orchestration
 
 import (
 	"errors"
-	"fmt"
-	"math"
 	"net/http"
 	"strings"
 
@@ -29,16 +27,6 @@ func (s *bridgeService) executeProvidersGetAction(traceID string) (any, int, err
 
 func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (any, int, error) {
 	logAction(traceID, actionConfigProviderCreate, "running", nil)
-	modelContextWindowTokens, err := decodeProviderModelTokenOverrides(req.ModelContextWindowTokens)
-	if err != nil {
-		logAction(traceID, actionConfigProviderCreate, "error", err)
-		return nil, http.StatusBadRequest, err
-	}
-	modelResponseReserveTokens, err := decodeProviderModelTokenOverrides(req.ModelResponseReserveTokens)
-	if err != nil {
-		logAction(traceID, actionConfigProviderCreate, "error", err)
-		return nil, http.StatusBadRequest, err
-	}
 	if err := s.configStore.AddProvider(providerConfig{
 		Name:                       req.Name,
 		Type:                       llm.Provider(req.Type),
@@ -47,8 +35,8 @@ func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, t
 		Models:                     req.Models,
 		ContextWindowTokens:        req.ContextWindowTokens,
 		ResponseReserveTokens:      req.ResponseReserveTokens,
-		ModelContextWindowTokens:   modelContextWindowTokens,
-		ModelResponseReserveTokens: modelResponseReserveTokens,
+		ModelContextWindowTokens:   cloneModelTokenOverrides(req.ModelContextWindowTokens),
+		ModelResponseReserveTokens: cloneModelTokenOverrides(req.ModelResponseReserveTokens),
 	}); err != nil {
 		logAction(traceID, actionConfigProviderCreate, "error", err)
 		return nil, configProviderStatusCode(err), err
@@ -62,16 +50,6 @@ func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, t
 
 func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpdateRequest, traceID string) (any, int, error) {
 	logAction(traceID, actionConfigProviderUpdate, "running", nil)
-	modelContextWindowTokens, err := decodeProviderModelTokenOverrides(req.ModelContextWindowTokens)
-	if err != nil {
-		logAction(traceID, actionConfigProviderUpdate, "error", err)
-		return nil, http.StatusBadRequest, err
-	}
-	modelResponseReserveTokens, err := decodeProviderModelTokenOverrides(req.ModelResponseReserveTokens)
-	if err != nil {
-		logAction(traceID, actionConfigProviderUpdate, "error", err)
-		return nil, http.StatusBadRequest, err
-	}
 	if err := s.configStore.UpdateProvider(name, providerConfig{
 		Name:                       req.Name,
 		Type:                       llm.Provider(req.Type),
@@ -80,8 +58,8 @@ func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpd
 		Models:                     req.Models,
 		ContextWindowTokens:        req.ContextWindowTokens,
 		ResponseReserveTokens:      req.ResponseReserveTokens,
-		ModelContextWindowTokens:   modelContextWindowTokens,
-		ModelResponseReserveTokens: modelResponseReserveTokens,
+		ModelContextWindowTokens:   cloneModelTokenOverrides(req.ModelContextWindowTokens),
+		ModelResponseReserveTokens: cloneModelTokenOverrides(req.ModelResponseReserveTokens),
 	}); err != nil {
 		logAction(traceID, actionConfigProviderUpdate, "error", err)
 		return nil, configProviderStatusCode(err), err
@@ -134,69 +112,9 @@ func buildProviderConfigResponses(providers []providerConfig) []providerConfigRe
 			APIKeySet:                  strings.TrimSpace(stringValue(provider.APIKey)) != "",
 			ContextWindowTokens:        provider.ContextWindowTokens,
 			ResponseReserveTokens:      provider.ResponseReserveTokens,
-			ModelContextWindowTokens:   encodeProviderModelTokenOverrides(provider.ModelContextWindowTokens),
-			ModelResponseReserveTokens: encodeProviderModelTokenOverrides(provider.ModelResponseReserveTokens),
+			ModelContextWindowTokens:   cloneModelTokenOverrides(provider.ModelContextWindowTokens),
+			ModelResponseReserveTokens: cloneModelTokenOverrides(provider.ModelResponseReserveTokens),
 		})
-	}
-	return out
-}
-
-func decodeProviderModelTokenOverrides(raw map[string]any) (map[string]int, error) {
-	if len(raw) == 0 {
-		return nil, nil
-	}
-
-	out := make(map[string]int, len(raw))
-	for key, value := range raw {
-		normalizedKey := strings.TrimSpace(key)
-		if normalizedKey == "" {
-			continue
-		}
-
-		parsed, err := decodeProviderModelTokenOverrideValue(value)
-		if err != nil {
-			return nil, fmt.Errorf("invalid model token override %q: %w", normalizedKey, err)
-		}
-		out[normalizedKey] = parsed
-	}
-	return out, nil
-}
-
-func decodeProviderModelTokenOverrideValue(value any) (int, error) {
-	switch typed := value.(type) {
-	case int:
-		return typed, nil
-	case int8:
-		return int(typed), nil
-	case int16:
-		return int(typed), nil
-	case int32:
-		return int(typed), nil
-	case int64:
-		return int(typed), nil
-	case float32:
-		if math.Trunc(float64(typed)) != float64(typed) {
-			return 0, fmt.Errorf("expected integer value, got %v", typed)
-		}
-		return int(typed), nil
-	case float64:
-		if math.Trunc(typed) != typed {
-			return 0, fmt.Errorf("expected integer value, got %v", typed)
-		}
-		return int(typed), nil
-	default:
-		return 0, fmt.Errorf("expected integer value, got %T", value)
-	}
-}
-
-func encodeProviderModelTokenOverrides(raw map[string]int) map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
-
-	out := make(map[string]any, len(raw))
-	for key, value := range raw {
-		out[key] = value
 	}
 	return out
 }

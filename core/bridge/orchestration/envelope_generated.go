@@ -245,7 +245,7 @@ type graphqlSourceResponse struct {
 	MaxFields        int                     `json:"max_fields"`
 	MaxRootFields    int                     `json:"max_root_fields"`
 	MaxFragments     int                     `json:"max_fragments"`
-	Headers          map[string]any          `json:"headers,omitempty"`
+	Headers          map[string]string       `json:"headers,omitempty"`
 	APIKeySet        bool                    `json:"api_key_set"`
 	Domains          []graphqlDomainResponse `json:"domains,omitempty"`
 }
@@ -302,7 +302,7 @@ type graphqlSourceInput struct {
 	SchemaPath       string               `json:"schema_path"`
 	TimeoutMs        int                  `json:"timeout_ms,omitempty"`
 	MaxResponseBytes int                  `json:"max_response_bytes,omitempty"`
-	Headers          map[string]any       `json:"headers,omitempty"`
+	Headers          map[string]string    `json:"headers,omitempty"`
 	MaxDepth         int                  `json:"max_depth,omitempty"`
 	MaxFields        int                  `json:"max_fields,omitempty"`
 	MaxRootFields    int                  `json:"max_root_fields,omitempty"`
@@ -318,8 +318,8 @@ type providerConfigResponse struct {
 	Models                     []string       `json:"models,omitempty"`
 	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
 	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
-	ModelContextWindowTokens   map[string]any `json:"model_context_window_tokens,omitempty"`
-	ModelResponseReserveTokens map[string]any `json:"model_response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]int `json:"model_context_window_tokens,omitempty"`
+	ModelResponseReserveTokens map[string]int `json:"model_response_reserve_tokens,omitempty"`
 	APIKeySet                  bool           `json:"api_key_set"`
 }
 
@@ -332,8 +332,8 @@ type providerConfigInput struct {
 	Models                     []string       `json:"models,omitempty"`
 	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
 	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
-	ModelContextWindowTokens   map[string]any `json:"model_context_window_tokens,omitempty"`
-	ModelResponseReserveTokens map[string]any `json:"model_response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]int `json:"model_context_window_tokens,omitempty"`
+	ModelResponseReserveTokens map[string]int `json:"model_response_reserve_tokens,omitempty"`
 	TraceID                    string         `json:"trace_id,omitempty"`
 }
 

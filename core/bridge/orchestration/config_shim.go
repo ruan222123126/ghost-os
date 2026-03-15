@@ -155,17 +155,13 @@ func stringValue(raw *string) string {
 	return bridgeconfig.StringValue(raw)
 }
 
-func stringMapFromAny(raw map[string]any) map[string]string {
+func cloneStringMap(raw map[string]string) map[string]string {
 	if len(raw) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(raw))
 	for key, value := range raw {
-		text, ok := value.(string)
-		if !ok {
-			return nil
-		}
-		out[key] = text
+		out[key] = value
 	}
 	return out
 }
@@ -188,7 +184,7 @@ func graphQLSourceResponses(raw []bridgeconfig.GraphQLSourceSnapshot) []graphqlS
 			MaxFields:        source.MaxFields,
 			MaxRootFields:    source.MaxRootFields,
 			MaxFragments:     source.MaxFragments,
-			Headers:          anyMapFromString(source.Headers),
+			Headers:          cloneStringMap(source.Headers),
 			APIKeySet:        source.APIKeySet,
 			Domains:          graphQLDomainResponses(source.Domains),
 		})
@@ -258,7 +254,7 @@ func graphQLSourceInputs(raw []graphqlSourceInput) []bridgeconfig.GraphQLSourceI
 			SchemaPath:       source.SchemaPath,
 			TimeoutMS:        source.TimeoutMs,
 			MaxResponseBytes: source.MaxResponseBytes,
-			Headers:          stringMapFromAny(source.Headers),
+			Headers:          cloneStringMap(source.Headers),
 			MaxDepth:         source.MaxDepth,
 			MaxFields:        source.MaxFields,
 			MaxRootFields:    source.MaxRootFields,
@@ -281,7 +277,7 @@ func graphQLSourceInputPointer(raw graphqlSourceInput) *bridgeconfig.GraphQLSour
 		SchemaPath:       raw.SchemaPath,
 		TimeoutMS:        raw.TimeoutMs,
 		MaxResponseBytes: raw.MaxResponseBytes,
-		Headers:          stringMapFromAny(raw.Headers),
+		Headers:          cloneStringMap(raw.Headers),
 		MaxDepth:         raw.MaxDepth,
 		MaxFields:        raw.MaxFields,
 		MaxRootFields:    raw.MaxRootFields,
@@ -334,18 +330,6 @@ func graphQLMutationPolicyInputs(
 			MaxRootFields:           policy.MaxRootFields,
 			MaxFragments:            policy.MaxFragments,
 		})
-	}
-	return out
-}
-
-func anyMapFromString(raw map[string]string) map[string]any {
-	if len(raw) == 0 {
-		return nil
-	}
-
-	out := make(map[string]any, len(raw))
-	for key, value := range raw {
-		out[key] = value
 	}
 	return out
 }

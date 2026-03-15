@@ -1,7 +1,13 @@
 from __future__ import annotations
 
 from contract_codegen.catalog import collect_definitions, dereference_schema, target_name_map
-from contract_codegen.common import non_null_one_of_candidates, schema_ref_name
+from contract_codegen.common import (
+    non_null_one_of_candidates,
+    object_additional_properties_schema,
+    object_has_declared_properties,
+    object_is_open,
+    schema_ref_name,
+)
 
 GO_INITIALISMS = {
     "api": "API",
@@ -20,6 +26,18 @@ def go_field_name(name: str) -> str:
             continue
         rendered.append(part[:1].upper() + part[1:])
     return "".join(rendered)
+
+
+def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if object_has_declared_properties(prop_schema):
+        raise ValueError(f"inline structured Go object must be promoted to $defs: {prop_schema}")
+
+    additional = object_additional_properties_schema(prop_schema)
+    if additional is not None:
+        return f'map[string]{_type_for_schema(schema, target_names, additional)}'
+    if object_is_open(prop_schema):
+        return "map[string]any"
+    raise ValueError(f"unsupported closed Go object schema: {prop_schema}")
 
 
 def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
@@ -43,7 +61,7 @@ def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -
         item_schema = prop_schema.get("items", {})
         return f'[]{_inner_type(schema, target_names, item_schema)}'
     if schema_type == "object":
-        return "map[string]any"
+        return _object_type(schema, target_names, prop_schema)
     raise ValueError(f"unsupported Go schema: {prop_schema}")
 
 
@@ -127,4 +145,3 @@ type apiResponse struct {{
 \tRequestID string `json:"request_id,omitempty"`
 }}
 '''
-

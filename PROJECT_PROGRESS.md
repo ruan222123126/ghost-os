@@ -23,6 +23,12 @@
 
 ### 2026-03-15
 
+- 修复 GraphQL 配置更新链路的 header 类型漂移：
+  - `core/shared/contract_codegen/emitters/go.py` 现按 `additionalProperties` 生成强类型 map；`graphqlSourceInput.headers` / `graphqlSourceResponse.headers` 已回到 `map[string]string`，无效 header value 会在 orchestration 参数解码阶段显式失败。
+  - `core/bridge/orchestration/config_shim.go` 已移除 `any -> string -> nil` 的静默降级路径，GraphQL source header 不再因非法值被整块清空。
+  - `core/bridge/orchestration/service_config_runtime_test.go` 新增回归，覆盖“非法非字符串 header 返回 400，且既有 header 保持不变”。
+  - 当前环境下 `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./config -timeout 60s` 已通过。
+
 - 收口 `tfind` 的模型侧工具面管理语义：
   - `tools.FormatPromptGuidanceForCatalog` 新增 `tfind` 专用 workflow guidance，明确 `search -> load -> next turn use -> list/unload` 的使用顺序与同轮限制。
   - `core/bridge/orchestration` 新增仅作用于模型输入的 history projection；会话存储仍保留完整 `tfind` assistant/tool 原始 JSON，下一轮喂给模型时只把 `load` / `list` / `unload` span 压成简短 assistant 摘要。
