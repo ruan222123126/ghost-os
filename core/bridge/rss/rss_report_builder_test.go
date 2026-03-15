@@ -19,7 +19,7 @@ func TestAgentRSSReportBuilderUsesOnlyScopedTools(t *testing.T) {
 	requireToolDefNames(t, fixture.completer.requests[0].Tools, []string{"script_exec", "web_search"})
 }
 
-func TestAgentRSSReportBuilderPromptIncludesDossierAndScopedGuidance(t *testing.T) {
+func TestAgentRSSReportBuilderPromptIncludesDossierAndWritingContract(t *testing.T) {
 	fixture := newRSSReportBuilderFixture(t)
 
 	fixture.build(t)
@@ -29,6 +29,14 @@ func TestAgentRSSReportBuilderPromptIncludesDossierAndScopedGuidance(t *testing.
 	requireStringContains(t, prompt, "Simplified Chinese")
 	requireStringContains(t, prompt, "Use this exact H1 title")
 	requireStringContains(t, prompt, "Do not move sources into a separate appendix section")
+}
+
+func TestAgentRSSReportBuilderPromptReflectsScopedToolVisibility(t *testing.T) {
+	fixture := newRSSReportBuilderFixture(t)
+
+	fixture.build(t)
+	prompt := fixture.firstPrompt(t)
+
 	requireStringContains(t, prompt, "Investigation tools for this run: `script_exec`, `web_search`.")
 	requireStringNotContains(t, prompt, "`read_and_summarize`")
 	requireStringNotContains(t, prompt, "`rss_fetch`")
