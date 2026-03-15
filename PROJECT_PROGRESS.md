@@ -23,6 +23,13 @@
 
 ### 2026-03-15
 
+- 收口 memory recall prompt 注入块：
+  - `memoryaug.FormatPromptBlock` 现保留 `Memory slots` 与最多 2 条 `Other memory context`，非 slot 记忆只注入 `summary`，每条限制 80 字，不再向 system prompt 追加 `content=`。
+  - 已补 formatter 与 session turn 的定向回归，覆盖“只保留短块、不落会话历史、超额条目丢弃、长 summary 截断”。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./memoryaug -run 'TestFormatPromptBlock' -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -run 'TestSessionRunner(InjectsRecallOnlyIntoPrompt|InjectsCompactRecallPromptBlock|RecallDoesNotBreakAskHumanContinuation|BuildsRecallQueryFromRecentContext)' -timeout 60s` 仍受当前工作区现有 GraphQL 编译错误阻塞：`tools/graphql_mutation_commit_execute.go:56 source.Headers undefined`
+
 - 完成 GraphQL 第二步基线：
   - `core/bridge/config` 从单 source 升级为 `graphql_default_source + graphql_sources[]`，保留旧单源字段只读迁移入口；旧配置读取时显式物化为 `default` source，经新接口更新后仅持久化新结构。
   - `core/bridge/runtime` 启动时为所有 GraphQL source 预加载 schema snapshot，并通过共享只读 registry 向 `graphql_query` / `graphql_schema_lookup` 提供多 source 路由能力；工具仍保持 `OnDemand: true`，默认不进入静态工具面。

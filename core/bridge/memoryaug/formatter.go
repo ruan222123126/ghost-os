@@ -6,12 +6,18 @@ import (
 	"strings"
 )
 
+const (
+	promptOtherMemoryLimit     = 2
+	promptOtherSummaryMaxChars = 80
+	promptOtherSummaryEllipsis = "..."
+)
+
 func FormatPromptBlock(items []RecallItem) string {
 	if len(items) == 0 {
 		return ""
 	}
 	slotLines := formatSlotLines(items)
-	otherLines := formatOtherMemoryLines(items, len(items) <= 2)
+	otherLines := formatOtherMemoryLines(items)
 	lines := make([]string, 0, len(slotLines)+len(otherLines)+4)
 	if len(slotLines) > 0 {
 		lines = append(lines, "Memory slots:")
@@ -64,34 +70,39 @@ func formatSlotLines(items []RecallItem) []string {
 	return lines
 }
 
-func formatOtherMemoryLines(items []RecallItem, includeContent bool) []string {
-	lines := make([]string, 0, len(items))
+func formatOtherMemoryLines(items []RecallItem) []string {
+	lines := make([]string, 0, promptOtherMemoryLimit)
 	for _, item := range items {
-		if _, ok := slotSpecForKey(item.Entry.MemoryKey); ok && slotValueFromEntry(item.Entry) != "" {
+		if isPromptSlotItem(item) {
 			continue
 		}
-		lines = append(lines, formatOtherPromptLine(item, includeContent))
+		lines = append(lines, formatOtherPromptLine(item))
+		if len(lines) >= promptOtherMemoryLimit {
+			return lines
+		}
 	}
 	return lines
 }
 
-func formatOtherPromptLine(item RecallItem, includeContent bool) string {
-	line := fmt.Sprintf(
+func isPromptSlotItem(item RecallItem) bool {
+	_, ok := slotSpecForKey(item.Entry.MemoryKey)
+	return ok && slotValueFromEntry(item.Entry) != ""
+}
+
+func formatOtherPromptLine(item RecallItem) string {
+	return fmt.Sprintf(
 		"- [%s/%s] %s",
 		item.Entry.ScopeType,
 		item.Entry.MemoryType,
-		strings.TrimSpace(item.Entry.Summary),
+		trimPromptSummary(item.Entry.Summary),
 	)
-	if includeContent && strings.TrimSpace(item.Entry.Content) != "" && item.Entry.Content != item.Entry.Summary {
-		line += " | content=" + trimPromptField(item.Entry.Content)
-	}
-	return line
 }
 
-func trimPromptField(raw string) string {
+func trimPromptSummary(raw string) string {
 	value := strings.TrimSpace(raw)
-	if len(value) <= 160 {
+	if len(value) <= promptOtherSummaryMaxChars {
 		return value
 	}
-	return strings.TrimSpace(value[:157]) + "..."
+	limit := promptOtherSummaryMaxChars - len(promptOtherSummaryEllipsis)
+	return strings.TrimSpace(value[:limit]) + promptOtherSummaryEllipsis
 }
