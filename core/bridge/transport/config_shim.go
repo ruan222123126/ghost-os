@@ -29,10 +29,6 @@ func writeBridgeFileConfig(path string, cfg bridgeFileConfig) error {
 	return bridgeconfig.WriteBridgeFileConfig(path, cfg)
 }
 
-func migrateBridgeFileConfigIfLegacy() (string, bool, error) {
-	return bridgeconfig.MigrateBridgeFileConfigIfLegacy()
-}
-
 func sessionsPathFromEnv() string {
 	return bridgeconfig.SessionsPathFromEnv()
 }

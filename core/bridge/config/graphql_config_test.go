@@ -7,57 +7,6 @@ import (
 	"testing"
 )
 
-func TestRuntimeConfigFromEnvMaterializesLegacyGraphQLSource(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.toml")
-	t.Setenv("GHOST_CONFIG_PATH", configPath)
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://env.example/graphql")
-	t.Setenv("GHOST_GRAPHQL_API_KEY", "env-graphql-key")
-	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", "/env/schema.json")
-	t.Setenv("GHOST_GRAPHQL_TIMEOUT_MS", "9000")
-	t.Setenv("GHOST_GRAPHQL_MAX_RESPONSE_BYTES", "8192")
-
-	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
-		GraphQLEnabled:    boolPointer(true),
-		GraphQLEndpoint:   stringPointer("https://file.example/graphql"),
-		GraphQLSchemaPath: stringPointer("/file/schema.json"),
-		GraphQLTimeoutMS:  optionalIntPointer(5000),
-		GraphQLHeaders: map[string]string{
-			"X-File": "file",
-		},
-	}); err != nil {
-		t.Fatalf("writeBridgeFileConfig: %v", err)
-	}
-
-	runtime, err := runtimeConfigFromEnv()
-	if err != nil {
-		t.Fatalf("runtimeConfigFromEnv: %v", err)
-	}
-
-	if runtime.GraphQL.DefaultSource != DefaultGraphQLLegacySourceName {
-		t.Fatalf("unexpected graphql default source: %q", runtime.GraphQL.DefaultSource)
-	}
-	source := findGraphQLSource(t, runtime.GraphQL.Sources, DefaultGraphQLLegacySourceName)
-	if source.Endpoint != "https://file.example/graphql" {
-		t.Fatalf("unexpected graphql endpoint: %q", source.Endpoint)
-	}
-	if source.APIKey != "env-graphql-key" {
-		t.Fatalf("unexpected graphql api key: %q", source.APIKey)
-	}
-	if source.SchemaPath != "/file/schema.json" {
-		t.Fatalf("unexpected graphql schema path: %q", source.SchemaPath)
-	}
-	if source.TimeoutMS != 5000 {
-		t.Fatalf("unexpected graphql timeout: %d", source.TimeoutMS)
-	}
-	if source.MaxResponseBytes != 8192 {
-		t.Fatalf("unexpected graphql max bytes: %d", source.MaxResponseBytes)
-	}
-	if source.Headers["X-File"] != "file" {
-		t.Fatalf("unexpected graphql headers: %+v", source.Headers)
-	}
-}
-
 func TestRuntimeConfigFromEnvUsesGraphQLSourcesLayout(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
@@ -180,10 +129,6 @@ func TestConfigStoreUpdatePersistsGraphQLSourcesAndHidesAPIKeys(t *testing.T) {
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_PROVIDER", "custom")
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://env.example/graphql")
-	t.Setenv("GHOST_GRAPHQL_API_KEY", "env-graphql-key")
-	t.Setenv("GHOST_GRAPHQL_SCHEMA_PATH", "/env/schema.json")
 
 	store, err := NewConfigStoreFromEnv()
 	if err != nil {
@@ -231,9 +176,6 @@ func TestConfigStoreUpdatePersistsGraphQLSourcesAndHidesAPIKeys(t *testing.T) {
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		t.Fatalf("loadBridgeFileConfig: %v", err)
-	}
-	if fileCfg.GraphQLEndpoint != nil || fileCfg.GraphQLSchemaPath != nil || fileCfg.GraphQLAPIKey != nil {
-		t.Fatalf("expected legacy graphql fields to be cleared, got %+v", fileCfg)
 	}
 	if fileCfg.GraphQLDefaultSource == nil || *fileCfg.GraphQLDefaultSource != "crm" {
 		t.Fatalf("unexpected persisted graphql default source: %#v", fileCfg.GraphQLDefaultSource)
@@ -350,15 +292,4 @@ func TestRuntimeConfigFromEnvFailsOnMissingGraphQLMutationIdempotency(t *testing
 	if _, err := runtimeConfigFromEnv(); err == nil || !strings.Contains(err.Error(), "idempotency_mode") {
 		t.Fatalf("expected missing idempotency error, got %v", err)
 	}
-}
-
-func findGraphQLSource(t *testing.T, sources []GraphQLSourceConfig, name string) GraphQLSourceConfig {
-	t.Helper()
-	for _, source := range sources {
-		if source.Name == name {
-			return source
-		}
-	}
-	t.Fatalf("graphql source %q was not found in %+v", name, sources)
-	return GraphQLSourceConfig{}
 }

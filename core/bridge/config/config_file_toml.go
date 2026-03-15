@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -26,61 +27,36 @@ func loadBridgeTomlConfig(path string) (bridgeFileConfig, error) {
 	}
 
 	var cfg bridgeFileConfig
-	if _, err := toml.Decode(string(raw), &cfg); err != nil {
+	md, err := toml.Decode(string(raw), &cfg)
+	if err != nil {
+		return bridgeFileConfig{}, fmt.Errorf("parse config file %s: %w", resolvedPath, err)
+	}
+	if err := validateRemovedConfigKeys(md.Undecoded()); err != nil {
 		return bridgeFileConfig{}, fmt.Errorf("parse config file %s: %w", resolvedPath, err)
 	}
 	return cfg, nil
 }
 
 func loadBridgeFileConfig() (bridgeFileConfig, string, error) {
-	cfg, path, _, err := loadBridgeFileConfigWithMigrationInfo()
-	return cfg, path, err
-}
-
-// loadBridgeFileConfigWithMigrationInfo behaves like loadBridgeFileConfig but also reports
-// whether the config file uses a legacy provider layout that can be migrated.
-//
-// IMPORTANT: This function is side-effect free; callers must explicitly invoke migration/write.
-func loadBridgeFileConfigWithMigrationInfo() (bridgeFileConfig, string, bool, error) {
 	configPath := configPathFromEnv()
 	rawCfg, err := loadBridgeTomlConfig(configPath)
 	switch {
 	case err == nil:
 		resolvedPath, resolveErr := resolveUserPath(configPath)
 		if resolveErr != nil {
-			return bridgeFileConfig{}, "", false, fmt.Errorf("resolve config path: %w", resolveErr)
+			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
 		}
-		needsMigration := hasLegacyProviderLayout(rawCfg)
 		normalized := normalizeBridgeFileConfigForWrite(rawCfg)
-		return normalized, resolvedPath, needsMigration, nil
+		return normalized, resolvedPath, nil
 	case errors.Is(err, os.ErrNotExist):
 		resolvedPath, resolveErr := resolveUserPath(configPath)
 		if resolveErr != nil {
-			return bridgeFileConfig{}, "", false, fmt.Errorf("resolve config path: %w", resolveErr)
+			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
 		}
-		return bridgeFileConfig{}, resolvedPath, false, nil
+		return bridgeFileConfig{}, resolvedPath, nil
 	default:
-		return bridgeFileConfig{}, configPath, false, fmt.Errorf("read config file %s: %w", configPath, err)
+		return bridgeFileConfig{}, configPath, fmt.Errorf("read config file %s: %w", configPath, err)
 	}
-}
-
-// migrateBridgeFileConfigIfLegacy rewrites the configured TOML file to the current provider layout,
-// but only when legacy provider fields are present.
-//
-// This migration is intentionally opt-in to avoid "read == write" surprises across server options
-// and middleware that read config frequently.
-func migrateBridgeFileConfigIfLegacy() (string, bool, error) {
-	cfg, resolvedPath, needsMigration, err := loadBridgeFileConfigWithMigrationInfo()
-	if err != nil {
-		return resolvedPath, false, err
-	}
-	if !needsMigration {
-		return resolvedPath, false, nil
-	}
-	if err := writeBridgeTomlConfig(configPathFromEnv(), cfg); err != nil {
-		return resolvedPath, false, err
-	}
-	return resolvedPath, true, nil
 }
 
 func writeBridgeFileConfig(path string, cfg bridgeFileConfig) error {
@@ -105,4 +81,67 @@ func writeBridgeTomlConfig(path string, cfg bridgeFileConfig) error {
 		return fmt.Errorf("write config file %s: %w", resolvedPath, err)
 	}
 	return nil
+}
+
+func validateRemovedConfigKeys(keys []toml.Key) error {
+	if len(keys) == 0 {
+		return nil
+	}
+
+	removed := collectRemovedConfigKeys(keys)
+	if len(removed) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"unsupported legacy config fields: %s; migrate to [providers] and graphql_sources/graphql_mutation_policies",
+		strings.Join(removed, ", "),
+	)
+}
+
+func collectRemovedConfigKeys(keys []toml.Key) []string {
+	seen := make(map[string]struct{}, len(keys))
+	out := make([]string, 0, len(keys))
+	for _, key := range keys {
+		name := removedConfigKeyName(key)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func removedConfigKeyName(key toml.Key) string {
+	if len(key) == 0 {
+		return ""
+	}
+
+	switch key[0] {
+	case "model_providers", "graphql_headers":
+		return key[0]
+	}
+	if len(key) != 1 {
+		return ""
+	}
+
+	switch key[0] {
+	case "model_provider",
+		"provider",
+		"api_key",
+		"base_url",
+		"graphql_enabled",
+		"graphql_endpoint",
+		"graphql_api_key",
+		"graphql_schema_path",
+		"graphql_timeout_ms",
+		"graphql_max_response_bytes":
+		return key[0]
+	default:
+		return ""
+	}
 }

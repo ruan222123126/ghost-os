@@ -76,7 +76,6 @@ const (
 	DefaultGraphQLMaxFields        = defaultGraphQLMaxFields
 	DefaultGraphQLMaxRootFields    = defaultGraphQLMaxRootFields
 	DefaultGraphQLMaxFragments     = defaultGraphQLMaxFragments
-	DefaultGraphQLLegacySourceName = defaultGraphQLLegacySourceName
 	DefaultToolSelectorTimeoutMS   = defaultToolSelectorTimeoutMS
 	DefaultToolSelectorConfidence  = defaultToolSelectorConfidence
 	DefaultToolSelectorRecentMsgs  = defaultToolSelectorRecentMsgs
@@ -264,10 +263,6 @@ func LoadBridgeFileConfig() (FileConfig, string, error) {
 
 func WriteBridgeFileConfig(path string, cfg FileConfig) error {
 	return writeBridgeFileConfig(path, bridgeFileConfig(cfg))
-}
-
-func MigrateBridgeFileConfigIfLegacy() (string, bool, error) {
-	return migrateBridgeFileConfigIfLegacy()
 }
 
 func NormalizeProviderConfigs(raw map[string]ProviderFileConfig, model string) []ProviderRecord {

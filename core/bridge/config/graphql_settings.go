@@ -8,43 +8,22 @@ import (
 )
 
 func envGraphQLSettings() (GraphQLConfig, error) {
-	source, ok, err := legacyGraphQLSourceFromEnv()
-	if err != nil {
+	if err := validateNoLegacyGraphQLEnv(); err != nil {
 		return GraphQLConfig{}, err
 	}
-	if !ok {
-		return finalizeGraphQLConfig(GraphQLConfig{})
-	}
-	return finalizeGraphQLConfig(GraphQLConfig{
-		DefaultSource: defaultGraphQLLegacySourceName,
-		Sources:       []GraphQLSourceConfig{source},
-	})
+	return finalizeGraphQLConfig(GraphQLConfig{})
 }
 
 func fileGraphQLSettings(fileCfg bridgeFileConfig, fallback GraphQLConfig) (GraphQLConfig, error) {
 	settings := normalizeGraphQLConfig(fallback)
-	switch {
-	case hasGraphQLSourceLayout(fileCfg):
-		return finalizeGraphQLConfig(GraphQLConfig{
-			DefaultSource:    stringValue(fileCfg.GraphQLDefaultSource),
-			Sources:          graphQLSourcesFromFile(fileCfg.GraphQLSources),
-			MutationPolicies: graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
-		})
-	case hasLegacyGraphQLConfig(fileCfg):
-		source, ok, err := legacyGraphQLSourceFromFile(fileCfg, legacyGraphQLFallbackSource(settings))
-		if err != nil {
-			return GraphQLConfig{}, err
-		}
-		if !ok {
-			return finalizeGraphQLConfig(GraphQLConfig{})
-		}
-		return finalizeGraphQLConfig(GraphQLConfig{
-			DefaultSource: defaultGraphQLLegacySourceName,
-			Sources:       []GraphQLSourceConfig{source},
-		})
-	default:
+	if !hasGraphQLSourceLayout(fileCfg) {
 		return finalizeGraphQLConfig(settings)
 	}
+	return finalizeGraphQLConfig(GraphQLConfig{
+		DefaultSource:    stringValue(fileCfg.GraphQLDefaultSource),
+		Sources:          graphQLSourcesFromFile(fileCfg.GraphQLSources),
+		MutationPolicies: graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
+	})
 }
 
 func finalizeGraphQLConfig(cfg GraphQLConfig) (GraphQLConfig, error) {
@@ -138,64 +117,6 @@ func normalizeGraphQLNames(raw []string) []string {
 	return out
 }
 
-func legacyGraphQLSourceFromEnv() (GraphQLSourceConfig, bool, error) {
-	if !parseBoolEnv("GHOST_GRAPHQL_ENABLED", false) {
-		return GraphQLSourceConfig{}, false, nil
-	}
-	headers, err := parseGraphQLHeaders(os.Getenv("GHOST_GRAPHQL_HEADERS"))
-	if err != nil {
-		return GraphQLSourceConfig{}, false, err
-	}
-	return normalizeGraphQLSourceConfig(GraphQLSourceConfig{
-		Name:             defaultGraphQLLegacySourceName,
-		Endpoint:         getenvDefault("GHOST_GRAPHQL_ENDPOINT", ""),
-		APIKey:           firstNonEmptyEnv("GHOST_GRAPHQL_API_KEY"),
-		SchemaPath:       getenvDefault("GHOST_GRAPHQL_SCHEMA_PATH", ""),
-		TimeoutMS:        parsePositiveIntEnv("GHOST_GRAPHQL_TIMEOUT_MS", defaultGraphQLTimeoutMS),
-		MaxResponseBytes: parsePositiveIntEnv("GHOST_GRAPHQL_MAX_RESPONSE_BYTES", defaultGraphQLMaxResponseBytes),
-		Headers:          headers,
-	}), true, nil
-}
-
-func legacyGraphQLSourceFromFile(
-	fileCfg bridgeFileConfig,
-	fallback GraphQLSourceConfig,
-) (GraphQLSourceConfig, bool, error) {
-	enabled := fallback.Name != ""
-	if fileCfg.GraphQLEnabled != nil {
-		enabled = *fileCfg.GraphQLEnabled
-	}
-	if !enabled {
-		return GraphQLSourceConfig{}, false, nil
-	}
-
-	source := normalizeGraphQLSourceConfig(fallback)
-	source.Name = defaultGraphQLLegacySourceName
-	if fileCfg.GraphQLEndpoint != nil {
-		source.Endpoint = normalizeOptionalString(*fileCfg.GraphQLEndpoint)
-	}
-	if fileCfg.GraphQLAPIKey != nil {
-		source.APIKey = normalizeOptionalString(*fileCfg.GraphQLAPIKey)
-	}
-	if fileCfg.GraphQLSchemaPath != nil {
-		source.SchemaPath = normalizeOptionalString(*fileCfg.GraphQLSchemaPath)
-	}
-	if fileCfg.GraphQLTimeoutMS != nil {
-		source.TimeoutMS = *fileCfg.GraphQLTimeoutMS
-	}
-	if fileCfg.GraphQLMaxResponseBytes != nil {
-		source.MaxResponseBytes = *fileCfg.GraphQLMaxResponseBytes
-	}
-	if fileCfg.GraphQLHeaders != nil {
-		headers, err := normalizeGraphQLHeaders(fileCfg.GraphQLHeaders)
-		if err != nil {
-			return GraphQLSourceConfig{}, false, err
-		}
-		source.Headers = headers
-	}
-	return normalizeGraphQLSourceConfig(source), true, nil
-}
-
 func graphQLSourcesFromFile(raw []graphQLSourceFileConfig) []GraphQLSourceConfig {
 	if len(raw) == 0 {
 		return nil
@@ -242,25 +163,6 @@ func graphQLDomainsFromFile(raw []graphQLDomainFileConfig) []GraphQLDomainConfig
 	return out
 }
 
-func legacyGraphQLFallbackSource(cfg GraphQLConfig) GraphQLSourceConfig {
-	for _, source := range cfg.Sources {
-		if source.Name == defaultGraphQLLegacySourceName {
-			return source
-		}
-	}
-	return GraphQLSourceConfig{}
-}
-
-func hasLegacyGraphQLConfig(fileCfg bridgeFileConfig) bool {
-	return fileCfg.GraphQLEnabled != nil ||
-		fileCfg.GraphQLEndpoint != nil ||
-		fileCfg.GraphQLAPIKey != nil ||
-		fileCfg.GraphQLSchemaPath != nil ||
-		fileCfg.GraphQLTimeoutMS != nil ||
-		fileCfg.GraphQLMaxResponseBytes != nil ||
-		fileCfg.GraphQLHeaders != nil
-}
-
 func normalizeGraphQLSourceInt(value int, fallback int) int {
 	if value == 0 {
 		return fallback
@@ -289,4 +191,36 @@ func validateGraphQLOverrideValue(value int, source string, domain string, field
 
 func normalizeOptionalString(raw string) string {
 	return strings.TrimSpace(raw)
+}
+
+func validateNoLegacyGraphQLEnv() error {
+	legacyEnv := configuredLegacyGraphQLEnv()
+	if len(legacyEnv) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"legacy graphql env vars are no longer supported: %s; configure graphql_sources/graphql_mutation_policies in the bridge config file",
+		strings.Join(legacyEnv, ", "),
+	)
+}
+
+func configuredLegacyGraphQLEnv() []string {
+	names := []string{
+		"GHOST_GRAPHQL_ENABLED",
+		"GHOST_GRAPHQL_ENDPOINT",
+		"GHOST_GRAPHQL_API_KEY",
+		"GHOST_GRAPHQL_SCHEMA_PATH",
+		"GHOST_GRAPHQL_TIMEOUT_MS",
+		"GHOST_GRAPHQL_MAX_RESPONSE_BYTES",
+		"GHOST_GRAPHQL_HEADERS",
+	}
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		value, ok := os.LookupEnv(name)
+		if !ok || strings.TrimSpace(value) == "" {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
 }

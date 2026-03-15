@@ -6,19 +6,10 @@ func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
 	out := cfg
 	normalizeBridgeScalarFields(&out)
 	normalizeBridgeCollectionFields(&out)
-
-	providers := materializeProvidersForWrite(out)
+	providers := normalizeProviderConfigs(out.Providers, stringValue(out.Model))
 	out.Providers = providerConfigsToFileMap(providers)
-	out.ActiveProvider = normalizedActiveProviderName(providers, out.ActiveProvider, out.ModelProvider)
-	if hasGraphQLSourceLayout(out) {
-		clearLegacyGraphQLFields(&out)
-	}
-	clearLegacyProviderFields(&out)
+	out.ActiveProvider = normalizedActiveProviderName(providers, out.ActiveProvider)
 	return out
-}
-
-func hasLegacyProviderLayout(cfg bridgeFileConfig) bool {
-	return cfg.ModelProvider != nil || len(cfg.ModelProviders) > 0 || cfg.Provider != nil || cfg.APIKey != nil || cfg.BaseURL != nil
 }
 
 func normalizedActiveProviderName(providers []providerConfig, preferred ...*string) *string {
@@ -50,9 +41,6 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.RSSPollInterval = cloneOptionalStringPointer(cfg.RSSPollInterval)
 	cfg.RSSBriefingInterval = cloneOptionalStringPointer(cfg.RSSBriefingInterval)
 	cfg.GraphQLDefaultSource = cloneOptionalStringPointer(cfg.GraphQLDefaultSource)
-	cfg.GraphQLEndpoint = cloneOptionalStringPointer(cfg.GraphQLEndpoint)
-	cfg.GraphQLAPIKey = cloneOptionalStringPointer(cfg.GraphQLAPIKey)
-	cfg.GraphQLSchemaPath = cloneOptionalStringPointer(cfg.GraphQLSchemaPath)
 	cfg.WebSearchTavilyAPIKey = cloneOptionalStringPointer(cfg.WebSearchTavilyAPIKey)
 	cfg.WebSearchExaAPIKey = cloneOptionalStringPointer(cfg.WebSearchExaAPIKey)
 	cfg.AnthropicVersion = cloneOptionalStringPointer(cfg.AnthropicVersion)
@@ -75,74 +63,16 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
 	cfg.NativeAllowedWritePaths = normalizeConfiguredPathList(cfg.NativeAllowedWritePaths)
 	cfg.GraphQLSources = normalizeGraphQLSourceFileConfigs(cfg.GraphQLSources)
 	cfg.GraphQLMutationPolicies = normalizeGraphQLMutationPolicyFileConfigs(cfg.GraphQLMutationPolicies)
-	cfg.GraphQLHeaders, _ = normalizeGraphQLHeaders(cfg.GraphQLHeaders)
 	cfg.ProviderHeaders, _ = normalizeProviderHeaders(cfg.ProviderHeaders)
 	cfg.CORSOrigins = normalizeOrigins(cfg.CORSOrigins)
 	cfg.ToolAllowlist = normalizeConfiguredToolNames(cfg.ToolAllowlist)
 	cfg.ToolBlocklist = normalizeConfiguredToolNames(cfg.ToolBlocklist)
 }
 
-func materializeProvidersForWrite(cfg bridgeFileConfig) []providerConfig {
-	providers := normalizeProviderConfigs(cfg.Providers, stringValue(cfg.Model))
-	if len(providers) > 0 {
-		return providers
-	}
-
-	providers = normalizeLegacyProviderConfigs(cfg.ModelProviders, stringValue(cfg.Model))
-	if len(providers) > 0 {
-		return providers
-	}
-	return legacySingleProviderConfig(cfg)
-}
-
-func legacySingleProviderConfig(cfg bridgeFileConfig) []providerConfig {
-	name := strings.TrimSpace(stringValue(cfg.Provider))
-	baseURL := strings.TrimSpace(stringValue(cfg.BaseURL))
-	apiKey := cloneOptionalStringPointer(cfg.APIKey)
-	if name == "" && baseURL == "" && apiKey == nil {
-		return nil
-	}
-	if name == "" {
-		name = string(defaultProvider)
-	}
-
-	providerType := inferProviderType(name, baseURL, stringValue(cfg.Model))
-	if providerType == "" {
-		providerType = defaultProvider
-	}
-	if baseURL == "" {
-		baseURL = defaultBaseURLForProvider(providerType)
-	}
-	return []providerConfig{{
-		Name:    name,
-		Type:    providerType,
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-	}}
-}
-
-func clearLegacyProviderFields(cfg *bridgeFileConfig) {
-	cfg.ModelProvider = nil
-	cfg.ModelProviders = nil
-	cfg.Provider = nil
-	cfg.APIKey = nil
-	cfg.BaseURL = nil
-}
-
 func hasGraphQLSourceLayout(cfg bridgeFileConfig) bool {
 	return cfg.GraphQLDefaultSource != nil ||
 		len(cfg.GraphQLSources) > 0 ||
 		len(cfg.GraphQLMutationPolicies) > 0
-}
-
-func clearLegacyGraphQLFields(cfg *bridgeFileConfig) {
-	cfg.GraphQLEnabled = nil
-	cfg.GraphQLEndpoint = nil
-	cfg.GraphQLAPIKey = nil
-	cfg.GraphQLSchemaPath = nil
-	cfg.GraphQLTimeoutMS = nil
-	cfg.GraphQLMaxResponseBytes = nil
-	cfg.GraphQLHeaders = nil
 }
 
 func normalizeGraphQLSourceFileConfigs(raw []graphQLSourceFileConfig) []graphQLSourceFileConfig {

@@ -13,10 +13,6 @@ func parseProviderHeaders(raw string) (map[string]string, error) {
 	return parseNamedHeaders(raw, "GHOST_PROVIDER_HEADERS")
 }
 
-func parseGraphQLHeaders(raw string) (map[string]string, error) {
-	return parseNamedHeaders(raw, "GHOST_GRAPHQL_HEADERS")
-}
-
 func parseNamedHeaders(raw string, envName string) (map[string]string, error) {
 	text := strings.TrimSpace(raw)
 	if text == "" {

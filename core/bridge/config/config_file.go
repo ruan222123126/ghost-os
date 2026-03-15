@@ -27,14 +27,6 @@ type providerFileConfig struct {
 	ModelResponseReserveTokens map[string]int `toml:"model_response_reserve_tokens,omitempty"`
 }
 
-type legacyProviderConfig struct {
-	Name    string       `toml:"name,omitempty"`
-	Type    llm.Provider `toml:"type,omitempty"`
-	BaseURL string       `toml:"base_url,omitempty"`
-	APIKey  *string      `toml:"api_key,omitempty"`
-	Models  []string     `toml:"models,omitempty"`
-}
-
 type graphQLDomainFileConfig struct {
 	Name          string   `toml:"name,omitempty"`
 	Description   string   `toml:"description,omitempty"`
@@ -79,11 +71,6 @@ type graphQLMutationPolicyFileConfig struct {
 type bridgeFileConfig struct {
 	ActiveProvider                        *string                           `toml:"active_provider,omitempty"`
 	Providers                             map[string]providerFileConfig     `toml:"providers,omitempty"`
-	ModelProvider                         *string                           `toml:"model_provider,omitempty"`
-	ModelProviders                        []legacyProviderConfig            `toml:"model_providers,omitempty"`
-	Provider                              *string                           `toml:"provider,omitempty"`
-	APIKey                                *string                           `toml:"api_key,omitempty"`
-	BaseURL                               *string                           `toml:"base_url,omitempty"`
 	Model                                 *string                           `toml:"model,omitempty"`
 	ChatPath                              *string                           `toml:"chat_path,omitempty"`
 	ProjectRoot                           *string                           `toml:"project_root,omitempty"`
@@ -113,13 +100,6 @@ type bridgeFileConfig struct {
 	GraphQLDefaultSource                  *string                           `toml:"graphql_default_source,omitempty"`
 	GraphQLSources                        []graphQLSourceFileConfig         `toml:"graphql_sources,omitempty"`
 	GraphQLMutationPolicies               []graphQLMutationPolicyFileConfig `toml:"graphql_mutation_policies,omitempty"`
-	GraphQLEnabled                        *bool                             `toml:"graphql_enabled,omitempty"`
-	GraphQLEndpoint                       *string                           `toml:"graphql_endpoint,omitempty"`
-	GraphQLAPIKey                         *string                           `toml:"graphql_api_key,omitempty"`
-	GraphQLSchemaPath                     *string                           `toml:"graphql_schema_path,omitempty"`
-	GraphQLTimeoutMS                      *int                              `toml:"graphql_timeout_ms,omitempty"`
-	GraphQLMaxResponseBytes               *int                              `toml:"graphql_max_response_bytes,omitempty"`
-	GraphQLHeaders                        map[string]string                 `toml:"graphql_headers,omitempty"`
 	WebSearchTavilyAPIKey                 *string                           `toml:"web_search_tavily_api_key,omitempty"`
 	WebSearchExaAPIKey                    *string                           `toml:"web_search_exa_api_key,omitempty"`
 	ProviderHeaders                       map[string]string                 `toml:"provider_headers,omitempty"`

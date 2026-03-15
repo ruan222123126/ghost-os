@@ -62,12 +62,6 @@ func runServer(ctx context.Context, port int) (string, error) {
 		return "", err
 	}
 
-	if path, migrated, err := migrateBridgeFileConfigIfLegacy(); err != nil {
-		log.Printf("action=CONFIG_FILE_MIGRATION status=error path=%s error=%v", strings.TrimSpace(path), err)
-	} else if migrated {
-		log.Printf("action=CONFIG_FILE_MIGRATION status=success path=%s", strings.TrimSpace(path))
-	}
-
 	sessionStore, err := session.NewStore(sessionsPathFromEnv())
 	if err != nil {
 		return "", err

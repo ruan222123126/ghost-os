@@ -197,7 +197,6 @@ const (
 	defaultGraphQLMaxFields        = 64
 	defaultGraphQLMaxRootFields    = 3
 	defaultGraphQLMaxFragments     = 8
-	defaultGraphQLLegacySourceName = "default"
 	defaultToolSelectorTimeoutMS   = 1500
 	defaultToolSelectorConfidence  = 0.75
 	defaultToolSelectorRecentMsgs  = 6

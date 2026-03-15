@@ -23,6 +23,13 @@
 
 ### 2026-03-15
 
+- 移除 Bridge 配置的 legacy TOML / GraphQL 兼容层：
+  - `core/bridge/config` 不再接受顶层 `provider` / `api_key` / `base_url` / `model_provider` / `model_providers` 与旧 `graphql_*` TOML 字段；读取旧配置时改为显式报错，不再自动迁移。
+  - GraphQL 配置解析现只保留 `graphql_default_source` / `graphql_sources` / `graphql_mutation_policies` 新布局；旧 `GHOST_GRAPHQL_*` 环境变量也会显式报错。
+  - `core/bridge/transport` 已删除启动时的自动配置迁移路径与相关日志。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./transport -timeout 60s`
+
 - 收口 RSS report prompt 的职责边界：
   - `core/bridge/rss/report_prompt.go` 已移除对 `ghost-os/bridge/tools` 的依赖，prompt 文件只保留“输入 -> 提示词字符串”的模板拼装。
   - scoped `ToolCatalog` 到提示词文案的适配已迁回 `core/bridge/rss/report_service.go`，避免 RSS prompt 层反向依赖工具目录实现。

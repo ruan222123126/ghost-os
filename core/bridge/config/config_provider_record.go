@@ -33,29 +33,6 @@ func normalizeProviderConfigs(raw map[string]providerFileConfig, model string) [
 	return out
 }
 
-func normalizeLegacyProviderConfigs(raw []legacyProviderConfig, model string) []providerConfig {
-	if len(raw) == 0 {
-		return nil
-	}
-
-	out := make([]providerConfig, 0, len(raw))
-	for _, provider := range raw {
-		normalized, ok := normalizeProviderRecord(provider.Name, provider.Type, provider.BaseURL, provider.APIKey, provider.Models, 0, 0, nil, nil, model)
-		if !ok {
-			continue
-		}
-		out = append(out, normalized)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].Name < out[j].Name
-	})
-	return out
-}
-
 func normalizeProviderRecord(
 	name string,
 	rawType llm.Provider,
