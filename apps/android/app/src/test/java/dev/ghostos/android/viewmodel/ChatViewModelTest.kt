@@ -65,6 +65,7 @@ class ChatViewModelTest {
             id = "session-1",
             messages = listOf(
                 SessionMessage(role = "user", text = "旧问题"),
+                SessionMessage(role = "internal", text = "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}"),
                 SessionMessage(role = "assistant", text = "旧回答"),
             ),
             createdAt = "2026-03-07T10:00:00Z",
@@ -83,8 +84,14 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         assertEquals("session-1", viewModel.sessionId.value)
-        assertEquals(listOf("旧问题", "旧回答"), viewModel.messages.value.map { it.text })
-        assertEquals(listOf(ChatMessageKind.User, ChatMessageKind.Assistant), viewModel.messages.value.map { it.kind })
+        assertEquals(
+            listOf("旧问题", "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}", "旧回答"),
+            viewModel.messages.value.map { it.text }
+        )
+        assertEquals(
+            listOf(ChatMessageKind.User, ChatMessageKind.System, ChatMessageKind.Assistant),
+            viewModel.messages.value.map { it.kind }
+        )
         assertEquals(listOf("session-1"), store.savedSessionIds)
     }
 

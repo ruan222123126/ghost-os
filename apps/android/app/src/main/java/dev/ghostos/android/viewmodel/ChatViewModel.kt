@@ -890,6 +890,7 @@ class ChatViewModel(
                 "user" -> messages += buildUserMessage(message.text.orEmpty())
                 "assistant" -> messages += buildAssistantMessage(message.text.orEmpty())
                 "system" -> messages += buildSystemMessage(message.text?.ifBlank { "[system]" } ?: "[system]")
+                "internal" -> messages += buildSystemMessage(message.text?.ifBlank { "[internal]" } ?: "[internal]")
                 "tool" -> {
                     val interaction = message.humanInteraction
                     if (interaction != null) {

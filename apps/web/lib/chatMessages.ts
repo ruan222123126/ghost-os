@@ -200,6 +200,8 @@ export function mapSessionMessageToChatMessages(message: SessionMessage): ChatMe
       return [buildAssistantMessage(normalized.text)];
     case 'system':
       return [buildSystemMessage(normalized.text || '[system]')];
+    case 'internal':
+      return [buildSystemMessage(normalized.text || '[internal]')];
     case 'tool':
       return mapToolSessionMessage(normalized);
     default:

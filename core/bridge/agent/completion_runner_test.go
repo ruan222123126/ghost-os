@@ -49,3 +49,32 @@ func TestCompletionRunnerCompleteDoesNotMutateHistory(t *testing.T) {
 		t.Fatalf("complete should not update conversation state: got %q want %q", got, "resp_prev")
 	}
 }
+
+func TestCompletionRunnerProjectsInternalMessagesForProvider(t *testing.T) {
+	completer := newFakeCompleter(&llm.CompletionResponse{
+		Message:      llm.Message{Role: llm.RoleAssistant, Text: "done"},
+		FinishReason: llm.FinishStop,
+	})
+	history := NewHistoryFromMessages([]llm.Message{
+		{Role: llm.RoleSystem, Text: "system prompt"},
+		{Role: llm.RoleUser, Text: "hello"},
+		{Role: llm.RoleInternal, Text: "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}"},
+	})
+
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history)
+	if _, err := runner.complete(context.Background(), nil, "trace-runner", "", 0); err != nil {
+		t.Fatalf("complete returned error: %v", err)
+	}
+
+	if len(completer.requests) != 1 {
+		t.Fatalf("expected one completion request, got %d", len(completer.requests))
+	}
+	request := completer.requests[0]
+	last := request.Messages[len(request.Messages)-1]
+	if last.Role != llm.RoleAssistant {
+		t.Fatalf("expected projected assistant role for provider request, got %+v", last)
+	}
+	if history.Messages()[2].Role != llm.RoleInternal {
+		t.Fatalf("expected persisted history role to stay internal, got %+v", history.Messages()[2])
+	}
+}

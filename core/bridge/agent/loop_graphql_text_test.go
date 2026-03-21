@@ -111,7 +111,7 @@ func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *
 	if newMessages[1].Role != llm.RoleAssistant || !strings.Contains(newMessages[1].Text, "updateViewer") {
 		t.Fatalf("unexpected committed assistant graphql text: %+v", newMessages[1])
 	}
-	if newMessages[2].Role != llm.RoleUser || !strings.Contains(newMessages[2].Text, "[GRAPHQL_EXECUTION_RESULT]") {
+	if newMessages[2].Role != llm.RoleInternal || !strings.Contains(newMessages[2].Text, "[GRAPHQL_EXECUTION_RESULT]") {
 		t.Fatalf("unexpected committed graphql feedback: %+v", newMessages[2])
 	}
 }

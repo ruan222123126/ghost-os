@@ -148,10 +148,12 @@ func normalizeIDs(values []string) []string {
 
 func normalizeRole(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "user":
+		return "user"
 	case "assistant":
 		return "assistant"
 	default:
-		return "user"
+		return ""
 	}
 }
 

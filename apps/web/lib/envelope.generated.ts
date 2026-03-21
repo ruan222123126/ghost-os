@@ -193,7 +193,7 @@ export interface AgentStreamMessagePayload {
 }
 
 export interface SessionMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
+  role: 'system' | 'internal' | 'user' | 'assistant' | 'tool';
   text?: string;
   content?: SessionContentPart[];
   tool_calls?: SessionToolCall[];

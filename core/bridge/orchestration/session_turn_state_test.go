@@ -111,7 +111,7 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 	if loaded.Messages[2].Role != llm.RoleAssistant || !strings.Contains(loaded.Messages[2].Text, "updateViewer") {
 		t.Fatalf("unexpected persisted assistant graphql text: %+v", loaded.Messages[2])
 	}
-	if loaded.Messages[3].Role != llm.RoleUser || !strings.Contains(loaded.Messages[3].Text, "[GRAPHQL_EXECUTION_RESULT]") {
+	if loaded.Messages[3].Role != llm.RoleInternal || !strings.Contains(loaded.Messages[3].Text, "[GRAPHQL_EXECUTION_RESULT]") {
 		t.Fatalf("unexpected persisted graphql feedback: %+v", loaded.Messages[3])
 	}
 

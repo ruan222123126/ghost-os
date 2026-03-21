@@ -11,6 +11,7 @@ describe('chatMessages', () => {
   it('preserves system and tool messages as structured chat kinds', () => {
     const messages: SessionMessage[] = [
       { role: 'system', text: 'keep sharp' },
+      { role: 'internal', text: '[GRAPHQL_EXECUTION_RESULT]\n{"data":{"viewer":{"id":"1"}}}' },
       {
         role: 'tool',
         text: 'README.md contents',
@@ -27,9 +28,13 @@ describe('chatMessages', () => {
 
     const mapped = mapSessionMessagesToChat(messages);
 
-    expect(mapped).toHaveLength(2);
+    expect(mapped).toHaveLength(3);
     expect(mapped[0]).toMatchObject({ kind: 'system', content: 'keep sharp' });
     expect(mapped[1]).toMatchObject({
+      kind: 'system',
+      content: '[GRAPHQL_EXECUTION_RESULT]\n{"data":{"viewer":{"id":"1"}}}',
+    });
+    expect(mapped[2]).toMatchObject({
       kind: 'tool',
       content: 'README.md contents',
       toolName: 'read_file',

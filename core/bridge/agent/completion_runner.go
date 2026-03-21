@@ -23,8 +23,9 @@ func newCompletionRunner(completer Completer, toolCatalog ToolCatalog, history *
 }
 
 func (r completionRunner) complete(ctx context.Context, streamSink streaming.Sink, traceID string, sessionID string, turn int) (*llm.CompletionResponse, error) {
+	messages := llm.ProjectMessagesForCompletion(r.history.Messages())
 	req := llm.CompletionRequest{
-		Messages:          r.history.Messages(),
+		Messages:          messages,
 		Tools:             r.tools.ToolDefs(),
 		ConversationState: r.history.ConversationState(),
 	}

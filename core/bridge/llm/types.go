@@ -14,6 +14,7 @@ const (
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
 	RoleTool      Role = "tool"
+	RoleInternal  Role = "internal"
 )
 
 // FinishReason 是内部统一的回合结束原因。

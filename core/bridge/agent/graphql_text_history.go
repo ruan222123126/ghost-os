@@ -17,7 +17,7 @@ func appendGraphQLExecutionFeedback(history *History, output string) {
 		return
 	}
 	history.Append(llm.Message{
-		Role: llm.RoleUser,
+		Role: llm.RoleInternal,
 		Text: formatGraphQLExecutionFeedback(trimmed),
 	})
 }

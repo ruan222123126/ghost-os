@@ -23,6 +23,17 @@
 
 ### 2026-03-21
 
+- 修复 GraphQL 文本执行反馈污染会话语义的问题：
+  - `core/bridge/agent` 现在把 GraphQL 执行结果以 `internal` 历史角色持久化，不再伪装成 `user` 消息。
+  - `core/bridge/llm` 新增 completion 前 role 投影：内部消息只在发给 provider 时映射为 provider-safe assistant 角色，存档、transcript、memory recall 与 turn learning 保持内部边界。
+  - `core/bridge/memoryaug` 收紧学习角色过滤，未知/内部角色不再默认归一为 `user`。
+  - Web / Android 会话历史解析已支持 `internal`，统一按系统注记展示，不再混入对话气泡。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent ./orchestration ./memoryaug ./llm -timeout 60s`
+  - `timeout 60s pnpm -C apps/web test -- --runTestsByPath lib/chatMessages.test.ts lib/api/sessions/parser.test.ts`
+  - `timeout 60s pnpm -C apps/web exec tsc --noEmit --pretty false`
+  - Android 定向单测已尝试：`timeout 300s env GRADLE_USER_HOME=/tmp/gradle-home ./gradlew :app:testDebugUnitTest --tests dev.ghostos.android.viewmodel.ChatViewModelTest`，但当前环境仍停在 Gradle 8.2 wrapper 下载，超时未拿到测试结果。
+
 - 修复 GraphQL text mutation 自动提交打穿 turn 事务边界的问题：
   - `core/bridge/agent` 在 GraphQL 文本写操作成功并生成 execution feedback 后，现会立即 `commitTurn`，不再把该子回合留在未提交历史里等待下一次 completion。
   - `core/bridge/orchestration` 的 `sessionTurnState.complete()` 现会在普通错误返回前，检测并持久化 agent 已显式提交的增量消息，避免出现“GraphQL mutation intent 已 checkpoint.Save，但对话历史没落盘”的分叉。

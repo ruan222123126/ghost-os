@@ -21,7 +21,7 @@ import {
   parseOptionalString,
 } from '@/lib/api/shared';
 
-const SESSION_ROLES = ['system', 'user', 'assistant', 'tool'] as const;
+const SESSION_ROLES = ['system', 'internal', 'user', 'assistant', 'tool'] as const;
 const TOOL_RESULT_STATUSES = ['success', 'error'] as const;
 const SESSION_METADATA_KEYS = [
   'id',

@@ -48,6 +48,23 @@ describe('lib/api/sessions/parser', () => {
     expect(parseSessionDetail(payload)).toEqual(payload);
   });
 
+  it('parses internal session messages', () => {
+    const payload: SessionDetail = {
+      id: 'session-2',
+      created_at: '2026-02-28T10:00:00Z',
+      updated_at: '2026-02-28T10:05:00Z',
+      token_count: 64,
+      messages: [
+        {
+          role: 'internal',
+          text: '[GRAPHQL_EXECUTION_RESULT]\n{"data":{"viewer":{"id":"1"}}}',
+        },
+      ],
+    };
+
+    expect(parseSessionDetail(payload)).toEqual(payload);
+  });
+
   it('ignores unknown fields in session detail payloads', () => {
     const payload = {
       id: 'session-1',
