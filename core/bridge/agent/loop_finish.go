@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
+	"ghost-os/bridge/tools"
 )
 
 type turnOutcome struct {
@@ -29,10 +31,28 @@ func (a *Agent) handleTurnResponse(
 	resp *llm.CompletionResponse,
 	state *agentRunState,
 ) (turnOutcome, error) {
+	if len(resp.Message.ToolCalls) > 0 {
+		if state.strictToolCallProtocol {
+			return turnOutcome{}, state.terminalRunError(
+				ctx,
+				turn,
+				strictToolCallProtocolError(state.traceID, turn),
+			)
+		}
+		return a.handleToolCallTurn(ctx, turn, resp, state)
+	}
+
 	switch resp.FinishReason {
 	case llm.FinishStop:
 		return a.handleStopTurn(ctx, turn, resp, state)
 	case llm.FinishToolCalls:
+		if state.strictToolCallProtocol {
+			return turnOutcome{}, state.terminalRunError(
+				ctx,
+				turn,
+				strictToolCallProtocolError(state.traceID, turn),
+			)
+		}
 		return a.handleToolCallTurn(ctx, turn, resp, state)
 	case llm.FinishLength:
 		return a.handleLengthTurn(ctx, turn, resp, state)
@@ -51,6 +71,10 @@ func (a *Agent) handleStopTurn(
 	resp *llm.CompletionResponse,
 	state *agentRunState,
 ) (turnOutcome, error) {
+	handled, outcome, err := a.handleGraphQLTextTurn(ctx, turn, resp, state)
+	if err != nil || handled {
+		return outcome, err
+	}
 	acceptAssistantTurn(state.history, resp)
 	a.commitTurn(state.history)
 	output := resp.Message.Text
@@ -74,6 +98,10 @@ func (a *Agent) handleLengthTurn(
 			emptyLengthResponseError(state.traceID, turn, resp.FinishReason),
 		)
 	}
+	handled, outcome, err := a.handleGraphQLTextTurn(ctx, turn, resp, state)
+	if err != nil || handled {
+		return outcome, err
+	}
 
 	acceptAssistantTurn(state.history, resp)
 	a.commitTurn(state.history)
@@ -81,6 +109,79 @@ func (a *Agent) handleLengthTurn(
 		return turnOutcome{}, err
 	}
 	return turnOutcome{output: content, done: true}, nil
+}
+
+func (a *Agent) handleGraphQLTextTurn(
+	ctx context.Context,
+	turn int,
+	resp *llm.CompletionResponse,
+	state *agentRunState,
+) (bool, turnOutcome, error) {
+	if state.graphQL == nil || resp == nil || strings.TrimSpace(resp.Message.Text) == "" {
+		return false, turnOutcome{}, nil
+	}
+	result, err := state.graphQL.Execute(ctx, resp.Message.Text, state.traceID)
+	if !result.Recognized {
+		return false, turnOutcome{}, nil
+	}
+	stepID, err := streaming.ToolStepID(turn, 0)
+	if err != nil {
+		return true, turnOutcome{}, err
+	}
+	if err := state.events.toolCallStarted(ctx, state.traceID, turn, stepID, "graphql_text", "graphql-text"); err != nil {
+		return true, turnOutcome{}, err
+	}
+	acceptAssistantTurn(state.history, resp)
+	if err != nil {
+		if emitErr := state.events.toolCallFinished(ctx, state.traceID, turn, stepID, "graphql_text", "graphql-text", "error", err); emitErr != nil {
+			return true, turnOutcome{}, emitErr
+		}
+		return true, turnOutcome{}, state.terminalRunError(ctx, turn, graphQLTextTurnError(state.traceID, turn, err))
+	}
+	if emitErr := state.events.toolCallFinished(ctx, state.traceID, turn, stepID, "graphql_text", "graphql-text", "success", nil); emitErr != nil {
+		return true, turnOutcome{}, emitErr
+	}
+	if result.Meta.AwaitingHuman != nil {
+		if err := emitGraphQLAwaitingHuman(ctx, turn, state, stepID, result.Meta.AwaitingHuman); err != nil {
+			return true, turnOutcome{}, err
+		}
+		a.commitTurn(state.history)
+		return true, turnOutcome{}, &ErrAwaitingHuman{
+			QuestionID:    strings.TrimSpace(result.Meta.AwaitingHuman.QuestionID),
+			Prompt:        strings.TrimSpace(result.Meta.AwaitingHuman.Prompt),
+			SelectionMode: strings.TrimSpace(result.Meta.AwaitingHuman.SelectionMode),
+			Options:       append([]tools.AskHumanOption(nil), result.Meta.AwaitingHuman.Options...),
+		}
+	}
+	appendGraphQLExecutionFeedback(state.history, result.Output)
+	return true, turnOutcome{}, nil
+}
+
+func emitGraphQLAwaitingHuman(
+	ctx context.Context,
+	turn int,
+	state *agentRunState,
+	stepID string,
+	awaiting *tools.AwaitingHumanSignal,
+) error {
+	if state == nil || awaiting == nil {
+		return nil
+	}
+	if err := state.events.awaitingHuman(
+		ctx,
+		state.traceID,
+		turn,
+		stepID,
+		tools.GraphQLTextMutationToolName,
+		"graphql-text",
+		strings.TrimSpace(awaiting.QuestionID),
+		strings.TrimSpace(awaiting.Prompt),
+		strings.TrimSpace(awaiting.SelectionMode),
+		append([]tools.AskHumanOption(nil), awaiting.Options...),
+	); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a *Agent) handleToolCallTurn(
@@ -201,12 +302,24 @@ func toolCallTurnError(traceID string, turn int, err error) error {
 	return fmt.Errorf("trace_id=%s turn=%d handle_tool_calls: %w", traceID, turn, err)
 }
 
+func graphQLTextTurnError(traceID string, turn int, err error) error {
+	return fmt.Errorf("trace_id=%s turn=%d handle_graphql_text: %w", traceID, turn, err)
+}
+
 func emptyLengthResponseError(traceID string, turn int, finishReason llm.FinishReason) error {
 	return fmt.Errorf("trace_id=%s turn=%d finish_reason=%q with empty content", traceID, turn, finishReason)
 }
 
 func unsupportedFinishReasonError(traceID string, turn int, finishReason llm.FinishReason) error {
 	return fmt.Errorf("trace_id=%s turn=%d unsupported finish_reason: %q", traceID, turn, finishReason)
+}
+
+func strictToolCallProtocolError(traceID string, turn int) error {
+	return fmt.Errorf(
+		"trace_id=%s turn=%d strict graphql text mode rejects tool_calls finish reason",
+		traceID,
+		turn,
+	)
 }
 
 func repeatedNonExecutableToolCallError(traceID string, turn int) error {

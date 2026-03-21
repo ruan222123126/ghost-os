@@ -476,6 +476,42 @@ func TestRunAskHumanReturnsAwaitingError(t *testing.T) {
 	}
 }
 
+func TestRunStopFinishReasonWithToolCallsStillExecutesTools(t *testing.T) {
+	completer := newFakeCompleter(
+		&llm.CompletionResponse{
+			Message: llm.Message{
+				Role: llm.RoleAssistant,
+				ToolCalls: []llm.ToolCall{
+					{
+						ID:        "call-stop-1",
+						Name:      "echo",
+						Arguments: json.RawMessage(`{"value":"hi"}`),
+					},
+				},
+			},
+			FinishReason: llm.FinishStop,
+		},
+		newStopResponse("done"),
+	)
+	tool := newStaticTool("echo", `{"ok":true}`)
+	agent := newTestAgent(completer, newFakeToolCatalog(tool), 3)
+
+	got, err := agent.Run(context.Background(), "use tool")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+
+	if tool.callCount != 1 {
+		t.Fatalf("expected tool to execute once, got %d", tool.callCount)
+	}
+	if len(completer.requests) != 2 {
+		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 2)
+	}
+}
+
 func TestRunBrowserScreenshotKeepsToolRoleWithImageContent(t *testing.T) {
 	tool := &fakeTool{
 		name: "visual_probe",

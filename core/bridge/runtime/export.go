@@ -35,6 +35,10 @@ func (d agentRuntimeDependencies) Registry() *tools.Registry {
 	return d.registry
 }
 
+func (d agentRuntimeDependencies) GraphQLRegistry() *tools.GraphQLSourceRegistry {
+	return d.graphQL
+}
+
 func (d agentRuntimeDependencies) SystemPrompt() string {
 	return d.systemPrompt
 }

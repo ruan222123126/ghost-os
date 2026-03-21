@@ -442,6 +442,8 @@ data class GraphQLMutationPolicyResponse(
     val domain: String,
     @SerialName("root_mutation")
     val rootMutation: String,
+    @SerialName("approval_required")
+    val approvalRequired: Boolean? = null,
     @SerialName("idempotency_mode")
     val idempotencyMode: String,
     @SerialName("idempotency_header")
@@ -466,6 +468,8 @@ data class GraphQLMutationPolicyInput(
     val domain: String,
     @SerialName("root_mutation")
     val rootMutation: String,
+    @SerialName("approval_required")
+    val approvalRequired: Boolean? = null,
     @SerialName("idempotency_mode")
     val idempotencyMode: String,
     @SerialName("idempotency_header")

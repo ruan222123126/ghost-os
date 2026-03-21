@@ -15,6 +15,7 @@ func normalizeGraphQLMutationPolicies(raw []GraphQLMutationPolicyConfig) []Graph
 			Source:                  normalizeOptionalString(policy.Source),
 			Domain:                  normalizeOptionalString(policy.Domain),
 			RootMutation:            normalizeOptionalString(policy.RootMutation),
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         normalizeOptionalString(policy.IdempotencyMode),
 			IdempotencyHeader:       normalizeOptionalString(policy.IdempotencyHeader),
 			IdempotencyVariablePath: normalizeOptionalString(policy.IdempotencyVariablePath),
@@ -49,6 +50,7 @@ func graphQLMutationPoliciesFromFile(raw []graphQLMutationPolicyFileConfig) []Gr
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,
@@ -74,6 +76,7 @@ func graphQLMutationPoliciesToFileConfigs(raw []GraphQLMutationPolicyConfig) []g
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,
@@ -99,6 +102,7 @@ func graphQLMutationPolicyInputsToFileConfigs(raw []GraphQLMutationPolicyInput) 
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,
@@ -113,7 +117,7 @@ func graphQLMutationPolicyInputsToFileConfigs(raw []GraphQLMutationPolicyInput) 
 
 func graphQLMutationPolicySnapshots(raw []GraphQLMutationPolicyConfig) []GraphQLMutationPolicySnapshot {
 	if len(raw) == 0 {
-		return nil
+		return []GraphQLMutationPolicySnapshot{}
 	}
 
 	out := make([]GraphQLMutationPolicySnapshot, 0, len(raw))
@@ -124,6 +128,7 @@ func graphQLMutationPolicySnapshots(raw []GraphQLMutationPolicyConfig) []GraphQL
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,
@@ -149,6 +154,7 @@ func normalizeGraphQLMutationPolicyFileConfigs(raw []graphQLMutationPolicyFileCo
 			Source:                  normalizeOptionalString(policy.Source),
 			Domain:                  normalizeOptionalString(policy.Domain),
 			RootMutation:            normalizeOptionalString(policy.RootMutation),
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         normalizeOptionalString(policy.IdempotencyMode),
 			IdempotencyHeader:       normalizeOptionalString(policy.IdempotencyHeader),
 			IdempotencyVariablePath: normalizeOptionalString(policy.IdempotencyVariablePath),

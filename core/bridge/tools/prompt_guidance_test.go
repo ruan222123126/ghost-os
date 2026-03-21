@@ -7,15 +7,16 @@ import (
 
 func TestFormatPromptGuidanceForCatalog_UsesScopedToolHints(t *testing.T) {
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "script_exec", "screen_action", ToolSearchToolName} {
+	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec", "screen_action", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
 
-	scoped := NewScopedCatalog(registry, []string{"ask_human", "script_exec", ToolSearchToolName})
+	scoped := NewScopedCatalog(registry, []string{"ask_human", "read_and_summarize", "script_exec", ToolSearchToolName})
 	guidance := FormatPromptGuidanceForCatalog(scoped)
 
 	for _, snippet := range []string{
 		"structured tool schema",
+		"`read_and_summarize`",
 		"`script_exec`",
 		"`ask_human`",
 		"`tfind(action=\"search\")`",
@@ -95,5 +96,29 @@ func TestFormatPromptGuidanceForCatalog_IncludesGraphQLWorkflowWhenVisible(t *te
 		if !strings.Contains(guidance, snippet) {
 			t.Fatalf("expected guidance to contain %q, got %q", snippet, guidance)
 		}
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec"} {
+		registry.Register(&mockTool{name: name})
+	}
+
+	withBoth := FormatPromptGuidanceForCatalog(registry)
+	if !strings.Contains(withBoth, "Use `read_and_summarize` for broad local triage, then use `script_exec`") {
+		t.Fatalf("expected combined workspace guidance when both tools are visible, got %q", withBoth)
+	}
+
+	onlyScriptExec := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human", "script_exec"}))
+	if strings.Contains(onlyScriptExec, "`script_exec` for exact workspace reads") ||
+		strings.Contains(onlyScriptExec, "`read_and_summarize` for broad local triage") {
+		t.Fatalf("expected workspace guidance to stay hidden when read_and_summarize is not visible, got %q", onlyScriptExec)
+	}
+
+	onlyReadAndSummarize := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human", "read_and_summarize"}))
+	if strings.Contains(onlyReadAndSummarize, "`read_and_summarize` for broad local triage") ||
+		strings.Contains(onlyReadAndSummarize, "broad multi-file triage") {
+		t.Fatalf("expected workspace guidance to stay hidden when script_exec is not visible, got %q", onlyReadAndSummarize)
 	}
 }

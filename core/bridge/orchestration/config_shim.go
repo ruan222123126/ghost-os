@@ -179,7 +179,7 @@ func cloneModelTokenOverrides(raw map[string]int) map[string]int {
 
 func graphQLSourceResponses(raw []bridgeconfig.GraphQLSourceSnapshot) []graphqlSourceResponse {
 	if len(raw) == 0 {
-		return nil
+		return []graphqlSourceResponse{}
 	}
 
 	out := make([]graphqlSourceResponse, 0, len(raw))
@@ -227,7 +227,7 @@ func graphQLMutationPolicyResponses(
 	raw []bridgeconfig.GraphQLMutationPolicySnapshot,
 ) []graphqlMutationPolicyResponse {
 	if len(raw) == 0 {
-		return nil
+		return []graphqlMutationPolicyResponse{}
 	}
 
 	out := make([]graphqlMutationPolicyResponse, 0, len(raw))
@@ -238,6 +238,7 @@ func graphQLMutationPolicyResponses(
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,
@@ -333,6 +334,7 @@ func graphQLMutationPolicyInputs(
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,

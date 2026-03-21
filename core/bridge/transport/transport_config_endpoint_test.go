@@ -81,3 +81,29 @@ func TestConfigUpdateEmptyBaseURLAndModelResetDefaults(t *testing.T) {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", payload["model_selection_enabled"])
 	}
 }
+
+func TestConfigGetReturnsEmptyGraphQLArraysWhenUnset(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	get := serveRequest(handler, http.MethodGet, "/api/config", "", nil)
+	if get.Code != http.StatusOK {
+		t.Fatalf("unexpected get status: got %d want %d", get.Code, http.StatusOK)
+	}
+	body := decodeResponseBody(t, get)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+
+	sources, ok := payload["graphql_sources"].([]any)
+	if !ok || len(sources) != 0 {
+		t.Fatalf("expected graphql_sources to be an empty array, got %#v", payload["graphql_sources"])
+	}
+	policies, ok := payload["graphql_mutation_policies"].([]any)
+	if !ok || len(policies) != 0 {
+		t.Fatalf(
+			"expected graphql_mutation_policies to be an empty array, got %#v",
+			payload["graphql_mutation_policies"],
+		)
+	}
+}

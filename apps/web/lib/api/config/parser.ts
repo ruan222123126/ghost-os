@@ -76,6 +76,7 @@ const GRAPHQL_MUTATION_POLICY_KEYS = [
   'source',
   'domain',
   'root_mutation',
+  'approval_required',
   'idempotency_mode',
   'idempotency_header',
   'idempotency_variable_path',
@@ -167,6 +168,9 @@ function parseGraphQLMutationPolicyResponse(
   label: string,
 ): GraphQLMutationPolicyResponse {
   const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_MUTATION_POLICY_KEYS);
+  const approvalRequired = record.approval_required === undefined
+    ? undefined
+    : expectBoolean(record.approval_required, `${label}.approval_required`);
 
   return {
     name: expectString(record.name, `${label}.name`),
@@ -176,6 +180,7 @@ function parseGraphQLMutationPolicyResponse(
     source: expectString(record.source, `${label}.source`),
     domain: expectString(record.domain, `${label}.domain`),
     root_mutation: expectString(record.root_mutation, `${label}.root_mutation`),
+    ...(approvalRequired === undefined ? {} : { approval_required: approvalRequired }),
     idempotency_mode: expectStringEnum(
       record.idempotency_mode,
       GRAPHQL_IDEMPOTENCY_MODES,

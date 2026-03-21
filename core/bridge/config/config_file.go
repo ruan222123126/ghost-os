@@ -59,6 +59,7 @@ type graphQLMutationPolicyFileConfig struct {
 	Source                  string `toml:"source,omitempty"`
 	Domain                  string `toml:"domain,omitempty"`
 	RootMutation            string `toml:"root_mutation,omitempty"`
+	ApprovalRequired        bool   `toml:"approval_required,omitempty"`
 	IdempotencyMode         string `toml:"idempotency_mode,omitempty"`
 	IdempotencyHeader       string `toml:"idempotency_header,omitempty"`
 	IdempotencyVariablePath string `toml:"idempotency_variable_path,omitempty"`

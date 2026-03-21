@@ -12,6 +12,7 @@ type MutationPolicy struct {
 	Source                  string
 	Domain                  string
 	RootMutation            string
+	ApprovalRequired        bool
 	IdempotencyMode         string
 	IdempotencyHeader       string
 	IdempotencyVariablePath string
@@ -211,6 +212,7 @@ func buildMutationPolicy(
 		Source:                  sourceName,
 		Domain:                  domainName,
 		RootMutation:            rootMutation,
+		ApprovalRequired:        cfg.ApprovalRequired,
 		IdempotencyMode:         strings.TrimSpace(cfg.IdempotencyMode),
 		IdempotencyHeader:       strings.TrimSpace(cfg.IdempotencyHeader),
 		IdempotencyVariablePath: strings.TrimSpace(cfg.IdempotencyVariablePath),
@@ -281,6 +283,7 @@ func cloneMutationPolicy(policy MutationPolicy) MutationPolicy {
 		Source:                  policy.Source,
 		Domain:                  policy.Domain,
 		RootMutation:            policy.RootMutation,
+		ApprovalRequired:        policy.ApprovalRequired,
 		IdempotencyMode:         policy.IdempotencyMode,
 		IdempotencyHeader:       policy.IdempotencyHeader,
 		IdempotencyVariablePath: policy.IdempotencyVariablePath,

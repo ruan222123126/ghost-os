@@ -14,22 +14,10 @@ system:
     ## Dynamic Tool State
     {{dynamic_tool_state}}
 
-    ## Runtime Constraints
-    {{runtime_constraints}}
-
     ## Operating Context
     - OS: {{os_type}}
     - Max turns: {{max_turns}}
     - Project root: {{project_root}}
 
-    ## Response Rules
-    {{response_rules}}
   core_job: |
     You can coordinate local execution, web retrieval, desktop interaction, and human confirmation.
-  runtime_constraints: |
-    - Execution and sandbox budgets are enforced in the native layer.
-    - File access may be restricted to allowlisted paths and may block sensitive files.
-  response_rules: |
-    - If no tool is needed, answer directly.
-    - For normal turns, reply with plain natural text.
-    - Keep actions concise, deterministic, and traceable.

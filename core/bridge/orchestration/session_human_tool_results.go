@@ -13,8 +13,8 @@ func resolvedHumanQuestionToolResult(
 ) (string, string, string) {
 	toolName := resolvedHumanQuestionToolName(item.Question)
 	switch toolName {
-	case "graphql_mutation":
-		return graphqlMutationResolvedQuestionToolResult(sess, item)
+	case "graphql_mutation", "graphql_text_mutation":
+		return graphqlMutationResolvedQuestionToolResult(sess, item, toolName)
 	default:
 		return askHumanResolvedQuestionToolResult(item)
 	}
@@ -67,6 +67,7 @@ func askHumanResolvedQuestionOptions(
 func graphqlMutationResolvedQuestionToolResult(
 	sess *session.Session,
 	item session.AnsweredHumanQuestion,
+	toolName string,
 ) (string, string, string) {
 	intent, ok := sess.PendingGraphQLMutationIntentByQuestionID(item.QuestionID)
 	if !ok {
@@ -78,7 +79,7 @@ func graphqlMutationResolvedQuestionToolResult(
 			"intent_missing":  true,
 			"prompt":          item.Question.Prompt,
 		}
-		return "graphql_mutation", mustEncodeResolvedQuestionPayload(payload), ""
+		return toolName, mustEncodeResolvedQuestionPayload(payload), ""
 	}
 
 	payload := map[string]any{
@@ -92,7 +93,7 @@ func graphqlMutationResolvedQuestionToolResult(
 		"policy":          intent.PolicyName,
 		"root_mutation":   intent.RootMutation,
 	}
-	return "graphql_mutation", mustEncodeResolvedQuestionPayload(payload), intent.Summary
+	return toolName, mustEncodeResolvedQuestionPayload(payload), intent.Summary
 }
 
 func mustEncodeResolvedQuestionPayload(payload map[string]any) string {

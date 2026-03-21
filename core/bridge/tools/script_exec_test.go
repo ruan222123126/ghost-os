@@ -27,7 +27,7 @@ func TestScriptExecToolName(t *testing.T) {
 	}
 }
 
-func TestScriptExecToolDescriptionListsEnhancedMethods(t *testing.T) {
+func TestScriptExecToolDescriptionListsHelpers(t *testing.T) {
 	tool := NewScriptExecTool(nil)
 	description := tool.Description()
 

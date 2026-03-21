@@ -92,6 +92,7 @@ func newGraphQLSchemaMutationPolicyPayload(
 		Description:             policy.Description,
 		Domain:                  policy.Domain,
 		RootMutation:            newGraphQLSchemaFieldPayload(rootField),
+		ApprovalRequired:        policy.ApprovalRequired,
 		IdempotencyMode:         policy.IdempotencyMode,
 		IdempotencyHeader:       policy.IdempotencyHeader,
 		IdempotencyVariablePath: policy.IdempotencyVariablePath,

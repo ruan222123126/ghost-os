@@ -68,7 +68,7 @@ func (s *ConfigStore) ListProviders() []providerConfig {
 
 func graphQLSourceSnapshots(raw []GraphQLSourceConfig) []GraphQLSourceSnapshot {
 	if len(raw) == 0 {
-		return nil
+		return []GraphQLSourceSnapshot{}
 	}
 
 	out := make([]GraphQLSourceSnapshot, 0, len(raw))

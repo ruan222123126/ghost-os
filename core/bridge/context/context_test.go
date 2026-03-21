@@ -148,14 +148,14 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			"## Dynamic Tool State",
 			defaultToolGuidance,
 			defaultDynamicState,
-			"## Runtime Constraints",
-			"## Response Rules",
 		} {
 			if !strings.Contains(prompt, snippet) {
 				t.Fatalf("prompt missing %q: %q", snippet, prompt)
 			}
 		}
 		for _, snippet := range []string{
+			"## Runtime Constraints",
+			"## Response Rules",
 			"END_SESSION",
 			"RSS inbox polling and AI filtering",
 			"Available tools:",

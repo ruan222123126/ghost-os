@@ -19,10 +19,12 @@ type ToolCatalog = tools.ToolCatalog
 // Agent 只编排对话循环，不绑定具体 Provider/Tool 实现。
 // Agent 非并发安全，调用方需自行串行化或加锁保护。
 type Agent struct {
-	completer Completer
-	tools     ToolCatalog
-	history   *History
-	maxTurns  int
+	completer              Completer
+	tools                  ToolCatalog
+	graphQL                tools.GraphQLTextExecutor
+	strictToolCallProtocol bool
+	history                *History
+	maxTurns               int
 
 	initialHistoryLen int
 	lastTurn          int
@@ -90,6 +92,20 @@ func (a *Agent) SetStreamLifecyclePayloadBuilder(builder StreamLifecyclePayloadB
 		return
 	}
 	a.streamLifecycle = builder
+}
+
+func (a *Agent) SetGraphQLTextExecutor(executor tools.GraphQLTextExecutor) {
+	if a == nil {
+		return
+	}
+	a.graphQL = executor
+}
+
+func (a *Agent) SetStrictToolCallProtocol(strict bool) {
+	if a == nil {
+		return
+	}
+	a.strictToolCallProtocol = strict
 }
 
 // Run 负责循环与退出条件；单步执行下沉给独立协作者处理。

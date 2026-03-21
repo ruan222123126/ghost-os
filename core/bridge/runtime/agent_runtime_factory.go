@@ -2,13 +2,10 @@ package runtime
 
 import (
 	"os"
-	goruntime "runtime"
-	"strconv"
 	"strings"
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/artifacts"
-	ctxmgr "ghost-os/bridge/context"
 	"ghost-os/bridge/execution"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
@@ -21,6 +18,7 @@ type agentRuntimeDependencies struct {
 	cfg          Config
 	client       agent.Completer
 	registry     *tools.Registry
+	graphQL      *tools.GraphQLSourceRegistry
 	systemPrompt string
 	memoryRecall memoryaug.RecallService
 	memoryLearn  memoryaug.LearningService
@@ -103,7 +101,8 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		resources:   resources,
 		taskManager: taskManager,
 	})
-	if err := registerOptionalGraphQLTools(registry, cfg); err != nil {
+	graphQLRegistry, err := buildGraphQLSourceRegistry(cfg)
+	if err != nil {
 		closeRuntimeToolResources(resources)
 		return agentRuntimeDependencies{}, err
 	}
@@ -122,6 +121,7 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		cfg:          cfg,
 		client:       clients.primary,
 		registry:     registry,
+		graphQL:      graphQLRegistry,
 		systemPrompt: systemPrompt,
 		memoryRecall: memoryResources.recall,
 		memoryLearn:  memoryResources.learn,
@@ -251,30 +251,19 @@ func memorySettingsFromConfig(cfg Config) memoryaug.Settings {
 }
 
 func buildRuntimeSystemPrompt(cfg Config, registry *tools.Registry) (string, error) {
-	promptManager, err := ctxmgr.NewPromptManagerWithOptions(ctxmgr.PromptLoadOptions{
-		ConfigPath: cfg.PromptsPath,
-		CoreDir:    cfg.PromptsDir,
-		CoreFiles:  cfg.PromptsCoreFiles,
-	})
-	if err != nil {
-		if len(cfg.PromptsCoreFiles) > 0 {
-			return "", err
-		}
-		promptManager = ctxmgr.NewPromptManagerWithDefault()
-	}
 	catalog := newToolSelectionPolicy(cfg).scopeCatalog(registry)
-	contextBuilder := ctxmgr.NewBuilder(promptManager, catalog)
-	return contextBuilder.BuildSystemPrompt(map[string]string{
-		"os_type":      goruntime.GOOS,
-		"tools_count":  strconv.Itoa(len(catalog.ToolDefs())),
-		"tool_list":    tools.FormatPromptToolsForCatalog(catalog),
-		"max_turns":    strconv.Itoa(cfg.MaxTurns),
-		"project_root": resolvePromptProjectRoot(cfg.ProjectRoot),
-	}), nil
+	return buildSystemPrompt(cfg, catalog)
 }
 
 func closeRuntimeToolResources(resources runtimeToolResources) {
 	_ = closeExecutionClient(resources.executionClient)
+}
+
+func buildGraphQLSourceRegistry(cfg Config) (*tools.GraphQLSourceRegistry, error) {
+	if len(cfg.GraphQL.Sources) == 0 {
+		return nil, nil
+	}
+	return tools.NewGraphQLSourceRegistry(graphQLRegistryConfig(cfg))
 }
 
 func resolvePromptProjectRoot(projectRoot string) string {

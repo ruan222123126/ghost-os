@@ -63,7 +63,7 @@ func (ReadAndSummarizeTool) Name() string {
 }
 
 func (ReadAndSummarizeTool) Description() string {
-	return "Read multiple local files and summarize them with a worker model for fast triage. Verify exact code with script_exec + tools.read_file before editing."
+	return "Read multiple local files and summarize them with a worker model for fast triage. Use the available workspace tools to verify exact code before editing."
 }
 
 func (ReadAndSummarizeTool) Parameters() json.RawMessage {

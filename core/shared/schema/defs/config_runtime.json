@@ -196,6 +196,7 @@
         "source": { "type": "string", "minLength": 1 },
         "domain": { "type": "string", "minLength": 1 },
         "root_mutation": { "type": "string", "minLength": 1 },
+        "approval_required": { "type": "boolean" },
         "idempotency_mode": {
           "type": "string",
           "enum": ["header", "variable_path"]
@@ -231,6 +232,7 @@
         "source": { "type": "string", "minLength": 1 },
         "domain": { "type": "string", "minLength": 1 },
         "root_mutation": { "type": "string", "minLength": 1 },
+        "approval_required": { "type": "boolean" },
         "idempotency_mode": {
           "type": "string",
           "enum": ["header", "variable_path"]

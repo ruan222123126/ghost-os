@@ -45,6 +45,7 @@ type MutationPolicyConfig struct {
 	Source                  string
 	Domain                  string
 	RootMutation            string
+	ApprovalRequired        bool
 	IdempotencyMode         string
 	IdempotencyHeader       string
 	IdempotencyVariablePath string

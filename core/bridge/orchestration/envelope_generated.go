@@ -364,6 +364,7 @@ type graphqlMutationPolicyResponse struct {
 	Source string `json:"source"`
 	Domain string `json:"domain"`
 	RootMutation string `json:"root_mutation"`
+	ApprovalRequired bool `json:"approval_required,omitempty"`
 	IdempotencyMode string `json:"idempotency_mode"`
 	IdempotencyHeader string `json:"idempotency_header,omitempty"`
 	IdempotencyVariablePath string `json:"idempotency_variable_path,omitempty"`
@@ -380,6 +381,7 @@ type graphqlMutationPolicyInput struct {
 	Source string `json:"source"`
 	Domain string `json:"domain"`
 	RootMutation string `json:"root_mutation"`
+	ApprovalRequired bool `json:"approval_required,omitempty"`
 	IdempotencyMode string `json:"idempotency_mode"`
 	IdempotencyHeader string `json:"idempotency_header,omitempty"`
 	IdempotencyVariablePath string `json:"idempotency_variable_path,omitempty"`

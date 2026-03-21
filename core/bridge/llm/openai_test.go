@@ -109,6 +109,35 @@ func TestOpenAIToCompletionResponseEmptyFinishReasonFallsBackToToolCalls(t *test
 	}
 }
 
+func TestOpenAIToCompletionResponseStopFinishReasonWithToolCallsNormalizesToToolCalls(t *testing.T) {
+	resp, err := openAIToCompletionResponse(openAIResponse{
+		Choices: []openAIChoice{
+			{
+				Message: openAIMessage{
+					Role: "assistant",
+					ToolCalls: []openAIToolCall{
+						{
+							ID:   "call-1",
+							Type: "function",
+							Function: openAIFunctionCall{
+								Name:      "script_exec",
+								Arguments: `{"script":"print(1)"}`,
+							},
+						},
+					},
+				},
+				FinishReason: "stop",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("openAIToCompletionResponse returned error: %v", err)
+	}
+	if resp.FinishReason != FinishToolCalls {
+		t.Fatalf("unexpected finish reason: got %q want %q", resp.FinishReason, FinishToolCalls)
+	}
+}
+
 // 验证空 tool_call.arguments 不被静默改写为 {}，交由上层做无效调用处理。
 func TestOpenAIToCompletionResponsePreservesEmptyToolCallArguments(t *testing.T) {
 	resp, err := openAIToCompletionResponse(openAIResponse{

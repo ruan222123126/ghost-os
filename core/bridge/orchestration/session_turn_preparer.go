@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"sort"
@@ -82,6 +83,16 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 			err:        err,
 		}
 	}
+	execCtx = tools.WithSession(execCtx, sess)
+	execCtx = tools.WithSessionCheckpoint(execCtx, p.sessionStore)
+	if err := autoCommitApprovedGraphQLTextIntents(execCtx, deps.graphQL, sess, trimmedTraceID); err != nil {
+		cleanup()
+		deps.Close()
+		return nil, &sessionTurnSetupError{
+			sessionID: strings.TrimSpace(sess.ID),
+			err:       err,
+		}
+	}
 
 	history, preTurnMessages, catalog, err := p.prepareHistoryAndEnvironment(execCtx, deps, historyBuilder, sess, rawUserMessage, trimmedUserMessage, trimmedTraceID)
 	if err != nil {
@@ -92,16 +103,18 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 			err:       err,
 		}
 	}
-
-	execCtx = tools.WithSession(execCtx, sess)
-	execCtx = tools.WithSessionCheckpoint(execCtx, p.sessionStore)
+	runAgent := agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns)
+	if deps.graphQL != nil {
+		runAgent.SetGraphQLTextExecutor(tools.NewGraphQLTextExecutor(deps.graphQL))
+		runAgent.SetStrictToolCallProtocol(true)
+	}
 
 	return &sessionTurnState{
 		sessionStore:    p.sessionStore,
 		deps:            deps,
 		persistence:     persistence,
 		sess:            sess,
-		agent:           agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns),
+		agent:           runAgent,
 		execCtx:         execCtx,
 		traceID:         trimmedTraceID,
 		userMessage:     trimmedUserMessage,
@@ -173,6 +186,10 @@ func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 	if basePrompt == "" {
 		basePrompt = strings.TrimSpace(deps.systemPrompt)
 	}
+	if deps.graphQL != nil {
+		// GraphQL text mode augments the active runtime prompt; it must not replace it.
+		basePrompt = withGraphQLTextProtocolPrompt(basePrompt)
+	}
 	sessionID := ""
 	if sess != nil {
 		sessionID = sess.ID
@@ -220,6 +237,9 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 	askHumanContinuation bool,
 	traceID string,
 ) (tools.ToolCatalog, string, error) {
+	if deps.graphQL != nil {
+		return tools.NewScopedCatalog(deps.registry, nil), "", nil
+	}
 	policy := newToolSelectionPolicy(deps.cfg)
 	staticCatalog := policy.scopeCatalog(deps.registry)
 	staticNames := toolCatalogNames(staticCatalog)
@@ -329,4 +349,80 @@ func toolCatalogNames(catalog tools.ToolCatalog) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func withGraphQLTextProtocolPrompt(basePrompt string) string {
+	protocol := strings.TrimSpace(`
+GraphQL Text Protocol:
+- Do not emit tool calls.
+- If data access is needed, output exactly one GraphQL document and nothing else.
+- Use query for reads and mutation for writes.
+- Keep one operation per response.
+- Avoid markdown fences unless explicitly requested.
+`)
+	trimmed := strings.TrimSpace(basePrompt)
+	if trimmed == "" {
+		return protocol
+	}
+	return trimmed + "\n\n" + protocol
+}
+
+func autoCommitApprovedGraphQLTextIntents(
+	ctx context.Context,
+	registry *tools.GraphQLSourceRegistry,
+	sess *session.Session,
+	traceID string,
+) error {
+	if registry == nil || sess == nil || len(sess.HumanAnswers) == 0 {
+		return nil
+	}
+	tool := tools.NewGraphQLMutationTool(registry)
+	questionIDs := sortedAnsweredQuestionIDs(sess.HumanAnswers)
+	for _, questionID := range questionIDs {
+		question, ok := sess.PendingQuestions[questionID]
+		if !ok || strings.TrimSpace(question.ToolName) != tools.GraphQLTextMutationToolName {
+			continue
+		}
+		intent, ok := sess.PendingGraphQLMutationIntentByQuestionID(questionID)
+		if !ok {
+			continue
+		}
+		action := autoCommitActionForIntent(intent)
+		if action == "" {
+			continue
+		}
+		argsJSON, err := json.Marshal(map[string]any{"action": action, "intent_id": intent.IntentID})
+		if err != nil {
+			return err
+		}
+		if _, err := tool.Execute(ctx, argsJSON, traceID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sortedAnsweredQuestionIDs(answers map[string]string) []string {
+	if len(answers) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(answers))
+	for questionID := range answers {
+		if trimmed := strings.TrimSpace(questionID); trimmed != "" {
+			ids = append(ids, trimmed)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func autoCommitActionForIntent(intent session.PendingGraphQLMutationIntent) string {
+	switch strings.TrimSpace(intent.Status) {
+	case session.GraphQLMutationIntentApproved:
+		return "commit"
+	case session.GraphQLMutationIntentDeliveryUnknown:
+		return "retry_commit"
+	default:
+		return ""
+	}
 }

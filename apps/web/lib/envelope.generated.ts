@@ -314,6 +314,7 @@ export interface GraphQLMutationPolicyResponse {
   source: string;
   domain: string;
   root_mutation: string;
+  approval_required?: boolean;
   idempotency_mode: 'header' | 'variable_path';
   idempotency_header?: string;
   idempotency_variable_path?: string;
@@ -329,6 +330,7 @@ export interface GraphQLMutationPolicyInput {
   source: string;
   domain: string;
   root_mutation: string;
+  approval_required?: boolean;
   idempotency_mode: 'header' | 'variable_path';
   idempotency_header?: string;
   idempotency_variable_path?: string;

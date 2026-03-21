@@ -43,7 +43,7 @@ func (ScriptExecTool) Description() string {
 	allowedHelpers := append([]string(nil), scriptExecAllowedHelpers...)
 	sort.Strings(allowedHelpers)
 
-	return "Execute a Python script in the fallback sandbox as the primary local workspace tool. For deterministic edits, prefer tools.list_files, tools.read_file, tools.search_files, tools.apply_diff, and tools.write_file inside the script. Use tools.bash_exec only when a shell command is required.\n\nAllowed helpers: " + strings.Join(allowedHelpers, ", ") + ".\nSandbox limits are enforced by the execution layer."
+	return "Execute a Python script in the fallback sandbox as the primary local workspace tool.\n\nAllowed helpers: " + strings.Join(allowedHelpers, ", ") + ".\nSandbox limits are enforced by the execution layer."
 }
 
 func (ScriptExecTool) Parameters() json.RawMessage {

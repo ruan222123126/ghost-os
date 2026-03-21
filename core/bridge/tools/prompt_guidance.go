@@ -26,21 +26,11 @@ func rssPromptGuidance(names map[string]bool) []string {
 }
 
 func workspacePromptGuidance(names map[string]bool) []string {
-	switch {
-	case names["script_exec"] && names["read_and_summarize"]:
-		return []string{
-			"- Use `read_and_summarize` for broad local triage, then use `script_exec` for exact reads, searches, edits, and shell/script work.",
-		}
-	case names["script_exec"]:
-		return []string{
-			"- Prefer `script_exec` for exact workspace reads, searches, edits, and shell/script work.",
-		}
-	case names["read_and_summarize"]:
-		return []string{
-			"- Use `read_and_summarize` for broad multi-file triage; rely on the available workspace tools for exact verification before changing code.",
-		}
-	default:
+	if !names["script_exec"] || !names["read_and_summarize"] {
 		return nil
+	}
+	return []string{
+		"- Use `read_and_summarize` for broad local triage, then use `script_exec` for exact reads, searches, edits, and shell/script work.",
 	}
 }
 

@@ -99,6 +99,7 @@ func graphQLMutationPolicyConfigs(
 			Source:                  policy.Source,
 			Domain:                  policy.Domain,
 			RootMutation:            policy.RootMutation,
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         policy.IdempotencyMode,
 			IdempotencyHeader:       policy.IdempotencyHeader,
 			IdempotencyVariablePath: policy.IdempotencyVariablePath,

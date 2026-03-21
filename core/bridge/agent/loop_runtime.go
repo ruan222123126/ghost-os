@@ -8,17 +8,20 @@ import (
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
+	"ghost-os/bridge/tools"
 )
 
 type agentRunState struct {
 	traceID string
 	sink    streaming.Sink
 
-	history    *History
-	completion completionRunner
-	toolCalls  toolCallExecutor
-	events     agentEventEmitter
-	lifecycle  StreamLifecyclePayloadBuilder
+	history                *History
+	completion             completionRunner
+	toolCalls              toolCallExecutor
+	graphQL                tools.GraphQLTextExecutor
+	events                 agentEventEmitter
+	lifecycle              StreamLifecyclePayloadBuilder
+	strictToolCallProtocol bool
 
 	consecutiveNonExecutableToolCallTurns int
 }
@@ -36,13 +39,15 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) agentRunSta
 
 	events := newAgentEventEmitter(sink, lifecycle.SessionID)
 	return agentRunState{
-		traceID:    normalizeTraceID(traceID),
-		sink:       sink,
-		history:    history,
-		completion: newCompletionRunner(a.completer, a.tools, history),
-		toolCalls:  newToolCallExecutor(a.tools, history, nil, events),
-		events:     events,
-		lifecycle:  lifecycle,
+		traceID:                normalizeTraceID(traceID),
+		sink:                   sink,
+		history:                history,
+		completion:             newCompletionRunner(a.completer, a.tools, history),
+		toolCalls:              newToolCallExecutor(a.tools, history, nil, events),
+		graphQL:                a.graphQL,
+		events:                 events,
+		lifecycle:              lifecycle,
+		strictToolCallProtocol: a.strictToolCallProtocol,
 	}
 }
 

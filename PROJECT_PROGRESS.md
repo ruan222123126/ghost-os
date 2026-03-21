@@ -1,6 +1,6 @@
 # Ghost-OS 当前项目概述
 
-更新日期：2026-03-14  
+更新日期：2026-03-21  
 分支：main（与 `origin/main` 同步）  
 阶段：MVP 骨架（主链路可用，核心能力持续补齐）
 
@@ -21,7 +21,68 @@
 
 ## 近期关键进展
 
+### 2026-03-21
+
+- 落地“纯文本 GraphQL 执行 + 高风险审批”主链路：
+  - Agent 新增 `GraphQLTextExecutor` 执行分支；当模型输出单条 GraphQL `query/mutation` 文本时直接执行，不再依赖 tool-call schema。
+  - GraphQL 模式下开启 strict 协议：`finish_reason=tool_calls` 直接报错；并在会话 prompt 注入 `GraphQL Text Protocol`，要求模型输出单条 GraphQL 文档。
+  - 新增 `core/bridge/tools/graphql_text_executor*.go`：`query` 走 source/domain 推断后直执行；`mutation` 按 policy 执行（低风险自动 commit，高风险挂起人工审批）。
+  - `session_turn_preparer` 在 resume 前会自动扫描 `graphql_text_mutation` 已批准 intent，并自动触发 `commit/retry_commit`，不再依赖模型二次发起提交。
+  - human-answer 回放链路支持 `graphql_text_mutation`，GraphQL 审批问答可被正确写回与消费。
+  - 修复 GraphQL 文本协议对主 system prompt 的短路：协议块现在只会在默认运行时 prompt / fallback prompt 组装完成后追加，不再替换 `Core Job`、动态工具状态与运行上下文；已补 `session_turn_graphql_prompt_test.go` 回归。
+
+- 新增 mutation policy 风险标记并打通跨端契约：
+  - `graphql_mutation_policies` 新增 `approval_required`，已贯通 `config`、`runtime`、`tools/internal/graphqlschema`、schema lookup payload 与 orchestration shim。
+  - 更新 `core/shared/schema/defs/config_runtime.json` 并执行 `python3 task.py gen-contracts`，同步 Go/TS/Rust/Kotlin 生成类型。
+  - Web config parser 已支持 `approval_required` 字段解析。
+
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s`
+  - `pnpm -C apps/web test`
+  - `pnpm -C apps/web exec tsc --noEmit --pretty false`
+  - `timeout 60 cargo test --manifest-path apps/cli/Cargo.toml`
+
+- 新增 GraphQL 统一调用文档并收口外部表述：
+  - 新增 `docs/graphql-mutation-unified-api.md`，明确“统一接口”发生在业务层（GraphQL Query/Mutation），而非调度层（tool-call 仍保留）。
+  - 文档同步收口“写操作语义”：`graphql_mutation` 采用 `prepare -> commit/retry` 两阶段，包含 `status/discard/list_pending`，不再把写链路表述为“裸 mutation 直发”。
+  - 补充三类挑战说明：先后依赖、多轮审批、幂等交付与不确定状态追踪，避免把 schema 类型校验误写成端到端执行保障。
+
+- 按当前需求移除 Agent 侧 GraphQL 工具可用性：
+  - `core/bridge/runtime/agent_runtime_factory.go` 不再调用 `registerOptionalGraphQLTools`，Bridge 运行时不再注册 `graphql_query` / `graphql_schema_lookup` / `graphql_mutation`。
+  - 保留 GraphQL 配置结构与底层实现代码，避免对配置 DTO、持久化和既有模块造成跨层破坏；仅关闭模型可用工具面与执行入口。
+  - `core/bridge/runtime/agent_runtime_factory_test.go` 已同步为“GraphQL 配置存在时仍禁用工具”的断言，并覆盖无效 schema/policy 不再影响 runtime Build 的行为。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./runtime ./tools ./config -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -timeout 60s`
+
+- 收口工具指引的按需显示条件：
+  - `core/bridge/tools/prompt_guidance.go` 的 workspace 指引改为“仅当 `read_and_summarize` 与 `script_exec` 同时在本轮结构化工具 schema 中可见时才注入”，不再在只加载单工具时显示对应文案。
+  - 补充 `core/bridge/tools/prompt_guidance_test.go` 回归用例，覆盖“仅单工具可见时不显示 workspace 指引”。
+  - 同步更新 `core/bridge/runtime/tool_selector_factory_test.go` 断言，避免继续依赖旧的“单 `script_exec` 也应注入 workspace 指引”语义。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./tools -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./runtime -timeout 60s`
+
+- 精简主 system prompt 默认模板：
+  - `core/bridge/prompts.yaml` 已删除 `## Runtime Constraints` 与 `## Response Rules` 两个区块及对应默认文案，默认提示词仅保留 `core_job`、`tool_guidance`、`dynamic_tool_state` 与运行上下文。
+  - `core/bridge/context/prompt_default_generated.go` 已通过 `go generate -C core/bridge/context` 同步更新，确保内置 fallback 模板与 `prompts.yaml` 一致。
+  - `core/bridge/context/context_test.go` 已更新断言，改为校验上述两区块默认不再出现在 prompt 文本中。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./context ./runtime -timeout 60s`
+
 ### 2026-03-15
+
+- 修复 OpenAI-compatible 非流式 tool-call finish reason 漂移：
+  - 当上游错误返回 `message.tool_calls` 且 `finish_reason="stop"` 时，Bridge 现在会按 `tool_calls` 处理，不再把空 assistant 文本误判成最终回复并抛出 `agent response message is empty`。
+  - Agent 回合分发新增一层显式保护：当前响应只要携带 `tool_calls`，就优先进入工具执行分支，避免再被 provider 的 finish reason 误导。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./llm ./agent ./orchestration ./transport -timeout 60s`
+  - 本机 live 回归：`POST http://127.0.0.1:8080/api/agent` 使用工具请求已返回正常文本，不再报 `agent response message is empty`
+
+- 修复 `/api/config` 的 GraphQL 配置响应契约：
+  - 当未配置 GraphQL source / mutation policy 时，Bridge 现在稳定返回 `graphql_sources: []` 与 `graphql_mutation_policies: []`，不再序列化成 `null`，避免 Web Console 因 schema mismatch 抛出 `Invalid bridge config.graphql_sources: expected array`。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./transport -timeout 60s`
 
 - 移除 Bridge 配置的 legacy TOML / GraphQL 兼容层：
   - `core/bridge/config` 不再接受顶层 `provider` / `api_key` / `base_url` / `model_provider` / `model_providers` 与旧 `graphql_*` TOML 字段；读取旧配置时改为显式报错，不再自动迁移。
@@ -43,6 +104,10 @@
   - `cargo clippy --manifest-path drivers/native/Cargo.toml -- -W clippy::needless_return -W clippy::collapsible_if`
   - `pnpm -C apps/web exec tsc --noEmit --pretty false`
 
+- 清理 `config` / `memoryaug` / `orchestration` / `tools` 中零散死 helper：
+  - 删除仅剩定义、无实际调用的 `cloneStringPointer`、`normalizeCandidateMemoryType`、`requireTaskID`、`normalizeScheduledTask`、`newTaskRunID`、`sourceHasMutationPolicies`、`cloneParams`，避免继续保留误导性的包内包装与未使用小工具。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./memoryaug ./orchestration ./tools -timeout 60s`
 
 - 清理 orchestration 与 RSS 间已漂移的重复文本工具实现：
   - 删除 `core/bridge/orchestration/textutil.go` 中未被调用的 `effectiveWorkerModel` 与 `stripJSONCodeFence`，避免与 `core/bridge/rss/export.go` 中仍在实际使用的实现继续双份维护。
@@ -71,6 +136,15 @@
   - CLI 侧仅补了一个本地 `ConfigUpdate::default()` 实现用于命令构造；如果共享契约继续增字段，这里会在编译期显式暴露未覆盖项。
 - 本轮验证：
   - `timeout 60 cargo test --manifest-path apps/cli/Cargo.toml`
+
+- 收口流式协议的共享契约来源：
+  - `core/shared/schema.json` 与新增 `core/shared/schema/defs/streaming_events.json` 现纳入 `agent stream` / `session push` 的 envelope 与核心 payload 定义，不再只有 request/response DTO 在共享 schema 内。
+  - 重新生成 Go / TS / Rust / Kotlin 契约后，Android 已删除手写 `SessionPushModels.kt`，直接使用共享生成的 `AgentStreamEvent`、`SessionPushEvent` 及其 payload 模型。
+  - `core/bridge/orchestration` 已移除手写 `assistantMessagePushPayload` / `awaitingHumanPushPayload`，并新增 `stream_contract_test.go` 校验手写实时事件 envelope 仍与共享生成契约兼容。
+- 本轮验证：
+  - `python3 -m unittest core/shared/tests/test_schema_loader.py core/shared/tests/test_emitters.py`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./transport -timeout 60s`
+  - `timeout 180s ./gradlew testDebugUnitTest --tests dev.ghostos.android.network.BridgeClientTest --tests dev.ghostos.android.viewmodel.ChatViewModelTest`
 
 - 收口共享契约 codegen 的 object 语义漂移：
   - `core/shared/contract_codegen` 现区分三类 object：具名结构体、`additionalProperties` typed map、以及真正 free-form object；TS/Go/Rust/Kotlin 不再把 `headers`、provider token override 这类 typed map 统一降成 `unknown/any/Value/JsonObject`。
@@ -122,6 +196,15 @@
 - 本轮验证：
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./memoryaug -run 'TestFormatPromptBlock' -timeout 60s`
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -run 'TestSessionRunner(InjectsRecallOnlyIntoPrompt|InjectsCompactRecallPromptBlock|RecallDoesNotBreakAskHumanContinuation|BuildsRecallQueryFromRecentContext)' -timeout 60s` 仍受当前工作区现有 GraphQL 编译错误阻塞：`tools/graphql_mutation_commit_execute.go:56 source.Headers undefined`
+
+- 收口主 system prompt 与工具提示职责：
+  - 主 system prompt 不再静态写死工具名单、`tools_count` / `tool_list` 或 `read_file` / `search_files` / `apply_diff` 这类工具级限制，改为基于当前 catalog 注入最小 `tool_guidance`。
+  - 基础回合与 selector subset 回合现共用同一套 system prompt 装配逻辑，避免 prompt 继续提到已被裁掉的工具。
+  - RSS report 调查 prompt 改为只按当前 scoped catalog 动态提示可用工具；少数跨工具引用的 tool description 也已收口为“仅依赖当前可用能力”的表述。
+
+- 修复 tool selector 子集回合的 system prompt 变量漏传：
+  - `buildSystemPromptForCatalog` 现在会补齐 `project_root`，避免 selector 选出工具子集后重建 prompt 时残留 `{{project_root}}` 占位符。
+  - 已新增 runtime 回归测试覆盖该路径。
 
 - 完成 GraphQL 第二步基线：
   - `core/bridge/config` 从单 source 升级为 `graphql_default_source + graphql_sources[]`，保留旧单源字段只读迁移入口；旧配置读取时显式物化为 `default` source，经新接口更新后仅持久化新结构。
@@ -278,6 +361,12 @@
 - 收紧与清理工具面：
   - Agent 默认暴露面以 `script_exec` 为主入口。
   - `memory_manage`、`browser_control`、`script_exec`、`send_file` 等工具的输出与元数据更稳定。
+- 修复 Web 到 bridge 代理层的 traceability / 流式边界回归：
+  - `apps/web/lib/server/bridge/forward.ts` 不再重建 bridge 响应，不再把普通 API 响应 `text()` 缓冲后只回写 `Content-Type`。
+  - `/api/*` 与 artifact 下载代理现都直接透传 bridge `Response`，保留 `X-Trace-ID` 等响应头，并允许浏览器侧消费流式 body。
+  - 已补 Web 侧回归测试，覆盖普通代理与下载代理的 header/body 透传语义。
+- 本轮验证：
+  - `pnpm -C apps/web test -- --runTestsByPath lib/server/bridge/index.test.ts`
 
 ### 2026-03-13
 
@@ -314,12 +403,3 @@
 - `drivers/native` 仍未达到“所有原子能力都稳定完备”的状态，新增功能时仍应优先走脚本与 API，再考虑视觉回退。
 - Memory 子系统处于持续演进阶段，当前以可用和可验证为先，不宜假设其内部模型已经稳定冻结。
 - `PROJECT_PROGRESS.md` 现改为压缩版快照，不再保留逐次微调的完整流水账；如需追溯细粒度变更，应查看 `git log`。
-
-- 收口流式协议的共享契约来源：
-  - `core/shared/schema.json` 与新增 `core/shared/schema/defs/streaming_events.json` 现纳入 `agent stream` / `session push` 的 envelope 与核心 payload 定义，不再只有 request/response DTO 在共享 schema 内。
-  - 重新生成 Go / TS / Rust / Kotlin 契约后，Android 已删除手写 `SessionPushModels.kt`，直接使用共享生成的 `AgentStreamEvent`、`SessionPushEvent` 及其 payload 模型。
-  - `core/bridge/orchestration` 已移除手写 `assistantMessagePushPayload` / `awaitingHumanPushPayload`，并新增 `stream_contract_test.go` 校验手写实时事件 envelope 仍与共享生成契约兼容。
-- 本轮验证：
-  - `python3 -m unittest core/shared/tests/test_schema_loader.py core/shared/tests/test_emitters.py`
-  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./transport -timeout 60s`
-  - `timeout 180s ./gradlew testDebugUnitTest --tests dev.ghostos.android.network.BridgeClientTest --tests dev.ghostos.android.viewmodel.ChatViewModelTest`

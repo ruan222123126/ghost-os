@@ -71,6 +71,7 @@ type graphqlSchemaMutationPolicyPayload struct {
 	Description             string                    `json:"description,omitempty"`
 	Domain                  string                    `json:"domain"`
 	RootMutation            graphqlSchemaFieldPayload `json:"root_mutation"`
+	ApprovalRequired        bool                      `json:"approval_required,omitempty"`
 	IdempotencyMode         string                    `json:"idempotency_mode"`
 	IdempotencyHeader       string                    `json:"idempotency_header,omitempty"`
 	IdempotencyVariablePath string                    `json:"idempotency_variable_path,omitempty"`

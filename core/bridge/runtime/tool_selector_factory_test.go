@@ -30,15 +30,18 @@ func TestBuildSystemPromptForCatalogIncludesProjectRootRegression(t *testing.T) 
 
 func TestBuildSystemPromptForCatalogUsesOnlyScopedToolGuidance(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "script_exec", "screen_action"} {
+	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec", "screen_action"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
-	prompt, err := buildSystemPromptForCatalog(Config{MaxTurns: 3}, tools.NewScopedCatalog(registry, []string{"ask_human", "script_exec"}))
+	prompt, err := buildSystemPromptForCatalog(
+		Config{MaxTurns: 3},
+		tools.NewScopedCatalog(registry, []string{"ask_human", "read_and_summarize", "script_exec"}),
+	)
 	if err != nil {
 		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
 	}
-	for _, snippet := range []string{"`script_exec`", "`ask_human`"} {
+	for _, snippet := range []string{"`read_and_summarize`", "`script_exec`", "`ask_human`"} {
 		if !strings.Contains(prompt, snippet) {
 			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
 		}

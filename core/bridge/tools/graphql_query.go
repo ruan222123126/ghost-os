@@ -34,7 +34,7 @@ func (GraphQLQueryTool) Name() string {
 }
 
 func (GraphQLQueryTool) Description() string {
-	return "Execute a read-only GraphQL query against a configured source. First inspect sources and domains with graphql_schema_lookup, then query only the selected source/domain."
+	return "Execute a read-only GraphQL query against a configured source. Inspect the available source and domain metadata first when it is available, then query only the selected source/domain."
 }
 
 func (GraphQLQueryTool) Parameters() json.RawMessage {

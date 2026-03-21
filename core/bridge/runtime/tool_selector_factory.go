@@ -1,11 +1,8 @@
 package runtime
 
 import (
-	"runtime"
-	"strconv"
 	"strings"
 
-	ctxmgr "ghost-os/bridge/context"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
@@ -33,24 +30,5 @@ func toolSelectorModel(cfg Config) string {
 }
 
 func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string, error) {
-	promptManager, err := ctxmgr.NewPromptManagerWithOptions(ctxmgr.PromptLoadOptions{
-		ConfigPath: cfg.PromptsPath,
-		CoreDir:    cfg.PromptsDir,
-		CoreFiles:  cfg.PromptsCoreFiles,
-	})
-	if err != nil {
-		if len(cfg.PromptsCoreFiles) == 0 {
-			promptManager = ctxmgr.NewPromptManagerWithDefault()
-		} else {
-			return "", err
-		}
-	}
-
-	contextBuilder := ctxmgr.NewBuilder(promptManager, catalog)
-	return contextBuilder.BuildSystemPrompt(map[string]string{
-		"os_type":     runtime.GOOS,
-		"tools_count": strconv.Itoa(len(catalog.ToolDefs())),
-		"tool_list":   tools.FormatPromptToolsForCatalog(catalog),
-		"max_turns":   strconv.Itoa(cfg.MaxTurns),
-	}), nil
+	return buildSystemPrompt(cfg, catalog)
 }

@@ -19,6 +19,7 @@ type agentRuntimeDependencies struct {
 	cfg          Config
 	client       agent.Completer
 	registry     *tools.Registry
+	graphQL      *tools.GraphQLSourceRegistry
 	systemPrompt string
 	memoryRecall memoryaug.RecallService
 	memoryLearn  memoryaug.LearningService
@@ -52,6 +53,7 @@ func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependenci
 		cfg:          deps.Config(),
 		client:       deps.Client(),
 		registry:     deps.Registry(),
+		graphQL:      deps.GraphQLRegistry(),
 		systemPrompt: deps.SystemPrompt(),
 		memoryRecall: deps.MemoryRecall(),
 		memoryLearn:  deps.MemoryLearning(),

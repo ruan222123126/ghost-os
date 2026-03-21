@@ -456,6 +456,8 @@ pub struct GraphQLMutationPolicyResponse {
     pub source: String,
     pub domain: String,
     pub root_mutation: String,
+    #[serde(default)]
+    pub approval_required: Option<bool>,
     pub idempotency_mode: String,
     #[serde(default)]
     pub idempotency_header: Option<String>,
@@ -479,6 +481,8 @@ pub struct GraphQLMutationPolicyInput {
     pub source: String,
     pub domain: String,
     pub root_mutation: String,
+    #[serde(default)]
+    pub approval_required: Option<bool>,
     pub idempotency_mode: String,
     #[serde(default)]
     pub idempotency_header: Option<String>,

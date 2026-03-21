@@ -102,6 +102,7 @@ func TestRuntimeConfigFromEnvLoadsGraphQLMutationPolicies(t *testing.T) {
 			Source:            "crm",
 			Domain:            "orders",
 			RootMutation:      "captureOrder",
+			ApprovalRequired:  true,
 			IdempotencyMode:   "header",
 			IdempotencyHeader: "Idempotency-Key",
 			MaxDepth:          2,
@@ -121,6 +122,9 @@ func TestRuntimeConfigFromEnvLoadsGraphQLMutationPolicies(t *testing.T) {
 	policy := runtime.GraphQL.MutationPolicies[0]
 	if policy.Name != "capture_order" || policy.RootMutation != "captureOrder" {
 		t.Fatalf("unexpected mutation policy: %+v", policy)
+	}
+	if !policy.ApprovalRequired {
+		t.Fatalf("expected approval_required=true, got %+v", policy)
 	}
 }
 
@@ -197,6 +201,41 @@ func TestConfigStoreUpdatePersistsGraphQLSourcesAndHidesAPIKeys(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), crmAPIKey) {
 		t.Fatalf("graphql source api key should not leak in snapshot: %s", string(encoded))
+	}
+}
+
+func TestConfigStoreSnapshotKeepsEmptyGraphQLArrays(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := NewConfigStoreFromEnv()
+	if err != nil {
+		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+	}
+
+	snapshot := store.Snapshot()
+	if snapshot.GraphQLSources == nil || len(snapshot.GraphQLSources) != 0 {
+		t.Fatalf("expected empty graphql_sources array, got %+v", snapshot.GraphQLSources)
+	}
+	if snapshot.GraphQLMutationPolicies == nil || len(snapshot.GraphQLMutationPolicies) != 0 {
+		t.Fatalf(
+			"expected empty graphql_mutation_policies array, got %+v",
+			snapshot.GraphQLMutationPolicies,
+		)
+	}
+
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	encodedJSON := string(encoded)
+	if !strings.Contains(encodedJSON, `"graphql_sources":[]`) {
+		t.Fatalf("expected graphql_sources to encode as [], got %s", encodedJSON)
+	}
+	if !strings.Contains(encodedJSON, `"graphql_mutation_policies":[]`) {
+		t.Fatalf("expected graphql_mutation_policies to encode as [], got %s", encodedJSON)
 	}
 }
 

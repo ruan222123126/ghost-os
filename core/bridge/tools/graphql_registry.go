@@ -39,6 +39,7 @@ type GraphQLMutationPolicyConfig struct {
 	Source                  string
 	Domain                  string
 	RootMutation            string
+	ApprovalRequired        bool
 	IdempotencyMode         string
 	IdempotencyHeader       string
 	IdempotencyVariablePath string
@@ -137,6 +138,7 @@ func graphQLMutationPolicyConfigs(raw []GraphQLMutationPolicyConfig) []graphqlsc
 			Source:                  strings.TrimSpace(policy.Source),
 			Domain:                  strings.TrimSpace(policy.Domain),
 			RootMutation:            strings.TrimSpace(policy.RootMutation),
+			ApprovalRequired:        policy.ApprovalRequired,
 			IdempotencyMode:         strings.TrimSpace(policy.IdempotencyMode),
 			IdempotencyHeader:       strings.TrimSpace(policy.IdempotencyHeader),
 			IdempotencyVariablePath: strings.TrimSpace(policy.IdempotencyVariablePath),

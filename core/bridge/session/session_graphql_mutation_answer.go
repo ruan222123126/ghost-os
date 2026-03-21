@@ -5,19 +5,24 @@ import (
 	"time"
 )
 
+const (
+	graphQLMutationQuestionToolName     = "graphql_mutation"
+	graphQLTextMutationQuestionToolName = "graphql_text_mutation"
+)
+
 func (s *Session) applyToolSpecificHumanAnswer(
 	questionID string,
 	question PendingHumanQuestion,
 	answer string,
 ) {
-	if strings.TrimSpace(question.ToolName) != "graphql_mutation" {
+	if !isGraphQLMutationQuestion(question.ToolName) {
 		return
 	}
 	s.applyPendingGraphQLMutationAnswer(questionID, answer)
 }
 
 func (s *Session) handleRemovedPendingQuestion(questionID string, question PendingHumanQuestion) {
-	if strings.TrimSpace(question.ToolName) != "graphql_mutation" {
+	if !isGraphQLMutationQuestion(question.ToolName) {
 		return
 	}
 	intent, ok := s.PendingGraphQLMutationIntentByQuestionID(questionID)
@@ -43,6 +48,15 @@ func (s *Session) applyPendingGraphQLMutationAnswer(questionID string, answer st
 		}
 		s.PendingGraphQLMutationIntents[intentID] = intent
 		return
+	}
+}
+
+func isGraphQLMutationQuestion(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case graphQLMutationQuestionToolName, graphQLTextMutationQuestionToolName:
+		return true
+	default:
+		return false
 	}
 }
 

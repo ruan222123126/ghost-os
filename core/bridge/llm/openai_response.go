@@ -72,11 +72,17 @@ func openAIToMessage(msg openAIMessage) (Message, error) {
 // normalizeOpenAIFinishReason 为不规范的 OpenAI 兼容实现提供最小兜底。
 // 当 finish_reason 缺失时，优先按 tool_calls 判定，否则回落为 stop。
 func normalizeOpenAIFinishReason(reason string, message Message) string {
-	if strings.TrimSpace(reason) != "" {
-		return reason
-	}
+	normalized := strings.TrimSpace(reason)
 	if len(message.ToolCalls) > 0 {
-		return "tool_calls"
+		switch normalized {
+		case "", "stop":
+			return "tool_calls"
+		default:
+			return normalized
+		}
+	}
+	if normalized != "" {
+		return normalized
 	}
 	return "stop"
 }

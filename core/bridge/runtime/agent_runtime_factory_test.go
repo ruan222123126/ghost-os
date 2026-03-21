@@ -56,7 +56,7 @@ func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
+func TestAgentRuntimeFactorySkipsGraphQLToolsEvenWhenConfigured(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	t.Setenv("GHOST_TOOL_SEARCH_ENABLED", "true")
 	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
@@ -93,10 +93,13 @@ func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 		t.Fatalf("build runtime deps: %v", err)
 	}
 	t.Cleanup(deps.Close)
+	if deps.graphQL == nil {
+		t.Fatal("expected graphql registry to be available when graphql sources are configured")
+	}
 
 	for _, name := range []string{"graphql_query", "graphql_schema_lookup", "graphql_mutation"} {
-		if deps.registry.Get(name) == nil {
-			t.Fatalf("expected %s to be registered", name)
+		if deps.registry.Get(name) != nil {
+			t.Fatalf("expected %s to stay disabled", name)
 		}
 	}
 
@@ -105,8 +108,8 @@ func TestAgentRuntimeFactoryRegistersGraphQLToolsWhenConfigured(t *testing.T) {
 		t.Fatalf("expected graphql tools to stay out of the static tool surface, got %v", visible)
 	}
 	candidates := tools.SearchCandidateToolNames(tools.CatalogToolNames(deps.registry), nil, toolVisibilityOptions(deps.cfg))
-	if !containsRuntimeTool(candidates, "graphql_query") || !containsRuntimeTool(candidates, "graphql_schema_lookup") || !containsRuntimeTool(candidates, "graphql_mutation") {
-		t.Fatalf("expected graphql tools to be discoverable via tfind, got %v", candidates)
+	if containsRuntimeTool(candidates, "graphql_query") || containsRuntimeTool(candidates, "graphql_schema_lookup") || containsRuntimeTool(candidates, "graphql_mutation") {
+		t.Fatalf("expected graphql tools to stay hidden from tfind candidates, got %v", candidates)
 	}
 }
 
@@ -119,6 +122,9 @@ func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutSources(t *testing.T)
 		t.Fatalf("build runtime deps: %v", err)
 	}
 	t.Cleanup(deps.Close)
+	if deps.graphQL != nil {
+		t.Fatal("expected graphql registry to stay nil without graphql sources")
+	}
 
 	if deps.registry.Get("graphql_query") != nil || deps.registry.Get("graphql_schema_lookup") != nil {
 		t.Fatal("expected graphql tools to stay unregistered without graphql sources")
@@ -166,9 +172,8 @@ func TestAgentRuntimeFactoryFailsOnInvalidGraphQLSchemaSnapshot(t *testing.T) {
 	})
 	store := newRuntimeTestStore(t)
 
-	_, err := newAgentRuntimeFactory().Build(store)
-	if err == nil {
-		t.Fatal("expected invalid graphql schema snapshot error")
+	if _, err := newAgentRuntimeFactory().Build(store); err == nil {
+		t.Fatal("expected build runtime deps to fail on invalid graphql schema snapshot")
 	}
 }
 
@@ -203,7 +208,7 @@ func TestAgentRuntimeFactoryFailsOnInvalidGraphQLMutationPolicy(t *testing.T) {
 	store := newRuntimeTestStore(t)
 
 	if _, err := newAgentRuntimeFactory().Build(store); err == nil {
-		t.Fatal("expected invalid graphql mutation policy error")
+		t.Fatal("expected build runtime deps to fail on invalid graphql mutation policy")
 	}
 }
 
