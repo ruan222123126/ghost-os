@@ -49,17 +49,18 @@ func newToolCallExecutor(toolCatalog ToolCatalog, history *History, stderr io.Wr
 	}
 }
 
-func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int, calls []llm.ToolCall) (toolCallTurnStats, error) {
+func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int, calls []indexedToolCall) (toolCallTurnStats, error) {
 	stats := toolCallTurnStats{totalCalls: len(calls)}
 	if len(calls) == 0 {
 		return stats, errors.New("finish_reason=tool_calls but tool_calls is empty")
 	}
 
-	for toolIndex, call := range calls {
-		stepID, err := streaming.ToolStepID(turn, toolIndex)
+	for _, indexedCall := range calls {
+		stepID, err := streaming.ToolStepID(turn, indexedCall.index)
 		if err != nil {
 			return stats, err
 		}
+		call := indexedCall.call
 		rawToolCallID := strings.TrimSpace(call.ID)
 		rawToolName := strings.TrimSpace(call.Name)
 		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {

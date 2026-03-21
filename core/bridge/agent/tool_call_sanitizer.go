@@ -13,19 +13,25 @@ type invalidToolCallIssue struct {
 	err   error
 }
 
+type indexedToolCall struct {
+	index int
+	call  llm.ToolCall
+}
+
 // sanitizeAssistantToolCalls 在 assistant tool_calls 落历史前做协议校验。
 // 非法调用会被剔除，避免污染后续 provider request。
-func sanitizeAssistantToolCalls(msg llm.Message) (llm.Message, []invalidToolCallIssue) {
+func sanitizeAssistantToolCalls(msg llm.Message) (llm.Message, []indexedToolCall, []invalidToolCallIssue) {
 	cloned := llm.CloneMessages([]llm.Message{msg})
 	if len(cloned) != 1 {
-		return llm.Message{}, nil
+		return llm.Message{}, nil, nil
 	}
 	out := cloned[0]
 	if len(out.ToolCalls) == 0 {
-		return out, nil
+		return out, nil, nil
 	}
 
 	validCalls := make([]llm.ToolCall, 0, len(out.ToolCalls))
+	indexedCalls := make([]indexedToolCall, 0, len(out.ToolCalls))
 	issues := make([]invalidToolCallIssue, 0, len(out.ToolCalls))
 	for index, call := range out.ToolCalls {
 		if _, _, _, err := validateToolCall(call); err != nil {
@@ -37,9 +43,13 @@ func sanitizeAssistantToolCalls(msg llm.Message) (llm.Message, []invalidToolCall
 			continue
 		}
 		validCalls = append(validCalls, call)
+		indexedCalls = append(indexedCalls, indexedToolCall{
+			index: index,
+			call:  call,
+		})
 	}
 	out.ToolCalls = validCalls
-	return out, issues
+	return out, indexedCalls, issues
 }
 
 func invalidToolCallAssistantMessage(original llm.Message, issues []invalidToolCallIssue) llm.Message {

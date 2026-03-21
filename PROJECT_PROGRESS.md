@@ -23,6 +23,21 @@
 
 ### 2026-03-21
 
+- 收口 `core/bridge/app` 的简化 Agent 装配路径：
+  - `core/bridge/app/agent.go` 不再直接 `agent.NewAgent(...)`，改为委托正式 `orchestration.SessionAgentRunner` 执行 one-shot turn，避免与 `session_turn_preparer` 的历史恢复、catalog 选择、GraphQL assistant-text handler 与 strict protocol 继续漂移。
+  - 新增 `core/bridge/orchestration/config_store_export.go`，提供对现有 config store 的轻量包装，避免 `app` 侧重复适配配置层。
+  - 新增 `core/bridge/app/agent_test.go`，锁定 `app` 路径委托正式 turn runner、透传 `trace_id` 且保持无 `session_id` 的 one-shot 语义。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./app -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -run '^$' -count=0 -timeout 60s`
+
+- 修复 mixed valid/invalid `tool_calls` 的流式 `step_id` 碰撞：
+  - `core/bridge/agent` 现为 sanitize 后仍可执行的 `tool_call` 保留原始响应索引，事件发射不再按压缩后的切片位置重新编号。
+  - mixed 场景下，非法调用继续使用原始 `tool_call[i]` 产生 error 事件；合法调用的 `tool_call_started` / `tool_call_finished` / `awaiting_human` 也复用同一原始索引，避免前端或 transport 侧按 `step_id` 聚合时串线。
+  - 新增 `agent` 流式回归测试，覆盖“`tool_call[0]` 非法、`tool_call[1]` 合法”时两组事件 `step_id` 必须不同。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent -run 'TestRunStreamMixedValidAndInvalidToolCallsKeepDistinctStepIDs|TestRunMixedValidAndInvalidToolCallsOnlyReplaysValidCalls|TestProtocolRunMixedValidAndInvalidToolCallsOnlyReplaysValidCalls' -timeout 60s`
+
 - 修复 GraphQL text awaiting-human 链路的 `tool_call_id` 漂移：
   - `core/bridge/agent` 侧 assistant-text GraphQL handler 不再固定发 `graphql-text`，改为为每次文本 GraphQL 执行生成单一 `tool_call_id` 并注入执行上下文。
   - `core/bridge/tools/graphql_text_executor.go` 现优先复用上下文中的 `tool_call_id` 来写 `PendingQuestion` 与 `PendingGraphQLMutationIntent`，避免流事件、session 持久化与 human-resume tool result 各自持有不同追踪键。

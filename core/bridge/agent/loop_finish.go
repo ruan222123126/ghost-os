@@ -115,20 +115,28 @@ func (a *Agent) handleToolCallTurn(
 	resp *llm.CompletionResponse,
 	state *agentRunState,
 ) (turnOutcome, error) {
-	sanitizedMsg, issues, err := state.prepareToolCallTurn(ctx, turn, resp.Message)
+	sanitizedMsg, validCalls, issues, err := state.prepareToolCallTurn(ctx, turn, resp.Message)
 	if err != nil {
 		return turnOutcome{}, err
 	}
 	if len(sanitizedMsg.ToolCalls) == 0 {
-		return turnOutcome{}, state.recordNonExecutableToolCallTurn(ctx, turn, resp.Message, issues)
+		err := state.recordNonExecutableToolCallTurn(ctx, turn, resp.Message, issues)
+		if err == nil {
+			a.commitTurn(state.history)
+		}
+		return turnOutcome{}, err
 	}
 
 	acceptAssistantTurn(state.history, sanitizedToolCallResponse(resp, sanitizedMsg, len(issues) > 0))
-	stats, err := state.toolCalls.execute(ctx, state.traceID, turn, sanitizedMsg.ToolCalls)
+	stats, err := state.toolCalls.execute(ctx, state.traceID, turn, validCalls)
 	if err != nil {
 		return turnOutcome{}, a.handleToolCallExecutionError(ctx, turn, err, state)
 	}
-	return turnOutcome{}, state.finalizeToolCallTurn(ctx, turn, stats)
+	if err := state.finalizeToolCallTurn(ctx, turn, stats); err != nil {
+		return turnOutcome{}, err
+	}
+	a.commitTurn(state.history)
+	return turnOutcome{}, nil
 }
 
 func (a *Agent) handleToolCallExecutionError(
@@ -151,16 +159,16 @@ func (state *agentRunState) prepareToolCallTurn(
 	ctx context.Context,
 	turn int,
 	msg llm.Message,
-) (llm.Message, []invalidToolCallIssue, error) {
-	sanitizedMsg, issues := sanitizeAssistantToolCalls(msg)
+) (llm.Message, []indexedToolCall, []invalidToolCallIssue, error) {
+	sanitizedMsg, validCalls, issues := sanitizeAssistantToolCalls(msg)
 	if len(issues) == 0 {
-		return sanitizedMsg, nil, nil
+		return sanitizedMsg, validCalls, nil, nil
 	}
 	if err := state.toolCalls.reportInvalidCalls(ctx, state.traceID, turn, issues); err != nil {
-		return llm.Message{}, nil, err
+		return llm.Message{}, nil, nil, err
 	}
 	state.history.SetConversationState(llm.ConversationState{})
-	return sanitizedMsg, issues, nil
+	return sanitizedMsg, validCalls, issues, nil
 }
 
 func (state *agentRunState) recordNonExecutableToolCallTurn(

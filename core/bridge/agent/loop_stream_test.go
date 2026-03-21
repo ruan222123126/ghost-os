@@ -90,6 +90,54 @@ func TestRunStreamEmitsAwaitingHumanEvent(t *testing.T) {
 	}
 }
 
+func TestRunStreamMixedValidAndInvalidToolCallsKeepDistinctStepIDs(t *testing.T) {
+	tool := newStaticTool("echo", "ok")
+	completer := newFakeCompleter(
+		newToolCallsResponse(
+			newToolCall("", "echo", `{}`),
+			newToolCall("call-2", "echo", `{"input":"hi"}`),
+		),
+		newStopResponse("done"),
+	)
+	sink := newRecordingEventSink()
+	agent := newTestAgent(completer, newFakeToolCatalog(tool), 3)
+
+	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-mixed", sink)
+	if err != nil {
+		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+	}
+	if got != "done" {
+		t.Fatalf("unexpected output: got %q want %q", got, "done")
+	}
+	if len(sink.events) != 7 {
+		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 7)
+	}
+
+	invalidStepID, err := streaming.ToolStepID(0, 0)
+	if err != nil {
+		t.Fatalf("ToolStepID returned error: %v", err)
+	}
+	validStepID, err := streaming.ToolStepID(0, 1)
+	if err != nil {
+		t.Fatalf("ToolStepID returned error: %v", err)
+	}
+	if sink.events[1].StepID != invalidStepID || sink.events[2].StepID != invalidStepID {
+		t.Fatalf("unexpected invalid tool step ids: got %q and %q", sink.events[1].StepID, sink.events[2].StepID)
+	}
+	if sink.events[3].StepID != validStepID || sink.events[4].StepID != validStepID {
+		t.Fatalf("unexpected valid tool step ids: got %q and %q", sink.events[3].StepID, sink.events[4].StepID)
+	}
+	if sink.events[1].StepID == sink.events[3].StepID {
+		t.Fatalf("mixed valid/invalid tool events should not share step id: %q", sink.events[1].StepID)
+	}
+	if got := eventToolCallID(t, sink.events[3]); got != "call-2" {
+		t.Fatalf("unexpected valid tool_call_started id: got %q want %q", got, "call-2")
+	}
+	if got := eventToolCallID(t, sink.events[4]); got != "call-2" {
+		t.Fatalf("unexpected valid tool_call_finished id: got %q want %q", got, "call-2")
+	}
+}
+
 func TestRunStreamEmitsErrorEventOnFatalFailure(t *testing.T) {
 	completer := newFakeCompleter()
 	catalog := newFakeToolCatalog()
