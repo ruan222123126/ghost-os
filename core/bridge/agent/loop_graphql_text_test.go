@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
 
@@ -78,5 +79,39 @@ func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
 	}
 	if awaitingErr.QuestionID != "q-1" {
 		t.Fatalf("unexpected awaiting question id: %q", awaitingErr.QuestionID)
+	}
+}
+
+func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *testing.T) {
+	completer := newFakeCompleter(
+		newStopResponse(`mutation { updateViewer(input: {id: "1"}) { ok } }`),
+	)
+	executor := &fakeGraphQLTextExecutor{
+		results: []tools.GraphQLTextExecutionResult{{
+			Recognized: true,
+			Output:     `{"status":"executed","intent_id":"intent-1"}`,
+		}},
+	}
+	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
+	agent.SetStrictToolCallProtocol(true)
+	agent.SetGraphQLTextExecutor(executor)
+
+	_, err := agent.Run(context.Background(), "hello")
+	if err == nil {
+		t.Fatal("expected completion error after graphql text execution")
+	}
+
+	newMessages := agent.GetNewMessages()
+	if len(newMessages) != 3 {
+		t.Fatalf("expected committed graphql turn messages, got %+v", newMessages)
+	}
+	if newMessages[0].Role != llm.RoleUser || newMessages[0].Text != "hello" {
+		t.Fatalf("unexpected committed user message: %+v", newMessages[0])
+	}
+	if newMessages[1].Role != llm.RoleAssistant || !strings.Contains(newMessages[1].Text, "updateViewer") {
+		t.Fatalf("unexpected committed assistant graphql text: %+v", newMessages[1])
+	}
+	if newMessages[2].Role != llm.RoleUser || !strings.Contains(newMessages[2].Text, "[GRAPHQL_EXECUTION_RESULT]") {
+		t.Fatalf("unexpected committed graphql feedback: %+v", newMessages[2])
 	}
 }

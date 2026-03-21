@@ -154,6 +154,7 @@ func (a *Agent) handleGraphQLTextTurn(
 		}
 	}
 	appendGraphQLExecutionFeedback(state.history, result.Output)
+	a.commitTurn(state.history)
 	return true, turnOutcome{}, nil
 }
 

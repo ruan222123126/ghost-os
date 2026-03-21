@@ -85,10 +85,13 @@ func (s *sessionTurnState) complete(
 	awaitingHuman := false
 	if runErr != nil {
 		var awaitingErr *agent.ErrAwaitingHuman
-		if !errors.As(runErr, &awaitingErr) {
-			return "", "", runErr
+		if errors.As(runErr, &awaitingErr) {
+			awaitingHuman = true
+		} else {
+			if !s.hasCommittedMessages() {
+				return "", "", runErr
+			}
 		}
-		awaitingHuman = true
 	}
 
 	newMessages := []llm.Message(nil)
@@ -110,5 +113,15 @@ func (s *sessionTurnState) complete(
 	if awaitingHuman {
 		return "", s.persistedSessionID(), runErr
 	}
+	if runErr != nil {
+		return "", s.persistedSessionID(), runErr
+	}
 	return response, s.persistedSessionID(), nil
+}
+
+func (s *sessionTurnState) hasCommittedMessages() bool {
+	if s == nil || s.agent == nil {
+		return false
+	}
+	return len(s.agent.GetNewMessages()) > 0
 }

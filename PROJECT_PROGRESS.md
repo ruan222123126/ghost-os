@@ -23,6 +23,13 @@
 
 ### 2026-03-21
 
+- 修复 GraphQL text mutation 自动提交打穿 turn 事务边界的问题：
+  - `core/bridge/agent` 在 GraphQL 文本写操作成功并生成 execution feedback 后，现会立即 `commitTurn`，不再把该子回合留在未提交历史里等待下一次 completion。
+  - `core/bridge/orchestration` 的 `sessionTurnState.complete()` 现会在普通错误返回前，检测并持久化 agent 已显式提交的增量消息，避免出现“GraphQL mutation intent 已 checkpoint.Save，但对话历史没落盘”的分叉。
+  - 新增 `agent` / `orchestration` 回归测试，覆盖“GraphQL 文本成功执行后下一次 completion 失败”场景，确认 session mutation 状态与消息历史保持一致。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent ./orchestration -timeout 60s`
+
 - 落地“纯文本 GraphQL 执行 + 高风险审批”主链路：
   - Agent 新增 `GraphQLTextExecutor` 执行分支；当模型输出单条 GraphQL `query/mutation` 文本时直接执行，不再依赖 tool-call schema。
   - GraphQL 模式下开启 strict 协议：`finish_reason=tool_calls` 直接报错；并在会话 prompt 注入 `GraphQL Text Protocol`，要求模型输出单条 GraphQL 文档。
