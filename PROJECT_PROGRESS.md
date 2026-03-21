@@ -38,6 +38,14 @@
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./app -timeout 60s`
   - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge . -run '^$' -count=0 -timeout 60s`
 
+- 补齐 Bridge CLI `ping` 命令的上下文透传，修复入口契约收紧后的签名断层：
+  - `core/bridge/app/ping.go` 现显式接收调用方 `context.Context`，并将其透传给 native `PING` 调用，不再硬编码 `context.Background()`。
+  - 新增 `pingRunner` 注入点与 `nextPingTraceID()`，`PING` trace id 不再固定写死为 `"bridge-ping-1"`，每次调用都会生成新的 `bridge-ping-*` 标识。
+  - `core/bridge/app/ping_test.go` 与 `cmd_dispatcher_test.go` 已覆盖上下文透传和 dispatcher 路由。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./app -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s`
+
 - 新增 Bridge 级 GUI executor 基线：
   - `core/bridge/guiagent` 已落地 desktop v1 screenshot loop，按 `screenshot -> VLM -> parse -> execute -> verify -> next step` 运行，并把严格 JSON parser、artifact 写盘、可见性验证与 human-answer continuation 收口在 bridge 内。
   - Bridge 新增高层工具 `computer_use`；对外只接收 goal / target / mode，不再要求外层 agent 手工拼接 `screen_action.screenshot` 回路。

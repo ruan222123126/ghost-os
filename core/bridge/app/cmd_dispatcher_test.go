@@ -135,7 +135,7 @@ func newFailOnCallDispatcher(t *testing.T) commandDispatcher {
 	}
 }
 
-func failPing(t *testing.T) func() (string, error) {
+func failPing(t *testing.T) func(context.Context) (string, error) {
 	t.Helper()
 	return func(context.Context) (string, error) {
 		t.Fatal("runPing should not be called")
