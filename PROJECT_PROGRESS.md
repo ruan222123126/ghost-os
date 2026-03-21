@@ -23,6 +23,14 @@
 
 ### 2026-03-21
 
+- 拆分 `core/bridge/agent/toolCallExecutor.execute` 的脆弱职责面：
+  - `tool_executor_execute.go` 新增 step 上下文、tool 解析、执行失败收口、awaiting-human / iteration handoff 分发等私有 helper，`execute` 本身退回到“单回合协调 + stats 汇总”职责。
+  - 保留原有事务语义：`tool_call_started` / `tool_call_finished` / `awaiting_human` 事件顺序不变，invalid / missing tool 继续写稳定 error envelope，awaiting-human 与 iteration handoff 仍在当前部分回合提交后返回给外层 orchestrator。
+  - 新增 `core/bridge/agent/tool_executor_test.go`，直接覆盖 awaiting-human、iteration handoff、missing tool 三条 executor 路径，避免后续回归只能靠外层 `loop_*` 测试间接发现。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent -timeout 60s`
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration -timeout 60s`
+
 - 修复普通工具回合未做中间提交导致的历史分叉：
   - `core/bridge/agent` 现在会在普通 `tool_calls` 回合完成 assistant/tool 写入后立即 `commitTurn`，不再只在 stop / length / assistant-text / awaiting-human 路径提交。
   - 新增 `agent` / `orchestration` 回归测试，覆盖“工具已执行但下一次 completion 失败”与“工具回合后触发 maxTurns 超限”场景，确认 `GetNewMessages()` 与 session 持久化都能保留当轮 assistant/tool 消息。
