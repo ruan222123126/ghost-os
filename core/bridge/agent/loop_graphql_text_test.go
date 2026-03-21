@@ -133,6 +133,16 @@ func TestGraphQLTextTurnAwaitingHumanEventMatchesExecutorToolCallID(t *testing.T
 	if got := eventToolCallID(t, sink.events[3]); got != want {
 		t.Fatalf("unexpected awaiting_human id: got %q want %q", got, want)
 	}
+	for index, event := range sink.events[1:4] {
+		if got := eventToolName(t, event); got != tools.GraphQLTextMutationToolName {
+			t.Fatalf(
+				"unexpected event[%d] tool: got %q want %q",
+				index+1,
+				got,
+				tools.GraphQLTextMutationToolName,
+			)
+		}
+	}
 }
 
 func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *testing.T) {
@@ -181,4 +191,18 @@ func eventToolCallID(t *testing.T, event streaming.Event) string {
 		t.Fatalf("expected tool_call_id in payload: %+v", payload)
 	}
 	return toolCallID
+}
+
+func eventToolName(t *testing.T, event streaming.Event) string {
+	t.Helper()
+
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", event.Payload)
+	}
+	toolName, _ := payload["tool"].(string)
+	if toolName == "" {
+		t.Fatalf("expected tool in payload: %+v", payload)
+	}
+	return toolName
 }

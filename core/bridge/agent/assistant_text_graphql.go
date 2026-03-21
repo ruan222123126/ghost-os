@@ -39,10 +39,11 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 	if !result.Recognized {
 		return AssistantTextResult{}, nil
 	}
+	toolName := graphQLAssistantToolName(result)
 	handled := AssistantTextResult{
 		Recognized: true,
 		Tool: AssistantTextToolRef{
-			Name:   graphQLAssistantTextToolName,
+			Name:   toolName,
 			CallID: toolCallID,
 		},
 	}
@@ -51,10 +52,7 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 	}
 	if awaiting := result.Meta.AwaitingHuman; awaiting != nil {
 		handled.AwaitingHuman = &AssistantTextAwaitingHuman{
-			Tool: AssistantTextToolRef{
-				Name:   tools.GraphQLTextMutationToolName,
-				CallID: toolCallID,
-			},
+			Tool:          handled.Tool,
 			QuestionID:    strings.TrimSpace(awaiting.QuestionID),
 			Prompt:        strings.TrimSpace(awaiting.Prompt),
 			SelectionMode: strings.TrimSpace(awaiting.SelectionMode),
@@ -67,6 +65,13 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 		handled.Feedback = []llm.Message{feedback}
 	}
 	return handled, nil
+}
+
+func graphQLAssistantToolName(result tools.GraphQLTextExecutionResult) string {
+	if result.Meta.AwaitingHuman != nil {
+		return tools.GraphQLTextMutationToolName
+	}
+	return graphQLAssistantTextToolName
 }
 
 func newGraphQLExecutionFeedbackMessage(output string) (llm.Message, bool) {
