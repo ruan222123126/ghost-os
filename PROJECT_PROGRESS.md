@@ -23,6 +23,14 @@
 
 ### 2026-03-21
 
+- 收口 Agent 主循环对 GraphQL 文本协议的直接耦合：
+  - `core/bridge/agent` 新增通用 `AssistantTextHandler` 扩展点，`Agent` 结构不再直接持有 GraphQL-specific executor 状态。
+  - `loop_finish.go` 已移除专门的 GraphQL 文本分支与 GraphQL 常量引用，统一改走 assistant-text handler 分发；GraphQL 文本执行被下沉到独立适配文件。
+  - `orchestration` 现通过 `agent.NewGraphQLTextTurnHandler(...)` 注册 GraphQL 文本协议，等待人工事件与执行反馈保持原有行为，但不再污染通用回合驱动器。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent ./orchestration -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s`
+
 - 修复 GraphQL 文本执行反馈污染会话语义的问题：
   - `core/bridge/agent` 现在把 GraphQL 执行结果以 `internal` 历史角色持久化，不再伪装成 `user` 消息。
   - `core/bridge/llm` 新增 completion 前 role 投影：内部消息只在发给 provider 时映射为 provider-safe assistant 角色，存档、transcript、memory recall 与 turn learning 保持内部边界。

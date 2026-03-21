@@ -8,7 +8,6 @@ import (
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
-	"ghost-os/bridge/tools"
 )
 
 type agentRunState struct {
@@ -18,7 +17,7 @@ type agentRunState struct {
 	history                *History
 	completion             completionRunner
 	toolCalls              toolCallExecutor
-	graphQL                tools.GraphQLTextExecutor
+	assistantTextHandlers  []AssistantTextHandler
 	events                 agentEventEmitter
 	lifecycle              StreamLifecyclePayloadBuilder
 	strictToolCallProtocol bool
@@ -44,7 +43,7 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) agentRunSta
 		history:                history,
 		completion:             newCompletionRunner(a.completer, a.tools, history),
 		toolCalls:              newToolCallExecutor(a.tools, history, nil, events),
-		graphQL:                a.graphQL,
+		assistantTextHandlers:  append([]AssistantTextHandler(nil), a.assistantTextHandlers...),
 		events:                 events,
 		lifecycle:              lifecycle,
 		strictToolCallProtocol: a.strictToolCallProtocol,

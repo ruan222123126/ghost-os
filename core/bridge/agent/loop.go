@@ -21,7 +21,7 @@ type ToolCatalog = tools.ToolCatalog
 type Agent struct {
 	completer              Completer
 	tools                  ToolCatalog
-	graphQL                tools.GraphQLTextExecutor
+	assistantTextHandlers  []AssistantTextHandler
 	strictToolCallProtocol bool
 	history                *History
 	maxTurns               int
@@ -94,11 +94,14 @@ func (a *Agent) SetStreamLifecyclePayloadBuilder(builder StreamLifecyclePayloadB
 	a.streamLifecycle = builder
 }
 
-func (a *Agent) SetGraphQLTextExecutor(executor tools.GraphQLTextExecutor) {
+func (a *Agent) AddAssistantTextHandler(handler AssistantTextHandler) {
 	if a == nil {
 		return
 	}
-	a.graphQL = executor
+	if handler == nil {
+		return
+	}
+	a.assistantTextHandlers = append(a.assistantTextHandlers, handler)
 }
 
 func (a *Agent) SetStrictToolCallProtocol(strict bool) {

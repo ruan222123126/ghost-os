@@ -19,7 +19,7 @@ func TestStrictGraphQLTextModeRejectsToolCalls(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected strict graphql text mode to reject tool calls")
 	}
-	if !strings.Contains(err.Error(), "strict graphql text mode rejects tool_calls finish reason") {
+	if !strings.Contains(err.Error(), "strict text protocol rejects tool_calls finish reason") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -37,7 +37,7 @@ func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 	}
 	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
 	agent.SetStrictToolCallProtocol(true)
-	agent.SetGraphQLTextExecutor(executor)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
 
 	output, err := agent.Run(context.Background(), "hello")
 	if err != nil {
@@ -70,7 +70,7 @@ func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
 	}
 	agent := newTestAgent(completer, newFakeToolCatalog(), 2)
 	agent.SetStrictToolCallProtocol(true)
-	agent.SetGraphQLTextExecutor(executor)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
 
 	_, err := agent.Run(context.Background(), "hello")
 	var awaitingErr *ErrAwaitingHuman
@@ -94,7 +94,7 @@ func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *
 	}
 	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
 	agent.SetStrictToolCallProtocol(true)
-	agent.SetGraphQLTextExecutor(executor)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
 
 	_, err := agent.Run(context.Background(), "hello")
 	if err == nil {

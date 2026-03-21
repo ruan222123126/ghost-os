@@ -105,7 +105,7 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 	}
 	runAgent := agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns)
 	if deps.graphQL != nil {
-		runAgent.SetGraphQLTextExecutor(tools.NewGraphQLTextExecutor(deps.graphQL))
+		runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(deps.graphQL)))
 		runAgent.SetStrictToolCallProtocol(true)
 	}
 

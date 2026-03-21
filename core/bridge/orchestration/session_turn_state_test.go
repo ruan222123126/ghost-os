@@ -74,7 +74,7 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 	}
 	runAgent := agent.NewAgentWithHistory(completer, tools.NewRegistry(), agent.NewHistory("base system prompt"), 3)
 	runAgent.SetStrictToolCallProtocol(true)
-	runAgent.SetGraphQLTextExecutor(persistingGraphQLTextExecutor{})
+	runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(persistingGraphQLTextExecutor{}))
 
 	turn := &sessionTurnState{
 		sessionStore: sessionStore,
