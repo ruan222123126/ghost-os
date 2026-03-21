@@ -23,6 +23,12 @@
 
 ### 2026-03-21
 
+- 修复普通工具回合未做中间提交导致的历史分叉：
+  - `core/bridge/agent` 现在会在普通 `tool_calls` 回合完成 assistant/tool 写入后立即 `commitTurn`，不再只在 stop / length / assistant-text / awaiting-human 路径提交。
+  - 新增 `agent` / `orchestration` 回归测试，覆盖“工具已执行但下一次 completion 失败”与“工具回合后触发 maxTurns 超限”场景，确认 `GetNewMessages()` 与 session 持久化都能保留当轮 assistant/tool 消息。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent ./orchestration -timeout 60s`
+
 - 收口 `core/bridge/app` 的简化 Agent 装配路径：
   - `core/bridge/app/agent.go` 不再直接 `agent.NewAgent(...)`，改为委托正式 `orchestration.SessionAgentRunner` 执行 one-shot turn，避免与 `session_turn_preparer` 的历史恢复、catalog 选择、GraphQL assistant-text handler 与 strict protocol 继续漂移。
   - 新增 `core/bridge/orchestration/config_store_export.go`，提供对现有 config store 的轻量包装，避免 `app` 侧重复适配配置层。

@@ -3,25 +3,30 @@ package app
 import (
 	"context"
 
-	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
-	bridgeruntime "ghost-os/bridge/runtime"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 )
 
-// runAgent 组装最小可运行链路：配置 -> LLM 客户端 -> 工具目录 -> Agent。
+type sessionTurnRunner interface {
+	RunTurn(ctx context.Context, message string, sessionID string, traceID string) (string, string, error)
+}
+
+var newAgentTurnRunner = func(store *bridgeconfig.Store) sessionTurnRunner {
+	return bridgeorchestration.NewSessionAgentRunner(
+		nil,
+		bridgeorchestration.WrapConfigStore(store),
+		nil,
+		nil,
+	)
+}
+
+// runAgent 通过正式 session turn runner 执行一次无持久化的单轮请求。
 func runAgent(ctx context.Context, userMessage string) (string, error) {
 	return runAgentWithConfigStore(ctx, userMessage, nil, "")
 }
 
-// runAgentWithConfigStore 允许注入配置存储与 trace id，便于服务层复用。
+// runAgentWithConfigStore 复用正式单轮编排入口；CLI one-shot 不持久化 session。
 func runAgentWithConfigStore(ctx context.Context, userMessage string, store *bridgeconfig.Store, traceID string) (string, error) {
-	factory := bridgeruntime.NewAgentRuntimeFactory()
-	deps, err := factory.Build(store)
-	if err != nil {
-		return "", err
-	}
-	defer deps.Close()
-
-	a := agent.NewAgent(deps.Client(), deps.Registry(), deps.SystemPrompt(), deps.Config().MaxTurns)
-	return a.RunWithTraceID(ctx, userMessage, traceID)
+	response, _, err := newAgentTurnRunner(store).RunTurn(ctx, userMessage, "", traceID)
+	return response, err
 }
