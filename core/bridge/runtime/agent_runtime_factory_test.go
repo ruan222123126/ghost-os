@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -59,33 +60,33 @@ func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
 func TestAgentRuntimeFactorySkipsGraphQLToolsEvenWhenConfigured(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	t.Setenv("GHOST_TOOL_SEARCH_ENABLED", "true")
-	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
-		GraphQLDefaultSource: bridgeconfig.OptionalStringPointer("crm"),
-		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
-			Name:             "crm",
-			Endpoint:         "https://graphql.test/query",
-			SchemaPath:       writeRuntimeGraphQLSchema(t, tempDir),
-			TimeoutMS:        3000,
-			MaxResponseBytes: 4096,
-			MaxDepth:         5,
-			MaxFields:        24,
-			MaxRootFields:    2,
-			MaxFragments:     3,
-			Domains: []bridgeconfig.GraphQLDomainFileConfig{{
-				Name:        "viewer",
-				RootQueries: []string{"viewer"},
-				Types:       []string{"Viewer", "MutationPayload"},
-			}},
-		}},
-		GraphQLMutationPolicies: []bridgeconfig.GraphQLMutationPolicyFileConfig{{
-			Name:              "update_viewer",
-			Source:            "crm",
-			Domain:            "viewer",
-			RootMutation:      "updateViewer",
-			IdempotencyMode:   "header",
-			IdempotencyHeader: "Idempotency-Key",
-		}},
-	})
+	writeRuntimeGraphQLConfig(t, tempDir, fmt.Sprintf(`
+graphql_default_source = "crm"
+
+[[graphql_sources]]
+name = "crm"
+endpoint = "https://graphql.test/query"
+schema_path = %q
+timeout_ms = 3000
+max_response_bytes = 4096
+max_depth = 5
+max_fields = 24
+max_root_fields = 2
+max_fragments = 3
+
+[[graphql_sources.domains]]
+name = "viewer"
+root_queries = ["viewer"]
+types = ["Viewer", "MutationPayload"]
+
+[[graphql_mutation_policies]]
+name = "update_viewer"
+source = "crm"
+domain = "viewer"
+root_mutation = "updateViewer"
+idempotency_mode = "header"
+idempotency_header = "Idempotency-Key"
+`, writeRuntimeGraphQLSchema(t, tempDir)))
 	store := newRuntimeTestStore(t)
 
 	deps, err := newAgentRuntimeFactory().Build(store)
@@ -93,9 +94,6 @@ func TestAgentRuntimeFactorySkipsGraphQLToolsEvenWhenConfigured(t *testing.T) {
 		t.Fatalf("build runtime deps: %v", err)
 	}
 	t.Cleanup(deps.Close)
-	if deps.graphQL == nil {
-		t.Fatal("expected graphql registry to be available when graphql sources are configured")
-	}
 
 	for _, name := range []string{"graphql_query", "graphql_schema_lookup", "graphql_mutation"} {
 		if deps.registry.Get(name) != nil {
@@ -122,10 +120,6 @@ func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutSources(t *testing.T)
 		t.Fatalf("build runtime deps: %v", err)
 	}
 	t.Cleanup(deps.Close)
-	if deps.graphQL != nil {
-		t.Fatal("expected graphql registry to stay nil without graphql sources")
-	}
-
 	if deps.registry.Get("graphql_query") != nil || deps.registry.Get("graphql_schema_lookup") != nil {
 		t.Fatal("expected graphql tools to stay unregistered without graphql sources")
 	}
@@ -133,83 +127,84 @@ func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutSources(t *testing.T)
 
 func TestAgentRuntimeFactoryFailsOnMissingGraphQLSchemaSnapshot(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
-	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
-		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
-			Name:             "crm",
-			Endpoint:         "https://graphql.test/query",
-			SchemaPath:       "",
-			TimeoutMS:        3000,
-			MaxResponseBytes: 4096,
-			MaxDepth:         5,
-			MaxFields:        24,
-			MaxRootFields:    2,
-			MaxFragments:     3,
-		}},
-	})
+	writeRuntimeGraphQLConfig(t, tempDir, `
+[[graphql_sources]]
+name = "crm"
+endpoint = "https://graphql.test/query"
+schema_path = ""
+timeout_ms = 3000
+max_response_bytes = 4096
+max_depth = 5
+max_fields = 24
+max_root_fields = 2
+max_fragments = 3
+`)
 	if _, err := bridgeconfig.NewStoreFromEnv(); err == nil {
 		t.Fatal("expected missing graphql schema snapshot error")
 	}
 }
 
-func TestAgentRuntimeFactoryFailsOnInvalidGraphQLSchemaSnapshot(t *testing.T) {
+func TestAgentRuntimeFactoryIgnoresInvalidGraphQLSchemaSnapshot(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	badPath := filepath.Join(tempDir, "bad-graphql-schema.json")
 	if err := os.WriteFile(badPath, []byte(`{"root_queries":[{"name":"","return_type":"Viewer"}],"types":[]}`), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
-		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
-			Name:             "crm",
-			Endpoint:         "https://graphql.test/query",
-			SchemaPath:       badPath,
-			TimeoutMS:        3000,
-			MaxResponseBytes: 4096,
-			MaxDepth:         5,
-			MaxFields:        24,
-			MaxRootFields:    2,
-			MaxFragments:     3,
-		}},
-	})
+	writeRuntimeGraphQLConfig(t, tempDir, fmt.Sprintf(`
+[[graphql_sources]]
+name = "crm"
+endpoint = "https://graphql.test/query"
+schema_path = %q
+timeout_ms = 3000
+max_response_bytes = 4096
+max_depth = 5
+max_fields = 24
+max_root_fields = 2
+max_fragments = 3
+	`, badPath))
 	store := newRuntimeTestStore(t)
 
-	if _, err := newAgentRuntimeFactory().Build(store); err == nil {
-		t.Fatal("expected build runtime deps to fail on invalid graphql schema snapshot")
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
 	}
+	t.Cleanup(deps.Close)
 }
 
-func TestAgentRuntimeFactoryFailsOnInvalidGraphQLMutationPolicy(t *testing.T) {
+func TestAgentRuntimeFactoryIgnoresInvalidGraphQLMutationPolicy(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
-	writeRuntimeGraphQLConfig(t, tempDir, bridgeconfig.FileConfig{
-		GraphQLSources: []bridgeconfig.GraphQLSourceFileConfig{{
-			Name:             "crm",
-			Endpoint:         "https://graphql.test/query",
-			SchemaPath:       writeRuntimeGraphQLSchema(t, tempDir),
-			TimeoutMS:        3000,
-			MaxResponseBytes: 4096,
-			MaxDepth:         5,
-			MaxFields:        24,
-			MaxRootFields:    2,
-			MaxFragments:     3,
-			Domains: []bridgeconfig.GraphQLDomainFileConfig{{
-				Name:        "viewer",
-				RootQueries: []string{"viewer"},
-				Types:       []string{"Viewer", "MutationPayload"},
-			}},
-		}},
-		GraphQLMutationPolicies: []bridgeconfig.GraphQLMutationPolicyFileConfig{{
-			Name:              "bad_policy",
-			Source:            "crm",
-			Domain:            "viewer",
-			RootMutation:      "archiveViewer",
-			IdempotencyMode:   "header",
-			IdempotencyHeader: "Idempotency-Key",
-		}},
-	})
+	writeRuntimeGraphQLConfig(t, tempDir, fmt.Sprintf(`
+[[graphql_sources]]
+name = "crm"
+endpoint = "https://graphql.test/query"
+schema_path = %q
+timeout_ms = 3000
+max_response_bytes = 4096
+max_depth = 5
+max_fields = 24
+max_root_fields = 2
+max_fragments = 3
+
+[[graphql_sources.domains]]
+name = "viewer"
+root_queries = ["viewer"]
+types = ["Viewer", "MutationPayload"]
+
+[[graphql_mutation_policies]]
+name = "bad_policy"
+source = "crm"
+domain = "viewer"
+root_mutation = "archiveViewer"
+idempotency_mode = "header"
+idempotency_header = "Idempotency-Key"
+	`, writeRuntimeGraphQLSchema(t, tempDir)))
 	store := newRuntimeTestStore(t)
 
-	if _, err := newAgentRuntimeFactory().Build(store); err == nil {
-		t.Fatal("expected build runtime deps to fail on invalid graphql mutation policy")
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
 	}
+	t.Cleanup(deps.Close)
 }
 
 func TestAgentRuntimeFactorySkipsMemoryAugmentationWhenDisabled(t *testing.T) {
@@ -303,11 +298,11 @@ func writeRuntimeGraphQLSchema(t *testing.T, tempDir string) string {
 	return path
 }
 
-func writeRuntimeGraphQLConfig(t *testing.T, tempDir string, cfg bridgeconfig.FileConfig) {
+func writeRuntimeGraphQLConfig(t *testing.T, tempDir string, body string) {
 	t.Helper()
 	configPath := filepath.Join(tempDir, "config.toml")
-	if err := bridgeconfig.WriteBridgeFileConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteBridgeFileConfig: %v", err)
+	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
 }
 

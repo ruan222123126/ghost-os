@@ -1,18 +1,20 @@
 package orchestration
 
-import bridgeconfig "ghost-os/bridge/config"
+import (
+	"strings"
+
+	bridgeconfig "ghost-os/bridge/config"
+)
 
 type Config = bridgeconfig.Config
 type ProviderConfig = bridgeconfig.ProviderConfig
 type RSSConfig = bridgeconfig.RSSConfig
 type WorkerConfig = bridgeconfig.WorkerConfig
+type GraphQLConfig = bridgeconfig.GraphQLConfig
 type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
 type ToolSearchConfig = bridgeconfig.ToolSearchConfig
 type MemoryAugmentationConfig = bridgeconfig.MemoryAugmentationConfig
-type runtimeConfig = bridgeconfig.RuntimeConfig
 type providerConfig = bridgeconfig.ProviderRecord
-type providerFileConfig = bridgeconfig.ProviderFileConfig
-type bridgeFileConfig = bridgeconfig.FileConfig
 
 const (
 	defaultProvider               = bridgeconfig.DefaultProvider
@@ -79,43 +81,24 @@ func (s *ConfigStore) Inner() *bridgeconfig.Store {
 	return s.unwrap()
 }
 
-func (s *ConfigStore) RuntimeConfig() runtimeConfig {
-	return s.unwrap().RuntimeConfig()
+func (s *ConfigStore) Config() (Config, error) {
+	return s.unwrap().Config()
 }
 
 func (s *ConfigStore) Snapshot() configResponse {
-	snapshot := s.unwrap().Snapshot()
-	return configResponse{
-		Provider:                 snapshot.Provider,
-		ProviderType:             snapshot.ProviderType,
-		BaseURL:                  snapshot.BaseURL,
-		Model:                    snapshot.Model,
-		ChatPath:                 snapshot.ChatPath,
-		APIKeySet:                snapshot.APIKeySet,
-		ModelSelectionEnabled:    snapshot.ModelSelectionEnabled,
-		GraphqlDefaultSource:     snapshot.GraphQLDefaultSource,
-		GraphqlSources:           graphQLSourceResponses(snapshot.GraphQLSources),
-		GraphqlMutationPolicies:  graphQLMutationPolicyResponses(snapshot.GraphQLMutationPolicies),
-		WebSearchTavilyAPIKeySet: snapshot.WebSearchTavilyAPIKeySet,
-		WebSearchExaAPIKeySet:    snapshot.WebSearchExaAPIKeySet,
-	}
+	return configResponseFromSnapshot(s.unwrap().Snapshot())
 }
 
 func (s *ConfigStore) ListProviders() []providerConfig {
-	providers := s.unwrap().ListProviders()
-	out := make([]providerConfig, 0, len(providers))
-	for _, provider := range providers {
-		out = append(out, providerConfig(provider))
-	}
-	return out
+	return s.unwrap().ListProviders()
 }
 
 func (s *ConfigStore) AddProvider(cfg providerConfig) error {
-	return s.unwrap().AddProvider(bridgeconfig.ProviderRecord(cfg))
+	return s.unwrap().AddProvider(cfg)
 }
 
 func (s *ConfigStore) UpdateProvider(name string, cfg providerConfig) error {
-	return s.unwrap().UpdateProvider(name, bridgeconfig.ProviderRecord(cfg))
+	return s.unwrap().UpdateProvider(name, cfg)
 }
 
 func (s *ConfigStore) DeleteProvider(name string) error {
@@ -148,11 +131,21 @@ func (s *ConfigStore) SetProjectRoot(path string) error {
 }
 
 func cloneOptionalStringPointer(raw *string) *string {
-	return bridgeconfig.CloneOptionalStringPointer(raw)
+	if raw == nil {
+		return nil
+	}
+	value := strings.TrimSpace(*raw)
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func stringValue(raw *string) string {
-	return bridgeconfig.StringValue(raw)
+	if raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(*raw)
 }
 
 func cloneStringMap(raw map[string]string) map[string]string {
@@ -173,80 +166,6 @@ func cloneModelTokenOverrides(raw map[string]int) map[string]int {
 	out := make(map[string]int, len(raw))
 	for key, value := range raw {
 		out[key] = value
-	}
-	return out
-}
-
-func graphQLSourceResponses(raw []bridgeconfig.GraphQLSourceSnapshot) []graphqlSourceResponse {
-	if len(raw) == 0 {
-		return []graphqlSourceResponse{}
-	}
-
-	out := make([]graphqlSourceResponse, 0, len(raw))
-	for _, source := range raw {
-		out = append(out, graphqlSourceResponse{
-			Name:             source.Name,
-			Description:      source.Description,
-			Endpoint:         source.Endpoint,
-			SchemaPath:       source.SchemaPath,
-			TimeoutMs:        source.TimeoutMS,
-			MaxResponseBytes: source.MaxResponseBytes,
-			MaxDepth:         source.MaxDepth,
-			MaxFields:        source.MaxFields,
-			MaxRootFields:    source.MaxRootFields,
-			MaxFragments:     source.MaxFragments,
-			Headers:          cloneStringMap(source.Headers),
-			APIKeySet:        source.APIKeySet,
-			Domains:          graphQLDomainResponses(source.Domains),
-		})
-	}
-	return out
-}
-
-func graphQLDomainResponses(raw []bridgeconfig.GraphQLDomainSnapshot) []graphqlDomainResponse {
-	if len(raw) == 0 {
-		return nil
-	}
-
-	out := make([]graphqlDomainResponse, 0, len(raw))
-	for _, domain := range raw {
-		out = append(out, graphqlDomainResponse{
-			Name:          domain.Name,
-			Description:   domain.Description,
-			RootQueries:   append([]string(nil), domain.RootQueries...),
-			Types:         append([]string(nil), domain.Types...),
-			MaxDepth:      domain.MaxDepth,
-			MaxFields:     domain.MaxFields,
-			MaxRootFields: domain.MaxRootFields,
-		})
-	}
-	return out
-}
-
-func graphQLMutationPolicyResponses(
-	raw []bridgeconfig.GraphQLMutationPolicySnapshot,
-) []graphqlMutationPolicyResponse {
-	if len(raw) == 0 {
-		return []graphqlMutationPolicyResponse{}
-	}
-
-	out := make([]graphqlMutationPolicyResponse, 0, len(raw))
-	for _, policy := range raw {
-		out = append(out, graphqlMutationPolicyResponse{
-			Name:                    policy.Name,
-			Description:             policy.Description,
-			Source:                  policy.Source,
-			Domain:                  policy.Domain,
-			RootMutation:            policy.RootMutation,
-			ApprovalRequired:        policy.ApprovalRequired,
-			IdempotencyMode:         policy.IdempotencyMode,
-			IdempotencyHeader:       policy.IdempotencyHeader,
-			IdempotencyVariablePath: policy.IdempotencyVariablePath,
-			MaxDepth:                policy.MaxDepth,
-			MaxFields:               policy.MaxFields,
-			MaxRootFields:           policy.MaxRootFields,
-			MaxFragments:            policy.MaxFragments,
-		})
 	}
 	return out
 }

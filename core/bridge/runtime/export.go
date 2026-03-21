@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"strings"
+
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/execution"
@@ -12,10 +14,8 @@ import (
 
 type Config = bridgeconfig.Config
 type ConfigStore = bridgeconfig.Store
-type RuntimeConfig = bridgeconfig.RuntimeConfig
 type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
 type ToolSearchConfig = bridgeconfig.ToolSearchConfig
-type runtimeConfig = bridgeconfig.RuntimeConfig
 type Dependencies = agentRuntimeDependencies
 type SelectorEngine = selectorEngine
 
@@ -33,10 +33,6 @@ func (d agentRuntimeDependencies) Client() agent.Completer {
 
 func (d agentRuntimeDependencies) Registry() *tools.Registry {
 	return d.registry
-}
-
-func (d agentRuntimeDependencies) GraphQLRegistry() *tools.GraphQLSourceRegistry {
-	return d.graphQL
 }
 
 func (d agentRuntimeDependencies) SystemPrompt() string {
@@ -97,43 +93,20 @@ func NewSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *ses
 }
 
 func providerClientOptions(cfg Config, model string) llm.ClientOptions {
-	return bridgeconfig.ProviderClientOptions(cfg, model)
-}
-
-func runtimeConfigFromEnv() (RuntimeConfig, error) {
-	return bridgeconfig.RuntimeConfigFromEnv()
-}
-
-func loadConfigWithRuntime(runtime RuntimeConfig) (Config, error) {
-	return bridgeconfig.LoadWithRuntime(runtime)
-}
-
-func nativePersistentEnabledFromEnv() bool {
-	return bridgeconfig.NativePersistentEnabledFromEnv()
-}
-
-func nativeBinaryPathFromEnv() string {
-	return bridgeconfig.NativeBinaryPathFromEnv()
-}
-
-func nativeBinaryRootsFromEnv() []string {
-	return bridgeconfig.NativeBinaryRootsFromEnv()
-}
-
-func nativeBinaryCandidatesFromEnv() []string {
-	return bridgeconfig.NativeBinaryCandidatesFromEnv()
-}
-
-func nativeAllowedReadPathsFromEnv() []string {
-	return bridgeconfig.NativeAllowedReadPathsFromEnv()
-}
-
-func nativeAllowedWritePathsFromEnv() []string {
-	return bridgeconfig.NativeAllowedWritePathsFromEnv()
-}
-
-func projectRootFromEnv() string {
-	return bridgeconfig.ProjectRootFromEnv()
+	resolvedModel := strings.TrimSpace(model)
+	if resolvedModel == "" {
+		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
+	}
+	return llm.ClientOptions{
+		Provider:           cfg.Provider.Type,
+		BaseURL:            cfg.Provider.BaseURL,
+		APIKey:             cfg.Provider.APIKey,
+		Model:              resolvedModel,
+		ChatPath:           cfg.ChatPath,
+		Headers:            cfg.Provider.Headers,
+		AnthropicVersion:   cfg.Provider.AnthropicVersion,
+		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
+	}
 }
 
 func NewExecutionClientFromEnv() execution.Client {

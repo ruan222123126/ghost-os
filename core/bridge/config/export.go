@@ -7,6 +7,7 @@ import (
 )
 
 type RuntimeConfig = runtimeConfig
+type Store = ConfigStore
 type ProviderFileConfig = providerFileConfig
 type FileConfig = bridgeFileConfig
 type MemoryAugmentationSettings = MemoryAugmentationConfig
@@ -65,6 +66,10 @@ func Load() (Config, error) {
 
 func LoadWithRuntime(runtime RuntimeConfig) (Config, error) {
 	return loadConfigWithRuntime(runtime)
+}
+
+func NewStoreFromEnv() (*Store, error) {
+	return NewConfigStoreFromEnv()
 }
 
 func GetenvDefault(name, fallback string) string {

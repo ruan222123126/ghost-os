@@ -6,6 +6,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/artifacts"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/execution"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
@@ -18,7 +19,6 @@ type agentRuntimeDependencies struct {
 	cfg          Config
 	client       agent.Completer
 	registry     *tools.Registry
-	graphQL      *tools.GraphQLSourceRegistry
 	systemPrompt string
 	memoryRecall memoryaug.RecallService
 	memoryLearn  memoryaug.LearningService
@@ -101,11 +101,6 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		resources:   resources,
 		taskManager: taskManager,
 	})
-	graphQLRegistry, err := buildGraphQLSourceRegistry(cfg)
-	if err != nil {
-		closeRuntimeToolResources(resources)
-		return agentRuntimeDependencies{}, err
-	}
 	memoryResources, err := setupMemoryAugmentation(cfg, registry)
 	if err != nil {
 		closeRuntimeToolResources(resources)
@@ -121,7 +116,6 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		cfg:          cfg,
 		client:       clients.primary,
 		registry:     registry,
-		graphQL:      graphQLRegistry,
 		systemPrompt: systemPrompt,
 		memoryRecall: memoryResources.recall,
 		memoryLearn:  memoryResources.learn,
@@ -146,13 +140,9 @@ func (d memoryRuntimeResources) Close() {
 
 func loadAgentRuntimeConfig(store *ConfigStore) (Config, error) {
 	if store == nil {
-		runtimeCfg, err := runtimeConfigFromEnv()
-		if err != nil {
-			return Config{}, err
-		}
-		return loadConfigWithRuntime(runtimeCfg)
+		return bridgeconfig.Load()
 	}
-	return loadConfigWithRuntime(store.RuntimeConfig())
+	return store.Config()
 }
 
 func newRuntimeClients(cfg Config) runtimeClients {
@@ -200,6 +190,7 @@ func registerCoreTools(opts coreToolOptions) {
 	opts.registry.Register(tools.NewScreenActionTool(opts.resources.executionClient))
 	opts.registry.Register(tools.NewBrowserControlTool(opts.resources.executionClient))
 	opts.registry.Register(tools.NewTextInputTool(opts.resources.executionClient))
+	opts.registry.Register(tools.NewComputerUseTool(opts.resources.executionClient, opts.clients.primary, opts.resources.artifactStore))
 	if opts.taskManager != nil {
 		opts.registry.Register(tools.NewTaskManageTool(opts.taskManager))
 	}
@@ -257,13 +248,6 @@ func buildRuntimeSystemPrompt(cfg Config, registry *tools.Registry) (string, err
 
 func closeRuntimeToolResources(resources runtimeToolResources) {
 	_ = closeExecutionClient(resources.executionClient)
-}
-
-func buildGraphQLSourceRegistry(cfg Config) (*tools.GraphQLSourceRegistry, error) {
-	if len(cfg.GraphQL.Sources) == 0 {
-		return nil, nil
-	}
-	return tools.NewGraphQLSourceRegistry(graphQLRegistryConfig(cfg))
 }
 
 func resolvePromptProjectRoot(projectRoot string) string {

@@ -80,7 +80,7 @@ func (c *llmRSSInboxClassifier) classifierTimeout() time.Duration {
 func loadRSSClassifierConfig(c *llmRSSInboxClassifier) (Config, error) {
 	switch {
 	case c != nil && c.store != nil:
-		return loadConfigWithRuntime(c.store.RuntimeConfig())
+		return c.store.Config()
 	case c != nil && strings.TrimSpace(c.cfg.Provider.Model) != "":
 		return c.cfg, nil
 	default:

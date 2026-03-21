@@ -13,7 +13,6 @@ import (
 )
 
 type Config = bridgeconfig.Config
-type ConfigStore = bridgeconfig.Store
 type RSSInboxFetcher = rssInboxFetcher
 type RSSInboxClassifier = rssInboxClassifier
 type RSSBriefingBuilder = rssBriefingBuilder
@@ -62,7 +61,7 @@ type runtimeFactoryAdapter struct {
 }
 
 func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
-	deps, err := f.inner.Build(store)
+	deps, err := f.inner.Build(store.unwrap())
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
@@ -79,20 +78,57 @@ func newAgentRuntimeFactory() AgentRuntimeFactory {
 	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactory()}
 }
 
+type ConfigStore struct {
+	inner bridgeconfig.Store
+}
+
+func wrapConfigStore(store bridgeconfig.Store) *ConfigStore {
+	if store == nil {
+		return nil
+	}
+	return &ConfigStore{inner: store}
+}
+
+func (s *ConfigStore) unwrap() bridgeconfig.Store {
+	if s == nil {
+		return nil
+	}
+	return s.inner
+}
+
+func (s *ConfigStore) Config() (Config, error) {
+	if s == nil || s.inner == nil {
+		return LoadConfig()
+	}
+	return s.inner.Config()
+}
+
 func LoadConfig() (Config, error) {
 	return bridgeconfig.Load()
 }
 
-func loadConfigWithRuntime(runtime bridgeconfig.RuntimeConfig) (Config, error) {
-	return bridgeconfig.LoadWithRuntime(runtime)
-}
-
 func providerClientOptions(cfg Config, model string) llm.ClientOptions {
-	return bridgeconfig.ProviderClientOptions(cfg, model)
+	resolvedModel := strings.TrimSpace(model)
+	if resolvedModel == "" {
+		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
+	}
+	return llm.ClientOptions{
+		Provider:           cfg.Provider.Type,
+		BaseURL:            cfg.Provider.BaseURL,
+		APIKey:             cfg.Provider.APIKey,
+		Model:              resolvedModel,
+		ChatPath:           cfg.ChatPath,
+		Headers:            cfg.Provider.Headers,
+		AnthropicVersion:   cfg.Provider.AnthropicVersion,
+		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
+	}
 }
 
 func effectiveWorkerModel(cfg Config) string {
-	return bridgeconfig.EffectiveWorkerModel(cfg)
+	if model := strings.TrimSpace(cfg.Worker.Model); model != "" {
+		return model
+	}
+	return strings.TrimSpace(cfg.Provider.Model)
 }
 
 func resolveUserPath(pathValue string) (string, error) {
@@ -126,8 +162,8 @@ func stripJSONCodeFence(text string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
-func NewRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) {
-	return newRSSInboxServiceFromConfig(store)
+func NewRSSInboxServiceFromConfig(store bridgeconfig.Store) (*RSSInboxService, error) {
+	return newRSSInboxServiceFromConfig(wrapConfigStore(store))
 }
 
 func NewLLMRSSBriefingBuilder(client llm.Completer, cfg Config) RSSBriefingBuilder {

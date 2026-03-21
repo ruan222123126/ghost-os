@@ -37,6 +37,15 @@
 - 本轮验证：
   - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge -count=1 ./config -timeout 60s`
 
+- 固定配置暴露链为单向四层，并把 runtime->file 反向物化限制在 store 显式 patch 阶段：
+  - `core/bridge/config` 现以 `bridgeFileConfig -> runtimeConfig -> Snapshot -> orchestration/transport DTO` 单向转换为主干；`Snapshot()` 只负责 resolved runtime 到 public runtime config，`orchestration/config_public_runtime.go` 只负责 public runtime config 到 transport/orchestration DTO，不再混入 file 层回填。
+  - `ConfigStore` 的普通读取路径不再回写配置文件；只有 `config_store_update_pipeline.go` 构造 patch base 时，才允许基于当前 runtime snapshot 显式物化 provider / GraphQL / web-search 所需 file DTO 基底后再进入 patch 与 persist。
+  - 补齐 `config` / `runtime` / `rss` / `orchestration` / `transport` 之间的 store 导出与 pointer 语义，修复半落地重构留下的 `Store`/`ConfigStore`/public export 冲突，恢复跨包编译。
+  - 新增 `TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile`，锁定 `Snapshot()` 不会把 runtime 状态静默写回配置文件；保留 GraphQL patch-base 回归测试，确认只有显式 patch 路径会物化当前 runtime 基底。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./runtime ./rss -count=1 -timeout 60s`
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./orchestration ./transport -run 'TestConfigUpdateRejectsNonStringGraphQLHeaders|TestConfigUpdateThenGetUsesStore|TestConfigUpdateEmptyBaseURLAndModelResetDefaults|TestConfigGetReturnsEmptyGraphQLArraysWhenUnset' -count=1 -timeout 60s`
+
 - 拆分 `core/bridge/agent/toolCallExecutor.execute` 的脆弱职责面：
   - `tool_executor_execute.go` 新增 step 上下文、tool 解析、执行失败收口、awaiting-human / iteration handoff 分发等私有 helper，`execute` 本身退回到“单回合协调 + stats 汇总”职责。
   - 保留原有事务语义：`tool_call_started` / `tool_call_finished` / `awaiting_human` 事件顺序不变，invalid / missing tool 继续写稳定 error envelope，awaiting-human 与 iteration handoff 仍在当前部分回合提交后返回给外层 orchestrator。

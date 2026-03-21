@@ -34,7 +34,7 @@ func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) 
 
 func loadRSSInboxConfig(store *ConfigStore) (Config, error) {
 	if store != nil {
-		return loadConfigWithRuntime(store.RuntimeConfig())
+		return store.Config()
 	}
 	return LoadConfig()
 }

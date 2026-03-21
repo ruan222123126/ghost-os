@@ -5,6 +5,43 @@ import (
 	"testing"
 )
 
+func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_API_KEY", "snapshot-key")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+	t.Setenv("GHOST_MODEL", "snapshot-model")
+	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "snapshot-tavily")
+
+	store, err := NewConfigStoreFromEnv()
+	if err != nil {
+		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+	}
+
+	snapshot := store.Snapshot()
+	if snapshot.Provider != "custom" {
+		t.Fatalf("unexpected provider: got %q want %q", snapshot.Provider, "custom")
+	}
+	if !snapshot.APIKeySet {
+		t.Fatal("expected api_key_set to be true")
+	}
+	if !snapshot.WebSearchTavilyAPIKeySet {
+		t.Fatal("expected web_search_tavily_api_key_set to be true")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if len(fileCfg.Providers) != 0 {
+		t.Fatalf("snapshot should not materialize providers, got %+v", fileCfg.Providers)
+	}
+	if fileCfg.WebSearchTavilyAPIKey != nil {
+		t.Fatalf("snapshot should not persist web search api key, got %#v", fileCfg.WebSearchTavilyAPIKey)
+	}
+}
+
 func TestConfigStoreUpdateLoadsRuntimeGraphQLIntoPatchBase(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
