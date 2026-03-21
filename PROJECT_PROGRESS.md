@@ -23,6 +23,13 @@
 
 ### 2026-03-21
 
+- 收口 `core/bridge/config` 的 read/resolve 边界：
+  - `LoadConfig()` 现显式改成 `loadBridgeFileConfig()` + `Resolve(fileCfg, env)` 两步，`Resolve` 只消费文件配置和 `Env` 快照，不再在解析过程中读取磁盘或 `os.Getenv`。
+  - 新增 `Env` 快照与一组 `*WithEnv` 纯解析 helper，`runtimeConfig` 解析同样改为基于 `fileCfg + env` 运行；`resolveRuntimeConfigWithFallback` 也不再偷偷回读环境，store snapshot 的 fallback 语义更稳定。
+  - 新增 `config_resolve_test.go`，直接覆盖“`Resolve` 只使用传入 env snapshot”与“runtime fallback 不因环境漂移改写 `ModelSelectionEnabled`”两条回归路径。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge -count=1 ./config -timeout 60s`
+
 - 拆分 `core/bridge/agent/toolCallExecutor.execute` 的脆弱职责面：
   - `tool_executor_execute.go` 新增 step 上下文、tool 解析、执行失败收口、awaiting-human / iteration handoff 分发等私有 helper，`execute` 本身退回到“单回合协调 + stats 汇总”职责。
   - 保留原有事务语义：`tool_call_started` / `tool_call_finished` / `awaiting_human` 事件顺序不变，invalid / missing tool 继续写稳定 error envelope，awaiting-human 与 iteration handoff 仍在当前部分回合提交后返回给外层 orchestrator。

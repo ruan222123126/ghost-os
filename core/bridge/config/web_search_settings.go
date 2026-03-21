@@ -8,9 +8,13 @@ type webSearchSettings struct {
 }
 
 func envWebSearchSettings() webSearchSettings {
+	return webSearchSettingsFromEnv(CurrentEnv())
+}
+
+func webSearchSettingsFromEnv(env Env) webSearchSettings {
 	return webSearchSettings{
-		TavilyAPIKey: firstNonEmptyEnv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY"),
-		ExaAPIKey:    firstNonEmptyEnv("GHOST_WEB_SEARCH_EXA_API_KEY", "EXA_API_KEY"),
+		TavilyAPIKey: env.firstNonEmpty("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY"),
+		ExaAPIKey:    env.firstNonEmpty("GHOST_WEB_SEARCH_EXA_API_KEY", "EXA_API_KEY"),
 	}
 }
 

@@ -8,85 +8,104 @@ import (
 
 // LoadConfig 从环境变量加载配置并做基础校验与归一化。
 func LoadConfig() (Config, error) {
-	runtime, err := runtimeConfigFromEnv()
-	if err != nil {
-		return Config{}, err
-	}
-	return loadConfigWithRuntime(runtime)
-}
-
-// loadConfigWithRuntime 在 runtimeConfig 基础上补齐环境默认值与执行期约束。
-func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
-	runtime = normalizeRuntimeConfig(runtime)
-	if err := validateRuntimeForExecution(runtime); err != nil {
-		return Config{}, err
-	}
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		return Config{}, err
 	}
-	headers, promptsDir, err := loadConfigEnvDetails(fileCfg)
+	return Resolve(fileCfg, CurrentEnv())
+}
+
+// Resolve 把已读取的文件配置和环境快照解析成运行时配置。
+func Resolve(fileCfg FileConfig, env Env) (Config, error) {
+	return resolveConfig(bridgeFileConfig(fileCfg), env)
+}
+
+// loadConfigWithRuntime 在 runtimeConfig 基础上补齐环境默认值与执行期约束。
+func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return Config{}, err
+	}
+	return resolveConfigWithRuntime(fileCfg, CurrentEnv(), runtime)
+}
+
+func resolveConfig(fileCfg bridgeFileConfig, env Env) (Config, error) {
+	runtime, err := resolveRuntimeConfig(fileCfg, env)
+	if err != nil {
+		return Config{}, err
+	}
+	return resolveConfigWithRuntime(fileCfg, env, runtime)
+}
+
+func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env Env, runtime runtimeConfig) (Config, error) {
+	runtime = normalizeRuntimeConfig(runtime)
+	if err := validateRuntimeForExecution(runtime); err != nil {
+		return Config{}, err
+	}
+	headers, promptsDir, err := loadConfigEnvDetails(fileCfg, env)
 	if err != nil {
 		return Config{}, err
 	}
 
 	cfg := Config{
-		Provider:                buildProviderConfig(runtime, fileCfg, headers),
-		RSS:                     buildRSSConfig(),
-		Worker:                  buildWorkerConfig(fileCfg),
+		Provider:                buildProviderConfig(runtime, fileCfg, env, headers),
+		RSS:                     buildRSSConfig(fileCfg, env),
+		Worker:                  buildWorkerConfig(fileCfg, env),
 		GraphQL:                 runtime.GraphQL,
-		ToolSelector:            buildToolSelectorConfig(fileCfg),
-		ToolSearch:              buildToolSearchConfig(fileCfg),
-		MemoryAugmentation:      buildMemoryAugmentationConfig(fileCfg),
+		ToolSelector:            buildToolSelectorConfig(fileCfg, env),
+		ToolSearch:              buildToolSearchConfig(fileCfg, env),
+		MemoryAugmentation:      buildMemoryAugmentationConfig(fileCfg, env),
 		NativePersistent:        runtime.NativePersistent,
-		NativeBinaryPath:        nativeBinaryPathFromEnv(),
-		NativeBinaryRoots:       nativeBinaryRootsFromEnv(),
-		NativeBinaryCandidates:  nativeBinaryCandidatesFromEnv(),
-		NativeAllowedReadPaths:  nativeAllowedReadPathsFromEnv(),
-		NativeAllowedWritePaths: nativeAllowedWritePathsFromEnv(),
+		NativeBinaryPath:        resolveNativeBinaryPath(fileCfg, env),
+		NativeBinaryRoots:       resolveNativeBinaryRoots(fileCfg, env),
+		NativeBinaryCandidates:  resolveNativeBinaryCandidates(fileCfg, env),
+		NativeAllowedReadPaths:  resolveNativeAllowedReadPaths(fileCfg, env),
+		NativeAllowedWritePaths: resolveNativeAllowedWritePaths(fileCfg, env),
 		ProjectRoot:             runtime.ProjectRoot,
 		ChatPath:                runtime.ChatPath,
-		PromptsPath:             valueOrEnv(fileCfg.PromptsPath, "GHOST_PROMPTS_PATH", defaultPromptsPath),
+		PromptsPath:             valueOrEnvWithEnv(fileCfg.PromptsPath, env, "GHOST_PROMPTS_PATH", defaultPromptsPath),
 		PromptsDir:              promptsDir,
-		PromptsCoreFiles:        promptsCoreFiles(fileCfg),
-		PromptsRuntimeConstraintFiles: promptPathList(
+		PromptsCoreFiles:        promptsCoreFiles(fileCfg, env),
+		PromptsRuntimeConstraintFiles: promptPathListWithEnv(
 			fileCfg.PromptsRuntimeConstraintFiles,
+			env,
 			"GHOST_PROMPTS_RUNTIME_CONSTRAINT_FILES",
 		),
-		PromptsResponseRuleFiles: promptPathList(
+		PromptsResponseRuleFiles: promptPathListWithEnv(
 			fileCfg.PromptsResponseRuleFiles,
+			env,
 			"GHOST_PROMPTS_RESPONSE_RULE_FILES",
 		),
-		SessionsPath:          sessionsPathFromEnv(),
+		SessionsPath:          resolveSessionsPath(fileCfg, env),
 		WebSearchTavilyAPIKey: runtime.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:    runtime.WebSearchExaAPIKey,
-		ProMaxIterations:      intOrEnv(fileCfg.ProMaxIterations, "GHOST_PRO_MAX_ITERATIONS", defaultProMaxIterations),
-		MaxTurns:              intOrEnv(fileCfg.MaxTurns, "GHOST_MAX_TURNS", defaultMaxTurns),
+		ProMaxIterations:      intOrEnvWithEnv(fileCfg.ProMaxIterations, env, "GHOST_PRO_MAX_ITERATIONS", defaultProMaxIterations),
+		MaxTurns:              intOrEnvWithEnv(fileCfg.MaxTurns, env, "GHOST_MAX_TURNS", defaultMaxTurns),
 	}
 	return finalizeLoadedConfig(cfg)
 }
 
-func loadConfigEnvDetails(fileCfg bridgeFileConfig) (map[string]string, string, error) {
-	headers, err := headersOrEnv(fileCfg.ProviderHeaders)
+func loadConfigEnvDetails(fileCfg bridgeFileConfig, env Env) (map[string]string, string, error) {
+	headers, err := headersOrEnvWithEnv(fileCfg.ProviderHeaders, env)
 	if err != nil {
 		return nil, "", err
 	}
-	promptsDir, err := resolvePromptsDir(fileCfg)
+	promptsDir, err := resolvePromptsDir(fileCfg, env)
 	if err != nil {
 		return nil, "", err
 	}
 	return headers, promptsDir, nil
 }
 
-func buildProviderConfig(runtime runtimeConfig, fileCfg bridgeFileConfig, headers map[string]string) ProviderConfig {
+func buildProviderConfig(runtime runtimeConfig, fileCfg bridgeFileConfig, env Env, headers map[string]string) ProviderConfig {
 	return ProviderConfig{
 		Type:                       runtime.Provider,
 		APIKey:                     runtime.APIKey,
 		BaseURL:                    runtime.BaseURL,
 		Model:                      runtime.Model,
 		Headers:                    headers,
-		AnthropicVersion:           valueOrEnv(fileCfg.AnthropicVersion, "GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
-		AnthropicMaxTokens:         intOrEnv(fileCfg.AnthropicMaxTokens, "GHOST_ANTHROPIC_MAX_TOKENS", defaultAnthropicMaxTokens),
+		AnthropicVersion:           valueOrEnvWithEnv(fileCfg.AnthropicVersion, env, "GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
+		AnthropicMaxTokens:         intOrEnvWithEnv(fileCfg.AnthropicMaxTokens, env, "GHOST_ANTHROPIC_MAX_TOKENS", defaultAnthropicMaxTokens),
 		ContextWindowTokens:        runtime.ContextWindowTokens,
 		ResponseReserveTokens:      runtime.ResponseReserveTokens,
 		ModelContextWindowTokens:   cloneModelTokenOverrides(runtime.ModelContextWindowTokens),
@@ -94,63 +113,63 @@ func buildProviderConfig(runtime runtimeConfig, fileCfg bridgeFileConfig, header
 	}
 }
 
-func buildRSSConfig() RSSConfig {
+func buildRSSConfig(fileCfg bridgeFileConfig, env Env) RSSConfig {
 	return RSSConfig{
-		FeedsPath:           rssFeedsPathFromEnv(),
-		InboxPath:           rssInboxPathFromEnv(),
-		BriefingsPath:       rssBriefingsPathFromEnv(),
-		ReportsPath:         rssReportsPathFromEnv(),
-		PollEnabled:         rssPollEnabledFromEnv(),
-		PollInterval:        rssPollIntervalFromEnv(),
-		PollMaxItemsPerFeed: rssPollMaxItemsPerFeedFromEnv(),
-		AIBatchSize:         rssAIBatchSizeFromEnv(),
-		BriefingEnabled:     rssBriefingEnabledFromEnv(),
-		BriefingInterval:    rssBriefingIntervalFromEnv(),
+		FeedsPath:           resolveRSSFeedsPath(fileCfg, env),
+		InboxPath:           resolveRSSInboxPath(fileCfg, env),
+		BriefingsPath:       resolveRSSBriefingsPath(fileCfg, env),
+		ReportsPath:         resolveRSSReportsPath(fileCfg, env),
+		PollEnabled:         boolOrEnvWithEnv(fileCfg.RSSPollEnabled, env, "GHOST_RSS_POLL_ENABLED", true),
+		PollInterval:        durationOrEnvWithEnv(fileCfg.RSSPollInterval, env, "GHOST_RSS_POLL_INTERVAL", defaultRSSPollInterval),
+		PollMaxItemsPerFeed: intOrEnvWithEnv(fileCfg.RSSPollMaxItemsPerFeed, env, "GHOST_RSS_POLL_MAX_ITEMS_PER_FEED", defaultRSSPollMaxItemsPerFeed),
+		AIBatchSize:         intOrEnvWithEnv(fileCfg.RSSAIBatchSize, env, "GHOST_RSS_AI_BATCH_SIZE", defaultRSSAIBatchSize),
+		BriefingEnabled:     boolOrEnvWithEnv(fileCfg.RSSBriefingEnabled, env, "GHOST_RSS_BRIEFING_ENABLED", true),
+		BriefingInterval:    durationOrEnvWithEnv(fileCfg.RSSBriefingInterval, env, "GHOST_RSS_BRIEFING_INTERVAL", defaultRSSBriefingInterval),
 	}
 }
 
-func buildWorkerConfig(fileCfg bridgeFileConfig) WorkerConfig {
+func buildWorkerConfig(fileCfg bridgeFileConfig, env Env) WorkerConfig {
 	return WorkerConfig{
-		Model:          valueOrEnv(fileCfg.WorkerModel, "GHOST_WORKER_MODEL", ""),
-		MaxConcurrency: intOrEnv(fileCfg.WorkerMaxConcurrency, "GHOST_WORKER_MAX_CONCURRENCY", defaultWorkerMaxConcurrency),
-		MaxFiles:       intOrEnv(fileCfg.WorkerMaxFiles, "GHOST_WORKER_MAX_FILES", defaultWorkerMaxFiles),
-		MaxFileChunks:  intOrEnv(fileCfg.WorkerMaxFileChunks, "GHOST_WORKER_MAX_FILE_CHUNKS", defaultWorkerMaxFileChunks),
+		Model:          valueOrEnvWithEnv(fileCfg.WorkerModel, env, "GHOST_WORKER_MODEL", ""),
+		MaxConcurrency: intOrEnvWithEnv(fileCfg.WorkerMaxConcurrency, env, "GHOST_WORKER_MAX_CONCURRENCY", defaultWorkerMaxConcurrency),
+		MaxFiles:       intOrEnvWithEnv(fileCfg.WorkerMaxFiles, env, "GHOST_WORKER_MAX_FILES", defaultWorkerMaxFiles),
+		MaxFileChunks:  intOrEnvWithEnv(fileCfg.WorkerMaxFileChunks, env, "GHOST_WORKER_MAX_FILE_CHUNKS", defaultWorkerMaxFileChunks),
 	}
 }
 
-func buildToolSelectorConfig(fileCfg bridgeFileConfig) ToolSelectorConfig {
+func buildToolSelectorConfig(fileCfg bridgeFileConfig, env Env) ToolSelectorConfig {
 	return ToolSelectorConfig{
-		Enabled:       boolOrEnv(fileCfg.ToolSelectorEnabled, "GHOST_TOOL_SELECTOR_ENABLED", false),
-		Mode:          strings.ToLower(valueOrEnv(fileCfg.ToolSelectorMode, "GHOST_TOOL_SELECTOR_MODE", "llm")),
-		Model:         valueOrEnv(fileCfg.ToolSelectorModel, "GHOST_TOOL_SELECTOR_MODEL", ""),
-		TimeoutMS:     intOrEnv(fileCfg.ToolSelectorTimeoutMS, "GHOST_TOOL_SELECTOR_TIMEOUT_MS", defaultToolSelectorTimeoutMS),
-		Confidence:    floatOrEnv(fileCfg.ToolSelectorConfidence, "GHOST_TOOL_SELECTOR_CONFIDENCE", defaultToolSelectorConfidence),
-		Shadow:        boolOrEnv(fileCfg.ToolSelectorShadow, "GHOST_TOOL_SELECTOR_SHADOW", false),
-		RecentMsgs:    intOrEnv(fileCfg.ToolSelectorRecentMsgs, "GHOST_TOOL_SELECTOR_RECENT_MESSAGES", defaultToolSelectorRecentMsgs),
-		AllowlistOnly: boolOrEnv(fileCfg.ToolAllowlistOnly, "GHOST_TOOL_ALLOWLIST_ONLY", false),
-		Allowlist:     toolNameListOrEnv(fileCfg.ToolAllowlist, "GHOST_TOOL_ALLOWLIST"),
-		Blocklist:     toolNameListOrEnv(fileCfg.ToolBlocklist, "GHOST_TOOL_BLOCKLIST"),
+		Enabled:       boolOrEnvWithEnv(fileCfg.ToolSelectorEnabled, env, "GHOST_TOOL_SELECTOR_ENABLED", false),
+		Mode:          strings.ToLower(valueOrEnvWithEnv(fileCfg.ToolSelectorMode, env, "GHOST_TOOL_SELECTOR_MODE", "llm")),
+		Model:         valueOrEnvWithEnv(fileCfg.ToolSelectorModel, env, "GHOST_TOOL_SELECTOR_MODEL", ""),
+		TimeoutMS:     intOrEnvWithEnv(fileCfg.ToolSelectorTimeoutMS, env, "GHOST_TOOL_SELECTOR_TIMEOUT_MS", defaultToolSelectorTimeoutMS),
+		Confidence:    floatOrEnvWithEnv(fileCfg.ToolSelectorConfidence, env, "GHOST_TOOL_SELECTOR_CONFIDENCE", defaultToolSelectorConfidence),
+		Shadow:        boolOrEnvWithEnv(fileCfg.ToolSelectorShadow, env, "GHOST_TOOL_SELECTOR_SHADOW", false),
+		RecentMsgs:    intOrEnvWithEnv(fileCfg.ToolSelectorRecentMsgs, env, "GHOST_TOOL_SELECTOR_RECENT_MESSAGES", defaultToolSelectorRecentMsgs),
+		AllowlistOnly: boolOrEnvWithEnv(fileCfg.ToolAllowlistOnly, env, "GHOST_TOOL_ALLOWLIST_ONLY", false),
+		Allowlist:     toolNameListOrEnvWithEnv(fileCfg.ToolAllowlist, env, "GHOST_TOOL_ALLOWLIST"),
+		Blocklist:     toolNameListOrEnvWithEnv(fileCfg.ToolBlocklist, env, "GHOST_TOOL_BLOCKLIST"),
 	}
 }
 
-func buildToolSearchConfig(fileCfg bridgeFileConfig) ToolSearchConfig {
+func buildToolSearchConfig(fileCfg bridgeFileConfig, env Env) ToolSearchConfig {
 	return ToolSearchConfig{
-		Enabled:   boolOrEnv(fileCfg.ToolSearchEnabled, "GHOST_TOOL_SEARCH_ENABLED", false),
-		IdleTurns: intOrEnv(fileCfg.ToolSearchIdleTurns, "GHOST_TOOL_SEARCH_IDLE_TURNS", defaultToolSearchIdleTurns),
+		Enabled:   boolOrEnvWithEnv(fileCfg.ToolSearchEnabled, env, "GHOST_TOOL_SEARCH_ENABLED", false),
+		IdleTurns: intOrEnvWithEnv(fileCfg.ToolSearchIdleTurns, env, "GHOST_TOOL_SEARCH_IDLE_TURNS", defaultToolSearchIdleTurns),
 	}
 }
 
-func buildMemoryAugmentationConfig(fileCfg bridgeFileConfig) MemoryAugmentationConfig {
+func buildMemoryAugmentationConfig(fileCfg bridgeFileConfig, env Env) MemoryAugmentationConfig {
 	return MemoryAugmentationConfig{
-		Enabled:             boolOrEnv(fileCfg.MemoryAugmentationEnabled, "GHOST_MEMORY_AUGMENTATION_ENABLED", true),
-		LearningEnabled:     boolOrEnv(fileCfg.MemoryAugmentationLearningEnabled, "GHOST_MEMORY_AUGMENTATION_LEARNING_ENABLED", true),
-		RecallEnabled:       boolOrEnv(fileCfg.MemoryAugmentationRecallEnabled, "GHOST_MEMORY_AUGMENTATION_RECALL_ENABLED", true),
-		MaxRecallItems:      intOrEnv(fileCfg.MemoryAugmentationMaxRecallItems, "GHOST_MEMORY_AUGMENTATION_MAX_RECALL_ITEMS", defaultMemoryRecallItems),
-		MinConfidence:       floatOrEnv(fileCfg.MemoryAugmentationMinConfidence, "GHOST_MEMORY_AUGMENTATION_MIN_CONFIDENCE", defaultMemoryMinConfidence),
-		SessionScopeEnabled: boolOrEnv(fileCfg.MemoryAugmentationSessionScopeEnabled, "GHOST_MEMORY_AUGMENTATION_SESSION_SCOPE_ENABLED", true),
-		UserScopeEnabled:    boolOrEnv(fileCfg.MemoryAugmentationUserScopeEnabled, "GHOST_MEMORY_AUGMENTATION_USER_SCOPE_ENABLED", true),
-		LLMModel:            valueOrEnv(fileCfg.MemoryAugmentationLLMModel, "GHOST_MEMORY_AUGMENTATION_LLM_MODEL", ""),
-		UserScopeID:         valueOrEnv(fileCfg.MemoryAugmentationUserScopeID, "GHOST_MEMORY_AUGMENTATION_USER_SCOPE_ID", defaultMemoryUserScopeID),
+		Enabled:             boolOrEnvWithEnv(fileCfg.MemoryAugmentationEnabled, env, "GHOST_MEMORY_AUGMENTATION_ENABLED", true),
+		LearningEnabled:     boolOrEnvWithEnv(fileCfg.MemoryAugmentationLearningEnabled, env, "GHOST_MEMORY_AUGMENTATION_LEARNING_ENABLED", true),
+		RecallEnabled:       boolOrEnvWithEnv(fileCfg.MemoryAugmentationRecallEnabled, env, "GHOST_MEMORY_AUGMENTATION_RECALL_ENABLED", true),
+		MaxRecallItems:      intOrEnvWithEnv(fileCfg.MemoryAugmentationMaxRecallItems, env, "GHOST_MEMORY_AUGMENTATION_MAX_RECALL_ITEMS", defaultMemoryRecallItems),
+		MinConfidence:       floatOrEnvWithEnv(fileCfg.MemoryAugmentationMinConfidence, env, "GHOST_MEMORY_AUGMENTATION_MIN_CONFIDENCE", defaultMemoryMinConfidence),
+		SessionScopeEnabled: boolOrEnvWithEnv(fileCfg.MemoryAugmentationSessionScopeEnabled, env, "GHOST_MEMORY_AUGMENTATION_SESSION_SCOPE_ENABLED", true),
+		UserScopeEnabled:    boolOrEnvWithEnv(fileCfg.MemoryAugmentationUserScopeEnabled, env, "GHOST_MEMORY_AUGMENTATION_USER_SCOPE_ENABLED", true),
+		LLMModel:            valueOrEnvWithEnv(fileCfg.MemoryAugmentationLLMModel, env, "GHOST_MEMORY_AUGMENTATION_LLM_MODEL", ""),
+		UserScopeID:         valueOrEnvWithEnv(fileCfg.MemoryAugmentationUserScopeID, env, "GHOST_MEMORY_AUGMENTATION_USER_SCOPE_ID", defaultMemoryUserScopeID),
 	}
 }
 
@@ -175,8 +194,8 @@ func finalizeLoadedConfig(cfg Config) (Config, error) {
 	return cfg, nil
 }
 
-func resolvePromptsDir(fileCfg bridgeFileConfig) (string, error) {
-	raw := valueOrEnv(fileCfg.PromptsDir, "GHOST_PROMPTS_DIR", defaultPromptsDir)
+func resolvePromptsDir(fileCfg bridgeFileConfig, env Env) (string, error) {
+	raw := valueOrEnvWithEnv(fileCfg.PromptsDir, env, "GHOST_PROMPTS_DIR", defaultPromptsDir)
 	resolved, err := resolveUserPath(raw)
 	if err != nil {
 		return "", fmt.Errorf("resolve prompts_dir: %w", err)
@@ -184,13 +203,13 @@ func resolvePromptsDir(fileCfg bridgeFileConfig) (string, error) {
 	return resolved, nil
 }
 
-func promptsCoreFiles(fileCfg bridgeFileConfig) []string {
-	return promptPathList(fileCfg.PromptsCoreFiles, "GHOST_PROMPTS_CORE_FILES")
+func promptsCoreFiles(fileCfg bridgeFileConfig, env Env) []string {
+	return promptPathListWithEnv(fileCfg.PromptsCoreFiles, env, "GHOST_PROMPTS_CORE_FILES")
 }
 
-func promptPathList(raw []string, envName string) []string {
+func promptPathListWithEnv(raw []string, env Env, envName string) []string {
 	if raw != nil {
 		return normalizeConfiguredPathList(raw)
 	}
-	return normalizeConfiguredPathList(parseStringCSV(getenvDefault(envName, "")))
+	return normalizeConfiguredPathList(parseStringCSV(env.defaultValue(envName, "")))
 }

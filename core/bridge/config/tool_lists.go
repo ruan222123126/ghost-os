@@ -10,10 +10,14 @@ import (
 )
 
 func toolNameListOrEnv(raw []string, envName string) []string {
+	return toolNameListOrEnvWithEnv(raw, CurrentEnv(), envName)
+}
+
+func toolNameListOrEnvWithEnv(raw []string, env Env, envName string) []string {
 	if raw != nil {
 		return normalizeConfiguredToolNames(raw)
 	}
-	return normalizeConfiguredToolNames(parseStringCSV(getenvDefault(envName, "")))
+	return normalizeConfiguredToolNames(parseStringCSV(env.defaultValue(envName, "")))
 }
 
 func normalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]string, []string, error) {

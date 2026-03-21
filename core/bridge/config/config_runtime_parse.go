@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -37,73 +36,86 @@ func parseNamedHeaders(raw string, envName string) (map[string]string, error) {
 }
 
 func nativePersistentEnabledFromEnv() bool {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err == nil {
-		return resolveNativePersistent(fileCfg.NativePersistent)
+		return resolveNativePersistent(fileCfg.NativePersistent, env)
 	}
-	return resolveNativePersistent(nil)
+	return resolveNativePersistent(nil, env)
 }
 
-func resolveNativePersistent(raw *bool) bool {
+func resolveNativePersistent(raw *bool, env Env) bool {
 	if raw != nil {
 		return *raw
 	}
 	for _, name := range []string{"GHOST_NATIVE_PERSISTENT", "GHOST_NATIVE_PERSISTENT_ENABLED"} {
-		rawValue := strings.TrimSpace(os.Getenv(name))
-		if rawValue == "" {
+		if rawValue := env.value(name); rawValue == "" {
 			continue
+		} else {
+			return parseBoolValue(rawValue, false)
 		}
-		enabled, err := strconv.ParseBool(rawValue)
-		if err != nil {
-			return false
-		}
-		return enabled
 	}
 	return false
 }
 
 func parseBoolEnv(name string, fallback bool) bool {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
+	return parseBoolValue(CurrentEnv().value(name), fallback)
+}
+
+func parsePositiveIntEnv(name string, fallback int) int {
+	return parsePositiveIntValue(CurrentEnv().value(name), fallback)
+}
+
+func parseFloatEnv(name string, fallback float64) float64 {
+	return parseFloatValue(CurrentEnv().value(name), fallback)
+}
+
+func parseDurationEnv(name string, fallback time.Duration) time.Duration {
+	return parseDurationValue(CurrentEnv().value(name), fallback)
+}
+
+func parseBoolValue(raw string, fallback bool) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return fallback
 	}
-	value, err := strconv.ParseBool(raw)
+	value, err := strconv.ParseBool(trimmed)
 	if err != nil {
 		return fallback
 	}
 	return value
 }
 
-func parsePositiveIntEnv(name string, fallback int) int {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
+func parsePositiveIntValue(raw string, fallback int) int {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return fallback
 	}
-	value, err := strconv.Atoi(raw)
+	value, err := strconv.Atoi(trimmed)
 	if err != nil || value <= 0 {
 		return fallback
 	}
 	return value
 }
 
-func parseFloatEnv(name string, fallback float64) float64 {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
+func parseFloatValue(raw string, fallback float64) float64 {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return fallback
 	}
-	value, err := strconv.ParseFloat(raw, 64)
+	value, err := strconv.ParseFloat(trimmed, 64)
 	if err != nil || value < 0 || value > 1 {
 		return fallback
 	}
 	return value
 }
 
-func parseDurationEnv(name string, fallback time.Duration) time.Duration {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
+func parseDurationValue(raw string, fallback time.Duration) time.Duration {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return fallback
 	}
-	value, err := time.ParseDuration(raw)
+	value, err := time.ParseDuration(trimmed)
 	if err != nil || value <= 0 {
 		return fallback
 	}

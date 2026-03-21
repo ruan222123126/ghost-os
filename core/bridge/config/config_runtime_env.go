@@ -1,58 +1,55 @@
 package config
 
-import (
-	"os"
-	"strings"
-	"time"
-)
+import "time"
 
 func getenvDefault(name, fallback string) string {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return fallback
-	}
-	return v
+	return CurrentEnv().defaultValue(name, fallback)
 }
 
 // sessionsPathFromEnv 返回会话持久化目录。
 func sessionsPathFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return getenvDefault("GHOST_SESSIONS_PATH", defaultSessionsPath)
+		return env.defaultValue("GHOST_SESSIONS_PATH", defaultSessionsPath)
 	}
-	return valueOrEnv(fileCfg.SessionsPath, "GHOST_SESSIONS_PATH", defaultSessionsPath)
+	return resolveSessionsPath(fileCfg, env)
 }
 
 func rssFeedsPathFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return getenvDefault("GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
+		return env.defaultValue("GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
 	}
-	return valueOrEnv(fileCfg.RSSFeedsPath, "GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
+	return resolveRSSFeedsPath(fileCfg, env)
 }
 
 func rssInboxPathFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return getenvDefault("GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
+		return env.defaultValue("GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
 	}
-	return valueOrEnv(fileCfg.RSSInboxPath, "GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
+	return resolveRSSInboxPath(fileCfg, env)
 }
 
 func rssBriefingsPathFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return getenvDefault("GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
+		return env.defaultValue("GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
 	}
-	return valueOrEnv(fileCfg.RSSBriefingsPath, "GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
+	return resolveRSSBriefingsPath(fileCfg, env)
 }
 
 func rssReportsPathFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return getenvDefault("GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
+		return env.defaultValue("GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
 	}
-	return valueOrEnv(fileCfg.RSSReportsPath, "GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
+	return resolveRSSReportsPath(fileCfg, env)
 }
 
 func rssPollEnabledFromEnv() bool {
@@ -104,91 +101,72 @@ func rssBriefingIntervalFromEnv() time.Duration {
 }
 
 func webSearchTavilyAPIKeyFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return firstNonEmptyEnv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
+		return env.firstNonEmpty("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
 	}
-	if fileCfg.WebSearchTavilyAPIKey != nil {
-		return strings.TrimSpace(*fileCfg.WebSearchTavilyAPIKey)
-	}
-	return firstNonEmptyEnv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
+	return resolveWebSearchTavilyAPIKey(fileCfg, env)
 }
 
 func tasksPathFromEnv() string {
-	return getenvDefault("GHOST_TASKS_PATH", defaultTasksPath)
+	return resolveTasksPath(CurrentEnv())
 }
 
 func nativeBinaryPathFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return firstNonEmptyEnv("GHOST_NATIVE_BINARY_PATH", "GHOST_NATIVE_BIN")
+		return env.firstNonEmpty("GHOST_NATIVE_BINARY_PATH", "GHOST_NATIVE_BIN")
 	}
-	if fileCfg.NativeBinaryPath != nil {
-		return strings.TrimSpace(*fileCfg.NativeBinaryPath)
-	}
-	return firstNonEmptyEnv("GHOST_NATIVE_BINARY_PATH", "GHOST_NATIVE_BIN")
+	return resolveNativeBinaryPath(fileCfg, env)
 }
 
 func nativeBinaryRootsFromEnv() []string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_ROOTS", "")))
+		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_BINARY_ROOTS", "")))
 	}
-	if fileCfg.NativeBinaryRoots != nil {
-		return normalizeConfiguredPathList(fileCfg.NativeBinaryRoots)
-	}
-	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_ROOTS", "")))
+	return resolveNativeBinaryRoots(fileCfg, env)
 }
 
 func nativeBinaryCandidatesFromEnv() []string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_CANDIDATES", "")))
+		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_BINARY_CANDIDATES", "")))
 	}
-	if fileCfg.NativeBinaryCandidates != nil {
-		return normalizeConfiguredPathList(fileCfg.NativeBinaryCandidates)
-	}
-	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_BINARY_CANDIDATES", "")))
+	return resolveNativeBinaryCandidates(fileCfg, env)
 }
 
 func nativeAllowedReadPathsFromEnv() []string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_ALLOWED_READ_PATHS", "")))
+		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_ALLOWED_READ_PATHS", "")))
 	}
-	if fileCfg.NativeAllowedReadPaths != nil {
-		return normalizeConfiguredPathList(fileCfg.NativeAllowedReadPaths)
-	}
-	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_ALLOWED_READ_PATHS", "")))
+	return resolveNativeAllowedReadPaths(fileCfg, env)
 }
 
 func nativeAllowedWritePathsFromEnv() []string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_ALLOWED_WRITE_PATHS", "")))
+		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_ALLOWED_WRITE_PATHS", "")))
 	}
-	if fileCfg.NativeAllowedWritePaths != nil {
-		return normalizeConfiguredPathList(fileCfg.NativeAllowedWritePaths)
-	}
-	return normalizeConfiguredPathList(parseStringCSV(getenvDefault("GHOST_NATIVE_ALLOWED_WRITE_PATHS", "")))
+	return resolveNativeAllowedWritePaths(fileCfg, env)
 }
 
 func projectRootFromEnv() string {
+	env := CurrentEnv()
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
-		return strings.TrimSpace(os.Getenv("GHOST_PROJECT_ROOT"))
+		return env.value("GHOST_PROJECT_ROOT")
 	}
-	if fileCfg.ProjectRoot != nil {
-		return strings.TrimSpace(*fileCfg.ProjectRoot)
-	}
-	return strings.TrimSpace(os.Getenv("GHOST_PROJECT_ROOT"))
+	return resolveProjectRoot(fileCfg, env)
 }
 
 func firstNonEmptyEnv(names ...string) string {
-	for _, name := range names {
-		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
-			return value
-		}
-	}
-	return ""
+	return CurrentEnv().firstNonEmpty(names...)
 }

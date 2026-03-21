@@ -12,31 +12,41 @@ func runtimeConfigFromEnv() (runtimeConfig, error) {
 	if err != nil {
 		return runtimeConfig{}, err
 	}
-	return runtimeConfigFromFileConfig(fileCfg)
+	return resolveRuntimeConfig(fileCfg, CurrentEnv())
 }
 
-func runtimeConfigFromFileConfig(fileCfg bridgeFileConfig) (runtimeConfig, error) {
-	webSearch := envWebSearchSettings()
-	graphql, err := envGraphQLSettings()
+func resolveRuntimeConfig(fileCfg bridgeFileConfig, env Env) (runtimeConfig, error) {
+	fallback, err := runtimeFallbackFromEnv(env)
 	if err != nil {
 		return runtimeConfig{}, err
 	}
-	return runtimeConfigFromFileConfigWithFallback(fileCfg, runtimeConfig{
-		ProviderName:          getenvDefault("GHOST_PROVIDER", string(defaultProvider)),
-		APIKey:                getenvDefault("GHOST_API_KEY", ""),
-		BaseURL:               getenvDefault("GHOST_BASE_URL", ""),
-		Model:                 getenvDefault("GHOST_MODEL", ""),
-		ChatPath:              getenvDefault("GHOST_CHAT_PATH", ""),
-		NativePersistent:      resolveNativePersistent(nil),
-		ProjectRoot:           getenvDefault("GHOST_PROJECT_ROOT", ""),
+	return resolveRuntimeConfigWithFallback(fileCfg, fallback)
+}
+
+func runtimeFallbackFromEnv(env Env) (runtimeConfig, error) {
+	webSearch := webSearchSettingsFromEnv(env)
+	graphql, err := graphQLSettingsFromEnv(env)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	return normalizeRuntimeConfig(runtimeConfig{
+		ProviderName:          env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
+		APIKey:                env.defaultValue("GHOST_API_KEY", ""),
+		BaseURL:               env.defaultValue("GHOST_BASE_URL", ""),
+		Model:                 env.defaultValue("GHOST_MODEL", ""),
+		ChatPath:              env.defaultValue("GHOST_CHAT_PATH", ""),
+		NativePersistent:      resolveNativePersistent(nil, env),
+		ProjectRoot:           env.defaultValue("GHOST_PROJECT_ROOT", ""),
+		ModelSelectionEnabled: !parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), false),
 		WebSearchTavilyAPIKey: webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:    webSearch.ExaAPIKey,
 		GraphQL:               graphql,
-	})
+	}), nil
 }
 
-// runtimeConfigFromFileConfigWithFallback folds file overrides onto an existing runtime snapshot.
-func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
+// resolveRuntimeConfigWithFallback folds file overrides onto an existing
+// runtime snapshot. Store patch flows use this explicit exception path.
+func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
 	fileCfg = normalizeBridgeFileConfigForWrite(fileCfg)
 	fallback = normalizeRuntimeConfig(fallback)
 	webSearch := fileWebSearchSettings(fileCfg, webSearchSettings{
@@ -47,12 +57,23 @@ func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback 
 	if err != nil {
 		return runtimeConfig{}, err
 	}
-	allowlistOnly := boolOrEnv(fileCfg.ToolAllowlistOnly, "GHOST_TOOL_ALLOWLIST_ONLY", false)
+	allowlistOnly := resolveRuntimeAllowlistOnly(fileCfg, fallback)
 	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
 	if len(providers) > 0 {
 		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch, graphql), nil
 	}
 	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch, graphql), nil
+}
+
+func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
+	return resolveRuntimeConfigWithFallback(fileCfg, fallback)
+}
+
+func resolveRuntimeAllowlistOnly(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.ToolAllowlistOnly != nil {
+		return *fileCfg.ToolAllowlistOnly
+	}
+	return !fallback.ModelSelectionEnabled
 }
 
 func runtimeConfigWithProviders(
@@ -267,5 +288,3 @@ func validateRuntimeForExecution(runtime runtimeConfig) error {
 	}
 	return nil
 }
-
-// getenvDefault 在环境变量为空时回落默认值。
