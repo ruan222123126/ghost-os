@@ -11,9 +11,8 @@ import (
 )
 
 const (
-	graphQLAssistantTextToolName   = "graphql_text"
-	graphQLAssistantTextToolCallID = "graphql-text"
-	graphQLExecutionResultPrefix   = "[GRAPHQL_EXECUTION_RESULT]\n"
+	graphQLAssistantTextToolName = "graphql_text"
+	graphQLExecutionResultPrefix = "[GRAPHQL_EXECUTION_RESULT]\n"
 )
 
 type graphQLTextTurnHandler struct {
@@ -31,6 +30,11 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 	ctx context.Context,
 	req AssistantTextRequest,
 ) (AssistantTextResult, error) {
+	toolCallID := strings.TrimSpace(tools.ToolCallIDFromContext(ctx))
+	if toolCallID == "" {
+		toolCallID = tools.NewGraphQLTextToolCallID()
+		ctx = tools.WithToolCallID(ctx, toolCallID)
+	}
 	result, err := h.executor.Execute(ctx, req.Text, req.TraceID)
 	if !result.Recognized {
 		return AssistantTextResult{}, nil
@@ -39,7 +43,7 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 		Recognized: true,
 		Tool: AssistantTextToolRef{
 			Name:   graphQLAssistantTextToolName,
-			CallID: graphQLAssistantTextToolCallID,
+			CallID: toolCallID,
 		},
 	}
 	if err != nil {
@@ -49,7 +53,7 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 		handled.AwaitingHuman = &AssistantTextAwaitingHuman{
 			Tool: AssistantTextToolRef{
 				Name:   tools.GraphQLTextMutationToolName,
-				CallID: graphQLAssistantTextToolCallID,
+				CallID: toolCallID,
 			},
 			QuestionID:    strings.TrimSpace(awaiting.QuestionID),
 			Prompt:        strings.TrimSpace(awaiting.Prompt),

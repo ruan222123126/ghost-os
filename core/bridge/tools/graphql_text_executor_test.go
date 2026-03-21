@@ -39,6 +39,33 @@ func TestGraphQLTextExecutorMutationRequiresApprovalWhenPolicyEnabled(t *testing
 	}
 }
 
+func TestGraphQLTextExecutorMutationReusesContextToolCallID(t *testing.T) {
+	registry := testGraphQLTextRegistry(t, true)
+	executor := NewGraphQLTextExecutor(registry).(*graphQLTextExecutor)
+	sess := session.NewSession("system")
+	ctx := WithToolCallID(graphQLTextExecutionContext(sess), "graphql-text-call-explicit")
+
+	result, err := executor.Execute(
+		ctx,
+		`mutation { updateViewer(input: {id: "user-1"}) { ok } }`,
+		"trace-graphql-text-await",
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Meta.AwaitingHuman == nil {
+		t.Fatalf("expected awaiting human result, got %+v", result)
+	}
+	intent := sess.PendingGraphQLMutationIntentsSnapshot()[0]
+	question := sess.PendingQuestions[intent.QuestionID]
+	if intent.ToolCallID != "graphql-text-call-explicit" {
+		t.Fatalf("unexpected intent tool call id: %+v", intent)
+	}
+	if question.ToolCallID != "graphql-text-call-explicit" {
+		t.Fatalf("unexpected question tool call id: %+v", question)
+	}
+}
+
 func TestGraphQLTextExecutorMutationAutoCommitsWhenApprovalDisabled(t *testing.T) {
 	registry := testGraphQLTextRegistry(t, false)
 	executor := NewGraphQLTextExecutor(registry).(*graphQLTextExecutor)

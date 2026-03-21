@@ -23,6 +23,33 @@
 
 ### 2026-03-21
 
+- 修复 GraphQL text awaiting-human 链路的 `tool_call_id` 漂移：
+  - `core/bridge/agent` 侧 assistant-text GraphQL handler 不再固定发 `graphql-text`，改为为每次文本 GraphQL 执行生成单一 `tool_call_id` 并注入执行上下文。
+  - `core/bridge/tools/graphql_text_executor.go` 现优先复用上下文中的 `tool_call_id` 来写 `PendingQuestion` 与 `PendingGraphQLMutationIntent`，避免流事件、session 持久化与 human-resume tool result 各自持有不同追踪键。
+  - 新增 `agent` / `tools` 回归测试，覆盖“executor 看到的 `tool_call_id` 与 awaiting_human 流事件一致”以及“pending question / intent 复用上下文 `tool_call_id`”。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./agent ./tools ./orchestration -timeout 60s`
+
+- 收紧 Bridge CLI 入口契约，避免误输入静默触发 Agent 运行：
+  - `core/bridge/app/cmd_dispatcher.go` 不再把空参数、未知子命令或空 `agent` 消息回退成默认 prompt；这些场景现在直接返回 usage error。
+  - `ping` / `serve` 参数个数已改为显式校验，`serve` 仅接受一个可选端口参数。
+  - 新增 `core/bridge/app/cmd_dispatcher_test.go`，覆盖空参数、未知子命令、空消息、非法端口与正常路由场景。
+- 本轮验证：
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./app -timeout 60s`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge . -run '^$' -count=0 -timeout 60s`
+
+- 新增 Bridge 级 GUI executor 基线：
+  - `core/bridge/guiagent` 已落地 desktop v1 screenshot loop，按 `screenshot -> VLM -> parse -> execute -> verify -> next step` 运行，并把严格 JSON parser、artifact 写盘、可见性验证与 human-answer continuation 收口在 bridge 内。
+  - Bridge 新增高层工具 `computer_use`；对外只接收 goal / target / mode，不再要求外层 agent 手工拼接 `screen_action.screenshot` 回路。
+  - `session` / `orchestration` 已新增 `computer_use` 的 pending run 持久化与 human resume 自动续跑，`call_user` 现可作为 GUI executor 的一等动作进入现有 awaiting-human 链路。
+  - `runtime` / tool catalog / prompt guidance 已接入 `computer_use`，并明确保留 script/API/browser-first、visual-last 的调用优先级。
+- Native 执行层补齐 GUI executor v1 原子动作：
+  - 新增 `MOUSE_DOUBLE_CLICK`、`MOUSE_RIGHT_CLICK`、`MOUSE_SCROLL`、`MOUSE_DRAG`、`KEY_HOTKEY`、`ACTIVE_WINDOW_INFO`。
+  - 保持 native 仅负责原子执行与窗口观测，不承载任务规划、动作选择或 fallback。
+- 本轮验证：
+  - `timeout 60 cargo test --manifest-path drivers/native/Cargo.toml`
+  - `env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s`
+
 - 收口 Agent 主循环对 GraphQL 文本协议的直接耦合：
   - `core/bridge/agent` 新增通用 `AssistantTextHandler` 扩展点，`Agent` 结构不再直接持有 GraphQL-specific executor 状态。
   - `loop_finish.go` 已移除专门的 GraphQL 文本分支与 GraphQL 常量引用，统一改走 assistant-text handler 分发；GraphQL 文本执行被下沉到独立适配文件。

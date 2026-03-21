@@ -7,8 +7,30 @@ import (
 	"testing"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
+
+type capturingAwaitingGraphQLTextExecutor struct {
+	toolCallIDs []string
+}
+
+func (e *capturingAwaitingGraphQLTextExecutor) Execute(
+	ctx context.Context,
+	_ string,
+	_ string,
+) (tools.GraphQLTextExecutionResult, error) {
+	e.toolCallIDs = append(e.toolCallIDs, tools.ToolCallIDFromContext(ctx))
+	return tools.GraphQLTextExecutionResult{
+		Recognized: true,
+		Meta: tools.ExecuteMeta{
+			AwaitingHuman: &tools.AwaitingHumanSignal{
+				QuestionID: "q-1",
+				Prompt:     "Approve write?",
+			},
+		},
+	}, nil
+}
 
 func TestStrictGraphQLTextModeRejectsToolCalls(t *testing.T) {
 	completer := newFakeCompleter(newToolCallsResponse(newToolCall("call-1", "echo", `{}`)))
@@ -82,6 +104,37 @@ func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
 	}
 }
 
+func TestGraphQLTextTurnAwaitingHumanEventMatchesExecutorToolCallID(t *testing.T) {
+	completer := newFakeCompleter(newStopResponse("mutation { updateViewer(input:{id:\"1\"}) { ok } }"))
+	executor := &capturingAwaitingGraphQLTextExecutor{}
+	agent := newTestAgent(completer, newFakeToolCatalog(), 2)
+	sink := newRecordingEventSink()
+	agent.SetStrictToolCallProtocol(true)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
+
+	_, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-await", sink)
+	var awaitingErr *ErrAwaitingHuman
+	if !errors.As(err, &awaitingErr) {
+		t.Fatalf("expected ErrAwaitingHuman, got %v", err)
+	}
+	if len(sink.events) != 4 {
+		t.Fatalf("unexpected event count: got %d want 4", len(sink.events))
+	}
+	if len(executor.toolCallIDs) != 1 || executor.toolCallIDs[0] == "" {
+		t.Fatalf("expected executor to observe tool call id, got %+v", executor.toolCallIDs)
+	}
+	want := executor.toolCallIDs[0]
+	if got := eventToolCallID(t, sink.events[1]); got != want {
+		t.Fatalf("unexpected tool_call_started id: got %q want %q", got, want)
+	}
+	if got := eventToolCallID(t, sink.events[2]); got != want {
+		t.Fatalf("unexpected tool_call_finished id: got %q want %q", got, want)
+	}
+	if got := eventToolCallID(t, sink.events[3]); got != want {
+		t.Fatalf("unexpected awaiting_human id: got %q want %q", got, want)
+	}
+}
+
 func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *testing.T) {
 	completer := newFakeCompleter(
 		newStopResponse(`mutation { updateViewer(input: {id: "1"}) { ok } }`),
@@ -114,4 +167,18 @@ func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *
 	if newMessages[2].Role != llm.RoleInternal || !strings.Contains(newMessages[2].Text, "[GRAPHQL_EXECUTION_RESULT]") {
 		t.Fatalf("unexpected committed graphql feedback: %+v", newMessages[2])
 	}
+}
+
+func eventToolCallID(t *testing.T, event streaming.Event) string {
+	t.Helper()
+
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", event.Payload)
+	}
+	toolCallID, _ := payload["tool_call_id"].(string)
+	if toolCallID == "" {
+		t.Fatalf("expected tool_call_id in payload: %+v", payload)
+	}
+	return toolCallID
 }

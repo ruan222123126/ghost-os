@@ -65,7 +65,7 @@ func (e *graphQLTextExecutor) Execute(
 	case ast.Query:
 		return e.executeQuery(ctx, source, documentText, traceID)
 	case ast.Mutation:
-		return e.executeMutation(ctx, source, documentText, traceID)
+		return e.executeMutation(ctx, source, documentText, traceID, resolveGraphQLTextToolCallID(ctx))
 	default:
 		return GraphQLTextExecutionResult{Recognized: true}, fmt.Errorf("graphql text executor only supports query or mutation")
 	}
@@ -116,6 +116,7 @@ func (e *graphQLTextExecutor) executeMutation(
 	source *graphqlschema.Source,
 	documentText string,
 	traceID string,
+	toolCallID string,
 ) (GraphQLTextExecutionResult, error) {
 	domain, err := inferMutationDomain(e.registry, source, documentText)
 	if err != nil {
@@ -137,9 +138,9 @@ func (e *graphQLTextExecutor) executeMutation(
 		return GraphQLTextExecutionResult{Recognized: true}, err
 	}
 	if prepared.Policy.ApprovalRequired {
-		return e.prepareAwaitingMutationApproval(ctx, traceID, args, prepared)
+		return e.prepareAwaitingMutationApproval(ctx, traceID, args, prepared, toolCallID)
 	}
-	output, err := e.executeMutationImmediately(ctx, traceID, args, prepared)
+	output, err := e.executeMutationImmediately(ctx, traceID, args, prepared, toolCallID)
 	if err != nil {
 		return GraphQLTextExecutionResult{Recognized: true}, err
 	}
@@ -154,14 +155,11 @@ func (e *graphQLTextExecutor) prepareAwaitingMutationApproval(
 	traceID string,
 	args graphQLMutationArgs,
 	prepared graphQLPreparedMutation,
+	toolCallID string,
 ) (GraphQLTextExecutionResult, error) {
 	sess := SessionFromContext(ctx)
 	if sess == nil {
 		return GraphQLTextExecutionResult{Recognized: true}, fmt.Errorf("graphql text mutation requires an active session")
-	}
-	toolCallID, err := newGraphQLMutationID("graphql-text-call")
-	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, fmt.Errorf("generate graphql text tool call id: %w", err)
 	}
 	intent, prompt, err := buildPendingGraphQLMutationIntent(traceID, toolCallID, prepared, args)
 	if err != nil {
@@ -197,12 +195,13 @@ func (e *graphQLTextExecutor) executeMutationImmediately(
 	traceID string,
 	args graphQLMutationArgs,
 	prepared graphQLPreparedMutation,
+	toolCallID string,
 ) (string, error) {
 	sess := SessionFromContext(ctx)
 	if sess == nil {
 		return "", fmt.Errorf("graphql text mutation requires an active session")
 	}
-	intent, err := buildApprovedGraphQLTextIntent(traceID, args, prepared)
+	intent, err := buildApprovedGraphQLTextIntent(traceID, toolCallID, args, prepared)
 	if err != nil {
 		return "", err
 	}
@@ -219,16 +218,13 @@ func (e *graphQLTextExecutor) executeMutationImmediately(
 
 func buildApprovedGraphQLTextIntent(
 	traceID string,
+	toolCallID string,
 	args graphQLMutationArgs,
 	prepared graphQLPreparedMutation,
 ) (session.PendingGraphQLMutationIntent, error) {
 	intentID, err := newGraphQLMutationID("intent")
 	if err != nil {
 		return session.PendingGraphQLMutationIntent{}, fmt.Errorf("generate intent id: %w", err)
-	}
-	toolCallID, err := newGraphQLMutationID("graphql-text-call")
-	if err != nil {
-		return session.PendingGraphQLMutationIntent{}, fmt.Errorf("generate graphql text tool call id: %w", err)
 	}
 	frozen, err := freezeGraphQLMutationRequest(prepared, args)
 	if err != nil {
