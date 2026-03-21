@@ -23,6 +23,13 @@
 
 ### 2026-03-21
 
+- 收口 `core/bridge/config.ConfigStore.Update()` 固定流水线：
+  - `Update()` 现明确执行 `load current update base -> apply patch -> normalize -> resolve/validate -> persist`，provider / GraphQL / websearch 的 runtime 回填统一进入 load-base 预处理，不再散落在 patch 阶段补洞。
+  - active provider record、GraphQL source layout 与 websearch API key 的当前 runtime snapshot 装载已合并成统一 update-base helper，避免继续靠按字段“materialize runtime if needed”维持行为。
+  - 新增 `config_store_update_test.go`，覆盖“磁盘 GraphQL 配置被清空、但 store runtime snapshot 仍保留当前源配置时，`Update()` 会先装载 current base 再执行 source upsert”的回归路径。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config -timeout 60s`
+
 - 收口 `core/bridge/config` 的 read/resolve 边界：
   - `LoadConfig()` 现显式改成 `loadBridgeFileConfig()` + `Resolve(fileCfg, env)` 两步，`Resolve` 只消费文件配置和 `Env` 快照，不再在解析过程中读取磁盘或 `os.Getenv`。
   - 新增 `Env` 快照与一组 `*WithEnv` 纯解析 helper，`runtimeConfig` 解析同样改为基于 `fileCfg + env` 运行；`resolveRuntimeConfigWithFallback` 也不再偷偷回读环境，store snapshot 的 fallback 语义更稳定。

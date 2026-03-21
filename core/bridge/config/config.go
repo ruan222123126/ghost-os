@@ -41,6 +41,8 @@ type WorkerConfig struct {
 	MaxFileChunks  int
 }
 
+type ProviderRecord = providerConfig
+
 type GraphQLDomainConfig struct {
 	Name          string
 	Description   string
@@ -84,9 +86,10 @@ type GraphQLMutationPolicyConfig struct {
 }
 
 type GraphQLConfig struct {
-	DefaultSource    string
-	Sources          []GraphQLSourceConfig
-	MutationPolicies []GraphQLMutationPolicyConfig
+	ToolRuntimeEnabled bool
+	DefaultSource      string
+	Sources            []GraphQLSourceConfig
+	MutationPolicies   []GraphQLMutationPolicyConfig
 }
 
 type ToolSelectorConfig struct {
@@ -120,6 +123,27 @@ type MemoryAugmentationConfig struct {
 	UserScopeID         string
 }
 
+type ServerConfig struct {
+	BindAddr     string
+	APIToken     string
+	CORSOrigins  []string
+	SessionsPath string
+}
+
+type ExecutionConfig struct {
+	Persistent             bool
+	NativeBinaryPath       string
+	NativeBinaryRoots      []string
+	NativeBinaryCandidates []string
+	AllowedReadPaths       []string
+	AllowedWritePaths      []string
+	ProjectRoot            string
+}
+
+type TaskConfig struct {
+	TasksPath string
+}
+
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
 	Provider                      ProviderConfig
@@ -149,6 +173,8 @@ type Config struct {
 	MaxTurns                      int
 }
 
+// runtimeConfig is the resolved runtime layer: persisted file DTO merged with
+// env fallback, normalized once for execution and public exposure.
 type runtimeConfig struct {
 	ProviderName               string
 	Provider                   llm.Provider

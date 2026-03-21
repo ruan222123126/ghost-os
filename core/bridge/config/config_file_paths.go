@@ -62,6 +62,14 @@ func cloneOptionalStringPointer(raw *string) *string {
 	return &value
 }
 
+func cloneBoolPointer(raw *bool) *bool {
+	if raw == nil {
+		return nil
+	}
+	value := *raw
+	return &value
+}
+
 func optionalStringPointer(raw string) *string {
 	value := strings.TrimSpace(raw)
 	if value == "" {

@@ -16,7 +16,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 		t.Fatalf("NewConfigStoreFromEnv: %v", err)
 	}
 
-	if err := store.AddProvider(providerConfig{
+	if err := store.AddProvider(ProviderRecord{
 		Name:    "crs",
 		Type:    llm.ProviderCustom,
 		BaseURL: "https://lldai.online/openai",
@@ -25,7 +25,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("AddProvider: %v", err)
 	}
-	if err := store.AddProvider(providerConfig{
+	if err := store.AddProvider(ProviderRecord{
 		Name:    "openai",
 		Type:    llm.ProviderOpenAI,
 		BaseURL: defaultBaseURL,
@@ -36,7 +36,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	if err := store.SetActiveProvider("openai"); err != nil {
 		t.Fatalf("SetActiveProvider: %v", err)
 	}
-	if err := store.UpdateProvider("openai", providerConfig{
+	if err := store.UpdateProvider("openai", ProviderRecord{
 		Name:    "openai",
 		Type:    llm.ProviderOpenAI,
 		BaseURL: "https://api.openai.com/v1",

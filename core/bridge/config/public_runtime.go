@@ -1,0 +1,37 @@
+package config
+
+// Snapshot is the public runtime config layer exposed outside config.
+type Snapshot struct {
+	Provider                  string                          `json:"provider"`
+	ProviderType              string                          `json:"provider_type"`
+	BaseURL                   string                          `json:"base_url"`
+	Model                     string                          `json:"model"`
+	ChatPath                  string                          `json:"chat_path"`
+	APIKeySet                 bool                            `json:"api_key_set"`
+	ModelSelectionEnabled     bool                            `json:"model_selection_enabled"`
+	GraphQLDefaultSource      string                          `json:"graphql_default_source"`
+	GraphQLToolRuntimeEnabled bool                            `json:"graphql_tool_runtime_enabled"`
+	GraphQLSources            []GraphQLSourceSnapshot         `json:"graphql_sources"`
+	GraphQLMutationPolicies   []GraphQLMutationPolicySnapshot `json:"graphql_mutation_policies"`
+	WebSearchTavilyAPIKeySet  bool                            `json:"web_search_tavily_api_key_set"`
+	WebSearchExaAPIKeySet     bool                            `json:"web_search_exa_api_key_set"`
+}
+
+type UpdateRequest struct {
+	Provider                  *string                      `json:"provider,omitempty"`
+	APIKey                    *string                      `json:"api_key,omitempty"`
+	BaseURL                   *string                      `json:"base_url,omitempty"`
+	Model                     *string                      `json:"model,omitempty"`
+	ChatPath                  *string                      `json:"chat_path,omitempty"`
+	GraphQLDefaultSource      *string                      `json:"graphql_default_source,omitempty"`
+	GraphQLToolRuntimeEnabled *bool                        `json:"graphql_tool_runtime_enabled,omitempty"`
+	GraphQLSources            []GraphQLSourceInput         `json:"graphql_sources,omitempty"`
+	GraphQLSourceUpsert       *GraphQLSourceInput          `json:"graphql_source_upsert,omitempty"`
+	GraphQLMutationPolicies   []GraphQLMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
+	WebSearchTavilyAPIKey     *string                      `json:"web_search_tavily_api_key,omitempty"`
+	WebSearchExaAPIKey        *string                      `json:"web_search_exa_api_key,omitempty"`
+	TraceID                   string                       `json:"trace_id,omitempty"`
+}
+
+type configResponse = Snapshot
+type configUpdateRequest = UpdateRequest

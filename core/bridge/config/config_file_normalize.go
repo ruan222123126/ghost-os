@@ -41,6 +41,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.RSSPollInterval = cloneOptionalStringPointer(cfg.RSSPollInterval)
 	cfg.RSSBriefingInterval = cloneOptionalStringPointer(cfg.RSSBriefingInterval)
 	cfg.GraphQLDefaultSource = cloneOptionalStringPointer(cfg.GraphQLDefaultSource)
+	cfg.GraphQLToolRuntimeEnabled = cloneBoolPointer(cfg.GraphQLToolRuntimeEnabled)
 	cfg.WebSearchTavilyAPIKey = cloneOptionalStringPointer(cfg.WebSearchTavilyAPIKey)
 	cfg.WebSearchExaAPIKey = cloneOptionalStringPointer(cfg.WebSearchExaAPIKey)
 	cfg.AnthropicVersion = cloneOptionalStringPointer(cfg.AnthropicVersion)
@@ -70,7 +71,8 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
 }
 
 func hasGraphQLSourceLayout(cfg bridgeFileConfig) bool {
-	return cfg.GraphQLDefaultSource != nil ||
+	return cfg.GraphQLToolRuntimeEnabled != nil ||
+		cfg.GraphQLDefaultSource != nil ||
 		len(cfg.GraphQLSources) > 0 ||
 		len(cfg.GraphQLMutationPolicies) > 0
 }

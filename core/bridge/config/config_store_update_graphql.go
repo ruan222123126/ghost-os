@@ -2,37 +2,21 @@ package config
 
 import "fmt"
 
-func materializeRuntimeGraphQLIfNeeded(
-	fileCfg *bridgeFileConfig,
-	current runtimeConfig,
-	req configUpdateRequest,
-) {
-	if fileCfg == nil || !requiresRuntimeGraphQLMaterialization(req) || hasGraphQLSourceLayout(*fileCfg) {
-		return
-	}
-	fileCfg.GraphQLDefaultSource = optionalStringPointer(current.GraphQL.DefaultSource)
-	fileCfg.GraphQLSources = graphQLSourcesToFileConfigs(current.GraphQL.Sources)
-	fileCfg.GraphQLMutationPolicies = graphQLMutationPoliciesToFileConfigs(
-		current.GraphQL.MutationPolicies,
-	)
-}
-
-func requiresRuntimeGraphQLMaterialization(req configUpdateRequest) bool {
-	return req.GraphQLDefaultSource != nil ||
-		req.GraphQLSources != nil ||
-		req.GraphQLSourceUpsert != nil ||
-		req.GraphQLMutationPolicies != nil
-}
-
-func applyGraphQLRuntimeFields(fileCfg *bridgeFileConfig, req configUpdateRequest) error {
-	if fileCfg == nil || !requiresRuntimeGraphQLMaterialization(req) {
+func applyGraphQLUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) error {
+	if fileCfg == nil || !touchesGraphQLUpdate(req) {
 		return nil
 	}
 	if req.GraphQLSources != nil && req.GraphQLSourceUpsert != nil {
 		return fmt.Errorf("graphql_sources and graphql_source_upsert cannot be used together")
 	}
+	if req.GraphQLToolRuntimeEnabled != nil {
+		fileCfg.GraphQLToolRuntimeEnabled = boolPointer(*req.GraphQLToolRuntimeEnabled)
+	}
 	if req.GraphQLDefaultSource != nil {
 		fileCfg.GraphQLDefaultSource = cloneOptionalStringPointer(req.GraphQLDefaultSource)
+	}
+	if req.GraphQLToolRuntimeEnabled != nil {
+		fileCfg.GraphQLToolRuntimeEnabled = boolPointer(*req.GraphQLToolRuntimeEnabled)
 	}
 	if req.GraphQLMutationPolicies != nil {
 		fileCfg.GraphQLMutationPolicies = graphQLMutationPolicyInputsToFileConfigs(

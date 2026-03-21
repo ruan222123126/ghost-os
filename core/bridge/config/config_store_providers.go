@@ -5,16 +5,16 @@ import (
 	"strings"
 )
 
-func (s *ConfigStore) AddProvider(cfg providerConfig) error {
+func (s *store) AddProvider(cfg ProviderRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	normalized, err := validateProviderConfig(cfg)
+	normalized, err := validateProviderConfig(providerConfigFromRecord(cfg))
 	if err != nil {
 		return err
 	}
 
-	fileCfg, configPath, _, err := s.loadMutationStateLocked()
+	fileCfg, configPath, err := s.loadStoredFileConfigLocked()
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (s *ConfigStore) AddProvider(cfg providerConfig) error {
 	return s.persistLocked(configPath, fileCfg)
 }
 
-func (s *ConfigStore) UpdateProvider(name string, cfg providerConfig) error {
+func (s *store) UpdateProvider(name string, cfg ProviderRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -40,12 +40,12 @@ func (s *ConfigStore) UpdateProvider(name string, cfg providerConfig) error {
 		return errProviderNameRequired
 	}
 
-	normalized, err := validateProviderConfig(cfg)
+	normalized, err := validateProviderConfig(providerConfigFromRecord(cfg))
 	if err != nil {
 		return err
 	}
 
-	fileCfg, configPath, _, err := s.loadMutationStateLocked()
+	fileCfg, configPath, err := s.loadStoredFileConfigLocked()
 	if err != nil {
 		return err
 	}
@@ -72,7 +72,7 @@ func (s *ConfigStore) UpdateProvider(name string, cfg providerConfig) error {
 	return s.persistLocked(configPath, fileCfg)
 }
 
-func (s *ConfigStore) DeleteProvider(name string) error {
+func (s *store) DeleteProvider(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -81,7 +81,7 @@ func (s *ConfigStore) DeleteProvider(name string) error {
 		return errProviderNameRequired
 	}
 
-	fileCfg, configPath, _, err := s.loadMutationStateLocked()
+	fileCfg, configPath, err := s.loadStoredFileConfigLocked()
 	if err != nil {
 		return err
 	}
@@ -101,7 +101,7 @@ func (s *ConfigStore) DeleteProvider(name string) error {
 	return s.persistLocked(configPath, fileCfg)
 }
 
-func (s *ConfigStore) SetActiveProvider(name string) error {
+func (s *store) SetActiveProvider(name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -110,7 +110,7 @@ func (s *ConfigStore) SetActiveProvider(name string) error {
 		return errProviderNameRequired
 	}
 
-	fileCfg, configPath, _, err := s.loadMutationStateLocked()
+	fileCfg, configPath, err := s.loadStoredFileConfigLocked()
 	if err != nil {
 		return err
 	}

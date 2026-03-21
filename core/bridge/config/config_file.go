@@ -99,6 +99,7 @@ type bridgeFileConfig struct {
 	RSSBriefingEnabled                    *bool                             `toml:"rss_briefing_enabled,omitempty"`
 	RSSBriefingInterval                   *string                           `toml:"rss_briefing_interval,omitempty"`
 	GraphQLDefaultSource                  *string                           `toml:"graphql_default_source,omitempty"`
+	GraphQLToolRuntimeEnabled             *bool                             `toml:"graphql_tool_runtime_enabled,omitempty"`
 	GraphQLSources                        []graphQLSourceFileConfig         `toml:"graphql_sources,omitempty"`
 	GraphQLMutationPolicies               []graphQLMutationPolicyFileConfig `toml:"graphql_mutation_policies,omitempty"`
 	WebSearchTavilyAPIKey                 *string                           `toml:"web_search_tavily_api_key,omitempty"`

@@ -2,27 +2,39 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 )
 
 func envGraphQLSettings() (GraphQLConfig, error) {
-	if err := validateNoLegacyGraphQLEnv(); err != nil {
+	return graphQLSettingsFromEnv(CurrentEnv())
+}
+
+func graphQLSettingsFromEnv(env Env) (GraphQLConfig, error) {
+	if err := validateNoLegacyGraphQLEnv(env); err != nil {
 		return GraphQLConfig{}, err
 	}
-	return finalizeGraphQLConfig(GraphQLConfig{})
+	return finalizeGraphQLConfig(GraphQLConfig{
+		ToolRuntimeEnabled: parseBoolValue(
+			env.value("GHOST_GRAPHQL_TOOL_RUNTIME_ENABLED"),
+			false,
+		),
+	})
 }
 
 func fileGraphQLSettings(fileCfg bridgeFileConfig, fallback GraphQLConfig) (GraphQLConfig, error) {
 	settings := normalizeGraphQLConfig(fallback)
 	if !hasGraphQLSourceLayout(fileCfg) {
+		if fileCfg.GraphQLToolRuntimeEnabled != nil {
+			settings.ToolRuntimeEnabled = *fileCfg.GraphQLToolRuntimeEnabled
+		}
 		return finalizeGraphQLConfig(settings)
 	}
 	return finalizeGraphQLConfig(GraphQLConfig{
-		DefaultSource:    stringValue(fileCfg.GraphQLDefaultSource),
-		Sources:          graphQLSourcesFromFile(fileCfg.GraphQLSources),
-		MutationPolicies: graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
+		ToolRuntimeEnabled: resolveGraphQLToolRuntimeEnabled(fileCfg, fallback),
+		DefaultSource:      stringValue(fileCfg.GraphQLDefaultSource),
+		Sources:            graphQLSourcesFromFile(fileCfg.GraphQLSources),
+		MutationPolicies:   graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
 	})
 }
 
@@ -36,10 +48,21 @@ func finalizeGraphQLConfig(cfg GraphQLConfig) (GraphQLConfig, error) {
 
 func normalizeGraphQLConfig(cfg GraphQLConfig) GraphQLConfig {
 	return GraphQLConfig{
-		DefaultSource:    normalizeOptionalString(cfg.DefaultSource),
-		Sources:          normalizeGraphQLSources(cfg.Sources),
-		MutationPolicies: normalizeGraphQLMutationPolicies(cfg.MutationPolicies),
+		ToolRuntimeEnabled: cfg.ToolRuntimeEnabled,
+		DefaultSource:      normalizeOptionalString(cfg.DefaultSource),
+		Sources:            normalizeGraphQLSources(cfg.Sources),
+		MutationPolicies:   normalizeGraphQLMutationPolicies(cfg.MutationPolicies),
 	}
+}
+
+func resolveGraphQLToolRuntimeEnabled(
+	fileCfg bridgeFileConfig,
+	fallback GraphQLConfig,
+) bool {
+	if fileCfg.GraphQLToolRuntimeEnabled != nil {
+		return *fileCfg.GraphQLToolRuntimeEnabled
+	}
+	return fallback.ToolRuntimeEnabled
 }
 
 func normalizeGraphQLSources(raw []GraphQLSourceConfig) []GraphQLSourceConfig {
@@ -193,8 +216,8 @@ func normalizeOptionalString(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
-func validateNoLegacyGraphQLEnv() error {
-	legacyEnv := configuredLegacyGraphQLEnv()
+func validateNoLegacyGraphQLEnv(env Env) error {
+	legacyEnv := configuredLegacyGraphQLEnv(env)
 	if len(legacyEnv) == 0 {
 		return nil
 	}
@@ -204,7 +227,7 @@ func validateNoLegacyGraphQLEnv() error {
 	)
 }
 
-func configuredLegacyGraphQLEnv() []string {
+func configuredLegacyGraphQLEnv(env Env) []string {
 	names := []string{
 		"GHOST_GRAPHQL_ENABLED",
 		"GHOST_GRAPHQL_ENDPOINT",
@@ -216,8 +239,7 @@ func configuredLegacyGraphQLEnv() []string {
 	}
 	out := make([]string, 0, len(names))
 	for _, name := range names {
-		value, ok := os.LookupEnv(name)
-		if !ok || strings.TrimSpace(value) == "" {
+		if env.value(name) == "" {
 			continue
 		}
 		out = append(out, name)
