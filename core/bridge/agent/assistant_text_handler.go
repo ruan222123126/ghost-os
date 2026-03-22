@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -31,9 +32,23 @@ type AssistantTextAwaitingHuman struct {
 	Options       []tools.AskHumanOption
 }
 
+type AssistantTextToolExecutionResult struct {
+	Tool   AssistantTextToolRef
+	Output string
+	Meta   tools.ExecuteMeta
+}
+
+type AssistantTextToolFeedbackBuilder func(AssistantTextToolExecutionResult) []llm.Message
+
+type AssistantTextToolInvocation struct {
+	Arguments       json.RawMessage
+	FeedbackBuilder AssistantTextToolFeedbackBuilder
+}
+
 type AssistantTextResult struct {
 	Recognized    bool
 	Tool          AssistantTextToolRef
+	Invocation    *AssistantTextToolInvocation
 	Feedback      []llm.Message
 	AwaitingHuman *AssistantTextAwaitingHuman
 }
@@ -47,6 +62,14 @@ func validateAssistantTextResult(result AssistantTextResult) error {
 	}
 	if strings.TrimSpace(result.Tool.CallID) == "" {
 		return fmt.Errorf("recognized assistant text handler returned empty tool_call_id")
+	}
+	if result.Invocation != nil {
+		if len(result.Invocation.Arguments) == 0 {
+			return fmt.Errorf("recognized assistant text handler returned empty tool arguments")
+		}
+		if _, err := normalizedToolArguments(result.Invocation.Arguments); err != nil {
+			return fmt.Errorf("recognized assistant text handler returned invalid tool arguments: %w", err)
+		}
 	}
 	if result.AwaitingHuman == nil {
 		return nil
@@ -62,6 +85,16 @@ func validateAssistantTextResult(result AssistantTextResult) error {
 
 func cloneAssistantTextFeedback(messages []llm.Message) []llm.Message {
 	return llm.CloneMessages(messages)
+}
+
+func buildAssistantTextToolFeedback(
+	invocation *AssistantTextToolInvocation,
+	result AssistantTextToolExecutionResult,
+) []llm.Message {
+	if invocation == nil || invocation.FeedbackBuilder == nil {
+		return nil
+	}
+	return cloneAssistantTextFeedback(invocation.FeedbackBuilder(result))
 }
 
 func cloneAssistantTextOptions(options []tools.AskHumanOption) []tools.AskHumanOption {

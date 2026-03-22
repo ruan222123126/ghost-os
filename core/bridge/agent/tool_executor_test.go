@@ -152,3 +152,49 @@ func TestToolCallExecutorExecuteAppendsMissingToolErrorEnvelope(t *testing.T) {
 		t.Fatalf("unexpected tool name in finish event: %+v", sink.events[1].Payload)
 	}
 }
+
+func TestToolCallExecutorExecuteSingleClosesExplicitInvalidInvocation(t *testing.T) {
+	sink := newRecordingEventSink()
+	history := NewHistory("")
+	executor := newToolCallExecutor(newFakeToolCatalog(newStaticTool("web_search", `{"items":[]}`)), history, nil, newAgentEventEmitter(sink, nil))
+
+	outcome, err := executor.executeSingle(
+		context.Background(),
+		"trace-explicit-invalid",
+		4,
+		"web_search",
+		"call-explicit-1",
+		json.RawMessage(`[]`),
+	)
+	if err == nil {
+		t.Fatal("expected executeSingle to fail for non-object arguments")
+	}
+	if outcome.executed {
+		t.Fatalf("invalid explicit invocation should not execute: %+v", outcome)
+	}
+	if len(history.Messages()) != 0 {
+		t.Fatalf("invalid explicit invocation should not append history: %+v", history.Messages())
+	}
+	if len(sink.events) != 2 {
+		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 2)
+	}
+	if sink.events[0].Type != streaming.EventToolCallStarted {
+		t.Fatalf("unexpected first event: %q", sink.events[0].Type)
+	}
+	if sink.events[1].Type != streaming.EventToolCallFinished {
+		t.Fatalf("unexpected second event: %q", sink.events[1].Type)
+	}
+	payload, ok := sink.events[1].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", sink.events[1].Payload)
+	}
+	if payload["status"] != "error" {
+		t.Fatalf("unexpected finish status: got %v want %q", payload["status"], "error")
+	}
+	if payload["tool"] != "web_search" {
+		t.Fatalf("unexpected tool in finish event: %+v", payload)
+	}
+	if payload["tool_call_id"] != "call-explicit-1" {
+		t.Fatalf("unexpected tool_call_id in finish event: %+v", payload)
+	}
+}

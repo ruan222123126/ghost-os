@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	graphQLAssistantTextToolName = "graphql_text"
-	graphQLExecutionResultPrefix = "[GRAPHQL_EXECUTION_RESULT]\n"
+	graphQLToolCallProtocolName = "graphql_tool_call"
+	graphQLToolResultPrefix     = "[GRAPHQL_TOOL_RESULT]\n"
 )
 
 type graphQLTextTurnHandler struct {
@@ -39,7 +39,10 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 	if !result.Recognized {
 		return AssistantTextResult{}, nil
 	}
-	toolName := graphQLAssistantToolName(result)
+	toolName := strings.TrimSpace(result.ToolName)
+	if toolName == "" {
+		toolName = graphQLToolCallProtocolName
+	}
 	handled := AssistantTextResult{
 		Recognized: true,
 		Tool: AssistantTextToolRef{
@@ -50,49 +53,46 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 	if err != nil {
 		return handled, err
 	}
-	if awaiting := result.Meta.AwaitingHuman; awaiting != nil {
-		handled.AwaitingHuman = &AssistantTextAwaitingHuman{
-			Tool:          handled.Tool,
-			QuestionID:    strings.TrimSpace(awaiting.QuestionID),
-			Prompt:        strings.TrimSpace(awaiting.Prompt),
-			SelectionMode: strings.TrimSpace(awaiting.SelectionMode),
-			Options:       cloneAssistantTextOptions(awaiting.Options),
+	if len(result.Arguments) != 0 {
+		handled.Invocation = &AssistantTextToolInvocation{
+			Arguments:       append(json.RawMessage(nil), result.Arguments...),
+			FeedbackBuilder: graphQLToolResultFeedbackBuilder,
 		}
-		return handled, nil
-	}
-	feedback, ok := newGraphQLExecutionFeedbackMessage(result.Output)
-	if ok {
-		handled.Feedback = []llm.Message{feedback}
 	}
 	return handled, nil
 }
 
-func graphQLAssistantToolName(result tools.GraphQLTextExecutionResult) string {
-	if result.Meta.AwaitingHuman != nil {
-		return tools.GraphQLTextMutationToolName
+func graphQLToolResultFeedbackBuilder(result AssistantTextToolExecutionResult) []llm.Message {
+	feedback, ok := newGraphQLToolResultFeedbackMessage(result.Tool.Name, result.Output)
+	if !ok {
+		return nil
 	}
-	return graphQLAssistantTextToolName
+	return []llm.Message{feedback}
 }
 
-func newGraphQLExecutionFeedbackMessage(output string) (llm.Message, bool) {
+func newGraphQLToolResultFeedbackMessage(toolName string, output string) (llm.Message, bool) {
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" {
 		return llm.Message{}, false
 	}
 	return llm.Message{
 		Role: llm.RoleInternal,
-		Text: formatGraphQLExecutionFeedback(trimmed),
+		Text: formatGraphQLToolResultFeedback(strings.TrimSpace(toolName), trimmed),
 	}, true
 }
 
-func formatGraphQLExecutionFeedback(output string) string {
+func formatGraphQLToolResultFeedback(toolName string, output string) string {
+	payload := map[string]any{
+		"tool":   toolName,
+		"output": output,
+	}
 	var decoded any
-	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
-		return graphQLExecutionResultPrefix + output
+	if err := json.Unmarshal([]byte(output), &decoded); err == nil {
+		payload["output"] = decoded
 	}
-	normalized, err := json.Marshal(decoded)
+	normalized, err := json.Marshal(payload)
 	if err != nil {
-		return graphQLExecutionResultPrefix + output
+		return graphQLToolResultPrefix + output
 	}
-	return fmt.Sprintf("%s%s", graphQLExecutionResultPrefix, string(normalized))
+	return fmt.Sprintf("%s%s", graphQLToolResultPrefix, string(normalized))
 }

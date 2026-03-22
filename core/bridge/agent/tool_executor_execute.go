@@ -31,11 +31,12 @@ type resolvedToolCall struct {
 type toolCallOutcome struct {
 	executed bool
 	stopErr  error
+	output   string
+	meta     tools.ExecuteMeta
 }
 
 func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int, calls []indexedToolCall) (toolCallTurnStats, error) {
 	stats := toolCallTurnStats{totalCalls: len(calls)}
-
 	for _, indexedCall := range calls {
 		outcome, err := e.executeIndexedCall(ctx, traceID, turn, indexedCall)
 		if err != nil {
@@ -49,6 +50,25 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 		}
 	}
 	return stats, nil
+}
+
+func (e toolCallExecutor) executeSingle(
+	ctx context.Context,
+	traceID string,
+	turn int,
+	toolName string,
+	toolCallID string,
+	args json.RawMessage,
+) (toolCallOutcome, error) {
+	step, err := e.startExplicitToolCall(ctx, traceID, turn, toolName, toolCallID)
+	if err != nil {
+		return toolCallOutcome{}, err
+	}
+	resolved, outcome, handled, err := e.resolveExplicitToolCall(ctx, traceID, step, args)
+	if err != nil || handled {
+		return outcome, err
+	}
+	return e.runResolvedToolCall(ctx, traceID, resolved)
 }
 
 func (e toolCallExecutor) executeIndexedCall(ctx context.Context, traceID string, turn int, indexedCall indexedToolCall) (toolCallOutcome, error) {
@@ -84,6 +104,29 @@ func (e toolCallExecutor) startToolCall(ctx context.Context, traceID string, tur
 	return step, nil
 }
 
+func (e toolCallExecutor) startExplicitToolCall(
+	ctx context.Context,
+	traceID string,
+	turn int,
+	toolName string,
+	toolCallID string,
+) (toolCallStep, error) {
+	stepID, err := streaming.ToolStepID(turn, 0)
+	if err != nil {
+		return toolCallStep{}, err
+	}
+	step := toolCallStep{
+		turn:          turn,
+		stepID:        stepID,
+		rawToolCallID: strings.TrimSpace(toolCallID),
+		rawToolName:   strings.TrimSpace(toolName),
+	}
+	if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, step.rawToolName, step.rawToolCallID); err != nil {
+		return toolCallStep{}, err
+	}
+	return step, nil
+}
+
 func (e toolCallExecutor) resolveToolCall(ctx context.Context, traceID string, step toolCallStep) (resolvedToolCall, toolCallOutcome, bool, error) {
 	toolCallID, toolName, args, err := validateToolCall(step.call)
 	if err != nil {
@@ -105,6 +148,57 @@ func (e toolCallExecutor) resolveToolCall(ctx context.Context, traceID string, s
 		args:       args,
 		tool:       tool,
 	}, toolCallOutcome{}, false, nil
+}
+
+func (e toolCallExecutor) resolveExplicitToolCall(
+	ctx context.Context,
+	traceID string,
+	step toolCallStep,
+	args json.RawMessage,
+) (resolvedToolCall, toolCallOutcome, bool, error) {
+	toolCallID := strings.TrimSpace(step.rawToolCallID)
+	if toolCallID == "" {
+		return e.finishExplicitToolCallValidationError(ctx, traceID, step, "", "", errToolCallIDRequired)
+	}
+	toolName := strings.TrimSpace(step.rawToolName)
+	if toolName == "" {
+		return e.finishExplicitToolCallValidationError(ctx, traceID, step, toolCallID, "", errors.New("tool_call.name is empty"))
+	}
+	normalizedArgs, err := normalizedToolArguments(args)
+	if err != nil {
+		return e.finishExplicitToolCallValidationError(ctx, traceID, step, toolCallID, toolName, err)
+	}
+	fmt.Fprintf(e.stderr, "[%s] tool_call: %s %s\n", traceID, toolName, summarizeToolArgs(normalizedArgs))
+	tool := e.tools.Get(toolName)
+	if tool == nil {
+		outcome, finishErr := e.finishMissingToolCall(ctx, traceID, step, toolCallID, toolName)
+		return resolvedToolCall{}, outcome, true, finishErr
+	}
+	return resolvedToolCall{
+		step:       step,
+		toolCallID: toolCallID,
+		toolName:   toolName,
+		args:       normalizedArgs,
+		tool:       tool,
+	}, toolCallOutcome{}, false, nil
+}
+
+func (e toolCallExecutor) finishExplicitToolCallValidationError(
+	ctx context.Context,
+	traceID string,
+	step toolCallStep,
+	toolCallID string,
+	toolName string,
+	callErr error,
+) (resolvedToolCall, toolCallOutcome, bool, error) {
+	fmt.Fprintf(e.stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, step.rawToolCallID, step.rawToolName, callErr)
+
+	resolvedToolCallID := coalesceToolCallID(toolCallID, step.rawToolCallID)
+	resolvedToolName := coalesceToolName(toolName, step.rawToolName, "invalid_tool_call")
+	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, resolvedToolName, resolvedToolCallID, "error", callErr); err != nil {
+		return resolvedToolCall{}, toolCallOutcome{}, true, err
+	}
+	return resolvedToolCall{}, toolCallOutcome{}, true, callErr
 }
 
 func (e toolCallExecutor) finishInvalidToolCall(ctx context.Context, traceID string, step toolCallStep, toolCallID string, toolName string, callErr error) (toolCallOutcome, error) {
@@ -163,14 +257,22 @@ func (e toolCallExecutor) finishSuccessfulToolCall(ctx context.Context, traceID 
 		return toolCallOutcome{}, err
 	}
 	if meta.AwaitingHuman != nil {
-		return e.finishAwaitingHuman(ctx, traceID, resolved, meta.AwaitingHuman)
+		outcome, err := e.finishAwaitingHuman(ctx, traceID, resolved, meta.AwaitingHuman)
+		outcome.output = output
+		outcome.meta = meta
+		return outcome, err
 	}
 	if meta.Iteration != nil {
-		return toolCallOutcome{executed: true, stopErr: newIterationHandoffError(meta.Iteration)}, nil
+		return toolCallOutcome{
+			executed: true,
+			stopErr:  newIterationHandoffError(meta.Iteration),
+			output:   output,
+			meta:     meta,
+		}, nil
 	}
 
 	appendToolResult(e.history, resolved.toolCallID, resolved.toolName, traceID, output, nil, meta.Content)
-	return toolCallOutcome{executed: true}, nil
+	return toolCallOutcome{executed: true, output: output, meta: meta}, nil
 }
 
 func (e toolCallExecutor) finishAwaitingHuman(ctx context.Context, traceID string, resolved resolvedToolCall, awaiting *tools.AwaitingHumanSignal) (toolCallOutcome, error) {
