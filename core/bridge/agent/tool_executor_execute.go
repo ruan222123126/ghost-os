@@ -35,9 +35,6 @@ type toolCallOutcome struct {
 
 func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int, calls []indexedToolCall) (toolCallTurnStats, error) {
 	stats := toolCallTurnStats{totalCalls: len(calls)}
-	if len(calls) == 0 {
-		return stats, errors.New("finish_reason=tool_calls but tool_calls is empty")
-	}
 
 	for _, indexedCall := range calls {
 		outcome, err := e.executeIndexedCall(ctx, traceID, turn, indexedCall)

@@ -69,17 +69,7 @@ func (a *Agent) handleStopTurn(
 	resp *llm.CompletionResponse,
 	state *agentRunState,
 ) (turnOutcome, error) {
-	handled, outcome, err := a.handleAssistantTextTurn(ctx, turn, resp, state)
-	if err != nil || handled {
-		return outcome, err
-	}
-	acceptAssistantTurn(state.history, resp)
-	a.commitTurn(state.history)
-	output := resp.Message.Text
-	if err := state.events.terminalSuccess(ctx, state.traceID, turn, output, state.lifecycle); err != nil {
-		return turnOutcome{}, err
-	}
-	return turnOutcome{output: output, done: true}, nil
+	return a.handleCompletedTextTurn(ctx, turn, resp, state, resp.Message.Text)
 }
 
 func (a *Agent) handleLengthTurn(
@@ -96,17 +86,36 @@ func (a *Agent) handleLengthTurn(
 			emptyLengthResponseError(state.traceID, turn, resp.FinishReason),
 		)
 	}
+	return a.handleCompletedTextTurn(ctx, turn, resp, state, content)
+}
+
+func (a *Agent) handleCompletedTextTurn(
+	ctx context.Context,
+	turn int,
+	resp *llm.CompletionResponse,
+	state *agentRunState,
+	output string,
+) (turnOutcome, error) {
 	handled, outcome, err := a.handleAssistantTextTurn(ctx, turn, resp, state)
 	if err != nil || handled {
 		return outcome, err
 	}
+	return a.finalizeCompletedTextTurn(ctx, turn, resp, state, output)
+}
 
+func (a *Agent) finalizeCompletedTextTurn(
+	ctx context.Context,
+	turn int,
+	resp *llm.CompletionResponse,
+	state *agentRunState,
+	output string,
+) (turnOutcome, error) {
 	acceptAssistantTurn(state.history, resp)
 	a.commitTurn(state.history)
-	if err := state.events.terminalSuccess(ctx, state.traceID, turn, content, state.lifecycle); err != nil {
+	if err := state.events.terminalSuccess(ctx, state.traceID, turn, output, state.lifecycle); err != nil {
 		return turnOutcome{}, err
 	}
-	return turnOutcome{output: content, done: true}, nil
+	return turnOutcome{output: output, done: true}, nil
 }
 
 func (a *Agent) handleToolCallTurn(
