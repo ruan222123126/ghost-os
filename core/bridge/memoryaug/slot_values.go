@@ -1,7 +1,6 @@
 package memoryaug
 
 import (
-	"fmt"
 	"strings"
 
 	"ghost-os/bridge/memorystore"
@@ -43,10 +42,6 @@ func normalizeSlotValue(spec SlotSpec, candidate Candidate) string {
 		return normalizeResponseStyleValue(joined)
 	case "approval_style":
 		return normalizeApprovalStyleValue(joined)
-	case "package_manager":
-		return normalizePackageManagerValue(joined)
-	case "build_command", "test_command":
-		return normalizeCommandValue(candidate.Value, candidate.Content)
 	default:
 		return ""
 	}
@@ -86,12 +81,6 @@ func renderSlotContent(spec SlotSpec, value string) string {
 			return "Ask before destructive changes."
 		}
 		return "Auto-apply safe changes without asking."
-	case "package_manager":
-		return fmt.Sprintf("This project uses %s.", value)
-	case "build_command":
-		return fmt.Sprintf("Use `%s` as the build command.", value)
-	case "test_command":
-		return fmt.Sprintf("Use `%s` as the test command.", value)
 	default:
 		return strings.TrimSpace(value)
 	}
@@ -135,57 +124,6 @@ func normalizeApprovalStyleValue(raw string) string {
 	default:
 		return ""
 	}
-}
-
-func normalizePackageManagerValue(raw string) string {
-	normalized := normalizeText(raw)
-	switch {
-	case containsAny(normalized, "pnpm"):
-		return "pnpm"
-	case containsAny(normalized, "npm"):
-		return "npm"
-	case containsAny(normalized, "yarn"):
-		return "yarn"
-	case containsAny(normalized, "cargo"):
-		return "cargo"
-	case containsAny(normalized, "go mod", "go test", "golang"):
-		return "go"
-	default:
-		return ""
-	}
-}
-
-func normalizeCommandValue(value string, content string) string {
-	joined := strings.TrimSpace(value)
-	if joined == "" {
-		joined = extractBacktickValue(content)
-	}
-	if joined == "" {
-		joined = strings.TrimSpace(content)
-	}
-	return collapseWhitespace(joined)
-}
-
-func extractBacktickValue(raw string) string {
-	text := strings.TrimSpace(raw)
-	if text == "" {
-		return ""
-	}
-	parts := strings.Split(text, "`")
-	if len(parts) < 3 {
-		return ""
-	}
-	for idx := 1; idx < len(parts); idx += 2 {
-		value := collapseWhitespace(parts[idx])
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func collapseWhitespace(raw string) string {
-	return strings.Join(strings.Fields(strings.TrimSpace(raw)), " ")
 }
 
 func containsAny(text string, values ...string) bool {

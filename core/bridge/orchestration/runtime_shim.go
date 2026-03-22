@@ -20,6 +20,7 @@ type agentRuntimeDependencies struct {
 	client       agent.Completer
 	registry     *tools.Registry
 	systemPrompt string
+	memoryPlan   memoryaug.IntentPlanner
 	memoryRecall memoryaug.RecallService
 	memoryLearn  memoryaug.LearningService
 	cleanup      func()
@@ -53,6 +54,7 @@ func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependenci
 		client:       deps.Client(),
 		registry:     deps.Registry(),
 		systemPrompt: deps.SystemPrompt(),
+		memoryPlan:   deps.MemoryPlanner(),
 		memoryRecall: deps.MemoryRecall(),
 		memoryLearn:  deps.MemoryLearning(),
 		cleanup:      deps.Close,

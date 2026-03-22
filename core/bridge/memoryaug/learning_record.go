@@ -46,7 +46,10 @@ func (s *learningService) recordOutcome(
 	outcome applyOutcome,
 ) error {
 	status := "success"
-	if len(outcome.Created) == 0 && len(outcome.Refreshed) == 0 {
+	if len(outcome.Created) == 0 &&
+		len(outcome.Refreshed) == 0 &&
+		len(outcome.EventCreated) == 0 &&
+		len(outcome.EventRefreshed) == 0 {
 		status = "skipped"
 	}
 	_, err := s.store.CreateLearningEvent(ctx, memorystore.LearningEventInput{

@@ -2,22 +2,30 @@ package memoryaug
 
 import (
 	"context"
-	"errors"
+	"fmt"
+	"strings"
 
 	"ghost-os/bridge/memorystore"
 )
 
 type learningService struct {
-	settings  Settings
-	store     learningStore
-	extractor CandidateExtractor
+	settings        Settings
+	store           learningStore
+	globalExtractor CandidateExtractor
+	eventExtractor  EventMemoryExtractor
 }
 
-func NewLearningService(settings Settings, store learningStore, extractor CandidateExtractor) LearningService {
+func NewLearningService(
+	settings Settings,
+	store learningStore,
+	globalExtractor CandidateExtractor,
+	eventExtractor EventMemoryExtractor,
+) LearningService {
 	return &learningService{
-		settings:  normalizeSettings(settings),
-		store:     store,
-		extractor: extractor,
+		settings:        normalizeSettings(settings),
+		store:           store,
+		globalExtractor: globalExtractor,
+		eventExtractor:  eventExtractor,
 	}
 }
 
@@ -26,133 +34,169 @@ func (s *learningService) LearnFromTurn(ctx context.Context, input LearnFromTurn
 		return nil
 	}
 	if s.store == nil {
-		return errors.New("memory learning store is not configured")
+		return fmt.Errorf("memory learning store is not configured")
 	}
-	if s.extractor == nil {
-		return errors.New("memory candidate extractor is not configured")
-	}
-	return s.learn(ctx, normalizeLearnInput(input, s.settings))
-}
-
-func (s *learningService) learn(ctx context.Context, input LearnFromTurnInput) error {
-	filtered := filterTurnMessages(input.Messages)
+	normalized := normalizeLearnInput(input, s.settings)
+	filtered := filterTurnMessages(normalized.Messages)
 	if len(filtered) == 0 {
-		return s.recordSkipped(ctx, input, filtered, "no durable candidates after rule filter")
+		return s.recordSkipped(ctx, normalized, filtered, "no durable candidates after rule filter")
 	}
-	policy := deriveLearningPolicy(filtered)
-	if !policy.shouldLearn {
-		return s.recordSkipped(ctx, input, filtered, "turn does not contain a stable slot signal")
+	if !normalized.AllowWrite {
+		return s.recordSkipped(ctx, normalized, filtered, "planner disabled learning for this turn")
 	}
-	explicitContext, learnedContext, err := s.loadLearningContext(ctx, input, filtered)
+	outcome, rawJSON, err := s.learn(ctx, normalized, filtered)
 	if err != nil {
-		return s.recordError(ctx, input, filtered, "", err)
+		return s.recordError(ctx, normalized, filtered, rawJSON, err)
 	}
-	output, err := s.extractor.Extract(ctx, ExtractInput{
-		SessionID:        input.SessionID,
-		UserScopeID:      input.UserScope,
-		Transcript:       filtered,
-		ExistingExplicit: explicitContext,
-		ExistingLearned:  learnedContext,
-	})
-	if err != nil {
-		return s.recordError(ctx, input, filtered, "", err)
-	}
-	outcome, err := s.applyCandidates(ctx, input, output.Items, explicitContext, learnedContext)
-	if err != nil {
-		return s.recordError(ctx, input, filtered, output.RawJSON, err)
-	}
-	return s.recordOutcome(ctx, input, filtered, output.RawJSON, outcome)
+	return s.recordOutcome(ctx, normalized, filtered, rawJSON, outcome)
 }
 
-func (s *learningService) loadLearningContext(
+func (s *learningService) learn(
 	ctx context.Context,
 	input LearnFromTurnInput,
 	filtered []TurnMessage,
-) ([]memorystore.MemoryEntry, []memorystore.MemoryEntry, error) {
-	query := buildTranscriptText(filtered)
-	explicit, err := s.store.SearchExplicitRecallRecords(ctx, query, 12)
+) (applyOutcome, string, error) {
+	outcome := applyOutcome{}
+	rawPayload := map[string]string{}
+	globalContext, err := s.loadGlobalPreferences(ctx)
 	if err != nil {
-		return nil, nil, err
+		return outcome, "", err
 	}
-	learned := make([]memorystore.MemoryEntry, 0, 24)
-	if s.settings.SessionScopeEnabled {
-		items, _, err := s.store.ListLearned(ctx, memorystore.LearnedListFilter{
-			ScopeType: memorystore.ScopeTypeSession,
-			ScopeID:   input.SessionID,
-			Statuses:  []string{memorystore.MemoryStatusActive},
-			Query:     query,
-			Limit:     12,
-		})
+	if shouldExtractGlobalPreferences(filtered) {
+		rawPayload["global_preferences"], err = s.applyGlobalPreferences(ctx, input, filtered, globalContext, &outcome)
 		if err != nil {
-			return nil, nil, err
+			return outcome, mustMarshalJSON(rawPayload), err
 		}
-		learned = append(learned, items...)
 	}
-	if s.settings.UserScopeEnabled {
-		items, _, err := s.store.ListLearned(ctx, memorystore.LearnedListFilter{
-			ScopeType: memorystore.ScopeTypeUser,
-			ScopeID:   input.UserScope,
-			Statuses:  []string{memorystore.MemoryStatusActive},
-			Query:     query,
-			Limit:     12,
-		})
-		if err != nil {
-			return nil, nil, err
-		}
-		learned = append(learned, items...)
+	if strings.TrimSpace(input.PrimaryEventID) == "" {
+		return outcome, mustMarshalJSON(rawPayload), nil
 	}
-	return explicit, learned, nil
+	eventContext, err := s.loadEventMemories(ctx, input.PrimaryEventID)
+	if err != nil {
+		return outcome, mustMarshalJSON(rawPayload), err
+	}
+	rawPayload["event_memories"], err = s.applyEventMemories(ctx, input, filtered, eventContext, &outcome)
+	if err != nil {
+		return outcome, mustMarshalJSON(rawPayload), err
+	}
+	return outcome, mustMarshalJSON(rawPayload), nil
 }
 
-func (s *learningService) applyCandidates(
+func (s *learningService) loadGlobalPreferences(ctx context.Context) ([]memorystore.MemoryEntry, error) {
+	return s.store.ListGlobalPreferences(ctx, globalPreferenceKeys())
+}
+
+func (s *learningService) loadEventMemories(ctx context.Context, eventID string) ([]memorystore.EventMemory, error) {
+	items, _, err := s.store.ListEventMemories(ctx, memorystore.EventMemoryListFilter{
+		EventID:  eventID,
+		Statuses: []string{memorystore.MemoryStatusActive},
+		Limit:    16,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func (s *learningService) applyGlobalPreferences(
 	ctx context.Context,
 	input LearnFromTurnInput,
-	candidates []Candidate,
-	explicit []memorystore.MemoryEntry,
+	filtered []TurnMessage,
 	existing []memorystore.MemoryEntry,
-) (applyOutcome, error) {
-	outcome := applyOutcome{}
-	for _, candidate := range candidates {
-		if !s.acceptsCandidate(candidate) {
-			outcome.Skipped = append(outcome.Skipped, candidateLabel(candidate))
-			continue
-		}
-		entry, supersedes, ok := s.normalizeCandidate(candidate, input)
-		if !ok {
-			outcome.Skipped = append(outcome.Skipped, candidateLabel(candidate))
-			continue
-		}
-		if s.duplicatesExplicit(entry, explicit) {
-			outcome.Skipped = append(outcome.Skipped, entry.Summary)
-			continue
-		}
-		if refreshedID := s.findExactLearnedMatch(entry, existing); refreshedID != "" {
-			if err := s.store.RefreshLearned(ctx, refreshedID, entry.Confidence); err != nil {
-				return outcome, err
-			}
-			outcome.Refreshed = append(outcome.Refreshed, refreshedID)
-			continue
-		}
-		validSupersedes, err := s.resolveSupersedes(ctx, entry, supersedes, existing)
-		if err != nil {
-			return outcome, err
-		}
-		created, err := s.store.CreateLearned(ctx, memorystore.LearnedMemoryInput{
-			ScopeType:  entry.ScopeType,
-			ScopeID:    entry.ScopeID,
-			MemoryType: entry.MemoryType,
-			MemoryKey:  entry.MemoryKey,
-			Content:    entry.Content,
-			Summary:    entry.Summary,
-			Metadata:   entry.Metadata,
-			Confidence: entry.Confidence,
-		}, validSupersedes)
-		if err != nil {
-			return outcome, err
-		}
-		existing = append(existing, created)
-		outcome.Created = append(outcome.Created, created)
-		outcome.Superseded = append(outcome.Superseded, validSupersedes...)
+	outcome *applyOutcome,
+) (string, error) {
+	if s.globalExtractor == nil {
+		return "", fmt.Errorf("global preference extractor is not configured")
 	}
-	return outcome, nil
+	output, err := s.globalExtractor.Extract(ctx, ExtractInput{
+		SessionID:        input.SessionID,
+		UserScopeID:      input.UserScope,
+		Transcript:       filtered,
+		ExistingExplicit: filterMemoryEntriesBySource(existing, memorystore.SourceKindExplicit),
+		ExistingLearned:  filterMemoryEntriesBySource(existing, memorystore.SourceKindLearned),
+	})
+	if err != nil {
+		return "", err
+	}
+	if err := s.applyGlobalCandidates(ctx, input, existing, output.Items, outcome); err != nil {
+		return output.RawJSON, err
+	}
+	return output.RawJSON, nil
+}
+
+func (s *learningService) applyEventMemories(
+	ctx context.Context,
+	input LearnFromTurnInput,
+	filtered []TurnMessage,
+	existing []memorystore.EventMemory,
+	outcome *applyOutcome,
+) (string, error) {
+	if s.eventExtractor == nil {
+		return "", fmt.Errorf("event memory extractor is not configured")
+	}
+	output, err := s.eventExtractor.Extract(ctx, EventExtractInput{
+		SessionID:      input.SessionID,
+		PrimaryEventID: input.PrimaryEventID,
+		ActiveEventIDs: input.ActiveEventIDs,
+		Transcript:     filtered,
+		Existing:       existing,
+	})
+	if err != nil {
+		return "", err
+	}
+	if err := s.applyEventCandidates(ctx, input.PrimaryEventID, existing, output.Items, outcome); err != nil {
+		return output.RawJSON, err
+	}
+	return output.RawJSON, nil
+}
+
+func normalizeLearnInput(input LearnFromTurnInput, settings Settings) LearnFromTurnInput {
+	userScope := strings.TrimSpace(input.UserScope)
+	if userScope == "" {
+		userScope = settings.UserScopeID
+	}
+	return LearnFromTurnInput{
+		SessionID:      strings.TrimSpace(input.SessionID),
+		UserScope:      userScope,
+		TraceID:        strings.TrimSpace(input.TraceID),
+		PrimaryEventID: strings.TrimSpace(input.PrimaryEventID),
+		ActiveEventIDs: normalizeIDs(input.ActiveEventIDs),
+		AllowWrite:     input.AllowWrite,
+		Messages:       append([]TurnMessage(nil), input.Messages...),
+	}
+}
+
+func shouldExtractGlobalPreferences(messages []TurnMessage) bool {
+	for _, message := range messages {
+		if normalizeRole(message.Role) != "user" {
+			continue
+		}
+		if hasGlobalPreferenceMarker(message.Text) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasGlobalPreferenceMarker(text string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return false
+	}
+	return strings.Contains(lower, "reply in") ||
+		strings.Contains(lower, "respond in") ||
+		strings.Contains(lower, "请用") ||
+		strings.Contains(lower, "默认") ||
+		strings.Contains(lower, "response style") ||
+		strings.Contains(lower, "approval")
+}
+
+func filterMemoryEntriesBySource(items []memorystore.MemoryEntry, sourceKind string) []memorystore.MemoryEntry {
+	out := make([]memorystore.MemoryEntry, 0, len(items))
+	for _, item := range items {
+		if item.SourceKind == sourceKind {
+			out = append(out, item)
+		}
+	}
+	return out
 }

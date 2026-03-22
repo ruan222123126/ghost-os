@@ -20,6 +20,7 @@ type agentRuntimeDependencies struct {
 	client       agent.Completer
 	registry     *tools.Registry
 	systemPrompt string
+	memoryPlan   memoryaug.IntentPlanner
 	memoryRecall memoryaug.RecallService
 	memoryLearn  memoryaug.LearningService
 	cleanup      func()
@@ -48,6 +49,7 @@ type runtimeToolResources struct {
 }
 
 type memoryRuntimeResources struct {
+	planner memoryaug.IntentPlanner
 	recall  memoryaug.RecallService
 	learn   memoryaug.LearningService
 	cleanup func()
@@ -117,6 +119,7 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		client:       clients.primary,
 		registry:     registry,
 		systemPrompt: systemPrompt,
+		memoryPlan:   memoryResources.planner,
 		memoryRecall: memoryResources.recall,
 		memoryLearn:  memoryResources.learn,
 		cleanup: func() {
@@ -213,14 +216,21 @@ func setupMemoryAugmentation(cfg Config, registry *tools.Registry) (memoryRuntim
 		return memoryRuntimeResources{}, err
 	}
 	memoryClient := llm.NewClientWithOptions(providerClientOptions(cfg, strings.TrimSpace(settings.LLMModel)))
+	planner := memoryaug.NewIntentPlanner(settings, store, memoryClient)
 	recall := memoryaug.NewRecallService(settings, store)
-	learn := memoryaug.NewLearningService(settings, store, memoryaug.NewLLMExtractor(memoryClient))
+	learn := memoryaug.NewLearningService(
+		settings,
+		store,
+		memoryaug.NewLLMExtractor(memoryClient),
+		memoryaug.NewEventLLMExtractor(memoryClient),
+	)
 	registry.Register(tools.NewMemoryManageTool(store))
 	registry.Register(tools.NewMemoryLearnedListTool(store))
-	registry.Register(tools.NewMemoryRecallDebugTool(recall, settings.UserScopeID))
+	registry.Register(tools.NewMemoryRecallDebugTool(planner, recall, settings.UserScopeID))
 	return memoryRuntimeResources{
-		recall: recall,
-		learn:  learn,
+		planner: planner,
+		recall:  recall,
+		learn:   learn,
 		cleanup: func() {
 			_ = store.Close()
 		},

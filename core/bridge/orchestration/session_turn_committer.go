@@ -29,6 +29,7 @@ func (c *SessionTurnCommitter) CommitTurn(
 	messages []llm.Message,
 	traceID string,
 	completed bool,
+	memoryCtx *turnMemoryContext,
 ) error {
 	if c == nil || c.sessionStore == nil {
 		return nil
@@ -43,9 +44,12 @@ func (c *SessionTurnCommitter) CommitTurn(
 		return nil
 	}
 	if err := c.memoryLearning.LearnFromTurn(ctx, memoryaug.LearnFromTurnInput{
-		SessionID: sess.ID,
-		TraceID:   traceID,
-		Messages:  projectLearningMessages(messages),
+		SessionID:      sess.ID,
+		TraceID:        traceID,
+		PrimaryEventID: primaryEventID(memoryCtx),
+		ActiveEventIDs: activeEventIDs(memoryCtx),
+		AllowWrite:     allowsMemoryWrite(memoryCtx),
+		Messages:       projectLearningMessages(messages),
 	}); err != nil {
 		log.Printf("trace_id=%s action=MEMORY_LEARN status=error error=%v", traceID, err)
 	}
@@ -61,4 +65,22 @@ func projectLearningMessages(messages []llm.Message) []memoryaug.TurnMessage {
 		})
 	}
 	return out
+}
+
+func primaryEventID(memoryCtx *turnMemoryContext) string {
+	if memoryCtx == nil {
+		return ""
+	}
+	return memoryCtx.Decision.PrimaryEvent.EventID
+}
+
+func activeEventIDs(memoryCtx *turnMemoryContext) []string {
+	if memoryCtx == nil {
+		return nil
+	}
+	return append([]string(nil), memoryCtx.Decision.RecallPlan.EventIDs...)
+}
+
+func allowsMemoryWrite(memoryCtx *turnMemoryContext) bool {
+	return memoryCtx != nil && memoryCtx.Decision.RecallPlan.AllowLearning
 }

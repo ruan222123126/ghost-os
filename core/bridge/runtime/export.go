@@ -42,6 +42,10 @@ func (d agentRuntimeDependencies) SystemPrompt() string {
 	return d.systemPrompt
 }
 
+func (d agentRuntimeDependencies) MemoryPlanner() memoryaug.IntentPlanner {
+	return d.memoryPlan
+}
+
 func (d agentRuntimeDependencies) MemoryRecall() memoryaug.RecallService {
 	return d.memoryRecall
 }

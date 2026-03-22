@@ -7,215 +7,140 @@ import (
 	"ghost-os/bridge/memorystore"
 )
 
-func TestLearningServiceSkipsLowSignalTurnWithoutExtractorCall(t *testing.T) {
+func TestLearningServiceWritesEventMemoryToPrimaryEvent(t *testing.T) {
 	store := newTestStore(t)
-	extractor := &scriptedExtractor{}
-	service := NewLearningService(newTestSettings(), store, extractor)
-
-	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
-		SessionID: "session-1",
-		Messages: []TurnMessage{
-			{Role: "user", Text: "hello"},
-			{Role: "assistant", Text: "ok"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("learn from turn: %v", err)
-	}
-	if extractor.calls != 0 {
-		t.Fatalf("extractor should not be called, got %d", extractor.calls)
-	}
-	items := mustListLearned(t, store, memorystore.LearnedListFilter{
-		Statuses: []string{memorystore.MemoryStatusActive},
-		Limit:    10,
-	})
-	if len(items) != 0 {
-		t.Fatalf("expected no learned memories, got %+v", items)
-	}
-}
-
-func TestLearningServiceDropsLowConfidenceCandidates(t *testing.T) {
-	store := newTestStore(t)
-	extractor := &scriptedExtractor{
-		outputs: []ExtractOutput{{
-			RawJSON: `{"items":[{"memory_type":"preference"}]}`,
-			Items: []Candidate{{
-				MemoryType: "preference",
-				MemoryKey:  "reply_language",
-				Value:      "zh-CN",
-				Summary:    "reply language",
-				Content:    "Reply in Chinese by default.",
-				Confidence: 0.4,
+	service := NewLearningService(
+		newTestSettings(),
+		store,
+		&scriptedExtractor{},
+		&scriptedEventExtractor{outputs: []EventExtractOutput{{
+			Items: []EventMemoryCandidate{{
+				MemoryType: memorystore.MemoryTypeWorkflow,
+				Summary:    "run Android tests after changing runtime flags",
+				Content:    "run Android tests after changing runtime flags",
+				Confidence: 0.91,
 			}},
+		}}},
+	)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		AllowWrite:     true,
+		Messages: []TurnMessage{{
+			Role: "user",
+			Text: "Keep in mind that we should run Android tests after changing runtime flags.",
 		}},
-	}
-	service := NewLearningService(newTestSettings(), store, extractor)
-
-	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
-		SessionID: "session-1",
-		Messages:  []TurnMessage{{Role: "user", Text: "Please reply in Chinese by default."}},
 	})
 	if err != nil {
-		t.Fatalf("learn from turn: %v", err)
+		t.Fatalf("learn: %v", err)
 	}
-	items := mustListLearned(t, store, memorystore.LearnedListFilter{
+
+	items, _, err := store.ListEventMemories(context.Background(), memorystore.EventMemoryListFilter{
+		EventID:  primary.ID,
 		Statuses: []string{memorystore.MemoryStatusActive},
-		Limit:    10,
 	})
-	if len(items) != 0 {
-		t.Fatalf("expected no learned memories, got %+v", items)
+	if err != nil {
+		t.Fatalf("list event memories: %v", err)
+	}
+	if len(items) != 1 || items[0].EventID != primary.ID {
+		t.Fatalf("expected one event memory on primary event, got %+v", items)
 	}
 }
 
-func TestLearningServiceDedupesRepeatedPreference(t *testing.T) {
+func TestLearningServiceKeepsGlobalPreferencesOutOfEvents(t *testing.T) {
 	store := newTestStore(t)
-	extractor := &scriptedExtractor{
-		outputs: []ExtractOutput{
-			{Items: []Candidate{{
-				MemoryType: "preference",
+	service := NewLearningService(
+		newTestSettings(),
+		store,
+		&scriptedExtractor{outputs: []ExtractOutput{{
+			Items: []Candidate{{
+				MemoryType: memorystore.MemoryTypePreference,
 				MemoryKey:  "reply_language",
 				Value:      "zh-CN",
 				Summary:    "reply language",
-				Content:    "Reply in Chinese by default.",
-				Confidence: 0.92,
-			}}},
-			{Items: []Candidate{{
-				MemoryType: "preference",
-				MemoryKey:  "reply_language",
-				Value:      "zh-CN",
-				Summary:    "reply language",
-				Content:    "Please keep replying in Chinese.",
-				Confidence: 0.95,
-			}}},
-		},
-	}
-	service := NewLearningService(newTestSettings(), store, extractor)
+				Content:    "reply in Chinese by default",
+				Confidence: 0.94,
+			}},
+		}}},
+		&scriptedEventExtractor{},
+	)
 
-	for range 2 {
-		err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
-			SessionID: "session-1",
-			Messages:  []TurnMessage{{Role: "user", Text: "Please reply in Chinese by default."}},
-		})
-		if err != nil {
-			t.Fatalf("learn from turn: %v", err)
-		}
-	}
-
-	items := mustListLearned(t, store, memorystore.LearnedListFilter{
-		ScopeType: memorystore.ScopeTypeUser,
-		ScopeID:   memorystore.DefaultUserScopeID,
-		Statuses:  []string{memorystore.MemoryStatusActive},
-		Limit:     10,
-	})
-	if len(items) != 1 {
-		t.Fatalf("expected one active learned memory, got %+v", items)
-	}
-	if items[0].Confidence != 0.95 {
-		t.Fatalf("expected refreshed confidence 0.95, got %.2f", items[0].Confidence)
-	}
-}
-
-func TestLearningServiceRefreshesSameMemoryKey(t *testing.T) {
-	store := newTestStore(t)
-	extractor := &scriptedExtractor{
-		outputs: []ExtractOutput{
-			{Items: []Candidate{{
-				MemoryType: "preference",
-				MemoryKey:  "reply_language",
-				Value:      "zh-CN",
-				Summary:    "reply language",
-				Content:    "Reply in Chinese by default.",
-				Confidence: 0.9,
-			}}},
-			{Items: []Candidate{{
-				MemoryType: "preference",
-				MemoryKey:  "reply_language",
-				Value:      "zh-CN",
-				Summary:    "reply language",
-				Content:    "Use Chinese in future replies.",
-				Confidence: 0.96,
-			}}},
-		},
-	}
-	service := NewLearningService(newTestSettings(), store, extractor)
-
-	for range 2 {
-		err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
-			SessionID: "session-1",
-			Messages:  []TurnMessage{{Role: "user", Text: "Please reply in Chinese by default."}},
-		})
-		if err != nil {
-			t.Fatalf("learn from turn: %v", err)
-		}
-	}
-
-	items := mustListLearned(t, store, memorystore.LearnedListFilter{
-		ScopeType: memorystore.ScopeTypeUser,
-		ScopeID:   memorystore.DefaultUserScopeID,
-		Statuses:  []string{memorystore.MemoryStatusActive},
-		Limit:     10,
-	})
-	if len(items) != 1 {
-		t.Fatalf("expected one active memory, got %+v", items)
-	}
-	if items[0].MemoryKey != "reply_language" {
-		t.Fatalf("expected stable memory key, got %+v", items[0])
-	}
-	if got := slotValueFromEntry(items[0]); got != "zh-CN" {
-		t.Fatalf("expected metadata.value zh-CN, got %+v", items[0].Metadata)
-	}
-	if items[0].Confidence != 0.96 {
-		t.Fatalf("expected refreshed confidence 0.96, got %.2f", items[0].Confidence)
-	}
-}
-
-func TestLearningServiceSupersedesByMemoryKey(t *testing.T) {
-	store := newTestStore(t)
-	extractor := &scriptedExtractor{
-		outputs: []ExtractOutput{
-			{Items: []Candidate{{
-				MemoryType: "preference",
-				MemoryKey:  "response_style",
-				Value:      "concise",
-				Summary:    "response style",
-				Content:    "Keep responses concise.",
-				Confidence: 0.9,
-			}}},
-			{Items: []Candidate{{
-				MemoryType: "preference",
-				MemoryKey:  "response_style",
-				Value:      "detailed",
-				Summary:    "response style",
-				Content:    "Provide detailed responses.",
-				Confidence: 0.95,
-			}}},
-		},
-	}
-	service := NewLearningService(newTestSettings(), store, extractor)
-
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
 	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
-		SessionID: "session-1",
-		Messages:  []TurnMessage{{Role: "user", Text: "Keep responses concise."}},
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		AllowWrite:     true,
+		Messages: []TurnMessage{{
+			Role: "user",
+			Text: "Please reply in Chinese by default.",
+		}},
 	})
 	if err != nil {
-		t.Fatalf("first learn: %v", err)
-	}
-	err = service.LearnFromTurn(context.Background(), LearnFromTurnInput{
-		SessionID: "session-2",
-		Messages:  []TurnMessage{{Role: "user", Text: "Keep responses very concise in future responses."}},
-	})
-	if err != nil {
-		t.Fatalf("second learn: %v", err)
+		t.Fatalf("learn: %v", err)
 	}
 
-	all := mustListLearned(t, store, memorystore.LearnedListFilter{
-		Statuses: []string{memorystore.MemoryStatusActive, memorystore.MemoryStatusSuperseded},
-		Limit:    10,
-	})
-	if len(all) != 2 {
-		t.Fatalf("expected one refresh lineage with superseded entry, got %+v", all)
+	global, err := store.ListGlobalPreferences(context.Background(), []string{"reply_language"})
+	if err != nil {
+		t.Fatalf("list global preferences: %v", err)
 	}
-	if !containsStatus(all, memorystore.MemoryStatusSuperseded) {
-		t.Fatalf("expected older keyed memory to be superseded, got %+v", all)
+	if len(global) != 1 || global[0].MemoryKey != "reply_language" {
+		t.Fatalf("expected global reply_language preference, got %+v", global)
+	}
+	items, _, err := store.ListEventMemories(context.Background(), memorystore.EventMemoryListFilter{
+		EventID:  primary.ID,
+		Statuses: []string{memorystore.MemoryStatusActive},
+	})
+	if err != nil {
+		t.Fatalf("list event memories: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("global preference should not be written into event memories: %+v", items)
+	}
+}
+
+func TestLearningServiceSkipsWhenPlannerDisablesWrite(t *testing.T) {
+	store := newTestStore(t)
+	service := NewLearningService(
+		newTestSettings(),
+		store,
+		&scriptedExtractor{},
+		&scriptedEventExtractor{outputs: []EventExtractOutput{{
+			Items: []EventMemoryCandidate{{
+				MemoryType: memorystore.MemoryTypeFact,
+				Summary:    "should be skipped",
+				Content:    "should be skipped",
+				Confidence: 0.9,
+			}},
+		}}},
+	)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		AllowWrite:     false,
+		Messages: []TurnMessage{{
+			Role: "user",
+			Text: "Remember the current runtime flag wiring.",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+
+	items, _, err := store.ListEventMemories(context.Background(), memorystore.EventMemoryListFilter{
+		EventID:  primary.ID,
+		Statuses: []string{memorystore.MemoryStatusActive},
+	})
+	if err != nil {
+		t.Fatalf("list event memories: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected no event memories when learning is disabled, got %+v", items)
 	}
 }

@@ -14,8 +14,8 @@ type MemoryLearnedListTool struct {
 }
 
 type memoryLearnedListArgs struct {
-	ScopeType  *string `json:"scope_type,omitempty"`
-	ScopeID    *string `json:"scope_id,omitempty"`
+	EventID    *string `json:"event_id,omitempty"`
+	SessionID  *string `json:"session_id,omitempty"`
 	MemoryType *string `json:"memory_type,omitempty"`
 	Status     *string `json:"status,omitempty"`
 	Query      *string `json:"query,omitempty"`
@@ -24,7 +24,7 @@ type memoryLearnedListArgs struct {
 }
 
 type memoryLearnedListResult struct {
-	Items  []memorystore.MemoryEntry `json:"items"`
+	Items  []memorystore.EventMemory `json:"items"`
 	Total  int                       `json:"total"`
 	Limit  int                       `json:"limit"`
 	Offset int                       `json:"offset"`
@@ -39,15 +39,15 @@ func (MemoryLearnedListTool) Name() string {
 }
 
 func (MemoryLearnedListTool) Description() string {
-	return "Read-only listing of automatically learned memories with optional scope, type, status, and query filters."
+	return "Read-only listing of event-scoped learned memories with optional event_id, session_id, type, status, and query filters."
 }
 
 func (MemoryLearnedListTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"scope_type":{"type":"string","enum":["user","session"]},
-			"scope_id":{"type":"string"},
+			"event_id":{"type":"string"},
+			"session_id":{"type":"string"},
 			"memory_type":{"type":"string","enum":["profile","preference","workflow","fact"]},
 			"status":{"type":"string","enum":["active","superseded","deleted"]},
 			"query":{"type":"string"},
@@ -70,9 +70,9 @@ func (t *MemoryLearnedListTool) Execute(ctx context.Context, argsJSON json.RawMe
 	if err != nil {
 		return "", err
 	}
-	items, total, err := t.store.ListLearned(ctx, memorystore.LearnedListFilter{
-		ScopeType:  optionalStringValue(args.ScopeType),
-		ScopeID:    optionalStringValue(args.ScopeID),
+	items, total, err := t.store.ListEventMemories(ctx, memorystore.EventMemoryListFilter{
+		EventID:    optionalStringValue(args.EventID),
+		SessionID:  optionalStringValue(args.SessionID),
 		MemoryType: optionalStringValue(args.MemoryType),
 		Statuses:   resolveLearnedStatuses(args.Status),
 		Query:      optionalStringValue(args.Query),

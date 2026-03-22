@@ -2,107 +2,108 @@ package memoryaug
 
 import (
 	"fmt"
-	"sort"
 	"strings"
+
+	"ghost-os/bridge/memorystore"
 )
 
 const (
-	promptOtherMemoryLimit     = 2
-	promptOtherSummaryMaxChars = 80
-	promptOtherSummaryEllipsis = "..."
+	promptEventMemoryLimit = 5
+	promptSummaryMaxChars  = 96
+	promptSummaryEllipsis  = "..."
 )
 
-func FormatPromptBlock(items []RecallItem) string {
-	if len(items) == 0 {
-		return ""
+func FormatPromptBlock(output RecallOutput) string {
+	lines := make([]string, 0, 16)
+	activeLines := formatActiveEventLines(output)
+	if len(activeLines) > 0 {
+		lines = append(lines, "Active event:")
+		lines = append(lines, activeLines...)
 	}
-	slotLines := formatSlotLines(items)
-	otherLines := formatOtherMemoryLines(items)
-	lines := make([]string, 0, len(slotLines)+len(otherLines)+4)
-	if len(slotLines) > 0 {
-		lines = append(lines, "Memory slots:")
-		lines = append(lines, slotLines...)
-	}
-	if len(otherLines) > 0 {
+	memoryLines := formatRelevantEventMemoryLines(output)
+	if len(memoryLines) > 0 {
 		if len(lines) > 0 {
 			lines = append(lines, "")
 		}
-		lines = append(lines, "Other memory context:")
-		lines = append(lines, otherLines...)
+		lines = append(lines, "Relevant event memory:")
+		lines = append(lines, memoryLines...)
+	}
+	preferenceLines := formatGlobalPreferenceLines(output.GlobalPreferences)
+	if len(preferenceLines) > 0 {
+		if len(lines) > 0 {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "Global preferences:")
+		lines = append(lines, preferenceLines...)
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatSlotLines(items []RecallItem) []string {
-	bestByKey := make(map[string]RecallItem, len(items))
-	for _, item := range items {
-		spec, ok := slotSpecForKey(item.Entry.MemoryKey)
-		if !ok {
-			continue
-		}
-		if slotValueFromEntry(item.Entry) == "" {
-			continue
-		}
-		existing, found := bestByKey[spec.Key]
-		if !found || compareRecallItem(item, existing) {
-			bestByKey[spec.Key] = item
+func formatActiveEventLines(output RecallOutput) []string {
+	lines := make([]string, 0, 4)
+	if output.PrimaryEvent != nil {
+		lines = append(lines, fmt.Sprintf("- primary: %s", trimPromptSummary(output.PrimaryEvent.Event.Title)))
+		if summary := trimPromptSummary(output.PrimaryEvent.Event.Summary); summary != "" {
+			lines = append(lines, fmt.Sprintf("- summary: %s", summary))
 		}
 	}
-	if len(bestByKey) == 0 {
-		return nil
-	}
-	specs := make([]SlotSpec, 0, len(bestByKey))
-	for _, spec := range knownSlots {
-		if _, ok := bestByKey[spec.Key]; ok {
-			specs = append(specs, spec)
-		}
-	}
-	sort.SliceStable(specs, func(i int, j int) bool {
-		if specs[i].PromptPriority != specs[j].PromptPriority {
-			return specs[i].PromptPriority < specs[j].PromptPriority
-		}
-		return specs[i].Key < specs[j].Key
-	})
-	lines := make([]string, 0, len(specs))
-	for _, spec := range specs {
-		lines = append(lines, fmt.Sprintf("- %s=%s", spec.Key, slotValueFromEntry(bestByKey[spec.Key].Entry)))
+	for _, adjacent := range output.AdjacentEvents {
+		lines = append(lines, fmt.Sprintf("- adjacent: %s", trimPromptSummary(adjacent.Event.Title)))
 	}
 	return lines
 }
 
-func formatOtherMemoryLines(items []RecallItem) []string {
-	lines := make([]string, 0, promptOtherMemoryLimit)
-	for _, item := range items {
-		if isPromptSlotItem(item) {
-			continue
+func formatRelevantEventMemoryLines(output RecallOutput) []string {
+	lines := make([]string, 0, promptEventMemoryLimit)
+	for _, hit := range output.PrimaryMemories {
+		lines = append(lines, formatEventMemoryLine("primary", hit))
+		if len(lines) >= promptEventMemoryLimit {
+			return lines
 		}
-		lines = append(lines, formatOtherPromptLine(item))
-		if len(lines) >= promptOtherMemoryLimit {
+	}
+	for _, hit := range output.AdjacentMemories {
+		lines = append(lines, formatEventMemoryLine("adjacent", hit))
+		if len(lines) >= promptEventMemoryLimit {
 			return lines
 		}
 	}
 	return lines
 }
 
-func isPromptSlotItem(item RecallItem) bool {
-	_, ok := slotSpecForKey(item.Entry.MemoryKey)
-	return ok && slotValueFromEntry(item.Entry) != ""
+func formatEventMemoryLine(role string, hit RecallMemoryHit) string {
+	label := trimPromptSummary(hit.Event.Title)
+	if label == "" {
+		label = hit.Event.ID
+	}
+	return fmt.Sprintf(
+		"- [%s/%s] %s: %s",
+		role,
+		hit.Entry.MemoryType,
+		label,
+		trimPromptSummary(hit.Entry.Summary),
+	)
 }
 
-func formatOtherPromptLine(item RecallItem) string {
-	return fmt.Sprintf(
-		"- [%s/%s] %s",
-		item.Entry.ScopeType,
-		item.Entry.MemoryType,
-		trimPromptSummary(item.Entry.Summary),
-	)
+func formatGlobalPreferenceLines(items []memorystore.MemoryEntry) []string {
+	lines := make([]string, 0, len(items))
+	for _, item := range items {
+		value := slotValueFromEntry(item)
+		if value == "" {
+			value = trimPromptSummary(item.Summary)
+		}
+		if item.MemoryKey == "" || value == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- %s=%s", item.MemoryKey, value))
+	}
+	return lines
 }
 
 func trimPromptSummary(raw string) string {
 	value := strings.TrimSpace(raw)
-	if len(value) <= promptOtherSummaryMaxChars {
+	if len(value) <= promptSummaryMaxChars {
 		return value
 	}
-	limit := promptOtherSummaryMaxChars - len(promptOtherSummaryEllipsis)
-	return strings.TrimSpace(value[:limit]) + promptOtherSummaryEllipsis
+	limit := promptSummaryMaxChars - len(promptSummaryEllipsis)
+	return strings.TrimSpace(value[:limit]) + promptSummaryEllipsis
 }

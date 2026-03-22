@@ -22,6 +22,21 @@ func (e *scriptedExtractor) Extract(context.Context, ExtractInput) (ExtractOutpu
 	return output, nil
 }
 
+type scriptedEventExtractor struct {
+	outputs []EventExtractOutput
+	calls   int
+}
+
+func (e *scriptedEventExtractor) Extract(context.Context, EventExtractInput) (EventExtractOutput, error) {
+	e.calls++
+	if len(e.outputs) == 0 {
+		return EventExtractOutput{}, nil
+	}
+	output := e.outputs[0]
+	e.outputs = e.outputs[1:]
+	return output, nil
+}
+
 func newTestStore(t *testing.T) *memorystore.Store {
 	t.Helper()
 	store, err := memorystore.NewStore(t.TempDir() + "/memory.db")

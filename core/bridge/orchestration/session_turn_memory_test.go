@@ -14,29 +14,36 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-type fixedRecallService struct {
-	items []memoryaug.RecallItem
+type fixedMemoryPlanner struct {
+	decision  memoryaug.PlannerDecision
+	lastInput memoryaug.PlannerInput
 }
 
-func (s fixedRecallService) Recall(context.Context, memoryaug.RecallInput) ([]memoryaug.RecallItem, error) {
-	return s.items, nil
+func (p *fixedMemoryPlanner) Plan(_ context.Context, input memoryaug.PlannerInput) (memoryaug.PlannerDecision, error) {
+	p.lastInput = input
+	return p.decision, nil
 }
 
-func (s fixedRecallService) LearnFromTurn(context.Context, memoryaug.LearnFromTurnInput) error {
-	return nil
-}
-
-type capturingRecallService struct {
-	fixedRecallService
+type fixedEventRecallService struct {
+	output    memoryaug.RecallOutput
 	lastInput memoryaug.RecallInput
 }
 
-func (s *capturingRecallService) Recall(_ context.Context, input memoryaug.RecallInput) ([]memoryaug.RecallItem, error) {
+func (s *fixedEventRecallService) Recall(_ context.Context, input memoryaug.RecallInput) (memoryaug.RecallOutput, error) {
 	s.lastInput = input
-	return s.items, nil
+	return s.output, nil
 }
 
-func TestSessionRunnerInjectsRecallOnlyIntoPrompt(t *testing.T) {
+type capturingLearningService struct {
+	lastInput memoryaug.LearnFromTurnInput
+}
+
+func (s *capturingLearningService) LearnFromTurn(_ context.Context, input memoryaug.LearnFromTurnInput) error {
+	s.lastInput = input
+	return nil
+}
+
+func TestSessionRunnerInjectsEventRecallOnlyIntoPrompt(t *testing.T) {
 	sessionStore := newTempSessionStore(t)
 	completer := &proTestCompleter{
 		responses: []*llm.CompletionResponse{{
@@ -44,39 +51,36 @@ func TestSessionRunnerInjectsRecallOnlyIntoPrompt(t *testing.T) {
 			FinishReason: llm.FinishStop,
 		}},
 	}
+	planner := &fixedMemoryPlanner{
+		decision: plannedMemoryDecision("event-1"),
+	}
+	recall := &fixedEventRecallService{
+		output: memoryaug.RecallOutput{
+			PrimaryEvent: &memoryaug.RecallEventHit{
+				Event: memorystore.EventNode{ID: "event-1", Title: "Android runtime settings"},
+				Role:  "primary",
+			},
+			PromptBlock: "Active event:\n- primary: Android runtime settings\n\nGlobal preferences:\n- reply_language=zh-CN",
+		},
+	}
+	learn := &capturingLearningService{}
 	runner := NewSessionAgentRunner(proTestRuntimeFactory{
-		deps: buildMemoryTestDeps(completer, fixedRecallService{
-			items: []memoryaug.RecallItem{{
-				Entry: memorystore.MemoryEntry{
-					ID:         "explicit:user://lang",
-					ScopeType:  memorystore.ScopeTypeUser,
-					ScopeID:    memorystore.DefaultUserScopeID,
-					SourceKind: memorystore.SourceKindExplicit,
-					MemoryType: memorystore.MemoryTypePreference,
-					Summary:    "reply in Chinese",
-					Confidence: 1,
-					Status:     memorystore.MemoryStatusActive,
-				},
-			}},
-		}),
+		deps: buildMemoryTestDeps(completer, planner, recall, learn),
 	}, nil, sessionStore, nil)
 
 	_, sessionID, err := runner.RunTurn(context.Background(), "What language should you use?", "", "trace-memory")
 	if err != nil {
 		t.Fatalf("run turn: %v", err)
 	}
-	if len(completer.requests) != 1 {
-		t.Fatalf("expected one completion request, got %d", len(completer.requests))
-	}
-	if !strings.Contains(completer.requests[0].Messages[0].Text, "Other memory context:") {
-		t.Fatalf("expected memory block in system prompt, got %q", completer.requests[0].Messages[0].Text)
+	if !strings.Contains(completer.requests[0].Messages[0].Text, "Active event:") {
+		t.Fatalf("expected event memory block in system prompt, got %q", completer.requests[0].Messages[0].Text)
 	}
 	loaded, err := sessionStore.Load(sessionID)
 	if err != nil {
 		t.Fatalf("load session: %v", err)
 	}
 	for _, message := range loaded.Messages {
-		if strings.Contains(message.Text, "Other memory context:") || strings.Contains(message.Text, "Memory slots:") {
+		if strings.Contains(message.Text, "Active event:") || strings.Contains(message.Text, "Global preferences:") {
 			t.Fatalf("memory context should not persist into session history: %+v", loaded.Messages)
 		}
 	}
@@ -105,21 +109,18 @@ func TestSessionRunnerRecallDoesNotBreakAskHumanContinuation(t *testing.T) {
 			FinishReason: llm.FinishStop,
 		}},
 	}
+	planner := &fixedMemoryPlanner{decision: plannedMemoryDecision("event-1")}
+	recall := &fixedEventRecallService{
+		output: memoryaug.RecallOutput{
+			PrimaryEvent: &memoryaug.RecallEventHit{
+				Event: memorystore.EventNode{ID: "event-1", Title: "Android runtime settings"},
+				Role:  "primary",
+			},
+			PromptBlock: "Active event:\n- primary: Android runtime settings",
+		},
+	}
 	runner := NewSessionAgentRunner(proTestRuntimeFactory{
-		deps: buildMemoryTestDeps(completer, fixedRecallService{
-			items: []memoryaug.RecallItem{{
-				Entry: memorystore.MemoryEntry{
-					ID:         "mem-1",
-					ScopeType:  memorystore.ScopeTypeSession,
-					ScopeID:    sess.ID,
-					SourceKind: memorystore.SourceKindLearned,
-					MemoryType: memorystore.MemoryTypeWorkflow,
-					Summary:    "waiting for ship approval",
-					Confidence: 0.9,
-					Status:     memorystore.MemoryStatusActive,
-				},
-			}},
-		}),
+		deps: buildMemoryTestDeps(completer, planner, recall, &capturingLearningService{}),
 	}, nil, sessionStore, nil)
 
 	_, _, err := runner.RunTurn(context.Background(), "continue", sess.ID, "trace-resume")
@@ -130,8 +131,67 @@ func TestSessionRunnerRecallDoesNotBreakAskHumanContinuation(t *testing.T) {
 	if !containsToolMessage(request.Messages, "call-ask") {
 		t.Fatalf("expected ask_human tool message to remain in resumed history, got %+v", request.Messages)
 	}
-	if !strings.Contains(request.Messages[0].Text, "Other memory context:") {
-		t.Fatalf("expected memory context in system prompt, got %q", request.Messages[0].Text)
+	if !strings.Contains(request.Messages[0].Text, "Active event:") {
+		t.Fatalf("expected event memory context in system prompt, got %q", request.Messages[0].Text)
+	}
+}
+
+func TestSessionRunnerPlannerUsesRecentContext(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	sess := session.NewSession("base system prompt")
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "Please reply in Chinese."})
+	sess.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "I will reply in Chinese."})
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "We are updating the Android runtime settings screen."})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{{
+			Message:      llm.Message{Role: llm.RoleAssistant, Text: "continuing"},
+			FinishReason: llm.FinishStop,
+		}},
+	}
+	planner := &fixedMemoryPlanner{decision: plannedMemoryDecision("event-1")}
+	recall := &fixedEventRecallService{}
+	runner := NewSessionAgentRunner(proTestRuntimeFactory{
+		deps: buildMemoryTestDeps(completer, planner, recall, &capturingLearningService{}),
+	}, nil, sessionStore, nil)
+
+	if _, _, err := runner.RunTurn(context.Background(), "continue with the runtime change", sess.ID, "trace-query"); err != nil {
+		t.Fatalf("run turn: %v", err)
+	}
+	if planner.lastInput.UserMessage != "continue with the runtime change" {
+		t.Fatalf("expected planner to receive current user message, got %+v", planner.lastInput)
+	}
+	if len(planner.lastInput.RecentMessages) < 2 {
+		t.Fatalf("expected planner to receive recent conversation context, got %+v", planner.lastInput)
+	}
+}
+
+func TestSessionRunnerPassesPrimaryEventIntoLearning(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{{
+			Message:      llm.Message{Role: llm.RoleAssistant, Text: "done"},
+			FinishReason: llm.FinishStop,
+		}},
+	}
+	planner := &fixedMemoryPlanner{decision: plannedMemoryDecision("event-1")}
+	recall := &fixedEventRecallService{}
+	learn := &capturingLearningService{}
+	runner := NewSessionAgentRunner(proTestRuntimeFactory{
+		deps: buildMemoryTestDeps(completer, planner, recall, learn),
+	}, nil, sessionStore, nil)
+
+	if _, _, err := runner.RunTurn(context.Background(), "continue", "", "trace-learn"); err != nil {
+		t.Fatalf("run turn: %v", err)
+	}
+	if learn.lastInput.PrimaryEventID != "event-1" {
+		t.Fatalf("expected learning input to carry primary event, got %+v", learn.lastInput)
+	}
+	if len(learn.lastInput.ActiveEventIDs) != 1 || learn.lastInput.ActiveEventIDs[0] != "event-1" {
+		t.Fatalf("expected active_event_ids to match planner decision, got %+v", learn.lastInput)
 	}
 }
 
@@ -175,10 +235,6 @@ func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
 	if _, _, err := runner.RunTurn(context.Background(), "continue", sess.ID, "trace-dynamic-tools"); err != nil {
 		t.Fatalf("run turn: %v", err)
 	}
-	if len(completer.requests) != 1 {
-		t.Fatalf("expected one completion request, got %d", len(completer.requests))
-	}
-
 	request := completer.requests[0]
 	prompt := request.Messages[0].Text
 	for _, snippet := range []string{
@@ -195,58 +251,44 @@ func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
 	}
 }
 
-func TestSessionRunnerBuildsRecallQueryFromRecentContext(t *testing.T) {
-	sessionStore := newTempSessionStore(t)
-	sess := session.NewSession("base system prompt")
-	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "Please reply in Chinese."})
-	sess.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "I will reply in Chinese."})
-	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "We are updating the Android runtime settings screen."})
-	if err := sessionStore.Save(sess); err != nil {
-		t.Fatalf("save session: %v", err)
-	}
-
-	completer := &proTestCompleter{
-		responses: []*llm.CompletionResponse{{
-			Message:      llm.Message{Role: llm.RoleAssistant, Text: "continuing"},
-			FinishReason: llm.FinishStop,
-		}},
-	}
-	recall := &capturingRecallService{}
-	runner := NewSessionAgentRunner(proTestRuntimeFactory{
-		deps: buildMemoryTestDeps(completer, recall),
-	}, nil, sessionStore, nil)
-
-	if _, _, err := runner.RunTurn(context.Background(), "continue with the runtime change", sess.ID, "trace-query"); err != nil {
-		t.Fatalf("run turn: %v", err)
-	}
-	if !strings.Contains(recall.lastInput.Query, "Please reply in Chinese.") {
-		t.Fatalf("expected recent user context in recall query, got %q", recall.lastInput.Query)
-	}
-	if !strings.Contains(recall.lastInput.Query, "We are updating the Android runtime settings screen.") {
-		t.Fatalf("expected latest session context in recall query, got %q", recall.lastInput.Query)
-	}
-	if !strings.Contains(recall.lastInput.Query, "continue with the runtime change") {
-		t.Fatalf("expected current user message in recall query, got %q", recall.lastInput.Query)
+func plannedMemoryDecision(primaryEventID string) memoryaug.PlannerDecision {
+	return memoryaug.PlannerDecision{
+		PrimaryEvent: memoryaug.PlannerEventRef{
+			EventID: primaryEventID,
+			Reason:  "same task",
+		},
+		RecallPlan: memoryaug.RecallPlan{
+			EventIDs:           []string{primaryEventID},
+			IncludeNodeSummary: true,
+			IncludeWorkflow:    true,
+			IncludePreference:  true,
+			IncludeFact:        true,
+			AllowLearning:      true,
+		},
 	}
 }
 
-type fixedMemoryService interface {
-	memoryaug.RecallService
-	memoryaug.LearningService
-}
-
-func buildMemoryTestDeps(completer *proTestCompleter, recall fixedMemoryService) agentRuntimeDependencies {
+func buildMemoryTestDeps(
+	completer *proTestCompleter,
+	planner memoryaug.IntentPlanner,
+	recall memoryaug.RecallService,
+	learn memoryaug.LearningService,
+) agentRuntimeDependencies {
 	return agentRuntimeDependencies{
 		cfg: Config{
 			MaxTurns:    3,
 			PromptsPath: "",
 			Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+			MemoryAugmentation: MemoryAugmentationConfig{
+				UserScopeID: memorystore.DefaultUserScopeID,
+			},
 		},
 		client:       completer,
 		registry:     tools.NewRegistry(),
 		systemPrompt: "base system prompt",
+		memoryPlan:   planner,
 		memoryRecall: recall,
-		memoryLearn:  recall,
+		memoryLearn:  learn,
 	}
 }
 

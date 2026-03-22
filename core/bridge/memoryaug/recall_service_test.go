@@ -2,173 +2,139 @@ package memoryaug
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"ghost-os/bridge/memorystore"
 )
 
-func TestRecallServicePrefersExplicitAndUpdatesLastUsed(t *testing.T) {
+func TestRecallServiceOnlyReturnsActiveSubgraphAndGlobalPreferences(t *testing.T) {
 	store := newTestStore(t)
-	settings := newTestSettings()
-	recall := NewRecallService(settings, store)
+	recall := NewRecallService(newTestSettings(), store)
 
-	mustCreateExplicit(t, store, "user://language", "Reply in Chinese by default.", nil)
-	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
-		ScopeType:  memorystore.ScopeTypeUser,
-		ScopeID:    memorystore.DefaultUserScopeID,
-		MemoryType: memorystore.MemoryTypePreference,
-		Summary:    "reply in Chinese",
-		Content:    "The user prefers Chinese replies by default.",
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	adjacent := mustCreateEventNode(t, store, "session-1", "CLI envelope sync")
+	other := mustCreateEventNode(t, store, "session-1", "Web config parser")
+	mustCreateEventMemory(t, store, primary.ID, memorystore.MemoryTypeWorkflow, "run Android tests after runtime flag changes")
+	mustCreateEventMemory(t, store, adjacent.ID, memorystore.MemoryTypeFact, "CLI schema depends on config_runtime.json")
+	mustCreateEventMemory(t, store, other.ID, memorystore.MemoryTypeFact, "this should never be recalled")
+	mustCreateLearnedPreference(t, store, "reply_language", "zh-CN")
+
+	output, err := recall.Recall(context.Background(), RecallInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID, adjacent.ID},
+		FocusText:      "continue runtime config work",
+		RecallPlan: RecallPlan{
+			EventIDs:           []string{primary.ID, adjacent.ID},
+			IncludeNodeSummary: true,
+			IncludeWorkflow:    true,
+			IncludePreference:  true,
+			IncludeFact:        true,
+			AllowLearning:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if output.PrimaryEvent == nil || output.PrimaryEvent.Event.ID != primary.ID {
+		t.Fatalf("unexpected primary event: %+v", output.PrimaryEvent)
+	}
+	if len(output.AdjacentEvents) != 1 || output.AdjacentEvents[0].Event.ID != adjacent.ID {
+		t.Fatalf("unexpected adjacent events: %+v", output.AdjacentEvents)
+	}
+	if containsEventMemory(output, other.ID) {
+		t.Fatalf("non-active event memory should not be injected: %+v", output)
+	}
+	if len(output.GlobalPreferences) != 1 || output.GlobalPreferences[0].MemoryKey != "reply_language" {
+		t.Fatalf("expected global preferences, got %+v", output.GlobalPreferences)
+	}
+	if strings.Contains(output.PromptBlock, "this should never be recalled") {
+		t.Fatalf("prompt block leaked non-active memory: %q", output.PromptBlock)
+	}
+}
+
+func TestRecallServiceHonorsMemoryTypeFilters(t *testing.T) {
+	store := newTestStore(t)
+	recall := NewRecallService(newTestSettings(), store)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	mustCreateEventMemory(t, store, primary.ID, memorystore.MemoryTypeWorkflow, "run Android tests after runtime flag changes")
+	mustCreateEventMemory(t, store, primary.ID, memorystore.MemoryTypeFact, "GraphQL toggle defaults to off in config schema")
+
+	output, err := recall.Recall(context.Background(), RecallInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		FocusText:      "continue runtime config work",
+		RecallPlan: RecallPlan{
+			EventIDs:        []string{primary.ID},
+			IncludeWorkflow: true,
+			IncludeFact:     false,
+			AllowLearning:   true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if len(output.PrimaryMemories) != 1 || output.PrimaryMemories[0].Entry.MemoryType != memorystore.MemoryTypeWorkflow {
+		t.Fatalf("expected workflow-only recall, got %+v", output.PrimaryMemories)
+	}
+}
+
+func mustCreateEventNode(t *testing.T, store *memorystore.Store, sessionID string, title string) memorystore.EventNode {
+	t.Helper()
+	node, err := store.CreateEventNode(context.Background(), memorystore.EventNodeInput{
+		SessionID: sessionID,
+		Title:     title,
+		Summary:   title + " summary",
+		Status:    memorystore.EventStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("create event node: %v", err)
+	}
+	return node
+}
+
+func mustCreateEventMemory(t *testing.T, store *memorystore.Store, eventID string, memoryType string, summary string) {
+	t.Helper()
+	if _, err := store.CreateEventMemory(context.Background(), memorystore.EventMemoryInput{
+		EventID:    eventID,
+		MemoryType: memoryType,
+		Summary:    summary,
+		Content:    summary,
 		Confidence: 0.9,
 	}, nil); err != nil {
-		t.Fatalf("create learned: %v", err)
-	}
-
-	items, err := recall.Recall(context.Background(), RecallInput{
-		SessionID: "session-1",
-		Query:     "reply in Chinese",
-	})
-	if err != nil {
-		t.Fatalf("recall: %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatalf("expected duplicate learned memory to be suppressed, got %+v", items)
-	}
-	if items[0].Entry.SourceKind != memorystore.SourceKindExplicit {
-		t.Fatalf("expected explicit memory first, got %+v", items[0])
-	}
-	record, err := store.Read(context.Background(), "user://language")
-	if err != nil {
-		t.Fatalf("read explicit: %v", err)
-	}
-	if record.LastUsedAt.IsZero() {
-		t.Fatalf("expected explicit last_used_at to update")
+		t.Fatalf("create event memory: %v", err)
 	}
 }
 
-func TestRecallServiceKeepsSessionScopeIsolatedAndUserScopeShared(t *testing.T) {
-	store := newTestStore(t)
-	settings := newTestSettings()
-	recall := NewRecallService(settings, store)
-
-	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
-		ScopeType:  memorystore.ScopeTypeSession,
-		ScopeID:    "session-a",
-		MemoryType: memorystore.MemoryTypeWorkflow,
-		Summary:    "current phase",
-		Content:    "The current session is focused on memory refactoring.",
-		Confidence: 0.88,
-	}, nil); err != nil {
-		t.Fatalf("create session learned: %v", err)
-	}
+func mustCreateLearnedPreference(t *testing.T, store *memorystore.Store, memoryKey string, value string) {
+	t.Helper()
 	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
 		ScopeType:  memorystore.ScopeTypeUser,
 		ScopeID:    memorystore.DefaultUserScopeID,
 		MemoryType: memorystore.MemoryTypePreference,
-		Summary:    "reply in Chinese",
-		Content:    "The user prefers Chinese replies.",
-		Confidence: 0.95,
+		MemoryKey:  memoryKey,
+		Summary:    memoryKey,
+		Content:    value,
+		Metadata:   buildSlotMetadata(value, "test"),
+		Confidence: 0.9,
 	}, nil); err != nil {
-		t.Fatalf("create user learned: %v", err)
-	}
-
-	items, err := recall.Recall(context.Background(), RecallInput{
-		SessionID: "session-b",
-		Query:     "Chinese replies and memory refactoring",
-	})
-	if err != nil {
-		t.Fatalf("recall: %v", err)
-	}
-	if len(items) != 1 || items[0].Entry.ScopeType != memorystore.ScopeTypeUser {
-		t.Fatalf("expected only user-scoped memory across sessions, got %+v", items)
-	}
-
-	items, err = recall.Recall(context.Background(), RecallInput{
-		SessionID: "session-a",
-		Query:     "Chinese replies and memory refactoring",
-	})
-	if err != nil {
-		t.Fatalf("recall same session: %v", err)
-	}
-	if len(items) != 2 {
-		t.Fatalf("expected both session and user memories, got %+v", items)
-	}
-	if items[0].Entry.ScopeType != memorystore.ScopeTypeSession {
-		t.Fatalf("expected session memory to rank first, got %+v", items)
+		t.Fatalf("create learned preference: %v", err)
 	}
 }
 
-func TestRecallServiceHonorsBudgetWithStableOrdering(t *testing.T) {
-	store := newTestStore(t)
-	settings := newTestSettings()
-	settings.MaxRecallItems = 2
-	recall := NewRecallService(settings, store)
-
-	candidates := []memorystore.LearnedMemoryInput{
-		{ScopeType: "user", ScopeID: memorystore.DefaultUserScopeID, MemoryType: "fact", Summary: "alpha", Content: "alpha project constraint", Confidence: 0.8},
-		{ScopeType: "user", ScopeID: memorystore.DefaultUserScopeID, MemoryType: "fact", Summary: "beta", Content: "beta project constraint", Confidence: 0.9},
-		{ScopeType: "user", ScopeID: memorystore.DefaultUserScopeID, MemoryType: "fact", Summary: "gamma", Content: "gamma project constraint", Confidence: 0.85},
-	}
-	for _, candidate := range candidates {
-		if _, err := store.CreateLearned(context.Background(), candidate, nil); err != nil {
-			t.Fatalf("create learned: %v", err)
+func containsEventMemory(output RecallOutput, eventID string) bool {
+	for _, item := range output.PrimaryMemories {
+		if item.Event.ID == eventID {
+			return true
 		}
 	}
-
-	items, err := recall.Recall(context.Background(), RecallInput{
-		SessionID: "session-1",
-		Query:     "project constraint",
-	})
-	if err != nil {
-		t.Fatalf("recall: %v", err)
+	for _, item := range output.AdjacentMemories {
+		if item.Event.ID == eventID {
+			return true
+		}
 	}
-	if len(items) != 2 {
-		t.Fatalf("expected recall budget of 2, got %+v", items)
-	}
-	if items[0].Entry.Summary != "beta" || items[1].Entry.Summary != "gamma" {
-		t.Fatalf("expected stable confidence ordering under truncation, got %+v", items)
-	}
-}
-
-func TestRecallServiceDirectSlotLookupRanksBeforeFreeText(t *testing.T) {
-	store := newTestStore(t)
-	settings := newTestSettings()
-	recall := NewRecallService(settings, store)
-
-	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
-		ScopeType:  memorystore.ScopeTypeSession,
-		ScopeID:    "session-1",
-		MemoryType: memorystore.MemoryTypeWorkflow,
-		MemoryKey:  "test_command",
-		Summary:    "test command",
-		Content:    "Use `pnpm --dir apps/web test` as the test command.",
-		Metadata:   buildSlotMetadata("pnpm --dir apps/web test", "seed"),
-		Confidence: 0.82,
-	}, nil); err != nil {
-		t.Fatalf("create slot learned: %v", err)
-	}
-	if _, err := store.CreateLearned(context.Background(), memorystore.LearnedMemoryInput{
-		ScopeType:  memorystore.ScopeTypeSession,
-		ScopeID:    "session-1",
-		MemoryType: memorystore.MemoryTypeFact,
-		Summary:    "test setup",
-		Content:    "The test setup uses Vitest and contract fixtures.",
-		Confidence: 0.99,
-	}, nil); err != nil {
-		t.Fatalf("create free text learned: %v", err)
-	}
-
-	items, err := recall.Recall(context.Background(), RecallInput{
-		SessionID: "session-1",
-		Query:     "Which test command should I run?",
-	})
-	if err != nil {
-		t.Fatalf("recall: %v", err)
-	}
-	if len(items) == 0 {
-		t.Fatal("expected recalled items")
-	}
-	if items[0].Entry.MemoryKey != "test_command" || !items[0].SlotMatch {
-		t.Fatalf("expected slot recall to rank first, got %+v", items)
-	}
+	return false
 }
