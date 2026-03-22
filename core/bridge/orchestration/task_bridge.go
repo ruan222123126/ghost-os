@@ -37,6 +37,9 @@ var (
 type ScheduledTask = bridgeTasks.ScheduledTask
 type WorkflowDefinition = bridgeTasks.WorkflowDefinition
 type WorkflowNode = bridgeTasks.WorkflowNode
+type WorkflowToolNode = bridgeTasks.WorkflowToolNode
+type WorkflowLLMNode = bridgeTasks.WorkflowLLMNode
+type WorkflowAgentNode = bridgeTasks.WorkflowAgentNode
 type WorkflowEdge = bridgeTasks.WorkflowEdge
 type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
@@ -78,7 +81,7 @@ type taskExecutorAdapter struct {
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
 	switch normalizeTaskKind(task.TaskKind) {
 	case taskKindWorkflow:
-		return executeWorkflowTask(task)
+		return a.executeWorkflowTask(ctx, task, traceID)
 	case taskKindSystemAction:
 		return a.executeSystemTask(ctx, task, traceID)
 	default:
@@ -87,16 +90,28 @@ func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, tr
 }
 
 func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
-	if a.service == nil {
-		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
-	}
-	payload, _, err := a.service.executeAgentAction(ctx, agentParams{
+	return a.runAgentAction(ctx, agentParams{
 		Message:   task.Message,
 		SessionID: task.SessionID,
 	}, traceID)
+}
+
+func (a taskExecutorAdapter) runAgentAction(
+	ctx context.Context,
+	params agentParams,
+	traceID string,
+) bridgeTasks.ExecutionResult {
+	if a.service == nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
+	}
+	payload, _, err := a.service.executeAgentAction(ctx, params, traceID)
 	if err != nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
+	return taskExecutionResultFromAgentPayload(payload)
+}
+
+func taskExecutionResultFromAgentPayload(payload any) bridgeTasks.ExecutionResult {
 	switch typed := payload.(type) {
 	case agentResponse:
 		return bridgeTasks.ExecutionResult{

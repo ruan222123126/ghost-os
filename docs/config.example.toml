@@ -41,6 +41,7 @@ api_token = "change-me"
 cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 
 sessions_path = "~/.ghost-os/sessions"
+# tasks_path = "~/.ghost-os/tasks"
 # project_root = "/abs/path/to/project"
 # web_search_tavily_api_key = "tvly-..."
 # web_search_exa_api_key = "exa-..."
@@ -72,6 +73,11 @@ worker_max_concurrency = 4
 worker_max_files = 20
 worker_max_file_chunks = 4
 
+# GraphQL tool runtime: when enabled, the model must emit exactly one GraphQL
+# document that maps one top-level field to one visible bridge tool.
+# Native structured tool_calls are hidden from the model in this mode.
+# graphql_tool_runtime_enabled = false
+
 anthropic_version = "2023-06-01"
 anthropic_max_tokens = 1024
 
@@ -92,6 +98,10 @@ tool_selector_recent_messages = 6
 # - blocklist tools are always removed from the final runnable set
 # tool_allowlist = ["script_exec", "read_and_summarize"]
 # tool_blocklist = ["web_search"]
+# Workflow task tool nodes use an explicit independent allowlist.
+# Tools that require an active session, such as ask_human, tfind, send_file,
+# and computer_use, are rejected from this list at config-load time.
+# workflow_tool_allowlist = ["script_exec", "web_search"]
 
 # mem0-style memory augmentation
 memory_augmentation_enabled = true

@@ -110,7 +110,8 @@ type ToolSelectorConfig struct {
 	Confidence float64
 	Shadow     bool
 	RecentMsgs int
-	// AllowlistOnly enables allowlist-mode: the agent is only exposed to tools in Allowlist (plus ask_human if registered).
+	// AllowlistOnly switches tool_allowlist from resident-only mode to strict static visibility mode.
+	// When false, Allowlist defines resident tools and selector-visible static tools still include other non-blocked tools.
 	AllowlistOnly bool
 	Allowlist     []string
 	Blocklist     []string
@@ -151,7 +152,8 @@ type ExecutionConfig struct {
 }
 
 type TaskConfig struct {
-	TasksPath string
+	TasksPath             string
+	WorkflowToolAllowlist []string
 }
 
 // Config 描述 bridge 在运行时依赖的最小配置集合。
@@ -170,6 +172,7 @@ type Config struct {
 	NativeAllowedReadPaths        []string
 	NativeAllowedWritePaths       []string
 	ProjectRoot                   string
+	Task                          TaskConfig
 	ChatPath                      string
 	PromptsPath                   string
 	PromptsDir                    string

@@ -38,6 +38,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.WorkerModel = cloneOptionalStringPointer(cfg.WorkerModel)
 	cfg.PromptsPath = cloneOptionalStringPointer(cfg.PromptsPath)
 	cfg.PromptsDir = cloneOptionalStringPointer(cfg.PromptsDir)
+	cfg.TasksPath = cloneOptionalStringPointer(cfg.TasksPath)
 	cfg.SessionsPath = cloneOptionalStringPointer(cfg.SessionsPath)
 	cfg.RSSFeedsPath = cloneOptionalStringPointer(cfg.RSSFeedsPath)
 	cfg.RSSInboxPath = cloneOptionalStringPointer(cfg.RSSInboxPath)
@@ -85,6 +86,7 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) error {
 	cfg.CORSOrigins = normalizeOrigins(cfg.CORSOrigins)
 	cfg.ToolAllowlist = normalizeConfiguredToolNames(cfg.ToolAllowlist)
 	cfg.ToolBlocklist = normalizeConfiguredToolNames(cfg.ToolBlocklist)
+	cfg.WorkflowToolAllowlist = normalizeConfiguredToolNames(cfg.WorkflowToolAllowlist)
 	return nil
 }
 

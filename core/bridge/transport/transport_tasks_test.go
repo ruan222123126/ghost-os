@@ -13,8 +13,25 @@ type taskWorkflowDefinition struct {
 }
 
 type taskWorkflowNode struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID    string                 `json:"id"`
+	Type  string                 `json:"type"`
+	Tool  *taskWorkflowToolNode  `json:"tool,omitempty"`
+	LLM   *taskWorkflowLLMNode   `json:"llm,omitempty"`
+	Agent *taskWorkflowAgentNode `json:"agent,omitempty"`
+}
+
+type taskWorkflowToolNode struct {
+	ToolName  string         `json:"tool_name"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+type taskWorkflowLLMNode struct {
+	Prompt       string `json:"prompt"`
+	SystemPrompt string `json:"system_prompt,omitempty"`
+}
+
+type taskWorkflowAgentNode struct {
+	Message string `json:"message"`
 }
 
 type taskWorkflowEdge struct {
@@ -67,10 +84,12 @@ func TestHandleTasksCreateGetAndUpdateWorkflow(t *testing.T) {
 		"workflow":{
 			"nodes":[
 				{"id":"entry","type":"start"},
+				{"id":"llm-step","type":"llm","llm":{"prompt":"Summarize","system_prompt":"Be concise"}},
 				{"id":"finish","type":"end"}
 			],
 			"edges":[
-				{"from_node_id":"entry","to_node_id":"finish"}
+				{"from_node_id":"entry","to_node_id":"llm-step"},
+				{"from_node_id":"llm-step","to_node_id":"finish"}
 			]
 		},
 		"cron_expr":"*/5 * * * *"
@@ -81,6 +100,9 @@ func TestHandleTasksCreateGetAndUpdateWorkflow(t *testing.T) {
 	updated := decodeTaskResponsePayload(t, update)
 	if updated.Workflow == nil || updated.Workflow.Edges[0].FromNodeID != "entry" {
 		t.Fatalf("unexpected updated payload: %#v", updated)
+	}
+	if updated.Workflow.Nodes[1].LLM == nil || updated.Workflow.Nodes[1].LLM.Prompt != "Summarize" {
+		t.Fatalf("unexpected updated workflow nodes: %#v", updated.Workflow.Nodes)
 	}
 	if updated.CronExpr != "*/5 * * * *" {
 		t.Fatalf("unexpected updated cron expr: %#v", updated)

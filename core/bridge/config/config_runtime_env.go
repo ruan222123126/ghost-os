@@ -104,7 +104,7 @@ func webSearchTavilyAPIKeyFromEnv() (string, error) {
 }
 
 func tasksPathFromEnv() string {
-	return resolveTasksPath(currentEnv())
+	return resolveTasksPath(bridgeFileConfig{}, currentEnv())
 }
 
 func nativeBinaryPathFromEnv() (string, error) {

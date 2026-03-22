@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -26,10 +27,10 @@ func TestValidateTaskDefinitionWorkflowRejectsInvalidCases(t *testing.T) {
 		{name: "missing workflow", task: ScheduledTask{TaskKind: taskKindWorkflow}, want: "workflow is required"},
 		{name: "mixed message", task: ScheduledTask{TaskKind: taskKindWorkflow, Message: "x", Workflow: validWorkflowDefinition()}, want: "does not allow message"},
 		{name: "unknown node type", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "noop"}}, Edges: []WorkflowEdge{{FromNodeID: "start-node", ToNodeID: "end-node"}}}}, want: "unsupported workflow node type"},
-		{name: "extra edge", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "end"}}, Edges: []WorkflowEdge{{FromNodeID: "start-node", ToNodeID: "end-node"}, {FromNodeID: "start-node", ToNodeID: "end-node"}}}}, want: "exactly 1 edge"},
+		{name: "extra edge", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "end"}}, Edges: []WorkflowEdge{{FromNodeID: "start-node", ToNodeID: "end-node"}, {FromNodeID: "start-node", ToNodeID: "end-node"}}}}, want: "len(nodes)-1 edges"},
 		{name: "dangling edge", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "end"}}, Edges: []WorkflowEdge{{FromNodeID: "start-node", ToNodeID: "missing-node"}}}}, want: "unknown to_node_id"},
 		{name: "self loop", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "end"}}, Edges: []WorkflowEdge{{FromNodeID: "start-node", ToNodeID: "start-node"}}}}, want: "self-loop"},
-		{name: "wrong edge direction", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "end"}}, Edges: []WorkflowEdge{{FromNodeID: "end-node", ToNodeID: "start-node"}}}}, want: "start node must be the only edge source"},
+		{name: "wrong edge direction", task: ScheduledTask{TaskKind: taskKindWorkflow, Workflow: &WorkflowDefinition{Nodes: []WorkflowNode{{ID: "start-node", Type: "start"}, {ID: "end-node", Type: "end"}}, Edges: []WorkflowEdge{{FromNodeID: "end-node", ToNodeID: "start-node"}}}}, want: "must have in="},
 	}
 
 	for _, test := range tests {
@@ -176,10 +177,10 @@ func validWorkflowDefinition() *WorkflowDefinition {
 }
 
 func TestTaskWorkflowRunnerDoesNotNeedAgentExecution(t *testing.T) {
-	result := executeWorkflowTask(ScheduledTask{
+	result := taskExecutorAdapter{}.executeWorkflowTask(context.Background(), ScheduledTask{
 		TaskKind: taskKindWorkflow,
 		Workflow: validWorkflowDefinition(),
-	})
+	}, "trace-workflow-direct")
 	if result.Status != taskRunStatusSuccess {
 		t.Fatalf("unexpected workflow execution result: %#v", result)
 	}

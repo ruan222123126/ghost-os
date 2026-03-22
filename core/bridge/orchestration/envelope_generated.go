@@ -459,6 +459,9 @@ type setActiveProviderRequest struct {
 type workflowNodeContract struct {
 	ID string `json:"id"`
 	Type string `json:"type"`
+	Tool workflowToolNodeContract `json:"tool,omitempty"`
+	Llm workflowLLMNodeContract `json:"llm,omitempty"`
+	Agent workflowAgentNodeContract `json:"agent,omitempty"`
 }
 
 // workflowEdgeContract 对齐 core/shared/schema.json 的 workflowEdge。
@@ -471,6 +474,23 @@ type workflowEdgeContract struct {
 type workflowDefinitionContract struct {
 	Nodes []workflowNodeContract `json:"nodes"`
 	Edges []workflowEdgeContract `json:"edges"`
+}
+
+// workflowToolNodeContract 对齐 core/shared/schema.json 的 workflowToolNode。
+type workflowToolNodeContract struct {
+	ToolName string `json:"tool_name"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+}
+
+// workflowLLMNodeContract 对齐 core/shared/schema.json 的 workflowLLMNode。
+type workflowLLMNodeContract struct {
+	Prompt string `json:"prompt"`
+	SystemPrompt string `json:"system_prompt,omitempty"`
+}
+
+// workflowAgentNodeContract 对齐 core/shared/schema.json 的 workflowAgentNode。
+type workflowAgentNodeContract struct {
+	Message string `json:"message"`
 }
 
 // apiRequest 对齐 core/shared/schema.json 的 requestEnvelope。

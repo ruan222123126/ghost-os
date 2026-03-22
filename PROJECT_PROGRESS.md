@@ -22,10 +22,14 @@
   - `memory_augmentation_session_scope_enabled` / `memory_augmentation_user_scope_enabled` 已分别落到 recall / learning 读写路径；`memory_augmentation_max_recall_items` 现作为事件记忆总召回上限生效，prompt formatter 不再额外施加写死的 5 条截断。
   - `memory_recall_debug` 现输出 planner 决策、激活节点与最终 prompt block；`memory_learned_list` 已改为按 `event_id / session_id / status` 查看事件记忆。
   - `memory_manage` 的提示词与 GraphQL 最小示例已补齐显式 URI 工作流：新写入使用 `create`，修改/删除前先通过 `read` / `list` / `system://index` 发现精确 URI；缺失显式 memory 时返回可恢复的操作提示而不再只给裸 `not found`。
+  - 新会话里的“纯全局偏好”消息现不再强制进入事件图 planner：像“偏好中文回答”这类长期偏好会跳过 event recall 预处理，但仍保留后续 global preference learning，避免在空事件上下文里因 planner 引用不存在 event 而直接失败成 `memory not found`。
+  - 新会话里的低信息开场消息也不再进入事件图 planner：像“你好”这类问候/寒暄会直接跳过 event recall，仅保留全局偏好上下文，避免 planner 在无候选事件时生成不存在的 event id 并最终炸成 `memory not found`。
+  - 事件图 planner 的 `recall_plan.event_ids` 现会收口到“已解析出的真实 active event ids”：模型输出的临时别名或占位 id（如 `evt_ai_current_landscape_search`）会在 recall 前被剔除，并在为空时回退到真实 primary/adjacent ids，避免搜索类新任务在 recall 阶段把别名当成 adjacent event 再次炸成 `memory not found`。
 - Agent 收尾路径进一步收口：`loop_finish` 已合并 stop/length 文本完成分支的公共 finalize 流程，并移除 `toolCallExecutor.execute` 中当前调用图不可达的空 `calls` 防御分支，补充了 length 收尾与 assistant-text 分发回归测试。
 - 共享消息契约、`trace_id`、跨端 DTO 与 `core/shared/schema.json` 已基本统一。
-- GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
 - 任务更新路径已补回显式回滚：在 `Unregister` 前移后，若 `SaveTask` 或后续 `Upsert` 失败，会恢复旧注册并在需要时把旧任务重新写回磁盘，避免留下“磁盘仍有任务、内存已不再调度”的漂移状态；共享 task schema 也已收口为 kind-specific 契约，`system_action` 的 `action/action_params` 与 `workflow/agent_message` 的必填约束现可被 schema 正确表达。
+- GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
+- RSS report 生成链路已去掉静默 fallback：agent 报告空回或失败时不再落回模板化“机会点 / 风险与约束 / 接下来可能会怎样”段落，而是显式记录 `report_error`；report prompt 也已收口到更精简的章节契约，避免重复凑段。
 - GraphQL 文本工具调用运行时的协议失败已改为“可修复的结构化反馈”：解析/校验错误会写入 `[GRAPHQL_TOOL_RESULT]` 风格的 `status=error`、`kind`、`expected/received` 等字段，并在同次 agent run 的下一轮 completion 中作为显式失败反馈供模型自修正。
 - GraphQL tool runtime 的 query / mutation 判定已从运行时硬编码名单收口到 `ToolDef.Semantics`：工具通过统一语义元数据声明 `read_only` / `side_effect`，schema 生成、示例输出与执行期校验都复用同一份定义，未知工具仍显式按 mutation 处理。
 - GraphQL prompt 已补齐“最小可用示例”层：除了 schema/签名外，还会为当前可见工具输出最小成功 GraphQL 示例，重点覆盖 `tfind(action="load")` 的“下一轮才可用”、`ask_human` 的 `options` 结构，以及 `script_exec` 的最简 mutation。
@@ -33,17 +37,21 @@
 - GraphQL 模式的系统提示词已补回工具使用指导：`hidden catalog` 继续隐藏原生 `tool_defs`，但会为 prompt 保留 `ask_human`、`tfind`、`screen_action`、`computer_use` 等可见工具的“何时使用/有哪些约束”提示。
 - Bridge 已新增只读 `web_rooter` 高层工具：通过固定 HTTP 契约接入独立运行的 `web-rooter` 服务，当前仅开放 `internet_search` / `research` / `academic_search` / `site_search` / `fetch` / `extract` 六个 stateless action，并在桥内统一输出 `provider/action/payload/citations/references_text/trace_id` 稳定壳；未引入上游 CLI、MCP、jobs、skills、safe mode、knowledge/visited 等双编排能力。运行时现通过 `web_rooter_enabled/base_url/api_token/timeout_ms` 显式控制接入，桥层不会默认启用或做隐式降级。
 - `web_rooter` 桥接现已对上游 HTTP 响应做显式契约校验：`success/content/data/urls/error/metadata` 缺失或类型不合法、HTTP 500、200 + `success=false`、非法 JSON、超时都会直接作为错误上抛，不再被桥层静默包装成成功结果。
-- prompt guidance 已按协议模式分流：普通 native `tool_calls` prompt 不再泄漏 `mutation { ... }`、`tfind(action: ...)` 一类 GraphQL 示例，GraphQL 专用样例只保留在 hidden catalog / GraphQL runtime prompt 路径中。
-- `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
-- 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
-- Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
 - `web_rooter` 实现已按边界重排：顶层工具只保留显式参数校验、action 路由、client 调用与稳定 envelope 输出；HTTP 传输、版本钉死校验、响应归一化下沉到 `tools/internal/webrooter`。对外 public runtime 快照也已收口为 `web_rooter_enabled` / `web_rooter_api_token_set` 布尔态，不再暴露 `base_url` / `timeout_ms`。
 - `config/web_rooter_settings.go` 的运行期配置解析已补回缺失的 `resolveWebRooterBaseURL` 路径，`serve`/HTTP 入口可重新完整编译并参与 live 调试。
 - `web_rooter` 的 sidecar 边界已补成显式契约并有回归测试锁定：Ghost-OS 只认外置 `base_url`，不负责拉起或管理 upstream Python 进程；桥层继续只开放六个 stateless HTTP action，不接 `knowledge` / `visited` / context snapshot；版本探测与 action 请求都会透传 `X-Trace-ID`；过大响应会返回显式超限错误，不做静默裁切。
+- prompt guidance 已按协议模式分流：普通 native `tool_calls` prompt 不再泄漏 `mutation { ... }`、`tfind(action: ...)` 一类 GraphQL 示例，GraphQL 专用样例只保留在 hidden catalog / GraphQL runtime prompt 路径中。
+- `web_rooter` 的 prompt guidance 已补齐联网分流规则：需要引用、出处、多源交叉验证、学术资料或深度研究时优先走 `web_rooter`；普通即时网页搜继续走 `web_search`，避免模型把所有联网任务都打到同一层搜索能力。
+- 工具可见性语义已拆分为“常驻 allowlist”与“严格 allowlist-only”两层：`tool_allowlist` 现在只定义当前 turn 的 resident 工具；当 `tool_allowlist_only = true` 时，selector 与静态工具面才会一起收紧到 allowlist。非 strict 模式下，selector 仍可为主模型挑选其他未被 `tool_blocklist` 屏蔽的静态工具。
+- `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
+- 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
+- Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
 
 ### Perception: `apps/web` / `apps/cli` / `apps/android`
 
 - Web Console MVP 可用，已支持基础聊天、配置读取与主要交互链路。
+- Web Console 现已补上左下角设置入口：侧边栏底部新增 `Settings` 按钮，可直接打开现有运行时配置弹窗，不再需要依赖隐式入口或额外页面跳转。
+- Web Console 会话主链已切到流式：前端现直接消费 Bridge SSE 的 `run_started / completion_delta / tool_call_started / tool_call_finished / awaiting_human / message / done / error` 事件，回复文本和工具状态可在回合进行中实时落屏；回合结束后仍会回填一次 session history 以收口最终持久化内容、工具输出与附件。
 - CLI 基线可用，已支持基础会话与桥接操作。
 - Android 已接入部分会话与展示能力，但整体成熟度低于 Web 与 CLI。
 
@@ -68,6 +76,7 @@
 - 配置系统：Provider、模型、运行时配置的读写、解析与校验。
 - 任务系统：基础调度、立即执行、日志查询。
 - 任务系统已补上 `workflow` 类型地基：继续复用现有调度器、任务存储、`/api/tasks` 与 `TASK_*` action，在不新增独立服务/存储的前提下支持 `start -> end` 最小 workflow 任务创建、查询、手动执行与运行摘要。
+- `workflow` 运行时已扩到线性节点链：现支持固定参数的 `tool` / `llm` / `agent` 节点，继续复用现有 runtime factory、任务存储与调度器；节点间暂不传递输出，`agent` 节点按 fresh session 运行，`tool` 节点受独立 `workflow_tool_allowlist` 显式约束。
 - Web Console / CLI：基础对话和桥接操作可用。
 
 ## 当前约束

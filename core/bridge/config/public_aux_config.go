@@ -21,6 +21,10 @@ func LoadExecutionConfig() (ExecutionConfig, error) {
 	return aux.Execution, nil
 }
 
-func LoadTaskConfig() TaskConfig {
-	return TaskConfig{TasksPath: tasksPathFromEnv()}
+func LoadTaskConfig() (TaskConfig, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return TaskConfig{}, err
+	}
+	return buildTaskConfig(fileCfg, currentEnv())
 }

@@ -27,6 +27,12 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaRequired(t, defs, "taskUpdateRequest", "id")
 	assertSchemaProperty(t, defs, "taskUpdateRequest", "action")
 	assertSchemaProperty(t, defs, "taskUpdateRequest", "action_params")
+	assertSchemaProperty(t, defs, "workflowNode", "tool")
+	assertSchemaProperty(t, defs, "workflowNode", "llm")
+	assertSchemaProperty(t, defs, "workflowNode", "agent")
+	assertSchemaRequired(t, defs, "workflowToolNode", "tool_name")
+	assertSchemaRequired(t, defs, "workflowLLMNode", "prompt")
+	assertSchemaRequired(t, defs, "workflowAgentNode", "message")
 	assertSchemaConst(t, defs, "rssInboxPollTaskCreateRequest", "action", busActionRSSInboxPoll)
 	assertSchemaConst(t, defs, "rssBriefingTaskPayload", "action", busActionRSSBriefingBuild)
 }

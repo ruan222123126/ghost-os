@@ -588,7 +588,10 @@ data class SetActiveProviderRequest(
 @Serializable
 data class WorkflowNode(
     val id: String,
-    val type: String
+    val type: String,
+    val tool: WorkflowToolNode? = null,
+    val llm: WorkflowLLMNode? = null,
+    val agent: WorkflowAgentNode? = null
 )
 
 @Serializable
@@ -647,6 +650,13 @@ data class AgentMessageTaskCreateRequest(
 ) : TaskCreateRequest
 
 @Serializable
+data class WorkflowToolNode(
+    @SerialName("tool_name")
+    val toolName: String,
+    val arguments: JsonObject? = null
+)
+
+@Serializable
 data class RSSInboxPollTaskCreateRequest(
     @SerialName("task_kind")
     val taskKind: String,
@@ -662,6 +672,13 @@ data class RSSInboxPollTaskCreateRequest(
 ) : TaskCreateRequest
 
 @Serializable
+data class WorkflowLLMNode(
+    val prompt: String,
+    @SerialName("system_prompt")
+    val systemPrompt: String? = null
+)
+
+@Serializable
 data class RSSBriefingTaskCreateRequest(
     @SerialName("task_kind")
     val taskKind: String,
@@ -675,6 +692,11 @@ data class RSSBriefingTaskCreateRequest(
     @SerialName("trace_id")
     val traceId: String? = null
 ) : TaskCreateRequest
+
+@Serializable
+data class WorkflowAgentNode(
+    val message: String
+)
 
 @Serializable
 data class WorkflowTaskCreateRequest(

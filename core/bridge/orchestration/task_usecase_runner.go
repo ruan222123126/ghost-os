@@ -34,6 +34,7 @@ type taskMutationScheduler interface {
 type taskMutationRunner struct {
 	store        taskMutationStore
 	scheduler    taskMutationScheduler
+	configStore  *ConfigStore
 	sessionStore *session.Store
 	now          func() time.Time
 }
@@ -50,6 +51,7 @@ func (s *bridgeService) requireTaskMutationRunner() (taskMutationRunner, int, er
 	return taskMutationRunner{
 		store:        store,
 		scheduler:    scheduler,
+		configStore:  s.configStore,
 		sessionStore: s.sessionStore,
 		now:          func() time.Time { return time.Now().UTC() },
 	}, http.StatusOK, nil
@@ -132,6 +134,9 @@ func (r taskMutationRunner) buildScheduledTask(params taskCreateParams) (Schedul
 	if err := validateTaskDefinition(&task); err != nil {
 		return ScheduledTask{}, wrapTaskConfigError(err)
 	}
+	if err := r.validateTaskRuntime(task); err != nil {
+		return ScheduledTask{}, err
+	}
 	if err := r.ensureTaskSessionExists(task.TaskKind, task.SessionID); err != nil {
 		return ScheduledTask{}, err
 	}
@@ -183,6 +188,9 @@ func (r taskMutationRunner) applyUpdate(task *ScheduledTask, params taskUpdatePa
 	}
 	if err := validateTaskDefinition(task); err != nil {
 		return wrapTaskConfigError(err)
+	}
+	if err := r.validateTaskRuntime(*task); err != nil {
+		return err
 	}
 	if err := r.ensureTaskSessionExists(task.TaskKind, task.SessionID); err != nil {
 		return err

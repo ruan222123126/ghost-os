@@ -228,6 +228,15 @@
         "workflowNode": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowNode"
         },
+        "workflowToolNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowToolNode"
+        },
+        "workflowLLMNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowLLMNode"
+        },
+        "workflowAgentNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowAgentNode"
+        },
         "workflowEdge": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowEdge"
         }

@@ -598,6 +598,12 @@ pub struct WorkflowNode {
     pub id: String,
     #[serde(rename = "type")]
     pub r#type: String,
+    #[serde(default)]
+    pub tool: Option<WorkflowToolNode>,
+    #[serde(default)]
+    pub llm: Option<WorkflowLLMNode>,
+    #[serde(default)]
+    pub agent: Option<WorkflowAgentNode>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -656,6 +662,13 @@ pub struct AgentMessageTaskCreateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowToolNode {
+    pub tool_name: String,
+    #[serde(default)]
+    pub arguments: Option<BTreeMap<String, Value>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct RSSInboxPollTaskCreateRequest {
     pub task_kind: String,
     pub action: String,
@@ -670,6 +683,13 @@ pub struct RSSInboxPollTaskCreateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowLLMNode {
+    pub prompt: String,
+    #[serde(default)]
+    pub system_prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct RSSBriefingTaskCreateRequest {
     pub task_kind: String,
     pub action: String,
@@ -681,6 +701,11 @@ pub struct RSSBriefingTaskCreateRequest {
     pub cron_expr: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowAgentNode {
+    pub message: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

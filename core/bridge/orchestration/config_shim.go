@@ -14,6 +14,7 @@ type GraphQLConfig = bridgeconfig.GraphQLConfig
 type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
 type ToolSearchConfig = bridgeconfig.ToolSearchConfig
 type MemoryAugmentationConfig = bridgeconfig.MemoryAugmentationConfig
+type TaskConfig = bridgeconfig.TaskConfig
 type providerConfig = bridgeconfig.ProviderRecord
 
 const (

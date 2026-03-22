@@ -53,6 +53,10 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 	if err != nil {
 		return Config{}, err
 	}
+	task, err := buildTaskConfig(fileCfg, env)
+	if err != nil {
+		return Config{}, err
+	}
 	toolSelector, err := buildToolSelectorConfig(fileCfg, env)
 	if err != nil {
 		return Config{}, err
@@ -94,6 +98,7 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 		NativeAllowedReadPaths:  resolveNativeAllowedReadPaths(fileCfg, env),
 		NativeAllowedWritePaths: resolveNativeAllowedWritePaths(fileCfg, env),
 		ProjectRoot:             runtime.ProjectRoot,
+		Task:                    task,
 		ChatPath:                runtime.ChatPath,
 		PromptsPath:             valueOrEnvWithEnv(fileCfg.PromptsPath, env, "GHOST_PROMPTS_PATH", defaultPromptsPath),
 		PromptsDir:              promptsDir,

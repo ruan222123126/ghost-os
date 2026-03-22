@@ -401,7 +401,10 @@ export interface SetActiveProviderRequest {
 
 export interface WorkflowNode {
   id: string;
-  type: string;
+  type: 'start' | 'tool' | 'llm' | 'agent' | 'end';
+  tool?: WorkflowToolNode;
+  llm?: WorkflowLLMNode;
+  agent?: WorkflowAgentNode;
 }
 
 export interface WorkflowEdge {
@@ -439,6 +442,11 @@ export interface AgentMessageTaskCreateRequest {
   trace_id?: string;
 }
 
+export interface WorkflowToolNode {
+  tool_name: string;
+  arguments?: Record<string, unknown>;
+}
+
 export interface RSSInboxPollTaskCreateRequest {
   task_kind: 'system_action';
   action: 'RSS_INBOX_POLL';
@@ -448,6 +456,11 @@ export interface RSSInboxPollTaskCreateRequest {
   trace_id?: string;
 }
 
+export interface WorkflowLLMNode {
+  prompt: string;
+  system_prompt?: string;
+}
+
 export interface RSSBriefingTaskCreateRequest {
   task_kind: 'system_action';
   action: 'RSS_BRIEFING_BUILD';
@@ -455,6 +468,10 @@ export interface RSSBriefingTaskCreateRequest {
   interval_seconds?: number;
   cron_expr?: string;
   trace_id?: string;
+}
+
+export interface WorkflowAgentNode {
+  message: string;
 }
 
 export interface WorkflowTaskCreateRequest {

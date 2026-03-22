@@ -29,8 +29,8 @@ func resolveWebSearchTavilyAPIKey(fileCfg bridgeFileConfig, env envSnapshot) str
 	return env.firstNonEmpty("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
 }
 
-func resolveTasksPath(env envSnapshot) string {
-	return env.defaultValue("GHOST_TASKS_PATH", defaultTasksPath)
+func resolveTasksPath(fileCfg bridgeFileConfig, env envSnapshot) string {
+	return valueOrEnvWithEnv(fileCfg.TasksPath, env, "GHOST_TASKS_PATH", defaultTasksPath)
 }
 
 func resolveNativeBinaryPath(fileCfg bridgeFileConfig, env envSnapshot) string {
