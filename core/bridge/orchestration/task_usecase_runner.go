@@ -19,9 +19,21 @@ type taskQueryRunner struct {
 	store *TaskStore
 }
 
+type taskMutationStore interface {
+	LoadTask(taskID string) (*ScheduledTask, error)
+	SaveTask(task *ScheduledTask) error
+	DeleteTask(taskID string) error
+}
+
+type taskMutationScheduler interface {
+	Upsert(task ScheduledTask) error
+	Unregister(taskID string) error
+	RunNow(task ScheduledTask, traceID string) (TaskRunLog, error)
+}
+
 type taskMutationRunner struct {
-	store        *TaskStore
-	scheduler    *TaskScheduler
+	store        taskMutationStore
+	scheduler    taskMutationScheduler
 	sessionStore *session.Store
 	now          func() time.Time
 }

@@ -348,8 +348,6 @@ pub struct BridgeConfig {
     pub graphql_sources: Vec<GraphQLSourceResponse>,
     pub graphql_mutation_policies: Vec<GraphQLMutationPolicyResponse>,
     pub web_rooter_enabled: bool,
-    pub web_rooter_base_url: String,
-    pub web_rooter_timeout_ms: i64,
     pub web_rooter_api_token_set: bool,
     pub web_search_tavily_api_key_set: bool,
     pub web_search_exa_api_key_set: bool,
@@ -614,9 +612,225 @@ pub struct WorkflowDefinition {
     pub edges: Vec<WorkflowEdge>,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct RSSInboxPollTaskActionParams {
+    #[serde(default)]
+    pub max_items_per_feed: Option<i64>,
+    #[serde(default)]
+    pub ai_batch_size: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct RSSBriefingTaskActionParams {
+    #[serde(default)]
+    pub feed_id: Option<String>,
+    #[serde(default)]
+    pub tag: Option<String>,
+    #[serde(default)]
+    pub importance: Option<String>,
+    #[serde(default)]
+    pub window_hours: Option<i64>,
+    #[serde(default)]
+    pub group_limit: Option<i64>,
+    #[serde(default)]
+    pub item_limit: Option<i64>,
+    #[serde(default)]
+    pub items_per_group: Option<i64>,
+    #[serde(default)]
+    pub highlights_limit: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentMessageTaskCreateRequest {
+    pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub task_kind: Option<String>,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct RSSInboxPollTaskCreateRequest {
+    pub task_kind: String,
+    pub action: String,
+    #[serde(default)]
+    pub action_params: Option<RSSInboxPollTaskActionParams>,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct RSSBriefingTaskCreateRequest {
+    pub task_kind: String,
+    pub action: String,
+    #[serde(default)]
+    pub action_params: Option<RSSBriefingTaskActionParams>,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowTaskCreateRequest {
+    pub task_kind: String,
+    pub workflow: WorkflowDefinition,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskUpdateRequest {
+    pub id: String,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub task_kind: Option<String>,
+    #[serde(default)]
+    pub action: Option<String>,
+    #[serde(default)]
+    pub action_params: Option<BTreeMap<String, Value>>,
+    #[serde(default)]
+    pub workflow: Option<WorkflowDefinition>,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentMessageTaskPayload {
+    pub id: String,
+    pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    pub task_kind: String,
+    pub schedule_type: String,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub last_run_at: Option<String>,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct RSSInboxPollTaskPayload {
+    pub id: String,
+    pub task_kind: String,
+    pub action: String,
+    #[serde(default)]
+    pub action_params: Option<RSSInboxPollTaskActionParams>,
+    pub schedule_type: String,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub last_run_at: Option<String>,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct RSSBriefingTaskPayload {
+    pub id: String,
+    pub task_kind: String,
+    pub action: String,
+    #[serde(default)]
+    pub action_params: Option<RSSBriefingTaskActionParams>,
+    pub schedule_type: String,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub last_run_at: Option<String>,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowTaskPayload {
+    pub id: String,
+    pub task_kind: String,
+    pub workflow: WorkflowDefinition,
+    pub schedule_type: String,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub last_run_at: Option<String>,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
 #[derive(Debug, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum AgentPayload {
     Success(AgentSendSuccessResponse),
     AwaitingHuman(AgentSendAwaitingHumanResponse),
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum TaskCreateRequest {
+    AgentMessage(AgentMessageTaskCreateRequest),
+    RSSInboxPoll(RSSInboxPollTaskCreateRequest),
+    RSSBriefing(RSSBriefingTaskCreateRequest),
+    Workflow(WorkflowTaskCreateRequest),
+}
+
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum TaskPayload {
+    AgentMessage(AgentMessageTaskPayload),
+    RSSInboxPoll(RSSInboxPollTaskPayload),
+    RSSBriefing(RSSBriefingTaskPayload),
+    Workflow(WorkflowTaskPayload),
 }

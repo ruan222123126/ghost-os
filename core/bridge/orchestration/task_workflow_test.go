@@ -198,7 +198,7 @@ func TestTaskWorkflowRunNowUsesExistingScheduler(t *testing.T) {
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("require runner: code=%d err=%v", code, err)
 	}
-	tasks, err := runner.store.ListTasks()
+	tasks, err := service.taskStore.ListTasks()
 	if err != nil || len(tasks) != 1 {
 		t.Fatalf("list tasks: tasks=%d err=%v", len(tasks), err)
 	}

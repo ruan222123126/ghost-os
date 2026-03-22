@@ -24,6 +24,10 @@ data class ApiEnvelope<TPayload>(
 
 sealed interface AgentSendResponse
 
+sealed interface TaskCreateRequest
+
+sealed interface TaskPayload
+
 @Serializable
 data class AssistantSessionEndSignal(
     val signal: String,
@@ -324,10 +328,16 @@ data class BridgeConfig(
     val modelSelectionEnabled: Boolean,
     @SerialName("graphql_default_source")
     val graphqlDefaultSource: String,
+    @SerialName("graphql_tool_runtime_enabled")
+    val graphqlToolRuntimeEnabled: Boolean,
     @SerialName("graphql_sources")
     val graphqlSources: List<GraphQLSourceResponse>,
     @SerialName("graphql_mutation_policies")
     val graphqlMutationPolicies: List<GraphQLMutationPolicyResponse>,
+    @SerialName("web_rooter_enabled")
+    val webRooterEnabled: Boolean,
+    @SerialName("web_rooter_api_token_set")
+    val webRooterApiTokenSet: Boolean,
     @SerialName("web_search_tavily_api_key_set")
     val webSearchTavilyApiKeySet: Boolean,
     @SerialName("web_search_exa_api_key_set")
@@ -355,12 +365,22 @@ data class ConfigUpdate(
     val chatPath: String? = null,
     @SerialName("graphql_default_source")
     val graphqlDefaultSource: String? = null,
+    @SerialName("graphql_tool_runtime_enabled")
+    val graphqlToolRuntimeEnabled: Boolean? = null,
     @SerialName("graphql_sources")
     val graphqlSources: List<GraphQLSourceInput>? = null,
     @SerialName("graphql_source_upsert")
     val graphqlSourceUpsert: GraphQLSourceInput? = null,
     @SerialName("graphql_mutation_policies")
     val graphqlMutationPolicies: List<GraphQLMutationPolicyInput>? = null,
+    @SerialName("web_rooter_enabled")
+    val webRooterEnabled: Boolean? = null,
+    @SerialName("web_rooter_base_url")
+    val webRooterBaseUrl: String? = null,
+    @SerialName("web_rooter_api_token")
+    val webRooterApiToken: String? = null,
+    @SerialName("web_rooter_timeout_ms")
+    val webRooterTimeoutMs: Int? = null,
     @SerialName("web_search_tavily_api_key")
     val webSearchTavilyApiKey: String? = null,
     @SerialName("web_search_exa_api_key")
@@ -564,3 +584,234 @@ data class SetActiveProviderRequest(
     @SerialName("trace_id")
     val traceId: String? = null
 )
+
+@Serializable
+data class WorkflowNode(
+    val id: String,
+    val type: String
+)
+
+@Serializable
+data class WorkflowEdge(
+    @SerialName("from_node_id")
+    val fromNodeId: String,
+    @SerialName("to_node_id")
+    val toNodeId: String
+)
+
+@Serializable
+data class WorkflowDefinition(
+    val nodes: List<WorkflowNode>,
+    val edges: List<WorkflowEdge>
+)
+
+@Serializable
+data class RSSInboxPollTaskActionParams(
+    @SerialName("max_items_per_feed")
+    val maxItemsPerFeed: Int? = null,
+    @SerialName("ai_batch_size")
+    val aiBatchSize: Int? = null
+)
+
+@Serializable
+data class RSSBriefingTaskActionParams(
+    @SerialName("feed_id")
+    val feedId: String? = null,
+    val tag: String? = null,
+    val importance: String? = null,
+    @SerialName("window_hours")
+    val windowHours: Int? = null,
+    @SerialName("group_limit")
+    val groupLimit: Int? = null,
+    @SerialName("item_limit")
+    val itemLimit: Int? = null,
+    @SerialName("items_per_group")
+    val itemsPerGroup: Int? = null,
+    @SerialName("highlights_limit")
+    val highlightsLimit: Int? = null
+)
+
+@Serializable
+data class AgentMessageTaskCreateRequest(
+    val message: String,
+    @SerialName("session_id")
+    val sessionId: String? = null,
+    @SerialName("task_kind")
+    val taskKind: String? = null,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+) : TaskCreateRequest
+
+@Serializable
+data class RSSInboxPollTaskCreateRequest(
+    @SerialName("task_kind")
+    val taskKind: String,
+    val action: String,
+    @SerialName("action_params")
+    val actionParams: RSSInboxPollTaskActionParams? = null,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+) : TaskCreateRequest
+
+@Serializable
+data class RSSBriefingTaskCreateRequest(
+    @SerialName("task_kind")
+    val taskKind: String,
+    val action: String,
+    @SerialName("action_params")
+    val actionParams: RSSBriefingTaskActionParams? = null,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+) : TaskCreateRequest
+
+@Serializable
+data class WorkflowTaskCreateRequest(
+    @SerialName("task_kind")
+    val taskKind: String,
+    val workflow: WorkflowDefinition,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+) : TaskCreateRequest
+
+@Serializable
+data class TaskUpdateRequest(
+    val id: String,
+    val message: String? = null,
+    @SerialName("session_id")
+    val sessionId: String? = null,
+    @SerialName("task_kind")
+    val taskKind: String? = null,
+    val action: String? = null,
+    @SerialName("action_params")
+    val actionParams: JsonObject? = null,
+    val workflow: WorkflowDefinition? = null,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+)
+
+@Serializable
+data class AgentMessageTaskPayload(
+    val id: String,
+    val message: String,
+    @SerialName("session_id")
+    val sessionId: String? = null,
+    @SerialName("task_kind")
+    val taskKind: String,
+    @SerialName("schedule_type")
+    val scheduleType: String,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("last_run_at")
+    val lastRunAt: String? = null,
+    @SerialName("next_run_at")
+    val nextRunAt: String? = null,
+    @SerialName("last_error")
+    val lastError: String? = null
+) : TaskPayload
+
+@Serializable
+data class RSSInboxPollTaskPayload(
+    val id: String,
+    @SerialName("task_kind")
+    val taskKind: String,
+    val action: String,
+    @SerialName("action_params")
+    val actionParams: RSSInboxPollTaskActionParams? = null,
+    @SerialName("schedule_type")
+    val scheduleType: String,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("last_run_at")
+    val lastRunAt: String? = null,
+    @SerialName("next_run_at")
+    val nextRunAt: String? = null,
+    @SerialName("last_error")
+    val lastError: String? = null
+) : TaskPayload
+
+@Serializable
+data class RSSBriefingTaskPayload(
+    val id: String,
+    @SerialName("task_kind")
+    val taskKind: String,
+    val action: String,
+    @SerialName("action_params")
+    val actionParams: RSSBriefingTaskActionParams? = null,
+    @SerialName("schedule_type")
+    val scheduleType: String,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("last_run_at")
+    val lastRunAt: String? = null,
+    @SerialName("next_run_at")
+    val nextRunAt: String? = null,
+    @SerialName("last_error")
+    val lastError: String? = null
+) : TaskPayload
+
+@Serializable
+data class WorkflowTaskPayload(
+    val id: String,
+    @SerialName("task_kind")
+    val taskKind: String,
+    val workflow: WorkflowDefinition,
+    @SerialName("schedule_type")
+    val scheduleType: String,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("last_run_at")
+    val lastRunAt: String? = null,
+    @SerialName("next_run_at")
+    val nextRunAt: String? = null,
+    @SerialName("last_error")
+    val lastError: String? = null
+) : TaskPayload

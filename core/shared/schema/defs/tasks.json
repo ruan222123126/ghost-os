@@ -103,9 +103,85 @@
                 }
             }
         },
-        "taskCreateRequest": {
+        "rssInboxPollTaskActionParams": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "max_items_per_feed": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "ai_batch_size": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "x-codegen": {
+                "order": 243,
+                "ts": {
+                    "name": "RSSInboxPollTaskActionParams"
+                },
+                "rust": {
+                    "name": "RSSInboxPollTaskActionParams"
+                },
+                "kotlin": {
+                    "name": "RSSInboxPollTaskActionParams"
+                }
+            }
+        },
+        "rssBriefingTaskActionParams": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+                "feed_id": {
+                    "type": "string"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "importance": {
+                    "type": "string"
+                },
+                "window_hours": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "group_limit": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "item_limit": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "items_per_group": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "highlights_limit": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "x-codegen": {
+                "order": 244,
+                "ts": {
+                    "name": "RSSBriefingTaskActionParams"
+                },
+                "rust": {
+                    "name": "RSSBriefingTaskActionParams"
+                },
+                "kotlin": {
+                    "name": "RSSBriefingTaskActionParams"
+                }
+            }
+        },
+        "agentMessageTaskCreateRequest": {
             "type": "object",
             "additionalProperties": false,
+            "required": [
+                "message"
+            ],
             "properties": {
                 "message": {
                     "type": "string",
@@ -117,8 +193,173 @@
                 "task_kind": {
                     "type": "string",
                     "enum": [
-                        "agent_message",
-                        "system_action",
+                        "agent_message"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 245,
+                "ts": {
+                    "name": "AgentMessageTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "AgentMessageTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "AgentMessageTaskCreateRequest"
+                }
+            }
+        },
+        "rssInboxPollTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_kind",
+                "action"
+            ],
+            "properties": {
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "system_action"
+                    ]
+                },
+                "action": {
+                    "type": "string",
+                    "const": "RSS_INBOX_POLL"
+                },
+                "action_params": {
+                    "$ref": "#/$defs/rssInboxPollTaskActionParams"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 246,
+                "ts": {
+                    "name": "RSSInboxPollTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "RSSInboxPollTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "RSSInboxPollTaskCreateRequest"
+                }
+            }
+        },
+        "rssBriefingTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_kind",
+                "action"
+            ],
+            "properties": {
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "system_action"
+                    ]
+                },
+                "action": {
+                    "type": "string",
+                    "const": "RSS_BRIEFING_BUILD"
+                },
+                "action_params": {
+                    "$ref": "#/$defs/rssBriefingTaskActionParams"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 247,
+                "ts": {
+                    "name": "RSSBriefingTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "RSSBriefingTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "RSSBriefingTaskCreateRequest"
+                }
+            }
+        },
+        "workflowTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_kind",
+                "workflow"
+            ],
+            "properties": {
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
                         "workflow"
                     ]
                 },
@@ -135,6 +376,65 @@
                 },
                 "trace_id": {
                     "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 248,
+                "ts": {
+                    "name": "WorkflowTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "WorkflowTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "WorkflowTaskCreateRequest"
+                }
+            }
+        },
+        "taskCreateRequest": {
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/agentMessageTaskCreateRequest"
+                },
+                {
+                    "$ref": "#/$defs/rssInboxPollTaskCreateRequest"
+                },
+                {
+                    "$ref": "#/$defs/rssBriefingTaskCreateRequest"
+                },
+                {
+                    "$ref": "#/$defs/workflowTaskCreateRequest"
+                }
+            ],
+            "x-codegen": {
+                "order": 249,
+                "ts": {
+                    "name": "TaskCreateRequest"
+                },
+                "rust": {
+                    "name": "TaskCreateRequest",
+                    "variants": {
+                        "agentMessageTaskCreateRequest": "AgentMessage",
+                        "rssInboxPollTaskCreateRequest": "RSSInboxPoll",
+                        "rssBriefingTaskCreateRequest": "RSSBriefing",
+                        "workflowTaskCreateRequest": "Workflow"
+                    }
+                },
+                "kotlin": {
+                    "name": "TaskCreateRequest",
+                    "kind": "sealed_interface"
                 }
             }
         },
@@ -154,6 +454,9 @@
         "taskUpdateRequest": {
             "type": "object",
             "additionalProperties": false,
+            "required": [
+                "id"
+            ],
             "properties": {
                 "id": {
                     "type": "string",
@@ -174,6 +477,16 @@
                         "workflow"
                     ]
                 },
+                "action": {
+                    "type": "string",
+                    "enum": [
+                        "RSS_INBOX_POLL",
+                        "RSS_BRIEFING_BUILD"
+                    ]
+                },
+                "action_params": {
+                    "type": "object"
+                },
                 "workflow": {
                     "$ref": "#/$defs/workflowDefinition"
                 },
@@ -191,13 +504,85 @@
                 "trace_id": {
                     "type": "string"
                 }
+            },
+            "not": {
+                "required": [
+                    "interval_seconds",
+                    "cron_expr"
+                ]
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "agent_message"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "message"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "system_action"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "action"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "workflow"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "workflow"
+                        ]
+                    }
+                }
+            ],
+            "x-codegen": {
+                "order": 250,
+                "ts": {
+                    "name": "TaskUpdateRequest"
+                },
+                "rust": {
+                    "name": "TaskUpdateRequest"
+                },
+                "kotlin": {
+                    "name": "TaskUpdateRequest"
+                }
             }
         },
-        "taskPayload": {
+        "agentMessageTaskPayload": {
             "type": "object",
             "additionalProperties": false,
             "required": [
                 "id",
+                "message",
                 "task_kind",
                 "schedule_type",
                 "enabled",
@@ -219,13 +604,8 @@
                 "task_kind": {
                     "type": "string",
                     "enum": [
-                        "agent_message",
-                        "system_action",
-                        "workflow"
+                        "agent_message"
                     ]
-                },
-                "workflow": {
-                    "$ref": "#/$defs/workflowDefinition"
                 },
                 "schedule_type": {
                     "type": "string",
@@ -239,7 +619,8 @@
                     "minimum": 1
                 },
                 "cron_expr": {
-                    "type": "string"
+                    "type": "string",
+                    "minLength": 1
                 },
                 "enabled": {
                     "type": "boolean"
@@ -260,6 +641,382 @@
                 },
                 "last_error": {
                     "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 251,
+                "ts": {
+                    "name": "AgentMessageTaskPayload"
+                },
+                "rust": {
+                    "name": "AgentMessageTaskPayload"
+                },
+                "kotlin": {
+                    "name": "AgentMessageTaskPayload"
+                }
+            }
+        },
+        "rssInboxPollTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "task_kind",
+                "action",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "system_action"
+                    ]
+                },
+                "action": {
+                    "type": "string",
+                    "const": "RSS_INBOX_POLL"
+                },
+                "action_params": {
+                    "$ref": "#/$defs/rssInboxPollTaskActionParams"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 252,
+                "ts": {
+                    "name": "RSSInboxPollTaskPayload"
+                },
+                "rust": {
+                    "name": "RSSInboxPollTaskPayload"
+                },
+                "kotlin": {
+                    "name": "RSSInboxPollTaskPayload"
+                }
+            }
+        },
+        "rssBriefingTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "task_kind",
+                "action",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "system_action"
+                    ]
+                },
+                "action": {
+                    "type": "string",
+                    "const": "RSS_BRIEFING_BUILD"
+                },
+                "action_params": {
+                    "$ref": "#/$defs/rssBriefingTaskActionParams"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 253,
+                "ts": {
+                    "name": "RSSBriefingTaskPayload"
+                },
+                "rust": {
+                    "name": "RSSBriefingTaskPayload"
+                },
+                "kotlin": {
+                    "name": "RSSBriefingTaskPayload"
+                }
+            }
+        },
+        "workflowTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "task_kind",
+                "workflow",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "workflow"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 254,
+                "ts": {
+                    "name": "WorkflowTaskPayload"
+                },
+                "rust": {
+                    "name": "WorkflowTaskPayload"
+                },
+                "kotlin": {
+                    "name": "WorkflowTaskPayload"
+                }
+            }
+        },
+        "taskPayload": {
+            "oneOf": [
+                {
+                    "$ref": "#/$defs/agentMessageTaskPayload"
+                },
+                {
+                    "$ref": "#/$defs/rssInboxPollTaskPayload"
+                },
+                {
+                    "$ref": "#/$defs/rssBriefingTaskPayload"
+                },
+                {
+                    "$ref": "#/$defs/workflowTaskPayload"
+                }
+            ],
+            "x-codegen": {
+                "order": 255,
+                "ts": {
+                    "name": "TaskPayload"
+                },
+                "rust": {
+                    "name": "TaskPayload",
+                    "variants": {
+                        "agentMessageTaskPayload": "AgentMessage",
+                        "rssInboxPollTaskPayload": "RSSInboxPoll",
+                        "rssBriefingTaskPayload": "RSSBriefing",
+                        "workflowTaskPayload": "Workflow"
+                    }
+                },
+                "kotlin": {
+                    "name": "TaskPayload",
+                    "kind": "sealed_interface"
                 }
             }
         },

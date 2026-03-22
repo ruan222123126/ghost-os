@@ -242,8 +242,6 @@ export interface BridgeConfig {
   graphql_sources: GraphQLSourceResponse[];
   graphql_mutation_policies: GraphQLMutationPolicyResponse[];
   web_rooter_enabled: boolean;
-  web_rooter_base_url: string;
-  web_rooter_timeout_ms: number;
   web_rooter_api_token_set: boolean;
   web_search_tavily_api_key_set: boolean;
   web_search_exa_api_key_set: boolean;
@@ -416,4 +414,136 @@ export interface WorkflowDefinition {
   edges: WorkflowEdge[];
 }
 
+export interface RSSInboxPollTaskActionParams {
+  max_items_per_feed?: number;
+  ai_batch_size?: number;
+}
+
+export interface RSSBriefingTaskActionParams {
+  feed_id?: string;
+  tag?: string;
+  importance?: string;
+  window_hours?: number;
+  group_limit?: number;
+  item_limit?: number;
+  items_per_group?: number;
+  highlights_limit?: number;
+}
+
+export interface AgentMessageTaskCreateRequest {
+  message: string;
+  session_id?: string;
+  task_kind?: 'agent_message';
+  interval_seconds?: number;
+  cron_expr?: string;
+  trace_id?: string;
+}
+
+export interface RSSInboxPollTaskCreateRequest {
+  task_kind: 'system_action';
+  action: 'RSS_INBOX_POLL';
+  action_params?: RSSInboxPollTaskActionParams;
+  interval_seconds?: number;
+  cron_expr?: string;
+  trace_id?: string;
+}
+
+export interface RSSBriefingTaskCreateRequest {
+  task_kind: 'system_action';
+  action: 'RSS_BRIEFING_BUILD';
+  action_params?: RSSBriefingTaskActionParams;
+  interval_seconds?: number;
+  cron_expr?: string;
+  trace_id?: string;
+}
+
+export interface WorkflowTaskCreateRequest {
+  task_kind: 'workflow';
+  workflow: WorkflowDefinition;
+  interval_seconds?: number;
+  cron_expr?: string;
+  trace_id?: string;
+}
+
+export interface TaskUpdateRequest {
+  id: string;
+  message?: string;
+  session_id?: string;
+  task_kind?: 'agent_message' | 'system_action' | 'workflow';
+  action?: 'RSS_INBOX_POLL' | 'RSS_BRIEFING_BUILD';
+  action_params?: Record<string, unknown>;
+  workflow?: WorkflowDefinition;
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled?: boolean;
+  trace_id?: string;
+}
+
+export interface AgentMessageTaskPayload {
+  id: string;
+  message: string;
+  session_id?: string;
+  task_kind: 'agent_message';
+  schedule_type: 'interval' | 'cron';
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
+export interface RSSInboxPollTaskPayload {
+  id: string;
+  task_kind: 'system_action';
+  action: 'RSS_INBOX_POLL';
+  action_params?: RSSInboxPollTaskActionParams;
+  schedule_type: 'interval' | 'cron';
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
+export interface RSSBriefingTaskPayload {
+  id: string;
+  task_kind: 'system_action';
+  action: 'RSS_BRIEFING_BUILD';
+  action_params?: RSSBriefingTaskActionParams;
+  schedule_type: 'interval' | 'cron';
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
+export interface WorkflowTaskPayload {
+  id: string;
+  task_kind: 'workflow';
+  workflow: WorkflowDefinition;
+  schedule_type: 'interval' | 'cron';
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
 export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;
+
+export type TaskCreateRequest = AgentMessageTaskCreateRequest | RSSInboxPollTaskCreateRequest | RSSBriefingTaskCreateRequest | WorkflowTaskCreateRequest;
+
+export type TaskPayload = AgentMessageTaskPayload | RSSInboxPollTaskPayload | RSSBriefingTaskPayload | WorkflowTaskPayload;
