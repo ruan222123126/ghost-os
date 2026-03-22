@@ -7,6 +7,7 @@ import (
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
+	"ghost-os/bridge/tools"
 )
 
 func (a *Agent) handleAssistantTextTurn(
@@ -139,6 +140,13 @@ func (a *Agent) finishAssistantTextTurnWithError(
 ) error {
 	if emitErr := state.events.toolCallFinished(ctx, state.traceID, turn, stepID, result.Tool.Name, result.Tool.CallID, "error", handlerErr); emitErr != nil {
 		return emitErr
+	}
+	if protocolErr, ok := tools.AsGraphQLTextProtocolError(handlerErr); ok && protocolErr.Recoverable() {
+		for _, message := range cloneAssistantTextFeedback(result.Feedback) {
+			state.history.Append(message)
+		}
+		a.commitTurn(state.history)
+		return nil
 	}
 	return state.terminalRunError(ctx, turn, assistantTextTurnError(state.traceID, turn, handlerErr))
 }

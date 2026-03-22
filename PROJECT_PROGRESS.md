@@ -23,6 +23,7 @@
 - Agent 收尾路径进一步收口：`loop_finish` 已合并 stop/length 文本完成分支的公共 finalize 流程，并移除 `toolCallExecutor.execute` 中当前调用图不可达的空 `calls` 防御分支，补充了 length 收尾与 assistant-text 分发回归测试。
 - 共享消息契约、`trace_id`、跨端 DTO 与 `core/shared/schema.json` 已基本统一。
 - GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
+- GraphQL 文本工具调用运行时的协议失败已改为“可修复的结构化反馈”：解析/校验错误会写入 `[GRAPHQL_TOOL_RESULT]` 风格的 `status=error`、`kind`、`expected/received` 等字段，并在同次 agent run 的下一轮 completion 中作为显式失败反馈供模型自修正。
 - GraphQL tool runtime 的 query / mutation 判定已从运行时硬编码名单收口到 `ToolDef.Semantics`：工具通过统一语义元数据声明 `read_only` / `side_effect`，schema 生成、示例输出与执行期校验都复用同一份定义，未知工具仍显式按 mutation 处理。
 - GraphQL prompt 已补齐“最小可用示例”层：除了 schema/签名外，还会为当前可见工具输出最小成功 GraphQL 示例，重点覆盖 `tfind(action="load")` 的“下一轮才可用”、`ask_human` 的 `options` 结构，以及 `script_exec` 的最简 mutation。
 - GraphQL tool runtime 的 prompt/example 已与真实 schema 对齐：复杂参数通过命名 `input` / `enum` 暴露结构，示例里的枚举字段也改为 GraphQL enum literal，避免 `browser_control`、`computer_use`、`task_manage` 一类工具继续被模型按 JSON 字符串硬拼。

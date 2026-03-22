@@ -51,6 +51,9 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 		},
 	}
 	if err != nil {
+		if feedback, ok := newGraphQLToolErrorFeedbackMessage(result.ToolName, err); ok {
+			handled.Feedback = []llm.Message{feedback}
+		}
 		return handled, err
 	}
 	if len(result.Arguments) != 0 {
@@ -78,6 +81,28 @@ func newGraphQLToolResultFeedbackMessage(toolName string, output string) (llm.Me
 	return llm.Message{
 		Role: llm.RoleInternal,
 		Text: formatGraphQLToolResultFeedback(strings.TrimSpace(toolName), trimmed),
+	}, true
+}
+
+func newGraphQLToolErrorFeedbackMessage(toolName string, err error) (llm.Message, bool) {
+	protocolErr, ok := tools.AsGraphQLTextProtocolError(err)
+	if !ok {
+		return llm.Message{}, false
+	}
+	payload := protocolErr.Feedback()
+	if payload.Tool == "" {
+		payload.Tool = strings.TrimSpace(toolName)
+	}
+	normalized, marshalErr := json.Marshal(payload)
+	if marshalErr != nil {
+		return llm.Message{
+			Role: llm.RoleInternal,
+			Text: graphQLToolResultPrefix + err.Error(),
+		}, true
+	}
+	return llm.Message{
+		Role: llm.RoleInternal,
+		Text: fmt.Sprintf("%s%s", graphQLToolResultPrefix, string(normalized)),
 	}, true
 }
 

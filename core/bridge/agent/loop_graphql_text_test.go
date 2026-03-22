@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -135,6 +136,52 @@ func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *
 	}
 }
 
+func TestGraphQLTextTurnFeedsStructuredProtocolErrorBackIntoNextRound(t *testing.T) {
+	completer := newFakeCompleter(
+		newStopResponse(`mutation { web_search(query: "OpenAI") }`),
+		newStopResponse(`query { web_search(query: "OpenAI") }`),
+		newStopResponse("done"),
+	)
+	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
+	tool.semantics = llm.ToolSemantics{ReadOnly: true}
+	catalog := newFakeToolCatalog(tool)
+	agent := newTestAgent(completer, catalog, 4)
+	agent.SetStrictToolCallProtocol(true)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
+
+	output, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if output != "done" {
+		t.Fatalf("unexpected output: got %q want %q", output, "done")
+	}
+	if tool.callCount != 1 {
+		t.Fatalf("expected web_search to execute once after correction, got %d", tool.callCount)
+	}
+	if len(completer.requests) != 3 {
+		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 3)
+	}
+
+	last := completer.requests[1].Messages[len(completer.requests[1].Messages)-1]
+	if !strings.Contains(last.Text, "[GRAPHQL_TOOL_RESULT]") {
+		t.Fatalf("expected graphql protocol error feedback in second request, got %+v", last)
+	}
+	payload := decodeGraphQLToolFeedback(t, last.Text)
+	if payload["status"] != "error" {
+		t.Fatalf("unexpected feedback status: %+v", payload)
+	}
+	if payload["kind"] != "wrong_operation" {
+		t.Fatalf("unexpected feedback kind: %+v", payload)
+	}
+	if payload["tool"] != "web_search" {
+		t.Fatalf("unexpected feedback tool: %+v", payload)
+	}
+	if payload["expected"] != "query" || payload["received"] != "mutation" {
+		t.Fatalf("unexpected feedback operation payload: %+v", payload)
+	}
+}
+
 func eventToolCallID(t *testing.T, event streaming.Event) string {
 	t.Helper()
 
@@ -161,4 +208,15 @@ func eventToolName(t *testing.T, event streaming.Event) string {
 		t.Fatalf("expected tool in payload: %+v", payload)
 	}
 	return toolName
+}
+
+func decodeGraphQLToolFeedback(t *testing.T, raw string) map[string]any {
+	t.Helper()
+
+	payloadText := strings.TrimSpace(strings.TrimPrefix(raw, "[GRAPHQL_TOOL_RESULT]"))
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(payloadText), &payload); err != nil {
+		t.Fatalf("decode graphql tool feedback: %v, raw=%q", err, raw)
+	}
+	return payload
 }

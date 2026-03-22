@@ -133,6 +133,23 @@ func TestGraphQLTextExecutorRejectsOperationMismatch(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), `tool "ask_human" must use mutation`) {
 		t.Fatalf("expected operation mismatch error, got %v", err)
 	}
+	protocolErr, ok := AsGraphQLTextProtocolError(err)
+	if !ok {
+		t.Fatalf("expected structured protocol error, got %T", err)
+	}
+	feedback := protocolErr.Feedback()
+	if feedback.Kind != "wrong_operation" {
+		t.Fatalf("unexpected feedback kind: %+v", feedback)
+	}
+	if feedback.Tool != "ask_human" {
+		t.Fatalf("unexpected feedback tool: %+v", feedback)
+	}
+	if feedback.Expected != "mutation" || feedback.Received != "query" {
+		t.Fatalf("unexpected feedback operation payload: %+v", feedback)
+	}
+	if !protocolErr.Recoverable() {
+		t.Fatalf("expected wrong operation to be recoverable")
+	}
 }
 
 func TestGraphQLTextExecutorDefaultsUndeclaredToolsToMutation(t *testing.T) {
