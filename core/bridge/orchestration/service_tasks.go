@@ -46,9 +46,10 @@ func buildTaskPayload(task ScheduledTask) taskPayload {
 		ID:              task.ID,
 		Message:         task.Message,
 		SessionID:       task.SessionID,
-		TaskKind:        task.TaskKind,
+		TaskKind:        normalizeTaskKind(task.TaskKind),
 		Action:          task.Action,
 		ActionParams:    cloneTaskActionParams(task.ActionParams),
+		Workflow:        cloneTaskWorkflow(task.Workflow),
 		ScheduleType:    task.ScheduleType,
 		IntervalSeconds: task.IntervalSeconds,
 		CronExpr:        task.CronExpr,
@@ -80,11 +81,12 @@ func buildTaskRunLogPayload(run TaskRunLog) taskRunLogPayload {
 }
 
 func includeTaskInScope(task ScheduledTask, scope string) bool {
+	kind := normalizeTaskKind(task.TaskKind)
 	switch strings.TrimSpace(scope) {
 	case "", taskListScopeUser:
-		return normalizeTaskKind(task.TaskKind) == taskKindAgentMessage
+		return kind == taskKindAgentMessage || kind == taskKindWorkflow
 	case taskListScopeSystem:
-		return normalizeTaskKind(task.TaskKind) == taskKindSystemAction
+		return kind == taskKindSystemAction
 	default:
 		return false
 	}

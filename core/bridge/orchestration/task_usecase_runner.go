@@ -131,6 +131,10 @@ func buildTaskFromCreateParams(params taskCreateParams, now time.Time) (Schedule
 	if invalidScheduleFields(params.IntervalSeconds, cronExpr) {
 		return ScheduledTask{}, invalidTaskConfig("exactly one of interval_seconds or cron_expr is required")
 	}
+	taskKind := normalizeTaskKind(params.TaskKind)
+	if err := ensureWorkflowAllowedForTaskKind(taskKind, params.Workflow); err != nil {
+		return ScheduledTask{}, err
+	}
 
 	task := ScheduledTask{
 		Message:         strings.TrimSpace(params.Message),
@@ -138,6 +142,7 @@ func buildTaskFromCreateParams(params taskCreateParams, now time.Time) (Schedule
 		TaskKind:        strings.TrimSpace(params.TaskKind),
 		Action:          strings.TrimSpace(params.Action),
 		ActionParams:    cloneTaskActionParams(params.ActionParams),
+		Workflow:        cloneTaskWorkflow(params.Workflow),
 		Enabled:         true,
 		CreatedAt:       now,
 		ScheduleType:    taskScheduleTypeInterval,
@@ -189,6 +194,16 @@ func applyTaskPatch(task *ScheduledTask, params taskUpdateParams) (bool, error) 
 	}
 	if params.ActionParams != nil {
 		task.ActionParams = cloneTaskActionParams(*params.ActionParams)
+	}
+	taskKind := normalizeTaskKind(task.TaskKind)
+	if params.Workflow != nil {
+		if err := ensureWorkflowAllowedForTaskKind(taskKind, params.Workflow); err != nil {
+			return false, err
+		}
+		task.Workflow = cloneTaskWorkflow(params.Workflow)
+	}
+	if taskKind != taskKindWorkflow {
+		task.Workflow = nil
 	}
 	if params.Enabled != nil {
 		task.Enabled = *params.Enabled
@@ -243,4 +258,11 @@ func (r taskMutationRunner) ensureTaskSessionExists(taskKind string, sessionID s
 		return errSessionEnded
 	}
 	return nil
+}
+
+func ensureWorkflowAllowedForTaskKind(taskKind string, workflow *WorkflowDefinition) error {
+	if workflow == nil || normalizeTaskKind(taskKind) == taskKindWorkflow {
+		return nil
+	}
+	return invalidTaskConfig(normalizeTaskKind(taskKind) + " does not allow workflow")
 }

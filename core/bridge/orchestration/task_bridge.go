@@ -20,6 +20,7 @@ const (
 	maxTaskResponsePreviewRunes = bridgeTasks.MaxResponsePreviewRunes
 	taskKindAgentMessage        = bridgeTasks.KindAgentMessage
 	taskKindSystemAction        = bridgeTasks.KindSystemAction
+	taskKindWorkflow            = bridgeTasks.KindWorkflow
 	taskLoadIssueReadError      = bridgeTasks.LoadIssueReadError
 	taskLoadIssueDecodeError    = bridgeTasks.LoadIssueDecodeError
 	taskLoadIssueInvalidConfig  = bridgeTasks.LoadIssueInvalidConfig
@@ -34,6 +35,9 @@ var (
 )
 
 type ScheduledTask = bridgeTasks.ScheduledTask
+type WorkflowDefinition = bridgeTasks.WorkflowDefinition
+type WorkflowNode = bridgeTasks.WorkflowNode
+type WorkflowEdge = bridgeTasks.WorkflowEdge
 type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
 type TaskStore = bridgeTasks.Store
@@ -55,6 +59,10 @@ func cloneTaskActionParams(input map[string]any) map[string]any {
 	return bridgeTasks.CloneActionParams(input)
 }
 
+func cloneTaskWorkflow(input *WorkflowDefinition) *WorkflowDefinition {
+	return bridgeTasks.CloneWorkflowDefinition(input)
+}
+
 func decodeActionParamsMap[T any](input map[string]any) (T, error) {
 	return bridgeTasks.DecodeParamsMap[T](input)
 }
@@ -68,16 +76,20 @@ type taskExecutorAdapter struct {
 }
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
-	if a.service == nil {
-		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
-	}
-	if normalizeTaskKind(task.TaskKind) == taskKindSystemAction {
+	switch normalizeTaskKind(task.TaskKind) {
+	case taskKindWorkflow:
+		return executeWorkflowTask(task)
+	case taskKindSystemAction:
 		return a.executeSystemTask(ctx, task, traceID)
+	default:
+		return a.executeAgentTask(ctx, task, traceID)
 	}
-	return a.executeAgentTask(ctx, task, traceID)
 }
 
 func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
+	if a.service == nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
+	}
 	payload, _, err := a.service.executeAgentAction(ctx, agentParams{
 		Message:   task.Message,
 		SessionID: task.SessionID,
@@ -104,6 +116,9 @@ func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task Schedule
 }
 
 func (a taskExecutorAdapter) executeSystemTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
+	if a.service == nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
+	}
 	switch strings.TrimSpace(task.Action) {
 	case busActionRSSInboxPoll:
 		params, err := decodeRSSInboxPollParams(task.ActionParams)

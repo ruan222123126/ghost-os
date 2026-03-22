@@ -75,7 +75,11 @@ func (s *TaskScheduler) persistNextRun(reg *taskRegistration, next time.Time) er
 	reg.mu.Lock()
 	reg.task.NextRunAt = next.UTC()
 	updated := reg.task
+	running := reg.running
 	reg.mu.Unlock()
+	if running {
+		return nil
+	}
 	return s.store.SaveTask(&updated)
 }
 

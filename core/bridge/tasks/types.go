@@ -23,6 +23,7 @@ const (
 	MaxResponsePreviewRunes = 240
 	KindAgentMessage        = "agent_message"
 	KindSystemAction        = "system_action"
+	KindWorkflow            = "workflow"
 	LoadIssueReadError      = "read_error"
 	LoadIssueDecodeError    = "decode_error"
 	LoadIssueInvalidConfig  = "invalid_config"
@@ -41,21 +42,22 @@ var (
 )
 
 type ScheduledTask struct {
-	ID              string         `json:"id"`
-	Message         string         `json:"message"`
-	SessionID       string         `json:"session_id,omitempty"`
-	TaskKind        string         `json:"task_kind,omitempty"`
-	Action          string         `json:"action,omitempty"`
-	ActionParams    map[string]any `json:"action_params,omitempty"`
-	ScheduleType    string         `json:"schedule_type"`
-	IntervalSeconds int            `json:"interval_seconds,omitempty"`
-	CronExpr        string         `json:"cron_expr,omitempty"`
-	Enabled         bool           `json:"enabled"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	LastRunAt       time.Time      `json:"last_run_at,omitempty"`
-	NextRunAt       time.Time      `json:"next_run_at,omitempty"`
-	LastError       string         `json:"last_error,omitempty"`
+	ID              string              `json:"id"`
+	Message         string              `json:"message,omitempty"`
+	SessionID       string              `json:"session_id,omitempty"`
+	TaskKind        string              `json:"task_kind,omitempty"`
+	Action          string              `json:"action,omitempty"`
+	ActionParams    map[string]any      `json:"action_params,omitempty"`
+	Workflow        *WorkflowDefinition `json:"workflow,omitempty"`
+	ScheduleType    string              `json:"schedule_type"`
+	IntervalSeconds int                 `json:"interval_seconds,omitempty"`
+	CronExpr        string              `json:"cron_expr,omitempty"`
+	Enabled         bool                `json:"enabled"`
+	CreatedAt       time.Time           `json:"created_at"`
+	UpdatedAt       time.Time           `json:"updated_at"`
+	LastRunAt       time.Time           `json:"last_run_at,omitempty"`
+	NextRunAt       time.Time           `json:"next_run_at,omitempty"`
+	LastError       string              `json:"last_error,omitempty"`
 }
 
 type RunLog struct {
@@ -87,6 +89,8 @@ func NormalizeKind(kind string) string {
 	switch strings.TrimSpace(kind) {
 	case KindSystemAction:
 		return KindSystemAction
+	case KindWorkflow:
+		return KindWorkflow
 	default:
 		return KindAgentMessage
 	}
@@ -128,6 +132,7 @@ func NormalizeScheduledTask(task *ScheduledTask, validator DefinitionValidator) 
 	task.TaskKind = NormalizeKind(task.TaskKind)
 	task.Action = strings.TrimSpace(task.Action)
 	task.ActionParams = CloneActionParams(task.ActionParams)
+	task.Workflow = CloneWorkflowDefinition(task.Workflow)
 	task.ScheduleType = strings.TrimSpace(task.ScheduleType)
 	task.CronExpr = strings.TrimSpace(task.CronExpr)
 	task.LastError = strings.TrimSpace(task.LastError)

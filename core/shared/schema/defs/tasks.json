@@ -1,120 +1,284 @@
 {
-  "$defs": {
-    "taskCreateRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "message"
-      ],
-      "properties": {
-        "message": {
-          "type": "string",
-          "minLength": 1
+    "$defs": {
+        "workflowNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 240,
+                "go": {
+                    "name": "workflowNodeContract"
+                },
+                "ts": {
+                    "name": "WorkflowNode"
+                },
+                "rust": {
+                    "name": "WorkflowNode"
+                },
+                "kotlin": {
+                    "name": "WorkflowNode"
+                }
+            }
         },
-        "session_id": {
-          "type": "string"
+        "workflowEdge": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "from_node_id",
+                "to_node_id"
+            ],
+            "properties": {
+                "from_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "to_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 241,
+                "go": {
+                    "name": "workflowEdgeContract"
+                },
+                "ts": {
+                    "name": "WorkflowEdge"
+                },
+                "rust": {
+                    "name": "WorkflowEdge"
+                },
+                "kotlin": {
+                    "name": "WorkflowEdge"
+                }
+            }
         },
-        "interval_seconds": {
-          "type": "integer",
-          "minimum": 1
+        "workflowDefinition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "nodes",
+                "edges"
+            ],
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/workflowNode"
+                    }
+                },
+                "edges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/workflowEdge"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 242,
+                "go": {
+                    "name": "workflowDefinitionContract"
+                },
+                "ts": {
+                    "name": "WorkflowDefinition"
+                },
+                "rust": {
+                    "name": "WorkflowDefinition"
+                },
+                "kotlin": {
+                    "name": "WorkflowDefinition"
+                }
+            }
         },
-        "cron_expr": {
-          "type": "string",
-          "minLength": 1
+        "taskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "system_action",
+                        "workflow"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            }
         },
-        "trace_id": {
-          "type": "string"
+        "taskIDRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            }
+        },
+        "taskUpdateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "system_action",
+                        "workflow"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "taskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "task_kind",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "system_action",
+                        "workflow"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            }
+        },
+        "taskDeletePayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "deleted"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "deleted": {
+                    "type": "boolean"
+                }
+            }
         }
-      }
-    },
-    "taskIDRequest": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "taskPayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "message",
-        "schedule_type",
-        "enabled",
-        "created_at",
-        "updated_at"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "message": {
-          "type": "string",
-          "minLength": 1
-        },
-        "session_id": {
-          "type": "string"
-        },
-        "schedule_type": {
-          "type": "string",
-          "enum": [
-            "interval",
-            "cron"
-          ]
-        },
-        "interval_seconds": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "cron_expr": {
-          "type": "string"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "created_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "updated_at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "last_run_at": {
-          "type": "string"
-        },
-        "next_run_at": {
-          "type": "string"
-        },
-        "last_error": {
-          "type": "string"
-        }
-      }
-    },
-    "taskDeletePayload": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "deleted"
-      ],
-      "properties": {
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "deleted": {
-          "type": "boolean"
-        }
-      }
     }
-  }
 }

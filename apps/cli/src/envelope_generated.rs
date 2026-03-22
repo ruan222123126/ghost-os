@@ -344,8 +344,13 @@ pub struct BridgeConfig {
     pub api_key_set: bool,
     pub model_selection_enabled: bool,
     pub graphql_default_source: String,
+    pub graphql_tool_runtime_enabled: bool,
     pub graphql_sources: Vec<GraphQLSourceResponse>,
     pub graphql_mutation_policies: Vec<GraphQLMutationPolicyResponse>,
+    pub web_rooter_enabled: bool,
+    pub web_rooter_base_url: String,
+    pub web_rooter_timeout_ms: i64,
+    pub web_rooter_api_token_set: bool,
     pub web_search_tavily_api_key_set: bool,
     pub web_search_exa_api_key_set: bool,
 }
@@ -373,11 +378,21 @@ pub struct ConfigUpdate {
     #[serde(default)]
     pub graphql_default_source: Option<String>,
     #[serde(default)]
+    pub graphql_tool_runtime_enabled: Option<bool>,
+    #[serde(default)]
     pub graphql_sources: Option<Vec<GraphQLSourceInput>>,
     #[serde(default)]
     pub graphql_source_upsert: Option<GraphQLSourceInput>,
     #[serde(default)]
     pub graphql_mutation_policies: Option<Vec<GraphQLMutationPolicyInput>>,
+    #[serde(default)]
+    pub web_rooter_enabled: Option<bool>,
+    #[serde(default)]
+    pub web_rooter_base_url: Option<String>,
+    #[serde(default)]
+    pub web_rooter_api_token: Option<String>,
+    #[serde(default)]
+    pub web_rooter_timeout_ms: Option<i64>,
     #[serde(default)]
     pub web_search_tavily_api_key: Option<String>,
     #[serde(default)]
@@ -578,6 +593,25 @@ pub struct SetActiveProviderRequest {
     pub name: String,
     #[serde(default)]
     pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowNode {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowEdge {
+    pub from_node_id: String,
+    pub to_node_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowDefinition {
+    pub nodes: Vec<WorkflowNode>,
+    pub edges: Vec<WorkflowEdge>,
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]

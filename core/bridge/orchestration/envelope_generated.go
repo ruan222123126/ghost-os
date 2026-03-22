@@ -281,8 +281,13 @@ type configResponse struct {
 	APIKeySet bool `json:"api_key_set"`
 	ModelSelectionEnabled bool `json:"model_selection_enabled"`
 	GraphqlDefaultSource string `json:"graphql_default_source"`
+	GraphqlToolRuntimeEnabled bool `json:"graphql_tool_runtime_enabled"`
 	GraphqlSources []graphqlSourceResponse `json:"graphql_sources"`
 	GraphqlMutationPolicies []graphqlMutationPolicyResponse `json:"graphql_mutation_policies"`
+	WebRooterEnabled bool `json:"web_rooter_enabled"`
+	WebRooterBaseURL string `json:"web_rooter_base_url"`
+	WebRooterTimeoutMs int `json:"web_rooter_timeout_ms"`
+	WebRooterAPITokenSet bool `json:"web_rooter_api_token_set"`
 	WebSearchTavilyAPIKeySet bool `json:"web_search_tavily_api_key_set"`
 	WebSearchExaAPIKeySet bool `json:"web_search_exa_api_key_set"`
 }
@@ -302,9 +307,14 @@ type configUpdateRequest struct {
 	Model *string `json:"model,omitempty"`
 	ChatPath *string `json:"chat_path,omitempty"`
 	GraphqlDefaultSource *string `json:"graphql_default_source,omitempty"`
+	GraphqlToolRuntimeEnabled *bool `json:"graphql_tool_runtime_enabled,omitempty"`
 	GraphqlSources []graphqlSourceInput `json:"graphql_sources,omitempty"`
 	GraphqlSourceUpsert graphqlSourceInput `json:"graphql_source_upsert,omitempty"`
 	GraphqlMutationPolicies []graphqlMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
+	WebRooterEnabled *bool `json:"web_rooter_enabled,omitempty"`
+	WebRooterBaseURL *string `json:"web_rooter_base_url,omitempty"`
+	WebRooterAPIToken *string `json:"web_rooter_api_token,omitempty"`
+	WebRooterTimeoutMs *int `json:"web_rooter_timeout_ms,omitempty"`
 	WebSearchTavilyAPIKey *string `json:"web_search_tavily_api_key,omitempty"`
 	WebSearchExaAPIKey *string `json:"web_search_exa_api_key,omitempty"`
 	TraceID string `json:"trace_id,omitempty"`
@@ -445,6 +455,24 @@ type providerListResponse struct {
 type setActiveProviderRequest struct {
 	Name string `json:"name"`
 	TraceID string `json:"trace_id,omitempty"`
+}
+
+// workflowNodeContract 对齐 core/shared/schema.json 的 workflowNode。
+type workflowNodeContract struct {
+	ID string `json:"id"`
+	Type string `json:"type"`
+}
+
+// workflowEdgeContract 对齐 core/shared/schema.json 的 workflowEdge。
+type workflowEdgeContract struct {
+	FromNodeID string `json:"from_node_id"`
+	ToNodeID string `json:"to_node_id"`
+}
+
+// workflowDefinitionContract 对齐 core/shared/schema.json 的 workflowDefinition。
+type workflowDefinitionContract struct {
+	Nodes []workflowNodeContract `json:"nodes"`
+	Edges []workflowEdgeContract `json:"edges"`
 }
 
 // apiRequest 对齐 core/shared/schema.json 的 requestEnvelope。

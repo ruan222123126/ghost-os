@@ -27,6 +27,9 @@ func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error)
 	if err := r.applyUpdate(task, params); err != nil {
 		return taskPayload{}, err
 	}
+	if err := r.scheduler.Unregister(id); err != nil {
+		return taskPayload{}, err
+	}
 	if err := r.store.SaveTask(task); err != nil {
 		return taskPayload{}, err
 	}

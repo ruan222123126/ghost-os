@@ -238,8 +238,13 @@ export interface BridgeConfig {
   api_key_set: boolean;
   model_selection_enabled: boolean;
   graphql_default_source: string;
+  graphql_tool_runtime_enabled: boolean;
   graphql_sources: GraphQLSourceResponse[];
   graphql_mutation_policies: GraphQLMutationPolicyResponse[];
+  web_rooter_enabled: boolean;
+  web_rooter_base_url: string;
+  web_rooter_timeout_ms: number;
+  web_rooter_api_token_set: boolean;
   web_search_tavily_api_key_set: boolean;
   web_search_exa_api_key_set: boolean;
 }
@@ -257,9 +262,14 @@ export interface ConfigUpdate {
   model?: string;
   chat_path?: string;
   graphql_default_source?: string;
+  graphql_tool_runtime_enabled?: boolean;
   graphql_sources?: GraphQLSourceInput[];
   graphql_source_upsert?: GraphQLSourceInput;
   graphql_mutation_policies?: GraphQLMutationPolicyInput[];
+  web_rooter_enabled?: boolean;
+  web_rooter_base_url?: string;
+  web_rooter_api_token?: string;
+  web_rooter_timeout_ms?: number;
   web_search_tavily_api_key?: string;
   web_search_exa_api_key?: string;
   trace_id?: string;
@@ -389,6 +399,21 @@ export interface ProviderListResponse {
 export interface SetActiveProviderRequest {
   name: string;
   trace_id?: string;
+}
+
+export interface WorkflowNode {
+  id: string;
+  type: string;
+}
+
+export interface WorkflowEdge {
+  from_node_id: string;
+  to_node_id: string;
+}
+
+export interface WorkflowDefinition {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
 }
 
 export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;

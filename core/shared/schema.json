@@ -1,193 +1,205 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ghost-os.dev/schemas/bus-envelope.schema.json",
-  "title": "Ghost-OS Bus Contract",
-  "description": "Single source of truth for cross-process request/response envelopes, stream event envelopes, and core action schemas.",
-  "oneOf": [
-    {
-      "$ref": "#/$defs/requestEnvelope"
-    },
-    {
-      "$ref": "#/$defs/responseEnvelope"
-    },
-    {
-      "$ref": "#/$defs/agentStreamEvent"
-    },
-    {
-      "$ref": "#/$defs/sessionPushEvent"
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://ghost-os.dev/schemas/bus-envelope.schema.json",
+    "title": "Ghost-OS Bus Contract",
+    "description": "Single source of truth for cross-process request/response envelopes, stream event envelopes, and core action schemas.",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/requestEnvelope"
+        },
+        {
+            "$ref": "#/$defs/responseEnvelope"
+        },
+        {
+            "$ref": "#/$defs/agentStreamEvent"
+        },
+        {
+            "$ref": "#/$defs/sessionPushEvent"
+        }
+    ],
+    "$defs": {
+        "action": {
+            "$ref": "./schema/defs/base.json#/$defs/action"
+        },
+        "status": {
+            "$ref": "./schema/defs/base.json#/$defs/status"
+        },
+        "requestEnvelope": {
+            "$ref": "./schema/defs/base.json#/$defs/requestEnvelope"
+        },
+        "responseEnvelope": {
+            "$ref": "./schema/defs/base.json#/$defs/responseEnvelope"
+        },
+        "providerType": {
+            "$ref": "./schema/defs/base.json#/$defs/providerType"
+        },
+        "bashExecParams": {
+            "$ref": "./schema/defs/execution.json#/$defs/bashExecParams"
+        },
+        "bashExecPayload": {
+            "$ref": "./schema/defs/execution.json#/$defs/bashExecPayload"
+        },
+        "scriptExecParams": {
+            "$ref": "./schema/defs/execution.json#/$defs/scriptExecParams"
+        },
+        "scriptExecPayload": {
+            "$ref": "./schema/defs/execution.json#/$defs/scriptExecPayload"
+        },
+        "exportFileParams": {
+            "$ref": "./schema/defs/execution.json#/$defs/exportFileParams"
+        },
+        "exportFilePayload": {
+            "$ref": "./schema/defs/execution.json#/$defs/exportFilePayload"
+        },
+        "assistantSessionEndSignal": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/assistantSessionEndSignal"
+        },
+        "agentRequest": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentRequest"
+        },
+        "agentIterationSummaryItem": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentIterationSummaryItem"
+        },
+        "agentResponsePayload": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentResponsePayload"
+        },
+        "askHumanOption": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/askHumanOption"
+        },
+        "agentAwaitingHumanPayload": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/agentAwaitingHumanPayload"
+        },
+        "agentStopResponsePayload": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/agentStopResponsePayload"
+        },
+        "humanResponseRequest": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseRequest"
+        },
+        "humanResponseAck": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseAck"
+        },
+        "agentSendResultPayload": {
+            "$ref": "./schema/defs/agent_core.json#/$defs/agentSendResultPayload"
+        },
+        "agentStreamEvent": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamEvent"
+        },
+        "sessionPushEvent": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushEvent"
+        },
+        "agentRunStartedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentRunStartedPayload"
+        },
+        "agentCompletionDeltaPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentCompletionDeltaPayload"
+        },
+        "agentToolCallStartedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallStartedPayload"
+        },
+        "agentToolCallFinishedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallFinishedPayload"
+        },
+        "agentStreamMessagePayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamMessagePayload"
+        },
+        "agentDonePayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentDonePayload"
+        },
+        "agentErrorPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentErrorPayload"
+        },
+        "sessionPushAssistantMessagePayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAssistantMessagePayload"
+        },
+        "sessionPushAwaitingHumanPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAwaitingHumanPayload"
+        },
+        "sessionImageContent": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionImageContent"
+        },
+        "sessionFileContent": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionFileContent"
+        },
+        "sessionContentPart": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionContentPart"
+        },
+        "sessionToolCall": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionToolCall"
+        },
+        "sessionToolResult": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionToolResult"
+        },
+        "sessionHumanInteraction": {
+            "$ref": "./schema/defs/session_content.json#/$defs/sessionHumanInteraction"
+        },
+        "sessionMessage": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionMessage"
+        },
+        "sessionMetadata": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
+        },
+        "sessionDetail": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionDetail"
+        },
+        "bridgeConfig": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/bridgeConfig"
+        },
+        "configUpdate": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/configUpdate"
+        },
+        "graphqlDomainResponse": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainResponse"
+        },
+        "graphqlSourceResponse": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceResponse"
+        },
+        "graphqlMutationPolicyResponse": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyResponse"
+        },
+        "graphqlDomainInput": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainInput"
+        },
+        "graphqlMutationPolicyInput": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyInput"
+        },
+        "graphqlSourceInput": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceInput"
+        },
+        "providerConfig": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerConfig"
+        },
+        "providerConfigInput": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerConfigInput"
+        },
+        "providerListResponse": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerListResponse"
+        },
+        "setActiveProviderRequest": {
+            "$ref": "./schema/defs/config_runtime.json#/$defs/setActiveProviderRequest"
+        },
+        "taskCreateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskCreateRequest"
+        },
+        "taskUpdateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskUpdateRequest"
+        },
+        "taskIDRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskIDRequest"
+        },
+        "taskPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskPayload"
+        },
+        "taskDeletePayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskDeletePayload"
+        },
+        "workflowDefinition": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowDefinition"
+        },
+        "workflowNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowNode"
+        },
+        "workflowEdge": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowEdge"
+        }
     }
-  ],
-  "$defs": {
-    "action": {
-      "$ref": "./schema/defs/base.json#/$defs/action"
-    },
-    "status": {
-      "$ref": "./schema/defs/base.json#/$defs/status"
-    },
-    "requestEnvelope": {
-      "$ref": "./schema/defs/base.json#/$defs/requestEnvelope"
-    },
-    "responseEnvelope": {
-      "$ref": "./schema/defs/base.json#/$defs/responseEnvelope"
-    },
-    "providerType": {
-      "$ref": "./schema/defs/base.json#/$defs/providerType"
-    },
-    "bashExecParams": {
-      "$ref": "./schema/defs/execution.json#/$defs/bashExecParams"
-    },
-    "bashExecPayload": {
-      "$ref": "./schema/defs/execution.json#/$defs/bashExecPayload"
-    },
-    "scriptExecParams": {
-      "$ref": "./schema/defs/execution.json#/$defs/scriptExecParams"
-    },
-    "scriptExecPayload": {
-      "$ref": "./schema/defs/execution.json#/$defs/scriptExecPayload"
-    },
-    "exportFileParams": {
-      "$ref": "./schema/defs/execution.json#/$defs/exportFileParams"
-    },
-    "exportFilePayload": {
-      "$ref": "./schema/defs/execution.json#/$defs/exportFilePayload"
-    },
-    "assistantSessionEndSignal": {
-      "$ref": "./schema/defs/agent_core.json#/$defs/assistantSessionEndSignal"
-    },
-    "agentRequest": {
-      "$ref": "./schema/defs/agent_core.json#/$defs/agentRequest"
-    },
-    "agentIterationSummaryItem": {
-      "$ref": "./schema/defs/agent_core.json#/$defs/agentIterationSummaryItem"
-    },
-    "agentResponsePayload": {
-      "$ref": "./schema/defs/agent_core.json#/$defs/agentResponsePayload"
-    },
-    "askHumanOption": {
-      "$ref": "./schema/defs/agent_human.json#/$defs/askHumanOption"
-    },
-    "agentAwaitingHumanPayload": {
-      "$ref": "./schema/defs/agent_human.json#/$defs/agentAwaitingHumanPayload"
-    },
-    "agentStopResponsePayload": {
-      "$ref": "./schema/defs/agent_human.json#/$defs/agentStopResponsePayload"
-    },
-    "humanResponseRequest": {
-      "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseRequest"
-    },
-    "humanResponseAck": {
-      "$ref": "./schema/defs/agent_human.json#/$defs/humanResponseAck"
-    },
-    "agentSendResultPayload": {
-      "$ref": "./schema/defs/agent_core.json#/$defs/agentSendResultPayload"
-    },
-    "agentStreamEvent": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamEvent"
-    },
-    "sessionPushEvent": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushEvent"
-    },
-    "agentRunStartedPayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentRunStartedPayload"
-    },
-    "agentCompletionDeltaPayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentCompletionDeltaPayload"
-    },
-    "agentToolCallStartedPayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallStartedPayload"
-    },
-    "agentToolCallFinishedPayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallFinishedPayload"
-    },
-    "agentStreamMessagePayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamMessagePayload"
-    },
-    "agentDonePayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentDonePayload"
-    },
-    "agentErrorPayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/agentErrorPayload"
-    },
-    "sessionPushAssistantMessagePayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAssistantMessagePayload"
-    },
-    "sessionPushAwaitingHumanPayload": {
-      "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAwaitingHumanPayload"
-    },
-    "sessionImageContent": {
-      "$ref": "./schema/defs/session_content.json#/$defs/sessionImageContent"
-    },
-    "sessionFileContent": {
-      "$ref": "./schema/defs/session_content.json#/$defs/sessionFileContent"
-    },
-    "sessionContentPart": {
-      "$ref": "./schema/defs/session_content.json#/$defs/sessionContentPart"
-    },
-    "sessionToolCall": {
-      "$ref": "./schema/defs/session_content.json#/$defs/sessionToolCall"
-    },
-    "sessionToolResult": {
-      "$ref": "./schema/defs/session_content.json#/$defs/sessionToolResult"
-    },
-    "sessionHumanInteraction": {
-      "$ref": "./schema/defs/session_content.json#/$defs/sessionHumanInteraction"
-    },
-    "sessionMessage": {
-      "$ref": "./schema/defs/session_history.json#/$defs/sessionMessage"
-    },
-    "sessionMetadata": {
-      "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
-    },
-    "sessionDetail": {
-      "$ref": "./schema/defs/session_history.json#/$defs/sessionDetail"
-    },
-    "bridgeConfig": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/bridgeConfig"
-    },
-    "configUpdate": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/configUpdate"
-    },
-    "graphqlDomainResponse": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainResponse"
-    },
-    "graphqlSourceResponse": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceResponse"
-    },
-    "graphqlMutationPolicyResponse": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyResponse"
-    },
-    "graphqlDomainInput": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainInput"
-    },
-    "graphqlMutationPolicyInput": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyInput"
-    },
-    "graphqlSourceInput": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceInput"
-    },
-    "providerConfig": {
-      "$ref": "./schema/defs/config_provider.json#/$defs/providerConfig"
-    },
-    "providerConfigInput": {
-      "$ref": "./schema/defs/config_provider.json#/$defs/providerConfigInput"
-    },
-    "providerListResponse": {
-      "$ref": "./schema/defs/config_provider.json#/$defs/providerListResponse"
-    },
-    "setActiveProviderRequest": {
-      "$ref": "./schema/defs/config_runtime.json#/$defs/setActiveProviderRequest"
-    },
-    "taskCreateRequest": {
-      "$ref": "./schema/defs/tasks.json#/$defs/taskCreateRequest"
-    },
-    "taskIDRequest": {
-      "$ref": "./schema/defs/tasks.json#/$defs/taskIDRequest"
-    },
-    "taskPayload": {
-      "$ref": "./schema/defs/tasks.json#/$defs/taskPayload"
-    },
-    "taskDeletePayload": {
-      "$ref": "./schema/defs/tasks.json#/$defs/taskDeletePayload"
-    }
-  }
 }

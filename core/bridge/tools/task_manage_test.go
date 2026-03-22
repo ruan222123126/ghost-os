@@ -147,24 +147,28 @@ func TestTaskManageToolUpdateAllowsClearingSessionAndEnabled(t *testing.T) {
 }
 
 func TestTaskManageToolRejectsNonAgentTasks(t *testing.T) {
-	manager := &fakeTaskManager{getResult: TaskPayload{ID: "task-sys", TaskKind: "system_action", ScheduleType: "interval", IntervalSeconds: 60, Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}}
+	manager := &fakeTaskManager{}
 	tool := NewTaskManageTool(manager)
 
-	for _, input := range []string{
-		`{"operation":"get","id":"task-sys"}`,
-		`{"operation":"update","id":"task-sys","message":"x"}`,
-		`{"operation":"delete","id":"task-sys"}`,
-	} {
-		if _, err := tool.Execute(context.Background(), json.RawMessage(input), "trace-task"); err == nil || !strings.Contains(err.Error(), "agent_message") {
-			t.Fatalf("expected agent_message rejection for %s, got %v", input, err)
+	for _, taskKind := range []string{"system_action", "workflow"} {
+		manager.getResult = TaskPayload{ID: "task-non-agent", TaskKind: taskKind, ScheduleType: "interval", IntervalSeconds: 60, Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+		for _, input := range []string{
+			`{"operation":"get","id":"task-non-agent"}`,
+			`{"operation":"update","id":"task-non-agent","message":"x"}`,
+			`{"operation":"delete","id":"task-non-agent"}`,
+		} {
+			if _, err := tool.Execute(context.Background(), json.RawMessage(input), "trace-task"); err == nil || !strings.Contains(err.Error(), "agent_message") {
+				t.Fatalf("expected agent_message rejection for %s, got %v", input, err)
+			}
 		}
 	}
 }
 
-func TestTaskManageToolListFiltersSystemTasks(t *testing.T) {
+func TestTaskManageToolListFiltersNonAgentTasks(t *testing.T) {
 	manager := &fakeTaskManager{listResult: []TaskPayload{
 		{ID: "task-1", TaskKind: taskManageKindAgentMessage, ScheduleType: "interval", IntervalSeconds: 60, Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
 		{ID: "task-2", TaskKind: "system_action", ScheduleType: "interval", IntervalSeconds: 60, Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+		{ID: "task-3", TaskKind: "workflow", ScheduleType: "interval", IntervalSeconds: 60, Enabled: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
 	}}
 	tool := NewTaskManageTool(manager)
 
