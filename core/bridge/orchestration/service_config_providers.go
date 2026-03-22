@@ -17,9 +17,10 @@ const (
 )
 
 func (s *bridgeService) executeProvidersGetAction(traceID string) (any, int, error) {
-	payload := providerListResponse{
-		Providers:      buildProviderConfigResponses(s.configStore.ListProviders()),
-		ActiveProvider: s.configStore.Snapshot().Provider,
+	payload, err := s.providerListPayload()
+	if err != nil {
+		logAction(traceID, actionConfigProvidersGet, "error", err)
+		return nil, http.StatusInternalServerError, err
 	}
 	logAction(traceID, actionConfigProvidersGet, "success", nil)
 	return payload, http.StatusOK, nil
@@ -41,11 +42,13 @@ func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, t
 		logAction(traceID, actionConfigProviderCreate, "error", err)
 		return nil, configProviderStatusCode(err), err
 	}
+	payload, err := s.providerListPayload()
+	if err != nil {
+		logAction(traceID, actionConfigProviderCreate, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
 	logAction(traceID, actionConfigProviderCreate, "success", nil)
-	return providerListResponse{
-		Providers:      buildProviderConfigResponses(s.configStore.ListProviders()),
-		ActiveProvider: s.configStore.Snapshot().Provider,
-	}, http.StatusOK, nil
+	return payload, http.StatusOK, nil
 }
 
 func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpdateRequest, traceID string) (any, int, error) {
@@ -64,11 +67,13 @@ func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpd
 		logAction(traceID, actionConfigProviderUpdate, "error", err)
 		return nil, configProviderStatusCode(err), err
 	}
+	payload, err := s.providerListPayload()
+	if err != nil {
+		logAction(traceID, actionConfigProviderUpdate, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
 	logAction(traceID, actionConfigProviderUpdate, "success", nil)
-	return providerListResponse{
-		Providers:      buildProviderConfigResponses(s.configStore.ListProviders()),
-		ActiveProvider: s.configStore.Snapshot().Provider,
-	}, http.StatusOK, nil
+	return payload, http.StatusOK, nil
 }
 
 func (s *bridgeService) executeProviderDeleteAction(name string, traceID string) (any, int, error) {
@@ -77,11 +82,13 @@ func (s *bridgeService) executeProviderDeleteAction(name string, traceID string)
 		logAction(traceID, actionConfigProviderDelete, "error", err)
 		return nil, configProviderStatusCode(err), err
 	}
+	payload, err := s.providerListPayload()
+	if err != nil {
+		logAction(traceID, actionConfigProviderDelete, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
 	logAction(traceID, actionConfigProviderDelete, "success", nil)
-	return providerListResponse{
-		Providers:      buildProviderConfigResponses(s.configStore.ListProviders()),
-		ActiveProvider: s.configStore.Snapshot().Provider,
-	}, http.StatusOK, nil
+	return payload, http.StatusOK, nil
 }
 
 func (s *bridgeService) executeSetActiveProviderAction(req setActiveProviderRequest, traceID string) (any, int, error) {
@@ -90,11 +97,24 @@ func (s *bridgeService) executeSetActiveProviderAction(req setActiveProviderRequ
 		logAction(traceID, actionConfigProviderSetActive, "error", err)
 		return nil, configProviderStatusCode(err), err
 	}
+	payload, err := s.providerListPayload()
+	if err != nil {
+		logAction(traceID, actionConfigProviderSetActive, "error", err)
+		return nil, http.StatusInternalServerError, err
+	}
 	logAction(traceID, actionConfigProviderSetActive, "success", nil)
+	return payload, http.StatusOK, nil
+}
+
+func (s *bridgeService) providerListPayload() (providerListResponse, error) {
+	providers, err := s.configStore.ListProviders()
+	if err != nil {
+		return providerListResponse{}, err
+	}
 	return providerListResponse{
-		Providers:      buildProviderConfigResponses(s.configStore.ListProviders()),
+		Providers:      buildProviderConfigResponses(providers),
 		ActiveProvider: s.configStore.Snapshot().Provider,
-	}, http.StatusOK, nil
+	}, nil
 }
 
 func buildProviderConfigResponses(providers []providerConfig) []providerConfigResponse {

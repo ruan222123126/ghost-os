@@ -1,15 +1,20 @@
 package config
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
-func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) bridgeFileConfig {
+func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) (bridgeFileConfig, error) {
 	out := cfg
 	normalizeBridgeScalarFields(&out)
-	normalizeBridgeCollectionFields(&out)
+	if err := normalizeBridgeCollectionFields(&out); err != nil {
+		return bridgeFileConfig{}, err
+	}
 	providers := normalizeProviderConfigs(out.Providers, stringValue(out.Model))
 	out.Providers = providerConfigsToFileMap(providers)
 	out.ActiveProvider = normalizedActiveProviderName(providers, out.ActiveProvider)
-	return out
+	return out, nil
 }
 
 func normalizedActiveProviderName(providers []providerConfig, preferred ...*string) *string {
@@ -54,7 +59,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.NativeBinaryPath = cloneOptionalStringPointer(cfg.NativeBinaryPath)
 }
 
-func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
+func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) error {
 	cfg.PromptsCoreFiles = normalizeConfiguredPathList(cfg.PromptsCoreFiles)
 	cfg.PromptsRuntimeConstraintFiles = normalizeConfiguredPathList(cfg.PromptsRuntimeConstraintFiles)
 	cfg.PromptsResponseRuleFiles = normalizeConfiguredPathList(cfg.PromptsResponseRuleFiles)
@@ -62,12 +67,21 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) {
 	cfg.NativeBinaryCandidates = normalizeConfiguredPathList(cfg.NativeBinaryCandidates)
 	cfg.NativeAllowedReadPaths = normalizeConfiguredPathList(cfg.NativeAllowedReadPaths)
 	cfg.NativeAllowedWritePaths = normalizeConfiguredPathList(cfg.NativeAllowedWritePaths)
-	cfg.GraphQLSources = normalizeGraphQLSourceFileConfigs(cfg.GraphQLSources)
+	sources, err := normalizeGraphQLSourceFileConfigs(cfg.GraphQLSources)
+	if err != nil {
+		return err
+	}
+	cfg.GraphQLSources = sources
 	cfg.GraphQLMutationPolicies = normalizeGraphQLMutationPolicyFileConfigs(cfg.GraphQLMutationPolicies)
-	cfg.ProviderHeaders, _ = normalizeProviderHeaders(cfg.ProviderHeaders)
+	providerHeaders, err := normalizeProviderHeaders(cfg.ProviderHeaders)
+	if err != nil {
+		return err
+	}
+	cfg.ProviderHeaders = providerHeaders
 	cfg.CORSOrigins = normalizeOrigins(cfg.CORSOrigins)
 	cfg.ToolAllowlist = normalizeConfiguredToolNames(cfg.ToolAllowlist)
 	cfg.ToolBlocklist = normalizeConfiguredToolNames(cfg.ToolBlocklist)
+	return nil
 }
 
 func hasGraphQLSourceLayout(cfg bridgeFileConfig) bool {
@@ -77,30 +91,46 @@ func hasGraphQLSourceLayout(cfg bridgeFileConfig) bool {
 		len(cfg.GraphQLMutationPolicies) > 0
 }
 
-func normalizeGraphQLSourceFileConfigs(raw []graphQLSourceFileConfig) []graphQLSourceFileConfig {
+func normalizeGraphQLSourceFileConfigs(raw []graphQLSourceFileConfig) ([]graphQLSourceFileConfig, error) {
 	if len(raw) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	out := make([]graphQLSourceFileConfig, 0, len(raw))
 	for _, source := range raw {
-		out = append(out, graphQLSourceFileConfig{
-			Name:             strings.TrimSpace(source.Name),
-			Description:      strings.TrimSpace(source.Description),
-			Endpoint:         strings.TrimSpace(source.Endpoint),
-			APIKey:           cloneOptionalStringPointer(source.APIKey),
-			SchemaPath:       strings.TrimSpace(source.SchemaPath),
-			TimeoutMS:        source.TimeoutMS,
-			MaxResponseBytes: source.MaxResponseBytes,
-			Headers:          cloneStringMap(source.Headers),
-			MaxDepth:         source.MaxDepth,
-			MaxFields:        source.MaxFields,
-			MaxRootFields:    source.MaxRootFields,
-			MaxFragments:     source.MaxFragments,
-			Domains:          normalizeGraphQLDomainFileConfigs(source.Domains),
-		})
+		normalized, err := normalizeGraphQLSourceFileConfig(source)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, normalized)
 	}
-	return out
+	return out, nil
+}
+
+func normalizeGraphQLSourceFileConfig(source graphQLSourceFileConfig) (graphQLSourceFileConfig, error) {
+	headers, err := normalizeGraphQLHeaders(source.Headers)
+	if err != nil {
+		return graphQLSourceFileConfig{}, fmt.Errorf(
+			"invalid graphql source %q headers: %w",
+			strings.TrimSpace(source.Name),
+			err,
+		)
+	}
+	return graphQLSourceFileConfig{
+		Name:             strings.TrimSpace(source.Name),
+		Description:      strings.TrimSpace(source.Description),
+		Endpoint:         strings.TrimSpace(source.Endpoint),
+		APIKey:           cloneOptionalStringPointer(source.APIKey),
+		SchemaPath:       strings.TrimSpace(source.SchemaPath),
+		TimeoutMS:        source.TimeoutMS,
+		MaxResponseBytes: source.MaxResponseBytes,
+		Headers:          headers,
+		MaxDepth:         source.MaxDepth,
+		MaxFields:        source.MaxFields,
+		MaxRootFields:    source.MaxRootFields,
+		MaxFragments:     source.MaxFragments,
+		Domains:          normalizeGraphQLDomainFileConfigs(source.Domains),
+	}, nil
 }
 
 func normalizeGraphQLDomainFileConfigs(raw []graphQLDomainFileConfig) []graphQLDomainFileConfig {

@@ -18,10 +18,14 @@ func (s *store) loadUpdateStateLocked(req UpdateRequest) (configUpdateState, err
 	if err := validateConfigUpdateRequest(req, current); err != nil {
 		return configUpdateState{}, err
 	}
+	updateFileCfg, err := loadCurrentUpdateFileConfig(fileCfg, current, req)
+	if err != nil {
+		return configUpdateState{}, err
+	}
 	return configUpdateState{
 		configPath: configPath,
 		current:    current,
-		fileCfg:    loadCurrentUpdateFileConfig(fileCfg, current, req),
+		fileCfg:    updateFileCfg,
 	}, nil
 }
 
@@ -36,8 +40,11 @@ func loadCurrentUpdateFileConfig(
 	fileCfg bridgeFileConfig,
 	current runtimeConfig,
 	req UpdateRequest,
-) bridgeFileConfig {
-	out := normalizeBridgeFileConfigForWrite(fileCfg)
+) (bridgeFileConfig, error) {
+	out, err := normalizeBridgeFileConfigForWrite(fileCfg)
+	if err != nil {
+		return bridgeFileConfig{}, err
+	}
 	prepareProviderUpdateBase(&out, current, req)
 	prepareGraphQLUpdateBase(&out, current, req)
 	prepareWebSearchUpdateBase(&out, current, req)

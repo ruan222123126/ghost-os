@@ -89,7 +89,7 @@ func (s *ConfigStore) Snapshot() configResponse {
 	return configResponseFromSnapshot(s.unwrap().Snapshot())
 }
 
-func (s *ConfigStore) ListProviders() []providerConfig {
+func (s *ConfigStore) ListProviders() ([]providerConfig, error) {
 	return s.unwrap().ListProviders()
 }
 

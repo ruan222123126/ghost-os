@@ -30,16 +30,13 @@ func newStoreFromEnv() (*store, error) {
 }
 
 func (s *store) Config() (Config, error) {
-	s.mu.RLock()
-	runtime := s.runtime
-	s.mu.RUnlock()
-	return loadConfigWithRuntime(runtime)
+	return loadConfigWithRuntime(s.runtimeSnapshot())
 }
 
 func (s *store) runtimeSnapshot() runtimeConfig {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.runtime
+	return cloneRuntimeConfig(s.runtime)
 }
 
 func (s *store) RuntimeConfig() runtimeConfig {
@@ -51,13 +48,13 @@ func (s *store) Snapshot() Snapshot {
 	return snapshotFromRuntimeConfig(s.runtimeSnapshot())
 }
 
-func (s *store) ListProviders() []ProviderRecord {
+func (s *store) ListProviders() ([]ProviderRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	fileCfg, _, err := s.loadStoredFileConfigLocked()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return providerRecordsFromConfigs(normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)))
+	return providerRecordsFromConfigs(normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))), nil
 }

@@ -12,8 +12,8 @@ type stubConfigStore struct{}
 
 func (*stubConfigStore) Config() (bridgeconfig.Config, error) { return bridgeconfig.Config{}, nil }
 func (*stubConfigStore) Snapshot() bridgeconfig.Snapshot      { return bridgeconfig.Snapshot{} }
-func (*stubConfigStore) ListProviders() []bridgeconfig.ProviderRecord {
-	return nil
+func (*stubConfigStore) ListProviders() ([]bridgeconfig.ProviderRecord, error) {
+	return nil, nil
 }
 func (*stubConfigStore) AddProvider(bridgeconfig.ProviderRecord) error { return nil }
 func (*stubConfigStore) UpdateProvider(string, bridgeconfig.ProviderRecord) error {

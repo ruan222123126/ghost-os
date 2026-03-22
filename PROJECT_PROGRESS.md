@@ -23,6 +23,20 @@
 
 ### 2026-03-22
 
+- 收紧 `core/bridge/config` store 快照和值语义：
+  - `store.runtimeSnapshot()` / `RuntimeConfig()` 现改为深拷贝 runtime 中的 map/slice/GraphQL 嵌套结构，不再把内部可变引用直接暴露给调用方。
+  - `ListProviders()` 现改为显式返回 `([]ProviderRecord, error)`；`orchestration` provider 配置接口同步透传配置文件读取/解析失败，不再静默返回空列表。
+  - 新增 `config_store_snapshot_test.go`，覆盖 runtime 快照深拷贝回归和损坏配置文件时 `ListProviders()` 必须返回错误的路径。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./orchestration ./app -timeout 60s`
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -run '^$' -timeout 60s`
+
+- 修复 `core/bridge/config` 剩余的 header 归一化静默吞错：
+  - `normalizeBridgeFileConfigForWrite()`、`loadBridgeFileConfig()`、`writeBridgeTomlConfig()` 与 store update / runtime resolve 链路现会显式传播 `provider_headers`、GraphQL source `headers` 的归一化错误，不再把空白 header key 静默清空后继续执行。
+  - 新增 `config_header_failfast_test.go`，覆盖“从磁盘加载无效 `provider_headers` / GraphQL source headers 会直接失败”以及“写回配置时同样 fail-fast”两条回归路径。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s`
+
 - 收口 `core/bridge/config` 公共 API 为稳定域对象 + `Store` 接口：
   - 删除旧 `export.go` 对 runtime/file DTO、pointer helper、env helper 与 GraphQL file alias 的大面积再导出；`go doc ghost-os/bridge/config` 现在仅保留稳定配置对象、GraphQL 输入/快照、默认常量、错误以及 `Store` 接口。
   - `ProviderRecord` 改为独立公共 struct；`Store` 改为接口并由 `NewStoreFromEnv()` 返回，`orchestration` / `runtime` / `rss` / `app` 统一改为本地 wrapper 适配，不再依赖 `config` concrete store 或 `*bridgeconfig.Store` 指针。

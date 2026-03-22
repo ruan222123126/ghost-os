@@ -46,7 +46,10 @@ func loadBridgeFileConfig() (bridgeFileConfig, string, error) {
 		if resolveErr != nil {
 			return bridgeFileConfig{}, "", fmt.Errorf("resolve config path: %w", resolveErr)
 		}
-		normalized := normalizeBridgeFileConfigForWrite(rawCfg)
+		normalized, normalizeErr := normalizeBridgeFileConfigForWrite(rawCfg)
+		if normalizeErr != nil {
+			return bridgeFileConfig{}, "", fmt.Errorf("normalize config file %s: %w", resolvedPath, normalizeErr)
+		}
 		return normalized, resolvedPath, nil
 	case errors.Is(err, os.ErrNotExist):
 		resolvedPath, resolveErr := resolveUserPath(configPath)
@@ -72,7 +75,10 @@ func writeBridgeTomlConfig(path string, cfg bridgeFileConfig) error {
 		return fmt.Errorf("create config directory: %w", err)
 	}
 
-	normalized := normalizeBridgeFileConfigForWrite(cfg)
+	normalized, normalizeErr := normalizeBridgeFileConfigForWrite(cfg)
+	if normalizeErr != nil {
+		return fmt.Errorf("normalize config file: %w", normalizeErr)
+	}
 	var buffer bytes.Buffer
 	if err := toml.NewEncoder(&buffer).Encode(normalized); err != nil {
 		return fmt.Errorf("encode config file: %w", err)

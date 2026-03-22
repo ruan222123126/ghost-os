@@ -97,7 +97,10 @@ func resolveConfigForPersist(
 	fileCfg bridgeFileConfig,
 	fallback runtimeConfig,
 ) (bridgeFileConfig, runtimeConfig, error) {
-	normalized := normalizeBridgeFileConfigForWrite(fileCfg)
+	normalized, err := normalizeBridgeFileConfigForWrite(fileCfg)
+	if err != nil {
+		return bridgeFileConfig{}, runtimeConfig{}, err
+	}
 	runtime, err := resolveRuntimeConfigWithFallback(normalized, fallback)
 	if err != nil {
 		return bridgeFileConfig{}, runtimeConfig{}, err

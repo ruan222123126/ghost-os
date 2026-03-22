@@ -55,7 +55,11 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 // resolveRuntimeConfigWithFallback folds file overrides onto an existing
 // runtime snapshot. Store patch flows use this explicit exception path.
 func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
-	fileCfg = normalizeBridgeFileConfigForWrite(fileCfg)
+	normalizedFileCfg, err := normalizeBridgeFileConfigForWrite(fileCfg)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	fileCfg = normalizedFileCfg
 	fallback = normalizeRuntimeConfig(fallback)
 	webSearch := fileWebSearchSettings(fileCfg, webSearchSettings{
 		TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
