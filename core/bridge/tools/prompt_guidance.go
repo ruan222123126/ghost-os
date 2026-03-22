@@ -35,6 +35,7 @@ func workspacePromptGuidance(names map[string]bool) []string {
 	}
 	return []string{
 		"- Use `read_and_summarize` for broad local triage, then use `script_exec` for exact reads, searches, edits, and shell/script work.",
+		"- Minimal `script_exec` GraphQL example: `mutation { script_exec(script: \"print(\\\"ok\\\")\") }`.",
 	}
 }
 
@@ -44,10 +45,11 @@ func toolSearchPromptGuidance(names map[string]bool) []string {
 	}
 	return []string{
 		"- Use `tfind` when the currently visible tools are insufficient.",
-		"- Start with `tfind(action=\"search\")` to find the smallest suitable optional tool.",
-		"- After `tfind(action=\"load\")`, do not call the loaded tool in the same turn; it becomes available next turn.",
-		"- Use `tfind(action=\"list\")` to check whether a loaded tool is pending, active, or expired.",
-		"- Unload tools you no longer need with `tfind(action=\"unload\")`.",
+		"- Start with `tfind(action: search)` to find the smallest suitable optional tool.",
+		"- After `tfind(action: load)`, do not call the loaded tool in the same turn; it becomes available next turn.",
+		"- Minimal `tfind(action: load)` example: `mutation { tfind(action: load, tool_names: [\"browser_control\"]) }`.",
+		"- Use `tfind(action: list)` to check whether a loaded tool is pending, active, or expired.",
+		"- Unload tools you no longer need with `tfind(action: unload)`.",
 	}
 }
 
@@ -56,7 +58,8 @@ func humanPromptGuidance(names map[string]bool) []string {
 		return nil
 	}
 	return []string{
-		"- Use `ask_human` only when blocked on required user input. If you provide predefined choices, ensure one option allows custom input.",
+		"- Use `ask_human` only when blocked on required user input. If you provide predefined choices, the final option must allow custom input.",
+		"- Minimal `ask_human` options example: `mutation { ask_human(prompt: \"Which environment should I use?\", options: [{label: \"staging\"}, {label: \"Other\", allow_custom: true}]) }`.",
 	}
 }
 

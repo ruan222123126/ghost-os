@@ -67,6 +67,12 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "ask_human(") {
 		t.Fatalf("expected graphql schema summary to include ask_human field, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "Minimal successful examples:") {
+		t.Fatalf("expected graphql prompt to include minimal examples, got %q", prompt)
+	}
+	if !strings.Contains(prompt, `mutation { ask_human(prompt: "Which environment should I use?", options: [{label: "staging"}, {label: "Other", allow_custom: true}]) }`) {
+		t.Fatalf("expected graphql prompt to include ask_human example, got %q", prompt)
+	}
 	if len(completer.requests[0].Tools) != 0 {
 		t.Fatalf("expected graphql mode to hide native tool defs, got %+v", completer.requests[0].Tools)
 	}

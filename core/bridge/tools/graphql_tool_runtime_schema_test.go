@@ -16,6 +16,7 @@ func TestFormatGraphQLToolRuntimePrompt_IncludesMinimalExamplesForVisibleTools(t
 
 	for _, snippet := range []string{
 		"Minimal successful examples:",
+		"Prefer copying the closest minimal successful example",
 		"- `ask_human`: include a final custom option so the user can type their own answer.",
 		`mutation { ask_human(prompt: "Which environment should I use?", options: [{label: "staging"}, {label: "Other", allow_custom: true}]) }`,
 		"- `script_exec`: minimal sandbox execution mutation.",

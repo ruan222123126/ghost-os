@@ -19,7 +19,8 @@ func TestFormatPromptGuidanceForCatalog_UsesScopedToolHints(t *testing.T) {
 		"`read_and_summarize`",
 		"`script_exec`",
 		"`ask_human`",
-		"`tfind(action=\"search\")`",
+		"`tfind(action: search)`",
+		"Minimal `script_exec` GraphQL example",
 	} {
 		if !strings.Contains(guidance, snippet) {
 			t.Fatalf("expected guidance to contain %q, got %q", snippet, guidance)
@@ -39,9 +40,10 @@ func TestFormatPromptGuidanceForCatalog_IncludesToolSearchWorkflowOnlyWhenVisibl
 	withToolSearch := FormatPromptGuidanceForCatalog(registry)
 	for _, snippet := range []string{
 		"currently visible tools are insufficient",
-		"`tfind(action=\"load\")`",
+		"`tfind(action: load)`",
 		"becomes available next turn",
-		"`tfind(action=\"unload\")`",
+		`mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
+		"`tfind(action: unload)`",
 	} {
 		if !strings.Contains(withToolSearch, snippet) {
 			t.Fatalf("expected tool search guidance to contain %q, got %q", snippet, withToolSearch)
@@ -49,7 +51,7 @@ func TestFormatPromptGuidanceForCatalog_IncludesToolSearchWorkflowOnlyWhenVisibl
 	}
 
 	withoutToolSearch := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human"}))
-	if strings.Contains(withoutToolSearch, "`tfind(action=\"search\")`") {
+	if strings.Contains(withoutToolSearch, "`tfind(action: search)`") {
 		t.Fatalf("expected tool search guidance to stay hidden, got %q", withoutToolSearch)
 	}
 }
@@ -76,8 +78,13 @@ func TestFormatPromptGuidanceForCatalog_AskHumanRequiresCustomOption(t *testing.
 	registry.Register(&mockTool{name: "ask_human"})
 
 	guidance := FormatPromptGuidanceForCatalog(registry)
-	if !strings.Contains(guidance, "allows custom input") {
-		t.Fatalf("expected ask_human guidance to require custom input option, got %q", guidance)
+	for _, snippet := range []string{
+		"final option must allow custom input",
+		`mutation { ask_human(prompt: "Which environment should I use?", options: [{label: "staging"}, {label: "Other", allow_custom: true}]) }`,
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected ask_human guidance to contain %q, got %q", snippet, guidance)
+		}
 	}
 }
 
@@ -88,8 +95,13 @@ func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *te
 	}
 
 	withBoth := FormatPromptGuidanceForCatalog(registry)
-	if !strings.Contains(withBoth, "Use `read_and_summarize` for broad local triage, then use `script_exec`") {
-		t.Fatalf("expected combined workspace guidance when both tools are visible, got %q", withBoth)
+	for _, snippet := range []string{
+		"Use `read_and_summarize` for broad local triage, then use `script_exec`",
+		`mutation { script_exec(script: "print(\"ok\")") }`,
+	} {
+		if !strings.Contains(withBoth, snippet) {
+			t.Fatalf("expected combined workspace guidance to contain %q, got %q", snippet, withBoth)
+		}
 	}
 
 	onlyScriptExec := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human", "script_exec"}))
@@ -123,7 +135,9 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 	for _, snippet := range []string{
 		"GraphQL tool schema",
 		"`ask_human` only when blocked",
-		"`tfind(action=\"search\")`",
+		"Minimal `ask_human` options example",
+		"`tfind(action: search)`",
+		`mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
 		"`screen_action.click_text`",
 		"`computer_use` only for desktop visual tasks",
 		"`browser_control` for browser tasks",
