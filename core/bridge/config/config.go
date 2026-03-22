@@ -179,6 +179,10 @@ type Config struct {
 	SessionsPath                  string
 	WebSearchTavilyAPIKey         string
 	WebSearchExaAPIKey            string
+	WebRooterEnabled              bool
+	WebRooterBaseURL              string
+	WebRooterAPIToken             string
+	WebRooterTimeoutMS            int
 	ProMaxIterations              int
 	MaxTurns                      int
 }
@@ -201,6 +205,10 @@ type runtimeConfig struct {
 	ModelResponseReserveTokens map[string]int
 	WebSearchTavilyAPIKey      string
 	WebSearchExaAPIKey         string
+	WebRooterEnabled           bool
+	WebRooterBaseURL           string
+	WebRooterAPIToken          string
+	WebRooterTimeoutMS         int
 	GraphQL                    GraphQLConfig
 }
 
@@ -241,6 +249,8 @@ const (
 	defaultMemoryRecallItems       = 8
 	defaultMemoryMinConfidence     = 0.7
 	defaultMemoryUserScopeID       = "local-user"
+	defaultWebRooterBaseURL        = "http://127.0.0.1:8765"
+	defaultWebRooterTimeoutMS      = 90_000
 )
 
 func providerClientOptions(cfg Config, model string) llm.ClientOptions {

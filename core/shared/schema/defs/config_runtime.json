@@ -12,8 +12,11 @@
         "api_key_set",
         "model_selection_enabled",
         "graphql_default_source",
+        "graphql_tool_runtime_enabled",
         "graphql_sources",
         "graphql_mutation_policies",
+        "web_rooter_enabled",
+        "web_rooter_api_token_set",
         "web_search_tavily_api_key_set",
         "web_search_exa_api_key_set"
       ],
@@ -26,6 +29,7 @@
         "api_key_set": { "type": "boolean" },
         "model_selection_enabled": { "type": "boolean" },
         "graphql_default_source": { "type": "string" },
+        "graphql_tool_runtime_enabled": { "type": "boolean" },
         "graphql_sources": {
           "type": "array",
           "items": { "$ref": "#/$defs/graphqlSourceResponse" }
@@ -34,6 +38,8 @@
           "type": "array",
           "items": { "$ref": "#/$defs/graphqlMutationPolicyResponse" }
         },
+        "web_rooter_enabled": { "type": "boolean" },
+        "web_rooter_api_token_set": { "type": "boolean" },
         "web_search_tavily_api_key_set": { "type": "boolean" },
         "web_search_exa_api_key_set": { "type": "boolean" }
       },
@@ -55,6 +61,7 @@
         "model": { "type": "string", "x-go-pointer": true },
         "chat_path": { "type": "string", "x-go-pointer": true },
         "graphql_default_source": { "type": "string", "x-go-pointer": true },
+        "graphql_tool_runtime_enabled": { "type": "boolean", "x-go-pointer": true },
         "graphql_sources": {
           "type": "array",
           "items": { "$ref": "#/$defs/graphqlSourceInput" }
@@ -64,6 +71,10 @@
           "type": "array",
           "items": { "$ref": "#/$defs/graphqlMutationPolicyInput" }
         },
+        "web_rooter_enabled": { "type": "boolean", "x-go-pointer": true },
+        "web_rooter_base_url": { "type": "string", "x-go-pointer": true },
+        "web_rooter_api_token": { "type": "string", "x-go-pointer": true },
+        "web_rooter_timeout_ms": { "type": "integer", "minimum": 1, "x-go-pointer": true },
         "web_search_tavily_api_key": { "type": "string", "x-go-pointer": true },
         "web_search_exa_api_key": { "type": "string", "x-go-pointer": true },
         "trace_id": { "type": "string" }

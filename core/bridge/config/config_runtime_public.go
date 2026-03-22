@@ -14,6 +14,8 @@ func snapshotFromRuntimeConfig(runtime runtimeConfig) Snapshot {
 		GraphQLToolRuntimeEnabled: runtime.GraphQL.ToolRuntimeEnabled,
 		GraphQLSources:            graphQLSourceSnapshotsFromRuntime(runtime.GraphQL.Sources),
 		GraphQLMutationPolicies:   graphQLMutationPolicySnapshots(runtime.GraphQL.MutationPolicies),
+		WebRooterEnabled:          runtime.WebRooterEnabled,
+		WebRooterAPITokenSet:      runtime.WebRooterAPIToken != "",
 		WebSearchTavilyAPIKeySet:  runtime.WebSearchTavilyAPIKey != "",
 		WebSearchExaAPIKeySet:     runtime.WebSearchExaAPIKey != "",
 	}

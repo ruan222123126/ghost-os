@@ -199,3 +199,67 @@ func TestConfigStoreUpdatePersistsWebSearchSettings(t *testing.T) {
 		t.Fatal("expected exa api key flag to be true")
 	}
 }
+
+func TestConfigStoreUpdatePersistsWebRooterSettings(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "false")
+	t.Setenv("GHOST_WEB_ROOTER_BASE_URL", "http://127.0.0.1:8765")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	webRooterEnabled := true
+	webRooterAPIToken := "updated-rooter-token"
+	webRooterTimeoutMS := 12_345
+	if err := store.Update(configUpdateRequest{
+		WebRooterEnabled:   &webRooterEnabled,
+		WebRooterAPIToken:  &webRooterAPIToken,
+		WebRooterTimeoutMS: &webRooterTimeoutMS,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	runtime := store.RuntimeConfig()
+	if !runtime.WebRooterEnabled {
+		t.Fatal("expected runtime web_rooter to be enabled")
+	}
+	if runtime.WebRooterBaseURL != "http://127.0.0.1:8765" {
+		t.Fatalf("unexpected web_rooter base url: got %q want %q", runtime.WebRooterBaseURL, "http://127.0.0.1:8765")
+	}
+	if runtime.WebRooterAPIToken != webRooterAPIToken {
+		t.Fatalf("unexpected web_rooter api token: got %q want %q", runtime.WebRooterAPIToken, webRooterAPIToken)
+	}
+	if runtime.WebRooterTimeoutMS != webRooterTimeoutMS {
+		t.Fatalf("unexpected web_rooter timeout: got %d want %d", runtime.WebRooterTimeoutMS, webRooterTimeoutMS)
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.WebRooterEnabled == nil || !*fileCfg.WebRooterEnabled {
+		t.Fatalf("unexpected persisted web_rooter enabled: %#v", fileCfg.WebRooterEnabled)
+	}
+	if fileCfg.WebRooterBaseURL == nil || *fileCfg.WebRooterBaseURL != "http://127.0.0.1:8765" {
+		t.Fatalf("unexpected persisted web_rooter base url: %#v", fileCfg.WebRooterBaseURL)
+	}
+	if fileCfg.WebRooterAPIToken == nil || *fileCfg.WebRooterAPIToken != webRooterAPIToken {
+		t.Fatalf("unexpected persisted web_rooter api token: %#v", fileCfg.WebRooterAPIToken)
+	}
+	if fileCfg.WebRooterTimeoutMS == nil || *fileCfg.WebRooterTimeoutMS != webRooterTimeoutMS {
+		t.Fatalf("unexpected persisted web_rooter timeout: %#v", fileCfg.WebRooterTimeoutMS)
+	}
+
+	snapshot := store.Snapshot()
+	if !snapshot.WebRooterEnabled {
+		t.Fatal("expected web_rooter enabled flag to be true")
+	}
+	if !snapshot.WebRooterAPITokenSet {
+		t.Fatal("expected web_rooter api token flag to be true")
+	}
+}

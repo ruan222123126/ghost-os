@@ -25,6 +25,10 @@ func resolveRuntimeConfig(fileCfg bridgeFileConfig, env envSnapshot) (runtimeCon
 
 func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 	webSearch := webSearchSettingsFromEnv(env)
+	webRooter, err := webRooterSettingsFromEnv(env)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
 	graphql, err := graphQLSettingsFromEnv(env)
 	if err != nil {
 		return runtimeConfig{}, err
@@ -48,6 +52,10 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 		ModelSelectionEnabled: !allowlistOnly,
 		WebSearchTavilyAPIKey: webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:    webSearch.ExaAPIKey,
+		WebRooterEnabled:      webRooter.Enabled,
+		WebRooterBaseURL:      webRooter.BaseURL,
+		WebRooterAPIToken:     webRooter.APIToken,
+		WebRooterTimeoutMS:    webRooter.TimeoutMS,
 		GraphQL:               graphql,
 	}), nil
 }
@@ -65,6 +73,15 @@ func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtime
 		TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
 		ExaAPIKey:    fallback.WebSearchExaAPIKey,
 	})
+	webRooter, err := fileWebRooterSettings(fileCfg, webRooterSettings{
+		Enabled:   fallback.WebRooterEnabled,
+		BaseURL:   fallback.WebRooterBaseURL,
+		APIToken:  fallback.WebRooterAPIToken,
+		TimeoutMS: fallback.WebRooterTimeoutMS,
+	})
+	if err != nil {
+		return runtimeConfig{}, err
+	}
 	graphql, err := fileGraphQLSettings(fileCfg, fallback.GraphQL)
 	if err != nil {
 		return runtimeConfig{}, err
@@ -72,9 +89,9 @@ func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtime
 	allowlistOnly := resolveRuntimeAllowlistOnly(fileCfg, fallback)
 	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
 	if len(providers) > 0 {
-		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch, graphql), nil
+		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch, webRooter, graphql), nil
 	}
-	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch, graphql), nil
+	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch, webRooter, graphql), nil
 }
 
 func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
@@ -94,6 +111,7 @@ func runtimeConfigWithProviders(
 	providers []providerConfig,
 	allowlistOnly bool,
 	webSearch webSearchSettings,
+	webRooter webRooterSettings,
 	graphql GraphQLConfig,
 ) runtimeConfig {
 	active := resolveActiveProvider(providers, stringValue(fileCfg.ActiveProvider), fallback)
@@ -113,6 +131,10 @@ func runtimeConfigWithProviders(
 		ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
 		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
+		WebRooterEnabled:           webRooter.Enabled,
+		WebRooterBaseURL:           webRooter.BaseURL,
+		WebRooterAPIToken:          webRooter.APIToken,
+		WebRooterTimeoutMS:         webRooter.TimeoutMS,
 		GraphQL:                    graphql,
 	})
 }
@@ -122,6 +144,7 @@ func runtimeConfigWithoutProviders(
 	fallback runtimeConfig,
 	allowlistOnly bool,
 	webSearch webSearchSettings,
+	webRooter webRooterSettings,
 	graphql GraphQLConfig,
 ) runtimeConfig {
 	providerName := resolveRuntimeProviderName(fallback)
@@ -141,6 +164,10 @@ func runtimeConfigWithoutProviders(
 		ModelResponseReserveTokens: cloneModelTokenOverrides(fallback.ModelResponseReserveTokens),
 		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
+		WebRooterEnabled:           webRooter.Enabled,
+		WebRooterBaseURL:           webRooter.BaseURL,
+		WebRooterAPIToken:          webRooter.APIToken,
+		WebRooterTimeoutMS:         webRooter.TimeoutMS,
 		GraphQL:                    graphql,
 	})
 }
@@ -282,6 +309,14 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	out.ProjectRoot = strings.TrimSpace(out.ProjectRoot)
 	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)
 	out.WebSearchExaAPIKey = strings.TrimSpace(out.WebSearchExaAPIKey)
+	out.WebRooterBaseURL = strings.TrimSpace(out.WebRooterBaseURL)
+	if out.WebRooterBaseURL == "" {
+		out.WebRooterBaseURL = defaultWebRooterBaseURL
+	}
+	out.WebRooterAPIToken = strings.TrimSpace(out.WebRooterAPIToken)
+	if out.WebRooterTimeoutMS <= 0 {
+		out.WebRooterTimeoutMS = defaultWebRooterTimeoutMS
+	}
 	out.GraphQL = normalizeGraphQLConfig(out.GraphQL)
 	return out
 }

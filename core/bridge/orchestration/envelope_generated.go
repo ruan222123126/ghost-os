@@ -285,8 +285,6 @@ type configResponse struct {
 	GraphqlSources []graphqlSourceResponse `json:"graphql_sources"`
 	GraphqlMutationPolicies []graphqlMutationPolicyResponse `json:"graphql_mutation_policies"`
 	WebRooterEnabled bool `json:"web_rooter_enabled"`
-	WebRooterBaseURL string `json:"web_rooter_base_url"`
-	WebRooterTimeoutMs int `json:"web_rooter_timeout_ms"`
 	WebRooterAPITokenSet bool `json:"web_rooter_api_token_set"`
 	WebSearchTavilyAPIKeySet bool `json:"web_search_tavily_api_key_set"`
 	WebSearchExaAPIKeySet bool `json:"web_search_exa_api_key_set"`

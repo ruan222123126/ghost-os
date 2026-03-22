@@ -3,6 +3,7 @@ package runtime
 import (
 	"os"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/artifacts"
@@ -188,6 +189,13 @@ func registerCoreTools(opts coreToolOptions) {
 		TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey,
 		ExaAPIKey:    opts.cfg.WebSearchExaAPIKey,
 	}))
+	if opts.cfg.WebRooterEnabled {
+		opts.registry.Register(tools.NewWebRooterTool(tools.WebRooterConfig{
+			BaseURL:  opts.cfg.WebRooterBaseURL,
+			APIToken: opts.cfg.WebRooterAPIToken,
+			Timeout:  time.Duration(opts.cfg.WebRooterTimeoutMS) * time.Millisecond,
+		}))
+	}
 	opts.registry.Register(tools.NewFeedManageTool(opts.resources.feedStore))
 	opts.registry.Register(tools.NewRSSFetchTool())
 	opts.registry.Register(tools.NewScreenActionTool(opts.resources.executionClient))

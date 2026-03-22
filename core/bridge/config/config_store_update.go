@@ -57,6 +57,18 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.WebSearchExaAPIKey != nil {
 		fileCfg.WebSearchExaAPIKey = cloneOptionalStringPointer(req.WebSearchExaAPIKey)
 	}
+	if req.WebRooterEnabled != nil {
+		fileCfg.WebRooterEnabled = cloneBoolPointer(req.WebRooterEnabled)
+	}
+	if req.WebRooterBaseURL != nil {
+		fileCfg.WebRooterBaseURL = cloneStringPointer(req.WebRooterBaseURL)
+	}
+	if req.WebRooterAPIToken != nil {
+		fileCfg.WebRooterAPIToken = cloneOptionalStringPointer(req.WebRooterAPIToken)
+	}
+	if req.WebRooterTimeoutMS != nil {
+		fileCfg.WebRooterTimeoutMS = cloneIntPointer(req.WebRooterTimeoutMS)
+	}
 }
 
 // SetProjectRoot 更新并持久化 project_root，并刷新运行态快照。

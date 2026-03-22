@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Load 从环境变量加载配置并做基础校验与归一化。
@@ -78,7 +79,6 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 	if err != nil {
 		return Config{}, err
 	}
-
 	cfg := Config{
 		Provider:                provider,
 		RSS:                     rss,
@@ -111,6 +111,10 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 		SessionsPath:          resolveSessionsPath(fileCfg, env),
 		WebSearchTavilyAPIKey: runtime.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:    runtime.WebSearchExaAPIKey,
+		WebRooterEnabled:      runtime.WebRooterEnabled,
+		WebRooterBaseURL:      runtime.WebRooterBaseURL,
+		WebRooterAPIToken:     runtime.WebRooterAPIToken,
+		WebRooterTimeoutMS:    runtime.WebRooterTimeoutMS,
 		ProMaxIterations:      proMaxIterations,
 		MaxTurns:              maxTurns,
 	}
@@ -141,6 +145,9 @@ func finalizeLoadedConfig(cfg Config) (Config, error) {
 	}
 	if cfg.ToolSearch.IdleTurns <= 0 {
 		return Config{}, errors.New("tool_search_idle_turns must be > 0")
+	}
+	if strings.TrimSpace(cfg.WebRooterBaseURL) == "" {
+		return Config{}, errors.New("web_rooter_base_url must not be empty")
 	}
 	if !cfg.MemoryAugmentation.SessionScopeEnabled && !cfg.MemoryAugmentation.UserScopeEnabled {
 		cfg.MemoryAugmentation.RecallEnabled = false

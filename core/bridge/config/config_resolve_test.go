@@ -89,6 +89,11 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RSS_POLL_INTERVAL": "later"},
 			want: "invalid GHOST_RSS_POLL_INTERVAL",
 		},
+		{
+			name: "web rooter enabled bool",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_WEB_ROOTER_ENABLED": "maybe"},
+			want: "invalid GHOST_WEB_ROOTER_ENABLED",
+		},
 	}
 
 	for _, tc := range cases {
@@ -122,6 +127,11 @@ func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 			fileCfg: bridgeFileConfig{RSSPollInterval: stringPointer("later")},
 			want:    "invalid rss_poll_interval",
 		},
+		{
+			name:    "web rooter timeout",
+			fileCfg: bridgeFileConfig{WebRooterTimeoutMS: intPtr(0)},
+			want:    "invalid web_rooter_timeout_ms",
+		},
 	}
 
 	env := envSnapshot{"GHOST_PROVIDER": "custom"}
@@ -135,10 +145,66 @@ func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 	}
 }
 
+func TestResolveConfigLoadsWebRooterDefaults(t *testing.T) {
+	cfg, err := resolveConfig(bridgeFileConfig{}, envSnapshot{"GHOST_PROVIDER": "custom"})
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if cfg.WebRooterBaseURL != defaultWebRooterBaseURL {
+		t.Fatalf("unexpected web_rooter base url: got %q want %q", cfg.WebRooterBaseURL, defaultWebRooterBaseURL)
+	}
+	if cfg.WebRooterEnabled {
+		t.Fatal("expected web_rooter to stay disabled by default")
+	}
+	if cfg.WebRooterAPIToken != "" {
+		t.Fatalf("expected empty web_rooter api token, got %q", cfg.WebRooterAPIToken)
+	}
+	if cfg.WebRooterTimeoutMS != defaultWebRooterTimeoutMS {
+		t.Fatalf("unexpected web_rooter timeout: got %d want %d", cfg.WebRooterTimeoutMS, defaultWebRooterTimeoutMS)
+	}
+}
+
+func TestResolveConfigAllowsWebRooterOverrides(t *testing.T) {
+	cfg, err := resolveConfig(
+		bridgeFileConfig{
+			WebRooterEnabled:   boolPtr(true),
+			WebRooterBaseURL:   stringPointer("http://127.0.0.1:9999/rooter"),
+			WebRooterAPIToken:  stringPointer("file-rooter-token"),
+			WebRooterTimeoutMS: intPtr(12_345),
+		},
+		envSnapshot{
+			"GHOST_WEB_ROOTER_ENABLED":    "false",
+			"GHOST_PROVIDER":              "custom",
+			"GHOST_WEB_ROOTER_BASE_URL":   "http://127.0.0.1:8765",
+			"GHOST_WEB_ROOTER_API_TOKEN":  "env-rooter-token",
+			"GHOST_WEB_ROOTER_TIMEOUT_MS": "90000",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if !cfg.WebRooterEnabled {
+		t.Fatal("expected web_rooter enabled override to persist")
+	}
+	if cfg.WebRooterBaseURL != "http://127.0.0.1:9999/rooter" {
+		t.Fatalf("unexpected web_rooter base url override: %q", cfg.WebRooterBaseURL)
+	}
+	if cfg.WebRooterAPIToken != "file-rooter-token" {
+		t.Fatalf("unexpected web_rooter api token override: %q", cfg.WebRooterAPIToken)
+	}
+	if cfg.WebRooterTimeoutMS != 12_345 {
+		t.Fatalf("unexpected web_rooter timeout override: %d", cfg.WebRooterTimeoutMS)
+	}
+}
+
 func intPtr(value int) *int {
 	return &value
 }
 
 func floatPtr(value float64) *float64 {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
 	return &value
 }

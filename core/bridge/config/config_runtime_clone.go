@@ -17,6 +17,10 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 		ModelResponseReserveTokens: cloneModelTokenOverrides(raw.ModelResponseReserveTokens),
 		WebSearchTavilyAPIKey:      raw.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:         raw.WebSearchExaAPIKey,
+		WebRooterEnabled:           raw.WebRooterEnabled,
+		WebRooterBaseURL:           raw.WebRooterBaseURL,
+		WebRooterAPIToken:          raw.WebRooterAPIToken,
+		WebRooterTimeoutMS:         raw.WebRooterTimeoutMS,
 		GraphQL:                    cloneGraphQLConfig(raw.GraphQL),
 	}
 }

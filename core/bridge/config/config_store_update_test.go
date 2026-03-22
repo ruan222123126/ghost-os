@@ -13,6 +13,8 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 	t.Setenv("GHOST_MODEL", "snapshot-model")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "snapshot-tavily")
+	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "true")
+	t.Setenv("GHOST_WEB_ROOTER_API_TOKEN", "snapshot-rooter-token")
 
 	store, err := newStoreFromEnv()
 	if err != nil {
@@ -29,6 +31,12 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if !snapshot.WebSearchTavilyAPIKeySet {
 		t.Fatal("expected web_search_tavily_api_key_set to be true")
 	}
+	if !snapshot.WebRooterEnabled {
+		t.Fatal("expected web_rooter_enabled to be true")
+	}
+	if !snapshot.WebRooterAPITokenSet {
+		t.Fatal("expected web_rooter_api_token_set to be true")
+	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
@@ -39,6 +47,12 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	}
 	if fileCfg.WebSearchTavilyAPIKey != nil {
 		t.Fatalf("snapshot should not persist web search api key, got %#v", fileCfg.WebSearchTavilyAPIKey)
+	}
+	if fileCfg.WebRooterEnabled != nil {
+		t.Fatalf("snapshot should not persist web_rooter enabled, got %#v", fileCfg.WebRooterEnabled)
+	}
+	if fileCfg.WebRooterAPIToken != nil {
+		t.Fatalf("snapshot should not persist web_rooter api token, got %#v", fileCfg.WebRooterAPIToken)
 	}
 }
 

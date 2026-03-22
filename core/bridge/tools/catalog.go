@@ -117,6 +117,7 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
+		{Name: webRooterToolName, Domain: "web", Tags: []string{"research", "citation", "crawl", "academic"}, ShortDesc: "Citation-rich web research via external web-rooter service."},
 		{Name: "feed_manage", Domain: "web", Tags: []string{"feed", "rss", "manage", "crud"}, ShortDesc: "Manage RSS/Atom sources."},
 		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}, ShortDesc: "Fetch one RSS/Atom feed."},
 		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}, ShortDesc: "CRUD explicit memory."},

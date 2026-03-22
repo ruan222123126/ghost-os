@@ -13,6 +13,8 @@ type Snapshot struct {
 	GraphQLToolRuntimeEnabled bool                            `json:"graphql_tool_runtime_enabled"`
 	GraphQLSources            []GraphQLSourceSnapshot         `json:"graphql_sources"`
 	GraphQLMutationPolicies   []GraphQLMutationPolicySnapshot `json:"graphql_mutation_policies"`
+	WebRooterEnabled          bool                            `json:"web_rooter_enabled"`
+	WebRooterAPITokenSet      bool                            `json:"web_rooter_api_token_set"`
 	WebSearchTavilyAPIKeySet  bool                            `json:"web_search_tavily_api_key_set"`
 	WebSearchExaAPIKeySet     bool                            `json:"web_search_exa_api_key_set"`
 }
@@ -28,6 +30,10 @@ type UpdateRequest struct {
 	GraphQLSources            []GraphQLSourceInput         `json:"graphql_sources,omitempty"`
 	GraphQLSourceUpsert       *GraphQLSourceInput          `json:"graphql_source_upsert,omitempty"`
 	GraphQLMutationPolicies   []GraphQLMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
+	WebRooterEnabled          *bool                        `json:"web_rooter_enabled,omitempty"`
+	WebRooterBaseURL          *string                      `json:"web_rooter_base_url,omitempty"`
+	WebRooterAPIToken         *string                      `json:"web_rooter_api_token,omitempty"`
+	WebRooterTimeoutMS        *int                         `json:"web_rooter_timeout_ms,omitempty"`
 	WebSearchTavilyAPIKey     *string                      `json:"web_search_tavily_api_key,omitempty"`
 	WebSearchExaAPIKey        *string                      `json:"web_search_exa_api_key,omitempty"`
 	TraceID                   string                       `json:"trace_id,omitempty"`

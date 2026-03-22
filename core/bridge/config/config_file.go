@@ -92,6 +92,10 @@ type bridgeFileConfig struct {
 	RSSInboxPath                          *string                           `toml:"rss_inbox_path,omitempty"`
 	RSSBriefingsPath                      *string                           `toml:"rss_briefings_path,omitempty"`
 	RSSReportsPath                        *string                           `toml:"rss_reports_path,omitempty"`
+	WebRooterEnabled                      *bool                             `toml:"web_rooter_enabled,omitempty"`
+	WebRooterBaseURL                      *string                           `toml:"web_rooter_base_url,omitempty"`
+	WebRooterAPIToken                     *string                           `toml:"web_rooter_api_token,omitempty"`
+	WebRooterTimeoutMS                    *int                              `toml:"web_rooter_timeout_ms,omitempty"`
 	RSSPollEnabled                        *bool                             `toml:"rss_poll_enabled,omitempty"`
 	RSSPollInterval                       *string                           `toml:"rss_poll_interval,omitempty"`
 	RSSPollMaxItemsPerFeed                *int                              `toml:"rss_poll_max_items_per_feed,omitempty"`

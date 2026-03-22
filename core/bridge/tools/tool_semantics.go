@@ -81,3 +81,7 @@ func (ToolSearchTool) ToolSemantics() llm.ToolSemantics {
 func (WebSearchTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{ReadOnly: true}
 }
+
+func (WebRooterTool) ToolSemantics() llm.ToolSemantics {
+	return llm.ToolSemantics{ReadOnly: true}
+}

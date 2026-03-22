@@ -48,6 +48,7 @@ func loadCurrentUpdateFileConfig(
 	prepareProviderUpdateBase(&out, current, req)
 	prepareGraphQLUpdateBase(&out, current, req)
 	prepareWebSearchUpdateBase(&out, current, req)
+	prepareWebRooterUpdateBase(&out, current, req)
 	return normalizeBridgeFileConfigForWrite(out)
 }
 
@@ -118,4 +119,33 @@ func prepareWebSearchUpdateBase(
 
 func touchesWebSearchUpdate(req UpdateRequest) bool {
 	return req.WebSearchTavilyAPIKey != nil || req.WebSearchExaAPIKey != nil
+}
+
+func prepareWebRooterUpdateBase(
+	fileCfg *bridgeFileConfig,
+	current runtimeConfig,
+	req UpdateRequest,
+) {
+	if fileCfg == nil || !touchesWebRooterUpdate(req) {
+		return
+	}
+	if fileCfg.WebRooterEnabled == nil {
+		fileCfg.WebRooterEnabled = cloneBoolPointer(&current.WebRooterEnabled)
+	}
+	if fileCfg.WebRooterBaseURL == nil {
+		fileCfg.WebRooterBaseURL = stringPointer(current.WebRooterBaseURL)
+	}
+	if fileCfg.WebRooterAPIToken == nil {
+		fileCfg.WebRooterAPIToken = optionalStringPointer(current.WebRooterAPIToken)
+	}
+	if fileCfg.WebRooterTimeoutMS == nil {
+		fileCfg.WebRooterTimeoutMS = cloneIntPointer(&current.WebRooterTimeoutMS)
+	}
+}
+
+func touchesWebRooterUpdate(req UpdateRequest) bool {
+	return req.WebRooterEnabled != nil ||
+		req.WebRooterBaseURL != nil ||
+		req.WebRooterAPIToken != nil ||
+		req.WebRooterTimeoutMS != nil
 }
