@@ -10,11 +10,13 @@ import (
 	"strings"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 )
 
 type serverOptions struct {
 	bindAddr     string
+	sessionsPath string
 	maxBodyBytes int64
 	cors         corsPolicy
 	auth         apiTokenAuth
@@ -22,24 +24,22 @@ type serverOptions struct {
 
 // newServerOptionsFromEnv 收敛 server 相关配置，优先读配置文件并回退环境变量。
 func newServerOptionsFromEnv(port int) (serverOptions, error) {
-	fileCfg, _, err := loadBridgeFileConfig()
+	cfg, err := bridgeconfig.LoadServerConfig()
 	if err != nil {
 		return serverOptions{}, err
 	}
 
 	return serverOptions{
-		bindAddr:     resolveBindAddrFromConfig(fileCfg, port),
+		bindAddr:     resolveBindAddrFromConfig(cfg, port),
+		sessionsPath: cfg.SessionsPath,
 		maxBodyBytes: defaultMaxRequestBodyBytes,
-		cors:         newCORSPolicyFromConfig(fileCfg),
-		auth:         newAPITokenAuthFromConfig(fileCfg),
+		cors:         newCORSPolicyFromConfig(cfg),
+		auth:         newAPITokenAuthFromConfig(cfg),
 	}, nil
 }
 
-func resolveBindAddrFromConfig(fileCfg bridgeFileConfig, port int) string {
-	if configured := strings.TrimSpace(valueOrEnv(fileCfg.BindAddr, "GHOST_BIND_ADDR", "")); configured != "" {
-		return configured
-	}
-	if configured := strings.TrimSpace(getenvDefault("GHOST_BIND_ADDR", "")); configured != "" {
+func resolveBindAddrFromConfig(cfg bridgeconfig.ServerConfig, port int) string {
+	if configured := strings.TrimSpace(cfg.BindAddr); configured != "" {
 		return configured
 	}
 	return net.JoinHostPort("127.0.0.1", fmt.Sprintf("%d", port))
@@ -48,11 +48,11 @@ func resolveBindAddrFromConfig(fileCfg bridgeFileConfig, port int) string {
 // resolveBindAddr 优先使用显式绑定地址，否则回退到本地回环端口。
 // 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
 func resolveBindAddr(port int) (string, error) {
-	fileCfg, _, err := loadBridgeFileConfig()
+	cfg, err := bridgeconfig.LoadServerConfig()
 	if err != nil {
 		return "", err
 	}
-	return resolveBindAddrFromConfig(fileCfg, port), nil
+	return resolveBindAddrFromConfig(cfg, port), nil
 }
 
 // runServer 暴露 bridge HTTP API。
@@ -62,7 +62,11 @@ func runServer(ctx context.Context, port int) (string, error) {
 		return "", err
 	}
 
-	sessionStore, err := session.NewStore(sessionsPathFromEnv())
+	options, err := newServerOptionsFromEnv(port)
+	if err != nil {
+		return "", err
+	}
+	sessionStore, err := session.NewStore(options.sessionsPath)
 	if err != nil {
 		return "", err
 	}
@@ -77,11 +81,6 @@ func runServer(ctx context.Context, port int) (string, error) {
 		return "", err
 	}
 	defer service.Close()
-
-	options, err := newServerOptionsFromEnv(port)
-	if err != nil {
-		return "", err
-	}
 	server := &http.Server{
 		Addr:              options.bindAddr,
 		Handler:           newHTTPHandler(service, options),

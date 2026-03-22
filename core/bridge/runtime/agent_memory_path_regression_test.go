@@ -64,5 +64,5 @@ func newRegressionRuntimeTestStore(t *testing.T) *ConfigStore {
 	if err != nil {
 		t.Fatalf("new config store: %v", err)
 	}
-	return store
+	return WrapConfigStore(store)
 }

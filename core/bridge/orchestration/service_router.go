@@ -176,7 +176,7 @@ func (s *bridgeService) initTaskRuntime() error {
 		s.taskInitErr = nil
 		return nil
 	}
-	taskStore, err := NewTaskStore(bridgeconfig.TasksPathFromEnv())
+	taskStore, err := NewTaskStore(bridgeconfig.LoadTaskConfig().TasksPath)
 	if err != nil {
 		s.taskInitErr = err
 		return err

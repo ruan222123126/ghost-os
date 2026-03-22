@@ -76,7 +76,7 @@ func (c rssSystemTaskCoordinator) loadConfig() (Config, error) {
 		return Config{}, c.rssInitErr
 	}
 	if c.configStore != nil {
-		return bridgeconfig.LoadWithRuntime(c.configStore.RuntimeConfig())
+		return c.configStore.Config()
 	}
 	return bridgeconfig.Load()
 }

@@ -1,6 +1,10 @@
 package rss
 
 import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -61,7 +65,11 @@ type runtimeFactoryAdapter struct {
 }
 
 func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
-	deps, err := f.inner.Build(store.unwrap())
+	var runtimeStore *bridgeruntime.ConfigStore
+	if store != nil {
+		runtimeStore = bridgeruntime.WrapConfigStore(store.unwrap())
+	}
+	deps, err := f.inner.Build(runtimeStore)
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
@@ -132,7 +140,21 @@ func effectiveWorkerModel(cfg Config) string {
 }
 
 func resolveUserPath(pathValue string) (string, error) {
-	return bridgeconfig.ResolveUserPath(pathValue)
+	trimmed := strings.TrimSpace(pathValue)
+	if trimmed == "" {
+		return "", errors.New("path is empty")
+	}
+	if trimmed == "~" || strings.HasPrefix(trimmed, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("resolve user home directory: %w", err)
+		}
+		if trimmed == "~" {
+			return homeDir, nil
+		}
+		return filepath.Join(homeDir, strings.TrimPrefix(trimmed, "~/")), nil
+	}
+	return filepath.Clean(trimmed), nil
 }
 
 func truncateRunes(value string, limit int) string {

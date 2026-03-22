@@ -11,7 +11,7 @@ import (
 )
 
 type pingRunner struct {
-	newClient   func() execution.Client
+	newClient   func() (execution.Client, error)
 	closeClient func(execution.Client) error
 	nextTraceID func() string
 }
@@ -32,7 +32,10 @@ func newPingRunner() pingRunner {
 }
 
 func (r pingRunner) run(ctx context.Context) (string, error) {
-	client := r.newClient()
+	client, err := r.newClient()
+	if err != nil {
+		return "", err
+	}
 	defer func() {
 		_ = r.closeClient(client)
 	}()

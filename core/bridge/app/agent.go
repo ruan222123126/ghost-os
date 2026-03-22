@@ -11,7 +11,7 @@ type sessionTurnRunner interface {
 	RunTurn(ctx context.Context, message string, sessionID string, traceID string) (string, string, error)
 }
 
-var newAgentTurnRunner = func(store *bridgeconfig.Store) sessionTurnRunner {
+var newAgentTurnRunner = func(store bridgeconfig.Store) sessionTurnRunner {
 	return bridgeorchestration.NewSessionAgentRunner(
 		nil,
 		bridgeorchestration.WrapConfigStore(store),
@@ -26,7 +26,7 @@ func runAgent(ctx context.Context, userMessage string) (string, error) {
 }
 
 // runAgentWithConfigStore 复用正式单轮编排入口；CLI one-shot 不持久化 session。
-func runAgentWithConfigStore(ctx context.Context, userMessage string, store *bridgeconfig.Store, traceID string) (string, error) {
+func runAgentWithConfigStore(ctx context.Context, userMessage string, store bridgeconfig.Store, traceID string) (string, error) {
 	response, _, err := newAgentTurnRunner(store).RunTurn(ctx, userMessage, "", traceID)
 	return response, err
 }

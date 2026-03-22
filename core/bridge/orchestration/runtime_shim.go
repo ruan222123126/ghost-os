@@ -42,7 +42,7 @@ type runtimeFactoryAdapter struct {
 func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
 	var innerStore *bridgeruntime.ConfigStore
 	if store != nil {
-		innerStore = store.Inner()
+		innerStore = bridgeruntime.WrapConfigStore(store.Inner())
 	}
 	deps, err := f.inner.Build(innerStore)
 	if err != nil {

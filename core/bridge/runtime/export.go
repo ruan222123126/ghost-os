@@ -13,7 +13,6 @@ import (
 )
 
 type Config = bridgeconfig.Config
-type ConfigStore = bridgeconfig.Store
 type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
 type ToolSearchConfig = bridgeconfig.ToolSearchConfig
 type Dependencies = agentRuntimeDependencies
@@ -21,6 +20,10 @@ type SelectorEngine = selectorEngine
 
 type SelectionPolicy struct {
 	toolSelectionPolicy
+}
+
+type ConfigStore struct {
+	inner bridgeconfig.Store
 }
 
 func (d agentRuntimeDependencies) Config() Config {
@@ -45,6 +48,34 @@ func (d agentRuntimeDependencies) MemoryRecall() memoryaug.RecallService {
 
 func (d agentRuntimeDependencies) MemoryLearning() memoryaug.LearningService {
 	return d.memoryLearn
+}
+
+func WrapConfigStore(store bridgeconfig.Store) *ConfigStore {
+	if store == nil {
+		return nil
+	}
+	return &ConfigStore{inner: store}
+}
+
+func (s *ConfigStore) unwrap() bridgeconfig.Store {
+	if s == nil {
+		return nil
+	}
+	return s.inner
+}
+
+func (s *ConfigStore) Config() (Config, error) {
+	if s == nil || s.inner == nil {
+		return bridgeconfig.Load()
+	}
+	return s.inner.Config()
+}
+
+func (s *ConfigStore) SetProjectRoot(path string) error {
+	if s == nil || s.inner == nil {
+		return nil
+	}
+	return s.inner.SetProjectRoot(path)
 }
 
 func NewAgentRuntimeFactory() AgentRuntimeFactory {
@@ -109,8 +140,12 @@ func providerClientOptions(cfg Config, model string) llm.ClientOptions {
 	}
 }
 
-func NewExecutionClientFromEnv() execution.Client {
-	return newExecutionClient(executionClientConfigFromEnv())
+func NewExecutionClientFromEnv() (execution.Client, error) {
+	cfg, err := executionClientConfigFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return newExecutionClient(cfg), nil
 }
 
 func CloseExecutionClient(client execution.Client) error {

@@ -6,15 +6,17 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
 
 type corsPolicy struct {
 	allowedOrigins map[string]struct{}
 }
 
-func newCORSPolicyFromConfig(fileCfg bridgeFileConfig) corsPolicy {
+func newCORSPolicyFromConfig(cfg bridgeconfig.ServerConfig) corsPolicy {
 	allowed := make(map[string]struct{})
-	origins := corsOriginsOrEnv(fileCfg.CORSOrigins)
+	origins := append([]string(nil), cfg.CORSOrigins...)
 	if len(origins) == 0 {
 		return corsPolicy{allowedOrigins: allowed}
 	}
@@ -32,11 +34,11 @@ func newCORSPolicyFromConfig(fileCfg bridgeFileConfig) corsPolicy {
 // newCORSPolicyFromEnv 优先从配置文件读取 CORS 白名单，缺省时回退 GHOST_CORS_ORIGINS。
 // 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
 func newCORSPolicyFromEnv() (corsPolicy, error) {
-	fileCfg, _, err := loadBridgeFileConfig()
+	cfg, err := bridgeconfig.LoadServerConfig()
 	if err != nil {
 		return corsPolicy{}, err
 	}
-	return newCORSPolicyFromConfig(fileCfg), nil
+	return newCORSPolicyFromConfig(cfg), nil
 }
 
 // allows 判定 origin 是否允许；无 Origin（同源/非浏览器）默认放行。
@@ -52,18 +54,18 @@ type apiTokenAuth struct {
 	token string
 }
 
-func newAPITokenAuthFromConfig(fileCfg bridgeFileConfig) apiTokenAuth {
-	return apiTokenAuth{token: strings.TrimSpace(valueOrEnv(fileCfg.APIToken, "GHOST_API_TOKEN", ""))}
+func newAPITokenAuthFromConfig(cfg bridgeconfig.ServerConfig) apiTokenAuth {
+	return apiTokenAuth{token: strings.TrimSpace(cfg.APIToken)}
 }
 
 // newAPITokenAuthFromEnv 优先读取配置文件中的 API Token，缺省时回退 GHOST_API_TOKEN。
 // 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
 func newAPITokenAuthFromEnv() (apiTokenAuth, error) {
-	fileCfg, _, err := loadBridgeFileConfig()
+	cfg, err := bridgeconfig.LoadServerConfig()
 	if err != nil {
 		return apiTokenAuth{}, err
 	}
-	return newAPITokenAuthFromConfig(fileCfg), nil
+	return newAPITokenAuthFromConfig(cfg), nil
 }
 
 // enabled 表示是否启用 token 认证。

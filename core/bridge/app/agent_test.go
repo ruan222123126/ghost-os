@@ -8,6 +8,24 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 )
 
+type stubConfigStore struct{}
+
+func (*stubConfigStore) Config() (bridgeconfig.Config, error) { return bridgeconfig.Config{}, nil }
+func (*stubConfigStore) Snapshot() bridgeconfig.Snapshot      { return bridgeconfig.Snapshot{} }
+func (*stubConfigStore) ListProviders() []bridgeconfig.ProviderRecord {
+	return nil
+}
+func (*stubConfigStore) AddProvider(bridgeconfig.ProviderRecord) error { return nil }
+func (*stubConfigStore) UpdateProvider(string, bridgeconfig.ProviderRecord) error {
+	return nil
+}
+func (*stubConfigStore) DeleteProvider(string) error    { return nil }
+func (*stubConfigStore) SetActiveProvider(string) error { return nil }
+func (*stubConfigStore) Update(bridgeconfig.UpdateRequest) error {
+	return nil
+}
+func (*stubConfigStore) SetProjectRoot(string) error { return nil }
+
 type recordingTurnRunner struct {
 	ctx       context.Context
 	message   string
@@ -36,11 +54,11 @@ func TestRunAgentWithConfigStoreDelegatesToSessionTurnRunner(t *testing.T) {
 		newAgentTurnRunner = original
 	})
 
-	store := &bridgeconfig.Store{}
+	store := bridgeconfig.Store(&stubConfigStore{})
 	runner := &recordingTurnRunner{response: "ok"}
-	newAgentTurnRunner = func(got *bridgeconfig.Store) sessionTurnRunner {
+	newAgentTurnRunner = func(got bridgeconfig.Store) sessionTurnRunner {
 		if got != store {
-			t.Fatalf("expected config store %p, got %p", store, got)
+			t.Fatalf("expected config store %v, got %v", store, got)
 		}
 		return runner
 	}
@@ -76,7 +94,7 @@ func TestRunAgentWithConfigStoreReturnsRunnerError(t *testing.T) {
 	})
 
 	wantErr := errors.New("runner failed")
-	newAgentTurnRunner = func(*bridgeconfig.Store) sessionTurnRunner {
+	newAgentTurnRunner = func(bridgeconfig.Store) sessionTurnRunner {
 		return &recordingTurnRunner{err: wantErr}
 	}
 

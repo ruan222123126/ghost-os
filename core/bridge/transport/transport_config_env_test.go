@@ -4,30 +4,26 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"ghost-os/bridge/llm"
 )
 
 func TestTransportConfigFromTomlConfig(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 
-	providerName := "openai"
 	bindAddr := "0.0.0.0:9090"
 	apiToken := "secret-token"
-	if err := writeBridgeFileConfig(configPathFromEnv(), bridgeFileConfig{
-		ActiveProvider: &providerName,
-		Providers: map[string]providerFileConfig{
-			"openai": {
-				Type:    llm.ProviderOpenAI,
-				BaseURL: defaultBaseURL,
-				APIKey:  optionalStringPointer("file-key"),
-			},
-		},
-		BindAddr:    &bindAddr,
-		APIToken:    &apiToken,
-		CORSOrigins: []string{"http://localhost:5173"},
-	}); err != nil {
+	configBody := `
+active_provider = "openai"
+bind_addr = "0.0.0.0:9090"
+api_token = "secret-token"
+cors_origins = ["http://localhost:5173"]
+
+[providers.openai]
+type = "openai"
+base_url = "` + defaultBaseURL + `"
+api_key = "file-key"
+`
+	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {
 		t.Fatalf("write config file: %v", err)
 	}
 

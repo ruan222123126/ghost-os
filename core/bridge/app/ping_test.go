@@ -29,7 +29,7 @@ func TestPingRunnerPassesCallerContextAndTraceID(t *testing.T) {
 	var gotTraceID string
 	closed := false
 	runner := pingRunner{
-		newClient: func() execution.Client {
+		newClient: func() (execution.Client, error) {
 			return stubPingClient{
 				call: func(callCtx context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
 					gotCtx = callCtx
@@ -48,7 +48,7 @@ func TestPingRunnerPassesCallerContextAndTraceID(t *testing.T) {
 					}
 					return map[string]any{"message": "pong"}, nil
 				},
-			}
+			}, nil
 		},
 		closeClient: func(execution.Client) error {
 			closed = true

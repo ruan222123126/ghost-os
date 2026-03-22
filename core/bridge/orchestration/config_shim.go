@@ -59,10 +59,10 @@ var (
 )
 
 type ConfigStore struct {
-	inner *bridgeconfig.Store
+	inner bridgeconfig.Store
 }
 
-func (s *ConfigStore) unwrap() *bridgeconfig.Store {
+func (s *ConfigStore) unwrap() bridgeconfig.Store {
 	if s == nil || s.inner == nil {
 		panic("config store is nil")
 	}
@@ -77,7 +77,7 @@ func NewConfigStoreFromEnv() (*ConfigStore, error) {
 	return &ConfigStore{inner: inner}, nil
 }
 
-func (s *ConfigStore) Inner() *bridgeconfig.Store {
+func (s *ConfigStore) Inner() bridgeconfig.Store {
 	return s.unwrap()
 }
 
