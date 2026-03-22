@@ -10,9 +10,11 @@ import (
 )
 
 const (
-	primaryMemoryRecallLimit  = 3
-	adjacentMemoryRecallLimit = 2
 	eventMemoryCandidateLimit = 12
+	maxActiveEventCount       = 3
+	primaryRecallWeight       = 3
+	adjacentRecallWeight      = 2
+	totalRecallWeight         = primaryRecallWeight + adjacentRecallWeight
 )
 
 type recallService struct {
@@ -43,43 +45,103 @@ func (s *recallService) Recall(ctx context.Context, input RecallInput) (RecallOu
 	if err != nil {
 		return RecallOutput{}, err
 	}
-	primaryNode, err := s.store.GetEventNode(ctx, normalized.PrimaryEventID)
-	if err != nil {
-		return RecallOutput{}, err
-	}
-	output := RecallOutput{
-		PrimaryEvent: &RecallEventHit{
-			Event:  primaryNode,
-			Role:   "primary",
-			Reason: "planner primary_event",
-		},
-	}
-	adjacentNodes, err := s.loadAdjacentNodes(ctx, normalized.ActiveEventIDs[1:])
-	if err != nil {
-		return RecallOutput{}, err
-	}
-	output.AdjacentEvents = adjacentNodes
-	if planRecallsEvent(normalized.RecallPlan, primaryNode.ID) {
-		primaryMemories, err := s.loadEventMemories(ctx, primaryNode, normalized.FocusText, normalized.RecallPlan, primaryMemoryRecallLimit)
+	output := RecallOutput{}
+	if s.settings.SessionScopeEnabled {
+		sessionOutput, err := s.loadSessionRecall(ctx, normalized)
 		if err != nil {
 			return RecallOutput{}, err
 		}
-		output.PrimaryMemories = primaryMemories
+		output.PrimaryEvent = sessionOutput.PrimaryEvent
+		output.AdjacentEvents = sessionOutput.AdjacentEvents
+		output.PrimaryMemories = sessionOutput.PrimaryMemories
+		output.AdjacentMemories = sessionOutput.AdjacentMemories
 	}
-	adjacentMemories, err := s.loadAdjacentMemories(ctx, adjacentNodes, normalized.FocusText, normalized.RecallPlan)
-	if err != nil {
-		return RecallOutput{}, err
+	if s.shouldRecallGlobalPreferences(normalized.RecallPlan) {
+		preferences, err := s.store.ListGlobalPreferences(ctx, globalPreferenceKeys())
+		if err != nil {
+			return RecallOutput{}, err
+		}
+		output.GlobalPreferences = preferences
 	}
-	output.AdjacentMemories = adjacentMemories
-	preferences, err := s.store.ListGlobalPreferences(ctx, globalPreferenceKeys())
-	if err != nil {
-		return RecallOutput{}, err
-	}
-	output.GlobalPreferences = preferences
 	if err := s.touchRecallSelection(ctx, output); err != nil {
 		return RecallOutput{}, err
 	}
 	output.PromptBlock = FormatPromptBlock(output)
+	return output, nil
+}
+
+func (s *recallService) loadSessionRecall(ctx context.Context, input RecallInput) (RecallOutput, error) {
+	primaryLimit, adjacentLimit := s.recallItemBudget(len(input.ActiveEventIDs) - 1)
+	recallEventMemories := planIncludesEventMemory(input.RecallPlan)
+	recallPrimaryMemories := recallEventMemories &&
+		primaryLimit > 0 &&
+		planRecallsEvent(input.RecallPlan, input.PrimaryEventID)
+	needsPrimaryNode := input.RecallPlan.IncludeNodeSummary || recallPrimaryMemories
+	if !needsPrimaryNode {
+		if len(input.ActiveEventIDs) == 1 || (adjacentLimit == 0 && !input.RecallPlan.IncludeNodeSummary) {
+			return RecallOutput{}, nil
+		}
+		return s.loadAdjacentRecall(ctx, input, adjacentLimit)
+	}
+	primaryNode, err := s.store.GetEventNode(ctx, input.PrimaryEventID)
+	if err != nil {
+		return RecallOutput{}, err
+	}
+	output := RecallOutput{}
+	if input.RecallPlan.IncludeNodeSummary {
+		output.PrimaryEvent = &RecallEventHit{
+			Event:  primaryNode,
+			Role:   "primary",
+			Reason: "planner primary_event",
+		}
+	}
+	if recallPrimaryMemories {
+		output.PrimaryMemories, err = s.loadEventMemories(ctx, primaryNode, input.FocusText, input.RecallPlan, primaryLimit)
+		if err != nil {
+			return RecallOutput{}, err
+		}
+	}
+	if len(input.ActiveEventIDs) == 1 || (adjacentLimit == 0 && !input.RecallPlan.IncludeNodeSummary) {
+		return output, nil
+	}
+	adjacentOutput, err := s.loadAdjacentRecall(ctx, input, adjacentLimit)
+	if err != nil {
+		return RecallOutput{}, err
+	}
+	output.AdjacentEvents = adjacentOutput.AdjacentEvents
+	output.AdjacentMemories = adjacentOutput.AdjacentMemories
+	return output, nil
+}
+
+func (s *recallService) loadAdjacentRecall(ctx context.Context, input RecallInput, adjacentLimit int) (RecallOutput, error) {
+	if len(input.ActiveEventIDs) == 1 {
+		return RecallOutput{}, nil
+	}
+	recallEventMemories := planIncludesEventMemory(input.RecallPlan)
+	if !input.RecallPlan.IncludeNodeSummary && (!recallEventMemories || adjacentLimit == 0) {
+		return RecallOutput{}, nil
+	}
+	adjacentNodes, err := s.loadAdjacentNodes(ctx, input.ActiveEventIDs[1:])
+	if err != nil {
+		return RecallOutput{}, err
+	}
+	output := RecallOutput{}
+	if input.RecallPlan.IncludeNodeSummary {
+		output.AdjacentEvents = adjacentNodes
+	}
+	if !recallEventMemories || adjacentLimit == 0 {
+		return output, nil
+	}
+	output.AdjacentMemories, err = s.loadAdjacentMemories(
+		ctx,
+		adjacentNodes,
+		input.FocusText,
+		input.RecallPlan,
+		adjacentLimit,
+	)
+	if err != nil {
+		return RecallOutput{}, err
+	}
 	return output, nil
 }
 
@@ -152,13 +214,18 @@ func (s *recallService) loadAdjacentMemories(
 	nodes []RecallEventHit,
 	focusText string,
 	plan RecallPlan,
+	limit int,
 ) ([]RecallMemoryHit, error) {
-	scored := make([]scoredEventMemory, 0, len(nodes)*adjacentMemoryRecallLimit)
+	if limit <= 0 {
+		return nil, nil
+	}
+	perNodeLimit := minInt(limit, eventMemoryCandidateLimit)
+	scored := make([]scoredEventMemory, 0, len(nodes)*perNodeLimit)
 	for _, node := range nodes {
 		if !planRecallsEvent(plan, node.Event.ID) {
 			continue
 		}
-		items, err := s.loadEventMemories(ctx, node.Event, focusText, plan, adjacentMemoryRecallLimit)
+		items, err := s.loadEventMemories(ctx, node.Event, focusText, plan, perNodeLimit)
 		if err != nil {
 			return nil, err
 		}
@@ -172,14 +239,33 @@ func (s *recallService) loadAdjacentMemories(
 	sort.SliceStable(scored, func(i int, j int) bool {
 		return compareScoredEventMemory(scored[i], scored[j])
 	})
-	out := make([]RecallMemoryHit, 0, minInt(adjacentMemoryRecallLimit, len(scored)))
+	out := make([]RecallMemoryHit, 0, minInt(limit, len(scored)))
 	for _, item := range scored {
 		out = append(out, item.hit)
-		if len(out) >= adjacentMemoryRecallLimit {
+		if len(out) >= limit {
 			break
 		}
 	}
 	return out, nil
+}
+
+func (s *recallService) recallItemBudget(adjacentCount int) (int, int) {
+	total := s.settings.MaxRecallItems
+	if total <= 0 {
+		return 0, 0
+	}
+	if adjacentCount <= 0 {
+		return total, 0
+	}
+	adjacentLimit := roundShare(total, adjacentRecallWeight, totalRecallWeight)
+	if adjacentLimit >= total {
+		adjacentLimit = total - 1
+	}
+	return total - adjacentLimit, adjacentLimit
+}
+
+func (s *recallService) shouldRecallGlobalPreferences(plan RecallPlan) bool {
+	return s.settings.UserScopeEnabled && plan.IncludePreference
 }
 
 func (s *recallService) touchRecallSelection(ctx context.Context, output RecallOutput) error {
@@ -220,7 +306,7 @@ func normalizeEventRecallInput(input RecallInput) (RecallInput, error) {
 	if activeIDs[0] != primaryEventID {
 		activeIDs = append([]string{primaryEventID}, filterEventIDs(activeIDs, primaryEventID)...)
 	}
-	if len(activeIDs) > 3 {
+	if len(activeIDs) > maxActiveEventCount {
 		return RecallInput{}, fmt.Errorf("active_event_ids cannot exceed 3")
 	}
 	return RecallInput{
@@ -268,6 +354,10 @@ func allowsMemoryType(plan RecallPlan, memoryType string) bool {
 	}
 }
 
+func planIncludesEventMemory(plan RecallPlan) bool {
+	return plan.IncludeWorkflow || plan.IncludePreference || plan.IncludeFact || plan.IncludeProfile
+}
+
 func computeEventMemoryScore(query string, entry memorystore.EventMemory) float64 {
 	memoryEntry := memorystore.MemoryEntry{
 		ID:         entry.ID,
@@ -311,4 +401,11 @@ func minInt(left int, right int) int {
 		return left
 	}
 	return right
+}
+
+func roundShare(total int, weight int, totalWeight int) int {
+	if total <= 0 || weight <= 0 || totalWeight <= 0 {
+		return 0
+	}
+	return (total*weight + totalWeight/2) / totalWeight
 }

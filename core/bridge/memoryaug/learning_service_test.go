@@ -144,3 +144,125 @@ func TestLearningServiceSkipsWhenPlannerDisablesWrite(t *testing.T) {
 		t.Fatalf("expected no event memories when learning is disabled, got %+v", items)
 	}
 }
+
+func TestLearningServiceSkipsEventLearningWhenSessionScopeDisabled(t *testing.T) {
+	store := newTestStore(t)
+	settings := newTestSettings()
+	settings.SessionScopeEnabled = false
+	globalExtractor := &scriptedExtractor{outputs: []ExtractOutput{{
+		Items: []Candidate{{
+			MemoryType: memorystore.MemoryTypePreference,
+			MemoryKey:  "reply_language",
+			Value:      "zh-CN",
+			Summary:    "reply language",
+			Content:    "reply in Chinese by default",
+			Confidence: 0.94,
+		}},
+	}}}
+	eventExtractor := &scriptedEventExtractor{outputs: []EventExtractOutput{{
+		Items: []EventMemoryCandidate{{
+			MemoryType: memorystore.MemoryTypeWorkflow,
+			Summary:    "run Android tests after changing runtime flags",
+			Content:    "run Android tests after changing runtime flags",
+			Confidence: 0.91,
+		}},
+	}}}
+	service := NewLearningService(settings, store, globalExtractor, eventExtractor)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		AllowWrite:     true,
+		Messages: []TurnMessage{{
+			Role: "user",
+			Text: "Please reply in Chinese by default.",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+
+	global, err := store.ListGlobalPreferences(context.Background(), []string{"reply_language"})
+	if err != nil {
+		t.Fatalf("list global preferences: %v", err)
+	}
+	if len(global) != 1 {
+		t.Fatalf("expected global preference to be learned, got %+v", global)
+	}
+	items, _, err := store.ListEventMemories(context.Background(), memorystore.EventMemoryListFilter{
+		EventID:  primary.ID,
+		Statuses: []string{memorystore.MemoryStatusActive},
+	})
+	if err != nil {
+		t.Fatalf("list event memories: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("expected event learning to be disabled, got %+v", items)
+	}
+	if eventExtractor.calls != 0 {
+		t.Fatalf("event extractor should not run when session scope is disabled, got %d calls", eventExtractor.calls)
+	}
+}
+
+func TestLearningServiceSkipsGlobalPreferencesWhenUserScopeDisabled(t *testing.T) {
+	store := newTestStore(t)
+	settings := newTestSettings()
+	settings.UserScopeEnabled = false
+	globalExtractor := &scriptedExtractor{outputs: []ExtractOutput{{
+		Items: []Candidate{{
+			MemoryType: memorystore.MemoryTypePreference,
+			MemoryKey:  "reply_language",
+			Value:      "zh-CN",
+			Summary:    "reply language",
+			Content:    "reply in Chinese by default",
+			Confidence: 0.94,
+		}},
+	}}}
+	eventExtractor := &scriptedEventExtractor{outputs: []EventExtractOutput{{
+		Items: []EventMemoryCandidate{{
+			MemoryType: memorystore.MemoryTypeWorkflow,
+			Summary:    "run Android tests after changing runtime flags",
+			Content:    "run Android tests after changing runtime flags",
+			Confidence: 0.91,
+		}},
+	}}}
+	service := NewLearningService(settings, store, globalExtractor, eventExtractor)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	err := service.LearnFromTurn(context.Background(), LearnFromTurnInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		AllowWrite:     true,
+		Messages: []TurnMessage{{
+			Role: "user",
+			Text: "Please reply in Chinese by default, and remember to run Android tests after runtime changes.",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("learn: %v", err)
+	}
+
+	global, err := store.ListGlobalPreferences(context.Background(), []string{"reply_language"})
+	if err != nil {
+		t.Fatalf("list global preferences: %v", err)
+	}
+	if len(global) != 0 {
+		t.Fatalf("expected global preference learning to be disabled, got %+v", global)
+	}
+	items, _, err := store.ListEventMemories(context.Background(), memorystore.EventMemoryListFilter{
+		EventID:  primary.ID,
+		Statuses: []string{memorystore.MemoryStatusActive},
+	})
+	if err != nil {
+		t.Fatalf("list event memories: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected event learning to remain enabled, got %+v", items)
+	}
+	if globalExtractor.calls != 0 {
+		t.Fatalf("global extractor should not run when user scope is disabled, got %d calls", globalExtractor.calls)
+	}
+}

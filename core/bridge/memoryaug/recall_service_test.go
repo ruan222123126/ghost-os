@@ -82,6 +82,120 @@ func TestRecallServiceHonorsMemoryTypeFilters(t *testing.T) {
 	}
 }
 
+func TestRecallServiceSkipsSessionScopeWhenDisabled(t *testing.T) {
+	store := newTestStore(t)
+	settings := newTestSettings()
+	settings.SessionScopeEnabled = false
+	recall := NewRecallService(settings, store)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	mustCreateEventMemory(t, store, primary.ID, memorystore.MemoryTypeWorkflow, "run Android tests after runtime flag changes")
+	mustCreateLearnedPreference(t, store, "reply_language", "zh-CN")
+
+	output, err := recall.Recall(context.Background(), RecallInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		FocusText:      "continue runtime config work",
+		RecallPlan: RecallPlan{
+			EventIDs:           []string{primary.ID},
+			IncludeNodeSummary: true,
+			IncludeWorkflow:    true,
+			IncludePreference:  true,
+			AllowLearning:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if output.PrimaryEvent != nil || len(output.PrimaryMemories) != 0 || len(output.AdjacentMemories) != 0 {
+		t.Fatalf("expected session-scoped recall to be disabled, got %+v", output)
+	}
+	if len(output.GlobalPreferences) != 1 || output.GlobalPreferences[0].MemoryKey != "reply_language" {
+		t.Fatalf("expected user-scoped preferences to remain enabled, got %+v", output.GlobalPreferences)
+	}
+	if strings.Contains(output.PromptBlock, "Active event:") || strings.Contains(output.PromptBlock, "Relevant event memory:") {
+		t.Fatalf("prompt block should not contain session-scoped sections when disabled: %q", output.PromptBlock)
+	}
+}
+
+func TestRecallServiceSkipsUserScopeWhenDisabled(t *testing.T) {
+	store := newTestStore(t)
+	settings := newTestSettings()
+	settings.UserScopeEnabled = false
+	recall := NewRecallService(settings, store)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	mustCreateEventMemory(t, store, primary.ID, memorystore.MemoryTypeWorkflow, "run Android tests after runtime flag changes")
+	mustCreateLearnedPreference(t, store, "reply_language", "zh-CN")
+
+	output, err := recall.Recall(context.Background(), RecallInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		FocusText:      "continue runtime config work",
+		RecallPlan: RecallPlan{
+			EventIDs:           []string{primary.ID},
+			IncludeNodeSummary: true,
+			IncludeWorkflow:    true,
+			IncludePreference:  true,
+			AllowLearning:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if len(output.GlobalPreferences) != 0 {
+		t.Fatalf("expected user-scoped preferences to be disabled, got %+v", output.GlobalPreferences)
+	}
+	if output.PrimaryEvent == nil || len(output.PrimaryMemories) != 1 {
+		t.Fatalf("expected session-scoped recall to remain enabled, got %+v", output)
+	}
+	if strings.Contains(output.PromptBlock, "Global preferences:") {
+		t.Fatalf("prompt block should not contain global preferences when disabled: %q", output.PromptBlock)
+	}
+}
+
+func TestRecallServiceHonorsMaxRecallItems(t *testing.T) {
+	store := newTestStore(t)
+	settings := newTestSettings()
+	settings.MaxRecallItems = 6
+	recall := NewRecallService(settings, store)
+
+	primary := mustCreateEventNode(t, store, "session-1", "Android runtime settings")
+	for idx := 0; idx < 8; idx++ {
+		mustCreateEventMemory(
+			t,
+			store,
+			primary.ID,
+			memorystore.MemoryTypeFact,
+			"runtime constraint memory "+string(rune('A'+idx)),
+		)
+	}
+
+	output, err := recall.Recall(context.Background(), RecallInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		FocusText:      "runtime constraint",
+		RecallPlan: RecallPlan{
+			EventIDs:           []string{primary.ID},
+			IncludeNodeSummary: true,
+			IncludeFact:        true,
+			AllowLearning:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if total := countRecalledMemories(output); total != 6 {
+		t.Fatalf("expected max_recall_items=6 to cap recalled memories, got %d (%+v)", total, output)
+	}
+	if strings.Count(output.PromptBlock, "[primary/fact]") != 6 {
+		t.Fatalf("prompt block should include all recalled items without extra hard cap, got %q", output.PromptBlock)
+	}
+}
+
 func mustCreateEventNode(t *testing.T, store *memorystore.Store, sessionID string, title string) memorystore.EventNode {
 	t.Helper()
 	node, err := store.CreateEventNode(context.Background(), memorystore.EventNodeInput{
@@ -137,4 +251,8 @@ func containsEventMemory(output RecallOutput, eventID string) bool {
 		}
 	}
 	return false
+}
+
+func countRecalledMemories(output RecallOutput) int {
+	return len(output.PrimaryMemories) + len(output.AdjacentMemories)
 }

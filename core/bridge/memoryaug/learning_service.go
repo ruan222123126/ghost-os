@@ -58,17 +58,17 @@ func (s *learningService) learn(
 ) (applyOutcome, string, error) {
 	outcome := applyOutcome{}
 	rawPayload := map[string]string{}
-	globalContext, err := s.loadGlobalPreferences(ctx)
-	if err != nil {
-		return outcome, "", err
-	}
-	if shouldExtractGlobalPreferences(filtered) {
+	if s.settings.UserScopeEnabled && shouldExtractGlobalPreferences(filtered) {
+		globalContext, err := s.loadGlobalPreferences(ctx)
+		if err != nil {
+			return outcome, "", err
+		}
 		rawPayload["global_preferences"], err = s.applyGlobalPreferences(ctx, input, filtered, globalContext, &outcome)
 		if err != nil {
 			return outcome, mustMarshalJSON(rawPayload), err
 		}
 	}
-	if strings.TrimSpace(input.PrimaryEventID) == "" {
+	if !s.settings.SessionScopeEnabled || strings.TrimSpace(input.PrimaryEventID) == "" {
 		return outcome, mustMarshalJSON(rawPayload), nil
 	}
 	eventContext, err := s.loadEventMemories(ctx, input.PrimaryEventID)

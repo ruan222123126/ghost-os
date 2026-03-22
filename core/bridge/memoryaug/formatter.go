@@ -8,9 +8,8 @@ import (
 )
 
 const (
-	promptEventMemoryLimit = 5
-	promptSummaryMaxChars  = 96
-	promptSummaryEllipsis  = "..."
+	promptSummaryMaxChars = 96
+	promptSummaryEllipsis = "..."
 )
 
 func FormatPromptBlock(output RecallOutput) string {
@@ -54,18 +53,12 @@ func formatActiveEventLines(output RecallOutput) []string {
 }
 
 func formatRelevantEventMemoryLines(output RecallOutput) []string {
-	lines := make([]string, 0, promptEventMemoryLimit)
+	lines := make([]string, 0, len(output.PrimaryMemories)+len(output.AdjacentMemories))
 	for _, hit := range output.PrimaryMemories {
 		lines = append(lines, formatEventMemoryLine("primary", hit))
-		if len(lines) >= promptEventMemoryLimit {
-			return lines
-		}
 	}
 	for _, hit := range output.AdjacentMemories {
 		lines = append(lines, formatEventMemoryLine("adjacent", hit))
-		if len(lines) >= promptEventMemoryLimit {
-			return lines
-		}
 	}
 	return lines
 }
