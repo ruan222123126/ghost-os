@@ -70,12 +70,7 @@ func (r *Registry) ToolDefs() []llm.ToolDef {
 
 	defs := make([]llm.ToolDef, 0, len(names))
 	for _, name := range names {
-		tool := r.tools[name]
-		defs = append(defs, llm.ToolDef{
-			Name:        tool.Name(),
-			Description: tool.Description(),
-			Parameters:  tool.Parameters(),
-		})
+		defs = append(defs, ToolDefFromTool(r.tools[name]))
 	}
 	return defs
 }
@@ -122,15 +117,13 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
-		{Name: "graphql_query", Domain: "data", Tags: []string{"graphql", "query", "read", "structured"}, ShortDesc: "Read-only structured data query.", OnDemand: true},
-		{Name: "graphql_schema_lookup", Domain: "data", Tags: []string{"graphql", "schema", "inspect", "read"}, ShortDesc: "Inspect local GraphQL schema snapshot.", OnDemand: true},
-		{Name: "graphql_mutation", Domain: "data", Tags: []string{"graphql", "mutation", "write", "approval"}, ShortDesc: "Prepare and commit approved GraphQL writes.", OnDemand: true},
 		{Name: "feed_manage", Domain: "web", Tags: []string{"feed", "rss", "manage", "crud"}, ShortDesc: "Manage RSS/Atom sources."},
 		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}, ShortDesc: "Fetch one RSS/Atom feed."},
 		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}, ShortDesc: "CRUD explicit memory."},
 		{Name: "memory_learned_list", Domain: "memory", Tags: []string{"memory", "learned", "read", "debug"}, ShortDesc: "List learned memory."},
 		{Name: "memory_recall_debug", Domain: "memory", Tags: []string{"memory", "recall", "debug", "read"}, ShortDesc: "Inspect memory recall."},
 		{Name: "screen_action", Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "native"}, ShortDesc: "Use OCR or click on screen."},
+		{Name: computerUseToolName, Domain: "screen", Tags: []string{"desktop", "visual", "executor", "gui"}, ShortDesc: "Run a goal-driven desktop GUI executor."},
 		{Name: "browser_control", Domain: "browser", Tags: []string{"browser", "automation", "web", "dom"}, ShortDesc: "Control a browser tab."},
 		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}, ShortDesc: "Type into the focused field."},
 		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}, ShortDesc: "Manage scheduled tasks."},

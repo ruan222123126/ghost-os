@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
@@ -13,20 +12,36 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-type persistingGraphQLTextExecutor struct{}
-
 type persistingToolTurnEchoTool struct{}
+
+type persistingGraphQLQueryTool struct{}
 
 func (persistingToolTurnEchoTool) Name() string {
 	return "echo"
+}
+
+func (persistingGraphQLQueryTool) Name() string {
+	return "web_search"
 }
 
 func (persistingToolTurnEchoTool) Description() string {
 	return "persisting echo"
 }
 
+func (persistingGraphQLQueryTool) Description() string {
+	return "persisting graphql query"
+}
+
 func (persistingToolTurnEchoTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)
+}
+
+func (persistingGraphQLQueryTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"}}}`)
+}
+
+func (persistingGraphQLQueryTool) ToolSemantics() llm.ToolSemantics {
+	return llm.ToolSemantics{ReadOnly: true}
 }
 
 func (persistingToolTurnEchoTool) Execute(
@@ -49,47 +64,24 @@ func (persistingToolTurnEchoTool) Execute(
 	return "tool-ok", nil
 }
 
-func (persistingGraphQLTextExecutor) Execute(
+func (persistingGraphQLQueryTool) Execute(
 	ctx context.Context,
-	text string,
-	traceID string,
-) (tools.GraphQLTextExecutionResult, error) {
+	_ json.RawMessage,
+	_ string,
+) (string, error) {
 	sess := tools.SessionFromContext(ctx)
 	if sess == nil {
-		return tools.GraphQLTextExecutionResult{}, context.Canceled
+		return "", context.Canceled
 	}
 	checkpoint := tools.SessionCheckpointFromContext(ctx)
 	if checkpoint == nil {
-		return tools.GraphQLTextExecutionResult{}, context.Canceled
+		return "", context.Canceled
 	}
-	now := time.Now().UTC()
-	sess.StorePendingGraphQLMutationIntent(session.PendingGraphQLMutationIntent{
-		IntentID:      "intent-graphql-text-auto",
-		Source:        "crm",
-		Domain:        "people",
-		PolicyName:    "update_viewer",
-		RootMutation:  "updateViewer",
-		Query:         strings.TrimSpace(text),
-		ToolCallID:    "graphql-text-call-1",
-		TraceID:       strings.TrimSpace(traceID),
-		PreparedAt:    now,
-		ApprovedAt:    now,
-		ExecutedAt:    now,
-		Status:        session.GraphQLMutationIntentExecuted,
-		CommitState:   session.GraphQLMutationCommitStateExecuted,
-		DeliveryKey:   "delivery-key",
-		RequestHash:   "request-hash",
-		Summary:       "update viewer",
-		AttemptCount:  1,
-		ResponseBytes: len(`{"status":"executed"}`),
-	})
+	sess.EnsureDynamicToolLoaded("web_search", "graphql-tool-test")
 	if err := checkpoint.Save(sess); err != nil {
-		return tools.GraphQLTextExecutionResult{}, err
+		return "", err
 	}
-	return tools.GraphQLTextExecutionResult{
-		Recognized: true,
-		Output:     `{"status":"executed","intent_id":"intent-graphql-text-auto"}`,
-	}, nil
+	return `{"items":[{"title":"OpenAI"}]}`, nil
 }
 
 func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing.T) {
@@ -102,14 +94,16 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 		responses: []*llm.CompletionResponse{{
 			Message: llm.Message{
 				Role: llm.RoleAssistant,
-				Text: `mutation { updateViewer(input: {id: "user-1"}) { ok } }`,
+				Text: `query { web_search(query: "OpenAI") }`,
 			},
 			FinishReason: llm.FinishStop,
 		}},
 	}
-	runAgent := agent.NewAgentWithHistory(completer, tools.NewRegistry(), agent.NewHistory("base system prompt"), 3)
+	registry := tools.NewRegistry()
+	registry.Register(persistingGraphQLQueryTool{})
+	runAgent := agent.NewAgentWithHistory(completer, registry, agent.NewHistory("base system prompt"), 3)
 	runAgent.SetStrictToolCallProtocol(true)
-	runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(persistingGraphQLTextExecutor{}))
+	runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(registry)))
 
 	turn := &sessionTurnState{
 		sessionStore: sessionStore,
@@ -137,25 +131,24 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 	if loadErr != nil {
 		t.Fatalf("load session: %v", loadErr)
 	}
-	if len(loaded.Messages) != 4 {
+	if len(loaded.Messages) != 5 {
 		t.Fatalf("expected system + committed graphql turn messages, got %+v", loaded.Messages)
 	}
 	if loaded.Messages[1].Role != llm.RoleUser || loaded.Messages[1].Text != "apply update" {
 		t.Fatalf("unexpected persisted user message: %+v", loaded.Messages[1])
 	}
-	if loaded.Messages[2].Role != llm.RoleAssistant || !strings.Contains(loaded.Messages[2].Text, "updateViewer") {
+	if loaded.Messages[2].Role != llm.RoleAssistant || !strings.Contains(loaded.Messages[2].Text, "web_search") {
 		t.Fatalf("unexpected persisted assistant graphql text: %+v", loaded.Messages[2])
 	}
-	if loaded.Messages[3].Role != llm.RoleInternal || !strings.Contains(loaded.Messages[3].Text, "[GRAPHQL_EXECUTION_RESULT]") {
-		t.Fatalf("unexpected persisted graphql feedback: %+v", loaded.Messages[3])
+	if loaded.Messages[3].Role != llm.RoleTool {
+		t.Fatalf("unexpected persisted graphql tool result: %+v", loaded.Messages[3])
 	}
-
-	intents := loaded.PendingGraphQLMutationIntentsSnapshot()
-	if len(intents) != 1 {
-		t.Fatalf("expected persisted graphql mutation intent, got %+v", intents)
+	if loaded.Messages[4].Role != llm.RoleInternal || !strings.Contains(loaded.Messages[4].Text, "[GRAPHQL_TOOL_RESULT]") {
+		t.Fatalf("unexpected persisted graphql feedback: %+v", loaded.Messages[4])
 	}
-	if intents[0].Status != session.GraphQLMutationIntentExecuted {
-		t.Fatalf("expected executed graphql mutation intent, got %+v", intents[0])
+	loads := loaded.DynamicToolLoadsSnapshot()
+	if len(loads) != 1 || loads[0].ToolName != "web_search" {
+		t.Fatalf("expected persisted graphql tool side effect, got %+v", loads)
 	}
 }
 

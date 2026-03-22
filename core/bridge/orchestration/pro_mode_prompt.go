@@ -52,12 +52,7 @@ func (c *proModeCatalog) ToolDefs() []llm.ToolDef {
 	defs := collectVisibleToolDefs(c.base, c.hidden)
 	names := sortedProModeToolNames(c.extra)
 	for _, name := range names {
-		tool := c.extra[name]
-		defs = append(defs, llm.ToolDef{
-			Name:        tool.Name(),
-			Description: tool.Description(),
-			Parameters:  tool.Parameters(),
-		})
+		defs = append(defs, tools.ToolDefFromTool(c.extra[name]))
 	}
 	sort.Slice(defs, func(i, j int) bool { return defs[i].Name < defs[j].Name })
 	return defs

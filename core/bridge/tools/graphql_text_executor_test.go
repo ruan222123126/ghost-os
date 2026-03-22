@@ -2,144 +2,192 @@ package tools
 
 import (
 	"context"
-	"net/http"
+	"encoding/json"
 	"strings"
 	"testing"
-
-	"ghost-os/bridge/session"
 )
 
-func TestGraphQLTextExecutorMutationRequiresApprovalWhenPolicyEnabled(t *testing.T) {
-	registry := testGraphQLTextRegistry(t, true)
-	executor := NewGraphQLTextExecutor(registry).(*graphQLTextExecutor)
-	sess := session.NewSession("system")
-	ctx := graphQLTextExecutionContext(sess)
+func TestGraphQLTextExecutorRecognizesQueryToolCall(t *testing.T) {
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog()).(*graphQLTextExecutor)
 
 	result, err := executor.Execute(
-		ctx,
-		`mutation { updateViewer(input: {id: "user-1"}) { ok } }`,
-		"trace-graphql-text-await",
-	)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if !result.Recognized || result.Meta.AwaitingHuman == nil {
-		t.Fatalf("expected awaiting human result, got %+v", result)
-	}
-	if result.Meta.AwaitingHuman.QuestionID == "" {
-		t.Fatalf("expected question id in awaiting result: %+v", result.Meta.AwaitingHuman)
-	}
-	intents := sess.PendingGraphQLMutationIntentsSnapshot()
-	if len(intents) != 1 {
-		t.Fatalf("expected one pending intent, got %+v", intents)
-	}
-	question := sess.PendingQuestions[intents[0].QuestionID]
-	if question.ToolName != GraphQLTextMutationToolName {
-		t.Fatalf("expected %q question, got %+v", GraphQLTextMutationToolName, question)
-	}
-}
-
-func TestGraphQLTextExecutorMutationReusesContextToolCallID(t *testing.T) {
-	registry := testGraphQLTextRegistry(t, true)
-	executor := NewGraphQLTextExecutor(registry).(*graphQLTextExecutor)
-	sess := session.NewSession("system")
-	ctx := WithToolCallID(graphQLTextExecutionContext(sess), "graphql-text-call-explicit")
-
-	result, err := executor.Execute(
-		ctx,
-		`mutation { updateViewer(input: {id: "user-1"}) { ok } }`,
-		"trace-graphql-text-await",
-	)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if result.Meta.AwaitingHuman == nil {
-		t.Fatalf("expected awaiting human result, got %+v", result)
-	}
-	intent := sess.PendingGraphQLMutationIntentsSnapshot()[0]
-	question := sess.PendingQuestions[intent.QuestionID]
-	if intent.ToolCallID != "graphql-text-call-explicit" {
-		t.Fatalf("unexpected intent tool call id: %+v", intent)
-	}
-	if question.ToolCallID != "graphql-text-call-explicit" {
-		t.Fatalf("unexpected question tool call id: %+v", question)
-	}
-}
-
-func TestGraphQLTextExecutorMutationAutoCommitsWhenApprovalDisabled(t *testing.T) {
-	registry := testGraphQLTextRegistry(t, false)
-	executor := NewGraphQLTextExecutor(registry).(*graphQLTextExecutor)
-	sess := session.NewSession("system")
-	ctx := graphQLTextExecutionContext(sess)
-	executor.mutationTool.httpClient = &http.Client{
-		Transport: graphQLRoundTripper(func(req *http.Request) (*http.Response, error) {
-			return newGraphQLResponse(http.StatusOK, `{"data":{"updateViewer":{"ok":true}}}`), nil
-		}),
-	}
-
-	result, err := executor.Execute(
-		ctx,
-		`mutation { updateViewer(input: {id: "user-1"}) { ok } }`,
-		"trace-graphql-text-auto-commit",
+		context.Background(),
+		`query { web_search(query: "OpenAI latest news", max_results: 5) }`,
+		"trace-graphql-query",
 	)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if !result.Recognized {
-		t.Fatalf("expected recognized graphql mutation, got %+v", result)
+		t.Fatalf("expected recognized graphql tool call, got %+v", result)
 	}
-	if !strings.Contains(result.Output, `"status":"executed"`) {
-		t.Fatalf("expected executed commit payload, got %s", result.Output)
+	if result.ToolName != "web_search" {
+		t.Fatalf("unexpected tool name: %+v", result)
 	}
-	intents := sess.PendingGraphQLMutationIntentsSnapshot()
-	if len(intents) != 1 || intents[0].Status != session.GraphQLMutationIntentExecuted {
-		t.Fatalf("expected one executed intent, got %+v", intents)
+	args := decodeGraphQLToolArgs(t, result.Arguments)
+	if args["query"] != "OpenAI latest news" {
+		t.Fatalf("unexpected args: %+v", args)
 	}
-	if len(sess.PendingQuestions) != 0 {
-		t.Fatalf("expected no pending question for auto-commit mutation, got %+v", sess.PendingQuestions)
+	if args["max_results"] != float64(5) {
+		t.Fatalf("unexpected args: %+v", args)
 	}
 }
 
-func testGraphQLTextRegistry(t *testing.T, approvalRequired bool) *GraphQLSourceRegistry {
+func TestGraphQLTextExecutorRecognizesMutationToolCall(t *testing.T) {
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog()).(*graphQLTextExecutor)
+
+	result, err := executor.Execute(
+		context.Background(),
+		`mutation { ask_human(prompt: "Need approval?", options: [{label: "Approve", allow_custom: false}, {label: "Other", allow_custom: true}]) }`,
+		"trace-graphql-mutation",
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.ToolName != "ask_human" {
+		t.Fatalf("unexpected tool name: %+v", result)
+	}
+	args := decodeGraphQLToolArgs(t, result.Arguments)
+	if args["prompt"] != "Need approval?" {
+		t.Fatalf("unexpected args: %+v", args)
+	}
+	options, ok := args["options"].([]any)
+	if !ok || len(options) != 2 {
+		t.Fatalf("unexpected options payload: %+v", args)
+	}
+}
+
+func TestGraphQLTextExecutorRejectsMultipleTopLevelFields(t *testing.T) {
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
+
+	_, err := executor.Execute(
+		context.Background(),
+		`query { web_search(query: "a") ask_human(prompt: "b") }`,
+		"trace-graphql-multi-field",
+	)
+	if err == nil || !strings.Contains(err.Error(), "exactly one top-level field") {
+		t.Fatalf("expected multi-field error, got %v", err)
+	}
+}
+
+func TestGraphQLTextExecutorRejectsAliasesFragmentsVariablesAndDirectives(t *testing.T) {
+	tests := []struct {
+		name     string
+		document string
+		want     string
+	}{
+		{
+			name:     "alias",
+			document: `query { search: web_search(query: "a") }`,
+			want:     "does not support aliases",
+		},
+		{
+			name:     "fragment",
+			document: `query { ...SearchFrag } fragment SearchFrag on Query { web_search(query: "a") }`,
+			want:     "does not support fragments",
+		},
+		{
+			name:     "variables",
+			document: `query Search($query: String!) { web_search(query: $query) }`,
+			want:     "does not support variables",
+		},
+		{
+			name:     "directives",
+			document: `query @skip(if: false) { web_search(query: "a") }`,
+			want:     "does not support directives",
+		},
+	}
+
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			_, err := executor.Execute(context.Background(), testCase.document, "trace-graphql-invalid")
+			if err == nil || !strings.Contains(err.Error(), testCase.want) {
+				t.Fatalf("expected %q error, got %v", testCase.want, err)
+			}
+		})
+	}
+}
+
+func TestGraphQLTextExecutorRejectsUnknownTool(t *testing.T) {
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
+
+	_, err := executor.Execute(
+		context.Background(),
+		`query { missing_tool(query: "a") }`,
+		"trace-graphql-missing",
+	)
+	if err == nil || !strings.Contains(err.Error(), `tool "missing_tool" not found`) {
+		t.Fatalf("expected tool not found error, got %v", err)
+	}
+}
+
+func TestGraphQLTextExecutorRejectsOperationMismatch(t *testing.T) {
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
+
+	_, err := executor.Execute(
+		context.Background(),
+		`query { ask_human(prompt: "Need approval?") }`,
+		"trace-graphql-mismatch",
+	)
+	if err == nil || !strings.Contains(err.Error(), `tool "ask_human" must use mutation`) {
+		t.Fatalf("expected operation mismatch error, got %v", err)
+	}
+}
+
+func TestGraphQLTextExecutorDefaultsUndeclaredToolsToMutation(t *testing.T) {
+	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
+
+	_, err := executor.Execute(
+		context.Background(),
+		`query { script_exec(script: "print('hi')") }`,
+		"trace-graphql-default-mutation",
+	)
+	if err == nil || !strings.Contains(err.Error(), `tool "script_exec" must use mutation`) {
+		t.Fatalf("expected default mutation mismatch error, got %v", err)
+	}
+}
+
+func graphQLToolRuntimeTestCatalog() ToolCatalog {
+	registry := NewRegistry()
+	registry.Register(NewWebSearchTool(WebSearchConfig{}))
+	registry.Register(NewAskHumanTool())
+	registry.Register(&graphQLToolRuntimeNestedArgsTool{})
+	return registry
+}
+
+type graphQLToolRuntimeNestedArgsTool struct{}
+
+func (*graphQLToolRuntimeNestedArgsTool) Name() string {
+	return "script_exec"
+}
+
+func (*graphQLToolRuntimeNestedArgsTool) Description() string {
+	return "test script exec"
+}
+
+func (*graphQLToolRuntimeNestedArgsTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"script":{"type":"string"},
+			"env":{"type":"object"},
+			"files":{"type":"array","items":{"type":"string"}}
+		},
+		"required":["script"]
+	}`)
+}
+
+func (*graphQLToolRuntimeNestedArgsTool) Execute(context.Context, json.RawMessage, string) (string, error) {
+	return "", nil
+}
+
+func decodeGraphQLToolArgs(t *testing.T, raw json.RawMessage) map[string]any {
 	t.Helper()
-	return testGraphQLRegistry(t, GraphQLRegistryConfig{
-		DefaultSource: "crm",
-		Sources: []GraphQLSourceConfig{{
-			Name:             "crm",
-			Endpoint:         "https://crm.test/query",
-			SchemaPath:       writeGraphQLSchema(t, "crm-text"),
-			TimeoutMS:        3000,
-			MaxResponseBytes: 4096,
-			MaxDepth:         6,
-			MaxFields:        16,
-			MaxRootFields:    2,
-			MaxFragments:     4,
-			Domains: []GraphQLDomainConfig{{
-				Name:        "people",
-				RootQueries: []string{"viewer"},
-				Types:       []string{"Viewer", "MutationPayload"},
-			}},
-		}},
-		MutationPolicies: []GraphQLMutationPolicyConfig{{
-			Name:              "update_viewer",
-			Source:            "crm",
-			Domain:            "people",
-			RootMutation:      "updateViewer",
-			ApprovalRequired:  approvalRequired,
-			IdempotencyMode:   graphQLMutationIdempotencyModeHeader,
-			IdempotencyHeader: "Idempotency-Key",
-			MaxDepth:          4,
-			MaxFields:         8,
-			MaxRootFields:     1,
-			MaxFragments:      2,
-		}},
-	})
-}
 
-func graphQLTextExecutionContext(sess *session.Session) context.Context {
-	ctx := WithSession(context.Background(), sess)
-	ctx = WithSessionCheckpoint(ctx, graphQLMutationCheckpointFunc(func(*session.Session) error {
-		return nil
-	}))
-	return ctx
+	var args map[string]any
+	if err := json.Unmarshal(raw, &args); err != nil {
+		t.Fatalf("decode graphql args: %v", err)
+	}
+	return args
 }

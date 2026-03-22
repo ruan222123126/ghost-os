@@ -5,259 +5,62 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/vektah/gqlparser/v2/ast"
 
-	"ghost-os/bridge/session"
-	"ghost-os/bridge/tools/internal/graphqlschema"
+	"ghost-os/bridge/llm"
 )
 
-const (
-	GraphQLTextMutationToolName = "graphql_text_mutation"
-	graphQLTextSourceName       = "graphql_text.graphql"
-)
+const graphQLTextSourceName = "graphql_tool_runtime.graphql"
 
-// GraphQLTextExecutionResult 描述文本 GraphQL 的执行结果。
 type GraphQLTextExecutionResult struct {
 	Recognized bool
-	Output     string
-	Meta       ExecuteMeta
+	Operation  ast.Operation
+	ToolName   string
+	Arguments  json.RawMessage
 }
 
-// GraphQLTextExecutor 执行模型直接输出的 GraphQL 文本。
 type GraphQLTextExecutor interface {
 	Execute(ctx context.Context, text string, traceID string) (GraphQLTextExecutionResult, error)
 }
 
 type graphQLTextExecutor struct {
-	registry     *GraphQLSourceRegistry
-	queryTool    *GraphQLQueryTool
-	mutationTool *GraphQLMutationTool
+	catalog ToolCatalog
 }
 
-func NewGraphQLTextExecutor(registry *GraphQLSourceRegistry) GraphQLTextExecutor {
-	return &graphQLTextExecutor{
-		registry:     registry,
-		queryTool:    NewGraphQLQueryTool(registry).(*GraphQLQueryTool),
-		mutationTool: NewGraphQLMutationTool(registry).(*GraphQLMutationTool),
-	}
+func NewGraphQLTextExecutor(catalog ToolCatalog) GraphQLTextExecutor {
+	return &graphQLTextExecutor{catalog: catalog}
 }
 
 func (e *graphQLTextExecutor) Execute(
-	ctx context.Context,
+	_ context.Context,
 	text string,
-	traceID string,
+	_ string,
 ) (GraphQLTextExecutionResult, error) {
 	documentText, looksLikeGraphQL := normalizeGraphQLTextDocument(text)
 	if !looksLikeGraphQL {
 		return GraphQLTextExecutionResult{}, nil
 	}
-	operation, parseErr := parseSingleGraphQLOperation(documentText)
-	if parseErr != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, parseErr
-	}
-	source, err := e.registry.resolveSource("")
+	call, err := parseGraphQLToolCallDocument(documentText)
 	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, err
+		call.Recognized = true
+		return call, err
 	}
-	switch operation {
-	case ast.Query:
-		return e.executeQuery(ctx, source, documentText, traceID)
-	case ast.Mutation:
-		return e.executeMutation(ctx, source, documentText, traceID, resolveGraphQLTextToolCallID(ctx))
-	default:
-		return GraphQLTextExecutionResult{Recognized: true}, fmt.Errorf("graphql text executor only supports query or mutation")
+	if e.catalog == nil {
+		call.Recognized = true
+		return call, newGraphQLTextCatalogUnavailableError()
 	}
-}
-
-func (e *graphQLTextExecutor) executeQuery(
-	ctx context.Context,
-	source *graphqlschema.Source,
-	documentText string,
-	traceID string,
-) (GraphQLTextExecutionResult, error) {
-	startedAt := time.Now()
-	summary, err := validateGraphQLQueryDocument(documentText, "", source, "")
-	if err != nil {
-		logGraphQLQuery(traceID, sourceName(source), "", summary, 0, time.Since(startedAt), err)
-		return GraphQLTextExecutionResult{Recognized: true}, err
+	def, ok := graphQLVisibleToolDef(e.catalog, call.ToolName)
+	if !ok || e.catalog.Get(call.ToolName) == nil {
+		call.Recognized = true
+		return call, newGraphQLTextUnknownToolError(call.ToolName)
 	}
-	domain, err := inferQueryDomain(source, summary.RootFields)
-	if err != nil {
-		logGraphQLQuery(traceID, sourceName(source), "", summary, 0, time.Since(startedAt), err)
-		return GraphQLTextExecutionResult{Recognized: true}, err
+	if err := validateGraphQLToolOperation(call.Operation, def); err != nil {
+		call.Recognized = true
+		return call, err
 	}
-	if domain != "" {
-		summary, err = validateGraphQLQueryDocument(documentText, "", source, domain)
-		if err != nil {
-			logGraphQLQuery(traceID, source.Name, domain, summary, 0, time.Since(startedAt), err)
-			return GraphQLTextExecutionResult{Recognized: true}, err
-		}
-	}
-	body, err := e.queryTool.executeRequest(ctx, source, graphQLQueryArgs{Query: documentText})
-	if err != nil {
-		logGraphQLQuery(traceID, source.Name, domain, summary, 0, time.Since(startedAt), err)
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	if err := validateGraphQLResponseBody(body); err != nil {
-		logGraphQLQuery(traceID, source.Name, domain, summary, len(body), time.Since(startedAt), err)
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	logGraphQLQuery(traceID, source.Name, domain, summary, len(body), time.Since(startedAt), nil)
-	return GraphQLTextExecutionResult{
-		Recognized: true,
-		Output:     string(body),
-	}, nil
-}
-
-func (e *graphQLTextExecutor) executeMutation(
-	ctx context.Context,
-	source *graphqlschema.Source,
-	documentText string,
-	traceID string,
-	toolCallID string,
-) (GraphQLTextExecutionResult, error) {
-	domain, err := inferMutationDomain(e.registry, source, documentText)
-	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	args := graphQLMutationArgs{
-		Source:   source.Name,
-		Domain:   domain,
-		Mutation: documentText,
-	}
-	prepared, err := prepareGraphQLMutationDocument(
-		documentText,
-		"",
-		source,
-		domain,
-		e.registry,
-	)
-	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	if prepared.Policy.ApprovalRequired {
-		return e.prepareAwaitingMutationApproval(ctx, traceID, args, prepared, toolCallID)
-	}
-	output, err := e.executeMutationImmediately(ctx, traceID, args, prepared, toolCallID)
-	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	return GraphQLTextExecutionResult{
-		Recognized: true,
-		Output:     output,
-	}, nil
-}
-
-func (e *graphQLTextExecutor) prepareAwaitingMutationApproval(
-	ctx context.Context,
-	traceID string,
-	args graphQLMutationArgs,
-	prepared graphQLPreparedMutation,
-	toolCallID string,
-) (GraphQLTextExecutionResult, error) {
-	sess := SessionFromContext(ctx)
-	if sess == nil {
-		return GraphQLTextExecutionResult{Recognized: true}, fmt.Errorf("graphql text mutation requires an active session")
-	}
-	intent, prompt, err := buildPendingGraphQLMutationIntent(traceID, toolCallID, prepared, args)
-	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	sess.StorePendingGraphQLMutationIntent(intent)
-	sess.AddPendingQuestion(intent.QuestionID, session.PendingHumanQuestion{
-		Prompt:        prompt,
-		SelectionMode: session.HumanQuestionSelectionSingle,
-		Options: []session.HumanQuestionOption{
-			{Label: graphQLMutationApprovalApprove},
-			{Label: graphQLMutationApprovalReject},
-			{Label: graphQLMutationApprovalEdit, AllowCustom: true},
-		},
-		ToolName:   GraphQLTextMutationToolName,
-		ToolCallID: toolCallID,
-		TraceID:    strings.TrimSpace(traceID),
-		CreatedAt:  time.Now().UTC(),
-	})
-	output, err := encodeGraphQLMutationAwaitingPayload(intent, prompt)
-	if err != nil {
-		return GraphQLTextExecutionResult{Recognized: true}, err
-	}
-	return GraphQLTextExecutionResult{
-		Recognized: true,
-		Output:     output,
-		Meta:       interpretGraphQLMutationAwaitingResult(output),
-	}, nil
-}
-
-func (e *graphQLTextExecutor) executeMutationImmediately(
-	ctx context.Context,
-	traceID string,
-	args graphQLMutationArgs,
-	prepared graphQLPreparedMutation,
-	toolCallID string,
-) (string, error) {
-	sess := SessionFromContext(ctx)
-	if sess == nil {
-		return "", fmt.Errorf("graphql text mutation requires an active session")
-	}
-	intent, err := buildApprovedGraphQLTextIntent(traceID, toolCallID, args, prepared)
-	if err != nil {
-		return "", err
-	}
-	sess.StorePendingGraphQLMutationIntent(intent)
-	argsJSON, err := json.Marshal(map[string]any{
-		"action":    graphQLMutationActionCommit,
-		"intent_id": intent.IntentID,
-	})
-	if err != nil {
-		return "", fmt.Errorf("encode graphql commit args: %w", err)
-	}
-	return e.mutationTool.Execute(ctx, argsJSON, traceID)
-}
-
-func buildApprovedGraphQLTextIntent(
-	traceID string,
-	toolCallID string,
-	args graphQLMutationArgs,
-	prepared graphQLPreparedMutation,
-) (session.PendingGraphQLMutationIntent, error) {
-	intentID, err := newGraphQLMutationID("intent")
-	if err != nil {
-		return session.PendingGraphQLMutationIntent{}, fmt.Errorf("generate intent id: %w", err)
-	}
-	frozen, err := freezeGraphQLMutationRequest(prepared, args)
-	if err != nil {
-		return session.PendingGraphQLMutationIntent{}, err
-	}
-	now := time.Now().UTC()
-	return session.PendingGraphQLMutationIntent{
-		IntentID:                intentID,
-		Source:                  prepared.Source.Name,
-		Domain:                  prepared.Domain,
-		PolicyName:              prepared.Policy.Name,
-		RootMutation:            prepared.Policy.RootMutation,
-		IdempotencyMode:         prepared.Policy.IdempotencyMode,
-		IdempotencyHeader:       prepared.Policy.IdempotencyHeader,
-		IdempotencyVariablePath: prepared.Policy.IdempotencyVariablePath,
-		Query:                   prepared.MutationDoc,
-		Variables:               frozen.Variables,
-		DeliveryKey:             frozen.DeliveryKey,
-		RequestHash:             frozen.RequestHash,
-		ToolCallID:              toolCallID,
-		TraceID:                 strings.TrimSpace(traceID),
-		PreparedAt:              now,
-		ApprovedAt:              now,
-		Status:                  session.GraphQLMutationIntentApproved,
-		CommitState:             session.GraphQLMutationCommitStateApproved,
-		Summary: buildGraphQLMutationSummary(
-			prepared.Source.Name,
-			prepared.Domain,
-			prepared.Policy.Name,
-			prepared.Policy.RootMutation,
-			frozen.Variables,
-		),
-	}, nil
+	call.Recognized = true
+	return call, nil
 }
 
 func normalizeGraphQLTextDocument(text string) (string, bool) {
@@ -271,20 +74,167 @@ func normalizeGraphQLTextDocument(text string) (string, bool) {
 	return trimmed, looksLikeGraphQLDocument(trimmed)
 }
 
-func parseSingleGraphQLOperation(text string) (ast.Operation, error) {
+func parseGraphQLToolCallDocument(text string) (GraphQLTextExecutionResult, error) {
 	document, err := parseGraphQLDocument(graphQLTextSourceName, text)
 	if err != nil {
-		return ast.Query, err
+		return GraphQLTextExecutionResult{}, newGraphQLTextParseError(err)
 	}
-	if len(document.Operations) != 1 {
-		return ast.Query, fmt.Errorf("graphql text executor requires exactly one operation")
+	if len(document.Fragments) != 0 {
+		return GraphQLTextExecutionResult{}, newGraphQLTextFeatureError(
+			"unsupported_fragments",
+			"graphql tool runtime does not support fragments",
+		)
 	}
-	operation := document.Operations[0]
+	operation, err := singleGraphQLToolOperation(document.Operations)
+	if err != nil {
+		return GraphQLTextExecutionResult{}, err
+	}
+	field, err := singleGraphQLToolField(operation)
+	if err != nil {
+		return GraphQLTextExecutionResult{Operation: operation.Operation}, err
+	}
+	argsJSON, err := graphQLFieldArgumentsJSON(field.Arguments)
+	if err != nil {
+		return GraphQLTextExecutionResult{
+			Operation: operation.Operation,
+			ToolName:  strings.TrimSpace(field.Name),
+		}, err
+	}
+	return GraphQLTextExecutionResult{
+		Operation: operation.Operation,
+		ToolName:  strings.TrimSpace(field.Name),
+		Arguments: argsJSON,
+	}, nil
+}
+
+func singleGraphQLToolOperation(
+	operations ast.OperationList,
+) (*ast.OperationDefinition, error) {
+	if len(operations) != 1 {
+		return nil, newGraphQLTextOperationCountError(len(operations))
+	}
+	operation := operations[0]
 	if operation == nil {
-		return ast.Query, fmt.Errorf("graphql text executor found an empty operation definition")
+		return nil, newGraphQLTextFeatureError(
+			"empty_operation_definition",
+			"graphql tool runtime found an empty operation definition",
+		)
 	}
 	if operation.Operation != ast.Query && operation.Operation != ast.Mutation {
-		return ast.Query, fmt.Errorf("graphql text executor only supports query or mutation operations")
+		return nil, newGraphQLTextOperationError(
+			"unsupported_operation_type",
+			"graphql tool runtime only supports query or mutation",
+			"query_or_mutation",
+			string(operation.Operation),
+		)
 	}
-	return operation.Operation, nil
+	if len(operation.VariableDefinitions) != 0 {
+		return nil, newGraphQLTextFeatureError(
+			"unsupported_variables",
+			"graphql tool runtime does not support variables",
+		)
+	}
+	if len(operation.Directives) != 0 {
+		return nil, newGraphQLTextFeatureError(
+			"unsupported_directives",
+			"graphql tool runtime does not support directives",
+		)
+	}
+	return operation, nil
+}
+
+func singleGraphQLToolField(
+	operation *ast.OperationDefinition,
+) (*ast.Field, error) {
+	if operation == nil {
+		return nil, newGraphQLTextFeatureError(
+			"empty_operation_definition",
+			"graphql tool runtime operation is empty",
+		)
+	}
+	if len(operation.SelectionSet) != 1 {
+		return nil, newGraphQLTextTopLevelFieldCountError(len(operation.SelectionSet))
+	}
+	field, ok := operation.SelectionSet[0].(*ast.Field)
+	if !ok || field == nil {
+		return nil, newGraphQLTextFeatureError(
+			"invalid_top_level_selection",
+			"graphql tool runtime only supports a top-level field selection",
+		)
+	}
+	if alias := strings.TrimSpace(field.Alias); alias != "" && alias != strings.TrimSpace(field.Name) {
+		return nil, newGraphQLTextAliasError(field.Name)
+	}
+	if len(field.Directives) != 0 {
+		return nil, newGraphQLTextFeatureError(
+			"unsupported_directives",
+			"graphql tool runtime does not support directives",
+		)
+	}
+	if len(field.SelectionSet) != 0 {
+		return nil, newGraphQLTextNestedSelectionError(field.Name)
+	}
+	return field, nil
+}
+
+func graphQLFieldArgumentsJSON(arguments ast.ArgumentList) (json.RawMessage, error) {
+	if len(arguments) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+	payload := make(map[string]any, len(arguments))
+	for _, argument := range arguments {
+		if argument == nil || strings.TrimSpace(argument.Name) == "" {
+			err := fmt.Errorf("graphql tool runtime contains an invalid argument")
+			return nil, newGraphQLTextArgumentError("", err)
+		}
+		value, err := graphQLLiteralValue(argument.Value)
+		if err != nil {
+			return nil, newGraphQLTextArgumentError(
+				argument.Name,
+				fmt.Errorf("argument %q: %w", argument.Name, err),
+			)
+		}
+		payload[strings.TrimSpace(argument.Name)] = value
+	}
+	return json.Marshal(payload)
+}
+
+func graphQLLiteralValue(value *ast.Value) (any, error) {
+	if containsGraphQLVariable(value) {
+		return nil, fmt.Errorf("graphql tool runtime does not support variables")
+	}
+	if value == nil {
+		return nil, nil
+	}
+	decoded, err := value.Value(nil)
+	if err != nil {
+		return nil, fmt.Errorf("decode graphql literal: %w", err)
+	}
+	return decoded, nil
+}
+
+func containsGraphQLVariable(value *ast.Value) bool {
+	if value == nil {
+		return false
+	}
+	if value.Kind == ast.Variable {
+		return true
+	}
+	for _, child := range value.Children {
+		if child != nil && containsGraphQLVariable(child.Value) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateGraphQLToolOperation(
+	operation ast.Operation,
+	def llm.ToolDef,
+) error {
+	expected := graphQLToolOperation(def)
+	if operation == expected {
+		return nil
+	}
+	return newGraphQLTextWrongOperationError(def.Name, expected, operation)
 }

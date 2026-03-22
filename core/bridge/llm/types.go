@@ -70,6 +70,13 @@ type ToolDef struct {
 	Name        string
 	Description string
 	Parameters  json.RawMessage
+	Semantics   ToolSemantics
+}
+
+// ToolSemantics 描述工具对运行时协议有影响的最小语义。
+type ToolSemantics struct {
+	ReadOnly   bool
+	SideEffect bool
 }
 
 // ConversationState 保存 provider 侧可续跑的会话状态。

@@ -77,6 +77,7 @@ func cloneCompletionRequest(request llm.CompletionRequest) llm.CompletionRequest
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  cloneRawJSON(tool.Parameters),
+			Semantics:   tool.Semantics,
 		}
 	}
 
@@ -109,6 +110,7 @@ func (f *fakeToolCatalog) ToolDefs() []llm.ToolDef {
 			Name:        tool.Name,
 			Description: tool.Description,
 			Parameters:  cloneRawJSON(tool.Parameters),
+			Semantics:   tool.Semantics,
 		}
 	}
 	return out
@@ -136,6 +138,7 @@ func newFakeToolCatalog(testTools ...*fakeTool) *fakeToolCatalog {
 			Name:        tool.Name(),
 			Description: tool.Description(),
 			Parameters:  cloneRawJSON(tool.Parameters()),
+			Semantics:   tool.ToolSemantics(),
 		})
 		toolByKey[tool.Name()] = tool
 	}
@@ -148,6 +151,7 @@ type fakeTool struct {
 	execute   func(context.Context, json.RawMessage) (string, error)
 	executeV2 func(context.Context, json.RawMessage, string) (string, error)
 	interpret func(string) tools.ExecuteMeta
+	semantics llm.ToolSemantics
 	callCount int
 	lastArgs  json.RawMessage
 	lastTrace string
@@ -163,6 +167,10 @@ func (f *fakeTool) Description() string {
 
 func (f *fakeTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{"type":"object"}`)
+}
+
+func (f *fakeTool) ToolSemantics() llm.ToolSemantics {
+	return f.semantics
 }
 
 func (f *fakeTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {

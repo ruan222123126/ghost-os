@@ -64,6 +64,7 @@ func cloneToolDefs(registry ToolRegistry) []llm.ToolDef {
 			Name:        def.Name,
 			Description: def.Description,
 			Parameters:  cloneRawJSON(def.Parameters),
+			Semantics:   def.Semantics,
 		}
 	}
 

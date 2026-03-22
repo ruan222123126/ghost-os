@@ -11,27 +11,6 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-type capturingAwaitingGraphQLTextExecutor struct {
-	toolCallIDs []string
-}
-
-func (e *capturingAwaitingGraphQLTextExecutor) Execute(
-	ctx context.Context,
-	_ string,
-	_ string,
-) (tools.GraphQLTextExecutionResult, error) {
-	e.toolCallIDs = append(e.toolCallIDs, tools.ToolCallIDFromContext(ctx))
-	return tools.GraphQLTextExecutionResult{
-		Recognized: true,
-		Meta: tools.ExecuteMeta{
-			AwaitingHuman: &tools.AwaitingHumanSignal{
-				QuestionID: "q-1",
-				Prompt:     "Approve write?",
-			},
-		},
-	}, nil
-}
-
 func TestStrictGraphQLTextModeRejectsToolCalls(t *testing.T) {
 	completer := newFakeCompleter(newToolCallsResponse(newToolCall("call-1", "echo", `{}`)))
 	agent := newTestAgent(completer, newFakeToolCatalog(), 1)
@@ -48,18 +27,15 @@ func TestStrictGraphQLTextModeRejectsToolCalls(t *testing.T) {
 
 func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse("query { viewer { id } }"),
+		newStopResponse(`query { web_search(query: "OpenAI") }`),
 		newStopResponse("done"),
 	)
-	executor := &fakeGraphQLTextExecutor{
-		results: []tools.GraphQLTextExecutionResult{{
-			Recognized: true,
-			Output:     `{"data":{"viewer":{"id":"1"}}}`,
-		}},
-	}
-	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
+	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
+	tool.semantics = llm.ToolSemantics{ReadOnly: true}
+	catalog := newFakeToolCatalog(tool)
+	agent := newTestAgent(completer, catalog, 3)
 	agent.SetStrictToolCallProtocol(true)
-	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
 
 	output, err := agent.Run(context.Background(), "hello")
 	if err != nil {
@@ -72,27 +48,20 @@ func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 2)
 	}
 	last := completer.requests[1].Messages[len(completer.requests[1].Messages)-1]
-	if !strings.Contains(last.Text, "[GRAPHQL_EXECUTION_RESULT]") {
-		t.Fatalf("expected graphql execution feedback in second request, got %+v", last)
+	if !strings.Contains(last.Text, "[GRAPHQL_TOOL_RESULT]") {
+		t.Fatalf("expected graphql tool result feedback in second request, got %+v", last)
+	}
+	if tool.callCount != 1 {
+		t.Fatalf("expected web_search to execute once, got %d", tool.callCount)
 	}
 }
 
 func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse("mutation { updateViewer(input:{id:\"1\"}) { ok } }"))
-	executor := &fakeGraphQLTextExecutor{
-		results: []tools.GraphQLTextExecutionResult{{
-			Recognized: true,
-			Meta: tools.ExecuteMeta{
-				AwaitingHuman: &tools.AwaitingHumanSignal{
-					QuestionID: "q-1",
-					Prompt:     "Approve write?",
-				},
-			},
-		}},
-	}
-	agent := newTestAgent(completer, newFakeToolCatalog(), 2)
+	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") }`))
+	catalog := newFakeToolCatalog(newAwaitingHumanTool("ask_human", "q-1", "Approve write?"))
+	agent := newTestAgent(completer, catalog, 2)
 	agent.SetStrictToolCallProtocol(true)
-	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
 
 	_, err := agent.Run(context.Background(), "hello")
 	var awaitingErr *ErrAwaitingHuman
@@ -104,13 +73,13 @@ func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
 	}
 }
 
-func TestGraphQLTextTurnAwaitingHumanEventMatchesExecutorToolCallID(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse("mutation { updateViewer(input:{id:\"1\"}) { ok } }"))
-	executor := &capturingAwaitingGraphQLTextExecutor{}
-	agent := newTestAgent(completer, newFakeToolCatalog(), 2)
+func TestGraphQLTextTurnAwaitingHumanEventUsesRealToolName(t *testing.T) {
+	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") }`))
+	catalog := newFakeToolCatalog(newAwaitingHumanTool("ask_human", "q-1", "Approve write?"))
+	agent := newTestAgent(completer, catalog, 2)
 	sink := newRecordingEventSink()
 	agent.SetStrictToolCallProtocol(true)
-	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
 
 	_, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-await", sink)
 	var awaitingErr *ErrAwaitingHuman
@@ -120,62 +89,49 @@ func TestGraphQLTextTurnAwaitingHumanEventMatchesExecutorToolCallID(t *testing.T
 	if len(sink.events) != 4 {
 		t.Fatalf("unexpected event count: got %d want 4", len(sink.events))
 	}
-	if len(executor.toolCallIDs) != 1 || executor.toolCallIDs[0] == "" {
-		t.Fatalf("expected executor to observe tool call id, got %+v", executor.toolCallIDs)
+	startID := eventToolCallID(t, sink.events[1])
+	if got := eventToolCallID(t, sink.events[2]); got != startID {
+		t.Fatalf("unexpected tool_call_finished id: got %q want %q", got, startID)
 	}
-	want := executor.toolCallIDs[0]
-	if got := eventToolCallID(t, sink.events[1]); got != want {
-		t.Fatalf("unexpected tool_call_started id: got %q want %q", got, want)
-	}
-	if got := eventToolCallID(t, sink.events[2]); got != want {
-		t.Fatalf("unexpected tool_call_finished id: got %q want %q", got, want)
-	}
-	if got := eventToolCallID(t, sink.events[3]); got != want {
-		t.Fatalf("unexpected awaiting_human id: got %q want %q", got, want)
+	if got := eventToolCallID(t, sink.events[3]); got != startID {
+		t.Fatalf("unexpected awaiting_human id: got %q want %q", got, startID)
 	}
 	for index, event := range sink.events[1:4] {
-		if got := eventToolName(t, event); got != tools.GraphQLTextMutationToolName {
-			t.Fatalf(
-				"unexpected event[%d] tool: got %q want %q",
-				index+1,
-				got,
-				tools.GraphQLTextMutationToolName,
-			)
+		if got := eventToolName(t, event); got != "ask_human" {
+			t.Fatalf("unexpected event[%d] tool: got %q want %q", index+1, got, "ask_human")
 		}
 	}
 }
 
 func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *testing.T) {
-	completer := newFakeCompleter(
-		newStopResponse(`mutation { updateViewer(input: {id: "1"}) { ok } }`),
-	)
-	executor := &fakeGraphQLTextExecutor{
-		results: []tools.GraphQLTextExecutionResult{{
-			Recognized: true,
-			Output:     `{"status":"executed","intent_id":"intent-1"}`,
-		}},
-	}
-	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
+	completer := newFakeCompleter(newStopResponse(`query { web_search(query: "OpenAI") }`))
+	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
+	tool.semantics = llm.ToolSemantics{ReadOnly: true}
+	catalog := newFakeToolCatalog(tool)
+	agent := newTestAgent(completer, catalog, 3)
 	agent.SetStrictToolCallProtocol(true)
-	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(executor))
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
 
 	_, err := agent.Run(context.Background(), "hello")
 	if err == nil {
-		t.Fatal("expected completion error after graphql text execution")
+		t.Fatal("expected completion error after graphql tool execution")
 	}
 
 	newMessages := agent.GetNewMessages()
-	if len(newMessages) != 3 {
+	if len(newMessages) != 4 {
 		t.Fatalf("expected committed graphql turn messages, got %+v", newMessages)
 	}
 	if newMessages[0].Role != llm.RoleUser || newMessages[0].Text != "hello" {
 		t.Fatalf("unexpected committed user message: %+v", newMessages[0])
 	}
-	if newMessages[1].Role != llm.RoleAssistant || !strings.Contains(newMessages[1].Text, "updateViewer") {
+	if newMessages[1].Role != llm.RoleAssistant || !strings.Contains(newMessages[1].Text, "web_search") {
 		t.Fatalf("unexpected committed assistant graphql text: %+v", newMessages[1])
 	}
-	if newMessages[2].Role != llm.RoleInternal || !strings.Contains(newMessages[2].Text, "[GRAPHQL_EXECUTION_RESULT]") {
-		t.Fatalf("unexpected committed graphql feedback: %+v", newMessages[2])
+	if newMessages[2].Role != llm.RoleTool {
+		t.Fatalf("expected committed tool envelope, got %+v", newMessages[2])
+	}
+	if newMessages[3].Role != llm.RoleInternal || !strings.Contains(newMessages[3].Text, "[GRAPHQL_TOOL_RESULT]") {
+		t.Fatalf("unexpected committed graphql feedback: %+v", newMessages[3])
 	}
 }
 
