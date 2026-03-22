@@ -1,0 +1,36 @@
+package tools
+
+import "ghost-os/bridge/llm"
+
+type structuredToolHiddenCatalog struct {
+	base ToolCatalog
+}
+
+func NewStructuredToolHiddenCatalog(base ToolCatalog) ToolCatalog {
+	if base == nil {
+		return nil
+	}
+	return structuredToolHiddenCatalog{base: base}
+}
+
+func (c structuredToolHiddenCatalog) Get(name string) Tool {
+	if c.base == nil {
+		return nil
+	}
+	return c.base.Get(name)
+}
+
+func (structuredToolHiddenCatalog) PromptGuidancePreamble() string {
+	return "- Use only the tools exposed in the GraphQL tool schema for this turn."
+}
+
+func (c structuredToolHiddenCatalog) PromptGuidanceToolNames() []string {
+	if c.base == nil {
+		return nil
+	}
+	return toolDefNames(c.base.ToolDefs())
+}
+
+func (structuredToolHiddenCatalog) ToolDefs() []llm.ToolDef {
+	return nil
+}

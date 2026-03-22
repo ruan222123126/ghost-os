@@ -3,16 +3,20 @@ package tools
 import "strings"
 
 func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
-	names := toolNameSet(CatalogToolNames(catalog))
-	lines := []string{
-		"- Use only the tools included in the structured tool schema for this turn.",
+	names := toolNameSet(promptGuidanceToolNames(catalog))
+	if len(names) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, 7)
+	if preamble := promptGuidancePreamble(catalog); preamble != "" {
+		lines = append(lines, preamble)
 	}
 	lines = append(lines, rssPromptGuidance(names)...)
 	lines = append(lines, workspacePromptGuidance(names)...)
 	lines = append(lines, toolSearchPromptGuidance(names)...)
 	lines = append(lines, humanPromptGuidance(names)...)
-	lines = append(lines, graphQLPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
+	lines = append(lines, computerUsePromptGuidance(names)...)
 	return strings.Join(lines, "\n")
 }
 
@@ -56,21 +60,6 @@ func humanPromptGuidance(names map[string]bool) []string {
 	}
 }
 
-func graphQLPromptGuidance(names map[string]bool) []string {
-	lines := make([]string, 0, 2)
-	if names["graphql_schema_lookup"] && (names["graphql_query"] || names["graphql_mutation"]) {
-		lines = append(lines, "- Inspect sources, domains, and allowed policies with `graphql_schema_lookup` before GraphQL queries or writes.")
-	}
-	if !names["graphql_mutation"] {
-		return lines
-	}
-	line := "- Before any GraphQL write, call `graphql_mutation(action=\"prepare\")` first and commit only after explicit user approval for the returned `intent_id`."
-	if names["graphql_schema_lookup"] {
-		line = "- Before any GraphQL write, inspect allowed policies with `graphql_schema_lookup`, then call `graphql_mutation(action=\"prepare\")`. Commit only after explicit user approval for the returned `intent_id`."
-	}
-	return append(lines, line)
-}
-
 func screenPromptGuidance(names map[string]bool) []string {
 	if !names["screen_action"] {
 		return nil
@@ -78,4 +67,20 @@ func screenPromptGuidance(names map[string]bool) []string {
 	return []string{
 		"- Prefer `screen_action.click_text` when visible labels exist; use `click_icon` only for unlabeled or template-driven targets.",
 	}
+}
+
+func computerUsePromptGuidance(names map[string]bool) []string {
+	if !names[computerUseToolName] {
+		return nil
+	}
+	lines := []string{
+		"- Use `computer_use` only for desktop visual tasks that cannot be solved through scripts, APIs, or DOM/browser-native control.",
+	}
+	if names["browser_control"] {
+		lines = append(lines, "- Prefer `browser_control` for browser tasks before using `computer_use`.")
+	}
+	if names["script_exec"] {
+		lines = append(lines, "- Prefer `script_exec` for scriptable local operations before using `computer_use`.")
+	}
+	return lines
 }

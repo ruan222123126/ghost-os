@@ -5,12 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
 
 func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 	sessionStore := newTempSessionStore(t)
+	registry := tools.NewRegistry()
+	registry.Register(tools.NewAskHumanTool())
 	completer := &proTestCompleter{
 		responses: []*llm.CompletionResponse{{
 			Message:      llm.Message{Role: llm.RoleAssistant, Text: "noted"},
@@ -23,10 +26,12 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 				MaxTurns:    3,
 				PromptsPath: "",
 				Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+				GraphQL: bridgeconfig.GraphQLConfig{
+					ToolRuntimeEnabled: true,
+				},
 			},
 			client:       completer,
-			registry:     tools.NewRegistry(),
-			graphQL:      &tools.GraphQLSourceRegistry{},
+			registry:     registry,
 			systemPrompt: "runtime fallback prompt",
 		},
 	}, nil, sessionStore, nil)
@@ -40,7 +45,7 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 
 	prompt := completer.requests[0].Messages[0].Text
 	coreJobIndex := strings.Index(prompt, "## Core Job")
-	protocolIndex := strings.Index(prompt, "GraphQL Text Protocol:")
+	protocolIndex := strings.Index(prompt, "GraphQL Tool Call Protocol:")
 	if !strings.Contains(prompt, "You are Ghost-OS bridge agent, an AI-driven digital twin execution layer.") {
 		t.Fatalf("expected default system prompt to remain, got %q", prompt)
 	}
@@ -52,5 +57,17 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 	}
 	if protocolIndex < coreJobIndex {
 		t.Fatalf("expected GraphQL protocol to augment the default prompt, got %q", prompt)
+	}
+	if strings.Contains(prompt, "structured tool schema") {
+		t.Fatalf("expected structured tool schema guidance to be removed in graphql mode, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Use `ask_human` only when blocked on required user input") {
+		t.Fatalf("expected graphql mode to keep ask_human guidance, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "ask_human(") {
+		t.Fatalf("expected graphql schema summary to include ask_human field, got %q", prompt)
+	}
+	if len(completer.requests[0].Tools) != 0 {
+		t.Fatalf("expected graphql mode to hide native tool defs, got %+v", completer.requests[0].Tools)
 	}
 }

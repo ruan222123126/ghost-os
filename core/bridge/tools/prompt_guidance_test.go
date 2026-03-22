@@ -81,24 +81,6 @@ func TestFormatPromptGuidanceForCatalog_AskHumanRequiresCustomOption(t *testing.
 	}
 }
 
-func TestFormatPromptGuidanceForCatalog_IncludesGraphQLWorkflowWhenVisible(t *testing.T) {
-	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "graphql_schema_lookup", "graphql_mutation"} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	guidance := FormatPromptGuidanceForCatalog(registry)
-	for _, snippet := range []string{
-		"`graphql_schema_lookup`",
-		"`graphql_mutation(action=\"prepare\")`",
-		"`intent_id`",
-	} {
-		if !strings.Contains(guidance, snippet) {
-			t.Fatalf("expected guidance to contain %q, got %q", snippet, guidance)
-		}
-	}
-}
-
 func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *testing.T) {
 	registry := NewRegistry()
 	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec"} {
@@ -120,5 +102,38 @@ func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *te
 	if strings.Contains(onlyReadAndSummarize, "`read_and_summarize` for broad local triage") ||
 		strings.Contains(onlyReadAndSummarize, "broad multi-file triage") {
 		t.Fatalf("expected workspace guidance to stay hidden when script_exec is not visible, got %q", onlyReadAndSummarize)
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{
+		AskHumanToolName,
+		ToolSearchToolName,
+		"screen_action",
+		computerUseToolName,
+		"browser_control",
+		"script_exec",
+	} {
+		registry.Register(&mockTool{name: name})
+	}
+
+	guidance := FormatPromptGuidanceForCatalog(NewStructuredToolHiddenCatalog(registry))
+
+	for _, snippet := range []string{
+		"GraphQL tool schema",
+		"`ask_human` only when blocked",
+		"`tfind(action=\"search\")`",
+		"`screen_action.click_text`",
+		"`computer_use` only for desktop visual tasks",
+		"`browser_control` for browser tasks",
+		"`script_exec` for scriptable local operations",
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected graphql guidance to contain %q, got %q", snippet, guidance)
+		}
+	}
+	if strings.Contains(guidance, "structured tool schema") {
+		t.Fatalf("expected graphql hidden catalog to avoid structured schema wording, got %q", guidance)
 	}
 }

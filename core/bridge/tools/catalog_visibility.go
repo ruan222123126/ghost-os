@@ -89,17 +89,7 @@ func CatalogToolNames(catalog ToolCatalog) []string {
 	if catalog == nil {
 		return nil
 	}
-
-	defs := catalog.ToolDefs()
-	names := make([]string, 0, len(defs))
-	for _, def := range defs {
-		name := strings.TrimSpace(def.Name)
-		if name != "" {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return normalizeVisibleToolNames(names)
+	return toolDefNames(catalog.ToolDefs())
 }
 
 func StaticVisibleToolNames(available []string, opts VisibilityOptions) []string {
