@@ -20,8 +20,8 @@ func TestFormatGraphQLToolRuntimePrompt_IncludesMinimalExamplesForVisibleTools(t
 		`mutation { ask_human(prompt: "Which environment should I use?", options: [{label: "staging"}, {label: "Other", allow_custom: true}]) }`,
 		"- `script_exec`: minimal sandbox execution mutation.",
 		`mutation { script_exec(script: "print(\"ok\")") }`,
-		"- `tfind`: after `action: \"load\"`, the loaded tool is available next turn, not in the same response.",
-		`mutation { tfind(action: "load", tool_names: ["browser_control"]) }`,
+		"- `tfind`: after `action: load`, the loaded tool is available next turn, not in the same response.",
+		`mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
 		"- `web_search`:",
 		`query { web_search(query: "OpenAI API docs") }`,
 	} {

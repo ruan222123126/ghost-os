@@ -56,8 +56,8 @@ func graphQLSpecialToolRuntimeExample(name string) (graphQLToolRuntimeExample, b
 		}, true
 	case ToolSearchToolName:
 		return graphQLToolRuntimeExample{
-			Note:     "after `action: \"load\"`, the loaded tool is available next turn, not in the same response.",
-			Document: `mutation { tfind(action: "load", tool_names: ["browser_control"]) }`,
+			Note:     "after `action: load`, the loaded tool is available next turn, not in the same response.",
+			Document: `mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
 		}, true
 	case "script_exec":
 		return graphQLToolRuntimeExample{
@@ -112,6 +112,9 @@ func graphQLRequiredExampleKeys(properties map[string]any, required map[string]b
 }
 
 func graphQLExampleLiteral(name string, schema map[string]any) string {
+	if enumValue := graphQLEnumExample(schema); enumValue != "" {
+		return enumValue
+	}
 	switch graphQLSchemaTypeName(schema) {
 	case "string":
 		return graphQLQuotedString(graphQLExampleString(name, schema))
@@ -167,10 +170,6 @@ func graphQLExampleObjectKeys(properties map[string]any, required map[string]boo
 }
 
 func graphQLExampleString(name string, schema map[string]any) string {
-	if enumValue := graphQLEnumExample(schema); enumValue != "" {
-		return enumValue
-	}
-
 	trimmed := strings.ToLower(strings.TrimSpace(name))
 	switch {
 	case strings.Contains(trimmed, "prompt"):
