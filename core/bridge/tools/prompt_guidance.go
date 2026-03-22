@@ -14,8 +14,10 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 	}
 	lines = append(lines, rssPromptGuidance(names)...)
 	lines = append(lines, workspacePromptGuidance(protocol, names)...)
+	lines = append(lines, memoryPromptGuidance(protocol, names)...)
 	lines = append(lines, toolSearchPromptGuidance(protocol, names)...)
 	lines = append(lines, humanPromptGuidance(protocol, names)...)
+	lines = append(lines, webRooterPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
 	lines = append(lines, computerUsePromptGuidance(names)...)
 	return strings.Join(lines, "\n")
@@ -39,6 +41,25 @@ func workspacePromptGuidance(protocol promptGuidanceProtocol, names map[string]b
 	}
 	if protocol == promptGuidanceProtocolGraphQL {
 		lines = append(lines, "- Minimal `script_exec` GraphQL example: `mutation { script_exec(script: \"print(\\\"ok\\\")\") }`.")
+	}
+	return lines
+}
+
+func memoryPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
+	if !names["memory_manage"] {
+		return nil
+	}
+	lines := []string{
+		"- Use `memory_manage` only for explicit long-term notes that should persist by stable URI.",
+		"- Prefer URIs like `user://preferences/editor` or `project://roadmap/current`; use `create` for the first write.",
+		"- Before `update` or `delete`, first confirm the exact URI with `read`, `list`, or `read` on `system://index`; do not guess URIs.",
+		"- `system://index` and `system://recent` are read-only discovery entries.",
+	}
+	if protocol == promptGuidanceProtocolGraphQL {
+		lines = append(
+			lines,
+			"- Minimal `memory_manage` create example: `mutation { memory_manage(operation: create, uri: \"user://preferences/editor\", content: \"Prefer vim keybindings\") }`.",
+		)
 	}
 	return lines
 }
@@ -75,6 +96,20 @@ func humanPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool)
 	}
 	if protocol == promptGuidanceProtocolGraphQL {
 		lines = append(lines, "- Minimal `ask_human` options example: `mutation { ask_human(prompt: \"Which environment should I use?\", options: [{label: \"staging\"}, {label: \"Other\", allow_custom: true}]) }`.")
+	}
+	return lines
+}
+
+func webRooterPromptGuidance(names map[string]bool) []string {
+	if !names[webRooterToolName] {
+		return nil
+	}
+	lines := []string{
+		"- Use `web_rooter` for stateless HTTP web research only. Choose exactly one supported `action`, and provide every action parameter explicitly in `params`.",
+		"- Prefer `web_rooter` when the task needs citations, source attribution, multi-source cross-checking, academic material, or deeper research.",
+	}
+	if names["web_search"] {
+		lines = append(lines, "- Use `web_search` for lighter real-time web lookups when citation-rich research is unnecessary.")
 	}
 	return lines
 }
