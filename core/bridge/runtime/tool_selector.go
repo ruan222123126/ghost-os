@@ -35,6 +35,7 @@ type ToolSelector struct {
 	worker     toolSelectorCompleter
 	metadata   string
 	validTools map[string]bool
+	fallback   bool
 }
 
 func NewToolSelector(cfg Config, worker toolSelectorCompleter) *ToolSelector {
@@ -43,19 +44,13 @@ func NewToolSelector(cfg Config, worker toolSelectorCompleter) *ToolSelector {
 
 func NewToolSelectorForCatalog(cfg Config, worker toolSelectorCompleter, catalog tools.ToolCatalog) *ToolSelector {
 	metadata := tools.FormatMetadataForCatalog(catalog)
-	if strings.TrimSpace(metadata) == "" {
-		metadata = tools.FormatMetadataForSelector()
-	}
-	validTools := make(map[string]bool)
-	for _, name := range tools.CatalogToolNames(catalog) {
-		validTools[name] = true
-	}
-	if len(validTools) == 0 {
-		for _, item := range tools.GetToolMetadata() {
-			if item.Name == tools.ToolSearchToolName || item.OnDemand {
-				continue
-			}
-			validTools[item.Name] = true
+	validTools := selectorValidToolsForCatalog(catalog)
+	if catalog == nil {
+		if strings.TrimSpace(metadata) == "" {
+			metadata = tools.FormatMetadataForSelector()
+		}
+		if len(validTools) == 0 {
+			validTools = validSelectorToolNames()
 		}
 	}
 	return &ToolSelector{
@@ -63,7 +58,16 @@ func NewToolSelectorForCatalog(cfg Config, worker toolSelectorCompleter, catalog
 		worker:     worker,
 		metadata:   metadata,
 		validTools: validTools,
+		fallback:   catalog == nil,
 	}
+}
+
+func selectorValidToolsForCatalog(catalog tools.ToolCatalog) map[string]bool {
+	validTools := make(map[string]bool)
+	for _, name := range tools.CatalogToolNames(catalog) {
+		validTools[name] = true
+	}
+	return validTools
 }
 
 func (ts *ToolSelector) SelectTools(ctx context.Context, userMessage string, recentHistory []llm.Message, decisionHint string, traceID string) ToolSelectorResult {

@@ -72,15 +72,14 @@ tool_selector_timeout_ms = 1500
 tool_selector_confidence = 0.75
 tool_selector_shadow = false
 tool_selector_recent_messages = 6
-# Allowlist-only mode: when enabled, the agent only sees tools in tool_allowlist (plus ask_human if registered),
-# and runtime model switching from Web/CLI is disabled.
-# This is useful for locked-down deployments that must strictly limit tool exposure.
+# Resident tools are opt-in: only tools listed in tool_allowlist are exposed at turn start.
+# Session tools loaded later still depend on their own runtime path (for example tfind when enabled and allowlisted).
+# tool_allowlist_only additionally disables runtime model switching from Web/CLI.
 # tool_allowlist_only = true
 # Highest priority hard constraints for tools:
-# - if both lists are empty, they are inactive and normal selector behavior stays in place
+# - if tool_allowlist is empty, no tools are resident by default
 # - allowlist tools are always forced into the final runnable set
 # - blocklist tools are always removed from the final runnable set
-# - ask_human stays always-on even if listed in tool_blocklist
 # tool_allowlist = ["script_exec", "read_and_summarize"]
 # tool_blocklist = ["web_search"]
 

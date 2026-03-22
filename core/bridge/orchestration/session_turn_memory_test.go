@@ -221,6 +221,9 @@ func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
 				MaxTurns:    3,
 				PromptsPath: "",
 				Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+				ToolSelector: ToolSelectorConfig{
+					Allowlist: []string{"tfind"},
+				},
 				ToolSearch: ToolSearchConfig{
 					Enabled:   true,
 					IdleTurns: 3,

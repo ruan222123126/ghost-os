@@ -108,26 +108,11 @@ func StaticVisibleToolNames(available []string, opts VisibilityOptions) []string
 		result = append(result, name)
 	}
 
-	add(AskHumanToolName)
-	if opts.ToolSearchEnabled {
-		add(ToolSearchToolName)
-	}
-
-	switch {
-	case opts.ToolSearchEnabled, opts.AllowlistOnly:
-		for _, name := range normalizeVisibleToolNames(opts.Allowlist) {
-			if isBlockedVisibleTool(name, opts) {
-				continue
-			}
-			add(name)
+	for _, name := range normalizeVisibleToolNames(opts.Allowlist) {
+		if isBlockedVisibleTool(name, opts) {
+			continue
 		}
-	default:
-		for _, name := range normalizeVisibleToolNames(available) {
-			if isBlockedVisibleTool(name, opts) || isOnDemandTool(name) {
-				continue
-			}
-			add(name)
-		}
+		add(name)
 	}
 
 	sort.Strings(result)
@@ -212,21 +197,10 @@ func toolNameSet(names []string) map[string]bool {
 }
 
 func isBlockedVisibleTool(name string, opts VisibilityOptions) bool {
-	if name == AskHumanToolName {
-		return false
-	}
-	if opts.ToolSearchEnabled && name == ToolSearchToolName {
-		return false
-	}
 	for _, blocked := range normalizeVisibleToolNames(opts.Blocklist) {
 		if blocked == name {
 			return true
 		}
 	}
 	return false
-}
-
-func isOnDemandTool(name string) bool {
-	item, ok := ToolMetadataByName(name)
-	return ok && item.OnDemand
 }

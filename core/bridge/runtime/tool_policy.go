@@ -72,10 +72,6 @@ func (p toolSelectionPolicy) requiredTools(available []string) []string {
 		result = append(result, name)
 	}
 
-	add(tools.AskHumanToolName)
-	if p.visibility.ToolSearchEnabled {
-		add(tools.ToolSearchToolName)
-	}
 	for _, name := range normalizeToolNames(p.visibility.Allowlist) {
 		add(name)
 	}
@@ -100,12 +96,6 @@ func toolNameSet(names []string) map[string]bool {
 }
 
 func isBlockedTool(name string, visibility tools.VisibilityOptions) bool {
-	if name == tools.AskHumanToolName {
-		return false
-	}
-	if visibility.ToolSearchEnabled && name == tools.ToolSearchToolName {
-		return false
-	}
 	for _, blocked := range visibility.Blocklist {
 		if blocked == name {
 			return true

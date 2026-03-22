@@ -129,7 +129,7 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}, ShortDesc: "Type into the focused field."},
 		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}, ShortDesc: "Manage scheduled tasks."},
 		{Name: ToolSearchToolName, Domain: "tools", Tags: []string{"search", "load", "unload", "catalog"}, ShortDesc: "Find or load optional tools."},
-		{Name: AskHumanToolName, Domain: "human", Tags: []string{"interactive", "safety"}, ShortDesc: "Ask the user when blocked.", AlwaysOn: true},
+		{Name: AskHumanToolName, Domain: "human", Tags: []string{"interactive", "safety"}, ShortDesc: "Ask the user when blocked."},
 	}
 }
 

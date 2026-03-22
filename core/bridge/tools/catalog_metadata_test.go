@@ -14,15 +14,14 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		"script_exec",
 		"codex_cli",
 		"web_search",
-		"graphql_query",
-		"graphql_schema_lookup",
-		"graphql_mutation",
+		"web_rooter",
 		"feed_manage",
 		"rss_fetch",
 		"memory_manage",
 		"memory_learned_list",
 		"memory_recall_debug",
 		"screen_action",
+		"computer_use",
 		"browser_control",
 		"text_input",
 		"task_manage",
@@ -55,11 +54,8 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 			t.Fatalf("expected metadata for tool %q", name)
 		}
 	}
-	if alwaysOnCount != 1 {
-		t.Fatalf("expected exactly one always-on tool, got %d", alwaysOnCount)
-	}
-	if !seen["ask_human"].AlwaysOn {
-		t.Fatal("ask_human should be marked always-on")
+	if alwaysOnCount != 0 {
+		t.Fatalf("expected no always-on tools, got %d", alwaysOnCount)
 	}
 }
 
@@ -80,13 +76,8 @@ func TestFormatMetadataForSelector_HidesOnDemandTools(t *testing.T) {
 	if strings.Contains(formatted, ToolSearchToolName) {
 		t.Fatalf("formatted metadata should exclude %q: %q", ToolSearchToolName, formatted)
 	}
-	for _, name := range []string{"graphql_query", "graphql_schema_lookup", "graphql_mutation"} {
-		if strings.Contains(formatted, name) {
-			t.Fatalf("formatted metadata should exclude on-demand tool %q: %q", name, formatted)
-		}
-	}
-	if !strings.Contains(formatted, "always_on=true") {
-		t.Fatal("formatted metadata should include always_on marker")
+	if strings.Contains(formatted, "always_on=true") {
+		t.Fatalf("formatted metadata should not include always_on marker: %q", formatted)
 	}
 }
 

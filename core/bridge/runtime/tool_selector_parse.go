@@ -78,7 +78,6 @@ func (ts *ToolSelector) resolveSelectedTools(parsed selectorResponseEnvelope, tr
 		return nil, &result
 	}
 
-	selected = ensureAskHuman(selected)
 	if err := ts.validateSelectedTools(selected); err != nil {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=unknown_tool latency_ms=%d error=%v", traceID, latencyMS, err)
 		result := ToolSelectorResult{Mode: "all", Fallback: true, Error: err}
@@ -102,6 +101,9 @@ func logSelectorValidationError(traceID string, latencyMS int64, parsed selector
 func (ts *ToolSelector) validateSelectedTools(selected []string) error {
 	valid := ts.validTools
 	if len(valid) == 0 {
+		if ts == nil || !ts.fallback {
+			return fmt.Errorf("no visible tools available")
+		}
 		valid = validSelectorToolNames()
 	}
 	for _, name := range selected {
@@ -120,13 +122,6 @@ func validSelectorToolNames() map[string]bool {
 		}
 	}
 	return valid
-}
-
-func ensureAskHuman(selected []string) []string {
-	if containsToolName(selected, "ask_human") {
-		return selected
-	}
-	return append(selected, "ask_human")
 }
 
 func extractJSONObject(raw string) string {

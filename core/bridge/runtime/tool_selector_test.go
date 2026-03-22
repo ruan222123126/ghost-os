@@ -90,7 +90,7 @@ func TestToolSelector_FallbackOnErrorCases(t *testing.T) {
 	}
 }
 
-func TestToolSelector_AlwaysIncludesAskHuman(t *testing.T) {
+func TestToolSelector_DoesNotInjectAdditionalTools(t *testing.T) {
 	selector := NewToolSelector(newSelectorTestConfig(), &fakeSelectorCompleter{
 		response: selectorResponse(`{"mode":"subset","tools":["script_exec"],"confidence":0.91,"reason":"focused edit task"}`),
 	})
@@ -99,27 +99,52 @@ func TestToolSelector_AlwaysIncludesAskHuman(t *testing.T) {
 	if result.Mode != "subset" || result.Fallback {
 		t.Fatalf("expected subset result, got %+v", result)
 	}
-	if !containsToolName(result.Tools, "ask_human") {
-		t.Fatalf("expected ask_human in tools, got %v", result.Tools)
+	if len(result.Tools) != 1 || result.Tools[0] != "script_exec" {
+		t.Fatalf("expected selector to keep returned subset unchanged, got %v", result.Tools)
 	}
 }
 
 func TestToolSelector_ScriptExecSubsetStaysMinimal(t *testing.T) {
 	selector := NewToolSelector(newSelectorTestConfig(), &fakeSelectorCompleter{
-		response: selectorResponse(`{"mode":"subset","tools":["script_exec","ask_human"],"confidence":0.95,"reason":"complex script task"}`),
+		response: selectorResponse(`{"mode":"subset","tools":["script_exec"],"confidence":0.95,"reason":"complex script task"}`),
 	})
 
 	result := selector.SelectTools(context.Background(), "do a complex scripted edit", nil, "", "trace-3")
 	if result.Mode != "subset" || result.Fallback {
 		t.Fatalf("expected subset result, got %+v", result)
 	}
-	for _, name := range []string{"script_exec", "ask_human"} {
-		if !containsToolName(result.Tools, name) {
-			t.Fatalf("expected %q in tools, got %v", name, result.Tools)
-		}
-	}
-	if len(result.Tools) != 2 {
+	if len(result.Tools) != 1 || !containsToolName(result.Tools, "script_exec") {
 		t.Fatalf("expected minimal subset, got %v", result.Tools)
+	}
+}
+
+func TestToolSelector_RejectsHiddenAskHumanOutsideCatalog(t *testing.T) {
+	registry := tools.NewRegistry()
+	for _, name := range []string{"ask_human", "script_exec"} {
+		registry.Register(&catalogMockTool{name: name})
+	}
+	catalog := tools.NewScopedCatalog(registry, []string{"script_exec"})
+	selector := NewToolSelectorForCatalog(newSelectorTestConfig(), &fakeSelectorCompleter{
+		response: selectorResponse(`{"mode":"subset","tools":["ask_human"],"confidence":0.95,"reason":"hidden tool"}`),
+	}, catalog)
+
+	result := selector.SelectTools(context.Background(), "ask for help", nil, "", "trace-hidden-ask")
+	if result.Mode != "all" || !result.Fallback {
+		t.Fatalf("expected fallback for hidden ask_human, got %+v", result)
+	}
+}
+
+func TestToolSelector_EmptyCatalogRejectsGlobalFallbackTools(t *testing.T) {
+	registry := tools.NewRegistry()
+	registry.Register(&catalogMockTool{name: "script_exec"})
+	catalog := tools.NewScopedCatalog(registry, []string{})
+	selector := NewToolSelectorForCatalog(newSelectorTestConfig(), &fakeSelectorCompleter{
+		response: selectorResponse(`{"mode":"subset","tools":["script_exec"],"confidence":0.95,"reason":"should stay hidden"}`),
+	}, catalog)
+
+	result := selector.SelectTools(context.Background(), "edit config", nil, "", "trace-empty-catalog")
+	if result.Mode != "all" || !result.Fallback {
+		t.Fatalf("expected fallback for empty visible catalog, got %+v", result)
 	}
 }
 

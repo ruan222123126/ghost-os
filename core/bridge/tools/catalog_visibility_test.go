@@ -2,36 +2,44 @@ package tools
 
 import "testing"
 
-func TestStaticVisibleToolNames_HidesOnDemandToolsByDefault(t *testing.T) {
+func TestStaticVisibleToolNames_UsesOnlyAllowlistedResidentTools(t *testing.T) {
 	visible := StaticVisibleToolNames([]string{
 		"ask_human",
 		"script_exec",
-		"graphql_query",
-		"graphql_schema_lookup",
-		"graphql_mutation",
-	}, VisibilityOptions{})
+		"web_search",
+	}, VisibilityOptions{Allowlist: []string{"script_exec"}})
 
-	if containsTool(visible, "graphql_query") || containsTool(visible, "graphql_schema_lookup") || containsTool(visible, "graphql_mutation") {
-		t.Fatalf("expected on-demand graphql tools to stay hidden, got %v", visible)
-	}
 	if !containsTool(visible, "script_exec") {
-		t.Fatalf("expected static tool to remain visible, got %v", visible)
+		t.Fatalf("expected allowlisted tool to remain visible, got %v", visible)
+	}
+	if containsTool(visible, "web_search") || containsTool(visible, "ask_human") {
+		t.Fatalf("expected non-allowlisted tools to stay hidden, got %v", visible)
 	}
 }
 
-func TestSearchCandidateToolNames_IncludeOnDemandGraphQLTools(t *testing.T) {
+func TestStaticVisibleToolNames_EmptyAllowlistHasNoResidents(t *testing.T) {
+	visible := StaticVisibleToolNames([]string{
+		"ask_human",
+		"script_exec",
+		"web_search",
+	}, VisibilityOptions{})
+
+	if len(visible) != 0 {
+		t.Fatalf("expected no resident tools without allowlist, got %v", visible)
+	}
+}
+
+func TestSearchCandidateToolNames_IncludeHiddenStaticToolsWhenToolSearchEnabled(t *testing.T) {
 	candidates := SearchCandidateToolNames([]string{
 		"ask_human",
 		"script_exec",
-		"graphql_query",
-		"graphql_schema_lookup",
-		"graphql_mutation",
+		"web_search",
 		"tfind",
 	}, nil, VisibilityOptions{
 		ToolSearchEnabled: true,
 	})
 
-	if !containsTool(candidates, "graphql_query") || !containsTool(candidates, "graphql_schema_lookup") || !containsTool(candidates, "graphql_mutation") {
+	if !containsTool(candidates, "script_exec") || !containsTool(candidates, "web_search") {
 		t.Fatalf("unexpected tfind candidates: %v", candidates)
 	}
 }

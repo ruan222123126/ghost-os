@@ -13,7 +13,6 @@ func (ts *ToolSelector) selectorSystemPrompt() string {
 Choose the MINIMAL sufficient tool subset for the current turn.
 
 Rules:
-- ALWAYS include ask_human.
 - Decision hints are advisory, not mandatory.
 - Prefer the current request and available tools over historical hints when they conflict.
 - Do not infer unavailable tools from hints.

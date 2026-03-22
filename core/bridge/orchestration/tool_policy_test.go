@@ -35,7 +35,7 @@ func TestNormalizeConfiguredToolLists_AllowsCodexCLI(t *testing.T) {
 	}
 }
 
-func TestNormalizeConfiguredToolLists_IgnoresAskHumanBlocklist(t *testing.T) {
+func TestNormalizeConfiguredToolLists_AllowsBlockingAskHumanAndToolSearch(t *testing.T) {
 	allowlist, blocklist, err := normalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec", "tfind"})
 	if err != nil {
 		t.Fatalf("normalizeConfiguredToolLists: %v", err)
@@ -43,8 +43,14 @@ func TestNormalizeConfiguredToolLists_IgnoresAskHumanBlocklist(t *testing.T) {
 	if len(allowlist) != 0 {
 		t.Fatalf("unexpected allowlist: %v", allowlist)
 	}
-	if len(blocklist) != 1 || blocklist[0] != "script_exec" {
+	expected := []string{"ask_human", "script_exec", "tfind"}
+	if len(blocklist) != len(expected) {
 		t.Fatalf("unexpected blocklist: %v", blocklist)
+	}
+	for index, name := range expected {
+		if blocklist[index] != name {
+			t.Fatalf("unexpected blocklist at %d: got %v want %v", index, blocklist, expected)
+		}
 	}
 }
 
@@ -57,7 +63,7 @@ func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) 
 	})
 
 	selected := policy.apply([]string{"ask_human", "script_exec", "send_file", "web_search"}, []string{"script_exec", "web_search"})
-	expected := []string{"ask_human", "send_file", "web_search"}
+	expected := []string{"send_file", "web_search"}
 	if len(selected) != len(expected) {
 		t.Fatalf("unexpected tool count: got %v want %v", selected, expected)
 	}
@@ -68,7 +74,7 @@ func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) 
 	}
 }
 
-func TestSessionTurnPreparer_SelectToolsForTurn_AppliesBlocklistWhenSelectorDisabled(t *testing.T) {
+func TestSessionTurnPreparer_SelectToolsForTurn_HasNoResidentToolsWithoutAllowlist(t *testing.T) {
 	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Blocklist: []string{"script_exec"}}, MaxTurns: 6})
 
@@ -76,19 +82,39 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesBlocklistWhenSelectorDisa
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	if catalog.Get("script_exec") != nil {
-		t.Fatal("expected script_exec to be removed by blocklist")
-	}
-	if catalog.Get("ask_human") == nil {
-		t.Fatal("expected ask_human to remain available")
+	for _, name := range []string{"script_exec", "ask_human", "send_file", "web_search"} {
+		if catalog.Get(name) != nil {
+			t.Fatalf("expected %q to stay hidden without allowlist, got visible catalog", name)
+		}
 	}
 	if prompt != "" {
 		t.Fatalf("expected empty prompt override, got %q", prompt)
 	}
 }
 
+func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWithoutAllowlistOnly(t *testing.T) {
+	preparer := &sessionTurnPreparer{}
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{
+			Allowlist: []string{"script_exec"},
+		},
+		MaxTurns: 6,
+	})
+
+	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-allowlist")
+	if err != nil {
+		t.Fatalf("selectToolsForTurn returned error: %v", err)
+	}
+	if catalog.Get("script_exec") == nil {
+		t.Fatal("expected allowlisted tool to remain available")
+	}
+	if catalog.Get("ask_human") != nil || catalog.Get("web_search") != nil || catalog.Get("send_file") != nil {
+		t.Fatalf("expected non-allowlisted tools to stay hidden")
+	}
+}
+
 func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *testing.T) {
-	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"web_search"}, Confidence: 0.9}}
+	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"send_file"}, Confidence: 0.9}}
 	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
 	deps := newRunnerTestDeps(Config{
 		ToolSelector: ToolSelectorConfig{
@@ -103,11 +129,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	if catalog.Get("web_search") == nil || catalog.Get("send_file") == nil {
-		t.Fatalf("expected allowlist tool to be forced into subset")
+	if catalog.Get("send_file") == nil {
+		t.Fatal("expected allowlist tool to remain in scoped subset")
 	}
-	if catalog.Get("script_exec") != nil {
-		t.Fatal("expected unselected tool to stay hidden")
+	for _, name := range []string{"web_search", "script_exec", "ask_human"} {
+		if catalog.Get(name) != nil {
+			t.Fatalf("expected %q to stay hidden outside scoped subset", name)
+		}
 	}
 	if prompt == "" {
 		t.Fatal("expected prompt override for scoped subset")
@@ -162,8 +190,8 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 	if catalog.Get("web_search") != nil || catalog.Get("send_file") != nil {
 		t.Fatal("expected non-allowlisted tools to be hidden")
 	}
-	if catalog.Get("ask_human") == nil {
-		t.Fatal("expected ask_human to remain available")
+	if catalog.Get("ask_human") != nil {
+		t.Fatal("expected ask_human to stay hidden when not allowlisted")
 	}
 }
 
@@ -171,7 +199,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(Config{
 		ToolSelector: ToolSelectorConfig{
-			Allowlist: []string{"send_file"},
+			Allowlist: []string{"send_file", "tfind"},
 		},
 		ToolSearch: ToolSearchConfig{
 			Enabled:   true,
@@ -184,12 +212,12 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	for _, name := range []string{"ask_human", "send_file", "tfind"} {
+	for _, name := range []string{"send_file", "tfind"} {
 		if catalog.Get(name) == nil {
 			t.Fatalf("expected %q to remain visible", name)
 		}
 	}
-	for _, name := range []string{"script_exec", "web_search"} {
+	for _, name := range []string{"ask_human", "script_exec", "web_search"} {
 		if catalog.Get(name) != nil {
 			t.Fatalf("expected %q to stay hidden until dynamically loaded", name)
 		}

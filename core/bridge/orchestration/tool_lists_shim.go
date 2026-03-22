@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 
@@ -24,10 +23,6 @@ func normalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]str
 	for _, name := range normalizedBlocklist {
 		if !valid[name] {
 			return nil, nil, fmt.Errorf("unknown tool in tool_blocklist: %s", name)
-		}
-		if name == tools.AskHumanToolName || name == tools.ToolSearchToolName {
-			log.Printf("action=TOOL_POLICY status=ignore_blocked_tool tool=%q reason=%q", name, "always_on")
-			continue
 		}
 		filteredBlocklist = append(filteredBlocklist, name)
 	}
