@@ -37,6 +37,9 @@
 - `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
 - Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
+- `web_rooter` 实现已按边界重排：顶层工具只保留显式参数校验、action 路由、client 调用与稳定 envelope 输出；HTTP 传输、版本钉死校验、响应归一化下沉到 `tools/internal/webrooter`。对外 public runtime 快照也已收口为 `web_rooter_enabled` / `web_rooter_api_token_set` 布尔态，不再暴露 `base_url` / `timeout_ms`。
+- `config/web_rooter_settings.go` 的运行期配置解析已补回缺失的 `resolveWebRooterBaseURL` 路径，`serve`/HTTP 入口可重新完整编译并参与 live 调试。
+- `web_rooter` 的 sidecar 边界已补成显式契约并有回归测试锁定：Ghost-OS 只认外置 `base_url`，不负责拉起或管理 upstream Python 进程；桥层继续只开放六个 stateless HTTP action，不接 `knowledge` / `visited` / context snapshot；版本探测与 action 请求都会透传 `X-Trace-ID`；过大响应会返回显式超限错误，不做静默裁切。
 
 ### Perception: `apps/web` / `apps/cli` / `apps/android`
 

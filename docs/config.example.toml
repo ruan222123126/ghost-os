@@ -44,6 +44,16 @@ sessions_path = "~/.ghost-os/sessions"
 # project_root = "/abs/path/to/project"
 # web_search_tavily_api_key = "tvly-..."
 # web_search_exa_api_key = "exa-..."
+# web_rooter stays an external sidecar service. In development, run the pinned upstream server
+# manually, for example from the checked out web-rooter repo with `python server.py`.
+# In production, run it as a separate container or service process. Ghost-OS only calls
+# `web_rooter_base_url`; it does not install Playwright/FastAPI/MCP deps or spawn the sidecar.
+# Only the stateless HTTP actions are integrated, and result volume should be bounded explicitly
+# with action params such as `num_results`, `max_pages`, and `fetch_abstracts`.
+# web_rooter_enabled = true
+# web_rooter_base_url = "http://127.0.0.1:8765"
+# web_rooter_api_token = "rooter-token"
+# web_rooter_timeout_ms = 90000
 
 prompts_path = "prompts.yaml"
 # Prompt section assembly (optional)

@@ -159,9 +159,9 @@ func readErrorBody(body io.Reader) string {
 }
 
 func decodeJSONResponse(body io.Reader, target any) error {
-	data, err := io.ReadAll(io.LimitReader(body, maxBodyBytes))
+	data, err := readJSONBody(body)
 	if err != nil {
-		return fmt.Errorf("decode response: read response: %w", err)
+		return err
 	}
 	if len(bytes.TrimSpace(data)) == 0 {
 		return fmt.Errorf("decode response: empty response body")
@@ -172,6 +172,17 @@ func decodeJSONResponse(body io.Reader, target any) error {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return ensureJSONEOF(decoder)
+}
+
+func readJSONBody(body io.Reader) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(body, maxBodyBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("decode response: read response: %w", err)
+	}
+	if len(data) > maxBodyBytes {
+		return nil, fmt.Errorf("decode response: response body exceeds %d bytes", maxBodyBytes)
+	}
+	return data, nil
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {
