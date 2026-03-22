@@ -240,11 +240,14 @@ func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
 	for _, snippet := range []string{
 		"## Dynamic Tool State",
 		"`graphql_query` is active in this session; remaining_idle_turns=3.",
-		"`tfind(action: search)`",
+		"`action=search`",
 	} {
 		if !strings.Contains(prompt, snippet) {
 			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
 		}
+	}
+	if strings.Contains(prompt, "mutation {") {
+		t.Fatalf("expected native prompt guidance to avoid GraphQL examples, got %q", prompt)
 	}
 	if !containsToolDef(request.Tools, "graphql_query") {
 		t.Fatalf("expected dynamically loaded tool to be available this turn, got %+v", request.Tools)

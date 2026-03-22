@@ -24,6 +24,10 @@ func (structuredToolHiddenCatalog) PromptGuidancePreamble() string {
 	return "- Use only the tools exposed in the GraphQL tool schema for this turn."
 }
 
+func (structuredToolHiddenCatalog) PromptGuidanceProtocol() promptGuidanceProtocol {
+	return promptGuidanceProtocolGraphQL
+}
+
 func (c structuredToolHiddenCatalog) PromptGuidanceToolNames() []string {
 	if c.base == nil {
 		return nil

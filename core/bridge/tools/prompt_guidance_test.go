@@ -19,12 +19,14 @@ func TestFormatPromptGuidanceForCatalog_UsesScopedToolHints(t *testing.T) {
 		"`read_and_summarize`",
 		"`script_exec`",
 		"`ask_human`",
-		"`tfind(action: search)`",
-		"Minimal `script_exec` GraphQL example",
+		"`action=search`",
 	} {
 		if !strings.Contains(guidance, snippet) {
 			t.Fatalf("expected guidance to contain %q, got %q", snippet, guidance)
 		}
+	}
+	if strings.Contains(guidance, "mutation {") {
+		t.Fatalf("expected native guidance to avoid GraphQL examples, got %q", guidance)
 	}
 	if strings.Contains(guidance, "`screen_action`") {
 		t.Fatalf("expected guidance to exclude hidden tools, got %q", guidance)
@@ -40,18 +42,20 @@ func TestFormatPromptGuidanceForCatalog_IncludesToolSearchWorkflowOnlyWhenVisibl
 	withToolSearch := FormatPromptGuidanceForCatalog(registry)
 	for _, snippet := range []string{
 		"currently visible tools are insufficient",
-		"`tfind(action: load)`",
+		"`action=load`",
 		"becomes available next turn",
-		`mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
-		"`tfind(action: unload)`",
+		"`action=unload`",
 	} {
 		if !strings.Contains(withToolSearch, snippet) {
 			t.Fatalf("expected tool search guidance to contain %q, got %q", snippet, withToolSearch)
 		}
 	}
+	if strings.Contains(withToolSearch, "mutation {") {
+		t.Fatalf("expected native tool search guidance to avoid GraphQL examples, got %q", withToolSearch)
+	}
 
 	withoutToolSearch := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human"}))
-	if strings.Contains(withoutToolSearch, "`tfind(action: search)`") {
+	if strings.Contains(withoutToolSearch, "`action=search`") {
 		t.Fatalf("expected tool search guidance to stay hidden, got %q", withoutToolSearch)
 	}
 }
@@ -78,13 +82,11 @@ func TestFormatPromptGuidanceForCatalog_AskHumanRequiresCustomOption(t *testing.
 	registry.Register(&mockTool{name: "ask_human"})
 
 	guidance := FormatPromptGuidanceForCatalog(registry)
-	for _, snippet := range []string{
-		"final option must allow custom input",
-		`mutation { ask_human(prompt: "Which environment should I use?", options: [{label: "staging"}, {label: "Other", allow_custom: true}]) }`,
-	} {
-		if !strings.Contains(guidance, snippet) {
-			t.Fatalf("expected ask_human guidance to contain %q, got %q", snippet, guidance)
-		}
+	if !strings.Contains(guidance, "final option must allow custom input") {
+		t.Fatalf("expected ask_human guidance to require a custom option, got %q", guidance)
+	}
+	if strings.Contains(guidance, "mutation { ask_human(") {
+		t.Fatalf("expected native ask_human guidance to avoid GraphQL examples, got %q", guidance)
 	}
 }
 
@@ -95,13 +97,11 @@ func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *te
 	}
 
 	withBoth := FormatPromptGuidanceForCatalog(registry)
-	for _, snippet := range []string{
-		"Use `read_and_summarize` for broad local triage, then use `script_exec`",
-		`mutation { script_exec(script: "print(\"ok\")") }`,
-	} {
-		if !strings.Contains(withBoth, snippet) {
-			t.Fatalf("expected combined workspace guidance to contain %q, got %q", snippet, withBoth)
-		}
+	if !strings.Contains(withBoth, "Use `read_and_summarize` for broad local triage, then use `script_exec`") {
+		t.Fatalf("expected combined workspace guidance to mention both tools, got %q", withBoth)
+	}
+	if strings.Contains(withBoth, "mutation { script_exec(") {
+		t.Fatalf("expected native workspace guidance to avoid GraphQL examples, got %q", withBoth)
 	}
 
 	onlyScriptExec := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human", "script_exec"}))
@@ -114,6 +114,30 @@ func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *te
 	if strings.Contains(onlyReadAndSummarize, "`read_and_summarize` for broad local triage") ||
 		strings.Contains(onlyReadAndSummarize, "broad multi-file triage") {
 		t.Fatalf("expected workspace guidance to stay hidden when script_exec is not visible, got %q", onlyReadAndSummarize)
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_NativeCatalogOmitsGraphQLSyntax(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{
+		AskHumanToolName,
+		ToolSearchToolName,
+		"read_and_summarize",
+		"script_exec",
+	} {
+		registry.Register(&mockTool{name: name})
+	}
+
+	guidance := FormatPromptGuidanceForCatalog(registry)
+	for _, snippet := range []string{
+		"mutation {",
+		"`tfind(action: search)`",
+		"ask_human(prompt:",
+		"script_exec(script:",
+	} {
+		if strings.Contains(guidance, snippet) {
+			t.Fatalf("expected native guidance to omit %q, got %q", snippet, guidance)
+		}
 	}
 }
 

@@ -8,8 +8,31 @@ import (
 )
 
 type promptGuidanceCatalog interface {
+	PromptGuidanceProtocol() promptGuidanceProtocol
 	PromptGuidancePreamble() string
 	PromptGuidanceToolNames() []string
+}
+
+type promptGuidanceProtocol string
+
+const (
+	promptGuidanceProtocolToolCalls promptGuidanceProtocol = "tool_calls"
+	promptGuidanceProtocolGraphQL   promptGuidanceProtocol = "graphql"
+)
+
+func promptGuidanceProtocolForCatalog(catalog ToolCatalog) promptGuidanceProtocol {
+	if catalog == nil {
+		return promptGuidanceProtocolToolCalls
+	}
+	guidanceCatalog, ok := catalog.(promptGuidanceCatalog)
+	if !ok {
+		return promptGuidanceProtocolToolCalls
+	}
+	protocol := guidanceCatalog.PromptGuidanceProtocol()
+	if protocol == "" {
+		return promptGuidanceProtocolToolCalls
+	}
+	return protocol
 }
 
 func promptGuidancePreamble(catalog ToolCatalog) string {

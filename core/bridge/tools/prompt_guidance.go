@@ -7,14 +7,15 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 	if len(names) == 0 {
 		return ""
 	}
+	protocol := promptGuidanceProtocolForCatalog(catalog)
 	lines := make([]string, 0, 7)
 	if preamble := promptGuidancePreamble(catalog); preamble != "" {
 		lines = append(lines, preamble)
 	}
 	lines = append(lines, rssPromptGuidance(names)...)
-	lines = append(lines, workspacePromptGuidance(names)...)
-	lines = append(lines, toolSearchPromptGuidance(names)...)
-	lines = append(lines, humanPromptGuidance(names)...)
+	lines = append(lines, workspacePromptGuidance(protocol, names)...)
+	lines = append(lines, toolSearchPromptGuidance(protocol, names)...)
+	lines = append(lines, humanPromptGuidance(protocol, names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
 	lines = append(lines, computerUsePromptGuidance(names)...)
 	return strings.Join(lines, "\n")
@@ -29,38 +30,53 @@ func rssPromptGuidance(names map[string]bool) []string {
 	}
 }
 
-func workspacePromptGuidance(names map[string]bool) []string {
+func workspacePromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
 	if !names["script_exec"] || !names["read_and_summarize"] {
 		return nil
 	}
-	return []string{
+	lines := []string{
 		"- Use `read_and_summarize` for broad local triage, then use `script_exec` for exact reads, searches, edits, and shell/script work.",
-		"- Minimal `script_exec` GraphQL example: `mutation { script_exec(script: \"print(\\\"ok\\\")\") }`.",
 	}
+	if protocol == promptGuidanceProtocolGraphQL {
+		lines = append(lines, "- Minimal `script_exec` GraphQL example: `mutation { script_exec(script: \"print(\\\"ok\\\")\") }`.")
+	}
+	return lines
 }
 
-func toolSearchPromptGuidance(names map[string]bool) []string {
+func toolSearchPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
 	if !names[ToolSearchToolName] {
 		return nil
 	}
+	if protocol == promptGuidanceProtocolGraphQL {
+		return []string{
+			"- Use `tfind` when the currently visible tools are insufficient.",
+			"- Start with `tfind(action: search)` to find the smallest suitable optional tool.",
+			"- After `tfind(action: load)`, do not call the loaded tool in the same turn; it becomes available next turn.",
+			"- Minimal `tfind(action: load)` example: `mutation { tfind(action: load, tool_names: [\"browser_control\"]) }`.",
+			"- Use `tfind(action: list)` to check whether a loaded tool is pending, active, or expired.",
+			"- Unload tools you no longer need with `tfind(action: unload)`.",
+		}
+	}
 	return []string{
 		"- Use `tfind` when the currently visible tools are insufficient.",
-		"- Start with `tfind(action: search)` to find the smallest suitable optional tool.",
-		"- After `tfind(action: load)`, do not call the loaded tool in the same turn; it becomes available next turn.",
-		"- Minimal `tfind(action: load)` example: `mutation { tfind(action: load, tool_names: [\"browser_control\"]) }`.",
-		"- Use `tfind(action: list)` to check whether a loaded tool is pending, active, or expired.",
-		"- Unload tools you no longer need with `tfind(action: unload)`.",
+		"- Start with `tfind` using `action=search` to find the smallest suitable optional tool.",
+		"- After `tfind` with `action=load`, do not call the loaded tool in the same turn; it becomes available next turn.",
+		"- Use `tfind` with `action=list` to check whether a loaded tool is pending, active, or expired.",
+		"- Unload tools you no longer need with `tfind` using `action=unload`.",
 	}
 }
 
-func humanPromptGuidance(names map[string]bool) []string {
+func humanPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
 	if !names[AskHumanToolName] {
 		return nil
 	}
-	return []string{
+	lines := []string{
 		"- Use `ask_human` only when blocked on required user input. If you provide predefined choices, the final option must allow custom input.",
-		"- Minimal `ask_human` options example: `mutation { ask_human(prompt: \"Which environment should I use?\", options: [{label: \"staging\"}, {label: \"Other\", allow_custom: true}]) }`.",
 	}
+	if protocol == promptGuidanceProtocolGraphQL {
+		lines = append(lines, "- Minimal `ask_human` options example: `mutation { ask_human(prompt: \"Which environment should I use?\", options: [{label: \"staging\"}, {label: \"Other\", allow_custom: true}]) }`.")
+	}
+	return lines
 }
 
 func screenPromptGuidance(names map[string]bool) []string {
