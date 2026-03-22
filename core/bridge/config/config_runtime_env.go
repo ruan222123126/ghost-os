@@ -3,170 +3,158 @@ package config
 import "time"
 
 func getenvDefault(name, fallback string) string {
-	return CurrentEnv().defaultValue(name, fallback)
+	return currentEnv().defaultValue(name, fallback)
 }
 
 // sessionsPathFromEnv 返回会话持久化目录。
-func sessionsPathFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func sessionsPathFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.defaultValue("GHOST_SESSIONS_PATH", defaultSessionsPath)
+		return "", err
 	}
-	return resolveSessionsPath(fileCfg, env)
+	return aux.SessionsPath, nil
 }
 
-func rssFeedsPathFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssFeedsPathFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.defaultValue("GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
+		return "", err
 	}
-	return resolveRSSFeedsPath(fileCfg, env)
+	return aux.RSS.FeedsPath, nil
 }
 
-func rssInboxPathFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssInboxPathFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.defaultValue("GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
+		return "", err
 	}
-	return resolveRSSInboxPath(fileCfg, env)
+	return aux.RSS.InboxPath, nil
 }
 
-func rssBriefingsPathFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssBriefingsPathFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.defaultValue("GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
+		return "", err
 	}
-	return resolveRSSBriefingsPath(fileCfg, env)
+	return aux.RSS.BriefingsPath, nil
 }
 
-func rssReportsPathFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssReportsPathFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.defaultValue("GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
+		return "", err
 	}
-	return resolveRSSReportsPath(fileCfg, env)
+	return aux.RSS.ReportsPath, nil
 }
 
-func rssPollEnabledFromEnv() bool {
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssPollEnabledFromEnv() (bool, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return parseBoolEnv("GHOST_RSS_POLL_ENABLED", true)
+		return false, err
 	}
-	return boolOrEnv(fileCfg.RSSPollEnabled, "GHOST_RSS_POLL_ENABLED", true)
+	return aux.RSS.PollEnabled, nil
 }
 
-func rssPollIntervalFromEnv() time.Duration {
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssPollIntervalFromEnv() (time.Duration, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return parseDurationEnv("GHOST_RSS_POLL_INTERVAL", defaultRSSPollInterval)
+		return 0, err
 	}
-	return durationOrEnv(fileCfg.RSSPollInterval, "GHOST_RSS_POLL_INTERVAL", defaultRSSPollInterval)
+	return aux.RSS.PollInterval, nil
 }
 
-func rssPollMaxItemsPerFeedFromEnv() int {
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssPollMaxItemsPerFeedFromEnv() (int, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return parsePositiveIntEnv("GHOST_RSS_POLL_MAX_ITEMS_PER_FEED", defaultRSSPollMaxItemsPerFeed)
+		return 0, err
 	}
-	return intOrEnv(fileCfg.RSSPollMaxItemsPerFeed, "GHOST_RSS_POLL_MAX_ITEMS_PER_FEED", defaultRSSPollMaxItemsPerFeed)
+	return aux.RSS.PollMaxItemsPerFeed, nil
 }
 
-func rssAIBatchSizeFromEnv() int {
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssAIBatchSizeFromEnv() (int, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return parsePositiveIntEnv("GHOST_RSS_AI_BATCH_SIZE", defaultRSSAIBatchSize)
+		return 0, err
 	}
-	return intOrEnv(fileCfg.RSSAIBatchSize, "GHOST_RSS_AI_BATCH_SIZE", defaultRSSAIBatchSize)
+	return aux.RSS.AIBatchSize, nil
 }
 
-func rssBriefingEnabledFromEnv() bool {
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssBriefingEnabledFromEnv() (bool, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return parseBoolEnv("GHOST_RSS_BRIEFING_ENABLED", true)
+		return false, err
 	}
-	return boolOrEnv(fileCfg.RSSBriefingEnabled, "GHOST_RSS_BRIEFING_ENABLED", true)
+	return aux.RSS.BriefingEnabled, nil
 }
 
-func rssBriefingIntervalFromEnv() time.Duration {
-	fileCfg, _, err := loadBridgeFileConfig()
+func rssBriefingIntervalFromEnv() (time.Duration, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return parseDurationEnv("GHOST_RSS_BRIEFING_INTERVAL", defaultRSSBriefingInterval)
+		return 0, err
 	}
-	return durationOrEnv(fileCfg.RSSBriefingInterval, "GHOST_RSS_BRIEFING_INTERVAL", defaultRSSBriefingInterval)
+	return aux.RSS.BriefingInterval, nil
 }
 
-func webSearchTavilyAPIKeyFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func webSearchTavilyAPIKeyFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.firstNonEmpty("GHOST_WEB_SEARCH_TAVILY_API_KEY", "TAVILY_API_KEY")
+		return "", err
 	}
-	return resolveWebSearchTavilyAPIKey(fileCfg, env)
+	return aux.WebSearchTavilyAPIKey, nil
 }
 
 func tasksPathFromEnv() string {
-	return resolveTasksPath(CurrentEnv())
+	return resolveTasksPath(currentEnv())
 }
 
-func nativeBinaryPathFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func nativeBinaryPathFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.firstNonEmpty("GHOST_NATIVE_BINARY_PATH", "GHOST_NATIVE_BIN")
+		return "", err
 	}
-	return resolveNativeBinaryPath(fileCfg, env)
+	return aux.Execution.NativeBinaryPath, nil
 }
 
-func nativeBinaryRootsFromEnv() []string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func nativeBinaryRootsFromEnv() ([]string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_BINARY_ROOTS", "")))
+		return nil, err
 	}
-	return resolveNativeBinaryRoots(fileCfg, env)
+	return aux.Execution.NativeBinaryRoots, nil
 }
 
-func nativeBinaryCandidatesFromEnv() []string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func nativeBinaryCandidatesFromEnv() ([]string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_BINARY_CANDIDATES", "")))
+		return nil, err
 	}
-	return resolveNativeBinaryCandidates(fileCfg, env)
+	return aux.Execution.NativeBinaryCandidates, nil
 }
 
-func nativeAllowedReadPathsFromEnv() []string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func nativeAllowedReadPathsFromEnv() ([]string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_ALLOWED_READ_PATHS", "")))
+		return nil, err
 	}
-	return resolveNativeAllowedReadPaths(fileCfg, env)
+	return aux.Execution.AllowedReadPaths, nil
 }
 
-func nativeAllowedWritePathsFromEnv() []string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func nativeAllowedWritePathsFromEnv() ([]string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_ALLOWED_WRITE_PATHS", "")))
+		return nil, err
 	}
-	return resolveNativeAllowedWritePaths(fileCfg, env)
+	return aux.Execution.AllowedWritePaths, nil
 }
 
-func projectRootFromEnv() string {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
+func projectRootFromEnv() (string, error) {
+	aux, err := loadAuxConfigFromEnv()
 	if err != nil {
-		return env.value("GHOST_PROJECT_ROOT")
+		return "", err
 	}
-	return resolveProjectRoot(fileCfg, env)
+	return aux.Execution.ProjectRoot, nil
 }
 
 func firstNonEmptyEnv(names ...string) string {
-	return CurrentEnv().firstNonEmpty(names...)
+	return currentEnv().firstNonEmpty(names...)
 }

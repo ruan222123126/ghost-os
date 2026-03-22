@@ -11,9 +11,9 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	if err := store.AddProvider(ProviderRecord{
@@ -79,9 +79,9 @@ func TestConfigStoreRuntimeConfigRemainsSnapshotAfterEnvChanges(t *testing.T) {
 	t.Setenv("GHOST_MODEL", "initial-model")
 	t.Setenv("GHOST_CHAT_PATH", "/initial/chat")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	t.Setenv("GHOST_PROVIDER", "openai")
@@ -116,9 +116,9 @@ func TestConfigStoreUpdateKeepsSnapshotFallbackInsteadOfReloadingEnv(t *testing.
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 	t.Setenv("GHOST_MODEL", "initial-model")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	t.Setenv("GHOST_API_KEY", "drifted-key")
@@ -160,9 +160,9 @@ func TestConfigStoreUpdatePersistsWebSearchSettings(t *testing.T) {
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "initial-tavily-key")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	webSearchExaAPIKey := "updated-exa-key"

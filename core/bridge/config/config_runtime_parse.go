@@ -35,89 +35,97 @@ func parseNamedHeaders(raw string, envName string) (map[string]string, error) {
 	return out, nil
 }
 
-func nativePersistentEnabledFromEnv() bool {
-	env := CurrentEnv()
-	fileCfg, _, err := loadBridgeFileConfig()
-	if err == nil {
-		return resolveNativePersistent(fileCfg.NativePersistent, env)
+func nativePersistentEnabledFromEnv() (bool, error) {
+	aux, err := loadAuxConfigFromEnv()
+	if err != nil {
+		return false, err
 	}
-	return resolveNativePersistent(nil, env)
+	return aux.Execution.Persistent, nil
 }
 
-func resolveNativePersistent(raw *bool, env Env) bool {
+func resolveNativePersistent(raw *bool, env envSnapshot) (bool, error) {
 	if raw != nil {
-		return *raw
+		return *raw, nil
 	}
 	for _, name := range []string{"GHOST_NATIVE_PERSISTENT", "GHOST_NATIVE_PERSISTENT_ENABLED"} {
-		if rawValue := env.value(name); rawValue == "" {
+		rawValue := strings.TrimSpace(env.value(name))
+		if rawValue == "" {
 			continue
-		} else {
-			return parseBoolValue(rawValue, false)
 		}
+		return parseBoolValue(rawValue, name, false)
 	}
-	return false
+	return false, nil
 }
 
-func parseBoolEnv(name string, fallback bool) bool {
-	return parseBoolValue(CurrentEnv().value(name), fallback)
+func parseBoolEnv(name string, fallback bool) (bool, error) {
+	return parseBoolValue(currentEnv().value(name), name, fallback)
 }
 
-func parsePositiveIntEnv(name string, fallback int) int {
-	return parsePositiveIntValue(CurrentEnv().value(name), fallback)
+func parsePositiveIntEnv(name string, fallback int) (int, error) {
+	return parsePositiveIntValue(currentEnv().value(name), name, fallback)
 }
 
-func parseFloatEnv(name string, fallback float64) float64 {
-	return parseFloatValue(CurrentEnv().value(name), fallback)
+func parseFloatEnv(name string, fallback float64) (float64, error) {
+	return parseFloatValue(currentEnv().value(name), name, fallback)
 }
 
-func parseDurationEnv(name string, fallback time.Duration) time.Duration {
-	return parseDurationValue(CurrentEnv().value(name), fallback)
+func parseDurationEnv(name string, fallback time.Duration) (time.Duration, error) {
+	return parseDurationValue(currentEnv().value(name), name, fallback)
 }
 
-func parseBoolValue(raw string, fallback bool) bool {
+func parseBoolValue(raw, fieldName string, fallback bool) (bool, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return fallback
+		return fallback, nil
 	}
 	value, err := strconv.ParseBool(trimmed)
 	if err != nil {
-		return fallback
+		return false, fmt.Errorf("invalid %s: expected boolean, got %q", strings.TrimSpace(fieldName), trimmed)
 	}
-	return value
+	return value, nil
 }
 
-func parsePositiveIntValue(raw string, fallback int) int {
+func parsePositiveIntValue(raw, fieldName string, fallback int) (int, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return fallback
+		return fallback, nil
 	}
 	value, err := strconv.Atoi(trimmed)
-	if err != nil || value <= 0 {
-		return fallback
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: expected positive integer, got %q", strings.TrimSpace(fieldName), trimmed)
 	}
-	return value
+	if value <= 0 {
+		return 0, fmt.Errorf("invalid %s: must be > 0, got %q", strings.TrimSpace(fieldName), trimmed)
+	}
+	return value, nil
 }
 
-func parseFloatValue(raw string, fallback float64) float64 {
+func parseFloatValue(raw, fieldName string, fallback float64) (float64, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return fallback
+		return fallback, nil
 	}
 	value, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil || value < 0 || value > 1 {
-		return fallback
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: expected number in [0, 1], got %q", strings.TrimSpace(fieldName), trimmed)
 	}
-	return value
+	if value < 0 || value > 1 {
+		return 0, fmt.Errorf("invalid %s: must be between 0 and 1, got %q", strings.TrimSpace(fieldName), trimmed)
+	}
+	return value, nil
 }
 
-func parseDurationValue(raw string, fallback time.Duration) time.Duration {
+func parseDurationValue(raw, fieldName string, fallback time.Duration) (time.Duration, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return fallback
+		return fallback, nil
 	}
 	value, err := time.ParseDuration(trimmed)
-	if err != nil || value <= 0 {
-		return fallback
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: expected duration, got %q: %w", strings.TrimSpace(fieldName), trimmed, err)
 	}
-	return value
+	if value <= 0 {
+		return 0, fmt.Errorf("invalid %s: must be > 0, got %q", strings.TrimSpace(fieldName), trimmed)
+	}
+	return value, nil
 }

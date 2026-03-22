@@ -1,9 +1,5 @@
 package config
 
-type GraphQLDomainFileConfig = graphQLDomainFileConfig
-type GraphQLSourceFileConfig = graphQLSourceFileConfig
-type GraphQLMutationPolicyFileConfig = graphQLMutationPolicyFileConfig
-
 type GraphQLDomainSnapshot struct {
 	Name          string   `json:"name"`
 	Description   string   `json:"description,omitempty"`

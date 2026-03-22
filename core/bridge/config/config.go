@@ -41,7 +41,17 @@ type WorkerConfig struct {
 	MaxFileChunks  int
 }
 
-type ProviderRecord = providerConfig
+type ProviderRecord struct {
+	Name                       string
+	Type                       llm.Provider
+	BaseURL                    string
+	APIKey                     *string
+	Models                     []string
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
+}
 
 type GraphQLDomainConfig struct {
 	Name          string

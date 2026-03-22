@@ -10,10 +10,10 @@ import (
 )
 
 func toolNameListOrEnv(raw []string, envName string) []string {
-	return toolNameListOrEnvWithEnv(raw, CurrentEnv(), envName)
+	return toolNameListOrEnvWithEnv(raw, currentEnv(), envName)
 }
 
-func toolNameListOrEnvWithEnv(raw []string, env Env, envName string) []string {
+func toolNameListOrEnvWithEnv(raw []string, env envSnapshot, envName string) []string {
 	if raw != nil {
 		return normalizeConfiguredToolNames(raw)
 	}

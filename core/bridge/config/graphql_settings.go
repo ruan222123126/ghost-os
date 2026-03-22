@@ -7,18 +7,23 @@ import (
 )
 
 func envGraphQLSettings() (GraphQLConfig, error) {
-	return graphQLSettingsFromEnv(CurrentEnv())
+	return graphQLSettingsFromEnv(currentEnv())
 }
 
-func graphQLSettingsFromEnv(env Env) (GraphQLConfig, error) {
+func graphQLSettingsFromEnv(env envSnapshot) (GraphQLConfig, error) {
 	if err := validateNoLegacyGraphQLEnv(env); err != nil {
 		return GraphQLConfig{}, err
 	}
+	toolRuntimeEnabled, err := parseBoolValue(
+		env.value("GHOST_GRAPHQL_TOOL_RUNTIME_ENABLED"),
+		"GHOST_GRAPHQL_TOOL_RUNTIME_ENABLED",
+		false,
+	)
+	if err != nil {
+		return GraphQLConfig{}, err
+	}
 	return finalizeGraphQLConfig(GraphQLConfig{
-		ToolRuntimeEnabled: parseBoolValue(
-			env.value("GHOST_GRAPHQL_TOOL_RUNTIME_ENABLED"),
-			false,
-		),
+		ToolRuntimeEnabled: toolRuntimeEnabled,
 	})
 }
 
@@ -216,7 +221,7 @@ func normalizeOptionalString(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
-func validateNoLegacyGraphQLEnv(env Env) error {
+func validateNoLegacyGraphQLEnv(env envSnapshot) error {
 	legacyEnv := configuredLegacyGraphQLEnv(env)
 	if len(legacyEnv) == 0 {
 		return nil
@@ -227,7 +232,7 @@ func validateNoLegacyGraphQLEnv(env Env) error {
 	)
 }
 
-func configuredLegacyGraphQLEnv(env Env) []string {
+func configuredLegacyGraphQLEnv(env envSnapshot) []string {
 	names := []string{
 		"GHOST_GRAPHQL_ENABLED",
 		"GHOST_GRAPHQL_ENDPOINT",

@@ -5,14 +5,14 @@ import (
 	"strings"
 )
 
-func resolveGraphQLSettingsFromEnv(env Env) (GraphQLConfig, error) {
+func resolveGraphQLSettingsFromEnv(env envSnapshot) (GraphQLConfig, error) {
 	if err := validateNoLegacyGraphQLEnvFromEnv(env); err != nil {
 		return GraphQLConfig{}, err
 	}
 	return finalizeGraphQLConfig(GraphQLConfig{})
 }
 
-func validateNoLegacyGraphQLEnvFromEnv(env Env) error {
+func validateNoLegacyGraphQLEnvFromEnv(env envSnapshot) error {
 	legacyEnv := configuredLegacyGraphQLEnvFromEnv(env)
 	if len(legacyEnv) == 0 {
 		return nil
@@ -23,7 +23,7 @@ func validateNoLegacyGraphQLEnvFromEnv(env Env) error {
 	)
 }
 
-func configuredLegacyGraphQLEnvFromEnv(env Env) []string {
+func configuredLegacyGraphQLEnvFromEnv(env envSnapshot) []string {
 	names := []string{
 		"GHOST_GRAPHQL_ENABLED",
 		"GHOST_GRAPHQL_ENDPOINT",

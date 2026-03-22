@@ -20,8 +20,6 @@ type store struct {
 	runtime runtimeConfig
 }
 
-type ConfigStore = store
-
 // newStoreFromEnv 用配置文件 + 环境变量回退初始化可热更新配置存储。
 func newStoreFromEnv() (*store, error) {
 	runtime, err := runtimeConfigFromEnv()
@@ -29,10 +27,6 @@ func newStoreFromEnv() (*store, error) {
 		return nil, err
 	}
 	return &store{runtime: runtime}, nil
-}
-
-func NewConfigStoreFromEnv() (*ConfigStore, error) {
-	return newStoreFromEnv()
 }
 
 func (s *store) Config() (Config, error) {

@@ -5,15 +5,15 @@ import (
 	"strings"
 )
 
-// Env 是配置解析阶段使用的环境快照，避免 resolve 过程中直接读取进程环境。
-type Env map[string]string
+// envSnapshot 是配置解析阶段使用的环境快照，避免 resolve 过程中直接读取进程环境。
+type envSnapshot map[string]string
 
-func CurrentEnv() Env {
+func currentEnv() envSnapshot {
 	return envFromEntries(os.Environ())
 }
 
-func envFromEntries(entries []string) Env {
-	values := make(Env, len(entries))
+func envFromEntries(entries []string) envSnapshot {
+	values := make(envSnapshot, len(entries))
 	for _, entry := range entries {
 		name, value, found := strings.Cut(entry, "=")
 		if !found {
@@ -25,21 +25,21 @@ func envFromEntries(entries []string) Env {
 	return values
 }
 
-func (env Env) value(name string) string {
+func (env envSnapshot) value(name string) string {
 	if env == nil {
 		return ""
 	}
 	return strings.TrimSpace(env[name])
 }
 
-func (env Env) defaultValue(name string, fallback string) string {
+func (env envSnapshot) defaultValue(name string, fallback string) string {
 	if value := env.value(name); value != "" {
 		return value
 	}
 	return fallback
 }
 
-func (env Env) firstNonEmpty(names ...string) string {
+func (env envSnapshot) firstNonEmpty(names ...string) string {
 	for _, name := range names {
 		if value := env.value(name); value != "" {
 			return value

@@ -14,9 +14,9 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	t.Setenv("GHOST_MODEL", "snapshot-model")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "snapshot-tavily")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	snapshot := store.Snapshot()
@@ -48,9 +48,9 @@ func TestConfigStoreUpdateLoadsRuntimeGraphQLIntoPatchBase(t *testing.T) {
 	t.Setenv("GHOST_PROVIDER", "custom")
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	defaultSource := "crm"

@@ -1,6 +1,9 @@
 package runtime
 
-import "ghost-os/bridge/execution"
+import (
+	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/execution"
+)
 
 type executionClientConfig struct {
 	Persistent             bool
@@ -36,16 +39,20 @@ func executionClientConfigFromConfig(cfg Config) executionClientConfig {
 	}
 }
 
-func executionClientConfigFromEnv() executionClientConfig {
-	return executionClientConfig{
-		Persistent:             nativePersistentEnabledFromEnv(),
-		NativeBinaryPath:       nativeBinaryPathFromEnv(),
-		NativeBinaryRoots:      nativeBinaryRootsFromEnv(),
-		NativeBinaryCandidates: nativeBinaryCandidatesFromEnv(),
-		AllowedReadPaths:       nativeAllowedReadPathsFromEnv(),
-		AllowedWritePaths:      nativeAllowedWritePathsFromEnv(),
-		WorkingDir:             projectRootFromEnv(),
+func executionClientConfigFromEnv() (executionClientConfig, error) {
+	cfg, err := bridgeconfig.LoadExecutionConfig()
+	if err != nil {
+		return executionClientConfig{}, err
 	}
+	return executionClientConfig{
+		Persistent:             cfg.Persistent,
+		NativeBinaryPath:       cfg.NativeBinaryPath,
+		NativeBinaryRoots:      append([]string(nil), cfg.NativeBinaryRoots...),
+		NativeBinaryCandidates: append([]string(nil), cfg.NativeBinaryCandidates...),
+		AllowedReadPaths:       append([]string(nil), cfg.AllowedReadPaths...),
+		AllowedWritePaths:      append([]string(nil), cfg.AllowedWritePaths...),
+		WorkingDir:             cfg.ProjectRoot,
+	}, nil
 }
 
 func closeExecutionClient(client execution.Client) error {

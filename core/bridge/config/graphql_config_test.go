@@ -134,9 +134,9 @@ func TestConfigStoreUpdatePersistsGraphQLSourcesAndHidesAPIKeys(t *testing.T) {
 	t.Setenv("GHOST_PROVIDER", "custom")
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	defaultSource := "crm"
@@ -210,9 +210,9 @@ func TestConfigStoreSnapshotKeepsEmptyGraphQLArrays(t *testing.T) {
 	t.Setenv("GHOST_PROVIDER", "custom")
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := newStoreFromEnv()
 	if err != nil {
-		t.Fatalf("NewConfigStoreFromEnv: %v", err)
+		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
 	snapshot := store.Snapshot()

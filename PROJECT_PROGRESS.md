@@ -1,6 +1,6 @@
 # Ghost-OS 当前项目概述
 
-更新日期：2026-03-21  
+更新日期：2026-03-22  
 分支：main（与 `origin/main` 同步）  
 阶段：MVP 骨架（主链路可用，核心能力持续补齐）
 
@@ -21,7 +21,39 @@
 
 ## 近期关键进展
 
+### 2026-03-22
+
+- 收口 `core/bridge/config` 公共 API 为稳定域对象 + `Store` 接口：
+  - 删除旧 `export.go` 对 runtime/file DTO、pointer helper、env helper 与 GraphQL file alias 的大面积再导出；`go doc ghost-os/bridge/config` 现在仅保留稳定配置对象、GraphQL 输入/快照、默认常量、错误以及 `Store` 接口。
+  - `ProviderRecord` 改为独立公共 struct；`Store` 改为接口并由 `NewStoreFromEnv()` 返回，`orchestration` / `runtime` / `rss` / `app` 统一改为本地 wrapper 适配，不再依赖 `config` concrete store 或 `*bridgeconfig.Store` 指针。
+  - `config` 包内部 `Env`/`CurrentEnv` 已收回为私有 `envSnapshot/currentEnv`，避免环境快照 helper 继续泄漏到跨包 API；`orchestration` 也已内聚 tool-list 归一化逻辑，`rss` 内聚用户路径解析。
+  - 顺手修复 `app/ping` 对 `runtime.NewExecutionClientFromEnv()` 新签名的错误处理，保持 `./app` 定向测试可通过。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./runtime ./rss ./orchestration ./transport ./app -timeout 60s`
+
+- 收口 `core/bridge/config` 的辅助加载旁路为单次辅助 resolve：
+  - 新增内部 `auxConfig` 解析入口，统一基于同一份 `fileCfg + env` 投影 `sessions/rss/web-search/execution` 辅助字段，不再让 legacy `*_FromEnv()` wrapper 各自直接调用 `loadBridgeFileConfig()`。
+  - `LoadExecutionConfig()` 现直接复用同一辅助快照返回 execution 配置，不再串联多个旧 helper 造成重复读文件；`nativePersistentEnabledFromEnv()` 也已并入该入口。
+  - 新增 `config_aux_resolve_test.go`，覆盖辅助 resolve 只使用传入 env snapshot 的回归路径。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./config ./runtime ./transport ./orchestration -timeout 60s`
+
 ### 2026-03-21
+
+- GraphQL runtime 已从“业务 GraphQL source 执行器”切换为“GraphQL 工具调用协议”：
+  - 新增显式开关 `graphql_tool_runtime_enabled`，`session_turn_preparer` 不再用 `deps.graphQL != nil` 隐式进入 GraphQL 模式。
+  - GraphQL 模式下 completion request 会隐藏 native structured tool defs，模型只能输出单条 GraphQL 文档；当前 turn 可见工具会被动态生成为 GraphQL schema 摘要注入 prompt。
+  - `core/bridge/tools/graphql_text_executor.go` 已改为解析单 operation / 单 top-level field 的 GraphQL 工具调用文档，并把 field 名与参数直接映射到真实 bridge tool。
+  - assistant-text GraphQL 路径现复用真实单工具执行链，统一保留 tool result envelope、`tool_call_id`、`awaiting_human`、流事件与内部反馈；反馈前缀改为 `[GRAPHQL_TOOL_RESULT]`。
+  - 旧业务 GraphQL runtime 主链路依赖已退出本模式：不再依赖 source/domain/policy registry 执行业务 GraphQL source，也不再沿用 `graphql_text_mutation` 残留语义。
+- 共享契约与消费端已同步：
+  - `core/shared/schema/defs/config_runtime.json` 新增 `graphql_tool_runtime_enabled`，并已重新生成 Go/TS/Rust envelope 类型。
+  - Web config parser / fixture 与 CLI `ConfigUpdate::empty()` / config view 测试已同步新字段。
+- 本轮验证：
+  - `timeout 60s env GOCACHE=/tmp/go-build GOTMPDIR=/tmp/go-tmp go test -C core/bridge ./... -timeout 60s`
+  - `pnpm -C apps/web exec tsc --noEmit --pretty false`
+  - `pnpm -C apps/web test -- --runInBand lib/api/config/api.test.ts lib/api/config/parser.test.ts`
+  - `timeout 60s cargo test --manifest-path apps/cli/Cargo.toml`
 
 - 收口 `core/bridge/config.ConfigStore.Update()` 固定流水线：
   - `Update()` 现明确执行 `load current update base -> apply patch -> normalize -> resolve/validate -> persist`，provider / GraphQL / websearch 的 runtime 回填统一进入 load-base 预处理，不再散落在 patch 阶段补洞。

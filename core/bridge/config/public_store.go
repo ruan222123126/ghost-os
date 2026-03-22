@@ -1,6 +1,6 @@
 package config
 
-type StoreAPI interface {
+type Store interface {
 	Config() (Config, error)
 	Snapshot() Snapshot
 	ListProviders() []ProviderRecord
@@ -10,4 +10,8 @@ type StoreAPI interface {
 	SetActiveProvider(name string) error
 	Update(UpdateRequest) error
 	SetProjectRoot(path string) error
+}
+
+func NewStoreFromEnv() (Store, error) {
+	return newStoreFromEnv()
 }

@@ -12,10 +12,10 @@ func runtimeConfigFromEnv() (runtimeConfig, error) {
 	if err != nil {
 		return runtimeConfig{}, err
 	}
-	return resolveRuntimeConfig(fileCfg, CurrentEnv())
+	return resolveRuntimeConfig(fileCfg, currentEnv())
 }
 
-func resolveRuntimeConfig(fileCfg bridgeFileConfig, env Env) (runtimeConfig, error) {
+func resolveRuntimeConfig(fileCfg bridgeFileConfig, env envSnapshot) (runtimeConfig, error) {
 	fallback, err := runtimeFallbackFromEnv(env)
 	if err != nil {
 		return runtimeConfig{}, err
@@ -23,9 +23,17 @@ func resolveRuntimeConfig(fileCfg bridgeFileConfig, env Env) (runtimeConfig, err
 	return resolveRuntimeConfigWithFallback(fileCfg, fallback)
 }
 
-func runtimeFallbackFromEnv(env Env) (runtimeConfig, error) {
+func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 	webSearch := webSearchSettingsFromEnv(env)
 	graphql, err := graphQLSettingsFromEnv(env)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	allowlistOnly, err := parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), "GHOST_TOOL_ALLOWLIST_ONLY", false)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	nativePersistent, err := resolveNativePersistent(nil, env)
 	if err != nil {
 		return runtimeConfig{}, err
 	}
@@ -35,9 +43,9 @@ func runtimeFallbackFromEnv(env Env) (runtimeConfig, error) {
 		BaseURL:               env.defaultValue("GHOST_BASE_URL", ""),
 		Model:                 env.defaultValue("GHOST_MODEL", ""),
 		ChatPath:              env.defaultValue("GHOST_CHAT_PATH", ""),
-		NativePersistent:      resolveNativePersistent(nil, env),
+		NativePersistent:      nativePersistent,
 		ProjectRoot:           env.defaultValue("GHOST_PROJECT_ROOT", ""),
-		ModelSelectionEnabled: !parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), false),
+		ModelSelectionEnabled: !allowlistOnly,
 		WebSearchTavilyAPIKey: webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:    webSearch.ExaAPIKey,
 		GraphQL:               graphql,

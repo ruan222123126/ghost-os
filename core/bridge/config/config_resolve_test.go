@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"ghost-os/bridge/llm"
@@ -12,7 +13,7 @@ func TestResolveUsesProvidedEnvSnapshot(t *testing.T) {
 	t.Setenv("GHOST_PROMPTS_DIR", "/process/prompts")
 	t.Setenv("GHOST_NATIVE_BINARY_PATH", "/process/native")
 
-	env := Env{
+	env := envSnapshot{
 		"GHOST_PROVIDER":           "openai",
 		"GHOST_API_KEY":            "snapshot-key",
 		"GHOST_SESSIONS_PATH":      "/snapshot/sessions",
@@ -20,9 +21,9 @@ func TestResolveUsesProvidedEnvSnapshot(t *testing.T) {
 		"GHOST_NATIVE_BINARY_PATH": "/snapshot/native",
 	}
 
-	cfg, err := Resolve(bridgeFileConfig{}, env)
+	cfg, err := resolveConfig(bridgeFileConfig{}, env)
 	if err != nil {
-		t.Fatalf("Resolve: %v", err)
+		t.Fatalf("resolveConfig: %v", err)
 	}
 	if cfg.Provider.APIKey != "snapshot-key" {
 		t.Fatalf("unexpected api key: got %q want %q", cfg.Provider.APIKey, "snapshot-key")
@@ -55,4 +56,89 @@ func TestResolveRuntimeConfigWithFallbackKeepsSnapshotModelSelection(t *testing.
 	if runtime.ModelSelectionEnabled {
 		t.Fatalf("expected model selection to stay disabled, got %+v", runtime)
 	}
+}
+
+func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
+	cases := []struct {
+		name string
+		env  envSnapshot
+		want string
+	}{
+		{
+			name: "runtime fallback bool",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_TOOL_ALLOWLIST_ONLY": "maybe"},
+			want: "invalid GHOST_TOOL_ALLOWLIST_ONLY",
+		},
+		{
+			name: "rss bool",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RSS_POLL_ENABLED": "maybe"},
+			want: "invalid GHOST_RSS_POLL_ENABLED",
+		},
+		{
+			name: "positive int",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_MAX_TURNS": "0"},
+			want: "invalid GHOST_MAX_TURNS",
+		},
+		{
+			name: "float range",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_TOOL_SELECTOR_CONFIDENCE": "1.5"},
+			want: "invalid GHOST_TOOL_SELECTOR_CONFIDENCE",
+		},
+		{
+			name: "duration",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RSS_POLL_INTERVAL": "later"},
+			want: "invalid GHOST_RSS_POLL_INTERVAL",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := resolveConfig(bridgeFileConfig{}, tc.env)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
+	cases := []struct {
+		name    string
+		fileCfg bridgeFileConfig
+		want    string
+	}{
+		{
+			name:    "max turns",
+			fileCfg: bridgeFileConfig{MaxTurns: intPtr(0)},
+			want:    "invalid max_turns",
+		},
+		{
+			name:    "selector confidence",
+			fileCfg: bridgeFileConfig{ToolSelectorConfidence: floatPtr(1.1)},
+			want:    "invalid tool_selector_confidence",
+		},
+		{
+			name:    "rss poll interval",
+			fileCfg: bridgeFileConfig{RSSPollInterval: stringPointer("later")},
+			want:    "invalid rss_poll_interval",
+		},
+	}
+
+	env := envSnapshot{"GHOST_PROVIDER": "custom"}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := resolveConfig(tc.fileCfg, env)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func floatPtr(value float64) *float64 {
+	return &value
 }
