@@ -1,107 +1,18 @@
 package tools
 
 import (
-	"fmt"
 	"regexp"
-	"sort"
 	"strings"
-
-	"ghost-os/bridge/tools/internal/graphqlschema"
 )
 
 var graphQLTextFencePattern = regexp.MustCompile("(?is)```(?:graphql|gql)?\\s*([\\s\\S]*?)```")
 
-func inferQueryDomain(source *graphqlschema.Source, rootFields []string) (string, error) {
-	if source == nil {
-		return "", fmt.Errorf("graphql source is not configured")
-	}
-	domains := source.DomainList()
-	if len(domains) == 0 {
-		return "", nil
-	}
-	matches := filterQueryDomainsByRootFields(source, domains, rootFields)
-	return resolveInferredDomain(matches, "query root fields")
-}
+const graphQLToolResultMarker = "[GRAPHQL_TOOL_RESULT]"
 
-func filterQueryDomainsByRootFields(
-	source *graphqlschema.Source,
-	domains []graphqlschema.Domain,
-	rootFields []string,
-) []string {
-	matches := make([]string, 0, len(domains))
-	for _, domain := range domains {
-		if domainAllowsAllRootQueries(source, domain.Name, rootFields) {
-			matches = append(matches, domain.Name)
-		}
-	}
-	return matches
-}
-
-func domainAllowsAllRootQueries(source *graphqlschema.Source, domain string, rootFields []string) bool {
-	for _, field := range rootFields {
-		allowed, err := source.DomainAllowsRootQuery(domain, field)
-		if err != nil || !allowed {
-			return false
-		}
-	}
-	return true
-}
-
-func inferMutationDomain(
-	registry *GraphQLSourceRegistry,
-	source *graphqlschema.Source,
-	mutationText string,
-) (string, error) {
-	summary, err := parseAndSummarizeGraphQLMutation(mutationText, "")
-	if err != nil {
-		return "", err
-	}
-	rootMutation := summary.RootFields[0]
-	matches, err := mutationPolicyDomainMatches(registry, source, rootMutation)
-	if err != nil {
-		return "", err
-	}
-	return resolveInferredDomain(matches, "mutation policy")
-}
-
-func mutationPolicyDomainMatches(
-	registry *GraphQLSourceRegistry,
-	source *graphqlschema.Source,
-	rootMutation string,
-) ([]string, error) {
-	if source == nil {
-		return nil, fmt.Errorf("graphql source is not configured")
-	}
-	domains := source.DomainList()
-	matches := make([]string, 0, len(domains))
-	for _, domain := range domains {
-		policies, err := registry.listMutationPolicies(source.Name, domain.Name)
-		if err != nil {
-			return nil, err
-		}
-		for _, policy := range policies {
-			if policy.RootMutation == rootMutation {
-				matches = append(matches, domain.Name)
-			}
-		}
-	}
-	sort.Strings(matches)
-	return matches, nil
-}
-
-func resolveInferredDomain(matches []string, reason string) (string, error) {
-	switch len(matches) {
-	case 0:
-		return "", fmt.Errorf("failed to infer graphql domain from %s", reason)
-	case 1:
-		return matches[0], nil
-	default:
-		return "", fmt.Errorf(
-			"graphql domain inference is ambiguous for %s: %s",
-			reason,
-			strings.Join(matches, ","),
-		)
-	}
+type graphQLTextNormalizationResult struct {
+	Document      string
+	Recognized    bool
+	SanitizeKinds []string
 }
 
 func extractGraphQLFenceContent(text string) string {
@@ -112,16 +23,56 @@ func extractGraphQLFenceContent(text string) string {
 	return strings.TrimSpace(match[1])
 }
 
+func normalizeGraphQLTextDocument(
+	text string,
+	sanitizeKnownArtifacts bool,
+) graphQLTextNormalizationResult {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return graphQLTextNormalizationResult{}
+	}
+
+	kinds := make([]string, 0, 3)
+	if trimmed != text {
+		kinds = append(kinds, "trim_whitespace")
+	}
+	if fenced := extractGraphQLFenceContent(trimmed); fenced != "" {
+		if fenced != trimmed {
+			kinds = append(kinds, "strip_code_fence")
+		}
+		trimmed = fenced
+	}
+	if !looksLikeGraphQLDocument(trimmed) {
+		return graphQLTextNormalizationResult{}
+	}
+	if sanitizeKnownArtifacts {
+		if stripped, ok := stripGraphQLToolResultSuffix(trimmed); ok {
+			trimmed = stripped
+			kinds = append(kinds, "strip_graphql_tool_result_suffix")
+		}
+	}
+	return graphQLTextNormalizationResult{
+		Document:      trimmed,
+		Recognized:    true,
+		SanitizeKinds: kinds,
+	}
+}
+
+func stripGraphQLToolResultSuffix(text string) (string, bool) {
+	index := strings.Index(text, graphQLToolResultMarker)
+	if index < 0 {
+		return text, false
+	}
+	prefix := strings.TrimSpace(text[:index])
+	if prefix == "" || !looksLikeGraphQLDocument(prefix) || !strings.HasSuffix(prefix, "}") {
+		return text, false
+	}
+	return prefix, true
+}
+
 func looksLikeGraphQLDocument(text string) bool {
 	trimmed := strings.TrimSpace(strings.ToLower(text))
 	return strings.HasPrefix(trimmed, "{") ||
 		strings.HasPrefix(trimmed, "query") ||
 		strings.HasPrefix(trimmed, "mutation")
-}
-
-func sourceName(source *graphqlschema.Source) string {
-	if source == nil {
-		return ""
-	}
-	return source.Name
 }

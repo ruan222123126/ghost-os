@@ -138,7 +138,7 @@ func (t *ToolSearchTool) load(sess *session.Session, toolNames []string) (string
 			Summary:           toolShortDescription(name, ""),
 			Status:            loadStatus(result.AlreadyLoaded),
 			AvailableNow:      availableNow,
-			AvailableNextTurn: !availableNow,
+			AvailableNextTurn: availableNextTurn(result.Load, sess.TurnIndex, t.idleTurns),
 		})
 	}
 	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionLoad, Items: items})
@@ -177,7 +177,7 @@ func (t *ToolSearchTool) list(sess *session.Session) (string, error) {
 			Summary:            toolShortDescription(load.ToolName, ""),
 			Status:             listStatus(load, sess.TurnIndex, t.idleTurns),
 			AvailableNow:       load.VisibleForTurn(sess.TurnIndex) && !load.ExpiredAtTurn(sess.TurnIndex, t.idleTurns),
-			AvailableNextTurn:  load.LoadedAtTurn == sess.TurnIndex,
+			AvailableNextTurn:  availableNextTurn(load, sess.TurnIndex, t.idleTurns),
 			RemainingIdleTurns: load.RemainingIdleTurns(sess.TurnIndex, t.idleTurns),
 		})
 	}
@@ -212,13 +212,21 @@ func loadStatus(alreadyLoaded bool) string {
 
 func listStatus(load session.DynamicToolLoad, currentTurn int, idleTurns int) string {
 	switch {
-	case load.LoadedAtTurn == currentTurn:
-		return "pending"
 	case load.ExpiredAtTurn(currentTurn, idleTurns):
 		return "expired"
+	case load.VisibleForTurn(currentTurn):
+		return "active"
+	case load.LoadedAtTurn > currentTurn:
+		return "pending"
 	default:
 		return "active"
 	}
+}
+
+func availableNextTurn(load session.DynamicToolLoad, currentTurn int, idleTurns int) bool {
+	return !load.VisibleForTurn(currentTurn) &&
+		!load.ExpiredAtTurn(currentTurn, idleTurns) &&
+		load.LoadedAtTurn > currentTurn
 }
 
 func toolMatchesQuery(metadata ToolMetadata, query string) bool {

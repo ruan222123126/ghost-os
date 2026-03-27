@@ -97,7 +97,7 @@ func TestBuildSystemPromptForCatalogIncludesDynamicToolStateSection(t *testing.T
 	}
 }
 
-func TestBuildSystemPromptForSessionIncludesPendingAndActiveDynamicTools(t *testing.T) {
+func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *testing.T) {
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "web_search"} {
 		registry.Register(&catalogMockTool{name: name})
@@ -108,7 +108,7 @@ func TestBuildSystemPromptForSessionIncludesPendingAndActiveDynamicTools(t *test
 	sess.AdvanceToolTurn(3)
 	sess.EnsureDynamicToolLoaded("web_search", "tfind")
 
-	pending, err := buildSystemPromptForSession(
+	immediate, err := buildSystemPromptForSession(
 		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}},
 		catalog,
 		sess,
@@ -117,8 +117,8 @@ func TestBuildSystemPromptForSessionIncludesPendingAndActiveDynamicTools(t *test
 	if err != nil {
 		t.Fatalf("buildSystemPromptForSession returned error: %v", err)
 	}
-	if !strings.Contains(pending, "`web_search` was loaded this turn and becomes available next turn.") {
-		t.Fatalf("expected pending dynamic tool state, got %q", pending)
+	if !strings.Contains(immediate, "`web_search` was loaded in this user turn and is available now.") {
+		t.Fatalf("expected immediate dynamic tool state, got %q", immediate)
 	}
 
 	sess.AdvanceToolTurn(3)

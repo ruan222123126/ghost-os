@@ -57,6 +57,9 @@ func TestRuntimeConfigFromEnvUsesGraphQLSourcesLayout(t *testing.T) {
 	if runtime.GraphQL.DefaultSource != "crm" {
 		t.Fatalf("unexpected graphql default source: %q", runtime.GraphQL.DefaultSource)
 	}
+	if !runtime.GraphQL.TextSanitizeEnabled {
+		t.Fatal("expected graphql_text_sanitize_enabled to default to true")
+	}
 	if len(runtime.GraphQL.Sources) != 2 {
 		t.Fatalf("unexpected graphql source count: %d", len(runtime.GraphQL.Sources))
 	}
@@ -72,6 +75,25 @@ func TestRuntimeConfigFromEnvUsesGraphQLSourcesLayout(t *testing.T) {
 	}
 	if len(runtime.GraphQL.MutationPolicies) != 0 {
 		t.Fatalf("expected no mutation policies by default, got %+v", runtime.GraphQL.MutationPolicies)
+	}
+}
+
+func TestRuntimeConfigFromEnvLoadsGraphQLTextSanitizeSetting(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		GraphQLTextSanitizeEnabled: boolPointer(false),
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+
+	runtime, err := runtimeConfigFromEnv()
+	if err != nil {
+		t.Fatalf("runtimeConfigFromEnv: %v", err)
+	}
+	if runtime.GraphQL.TextSanitizeEnabled {
+		t.Fatal("expected graphql_text_sanitize_enabled=false from file config")
 	}
 }
 

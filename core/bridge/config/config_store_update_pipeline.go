@@ -79,6 +79,7 @@ func prepareGraphQLUpdateBase(
 		return
 	}
 	fileCfg.GraphQLToolRuntimeEnabled = boolPointer(current.GraphQL.ToolRuntimeEnabled)
+	fileCfg.GraphQLTextSanitizeEnabled = boolPointer(current.GraphQL.TextSanitizeEnabled)
 	fileCfg.GraphQLDefaultSource = optionalStringPointer(current.GraphQL.DefaultSource)
 	fileCfg.GraphQLSources = graphQLSourcesToFileConfigs(current.GraphQL.Sources)
 	fileCfg.GraphQLMutationPolicies = graphQLMutationPoliciesToFileConfigs(
@@ -89,6 +90,7 @@ func prepareGraphQLUpdateBase(
 func touchesGraphQLUpdate(req UpdateRequest) bool {
 	return req.GraphQLDefaultSource != nil ||
 		req.GraphQLToolRuntimeEnabled != nil ||
+		req.GraphQLTextSanitizeEnabled != nil ||
 		req.GraphQLSources != nil ||
 		req.GraphQLSourceUpsert != nil ||
 		req.GraphQLMutationPolicies != nil
@@ -96,6 +98,7 @@ func touchesGraphQLUpdate(req UpdateRequest) bool {
 
 func hasRuntimeGraphQLConfig(cfg GraphQLConfig) bool {
 	return cfg.ToolRuntimeEnabled ||
+		cfg.TextSanitizeEnabled != defaultGraphQLTextSanitizeEnabled ||
 		cfg.DefaultSource != "" ||
 		len(cfg.Sources) > 0 ||
 		len(cfg.MutationPolicies) > 0
@@ -109,6 +112,12 @@ func prepareWebSearchUpdateBase(
 	if fileCfg == nil || !touchesWebSearchUpdate(req) {
 		return
 	}
+	if fileCfg.WebSearchTavilyURL == nil {
+		fileCfg.WebSearchTavilyURL = optionalStringPointer(current.WebSearchTavilyURL)
+	}
+	if fileCfg.WebSearchExaURL == nil {
+		fileCfg.WebSearchExaURL = optionalStringPointer(current.WebSearchExaURL)
+	}
 	if fileCfg.WebSearchTavilyAPIKey == nil {
 		fileCfg.WebSearchTavilyAPIKey = optionalStringPointer(current.WebSearchTavilyAPIKey)
 	}
@@ -118,7 +127,10 @@ func prepareWebSearchUpdateBase(
 }
 
 func touchesWebSearchUpdate(req UpdateRequest) bool {
-	return req.WebSearchTavilyAPIKey != nil || req.WebSearchExaAPIKey != nil
+	return req.WebSearchTavilyURL != nil ||
+		req.WebSearchExaURL != nil ||
+		req.WebSearchTavilyAPIKey != nil ||
+		req.WebSearchExaAPIKey != nil
 }
 
 func prepareWebRooterUpdateBase(

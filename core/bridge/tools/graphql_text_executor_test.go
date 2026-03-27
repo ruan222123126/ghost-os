@@ -1,13 +1,15 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"strings"
 	"testing"
 )
 
-func TestGraphQLTextExecutorRecognizesQueryToolCall(t *testing.T) {
+func TestGraphQLTextExecutorRejectsQueryToolCallInMutationOnlyMode(t *testing.T) {
 	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog()).(*graphQLTextExecutor)
 
 	result, err := executor.Execute(
@@ -15,8 +17,8 @@ func TestGraphQLTextExecutorRecognizesQueryToolCall(t *testing.T) {
 		`query { web_search(query: "OpenAI latest news", max_results: 5) }`,
 		"trace-graphql-query",
 	)
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
+	if err == nil || !strings.Contains(err.Error(), `tool "web_search" must use mutation`) {
+		t.Fatalf("expected mutation-only protocol error, got %v", err)
 	}
 	if !result.Recognized {
 		t.Fatalf("expected recognized graphql tool call, got %+v", result)
@@ -30,6 +32,14 @@ func TestGraphQLTextExecutorRecognizesQueryToolCall(t *testing.T) {
 	}
 	if args["max_results"] != float64(5) {
 		t.Fatalf("unexpected args: %+v", args)
+	}
+	protocolErr, ok := AsGraphQLTextProtocolError(err)
+	if !ok {
+		t.Fatalf("expected structured protocol error, got %T", err)
+	}
+	feedback := protocolErr.Feedback()
+	if feedback.Expected != "mutation" || feedback.Received != "query" {
+		t.Fatalf("unexpected feedback payload: %+v", feedback)
 	}
 }
 
@@ -110,7 +120,9 @@ func TestGraphQLTextExecutorRejectsAliasesFragmentsVariablesAndDirectives(t *tes
 }
 
 func TestGraphQLTextExecutorRejectsUnknownTool(t *testing.T) {
-	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
+	registry := NewRegistry()
+	registry.Register(&graphQLToolRuntimeToolSearchTool{})
+	executor := NewGraphQLTextExecutor(registry)
 
 	_, err := executor.Execute(
 		context.Background(),
@@ -119,6 +131,20 @@ func TestGraphQLTextExecutorRejectsUnknownTool(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), `tool "missing_tool" not found`) {
 		t.Fatalf("expected tool not found error, got %v", err)
+	}
+	protocolErr, ok := AsGraphQLTextProtocolError(err)
+	if !ok {
+		t.Fatalf("expected structured protocol error, got %T", err)
+	}
+	feedback := protocolErr.Feedback()
+	if feedback.Kind != "unknown_tool" {
+		t.Fatalf("unexpected feedback kind: %+v", feedback)
+	}
+	if !strings.Contains(feedback.Hint, "`tfind`") {
+		t.Fatalf("expected tfind hint in feedback, got %+v", feedback)
+	}
+	if feedback.Example != `mutation { tfind(action: search, query: "browser control") }` {
+		t.Fatalf("unexpected example: %+v", feedback)
 	}
 }
 
@@ -165,6 +191,70 @@ func TestGraphQLTextExecutorDefaultsUndeclaredToolsToMutation(t *testing.T) {
 	}
 }
 
+func TestGraphQLTextExecutorSanitizesKnownGraphQLToolResultSuffix(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&graphQLToolRuntimeToolSearchTool{})
+	executor := NewGraphQLTextExecutorWithOptions(registry, GraphQLTextExecutorOptions{
+		SanitizeKnownArtifacts: true,
+	})
+
+	var logs bytes.Buffer
+	originalWriter := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(originalWriter)
+
+	result, err := executor.Execute(
+		context.Background(),
+		"mutation { tfind(action: list) }[GRAPHQL_TOOL_RESULT]\n{\"status\":\"error\"}",
+		"trace-sanitize",
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.Recognized || result.ToolName != ToolSearchToolName {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	args := decodeGraphQLToolArgs(t, result.Arguments)
+	if args["action"] != "list" {
+		t.Fatalf("unexpected args: %+v", args)
+	}
+	if !strings.Contains(logs.String(), "trace_id=trace-sanitize") ||
+		!strings.Contains(logs.String(), "kind=strip_graphql_tool_result_suffix") {
+		t.Fatalf("expected sanitize log, got %q", logs.String())
+	}
+}
+
+func TestGraphQLTextExecutorKeepsStrictParseWhenSanitizeDisabled(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&graphQLToolRuntimeToolSearchTool{})
+	executor := NewGraphQLTextExecutorWithOptions(registry, GraphQLTextExecutorOptions{
+		SanitizeKnownArtifacts: false,
+	})
+
+	_, err := executor.Execute(
+		context.Background(),
+		"mutation { tfind(action: list) }[GRAPHQL_TOOL_RESULT]\n{\"status\":\"error\"}",
+		"trace-sanitize-disabled",
+	)
+	if err == nil {
+		t.Fatal("expected parse error when sanitize is disabled")
+	}
+	protocolErr, ok := AsGraphQLTextProtocolError(err)
+	if !ok {
+		t.Fatalf("expected structured protocol error, got %T", err)
+	}
+	feedback := protocolErr.Feedback()
+	if feedback.Kind != "parse_error" {
+		t.Fatalf("unexpected feedback kind: %+v", feedback)
+	}
+	if !strings.Contains(feedback.Hint, "Return only a pure GraphQL document") {
+		t.Fatalf("unexpected parse hint: %+v", feedback)
+	}
+	if feedback.Example == "" {
+		t.Fatalf("expected parse example to be populated: %+v", feedback)
+	}
+}
+
 func graphQLToolRuntimeTestCatalog() ToolCatalog {
 	registry := NewRegistry()
 	registry.Register(NewWebSearchTool(WebSearchConfig{}))
@@ -174,6 +264,8 @@ func graphQLToolRuntimeTestCatalog() ToolCatalog {
 }
 
 type graphQLToolRuntimeNestedArgsTool struct{}
+
+type graphQLToolRuntimeToolSearchTool struct{}
 
 func (*graphQLToolRuntimeNestedArgsTool) Name() string {
 	return "script_exec"
@@ -196,6 +288,28 @@ func (*graphQLToolRuntimeNestedArgsTool) Parameters() json.RawMessage {
 }
 
 func (*graphQLToolRuntimeNestedArgsTool) Execute(context.Context, json.RawMessage, string) (string, error) {
+	return "", nil
+}
+
+func (*graphQLToolRuntimeToolSearchTool) Name() string {
+	return ToolSearchToolName
+}
+
+func (*graphQLToolRuntimeToolSearchTool) Description() string {
+	return "test tool search"
+}
+
+func (*graphQLToolRuntimeToolSearchTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"action":{"type":"string"},
+			"query":{"type":"string"}
+		}
+	}`)
+}
+
+func (*graphQLToolRuntimeToolSearchTool) Execute(context.Context, json.RawMessage, string) (string, error) {
 	return "", nil
 }
 

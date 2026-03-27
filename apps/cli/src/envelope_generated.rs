@@ -345,10 +345,13 @@ pub struct BridgeConfig {
     pub model_selection_enabled: bool,
     pub graphql_default_source: String,
     pub graphql_tool_runtime_enabled: bool,
+    pub graphql_text_sanitize_enabled: bool,
     pub graphql_sources: Vec<GraphQLSourceResponse>,
     pub graphql_mutation_policies: Vec<GraphQLMutationPolicyResponse>,
     pub web_rooter_enabled: bool,
     pub web_rooter_api_token_set: bool,
+    pub web_search_tavily_url: String,
+    pub web_search_exa_url: String,
     pub web_search_tavily_api_key_set: bool,
     pub web_search_exa_api_key_set: bool,
 }
@@ -378,6 +381,8 @@ pub struct ConfigUpdate {
     #[serde(default)]
     pub graphql_tool_runtime_enabled: Option<bool>,
     #[serde(default)]
+    pub graphql_text_sanitize_enabled: Option<bool>,
+    #[serde(default)]
     pub graphql_sources: Option<Vec<GraphQLSourceInput>>,
     #[serde(default)]
     pub graphql_source_upsert: Option<GraphQLSourceInput>,
@@ -391,6 +396,10 @@ pub struct ConfigUpdate {
     pub web_rooter_api_token: Option<String>,
     #[serde(default)]
     pub web_rooter_timeout_ms: Option<i64>,
+    #[serde(default)]
+    pub web_search_tavily_url: Option<String>,
+    #[serde(default)]
+    pub web_search_exa_url: Option<String>,
     #[serde(default)]
     pub web_search_tavily_api_key: Option<String>,
     #[serde(default)]

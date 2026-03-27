@@ -30,6 +30,8 @@ describe('lib/api/config/api', () => {
       api_key_set: true,
       model_selection_enabled: true,
       graphql_default_source: 'crm',
+      graphql_tool_runtime_enabled: false,
+      graphql_text_sanitize_enabled: true,
       graphql_sources: [{
         name: 'crm',
         endpoint: 'https://crm.example/graphql',
@@ -50,6 +52,10 @@ describe('lib/api/config/api', () => {
         idempotency_mode: 'header',
         idempotency_header: 'Idempotency-Key',
       }],
+      web_rooter_enabled: false,
+      web_rooter_api_token_set: false,
+      web_search_tavily_url: 'https://proxy.example/tavily',
+      web_search_exa_url: '',
       web_search_tavily_api_key_set: true,
       web_search_exa_api_key_set: false,
     };
@@ -73,6 +79,8 @@ describe('lib/api/config/api', () => {
       base_url: 'https://lldai.online/openai',
       api_key: 'secret',
       chat_path: '/v1/chat',
+      web_search_tavily_url: 'https://proxy.example/tavily',
+      web_search_exa_url: 'https://proxy.example/exa',
       web_search_exa_api_key: 'exa-secret',
     };
 
@@ -85,6 +93,8 @@ describe('lib/api/config/api', () => {
       api_key_set: true,
       model_selection_enabled: true,
       graphql_default_source: 'crm',
+      graphql_tool_runtime_enabled: false,
+      graphql_text_sanitize_enabled: true,
       graphql_sources: [{
         name: 'crm',
         endpoint: 'https://crm.example/graphql',
@@ -105,6 +115,10 @@ describe('lib/api/config/api', () => {
         idempotency_mode: 'header',
         idempotency_header: 'Idempotency-Key',
       }],
+      web_rooter_enabled: false,
+      web_rooter_api_token_set: false,
+      web_search_tavily_url: 'https://proxy.example/tavily',
+      web_search_exa_url: 'https://proxy.example/exa',
       web_search_tavily_api_key_set: true,
       web_search_exa_api_key_set: true,
     };

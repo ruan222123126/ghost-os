@@ -71,18 +71,19 @@ func toolSearchPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 	if protocol == promptGuidanceProtocolGraphQL {
 		return []string{
 			"- Use `tfind` when the currently visible tools are insufficient.",
-			"- Start with `tfind(action: search)` to find the smallest suitable optional tool.",
-			"- After `tfind(action: load)`, do not call the loaded tool in the same turn; it becomes available next turn.",
+			"- When you are unsure which tools are visible, start with `mutation { tfind(action: search, query: \"...\") }` to discover the smallest suitable optional tool.",
+			"- After `tfind(action: load)`, the loaded tool becomes available in the same user turn on the next completion.",
 			"- Minimal `tfind(action: load)` example: `mutation { tfind(action: load, tool_names: [\"browser_control\"]) }`.",
-			"- Use `tfind(action: list)` to check whether a loaded tool is pending, active, or expired.",
+			"- Use `tfind(action: list)` only to inspect the current dynamic tool load state.",
 			"- Unload tools you no longer need with `tfind(action: unload)`.",
+			"- Never repeat or fabricate `[GRAPHQL_TOOL_RESULT]` in assistant text.",
 		}
 	}
 	return []string{
 		"- Use `tfind` when the currently visible tools are insufficient.",
 		"- Start with `tfind` using `action=search` to find the smallest suitable optional tool.",
-		"- After `tfind` with `action=load`, do not call the loaded tool in the same turn; it becomes available next turn.",
-		"- Use `tfind` with `action=list` to check whether a loaded tool is pending, active, or expired.",
+		"- After `tfind` with `action=load`, the loaded tool becomes available in the same user turn on the next completion.",
+		"- Use `tfind` with `action=list` only to inspect the current dynamic tool load state.",
 		"- Unload tools you no longer need with `tfind` using `action=unload`.",
 	}
 }

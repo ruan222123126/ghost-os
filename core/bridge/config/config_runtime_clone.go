@@ -15,6 +15,8 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 		ResponseReserveTokens:      raw.ResponseReserveTokens,
 		ModelContextWindowTokens:   cloneModelTokenOverrides(raw.ModelContextWindowTokens),
 		ModelResponseReserveTokens: cloneModelTokenOverrides(raw.ModelResponseReserveTokens),
+		WebSearchTavilyURL:         raw.WebSearchTavilyURL,
+		WebSearchExaURL:            raw.WebSearchExaURL,
 		WebSearchTavilyAPIKey:      raw.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:         raw.WebSearchExaAPIKey,
 		WebRooterEnabled:           raw.WebRooterEnabled,
@@ -27,10 +29,11 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 
 func cloneGraphQLConfig(raw GraphQLConfig) GraphQLConfig {
 	return GraphQLConfig{
-		ToolRuntimeEnabled: raw.ToolRuntimeEnabled,
-		DefaultSource:      raw.DefaultSource,
-		Sources:            cloneGraphQLSources(raw.Sources),
-		MutationPolicies:   cloneGraphQLMutationPolicies(raw.MutationPolicies),
+		ToolRuntimeEnabled:  raw.ToolRuntimeEnabled,
+		TextSanitizeEnabled: raw.TextSanitizeEnabled,
+		DefaultSource:       raw.DefaultSource,
+		Sources:             cloneGraphQLSources(raw.Sources),
+		MutationPolicies:    cloneGraphQLMutationPolicies(raw.MutationPolicies),
 	}
 }
 

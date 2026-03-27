@@ -96,10 +96,11 @@ type GraphQLMutationPolicyConfig struct {
 }
 
 type GraphQLConfig struct {
-	ToolRuntimeEnabled bool
-	DefaultSource      string
-	Sources            []GraphQLSourceConfig
-	MutationPolicies   []GraphQLMutationPolicyConfig
+	ToolRuntimeEnabled  bool
+	TextSanitizeEnabled bool
+	DefaultSource       string
+	Sources             []GraphQLSourceConfig
+	MutationPolicies    []GraphQLMutationPolicyConfig
 }
 
 type ToolSelectorConfig struct {
@@ -180,6 +181,8 @@ type Config struct {
 	PromptsRuntimeConstraintFiles []string
 	PromptsResponseRuleFiles      []string
 	SessionsPath                  string
+	WebSearchTavilyURL            string
+	WebSearchExaURL               string
 	WebSearchTavilyAPIKey         string
 	WebSearchExaAPIKey            string
 	WebRooterEnabled              bool
@@ -206,6 +209,8 @@ type runtimeConfig struct {
 	ResponseReserveTokens      int
 	ModelContextWindowTokens   map[string]int
 	ModelResponseReserveTokens map[string]int
+	WebSearchTavilyURL         string
+	WebSearchExaURL            string
 	WebSearchTavilyAPIKey      string
 	WebSearchExaAPIKey         string
 	WebRooterEnabled           bool
@@ -216,44 +221,45 @@ type runtimeConfig struct {
 }
 
 const (
-	defaultProvider                = llm.ProviderOpenAI
-	defaultBaseURL                 = "https://api.openai.com/v1"
-	defaultAnthropicBaseURL        = "https://api.anthropic.com"
-	defaultModel                   = "gpt-4o"
-	defaultPromptsPath             = "prompts.yaml"
-	defaultPromptsDir              = "~/.ghost-os/prompts"
-	defaultSessionsPath            = "~/.ghost-os/sessions"
-	defaultRSSFeedsPath            = "~/.ghost-os/rss/feeds.json"
-	defaultRSSInboxPath            = "~/.ghost-os/rss/inbox.json"
-	defaultRSSBriefingsPath        = "~/.ghost-os/rss/briefings.json"
-	defaultRSSReportsPath          = "~/.ghost-os/rss/reports/index.json"
-	defaultRSSPollInterval         = 15 * time.Minute
-	defaultRSSPollMaxItemsPerFeed  = 10
-	defaultRSSAIBatchSize          = 5
-	defaultRSSBriefingInterval     = 30 * time.Minute
-	defaultTasksPath               = "~/.ghost-os/tasks"
-	defaultAnthropicVersion        = "2023-06-01"
-	defaultAnthropicMaxTokens      = 1024
-	defaultProMaxIterations        = 20
-	defaultMaxTurns                = 20
-	defaultWorkerMaxConcurrency    = 4
-	defaultWorkerMaxFiles          = 20
-	defaultWorkerMaxFileChunks     = 4
-	defaultGraphQLTimeoutMS        = 10_000
-	defaultGraphQLMaxResponseBytes = 1 << 20
-	defaultGraphQLMaxDepth         = 8
-	defaultGraphQLMaxFields        = 64
-	defaultGraphQLMaxRootFields    = 3
-	defaultGraphQLMaxFragments     = 8
-	defaultToolSelectorTimeoutMS   = 1500
-	defaultToolSelectorConfidence  = 0.75
-	defaultToolSelectorRecentMsgs  = 6
-	defaultToolSearchIdleTurns     = 3
-	defaultMemoryRecallItems       = 8
-	defaultMemoryMinConfidence     = 0.7
-	defaultMemoryUserScopeID       = "local-user"
-	defaultWebRooterBaseURL        = "http://127.0.0.1:8765"
-	defaultWebRooterTimeoutMS      = 90_000
+	defaultProvider                   = llm.ProviderOpenAI
+	defaultBaseURL                    = "https://api.openai.com/v1"
+	defaultAnthropicBaseURL           = "https://api.anthropic.com"
+	defaultModel                      = "gpt-4o"
+	defaultPromptsPath                = "prompts.yaml"
+	defaultPromptsDir                 = "~/.ghost-os/prompts"
+	defaultSessionsPath               = "~/.ghost-os/sessions"
+	defaultRSSFeedsPath               = "~/.ghost-os/rss/feeds.json"
+	defaultRSSInboxPath               = "~/.ghost-os/rss/inbox.json"
+	defaultRSSBriefingsPath           = "~/.ghost-os/rss/briefings.json"
+	defaultRSSReportsPath             = "~/.ghost-os/rss/reports/index.json"
+	defaultRSSPollInterval            = 15 * time.Minute
+	defaultRSSPollMaxItemsPerFeed     = 10
+	defaultRSSAIBatchSize             = 5
+	defaultRSSBriefingInterval        = 30 * time.Minute
+	defaultTasksPath                  = "~/.ghost-os/tasks"
+	defaultAnthropicVersion           = "2023-06-01"
+	defaultAnthropicMaxTokens         = 1024
+	defaultProMaxIterations           = 20
+	defaultMaxTurns                   = 20
+	defaultWorkerMaxConcurrency       = 4
+	defaultWorkerMaxFiles             = 20
+	defaultWorkerMaxFileChunks        = 4
+	defaultGraphQLTimeoutMS           = 10_000
+	defaultGraphQLMaxResponseBytes    = 1 << 20
+	defaultGraphQLMaxDepth            = 8
+	defaultGraphQLMaxFields           = 64
+	defaultGraphQLMaxRootFields       = 3
+	defaultGraphQLMaxFragments        = 8
+	defaultGraphQLTextSanitizeEnabled = true
+	defaultToolSelectorTimeoutMS      = 1500
+	defaultToolSelectorConfidence     = 0.75
+	defaultToolSelectorRecentMsgs     = 6
+	defaultToolSearchIdleTurns        = 3
+	defaultMemoryRecallItems          = 8
+	defaultMemoryMinConfidence        = 0.7
+	defaultMemoryUserScopeID          = "local-user"
+	defaultWebRooterBaseURL           = "http://127.0.0.1:8765"
+	defaultWebRooterTimeoutMS         = 90_000
 )
 
 func providerClientOptions(cfg Config, model string) llm.ClientOptions {

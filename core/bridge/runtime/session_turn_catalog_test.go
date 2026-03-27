@@ -23,7 +23,7 @@ func (m *catalogMockTool) Execute(context.Context, json.RawMessage, string) (str
 	return "", nil
 }
 
-func TestSessionTurnCatalog_ExposesLoadedToolsNextTurnOnly(t *testing.T) {
+func TestSessionTurnCatalog_ExposesLoadedToolsImmediately(t *testing.T) {
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "send_file", "web_search", "tfind"} {
 		registry.Register(&catalogMockTool{name: name})
@@ -34,13 +34,8 @@ func TestSessionTurnCatalog_ExposesLoadedToolsNextTurnOnly(t *testing.T) {
 	sess.EnsureDynamicToolLoaded("web_search", "tfind")
 
 	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "send_file", "tfind"}, sess, 3, false)
-	if catalog.Get("web_search") != nil {
-		t.Fatal("expected loaded tool to stay hidden during the loading turn")
-	}
-
-	sess.AdvanceToolTurn(3)
 	if catalog.Get("web_search") == nil {
-		t.Fatal("expected loaded tool to become available on the next turn")
+		t.Fatal("expected loaded tool to become available immediately")
 	}
 }
 

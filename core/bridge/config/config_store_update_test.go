@@ -12,6 +12,7 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	t.Setenv("GHOST_API_KEY", "snapshot-key")
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 	t.Setenv("GHOST_MODEL", "snapshot-model")
+	t.Setenv("GHOST_WEB_SEARCH_TAVILY_URL", "https://proxy.example/tavily")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "snapshot-tavily")
 	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "true")
 	t.Setenv("GHOST_WEB_ROOTER_API_TOKEN", "snapshot-rooter-token")
@@ -31,6 +32,9 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if !snapshot.WebSearchTavilyAPIKeySet {
 		t.Fatal("expected web_search_tavily_api_key_set to be true")
 	}
+	if snapshot.WebSearchTavilyURL != "https://proxy.example/tavily" {
+		t.Fatalf("unexpected web_search_tavily_url: got %q want %q", snapshot.WebSearchTavilyURL, "https://proxy.example/tavily")
+	}
 	if !snapshot.WebRooterEnabled {
 		t.Fatal("expected web_rooter_enabled to be true")
 	}
@@ -47,6 +51,9 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	}
 	if fileCfg.WebSearchTavilyAPIKey != nil {
 		t.Fatalf("snapshot should not persist web search api key, got %#v", fileCfg.WebSearchTavilyAPIKey)
+	}
+	if fileCfg.WebSearchTavilyURL != nil {
+		t.Fatalf("snapshot should not persist web search url, got %#v", fileCfg.WebSearchTavilyURL)
 	}
 	if fileCfg.WebRooterEnabled != nil {
 		t.Fatalf("snapshot should not persist web_rooter enabled, got %#v", fileCfg.WebRooterEnabled)
@@ -128,5 +135,39 @@ func TestConfigStoreUpdateLoadsRuntimeGraphQLIntoPatchBase(t *testing.T) {
 			fileCfg.GraphQLSources[0].SchemaPath,
 			updatedSchemaPath,
 		)
+	}
+}
+
+func TestConfigStoreUpdatePersistsGraphQLTextSanitizeSetting(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	disabled := false
+	if err := store.Update(configUpdateRequest{
+		GraphQLTextSanitizeEnabled: &disabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	if store.RuntimeConfig().GraphQL.TextSanitizeEnabled {
+		t.Fatal("expected runtime graphql_text_sanitize_enabled to be false")
+	}
+	if store.Snapshot().GraphQLTextSanitizeEnabled {
+		t.Fatal("expected snapshot graphql_text_sanitize_enabled to be false")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.GraphQLTextSanitizeEnabled == nil || *fileCfg.GraphQLTextSanitizeEnabled {
+		t.Fatalf("unexpected persisted graphql_text_sanitize_enabled: %#v", fileCfg.GraphQLTextSanitizeEnabled)
 	}
 }

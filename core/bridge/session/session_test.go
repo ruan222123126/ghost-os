@@ -149,11 +149,10 @@ func TestDynamicToolLoadLifecycle(t *testing.T) {
 	if loaded.AlreadyLoaded {
 		t.Fatal("newly loaded tool should not report already_loaded")
 	}
-	if got := s.VisibleDynamicToolNames(3); len(got) != 0 {
-		t.Fatalf("loaded tool should stay hidden until next turn, got %v", got)
+	if got := s.VisibleDynamicToolNames(3); len(got) != 1 || got[0] != "web_search" {
+		t.Fatalf("loaded tool should be visible immediately in the current turn, got %v", got)
 	}
 
-	s.AdvanceToolTurn(3)
 	visible := s.VisibleDynamicToolNames(3)
 	if len(visible) != 1 || visible[0] != "web_search" {
 		t.Fatalf("unexpected visible tools: %v", visible)
@@ -163,7 +162,7 @@ func TestDynamicToolLoadLifecycle(t *testing.T) {
 		t.Fatal("expected dynamic tool snapshot")
 	}
 	if !snapshot.VisibleForTurn(s.TurnIndex) {
-		t.Fatal("expected tool to be visible on the next turn")
+		t.Fatal("expected tool to be visible in the current turn")
 	}
 	if snapshot.RemainingIdleTurns(s.TurnIndex, 3) != 3 {
 		t.Fatalf("unexpected remaining idle turns: %d", snapshot.RemainingIdleTurns(s.TurnIndex, 3))

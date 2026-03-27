@@ -22,6 +22,7 @@ type Agent struct {
 	completer              Completer
 	tools                  ToolCatalog
 	assistantTextHandlers  []AssistantTextHandler
+	beforeCompletion       BeforeCompletionHook
 	strictToolCallProtocol bool
 	history                *History
 	maxTurns               int
@@ -32,6 +33,8 @@ type Agent struct {
 }
 
 const maxConsecutiveNonExecutableToolCallTurns = 3
+
+type BeforeCompletionHook func(context.Context, int, *History) error
 
 // ErrAwaitingHuman 表示 ask_human 已发起问题，当前回合需要等待用户输入。
 type ErrAwaitingHuman struct {
@@ -104,6 +107,13 @@ func (a *Agent) AddAssistantTextHandler(handler AssistantTextHandler) {
 	a.assistantTextHandlers = append(a.assistantTextHandlers, handler)
 }
 
+func (a *Agent) SetBeforeCompletionHook(hook BeforeCompletionHook) {
+	if a == nil {
+		return
+	}
+	a.beforeCompletion = hook
+}
+
 func (a *Agent) SetStrictToolCallProtocol(strict bool) {
 	if a == nil {
 		return
@@ -130,7 +140,16 @@ func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, tr
 }
 
 func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink streaming.Sink) (string, error) {
-	state := newAgentRunState(a, sink, traceID)
+	state, err := newAgentRunState(a, sink, traceID)
+	if err != nil {
+		runErr := fmt.Errorf("initialize agent runtime: %w", err)
+		if sink != nil {
+			if emitErr := state.terminalRunError(ctx, 0, runErr); emitErr != nil {
+				return "", emitErr
+			}
+		}
+		return "", runErr
+	}
 	if err := state.events.runStarted(ctx, state.traceID, state.lifecycle); err != nil {
 		return "", err
 	}

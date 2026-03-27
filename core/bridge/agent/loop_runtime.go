@@ -2,12 +2,20 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
+)
+
+var (
+	errAgentCompleterRequired  = errors.New("agent completer is nil")
+	errAgentHistoryRequired    = errors.New("agent history is nil")
+	errAgentRequired           = errors.New("agent is nil")
+	errAgentToolCatalogMissing = errors.New("agent tool catalog is nil")
 )
 
 type agentRunState struct {
@@ -18,6 +26,7 @@ type agentRunState struct {
 	completion             completionRunner
 	toolCalls              toolCallExecutor
 	assistantTextHandlers  []AssistantTextHandler
+	beforeCompletion       BeforeCompletionHook
 	events                 agentEventEmitter
 	lifecycle              StreamLifecyclePayloadBuilder
 	strictToolCallProtocol bool
@@ -25,17 +34,21 @@ type agentRunState struct {
 	consecutiveNonExecutableToolCallTurns int
 }
 
-func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) agentRunState {
-	history := NewHistory("")
-	if a != nil && a.history != nil {
-		history = a.history.Clone()
-	}
-
+func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunState, error) {
 	lifecycle := StreamLifecyclePayloadBuilder{}
-	if a != nil {
-		lifecycle = a.streamLifecycle
+	state := agentRunState{
+		traceID:   normalizeTraceID(traceID),
+		sink:      sink,
+		history:   NewHistory(""),
+		lifecycle: lifecycle,
+	}
+	state.events = newAgentEventEmitter(sink, lifecycle.sessionID)
+	if err := validateAgentForRun(a); err != nil {
+		return state, err
 	}
 
+	history := a.history.Clone()
+	lifecycle = a.streamLifecycle
 	events := newAgentEventEmitter(sink, lifecycle.SessionID)
 	return agentRunState{
 		traceID:                normalizeTraceID(traceID),
@@ -44,10 +57,27 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) agentRunSta
 		completion:             newCompletionRunner(a.completer, a.tools, history),
 		toolCalls:              newToolCallExecutor(a.tools, history, nil, events),
 		assistantTextHandlers:  append([]AssistantTextHandler(nil), a.assistantTextHandlers...),
+		beforeCompletion:       a.beforeCompletion,
 		events:                 events,
 		lifecycle:              lifecycle,
 		strictToolCallProtocol: a.strictToolCallProtocol,
+	}, nil
+}
+
+func validateAgentForRun(a *Agent) error {
+	if a == nil {
+		return errAgentRequired
 	}
+	if a.completer == nil {
+		return errAgentCompleterRequired
+	}
+	if a.tools == nil {
+		return errAgentToolCatalogMissing
+	}
+	if a.history == nil {
+		return errAgentHistoryRequired
+	}
+	return nil
 }
 
 func normalizeTraceID(traceID string) string {
@@ -59,6 +89,11 @@ func normalizeTraceID(traceID string) string {
 }
 
 func (state agentRunState) complete(ctx context.Context, turn int) (*llm.CompletionResponse, error) {
+	if state.beforeCompletion != nil {
+		if err := state.beforeCompletion(ctx, turn, state.history); err != nil {
+			return nil, err
+		}
+	}
 	return state.completion.complete(
 		ctx,
 		state.sink,

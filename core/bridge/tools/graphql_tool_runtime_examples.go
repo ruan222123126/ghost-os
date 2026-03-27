@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/vektah/gqlparser/v2/ast"
-
 	"ghost-os/bridge/llm"
 )
 
@@ -43,7 +41,7 @@ func graphQLToolRuntimeExampleForDef(def llm.ToolDef) graphQLToolRuntimeExample 
 	}
 
 	return graphQLToolRuntimeExample{
-		Document: graphQLExampleDocument(graphQLToolOperation(def), strings.TrimSpace(def.Name), def.Parameters),
+		Document: graphQLExampleDocument(strings.TrimSpace(def.Name), def.Parameters),
 	}
 }
 
@@ -56,7 +54,7 @@ func graphQLSpecialToolRuntimeExample(name string) (graphQLToolRuntimeExample, b
 		}, true
 	case ToolSearchToolName:
 		return graphQLToolRuntimeExample{
-			Note:     "after `action: load`, the loaded tool is available next turn, not in the same response.",
+			Note:     "after `action: load`, the loaded tool is available in the same user turn on the next completion.",
 			Document: `mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
 		}, true
 	case "script_exec":
@@ -64,20 +62,23 @@ func graphQLSpecialToolRuntimeExample(name string) (graphQLToolRuntimeExample, b
 			Note:     "minimal sandbox execution mutation.",
 			Document: `mutation { script_exec(script: "print(\"ok\")") }`,
 		}, true
+	case "memory_manage":
+		return graphQLToolRuntimeExample{
+			Note:     "use stable URIs; for `update` or `delete`, discover the exact URI first with `read` or `list`.",
+			Document: `mutation { memory_manage(operation: create, uri: "user://preferences/editor", content: "Prefer vim keybindings") }`,
+		}, true
+	case webRooterToolName:
+		return graphQLToolRuntimeExample{
+			Note:     "single read-only action wrapper for the pinned web-rooter HTTP service.",
+			Document: `mutation { web_rooter(action: internet_search, params: {query: "OpenAI API docs", num_results: 5, auto_crawl: false}) }`,
+		}, true
 	default:
 		return graphQLToolRuntimeExample{}, false
 	}
 }
 
-func graphQLExampleDocument(
-	operation ast.Operation,
-	fieldName string,
-	params json.RawMessage,
-) string {
+func graphQLExampleDocument(fieldName string, params json.RawMessage) string {
 	signature := graphQLExampleFieldCall(fieldName, params)
-	if operation == ast.Query {
-		return "query { " + signature + " }"
-	}
 	return "mutation { " + signature + " }"
 }
 

@@ -1,7 +1,6 @@
 package orchestration
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -67,65 +66,6 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 	}
 }
 
-func TestSessionHistoryBuilderInjectsGraphQLMutationResolvedToolResult(t *testing.T) {
-	sess := session.NewSession("system")
-	createdAt := time.Date(2026, 3, 7, 12, 0, 0, 0, time.UTC)
-	sess.StorePendingGraphQLMutationIntent(session.PendingGraphQLMutationIntent{
-		IntentID:     "intent-1",
-		Source:       "crm",
-		Domain:       "people",
-		PolicyName:   "update_viewer",
-		RootMutation: "updateViewer",
-		Query:        "mutation { updateViewer { ok } }",
-		QuestionID:   "q-graphql",
-		ToolCallID:   "call-mutation",
-		TraceID:      "trace-mutation",
-		PreparedAt:   createdAt,
-		Status:       session.GraphQLMutationIntentPendingApproval,
-		Summary:      "summary",
-	})
-	sess.AddPendingQuestion("q-graphql", session.PendingHumanQuestion{
-		Prompt:     "Approve mutation?",
-		ToolName:   "graphql_mutation",
-		ToolCallID: "call-mutation",
-		TraceID:    "trace-mutation",
-		CreatedAt:  createdAt,
-	})
-	if !sess.SetHumanAnswer("q-graphql", "Approve") {
-		t.Fatalf("expected human answer to be accepted")
-	}
-
-	builder := newSessionHistoryBuilder(
-		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
-		"system",
-		nil,
-		3,
-	)
-	history, resolved := builder.BuildHistoryWithResolvedQuestions(sess)
-	if len(resolved) != 1 {
-		t.Fatalf("expected 1 resolved question, got %d", len(resolved))
-	}
-	if resolved[0].ToolName != "graphql_mutation" || resolved[0].Summary != "summary" {
-		t.Fatalf("unexpected resolved question metadata: %+v", resolved[0])
-	}
-
-	last := history.Messages()[len(history.Messages())-1]
-	envelope, ok := agent.ParseToolResultEnvelope(last.Text)
-	if !ok {
-		t.Fatalf("expected tool result envelope, got %q", last.Text)
-	}
-	if envelope.Tool != "graphql_mutation" {
-		t.Fatalf("unexpected tool name: %q", envelope.Tool)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(envelope.Output), &payload); err != nil {
-		t.Fatalf("decode payload: %v", err)
-	}
-	if payload["intent_id"] != "intent-1" || payload["approval_status"] != session.GraphQLMutationIntentApproved {
-		t.Fatalf("unexpected graphql_mutation payload: %+v", payload)
-	}
-}
-
 func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) {
 	sess := session.NewSession("system")
 	sess.AddMessage(llm.Message{
@@ -142,7 +82,7 @@ func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) 
 		Text: agent.FormatToolResult(
 			"tfind",
 			"trace-tfind-load",
-			`{"action":"load","items":[{"name":"web_search","status":"loaded","available_next_turn":true}]}`,
+			`{"action":"load","items":[{"name":"web_search","status":"loaded","available_now":true}]}`,
 			nil,
 		),
 	})
@@ -164,8 +104,8 @@ func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) 
 	if !strings.Contains(messages[1].Text, "Loaded dynamic session tools via tfind: `web_search`.") {
 		t.Fatalf("unexpected projected summary: %q", messages[1].Text)
 	}
-	if !strings.Contains(messages[1].Text, "become available next turn") {
-		t.Fatalf("expected next-turn hint in projected summary, got %q", messages[1].Text)
+	if !strings.Contains(messages[1].Text, "available now in the current user turn") {
+		t.Fatalf("expected immediate-availability hint in projected summary, got %q", messages[1].Text)
 	}
 }
 

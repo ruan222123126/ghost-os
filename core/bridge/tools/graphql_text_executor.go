@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
@@ -24,24 +25,42 @@ type GraphQLTextExecutor interface {
 	Execute(ctx context.Context, text string, traceID string) (GraphQLTextExecutionResult, error)
 }
 
+type GraphQLTextExecutorOptions struct {
+	SanitizeKnownArtifacts bool
+}
+
 type graphQLTextExecutor struct {
-	catalog ToolCatalog
+	catalog                ToolCatalog
+	sanitizeKnownArtifacts bool
 }
 
 func NewGraphQLTextExecutor(catalog ToolCatalog) GraphQLTextExecutor {
-	return &graphQLTextExecutor{catalog: catalog}
+	return NewGraphQLTextExecutorWithOptions(catalog, GraphQLTextExecutorOptions{
+		SanitizeKnownArtifacts: true,
+	})
+}
+
+func NewGraphQLTextExecutorWithOptions(
+	catalog ToolCatalog,
+	opts GraphQLTextExecutorOptions,
+) GraphQLTextExecutor {
+	return &graphQLTextExecutor{
+		catalog:                catalog,
+		sanitizeKnownArtifacts: opts.SanitizeKnownArtifacts,
+	}
 }
 
 func (e *graphQLTextExecutor) Execute(
 	_ context.Context,
 	text string,
-	_ string,
+	traceID string,
 ) (GraphQLTextExecutionResult, error) {
-	documentText, looksLikeGraphQL := normalizeGraphQLTextDocument(text)
-	if !looksLikeGraphQL {
+	normalized := normalizeGraphQLTextDocument(text, e.sanitizeKnownArtifacts)
+	if !normalized.Recognized {
 		return GraphQLTextExecutionResult{}, nil
 	}
-	call, err := parseGraphQLToolCallDocument(documentText)
+	logGraphQLTextSanitization(traceID, normalized.SanitizeKinds, e.sanitizeKnownArtifacts)
+	call, err := parseGraphQLToolCallDocument(normalized.Document)
 	if err != nil {
 		call.Recognized = true
 		return call, err
@@ -53,7 +72,7 @@ func (e *graphQLTextExecutor) Execute(
 	def, ok := graphQLVisibleToolDef(e.catalog, call.ToolName)
 	if !ok || e.catalog.Get(call.ToolName) == nil {
 		call.Recognized = true
-		return call, newGraphQLTextUnknownToolError(call.ToolName)
+		return call, newGraphQLTextUnknownToolError(call.ToolName, visibleGraphQLToolDefNames(e.catalog))
 	}
 	if err := validateGraphQLToolOperation(call.Operation, def); err != nil {
 		call.Recognized = true
@@ -61,17 +80,6 @@ func (e *graphQLTextExecutor) Execute(
 	}
 	call.Recognized = true
 	return call, nil
-}
-
-func normalizeGraphQLTextDocument(text string) (string, bool) {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return "", false
-	}
-	if fenced := extractGraphQLFenceContent(trimmed); fenced != "" {
-		return fenced, true
-	}
-	return trimmed, looksLikeGraphQLDocument(trimmed)
 }
 
 func parseGraphQLToolCallDocument(text string) (GraphQLTextExecutionResult, error) {
@@ -123,8 +131,8 @@ func singleGraphQLToolOperation(
 	if operation.Operation != ast.Query && operation.Operation != ast.Mutation {
 		return nil, newGraphQLTextOperationError(
 			"unsupported_operation_type",
-			"graphql tool runtime only supports query or mutation",
-			"query_or_mutation",
+			"graphql tool runtime only supports mutation",
+			"mutation",
 			string(operation.Operation),
 		)
 	}
@@ -237,4 +245,21 @@ func validateGraphQLToolOperation(
 		return nil
 	}
 	return newGraphQLTextWrongOperationError(def.Name, expected, operation)
+}
+
+func logGraphQLTextSanitization(traceID string, kinds []string, enabled bool) {
+	if !enabled {
+		return
+	}
+	trimmedTraceID := strings.TrimSpace(traceID)
+	for _, kind := range kinds {
+		if strings.TrimSpace(kind) == "" {
+			continue
+		}
+		log.Printf(
+			"trace_id=%s action=GRAPHQL_TEXT_SANITIZE kind=%s",
+			trimmedTraceID,
+			strings.TrimSpace(kind),
+		)
+	}
 }

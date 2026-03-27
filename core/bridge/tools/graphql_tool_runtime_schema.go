@@ -13,7 +13,6 @@ import (
 type GraphQLToolRuntimeSchema struct {
 	EnumTypes      []GraphQLToolRuntimeEnumType
 	InputTypes     []GraphQLToolRuntimeInputType
-	QueryFields    []GraphQLToolRuntimeField
 	MutationFields []GraphQLToolRuntimeField
 }
 
@@ -52,10 +51,6 @@ func BuildGraphQLToolRuntimeSchema(catalog ToolCatalog) GraphQLToolRuntimeSchema
 
 	for _, def := range defs {
 		field := buildGraphQLToolRuntimeField(def, builder)
-		if graphQLToolOperation(def) == ast.Query {
-			schema.QueryFields = append(schema.QueryFields, field)
-			continue
-		}
 		schema.MutationFields = append(schema.MutationFields, field)
 	}
 
@@ -72,30 +67,29 @@ func FormatGraphQLToolRuntimePrompt(catalog ToolCatalog) string {
 	builder.WriteString("GraphQL Tool Call Protocol:\n")
 	builder.WriteString("- Return exactly one GraphQL document and nothing else.\n")
 	builder.WriteString("- Do not emit native tool_calls.\n")
-	builder.WriteString("- Use exactly one operation and exactly one top-level field.\n")
+	builder.WriteString("- Use exactly one `mutation` operation and exactly one top-level field.\n")
 	builder.WriteString("- Field names must match visible tool names exactly.\n")
 	builder.WriteString("- GraphQL arguments map directly to the tool JSON parameters.\n")
 	builder.WriteString("- Unsupported: aliases, fragments, variables, directives, multiple operations, multiple top-level fields.\n")
-	builder.WriteString("- Use `query` only for read-only tools.\n")
-	builder.WriteString("- Use `mutation` only for side-effect tools.\n")
+	builder.WriteString("- `query` is not part of this protocol; use `mutation` for every tool call.\n")
+	if visibleNames := visibleGraphQLToolDefNames(catalog); len(visibleNames) == 1 && visibleNames[0] == ToolSearchToolName {
+		builder.WriteString("- This turn is effectively empty; bootstrap by starting with `mutation { tfind(action: search, query: \"...\") }`.\n")
+	}
+	if hasVisibleGraphQLToolDef(catalog, ToolSearchToolName) {
+		builder.WriteString("- If you are unsure which tools are visible, prefer `mutation { tfind(action: search, query: \"...\") }`.\n")
+		builder.WriteString("- Use `mutation { tfind(action: list) }` only when you need the current dynamic tool load state.\n")
+	}
+	builder.WriteString("- Never repeat or fabricate `[GRAPHQL_TOOL_RESULT]`; that marker is internal bridge feedback.\n")
 	builder.WriteString("- Prefer copying the closest minimal successful example and editing only the arguments you need.\n\n")
 	builder.WriteString("Available GraphQL tool schema:\n")
 	builder.WriteString("scalar JSON\n\n")
 	writeGraphQLToolTypeDefinitions(&builder, schema.EnumTypes, schema.InputTypes)
-	writeGraphQLToolFieldBlock(&builder, "Query", schema.QueryFields)
-	builder.WriteString("\n\n")
 	writeGraphQLToolFieldBlock(&builder, "Mutation", schema.MutationFields)
 	writeGraphQLToolExamplesBlock(&builder, defs)
 	return strings.TrimSpace(builder.String())
 }
 
-func graphQLToolOperation(def llm.ToolDef) ast.Operation {
-	if def.Semantics.ReadOnly && !def.Semantics.SideEffect {
-		return ast.Query
-	}
-	if def.Semantics.SideEffect {
-		return ast.Mutation
-	}
+func graphQLToolOperation(_ llm.ToolDef) ast.Operation {
 	return ast.Mutation
 }
 
@@ -112,11 +106,31 @@ func graphQLVisibleToolDef(catalog ToolCatalog, name string) (llm.ToolDef, bool)
 	return llm.ToolDef{}, false
 }
 
+func hasVisibleGraphQLToolDef(catalog ToolCatalog, name string) bool {
+	_, ok := graphQLVisibleToolDef(catalog, name)
+	return ok
+}
+
+func visibleGraphQLToolDefNames(catalog ToolCatalog) []string {
+	defs := visibleGraphQLToolDefs(catalog)
+	if len(defs) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(defs))
+	for _, def := range defs {
+		names = append(names, strings.TrimSpace(def.Name))
+	}
+	return names
+}
+
 func visibleGraphQLToolDefs(catalog ToolCatalog) []llm.ToolDef {
 	if catalog == nil {
 		return nil
 	}
 	defs := catalog.ToolDefs()
+	if source, ok := catalog.(graphQLToolDefSource); ok {
+		defs = source.GraphQLToolDefs()
+	}
 	out := make([]llm.ToolDef, 0, len(defs))
 	for _, def := range defs {
 		if strings.TrimSpace(def.Name) == "" {

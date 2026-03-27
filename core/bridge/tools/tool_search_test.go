@@ -40,13 +40,13 @@ func TestToolSearchTool_SearchLoadListAndUnload(t *testing.T) {
 	}
 
 	load := decodeToolSearchResponse(t, tool, ctx, `{"action":"load","tool_names":["web_search"]}`)
-	if len(load.Items) != 1 || load.Items[0].Status != "loaded" || !load.Items[0].AvailableNextTurn {
+	if len(load.Items) != 1 || load.Items[0].Status != "loaded" || !load.Items[0].AvailableNow || load.Items[0].AvailableNextTurn {
 		t.Fatalf("unexpected load result: %+v", load.Items)
 	}
 
-	pending := decodeToolSearchResponse(t, tool, ctx, `{"action":"list"}`)
-	if len(pending.Items) != 1 || pending.Items[0].Status != "pending" {
-		t.Fatalf("unexpected pending list: %+v", pending.Items)
+	activeNow := decodeToolSearchResponse(t, tool, ctx, `{"action":"list"}`)
+	if len(activeNow.Items) != 1 || activeNow.Items[0].Status != "active" || !activeNow.Items[0].AvailableNow {
+		t.Fatalf("unexpected active list in current turn: %+v", activeNow.Items)
 	}
 
 	sess.AdvanceToolTurn(3)

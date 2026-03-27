@@ -330,6 +330,8 @@ data class BridgeConfig(
     val graphqlDefaultSource: String,
     @SerialName("graphql_tool_runtime_enabled")
     val graphqlToolRuntimeEnabled: Boolean,
+    @SerialName("graphql_text_sanitize_enabled")
+    val graphqlTextSanitizeEnabled: Boolean,
     @SerialName("graphql_sources")
     val graphqlSources: List<GraphQLSourceResponse>,
     @SerialName("graphql_mutation_policies")
@@ -338,6 +340,10 @@ data class BridgeConfig(
     val webRooterEnabled: Boolean,
     @SerialName("web_rooter_api_token_set")
     val webRooterApiTokenSet: Boolean,
+    @SerialName("web_search_tavily_url")
+    val webSearchTavilyUrl: String,
+    @SerialName("web_search_exa_url")
+    val webSearchExaUrl: String,
     @SerialName("web_search_tavily_api_key_set")
     val webSearchTavilyApiKeySet: Boolean,
     @SerialName("web_search_exa_api_key_set")
@@ -367,6 +373,8 @@ data class ConfigUpdate(
     val graphqlDefaultSource: String? = null,
     @SerialName("graphql_tool_runtime_enabled")
     val graphqlToolRuntimeEnabled: Boolean? = null,
+    @SerialName("graphql_text_sanitize_enabled")
+    val graphqlTextSanitizeEnabled: Boolean? = null,
     @SerialName("graphql_sources")
     val graphqlSources: List<GraphQLSourceInput>? = null,
     @SerialName("graphql_source_upsert")
@@ -381,6 +389,10 @@ data class ConfigUpdate(
     val webRooterApiToken: String? = null,
     @SerialName("web_rooter_timeout_ms")
     val webRooterTimeoutMs: Int? = null,
+    @SerialName("web_search_tavily_url")
+    val webSearchTavilyUrl: String? = null,
+    @SerialName("web_search_exa_url")
+    val webSearchExaUrl: String? = null,
     @SerialName("web_search_tavily_api_key")
     val webSearchTavilyApiKey: String? = null,
     @SerialName("web_search_exa_api_key")

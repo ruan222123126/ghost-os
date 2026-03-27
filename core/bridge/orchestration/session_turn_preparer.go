@@ -89,7 +89,7 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		return nil, err
 	}
 
-	history, preTurnMessages, catalog, memoryCtx, err := p.prepareHistoryAndEnvironment(execCtx, deps, historyBuilder, sess, rawUserMessage, trimmedUserMessage, trimmedTraceID)
+	history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, err := p.prepareHistoryAndEnvironment(execCtx, deps, historyBuilder, sess, rawUserMessage, trimmedUserMessage, trimmedTraceID)
 	if err != nil {
 		cleanup()
 		deps.Close()
@@ -104,7 +104,20 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 	}
 	runAgent := agent.NewAgentWithHistory(deps.client, runCatalog, history, deps.cfg.MaxTurns)
 	if graphQLToolRuntimeEnabled(deps.cfg) {
-		runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
+		runAgent.SetBeforeCompletionHook(
+			p.newGraphQLSystemPromptRefreshHook(
+				deps,
+				sess,
+				catalog,
+				systemPrompt,
+				memoryBlock,
+			),
+		)
+		runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(
+			tools.NewGraphQLTextExecutorWithOptions(catalog, tools.GraphQLTextExecutorOptions{
+				SanitizeKnownArtifacts: deps.cfg.GraphQL.TextSanitizeEnabled,
+			}),
+		))
 		runAgent.SetStrictToolCallProtocol(true)
 	}
 
@@ -132,7 +145,7 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	rawUserMessage string,
 	trimmedUserMessage string,
 	traceID string,
-) (*agent.History, []llm.Message, tools.ToolCatalog, *turnMemoryContext, error) {
+) (*agent.History, []llm.Message, tools.ToolCatalog, string, string, *turnMemoryContext, error) {
 	preTurnMessages := llm.CloneMessages(sess.Messages)
 	askHumanContinuation := hasAnsweredHumanResponse(sess)
 	sess.AdvanceToolTurn(deps.cfg.ToolSearch.IdleTurns)
@@ -140,9 +153,9 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 
 	catalog, systemPrompt, err := p.selectToolsForTurn(ctx, deps, sess, history, rawUserMessage, askHumanContinuation, traceID)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, "", "", nil, err
 	}
-	finalPrompt, memoryCtx, err := p.buildSystemPromptWithMemory(
+	finalPrompt, memoryBlock, memoryCtx, err := p.buildSystemPromptWithMemory(
 		ctx,
 		deps,
 		sess,
@@ -152,13 +165,13 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 		catalog,
 	)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, "", "", nil, err
 	}
 	if finalPrompt != "" {
 		history.UpdateSystemPrompt(finalPrompt)
 	}
 
-	return history, preTurnMessages, catalog, memoryCtx, nil
+	return history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, nil
 }
 
 func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
@@ -169,7 +182,24 @@ func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 	userMessage string,
 	systemPrompt string,
 	catalog tools.ToolCatalog,
-) (string, *turnMemoryContext, error) {
+) (string, string, *turnMemoryContext, error) {
+	basePrompt, err := p.buildCompletionSystemPrompt(deps, sess, catalog, systemPrompt)
+	if err != nil {
+		return "", "", nil, err
+	}
+	memoryCtx, memoryBlock, err := p.prepareTurnMemory(ctx, deps, sess, history, userMessage)
+	if err != nil {
+		return "", "", nil, err
+	}
+	return composeTurnSystemPrompt(basePrompt, memoryBlock), memoryBlock, memoryCtx, nil
+}
+
+func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
+	deps agentRuntimeDependencies,
+	sess *session.Session,
+	catalog tools.ToolCatalog,
+	systemPrompt string,
+) (string, error) {
 	graphQLMode := graphQLToolRuntimeEnabled(deps.cfg)
 	promptCatalog := catalog
 	if graphQLMode {
@@ -184,7 +214,7 @@ func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 			deps.cfg.ToolSearch.IdleTurns,
 		)
 		if err != nil {
-			return "", nil, err
+			return "", err
 		}
 		basePrompt = strings.TrimSpace(prompt)
 	}
@@ -194,17 +224,39 @@ func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
 	if graphQLMode {
 		basePrompt = withGraphQLTextProtocolPrompt(basePrompt, catalog)
 	}
-	memoryCtx, memoryBlock, err := p.prepareTurnMemory(ctx, deps, sess, history, userMessage)
-	if err != nil {
-		return "", nil, err
+	return basePrompt, nil
+}
+
+func composeTurnSystemPrompt(basePrompt string, memoryBlock string) string {
+	trimmedBase := strings.TrimSpace(basePrompt)
+	trimmedMemory := strings.TrimSpace(memoryBlock)
+	if trimmedMemory == "" {
+		return trimmedBase
 	}
-	if memoryBlock == "" {
-		return basePrompt, memoryCtx, nil
+	if trimmedBase == "" {
+		return trimmedMemory
 	}
-	if basePrompt == "" {
-		return memoryBlock, memoryCtx, nil
+	return trimmedBase + "\n\n" + trimmedMemory
+}
+
+func (p *sessionTurnPreparer) newGraphQLSystemPromptRefreshHook(
+	deps agentRuntimeDependencies,
+	sess *session.Session,
+	catalog tools.ToolCatalog,
+	systemPrompt string,
+	memoryBlock string,
+) agent.BeforeCompletionHook {
+	return func(_ context.Context, _ int, history *agent.History) error {
+		if history == nil {
+			return nil
+		}
+		prompt, err := p.buildCompletionSystemPrompt(deps, sess, catalog, systemPrompt)
+		if err != nil {
+			return err
+		}
+		history.UpdateSystemPrompt(composeTurnSystemPrompt(prompt, memoryBlock))
+		return nil
 	}
-	return basePrompt + "\n\n" + memoryBlock, memoryCtx, nil
 }
 
 func (p *sessionTurnPreparer) selectToolsForTurn(
@@ -217,10 +269,11 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 	traceID string,
 ) (tools.ToolCatalog, string, error) {
 	policy := newToolSelectionPolicy(deps.cfg)
-	staticCatalog := policy.scopeCatalog(deps.registry)
-	staticNames := toolCatalogNames(staticCatalog)
-	baseCatalog := newSessionTurnCatalog(deps.registry, staticNames, sess, deps.cfg.ToolSearch.IdleTurns, false)
-	selectorCatalog := newSessionTurnCatalog(deps.registry, staticNames, sess, deps.cfg.ToolSearch.IdleTurns, true)
+	residentStaticNames := toolCatalogNames(policy.residentCatalog(deps.registry))
+	selectorStaticNames := toolCatalogNames(policy.selectorCatalog(deps.registry))
+	baseCatalog := newSessionTurnCatalog(deps.registry, residentStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false)
+	selectionCatalog := newSessionTurnCatalog(deps.registry, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false)
+	selectorCatalog := newSessionTurnCatalog(deps.registry, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, true)
 	if askHumanContinuation {
 		log.Printf("trace_id=%s action=TOOL_SELECTOR status=ask_human_continuation", strings.TrimSpace(traceID))
 		return baseCatalog, "", nil
@@ -244,7 +297,13 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 		return baseCatalog, "", nil
 	}
 
-	scoped := tools.NewScopedCatalog(baseCatalog, policy.apply(toolCatalogNames(baseCatalog), result.Tools))
+	scoped := newSessionTurnCatalog(
+		deps.registry,
+		policy.apply(toolCatalogNames(selectionCatalog), result.Tools),
+		sess,
+		deps.cfg.ToolSearch.IdleTurns,
+		false,
+	)
 	systemPrompt, err := buildSystemPromptForSession(
 		deps.cfg,
 		scoped,

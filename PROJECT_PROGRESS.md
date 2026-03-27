@@ -29,14 +29,19 @@
 - 共享消息契约、`trace_id`、跨端 DTO 与 `core/shared/schema.json` 已基本统一。
 - 任务更新路径已补回显式回滚：在 `Unregister` 前移后，若 `SaveTask` 或后续 `Upsert` 失败，会恢复旧注册并在需要时把旧任务重新写回磁盘，避免留下“磁盘仍有任务、内存已不再调度”的漂移状态；共享 task schema 也已收口为 kind-specific 契约，`system_action` 的 `action/action_params` 与 `workflow/agent_message` 的必填约束现可被 schema 正确表达。
 - 任务调度器的 registration 生命周期已补上显式 retired 状态：`Stop` / `Unregister` / `register` 替换旧实例后，旧 `taskRegistration` 不会再在锁外被 `RunNow` 或定时触发重新 `beginRun`，从而封住 stale registration 复活和 `waitIdle()` 与 `runWG.Add(1)` 并发交错的风险。
+- 任务调度器的 Start/Stop 边界已进一步收紧为显式门闩：`Upsert` / `RunNow` 现要求 scheduler 处于 running 生命周期内，`Stop` 后不会再被并发 API 调用重新注册或手动触发；任务删除路径也已补齐显式回滚，非法 `*.json` 任务文件名会进入 tolerant load issues，而不再被静默跳过。
 - task kind 归一化已去掉“非法值静默回落到 `agent_message`”的 fallback：`task_kind` 为空时仍默认视为 `agent_message`，但未知值现在会在校验阶段显式报 `unsupported task_kind`，执行器默认分支也不会再把坏输入当作 agent task 运行。
 - GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
 - RSS report 生成链路已去掉静默 fallback：agent 报告空回或失败时不再落回模板化“机会点 / 风险与约束 / 接下来可能会怎样”段落，而是显式记录 `report_error`；report prompt 也已收口到更精简的章节契约，避免重复凑段。
-- GraphQL 文本工具调用运行时的协议失败已改为“可修复的结构化反馈”：解析/校验错误会写入 `[GRAPHQL_TOOL_RESULT]` 风格的 `status=error`、`kind`、`expected/received` 等字段，并在同次 agent run 的下一轮 completion 中作为显式失败反馈供模型自修正。
-- GraphQL tool runtime 的 query / mutation 判定已从运行时硬编码名单收口到 `ToolDef.Semantics`：工具通过统一语义元数据声明 `read_only` / `side_effect`，schema 生成、示例输出与执行期校验都复用同一份定义，未知工具仍显式按 mutation 处理。
-- GraphQL prompt 已补齐“最小可用示例”层：除了 schema/签名外，还会为当前可见工具输出最小成功 GraphQL 示例，重点覆盖 `tfind(action="load")` 的“下一轮才可用”、`ask_human` 的 `options` 结构，以及 `script_exec` 的最简 mutation。
+- GraphQL 文本工具调用运行时的协议失败已改为“可修复的结构化反馈”：解析/校验错误会写入 `[GRAPHQL_TOOL_RESULT]` 风格的 `status=error`、`kind`、`expected/received`、`hint/example` 等字段，并在同次 agent run 的下一轮 completion 中作为显式失败反馈供模型自修正。
+- GraphQL tool runtime 继续以 `ToolDef.Semantics` 作为读写语义源：schema、示例与执行期校验重新按真实工具语义区分 `query` / `mutation`，不再把所有工具强行压成 mutation-only。
+- GraphQL prompt 已补齐“最小可用示例”层：除了 schema/签名外，还会为当前可见工具输出最小成功 GraphQL 示例，重点覆盖 `tfind(action="load")` 的“同一用户 turn 的下一次 completion 可用”、`ask_human` 的 `options` 结构，以及 `script_exec` 的最简 mutation。
 - GraphQL tool runtime 的 prompt/example 已与真实 schema 对齐：复杂参数通过命名 `input` / `enum` 暴露结构，示例里的枚举字段也改为 GraphQL enum literal，避免 `browser_control`、`computer_use`、`task_manage` 一类工具继续被模型按 JSON 字符串硬拼。
+- GraphQL tool runtime 的空能力面提示已去掉 `_empty` 这类可误判为真实能力的占位字段：当当前 turn 没有可用 GraphQL 工具时，prompt 会直接输出显式说明，避免模型把占位字段当成可调用能力。
+- GraphQL tool runtime 现支持“同回合 load+use”：`tfind(action="load")` 写入的动态工具会在当前用户 turn 内即时可见，bridge 会在每次 completion 前刷新 system prompt / GraphQL schema / Dynamic Tool State，因此模型无需额外追加一条用户消息，就能在下一次 completion 里直接调用新工具。
+- GraphQL 文本标准化路径已补上“定向 sanitize + 显式开关”：默认开启 `graphql_text_sanitize_enabled`，只清理首尾空白、代码围栏与误拼接的 `[GRAPHQL_TOOL_RESULT]` 后缀；每次命中都会打带 `trace_id` / `kind` 的结构化日志，关闭开关后回到现有严格解析行为。
 - GraphQL 模式的系统提示词已补回工具使用指导：`hidden catalog` 继续隐藏原生 `tool_defs`，但会为 prompt 保留 `ask_human`、`tfind`、`screen_action`、`computer_use` 等可见工具的“何时使用/有哪些约束”提示。
+- GraphQL 文本工具调用的 provider 请求投影已补齐 assistant/tool 协议配对：持久化 transcript 仍保留原始 assistant 文本 + tool result + internal feedback，但在发给 OpenAI/Anthropic/Codex 前会为已执行的 GraphQL 文本 turn 按原文重建合法的 assistant `tool_calls`，修复下一轮 completion 因 `tool message references unknown tool_call_id` 直接失败的问题。
 - Bridge 已新增只读 `web_rooter` 高层工具：通过固定 HTTP 契约接入独立运行的 `web-rooter` 服务，当前仅开放 `internet_search` / `research` / `academic_search` / `site_search` / `fetch` / `extract` 六个 stateless action，并在桥内统一输出 `provider/action/payload/citations/references_text/trace_id` 稳定壳；未引入上游 CLI、MCP、jobs、skills、safe mode、knowledge/visited 等双编排能力。运行时现通过 `web_rooter_enabled/base_url/api_token/timeout_ms` 显式控制接入，桥层不会默认启用或做隐式降级。
 - `web_rooter` 桥接现已对上游 HTTP 响应做显式契约校验：`success/content/data/urls/error/metadata` 缺失或类型不合法、HTTP 500、200 + `success=false`、非法 JSON、超时都会直接作为错误上抛，不再被桥层静默包装成成功结果。
 - `web_rooter` 实现已按边界重排：顶层工具只保留显式参数校验、action 路由、client 调用与稳定 envelope 输出；HTTP 传输、版本钉死校验、响应归一化下沉到 `tools/internal/webrooter`。对外 public runtime 快照也已收口为 `web_rooter_enabled` / `web_rooter_api_token_set` 布尔态，不再暴露 `base_url` / `timeout_ms`。

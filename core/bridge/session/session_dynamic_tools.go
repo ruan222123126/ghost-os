@@ -182,7 +182,7 @@ func normalizeDynamicToolLoad(toolName string, record DynamicToolLoad) DynamicTo
 }
 
 func (r DynamicToolLoad) VisibleForTurn(currentTurn int) bool {
-	return r.LoadedAtTurn > 0 && r.LoadedAtTurn < currentTurn
+	return r.LoadedAtTurn > 0 && r.LoadedAtTurn <= currentTurn
 }
 
 func (r DynamicToolLoad) ExpiredAtTurn(currentTurn int, idleTurns int) bool {

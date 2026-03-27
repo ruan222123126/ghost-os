@@ -29,8 +29,14 @@ const BRIDGE_CONFIG_KEYS = [
   'api_key_set',
   'model_selection_enabled',
   'graphql_default_source',
+  'graphql_tool_runtime_enabled',
+  'graphql_text_sanitize_enabled',
   'graphql_sources',
   'graphql_mutation_policies',
+  'web_rooter_enabled',
+  'web_rooter_api_token_set',
+  'web_search_tavily_url',
+  'web_search_exa_url',
   'web_search_tavily_api_key_set',
   'web_search_exa_api_key_set',
 ] as const;
@@ -224,6 +230,14 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
       'bridge config.model_selection_enabled',
     ),
     graphql_default_source: expectString(record.graphql_default_source, 'bridge config.graphql_default_source'),
+    graphql_tool_runtime_enabled: expectBoolean(
+      record.graphql_tool_runtime_enabled,
+      'bridge config.graphql_tool_runtime_enabled',
+    ),
+    graphql_text_sanitize_enabled: expectBoolean(
+      record.graphql_text_sanitize_enabled,
+      'bridge config.graphql_text_sanitize_enabled',
+    ),
     graphql_sources: record.graphql_sources.map((entry, index) => {
       return parseGraphQLSourceResponse(entry, `bridge config.graphql_sources[${index}]`);
     }),
@@ -233,6 +247,22 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
         `bridge config.graphql_mutation_policies[${index}]`,
       );
     }),
+    web_rooter_enabled: expectBoolean(
+      record.web_rooter_enabled,
+      'bridge config.web_rooter_enabled',
+    ),
+    web_rooter_api_token_set: expectBoolean(
+      record.web_rooter_api_token_set,
+      'bridge config.web_rooter_api_token_set',
+    ),
+    web_search_tavily_url: expectString(
+      record.web_search_tavily_url,
+      'bridge config.web_search_tavily_url',
+    ),
+    web_search_exa_url: expectString(
+      record.web_search_exa_url,
+      'bridge config.web_search_exa_url',
+    ),
     web_search_tavily_api_key_set: expectBoolean(
       record.web_search_tavily_api_key_set,
       'bridge config.web_search_tavily_api_key_set',

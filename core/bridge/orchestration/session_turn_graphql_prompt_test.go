@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -78,5 +79,114 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 	}
 	if len(completer.requests[0].Tools) != 0 {
 		t.Fatalf("expected graphql mode to hide native tool defs, got %+v", completer.requests[0].Tools)
+	}
+}
+
+func TestSessionRunnerGraphQLModeRefreshesPromptAfterDynamicLoadInSameTurn(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	registry := tools.NewRegistry()
+	cfg := Config{
+		MaxTurns:    4,
+		PromptsPath: "",
+		Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		ToolSelector: ToolSelectorConfig{
+			AllowlistOnly: true,
+			Allowlist:     []string{tools.ToolSearchToolName},
+		},
+		ToolSearch: ToolSearchConfig{
+			Enabled:   true,
+			IdleTurns: 3,
+		},
+		GraphQL: bridgeconfig.GraphQLConfig{
+			ToolRuntimeEnabled:  true,
+			TextSanitizeEnabled: true,
+		},
+	}
+	registry.Register(&graphQLPromptRefreshWebSearchTool{})
+	registry.Register(tools.NewToolSearchTool(registry, visibilityOptionsFromConfig(cfg), cfg.ToolSearch.IdleTurns))
+
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message:      llm.Message{Role: llm.RoleAssistant, Text: `mutation { tfind(action: load, tool_names: ["web_search"]) }`},
+				FinishReason: llm.FinishStop,
+			},
+			{
+				Message:      llm.Message{Role: llm.RoleAssistant, Text: `query { web_search(query: "OpenAI API docs") }`},
+				FinishReason: llm.FinishStop,
+			},
+			{
+				Message:      llm.Message{Role: llm.RoleAssistant, Text: "done"},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	runner := NewSessionAgentRunner(proTestRuntimeFactory{
+		deps: agentRuntimeDependencies{
+			cfg:          cfg,
+			client:       completer,
+			registry:     registry,
+			systemPrompt: "runtime fallback prompt",
+		},
+	}, nil, sessionStore, nil)
+
+	output, _, err := runner.RunTurn(context.Background(), "find docs", "", "trace-graphql-refresh")
+	if err != nil {
+		t.Fatalf("run turn: %v", err)
+	}
+	if output != "done" {
+		t.Fatalf("unexpected output: %q", output)
+	}
+	if len(completer.requests) != 3 {
+		t.Fatalf("expected three completion requests, got %d", len(completer.requests))
+	}
+
+	firstPrompt := completer.requests[0].Messages[0].Text
+	if strings.Contains(firstPrompt, "web_search(") {
+		t.Fatalf("expected first completion prompt to exclude web_search before load, got %q", firstPrompt)
+	}
+	secondPrompt := completer.requests[1].Messages[0].Text
+	if !strings.Contains(secondPrompt, "web_search(") {
+		t.Fatalf("expected second completion prompt to include web_search after load, got %q", secondPrompt)
+	}
+	if !strings.Contains(secondPrompt, "`web_search` was loaded in this user turn and is available now.") {
+		t.Fatalf("expected refreshed dynamic tool state, got %q", secondPrompt)
+	}
+}
+
+type graphQLPromptRefreshWebSearchTool struct{}
+
+func (*graphQLPromptRefreshWebSearchTool) Name() string {
+	return "web_search"
+}
+
+func (*graphQLPromptRefreshWebSearchTool) Description() string {
+	return "test web search"
+}
+
+func (*graphQLPromptRefreshWebSearchTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"query":{"type":"string"}
+		},
+		"required":["query"]
+	}`)
+}
+
+func (*graphQLPromptRefreshWebSearchTool) ToolSemantics() llm.ToolSemantics {
+	return llm.ToolSemantics{ReadOnly: true}
+}
+
+func (*graphQLPromptRefreshWebSearchTool) Execute(context.Context, json.RawMessage, string) (string, error) {
+	return `{"items":[{"title":"OpenAI API docs"}]}`, nil
+}
+
+func visibilityOptionsFromConfig(cfg Config) tools.VisibilityOptions {
+	return tools.VisibilityOptions{
+		ToolSearchEnabled: cfg.ToolSearch.Enabled,
+		AllowlistOnly:     cfg.ToolSelector.AllowlistOnly,
+		Allowlist:         append([]string(nil), cfg.ToolSelector.Allowlist...),
+		Blocklist:         append([]string(nil), cfg.ToolSelector.Blocklist...),
 	}
 }

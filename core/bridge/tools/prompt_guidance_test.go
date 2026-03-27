@@ -43,7 +43,7 @@ func TestFormatPromptGuidanceForCatalog_IncludesToolSearchWorkflowOnlyWhenVisibl
 	for _, snippet := range []string{
 		"currently visible tools are insufficient",
 		"`action=load`",
-		"becomes available next turn",
+		"same user turn on the next completion",
 		"`action=unload`",
 	} {
 		if !strings.Contains(withToolSearch, snippet) {
@@ -184,8 +184,11 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 		"GraphQL tool schema",
 		"`ask_human` only when blocked",
 		"Minimal `ask_human` options example",
-		"`tfind(action: search)`",
+		`mutation { tfind(action: search, query: "...") }`,
 		`mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
+		"same user turn on the next completion",
+		"`tfind(action: list)` only to inspect the current dynamic tool load state",
+		"Never repeat or fabricate `[GRAPHQL_TOOL_RESULT]`",
 		"`memory_manage` only for explicit long-term notes",
 		"Minimal `memory_manage` create example",
 		`mutation { memory_manage(operation: create, uri: "user://preferences/editor", content: "Prefer vim keybindings") }`,

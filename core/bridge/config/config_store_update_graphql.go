@@ -12,6 +12,9 @@ func applyGraphQLUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) error
 	if req.GraphQLToolRuntimeEnabled != nil {
 		fileCfg.GraphQLToolRuntimeEnabled = boolPointer(*req.GraphQLToolRuntimeEnabled)
 	}
+	if req.GraphQLTextSanitizeEnabled != nil {
+		fileCfg.GraphQLTextSanitizeEnabled = boolPointer(*req.GraphQLTextSanitizeEnabled)
+	}
 	if req.GraphQLDefaultSource != nil {
 		fileCfg.GraphQLDefaultSource = cloneOptionalStringPointer(req.GraphQLDefaultSource)
 	}

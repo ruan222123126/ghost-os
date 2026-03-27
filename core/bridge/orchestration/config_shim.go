@@ -112,18 +112,22 @@ func (s *ConfigStore) SetActiveProvider(name string) error {
 
 func (s *ConfigStore) Update(req configUpdateRequest) error {
 	return s.unwrap().Update(bridgeconfig.UpdateRequest{
-		Provider:                req.Provider,
-		APIKey:                  req.APIKey,
-		BaseURL:                 req.BaseURL,
-		Model:                   req.Model,
-		ChatPath:                req.ChatPath,
-		GraphQLDefaultSource:    req.GraphqlDefaultSource,
-		GraphQLSources:          graphQLSourceInputs(req.GraphqlSources),
-		GraphQLSourceUpsert:     graphQLSourceInputPointer(req.GraphqlSourceUpsert),
-		GraphQLMutationPolicies: graphQLMutationPolicyInputs(req.GraphqlMutationPolicies),
-		WebSearchTavilyAPIKey:   req.WebSearchTavilyAPIKey,
-		WebSearchExaAPIKey:      req.WebSearchExaAPIKey,
-		TraceID:                 req.TraceID,
+		Provider:                   req.Provider,
+		APIKey:                     req.APIKey,
+		BaseURL:                    req.BaseURL,
+		Model:                      req.Model,
+		ChatPath:                   req.ChatPath,
+		GraphQLDefaultSource:       req.GraphqlDefaultSource,
+		GraphQLToolRuntimeEnabled:  req.GraphqlToolRuntimeEnabled,
+		GraphQLTextSanitizeEnabled: req.GraphqlTextSanitizeEnabled,
+		GraphQLSources:             graphQLSourceInputs(req.GraphqlSources),
+		GraphQLSourceUpsert:        graphQLSourceInputPointer(req.GraphqlSourceUpsert),
+		GraphQLMutationPolicies:    graphQLMutationPolicyInputs(req.GraphqlMutationPolicies),
+		WebSearchTavilyURL:         req.WebSearchTavilyURL,
+		WebSearchExaURL:            req.WebSearchExaURL,
+		WebSearchTavilyAPIKey:      req.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:         req.WebSearchExaAPIKey,
+		TraceID:                    req.TraceID,
 	})
 }
 

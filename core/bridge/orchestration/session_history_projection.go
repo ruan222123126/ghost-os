@@ -152,10 +152,10 @@ func summarizeToolSearchLoad(items []toolSearchProjectionItem) string {
 	if len(loaded) > 0 {
 		part := fmt.Sprintf("Loaded dynamic session tools via tfind: %s.", joinToolSearchNames(loaded))
 		if allToolSearchItemsPending(loaded) {
-			part += " These tools become available next turn."
+			part += " These tools become available on a future turn."
 		}
 		if allToolSearchItemsAvailableNow(loaded) {
-			part += " These tools are available now."
+			part += " These tools are available now in the current user turn."
 		}
 		parts = append(parts, part)
 	}
@@ -192,14 +192,14 @@ func summarizeToolSearchStatus(item toolSearchProjectionItem) string {
 
 	switch status {
 	case "pending":
-		return fmt.Sprintf("%s is pending and becomes available next turn", name)
+		return fmt.Sprintf("%s is pending for a future turn", name)
 	case "expired":
 		return fmt.Sprintf("%s is expired", name)
 	case "active":
 		return fmt.Sprintf("%s is active (remaining_idle_turns=%d)", name, item.RemainingIdleTurns)
 	default:
 		if item.AvailableNextTurn && !item.AvailableNow {
-			return fmt.Sprintf("%s becomes available next turn", name)
+			return fmt.Sprintf("%s becomes available on a future turn", name)
 		}
 		if item.AvailableNow {
 			return fmt.Sprintf("%s is available now", name)

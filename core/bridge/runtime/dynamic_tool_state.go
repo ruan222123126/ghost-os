@@ -37,7 +37,7 @@ func dynamicToolStateLine(load session.DynamicToolLoad, currentTurn int, idleTur
 
 	switch {
 	case load.LoadedAtTurn == currentTurn:
-		return fmt.Sprintf("- %s was loaded this turn and becomes available next turn.", name)
+		return fmt.Sprintf("- %s was loaded in this user turn and is available now.", name)
 	case load.ExpiredAtTurn(currentTurn, idleTurns):
 		return fmt.Sprintf("- %s is expired and must be loaded again with `tfind(action=\"load\")`.", name)
 	case load.VisibleForTurn(currentTurn):
@@ -47,6 +47,6 @@ func dynamicToolStateLine(load session.DynamicToolLoad, currentTurn int, idleTur
 			load.RemainingIdleTurns(currentTurn, idleTurns),
 		)
 	default:
-		return fmt.Sprintf("- %s is pending and becomes available next turn.", name)
+		return fmt.Sprintf("- %s is pending for a future turn.", name)
 	}
 }

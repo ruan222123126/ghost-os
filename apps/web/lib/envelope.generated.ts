@@ -239,10 +239,13 @@ export interface BridgeConfig {
   model_selection_enabled: boolean;
   graphql_default_source: string;
   graphql_tool_runtime_enabled: boolean;
+  graphql_text_sanitize_enabled: boolean;
   graphql_sources: GraphQLSourceResponse[];
   graphql_mutation_policies: GraphQLMutationPolicyResponse[];
   web_rooter_enabled: boolean;
   web_rooter_api_token_set: boolean;
+  web_search_tavily_url: string;
+  web_search_exa_url: string;
   web_search_tavily_api_key_set: boolean;
   web_search_exa_api_key_set: boolean;
 }
@@ -261,6 +264,7 @@ export interface ConfigUpdate {
   chat_path?: string;
   graphql_default_source?: string;
   graphql_tool_runtime_enabled?: boolean;
+  graphql_text_sanitize_enabled?: boolean;
   graphql_sources?: GraphQLSourceInput[];
   graphql_source_upsert?: GraphQLSourceInput;
   graphql_mutation_policies?: GraphQLMutationPolicyInput[];
@@ -268,6 +272,8 @@ export interface ConfigUpdate {
   web_rooter_base_url?: string;
   web_rooter_api_token?: string;
   web_rooter_timeout_ms?: number;
+  web_search_tavily_url?: string;
+  web_search_exa_url?: string;
   web_search_tavily_api_key?: string;
   web_search_exa_api_key?: string;
   trace_id?: string;

@@ -6,6 +6,10 @@ type structuredToolHiddenCatalog struct {
 	base ToolCatalog
 }
 
+type graphQLToolDefSource interface {
+	GraphQLToolDefs() []llm.ToolDef
+}
+
 func NewStructuredToolHiddenCatalog(base ToolCatalog) ToolCatalog {
 	if base == nil {
 		return nil
@@ -33,6 +37,13 @@ func (c structuredToolHiddenCatalog) PromptGuidanceToolNames() []string {
 		return nil
 	}
 	return toolDefNames(c.base.ToolDefs())
+}
+
+func (c structuredToolHiddenCatalog) GraphQLToolDefs() []llm.ToolDef {
+	if c.base == nil {
+		return nil
+	}
+	return c.base.ToolDefs()
 }
 
 func (structuredToolHiddenCatalog) ToolDefs() []llm.ToolDef {

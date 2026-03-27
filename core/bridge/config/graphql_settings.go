@@ -22,8 +22,17 @@ func graphQLSettingsFromEnv(env envSnapshot) (GraphQLConfig, error) {
 	if err != nil {
 		return GraphQLConfig{}, err
 	}
+	textSanitizeEnabled, err := parseBoolValue(
+		env.value("GHOST_GRAPHQL_TEXT_SANITIZE_ENABLED"),
+		"GHOST_GRAPHQL_TEXT_SANITIZE_ENABLED",
+		defaultGraphQLTextSanitizeEnabled,
+	)
+	if err != nil {
+		return GraphQLConfig{}, err
+	}
 	return finalizeGraphQLConfig(GraphQLConfig{
-		ToolRuntimeEnabled: toolRuntimeEnabled,
+		ToolRuntimeEnabled:  toolRuntimeEnabled,
+		TextSanitizeEnabled: textSanitizeEnabled,
 	})
 }
 
@@ -33,13 +42,17 @@ func fileGraphQLSettings(fileCfg bridgeFileConfig, fallback GraphQLConfig) (Grap
 		if fileCfg.GraphQLToolRuntimeEnabled != nil {
 			settings.ToolRuntimeEnabled = *fileCfg.GraphQLToolRuntimeEnabled
 		}
+		if fileCfg.GraphQLTextSanitizeEnabled != nil {
+			settings.TextSanitizeEnabled = *fileCfg.GraphQLTextSanitizeEnabled
+		}
 		return finalizeGraphQLConfig(settings)
 	}
 	return finalizeGraphQLConfig(GraphQLConfig{
-		ToolRuntimeEnabled: resolveGraphQLToolRuntimeEnabled(fileCfg, fallback),
-		DefaultSource:      stringValue(fileCfg.GraphQLDefaultSource),
-		Sources:            graphQLSourcesFromFile(fileCfg.GraphQLSources),
-		MutationPolicies:   graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
+		ToolRuntimeEnabled:  resolveGraphQLToolRuntimeEnabled(fileCfg, fallback),
+		TextSanitizeEnabled: resolveGraphQLTextSanitizeEnabled(fileCfg, fallback),
+		DefaultSource:       stringValue(fileCfg.GraphQLDefaultSource),
+		Sources:             graphQLSourcesFromFile(fileCfg.GraphQLSources),
+		MutationPolicies:    graphQLMutationPoliciesFromFile(fileCfg.GraphQLMutationPolicies),
 	})
 }
 
@@ -53,10 +66,11 @@ func finalizeGraphQLConfig(cfg GraphQLConfig) (GraphQLConfig, error) {
 
 func normalizeGraphQLConfig(cfg GraphQLConfig) GraphQLConfig {
 	return GraphQLConfig{
-		ToolRuntimeEnabled: cfg.ToolRuntimeEnabled,
-		DefaultSource:      normalizeOptionalString(cfg.DefaultSource),
-		Sources:            normalizeGraphQLSources(cfg.Sources),
-		MutationPolicies:   normalizeGraphQLMutationPolicies(cfg.MutationPolicies),
+		ToolRuntimeEnabled:  cfg.ToolRuntimeEnabled,
+		TextSanitizeEnabled: normalizeGraphQLTextSanitizeEnabled(cfg.TextSanitizeEnabled),
+		DefaultSource:       normalizeOptionalString(cfg.DefaultSource),
+		Sources:             normalizeGraphQLSources(cfg.Sources),
+		MutationPolicies:    normalizeGraphQLMutationPolicies(cfg.MutationPolicies),
 	}
 }
 
@@ -68,6 +82,23 @@ func resolveGraphQLToolRuntimeEnabled(
 		return *fileCfg.GraphQLToolRuntimeEnabled
 	}
 	return fallback.ToolRuntimeEnabled
+}
+
+func resolveGraphQLTextSanitizeEnabled(
+	fileCfg bridgeFileConfig,
+	fallback GraphQLConfig,
+) bool {
+	if fileCfg.GraphQLTextSanitizeEnabled != nil {
+		return *fileCfg.GraphQLTextSanitizeEnabled
+	}
+	return normalizeGraphQLTextSanitizeEnabled(fallback.TextSanitizeEnabled)
+}
+
+func normalizeGraphQLTextSanitizeEnabled(value bool) bool {
+	if !value {
+		return false
+	}
+	return defaultGraphQLTextSanitizeEnabled
 }
 
 func normalizeGraphQLSources(raw []GraphQLSourceConfig) []GraphQLSourceConfig {

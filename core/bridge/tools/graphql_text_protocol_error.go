@@ -15,6 +15,8 @@ type GraphQLTextProtocolFeedback struct {
 	Kind     string `json:"kind,omitempty"`
 	Tool     string `json:"tool,omitempty"`
 	Message  string `json:"message,omitempty"`
+	Hint     string `json:"hint,omitempty"`
+	Example  string `json:"example,omitempty"`
 	Expected string `json:"expected,omitempty"`
 	Received string `json:"received,omitempty"`
 	Field    string `json:"field,omitempty"`
@@ -74,6 +76,8 @@ func newGraphQLTextProtocolError(
 	feedback.Kind = strings.TrimSpace(feedback.Kind)
 	feedback.Tool = strings.TrimSpace(feedback.Tool)
 	feedback.Message = strings.TrimSpace(feedback.Message)
+	feedback.Hint = strings.TrimSpace(feedback.Hint)
+	feedback.Example = strings.TrimSpace(feedback.Example)
 	feedback.Expected = strings.TrimSpace(feedback.Expected)
 	feedback.Received = strings.TrimSpace(feedback.Received)
 	feedback.Field = strings.TrimSpace(feedback.Field)
@@ -92,6 +96,8 @@ func newGraphQLTextParseError(err error) error {
 	feedback := GraphQLTextProtocolFeedback{
 		Kind:    "parse_error",
 		Message: strings.TrimSpace(err.Error()),
+		Hint:    "Return only a pure GraphQL document. Do not include [GRAPHQL_TOOL_RESULT], explanations, or extra prefixes/suffixes.",
+		Example: `mutation { tfind(action: search, query: "browser control") }`,
 	}
 	if line, column, ok := graphQLTextErrorLocation(err); ok {
 		feedback.Line = line
@@ -172,12 +178,19 @@ func newGraphQLTextCatalogUnavailableError() error {
 	}, err, false)
 }
 
-func newGraphQLTextUnknownToolError(toolName string) error {
-	err := fmt.Errorf("tool %q not found", strings.TrimSpace(toolName))
+func newGraphQLTextUnknownToolError(toolName string, visibleToolNames []string) error {
+	trimmedToolName := strings.TrimSpace(toolName)
+	err := fmt.Errorf("tool %q not found", trimmedToolName)
+	message := err.Error()
+	if visible := graphQLVisibleToolListText(visibleToolNames); visible != "" {
+		message = fmt.Sprintf("%s; visible tools: %s", message, visible)
+	}
 	return newGraphQLTextProtocolError(GraphQLTextProtocolFeedback{
 		Kind:    "unknown_tool",
-		Tool:    toolName,
-		Message: err.Error(),
+		Tool:    trimmedToolName,
+		Message: message,
+		Hint:    graphQLUnknownToolHint(visibleToolNames),
+		Example: graphQLUnknownToolExample(visibleToolNames),
 	}, err, true)
 }
 
@@ -214,4 +227,53 @@ func graphQLTextErrorLocation(err error) (int, int, bool) {
 		return location.Line, location.Column, true
 	}
 	return 0, 0, false
+}
+
+func graphQLUnknownToolHint(visibleToolNames []string) string {
+	visible := normalizeVisibleToolNames(visibleToolNames)
+	if len(visible) == 0 {
+		return "Use one of the exact field names visible in the current GraphQL tool schema."
+	}
+	if containsString(visible, ToolSearchToolName) {
+		return fmt.Sprintf(
+			"Visible tools for this turn: %s. If you need another tool, use `tfind(action: search)` to discover it, or `tfind(action: list)` to inspect current dynamic tool state.",
+			graphQLVisibleToolListText(visible),
+		)
+	}
+	return fmt.Sprintf(
+		"Visible tools for this turn: %s. Use one of those exact field names.",
+		graphQLVisibleToolListText(visible),
+	)
+}
+
+func graphQLUnknownToolExample(visibleToolNames []string) string {
+	visible := normalizeVisibleToolNames(visibleToolNames)
+	if containsString(visible, ToolSearchToolName) {
+		return `mutation { tfind(action: search, query: "browser control") }`
+	}
+	if len(visible) == 0 {
+		return ""
+	}
+	return ""
+}
+
+func graphQLVisibleToolListText(visibleToolNames []string) string {
+	visible := normalizeVisibleToolNames(visibleToolNames)
+	if len(visible) == 0 {
+		return ""
+	}
+	quoted := make([]string, 0, len(visible))
+	for _, name := range visible {
+		quoted = append(quoted, fmt.Sprintf("`%s`", name))
+	}
+	return strings.Join(quoted, ", ")
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if strings.TrimSpace(item) == strings.TrimSpace(want) {
+			return true
+		}
+	}
+	return false
 }

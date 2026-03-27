@@ -55,6 +55,8 @@ impl ConfigUpdate {
             model: None,
             chat_path: None,
             graphql_default_source: None,
+            graphql_tool_runtime_enabled: None,
+            graphql_text_sanitize_enabled: None,
             graphql_sources: None,
             graphql_source_upsert: None,
             graphql_mutation_policies: None,
