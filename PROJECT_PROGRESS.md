@@ -1,6 +1,6 @@
 # Ghost-OS 项目进展
 
-更新日期：2026-03-22  
+更新日期：2026-03-27  
 当前阶段：MVP 骨架
 
 ## 总体结论
@@ -28,6 +28,7 @@
 - Agent 收尾路径进一步收口：`loop_finish` 已合并 stop/length 文本完成分支的公共 finalize 流程，并移除 `toolCallExecutor.execute` 中当前调用图不可达的空 `calls` 防御分支，补充了 length 收尾与 assistant-text 分发回归测试。
 - 共享消息契约、`trace_id`、跨端 DTO 与 `core/shared/schema.json` 已基本统一。
 - 任务更新路径已补回显式回滚：在 `Unregister` 前移后，若 `SaveTask` 或后续 `Upsert` 失败，会恢复旧注册并在需要时把旧任务重新写回磁盘，避免留下“磁盘仍有任务、内存已不再调度”的漂移状态；共享 task schema 也已收口为 kind-specific 契约，`system_action` 的 `action/action_params` 与 `workflow/agent_message` 的必填约束现可被 schema 正确表达。
+- 任务调度器的 registration 生命周期已补上显式 retired 状态：`Stop` / `Unregister` / `register` 替换旧实例后，旧 `taskRegistration` 不会再在锁外被 `RunNow` 或定时触发重新 `beginRun`，从而封住 stale registration 复活和 `waitIdle()` 与 `runWG.Add(1)` 并发交错的风险。
 - task kind 归一化已去掉“非法值静默回落到 `agent_message`”的 fallback：`task_kind` 为空时仍默认视为 `agent_message`，但未知值现在会在校验阶段显式报 `unsupported task_kind`，执行器默认分支也不会再把坏输入当作 agent task 运行。
 - GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
 - RSS report 生成链路已去掉静默 fallback：agent 报告空回或失败时不再落回模板化“机会点 / 风险与约束 / 接下来可能会怎样”段落，而是显式记录 `report_error`；report prompt 也已收口到更精简的章节契约，避免重复凑段。

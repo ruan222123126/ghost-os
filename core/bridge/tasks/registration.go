@@ -7,11 +7,17 @@ import (
 	"time"
 )
 
+const (
+	skipRunReasonAlreadyRunning      = "task already running"
+	skipRunReasonRegistrationRetired = "task registration retired"
+)
+
 type taskRegistration struct {
 	cancel     context.CancelFunc
 	loopDone   chan struct{}
 	loopCtx    context.Context
 	runWG      sync.WaitGroup
+	retired    bool
 	task       ScheduledTask
 	running    bool
 	runCancel  context.CancelFunc
@@ -42,9 +48,12 @@ func (r *taskRegistration) beginRun(
 ) (ScheduledTask, context.Context, bool, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.retired {
+		return task, nil, true, skipRunReasonRegistrationRetired
+	}
 	r.task = task
 	if r.running {
-		return r.task, nil, true, "task already running"
+		return r.task, nil, true, skipRunReasonAlreadyRunning
 	}
 	parentCtx := r.loopCtx
 	if parentCtx == nil {
@@ -64,6 +73,16 @@ func (r *taskRegistration) beginRun(
 	return r.task, runCtx, false, ""
 }
 
+func (r *taskRegistration) retire() (context.CancelFunc, context.CancelFunc) {
+	if r == nil {
+		return nil, nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.retired = true
+	return r.cancel, r.runCancel
+}
+
 func (r *taskRegistration) finishRun() {
 	r.mu.Lock()
 	cancel := r.runCancel
@@ -77,26 +96,17 @@ func (r *taskRegistration) finishRun() {
 	r.runWG.Done()
 }
 
-func (r *taskRegistration) cancelRun() {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	cancel := r.runCancel
-	r.mu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
-}
-
 func (r *taskRegistration) stop() {
 	if r == nil {
 		return
 	}
-	if r.cancel != nil {
-		r.cancel()
+	cancelLoop, cancelRun := r.retire()
+	if cancelLoop != nil {
+		cancelLoop()
 	}
-	r.cancelRun()
+	if cancelRun != nil {
+		cancelRun()
+	}
 }
 
 func (s *TaskScheduler) lookupTask(taskID string) *taskRegistration {

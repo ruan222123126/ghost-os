@@ -175,12 +175,29 @@ func (s *TaskScheduler) RunNow(task ScheduledTask, traceID string) (RunLog, erro
 	if runTraceID == "" {
 		runTraceID = s.traceID()
 	}
-	task, runCtx, skipped, _ := reg.beginRun(task, s.taskExecutionTimeout(), runTraceID)
+	task, runCtx, reg, skipped, reason := s.beginManualRun(reg, task, runTraceID)
 	if skipped {
-		run := skippedTaskRunLog(task, runTraceID, scheduledAt)
+		run := skippedTaskRunLog(task, runTraceID, scheduledAt, reason)
 		return run, s.store.AppendRunLog(run)
 	}
 	return s.executeRun(runCtx, reg, task, scheduledAt, runTraceID)
+}
+
+func (s *TaskScheduler) beginManualRun(
+	reg *taskRegistration,
+	task ScheduledTask,
+	traceID string,
+) (ScheduledTask, context.Context, *taskRegistration, bool, string) {
+	if reg == nil {
+		reg = &taskRegistration{task: task}
+	}
+	task, runCtx, skipped, reason := reg.beginRun(task, s.taskExecutionTimeout(), traceID)
+	if reason != skipRunReasonRegistrationRetired {
+		return task, runCtx, reg, skipped, reason
+	}
+	reg = &taskRegistration{task: task}
+	task, runCtx, skipped, reason = reg.beginRun(task, s.taskExecutionTimeout(), traceID)
+	return task, runCtx, reg, skipped, reason
 }
 
 func (s *TaskScheduler) register(task ScheduledTask) error {
@@ -260,9 +277,12 @@ func (s *TaskScheduler) runTaskLoop(
 
 func (s *TaskScheduler) fireTask(reg *taskRegistration, scheduledAt time.Time) {
 	runTraceID := s.traceID()
-	task, runCtx, skipped, _ := reg.beginRun(reg.snapshot(), s.taskExecutionTimeout(), runTraceID)
+	task, runCtx, skipped, reason := reg.beginRun(reg.snapshot(), s.taskExecutionTimeout(), runTraceID)
 	if skipped {
-		_ = s.store.AppendRunLog(skippedTaskRunLog(task, runTraceID, scheduledAt))
+		if reason == skipRunReasonRegistrationRetired {
+			return
+		}
+		_ = s.store.AppendRunLog(skippedTaskRunLog(task, runTraceID, scheduledAt, reason))
 		return
 	}
 	go func() {

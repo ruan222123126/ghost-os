@@ -101,7 +101,16 @@ func (s *TaskScheduler) taskExecutionTimeout() time.Duration {
 	return s.executionTimeout
 }
 
-func skippedTaskRunLog(task ScheduledTask, traceID string, scheduledAt time.Time) RunLog {
+func skippedTaskRunLog(
+	task ScheduledTask,
+	traceID string,
+	scheduledAt time.Time,
+	reason string,
+) RunLog {
+	skipReason := strings.TrimSpace(reason)
+	if skipReason == "" {
+		skipReason = skipRunReasonAlreadyRunning
+	}
 	return RunLog{
 		TaskID:         task.ID,
 		RunID:          NewRunID(),
@@ -111,6 +120,6 @@ func skippedTaskRunLog(task ScheduledTask, traceID string, scheduledAt time.Time
 		ScheduledAt:    scheduledAt.UTC(),
 		Status:         RunStatusSkipped,
 		SessionIDInput: task.SessionID,
-		Error:          "task already running",
+		Error:          skipReason,
 	}
 }
