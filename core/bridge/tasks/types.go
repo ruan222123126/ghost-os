@@ -86,13 +86,25 @@ type LoadIssue struct {
 type DefinitionValidator func(*ScheduledTask) error
 
 func NormalizeKind(kind string) string {
-	switch strings.TrimSpace(kind) {
+	normalized := strings.TrimSpace(kind)
+	switch normalized {
+	case "", KindAgentMessage:
+		return KindAgentMessage
 	case KindSystemAction:
 		return KindSystemAction
 	case KindWorkflow:
 		return KindWorkflow
 	default:
-		return KindAgentMessage
+		return normalized
+	}
+}
+
+func IsSupportedKind(kind string) bool {
+	switch NormalizeKind(kind) {
+	case KindAgentMessage, KindSystemAction, KindWorkflow:
+		return true
+	default:
+		return false
 	}
 }
 

@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -58,6 +59,10 @@ func normalizeTaskKind(kind string) string {
 	return bridgeTasks.NormalizeKind(kind)
 }
 
+func isSupportedTaskKind(kind string) bool {
+	return bridgeTasks.IsSupportedKind(kind)
+}
+
 func cloneTaskActionParams(input map[string]any) map[string]any {
 	return bridgeTasks.CloneActionParams(input)
 }
@@ -79,13 +84,18 @@ type taskExecutorAdapter struct {
 }
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
-	switch normalizeTaskKind(task.TaskKind) {
+	switch kind := normalizeTaskKind(task.TaskKind); kind {
 	case taskKindWorkflow:
 		return a.executeWorkflowTask(ctx, task, traceID)
 	case taskKindSystemAction:
 		return a.executeSystemTask(ctx, task, traceID)
-	default:
+	case taskKindAgentMessage:
 		return a.executeAgentTask(ctx, task, traceID)
+	default:
+		return bridgeTasks.ExecutionResult{
+			Status: taskRunStatusError,
+			Error:  fmt.Sprintf("unsupported task_kind %q", kind),
+		}
 	}
 }
 

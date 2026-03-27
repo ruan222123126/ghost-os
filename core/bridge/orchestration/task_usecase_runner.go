@@ -281,8 +281,12 @@ func (r taskMutationRunner) ensureTaskSessionExists(taskKind string, sessionID s
 }
 
 func ensureWorkflowAllowedForTaskKind(taskKind string, workflow *WorkflowDefinition) error {
-	if workflow == nil || normalizeTaskKind(taskKind) == taskKindWorkflow {
+	normalized := normalizeTaskKind(taskKind)
+	if workflow == nil || normalized == taskKindWorkflow {
 		return nil
 	}
-	return invalidTaskConfig(normalizeTaskKind(taskKind) + " does not allow workflow")
+	if !isSupportedTaskKind(normalized) {
+		return invalidTaskConfig(fmt.Sprintf("unsupported task_kind %q", normalized))
+	}
+	return invalidTaskConfig(normalized + " does not allow workflow")
 }
