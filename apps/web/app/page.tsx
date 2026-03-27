@@ -12,6 +12,7 @@ import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
 import { useSessions } from '@/hooks/useSessions';
 import { ignorePromise } from '@/lib/errors';
+import type { ChatSendInput } from '@/lib/types';
 
 const HomePage: FC = () => {
   const [showConfig, setShowConfig] = useState(false);
@@ -58,8 +59,8 @@ const HomePage: FC = () => {
   const topStatusVisible = configLoading || (Boolean(configError) && !showConfig);
 
   const handleSendChatMessage = useCallback(
-    async (message: string) => {
-      await sendChatMessage(message);
+    async (input: ChatSendInput) => {
+      await sendChatMessage(input);
       await loadSessions();
     },
     [loadSessions, sendChatMessage]
@@ -114,6 +115,7 @@ const HomePage: FC = () => {
               ignorePromise(handleDeleteSession(id));
             }}
             onNewChat={handleNewChat}
+            onOpenSettings={() => setShowConfig(true)}
           />
 
           <section className="chat panel">

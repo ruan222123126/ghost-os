@@ -1,0 +1,42 @@
+'use client';
+
+import type { FC } from 'react';
+
+interface SidebarSettingsButtonProps {
+  collapsed: boolean;
+  onClick: () => void;
+}
+
+const IconSettings: FC<{ size?: number }> = ({ size = 20 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path
+      d="M10 3.25 11.35 2.5l1.1 1.9 1.6.4 1.55-1.15 1.4 1.4-1.15 1.55.4 1.6 1.9 1.1-.75 1.35.75 1.35-1.9 1.1-.4 1.6 1.15 1.55-1.4 1.4-1.55-1.15-1.6.4-1.1 1.9L10 16.75l-1.35.75-1.1-1.9-1.6-.4-1.55 1.15-1.4-1.4 1.15-1.55-.4-1.6-1.9-1.1.75-1.35-.75-1.35 1.9-1.1.4-1.6L3 5.05l1.4-1.4 1.55 1.15 1.6-.4 1.1-1.9L10 3.25Z"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+    />
+    <circle cx="10" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
+
+export const SidebarSettingsButton: FC<SidebarSettingsButtonProps> = ({ collapsed, onClick }) => (
+  <div className="border-t border-black/10 px-3 py-3">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex items-center justify-center gap-2 bg-white text-black transition-colors hover:bg-black hover:text-white ${
+        collapsed ? 'mx-auto h-10 w-10' : 'w-full px-4 py-3'
+      }`}
+      aria-label="Open settings"
+      aria-haspopup="dialog"
+      title="Settings"
+    >
+      <IconSettings />
+      {collapsed ? null : (
+        <span className="text-xs font-bold uppercase tracking-tighter text-neutral-500 transition-colors group-hover:text-white">
+          Settings
+        </span>
+      )}
+    </button>
+  </div>
+);

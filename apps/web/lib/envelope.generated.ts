@@ -33,7 +33,8 @@ export interface AssistantSessionEndSignal {
 }
 
 export interface AgentRequest {
-  message: string;
+  message?: string;
+  images?: SessionImageContent[];
   session_id?: string;
   trace_id?: string;
 }

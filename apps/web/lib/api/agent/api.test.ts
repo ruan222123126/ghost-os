@@ -32,7 +32,7 @@ describe('lib/api/agent/api', () => {
       error: '',
     });
 
-    await sendMessage('hello again', 'session-abc', 'trace-abc');
+    await sendMessage('hello again', undefined, 'session-abc', 'trace-abc');
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(init.method).toBe('POST');
@@ -40,6 +40,32 @@ describe('lib/api/agent/api', () => {
       message: 'hello again',
       session_id: 'session-abc',
       trace_id: 'trace-abc',
+    });
+  });
+
+  it('sendMessage includes images when provided', async () => {
+    mockFetchJSON({
+      status: 'success',
+      payload: { message: 'done', session_id: 'session-img', session_ended: false },
+      error: '',
+    });
+
+    await sendMessage('', [{
+      url: 'data:image/png;base64,R2hvc3Q=',
+      mime_type: 'image/png',
+      bytes: 5,
+    }], 'session-img', 'trace-img');
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      message: '',
+      images: [{
+        url: 'data:image/png;base64,R2hvc3Q=',
+        mime_type: 'image/png',
+        bytes: 5,
+      }],
+      session_id: 'session-img',
+      trace_id: 'trace-img',
     });
   });
 

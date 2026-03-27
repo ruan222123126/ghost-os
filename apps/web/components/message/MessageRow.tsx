@@ -1,14 +1,18 @@
 import type { FC } from 'react';
 import { QuestionInput } from '@/components/QuestionInput';
-import type { PendingQuestionMessage, ToolChatMessage } from '@/lib/types';
+import type { PendingQuestionMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageCopyButton } from './MessageCopyButton';
+import { MessageImageGallery } from './MessageImageGallery';
 import { ToolCard } from './ToolCard';
 import type { MessageRowProps } from './types';
 
-const UserMessageRow: FC<{ content: string }> = ({ content }) => (
+const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
   <div className="message-row is-user">
-    <div className="message-bubble is-user">{content}</div>
+    <div className="message-stack">
+      {message.images?.length ? <MessageImageGallery images={message.images} /> : null}
+      {message.content ? <div className="message-bubble is-user">{message.content}</div> : null}
+    </div>
   </div>
 );
 
@@ -63,7 +67,7 @@ const QuestionMessageRow: FC<{
 export const MessageRow: FC<MessageRowProps> = ({ message, loading, onAnswerQuestion, onCancelQuestion }) => {
   switch (message.kind) {
     case 'user':
-      return <UserMessageRow content={message.content} />;
+      return <UserMessageRow message={message} />;
     case 'assistant':
       return <AssistantMessageRow content={message.content} />;
     case 'tool':

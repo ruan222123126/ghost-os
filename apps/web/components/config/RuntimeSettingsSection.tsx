@@ -16,6 +16,8 @@ interface RuntimeSettingsSectionProps {
 interface RuntimeFormState {
   model: string;
   chatPath: string;
+  webSearchTavilyURL: string;
+  webSearchExaURL: string;
   webSearchTavilyAPIKey: string;
   webSearchExaAPIKey: string;
 }
@@ -32,7 +34,7 @@ export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
     <section className="settings-section">
       <div className="section-head-copy">
         <h3>Runtime</h3>
-        <p className="section-copy">Update runtime defaults and configure Tavily / Exa keys for agent web search.</p>
+        <p className="section-copy">Update runtime defaults and configure Tavily / Exa search endpoints and keys.</p>
       </div>
 
       <div className="settings-stack">
@@ -54,6 +56,8 @@ function createRuntimeFormState(config: BridgeConfig | null): RuntimeFormState {
   return {
     model: config?.model ?? '',
     chatPath: config?.chat_path ?? '',
+    webSearchTavilyURL: config?.web_search_tavily_url ?? '',
+    webSearchExaURL: config?.web_search_exa_url ?? '',
     webSearchTavilyAPIKey: '',
     webSearchExaAPIKey: '',
   };
@@ -147,6 +151,17 @@ function WebSearchFields(props: WebSearchFieldsProps) {
   return (
     <>
       <label className="field-label">
+        Tavily Custom URL (optional)
+        <input
+          value={formState.webSearchTavilyURL}
+          disabled={runtimeControlsDisabled}
+          placeholder="Leave blank to use the official Tavily endpoint"
+          onChange={(event) => onChange((prev) => ({ ...prev, webSearchTavilyURL: event.target.value }))}
+          className="input mono"
+        />
+      </label>
+
+      <label className="field-label">
         Tavily API Key (optional)
         <input
           type="password"
@@ -155,6 +170,17 @@ function WebSearchFields(props: WebSearchFieldsProps) {
           placeholder={tavilyPlaceholder}
           onChange={(event) => onChange((prev) => ({ ...prev, webSearchTavilyAPIKey: event.target.value }))}
           className="input"
+        />
+      </label>
+
+      <label className="field-label">
+        Exa Custom URL (optional)
+        <input
+          value={formState.webSearchExaURL}
+          disabled={runtimeControlsDisabled}
+          placeholder="Leave blank to use the official Exa endpoint"
+          onChange={(event) => onChange((prev) => ({ ...prev, webSearchExaURL: event.target.value }))}
+          className="input mono"
         />
       </label>
 
@@ -225,6 +251,8 @@ function buildRuntimeUpdate(
 ): ConfigUpdate {
   const update: ConfigUpdate = {
     chat_path: formState.chatPath,
+    web_search_tavily_url: formState.webSearchTavilyURL,
+    web_search_exa_url: formState.webSearchExaURL,
   };
   if (modelSelectionEnabled) {
     update.model = formState.model;

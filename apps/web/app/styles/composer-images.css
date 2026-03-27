@@ -1,0 +1,73 @@
+.composer-image-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.composer-image-card {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 132px;
+  padding: 10px;
+  border: 1px solid rgb(229 229 229 / 0.8);
+  border-radius: 18px;
+  background: rgb(250 250 250 / 0.92);
+}
+
+.composer-image-thumb {
+  width: 112px;
+  height: 84px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgb(245 245 245);
+}
+
+.composer-image-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.composer-image-name,
+.composer-image-size {
+  max-width: 112px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-image-name {
+  color: rgb(38 38 38);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.composer-image-size,
+.composer-inline-error {
+  font-size: 11px;
+}
+
+.composer-image-size {
+  color: rgb(115 115 115);
+}
+
+.composer-image-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: rgb(23 23 23 / 0.82);
+  color: rgb(250 250 250);
+  cursor: pointer;
+}
+
+.composer-inline-error {
+  color: rgb(185 28 28);
+}

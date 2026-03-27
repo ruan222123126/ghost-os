@@ -10,6 +10,10 @@ export function toErrorMessage(error: unknown, fallback = 'request failed'): str
   return fallback;
 }
 
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
 export function ignorePromise<T>(promise: Promise<T>): void {
   promise.catch(() => undefined);
 }

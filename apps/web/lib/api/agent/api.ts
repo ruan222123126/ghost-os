@@ -16,10 +16,14 @@ type AgentStopParams = Record<string, unknown> & {
 
 export async function sendMessage(
   message: string,
+  images?: AgentRequest['images'],
   sessionId?: string,
   traceId?: string,
 ): Promise<AgentSendResponse> {
   const body: AgentRequest = { message };
+  if (images?.length) {
+    body.images = images.map((image) => ({ ...image }));
+  }
   if (sessionId?.trim()) {
     body.session_id = sessionId.trim();
   }

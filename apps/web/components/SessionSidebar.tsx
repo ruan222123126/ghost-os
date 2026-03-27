@@ -3,6 +3,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type FC } from 'react';
+import { SidebarSettingsButton } from '@/components/SidebarSettingsButton';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionSidebarProps {
@@ -13,6 +14,7 @@ interface SessionSidebarProps {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onNewChat: () => void;
+  onOpenSettings: () => void;
 }
 
 const IconPanelLeftClose: FC<{ size?: number }> = ({ size = 20 }) => (
@@ -62,6 +64,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
   onSelect,
   onDelete,
   onNewChat,
+  onOpenSettings,
 }) => {
   const [isOpen, setIsOpen] = useState(true);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -232,6 +235,8 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
           </>
         ) : null}
       </div>
+
+      <SidebarSettingsButton collapsed={!isOpen} onClick={onOpenSettings} />
     </aside>
   );
 };

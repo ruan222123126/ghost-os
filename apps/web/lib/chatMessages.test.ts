@@ -83,6 +83,72 @@ describe('chatMessages', () => {
     expect(mapped[1]).toMatchObject({ kind: 'user', content: 'PostgreSQL' });
   });
 
+  it('maps user image content into chat messages', () => {
+    const messages: SessionMessage[] = [
+      {
+        role: 'user',
+        text: '',
+        content: [
+          {
+            type: 'image',
+            image: {
+              url: 'data:image/png;base64,R2hvc3Q=',
+              mime_type: 'image/png',
+              bytes: 5,
+            },
+          },
+        ],
+      },
+    ];
+
+    const mapped = mapSessionMessagesToChat(messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'user',
+      content: '',
+      images: [
+        {
+          url: 'data:image/png;base64,R2hvc3Q=',
+          mimeType: 'image/png',
+          bytes: 5,
+        },
+      ],
+    });
+  });
+
+  it('keeps path-only user images visible instead of dropping them', () => {
+    const messages: SessionMessage[] = [
+      {
+        role: 'user',
+        text: 'inspect this',
+        content: [
+          {
+            type: 'image',
+            image: {
+              path: '/tmp/cat.png',
+              mime_type: 'image/png',
+            },
+          },
+        ],
+      },
+    ];
+
+    const mapped = mapSessionMessagesToChat(messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'user',
+      content: 'inspect this',
+      images: [
+        {
+          path: '/tmp/cat.png',
+          mimeType: 'image/png',
+        },
+      ],
+    });
+  });
+
   it('treats tool text as plain content when structured tool_result is absent', () => {
     const rawEnvelope = JSON.stringify({
       status: 'success',
@@ -101,6 +167,46 @@ describe('chatMessages', () => {
       content: rawEnvelope,
       toolName: undefined,
       traceId: undefined,
+    });
+  });
+
+  it('hides assistant graphql tool text when the turn already has a tool card', () => {
+    const messages: SessionMessage[] = [
+      { role: 'user', text: '搜一下 AI 咨询行业动态' },
+      { role: 'assistant', text: 'mutation { web_search(provider: tavily, query: "AI consulting latest trends 2025") }' },
+      {
+        role: 'tool',
+        tool_call_id: 'call-1',
+        tool_result: {
+          status: 'success',
+          tool: 'web_search',
+          trace_id: 'trace-web-1',
+          output: 'search result',
+          error: '',
+        },
+      },
+      { role: 'assistant', text: '我整理了几条近期趋势。' },
+    ];
+
+    const mapped = mapSessionMessagesToChat(messages);
+
+    expect(mapped).toHaveLength(3);
+    expect(mapped[0]).toMatchObject({ kind: 'user', content: '搜一下 AI 咨询行业动态' });
+    expect(mapped[1]).toMatchObject({ kind: 'tool', toolName: 'web_search', toolCallId: 'call-1' });
+    expect(mapped[2]).toMatchObject({ kind: 'assistant', content: '我整理了几条近期趋势。' });
+  });
+
+  it('keeps assistant graphql text visible when no tool card follows', () => {
+    const messages: SessionMessage[] = [
+      { role: 'assistant', text: 'mutation { web_search(provider: tavily, query: "OpenAI") }' },
+    ];
+
+    const mapped = mapSessionMessagesToChat(messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'assistant',
+      content: 'mutation { web_search(provider: tavily, query: "OpenAI") }',
     });
   });
 

@@ -11,7 +11,7 @@ export const MessageList: FC<MessageListProps> = ({ messages, loading, onAnswerQ
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    endRef.current?.scrollIntoView({ behavior: loading ? 'auto' : 'smooth', block: 'end' });
   }, [loading, messages]);
 
   if (messages.length === 0) {

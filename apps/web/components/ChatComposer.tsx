@@ -11,17 +11,20 @@ import { ignorePromise } from '@/lib/errors';
 interface ChatComposerProps {
   value: string;
   onChange: (value: string) => void;
-  onSubmit: (value: string) => Promise<void>;
+  onSubmit: () => Promise<void>;
   onStop?: () => Promise<void>;
   sending: boolean;
   canStop?: boolean;
+  canSubmit?: boolean;
   disabled?: boolean;
   ariaLabel?: string;
   placeholder?: string;
   rows?: number;
   hint?: ReactNode;
+  preview?: ReactNode;
   status?: ReactNode;
   toolbar?: ReactNode;
+  onSelectFiles?: (files: FileList) => Promise<void> | void;
 }
 
 function PlusIcon() {
@@ -49,18 +52,25 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   onStop,
   sending,
   canStop = false,
+  canSubmit,
   disabled = false,
   ariaLabel = 'Message input',
   placeholder = 'Type a task for Ghost-OS...',
+  rows = 1,
   hint,
+  preview,
   status,
   toolbar,
+  onSelectFiles,
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const hasToolbar = toolbar !== undefined && toolbar !== null;
   const showStopAction = sending && onStop !== undefined;
-  const submitDisabled = sending || disabled || value.trim().length === 0;
+  const canSend = canSubmit ?? value.trim().length > 0;
+  const submitDisabled = sending || disabled || !canSend;
   const actionDisabled = showStopAction ? !canStop : submitDisabled;
+  const uploadDisabled = disabled || sending || onSelectFiles === undefined;
   const actionLabel = showStopAction
     ? canStop
       ? 'Stop agent run'
@@ -74,12 +84,11 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   }, [value]);
 
   async function submit() {
-    const nextValue = value.trim();
-    if (!nextValue || sending || disabled) {
+    if (!canSend || sending || disabled) {
       return;
     }
 
-    await onSubmit(nextValue);
+    await onSubmit();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -96,6 +105,22 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
     event.preventDefault();
     ignorePromise(submit());
+  }
+
+  function handleAttachmentClick() {
+    if (uploadDisabled) {
+      return;
+    }
+
+    fileInputRef.current?.click();
+  }
+
+  function handleFileChange(files: FileList | null) {
+    if (!files || files.length === 0 || onSelectFiles === undefined) {
+      return;
+    }
+
+    ignorePromise(Promise.resolve(onSelectFiles(files)));
   }
 
   function syncTextareaHeight() {
@@ -117,6 +142,8 @@ export const ChatComposer: FC<ChatComposerProps> = ({
       }}
     >
       <div className={`composer-shell${sending ? ' is-sending' : ''}${disabled ? ' is-disabled' : ''}`}>
+        {preview}
+
         <textarea
           ref={textareaRef}
           value={value}
@@ -126,8 +153,20 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           onInput={syncTextareaHeight}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          rows={1}
+          rows={rows}
           className="composer-textarea"
+        />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          onChange={(event) => {
+            handleFileChange(event.currentTarget.files);
+            event.currentTarget.value = '';
+          }}
         />
 
         <div className="composer-footer">
@@ -138,10 +177,11 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           >
             <button
               type="button"
-              className="composer-plus-btn is-placeholder"
-              aria-label="Attachments not available in this view"
-              title="Attachments not available in this view"
-              disabled
+              className={`composer-plus-btn${uploadDisabled ? ' is-placeholder' : ''}`}
+              aria-label="Upload images"
+              title="Upload images"
+              disabled={uploadDisabled}
+              onClick={handleAttachmentClick}
             >
               <PlusIcon />
             </button>

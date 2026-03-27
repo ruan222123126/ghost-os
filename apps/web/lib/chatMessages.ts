@@ -2,8 +2,8 @@ import type {
   AskHumanOption,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
-  ChatFileAttachment,
   ChatMessage,
+  ChatImage,
   PendingQuestionMessage,
   QuestionChatMessage,
   SessionContentPart,
@@ -13,6 +13,8 @@ import type {
   SessionToolResult,
   ToolChatMessage,
 } from '@/lib/types';
+import { attachmentsFromContent, imagesFromContent } from './chatMessageMedia';
+import { isGraphQLToolDocument } from '@/lib/graphqlToolText';
 
 interface NormalizedSessionMessage {
   role: SessionMessageRole | '';
@@ -38,27 +40,6 @@ function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMess
     toolResult: message.tool_result ?? undefined,
     humanInteraction: message.human_interaction ?? undefined,
   };
-}
-
-function attachmentsFromContent(content?: SessionContentPart[]): ChatFileAttachment[] | undefined {
-  if (!content || content.length === 0) {
-    return undefined;
-  }
-
-  const attachments = content
-    .filter((part) => part.type === 'file' && part.file)
-    .map((part) => ({
-      artifactId: part.file!.artifact_id,
-      name: part.file!.name,
-      downloadUrl: part.file!.download_url,
-      mimeType: part.file!.mime_type,
-      bytes: part.file!.bytes,
-      sha256: part.file!.sha256,
-      sourcePath: part.file!.source_path,
-      note: part.file!.note,
-    }));
-
-  return attachments.length > 0 ? attachments : undefined;
 }
 
 function formatToolContent(toolResult: SessionToolResult, fallbackText: string): string {
@@ -105,11 +86,16 @@ function buildQuestionMessage(
   };
 }
 
-export function buildUserMessage(content: string): ChatMessage {
+interface BuildUserMessageOptions {
+  images?: ChatImage[];
+}
+
+export function buildUserMessage(content: string, options?: BuildUserMessageOptions): ChatMessage {
   return {
     id: nextChatMessageID(),
     kind: 'user',
     content,
+    images: options?.images,
   };
 }
 
@@ -191,12 +177,38 @@ function mapToolSessionMessage(message: NormalizedSessionMessage): ChatMessage[]
   ];
 }
 
+function hasToolMessageAhead(messages: SessionMessage[], startIndex: number): boolean {
+  for (let index = startIndex; index < messages.length; index += 1) {
+    const role = messages[index].role;
+    if (role === 'tool') {
+      return true;
+    }
+    if (role === 'user') {
+      return false;
+    }
+  }
+
+  return false;
+}
+
+function shouldHideAssistantSessionMessage(messages: SessionMessage[], index: number): boolean {
+  const text = messages[index].text?.trim() ?? '';
+  if (!text) {
+    return true;
+  }
+
+  return isGraphQLToolDocument(text) && hasToolMessageAhead(messages, index + 1);
+}
+
 export function mapSessionMessageToChatMessages(message: SessionMessage): ChatMessage[] {
   const normalized = normalizeSessionMessage(message);
   switch (normalized.role) {
     case 'user':
-      return [buildUserMessage(normalized.text)];
+      return [buildUserMessage(normalized.text, { images: imagesFromContent(normalized.content) })];
     case 'assistant':
+      if (!normalized.text.trim()) {
+        return [];
+      }
       return [buildAssistantMessage(normalized.text)];
     case 'system':
       return [buildSystemMessage(normalized.text || '[system]')];
@@ -210,7 +222,16 @@ export function mapSessionMessageToChatMessages(message: SessionMessage): ChatMe
 }
 
 export function mapSessionMessagesToChat(messages: SessionMessage[]): ChatMessage[] {
-  return messages.flatMap((message) => mapSessionMessageToChatMessages(message));
+  const mapped: ChatMessage[] = [];
+
+  for (const [index, message] of messages.entries()) {
+    if (message.role === 'assistant' && shouldHideAssistantSessionMessage(messages, index)) {
+      continue;
+    }
+    mapped.push(...mapSessionMessageToChatMessages(message));
+  }
+
+  return mapped;
 }
 
 export function mapAgentReplyToChatMessages(reply: AgentSendResponse): ChatMessage[] {

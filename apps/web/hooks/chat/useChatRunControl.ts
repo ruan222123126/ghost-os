@@ -1,18 +1,18 @@
 import { useCallback } from 'react';
-import { sendMessage, stopAgent } from '@/lib/api/agent/api';
+import { stopAgent } from '@/lib/api/agent/api';
 import { createClientTraceId } from '@/lib/api/trace';
+import { draftImagesToChatImages, draftImagesToSessionImages } from '@/lib/chatImageDrafts';
 import { buildUserMessage } from '@/lib/chatMessages';
-import { toErrorMessage } from '@/lib/errors';
-import type { ChatStateControls, UseBridgeChatOptions } from './types';
-
-const AGENT_RUN_CANCELLED_MESSAGE = 'agent run cancelled';
+import { isAbortError, toErrorMessage } from '@/lib/errors';
+import type { ChatSendInput } from '@/lib/types';
+import type { ChatStateControls, StreamAgentRunInput, UseBridgeChatOptions } from './types';
 
 interface UseChatRunControlOptions {
   appendErrorMessage: ChatStateControls['appendErrorMessage'];
   appendMessages: ChatStateControls['appendMessages'];
   clearChatError: ChatStateControls['clearChatError'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
-  handleReply: (reply: Awaited<ReturnType<typeof sendMessage>>) => Promise<void>;
+  runAgentStream: (run: StreamAgentRunInput) => Promise<void>;
   activeRunRef: ChatStateControls['activeRunRef'];
   setActiveRun: ChatStateControls['setActiveRun'];
   setLoading: ChatStateControls['setLoading'];
@@ -27,7 +27,7 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     appendMessages,
     clearChatError,
     currentSessionId,
-    handleReply,
+    runAgentStream,
     activeRunRef,
     setActiveRun,
     setLoading,
@@ -36,36 +36,38 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     stopPendingRef,
   } = options;
 
-  const sendChatMessage = useCallback(async (message: string) => {
-    const trimmed = message.trim();
-    const sessionId = currentSessionId.trim();
-    if (!trimmed && !sessionId) {
+  const sendChatMessage = useCallback(async (input: ChatSendInput) => {
+    if (!hasSendPayload(input)) {
       return;
     }
 
+    const sessionId = currentSessionId.trim();
     const traceId = createClientTraceId('agent-run');
+    const abortController = new AbortController();
     clearChatError();
     setStopPending(false);
-    setActiveRun({ sessionId, traceId });
-    if (trimmed) {
-      appendMessages([buildUserMessage(trimmed)]);
-    }
+    setActiveRun({ abortController, sessionId, traceId });
+    appendMessages([buildUserMessage(input.message, { images: draftImagesToChatImages(input.images) })]);
     setLoading(true);
 
     try {
-      const reply = await sendMessage(trimmed, sessionId || undefined, traceId);
-      await handleReply(reply);
+      await runAgentStream({
+        images: draftImagesToSessionImages(input.images),
+        message: input.message,
+        sessionId: sessionId || undefined,
+        signal: abortController.signal,
+        traceId,
+      });
     } catch (error) {
-      const messageText = toErrorMessage(error);
-      if (!(stopPendingRef.current && messageText === AGENT_RUN_CANCELLED_MESSAGE)) {
-        appendErrorMessage(messageText);
+      if (!shouldSuppressRunError(error, stopPendingRef.current)) {
+        appendErrorMessage(toErrorMessage(error));
       }
     } finally {
       setLoading(false);
       setActiveRun(null);
       setStopPending(false);
     }
-  }, [appendErrorMessage, appendMessages, clearChatError, currentSessionId, handleReply, setActiveRun, setLoading, setStopPending, stopPendingRef]);
+  }, [appendErrorMessage, appendMessages, clearChatError, currentSessionId, runAgentStream, setActiveRun, setLoading, setStopPending, stopPendingRef]);
 
   const stopCurrentRun = useCallback(async () => {
     const run = activeRunRef.current;
@@ -77,6 +79,7 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     setStopPending(true);
     try {
       await stopAgent(run.sessionId || undefined, run.traceId || undefined);
+      run.abortController?.abort();
     } catch (error) {
       setChatError(toErrorMessage(error));
       setStopPending(false);
@@ -87,4 +90,16 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     sendChatMessage,
     stopCurrentRun,
   };
+}
+
+function hasSendPayload(input: ChatSendInput): boolean {
+  return input.message.trim().length > 0 || input.images.length > 0;
+}
+
+function shouldSuppressRunError(error: unknown, stopPending: boolean): boolean {
+  if (!stopPending) {
+    return false;
+  }
+
+  return isAbortError(error) || toErrorMessage(error) === 'agent stream closed before terminal event';
 }

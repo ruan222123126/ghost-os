@@ -15,6 +15,7 @@
 ### Central: `core/bridge`
 
 - Agent、Session、Tool、Provider、SSE、配置持久化、`ask_human` 续跑、基础 Memory 增强链路已落地。
+- 普通 Agent 请求现已补上图片入参链路：`/api/agent` / `AGENT_SEND` 支持 `images[]`，图片可用本地路径、远程 URL 或 data URL 表达；Central 会把用户图片写入 session history，并在 provider 投影阶段对 OpenAI / Anthropic / Codex 统一转成对应多模态输入，不再只支持 tool-result 图片。
 - Memory 主链已切换到“事件节点图驱动”：
   - `core/bridge/memorystore` 新增 `event_nodes` / `event_edges` / `event_memories` / `session_event_state` 存储层，用于承载任务/目标级事件图；旧 `learned_memories` 不再接任务型自动记忆写入，只保留全局长期偏好的实现细节。
   - `core/bridge/memoryaug` 现按 `IntentPlanner -> RecallService -> LearningService` 三段式工作：每轮 prepare 固定先跑 planner，激活范围收敛到 `1 primary + 最多 2 adjacent`，recall 只读激活子图，learning 只写当前 primary event。
@@ -50,6 +51,9 @@
 - prompt guidance 已按协议模式分流：普通 native `tool_calls` prompt 不再泄漏 `mutation { ... }`、`tfind(action: ...)` 一类 GraphQL 示例，GraphQL 专用样例只保留在 hidden catalog / GraphQL runtime prompt 路径中。
 - `web_rooter` 的 prompt guidance 已补齐联网分流规则：需要引用、出处、多源交叉验证、学术资料或深度研究时优先走 `web_rooter`；普通即时网页搜继续走 `web_search`，避免模型把所有联网任务都打到同一层搜索能力。
 - `web_search` 的 Tavily / Exa provider 现支持显式自定义 endpoint：运行时配置可分别填写 `web_search_tavily_url` / `web_search_exa_url`，留空时继续走官方接口，填写后请求会直接命中自定义 URL，原有 API key 语义保持不变。
+- `web_search` 在同时配置 Tavily 和 Exa API key 时，工具参数 schema 与 GraphQL 最小示例现会把 `provider` 明确提升为必填，并在工具描述中显式说明原因，避免模型继续按 `web_search(query: ...)` 生成错误调用后表现成“什么都没搜到”。
+- `tfind(action="search")` 的候选工具匹配已从“整句 substring”改为规范化自然语言词匹配：会统一处理空格/下划线/标点，并优先匹配工具名与标签，避免像 `website search tool availability; web_search, browser_control, internet retrieval, web browser` 这类查询继续把 `web_search` / `browser_control` 搜成空结果。
+- GraphQL 文本 sanitize 现可在显式 sanitize 模式下提取并校验嵌入在同一 assistant 文本里的合法 GraphQL 文档：像 `mutation { ... }你好` 这类“工具调用 + 额外文字”不再一律直接 parse error；已知的 `[GRAPHQL_TOOL_RESULT]` 后缀剥离语义保持不变，关闭 `graphql_text_sanitize_enabled` 后仍回到严格纯文档模式。
 - 工具可见性语义已拆分为“常驻 allowlist”与“严格 allowlist-only”两层：`tool_allowlist` 现在只定义当前 turn 的 resident 工具；当 `tool_allowlist_only = true` 时，selector 与静态工具面才会一起收紧到 allowlist。非 strict 模式下，selector 仍可为主模型挑选其他未被 `tool_blocklist` 屏蔽的静态工具。
 - `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
@@ -61,6 +65,8 @@
 - Web Console 现已补上左下角设置入口：侧边栏底部新增 `Settings` 按钮，可直接打开现有运行时配置弹窗，不再需要依赖隐式入口或额外页面跳转。
 - Web Console 的 Runtime Settings 现已补上 Tavily / Exa 自定义 URL 输入框，可直接查看、保存或清空搜索 endpoint；未填写时仍默认使用官方地址。
 - Web Console 会话主链已切到流式：前端现直接消费 Bridge SSE 的 `run_started / completion_delta / tool_call_started / tool_call_finished / awaiting_human / message / done / error` 事件，回复文本和工具状态可在回合进行中实时落屏；回合结束后仍会回填一次 session history 以收口最终持久化内容、工具输出与附件。
+- Web Console 前端的用户侧图片发送链路现已接通：输入区加号按钮可选择多张图片，浏览器会将图片转成 data URL 通过现有 `/api/agent/stream` `images[]` contract 发给 Bridge；前端同时补上发送前预览、纯图片提交、图文混发，以及 session history 里的用户图片回显。
+- Web Console 的聊天消息去重已补上 GraphQL 工具文本抑制：当 assistant 的纯 `query/mutation { ... }` 文本已被解析并呈现为 tool card 时，前端不会再额外渲染同一段原始 GraphQL 工具调用文本；历史回放与流式工具事件两条路径都已收口。
 - CLI 基线可用，已支持基础会话与桥接操作。
 - Android 已接入部分会话与展示能力，但整体成熟度低于 Web 与 CLI。
 
@@ -87,6 +93,7 @@
 - 任务系统已补上 `workflow` 类型地基：继续复用现有调度器、任务存储、`/api/tasks` 与 `TASK_*` action，在不新增独立服务/存储的前提下支持 `start -> end` 最小 workflow 任务创建、查询、手动执行与运行摘要。
 - `workflow` 运行时已扩到线性节点链：现支持固定参数的 `tool` / `llm` / `agent` 节点，继续复用现有 runtime factory、任务存储与调度器；节点间暂不传递输出，`agent` 节点按 fresh session 运行，`tool` 节点受独立 `workflow_tool_allowlist` 显式约束。
 - Web Console / CLI：基础对话和桥接操作可用。
+- Web Console 前端的用户侧图片发送已可用：支持点击加号选择多图、发送纯图片或图文混发，并能在历史消息中回显用户图片。
 
 ## 当前约束
 

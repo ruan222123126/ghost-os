@@ -4,22 +4,31 @@ import type {
   AskHumanOption,
   ProviderConfig,
   SessionFileContent as SharedSessionFileContent,
+  SessionImageContent as SharedSessionImageContent,
   SessionMessage as SharedSessionMessage,
 } from '@/lib/envelope.generated';
 
 export type {
   AgentIterationSummaryItem,
+  AgentCompletionDeltaPayload,
+  AgentDonePayload,
+  AgentErrorPayload,
   AgentRequest,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
   AgentStopResponsePayload,
   AgentSendSuccessResponse,
+  AgentStreamEvent,
+  AgentStreamMessagePayload,
+  AgentToolCallFinishedPayload,
+  AgentToolCallStartedPayload,
   ApiEnvelope,
   ApiErrorEnvelope,
   ApiRequest,
   ApiSuccessEnvelope,
   AskHumanOption,
   AssistantSessionEndSignal,
+  AgentRunStartedPayload,
   BridgeConfig,
   ConfigUpdate,
   GraphQLDomainInput,
@@ -49,6 +58,7 @@ export interface UserChatMessage {
   id: string;
   kind: 'user';
   content: string;
+  images?: ChatImage[];
 }
 
 export interface AssistantChatMessage {
@@ -85,6 +95,29 @@ export interface ChatFileAttachment {
   sha256?: string;
   sourcePath?: string;
   note?: string;
+}
+
+export interface ChatImage {
+  id: string;
+  name?: string;
+  url?: string;
+  path?: string;
+  mimeType?: string;
+  width?: number;
+  height?: number;
+  bytes?: number;
+  sha256?: string;
+}
+
+export interface ChatImageDraft {
+  id: string;
+  name: string;
+  content: SharedSessionImageContent;
+}
+
+export interface ChatSendInput {
+  message: string;
+  images: ChatImageDraft[];
 }
 
 export interface ErrorChatMessage {
