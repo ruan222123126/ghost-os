@@ -45,9 +45,12 @@ func scanStoredTaskEntry(
 	entry os.DirEntry,
 	validator DefinitionValidator,
 ) (ScheduledTask, LoadIssue, bool, error) {
-	taskID, ok := taskIDFromEntry(entry)
-	if !ok {
+	taskID, issue, handled, err := taskEntryID(tasksDir, entry)
+	if !handled {
 		return ScheduledTask{}, LoadIssue{}, false, nil
+	}
+	if err != nil {
+		return ScheduledTask{}, issue, true, err
 	}
 
 	path := filepath.Join(tasksDir, entry.Name())
@@ -67,15 +70,17 @@ func scanStoredTaskEntry(
 	return task, LoadIssue{}, true, nil
 }
 
-func taskIDFromEntry(entry os.DirEntry) (string, bool) {
+func taskEntryID(tasksDir string, entry os.DirEntry) (string, LoadIssue, bool, error) {
 	if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-		return "", false
+		return "", LoadIssue{}, false, nil
 	}
 	id := strings.TrimSuffix(entry.Name(), ".json")
 	if !IsValidTaskID(id) {
-		return "", false
+		path := filepath.Join(tasksDir, entry.Name())
+		err := fmt.Errorf("%w: file name %q", ErrInvalidTaskID, entry.Name())
+		return "", newLoadIssue(LoadIssueInvalidFilename, id, path, err), true, err
 	}
-	return id, true
+	return id, LoadIssue{}, true, nil
 }
 
 func newLoadIssue(kind string, taskID string, path string, err error) LoadIssue {

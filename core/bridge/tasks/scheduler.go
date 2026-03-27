@@ -30,9 +30,11 @@ type TaskScheduler struct {
 	execute          func(context.Context, ScheduledTask, string) ExecutionResult
 	executionTimeout time.Duration
 
-	mu      sync.Mutex
-	running bool
-	tasks   map[string]*taskRegistration
+	mu              sync.Mutex
+	running         bool
+	lifecycleCtx    context.Context
+	lifecycleCancel context.CancelFunc
+	tasks           map[string]*taskRegistration
 }
 
 const defaultTaskExecutionTimeout = 2 * time.Minute
@@ -63,6 +65,9 @@ func (s *TaskScheduler) Start() error {
 		s.mu.Unlock()
 		return nil
 	}
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	s.lifecycleCtx = lifecycleCtx
+	s.lifecycleCancel = lifecycleCancel
 	s.running = true
 	s.mu.Unlock()
 	started := false
@@ -71,8 +76,14 @@ func (s *TaskScheduler) Start() error {
 			return
 		}
 		s.mu.Lock()
+		cancel := s.lifecycleCancel
+		s.lifecycleCtx = nil
+		s.lifecycleCancel = nil
 		s.running = false
 		s.mu.Unlock()
+		if cancel != nil {
+			cancel()
+		}
 	}()
 
 	tasks, issues, err := s.store.ListTasksTolerant()
@@ -114,15 +125,21 @@ func (s *TaskScheduler) Stop() {
 		return
 	}
 	s.mu.Lock()
+	cancel := s.lifecycleCancel
 	registrations := make([]*taskRegistration, 0, len(s.tasks))
 	for id, reg := range s.tasks {
 		registrations = append(registrations, reg)
 		reg.stop()
 		delete(s.tasks, id)
 	}
+	s.lifecycleCtx = nil
+	s.lifecycleCancel = nil
 	s.running = false
 	s.mu.Unlock()
 
+	if cancel != nil {
+		cancel()
+	}
 	for _, reg := range registrations {
 		reg.waitIdle()
 	}
@@ -166,9 +183,12 @@ func (s *TaskScheduler) RunNow(task ScheduledTask, traceID string) (RunLog, erro
 	if err := NormalizeScheduledTask(&task, schedulerValidator(s.store)); err != nil {
 		return RunLog{}, err
 	}
-	reg := s.lookupTask(task.ID)
+	reg, lifecycleCtx, err := s.runningTask(task.ID)
+	if err != nil {
+		return RunLog{}, err
+	}
 	if reg == nil {
-		reg = &taskRegistration{task: task}
+		reg = &taskRegistration{task: task, loopCtx: lifecycleCtx}
 	}
 	scheduledAt := s.now().UTC()
 	runTraceID := strings.TrimSpace(traceID)
@@ -183,51 +203,30 @@ func (s *TaskScheduler) RunNow(task ScheduledTask, traceID string) (RunLog, erro
 	return s.executeRun(runCtx, reg, task, scheduledAt, runTraceID)
 }
 
-func (s *TaskScheduler) beginManualRun(
-	reg *taskRegistration,
-	task ScheduledTask,
-	traceID string,
-) (ScheduledTask, context.Context, *taskRegistration, bool, string) {
-	if reg == nil {
-		reg = &taskRegistration{task: task}
-	}
-	task, runCtx, skipped, reason := reg.beginRun(task, s.taskExecutionTimeout(), traceID)
-	if reason != skipRunReasonRegistrationRetired {
-		return task, runCtx, reg, skipped, reason
-	}
-	reg = &taskRegistration{task: task}
-	task, runCtx, skipped, reason = reg.beginRun(task, s.taskExecutionTimeout(), traceID)
-	return task, runCtx, reg, skipped, reason
-}
-
 func (s *TaskScheduler) register(task ScheduledTask) error {
 	plan, err := buildTaskSchedulePlan(task)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	lifecycleCtx, existing, err := s.prepareRegistration(task.ID)
+	if err != nil {
+		return err
+	}
+	if existing != nil {
+		existing.waitIdle()
+	}
+
+	ctx, cancel := context.WithCancel(lifecycleCtx)
 	reg := &taskRegistration{
 		cancel:   cancel,
 		loopDone: make(chan struct{}),
 		loopCtx:  ctx,
 		task:     task,
 	}
-
-	var existing *taskRegistration
-	s.mu.Lock()
-	if current, ok := s.tasks[task.ID]; ok {
-		existing = current
-		existing.stop()
-		delete(s.tasks, task.ID)
+	if err := s.commitRegistration(task.ID, reg); err != nil {
+		cancel()
+		return err
 	}
-	s.mu.Unlock()
-	if existing != nil {
-		existing.waitIdle()
-	}
-
-	s.mu.Lock()
-	s.tasks[task.ID] = reg
-	s.mu.Unlock()
 
 	go s.runTaskLoop(ctx, reg, plan)
 	return nil

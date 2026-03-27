@@ -11,18 +11,19 @@ type TaskLoadIssue = LoadIssue
 type scheduledTaskExecutionResult = ExecutionResult
 
 const (
-	taskScheduleTypeInterval   = ScheduleTypeInterval
-	taskScheduleTypeCron       = ScheduleTypeCron
-	defaultTaskRunLogRetention = DefaultRunLogRetention
-	taskRunStatusSuccess       = RunStatusSuccess
-	taskRunStatusCancelled     = RunStatusCancelled
-	taskRunStatusError         = RunStatusError
-	taskRunStatusSkipped       = RunStatusSkipped
-	taskRunStatusAwaitingHuman = RunStatusAwaitingHuman
-	taskLoadIssueReadError     = LoadIssueReadError
-	taskLoadIssueDecodeError   = LoadIssueDecodeError
-	taskLoadIssueInvalidConfig = LoadIssueInvalidConfig
-	taskLoadIssueIDMismatch    = LoadIssueIDMismatch
+	taskScheduleTypeInterval     = ScheduleTypeInterval
+	taskScheduleTypeCron         = ScheduleTypeCron
+	defaultTaskRunLogRetention   = DefaultRunLogRetention
+	taskRunStatusSuccess         = RunStatusSuccess
+	taskRunStatusCancelled       = RunStatusCancelled
+	taskRunStatusError           = RunStatusError
+	taskRunStatusSkipped         = RunStatusSkipped
+	taskRunStatusAwaitingHuman   = RunStatusAwaitingHuman
+	taskLoadIssueInvalidFilename = LoadIssueInvalidFilename
+	taskLoadIssueReadError       = LoadIssueReadError
+	taskLoadIssueDecodeError     = LoadIssueDecodeError
+	taskLoadIssueInvalidConfig   = LoadIssueInvalidConfig
+	taskLoadIssueIDMismatch      = LoadIssueIDMismatch
 )
 
 func NewTaskStore(baseDir string) (*TaskStore, error) {

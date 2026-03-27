@@ -261,6 +261,10 @@ func TestTaskSchedulerRunMarksTimeout(t *testing.T) {
 		<-ctx.Done()
 		return ExecutionResult{Status: RunStatusSuccess}
 	}
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
 
 	task := ScheduledTask{
 		ID:              "timeout-task",
@@ -319,6 +323,10 @@ func TestTaskSchedulerUnregisterCancelsRunningTask(t *testing.T) {
 		close(finished)
 		return ExecutionResult{Status: RunStatusError, Error: ctx.Err().Error()}
 	}
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
 
 	task := ScheduledTask{
 		ID:              "unregister-cancel-task",
@@ -375,6 +383,10 @@ func TestTaskSchedulerRunNowHonorsTimeout(t *testing.T) {
 		<-ctx.Done()
 		return ExecutionResult{Status: RunStatusError, Error: ctx.Err().Error()}
 	}
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
 
 	task := ScheduledTask{
 		ID:              "run-now-timeout-task",
@@ -407,6 +419,10 @@ func TestTaskSchedulerRunKeepsNormalErrorsAsError(t *testing.T) {
 	scheduler.execute = func(_ context.Context, _ ScheduledTask, _ string) ExecutionResult {
 		return ExecutionResult{Status: RunStatusError, Error: wantErr.Error()}
 	}
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
 
 	task := ScheduledTask{
 		ID:              "normal-error-task",

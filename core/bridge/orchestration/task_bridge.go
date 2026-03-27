@@ -10,29 +10,31 @@ import (
 )
 
 const (
-	taskScheduleTypeInterval    = bridgeTasks.ScheduleTypeInterval
-	taskScheduleTypeCron        = bridgeTasks.ScheduleTypeCron
-	defaultTaskRunLogRetention  = bridgeTasks.DefaultRunLogRetention
-	taskRunStatusSuccess        = bridgeTasks.RunStatusSuccess
-	taskRunStatusCancelled      = bridgeTasks.RunStatusCancelled
-	taskRunStatusError          = bridgeTasks.RunStatusError
-	taskRunStatusSkipped        = bridgeTasks.RunStatusSkipped
-	taskRunStatusAwaitingHuman  = bridgeTasks.RunStatusAwaitingHuman
-	maxTaskResponsePreviewRunes = bridgeTasks.MaxResponsePreviewRunes
-	taskKindAgentMessage        = bridgeTasks.KindAgentMessage
-	taskKindSystemAction        = bridgeTasks.KindSystemAction
-	taskKindWorkflow            = bridgeTasks.KindWorkflow
-	taskLoadIssueReadError      = bridgeTasks.LoadIssueReadError
-	taskLoadIssueDecodeError    = bridgeTasks.LoadIssueDecodeError
-	taskLoadIssueInvalidConfig  = bridgeTasks.LoadIssueInvalidConfig
-	taskLoadIssueIDMismatch     = bridgeTasks.LoadIssueIDMismatch
+	taskScheduleTypeInterval     = bridgeTasks.ScheduleTypeInterval
+	taskScheduleTypeCron         = bridgeTasks.ScheduleTypeCron
+	defaultTaskRunLogRetention   = bridgeTasks.DefaultRunLogRetention
+	taskRunStatusSuccess         = bridgeTasks.RunStatusSuccess
+	taskRunStatusCancelled       = bridgeTasks.RunStatusCancelled
+	taskRunStatusError           = bridgeTasks.RunStatusError
+	taskRunStatusSkipped         = bridgeTasks.RunStatusSkipped
+	taskRunStatusAwaitingHuman   = bridgeTasks.RunStatusAwaitingHuman
+	maxTaskResponsePreviewRunes  = bridgeTasks.MaxResponsePreviewRunes
+	taskKindAgentMessage         = bridgeTasks.KindAgentMessage
+	taskKindSystemAction         = bridgeTasks.KindSystemAction
+	taskKindWorkflow             = bridgeTasks.KindWorkflow
+	taskLoadIssueInvalidFilename = bridgeTasks.LoadIssueInvalidFilename
+	taskLoadIssueReadError       = bridgeTasks.LoadIssueReadError
+	taskLoadIssueDecodeError     = bridgeTasks.LoadIssueDecodeError
+	taskLoadIssueInvalidConfig   = bridgeTasks.LoadIssueInvalidConfig
+	taskLoadIssueIDMismatch      = bridgeTasks.LoadIssueIDMismatch
 )
 
 var (
-	ErrTaskNotFound      = bridgeTasks.ErrTaskNotFound
-	ErrTaskCorrupted     = bridgeTasks.ErrTaskCorrupted
-	ErrInvalidTaskID     = bridgeTasks.ErrInvalidTaskID
-	ErrInvalidTaskConfig = bridgeTasks.ErrInvalidTaskConfig
+	ErrTaskNotFound         = bridgeTasks.ErrTaskNotFound
+	ErrTaskCorrupted        = bridgeTasks.ErrTaskCorrupted
+	ErrInvalidTaskID        = bridgeTasks.ErrInvalidTaskID
+	ErrInvalidTaskConfig    = bridgeTasks.ErrInvalidTaskConfig
+	ErrTaskSchedulerStopped = bridgeTasks.ErrTaskSchedulerStopped
 )
 
 type ScheduledTask = bridgeTasks.ScheduledTask

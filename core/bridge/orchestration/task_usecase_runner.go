@@ -99,20 +99,6 @@ func (r taskMutationRunner) RunNow(params taskIDParams, traceID string) (taskRun
 	}, nil
 }
 
-func (r taskMutationRunner) Delete(params taskIDParams) (taskDeleteResponse, error) {
-	id, err := normalizeTaskID(params.ID)
-	if err != nil {
-		return taskDeleteResponse{}, err
-	}
-	if err := r.scheduler.Unregister(id); err != nil {
-		return taskDeleteResponse{}, err
-	}
-	if err := r.store.DeleteTask(id); err != nil {
-		return taskDeleteResponse{}, err
-	}
-	return taskDeleteResponse{ID: id, Deleted: true}, nil
-}
-
 func (r taskMutationRunner) newScheduledTask(params taskCreateParams) (ScheduledTask, error) {
 	task, err := r.buildScheduledTask(params)
 	if err != nil {

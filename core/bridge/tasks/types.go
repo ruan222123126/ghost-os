@@ -14,20 +14,21 @@ const (
 	ScheduleTypeInterval = "interval"
 	ScheduleTypeCron     = "cron"
 
-	DefaultRunLogRetention  = 100
-	RunStatusSuccess        = "success"
-	RunStatusCancelled      = "cancelled"
-	RunStatusError          = "error"
-	RunStatusSkipped        = "skipped"
-	RunStatusAwaitingHuman  = "awaiting_human"
-	MaxResponsePreviewRunes = 240
-	KindAgentMessage        = "agent_message"
-	KindSystemAction        = "system_action"
-	KindWorkflow            = "workflow"
-	LoadIssueReadError      = "read_error"
-	LoadIssueDecodeError    = "decode_error"
-	LoadIssueInvalidConfig  = "invalid_config"
-	LoadIssueIDMismatch     = "id_mismatch"
+	DefaultRunLogRetention   = 100
+	RunStatusSuccess         = "success"
+	RunStatusCancelled       = "cancelled"
+	RunStatusError           = "error"
+	RunStatusSkipped         = "skipped"
+	RunStatusAwaitingHuman   = "awaiting_human"
+	MaxResponsePreviewRunes  = 240
+	KindAgentMessage         = "agent_message"
+	KindSystemAction         = "system_action"
+	KindWorkflow             = "workflow"
+	LoadIssueInvalidFilename = "invalid_filename"
+	LoadIssueReadError       = "read_error"
+	LoadIssueDecodeError     = "decode_error"
+	LoadIssueInvalidConfig   = "invalid_config"
+	LoadIssueIDMismatch      = "id_mismatch"
 )
 
 var (

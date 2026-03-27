@@ -66,6 +66,8 @@ func TestTaskMutationRunnerUpdateRollsBackPersistedTaskWhenUpsertFails(t *testin
 type taskMutationStoreStub struct {
 	loadedTask ScheduledTask
 	saveErrs   []error
+	deleteErrs []error
+	deletedIDs []string
 	savedTasks []ScheduledTask
 }
 
@@ -85,7 +87,16 @@ func (s *taskMutationStoreStub) SaveTask(task *ScheduledTask) error {
 	return nil
 }
 
-func (s *taskMutationStoreStub) DeleteTask(_ string) error {
+func (s *taskMutationStoreStub) DeleteTask(taskID string) error {
+	s.deletedIDs = append(s.deletedIDs, taskID)
+	if len(s.deleteErrs) > 0 {
+		err := s.deleteErrs[0]
+		s.deleteErrs = s.deleteErrs[1:]
+		if err != nil {
+			return err
+		}
+	}
+	s.loadedTask = ScheduledTask{}
 	return nil
 }
 

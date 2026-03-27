@@ -60,6 +60,10 @@ func TestTaskSchedulerRunNowFallsBackFromRetiredRegistration(t *testing.T) {
 		}
 		return ExecutionResult{Status: RunStatusSuccess, SessionIDOutput: "session-ok"}
 	}
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
 
 	stale := &taskRegistration{task: task}
 	stale.stop()

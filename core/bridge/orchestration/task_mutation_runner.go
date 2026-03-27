@@ -37,10 +37,10 @@ func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error)
 		return taskPayload{}, err
 	}
 	if err := r.store.SaveTask(task); err != nil {
-		return taskPayload{}, wrapTaskUpdateRollbackError(err, r.restoreTaskRegistration(previous))
+		return taskPayload{}, wrapTaskMutationRollbackError(err, r.restoreTaskRegistration(previous))
 	}
 	if err := r.scheduler.Upsert(*task); err != nil {
-		return taskPayload{}, wrapTaskUpdateRollbackError(err, r.rollbackPersistedTaskUpdate(previous))
+		return taskPayload{}, wrapTaskMutationRollbackError(err, r.rollbackPersistedTaskUpdate(previous))
 	}
 	return buildTaskPayload(*task), nil
 }
@@ -64,7 +64,15 @@ func (r taskMutationRunner) rollbackPersistedTaskUpdate(task ScheduledTask) erro
 	)
 }
 
-func wrapTaskUpdateRollbackError(updateErr error, rollbackErr error) error {
+func (r taskMutationRunner) rollbackTaskDeletion(task ScheduledTask) error {
+	rollbackTask := cloneScheduledTask(task)
+	return errors.Join(
+		r.store.SaveTask(&rollbackTask),
+		r.scheduler.Upsert(task),
+	)
+}
+
+func wrapTaskMutationRollbackError(updateErr error, rollbackErr error) error {
 	if rollbackErr == nil {
 		return updateErr
 	}
