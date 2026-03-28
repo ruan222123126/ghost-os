@@ -163,9 +163,13 @@ func codexIncrementalMessages(messages []Message) []Message {
 
 	lastAssistantIndex := -1
 	for index, msg := range messages {
-		if msg.Role == RoleAssistant {
-			lastAssistantIndex = index
+		if msg.Role != RoleAssistant {
+			continue
 		}
+		if codexSkipsIncrementalBoundary(msg) {
+			continue
+		}
+		lastAssistantIndex = index
 	}
 
 	start := lastAssistantIndex + 1
@@ -176,6 +180,14 @@ func codexIncrementalMessages(messages []Message) []Message {
 		return nil
 	}
 	return CloneMessages(messages[start:])
+}
+
+func codexSkipsIncrementalBoundary(msg Message) bool {
+	text := strings.TrimSpace(msg.Text)
+	if text == "" {
+		return false
+	}
+	return strings.HasPrefix(text, "[GRAPHQL_TOOL_RESULT]")
 }
 
 func toCodexMessageInput(msg Message) (codexInputItem, bool, error) {
@@ -195,9 +207,10 @@ func toCodexMessageInput(msg Message) (codexInputItem, bool, error) {
 
 func toCodexInputContent(msg Message) ([]codexInputContent, error) {
 	parts := make([]codexInputContent, 0, len(msg.Content)+1)
+	textContentType := codexTextContentType(msg.Role)
 	if text := strings.TrimSpace(msg.Text); text != "" {
 		parts = append(parts, codexInputContent{
-			Type: "input_text",
+			Type: textContentType,
 			Text: text,
 		})
 	}
@@ -206,11 +219,14 @@ func toCodexInputContent(msg Message) ([]codexInputContent, error) {
 		case "", ContentTypeText:
 			if text := strings.TrimSpace(part.Text); text != "" {
 				parts = append(parts, codexInputContent{
-					Type: "input_text",
+					Type: textContentType,
 					Text: text,
 				})
 			}
 		case ContentTypeImage:
+			if msg.Role != RoleUser {
+				return nil, fmt.Errorf("unsupported image content role for codex provider: %q", msg.Role)
+			}
 			if part.Image == nil {
 				continue
 			}
@@ -225,6 +241,13 @@ func toCodexInputContent(msg Message) ([]codexInputContent, error) {
 		}
 	}
 	return parts, nil
+}
+
+func codexTextContentType(role Role) string {
+	if role == RoleAssistant {
+		return "output_text"
+	}
+	return "input_text"
 }
 
 func toCodexToolOutput(msg Message) string {

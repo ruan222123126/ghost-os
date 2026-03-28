@@ -75,6 +75,7 @@ func TestCodexToCompletionResponseMapsTextAndLengthFinish(t *testing.T) {
 }
 
 func TestToCodexRequestBuildsFunctionCallAndToolOutputItems(t *testing.T) {
+	store := false
 	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
 		Messages: []Message{
 			{Role: RoleSystem, Text: "system prompt"},
@@ -90,6 +91,15 @@ func TestToCodexRequestBuildsFunctionCallAndToolOutputItems(t *testing.T) {
 		},
 		Tools: []ToolDef{
 			{Name: "read_file", Description: "Read a file", Parameters: json.RawMessage(`{"type":"object"}`)},
+		},
+		ResponseOptions: ResponseOptions{
+			PromptCacheKey:       "cache-key",
+			PromptCacheRetention: "retain",
+			SafetyIdentifier:     "user-1",
+			Metadata: map[string]string{
+				"channel": "bridge",
+			},
+			Store: &store,
 		},
 	})
 	if err != nil {
@@ -121,6 +131,189 @@ func TestToCodexRequestBuildsFunctionCallAndToolOutputItems(t *testing.T) {
 	}
 	if req.Tools[0].Strict {
 		t.Fatalf("expected tool strict=false, got true")
+	}
+	if req.PromptCacheKey != "cache-key" {
+		t.Fatalf("unexpected prompt_cache_key: got %q want %q", req.PromptCacheKey, "cache-key")
+	}
+	if req.PromptCacheRetention != "retain" {
+		t.Fatalf("unexpected prompt_cache_retention: got %q want %q", req.PromptCacheRetention, "retain")
+	}
+	if req.SafetyIdentifier != "user-1" {
+		t.Fatalf("unexpected safety_identifier: got %q want %q", req.SafetyIdentifier, "user-1")
+	}
+	if req.Metadata["channel"] != "bridge" {
+		t.Fatalf("unexpected metadata payload: %+v", req.Metadata)
+	}
+	if req.Store == nil || *req.Store {
+		t.Fatalf("unexpected store option: %+v", req.Store)
+	}
+}
+
+func TestToCodexRequestMapsAssistantTextAsOutputText(t *testing.T) {
+	req, err := toCodexRequest("gpt-5.3-codex", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+			{Role: RoleAssistant, Text: "world"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if len(req.Input) != 2 {
+		t.Fatalf("unexpected input count: got %d want 2", len(req.Input))
+	}
+	if req.Input[0].Role != "user" || len(req.Input[0].Content) != 1 || req.Input[0].Content[0].Type != "input_text" {
+		t.Fatalf("unexpected user input item: %+v", req.Input[0])
+	}
+	if req.Input[1].Role != "assistant" || len(req.Input[1].Content) != 1 || req.Input[1].Content[0].Type != "output_text" {
+		t.Fatalf("unexpected assistant input item: %+v", req.Input[1])
+	}
+}
+
+func TestToCodexRequestRejectsAssistantImageContent(t *testing.T) {
+	_, err := toCodexRequest("gpt-5.3-codex", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "hi"},
+			{
+				Role: RoleAssistant,
+				Content: []ContentPart{{
+					Type: ContentTypeImage,
+					Image: &ImageContent{
+						URL: "https://example.com/a.png",
+					},
+				}},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error for assistant image content, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported image content role") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCompleteCodexAppliesClientDefaultResponseOptions(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}`))
+	}))
+	defer server.Close()
+
+	store := false
+	client := NewClientWithOptions(ClientOptions{
+		Provider: ProviderCodex,
+		BaseURL:  server.URL,
+		Model:    "gpt-5.4",
+		ResponseOptions: ResponseOptions{
+			PromptCacheKey:       "default-cache-key",
+			PromptCacheRetention: "retain-default",
+			SafetyIdentifier:     "safe-default",
+			Metadata: map[string]string{
+				"source": "client-defaults",
+			},
+			Store: &store,
+		},
+	})
+	client.httpClient = server.Client()
+
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	if len(requestBodies) != 1 {
+		t.Fatalf("expected one request, got %d", len(requestBodies))
+	}
+	body := requestBodies[0]
+	if body.PromptCacheKey != "default-cache-key" {
+		t.Fatalf("unexpected prompt_cache_key: got %q want %q", body.PromptCacheKey, "default-cache-key")
+	}
+	if body.PromptCacheRetention != "retain-default" {
+		t.Fatalf(
+			"unexpected prompt_cache_retention: got %q want %q",
+			body.PromptCacheRetention,
+			"retain-default",
+		)
+	}
+	if body.SafetyIdentifier != "safe-default" {
+		t.Fatalf("unexpected safety_identifier: got %q want %q", body.SafetyIdentifier, "safe-default")
+	}
+	if body.Metadata["source"] != "client-defaults" {
+		t.Fatalf("unexpected metadata: %+v", body.Metadata)
+	}
+	if body.Store == nil || *body.Store {
+		t.Fatalf("unexpected store setting: %+v", body.Store)
+	}
+}
+
+func TestCompleteCodexRequestOptionsOverrideClientDefaults(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(ClientOptions{
+		Provider: ProviderCodex,
+		BaseURL:  server.URL,
+		Model:    "gpt-5.4",
+		ResponseOptions: ResponseOptions{
+			PromptCacheKey: "default-cache-key",
+		},
+	})
+	client.httpClient = server.Client()
+
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+		},
+		ResponseOptions: ResponseOptions{
+			PromptCacheKey: "request-cache-key",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	if len(requestBodies) != 1 {
+		t.Fatalf("expected one request, got %d", len(requestBodies))
+	}
+	if requestBodies[0].PromptCacheKey != "request-cache-key" {
+		t.Fatalf(
+			"unexpected prompt_cache_key override: got %q want %q",
+			requestBodies[0].PromptCacheKey,
+			"request-cache-key",
+		)
 	}
 }
 
@@ -182,6 +375,90 @@ func TestToCodexRequestUsesPreviousResponseIDAndOnlySendsIncrementalMessages(t *
 	}
 	if req.Input[0].Content[0].Text != "second turn" {
 		t.Fatalf("unexpected incremental user content: %+v", req.Input[0])
+	}
+}
+
+func TestCodexIncrementalMessagesSkipsGraphQLToolResultBoundary(t *testing.T) {
+	messages := []Message{
+		{Role: RoleSystem, Text: "system prompt"},
+		{Role: RoleUser, Text: "find project"},
+		{Role: RoleAssistant, Text: `mutation { tfind(action: search, query: "project") }`},
+		{Role: RoleTool, ToolCallID: "call_1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
+		{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+{"status":"success","tool":"tfind"}`},
+	}
+
+	got := codexIncrementalMessages(messages)
+	if len(got) != 2 {
+		t.Fatalf("unexpected incremental message count: got %d want 2", len(got))
+	}
+	if got[0].Role != RoleTool {
+		t.Fatalf("expected incremental first message to stay tool result, got %+v", got[0])
+	}
+	if got[1].Role != RoleAssistant || !strings.Contains(got[1].Text, "[GRAPHQL_TOOL_RESULT]") {
+		t.Fatalf("expected incremental second message to keep graphql feedback, got %+v", got[1])
+	}
+}
+
+func TestToCodexRequestKeepsPreviousResponseIDWithTrailingGraphQLFeedback(t *testing.T) {
+	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "find project"},
+			{Role: RoleAssistant, Text: `mutation { tfind(action: search, query: "project") }`},
+			{Role: RoleTool, ToolCallID: "call_1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
+			{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+{"status":"success","tool":"tfind"}`},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            "https://api.openai.com/v1",
+			Model:              "codex-mini-latest",
+			PreviousResponseID: "resp_prev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if req.PreviousResponseID != "resp_prev" {
+		t.Fatalf("unexpected previous_response_id: got %q want %q", req.PreviousResponseID, "resp_prev")
+	}
+	if len(req.Input) != 2 {
+		t.Fatalf("unexpected incremental input count: got %d want 2", len(req.Input))
+	}
+	if req.Input[0].Type != "function_call_output" {
+		t.Fatalf("expected first incremental item to be tool output, got %+v", req.Input[0])
+	}
+	if req.Input[1].Type != "message" || req.Input[1].Role != "assistant" {
+		t.Fatalf("expected second incremental item to be assistant feedback, got %+v", req.Input[1])
+	}
+}
+
+func TestToCodexRequestClearsPreviousResponseIDWhenIncrementalInputIsEmpty(t *testing.T) {
+	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+			{Role: RoleAssistant, Text: "hi"},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            "https://api.openai.com/v1",
+			Model:              "codex-mini-latest",
+			PreviousResponseID: "resp_prev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("expected empty previous_response_id when incremental input is empty, got %q", req.PreviousResponseID)
+	}
+	if len(req.Input) == 0 {
+		t.Fatal("expected non-empty stateless input fallback")
+	}
+	if req.Input[0].Type != "message" || req.Input[0].Role != "user" {
+		t.Fatalf("unexpected fallback first input: %+v", req.Input[0])
 	}
 }
 
@@ -284,9 +561,10 @@ func TestCompleteCodexFallsBackToStatelessReplayAfterContinuation400(t *testing.
 	defer server.Close()
 
 	client := NewClientWithOptions(ClientOptions{
-		Provider: ProviderCodex,
-		BaseURL:  server.URL,
-		Model:    "gpt-5.4",
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "gpt-5.4",
+		CodexStatelessRetryEnabled: true,
 	})
 	client.httpClient = server.Client()
 
@@ -372,9 +650,10 @@ func TestCompleteCodexFallsBackToStatelessReplayForPlainFollowUpTurn(t *testing.
 	defer server.Close()
 
 	client := NewClientWithOptions(ClientOptions{
-		Provider: ProviderCodex,
-		BaseURL:  server.URL,
-		Model:    "gpt-5.4",
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "gpt-5.4",
+		CodexStatelessRetryEnabled: true,
 	})
 	client.httpClient = server.Client()
 
@@ -444,5 +723,51 @@ func TestToCodexRequestWithOptionsStatelessCompressesHistoryIntoSyntheticUserPro
 	text := req.Input[0].Content[0].Text
 	if !strings.Contains(text, "User: first") || !strings.Contains(text, "Assistant: first answer") || !strings.Contains(text, "Current request: second") {
 		t.Fatalf("unexpected synthetic prompt: %q", text)
+	}
+}
+
+func TestCompleteCodexDoesNotFallbackToStatelessReplayByDefault(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"upstream_error","type":"upstream_error","code":"upstream_error"}}`))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(ClientOptions{
+		Provider: ProviderCodex,
+		BaseURL:  server.URL,
+		Model:    "gpt-5.4",
+	})
+	client.httpClient = server.Client()
+
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            server.URL,
+			Model:              "gpt-5.4",
+			PreviousResponseID: "resp_prev",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "status 400") {
+		t.Fatalf("expected upstream 400 error without fallback, got %v", err)
+	}
+	if len(requestBodies) != 1 {
+		t.Fatalf("expected one request without fallback, got %d", len(requestBodies))
 	}
 }
