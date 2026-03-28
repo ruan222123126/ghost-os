@@ -16,9 +16,18 @@ const graphQLTextSourceName = "graphql_tool_runtime.graphql"
 
 type GraphQLTextExecutionResult struct {
 	Recognized bool
-	Operation  ast.Operation
-	ToolName   string
-	Arguments  json.RawMessage
+	Calls      []GraphQLTextToolCall
+
+	// Legacy single-call view retained for compatibility with existing callers.
+	Operation ast.Operation
+	ToolName  string
+	Arguments json.RawMessage
+}
+
+type GraphQLTextToolCall struct {
+	Operation ast.Operation
+	ToolName  string
+	Arguments json.RawMessage
 }
 
 type GraphQLTextExecutor interface {
@@ -69,14 +78,16 @@ func (e *graphQLTextExecutor) Execute(
 		call.Recognized = true
 		return call, newGraphQLTextCatalogUnavailableError()
 	}
-	def, ok := graphQLVisibleToolDef(e.catalog, call.ToolName)
-	if !ok || e.catalog.Get(call.ToolName) == nil {
-		call.Recognized = true
-		return call, newGraphQLTextUnknownToolError(call.ToolName, visibleGraphQLToolDefNames(e.catalog))
-	}
-	if err := validateGraphQLToolOperation(call.Operation, def); err != nil {
-		call.Recognized = true
-		return call, err
+	for _, toolCall := range call.Calls {
+		def, ok := graphQLVisibleToolDef(e.catalog, toolCall.ToolName)
+		if !ok || e.catalog.Get(toolCall.ToolName) == nil {
+			call.Recognized = true
+			return call, newGraphQLTextUnknownToolError(toolCall.ToolName, visibleGraphQLToolDefNames(e.catalog))
+		}
+		if err := validateGraphQLToolOperation(toolCall.Operation, def); err != nil {
+			call.Recognized = true
+			return call, err
+		}
 	}
 	call.Recognized = true
 	return call, nil
@@ -93,35 +104,54 @@ func parseGraphQLToolCallDocument(text string) (GraphQLTextExecutionResult, erro
 			"graphql tool runtime does not support fragments",
 		)
 	}
-	operation, err := singleGraphQLToolOperation(document.Operations)
+	calls, err := parseGraphQLToolOperations(document.Operations)
 	if err != nil {
 		return GraphQLTextExecutionResult{}, err
 	}
-	field, err := singleGraphQLToolField(operation)
+	return graphQLTextExecutionResultForCalls(calls), nil
+}
+
+func parseGraphQLToolOperations(
+	operations ast.OperationList,
+) ([]GraphQLTextToolCall, error) {
+	if len(operations) == 0 {
+		return nil, newGraphQLTextOperationCountError(0)
+	}
+	parsed := make([]GraphQLTextToolCall, 0, len(operations))
+	for _, operation := range operations {
+		call, err := parseGraphQLToolOperation(operation)
+		if err != nil {
+			return nil, err
+		}
+		parsed = append(parsed, call)
+	}
+	return parsed, nil
+}
+
+func parseGraphQLToolOperation(operation *ast.OperationDefinition) (GraphQLTextToolCall, error) {
+	normalizedOperation, err := normalizeGraphQLToolOperation(operation)
 	if err != nil {
-		return GraphQLTextExecutionResult{Operation: operation.Operation}, err
+		return GraphQLTextToolCall{}, err
+	}
+	field, err := singleGraphQLToolField(normalizedOperation)
+	if err != nil {
+		return GraphQLTextToolCall{Operation: normalizedOperation.Operation}, err
 	}
 	argsJSON, err := graphQLFieldArgumentsJSON(field.Arguments)
 	if err != nil {
-		return GraphQLTextExecutionResult{
-			Operation: operation.Operation,
+		return GraphQLTextToolCall{
+			Operation: normalizedOperation.Operation,
 			ToolName:  strings.TrimSpace(field.Name),
 		}, err
 	}
-	return GraphQLTextExecutionResult{
-		Operation: operation.Operation,
+	return GraphQLTextToolCall{
+		Operation: normalizedOperation.Operation,
 		ToolName:  strings.TrimSpace(field.Name),
 		Arguments: argsJSON,
 	}, nil
 }
 
-func singleGraphQLToolOperation(
-	operations ast.OperationList,
-) (*ast.OperationDefinition, error) {
-	if len(operations) != 1 {
-		return nil, newGraphQLTextOperationCountError(len(operations))
-	}
-	operation := operations[0]
+func normalizeGraphQLToolOperation(operation *ast.OperationDefinition) (*ast.OperationDefinition, error) {
 	if operation == nil {
 		return nil, newGraphQLTextFeatureError(
 			"empty_operation_definition",
@@ -149,6 +179,21 @@ func singleGraphQLToolOperation(
 		)
 	}
 	return operation, nil
+}
+
+func graphQLTextExecutionResultForCalls(calls []GraphQLTextToolCall) GraphQLTextExecutionResult {
+	result := GraphQLTextExecutionResult{
+		Calls: append([]GraphQLTextToolCall(nil), calls...),
+	}
+	if len(calls) == 0 {
+		return result
+	}
+	result.Operation = calls[0].Operation
+	result.ToolName = calls[0].ToolName
+	if len(calls[0].Arguments) != 0 {
+		result.Arguments = append(json.RawMessage(nil), calls[0].Arguments...)
+	}
+	return result
 }
 
 func singleGraphQLToolField(

@@ -59,11 +59,11 @@ func (a *Agent) finalizeAssistantTextTurn(
 	result AssistantTextResult,
 	handlerErr error,
 ) error {
-	if result.Invocation != nil {
+	if result.Invocation != nil || len(result.Invocations) > 0 {
 		if handlerErr != nil {
 			return state.terminalRunError(ctx, turn, assistantTextTurnError(state.traceID, turn, handlerErr))
 		}
-		return a.finishAssistantTextToolInvocation(ctx, turn, resp, state, result)
+		return a.finishAssistantTextToolInvocations(ctx, turn, resp, state, result)
 	}
 	stepID, err := streaming.ToolStepID(turn, 0)
 	if err != nil {
@@ -89,7 +89,7 @@ func (a *Agent) finalizeAssistantTextTurn(
 	return nil
 }
 
-func (a *Agent) finishAssistantTextToolInvocation(
+func (a *Agent) finishAssistantTextToolInvocations(
 	ctx context.Context,
 	turn int,
 	resp *llm.CompletionResponse,
@@ -97,37 +97,55 @@ func (a *Agent) finishAssistantTextToolInvocation(
 	result AssistantTextResult,
 ) error {
 	acceptAssistantTurn(state.history, resp)
-	outcome, err := state.toolCalls.executeSingle(
-		ctx,
-		state.traceID,
-		turn,
-		result.Tool.Name,
-		result.Tool.CallID,
-		result.Invocation.Arguments,
-	)
-	if err != nil || outcome.stopErr != nil {
-		if outcome.stopErr != nil {
-			err = outcome.stopErr
+	for index, invocation := range assistantTextToolInvocations(result) {
+		outcome, err := state.toolCalls.executeSingleWithStepIndex(
+			ctx,
+			state.traceID,
+			turn,
+			index,
+			invocation.Tool.Name,
+			invocation.Tool.CallID,
+			invocation.Invocation.Arguments,
+		)
+		if err != nil || outcome.stopErr != nil {
+			if outcome.stopErr != nil {
+				err = outcome.stopErr
+			}
+			return a.handleToolCallExecutionError(ctx, turn, err, state)
 		}
-		return a.handleToolCallExecutionError(ctx, turn, err, state)
+		if outcome.executed {
+			for _, message := range buildAssistantTextToolFeedback(
+				&invocation.Invocation,
+				AssistantTextToolExecutionResult{
+					Tool:   invocation.Tool,
+					Output: outcome.output,
+					Meta:   outcome.meta,
+				},
+			) {
+				state.history.Append(message)
+			}
+		}
 	}
-	if outcome.executed {
-		for _, message := range cloneAssistantTextFeedback(result.Feedback) {
-			state.history.Append(message)
-		}
-		for _, message := range buildAssistantTextToolFeedback(
-			result.Invocation,
-			AssistantTextToolExecutionResult{
-				Tool:   result.Tool,
-				Output: outcome.output,
-				Meta:   outcome.meta,
-			},
-		) {
-			state.history.Append(message)
-		}
+	for _, message := range cloneAssistantTextFeedback(result.Feedback) {
+		state.history.Append(message)
 	}
 	a.commitTurn(state.history)
 	return nil
+}
+
+func assistantTextToolInvocations(result AssistantTextResult) []AssistantTextToolInvocationEntry {
+	if len(result.Invocations) > 0 {
+		return append([]AssistantTextToolInvocationEntry(nil), result.Invocations...)
+	}
+	if result.Invocation == nil {
+		return nil
+	}
+	return []AssistantTextToolInvocationEntry{
+		{
+			Tool:       result.Tool,
+			Invocation: *result.Invocation,
+		},
+	}
 }
 
 func (a *Agent) finishAssistantTextTurnWithError(

@@ -107,11 +107,11 @@ func newGraphQLTextParseError(err error) error {
 }
 
 func newGraphQLTextOperationCountError(received int) error {
-	err := fmt.Errorf("graphql tool runtime requires exactly one operation")
+	err := fmt.Errorf("graphql tool runtime requires at least one operation")
 	return newGraphQLTextProtocolError(GraphQLTextProtocolFeedback{
 		Kind:     "wrong_operation_count",
 		Message:  err.Error(),
-		Expected: "1",
+		Expected: ">=1",
 		Received: strconv.Itoa(received),
 	}, err, true)
 }

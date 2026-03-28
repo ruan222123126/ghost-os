@@ -60,7 +60,19 @@ func (e toolCallExecutor) executeSingle(
 	toolCallID string,
 	args json.RawMessage,
 ) (toolCallOutcome, error) {
-	step, err := e.startExplicitToolCall(ctx, traceID, turn, toolName, toolCallID)
+	return e.executeSingleWithStepIndex(ctx, traceID, turn, 0, toolName, toolCallID, args)
+}
+
+func (e toolCallExecutor) executeSingleWithStepIndex(
+	ctx context.Context,
+	traceID string,
+	turn int,
+	stepIndex int,
+	toolName string,
+	toolCallID string,
+	args json.RawMessage,
+) (toolCallOutcome, error) {
+	step, err := e.startExplicitToolCall(ctx, traceID, turn, stepIndex, toolName, toolCallID)
 	if err != nil {
 		return toolCallOutcome{}, err
 	}
@@ -108,10 +120,11 @@ func (e toolCallExecutor) startExplicitToolCall(
 	ctx context.Context,
 	traceID string,
 	turn int,
+	stepIndex int,
 	toolName string,
 	toolCallID string,
 ) (toolCallStep, error) {
-	stepID, err := streaming.ToolStepID(turn, 0)
+	stepID, err := streaming.ToolStepID(turn, stepIndex)
 	if err != nil {
 		return toolCallStep{}, err
 	}

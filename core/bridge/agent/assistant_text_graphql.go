@@ -30,39 +30,63 @@ func (h graphQLTextTurnHandler) HandleAssistantText(
 	ctx context.Context,
 	req AssistantTextRequest,
 ) (AssistantTextResult, error) {
-	toolCallID := strings.TrimSpace(tools.ToolCallIDFromContext(ctx))
-	if toolCallID == "" {
-		toolCallID = tools.NewGraphQLTextToolCallID()
-		ctx = tools.WithToolCallID(ctx, toolCallID)
-	}
 	result, err := h.executor.Execute(ctx, req.Text, req.TraceID)
 	if !result.Recognized {
 		return AssistantTextResult{}, nil
 	}
-	toolName := strings.TrimSpace(result.ToolName)
-	if toolName == "" {
-		toolName = graphQLToolCallProtocolName
-	}
+	toolName := graphQLFallbackToolName(result)
 	handled := AssistantTextResult{
 		Recognized: true,
 		Tool: AssistantTextToolRef{
 			Name:   toolName,
-			CallID: toolCallID,
+			CallID: tools.NewGraphQLTextToolCallID(),
 		},
 	}
 	if err != nil {
-		if feedback, ok := newGraphQLToolErrorFeedbackMessage(result.ToolName, err); ok {
+		if feedback, ok := newGraphQLToolErrorFeedbackMessage(toolName, err); ok {
 			handled.Feedback = []llm.Message{feedback}
 		}
 		return handled, err
 	}
-	if len(result.Arguments) != 0 {
-		handled.Invocation = &AssistantTextToolInvocation{
-			Arguments:       append(json.RawMessage(nil), result.Arguments...),
-			FeedbackBuilder: graphQLToolResultFeedbackBuilder,
+	if len(result.Calls) == 0 {
+		return handled, nil
+	}
+	invocations := make([]AssistantTextToolInvocationEntry, 0, len(result.Calls))
+	for _, call := range result.Calls {
+		name := strings.TrimSpace(call.ToolName)
+		if name == "" {
+			name = graphQLToolCallProtocolName
 		}
+		invocations = append(invocations, AssistantTextToolInvocationEntry{
+			Tool: AssistantTextToolRef{
+				Name:   name,
+				CallID: tools.NewGraphQLTextToolCallID(),
+			},
+			Invocation: AssistantTextToolInvocation{
+				Arguments:       append(json.RawMessage(nil), call.Arguments...),
+				FeedbackBuilder: graphQLToolResultFeedbackBuilder,
+			},
+		})
+	}
+	handled.Invocations = invocations
+	handled.Tool = invocations[0].Tool
+	handled.Invocation = &AssistantTextToolInvocation{
+		Arguments:       append(json.RawMessage(nil), invocations[0].Invocation.Arguments...),
+		FeedbackBuilder: invocations[0].Invocation.FeedbackBuilder,
 	}
 	return handled, nil
+}
+
+func graphQLFallbackToolName(result tools.GraphQLTextExecutionResult) string {
+	if len(result.Calls) > 0 {
+		if name := strings.TrimSpace(result.Calls[0].ToolName); name != "" {
+			return name
+		}
+	}
+	if name := strings.TrimSpace(result.ToolName); name != "" {
+		return name
+	}
+	return graphQLToolCallProtocolName
 }
 
 func graphQLToolResultFeedbackBuilder(result AssistantTextToolExecutionResult) []llm.Message {

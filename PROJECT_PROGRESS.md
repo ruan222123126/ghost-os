@@ -40,6 +40,7 @@
 - GraphQL tool runtime 的 prompt/example 已与真实 schema 对齐：复杂参数通过命名 `input` / `enum` 暴露结构，示例里的枚举字段也改为 GraphQL enum literal，避免 `browser_control`、`computer_use`、`task_manage` 一类工具继续被模型按 JSON 字符串硬拼。
 - GraphQL tool runtime 的空能力面提示已去掉 `_empty` 这类可误判为真实能力的占位字段：当当前 turn 没有可用 GraphQL 工具时，prompt 会直接输出显式说明，避免模型把占位字段当成可调用能力。
 - GraphQL tool runtime 现支持“同回合 load+use”：`tfind(action="load")` 写入的动态工具会在当前用户 turn 内即时可见，bridge 会在每次 completion 前刷新 system prompt / GraphQL schema / Dynamic Tool State，因此模型无需额外追加一条用户消息，就能在下一次 completion 里直接调用新工具。
+- GraphQL 文本工具调用协议已支持“单文档多次调用”：同一 assistant 文本可包含多个顺序 `mutation` operation（每个 operation 仍限制为单顶层字段），执行链路会为每一步生成独立 `tool_call_id` 与流式事件；普通工具错误会继续执行后续 operation，`awaiting_human` / 迭代交接仍会中断后续步骤。provider 请求投影也已扩到多调用修复，避免出现批量场景下的 `unknown tool_call_id` 配对失败。
 - Session history 主链已切到“热窗口常驻 + 冷历史分页”：
   - `core/bridge/session` 已从单文件整段 JSON 持久化切到 SQLite；内存里只保留最近热窗口，旧消息落到 `session_messages`。
   - `/api/sessions/:id` 默认只返回最新一页，并支持 `limit` / `before` 分页窗口；响应里补上 `message_count` 和 `page` 游标信息。
@@ -77,7 +78,9 @@
 - Web Console 会话主链已切到流式：前端现直接消费 Bridge SSE 的 `run_started / completion_delta / tool_call_started / tool_call_finished / awaiting_human / message / done / error` 事件，回复文本和工具状态可在回合进行中实时落屏；回合结束后仍会回填一次 session history 以收口最终持久化内容、工具输出与附件。
 - Web Console 前端的用户侧图片发送链路现已接通：输入区加号按钮可选择多张图片，浏览器会将图片转成 data URL 通过现有 `/api/agent/stream` `images[]` contract 发给 Bridge；前端同时补上发送前预览、纯图片提交、图文混发，以及 session history 里的用户图片回显。
 - Web Console 的聊天消息去重已补上 GraphQL 工具文本抑制：当 assistant 的纯 `query/mutation { ... }` 文本已被解析并呈现为 tool card 时，前端不会再额外渲染同一段原始 GraphQL 工具调用文本；历史回放与流式工具事件两条路径都已收口。
+- Web Console 的 internal note 渲染已补上 `[GRAPHQL_TOOL_RESULT]` 的 `tfind` 结果收口：前端展示时只保留“已加载/可用”的 tool 项，未加载或已过期项不再占据消息区。
 - Web Console 的聊天前端已把流式热路径从“整段 `messages[]` 重建”改成“`committedMessages + streamingAssistantText + streamingTools + pendingQuestions`”分层状态：`completion_delta` 不再复制长历史数组，terminal 后只同步最近一页 session history 做 merge；消息列表同时接通现有 older-history 分页并改为 `@tanstack/react-virtual` 虚拟渲染，显著降低长会话下的内存 churn 和整表重渲染放大。
+- Web Console 流式消息列表已补上显式事件顺序轨道：前端新增 `streamingItemOrder`（assistant/tool/question）并按该顺序渲染 streaming rows，不再固定按“assistant 段 + tool 段 + question 段”分块拼接，工具卡片会随 SSE 到达顺序由上到下展开。
 - Web Console 会话详情已完成窗口化 hydrate：首次进入只加载最近一页，旧消息通过顶部补页按页回拉；补页时保持滚动位置，切换会话时重置到当前会话尾部，本地 `local:` / `stream-*` 临时消息会在尾页同步时和持久化消息做稳定 ID 合并。
 - Web Console 聊天输入框初始高度已下调一档：输入区初始行数由 `4` 调整为 `3`，在不影响自动增高的前提下减少默认占用空间。
 - Web Console 聊天输入提交交互已改为“先清空再发送”：发送后输入框会立即刷新为空；若发送链路抛错，则自动回填草稿与待发图片，避免内容丢失。

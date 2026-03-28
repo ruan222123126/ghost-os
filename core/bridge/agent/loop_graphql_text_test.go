@@ -28,7 +28,7 @@ func TestStrictGraphQLTextModeRejectsToolCalls(t *testing.T) {
 
 func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse(`query { web_search(query: "OpenAI") }`),
+		newStopResponse(`mutation { web_search(query: "OpenAI") }`),
 		newStopResponse("done"),
 	)
 	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
@@ -74,6 +74,88 @@ func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
 	}
 }
 
+func TestGraphQLTextTurnExecutesMultipleOperationsInOrder(t *testing.T) {
+	completer := newFakeCompleter(
+		newStopResponse(`mutation { web_search(query: "OpenAI") } mutation { script_exec(script: "print('ok')") }`),
+		newStopResponse("done"),
+	)
+	webSearchTool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
+	webSearchTool.semantics = llm.ToolSemantics{ReadOnly: true}
+	scriptExecTool := newStaticTool("script_exec", `{"status":"ok"}`)
+	catalog := newFakeToolCatalog(webSearchTool, scriptExecTool)
+	agent := newTestAgent(completer, catalog, 3)
+	agent.SetStrictToolCallProtocol(true)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
+
+	output, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if output != "done" {
+		t.Fatalf("unexpected output: got %q want %q", output, "done")
+	}
+	if webSearchTool.callCount != 1 || scriptExecTool.callCount != 1 {
+		t.Fatalf("unexpected tool call counts: web_search=%d script_exec=%d", webSearchTool.callCount, scriptExecTool.callCount)
+	}
+	if len(completer.requests) != 2 {
+		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 2)
+	}
+	feedbackCount := 0
+	for _, message := range completer.requests[1].Messages {
+		if strings.Contains(message.Text, "[GRAPHQL_TOOL_RESULT]") {
+			feedbackCount++
+		}
+	}
+	if feedbackCount < 2 {
+		t.Fatalf("expected at least two graphql feedback messages, got %d", feedbackCount)
+	}
+}
+
+func TestGraphQLTextTurnContinuesAfterToolExecutionError(t *testing.T) {
+	completer := newFakeCompleter(
+		newStopResponse(`mutation { broken_tool } mutation { web_search(query: "OpenAI") }`),
+		newStopResponse("done"),
+	)
+	brokenTool := newErrorTool("broken_tool", errors.New("boom"))
+	webSearchTool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
+	webSearchTool.semantics = llm.ToolSemantics{ReadOnly: true}
+	catalog := newFakeToolCatalog(brokenTool, webSearchTool)
+	agent := newTestAgent(completer, catalog, 3)
+	agent.SetStrictToolCallProtocol(true)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
+
+	output, err := agent.Run(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if output != "done" {
+		t.Fatalf("unexpected output: got %q want %q", output, "done")
+	}
+	if brokenTool.callCount != 1 || webSearchTool.callCount != 1 {
+		t.Fatalf("unexpected tool call counts: broken_tool=%d web_search=%d", brokenTool.callCount, webSearchTool.callCount)
+	}
+}
+
+func TestGraphQLTextTurnStopsBatchAfterAwaitingHuman(t *testing.T) {
+	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") } mutation { web_search(query: "OpenAI") }`))
+	askHumanTool := newAwaitingHumanTool("ask_human", "q-1", "Approve write?")
+	webSearchTool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
+	webSearchTool.semantics = llm.ToolSemantics{ReadOnly: true}
+	catalog := newFakeToolCatalog(askHumanTool, webSearchTool)
+	agent := newTestAgent(completer, catalog, 2)
+	agent.SetStrictToolCallProtocol(true)
+	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
+
+	_, err := agent.Run(context.Background(), "hello")
+	var awaitingErr *ErrAwaitingHuman
+	if !errors.As(err, &awaitingErr) {
+		t.Fatalf("expected ErrAwaitingHuman, got %v", err)
+	}
+	if webSearchTool.callCount != 0 {
+		t.Fatalf("expected follow-up calls to stop after awaiting human, got web_search call count %d", webSearchTool.callCount)
+	}
+}
+
 func TestGraphQLTextTurnAwaitingHumanEventUsesRealToolName(t *testing.T) {
 	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") }`))
 	catalog := newFakeToolCatalog(newAwaitingHumanTool("ask_human", "q-1", "Approve write?"))
@@ -105,7 +187,7 @@ func TestGraphQLTextTurnAwaitingHumanEventUsesRealToolName(t *testing.T) {
 }
 
 func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse(`query { web_search(query: "OpenAI") }`))
+	completer := newFakeCompleter(newStopResponse(`mutation { web_search(query: "OpenAI") }`))
 	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
 	tool.semantics = llm.ToolSemantics{ReadOnly: true}
 	catalog := newFakeToolCatalog(tool)
@@ -138,8 +220,8 @@ func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *
 
 func TestGraphQLTextTurnFeedsStructuredProtocolErrorBackIntoNextRound(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse(`mutation { web_search(query: "OpenAI") }`),
 		newStopResponse(`query { web_search(query: "OpenAI") }`),
+		newStopResponse(`mutation { web_search(query: "OpenAI") }`),
 		newStopResponse("done"),
 	)
 	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
@@ -177,7 +259,7 @@ func TestGraphQLTextTurnFeedsStructuredProtocolErrorBackIntoNextRound(t *testing
 	if payload["tool"] != "web_search" {
 		t.Fatalf("unexpected feedback tool: %+v", payload)
 	}
-	if payload["expected"] != "query" || payload["received"] != "mutation" {
+	if payload["expected"] != "mutation" || payload["received"] != "query" {
 		t.Fatalf("unexpected feedback operation payload: %+v", payload)
 	}
 }

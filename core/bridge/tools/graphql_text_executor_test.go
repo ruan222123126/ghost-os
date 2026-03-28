@@ -67,6 +67,42 @@ func TestGraphQLTextExecutorRecognizesMutationToolCall(t *testing.T) {
 	}
 }
 
+func TestGraphQLTextExecutorAcceptsMultipleMutationOperations(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(NewWebSearchTool(WebSearchConfig{}))
+	registry.Register(&graphQLToolRuntimeToolSearchTool{})
+	executor := NewGraphQLTextExecutor(registry)
+
+	result, err := executor.Execute(
+		context.Background(),
+		`mutation { tfind(action: "list") } mutation { web_search(query: "OpenAI") }`,
+		"trace-graphql-multi-operation",
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.Recognized {
+		t.Fatalf("expected recognized graphql tool call, got %+v", result)
+	}
+	if len(result.Calls) != 2 {
+		t.Fatalf("unexpected call count: %+v", result.Calls)
+	}
+	if result.Calls[0].ToolName != ToolSearchToolName {
+		t.Fatalf("unexpected first tool: %+v", result.Calls[0])
+	}
+	if result.Calls[1].ToolName != "web_search" {
+		t.Fatalf("unexpected second tool: %+v", result.Calls[1])
+	}
+	firstArgs := decodeGraphQLToolArgs(t, result.Calls[0].Arguments)
+	secondArgs := decodeGraphQLToolArgs(t, result.Calls[1].Arguments)
+	if firstArgs["action"] != "list" {
+		t.Fatalf("unexpected first args: %+v", firstArgs)
+	}
+	if secondArgs["query"] != "OpenAI" {
+		t.Fatalf("unexpected second args: %+v", secondArgs)
+	}
+}
+
 func TestGraphQLTextExecutorRejectsMultipleTopLevelFields(t *testing.T) {
 	executor := NewGraphQLTextExecutor(graphQLToolRuntimeTestCatalog())
 
@@ -252,6 +288,55 @@ func TestGraphQLTextExecutorKeepsStrictParseWhenSanitizeDisabled(t *testing.T) {
 	}
 	if feedback.Example == "" {
 		t.Fatalf("expected parse example to be populated: %+v", feedback)
+	}
+}
+
+func TestGraphQLTextExecutorExtractsEmbeddedGraphQLDocumentWhenSanitizeEnabled(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&graphQLToolRuntimeToolSearchTool{})
+	executor := NewGraphQLTextExecutorWithOptions(registry, GraphQLTextExecutorOptions{
+		SanitizeKnownArtifacts: true,
+	})
+
+	var logs bytes.Buffer
+	originalWriter := log.Writer()
+	log.SetOutput(&logs)
+	defer log.SetOutput(originalWriter)
+
+	result, err := executor.Execute(
+		context.Background(),
+		`mutation { tfind(action: search, query: "browser control") }你好！`,
+		"trace-embedded-graphql",
+	)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !result.Recognized || result.ToolName != ToolSearchToolName {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	args := decodeGraphQLToolArgs(t, result.Arguments)
+	if args["action"] != "search" || args["query"] != "browser control" {
+		t.Fatalf("unexpected args: %+v", args)
+	}
+	if !strings.Contains(logs.String(), "kind=extract_embedded_graphql_document") {
+		t.Fatalf("expected embedded graphql sanitize log, got %q", logs.String())
+	}
+}
+
+func TestGraphQLTextExecutorRejectsEmbeddedGraphQLDocumentWhenSanitizeDisabled(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&graphQLToolRuntimeToolSearchTool{})
+	executor := NewGraphQLTextExecutorWithOptions(registry, GraphQLTextExecutorOptions{
+		SanitizeKnownArtifacts: false,
+	})
+
+	_, err := executor.Execute(
+		context.Background(),
+		`mutation { tfind(action: search, query: "browser control") }你好！`,
+		"trace-embedded-graphql-disabled",
+	)
+	if err == nil {
+		t.Fatal("expected parse error when embedded graphql sanitize is disabled")
 	}
 }
 
