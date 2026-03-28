@@ -2,10 +2,13 @@ package tools
 
 import (
 	"context"
-	"encoding/base64"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"ghost-os/bridge/tools/internal/toolartifacts"
@@ -19,16 +22,11 @@ func (t *ScreenActionTool) executeScreenshot(ctx context.Context, params map[str
 	if err != nil {
 		return "", err
 	}
-	if payload.ImageBase64 == "" {
-		return "", fmt.Errorf("SCREEN_CAPTURE returned empty image payload")
+	if strings.TrimSpace(payload.ImagePath) == "" {
+		return "", fmt.Errorf("SCREEN_CAPTURE returned empty image_path")
 	}
 
-	imageBytes, err := base64.StdEncoding.DecodeString(payload.ImageBase64)
-	if err != nil {
-		return "", fmt.Errorf("decode screenshot image: %w", err)
-	}
-
-	artifact, err := writeScreenArtifact(ctx, traceID, imageBytes, payload)
+	artifact, err := writeScreenArtifact(ctx, traceID, payload)
 	if err != nil {
 		return "", err
 	}
@@ -42,7 +40,6 @@ func (t *ScreenActionTool) executeScreenshot(ctx context.Context, params map[str
 func writeScreenArtifact(
 	ctx context.Context,
 	traceID string,
-	imageBytes []byte,
 	shotPayload screenCapturePayload,
 ) (*screenActionArtifact, error) {
 	baseDir, err := toolartifacts.ResolveScreenshotsRoot()
@@ -64,8 +61,13 @@ func writeScreenArtifact(
 		return nil, fmt.Errorf("create screenshot directory: %w", err)
 	}
 	fullPath := filepath.Join(sessionDir, filename)
-	if err := os.WriteFile(fullPath, imageBytes, 0o600); err != nil {
-		return nil, fmt.Errorf("write screenshot file: %w", err)
+	written, sha256Value, err := copyAndHashScreenshot(shotPayload.ImagePath, fullPath)
+	if err != nil {
+		return nil, err
+	}
+	visionBytes, err := toIntBytes(written)
+	if err != nil {
+		return nil, err
 	}
 
 	return &screenActionArtifact{
@@ -74,9 +76,43 @@ func writeScreenArtifact(
 		VisionMime:  screenImageMimeType,
 		Width:       shotPayload.ImageWidth,
 		Height:      shotPayload.ImageHeight,
-		SHA256:      toolartifacts.SHA256Hex(imageBytes),
-		VisionBytes: len(imageBytes),
+		SHA256:      sha256Value,
+		VisionBytes: visionBytes,
 	}, nil
+}
+
+func copyAndHashScreenshot(sourcePath string, targetPath string) (int64, string, error) {
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		return 0, "", fmt.Errorf("open screenshot file: %w", err)
+	}
+	defer sourceFile.Close()
+
+	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return 0, "", fmt.Errorf("create screenshot file: %w", err)
+	}
+
+	hasher := sha256.New()
+	written, copyErr := io.Copy(io.MultiWriter(targetFile, hasher), sourceFile)
+	closeErr := targetFile.Close()
+	if copyErr != nil {
+		_ = os.Remove(targetPath)
+		return 0, "", fmt.Errorf("copy screenshot file: %w", copyErr)
+	}
+	if closeErr != nil {
+		_ = os.Remove(targetPath)
+		return 0, "", fmt.Errorf("close screenshot file: %w", closeErr)
+	}
+	return written, hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func toIntBytes(value int64) (int, error) {
+	bytes := int(value)
+	if int64(bytes) != value {
+		return 0, fmt.Errorf("screenshot file is too large")
+	}
+	return bytes, nil
 }
 
 func screenSessionID(ctx context.Context) string {

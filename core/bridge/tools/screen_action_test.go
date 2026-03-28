@@ -23,6 +23,10 @@ func TestScreenActionToolExecuteScreenshotPersistsImage(t *testing.T) {
 	}
 	tmpDir := t.TempDir()
 	t.Setenv("GHOST_SCREENSHOTS_PATH", tmpDir)
+	sourcePath := filepath.Join(tmpDir, "native-shot.png")
+	if err := os.WriteFile(sourcePath, imageBytes, 0o600); err != nil {
+		t.Fatalf("write source screenshot: %v", err)
+	}
 
 	var capturedParams map[string]any
 	tool := NewScreenActionTool(mockExecutionClient{
@@ -35,7 +39,7 @@ func TestScreenActionToolExecuteScreenshotPersistsImage(t *testing.T) {
 			}
 			capturedParams = params
 			return map[string]any{
-				"image_base64": imageBase64,
+				"image_path":   sourcePath,
 				"image_width":  1,
 				"image_height": 1,
 				"display_id":   2,

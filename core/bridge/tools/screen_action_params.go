@@ -97,9 +97,9 @@ func buildScreenCaptureParams(params map[string]any) (map[string]any, error) {
 
 func buildOCRImageParams(capture screenCapturePayload, params map[string]any) map[string]any {
 	payload := map[string]any{
-		"image_base64": capture.ImageBase64,
-		"origin_x":     capture.OriginX,
-		"origin_y":     capture.OriginY,
+		"image_path": capture.ImagePath,
+		"origin_x":   capture.OriginX,
+		"origin_y":   capture.OriginY,
 	}
 	if raw, ok := params["languages"]; ok {
 		payload["languages"] = raw
@@ -112,7 +112,7 @@ func buildOCRImageParams(capture screenCapturePayload, params map[string]any) ma
 
 func buildTemplateMatchParams(capture screenCapturePayload, params map[string]any) map[string]any {
 	payload := map[string]any{
-		"image_base64":  capture.ImageBase64,
+		"image_path":    capture.ImagePath,
 		"origin_x":      capture.OriginX,
 		"origin_y":      capture.OriginY,
 		"template_path": toolparams.OptionalString(params, "template_path", ""),

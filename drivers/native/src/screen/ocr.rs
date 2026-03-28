@@ -1,24 +1,23 @@
-use super::image_ops::decode_png_base64;
 use super::types::{OcrItem, ScreenBoundingBox, ScreenPoint};
 use crate::Response;
 use crate::json_params::{optional_f64, optional_i32, required_string};
 use serde_json::{Value, json};
 use std::cmp::Ordering;
-use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::time::{SystemTime, UNIX_EPOCH};
-use xcap::image::{DynamicImage, RgbaImage};
 
 pub(crate) fn handle_ocr_image(params: &Value) -> Response {
-    let image_base64 = match required_string(params, "image_base64") {
-        Ok(value) => value,
+    let image_path = match required_string(params, "image_path") {
+        Ok(path) => path,
         Err(err) => return Response::error(err),
     };
-    let image = match decode_png_base64(&image_base64) {
-        Ok(image) => image,
-        Err(err) => return Response::error(err),
-    };
+    let image_path = Path::new(&image_path);
+    if !image_path.exists() {
+        return Response::error(format!(
+            "image_path does not exist: {}",
+            image_path.display()
+        ));
+    }
     let origin_x = match optional_i32(params, "origin_x") {
         Ok(value) => value.unwrap_or(0),
         Err(err) => return Response::error(err),
@@ -36,7 +35,7 @@ pub(crate) fn handle_ocr_image(params: &Value) -> Response {
         Ok(None) => 0.75,
         Err(err) => return Response::error(err),
     };
-    let output = match run_tesseract_ocr(&image, &languages) {
+    let output = match run_tesseract_ocr(image_path, &languages) {
         Ok(output) => output,
         Err(err) => return Response::error(err),
     };
@@ -80,10 +79,7 @@ fn map_tesseract_language(language: &str) -> String {
     }
 }
 
-fn run_tesseract_ocr(image: &RgbaImage, languages: &[String]) -> Result<String, String> {
-    let input_path = unique_temp_path("ghost-os-screen-ocr", "png");
-    write_image_png(image, &input_path)?;
-
+fn run_tesseract_ocr(image_path: &Path, languages: &[String]) -> Result<String, String> {
     let language_arg = if languages.is_empty() {
         "eng".to_string()
     } else {
@@ -91,7 +87,7 @@ fn run_tesseract_ocr(image: &RgbaImage, languages: &[String]) -> Result<String, 
     };
     let output = Command::new("tesseract")
         .args([
-            input_path.to_string_lossy().as_ref(),
+            image_path.to_string_lossy().as_ref(),
             "stdout",
             "-l",
             &language_arg,
@@ -100,8 +96,6 @@ fn run_tesseract_ocr(image: &RgbaImage, languages: &[String]) -> Result<String, 
             "tsv",
         ])
         .output();
-
-    let _ = fs::remove_file(&input_path);
 
     match output {
         Ok(result) if result.status.success() => {
@@ -120,21 +114,6 @@ fn run_tesseract_ocr(image: &RgbaImage, languages: &[String]) -> Result<String, 
         }
         Err(err) => Err(format!("spawn tesseract failed: {err}")),
     }
-}
-
-fn write_image_png(image: &RgbaImage, path: &Path) -> Result<(), String> {
-    DynamicImage::ImageRgba8(image.clone())
-        .save(path)
-        .map_err(|err| format!("write temp image failed: {err}"))
-}
-
-fn unique_temp_path(prefix: &str, extension: &str) -> std::path::PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    let pid = std::process::id();
-    std::env::temp_dir().join(format!("{prefix}-{pid}-{nanos}.{extension}"))
 }
 
 fn parse_tesseract_tsv(

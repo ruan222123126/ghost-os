@@ -41,7 +41,7 @@ pub(crate) struct IconMatch {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct CapturePayload {
-    pub(crate) image_base64: String,
+    pub(crate) image_path: String,
     pub(crate) image_width: u32,
     pub(crate) image_height: u32,
     pub(crate) display_id: u32,

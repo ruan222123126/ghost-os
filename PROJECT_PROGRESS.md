@@ -1,6 +1,6 @@
 # Ghost-OS 项目进展
 
-更新日期：2026-03-27  
+更新日期：2026-03-28  
 当前阶段：MVP 骨架
 
 ## 总体结论
@@ -40,9 +40,15 @@
 - GraphQL tool runtime 的 prompt/example 已与真实 schema 对齐：复杂参数通过命名 `input` / `enum` 暴露结构，示例里的枚举字段也改为 GraphQL enum literal，避免 `browser_control`、`computer_use`、`task_manage` 一类工具继续被模型按 JSON 字符串硬拼。
 - GraphQL tool runtime 的空能力面提示已去掉 `_empty` 这类可误判为真实能力的占位字段：当当前 turn 没有可用 GraphQL 工具时，prompt 会直接输出显式说明，避免模型把占位字段当成可调用能力。
 - GraphQL tool runtime 现支持“同回合 load+use”：`tfind(action="load")` 写入的动态工具会在当前用户 turn 内即时可见，bridge 会在每次 completion 前刷新 system prompt / GraphQL schema / Dynamic Tool State，因此模型无需额外追加一条用户消息，就能在下一次 completion 里直接调用新工具。
+- Session history 主链已切到“热窗口常驻 + 冷历史分页”：
+  - `core/bridge/session` 已从单文件整段 JSON 持久化切到 SQLite；内存里只保留最近热窗口，旧消息落到 `session_messages`。
+  - `/api/sessions/:id` 默认只返回最新一页，并支持 `limit` / `before` 分页窗口；响应里补上 `message_count` 和 `page` 游标信息。
+  - legacy `session-id.json` 会在首次读取时自动导入 SQLite 并删除旧文件。
 - GraphQL 文本标准化路径已补上“定向 sanitize + 显式开关”：默认开启 `graphql_text_sanitize_enabled`，只清理首尾空白、代码围栏与误拼接的 `[GRAPHQL_TOOL_RESULT]` 后缀；每次命中都会打带 `trace_id` / `kind` 的结构化日志，关闭开关后回到现有严格解析行为。
 - GraphQL 模式的系统提示词已补回工具使用指导：`hidden catalog` 继续隐藏原生 `tool_defs`，但会为 prompt 保留 `ask_human`、`tfind`、`screen_action`、`computer_use` 等可见工具的“何时使用/有哪些约束”提示。
 - GraphQL 文本工具调用的 provider 请求投影已补齐 assistant/tool 协议配对：持久化 transcript 仍保留原始 assistant 文本 + tool result + internal feedback，但在发给 OpenAI/Anthropic/Codex 前会为已执行的 GraphQL 文本 turn 按原文重建合法的 assistant `tool_calls`，修复下一轮 completion 因 `tool message references unknown tool_call_id` 直接失败的问题。
+- Codex 续跑请求构造已补上空增量防护：当 `previous_response_id` 模式下增量窗口只剩 GraphQL internal feedback 或最终变成空 `input` 时，会跳过该 feedback 作为增量边界并在必要时显式回退到无 `previous_response_id` 的非空输入，避免继续向上游发送缺失 `input` 的请求并触发 `input is required`。
+- Codex / Responses 参数层已补齐首批标准化透传：`prompt_cache_key`、`prompt_cache_retention`、`safety_identifier`、`metadata`、`store` 可从 config/env 注入并进入 provider 请求；`GHOST_RESPONSE_METADATA_*` 前缀键支持映射 metadata。旧的 Codex 4xx 自动无状态回退改为默认关闭，仅在显式 `codex_stateless_retry_enabled` 打开时才会触发，失败路径默认直出，避免隐式降级。
 - Bridge 已新增只读 `web_rooter` 高层工具：通过固定 HTTP 契约接入独立运行的 `web-rooter` 服务，当前仅开放 `internet_search` / `research` / `academic_search` / `site_search` / `fetch` / `extract` 六个 stateless action，并在桥内统一输出 `provider/action/payload/citations/references_text/trace_id` 稳定壳；未引入上游 CLI、MCP、jobs、skills、safe mode、knowledge/visited 等双编排能力。运行时现通过 `web_rooter_enabled/base_url/api_token/timeout_ms` 显式控制接入，桥层不会默认启用或做隐式降级。
 - `web_rooter` 桥接现已对上游 HTTP 响应做显式契约校验：`success/content/data/urls/error/metadata` 缺失或类型不合法、HTTP 500、200 + `success=false`、非法 JSON、超时都会直接作为错误上抛，不再被桥层静默包装成成功结果。
 - `web_rooter` 实现已按边界重排：顶层工具只保留显式参数校验、action 路由、client 调用与稳定 envelope 输出；HTTP 传输、版本钉死校验、响应归一化下沉到 `tools/internal/webrooter`。对外 public runtime 快照也已收口为 `web_rooter_enabled` / `web_rooter_api_token_set` 布尔态，不再暴露 `base_url` / `timeout_ms`。
@@ -57,6 +63,8 @@
 - 工具可见性语义已拆分为“常驻 allowlist”与“严格 allowlist-only”两层：`tool_allowlist` 现在只定义当前 turn 的 resident 工具；当 `tool_allowlist_only = true` 时，selector 与静态工具面才会一起收紧到 allowlist。非 strict 模式下，selector 仍可为主模型挑选其他未被 `tool_blocklist` 屏蔽的静态工具。
 - `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
+- 已完成一次后端 Agent 工具能力全量实测，并沉淀到 `docs/backend-agent-tool-capability-2026-03-28.md`：在临时测试配置（`max_turns=1`、memory 关闭、全工具 allowlist）下 15 个工具均完成至少一次真实调用；其中 `send_file`、`computer_use` 归类为需调试，`codex_cli`、`browser_control` 受前置配置/会话约束。
+- `screen_action` 截图链路已切到文件引用：`SCREEN_CAPTURE` 改为返回 `image_path`，Bridge 侧截图 artifact 改为基于文件流复制与流式哈希，不再经过 `image_base64 -> decode -> 写文件` 这条高内存路径；`OCR_IMAGE` / `TEMPLATE_MATCH_IMAGE` 的入参也已改为传 `image_path`。
 - Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
 
 ### Perception: `apps/web` / `apps/cli` / `apps/android`
@@ -64,9 +72,15 @@
 - Web Console MVP 可用，已支持基础聊天、配置读取与主要交互链路。
 - Web Console 现已补上左下角设置入口：侧边栏底部新增 `Settings` 按钮，可直接打开现有运行时配置弹窗，不再需要依赖隐式入口或额外页面跳转。
 - Web Console 的 Runtime Settings 现已补上 Tavily / Exa 自定义 URL 输入框，可直接查看、保存或清空搜索 endpoint；未填写时仍默认使用官方地址。
+- Web Console 设置弹窗现已完成一轮整体视觉重构：改为左侧导航 + 右侧内容区的白底配置面板，Provider 区切到“列表态 / 编辑态”单视图切换，Runtime 区与 Provider 表单统一为同一套卡片式输入样式，同时保留现有真实配置读写链路。
+- Web Console 设置弹窗已对齐新设计稿：左侧导航扩展为 `General / Provider / Appearance / Data & Memory / Notifications / Security` 六个分组项，`Provider` 与 `General` 继续接真实配置读写，其余分组先提供占位页并保持同一视觉框架。
 - Web Console 会话主链已切到流式：前端现直接消费 Bridge SSE 的 `run_started / completion_delta / tool_call_started / tool_call_finished / awaiting_human / message / done / error` 事件，回复文本和工具状态可在回合进行中实时落屏；回合结束后仍会回填一次 session history 以收口最终持久化内容、工具输出与附件。
 - Web Console 前端的用户侧图片发送链路现已接通：输入区加号按钮可选择多张图片，浏览器会将图片转成 data URL 通过现有 `/api/agent/stream` `images[]` contract 发给 Bridge；前端同时补上发送前预览、纯图片提交、图文混发，以及 session history 里的用户图片回显。
 - Web Console 的聊天消息去重已补上 GraphQL 工具文本抑制：当 assistant 的纯 `query/mutation { ... }` 文本已被解析并呈现为 tool card 时，前端不会再额外渲染同一段原始 GraphQL 工具调用文本；历史回放与流式工具事件两条路径都已收口。
+- Web Console 的聊天前端已把流式热路径从“整段 `messages[]` 重建”改成“`committedMessages + streamingAssistantText + streamingTools + pendingQuestions`”分层状态：`completion_delta` 不再复制长历史数组，terminal 后只同步最近一页 session history 做 merge；消息列表同时接通现有 older-history 分页并改为 `@tanstack/react-virtual` 虚拟渲染，显著降低长会话下的内存 churn 和整表重渲染放大。
+- Web Console 会话详情已完成窗口化 hydrate：首次进入只加载最近一页，旧消息通过顶部补页按页回拉；补页时保持滚动位置，切换会话时重置到当前会话尾部，本地 `local:` / `stream-*` 临时消息会在尾页同步时和持久化消息做稳定 ID 合并。
+- Web Console 聊天输入框初始高度已下调一档：输入区初始行数由 `4` 调整为 `3`，在不影响自动增高的前提下减少默认占用空间。
+- Web Console 聊天输入提交交互已改为“先清空再发送”：发送后输入框会立即刷新为空；若发送链路抛错，则自动回填草稿与待发图片，避免内容丢失。
 - CLI 基线可用，已支持基础会话与桥接操作。
 - Android 已接入部分会话与展示能力，但整体成熟度低于 Web 与 CLI。
 
@@ -74,6 +88,7 @@
 
 - Native 层已支持截图、输入模拟、脚本执行、窗口/浏览器查询等原子动作。
 - GUI executor 所需的双击、右键、滚动、拖拽、组合键、活动窗口信息等能力已补齐一轮基线。
+- Native 截图子模块已去掉主链路 base64 载荷：`SCREEN_CAPTURE` 返回临时 PNG 文件路径，`OCR_IMAGE` 直接消费 `image_path`，`crop_image` 改为仅复制裁剪区域，避免整图 clone 后再裁切。
 - 该层仍遵守“只做原子执行，不承载业务决策”的边界，新增需求应优先走脚本/API，再考虑视觉路径。
 
 ## 已完成的主线里程碑

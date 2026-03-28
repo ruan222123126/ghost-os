@@ -134,7 +134,7 @@ type iconMatchPayload struct {
 }
 
 type screenCapturePayload struct {
-	ImageBase64 string       `json:"image_base64"`
+	ImagePath   string       `json:"image_path"`
 	ImageWidth  int          `json:"image_width"`
 	ImageHeight int          `json:"image_height"`
 	DisplayID   int          `json:"display_id"`

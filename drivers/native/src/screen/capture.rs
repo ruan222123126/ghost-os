@@ -52,9 +52,9 @@ pub(crate) fn capture_screen(params: &Value) -> Result<CapturedImage, String> {
 fn capture_payload(captured: CapturedImage) -> Result<CapturePayload, String> {
     let image_width = captured.image.width();
     let image_height = captured.image.height();
-    let image_base64 = super::image_ops::encode_png_base64(&captured.image)?;
+    let image_path = super::image_ops::write_temp_png(&captured.image, "ghost-os-screen-capture")?;
     Ok(CapturePayload {
-        image_base64,
+        image_path,
         image_width,
         image_height,
         display_id: captured.display_id,

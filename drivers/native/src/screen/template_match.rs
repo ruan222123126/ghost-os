@@ -1,4 +1,4 @@
-use super::image_ops::decode_png_base64;
+use super::image_ops::load_image_from_path;
 use super::match_engine::find_template_matches_with_scale;
 use super::params::parse_scale_range;
 use crate::Response;
@@ -8,11 +8,11 @@ use std::path::Path;
 use xcap::image::{ImageReader, RgbaImage};
 
 pub(crate) fn handle_template_match_image(params: &Value) -> Response {
-    let image_base64 = match required_string(params, "image_base64") {
-        Ok(value) => value,
+    let image_path = match required_string(params, "image_path") {
+        Ok(path) => path,
         Err(err) => return Response::error(err),
     };
-    let image = match decode_png_base64(&image_base64) {
+    let image = match load_image_from_path(&image_path) {
         Ok(image) => image,
         Err(err) => return Response::error(err),
     };

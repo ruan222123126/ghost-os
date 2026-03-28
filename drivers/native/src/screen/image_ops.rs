@@ -1,17 +1,18 @@
 use super::params::parse_required_region;
 use super::types::{ImageCropPayload, ScreenRegion};
 use crate::Response;
-use crate::json_params::{optional_i32, required_string};
+use crate::json_params::{optional_i32, optional_string, required_string};
 use base64::Engine;
 use serde_json::Value;
-use xcap::image::{DynamicImage, ImageFormat, RgbaImage};
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+use xcap::image::codecs::png::PngEncoder;
+use xcap::image::{ColorType, ImageEncoder, ImageReader, RgbaImage, imageops};
 
 pub(crate) fn handle_image_crop(params: &Value) -> Response {
-    let image_base64 = match required_string(params, "image_base64") {
-        Ok(value) => value,
-        Err(err) => return Response::error(err),
-    };
-    let image = match decode_png_base64(&image_base64) {
+    let image = match parse_image_from_params(params) {
         Ok(image) => image,
         Err(err) => return Response::error(err),
     };
@@ -57,9 +58,7 @@ pub(crate) fn crop_image(image: &RgbaImage, region: ScreenRegion) -> Result<Rgba
     let height =
         u32::try_from(region.height).map_err(|_| "region.height must be positive".to_string())?;
 
-    Ok(DynamicImage::ImageRgba8(image.clone())
-        .crop_imm(x, y, width, height)
-        .to_rgba8())
+    Ok(imageops::crop_imm(image, x, y, width, height).to_image())
 }
 
 pub(crate) fn decode_png_base64(image_base64: &str) -> Result<RgbaImage, String> {
@@ -72,11 +71,71 @@ pub(crate) fn decode_png_base64(image_base64: &str) -> Result<RgbaImage, String>
 }
 
 pub(crate) fn encode_png_base64(image: &RgbaImage) -> Result<String, String> {
-    let mut cursor = std::io::Cursor::new(Vec::new());
-    DynamicImage::ImageRgba8(image.clone())
-        .write_to(&mut cursor, ImageFormat::Png)
+    let bytes = encode_png_bytes(image)?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+pub(crate) fn load_image_from_path(path: &str) -> Result<RgbaImage, String> {
+    let image_path = Path::new(path);
+    if !image_path.exists() {
+        return Err(format!("image_path does not exist: {path}"));
+    }
+    ImageReader::open(image_path)
+        .map_err(|err| format!("open image failed: {err}"))?
+        .decode()
+        .map(|image| image.to_rgba8())
+        .map_err(|err| format!("decode image failed: {err}"))
+}
+
+pub(crate) fn parse_image_from_params(params: &Value) -> Result<RgbaImage, String> {
+    if let Some(image_path) = optional_string(params, "image_path")? {
+        return load_image_from_path(&image_path);
+    }
+    let image_base64 = required_string(params, "image_base64")?;
+    decode_png_base64(&image_base64)
+}
+
+pub(crate) fn write_temp_png(image: &RgbaImage, prefix: &str) -> Result<String, String> {
+    let path = unique_temp_path(prefix, "png");
+    write_png_file(image, &path)?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+fn encode_png_bytes(image: &RgbaImage) -> Result<Vec<u8>, String> {
+    let mut buf = Vec::new();
+    let encoder = PngEncoder::new(&mut buf);
+    encoder
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            ColorType::Rgba8.into(),
+        )
         .map_err(|err| format!("encode png failed: {err}"))?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(cursor.into_inner()))
+    Ok(buf)
+}
+
+fn write_png_file(image: &RgbaImage, path: &Path) -> Result<(), String> {
+    let file = File::create(path).map_err(|err| format!("create temp image failed: {err}"))?;
+    let mut writer = BufWriter::new(file);
+    let encoder = PngEncoder::new(&mut writer);
+    encoder
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            ColorType::Rgba8.into(),
+        )
+        .map_err(|err| format!("write temp image failed: {err}"))
+}
+
+fn unique_temp_path(prefix: &str, extension: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let pid = std::process::id();
+    std::env::temp_dir().join(format!("{prefix}-{pid}-{nanos}.{extension}"))
 }
 
 #[cfg(test)]

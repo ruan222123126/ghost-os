@@ -2,13 +2,16 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
 func TestScreenActionToolExecuteOCRScanUsesAtomicActions(t *testing.T) {
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+	imagePath := writeScreenActionTestPNG(t)
 	var actions []string
 	tool := NewScreenActionTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
@@ -16,7 +19,7 @@ func TestScreenActionToolExecuteOCRScanUsesAtomicActions(t *testing.T) {
 			switch action {
 			case "SCREEN_CAPTURE":
 				return map[string]any{
-					"image_base64": imageBase64,
+					"image_path":   imagePath,
 					"image_width":  1,
 					"image_height": 1,
 					"display_id":   3,
@@ -29,6 +32,9 @@ func TestScreenActionToolExecuteOCRScanUsesAtomicActions(t *testing.T) {
 					},
 				}, nil
 			case "OCR_IMAGE":
+				if params["image_path"] != imagePath {
+					t.Fatalf("unexpected OCR_IMAGE image_path: %+v", params)
+				}
 				if params["origin_x"] != 100 || params["origin_y"] != 200 {
 					t.Fatalf("unexpected OCR_IMAGE params: %+v", params)
 				}
@@ -76,7 +82,7 @@ func TestScreenActionToolExecuteOCRScanUsesAtomicActions(t *testing.T) {
 }
 
 func TestScreenActionToolExecuteClickTextUsesMouseClickWithoutScale(t *testing.T) {
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+	imagePath := writeScreenActionTestPNG(t)
 	var actions []string
 	tool := NewScreenActionTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
@@ -84,7 +90,7 @@ func TestScreenActionToolExecuteClickTextUsesMouseClickWithoutScale(t *testing.T
 			switch action {
 			case "SCREEN_CAPTURE":
 				return map[string]any{
-					"image_base64": imageBase64,
+					"image_path":   imagePath,
 					"image_width":  1,
 					"image_height": 1,
 					"display_id":   7,
@@ -97,6 +103,9 @@ func TestScreenActionToolExecuteClickTextUsesMouseClickWithoutScale(t *testing.T
 					},
 				}, nil
 			case "OCR_IMAGE":
+				if params["image_path"] != imagePath {
+					t.Fatalf("unexpected OCR_IMAGE image_path: %+v", params)
+				}
 				return map[string]any{
 					"items": []any{
 						map[string]any{
@@ -149,7 +158,7 @@ func TestScreenActionToolExecuteClickTextUsesMouseClickWithoutScale(t *testing.T
 }
 
 func TestScreenActionToolExecuteClickIconUsesAtomicMatcher(t *testing.T) {
-	imageBase64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+	imagePath := writeScreenActionTestPNG(t)
 	var actions []string
 	tool := NewScreenActionTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
@@ -157,7 +166,7 @@ func TestScreenActionToolExecuteClickIconUsesAtomicMatcher(t *testing.T) {
 			switch action {
 			case "SCREEN_CAPTURE":
 				return map[string]any{
-					"image_base64": imageBase64,
+					"image_path":   imagePath,
 					"image_width":  1,
 					"image_height": 1,
 					"display_id":   9,
@@ -170,6 +179,9 @@ func TestScreenActionToolExecuteClickIconUsesAtomicMatcher(t *testing.T) {
 					},
 				}, nil
 			case "TEMPLATE_MATCH_IMAGE":
+				if params["image_path"] != imagePath {
+					t.Fatalf("unexpected TEMPLATE_MATCH_IMAGE image_path: %+v", params)
+				}
 				if params["origin_x"] != 30 || params["origin_y"] != 40 {
 					t.Fatalf("unexpected TEMPLATE_MATCH_IMAGE params: %+v", params)
 				}
@@ -222,4 +234,18 @@ func TestScreenActionToolExecuteClickIconUsesAtomicMatcher(t *testing.T) {
 	if payload["action"] != "click_icon" || payload["clicked"] != true {
 		t.Fatalf("unexpected click_icon payload: %+v", payload)
 	}
+}
+
+func writeScreenActionTestPNG(t *testing.T) string {
+	t.Helper()
+	raw := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
+	buf, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		t.Fatalf("decode png fixture: %v", err)
+	}
+	path := filepath.Join(t.TempDir(), "screen.png")
+	if err := os.WriteFile(path, buf, 0o600); err != nil {
+		t.Fatalf("write png fixture: %v", err)
+	}
+	return path
 }
