@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,16 +45,20 @@ func (t *BrowserControlTool) executeLaunch(ctx context.Context, params map[strin
 	if t.execution == nil {
 		return "", fmt.Errorf("execution client is not configured")
 	}
-	command, err := toolparams.RequiredString(params, "command")
+	endpoint, err := launchEndpoint(params)
+	if err != nil {
+		return "", err
+	}
+	command, err := browserLaunchCommand(params, endpoint)
 	if err != nil {
 		return "", err
 	}
 
-	if _, err := t.execution.Call(ctx, "BASH_EXEC", map[string]any{"command": command}, traceID); err != nil {
+	launchResult, err := t.execution.Call(ctx, "BASH_EXEC", map[string]any{"command": command}, traceID)
+	if err != nil {
 		return "", fmt.Errorf("launch command failed: %w", err)
 	}
-	endpoint, err := launchEndpoint(params)
-	if err != nil {
+	if err := launchCommandDiscoveryError(command, launchResult); err != nil {
 		return "", err
 	}
 
@@ -84,7 +90,110 @@ func launchEndpoint(params map[string]any) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("debug_port or endpoint is required for launch")
 	}
+	if port <= 0 || port > maxBrowserDebugPort {
+		return "", fmt.Errorf("debug_port must be between 1 and %d", maxBrowserDebugPort)
+	}
 	return fmt.Sprintf("http://127.0.0.1:%d", port), nil
+}
+
+func browserLaunchCommand(params map[string]any, endpoint string) (string, error) {
+	if explicit := toolparams.OptionalString(params, "command", ""); explicit != "" {
+		return explicit, nil
+	}
+	port, err := browserLaunchPort(params, endpoint)
+	if err != nil {
+		return "", err
+	}
+	return buildAutoBrowserLaunchCommand(port), nil
+}
+
+func browserLaunchPort(params map[string]any, endpoint string) (int, error) {
+	if port, ok := toolparams.OptionalInt(params, "debug_port"); ok {
+		if port <= 0 || port > maxBrowserDebugPort {
+			return 0, fmt.Errorf("debug_port must be between 1 and %d", maxBrowserDebugPort)
+		}
+		return port, nil
+	}
+	port, err := portFromEndpoint(endpoint)
+	if err != nil {
+		return 0, fmt.Errorf("debug_port is required when command is omitted: %w", err)
+	}
+	return port, nil
+}
+
+func portFromEndpoint(endpoint string) (int, error) {
+	trimmed := strings.TrimSpace(endpoint)
+	if trimmed == "" {
+		return 0, fmt.Errorf("endpoint is required")
+	}
+	if !strings.Contains(trimmed, "://") {
+		trimmed = "http://" + trimmed
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return 0, fmt.Errorf("invalid endpoint %q: %w", endpoint, err)
+	}
+	portText := strings.TrimSpace(parsed.Port())
+	if portText == "" {
+		return 0, fmt.Errorf("endpoint %q must include an explicit port", endpoint)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil {
+		return 0, fmt.Errorf("invalid endpoint port %q", portText)
+	}
+	if port <= 0 || port > maxBrowserDebugPort {
+		return 0, fmt.Errorf("endpoint port must be between 1 and %d", maxBrowserDebugPort)
+	}
+	return port, nil
+}
+
+func buildAutoBrowserLaunchCommand(port int) string {
+	candidateList := strings.Join(browserAutoLaunchCandidates, " ")
+	candidateLog := strings.Join(browserAutoLaunchCandidates, ", ")
+	return fmt.Sprintf(
+		autoBrowserLaunchCommandTemplate,
+		candidateList,
+		candidateLog,
+		port,
+		browserAutoLaunchProfileDir,
+		browserAutoLaunchLogPath,
+	)
+}
+
+func launchCommandDiscoveryError(command string, launchResult map[string]any) error {
+	stderr, _ := launchResult["stderr"].(string)
+	missing := missingCommandError(strings.TrimSpace(stderr))
+	if missing == "" {
+		return nil
+	}
+	return fmt.Errorf(
+		"launch command references an unavailable executable: %s (command=%q)",
+		missing,
+		command,
+	)
+}
+
+func missingCommandError(stderr string) string {
+	if stderr == "" {
+		return ""
+	}
+	lower := strings.ToLower(stderr)
+	for _, marker := range missingBinaryMarkers {
+		if strings.Contains(lower, marker) {
+			return firstNonEmptyLine(stderr)
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyLine(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func resolveWSEndpoint(endpoint string, timeout time.Duration) (string, error) {

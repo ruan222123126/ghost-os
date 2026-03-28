@@ -71,16 +71,8 @@ func TestBrowserControlLaunchRequiresEndpointOrDebugPort(t *testing.T) {
 	tool := NewBrowserControlTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
 			callCount++
-			if action != "BASH_EXEC" {
-				t.Fatalf("unexpected action: got %q want %q", action, "BASH_EXEC")
-			}
-			if traceID != "trace-launch" {
-				t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-launch")
-			}
-			if params["command"] != "chromium --headless &" {
-				t.Fatalf("unexpected params: %+v", params)
-			}
-			return map[string]any{"ok": true}, nil
+			t.Fatalf("launch should not execute command when endpoint/debug_port is missing, got action=%q params=%+v trace=%q", action, params, traceID)
+			return nil, nil
 		},
 	})
 
@@ -95,8 +87,73 @@ func TestBrowserControlLaunchRequiresEndpointOrDebugPort(t *testing.T) {
 	if !strings.Contains(err.Error(), "debug_port or endpoint is required for launch") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if callCount != 0 {
+		t.Fatalf("expected zero launch command calls, got %d", callCount)
+	}
+}
+
+func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
+	var callCount int
+	tool := NewBrowserControlTool(mockExecutionClient{
+		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
+			callCount++
+			if action != "BASH_EXEC" {
+				t.Fatalf("unexpected action: got %q want %q", action, "BASH_EXEC")
+			}
+			if traceID != "trace-launch-not-found" {
+				t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-launch-not-found")
+			}
+			if params["command"] != "google-chrome --headless --remote-debugging-port=9222 &" {
+				t.Fatalf("unexpected command payload: %+v", params)
+			}
+			return map[string]any{
+				"stdout": "",
+				"stderr": "bash: line 1: google-chrome: command not found",
+			}, nil
+		},
+	})
+
+	_, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"action":"launch","params":{"command":"google-chrome --headless --remote-debugging-port=9222 &","endpoint":"http://127.0.0.1:9222"}}`),
+		"trace-launch-not-found",
+	)
+	if err == nil {
+		t.Fatal("expected missing executable error")
+	}
+	if !strings.Contains(err.Error(), "launch command references an unavailable executable") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if callCount != 1 {
 		t.Fatalf("expected one launch command call, got %d", callCount)
+	}
+}
+
+func TestBrowserLaunchCommandBuildsAutoLaunchScript(t *testing.T) {
+	command, err := browserLaunchCommand(map[string]any{"debug_port": 9333}, "")
+	if err != nil {
+		t.Fatalf("browserLaunchCommand returned error: %v", err)
+	}
+	for _, snippet := range []string{
+		"google-chrome",
+		"chromium",
+		"--remote-debugging-port=9333",
+		"--headless",
+		"--no-sandbox",
+	} {
+		if !strings.Contains(command, snippet) {
+			t.Fatalf("auto launch command missing %q: %q", snippet, command)
+		}
+	}
+}
+
+func TestBrowserLaunchCommandRequiresEndpointPortWhenAutoLaunching(t *testing.T) {
+	_, err := browserLaunchCommand(map[string]any{}, "http://127.0.0.1")
+	if err == nil {
+		t.Fatal("expected auto launch port parse error")
+	}
+	if !strings.Contains(err.Error(), "must include an explicit port") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
