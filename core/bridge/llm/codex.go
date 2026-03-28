@@ -13,14 +13,19 @@ type codexToolEnvelope struct {
 }
 
 type codexRequest struct {
-	Model              string           `json:"model"`
-	Instructions       string           `json:"instructions,omitempty"`
-	Input              []codexInputItem `json:"input,omitempty"`
-	Tools              []codexTool      `json:"tools,omitempty"`
-	ToolChoice         string           `json:"tool_choice"`
-	ParallelToolCalls  bool             `json:"parallel_tool_calls"`
-	PreviousResponseID string           `json:"previous_response_id,omitempty"`
-	Stream             bool             `json:"stream,omitempty"`
+	Model                string            `json:"model"`
+	Instructions         string            `json:"instructions,omitempty"`
+	Input                []codexInputItem  `json:"input,omitempty"`
+	Tools                []codexTool       `json:"tools,omitempty"`
+	ToolChoice           string            `json:"tool_choice"`
+	ParallelToolCalls    bool              `json:"parallel_tool_calls"`
+	PromptCacheKey       string            `json:"prompt_cache_key,omitempty"`
+	PromptCacheRetention string            `json:"prompt_cache_retention,omitempty"`
+	SafetyIdentifier     string            `json:"safety_identifier,omitempty"`
+	Metadata             map[string]string `json:"metadata,omitempty"`
+	Store                *bool             `json:"store,omitempty"`
+	PreviousResponseID   string            `json:"previous_response_id,omitempty"`
+	Stream               bool              `json:"stream,omitempty"`
 }
 
 type codexInputItem struct {
@@ -93,6 +98,8 @@ type codexRequestOptions struct {
 	ForceStateless bool
 }
 
+const graphQLTextToolCallIDPrefix = "graphql-text-call-"
+
 func (c *Client) buildCodexProviderRequest(request CompletionRequest) (providerRequest, error) {
 	body, err := toCodexRequest(c.opts.Model, request)
 	if err != nil {
@@ -159,30 +166,11 @@ func toCodexRequest(model string, request CompletionRequest) (codexRequest, erro
 
 func toCodexRequestWithOptions(model string, request CompletionRequest, options codexRequestOptions) (codexRequest, error) {
 	instructions := codexInstructions(request.Messages)
-	messages := request.Messages
-	previousResponseID := ""
-	if !options.ForceStateless {
-		previousResponseID = strings.TrimSpace(request.ConversationState.PreviousResponseID)
+	input, previousResponseID, err := codexRequestInput(request, options)
+	if err != nil {
+		return codexRequest{}, err
 	}
-	if previousResponseID != "" {
-		messages = codexIncrementalMessages(messages)
-	}
-
-	var (
-		input []codexInputItem
-		err   error
-	)
-	if options.ForceStateless {
-		input, err = codexFallbackInput(messages)
-		if err != nil {
-			return codexRequest{}, err
-		}
-	} else {
-		input, err = codexMessagesToInput(messages)
-		if err != nil {
-			return codexRequest{}, err
-		}
-	}
+	responseOptions := CloneResponseOptions(request.ResponseOptions)
 
 	tools := make([]codexTool, 0, len(request.Tools))
 	for _, tool := range request.Tools {
@@ -201,14 +189,93 @@ func toCodexRequestWithOptions(model string, request CompletionRequest, options 
 	}
 
 	return codexRequest{
-		Model:              model,
-		Instructions:       instructions,
-		Input:              input,
-		Tools:              tools,
-		ToolChoice:         "auto",
-		ParallelToolCalls:  false,
-		PreviousResponseID: previousResponseID,
+		Model:                model,
+		Instructions:         instructions,
+		Input:                input,
+		Tools:                tools,
+		ToolChoice:           "auto",
+		ParallelToolCalls:    false,
+		PromptCacheKey:       responseOptions.PromptCacheKey,
+		PromptCacheRetention: responseOptions.PromptCacheRetention,
+		SafetyIdentifier:     responseOptions.SafetyIdentifier,
+		Metadata:             responseOptions.Metadata,
+		Store:                responseOptions.Store,
+		PreviousResponseID:   previousResponseID,
 	}, nil
+}
+
+func codexRequestInput(
+	request CompletionRequest,
+	options codexRequestOptions,
+) ([]codexInputItem, string, error) {
+	messages := request.Messages
+	previousResponseID := ""
+	if !options.ForceStateless {
+		previousResponseID = strings.TrimSpace(request.ConversationState.PreviousResponseID)
+	}
+	if previousResponseID != "" {
+		messages = codexIncrementalMessages(messages)
+	}
+
+	input, err := codexInputForMessages(messages, options.ForceStateless)
+	if err != nil {
+		return nil, "", err
+	}
+	if previousResponseID != "" && (len(input) == 0 || codexRequiresStatelessReplay(input)) {
+		// previous_response_id 模式必须携带增量 input；窗口为空时显式回到无状态输入。
+		previousResponseID = ""
+		input, err = codexFallbackInput(request.Messages)
+		if err != nil {
+			return nil, "", err
+		}
+	}
+	if len(input) == 0 {
+		return nil, "", fmt.Errorf("codex request input is empty")
+	}
+	return input, previousResponseID, nil
+}
+
+func codexRequiresStatelessReplay(input []codexInputItem) bool {
+	if len(input) == 0 {
+		return true
+	}
+
+	matchedCalls := make(map[string]bool, len(input))
+	for _, item := range input {
+		if strings.TrimSpace(item.Type) != "function_call" {
+			continue
+		}
+		callID := strings.TrimSpace(item.CallID)
+		if callID == "" {
+			continue
+		}
+		matchedCalls[callID] = true
+	}
+
+	for _, item := range input {
+		if strings.TrimSpace(item.Type) != "function_call_output" {
+			continue
+		}
+		callID := strings.TrimSpace(item.CallID)
+		if callID == "" {
+			continue
+		}
+		if matchedCalls[callID] {
+			continue
+		}
+		if strings.HasPrefix(callID, graphQLTextToolCallIDPrefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func codexInputForMessages(messages []Message, forceStateless bool) ([]codexInputItem, error) {
+	if forceStateless {
+		return codexFallbackInput(messages)
+	}
+	return codexMessagesToInput(messages)
 }
 
 func codexInstructions(messages []Message) string {

@@ -434,6 +434,121 @@ func TestToCodexRequestKeepsPreviousResponseIDWithTrailingGraphQLFeedback(t *tes
 	}
 }
 
+func TestToCodexRequestFallsBackToStatelessReplayForGraphQLTextToolOutput(t *testing.T) {
+	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "find project"},
+			{
+				Role: RoleAssistant,
+				Text: `mutation { tfind(action: search, query: "project") }`,
+				ToolCalls: []ToolCall{{
+					ID:        "graphql-text-call-1",
+					Name:      "tfind",
+					Arguments: json.RawMessage(`{"action":"search","query":"project"}`),
+				}},
+			},
+			{Role: RoleTool, ToolCallID: "graphql-text-call-1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
+			{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+{"status":"success","tool":"tfind"}`},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            "https://api.openai.com/v1",
+			Model:              "codex-mini-latest",
+			PreviousResponseID: "resp_prev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if req.PreviousResponseID != "" {
+		t.Fatalf("expected previous_response_id cleared for graphql-text tool output, got %q", req.PreviousResponseID)
+	}
+	if len(req.Input) != 3 {
+		t.Fatalf("unexpected stateless replay input count: got %d want 3", len(req.Input))
+	}
+	if req.Input[0].Type != "message" || req.Input[0].Role != "user" {
+		t.Fatalf("unexpected fallback first input: %+v", req.Input[0])
+	}
+	if req.Input[1].Type != "function_call" || req.Input[1].CallID != "graphql-text-call-1" {
+		t.Fatalf("unexpected fallback function_call input: %+v", req.Input[1])
+	}
+	if req.Input[2].Type != "function_call_output" || req.Input[2].CallID != "graphql-text-call-1" {
+		t.Fatalf("unexpected fallback tool output input: %+v", req.Input[2])
+	}
+}
+
+func TestCompleteCodexClearsPreviousResponseIDForGraphQLTextToolOutput(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(ClientOptions{
+		Provider: ProviderCodex,
+		BaseURL:  server.URL,
+		Model:    "gpt-5.4",
+	})
+	client.httpClient = server.Client()
+
+	_, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "find project"},
+			{
+				Role: RoleAssistant,
+				Text: `mutation { tfind(action: search, query: "project") }`,
+				ToolCalls: []ToolCall{{
+					ID:        "graphql-text-call-1",
+					Name:      "tfind",
+					Arguments: json.RawMessage(`{"action":"search","query":"project"}`),
+				}},
+			},
+			{Role: RoleTool, ToolCallID: "graphql-text-call-1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
+			{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+{"status":"success","tool":"tfind"}`},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            server.URL,
+			Model:              "gpt-5.4",
+			PreviousResponseID: "resp_prev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	if len(requestBodies) != 1 {
+		t.Fatalf("expected one request, got %d", len(requestBodies))
+	}
+	if requestBodies[0].PreviousResponseID != "" {
+		t.Fatalf(
+			"expected previous_response_id to be cleared for graphql-text tool output, got %q",
+			requestBodies[0].PreviousResponseID,
+		)
+	}
+	if len(requestBodies[0].Input) != 3 {
+		t.Fatalf("unexpected input count: got %d want 3", len(requestBodies[0].Input))
+	}
+	if requestBodies[0].Input[1].Type != "function_call" || requestBodies[0].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected replay input: %+v", requestBodies[0].Input)
+	}
+}
+
 func TestToCodexRequestClearsPreviousResponseIDWhenIncrementalInputIsEmpty(t *testing.T) {
 	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
 		Messages: []Message{
