@@ -165,7 +165,11 @@ func (t *BrowserControlTool) executeInfo(params map[string]any) (string, error) 
 func (t *BrowserControlTool) executeClose(params map[string]any) (string, error) {
 	sessionID := toolparams.OptionalString(params, "session_id", "")
 	if sessionID == "" {
-		return "", fmt.Errorf("session_id is required")
+		session, err := t.singleSession()
+		if err != nil {
+			return "", err
+		}
+		sessionID = session.id
 	}
 	session := t.popSession(sessionID)
 	if session == nil {

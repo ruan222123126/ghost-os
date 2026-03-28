@@ -88,7 +88,7 @@ func launchEndpoint(params map[string]any) (string, error) {
 	}
 	port, ok := toolparams.OptionalInt(params, "debug_port")
 	if !ok {
-		return "", fmt.Errorf("debug_port or endpoint is required for launch")
+		port = defaultBrowserDebugPort
 	}
 	if port <= 0 || port > maxBrowserDebugPort {
 		return "", fmt.Errorf("debug_port must be between 1 and %d", maxBrowserDebugPort)

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const browserControlDescription = "Control a Chrome DevTools Protocol (CDP) browser session for navigation, clicking, typing, DOM extraction, and screenshots. Use connect or launch first to create a session_id, then reuse it for subsequent actions."
+const browserControlDescription = "Control a Chrome DevTools Protocol (CDP) browser session for navigation, clicking, typing, DOM extraction, and screenshots. Use connect or launch first to create a session_id, then reuse it for subsequent actions. When exactly one session is active, session_id can be omitted for follow-up actions."
 
 const browserControlSchema = `{
 	"type":"object",
@@ -18,10 +18,10 @@ const browserControlSchema = `{
 		"params":{
 			"type":"object",
 			"properties":{
-				"session_id":{"type":"string","description":"Existing browser session id."},
+				"session_id":{"type":"string","description":"Existing browser session id. Optional when only one browser session is active."},
 				"endpoint":{"type":"string","description":"CDP websocket URL (ws://) or http(s)://host:port for /json/version discovery."},
 				"command":{"type":"string","description":"Optional launch command for the launch action. If omitted, bridge auto-detects a Chrome-compatible binary in execution PATH and launches it."},
-				"debug_port":{"type":"number","minimum":1,"maximum":65535,"description":"Remote debugging port for launch/connect. Required when endpoint is omitted, and also required for auto-launch when endpoint has no explicit port."},
+				"debug_port":{"type":"number","minimum":1,"maximum":65535,"description":"Remote debugging port for launch/connect. Defaults to 9222 when endpoint is omitted."},
 				"wait_timeout_ms":{"type":"number","minimum":0,"description":"Launch wait timeout in milliseconds."},
 				"url":{"type":"string","description":"Navigation target URL."},
 				"wait":{"type":"string","enum":["none","dom","load"],"description":"Navigation wait mode."},

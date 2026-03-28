@@ -11,6 +11,7 @@ const (
 	defaultBrowserEndpointTimeout    = 5 * time.Second
 	defaultBrowserFetchTimeout       = 3 * time.Second
 	defaultBrowserEndpointPoll       = 200 * time.Millisecond
+	defaultBrowserDebugPort          = 9222
 	maxBrowserDebugPort              = 65535
 	browserAutoLaunchProfileDir      = "/tmp/ghost-browser-control-profile"
 	browserAutoLaunchLogPath         = "/tmp/ghost-browser-control.log"

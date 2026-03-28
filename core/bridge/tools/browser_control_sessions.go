@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"ghost-os/bridge/tools/internal/toolparams"
@@ -13,14 +15,44 @@ import (
 
 func (t *BrowserControlTool) sessionFromParams(params map[string]any) (*browserSession, error) {
 	sessionID := toolparams.OptionalString(params, "session_id", "")
-	if sessionID == "" {
-		return nil, fmt.Errorf("session_id is required")
+	if sessionID != "" {
+		return t.sessionByID(sessionID)
 	}
+	session, err := t.singleSession()
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (t *BrowserControlTool) sessionByID(sessionID string) (*browserSession, error) {
 	session := t.getSession(sessionID)
 	if session == nil {
 		return nil, fmt.Errorf("browser session %q not found", sessionID)
 	}
 	return session, nil
+}
+
+func (t *BrowserControlTool) singleSession() (*browserSession, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if len(t.sessions) == 0 {
+		return nil, fmt.Errorf("session_id is required; run browser_control connect or launch first")
+	}
+	if len(t.sessions) == 1 {
+		for _, session := range t.sessions {
+			return session, nil
+		}
+	}
+	ids := make([]string, 0, len(t.sessions))
+	for id := range t.sessions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return nil, fmt.Errorf(
+		"session_id is required when multiple browser sessions exist: %s",
+		strings.Join(ids, ", "),
+	)
 }
 
 func (t *BrowserControlTool) getSession(sessionID string) *browserSession {

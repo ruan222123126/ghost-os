@@ -66,29 +66,13 @@ func TestFetchWebSocketURLDiscoversWSEndpoint(t *testing.T) {
 	}
 }
 
-func TestBrowserControlLaunchRequiresEndpointOrDebugPort(t *testing.T) {
-	var callCount int
-	tool := NewBrowserControlTool(mockExecutionClient{
-		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
-			callCount++
-			t.Fatalf("launch should not execute command when endpoint/debug_port is missing, got action=%q params=%+v trace=%q", action, params, traceID)
-			return nil, nil
-		},
-	})
-
-	_, err := tool.Execute(
-		context.Background(),
-		json.RawMessage(`{"action":"launch","params":{"command":"chromium --headless &"}}`),
-		"trace-launch",
-	)
-	if err == nil {
-		t.Fatal("expected error for missing debug_port/endpoint")
+func TestLaunchEndpointDefaultsToLocalDebugPort(t *testing.T) {
+	endpoint, err := launchEndpoint(map[string]any{})
+	if err != nil {
+		t.Fatalf("launchEndpoint returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "debug_port or endpoint is required for launch") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if callCount != 0 {
-		t.Fatalf("expected zero launch command calls, got %d", callCount)
+	if endpoint != "http://127.0.0.1:9222" {
+		t.Fatalf("unexpected endpoint: got %q want %q", endpoint, "http://127.0.0.1:9222")
 	}
 }
 
@@ -169,6 +153,33 @@ func TestBrowserControlCloseMissingSession(t *testing.T) {
 		t.Fatal("expected missing session error")
 	}
 	if !strings.Contains(err.Error(), `browser session "missing" not found`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBrowserControlSessionFromParamsUsesSingleSessionWhenIDOmitted(t *testing.T) {
+	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
+	tool.storeSession(&browserSession{id: "session-a"})
+
+	session, err := tool.sessionFromParams(map[string]any{})
+	if err != nil {
+		t.Fatalf("sessionFromParams returned error: %v", err)
+	}
+	if session.id != "session-a" {
+		t.Fatalf("unexpected session id: got %q want %q", session.id, "session-a")
+	}
+}
+
+func TestBrowserControlSessionFromParamsErrorsWhenMultipleSessionsAndIDOmitted(t *testing.T) {
+	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
+	tool.storeSession(&browserSession{id: "session-a"})
+	tool.storeSession(&browserSession{id: "session-b"})
+
+	_, err := tool.sessionFromParams(map[string]any{})
+	if err == nil {
+		t.Fatal("expected error when session_id is omitted and multiple sessions exist")
+	}
+	if !strings.Contains(err.Error(), "session_id is required when multiple browser sessions exist") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
