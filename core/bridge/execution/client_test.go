@@ -64,6 +64,32 @@ func TestLocateNativeBinaryInRootsFindsFromSecondRoot(t *testing.T) {
 	}
 }
 
+func TestLocateNativeBinaryPrefersProjectBuildOverBareBinaryName(t *testing.T) {
+	root := t.TempDir()
+	bare := filepath.Join(root, "native")
+	project := filepath.Join(root, "drivers", "native", "target", "debug", "native")
+
+	if err := writeFile(bare, []byte("bare")); err != nil {
+		t.Fatalf("write bare binary fixture: %v", err)
+	}
+	if err := writeFile(project, []byte("project")); err != nil {
+		t.Fatalf("write project binary fixture: %v", err)
+	}
+
+	got, err := locateNativeBinary(nativeBinaryLocator{roots: []string{root}})
+	if err != nil {
+		t.Fatalf("locateNativeBinary returned error: %v", err)
+	}
+
+	want, err := filepath.Abs(project)
+	if err != nil {
+		t.Fatalf("abs project binary path: %v", err)
+	}
+	if got != filepath.Clean(want) {
+		t.Fatalf("unexpected path: got %q want %q", got, filepath.Clean(want))
+	}
+}
+
 func writeFile(path string, content []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

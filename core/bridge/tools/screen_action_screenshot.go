@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"ghost-os/bridge/tools/internal/toolartifacts"
@@ -21,9 +20,6 @@ func (t *ScreenActionTool) executeScreenshot(ctx context.Context, params map[str
 	payload, err := t.captureScreen(ctx, params, traceID)
 	if err != nil {
 		return "", err
-	}
-	if strings.TrimSpace(payload.ImagePath) == "" {
-		return "", fmt.Errorf("SCREEN_CAPTURE returned empty image_path")
 	}
 
 	artifact, err := writeScreenArtifact(ctx, traceID, payload)

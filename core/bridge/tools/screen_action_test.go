@@ -151,3 +151,27 @@ func TestScreenActionToolInterpretResultBuildsImageContent(t *testing.T) {
 		t.Fatalf("unexpected byte count: %d", part.Image.Bytes)
 	}
 }
+
+func TestScreenActionToolExecuteScreenshotRejectsDeprecatedCapturePayload(t *testing.T) {
+	tool := NewScreenActionTool(mockExecutionClient{
+		callFunc: func(_ context.Context, action string, _ map[string]any, _ string) (map[string]any, error) {
+			if action != "SCREEN_CAPTURE" {
+				t.Fatalf("unexpected action: got %q", action)
+			}
+			return map[string]any{
+				"image_base64": "ZmFrZS1wbmc=",
+				"image_width":  100,
+				"image_height": 80,
+				"display_id":   67,
+			}, nil
+		},
+	})
+
+	_, err := tool.Execute(context.Background(), json.RawMessage(`{"action":"screenshot"}`), "trace-shot-legacy")
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "deprecated image_base64 payload") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

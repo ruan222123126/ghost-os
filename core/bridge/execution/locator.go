@@ -45,8 +45,6 @@ func locateNativeBinary(locator nativeBinaryLocator) (string, error) {
 
 func nativeBinaryCandidates() []string {
 	return []string{
-		"native",
-		"native.exe",
 		"../../drivers/native/target/release/native",
 		"drivers/native/target/release/native",
 		"../../drivers/native/target/release/native.exe",
@@ -55,6 +53,8 @@ func nativeBinaryCandidates() []string {
 		"drivers/native/target/debug/native",
 		"../../drivers/native/target/debug/native.exe",
 		"drivers/native/target/debug/native.exe",
+		"native",
+		"native.exe",
 	}
 }
 

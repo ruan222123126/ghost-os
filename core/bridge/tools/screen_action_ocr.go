@@ -91,7 +91,7 @@ func (t *ScreenActionTool) captureScreen(
 	if err != nil {
 		return screenCapturePayload{}, fmt.Errorf("execution SCREEN_CAPTURE failed: %w", err)
 	}
-	return tooljson.DecodePayload[screenCapturePayload](payload)
+	return decodeScreenCapturePayload(payload)
 }
 
 func (t *ScreenActionTool) runOCRImage(
