@@ -177,3 +177,24 @@ func assertUsageError(t *testing.T, err error, wantDetail string, wantUsage stri
 		t.Fatalf("expected usage %q in error %q", wantUsage, err.Error())
 	}
 }
+
+func TestDispatchServeWrapsRunError(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := commandDispatcher{
+		runPing:  failPing(t),
+		runServe: func(context.Context, int) (string, error) { return "", errors.New("listen failed") },
+		runAgent: failAgent(t),
+	}
+
+	_, err := dispatcher.dispatch(context.Background(), []string{"serve"})
+	if err == nil {
+		t.Fatal("expected serve error")
+	}
+	if !strings.Contains(err.Error(), "serve command failed") {
+		t.Fatalf("expected serve stage wrapper, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "listen failed") {
+		t.Fatalf("expected wrapped serve error detail, got %v", err)
+	}
+}

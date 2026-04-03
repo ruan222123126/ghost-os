@@ -22,6 +22,42 @@ type serverOptions struct {
 	auth         apiTokenAuth
 }
 
+const (
+	serverReadHeaderTimeout = 5 * time.Second
+	serverShutdownTimeout   = 5 * time.Second
+
+	startupStageConfig       = "config"
+	startupStageOptions      = "options"
+	startupStageSessionStore = "session_store"
+	startupStageRuntimes     = "runtimes"
+	startupStageListen       = "listen"
+)
+
+type servePreflightState struct {
+	options serverOptions
+	service *bridgeService
+}
+
+type serveStartupError struct {
+	stage string
+	err   error
+}
+
+func (e serveStartupError) Error() string {
+	return fmt.Sprintf("serve startup failed at stage=%s: %v", e.stage, e.err)
+}
+
+func (e serveStartupError) Unwrap() error {
+	return e.err
+}
+
+func newServeStartupError(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return serveStartupError{stage: stage, err: err}
+}
+
 // newServerOptionsFromEnv 收敛 server 相关配置，优先读配置文件并回退环境变量。
 func newServerOptionsFromEnv(port int) (serverOptions, error) {
 	cfg, err := bridgeconfig.LoadServerConfig()
@@ -57,54 +93,101 @@ func resolveBindAddr(port int) (string, error) {
 
 // runServer 暴露 bridge HTTP API。
 func runServer(ctx context.Context, port int) (string, error) {
+	preflight, err := runServePreflight(port)
+	if err != nil {
+		return "", err
+	}
+	defer preflight.service.Close()
+
+	return runServeListen(ctx, preflight)
+}
+
+// runServePreflight 按固定顺序执行启动预检，确保失败阶段可观测。
+func runServePreflight(port int) (servePreflightState, error) {
+	logStartupCheckpoint(startupStageConfig, "begin", "")
 	store, err := NewConfigStoreFromEnv()
 	if err != nil {
-		return "", err
+		return servePreflightState{}, newServeStartupError(startupStageConfig, err)
 	}
+	logStartupCheckpoint(startupStageConfig, "ready", "")
 
+	logStartupCheckpoint(startupStageOptions, "begin", fmt.Sprintf("port=%d", port))
 	options, err := newServerOptionsFromEnv(port)
 	if err != nil {
-		return "", err
+		return servePreflightState{}, newServeStartupError(startupStageOptions, err)
 	}
+	logStartupCheckpoint(startupStageOptions, "ready", fmt.Sprintf("bind_addr=%s", options.bindAddr))
+
+	logStartupCheckpoint(startupStageSessionStore, "begin", fmt.Sprintf("path=%s", options.sessionsPath))
 	sessionStore, err := session.NewStore(options.sessionsPath)
 	if err != nil {
-		return "", err
+		return servePreflightState{}, newServeStartupError(startupStageSessionStore, err)
 	}
+	logStartupCheckpoint(startupStageSessionStore, "ready", "")
 
 	service := newBridgeService(store, sessionStore, nil)
-	if err := service.StartBackgroundRuntimes(); err != nil {
+	logStartupCheckpoint(startupStageRuntimes, "begin", "")
+	if err := startServeRuntimes(service); err != nil {
 		service.Close()
-		return "", err
+		return servePreflightState{}, newServeStartupError(startupStageRuntimes, err)
+	}
+	logStartupCheckpoint(startupStageRuntimes, "ready", "")
+
+	return servePreflightState{
+		options: options,
+		service: service,
+	}, nil
+}
+
+func startServeRuntimes(service *bridgeService) error {
+	if err := service.StartBackgroundRuntimes(); err != nil {
+		return fmt.Errorf("start background runtimes: %w", err)
 	}
 	if err := service.BootstrapSystemTasks(); err != nil {
-		service.Close()
-		return "", err
+		return fmt.Errorf("bootstrap system tasks: %w", err)
 	}
-	defer service.Close()
+	return nil
+}
+
+func runServeListen(ctx context.Context, preflight servePreflightState) (string, error) {
 	server := &http.Server{
-		Addr:              options.bindAddr,
-		Handler:           newHTTPHandler(service, options),
-		ReadHeaderTimeout: 5 * time.Second,
+		Addr:              preflight.options.bindAddr,
+		Handler:           newHTTPHandler(preflight.service, preflight.options),
+		ReadHeaderTimeout: serverReadHeaderTimeout,
 	}
 
 	go func() {
 		<-ctx.Done()
-		service.Close()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		preflight.service.Close()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), serverShutdownTimeout)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
 
-	logAddr := options.bindAddr
-	if strings.HasPrefix(logAddr, ":") {
-		logAddr = "0.0.0.0" + logAddr
-	}
-	log.Printf("bridge HTTP server listening on http://%s", logAddr)
-	err = server.ListenAndServe()
+	listenAddr := normalizeListenAddr(preflight.options.bindAddr)
+	logStartupCheckpoint(startupStageListen, "begin", fmt.Sprintf("addr=http://%s", listenAddr))
+
+	err := server.ListenAndServe()
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
+		logStartupCheckpoint(startupStageListen, "stopped", "")
 		return "", nil
 	}
-	return "", err
+	return "", newServeStartupError(startupStageListen, err)
+}
+
+func normalizeListenAddr(bindAddr string) string {
+	if strings.HasPrefix(bindAddr, ":") {
+		return "0.0.0.0" + bindAddr
+	}
+	return bindAddr
+}
+
+func logStartupCheckpoint(stage string, status string, detail string) {
+	line := fmt.Sprintf("startup checkpoint stage=%s status=%s", stage, status)
+	if strings.TrimSpace(detail) != "" {
+		line = fmt.Sprintf("%s %s", line, detail)
+	}
+	log.Print(line)
 }
 
 type transport struct {

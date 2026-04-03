@@ -57,11 +57,7 @@ func (d commandDispatcher) dispatch(ctx context.Context, args []string) (string,
 		}
 		return d.runPing(ctx)
 	case "serve":
-		port, err := d.parseServePort(args[1:])
-		if err != nil {
-			return "", err
-		}
-		return d.runServe(ctx, port)
+		return d.dispatchServe(ctx, args[1:])
 	case "agent":
 		message, err := d.parseAgentMessage(args[1:])
 		if err != nil {
@@ -71,6 +67,19 @@ func (d commandDispatcher) dispatch(ctx context.Context, args []string) (string,
 	default:
 		return "", newUsageError(fmt.Sprintf("unknown subcommand %q", args[0]))
 	}
+}
+
+func (d commandDispatcher) dispatchServe(ctx context.Context, args []string) (string, error) {
+	port, err := d.parseServePort(args)
+	if err != nil {
+		return "", err
+	}
+
+	output, err := d.runServe(ctx, port)
+	if err != nil {
+		return "", fmt.Errorf("serve command failed: %w", err)
+	}
+	return output, nil
 }
 
 // parseServePort 解析 serve 子命令端口，仅允许一个可选端口参数。

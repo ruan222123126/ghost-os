@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"ghost-os/bridge/app"
@@ -15,9 +17,20 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	output, err := app.Run(ctx, os.Args[1:])
+	args := os.Args[1:]
+	if isServeSubcommand(args) {
+		log.Print("startup checkpoint stage=process status=begin")
+	}
+
+	output, err := app.Run(ctx, args)
 	if err != nil {
+		if isServeSubcommand(args) {
+			log.Printf("startup checkpoint stage=process status=error error=%v", err)
+		}
 		fatal(err)
+	}
+	if isServeSubcommand(args) {
+		log.Print("startup checkpoint stage=process status=ready")
 	}
 	if output != "" {
 		fmt.Println(output)
@@ -28,4 +41,8 @@ func main() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
+}
+
+func isServeSubcommand(args []string) bool {
+	return len(args) > 0 && strings.TrimSpace(args[0]) == "serve"
 }
