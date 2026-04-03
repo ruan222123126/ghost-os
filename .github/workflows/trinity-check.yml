@@ -58,7 +58,7 @@ jobs:
 
       - name: Run tests
         working-directory: core/bridge
-        run: go test ./...
+        run: timeout 60s go test ./...
 
   native-check:
     name: Native (Rust)

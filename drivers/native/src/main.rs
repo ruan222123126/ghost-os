@@ -204,8 +204,11 @@ fn write_response_line<W: Write>(writer: &mut W, response: &Response) -> Result<
 }
 
 #[cfg(test)]
+mod main_startup_tests;
+
+#[cfg(test)]
 mod tests {
-    use super::{Response, resolve_entry_route, serve_persistent_session, write_response_line};
+    use super::{Response, serve_persistent_session, write_response_line};
     use serde_json::json;
     use std::io::{Cursor, Error, Write};
 
@@ -237,24 +240,6 @@ mod tests {
         assert_eq!(first.payload["message"], "PONG");
         assert_eq!(second.request_id.as_deref(), Some("req-b"));
         assert_eq!(second.payload["trace_id"], "trace-b");
-    }
-
-    #[test]
-    fn resolve_entry_route_rejects_unknown_argument() {
-        let args = vec!["native".to_string(), "--invalid".to_string()];
-        let err = resolve_entry_route(&args).expect_err("unknown arg should fail");
-        assert!(err.contains("unknown argument: --invalid"));
-    }
-
-    #[test]
-    fn resolve_entry_route_rejects_conflicting_flags() {
-        let args = vec![
-            "native".to_string(),
-            "--sandbox-worker".to_string(),
-            "--persistent".to_string(),
-        ];
-        let err = resolve_entry_route(&args).expect_err("conflicting args should fail");
-        assert!(err.contains("conflicting arguments"));
     }
 
     #[test]

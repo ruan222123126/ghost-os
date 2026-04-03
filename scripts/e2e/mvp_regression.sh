@@ -107,7 +107,7 @@ main() {
   log "Running deterministic regression checks across Trinity layers"
   cargo test --manifest-path "${ROOT_DIR}/drivers/native/Cargo.toml"
   cargo test --manifest-path "${ROOT_DIR}/apps/cli/Cargo.toml"
-  (cd "${ROOT_DIR}/core/bridge" && go test ./...)
+  (cd "${ROOT_DIR}/core/bridge" && timeout 60s go test ./...)
   (cd "${ROOT_DIR}/apps/web" && pnpm test -- --runInBand lib/api.test.ts)
   (cd "${ROOT_DIR}/apps/web" && pnpm exec tsc --noEmit)
 
