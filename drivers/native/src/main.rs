@@ -18,54 +18,123 @@ use types::Request;
 
 pub(crate) use types::Response;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EntryRoute {
+    SandboxWorker,
+    Persistent,
+    OneShot,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct RouteResult {
+    handled: bool,
+    error: Option<String>,
+}
+
+impl RouteResult {
+    fn handled() -> Self {
+        Self {
+            handled: true,
+            error: None,
+        }
+    }
+
+    fn error(message: impl Into<String>) -> Self {
+        Self {
+            handled: false,
+            error: Some(message.into()),
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    if args.iter().any(|arg| arg == "--sandbox-worker") {
-        script_exec::run_sandbox_worker();
-        return;
+    let result = route_entry(&args);
+    if let Some(err) = result.error {
+        eprintln!("{err}");
+        std::process::exit(1);
     }
-
-    if args.iter().any(|arg| arg == "--persistent") {
-        run_persistent_mode();
-        return;
+    if !result.handled {
+        eprintln!("native entry route was not handled");
+        std::process::exit(1);
     }
-
-    run_oneshot_mode();
 }
 
-fn run_oneshot_mode() {
-    // 读取整段 stdin，保持最小协议处理路径。
-    let input = match read_stdin_payload() {
-        Ok(input) => input,
-        Err(err) => {
-            emit(Response::error(err));
-            return;
-        }
+fn route_entry(args: &[String]) -> RouteResult {
+    let route = match resolve_entry_route(args) {
+        Ok(route) => route,
+        Err(err) => return RouteResult::error(err),
     };
 
-    let request: Request = match serde_json::from_str(&input) {
-        Ok(request) => request,
-        Err(err) => {
-            emit(Response::error(format!("invalid json: {err}")));
-            return;
+    match route {
+        EntryRoute::SandboxWorker => {
+            script_exec::run_sandbox_worker();
+            RouteResult::handled()
         }
+        EntryRoute::Persistent => match run_persistent_mode() {
+            Ok(()) => RouteResult::handled(),
+            Err(err) => RouteResult::error(format!("persistent mode exited: {err}")),
+        },
+        EntryRoute::OneShot => run_oneshot_mode(),
+    }
+}
+
+fn resolve_entry_route(args: &[String]) -> Result<EntryRoute, String> {
+    let mut sandbox_worker = false;
+    let mut persistent = false;
+
+    for arg in args.iter().skip(1) {
+        match arg.as_str() {
+            "--sandbox-worker" => sandbox_worker = true,
+            "--persistent" => persistent = true,
+            _ => return Err(format!("unknown argument: {arg}")),
+        }
+    }
+
+    if sandbox_worker && persistent {
+        return Err(
+            "conflicting arguments: --sandbox-worker and --persistent cannot be used together"
+                .to_string(),
+        );
+    }
+
+    if sandbox_worker {
+        return Ok(EntryRoute::SandboxWorker);
+    }
+    if persistent {
+        return Ok(EntryRoute::Persistent);
+    }
+    Ok(EntryRoute::OneShot)
+}
+
+fn run_oneshot_mode() -> RouteResult {
+    let response = match build_oneshot_response() {
+        Ok(response) => response,
+        Err(err) => Response::error(err),
     };
 
-    let response =
+    match emit(response) {
+        Ok(()) => RouteResult::handled(),
+        Err(err) => RouteResult::error(format!("oneshot mode emit failed: {err}")),
+    }
+}
+
+fn build_oneshot_response() -> Result<Response, String> {
+    let input = read_stdin_payload()?;
+    let request: Request =
+        serde_json::from_str(&input).map_err(|err| format!("invalid json: {err}"))?;
+    Ok(
         action_router::dispatch_action(&request.action, &request.params, &request.trace_id)
-            .with_request_id(request.request_id.as_deref());
-    emit(response);
+            .with_request_id(request.request_id.as_deref()),
+    )
 }
 
-fn run_persistent_mode() {
+fn run_persistent_mode() -> Result<(), String> {
     let stdin = io::stdin();
     let stdout = io::stdout();
     let mut reader = BufReader::new(stdin.lock());
     let mut writer = BufWriter::new(stdout.lock());
-
-    if let Err(err) = serve_persistent_session(&mut reader, &mut writer) {
-        eprintln!("persistent mode exited: {err}");
-    }
+    serve_persistent_session(&mut reader, &mut writer)
 }
 
 fn serve_persistent_session<R: Read, W: Write>(
@@ -115,21 +184,30 @@ pub(crate) fn read_stdin_payload() -> Result<String, String> {
     Ok(input.to_string())
 }
 
-// emit 负责写出单行 JSON 响应，失败时静默返回。
-fn emit(response: Response) {
-    let mut stdout = io::stdout();
-    if let Ok(mut bytes) = serde_json::to_vec(&response) {
-        bytes.push(b'\n');
-        let _ = stdout.write_all(&bytes);
-        let _ = stdout.flush();
-    }
+fn emit(response: Response) -> Result<(), String> {
+    let stdout = io::stdout();
+    let mut writer = stdout.lock();
+    write_response_line(&mut writer, &response)
+}
+
+fn write_response_line<W: Write>(writer: &mut W, response: &Response) -> Result<(), String> {
+    let mut bytes =
+        serde_json::to_vec(response).map_err(|err| format!("encode response failed: {err}"))?;
+    bytes.push(b'\n');
+    writer
+        .write_all(&bytes)
+        .map_err(|err| format!("write response failed: {err}"))?;
+    writer
+        .flush()
+        .map_err(|err| format!("flush response failed: {err}"))?;
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Response, serve_persistent_session};
+    use super::{Response, resolve_entry_route, serve_persistent_session, write_response_line};
     use serde_json::json;
-    use std::io::Cursor;
+    use std::io::{Cursor, Error, Write};
 
     #[test]
     fn serve_persistent_session_handles_multiple_requests() {
@@ -159,6 +237,44 @@ mod tests {
         assert_eq!(first.payload["message"], "PONG");
         assert_eq!(second.request_id.as_deref(), Some("req-b"));
         assert_eq!(second.payload["trace_id"], "trace-b");
+    }
+
+    #[test]
+    fn resolve_entry_route_rejects_unknown_argument() {
+        let args = vec!["native".to_string(), "--invalid".to_string()];
+        let err = resolve_entry_route(&args).expect_err("unknown arg should fail");
+        assert!(err.contains("unknown argument: --invalid"));
+    }
+
+    #[test]
+    fn resolve_entry_route_rejects_conflicting_flags() {
+        let args = vec![
+            "native".to_string(),
+            "--sandbox-worker".to_string(),
+            "--persistent".to_string(),
+        ];
+        let err = resolve_entry_route(&args).expect_err("conflicting args should fail");
+        assert!(err.contains("conflicting arguments"));
+    }
+
+    #[test]
+    fn write_response_line_returns_error_when_writer_fails() {
+        let mut writer = BrokenWriter;
+        let err = write_response_line(&mut writer, &Response::success(json!({})))
+            .expect_err("write failure should be surfaced");
+        assert!(err.contains("write response failed"));
+    }
+
+    struct BrokenWriter;
+
+    impl Write for BrokenWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(Error::other("broken pipe"))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
     }
 
     fn frame_request(payload: &serde_json::Value) -> Vec<u8> {
