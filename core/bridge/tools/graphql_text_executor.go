@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 
 	"github.com/vektah/gqlparser/v2/ast"
 
 	"ghost-os/bridge/llm"
 )
-
-const graphQLTextSourceName = "graphql_tool_runtime.graphql"
 
 type GraphQLTextExecutionResult struct {
 	Recognized bool
@@ -26,6 +25,7 @@ type GraphQLTextExecutionResult struct {
 
 type GraphQLTextToolCall struct {
 	Operation ast.Operation
+	ToolID    int
 	ToolName  string
 	Arguments json.RawMessage
 }
@@ -69,6 +69,12 @@ func (e *graphQLTextExecutor) Execute(
 		return GraphQLTextExecutionResult{}, nil
 	}
 	logGraphQLTextSanitization(traceID, normalized.SanitizeKinds, e.sanitizeKnownArtifacts)
+	if normalized.LegacyGraphQL {
+		return GraphQLTextExecutionResult{Recognized: true}, newGraphQLTextParseError(
+			fmt.Errorf("legacy GraphQL mutation/query tool calls are no longer supported"),
+		)
+	}
+
 	call, err := parseGraphQLToolCallDocument(normalized.Document)
 	if err != nil {
 		call.Recognized = true
@@ -78,107 +84,232 @@ func (e *graphQLTextExecutor) Execute(
 		call.Recognized = true
 		return call, newGraphQLTextCatalogUnavailableError()
 	}
-	for _, toolCall := range call.Calls {
-		def, ok := graphQLVisibleToolDef(e.catalog, toolCall.ToolName)
-		if !ok || e.catalog.Get(toolCall.ToolName) == nil {
+
+	entries := graphQLVisibleToolIDEntries(e.catalog)
+	byID := make(map[int]llm.ToolDef, len(entries))
+	for _, entry := range entries {
+		byID[entry.ID] = entry.Def
+	}
+
+	for index := range call.Calls {
+		toolCall := &call.Calls[index]
+		def, ok := byID[toolCall.ToolID]
+		if !ok {
 			call.Recognized = true
-			return call, newGraphQLTextUnknownToolError(toolCall.ToolName, visibleGraphQLToolDefNames(e.catalog))
+			return call, newGraphQLTextUnknownToolIDError(toolCall.ToolID, entries)
 		}
-		if err := validateGraphQLToolOperation(toolCall.Operation, def); err != nil {
+		toolCall.ToolName = strings.TrimSpace(def.Name)
+		if err := validateToolTagArguments(toolCall.Arguments, def); err != nil {
 			call.Recognized = true
 			return call, err
 		}
 	}
+
 	call.Recognized = true
+	if len(call.Calls) > 0 {
+		call.ToolName = call.Calls[0].ToolName
+	}
 	return call, nil
 }
 
 func parseGraphQLToolCallDocument(text string) (GraphQLTextExecutionResult, error) {
-	document, err := parseGraphQLDocument(graphQLTextSourceName, text)
+	calls, recognized, err := parseToolTagCalls(text)
 	if err != nil {
-		return GraphQLTextExecutionResult{}, newGraphQLTextParseError(err)
+		return GraphQLTextExecutionResult{Recognized: recognized}, err
 	}
-	if len(document.Fragments) != 0 {
-		return GraphQLTextExecutionResult{}, newGraphQLTextFeatureError(
-			"unsupported_fragments",
-			"graphql tool runtime does not support fragments",
-		)
-	}
-	calls, err := parseGraphQLToolOperations(document.Operations)
-	if err != nil {
-		return GraphQLTextExecutionResult{}, err
+	if !recognized {
+		return GraphQLTextExecutionResult{}, nil
 	}
 	return graphQLTextExecutionResultForCalls(calls), nil
 }
 
-func parseGraphQLToolOperations(
-	operations ast.OperationList,
-) ([]GraphQLTextToolCall, error) {
-	if len(operations) == 0 {
-		return nil, newGraphQLTextOperationCountError(0)
+func parseToolTagCalls(text string) ([]GraphQLTextToolCall, bool, error) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return nil, false, nil
 	}
-	parsed := make([]GraphQLTextToolCall, 0, len(operations))
-	for _, operation := range operations {
-		call, err := parseGraphQLToolOperation(operation)
-		if err != nil {
-			return nil, err
+
+	const (
+		modeNormal = iota
+		modeCaptureID
+		modeCaptureArgs
+	)
+
+	calls := make([]GraphQLTextToolCall, 0, 2)
+	mode := modeNormal
+	recognized := false
+	tagStart := 0
+	idStart := 0
+	argsStart := 0
+	currentToolID := 0
+	inString := false
+	escaped := false
+
+	for index := 0; index < len(trimmed); {
+		switch mode {
+		case modeNormal:
+			if strings.HasPrefix(trimmed[index:], "<t:") {
+				recognized = true
+				mode = modeCaptureID
+				tagStart = index
+				idStart = index + len("<t:")
+				index = idStart
+				continue
+			}
+			index++
+		case modeCaptureID:
+			if trimmed[index] != '>' {
+				index++
+				continue
+			}
+			toolID, err := parseToolTagID(trimmed[idStart:index])
+			if err != nil {
+				return nil, true, newGraphQLTextParseError(
+					fmt.Errorf("invalid tool id near %q: %w", trimmed[tagStart:index+1], err),
+				)
+			}
+			currentToolID = toolID
+			mode = modeCaptureArgs
+			argsStart = index + 1
+			index = argsStart
+			inString = false
+			escaped = false
+		case modeCaptureArgs:
+			if !inString && strings.HasPrefix(trimmed[index:], "</t>") {
+				arguments, err := decodeToolTagArguments(trimmed[argsStart:index])
+				if err != nil {
+					return nil, true, err
+				}
+				calls = append(calls, GraphQLTextToolCall{
+					Operation: ast.Mutation,
+					ToolID:    currentToolID,
+					Arguments: arguments,
+				})
+				mode = modeNormal
+				index += len("</t>")
+				continue
+			}
+			ch := trimmed[index]
+			if inString {
+				if escaped {
+					escaped = false
+				} else {
+					if ch == '\\' {
+						escaped = true
+					} else if ch == '"' {
+						inString = false
+					}
+				}
+			} else if ch == '"' {
+				inString = true
+			}
+			index++
 		}
-		parsed = append(parsed, call)
 	}
-	return parsed, nil
+
+	if mode == modeCaptureID {
+		return nil, true, newGraphQLTextParseError(fmt.Errorf("unterminated tool tag id"))
+	}
+	if mode == modeCaptureArgs {
+		arguments, err := decodeToolTagArguments(trimmed[argsStart:])
+		if err != nil {
+			return nil, true, err
+		}
+		calls = append(calls, GraphQLTextToolCall{
+			Operation: ast.Mutation,
+			ToolID:    currentToolID,
+			Arguments: arguments,
+		})
+	}
+	if len(calls) == 0 {
+		return nil, recognized, nil
+	}
+	return calls, true, nil
 }
 
-func parseGraphQLToolOperation(operation *ast.OperationDefinition) (GraphQLTextToolCall, error) {
-	normalizedOperation, err := normalizeGraphQLToolOperation(operation)
-	if err != nil {
-		return GraphQLTextToolCall{}, err
+func parseToolTagID(raw string) (int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, fmt.Errorf("tool id is empty")
 	}
-	field, err := singleGraphQLToolField(normalizedOperation)
-	if err != nil {
-		return GraphQLTextToolCall{Operation: normalizedOperation.Operation}, err
+	for _, ch := range trimmed {
+		if ch < '0' || ch > '9' {
+			return 0, fmt.Errorf("tool id must be digits only")
+		}
 	}
-	argsJSON, err := graphQLFieldArgumentsJSON(field.Arguments)
-	if err != nil {
-		return GraphQLTextToolCall{
-			Operation: normalizedOperation.Operation,
-			ToolName:  strings.TrimSpace(field.Name),
-		}, err
+	id, err := strconv.Atoi(trimmed)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("tool id must be a positive integer")
 	}
-	return GraphQLTextToolCall{
-		Operation: normalizedOperation.Operation,
-		ToolName:  strings.TrimSpace(field.Name),
-		Arguments: argsJSON,
-	}, nil
+	return id, nil
 }
 
-func normalizeGraphQLToolOperation(operation *ast.OperationDefinition) (*ast.OperationDefinition, error) {
-	if operation == nil {
-		return nil, newGraphQLTextFeatureError(
-			"empty_operation_definition",
-			"graphql tool runtime found an empty operation definition",
+func decodeToolTagArguments(raw string) (json.RawMessage, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return json.RawMessage(`{}`), nil
+	}
+	var decoded any
+	if err := json.Unmarshal([]byte(trimmed), &decoded); err != nil {
+		return nil, newGraphQLTextParseError(fmt.Errorf("invalid tool arguments JSON: %w", err))
+	}
+	if _, ok := decoded.(map[string]any); !ok {
+		return nil, newGraphQLTextParseError(fmt.Errorf("tool arguments must be a JSON object"))
+	}
+	normalized, err := json.Marshal(decoded)
+	if err != nil {
+		return nil, newGraphQLTextParseError(fmt.Errorf("normalize tool arguments JSON: %w", err))
+	}
+	return json.RawMessage(normalized), nil
+}
+
+func validateToolTagArguments(args json.RawMessage, def llm.ToolDef) error {
+	var payload map[string]any
+	if err := json.Unmarshal(args, &payload); err != nil {
+		return newGraphQLTextArgumentError("", fmt.Errorf("decode arguments: %w", err))
+	}
+	if len(payload) == 0 {
+		return nil
+	}
+	root := decodeGraphQLToolSchemaObject(def.Parameters)
+	properties, _ := root["properties"].(map[string]any)
+	for name, value := range payload {
+		nested, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		if allowsNestedToolArgument(properties, name) {
+			continue
+		}
+		if len(nested) == 0 {
+			continue
+		}
+		return newGraphQLTextArgumentError(
+			name,
+			fmt.Errorf("argument %q should stay flat; nested objects are only allowed when the schema requires an object", name),
 		)
 	}
-	if operation.Operation != ast.Query && operation.Operation != ast.Mutation {
-		return nil, newGraphQLTextOperationError(
-			"unsupported_operation_type",
-			"graphql tool runtime only supports mutation",
-			"mutation",
-			string(operation.Operation),
-		)
+	return nil
+}
+
+func allowsNestedToolArgument(properties map[string]any, name string) bool {
+	if len(properties) == 0 {
+		return false
 	}
-	if len(operation.VariableDefinitions) != 0 {
-		return nil, newGraphQLTextFeatureError(
-			"unsupported_variables",
-			"graphql tool runtime does not support variables",
-		)
+	rawProperty, ok := properties[strings.TrimSpace(name)]
+	if !ok {
+		return false
 	}
-	if len(operation.Directives) != 0 {
-		return nil, newGraphQLTextFeatureError(
-			"unsupported_directives",
-			"graphql tool runtime does not support directives",
-		)
+	property, _ := rawProperty.(map[string]any)
+	typeName := strings.ToLower(strings.TrimSpace(graphQLSchemaTypeName(property)))
+	if typeName == "object" {
+		return true
 	}
-	return operation, nil
+	if typeName != "" {
+		return false
+	}
+	_, hasObjectFields := property["properties"].(map[string]any)
+	return hasObjectFields
 }
 
 func graphQLTextExecutionResultForCalls(calls []GraphQLTextToolCall) GraphQLTextExecutionResult {
@@ -196,102 +327,6 @@ func graphQLTextExecutionResultForCalls(calls []GraphQLTextToolCall) GraphQLText
 	return result
 }
 
-func singleGraphQLToolField(
-	operation *ast.OperationDefinition,
-) (*ast.Field, error) {
-	if operation == nil {
-		return nil, newGraphQLTextFeatureError(
-			"empty_operation_definition",
-			"graphql tool runtime operation is empty",
-		)
-	}
-	if len(operation.SelectionSet) != 1 {
-		return nil, newGraphQLTextTopLevelFieldCountError(len(operation.SelectionSet))
-	}
-	field, ok := operation.SelectionSet[0].(*ast.Field)
-	if !ok || field == nil {
-		return nil, newGraphQLTextFeatureError(
-			"invalid_top_level_selection",
-			"graphql tool runtime only supports a top-level field selection",
-		)
-	}
-	if alias := strings.TrimSpace(field.Alias); alias != "" && alias != strings.TrimSpace(field.Name) {
-		return nil, newGraphQLTextAliasError(field.Name)
-	}
-	if len(field.Directives) != 0 {
-		return nil, newGraphQLTextFeatureError(
-			"unsupported_directives",
-			"graphql tool runtime does not support directives",
-		)
-	}
-	if len(field.SelectionSet) != 0 {
-		return nil, newGraphQLTextNestedSelectionError(field.Name)
-	}
-	return field, nil
-}
-
-func graphQLFieldArgumentsJSON(arguments ast.ArgumentList) (json.RawMessage, error) {
-	if len(arguments) == 0 {
-		return json.RawMessage(`{}`), nil
-	}
-	payload := make(map[string]any, len(arguments))
-	for _, argument := range arguments {
-		if argument == nil || strings.TrimSpace(argument.Name) == "" {
-			err := fmt.Errorf("graphql tool runtime contains an invalid argument")
-			return nil, newGraphQLTextArgumentError("", err)
-		}
-		value, err := graphQLLiteralValue(argument.Value)
-		if err != nil {
-			return nil, newGraphQLTextArgumentError(
-				argument.Name,
-				fmt.Errorf("argument %q: %w", argument.Name, err),
-			)
-		}
-		payload[strings.TrimSpace(argument.Name)] = value
-	}
-	return json.Marshal(payload)
-}
-
-func graphQLLiteralValue(value *ast.Value) (any, error) {
-	if containsGraphQLVariable(value) {
-		return nil, fmt.Errorf("graphql tool runtime does not support variables")
-	}
-	if value == nil {
-		return nil, nil
-	}
-	decoded, err := value.Value(nil)
-	if err != nil {
-		return nil, fmt.Errorf("decode graphql literal: %w", err)
-	}
-	return decoded, nil
-}
-
-func containsGraphQLVariable(value *ast.Value) bool {
-	if value == nil {
-		return false
-	}
-	if value.Kind == ast.Variable {
-		return true
-	}
-	for _, child := range value.Children {
-		if child != nil && containsGraphQLVariable(child.Value) {
-			return true
-		}
-	}
-	return false
-}
-
-func validateGraphQLToolOperation(
-	operation ast.Operation,
-	def llm.ToolDef,
-) error {
-	expected := graphQLToolOperation(def)
-	if operation == expected {
-		return nil
-	}
-	return newGraphQLTextWrongOperationError(def.Name, expected, operation)
-}
-
 func logGraphQLTextSanitization(traceID string, kinds []string, enabled bool) {
 	if !enabled {
 		return
@@ -302,7 +337,7 @@ func logGraphQLTextSanitization(traceID string, kinds []string, enabled bool) {
 			continue
 		}
 		log.Printf(
-			"trace_id=%s action=GRAPHQL_TEXT_SANITIZE kind=%s",
+			"trace_id=%s action=TAG_TOOL_TEXT_SANITIZE kind=%s",
 			trimmedTraceID,
 			strings.TrimSpace(kind),
 		)

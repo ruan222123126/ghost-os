@@ -2,10 +2,10 @@ package tools
 
 import (
 	"encoding/json"
+	"fmt"
 	"sort"
+	"strconv"
 	"strings"
-
-	"github.com/vektah/gqlparser/v2/ast"
 
 	"ghost-os/bridge/llm"
 )
@@ -44,6 +44,11 @@ type GraphQLToolRuntimeEnumValue struct {
 	Name string
 }
 
+type GraphQLToolIDEntry struct {
+	ID  int
+	Def llm.ToolDef
+}
+
 func BuildGraphQLToolRuntimeSchema(catalog ToolCatalog) GraphQLToolRuntimeSchema {
 	defs := visibleGraphQLToolDefs(catalog)
 	builder := newGraphQLToolRuntimeTypeBuilder()
@@ -59,71 +64,142 @@ func BuildGraphQLToolRuntimeSchema(catalog ToolCatalog) GraphQLToolRuntimeSchema
 	return schema
 }
 
-func FormatGraphQLToolRuntimePrompt(catalog ToolCatalog) string {
-	defs := visibleGraphQLToolDefs(catalog)
-	schema := BuildGraphQLToolRuntimeSchema(catalog)
-	var builder strings.Builder
-
-	builder.WriteString("GraphQL Tool Call Protocol:\n")
-	builder.WriteString("- Return exactly one GraphQL document and nothing else.\n")
-	builder.WriteString("- Do not emit native tool_calls.\n")
-	builder.WriteString("- Use one or more `mutation` operations.\n")
-	builder.WriteString("- Each operation must contain exactly one top-level field.\n")
-	builder.WriteString("- Operations execute sequentially in the order written.\n")
-	builder.WriteString("- Field names must match visible tool names exactly.\n")
-	builder.WriteString("- GraphQL arguments map directly to the tool JSON parameters.\n")
-	builder.WriteString("- If one operation loads a dynamic tool (for example `tfind(action: load)`), later operations in the same document can call it.\n")
-	builder.WriteString("- Unsupported: aliases, fragments, variables, directives, multiple top-level fields in one operation.\n")
-	builder.WriteString("- `query` is not part of this protocol; use `mutation` for every tool call.\n")
-	if visibleNames := visibleGraphQLToolDefNames(catalog); len(visibleNames) == 1 && visibleNames[0] == ToolSearchToolName {
-		builder.WriteString("- This turn is effectively empty; bootstrap by starting with `mutation { tfind(action: search, query: \"...\") }`.\n")
-	}
-	if hasVisibleGraphQLToolDef(catalog, ToolSearchToolName) {
-		builder.WriteString("- If you are unsure which tools are visible, prefer `mutation { tfind(action: search, query: \"...\") }`.\n")
-		builder.WriteString("- Use `mutation { tfind(action: list) }` only when you need the current dynamic tool load state.\n")
-	}
-	builder.WriteString("- Never repeat or fabricate `[GRAPHQL_TOOL_RESULT]`; that marker is internal bridge feedback.\n")
-	builder.WriteString("- Prefer copying the closest minimal successful example and editing only the arguments you need.\n\n")
-	builder.WriteString("Available GraphQL tool schema:\n")
-	builder.WriteString("scalar JSON\n\n")
-	writeGraphQLToolTypeDefinitions(&builder, schema.EnumTypes, schema.InputTypes)
-	writeGraphQLToolFieldBlock(&builder, "Mutation", schema.MutationFields)
-	writeGraphQLToolExamplesBlock(&builder, defs)
-	return strings.TrimSpace(builder.String())
-}
-
-func graphQLToolOperation(_ llm.ToolDef) ast.Operation {
-	return ast.Mutation
-}
-
-func graphQLVisibleToolDef(catalog ToolCatalog, name string) (llm.ToolDef, bool) {
-	trimmed := strings.TrimSpace(name)
-	if trimmed == "" {
-		return llm.ToolDef{}, false
-	}
-	for _, def := range visibleGraphQLToolDefs(catalog) {
-		if strings.TrimSpace(def.Name) == trimmed {
-			return def, true
-		}
-	}
-	return llm.ToolDef{}, false
-}
-
-func hasVisibleGraphQLToolDef(catalog ToolCatalog, name string) bool {
-	_, ok := graphQLVisibleToolDef(catalog, name)
-	return ok
-}
-
-func visibleGraphQLToolDefNames(catalog ToolCatalog) []string {
+func graphQLVisibleToolIDEntries(catalog ToolCatalog) []GraphQLToolIDEntry {
 	defs := visibleGraphQLToolDefs(catalog)
 	if len(defs) == 0 {
 		return nil
 	}
-	names := make([]string, 0, len(defs))
-	for _, def := range defs {
-		names = append(names, strings.TrimSpace(def.Name))
+	entries := make([]GraphQLToolIDEntry, 0, len(defs))
+	for index, def := range defs {
+		entries = append(entries, GraphQLToolIDEntry{
+			ID:  index + 1,
+			Def: def,
+		})
 	}
-	return names
+	return entries
+}
+
+func FormatGraphQLToolRuntimePrompt(catalog ToolCatalog) string {
+	entries := graphQLVisibleToolIDEntries(catalog)
+	var builder strings.Builder
+
+	builder.WriteString("[System Instruction]\n")
+	builder.WriteString("You have the following tools. When calling a tool, strictly use <t:TOOL_ID>JSON_ARGS</t>.\n")
+	builder.WriteString("The JSON args must be a single object. Prefer flat top-level arguments; use nested objects only when the parameter schema explicitly requires them.\n")
+	builder.WriteString("You may place multiple tool calls in one reply by concatenating tags, for example: <t:1>{\"city\":\"Beijing\"}</t><t:2>{\"to\":\"boss@example.com\"}</t>.\n\n")
+
+	if len(entries) == 0 {
+		builder.WriteString("No tools are available for this turn.")
+		return strings.TrimSpace(builder.String())
+	}
+
+	for _, entry := range entries {
+		builder.WriteString("ID: ")
+		builder.WriteString(strconv.Itoa(entry.ID))
+		builder.WriteString("\n")
+		builder.WriteString("Tool name: ")
+		builder.WriteString(strings.TrimSpace(entry.Def.Name))
+		if desc := strings.TrimSpace(entry.Def.Description); desc != "" {
+			builder.WriteString(" (")
+			builder.WriteString(desc)
+			builder.WriteString(")")
+		}
+		builder.WriteString("\n")
+		builder.WriteString("Parameter format: ")
+		builder.WriteString(formatToolParameterShape(entry.Def.Parameters))
+		builder.WriteString("\n\n")
+	}
+
+	return strings.TrimSpace(builder.String())
+}
+
+func formatToolParameterShape(params json.RawMessage) string {
+	root := decodeGraphQLToolSchemaObject(params)
+	properties, _ := root["properties"].(map[string]any)
+	if len(properties) == 0 {
+		return `{}`
+	}
+	required := graphQLRequiredSet(root["required"])
+	keys := graphQLSortedPropertyKeys(properties)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		schema := graphQLSchemaMap(properties[key])
+		parts = append(parts, formatToolParameterShapeEntry(key, schema, required[key]))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+func formatToolParameterShapeEntry(name string, schema map[string]any, required bool) string {
+	typeLabel := formatToolParameterTypeLabel(schema)
+	metaParts := make([]string, 0, 2)
+	if required {
+		metaParts = append(metaParts, "required")
+	} else {
+		metaParts = append(metaParts, "optional")
+	}
+	if example := toolParameterExampleForName(name, schema); example != "" {
+		metaParts = append(metaParts, fmt.Sprintf("e.g. %s", example))
+	}
+	if desc := strings.TrimSpace(graphQLArgumentDescription(schema)); desc != "" {
+		metaParts = append(metaParts, desc)
+	}
+	return fmt.Sprintf("\"%s\": %s (%s)", name, typeLabel, strings.Join(metaParts, ", "))
+}
+
+func formatToolParameterTypeLabel(schema map[string]any) string {
+	typeName := strings.ToLower(strings.TrimSpace(graphQLSchemaTypeName(schema)))
+	switch typeName {
+	case "string":
+		return "string"
+	case "integer":
+		return "int"
+	case "number":
+		return "number"
+	case "boolean":
+		return "bool"
+	case "array":
+		return "array"
+	case "object":
+		return "object"
+	default:
+		if _, ok := schema["properties"].(map[string]any); ok {
+			return "object"
+		}
+		if enumValues, ok := graphQLEnumValues(schema); ok && len(enumValues) > 0 {
+			return "string"
+		}
+		return "json"
+	}
+}
+
+func toolParameterExampleForName(name string, schema map[string]any) string {
+	trimmed := strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case strings.Contains(trimmed, "city"):
+		return `"Beijing"`
+	case strings.Contains(trimmed, "date"):
+		return `"2026-03-29"`
+	case strings.Contains(trimmed, "day"):
+		return "1"
+	case strings.Contains(trimmed, "email"), strings.Contains(trimmed, "to"):
+		return `"boss@example.com"`
+	case strings.Contains(trimmed, "title"):
+		return `"Daily report"`
+	case strings.Contains(trimmed, "body"):
+		return `"Summary text"`
+	case strings.Contains(trimmed, "query"):
+		return `"OpenAI API docs"`
+	case strings.Contains(trimmed, "url"):
+		return `"https://example.com"`
+	}
+	typeName := strings.ToLower(strings.TrimSpace(graphQLSchemaTypeName(schema)))
+	if typeName == "boolean" {
+		return "true"
+	}
+	if typeName == "integer" || typeName == "number" {
+		return "1"
+	}
+	return ""
 }
 
 func visibleGraphQLToolDefs(catalog ToolCatalog) []llm.ToolDef {

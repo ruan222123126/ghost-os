@@ -1,7 +1,6 @@
 package tools
 
 import (
-	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -19,12 +18,4 @@ func NewGraphQLTextToolCallID() string {
 		time.Now().UTC().UnixNano(),
 		sequence,
 	)
-}
-
-func resolveGraphQLTextToolCallID(ctx context.Context) string {
-	toolCallID := ToolCallIDFromContext(ctx)
-	if toolCallID != "" {
-		return toolCallID
-	}
-	return NewGraphQLTextToolCallID()
 }

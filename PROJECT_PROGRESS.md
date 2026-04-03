@@ -75,6 +75,7 @@
 - 工具可见性语义已拆分为“常驻 allowlist”与“严格 allowlist-only”两层：`tool_allowlist` 现在只定义当前 turn 的 resident 工具；当 `tool_allowlist_only = true` 时，selector 与静态工具面才会一起收紧到 allowlist。非 strict 模式下，selector 仍可为主模型挑选其他未被 `tool_blocklist` 屏蔽的静态工具。
 - `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
+- GraphQL 文本协议的遗留死代码已完成一轮清理：删除未接线的文档预算校验模块、schema render 辅助模块，以及一组未引用的协议错误构造器/工具 ID 辅助函数，`core/bridge/tools` 的 staticcheck(U1000) 不再报告这批不可达路径。
 - 已完成一次后端 Agent 工具能力全量实测，并沉淀到 `docs/backend-agent-tool-capability-2026-03-28.md`：在临时测试配置（`max_turns=1`、memory 关闭、全工具 allowlist）下 15 个工具均完成至少一次真实调用；其中 `send_file`、`computer_use` 归类为需调试，`codex_cli`、`browser_control` 受前置配置/会话约束。
 - `screen_action` 截图链路已切到文件引用：`SCREEN_CAPTURE` 改为返回 `image_path`，Bridge 侧截图 artifact 改为基于文件流复制与流式哈希，不再经过 `image_base64 -> decode -> 写文件` 这条高内存路径；`OCR_IMAGE` / `TEMPLATE_MATCH_IMAGE` 的入参也已改为传 `image_path`。
 - native binary 解析顺序已收口为“优先仓库内 `drivers/native/target/*` 构建产物，再尝试裸名 `native`”：避免误命中过期二进制导致 `SCREEN_CAPTURE` payload 与 Bridge 契约漂移；同时 `screen_action` / `computer_use` 对截图 payload 增加了显式契约校验，在缺失 `image_path` 或命中旧 `image_base64` 字段时会直接报结构化错误，不再只给 `empty image_path`。
