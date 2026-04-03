@@ -59,3 +59,55 @@ func TestConfigUpdateRejectsNonStringGraphQLHeaders(t *testing.T) {
 		t.Fatalf("graphql headers changed after invalid update: %+v", snapshot.GraphqlSources[0].Headers)
 	}
 }
+
+func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	raw := json.RawMessage(`{
+		"web_rooter_enabled": true,
+		"web_rooter_base_url": "http://127.0.0.1:9988",
+		"web_rooter_api_token": "rooter-token",
+		"web_rooter_timeout_ms": 12345
+	}`)
+
+	payload, status, err := service.dispatchAction(
+		context.Background(),
+		busActionConfigUpdate,
+		raw,
+		"trace-web-rooter-update",
+	)
+	if err != nil {
+		t.Fatalf("config update failed: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("unexpected status: %d", status)
+	}
+
+	snapshot, ok := payload.(configResponse)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", payload)
+	}
+	if !snapshot.WebRooterEnabled {
+		t.Fatal("expected web_rooter_enabled in snapshot")
+	}
+	if !snapshot.WebRooterAPITokenSet {
+		t.Fatal("expected web_rooter_api_token_set in snapshot")
+	}
+
+	cfg, err := service.configStore.Config()
+	if err != nil {
+		t.Fatalf("load runtime config: %v", err)
+	}
+	if !cfg.WebRooterEnabled {
+		t.Fatal("expected web_rooter_enabled in runtime config")
+	}
+	if cfg.WebRooterBaseURL != "http://127.0.0.1:9988" {
+		t.Fatalf("unexpected web_rooter_base_url: %q", cfg.WebRooterBaseURL)
+	}
+	if cfg.WebRooterAPIToken != "rooter-token" {
+		t.Fatalf("unexpected web_rooter_api_token: %q", cfg.WebRooterAPIToken)
+	}
+	if cfg.WebRooterTimeoutMS != 12345 {
+		t.Fatalf("unexpected web_rooter_timeout_ms: %d", cfg.WebRooterTimeoutMS)
+	}
+}
