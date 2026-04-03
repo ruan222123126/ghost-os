@@ -72,7 +72,11 @@ func TestCompleteStreamOpenAITextDeltas(t *testing.T) {
 	client := newStreamTestClient(server, ProviderOpenAI)
 	sink := &recordingLLMStreamSink{}
 
-	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "Read config file"},
+		},
+	}, sink)
 	if err != nil {
 		t.Fatalf("CompleteStream returned error: %v", err)
 	}
@@ -110,7 +114,11 @@ func TestCompleteStreamOpenAIToolCallSequence(t *testing.T) {
 	client := newStreamTestClient(server, ProviderOpenAI)
 	sink := &recordingLLMStreamSink{}
 
-	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "Say hello"},
+		},
+	}, sink)
 	if err != nil {
 		t.Fatalf("CompleteStream returned error: %v", err)
 	}
@@ -174,7 +182,11 @@ func TestCompleteStreamAnthropicTextDeltas(t *testing.T) {
 	client := newStreamTestClient(server, ProviderAnthropic)
 	sink := &recordingLLMStreamSink{}
 
-	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "read config"},
+		},
+	}, sink)
 	if err != nil {
 		t.Fatalf("CompleteStream returned error: %v", err)
 	}
@@ -221,7 +233,11 @@ func TestCompleteStreamAnthropicToolCallSequence(t *testing.T) {
 	client := newStreamTestClient(server, ProviderAnthropic)
 	sink := &recordingLLMStreamSink{}
 
-	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "say hello"},
+		},
+	}, sink)
 	if err != nil {
 		t.Fatalf("CompleteStream returned error: %v", err)
 	}
@@ -273,10 +289,20 @@ func TestCompleteStreamCodexToolCallSequence(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newStreamTestClient(server, ProviderCodex)
+	client := NewClientWithOptions(ClientOptions{
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "test-model",
+		CodexStatelessRetryEnabled: true,
+	})
+	client.httpClient = server.Client()
 	sink := &recordingLLMStreamSink{}
 
-	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "read config.toml"},
+		},
+	}, sink)
 	if err != nil {
 		t.Fatalf("CompleteStream returned error: %v", err)
 	}
@@ -322,10 +348,20 @@ func TestCompleteStreamCodexTextDeltas(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := newStreamTestClient(server, ProviderCodex)
+	client := NewClientWithOptions(ClientOptions{
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "test-model",
+		CodexStatelessRetryEnabled: true,
+	})
+	client.httpClient = server.Client()
 	sink := &recordingLLMStreamSink{}
 
-	resp, err := client.CompleteStream(context.Background(), CompletionRequest{}, sink)
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "say hello"},
+		},
+	}, sink)
 	if err != nil {
 		t.Fatalf("CompleteStream returned error: %v", err)
 	}
@@ -373,7 +409,13 @@ func TestCompleteStreamCodexFallsBackToStatelessReplayAfterContinuation400(t *te
 	}))
 	defer server.Close()
 
-	client := newStreamTestClient(server, ProviderCodex)
+	client := NewClientWithOptions(ClientOptions{
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "test-model",
+		CodexStatelessRetryEnabled: true,
+	})
+	client.httpClient = server.Client()
 	sink := &recordingLLMStreamSink{}
 
 	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
@@ -407,14 +449,20 @@ func TestCompleteStreamCodexFallsBackToStatelessReplayAfterContinuation400(t *te
 	if len(requestBodies) != 2 {
 		t.Fatalf("unexpected request count: got %d want 2", len(requestBodies))
 	}
-	if requestBodies[0].PreviousResponseID != "resp_prev" {
-		t.Fatalf("first request should keep previous_response_id, got %q", requestBodies[0].PreviousResponseID)
+	if requestBodies[0].PreviousResponseID != "" {
+		t.Fatalf("first request should proactively clear previous_response_id, got %q", requestBodies[0].PreviousResponseID)
 	}
 	if requestBodies[1].PreviousResponseID != "" {
 		t.Fatalf("second request should clear previous_response_id, got %q", requestBodies[1].PreviousResponseID)
 	}
-	if len(requestBodies[0].Input) != 1 || requestBodies[0].Input[0].Type != "function_call_output" {
+	if len(requestBodies[0].Input) != 3 {
 		t.Fatalf("unexpected continuation payload: %+v", requestBodies[0].Input)
+	}
+	if requestBodies[0].Input[0].Type != "message" || requestBodies[0].Input[0].Role != "user" {
+		t.Fatalf("unexpected first replay user item: %+v", requestBodies[0].Input[0])
+	}
+	if requestBodies[0].Input[1].Type != "function_call" || requestBodies[0].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected first replay tail: %+v", requestBodies[0].Input)
 	}
 	if len(requestBodies[1].Input) != 3 {
 		t.Fatalf("unexpected stateless replay input count: got %d want 3", len(requestBodies[1].Input))
@@ -424,5 +472,137 @@ func TestCompleteStreamCodexFallsBackToStatelessReplayAfterContinuation400(t *te
 	}
 	if requestBodies[1].Input[1].Type != "function_call" || requestBodies[1].Input[2].Type != "function_call_output" {
 		t.Fatalf("unexpected stateless replay tail: %+v", requestBodies[1].Input)
+	}
+}
+
+func TestCompleteStreamCodexFallsBackToStatelessReplayAfterMissingFunctionCallOutputError(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+
+		if len(requestBodies) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"No tool call found for function_call_output with call_id call_1.","type":"invalid_request_error","code":null}}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: response.output_text.delta`,
+			`data: {"type":"response.output_text.delta","delta":"done"}`,
+			"",
+			`event: response.completed`,
+			`data: {"type":"response.completed","response":{"id":"resp_2","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":9,"output_tokens":2,"total_tokens":11}}}`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(ClientOptions{
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "test-model",
+		CodexStatelessRetryEnabled: true,
+	})
+	client.httpClient = server.Client()
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "Need your approval"},
+			{
+				Role: RoleAssistant,
+				ToolCalls: []ToolCall{
+					{ID: "call_1", Name: "ask_human", Arguments: json.RawMessage(`{"question":"continue?"}`)},
+				},
+			},
+			{Role: RoleTool, ToolCallID: "call_1", Text: `{"answer":"ai"}`},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            server.URL,
+			Model:              "test-model",
+			PreviousResponseID: "resp_prev",
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.Message.Text != "done" {
+		t.Fatalf("unexpected response text: got %q want %q", resp.Message.Text, "done")
+	}
+	if len(requestBodies) != 2 {
+		t.Fatalf("unexpected request count: got %d want 2", len(requestBodies))
+	}
+	if requestBodies[0].PreviousResponseID != "" {
+		t.Fatalf("first request should proactively clear previous_response_id, got %q", requestBodies[0].PreviousResponseID)
+	}
+	if requestBodies[1].PreviousResponseID != "" {
+		t.Fatalf("second request should clear previous_response_id, got %q", requestBodies[1].PreviousResponseID)
+	}
+	if len(requestBodies[0].Input) != 3 {
+		t.Fatalf("unexpected first stateless replay input count: got %d want 3", len(requestBodies[0].Input))
+	}
+	if requestBodies[0].Input[1].Type != "function_call" || requestBodies[0].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected first stateless replay tail: %+v", requestBodies[0].Input)
+	}
+	if len(requestBodies[1].Input) != 3 {
+		t.Fatalf("unexpected stateless replay input count: got %d want 3", len(requestBodies[1].Input))
+	}
+	if requestBodies[1].Input[1].Type != "function_call" || requestBodies[1].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected stateless replay tail: %+v", requestBodies[1].Input)
+	}
+}
+
+func TestCompleteStreamCodexDoesNotFallbackToStatelessReplayByDefault(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"upstream_error","type":"upstream_error","code":"upstream_error"}}`))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderCodex)
+	sink := &recordingLLMStreamSink{}
+
+	_, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            server.URL,
+			Model:              "test-model",
+			PreviousResponseID: "resp_prev",
+		},
+	}, sink)
+	if err == nil || !strings.Contains(err.Error(), "status 400") {
+		t.Fatalf("expected upstream 400 error without fallback, got %v", err)
+	}
+	if len(requestBodies) != 1 {
+		t.Fatalf("expected one request without fallback, got %d", len(requestBodies))
 	}
 }

@@ -15,14 +15,16 @@ import (
 
 // ClientOptions 定义 provider 与 HTTP 客户端初始化所需配置。
 type ClientOptions struct {
-	Provider           Provider
-	BaseURL            string
-	APIKey             string
-	Model              string
-	ChatPath           string
-	Headers            map[string]string
-	AnthropicVersion   string
-	AnthropicMaxTokens int
+	Provider                   Provider
+	BaseURL                    string
+	APIKey                     string
+	Model                      string
+	ChatPath                   string
+	Headers                    map[string]string
+	AnthropicVersion           string
+	AnthropicMaxTokens         int
+	CodexStatelessRetryEnabled bool
+	ResponseOptions            ResponseOptions
 }
 
 // Client 封装 provider 适配与 HTTP 调用细节。
@@ -61,11 +63,22 @@ func (e *completionStatusError) Error() string {
 
 // Complete 执行一次完整请求链路：构建请求 -> 发起 HTTP -> 解析响应。
 func (c *Client) Complete(ctx context.Context, request CompletionRequest) (*CompletionResponse, error) {
+	request = c.withDefaultResponseOptions(request)
 	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
 		return nil, err
 	}
 
-	payload, err := c.buildProviderRequest(request)
+	preferCodexStateless := c.shouldPreferCodexStateless(request)
+
+	var (
+		payload providerRequest
+		err     error
+	)
+	if preferCodexStateless {
+		payload, err = c.buildCodexProviderRequestStateless(request)
+	} else {
+		payload, err = c.buildProviderRequest(request)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -95,6 +108,9 @@ func (c *Client) shouldRetryCodexStateless(request CompletionRequest, statusCode
 	if c.opts.Provider != ProviderCodex {
 		return false
 	}
+	if !c.opts.CodexStatelessRetryEnabled {
+		return false
+	}
 	if statusCode < 400 || statusCode >= 500 {
 		return false
 	}
@@ -102,8 +118,70 @@ func (c *Client) shouldRetryCodexStateless(request CompletionRequest, statusCode
 		return false
 	}
 
-	body := strings.TrimSpace(string(raw))
-	return strings.Contains(body, `"upstream_error"`) || strings.Contains(strings.ToLower(body), "previous_response_id")
+	return shouldRetryCodexStatelessByBody(raw)
+}
+
+func (c *Client) shouldPreferCodexStateless(request CompletionRequest) bool {
+	if c.opts.Provider != ProviderCodex {
+		return false
+	}
+	if !c.opts.CodexStatelessRetryEnabled {
+		return false
+	}
+	if strings.TrimSpace(request.ConversationState.PreviousResponseID) == "" {
+		return false
+	}
+	return codexRequestContainsToolRoundtrip(request.Messages)
+}
+
+func codexRequestContainsToolRoundtrip(messages []Message) bool {
+	if len(messages) == 0 {
+		return false
+	}
+
+	assistantCallIDs := make(map[string]struct{}, len(messages))
+	for _, msg := range messages {
+		if msg.Role != RoleAssistant {
+			continue
+		}
+		for _, call := range msg.ToolCalls {
+			callID := strings.TrimSpace(call.ID)
+			if callID == "" {
+				continue
+			}
+			assistantCallIDs[callID] = struct{}{}
+		}
+	}
+
+	for _, msg := range messages {
+		if msg.Role != RoleTool {
+			continue
+		}
+		callID := strings.TrimSpace(msg.ToolCallID)
+		if callID == "" {
+			continue
+		}
+		if _, ok := assistantCallIDs[callID]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldRetryCodexStatelessByBody(raw []byte) bool {
+	body := strings.TrimSpace(strings.ToLower(string(raw)))
+	if body == "" {
+		return false
+	}
+
+	// 兼容历史上游错误与 previous_response_id 失效场景。
+	if strings.Contains(body, `"upstream_error"`) || strings.Contains(body, "previous_response_id") {
+		return true
+	}
+
+	// 继续响应时只收到 function_call_output，且上游上下文已丢失对应 function_call。
+	return strings.Contains(body, "no tool call found for function call output with call_id") ||
+		strings.Contains(body, "no tool call found for function_call_output with call_id")
 }
 
 func (c *Client) shouldRetryCodexStatelessForError(request CompletionRequest, err error) bool {
@@ -118,6 +196,7 @@ func (c *Client) CompleteStream(ctx context.Context, request CompletionRequest, 
 	if sink == nil {
 		return nil, fmt.Errorf("stream sink is required")
 	}
+	request = c.withDefaultResponseOptions(request)
 	if err := validateRequestMessageToolProtocol(request.Messages); err != nil {
 		return nil, err
 	}
@@ -128,6 +207,13 @@ func (c *Client) CompleteStream(ctx context.Context, request CompletionRequest, 
 	case ProviderAnthropic:
 		return c.streamAnthropicCompletion(ctx, request, sink)
 	case ProviderCodex:
+		if c.shouldPreferCodexStateless(request) {
+			resp, err := c.streamCodexCompletionStateless(ctx, request, sink)
+			if err != nil && c.shouldRetryCodexStatelessForError(request, err) {
+				return c.streamCodexCompletionStateless(ctx, request, sink)
+			}
+			return resp, err
+		}
 		resp, err := c.streamCodexCompletion(ctx, request, sink)
 		if err != nil && c.shouldRetryCodexStatelessForError(request, err) {
 			return c.streamCodexCompletionStateless(ctx, request, sink)
@@ -301,7 +387,15 @@ func normalizeOptions(opts ClientOptions) ClientOptions {
 	}
 
 	out.Headers = cloneHeaders(opts.Headers)
+	out.ResponseOptions = CloneResponseOptions(opts.ResponseOptions)
 	return out
+}
+
+func (c *Client) withDefaultResponseOptions(request CompletionRequest) CompletionRequest {
+	if request.ResponseOptions.IsZero() {
+		request.ResponseOptions = CloneResponseOptions(c.opts.ResponseOptions)
+	}
+	return request
 }
 
 // normalizePath 在未配置时填充 provider 默认 API 路径。

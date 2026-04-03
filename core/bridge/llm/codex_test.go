@@ -384,7 +384,7 @@ func TestCodexIncrementalMessagesSkipsGraphQLToolResultBoundary(t *testing.T) {
 		{Role: RoleUser, Text: "find project"},
 		{Role: RoleAssistant, Text: `mutation { tfind(action: search, query: "project") }`},
 		{Role: RoleTool, ToolCallID: "call_1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
-		{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+		{Role: RoleAssistant, Text: `[TOOL_TAG_RESULT]
 {"status":"success","tool":"tfind"}`},
 	}
 
@@ -395,7 +395,7 @@ func TestCodexIncrementalMessagesSkipsGraphQLToolResultBoundary(t *testing.T) {
 	if got[0].Role != RoleTool {
 		t.Fatalf("expected incremental first message to stay tool result, got %+v", got[0])
 	}
-	if got[1].Role != RoleAssistant || !strings.Contains(got[1].Text, "[GRAPHQL_TOOL_RESULT]") {
+	if got[1].Role != RoleAssistant || !strings.Contains(got[1].Text, "[TOOL_TAG_RESULT]") {
 		t.Fatalf("expected incremental second message to keep graphql feedback, got %+v", got[1])
 	}
 }
@@ -407,7 +407,7 @@ func TestToCodexRequestKeepsPreviousResponseIDWithTrailingGraphQLFeedback(t *tes
 			{Role: RoleUser, Text: "find project"},
 			{Role: RoleAssistant, Text: `mutation { tfind(action: search, query: "project") }`},
 			{Role: RoleTool, ToolCallID: "call_1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
-			{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+			{Role: RoleAssistant, Text: `[TOOL_TAG_RESULT]
 {"status":"success","tool":"tfind"}`},
 		},
 		ConversationState: ConversationState{
@@ -449,7 +449,7 @@ func TestToCodexRequestFallsBackToStatelessReplayForGraphQLTextToolOutput(t *tes
 				}},
 			},
 			{Role: RoleTool, ToolCallID: "graphql-text-call-1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
-			{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+			{Role: RoleAssistant, Text: `[TOOL_TAG_RESULT]
 {"status":"success","tool":"tfind"}`},
 		},
 		ConversationState: ConversationState{
@@ -519,7 +519,7 @@ func TestCompleteCodexClearsPreviousResponseIDForGraphQLTextToolOutput(t *testin
 				}},
 			},
 			{Role: RoleTool, ToolCallID: "graphql-text-call-1", Text: `{"status":"success","tool":"tfind","output":"{}"}`},
-			{Role: RoleAssistant, Text: `[GRAPHQL_TOOL_RESULT]
+			{Role: RoleAssistant, Text: `[TOOL_TAG_RESULT]
 {"status":"success","tool":"tfind"}`},
 		},
 		ConversationState: ConversationState{
@@ -630,6 +630,9 @@ func TestToCodexRequestSanitizesToolSchemaForStrictGateways(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected sanitized properties object, got %#v", req.Tools[0].Parameters["properties"])
 	}
+	if got, exists := properties["type"]; exists {
+		t.Fatalf("expected no synthetic properties.type entry, got %#v", got)
+	}
 	page, ok := properties["page"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected page property object, got %#v", properties["page"])
@@ -646,6 +649,61 @@ func TestToCodexRequestSanitizesToolSchemaForStrictGateways(t *testing.T) {
 	}
 	if got := filters["properties"]; got == nil {
 		t.Fatal("expected inferred object schema to include empty properties")
+	}
+}
+
+func TestToCodexRequestDoesNotInjectTypeIntoPropertiesContainer(t *testing.T) {
+	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+		},
+		Tools: []ToolDef{
+			{
+				Name:        "browser_control",
+				Description: "browser",
+				Parameters: json.RawMessage(`{
+					"type":"object",
+					"properties":{
+						"action":{"type":"string"},
+						"params":{
+							"type":"object",
+							"properties":{
+								"url":{"type":"string"}
+							},
+							"additionalProperties":false
+						}
+					},
+					"required":["action"],
+					"additionalProperties":false
+				}`),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if len(req.Tools) != 1 {
+		t.Fatalf("unexpected tools count: got %d want 1", len(req.Tools))
+	}
+
+	rootProps, ok := req.Tools[0].Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected root properties object, got %#v", req.Tools[0].Parameters["properties"])
+	}
+	if got, exists := rootProps["type"]; exists {
+		t.Fatalf("expected no synthetic root properties.type entry, got %#v", got)
+	}
+	paramsSchema, ok := rootProps["params"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected params schema object, got %#v", rootProps["params"])
+	}
+	nestedProps, ok := paramsSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected nested properties object, got %#v", paramsSchema["properties"])
+	}
+	if got, exists := nestedProps["type"]; exists {
+		t.Fatalf("expected no synthetic nested properties.type entry, got %#v", got)
 	}
 }
 
@@ -712,11 +770,17 @@ func TestCompleteCodexFallsBackToStatelessReplayAfterContinuation400(t *testing.
 	if len(requestBodies) != 2 {
 		t.Fatalf("unexpected request count: got %d want 2", len(requestBodies))
 	}
-	if requestBodies[0].PreviousResponseID != "resp_prev" {
+	if requestBodies[0].PreviousResponseID != "" {
 		t.Fatalf("unexpected first previous_response_id: got %q", requestBodies[0].PreviousResponseID)
 	}
-	if len(requestBodies[0].Input) != 1 || requestBodies[0].Input[0].Type != "function_call_output" {
+	if len(requestBodies[0].Input) != 3 {
 		t.Fatalf("unexpected first request input: %+v", requestBodies[0].Input)
+	}
+	if requestBodies[0].Input[0].Type != "message" || requestBodies[0].Input[0].Role != "user" {
+		t.Fatalf("unexpected first replay user item: %+v", requestBodies[0].Input[0])
+	}
+	if requestBodies[0].Input[1].Type != "function_call" || requestBodies[0].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected first replay tail: %+v", requestBodies[0].Input)
 	}
 	if requestBodies[1].PreviousResponseID != "" {
 		t.Fatalf("unexpected fallback previous_response_id: got %q", requestBodies[1].PreviousResponseID)
@@ -735,6 +799,92 @@ func TestCompleteCodexFallsBackToStatelessReplayAfterContinuation400(t *testing.
 	}
 	if requestBodies[1].Input[2].Type != "function_call_output" {
 		t.Fatalf("unexpected fallback tool output item: %+v", requestBodies[1].Input[2])
+	}
+}
+
+func TestCompleteCodexFallsBackToStatelessReplayAfterMissingFunctionCallOutputError(t *testing.T) {
+	requestBodies := make([]codexRequest, 0, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("read request body: %v", err)
+		}
+		defer r.Body.Close()
+
+		var body codexRequest
+		if err := json.Unmarshal(raw, &body); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		requestBodies = append(requestBodies, body)
+
+		if len(requestBodies) == 1 {
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":{"message":"No tool call found for function call output with call_id call_1.","type":"invalid_request_error","code":null}}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_2","status":"completed","output":[{"type":"message","content":[{"type":"output_text","text":"done"}]}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(ClientOptions{
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "gpt-5.4",
+		CodexStatelessRetryEnabled: true,
+	})
+	client.httpClient = server.Client()
+
+	resp, err := client.Complete(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "list files"},
+			{
+				Role: RoleAssistant,
+				Text: "I will inspect the repo.",
+				ToolCalls: []ToolCall{
+					{ID: "call_1", Name: "bash_exec", Arguments: json.RawMessage(`{"command":"pwd && ls -la"}`)},
+				},
+			},
+			{Role: RoleTool, ToolCallID: "call_1", Text: "/repo\nAGENTS.md"},
+		},
+		ConversationState: ConversationState{
+			Provider:           ProviderCodex,
+			BaseURL:            server.URL,
+			Model:              "gpt-5.4",
+			PreviousResponseID: "resp_prev",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Complete returned error: %v", err)
+	}
+	if resp.Message.Text != "done" {
+		t.Fatalf("unexpected response text: got %q want %q", resp.Message.Text, "done")
+	}
+	if len(requestBodies) != 2 {
+		t.Fatalf("unexpected request count: got %d want 2", len(requestBodies))
+	}
+	if requestBodies[0].PreviousResponseID != "" {
+		t.Fatalf("unexpected first previous_response_id: got %q", requestBodies[0].PreviousResponseID)
+	}
+	if len(requestBodies[0].Input) != 3 {
+		t.Fatalf("unexpected first request input: %+v", requestBodies[0].Input)
+	}
+	if requestBodies[0].Input[0].Type != "message" || requestBodies[0].Input[0].Role != "user" {
+		t.Fatalf("unexpected first replay user item: %+v", requestBodies[0].Input[0])
+	}
+	if requestBodies[0].Input[1].Type != "function_call" || requestBodies[0].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected first replay tail: %+v", requestBodies[0].Input)
+	}
+	if requestBodies[1].PreviousResponseID != "" {
+		t.Fatalf("unexpected fallback previous_response_id: got %q", requestBodies[1].PreviousResponseID)
+	}
+	if len(requestBodies[1].Input) != 3 {
+		t.Fatalf("unexpected fallback input count: got %d want 3", len(requestBodies[1].Input))
+	}
+	if requestBodies[1].Input[1].Type != "function_call" || requestBodies[1].Input[2].Type != "function_call_output" {
+		t.Fatalf("unexpected fallback replay tail: %+v", requestBodies[1].Input)
 	}
 }
 
