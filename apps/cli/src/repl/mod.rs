@@ -1,4 +1,5 @@
 mod ask_human;
+mod early_input;
 mod input;
 mod view;
 
@@ -12,21 +13,25 @@ use crate::commands::{
 };
 use crate::types::AgentPayload;
 
+use early_input::capture_first_line_prefill;
 use input::{RoutedInput, route_input};
 
 pub struct Repl {
     client: BridgeClient,
     editor: DefaultEditor,
     current_session_id: Option<String>,
+    first_line_prefill: Option<String>,
 }
 
 impl Repl {
     pub fn new(client: BridgeClient) -> Result<Self> {
+        let first_line_prefill = capture_first_line_prefill()?;
         let editor = DefaultEditor::new()?;
         Ok(Self {
             client,
             editor,
             current_session_id: None,
+            first_line_prefill,
         })
     }
 
@@ -50,7 +55,7 @@ impl Repl {
     }
 
     fn read_main_line(&mut self, prompt: &str) -> Result<LoopEvent> {
-        match self.editor.readline(prompt) {
+        match self.read_main_line_input(prompt) {
             Ok(line) => Ok(LoopEvent::Line(line)),
             Err(ReadlineError::Interrupted) => {
                 view::print_input_cancelled();
@@ -62,6 +67,13 @@ impl Repl {
             }
             Err(err) => Err(err.into()),
         }
+    }
+
+    fn read_main_line_input(&mut self, prompt: &str) -> std::result::Result<String, ReadlineError> {
+        if let Some(prefill) = self.first_line_prefill.take() {
+            return self.editor.readline_with_initial(prompt, (&prefill, ""));
+        }
+        self.editor.readline(prompt)
     }
 
     fn handle_input_line(&mut self, line: &str) -> Result<RunAction> {
