@@ -40,22 +40,31 @@ func locateNativeBinary(locator nativeBinaryLocator) (string, error) {
 		return path, nil
 	}
 
-	return "", errors.New("native binary not found; configure native binary path or run `cargo build` in drivers/native first")
+	return "", errors.New(
+		"native binary not found; set native_binary_path (or GHOST_NATIVE_BINARY_PATH) or place native alongside the bridge deployment",
+	)
 }
 
 func nativeBinaryCandidates() []string {
-	return []string{
-		"../../drivers/native/target/release/native",
-		"drivers/native/target/release/native",
-		"../../drivers/native/target/release/native.exe",
-		"drivers/native/target/release/native.exe",
-		"../../drivers/native/target/debug/native",
-		"drivers/native/target/debug/native",
-		"../../drivers/native/target/debug/native.exe",
-		"drivers/native/target/debug/native.exe",
-		"native",
-		"native.exe",
+	baseNames := []string{"native", "native.exe"}
+	relativeDirs := []string{
+		".",
+		"bin",
+		"..",
+		filepath.Join("..", "bin"),
 	}
+	candidates := make([]string, 0, len(baseNames)*len(relativeDirs))
+	for _, dir := range relativeDirs {
+		for _, name := range baseNames {
+			if dir == "." {
+				candidates = append(candidates, name)
+				continue
+			}
+			candidates = append(candidates, filepath.Join(dir, name))
+		}
+	}
+
+	return candidates
 }
 
 func defaultNativeBinaryRoots() []string {

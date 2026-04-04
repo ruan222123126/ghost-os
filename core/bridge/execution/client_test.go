@@ -64,19 +64,36 @@ func TestLocateNativeBinaryInRootsFindsFromSecondRoot(t *testing.T) {
 	}
 }
 
-func TestLocateNativeBinaryPrefersProjectBuildOverBareBinaryName(t *testing.T) {
+func TestLocateNativeBinaryDefaultsIgnoreRepositoryRelativeCandidates(t *testing.T) {
 	root := t.TempDir()
-	bare := filepath.Join(root, "native")
 	project := filepath.Join(root, "drivers", "native", "target", "debug", "native")
 
-	if err := writeFile(bare, []byte("bare")); err != nil {
-		t.Fatalf("write bare binary fixture: %v", err)
-	}
 	if err := writeFile(project, []byte("project")); err != nil {
 		t.Fatalf("write project binary fixture: %v", err)
 	}
 
-	got, err := locateNativeBinary(nativeBinaryLocator{roots: []string{root}})
+	_, err := locateNativeBinary(nativeBinaryLocator{roots: []string{root}})
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "native binary not found") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLocateNativeBinaryUsesRepositoryCandidateWhenExplicitlyConfigured(t *testing.T) {
+	root := t.TempDir()
+	candidate := filepath.Join("drivers", "native", "target", "debug", "native")
+	project := filepath.Join(root, candidate)
+
+	if err := writeFile(project, []byte("project")); err != nil {
+		t.Fatalf("write project binary fixture: %v", err)
+	}
+
+	got, err := locateNativeBinary(nativeBinaryLocator{
+		roots:      []string{root},
+		candidates: []string{candidate, "native"},
+	})
 	if err != nil {
 		t.Fatalf("locateNativeBinary returned error: %v", err)
 	}
