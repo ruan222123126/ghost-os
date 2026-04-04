@@ -61,13 +61,6 @@ func WrapConfigStore(store bridgeconfig.Store) *ConfigStore {
 	return &ConfigStore{inner: store}
 }
 
-func (s *ConfigStore) unwrap() bridgeconfig.Store {
-	if s == nil {
-		return nil
-	}
-	return s.inner
-}
-
 func (s *ConfigStore) Config() (Config, error) {
 	if s == nil || s.inner == nil {
 		return bridgeconfig.Load()
@@ -94,12 +87,28 @@ func NewToolSelectionPolicy(cfg Config) SelectionPolicy {
 	return SelectionPolicy{toolSelectionPolicy: newToolSelectionPolicy(cfg)}
 }
 
+func (p SelectionPolicy) ResidentCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
+	return p.toolSelectionPolicy.residentCatalog(catalog)
+}
+
+func (p SelectionPolicy) SelectorCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
+	return p.toolSelectionPolicy.selectorCatalog(catalog)
+}
+
 func (p SelectionPolicy) ScopeCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.toolSelectionPolicy.scopeCatalog(catalog)
+	return p.ResidentCatalog(catalog)
+}
+
+func (p SelectionPolicy) ResidentScope(available []string) []string {
+	return p.toolSelectionPolicy.residentScope(available)
+}
+
+func (p SelectionPolicy) SelectorScope(available []string) []string {
+	return p.toolSelectionPolicy.selectorScope(available)
 }
 
 func (p SelectionPolicy) AllowlistScope(available []string) []string {
-	return p.toolSelectionPolicy.allowlistScope(available)
+	return p.ResidentScope(available)
 }
 
 func (p SelectionPolicy) Apply(available []string, selected []string) []string {
@@ -133,14 +142,16 @@ func providerClientOptions(cfg Config, model string) llm.ClientOptions {
 		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
 	}
 	return llm.ClientOptions{
-		Provider:           cfg.Provider.Type,
-		BaseURL:            cfg.Provider.BaseURL,
-		APIKey:             cfg.Provider.APIKey,
-		Model:              resolvedModel,
-		ChatPath:           cfg.ChatPath,
-		Headers:            cfg.Provider.Headers,
-		AnthropicVersion:   cfg.Provider.AnthropicVersion,
-		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
+		Provider:                   cfg.Provider.Type,
+		BaseURL:                    cfg.Provider.BaseURL,
+		APIKey:                     cfg.Provider.APIKey,
+		Model:                      resolvedModel,
+		ChatPath:                   cfg.ChatPath,
+		Headers:                    cfg.Provider.Headers,
+		AnthropicVersion:           cfg.Provider.AnthropicVersion,
+		AnthropicMaxTokens:         cfg.Provider.AnthropicMaxTokens,
+		CodexStatelessRetryEnabled: cfg.CodexStatelessRetryEnabled,
+		ResponseOptions:            llm.CloneResponseOptions(cfg.ResponseOptions),
 	}
 }
 

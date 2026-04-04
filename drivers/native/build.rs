@@ -6,6 +6,10 @@ use std::path::Path;
 use std::process::Command;
 
 fn main() {
+    if env::var_os("CARGO_FEATURE_PYTHON_SANDBOX").is_none() {
+        return;
+    }
+
     println!("cargo:rerun-if-env-changed=PYO3_PYTHON");
     println!("cargo:rerun-if-env-changed=PYTHON_SYS_EXECUTABLE");
 

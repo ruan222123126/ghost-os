@@ -93,8 +93,8 @@ fn test_list_files_returns_stable_sorted_entries() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_read_file_paginated_range() {
+#[test]
+fn test_read_file_paginated_range() {
     let root = make_temp_dir();
     let file = root.join("notes.txt");
     let content = (1..=20)
@@ -120,8 +120,8 @@ async fn test_read_file_paginated_range() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_read_file_enforces_line_limit() {
+#[test]
+fn test_read_file_enforces_line_limit() {
     let root = make_temp_dir();
     let file = root.join("large.txt");
     let content = (1..=300)
@@ -147,8 +147,8 @@ async fn test_read_file_enforces_line_limit() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_write_file_write_and_append_modes() {
+#[test]
+fn test_write_file_write_and_append_modes() {
     let root = make_temp_dir();
     let file = root.join("out.txt");
 
@@ -171,8 +171,8 @@ print(tools.read_file(path='{path}'))",
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_write_file_blocks_sensitive_patterns() {
+#[test]
+fn test_write_file_blocks_sensitive_patterns() {
     let root = make_temp_dir();
     let file = root.join(".env");
 
@@ -193,8 +193,8 @@ async fn test_write_file_blocks_sensitive_patterns() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_apply_diff_success() {
+#[test]
+fn test_apply_diff_success() {
     let root = make_temp_dir();
     let file = root.join("patch.txt");
     fs::write(&file, "alpha\nbeta\ngamma\n").expect("write fixture");
@@ -217,8 +217,8 @@ print(tools.read_file(path='{path}'))",
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_apply_diff_mismatch_returns_error() {
+#[test]
+fn test_apply_diff_mismatch_returns_error() {
     let root = make_temp_dir();
     let file = root.join("patch-mismatch.txt");
     fs::write(&file, "one\ntwo\nthree\n").expect("write fixture");
@@ -237,8 +237,8 @@ async fn test_apply_diff_mismatch_returns_error() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_search_files_returns_grep_style_matches() {
+#[test]
+fn test_search_files_returns_grep_style_matches() {
     let root = make_temp_dir();
     let src = root.join("src");
     fs::create_dir_all(&src).expect("create src dir");
@@ -265,8 +265,8 @@ async fn test_search_files_returns_grep_style_matches() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_bash_exec_truncates_large_stdout() {
+#[test]
+fn test_bash_exec_truncates_large_stdout() {
     let root = make_temp_dir();
     let sandbox = sandbox_for(&root);
 
@@ -290,8 +290,8 @@ async fn test_bash_exec_truncates_large_stdout() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_bash_exec_enforces_per_call_timeout_budget() {
+#[test]
+fn test_bash_exec_enforces_per_call_timeout_budget() {
     if cfg!(target_os = "windows") {
         return;
     }
@@ -313,8 +313,8 @@ async fn test_bash_exec_enforces_per_call_timeout_budget() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_tool_call_logs_use_shared_truncation_budget() {
+#[test]
+fn test_tool_call_logs_use_shared_truncation_budget() {
     let root = make_temp_dir();
     let file = root.join("large.txt");
     fs::write(&file, "a".repeat(256)).expect("write fixture");
@@ -360,8 +360,8 @@ fn test_script_sandbox_allowed_tools_are_explicit() {
     );
 }
 
-#[tokio::test]
-async fn test_read_file_blocks_path_outside_allowlist() {
+#[test]
+fn test_read_file_blocks_path_outside_allowlist() {
     let root = make_temp_dir();
     let outside = std::env::temp_dir().join("ghost_os_outside.txt");
     fs::write(&outside, "outside").expect("write outside fixture");
@@ -381,8 +381,8 @@ async fn test_read_file_blocks_path_outside_allowlist() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_fetch_webpage_rejects_non_https() {
+#[test]
+fn test_fetch_webpage_rejects_non_https() {
     let root = make_temp_dir();
     let sandbox = sandbox_for(&root);
 
@@ -397,8 +397,8 @@ async fn test_fetch_webpage_rejects_non_https() {
     fs::remove_dir_all(root).ok();
 }
 
-#[tokio::test]
-async fn test_fetch_webpage_rate_limit() {
+#[test]
+fn test_fetch_webpage_rate_limit() {
     let root = make_temp_dir();
     let mut config = SandboxConfig::default();
     let root_str = root.to_string_lossy().to_string();

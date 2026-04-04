@@ -29,6 +29,7 @@
   - 新会话里的“纯全局偏好”消息现不再强制进入事件图 planner：像“偏好中文回答”这类长期偏好会跳过 event recall 预处理，但仍保留后续 global preference learning，避免在空事件上下文里因 planner 引用不存在 event 而直接失败成 `memory not found`。
   - 新会话里的低信息开场消息也不再进入事件图 planner：像“你好”这类问候/寒暄会直接跳过 event recall，仅保留全局偏好上下文，避免 planner 在无候选事件时生成不存在的 event id 并最终炸成 `memory not found`。
   - 事件图 planner 的 `recall_plan.event_ids` 现会收口到“已解析出的真实 active event ids”：模型输出的临时别名或占位 id（如 `evt_ai_current_landscape_search`）会在 recall 前被剔除，并在为空时回退到真实 primary/adjacent ids，避免搜索类新任务在 recall 阶段把别名当成 adjacent event 再次炸成 `memory not found`。
+- `core/bridge/memoryaug` 已完成一轮静态清理与拆分：清理未引用符号（`buildTranscriptText`、`LooksLikeLowSignalTurn`、`matchSlotsForQuery`、`slotMatchesQuery`），并将 `recall_service.go` / `intent_planner.go` 拆分为多文件以回到单文件 300 行以内；`loadSessionRecall` 与 `applyGlobalCandidates` 也已按小函数重排降低复杂度与参数耦合。
 - Agent 收尾路径进一步收口：`loop_finish` 已合并 stop/length 文本完成分支的公共 finalize 流程，并移除 `toolCallExecutor.execute` 中当前调用图不可达的空 `calls` 防御分支，补充了 length 收尾与 assistant-text 分发回归测试。
 - Agent 工具执行与消息投影链路完成一轮可维护性收口：清理未引用测试辅助（含 `fakeGraphQLTextExecutor` 与空转 `streaming_test_helpers_test.go`）、移除仅测试使用的 `RunStream`/`RunStreamWithTraceID` 对外入口并统一走 `RunMessageStreamWithTraceID`、将 `repairProjectedGraphQLTextTurn` 与 `validateAssistantTextResult` 拆为小函数以降低圈复杂度、同时把 `tool_executor_execute.go` 按“解析/执行”职责拆分为 `tool_executor_execute.go` + `tool_executor_resolution.go`，避免单文件超 300 行。
 - 对话 completion 链路已新增一次性瞬时错误重试：在 `completion_runner` 中对网络错误、HTTP 429、HTTP 5xx 提供最多 1 次重试；流式场景仅在“尚未发出任何 delta”时允许重试，已产出增量后失败不会重放，避免重复输出。
@@ -69,6 +70,7 @@
 - `web_rooter` 的 sidecar 边界已补成显式契约并有回归测试锁定：Ghost-OS 只认外置 `base_url`，不负责拉起或管理 upstream Python 进程；桥层继续只开放六个 stateless HTTP action，不接 `knowledge` / `visited` / context snapshot；版本探测与 action 请求都会透传 `X-Trace-ID`；过大响应会返回显式超限错误，不做静默裁切。
 - prompt guidance 已按协议模式分流：普通 native `tool_calls` prompt 不再泄漏 `mutation { ... }`、`tfind(action: ...)` 一类 GraphQL 示例，GraphQL 专用样例只保留在 hidden catalog / GraphQL runtime prompt 路径中。
 - `browser_control` 的 prompt guidance 已补上显式动作约束：系统提示现在会直接列出合法 `action`（`connect|launch|goto|click|type|press|evaluate|content|screenshot|info|close`），并明确 `goto`/`wait`/`content` 用法，减少模型继续误用 `navigate`、独立 `wait`、`extract` 的概率。
+- `script_exec` 的 prompt guidance 已补上运行时约束：明确要求通过注入的 `tools.*` 对象调用能力（而非 `import tools`），并显式禁止 `open/eval/exec/compile/input` 这类会被沙箱拦截的 builtins；同时要求输出简洁结构化结果，降低后续轮次解析歧义。
 - `screen_action` / `task_manage` / `feed_manage` / `codex_cli` 的 prompt guidance 也已补上显式合法操作约束：分别给出 `action/operation/op` 枚举与关键必填字段；同时修正 `codex_cli` 工具描述中的旧文案 `exec` 为真实枚举值 `start`，避免模型生成非法 `op`。
 - `web_rooter` 的 prompt guidance 已补齐联网分流规则：需要引用、出处、多源交叉验证、学术资料或深度研究时优先走 `web_rooter`；普通即时网页搜继续走 `web_search`，避免模型把所有联网任务都打到同一层搜索能力。
 - `web_search` 的 Tavily / Exa provider 现支持显式自定义 endpoint：运行时配置可分别填写 `web_search_tavily_url` / `web_search_exa_url`，留空时继续走官方接口，填写后请求会直接命中自定义 URL，原有 API key 语义保持不变。
@@ -79,6 +81,7 @@
 - `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
 - GraphQL 文本协议的遗留死代码已完成一轮清理：删除未接线的文档预算校验模块、schema render 辅助模块，以及一组未引用的协议错误构造器/工具 ID 辅助函数，`core/bridge/tools` 的 staticcheck(U1000) 不再报告这批不可达路径。
+- `core/bridge/tools` 的 Tag 文本执行路径已继续收口：`parseToolTagCalls` 抽到独立状态机解析器并拆分辅助函数，`codex_cli.Execute` 改为“解析请求 -> 构造 action/params -> 执行”三段，降低圈复杂度并保持现有参数/错误语义。
 - 已完成一次后端 Agent 工具能力全量实测，并沉淀到 `docs/backend-agent-tool-capability-2026-03-28.md`：在临时测试配置（`max_turns=1`、memory 关闭、全工具 allowlist）下 15 个工具均完成至少一次真实调用；其中 `send_file`、`computer_use` 归类为需调试，`codex_cli`、`browser_control` 受前置配置/会话约束。
 - `screen_action` 截图链路已切到文件引用：`SCREEN_CAPTURE` 改为返回 `image_path`，Bridge 侧截图 artifact 改为基于文件流复制与流式哈希，不再经过 `image_base64 -> decode -> 写文件` 这条高内存路径；`OCR_IMAGE` / `TEMPLATE_MATCH_IMAGE` 的入参也已改为传 `image_path`。
 - native binary 解析顺序已收口为“优先仓库内 `drivers/native/target/*` 构建产物，再尝试裸名 `native`”：避免误命中过期二进制导致 `SCREEN_CAPTURE` payload 与 Bridge 契约漂移；同时 `screen_action` / `computer_use` 对截图 payload 增加了显式契约校验，在缺失 `image_path` 或命中旧 `image_base64` 字段时会直接报结构化错误，不再只给 `empty image_path`。
@@ -119,6 +122,7 @@
 - Native 截图子模块已去掉主链路 base64 载荷：`SCREEN_CAPTURE` 返回临时 PNG 文件路径，`OCR_IMAGE` 直接消费 `image_path`，`crop_image` 改为仅复制裁剪区域，避免整图 clone 后再裁切。
 - Native 入口阶段D已收口：`--sandbox-worker` / `--persistent` / oneshot 由统一路由决策函数分流，入口执行结果统一为 `{handled,error}` 语义；oneshot `emit` 写出失败改为显式 stderr + 非零退出，未知参数与冲突参数会直接报错。
 - Native 启动路由回归已补齐：新增 `drivers/native/src/main_startup_tests.rs`，覆盖默认 oneshot、`--sandbox-worker`、`--persistent` 分流和未知参数/冲突参数错误路径，启动入口决策具备自动化锁定。
+- Native 依赖边界已收口：新增 `python-sandbox` feature（默认关闭）承载 `pyo3(auto-initialize)` 与 `reqwest(blocking)`；默认构建不再链接 Python runtime / reqwest / tokio。`SCRIPT_EXEC` 在未启用 feature 时会显式返回 `python-sandbox` 未开启错误，不做静默降级；启用 feature 后原有脚本沙箱与测试链路保持可用。
 - 该层仍遵守“只做原子执行，不承载业务决策”的边界，新增需求应优先走脚本/API，再考虑视觉路径。
 
 ## 已完成的主线里程碑

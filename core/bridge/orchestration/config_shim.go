@@ -51,12 +51,8 @@ const (
 )
 
 var (
-	errProviderNameRequired    = bridgeconfig.ErrProviderNameRequired
-	errProviderTypeInvalid     = bridgeconfig.ErrProviderTypeInvalid
-	errProviderBaseURLRequired = bridgeconfig.ErrProviderBaseURLRequired
-	errProviderNotFound        = bridgeconfig.ErrProviderNotFound
-	errProviderExists          = bridgeconfig.ErrProviderExists
-	errModelSelectionDisabled  = bridgeconfig.ErrModelSelectionDisabled
+	errProviderNotFound = bridgeconfig.ErrProviderNotFound
+	errProviderExists   = bridgeconfig.ErrProviderExists
 )
 
 type ConfigStore struct {

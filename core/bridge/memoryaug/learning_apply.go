@@ -8,48 +8,82 @@ import (
 	"ghost-os/bridge/memorystore"
 )
 
+type globalCandidateApplyInput struct {
+	UserScope  string
+	Existing   []memorystore.MemoryEntry
+	Candidates []Candidate
+	Outcome    *applyOutcome
+}
+
+type globalCandidateApplyState struct {
+	userScope string
+	existing  []memorystore.MemoryEntry
+	outcome   *applyOutcome
+}
+
 func (s *learningService) applyGlobalCandidates(
 	ctx context.Context,
-	input LearnFromTurnInput,
-	existing []memorystore.MemoryEntry,
-	candidates []Candidate,
-	outcome *applyOutcome,
+	input globalCandidateApplyInput,
 ) error {
-	for _, candidate := range candidates {
-		if candidate.Confidence < s.settings.MinConfidence {
-			outcome.Skipped = append(outcome.Skipped, candidateLabel(candidate.Summary, candidate.Content))
-			continue
-		}
-		entry, ok := buildGlobalPreferenceInput(candidate, input.UserScope)
-		if !ok {
-			outcome.Skipped = append(outcome.Skipped, candidateLabel(candidate.Summary, candidate.Content))
-			continue
-		}
-		if hasExplicitGlobalPreference(existing, entry.MemoryKey) {
-			outcome.Skipped = append(outcome.Skipped, entry.MemoryKey)
-			continue
-		}
-		refreshedID := findMatchingGlobalPreference(existing, entry)
-		if refreshedID != "" {
-			if err := s.store.RefreshLearned(ctx, refreshedID, entry.Confidence); err != nil {
-				return err
-			}
-			outcome.Refreshed = append(outcome.Refreshed, refreshedID)
-			continue
-		}
-		supersedesID, err := resolveGlobalPreferenceSupersedes(ctx, s.store, entry.MemoryKey, input.UserScope)
-		if err != nil {
+	state := globalCandidateApplyState{
+		userScope: strings.TrimSpace(input.UserScope),
+		existing:  append([]memorystore.MemoryEntry(nil), input.Existing...),
+		outcome:   input.Outcome,
+	}
+	for _, candidate := range input.Candidates {
+		if err := s.applyGlobalCandidate(ctx, &state, candidate); err != nil {
 			return err
 		}
-		created, err := s.store.CreateLearned(ctx, entry, optionalSingleID(supersedesID))
-		if err != nil {
+	}
+	return nil
+}
+
+func (s *learningService) applyGlobalCandidate(
+	ctx context.Context,
+	state *globalCandidateApplyState,
+	candidate Candidate,
+) error {
+	if candidate.Confidence < s.settings.MinConfidence {
+		appendApplyOutcomeSkipped(state.outcome, candidateLabel(candidate.Summary, candidate.Content))
+		return nil
+	}
+	entry, ok := buildGlobalPreferenceInput(candidate, state.userScope)
+	if !ok {
+		appendApplyOutcomeSkipped(state.outcome, candidateLabel(candidate.Summary, candidate.Content))
+		return nil
+	}
+	if hasExplicitGlobalPreference(state.existing, entry.MemoryKey) {
+		appendApplyOutcomeSkipped(state.outcome, entry.MemoryKey)
+		return nil
+	}
+	refreshedID := findMatchingGlobalPreference(state.existing, entry)
+	if refreshedID != "" {
+		if err := s.store.RefreshLearned(ctx, refreshedID, entry.Confidence); err != nil {
 			return err
 		}
-		existing = append(existing, created)
-		outcome.Created = append(outcome.Created, created)
-		if supersedesID != "" {
-			outcome.Superseded = append(outcome.Superseded, supersedesID)
-		}
+		appendApplyOutcomeRefreshed(state.outcome, refreshedID)
+		return nil
+	}
+	return s.createGlobalPreference(ctx, state, entry)
+}
+
+func (s *learningService) createGlobalPreference(
+	ctx context.Context,
+	state *globalCandidateApplyState,
+	entry memorystore.LearnedMemoryInput,
+) error {
+	supersedesID, err := resolveGlobalPreferenceSupersedes(ctx, s.store, entry.MemoryKey, state.userScope)
+	if err != nil {
+		return err
+	}
+	created, err := s.store.CreateLearned(ctx, entry, optionalSingleID(supersedesID))
+	if err != nil {
+		return err
+	}
+	state.existing = append(state.existing, created)
+	appendApplyOutcomeCreated(state.outcome, created)
+	if supersedesID != "" {
+		appendApplyOutcomeSuperseded(state.outcome, supersedesID)
 	}
 	return nil
 }
@@ -224,6 +258,34 @@ func candidateLabel(summary string, content string) string {
 		return strings.TrimSpace(summary)
 	}
 	return strings.TrimSpace(content)
+}
+
+func appendApplyOutcomeSkipped(outcome *applyOutcome, value string) {
+	if outcome == nil || strings.TrimSpace(value) == "" {
+		return
+	}
+	outcome.Skipped = append(outcome.Skipped, value)
+}
+
+func appendApplyOutcomeRefreshed(outcome *applyOutcome, value string) {
+	if outcome == nil || strings.TrimSpace(value) == "" {
+		return
+	}
+	outcome.Refreshed = append(outcome.Refreshed, value)
+}
+
+func appendApplyOutcomeCreated(outcome *applyOutcome, entry memorystore.MemoryEntry) {
+	if outcome == nil {
+		return
+	}
+	outcome.Created = append(outcome.Created, entry)
+}
+
+func appendApplyOutcomeSuperseded(outcome *applyOutcome, value string) {
+	if outcome == nil || strings.TrimSpace(value) == "" {
+		return
+	}
+	outcome.Superseded = append(outcome.Superseded, value)
 }
 
 func optionalSingleID(id string) []string {

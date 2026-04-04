@@ -8,24 +8,10 @@ import (
 )
 
 func resolvedHumanQuestionToolResult(
-	sess *session.Session,
+	_ *session.Session,
 	item session.AnsweredHumanQuestion,
 ) (string, string, string) {
-	toolName := resolvedHumanQuestionToolName(item.Question)
-	switch toolName {
-	case "graphql_mutation", "graphql_text_mutation":
-		return graphqlMutationResolvedQuestionToolResult(sess, item, toolName)
-	default:
-		return askHumanResolvedQuestionToolResult(item)
-	}
-}
-
-func resolvedHumanQuestionToolName(question session.PendingHumanQuestion) string {
-	toolName := strings.TrimSpace(question.ToolName)
-	if toolName == "" {
-		return "ask_human"
-	}
-	return toolName
+	return askHumanResolvedQuestionToolResult(item)
 }
 
 func askHumanResolvedQuestionToolResult(item session.AnsweredHumanQuestion) (string, string, string) {
@@ -62,38 +48,6 @@ func askHumanResolvedQuestionOptions(
 		})
 	}
 	return out
-}
-
-func graphqlMutationResolvedQuestionToolResult(
-	sess *session.Session,
-	item session.AnsweredHumanQuestion,
-	toolName string,
-) (string, string, string) {
-	intent, ok := sess.PendingGraphQLMutationIntentByQuestionID(item.QuestionID)
-	if !ok {
-		payload := map[string]any{
-			"question_id":     item.QuestionID,
-			"approval_status": "unknown",
-			"answer":          item.Answer,
-			"summary":         "",
-			"intent_missing":  true,
-			"prompt":          item.Question.Prompt,
-		}
-		return toolName, mustEncodeResolvedQuestionPayload(payload), ""
-	}
-
-	payload := map[string]any{
-		"intent_id":       intent.IntentID,
-		"approval_status": intent.Status,
-		"question_id":     item.QuestionID,
-		"answer":          item.Answer,
-		"summary":         intent.Summary,
-		"source":          intent.Source,
-		"domain":          intent.Domain,
-		"policy":          intent.PolicyName,
-		"root_mutation":   intent.RootMutation,
-	}
-	return toolName, mustEncodeResolvedQuestionPayload(payload), intent.Summary
 }
 
 func mustEncodeResolvedQuestionPayload(payload map[string]any) string {

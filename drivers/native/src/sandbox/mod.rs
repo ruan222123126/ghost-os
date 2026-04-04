@@ -1,15 +1,21 @@
 // Sandbox module entrypoint; re-exports executor, restrictions, and tool adapters.
 
+#[cfg(feature = "python-sandbox")]
 pub mod executor;
 pub(crate) mod file_tools;
+#[cfg(feature = "python-sandbox")]
 pub mod restrictions;
 pub(crate) mod shell_tools;
+#[cfg(feature = "python-sandbox")]
 pub(crate) mod tool_runtime;
+#[cfg(feature = "python-sandbox")]
 pub mod tools;
+#[cfg(feature = "python-sandbox")]
 pub(crate) mod web_tools;
 
 mod diff_engine;
 pub(crate) mod path_policy;
+#[cfg(feature = "python-sandbox")]
 mod web_security;
 
 use serde::{Deserialize, Serialize};
@@ -221,11 +227,14 @@ pub struct ToolCallLog {
     pub error: Option<String>,
 }
 
+#[cfg(feature = "python-sandbox")]
 pub use executor::PythonSandbox;
 
 #[cfg(test)]
+#[cfg(feature = "python-sandbox")]
 mod executor_test;
 #[cfg(test)]
+#[cfg(feature = "python-sandbox")]
 mod tools_test;
 
 #[cfg(test)]

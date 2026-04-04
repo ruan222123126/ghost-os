@@ -1,8 +1,10 @@
+#[cfg(feature = "python-sandbox")]
 mod bindings;
 mod export;
 mod read_write;
 mod search;
 
+#[cfg(feature = "python-sandbox")]
 pub(crate) use bindings::{
     apply_diff_py, list_files_py, read_file_py, search_files_py, write_file_py,
 };

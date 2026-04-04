@@ -1,8 +1,10 @@
 use std::io::{self, Write};
+#[cfg(feature = "python-sandbox")]
 use std::process::ExitStatus;
 
 use crate::sandbox::ExecutionResult;
 
+#[cfg(feature = "python-sandbox")]
 pub(super) fn decode_worker_result(stdout_bytes: &[u8]) -> Result<ExecutionResult, String> {
     serde_json::from_slice::<ExecutionResult>(stdout_bytes).map_err(|err| {
         let stdout_text = String::from_utf8_lossy(stdout_bytes);
@@ -18,6 +20,7 @@ pub(super) fn decode_worker_result(stdout_bytes: &[u8]) -> Result<ExecutionResul
     })
 }
 
+#[cfg(feature = "python-sandbox")]
 pub(super) fn worker_exit_error(status: ExitStatus, stderr_bytes: &[u8]) -> String {
     let stderr_text = String::from_utf8_lossy(stderr_bytes);
     let stderr_line = stderr_text.lines().next().unwrap_or("").trim();

@@ -1,17 +1,33 @@
+#[cfg(feature = "python-sandbox")]
 mod budget;
 mod result;
+#[cfg(feature = "python-sandbox")]
 mod types;
+#[cfg(feature = "python-sandbox")]
 mod worker;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
+#[cfg(feature = "python-sandbox")]
+use serde_json::json;
+
+#[cfg(feature = "python-sandbox")]
 use crate::sandbox::{PythonSandbox, SandboxConfig};
-use crate::{Response, read_stdin_payload};
+use crate::Response;
+#[cfg(feature = "python-sandbox")]
+use crate::read_stdin_payload;
 
+#[cfg(feature = "python-sandbox")]
 use budget::resolve_script_budget;
 use result::emit_worker_result;
+#[cfg(feature = "python-sandbox")]
 use types::ScriptWorkerRequest;
+#[cfg(feature = "python-sandbox")]
 use worker::{apply_memory_limit, execute_script_in_subprocess};
+
+#[cfg(not(feature = "python-sandbox"))]
+const PYTHON_SANDBOX_DISABLED_ERROR: &str =
+    "SCRIPT_EXEC unavailable: native build does not include `python-sandbox` feature";
 
 pub(crate) fn dispatch_action(action: &str, params: &Value) -> Option<Response> {
     match action {
@@ -20,6 +36,7 @@ pub(crate) fn dispatch_action(action: &str, params: &Value) -> Option<Response> 
     }
 }
 
+#[cfg(feature = "python-sandbox")]
 pub(crate) fn run_sandbox_worker() {
     let request = match read_worker_request() {
         Ok(request) => request,
@@ -34,6 +51,12 @@ pub(crate) fn run_sandbox_worker() {
     emit_worker_result(sandbox.execute_blocking(&request.script));
 }
 
+#[cfg(not(feature = "python-sandbox"))]
+pub(crate) fn run_sandbox_worker() {
+    emit_execution_error(PYTHON_SANDBOX_DISABLED_ERROR.to_string());
+}
+
+#[cfg(feature = "python-sandbox")]
 fn handle_script_exec(params: &Value) -> Response {
     let script = match parse_script(params) {
         Ok(script) => script,
@@ -60,11 +83,18 @@ fn handle_script_exec(params: &Value) -> Response {
     }
 }
 
+#[cfg(not(feature = "python-sandbox"))]
+fn handle_script_exec(_params: &Value) -> Response {
+    Response::error(PYTHON_SANDBOX_DISABLED_ERROR.to_string())
+}
+
+#[cfg(feature = "python-sandbox")]
 fn read_worker_request() -> Result<ScriptWorkerRequest, String> {
     let input = read_stdin_payload()?;
     serde_json::from_str(&input).map_err(|err| format!("invalid sandbox worker request: {err}"))
 }
 
+#[cfg(feature = "python-sandbox")]
 fn parse_script(params: &Value) -> Result<String, String> {
     let script = params
         .get("script")
@@ -93,5 +123,14 @@ mod tests {
     #[test]
     fn dispatch_action_returns_none_for_unknown_script_action() {
         assert!(dispatch_action("BASH_EXEC", &json!({})).is_none());
+    }
+
+    #[cfg(not(feature = "python-sandbox"))]
+    #[test]
+    fn dispatch_action_reports_missing_python_sandbox_feature() {
+        let response = dispatch_action("SCRIPT_EXEC", &json!({}))
+            .expect("SCRIPT_EXEC should be handled with explicit error");
+        assert_eq!(response.status, "error");
+        assert!(response.error.contains("python-sandbox"));
     }
 }

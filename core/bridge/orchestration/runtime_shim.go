@@ -81,12 +81,12 @@ func newToolSelectionPolicy(cfg Config) toolSelectionPolicy {
 	return toolSelectionPolicy{inner: bridgeruntime.NewToolSelectionPolicy(cfg)}
 }
 
-func (p toolSelectionPolicy) scopeCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.inner.ScopeCatalog(catalog)
+func (p toolSelectionPolicy) residentCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
+	return p.inner.ResidentCatalog(catalog)
 }
 
-func (p toolSelectionPolicy) allowlistScope(available []string) []string {
-	return p.inner.AllowlistScope(available)
+func (p toolSelectionPolicy) selectorCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
+	return p.inner.SelectorCatalog(catalog)
 }
 
 func (p toolSelectionPolicy) apply(available []string, selected []string) []string {

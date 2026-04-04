@@ -14,15 +14,26 @@ func newToolSelectionPolicy(cfg Config) toolSelectionPolicy {
 	return toolSelectionPolicy{visibility: toolVisibilityOptions(cfg)}
 }
 
-func (p toolSelectionPolicy) scopeCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
+func (p toolSelectionPolicy) residentCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
 	if catalog == nil {
 		return nil
 	}
-	return tools.NewScopedCatalog(catalog, p.allowlistScope(tools.CatalogToolNames(catalog)))
+	return tools.NewScopedCatalog(catalog, p.residentScope(tools.CatalogToolNames(catalog)))
 }
 
-func (p toolSelectionPolicy) allowlistScope(available []string) []string {
+func (p toolSelectionPolicy) selectorCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
+	if catalog == nil {
+		return nil
+	}
+	return tools.NewScopedCatalog(catalog, p.selectorScope(tools.CatalogToolNames(catalog)))
+}
+
+func (p toolSelectionPolicy) residentScope(available []string) []string {
 	return tools.StaticVisibleToolNames(available, p.visibility)
+}
+
+func (p toolSelectionPolicy) selectorScope(available []string) []string {
+	return tools.SelectorStaticToolNames(available, p.visibility)
 }
 
 func (p toolSelectionPolicy) apply(available []string, selected []string) []string {
@@ -30,7 +41,7 @@ func (p toolSelectionPolicy) apply(available []string, selected []string) []stri
 		return nil
 	}
 	if len(selected) == 0 {
-		return p.allowlistScope(available)
+		return p.residentScope(available)
 	}
 
 	availableSet := toolNameSet(available)
@@ -59,23 +70,7 @@ func (p toolSelectionPolicy) apply(available []string, selected []string) []stri
 }
 
 func (p toolSelectionPolicy) requiredTools(available []string) []string {
-	if len(available) == 0 {
-		return nil
-	}
-
-	availableSet := toolNameSet(available)
-	result := make([]string, 0, len(available))
-	add := func(name string) {
-		if name == "" || !availableSet[name] || isBlockedTool(name, p.visibility) {
-			return
-		}
-		result = append(result, name)
-	}
-
-	for _, name := range normalizeToolNames(p.visibility.Allowlist) {
-		add(name)
-	}
-	return normalizeToolNames(result)
+	return p.residentScope(available)
 }
 
 func toolVisibilityOptions(cfg Config) tools.VisibilityOptions {

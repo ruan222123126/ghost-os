@@ -1,4 +1,6 @@
+#[cfg(feature = "python-sandbox")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-sandbox")]
 use serde_json::json;
 use std::io::{self, Read};
 use std::process::{Child, Command, Output, Stdio};
@@ -6,6 +8,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::SandboxConfig;
+#[cfg(feature = "python-sandbox")]
 use super::tool_runtime::ToolRuntime;
 
 pub(crate) struct BashExecOutput {
@@ -15,6 +18,7 @@ pub(crate) struct BashExecOutput {
     pub(crate) success: bool,
 }
 
+#[cfg(feature = "python-sandbox")]
 pub(crate) fn bash_exec_py(
     runtime: &ToolRuntime,
     py: Python<'_>,

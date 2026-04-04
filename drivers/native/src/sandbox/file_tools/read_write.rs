@@ -1,4 +1,7 @@
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(feature = "python-sandbox")]
+use std::fs::OpenOptions;
+#[cfg(feature = "python-sandbox")]
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -20,6 +23,7 @@ pub(crate) struct ListFilesOutput {
     pub(crate) entries: Vec<String>,
 }
 
+#[cfg(feature = "python-sandbox")]
 pub(crate) struct WriteFileOutput {
     pub(crate) message: String,
 }
@@ -111,6 +115,7 @@ pub(crate) fn list_files_impl(
     Ok(ListFilesOutput { entries: names })
 }
 
+#[cfg(feature = "python-sandbox")]
 pub(crate) fn write_file_impl(
     config: &SandboxConfig,
     path: &str,

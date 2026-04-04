@@ -118,7 +118,12 @@ func (s *learningService) applyGlobalPreferences(
 	if err != nil {
 		return "", err
 	}
-	if err := s.applyGlobalCandidates(ctx, input, existing, output.Items, outcome); err != nil {
+	if err := s.applyGlobalCandidates(ctx, globalCandidateApplyInput{
+		UserScope:  input.UserScope,
+		Existing:   existing,
+		Candidates: output.Items,
+		Outcome:    outcome,
+	}); err != nil {
 		return output.RawJSON, err
 	}
 	return output.RawJSON, nil
@@ -186,9 +191,16 @@ func hasGlobalPreferenceMarker(text string) bool {
 	return strings.Contains(lower, "reply in") ||
 		strings.Contains(lower, "respond in") ||
 		strings.Contains(lower, "请用") ||
+		strings.Contains(lower, "偏好") ||
+		strings.Contains(lower, "习惯") ||
+		strings.Contains(lower, "喜欢用") ||
 		strings.Contains(lower, "默认") ||
 		strings.Contains(lower, "response style") ||
 		strings.Contains(lower, "approval")
+}
+
+func LooksLikeGlobalPreference(text string) bool {
+	return hasGlobalPreferenceMarker(text)
 }
 
 func filterMemoryEntriesBySource(items []memorystore.MemoryEntry, sourceKind string) []memorystore.MemoryEntry {

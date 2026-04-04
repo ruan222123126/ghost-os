@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"ghost-os/bridge/tools/internal/payloadutil"
@@ -16,10 +15,10 @@ const (
 	codexCLIOpFork   = "fork"
 	codexCLIOpStatus = "status"
 
-	defaultCodexCLIModel              = "gpt-5.4"
-	defaultCodexCLIWaitMSBeforeAsync  = 3000
+	defaultCodexCLIModel               = "gpt-5.4"
+	defaultCodexCLIWaitMSBeforeAsync   = 3000
 	defaultCodexCLIWaitDurationSeconds = 300
-	defaultCodexCLIOutputChars        = 200
+	defaultCodexCLIOutputChars         = 200
 )
 
 type CodexCLITool struct {
@@ -62,7 +61,7 @@ func (CodexCLITool) Name() string {
 }
 
 func (CodexCLITool) Description() string {
-	return "Run codex exec/resume/fork asynchronously and poll status. Requires native_persistent=true. For status, pass the command_id (or session_id) via session_id."
+	return "Run codex start/resume/fork asynchronously and poll status. Requires native_persistent=true. For status, pass the command_id (or session_id) via session_id."
 }
 
 func (CodexCLITool) Parameters() json.RawMessage {
@@ -88,117 +87,38 @@ func (CodexCLITool) Parameters() json.RawMessage {
 }
 
 func (t *CodexCLITool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
-	if t == nil || t.execution == nil {
-		return "", fmt.Errorf("execution client is not configured")
-	}
-	if !t.nativePersistent {
-		return "", fmt.Errorf("codex_cli requires native_persistent=true")
-	}
-
-	var args codexCLIArgs
-	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return "", fmt.Errorf("decode args: %w", err)
-	}
-
-	op := strings.ToLower(strings.TrimSpace(args.Op))
-	if op == "" {
-		return "", fmt.Errorf("op is required")
-	}
-	if !isCodexCLIOperation(op) {
-		return "", fmt.Errorf("unsupported op %q", op)
-	}
-
-	prompt := strings.TrimSpace(args.Prompt)
-	sessionID := strings.TrimSpace(args.SessionID)
-	switch op {
-	case codexCLIOpStart:
-		if prompt == "" {
-			return "", fmt.Errorf("prompt is required for start")
-		}
-	case codexCLIOpResume, codexCLIOpFork:
-		if sessionID == "" {
-			return "", fmt.Errorf("session_id is required for %s", op)
-		}
-		if prompt == "" {
-			return "", fmt.Errorf("prompt is required for %s", op)
-		}
-	case codexCLIOpStatus:
-		if sessionID == "" {
-			return "", fmt.Errorf("session_id is required for status")
-		}
-	}
-
-	cwd := strings.TrimSpace(args.Cwd)
-	if cwd != "" && filepath.IsAbs(cwd) {
-		return "", fmt.Errorf("cwd must be a relative path")
-	}
-	outputPath := strings.TrimSpace(args.OutputPath)
-
-	model := strings.TrimSpace(args.Model)
-	if model == "" {
-		model = defaultCodexCLIModel
-	}
-	fullAuto := boolOrDefault(args.FullAuto, true)
-	skipGitRepoCheck := boolOrDefault(args.SkipGitRepoCheck, true)
-	jsonFlag := boolOrDefault(args.JSON, true)
-
-	waitMSBeforeAsync, err := normalizedNonNegativeInt(args.WaitMSBeforeAsync, defaultCodexCLIWaitMSBeforeAsync, "wait_ms_before_async")
-	if err != nil {
+	if err := t.validateExecutionConfig(); err != nil {
 		return "", err
 	}
-	waitDurationSeconds, err := normalizedNonNegativeInt(args.WaitDurationSeconds, defaultCodexCLIWaitDurationSeconds, "wait_duration_seconds")
-	if err != nil {
-		return "", err
-	}
-	outputCharCount, err := normalizedNonNegativeInt(args.OutputCharacterCount, defaultCodexCLIOutputChars, "output_character_count")
+	request, err := parseCodexCLIRequest(argsJSON)
 	if err != nil {
 		return "", err
 	}
 
-	params := map[string]any{
-		"op": op,
-	}
-	action := "CODEX_CLI_START"
-	switch op {
-	case codexCLIOpStatus:
-		action = "CODEX_CLI_STATUS"
-		params["session_id"] = sessionID
-		params["wait_duration_seconds"] = waitDurationSeconds
-		params["output_character_count"] = outputCharCount
-	default:
-		params["prompt"] = prompt
-		if sessionID != "" {
-			params["session_id"] = sessionID
-		}
-		if cwd != "" {
-			params["cwd"] = cwd
-		}
-		if outputPath != "" {
-			params["output_path"] = outputPath
-		}
-		if model != "" {
-			params["model"] = model
-		}
-		params["full_auto"] = fullAuto
-		params["skip_git_repo_check"] = skipGitRepoCheck
-		params["json"] = jsonFlag
-		params["wait_ms_before_async"] = waitMSBeforeAsync
-	}
-
-	payload, err := t.execution.Call(ctx, action, params, traceID)
+	payload, err := t.execution.Call(ctx, request.Action, request.Params, traceID)
 	if err != nil {
 		return marshalCodexCLIResult(codexCLIResult{
 			Status:     "error",
 			Message:    err.Error(),
-			OutputPath: outputPath,
+			OutputPath: request.OutputPath,
 		})
 	}
 
-	result, err := codexCLIResultFromPayload(payload, outputPath)
+	result, err := codexCLIResultFromPayload(payload, request.OutputPath)
 	if err != nil {
 		return "", err
 	}
 	return marshalCodexCLIResult(result)
+}
+
+func (t *CodexCLITool) validateExecutionConfig() error {
+	if t == nil || t.execution == nil {
+		return fmt.Errorf("execution client is not configured")
+	}
+	if !t.nativePersistent {
+		return fmt.Errorf("codex_cli requires native_persistent=true")
+	}
+	return nil
 }
 
 func isCodexCLIOperation(op string) bool {

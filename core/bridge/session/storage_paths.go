@@ -6,13 +6,14 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	goruntime "runtime"
 	"strings"
 )
 
 var sessionIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$`)
 
-func (s *Store) pathForSession(sessionID string) (string, error) {
+const sessionsDatabaseFilename = "sessions.db"
+
+func (s *Store) legacyPathForSession(sessionID string) (string, error) {
 	id := strings.TrimSpace(sessionID)
 	if !isValidSessionID(id) {
 		return "", fmt.Errorf("%w: %q", ErrInvalidSessionID, sessionID)
@@ -42,19 +43,4 @@ func resolveBaseDir(pathValue string) (string, error) {
 
 func isValidSessionID(sessionID string) bool {
 	return sessionIDPattern.MatchString(strings.TrimSpace(sessionID))
-}
-
-func replaceFileAtomic(tempPath, path string) error {
-	if err := os.Rename(tempPath, path); err != nil {
-		if goruntime.GOOS != "windows" {
-			return err
-		}
-		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-			return fmt.Errorf("remove existing session file %q: %w", path, removeErr)
-		}
-		if renameErr := os.Rename(tempPath, path); renameErr != nil {
-			return renameErr
-		}
-	}
-	return nil
 }
