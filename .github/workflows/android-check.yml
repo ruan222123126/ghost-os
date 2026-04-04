@@ -1,0 +1,47 @@
+name: android-check
+
+on:
+  pull_request:
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/android/**"
+      - ".github/workflows/android-check.yml"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Make gradlew executable
+        working-directory: apps/android
+        run: chmod +x gradlew
+
+      - name: Android lint (debug)
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:lintDebug
+
+      - name: Android unit tests (debug)
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Android debug build
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:assembleDebug

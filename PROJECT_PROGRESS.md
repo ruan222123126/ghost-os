@@ -124,6 +124,7 @@
 - CLI 启动入口与 profiler 已补齐集成回归：新增 `apps/cli/tests/startup_router_test.rs`，覆盖版本快捷路由（`--version`/`-v`/`-V`）、startup profiler 文件输出、profiler 非法环境变量错误、`--message` 空文本错误路径。
 - CLI REPL 已补上首轮早输入预填充：在初始化 `rustyline` 前短窗口捕获 TTY 输入并注入首轮 `readline_with_initial`，只做预填充不自动发送；非 TTY 自动禁用，Ctrl+C/Ctrl+D 主行为保持与现有路径一致。
 - Android 已接入部分会话与展示能力，但整体成熟度低于 Web 与 CLI。
+- Android 层 CI 门禁已补齐：新增 `.github/workflows/android-check.yml`，对 `apps/android/**` 变更执行 `lintDebug`、`testDebugUnitTest` 与 `assembleDebug`，避免 Android 代码在无同级自动化检查下直接进入主分支。
 
 ### Execution: `drivers/native`
 
