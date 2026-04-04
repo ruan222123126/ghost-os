@@ -13,16 +13,15 @@ const (
 )
 
 type taskRegistration struct {
-	cancel     context.CancelFunc
-	loopDone   chan struct{}
-	loopCtx    context.Context
-	runWG      sync.WaitGroup
-	retired    bool
-	task       ScheduledTask
-	running    bool
-	runCancel  context.CancelFunc
-	runTraceID string
-	mu         sync.Mutex
+	cancel    context.CancelFunc
+	loopDone  chan struct{}
+	loopCtx   context.Context
+	runWG     sync.WaitGroup
+	retired   bool
+	task      ScheduledTask
+	running   bool
+	runCancel context.CancelFunc
+	mu        sync.Mutex
 }
 
 func (r *taskRegistration) snapshot() ScheduledTask {
@@ -44,7 +43,6 @@ func (r *taskRegistration) waitIdle() {
 func (r *taskRegistration) beginRun(
 	task ScheduledTask,
 	timeout time.Duration,
-	traceID string,
 ) (ScheduledTask, context.Context, bool, string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -68,7 +66,6 @@ func (r *taskRegistration) beginRun(
 	}
 	r.running = true
 	r.runCancel = cancel
-	r.runTraceID = strings.TrimSpace(traceID)
 	r.runWG.Add(1)
 	return r.task, runCtx, false, ""
 }
@@ -87,7 +84,6 @@ func (r *taskRegistration) finishRun() {
 	r.mu.Lock()
 	cancel := r.runCancel
 	r.runCancel = nil
-	r.runTraceID = ""
 	r.running = false
 	r.mu.Unlock()
 	if cancel != nil {

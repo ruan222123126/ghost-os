@@ -7,6 +7,14 @@ import (
 )
 
 var ErrTaskSchedulerStopped = errors.New("task scheduler is not running")
+var ErrTaskSchedulerNotConfigured = errors.New("task scheduler is not configured")
+
+func (s *TaskScheduler) requireConfigured() error {
+	if s == nil || s.store == nil {
+		return ErrTaskSchedulerNotConfigured
+	}
+	return nil
+}
 
 func (s *TaskScheduler) prepareRegistration(taskID string) (context.Context, *taskRegistration, error) {
 	id := strings.TrimSpace(taskID)

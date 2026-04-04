@@ -10,7 +10,6 @@ import (
 type taskSchedulePlan struct {
 	kind     string
 	interval time.Duration
-	cronExpr string
 	cron     cron.Schedule
 }
 
@@ -30,9 +29,8 @@ func buildTaskSchedulePlan(task ScheduledTask) (taskSchedulePlan, error) {
 			return taskSchedulePlan{}, fmt.Errorf("%w: invalid cron_expr: %w", ErrInvalidTaskConfig, err)
 		}
 		return taskSchedulePlan{
-			kind:     ScheduleTypeCron,
-			cronExpr: task.CronExpr,
-			cron:     schedule,
+			kind: ScheduleTypeCron,
+			cron: schedule,
 		}, nil
 	default:
 		return taskSchedulePlan{}, fmt.Errorf(

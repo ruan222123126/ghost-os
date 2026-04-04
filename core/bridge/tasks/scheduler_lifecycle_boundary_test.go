@@ -45,3 +45,29 @@ func TestTaskSchedulerRunNowReturnsErrorAfterStop(t *testing.T) {
 		t.Fatalf("expected scheduler stopped error, got %v", err)
 	}
 }
+
+func TestTaskSchedulerUnregisterReturnsErrorAfterStop(t *testing.T) {
+	store, err := NewStore(t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("new task store: %v", err)
+	}
+
+	scheduler := NewTaskScheduler(store, nil)
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	scheduler.Stop()
+
+	err = scheduler.Unregister("stopped-unregister")
+	if !errors.Is(err, ErrTaskSchedulerStopped) {
+		t.Fatalf("expected scheduler stopped error, got %v", err)
+	}
+}
+
+func TestTaskSchedulerStartReturnsErrorWhenStoreNotConfigured(t *testing.T) {
+	scheduler := NewTaskScheduler(nil, nil)
+	err := scheduler.Start()
+	if !errors.Is(err, ErrTaskSchedulerNotConfigured) {
+		t.Fatalf("expected scheduler not configured error, got %v", err)
+	}
+}

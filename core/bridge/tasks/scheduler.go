@@ -56,70 +56,6 @@ func NewTaskScheduler(store *Store, executor Executor) *TaskScheduler {
 	return scheduler
 }
 
-func (s *TaskScheduler) Start() error {
-	if s == nil || s.store == nil {
-		return nil
-	}
-	s.mu.Lock()
-	if s.running {
-		s.mu.Unlock()
-		return nil
-	}
-	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
-	s.lifecycleCtx = lifecycleCtx
-	s.lifecycleCancel = lifecycleCancel
-	s.running = true
-	s.mu.Unlock()
-	started := false
-	defer func() {
-		if started {
-			return
-		}
-		s.mu.Lock()
-		cancel := s.lifecycleCancel
-		s.lifecycleCtx = nil
-		s.lifecycleCancel = nil
-		s.running = false
-		s.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-	}()
-
-	tasks, issues, err := s.store.ListTasksTolerant()
-	if err != nil {
-		return err
-	}
-	for _, issue := range issues {
-		log.Printf(
-			"task scheduler skipped corrupted task: kind=%s task_id=%s path=%s error=%s",
-			issue.Kind,
-			issue.TaskID,
-			issue.Path,
-			issue.Error,
-		)
-	}
-	for _, task := range tasks {
-		if !task.Enabled {
-			continue
-		}
-		if err := s.register(task); err != nil {
-			path, pathErr := s.store.PathForTask(task.ID)
-			if pathErr != nil {
-				path = ""
-			}
-			log.Printf(
-				"task scheduler skipped invalid task during registration: task_id=%s path=%s error=%v",
-				task.ID,
-				path,
-				err,
-			)
-		}
-	}
-	started = true
-	return nil
-}
-
 func (s *TaskScheduler) Stop() {
 	if s == nil {
 		return
@@ -146,8 +82,8 @@ func (s *TaskScheduler) Stop() {
 }
 
 func (s *TaskScheduler) Upsert(task ScheduledTask) error {
-	if s == nil || s.store == nil {
-		return nil
+	if err := s.requireConfigured(); err != nil {
+		return err
 	}
 	if err := NormalizeScheduledTask(&task, schedulerValidator(s.store)); err != nil {
 		return err
@@ -159,11 +95,15 @@ func (s *TaskScheduler) Upsert(task ScheduledTask) error {
 }
 
 func (s *TaskScheduler) Unregister(taskID string) error {
-	if s == nil {
-		return nil
+	if err := s.requireConfigured(); err != nil {
+		return err
 	}
 	id := strings.TrimSpace(taskID)
 	s.mu.Lock()
+	if !s.running || s.lifecycleCtx == nil {
+		s.mu.Unlock()
+		return ErrTaskSchedulerStopped
+	}
 	reg := s.tasks[id]
 	if reg != nil {
 		reg.stop()
@@ -177,8 +117,8 @@ func (s *TaskScheduler) Unregister(taskID string) error {
 }
 
 func (s *TaskScheduler) RunNow(task ScheduledTask, traceID string) (RunLog, error) {
-	if s == nil || s.store == nil {
-		return RunLog{}, fmt.Errorf("task scheduler is not configured")
+	if err := s.requireConfigured(); err != nil {
+		return RunLog{}, err
 	}
 	if err := NormalizeScheduledTask(&task, schedulerValidator(s.store)); err != nil {
 		return RunLog{}, err
@@ -195,7 +135,7 @@ func (s *TaskScheduler) RunNow(task ScheduledTask, traceID string) (RunLog, erro
 	if runTraceID == "" {
 		runTraceID = s.traceID()
 	}
-	task, runCtx, reg, skipped, reason := s.beginManualRun(reg, task, runTraceID)
+	task, runCtx, reg, skipped, reason := s.beginManualRun(reg, task)
 	if skipped {
 		run := skippedTaskRunLog(task, runTraceID, scheduledAt, reason)
 		return run, s.store.AppendRunLog(run)
@@ -276,7 +216,7 @@ func (s *TaskScheduler) runTaskLoop(
 
 func (s *TaskScheduler) fireTask(reg *taskRegistration, scheduledAt time.Time) {
 	runTraceID := s.traceID()
-	task, runCtx, skipped, reason := reg.beginRun(reg.snapshot(), s.taskExecutionTimeout(), runTraceID)
+	task, runCtx, skipped, reason := reg.beginRun(reg.snapshot(), s.taskExecutionTimeout())
 	if skipped {
 		if reason == skipRunReasonRegistrationRetired {
 			return

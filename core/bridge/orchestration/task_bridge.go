@@ -30,11 +30,12 @@ const (
 )
 
 var (
-	ErrTaskNotFound         = bridgeTasks.ErrTaskNotFound
-	ErrTaskCorrupted        = bridgeTasks.ErrTaskCorrupted
-	ErrInvalidTaskID        = bridgeTasks.ErrInvalidTaskID
-	ErrInvalidTaskConfig    = bridgeTasks.ErrInvalidTaskConfig
-	ErrTaskSchedulerStopped = bridgeTasks.ErrTaskSchedulerStopped
+	ErrTaskNotFound               = bridgeTasks.ErrTaskNotFound
+	ErrTaskCorrupted              = bridgeTasks.ErrTaskCorrupted
+	ErrInvalidTaskID              = bridgeTasks.ErrInvalidTaskID
+	ErrInvalidTaskConfig          = bridgeTasks.ErrInvalidTaskConfig
+	ErrTaskSchedulerStopped       = bridgeTasks.ErrTaskSchedulerStopped
+	ErrTaskSchedulerNotConfigured = bridgeTasks.ErrTaskSchedulerNotConfigured
 )
 
 type ScheduledTask = bridgeTasks.ScheduledTask

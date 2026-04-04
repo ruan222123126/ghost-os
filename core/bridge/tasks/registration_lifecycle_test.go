@@ -19,7 +19,7 @@ func TestTaskRegistrationStopRetiresRegistration(t *testing.T) {
 	reg.stop()
 	reg.waitIdle()
 
-	gotTask, runCtx, skipped, reason := reg.beginRun(task, time.Second, "trace-retired")
+	gotTask, runCtx, skipped, reason := reg.beginRun(task, time.Second)
 	if !skipped {
 		t.Fatal("expected retired registration to skip future runs")
 	}
@@ -64,6 +64,10 @@ func TestTaskSchedulerRunNowFallsBackFromRetiredRegistration(t *testing.T) {
 		t.Fatalf("start scheduler: %v", err)
 	}
 	defer scheduler.Stop()
+
+	if err := scheduler.Unregister(task.ID); err != nil {
+		t.Fatalf("unregister running registration before stale injection: %v", err)
+	}
 
 	stale := &taskRegistration{task: task}
 	stale.stop()

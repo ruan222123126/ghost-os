@@ -5,16 +5,15 @@ import "context"
 func (s *TaskScheduler) beginManualRun(
 	reg *taskRegistration,
 	task ScheduledTask,
-	traceID string,
 ) (ScheduledTask, context.Context, *taskRegistration, bool, string) {
 	if reg == nil {
 		reg = &taskRegistration{task: task}
 	}
-	task, runCtx, skipped, reason := reg.beginRun(task, s.taskExecutionTimeout(), traceID)
+	task, runCtx, skipped, reason := reg.beginRun(task, s.taskExecutionTimeout())
 	if reason != skipRunReasonRegistrationRetired {
 		return task, runCtx, reg, skipped, reason
 	}
 	reg = &taskRegistration{task: task, loopCtx: reg.loopCtx}
-	task, runCtx, skipped, reason = reg.beginRun(task, s.taskExecutionTimeout(), traceID)
+	task, runCtx, skipped, reason = reg.beginRun(task, s.taskExecutionTimeout())
 	return task, runCtx, reg, skipped, reason
 }
