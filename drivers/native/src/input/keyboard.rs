@@ -117,26 +117,10 @@ fn perform_text_input(text: &str, submit: bool) -> Result<(), String> {
     let lines: Vec<&str> = text.split('\n').collect();
     for (index, segment) in lines.iter().enumerate() {
         if !segment.is_empty() {
-            let status = Command::new("xdotool")
-                .args(["type", "--clearmodifiers", "--delay", "0", "--", segment])
-                .status()
-                .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-            if !status.success() {
-                return Err(format!(
-                    "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-                ));
-            }
+            type_text_with_xdotool(segment)?;
         }
         if index + 1 < lines.len() || submit {
-            let status = Command::new("xdotool")
-                .args(["key", "--clearmodifiers", "Return"])
-                .status()
-                .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-            if !status.success() {
-                return Err(format!(
-                    "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-                ));
-            }
+            trigger_xdotool_key("Return")?;
         }
     }
     Ok(())
@@ -158,6 +142,43 @@ fn perform_hotkey(keys: &[String]) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn type_text_with_xdotool(text: &str) -> Result<(), String> {
+    let mut command = Command::new("xdotool");
+    command.args(["key", "--clearmodifiers", "--delay", "0"]);
+    for keysym in text_to_xdotool_keysyms(text) {
+        command.arg(keysym);
+    }
+    run_xdotool(command)
+}
+
+#[cfg(target_os = "linux")]
+fn trigger_xdotool_key(keysym: &str) -> Result<(), String> {
+    let mut command = Command::new("xdotool");
+    command.args(["key", "--clearmodifiers", keysym]);
+    run_xdotool(command)
+}
+
+#[cfg(target_os = "linux")]
+fn run_xdotool(mut command: Command) -> Result<(), String> {
+    let status = command
+        .status()
+        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
+    ))
+}
+
+#[cfg(target_os = "linux")]
+fn text_to_xdotool_keysyms(text: &str) -> Vec<String> {
+    text.chars()
+        .map(|ch| format!("U{:04X}", ch as u32))
+        .collect()
 }
 
 #[cfg(target_os = "linux")]
@@ -209,6 +230,8 @@ fn perform_hotkey(_keys: &[String]) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "linux")]
+    use super::text_to_xdotool_keysyms;
     use super::{handle_text_input, normalize_hotkey_key, normalize_input_text, parse_hotkey_keys};
     use serde_json::json;
 
@@ -234,5 +257,19 @@ mod tests {
     fn parse_hotkey_keys_requires_array() {
         let err = parse_hotkey_keys(&json!({"keys":["CTRL","L"]})).expect("must parse");
         assert_eq!(err, vec!["ctrl".to_string(), "L".to_string()]);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn text_to_xdotool_keysyms_encodes_mixed_language() {
+        let got = text_to_xdotool_keysyms("我是 Ghost-OS 的 AI 助手");
+        assert_eq!(
+            got,
+            vec![
+                "U6211", "U662F", "U0020", "U0047", "U0068", "U006F", "U0073", "U0074", "U002D",
+                "U004F", "U0053", "U0020", "U7684", "U0020", "U0041", "U0049", "U0020", "U52A9",
+                "U624B",
+            ]
+        );
     }
 }

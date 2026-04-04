@@ -133,6 +133,7 @@
 
 - Native 层已支持截图、输入模拟、脚本执行、窗口/浏览器查询等原子动作。
 - GUI executor 所需的双击、右键、滚动、拖拽、组合键、活动窗口信息等能力已补齐一轮基线。
+- `TEXT_INPUT` 的 Linux/X11 注入路径已从 `xdotool type` 切到 Unicode keysym（`xdotool key UXXXX`）：中英混输不再依赖输入法候选上屏，降低中文输入法开启时的串字/乱序风险；并补充了中英混合字符串编码回归测试。
 - Native 截图子模块已去掉主链路 base64 载荷：`SCREEN_CAPTURE` 返回临时 PNG 文件路径，`OCR_IMAGE` 直接消费 `image_path`，`crop_image` 改为仅复制裁剪区域，避免整图 clone 后再裁切。
 - Native 入口阶段D已收口：`--sandbox-worker` / `--persistent` / oneshot 由统一路由决策函数分流，入口执行结果统一为 `{handled,error}` 语义；oneshot `emit` 写出失败改为显式 stderr + 非零退出，未知参数与冲突参数会直接报错。
 - Native 启动路由回归已补齐：新增 `drivers/native/src/main_startup_tests.rs`，覆盖默认 oneshot、`--sandbox-worker`、`--persistent` 分流和未知参数/冲突参数错误路径，启动入口决策具备自动化锁定。
