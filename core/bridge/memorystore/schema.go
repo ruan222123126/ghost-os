@@ -29,7 +29,7 @@ func initSchema(db *sql.DB) error {
 	if err := createIndexes(db); err != nil {
 		return err
 	}
-	return recreateRecallView(db)
+	return nil
 }
 
 func createTables(db *sql.DB) error {
@@ -151,56 +151,6 @@ func createIndexes(db *sql.DB) error {
 		if _, err := db.Exec(statement); err != nil {
 			return fmt.Errorf("create memory index: %w", err)
 		}
-	}
-	return nil
-}
-
-func recreateRecallView(db *sql.DB) error {
-	if _, err := db.Exec(`DROP VIEW IF EXISTS memory_recall_view`); err != nil {
-		return fmt.Errorf("drop recall view: %w", err)
-	}
-	view := fmt.Sprintf(`CREATE VIEW memory_recall_view AS
-		SELECT
-			'explicit:' || uri AS id,
-			COALESCE(json_extract(metadata_json, '$.scope_type'), '%s') AS scope_type,
-			COALESCE(json_extract(metadata_json, '$.scope_id'), '%s') AS scope_id,
-			'%s' AS source_kind,
-			COALESCE(json_extract(metadata_json, '$.memory_type'), '%s') AS memory_type,
-			NULL AS memory_key,
-			content AS content,
-			substr(content, 1, 240) AS summary,
-			metadata_json AS metadata_json,
-			1.0 AS confidence,
-			'%s' AS status,
-			created_at AS created_at,
-			updated_at AS updated_at,
-			last_used_at AS last_used_at
-		FROM memories
-		UNION ALL
-		SELECT
-			id,
-			scope_type,
-			scope_id,
-			source_kind,
-			memory_type,
-			memory_key,
-			content,
-			summary,
-			metadata_json,
-			confidence,
-			status,
-			created_at,
-			updated_at,
-			last_used_at
-		FROM learned_memories`,
-		ScopeTypeUser,
-		DefaultUserScopeID,
-		SourceKindExplicit,
-		MemoryTypeFact,
-		MemoryStatusActive,
-	)
-	if _, err := db.Exec(view); err != nil {
-		return fmt.Errorf("create recall view: %w", err)
 	}
 	return nil
 }

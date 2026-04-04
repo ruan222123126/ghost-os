@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-func mustMarshalString(value any) string {
+func marshalString(value any) (string, error) {
 	encoded, err := json.Marshal(value)
 	if err != nil {
-		return "[]"
+		return "", fmt.Errorf("encode json string: %w", err)
 	}
-	return string(encoded)
+	return string(encoded), nil
 }
 
 func unmarshalStringSlice(raw string, target *[]string) error {

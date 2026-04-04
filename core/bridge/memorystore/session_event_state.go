@@ -35,18 +35,22 @@ func (s *Store) SaveSessionEventState(ctx context.Context, state SessionEventSta
 	if err != nil {
 		return err
 	}
+	activeIDsJSON, err := marshalString(activeIDs)
+	if err != nil {
+		return fmt.Errorf("encode active event ids: %w", err)
+	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO session_event_state (
 		session_id, primary_event_id, active_event_ids_json, planner_snapshot_json, updated_at
 	) VALUES (?, ?, ?, ?, ?)
 	ON CONFLICT(session_id)
-	DO UPDATE SET
-		primary_event_id = excluded.primary_event_id,
-		active_event_ids_json = excluded.active_event_ids_json,
-		planner_snapshot_json = excluded.planner_snapshot_json,
-		updated_at = excluded.updated_at`,
+		DO UPDATE SET
+			primary_event_id = excluded.primary_event_id,
+			active_event_ids_json = excluded.active_event_ids_json,
+			planner_snapshot_json = excluded.planner_snapshot_json,
+			updated_at = excluded.updated_at`,
 		sessionID,
 		nullIfEmpty(state.PrimaryEventID),
-		mustMarshalString(activeIDs),
+		activeIDsJSON,
 		snapshot,
 		formatTime(now),
 	)

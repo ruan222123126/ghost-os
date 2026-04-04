@@ -58,16 +58,6 @@ type LearnedMemoryInput struct {
 	Confidence float64
 }
 
-type LearnedListFilter struct {
-	ScopeType  string
-	ScopeID    string
-	MemoryType string
-	Statuses   []string
-	Query      string
-	Limit      int
-	Offset     int
-}
-
 type LearningEvent struct {
 	ID             string    `json:"id"`
 	SessionID      string    `json:"session_id"`

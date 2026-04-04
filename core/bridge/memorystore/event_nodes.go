@@ -13,9 +13,13 @@ func (s *Store) CreateEventNode(ctx context.Context, input EventNodeInput) (Even
 	if s == nil || s.db == nil {
 		return EventNode{}, errors.New("memory store is not configured")
 	}
+	id, err := newMemoryID("event")
+	if err != nil {
+		return EventNode{}, err
+	}
 	now := s.currentTime()
 	node := EventNode{
-		ID:              newMemoryID("event"),
+		ID:              id,
 		SessionID:       strings.TrimSpace(input.SessionID),
 		Title:           strings.TrimSpace(input.Title),
 		Summary:         summarizeText(input.Summary, input.Title),
@@ -30,7 +34,7 @@ func (s *Store) CreateEventNode(ctx context.Context, input EventNodeInput) (Even
 	if node.Title == "" {
 		return EventNode{}, fmt.Errorf("event title is required")
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO event_nodes (
+	_, err = s.db.ExecContext(ctx, `INSERT INTO event_nodes (
 		id, session_id, title, summary, status, created_at, updated_at, last_activated_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		node.ID,

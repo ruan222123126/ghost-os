@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 )
 
 type rowScanner interface {
@@ -25,9 +24,13 @@ func (s *Store) CreateLearningEvent(ctx context.Context, input LearningEventInpu
 	if s == nil || s.db == nil {
 		return LearningEvent{}, errors.New("memory store is not configured")
 	}
+	id, err := newMemoryID("evt")
+	if err != nil {
+		return LearningEvent{}, err
+	}
 	now := s.currentTime()
 	event := LearningEvent{
-		ID:             newMemoryID("evt"),
+		ID:             id,
 		SessionID:      strings.TrimSpace(input.SessionID),
 		TraceID:        strings.TrimSpace(input.TraceID),
 		Status:         strings.TrimSpace(input.Status),
@@ -38,7 +41,7 @@ func (s *Store) CreateLearningEvent(ctx context.Context, input LearningEventInpu
 		ErrorText:      strings.TrimSpace(input.ErrorText),
 		CreatedAt:      now,
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO memory_learning_events (
+	_, err = s.db.ExecContext(ctx, `INSERT INTO memory_learning_events (
 		id, session_id, trace_id, status, input_json, filtered_json,
 		candidates_json, result_json, error_text, created_at
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -127,10 +130,14 @@ func nullIfEmpty(value string) any {
 	return value
 }
 
-func newMemoryID(prefix string) string {
+func newMemoryID(prefix string) (string, error) {
+	tag := strings.TrimSpace(prefix)
+	if tag == "" {
+		return "", fmt.Errorf("memory id prefix is required")
+	}
 	raw := make([]byte, 12)
 	if _, err := rand.Read(raw); err != nil {
-		return strings.TrimSpace(prefix) + "-" + fmt.Sprintf("%d", time.Now().UnixNano())
+		return "", fmt.Errorf("generate memory id: %w", err)
 	}
-	return strings.TrimSpace(prefix) + "-" + hex.EncodeToString(raw)
+	return tag + "-" + hex.EncodeToString(raw), nil
 }

@@ -12,7 +12,10 @@ func (s *Store) CreateEventMemory(ctx context.Context, input EventMemoryInput, s
 	if s == nil || s.db == nil {
 		return EventMemory{}, errors.New("memory store is not configured")
 	}
-	entry := normalizeEventMemoryInput(input, s.currentTime())
+	entry, err := normalizeEventMemoryInput(input, s.currentTime())
+	if err != nil {
+		return EventMemory{}, err
+	}
 	if entry.EventID == "" {
 		return EventMemory{}, fmt.Errorf("event_id is required")
 	}
@@ -139,9 +142,13 @@ func (s *Store) FindActiveEventMemoryByKey(ctx context.Context, eventID string, 
 	return entry, nil
 }
 
-func normalizeEventMemoryInput(input EventMemoryInput, now time.Time) EventMemory {
+func normalizeEventMemoryInput(input EventMemoryInput, now time.Time) (EventMemory, error) {
+	id, err := newMemoryID("evtmem")
+	if err != nil {
+		return EventMemory{}, err
+	}
 	return EventMemory{
-		ID:         newMemoryID("evtmem"),
+		ID:         id,
 		EventID:    strings.TrimSpace(input.EventID),
 		MemoryType: resolveMemoryType(input.MemoryType),
 		MemoryKey:  resolveLearnedMemoryKey(LearnedMemoryInput{MemoryType: input.MemoryType, MemoryKey: input.MemoryKey, Summary: input.Summary, Content: input.Content}),
@@ -152,7 +159,7 @@ func normalizeEventMemoryInput(input EventMemoryInput, now time.Time) EventMemor
 		Status:     MemoryStatusActive,
 		CreatedAt:  now,
 		UpdatedAt:  now,
-	}
+	}, nil
 }
 
 func buildEventMemoryFilter(filter EventMemoryListFilter) (string, []any) {

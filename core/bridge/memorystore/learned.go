@@ -12,7 +12,10 @@ func (s *Store) CreateLearned(ctx context.Context, input LearnedMemoryInput, sup
 	if s == nil || s.db == nil {
 		return MemoryEntry{}, errors.New("memory store is not configured")
 	}
-	entry := normalizeLearnedInput(input, s.currentTime())
+	entry, err := normalizeLearnedInput(input, s.currentTime())
+	if err != nil {
+		return MemoryEntry{}, err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return MemoryEntry{}, fmt.Errorf("begin learned memory tx: %w", err)
@@ -54,57 +57,6 @@ func (s *Store) CreateLearned(ctx context.Context, input LearnedMemoryInput, sup
 	return entry, nil
 }
 
-func (s *Store) GetLearnedByIDs(ctx context.Context, ids []string) ([]MemoryEntry, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("memory store is not configured")
-	}
-	trimmed := normalizeIdentifierList(ids)
-	if len(trimmed) == 0 {
-		return nil, nil
-	}
-	filter, args := buildInFilter("id", trimmed)
-	rows, err := s.db.QueryContext(ctx, `SELECT
-		id, scope_type, scope_id, source_kind, memory_type, memory_key, content, summary,
-		metadata_json, confidence, status, created_at, updated_at, last_used_at
-		FROM learned_memories
-		WHERE `+filter+`
-		ORDER BY updated_at DESC, id ASC`,
-		args...,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("query learned memories by id: %w", err)
-	}
-	defer rows.Close()
-	return scanMemoryEntryRows(rows)
-}
-
-func (s *Store) ListLearned(ctx context.Context, filter LearnedListFilter) ([]MemoryEntry, int, error) {
-	if s == nil || s.db == nil {
-		return nil, 0, errors.New("memory store is not configured")
-	}
-	whereSQL, args := buildLearnedFilter(filter)
-	total, err := s.count(ctx, `SELECT COUNT(1) FROM learned_memories WHERE `+whereSQL, args...)
-	if err != nil {
-		return nil, 0, err
-	}
-	args = append(args, filter.Limit, filter.Offset)
-	rows, err := s.db.QueryContext(ctx, `SELECT
-		id, scope_type, scope_id, source_kind, memory_type, memory_key, content, summary,
-		metadata_json, confidence, status, created_at, updated_at, last_used_at
-		FROM learned_memories
-		WHERE `+whereSQL+`
-		ORDER BY updated_at DESC, id ASC
-		LIMIT ? OFFSET ?`,
-		args...,
-	)
-	if err != nil {
-		return nil, 0, fmt.Errorf("list learned memories: %w", err)
-	}
-	defer rows.Close()
-	items, err := scanMemoryEntryRows(rows)
-	return items, total, err
-}
-
 func (s *Store) RefreshLearned(ctx context.Context, id string, confidence float64) error {
 	if s == nil || s.db == nil {
 		return errors.New("memory store is not configured")
@@ -128,13 +80,17 @@ func (s *Store) TouchLearned(ctx context.Context, ids []string) error {
 	return s.touchRows(ctx, "learned_memories", "id", ids)
 }
 
-func normalizeLearnedInput(input LearnedMemoryInput, now time.Time) MemoryEntry {
+func normalizeLearnedInput(input LearnedMemoryInput, now time.Time) (MemoryEntry, error) {
+	id, err := newMemoryID("mem")
+	if err != nil {
+		return MemoryEntry{}, err
+	}
 	scopeType := normalizeScopeType(input.ScopeType)
 	if scopeType == "" {
 		scopeType = ScopeTypeUser
 	}
 	return MemoryEntry{
-		ID:         newMemoryID("mem"),
+		ID:         id,
 		ScopeType:  scopeType,
 		ScopeID:    strings.TrimSpace(input.ScopeID),
 		SourceKind: SourceKindLearned,
@@ -147,35 +103,7 @@ func normalizeLearnedInput(input LearnedMemoryInput, now time.Time) MemoryEntry 
 		Status:     MemoryStatusActive,
 		CreatedAt:  now,
 		UpdatedAt:  now,
-	}
-}
-
-func buildLearnedFilter(filter LearnedListFilter) (string, []any) {
-	clauses := []string{"1=1"}
-	args := make([]any, 0, 8)
-	if scopeType := normalizeScopeType(filter.ScopeType); scopeType != "" {
-		clauses = append(clauses, "scope_type = ?")
-		args = append(args, scopeType)
-	}
-	if scopeID := strings.TrimSpace(filter.ScopeID); scopeID != "" {
-		clauses = append(clauses, "scope_id = ?")
-		args = append(args, scopeID)
-	}
-	if memoryType := normalizeMemoryType(filter.MemoryType); memoryType != "" {
-		clauses = append(clauses, "memory_type = ?")
-		args = append(args, memoryType)
-	}
-	if statuses := normalizeStatusList(filter.Statuses); len(statuses) > 0 {
-		clause, clauseArgs := buildInFilter("status", statuses)
-		clauses = append(clauses, clause)
-		args = append(args, clauseArgs...)
-	}
-	if terms := buildSearchTerms(filter.Query); len(terms) > 0 {
-		clause, clauseArgs := buildLikeFilter([]string{"summary", "content"}, terms)
-		clauses = append(clauses, clause)
-		args = append(args, clauseArgs...)
-	}
-	return strings.Join(clauses, " AND "), args
+	}, nil
 }
 
 func resolveLearnedMemoryKey(input LearnedMemoryInput) string {

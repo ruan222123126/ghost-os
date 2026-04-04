@@ -64,7 +64,11 @@ func (s *Store) Update(ctx context.Context, uri string, content string, metadata
 		return Record{}, err
 	}
 	updatedAt := s.currentTime()
-	normalizedMetadata := resolveUpdatedExplicitMetadata(existing.Metadata, metadata, s.defaultUserScopeID)
+	metadataSource := metadata
+	if metadataSource == nil {
+		metadataSource = existing.Metadata
+	}
+	normalizedMetadata := normalizeExplicitMetadata(metadataSource, s.defaultUserScopeID)
 	metadataValue, err := encodeMetadata(normalizedMetadata)
 	if err != nil {
 		return Record{}, err
@@ -150,13 +154,6 @@ func (s *Store) explicitExists(ctx context.Context, uri string) (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("check memory exists: %w", err)
-}
-
-func resolveUpdatedExplicitMetadata(existing map[string]any, next map[string]any, defaultUserScopeID string) map[string]any {
-	if next == nil {
-		return normalizeExplicitMetadata(existing, defaultUserScopeID)
-	}
-	return normalizeExplicitMetadata(next, defaultUserScopeID)
 }
 
 func normalizeExplicitMetadata(source map[string]any, defaultUserScopeID string) map[string]any {

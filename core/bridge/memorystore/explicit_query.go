@@ -59,18 +59,6 @@ func (s *Store) Search(ctx context.Context, query string, limit int, offset int)
 	return scanRecordRows(rows, total)
 }
 
-func (s *Store) SearchExplicitRecallRecords(ctx context.Context, query string, limit int) ([]MemoryEntry, error) {
-	items, _, err := s.Search(ctx, query, limit, 0)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]MemoryEntry, 0, len(items))
-	for _, item := range items {
-		out = append(out, explicitRecordToMemoryEntry(item, s.defaultUserScopeID))
-	}
-	return out, nil
-}
-
 func (s *Store) ListAllURIs(ctx context.Context, limit int, offset int) ([]string, int, error) {
 	return s.listURIs(ctx, `SELECT uri FROM memories ORDER BY uri ASC LIMIT ? OFFSET ?`, limit, offset)
 }
