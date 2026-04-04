@@ -1,5 +1,4 @@
 'use client';
-
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -8,8 +7,8 @@ import { EmptyState } from './EmptyState';
 import { MessageRow } from './MessageRow';
 import { getOrderedStreamingRows, type StreamingMessageRow } from './streamingRows';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { shouldShowThinkingIndicator } from './thinkingState';
 import type { MessageListProps, MessageListRow } from './types';
-
 const BOTTOM_FOLLOW_THRESHOLD_PX = 120;
 const LOAD_OLDER_TRIGGER_ROWS = 5;
 const MESSAGE_LIST_OVERSCAN = 8;
@@ -39,10 +38,11 @@ export const MessageList: FC<MessageListProps> = ({
     streamingItemOrder,
     streamingTools,
   });
+  const showThinking = shouldShowThinkingIndicator({ loading, streamingAssistantSegments, streamingTools });
   const rowCount = getRowCount(
     visibleCommittedMessages,
     streamingRows,
-    loading,
+    showThinking,
     loadingOlderHistory,
   );
   const rowVirtualizer = useVirtualizer({
@@ -50,7 +50,7 @@ export const MessageList: FC<MessageListProps> = ({
     estimateSize: estimateMessageRowSize,
     getItemKey: (index) => getRowAtIndex(index, {
       committedMessages: visibleCommittedMessages,
-      loading,
+      showThinking,
       loadingOlderHistory,
       streamingRows,
     }).key,
@@ -151,7 +151,7 @@ export const MessageList: FC<MessageListProps> = ({
         {virtualItems.map((virtualItem) => {
           const row = getRowAtIndex(virtualItem.index, {
             committedMessages: visibleCommittedMessages,
-            loading,
+            showThinking,
             loadingOlderHistory,
             streamingRows,
           });
@@ -219,12 +219,12 @@ function renderRow(
 function getRowCount(
   committedMessages: ChatMessage[],
   streamingRows: StreamingMessageRow[],
-  loading: boolean,
+  showThinking: boolean,
   loadingOlderHistory: boolean,
 ): number {
   return committedMessages.length
     + streamingRows.length
-    + (loading ? 1 : 0)
+    + (showThinking ? 1 : 0)
     + (loadingOlderHistory ? 1 : 0);
 }
 
@@ -232,7 +232,7 @@ function getRowAtIndex(
   index: number,
   options: {
     committedMessages: ChatMessage[];
-    loading: boolean;
+    showThinking: boolean;
     loadingOlderHistory: boolean;
     streamingRows: StreamingMessageRow[];
   },
@@ -264,7 +264,7 @@ function getRowAtIndex(
   }
   cursor -= options.streamingRows.length;
 
-  if (options.loading && cursor === 0) {
+  if (options.showThinking && cursor === 0) {
     return { key: 'thinking', kind: 'thinking' };
   }
 
