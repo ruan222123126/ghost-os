@@ -17,6 +17,7 @@
 
 - Agent、Session、Tool、Provider、SSE、配置持久化、`ask_human` 续跑、基础 Memory 增强链路已落地。
 - Bridge 启动入口的 `serve` 子命令判定已收口到 `app.IsServeSubcommand` 单点实现，`core/bridge/main.go` 与 `app.Run` 不再重复维护同构逻辑；同时清理了 `core/bridge/main.go.tmp.k29Khx` 临时文件，并移除 `core/bridge/app/agent.go` 中仅测试使用的注入缝隙层（`newAgentTurnRunner`、`runAgentWithConfigStore`）。
+- context/prompt 链路完成一轮“显式失败优先”收口：删除仅测试引用的 `BuildRequest` 死路径与 `NewPromptManager` 薄封装入口；`runtime/system_prompt` 不再在加载失败时静默回退默认 prompt；`context/prompt.go` 拆分为 `prompt.go + prompt_loader.go`（各自低于 300 行）并补齐“不再静默兜底”的回归测试。
 - 普通 Agent 请求现已补上图片入参链路：`/api/agent` / `AGENT_SEND` 支持 `images[]`，图片可用本地路径、远程 URL 或 data URL 表达；Central 会把用户图片写入 session history，并在 provider 投影阶段对 OpenAI / Anthropic / Codex 统一转成对应多模态输入，不再只支持 tool-result 图片。
 - Memory 主链已切换到“事件节点图驱动”：
   - `core/bridge/memorystore` 新增 `event_nodes` / `event_edges` / `event_memories` / `session_event_state` 存储层，用于承载任务/目标级事件图；旧 `learned_memories` 不再接任务型自动记忆写入，只保留全局长期偏好的实现细节。

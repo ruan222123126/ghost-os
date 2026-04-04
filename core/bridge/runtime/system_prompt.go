@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"fmt"
 	goruntime "runtime"
 	"strconv"
 
@@ -23,8 +24,7 @@ func buildSystemPromptForSession(
 	if err != nil {
 		return "", err
 	}
-	contextBuilder := ctxmgr.NewBuilder(promptManager, catalog)
-	return contextBuilder.BuildSystemPrompt(systemPromptVars(cfg, catalog, sess, idleTurns)), nil
+	return promptManager.Render(systemPromptVars(cfg, catalog, sess, idleTurns)), nil
 }
 
 func loadPromptManager(cfg Config) (*ctxmgr.PromptManager, error) {
@@ -35,13 +35,10 @@ func loadPromptManager(cfg Config) (*ctxmgr.PromptManager, error) {
 		RuntimeConstraintFiles: cfg.PromptsRuntimeConstraintFiles,
 		ResponseRuleFiles:      cfg.PromptsResponseRuleFiles,
 	})
-	if err == nil {
-		return promptManager, nil
+	if err != nil {
+		return nil, fmt.Errorf("load prompt manager: %w", err)
 	}
-	if hasPromptSectionOverrides(cfg) {
-		return nil, err
-	}
-	return ctxmgr.NewPromptManagerWithDefault(), nil
+	return promptManager, nil
 }
 
 func systemPromptVars(
@@ -57,10 +54,4 @@ func systemPromptVars(
 		"max_turns":          strconv.Itoa(cfg.MaxTurns),
 		"project_root":       resolvePromptProjectRoot(cfg.ProjectRoot),
 	}
-}
-
-func hasPromptSectionOverrides(cfg Config) bool {
-	return len(cfg.PromptsCoreFiles) > 0 ||
-		len(cfg.PromptsRuntimeConstraintFiles) > 0 ||
-		len(cfg.PromptsResponseRuleFiles) > 0
 }

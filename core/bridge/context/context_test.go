@@ -1,22 +1,11 @@
 package context
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"ghost-os/bridge/llm"
 )
-
-type fakeRegistry struct {
-	defs []llm.ToolDef
-}
-
-func (f *fakeRegistry) ToolDefs() []llm.ToolDef {
-	return f.defs
-}
 
 func TestRenderTemplate(t *testing.T) {
 	template := "Hello {{name}}, missing={{missing}}!"
@@ -43,7 +32,7 @@ system:
 		t.Fatalf("write prompts file: %v", err)
 	}
 
-	pm, err := NewPromptManager(configPath)
+	pm, err := NewPromptManagerWithOptions(PromptLoadOptions{ConfigPath: configPath})
 	if err != nil {
 		t.Fatalf("NewPromptManager returned error: %v", err)
 	}
@@ -72,7 +61,7 @@ system:
 		t.Fatalf("write prompts file: %v", err)
 	}
 
-	pm, err := NewPromptManager(configPath)
+	pm, err := NewPromptManagerWithOptions(PromptLoadOptions{ConfigPath: configPath})
 	if err != nil {
 		t.Fatalf("NewPromptManager returned error: %v", err)
 	}
@@ -98,7 +87,7 @@ system:
 		t.Fatalf("write prompts file: %v", err)
 	}
 
-	_, err := NewPromptManager(configPath)
+	_, err := NewPromptManagerWithOptions(PromptLoadOptions{ConfigPath: configPath})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -133,7 +122,9 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 		"os_type":   "linux",
 		"max_turns": "20",
 	}
-	fromFile, err := NewPromptManager(filepath.Join("..", "prompts.yaml"))
+	fromFile, err := NewPromptManagerWithOptions(PromptLoadOptions{
+		ConfigPath: filepath.Join("..", "prompts.yaml"),
+	})
 	if err != nil {
 		t.Fatalf("NewPromptManager returned error: %v", err)
 	}
@@ -244,129 +235,5 @@ system:
 		if !strings.Contains(rendered, snippet) {
 			t.Fatalf("unexpected rendered prompt, missing %q: %q", snippet, rendered)
 		}
-	}
-}
-
-func TestNewPromptManagerWithCoreFilesMissingFileFails(t *testing.T) {
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "prompts.yaml")
-	content := `version: "1.0"
-system:
-  default: |
-    Core: {{core_job}}
-`
-	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("write prompts file: %v", err)
-	}
-
-	_, err := NewPromptManagerWithOptions(PromptLoadOptions{
-		ConfigPath: configPath,
-		CoreDir:    tempDir,
-		CoreFiles:  []string{"missing.txt"},
-	})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestNewPromptManagerWithCoreFilesEmptyFileFails(t *testing.T) {
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "prompts.yaml")
-	content := `version: "1.0"
-system:
-  default: |
-    Core: {{core_job}}
-`
-	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("write prompts file: %v", err)
-	}
-	corePath := filepath.Join(tempDir, "core.txt")
-	if err := os.WriteFile(corePath, []byte("   "), 0o644); err != nil {
-		t.Fatalf("write core file: %v", err)
-	}
-
-	_, err := NewPromptManagerWithOptions(PromptLoadOptions{
-		ConfigPath: configPath,
-		CoreDir:    tempDir,
-		CoreFiles:  []string{"core.txt"},
-	})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestNewPromptManagerWithResponseRuleFilesEmptyFileFails(t *testing.T) {
-	tempDir := t.TempDir()
-	configPath := filepath.Join(tempDir, "prompts.yaml")
-	content := `version: "1.0"
-system:
-  default: |
-    Rules: {{response_rules}}
-`
-	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
-		t.Fatalf("write prompts file: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "rules.txt"), []byte("  "), 0o644); err != nil {
-		t.Fatalf("write rules file: %v", err)
-	}
-
-	_, err := NewPromptManagerWithOptions(PromptLoadOptions{
-		ConfigPath:        configPath,
-		CoreDir:           tempDir,
-		ResponseRuleFiles: []string{"rules.txt"},
-	})
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-}
-
-func TestBuilderBuildRequestClonesMessagesAndTools(t *testing.T) {
-	params := json.RawMessage(`{"type":"object"}`)
-	registry := &fakeRegistry{
-		defs: []llm.ToolDef{
-			{
-				Name:        "list_files",
-				Description: "list files",
-				Parameters:  params,
-			},
-		},
-	}
-
-	builder := NewBuilder(NewPromptManagerWithDefault(), registry)
-
-	messages := []llm.Message{
-		{
-			Role: llm.RoleUser,
-			Text: "hello",
-		},
-	}
-	req := builder.BuildRequest(messages)
-
-	if len(req.Messages) != 1 {
-		t.Fatalf("unexpected message count: got %d want %d", len(req.Messages), 1)
-	}
-	if len(req.Tools) != 1 {
-		t.Fatalf("unexpected tool count: got %d want %d", len(req.Tools), 1)
-	}
-
-	messages[0].Text = "changed"
-	registry.defs[0].Parameters[0] = '{'
-
-	if req.Messages[0].Text != "hello" {
-		t.Fatalf("messages should be cloned: got %q want %q", req.Messages[0].Text, "hello")
-	}
-	if got := string(req.Tools[0].Parameters); got != `{"type":"object"}` {
-		t.Fatalf("tool params should be cloned: got %q want %q", got, `{"type":"object"}`)
-	}
-}
-
-func TestBuilderBuildRequestNilBuilderDoesNotPanic(t *testing.T) {
-	var builder *Builder
-	req := builder.BuildRequest([]llm.Message{{Role: llm.RoleUser, Text: "hello"}})
-	if len(req.Messages) != 1 {
-		t.Fatalf("unexpected message count: got %d want %d", len(req.Messages), 1)
-	}
-	if len(req.Tools) != 0 {
-		t.Fatalf("unexpected tool count: got %d want %d", len(req.Tools), 0)
 	}
 }

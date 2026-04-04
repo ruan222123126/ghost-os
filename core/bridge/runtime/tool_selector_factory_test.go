@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -133,5 +134,21 @@ func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *te
 	}
 	if !strings.Contains(active, "`web_search` is active in this session; remaining_idle_turns=3.") {
 		t.Fatalf("expected active dynamic tool state, got %q", active)
+	}
+}
+
+func TestBuildSystemPromptForCatalogFailsWhenPromptConfigMissing(t *testing.T) {
+	registry := tools.NewRegistry()
+	registry.Register(&catalogMockTool{name: "ask_human"})
+
+	_, err := buildSystemPromptForCatalog(Config{
+		MaxTurns:    3,
+		PromptsPath: filepath.Join(t.TempDir(), "missing-prompts.yaml"),
+	}, registry)
+	if err == nil {
+		t.Fatal("expected prompt load error, got nil")
+	}
+	if !strings.Contains(err.Error(), "load prompt manager") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
