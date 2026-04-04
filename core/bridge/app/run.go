@@ -13,7 +13,7 @@ var newRunCommandDispatcher = newCommandDispatcher
 // Run 委托给命令分发器，保持 bridge 进程入口最小化。
 func Run(ctx context.Context, args []string) (string, error) {
 	dispatcher := newRunCommandDispatcher()
-	if !isServeCommand(args) {
+	if !IsServeSubcommand(args) {
 		return dispatcher.dispatch(ctx, args)
 	}
 
@@ -34,6 +34,7 @@ func Run(ctx context.Context, args []string) (string, error) {
 	return "", wrapped
 }
 
-func isServeCommand(args []string) bool {
+// IsServeSubcommand 返回参数是否表示 serve 子命令。
+func IsServeSubcommand(args []string) bool {
 	return len(args) > 0 && strings.TrimSpace(args[0]) == "serve"
 }

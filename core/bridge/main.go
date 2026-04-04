@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"ghost-os/bridge/app"
@@ -18,18 +17,18 @@ func main() {
 	defer stop()
 
 	args := os.Args[1:]
-	if isServeSubcommand(args) {
+	if app.IsServeSubcommand(args) {
 		log.Print("startup checkpoint stage=process status=begin")
 	}
 
 	output, err := app.Run(ctx, args)
 	if err != nil {
-		if isServeSubcommand(args) {
+		if app.IsServeSubcommand(args) {
 			log.Printf("startup checkpoint stage=process status=error error=%v", err)
 		}
 		fatal(err)
 	}
-	if isServeSubcommand(args) {
+	if app.IsServeSubcommand(args) {
 		log.Print("startup checkpoint stage=process status=ready")
 	}
 	if output != "" {
@@ -41,8 +40,4 @@ func main() {
 func fatal(err error) {
 	fmt.Fprintln(os.Stderr, err)
 	os.Exit(1)
-}
-
-func isServeSubcommand(args []string) bool {
-	return len(args) > 0 && strings.TrimSpace(args[0]) == "serve"
 }
