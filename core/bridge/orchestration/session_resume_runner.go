@@ -24,7 +24,7 @@ func (s *bridgeService) sessionResumeRunner() sessionResumeRunner {
 func (r sessionResumeRunner) Resume(ctx context.Context, sessionID string, traceID string) (any, int, error) {
 	response, resumedSessionID, err := r.runner.RunTurn(ctx, "", sessionID, traceID)
 	if err != nil {
-		awaitingErr, normalizedErr, statusCode, _ := classifyAgentTurnError(err)
+		awaitingErr, statusCode, _, normalizedErr := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			r.pushes.publishAwaitingHuman(traceID, resumedSessionID, awaitingErr)
 			return newAwaitingHumanResponse(resumedSessionID, awaitingErr), http.StatusAccepted, nil
@@ -53,7 +53,7 @@ func (r sessionResumeRunner) ResumeStream(
 	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, r.pushes.hub))
 	response, resumedSessionID, err := r.runner.RunTurnStream(ctx, "", sessionID, traceID, trackedSink)
 	if err != nil {
-		awaitingErr, normalizedErr, _, cancelled := classifyAgentTurnError(err)
+		awaitingErr, _, cancelled, normalizedErr := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			r.pushes.publishAwaitingHuman(traceID, resumedSessionID, awaitingErr)
 			return "", resumedSessionID, err

@@ -1,12 +1,12 @@
 package orchestration
 
 const (
-	BusActionAgentSend        = busActionAgentSend
-	BusStatusSuccess          = busStatusSuccess
-	BusStatusError            = busStatusError
+	BusActionAgentSend           = busActionAgentSend
+	BusStatusSuccess             = busStatusSuccess
+	BusStatusError               = busStatusError
 	BusAssistantSessionEndSignal = busAssistantSessionEndSignal
-	BusActionRSSInboxPoll     = busActionRSSInboxPoll
-	BusActionRSSBriefingBuild = busActionRSSBriefingBuild
+	BusActionRSSInboxPoll        = busActionRSSInboxPoll
+	BusActionRSSBriefingBuild    = busActionRSSBriefingBuild
 
 	DefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
 	TaskListScopeUser          = taskListScopeUser
@@ -28,6 +28,7 @@ type AgentRequest = agentRequest
 type AgentParams = agentParams
 type HumanResponseParams = humanResponseParams
 type SessionIDParams = sessionIDParams
+type SessionGetParams = sessionGetParams
 type SessionDeleteResponse = sessionDeleteResponse
 type ConfigResponse = configResponse
 type ConfigUpdateRequest = configUpdateRequest
@@ -55,26 +56,6 @@ type SessionPushHub = sessionPushHub
 
 func ValidateBusRequest(req APIRequest) error {
 	return validateBusRequest(req)
-}
-
-func ValidateTaskDefinition(task *ScheduledTask) error {
-	return validateTaskDefinition(task)
-}
-
-func DecodeRSSInboxPollTaskParams(input map[string]any) (RSSInboxPollParams, error) {
-	return decodeRSSInboxPollParams(input)
-}
-
-func RSSInboxPollTaskParamsToMap(params RSSInboxPollParams) map[string]any {
-	return rssInboxPollParamsToMap(params)
-}
-
-func DecodeRSSBriefingTaskParams(input map[string]any) (RSSBriefingParams, error) {
-	return decodeRSSBriefingParams(input)
-}
-
-func RSSBriefingTaskParamsToMap(params RSSBriefingParams) map[string]any {
-	return rssBriefingParamsToMap(params)
 }
 
 func NewSessionPushHub() *SessionPushHub {

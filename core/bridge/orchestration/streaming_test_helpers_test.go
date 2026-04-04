@@ -25,13 +25,3 @@ func mustAppAssistantStepID(t *testing.T, turn int) string {
 	}
 	return stepID
 }
-
-func mustAppToolStepID(t *testing.T, turn int, toolIndex int) string {
-	t.Helper()
-
-	stepID, err := streaming.ToolStepID(turn, toolIndex)
-	if err != nil {
-		t.Fatalf("ToolStepID returned error: %v", err)
-	}
-	return stepID
-}

@@ -8,10 +8,18 @@ import (
 	"net/http"
 	"strings"
 
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
 const cancelledHumanDialogueMessage = "Conversation cancelled by user."
+
+type validatedHumanResponse struct {
+	sessionID  string
+	questionID string
+	answer     string
+	cancelled  bool
+}
 
 // executeHumanResponseAction 接收 HUMAN_RESPONSE，将答案写回会话并解除 pending 状态。
 func (s *bridgeService) executeHumanResponseAction(_ context.Context, params humanResponseParams, traceID string) (any, int, error) {
@@ -20,41 +28,21 @@ func (s *bridgeService) executeHumanResponseAction(_ context.Context, params hum
 		return nil, code, err
 	}
 
-	sessionID, code, err := requireSessionID(params.SessionID)
+	validated, code, err := validateHumanResponseParams(params)
 	if err != nil {
 		return nil, code, err
 	}
 
-	questionID := strings.TrimSpace(params.QuestionID)
-	if questionID == "" {
-		return nil, http.StatusBadRequest, errors.New("question_id is required")
-	}
-
-	cancelled := params.Cancelled
-	answer := strings.TrimSpace(params.Answer)
-	if !cancelled && answer == "" {
-		return nil, http.StatusBadRequest, errors.New("answer is required")
-	}
-
 	logAction(traceID, busActionHumanResponse, "running", nil)
-	sess, err := store.Load(sessionID)
+	sess, err := store.Load(validated.sessionID)
 	if err != nil {
 		statusCode := mapSessionStorageError(err)
 		logAction(traceID, busActionHumanResponse, "error", err)
 		return nil, statusCode, err
 	}
 
-	accepted := true
-	if cancelled {
-		if _, ok := sess.RemovePendingQuestion(questionID); !ok {
-			err = errors.New("question not found in pending questions")
-			logAction(traceID, busActionHumanResponse, "error", err)
-			return nil, http.StatusNotFound, err
-		}
-		sess.MarkEnded(sess.UpdatedAt)
-		accepted = false
-	} else if !sess.SetHumanAnswer(questionID, answer) {
-		err = errors.New("question not found in pending questions")
+	accepted, err := applyHumanResponse(sess, validated)
+	if err != nil {
 		logAction(traceID, busActionHumanResponse, "error", err)
 		return nil, http.StatusNotFound, err
 	}
@@ -67,10 +55,45 @@ func (s *bridgeService) executeHumanResponseAction(_ context.Context, params hum
 
 	logAction(traceID, busActionHumanResponse, "success", nil)
 	return humanResponseAck{
-		SessionID:  sessionID,
-		QuestionID: questionID,
+		SessionID:  validated.sessionID,
+		QuestionID: validated.questionID,
 		Accepted:   accepted,
 	}, http.StatusOK, nil
+}
+
+func validateHumanResponseParams(params humanResponseParams) (validatedHumanResponse, int, error) {
+	sessionID, code, err := requireSessionID(params.SessionID)
+	if err != nil {
+		return validatedHumanResponse{}, code, err
+	}
+	questionID := strings.TrimSpace(params.QuestionID)
+	if questionID == "" {
+		return validatedHumanResponse{}, http.StatusBadRequest, errors.New("question_id is required")
+	}
+	answer := strings.TrimSpace(params.Answer)
+	if !params.Cancelled && answer == "" {
+		return validatedHumanResponse{}, http.StatusBadRequest, errors.New("answer is required")
+	}
+	return validatedHumanResponse{
+		sessionID:  sessionID,
+		questionID: questionID,
+		answer:     answer,
+		cancelled:  params.Cancelled,
+	}, http.StatusOK, nil
+}
+
+func applyHumanResponse(sess *session.Session, request validatedHumanResponse) (bool, error) {
+	if request.cancelled {
+		if _, ok := sess.RemovePendingQuestion(request.questionID); !ok {
+			return false, errors.New("question not found in pending questions")
+		}
+		sess.MarkEnded(sess.UpdatedAt)
+		return false, nil
+	}
+	if !sess.SetHumanAnswer(request.questionID, request.answer) {
+		return false, errors.New("question not found in pending questions")
+	}
+	return true, nil
 }
 
 // executeHumanAnswerAndResumeAction 先写入人类答案，再继续执行被 ask_human 暂停的回合。

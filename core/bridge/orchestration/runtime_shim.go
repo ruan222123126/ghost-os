@@ -1,19 +1,12 @@
 package orchestration
 
 import (
-	"context"
-
 	"ghost-os/bridge/agent"
-	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
-
-type toolSelectorCompleter interface {
-	Complete(context.Context, llm.CompletionRequest) (*llm.CompletionResponse, error)
-}
 
 type agentRuntimeDependencies struct {
 	cfg          Config
@@ -91,14 +84,6 @@ func (p toolSelectionPolicy) selectorCatalog(catalog tools.ToolCatalog) tools.To
 
 func (p toolSelectionPolicy) apply(available []string, selected []string) []string {
 	return p.inner.Apply(available, selected)
-}
-
-func NewToolSelector(cfg Config, worker toolSelectorCompleter) *ToolSelector {
-	return bridgeruntime.NewToolSelector(cfg, worker)
-}
-
-func NewToolSelectorForCatalog(cfg Config, worker toolSelectorCompleter, catalog tools.ToolCatalog) *ToolSelector {
-	return bridgeruntime.NewToolSelectorForCatalog(cfg, worker, catalog)
 }
 
 func newToolSelectorFromConfig(cfg Config, catalog tools.ToolCatalog) selectorEngine {

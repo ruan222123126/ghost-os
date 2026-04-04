@@ -2,9 +2,7 @@ package orchestration
 
 import (
 	"context"
-	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,6 +19,13 @@ type sessionTurnPreparer struct {
 	sessionStore    *session.Store
 	runRegistry     *RunRegistry
 	selectorFactory func(Config, tools.ToolCatalog) selectorEngine
+}
+
+type turnPreparationInput struct {
+	startedAt      time.Time
+	rawUserMessage string
+	userMessage    string
+	traceID        string
 }
 
 func newSessionTurnPreparer(
@@ -42,18 +47,37 @@ func newSessionTurnPreparer(
 	}
 }
 
-func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, sessionID string, traceID string) (*sessionTurnState, error) {
+func newTurnPreparationInput(userInput llm.Message, traceID string) turnPreparationInput {
+	message := strings.TrimSpace(userInput.Text)
+	return turnPreparationInput{
+		startedAt:      time.Now().UTC(),
+		rawUserMessage: message,
+		userMessage:    message,
+		traceID:        strings.TrimSpace(traceID),
+	}
+}
+
+func (p *sessionTurnPreparer) prepare(ctx context.Context, userInput llm.Message, sessionID string, traceID string) (*sessionTurnState, error) {
 	if p == nil {
 		p = newSessionTurnPreparer(nil, nil, nil, nil, nil)
 	}
-	turnStartedAt := time.Now().UTC()
-	rawUserMessage := userMessage
-	trimmedUserMessage := strings.TrimSpace(userMessage)
-	trimmedTraceID := strings.TrimSpace(traceID)
-
-	deps, err := p.runtimeFactory.Build(p.configStore)
+	input := newTurnPreparationInput(userInput, traceID)
+	deps, historyBuilder, persistence, err := p.buildPrepareDependencies()
 	if err != nil {
 		return nil, err
+	}
+	state, err := p.prepareSessionTurnState(ctx, deps, historyBuilder, persistence, sessionID, input)
+	if err != nil {
+		deps.Close()
+		return nil, err
+	}
+	return state, nil
+}
+
+func (p *sessionTurnPreparer) buildPrepareDependencies() (agentRuntimeDependencies, *SessionHistoryBuilder, *SessionTurnCommitter, error) {
+	deps, err := p.runtimeFactory.Build(p.configStore)
+	if err != nil {
+		return agentRuntimeDependencies{}, nil, nil, err
 	}
 	historyBuilder := newSessionHistoryBuilder(
 		deps.cfg.Provider,
@@ -62,65 +86,39 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		deps.cfg.ToolSearch.IdleTurns,
 	)
 	persistence := newSessionTurnCommitter(p.sessionStore, deps.memoryLearn)
+	return deps, historyBuilder, persistence, nil
+}
 
+func (p *sessionTurnPreparer) prepareSessionTurnState(
+	ctx context.Context,
+	deps agentRuntimeDependencies,
+	historyBuilder *SessionHistoryBuilder,
+	persistence *SessionTurnCommitter,
+	sessionID string,
+	input turnPreparationInput,
+) (*sessionTurnState, error) {
 	sess, err := historyBuilder.LoadOrCreateSession(sessionID)
 	if err != nil {
-		deps.Close()
-		return nil, &sessionTurnSetupError{
-			sessionID: strings.TrimSpace(sessionID),
-			err:       err,
-		}
+		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sessionID), err: err}
 	}
-
-	execCtx, cleanup, err := p.registerRun(ctx, sess.ID, trimmedTraceID)
+	execCtx, cleanup, err := p.prepareExecutionContext(ctx, sess, deps.registry, input.traceID)
 	if err != nil {
-		deps.Close()
-		return nil, &sessionTurnSetupError{
-			sessionID:  strings.TrimSpace(sess.ID),
-			statusCode: http.StatusConflict,
-			err:        err,
-		}
+		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), statusCode: http.StatusConflict, err: err}
 	}
-	execCtx = tools.WithSession(execCtx, sess)
-	execCtx = tools.WithSessionCheckpoint(execCtx, p.sessionStore)
-	if err := autoResumePendingHumanTools(execCtx, deps.registry, sess, trimmedTraceID); err != nil {
-		cleanup()
-		deps.Close()
-		return nil, err
-	}
-
-	history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, err := p.prepareHistoryAndEnvironment(execCtx, deps, historyBuilder, sess, rawUserMessage, trimmedUserMessage, trimmedTraceID)
+	history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, err := p.prepareHistoryAndEnvironment(
+		execCtx,
+		deps,
+		historyBuilder,
+		sess,
+		input.rawUserMessage,
+		input.userMessage,
+		input.traceID,
+	)
 	if err != nil {
 		cleanup()
-		deps.Close()
-		return nil, &sessionTurnSetupError{
-			sessionID: strings.TrimSpace(sess.ID),
-			err:       err,
-		}
+		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
 	}
-	runCatalog := catalog
-	if graphQLToolRuntimeEnabled(deps.cfg) {
-		runCatalog = tools.NewStructuredToolHiddenCatalog(catalog)
-	}
-	runAgent := agent.NewAgentWithHistory(deps.client, runCatalog, history, deps.cfg.MaxTurns)
-	if graphQLToolRuntimeEnabled(deps.cfg) {
-		runAgent.SetBeforeCompletionHook(
-			p.newGraphQLSystemPromptRefreshHook(
-				deps,
-				sess,
-				catalog,
-				systemPrompt,
-				memoryBlock,
-			),
-		)
-		runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(
-			tools.NewGraphQLTextExecutorWithOptions(catalog, tools.GraphQLTextExecutorOptions{
-				SanitizeKnownArtifacts: deps.cfg.GraphQL.TextSanitizeEnabled,
-			}),
-		))
-		runAgent.SetStrictToolCallProtocol(true)
-	}
-
+	runAgent := p.buildTurnAgent(deps, sess, catalog, history, systemPrompt, memoryBlock)
 	return &sessionTurnState{
 		sessionStore:    p.sessionStore,
 		deps:            deps,
@@ -128,13 +126,61 @@ func (p *sessionTurnPreparer) prepare(ctx context.Context, userMessage string, s
 		sess:            sess,
 		agent:           runAgent,
 		execCtx:         execCtx,
-		traceID:         trimmedTraceID,
-		userMessage:     trimmedUserMessage,
+		traceID:         input.traceID,
+		userMessage:     input.userMessage,
 		memoryCtx:       memoryCtx,
 		preTurnMessages: preTurnMessages,
-		turnStartedAt:   turnStartedAt,
+		turnStartedAt:   input.startedAt,
 		cleanup:         cleanup,
 	}, nil
+}
+
+func (p *sessionTurnPreparer) prepareExecutionContext(
+	ctx context.Context,
+	sess *session.Session,
+	registry *tools.Registry,
+	traceID string,
+) (context.Context, func(), error) {
+	execCtx, cleanup, err := p.registerRun(ctx, sess.ID, traceID)
+	if err != nil {
+		return ctx, func() {}, err
+	}
+	execCtx = tools.WithSession(execCtx, sess)
+	execCtx = tools.WithSessionCheckpoint(execCtx, p.sessionStore)
+	if err := autoResumePendingHumanTools(execCtx, registry, sess, traceID); err != nil {
+		cleanup()
+		return ctx, func() {}, err
+	}
+	return execCtx, cleanup, nil
+}
+
+func (p *sessionTurnPreparer) buildTurnAgent(
+	deps agentRuntimeDependencies,
+	sess *session.Session,
+	catalog tools.ToolCatalog,
+	history *agent.History,
+	systemPrompt string,
+	memoryBlock string,
+) *agent.Agent {
+	runCatalog := catalog
+	if graphQLToolRuntimeEnabled(deps.cfg) {
+		runCatalog = tools.NewStructuredToolHiddenCatalog(catalog)
+	}
+	runAgent := agent.NewAgentWithHistory(deps.client, runCatalog, history, deps.cfg.MaxTurns)
+	runAgent.SetResponseOptions(llm.CloneResponseOptions(deps.cfg.ResponseOptions))
+	if !graphQLToolRuntimeEnabled(deps.cfg) {
+		return runAgent
+	}
+	runAgent.SetBeforeCompletionHook(
+		p.newGraphQLSystemPromptRefreshHook(deps, sess, catalog, systemPrompt, memoryBlock),
+	)
+	runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(
+		tools.NewGraphQLTextExecutorWithOptions(catalog, tools.GraphQLTextExecutorOptions{
+			SanitizeKnownArtifacts: deps.cfg.GraphQL.TextSanitizeEnabled,
+		}),
+	))
+	runAgent.SetStrictToolCallProtocol(true)
+	return runAgent
 }
 
 func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
@@ -170,176 +216,7 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	if finalPrompt != "" {
 		history.UpdateSystemPrompt(finalPrompt)
 	}
-
 	return history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, nil
-}
-
-func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-	sess *session.Session,
-	history *agent.History,
-	userMessage string,
-	systemPrompt string,
-	catalog tools.ToolCatalog,
-) (string, string, *turnMemoryContext, error) {
-	basePrompt, err := p.buildCompletionSystemPrompt(deps, sess, catalog, systemPrompt)
-	if err != nil {
-		return "", "", nil, err
-	}
-	memoryCtx, memoryBlock, err := p.prepareTurnMemory(ctx, deps, sess, history, userMessage)
-	if err != nil {
-		return "", "", nil, err
-	}
-	return composeTurnSystemPrompt(basePrompt, memoryBlock), memoryBlock, memoryCtx, nil
-}
-
-func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
-	deps agentRuntimeDependencies,
-	sess *session.Session,
-	catalog tools.ToolCatalog,
-	systemPrompt string,
-) (string, error) {
-	graphQLMode := graphQLToolRuntimeEnabled(deps.cfg)
-	promptCatalog := catalog
-	if graphQLMode {
-		promptCatalog = tools.NewStructuredToolHiddenCatalog(catalog)
-	}
-	basePrompt := strings.TrimSpace(systemPrompt)
-	if basePrompt == "" || graphQLMode {
-		prompt, err := buildSystemPromptForSession(
-			deps.cfg,
-			promptCatalog,
-			sess,
-			deps.cfg.ToolSearch.IdleTurns,
-		)
-		if err != nil {
-			return "", err
-		}
-		basePrompt = strings.TrimSpace(prompt)
-	}
-	if basePrompt == "" {
-		basePrompt = strings.TrimSpace(deps.systemPrompt)
-	}
-	if graphQLMode {
-		basePrompt = withGraphQLTextProtocolPrompt(basePrompt, catalog)
-	}
-	return basePrompt, nil
-}
-
-func composeTurnSystemPrompt(basePrompt string, memoryBlock string) string {
-	trimmedBase := strings.TrimSpace(basePrompt)
-	trimmedMemory := strings.TrimSpace(memoryBlock)
-	if trimmedMemory == "" {
-		return trimmedBase
-	}
-	if trimmedBase == "" {
-		return trimmedMemory
-	}
-	return trimmedBase + "\n\n" + trimmedMemory
-}
-
-func (p *sessionTurnPreparer) newGraphQLSystemPromptRefreshHook(
-	deps agentRuntimeDependencies,
-	sess *session.Session,
-	catalog tools.ToolCatalog,
-	systemPrompt string,
-	memoryBlock string,
-) agent.BeforeCompletionHook {
-	return func(_ context.Context, _ int, history *agent.History) error {
-		if history == nil {
-			return nil
-		}
-		prompt, err := p.buildCompletionSystemPrompt(deps, sess, catalog, systemPrompt)
-		if err != nil {
-			return err
-		}
-		history.UpdateSystemPrompt(composeTurnSystemPrompt(prompt, memoryBlock))
-		return nil
-	}
-}
-
-func (p *sessionTurnPreparer) selectToolsForTurn(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-	sess *session.Session,
-	history *agent.History,
-	userMessage string,
-	askHumanContinuation bool,
-	traceID string,
-) (tools.ToolCatalog, string, error) {
-	policy := newToolSelectionPolicy(deps.cfg)
-	residentStaticNames := toolCatalogNames(policy.residentCatalog(deps.registry))
-	selectorStaticNames := toolCatalogNames(policy.selectorCatalog(deps.registry))
-	baseCatalog := newSessionTurnCatalog(deps.registry, residentStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false)
-	selectionCatalog := newSessionTurnCatalog(deps.registry, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false)
-	selectorCatalog := newSessionTurnCatalog(deps.registry, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, true)
-	if askHumanContinuation {
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=ask_human_continuation", strings.TrimSpace(traceID))
-		return baseCatalog, "", nil
-	}
-	if !deps.cfg.ToolSelector.Enabled {
-		return baseCatalog, "", nil
-	}
-
-	selector := p.newSelector(deps.cfg, selectorCatalog)
-	if selector == nil {
-		return baseCatalog, "", nil
-	}
-
-	recentMessages := getRecentMessages(history, deps.cfg.ToolSelector.RecentMsgs)
-	result := selector.SelectTools(ctx, userMessage, recentMessages, "", traceID)
-	if deps.cfg.ToolSelector.Shadow {
-		log.Printf("trace_id=%s action=TOOL_SELECTOR status=shadow mode=%s tools=%v confidence=%.2f fallback=%t reason=%q error=%v", strings.TrimSpace(traceID), result.Mode, result.Tools, result.Confidence, result.Fallback, result.Reason, result.Error)
-		return baseCatalog, "", nil
-	}
-	if result.Mode != "subset" || result.Fallback {
-		return baseCatalog, "", nil
-	}
-
-	scoped := newSessionTurnCatalog(
-		deps.registry,
-		policy.apply(toolCatalogNames(selectionCatalog), result.Tools),
-		sess,
-		deps.cfg.ToolSearch.IdleTurns,
-		false,
-	)
-	systemPrompt, err := buildSystemPromptForSession(
-		deps.cfg,
-		scoped,
-		sess,
-		deps.cfg.ToolSearch.IdleTurns,
-	)
-	if err != nil {
-		return nil, "", err
-	}
-	return scoped, systemPrompt, nil
-}
-
-func (p *sessionTurnPreparer) newSelector(cfg Config, catalog tools.ToolCatalog) selectorEngine {
-	if p != nil && p.selectorFactory != nil {
-		return p.selectorFactory(cfg, catalog)
-	}
-	return newToolSelectorFromConfig(cfg, catalog)
-}
-
-func getRecentMessages(history *agent.History, limit int) []llm.Message {
-	if history == nil || limit <= 0 {
-		return nil
-	}
-
-	messages := history.Messages()
-	filtered := make([]llm.Message, 0, len(messages))
-	for _, msg := range messages {
-		switch msg.Role {
-		case llm.RoleUser, llm.RoleAssistant:
-			filtered = append(filtered, msg)
-		}
-	}
-	if len(filtered) <= limit {
-		return llm.CloneMessages(filtered)
-	}
-	return llm.CloneMessages(filtered[len(filtered)-limit:])
 }
 
 func hasAnsweredHumanResponse(sess *session.Session) bool {
@@ -350,65 +227,17 @@ func (p *sessionTurnPreparer) registerRun(ctx context.Context, sessionID string,
 	if p == nil || p.runRegistry == nil {
 		return ctx, func() {}, nil
 	}
-
 	trimmedSessionID := strings.TrimSpace(sessionID)
 	if trimmedSessionID == "" {
 		return ctx, func() {}, nil
 	}
-
 	execCtx, cancel := context.WithCancel(ctx)
 	if err := p.runRegistry.Register(trimmedSessionID, strings.TrimSpace(traceID), cancel); err != nil {
 		cancel()
 		return ctx, func() {}, err
 	}
-
 	return execCtx, func() {
 		p.runRegistry.Unregister(trimmedSessionID)
 		cancel()
 	}, nil
-}
-
-func toolCatalogNames(catalog tools.ToolCatalog) []string {
-	if catalog == nil {
-		return nil
-	}
-	defs := catalog.ToolDefs()
-	if len(defs) == 0 {
-		return nil
-	}
-	names := make([]string, 0, len(defs))
-	for _, def := range defs {
-		if name := strings.TrimSpace(def.Name); name != "" {
-			names = append(names, name)
-		}
-	}
-	sort.Strings(names)
-	return names
-}
-
-func withGraphQLTextProtocolPrompt(basePrompt string, catalog tools.ToolCatalog) string {
-	protocol := tools.FormatGraphQLToolRuntimePrompt(catalog)
-	trimmed := strings.TrimSpace(basePrompt)
-	if trimmed == "" {
-		return protocol
-	}
-	return trimmed + "\n\n" + protocol
-}
-
-func graphQLToolRuntimeEnabled(cfg Config) bool {
-	return cfg.GraphQL.ToolRuntimeEnabled
-}
-
-func sortedAnsweredQuestionIDs(answers map[string]string) []string {
-	if len(answers) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(answers))
-	for questionID := range answers {
-		if trimmed := strings.TrimSpace(questionID); trimmed != "" {
-			ids = append(ids, trimmed)
-		}
-	}
-	sort.Strings(ids)
-	return ids
 }

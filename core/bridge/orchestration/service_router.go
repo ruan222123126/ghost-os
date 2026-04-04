@@ -61,38 +61,69 @@ func newBridgeServiceWithStreamExecutor(
 	executor agentExecutorFunc,
 	streamExecutor agentStreamExecutorFunc,
 ) *bridgeService {
-	runRegistry := NewRunRegistry()
+	service := newBridgeServiceState(store, sessionStore)
+	service.runtimeFactory = newAgentRuntimeFactoryWithTaskManager(service.taskToolManager())
+	service.agentRunner = newServiceAgentRunner(service, executor, streamExecutor)
+	registerDefaultActions(service)
+	return service
+}
 
-	service := &bridgeService{
+func newBridgeServiceState(store *ConfigStore, sessionStore *session.Store) *bridgeService {
+	return &bridgeService{
 		configStore:  store,
 		sessionStore: sessionStore,
 		sessionPush:  newSessionPushHub(),
-		runRegistry:  runRegistry,
+		runRegistry:  NewRunRegistry(),
 		actions:      make(map[string]actionHandler, 21),
 	}
-	service.runtimeFactory = newAgentRuntimeFactoryWithTaskManager(service.taskToolManager())
+}
 
-	runner := newSessionTurnRunnerAdapter(store, sessionStore, executor, streamExecutor)
-	if runner == nil {
-		runner = NewSessionAgentRunner(service.runtimeFactory, store, sessionStore, runRegistry)
+func newServiceAgentRunner(service *bridgeService, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) SessionTurnRunner {
+	runner := newSessionTurnRunnerAdapter(service.configStore, service.sessionStore, executor, streamExecutor)
+	if runner != nil {
+		return runner
 	}
-	service.agentRunner = runner
+	return NewSessionAgentRunner(
+		service.runtimeFactory,
+		service.configStore,
+		service.sessionStore,
+		service.runRegistry,
+	)
+}
 
+func registerDefaultActions(service *bridgeService) {
+	registerAgentActions(service)
+	registerConfigActions(service)
+	registerHumanActions(service)
+	registerTaskActions(service)
+	registerRSSActions(service)
+}
+
+func registerAgentActions(service *bridgeService) {
 	registerAction(service, busActionAgentSend, func(ctx context.Context, params agentParams, traceID string) (any, int, error) {
 		return service.executeAgentAction(ctx, params, traceID)
 	})
 	registerAction(service, busActionAgentStop, func(ctx context.Context, params agentStopParams, traceID string) (any, int, error) {
 		return service.executeAgentStopAction(ctx, params, traceID)
 	})
+}
+
+func registerConfigActions(service *bridgeService) {
 	registerAction(service, busActionConfigGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
 		return service.executeConfigGetAction(traceID)
 	})
 	registerAction(service, busActionConfigUpdate, func(_ context.Context, params configUpdateRequest, traceID string) (any, int, error) {
 		return service.executeConfigUpdateAction(params, traceID)
 	})
+}
+
+func registerHumanActions(service *bridgeService) {
 	registerAction(service, busActionHumanResponse, func(ctx context.Context, params humanResponseParams, traceID string) (any, int, error) {
 		return service.executeHumanResponseAction(ctx, params, traceID)
 	})
+}
+
+func registerTaskActions(service *bridgeService) {
 	registerAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (any, int, error) {
 		return service.executeTaskCreateAction(params, traceID)
 	})
@@ -114,6 +145,9 @@ func newBridgeServiceWithStreamExecutor(
 	registerAction(service, busActionTaskDelete, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskDeleteAction(params, traceID)
 	})
+}
+
+func registerRSSActions(service *bridgeService) {
 	registerAction(service, busActionRSSInboxPoll, func(ctx context.Context, params rssInboxPollParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxPollAction(ctx, params, traceID)
 	})
@@ -132,7 +166,6 @@ func newBridgeServiceWithStreamExecutor(
 	registerAction(service, busActionRSSBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
 		return service.executeRSSBriefingGetAction(traceID)
 	})
-	return service
 }
 
 func (s *bridgeService) taskToolManager() tools.TaskManager {

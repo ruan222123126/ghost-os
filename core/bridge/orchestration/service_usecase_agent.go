@@ -40,9 +40,9 @@ func (s *bridgeService) executeAgentAction(ctx context.Context, params agentPara
 	}
 
 	logAction(traceID, busActionAgentSend, "running", nil)
-	response, sessionID, err := s.agentRunner.RunTurn(ctx, prepared.message, prepared.sessionID, traceID)
+	response, sessionID, err := s.runPreparedAgentTurn(ctx, prepared, traceID)
 	if err != nil {
-		awaitingErr, normalizedErr, statusCode, _ := classifyAgentTurnError(err)
+		awaitingErr, statusCode, _, normalizedErr := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			logAction(traceID, busActionAgentSend, "awaiting_human", nil)
 			s.publishAwaitingHumanSessionPush(traceID, sessionID, awaitingErr)
@@ -69,59 +69,118 @@ func (s *bridgeService) executeAgentAction(ctx context.Context, params agentPara
 
 func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params agentParams, traceID string, sink streaming.Sink) (string, string, error) {
 	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush))
-	prepared, code, err := s.validateAgentTurnRequest(params)
+	sessionID := strings.TrimSpace(params.SessionID)
+
+	prepared, err := s.validateAgentStreamRequest(ctx, params, traceID, sessionID, trackedSink)
 	if err != nil {
-		if !errors.Is(err, errAgentMessageRequired) {
-			logAction(traceID, busActionAgentSend, "error", err)
-		}
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", strings.TrimSpace(params.SessionID), code, err); emitErr != nil {
-			return "", "", emitErr
-		}
 		return "", "", err
 	}
-	if _, matched, parseErr := parseProModeRequest(prepared.message, defaultProMaxIterations); matched || parseErr != nil {
-		if parseErr != nil {
-			logAction(traceID, busActionAgentSend, "error", parseErr)
-			if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", strings.TrimSpace(params.SessionID), http.StatusBadRequest, parseErr); emitErr != nil {
-				return "", "", emitErr
-			}
-			return "", "", parseErr
-		}
+	handled, message, resolvedSessionID, err := s.tryExecuteProModeStream(ctx, prepared, traceID, sessionID, trackedSink)
+	if handled {
+		return message, resolvedSessionID, err
+	}
+	return s.executeStandardAgentStreamTurn(ctx, prepared, traceID, trackedSink)
+}
 
-		logAction(traceID, busActionAgentSend, "running", nil)
-		payload, code, err := s.executeProModeAction(ctx, prepared, traceID)
-		if err != nil {
-			normalizedErr, statusCode := normalizeAgentExecutionError(err)
-			if code > 0 {
-				statusCode = code
-			}
-			if errors.Is(normalizedErr, ErrRunCancelled) {
-				logAction(traceID, busActionAgentSend, "cancelled", normalizedErr)
-				return "", prepared.sessionID, normalizedErr
-			}
-			logAction(traceID, busActionAgentSend, "error", normalizedErr)
-			if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", prepared.sessionID, statusCode, normalizedErr); emitErr != nil {
-				return "", "", emitErr
-			}
+func (s *bridgeService) validateAgentStreamRequest(
+	ctx context.Context,
+	params agentParams,
+	traceID string,
+	sessionID string,
+	trackedSink *eventTurnTracker,
+) (preparedAgentTurnRequest, error) {
+	prepared, code, err := s.validateAgentTurnRequest(params)
+	if err == nil {
+		return prepared, nil
+	}
+	if !errors.Is(err, errAgentMessageRequired) {
+		logAction(traceID, busActionAgentSend, "error", err)
+	}
+	if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", sessionID, code, err); emitErr != nil {
+		return preparedAgentTurnRequest{}, emitErr
+	}
+	return preparedAgentTurnRequest{}, err
+}
+
+func (s *bridgeService) tryExecuteProModeStream(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+	sessionID string,
+	trackedSink *eventTurnTracker,
+) (bool, string, string, error) {
+	_, matched, parseErr := parseProModeRequest(prepared.message, defaultProMaxIterations)
+	if parseErr != nil {
+		message, resolvedSessionID, err := s.emitProModeParseError(ctx, traceID, sessionID, trackedSink, parseErr)
+		return true, message, resolvedSessionID, err
+	}
+	if !matched {
+		return false, "", "", nil
+	}
+	message, resolvedSessionID, err := s.executeProModeStreamTurn(ctx, prepared, traceID, trackedSink)
+	return true, message, resolvedSessionID, err
+}
+
+func (s *bridgeService) emitProModeParseError(
+	ctx context.Context,
+	traceID string,
+	sessionID string,
+	trackedSink *eventTurnTracker,
+	parseErr error,
+) (string, string, error) {
+	logAction(traceID, busActionAgentSend, "error", parseErr)
+	if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", sessionID, http.StatusBadRequest, parseErr); emitErr != nil {
+		return "", "", emitErr
+	}
+	return "", "", parseErr
+}
+
+func (s *bridgeService) executeProModeStreamTurn(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+	trackedSink *eventTurnTracker,
+) (string, string, error) {
+	logAction(traceID, busActionAgentSend, "running", nil)
+	payload, code, err := s.executeProModeAction(ctx, prepared, traceID)
+	if err != nil {
+		statusCode, normalizedErr := normalizeAgentExecutionError(err)
+		if code > 0 {
+			statusCode = code
+		}
+		if errors.Is(normalizedErr, ErrRunCancelled) {
+			logAction(traceID, busActionAgentSend, "cancelled", normalizedErr)
 			return "", prepared.sessionID, normalizedErr
 		}
-
-		result := finalizedAgentTurn{
-			message:   payload.Message,
-			sessionID: payload.SessionID,
-		}
-		if emitErr := emitDirectAgentStreamResult(ctx, trackedSink, traceID, 0, result); emitErr != nil {
+		logAction(traceID, busActionAgentSend, "error", normalizedErr)
+		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", prepared.sessionID, statusCode, normalizedErr); emitErr != nil {
 			return "", "", emitErr
 		}
-		s.publishAssistantSessionPush(traceID, result)
-		logAction(traceID, busActionAgentSend, "success", nil)
-		return result.message, result.sessionID, nil
+		return "", prepared.sessionID, normalizedErr
 	}
 
+	result := finalizedAgentTurn{
+		message:   payload.Message,
+		sessionID: payload.SessionID,
+	}
+	if emitErr := emitDirectAgentStreamResult(ctx, trackedSink, traceID, 0, result); emitErr != nil {
+		return "", "", emitErr
+	}
+	s.publishAssistantSessionPush(traceID, result)
+	logAction(traceID, busActionAgentSend, "success", nil)
+	return result.message, result.sessionID, nil
+}
+
+func (s *bridgeService) executeStandardAgentStreamTurn(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+	trackedSink *eventTurnTracker,
+) (string, string, error) {
 	logAction(traceID, busActionAgentSend, "running", nil)
-	response, sessionID, err := s.agentRunner.RunTurnStream(ctx, prepared.message, prepared.sessionID, traceID, trackedSink)
+	response, sessionID, err := s.runPreparedAgentTurnStream(ctx, prepared, traceID, trackedSink)
 	if err != nil {
-		awaitingErr, normalizedErr, _, cancelled := classifyAgentTurnError(err)
+		awaitingErr, _, cancelled, normalizedErr := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			logAction(traceID, busActionAgentSend, "awaiting_human", nil)
 			s.publishAwaitingHumanSessionPush(traceID, sessionID, awaitingErr)

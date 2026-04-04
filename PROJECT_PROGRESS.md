@@ -90,6 +90,7 @@
 - artifacts 存储读取接口已做一次边界收口：`ResolveStoredPath` / `OpenStoredFile` 移除未使用 options 并固定启用 symlink 逃逸校验，`normalizeIdentifier` 删除重复的路径分隔符分支，`SessionFileArtifact` 不再写入未被消费的 `CreatedAt` 元数据字段。
 - `core/bridge/config` 已完成一轮死代码与复杂度收口：删除未接线私有 env 包装函数与重复 GraphQL env 解析路径（含整文件 `config_graphql_env.go`），并将 runtime 配置构建按职责拆分为 `config_runtime_resolve_helpers.go`、`config_runtime_sections_rss.go`、`config_runtime_sections_tools.go`；`config_runtime_resolve.go` 已降到 300 行以内，相关热点函数均拆到 50 行以内。
 - `core/bridge/llm` 已完成一轮可维护性重构：移除未使用 `Provider.Valid()` 与 Anthropic 空转封装；将 `anthropic_stream.ApplyEvent`、`codex_stream.ApplyEvent`、`client.streamJSON`、`toAnthropicRequest` 拆分为小函数以降低复杂度；并按职责拆分 `client.go` / `anthropic.go` / `codex_messages.go`，消除 Codex `function_call` 与 `function_call_output` 的重复映射实现。
+- `core/bridge/orchestration` 已完成一轮死代码与复杂度收口：删除 `export_types.go` 中 5 个未调用导出包装、`runtime_shim.go` 中未接线 selector 导出包装及其专用接口、以及未使用测试 helper；同时重构 `service_usecase_agent` / `service_usecase_human` / `service_router` 与 `session_turn_preparer`，将 `session_turn_preparer.go` 拆分为多文件并降至 300 行以内，`classifyAgentTurnError` 与 `normalizeAgentExecutionError` 的返回签名也已按 Go 约定调整为 `error` 置后。
 - Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
 
 ### Perception: `apps/web` / `apps/cli` / `apps/android`
