@@ -121,14 +121,16 @@ func providerClientOptions(cfg Config, model string) llm.ClientOptions {
 		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
 	}
 	return llm.ClientOptions{
-		Provider:           cfg.Provider.Type,
-		BaseURL:            cfg.Provider.BaseURL,
-		APIKey:             cfg.Provider.APIKey,
-		Model:              resolvedModel,
-		ChatPath:           cfg.ChatPath,
-		Headers:            cfg.Provider.Headers,
-		AnthropicVersion:   cfg.Provider.AnthropicVersion,
-		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
+		Provider:                   cfg.Provider.Type,
+		BaseURL:                    cfg.Provider.BaseURL,
+		APIKey:                     cfg.Provider.APIKey,
+		Model:                      resolvedModel,
+		ChatPath:                   cfg.ChatPath,
+		Headers:                    cfg.Provider.Headers,
+		AnthropicVersion:           cfg.Provider.AnthropicVersion,
+		AnthropicMaxTokens:         cfg.Provider.AnthropicMaxTokens,
+		CodexStatelessRetryEnabled: cfg.CodexStatelessRetryEnabled,
+		ResponseOptions:            llm.CloneResponseOptions(cfg.ResponseOptions),
 	}
 }
 
@@ -216,7 +218,6 @@ func (s *RSSInboxService) SetBriefingBuilder(builder RSSBriefingBuilder) {
 		s.briefingBuilder = builder
 	}
 }
-
 
 func (s *RSSInboxService) SetNow(now func() time.Time) {
 	if s != nil && now != nil {

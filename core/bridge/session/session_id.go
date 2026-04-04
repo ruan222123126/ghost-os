@@ -3,13 +3,12 @@ package session
 import (
 	"crypto/rand"
 	"fmt"
-	"time"
 )
 
 func newSessionID() string {
 	var raw [16]byte
 	if _, err := rand.Read(raw[:]); err != nil {
-		return fallbackSessionID()
+		panic(fmt.Sprintf("generate session id: %v", err))
 	}
 
 	// RFC 4122 UUID v4
@@ -17,8 +16,4 @@ func newSessionID() string {
 	raw[8] = (raw[8] & 0x3f) | 0x80
 
 	return fmt.Sprintf("%x-%x-%x-%x-%x", raw[0:4], raw[4:6], raw[6:8], raw[8:10], raw[10:16])
-}
-
-func fallbackSessionID() string {
-	return fmt.Sprintf("session-%d", time.Now().UTC().UnixNano())
 }

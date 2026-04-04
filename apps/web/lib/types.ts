@@ -49,6 +49,7 @@ export type {
   SessionHumanInteraction,
   SessionMessage,
   SessionMetadata,
+  SessionMessagePage,
   SessionToolCall,
   SessionToolResult,
   SetActiveProviderRequest,
@@ -84,6 +85,20 @@ export interface ToolChatMessage {
   toolCalls?: unknown[];
   traceId?: string;
   rawOutput?: string;
+}
+
+export interface StreamingToolState {
+  id: string;
+  content: string;
+  toolName?: string;
+  toolStatus?: string;
+  toolCallId?: string;
+  traceId?: string;
+}
+
+export interface StreamingAssistantSegment {
+  id: string;
+  content: string;
 }
 
 export interface ChatFileAttachment {

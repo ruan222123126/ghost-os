@@ -132,6 +132,79 @@ func TestHandleSessionGetNotFound(t *testing.T) {
 	}
 }
 
+func TestHandleSessionGetSupportsWindowQueries(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+	sess := session.NewSession("")
+	sess.ID = "session-window"
+	for i := 0; i < 5; i++ {
+		sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: strings.Repeat("x", i+1)})
+	}
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(handler, http.MethodGet, "/api/sessions/"+sess.ID+"?limit=2&before=4", "", nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["message_count"] != float64(5) {
+		t.Fatalf("unexpected message_count: %v", payload["message_count"])
+	}
+
+	messages, ok := payload["messages"].([]any)
+	if !ok {
+		t.Fatalf("unexpected messages type: %T", payload["messages"])
+	}
+	if len(messages) != 2 {
+		t.Fatalf("unexpected page size: got %d want 2", len(messages))
+	}
+	firstMessage := messages[0].(map[string]any)
+	secondMessage := messages[1].(map[string]any)
+	if firstMessage["index"] != float64(2) || secondMessage["index"] != float64(3) {
+		t.Fatalf("unexpected message indexes: first=%v second=%v", firstMessage["index"], secondMessage["index"])
+	}
+
+	page, ok := payload["page"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected page type: %T", payload["page"])
+	}
+	if page["limit"] != float64(2) {
+		t.Fatalf("unexpected limit: %v", page["limit"])
+	}
+	if page["before"] != float64(4) {
+		t.Fatalf("unexpected before: %v", page["before"])
+	}
+	if page["next_before"] != float64(2) {
+		t.Fatalf("unexpected next_before: %v", page["next_before"])
+	}
+}
+
+func TestHandleSessionGetRejectsInvalidWindowQueries(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	limitResp := serveRequest(handler, http.MethodGet, "/api/sessions/session-1?limit=0", "", nil)
+	if limitResp.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected limit status: got %d want %d", limitResp.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(limitResp.Body.String(), "limit must be an integer between 1 and 200") {
+		t.Fatalf("unexpected limit error: %s", limitResp.Body.String())
+	}
+
+	beforeResp := serveRequest(handler, http.MethodGet, "/api/sessions/session-1?before=-1", "", nil)
+	if beforeResp.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected before status: got %d want %d", beforeResp.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(beforeResp.Body.String(), "before must be a non-negative integer") {
+		t.Fatalf("unexpected before error: %s", beforeResp.Body.String())
+	}
+}
+
 func TestHandleSessionDeleteRemovesSession(t *testing.T) {
 	handler, sessionStore := newTestHandlerWithStore(t, nil)
 	sess := session.NewSession("system")

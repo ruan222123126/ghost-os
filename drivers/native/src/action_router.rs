@@ -1,6 +1,8 @@
 use serde_json::{Value, json};
 
-use crate::{Response, codex_cli, file_actions, input, screen, script_exec, shell_actions};
+use crate::{
+    Response, browser_actions, codex_cli, file_actions, input, screen, script_exec, shell_actions,
+};
 
 pub(crate) struct PersistentState {
     codex_manager: codex_cli::CodexCommandManager,
@@ -28,6 +30,10 @@ pub(crate) fn dispatch_action(action: &str, params: &Value, trace_id: &str) -> R
     }
 
     if let Some(response) = shell_actions::dispatch_action(action, params) {
+        return response;
+    }
+
+    if let Some(response) = browser_actions::dispatch_action(action, params) {
         return response;
     }
 

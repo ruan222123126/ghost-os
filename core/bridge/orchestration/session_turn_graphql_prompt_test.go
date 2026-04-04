@@ -49,7 +49,7 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 
 	prompt := completer.requests[0].Messages[0].Text
 	coreJobIndex := strings.Index(prompt, "## Core Job")
-	protocolIndex := strings.Index(prompt, "GraphQL Tool Call Protocol:")
+	protocolIndex := strings.Index(prompt, "[System Instruction]")
 	if !strings.Contains(prompt, "You are Ghost-OS bridge agent, an AI-driven digital twin execution layer.") {
 		t.Fatalf("expected default system prompt to remain, got %q", prompt)
 	}
@@ -57,10 +57,10 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 		t.Fatalf("expected default system prompt sections to remain, got %q", prompt)
 	}
 	if protocolIndex == -1 {
-		t.Fatalf("expected GraphQL protocol to be appended, got %q", prompt)
+		t.Fatalf("expected tagged tool protocol to be appended, got %q", prompt)
 	}
 	if protocolIndex < coreJobIndex {
-		t.Fatalf("expected GraphQL protocol to augment the default prompt, got %q", prompt)
+		t.Fatalf("expected tagged protocol to augment the default prompt, got %q", prompt)
 	}
 	if strings.Contains(prompt, "structured tool schema") {
 		t.Fatalf("expected structured tool schema guidance to be removed in graphql mode, got %q", prompt)
@@ -68,14 +68,14 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "Use `ask_human` only when blocked on required user input") {
 		t.Fatalf("expected graphql mode to keep ask_human guidance, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "ask_human(") {
-		t.Fatalf("expected graphql schema summary to include ask_human field, got %q", prompt)
+	if !strings.Contains(prompt, "Tool name: ask_human") {
+		t.Fatalf("expected tool id list to include ask_human, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "Minimal successful examples:") {
-		t.Fatalf("expected graphql prompt to include minimal examples, got %q", prompt)
+	if !strings.Contains(prompt, "strictly use <t:TOOL_ID>JSON_ARGS</t>") {
+		t.Fatalf("expected tagged protocol format in prompt, got %q", prompt)
 	}
-	if !strings.Contains(prompt, `mutation { ask_human(prompt: "Which environment should I use?", options: [{label: "staging"}, {label: "Other", allow_custom: true}]) }`) {
-		t.Fatalf("expected graphql prompt to include ask_human example, got %q", prompt)
+	if !strings.Contains(prompt, "Parameter format:") {
+		t.Fatalf("expected parameter shape section in prompt, got %q", prompt)
 	}
 	if len(completer.requests[0].Tools) != 0 {
 		t.Fatalf("expected graphql mode to hide native tool defs, got %+v", completer.requests[0].Tools)
@@ -108,11 +108,11 @@ func TestSessionRunnerGraphQLModeRefreshesPromptAfterDynamicLoadInSameTurn(t *te
 	completer := &proTestCompleter{
 		responses: []*llm.CompletionResponse{
 			{
-				Message:      llm.Message{Role: llm.RoleAssistant, Text: `mutation { tfind(action: load, tool_names: ["web_search"]) }`},
+				Message:      llm.Message{Role: llm.RoleAssistant, Text: `<t:1>{"action":"load","tool_names":["web_search"]}</t>`},
 				FinishReason: llm.FinishStop,
 			},
 			{
-				Message:      llm.Message{Role: llm.RoleAssistant, Text: `query { web_search(query: "OpenAI API docs") }`},
+				Message:      llm.Message{Role: llm.RoleAssistant, Text: `<t:2>{"query":"OpenAI API docs"}</t>`},
 				FinishReason: llm.FinishStop,
 			},
 			{
@@ -142,11 +142,11 @@ func TestSessionRunnerGraphQLModeRefreshesPromptAfterDynamicLoadInSameTurn(t *te
 	}
 
 	firstPrompt := completer.requests[0].Messages[0].Text
-	if strings.Contains(firstPrompt, "web_search(") {
+	if strings.Contains(firstPrompt, "Tool name: web_search") {
 		t.Fatalf("expected first completion prompt to exclude web_search before load, got %q", firstPrompt)
 	}
 	secondPrompt := completer.requests[1].Messages[0].Text
-	if !strings.Contains(secondPrompt, "web_search(") {
+	if !strings.Contains(secondPrompt, "Tool name: web_search") {
 		t.Fatalf("expected second completion prompt to include web_search after load, got %q", secondPrompt)
 	}
 	if !strings.Contains(secondPrompt, "`web_search` was loaded in this user turn and is available now.") {

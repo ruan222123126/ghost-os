@@ -169,8 +169,8 @@ func TestAgentEndpointRejectsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
 	}
 
 	body := decodeResponseBody(t, recorder)
-	if body.Error != "message is required" {
-		t.Fatalf("unexpected error: got %q want %q", body.Error, "message is required")
+	if body.Error != "message or images is required" {
+		t.Fatalf("unexpected error: got %q want %q", body.Error, "message or images is required")
 	}
 }
 

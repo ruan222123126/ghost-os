@@ -21,23 +21,37 @@ func buildSessionMetadataPayload(summary bridgesession.SessionMetadata) sessionM
 	}
 }
 
-func buildSessionDetailPayload(sess *bridgesession.Session) sessionDetail {
-	messages := make([]sessionMessage, 0, len(sess.Messages))
-	for _, message := range sess.Messages {
-		messages = append(messages, buildSessionMessagePayload(message))
+func buildSessionDetailPayload(sess *bridgesession.Session, page bridgesession.MessagePage) sessionDetail {
+	messages := make([]sessionMessage, 0, len(page.Messages))
+	for _, item := range page.Messages {
+		messages = append(messages, buildSessionMessagePayload(item.Index, item.Message))
 	}
 
 	return sessionDetail{
-		ID:         sess.ID,
-		Messages:   messages,
-		CreatedAt:  sess.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:  sess.UpdatedAt.UTC().Format(time.RFC3339),
-		TokenCount: sess.TokenCount,
+		ID:           sess.ID,
+		Messages:     messages,
+		CreatedAt:    sess.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    sess.UpdatedAt.UTC().Format(time.RFC3339),
+		MessageCount: sess.MessageCount,
+		Page:         buildSessionMessagePagePayload(page),
+		TokenCount:   sess.TokenCount,
 	}
 }
 
-func buildSessionMessagePayload(message llm.Message) sessionMessage {
+func buildSessionMessagePagePayload(page bridgesession.MessagePage) sessionMessagePage {
+	return sessionMessagePage{
+		Limit:         page.Limit,
+		Before:        cloneIntPointer(page.Before),
+		StartIndex:    cloneIntPointer(page.StartIndex),
+		EndIndex:      cloneIntPointer(page.EndIndex),
+		HasMoreBefore: page.HasMoreBefore,
+		NextBefore:    cloneIntPointer(page.NextBefore),
+	}
+}
+
+func buildSessionMessagePayload(index int, message llm.Message) sessionMessage {
 	payload := sessionMessage{
+		Index: index,
 		Role: string(message.Role),
 	}
 	if message.Role == llm.RoleTool {
@@ -55,6 +69,14 @@ func buildSessionMessagePayload(message llm.Message) sessionMessage {
 		payload.ToolCallID = message.ToolCallID
 	}
 	return payload
+}
+
+func cloneIntPointer(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }
 
 type answeredHumanInteractionPayload struct {

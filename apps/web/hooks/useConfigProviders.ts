@@ -38,7 +38,7 @@ interface UseConfigProvidersResult {
   editProvider: (provider: ProviderConfig) => void;
   updateEditor: (patch: Partial<ProviderEditorState>) => void;
   selectProviderType: (providerType: ProviderConfig['type']) => void;
-  submitProvider: () => Promise<void>;
+  submitProvider: () => Promise<boolean>;
   activateProvider: (name: string) => Promise<void>;
   deleteProviderByName: (name: string) => Promise<void>;
   cancelEditing: () => void;
@@ -88,15 +88,17 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
     action: () => Promise<ProviderListResponse>,
     errorMessage: string,
     onSuccess?: () => void | Promise<void>,
-  ) => {
+  ): Promise<boolean> => {
     setProviderSaving(true);
     setProviderError('');
     try {
       applyProviderList(await action());
       await onReloadConfig();
       await onSuccess?.();
+      return true;
     } catch (error) {
       setProviderError(toErrorMessage(error, errorMessage));
+      return false;
     } finally {
       setProviderSaving(false);
     }
@@ -110,12 +112,12 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
     setEditor((state) => nextEditorStateForProviderType(state, providerType));
   }, []);
 
-  const submitProvider = useCallback(async () => {
+  const submitProvider = useCallback(async (): Promise<boolean> => {
     const action = editorMode === 'edit'
       ? () => updateProvider(editingName, providerInputFromEditor(editor))
       : () => createProvider(providerInputFromEditor(editor));
 
-    await runProviderMutation(action, 'failed to save provider', () => {
+    return runProviderMutation(action, 'failed to save provider', () => {
       resetEditor();
     });
   }, [editor, editorMode, editingName, resetEditor, runProviderMutation]);

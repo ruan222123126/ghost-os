@@ -75,19 +75,19 @@ func (MemoryManageTool) Name() string {
 }
 
 func (MemoryManageTool) Description() string {
-	return "Manage persistent memory entries by URI using create, read, update, delete, list, and search. Supports system://index and system://recent for read-only listings."
+	return "Manage explicit persistent memory entries by stable URI using create, read, update, delete, list, and search. Use create for first write, use read/list or system://index/system://recent to discover exact URIs, and update/delete only after the target URI already exists."
 }
 
 func (MemoryManageTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"operation":{"type":"string","enum":["read","create","update","delete","search","list"]},
-			"uri":{"type":"string","description":"URI for read/create/update/delete. Supports system://index and system://recent."},
-			"content":{"type":"string","description":"Content for create/update."},
-			"metadata":{"type":"object","description":"Optional JSON metadata object."},
-			"prefix":{"type":"string","description":"URI prefix for list."},
-			"query":{"type":"string","description":"Search term for content LIKE query."},
+			"operation":{"type":"string","enum":["read","create","update","delete","search","list"],"description":"create writes a new URI; update/delete require an existing URI; read/list/search help discover existing records."},
+			"uri":{"type":"string","description":"URI for read/create/update/delete. Prefer stable URIs like user://preferences/editor or project://roadmap/current. system://index and system://recent are read-only discovery entries."},
+			"content":{"type":"string","description":"Required content for create/update."},
+			"metadata":{"type":"object","description":"Optional JSON metadata object stored with the explicit memory entry."},
+			"prefix":{"type":"string","description":"URI prefix for list. Use this to discover exact existing URIs before update/delete."},
+			"query":{"type":"string","description":"Search term across URI, content, and metadata for explicit memory discovery."},
 			"limit":{"type":"integer","minimum":1,"description":"Max results for list/search/system index reads (default: 50)."},
 			"offset":{"type":"integer","minimum":0,"description":"Offset for list/search/system index reads (default: 0)."}
 		},
@@ -140,7 +140,7 @@ func (t *MemoryManageTool) executeRead(ctx context.Context, args memoryManageArg
 	}
 	record, err := t.store.Read(ctx, uri)
 	if err != nil {
-		return "", mapMemoryStoreError(err, uri)
+		return "", mapMemoryStoreError(err, memoryManageOperationRead, uri)
 	}
 	return marshalMemoryManageOutput(record)
 }
@@ -159,7 +159,7 @@ func (t *MemoryManageTool) executeCreate(ctx context.Context, args memoryManageA
 	}
 	record, err := t.store.Create(ctx, uri, content, args.Metadata)
 	if err != nil {
-		return "", mapMemoryStoreError(err, uri)
+		return "", mapMemoryStoreError(err, memoryManageOperationCreate, uri)
 	}
 	return marshalMemoryManageOutput(record)
 }
@@ -178,7 +178,7 @@ func (t *MemoryManageTool) executeUpdate(ctx context.Context, args memoryManageA
 	}
 	record, err := t.store.Update(ctx, uri, content, args.Metadata)
 	if err != nil {
-		return "", mapMemoryStoreError(err, uri)
+		return "", mapMemoryStoreError(err, memoryManageOperationUpdate, uri)
 	}
 	return marshalMemoryManageOutput(record)
 }

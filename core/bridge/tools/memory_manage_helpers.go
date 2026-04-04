@@ -99,19 +99,40 @@ func buildSystemRecord(uri string, items []string, total int, limit int, offset 
 	}
 }
 
-func mapMemoryStoreError(err error, uri string) error {
+func mapMemoryStoreError(err error, operation string, uri string) error {
 	if err == nil {
 		return nil
 	}
 	switch {
 	case errors.Is(err, memorystore.ErrAlreadyExists):
-		return fmt.Errorf("memory %q already exists", uri)
+		return errors.New(memoryAlreadyExistsMessage(uri))
 	case errors.Is(err, memorystore.ErrNotFound):
-		return fmt.Errorf("memory %q not found", uri)
+		return errors.New(memoryNotFoundMessage(operation, uri))
 	case errors.Is(err, memorystore.ErrInvalidURI):
 		return err
 	default:
 		return err
+	}
+}
+
+func memoryAlreadyExistsMessage(uri string) string {
+	return fmt.Sprintf(
+		`memory %q already exists; use operation="read" to inspect it or operation="update" to replace its content`,
+		uri,
+	)
+}
+
+func memoryNotFoundMessage(operation string, uri string) string {
+	base := fmt.Sprintf("memory %q not found", uri)
+	switch operation {
+	case memoryManageOperationRead:
+		return base + `; use uri="system://index" or operation="list" to discover available URIs`
+	case memoryManageOperationUpdate:
+		return base + `; if this should be a new memory use operation="create", otherwise use uri="system://index" or operation="list" to confirm the exact URI before update`
+	case memoryManageOperationDelete:
+		return base + `; use uri="system://index" or operation="list" to confirm the exact URI before delete`
+	default:
+		return base
 	}
 }
 

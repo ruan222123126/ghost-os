@@ -4,6 +4,8 @@ package orchestration
 
 import (
 	"net/http"
+
+	"ghost-os/bridge/session"
 )
 
 // executeSessionsListAction 汇总全部会话元数据，并映射为 API 返回结构。
@@ -28,8 +30,8 @@ func (s *bridgeService) executeSessionsListAction(traceID string) (any, int, err
 	return metadata, http.StatusOK, nil
 }
 
-// executeSessionGetAction 读取并返回单会话详情（含完整消息与统计信息）。
-func (s *bridgeService) executeSessionGetAction(params sessionIDParams, traceID string) (any, int, error) {
+// executeSessionGetAction 读取并返回单会话详情页。
+func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID string) (any, int, error) {
 	store, code, err := s.requireSessionStore()
 	if err != nil {
 		return nil, code, err
@@ -40,14 +42,17 @@ func (s *bridgeService) executeSessionGetAction(params sessionIDParams, traceID 
 		return nil, code, err
 	}
 
-	sess, err := store.Load(id)
+	sess, page, err := store.LoadPage(id, session.PageParams{
+		Limit:  params.Limit,
+		Before: params.Before,
+	})
 	if err != nil {
 		logAction(traceID, "SESSION_GET", "error", err)
 		return nil, mapSessionStorageError(err), err
 	}
 
 	logAction(traceID, "SESSION_GET", "success", nil)
-	return buildSessionDetailPayload(sess), http.StatusOK, nil
+	return buildSessionDetailPayload(sess, page), http.StatusOK, nil
 }
 
 // executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。

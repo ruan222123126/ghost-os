@@ -70,6 +70,22 @@ func cloneBoolPointer(raw *bool) *bool {
 	return &value
 }
 
+func cloneIntPointer(raw *int) *int {
+	if raw == nil {
+		return nil
+	}
+	value := *raw
+	return &value
+}
+
+func cloneStringPointer(raw *string) *string {
+	if raw == nil {
+		return nil
+	}
+	value := strings.TrimSpace(*raw)
+	return &value
+}
+
 func optionalStringPointer(raw string) *string {
 	value := strings.TrimSpace(raw)
 	if value == "" {

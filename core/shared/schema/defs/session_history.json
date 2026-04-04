@@ -4,9 +4,14 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "index",
         "role"
       ],
       "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
         "role": {
           "type": "string",
           "enum": [
@@ -77,6 +82,49 @@
         "kotlin": { "name": "SessionMetadata" }
       }
     },
+    "sessionMessagePage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "limit",
+        "has_more_before"
+      ],
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1 },
+        "before": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "start_index": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "end_index": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "has_more_before": { "type": "boolean" },
+        "next_before": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        }
+      },
+      "x-codegen": {
+        "order": 175,
+        "go": { "name": "sessionMessagePage" },
+        "ts": { "name": "SessionMessagePage" },
+        "rust": { "name": "SessionMessagePage" },
+        "kotlin": { "name": "SessionMessagePage" }
+      }
+    },
     "sessionDetail": {
       "type": "object",
       "additionalProperties": false,
@@ -85,6 +133,8 @@
         "messages",
         "created_at",
         "updated_at",
+        "message_count",
+        "page",
         "token_count"
       ],
       "properties": {
@@ -97,6 +147,10 @@
         },
         "created_at": { "type": "string", "minLength": 1 },
         "updated_at": { "type": "string", "minLength": 1 },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "page": {
+          "$ref": "#/$defs/sessionMessagePage"
+        },
         "token_count": { "type": "integer", "minimum": 0 }
       },
       "x-codegen": {

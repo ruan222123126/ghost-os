@@ -3,8 +3,8 @@
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Serialize)]
 pub struct ApiRequest<TParams> {
@@ -46,7 +46,10 @@ pub struct AssistantSessionEndSignal {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentRequest {
-    pub message: String,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub images: Option<Vec<SessionImageContent>>,
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
@@ -284,6 +287,7 @@ pub struct AgentStreamMessagePayload {
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionMessage {
+    pub index: i64,
     pub role: String,
     #[serde(default)]
     pub text: Option<String>,
@@ -317,6 +321,20 @@ pub struct SessionMetadata {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionMessagePage {
+    pub limit: i64,
+    #[serde(default)]
+    pub before: Option<i64>,
+    #[serde(default)]
+    pub start_index: Option<i64>,
+    #[serde(default)]
+    pub end_index: Option<i64>,
+    pub has_more_before: bool,
+    #[serde(default)]
+    pub next_before: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentErrorPayload {
     pub message: String,
     #[serde(default)]
@@ -331,6 +349,8 @@ pub struct SessionDetail {
     pub messages: Vec<SessionMessage>,
     pub created_at: String,
     pub updated_at: String,
+    pub message_count: i64,
+    pub page: SessionMessagePage,
     pub token_count: i64,
 }
 

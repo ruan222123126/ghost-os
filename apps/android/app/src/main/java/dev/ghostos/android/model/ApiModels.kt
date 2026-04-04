@@ -36,7 +36,8 @@ data class AssistantSessionEndSignal(
 
 @Serializable
 data class AgentRequest(
-    val message: String,
+    val message: String? = null,
+    val images: List<SessionImageContent>? = null,
     @SerialName("session_id")
     val sessionId: String? = null,
     @SerialName("trace_id")
@@ -258,6 +259,7 @@ data class AgentStreamMessagePayload(
 
 @Serializable
 data class SessionMessage(
+    val index: Int,
     val role: String,
     val text: String? = null,
     val content: List<SessionContentPart>? = null,
@@ -293,6 +295,20 @@ data class SessionMetadata(
 )
 
 @Serializable
+data class SessionMessagePage(
+    val limit: Int,
+    val before: Int? = null,
+    @SerialName("start_index")
+    val startIndex: Int? = null,
+    @SerialName("end_index")
+    val endIndex: Int? = null,
+    @SerialName("has_more_before")
+    val hasMoreBefore: Boolean,
+    @SerialName("next_before")
+    val nextBefore: Int? = null
+)
+
+@Serializable
 data class AgentErrorPayload(
     val message: String,
     @SerialName("session_id")
@@ -308,6 +324,9 @@ data class SessionDetail(
     val createdAt: String,
     @SerialName("updated_at")
     val updatedAt: String,
+    @SerialName("message_count")
+    val messageCount: Int,
+    val page: SessionMessagePage,
     @SerialName("token_count")
     val tokenCount: Int
 )

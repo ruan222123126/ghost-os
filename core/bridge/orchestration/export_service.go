@@ -167,7 +167,7 @@ func (s *Service) ExecuteSessionsListAction(traceID string) (any, int, error) {
 	return s.inner.executeSessionsListAction(traceID)
 }
 
-func (s *Service) ExecuteSessionGetAction(params SessionIDParams, traceID string) (any, int, error) {
+func (s *Service) ExecuteSessionGetAction(params SessionGetParams, traceID string) (any, int, error) {
 	return s.inner.executeSessionGetAction(params, traceID)
 }
 

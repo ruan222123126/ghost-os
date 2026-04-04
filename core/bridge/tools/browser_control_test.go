@@ -81,8 +81,8 @@ func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
 	tool := NewBrowserControlTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
 			callCount++
-			if action != "BASH_EXEC" {
-				t.Fatalf("unexpected action: got %q want %q", action, "BASH_EXEC")
+			if action != browserLaunchAction {
+				t.Fatalf("unexpected action: got %q want %q", action, browserLaunchAction)
 			}
 			if traceID != "trace-launch-not-found" {
 				t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-launch-not-found")
@@ -90,10 +90,7 @@ func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
 			if params["command"] != "google-chrome --headless --remote-debugging-port=9222 &" {
 				t.Fatalf("unexpected command payload: %+v", params)
 			}
-			return map[string]any{
-				"stdout": "",
-				"stderr": "bash: line 1: google-chrome: command not found",
-			}, nil
+			return nil, fmt.Errorf("command failed: bash: line 1: google-chrome: command not found")
 		},
 	})
 
@@ -105,7 +102,7 @@ func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected missing executable error")
 	}
-	if !strings.Contains(err.Error(), "launch command references an unavailable executable") {
+	if !strings.Contains(err.Error(), "execution BROWSER_LAUNCH failed") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if callCount != 1 {
@@ -113,26 +110,27 @@ func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
 	}
 }
 
-func TestBrowserLaunchCommandBuildsAutoLaunchScript(t *testing.T) {
-	command, err := browserLaunchCommand(map[string]any{"debug_port": 9333}, "")
+func TestBrowserLaunchPayloadUsesExplicitCommand(t *testing.T) {
+	payload, err := browserLaunchPayload(
+		map[string]any{
+			"command":    "google-chrome --headless --remote-debugging-port=9222 &",
+			"debug_port": 9222,
+		},
+		"http://127.0.0.1:9222",
+	)
 	if err != nil {
-		t.Fatalf("browserLaunchCommand returned error: %v", err)
+		t.Fatalf("browserLaunchPayload returned error: %v", err)
 	}
-	for _, snippet := range []string{
-		"google-chrome",
-		"chromium",
-		"--remote-debugging-port=9333",
-		"--headless",
-		"--no-sandbox",
-	} {
-		if !strings.Contains(command, snippet) {
-			t.Fatalf("auto launch command missing %q: %q", snippet, command)
-		}
+	if payload["command"] != "google-chrome --headless --remote-debugging-port=9222 &" {
+		t.Fatalf("unexpected command payload: %+v", payload)
+	}
+	if payload["debug_port"] != 9222 {
+		t.Fatalf("unexpected debug_port payload: %+v", payload)
 	}
 }
 
-func TestBrowserLaunchCommandRequiresEndpointPortWhenAutoLaunching(t *testing.T) {
-	_, err := browserLaunchCommand(map[string]any{}, "http://127.0.0.1")
+func TestBrowserLaunchPayloadRequiresEndpointPortWhenAutoLaunching(t *testing.T) {
+	_, err := browserLaunchPayload(map[string]any{}, "http://127.0.0.1")
 	if err == nil {
 		t.Fatal("expected auto launch port parse error")
 	}

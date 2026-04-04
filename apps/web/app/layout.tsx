@@ -9,6 +9,7 @@ import './styles/message-images.css';
 import './styles/composer.css';
 import './styles/composer-images.css';
 import './styles/settings.css';
+import './styles/settings-panels.css';
 import './styles/responsive.css';
 
 export const metadata: Metadata = {

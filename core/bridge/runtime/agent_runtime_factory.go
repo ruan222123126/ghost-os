@@ -186,6 +186,8 @@ func registerCoreTools(opts coreToolOptions) {
 	opts.registry.Register(tools.NewSetProjectRootTool(opts.store, opts.resources.executionClient, opts.cfg.NativeAllowedReadPaths, opts.cfg.NativeAllowedWritePaths))
 	opts.registry.Register(tools.NewCodexCLITool(opts.resources.executionClient, opts.cfg.NativePersistent))
 	opts.registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{
+		TavilyURL:    opts.cfg.WebSearchTavilyURL,
+		ExaURL:       opts.cfg.WebSearchExaURL,
 		TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey,
 		ExaAPIKey:    opts.cfg.WebSearchExaAPIKey,
 	}))
@@ -260,7 +262,7 @@ func memorySettingsFromConfig(cfg Config) memoryaug.Settings {
 }
 
 func buildRuntimeSystemPrompt(cfg Config, registry *tools.Registry) (string, error) {
-	catalog := newToolSelectionPolicy(cfg).scopeCatalog(registry)
+	catalog := newToolSelectionPolicy(cfg).residentCatalog(registry)
 	return buildSystemPrompt(cfg, catalog)
 }
 

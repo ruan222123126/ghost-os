@@ -1,5 +1,12 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { ChatMessage, ChatSendInput, SessionImageContent } from '@/lib/types';
+import type {
+  ChatMessage,
+  ChatSendInput,
+  PendingQuestionMessage,
+  SessionImageContent,
+  StreamingAssistantSegment,
+  StreamingToolState,
+} from '@/lib/types';
 
 export interface ActiveAgentRun {
   abortController?: AbortController;
@@ -8,17 +15,24 @@ export interface ActiveAgentRun {
 }
 
 export interface UseBridgeChatResult {
-  messages: ChatMessage[];
+  committedMessages: ChatMessage[];
+  streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingItemOrder: string[];
+  streamingTools: StreamingToolState[];
+  pendingQuestions: PendingQuestionMessage[];
   loading: boolean;
   historyLoading: boolean;
+  loadingOlderHistory: boolean;
   chatError: string;
   hasPendingQuestion: boolean;
   canStop: boolean;
+  hasOlderHistory: boolean;
   sendChatMessage: (input: ChatSendInput) => Promise<void>;
   stopCurrentRun: () => Promise<void>;
   answerQuestion: (questionId: string, answer: string) => Promise<void>;
   cancelQuestion: (questionId: string) => Promise<void>;
   loadSessionHistory: (sessionId: string) => Promise<void>;
+  loadOlderHistory: () => Promise<void>;
   clearMessages: () => void;
 }
 
@@ -36,23 +50,41 @@ export interface StreamAgentRunInput {
 }
 
 export interface ChatStateControls {
-  messages: ChatMessage[];
+  committedMessages: ChatMessage[];
+  streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingItemOrder: string[];
+  streamingTools: StreamingToolState[];
+  pendingQuestions: PendingQuestionMessage[];
   loading: boolean;
   historyLoading: boolean;
+  loadingOlderHistory: boolean;
   chatError: string;
   activeRun: ActiveAgentRun | null;
   stopPending: boolean;
+  hasOlderHistory: boolean;
+  nextHistoryBefore: number | null;
   activeRunRef: MutableRefObject<ActiveAgentRun | null>;
   stopPendingRef: MutableRefObject<boolean>;
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+  setCommittedMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setLoading: (value: boolean) => void;
   setHistoryLoading: (value: boolean) => void;
+  setLoadingOlderHistory: (value: boolean) => void;
   setChatError: (value: string) => void;
   setActiveRun: (value: ActiveAgentRun | null) => void;
   setStopPending: (value: boolean) => void;
-  appendMessages: (nextMessages: ChatMessage[]) => void;
+  setHasOlderHistory: (value: boolean) => void;
+  setNextHistoryBefore: (value: number | null) => void;
+  appendCommittedMessages: (nextMessages: ChatMessage[]) => void;
   clearChatError: () => void;
   replaceWithErrorMessage: (messageText: string) => void;
   appendErrorMessage: (messageText: string) => void;
+  appendStreamingAssistantText: (text: string) => void;
+  clearStreamingAssistantText: () => void;
+  clearStreamingState: () => void;
+  upsertStreamingTool: (tool: StreamingToolState) => void;
+  clearStreamingTools: () => void;
+  upsertPendingQuestion: (question: PendingQuestionMessage) => void;
+  removePendingQuestion: (questionId: string) => void;
+  clearPendingQuestions: () => void;
   clearMessages: () => void;
 }

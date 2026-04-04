@@ -1,5 +1,7 @@
 package config
 
+import "ghost-os/bridge/llm"
+
 func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 	return runtimeConfig{
 		ProviderName:               raw.ProviderName,
@@ -8,6 +10,8 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 		BaseURL:                    raw.BaseURL,
 		Model:                      raw.Model,
 		ChatPath:                   raw.ChatPath,
+		ResponseOptions:            cloneResponseOptions(raw.ResponseOptions),
+		CodexStatelessRetryEnabled: raw.CodexStatelessRetryEnabled,
 		NativePersistent:           raw.NativePersistent,
 		ProjectRoot:                raw.ProjectRoot,
 		ModelSelectionEnabled:      raw.ModelSelectionEnabled,
@@ -25,6 +29,20 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 		WebRooterTimeoutMS:         raw.WebRooterTimeoutMS,
 		GraphQL:                    cloneGraphQLConfig(raw.GraphQL),
 	}
+}
+
+func cloneResponseOptions(raw llm.ResponseOptions) llm.ResponseOptions {
+	out := llm.ResponseOptions{
+		PromptCacheKey:       raw.PromptCacheKey,
+		PromptCacheRetention: raw.PromptCacheRetention,
+		SafetyIdentifier:     raw.SafetyIdentifier,
+		Metadata:             cloneStringMap(raw.Metadata),
+	}
+	if raw.Store != nil {
+		value := *raw.Store
+		out.Store = &value
+	}
+	return out
 }
 
 func cloneGraphQLConfig(raw GraphQLConfig) GraphQLConfig {

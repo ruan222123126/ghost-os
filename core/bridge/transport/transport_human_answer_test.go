@@ -169,7 +169,7 @@ func TestQuestionAnswerEndpointCanCancelPendingQuestion(t *testing.T) {
 	if !loaded.IsEnded() {
 		t.Fatal("cancelled session should be marked ended")
 	}
-	if loaded.HasPendingQuestion("q-1") {
+	if _, ok := loaded.PendingQuestions["q-1"]; ok {
 		t.Fatal("pending question should be removed after cancellation")
 	}
 }

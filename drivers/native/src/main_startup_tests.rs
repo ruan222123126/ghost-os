@@ -1,4 +1,4 @@
-use super::{resolve_entry_route, route_entry, EntryRoute};
+use super::{EntryRoute, resolve_entry_route, route_entry};
 
 #[test]
 fn resolve_entry_route_defaults_to_oneshot() {

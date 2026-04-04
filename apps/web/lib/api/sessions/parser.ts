@@ -5,11 +5,13 @@ import type {
   SessionHumanInteraction,
   SessionImageContent,
   SessionMessage,
+  SessionMessagePage,
   SessionMetadata,
   SessionToolCall,
   SessionToolResult,
 } from '@/lib/types';
 import {
+  expectBoolean,
   expectNumber,
   expectRecord,
   expectString,
@@ -30,8 +32,9 @@ const SESSION_METADATA_KEYS = [
   'message_count',
   'token_count',
 ] as const;
-const SESSION_DETAIL_KEYS = ['id', 'messages', 'created_at', 'updated_at', 'token_count'] as const;
+const SESSION_DETAIL_KEYS = ['id', 'messages', 'created_at', 'updated_at', 'message_count', 'page', 'token_count'] as const;
 const SESSION_MESSAGE_KEYS = [
+  'index',
   'role',
   'text',
   'content',
@@ -39,6 +42,14 @@ const SESSION_MESSAGE_KEYS = [
   'tool_result',
   'human_interaction',
   'tool_call_id',
+] as const;
+const SESSION_PAGE_KEYS = [
+  'limit',
+  'before',
+  'start_index',
+  'end_index',
+  'has_more_before',
+  'next_before',
 ] as const;
 const SESSION_CONTENT_PART_KEYS = ['type', 'text', 'image', 'file'] as const;
 const SESSION_IMAGE_KEYS = ['path', 'url', 'mime_type', 'width', 'height', 'sha256', 'bytes'] as const;
@@ -208,6 +219,7 @@ function parseSessionMessage(value: unknown, label: string): SessionMessage {
   const record = pickKnownKeys(expectRecord(value, label), SESSION_MESSAGE_KEYS);
 
   return {
+    index: expectNumber(record.index, `${label}.index`),
     role: expectStringEnum(record.role, SESSION_ROLES, `${label}.role`),
     text: parseOptionalString(record.text, `${label}.text`),
     content: parseOptionalSessionContent(record.content, `${label}.content`),
@@ -218,6 +230,29 @@ function parseSessionMessage(value: unknown, label: string): SessionMessage {
       `${label}.human_interaction`,
     ),
     tool_call_id: parseOptionalString(record.tool_call_id, `${label}.tool_call_id`),
+  };
+}
+
+function parseNullableNumber(value: unknown, label: string): number | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  return expectNumber(value, label);
+}
+
+function parseSessionPage(value: unknown, label: string): SessionMessagePage {
+  const record = pickKnownKeys(expectRecord(value, label), SESSION_PAGE_KEYS);
+
+  return {
+    limit: expectNumber(record.limit, `${label}.limit`),
+    before: parseNullableNumber(record.before, `${label}.before`),
+    start_index: parseNullableNumber(record.start_index, `${label}.start_index`),
+    end_index: parseNullableNumber(record.end_index, `${label}.end_index`),
+    has_more_before: expectBoolean(record.has_more_before, `${label}.has_more_before`),
+    next_before: parseNullableNumber(record.next_before, `${label}.next_before`),
   };
 }
 
@@ -254,6 +289,8 @@ export function parseSessionDetail(payload: unknown): SessionDetail {
     }),
     created_at: expectString(record.created_at, 'session detail.created_at'),
     updated_at: expectString(record.updated_at, 'session detail.updated_at'),
+    message_count: expectNumber(record.message_count, 'session detail.message_count'),
+    page: parseSessionPage(record.page, 'session detail.page'),
     token_count: expectNumber(record.token_count, 'session detail.token_count'),
   };
 }

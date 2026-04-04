@@ -38,6 +38,7 @@
 - 任务更新路径已补回显式回滚：在 `Unregister` 前移后，若 `SaveTask` 或后续 `Upsert` 失败，会恢复旧注册并在需要时把旧任务重新写回磁盘，避免留下“磁盘仍有任务、内存已不再调度”的漂移状态；共享 task schema 也已收口为 kind-specific 契约，`system_action` 的 `action/action_params` 与 `workflow/agent_message` 的必填约束现可被 schema 正确表达。
 - 任务调度器的 registration 生命周期已补上显式 retired 状态：`Stop` / `Unregister` / `register` 替换旧实例后，旧 `taskRegistration` 不会再在锁外被 `RunNow` 或定时触发重新 `beginRun`，从而封住 stale registration 复活和 `waitIdle()` 与 `runWG.Add(1)` 并发交错的风险。
 - 任务调度器的 Start/Stop 边界已进一步收紧为显式门闩：`Upsert` / `RunNow` 现要求 scheduler 处于 running 生命周期内，`Stop` 后不会再被并发 API 调用重新注册或手动触发；任务删除路径也已补齐显式回滚，非法 `*.json` 任务文件名会进入 tolerant load issues，而不再被静默跳过。
+- `core/bridge/tasks` 已完成一轮死代码与可维护性收口：移除未消费字段 `taskSchedulePlan.cronExpr` 与 `taskRegistration.runTraceID`，删除仓库内未调用的调度导出接口（`NewTaskStore`、`SetExecuteHook`、`SetExecutionTimeout`、`HasTask`、`Running`），将 scheduler 启动流程拆分到 `scheduler_start.go` 并统一未配置/未运行场景为显式错误；同时把 `task_scheduler_test.go` 与 `task_store_test.go` 拆分为多文件，单文件已回落到 300 行以内。
 - task kind 归一化已去掉“非法值静默回落到 `agent_message`”的 fallback：`task_kind` 为空时仍默认视为 `agent_message`，但未知值现在会在校验阶段显式报 `unsupported task_kind`，执行器默认分支也不会再把坏输入当作 agent task 运行。
 - GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
 - RSS report 生成链路已去掉静默 fallback：agent 报告空回或失败时不再落回模板化“机会点 / 风险与约束 / 接下来可能会怎样”段落，而是显式记录 `report_error`；report prompt 也已收口到更精简的章节契约，避免重复凑段。

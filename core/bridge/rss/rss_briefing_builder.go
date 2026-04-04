@@ -59,7 +59,7 @@ func (b *llmRSSBriefingBuilder) builderTimeout() time.Duration {
 func loadRSSBriefingConfig(b *llmRSSBriefingBuilder) (Config, error) {
 	switch {
 	case b != nil && b.store != nil:
-		return loadConfigWithRuntime(b.store.RuntimeConfig())
+		return b.store.Config()
 	case b != nil && strings.TrimSpace(b.cfg.Provider.Model) != "":
 		return b.cfg, nil
 	default:

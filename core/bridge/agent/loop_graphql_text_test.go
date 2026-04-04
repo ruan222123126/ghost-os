@@ -28,7 +28,7 @@ func TestStrictGraphQLTextModeRejectsToolCalls(t *testing.T) {
 
 func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse(`mutation { web_search(query: "OpenAI") }`),
+		newStopResponse(`<t:1>{"query":"OpenAI"}</t>`),
 		newStopResponse("done"),
 	)
 	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
@@ -49,7 +49,7 @@ func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 		t.Fatalf("unexpected complete call count: got %d want %d", len(completer.requests), 2)
 	}
 	last := completer.requests[1].Messages[len(completer.requests[1].Messages)-1]
-	if !strings.Contains(last.Text, "[GRAPHQL_TOOL_RESULT]") {
+	if !strings.Contains(last.Text, "[TOOL_TAG_RESULT]") {
 		t.Fatalf("expected graphql tool result feedback in second request, got %+v", last)
 	}
 	if tool.callCount != 1 {
@@ -58,7 +58,7 @@ func TestGraphQLTextTurnExecutesAndFeedsBackResult(t *testing.T) {
 }
 
 func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") }`))
+	completer := newFakeCompleter(newStopResponse(`<t:1>{"prompt":"Approve write?"}</t>`))
 	catalog := newFakeToolCatalog(newAwaitingHumanTool("ask_human", "q-1", "Approve write?"))
 	agent := newTestAgent(completer, catalog, 2)
 	agent.SetStrictToolCallProtocol(true)
@@ -76,7 +76,7 @@ func TestGraphQLTextTurnReturnsAwaitingHumanSignal(t *testing.T) {
 
 func TestGraphQLTextTurnExecutesMultipleOperationsInOrder(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse(`mutation { web_search(query: "OpenAI") } mutation { script_exec(script: "print('ok')") }`),
+		newStopResponse(`<t:2>{"query":"OpenAI"}</t><t:1>{"script":"print('ok')"}</t>`),
 		newStopResponse("done"),
 	)
 	webSearchTool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
@@ -102,7 +102,7 @@ func TestGraphQLTextTurnExecutesMultipleOperationsInOrder(t *testing.T) {
 	}
 	feedbackCount := 0
 	for _, message := range completer.requests[1].Messages {
-		if strings.Contains(message.Text, "[GRAPHQL_TOOL_RESULT]") {
+		if strings.Contains(message.Text, "[TOOL_TAG_RESULT]") {
 			feedbackCount++
 		}
 	}
@@ -113,7 +113,7 @@ func TestGraphQLTextTurnExecutesMultipleOperationsInOrder(t *testing.T) {
 
 func TestGraphQLTextTurnContinuesAfterToolExecutionError(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse(`mutation { broken_tool } mutation { web_search(query: "OpenAI") }`),
+		newStopResponse(`<t:1>{}</t><t:2>{"query":"OpenAI"}</t>`),
 		newStopResponse("done"),
 	)
 	brokenTool := newErrorTool("broken_tool", errors.New("boom"))
@@ -137,7 +137,7 @@ func TestGraphQLTextTurnContinuesAfterToolExecutionError(t *testing.T) {
 }
 
 func TestGraphQLTextTurnStopsBatchAfterAwaitingHuman(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") } mutation { web_search(query: "OpenAI") }`))
+	completer := newFakeCompleter(newStopResponse(`<t:1>{"prompt":"Approve write?"}</t><t:2>{"query":"OpenAI"}</t>`))
 	askHumanTool := newAwaitingHumanTool("ask_human", "q-1", "Approve write?")
 	webSearchTool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
 	webSearchTool.semantics = llm.ToolSemantics{ReadOnly: true}
@@ -157,14 +157,19 @@ func TestGraphQLTextTurnStopsBatchAfterAwaitingHuman(t *testing.T) {
 }
 
 func TestGraphQLTextTurnAwaitingHumanEventUsesRealToolName(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse(`mutation { ask_human(prompt: "Approve write?") }`))
+	completer := newFakeCompleter(newStopResponse(`<t:1>{"prompt":"Approve write?"}</t>`))
 	catalog := newFakeToolCatalog(newAwaitingHumanTool("ask_human", "q-1", "Approve write?"))
 	agent := newTestAgent(completer, catalog, 2)
 	sink := newRecordingEventSink()
 	agent.SetStrictToolCallProtocol(true)
 	agent.AddAssistantTextHandler(NewGraphQLTextTurnHandler(tools.NewGraphQLTextExecutor(catalog)))
 
-	_, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-await", sink)
+	_, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-await",
+		sink,
+	)
 	var awaitingErr *ErrAwaitingHuman
 	if !errors.As(err, &awaitingErr) {
 		t.Fatalf("expected ErrAwaitingHuman, got %v", err)
@@ -187,7 +192,7 @@ func TestGraphQLTextTurnAwaitingHumanEventUsesRealToolName(t *testing.T) {
 }
 
 func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *testing.T) {
-	completer := newFakeCompleter(newStopResponse(`mutation { web_search(query: "OpenAI") }`))
+	completer := newFakeCompleter(newStopResponse(`<t:1>{"query":"OpenAI"}</t>`))
 	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
 	tool.semantics = llm.ToolSemantics{ReadOnly: true}
 	catalog := newFakeToolCatalog(tool)
@@ -207,21 +212,27 @@ func TestGraphQLTextTurnCommitsSuccessfulExecutionBeforeLaterCompletionError(t *
 	if newMessages[0].Role != llm.RoleUser || newMessages[0].Text != "hello" {
 		t.Fatalf("unexpected committed user message: %+v", newMessages[0])
 	}
-	if newMessages[1].Role != llm.RoleAssistant || !strings.Contains(newMessages[1].Text, "web_search") {
-		t.Fatalf("unexpected committed assistant graphql text: %+v", newMessages[1])
+	if newMessages[1].Role != llm.RoleAssistant || !strings.Contains(newMessages[1].Text, "<t:1>") {
+		t.Fatalf("unexpected committed assistant tool text: %+v", newMessages[1])
+	}
+	if len(newMessages[1].ToolCalls) != 1 {
+		t.Fatalf("expected committed assistant tool call, got %+v", newMessages[1].ToolCalls)
+	}
+	if newMessages[1].ToolCalls[0].Name != "web_search" {
+		t.Fatalf("unexpected committed assistant tool name: %+v", newMessages[1].ToolCalls[0])
 	}
 	if newMessages[2].Role != llm.RoleTool {
 		t.Fatalf("expected committed tool envelope, got %+v", newMessages[2])
 	}
-	if newMessages[3].Role != llm.RoleInternal || !strings.Contains(newMessages[3].Text, "[GRAPHQL_TOOL_RESULT]") {
+	if newMessages[3].Role != llm.RoleInternal || !strings.Contains(newMessages[3].Text, "[TOOL_TAG_RESULT]") {
 		t.Fatalf("unexpected committed graphql feedback: %+v", newMessages[3])
 	}
 }
 
 func TestGraphQLTextTurnFeedsStructuredProtocolErrorBackIntoNextRound(t *testing.T) {
 	completer := newFakeCompleter(
-		newStopResponse(`query { web_search(query: "OpenAI") }`),
-		newStopResponse(`mutation { web_search(query: "OpenAI") }`),
+		newStopResponse(`<t:1>{"query":"OpenAI"`),
+		newStopResponse(`<t:1>{"query":"OpenAI"}</t>`),
 		newStopResponse("done"),
 	)
 	tool := newStaticTool("web_search", `{"items":[{"title":"OpenAI"}]}`)
@@ -246,21 +257,18 @@ func TestGraphQLTextTurnFeedsStructuredProtocolErrorBackIntoNextRound(t *testing
 	}
 
 	last := completer.requests[1].Messages[len(completer.requests[1].Messages)-1]
-	if !strings.Contains(last.Text, "[GRAPHQL_TOOL_RESULT]") {
+	if !strings.Contains(last.Text, "[TOOL_TAG_RESULT]") {
 		t.Fatalf("expected graphql protocol error feedback in second request, got %+v", last)
 	}
 	payload := decodeGraphQLToolFeedback(t, last.Text)
 	if payload["status"] != "error" {
 		t.Fatalf("unexpected feedback status: %+v", payload)
 	}
-	if payload["kind"] != "wrong_operation" {
+	if payload["kind"] != "parse_error" {
 		t.Fatalf("unexpected feedback kind: %+v", payload)
 	}
-	if payload["tool"] != "web_search" {
-		t.Fatalf("unexpected feedback tool: %+v", payload)
-	}
-	if payload["expected"] != "mutation" || payload["received"] != "query" {
-		t.Fatalf("unexpected feedback operation payload: %+v", payload)
+	if payload["tool"] != "" && payload["tool"] != "1" && payload["tool"] != "graphql_tool_call" {
+		t.Fatalf("unexpected feedback tool payload: %+v", payload)
 	}
 }
 
@@ -295,7 +303,7 @@ func eventToolName(t *testing.T, event streaming.Event) string {
 func decodeGraphQLToolFeedback(t *testing.T, raw string) map[string]any {
 	t.Helper()
 
-	payloadText := strings.TrimSpace(strings.TrimPrefix(raw, "[GRAPHQL_TOOL_RESULT]"))
+	payloadText := strings.TrimSpace(strings.TrimPrefix(raw, "[TOOL_TAG_RESULT]"))
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(payloadText), &payload); err != nil {
 		t.Fatalf("decode graphql tool feedback: %v, raw=%q", err, raw)

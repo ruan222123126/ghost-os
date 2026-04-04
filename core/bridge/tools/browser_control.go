@@ -80,15 +80,15 @@ func NewBrowserControlTool(client ExecutionClient) Tool {
 	}
 }
 
-func (BrowserControlTool) Name() string {
+func (*BrowserControlTool) Name() string {
 	return "browser_control"
 }
 
-func (BrowserControlTool) Description() string {
+func (*BrowserControlTool) Description() string {
 	return browserControlDescription
 }
 
-func (BrowserControlTool) Parameters() json.RawMessage {
+func (*BrowserControlTool) Parameters() json.RawMessage {
 	return json.RawMessage(browserControlSchema)
 }
 

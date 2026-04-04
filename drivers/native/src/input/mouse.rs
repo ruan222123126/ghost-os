@@ -10,6 +10,22 @@ use std::process::Command;
 use enigo::{Enigo, MouseButton, MouseControllable};
 
 pub(crate) fn handle_mouse_click(params: &Value) -> Response {
+    handle_mouse_click_request(params, None, 1)
+}
+
+pub(crate) fn handle_mouse_double_click(params: &Value) -> Response {
+    handle_mouse_click_request(params, Some(ClickButton::Left), 2)
+}
+
+pub(crate) fn handle_mouse_right_click(params: &Value) -> Response {
+    handle_mouse_click_request(params, Some(ClickButton::Right), 1)
+}
+
+fn handle_mouse_click_request(
+    params: &Value,
+    forced_button: Option<ClickButton>,
+    repeat: usize,
+) -> Response {
     let x = match required_i32(params, "x") {
         Ok(x) => x,
         Err(err) => return Response::error(err),
@@ -18,9 +34,12 @@ pub(crate) fn handle_mouse_click(params: &Value) -> Response {
         Ok(y) => y,
         Err(err) => return Response::error(err),
     };
-    let button = match parse_click_button(params) {
-        Ok(button) => button,
-        Err(err) => return Response::error(err),
+    let button = match forced_button {
+        Some(button) => button,
+        None => match parse_click_button(params) {
+            Ok(button) => button,
+            Err(err) => return Response::error(err),
+        },
     };
     let display_id = match optional_display_id(params) {
         Ok(display_id) => display_id,
@@ -40,7 +59,7 @@ pub(crate) fn handle_mouse_click(params: &Value) -> Response {
 
     let (scaled_x, scaled_y, resolved_scale_x, resolved_scale_y) =
         resolve_target_point(x, y, display_id);
-    if let Err(err) = perform_mouse_click(scaled_x, scaled_y, button) {
+    if let Err(err) = perform_mouse_click(scaled_x, scaled_y, button, repeat) {
         return Response::error(err);
     }
 
@@ -49,6 +68,7 @@ pub(crate) fn handle_mouse_click(params: &Value) -> Response {
         "x": scaled_x,
         "y": scaled_y,
         "button": button_name(button),
+        "repeat": repeat,
         "scale_x": resolved_scale_x,
         "scale_y": resolved_scale_y,
     }))
@@ -96,15 +116,16 @@ fn button_name(button: ClickButton) -> &'static str {
 }
 
 #[cfg(target_os = "linux")]
-fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
+fn perform_mouse_click(x: i32, y: i32, button: ClickButton, repeat: usize) -> Result<(), String> {
     if super::window_guard::is_wayland_session() {
-        return perform_mouse_click_wayland(x, y, button);
+        return perform_mouse_click_wayland(x, y, button, repeat);
     }
     let button_id = match button {
         ClickButton::Left => "1",
         ClickButton::Middle => "2",
         ClickButton::Right => "3",
     };
+    let repeat_value = repeat.max(1).to_string();
     let status = Command::new("xdotool")
         .args([
             "mousemove",
@@ -112,6 +133,8 @@ fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String
             &x.to_string(),
             &y.to_string(),
             "click",
+            "--repeat",
+            &repeat_value,
             button_id,
         ])
         .status()
@@ -125,7 +148,12 @@ fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String
 }
 
 #[cfg(target_os = "linux")]
-fn perform_mouse_click_wayland(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
+fn perform_mouse_click_wayland(
+    x: i32,
+    y: i32,
+    button: ClickButton,
+    repeat: usize,
+) -> Result<(), String> {
     let button_id = match button {
         ClickButton::Left => "1",
         ClickButton::Middle => "2",
@@ -155,26 +183,28 @@ fn perform_mouse_click_wayland(x: i32, y: i32, button: ClickButton) -> Result<()
         ));
     }
 
-    let status = Command::new("ydotool")
-        .args(["click", button_id])
-        .status()
-        .map_err(|err| {
-            if err.kind() == std::io::ErrorKind::NotFound {
-                "ydotool is not installed (required on Wayland for mouse input)".to_string()
-            } else {
-                format!("spawn ydotool failed: {err}")
-            }
-        })?;
-    if !status.success() {
-        return Err(format!(
-            "ydotool click exited with status {status}; ensure ydotoold is running"
-        ));
+    for _ in 0..repeat.max(1) {
+        let status = Command::new("ydotool")
+            .args(["click", button_id])
+            .status()
+            .map_err(|err| {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    "ydotool is not installed (required on Wayland for mouse input)".to_string()
+                } else {
+                    format!("spawn ydotool failed: {err}")
+                }
+            })?;
+        if !status.success() {
+            return Err(format!(
+                "ydotool click exited with status {status}; ensure ydotoold is running"
+            ));
+        }
     }
     Ok(())
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String> {
+fn perform_mouse_click(x: i32, y: i32, button: ClickButton, repeat: usize) -> Result<(), String> {
     let mut enigo = Enigo::new();
     enigo.mouse_move_to(x, y);
     let native_button = match button {
@@ -182,12 +212,19 @@ fn perform_mouse_click(x: i32, y: i32, button: ClickButton) -> Result<(), String
         ClickButton::Right => MouseButton::Right,
         ClickButton::Middle => MouseButton::Middle,
     };
-    enigo.mouse_click(native_button);
+    for _ in 0..repeat.max(1) {
+        enigo.mouse_click(native_button);
+    }
     Ok(())
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn perform_mouse_click(_x: i32, _y: i32, _button: ClickButton) -> Result<(), String> {
+fn perform_mouse_click(
+    _x: i32,
+    _y: i32,
+    _button: ClickButton,
+    _repeat: usize,
+) -> Result<(), String> {
     Err("mouse click is not supported on this platform".to_string())
 }
 

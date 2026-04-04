@@ -13,6 +13,7 @@ type llmDeltaBridge struct {
 	sessionID string
 	turn      int
 	stepID    string
+	emitted   bool
 }
 
 func newLLMDeltaBridge(sink streaming.Sink, traceID string, sessionID string, turn int) (*llmDeltaBridge, error) {
@@ -30,6 +31,7 @@ func newLLMDeltaBridge(sink streaming.Sink, traceID string, sessionID string, tu
 }
 
 func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error {
+	b.emitted = true
 	payload := map[string]any{
 		"kind": string(delta.Kind),
 	}
@@ -54,4 +56,11 @@ func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error 
 	}
 	_, err = b.sink.Emit(ctx, event)
 	return err
+}
+
+func (b *llmDeltaBridge) hasEmitted() bool {
+	if b == nil {
+		return false
+	}
+	return b.emitted
 }

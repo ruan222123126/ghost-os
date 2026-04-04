@@ -42,6 +42,7 @@ func TestFormatPromptGuidanceForCatalog_IncludesToolSearchWorkflowOnlyWhenVisibl
 	withToolSearch := FormatPromptGuidanceForCatalog(registry)
 	for _, snippet := range []string{
 		"currently visible tools are insufficient",
+		"Do not use `tfind` for greetings",
 		"`action=load`",
 		"same user turn on the next completion",
 		"`action=unload`",
@@ -140,6 +141,26 @@ func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *te
 	}
 }
 
+func TestFormatPromptGuidanceForCatalog_IncludesScriptExecUsageHintsWhenVisible(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: "script_exec"})
+
+	guidance := FormatPromptGuidanceForCatalog(registry)
+	for _, snippet := range []string{
+		"injected `tools` object",
+		"Do not use `import tools` or `from tools...`",
+		"Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`)",
+		"Print concise, structured output",
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected script_exec guidance to contain %q, got %q", snippet, guidance)
+		}
+	}
+	if strings.Contains(guidance, "`read_and_summarize` for broad local triage") {
+		t.Fatalf("expected workspace-combo guidance to stay hidden when read_and_summarize is not visible, got %q", guidance)
+	}
+}
+
 func TestFormatPromptGuidanceForCatalog_NativeCatalogOmitsGraphQLSyntax(t *testing.T) {
 	registry := NewRegistry()
 	for _, name := range []string{
@@ -181,28 +202,33 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 	guidance := FormatPromptGuidanceForCatalog(NewStructuredToolHiddenCatalog(registry))
 
 	for _, snippet := range []string{
-		"GraphQL tool schema",
+		"current tool id list",
 		"`ask_human` only when blocked",
-		"Minimal `ask_human` options example",
-		`mutation { tfind(action: search, query: "...") }`,
-		`mutation { tfind(action: load, tool_names: ["browser_control"]) }`,
+		"Minimal `ask_human` tag example",
+		`<t:ID>{"action":"search","query":"..."}</t>`,
+		"Do not use `tfind` for greetings",
+		"keep the assistant message focused on tool tags",
+		`<t:ID>{"action":"load","tool_names":["browser_control"]}</t>`,
 		"same user turn on the next completion",
 		"`tfind(action: list)` only to inspect the current dynamic tool load state",
-		"Never repeat or fabricate `[GRAPHQL_TOOL_RESULT]`",
+		"Never repeat or fabricate `[TOOL_TAG_RESULT]`",
 		"`memory_manage` only for explicit long-term notes",
-		"Minimal `memory_manage` create example",
-		`mutation { memory_manage(operation: create, uri: "user://preferences/editor", content: "Prefer vim keybindings") }`,
+		"Minimal `memory_manage` create tag example",
+		`<t:ID>{"operation":"create","uri":"user://preferences/editor","content":"Prefer vim keybindings"}</t>`,
 		"`screen_action.click_text`",
 		"`computer_use` only for desktop visual tasks",
 		"`browser_control` for browser tasks",
 		"`script_exec` for scriptable local operations",
+		"Do not use `import tools` or `from tools...`",
+		"Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`)",
+		"Minimal `script_exec` tag example",
 	} {
 		if !strings.Contains(guidance, snippet) {
 			t.Fatalf("expected graphql guidance to contain %q, got %q", snippet, guidance)
 		}
 	}
-	if strings.Contains(guidance, "structured tool schema") {
-		t.Fatalf("expected graphql hidden catalog to avoid structured schema wording, got %q", guidance)
+	if strings.Contains(guidance, "GraphQL tool schema") {
+		t.Fatalf("expected hidden catalog guidance to avoid graphql schema wording, got %q", guidance)
 	}
 }
 
@@ -224,5 +250,60 @@ func TestFormatPromptGuidanceForCatalog_IncludesWebRooterHintWhenVisible(t *test
 	}
 	if !strings.Contains(guidance, "Use `web_search` for lighter real-time web lookups") {
 		t.Fatalf("expected quick lookup web_search guidance, got %q", guidance)
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_IncludesBrowserControlActionHints(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: "browser_control"})
+
+	guidance := FormatPromptGuidanceForCatalog(registry)
+	for _, snippet := range []string{
+		"`browser_control` action must be one of",
+		"`action=\"goto\"`",
+		"do not use `navigate`",
+		"no standalone browser `wait` action",
+		"`params.wait` (`none|dom|load`)",
+		"do not use `extract`",
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected browser_control guidance to contain %q, got %q", snippet, guidance)
+		}
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_IncludesTaskFeedAndCodexActionHints(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{"task_manage", "feed_manage", "codex_cli"} {
+		registry.Register(&mockTool{name: name})
+	}
+
+	guidance := FormatPromptGuidanceForCatalog(registry)
+	for _, snippet := range []string{
+		"`task_manage` operation must be one of: create, update, delete, list, get.",
+		"`feed_manage` operation must be one of: subscribe, list, update, unsubscribe.",
+		"`codex_cli` `op` must be one of: start, resume, fork, status (not `exec`).",
+		"`task_manage` requires `id` for update/delete/get",
+		"`feed_manage` requires `url` for subscribe",
+		"`codex_cli` requires `prompt` for start/resume/fork",
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected action guidance to contain %q, got %q", snippet, guidance)
+		}
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_IncludesScreenActionList(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: "screen_action"})
+
+	guidance := FormatPromptGuidanceForCatalog(registry)
+	for _, snippet := range []string{
+		"`screen_action` action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
+		"`screen_action.click_text`",
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected screen_action guidance to contain %q, got %q", snippet, guidance)
+		}
 	}
 }

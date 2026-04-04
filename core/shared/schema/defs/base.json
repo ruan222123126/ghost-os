@@ -23,6 +23,7 @@
         "APPLY_DIFF",
         "EXPORT_FILE",
         "BASH_EXEC",
+        "BROWSER_LAUNCH",
         "SCRIPT_EXEC",
         "SCREEN_CAPTURE",
         "IMAGE_CROP",

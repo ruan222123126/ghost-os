@@ -18,10 +18,18 @@ export function createParamBridgeRouteHandler<Params extends Record<string, stri
     const params = (context?.params ?? {}) as Params;
     const headers = typeof options.headers === 'function' ? options.headers({ params, request }) : options.headers;
     return forwardBridge({
-      path: getPath(params),
+      path: appendRequestSearch(getPath(params), request),
       method,
       request,
       headers,
     });
   };
+}
+
+function appendRequestSearch(path: string, request: Request): string {
+  const search = new URL(request.url).search;
+  if (!search) {
+    return path;
+  }
+  return `${path}${search}`;
 }

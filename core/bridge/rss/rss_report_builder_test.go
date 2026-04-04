@@ -29,6 +29,11 @@ func TestAgentRSSReportBuilderPromptIncludesDossierAndWritingContract(t *testing
 	requireStringContains(t, prompt, "Simplified Chinese")
 	requireStringContains(t, prompt, "Use this exact H1 title")
 	requireStringContains(t, prompt, "Do not move sources into a separate appendix section")
+	requireStringContains(t, prompt, "Do not add standalone sections for opportunities, risks, constraints, or predictions")
+	requireStringContains(t, prompt, "avoid repeating the same point across sections")
+	requireStringNotContains(t, prompt, "- Opportunities")
+	requireStringNotContains(t, prompt, "- Risks / constraints")
+	requireStringNotContains(t, prompt, "- What may happen next")
 }
 
 func TestAgentRSSReportBuilderPromptReflectsScopedToolVisibility(t *testing.T) {

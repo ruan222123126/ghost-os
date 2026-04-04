@@ -18,7 +18,6 @@ type rssReportWorkflow struct {
 	now     func() time.Time
 }
 
-
 func (s *RSSInboxService) reportWorkflow() rssReportWorkflow {
 	return rssReportWorkflow{
 		store:   s.reportStore,
@@ -74,10 +73,6 @@ func (w rssReportWorkflow) buildMarkdown(
 	query RSSReportQuery,
 ) (string, error) {
 	markdown, err := w.builder.Build(ctx, report, briefing, groups, query)
-	if strings.TrimSpace(markdown) != "" {
-		return markdown, nil
-	}
-	markdown = fallbackRSSReportMarkdown(report, briefing, groups)
 	if strings.TrimSpace(markdown) != "" {
 		return markdown, nil
 	}

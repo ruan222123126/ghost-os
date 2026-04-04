@@ -51,6 +51,12 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.ChatPath != nil {
 		fileCfg.ChatPath = cloneOptionalStringPointer(req.ChatPath)
 	}
+	if req.WebSearchTavilyURL != nil {
+		fileCfg.WebSearchTavilyURL = cloneOptionalStringPointer(req.WebSearchTavilyURL)
+	}
+	if req.WebSearchExaURL != nil {
+		fileCfg.WebSearchExaURL = cloneOptionalStringPointer(req.WebSearchExaURL)
+	}
 	if req.WebSearchTavilyAPIKey != nil {
 		fileCfg.WebSearchTavilyAPIKey = cloneOptionalStringPointer(req.WebSearchTavilyAPIKey)
 	}

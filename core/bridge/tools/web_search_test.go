@@ -260,6 +260,76 @@ func TestWebSearchToolUsesExaWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestWebSearchToolUsesCustomTavilyURLWhenConfigured(t *testing.T) {
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.URL.String() != "https://proxy.example/internal/tavily" {
+				t.Fatalf("unexpected url: %q", req.URL.String())
+			}
+			return newWebSearchResponse(http.StatusOK, "application/json; charset=utf-8", `{
+  "results": [
+    {"title":"Ghost Tavily Result","url":"https://example.com/tavily","content":"Tavily content"}
+  ]
+}`), nil
+		}),
+	}
+
+	tool := NewWebSearchTool(WebSearchConfig{
+		TavilyURL:    "https://proxy.example/internal/tavily",
+		TavilyAPIKey: "test-tavily-key",
+	}).(*WebSearchTool)
+	tool.httpClient = client
+	tool.userAgents = []string{"test-agent"}
+
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"query":"ghost os"}`), "trace-web-custom-tavily")
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	var results []websearch.Result
+	if err := json.Unmarshal([]byte(output), &results); err != nil {
+		t.Fatalf("decode results: %v", err)
+	}
+	if len(results) != 1 || results[0].URL != "https://example.com/tavily" {
+		t.Fatalf("unexpected tavily result: %+v", results)
+	}
+}
+
+func TestWebSearchToolUsesCustomExaURLWhenConfigured(t *testing.T) {
+	client := &http.Client{
+		Transport: webSearchRoundTripper(func(req *http.Request) (*http.Response, error) {
+			if req.URL.String() != "https://proxy.example/internal/exa" {
+				t.Fatalf("unexpected url: %q", req.URL.String())
+			}
+			return newWebSearchResponse(http.StatusOK, "application/json; charset=utf-8", `{
+  "results": [
+    {"title":"Ghost Exa Result","url":"https://example.com/exa","highlights":["Exa highlight snippet."]}
+  ]
+}`), nil
+		}),
+	}
+
+	tool := NewWebSearchTool(WebSearchConfig{
+		ExaURL:    "https://proxy.example/internal/exa",
+		ExaAPIKey: "test-exa-key",
+	}).(*WebSearchTool)
+	tool.httpClient = client
+	tool.userAgents = []string{"test-agent"}
+
+	output, err := tool.Execute(context.Background(), json.RawMessage(`{"query":"ghost os"}`), "trace-web-custom-exa")
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+
+	var results []websearch.Result
+	if err := json.Unmarshal([]byte(output), &results); err != nil {
+		t.Fatalf("decode results: %v", err)
+	}
+	if len(results) != 1 || results[0].URL != "https://example.com/exa" {
+		t.Fatalf("unexpected exa result: %+v", results)
+	}
+}
+
 func TestWebSearchToolRequiresProviderWhenBothAPISearchKeysExist(t *testing.T) {
 	tool := NewWebSearchTool(WebSearchConfig{
 		TavilyAPIKey: "test-tavily-key",

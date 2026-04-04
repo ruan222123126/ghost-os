@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
 
@@ -69,6 +70,7 @@ func (b *agentRSSReportBuilder) Build(
 	}
 	systemPrompt := basePrompt + "\n\n" + rssReportInvestigationSystemPrompt
 	reportAgent := agent.NewAgent(deps.client, scoped, systemPrompt, deps.cfg.MaxTurns)
+	reportAgent.SetResponseOptions(llm.CloneResponseOptions(deps.cfg.ResponseOptions))
 	toolGuidance := renderRSSReportToolGuidance(scoped)
 	response, err := reportAgent.RunWithTraceID(
 		runCtx,

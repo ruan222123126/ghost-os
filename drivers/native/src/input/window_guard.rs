@@ -2,6 +2,9 @@
 use std::env;
 use std::process::Command;
 
+use crate::Response;
+use serde_json::{Value, json};
+
 pub(crate) fn ensure_active_window(
     expected_title: Option<&str>,
     expected_class: Option<&str>,
@@ -18,9 +21,7 @@ pub(crate) fn ensure_active_window(
         let active_id = command_stdout(Command::new("xdotool").arg("getactivewindow"))?;
         let active_id = parse_window_id(active_id.trim())
             .ok_or_else(|| "parse active window id failed".to_string())?;
-        let list = command_stdout(Command::new("wmctrl").args(["-lxp"]))?;
-        let (title, class_name) = find_window_by_id(&list, active_id)
-            .ok_or_else(|| "active window is not found in wmctrl list".to_string())?;
+        let (title, class_name) = lookup_active_window(active_id)?;
 
         if let Some(expected) = expected_title
             && !contains_case_insensitive(&title, expected)
@@ -44,6 +45,34 @@ pub(crate) fn ensure_active_window(
         let _ = expected_title;
         let _ = expected_class;
         Err("active window verification is not supported on this platform".to_string())
+    }
+}
+
+pub(crate) fn handle_active_window_info(_params: &Value) -> Response {
+    match active_window_info() {
+        Ok((title, class_name)) => Response::success(json!({
+            "title": title,
+            "class": class_name,
+        })),
+        Err(err) => Response::error(err),
+    }
+}
+
+pub(crate) fn active_window_info() -> Result<(String, String), String> {
+    #[cfg(target_os = "linux")]
+    {
+        if is_wayland_session() {
+            return Err("active window info is not supported on Wayland".to_string());
+        }
+        let active_id = command_stdout(Command::new("xdotool").arg("getactivewindow"))?;
+        let active_id = parse_window_id(active_id.trim())
+            .ok_or_else(|| "parse active window id failed".to_string())?;
+        return lookup_active_window(active_id);
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("active window info is not supported on this platform".to_string())
     }
 }
 
@@ -75,6 +104,13 @@ fn command_stdout(command: &mut Command) -> Result<String, String> {
         return Err("command returned empty output".to_string());
     }
     Ok(stdout)
+}
+
+#[cfg(target_os = "linux")]
+fn lookup_active_window(active_id: u64) -> Result<(String, String), String> {
+    let list = command_stdout(Command::new("wmctrl").args(["-lxp"]))?;
+    find_window_by_id(&list, active_id)
+        .ok_or_else(|| "active window is not found in wmctrl list".to_string())
 }
 
 #[cfg(target_os = "linux")]
@@ -115,4 +151,15 @@ fn contains_case_insensitive(haystack: &str, needle: &str) -> bool {
     haystack
         .to_ascii_lowercase()
         .contains(&needle.to_ascii_lowercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_window_id;
+
+    #[test]
+    fn parse_window_id_supports_decimal_and_hex() {
+        assert_eq!(parse_window_id("12"), Some(12));
+        assert_eq!(parse_window_id("0x10"), Some(16));
+    }
 }

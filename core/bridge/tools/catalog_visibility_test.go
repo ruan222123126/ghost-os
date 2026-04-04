@@ -29,6 +29,42 @@ func TestStaticVisibleToolNames_EmptyAllowlistHasNoResidents(t *testing.T) {
 	}
 }
 
+func TestSelectorStaticToolNames_ReturnAllNonBlockedToolsOutsideStrictMode(t *testing.T) {
+	visible := SelectorStaticToolNames([]string{
+		"ask_human",
+		"script_exec",
+		"web_search",
+	}, VisibilityOptions{
+		Allowlist: []string{"ask_human"},
+		Blocklist: []string{"web_search"},
+	})
+
+	if !containsTool(visible, "ask_human") || !containsTool(visible, "script_exec") {
+		t.Fatalf("expected selector-visible tools to include non-blocked tools, got %v", visible)
+	}
+	if containsTool(visible, "web_search") {
+		t.Fatalf("expected selector-visible tools to honor blocklist, got %v", visible)
+	}
+}
+
+func TestSelectorStaticToolNames_StrictModeUsesAllowlist(t *testing.T) {
+	visible := SelectorStaticToolNames([]string{
+		"ask_human",
+		"script_exec",
+		"web_search",
+	}, VisibilityOptions{
+		AllowlistOnly: true,
+		Allowlist:     []string{"ask_human"},
+	})
+
+	if !containsTool(visible, "ask_human") {
+		t.Fatalf("expected allowlisted tool to remain visible, got %v", visible)
+	}
+	if containsTool(visible, "script_exec") || containsTool(visible, "web_search") {
+		t.Fatalf("expected strict mode to hide non-allowlisted tools, got %v", visible)
+	}
+}
+
 func TestSearchCandidateToolNames_IncludeHiddenStaticToolsWhenToolSearchEnabled(t *testing.T) {
 	candidates := SearchCandidateToolNames([]string{
 		"ask_human",
@@ -41,6 +77,25 @@ func TestSearchCandidateToolNames_IncludeHiddenStaticToolsWhenToolSearchEnabled(
 
 	if !containsTool(candidates, "script_exec") || !containsTool(candidates, "web_search") {
 		t.Fatalf("unexpected tfind candidates: %v", candidates)
+	}
+}
+
+func TestSearchCandidateToolNames_ExcludeResidentAndBlockedTools(t *testing.T) {
+	candidates := SearchCandidateToolNames([]string{
+		"ask_human",
+		"script_exec",
+		"web_search",
+		"tfind",
+	}, nil, VisibilityOptions{
+		Allowlist: []string{"ask_human"},
+		Blocklist: []string{"web_search"},
+	})
+
+	if containsTool(candidates, "ask_human") || containsTool(candidates, "web_search") {
+		t.Fatalf("expected resident and blocked tools to stay out of search candidates, got %v", candidates)
+	}
+	if !containsTool(candidates, "script_exec") {
+		t.Fatalf("expected hidden non-blocked tools to remain searchable, got %v", candidates)
 	}
 }
 

@@ -13,11 +13,16 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 		lines = append(lines, preamble)
 	}
 	lines = append(lines, rssPromptGuidance(names)...)
-	lines = append(lines, workspacePromptGuidance(protocol, names)...)
+	lines = append(lines, scriptExecPromptGuidance(protocol, names)...)
+	lines = append(lines, workspacePromptGuidance(names)...)
 	lines = append(lines, memoryPromptGuidance(protocol, names)...)
 	lines = append(lines, toolSearchPromptGuidance(protocol, names)...)
 	lines = append(lines, humanPromptGuidance(protocol, names)...)
 	lines = append(lines, webRooterPromptGuidance(names)...)
+	lines = append(lines, browserControlPromptGuidance(names)...)
+	lines = append(lines, taskManagePromptGuidance(names)...)
+	lines = append(lines, feedManageOperationPromptGuidance(names)...)
+	lines = append(lines, codexCLIPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
 	lines = append(lines, computerUsePromptGuidance(names)...)
 	return strings.Join(lines, "\n")
@@ -32,15 +37,27 @@ func rssPromptGuidance(names map[string]bool) []string {
 	}
 }
 
-func workspacePromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
+func workspacePromptGuidance(names map[string]bool) []string {
 	if !names["script_exec"] || !names["read_and_summarize"] {
 		return nil
 	}
-	lines := []string{
+	return []string{
 		"- Use `read_and_summarize` for broad local triage, then use `script_exec` for exact reads, searches, edits, and shell/script work.",
 	}
+}
+
+func scriptExecPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
+	if !names["script_exec"] {
+		return nil
+	}
+	lines := []string{
+		"- In `script_exec`, use plain Python plus the injected `tools` object, and call helper methods with named parameters (for example `tools.list_files(path='...')` or `tools.read_file(path='...')`).",
+		"- Do not use `import tools` or `from tools...`; `tools` is a runtime object, not an importable module.",
+		"- Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`); use `tools.read_file`, `tools.write_file`, `tools.apply_diff`, or `tools.bash_exec` instead.",
+		"- Print concise, structured output (for example JSON) so later turns can parse results reliably.",
+	}
 	if protocol == promptGuidanceProtocolGraphQL {
-		lines = append(lines, "- Minimal `script_exec` GraphQL example: `mutation { script_exec(script: \"print(\\\"ok\\\")\") }`.")
+		lines = append(lines, "- Minimal `script_exec` tag example: `<t:ID>{\"script\":\"print(\\\"ok\\\")\"}</t>` (replace `ID` with the listed tool id).")
 	}
 	return lines
 }
@@ -58,7 +75,7 @@ func memoryPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool
 	if protocol == promptGuidanceProtocolGraphQL {
 		lines = append(
 			lines,
-			"- Minimal `memory_manage` create example: `mutation { memory_manage(operation: create, uri: \"user://preferences/editor\", content: \"Prefer vim keybindings\") }`.",
+			"- Minimal `memory_manage` create tag example: `<t:ID>{\"operation\":\"create\",\"uri\":\"user://preferences/editor\",\"content\":\"Prefer vim keybindings\"}</t>`.",
 		)
 	}
 	return lines
@@ -71,16 +88,19 @@ func toolSearchPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 	if protocol == promptGuidanceProtocolGraphQL {
 		return []string{
 			"- Use `tfind` when the currently visible tools are insufficient.",
-			"- When you are unsure which tools are visible, start with `mutation { tfind(action: search, query: \"...\") }` to discover the smallest suitable optional tool.",
+			"- Do not use `tfind` for greetings, small talk, or ordinary plain-text replies when no extra capability is needed.",
+			"- When you are unsure which tools are visible, start with the listed `tfind` id and call `<t:ID>{\"action\":\"search\",\"query\":\"...\"}</t>`.",
+			"- When calling tools, keep the assistant message focused on tool tags and avoid extra wrappers.",
 			"- After `tfind(action: load)`, the loaded tool becomes available in the same user turn on the next completion.",
-			"- Minimal `tfind(action: load)` example: `mutation { tfind(action: load, tool_names: [\"browser_control\"]) }`.",
+			"- Minimal `tfind(action: load)` tag example: `<t:ID>{\"action\":\"load\",\"tool_names\":[\"browser_control\"]}</t>`.",
 			"- Use `tfind(action: list)` only to inspect the current dynamic tool load state.",
 			"- Unload tools you no longer need with `tfind(action: unload)`.",
-			"- Never repeat or fabricate `[GRAPHQL_TOOL_RESULT]` in assistant text.",
+			"- Never repeat or fabricate `[TOOL_TAG_RESULT]` in assistant text.",
 		}
 	}
 	return []string{
 		"- Use `tfind` when the currently visible tools are insufficient.",
+		"- Do not use `tfind` for greetings, small talk, or ordinary plain-text replies when no extra capability is needed.",
 		"- Start with `tfind` using `action=search` to find the smallest suitable optional tool.",
 		"- After `tfind` with `action=load`, the loaded tool becomes available in the same user turn on the next completion.",
 		"- Use `tfind` with `action=list` only to inspect the current dynamic tool load state.",
@@ -96,7 +116,7 @@ func humanPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool)
 		"- Use `ask_human` only when blocked on required user input. If you provide predefined choices, the final option must allow custom input.",
 	}
 	if protocol == promptGuidanceProtocolGraphQL {
-		lines = append(lines, "- Minimal `ask_human` options example: `mutation { ask_human(prompt: \"Which environment should I use?\", options: [{label: \"staging\"}, {label: \"Other\", allow_custom: true}]) }`.")
+		lines = append(lines, "- Minimal `ask_human` tag example: `<t:ID>{\"prompt\":\"Which environment should I use?\",\"options\":[{\"label\":\"staging\"},{\"label\":\"Other\",\"allow_custom\":true}]}</t>`.")
 	}
 	return lines
 }
@@ -115,11 +135,54 @@ func webRooterPromptGuidance(names map[string]bool) []string {
 	return lines
 }
 
+func browserControlPromptGuidance(names map[string]bool) []string {
+	if !names["browser_control"] {
+		return nil
+	}
+	return []string{
+		"- `browser_control` action must be one of: connect, launch, goto, click, type, press, evaluate, content, screenshot, info, close.",
+		"- For page navigation use `action=\"goto\"` with `params.url`; do not use `navigate`.",
+		"- There is no standalone browser `wait` action. Use `params.wait` (`none|dom|load`) and optional `params.wait_ms` inside `goto`.",
+		"- For DOM/content extraction use `action=\"content\"` or `action=\"evaluate\"`; do not use `extract`.",
+	}
+}
+
+func taskManagePromptGuidance(names map[string]bool) []string {
+	if !names["task_manage"] {
+		return nil
+	}
+	return []string{
+		"- `task_manage` operation must be one of: create, update, delete, list, get.",
+		"- `task_manage` requires `id` for update/delete/get; `message` is required for create.",
+	}
+}
+
+func feedManageOperationPromptGuidance(names map[string]bool) []string {
+	if !names["feed_manage"] {
+		return nil
+	}
+	return []string{
+		"- `feed_manage` operation must be one of: subscribe, list, update, unsubscribe.",
+		"- `feed_manage` requires `url` for subscribe and `feed_id` for update/unsubscribe.",
+	}
+}
+
+func codexCLIPromptGuidance(names map[string]bool) []string {
+	if !names["codex_cli"] {
+		return nil
+	}
+	return []string{
+		"- `codex_cli` `op` must be one of: start, resume, fork, status (not `exec`).",
+		"- `codex_cli` requires `prompt` for start/resume/fork and `session_id` for resume/fork/status.",
+	}
+}
+
 func screenPromptGuidance(names map[string]bool) []string {
 	if !names["screen_action"] {
 		return nil
 	}
 	return []string{
+		"- `screen_action` action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
 		"- Prefer `screen_action.click_text` when visible labels exist; use `click_icon` only for unlabeled or template-driven targets.",
 	}
 }

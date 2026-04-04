@@ -28,8 +28,65 @@ pub(crate) fn handle_text_input(params: &Value) -> Response {
     }))
 }
 
+pub(crate) fn handle_key_hotkey(params: &Value) -> Response {
+    let keys = match parse_hotkey_keys(params) {
+        Ok(keys) => keys,
+        Err(err) => return Response::error(err),
+    };
+    if let Err(err) = perform_hotkey(&keys) {
+        return Response::error(err);
+    }
+    Response::success(json!({
+        "pressed": true,
+        "keys": keys,
+    }))
+}
+
 fn normalize_input_text(text: &str) -> String {
     text.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+fn parse_hotkey_keys(params: &Value) -> Result<Vec<String>, String> {
+    let raw = params
+        .get("keys")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "keys is required".to_string())?;
+    if raw.is_empty() {
+        return Err("keys is required".to_string());
+    }
+    let mut out = Vec::with_capacity(raw.len());
+    for value in raw {
+        let key = value
+            .as_str()
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .ok_or_else(|| "keys must be a non-empty string array".to_string())?;
+        out.push(normalize_hotkey_key(key)?);
+    }
+    Ok(out)
+}
+
+fn normalize_hotkey_key(key: &str) -> Result<String, String> {
+    let upper = key.to_ascii_uppercase();
+    let normalized = match upper.as_str() {
+        "CTRL" | "CONTROL" => "ctrl",
+        "SHIFT" => "shift",
+        "ALT" | "OPTION" => "alt",
+        "CMD" | "COMMAND" | "META" | "SUPER" | "WIN" => "super",
+        "ENTER" | "RETURN" => "Return",
+        "ESC" | "ESCAPE" => "Escape",
+        "TAB" => "Tab",
+        "SPACE" => "space",
+        "BACKSPACE" => "BackSpace",
+        "DELETE" => "Delete",
+        "UP" | "ARROWUP" => "Up",
+        "DOWN" | "ARROWDOWN" => "Down",
+        "LEFT" | "ARROWLEFT" => "Left",
+        "RIGHT" | "ARROWRIGHT" => "Right",
+        key if key.len() == 1 => key,
+        _ => return Err(format!("unsupported hotkey key {key:?}")),
+    };
+    Ok(normalized.to_string())
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -86,6 +143,24 @@ fn perform_text_input(text: &str, submit: bool) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
+fn perform_hotkey(keys: &[String]) -> Result<(), String> {
+    if is_wayland_session() {
+        return Err("hotkey input is not supported on Wayland".to_string());
+    }
+    let combo = keys.join("+");
+    let status = Command::new("xdotool")
+        .args(["key", "--clearmodifiers", &combo])
+        .status()
+        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
+    if !status.success() {
+        return Err(format!(
+            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
 fn perform_text_input_wayland(text: &str, submit: bool) -> Result<(), String> {
     let lines: Vec<&str> = text.split('\n').collect();
     for (index, segment) in lines.iter().enumerate() {
@@ -127,9 +202,14 @@ fn perform_text_input_wayland(text: &str, submit: bool) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "linux"))]
+fn perform_hotkey(_keys: &[String]) -> Result<(), String> {
+    Err("hotkey input is not supported on this platform".to_string())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{handle_text_input, normalize_input_text};
+    use super::{handle_text_input, normalize_hotkey_key, normalize_input_text, parse_hotkey_keys};
     use serde_json::json;
 
     #[test]
@@ -142,5 +222,17 @@ mod tests {
         let response = handle_text_input(&json!({"text":""}));
         assert_eq!(response.status, "error");
         assert_eq!(response.error, "text is required");
+    }
+
+    #[test]
+    fn normalize_hotkey_key_maps_common_modifiers() {
+        assert_eq!(normalize_hotkey_key("CTRL").expect("must parse"), "ctrl");
+        assert_eq!(normalize_hotkey_key("enter").expect("must parse"), "Return");
+    }
+
+    #[test]
+    fn parse_hotkey_keys_requires_array() {
+        let err = parse_hotkey_keys(&json!({"keys":["CTRL","L"]})).expect("must parse");
+        assert_eq!(err, vec!["ctrl".to_string(), "L".to_string()]);
     }
 }

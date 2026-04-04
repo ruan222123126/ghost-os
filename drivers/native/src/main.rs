@@ -1,6 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 mod action_router;
+mod browser_actions;
 mod codex_cli;
 mod display_scale;
 mod file_actions;

@@ -214,8 +214,8 @@ func TestHandleAgentStreamValidationErrorEmitsErrorEvent(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected payload type: %T", events[0].Payload)
 	}
-	if payload["message"] != "message is required" {
-		t.Fatalf("unexpected error message: got %v want %q", payload["message"], "message is required")
+	if payload["message"] != "message or images is required" {
+		t.Fatalf("unexpected error message: got %v want %q", payload["message"], "message or images is required")
 	}
 }
 

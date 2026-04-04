@@ -196,6 +196,34 @@ func TestRecallServiceHonorsMaxRecallItems(t *testing.T) {
 	}
 }
 
+func TestRecallServiceNormalizesUnknownRecallPlanEventIDs(t *testing.T) {
+	store := newTestStore(t)
+	recall := NewRecallService(newTestSettings(), store)
+
+	primary := mustCreateEventNode(t, store, "session-1", "搜索当前AI发展情况")
+
+	output, err := recall.Recall(context.Background(), RecallInput{
+		SessionID:      "session-1",
+		PrimaryEventID: primary.ID,
+		ActiveEventIDs: []string{primary.ID},
+		FocusText:      "帮我搜索现在ai的情况",
+		RecallPlan: RecallPlan{
+			EventIDs:           []string{"evt_ai_current_landscape_search"},
+			IncludeNodeSummary: true,
+			AllowLearning:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("recall: %v", err)
+	}
+	if output.PrimaryEvent == nil || output.PrimaryEvent.Event.ID != primary.ID {
+		t.Fatalf("expected primary event recall to fall back to the resolved active id, got %+v", output)
+	}
+	if len(output.AdjacentEvents) != 0 {
+		t.Fatalf("expected unknown recall_plan.event_ids to be dropped instead of treated as adjacent events, got %+v", output.AdjacentEvents)
+	}
+}
+
 func mustCreateEventNode(t *testing.T, store *memorystore.Store, sessionID string, title string) memorystore.EventNode {
 	t.Helper()
 	node, err := store.CreateEventNode(context.Background(), memorystore.EventNodeInput{

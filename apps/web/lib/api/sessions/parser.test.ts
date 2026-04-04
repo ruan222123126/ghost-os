@@ -1,6 +1,15 @@
 import { parseSessionDetail, parseSessionMetadataList } from './parser';
 import type { SessionDetail, SessionMetadata } from '@/lib/types';
 
+const SESSION_PAGE = {
+  limit: 100,
+  before: null,
+  start_index: 0,
+  end_index: 0,
+  has_more_before: false,
+  next_before: null,
+} as const;
+
 describe('lib/api/sessions/parser', () => {
   it('parses session metadata lists', () => {
     const payload: SessionMetadata[] = [
@@ -21,9 +30,12 @@ describe('lib/api/sessions/parser', () => {
       id: 'session-1',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 1,
+      page: SESSION_PAGE,
       token_count: 128,
       messages: [
         {
+          index: 0,
           role: 'tool',
           text: 'Need confirmation',
           content: [{ type: 'text', text: 'Need confirmation' }],
@@ -53,9 +65,12 @@ describe('lib/api/sessions/parser', () => {
       id: 'session-2',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 1,
+      page: SESSION_PAGE,
       token_count: 64,
       messages: [
         {
+          index: 0,
           role: 'internal',
           text: '[GRAPHQL_EXECUTION_RESULT]\n{"data":{"viewer":{"id":"1"}}}',
         },
@@ -70,10 +85,13 @@ describe('lib/api/sessions/parser', () => {
       id: 'session-1',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 1,
+      page: SESSION_PAGE,
       token_count: 128,
       future_field: true,
       messages: [
         {
+          index: 0,
           role: 'user',
           text: 'hello',
           extra_message_field: 'ignored',
@@ -86,9 +104,12 @@ describe('lib/api/sessions/parser', () => {
       id: 'session-1',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 1,
+      page: SESSION_PAGE,
       token_count: 128,
       messages: [
         {
+          index: 0,
           role: 'user',
           text: 'hello',
           content: [{ type: 'text', text: 'hello' }],

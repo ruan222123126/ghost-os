@@ -2,28 +2,69 @@ import { useCallback } from 'react';
 import { getSession } from '@/lib/api/sessions/api';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
 import { toErrorMessage } from '@/lib/errors';
+import type { ChatMessage, SessionDetail } from '@/lib/types';
 import type { ChatStateControls } from './types';
+
+const HISTORY_PAGE_LIMIT = 100;
 
 interface UseChatHistoryOptions {
   clearChatError: ChatStateControls['clearChatError'];
+  clearPendingQuestions: ChatStateControls['clearPendingQuestions'];
+  clearStreamingState: ChatStateControls['clearStreamingState'];
   replaceWithErrorMessage: ChatStateControls['replaceWithErrorMessage'];
+  setCommittedMessages: ChatStateControls['setCommittedMessages'];
+  setHasOlderHistory: ChatStateControls['setHasOlderHistory'];
   setHistoryLoading: ChatStateControls['setHistoryLoading'];
-  setMessages: ChatStateControls['setMessages'];
+  setLoadingOlderHistory: ChatStateControls['setLoadingOlderHistory'];
+  setNextHistoryBefore: ChatStateControls['setNextHistoryBefore'];
   setChatError: ChatStateControls['setChatError'];
+  nextHistoryBefore: ChatStateControls['nextHistoryBefore'];
 }
 
 export function useChatHistory(options: UseChatHistoryOptions) {
-  const { clearChatError, replaceWithErrorMessage, setHistoryLoading, setMessages, setChatError } = options;
+  const {
+    clearChatError,
+    clearPendingQuestions,
+    clearStreamingState,
+    replaceWithErrorMessage,
+    setCommittedMessages,
+    setHasOlderHistory,
+    setHistoryLoading,
+    setLoadingOlderHistory,
+    setNextHistoryBefore,
+    setChatError,
+    nextHistoryBefore,
+  } = options;
 
   const hydrateSessionHistory = useCallback(async (sessionId: string) => {
-    const detail = await getSession(sessionId);
-    setMessages(mapSessionMessagesToChat(detail.messages));
-  }, [setMessages]);
+    const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
+    applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
+    clearStreamingState();
+    clearPendingQuestions();
+    setCommittedMessages(mapSessionMessagesToChat(detail.id, detail.messages));
+  }, [
+    clearPendingQuestions,
+    clearStreamingState,
+    setCommittedMessages,
+    setHasOlderHistory,
+    setNextHistoryBefore,
+  ]);
+
+  const syncRecentHistory = useCallback(async (sessionId: string) => {
+    const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
+    applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
+    const latest = mapSessionMessagesToChat(detail.id, detail.messages);
+    setCommittedMessages((previous) => mergeLatestCommittedMessages(previous, latest));
+  }, [setCommittedMessages, setHasOlderHistory, setNextHistoryBefore]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();
     if (!id) {
-      setMessages([]);
+      clearStreamingState();
+      clearPendingQuestions();
+      setCommittedMessages([]);
+      setHasOlderHistory(false);
+      setNextHistoryBefore(null);
       return;
     }
 
@@ -38,10 +79,84 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     } finally {
       setHistoryLoading(false);
     }
-  }, [clearChatError, hydrateSessionHistory, replaceWithErrorMessage, setChatError, setHistoryLoading, setMessages]);
+  }, [
+    clearChatError,
+    clearPendingQuestions,
+    clearStreamingState,
+    hydrateSessionHistory,
+    replaceWithErrorMessage,
+    setChatError,
+    setCommittedMessages,
+    setHasOlderHistory,
+    setHistoryLoading,
+    setNextHistoryBefore,
+  ]);
+
+  const loadOlderHistory = useCallback(async (sessionId: string) => {
+    const id = sessionId.trim();
+    if (!id || nextHistoryBefore === null) {
+      return;
+    }
+
+    clearChatError();
+    setLoadingOlderHistory(true);
+    try {
+      const detail = await getSession(id, {
+        before: nextHistoryBefore,
+        limit: HISTORY_PAGE_LIMIT,
+      });
+      applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
+      const older = mapSessionMessagesToChat(detail.id, detail.messages);
+      setCommittedMessages((previous) => prependUniqueCommittedMessages(previous, older));
+    } catch (error) {
+      setChatError(toErrorMessage(error));
+    } finally {
+      setLoadingOlderHistory(false);
+    }
+  }, [
+    clearChatError,
+    nextHistoryBefore,
+    setChatError,
+    setCommittedMessages,
+    setHasOlderHistory,
+    setLoadingOlderHistory,
+    setNextHistoryBefore,
+  ]);
 
   return {
     hydrateSessionHistory,
+    syncRecentHistory,
     loadSessionHistory,
+    loadOlderHistory,
   };
+}
+
+function applyHistoryPage(
+  detail: SessionDetail,
+  setHasOlderHistory: ChatStateControls['setHasOlderHistory'],
+  setNextHistoryBefore: ChatStateControls['setNextHistoryBefore'],
+): void {
+  setHasOlderHistory(detail.page.has_more_before);
+  setNextHistoryBefore(detail.page.next_before ?? null);
+}
+
+function prependUniqueCommittedMessages(previous: ChatMessage[], older: ChatMessage[]): ChatMessage[] {
+  if (older.length === 0) {
+    return previous;
+  }
+
+  const olderIDs = new Set(older.map((message) => message.id));
+  return [...older, ...previous.filter((message) => !olderIDs.has(message.id))];
+}
+
+function mergeLatestCommittedMessages(previous: ChatMessage[], latest: ChatMessage[]): ChatMessage[] {
+  const latestIDs = new Set(latest.map((message) => message.id));
+  const preserved = previous.filter((message) => {
+    if (message.id.startsWith('stream-') || message.id.startsWith('local:')) {
+      return false;
+    }
+    return !latestIDs.has(message.id);
+  });
+
+  return [...preserved, ...latest];
 }

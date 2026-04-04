@@ -1,7 +1,6 @@
 'use client';
 
 import type { FC } from 'react';
-import { useState } from 'react';
 import type { ToolChatMessage } from '@/lib/types';
 import { formatToolAction, formatToolDetails } from './format';
 
@@ -33,8 +32,13 @@ function isToolError(status?: string): boolean {
   return normalized === 'error' || normalized === 'failed';
 }
 
-export const ToolCard: FC<{ tool: ToolChatMessage }> = ({ tool }) => {
-  const [isOpen, setIsOpen] = useState(false);
+interface ToolCardProps {
+  isOpen: boolean;
+  onToggle: () => void;
+  tool: ToolChatMessage;
+}
+
+export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool }) => {
   const action = formatToolAction(tool);
   const details = formatToolDetails(tool);
   const hasError = isToolError(tool.toolStatus);
@@ -43,7 +47,7 @@ export const ToolCard: FC<{ tool: ToolChatMessage }> = ({ tool }) => {
     <div className="tool-card">
       <button
         type="button"
-        onClick={() => setIsOpen((current) => !current)}
+        onClick={onToggle}
         className={`tool-card-button${isOpen ? ' is-open' : ''}${hasError ? ' is-error' : ''}`}
       >
         <span className="tool-card-title" title={action}>

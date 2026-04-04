@@ -47,10 +47,19 @@ export const ChatInput: FC<ChatInputProps> = ({
       return;
     }
 
-    await onSend(input);
+    const previousDraft = draft;
+    const previousImages = pendingImages;
     setDraft('');
     setPendingImages([]);
     setImageError('');
+
+    try {
+      await onSend(input);
+    } catch (error) {
+      setDraft(previousDraft);
+      setPendingImages(previousImages);
+      throw error;
+    }
   }, [draft, onSend, pendingImages]);
 
   const handleSelectFiles = useCallback(async (files: FileList) => {
@@ -81,7 +90,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       disabled={disabled}
       ariaLabel="Message input"
       placeholder={loading ? '正在思考中...' : '输入消息...'}
-      rows={4}
+      rows={3}
       preview={<ComposerImageStrip images={pendingImages} onRemove={handleRemoveImage} />}
       hint={buildHint(imageError, pendingImages)}
       toolbar={onSelectModel ? (

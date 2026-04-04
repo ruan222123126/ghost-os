@@ -8,6 +8,21 @@ use reqwest::Url;
 const DEFAULT_BRIDGE_URL: &str = "http://localhost:8080";
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
 
+#[derive(Debug, Clone, Default)]
+pub struct CliConfigArgs {
+    pub bridge_url: Option<String>,
+    pub timeout: Option<u64>,
+}
+
+impl CliConfigArgs {
+    pub fn new(bridge_url: Option<String>, timeout: Option<u64>) -> Self {
+        Self {
+            bridge_url,
+            timeout,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Config {
     pub bridge_url: String,
@@ -15,8 +30,13 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn load(bridge_url_arg: Option<String>, timeout_arg: Option<u64>) -> Result<Self> {
-        let bridge_url = match bridge_url_arg {
+    pub fn load(args: CliConfigArgs) -> Result<Self> {
+        let CliConfigArgs {
+            bridge_url,
+            timeout,
+        } = args;
+
+        let bridge_url = match bridge_url {
             Some(value) => validate_bridge_url(&value)?,
             None => match env::var("GHOST_BRIDGE_URL") {
                 Ok(value) => validate_bridge_url(&value)?,
@@ -24,7 +44,7 @@ impl Config {
             },
         };
 
-        let timeout_secs = resolve_timeout(timeout_arg)?;
+        let timeout_secs = resolve_timeout(timeout)?;
 
         Ok(Self {
             bridge_url,
@@ -79,7 +99,7 @@ fn validate_bridge_url(raw: &str) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, validate_bridge_url, validate_timeout};
+    use super::{CliConfigArgs, Config, validate_bridge_url, validate_timeout};
 
     #[test]
     fn bridge_url_validation_accepts_http_and_trims_trailing_slash() {
@@ -100,7 +120,12 @@ mod tests {
 
     #[test]
     fn config_load_uses_cli_args_when_provided() {
-        let cfg = Config::load(Some("http://127.0.0.1:18080".to_string()), Some(12)).unwrap();
+        let cfg = Config::load(CliConfigArgs::new(
+            Some("http://127.0.0.1:18080".to_string()),
+            Some(12),
+        ))
+        .unwrap();
+
         assert_eq!(cfg.bridge_url, "http://127.0.0.1:18080");
         assert_eq!(cfg.timeout_secs, 12);
     }

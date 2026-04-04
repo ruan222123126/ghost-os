@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"ghost-os/bridge/guiagent"
 	"ghost-os/bridge/llm"
 )
 
@@ -11,19 +12,25 @@ import (
 //
 // 注意：Session 非并发安全（包含 slice/map），同一个会话必须由上层保证串行访问。
 type Session struct {
-	ID                            string                                  `json:"id"`
-	Messages                      []llm.Message                           `json:"messages"`
-	CreatedAt                     time.Time                               `json:"created_at"`
-	UpdatedAt                     time.Time                               `json:"updated_at"`
-	EndedAt                       time.Time                               `json:"ended_at,omitempty"`
-	TurnIndex                     int                                     `json:"turn_index,omitempty"`
-	TokenCount                    int                                     `json:"token_count"`
-	ConversationState             llm.ConversationState                   `json:"conversation_state,omitempty"`
-	IterationRuntime              *IterationRuntime                       `json:"iteration_runtime,omitempty"`
-	PendingQuestions              map[string]PendingHumanQuestion         `json:"pending_questions,omitempty"`
-	HumanAnswers                  map[string]string                       `json:"human_answers,omitempty"`
-	PendingGraphQLMutationIntents map[string]PendingGraphQLMutationIntent `json:"pending_graphql_mutation_intents,omitempty"`
-	DynamicToolLoads              map[string]DynamicToolLoad              `json:"dynamic_tool_loads,omitempty"`
+	ID                     string                          `json:"id"`
+	Messages               []llm.Message                   `json:"messages"`
+	CreatedAt              time.Time                       `json:"created_at"`
+	UpdatedAt              time.Time                       `json:"updated_at"`
+	EndedAt                time.Time                       `json:"ended_at,omitempty"`
+	TurnIndex              int                             `json:"turn_index,omitempty"`
+	TokenCount             int                             `json:"token_count"`
+	MessageCount           int                             `json:"message_count"`
+	WindowStart            int                             `json:"window_start,omitempty"`
+	WindowTokenCount       int                             `json:"window_token_count,omitempty"`
+	ConversationState      llm.ConversationState           `json:"conversation_state,omitempty"`
+	IterationRuntime       *IterationRuntime               `json:"iteration_runtime,omitempty"`
+	PendingQuestions       map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
+	HumanAnswers           map[string]string               `json:"human_answers,omitempty"`
+	PendingComputerUseRuns map[string]guiagent.State       `json:"pending_computer_use_runs,omitempty"`
+	DynamicToolLoads       map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
+
+	persistedMessageCount int
+	persistedMessages     []llm.Message
 }
 
 // NewSession 创建带唯一 ID 的会话，并在首条消息写入 system prompt（若非空）。
@@ -43,6 +50,8 @@ func NewSession(systemPrompt string) *Session {
 		}
 		s.Messages = append(s.Messages, systemMsg)
 		s.TokenCount = EstimateTokens(systemMsg)
+		s.MessageCount = 1
+		s.WindowTokenCount = s.TokenCount
 	}
 
 	return s
@@ -61,7 +70,10 @@ func (s *Session) AddMessage(msg llm.Message) {
 	}
 
 	s.Messages = append(s.Messages, cloned[0])
-	s.TokenCount += EstimateTokens(cloned[0])
+	messageTokens := EstimateTokens(cloned[0])
+	s.TokenCount += messageTokens
+	s.MessageCount++
+	s.WindowTokenCount += messageTokens
 	s.UpdatedAt = time.Now().UTC()
 }
 
@@ -73,7 +85,10 @@ func (s *Session) GetMessages(maxTokens int) []llm.Message {
 	return PruneMessages(s.Messages, maxTokens)
 }
 
-// RecalculateTokenCount 重新计算会话 token 估算值，用于持久化校准。
+// RecalculateTokenCount 重新计算当前窗口 token 估算值。
+//
+// 当 Messages 表示完整历史时，该方法也会同步校正全会话 token/message 统计；
+// 当 Messages 只表示热窗口时，调用方必须自行维护全会话 TokenCount / MessageCount。
 func (s *Session) RecalculateTokenCount() {
 	if s == nil {
 		return
@@ -83,7 +98,12 @@ func (s *Session) RecalculateTokenCount() {
 	for _, msg := range s.Messages {
 		total += EstimateTokens(msg)
 	}
-	s.TokenCount = total
+	s.WindowTokenCount = total
+	if s.MessageCount == 0 || s.MessageCount == len(s.Messages) {
+		s.MessageCount = len(s.Messages)
+		s.TokenCount = total
+		s.WindowStart = 0
+	}
 }
 
 // MarkEnded 标记会话已结束，后续不应再继续使用相同 session id 续跑。
@@ -106,4 +126,12 @@ func (s *Session) IsEnded() bool {
 		return false
 	}
 	return !s.EndedAt.IsZero()
+}
+
+func (s *Session) setPersistedSnapshot() {
+	if s == nil {
+		return
+	}
+	s.persistedMessageCount = s.MessageCount
+	s.persistedMessages = llm.CloneMessages(s.Messages)
 }

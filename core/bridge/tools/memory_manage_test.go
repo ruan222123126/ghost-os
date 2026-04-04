@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 )
@@ -104,6 +105,8 @@ func TestMemoryManageErrors(t *testing.T) {
 		"content":   "hello",
 	}); err == nil {
 		t.Fatalf("expected duplicate create to fail")
+	} else if !strings.Contains(err.Error(), `operation="update"`) {
+		t.Fatalf("expected duplicate create hint, got %v", err)
 	}
 	if _, err := executeMemoryTool(tool, map[string]any{
 		"operation": "update",
@@ -111,12 +114,16 @@ func TestMemoryManageErrors(t *testing.T) {
 		"content":   "update",
 	}); err == nil {
 		t.Fatalf("expected update missing to fail")
+	} else if !strings.Contains(err.Error(), `operation="create"`) || !strings.Contains(err.Error(), `system://index`) {
+		t.Fatalf("expected update missing hint, got %v", err)
 	}
 	if _, err := executeMemoryTool(tool, map[string]any{
 		"operation": "read",
 		"uri":       "user://missing",
 	}); err == nil {
 		t.Fatalf("expected read missing to fail")
+	} else if !strings.Contains(err.Error(), `system://index`) || !strings.Contains(err.Error(), `operation="list"`) {
+		t.Fatalf("expected read missing hint, got %v", err)
 	}
 	if _, err := executeMemoryTool(tool, map[string]any{
 		"operation": "create",

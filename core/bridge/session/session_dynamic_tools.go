@@ -118,19 +118,6 @@ func (s *Session) VisibleDynamicToolNames(idleTurns int) []string {
 	return visible
 }
 
-func (s *Session) DynamicToolLoadSnapshot(toolName string) (DynamicToolLoad, bool) {
-	if s == nil || len(s.DynamicToolLoads) == 0 {
-		return DynamicToolLoad{}, false
-	}
-
-	name := strings.TrimSpace(toolName)
-	record, ok := s.DynamicToolLoads[name]
-	if !ok {
-		return DynamicToolLoad{}, false
-	}
-	return normalizeDynamicToolLoad(name, record), true
-}
-
 func (s *Session) DynamicToolLoadsSnapshot() []DynamicToolLoad {
 	if s == nil || len(s.DynamicToolLoads) == 0 {
 		return nil

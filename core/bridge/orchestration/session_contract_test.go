@@ -17,7 +17,10 @@ func TestBuildSessionMessagePayloadProjectsToolResult(t *testing.T) {
 		Text:       agent.FormatToolResult("read_file", "trace-1", "README.md contents", nil),
 	}
 
-	payload := buildSessionMessagePayload(message)
+	payload := buildSessionMessagePayload(3, message)
+	if payload.Index != 3 {
+		t.Fatalf("unexpected index: got %d want %d", payload.Index, 3)
+	}
 	if payload.Role != string(llm.RoleTool) {
 		t.Fatalf("unexpected role: got %q want %q", payload.Role, llm.RoleTool)
 	}
@@ -57,7 +60,10 @@ func TestBuildSessionMessagePayloadProjectsAnsweredAskHuman(t *testing.T) {
 		Text: agent.FormatToolResult("ask_human", "trace-2", toolOutput, nil),
 	}
 
-	payload := buildSessionMessagePayload(message)
+	payload := buildSessionMessagePayload(5, message)
+	if payload.Index != 5 {
+		t.Fatalf("unexpected index: got %d want %d", payload.Index, 5)
+	}
 	if strings.Contains(payload.Text, `"question_id"`) {
 		t.Fatalf("tool text should not leak ask_human payload: %q", payload.Text)
 	}
@@ -114,10 +120,13 @@ func TestBuildSessionMessagePayloadProjectsSendFileAttachment(t *testing.T) {
 		t.Fatalf("encode send_file result: %v", err)
 	}
 
-	payload := buildSessionMessagePayload(llm.Message{
+	payload := buildSessionMessagePayload(7, llm.Message{
 		Role: llm.RoleTool,
 		Text: agent.FormatToolResult("send_file", "trace-file", result, nil),
 	})
+	if payload.Index != 7 {
+		t.Fatalf("unexpected index: got %d want %d", payload.Index, 7)
+	}
 
 	if payload.ToolResult == nil {
 		t.Fatal("expected tool_result projection")

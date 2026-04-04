@@ -33,37 +33,6 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 			LastCalledTurn: 2,
 		},
 	}
-	s.PendingGraphQLMutationIntents = map[string]PendingGraphQLMutationIntent{
-		"intent-1": {
-			IntentID:      "intent-1",
-			Source:        "crm",
-			Domain:        "people",
-			PolicyName:    "update_viewer",
-			RootMutation:  "updateViewer",
-			DeliveryKey:   "delivery-1",
-			RequestHash:   "request-hash-1",
-			CommitState:   GraphQLMutationCommitStateDeliveryUnknown,
-			AttemptCount:  1,
-			LastError:     "timeout",
-			ResponseHash:  "response-hash-1",
-			ResponseBytes: 256,
-			Receipts: []GraphQLMutationReceipt{{
-				Attempt:       1,
-				State:         GraphQLMutationIntentDeliveryUnknown,
-				DeliveryKey:   "delivery-1",
-				RequestHash:   "request-hash-1",
-				ResponseHash:  "response-hash-1",
-				ResponseBytes: 256,
-				Error:         "timeout",
-			}},
-			Query:      "mutation { updateViewer { ok } }",
-			QuestionID: "q-1",
-			ToolCallID: "call-graphql-1",
-			TraceID:    "trace-graphql-1",
-			Status:     GraphQLMutationIntentDeliveryUnknown,
-			Summary:    "summary",
-		},
-	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
 	s.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "hi"})
 
@@ -89,9 +58,6 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.DynamicToolLoads, s.DynamicToolLoads) {
 		t.Fatalf("dynamic tool loads mismatch: got=%+v want=%+v", loaded.DynamicToolLoads, s.DynamicToolLoads)
-	}
-	if !reflect.DeepEqual(loaded.PendingGraphQLMutationIntents, s.PendingGraphQLMutationIntents) {
-		t.Fatalf("graphql mutation intents mismatch: got=%+v want=%+v", loaded.PendingGraphQLMutationIntents, s.PendingGraphQLMutationIntents)
 	}
 	if loaded.TokenCount <= 0 {
 		t.Fatalf("unexpected token count: got %d want > 0", loaded.TokenCount)

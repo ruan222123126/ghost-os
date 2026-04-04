@@ -11,11 +11,11 @@ use serde_json::Value;
 #[cfg(feature = "python-sandbox")]
 use serde_json::json;
 
-#[cfg(feature = "python-sandbox")]
-use crate::sandbox::{PythonSandbox, SandboxConfig};
 use crate::Response;
 #[cfg(feature = "python-sandbox")]
 use crate::read_stdin_payload;
+#[cfg(feature = "python-sandbox")]
+use crate::sandbox::{PythonSandbox, SandboxConfig};
 
 #[cfg(feature = "python-sandbox")]
 use budget::resolve_script_budget;

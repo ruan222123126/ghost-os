@@ -28,11 +28,15 @@ func (p *sessionTurnPreparer) prepareTurnMemory(
 	if sess != nil {
 		sessionID = strings.TrimSpace(sess.ID)
 	}
+	recentMessages := buildPlannerRecentMessages(history, "")
+	if shouldSkipEventGraphPlanning(userMessage, recentMessages) {
+		return preferenceOnlyMemoryContext(deps), "", nil
+	}
 	decision, err := deps.memoryPlan.Plan(ctx, memoryaug.PlannerInput{
 		SessionID:      sessionID,
 		UserScope:      deps.cfg.MemoryAugmentation.UserScopeID,
 		UserMessage:    userMessage,
-		RecentMessages: buildPlannerRecentMessages(history, ""),
+		RecentMessages: recentMessages,
 		ProjectRoot:    deps.cfg.ProjectRoot,
 	})
 	if err != nil {
@@ -52,4 +56,31 @@ func (p *sessionTurnPreparer) prepareTurnMemory(
 		Decision: decision,
 		Recall:   recall,
 	}, recall.PromptBlock, nil
+}
+
+func shouldSkipEventGraphPlanning(userMessage string, recentMessages []memoryaug.TurnMessage) bool {
+	if len(recentMessages) != 0 {
+		return false
+	}
+	return memoryaug.LooksLikeGlobalPreference(userMessage) || looksLikeFreshGreeting(userMessage)
+}
+
+func preferenceOnlyMemoryContext(deps agentRuntimeDependencies) *turnMemoryContext {
+	return &turnMemoryContext{
+		Decision: memoryaug.PlannerDecision{
+			RecallPlan: memoryaug.RecallPlan{
+				IncludePreference: true,
+				AllowLearning:     deps.memoryLearn != nil,
+			},
+		},
+	}
+}
+
+func looksLikeFreshGreeting(text string) bool {
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "hi", "hello", "hey", "你好", "您好", "嗨":
+		return true
+	default:
+		return false
+	}
 }

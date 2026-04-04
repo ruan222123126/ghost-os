@@ -30,7 +30,7 @@ func TestAskHumanToolExecuteStoresPendingQuestion(t *testing.T) {
 	if strings.TrimSpace(questionID) == "" {
 		t.Fatal("question_id should not be empty")
 	}
-	if !sess.HasPendingQuestion(questionID) {
+	if _, ok := sess.PendingQuestions[questionID]; !ok {
 		t.Fatalf("question %q should exist in pending_questions", questionID)
 	}
 }

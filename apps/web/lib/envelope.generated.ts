@@ -194,6 +194,7 @@ export interface AgentStreamMessagePayload {
 }
 
 export interface SessionMessage {
+  index: number;
   role: 'system' | 'internal' | 'user' | 'assistant' | 'tool';
   text?: string;
   content?: SessionContentPart[];
@@ -216,6 +217,15 @@ export interface SessionMetadata {
   token_count: number;
 }
 
+export interface SessionMessagePage {
+  limit: number;
+  before?: number | null;
+  start_index?: number | null;
+  end_index?: number | null;
+  has_more_before: boolean;
+  next_before?: number | null;
+}
+
 export interface AgentErrorPayload {
   message: string;
   session_id?: string;
@@ -227,6 +237,8 @@ export interface SessionDetail {
   messages: SessionMessage[];
   created_at: string;
   updated_at: string;
+  message_count: number;
+  page: SessionMessagePage;
   token_count: number;
 }
 

@@ -1,16 +1,16 @@
 import { useCallback } from 'react';
 import { createClientTraceId } from '@/lib/api/trace';
-import {
-  findPendingQuestion,
-  removePendingQuestion,
-  replacePendingQuestionWithUserAnswer,
-} from '@/lib/chatMessages';
+import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, toErrorMessage } from '@/lib/errors';
+import type { PendingQuestionMessage } from '@/lib/types';
 import type { ChatStateControls } from './types';
 
 interface UseChatQuestionActionsOptions {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
   appendErrorMessage: ChatStateControls['appendErrorMessage'];
   clearChatError: ChatStateControls['clearChatError'];
+  clearStreamingState: ChatStateControls['clearStreamingState'];
+  pendingQuestions: PendingQuestionMessage[];
   runHumanStream: (run: {
     answer: string;
     cancelled?: boolean;
@@ -19,25 +19,26 @@ interface UseChatQuestionActionsOptions {
     signal?: AbortSignal;
     traceId: string;
   }) => Promise<void>;
-  messages: ChatStateControls['messages'];
+  removePendingQuestion: ChatStateControls['removePendingQuestion'];
   setActiveRun: ChatStateControls['setActiveRun'];
   setChatError: ChatStateControls['setChatError'];
   setLoading: ChatStateControls['setLoading'];
   setStopPending: ChatStateControls['setStopPending'];
-  setMessages: ChatStateControls['setMessages'];
   stopPendingRef: ChatStateControls['stopPendingRef'];
 }
 
 export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
   const {
+    appendCommittedMessages,
     appendErrorMessage,
     clearChatError,
+    clearStreamingState,
+    pendingQuestions,
     runHumanStream,
-    messages,
+    removePendingQuestion,
     setActiveRun,
     setChatError,
     setLoading,
-    setMessages,
     setStopPending,
     stopPendingRef,
   } = options;
@@ -53,19 +54,23 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       return;
     }
 
-    const pending = findPendingQuestion(messages, trimmedQuestionId);
+    const pending = findPendingQuestion(pendingQuestions, trimmedQuestionId);
     if (!pending) {
       return;
     }
 
     clearChatError();
+    clearStreamingState();
     setStopPending(false);
     setLoading(true);
     const traceId = createClientTraceId('human-response');
     const abortController = new AbortController();
     setActiveRun({ abortController, sessionId: pending.sessionId, traceId });
     try {
-      setMessages((previous) => replacePendingQuestionWithUserAnswer(previous, trimmedQuestionId, trimmedAnswer));
+      removePendingQuestion(trimmedQuestionId);
+      appendCommittedMessages([buildUserMessage(trimmedAnswer, {
+        id: `local:answer:${traceId}:${trimmedQuestionId}`,
+      })]);
       await runHumanStream({
         answer: trimmedAnswer,
         questionId: pending.questionId,
@@ -82,7 +87,20 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       setActiveRun(null);
       setStopPending(false);
     }
-  }, [appendErrorMessage, clearChatError, messages, runHumanStream, setActiveRun, setChatError, setLoading, setMessages, setStopPending, stopPendingRef]);
+  }, [
+    appendCommittedMessages,
+    appendErrorMessage,
+    clearChatError,
+    clearStreamingState,
+    pendingQuestions,
+    removePendingQuestion,
+    runHumanStream,
+    setActiveRun,
+    setChatError,
+    setLoading,
+    setStopPending,
+    stopPendingRef,
+  ]);
 
   const cancelQuestion = useCallback(async (questionId: string) => {
     const trimmedQuestionId = questionId.trim();
@@ -90,19 +108,20 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       return;
     }
 
-    const pending = findPendingQuestion(messages, trimmedQuestionId);
+    const pending = findPendingQuestion(pendingQuestions, trimmedQuestionId);
     if (!pending) {
       return;
     }
 
     clearChatError();
+    clearStreamingState();
     setStopPending(false);
     setLoading(true);
     const traceId = createClientTraceId('human-response');
     const abortController = new AbortController();
     setActiveRun({ abortController, sessionId: pending.sessionId, traceId });
     try {
-      setMessages((previous) => removePendingQuestion(previous, trimmedQuestionId));
+      removePendingQuestion(trimmedQuestionId);
       await runHumanStream({
         answer: '',
         cancelled: true,
@@ -120,7 +139,18 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       setActiveRun(null);
       setStopPending(false);
     }
-  }, [appendErrorMessage, clearChatError, messages, runHumanStream, setActiveRun, setLoading, setMessages, setStopPending, stopPendingRef]);
+  }, [
+    appendErrorMessage,
+    clearChatError,
+    clearStreamingState,
+    pendingQuestions,
+    removePendingQuestion,
+    runHumanStream,
+    setActiveRun,
+    setLoading,
+    setStopPending,
+    stopPendingRef,
+  ]);
 
   return {
     answerQuestion,
@@ -134,4 +164,11 @@ function shouldSuppressQuestionStreamError(error: unknown, stopPending: boolean)
   }
 
   return isAbortError(error) || toErrorMessage(error) === 'agent stream closed before terminal event';
+}
+
+function findPendingQuestion(
+  questions: PendingQuestionMessage[],
+  questionId: string,
+): PendingQuestionMessage | undefined {
+  return questions.find((question) => question.questionId === questionId);
 }

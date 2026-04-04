@@ -21,7 +21,7 @@ models = ["gpt-4o", "gpt-4.1-mini"]
 # type = "codex"
 # base_url = "https://api.openai.com/v1"
 # api_key = "sk-your-key"
-# models = ["codex-mini-latest"]
+# models = ["gpt-5-codex"]
 
 # OpenAI-compatible gateway example
 # [providers.crs]
@@ -113,6 +113,15 @@ memory_augmentation_session_scope_enabled = true
 memory_augmentation_user_scope_enabled = true
 # memory_augmentation_llm_model = "gpt-4o-mini"
 memory_augmentation_user_scope_id = "local-user"
+
+# Responses API request options (optional)
+# response_prompt_cache_key = "ghost-session-cache-key"
+# response_prompt_cache_retention = "retain"
+# response_safety_identifier = "local-user"
+# response_store = false
+# response_metadata = { app = "ghost-os", channel = "bridge" }
+# Enable only when you explicitly want legacy retry behavior for codex continuation 4xx.
+# codex_stateless_retry_enabled = false
 
 # Extra headers for provider requests
 # [provider_headers]

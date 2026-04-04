@@ -4,11 +4,12 @@ This file defines repository-wide execution rules for coding agents.
 
 ## Current Project Status
 
-See `PROJECT_PROGRESS.md` before implementation. Current baseline is MVP skeleton:
-- Bridge main flow is usable (`core/bridge`).
-- Web Console MVP is usable (`apps/web`).
-- CLI baseline is in place (`apps/cli`).
-- Native atomic capabilities in `drivers/native` are still incomplete and should not be assumed production-ready.
+See `PROJECT_PROGRESS.md` before implementation. Current baseline is MVP stabilization:
+- Bridge main flow is usable and remains the primary development center (`core/bridge`).
+- Web Console and CLI are both usable; Web streaming and user image input are connected (`apps/web`, `apps/cli`).
+- Android has initial session/display integration but is still behind Web/CLI maturity (`apps/android`).
+- Native atomic capabilities cover screenshot/input/script/window-query, but are still not production-complete (`drivers/native`).
+- Assistant text tool-calling protocol baseline is `<t:ID>JSON</t>` with `[TOOL_TAG_RESULT]`; legacy plain `mutation/query` text calls are no longer active.
 
 ## Mission
 
@@ -38,7 +39,7 @@ Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital tw
    - Manages state, protocol routing, AI orchestration, safety checks.
    - Must not implement concrete OS system calls.
 
-3. **Perception Layer** (`apps/web`, `apps/cli`)
+3. **Perception Layer** (`apps/web`, `apps/cli`, `apps/android`)
    - Interaction and feedback.
    - Web rendering, browser structure access, immersive CLI control.
 
@@ -57,6 +58,9 @@ Always choose implementation path in this order:
 4. Cross-process payloads must strictly follow `core/shared/schema.json`:
    - Request: `{ "action": "string", "params": "object", "trace_id": "string" }`
    - Response: `{ "status": "success|error", "payload": "object", "error": "string" }`
+5. Assistant text tool-calls must use the Tool-Tag protocol:
+   - Tool call text: `<t:ID>JSON</t>`
+   - Internal feedback tag: `[TOOL_TAG_RESULT]`
 
 ## Engineering Aesthetics
 

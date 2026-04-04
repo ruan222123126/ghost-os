@@ -9,8 +9,9 @@ import type { ChatStateControls, StreamAgentRunInput, UseBridgeChatOptions } fro
 
 interface UseChatRunControlOptions {
   appendErrorMessage: ChatStateControls['appendErrorMessage'];
-  appendMessages: ChatStateControls['appendMessages'];
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
   clearChatError: ChatStateControls['clearChatError'];
+  clearStreamingState: ChatStateControls['clearStreamingState'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
   runAgentStream: (run: StreamAgentRunInput) => Promise<void>;
   activeRunRef: ChatStateControls['activeRunRef'];
@@ -24,8 +25,9 @@ interface UseChatRunControlOptions {
 export function useChatRunControl(options: UseChatRunControlOptions) {
   const {
     appendErrorMessage,
-    appendMessages,
+    appendCommittedMessages,
     clearChatError,
+    clearStreamingState,
     currentSessionId,
     runAgentStream,
     activeRunRef,
@@ -45,9 +47,13 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     const traceId = createClientTraceId('agent-run');
     const abortController = new AbortController();
     clearChatError();
+    clearStreamingState();
     setStopPending(false);
     setActiveRun({ abortController, sessionId, traceId });
-    appendMessages([buildUserMessage(input.message, { images: draftImagesToChatImages(input.images) })]);
+    appendCommittedMessages([buildUserMessage(input.message, {
+      id: `local:user:${traceId}`,
+      images: draftImagesToChatImages(input.images),
+    })]);
     setLoading(true);
 
     try {
@@ -67,7 +73,18 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
       setActiveRun(null);
       setStopPending(false);
     }
-  }, [appendErrorMessage, appendMessages, clearChatError, currentSessionId, runAgentStream, setActiveRun, setLoading, setStopPending, stopPendingRef]);
+  }, [
+    appendCommittedMessages,
+    appendErrorMessage,
+    clearChatError,
+    clearStreamingState,
+    currentSessionId,
+    runAgentStream,
+    setActiveRun,
+    setLoading,
+    setStopPending,
+    stopPendingRef,
+  ]);
 
   const stopCurrentRun = useCallback(async () => {
     const run = activeRunRef.current;

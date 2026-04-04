@@ -3,8 +3,9 @@ package orchestration
 const defaultMaxRequestBodyBytes int64 = 1 << 20
 
 type agentParams struct {
-	Message   string `json:"message"`
-	SessionID string `json:"session_id,omitempty"`
+	Message   string                `json:"message,omitempty"`
+	Images    []sessionImageContent `json:"images,omitempty"`
+	SessionID string                `json:"session_id,omitempty"`
 }
 
 type agentStopParams struct {
@@ -14,6 +15,12 @@ type agentStopParams struct {
 
 type sessionIDParams struct {
 	ID string `json:"id"`
+}
+
+type sessionGetParams struct {
+	ID     string
+	Limit  int
+	Before *int
 }
 
 type sessionDeleteResponse struct {

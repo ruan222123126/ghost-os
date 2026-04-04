@@ -94,6 +94,16 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_WEB_ROOTER_ENABLED": "maybe"},
 			want: "invalid GHOST_WEB_ROOTER_ENABLED",
 		},
+		{
+			name: "response store bool",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RESPONSE_STORE": "maybe"},
+			want: "invalid GHOST_RESPONSE_STORE",
+		},
+		{
+			name: "codex stateless retry bool",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_CODEX_STATELESS_RETRY_ENABLED": "maybe"},
+			want: "invalid GHOST_CODEX_STATELESS_RETRY_ENABLED",
+		},
 	}
 
 	for _, tc := range cases {
@@ -194,6 +204,75 @@ func TestResolveConfigAllowsWebRooterOverrides(t *testing.T) {
 	}
 	if cfg.WebRooterTimeoutMS != 12_345 {
 		t.Fatalf("unexpected web_rooter timeout override: %d", cfg.WebRooterTimeoutMS)
+	}
+}
+
+func TestResolveConfigLoadsResponseOptionsFromEnvAndFile(t *testing.T) {
+	fileStore := true
+	cfg, err := resolveConfig(
+		bridgeFileConfig{
+			ResponsePromptCacheKey:       stringPointer("file-cache-key"),
+			ResponsePromptCacheRetention: stringPointer("file-retention"),
+			ResponseSafetyIdentifier:     stringPointer("file-safe"),
+			ResponseStore:                &fileStore,
+			ResponseMetadata: map[string]string{
+				"source": "file",
+			},
+			CodexStatelessRetryEnabled: boolPtr(true),
+		},
+		envSnapshot{
+			"GHOST_PROVIDER":                     "custom",
+			"GHOST_PROMPT_CACHE_KEY":             "env-cache-key",
+			"GHOST_PROMPT_CACHE_RETENTION":       "env-retention",
+			"GHOST_SAFETY_IDENTIFIER":            "env-safe",
+			"GHOST_RESPONSE_STORE":               "false",
+			"GHOST_RESPONSE_METADATA_env_source": "env",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if cfg.ResponseOptions.PromptCacheKey != "file-cache-key" {
+		t.Fatalf("unexpected prompt_cache_key: got %q want %q", cfg.ResponseOptions.PromptCacheKey, "file-cache-key")
+	}
+	if cfg.ResponseOptions.PromptCacheRetention != "file-retention" {
+		t.Fatalf(
+			"unexpected prompt_cache_retention: got %q want %q",
+			cfg.ResponseOptions.PromptCacheRetention,
+			"file-retention",
+		)
+	}
+	if cfg.ResponseOptions.SafetyIdentifier != "file-safe" {
+		t.Fatalf("unexpected safety_identifier: got %q want %q", cfg.ResponseOptions.SafetyIdentifier, "file-safe")
+	}
+	if cfg.ResponseOptions.Store == nil || !*cfg.ResponseOptions.Store {
+		t.Fatalf("unexpected response store setting: %+v", cfg.ResponseOptions.Store)
+	}
+	if cfg.ResponseOptions.Metadata["source"] != "file" {
+		t.Fatalf("unexpected response metadata: %+v", cfg.ResponseOptions.Metadata)
+	}
+	if !cfg.CodexStatelessRetryEnabled {
+		t.Fatalf("expected codex stateless retry enabled, got false")
+	}
+}
+
+func TestResolveConfigLoadsResponseMetadataFromEnvPrefix(t *testing.T) {
+	cfg, err := resolveConfig(
+		bridgeFileConfig{},
+		envSnapshot{
+			"GHOST_PROVIDER":                     "custom",
+			"GHOST_RESPONSE_METADATA_channel":    "bridge",
+			"GHOST_RESPONSE_METADATA_request_id": "abc-123",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if cfg.ResponseOptions.Metadata["channel"] != "bridge" {
+		t.Fatalf("unexpected response metadata: %+v", cfg.ResponseOptions.Metadata)
+	}
+	if cfg.ResponseOptions.Metadata["request_id"] != "abc-123" {
+		t.Fatalf("unexpected response metadata: %+v", cfg.ResponseOptions.Metadata)
 	}
 }
 

@@ -145,7 +145,19 @@ func TestRunAssistantTextInvocationUsesHandlerFeedbackWithoutGraphQLSpecialCase(
 	if last.Text != "[ASSISTANT_TEXT_RESULT]\n{\"status\":\"ok\"}" {
 		t.Fatalf("unexpected feedback text: %q", last.Text)
 	}
-	if strings.Contains(last.Text, "[GRAPHQL_TOOL_RESULT]") {
+	if strings.Contains(last.Text, "[TOOL_TAG_RESULT]") {
 		t.Fatalf("invocation handler feedback should not be rewritten as graphql feedback: %q", last.Text)
+	}
+
+	newMessages := agent.GetNewMessages()
+	if len(newMessages) < 2 {
+		t.Fatalf("unexpected committed messages: %+v", newMessages)
+	}
+	assistant := newMessages[1]
+	if len(assistant.ToolCalls) != 1 {
+		t.Fatalf("expected assistant invocation to commit tool_calls immediately, got %+v", assistant)
+	}
+	if assistant.ToolCalls[0].Name != "web_search" {
+		t.Fatalf("unexpected committed tool call: %+v", assistant.ToolCalls[0])
 	}
 }

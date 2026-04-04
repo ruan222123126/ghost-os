@@ -29,10 +29,14 @@ const AssistantMessageRow: FC<{ content: string }> = ({ content }) => (
   </div>
 );
 
-const ToolMessageRow: FC<{ message: ToolChatMessage }> = ({ message }) => (
+const ToolMessageRow: FC<{
+  isOpen: boolean;
+  message: ToolChatMessage;
+  onToggle: () => void;
+}> = ({ isOpen, message, onToggle }) => (
   <div className="message-row is-tool">
     <div className="message-stack">
-      <ToolCard tool={message} />
+      <ToolCard isOpen={isOpen} onToggle={onToggle} tool={message} />
       {message.attachments?.length ? <MessageAttachments attachments={message.attachments} /> : null}
     </div>
   </div>
@@ -64,14 +68,27 @@ const QuestionMessageRow: FC<{
   </div>
 );
 
-export const MessageRow: FC<MessageRowProps> = ({ message, loading, onAnswerQuestion, onCancelQuestion }) => {
+export const MessageRow: FC<MessageRowProps> = ({
+  message,
+  isToolCardOpen = false,
+  loading,
+  onAnswerQuestion,
+  onCancelQuestion,
+  onToggleToolCard,
+}) => {
   switch (message.kind) {
     case 'user':
       return <UserMessageRow message={message} />;
     case 'assistant':
       return <AssistantMessageRow content={message.content} />;
     case 'tool':
-      return <ToolMessageRow message={message} />;
+      return (
+        <ToolMessageRow
+          isOpen={isToolCardOpen}
+          message={message}
+          onToggle={() => onToggleToolCard?.(message.id)}
+        />
+      );
     case 'system':
       return <NoteMessageRow content={message.content} tone="system" />;
     case 'error':

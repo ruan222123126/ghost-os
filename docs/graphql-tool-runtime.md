@@ -80,7 +80,7 @@ When GraphQL tool runtime is enabled:
   - tool result envelope writing
   - internal feedback for the next completion round
 
-Successful internal feedback uses the `[GRAPHQL_TOOL_RESULT]` prefix.
+Successful internal feedback uses the `[TOOL_TAG_RESULT]` prefix.
 
 ## Persistence
 

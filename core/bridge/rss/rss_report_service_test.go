@@ -30,7 +30,7 @@ func TestRSSInboxServiceBuildAndStoreBriefingWritesReportMarkdown(t *testing.T) 
 	requireFileContains(t, dossierPath, "Source: Example Feed")
 }
 
-func TestRSSInboxServiceBuildAndStoreBriefingFallsBackWhenAgentReportFails(t *testing.T) {
+func TestRSSInboxServiceBuildAndStoreBriefingSurfacesReportFailure(t *testing.T) {
 	now := time.Date(2026, 3, 9, 19, 0, 0, 0, time.UTC)
 	fixture := newRSSReportServiceFixture(t, rssReportServiceOptions{
 		now:           now,
@@ -42,13 +42,30 @@ func TestRSSInboxServiceBuildAndStoreBriefingFallsBackWhenAgentReportFails(t *te
 
 	result := fixture.buildBriefing(t, "trace-rss-briefing-report-fallback", "task-rss-briefing-report-fallback")
 
-	if result.Report == nil {
-		t.Fatal("expected fallback report metadata")
+	if result.Report != nil {
+		t.Fatalf("expected report metadata to be omitted on failure, got %+v", result.Report)
 	}
-	if strings.TrimSpace(result.ReportError) != "" {
-		t.Fatalf("expected fallback to suppress report error, got %q", result.ReportError)
+	if strings.TrimSpace(result.ReportError) != "agent failed" {
+		t.Fatalf("expected report error to be surfaced, got %q", result.ReportError)
 	}
-	requireFileContains(t, result.Report.MarkdownPath, "# AI Brief Report - 2026-03-09 19:00 UTC")
-	requireFileContains(t, result.Report.MarkdownPath, "## 值得持续关注的具体信号")
-	requireFileContains(t, result.Report.MarkdownPath, "出处：[Launch](https://example.com/launch)（Example Feed）")
+}
+
+func TestRSSInboxServiceBuildAndStoreBriefingSurfacesEmptyReport(t *testing.T) {
+	now := time.Date(2026, 3, 9, 20, 0, 0, 0, time.UTC)
+	fixture := newRSSReportServiceFixture(t, rssReportServiceOptions{
+		now:           now,
+		reportBuilder: stubRSSReportBuilder{},
+	})
+	fixture.saveItems(t, []RSSInboxItem{testRSSInboxItem(rssTestItemOptions{
+		now: now, title: "Launch", link: "https://example.com/launch", summary: "Launch summary",
+	})})
+
+	result := fixture.buildBriefing(t, "trace-rss-briefing-report-empty", "task-rss-briefing-report-empty")
+
+	if result.Report != nil {
+		t.Fatalf("expected report metadata to be omitted on empty report, got %+v", result.Report)
+	}
+	if strings.TrimSpace(result.ReportError) != "rss report builder returned empty content" {
+		t.Fatalf("expected empty report error to be surfaced, got %q", result.ReportError)
+	}
 }

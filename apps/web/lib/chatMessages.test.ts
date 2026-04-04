@@ -7,9 +7,11 @@ import {
 } from './chatMessages';
 import type { AgentSendAwaitingHumanResponse, SessionMessage } from './types';
 
+const SESSION_ID = 'session-test';
+
 describe('chatMessages', () => {
   it('preserves system and tool messages as structured chat kinds', () => {
-    const messages: SessionMessage[] = [
+    const messages = withSessionIndices([
       { role: 'system', text: 'keep sharp' },
       { role: 'internal', text: '[GRAPHQL_EXECUTION_RESULT]\n{"data":{"viewer":{"id":"1"}}}' },
       {
@@ -24,9 +26,9 @@ describe('chatMessages', () => {
         },
         tool_call_id: 'call-1',
       },
-    ];
+    ]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(3);
     expect(mapped[0]).toMatchObject({ kind: 'system', content: 'keep sharp' });
@@ -43,8 +45,25 @@ describe('chatMessages', () => {
     });
   });
 
+  it('filters tool-tag tfind internal notes to loaded tools only', () => {
+    const messages = withSessionIndices([
+      {
+        role: 'internal',
+        text: '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"browser_control","status":"active","available_now":true},{"name":"web_search","status":"expired"},{"name":"computer_use","status":"pending","available_next_turn":true}]}}',
+      },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({ kind: 'system' });
+    expect(mapped[0].content).toBe(
+      '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"browser_control","status":"active","available_now":true},{"name":"computer_use","status":"pending","available_next_turn":true}]}}',
+    );
+  });
+
   it('reconstructs answered ask_human tool results into question and user timeline', () => {
-    const messages: SessionMessage[] = [
+    const messages = withSessionIndices([
       {
         role: 'tool',
         text: 'Which database should I use?\nPostgreSQL',
@@ -65,9 +84,9 @@ describe('chatMessages', () => {
           answer: 'PostgreSQL',
         },
       },
-    ];
+    ]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(2);
     expect(mapped[0]).toMatchObject({
@@ -84,7 +103,7 @@ describe('chatMessages', () => {
   });
 
   it('maps user image content into chat messages', () => {
-    const messages: SessionMessage[] = [
+    const messages = withSessionIndices([
       {
         role: 'user',
         text: '',
@@ -99,9 +118,9 @@ describe('chatMessages', () => {
           },
         ],
       },
-    ];
+    ]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(1);
     expect(mapped[0]).toMatchObject({
@@ -118,7 +137,7 @@ describe('chatMessages', () => {
   });
 
   it('keeps path-only user images visible instead of dropping them', () => {
-    const messages: SessionMessage[] = [
+    const messages = withSessionIndices([
       {
         role: 'user',
         text: 'inspect this',
@@ -132,9 +151,9 @@ describe('chatMessages', () => {
           },
         ],
       },
-    ];
+    ]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(1);
     expect(mapped[0]).toMatchObject({
@@ -157,9 +176,9 @@ describe('chatMessages', () => {
       output: 'README.md contents',
       error: '',
     });
-    const messages: SessionMessage[] = [{ role: 'tool', text: rawEnvelope }];
+    const messages = withSessionIndices([{ role: 'tool', text: rawEnvelope }]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(1);
     expect(mapped[0]).toMatchObject({
@@ -170,10 +189,10 @@ describe('chatMessages', () => {
     });
   });
 
-  it('hides assistant graphql tool text when the turn already has a tool card', () => {
-    const messages: SessionMessage[] = [
+  it('hides assistant tool-tag text when the turn already has a tool card', () => {
+    const messages = withSessionIndices([
       { role: 'user', text: '搜一下 AI 咨询行业动态' },
-      { role: 'assistant', text: 'mutation { web_search(provider: tavily, query: "AI consulting latest trends 2025") }' },
+      { role: 'assistant', text: '<t:1>{"provider":"tavily","query":"AI consulting latest trends 2025"}</t>' },
       {
         role: 'tool',
         tool_call_id: 'call-1',
@@ -186,9 +205,9 @@ describe('chatMessages', () => {
         },
       },
       { role: 'assistant', text: '我整理了几条近期趋势。' },
-    ];
+    ]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(3);
     expect(mapped[0]).toMatchObject({ kind: 'user', content: '搜一下 AI 咨询行业动态' });
@@ -196,18 +215,28 @@ describe('chatMessages', () => {
     expect(mapped[2]).toMatchObject({ kind: 'assistant', content: '我整理了几条近期趋势。' });
   });
 
-  it('keeps assistant graphql text visible when no tool card follows', () => {
-    const messages: SessionMessage[] = [
-      { role: 'assistant', text: 'mutation { web_search(provider: tavily, query: "OpenAI") }' },
-    ];
+  it('strips tool tags from assistant text and keeps visible prose', () => {
+    const messages = withSessionIndices([
+      { role: 'assistant', text: '我先查一下<t:1>{"provider":"tavily","query":"OpenAI"}</t>完成后给你总结。' },
+    ]);
 
-    const mapped = mapSessionMessagesToChat(messages);
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(1);
     expect(mapped[0]).toMatchObject({
       kind: 'assistant',
-      content: 'mutation { web_search(provider: tavily, query: "OpenAI") }',
+      content: '我先查一下完成后给你总结。',
     });
+  });
+
+  it('does not render pure tool-tag assistant messages as raw text', () => {
+    const messages = withSessionIndices([
+      { role: 'assistant', text: '<t:1>{"provider":"tavily","query":"OpenAI"}</t>' },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(0);
   });
 
   it('replaces pending question cards with the user answer', () => {
@@ -244,3 +273,10 @@ describe('chatMessages', () => {
     expect(hasPendingQuestion(replaced)).toBe(false);
   });
 });
+
+function withSessionIndices(messages: Omit<SessionMessage, 'index'>[]): SessionMessage[] {
+  return messages.map((message, index) => ({
+    index,
+    ...message,
+  }));
+}

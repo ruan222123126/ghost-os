@@ -27,17 +27,24 @@ const HomePage: FC = () => {
     setCurrentSessionId,
   } = useSessions();
   const {
-    messages,
+    committedMessages,
+    streamingAssistantSegments,
+    streamingItemOrder,
+    streamingTools,
+    pendingQuestions,
     loading,
     historyLoading,
+    loadingOlderHistory,
     chatError,
     hasPendingQuestion,
+    hasOlderHistory,
     canStop,
     sendChatMessage,
     stopCurrentRun,
     answerQuestion,
     cancelQuestion,
     loadSessionHistory,
+    loadOlderHistory,
     clearMessages,
   } = useBridgeChat({
     currentSessionId,
@@ -123,8 +130,16 @@ const HomePage: FC = () => {
             {configError && !showConfig ? <div className="status-line error">{configError}</div> : null}
 
             <MessageList
-              messages={messages}
+              key={currentSessionId || 'draft-session'}
+              committedMessages={committedMessages}
+              streamingAssistantSegments={streamingAssistantSegments}
+              streamingItemOrder={streamingItemOrder}
+              streamingTools={streamingTools}
+              pendingQuestions={pendingQuestions}
               loading={loading}
+              loadingOlderHistory={loadingOlderHistory}
+              hasOlderHistory={hasOlderHistory}
+              loadOlderHistory={loadOlderHistory}
               onAnswerQuestion={answerQuestion}
               onCancelQuestion={cancelQuestion}
             />

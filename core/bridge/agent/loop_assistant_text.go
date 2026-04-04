@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -96,8 +97,9 @@ func (a *Agent) finishAssistantTextToolInvocations(
 	state *agentRunState,
 	result AssistantTextResult,
 ) error {
-	acceptAssistantTurn(state.history, resp)
-	for index, invocation := range assistantTextToolInvocations(result) {
+	invocations := assistantTextToolInvocations(result)
+	acceptAssistantTurn(state.history, assistantTextToolCallResponse(resp, invocations))
+	for index, invocation := range invocations {
 		outcome, err := state.toolCalls.executeSingleWithStepIndex(
 			ctx,
 			state.traceID,
@@ -131,6 +133,44 @@ func (a *Agent) finishAssistantTextToolInvocations(
 	}
 	a.commitTurn(state.history)
 	return nil
+}
+
+func assistantTextToolCallResponse(
+	resp *llm.CompletionResponse,
+	invocations []AssistantTextToolInvocationEntry,
+) *llm.CompletionResponse {
+	if resp == nil || len(invocations) == 0 {
+		return resp
+	}
+	cloned := *resp
+	clonedMessages := llm.CloneMessages([]llm.Message{resp.Message})
+	if len(clonedMessages) != 1 {
+		return resp
+	}
+	cloned.Message = clonedMessages[0]
+	cloned.Message.ToolCalls = assistantTextToolCalls(invocations)
+	return &cloned
+}
+
+func assistantTextToolCalls(invocations []AssistantTextToolInvocationEntry) []llm.ToolCall {
+	calls := make([]llm.ToolCall, 0, len(invocations))
+	for _, invocation := range invocations {
+		calls = append(calls, llm.ToolCall{
+			ID:        strings.TrimSpace(invocation.Tool.CallID),
+			Name:      strings.TrimSpace(invocation.Tool.Name),
+			Arguments: cloneAssistantTextArguments(invocation.Invocation.Arguments),
+		})
+	}
+	return calls
+}
+
+func cloneAssistantTextArguments(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	cloned := make([]byte, len(raw))
+	copy(cloned, raw)
+	return json.RawMessage(cloned)
 }
 
 func assistantTextToolInvocations(result AssistantTextResult) []AssistantTextToolInvocationEntry {

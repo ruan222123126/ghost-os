@@ -120,7 +120,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 		ToolSelector: ToolSelectorConfig{
 			Enabled:   true,
 			Mode:      "llm",
-			Allowlist: []string{"send_file"},
+			Allowlist: []string{"ask_human"},
 		},
 		MaxTurns: 6,
 	})
@@ -129,10 +129,10 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	if catalog.Get("send_file") == nil {
-		t.Fatal("expected allowlist tool to remain in scoped subset")
+	if catalog.Get("ask_human") == nil || catalog.Get("send_file") == nil {
+		t.Fatal("expected resident and selector-selected tools to remain in scoped subset")
 	}
-	for _, name := range []string{"web_search", "script_exec", "ask_human"} {
+	for _, name := range []string{"web_search", "script_exec", "tfind"} {
 		if catalog.Get(name) != nil {
 			t.Fatalf("expected %q to stay hidden outside scoped subset", name)
 		}
@@ -142,7 +142,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 	}
 }
 
-func TestSessionTurnPreparer_SelectToolsForTurn_PassesPolicyScopedCatalogToSelector(t *testing.T) {
+func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOutsideStrictMode(t *testing.T) {
 	var available []string
 	preparer := &sessionTurnPreparer{
 		selectorFactory: func(_ Config, catalog tools.ToolCatalog) selectorEngine {
@@ -154,6 +154,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesPolicyScopedCatalogToSelec
 		ToolSelector: ToolSelectorConfig{
 			Enabled:   true,
 			Mode:      "llm",
+			Allowlist: []string{"ask_human"},
 			Blocklist: []string{"script_exec"},
 		},
 		MaxTurns: 6,
@@ -163,17 +164,28 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesPolicyScopedCatalogToSelec
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	for _, name := range available {
-		if name == "script_exec" {
-			t.Fatalf("expected selector-visible catalog to exclude blocked tool, got %v", available)
+	if containsToolName(available, "script_exec") {
+		t.Fatalf("expected selector-visible catalog to exclude blocked tool, got %v", available)
+	}
+	for _, name := range []string{"ask_human", "send_file", "web_search"} {
+		if !containsToolName(available, name) {
+			t.Fatalf("expected selector-visible catalog to include %q outside strict mode, got %v", name, available)
 		}
 	}
 }
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(t *testing.T) {
-	preparer := &sessionTurnPreparer{}
+	var available []string
+	preparer := &sessionTurnPreparer{
+		selectorFactory: func(_ Config, catalog tools.ToolCatalog) selectorEngine {
+			available = toolCatalogNames(catalog)
+			return &fakeSelectorEngine{result: ToolSelectorResult{Mode: "all"}}
+		},
+	}
 	deps := newRunnerTestDeps(Config{
 		ToolSelector: ToolSelectorConfig{
+			Enabled:       true,
+			Mode:          "llm",
 			AllowlistOnly: true,
 			Allowlist:     []string{"script_exec"},
 		},
@@ -192,6 +204,9 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 	}
 	if catalog.Get("ask_human") != nil {
 		t.Fatal("expected ask_human to stay hidden when not allowlisted")
+	}
+	if len(available) != 1 || available[0] != "script_exec" {
+		t.Fatalf("expected selector-visible catalog to stay strict, got %v", available)
 	}
 }
 
@@ -222,4 +237,41 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 			t.Fatalf("expected %q to stay hidden until dynamically loaded", name)
 		}
 	}
+}
+
+func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithoutAllowlist(t *testing.T) {
+	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"script_exec"}, Confidence: 0.9}}
+	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(Config{
+		ToolSelector: ToolSelectorConfig{
+			Enabled: true,
+			Mode:    "llm",
+		},
+		MaxTurns: 6,
+	})
+
+	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-empty-resident-subset")
+	if err != nil {
+		t.Fatalf("selectToolsForTurn returned error: %v", err)
+	}
+	if catalog.Get("script_exec") == nil {
+		t.Fatal("expected selector to enable non-resident tool")
+	}
+	for _, name := range []string{"ask_human", "send_file", "web_search"} {
+		if catalog.Get(name) != nil {
+			t.Fatalf("expected %q to stay hidden outside scoped subset", name)
+		}
+	}
+	if prompt == "" {
+		t.Fatal("expected prompt override for scoped subset")
+	}
+}
+
+func containsToolName(names []string, target string) bool {
+	for _, name := range names {
+		if name == target {
+			return true
+		}
+	}
+	return false
 }

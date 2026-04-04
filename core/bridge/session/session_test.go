@@ -75,7 +75,7 @@ func TestPendingQuestionsLifecycle(t *testing.T) {
 		TraceID:    "trace-1",
 	})
 
-	if !s.HasPendingQuestion("q-1") {
+	if _, ok := s.PendingQuestions["q-1"]; !ok {
 		t.Fatal("expected q-1 to be pending")
 	}
 	if ok := s.SetHumanAnswer("q-1", "postgres"); !ok {
@@ -89,7 +89,7 @@ func TestPendingQuestionsLifecycle(t *testing.T) {
 	if resolved[0].QuestionID != "q-1" || resolved[0].Answer != "postgres" {
 		t.Fatalf("unexpected resolved payload: %+v", resolved[0])
 	}
-	if s.HasPendingQuestion("q-1") {
+	if _, ok := s.PendingQuestions["q-1"]; ok {
 		t.Fatal("pending question should be cleared after pop")
 	}
 }
@@ -157,10 +157,11 @@ func TestDynamicToolLoadLifecycle(t *testing.T) {
 	if len(visible) != 1 || visible[0] != "web_search" {
 		t.Fatalf("unexpected visible tools: %v", visible)
 	}
-	snapshot, ok := s.DynamicToolLoadSnapshot("web_search")
-	if !ok {
+	loads := s.DynamicToolLoadsSnapshot()
+	if len(loads) != 1 {
 		t.Fatal("expected dynamic tool snapshot")
 	}
+	snapshot := loads[0]
 	if !snapshot.VisibleForTurn(s.TurnIndex) {
 		t.Fatal("expected tool to be visible in the current turn")
 	}

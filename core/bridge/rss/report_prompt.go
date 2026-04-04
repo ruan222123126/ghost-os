@@ -19,9 +19,6 @@ Workflow requirements:
 The final report must cover:
 - What happened
 - Why it matters
-- Opportunities
-- Risks / constraints
-- What may happen next
 - Concrete signals to watch
 - Event sources. In the "What happened" section, every major event/highlight must end with its corresponding "出处：..." line mapped to concrete source items.
 
@@ -48,6 +45,7 @@ Return the final report in Markdown only.
 Write the entire report in Simplified Chinese.
 Use this exact H1 title: %s
 Inside the "## 发生了什么" section, every major event/highlight must be followed by its corresponding "出处：..." line with concrete source items and links. Do not move sources into a separate appendix section.
+Do not add standalone sections for opportunities, risks, constraints, or predictions. Keep the report concise and avoid repeating the same point across sections.
 
 Report context:
 - report_title: %s

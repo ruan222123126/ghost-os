@@ -5,7 +5,7 @@ import "testing"
 func TestProjectMessagesForCompletionKeepsStoredInternalRoleUntouched(t *testing.T) {
 	input := []Message{
 		{Role: RoleSystem, Text: "system"},
-		{Role: RoleInternal, Text: "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}"},
+		{Role: RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 	}
 
 	projected := ProjectMessagesForCompletion(input)

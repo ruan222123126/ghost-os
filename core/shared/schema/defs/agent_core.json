@@ -28,13 +28,18 @@
     "agentRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "message"
-      ],
       "properties": {
         "message": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Optional text prompt. Required when images is empty."
+        },
+        "images": {
+          "type": "array",
+          "description": "Optional image inputs. Each image may reference a local path, remote URL, or data URL.",
+          "items": {
+            "$ref": "./session_content.json#/$defs/sessionImageContent"
+          }
         },
         "session_id": {
           "type": "string",
@@ -45,6 +50,24 @@
           "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."
         }
       },
+      "anyOf": [
+        {
+          "required": [
+            "message"
+          ]
+        },
+        {
+          "required": [
+            "images"
+          ],
+          "properties": {
+            "images": {
+              "type": "array",
+              "minItems": 1
+            }
+          }
+        }
+      ],
       "x-codegen": {
         "order": 20,
         "go": { "name": "agentRequest" },

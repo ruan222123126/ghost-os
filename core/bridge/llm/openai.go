@@ -182,8 +182,14 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 	}
 
 	switch msg.Role {
-	case RoleSystem, RoleUser:
+	case RoleSystem:
 		out.Content = msg.Text
+	case RoleUser:
+		content, err := toOpenAIContent(msg.Text, msg.Content)
+		if err != nil {
+			return openAIMessage{}, err
+		}
+		out.Content = content
 	case RoleAssistant:
 		if strings.TrimSpace(msg.Text) != "" {
 			out.Content = msg.Text
@@ -203,7 +209,7 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 			out.ToolCalls = toolCalls
 		}
 	case RoleTool:
-		content, err := toOpenAIToolContent(msg.Text, msg.Content)
+		content, err := toOpenAIContent(msg.Text, msg.Content)
 		if err != nil {
 			return openAIMessage{}, err
 		}
@@ -216,7 +222,7 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 	return out, nil
 }
 
-func toOpenAIToolContent(text string, content []ContentPart) (any, error) {
+func toOpenAIContent(text string, content []ContentPart) (any, error) {
 	if len(content) == 0 {
 		return text, nil
 	}
@@ -230,19 +236,29 @@ func toOpenAIToolContent(text string, content []ContentPart) (any, error) {
 		})
 	}
 	for _, part := range content {
-		if part.Image == nil {
-			continue
+		switch strings.ToLower(strings.TrimSpace(part.Type)) {
+		case "", ContentTypeText:
+			if value := strings.TrimSpace(part.Text); value != "" {
+				parts = append(parts, openAIContentPart{
+					Type: "text",
+					Text: value,
+				})
+			}
+		case ContentTypeImage:
+			if part.Image == nil {
+				continue
+			}
+			imageURL, err := resolveOpenAIImageURL(part.Image)
+			if err != nil {
+				return nil, err
+			}
+			parts = append(parts, openAIContentPart{
+				Type: "image_url",
+				ImageURL: &openAIImagePart{
+					URL: imageURL,
+				},
+			})
 		}
-		imageURL, err := resolveOpenAIImageURL(part.Image)
-		if err != nil {
-			return nil, err
-		}
-		parts = append(parts, openAIContentPart{
-			Type: "image_url",
-			ImageURL: &openAIImagePart{
-				URL: imageURL,
-			},
-		})
 	}
 
 	if len(parts) == 0 {

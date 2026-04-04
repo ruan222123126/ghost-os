@@ -138,6 +138,9 @@
         "sessionMetadata": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
         },
+        "sessionMessagePage": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionMessagePage"
+        },
         "sessionDetail": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionDetail"
         },

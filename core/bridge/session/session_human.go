@@ -63,15 +63,6 @@ func (s *Session) AddPendingQuestion(questionID string, question PendingHumanQue
 	s.UpdatedAt = time.Now().UTC()
 }
 
-// HasPendingQuestion 判断指定问题是否仍处于待回答状态。
-func (s *Session) HasPendingQuestion(questionID string) bool {
-	if s == nil || len(s.PendingQuestions) == 0 {
-		return false
-	}
-	_, ok := s.PendingQuestions[strings.TrimSpace(questionID)]
-	return ok
-}
-
 // SetHumanAnswer 记录用户回答；仅对 pending question 生效。
 func (s *Session) SetHumanAnswer(questionID string, answer string) bool {
 	if s == nil || len(s.PendingQuestions) == 0 {
@@ -82,7 +73,7 @@ func (s *Session) SetHumanAnswer(questionID string, answer string) bool {
 	if questionID == "" {
 		return false
 	}
-	question, ok := s.PendingQuestions[questionID]
+	_, ok := s.PendingQuestions[questionID]
 	if !ok {
 		return false
 	}
@@ -91,7 +82,6 @@ func (s *Session) SetHumanAnswer(questionID string, answer string) bool {
 	}
 
 	s.HumanAnswers[questionID] = answer
-	s.applyToolSpecificHumanAnswer(questionID, question, answer)
 	s.UpdatedAt = time.Now().UTC()
 	return true
 }

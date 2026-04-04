@@ -5,7 +5,7 @@ import "testing"
 func TestFilterTurnMessagesDropsUnsupportedRoles(t *testing.T) {
 	filtered := filterTurnMessages([]TurnMessage{
 		{Role: "user", Text: "Please reply in Chinese by default."},
-		{Role: "internal", Text: "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}"},
+		{Role: "internal", Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 		{Role: "assistant", Text: "I will reply in Chinese."},
 	})
 

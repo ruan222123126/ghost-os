@@ -21,7 +21,12 @@ func decodeJSONObjectString(raw string) (map[string]any, error) {
 
 func sanitizeCodexToolSchema(schema map[string]any) {
 	for key, value := range schema {
-		schema[key] = sanitizeCodexToolSchemaValue(value)
+		switch key {
+		case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas":
+			schema[key] = sanitizeCodexSchemaMapEntries(value)
+		default:
+			schema[key] = sanitizeCodexToolSchemaValue(value)
+		}
 	}
 
 	ty := codexSchemaType(schema)
@@ -51,6 +56,17 @@ func sanitizeCodexToolSchema(schema map[string]any) {
 			schema["items"] = map[string]any{"type": "string"}
 		}
 	}
+}
+
+func sanitizeCodexSchemaMapEntries(value any) any {
+	entries, ok := value.(map[string]any)
+	if !ok {
+		return value
+	}
+	for key, raw := range entries {
+		entries[key] = sanitizeCodexToolSchemaValue(raw)
+	}
+	return entries
 }
 
 func sanitizeCodexToolSchemaValue(value any) any {

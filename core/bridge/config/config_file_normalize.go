@@ -34,6 +34,11 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.ActiveProvider = cloneOptionalStringPointer(cfg.ActiveProvider)
 	cfg.Model = cloneOptionalStringPointer(cfg.Model)
 	cfg.ChatPath = cloneOptionalStringPointer(cfg.ChatPath)
+	cfg.ResponsePromptCacheKey = cloneOptionalStringPointer(cfg.ResponsePromptCacheKey)
+	cfg.ResponsePromptCacheRetention = cloneOptionalStringPointer(cfg.ResponsePromptCacheRetention)
+	cfg.ResponseSafetyIdentifier = cloneOptionalStringPointer(cfg.ResponseSafetyIdentifier)
+	cfg.ResponseStore = cloneBoolPointer(cfg.ResponseStore)
+	cfg.CodexStatelessRetryEnabled = cloneBoolPointer(cfg.CodexStatelessRetryEnabled)
 	cfg.ProjectRoot = cloneOptionalStringPointer(cfg.ProjectRoot)
 	cfg.WorkerModel = cloneOptionalStringPointer(cfg.WorkerModel)
 	cfg.PromptsPath = cloneOptionalStringPointer(cfg.PromptsPath)
@@ -86,6 +91,11 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) error {
 		return err
 	}
 	cfg.ProviderHeaders = providerHeaders
+	responseMetadata, err := normalizeResponseMetadata(cfg.ResponseMetadata)
+	if err != nil {
+		return err
+	}
+	cfg.ResponseMetadata = responseMetadata
 	cfg.CORSOrigins = normalizeOrigins(cfg.CORSOrigins)
 	cfg.ToolAllowlist = normalizeConfiguredToolNames(cfg.ToolAllowlist)
 	cfg.ToolBlocklist = normalizeConfiguredToolNames(cfg.ToolBlocklist)

@@ -119,6 +119,22 @@ func StaticVisibleToolNames(available []string, opts VisibilityOptions) []string
 	return result
 }
 
+func SelectorStaticToolNames(available []string, opts VisibilityOptions) []string {
+	if opts.AllowlistOnly {
+		return StaticVisibleToolNames(available, opts)
+	}
+
+	result := make([]string, 0, len(available))
+	for _, name := range normalizeVisibleToolNames(available) {
+		if isBlockedVisibleTool(name, opts) {
+			continue
+		}
+		result = append(result, name)
+	}
+	sort.Strings(result)
+	return result
+}
+
 func SearchCandidateToolNames(available []string, loaded []string, opts VisibilityOptions) []string {
 	staticVisible := toolNameSet(StaticVisibleToolNames(available, opts))
 	loadedSet := toolNameSet(loaded)

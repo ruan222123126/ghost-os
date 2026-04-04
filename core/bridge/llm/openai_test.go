@@ -245,3 +245,35 @@ func TestToOpenAIRequestBuildsToolImageContentParts(t *testing.T) {
 		t.Fatalf("expected tool envelope text in content, got: %s", string(encoded))
 	}
 }
+
+func TestToOpenAIRequestBuildsUserImageContentParts(t *testing.T) {
+	request, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{{
+			Role: RoleUser,
+			Text: "describe this image",
+			Content: []ContentPart{{
+				Type: ContentTypeImage,
+				Image: &ImageContent{
+					URL:      "data:image/png;base64,ZmFrZS1pbWFnZQ==",
+					MimeType: "image/png",
+				},
+			}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("toOpenAIRequest returned error: %v", err)
+	}
+	if len(request.Messages) != 1 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 1)
+	}
+	encoded, err := json.Marshal(request.Messages[0].Content)
+	if err != nil {
+		t.Fatalf("marshal user content: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"type":"image_url"`) {
+		t.Fatalf("expected user image_url block, got: %s", string(encoded))
+	}
+	if !strings.Contains(string(encoded), `"describe this image"`) {
+		t.Fatalf("expected user text in content, got: %s", string(encoded))
+	}
+}

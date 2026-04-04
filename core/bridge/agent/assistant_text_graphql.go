@@ -12,7 +12,7 @@ import (
 
 const (
 	graphQLToolCallProtocolName = "graphql_tool_call"
-	graphQLToolResultPrefix     = "[GRAPHQL_TOOL_RESULT]\n"
+	toolTagResultPrefix         = "[TOOL_TAG_RESULT]\n"
 )
 
 type graphQLTextTurnHandler struct {
@@ -121,12 +121,12 @@ func newGraphQLToolErrorFeedbackMessage(toolName string, err error) (llm.Message
 	if marshalErr != nil {
 		return llm.Message{
 			Role: llm.RoleInternal,
-			Text: graphQLToolResultPrefix + err.Error(),
+			Text: toolTagResultPrefix + err.Error(),
 		}, true
 	}
 	return llm.Message{
 		Role: llm.RoleInternal,
-		Text: fmt.Sprintf("%s%s", graphQLToolResultPrefix, string(normalized)),
+		Text: fmt.Sprintf("%s%s", toolTagResultPrefix, string(normalized)),
 	}, true
 }
 
@@ -141,7 +141,7 @@ func formatGraphQLToolResultFeedback(toolName string, output string) string {
 	}
 	normalized, err := json.Marshal(payload)
 	if err != nil {
-		return graphQLToolResultPrefix + output
+		return toolTagResultPrefix + output
 	}
-	return fmt.Sprintf("%s%s", graphQLToolResultPrefix, string(normalized))
+	return fmt.Sprintf("%s%s", toolTagResultPrefix, string(normalized))
 }

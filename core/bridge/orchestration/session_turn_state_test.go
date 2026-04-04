@@ -94,7 +94,7 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 		responses: []*llm.CompletionResponse{{
 			Message: llm.Message{
 				Role: llm.RoleAssistant,
-				Text: `query { web_search(query: "OpenAI") }`,
+				Text: `<t:1>{"query":"OpenAI"}</t>`,
 			},
 			FinishReason: llm.FinishStop,
 		}},
@@ -137,13 +137,13 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 	if loaded.Messages[1].Role != llm.RoleUser || loaded.Messages[1].Text != "apply update" {
 		t.Fatalf("unexpected persisted user message: %+v", loaded.Messages[1])
 	}
-	if loaded.Messages[2].Role != llm.RoleAssistant || !strings.Contains(loaded.Messages[2].Text, "web_search") {
+	if loaded.Messages[2].Role != llm.RoleAssistant || !strings.Contains(loaded.Messages[2].Text, "<t:1>") {
 		t.Fatalf("unexpected persisted assistant graphql text: %+v", loaded.Messages[2])
 	}
 	if loaded.Messages[3].Role != llm.RoleTool {
 		t.Fatalf("unexpected persisted graphql tool result: %+v", loaded.Messages[3])
 	}
-	if loaded.Messages[4].Role != llm.RoleInternal || !strings.Contains(loaded.Messages[4].Text, "[GRAPHQL_TOOL_RESULT]") {
+	if loaded.Messages[4].Role != llm.RoleInternal || !strings.Contains(loaded.Messages[4].Text, "[TOOL_TAG_RESULT]") {
 		t.Fatalf("unexpected persisted graphql feedback: %+v", loaded.Messages[4])
 	}
 	loads := loaded.DynamicToolLoadsSnapshot()

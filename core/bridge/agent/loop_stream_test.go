@@ -20,9 +20,14 @@ func TestRunStreamEmitsToolEventsInOrder(t *testing.T) {
 	sink := newRecordingEventSink()
 
 	agent := newTestAgent(completer, catalog, 3)
-	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-stream", sink)
+	got, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-stream",
+		sink,
+	)
 	if err != nil {
-		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+		t.Fatalf("RunMessageStreamWithTraceID returned error: %v", err)
 	}
 	if got != "done" {
 		t.Fatalf("unexpected output: got %q want %q", got, "done")
@@ -67,7 +72,12 @@ func TestRunStreamEmitsAwaitingHumanEvent(t *testing.T) {
 	sink := newRecordingEventSink()
 
 	agent := newTestAgent(completer, catalog, 3)
-	_, err := agent.RunStreamWithTraceID(context.Background(), "pick db", "trace-await", sink)
+	_, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "pick db"},
+		"trace-await",
+		sink,
+	)
 	if err == nil {
 		t.Fatal("expected awaiting-human error")
 	}
@@ -102,9 +112,14 @@ func TestRunStreamMixedValidAndInvalidToolCallsKeepDistinctStepIDs(t *testing.T)
 	sink := newRecordingEventSink()
 	agent := newTestAgent(completer, newFakeToolCatalog(tool), 3)
 
-	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-mixed", sink)
+	got, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-mixed",
+		sink,
+	)
 	if err != nil {
-		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+		t.Fatalf("RunMessageStreamWithTraceID returned error: %v", err)
 	}
 	if got != "done" {
 		t.Fatalf("unexpected output: got %q want %q", got, "done")
@@ -144,7 +159,12 @@ func TestRunStreamEmitsErrorEventOnFatalFailure(t *testing.T) {
 	sink := newRecordingEventSink()
 
 	agent := newTestAgent(completer, catalog, 1)
-	_, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-error", sink)
+	_, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-error",
+		sink,
+	)
 	if err == nil {
 		t.Fatal("expected error but got nil")
 	}
@@ -184,9 +204,14 @@ func TestRunStreamUsesStreamingCompleterAndEmitsCompletionDeltas(t *testing.T) {
 	sink := newRecordingEventSink()
 	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
 
-	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-streaming", sink)
+	got, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-streaming",
+		sink,
+	)
 	if err != nil {
-		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+		t.Fatalf("RunMessageStreamWithTraceID returned error: %v", err)
 	}
 	if got != "Hello world" {
 		t.Fatalf("unexpected output: got %q want %q", got, "Hello world")
@@ -234,9 +259,14 @@ func TestRunStreamFallsBackToCompleteForNonStreamingCompleter(t *testing.T) {
 	sink := newRecordingEventSink()
 	agent := newTestAgent(completer, newFakeToolCatalog(), 3)
 
-	got, err := agent.RunStreamWithTraceID(context.Background(), "hello", "trace-fallback", sink)
+	got, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-fallback",
+		sink,
+	)
 	if err != nil {
-		t.Fatalf("RunStreamWithTraceID returned error: %v", err)
+		t.Fatalf("RunMessageStreamWithTraceID returned error: %v", err)
 	}
 	if got != "fallback" {
 		t.Fatalf("unexpected output: got %q want %q", got, "fallback")

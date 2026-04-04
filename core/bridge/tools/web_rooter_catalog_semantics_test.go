@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestWebRooterToolDefStaysReadOnlyAndGraphQLVisibleAsQuery(t *testing.T) {
+func TestWebRooterToolDefStaysReadOnlyAndGraphQLVisibleAsMutation(t *testing.T) {
 	tool := NewWebRooterTool(WebRooterConfig{})
 	def := ToolDefFromTool(tool)
 	if !def.Semantics.ReadOnly || def.Semantics.SideEffect {
@@ -15,11 +15,8 @@ func TestWebRooterToolDefStaysReadOnlyAndGraphQLVisibleAsQuery(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register(tool)
 	schema := BuildGraphQLToolRuntimeSchema(registry)
-	if !hasGraphQLToolRuntimeField(schema.QueryFields, webRooterToolName) {
-		t.Fatalf("expected web_rooter query field, got %+v", schema.QueryFields)
-	}
-	if hasGraphQLToolRuntimeField(schema.MutationFields, webRooterToolName) {
-		t.Fatalf("web_rooter should not be exposed as mutation: %+v", schema.MutationFields)
+	if !hasGraphQLToolRuntimeField(schema.MutationFields, webRooterToolName) {
+		t.Fatalf("expected web_rooter mutation field, got %+v", schema.MutationFields)
 	}
 }
 

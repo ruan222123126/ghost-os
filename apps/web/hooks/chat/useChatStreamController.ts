@@ -10,27 +10,37 @@ import {
   parseAgentToolCallFinishedPayload,
   parseAgentToolCallStartedPayload,
 } from '@/lib/api/agent/parser';
+import { buildAssistantMessage } from '@/lib/chatMessages';
 import {
-  appendAssistantText,
-  replaceAssistantText,
-  suppressGraphQLAssistantToolText,
-  upsertPendingQuestion,
-  upsertToolMessage,
-} from '@/lib/chatStream';
-import { isGraphQLToolDocument } from '@/lib/graphqlToolText';
-import type { AgentStreamEvent } from '@/lib/types';
+  consumeToolTagStreamChunk,
+  createToolTagStreamState,
+  isPureToolTagDocument,
+  stripToolTagCalls,
+  type ToolTagStreamEvent,
+  type ToolTagStreamUnit,
+  type ToolTagStreamState,
+} from '@/lib/toolTagText';
+import type { AgentStreamEvent, PendingQuestionMessage } from '@/lib/types';
 import type { ChatStateControls, StreamAgentRunInput, UseBridgeChatOptions } from './types';
 
+const TOOL_PENDING_STATUS = 'pending';
 const TOOL_RUNNING_STATUS = 'running';
 const TOOL_SUCCESS_STATUS = 'success';
 const TOOL_ERROR_STATUS = 'error';
 
 interface StreamRuntimeState {
+  assistantBuffer: string;
   assistantMessageId: string;
+  pendingPreviewQueue: string[];
+  previewToolArgs: Map<string, string>;
+  previewToolCallSeqToID: Map<number, string>;
+  previewToolIDByMessageId: Map<string, string>;
   sessionId: string;
   toolMessageIds: Map<string, string>;
+  toolTagState: ToolTagStreamState;
   traceId: string;
 }
+
 interface StreamHumanRunOptions {
   answer: string;
   cancelled?: boolean;
@@ -42,16 +52,34 @@ interface StreamHumanRunOptions {
 
 interface UseChatStreamControllerOptions {
   activeRunRef: ChatStateControls['activeRunRef'];
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
+  clearStreamingState: ChatStateControls['clearStreamingState'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
-  hydrateSessionHistory: (sessionId: string) => Promise<void>;
   onSessionResolved: UseBridgeChatOptions['onSessionResolved'];
   setActiveRun: ChatStateControls['setActiveRun'];
-  setMessages: ChatStateControls['setMessages'];
+  syncRecentHistory: (sessionId: string) => Promise<void>;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
 }
-export function useChatStreamController(options: UseChatStreamControllerOptions) {
-  const { activeRunRef, currentSessionId, hydrateSessionHistory, onSessionResolved, setActiveRun, setMessages } = options;
 
-  const syncSession = useCallback(async (sessionId?: string) => {
+export function useChatStreamController(options: UseChatStreamControllerOptions) {
+  const {
+    activeRunRef,
+    appendCommittedMessages,
+    appendStreamingAssistantText,
+    clearStreamingAssistantText,
+    clearStreamingState,
+    currentSessionId,
+    onSessionResolved,
+    setActiveRun,
+    syncRecentHistory,
+    upsertPendingQuestion,
+    upsertStreamingTool,
+  } = options;
+
+  const syncSession = useCallback(async (state: StreamRuntimeState, sessionId?: string) => {
     const trimmedSessionId = sessionId?.trim();
     if (!trimmedSessionId) {
       return;
@@ -64,8 +92,17 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
     if (trimmedSessionId !== currentSessionId) {
       onSessionResolved?.(trimmedSessionId);
     }
-    await hydrateSessionHistory(trimmedSessionId);
-  }, [activeRunRef, currentSessionId, hydrateSessionHistory, onSessionResolved, setActiveRun]);
+    await syncRecentHistory(trimmedSessionId);
+    clearStreamingState();
+    state.assistantBuffer = '';
+  }, [
+    activeRunRef,
+    clearStreamingState,
+    currentSessionId,
+    onSessionResolved,
+    setActiveRun,
+    syncRecentHistory,
+  ]);
 
   const applyEvent = useCallback((state: StreamRuntimeState, event: AgentStreamEvent) => {
     syncActiveSession({
@@ -76,8 +113,26 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
       setActiveRun,
       state,
     });
-    applyEventMessages({ event, setMessages, state });
-  }, [activeRunRef, currentSessionId, onSessionResolved, setActiveRun, setMessages]);
+    applyEventState({
+      appendCommittedMessages,
+      appendStreamingAssistantText,
+      clearStreamingAssistantText,
+      event,
+      state,
+      upsertPendingQuestion,
+      upsertStreamingTool,
+    });
+  }, [
+    activeRunRef,
+    appendCommittedMessages,
+    appendStreamingAssistantText,
+    clearStreamingAssistantText,
+    currentSessionId,
+    onSessionResolved,
+    setActiveRun,
+    upsertPendingQuestion,
+    upsertStreamingTool,
+  ]);
 
   const runAgentStream = useCallback(async (run: StreamAgentRunInput) => {
     const state = createStreamRuntimeState(run.traceId, run.sessionId);
@@ -91,7 +146,7 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
       signal: run.signal,
       traceId: run.traceId,
     });
-    await syncSession(result.sessionId || state.sessionId);
+    await syncSession(state, result.sessionId || state.sessionId);
   }, [applyEvent, syncSession]);
 
   const runHumanStream = useCallback(async (run: StreamHumanRunOptions) => {
@@ -107,7 +162,7 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
       signal: run.signal,
       traceId: run.traceId,
     });
-    await syncSession(result.sessionId || state.sessionId);
+    await syncSession(state, result.sessionId || state.sessionId);
   }, [applyEvent, syncSession]);
 
   return {
@@ -115,15 +170,23 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
     runHumanStream,
   };
 }
+
 function createStreamRuntimeState(traceId: string, sessionId?: string): StreamRuntimeState {
   const trimmedTraceId = traceId.trim();
   return {
+    assistantBuffer: '',
     assistantMessageId: `stream-assistant:${trimmedTraceId}`,
+    pendingPreviewQueue: [],
+    previewToolArgs: new Map(),
+    previewToolCallSeqToID: new Map(),
+    previewToolIDByMessageId: new Map(),
     sessionId: sessionId?.trim() || '',
     toolMessageIds: new Map(),
+    toolTagState: createToolTagStreamState(),
     traceId: trimmedTraceId,
   };
 }
+
 function syncActiveSession(options: {
   activeRunRef: ChatStateControls['activeRunRef'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
@@ -146,6 +209,7 @@ function syncActiveSession(options: {
     options.onSessionResolved?.(sessionId);
   }
 }
+
 function resolveEventSessionId(event: AgentStreamEvent): string {
   if (event.session_id?.trim()) {
     return event.session_id.trim();
@@ -164,10 +228,15 @@ function resolveEventSessionId(event: AgentStreamEvent): string {
       return '';
   }
 }
-function applyEventMessages(options: {
+
+function applyEventState(options: {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
   event: AgentStreamEvent;
-  setMessages: ChatStateControls['setMessages'];
   state: StreamRuntimeState;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
 }): void {
   switch (options.event.type) {
     case 'completion_delta':
@@ -189,10 +258,15 @@ function applyEventMessages(options: {
       return;
   }
 }
+
 function applyCompletionDelta(options: {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
   event: AgentStreamEvent;
-  setMessages: ChatStateControls['setMessages'];
   state: StreamRuntimeState;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
 }): void {
   const payload = parseAgentCompletionDeltaPayload(options.event.payload);
   const text = payload.text;
@@ -200,51 +274,73 @@ function applyCompletionDelta(options: {
     return;
   }
 
-  options.setMessages((previous) => appendAssistantText(previous, {
-    messageId: options.state.assistantMessageId,
-    text,
-  }));
+  const consumed = consumeToolTagStreamChunk(options.state.toolTagState, text);
+  applyToolTagUnits(
+    options.state,
+    options.event.trace_id,
+    consumed.units,
+    options.appendStreamingAssistantText,
+    options.upsertStreamingTool,
+  );
 }
+
 function applyToolStarted(options: {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
   event: AgentStreamEvent;
-  setMessages: ChatStateControls['setMessages'];
   state: StreamRuntimeState;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
 }): void {
   const payload = parseAgentToolCallStartedPayload(options.event.payload);
   const messageId = resolveToolMessageId(options.state, options.event, payload.tool_call_id);
+  const argsPreview = options.state.previewToolArgs.get(messageId) || '';
+  const previewToolName = options.state.previewToolIDByMessageId.get(messageId);
 
-  options.setMessages((previous) => upsertToolMessage(suppressGraphQLAssistantToolText(previous, options.state.assistantMessageId), {
-    messageId,
-    content: `${payload.tool || 'Tool'} running`,
+  options.upsertStreamingTool({
+    id: messageId,
+    content: argsPreview || `${payload.tool || 'Tool'} running`,
     toolCallId: payload.tool_call_id,
-    toolName: payload.tool,
+    toolName: payload.tool || formatToolIDName(previewToolName),
     toolStatus: TOOL_RUNNING_STATUS,
     traceId: options.event.trace_id,
-  }));
+  });
 }
+
 function applyToolFinished(options: {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
   event: AgentStreamEvent;
-  setMessages: ChatStateControls['setMessages'];
   state: StreamRuntimeState;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
 }): void {
   const payload = parseAgentToolCallFinishedPayload(options.event.payload);
-  const messageId = resolveToolMessageId(options.state, options.event, payload.tool_call_id);
   const toolStatus = payload.status?.trim() || (payload.error ? TOOL_ERROR_STATUS : TOOL_SUCCESS_STATUS);
-  const content = payload.error?.trim() || `${payload.tool || 'Tool'} finished`;
+  const messageId = resolveToolMessageId(options.state, options.event, payload.tool_call_id);
+  const argsPreview = options.state.previewToolArgs.get(messageId) || '';
+  const previewToolName = options.state.previewToolIDByMessageId.get(messageId);
 
-  options.setMessages((previous) => upsertToolMessage(previous, {
-    messageId,
-    content,
+  options.upsertStreamingTool({
+    id: messageId,
+    content: payload.error?.trim() || argsPreview || `${payload.tool || 'Tool'} finished`,
     toolCallId: payload.tool_call_id,
-    toolName: payload.tool,
+    toolName: payload.tool || formatToolIDName(previewToolName),
     toolStatus,
     traceId: options.event.trace_id,
-  }));
+  });
 }
+
 function applyAwaitingHuman(options: {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
   event: AgentStreamEvent;
-  setMessages: ChatStateControls['setMessages'];
   state: StreamRuntimeState;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
 }): void {
   const payload = parseAgentAwaitingHumanStreamPayload(options.event.payload);
   const sessionId = options.state.sessionId.trim();
@@ -252,42 +348,199 @@ function applyAwaitingHuman(options: {
     throw new Error('awaiting_human stream event is missing session_id');
   }
 
-  options.setMessages((previous) => upsertPendingQuestion(previous, {
-    messageId: `stream-question:${options.state.traceId}:${payload.question_id}`,
+  options.upsertPendingQuestion(buildPendingQuestionMessage(options.state, payload, sessionId));
+}
+
+function applyMessage(options: {
+  appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'];
+  clearStreamingAssistantText: ChatStateControls['clearStreamingAssistantText'];
+  event: AgentStreamEvent;
+  state: StreamRuntimeState;
+  upsertPendingQuestion: ChatStateControls['upsertPendingQuestion'];
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'];
+}): void {
+  const payload = parseAgentStreamMessagePayload(options.event.payload);
+
+  const finalized = consumeToolTagStreamChunk(options.state.toolTagState, '', true);
+  applyToolTagUnits(
+    options.state,
+    options.event.trace_id,
+    finalized.units,
+    options.appendStreamingAssistantText,
+    options.upsertStreamingTool,
+  );
+
+  options.clearStreamingAssistantText();
+
+  if (!payload.text.trim()) {
+    options.state.assistantBuffer = '';
+    return;
+  }
+
+  const visibleAssistantText = stripToolTagCalls(payload.text);
+  if (!visibleAssistantText.trim()) {
+    options.state.assistantBuffer = '';
+    return;
+  }
+
+  options.appendCommittedMessages([
+    buildAssistantMessage(visibleAssistantText, options.state.assistantMessageId),
+  ]);
+  options.state.assistantBuffer = '';
+}
+
+function applyToolTagUnits(
+  state: StreamRuntimeState,
+  traceId: string,
+  units: ToolTagStreamUnit[],
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'],
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'],
+): void {
+  for (const unit of units) {
+    if (unit.type === 'text') {
+      appendStreamingText(state, unit.text, appendStreamingAssistantText);
+      continue;
+    }
+    applyToolTagEvent(state, traceId, unit, upsertStreamingTool);
+  }
+}
+
+function appendStreamingText(
+  state: StreamRuntimeState,
+  text: string,
+  appendStreamingAssistantText: ChatStateControls['appendStreamingAssistantText'],
+): void {
+  if (!text) {
+    return;
+  }
+  state.assistantBuffer = `${state.assistantBuffer}${text}`;
+  appendStreamingAssistantText(text);
+}
+
+function applyToolTagEvent(
+  state: StreamRuntimeState,
+  traceId: string,
+  event: ToolTagStreamEvent,
+  upsertStreamingTool: ChatStateControls['upsertStreamingTool'],
+): void {
+  if (event.type === 'tool_open') {
+    const messageId = ensurePreviewMessageID(state, event.callSeq, event.toolId);
+    const args = state.previewToolArgs.get(messageId) || '';
+    upsertStreamingTool({
+      id: messageId,
+      content: args,
+      toolName: formatToolIDName(event.toolId),
+      toolStatus: TOOL_PENDING_STATUS,
+      traceId,
+    });
+    return;
+  }
+
+  if (event.type === 'tool_args') {
+    const messageId = state.previewToolCallSeqToID.get(event.callSeq);
+    if (!messageId) {
+      return;
+    }
+    const current = state.previewToolArgs.get(messageId) || '';
+    const next = `${current}${event.argsDelta}`;
+    state.previewToolArgs.set(messageId, next);
+    upsertStreamingTool({
+      id: messageId,
+      content: next,
+      toolName: formatToolIDName(state.previewToolIDByMessageId.get(messageId)),
+      toolStatus: TOOL_PENDING_STATUS,
+      traceId,
+    });
+    return;
+  }
+
+  const messageId = ensurePreviewMessageID(state, event.callSeq, event.toolId);
+  state.previewToolArgs.set(messageId, event.argsText);
+  if (!state.pendingPreviewQueue.includes(messageId)) {
+    state.pendingPreviewQueue.push(messageId);
+  }
+  upsertStreamingTool({
+    id: messageId,
+    content: event.argsText,
+    toolName: formatToolIDName(event.toolId),
+    toolStatus: TOOL_PENDING_STATUS,
+    traceId,
+  });
+}
+
+function ensurePreviewMessageID(state: StreamRuntimeState, callSeq: number, toolId: string): string {
+  const existing = state.previewToolCallSeqToID.get(callSeq);
+  if (existing) {
+    return existing;
+  }
+  const messageId = `stream-tag-tool:${state.traceId}:${callSeq}`;
+  state.previewToolCallSeqToID.set(callSeq, messageId);
+  state.previewToolIDByMessageId.set(messageId, toolId);
+  if (!state.previewToolArgs.has(messageId)) {
+    state.previewToolArgs.set(messageId, '');
+  }
+  return messageId;
+}
+
+function formatToolIDName(toolId?: string): string | undefined {
+  const trimmed = toolId?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return `tool#${trimmed}`;
+}
+
+function buildPendingQuestionMessage(
+  state: StreamRuntimeState,
+  payload: ReturnType<typeof parseAgentAwaitingHumanStreamPayload>,
+  sessionId: string,
+): PendingQuestionMessage {
+  return {
+    id: `stream-question:${state.traceId}:${payload.question_id}`,
+    kind: 'pending_question',
     content: payload.prompt,
     options: payload.options,
     questionId: payload.question_id,
     selectionMode: payload.selection_mode,
     sessionId,
-  }));
+  };
 }
-function applyMessage(options: {
-  event: AgentStreamEvent;
-  setMessages: ChatStateControls['setMessages'];
-  state: StreamRuntimeState;
-}): void {
-  const payload = parseAgentStreamMessagePayload(options.event.payload);
-  if (options.state.toolMessageIds.size > 0 && isGraphQLToolDocument(payload.text)) {
-    options.setMessages((previous) => suppressGraphQLAssistantToolText(previous, options.state.assistantMessageId));
-    return;
-  }
-  options.setMessages((previous) => replaceAssistantText(previous, {
-    messageId: options.state.assistantMessageId,
-    text: payload.text,
-  }));
-}
+
 function resolveToolMessageId(
   state: StreamRuntimeState,
   event: AgentStreamEvent,
   toolCallId?: string,
 ): string {
-  const toolKey = toolCallId?.trim() || event.step_id.trim() || event.id.trim();
-  const existing = state.toolMessageIds.get(toolKey);
-  if (existing) {
-    return existing;
+  const trimmedToolCallID = toolCallId?.trim();
+  if (trimmedToolCallID) {
+    const existing = state.toolMessageIds.get(trimmedToolCallID);
+    if (existing) {
+      return existing;
+    }
+
+    if (state.pendingPreviewQueue.length > 0) {
+      const previewMessageID = state.pendingPreviewQueue.shift();
+      if (previewMessageID) {
+        state.toolMessageIds.set(trimmedToolCallID, previewMessageID);
+        return previewMessageID;
+      }
+    }
+
+    const generated = `stream-tool:${state.traceId}:${trimmedToolCallID}`;
+    state.toolMessageIds.set(trimmedToolCallID, generated);
+    return generated;
   }
 
-  const messageId = `stream-tool:${state.traceId}:${toolKey}`;
-  state.toolMessageIds.set(toolKey, messageId);
-  return messageId;
+  const fallbackKey = event.step_id.trim() || event.id.trim();
+  const existingFallback = state.toolMessageIds.get(fallbackKey);
+  if (existingFallback) {
+    return existingFallback;
+  }
+
+  const generatedFallback = `stream-tool:${state.traceId}:${fallbackKey}`;
+  state.toolMessageIds.set(fallbackKey, generatedFallback);
+  return generatedFallback;
 }
+
+export { isPureToolTagDocument };

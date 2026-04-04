@@ -158,6 +158,7 @@ func TestConfigStoreUpdatePersistsWebSearchSettings(t *testing.T) {
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_PROVIDER", "custom")
 	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+	t.Setenv("GHOST_WEB_SEARCH_TAVILY_URL", "https://proxy.example/tavily")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "initial-tavily-key")
 
 	store, err := newStoreFromEnv()
@@ -165,14 +166,22 @@ func TestConfigStoreUpdatePersistsWebSearchSettings(t *testing.T) {
 		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
+	webSearchExaURL := "https://proxy.example/exa"
 	webSearchExaAPIKey := "updated-exa-key"
 	if err := store.Update(configUpdateRequest{
+		WebSearchExaURL:    &webSearchExaURL,
 		WebSearchExaAPIKey: &webSearchExaAPIKey,
 	}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
 	runtime := store.RuntimeConfig()
+	if runtime.WebSearchTavilyURL != "https://proxy.example/tavily" {
+		t.Fatalf("unexpected tavily url: got %q want %q", runtime.WebSearchTavilyURL, "https://proxy.example/tavily")
+	}
+	if runtime.WebSearchExaURL != webSearchExaURL {
+		t.Fatalf("unexpected exa url: got %q want %q", runtime.WebSearchExaURL, webSearchExaURL)
+	}
 	if runtime.WebSearchTavilyAPIKey != "initial-tavily-key" {
 		t.Fatalf("unexpected tavily api key: got %q want %q", runtime.WebSearchTavilyAPIKey, "initial-tavily-key")
 	}
@@ -187,11 +196,23 @@ func TestConfigStoreUpdatePersistsWebSearchSettings(t *testing.T) {
 	if fileCfg.WebSearchTavilyAPIKey == nil || *fileCfg.WebSearchTavilyAPIKey != "initial-tavily-key" {
 		t.Fatalf("unexpected persisted tavily api key: %#v", fileCfg.WebSearchTavilyAPIKey)
 	}
+	if fileCfg.WebSearchTavilyURL == nil || *fileCfg.WebSearchTavilyURL != "https://proxy.example/tavily" {
+		t.Fatalf("unexpected persisted tavily url: %#v", fileCfg.WebSearchTavilyURL)
+	}
+	if fileCfg.WebSearchExaURL == nil || *fileCfg.WebSearchExaURL != webSearchExaURL {
+		t.Fatalf("unexpected persisted exa url: %#v", fileCfg.WebSearchExaURL)
+	}
 	if fileCfg.WebSearchExaAPIKey == nil || *fileCfg.WebSearchExaAPIKey != webSearchExaAPIKey {
 		t.Fatalf("unexpected persisted exa api key: %#v", fileCfg.WebSearchExaAPIKey)
 	}
 
 	snapshot := store.Snapshot()
+	if snapshot.WebSearchTavilyURL != "https://proxy.example/tavily" {
+		t.Fatalf("unexpected snapshot tavily url: got %q want %q", snapshot.WebSearchTavilyURL, "https://proxy.example/tavily")
+	}
+	if snapshot.WebSearchExaURL != webSearchExaURL {
+		t.Fatalf("unexpected snapshot exa url: got %q want %q", snapshot.WebSearchExaURL, webSearchExaURL)
+	}
 	if !snapshot.WebSearchTavilyAPIKeySet {
 		t.Fatal("expected tavily api key flag to stay true")
 	}

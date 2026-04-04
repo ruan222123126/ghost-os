@@ -13,6 +13,22 @@ func normalizeGraphQLHeaders(raw map[string]string) (map[string]string, error) {
 	return normalizeNamedHeaders(raw, "graphql_headers")
 }
 
+func normalizeResponseMetadata(raw map[string]string) (map[string]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			return nil, fmt.Errorf("invalid response_metadata: metadata key cannot be empty")
+		}
+		out[trimmedKey] = strings.TrimSpace(value)
+	}
+	return out, nil
+}
+
 func normalizeNamedHeaders(raw map[string]string, fieldName string) (map[string]string, error) {
 	if len(raw) == 0 {
 		return nil, nil

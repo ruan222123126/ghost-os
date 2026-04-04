@@ -39,9 +39,19 @@ func (t *WebSearchTool) defaultProviders(providerHint string) ([]webSearchProvid
 	case "":
 		return t.providersForAutoSelection()
 	case webSearchProviderTavily:
-		return t.providersForRequestedAPIProvider(webSearchProviderTavily, t.config.TavilyAPIKey, defaultWebSearchTavily, webSearchFormatTavilyJSON)
+		return t.providersForRequestedAPIProvider(
+			webSearchProviderTavily,
+			t.config.TavilyAPIKey,
+			resolveWebSearchProviderEndpoint(t.config.TavilyURL, defaultWebSearchTavily),
+			webSearchFormatTavilyJSON,
+		)
 	case webSearchProviderExa:
-		return t.providersForRequestedAPIProvider(webSearchProviderExa, t.config.ExaAPIKey, defaultWebSearchExa, webSearchFormatExaJSON)
+		return t.providersForRequestedAPIProvider(
+			webSearchProviderExa,
+			t.config.ExaAPIKey,
+			resolveWebSearchProviderEndpoint(t.config.ExaURL, defaultWebSearchExa),
+			webSearchFormatExaJSON,
+		)
 	default:
 		return nil, fmt.Errorf("unsupported web search provider %q", providerHint)
 	}
@@ -50,13 +60,15 @@ func (t *WebSearchTool) defaultProviders(providerHint string) ([]webSearchProvid
 func (t *WebSearchTool) providersForAutoSelection() ([]webSearchProvider, error) {
 	tavilyAPIKey := strings.TrimSpace(t.config.TavilyAPIKey)
 	exaAPIKey := strings.TrimSpace(t.config.ExaAPIKey)
+	tavilyEndpoint := resolveWebSearchProviderEndpoint(t.config.TavilyURL, defaultWebSearchTavily)
+	exaEndpoint := resolveWebSearchProviderEndpoint(t.config.ExaURL, defaultWebSearchExa)
 	switch {
 	case tavilyAPIKey != "" && exaAPIKey != "":
 		return nil, fmt.Errorf("provider is required when both Tavily and Exa API keys are configured")
 	case tavilyAPIKey != "":
-		return []webSearchProvider{newAPIWebSearchProvider(webSearchProviderTavily, defaultWebSearchTavily, webSearchFormatTavilyJSON, tavilyAPIKey)}, nil
+		return []webSearchProvider{newAPIWebSearchProvider(webSearchProviderTavily, tavilyEndpoint, webSearchFormatTavilyJSON, tavilyAPIKey)}, nil
 	case exaAPIKey != "":
-		return []webSearchProvider{newAPIWebSearchProvider(webSearchProviderExa, defaultWebSearchExa, webSearchFormatExaJSON, exaAPIKey)}, nil
+		return []webSearchProvider{newAPIWebSearchProvider(webSearchProviderExa, exaEndpoint, webSearchFormatExaJSON, exaAPIKey)}, nil
 	default:
 		return defaultPublicWebSearchProviders(), nil
 	}
@@ -88,6 +100,14 @@ func providersForExplicitHint(providers []webSearchProvider, providerHint string
 
 func normalizeWebSearchProviderHint(providerHint string) string {
 	return strings.ToLower(strings.TrimSpace(providerHint))
+}
+
+func resolveWebSearchProviderEndpoint(customEndpoint, officialEndpoint string) string {
+	trimmed := strings.TrimSpace(customEndpoint)
+	if trimmed != "" {
+		return trimmed
+	}
+	return officialEndpoint
 }
 
 func newAPIWebSearchProvider(name, endpoint string, format webSearchFormat, apiKey string) webSearchProvider {

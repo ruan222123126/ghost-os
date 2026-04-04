@@ -12,6 +12,7 @@ func TestBuildGraphQLToolRuntimeSchema_GeneratesInputAndEnumTypes(t *testing.T) 
 	registry.Register(NewBrowserControlTool(nil))
 	registry.Register(NewTaskManageTool(nil))
 	registry.Register(NewComputerUseTool(nil, nil, nil))
+	registry.Register(NewWebRooterTool(WebRooterConfig{}))
 
 	schema := BuildGraphQLToolRuntimeSchema(registry)
 
@@ -21,19 +22,6 @@ func TestBuildGraphQLToolRuntimeSchema_GeneratesInputAndEnumTypes(t *testing.T) 
 	}
 	if got := findGraphQLToolRuntimeArgument(t, browserField.Arguments, "params").Type; got != "BrowserControlParamsInput" {
 		t.Fatalf("expected browser_control params input type, got %q", got)
-	}
-
-	taskField := findGraphQLToolRuntimeField(t, schema.MutationFields, "task_manage")
-	if got := findGraphQLToolRuntimeArgument(t, taskField.Arguments, "operation").Type; got != "TaskManageOperationEnum!" {
-		t.Fatalf("expected task_manage operation enum type, got %q", got)
-	}
-
-	computerField := findGraphQLToolRuntimeField(t, schema.MutationFields, "computer_use")
-	if got := findGraphQLToolRuntimeArgument(t, computerField.Arguments, "mode").Type; got != "ComputerUseModeEnum" {
-		t.Fatalf("expected computer_use mode enum type, got %q", got)
-	}
-	if got := findGraphQLToolRuntimeArgument(t, computerField.Arguments, "target").Type; got != "ComputerUseTargetInput" {
-		t.Fatalf("expected computer_use target input type, got %q", got)
 	}
 
 	enumType := findGraphQLToolRuntimeEnumType(t, schema.EnumTypes, "BrowserControlParamsWaitEnum")
@@ -47,45 +35,38 @@ func TestBuildGraphQLToolRuntimeSchema_GeneratesInputAndEnumTypes(t *testing.T) 
 	}
 }
 
-func TestFormatGraphQLToolRuntimePrompt_IncludesStructuredInputSchema(t *testing.T) {
+func TestFormatGraphQLToolRuntimePrompt_UsesIDAndJSONShape(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register(NewAskHumanTool())
-	registry.Register(NewBrowserControlTool(nil))
-	registry.Register(NewTaskManageTool(nil))
-	registry.Register(NewComputerUseTool(nil, nil, nil))
+	registry.Register(NewWebSearchTool(WebSearchConfig{}))
 
 	prompt := FormatGraphQLToolRuntimePrompt(registry)
 	for _, snippet := range []string{
-		"enum BrowserControlActionEnum {",
-		"enum BrowserControlParamsWaitEnum {",
-		"input BrowserControlParamsInput {",
-		"input AskHumanOptionsItemInput {",
-		"input ComputerUseTargetInput {",
-		"browser_control(action: BrowserControlActionEnum!, params: BrowserControlParamsInput): JSON",
-		"computer_use(display_id: Int, goal: String!, mode: ComputerUseModeEnum, target: ComputerUseTargetInput): JSON",
-		"task_manage(cron_expr: String, enabled: Boolean, id: String, interval_seconds: Int, message: String, operation: TaskManageOperationEnum!, session_id: String): JSON",
+		"[System Instruction]",
+		"<t:TOOL_ID>JSON_ARGS</t>",
+		"ID: 1",
+		"Tool name: ask_human",
+		"Tool name: web_search",
+		"Parameter format:",
 	} {
 		if !strings.Contains(prompt, snippet) {
 			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
 		}
 	}
-	if strings.Contains(prompt, "browser_control(action: String") {
-		t.Fatalf("expected browser_control action to stop degrading into String, got %q", prompt)
-	}
-	if strings.Contains(prompt, "browser_control(action: BrowserControlActionEnum!, params: JSON)") {
-		t.Fatalf("expected browser_control params to stay structured, got %q", prompt)
+	if strings.Contains(prompt, "type Mutation {") || strings.Contains(prompt, "enum ") {
+		t.Fatalf("expected prompt to avoid GraphQL schema blocks, got %q", prompt)
 	}
 }
 
-func TestGraphQLTextExecutorAcceptsEnumLiteralsAndNestedInputObjects(t *testing.T) {
+func TestGraphQLTextExecutorAcceptsTaggedNestedInputObjectsWhenSchemaAllows(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register(NewBrowserControlTool(nil))
 
 	executor := NewGraphQLTextExecutor(registry)
 	result, err := executor.Execute(
 		context.Background(),
-		`mutation { browser_control(action: goto, params: {session_id: "sess-1", selector_type: css, wait: load, timeout_ms: 500}) }`,
-		"trace-graphql-browser-enum",
+		`<t:1>{"action":"goto","params":{"session_id":"sess-1","selector_type":"css","wait":"load","timeout_ms":500}}</t>`,
+		"trace-tag-browser-object",
 	)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -93,17 +74,14 @@ func TestGraphQLTextExecutorAcceptsEnumLiteralsAndNestedInputObjects(t *testing.
 
 	args := decodeGraphQLToolArgs(t, result.Arguments)
 	if got := args["action"]; got != "goto" {
-		t.Fatalf("expected enum literal to decode as original string, got %+v", args)
+		t.Fatalf("expected action to decode as string, got %+v", args)
 	}
 	params, ok := args["params"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected nested params object, got %+v", args)
 	}
 	if got := params["selector_type"]; got != "css" {
-		t.Fatalf("expected nested enum literal to decode as original string, got %+v", params)
-	}
-	if got := params["wait"]; got != "load" {
-		t.Fatalf("expected wait enum literal to decode as original string, got %+v", params)
+		t.Fatalf("expected nested selector_type to decode as string, got %+v", params)
 	}
 }
 

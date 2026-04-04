@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"ghost-os/bridge/session"
 )
@@ -119,43 +118,11 @@ func (AskHumanTool) Execute(ctx context.Context, argsJSON json.RawMessage, trace
 
 // askHumanExecute 依赖会话上下文与 tool_call_id，注册 pending question 并返回等待态 payload。
 func askHumanExecute(ctx context.Context, question askHumanArgs, traceID string) (string, error) {
-	sess := SessionFromContext(ctx)
-	if sess == nil {
-		return "", fmt.Errorf("ask_human requires an active session")
-	}
-
-	toolCallID := ToolCallIDFromContext(ctx)
-	if toolCallID == "" {
-		return "", fmt.Errorf("ask_human requires tool call id in context")
-	}
-
 	questionID, err := newQuestionID()
 	if err != nil {
 		return "", fmt.Errorf("generate question id: %w", err)
 	}
-
-	sess.AddPendingQuestion(questionID, session.PendingHumanQuestion{
-		Prompt:        question.Prompt,
-		SelectionMode: question.SelectionMode,
-		Options:       sessionOptionsFromAskHuman(question.Options),
-		ToolName:      AskHumanToolName,
-		ToolCallID:    toolCallID,
-		TraceID:       strings.TrimSpace(traceID),
-		CreatedAt:     time.Now().UTC(),
-	})
-
-	payload := askHumanAwaitingPayload{
-		Status:        "awaiting_human",
-		QuestionID:    questionID,
-		Prompt:        question.Prompt,
-		SelectionMode: question.SelectionMode,
-		Options:       cloneAskHumanOptions(question.Options),
-	}
-	encoded, err := json.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("encode awaiting payload: %w", err)
-	}
-	return string(encoded), nil
+	return registerAwaitingHumanQuestion(ctx, questionID, question, traceID, AskHumanToolName)
 }
 
 // newQuestionID 生成全局低冲突问题 ID，用于后续 HUMAN_RESPONSE 关联。

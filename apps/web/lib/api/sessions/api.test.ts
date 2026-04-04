@@ -2,6 +2,15 @@ import { deleteSession, getSession, listSessions } from './api';
 import { fetchMock, installFetchMock, mockFetchJSON } from '@/lib/api.test.helpers';
 import type { SessionDetail, SessionMetadata } from '@/lib/types';
 
+const SESSION_PAGE = {
+  limit: 100,
+  before: null,
+  start_index: 0,
+  end_index: 1,
+  has_more_before: false,
+  next_before: null,
+} as const;
+
 describe('lib/api/sessions/api', () => {
   beforeEach(() => {
     installFetchMock();
@@ -35,10 +44,12 @@ describe('lib/api/sessions/api', () => {
       id: 'session-1',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 2,
+      page: SESSION_PAGE,
       token_count: 128,
       messages: [
-        { role: 'user', text: 'hello' },
-        { role: 'assistant', text: 'hi' },
+        { index: 0, role: 'user', text: 'hello' },
+        { index: 1, role: 'assistant', text: 'hi' },
       ],
     };
 
@@ -59,9 +70,15 @@ describe('lib/api/sessions/api', () => {
       id: 'session-1',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 1,
+      page: {
+        ...SESSION_PAGE,
+        end_index: 0,
+      },
       token_count: 128,
       messages: [
         {
+          index: 0,
           role: 'tool',
           text: 'Which database should I use?\nPostgreSQL',
           tool_result: {
@@ -102,9 +119,14 @@ describe('lib/api/sessions/api', () => {
         id: 'session-1',
         created_at: '2026-02-28T10:00:00Z',
         updated_at: '2026-02-28T10:05:00Z',
+        message_count: 1,
+        page: {
+          ...SESSION_PAGE,
+          end_index: 0,
+        },
         token_count: 128,
         schema_version: 'vNext',
-        messages: [{ role: 'user', text: 'hello', extra_field: 'ignored' }],
+        messages: [{ index: 0, role: 'user', text: 'hello', extra_field: 'ignored' }],
       },
       error: '',
     });
@@ -113,8 +135,13 @@ describe('lib/api/sessions/api', () => {
       id: 'session-1',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
+      message_count: 1,
+      page: {
+        ...SESSION_PAGE,
+        end_index: 0,
+      },
       token_count: 128,
-      messages: [{ role: 'user', text: 'hello' }],
+      messages: [{ index: 0, role: 'user', text: 'hello' }],
     });
   });
 
@@ -125,8 +152,13 @@ describe('lib/api/sessions/api', () => {
         id: 'session-1',
         created_at: '2026-02-28T10:00:00Z',
         updated_at: '2026-02-28T10:05:00Z',
+        message_count: 1,
+        page: {
+          ...SESSION_PAGE,
+          end_index: 0,
+        },
         token_count: 128,
-        messages: [{ Role: 'user', Text: 'hello' }],
+        messages: [{ index: 0, Role: 'user', Text: 'hello' }],
       },
       error: '',
     });

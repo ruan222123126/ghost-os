@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
@@ -109,7 +111,7 @@ func TestCompletionRunnerProjectsInternalMessagesForProvider(t *testing.T) {
 	history := NewHistoryFromMessages([]llm.Message{
 		{Role: llm.RoleSystem, Text: "system prompt"},
 		{Role: llm.RoleUser, Text: "hello"},
-		{Role: llm.RoleInternal, Text: "[GRAPHQL_TOOL_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
+		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 	})
 
 	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
@@ -176,13 +178,13 @@ func TestCompletionRunnerRepairsGraphQLTextToolProtocolForProviderRequest(t *tes
 	history := NewHistoryFromMessages([]llm.Message{
 		{Role: llm.RoleSystem, Text: "system prompt"},
 		{Role: llm.RoleUser, Text: "hello"},
-		{Role: llm.RoleAssistant, Text: `query { web_search(query: "OpenAI") }`},
+		{Role: llm.RoleAssistant, Text: `<t:1>{"query":"OpenAI"}</t>`},
 		{
 			Role:       llm.RoleTool,
 			ToolCallID: "graphql-text-call-1",
 			Text:       `{"status":"success","tool":"web_search","trace_id":"trace-1","output":"{\"items\":[{\"title\":\"OpenAI\"}]}"}`,
 		},
-		{Role: llm.RoleInternal, Text: "[GRAPHQL_TOOL_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
+		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 	})
 
 	runner := newCompletionRunner(completer, newFakeToolCatalog(tool), history, llm.ResponseOptions{})
@@ -260,19 +262,19 @@ func TestCompletionRunnerRepairsGraphQLTextBatchToolProtocolForProviderRequest(t
 	history := NewHistoryFromMessages([]llm.Message{
 		{Role: llm.RoleSystem, Text: "system prompt"},
 		{Role: llm.RoleUser, Text: "hello"},
-		{Role: llm.RoleAssistant, Text: `mutation { web_search(query: "OpenAI") } mutation { script_exec(script: "print('ok')") }`},
+		{Role: llm.RoleAssistant, Text: `<t:2>{"query":"OpenAI"}</t><t:1>{"script":"print('ok')"}</t>`},
 		{
 			Role:       llm.RoleTool,
 			ToolCallID: "graphql-text-call-1",
 			Text:       `{"status":"success","tool":"web_search","trace_id":"trace-1","output":"{\"items\":[{\"title\":\"OpenAI\"}]}"}`,
 		},
-		{Role: llm.RoleInternal, Text: "[GRAPHQL_TOOL_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
+		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 		{
 			Role:       llm.RoleTool,
 			ToolCallID: "graphql-text-call-2",
 			Text:       `{"status":"success","tool":"script_exec","trace_id":"trace-1","output":"{\"status\":\"ok\"}"}`,
 		},
-		{Role: llm.RoleInternal, Text: "[GRAPHQL_TOOL_RESULT]\n{\"tool\":\"script_exec\",\"output\":{\"status\":\"ok\"}}"},
+		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"script_exec\",\"output\":{\"status\":\"ok\"}}"},
 	})
 
 	runner := newCompletionRunner(completer, newFakeToolCatalog(webSearchTool, scriptExecTool), history, llm.ResponseOptions{})
@@ -340,13 +342,13 @@ func TestCompletionRunnerRepairsGraphQLTextToolProtocolWithHiddenCatalog(t *test
 	history := NewHistoryFromMessages([]llm.Message{
 		{Role: llm.RoleSystem, Text: "system prompt"},
 		{Role: llm.RoleUser, Text: "hello"},
-		{Role: llm.RoleAssistant, Text: `query { web_search(query: "OpenAI") }`},
+		{Role: llm.RoleAssistant, Text: `<t:1>{"query":"OpenAI"}</t>`},
 		{
 			Role:       llm.RoleTool,
 			ToolCallID: "graphql-text-call-1",
 			Text:       `{"status":"success","tool":"web_search","trace_id":"trace-1","output":"{\"items\":[{\"title\":\"OpenAI\"}]}"}`,
 		},
-		{Role: llm.RoleInternal, Text: "[GRAPHQL_TOOL_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
+		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 	})
 
 	runner := newCompletionRunner(completer, tools.NewStructuredToolHiddenCatalog(baseCatalog), history, llm.ResponseOptions{})
@@ -366,4 +368,189 @@ func TestCompletionRunnerRepairsGraphQLTextToolProtocolWithHiddenCatalog(t *test
 	if got := request.Messages[2].ToolCalls[0].Name; got != "web_search" {
 		t.Fatalf("unexpected repaired tool name: %q", got)
 	}
+}
+
+func TestCompletionRunnerRetriesNonStreamingOnTransientError(t *testing.T) {
+	completer := &retrySequenceCompleter{
+		results: []retryCompleteResult{
+			{err: transientNetError{message: "temporary network error"}},
+			{resp: newStopResponse("ok")},
+		},
+	}
+	runner := newCompletionRunner(
+		completer,
+		newFakeToolCatalog(),
+		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		llm.ResponseOptions{},
+	)
+
+	resp, err := runner.complete(context.Background(), nil, "trace-retry", "", 0)
+	if err != nil {
+		t.Fatalf("expected retry success, got error: %v", err)
+	}
+	if resp == nil || resp.Message.Text != "ok" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if len(completer.requests) != 2 {
+		t.Fatalf("expected 2 attempts, got %d", len(completer.requests))
+	}
+}
+
+func TestCompletionRunnerDoesNotRetryNonStreamingOnNonTransientError(t *testing.T) {
+	completer := &retrySequenceCompleter{
+		results: []retryCompleteResult{
+			{err: errors.New("bad request")},
+			{resp: newStopResponse("should not reach")},
+		},
+	}
+	runner := newCompletionRunner(
+		completer,
+		newFakeToolCatalog(),
+		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		llm.ResponseOptions{},
+	)
+
+	_, err := runner.complete(context.Background(), nil, "trace-retry", "", 0)
+	if err == nil {
+		t.Fatal("expected non-transient error")
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("expected 1 attempt, got %d", len(completer.requests))
+	}
+}
+
+func TestCompletionRunnerRetriesStreamingWhenNoDeltaEmitted(t *testing.T) {
+	completer := &retryStreamingCompleter{
+		attempts: []retryStreamResult{
+			{err: transientNetError{message: "upstream timeout"}},
+			{
+				resp: newStopResponse("done"),
+				deltas: []llm.LLMDelta{
+					{Kind: llm.DeltaKindText, Text: "done"},
+				},
+			},
+		},
+	}
+	history := NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}})
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
+	sink := newRecordingEventSink()
+
+	resp, err := runner.complete(context.Background(), sink, "trace-retry-stream", "session-1", 0)
+	if err != nil {
+		t.Fatalf("expected retry success, got error: %v", err)
+	}
+	if resp == nil || resp.Message.Text != "done" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if len(completer.requests) != 2 {
+		t.Fatalf("expected 2 attempts, got %d", len(completer.requests))
+	}
+	if got := countCompletionDeltaEvents(sink.events); got != 1 {
+		t.Fatalf("expected exactly one completion_delta event after retry, got %d", got)
+	}
+}
+
+func TestCompletionRunnerDoesNotRetryStreamingAfterDeltaEmitted(t *testing.T) {
+	completer := &retryStreamingCompleter{
+		attempts: []retryStreamResult{
+			{
+				err: transientNetError{message: "connection reset"},
+				deltas: []llm.LLMDelta{
+					{Kind: llm.DeltaKindText, Text: "partial"},
+				},
+			},
+			{resp: newStopResponse("should not reach")},
+		},
+	}
+	history := NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}})
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
+	sink := newRecordingEventSink()
+
+	_, err := runner.complete(context.Background(), sink, "trace-retry-stream", "session-1", 0)
+	if err == nil {
+		t.Fatal("expected streaming failure without retry after delta emission")
+	}
+	if len(completer.requests) != 1 {
+		t.Fatalf("expected 1 attempt, got %d", len(completer.requests))
+	}
+	if got := countCompletionDeltaEvents(sink.events); got != 1 {
+		t.Fatalf("expected one completion_delta event from first attempt, got %d", got)
+	}
+}
+
+func countCompletionDeltaEvents(events []streaming.Event) int {
+	count := 0
+	for _, event := range events {
+		if event.Type == streaming.EventCompletionDelta {
+			count++
+		}
+	}
+	return count
+}
+
+type retryCompleteResult struct {
+	resp *llm.CompletionResponse
+	err  error
+}
+
+type retrySequenceCompleter struct {
+	results  []retryCompleteResult
+	requests []llm.CompletionRequest
+}
+
+func (f *retrySequenceCompleter) Complete(_ context.Context, request llm.CompletionRequest) (*llm.CompletionResponse, error) {
+	f.requests = append(f.requests, cloneCompletionRequest(request))
+	if len(f.results) == 0 {
+		return nil, errors.New("unexpected complete call")
+	}
+	result := f.results[0]
+	f.results = f.results[1:]
+	return result.resp, result.err
+}
+
+type retryStreamResult struct {
+	resp   *llm.CompletionResponse
+	err    error
+	deltas []llm.LLMDelta
+}
+
+type retryStreamingCompleter struct {
+	attempts []retryStreamResult
+	requests []llm.CompletionRequest
+}
+
+func (f *retryStreamingCompleter) Complete(_ context.Context, request llm.CompletionRequest) (*llm.CompletionResponse, error) {
+	f.requests = append(f.requests, cloneCompletionRequest(request))
+	return nil, errors.New("unexpected complete call")
+}
+
+func (f *retryStreamingCompleter) CompleteStream(ctx context.Context, request llm.CompletionRequest, sink llm.LLMStreamSink) (*llm.CompletionResponse, error) {
+	f.requests = append(f.requests, cloneCompletionRequest(request))
+	if len(f.attempts) == 0 {
+		return nil, errors.New("unexpected complete stream call")
+	}
+	attempt := f.attempts[0]
+	f.attempts = f.attempts[1:]
+	for _, delta := range attempt.deltas {
+		if err := sink.OnDelta(ctx, delta); err != nil {
+			return nil, err
+		}
+	}
+	return attempt.resp, attempt.err
+}
+
+type transientNetError struct {
+	message string
+}
+
+func (e transientNetError) Error() string {
+	return e.message
+}
+
+func (transientNetError) Timeout() bool {
+	return true
+}
+
+func (transientNetError) Temporary() bool {
+	return true
 }

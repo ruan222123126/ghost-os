@@ -1,4 +1,4 @@
-import { hasPendingQuestion } from '@/lib/chatMessages';
+import { useCallback } from 'react';
 import { useChatHistory } from './useChatHistory';
 import { useChatQuestionActions } from './useChatQuestionActions';
 import { useChatRunControl } from './useChatRunControl';
@@ -8,25 +8,41 @@ import type { UseBridgeChatOptions, UseBridgeChatResult } from './types';
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
   const state = useChatState();
-  const { hydrateSessionHistory, loadSessionHistory } = useChatHistory({
+  const {
+    loadOlderHistory,
+    loadSessionHistory,
+    syncRecentHistory,
+  } = useChatHistory({
     clearChatError: state.clearChatError,
+    clearPendingQuestions: state.clearPendingQuestions,
+    clearStreamingState: state.clearStreamingState,
     replaceWithErrorMessage: state.replaceWithErrorMessage,
+    setCommittedMessages: state.setCommittedMessages,
+    setHasOlderHistory: state.setHasOlderHistory,
     setHistoryLoading: state.setHistoryLoading,
-    setMessages: state.setMessages,
+    setLoadingOlderHistory: state.setLoadingOlderHistory,
+    setNextHistoryBefore: state.setNextHistoryBefore,
     setChatError: state.setChatError,
+    nextHistoryBefore: state.nextHistoryBefore,
   });
   const { runAgentStream, runHumanStream } = useChatStreamController({
     currentSessionId: options.currentSessionId,
-    hydrateSessionHistory,
-    onSessionResolved: options.onSessionResolved,
     activeRunRef: state.activeRunRef,
+    appendCommittedMessages: state.appendCommittedMessages,
+    appendStreamingAssistantText: state.appendStreamingAssistantText,
+    clearStreamingAssistantText: state.clearStreamingAssistantText,
+    clearStreamingState: state.clearStreamingState,
+    onSessionResolved: options.onSessionResolved,
     setActiveRun: state.setActiveRun,
-    setMessages: state.setMessages,
+    syncRecentHistory,
+    upsertPendingQuestion: state.upsertPendingQuestion,
+    upsertStreamingTool: state.upsertStreamingTool,
   });
   const { sendChatMessage, stopCurrentRun } = useChatRunControl({
     appendErrorMessage: state.appendErrorMessage,
-    appendMessages: state.appendMessages,
+    appendCommittedMessages: state.appendCommittedMessages,
     clearChatError: state.clearChatError,
+    clearStreamingState: state.clearStreamingState,
     currentSessionId: options.currentSessionId,
     runAgentStream,
     activeRunRef: state.activeRunRef,
@@ -37,30 +53,42 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     stopPendingRef: state.stopPendingRef,
   });
   const { answerQuestion, cancelQuestion } = useChatQuestionActions({
+    appendCommittedMessages: state.appendCommittedMessages,
     appendErrorMessage: state.appendErrorMessage,
     clearChatError: state.clearChatError,
-    messages: state.messages,
+    clearStreamingState: state.clearStreamingState,
+    pendingQuestions: state.pendingQuestions,
     runHumanStream,
+    removePendingQuestion: state.removePendingQuestion,
     setActiveRun: state.setActiveRun,
     setChatError: state.setChatError,
     setLoading: state.setLoading,
     setStopPending: state.setStopPending,
-    setMessages: state.setMessages,
     stopPendingRef: state.stopPendingRef,
   });
+  const loadOlderCurrentSessionHistory = useCallback(async () => {
+    await loadOlderHistory(options.currentSessionId);
+  }, [loadOlderHistory, options.currentSessionId]);
 
   return {
-    messages: state.messages,
+    committedMessages: state.committedMessages,
+    streamingAssistantSegments: state.streamingAssistantSegments,
+    streamingItemOrder: state.streamingItemOrder,
+    streamingTools: state.streamingTools,
+    pendingQuestions: state.pendingQuestions,
     loading: state.loading,
     historyLoading: state.historyLoading,
+    loadingOlderHistory: state.loadingOlderHistory,
     chatError: state.chatError,
-    hasPendingQuestion: hasPendingQuestion(state.messages),
+    hasPendingQuestion: state.pendingQuestions.length > 0,
     canStop: state.loading && state.activeRun !== null && !state.stopPending,
+    hasOlderHistory: state.hasOlderHistory,
     sendChatMessage,
     stopCurrentRun,
     answerQuestion,
     cancelQuestion,
     loadSessionHistory,
+    loadOlderHistory: loadOlderCurrentSessionHistory,
     clearMessages: state.clearMessages,
   };
 }

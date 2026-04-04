@@ -74,6 +74,12 @@ type bridgeFileConfig struct {
 	Providers                             map[string]providerFileConfig     `toml:"providers,omitempty"`
 	Model                                 *string                           `toml:"model,omitempty"`
 	ChatPath                              *string                           `toml:"chat_path,omitempty"`
+	ResponsePromptCacheKey                *string                           `toml:"response_prompt_cache_key,omitempty"`
+	ResponsePromptCacheRetention          *string                           `toml:"response_prompt_cache_retention,omitempty"`
+	ResponseSafetyIdentifier              *string                           `toml:"response_safety_identifier,omitempty"`
+	ResponseStore                         *bool                             `toml:"response_store,omitempty"`
+	ResponseMetadata                      map[string]string                 `toml:"response_metadata,omitempty"`
+	CodexStatelessRetryEnabled            *bool                             `toml:"codex_stateless_retry_enabled,omitempty"`
 	ProjectRoot                           *string                           `toml:"project_root,omitempty"`
 	NativePersistent                      *bool                             `toml:"native_persistent,omitempty"`
 	NativeBinaryPath                      *string                           `toml:"native_binary_path,omitempty"`

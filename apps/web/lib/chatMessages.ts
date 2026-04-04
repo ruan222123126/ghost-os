@@ -14,9 +14,11 @@ import type {
   ToolChatMessage,
 } from '@/lib/types';
 import { attachmentsFromContent, imagesFromContent } from './chatMessageMedia';
-import { isGraphQLToolDocument } from '@/lib/graphqlToolText';
+import { filterToolTagResultToLoadedTools } from '@/lib/toolTagResultText';
+import { stripToolTagCalls } from '@/lib/toolTagText';
 
 interface NormalizedSessionMessage {
+  index: number;
   role: SessionMessageRole | '';
   text: string;
   content?: SessionContentPart[];
@@ -26,12 +28,18 @@ interface NormalizedSessionMessage {
   humanInteraction?: SessionHumanInteraction;
 }
 
+interface BuildUserMessageOptions {
+  id?: string;
+  images?: ChatImage[];
+}
+
 function nextChatMessageID() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMessage {
   return {
+    index: message.index,
     role: message.role,
     text: message.text ?? '',
     content: message.content ?? undefined,
@@ -40,6 +48,10 @@ function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMess
     toolResult: message.tool_result ?? undefined,
     humanInteraction: message.human_interaction ?? undefined,
   };
+}
+
+function buildSessionMessageID(sessionId: string, messageIndex: number, suffix: string): string {
+  return `session:${sessionId}:message:${messageIndex}:${suffix}`;
 }
 
 function formatToolContent(toolResult: SessionToolResult, fallbackText: string): string {
@@ -74,10 +86,11 @@ function buildQuestionMessage(
   content: string,
   questionId?: string,
   selectionMode?: 'single' | 'multiple',
-  options?: AskHumanOption[]
+  options?: AskHumanOption[],
+  id?: string,
 ): QuestionChatMessage {
   return {
-    id: nextChatMessageID(),
+    id: id ?? nextChatMessageID(),
     kind: 'question',
     content,
     questionId,
@@ -86,30 +99,46 @@ function buildQuestionMessage(
   };
 }
 
-interface BuildUserMessageOptions {
-  images?: ChatImage[];
+function buildSessionQuestionMessages(sessionId: string, message: NormalizedSessionMessage): ChatMessage[] {
+  if (!message.humanInteraction?.prompt) {
+    return [];
+  }
+
+  const mapped: ChatMessage[] = [buildQuestionMessage(
+    message.humanInteraction.prompt,
+    message.humanInteraction.question_id,
+    message.humanInteraction.selection_mode,
+    message.humanInteraction.options,
+    buildSessionMessageID(sessionId, message.index, 'question'),
+  )];
+  if (message.humanInteraction.answer) {
+    mapped.push(buildUserMessage(message.humanInteraction.answer, {
+      id: buildSessionMessageID(sessionId, message.index, 'answer'),
+    }));
+  }
+  return mapped;
 }
 
 export function buildUserMessage(content: string, options?: BuildUserMessageOptions): ChatMessage {
   return {
-    id: nextChatMessageID(),
+    id: options?.id ?? nextChatMessageID(),
     kind: 'user',
     content,
     images: options?.images,
   };
 }
 
-export function buildAssistantMessage(content: string): ChatMessage {
+export function buildAssistantMessage(content: string, id?: string): ChatMessage {
   return {
-    id: nextChatMessageID(),
+    id: id ?? nextChatMessageID(),
     kind: 'assistant',
     content,
   };
 }
 
-export function buildSystemMessage(content: string): ChatMessage {
+export function buildSystemMessage(content: string, id?: string): ChatMessage {
   return {
-    id: nextChatMessageID(),
+    id: id ?? nextChatMessageID(),
     kind: 'system',
     content,
   };
@@ -148,87 +177,65 @@ export function buildPendingQuestionMessage(response: AgentSendAwaitingHumanResp
   };
 }
 
-function mapToolSessionMessage(message: NormalizedSessionMessage): ChatMessage[] {
+function mapToolSessionMessage(sessionId: string, message: NormalizedSessionMessage): ChatMessage[] {
   if (message.humanInteraction?.prompt) {
-    const mapped: ChatMessage[] = [buildQuestionMessage(
-      message.humanInteraction.prompt,
-      message.humanInteraction.question_id,
-      message.humanInteraction.selection_mode,
-      message.humanInteraction.options
-    )];
-    if (message.humanInteraction.answer) {
-      mapped.push(buildUserMessage(message.humanInteraction.answer));
-    }
-    return mapped;
+    return buildSessionQuestionMessages(sessionId, message);
   }
 
   const toolResult = message.toolResult;
-  return [
-    buildToolMessage({
-      content: toolResult ? formatToolContent(toolResult, message.text) : message.text || '[tool]',
-      attachments: attachmentsFromContent(message.content),
-      rawOutput: toolResult?.output,
-      toolCallId: message.toolCallId,
-      toolCalls: message.toolCalls,
-      toolName: toolResult?.tool,
-      toolStatus: toolResult?.status,
-      traceId: toolResult?.trace_id,
-    }),
-  ];
+  return [{
+    id: buildSessionMessageID(sessionId, message.index, 'tool'),
+    kind: 'tool',
+    content: toolResult ? formatToolContent(toolResult, message.text) : message.text || '[tool]',
+    attachments: attachmentsFromContent(message.content),
+    rawOutput: toolResult?.output,
+    toolCallId: message.toolCallId,
+    toolCalls: message.toolCalls,
+    toolName: toolResult?.tool,
+    toolStatus: toolResult?.status,
+    traceId: toolResult?.trace_id,
+  }];
 }
 
-function hasToolMessageAhead(messages: SessionMessage[], startIndex: number): boolean {
-  for (let index = startIndex; index < messages.length; index += 1) {
-    const role = messages[index].role;
-    if (role === 'tool') {
-      return true;
-    }
-    if (role === 'user') {
-      return false;
-    }
-  }
-
-  return false;
-}
-
-function shouldHideAssistantSessionMessage(messages: SessionMessage[], index: number): boolean {
-  const text = messages[index].text?.trim() ?? '';
-  if (!text) {
-    return true;
-  }
-
-  return isGraphQLToolDocument(text) && hasToolMessageAhead(messages, index + 1);
-}
-
-export function mapSessionMessageToChatMessages(message: SessionMessage): ChatMessage[] {
+export function mapSessionMessageToChatMessages(sessionId: string, message: SessionMessage): ChatMessage[] {
   const normalized = normalizeSessionMessage(message);
   switch (normalized.role) {
     case 'user':
-      return [buildUserMessage(normalized.text, { images: imagesFromContent(normalized.content) })];
+      return [buildUserMessage(normalized.text, {
+        id: buildSessionMessageID(sessionId, normalized.index, 'user'),
+        images: imagesFromContent(normalized.content),
+      })];
     case 'assistant':
-      if (!normalized.text.trim()) {
+      const visibleText = stripToolTagCalls(normalized.text);
+      if (!visibleText.trim()) {
         return [];
       }
-      return [buildAssistantMessage(normalized.text)];
+      return [buildAssistantMessage(
+        visibleText,
+        buildSessionMessageID(sessionId, normalized.index, 'assistant'),
+      )];
     case 'system':
-      return [buildSystemMessage(normalized.text || '[system]')];
+      return [buildSystemMessage(
+        normalized.text || '[system]',
+        buildSessionMessageID(sessionId, normalized.index, 'system'),
+      )];
     case 'internal':
-      return [buildSystemMessage(normalized.text || '[internal]')];
+      return [buildSystemMessage(
+        filterToolTagResultToLoadedTools(normalized.text) || '[internal]',
+        buildSessionMessageID(sessionId, normalized.index, 'internal'),
+      )];
     case 'tool':
-      return mapToolSessionMessage(normalized);
+      return mapToolSessionMessage(sessionId, normalized);
     default:
       return [];
   }
 }
 
-export function mapSessionMessagesToChat(messages: SessionMessage[]): ChatMessage[] {
+export function mapSessionMessagesToChat(sessionId: string, messages: SessionMessage[]): ChatMessage[] {
   const mapped: ChatMessage[] = [];
 
-  for (const [index, message] of messages.entries()) {
-    if (message.role === 'assistant' && shouldHideAssistantSessionMessage(messages, index)) {
-      continue;
-    }
-    mapped.push(...mapSessionMessageToChatMessages(message));
+  for (const message of messages) {
+    mapped.push(...mapSessionMessageToChatMessages(sessionId, message));
   }
 
   return mapped;
@@ -244,7 +251,7 @@ export function mapAgentReplyToChatMessages(reply: AgentSendResponse): ChatMessa
 export function findPendingQuestion(messages: ChatMessage[], questionId: string): PendingQuestionMessage | undefined {
   return messages.find(
     (message): message is PendingQuestionMessage =>
-      message.kind === 'pending_question' && message.questionId === questionId
+      message.kind === 'pending_question' && message.questionId === questionId,
   );
 }
 
@@ -263,6 +270,6 @@ export function replacePendingQuestionWithUserAnswer(messages: ChatMessage[], qu
 
 export function removePendingQuestion(messages: ChatMessage[], questionId: string): ChatMessage[] {
   return messages.filter(
-    (message) => !(message.kind === 'pending_question' && message.questionId === questionId)
+    (message) => !(message.kind === 'pending_question' && message.questionId === questionId),
   );
 }

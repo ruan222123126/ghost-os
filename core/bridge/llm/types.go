@@ -87,6 +87,23 @@ type ConversationState struct {
 	PreviousResponseID string
 }
 
+// ResponseOptions 是 Responses API 相关的可选请求扩展参数。
+type ResponseOptions struct {
+	PromptCacheKey       string
+	PromptCacheRetention string
+	SafetyIdentifier     string
+	Metadata             map[string]string
+	Store                *bool
+}
+
+func (o ResponseOptions) IsZero() bool {
+	return strings.TrimSpace(o.PromptCacheKey) == "" &&
+		strings.TrimSpace(o.PromptCacheRetention) == "" &&
+		strings.TrimSpace(o.SafetyIdentifier) == "" &&
+		len(o.Metadata) == 0 &&
+		o.Store == nil
+}
+
 func (s ConversationState) IsZero() bool {
 	return s.Provider == "" && strings.TrimSpace(s.BaseURL) == "" && strings.TrimSpace(s.Model) == "" && strings.TrimSpace(s.PreviousResponseID) == ""
 }
@@ -102,6 +119,7 @@ type CompletionRequest struct {
 	Messages          []Message
 	Tools             []ToolDef
 	ConversationState ConversationState
+	ResponseOptions   ResponseOptions
 }
 
 // CompletionResponse 是一次模型请求的统一输出。
@@ -202,6 +220,20 @@ func cloneToolCalls(calls []ToolCall) []ToolCall {
 	return out
 }
 
+func CloneResponseOptions(raw ResponseOptions) ResponseOptions {
+	out := ResponseOptions{
+		PromptCacheKey:       strings.TrimSpace(raw.PromptCacheKey),
+		PromptCacheRetention: strings.TrimSpace(raw.PromptCacheRetention),
+		SafetyIdentifier:     strings.TrimSpace(raw.SafetyIdentifier),
+		Metadata:             cloneStringMap(raw.Metadata),
+	}
+	if raw.Store != nil {
+		value := *raw.Store
+		out.Store = &value
+	}
+	return out
+}
+
 // cloneRawJSON 复制原始 JSON 字节，保证调用方可安全持有。
 func cloneRawJSON(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
@@ -219,6 +251,25 @@ func normalizeJSONObject(raw json.RawMessage) json.RawMessage {
 		return json.RawMessage(`{}`)
 	}
 	return cloneRawJSON(raw)
+}
+
+func cloneStringMap(raw map[string]string) map[string]string {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		k := strings.TrimSpace(key)
+		if k == "" {
+			continue
+		}
+		out[k] = strings.TrimSpace(value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // contentToText 把 provider content 折叠为文本，兜底为 JSON 字符串。

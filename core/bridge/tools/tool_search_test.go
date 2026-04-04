@@ -66,6 +66,36 @@ func TestToolSearchTool_SearchLoadListAndUnload(t *testing.T) {
 	}
 }
 
+func TestToolSearchTool_SearchMatchesNaturalLanguageQuery(t *testing.T) {
+	registry := NewRegistry()
+	for _, name := range []string{"ask_human", "send_file", "browser_control", "web_search", ToolSearchToolName} {
+		registry.Register(&mockTool{name: name})
+	}
+
+	tool := NewToolSearchTool(registry, VisibilityOptions{
+		ToolSearchEnabled: true,
+		Allowlist:         []string{"send_file"},
+	}, 3)
+
+	sess := session.NewSession("")
+	sess.AdvanceToolTurn(1)
+	ctx := WithSession(context.Background(), sess)
+
+	search := decodeToolSearchResponse(
+		t,
+		tool,
+		ctx,
+		`{"action":"search","query":"website search tool availability; web_search, browser_control, internet retrieval, web browser"}`,
+	)
+
+	if !containsToolSearchItem(search.Items, "browser_control") {
+		t.Fatalf("expected browser_control to match natural-language query, got %+v", search.Items)
+	}
+	if !containsToolSearchItem(search.Items, "web_search") {
+		t.Fatalf("expected web_search to match natural-language query, got %+v", search.Items)
+	}
+}
+
 func decodeToolSearchResponse(t *testing.T, tool Tool, ctx context.Context, raw string) toolSearchResponse {
 	t.Helper()
 
@@ -78,4 +108,19 @@ func decodeToolSearchResponse(t *testing.T, tool Tool, ctx context.Context, raw 
 		t.Fatalf("decode tool search output: %v", err)
 	}
 	return payload
+}
+
+func containsToolSearchItem(items []struct {
+	Name               string `json:"name"`
+	Status             string `json:"status"`
+	AvailableNow       bool   `json:"available_now"`
+	AvailableNextTurn  bool   `json:"available_next_turn"`
+	RemainingIdleTurns int    `json:"remaining_idle_turns"`
+}, want string) bool {
+	for _, item := range items {
+		if item.Name == want {
+			return true
+		}
+	}
+	return false
 }

@@ -10,7 +10,7 @@ import (
 func TestBuildPlannerRecentMessagesSkipsInternalMessages(t *testing.T) {
 	history := agent.NewHistoryFromMessages([]llm.Message{
 		{Role: llm.RoleUser, Text: "Reply in Chinese."},
-		{Role: llm.RoleInternal, Text: "[GRAPHQL_TOOL_RESULT]\n{\"tool\":\"web_search\"}"},
+		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\"}"},
 		{Role: llm.RoleAssistant, Text: "I will reply in Chinese."},
 	})
 

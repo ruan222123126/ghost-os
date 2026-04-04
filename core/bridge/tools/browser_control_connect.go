@@ -14,6 +14,8 @@ import (
 	"ghost-os/bridge/tools/internal/toolparams"
 )
 
+const browserLaunchAction = "BROWSER_LAUNCH"
+
 func (t *BrowserControlTool) executeConnect(params map[string]any) (string, error) {
 	endpoint, err := toolparams.RequiredString(params, "endpoint")
 	if err != nil {
@@ -49,17 +51,13 @@ func (t *BrowserControlTool) executeLaunch(ctx context.Context, params map[strin
 	if err != nil {
 		return "", err
 	}
-	command, err := browserLaunchCommand(params, endpoint)
+	launchPayload, err := browserLaunchPayload(params, endpoint)
 	if err != nil {
 		return "", err
 	}
 
-	launchResult, err := t.execution.Call(ctx, "BASH_EXEC", map[string]any{"command": command}, traceID)
-	if err != nil {
-		return "", fmt.Errorf("launch command failed: %w", err)
-	}
-	if err := launchCommandDiscoveryError(command, launchResult); err != nil {
-		return "", err
+	if _, err := t.execution.Call(ctx, browserLaunchAction, launchPayload, traceID); err != nil {
+		return "", fmt.Errorf("execution %s failed: %w", browserLaunchAction, err)
 	}
 
 	wsEndpoint, err := waitForWSEndpoint(endpoint, browserParseWaitTimeout(params))
@@ -96,22 +94,47 @@ func launchEndpoint(params map[string]any) (string, error) {
 	return fmt.Sprintf("http://127.0.0.1:%d", port), nil
 }
 
-func browserLaunchCommand(params map[string]any, endpoint string) (string, error) {
+func browserLaunchPayload(params map[string]any, endpoint string) (map[string]any, error) {
 	if explicit := toolparams.OptionalString(params, "command", ""); explicit != "" {
-		return explicit, nil
+		payload := map[string]any{"command": explicit}
+		port, hasPort, err := browserOptionalDebugPort(params)
+		if err != nil {
+			return nil, err
+		}
+		if hasPort {
+			payload["debug_port"] = port
+		}
+		return payload, nil
 	}
 	port, err := browserLaunchPort(params, endpoint)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return buildAutoBrowserLaunchCommand(port), nil
+	return map[string]any{"debug_port": port}, nil
+}
+
+func browserOptionalDebugPort(params map[string]any) (int, bool, error) {
+	port, ok := toolparams.OptionalInt(params, "debug_port")
+	if !ok {
+		return 0, false, nil
+	}
+	if err := validateBrowserDebugPort(port); err != nil {
+		return 0, false, err
+	}
+	return port, true, nil
+}
+
+func validateBrowserDebugPort(port int) error {
+	if port <= 0 || port > maxBrowserDebugPort {
+		return fmt.Errorf("debug_port must be between 1 and %d", maxBrowserDebugPort)
+	}
+	return nil
 }
 
 func browserLaunchPort(params map[string]any, endpoint string) (int, error) {
-	if port, ok := toolparams.OptionalInt(params, "debug_port"); ok {
-		if port <= 0 || port > maxBrowserDebugPort {
-			return 0, fmt.Errorf("debug_port must be between 1 and %d", maxBrowserDebugPort)
-		}
+	if port, ok, err := browserOptionalDebugPort(params); err != nil {
+		return 0, err
+	} else if ok {
 		return port, nil
 	}
 	port, err := portFromEndpoint(endpoint)
@@ -145,55 +168,6 @@ func portFromEndpoint(endpoint string) (int, error) {
 		return 0, fmt.Errorf("endpoint port must be between 1 and %d", maxBrowserDebugPort)
 	}
 	return port, nil
-}
-
-func buildAutoBrowserLaunchCommand(port int) string {
-	candidateList := strings.Join(browserAutoLaunchCandidates, " ")
-	candidateLog := strings.Join(browserAutoLaunchCandidates, ", ")
-	return fmt.Sprintf(
-		autoBrowserLaunchCommandTemplate,
-		candidateList,
-		candidateLog,
-		port,
-		browserAutoLaunchProfileDir,
-		browserAutoLaunchLogPath,
-	)
-}
-
-func launchCommandDiscoveryError(command string, launchResult map[string]any) error {
-	stderr, _ := launchResult["stderr"].(string)
-	missing := missingCommandError(strings.TrimSpace(stderr))
-	if missing == "" {
-		return nil
-	}
-	return fmt.Errorf(
-		"launch command references an unavailable executable: %s (command=%q)",
-		missing,
-		command,
-	)
-}
-
-func missingCommandError(stderr string) string {
-	if stderr == "" {
-		return ""
-	}
-	lower := strings.ToLower(stderr)
-	for _, marker := range missingBinaryMarkers {
-		if strings.Contains(lower, marker) {
-			return firstNonEmptyLine(stderr)
-		}
-	}
-	return ""
-}
-
-func firstNonEmptyLine(text string) string {
-	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func resolveWSEndpoint(endpoint string, timeout time.Duration) (string, error) {

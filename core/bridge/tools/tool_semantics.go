@@ -6,7 +6,7 @@ func (AskHumanTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (BrowserControlTool) ToolSemantics() llm.ToolSemantics {
+func (*BrowserControlTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
