@@ -12,6 +12,7 @@ const MAX_BROWSER_DEBUG_PORT: usize = 65535;
 const DEFAULT_BROWSER_PROFILE_DIR: &str = "/tmp/ghost-browser-control-profile";
 const DEFAULT_BROWSER_LOG_PATH: &str = "/tmp/ghost-browser-control.log";
 
+// Execution-layer OS details for auto-discovery stay here, not in Central.
 const BROWSER_CANDIDATES: [&str; 5] = [
     "google-chrome",
     "google-chrome-stable",

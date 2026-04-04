@@ -14,6 +14,8 @@ import (
 	"ghost-os/bridge/tools/internal/toolparams"
 )
 
+// Boundary contract: Central only sends structured launch params;
+// execution owns browser process discovery/spawn details.
 const browserLaunchAction = "BROWSER_LAUNCH"
 
 func (t *BrowserControlTool) executeConnect(params map[string]any) (string, error) {
