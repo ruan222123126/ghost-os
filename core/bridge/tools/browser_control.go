@@ -20,7 +20,7 @@ const browserControlSchema = `{
 			"properties":{
 				"session_id":{"type":"string","description":"Existing browser session id. Optional when only one browser session is active."},
 				"endpoint":{"type":"string","description":"CDP websocket URL (ws://) or http(s)://host:port for /json/version discovery."},
-				"command":{"type":"string","description":"Optional launch command for the launch action. If omitted, bridge auto-detects a Chrome-compatible binary in execution PATH and launches it."},
+				"command":{"type":"string","description":"Optional launch command for the launch action. If omitted, the execution layer auto-detects a Chrome-compatible binary in PATH and launches it."},
 				"debug_port":{"type":"number","minimum":1,"maximum":65535,"description":"Remote debugging port for launch/connect. Defaults to 9222 when endpoint is omitted."},
 				"wait_timeout_ms":{"type":"number","minimum":0,"description":"Launch wait timeout in milliseconds."},
 				"url":{"type":"string","description":"Navigation target URL."},
