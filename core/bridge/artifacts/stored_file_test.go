@@ -20,7 +20,7 @@ func TestResolveStoredPathRejectsOutsideBaseDir(t *testing.T) {
 		t.Fatalf("write outside file: %v", err)
 	}
 
-	if _, err := store.ResolveStoredPath(outsideFile, nil); !errors.Is(err, ErrInvalidStoredPath) {
+	if _, err := store.ResolveStoredPath(outsideFile); !errors.Is(err, ErrInvalidStoredPath) {
 		t.Fatalf("expected invalid stored path, got %v", err)
 	}
 }
@@ -43,7 +43,7 @@ func TestResolveStoredPathRejectsSymlinkEscape(t *testing.T) {
 		t.Fatalf("symlink: %v", err)
 	}
 
-	if _, err := store.ResolveStoredPath(symlinkPath, nil); !errors.Is(err, ErrInvalidStoredPath) {
+	if _, err := store.ResolveStoredPath(symlinkPath); !errors.Is(err, ErrInvalidStoredPath) {
 		t.Fatalf("expected invalid stored path, got %v", err)
 	}
 }
@@ -78,7 +78,7 @@ func TestOpenStoredFileReturnsFileAndInfo(t *testing.T) {
 		t.Fatalf("write metadata: %v", err)
 	}
 
-	file, info, artifact, err := store.OpenStoredFile("session-1", "artifact-1", nil)
+	file, info, artifact, err := store.OpenStoredFile("session-1", "artifact-1")
 	if err != nil {
 		t.Fatalf("open stored file: %v", err)
 	}

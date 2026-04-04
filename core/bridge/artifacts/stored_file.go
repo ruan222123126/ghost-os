@@ -10,13 +10,7 @@ import (
 
 var ErrInvalidStoredPath = errors.New("invalid stored path")
 
-type ResolveStoredPathOptions struct {
-	// CheckSymlinkEscape resolves symlinks (best effort) and ensures the resolved
-	// path stays within the artifacts base directory.
-	CheckSymlinkEscape bool
-}
-
-func (s *SessionArtifactStore) ResolveStoredPath(storedPath string, opts *ResolveStoredPathOptions) (string, error) {
+func (s *SessionArtifactStore) ResolveStoredPath(storedPath string) (string, error) {
 	if s == nil {
 		return "", errors.New("artifact store is not configured")
 	}
@@ -33,14 +27,6 @@ func (s *SessionArtifactStore) ResolveStoredPath(storedPath string, opts *Resolv
 	}
 	if !isWithinBaseDir(cleanBase, cleanStored) {
 		return "", ErrInvalidStoredPath
-	}
-
-	checkSymlinks := true
-	if opts != nil {
-		checkSymlinks = opts.CheckSymlinkEscape
-	}
-	if !checkSymlinks {
-		return cleanStored, nil
 	}
 
 	resolvedBase := cleanBase
@@ -62,11 +48,7 @@ func (s *SessionArtifactStore) ResolveStoredPath(storedPath string, opts *Resolv
 	return resolvedStored, nil
 }
 
-type OpenStoredFileOptions struct {
-	ResolveStoredPathOptions
-}
-
-func (s *SessionArtifactStore) OpenStoredFile(sessionID string, artifactID string, opts *OpenStoredFileOptions) (*os.File, os.FileInfo, *SessionFileArtifact, error) {
+func (s *SessionArtifactStore) OpenStoredFile(sessionID string, artifactID string) (*os.File, os.FileInfo, *SessionFileArtifact, error) {
 	if s == nil {
 		return nil, nil, nil, errors.New("artifact store is not configured")
 	}
@@ -76,7 +58,7 @@ func (s *SessionArtifactStore) OpenStoredFile(sessionID string, artifactID strin
 		return nil, nil, nil, err
 	}
 
-	path, err := s.ResolveStoredPath(artifact.StoredPath, resolveStoredOptsFromOpenOpts(opts))
+	path, err := s.ResolveStoredPath(artifact.StoredPath)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -91,13 +73,6 @@ func (s *SessionArtifactStore) OpenStoredFile(sessionID string, artifactID strin
 		return nil, nil, nil, fmt.Errorf("stat artifact: %w", err)
 	}
 	return file, info, artifact, nil
-}
-
-func resolveStoredOptsFromOpenOpts(opts *OpenStoredFileOptions) *ResolveStoredPathOptions {
-	if opts == nil {
-		return nil
-	}
-	return &opts.ResolveStoredPathOptions
 }
 
 func isWithinBaseDir(baseDir string, target string) bool {

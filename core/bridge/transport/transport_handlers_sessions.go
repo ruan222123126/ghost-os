@@ -109,7 +109,7 @@ func (t *transport) handleSessionArtifactDownload(w http.ResponseWriter, r *http
 		writeError(w, http.StatusInternalServerError, err.Error(), traceID)
 		return
 	}
-	file, info, artifact, err := store.OpenStoredFile(normalizedSessionID, normalizedArtifactID, nil)
+	file, info, artifact, err := store.OpenStoredFile(normalizedSessionID, normalizedArtifactID)
 	if err != nil {
 		status := http.StatusInternalServerError
 		if errors.Is(err, artifacts.ErrArtifactNotFound) {

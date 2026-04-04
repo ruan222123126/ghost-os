@@ -1,6 +1,6 @@
 # Ghost-OS 项目进展
 
-更新日期：2026-04-03  
+更新日期：2026-04-04  
 当前阶段：MVP 稳定化（边界收口中）
 
 ## 总体结论
@@ -16,6 +16,7 @@
 ### Central: `core/bridge`
 
 - Agent、Session、Tool、Provider、SSE、配置持久化、`ask_human` 续跑、基础 Memory 增强链路已落地。
+- Bridge 启动入口的 `serve` 子命令判定已收口到 `app.IsServeSubcommand` 单点实现，`core/bridge/main.go` 与 `app.Run` 不再重复维护同构逻辑；同时清理了 `core/bridge/main.go.tmp.k29Khx` 临时文件，并移除 `core/bridge/app/agent.go` 中仅测试使用的注入缝隙层（`newAgentTurnRunner`、`runAgentWithConfigStore`）。
 - 普通 Agent 请求现已补上图片入参链路：`/api/agent` / `AGENT_SEND` 支持 `images[]`，图片可用本地路径、远程 URL 或 data URL 表达；Central 会把用户图片写入 session history，并在 provider 投影阶段对 OpenAI / Anthropic / Codex 统一转成对应多模态输入，不再只支持 tool-result 图片。
 - Memory 主链已切换到“事件节点图驱动”：
   - `core/bridge/memorystore` 新增 `event_nodes` / `event_edges` / `event_memories` / `session_event_state` 存储层，用于承载任务/目标级事件图；旧 `learned_memories` 不再接任务型自动记忆写入，只保留全局长期偏好的实现细节。
@@ -80,6 +81,7 @@
 - `screen_action` 截图链路已切到文件引用：`SCREEN_CAPTURE` 改为返回 `image_path`，Bridge 侧截图 artifact 改为基于文件流复制与流式哈希，不再经过 `image_base64 -> decode -> 写文件` 这条高内存路径；`OCR_IMAGE` / `TEMPLATE_MATCH_IMAGE` 的入参也已改为传 `image_path`。
 - native binary 解析顺序已收口为“优先仓库内 `drivers/native/target/*` 构建产物，再尝试裸名 `native`”：避免误命中过期二进制导致 `SCREEN_CAPTURE` payload 与 Bridge 契约漂移；同时 `screen_action` / `computer_use` 对截图 payload 增加了显式契约校验，在缺失 `image_path` 或命中旧 `image_base64` 字段时会直接报结构化错误，不再只给 `empty image_path`。
 - Bridge 启动层已补齐专用回归测试：`core/bridge/app/startup_router_test.go` 与 `startup_error_test.go` 覆盖了 `Run` 的 `serve`/非 `serve` 路由、startup checkpoint 日志、`usageError` 透传以及非 usage 错误包装（`serve dispatch failed`）路径。
+- artifacts 存储读取接口已做一次边界收口：`ResolveStoredPath` / `OpenStoredFile` 移除未使用 options 并固定启用 symlink 逃逸校验，`normalizeIdentifier` 删除重复的路径分隔符分支，`SessionFileArtifact` 不再写入未被消费的 `CreatedAt` 元数据字段。
 - Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
 
 ### Perception: `apps/web` / `apps/cli` / `apps/android`
