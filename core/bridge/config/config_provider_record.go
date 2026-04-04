@@ -149,28 +149,6 @@ func providerIndexByName(providers []providerConfig, name string) int {
 	return -1
 }
 
-func cloneProviderConfigs(providers []providerConfig) []providerConfig {
-	if len(providers) == 0 {
-		return nil
-	}
-
-	out := make([]providerConfig, 0, len(providers))
-	for _, provider := range providers {
-		out = append(out, providerConfig{
-			Name:                       provider.Name,
-			Type:                       provider.Type,
-			BaseURL:                    provider.BaseURL,
-			APIKey:                     cloneOptionalStringPointer(provider.APIKey),
-			Models:                     append([]string(nil), provider.Models...),
-			ContextWindowTokens:        provider.ContextWindowTokens,
-			ResponseReserveTokens:      provider.ResponseReserveTokens,
-			ModelContextWindowTokens:   cloneModelTokenOverrides(provider.ModelContextWindowTokens),
-			ModelResponseReserveTokens: cloneModelTokenOverrides(provider.ModelResponseReserveTokens),
-		})
-	}
-	return out
-}
-
 func normalizePositiveInt(value int) int {
 	if value > 0 {
 		return value

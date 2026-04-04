@@ -194,11 +194,6 @@ func cloneStringMap(raw map[string]string) map[string]string {
 	return out
 }
 
-func optionalIntPointer(value int) *int {
-	v := value
-	return &v
-}
-
 func boolPointer(value bool) *bool {
 	v := value
 	return &v

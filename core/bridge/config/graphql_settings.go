@@ -6,10 +6,6 @@ import (
 	"strings"
 )
 
-func envGraphQLSettings() (GraphQLConfig, error) {
-	return graphQLSettingsFromEnv(currentEnv())
-}
-
 func graphQLSettingsFromEnv(env envSnapshot) (GraphQLConfig, error) {
 	if err := validateNoLegacyGraphQLEnv(env); err != nil {
 		return GraphQLConfig{}, err

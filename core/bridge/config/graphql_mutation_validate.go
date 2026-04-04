@@ -31,6 +31,22 @@ func validateGraphQLMutationPolicy(
 	seenNames map[string]bool,
 	seenTargets map[string]bool,
 ) error {
+	if err := validateGraphQLMutationPolicyRequiredFields(policy); err != nil {
+		return err
+	}
+	if err := validateGraphQLMutationPolicyIdempotency(policy); err != nil {
+		return err
+	}
+	if err := registerGraphQLMutationPolicy(policy, seenNames, seenTargets); err != nil {
+		return err
+	}
+	if err := validateGraphQLMutationPolicySourceAndDomain(sources, policy); err != nil {
+		return err
+	}
+	return validateGraphQLMutationPolicyOverrides(policy)
+}
+
+func validateGraphQLMutationPolicyRequiredFields(policy GraphQLMutationPolicyConfig) error {
 	if policy.Name == "" {
 		return fmt.Errorf("graphql mutation policy name is required")
 	}
@@ -43,19 +59,19 @@ func validateGraphQLMutationPolicy(
 	if policy.RootMutation == "" {
 		return fmt.Errorf("graphql mutation policy %q root_mutation is required", policy.Name)
 	}
-	if err := validateGraphQLMutationPolicyIdempotency(policy); err != nil {
-		return err
-	}
+	return nil
+}
+
+func registerGraphQLMutationPolicy(
+	policy GraphQLMutationPolicyConfig,
+	seenNames map[string]bool,
+	seenTargets map[string]bool,
+) error {
 	if seenNames[policy.Name] {
 		return fmt.Errorf("graphql mutation policy %q is duplicated", policy.Name)
 	}
 	seenNames[policy.Name] = true
-
-	targetKey := graphQLMutationPolicyTargetKey(
-		policy.Source,
-		policy.Domain,
-		policy.RootMutation,
-	)
+	targetKey := graphQLMutationPolicyTargetKey(policy.Source, policy.Domain, policy.RootMutation)
 	if seenTargets[targetKey] {
 		return fmt.Errorf(
 			"graphql mutation policy for source %q domain %q root mutation %q is duplicated",
@@ -65,7 +81,13 @@ func validateGraphQLMutationPolicy(
 		)
 	}
 	seenTargets[targetKey] = true
+	return nil
+}
 
+func validateGraphQLMutationPolicySourceAndDomain(
+	sources []GraphQLSourceConfig,
+	policy GraphQLMutationPolicyConfig,
+) error {
 	source, ok := findGraphQLSourceConfigByName(sources, policy.Source)
 	if !ok {
 		return fmt.Errorf(
@@ -82,36 +104,20 @@ func validateGraphQLMutationPolicy(
 			policy.Source,
 		)
 	}
-	if err := validateGraphQLOverrideValue(
-		policy.MaxDepth,
-		policy.Source,
-		policy.Domain,
-		"max_depth",
-	); err != nil {
+	return nil
+}
+
+func validateGraphQLMutationPolicyOverrides(policy GraphQLMutationPolicyConfig) error {
+	if err := validateGraphQLOverrideValue(policy.MaxDepth, policy.Source, policy.Domain, "max_depth"); err != nil {
 		return err
 	}
-	if err := validateGraphQLOverrideValue(
-		policy.MaxFields,
-		policy.Source,
-		policy.Domain,
-		"max_fields",
-	); err != nil {
+	if err := validateGraphQLOverrideValue(policy.MaxFields, policy.Source, policy.Domain, "max_fields"); err != nil {
 		return err
 	}
-	if err := validateGraphQLOverrideValue(
-		policy.MaxRootFields,
-		policy.Source,
-		policy.Domain,
-		"max_root_fields",
-	); err != nil {
+	if err := validateGraphQLOverrideValue(policy.MaxRootFields, policy.Source, policy.Domain, "max_root_fields"); err != nil {
 		return err
 	}
-	return validateGraphQLOverrideValue(
-		policy.MaxFragments,
-		policy.Source,
-		policy.Domain,
-		"max_fragments",
-	)
+	return validateGraphQLOverrideValue(policy.MaxFragments, policy.Source, policy.Domain, "max_fragments")
 }
 
 func validateGraphQLMutationPolicyIdempotency(

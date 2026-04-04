@@ -1,7 +1,6 @@
 package config
 
 import (
-	"strings"
 	"time"
 
 	"ghost-os/bridge/llm"
@@ -175,6 +174,8 @@ type Config struct {
 	ProjectRoot                   string
 	Task                          TaskConfig
 	ChatPath                      string
+	ResponseOptions               llm.ResponseOptions
+	CodexStatelessRetryEnabled    bool
 	PromptsPath                   string
 	PromptsDir                    string
 	PromptsCoreFiles              []string
@@ -202,6 +203,8 @@ type runtimeConfig struct {
 	BaseURL                    string
 	Model                      string
 	ChatPath                   string
+	ResponseOptions            llm.ResponseOptions
+	CodexStatelessRetryEnabled bool
 	NativePersistent           bool
 	ProjectRoot                string
 	ModelSelectionEnabled      bool
@@ -261,20 +264,3 @@ const (
 	defaultWebRooterBaseURL           = "http://127.0.0.1:8765"
 	defaultWebRooterTimeoutMS         = 90_000
 )
-
-func providerClientOptions(cfg Config, model string) llm.ClientOptions {
-	resolvedModel := strings.TrimSpace(model)
-	if resolvedModel == "" {
-		resolvedModel = strings.TrimSpace(cfg.Provider.Model)
-	}
-	return llm.ClientOptions{
-		Provider:           cfg.Provider.Type,
-		BaseURL:            cfg.Provider.BaseURL,
-		APIKey:             cfg.Provider.APIKey,
-		Model:              resolvedModel,
-		ChatPath:           cfg.ChatPath,
-		Headers:            cfg.Provider.Headers,
-		AnthropicVersion:   cfg.Provider.AnthropicVersion,
-		AnthropicMaxTokens: cfg.Provider.AnthropicMaxTokens,
-	}
-}

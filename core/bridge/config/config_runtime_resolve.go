@@ -1,11 +1,6 @@
 package config
 
-import (
-	"fmt"
-	"strings"
-
-	"ghost-os/bridge/llm"
-)
+import "ghost-os/bridge/llm"
 
 func runtimeConfigFromEnv() (runtimeConfig, error) {
 	fileCfg, _, err := loadBridgeFileConfig()
@@ -24,40 +19,89 @@ func resolveRuntimeConfig(fileCfg bridgeFileConfig, env envSnapshot) (runtimeCon
 }
 
 func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
-	webSearch := webSearchSettingsFromEnv(env)
-	webRooter, err := webRooterSettingsFromEnv(env)
-	if err != nil {
-		return runtimeConfig{}, err
-	}
-	graphql, err := graphQLSettingsFromEnv(env)
-	if err != nil {
-		return runtimeConfig{}, err
-	}
-	allowlistOnly, err := parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), "GHOST_TOOL_ALLOWLIST_ONLY", false)
-	if err != nil {
-		return runtimeConfig{}, err
-	}
-	nativePersistent, err := resolveNativePersistent(nil, env)
+	settings, err := resolveRuntimeFallbackSettings(env)
 	if err != nil {
 		return runtimeConfig{}, err
 	}
 	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:          env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
-		APIKey:                env.defaultValue("GHOST_API_KEY", ""),
-		BaseURL:               env.defaultValue("GHOST_BASE_URL", ""),
-		Model:                 env.defaultValue("GHOST_MODEL", ""),
-		ChatPath:              env.defaultValue("GHOST_CHAT_PATH", ""),
-		NativePersistent:      nativePersistent,
-		ProjectRoot:           env.defaultValue("GHOST_PROJECT_ROOT", ""),
-		ModelSelectionEnabled: !allowlistOnly,
-		WebSearchTavilyAPIKey: webSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:    webSearch.ExaAPIKey,
-		WebRooterEnabled:      webRooter.Enabled,
-		WebRooterBaseURL:      webRooter.BaseURL,
-		WebRooterAPIToken:     webRooter.APIToken,
-		WebRooterTimeoutMS:    webRooter.TimeoutMS,
-		GraphQL:               graphql,
+		ProviderName:               env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
+		APIKey:                     env.defaultValue("GHOST_API_KEY", ""),
+		BaseURL:                    env.defaultValue("GHOST_BASE_URL", ""),
+		Model:                      env.defaultValue("GHOST_MODEL", ""),
+		ChatPath:                   env.defaultValue("GHOST_CHAT_PATH", ""),
+		ResponseOptions:            settings.ResponseOptions,
+		CodexStatelessRetryEnabled: settings.CodexStatelessRetryEnabled,
+		NativePersistent:           settings.NativePersistent,
+		ProjectRoot:                env.defaultValue("GHOST_PROJECT_ROOT", ""),
+		ModelSelectionEnabled:      !settings.AllowlistOnly,
+		WebSearchTavilyURL:         settings.WebSearch.TavilyURL,
+		WebSearchExaURL:            settings.WebSearch.ExaURL,
+		WebSearchTavilyAPIKey:      settings.WebSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:         settings.WebSearch.ExaAPIKey,
+		WebRooterEnabled:           settings.WebRooter.Enabled,
+		WebRooterBaseURL:           settings.WebRooter.BaseURL,
+		WebRooterAPIToken:          settings.WebRooter.APIToken,
+		WebRooterTimeoutMS:         settings.WebRooter.TimeoutMS,
+		GraphQL:                    settings.GraphQL,
 	}), nil
+}
+
+type runtimeFallbackSettings struct {
+	WebSearch                  webSearchSettings
+	WebRooter                  webRooterSettings
+	ResponseOptions            llm.ResponseOptions
+	GraphQL                    GraphQLConfig
+	CodexStatelessRetryEnabled bool
+	AllowlistOnly              bool
+	NativePersistent           bool
+}
+
+func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, error) {
+	webRooter, err := webRooterSettingsFromEnv(env)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
+	responseOptions, err := responseOptionsFromEnv(env)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
+	graphQL, err := graphQLSettingsFromEnv(env)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
+	codexRetryEnabled, allowlistOnly, nativePersistent, err := resolveRuntimeFallbackFlags(env)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
+	return runtimeFallbackSettings{
+		WebSearch:                  webSearchSettingsFromEnv(env),
+		WebRooter:                  webRooter,
+		ResponseOptions:            responseOptions,
+		GraphQL:                    graphQL,
+		CodexStatelessRetryEnabled: codexRetryEnabled,
+		AllowlistOnly:              allowlistOnly,
+		NativePersistent:           nativePersistent,
+	}, nil
+}
+
+func resolveRuntimeFallbackFlags(env envSnapshot) (bool, bool, bool, error) {
+	codexRetryEnabled, err := parseBoolValue(
+		env.value("GHOST_CODEX_STATELESS_RETRY_ENABLED"),
+		"GHOST_CODEX_STATELESS_RETRY_ENABLED",
+		false,
+	)
+	if err != nil {
+		return false, false, false, err
+	}
+	allowlistOnly, err := parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), "GHOST_TOOL_ALLOWLIST_ONLY", false)
+	if err != nil {
+		return false, false, false, err
+	}
+	nativePersistent, err := resolveNativePersistent(nil, env)
+	if err != nil {
+		return false, false, false, err
+	}
+	return codexRetryEnabled, allowlistOnly, nativePersistent, nil
 }
 
 // resolveRuntimeConfigWithFallback folds file overrides onto an existing
@@ -67,12 +111,47 @@ func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtime
 	if err != nil {
 		return runtimeConfig{}, err
 	}
-	fileCfg = normalizedFileCfg
 	fallback = normalizeRuntimeConfig(fallback)
-	webSearch := fileWebSearchSettings(fileCfg, webSearchSettings{
-		TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
-		ExaAPIKey:    fallback.WebSearchExaAPIKey,
-	})
+	settings, err := resolveRuntimeFileSettings(normalizedFileCfg, fallback)
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	if len(settings.Providers) > 0 {
+		return runtimeConfigWithProviders(
+			normalizedFileCfg,
+			fallback,
+			settings.Providers,
+			settings.AllowlistOnly,
+			settings.WebSearch,
+			settings.WebRooter,
+			settings.ResponseOptions,
+			settings.CodexStatelessRetryEnabled,
+			settings.GraphQL,
+		), nil
+	}
+	return runtimeConfigWithoutProviders(
+		normalizedFileCfg,
+		fallback,
+		settings.AllowlistOnly,
+		settings.WebSearch,
+		settings.WebRooter,
+		settings.ResponseOptions,
+		settings.CodexStatelessRetryEnabled,
+		settings.GraphQL,
+	), nil
+}
+
+type runtimeFileSettings struct {
+	WebSearch                  webSearchSettings
+	WebRooter                  webRooterSettings
+	ResponseOptions            llm.ResponseOptions
+	GraphQL                    GraphQLConfig
+	Providers                  []providerConfig
+	CodexStatelessRetryEnabled bool
+	AllowlistOnly              bool
+}
+
+func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeFileSettings, error) {
 	webRooter, err := fileWebRooterSettings(fileCfg, webRooterSettings{
 		Enabled:   fallback.WebRooterEnabled,
 		BaseURL:   fallback.WebRooterBaseURL,
@@ -80,22 +159,37 @@ func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtime
 		TimeoutMS: fallback.WebRooterTimeoutMS,
 	})
 	if err != nil {
-		return runtimeConfig{}, err
+		return runtimeFileSettings{}, err
 	}
-	graphql, err := fileGraphQLSettings(fileCfg, fallback.GraphQL)
+	responseOptions, err := fileResponseOptions(fileCfg, fallback.ResponseOptions)
 	if err != nil {
-		return runtimeConfig{}, err
+		return runtimeFileSettings{}, err
 	}
-	allowlistOnly := resolveRuntimeAllowlistOnly(fileCfg, fallback)
-	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
-	if len(providers) > 0 {
-		return runtimeConfigWithProviders(fileCfg, fallback, providers, allowlistOnly, webSearch, webRooter, graphql), nil
+	graphQL, err := fileGraphQLSettings(fileCfg, fallback.GraphQL)
+	if err != nil {
+		return runtimeFileSettings{}, err
 	}
-	return runtimeConfigWithoutProviders(fileCfg, fallback, allowlistOnly, webSearch, webRooter, graphql), nil
+	return runtimeFileSettings{
+		WebSearch: fileWebSearchSettings(fileCfg, webSearchSettings{
+			TavilyURL:    fallback.WebSearchTavilyURL,
+			ExaURL:       fallback.WebSearchExaURL,
+			TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
+			ExaAPIKey:    fallback.WebSearchExaAPIKey,
+		}),
+		WebRooter:                  webRooter,
+		ResponseOptions:            responseOptions,
+		GraphQL:                    graphQL,
+		Providers:                  normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)),
+		CodexStatelessRetryEnabled: resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
+		AllowlistOnly:              resolveRuntimeAllowlistOnly(fileCfg, fallback),
+	}, nil
 }
 
-func runtimeConfigFromFileConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
-	return resolveRuntimeConfigWithFallback(fileCfg, fallback)
+func resolveRuntimeCodexRetryEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.CodexStatelessRetryEnabled != nil {
+		return *fileCfg.CodexStatelessRetryEnabled
+	}
+	return fallback.CodexStatelessRetryEnabled
 }
 
 func resolveRuntimeAllowlistOnly(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
@@ -112,6 +206,8 @@ func runtimeConfigWithProviders(
 	allowlistOnly bool,
 	webSearch webSearchSettings,
 	webRooter webRooterSettings,
+	responseOptions llm.ResponseOptions,
+	codexRetryEnabled bool,
 	graphql GraphQLConfig,
 ) runtimeConfig {
 	active := resolveActiveProvider(providers, stringValue(fileCfg.ActiveProvider), fallback)
@@ -122,6 +218,8 @@ func runtimeConfigWithProviders(
 		BaseURL:                    resolveRuntimeBaseURL(active.BaseURL, fallback.BaseURL),
 		Model:                      resolveRuntimeModel(fileCfg, fallback),
 		ChatPath:                   resolveRuntimeChatPath(fileCfg, fallback),
+		ResponseOptions:            responseOptions,
+		CodexStatelessRetryEnabled: codexRetryEnabled,
 		NativePersistent:           resolveRuntimeNativePersistent(fileCfg, fallback),
 		ProjectRoot:                resolveRuntimeProjectRoot(fileCfg, fallback),
 		ModelSelectionEnabled:      !allowlistOnly,
@@ -129,6 +227,8 @@ func runtimeConfigWithProviders(
 		ResponseReserveTokens:      active.ResponseReserveTokens,
 		ModelContextWindowTokens:   cloneModelTokenOverrides(active.ModelContextWindowTokens),
 		ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
+		WebSearchTavilyURL:         webSearch.TavilyURL,
+		WebSearchExaURL:            webSearch.ExaURL,
 		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
 		WebRooterEnabled:           webRooter.Enabled,
@@ -145,6 +245,8 @@ func runtimeConfigWithoutProviders(
 	allowlistOnly bool,
 	webSearch webSearchSettings,
 	webRooter webRooterSettings,
+	responseOptions llm.ResponseOptions,
+	codexRetryEnabled bool,
 	graphql GraphQLConfig,
 ) runtimeConfig {
 	providerName := resolveRuntimeProviderName(fallback)
@@ -155,6 +257,8 @@ func runtimeConfigWithoutProviders(
 		BaseURL:                    fallback.BaseURL,
 		Model:                      resolveRuntimeModel(fileCfg, fallback),
 		ChatPath:                   resolveRuntimeChatPath(fileCfg, fallback),
+		ResponseOptions:            responseOptions,
+		CodexStatelessRetryEnabled: codexRetryEnabled,
 		NativePersistent:           resolveRuntimeNativePersistent(fileCfg, fallback),
 		ProjectRoot:                resolveRuntimeProjectRoot(fileCfg, fallback),
 		ModelSelectionEnabled:      !allowlistOnly,
@@ -162,6 +266,8 @@ func runtimeConfigWithoutProviders(
 		ResponseReserveTokens:      fallback.ResponseReserveTokens,
 		ModelContextWindowTokens:   cloneModelTokenOverrides(fallback.ModelContextWindowTokens),
 		ModelResponseReserveTokens: cloneModelTokenOverrides(fallback.ModelResponseReserveTokens),
+		WebSearchTavilyURL:         webSearch.TavilyURL,
+		WebSearchExaURL:            webSearch.ExaURL,
 		WebSearchTavilyAPIKey:      webSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         webSearch.ExaAPIKey,
 		WebRooterEnabled:           webRooter.Enabled,
@@ -170,168 +276,4 @@ func runtimeConfigWithoutProviders(
 		WebRooterTimeoutMS:         webRooter.TimeoutMS,
 		GraphQL:                    graphql,
 	})
-}
-
-func resolveActiveProvider(
-	providers []providerConfig,
-	activeName string,
-	fallback runtimeConfig,
-) providerConfig {
-	name := strings.TrimSpace(activeName)
-	if name == "" {
-		name = activeProviderLabel(fallback)
-	}
-	index := providerIndexByName(providers, name)
-	if index < 0 {
-		return providers[0]
-	}
-	return providers[index]
-}
-
-func resolveRuntimeProviderName(fallback runtimeConfig) string {
-	providerName := strings.TrimSpace(fallback.ProviderName)
-	if providerName == "" {
-		return string(defaultProvider)
-	}
-	return providerName
-}
-
-func resolveRuntimeModel(fileCfg bridgeFileConfig, fallback runtimeConfig) string {
-	model := stringValue(fileCfg.Model)
-	if model == "" {
-		return fallback.Model
-	}
-	return model
-}
-
-func resolveRuntimeChatPath(fileCfg bridgeFileConfig, fallback runtimeConfig) string {
-	chatPath := stringValue(fileCfg.ChatPath)
-	if chatPath == "" {
-		return fallback.ChatPath
-	}
-	return chatPath
-}
-
-func resolveRuntimeProjectRoot(fileCfg bridgeFileConfig, fallback runtimeConfig) string {
-	projectRoot := stringValue(fileCfg.ProjectRoot)
-	if projectRoot == "" {
-		return fallback.ProjectRoot
-	}
-	return projectRoot
-}
-
-func resolveRuntimeNativePersistent(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
-	if fileCfg.NativePersistent != nil {
-		return *fileCfg.NativePersistent
-	}
-	return fallback.NativePersistent
-}
-
-func resolveRuntimeAPIKey(active providerConfig, fallbackAPIKey string) string {
-	if active.APIKey != nil {
-		return strings.TrimSpace(*active.APIKey)
-	}
-	return fallbackAPIKey
-}
-
-func resolveRuntimeBaseURL(baseURL, fallbackBaseURL string) string {
-	if strings.TrimSpace(baseURL) == "" {
-		return fallbackBaseURL
-	}
-	return strings.TrimSpace(baseURL)
-}
-
-// normalizeProvider 统一 provider 大小写与空白字符。
-func normalizeProvider(raw string) llm.Provider {
-	return llm.Provider(strings.ToLower(strings.TrimSpace(raw)))
-}
-
-func inferProviderType(name, baseURL, model string) llm.Provider {
-	if normalized := normalizeProvider(name).Normalized(); normalized != "" {
-		return normalized
-	}
-
-	lowerBaseURL := strings.ToLower(strings.TrimSpace(baseURL))
-	lowerModel := strings.ToLower(strings.TrimSpace(model))
-	switch {
-	case strings.Contains(lowerModel, "claude"), strings.Contains(lowerBaseURL, "anthropic.com"):
-		return llm.ProviderAnthropic
-	case strings.Contains(lowerModel, "codex"):
-		return llm.ProviderCodex
-	case strings.Contains(lowerBaseURL, "openai.com"):
-		return llm.ProviderOpenAI
-	default:
-		return llm.ProviderCustom
-	}
-}
-
-func defaultBaseURLForProvider(provider llm.Provider) string {
-	switch provider.Normalized() {
-	case llm.ProviderAnthropic:
-		return defaultAnthropicBaseURL
-	default:
-		return defaultBaseURL
-	}
-}
-
-func activeProviderLabel(runtime runtimeConfig) string {
-	if value := strings.TrimSpace(runtime.ProviderName); value != "" {
-		return value
-	}
-	return string(runtime.Provider)
-}
-
-// normalizeRuntimeConfig 回填默认值并清理字符串字段。
-func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
-	out := runtime
-	out.ProviderName = strings.TrimSpace(out.ProviderName)
-	if out.Provider == "" {
-		out.Provider = inferProviderType(out.ProviderName, out.BaseURL, out.Model)
-	}
-	if out.Provider == "" {
-		out.Provider = defaultProvider
-	}
-	if out.ProviderName == "" {
-		out.ProviderName = string(out.Provider)
-	}
-	out.APIKey = strings.TrimSpace(out.APIKey)
-	if strings.TrimSpace(out.BaseURL) == "" {
-		out.BaseURL = defaultBaseURLForProvider(out.Provider)
-	} else {
-		out.BaseURL = strings.TrimSpace(out.BaseURL)
-	}
-	if strings.TrimSpace(out.Model) == "" {
-		out.Model = defaultModel
-	} else {
-		out.Model = strings.TrimSpace(out.Model)
-	}
-	out.ChatPath = strings.TrimSpace(out.ChatPath)
-	out.ProjectRoot = strings.TrimSpace(out.ProjectRoot)
-	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)
-	out.WebSearchExaAPIKey = strings.TrimSpace(out.WebSearchExaAPIKey)
-	out.WebRooterBaseURL = strings.TrimSpace(out.WebRooterBaseURL)
-	if out.WebRooterBaseURL == "" {
-		out.WebRooterBaseURL = defaultWebRooterBaseURL
-	}
-	out.WebRooterAPIToken = strings.TrimSpace(out.WebRooterAPIToken)
-	if out.WebRooterTimeoutMS <= 0 {
-		out.WebRooterTimeoutMS = defaultWebRooterTimeoutMS
-	}
-	out.GraphQL = normalizeGraphQLConfig(out.GraphQL)
-	return out
-}
-
-// validateRuntimeForExecution 校验当前 provider 的最小执行前置条件。
-func validateRuntimeForExecution(runtime runtimeConfig) error {
-	switch runtime.Provider {
-	case llm.ProviderOpenAI, llm.ProviderAnthropic, llm.ProviderCodex:
-		if runtime.APIKey == "" {
-			return fmt.Errorf("GHOST_API_KEY is required for provider %q", runtime.Provider)
-		}
-	case llm.ProviderCustom:
-		// custom provider 默认允许不传 API Key。
-	default:
-		return fmt.Errorf("invalid GHOST_PROVIDER=%q, expected one of: openai|anthropic|custom|codex", runtime.Provider)
-	}
-	return nil
 }

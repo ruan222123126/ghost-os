@@ -35,14 +35,6 @@ func parseNamedHeaders(raw string, envName string) (map[string]string, error) {
 	return out, nil
 }
 
-func nativePersistentEnabledFromEnv() (bool, error) {
-	aux, err := loadAuxConfigFromEnv()
-	if err != nil {
-		return false, err
-	}
-	return aux.Execution.Persistent, nil
-}
-
 func resolveNativePersistent(raw *bool, env envSnapshot) (bool, error) {
 	if raw != nil {
 		return *raw, nil
@@ -55,22 +47,6 @@ func resolveNativePersistent(raw *bool, env envSnapshot) (bool, error) {
 		return parseBoolValue(rawValue, name, false)
 	}
 	return false, nil
-}
-
-func parseBoolEnv(name string, fallback bool) (bool, error) {
-	return parseBoolValue(currentEnv().value(name), name, fallback)
-}
-
-func parsePositiveIntEnv(name string, fallback int) (int, error) {
-	return parsePositiveIntValue(currentEnv().value(name), name, fallback)
-}
-
-func parseFloatEnv(name string, fallback float64) (float64, error) {
-	return parseFloatValue(currentEnv().value(name), name, fallback)
-}
-
-func parseDurationEnv(name string, fallback time.Duration) (time.Duration, error) {
-	return parseDurationValue(currentEnv().value(name), name, fallback)
 }
 
 func parseBoolValue(raw, fieldName string, fallback bool) (bool, error) {

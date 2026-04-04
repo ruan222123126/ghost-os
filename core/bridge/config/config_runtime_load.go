@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"ghost-os/bridge/llm"
 )
 
 // Load 从环境变量加载配置并做基础校验与归一化。
@@ -37,38 +39,103 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 	if err := validateRuntimeForExecution(runtime); err != nil {
 		return Config{}, err
 	}
-	headers, promptsDir, err := loadConfigEnvDetails(fileCfg, env)
+	sections, err := resolveConfigSections(fileCfg, env, runtime)
 	if err != nil {
 		return Config{}, err
+	}
+	cfg := composeConfig(fileCfg, env, runtime, sections)
+	return finalizeLoadedConfig(cfg)
+}
+
+type configSections struct {
+	Provider           ProviderConfig
+	RSS                RSSConfig
+	Worker             WorkerConfig
+	Task               TaskConfig
+	ToolSelector       ToolSelectorConfig
+	ToolSearch         ToolSearchConfig
+	MemoryAugmentation MemoryAugmentationConfig
+	PromptsDir         string
+	ProMaxIterations   int
+	MaxTurns           int
+}
+
+func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig) (configSections, error) {
+	headers, promptsDir, err := loadConfigEnvDetails(fileCfg, env)
+	if err != nil {
+		return configSections{}, err
 	}
 	provider, err := buildProviderConfig(runtime, fileCfg, env, headers)
 	if err != nil {
-		return Config{}, err
+		return configSections{}, err
 	}
+	features, err := resolveRuntimeFeatureSections(fileCfg, env)
+	if err != nil {
+		return configSections{}, err
+	}
+	proMaxIterations, maxTurns, err := resolveIterationLimits(fileCfg, env)
+	if err != nil {
+		return configSections{}, err
+	}
+	return configSections{
+		Provider:           provider,
+		RSS:                features.RSS,
+		Worker:             features.Worker,
+		Task:               features.Task,
+		ToolSelector:       features.ToolSelector,
+		ToolSearch:         features.ToolSearch,
+		MemoryAugmentation: features.MemoryAugmentation,
+		PromptsDir:         promptsDir,
+		ProMaxIterations:   proMaxIterations,
+		MaxTurns:           maxTurns,
+	}, nil
+}
+
+type runtimeFeatureSections struct {
+	RSS                RSSConfig
+	Worker             WorkerConfig
+	Task               TaskConfig
+	ToolSelector       ToolSelectorConfig
+	ToolSearch         ToolSearchConfig
+	MemoryAugmentation MemoryAugmentationConfig
+}
+
+func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (runtimeFeatureSections, error) {
 	rss, err := buildRSSConfig(fileCfg, env)
 	if err != nil {
-		return Config{}, err
+		return runtimeFeatureSections{}, err
 	}
 	worker, err := buildWorkerConfig(fileCfg, env)
 	if err != nil {
-		return Config{}, err
+		return runtimeFeatureSections{}, err
 	}
 	task, err := buildTaskConfig(fileCfg, env)
 	if err != nil {
-		return Config{}, err
+		return runtimeFeatureSections{}, err
 	}
 	toolSelector, err := buildToolSelectorConfig(fileCfg, env)
 	if err != nil {
-		return Config{}, err
+		return runtimeFeatureSections{}, err
 	}
 	toolSearch, err := buildToolSearchConfig(fileCfg, env)
 	if err != nil {
-		return Config{}, err
+		return runtimeFeatureSections{}, err
 	}
 	memoryAugmentation, err := buildMemoryAugmentationConfig(fileCfg, env)
 	if err != nil {
-		return Config{}, err
+		return runtimeFeatureSections{}, err
 	}
+	return runtimeFeatureSections{
+		RSS:                rss,
+		Worker:             worker,
+		Task:               task,
+		ToolSelector:       toolSelector,
+		ToolSearch:         toolSearch,
+		MemoryAugmentation: memoryAugmentation,
+	}, nil
+}
+
+func resolveIterationLimits(fileCfg bridgeFileConfig, env envSnapshot) (int, int, error) {
 	proMaxIterations, err := intOrEnvWithEnv(
 		fileCfg.ProMaxIterations,
 		"pro_max_iterations",
@@ -77,32 +144,38 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 		defaultProMaxIterations,
 	)
 	if err != nil {
-		return Config{}, err
+		return 0, 0, err
 	}
 	maxTurns, err := intOrEnvWithEnv(fileCfg.MaxTurns, "max_turns", env, "GHOST_MAX_TURNS", defaultMaxTurns)
 	if err != nil {
-		return Config{}, err
+		return 0, 0, err
 	}
-	cfg := Config{
-		Provider:                provider,
-		RSS:                     rss,
-		Worker:                  worker,
-		GraphQL:                 runtime.GraphQL,
-		ToolSelector:            toolSelector,
-		ToolSearch:              toolSearch,
-		MemoryAugmentation:      memoryAugmentation,
-		NativePersistent:        runtime.NativePersistent,
-		NativeBinaryPath:        resolveNativeBinaryPath(fileCfg, env),
-		NativeBinaryRoots:       resolveNativeBinaryRoots(fileCfg, env),
-		NativeBinaryCandidates:  resolveNativeBinaryCandidates(fileCfg, env),
-		NativeAllowedReadPaths:  resolveNativeAllowedReadPaths(fileCfg, env),
-		NativeAllowedWritePaths: resolveNativeAllowedWritePaths(fileCfg, env),
-		ProjectRoot:             runtime.ProjectRoot,
-		Task:                    task,
-		ChatPath:                runtime.ChatPath,
-		PromptsPath:             valueOrEnvWithEnv(fileCfg.PromptsPath, env, "GHOST_PROMPTS_PATH", defaultPromptsPath),
-		PromptsDir:              promptsDir,
-		PromptsCoreFiles:        promptsCoreFiles(fileCfg, env),
+	return proMaxIterations, maxTurns, nil
+}
+
+func composeConfig(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig, sections configSections) Config {
+	return Config{
+		Provider:                   sections.Provider,
+		RSS:                        sections.RSS,
+		Worker:                     sections.Worker,
+		GraphQL:                    runtime.GraphQL,
+		ToolSelector:               sections.ToolSelector,
+		ToolSearch:                 sections.ToolSearch,
+		MemoryAugmentation:         sections.MemoryAugmentation,
+		NativePersistent:           runtime.NativePersistent,
+		NativeBinaryPath:           resolveNativeBinaryPath(fileCfg, env),
+		NativeBinaryRoots:          resolveNativeBinaryRoots(fileCfg, env),
+		NativeBinaryCandidates:     resolveNativeBinaryCandidates(fileCfg, env),
+		NativeAllowedReadPaths:     resolveNativeAllowedReadPaths(fileCfg, env),
+		NativeAllowedWritePaths:    resolveNativeAllowedWritePaths(fileCfg, env),
+		ProjectRoot:                runtime.ProjectRoot,
+		Task:                       sections.Task,
+		ChatPath:                   runtime.ChatPath,
+		ResponseOptions:            llm.CloneResponseOptions(runtime.ResponseOptions),
+		CodexStatelessRetryEnabled: runtime.CodexStatelessRetryEnabled,
+		PromptsPath:                valueOrEnvWithEnv(fileCfg.PromptsPath, env, "GHOST_PROMPTS_PATH", defaultPromptsPath),
+		PromptsDir:                 sections.PromptsDir,
+		PromptsCoreFiles:           promptsCoreFiles(fileCfg, env),
 		PromptsRuntimeConstraintFiles: promptPathListWithEnv(
 			fileCfg.PromptsRuntimeConstraintFiles,
 			env,
@@ -114,16 +187,17 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 			"GHOST_PROMPTS_RESPONSE_RULE_FILES",
 		),
 		SessionsPath:          resolveSessionsPath(fileCfg, env),
+		WebSearchTavilyURL:    runtime.WebSearchTavilyURL,
+		WebSearchExaURL:       runtime.WebSearchExaURL,
 		WebSearchTavilyAPIKey: runtime.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:    runtime.WebSearchExaAPIKey,
 		WebRooterEnabled:      runtime.WebRooterEnabled,
 		WebRooterBaseURL:      runtime.WebRooterBaseURL,
 		WebRooterAPIToken:     runtime.WebRooterAPIToken,
 		WebRooterTimeoutMS:    runtime.WebRooterTimeoutMS,
-		ProMaxIterations:      proMaxIterations,
-		MaxTurns:              maxTurns,
+		ProMaxIterations:      sections.ProMaxIterations,
+		MaxTurns:              sections.MaxTurns,
 	}
-	return finalizeLoadedConfig(cfg)
 }
 
 func loadConfigEnvDetails(fileCfg bridgeFileConfig, env envSnapshot) (map[string]string, string, error) {

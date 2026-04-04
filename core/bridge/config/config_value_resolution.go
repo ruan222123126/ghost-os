@@ -17,19 +17,11 @@ func valueOrEnvWithEnv(raw *string, env envSnapshot, envName, fallback string) s
 	return env.defaultValue(envName, fallback)
 }
 
-func boolOrEnv(raw *bool, envName string, fallback bool) (bool, error) {
-	return boolOrEnvWithEnv(raw, currentEnv(), envName, fallback)
-}
-
 func boolOrEnvWithEnv(raw *bool, env envSnapshot, envName string, fallback bool) (bool, error) {
 	if raw != nil {
 		return *raw, nil
 	}
 	return parseBoolValue(env.value(envName), envName, fallback)
-}
-
-func intOrEnv(raw *int, fieldName, envName string, fallback int) (int, error) {
-	return intOrEnvWithEnv(raw, fieldName, currentEnv(), envName, fallback)
 }
 
 func intOrEnvWithEnv(raw *int, fieldName string, env envSnapshot, envName string, fallback int) (int, error) {
@@ -40,10 +32,6 @@ func intOrEnvWithEnv(raw *int, fieldName string, env envSnapshot, envName string
 		return *raw, nil
 	}
 	return parsePositiveIntValue(env.value(envName), envName, fallback)
-}
-
-func floatOrEnv(raw *float64, fieldName, envName string, fallback float64) (float64, error) {
-	return floatOrEnvWithEnv(raw, fieldName, currentEnv(), envName, fallback)
 }
 
 func floatOrEnvWithEnv(raw *float64, fieldName string, env envSnapshot, envName string, fallback float64) (float64, error) {
@@ -58,10 +46,6 @@ func floatOrEnvWithEnv(raw *float64, fieldName string, env envSnapshot, envName 
 		return *raw, nil
 	}
 	return parseFloatValue(env.value(envName), envName, fallback)
-}
-
-func durationOrEnv(raw *string, fieldName, envName string, fallback time.Duration) (time.Duration, error) {
-	return durationOrEnvWithEnv(raw, fieldName, currentEnv(), envName, fallback)
 }
 
 func durationOrEnvWithEnv(raw *string, fieldName string, env envSnapshot, envName string, fallback time.Duration) (time.Duration, error) {
@@ -85,10 +69,6 @@ func durationOrEnvWithEnv(raw *string, fieldName string, env envSnapshot, envNam
 		return value, nil
 	}
 	return parseDurationValue(env.value(envName), envName, fallback)
-}
-
-func headersOrEnv(raw map[string]string) (map[string]string, error) {
-	return headersOrEnvWithEnv(raw, currentEnv())
 }
 
 func headersOrEnvWithEnv(raw map[string]string, env envSnapshot) (map[string]string, error) {
