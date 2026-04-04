@@ -21,6 +21,7 @@ type ToolCatalog = tools.ToolCatalog
 type Agent struct {
 	completer              Completer
 	tools                  ToolCatalog
+	responseOptions        llm.ResponseOptions
 	assistantTextHandlers  []AssistantTextHandler
 	beforeCompletion       BeforeCompletionHook
 	strictToolCallProtocol bool
@@ -121,25 +122,42 @@ func (a *Agent) SetStrictToolCallProtocol(strict bool) {
 	a.strictToolCallProtocol = strict
 }
 
+func (a *Agent) SetResponseOptions(options llm.ResponseOptions) {
+	if a == nil {
+		return
+	}
+	a.responseOptions = llm.CloneResponseOptions(options)
+}
+
 // Run 负责循环与退出条件；单步执行下沉给独立协作者处理。
 func (a *Agent) Run(ctx context.Context, userMessage string) (string, error) {
-	return a.runWithSink(ctx, userMessage, "", nil)
+	return a.RunMessage(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: userMessage,
+	})
 }
 
 // RunWithTraceID 允许调用方注入请求级 trace_id，保障跨层链路追踪一致。
 func (a *Agent) RunWithTraceID(ctx context.Context, userMessage string, traceID string) (string, error) {
-	return a.runWithSink(ctx, userMessage, traceID, nil)
+	return a.RunMessageWithTraceID(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: userMessage,
+	}, traceID)
 }
 
-func (a *Agent) RunStream(ctx context.Context, userMessage string, sink streaming.Sink) (string, error) {
-	return a.runWithSink(ctx, userMessage, "", sink)
+func (a *Agent) RunMessage(ctx context.Context, userInput llm.Message) (string, error) {
+	return a.runWithSink(ctx, userInput, "", nil)
 }
 
-func (a *Agent) RunStreamWithTraceID(ctx context.Context, userMessage string, traceID string, sink streaming.Sink) (string, error) {
-	return a.runWithSink(ctx, userMessage, traceID, sink)
+func (a *Agent) RunMessageWithTraceID(ctx context.Context, userInput llm.Message, traceID string) (string, error) {
+	return a.runWithSink(ctx, userInput, traceID, nil)
 }
 
-func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID string, sink streaming.Sink) (string, error) {
+func (a *Agent) RunMessageStreamWithTraceID(ctx context.Context, userInput llm.Message, traceID string, sink streaming.Sink) (string, error) {
+	return a.runWithSink(ctx, userInput, traceID, sink)
+}
+
+func (a *Agent) runWithSink(ctx context.Context, userInput llm.Message, traceID string, sink streaming.Sink) (string, error) {
 	state, err := newAgentRunState(a, sink, traceID)
 	if err != nil {
 		runErr := fmt.Errorf("initialize agent runtime: %w", err)
@@ -154,7 +172,7 @@ func (a *Agent) runWithSink(ctx context.Context, userMessage string, traceID str
 		return "", err
 	}
 
-	appendUserMessage(state.history, userMessage)
+	appendUserMessage(state.history, userInput)
 	a.lastTurn = 0
 
 	for turn := 0; turn < a.maxTurns; turn++ {

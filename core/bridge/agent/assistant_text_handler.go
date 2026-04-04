@@ -63,44 +63,76 @@ func validateAssistantTextResult(result AssistantTextResult) error {
 	if !result.Recognized {
 		return nil
 	}
+	if err := validateAssistantTextInvocations(result); err != nil {
+		return err
+	}
+	return validateAssistantTextAwaitingHuman(result.AwaitingHuman)
+}
+
+func validateAssistantTextInvocations(result AssistantTextResult) error {
 	if len(result.Invocations) > 0 {
-		for index, invocation := range result.Invocations {
-			if strings.TrimSpace(invocation.Tool.Name) == "" {
-				return fmt.Errorf("recognized assistant text handler returned empty tool name in invocations[%d]", index)
-			}
-			if strings.TrimSpace(invocation.Tool.CallID) == "" {
-				return fmt.Errorf("recognized assistant text handler returned empty tool_call_id in invocations[%d]", index)
-			}
-			if len(invocation.Invocation.Arguments) == 0 {
-				return fmt.Errorf("recognized assistant text handler returned empty tool arguments in invocations[%d]", index)
-			}
-			if _, err := normalizedToolArguments(invocation.Invocation.Arguments); err != nil {
-				return fmt.Errorf("recognized assistant text handler returned invalid tool arguments in invocations[%d]: %w", index, err)
-			}
+		return validateAssistantTextBatchInvocations(result.Invocations)
+	}
+	return validateAssistantTextSingleInvocation(result.Tool, result.Invocation)
+}
+
+func validateAssistantTextBatchInvocations(entries []AssistantTextToolInvocationEntry) error {
+	for index, entry := range entries {
+		if strings.TrimSpace(entry.Tool.Name) == "" {
+			return fmt.Errorf("recognized assistant text handler returned empty tool name in invocations[%d]", index)
 		}
-	} else {
-		if strings.TrimSpace(result.Tool.Name) == "" {
-			return fmt.Errorf("recognized assistant text handler returned empty tool name")
+		if strings.TrimSpace(entry.Tool.CallID) == "" {
+			return fmt.Errorf("recognized assistant text handler returned empty tool_call_id in invocations[%d]", index)
 		}
-		if strings.TrimSpace(result.Tool.CallID) == "" {
-			return fmt.Errorf("recognized assistant text handler returned empty tool_call_id")
-		}
-		if result.Invocation != nil {
-			if len(result.Invocation.Arguments) == 0 {
-				return fmt.Errorf("recognized assistant text handler returned empty tool arguments")
-			}
-			if _, err := normalizedToolArguments(result.Invocation.Arguments); err != nil {
-				return fmt.Errorf("recognized assistant text handler returned invalid tool arguments: %w", err)
-			}
+		if err := validateAssistantTextArguments(
+			entry.Invocation.Arguments,
+			fmt.Sprintf("recognized assistant text handler returned empty tool arguments in invocations[%d]", index),
+			fmt.Sprintf("recognized assistant text handler returned invalid tool arguments in invocations[%d]", index),
+		); err != nil {
+			return err
 		}
 	}
-	if result.AwaitingHuman == nil {
+	return nil
+}
+
+func validateAssistantTextSingleInvocation(
+	tool AssistantTextToolRef,
+	invocation *AssistantTextToolInvocation,
+) error {
+	if strings.TrimSpace(tool.Name) == "" {
+		return fmt.Errorf("recognized assistant text handler returned empty tool name")
+	}
+	if strings.TrimSpace(tool.CallID) == "" {
+		return fmt.Errorf("recognized assistant text handler returned empty tool_call_id")
+	}
+	if invocation == nil {
 		return nil
 	}
-	if strings.TrimSpace(result.AwaitingHuman.Tool.Name) == "" {
+	return validateAssistantTextArguments(
+		invocation.Arguments,
+		"recognized assistant text handler returned empty tool arguments",
+		"recognized assistant text handler returned invalid tool arguments",
+	)
+}
+
+func validateAssistantTextArguments(arguments json.RawMessage, emptyMsg string, invalidMsg string) error {
+	if len(arguments) == 0 {
+		return fmt.Errorf("%s", emptyMsg)
+	}
+	if _, err := normalizedToolArguments(arguments); err != nil {
+		return fmt.Errorf("%s: %w", invalidMsg, err)
+	}
+	return nil
+}
+
+func validateAssistantTextAwaitingHuman(awaiting *AssistantTextAwaitingHuman) error {
+	if awaiting == nil {
+		return nil
+	}
+	if strings.TrimSpace(awaiting.Tool.Name) == "" {
 		return fmt.Errorf("recognized assistant text handler returned empty awaiting-human tool name")
 	}
-	if strings.TrimSpace(result.AwaitingHuman.Tool.CallID) == "" {
+	if strings.TrimSpace(awaiting.Tool.CallID) == "" {
 		return fmt.Errorf("recognized assistant text handler returned empty awaiting-human tool_call_id")
 	}
 	return nil

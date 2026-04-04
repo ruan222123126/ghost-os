@@ -31,43 +31,103 @@ func repairProjectedGraphQLTextTurn(
 	if executor == nil {
 		return
 	}
-	current := source[index]
-	if current.Role != llm.RoleTool || strings.TrimSpace(current.ToolCallID) == "" {
+	candidate, ok := newProjectedGraphQLRepairCandidate(source, projected, index)
+	if !ok {
 		return
 	}
+	toolCall, ok := buildProjectedGraphQLRepairToolCall(executor, candidate, projected)
+	if !ok {
+		return
+	}
+	if !matchesProjectedGraphQLToolEnvelope(candidate.toolResult, toolCall.Name) {
+		return
+	}
+	projected[candidate.assistantIndex].ToolCalls = append(projected[candidate.assistantIndex].ToolCalls, toolCall)
+}
 
-	assistantIndex := findProjectedGraphQLAssistantIndex(source, index)
+type projectedGraphQLRepairCandidate struct {
+	assistantIndex int
+	assistantText  string
+	toolCallID     string
+	toolResult     string
+}
+
+func newProjectedGraphQLRepairCandidate(
+	source []llm.Message,
+	projected []llm.Message,
+	toolIndex int,
+) (projectedGraphQLRepairCandidate, bool) {
+	current := source[toolIndex]
+	toolCallID := strings.TrimSpace(current.ToolCallID)
+	if current.Role != llm.RoleTool || toolCallID == "" {
+		return projectedGraphQLRepairCandidate{}, false
+	}
+
+	assistantIndex := findProjectedGraphQLAssistantIndex(source, toolIndex)
 	if assistantIndex < 0 {
-		return
-	}
-	prev := source[assistantIndex]
-	if prev.Role != llm.RoleAssistant || len(prev.ToolCalls) != 0 || strings.TrimSpace(prev.Text) == "" {
-		return
-	}
-	if hasToolCallID(projected[assistantIndex].ToolCalls, current.ToolCallID) {
-		return
+		return projectedGraphQLRepairCandidate{}, false
 	}
 
-	result, err := executor.Execute(context.Background(), prev.Text, "")
+	assistantMessage := source[assistantIndex]
+	if !isProjectedGraphQLAssistantCandidate(assistantMessage) {
+		return projectedGraphQLRepairCandidate{}, false
+	}
+	if hasToolCallID(projected[assistantIndex].ToolCalls, toolCallID) {
+		return projectedGraphQLRepairCandidate{}, false
+	}
+	return projectedGraphQLRepairCandidate{
+		assistantIndex: assistantIndex,
+		assistantText:  assistantMessage.Text,
+		toolCallID:     toolCallID,
+		toolResult:     current.Text,
+	}, true
+}
+
+func isProjectedGraphQLAssistantCandidate(message llm.Message) bool {
+	if message.Role != llm.RoleAssistant {
+		return false
+	}
+	if len(message.ToolCalls) > 0 {
+		return false
+	}
+	return strings.TrimSpace(message.Text) != ""
+}
+
+func buildProjectedGraphQLRepairToolCall(
+	executor tools.GraphQLTextExecutor,
+	candidate projectedGraphQLRepairCandidate,
+	projected []llm.Message,
+) (llm.ToolCall, bool) {
+	result, err := executor.Execute(context.Background(), candidate.assistantText, "")
 	if err != nil && !canRepairProjectedLegacyGraphQLTextTurn(err, result) {
-		return
-	}
-	call, ok := projectedGraphQLToolCallForIndex(result, len(projected[assistantIndex].ToolCalls))
-	if !result.Recognized || !ok || strings.TrimSpace(call.ToolName) == "" {
-		return
+		return llm.ToolCall{}, false
 	}
 
-	if envelope, ok := ParseToolResultEnvelope(current.Text); ok {
-		if envelopeTool := strings.TrimSpace(envelope.Tool); envelopeTool != "" && envelopeTool != call.ToolName {
-			return
-		}
+	call, ok := projectedGraphQLToolCallForIndex(result, len(projected[candidate.assistantIndex].ToolCalls))
+	if !result.Recognized || !ok {
+		return llm.ToolCall{}, false
 	}
-
-	projected[assistantIndex].ToolCalls = append(projected[assistantIndex].ToolCalls, llm.ToolCall{
-		ID:        strings.TrimSpace(current.ToolCallID),
-		Name:      strings.TrimSpace(call.ToolName),
+	toolName := strings.TrimSpace(call.ToolName)
+	if toolName == "" {
+		return llm.ToolCall{}, false
+	}
+	return llm.ToolCall{
+		ID:        candidate.toolCallID,
+		Name:      toolName,
 		Arguments: cloneToolArguments(call.Arguments),
-	})
+	}, true
+}
+
+func matchesProjectedGraphQLToolEnvelope(rawResult string, toolName string) bool {
+	envelope, ok := ParseToolResultEnvelope(rawResult)
+	if !ok {
+		return true
+	}
+	envelopeTool := strings.TrimSpace(envelope.Tool)
+	if envelopeTool == "" {
+		return true
+	}
+	return envelopeTool == strings.TrimSpace(toolName)
 }
 
 func findProjectedGraphQLAssistantIndex(messages []llm.Message, toolIndex int) int {

@@ -85,6 +85,7 @@ func cloneCompletionRequest(request llm.CompletionRequest) llm.CompletionRequest
 		Messages:          llm.CloneMessages(request.Messages),
 		Tools:             clonedTools,
 		ConversationState: request.ConversationState,
+		ResponseOptions:   llm.CloneResponseOptions(request.ResponseOptions),
 	}
 }
 
@@ -294,33 +295,6 @@ func newTestAgent(completer Completer, catalog *fakeToolCatalog, maxTurns int) *
 
 func newRecordingEventSink() *recordingEventSink {
 	return &recordingEventSink{}
-}
-
-type fakeGraphQLTextExecutor struct {
-	results []tools.GraphQLTextExecutionResult
-	errors  []error
-	texts   []string
-	traces  []string
-}
-
-func (f *fakeGraphQLTextExecutor) Execute(
-	_ context.Context,
-	text string,
-	traceID string,
-) (tools.GraphQLTextExecutionResult, error) {
-	f.texts = append(f.texts, text)
-	f.traces = append(f.traces, traceID)
-	if len(f.results) == 0 {
-		return tools.GraphQLTextExecutionResult{}, errors.New("unexpected graphql text execute call")
-	}
-	result := f.results[0]
-	f.results = f.results[1:]
-	var err error
-	if len(f.errors) > 0 {
-		err = f.errors[0]
-		f.errors = f.errors[1:]
-	}
-	return result, err
 }
 
 type recordingEventSink struct {
