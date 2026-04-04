@@ -1,7 +1,6 @@
 package memoryaug
 
 import (
-	"sort"
 	"strings"
 
 	"ghost-os/bridge/memorystore"
@@ -80,38 +79,6 @@ func globalPreferenceKeys() []string {
 		keys = append(keys, spec.Key)
 	}
 	return keys
-}
-
-func matchSlotsForQuery(query string) []SlotSpec {
-	normalized := normalizeText(query)
-	if normalized == "" {
-		return nil
-	}
-	out := make([]SlotSpec, 0, len(knownSlots))
-	for _, spec := range knownSlots {
-		if slotMatchesQuery(spec, normalized) {
-			out = append(out, spec)
-		}
-	}
-	sort.SliceStable(out, func(i int, j int) bool {
-		if out[i].PromptPriority != out[j].PromptPriority {
-			return out[i].PromptPriority < out[j].PromptPriority
-		}
-		return out[i].Key < out[j].Key
-	})
-	return out
-}
-
-func slotMatchesQuery(spec SlotSpec, normalizedQuery string) bool {
-	if containsNormalized(normalizedQuery, spec.Key) || containsNormalized(normalizedQuery, spec.Summary) {
-		return true
-	}
-	for _, hint := range spec.QueryHints {
-		if containsNormalized(normalizedQuery, hint) {
-			return true
-		}
-	}
-	return false
 }
 
 func containsNormalized(normalizedText string, raw string) bool {

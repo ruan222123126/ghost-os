@@ -48,83 +48,125 @@ func (a *anthropicStreamAccumulator) ApplyEvent(ctx context.Context, sink LLMStr
 	case "ping":
 		return nil
 	case "message_start":
-		if event.Message != nil {
-			if role := strings.TrimSpace(event.Message.Role); role != "" {
-				a.role = Role(role)
-			}
-			a.usage = event.Message.Usage
-		}
+		a.handleMessageStart(event)
+		return nil
 	case "content_block_start":
-		state := a.ensureBlockState(event.Index)
-		if event.ContentBlock != nil {
-			state.kind = strings.TrimSpace(event.ContentBlock.Type)
-			if state.kind == "text" && strings.TrimSpace(event.ContentBlock.Text) != "" {
-				state.text.WriteString(event.ContentBlock.Text)
-				if err := sink.OnDelta(ctx, LLMDelta{
-					Kind: DeltaKindText,
-					Text: event.ContentBlock.Text,
-				}); err != nil {
-					return err
-				}
-			}
-			if state.kind == "tool_use" {
-				tool := state.ensureTool()
-				tool.setID(event.ContentBlock.ID)
-				tool.setName(event.ContentBlock.Name)
-				if err := tool.start(ctx, sink); err != nil {
-					return err
-				}
-			}
-		}
+		return a.handleContentBlockStart(ctx, sink, event)
 	case "content_block_delta":
-		if event.Delta == nil {
-			return nil
-		}
-		state := a.ensureBlockState(event.Index)
-		switch strings.TrimSpace(event.Delta.Type) {
-		case "text_delta":
-			if event.Delta.Text == "" {
-				return nil
-			}
-			state.kind = "text"
-			state.text.WriteString(event.Delta.Text)
-			if err := sink.OnDelta(ctx, LLMDelta{
-				Kind: DeltaKindText,
-				Text: event.Delta.Text,
-			}); err != nil {
-				return err
-			}
-		case "input_json_delta":
-			state.kind = "tool_use"
-			tool := state.ensureTool()
-			if err := tool.start(ctx, sink); err != nil {
-				return err
-			}
-			if err := tool.appendArguments(ctx, sink, event.Delta.PartialJSON); err != nil {
-				return err
-			}
-		}
+		return a.handleContentBlockDelta(ctx, sink, event)
 	case "content_block_stop":
-		state := a.blocks[event.Index]
-		if state == nil || state.kind != "tool_use" || state.tool == nil {
-			return nil
-		}
-		return state.tool.end(ctx, sink)
+		return a.handleContentBlockStop(ctx, sink, event.Index)
 	case "message_delta":
-		if event.Delta != nil && strings.TrimSpace(event.Delta.StopReason) != "" {
-			a.stopReason = strings.TrimSpace(event.Delta.StopReason)
-		}
-		if event.Usage.InputTokens > 0 {
-			a.usage.InputTokens = event.Usage.InputTokens
-		}
-		if event.Usage.OutputTokens > 0 {
-			a.usage.OutputTokens = event.Usage.OutputTokens
-		}
+		a.handleMessageDelta(event)
+		return nil
 	case "message_stop":
 		return nil
+	default:
+		return nil
 	}
+}
 
-	return nil
+func (a *anthropicStreamAccumulator) handleMessageStart(event anthropicStreamEvent) {
+	if event.Message == nil {
+		return
+	}
+	if role := strings.TrimSpace(event.Message.Role); role != "" {
+		a.role = Role(role)
+	}
+	a.usage = event.Message.Usage
+}
+
+func (a *anthropicStreamAccumulator) handleContentBlockStart(
+	ctx context.Context,
+	sink LLMStreamSink,
+	event anthropicStreamEvent,
+) error {
+	if event.ContentBlock == nil {
+		return nil
+	}
+	state := a.ensureBlockState(event.Index)
+	state.kind = strings.TrimSpace(event.ContentBlock.Type)
+	if state.kind == "text" {
+		if strings.TrimSpace(event.ContentBlock.Text) == "" {
+			return nil
+		}
+		return a.emitTextDelta(ctx, sink, state, event.ContentBlock.Text)
+	}
+	if state.kind != "tool_use" {
+		return nil
+	}
+	tool := state.ensureTool()
+	tool.setID(event.ContentBlock.ID)
+	tool.setName(event.ContentBlock.Name)
+	return tool.start(ctx, sink)
+}
+
+func (a *anthropicStreamAccumulator) handleContentBlockDelta(
+	ctx context.Context,
+	sink LLMStreamSink,
+	event anthropicStreamEvent,
+) error {
+	if event.Delta == nil {
+		return nil
+	}
+	state := a.ensureBlockState(event.Index)
+	switch strings.TrimSpace(event.Delta.Type) {
+	case "text_delta":
+		state.kind = "text"
+		return a.emitTextDelta(ctx, sink, state, event.Delta.Text)
+	case "input_json_delta":
+		state.kind = "tool_use"
+		tool := state.ensureTool()
+		if err := tool.start(ctx, sink); err != nil {
+			return err
+		}
+		return tool.appendArguments(ctx, sink, event.Delta.PartialJSON)
+	default:
+		return nil
+	}
+}
+
+func (a *anthropicStreamAccumulator) emitTextDelta(
+	ctx context.Context,
+	sink LLMStreamSink,
+	state *anthropicStreamBlockState,
+	text string,
+) error {
+	if text == "" {
+		return nil
+	}
+	state.text.WriteString(text)
+	return sink.OnDelta(ctx, LLMDelta{
+		Kind: DeltaKindText,
+		Text: text,
+	})
+}
+
+func (a *anthropicStreamAccumulator) handleContentBlockStop(
+	ctx context.Context,
+	sink LLMStreamSink,
+	index int,
+) error {
+	state := a.blocks[index]
+	if state == nil || state.kind != "tool_use" || state.tool == nil {
+		return nil
+	}
+	return state.tool.end(ctx, sink)
+}
+
+func (a *anthropicStreamAccumulator) handleMessageDelta(event anthropicStreamEvent) {
+	if event.Delta != nil {
+		stopReason := strings.TrimSpace(event.Delta.StopReason)
+		if stopReason != "" {
+			a.stopReason = stopReason
+		}
+	}
+	if event.Usage.InputTokens > 0 {
+		a.usage.InputTokens = event.Usage.InputTokens
+	}
+	if event.Usage.OutputTokens > 0 {
+		a.usage.OutputTokens = event.Usage.OutputTokens
+	}
 }
 
 func (a *anthropicStreamAccumulator) CompletionResponse() (*CompletionResponse, error) {

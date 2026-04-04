@@ -45,5 +45,4 @@ type UpdateRequest struct {
 	TraceID                    string                       `json:"trace_id,omitempty"`
 }
 
-type configResponse = Snapshot
 type configUpdateRequest = UpdateRequest

@@ -1,7 +1,6 @@
 package memoryaug
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 
@@ -29,14 +28,6 @@ func filterTurnMessages(messages []TurnMessage) []TurnMessage {
 		})
 	}
 	return filtered
-}
-
-func buildTranscriptText(messages []TurnMessage) string {
-	lines := make([]string, 0, len(messages))
-	for _, message := range messages {
-		lines = append(lines, fmt.Sprintf("%s: %s", normalizeRole(message.Role), strings.TrimSpace(message.Text)))
-	}
-	return strings.Join(lines, "\n")
 }
 
 func isLowSignalMessage(text string) bool {

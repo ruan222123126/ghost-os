@@ -61,19 +61,3 @@ func newTestSettings() Settings {
 		UserScopeID:         memorystore.DefaultUserScopeID,
 	}
 }
-
-func mustListLearned(t *testing.T, store *memorystore.Store, filter memorystore.LearnedListFilter) []memorystore.MemoryEntry {
-	t.Helper()
-	items, _, err := store.ListLearned(context.Background(), filter)
-	if err != nil {
-		t.Fatalf("list learned: %v", err)
-	}
-	return items
-}
-
-func mustCreateExplicit(t *testing.T, store *memorystore.Store, uri string, content string, metadata map[string]any) {
-	t.Helper()
-	if _, err := store.Create(context.Background(), uri, content, metadata); err != nil {
-		t.Fatalf("create explicit memory: %v", err)
-	}
-}

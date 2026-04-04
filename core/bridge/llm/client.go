@@ -1,13 +1,8 @@
 package llm
 
 import (
-	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -104,94 +99,6 @@ func (c *Client) Complete(ctx context.Context, request CompletionRequest) (*Comp
 	return c.parseProviderResponse(raw)
 }
 
-func (c *Client) shouldRetryCodexStateless(request CompletionRequest, statusCode int, raw []byte) bool {
-	if c.opts.Provider != ProviderCodex {
-		return false
-	}
-	if !c.opts.CodexStatelessRetryEnabled {
-		return false
-	}
-	if statusCode < 400 || statusCode >= 500 {
-		return false
-	}
-	if strings.TrimSpace(request.ConversationState.PreviousResponseID) == "" {
-		return false
-	}
-
-	return shouldRetryCodexStatelessByBody(raw)
-}
-
-func (c *Client) shouldPreferCodexStateless(request CompletionRequest) bool {
-	if c.opts.Provider != ProviderCodex {
-		return false
-	}
-	if !c.opts.CodexStatelessRetryEnabled {
-		return false
-	}
-	if strings.TrimSpace(request.ConversationState.PreviousResponseID) == "" {
-		return false
-	}
-	return codexRequestContainsToolRoundtrip(request.Messages)
-}
-
-func codexRequestContainsToolRoundtrip(messages []Message) bool {
-	if len(messages) == 0 {
-		return false
-	}
-
-	assistantCallIDs := make(map[string]struct{}, len(messages))
-	for _, msg := range messages {
-		if msg.Role != RoleAssistant {
-			continue
-		}
-		for _, call := range msg.ToolCalls {
-			callID := strings.TrimSpace(call.ID)
-			if callID == "" {
-				continue
-			}
-			assistantCallIDs[callID] = struct{}{}
-		}
-	}
-
-	for _, msg := range messages {
-		if msg.Role != RoleTool {
-			continue
-		}
-		callID := strings.TrimSpace(msg.ToolCallID)
-		if callID == "" {
-			continue
-		}
-		if _, ok := assistantCallIDs[callID]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldRetryCodexStatelessByBody(raw []byte) bool {
-	body := strings.TrimSpace(strings.ToLower(string(raw)))
-	if body == "" {
-		return false
-	}
-
-	// 兼容历史上游错误与 previous_response_id 失效场景。
-	if strings.Contains(body, `"upstream_error"`) || strings.Contains(body, "previous_response_id") {
-		return true
-	}
-
-	// 继续响应时只收到 function_call_output，且上游上下文已丢失对应 function_call。
-	return strings.Contains(body, "no tool call found for function call output with call_id") ||
-		strings.Contains(body, "no tool call found for function_call_output with call_id")
-}
-
-func (c *Client) shouldRetryCodexStatelessForError(request CompletionRequest, err error) bool {
-	var statusErr *completionStatusError
-	if !errors.As(err, &statusErr) {
-		return false
-	}
-	return c.shouldRetryCodexStateless(request, statusErr.statusCode, statusErr.raw)
-}
-
 func (c *Client) CompleteStream(ctx context.Context, request CompletionRequest, sink LLMStreamSink) (*CompletionResponse, error) {
 	if sink == nil {
 		return nil, fmt.Errorf("stream sink is required")
@@ -254,118 +161,6 @@ func (c *Client) parseProviderResponse(raw []byte) (*CompletionResponse, error) 
 	default:
 		return nil, fmt.Errorf("unsupported provider %q", c.opts.Provider)
 	}
-}
-
-// postJSON 负责底层 HTTP POST 与原始响应读取。
-func (c *Client) postJSON(ctx context.Context, path string, requestBody any, headers map[string]string) ([]byte, int, error) {
-	reqBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return nil, 0, fmt.Errorf("marshal request: %w", err)
-	}
-
-	url := c.opts.BaseURL + path
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
-	if err != nil {
-		return nil, 0, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	applyHeaders(req.Header, headers)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, 0, fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, fmt.Errorf("read response body: %w", err)
-	}
-
-	return raw, resp.StatusCode, nil
-}
-
-var errSSEStreamDone = errors.New("sse stream done")
-
-func (c *Client) streamJSON(
-	ctx context.Context,
-	path string,
-	requestBody any,
-	headers map[string]string,
-	lineHandler func([]byte) error,
-) error {
-	reqBody, err := json.Marshal(requestBody)
-	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
-	}
-
-	url := c.opts.BaseURL + path
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(reqBody))
-	if err != nil {
-		return fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
-	applyHeaders(req.Header, headers)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		raw, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return fmt.Errorf("read response body: %w", readErr)
-		}
-		return ensureSuccessStatus(resp.StatusCode, raw)
-	}
-
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
-
-	dataLines := make([]string, 0, 1)
-	flushEvent := func() error {
-		if len(dataLines) == 0 {
-			return nil
-		}
-		payload := strings.Join(dataLines, "\n")
-		dataLines = dataLines[:0]
-		if strings.TrimSpace(payload) == "[DONE]" {
-			return errSSEStreamDone
-		}
-		return lineHandler([]byte(payload))
-	}
-
-	for scanner.Scan() {
-		line := strings.TrimRight(scanner.Text(), "\r")
-		switch {
-		case line == "":
-			if err := flushEvent(); err != nil {
-				if errors.Is(err, errSSEStreamDone) {
-					return nil
-				}
-				return err
-			}
-		case strings.HasPrefix(line, ":"):
-			continue
-		case strings.HasPrefix(line, "data:"):
-			value := strings.TrimPrefix(line, "data:")
-			if strings.HasPrefix(value, " ") {
-				value = value[1:]
-			}
-			dataLines = append(dataLines, value)
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("stream interrupted: %w", err)
-	}
-	if err := flushEvent(); err != nil && !errors.Is(err, errSSEStreamDone) {
-		return err
-	}
-	return nil
 }
 
 // normalizeOptions 统一默认值与路径/头部格式。

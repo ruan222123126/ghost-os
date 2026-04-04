@@ -8,7 +8,6 @@ import (
 type TaskStore = Store
 type TaskRunLog = RunLog
 type TaskLoadIssue = LoadIssue
-type scheduledTaskExecutionResult = ExecutionResult
 
 const (
 	taskScheduleTypeInterval     = ScheduleTypeInterval

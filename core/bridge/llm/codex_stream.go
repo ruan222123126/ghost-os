@@ -40,53 +40,96 @@ func (a *codexStreamAccumulator) ApplyEvent(ctx context.Context, sink LLMStreamS
 	case "response.created", "response.in_progress":
 		return nil
 	case "response.output_text.delta":
-		if event.Delta == "" {
-			return nil
-		}
-		a.message.Text += event.Delta
-		return sink.OnDelta(ctx, LLMDelta{
-			Kind: DeltaKindText,
-			Text: event.Delta,
-		})
+		return a.handleOutputTextDelta(ctx, sink, event.Delta)
 	case "response.function_call_arguments.delta":
-		state := a.toolCalls.ensure(event.OutputIndex)
-		if err := state.start(ctx, sink); err != nil {
-			return err
-		}
-		return state.appendArguments(ctx, sink, event.Delta)
+		return a.handleToolArgumentsDelta(ctx, sink, event.OutputIndex, event.Delta)
 	case "response.output_item.added":
-		if event.Item == nil || strings.TrimSpace(event.Item.Type) != "function_call" {
-			return nil
-		}
-		state := a.toolCalls.ensure(event.OutputIndex)
-		a.updateToolState(state, *event.Item)
-		return state.start(ctx, sink)
+		return a.handleOutputItemAdded(ctx, sink, event.OutputIndex, event.Item)
 	case "response.output_item.done":
-		if event.Item == nil || strings.TrimSpace(event.Item.Type) != "function_call" {
-			return nil
-		}
-		state := a.toolCalls.ensure(event.OutputIndex)
-		a.updateToolState(state, *event.Item)
-		state.seedArguments(event.Item.Arguments)
-		if err := state.start(ctx, sink); err != nil {
-			return err
-		}
-		return state.end(ctx, sink)
+		return a.handleOutputItemDone(ctx, sink, event.OutputIndex, event.Item)
 	case "response.completed":
-		if event.Response == nil {
-			return nil
-		}
-		resp, err := codexToCompletionResponse(*event.Response)
-		if err != nil {
-			return err
-		}
-		a.final = resp
-		a.usage = resp.Usage
-		a.finishReason = resp.FinishReason
-		return nil
+		return a.handleResponseCompleted(event.Response)
 	default:
 		return nil
 	}
+}
+
+func (a *codexStreamAccumulator) handleOutputTextDelta(
+	ctx context.Context,
+	sink LLMStreamSink,
+	delta string,
+) error {
+	if delta == "" {
+		return nil
+	}
+	a.message.Text += delta
+	return sink.OnDelta(ctx, LLMDelta{
+		Kind: DeltaKindText,
+		Text: delta,
+	})
+}
+
+func (a *codexStreamAccumulator) handleToolArgumentsDelta(
+	ctx context.Context,
+	sink LLMStreamSink,
+	outputIndex int,
+	delta string,
+) error {
+	state := a.toolCalls.ensure(outputIndex)
+	if err := state.start(ctx, sink); err != nil {
+		return err
+	}
+	return state.appendArguments(ctx, sink, delta)
+}
+
+func (a *codexStreamAccumulator) handleOutputItemAdded(
+	ctx context.Context,
+	sink LLMStreamSink,
+	outputIndex int,
+	item *codexOutputItem,
+) error {
+	if !isCodexFunctionCallItem(item) {
+		return nil
+	}
+	state := a.toolCalls.ensure(outputIndex)
+	a.updateToolState(state, *item)
+	return state.start(ctx, sink)
+}
+
+func (a *codexStreamAccumulator) handleOutputItemDone(
+	ctx context.Context,
+	sink LLMStreamSink,
+	outputIndex int,
+	item *codexOutputItem,
+) error {
+	if !isCodexFunctionCallItem(item) {
+		return nil
+	}
+	state := a.toolCalls.ensure(outputIndex)
+	a.updateToolState(state, *item)
+	state.seedArguments(item.Arguments)
+	if err := state.start(ctx, sink); err != nil {
+		return err
+	}
+	return state.end(ctx, sink)
+}
+
+func isCodexFunctionCallItem(item *codexOutputItem) bool {
+	return item != nil && strings.TrimSpace(item.Type) == "function_call"
+}
+
+func (a *codexStreamAccumulator) handleResponseCompleted(response *codexResponse) error {
+	if response == nil {
+		return nil
+	}
+	resp, err := codexToCompletionResponse(*response)
+	if err != nil {
+		return err
+	}
+	a.final = resp
+	a.usage = resp.Usage
+	a.finishReason = resp.FinishReason
+	return nil
 }
 
 func (a *codexStreamAccumulator) CompletionResponse() (*CompletionResponse, error) {

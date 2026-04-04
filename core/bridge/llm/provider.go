@@ -27,8 +27,3 @@ func (p Provider) Normalized() Provider {
 		return ""
 	}
 }
-
-// Valid 用于配置阶段快速校验 provider 是否受支持。
-func (p Provider) Valid() bool {
-	return p.Normalized() != ""
-}
