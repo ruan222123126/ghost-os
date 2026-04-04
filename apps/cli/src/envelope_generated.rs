@@ -3,8 +3,8 @@
 
 use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use std::collections::BTreeMap;
+use serde_json::Value;
 
 #[derive(Debug, Serialize)]
 pub struct ApiRequest<TParams> {

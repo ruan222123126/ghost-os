@@ -26,6 +26,7 @@ const (
 	busActionApplyDiff = "APPLY_DIFF"
 	busActionExportFile = "EXPORT_FILE"
 	busActionBashExec = "BASH_EXEC"
+	busActionBrowserLaunch = "BROWSER_LAUNCH"
 	busActionScriptExec = "SCRIPT_EXEC"
 	busActionScreenCapture = "SCREEN_CAPTURE"
 	busActionImageCrop = "IMAGE_CROP"

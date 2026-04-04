@@ -4,16 +4,24 @@ on:
   pull_request:
     paths:
       - "core/bridge/**"
+      - "core/shared/**"
       - "drivers/native/**"
+      - "apps/cli/src/envelope_generated.rs"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt"
       - "apps/web/**"
+      - "scripts/check_generated_contracts.sh"
       - ".github/workflows/trinity-check.yml"
   push:
     branches:
       - main
     paths:
       - "core/bridge/**"
+      - "core/shared/**"
       - "drivers/native/**"
+      - "apps/cli/src/envelope_generated.rs"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt"
       - "apps/web/**"
+      - "scripts/check_generated_contracts.sh"
       - ".github/workflows/trinity-check.yml"
   workflow_dispatch:
 
@@ -22,6 +30,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       bridge: ${{ steps.filter.outputs.bridge }}
+      contract: ${{ steps.filter.outputs.contract }}
       native: ${{ steps.filter.outputs.native }}
       web: ${{ steps.filter.outputs.web }}
     steps:
@@ -37,10 +46,29 @@ jobs:
           filters: |
             bridge:
               - 'core/bridge/**'
+            contract:
+              - 'core/shared/**'
+              - 'core/bridge/orchestration/envelope_generated.go'
+              - 'apps/web/lib/envelope.generated.ts'
+              - 'apps/cli/src/envelope_generated.rs'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt'
+              - 'scripts/check_generated_contracts.sh'
             native:
               - 'drivers/native/**'
             web:
               - 'apps/web/**'
+
+  contract-check:
+    name: Shared Contract Generated Sync
+    needs: changes
+    if: ${{ needs.changes.outputs.contract == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify generated contract files
+        run: bash scripts/check_generated_contracts.sh
 
   bridge-check:
     name: Bridge (Go)
