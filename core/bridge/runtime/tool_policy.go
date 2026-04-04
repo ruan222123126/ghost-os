@@ -61,16 +61,12 @@ func (p toolSelectionPolicy) apply(available []string, selected []string) []stri
 		}
 		add(name)
 	}
-	for _, name := range p.requiredTools(available) {
+	for _, name := range p.residentScope(available) {
 		add(name)
 	}
 	result = normalizeToolNames(result)
 	sort.Strings(result)
 	return result
-}
-
-func (p toolSelectionPolicy) requiredTools(available []string) []string {
-	return p.residentScope(available)
 }
 
 func toolVisibilityOptions(cfg Config) tools.VisibilityOptions {

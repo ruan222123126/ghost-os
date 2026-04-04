@@ -79,6 +79,7 @@
 - `tfind(action="search")` 的候选工具匹配已从“整句 substring”改为规范化自然语言词匹配：会统一处理空格/下划线/标点，并优先匹配工具名与标签，避免像 `website search tool availability; web_search, browser_control, internet retrieval, web browser` 这类查询继续把 `web_search` / `browser_control` 搜成空结果。
 - GraphQL 文本 sanitize 现可在显式 sanitize 模式下提取并校验嵌入在同一 assistant 文本里的合法 GraphQL 文档：像 `mutation { ... }你好` 这类“工具调用 + 额外文字”不再一律直接 parse error；已知的 `[TOOL_TAG_RESULT]` 后缀剥离语义保持不变，关闭 `graphql_text_sanitize_enabled` 后仍回到严格纯文档模式。
 - 工具可见性语义已拆分为“常驻 allowlist”与“严格 allowlist-only”两层：`tool_allowlist` 现在只定义当前 turn 的 resident 工具；当 `tool_allowlist_only = true` 时，selector 与静态工具面才会一起收紧到 allowlist。非 strict 模式下，selector 仍可为主模型挑选其他未被 `tool_blocklist` 屏蔽的静态工具。
+- `core/bridge/runtime` 已完成一轮 API 面与测试边界清理：移除未被调用的 `SelectionPolicy` 冗余导出别名（`ScopeCatalog`、`SelectorScope`、`AllowlistScope`），将仅测试使用的 `containsToolName` 下沉到 `*_test.go`，并去掉 `toolSelectionPolicy.requiredTools` 空转转发；`agent_runtime_factory_test.go` 同时拆分 helper 文件，主测试文件已回落到 300 行以内。
 - `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
 - GraphQL 文本协议的遗留死代码已完成一轮清理：删除未接线的文档预算校验模块、schema render 辅助模块，以及一组未引用的协议错误构造器/工具 ID 辅助函数，`core/bridge/tools` 的 staticcheck(U1000) 不再报告这批不可达路径。

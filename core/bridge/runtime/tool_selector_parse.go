@@ -159,12 +159,3 @@ func normalizeToolNames(names []string) []string {
 	}
 	return result
 }
-
-func containsToolName(names []string, target string) bool {
-	for _, name := range names {
-		if name == target {
-			return true
-		}
-	}
-	return false
-}

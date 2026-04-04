@@ -1,7 +1,6 @@
 package runtime
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -38,6 +37,37 @@ func TestAgentRuntimeFactorySkipsTaskManageWithoutTaskManager(t *testing.T) {
 
 	if deps.registry.Get("task_manage") != nil {
 		t.Fatal("expected task_manage to stay hidden without a task manager")
+	}
+}
+
+func TestAgentRuntimeFactorySkipsWebRooterWhenDisabled(t *testing.T) {
+	setupRuntimeFactoryTestEnv(t)
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	if deps.registry.Get("web_rooter") != nil {
+		t.Fatal("expected web_rooter to stay hidden when disabled")
+	}
+}
+
+func TestAgentRuntimeFactoryRegistersWebRooterWhenEnabled(t *testing.T) {
+	setupRuntimeFactoryTestEnv(t)
+	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "true")
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	if deps.registry.Get("web_rooter") == nil {
+		t.Fatal("expected web_rooter to be registered")
 	}
 }
 
@@ -102,26 +132,12 @@ idempotency_header = "Idempotency-Key"
 	}
 
 	visible := tools.StaticVisibleToolNames(tools.CatalogToolNames(deps.registry), toolVisibilityOptions(deps.cfg))
-	if containsRuntimeTool(visible, "graphql_query") || containsRuntimeTool(visible, "graphql_schema_lookup") || containsRuntimeTool(visible, "graphql_mutation") {
+	if containsToolName(visible, "graphql_query") || containsToolName(visible, "graphql_schema_lookup") || containsToolName(visible, "graphql_mutation") {
 		t.Fatalf("expected graphql tools to stay out of the static tool surface, got %v", visible)
 	}
 	candidates := tools.SearchCandidateToolNames(tools.CatalogToolNames(deps.registry), nil, toolVisibilityOptions(deps.cfg))
-	if containsRuntimeTool(candidates, "graphql_query") || containsRuntimeTool(candidates, "graphql_schema_lookup") || containsRuntimeTool(candidates, "graphql_mutation") {
+	if containsToolName(candidates, "graphql_query") || containsToolName(candidates, "graphql_schema_lookup") || containsToolName(candidates, "graphql_mutation") {
 		t.Fatalf("expected graphql tools to stay hidden from tfind candidates, got %v", candidates)
-	}
-}
-
-func TestAgentRuntimeFactorySkipsGraphQLRegistrationWithoutSources(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-	if deps.registry.Get("graphql_query") != nil || deps.registry.Get("graphql_schema_lookup") != nil {
-		t.Fatal("expected graphql tools to stay unregistered without graphql sources")
 	}
 }
 
@@ -235,82 +251,4 @@ func TestAgentRuntimeFactorySkipsMemoryAugmentationWhenDisabled(t *testing.T) {
 	if _, err := os.Stat(memoryPath); !os.IsNotExist(err) {
 		t.Fatalf("expected disabled memory augmentation to avoid creating sqlite db, got err=%v", err)
 	}
-}
-
-type fakeTaskManager struct{}
-
-func (fakeTaskManager) CreateAgentTask(context.Context, tools.TaskCreateRequest, string) (tools.TaskPayload, error) {
-	return tools.TaskPayload{}, nil
-}
-
-func (fakeTaskManager) UpdateAgentTask(context.Context, tools.TaskUpdateRequest, string) (tools.TaskPayload, error) {
-	return tools.TaskPayload{}, nil
-}
-
-func (fakeTaskManager) GetTask(context.Context, string, string) (tools.TaskPayload, error) {
-	return tools.TaskPayload{}, nil
-}
-
-func (fakeTaskManager) ListTasks(context.Context, string) ([]tools.TaskPayload, error) {
-	return nil, nil
-}
-
-func (fakeTaskManager) DeleteTask(context.Context, string, string) (tools.TaskDeleteResult, error) {
-	return tools.TaskDeleteResult{}, nil
-}
-
-func newRuntimeTestStore(t *testing.T) *ConfigStore {
-	t.Helper()
-
-	store, err := bridgeconfig.NewStoreFromEnv()
-	if err != nil {
-		t.Fatalf("new config store: %v", err)
-	}
-	return WrapConfigStore(store)
-}
-
-func setupRuntimeFactoryTestEnv(t *testing.T) string {
-	t.Helper()
-
-	tempDir := t.TempDir()
-	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(tempDir, "config.toml"))
-	t.Setenv("GHOST_API_KEY", "test-key")
-	t.Setenv("GHOST_ARTIFACTS_PATH", filepath.Join(tempDir, "artifacts"))
-	t.Setenv("GHOST_MEMORY_PATH", filepath.Join(tempDir, "memory", "memory.db"))
-	t.Setenv("GHOST_RSS_FEEDS_PATH", filepath.Join(tempDir, "rss", "feeds.json"))
-	return tempDir
-}
-
-func writeRuntimeGraphQLSchema(t *testing.T, tempDir string) string {
-	t.Helper()
-
-	path := filepath.Join(tempDir, "graphql-schema.json")
-	if err := os.WriteFile(path, []byte(`{
-  "root_queries": [{"name":"viewer","return_type":"Viewer"}],
-  "root_mutations": [{"name":"updateViewer","return_type":"MutationPayload"}],
-  "types": [
-    {"name":"Viewer","fields":[{"name":"id","return_type":"ID!"}]},
-    {"name":"MutationPayload","fields":[{"name":"ok","return_type":"Boolean!"}]}
-  ]
-}`), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-	return path
-}
-
-func writeRuntimeGraphQLConfig(t *testing.T, tempDir string, body string) {
-	t.Helper()
-	configPath := filepath.Join(tempDir, "config.toml")
-	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-}
-
-func containsRuntimeTool(names []string, target string) bool {
-	for _, name := range names {
-		if name == target {
-			return true
-		}
-	}
-	return false
 }

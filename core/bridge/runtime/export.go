@@ -95,20 +95,8 @@ func (p SelectionPolicy) SelectorCatalog(catalog tools.ToolCatalog) tools.ToolCa
 	return p.toolSelectionPolicy.selectorCatalog(catalog)
 }
 
-func (p SelectionPolicy) ScopeCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.ResidentCatalog(catalog)
-}
-
 func (p SelectionPolicy) ResidentScope(available []string) []string {
 	return p.toolSelectionPolicy.residentScope(available)
-}
-
-func (p SelectionPolicy) SelectorScope(available []string) []string {
-	return p.toolSelectionPolicy.selectorScope(available)
-}
-
-func (p SelectionPolicy) AllowlistScope(available []string) []string {
-	return p.ResidentScope(available)
 }
 
 func (p SelectionPolicy) Apply(available []string, selected []string) []string {
