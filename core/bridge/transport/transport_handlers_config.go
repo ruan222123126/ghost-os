@@ -12,7 +12,7 @@ func (t *transport) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeConfigGetAction(traceID)
+		payload, code, err := t.service.ExecuteConfigGetAction(traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
 		var req configUpdateRequest
@@ -21,7 +21,7 @@ func (t *transport) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeConfigUpdateAction(req, traceID)
+		payload, code, err := t.service.ExecuteConfigUpdateAction(req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -32,7 +32,7 @@ func (t *transport) handleConfigProviders(w http.ResponseWriter, r *http.Request
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeProvidersGetAction(traceID)
+		payload, code, err := t.service.ExecuteProvidersGetAction(traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
 		var req providerCreateRequest
@@ -40,7 +40,7 @@ func (t *transport) handleConfigProviders(w http.ResponseWriter, r *http.Request
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeProviderCreateAction(req, traceID)
+		payload, code, err := t.service.ExecuteProviderCreateAction(req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -61,11 +61,11 @@ func (t *transport) handleConfigProviderByName(w http.ResponseWriter, r *http.Re
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeProviderUpdateAction(name, req, traceID)
+		payload, code, err := t.service.ExecuteProviderUpdateAction(name, req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodDelete:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeProviderDeleteAction(name, traceID)
+		payload, code, err := t.service.ExecuteProviderDeleteAction(name, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -83,7 +83,7 @@ func (t *transport) handleActiveProvider(w http.ResponseWriter, r *http.Request)
 	}
 
 	traceID := resolveTraceID(req.TraceID, r)
-	payload, code, err := t.service.executeSetActiveProviderAction(req, traceID)
+	payload, code, err := t.service.ExecuteSetActiveProviderAction(req, traceID)
 	respondServiceResult(w, traceID, payload, code, err)
 }
 

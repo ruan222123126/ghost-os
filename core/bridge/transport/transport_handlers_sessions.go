@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"ghost-os/bridge/artifacts"
+	"ghost-os/bridge/session"
 )
 
 // handleSessionsList 列出会话概要，供 Web/CLI 构建侧边栏或历史视图。
@@ -22,7 +24,7 @@ func (t *transport) handleSessionsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.executeSessionsListAction(traceID)
+	payload, code, err := t.service.ExecuteSessionsListAction(traceID)
 	respondServiceResult(w, traceID, payload, code, err)
 }
 
@@ -59,15 +61,20 @@ func (t *transport) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	params := sessionIDParams{ID: rawPath}
 	traceID := resolveTraceID("", r)
 
 	switch r.Method {
 	case http.MethodGet:
-		payload, code, err := t.service.executeSessionGetAction(params, traceID)
+		params, code, err := parseSessionGetParams(rawPath, r)
+		if err != nil {
+			writeError(w, code, err.Error(), traceID)
+			return
+		}
+		payload, code, err := t.service.ExecuteSessionGetAction(params, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodDelete:
-		payload, code, err := t.service.executeSessionDeleteAction(params, traceID)
+		params := sessionIDParams{ID: rawPath}
+		payload, code, err := t.service.ExecuteSessionDeleteAction(params, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -85,6 +92,32 @@ func parseSessionArtifactPath(rawPath string) (string, string, bool) {
 		return "", "", false
 	}
 	return sessionID, artifactID, true
+}
+
+func parseSessionGetParams(rawPath string, r *http.Request) (sessionGetParams, int, error) {
+	params := sessionGetParams{
+		ID:    rawPath,
+		Limit: session.DefaultDetailPageLimit,
+	}
+	query := r.URL.Query()
+	if query.Has("limit") {
+		limit, err := strconv.Atoi(strings.TrimSpace(query.Get("limit")))
+		if err != nil || limit <= 0 || limit > session.MaxDetailPageLimit {
+			return sessionGetParams{}, http.StatusBadRequest, fmt.Errorf(
+				"limit must be an integer between 1 and %d",
+				session.MaxDetailPageLimit,
+			)
+		}
+		params.Limit = limit
+	}
+	if query.Has("before") {
+		before, err := strconv.Atoi(strings.TrimSpace(query.Get("before")))
+		if err != nil || before < 0 {
+			return sessionGetParams{}, http.StatusBadRequest, errors.New("before must be a non-negative integer")
+		}
+		params.Before = &before
+	}
+	return params, http.StatusOK, nil
 }
 
 func (t *transport) handleSessionArtifactDownload(w http.ResponseWriter, r *http.Request, sessionID string, artifactID string) {

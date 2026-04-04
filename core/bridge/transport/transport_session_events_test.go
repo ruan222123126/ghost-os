@@ -21,7 +21,7 @@ func TestHandleSessionEventsStreamsAssistantMessage(t *testing.T) {
 	handler, service, _ := newTestHandlerWithService(t, executor, nil)
 	recorder, cancel, done := startSessionEventRequest(handler, "session-push")
 
-	waitForSessionPushSubscriber(t, service.sessionPush, "session-push")
+	waitForSessionPushSubscriber(t, service.SessionPushHub(), "session-push")
 	response := serveRequest(handler, http.MethodPost, "/api/agent", `{"message":"hello"}`, map[string]string{"Content-Type": "application/json"})
 	if response.Code != http.StatusOK {
 		cancel()
@@ -58,7 +58,7 @@ func TestHandleSessionEventsStreamsAwaitingHuman(t *testing.T) {
 	handler, service, _ := newTestHandlerWithService(t, executor, nil)
 	recorder, cancel, done := startSessionEventRequest(handler, "session-await")
 
-	waitForSessionPushSubscriber(t, service.sessionPush, "session-await")
+	waitForSessionPushSubscriber(t, service.SessionPushHub(), "session-await")
 	response := serveRequest(handler, http.MethodPost, "/api/agent", `{"message":"hello"}`, map[string]string{"Content-Type": "application/json"})
 	if response.Code != http.StatusAccepted {
 		cancel()
@@ -166,7 +166,7 @@ func TestHandleSessionEventsBroadcastsStreamProgress(t *testing.T) {
 	handler, service, _ := newTestHandlerWithService(t, nil, streamExecutor)
 	recorder, cancel, done := startSessionEventRequest(handler, "session-stream-push")
 
-	waitForSessionPushSubscriber(t, service.sessionPush, "session-stream-push")
+	waitForSessionPushSubscriber(t, service.SessionPushHub(), "session-stream-push")
 	response := serveRequest(handler, http.MethodPost, "/api/agent/stream", `{"message":"hello"}`, map[string]string{"Content-Type": "application/json"})
 	if response.Code != http.StatusOK {
 		cancel()

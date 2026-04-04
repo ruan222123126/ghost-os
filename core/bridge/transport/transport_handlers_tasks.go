@@ -11,7 +11,7 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeTaskListAction(taskListScopeUser, traceID)
+		payload, code, err := t.service.ExecuteTaskListAction(taskListScopeUser, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
 		var req taskCreateParams
@@ -19,7 +19,7 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeTaskCreateAction(req, traceID)
+		payload, code, err := t.service.ExecuteTaskCreateAction(req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -32,62 +32,103 @@ func (t *transport) handleSystemTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.executeTaskListAction(taskListScopeSystem, traceID)
+	payload, code, err := t.service.ExecuteTaskListAction(taskListScopeSystem, traceID)
 	respondServiceResult(w, traceID, payload, code, err)
 }
 
 func (t *transport) handleTaskByID(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/tasks/"))
+	id, action, err := parseTaskPath(r.URL.Path)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+	traceID := resolveTraceID("", r)
+	if action != "" {
+		t.handleTaskSubresource(w, r, traceID, id, action)
+		return
+	}
+	t.handleTaskResource(w, r, traceID, id)
+}
+
+func parseTaskPath(rawPath string) (string, string, error) {
+	path := strings.TrimSpace(strings.TrimPrefix(rawPath, "/api/tasks/"))
 	segments := strings.Split(path, "/")
 	if len(segments) == 0 {
-		writeError(w, http.StatusBadRequest, "task id is required", "")
-		return
+		return "", "", errors.New("task id is required")
 	}
 	id := strings.TrimSpace(segments[0])
 	if id == "" {
-		writeError(w, http.StatusBadRequest, "task id is required", "")
-		return
+		return "", "", errors.New("task id is required")
 	}
 	if len(segments) > 2 || (len(segments) == 2 && strings.TrimSpace(segments[1]) == "") {
-		writeError(w, http.StatusBadRequest, "invalid task path", "")
-		return
+		return "", "", errors.New("invalid task path")
 	}
-	action := ""
-	if len(segments) == 2 {
-		action = strings.TrimSpace(segments[1])
+	if len(segments) == 1 {
+		return id, "", nil
 	}
-	traceID := resolveTraceID("", r)
-	if action == "logs" {
-		if r.Method != http.MethodGet {
-			writeMethodNotAllowed(w)
-			return
-		}
-		limit, err := parseTaskLogsLimit(r)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error(), traceID)
-			return
-		}
-		payload, code, err := t.service.executeTaskLogsAction(taskLogsParams{ID: id, Limit: limit}, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
-		return
-	}
-	if action == "run" {
-		if r.Method != http.MethodPost {
-			writeMethodNotAllowed(w)
-			return
-		}
-		payload, code, err := t.service.executeTaskRunNowAction(taskIDParams{ID: id}, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
-		return
-	}
-	if action != "" {
+	return id, strings.TrimSpace(segments[1]), nil
+}
+
+func (t *transport) handleTaskSubresource(
+	w http.ResponseWriter,
+	r *http.Request,
+	traceID string,
+	id string,
+	action string,
+) {
+	switch action {
+	case "logs":
+		t.handleTaskLogs(w, r, traceID, id)
+	case "run":
+		t.handleTaskRun(w, r, traceID, id)
+	default:
 		writeError(w, http.StatusBadRequest, "invalid task path", traceID)
+	}
+}
+
+func (t *transport) handleTaskLogs(
+	w http.ResponseWriter,
+	r *http.Request,
+	traceID string,
+	id string,
+) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
 		return
 	}
+	limit, err := parseTaskLogsLimit(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), traceID)
+		return
+	}
+	payload, code, err := t.service.ExecuteTaskLogsAction(taskLogsParams{ID: id, Limit: limit}, traceID)
+	respondServiceResult(w, traceID, payload, code, err)
+}
+
+func (t *transport) handleTaskRun(
+	w http.ResponseWriter,
+	r *http.Request,
+	traceID string,
+	id string,
+) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	payload, code, err := t.service.ExecuteTaskRunNowAction(taskIDParams{ID: id}, traceID)
+	respondServiceResult(w, traceID, payload, code, err)
+}
+
+func (t *transport) handleTaskResource(
+	w http.ResponseWriter,
+	r *http.Request,
+	traceID string,
+	id string,
+) {
 	params := taskIDParams{ID: id}
 	switch r.Method {
 	case http.MethodGet:
-		payload, code, err := t.service.executeTaskGetAction(params, traceID)
+		payload, code, err := t.service.ExecuteTaskGetAction(params, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPatch:
 		var req taskUpdateParams
@@ -96,10 +137,10 @@ func (t *transport) handleTaskByID(w http.ResponseWriter, r *http.Request) {
 		}
 		req.ID = id
 		traceID = resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeTaskUpdateAction(req, traceID)
+		payload, code, err := t.service.ExecuteTaskUpdateAction(req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodDelete:
-		payload, code, err := t.service.executeTaskDeleteAction(params, traceID)
+		payload, code, err := t.service.ExecuteTaskDeleteAction(params, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)

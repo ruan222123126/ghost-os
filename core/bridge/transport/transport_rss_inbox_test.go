@@ -156,7 +156,7 @@ func TestExecuteRSSInboxPollUsecaseUsesTaskID(t *testing.T) {
 	rssService.SetNow(func() time.Time { return time.Date(2026, 3, 8, 15, 0, 0, 0, time.UTC) })
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 	service.SetRSSInboxService(rssService, nil)
-	result, _, err := service.executeRSSInboxPollUsecase(context.Background(), rssInboxPollParams{}, "task-1", "trace-rss-task")
+	result, _, err := service.ExecuteRSSInboxPollUsecase(context.Background(), rssInboxPollParams{}, "task-1", "trace-rss-task")
 	if err != nil {
 		t.Fatalf("poll usecase returned error: %v", err)
 	}

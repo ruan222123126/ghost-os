@@ -42,6 +42,7 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 	traceID := resolveTraceID(req.TraceID, r)
 	params, err := json.Marshal(agentParams{
 		Message:   req.Message,
+		Images:    req.Images,
 		SessionID: req.SessionID,
 	})
 	if err != nil {
@@ -64,7 +65,7 @@ func (t *transport) handleQuestionAnswer(w http.ResponseWriter, r *http.Request)
 	}
 
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.executeHumanAnswerAndResumeAction(r.Context(), req, traceID)
+	payload, code, err := t.service.ExecuteHumanAnswerAndResumeAction(r.Context(), req, traceID)
 	respondServiceResult(w, traceID, payload, code, err)
 }
 
@@ -92,7 +93,7 @@ func (t *transport) handleQuestionAnswerStream(w http.ResponseWriter, r *http.Re
 	w.Header().Set("X-Trace-ID", traceID)
 
 	sink := newSSEEventSink(w, flusher, traceID)
-	_, _, _ = t.service.executeHumanAnswerAndResumeStreamAction(r.Context(), req, traceID, sink)
+	_, _, _ = t.service.ExecuteHumanAnswerAndResumeStreamAction(r.Context(), req, traceID, sink)
 }
 
 func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
@@ -112,12 +113,12 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	traceID := resolveTraceID(req.TraceID, r)
-	if strings.TrimSpace(req.Message) != "" {
-		if code, err := t.service.ensureSessionNotInflight(req.SessionID); err != nil {
+	if strings.TrimSpace(req.Message) != "" || len(req.Images) > 0 {
+		if code, err := t.service.EnsureSessionNotInflight(req.SessionID); err != nil {
 			respondServiceResult(w, traceID, nil, code, err)
 			return
 		}
-		if code, err := t.service.ensureSessionActive(req.SessionID); err != nil {
+		if code, err := t.service.EnsureSessionActive(req.SessionID); err != nil {
 			respondServiceResult(w, traceID, nil, code, err)
 			return
 		}
@@ -130,14 +131,15 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Trace-ID", traceID)
 
 	sink := newSSEEventSink(w, flusher, traceID)
-	_, _, _ = t.service.executeAgentStreamAction(r.Context(), agentParams{
+	_, _, _ = t.service.ExecuteAgentStreamAction(r.Context(), agentParams{
 		Message:   req.Message,
+		Images:    req.Images,
 		SessionID: req.SessionID,
 	}, traceID, sink)
 }
 
 // dispatchAction 统一调用 service 并按 action 语义输出响应 envelope。
 func (t *transport) dispatchAction(w http.ResponseWriter, r *http.Request, action string, params json.RawMessage, traceID string) {
-	payload, code, err := t.service.dispatchAction(r.Context(), action, params, traceID)
+	payload, code, err := t.service.DispatchAction(r.Context(), action, params, traceID)
 	respondActionResult(w, traceID, action, payload, code, err)
 }

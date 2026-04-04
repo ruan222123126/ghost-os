@@ -10,7 +10,7 @@ func (t *transport) handleRSSBriefing(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeRSSBriefingGetAction(traceID)
+		payload, code, err := t.service.ExecuteRSSBriefingGetAction(traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
 		var req rssBriefingParams
@@ -18,7 +18,7 @@ func (t *transport) handleRSSBriefing(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeRSSBriefingBuildAction(r.Context(), req, traceID)
+		payload, code, err := t.service.ExecuteRSSBriefingBuildAction(r.Context(), req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -30,7 +30,7 @@ func (t *transport) handleRSSInboxGroups(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.executeRSSInboxGroupsAction(rssInboxGroupsParams{
+	payload, code, err := t.service.ExecuteRSSInboxGroupsAction(rssInboxGroupsParams{
 		FeedID:        strings.TrimSpace(r.URL.Query().Get("feed_id")),
 		Tag:           strings.TrimSpace(r.URL.Query().Get("tag")),
 		Importance:    strings.TrimSpace(r.URL.Query().Get("importance")),
@@ -46,7 +46,7 @@ func (t *transport) handleRSSInbox(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.executeRSSInboxListAction(rssInboxListParams{
+		payload, code, err := t.service.ExecuteRSSInboxListAction(rssInboxListParams{
 			FeedID:          strings.TrimSpace(r.URL.Query().Get("feed_id")),
 			Tag:             strings.TrimSpace(r.URL.Query().Get("tag")),
 			Importance:      strings.TrimSpace(r.URL.Query().Get("importance")),
@@ -63,7 +63,7 @@ func (t *transport) handleRSSInbox(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.executeRSSInboxPollAction(r.Context(), req, traceID)
+		payload, code, err := t.service.ExecuteRSSInboxPollAction(r.Context(), req, traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	default:
 		writeMethodNotAllowed(w)
@@ -80,7 +80,7 @@ func (t *transport) handleRSSInboxByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.executeRSSInboxGetAction(rssInboxGetParams{ID: id}, traceID)
+	payload, code, err := t.service.ExecuteRSSInboxGetAction(rssInboxGetParams{ID: id}, traceID)
 	respondServiceResult(w, traceID, payload, code, err)
 }
 

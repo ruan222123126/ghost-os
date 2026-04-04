@@ -25,13 +25,18 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Trace-ID", traceID)
 
-	if event, ok := t.service.pendingQuestionSnapshot(sessionID); ok {
+	if event, ok := t.service.PendingQuestionSnapshot(sessionID); ok {
 		if err := writeSessionPushEvent(w, flusher, event); err != nil {
 			return
 		}
 	}
 
-	ch, unsubscribe := t.service.sessionPush.Subscribe(sessionID)
+	hub := t.service.SessionPushHub()
+	if hub == nil {
+		writeError(w, http.StatusInternalServerError, "session push hub is not available", traceID)
+		return
+	}
+	ch, unsubscribe := hub.Subscribe(sessionID)
 	defer unsubscribe()
 
 	heartbeat := time.NewTicker(25 * time.Second)

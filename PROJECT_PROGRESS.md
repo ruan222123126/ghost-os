@@ -56,6 +56,7 @@
   - `core/bridge/session` 已从单文件整段 JSON 持久化切到 SQLite；内存里只保留最近热窗口，旧消息落到 `session_messages`。
   - `/api/sessions/:id` 默认只返回最新一页，并支持 `limit` / `before` 分页窗口；响应里补上 `message_count` 和 `page` 游标信息。
   - legacy `session-id.json` 会在首次读取时自动导入 SQLite 并删除旧文件。
+- `core/bridge/session` 与 `core/bridge/tools` 已完成一轮“工程硬限制 + debug-first”收口：`BrowserControlTool` 全部改为指针接收者以避免复制 `sync.Mutex`；移除 `applyToolSpecificHumanAnswer` 空实现与仅测试使用符号（`HasPendingQuestion`、`DynamicToolLoadSnapshot`、`encodeStoredSession`、`cloneSession`）；`newSessionID` 在随机源失败时改为显式 panic（不再静默时间戳降级）；`storage.go`/`storage_sql.go`/`storage_messages.go` 通过拆分 helper 和新文件回到单文件 300 行内且关键函数回到 50 行内；`ListMetadata` 删除重复排序，仅保留 SQL `ORDER BY`。
 - GraphQL 文本标准化路径已补上“定向 sanitize + 显式开关”：默认开启 `graphql_text_sanitize_enabled`，只清理首尾空白、代码围栏与误拼接的 `[TOOL_TAG_RESULT]` 后缀；每次命中都会打带 `trace_id` / `kind` 的结构化日志，关闭开关后回到现有严格解析行为。
 - GraphQL 模式的系统提示词已补回工具使用指导：`hidden catalog` 继续隐藏原生 `tool_defs`，但会为 prompt 保留 `ask_human`、`tfind`、`screen_action`、`computer_use` 等可见工具的“何时使用/有哪些约束”提示。
 - GraphQL 文本工具调用的 provider 请求投影已补齐 assistant/tool 协议配对：持久化 transcript 仍保留原始 assistant 文本 + tool result + internal feedback，但在发给 OpenAI/Anthropic/Codex 前会为已执行的 GraphQL 文本 turn 按原文重建合法的 assistant `tool_calls`，修复下一轮 completion 因 `tool message references unknown tool_call_id` 直接失败的问题。
@@ -73,6 +74,7 @@
 - prompt guidance 已按协议模式分流：普通 native `tool_calls` prompt 不再泄漏 `mutation { ... }`、`tfind(action: ...)` 一类 GraphQL 示例，GraphQL 专用样例只保留在 hidden catalog / GraphQL runtime prompt 路径中。
 - `browser_control` 的 prompt guidance 已补上显式动作约束：系统提示现在会直接列出合法 `action`（`connect|launch|goto|click|type|press|evaluate|content|screenshot|info|close`），并明确 `goto`/`wait`/`content` 用法，减少模型继续误用 `navigate`、独立 `wait`、`extract` 的概率。
 - `script_exec` 的 prompt guidance 已补上运行时约束：明确要求通过注入的 `tools.*` 对象调用能力（而非 `import tools`），并显式禁止 `open/eval/exec/compile/input` 这类会被沙箱拦截的 builtins；同时要求输出简洁结构化结果，降低后续轮次解析歧义。
+- `script_exec` 的 prompt guidance 现已明确 helper 调用优先使用命名参数（如 `tools.list_files(path='...')`、`tools.read_file(path='...')`），减少位置参数触发签名不匹配错误。
 - `screen_action` / `task_manage` / `feed_manage` / `codex_cli` 的 prompt guidance 也已补上显式合法操作约束：分别给出 `action/operation/op` 枚举与关键必填字段；同时修正 `codex_cli` 工具描述中的旧文案 `exec` 为真实枚举值 `start`，避免模型生成非法 `op`。
 - `web_rooter` 的 prompt guidance 已补齐联网分流规则：需要引用、出处、多源交叉验证、学术资料或深度研究时优先走 `web_rooter`；普通即时网页搜继续走 `web_search`，避免模型把所有联网任务都打到同一层搜索能力。
 - `web_search` 的 Tavily / Exa provider 现支持显式自定义 endpoint：运行时配置可分别填写 `web_search_tavily_url` / `web_search_exa_url`，留空时继续走官方接口，填写后请求会直接命中自定义 URL，原有 API key 语义保持不变。
@@ -93,6 +95,7 @@
 - `core/bridge/config` 已完成一轮死代码与复杂度收口：删除未接线私有 env 包装函数与重复 GraphQL env 解析路径（含整文件 `config_graphql_env.go`），并将 runtime 配置构建按职责拆分为 `config_runtime_resolve_helpers.go`、`config_runtime_sections_rss.go`、`config_runtime_sections_tools.go`；`config_runtime_resolve.go` 已降到 300 行以内，相关热点函数均拆到 50 行以内。
 - `core/bridge/llm` 已完成一轮可维护性重构：移除未使用 `Provider.Valid()` 与 Anthropic 空转封装；将 `anthropic_stream.ApplyEvent`、`codex_stream.ApplyEvent`、`client.streamJSON`、`toAnthropicRequest` 拆分为小函数以降低复杂度；并按职责拆分 `client.go` / `anthropic.go` / `codex_messages.go`，消除 Codex `function_call` 与 `function_call_output` 的重复映射实现。
 - `core/bridge/orchestration` 已完成一轮死代码与复杂度收口：删除 `export_types.go` 中 5 个未调用导出包装、`runtime_shim.go` 中未接线 selector 导出包装及其专用接口、以及未使用测试 helper；同时重构 `service_usecase_agent` / `service_usecase_human` / `service_router` 与 `session_turn_preparer`，将 `session_turn_preparer.go` 拆分为多文件并降至 300 行以内，`classifyAgentTurnError` 与 `normalizeAgentExecutionError` 的返回签名也已按 Go 约定调整为 `error` 置后。
+- `core/bridge/transport` 与 `core/bridge/orchestration/runtime` 已完成一轮 shim 收口：删除 `orchestration_shim_service.go` 的整层透传方法，`transport` handlers / session events 改为直接调用 `orchestration.Service` 导出方法；同时将 `orchestration/runtime_shim` 的 `toolSelectionPolicy` 改为直接复用 `runtime.SelectionPolicy`，并在 `core/bridge/runtime` 去掉对应导出包装方法，缩短调用链并保持测试通过。
 - Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
 
 ### Perception: `apps/web` / `apps/cli` / `apps/android`
