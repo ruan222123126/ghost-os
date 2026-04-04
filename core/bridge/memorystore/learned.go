@@ -131,18 +131,3 @@ func supersedeLearnedInTx(ctx context.Context, tx txRunner, ids []string, supers
 	}
 	return nil
 }
-
-func scanMemoryEntryRows(rows rowScanner) ([]MemoryEntry, error) {
-	items := make([]MemoryEntry, 0)
-	for rows.Next() {
-		entry, err := scanMemoryEntry(rows)
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, entry)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("scan memory entries: %w", err)
-	}
-	return items, nil
-}

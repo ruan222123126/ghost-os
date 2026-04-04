@@ -26,16 +26,6 @@ type listFilesArgs struct {
 	Path string `json:"path,omitempty"`
 }
 
-type ReadFileTool struct {
-	execution ExecutionClient
-}
-
-type readFileArgs struct {
-	Path      string `json:"path"`
-	StartLine *int   `json:"start_line,omitempty"`
-	EndLine   *int   `json:"end_line,omitempty"`
-}
-
 type SearchFilesTool struct {
 	execution ExecutionClient
 }
@@ -162,120 +152,6 @@ func (t ListFilesTool) Execute(ctx context.Context, argsJSON json.RawMessage, tr
 	}
 
 	return fmt.Sprintf("Directory: %s\nEntries (%d)\n- %s", path, len(entries), strings.Join(entries, "\n- ")), nil
-}
-
-func NewReadFileTool(client ExecutionClient) Tool {
-	return ReadFileTool{execution: client}
-}
-
-func (ReadFileTool) Name() string {
-	return "read_file"
-}
-
-func (ReadFileTool) Description() string {
-	return "Read file text, optionally by line range. Returns line-numbered text and reads at most 200 lines per call."
-}
-
-func (ReadFileTool) Parameters() json.RawMessage {
-	return json.RawMessage(`{
-		"type":"object",
-		"properties":{
-			"path":{"type":"string","description":"File path to read."},
-			"start_line":{"type":"integer","minimum":1,"description":"Optional 1-based start line."},
-			"end_line":{"type":"integer","minimum":1,"description":"Optional 1-based end line."}
-		},
-		"required":["path"],
-		"additionalProperties":false
-	}`)
-}
-
-func (t ReadFileTool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
-	if t.execution == nil {
-		return "", fmt.Errorf("execution client is not configured")
-	}
-
-	var args readFileArgs
-	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return "", fmt.Errorf("decode args: %w", err)
-	}
-
-	path := strings.TrimSpace(args.Path)
-	if path == "" {
-		return "", fmt.Errorf("path is required")
-	}
-
-	params := map[string]any{"path": path}
-	startLine := 1
-	if args.StartLine != nil {
-		if *args.StartLine < 1 {
-			return "", fmt.Errorf("start_line must be >= 1")
-		}
-		startLine = *args.StartLine
-		params["start_line"] = *args.StartLine
-	}
-	if args.EndLine != nil {
-		if *args.EndLine < 1 {
-			return "", fmt.Errorf("end_line must be >= 1")
-		}
-		if *args.EndLine < startLine {
-			return "", fmt.Errorf("end_line must be >= start_line")
-		}
-		if (*args.EndLine-startLine)+1 > 200 {
-			return "", fmt.Errorf("read range too large (max 200 lines)")
-		}
-		params["end_line"] = *args.EndLine
-	}
-
-	payload, err := t.execution.Call(ctx, "READ_FILE", params, traceID)
-	if err != nil {
-		return "", fmt.Errorf("execution READ_FILE failed: %w", err)
-	}
-
-	resolvedPath, err := payloadutil.String(payload, "path")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-	requestedStartLine, err := payloadutil.Int(payload, "requested_start_line")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-	requestedEndLine, err := payloadutil.Int(payload, "requested_end_line")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-	returnedStartLine, err := payloadutil.Int(payload, "returned_start_line")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-	returnedEndLine, err := payloadutil.Int(payload, "returned_end_line")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-	totalLines, err := payloadutil.Int(payload, "total_lines")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-	content, err := payloadutil.String(payload, "content")
-	if err != nil {
-		return "", fmt.Errorf("invalid READ_FILE payload: %w", err)
-	}
-
-	var result strings.Builder
-	result.WriteString(fmt.Sprintf("File: %s\n", resolvedPath))
-	result.WriteString(fmt.Sprintf("Requested lines: %d-%d\n", requestedStartLine, requestedEndLine))
-	if returnedStartLine == 0 || returnedEndLine == 0 {
-		if totalLines == 0 {
-			result.WriteString("Returned lines: none (file is empty)\n")
-		} else {
-			result.WriteString(fmt.Sprintf("Returned lines: none (file has %d total lines)\n", totalLines))
-		}
-		result.WriteString("(no content)")
-		return result.String(), nil
-	}
-
-	result.WriteString(fmt.Sprintf("Returned lines: %d-%d of %d total\n", returnedStartLine, returnedEndLine, totalLines))
-	result.WriteString(content)
-	return result.String(), nil
 }
 
 func NewSearchFilesTool(client ExecutionClient) Tool {

@@ -50,36 +50,16 @@ func NewRSSFetchTool() Tool {
 
 func FetchRSS(ctx context.Context, rawURL string, opts RSSFetchOptions) (RSSResult, error) {
 	tool := newDefaultRSSFetchTool()
-	feedURLText := strings.TrimSpace(rawURL)
-	if feedURLText == "" {
-		return RSSResult{}, fmt.Errorf("url is required")
-	}
-	feedURL, err := url.Parse(feedURLText)
+	feedURL, err := parseRSSRequestURL(ctx, rawURL, tool.validateRequestURL)
 	if err != nil {
-		return RSSResult{}, fmt.Errorf("invalid url: %w", err)
-	}
-	if err := tool.validateRequestURL(ctx, feedURL); err != nil {
 		return RSSResult{}, err
 	}
-	maxItems := opts.MaxItems
-	if maxItems <= 0 {
-		maxItems = defaultRSSMaxItems
-	}
-	if maxItems > maxRSSMaxItems {
-		maxItems = maxRSSMaxItems
-	}
+	maxItems := normalizeRSSMaxItems(opts.MaxItems)
 	result, err := tool.fetch(ctx, feedURL)
 	if err != nil {
 		return RSSResult{}, err
 	}
-	if len(result.Items) > maxItems {
-		result.Items = result.Items[:maxItems]
-	}
-	if !opts.IncludeSummary {
-		for i := range result.Items {
-			result.Items[i].Summary = ""
-		}
-	}
+	applyRSSResultOptions(&result, maxItems, opts.IncludeSummary)
 	return result, nil
 }
 
@@ -114,43 +94,18 @@ func (t *RSSFetchTool) Execute(ctx context.Context, argsJSON json.RawMessage, _ 
 		return "", fmt.Errorf("decode args: %w", err)
 	}
 
-	feedURLText := strings.TrimSpace(args.URL)
-	if feedURLText == "" {
-		return "", fmt.Errorf("url is required")
-	}
-	feedURL, err := url.Parse(feedURLText)
+	feedURL, err := parseRSSRequestURL(ctx, args.URL, t.validateRequestURL)
 	if err != nil {
-		return "", fmt.Errorf("invalid url: %w", err)
-	}
-	if err := t.validateRequestURL(ctx, feedURL); err != nil {
 		return "", err
 	}
-
-	maxItems := args.MaxItems
-	if maxItems <= 0 {
-		maxItems = defaultRSSMaxItems
-	}
-	if maxItems > maxRSSMaxItems {
-		maxItems = maxRSSMaxItems
-	}
-
-	includeSummary := true
-	if args.IncludeSummary != nil {
-		includeSummary = *args.IncludeSummary
-	}
+	maxItems := normalizeRSSMaxItems(args.MaxItems)
+	includeSummary := resolveRSSIncludeSummary(args.IncludeSummary)
 
 	result, err := t.fetch(ctx, feedURL)
 	if err != nil {
 		return "", err
 	}
-	if len(result.Items) > maxItems {
-		result.Items = result.Items[:maxItems]
-	}
-	if !includeSummary {
-		for i := range result.Items {
-			result.Items[i].Summary = ""
-		}
-	}
+	applyRSSResultOptions(&result, maxItems, includeSummary)
 
 	encoded, err := json.Marshal(result)
 	if err != nil {
@@ -203,6 +158,60 @@ func (t *RSSFetchTool) validateRequestURL(ctx context.Context, rawURL *url.URL) 
 		validator = t.validateURL
 	}
 	return validator(ctx, rawURL)
+}
+
+func parseRSSRequestURL(
+	ctx context.Context,
+	rawURL string,
+	validator func(context.Context, *url.URL) error,
+) (*url.URL, error) {
+	feedURLText := strings.TrimSpace(rawURL)
+	if feedURLText == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+	feedURL, err := url.Parse(feedURLText)
+	if err != nil {
+		return nil, fmt.Errorf("invalid url: %w", err)
+	}
+	if validator == nil {
+		validator = validateRSSURL
+	}
+	if err := validator(ctx, feedURL); err != nil {
+		return nil, err
+	}
+	return feedURL, nil
+}
+
+func normalizeRSSMaxItems(requested int) int {
+	if requested <= 0 {
+		return defaultRSSMaxItems
+	}
+	if requested > maxRSSMaxItems {
+		return maxRSSMaxItems
+	}
+	return requested
+}
+
+func resolveRSSIncludeSummary(includeSummary *bool) bool {
+	if includeSummary == nil {
+		return true
+	}
+	return *includeSummary
+}
+
+func applyRSSResultOptions(result *internalrss.Result, maxItems int, includeSummary bool) {
+	if result == nil {
+		return
+	}
+	if len(result.Items) > maxItems {
+		result.Items = result.Items[:maxItems]
+	}
+	if includeSummary {
+		return
+	}
+	for i := range result.Items {
+		result.Items[i].Summary = ""
+	}
 }
 
 func validateRSSURL(ctx context.Context, rawURL *url.URL) error {

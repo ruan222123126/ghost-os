@@ -136,82 +136,36 @@ func buildMutationPolicy(
 	seenNames map[string]bool,
 	seenTargets map[string]bool,
 ) (MutationPolicy, error) {
-	name := strings.TrimSpace(cfg.Name)
-	sourceName := strings.TrimSpace(cfg.Source)
-	domainName := strings.TrimSpace(cfg.Domain)
-	rootMutation := strings.TrimSpace(cfg.RootMutation)
-	if name == "" {
-		return MutationPolicy{}, fmt.Errorf("graphql mutation policy name is required")
-	}
-	if sourceName == "" {
-		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q source is required", name)
-	}
-	if domainName == "" {
-		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q domain is required", name)
-	}
-	if rootMutation == "" {
-		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q root_mutation is required", name)
-	}
-	if err := validateMutationPolicyIdempotency(name, cfg); err != nil {
-		return MutationPolicy{}, err
-	}
-	if seenNames[name] {
-		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q is duplicated", name)
-	}
-	seenNames[name] = true
-
-	targetKey := mutationPolicyKey(sourceName, domainName, rootMutation)
-	if seenTargets[targetKey] {
-		return MutationPolicy{}, fmt.Errorf(
-			"graphql mutation policy for source %q domain %q root mutation %q is duplicated",
-			sourceName,
-			domainName,
-			rootMutation,
-		)
-	}
-	seenTargets[targetKey] = true
-
-	source, ok := sources[sourceName]
-	if !ok {
-		return MutationPolicy{}, fmt.Errorf(
-			"graphql mutation policy %q source %q was not found",
-			name,
-			sourceName,
-		)
-	}
-	if _, err := source.ResolveDomain(domainName); err != nil {
-		return MutationPolicy{}, fmt.Errorf("graphql mutation policy %q: %w", name, err)
-	}
-	if _, ok := source.Schema.RootMutationByName(rootMutation); !ok {
-		return MutationPolicy{}, fmt.Errorf(
-			"graphql mutation policy %q root mutation %q was not found in source %q schema snapshot",
-			name,
-			rootMutation,
-			sourceName,
-		)
-	}
-	budget, err := source.DomainBudget(domainName)
+	base, err := parseMutationPolicyBase(cfg)
 	if err != nil {
 		return MutationPolicy{}, err
 	}
-	if cfg.MaxDepth > 0 {
-		budget.MaxDepth = cfg.MaxDepth
+	if err := validateMutationPolicyIdempotency(base.Name, cfg); err != nil {
+		return MutationPolicy{}, err
 	}
-	if cfg.MaxFields > 0 {
-		budget.MaxFields = cfg.MaxFields
+	if err := markMutationPolicyName(base.Name, seenNames); err != nil {
+		return MutationPolicy{}, err
 	}
-	if cfg.MaxRootFields > 0 {
-		budget.MaxRootFields = cfg.MaxRootFields
+	if err := markMutationPolicyTarget(base, seenTargets); err != nil {
+		return MutationPolicy{}, err
 	}
-	if cfg.MaxFragments > 0 {
-		budget.MaxFragments = cfg.MaxFragments
+	source, err := resolveMutationPolicySource(base.Name, base.Source, sources)
+	if err != nil {
+		return MutationPolicy{}, err
+	}
+	if err := ensureMutationPolicyTargetExists(base, source); err != nil {
+		return MutationPolicy{}, err
+	}
+	budget, err := resolveMutationPolicyBudget(cfg, source, base.Domain)
+	if err != nil {
+		return MutationPolicy{}, err
 	}
 	return MutationPolicy{
-		Name:                    name,
+		Name:                    base.Name,
 		Description:             strings.TrimSpace(cfg.Description),
-		Source:                  sourceName,
-		Domain:                  domainName,
-		RootMutation:            rootMutation,
+		Source:                  base.Source,
+		Domain:                  base.Domain,
+		RootMutation:            base.RootMutation,
 		ApprovalRequired:        cfg.ApprovalRequired,
 		IdempotencyMode:         strings.TrimSpace(cfg.IdempotencyMode),
 		IdempotencyHeader:       strings.TrimSpace(cfg.IdempotencyHeader),

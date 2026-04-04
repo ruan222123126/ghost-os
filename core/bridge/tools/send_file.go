@@ -25,6 +25,15 @@ type sendFileArgs struct {
 	Note  string `json:"note,omitempty"`
 }
 
+type sendFileExportResult struct {
+	Filename     string
+	StoredPath   string
+	OriginalPath string
+	MIMEType     string
+	SHA256       string
+	Bytes        int
+}
+
 func NewSendFileTool(client ExecutionClient, store *artifacts.SessionArtifactStore) Tool {
 	return &SendFileTool{execution: client, store: store}
 }
@@ -57,25 +66,18 @@ func (t *SendFileTool) Execute(ctx context.Context, argsJSON json.RawMessage, tr
 	if t.store == nil {
 		return "", fmt.Errorf("artifact store is not configured")
 	}
-
-	var args sendFileArgs
-	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return "", fmt.Errorf("decode args: %w", err)
+	args, path, err := decodeSendFileArgs(argsJSON)
+	if err != nil {
+		return "", err
 	}
-	path := strings.TrimSpace(args.Path)
-	if path == "" {
-		return "", fmt.Errorf("path is required")
+	sessionID, err := resolveSendFileSessionID(ctx)
+	if err != nil {
+		return "", err
 	}
-
-	sess := SessionFromContext(ctx)
-	if sess == nil || strings.TrimSpace(sess.ID) == "" {
-		return "", fmt.Errorf("send_file requires an active session")
-	}
-
 	artifactID := buildSendFileArtifactID(traceID, ToolCallIDFromContext(ctx))
 	payload, err := t.execution.Call(ctx, "EXPORT_FILE", map[string]any{
 		"path":          path,
-		"session_id":    strings.TrimSpace(sess.ID),
+		"session_id":    sessionID,
 		"artifact_root": t.store.BaseDir(),
 		"artifact_id":   artifactID,
 		"max_bytes":     defaultSendFileMaxBytes,
@@ -83,43 +85,22 @@ func (t *SendFileTool) Execute(ctx context.Context, argsJSON json.RawMessage, tr
 	if err != nil {
 		return "", fmt.Errorf("execution EXPORT_FILE failed: %w", err)
 	}
-
-	filename, err := payloadutil.String(payload, "filename")
+	exported, err := decodeSendFileExportResult(payload)
 	if err != nil {
-		return "", fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
-	}
-	storedPath, err := payloadutil.String(payload, "stored_path")
-	if err != nil {
-		return "", fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
-	}
-	originalPath, err := payloadutil.String(payload, "original_path")
-	if err != nil {
-		return "", fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
-	}
-	mimeType, err := payloadutil.String(payload, "mime_type")
-	if err != nil {
-		return "", fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
-	}
-	sha256, err := payloadutil.String(payload, "sha256")
-	if err != nil {
-		return "", fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
-	}
-	bytesCount, err := payloadutil.Int(payload, "bytes")
-	if err != nil {
-		return "", fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+		return "", err
 	}
 
-	displayName := normalizeSendFileName(strings.TrimSpace(args.Title), filename)
+	displayName := normalizeSendFileName(strings.TrimSpace(args.Title), exported.Filename)
 	artifact := artifacts.SessionFileArtifact{
 		ArtifactID:  artifactID,
-		SessionID:   strings.TrimSpace(sess.ID),
+		SessionID:   sessionID,
 		Name:        displayName,
-		MimeType:    strings.TrimSpace(mimeType),
-		Bytes:       int64(bytesCount),
-		SHA256:      strings.TrimSpace(sha256),
-		DownloadURL: fmt.Sprintf("/api/sessions/%s/artifacts/%s", strings.TrimSpace(sess.ID), artifactID),
-		SourcePath:  strings.TrimSpace(originalPath),
-		StoredPath:  strings.TrimSpace(storedPath),
+		MimeType:    strings.TrimSpace(exported.MIMEType),
+		Bytes:       int64(exported.Bytes),
+		SHA256:      strings.TrimSpace(exported.SHA256),
+		DownloadURL: fmt.Sprintf("/api/sessions/%s/artifacts/%s", sessionID, artifactID),
+		SourcePath:  strings.TrimSpace(exported.OriginalPath),
+		StoredPath:  strings.TrimSpace(exported.StoredPath),
 		Note:        strings.TrimSpace(args.Note),
 	}
 	if err := t.store.WriteMetadata(artifact); err != nil {
@@ -135,6 +116,65 @@ func (t *SendFileTool) Execute(ctx context.Context, argsJSON json.RawMessage, tr
 		return "", err
 	}
 	return encoded, nil
+}
+
+func decodeSendFileArgs(argsJSON json.RawMessage) (sendFileArgs, string, error) {
+	var args sendFileArgs
+	if err := json.Unmarshal(argsJSON, &args); err != nil {
+		return sendFileArgs{}, "", fmt.Errorf("decode args: %w", err)
+	}
+	path := strings.TrimSpace(args.Path)
+	if path == "" {
+		return sendFileArgs{}, "", fmt.Errorf("path is required")
+	}
+	return args, path, nil
+}
+
+func resolveSendFileSessionID(ctx context.Context) (string, error) {
+	sess := SessionFromContext(ctx)
+	if sess == nil {
+		return "", fmt.Errorf("send_file requires an active session")
+	}
+	sessionID := strings.TrimSpace(sess.ID)
+	if sessionID == "" {
+		return "", fmt.Errorf("send_file requires an active session")
+	}
+	return sessionID, nil
+}
+
+func decodeSendFileExportResult(payload map[string]any) (sendFileExportResult, error) {
+	filename, err := payloadutil.String(payload, "filename")
+	if err != nil {
+		return sendFileExportResult{}, fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+	}
+	storedPath, err := payloadutil.String(payload, "stored_path")
+	if err != nil {
+		return sendFileExportResult{}, fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+	}
+	originalPath, err := payloadutil.String(payload, "original_path")
+	if err != nil {
+		return sendFileExportResult{}, fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+	}
+	mimeType, err := payloadutil.String(payload, "mime_type")
+	if err != nil {
+		return sendFileExportResult{}, fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+	}
+	sha256, err := payloadutil.String(payload, "sha256")
+	if err != nil {
+		return sendFileExportResult{}, fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+	}
+	bytesCount, err := payloadutil.Int(payload, "bytes")
+	if err != nil {
+		return sendFileExportResult{}, fmt.Errorf("invalid EXPORT_FILE payload: %w", err)
+	}
+	return sendFileExportResult{
+		Filename:     filename,
+		StoredPath:   storedPath,
+		OriginalPath: originalPath,
+		MIMEType:     mimeType,
+		SHA256:       sha256,
+		Bytes:        bytesCount,
+	}, nil
 }
 
 func buildSendFileArtifactID(traceID string, toolCallID string) string {

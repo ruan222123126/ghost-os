@@ -98,7 +98,7 @@ func touchesGraphQLUpdate(req UpdateRequest) bool {
 
 func hasRuntimeGraphQLConfig(cfg GraphQLConfig) bool {
 	return cfg.ToolRuntimeEnabled ||
-		cfg.TextSanitizeEnabled != defaultGraphQLTextSanitizeEnabled ||
+		!cfg.TextSanitizeEnabled ||
 		cfg.DefaultSource != "" ||
 		len(cfg.Sources) > 0 ||
 		len(cfg.MutationPolicies) > 0
