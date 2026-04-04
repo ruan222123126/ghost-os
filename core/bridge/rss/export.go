@@ -217,11 +217,6 @@ func (s *RSSInboxService) SetBriefingBuilder(builder RSSBriefingBuilder) {
 	}
 }
 
-func (s *RSSInboxService) SetReportBuilder(builder RSSReportBuilder) {
-	if s != nil && builder != nil {
-		s.reportBuilder = builder
-	}
-}
 
 func (s *RSSInboxService) SetNow(now func() time.Time) {
 	if s != nil && now != nil {

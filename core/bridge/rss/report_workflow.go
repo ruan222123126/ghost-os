@@ -18,14 +18,6 @@ type rssReportWorkflow struct {
 	now     func() time.Time
 }
 
-func (s *RSSInboxService) BuildAndStoreReport(
-	ctx context.Context,
-	briefing RSSBriefingResult,
-	groups []RSSInboxTopicGroup,
-	query RSSReportQuery,
-) (RSSReportResult, error) {
-	return s.reportWorkflow().BuildAndStore(ctx, briefing, groups, query)
-}
 
 func (s *RSSInboxService) reportWorkflow() rssReportWorkflow {
 	return rssReportWorkflow{

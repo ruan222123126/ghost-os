@@ -5,6 +5,17 @@ import (
 	"time"
 )
 
+const (
+	rssMatchScoreStrongTagOverlap = 2
+	rssMatchScoreWeakTagOverlap   = 1
+	rssMatchScoreHighTokenOverlap = 3
+	rssMatchScoreMidTokenOverlap  = 2
+	rssMatchScoreStrongTagBase    = 5
+	rssMatchScoreTagTokenBase     = 4
+	rssMatchScoreHighTokenBase    = 3
+	rssMatchScoreMidTokenBase     = 2
+)
+
 func newRSSAggregateGroupState(
 	item RSSInboxItem,
 	bucketStart time.Time,
@@ -72,28 +83,31 @@ func rssAggregateMatchScore(group *rssAggregateGroupState, tags []string, tokens
 	if group == nil {
 		return 0
 	}
+	tagOverlap := rssAggregateOverlapCount(group.tagCounts, tags)
+	tokenOverlap := rssAggregateOverlapCount(group.tokenCounts, tokens)
+	return rssAggregateScore(tagOverlap, tokenOverlap)
+}
 
-	tagOverlap := 0
-	for _, tag := range tags {
-		if group.tagCounts[tag] > 0 {
-			tagOverlap++
+func rssAggregateOverlapCount(counters map[string]int, values []string) int {
+	overlap := 0
+	for _, value := range values {
+		if counters[value] > 0 {
+			overlap++
 		}
 	}
-	tokenOverlap := 0
-	for _, token := range tokens {
-		if group.tokenCounts[token] > 0 {
-			tokenOverlap++
-		}
-	}
+	return overlap
+}
+
+func rssAggregateScore(tagOverlap int, tokenOverlap int) int {
 	switch {
-	case tagOverlap >= 2:
-		return 5 + tokenOverlap
-	case tagOverlap >= 1 && tokenOverlap >= 1:
-		return 4 + tokenOverlap
-	case tokenOverlap >= 3:
-		return 3 + tokenOverlap
-	case tokenOverlap >= 2:
-		return 2 + tokenOverlap
+	case tagOverlap >= rssMatchScoreStrongTagOverlap:
+		return rssMatchScoreStrongTagBase + tokenOverlap
+	case tagOverlap >= rssMatchScoreWeakTagOverlap && tokenOverlap >= rssMatchScoreWeakTagOverlap:
+		return rssMatchScoreTagTokenBase + tokenOverlap
+	case tokenOverlap >= rssMatchScoreHighTokenOverlap:
+		return rssMatchScoreHighTokenBase + tokenOverlap
+	case tokenOverlap >= rssMatchScoreMidTokenOverlap:
+		return rssMatchScoreMidTokenBase + tokenOverlap
 	default:
 		return tokenOverlap
 	}

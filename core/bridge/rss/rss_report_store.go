@@ -40,11 +40,8 @@ func NewRSSReportStore(path string) (*RSSReportStore, error) {
 }
 
 func (s *RSSReportStore) Save(report RSSReportResult, markdown string) (RSSReportResult, error) {
-	if s == nil {
-		return RSSReportResult{}, errors.New("rss report store is nil")
-	}
-	if strings.TrimSpace(markdown) == "" {
-		return RSSReportResult{}, fmt.Errorf("rss report markdown is required")
+	if err := validateRSSReportSaveInputs(s, markdown); err != nil {
+		return RSSReportResult{}, err
 	}
 
 	s.mu.Lock()
@@ -54,30 +51,15 @@ func (s *RSSReportStore) Save(report RSSReportResult, markdown string) (RSSRepor
 	if err != nil {
 		return RSSReportResult{}, err
 	}
-	normalized, err := normalizeRSSReportResult(report, s.currentTime().UTC(), filepath.Dir(s.path))
+	normalized, err := s.normalizeReportForSave(report)
 	if err != nil {
 		return RSSReportResult{}, err
 	}
 	if err := writeRSSReportMarkdown(normalized.MarkdownPath, markdown); err != nil {
 		return RSSReportResult{}, err
 	}
-
-	replaced := false
-	for i := range snapshot.Reports {
-		if snapshot.Reports[i].ID != normalized.ID {
-			continue
-		}
-		snapshot.Reports[i] = normalized
-		replaced = true
-		break
-	}
-	if !replaced {
-		snapshot.Reports = append(snapshot.Reports, normalized)
-	}
-	sortRSSReports(snapshot.Reports)
-	if len(snapshot.Reports) > defaultRSSReportRetention {
-		snapshot.Reports = snapshot.Reports[:defaultRSSReportRetention]
-	}
+	snapshot.Reports = upsertRSSReport(snapshot.Reports, normalized)
+	snapshot.Reports = normalizeRSSReportSnapshot(snapshot.Reports)
 	if err := s.saveLocked(snapshot); err != nil {
 		return RSSReportResult{}, err
 	}
@@ -143,6 +125,39 @@ func (s *RSSReportStore) currentTime() time.Time {
 		return s.now()
 	}
 	return time.Now()
+}
+
+func validateRSSReportSaveInputs(store *RSSReportStore, markdown string) error {
+	if store == nil {
+		return errors.New("rss report store is nil")
+	}
+	if strings.TrimSpace(markdown) == "" {
+		return fmt.Errorf("rss report markdown is required")
+	}
+	return nil
+}
+
+func (s *RSSReportStore) normalizeReportForSave(report RSSReportResult) (RSSReportResult, error) {
+	return normalizeRSSReportResult(report, s.currentTime().UTC(), filepath.Dir(s.path))
+}
+
+func upsertRSSReport(items []RSSReportResult, report RSSReportResult) []RSSReportResult {
+	for i := range items {
+		if items[i].ID != report.ID {
+			continue
+		}
+		items[i] = report
+		return items
+	}
+	return append(items, report)
+}
+
+func normalizeRSSReportSnapshot(items []RSSReportResult) []RSSReportResult {
+	sortRSSReports(items)
+	if len(items) <= defaultRSSReportRetention {
+		return items
+	}
+	return items[:defaultRSSReportRetention]
 }
 
 func (s *RSSReportStore) RootDir() string {

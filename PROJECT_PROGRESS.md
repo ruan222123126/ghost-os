@@ -41,6 +41,7 @@
 - task kind 归一化已去掉“非法值静默回落到 `agent_message`”的 fallback：`task_kind` 为空时仍默认视为 `agent_message`，但未知值现在会在校验阶段显式报 `unsupported task_kind`，执行器默认分支也不会再把坏输入当作 agent task 运行。
 - GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
 - RSS report 生成链路已去掉静默 fallback：agent 报告空回或失败时不再落回模板化“机会点 / 风险与约束 / 接下来可能会怎样”段落，而是显式记录 `report_error`；report prompt 也已收口到更精简的章节契约，避免重复凑段。
+- `core/bridge/rss` 已完成一轮死代码与复杂度收口：删除仓库内未调用的公开入口 `BuildAndStoreReport` 与 `SetReportBuilder`；同时将 `rssInboxListQuery.matches`、`RSSReportStore.Save`、`rssAggregateMatchScore` 拆分为小函数，降低圈复杂度并保持原有行为与测试通过。
 - GraphQL 文本工具调用运行时的协议失败已改为“可修复的结构化反馈”：解析/校验错误会写入 `[TOOL_TAG_RESULT]` 风格的 `status=error`、`kind`、`expected/received`、`hint/example` 等字段，并在同次 agent run 的下一轮 completion 中作为显式失败反馈供模型自修正。
 - 文本工具调用协议已在后端硬切换为 `<t:ID>JSON</t>`：可见工具按每轮 ID 映射，执行链路使用字符级状态机串行解析 `<t:...>` 标签；旧 `mutation/query` 文本调用会直接返回结构化协议错误，不再兼容。
 - Tag 文本协议的内部回执前缀已统一改名为 `[TOOL_TAG_RESULT]`，并同步到后端解析清洗、Codex 续跑边界判断、前端 internal note 过滤与相关测试，避免继续暴露 GraphQL 语义残留。

@@ -31,32 +31,62 @@ func newRSSInboxListQuery(filter RSSInboxListFilter) rssInboxListQuery {
 }
 
 func (q rssInboxListQuery) matches(item RSSInboxItem) bool {
-	if q.feedID != "" && item.FeedID != q.feedID {
+	if !q.matchesFeedID(item) {
 		return false
 	}
-	if q.importance != "" && item.Importance != q.importance {
+	if !q.matchesImportance(item) {
 		return false
 	}
-	if q.tag != "" && !containsRSSInboxTag(item.Tags, q.tag) {
+	if !q.matchesTag(item) {
 		return false
 	}
-	if !q.savedAfter.IsZero() && item.SavedAt.Before(q.savedAfter) {
+	if !q.matchesSavedAfter(item) {
 		return false
 	}
-	if !q.savedBefore.IsZero() && item.SavedAt.After(q.savedBefore) {
+	if !q.matchesSavedBefore(item) {
 		return false
 	}
-	if !q.publishedAfter.IsZero() {
-		if item.PublishedAt.IsZero() || item.PublishedAt.Before(q.publishedAfter) {
-			return false
-		}
+	if !q.matchesPublishedAfter(item) {
+		return false
 	}
-	if !q.publishedBefore.IsZero() {
-		if item.PublishedAt.IsZero() || item.PublishedAt.After(q.publishedBefore) {
-			return false
-		}
+	if !q.matchesPublishedBefore(item) {
+		return false
 	}
 	return true
+}
+
+func (q rssInboxListQuery) matchesFeedID(item RSSInboxItem) bool {
+	return q.feedID == "" || item.FeedID == q.feedID
+}
+
+func (q rssInboxListQuery) matchesImportance(item RSSInboxItem) bool {
+	return q.importance == "" || item.Importance == q.importance
+}
+
+func (q rssInboxListQuery) matchesTag(item RSSInboxItem) bool {
+	return q.tag == "" || containsRSSInboxTag(item.Tags, q.tag)
+}
+
+func (q rssInboxListQuery) matchesSavedAfter(item RSSInboxItem) bool {
+	return q.savedAfter.IsZero() || !item.SavedAt.Before(q.savedAfter)
+}
+
+func (q rssInboxListQuery) matchesSavedBefore(item RSSInboxItem) bool {
+	return q.savedBefore.IsZero() || !item.SavedAt.After(q.savedBefore)
+}
+
+func (q rssInboxListQuery) matchesPublishedAfter(item RSSInboxItem) bool {
+	if q.publishedAfter.IsZero() {
+		return true
+	}
+	return !item.PublishedAt.IsZero() && !item.PublishedAt.Before(q.publishedAfter)
+}
+
+func (q rssInboxListQuery) matchesPublishedBefore(item RSSInboxItem) bool {
+	if q.publishedBefore.IsZero() {
+		return true
+	}
+	return !item.PublishedAt.IsZero() && !item.PublishedAt.After(q.publishedBefore)
 }
 
 func listRSSInboxItems(items []RSSInboxItem, query rssInboxListQuery) []RSSInboxItem {
