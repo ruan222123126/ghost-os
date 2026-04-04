@@ -89,6 +89,7 @@
 - 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
 - GraphQL 文本协议的遗留死代码已完成一轮清理：删除未接线的文档预算校验模块、schema render 辅助模块，以及一组未引用的协议错误构造器/工具 ID 辅助函数，`core/bridge/tools` 的 staticcheck(U1000) 不再报告这批不可达路径。
 - `core/bridge/tools` 的 Tag 文本执行路径已继续收口：`parseToolTagCalls` 抽到独立状态机解析器并拆分辅助函数，`codex_cli.Execute` 改为“解析请求 -> 构造 action/params -> 执行”三段，降低圈复杂度并保持现有参数/错误语义。
+- `core/bridge/tools` 本轮继续完成硬性度量收口：`task_manage.go` 与 `tool_search.go` 分别拆出 `types/helpers` 与 `match` 侧文件，主文件已回落至 300 行以内，行为与现有测试保持一致。
 - 已完成一次后端 Agent 工具能力全量实测，并沉淀到 `docs/backend-agent-tool-capability-2026-03-28.md`：在临时测试配置（`max_turns=1`、memory 关闭、全工具 allowlist）下 15 个工具均完成至少一次真实调用；其中 `send_file`、`computer_use` 归类为需调试，`codex_cli`、`browser_control` 受前置配置/会话约束。
 - `screen_action` 截图链路已切到文件引用：`SCREEN_CAPTURE` 改为返回 `image_path`，Bridge 侧截图 artifact 改为基于文件流复制与流式哈希，不再经过 `image_base64 -> decode -> 写文件` 这条高内存路径；`OCR_IMAGE` / `TEMPLATE_MATCH_IMAGE` 的入参也已改为传 `image_path`。
 - native binary 默认定位已改为“部署优先 sidecar 路径”（`native`、`bin/native` 及其上级变体），不再内置 `drivers/native/target/*` 这类仓库相对路径；若需继续按 monorepo 构建目录定位，必须显式通过 `native_binary_candidates` / `GHOST_NATIVE_BINARY_CANDIDATES` 配置。`screen_action` / `computer_use` 对截图 payload 的显式契约校验保持不变：缺失 `image_path` 或命中旧 `image_base64` 字段会直接报结构化错误，不再只给 `empty image_path`。
@@ -124,6 +125,8 @@
 - CLI 启动入口与 profiler 已补齐集成回归：新增 `apps/cli/tests/startup_router_test.rs`，覆盖版本快捷路由（`--version`/`-v`/`-V`）、startup profiler 文件输出、profiler 非法环境变量错误、`--message` 空文本错误路径。
 - CLI REPL 已补上首轮早输入预填充：在初始化 `rustyline` 前短窗口捕获 TTY 输入并注入首轮 `readline_with_initial`，只做预填充不自动发送；非 TTY 自动禁用，Ctrl+C/Ctrl+D 主行为保持与现有路径一致。
 - Android 已接入部分会话与展示能力，但整体成熟度低于 Web 与 CLI。
+- Android 会话层已完成一次高耦合拆分：`ChatViewModel.kt` 拆成 actions/connection/runtime/history/message-state 多文件协作，连接观察、流事件状态机、历史映射与消息更新不再堆在单一文件；`ChatScreen.kt` 也拆分为主屏、历史抽屉、消息气泡和格式化工具文件，相关文件均已回落到 300 行内。
+- Web 流式控制层已完成一次可维护性拆分：`useChatStreamController.ts` 拆分为 `chatStreamControllerSession/types/events`，主 hook 保持编排职责，事件状态机与 Tool-Tag 细节下沉，相关文件均已回落到 300 行内。
 - Android 层 CI 门禁已补齐：新增 `.github/workflows/android-check.yml`，对 `apps/android/**` 变更执行 `lintDebug`、`testDebugUnitTest` 与 `assembleDebug`，避免 Android 代码在无同级自动化检查下直接进入主分支。
 
 ### Execution: `drivers/native`
