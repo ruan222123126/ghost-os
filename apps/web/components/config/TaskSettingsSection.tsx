@@ -5,7 +5,7 @@ import { TaskEditorForm } from '@/components/config/TaskEditorForm';
 import { TaskList } from '@/components/config/TaskList';
 import { ignorePromise } from '@/lib/errors';
 import type { TaskEditorMode, TaskEditorState } from '@/lib/configTasks';
-import type { TaskPayload } from '@/lib/types';
+import type { AgentMessageTaskPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
 
 interface TaskSettingsSectionProps {
   tasks: TaskPayload[];
@@ -14,8 +14,10 @@ interface TaskSettingsSectionProps {
   editorMode: TaskEditorMode;
   editor: TaskEditorState;
   onRefresh: () => Promise<void>;
-  onBeginCreate: () => void;
-  onEdit: (task: TaskPayload) => void;
+  onBeginCreateTextTask: () => void;
+  onEditTextTask: (task: AgentMessageTaskPayload) => void;
+  onOpenWorkflowCreate: () => void;
+  onOpenWorkflowEdit: (task: WorkflowTaskPayload) => void;
   onChangeEditor: (patch: Partial<TaskEditorState>) => void;
   onSubmit: () => Promise<boolean>;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
@@ -32,8 +34,10 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
     editorMode,
     editor,
     onRefresh,
-    onBeginCreate,
-    onEdit,
+    onBeginCreateTextTask,
+    onEditTextTask,
+    onOpenWorkflowCreate,
+    onOpenWorkflowEdit,
     onChangeEditor,
     onSubmit,
     onSetEnabled,
@@ -45,14 +49,18 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
   const controlsDisabled = loading || saving;
   const sessionOptions = useMemo(() => buildSessionOptions(tasks), [tasks]);
 
-  const handleBeginCreate = () => {
-    onBeginCreate();
+  const handleBeginCreateTextTask = () => {
+    onBeginCreateTextTask();
     setEditorOpen(true);
   };
 
-  const handleEdit = (task: TaskPayload) => {
-    onEdit(task);
-    setEditorOpen(task.task_kind === 'agent_message');
+  const handleEditTextTask = (task: AgentMessageTaskPayload) => {
+    onEditTextTask(task);
+    setEditorOpen(true);
+  };
+
+  const handleEditWorkflowTask = (task: WorkflowTaskPayload) => {
+    onOpenWorkflowEdit(task);
   };
 
   const handleCancel = () => {
@@ -103,10 +111,18 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
           <button
             type="button"
             disabled={controlsDisabled}
-            onClick={handleBeginCreate}
+            onClick={handleBeginCreateTextTask}
             className="rounded-full bg-[#111111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Add
+            New Text Task
+          </button>
+          <button
+            type="button"
+            disabled={controlsDisabled}
+            onClick={onOpenWorkflowCreate}
+            className="rounded-full border border-[#111111] px-4 py-2 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            New Workflow
           </button>
         </div>
       </header>
@@ -115,7 +131,8 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
         tasks={tasks}
         loading={loading}
         controlsDisabled={controlsDisabled}
-        onEdit={handleEdit}
+        onEditTextTask={handleEditTextTask}
+        onEditWorkflowTask={handleEditWorkflowTask}
         onSetEnabled={onSetEnabled}
         onRunNow={onRunNow}
         onDelete={onDelete}

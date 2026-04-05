@@ -3,7 +3,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChatInput } from '@/components/ChatInput';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { MessageList } from '@/components/message/MessageList';
@@ -12,9 +12,16 @@ import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
 import { useSessions } from '@/hooks/useSessions';
 import { ignorePromise } from '@/lib/errors';
+import { parseSettingsQuery, stripSettingsQuery } from '@/lib/settingsQuery';
 import type { ChatSendInput } from '@/lib/types';
+import { useRouter } from 'next/navigation';
+
+export const dynamic = 'force-dynamic';
 
 const HomePage: FC = () => {
+  const router = useRouter();
+  const [queryString, setQueryString] = useState('');
+  const settingsTabFromQuery = parseSettingsQuery(queryString);
   const [showConfig, setShowConfig] = useState(false);
   const {
     sessions,
@@ -33,6 +40,7 @@ const HomePage: FC = () => {
     streamingTools,
     pendingQuestions,
     loading,
+    historySyncing,
     historyLoading,
     loadingOlderHistory,
     chatError,
@@ -65,6 +73,24 @@ const HomePage: FC = () => {
   const inputDisabled = configLoading || historyLoading || !config || hasPendingQuestion;
   const topStatusVisible = configLoading || (Boolean(configError) && !showConfig);
 
+  useEffect(() => {
+    const syncLocationSearch = () => {
+      setQueryString(window.location.search);
+    };
+    syncLocationSearch();
+    window.addEventListener('popstate', syncLocationSearch);
+
+    return () => {
+      window.removeEventListener('popstate', syncLocationSearch);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (settingsTabFromQuery === 'tasks') {
+      setShowConfig(true);
+    }
+  }, [settingsTabFromQuery]);
+
   const handleSendChatMessage = useCallback(
     async (input: ChatSendInput) => {
       await sendChatMessage(input);
@@ -95,6 +121,26 @@ const HomePage: FC = () => {
     createNewSession();
     clearMessages();
   }, [clearMessages, createNewSession]);
+
+  const handleCloseConfig = useCallback(() => {
+    setShowConfig(false);
+    if (!settingsTabFromQuery) {
+      return;
+    }
+    const nextQuery = stripSettingsQuery(queryString);
+    setQueryString(nextQuery);
+    router.replace(nextQuery.length > 0 ? `/${nextQuery}` : '/');
+  }, [queryString, router, settingsTabFromQuery]);
+
+  const handleOpenWorkflowCreate = useCallback(() => {
+    setShowConfig(false);
+    router.push('/workflow/new');
+  }, [router]);
+
+  const handleOpenWorkflowEdit = useCallback((taskID: string) => {
+    setShowConfig(false);
+    router.push(`/workflow/${encodeURIComponent(taskID)}`);
+  }, [router]);
 
   return (
     <>
@@ -127,6 +173,7 @@ const HomePage: FC = () => {
 
           <section className="chat panel">
             {historyLoading ? <div className="status-line info">Loading session history…</div> : null}
+            {historySyncing && !historyLoading ? <div className="status-line info">Syncing latest messages…</div> : null}
             {configError && !showConfig ? <div className="status-line error">{configError}</div> : null}
 
             <MessageList
@@ -164,11 +211,14 @@ const HomePage: FC = () => {
 
       <ConfigPanel
         open={showConfig}
+        initialTab={settingsTabFromQuery ?? 'provider'}
         loading={configLoading}
         saving={savingConfig}
         config={config}
         error={configError}
-        onClose={() => setShowConfig(false)}
+        onClose={handleCloseConfig}
+        onOpenWorkflowCreate={handleOpenWorkflowCreate}
+        onOpenWorkflowEdit={(task) => handleOpenWorkflowEdit(task.id)}
         onSave={saveConfig}
         onReload={refreshConfig}
       />

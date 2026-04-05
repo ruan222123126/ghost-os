@@ -1,114 +1,59 @@
 import {
   emptyTaskEditorState,
   taskCreateRequestFromEditor,
+  taskUpdateRequestFromEditor,
 } from '@/lib/configTasks';
-import type { TaskPayload } from '@/lib/types';
 
 describe('lib/configTasks', () => {
-  it('builds workflow task from frontend text tasks in selected session', () => {
+  it('builds text task create payload', () => {
     const editor = {
       ...emptyTaskEditorState,
-      taskKind: 'workflow' as const,
-      workflowSessionId: 'session-1',
+      message: 'Daily summary',
+      sessionId: 'session-1',
       scheduleMode: 'interval' as const,
       intervalSeconds: '120',
     };
 
-    const tasks: TaskPayload[] = [
-      {
-        id: 'text-1',
-        task_kind: 'agent_message',
-        message: 'step one',
-        session_id: 'session-1',
-        schedule_type: 'interval',
-        interval_seconds: 60,
-        enabled: true,
-        created_at: '2026-04-05T07:00:00Z',
-        updated_at: '2026-04-05T07:00:00Z',
-      },
-      {
-        id: 'text-2',
-        task_kind: 'agent_message',
-        message: 'step two',
-        session_id: 'session-1',
-        schedule_type: 'interval',
-        interval_seconds: 60,
-        enabled: true,
-        created_at: '2026-04-05T07:01:00Z',
-        updated_at: '2026-04-05T07:01:00Z',
-      },
-    ];
+    const payload = taskCreateRequestFromEditor(editor);
 
-    const request = taskCreateRequestFromEditor(editor, tasks);
-
-    expect(request).toEqual({
-      task_kind: 'workflow',
+    expect(payload).toEqual({
+      task_kind: 'agent_message',
+      message: 'Daily summary',
+      session_id: 'session-1',
       interval_seconds: 120,
-      workflow: {
-        nodes: [
-          { id: 'start-node', type: 'start' },
-          { id: 'agent-node-1', type: 'agent', agent: { message: 'step one' } },
-          { id: 'agent-node-2', type: 'agent', agent: { message: 'step two' } },
-          { id: 'end-node', type: 'end' },
-        ],
-        edges: [
-          { from_node_id: 'start-node', to_node_id: 'agent-node-1' },
-          { from_node_id: 'agent-node-1', to_node_id: 'agent-node-2' },
-          { from_node_id: 'agent-node-2', to_node_id: 'end-node' },
-        ],
-      },
+      runtime_overrides: undefined,
     });
   });
 
-  it('throws when selected session has no text tasks', () => {
+  it('builds update payload with empty runtime override object when disabled', () => {
     const editor = {
       ...emptyTaskEditorState,
-      taskKind: 'workflow' as const,
-      workflowSessionId: 'missing-session',
+      message: 'Weekly report',
       scheduleMode: 'cron' as const,
-      cronExpr: '*/5 * * * *',
+      cronExpr: '0 9 * * 1',
+      runtimeOverridesEnabled: false,
     };
 
-    expect(() => taskCreateRequestFromEditor(editor, [])).toThrow(
-      'no frontend tasks found for this session id',
-    );
+    const payload = taskUpdateRequestFromEditor(editor);
+
+    expect(payload).toEqual({
+      task_kind: 'agent_message',
+      message: 'Weekly report',
+      session_id: '',
+      cron_expr: '0 9 * * 1',
+      runtime_overrides: {},
+    });
   });
 
-  it('allows empty workflow session id and matches empty-session text tasks', () => {
+  it('throws on invalid interval value', () => {
     const editor = {
       ...emptyTaskEditorState,
-      taskKind: 'workflow' as const,
-      workflowSessionId: '',
-      scheduleMode: 'interval' as const,
-      intervalSeconds: '60',
+      message: 'Invalid interval',
+      intervalSeconds: '0',
     };
 
-    const tasks: TaskPayload[] = [
-      {
-        id: 'text-empty-session',
-        task_kind: 'agent_message',
-        message: 'run with new session each time',
-        session_id: '',
-        schedule_type: 'interval',
-        interval_seconds: 60,
-        enabled: true,
-        created_at: '2026-04-05T07:00:00Z',
-        updated_at: '2026-04-05T07:00:00Z',
-      },
-    ];
-
-    const request = taskCreateRequestFromEditor(editor, tasks);
-
-    expect(request).toMatchObject({
-      task_kind: 'workflow',
-      interval_seconds: 60,
-      workflow: {
-        nodes: [
-          { id: 'start-node', type: 'start' },
-          { id: 'agent-node-1', type: 'agent', agent: { message: 'run with new session each time' } },
-          { id: 'end-node', type: 'end' },
-        ],
-      },
-    });
+    expect(() => taskCreateRequestFromEditor(editor)).toThrow(
+      'interval seconds must be a positive integer',
+    );
   });
 });

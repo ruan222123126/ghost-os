@@ -17,6 +17,10 @@ export async function listTasks(): Promise<TaskPayload[]> {
   return requestJSON('/api/tasks', {}, parseTaskPayloadList);
 }
 
+export async function getTask(id: string): Promise<TaskPayload> {
+  return requestJSON(`/api/tasks/${encodeURIComponent(id)}`, {}, parseTaskPayload);
+}
+
 export async function createTask(input: TaskCreateRequest): Promise<TaskPayload> {
   return requestJSON('/api/tasks', {
     method: 'POST',

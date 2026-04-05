@@ -26,7 +26,7 @@ interface UseConfigTasksResult {
   editorMode: TaskEditorMode;
   editor: TaskEditorState;
   refreshTasks: () => Promise<void>;
-  beginCreateTask: () => void;
+  beginCreateTextTask: () => void;
   editTask: (task: TaskPayload) => void;
   updateEditor: (patch: Partial<TaskEditorState>) => void;
   submitTask: () => Promise<boolean>;
@@ -109,7 +109,7 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
   const submitTask = useCallback(async (): Promise<boolean> => {
     const action = editorMode === 'edit'
       ? () => updateTask(editingTaskID, taskUpdateRequestFromEditor(editor))
-      : () => createTask(taskCreateRequestFromEditor(editor, tasks));
+      : () => createTask(taskCreateRequestFromEditor(editor));
     const task = await runMutation(action, 'failed to save task');
     if (!task) {
       return false;
@@ -118,7 +118,7 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     upsertTask(task);
     resetEditor();
     return true;
-  }, [editor, editorMode, editingTaskID, resetEditor, runMutation, tasks, upsertTask]);
+  }, [editor, editorMode, editingTaskID, resetEditor, runMutation, upsertTask]);
 
   const setTaskEnabled = useCallback(async (id: string, enabled: boolean) => {
     const payload: Pick<TaskUpdateRequest, 'enabled'> = { enabled };
@@ -154,7 +154,7 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
 
   const editTask = useCallback((task: TaskPayload) => {
     if (!isAgentMessageTask(task)) {
-      setTaskError('workflow editing is not available yet');
+      setTaskError('text task editor only supports agent_message tasks');
       return;
     }
     setEditorMode('edit');
@@ -171,7 +171,7 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     editorMode,
     editor,
     refreshTasks,
-    beginCreateTask: resetEditor,
+    beginCreateTextTask: resetEditor,
     editTask,
     updateEditor,
     submitTask,

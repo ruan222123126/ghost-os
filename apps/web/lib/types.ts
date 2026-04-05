@@ -1,11 +1,22 @@
 // Web UI types plus API contracts generated from core/shared/schema.json.
 
 import type {
+  AgentMessageTaskCreateRequest as SharedAgentMessageTaskCreateRequest,
+  AgentMessageTaskPayload as SharedAgentMessageTaskPayload,
   AskHumanOption,
   ProviderConfig,
   SessionFileContent as SharedSessionFileContent,
   SessionImageContent as SharedSessionImageContent,
   SessionMessage as SharedSessionMessage,
+  TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
+  WorkflowDefinition as SharedWorkflowDefinition,
+  WorkflowEdge as SharedWorkflowEdge,
+  WorkflowInputVariable as SharedWorkflowInputVariable,
+  WorkflowNode as SharedWorkflowNode,
+  WorkflowTaskCreateRequest as SharedWorkflowTaskCreateRequest,
+  WorkflowTaskPayload as SharedWorkflowTaskPayload,
+  TaskPayload as SharedTaskPayload,
+  TaskUpdateRequest as SharedTaskUpdateRequest,
 } from '@/lib/envelope.generated';
 
 export type {
@@ -66,6 +77,7 @@ export interface AssistantChatMessage {
   id: string;
   kind: 'assistant';
   content: string;
+  inProgress?: boolean;
 }
 
 export interface SystemChatMessage {
@@ -205,3 +217,40 @@ export interface RSSBriefing {
   task_id?: string;
   highlights: RSSBriefingHighlight[];
 }
+
+export type TaskPayload = SharedTaskPayload;
+export type AgentMessageTaskPayload = SharedAgentMessageTaskPayload;
+export type WorkflowTaskPayload = SharedWorkflowTaskPayload;
+export type TaskRuntimeOverrides = SharedTaskRuntimeOverrides;
+export type WorkflowDefinition = SharedWorkflowDefinition;
+export type WorkflowNode = SharedWorkflowNode;
+export type WorkflowEdge = SharedWorkflowEdge;
+export type WorkflowInputVariable = SharedWorkflowInputVariable;
+
+export interface TextTaskCreateRequest extends Omit<SharedAgentMessageTaskCreateRequest, 'task_kind' | 'trace_id'> {
+  task_kind: 'agent_message';
+}
+
+export interface WorkflowTaskCreateRequest extends Omit<
+  SharedWorkflowTaskCreateRequest,
+  'trace_id'
+> {
+  task_kind: 'workflow';
+}
+
+export type TaskCreateRequest = TextTaskCreateRequest | WorkflowTaskCreateRequest;
+
+export interface TaskUpdateRequest extends Pick<
+  SharedTaskUpdateRequest,
+  | 'message'
+  | 'session_id'
+  | 'runtime_overrides'
+  | 'interval_seconds'
+  | 'cron_expr'
+  | 'enabled'
+  | 'task_kind'
+  | 'workflow'
+> {
+}
+
+export type TextTaskUpdateRequest = TaskUpdateRequest;

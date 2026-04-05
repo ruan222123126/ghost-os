@@ -2,16 +2,16 @@
 
 import type { KeyboardEvent } from 'react';
 import { ignorePromise } from '@/lib/errors';
-import type { AgentMessageTaskPayload, TaskPayload } from '@/lib/types';
+import type { AgentMessageTaskPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
 
 const TASK_SKELETON_COUNT = 3;
-type WorkflowTaskPayload = Extract<TaskPayload, { task_kind: 'workflow' }>;
 
 interface TaskListProps {
   tasks: TaskPayload[];
   loading: boolean;
   controlsDisabled: boolean;
-  onEdit: (task: TaskPayload) => void;
+  onEditTextTask: (task: AgentMessageTaskPayload) => void;
+  onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
   onRunNow: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -20,14 +20,15 @@ interface TaskListProps {
 interface TaskCardProps {
   task: TaskPayload;
   controlsDisabled: boolean;
-  onEdit: (task: TaskPayload) => void;
+  onEditTextTask: (task: AgentMessageTaskPayload) => void;
+  onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
   onRunNow: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 export function TaskList(props: TaskListProps) {
-  const { tasks, loading, controlsDisabled, onEdit, onSetEnabled, onRunNow, onDelete } = props;
+  const { tasks, loading, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
 
   if (loading) {
     return (
@@ -57,7 +58,8 @@ export function TaskList(props: TaskListProps) {
           key={task.id}
           task={task}
           controlsDisabled={controlsDisabled}
-          onEdit={onEdit}
+          onEditTextTask={onEditTextTask}
+          onEditWorkflowTask={onEditWorkflowTask}
           onSetEnabled={onSetEnabled}
           onRunNow={onRunNow}
           onDelete={onDelete}
@@ -68,19 +70,19 @@ export function TaskList(props: TaskListProps) {
 }
 
 function TaskCard(props: TaskCardProps) {
-  const { task, controlsDisabled, onEdit, onSetEnabled, onRunNow, onDelete } = props;
+  const { task, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
   const toggleLabel = task.enabled ? 'Disable' : 'Enable';
-  const editable = task.task_kind === 'agent_message';
+  const editable = task.task_kind === 'agent_message' || task.task_kind === 'workflow';
 
   return (
     <article
       className="group relative flex items-center justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]"
       onClick={() => {
         if (editable) {
-          onEdit(task);
+          handleTaskEdit(task, onEditTextTask, onEditWorkflowTask);
         }
       }}
-      onKeyDown={(event) => handleCardKeyDown(event, task, editable, onEdit)}
+      onKeyDown={(event) => handleCardKeyDown(event, task, editable, onEditTextTask, onEditWorkflowTask)}
       role={editable ? 'button' : undefined}
       tabIndex={editable ? 0 : -1}
     >
@@ -89,7 +91,7 @@ function TaskCard(props: TaskCardProps) {
           <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
             {task.enabled ? 'Enabled' : 'Disabled'}
           </span>
-          <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+          <span className="inline-flex whitespace-nowrap rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
             {formatTaskKind(task)}
           </span>
           <span className="font-mono text-[11px] text-[#737373]">{task.id}</span>
@@ -131,12 +133,12 @@ function TaskCard(props: TaskCardProps) {
           onClick={(event) => {
             event.stopPropagation();
             if (editable) {
-              onEdit(task);
+              handleTaskEdit(task, onEditTextTask, onEditWorkflowTask);
             }
           }}
           className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
           aria-label={`Edit task ${task.id}`}
-          title={editable ? 'Edit task' : 'Workflow editor is not available yet'}
+          title={editable ? 'Edit task' : 'Edit unavailable'}
         >
           <EditIcon />
         </button>
@@ -183,7 +185,7 @@ function formatSecondaryLine(task: TaskPayload): string {
     return `Session: ${task.session_id?.trim() ? task.session_id : '(new each run)'}`;
   }
 
-  return 'Session: workflow-internal (from selected session tasks)';
+  return 'Session: workflow-managed';
 }
 
 function formatRuntimeOverrides(task: AgentMessageTaskPayload): string {
@@ -213,7 +215,8 @@ function handleCardKeyDown(
   event: KeyboardEvent<HTMLElement>,
   task: TaskPayload,
   editable: boolean,
-  onEdit: (task: TaskPayload) => void,
+  onEditTextTask: (task: AgentMessageTaskPayload) => void,
+  onEditWorkflowTask: (task: WorkflowTaskPayload) => void,
 ) {
   if (!editable) {
     return;
@@ -223,7 +226,21 @@ function handleCardKeyDown(
   }
 
   event.preventDefault();
-  onEdit(task);
+  handleTaskEdit(task, onEditTextTask, onEditWorkflowTask);
+}
+
+function handleTaskEdit(
+  task: TaskPayload,
+  onEditTextTask: (task: AgentMessageTaskPayload) => void,
+  onEditWorkflowTask: (task: WorkflowTaskPayload) => void,
+) {
+  if (task.task_kind === 'agent_message') {
+    onEditTextTask(task);
+    return;
+  }
+  if (task.task_kind === 'workflow') {
+    onEditWorkflowTask(task);
+  }
 }
 
 function handleTaskDelete(id: string, onDelete: (id: string) => Promise<void>) {
