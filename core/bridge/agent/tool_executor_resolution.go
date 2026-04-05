@@ -29,10 +29,12 @@ type resolvedToolCall struct {
 }
 
 type toolCallOutcome struct {
-	executed bool
-	stopErr  error
-	output   string
-	meta     tools.ExecuteMeta
+	executed                  bool
+	stopErr                   error
+	output                    string
+	meta                      tools.ExecuteMeta
+	browserSessionInvalid     bool
+	browserSessionInvalidInfo string
 }
 
 func (e toolCallExecutor) startToolCall(ctx context.Context, traceID string, turn int, indexedCall indexedToolCall) (toolCallStep, error) {

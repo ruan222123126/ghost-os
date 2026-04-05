@@ -32,6 +32,7 @@ type agentRunState struct {
 	strictToolCallProtocol bool
 
 	consecutiveNonExecutableToolCallTurns int
+	consecutiveBrowserSessionInvalid      int
 }
 
 func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunState, error) {

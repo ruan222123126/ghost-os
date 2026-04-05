@@ -205,7 +205,7 @@ func (state *agentRunState) finalizeToolCallTurn(
 		state.consecutiveNonExecutableToolCallTurns = 0
 	}
 	if state.consecutiveNonExecutableToolCallTurns < maxConsecutiveNonExecutableToolCallTurns {
-		return nil
+		return state.updateBrowserSessionInvalidPolicy(ctx, turn, stats)
 	}
 	return state.terminalRunError(ctx, turn, repeatedNonExecutableToolCallError(state.traceID, turn))
 }

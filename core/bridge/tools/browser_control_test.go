@@ -12,11 +12,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"ghost-os/bridge/session"
 )
 
 const tinyPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg=="
 
 func TestBrowserControlConnectWithWSEndpoint(t *testing.T) {
+	mockBrowserWSEndpointFetcher(
+		t,
+		func(base string, _ time.Duration) (string, error) {
+			return strings.Replace(base, "http://", "ws://", 1) + "/devtools/browser/test", nil
+		},
+	)
 	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
 
 	output, err := tool.Execute(
@@ -27,7 +36,7 @@ func TestBrowserControlConnectWithWSEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
-	defer tool.popSession("session-a").close()
+	defer closeBrowserSessionInScope(t, tool, browserSessionGlobalScope, "session-a")
 
 	var result map[string]any
 	if err := json.Unmarshal([]byte(output), &result); err != nil {
@@ -38,6 +47,9 @@ func TestBrowserControlConnectWithWSEndpoint(t *testing.T) {
 	}
 	if result["ws_endpoint"] != "ws://127.0.0.1:9222/devtools/browser/test" {
 		t.Fatalf("unexpected ws endpoint: %+v", result)
+	}
+	if result["debug_port"] != float64(9222) {
+		t.Fatalf("unexpected debug_port: %+v", result)
 	}
 }
 
@@ -77,6 +89,12 @@ func TestLaunchEndpointDefaultsToLocalDebugPort(t *testing.T) {
 }
 
 func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
+	mockBrowserWSEndpointFetcher(
+		t,
+		func(base string, _ time.Duration) (string, error) {
+			return "", fmt.Errorf("fetch %s/json/version failed: dial tcp 127.0.0.1:9222: connect: connection refused", base)
+		},
+	)
 	var callCount int
 	tool := NewBrowserControlTool(mockExecutionClient{
 		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
@@ -89,6 +107,9 @@ func TestBrowserControlLaunchCommandNotFoundReturnsEarly(t *testing.T) {
 			}
 			if params["command"] != "google-chrome --headless --remote-debugging-port=9222 &" {
 				t.Fatalf("unexpected command payload: %+v", params)
+			}
+			if params["display_mode"] != "background" {
+				t.Fatalf("unexpected display_mode payload: %+v", params)
 			}
 			return nil, fmt.Errorf("command failed: bash: line 1: google-chrome: command not found")
 		},
@@ -127,6 +148,40 @@ func TestBrowserLaunchPayloadUsesExplicitCommand(t *testing.T) {
 	if payload["debug_port"] != 9222 {
 		t.Fatalf("unexpected debug_port payload: %+v", payload)
 	}
+	if payload["display_mode"] != "background" {
+		t.Fatalf("unexpected display_mode payload: %+v", payload)
+	}
+}
+
+func TestBrowserLaunchPayloadUsesForegroundDisplayMode(t *testing.T) {
+	payload, err := browserLaunchPayload(
+		map[string]any{
+			"debug_port":   9222,
+			"display_mode": "foreground",
+		},
+		"http://127.0.0.1:9222",
+	)
+	if err != nil {
+		t.Fatalf("browserLaunchPayload returned error: %v", err)
+	}
+	if payload["display_mode"] != "foreground" {
+		t.Fatalf("unexpected display_mode payload: %+v", payload)
+	}
+}
+
+func TestBrowserLaunchPayloadRejectsInvalidDisplayMode(t *testing.T) {
+	_, err := browserLaunchPayload(
+		map[string]any{
+			"display_mode": "invalid",
+		},
+		"http://127.0.0.1:9222",
+	)
+	if err == nil {
+		t.Fatal("expected display_mode validation error")
+	}
+	if !strings.Contains(err.Error(), "display_mode must be one of") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestBrowserLaunchPayloadRequiresEndpointPortWhenAutoLaunching(t *testing.T) {
@@ -157,9 +212,10 @@ func TestBrowserControlCloseMissingSession(t *testing.T) {
 
 func TestBrowserControlSessionFromParamsUsesSingleSessionWhenIDOmitted(t *testing.T) {
 	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
-	tool.storeSession(&browserSession{id: "session-a"})
+	tool.storeSession(browserSessionGlobalScope, &browserSession{id: "session-a"})
+	defer closeBrowserSessionInScope(t, tool, browserSessionGlobalScope, "session-a")
 
-	session, err := tool.sessionFromParams(map[string]any{})
+	session, err := tool.sessionFromParams(context.Background(), map[string]any{})
 	if err != nil {
 		t.Fatalf("sessionFromParams returned error: %v", err)
 	}
@@ -168,16 +224,35 @@ func TestBrowserControlSessionFromParamsUsesSingleSessionWhenIDOmitted(t *testin
 	}
 }
 
-func TestBrowserControlSessionFromParamsErrorsWhenMultipleSessionsAndIDOmitted(t *testing.T) {
+func TestBrowserControlSessionFromParamsUsesActiveSessionWhenMultipleSessionsExist(t *testing.T) {
 	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
-	tool.storeSession(&browserSession{id: "session-a"})
-	tool.storeSession(&browserSession{id: "session-b"})
+	tool.storeSession(browserSessionGlobalScope, &browserSession{id: "session-a"})
+	tool.storeSession(browserSessionGlobalScope, &browserSession{id: "session-b"})
+	defer closeBrowserSessionInScope(t, tool, browserSessionGlobalScope, "session-a")
+	defer closeBrowserSessionInScope(t, tool, browserSessionGlobalScope, "session-b")
 
-	_, err := tool.sessionFromParams(map[string]any{})
-	if err == nil {
-		t.Fatal("expected error when session_id is omitted and multiple sessions exist")
+	session, err := tool.sessionFromParams(context.Background(), map[string]any{})
+	if err != nil {
+		t.Fatalf("sessionFromParams returned error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "session_id is required when multiple browser sessions exist") {
+	if session.id != "session-b" {
+		t.Fatalf("expected active session-b, got %q", session.id)
+	}
+}
+
+func TestBrowserControlSessionIDCannotCrossConversationScope(t *testing.T) {
+	tool := NewBrowserControlTool(nil).(*BrowserControlTool)
+	scopeA := "session-a"
+	scopeB := "session-b"
+	tool.storeSession(scopeA, &browserSession{id: "browser-a"})
+	defer closeBrowserSessionInScope(t, tool, scopeA, "browser-a")
+
+	ctx := WithSession(context.Background(), &session.Session{ID: scopeB})
+	_, err := tool.sessionFromParams(ctx, map[string]any{"session_id": "browser-a"})
+	if err == nil {
+		t.Fatal("expected scope mismatch error")
+	}
+	if !strings.Contains(err.Error(), "does not belong to current conversation session") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -238,4 +313,20 @@ type browserControlRoundTripper func(*http.Request) (*http.Response, error)
 
 func (rt browserControlRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rt(req)
+}
+
+func closeBrowserSessionInScope(
+	t *testing.T,
+	tool *BrowserControlTool,
+	scopeKey string,
+	sessionID string,
+) {
+	t.Helper()
+	session, err := tool.popSession(scopeKey, sessionID)
+	if err != nil {
+		return
+	}
+	if session != nil {
+		session.close()
+	}
 }
