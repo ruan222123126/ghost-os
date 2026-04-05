@@ -95,8 +95,8 @@ export function TaskEditorForm(props: TaskEditorFormProps) {
             </FormField>
           ) : (
             <FormField
-              label="Session ID"
-              description="Workflow will be generated from frontend text tasks in this session."
+              label="Session ID (Optional)"
+              description="Workflow will be generated from frontend text tasks in this session. Leave empty to generate a new session ID on each run."
             >
               <input
                 list="task-session-options"

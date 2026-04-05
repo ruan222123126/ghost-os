@@ -73,4 +73,42 @@ describe('lib/configTasks', () => {
       'no frontend tasks found for this session id',
     );
   });
+
+  it('allows empty workflow session id and matches empty-session text tasks', () => {
+    const editor = {
+      ...emptyTaskEditorState,
+      taskKind: 'workflow' as const,
+      workflowSessionId: '',
+      scheduleMode: 'interval' as const,
+      intervalSeconds: '60',
+    };
+
+    const tasks: TaskPayload[] = [
+      {
+        id: 'text-empty-session',
+        task_kind: 'agent_message',
+        message: 'run with new session each time',
+        session_id: '',
+        schedule_type: 'interval',
+        interval_seconds: 60,
+        enabled: true,
+        created_at: '2026-04-05T07:00:00Z',
+        updated_at: '2026-04-05T07:00:00Z',
+      },
+    ];
+
+    const request = taskCreateRequestFromEditor(editor, tasks);
+
+    expect(request).toMatchObject({
+      task_kind: 'workflow',
+      interval_seconds: 60,
+      workflow: {
+        nodes: [
+          { id: 'start-node', type: 'start' },
+          { id: 'agent-node-1', type: 'agent', agent: { message: 'run with new session each time' } },
+          { id: 'end-node', type: 'end' },
+        ],
+      },
+    });
+  });
 });

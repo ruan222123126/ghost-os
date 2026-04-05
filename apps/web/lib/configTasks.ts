@@ -106,10 +106,6 @@ function workflowTaskCreateRequestFromEditor(
   tasks: TaskPayload[],
 ): TaskCreateRequest {
   const sessionID = editor.workflowSessionId.trim();
-  if (sessionID.length === 0) {
-    throw new Error('workflow session id is required');
-  }
-
   const messages = workflowMessagesFromTasks(tasks, sessionID);
 
   return {
