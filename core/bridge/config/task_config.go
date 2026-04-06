@@ -2,16 +2,7 @@ package config
 
 import (
 	"fmt"
-
-	"ghost-os/bridge/tools"
 )
-
-var workflowToolDenylist = map[string]string{
-	tools.AskHumanToolName:   "requires an active session",
-	tools.ToolSearchToolName: "requires an active session",
-	"send_file":              "requires an active session",
-	"computer_use":           "requires an active session",
-}
 
 func buildTaskConfig(fileCfg bridgeFileConfig, env envSnapshot) (TaskConfig, error) {
 	allowlist, err := resolveWorkflowToolAllowlist(fileCfg, env)

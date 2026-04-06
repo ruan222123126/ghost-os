@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
-	"ghost-os/bridge/tools"
 )
 
 func toolNameListOrEnvWithEnv(raw []string, env envSnapshot, envName string) []string {
@@ -57,9 +55,9 @@ func normalizeConfiguredToolNames(names []string) []string {
 }
 
 func validConfiguredToolNames() map[string]bool {
-	valid := make(map[string]bool, len(tools.GetToolMetadata()))
-	for _, item := range tools.GetToolMetadata() {
-		name := strings.TrimSpace(item.Name)
+	valid := make(map[string]bool, len(configuredToolCatalog))
+	for _, raw := range configuredToolCatalog {
+		name := strings.TrimSpace(raw)
 		if name != "" {
 			valid[name] = true
 		}
