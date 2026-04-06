@@ -41,6 +41,7 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 	traceID := resolveTraceID(req.TraceID, r)
 	params, err := json.Marshal(agentParams{
+		Mode:      req.Mode,
 		Message:   req.Message,
 		Images:    req.Images,
 		SessionID: req.SessionID,
@@ -92,8 +93,9 @@ func (t *transport) handleQuestionAnswerStream(w http.ResponseWriter, r *http.Re
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Trace-ID", traceID)
 
-	sink := newSSEEventSink(w, flusher, traceID)
-	_, _, _ = t.service.ExecuteHumanAnswerAndResumeStreamAction(r.Context(), req, traceID, sink)
+	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
+	_, sessionID, err := t.service.ExecuteHumanAnswerAndResumeStreamAction(r.Context(), req, traceID, sink)
+	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
 }
 
 func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
@@ -130,12 +132,14 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.Header().Set("X-Trace-ID", traceID)
 
-	sink := newSSEEventSink(w, flusher, traceID)
-	_, _, _ = t.service.ExecuteAgentStreamAction(r.Context(), agentParams{
+	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
+	_, sessionID, err := t.service.ExecuteAgentStreamAction(r.Context(), agentParams{
+		Mode:      req.Mode,
 		Message:   req.Message,
 		Images:    req.Images,
 		SessionID: req.SessionID,
 	}, traceID, sink)
+	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
 }
 
 // dispatchAction 统一调用 service 并按 action 语义输出响应 envelope。
