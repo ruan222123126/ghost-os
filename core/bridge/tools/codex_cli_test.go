@@ -3,118 +3,112 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 )
 
-func TestCodexCLIToolRequiresPersistent(t *testing.T) {
-	tool := NewCodexCLITool(mockExecutionClient{
-		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
-			return map[string]any{}, nil
-		},
-	}, false)
-
-	_, err := tool.Execute(context.Background(), json.RawMessage(`{"op":"start","prompt":"hello"}`), "trace-1")
-	if err == nil {
-		t.Fatal("expected native_persistent error")
-	}
-}
-
 func TestCodexCLIToolStartDefaults(t *testing.T) {
-	var gotAction string
-	var gotParams map[string]any
+	tool := newTestCodexCLITool(t)
+	var gotName string
+	var gotArgs []string
+	tool.commandFactory = func(name string, args ...string) *exec.Cmd {
+		gotName = name
+		gotArgs = append([]string(nil), args...)
+		return codexCLIHelperCommand("session_done")
+	}
 
-	tool := NewCodexCLITool(mockExecutionClient{
-		callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
-			gotAction = action
-			gotParams = params
-			return map[string]any{
-				"status":     "running",
-				"command_id": "cmd-1",
-			}, nil
-		},
-	}, true)
-
-	output, err := tool.Execute(context.Background(), json.RawMessage(`{"op":"start","prompt":"hello"}`), "trace-start")
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"op":"start","prompt":"hello","wait_ms_before_async":1}`),
+		"trace-start",
+	)
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
-	if gotAction != "CODEX_CLI_START" {
-		t.Fatalf("unexpected action: got %q", gotAction)
+	if gotName != codexCLIExecutable {
+		t.Fatalf("unexpected command name: got %q", gotName)
 	}
-	if gotParams["op"] != "start" {
-		t.Fatalf("unexpected op param: %+v", gotParams)
+	assertContainsArgSequence(t, gotArgs, []string{"exec", "hello"})
+	assertContainsArgSequence(t, gotArgs, []string{"--full-auto"})
+	assertContainsArgSequence(t, gotArgs, []string{"--skip-git-repo-check"})
+	assertContainsArgSequence(t, gotArgs, []string{"--json"})
+	assertContainsArgSequence(t, gotArgs, []string{"-m", defaultCodexCLIModel})
+	if containsArg(gotArgs, "-C") {
+		t.Fatalf("unexpected -C in default args: %v", gotArgs)
 	}
-	if gotParams["prompt"] != "hello" {
-		t.Fatalf("unexpected prompt param: %+v", gotParams)
-	}
-	if gotParams["model"] != "gpt-5.4" {
-		t.Fatalf("unexpected model default: %+v", gotParams)
-	}
-	if gotParams["full_auto"] != true {
-		t.Fatalf("unexpected full_auto default: %+v", gotParams)
-	}
-	if gotParams["skip_git_repo_check"] != true {
-		t.Fatalf("unexpected skip_git_repo_check default: %+v", gotParams)
-	}
-	if gotParams["json"] != true {
-		t.Fatalf("unexpected json default: %+v", gotParams)
-	}
-	if gotParams["wait_ms_before_async"] != defaultCodexCLIWaitMSBeforeAsync {
-		t.Fatalf("unexpected wait_ms_before_async default: %+v", gotParams)
+	if containsArg(gotArgs, "-o") {
+		t.Fatalf("unexpected -o in default args: %v", gotArgs)
 	}
 
-	var decoded codexCLIResult
-	if err := json.Unmarshal([]byte(output), &decoded); err != nil {
-		t.Fatalf("decode output: %v", err)
+	result := decodeCodexCLIResult(t, output)
+	if result.CommandID == "" {
+		t.Fatalf("expected command_id in output: %+v", result)
 	}
-	if decoded.Status != "running" || decoded.CommandID != "cmd-1" {
-		t.Fatalf("unexpected output: %+v", decoded)
+	if result.Status != "running" && result.Status != "done" {
+		t.Fatalf("unexpected status: %+v", result)
 	}
 }
 
-func TestCodexCLIToolStatusDefaults(t *testing.T) {
-	var gotAction string
-	var gotParams map[string]any
+func TestCodexCLIToolStartAndStatusFlow(t *testing.T) {
+	tool := newTestCodexCLITool(t)
+	tool.commandFactory = func(_ string, _ ...string) *exec.Cmd {
+		return codexCLIHelperCommand("session_done")
+	}
 
-	tool := NewCodexCLITool(mockExecutionClient{
-		callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
-			gotAction = action
-			gotParams = params
-			return map[string]any{
-				"status":     "running",
-				"command_id": "cmd-2",
-			}, nil
-		},
-	}, true)
+	startOutput, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"op":"start","prompt":"hi","wait_ms_before_async":1}`),
+		"trace-start",
+	)
+	if err != nil {
+		t.Fatalf("start returned error: %v", err)
+	}
+	startResult := decodeCodexCLIResult(t, startOutput)
+	if startResult.CommandID == "" {
+		t.Fatalf("missing command_id: %+v", startResult)
+	}
 
-	_, err := tool.Execute(context.Background(), json.RawMessage(`{"op":"status","session_id":"cmd-2"}`), "trace-status")
+	statusOutput, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(fmt.Sprintf(`{"op":"status","session_id":"%s","wait_duration_seconds":1}`, startResult.CommandID)),
+		"trace-status",
+	)
+	if err != nil {
+		t.Fatalf("status returned error: %v", err)
+	}
+	statusResult := decodeCodexCLIResult(t, statusOutput)
+	if statusResult.Status != "done" {
+		t.Fatalf("expected done status, got %+v", statusResult)
+	}
+	if statusResult.CommandID != startResult.CommandID {
+		t.Fatalf("command_id mismatch: start=%q status=%q", startResult.CommandID, statusResult.CommandID)
+	}
+	if statusResult.ExitCode == nil || *statusResult.ExitCode != 0 {
+		t.Fatalf("expected exit_code=0, got %+v", statusResult)
+	}
+}
+
+func TestCodexCLIToolStatusUnknownCommand(t *testing.T) {
+	tool := newTestCodexCLITool(t)
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"op":"status","session_id":"missing","wait_duration_seconds":1}`),
+		"trace-status",
+	)
 	if err != nil {
 		t.Fatalf("execute returned error: %v", err)
 	}
-	if gotAction != "CODEX_CLI_STATUS" {
-		t.Fatalf("unexpected action: got %q", gotAction)
-	}
-	if gotParams["session_id"] != "cmd-2" {
-		t.Fatalf("unexpected status params: %+v", gotParams)
-	}
-	if _, ok := gotParams["command_id"]; ok {
-		t.Fatalf("unexpected command_id param: %+v", gotParams)
-	}
-	if gotParams["wait_duration_seconds"] != defaultCodexCLIWaitDurationSeconds {
-		t.Fatalf("unexpected wait_duration_seconds default: %+v", gotParams)
-	}
-	if gotParams["output_character_count"] != defaultCodexCLIOutputChars {
-		t.Fatalf("unexpected output_character_count default: %+v", gotParams)
+	result := decodeCodexCLIResult(t, output)
+	if result.Status != "error" || result.Message != "command not found" {
+		t.Fatalf("unexpected status output: %+v", result)
 	}
 }
 
 func TestCodexCLIToolValidatesArgs(t *testing.T) {
-	tool := NewCodexCLITool(mockExecutionClient{
-		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
-			return map[string]any{}, nil
-		},
-	}, true)
-
+	tool := NewCodexCLITool(nil, false)
 	cases := []string{
 		`{"op":"start"}`,
 		`{"op":"resume","prompt":"hi"}`,
@@ -129,4 +123,77 @@ func TestCodexCLIToolValidatesArgs(t *testing.T) {
 			t.Fatalf("expected error for args: %s", raw)
 		}
 	}
+}
+
+func TestCodexCLIHelperProcess(t *testing.T) {
+	if os.Getenv("GO_WANT_CODEX_CLI_HELPER") != "1" {
+		return
+	}
+	switch os.Getenv("GO_CODEX_CLI_HELPER_MODE") {
+	case "session_done":
+		_, _ = fmt.Fprintln(os.Stdout, `{"session_id":"sess-helper-1"}`)
+		_, _ = fmt.Fprintln(os.Stdout, "helper output")
+		os.Exit(0)
+	default:
+		_, _ = fmt.Fprintln(os.Stderr, "unknown helper mode")
+		os.Exit(2)
+	}
+}
+
+func newTestCodexCLITool(t *testing.T) *CodexCLITool {
+	t.Helper()
+	tool, ok := NewCodexCLITool(nil, false).(*CodexCLITool)
+	if !ok {
+		t.Fatal("expected *CodexCLITool")
+	}
+	return tool
+}
+
+func decodeCodexCLIResult(t *testing.T, output string) codexCLIResult {
+	t.Helper()
+	var result codexCLIResult
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("decode output failed: %v", err)
+	}
+	return result
+}
+
+func codexCLIHelperCommand(mode string) *exec.Cmd {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestCodexCLIHelperProcess$")
+	cmd.Env = append(os.Environ(),
+		"GO_WANT_CODEX_CLI_HELPER=1",
+		"GO_CODEX_CLI_HELPER_MODE="+mode,
+	)
+	return cmd
+}
+
+func assertContainsArgSequence(t *testing.T, args []string, sequence []string) {
+	t.Helper()
+	if len(sequence) == 0 {
+		return
+	}
+	for index := 0; index <= len(args)-len(sequence); index++ {
+		if matchesArgSequence(args[index:index+len(sequence)], sequence) {
+			return
+		}
+	}
+	t.Fatalf("sequence %v not found in args: %v", sequence, args)
+}
+
+func matchesArgSequence(actual []string, expected []string) bool {
+	for index := range expected {
+		if strings.TrimSpace(actual[index]) != strings.TrimSpace(expected[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func containsArg(args []string, target string) bool {
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == target {
+			return true
+		}
+	}
+	return false
 }

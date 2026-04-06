@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"strings"
-
-	"ghost-os/bridge/tools/internal/payloadutil"
 )
 
 const (
@@ -19,11 +18,17 @@ const (
 	defaultCodexCLIWaitMSBeforeAsync   = 3000
 	defaultCodexCLIWaitDurationSeconds = 300
 	defaultCodexCLIOutputChars         = 200
+	codexCLIExecutable                 = "codex"
 )
 
+type CodexProjectRootResolver func() (string, error)
+
 type CodexCLITool struct {
-	execution        ExecutionClient
-	nativePersistent bool
+	manager            *codexCLICommandManager
+	allowedReadPaths   []string
+	allowedWritePaths  []string
+	resolveProjectRoot CodexProjectRootResolver
+	commandFactory     func(name string, args ...string) *exec.Cmd
 }
 
 type codexCLIArgs struct {
@@ -51,9 +56,11 @@ type codexCLIResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
-// NewCodexCLITool creates the codex_cli tool. It requires native_persistent=true.
-func NewCodexCLITool(client ExecutionClient, nativePersistent bool) Tool {
-	return &CodexCLITool{execution: client, nativePersistent: nativePersistent}
+func NewCodexCLITool(_ ExecutionClient, _ bool) Tool {
+	return &CodexCLITool{
+		manager:        newCodexCLICommandManager(),
+		commandFactory: exec.Command,
+	}
 }
 
 func (CodexCLITool) Name() string {
@@ -61,7 +68,7 @@ func (CodexCLITool) Name() string {
 }
 
 func (CodexCLITool) Description() string {
-	return "Run codex start/resume/fork asynchronously and poll status. Requires native_persistent=true. For status, pass the command_id (or session_id) via session_id."
+	return "Run codex start/resume/fork asynchronously and poll status. For status, pass the command_id (or session_id) via session_id."
 }
 
 func (CodexCLITool) Parameters() json.RawMessage {
@@ -86,39 +93,28 @@ func (CodexCLITool) Parameters() json.RawMessage {
 	}`)
 }
 
-func (t *CodexCLITool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
-	if err := t.validateExecutionConfig(); err != nil {
-		return "", err
-	}
+func (t *CodexCLITool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {
 	request, err := parseCodexCLIRequest(argsJSON)
 	if err != nil {
 		return "", err
 	}
-
-	payload, err := t.execution.Call(ctx, request.Action, request.Params, traceID)
-	if err != nil {
-		return marshalCodexCLIResult(codexCLIResult{
-			Status:     "error",
-			Message:    err.Error(),
-			OutputPath: request.OutputPath,
-		})
-	}
-
-	result, err := codexCLIResultFromPayload(payload, request.OutputPath)
-	if err != nil {
-		return "", err
-	}
+	result := t.executeRequest(ctx, request)
 	return marshalCodexCLIResult(result)
 }
 
-func (t *CodexCLITool) validateExecutionConfig() error {
-	if t == nil || t.execution == nil {
-		return fmt.Errorf("execution client is not configured")
+func (t *CodexCLITool) executeRequest(ctx context.Context, request codexCLIRequest) codexCLIResult {
+	switch request.Action {
+	case "CODEX_CLI_START":
+		return t.executeStart(ctx, request)
+	case "CODEX_CLI_STATUS":
+		return t.executeStatus(ctx, request)
+	default:
+		return codexCLIResult{
+			Status:     "error",
+			Message:    fmt.Sprintf("unsupported action: %s", request.Action),
+			OutputPath: strings.TrimSpace(request.OutputPath),
+		}
 	}
-	if !t.nativePersistent {
-		return fmt.Errorf("codex_cli requires native_persistent=true")
-	}
-	return nil
 }
 
 func isCodexCLIOperation(op string) bool {
@@ -143,69 +139,6 @@ func normalizedNonNegativeInt(value int, fallback int, field string) (int, error
 	}
 	if value == 0 {
 		return fallback, nil
-	}
-	return value, nil
-}
-
-func codexCLIResultFromPayload(payload map[string]any, fallbackOutputPath string) (codexCLIResult, error) {
-	status, err := payloadutil.String(payload, "status")
-	if err != nil {
-		return codexCLIResult{}, err
-	}
-	commandID, err := optionalStringPayload(payload, "command_id")
-	if err != nil {
-		return codexCLIResult{}, err
-	}
-	sessionID, err := optionalStringPayload(payload, "session_id")
-	if err != nil {
-		return codexCLIResult{}, err
-	}
-	outputTail, err := optionalStringPayload(payload, "output_tail")
-	if err != nil {
-		return codexCLIResult{}, err
-	}
-	outputPath, err := optionalStringPayload(payload, "output_path")
-	if err != nil {
-		return codexCLIResult{}, err
-	}
-	message, err := optionalStringPayload(payload, "message")
-	if err != nil {
-		return codexCLIResult{}, err
-	}
-	var exitCode *int
-	if raw, ok := payload["exit_code"]; ok {
-		if raw == nil {
-			exitCode = nil
-		} else if value, ok := payloadutil.NumericToInt(raw); ok {
-			exitCode = &value
-		} else {
-			return codexCLIResult{}, fmt.Errorf("invalid payload: exit_code must be an integer")
-		}
-	}
-
-	if outputPath == "" {
-		outputPath = strings.TrimSpace(fallbackOutputPath)
-	}
-
-	return codexCLIResult{
-		Status:     strings.TrimSpace(status),
-		CommandID:  strings.TrimSpace(commandID),
-		SessionID:  strings.TrimSpace(sessionID),
-		ExitCode:   exitCode,
-		OutputTail: outputTail,
-		OutputPath: outputPath,
-		Message:    strings.TrimSpace(message),
-	}, nil
-}
-
-func optionalStringPayload(payload map[string]any, field string) (string, error) {
-	raw, ok := payload[field]
-	if !ok {
-		return "", nil
-	}
-	value, ok := raw.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid payload: %s must be a string", field)
 	}
 	return value, nil
 }

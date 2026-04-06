@@ -1,8 +1,6 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 mod action_router;
-mod browser_actions;
-mod codex_cli;
 mod display_scale;
 mod file_actions;
 mod framing;
@@ -142,8 +140,6 @@ fn serve_persistent_session<R: Read, W: Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> Result<(), String> {
-    let mut state = action_router::PersistentState::new();
-
     loop {
         let request = match framing::read_frame(reader) {
             Ok(request) => request,
@@ -159,13 +155,9 @@ fn serve_persistent_session<R: Read, W: Write>(
             Err(framing::ReadFrameError::Protocol(message)) => return Err(message),
         };
 
-        let response = action_router::dispatch_with_state(
-            &request.action,
-            &request.params,
-            &request.trace_id,
-            &mut state,
-        )
-        .with_request_id(request.request_id.as_deref());
+        let response =
+            action_router::dispatch_action(&request.action, &request.params, &request.trace_id)
+                .with_request_id(request.request_id.as_deref());
 
         framing::write_frame(writer, &response)?;
     }
