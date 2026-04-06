@@ -11,31 +11,33 @@ import (
 
 type AgentExecutorFunc = agentExecutorFunc
 type AgentStreamExecutorFunc = agentStreamExecutorFunc
+type SessionStore = session.Store
+type StreamSink = streaming.Sink
 
 type Service struct {
 	inner *bridgeService
 }
 
-func NewService(store *ConfigStore, sessionStore *session.Store, executor AgentExecutorFunc) *Service {
+func NewService(store *ConfigStore, sessionStore *SessionStore, executor AgentExecutorFunc) *Service {
 	return &Service{inner: newBridgeService(store, sessionStore, executor)}
 }
 
 func NewServiceWithStreamExecutor(
 	store *ConfigStore,
-	sessionStore *session.Store,
+	sessionStore *SessionStore,
 	executor AgentExecutorFunc,
 	streamExecutor AgentStreamExecutorFunc,
 ) *Service {
 	return &Service{inner: newBridgeServiceWithStreamExecutor(store, sessionStore, executor, streamExecutor)}
 }
 
-func NewSessionStreamBroadcastSink(sink streaming.Sink, hub *SessionPushHub) streaming.Sink {
+func NewSessionStreamBroadcastSink(sink StreamSink, hub *SessionPushHub) StreamSink {
 	return newSessionStreamBroadcastSink(sink, hub)
 }
 
 func NewSessionTurnRunnerAdapter(
 	store *ConfigStore,
-	sessionStore *session.Store,
+	sessionStore *SessionStore,
 	executor AgentExecutorFunc,
 	streamExecutor AgentStreamExecutorFunc,
 ) SessionTurnRunner {
@@ -56,7 +58,7 @@ func (s *Service) ConfigStore() *ConfigStore {
 	return s.inner.configStore
 }
 
-func (s *Service) SessionStore() *session.Store {
+func (s *Service) SessionStore() *SessionStore {
 	if s == nil || s.inner == nil {
 		return nil
 	}

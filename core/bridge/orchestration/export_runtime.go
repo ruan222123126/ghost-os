@@ -6,11 +6,13 @@ import (
 )
 
 type RuntimeDependencies = agentRuntimeDependencies
+type RuntimeCompleter = agent.Completer
+type RuntimeToolRegistry = tools.Registry
 
 func NewRuntimeDependencies(
 	cfg Config,
-	client agent.Completer,
-	registry *tools.Registry,
+	client RuntimeCompleter,
+	registry *RuntimeToolRegistry,
 	systemPrompt string,
 	cleanup func(),
 ) RuntimeDependencies {

@@ -1,11 +1,7 @@
 package transport
 
 import (
-	"ghost-os/bridge/agent"
 	bridgeorchestration "ghost-os/bridge/orchestration"
-	"ghost-os/bridge/session"
-	"ghost-os/bridge/streaming"
-	"ghost-os/bridge/tools"
 )
 
 const (
@@ -53,6 +49,10 @@ type sessionPushHub = bridgeorchestration.SessionPushHub
 type agentExecutorFunc = bridgeorchestration.AgentExecutorFunc
 type agentStreamExecutorFunc = bridgeorchestration.AgentStreamExecutorFunc
 type agentRuntimeDependencies = bridgeorchestration.RuntimeDependencies
+type runtimeCompleter = bridgeorchestration.RuntimeCompleter
+type runtimeToolRegistry = bridgeorchestration.RuntimeToolRegistry
+type sessionStore = bridgeorchestration.SessionStore
+type streamSink = bridgeorchestration.StreamSink
 type bridgeService = bridgeorchestration.Service
 
 func validateBusRequest(req apiRequest) error {
@@ -63,13 +63,13 @@ func newSessionPushHub() *sessionPushHub {
 	return bridgeorchestration.NewSessionPushHub()
 }
 
-func newSessionStreamBroadcastSink(sink streaming.Sink, hub *sessionPushHub) streaming.Sink {
+func newSessionStreamBroadcastSink(sink streamSink, hub *sessionPushHub) streamSink {
 	return bridgeorchestration.NewSessionStreamBroadcastSink(sink, hub)
 }
 
 func newSessionTurnRunnerAdapter(
 	store *ConfigStore,
-	sessionStore *session.Store,
+	sessionStore *sessionStore,
 	executor agentExecutorFunc,
 	streamExecutor agentStreamExecutorFunc,
 ) bridgeorchestration.SessionTurnRunner {
@@ -78,21 +78,21 @@ func newSessionTurnRunnerAdapter(
 
 func newRuntimeDependencies(
 	cfg Config,
-	client agent.Completer,
-	registry *tools.Registry,
+	client runtimeCompleter,
+	registry *runtimeToolRegistry,
 	systemPrompt string,
 	cleanup func(),
 ) agentRuntimeDependencies {
 	return bridgeorchestration.NewRuntimeDependencies(cfg, client, registry, systemPrompt, cleanup)
 }
 
-func newBridgeService(store *ConfigStore, sessionStore *session.Store, executor agentExecutorFunc) *bridgeService {
+func newBridgeService(store *ConfigStore, sessionStore *sessionStore, executor agentExecutorFunc) *bridgeService {
 	return bridgeorchestration.NewService(store, sessionStore, executor)
 }
 
 func newBridgeServiceWithStreamExecutor(
 	store *ConfigStore,
-	sessionStore *session.Store,
+	sessionStore *sessionStore,
 	executor agentExecutorFunc,
 	streamExecutor agentStreamExecutorFunc,
 ) *bridgeService {

@@ -31,6 +31,8 @@ type RSSReportStore = bridgerss.RSSReportStore
 type RSSInboxStore = bridgerss.RSSInboxStore
 type RSSReportQuery = bridgerss.RSSReportQuery
 type RSSReportResult = bridgerss.RSSReportResult
+type RSSFeedStore = rsssubscriptions.FeedStore
+type RSSBriefingCompleter = llm.Completer
 
 var (
 	ErrRSSInboxItemNotFound = bridgerss.ErrRSSInboxItemNotFound
@@ -53,11 +55,11 @@ func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) 
 	return bridgerss.NewRSSInboxServiceFromConfig(store.Inner())
 }
 
-func NewRSSInboxService(feedStore *rsssubscriptions.FeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg Config) *RSSInboxService {
+func NewRSSInboxService(feedStore *RSSFeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg Config) *RSSInboxService {
 	return bridgerss.NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
 }
 
-func NewLLMRSSBriefingBuilder(client llm.Completer, cfg Config) RSSBriefingBuilder {
+func NewLLMRSSBriefingBuilder(client RSSBriefingCompleter, cfg Config) RSSBriefingBuilder {
 	return bridgerss.NewLLMRSSBriefingBuilder(client, cfg)
 }
 
