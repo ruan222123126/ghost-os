@@ -130,6 +130,9 @@ func registerTaskActions(service *bridgeService) {
 	registerAction(service, busActionTaskList, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
 		return service.executeTaskListAction(taskListScopeUser, traceID)
 	})
+	registerAction(service, busActionTaskSystemList, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
+		return service.executeTaskListAction(taskListScopeSystem, traceID)
+	})
 	registerAction(service, busActionTaskGet, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskGetAction(params, traceID)
 	})
