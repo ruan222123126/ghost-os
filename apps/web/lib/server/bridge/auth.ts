@@ -1,65 +1,5 @@
-import { readFile } from 'fs/promises';
-import { homedir } from 'os';
-import { join } from 'path';
-
-const DEFAULT_BRIDGE_CONFIG_PATH = join(homedir(), '.ghost-os', 'config.toml');
-
-function resolveConfigPath(rawPath: string | undefined): string {
-  const configuredPath = rawPath?.trim();
-  if (!configuredPath) {
-    return DEFAULT_BRIDGE_CONFIG_PATH;
-  }
-  if (configuredPath === '~') {
-    return homedir();
-  }
-  if (configuredPath.startsWith('~/')) {
-    return join(homedir(), configuredPath.slice(2));
-  }
-  return configuredPath;
-}
-
-function parseTomlString(raw: string): string | undefined {
-  const doubleQuoted = raw.match(/^"((?:[^"\\]|\\.)*)"$/);
-  if (doubleQuoted) {
-    try {
-      return JSON.parse(`"${doubleQuoted[1]}"`) as string;
-    } catch {
-      return doubleQuoted[1];
-    }
-  }
-
-  const singleQuoted = raw.match(/^'([^']*)'$/);
-  if (singleQuoted) {
-    return singleQuoted[1];
-  }
-}
-
-function parseBridgeTokenFromConfig(raw: string): string | undefined {
-  for (const line of raw.split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) {
-      continue;
-    }
-
-    const match = trimmed.match(/^api_token\s*=\s*(.+?)\s*(?:#.*)?$/);
-    if (!match) {
-      continue;
-    }
-
-    const token = parseTomlString(match[1].trim())?.trim();
-    if (token) {
-      return token;
-    }
-  }
-}
-
-async function loadBridgeTokenFromConfig(): Promise<string | undefined> {
-  try {
-    const raw = await readFile(resolveConfigPath(process.env.GHOST_CONFIG_PATH), 'utf8');
-    return parseBridgeTokenFromConfig(raw);
-  } catch {
-    return undefined;
-  }
+function hasAuthHeaders(headers: Headers): boolean {
+  return headers.has('X-API-Token') || headers.has('Authorization');
 }
 
 function forwardedAuthHeaders(request?: Request): Headers | undefined {
@@ -81,7 +21,7 @@ function forwardedAuthHeaders(request?: Request): Headers | undefined {
 
 export async function resolveBridgeHeaders(headers: HeadersInit | undefined, request?: Request): Promise<Headers> {
   const merged = new Headers(headers);
-  if (merged.has('X-API-Token') || merged.has('Authorization')) {
+  if (hasAuthHeaders(merged)) {
     return merged;
   }
 
@@ -93,7 +33,7 @@ export async function resolveBridgeHeaders(headers: HeadersInit | undefined, req
     return merged;
   }
 
-  const token = process.env.GHOST_API_TOKEN?.trim() || (await loadBridgeTokenFromConfig());
+  const token = process.env.GHOST_API_TOKEN?.trim();
   if (token) {
     merged.set('X-API-Token', token);
   }

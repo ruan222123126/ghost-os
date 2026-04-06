@@ -1,7 +1,3 @@
-import { mkdtemp, writeFile } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
-
 import { forwardBridge, forwardBridgeDownload } from './index';
 
 describe('lib/server/bridge', () => {
@@ -72,12 +68,7 @@ describe('lib/server/bridge', () => {
     expect(headers.get('X-API-Token')).toBe('secret-token');
   });
 
-  it('falls back to api_token in config.toml when env token is unset', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'ghost-web-proxy-'));
-    const configPath = join(dir, 'config.toml');
-    process.env.GHOST_CONFIG_PATH = configPath;
-    await writeFile(configPath, 'api_token = "file-secret"\n');
-
+  it('does not inject bridge auth when request and env token are both absent', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {
         status: 200,
@@ -89,7 +80,8 @@ describe('lib/server/bridge', () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = new Headers(init.headers);
-    expect(headers.get('X-API-Token')).toBe('file-secret');
+    expect(headers.has('X-API-Token')).toBe(false);
+    expect(headers.has('Authorization')).toBe(false);
   });
 
   it('forwards incoming auth headers on GET requests', async () => {
