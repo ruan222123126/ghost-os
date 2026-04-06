@@ -10,16 +10,14 @@ func (t *transport) handleRSSBriefing(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.ExecuteRSSBriefingGetAction(traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionRSSBriefingGet, map[string]any{}, traceID)
 	case http.MethodPost:
 		var req rssBriefingParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteRSSBriefingBuildAction(r.Context(), req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionRSSBriefingBuild, req, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -30,7 +28,7 @@ func (t *transport) handleRSSInboxGroups(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteRSSInboxGroupsAction(rssInboxGroupsParams{
+	t.dispatchActionObject(w, r, actionRSSInboxGroups, rssInboxGroupsParams{
 		FeedID:        strings.TrimSpace(r.URL.Query().Get("feed_id")),
 		Tag:           strings.TrimSpace(r.URL.Query().Get("tag")),
 		Importance:    strings.TrimSpace(r.URL.Query().Get("importance")),
@@ -39,14 +37,13 @@ func (t *transport) handleRSSInboxGroups(w http.ResponseWriter, r *http.Request)
 		ItemLimit:     parseOptionalIntQuery(r, "item_limit"),
 		ItemsPerGroup: parseOptionalIntQuery(r, "items_per_group"),
 	}, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
 }
 
 func (t *transport) handleRSSInbox(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.ExecuteRSSInboxListAction(rssInboxListParams{
+		t.dispatchActionObject(w, r, actionRSSInboxList, rssInboxListParams{
 			FeedID:          strings.TrimSpace(r.URL.Query().Get("feed_id")),
 			Tag:             strings.TrimSpace(r.URL.Query().Get("tag")),
 			Importance:      strings.TrimSpace(r.URL.Query().Get("importance")),
@@ -56,15 +53,13 @@ func (t *transport) handleRSSInbox(w http.ResponseWriter, r *http.Request) {
 			PublishedBefore: strings.TrimSpace(r.URL.Query().Get("published_before")),
 			Limit:           parseRSSInboxLimit(r),
 		}, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
 		var req rssInboxPollParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteRSSInboxPollAction(r.Context(), req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionRSSInboxPoll, req, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -80,8 +75,7 @@ func (t *transport) handleRSSInboxByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteRSSInboxGetAction(rssInboxGetParams{ID: id}, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	t.dispatchActionObject(w, r, actionRSSInboxGet, rssInboxGetParams{ID: id}, traceID)
 }
 
 func parseRSSInboxLimit(r *http.Request) int {

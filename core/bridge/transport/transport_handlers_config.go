@@ -12,8 +12,7 @@ func (t *transport) handleConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.ExecuteConfigGetAction(traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionConfigGet, map[string]any{}, traceID)
 	case http.MethodPost:
 		var req configUpdateRequest
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
@@ -21,8 +20,7 @@ func (t *transport) handleConfig(w http.ResponseWriter, r *http.Request) {
 		}
 
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteConfigUpdateAction(req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionConfigUpdate, req, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}

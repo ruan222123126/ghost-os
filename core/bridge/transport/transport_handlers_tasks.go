@@ -11,16 +11,14 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.ExecuteTaskListAction(taskListScopeUser, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionTaskList, map[string]any{"scope": taskListScopeUser}, traceID)
 	case http.MethodPost:
 		var req taskCreateParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteTaskCreateAction(req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionTaskCreate, req, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -32,8 +30,7 @@ func (t *transport) handleSystemTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteTaskListAction(taskListScopeSystem, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	t.dispatchActionObject(w, r, actionTaskList, map[string]any{"scope": taskListScopeSystem}, traceID)
 }
 
 func (t *transport) handleTaskByID(w http.ResponseWriter, r *http.Request) {
@@ -101,8 +98,7 @@ func (t *transport) handleTaskLogs(
 		writeError(w, http.StatusBadRequest, err.Error(), traceID)
 		return
 	}
-	payload, code, err := t.service.ExecuteTaskLogsAction(taskLogsParams{ID: id, Limit: limit}, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	t.dispatchActionObject(w, r, actionTaskLogs, taskLogsParams{ID: id, Limit: limit}, traceID)
 }
 
 func (t *transport) handleTaskRun(
@@ -115,8 +111,7 @@ func (t *transport) handleTaskRun(
 		writeMethodNotAllowed(w)
 		return
 	}
-	payload, code, err := t.service.ExecuteTaskRunNowAction(taskIDParams{ID: id}, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	t.dispatchActionObject(w, r, actionTaskRunNow, taskIDParams{ID: id}, traceID)
 }
 
 func (t *transport) handleTaskResource(
@@ -128,8 +123,7 @@ func (t *transport) handleTaskResource(
 	params := taskIDParams{ID: id}
 	switch r.Method {
 	case http.MethodGet:
-		payload, code, err := t.service.ExecuteTaskGetAction(params, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionTaskGet, params, traceID)
 	case http.MethodPatch:
 		var req taskUpdateParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
@@ -137,11 +131,9 @@ func (t *transport) handleTaskResource(
 		}
 		req.ID = id
 		traceID = resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteTaskUpdateAction(req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionTaskUpdate, req, traceID)
 	case http.MethodDelete:
-		payload, code, err := t.service.ExecuteTaskDeleteAction(params, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		t.dispatchActionObject(w, r, actionTaskDelete, params, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}

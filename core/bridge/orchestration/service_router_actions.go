@@ -3,7 +3,9 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 )
 
 func registerDefaultActions(service *bridgeService) {
@@ -42,8 +44,12 @@ func registerTaskActions(service *bridgeService) {
 	registerAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (any, int, error) {
 		return service.executeTaskCreateAction(params, traceID)
 	})
-	registerAction(service, busActionTaskList, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
-		return service.executeTaskListAction(taskListScopeUser, traceID)
+	registerAction(service, busActionTaskList, func(_ context.Context, params taskListParams, traceID string) (any, int, error) {
+		scope, err := normalizeTaskListScope(params.Scope)
+		if err != nil {
+			return nil, http.StatusBadRequest, err
+		}
+		return service.executeTaskListAction(scope, traceID)
 	})
 	registerAction(service, busActionTaskGet, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskGetAction(params, traceID)
@@ -60,6 +66,18 @@ func registerTaskActions(service *bridgeService) {
 	registerAction(service, busActionTaskDelete, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskDeleteAction(params, traceID)
 	})
+}
+
+func normalizeTaskListScope(scope string) (string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(scope))
+	switch normalized {
+	case "", taskListScopeUser:
+		return taskListScopeUser, nil
+	case taskListScopeSystem:
+		return taskListScopeSystem, nil
+	default:
+		return "", fmt.Errorf("invalid task scope %q", scope)
+	}
 }
 
 func registerRSSActions(service *bridgeService) {

@@ -147,3 +147,19 @@ func (t *transport) dispatchAction(w http.ResponseWriter, r *http.Request, actio
 	payload, code, err := t.service.DispatchAction(r.Context(), action, params, traceID)
 	respondActionResult(w, traceID, action, payload, code, err)
 }
+
+func (t *transport) dispatchActionObject(
+	w http.ResponseWriter,
+	r *http.Request,
+	action string,
+	params any,
+	traceID string,
+) bool {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode action params", traceID)
+		return false
+	}
+	t.dispatchAction(w, r, action, raw, traceID)
+	return true
+}

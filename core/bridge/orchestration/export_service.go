@@ -137,14 +137,6 @@ func (s *Service) DispatchAction(ctx context.Context, action string, params json
 	return s.inner.dispatchAction(ctx, action, params, traceID)
 }
 
-func (s *Service) ExecuteConfigGetAction(traceID string) (any, int, error) {
-	return s.inner.executeConfigGetAction(traceID)
-}
-
-func (s *Service) ExecuteConfigUpdateAction(req ConfigUpdateRequest, traceID string) (any, int, error) {
-	return s.inner.executeConfigUpdateAction(req, traceID)
-}
-
 func (s *Service) ExecuteProvidersGetAction(traceID string) (any, int, error) {
 	return s.inner.executeProvidersGetAction(traceID)
 }
@@ -197,26 +189,6 @@ func (s *Service) EnsureSessionActive(sessionID string) (int, error) {
 	return s.inner.ensureSessionActive(sessionID)
 }
 
-func (s *Service) ExecuteRSSBriefingGetAction(traceID string) (any, int, error) {
-	return s.inner.executeRSSBriefingGetAction(traceID)
-}
-
-func (s *Service) ExecuteRSSBriefingBuildAction(ctx context.Context, params RSSBriefingParams, traceID string) (any, int, error) {
-	return s.inner.executeRSSBriefingBuildAction(ctx, params, traceID)
-}
-
-func (s *Service) ExecuteRSSInboxGroupsAction(params RSSInboxGroupsParams, traceID string) (any, int, error) {
-	return s.inner.executeRSSInboxGroupsAction(params, traceID)
-}
-
-func (s *Service) ExecuteRSSInboxListAction(params RSSInboxListParams, traceID string) (any, int, error) {
-	return s.inner.executeRSSInboxListAction(params, traceID)
-}
-
-func (s *Service) ExecuteRSSInboxPollAction(ctx context.Context, params RSSInboxPollParams, traceID string) (any, int, error) {
-	return s.inner.executeRSSInboxPollAction(ctx, params, traceID)
-}
-
 func (s *Service) ExecuteRSSInboxPollUsecase(
 	ctx context.Context,
 	params RSSInboxPollParams,
@@ -226,36 +198,20 @@ func (s *Service) ExecuteRSSInboxPollUsecase(
 	return s.inner.executeRSSInboxPollUsecase(ctx, params, taskID, traceID)
 }
 
-func (s *Service) ExecuteRSSInboxGetAction(params RSSInboxGetParams, traceID string) (any, int, error) {
-	return s.inner.executeRSSInboxGetAction(params, traceID)
+func (s *Service) ExecuteSkillListAction(traceID string) (any, int, error) {
+	return s.inner.executeSkillListAction(traceID)
 }
 
-func (s *Service) ExecuteTaskListAction(scope string, traceID string) (any, int, error) {
-	return s.inner.executeTaskListAction(scope, traceID)
+func (s *Service) ExecuteSkillDeleteAction(params SkillIDParams, traceID string) (any, int, error) {
+	return s.inner.executeSkillDeleteAction(params, traceID)
 }
 
-func (s *Service) ExecuteTaskCreateAction(params TaskCreateParams, traceID string) (any, int, error) {
-	return s.inner.executeTaskCreateAction(params, traceID)
+func (s *Service) ExecuteToolListAction(traceID string) (any, int, error) {
+	return s.inner.executeToolListAction(traceID)
 }
 
-func (s *Service) ExecuteTaskLogsAction(params TaskLogsParams, traceID string) (any, int, error) {
-	return s.inner.executeTaskLogsAction(params, traceID)
-}
-
-func (s *Service) ExecuteTaskRunNowAction(params TaskIDParams, traceID string) (any, int, error) {
-	return s.inner.executeTaskRunNowAction(params, traceID)
-}
-
-func (s *Service) ExecuteTaskGetAction(params TaskIDParams, traceID string) (any, int, error) {
-	return s.inner.executeTaskGetAction(params, traceID)
-}
-
-func (s *Service) ExecuteTaskUpdateAction(params TaskUpdateParams, traceID string) (any, int, error) {
-	return s.inner.executeTaskUpdateAction(params, traceID)
-}
-
-func (s *Service) ExecuteTaskDeleteAction(params TaskIDParams, traceID string) (any, int, error) {
-	return s.inner.executeTaskDeleteAction(params, traceID)
+func (s *Service) ExecuteToolUpdateAction(params ToolNameParams, req ToolUpdateRequest, traceID string) (any, int, error) {
+	return s.inner.executeToolUpdateAction(params, req, traceID)
 }
 
 func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, bool) {
