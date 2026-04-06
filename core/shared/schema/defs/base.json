@@ -3,7 +3,6 @@
     "action": {
       "type": "string",
       "enum": [
-        "PING",
         "AGENT_SEND",
         "AGENT_STOP",
         "HUMAN_RESPONSE",
@@ -11,7 +10,6 @@
         "CONFIG_UPDATE",
         "TASK_CREATE",
         "TASK_LIST",
-        "TASK_SYSTEM_LIST",
         "TASK_GET",
         "TASK_UPDATE",
         "TASK_RUN_NOW",
@@ -22,28 +20,7 @@
         "RSS_INBOX_GET",
         "RSS_INBOX_GROUPS",
         "RSS_BRIEFING_BUILD",
-        "RSS_BRIEFING_GET",
-        "LIST_FILES",
-        "READ_FILE",
-        "SEARCH_FILES",
-        "APPLY_DIFF",
-        "EXPORT_FILE",
-        "BASH_EXEC",
-        "SCRIPT_EXEC",
-        "SCREEN_CAPTURE",
-        "IMAGE_CROP",
-        "OCR_IMAGE",
-        "TEMPLATE_MATCH_IMAGE",
-        "TEXT_INPUT",
-        "KEY_HOTKEY",
-        "MOUSE_CLICK",
-        "MOUSE_DOUBLE_CLICK",
-        "MOUSE_RIGHT_CLICK",
-        "MOUSE_DRAG",
-        "MOUSE_SCROLL",
-        "ACTIVE_WINDOW_INFO",
-        "CODEX_CLI_START",
-        "CODEX_CLI_STATUS"
+        "RSS_BRIEFING_GET"
       ]
     },
     "status": {

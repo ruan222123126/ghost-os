@@ -20,10 +20,13 @@ func decodeActionParams[T any](raw json.RawMessage) (T, error) {
 	return params, nil
 }
 
-// validateBusRequest 做 envelope 级别校验，要求 action 存在且 params 为对象。
+// validateBusRequest 做 envelope 级别校验，要求 action/trace_id 存在且 params 为对象。
 func validateBusRequest(req apiRequest) error {
 	if strings.TrimSpace(req.Action) == "" {
 		return errors.New("action is required")
+	}
+	if strings.TrimSpace(req.TraceID) == "" {
+		return errors.New("trace_id is required")
 	}
 
 	source := bytes.TrimSpace(req.Params)
