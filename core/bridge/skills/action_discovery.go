@@ -78,6 +78,23 @@ func discoverManagedSkillsFromRoots(roots skillRoots) ([]managedSkill, error) {
 	return items, nil
 }
 
+func managedSkillRootBySource(roots skillRoots, source string) (string, error) {
+	switch source {
+	case skillSourceRepo:
+		if strings.TrimSpace(roots.Repo) == "" {
+			return "", fmt.Errorf("%w: %s", ErrSkillSourceNotFound, source)
+		}
+		return roots.Repo, nil
+	case skillSourceUser:
+		if strings.TrimSpace(roots.User) == "" {
+			return "", fmt.Errorf("%w: %s", ErrSkillSourceNotFound, source)
+		}
+		return roots.User, nil
+	default:
+		return "", ErrInvalidSkillID
+	}
+}
+
 func discoverManagedSkillsBySource(source string, root string) ([]managedSkill, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("%w: %s", ErrSkillSourceNotFound, source)

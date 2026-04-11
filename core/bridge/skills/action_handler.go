@@ -99,7 +99,17 @@ func (h *ActionHandler) ExecuteDeleteAction(params SkillIDParams, traceID string
 		h.logAction(traceID, ActionSkillDelete, "error", err)
 		return nil, mapSkillError(err), err
 	}
-	items, roots, err := h.discoverManagedSkills()
+	roots, err := h.resolveSkillRoots()
+	if err != nil {
+		h.logAction(traceID, ActionSkillDelete, "error", err)
+		return nil, mapSkillError(err), err
+	}
+	targetRoot, err := managedSkillRootBySource(roots, decoded.Source)
+	if err != nil {
+		h.logAction(traceID, ActionSkillDelete, "error", err)
+		return nil, mapSkillError(err), err
+	}
+	items, err := discoverManagedSkillsBySource(decoded.Source, targetRoot)
 	if err != nil {
 		h.logAction(traceID, ActionSkillDelete, "error", err)
 		return nil, mapSkillError(err), err
