@@ -100,9 +100,7 @@ func (s *Service) SetRuntimeFactory(factory AgentRuntimeFactory) {
 }
 
 func (s *Service) SetRSSInbox(service *bridgerss.RSSInboxService) {
-	if s != nil && s.inner != nil && s.inner.rssHandler != nil {
-		_ = s.inner.reloadRSSInboxRuntime()
-	}
+	s.SetRSSInboxService(service, nil)
 }
 
 func (s *Service) SetRSSInboxService(service *bridgerss.RSSInboxService, initErr error) {
