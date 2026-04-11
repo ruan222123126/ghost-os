@@ -139,7 +139,7 @@ func (s *bridgeService) sessionPushAdapter() sessionPushAdapter {
 	if s == nil {
 		return newSessionPushAdapter(nil, nil)
 	}
-	return newSessionPushAdapter(s.sessionStore, s.sessionPush)
+	return newSessionPushAdapter(s.sessionStore, s.sessionPushHub())
 }
 
 func (s *bridgeService) publishAssistantSessionPush(traceID string, result finalizedAgentTurn) {

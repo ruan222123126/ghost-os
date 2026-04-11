@@ -9,23 +9,25 @@ import (
 )
 
 func (s *bridgeService) requireTaskStore() (*TaskStore, int, error) {
-	if s.taskStore == nil {
-		if s.taskInitErr != nil {
-			return nil, http.StatusInternalServerError, s.taskInitErr
+	store := s.taskStore()
+	if store == nil {
+		if initErr := s.taskInitErr(); initErr != nil {
+			return nil, http.StatusInternalServerError, initErr
 		}
 		return nil, http.StatusInternalServerError, errors.New("task store is not configured")
 	}
-	return s.taskStore, http.StatusOK, nil
+	return store, http.StatusOK, nil
 }
 
 func (s *bridgeService) requireTaskScheduler() (*TaskScheduler, int, error) {
-	if s.taskScheduler == nil {
-		if s.taskInitErr != nil {
-			return nil, http.StatusInternalServerError, s.taskInitErr
+	scheduler := s.taskScheduler()
+	if scheduler == nil {
+		if initErr := s.taskInitErr(); initErr != nil {
+			return nil, http.StatusInternalServerError, initErr
 		}
 		return nil, http.StatusInternalServerError, errors.New("task scheduler is not configured")
 	}
-	return s.taskScheduler, http.StatusOK, nil
+	return scheduler, http.StatusOK, nil
 }
 
 func mapTaskError(err error) int {

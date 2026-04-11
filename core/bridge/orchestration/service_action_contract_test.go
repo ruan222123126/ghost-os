@@ -65,8 +65,9 @@ func registeredBusActions() map[string]struct{} {
 	service := newBridgeServiceState(nil, nil)
 	registerDefaultActions(service)
 
-	actions := make(map[string]struct{}, len(service.actions))
-	for action := range service.actions {
+	names := service.registeredActionNames()
+	actions := make(map[string]struct{}, len(names))
+	for _, action := range names {
 		actions[action] = struct{}{}
 	}
 	return actions

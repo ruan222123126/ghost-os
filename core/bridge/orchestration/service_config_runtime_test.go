@@ -35,12 +35,13 @@ func TestConfigUpdateRejectsNonStringGraphQLHeaders(t *testing.T) {
 		}
 	}`)
 
-	_, status, err := service.dispatchAction(
+	_, err := service.dispatchAction(
 		context.Background(),
 		busActionConfigUpdate,
 		raw,
 		"trace-graphql-header-type",
 	)
+	status := legacyStatusFromServiceError(err)
 	if status != http.StatusBadRequest {
 		t.Fatalf("unexpected status: %d", status)
 	}
@@ -71,7 +72,7 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 		"web_rooter_timeout_ms": 12345
 	}`)
 
-	payload, status, err := service.dispatchAction(
+	result, err := service.dispatchAction(
 		context.Background(),
 		busActionConfigUpdate,
 		raw,
@@ -80,13 +81,14 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	if err != nil {
 		t.Fatalf("config update failed: %v", err)
 	}
+	status := legacyStatusFromServiceOutcome(result.Outcome)
 	if status != http.StatusOK {
 		t.Fatalf("unexpected status: %d", status)
 	}
 
-	snapshot, ok := payload.(configResponse)
+	snapshot, ok := result.Payload.(configResponse)
 	if !ok {
-		t.Fatalf("unexpected payload type: %T", payload)
+		t.Fatalf("unexpected payload type: %T", result.Payload)
 	}
 	if !snapshot.WebRooterEnabled {
 		t.Fatal("expected web_rooter_enabled in snapshot")

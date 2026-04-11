@@ -127,11 +127,11 @@ func (a taskExecutorAdapter) runAgentAction(
 	if a.service == nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
 	}
-	payload, _, err := a.service.executeAgentActionWithRuntimeOverrides(ctx, params, runtimeOverrides, traceID)
+	result, err := a.service.executeAgentActionWithRuntimeOverrides(ctx, params, runtimeOverrides, traceID)
 	if err != nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
-	return taskExecutionResultFromAgentPayload(payload)
+	return taskExecutionResultFromAgentPayload(result.Payload)
 }
 
 func taskExecutionResultFromAgentPayload(payload any) bridgeTasks.ExecutionResult {
@@ -157,7 +157,7 @@ func (a taskExecutorAdapter) executeSystemTask(ctx context.Context, task Schedul
 	if a.service == nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
 	}
-	if handler := a.service.rssHandler; handler != nil {
+	if handler := a.service.rssActionHandler(); handler != nil {
 		return handler.ExecuteSystemTask(ctx, task, traceID)
 	}
 	return bridgeTasks.ExecutionResult{
