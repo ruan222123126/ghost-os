@@ -2,12 +2,9 @@ package rss
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
-
-	"ghost-os/bridge/agent"
-	"ghost-os/bridge/llm"
-	"ghost-os/bridge/tools"
 )
 
 const (
@@ -40,72 +37,56 @@ type rssReportBuilder interface {
 	Build(context.Context, RSSReportResult, RSSBriefingResult, []RSSInboxTopicGroup, RSSReportQuery) (string, error)
 }
 
-type agentRSSReportBuilder struct {
-	store        *ConfigStore
-	timeout      time.Duration
-	buildRuntime func(*ConfigStore) (agentRuntimeDependencies, error)
-	allowedTools []string
+type rssReportBuildInput struct {
+	Report   RSSReportResult
+	Briefing RSSBriefingResult
+	Groups   []RSSInboxTopicGroup
+	Query    RSSReportQuery
 }
 
-func (b *agentRSSReportBuilder) Build(
+type rssReportBuildFunc func(context.Context, rssReportBuildInput) (string, error)
+
+type functionRSSReportBuilder struct {
+	timeout time.Duration
+	run     rssReportBuildFunc
+}
+
+func newFunctionRSSReportBuilder(timeout time.Duration, run rssReportBuildFunc) *functionRSSReportBuilder {
+	return &functionRSSReportBuilder{timeout: timeout, run: run}
+}
+
+func (b *functionRSSReportBuilder) Build(
 	ctx context.Context,
 	report RSSReportResult,
 	briefing RSSBriefingResult,
 	groups []RSSInboxTopicGroup,
 	query RSSReportQuery,
 ) (string, error) {
-	deps, err := b.runtimeDependencies()
-	if err != nil {
-		return "", err
+	if b == nil || b.run == nil {
+		return "", fmt.Errorf("rss report builder is not configured")
 	}
-	defer deps.Close()
-
 	runCtx, cancel := context.WithTimeout(ctx, b.reportTimeout())
 	defer cancel()
-
-	scoped := tools.NewScopedCatalog(deps.registry, b.allowedToolNames())
-	basePrompt, err := buildSystemPromptForCatalog(deps.cfg, scoped)
-	if err != nil {
-		return "", err
-	}
-	systemPrompt := basePrompt + "\n\n" + rssReportInvestigationSystemPrompt
-	reportAgent := agent.NewAgent(deps.client, scoped, systemPrompt, deps.cfg.MaxTurns)
-	reportAgent.SetResponseOptions(llm.CloneResponseOptions(deps.cfg.ResponseOptions))
-	toolGuidance := renderRSSReportToolGuidance(scoped)
-	response, err := reportAgent.RunWithTraceID(
-		runCtx,
-		renderAgentRSSReportPrompt(report, briefing, groups, query, toolGuidance),
-		query.TraceID,
-	)
+	response, err := b.run(runCtx, rssReportBuildInput{
+		Report:   report,
+		Briefing: briefing,
+		Groups:   groups,
+		Query:    query,
+	})
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(stripMarkdownCodeFence(strings.TrimSpace(response))), nil
 }
 
-func (b *agentRSSReportBuilder) runtimeDependencies() (agentRuntimeDependencies, error) {
-	if b != nil && b.buildRuntime != nil {
-		return b.buildRuntime(b.store)
-	}
-	return newAgentRuntimeFactory().Build(b.store)
-}
-
-func (b *agentRSSReportBuilder) reportTimeout() time.Duration {
+func (b *functionRSSReportBuilder) reportTimeout() time.Duration {
 	if b != nil && b.timeout > 0 {
 		return b.timeout
 	}
 	return defaultRSSReportTimeout
 }
 
-func (b *agentRSSReportBuilder) allowedToolNames() []string {
-	if b != nil && len(b.allowedTools) > 0 {
-		return append([]string(nil), b.allowedTools...)
-	}
-	return []string{"script_exec", "read_and_summarize", "web_search", "rss_fetch"}
-}
-
-func renderRSSReportToolGuidance(catalog tools.ToolCatalog) string {
-	names := tools.CatalogToolNames(catalog)
+func renderRSSReportToolGuidance(names []string) string {
 	if len(names) == 0 {
 		return ""
 	}

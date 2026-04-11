@@ -69,7 +69,6 @@ func NewRSSInboxService(
 		fetcher:         defaultRSSInboxFetcher{},
 		classifier:      classifier,
 		briefingBuilder: &llmRSSBriefingBuilder{timeout: defaultRSSBriefingTimeout, cfg: cfg},
-		reportBuilder:   &agentRSSReportBuilder{timeout: defaultRSSReportTimeout},
 		now:             time.Now,
 		maxItemsPerFeed: normalizeRSSPollMaxItems(cfg.RSS.PollMaxItemsPerFeed),
 		aiBatchSize:     normalizeRSSAIBatchSize(cfg.RSS.AIBatchSize),

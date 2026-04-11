@@ -1,48 +1,76 @@
 package rss
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+)
 
-func TestAgentRSSReportBuilderUsesOnlyScopedTools(t *testing.T) {
-	fixture := newRSSReportBuilderFixture(t)
+func TestRSSReportBuilderRunsConfiguredFunction(t *testing.T) {
+	builder := newFunctionRSSReportBuilder(defaultRSSReportTimeout, func(_ context.Context, input rssReportBuildInput) (string, error) {
+		if input.Report.ID != "rssr_test" {
+			t.Fatalf("unexpected report id: %q", input.Report.ID)
+		}
+		return "```markdown\n# Investigated Report\n```", nil
+	})
 
-	markdown := fixture.build(t)
-
-	requireStringContains(t, markdown, "## What happened")
-	requireReportToolCallCount(t, fixture.scriptExecTool, testRSSSingleToolCallCount)
-	requireReportToolCallCount(t, fixture.webSearchTool, testRSSSingleToolCallCount)
-	if len(fixture.completer.requests) != testRSSBuildRequestCount {
-		t.Fatalf("expected %d completion requests, got %d", testRSSBuildRequestCount, len(fixture.completer.requests))
+	out, err := builder.Build(
+		context.Background(),
+		RSSReportResult{ID: "rssr_test"},
+		RSSBriefingResult{ID: "rssb_test"},
+		nil,
+		RSSReportQuery{TraceID: "trace-rss-report"},
+	)
+	if err != nil {
+		t.Fatalf("builder returned error: %v", err)
 	}
-	if len(fixture.completer.requests[0].Tools) != testRSSScopedToolCount {
-		t.Fatalf("expected %d scoped tools, got %d", testRSSScopedToolCount, len(fixture.completer.requests[0].Tools))
+	if out != "# Investigated Report" {
+		t.Fatalf("unexpected markdown: %q", out)
 	}
-	requireToolDefNames(t, fixture.completer.requests[0].Tools, []string{"script_exec", "web_search"})
 }
 
-func TestAgentRSSReportBuilderPromptIncludesDossierAndWritingContract(t *testing.T) {
-	fixture := newRSSReportBuilderFixture(t)
-
-	fixture.build(t)
-	prompt := fixture.firstPrompt(t)
-
-	requireStringContains(t, prompt, fixture.query.DossierPath)
-	requireStringContains(t, prompt, "Simplified Chinese")
-	requireStringContains(t, prompt, "Use this exact H1 title")
-	requireStringContains(t, prompt, "Do not move sources into a separate appendix section")
-	requireStringContains(t, prompt, "Do not add standalone sections for opportunities, risks, constraints, or predictions")
-	requireStringContains(t, prompt, "avoid repeating the same point across sections")
-	requireStringNotContains(t, prompt, "- Opportunities")
-	requireStringNotContains(t, prompt, "- Risks / constraints")
-	requireStringNotContains(t, prompt, "- What may happen next")
+func TestRSSReportBuilderReturnsErrorWhenFunctionMissing(t *testing.T) {
+	builder := newFunctionRSSReportBuilder(defaultRSSReportTimeout, nil)
+	_, err := builder.Build(context.Background(), RSSReportResult{}, RSSBriefingResult{}, nil, RSSReportQuery{})
+	if err == nil {
+		t.Fatal("expected error when build function is missing")
+	}
+	requireStringContains(t, err.Error(), "rss report builder is not configured")
 }
 
-func TestAgentRSSReportBuilderPromptReflectsScopedToolVisibility(t *testing.T) {
-	fixture := newRSSReportBuilderFixture(t)
+func TestRSSReportBuilderPropagatesBuildError(t *testing.T) {
+	expected := errors.New("builder failed")
+	builder := newFunctionRSSReportBuilder(defaultRSSReportTimeout, func(context.Context, rssReportBuildInput) (string, error) {
+		return "", expected
+	})
+	_, err := builder.Build(context.Background(), RSSReportResult{}, RSSBriefingResult{}, nil, RSSReportQuery{})
+	if !errors.Is(err, expected) {
+		t.Fatalf("expected %v, got %v", expected, err)
+	}
+}
 
-	fixture.build(t)
-	prompt := fixture.firstPrompt(t)
+func TestRSSReportBuilderUsesDefaultTimeoutWhenInvalid(t *testing.T) {
+	builder := newFunctionRSSReportBuilder(0, func(ctx context.Context, _ rssReportBuildInput) (string, error) {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("expected context deadline")
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 || remaining > defaultRSSReportTimeout {
+			t.Fatalf("expected deadline within report timeout, got %v", remaining)
+		}
+		return "# ok", nil
+	})
+	_, err := builder.Build(context.Background(), RSSReportResult{}, RSSBriefingResult{}, nil, RSSReportQuery{})
+	if err != nil {
+		t.Fatalf("builder returned error: %v", err)
+	}
+}
 
-	requireStringContains(t, prompt, "Investigation tools for this run: `script_exec`, `web_search`.")
-	requireStringNotContains(t, prompt, "`read_and_summarize`")
-	requireStringNotContains(t, prompt, "`rss_fetch`")
+func TestRenderRSSReportToolGuidanceFormatsNames(t *testing.T) {
+	guidance := renderRSSReportToolGuidance([]string{" script_exec ", "web_search"})
+	requireStringContains(t, guidance, "`script_exec`")
+	requireStringContains(t, guidance, "`web_search`")
+	requireStringContains(t, guidance, "Investigation tools for this run")
 }

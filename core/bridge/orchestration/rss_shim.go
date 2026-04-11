@@ -67,11 +67,18 @@ const (
 )
 
 func newRSSInboxServiceFromConfig(store bridgeconfig.Store) (*RSSInboxService, error) {
-	return bridgerss.NewRSSInboxServiceFromConfig(store)
+	service, err := bridgerss.NewRSSInboxServiceFromConfig(store)
+	if err != nil {
+		return nil, err
+	}
+	service.SetReportBuilder(newRuntimeRSSReportBuilder(store))
+	return service, nil
 }
 
 func NewRSSInboxService(feedStore *RSSFeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg bridgeconfig.Config) *RSSInboxService {
-	return bridgerss.NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
+	service := bridgerss.NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
+	service.SetReportBuilder(newRuntimeRSSReportBuilder(nil))
+	return service
 }
 
 func NewLLMRSSBriefingBuilder(client RSSBriefingCompleter, cfg bridgeconfig.Config) RSSBriefingBuilder {

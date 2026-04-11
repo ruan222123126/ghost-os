@@ -99,7 +99,7 @@ func (s *Service) SetRuntimeFactory(factory AgentRuntimeFactory) {
 
 func (s *Service) SetRSSInbox(service *RSSInboxService) {
 	if s != nil && s.inner != nil && s.inner.rssHandler != nil {
-		_ = s.inner.rssHandler.Reload(s.inner.configStore)
+		_ = s.inner.reloadRSSInboxRuntime()
 	}
 }
 

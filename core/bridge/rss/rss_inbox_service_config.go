@@ -28,7 +28,6 @@ func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) 
 		cfg,
 	)
 	service.briefingBuilder = &llmRSSBriefingBuilder{store: store, timeout: defaultRSSBriefingTimeout, cfg: cfg}
-	service.reportBuilder = &agentRSSReportBuilder{store: store, timeout: defaultRSSReportTimeout}
 	return service, nil
 }
 

@@ -8,19 +8,19 @@ import (
 	"strings"
 	"time"
 
-	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
-	bridgeruntime "ghost-os/bridge/runtime"
-	"ghost-os/bridge/tools"
 )
 
 type Config = bridgeconfig.Config
+type RSSBriefingCompleter = llm.Completer
 type RSSInboxFetcher = rssInboxFetcher
 type RSSInboxClassifier = rssInboxClassifier
 type RSSBriefingBuilder = rssBriefingBuilder
 type RSSReportBuilder = rssReportBuilder
+type RSSReportBuildInput = rssReportBuildInput
+type RSSReportBuildFunc = rssReportBuildFunc
 type RSSInboxClassification = rssInboxClassification
 type RSSInboxCandidate = rssInboxCandidate
 type RSSBriefingDraft = rssBriefingDraft
@@ -36,55 +36,12 @@ const (
 	defaultRSSAIBatchSize             = bridgeconfig.DefaultRSSAIBatchSize
 	DefaultRSSPollTaskID              = defaultRSSPollTaskID
 	DefaultRSSBriefingTaskID          = defaultRSSBriefingTaskID
+	DefaultRSSReportTimeout           = defaultRSSReportTimeout
 	DefaultRSSAggregateWindowHours    = defaultRSSAggregateWindowHours
 	DefaultRSSAggregateItemLimit      = defaultRSSAggregateItemLimit
 	DefaultRSSBriefingGroupLimit      = defaultRSSBriefingGroupLimit
 	DefaultRSSBriefingHighlightsLimit = defaultRSSBriefingHighlightsLimit
 )
-
-type agentRuntimeDependencies struct {
-	cfg          Config
-	client       agent.Completer
-	registry     *tools.Registry
-	systemPrompt string
-	cleanup      func()
-}
-
-func (d agentRuntimeDependencies) Close() {
-	if d.cleanup != nil {
-		d.cleanup()
-	}
-}
-
-type AgentRuntimeFactory interface {
-	Build(store *ConfigStore) (agentRuntimeDependencies, error)
-}
-
-type runtimeFactoryAdapter struct {
-	inner bridgeruntime.AgentRuntimeFactory
-}
-
-func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
-	var runtimeStore *bridgeruntime.ConfigStore
-	if store != nil {
-		runtimeStore = bridgeruntime.WrapConfigStore(store.unwrap())
-	}
-	deps, err := f.inner.Build(runtimeStore)
-	if err != nil {
-		return agentRuntimeDependencies{}, err
-	}
-	return agentRuntimeDependencies{
-		cfg:          deps.Config(),
-		client:       deps.Client(),
-		registry:     deps.Registry(),
-		systemPrompt: deps.SystemPrompt(),
-		cleanup:      deps.Close,
-	}, nil
-}
-
-func newAgentRuntimeFactory() AgentRuntimeFactory {
-	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactory()}
-}
 
 type ConfigStore struct {
 	inner bridgeconfig.Store
@@ -95,13 +52,6 @@ func wrapConfigStore(store bridgeconfig.Store) *ConfigStore {
 		return nil
 	}
 	return &ConfigStore{inner: store}
-}
-
-func (s *ConfigStore) unwrap() bridgeconfig.Store {
-	if s == nil {
-		return nil
-	}
-	return s.inner
 }
 
 func (s *ConfigStore) Config() (Config, error) {
@@ -194,6 +144,28 @@ func NewLLMRSSBriefingBuilder(client llm.Completer, cfg Config) RSSBriefingBuild
 	return &llmRSSBriefingBuilder{client: client, cfg: cfg, timeout: defaultRSSBriefingTimeout}
 }
 
+func NewRSSReportBuilder(run RSSReportBuildFunc, timeout time.Duration) RSSReportBuilder {
+	return newFunctionRSSReportBuilder(timeout, run)
+}
+
+func RenderAgentRSSReportPrompt(
+	report RSSReportResult,
+	briefing RSSBriefingResult,
+	groups []RSSInboxTopicGroup,
+	query RSSReportQuery,
+	toolGuidance string,
+) string {
+	return renderAgentRSSReportPrompt(report, briefing, groups, query, toolGuidance)
+}
+
+func RenderRSSReportToolGuidance(toolNames []string) string {
+	return renderRSSReportToolGuidance(toolNames)
+}
+
+func RSSReportInvestigationSystemPrompt() string {
+	return rssReportInvestigationSystemPrompt
+}
+
 func (s *RSSInboxService) FeedStore() *rsssubscriptions.FeedStore {
 	if s == nil {
 		return nil
@@ -219,12 +191,14 @@ func (s *RSSInboxService) SetBriefingBuilder(builder RSSBriefingBuilder) {
 	}
 }
 
+func (s *RSSInboxService) SetReportBuilder(builder RSSReportBuilder) {
+	if s != nil && builder != nil {
+		s.reportBuilder = builder
+	}
+}
+
 func (s *RSSInboxService) SetNow(now func() time.Time) {
 	if s != nil && now != nil {
 		s.now = now
 	}
-}
-
-func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string, error) {
-	return bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
 }

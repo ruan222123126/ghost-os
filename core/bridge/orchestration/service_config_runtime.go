@@ -18,7 +18,7 @@ func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, trace
 		return nil, http.StatusBadRequest, err
 	}
 	if s.rssHandler != nil {
-		_ = s.rssHandler.Reload(s.configStore)
+		_ = s.reloadRSSInboxRuntime()
 	}
 	if err := s.BootstrapSystemTasks(); err != nil {
 		logAction(traceID, busActionConfigUpdate, "error", err)
