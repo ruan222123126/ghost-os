@@ -41,18 +41,13 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	traceID := resolveTraceID(req.TraceID, r)
-	params, err := json.Marshal(bridgeorchestration.AgentParams{
+	payload, code, err := t.service.ExecuteAgentAction(r.Context(), bridgeorchestration.AgentParams{
 		Mode:      req.Mode,
 		Message:   req.Message,
 		Images:    req.Images,
 		SessionID: req.SessionID,
-	})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to encode agent request", traceID)
-		return
-	}
-
-	t.dispatchAction(w, r, bridgeorchestration.BusActionAgentSend, params, traceID)
+	}, traceID)
+	respondActionResult(w, traceID, bridgeorchestration.BusActionAgentSend, payload, code, err)
 }
 
 // handleQuestionAnswer 以高层接口隐藏 HUMAN_RESPONSE + resume 的底层编排细节。

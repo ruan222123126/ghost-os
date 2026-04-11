@@ -138,6 +138,10 @@ func (s *Service) DispatchAction(ctx context.Context, action string, params json
 	return s.inner.dispatchAction(ctx, action, params, traceID)
 }
 
+func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, traceID string) (any, int, error) {
+	return s.inner.executeAgentAction(ctx, params, traceID)
+}
+
 func (s *Service) ExecuteProvidersGetAction(traceID string) (any, int, error) {
 	return s.inner.executeProvidersGetAction(traceID)
 }
