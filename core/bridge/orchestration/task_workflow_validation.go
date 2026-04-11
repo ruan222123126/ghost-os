@@ -10,7 +10,22 @@ const (
 	workflowNodeTypeTool  = "tool"
 	workflowNodeTypeLLM   = "llm"
 	workflowNodeTypeAgent = "agent"
+	workflowNodeTypeIf    = "if"
+	workflowNodeTypeLoop  = "loop"
 	workflowNodeTypeEnd   = "end"
+
+	workflowInputTypeString  = "string"
+	workflowInputTypeNumber  = "number"
+	workflowInputTypeBoolean = "boolean"
+	workflowInputTypeObject  = "object"
+	workflowInputTypeArray   = "array"
+
+	workflowIfOperatorEquals      = "equals"
+	workflowIfOperatorNotEquals   = "not_equals"
+	workflowIfOperatorContains    = "contains"
+	workflowIfOperatorNotContains = "not_contains"
+	workflowIfOperatorIsEmpty     = "is_empty"
+	workflowIfOperatorNotEmpty    = "not_empty"
 )
 
 type workflowNodeIndex struct {
@@ -19,14 +34,20 @@ type workflowNodeIndex struct {
 	endID   string
 }
 
-type workflowGraph struct {
-	next      map[string]string
-	indegree  map[string]int
-	outdegree map[string]int
+type workflowExecutionPlan struct {
+	nodes   map[string]WorkflowNode
+	startID string
+	endID   string
+	graph   workflowGraph
 }
 
-type workflowExecutionPlan struct {
-	ordered []WorkflowNode
+type workflowNodePayloadSpec struct {
+	allowStart bool
+	tool       bool
+	llm        bool
+	agent      bool
+	ifNode     bool
+	loop       bool
 }
 
 func validateWorkflowTaskDefinition(task *ScheduledTask) error {
@@ -64,11 +85,21 @@ func buildWorkflowExecutionPlan(definition *WorkflowDefinition) (workflowExecuti
 	if err := validateWorkflowDegrees(index, graph); err != nil {
 		return workflowExecutionPlan{}, err
 	}
-	ordered, err := orderWorkflowNodes(index, graph)
-	if err != nil {
+	if err := validateWorkflowControlTargets(index, graph); err != nil {
 		return workflowExecutionPlan{}, err
 	}
-	return workflowExecutionPlan{ordered: ordered}, nil
+	if err := validateWorkflowConnectivity(index, graph); err != nil {
+		return workflowExecutionPlan{}, err
+	}
+	if err := validateWorkflowCycles(index, graph); err != nil {
+		return workflowExecutionPlan{}, err
+	}
+	return workflowExecutionPlan{
+		nodes:   index.nodes,
+		startID: index.startID,
+		endID:   index.endID,
+		graph:   graph,
+	}, nil
 }
 
 func buildWorkflowNodeIndex(definition *WorkflowDefinition) (workflowNodeIndex, error) {
@@ -103,9 +134,12 @@ func validateWorkflowNode(node WorkflowNode) error {
 	}
 	switch node.Type {
 	case workflowNodeTypeStart:
-		return validateWorkflowNodePayload(node, false, false, false)
+		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{allowStart: true}); err != nil {
+			return err
+		}
+		return validateWorkflowStartNode(node)
 	case workflowNodeTypeTool:
-		if err := validateWorkflowNodePayload(node, true, false, false); err != nil {
+		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{tool: true}); err != nil {
 			return err
 		}
 		if strings.TrimSpace(node.Tool.ToolName) == "" {
@@ -113,7 +147,7 @@ func validateWorkflowNode(node WorkflowNode) error {
 		}
 		return nil
 	case workflowNodeTypeLLM:
-		if err := validateWorkflowNodePayload(node, false, true, false); err != nil {
+		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{llm: true}); err != nil {
 			return err
 		}
 		if strings.TrimSpace(node.LLM.Prompt) == "" {
@@ -121,33 +155,98 @@ func validateWorkflowNode(node WorkflowNode) error {
 		}
 		return nil
 	case workflowNodeTypeAgent:
-		if err := validateWorkflowNodePayload(node, false, false, true); err != nil {
+		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{agent: true}); err != nil {
 			return err
 		}
 		if strings.TrimSpace(node.Agent.Message) == "" {
 			return fmt.Errorf("%w: workflow agent node %q requires message", ErrInvalidTaskConfig, node.ID)
 		}
 		return nil
+	case workflowNodeTypeIf:
+		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{ifNode: true}); err != nil {
+			return err
+		}
+		return validateWorkflowIfNode(node)
+	case workflowNodeTypeLoop:
+		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{loop: true}); err != nil {
+			return err
+		}
+		return validateWorkflowLoopNode(node)
 	case workflowNodeTypeEnd:
-		return validateWorkflowNodePayload(node, false, false, false)
+		return validateWorkflowNodePayload(node, workflowNodePayloadSpec{})
 	default:
 		return fmt.Errorf("%w: unsupported workflow node type %q", ErrInvalidTaskConfig, node.Type)
 	}
 }
 
-func validateWorkflowNodePayload(
-	node WorkflowNode,
-	wantTool bool,
-	wantLLM bool,
-	wantAgent bool,
-) error {
+func validateWorkflowNodePayload(node WorkflowNode, spec workflowNodePayloadSpec) error {
+	hasStart := node.Start != nil
 	hasTool := node.Tool != nil
 	hasLLM := node.LLM != nil
 	hasAgent := node.Agent != nil
-	if hasTool == wantTool && hasLLM == wantLLM && hasAgent == wantAgent {
+	hasIf := node.If != nil
+	hasLoop := node.Loop != nil
+	if (!hasStart || spec.allowStart) &&
+		hasTool == spec.tool &&
+		hasLLM == spec.llm &&
+		hasAgent == spec.agent &&
+		hasIf == spec.ifNode &&
+		hasLoop == spec.loop {
 		return nil
 	}
 	return fmt.Errorf("%w: workflow node %q payload does not match type %q", ErrInvalidTaskConfig, node.ID, node.Type)
+}
+
+func validateWorkflowIfNode(node WorkflowNode) error {
+	if !isWorkflowIfOperatorSupported(node.If.Operator) {
+		return fmt.Errorf("%w: workflow if node %q uses unsupported operator %q", ErrInvalidTaskConfig, node.ID, node.If.Operator)
+	}
+	if strings.TrimSpace(node.If.TrueNodeID) == "" || strings.TrimSpace(node.If.FalseNodeID) == "" {
+		return fmt.Errorf("%w: workflow if node %q requires true_node_id and false_node_id", ErrInvalidTaskConfig, node.ID)
+	}
+	if node.If.TrueNodeID == node.If.FalseNodeID {
+		return fmt.Errorf("%w: workflow if node %q true_node_id and false_node_id must differ", ErrInvalidTaskConfig, node.ID)
+	}
+	if requiresWorkflowIfValue(node.If.Operator) && strings.TrimSpace(node.If.Value) == "" {
+		return fmt.Errorf("%w: workflow if node %q requires value for operator %q", ErrInvalidTaskConfig, node.ID, node.If.Operator)
+	}
+	return nil
+}
+
+func validateWorkflowLoopNode(node WorkflowNode) error {
+	if node.Loop.MaxIterations <= 0 {
+		return fmt.Errorf("%w: workflow loop node %q requires max_iterations > 0", ErrInvalidTaskConfig, node.ID)
+	}
+	if strings.TrimSpace(node.Loop.BodyNodeID) == "" || strings.TrimSpace(node.Loop.ExitNodeID) == "" {
+		return fmt.Errorf("%w: workflow loop node %q requires body_node_id and exit_node_id", ErrInvalidTaskConfig, node.ID)
+	}
+	if node.Loop.BodyNodeID == node.Loop.ExitNodeID {
+		return fmt.Errorf("%w: workflow loop node %q body_node_id and exit_node_id must differ", ErrInvalidTaskConfig, node.ID)
+	}
+	return nil
+}
+
+func isWorkflowIfOperatorSupported(operator string) bool {
+	switch strings.TrimSpace(operator) {
+	case workflowIfOperatorEquals,
+		workflowIfOperatorNotEquals,
+		workflowIfOperatorContains,
+		workflowIfOperatorNotContains,
+		workflowIfOperatorIsEmpty,
+		workflowIfOperatorNotEmpty:
+		return true
+	default:
+		return false
+	}
+}
+
+func requiresWorkflowIfValue(operator string) bool {
+	switch strings.TrimSpace(operator) {
+	case workflowIfOperatorIsEmpty, workflowIfOperatorNotEmpty:
+		return false
+	default:
+		return true
+	}
 }
 
 func countWorkflowNodes(index workflowNodeIndex, want string) int {
@@ -158,97 +257,4 @@ func countWorkflowNodes(index workflowNodeIndex, want string) int {
 		}
 	}
 	return count
-}
-
-func buildWorkflowGraph(definition *WorkflowDefinition, index workflowNodeIndex) (workflowGraph, error) {
-	graph := workflowGraph{
-		next:      make(map[string]string, len(definition.Edges)),
-		indegree:  make(map[string]int, len(index.nodes)),
-		outdegree: make(map[string]int, len(index.nodes)),
-	}
-	if len(definition.Edges) != len(index.nodes)-1 {
-		return workflowGraph{}, fmt.Errorf("%w: workflow requires exactly len(nodes)-1 edges", ErrInvalidTaskConfig)
-	}
-	for _, edge := range definition.Edges {
-		if err := connectWorkflowEdge(edge, index, &graph); err != nil {
-			return workflowGraph{}, err
-		}
-	}
-	return graph, nil
-}
-
-func connectWorkflowEdge(edge WorkflowEdge, index workflowNodeIndex, graph *workflowGraph) error {
-	if edge.FromNodeID == "" || edge.ToNodeID == "" {
-		return fmt.Errorf("%w: workflow edge endpoints are required", ErrInvalidTaskConfig)
-	}
-	if edge.FromNodeID == edge.ToNodeID {
-		return fmt.Errorf("%w: workflow does not allow self-loop edge %q", ErrInvalidTaskConfig, edge.FromNodeID)
-	}
-	if _, ok := index.nodes[edge.FromNodeID]; !ok {
-		return fmt.Errorf("%w: workflow edge references unknown from_node_id %q", ErrInvalidTaskConfig, edge.FromNodeID)
-	}
-	if _, ok := index.nodes[edge.ToNodeID]; !ok {
-		return fmt.Errorf("%w: workflow edge references unknown to_node_id %q", ErrInvalidTaskConfig, edge.ToNodeID)
-	}
-	if nextID, exists := graph.next[edge.FromNodeID]; exists && nextID != edge.ToNodeID {
-		return fmt.Errorf("%w: workflow branching is not supported", ErrInvalidTaskConfig)
-	}
-	graph.next[edge.FromNodeID] = edge.ToNodeID
-	graph.outdegree[edge.FromNodeID]++
-	graph.indegree[edge.ToNodeID]++
-	return nil
-}
-
-func validateWorkflowDegrees(index workflowNodeIndex, graph workflowGraph) error {
-	for id, node := range index.nodes {
-		in := graph.indegree[id]
-		out := graph.outdegree[id]
-		switch node.Type {
-		case workflowNodeTypeStart:
-			if in != 0 || out != 1 {
-				return fmt.Errorf("%w: start node must have in=0 and out=1", ErrInvalidTaskConfig)
-			}
-		case workflowNodeTypeEnd:
-			if in != 1 || out != 0 {
-				return fmt.Errorf("%w: end node must have in=1 and out=0", ErrInvalidTaskConfig)
-			}
-		default:
-			if in != 1 || out != 1 {
-				return fmt.Errorf("%w: workflow node %q must have in=1 and out=1", ErrInvalidTaskConfig, id)
-			}
-		}
-	}
-	return nil
-}
-
-func orderWorkflowNodes(index workflowNodeIndex, graph workflowGraph) ([]WorkflowNode, error) {
-	ordered := make([]WorkflowNode, 0, len(index.nodes))
-	seen := make(map[string]bool, len(index.nodes))
-	current := index.startID
-	for {
-		if seen[current] {
-			return nil, fmt.Errorf("%w: workflow must not contain cycles", ErrInvalidTaskConfig)
-		}
-		seen[current] = true
-		ordered = append(ordered, index.nodes[current])
-		nextID, ok := graph.next[current]
-		if !ok {
-			break
-		}
-		current = nextID
-	}
-	if current != index.endID {
-		return nil, fmt.Errorf("%w: workflow does not reach end node", ErrInvalidTaskConfig)
-	}
-	if len(seen) != len(index.nodes) {
-		return nil, fmt.Errorf("%w: workflow must be fully connected", ErrInvalidTaskConfig)
-	}
-	return ordered, nil
-}
-
-func (p workflowExecutionPlan) executableNodes() []WorkflowNode {
-	if len(p.ordered) <= 2 {
-		return nil
-	}
-	return append([]WorkflowNode(nil), p.ordered[1:len(p.ordered)-1]...)
 }

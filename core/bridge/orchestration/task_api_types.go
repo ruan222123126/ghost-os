@@ -3,29 +3,31 @@ package orchestration
 import "time"
 
 type taskCreateParams struct {
-	Message         string              `json:"message"`
-	SessionID       string              `json:"session_id,omitempty"`
-	TaskKind        string              `json:"task_kind,omitempty"`
-	Action          string              `json:"action,omitempty"`
-	ActionParams    map[string]any      `json:"action_params,omitempty"`
-	Workflow        *WorkflowDefinition `json:"workflow,omitempty"`
-	IntervalSeconds int                 `json:"interval_seconds,omitempty"`
-	CronExpr        string              `json:"cron_expr,omitempty"`
-	TraceID         string              `json:"trace_id,omitempty"`
+	Message          string                `json:"message"`
+	SessionID        string                `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
+	TaskKind         string                `json:"task_kind,omitempty"`
+	Action           string                `json:"action,omitempty"`
+	ActionParams     map[string]any        `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
+	IntervalSeconds  int                   `json:"interval_seconds,omitempty"`
+	CronExpr         string                `json:"cron_expr,omitempty"`
+	TraceID          string                `json:"trace_id,omitempty"`
 }
 
 type taskUpdateParams struct {
-	ID              string              `json:"id,omitempty"`
-	Message         *string             `json:"message,omitempty"`
-	SessionID       *string             `json:"session_id,omitempty"`
-	TaskKind        *string             `json:"task_kind,omitempty"`
-	Action          *string             `json:"action,omitempty"`
-	ActionParams    *map[string]any     `json:"action_params,omitempty"`
-	Workflow        *WorkflowDefinition `json:"workflow,omitempty"`
-	IntervalSeconds *int                `json:"interval_seconds,omitempty"`
-	CronExpr        *string             `json:"cron_expr,omitempty"`
-	Enabled         *bool               `json:"enabled,omitempty"`
-	TraceID         string              `json:"trace_id,omitempty"`
+	ID               string                `json:"id,omitempty"`
+	Message          *string               `json:"message,omitempty"`
+	SessionID        *string               `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
+	TaskKind         *string               `json:"task_kind,omitempty"`
+	Action           *string               `json:"action,omitempty"`
+	ActionParams     *map[string]any       `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
+	IntervalSeconds  *int                  `json:"interval_seconds,omitempty"`
+	CronExpr         *string               `json:"cron_expr,omitempty"`
+	Enabled          *bool                 `json:"enabled,omitempty"`
+	TraceID          string                `json:"trace_id,omitempty"`
 }
 
 type taskIDParams struct {
@@ -38,22 +40,23 @@ type taskLogsParams struct {
 }
 
 type taskPayload struct {
-	ID              string              `json:"id"`
-	Message         string              `json:"message,omitempty"`
-	SessionID       string              `json:"session_id,omitempty"`
-	TaskKind        string              `json:"task_kind"`
-	Action          string              `json:"action,omitempty"`
-	ActionParams    map[string]any      `json:"action_params,omitempty"`
-	Workflow        *WorkflowDefinition `json:"workflow,omitempty"`
-	ScheduleType    string              `json:"schedule_type"`
-	IntervalSeconds int                 `json:"interval_seconds,omitempty"`
-	CronExpr        string              `json:"cron_expr,omitempty"`
-	Enabled         bool                `json:"enabled"`
-	CreatedAt       time.Time           `json:"created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"`
-	LastRunAt       time.Time           `json:"last_run_at,omitempty"`
-	NextRunAt       time.Time           `json:"next_run_at,omitempty"`
-	LastError       string              `json:"last_error,omitempty"`
+	ID               string                `json:"id"`
+	Message          string                `json:"message,omitempty"`
+	SessionID        string                `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
+	TaskKind         string                `json:"task_kind"`
+	Action           string                `json:"action,omitempty"`
+	ActionParams     map[string]any        `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
+	ScheduleType     string                `json:"schedule_type"`
+	IntervalSeconds  int                   `json:"interval_seconds,omitempty"`
+	CronExpr         string                `json:"cron_expr,omitempty"`
+	Enabled          bool                  `json:"enabled"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+	LastRunAt        time.Time             `json:"last_run_at,omitempty"`
+	NextRunAt        time.Time             `json:"next_run_at,omitempty"`
+	LastError        string                `json:"last_error,omitempty"`
 }
 
 type taskDeleteResponse struct {

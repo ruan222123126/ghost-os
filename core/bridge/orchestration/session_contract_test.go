@@ -150,3 +150,64 @@ func TestBuildSessionMessagePayloadProjectsSendFileAttachment(t *testing.T) {
 		t.Fatalf("unexpected download URL: %q", payload.Content[0].File.DownloadURL)
 	}
 }
+
+func TestBuildSessionDetailPayloadIncludesAssistantDraftForLatestWindow(t *testing.T) {
+	sess := session.NewSession("system prompt")
+	sess.ID = "session-draft-detail"
+	sess.AssistantDraft = &session.AssistantDraft{
+		Text:    "partial answer",
+		TraceID: "trace-draft",
+		Turn:    1,
+	}
+
+	page := session.MessagePage{
+		Limit: 100,
+		Messages: []session.IndexedMessage{
+			{
+				Index:   0,
+				Message: sess.Messages[0],
+			},
+		},
+	}
+	payload := buildSessionDetailPayload(sess, page, true)
+	if len(payload.Messages) != 2 {
+		t.Fatalf("expected draft to be appended, got %d messages", len(payload.Messages))
+	}
+	draft := payload.Messages[1]
+	if draft.Role != string(llm.RoleAssistant) {
+		t.Fatalf("unexpected draft role: %q", draft.Role)
+	}
+	if draft.Text != "partial answer" {
+		t.Fatalf("unexpected draft text: %q", draft.Text)
+	}
+	if !draft.InProgress {
+		t.Fatal("expected draft message in_progress=true")
+	}
+	if draft.Index != sess.MessageCount {
+		t.Fatalf("unexpected draft index: got %d want %d", draft.Index, sess.MessageCount)
+	}
+}
+
+func TestBuildSessionDetailPayloadSkipsAssistantDraftForOlderWindow(t *testing.T) {
+	sess := session.NewSession("system prompt")
+	sess.ID = "session-draft-older-window"
+	sess.AssistantDraft = &session.AssistantDraft{
+		Text:    "partial answer",
+		TraceID: "trace-draft",
+		Turn:    1,
+	}
+	page := session.MessagePage{
+		Limit: 100,
+		Messages: []session.IndexedMessage{
+			{
+				Index:   0,
+				Message: sess.Messages[0],
+			},
+		},
+	}
+
+	payload := buildSessionDetailPayload(sess, page, false)
+	if len(payload.Messages) != 1 {
+		t.Fatalf("expected old page to skip draft, got %d messages", len(payload.Messages))
+	}
+}

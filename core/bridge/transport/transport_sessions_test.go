@@ -185,6 +185,55 @@ func TestHandleSessionGetSupportsWindowQueries(t *testing.T) {
 	}
 }
 
+func TestHandleSessionGetIncludesAssistantDraftForLatestWindow(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+	sess := session.NewSession("system")
+	sess.ID = "session-with-draft"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
+	sess.AssistantDraft = &session.AssistantDraft{
+		Text:    "partial answer",
+		TraceID: "trace-draft",
+		Turn:    1,
+	}
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(handler, http.MethodGet, "/api/sessions/"+sess.ID, "", nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok {
+		t.Fatalf("unexpected messages type: %T", payload["messages"])
+	}
+	if len(messages) != len(sess.Messages)+1 {
+		t.Fatalf("expected committed messages + draft, got %d", len(messages))
+	}
+	draft, ok := messages[len(messages)-1].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected draft message type: %T", messages[len(messages)-1])
+	}
+	if draft["role"] != string(llm.RoleAssistant) {
+		t.Fatalf("unexpected draft role: %v", draft["role"])
+	}
+	if draft["text"] != "partial answer" {
+		t.Fatalf("unexpected draft text: %v", draft["text"])
+	}
+	if draft["in_progress"] != true {
+		t.Fatalf("unexpected draft in_progress: %v", draft["in_progress"])
+	}
+	if payload["message_count"] != float64(len(sess.Messages)) {
+		t.Fatalf("unexpected message_count: got %v want %d", payload["message_count"], len(sess.Messages))
+	}
+}
+
 func TestHandleSessionGetRejectsInvalidWindowQueries(t *testing.T) {
 	handler := newTestHandler(t, nil)
 

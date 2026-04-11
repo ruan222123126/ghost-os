@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
@@ -16,6 +17,16 @@ type SessionTurnRunner interface {
 	RunTurnStream(ctx context.Context, message string, sessionID string, traceID string, sink streaming.Sink) (string, string, error)
 }
 
+type SessionTurnRunnerWithOverrides interface {
+	RunTurnWithOverrides(
+		ctx context.Context,
+		message string,
+		sessionID string,
+		traceID string,
+		runtimeOverrides *TaskRuntimeOverrides,
+	) (string, string, error)
+}
+
 type StructuredSessionTurnRunner interface {
 	RunTurnInput(ctx context.Context, input llm.Message, sessionID string, traceID string) (string, string, error)
 	RunTurnStreamInput(ctx context.Context, input llm.Message, sessionID string, traceID string, sink streaming.Sink) (string, string, error)
@@ -24,15 +35,15 @@ type StructuredSessionTurnRunner interface {
 // SessionAgentRunner 负责执行单轮 agent；运行时装配下沉到 sessionTurnPreparer。
 type SessionAgentRunner struct {
 	runtimeFactory  AgentRuntimeFactory
-	configStore     *ConfigStore
+	configStore     bridgeconfig.Store
 	sessionStore    *session.Store
 	runRegistry     *RunRegistry
-	selectorFactory func(Config, tools.ToolCatalog) selectorEngine
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine
 }
 
 func NewSessionAgentRunner(
 	runtimeFactory AgentRuntimeFactory,
-	configStore *ConfigStore,
+	configStore bridgeconfig.Store,
 	sessionStore *session.Store,
 	runRegistry *RunRegistry,
 ) *SessionAgentRunner {
@@ -48,7 +59,17 @@ func NewSessionAgentRunner(
 }
 
 func (r *SessionAgentRunner) prepareTurn(ctx context.Context, userInput llm.Message, sessionID string, traceID string) (*sessionTurnState, error) {
-	return r.turnPreparer().prepare(ctx, userInput, sessionID, traceID)
+	return r.prepareTurnWithRuntimeOverrides(ctx, userInput, sessionID, traceID, nil)
+}
+
+func (r *SessionAgentRunner) prepareTurnWithRuntimeOverrides(
+	ctx context.Context,
+	userInput llm.Message,
+	sessionID string,
+	traceID string,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (*sessionTurnState, error) {
+	return r.turnPreparer().prepareWithRuntimeOverrides(ctx, userInput, sessionID, traceID, runtimeOverrides)
 }
 
 func (r *SessionAgentRunner) turnPreparer() *sessionTurnPreparer {
@@ -71,8 +92,31 @@ func (r *SessionAgentRunner) RunTurn(ctx context.Context, userMessage string, se
 	}, sessionID, traceID)
 }
 
+func (r *SessionAgentRunner) RunTurnWithOverrides(
+	ctx context.Context,
+	userMessage string,
+	sessionID string,
+	traceID string,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (string, string, error) {
+	return r.RunTurnInputWithOverrides(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: userMessage,
+	}, sessionID, traceID, runtimeOverrides)
+}
+
 func (r *SessionAgentRunner) RunTurnInput(ctx context.Context, input llm.Message, sessionID string, traceID string) (string, string, error) {
-	turn, err := r.prepareTurn(ctx, input, sessionID, traceID)
+	return r.RunTurnInputWithOverrides(ctx, input, sessionID, traceID, nil)
+}
+
+func (r *SessionAgentRunner) RunTurnInputWithOverrides(
+	ctx context.Context,
+	input llm.Message,
+	sessionID string,
+	traceID string,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (string, string, error) {
+	turn, err := r.prepareTurnWithRuntimeOverrides(ctx, input, sessionID, traceID, runtimeOverrides)
 	if err != nil {
 		return "", "", err
 	}
@@ -104,8 +148,9 @@ func (r *SessionAgentRunner) RunTurnStreamInput(ctx context.Context, input llm.M
 	defer turn.close()
 
 	turn.agent.SetStreamLifecyclePayloadBuilder(newSessionStreamLifecyclePayloadBuilder(turn))
+	runSink := newSessionDraftCheckpointSink(streamSink, turn.sessionStore, turn.sess)
 
-	response, runErr := turn.agent.RunMessageStreamWithTraceID(turn.execCtx, input, turn.traceID, streamSink)
+	response, runErr := turn.agent.RunMessageStreamWithTraceID(turn.execCtx, input, turn.traceID, runSink)
 	response, persistedSessionID, err := turn.complete(response, runErr, func(err error, awaitingHuman bool) error {
 		turnNumber := turn.agent.LastTurn()
 		stepID, stepErr := streaming.AssistantStepID(turnNumber)

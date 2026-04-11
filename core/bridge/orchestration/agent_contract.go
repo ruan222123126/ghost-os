@@ -64,19 +64,28 @@ func validateAgentResponsePayload(payload agentResponse) error {
 		}
 	}
 	if payload.Mode != "" {
-		switch payload.Mode {
-		case proModePro, proModeProx:
-		default:
-			return errors.New("agent response mode is invalid")
-		}
-		if payload.IterationCount <= 0 {
-			return errors.New("agent response iteration_count must be > 0 when mode is set")
-		}
-		if strings.TrimSpace(payload.StoppedBy) == "" {
-			return errors.New("agent response stopped_by is required when mode is set")
+		if err := validateAgentResponseMode(payload); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func validateAgentResponseMode(payload agentResponse) error {
+	switch payload.Mode {
+	case proModePro, proModeProx:
+		if payload.IterationCount <= 0 {
+			return errors.New("agent response iteration_count must be > 0 for pro/prox mode")
+		}
+		if strings.TrimSpace(payload.StoppedBy) == "" {
+			return errors.New("agent response stopped_by is required for pro/prox mode")
+		}
+		return nil
+	case agentModePlan:
+		return nil
+	default:
+		return errors.New("agent response mode is invalid")
+	}
 }
 
 func cloneIterationSummary(records []agentIterationSummaryItem) []agentIterationSummaryItem {

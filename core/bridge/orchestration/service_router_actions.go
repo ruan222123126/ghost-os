@@ -81,19 +81,19 @@ func normalizeTaskListScope(scope string) (string, error) {
 }
 
 func registerRSSActions(service *bridgeService) {
-	registerAction(service, busActionRSSInboxPoll, func(ctx context.Context, params rssInboxPollParams, traceID string) (any, int, error) {
+	registerAction(service, busActionRSSInboxPoll, func(ctx context.Context, params RSSInboxPollParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxPollAction(ctx, params, traceID)
 	})
-	registerAction(service, busActionRSSInboxList, func(_ context.Context, params rssInboxListParams, traceID string) (any, int, error) {
+	registerAction(service, busActionRSSInboxList, func(_ context.Context, params RSSInboxListParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxListAction(params, traceID)
 	})
-	registerAction(service, busActionRSSInboxGet, func(_ context.Context, params rssInboxGetParams, traceID string) (any, int, error) {
+	registerAction(service, busActionRSSInboxGet, func(_ context.Context, params RSSInboxGetParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxGetAction(params, traceID)
 	})
-	registerAction(service, busActionRSSInboxGroups, func(_ context.Context, params rssInboxGroupsParams, traceID string) (any, int, error) {
+	registerAction(service, busActionRSSInboxGroups, func(_ context.Context, params RSSInboxGroupsParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxGroupsAction(params, traceID)
 	})
-	registerAction(service, busActionRSSBriefingBuild, func(ctx context.Context, params rssBriefingParams, traceID string) (any, int, error) {
+	registerAction(service, busActionRSSBriefingBuild, func(ctx context.Context, params RSSBriefingParams, traceID string) (any, int, error) {
 		return service.executeRSSBriefingBuildAction(ctx, params, traceID)
 	})
 	registerAction(service, busActionRSSBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {

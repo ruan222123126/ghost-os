@@ -3,7 +3,10 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -18,12 +21,12 @@ type Service struct {
 	inner *bridgeService
 }
 
-func NewService(store *ConfigStore, sessionStore *SessionStore, executor AgentExecutorFunc) *Service {
+func NewService(store bridgeconfig.Store, sessionStore *SessionStore, executor AgentExecutorFunc) *Service {
 	return &Service{inner: newBridgeService(store, sessionStore, executor)}
 }
 
 func NewServiceWithStreamExecutor(
-	store *ConfigStore,
+	store bridgeconfig.Store,
 	sessionStore *SessionStore,
 	executor AgentExecutorFunc,
 	streamExecutor AgentStreamExecutorFunc,
@@ -36,7 +39,7 @@ func NewSessionStreamBroadcastSink(sink StreamSink, hub *SessionPushHub) StreamS
 }
 
 func NewSessionTurnRunnerAdapter(
-	store *ConfigStore,
+	store bridgeconfig.Store,
 	sessionStore *SessionStore,
 	executor AgentExecutorFunc,
 	streamExecutor AgentStreamExecutorFunc,
@@ -51,7 +54,7 @@ func (s *Service) SessionPushHub() *SessionPushHub {
 	return s.inner.sessionPush
 }
 
-func (s *Service) ConfigStore() *ConfigStore {
+func (s *Service) ConfigStore() bridgeconfig.Store {
 	if s == nil || s.inner == nil {
 		return nil
 	}
@@ -95,13 +98,8 @@ func (s *Service) SetRuntimeFactory(factory AgentRuntimeFactory) {
 }
 
 func (s *Service) SetRSSInbox(service *RSSInboxService) {
-	if s != nil && s.inner != nil {
-		s.inner.rssInbox = service
-		if service == nil {
-			s.inner.feedStore = nil
-			return
-		}
-		s.inner.feedStore = service.FeedStore()
+	if s != nil && s.inner != nil && s.inner.rssHandler != nil {
+		_ = s.inner.rssHandler.Reload(s.inner.configStore)
 	}
 }
 
@@ -109,8 +107,11 @@ func (s *Service) SetRSSInboxService(service *RSSInboxService, initErr error) {
 	if s == nil || s.inner == nil {
 		return
 	}
-	s.inner.rssInitErr = initErr
-	s.SetRSSInbox(service)
+	if initErr != nil {
+		s.inner.rssHandler = NewRSSActionHandler(nil, initErr, s.inner.rssLogFunc())
+	} else {
+		s.inner.rssHandler = NewRSSActionHandler(service, nil, s.inner.rssLogFunc())
+	}
 }
 
 func (s *Service) StartBackgroundRuntimes() error {
@@ -195,7 +196,10 @@ func (s *Service) ExecuteRSSInboxPollUsecase(
 	taskID string,
 	traceID string,
 ) (RSSInboxPollResult, int, error) {
-	return s.inner.executeRSSInboxPollUsecase(ctx, params, taskID, traceID)
+	if s == nil || s.inner == nil || s.inner.rssHandler == nil {
+		return RSSInboxPollResult{}, http.StatusInternalServerError, fmt.Errorf("rss inbox service is not configured")
+	}
+	return s.inner.rssHandler.ExecuteInboxPollUsecase(ctx, params, taskID, traceID)
 }
 
 func (s *Service) ExecuteSkillListAction(traceID string) (any, int, error) {

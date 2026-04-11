@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 )
 
 // SessionHistoryBuilder 负责会话装载与 Agent 历史恢复。
 type SessionHistoryBuilder struct {
-	provider     ProviderConfig
+	provider     bridgeconfig.ProviderConfig
 	systemPrompt string
 	sessionStore *session.Store
 	idleTurns    int
@@ -32,7 +33,7 @@ type resolvedHumanQuestion struct {
 }
 
 func newSessionHistoryBuilder(
-	provider ProviderConfig,
+	provider bridgeconfig.ProviderConfig,
 	systemPrompt string,
 	sessionStore *session.Store,
 	idleTurns int,
@@ -46,7 +47,8 @@ func newSessionHistoryBuilder(
 }
 
 // LoadOrCreateSession 在 session_id 为空（或未启用持久化存储）时创建新会话；否则仅加载已存在会话。
-func (b *SessionHistoryBuilder) LoadOrCreateSession(sessionID string) (*session.Session, error) {
+// 返回值 created=true 表示本次返回的是新建会话。
+func (b *SessionHistoryBuilder) LoadOrCreateSession(sessionID string) (*session.Session, bool, error) {
 	trimmedSessionID := strings.TrimSpace(sessionID)
 	prompt := ""
 	if b != nil {
@@ -54,17 +56,17 @@ func (b *SessionHistoryBuilder) LoadOrCreateSession(sessionID string) (*session.
 	}
 	if trimmedSessionID == "" || b == nil || b.sessionStore == nil {
 		// 首次会话没有历史，按当前 system prompt 创建空会话。
-		return session.NewSession(prompt), nil
+		return session.NewSession(prompt), true, nil
 	}
 
 	sess, err := b.sessionStore.Load(trimmedSessionID)
 	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
-			return nil, fmt.Errorf("%w: session_id=%s", session.ErrSessionNotFound, trimmedSessionID)
+			return nil, false, fmt.Errorf("%w: session_id=%s", session.ErrSessionNotFound, trimmedSessionID)
 		}
-		return nil, err
+		return nil, false, err
 	}
-	return sess, nil
+	return sess, false, nil
 }
 
 // BuildHistory 基于会话历史恢复 Agent 上下文，并注入已回答的人类反馈。

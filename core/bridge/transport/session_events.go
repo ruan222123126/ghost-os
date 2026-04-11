@@ -3,6 +3,7 @@ package transport
 import (
 	"encoding/json"
 	"fmt"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"time"
 )
@@ -62,7 +63,7 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-func writeSessionPushEvent(w http.ResponseWriter, flusher http.Flusher, event sessionPushEvent) error {
+func writeSessionPushEvent(w http.ResponseWriter, flusher http.Flusher, event bridgeorchestration.SessionPushEvent) error {
 	if event.At.IsZero() {
 		event.At = time.Now().UTC()
 	}

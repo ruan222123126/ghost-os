@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -25,7 +26,7 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 	registry := tools.NewRegistry()
 	registry.Register(tool)
 	service.runtimeFactory = proTestRuntimeFactory{
-		deps: NewRuntimeDependencies(Config{Task: TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, completer, registry, "", nil),
+		deps: NewRuntimeDependencies(bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, completer, registry, "", nil),
 	}
 	agentRunner := &workflowTestRunner{message: "agent done", sessionID: "workflow-session"}
 	service.agentRunner = agentRunner
@@ -72,6 +73,79 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 	}
 }
 
+func TestTaskWorkflowRunNowRoutesIfNodeByToolOutput(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	tool := &workflowTestTool{name: "script_exec", output: "status=ok"}
+	registry := tools.NewRegistry()
+	registry.Register(tool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, &workflowTestCompleter{}, registry, "", nil),
+	}
+	agentRunner := &workflowTestRunner{message: "if branch done", sessionID: "if-session"}
+	service.agentRunner = agentRunner
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithIfNode("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-if-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-if-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if run.Run.SessionIDOutput != "if-session" {
+		t.Fatalf("unexpected session output: %#v", run.Run)
+	}
+	if len(agentRunner.calls) != 1 || agentRunner.calls[0].message != "true branch message" {
+		t.Fatalf("unexpected agent branch: %#v", agentRunner.calls)
+	}
+}
+
+func TestTaskWorkflowRunNowExecutesLoopBodyByMaxIterations(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	tool := &workflowTestTool{name: "script_exec", output: "loop body"}
+	registry := tools.NewRegistry()
+	registry.Register(tool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, &workflowTestCompleter{}, registry, "", nil),
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithLoopNode("script_exec", 3),
+		IntervalSeconds: 60,
+	}, "trace-workflow-loop-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-loop-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if len(tool.calls) != 3 {
+		t.Fatalf("unexpected loop execution count: got %d want 3", len(tool.calls))
+	}
+}
+
 func TestTaskWorkflowRunNowStopsOnAgentAwaitingHuman(t *testing.T) {
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 	service.agentRunner = &workflowTestRunner{
@@ -115,7 +189,7 @@ func TestTaskWorkflowRunNowFailsWhenAllowlistChanges(t *testing.T) {
 	registry := tools.NewRegistry()
 	registry.Register(&workflowTestTool{name: "script_exec", output: `{"status":"ok"}`})
 	service.runtimeFactory = proTestRuntimeFactory{
-		deps: NewRuntimeDependencies(Config{Task: TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, &workflowTestCompleter{}, registry, "", nil),
+		deps: NewRuntimeDependencies(bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, &workflowTestCompleter{}, registry, "", nil),
 	}
 
 	createdRaw, _, err := service.executeTaskCreateAction(taskCreateParams{
@@ -229,6 +303,62 @@ func workflowWithAgentNode() *WorkflowDefinition {
 		Edges: []WorkflowEdge{
 			{FromNodeID: "start-node", ToNodeID: "agent-node"},
 			{FromNodeID: "agent-node", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithIfNode(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{ID: "tool-node", Type: workflowNodeTypeTool, Tool: &WorkflowToolNode{ToolName: toolName, Arguments: map[string]any{"command": "pwd"}}},
+			{
+				ID:   "if-node",
+				Type: workflowNodeTypeIf,
+				If: &WorkflowIfNode{
+					SourceNodeID: "tool-node",
+					Operator:     workflowIfOperatorContains,
+					Value:        "ok",
+					TrueNodeID:   "agent-true",
+					FalseNodeID:  "agent-false",
+				},
+			},
+			{ID: "agent-true", Type: workflowNodeTypeAgent, Agent: &WorkflowAgentNode{Message: "true branch message"}},
+			{ID: "agent-false", Type: workflowNodeTypeAgent, Agent: &WorkflowAgentNode{Message: "false branch message"}},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "tool-node"},
+			{FromNodeID: "tool-node", ToNodeID: "if-node"},
+			{FromNodeID: "if-node", ToNodeID: "agent-true"},
+			{FromNodeID: "if-node", ToNodeID: "agent-false"},
+			{FromNodeID: "agent-true", ToNodeID: "end-node"},
+			{FromNodeID: "agent-false", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithLoopNode(toolName string, maxIterations int) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{
+				ID:   "loop-node",
+				Type: workflowNodeTypeLoop,
+				Loop: &WorkflowLoopNode{
+					MaxIterations: maxIterations,
+					BodyNodeID:    "tool-node",
+					ExitNodeID:    "end-node",
+				},
+			},
+			{ID: "tool-node", Type: workflowNodeTypeTool, Tool: &WorkflowToolNode{ToolName: toolName, Arguments: map[string]any{"command": "pwd"}}},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "loop-node"},
+			{FromNodeID: "loop-node", ToNodeID: "tool-node"},
+			{FromNodeID: "loop-node", ToNodeID: "end-node"},
+			{FromNodeID: "tool-node", ToNodeID: "loop-node"},
 		},
 	}
 }

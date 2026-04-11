@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 )
@@ -24,7 +25,7 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 	}
 
 	builder := newSessionHistoryBuilder(
-		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,
@@ -88,7 +89,7 @@ func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) 
 	})
 
 	builder := newSessionHistoryBuilder(
-		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,
@@ -131,7 +132,7 @@ func TestSessionHistoryBuilder_KeepsToolSearchSearchSpanUnchanged(t *testing.T) 
 	})
 
 	builder := newSessionHistoryBuilder(
-		ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,

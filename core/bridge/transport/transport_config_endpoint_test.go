@@ -3,6 +3,8 @@ package transport
 import (
 	"net/http"
 	"testing"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
 
 func TestHandleConfigMethodNotAllowed(t *testing.T) {
@@ -71,11 +73,11 @@ func TestConfigUpdateEmptyBaseURLAndModelResetDefaults(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected payload type: %T", body.Payload)
 	}
-	if payload["base_url"] != defaultBaseURL {
-		t.Fatalf("unexpected base_url: got %v want %q", payload["base_url"], defaultBaseURL)
+	if payload["base_url"] != bridgeconfig.DefaultBaseURL {
+		t.Fatalf("unexpected base_url: got %v want %q", payload["base_url"], bridgeconfig.DefaultBaseURL)
 	}
-	if payload["model"] != defaultModel {
-		t.Fatalf("unexpected model: got %v want %q", payload["model"], defaultModel)
+	if payload["model"] != bridgeconfig.DefaultModel {
+		t.Fatalf("unexpected model: got %v want %q", payload["model"], bridgeconfig.DefaultModel)
 	}
 	if payload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", payload["model_selection_enabled"])

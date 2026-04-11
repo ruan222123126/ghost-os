@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
@@ -38,7 +39,7 @@ func newRunnerTestRegistry() *tools.Registry {
 	return registry
 }
 
-func newRunnerTestDeps(cfg Config) agentRuntimeDependencies {
+func newRunnerTestDeps(cfg bridgeconfig.Config) agentRuntimeDependencies {
 	return agentRuntimeDependencies{
 		cfg:      cfg,
 		registry: newRunnerTestRegistry(),

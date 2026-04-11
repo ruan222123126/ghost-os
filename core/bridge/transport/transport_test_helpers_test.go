@@ -8,37 +8,39 @@ import (
 	"strings"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
-func decodeResponseBody(t *testing.T, recorder *httptest.ResponseRecorder) apiResponse {
+func decodeResponseBody(t *testing.T, recorder *httptest.ResponseRecorder) bridgeorchestration.APIResponse {
 	t.Helper()
 
-	var body apiResponse
+	var body bridgeorchestration.APIResponse
 	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode response: %v, body=%s", err, recorder.Body.String())
 	}
 	return body
 }
 
-func newTestHandler(t *testing.T, executor agentExecutorFunc) http.Handler {
+func newTestHandler(t *testing.T, executor bridgeorchestration.AgentExecutorFunc) http.Handler {
 	t.Helper()
 	handler, _ := newTestHandlerWithStore(t, executor)
 	return handler
 }
 
-func newTestHandlerWithStore(t *testing.T, executor agentExecutorFunc) (http.Handler, *session.Store) {
+func newTestHandlerWithStore(t *testing.T, executor bridgeorchestration.AgentExecutorFunc) (http.Handler, *session.Store) {
 	handler, _, sessionStore := newTestHandlerWithService(t, executor, nil)
 	return handler, sessionStore
 }
 
-func newTestHandlerWithStreamExecutor(t *testing.T, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) (http.Handler, *session.Store) {
+func newTestHandlerWithStreamExecutor(t *testing.T, executor bridgeorchestration.AgentExecutorFunc, streamExecutor bridgeorchestration.AgentStreamExecutorFunc) (http.Handler, *session.Store) {
 	handler, _, sessionStore := newTestHandlerWithService(t, executor, streamExecutor)
 	return handler, sessionStore
 }
 
-func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) (http.Handler, *bridgeService, *session.Store) {
+func newTestHandlerWithService(t *testing.T, executor bridgeorchestration.AgentExecutorFunc, streamExecutor bridgeorchestration.AgentStreamExecutorFunc) (http.Handler, *bridgeorchestration.Service, *session.Store) {
 	t.Helper()
 	tempDir := t.TempDir()
 	t.Setenv("GHOST_CONFIG_PATH", tempDir+"/config.toml")
@@ -49,12 +51,12 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	t.Setenv("GHOST_RSS_INBOX_PATH", tempDir+"/rss/inbox.json")
 	t.Setenv("GHOST_RSS_FEEDS_PATH", tempDir+"/rss/feeds.json")
 	if executor == nil {
-		executor = func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		executor = func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 			return "ok", "session-test", nil
 		}
 	}
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := bridgeconfig.NewStoreFromEnv()
 	if err != nil {
 		t.Fatalf("new config store: %v", err)
 	}
@@ -64,7 +66,7 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 		t.Fatalf("new session store: %v", err)
 	}
 
-	service := newBridgeServiceWithStreamExecutor(store, sessionStore, executor, streamExecutor)
+	service := bridgeorchestration.NewServiceWithStreamExecutor(store, sessionStore, executor, streamExecutor)
 	if err := service.StartBackgroundRuntimes(); err != nil {
 		t.Fatalf("start background runtimes: %v", err)
 	}
@@ -73,7 +75,7 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	if err != nil {
 		t.Fatalf("new server options: %v", err)
 	}
-	options.maxBodyBytes = defaultMaxRequestBodyBytes
+	options.maxBodyBytes = bridgeorchestration.DefaultMaxRequestBodyBytes
 	return newHTTPHandler(service, options), service, sessionStore
 }
 

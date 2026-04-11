@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -15,7 +16,7 @@ import (
 
 type proModeRunner struct {
 	runtimeFactory AgentRuntimeFactory
-	configStore    *ConfigStore
+	configStore    bridgeconfig.Store
 	sessionStore   *session.Store
 	runRegistry    *RunRegistry
 }
@@ -146,7 +147,8 @@ func (r proModeRunner) runIterations(
 	request proModeRequest,
 	traceID string,
 ) (proModeResult, error) {
-	catalog := newProModeCatalog(newToolSelectionPolicy(deps.cfg).residentCatalog(deps.registry), request.Mode == proModePro)
+	baseCatalog := tools.NewPromptOverrideCatalog(deps.registry, deps.cfg.ToolSelector.PromptOverrides)
+	catalog := newProModeCatalog(newToolSelectionPolicy(deps.cfg).residentCatalog(baseCatalog), request.Mode == proModePro)
 	systemPrompt, err := buildProModeSystemPrompt(deps.cfg, catalog, request)
 	if err != nil {
 		return proModeResult{}, err

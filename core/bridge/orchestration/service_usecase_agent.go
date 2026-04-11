@@ -7,6 +7,8 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
 
 // executeAgentAction 执行一次 Agent 回合，并处理“等待人工回答”的中断状态。
@@ -47,7 +49,7 @@ func (s *bridgeService) executeAgentActionWithRuntimeOverrides(
 		logAction(traceID, busActionAgentSend, "success", nil)
 		return payload, code, nil
 	}
-	if _, matched, parseErr := parseProModeRequest(prepared.message, defaultProMaxIterations); matched || parseErr != nil {
+	if _, matched, parseErr := parseProModeRequest(prepared.message, bridgeconfig.DefaultProMaxIterations); matched || parseErr != nil {
 		if parseErr != nil {
 			logAction(traceID, busActionAgentSend, "error", parseErr)
 			return nil, http.StatusBadRequest, parseErr

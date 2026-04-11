@@ -23,11 +23,11 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 	}
 	runner := NewSessionAgentRunner(proTestRuntimeFactory{
 		deps: agentRuntimeDependencies{
-			cfg: Config{
+			cfg: bridgeconfig.Config{
 				MaxTurns:    3,
 				PromptsPath: "",
-				Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
-				ToolSelector: ToolSelectorConfig{
+				Provider:    bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+				ToolSelector: bridgeconfig.ToolSelectorConfig{
 					Allowlist: []string{"ask_human"},
 				},
 				GraphQL: bridgeconfig.GraphQLConfig{
@@ -85,15 +85,15 @@ func TestSessionRunnerGraphQLModeKeepsDefaultSystemPrompt(t *testing.T) {
 func TestSessionRunnerGraphQLModeRefreshesPromptAfterDynamicLoadInSameTurn(t *testing.T) {
 	sessionStore := newTempSessionStore(t)
 	registry := tools.NewRegistry()
-	cfg := Config{
+	cfg := bridgeconfig.Config{
 		MaxTurns:    4,
 		PromptsPath: "",
-		Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
-		ToolSelector: ToolSelectorConfig{
+		Provider:    bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			AllowlistOnly: true,
 			Allowlist:     []string{tools.ToolSearchToolName},
 		},
-		ToolSearch: ToolSearchConfig{
+		ToolSearch: bridgeconfig.ToolSearchConfig{
 			Enabled:   true,
 			IdleTurns: 3,
 		},
@@ -182,7 +182,7 @@ func (*graphQLPromptRefreshWebSearchTool) Execute(context.Context, json.RawMessa
 	return `{"items":[{"title":"OpenAI API docs"}]}`, nil
 }
 
-func visibilityOptionsFromConfig(cfg Config) tools.VisibilityOptions {
+func visibilityOptionsFromConfig(cfg bridgeconfig.Config) tools.VisibilityOptions {
 	return tools.VisibilityOptions{
 		ToolSearchEnabled: cfg.ToolSearch.Enabled,
 		AllowlistOnly:     cfg.ToolSelector.AllowlistOnly,

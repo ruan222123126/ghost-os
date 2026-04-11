@@ -2,20 +2,48 @@ package orchestration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"ghost-os/bridge/llm"
 	bridgeTasks "ghost-os/bridge/tasks"
-	"ghost-os/bridge/tools"
 )
 
 type workflowNodeOutcome struct {
-	status    string
-	sessionID string
-	preview   string
-	err       error
+	status     string
+	sessionID  string
+	preview    string
+	outputText string
+	err        error
+}
+
+type workflowRunState struct {
+	lastOutputText string
+	nodeOutputs    map[string]string
+	loopIterations map[string]int
+}
+
+func newWorkflowRunState(nodeCount int) workflowRunState {
+	return workflowRunState{
+		lastOutputText: "",
+		nodeOutputs:    make(map[string]string, nodeCount),
+		loopIterations: make(map[string]int, nodeCount),
+	}
+}
+
+func (s *workflowRunState) recordNode(nodeID string, outcome workflowNodeOutcome) {
+	output := strings.TrimSpace(outcome.outputText)
+	if output == "" {
+		output = strings.TrimSpace(outcome.preview)
+	}
+	s.lastOutputText = output
+	s.nodeOutputs[nodeID] = output
+}
+
+func (s workflowRunState) sourceText(sourceNodeID string) string {
+	if strings.TrimSpace(sourceNodeID) == "" {
+		return s.lastOutputText
+	}
+	return strings.TrimSpace(s.nodeOutputs[sourceNodeID])
 }
 
 func (a taskExecutorAdapter) executeWorkflowTask(
@@ -27,21 +55,17 @@ func (a taskExecutorAdapter) executeWorkflowTask(
 	if err != nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
-	if len(plan.executableNodes()) == 0 {
-		return bridgeTasks.ExecutionResult{
-			Status:          taskRunStatusSuccess,
-			ResponsePreview: fmt.Sprintf("workflow completed: %s -> %s", plan.ordered[0].ID, plan.ordered[len(plan.ordered)-1].ID),
-		}
-	}
-	if a.service == nil {
+	if a.service == nil && plan.needsService() {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
 	}
-	cfg, err := loadTaskRuntimeConfig(a.service.configStore)
-	if err != nil {
-		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
-	}
-	if err := validateWorkflowTaskRuntime(task.Workflow, cfg); err != nil {
-		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+	if a.service != nil {
+		cfg, err := loadTaskRuntimeConfig(a.service.configStore)
+		if err != nil {
+			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
+		if err := validateWorkflowTaskRuntime(task.Workflow, cfg); err != nil {
+			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
 	}
 	return newWorkflowTaskRunner(a, plan, traceID).execute(ctx)
 }
@@ -52,11 +76,7 @@ type workflowTaskRunner struct {
 	traceID string
 }
 
-func newWorkflowTaskRunner(
-	adapter taskExecutorAdapter,
-	plan workflowExecutionPlan,
-	traceID string,
-) workflowTaskRunner {
+func newWorkflowTaskRunner(adapter taskExecutorAdapter, plan workflowExecutionPlan, traceID string) workflowTaskRunner {
 	return workflowTaskRunner{
 		adapter: adapter,
 		plan:    plan,
@@ -76,73 +96,104 @@ func (r workflowTaskRunner) execute(ctx context.Context) bridgeTasks.ExecutionRe
 }
 
 func (r workflowTaskRunner) loadRuntimeDependencies() (agentRuntimeDependencies, error) {
-	if !workflowNeedsRuntimeDependencies(r.plan.executableNodes()) {
+	if !r.plan.needsRuntimeDependencies() {
 		return agentRuntimeDependencies{}, nil
+	}
+	if r.adapter.service == nil {
+		return agentRuntimeDependencies{}, fmt.Errorf("workflow runtime service is not configured")
 	}
 	return r.adapter.service.runtimeFactory.Build(r.adapter.service.configStore)
 }
 
-func workflowNeedsRuntimeDependencies(nodes []WorkflowNode) bool {
-	for _, node := range nodes {
-		if node.Type == workflowNodeTypeTool || node.Type == workflowNodeTypeLLM {
-			return true
+func (r workflowTaskRunner) executePlan(ctx context.Context, deps agentRuntimeDependencies) bridgeTasks.ExecutionResult {
+	state := newWorkflowRunState(len(r.plan.nodes))
+	lastSessionID := ""
+	lastNode := WorkflowNode{}
+	lastPreview := ""
+	currentNodeID := r.plan.startID
+	for {
+		node, ok := r.plan.node(currentNodeID)
+		if !ok {
+			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: fmt.Sprintf("workflow node %q is missing", currentNodeID)}
 		}
-	}
-	return false
-}
-
-func (r workflowTaskRunner) executePlan(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-) bridgeTasks.ExecutionResult {
-	var lastSessionID string
-	var lastNode WorkflowNode
-	var lastPreview string
-	for _, node := range r.plan.executableNodes() {
-		outcome := r.executeNode(ctx, deps, node)
-		if outcome.err != nil {
+		if node.Type == workflowNodeTypeEnd {
+			return buildWorkflowSuccessResult(lastNode, lastPreview, lastSessionID, r.plan)
+		}
+		step := r.executeStep(ctx, deps, node, &state)
+		if step.err != nil {
 			return bridgeTasks.ExecutionResult{
 				Status: taskRunStatusError,
-				Error:  fmt.Sprintf("workflow node %s (%s) failed: %v", node.ID, node.Type, outcome.err),
+				Error:  fmt.Sprintf("workflow node %s (%s) failed: %v", node.ID, node.Type, step.err),
 			}
 		}
-		if strings.TrimSpace(outcome.sessionID) != "" {
-			lastSessionID = strings.TrimSpace(outcome.sessionID)
+		if strings.TrimSpace(step.outcome.sessionID) != "" {
+			lastSessionID = strings.TrimSpace(step.outcome.sessionID)
 		}
-		if outcome.status == taskRunStatusAwaitingHuman {
+		if step.outcome.status == taskRunStatusAwaitingHuman {
 			return bridgeTasks.ExecutionResult{
 				Status:          taskRunStatusAwaitingHuman,
 				SessionIDOutput: lastSessionID,
-				ResponsePreview: fmt.Sprintf("workflow awaiting human at %s: %s", node.ID, outcome.preview),
+				ResponsePreview: fmt.Sprintf("workflow awaiting human at %s: %s", node.ID, step.outcome.preview),
 			}
 		}
-		lastNode = node
-		lastPreview = outcome.preview
-	}
-	return buildWorkflowSuccessResult(lastNode, lastPreview, lastSessionID, r.plan)
-}
-
-func buildWorkflowSuccessResult(
-	lastNode WorkflowNode,
-	lastPreview string,
-	sessionID string,
-	plan workflowExecutionPlan,
-) bridgeTasks.ExecutionResult {
-	if strings.TrimSpace(lastNode.ID) == "" {
-		return bridgeTasks.ExecutionResult{
-			Status:          taskRunStatusSuccess,
-			SessionIDOutput: sessionID,
-			ResponsePreview: fmt.Sprintf("workflow completed: %s -> %s", plan.ordered[0].ID, plan.ordered[len(plan.ordered)-1].ID),
+		if step.executed {
+			state.recordNode(node.ID, step.outcome)
+			lastNode = node
+			lastPreview = step.outcome.preview
 		}
-	}
-	return bridgeTasks.ExecutionResult{
-		Status:          taskRunStatusSuccess,
-		SessionIDOutput: sessionID,
-		ResponsePreview: fmt.Sprintf("workflow completed at %s: %s", lastNode.ID, lastPreview),
+		currentNodeID = step.nextNodeID
 	}
 }
 
-func (r workflowTaskRunner) executeNode(
+type workflowStepResult struct {
+	nextNodeID string
+	outcome    workflowNodeOutcome
+	executed   bool
+	err        error
+}
+
+func (r workflowTaskRunner) executeStep(
+	ctx context.Context,
+	deps agentRuntimeDependencies,
+	node WorkflowNode,
+	state *workflowRunState,
+) workflowStepResult {
+	switch node.Type {
+	case workflowNodeTypeStart:
+		nextID, err := r.plan.singleNextNodeID(node.ID)
+		return workflowStepResult{nextNodeID: nextID, err: err}
+	case workflowNodeTypeTool, workflowNodeTypeLLM, workflowNodeTypeAgent:
+		return r.executeActionStep(ctx, deps, node)
+	case workflowNodeTypeIf:
+		nextID, err := selectWorkflowIfNextNode(node, *state)
+		return workflowStepResult{nextNodeID: nextID, err: err}
+	case workflowNodeTypeLoop:
+		nextID, err := selectWorkflowLoopNextNode(node, state)
+		return workflowStepResult{nextNodeID: nextID, err: err}
+	default:
+		return workflowStepResult{err: fmt.Errorf("unsupported workflow node type %q", node.Type)}
+	}
+}
+
+func (r workflowTaskRunner) executeActionStep(
+	ctx context.Context,
+	deps agentRuntimeDependencies,
+	node WorkflowNode,
+) workflowStepResult {
+	outcome := r.executeActionNode(ctx, deps, node)
+	if outcome.err != nil || outcome.status == taskRunStatusAwaitingHuman {
+		return workflowStepResult{outcome: outcome, executed: true, err: outcome.err}
+	}
+	nextID, err := r.plan.singleNextNodeID(node.ID)
+	return workflowStepResult{
+		nextNodeID: nextID,
+		outcome:    outcome,
+		executed:   true,
+		err:        err,
+	}
+}
+
+func (r workflowTaskRunner) executeActionNode(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
 	node WorkflowNode,
@@ -159,122 +210,71 @@ func (r workflowTaskRunner) executeNode(
 	}
 }
 
-func executeWorkflowToolNode(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-	node WorkflowNode,
-	traceID string,
-) workflowNodeOutcome {
-	if deps.registry == nil {
-		return workflowNodeOutcome{err: fmt.Errorf("workflow tool runtime is not configured")}
+func selectWorkflowIfNextNode(node WorkflowNode, state workflowRunState) (string, error) {
+	if node.If == nil {
+		return "", fmt.Errorf("workflow if node %q payload is missing", node.ID)
 	}
-	toolName := strings.TrimSpace(node.Tool.ToolName)
-	tool := deps.registry.Get(toolName)
-	if tool == nil {
-		return workflowNodeOutcome{err: fmt.Errorf("workflow tool %q is not available", toolName)}
-	}
-	args, err := encodeWorkflowToolArguments(node.Tool.Arguments)
+	sourceText := state.sourceText(node.If.SourceNodeID)
+	matched, err := evaluateWorkflowIfCondition(node.If.Operator, sourceText, node.If.Value)
 	if err != nil {
-		return workflowNodeOutcome{err: err}
+		return "", fmt.Errorf("workflow if node %q: %w", node.ID, err)
 	}
-	output, err := tool.Execute(tools.WithToolCallID(ctx, workflowNodeToolCallID(node.ID)), args, traceID)
-	if err != nil {
-		return workflowNodeOutcome{err: err}
+	if matched {
+		return strings.TrimSpace(node.If.TrueNodeID), nil
 	}
-	_, meta, err := tools.PostProcessExecuteResult(tool, output, traceID)
-	if err != nil {
-		return workflowNodeOutcome{err: err}
+	return strings.TrimSpace(node.If.FalseNodeID), nil
+}
+
+func evaluateWorkflowIfCondition(operator string, source string, value string) (bool, error) {
+	normalizedOperator := strings.TrimSpace(operator)
+	sourceText := strings.TrimSpace(source)
+	targetValue := strings.TrimSpace(value)
+	switch normalizedOperator {
+	case workflowIfOperatorEquals:
+		return sourceText == targetValue, nil
+	case workflowIfOperatorNotEquals:
+		return sourceText != targetValue, nil
+	case workflowIfOperatorContains:
+		return strings.Contains(sourceText, targetValue), nil
+	case workflowIfOperatorNotContains:
+		return !strings.Contains(sourceText, targetValue), nil
+	case workflowIfOperatorIsEmpty:
+		return sourceText == "", nil
+	case workflowIfOperatorNotEmpty:
+		return sourceText != "", nil
+	default:
+		return false, fmt.Errorf("unsupported operator %q", operator)
 	}
-	if meta.AwaitingHuman != nil {
-		return workflowNodeOutcome{
-			status:  taskRunStatusAwaitingHuman,
-			preview: truncateRunes(strings.TrimSpace(meta.AwaitingHuman.Prompt), maxTaskResponsePreviewRunes),
+}
+
+func selectWorkflowLoopNextNode(node WorkflowNode, state *workflowRunState) (string, error) {
+	if node.Loop == nil {
+		return "", fmt.Errorf("workflow loop node %q payload is missing", node.ID)
+	}
+	count := state.loopIterations[node.ID]
+	if count < node.Loop.MaxIterations {
+		state.loopIterations[node.ID] = count + 1
+		return strings.TrimSpace(node.Loop.BodyNodeID), nil
+	}
+	return strings.TrimSpace(node.Loop.ExitNodeID), nil
+}
+
+func buildWorkflowSuccessResult(
+	lastNode WorkflowNode,
+	lastPreview string,
+	sessionID string,
+	plan workflowExecutionPlan,
+) bridgeTasks.ExecutionResult {
+	if strings.TrimSpace(lastNode.ID) == "" {
+		return bridgeTasks.ExecutionResult{
+			Status:          taskRunStatusSuccess,
+			SessionIDOutput: sessionID,
+			ResponsePreview: fmt.Sprintf("workflow completed: %s -> %s", plan.startID, plan.endID),
 		}
 	}
-	return workflowNodeOutcome{
-		status:  taskRunStatusSuccess,
-		preview: fmt.Sprintf("tool %s executed", toolName),
-	}
-}
-
-func encodeWorkflowToolArguments(arguments map[string]any) (json.RawMessage, error) {
-	if len(arguments) == 0 {
-		return json.RawMessage(`{}`), nil
-	}
-	encoded, err := json.Marshal(arguments)
-	if err != nil {
-		return nil, fmt.Errorf("encode workflow tool arguments: %w", err)
-	}
-	return encoded, nil
-}
-
-func workflowNodeToolCallID(nodeID string) string {
-	return "workflow-" + strings.TrimSpace(nodeID)
-}
-
-func executeWorkflowLLMNode(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-	node WorkflowNode,
-) workflowNodeOutcome {
-	if deps.client == nil {
-		return workflowNodeOutcome{err: fmt.Errorf("workflow llm runtime is not configured")}
-	}
-	response, err := deps.client.Complete(ctx, llm.CompletionRequest{
-		Messages: workflowLLMMessages(*node.LLM),
-	})
-	if err != nil {
-		return workflowNodeOutcome{err: err}
-	}
-	text := workflowResponseText(response)
-	if text == "" {
-		return workflowNodeOutcome{err: fmt.Errorf("workflow llm node %q returned empty response", node.ID)}
-	}
-	return workflowNodeOutcome{
-		status:  taskRunStatusSuccess,
-		preview: truncateRunes(text, maxTaskResponsePreviewRunes),
-	}
-}
-
-func workflowLLMMessages(node WorkflowLLMNode) []llm.Message {
-	messages := make([]llm.Message, 0, 2)
-	if strings.TrimSpace(node.SystemPrompt) != "" {
-		messages = append(messages, llm.Message{Role: llm.RoleSystem, Text: node.SystemPrompt})
-	}
-	messages = append(messages, llm.Message{Role: llm.RoleUser, Text: node.Prompt})
-	return messages
-}
-
-func workflowResponseText(response *llm.CompletionResponse) string {
-	if response == nil {
-		return ""
-	}
-	if text := strings.TrimSpace(response.Message.Text); text != "" {
-		return text
-	}
-	parts := make([]string, 0, len(response.Message.Content))
-	for _, part := range response.Message.Content {
-		if text := strings.TrimSpace(part.Text); text != "" {
-			parts = append(parts, text)
-		}
-	}
-	return strings.TrimSpace(strings.Join(parts, "\n"))
-}
-
-func (r workflowTaskRunner) executeAgentNode(
-	ctx context.Context,
-	node WorkflowNode,
-) workflowNodeOutcome {
-	result := r.adapter.runAgentAction(ctx, agentParams{
-		Message:   node.Agent.Message,
-		SessionID: "",
-	}, r.traceID)
-	if strings.TrimSpace(result.Error) != "" {
-		return workflowNodeOutcome{err: fmt.Errorf("%s", result.Error)}
-	}
-	return workflowNodeOutcome{
-		status:    result.Status,
-		sessionID: result.SessionIDOutput,
-		preview:   result.ResponsePreview,
+	return bridgeTasks.ExecutionResult{
+		Status:          taskRunStatusSuccess,
+		SessionIDOutput: sessionID,
+		ResponsePreview: fmt.Sprintf("workflow completed at %s: %s", lastNode.ID, lastPreview),
 	}
 }

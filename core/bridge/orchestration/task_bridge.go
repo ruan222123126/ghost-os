@@ -39,11 +39,16 @@ var (
 )
 
 type ScheduledTask = bridgeTasks.ScheduledTask
+type TaskRuntimeOverrides = bridgeTasks.TaskRuntimeOverrides
 type WorkflowDefinition = bridgeTasks.WorkflowDefinition
 type WorkflowNode = bridgeTasks.WorkflowNode
+type WorkflowStartNode = bridgeTasks.WorkflowStartNode
+type WorkflowInputVariable = bridgeTasks.WorkflowInputVariable
 type WorkflowToolNode = bridgeTasks.WorkflowToolNode
 type WorkflowLLMNode = bridgeTasks.WorkflowLLMNode
 type WorkflowAgentNode = bridgeTasks.WorkflowAgentNode
+type WorkflowIfNode = bridgeTasks.WorkflowIfNode
+type WorkflowLoopNode = bridgeTasks.WorkflowLoopNode
 type WorkflowEdge = bridgeTasks.WorkflowEdge
 type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
@@ -72,6 +77,10 @@ func cloneTaskActionParams(input map[string]any) map[string]any {
 
 func cloneTaskWorkflow(input *WorkflowDefinition) *WorkflowDefinition {
 	return bridgeTasks.CloneWorkflowDefinition(input)
+}
+
+func cloneTaskRuntimeOverrides(input *TaskRuntimeOverrides) *TaskRuntimeOverrides {
+	return bridgeTasks.CloneTaskRuntimeOverrides(input)
 }
 
 func decodeActionParamsMap[T any](input map[string]any) (T, error) {
@@ -106,18 +115,19 @@ func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task Schedule
 	return a.runAgentAction(ctx, agentParams{
 		Message:   task.Message,
 		SessionID: task.SessionID,
-	}, traceID)
+	}, cloneTaskRuntimeOverrides(task.RuntimeOverrides), traceID)
 }
 
 func (a taskExecutorAdapter) runAgentAction(
 	ctx context.Context,
 	params agentParams,
+	runtimeOverrides *TaskRuntimeOverrides,
 	traceID string,
 ) bridgeTasks.ExecutionResult {
 	if a.service == nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
 	}
-	payload, _, err := a.service.executeAgentAction(ctx, params, traceID)
+	payload, _, err := a.service.executeAgentActionWithRuntimeOverrides(ctx, params, runtimeOverrides, traceID)
 	if err != nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
@@ -147,39 +157,11 @@ func (a taskExecutorAdapter) executeSystemTask(ctx context.Context, task Schedul
 	if a.service == nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
 	}
-	switch strings.TrimSpace(task.Action) {
-	case busActionRSSInboxPoll:
-		params, err := decodeRSSInboxPollParams(task.ActionParams)
-		if err != nil {
-			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
-		}
-		payload, _, err := a.service.executeRSSInboxPollUsecase(ctx, params, task.ID, traceID)
-		if err != nil {
-			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
-		}
-		return bridgeTasks.ExecutionResult{
-			Status:          taskRunStatusSuccess,
-			ResponsePreview: formatRSSInboxPollPreview(payload),
-		}
-	case busActionRSSBriefingBuild:
-		params, err := decodeRSSBriefingParams(task.ActionParams)
-		if err != nil {
-			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
-		}
-		params.TaskID = task.ID
-		payload, _, err := a.service.executeRSSBriefingBuildAction(ctx, params, traceID)
-		if err != nil {
-			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
-		}
-		typed, _ := payload.(RSSBriefingResult)
-		return bridgeTasks.ExecutionResult{
-			Status:          taskRunStatusSuccess,
-			ResponsePreview: formatRSSBriefingPreview(typed),
-		}
-	default:
-		return bridgeTasks.ExecutionResult{
-			Status: taskRunStatusError,
-			Error:  "unsupported system action: " + strings.TrimSpace(task.Action),
-		}
+	if handler := a.service.rssHandler; handler != nil {
+		return handler.ExecuteSystemTask(ctx, task, traceID)
+	}
+	return bridgeTasks.ExecutionResult{
+		Status: taskRunStatusError,
+		Error:  "unsupported system action: " + strings.TrimSpace(task.Action),
 	}
 }

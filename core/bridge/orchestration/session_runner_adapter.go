@@ -4,19 +4,20 @@ import (
 	"context"
 	"errors"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
 type sessionTurnRunnerAdapter struct {
-	store          *ConfigStore
+	store          bridgeconfig.Store
 	sessionStore   *session.Store
 	executor       agentExecutorFunc
 	streamExecutor agentStreamExecutorFunc
 }
 
 func newSessionTurnRunnerAdapter(
-	store *ConfigStore,
+	store bridgeconfig.Store,
 	sessionStore *session.Store,
 	executor agentExecutorFunc,
 	streamExecutor agentStreamExecutorFunc,

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -103,6 +104,6 @@ func withGraphQLTextProtocolPrompt(basePrompt string, catalog tools.ToolCatalog)
 	return trimmed + "\n\n" + protocol
 }
 
-func graphQLToolRuntimeEnabled(cfg Config) bool {
+func graphQLToolRuntimeEnabled(cfg bridgeconfig.Config) bool {
 	return cfg.GraphQL.ToolRuntimeEnabled
 }

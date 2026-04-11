@@ -6,108 +6,16 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 )
 
-type Config = bridgeconfig.Config
-type ProviderConfig = bridgeconfig.ProviderConfig
-type RSSConfig = bridgeconfig.RSSConfig
-type WorkerConfig = bridgeconfig.WorkerConfig
-type GraphQLConfig = bridgeconfig.GraphQLConfig
-type ToolSelectorConfig = bridgeconfig.ToolSelectorConfig
-type ToolSearchConfig = bridgeconfig.ToolSearchConfig
-type MemoryAugmentationConfig = bridgeconfig.MemoryAugmentationConfig
-type TaskConfig = bridgeconfig.TaskConfig
-type providerConfig = bridgeconfig.ProviderRecord
-
-const (
-	defaultProvider               = bridgeconfig.DefaultProvider
-	defaultBaseURL                = bridgeconfig.DefaultBaseURL
-	defaultAnthropicBaseURL       = bridgeconfig.DefaultAnthropicBaseURL
-	defaultModel                  = bridgeconfig.DefaultModel
-	defaultPromptsPath            = bridgeconfig.DefaultPromptsPath
-	defaultPromptsDir             = bridgeconfig.DefaultPromptsDir
-	defaultSessionsPath           = bridgeconfig.DefaultSessionsPath
-	defaultRSSFeedsPath           = bridgeconfig.DefaultRSSFeedsPath
-	defaultRSSInboxPath           = bridgeconfig.DefaultRSSInboxPath
-	defaultRSSBriefingsPath       = bridgeconfig.DefaultRSSBriefingsPath
-	defaultRSSReportsPath         = bridgeconfig.DefaultRSSReportsPath
-	defaultRSSPollInterval        = bridgeconfig.DefaultRSSPollInterval
-	defaultRSSPollMaxItemsPerFeed = bridgeconfig.DefaultRSSPollMaxItemsPerFeed
-	defaultRSSAIBatchSize         = bridgeconfig.DefaultRSSAIBatchSize
-	defaultRSSBriefingInterval    = bridgeconfig.DefaultRSSBriefingInterval
-	defaultTasksPath              = bridgeconfig.DefaultTasksPath
-	defaultAnthropicVersion       = bridgeconfig.DefaultAnthropicVersion
-	defaultAnthropicMaxTokens     = bridgeconfig.DefaultAnthropicMaxTokens
-	defaultProMaxIterations       = bridgeconfig.DefaultProMaxIterations
-	defaultMaxTurns               = bridgeconfig.DefaultMaxTurns
-	defaultWorkerMaxConcurrency   = bridgeconfig.DefaultWorkerMaxConcurrency
-	defaultWorkerMaxFiles         = bridgeconfig.DefaultWorkerMaxFiles
-	defaultWorkerMaxFileChunks    = bridgeconfig.DefaultWorkerMaxFileChunks
-	defaultToolSelectorTimeoutMS  = bridgeconfig.DefaultToolSelectorTimeoutMS
-	defaultToolSelectorConfidence = bridgeconfig.DefaultToolSelectorConfidence
-	defaultToolSelectorRecentMsgs = bridgeconfig.DefaultToolSelectorRecentMsgs
-	defaultToolSearchIdleTurns    = bridgeconfig.DefaultToolSearchIdleTurns
-	defaultMemoryRecallItems      = bridgeconfig.DefaultMemoryRecallItems
-	defaultMemoryMinConfidence    = bridgeconfig.DefaultMemoryMinConfidence
-	defaultMemoryUserScopeID      = bridgeconfig.DefaultMemoryUserScopeID
-)
-
-var (
-	errProviderNotFound = bridgeconfig.ErrProviderNotFound
-	errProviderExists   = bridgeconfig.ErrProviderExists
-)
-
-type ConfigStore struct {
-	inner bridgeconfig.Store
-}
-
-func (s *ConfigStore) unwrap() bridgeconfig.Store {
-	if s == nil || s.inner == nil {
-		panic("config store is nil")
+func toolUpdateRequestToStoreRequest(name string, req toolUpdateRequest) bridgeconfig.ToolUpdateRequest {
+	return bridgeconfig.ToolUpdateRequest{
+		Name:           strings.TrimSpace(name),
+		Enabled:        req.Enabled,
+		PromptOverride: req.PromptOverride,
 	}
-	return s.inner
 }
 
-func NewConfigStoreFromEnv() (*ConfigStore, error) {
-	inner, err := bridgeconfig.NewStoreFromEnv()
-	if err != nil {
-		return nil, err
-	}
-	return &ConfigStore{inner: inner}, nil
-}
-
-func (s *ConfigStore) Inner() bridgeconfig.Store {
-	return s.unwrap()
-}
-
-func (s *ConfigStore) Config() (Config, error) {
-	return s.unwrap().Config()
-}
-
-func (s *ConfigStore) Snapshot() configResponse {
-	return configResponseFromSnapshot(s.unwrap().Snapshot())
-}
-
-func (s *ConfigStore) ListProviders() ([]providerConfig, error) {
-	return s.unwrap().ListProviders()
-}
-
-func (s *ConfigStore) AddProvider(cfg providerConfig) error {
-	return s.unwrap().AddProvider(cfg)
-}
-
-func (s *ConfigStore) UpdateProvider(name string, cfg providerConfig) error {
-	return s.unwrap().UpdateProvider(name, cfg)
-}
-
-func (s *ConfigStore) DeleteProvider(name string) error {
-	return s.unwrap().DeleteProvider(name)
-}
-
-func (s *ConfigStore) SetActiveProvider(name string) error {
-	return s.unwrap().SetActiveProvider(name)
-}
-
-func (s *ConfigStore) Update(req configUpdateRequest) error {
-	return s.unwrap().Update(bridgeconfig.UpdateRequest{
+func configUpdateRequestToStoreRequest(req configUpdateRequest) bridgeconfig.UpdateRequest {
+	return bridgeconfig.UpdateRequest{
 		Provider:                   req.Provider,
 		APIKey:                     req.APIKey,
 		BaseURL:                    req.BaseURL,
@@ -119,6 +27,7 @@ func (s *ConfigStore) Update(req configUpdateRequest) error {
 		GraphQLSources:             graphQLSourceInputs(req.GraphqlSources),
 		GraphQLSourceUpsert:        graphQLSourceInputPointer(req.GraphqlSourceUpsert),
 		GraphQLMutationPolicies:    graphQLMutationPolicyInputs(req.GraphqlMutationPolicies),
+		SessionHumanLogFullEnabled: req.SessionHumanLogFullEnabled,
 		WebRooterEnabled:           req.WebRooterEnabled,
 		WebRooterBaseURL:           req.WebRooterBaseURL,
 		WebRooterAPIToken:          req.WebRooterAPIToken,
@@ -128,11 +37,7 @@ func (s *ConfigStore) Update(req configUpdateRequest) error {
 		WebSearchTavilyAPIKey:      req.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:         req.WebSearchExaAPIKey,
 		TraceID:                    req.TraceID,
-	})
-}
-
-func (s *ConfigStore) SetProjectRoot(path string) error {
-	return s.unwrap().SetProjectRoot(path)
+	}
 }
 
 func cloneOptionalStringPointer(raw *string) *string {
@@ -179,7 +84,6 @@ func graphQLSourceInputs(raw []graphqlSourceInput) []bridgeconfig.GraphQLSourceI
 	if raw == nil {
 		return nil
 	}
-
 	out := make([]bridgeconfig.GraphQLSourceInput, 0, len(raw))
 	for _, source := range raw {
 		out = append(out, bridgeconfig.GraphQLSourceInput{
@@ -227,7 +131,6 @@ func graphQLDomainInputs(raw []graphqlDomainInput) []bridgeconfig.GraphQLDomainI
 	if len(raw) == 0 {
 		return nil
 	}
-
 	out := make([]bridgeconfig.GraphQLDomainInput, 0, len(raw))
 	for _, domain := range raw {
 		out = append(out, bridgeconfig.GraphQLDomainInput{
@@ -243,13 +146,10 @@ func graphQLDomainInputs(raw []graphqlDomainInput) []bridgeconfig.GraphQLDomainI
 	return out
 }
 
-func graphQLMutationPolicyInputs(
-	raw []graphqlMutationPolicyInput,
-) []bridgeconfig.GraphQLMutationPolicyInput {
+func graphQLMutationPolicyInputs(raw []graphqlMutationPolicyInput) []bridgeconfig.GraphQLMutationPolicyInput {
 	if len(raw) == 0 {
 		return nil
 	}
-
 	out := make([]bridgeconfig.GraphQLMutationPolicyInput, 0, len(raw))
 	for _, policy := range raw {
 		out = append(out, bridgeconfig.GraphQLMutationPolicyInput{

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
@@ -15,7 +16,7 @@ type proTestRuntimeFactory struct {
 	err  error
 }
 
-func (f proTestRuntimeFactory) Build(*ConfigStore) (agentRuntimeDependencies, error) {
+func (f proTestRuntimeFactory) Build(bridgeconfig.Store) (agentRuntimeDependencies, error) {
 	if f.err != nil {
 		return agentRuntimeDependencies{}, f.err
 	}
@@ -93,11 +94,11 @@ func TestExecuteAgentActionRunsFiniteProMode(t *testing.T) {
 	}
 	service.runtimeFactory = proTestRuntimeFactory{
 		deps: agentRuntimeDependencies{
-			cfg: Config{
+			cfg: bridgeconfig.Config{
 				MaxTurns:         4,
 				ProMaxIterations: 2,
 				PromptsPath:      "",
-				Provider:         ProviderConfig{Model: "gpt-4o"},
+				Provider:         bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			client:       completer,
 			registry:     tools.NewRegistry(),
@@ -180,11 +181,11 @@ func TestExecuteAgentActionStopsAtProMaxIterations(t *testing.T) {
 	}
 	service.runtimeFactory = proTestRuntimeFactory{
 		deps: agentRuntimeDependencies{
-			cfg: Config{
+			cfg: bridgeconfig.Config{
 				MaxTurns:         4,
 				ProMaxIterations: 1,
 				PromptsPath:      "",
-				Provider:         ProviderConfig{Model: "gpt-4o"},
+				Provider:         bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			client:       completer,
 			registry:     tools.NewRegistry(),

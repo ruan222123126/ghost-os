@@ -10,13 +10,15 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
 func TestHandleAgentBodyTooLarge(t *testing.T) {
 	handler := newTestHandler(t, nil)
-	oversized := strings.Repeat("a", int(defaultMaxRequestBodyBytes)+32)
+	oversized := strings.Repeat("a", int(bridgeorchestration.DefaultMaxRequestBodyBytes)+32)
 	requestBody := fmt.Sprintf(`{"message":"%s"}`, oversized)
 
 	recorder := serveRequest(handler, http.MethodPost, "/api/agent", requestBody, map[string]string{"Content-Type": "application/json"})
@@ -47,7 +49,7 @@ func TestHandleAgentMethodNotAllowed(t *testing.T) {
 }
 
 func TestAgentEndpointAliasesBusDispatch(t *testing.T) {
-	handler := newTestHandler(t, func(_ context.Context, message string, sessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, message string, sessionID string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		if message != "hello" {
 			t.Fatalf("unexpected message: got %q want %q", message, "hello")
 		}
@@ -114,7 +116,7 @@ func TestAgentEndpointUsesHeaderTraceID(t *testing.T) {
 
 func TestAgentEndpointPassesSessionIDAndReturnsIt(t *testing.T) {
 	const sessionID = "session-from-client"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		if message != "hello" {
 			t.Fatalf("unexpected message: got %q want %q", message, "hello")
 		}
@@ -152,7 +154,7 @@ func TestAgentEndpointPassesSessionIDAndReturnsIt(t *testing.T) {
 
 func TestAgentEndpointRejectsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
 	const sessionID = "session-continue-1"
-	handler := newTestHandler(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, message string, requestSessionID string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not run when message is empty")
 		return "", "", nil
 	})
@@ -174,8 +176,31 @@ func TestAgentEndpointRejectsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
 	}
 }
 
+func TestAgentEndpointRejectsUnsupportedMode(t *testing.T) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
+		t.Fatal("executor should not run when mode is invalid")
+		return "", "", nil
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		`{"mode":"execute","message":"hello"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusBadRequest)
+	}
+
+	body := decodeResponseBody(t, recorder)
+	if body.Error != `unsupported agent mode: "execute"` {
+		t.Fatalf("unexpected error: got %q want %q", body.Error, `unsupported agent mode: "execute"`)
+	}
+}
+
 func TestAgentEndpointRejectsMissingSessionID(t *testing.T) {
-	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not run when session is missing")
 		return "", "", nil
 	})
@@ -201,7 +226,7 @@ func TestAgentEndpointRejectsMissingSessionID(t *testing.T) {
 
 func TestAgentEndpointStructuredSessionEndSignalMarksSessionEnded(t *testing.T) {
 	const sessionID = "session-end-1"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, requestSessionID string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		if requestSessionID != sessionID {
 			t.Fatalf("unexpected session_id: got %q want %q", requestSessionID, sessionID)
 		}
@@ -240,8 +265,8 @@ func TestAgentEndpointStructuredSessionEndSignalMarksSessionEnded(t *testing.T) 
 	if !ok {
 		t.Fatalf("unexpected session_end type: %T", payload["session_end"])
 	}
-	if sessionEnd["signal"] != busAssistantSessionEndSignal {
-		t.Fatalf("unexpected session_end.signal: got %v want %q", sessionEnd["signal"], busAssistantSessionEndSignal)
+	if sessionEnd["signal"] != bridgeorchestration.BusAssistantSessionEndSignal {
+		t.Fatalf("unexpected session_end.signal: got %v want %q", sessionEnd["signal"], bridgeorchestration.BusAssistantSessionEndSignal)
 	}
 	if sessionEnd["message"] != "bye" {
 		t.Fatalf("unexpected session_end.message: got %v want %q", sessionEnd["message"], "bye")
@@ -258,7 +283,7 @@ func TestAgentEndpointStructuredSessionEndSignalMarksSessionEnded(t *testing.T) 
 
 func TestAgentEndpointRejectsAlreadyEndedSession(t *testing.T) {
 	const sessionID = "session-ended-1"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not be called for ended session")
 		return "", "", nil
 	})
@@ -287,7 +312,7 @@ func TestAgentEndpointRejectsAlreadyEndedSession(t *testing.T) {
 }
 
 func TestAgentEndpointReturnsBadRequestOnInvalidSessionID(t *testing.T) {
-	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		return "", "", fmt.Errorf("%w: invalid characters", session.ErrInvalidSessionID)
 	})
 
@@ -305,7 +330,7 @@ func TestAgentEndpointReturnsBadRequestOnInvalidSessionID(t *testing.T) {
 }
 
 func TestAgentEndpointReturnsAcceptedWhenAwaitingHuman(t *testing.T) {
-	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		return "", "session-awaiting-1", &agent.ErrAwaitingHuman{
 			QuestionID:    "q-awaiting-1",
 			Prompt:        "Which database should we use?",

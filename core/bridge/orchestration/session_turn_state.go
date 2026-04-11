@@ -99,6 +99,7 @@ func (s *sessionTurnState) complete(
 	if s != nil && s.agent != nil {
 		newMessages = s.agent.GetNewMessages()
 	}
+	s.clearAssistantDraftBeforeCommit(newMessages)
 
 	if saveErr := s.persistNewMessages(newMessages, !awaitingHuman); saveErr != nil {
 		if onPersistErr != nil {
@@ -125,4 +126,11 @@ func (s *sessionTurnState) hasCommittedMessages() bool {
 		return false
 	}
 	return len(s.agent.GetNewMessages()) > 0
+}
+
+func (s *sessionTurnState) clearAssistantDraftBeforeCommit(newMessages []llm.Message) {
+	if s == nil || s.sess == nil || len(newMessages) == 0 {
+		return
+	}
+	s.sess.ClearAssistantDraft(time.Now().UTC())
 }

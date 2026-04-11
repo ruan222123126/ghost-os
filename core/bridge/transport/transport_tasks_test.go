@@ -15,9 +15,22 @@ type taskWorkflowDefinition struct {
 type taskWorkflowNode struct {
 	ID    string                 `json:"id"`
 	Type  string                 `json:"type"`
+	Start *taskWorkflowStartNode `json:"start,omitempty"`
 	Tool  *taskWorkflowToolNode  `json:"tool,omitempty"`
 	LLM   *taskWorkflowLLMNode   `json:"llm,omitempty"`
 	Agent *taskWorkflowAgentNode `json:"agent,omitempty"`
+}
+
+type taskWorkflowStartNode struct {
+	Inputs []taskWorkflowInputVariable `json:"inputs,omitempty"`
+}
+
+type taskWorkflowInputVariable struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Required    bool   `json:"required,omitempty"`
+	Default     any    `json:"default,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 type taskWorkflowToolNode struct {
@@ -169,6 +182,53 @@ func TestHandleSystemTasksExcludesWorkflow(t *testing.T) {
 	}
 	if len(items) != 0 {
 		t.Fatalf("expected workflow to be excluded from system scope, got %#v", items)
+	}
+}
+
+func TestHandleTasksCreateWorkflowWithStartInputs(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	create := serveRequest(handler, http.MethodPost, "/api/tasks", `{
+		"task_kind":"workflow",
+		"workflow":{
+			"nodes":[
+				{
+					"id":"start-node",
+					"type":"start",
+					"start":{
+						"inputs":[
+							{
+								"name":"topic",
+								"type":"string",
+								"required":true,
+								"default":"weekly",
+								"description":"briefing topic"
+							}
+						]
+					}
+				},
+				{"id":"end-node","type":"end"}
+			],
+			"edges":[
+				{"from_node_id":"start-node","to_node_id":"end-node"}
+			]
+		},
+		"interval_seconds":60
+	}`, nil)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("unexpected create status: got %d want %d", create.Code, http.StatusCreated)
+	}
+
+	created := decodeTaskResponsePayload(t, create)
+	if created.Workflow == nil {
+		t.Fatalf("expected workflow payload, got %#v", created)
+	}
+	start := created.Workflow.Nodes[0].Start
+	if start == nil || len(start.Inputs) != 1 {
+		t.Fatalf("expected start inputs to be returned, got %#v", created.Workflow.Nodes[0])
+	}
+	if start.Inputs[0].Name != "topic" || start.Inputs[0].Type != "string" {
+		t.Fatalf("unexpected input variable payload: %#v", start.Inputs[0])
 	}
 }
 

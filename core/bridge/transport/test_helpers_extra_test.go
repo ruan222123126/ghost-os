@@ -5,7 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -106,13 +108,13 @@ func (c testRSSInboxClassifier) Classify(
 }
 
 type proTestRuntimeFactory struct {
-	deps agentRuntimeDependencies
+	deps bridgeorchestration.RuntimeDependencies
 	err  error
 }
 
-func (f proTestRuntimeFactory) Build(*ConfigStore) (agentRuntimeDependencies, error) {
+func (f proTestRuntimeFactory) Build(bridgeconfig.Store) (bridgeorchestration.RuntimeDependencies, error) {
 	if f.err != nil {
-		return agentRuntimeDependencies{}, f.err
+		return bridgeorchestration.RuntimeDependencies{}, f.err
 	}
 	return f.deps, nil
 }

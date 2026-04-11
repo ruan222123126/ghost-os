@@ -8,13 +8,14 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
 func TestQuestionAnswerEndpointReturnsFinalReply(t *testing.T) {
 	const sessionID = "session-question-answer-final"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, store *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ bridgeconfig.Store, store *session.Store) (string, string, error) {
 		if message != "" {
 			t.Fatalf("unexpected resume message: got %q want empty", message)
 		}
@@ -70,7 +71,7 @@ func TestQuestionAnswerEndpointReturnsFinalReply(t *testing.T) {
 
 func TestQuestionAnswerEndpointCanReturnAwaitingHumanAgain(t *testing.T) {
 	const sessionID = "session-question-answer-awaiting"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, message string, requestSessionID string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		if message != "" {
 			t.Fatalf("unexpected resume message: got %q want empty", message)
 		}
@@ -123,7 +124,7 @@ func TestQuestionAnswerEndpointCanReturnAwaitingHumanAgain(t *testing.T) {
 
 func TestQuestionAnswerEndpointCanCancelPendingQuestion(t *testing.T) {
 	const sessionID = "session-question-answer-cancel"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not run when question is cancelled")
 		return "", "", nil
 	})
@@ -203,7 +204,7 @@ func TestQuestionAnswerEndpointRejectsMissingQuestion(t *testing.T) {
 
 func TestQuestionAnswerEndpointRejectsEndedSession(t *testing.T) {
 	const sessionID = "session-question-answer-ended"
-	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, sessionStore := newTestHandlerWithStore(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not be called for ended session")
 		return "", "", nil
 	})
@@ -247,7 +248,7 @@ func TestQuestionAnswerEndpointRejectsEndedSession(t *testing.T) {
 
 func TestQuestionAnswerEndpointRejectsInflightSession(t *testing.T) {
 	const sessionID = "session-question-answer-busy"
-	handler, service, sessionStore := newTestHandlerWithService(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler, service, sessionStore := newTestHandlerWithService(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not be called for inflight session")
 		return "", "", nil
 	}, nil)
@@ -299,7 +300,7 @@ func TestQuestionAnswerStreamEndpointReturnsSSEEvents(t *testing.T) {
 		message string,
 		incomingSessionID string,
 		traceID string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		sink streaming.Sink,
 	) (string, string, error) {

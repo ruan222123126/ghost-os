@@ -11,6 +11,7 @@ import (
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 )
 
@@ -35,7 +36,7 @@ const (
 
 type servePreflightState struct {
 	options serverOptions
-	service *bridgeService
+	service *bridgeorchestration.Service
 }
 
 type serveStartupError struct {
@@ -68,7 +69,7 @@ func newServerOptionsFromEnv(port int) (serverOptions, error) {
 	return serverOptions{
 		bindAddr:     resolveBindAddrFromConfig(cfg, port),
 		sessionsPath: cfg.SessionsPath,
-		maxBodyBytes: defaultMaxRequestBodyBytes,
+		maxBodyBytes: bridgeorchestration.DefaultMaxRequestBodyBytes,
 		cors:         newCORSPolicyFromConfig(cfg),
 		auth:         newAPITokenAuthFromConfig(cfg),
 	}, nil
@@ -105,7 +106,7 @@ func runServer(ctx context.Context, port int) (string, error) {
 // runServePreflight 按固定顺序执行启动预检，确保失败阶段可观测。
 func runServePreflight(port int) (servePreflightState, error) {
 	logStartupCheckpoint(startupStageConfig, "begin", "")
-	store, err := NewConfigStoreFromEnv()
+	store, err := bridgeconfig.NewStoreFromEnv()
 	if err != nil {
 		return servePreflightState{}, newServeStartupError(startupStageConfig, err)
 	}
@@ -119,13 +120,17 @@ func runServePreflight(port int) (servePreflightState, error) {
 	logStartupCheckpoint(startupStageOptions, "ready", fmt.Sprintf("bind_addr=%s", options.bindAddr))
 
 	logStartupCheckpoint(startupStageSessionStore, "begin", fmt.Sprintf("path=%s", options.sessionsPath))
-	sessionStore, err := session.NewStore(options.sessionsPath)
+	sessionStore, err := session.NewStore(options.sessionsPath, session.StoreOptions{
+		HumanLogFullEnabled: func() bool {
+			return store.Snapshot().SessionHumanLogFullEnabled
+		},
+	})
 	if err != nil {
 		return servePreflightState{}, newServeStartupError(startupStageSessionStore, err)
 	}
 	logStartupCheckpoint(startupStageSessionStore, "ready", "")
 
-	service := newBridgeService(store, sessionStore, nil)
+	service := bridgeorchestration.NewService(store, sessionStore, nil)
 	logStartupCheckpoint(startupStageRuntimes, "begin", "")
 	if err := startServeRuntimes(service); err != nil {
 		service.Close()
@@ -139,7 +144,7 @@ func runServePreflight(port int) (servePreflightState, error) {
 	}, nil
 }
 
-func startServeRuntimes(service *bridgeService) error {
+func startServeRuntimes(service *bridgeorchestration.Service) error {
 	if err := service.StartBackgroundRuntimes(); err != nil {
 		return fmt.Errorf("start background runtimes: %w", err)
 	}
@@ -191,12 +196,12 @@ func logStartupCheckpoint(stage string, status string, detail string) {
 }
 
 type transport struct {
-	service      *bridgeService
+	service      *bridgeorchestration.Service
 	maxBodyBytes int64
 }
 
 // newHTTPHandler 注册所有 HTTP 路由并挂载认证/CORS 中间件链。
-func newHTTPHandler(service *bridgeService, options serverOptions) http.Handler {
+func newHTTPHandler(service *bridgeorchestration.Service, options serverOptions) http.Handler {
 	transport := &transport{
 		service:      service,
 		maxBodyBytes: options.maxBodyBytes,
@@ -221,6 +226,10 @@ func newHTTPHandler(service *bridgeService, options serverOptions) http.Handler 
 	mux.HandleFunc("/api/system/tasks", transport.handleSystemTasks)
 	mux.HandleFunc("/api/tasks", transport.handleTasks)
 	mux.HandleFunc("/api/tasks/", transport.handleTaskByID)
+	mux.HandleFunc("/api/skills", transport.handleSkills)
+	mux.HandleFunc("/api/skills/", transport.handleSkillByID)
+	mux.HandleFunc("/api/tools", transport.handleTools)
+	mux.HandleFunc("/api/tools/", transport.handleToolByName)
 
 	return withCORS(options.cors, withAuth(options.auth, mux))
 }

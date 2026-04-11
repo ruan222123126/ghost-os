@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/tools"
 )
 
@@ -10,7 +11,7 @@ type RuntimeCompleter = agent.Completer
 type RuntimeToolRegistry = tools.Registry
 
 func NewRuntimeDependencies(
-	cfg Config,
+	cfg bridgeconfig.Config,
 	client RuntimeCompleter,
 	registry *RuntimeToolRegistry,
 	systemPrompt string,

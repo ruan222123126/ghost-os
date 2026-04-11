@@ -2,6 +2,7 @@ package transport
 
 import (
 	"errors"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,9 +12,9 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		t.dispatchActionObject(w, r, actionTaskList, map[string]any{"scope": taskListScopeUser}, traceID)
+		t.dispatchActionObject(w, r, actionTaskList, map[string]any{"scope": bridgeorchestration.TaskListScopeUser}, traceID)
 	case http.MethodPost:
-		var req taskCreateParams
+		var req bridgeorchestration.TaskCreateParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
@@ -30,7 +31,7 @@ func (t *transport) handleSystemTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	t.dispatchActionObject(w, r, actionTaskList, map[string]any{"scope": taskListScopeSystem}, traceID)
+	t.dispatchActionObject(w, r, actionTaskList, map[string]any{"scope": bridgeorchestration.TaskListScopeSystem}, traceID)
 }
 
 func (t *transport) handleTaskByID(w http.ResponseWriter, r *http.Request) {
@@ -98,7 +99,7 @@ func (t *transport) handleTaskLogs(
 		writeError(w, http.StatusBadRequest, err.Error(), traceID)
 		return
 	}
-	t.dispatchActionObject(w, r, actionTaskLogs, taskLogsParams{ID: id, Limit: limit}, traceID)
+	t.dispatchActionObject(w, r, actionTaskLogs, bridgeorchestration.TaskLogsParams{ID: id, Limit: limit}, traceID)
 }
 
 func (t *transport) handleTaskRun(
@@ -111,7 +112,7 @@ func (t *transport) handleTaskRun(
 		writeMethodNotAllowed(w)
 		return
 	}
-	t.dispatchActionObject(w, r, actionTaskRunNow, taskIDParams{ID: id}, traceID)
+	t.dispatchActionObject(w, r, actionTaskRunNow, bridgeorchestration.TaskIDParams{ID: id}, traceID)
 }
 
 func (t *transport) handleTaskResource(
@@ -120,12 +121,12 @@ func (t *transport) handleTaskResource(
 	traceID string,
 	id string,
 ) {
-	params := taskIDParams{ID: id}
+	params := bridgeorchestration.TaskIDParams{ID: id}
 	switch r.Method {
 	case http.MethodGet:
 		t.dispatchActionObject(w, r, actionTaskGet, params, traceID)
 	case http.MethodPatch:
-		var req taskUpdateParams
+		var req bridgeorchestration.TaskUpdateParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}

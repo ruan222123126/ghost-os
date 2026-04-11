@@ -47,6 +47,7 @@ func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error)
 
 func cloneScheduledTask(task ScheduledTask) ScheduledTask {
 	cloned := task
+	cloned.RuntimeOverrides = cloneTaskRuntimeOverrides(task.RuntimeOverrides)
 	cloned.ActionParams = cloneTaskActionParams(task.ActionParams)
 	cloned.Workflow = cloneTaskWorkflow(task.Workflow)
 	return cloned

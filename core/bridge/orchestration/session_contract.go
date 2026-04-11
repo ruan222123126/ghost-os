@@ -21,10 +21,19 @@ func buildSessionMetadataPayload(summary bridgesession.SessionMetadata) sessionM
 	}
 }
 
-func buildSessionDetailPayload(sess *bridgesession.Session, page bridgesession.MessagePage) sessionDetail {
+func buildSessionDetailPayload(
+	sess *bridgesession.Session,
+	page bridgesession.MessagePage,
+	includeDraft bool,
+) sessionDetail {
 	messages := make([]sessionMessage, 0, len(page.Messages))
 	for _, item := range page.Messages {
 		messages = append(messages, buildSessionMessagePayload(item.Index, item.Message))
+	}
+	if includeDraft {
+		if draft, ok := buildAssistantDraftSessionMessage(sess); ok {
+			messages = append(messages, draft)
+		}
 	}
 
 	return sessionDetail{
@@ -52,7 +61,7 @@ func buildSessionMessagePagePayload(page bridgesession.MessagePage) sessionMessa
 func buildSessionMessagePayload(index int, message llm.Message) sessionMessage {
 	payload := sessionMessage{
 		Index: index,
-		Role: string(message.Role),
+		Role:  string(message.Role),
 	}
 	if message.Role == llm.RoleTool {
 		projectToolSessionMessage(&payload, message.Text)

@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
@@ -23,12 +25,12 @@ func TestBusAgentStopCancelsRunBySessionID(t *testing.T) {
 	}
 	started := make(chan struct{})
 	stopped := make(chan struct{})
-	service.SetAgentRunner(newSessionTurnRunnerAdapter(service.ConfigStore(), service.SessionStore(), func(
+	service.SetAgentRunner(bridgeorchestration.NewSessionTurnRunnerAdapter(service.ConfigStore(), service.SessionStore(), func(
 		_ context.Context,
 		_ string,
 		_ string,
 		_ string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 	) (string, string, error) {
 		return "", "", errors.New("unexpected sync run")
@@ -37,7 +39,7 @@ func TestBusAgentStopCancelsRunBySessionID(t *testing.T) {
 		_ string,
 		sessionID string,
 		traceID string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		_ streaming.Sink,
 	) (string, string, error) {
@@ -123,7 +125,7 @@ func TestBusAgentStopReturnsNotRunning(t *testing.T) {
 }
 
 func TestBusAgentSendRegression(t *testing.T) {
-	handler := newTestHandler(t, func(_ context.Context, message string, sessionID string, traceID string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, message string, sessionID string, traceID string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		if message != "hello" {
 			t.Fatalf("unexpected message: got %q want %q", message, "hello")
 		}
@@ -163,7 +165,7 @@ func TestBusAgentSendRegression(t *testing.T) {
 }
 
 func TestBusAgentSendRejectsEmptyMessageEvenWithSessionID(t *testing.T) {
-	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		t.Fatal("executor should not run when message is empty")
 		return "", "", nil
 	})
@@ -181,5 +183,27 @@ func TestBusAgentSendRejectsEmptyMessageEvenWithSessionID(t *testing.T) {
 	body := decodeResponseBody(t, recorder)
 	if body.Error != "message or images is required" {
 		t.Fatalf("unexpected error: got %q want %q", body.Error, "message or images is required")
+	}
+}
+
+func TestBusAgentSendRejectsUnsupportedMode(t *testing.T) {
+	handler := newTestHandler(t, func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
+		t.Fatal("executor should not run when mode is invalid")
+		return "", "", nil
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"AGENT_SEND","params":{"mode":"execute","message":"hello"},"trace_id":"trace-agent-mode-invalid"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusBadRequest)
+	}
+	body := decodeResponseBody(t, recorder)
+	if body.Error != `unsupported agent mode: "execute"` {
+		t.Fatalf("unexpected error: got %q want %q", body.Error, `unsupported agent mode: "execute"`)
 	}
 }

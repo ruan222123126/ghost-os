@@ -10,7 +10,7 @@ import (
 func runAgent(ctx context.Context, userMessage string) (string, error) {
 	runner := bridgeorchestration.NewSessionAgentRunner(
 		nil,
-		bridgeorchestration.WrapConfigStore(nil),
+		nil,
 		nil,
 		nil,
 	)

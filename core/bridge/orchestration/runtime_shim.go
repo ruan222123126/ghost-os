@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/memoryaug"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
@@ -9,7 +10,7 @@ import (
 )
 
 type agentRuntimeDependencies struct {
-	cfg          Config
+	cfg          bridgeconfig.Config
 	client       agent.Completer
 	registry     *tools.Registry
 	systemPrompt string
@@ -26,17 +27,17 @@ func (d agentRuntimeDependencies) Close() {
 }
 
 type AgentRuntimeFactory interface {
-	Build(store *ConfigStore) (agentRuntimeDependencies, error)
+	Build(store bridgeconfig.Store) (agentRuntimeDependencies, error)
 }
 
 type runtimeFactoryAdapter struct {
 	inner bridgeruntime.AgentRuntimeFactory
 }
 
-func (f runtimeFactoryAdapter) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
+func (f runtimeFactoryAdapter) Build(store bridgeconfig.Store) (agentRuntimeDependencies, error) {
 	var innerStore *bridgeruntime.ConfigStore
 	if store != nil {
-		innerStore = bridgeruntime.WrapConfigStore(store.Inner())
+		innerStore = bridgeruntime.WrapConfigStore(store)
 	}
 	deps, err := f.inner.Build(innerStore)
 	if err != nil {
@@ -70,7 +71,7 @@ type toolSelectionPolicy struct {
 	inner bridgeruntime.SelectionPolicy
 }
 
-func newToolSelectionPolicy(cfg Config) toolSelectionPolicy {
+func newToolSelectionPolicy(cfg bridgeconfig.Config) toolSelectionPolicy {
 	return toolSelectionPolicy{inner: bridgeruntime.NewToolSelectionPolicy(cfg)}
 }
 
@@ -86,16 +87,16 @@ func (p toolSelectionPolicy) apply(available []string, selected []string) []stri
 	return p.inner.Apply(available, selected)
 }
 
-func newToolSelectorFromConfig(cfg Config, catalog tools.ToolCatalog) selectorEngine {
+func newToolSelectorFromConfig(cfg bridgeconfig.Config, catalog tools.ToolCatalog) selectorEngine {
 	return bridgeruntime.NewSelectorFromConfig(cfg, catalog)
 }
 
-func buildSystemPromptForCatalog(cfg Config, catalog tools.ToolCatalog) (string, error) {
+func buildSystemPromptForCatalog(cfg bridgeconfig.Config, catalog tools.ToolCatalog) (string, error) {
 	return bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
 }
 
 func buildSystemPromptForSession(
-	cfg Config,
+	cfg bridgeconfig.Config,
 	catalog tools.ToolCatalog,
 	sess *session.Session,
 	idleTurns int,

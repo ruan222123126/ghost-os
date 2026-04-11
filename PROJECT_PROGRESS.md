@@ -1,169 +1,30 @@
-# Ghost-OS 项目进展
+# Ghost-OS 项目进展（摘要版）
 
-更新日期：2026-04-04  
-当前阶段：MVP 稳定化（边界收口中）
+更新日期：2026-04-11
+当前阶段：MVP 稳定化（主链路可用，持续收口）
+文档规则：本文件为硬上限摘要，`总行数不得超过 30 行`，超出时必须先压缩再提交。
 
-## 总体结论
+## 总览
+- 架构三层稳定：Execution（`drivers/native`）、Central（`core/bridge`）、Perception（`apps/web`、`apps/cli`、`apps/android`）。
+- 主开发中心是 `core/bridge`；目标是稳定主链路、收紧边界、提升可测试性。
+- Assistant 文本工具调用基线为 Tool-Tag：`<t:ID>JSON</t>` + `[TOOL_TAG_RESULT]`。
 
-- 项目三层结构已经稳定成型：Execution（`drivers/native`）、Central（`core/bridge`）、Perception（`apps/web`、`apps/cli`、`apps/android`）。
-- 当前最成熟的是 `core/bridge`，主链路已经可用，承担会话编排、工具调度、状态管理、协议路由与安全边界。
-- `apps/web` 和 `apps/cli` 已具备可用 MVP；`apps/android` 已有基础接入，但仍处于补齐阶段。
-- `drivers/native` 已具备截图、键鼠输入、脚本执行、窗口查询等原子能力，但仍未达到生产完备状态。
-- Assistant 文本工具协议已收口到 Tool-Tag：后端与前端主链均以 `<t:ID>JSON</t>` + `[TOOL_TAG_RESULT]` 为基线，旧 `mutation/query` 文本调用仅作为显式协议错误处理路径。
-
-## 分层进度
-
-### Central: `core/bridge`
-
-- Agent、Session、Tool、Provider、SSE、配置持久化、`ask_human` 续跑、基础 Memory 增强链路已落地。
-- Bridge 启动入口的 `serve` 子命令判定已收口到 `app.IsServeSubcommand` 单点实现，`core/bridge/main.go` 与 `app.Run` 不再重复维护同构逻辑；同时清理了 `core/bridge/main.go.tmp.k29Khx` 临时文件，并移除 `core/bridge/app/agent.go` 中仅测试使用的注入缝隙层（`newAgentTurnRunner`、`runAgentWithConfigStore`）。
-- context/prompt 链路完成一轮“显式失败优先”收口：删除仅测试引用的 `BuildRequest` 死路径与 `NewPromptManager` 薄封装入口；`runtime/system_prompt` 不再在加载失败时静默回退默认 prompt；`context/prompt.go` 拆分为 `prompt.go + prompt_loader.go`（各自低于 300 行）并补齐“不再静默兜底”的回归测试。
-- 普通 Agent 请求现已补上图片入参链路：`/api/agent` / `AGENT_SEND` 支持 `images[]`，图片可用本地路径、远程 URL 或 data URL 表达；Central 会把用户图片写入 session history，并在 provider 投影阶段对 OpenAI / Anthropic / Codex 统一转成对应多模态输入，不再只支持 tool-result 图片。
-- Memory 主链已切换到“事件节点图驱动”：
-  - `core/bridge/memorystore` 新增 `event_nodes` / `event_edges` / `event_memories` / `session_event_state` 存储层，用于承载任务/目标级事件图；旧 `learned_memories` 不再接任务型自动记忆写入，只保留全局长期偏好的实现细节。
-  - `core/bridge/memoryaug` 现按 `IntentPlanner -> RecallService -> LearningService` 三段式工作：每轮 prepare 固定先跑 planner，激活范围收敛到 `1 primary + 最多 2 adjacent`，recall 只读激活子图，learning 只写当前 primary event。
-  - 注入 prompt 的记忆块已从旧的 `Memory slots / Other memory context` 收口为 `Active event / Relevant event memory / Global preferences`，且仍然不写回 session history。
-  - `memory_augmentation_session_scope_enabled` / `memory_augmentation_user_scope_enabled` 已分别落到 recall / learning 读写路径；`memory_augmentation_max_recall_items` 现作为事件记忆总召回上限生效，prompt formatter 不再额外施加写死的 5 条截断。
-  - `memory_recall_debug` 现输出 planner 决策、激活节点与最终 prompt block；`memory_learned_list` 已改为按 `event_id / session_id / status` 查看事件记忆。
-  - `memory_manage` 的提示词与 GraphQL 最小示例已补齐显式 URI 工作流：新写入使用 `create`，修改/删除前先通过 `read` / `list` / `system://index` 发现精确 URI；缺失显式 memory 时返回可恢复的操作提示而不再只给裸 `not found`。
-  - 新会话里的“纯全局偏好”消息现不再强制进入事件图 planner：像“偏好中文回答”这类长期偏好会跳过 event recall 预处理，但仍保留后续 global preference learning，避免在空事件上下文里因 planner 引用不存在 event 而直接失败成 `memory not found`。
-  - 新会话里的低信息开场消息也不再进入事件图 planner：像“你好”这类问候/寒暄会直接跳过 event recall，仅保留全局偏好上下文，避免 planner 在无候选事件时生成不存在的 event id 并最终炸成 `memory not found`。
-  - 事件图 planner 的 `recall_plan.event_ids` 现会收口到“已解析出的真实 active event ids”：模型输出的临时别名或占位 id（如 `evt_ai_current_landscape_search`）会在 recall 前被剔除，并在为空时回退到真实 primary/adjacent ids，避免搜索类新任务在 recall 阶段把别名当成 adjacent event 再次炸成 `memory not found`。
-- `core/bridge/memoryaug` 已完成一轮静态清理与拆分：清理未引用符号（`buildTranscriptText`、`LooksLikeLowSignalTurn`、`matchSlotsForQuery`、`slotMatchesQuery`），并将 `recall_service.go` / `intent_planner.go` 拆分为多文件以回到单文件 300 行以内；`loadSessionRecall` 与 `applyGlobalCandidates` 也已按小函数重排降低复杂度与参数耦合。
-- `core/bridge/memorystore` 已完成一轮“死代码 + 显式失败”收口：删除未接线且重复实现的 `tools/internal/memorystore` 整包，清理仓库内未使用的公开 API（`GetLearnedByIDs`、`ListLearned`、`LearnedListFilter`、`SearchExplicitRecallRecords` 等）与历史残留 `memory_recall_view` 重建逻辑；`session_event_state` 写库改为 JSON 编码失败显式报错，`newMemoryID` 在随机源失败时不再退化时间戳 ID，`explicit` 更新路径移除薄封装分支。
-- Agent 收尾路径进一步收口：`loop_finish` 已合并 stop/length 文本完成分支的公共 finalize 流程，并移除 `toolCallExecutor.execute` 中当前调用图不可达的空 `calls` 防御分支，补充了 length 收尾与 assistant-text 分发回归测试。
-- Agent 工具执行与消息投影链路完成一轮可维护性收口：清理未引用测试辅助（含 `fakeGraphQLTextExecutor` 与空转 `streaming_test_helpers_test.go`）、移除仅测试使用的 `RunStream`/`RunStreamWithTraceID` 对外入口并统一走 `RunMessageStreamWithTraceID`、将 `repairProjectedGraphQLTextTurn` 与 `validateAssistantTextResult` 拆为小函数以降低圈复杂度、同时把 `tool_executor_execute.go` 按“解析/执行”职责拆分为 `tool_executor_execute.go` + `tool_executor_resolution.go`，避免单文件超 300 行。
-- 对话 completion 链路已新增一次性瞬时错误重试：在 `completion_runner` 中对网络错误、HTTP 429、HTTP 5xx 提供最多 1 次重试；流式场景仅在“尚未发出任何 delta”时允许重试，已产出增量后失败不会重放，避免重复输出。
-- 共享消息契约、`trace_id`、跨端 DTO 与 `core/shared/schema.json` 已基本统一。
-- `trinity-check` 已补上共享契约生成一致性门禁：当 `core/shared`、四端生成文件或门禁脚本发生变更时，会执行 `scripts/check_generated_contracts.sh`（先重新生成，再用 `git diff --quiet` 校验 `core/bridge`、`apps/web`、`apps/cli`、`apps/android` 的生成物一致性），避免多端 DTO 漂移进入主分支。
-- 任务更新路径已补回显式回滚：在 `Unregister` 前移后，若 `SaveTask` 或后续 `Upsert` 失败，会恢复旧注册并在需要时把旧任务重新写回磁盘，避免留下“磁盘仍有任务、内存已不再调度”的漂移状态；共享 task schema 也已收口为 kind-specific 契约，`system_action` 的 `action/action_params` 与 `workflow/agent_message` 的必填约束现可被 schema 正确表达。
-- 任务调度器的 registration 生命周期已补上显式 retired 状态：`Stop` / `Unregister` / `register` 替换旧实例后，旧 `taskRegistration` 不会再在锁外被 `RunNow` 或定时触发重新 `beginRun`，从而封住 stale registration 复活和 `waitIdle()` 与 `runWG.Add(1)` 并发交错的风险。
-- 任务调度器的 Start/Stop 边界已进一步收紧为显式门闩：`Upsert` / `RunNow` 现要求 scheduler 处于 running 生命周期内，`Stop` 后不会再被并发 API 调用重新注册或手动触发；任务删除路径也已补齐显式回滚，非法 `*.json` 任务文件名会进入 tolerant load issues，而不再被静默跳过。
-- `core/bridge/tasks` 已完成一轮死代码与可维护性收口：移除未消费字段 `taskSchedulePlan.cronExpr` 与 `taskRegistration.runTraceID`，删除仓库内未调用的调度导出接口（`NewTaskStore`、`SetExecuteHook`、`SetExecutionTimeout`、`HasTask`、`Running`），将 scheduler 启动流程拆分到 `scheduler_start.go` 并统一未配置/未运行场景为显式错误；同时把 `task_scheduler_test.go` 与 `task_store_test.go` 拆分为多文件，单文件已回落到 300 行以内。
-- task kind 归一化已去掉“非法值静默回落到 `agent_message`”的 fallback：`task_kind` 为空时仍默认视为 `agent_message`，但未知值现在会在校验阶段显式报 `unsupported task_kind`，执行器默认分支也不会再把坏输入当作 agent task 运行。
-- GraphQL 文本工具调用运行时、GUI executor / `computer_use`、任务调度、RSS、配置系统都已建立主线能力。
-- RSS report 生成链路已去掉静默 fallback：agent 报告空回或失败时不再落回模板化“机会点 / 风险与约束 / 接下来可能会怎样”段落，而是显式记录 `report_error`；report prompt 也已收口到更精简的章节契约，避免重复凑段。
-- `core/bridge/rss` 已完成一轮死代码与复杂度收口：删除仓库内未调用的公开入口 `BuildAndStoreReport` 与 `SetReportBuilder`；同时将 `rssInboxListQuery.matches`、`RSSReportStore.Save`、`rssAggregateMatchScore` 拆分为小函数，降低圈复杂度并保持原有行为与测试通过。
-- GraphQL 文本工具调用运行时的协议失败已改为“可修复的结构化反馈”：解析/校验错误会写入 `[TOOL_TAG_RESULT]` 风格的 `status=error`、`kind`、`expected/received`、`hint/example` 等字段，并在同次 agent run 的下一轮 completion 中作为显式失败反馈供模型自修正。
-- 文本工具调用协议已在后端硬切换为 `<t:ID>JSON</t>`：可见工具按每轮 ID 映射，执行链路使用字符级状态机串行解析 `<t:...>` 标签；旧 `mutation/query` 文本调用会直接返回结构化协议错误，不再兼容。
-- Tag 文本协议的内部回执前缀已统一改名为 `[TOOL_TAG_RESULT]`，并同步到后端解析清洗、Codex 续跑边界判断、前端 internal note 过滤与相关测试，避免继续暴露 GraphQL 语义残留。
-- Codex 续跑路径已同步跟进 Tag 文本协议：当增量窗口只剩文本协议 `tool_call_output` 时会触发无状态重放，避免 `input is empty` 类续跑错误。
-- GraphQL tool runtime 继续以 `ToolDef.Semantics` 作为读写语义源：schema、示例与执行期校验重新按真实工具语义区分 `query` / `mutation`，不再把所有工具强行压成 mutation-only。
-- GraphQL prompt 已补齐“最小可用示例”层：除了 schema/签名外，还会为当前可见工具输出最小成功 GraphQL 示例，重点覆盖 `tfind(action="load")` 的“同一用户 turn 的下一次 completion 可用”、`ask_human` 的 `options` 结构，以及 `script_exec` 的最简 mutation。
-- GraphQL tool runtime 的 prompt/example 已与真实 schema 对齐：复杂参数通过命名 `input` / `enum` 暴露结构，示例里的枚举字段也改为 GraphQL enum literal，避免 `browser_control`、`computer_use`、`task_manage` 一类工具继续被模型按 JSON 字符串硬拼。
-- GraphQL tool runtime 的空能力面提示已去掉 `_empty` 这类可误判为真实能力的占位字段：当当前 turn 没有可用 GraphQL 工具时，prompt 会直接输出显式说明，避免模型把占位字段当成可调用能力。
-- GraphQL tool runtime 现支持“同回合 load+use”：`tfind(action="load")` 写入的动态工具会在当前用户 turn 内即时可见，bridge 会在每次 completion 前刷新 system prompt / GraphQL schema / Dynamic Tool State，因此模型无需额外追加一条用户消息，就能在下一次 completion 里直接调用新工具。
-- GraphQL 文本工具调用协议已支持“单文档多次调用”：同一 assistant 文本可包含多个顺序 `mutation` operation（每个 operation 仍限制为单顶层字段），执行链路会为每一步生成独立 `tool_call_id` 与流式事件；普通工具错误会继续执行后续 operation，`awaiting_human` / 迭代交接仍会中断后续步骤。provider 请求投影也已扩到多调用修复，避免出现批量场景下的 `unknown tool_call_id` 配对失败。
-- Session history 主链已切到“热窗口常驻 + 冷历史分页”：
-  - `core/bridge/session` 已从单文件整段 JSON 持久化切到 SQLite；内存里只保留最近热窗口，旧消息落到 `session_messages`。
-  - `/api/sessions/:id` 默认只返回最新一页，并支持 `limit` / `before` 分页窗口；响应里补上 `message_count` 和 `page` 游标信息。
-  - legacy `session-id.json` 会在首次读取时自动导入 SQLite 并删除旧文件。
-- `core/bridge/session` 与 `core/bridge/tools` 已完成一轮“工程硬限制 + debug-first”收口：`BrowserControlTool` 全部改为指针接收者以避免复制 `sync.Mutex`；移除 `applyToolSpecificHumanAnswer` 空实现与仅测试使用符号（`HasPendingQuestion`、`DynamicToolLoadSnapshot`、`encodeStoredSession`、`cloneSession`）；`newSessionID` 在随机源失败时改为显式 panic（不再静默时间戳降级）；`storage.go`/`storage_sql.go`/`storage_messages.go` 通过拆分 helper 和新文件回到单文件 300 行内且关键函数回到 50 行内；`ListMetadata` 删除重复排序，仅保留 SQL `ORDER BY`。
-- GraphQL 文本标准化路径已补上“定向 sanitize + 显式开关”：默认开启 `graphql_text_sanitize_enabled`，只清理首尾空白、代码围栏与误拼接的 `[TOOL_TAG_RESULT]` 后缀；每次命中都会打带 `trace_id` / `kind` 的结构化日志，关闭开关后回到现有严格解析行为。
-- GraphQL 模式的系统提示词已补回工具使用指导：`hidden catalog` 继续隐藏原生 `tool_defs`，但会为 prompt 保留 `ask_human`、`tfind`、`screen_action`、`computer_use` 等可见工具的“何时使用/有哪些约束”提示。
-- GraphQL 文本工具调用的 provider 请求投影已补齐 assistant/tool 协议配对：持久化 transcript 仍保留原始 assistant 文本 + tool result + internal feedback，但在发给 OpenAI/Anthropic/Codex 前会为已执行的 GraphQL 文本 turn 按原文重建合法的 assistant `tool_calls`，修复下一轮 completion 因 `tool message references unknown tool_call_id` 直接失败的问题。
-- assistant-text 工具调用提交路径已改为“同回合同步结构化提交”：当 assistant 文本（含 GraphQL `mutation`）被识别为可执行调用时，Bridge 会在执行工具前就把该条 assistant 消息按 `tool_calls` 结构写入 history，并在同轮立即执行，不再只以纯文本落库后等待后续 provider 请求阶段再做投影修复。
-- Codex 续跑请求构造已补上空增量防护：当 `previous_response_id` 模式下增量窗口只剩 GraphQL internal feedback 或最终变成空 `input` 时，会跳过该 feedback 作为增量边界并在必要时显式回退到无 `previous_response_id` 的非空输入，避免继续向上游发送缺失 `input` 的请求并触发 `input is required`。
-- Codex / Responses 参数层已补齐首批标准化透传：`prompt_cache_key`、`prompt_cache_retention`、`safety_identifier`、`metadata`、`store` 可从 config/env 注入并进入 provider 请求；`GHOST_RESPONSE_METADATA_*` 前缀键支持映射 metadata。旧的 Codex 4xx 自动无状态回退改为默认关闭，仅在显式 `codex_stateless_retry_enabled` 打开时才会触发，失败路径默认直出，避免隐式降级。
-- Codex continuation 的 4xx 回退判定已补齐 `No tool call found for function_call_output/function call output with call_id ...` 场景：在显式开启 `codex_stateless_retry_enabled` 时，这类“只有工具结果、上游丢失对应 function_call 上下文”的错误会自动触发一次无状态重放，并已补齐同步/流式回归测试。
-- Codex continuation 在显式开启 `codex_stateless_retry_enabled` 且消息里存在 `function_call + function_call_output` 时，现改为首发请求就走无状态重放（不再先依赖 `previous_response_id` 等上游报错后再降级）；同步/流式链路均已补齐回归测试，普通纯文本 follow-up 续跑策略保持不变。
-- Codex 工具 schema sanitize 已修复 `properties` 容器污染：`sanitizeCodexToolSchema` 不再把 `properties`/`$defs` 等“schema map 容器”误判为 schema 节点并注入伪 `type:"string"` 字段，修复 `browser_control` 在普通 tool-calling 下触发的 `Invalid schema for function ... tools[0].parameters`（`string` 不是 `object|boolean`）400 错误；同时补充了回归测试锁定该路径。
-- Bridge 已新增只读 `web_rooter` 高层工具：通过固定 HTTP 契约接入独立运行的 `web-rooter` 服务，当前仅开放 `internet_search` / `research` / `academic_search` / `site_search` / `fetch` / `extract` 六个 stateless action，并在桥内统一输出 `provider/action/payload/citations/references_text/trace_id` 稳定壳；未引入上游 CLI、MCP、jobs、skills、safe mode、knowledge/visited 等双编排能力。运行时现通过 `web_rooter_enabled/base_url/api_token/timeout_ms` 显式控制接入，桥层不会默认启用或做隐式降级。
-- `web_rooter` 桥接现已对上游 HTTP 响应做显式契约校验：`success/content/data/urls/error/metadata` 缺失或类型不合法、HTTP 500、200 + `success=false`、非法 JSON、超时都会直接作为错误上抛，不再被桥层静默包装成成功结果。
-- `web_rooter` 实现已按边界重排：顶层工具只保留显式参数校验、action 路由、client 调用与稳定 envelope 输出；HTTP 传输、版本钉死校验、响应归一化下沉到 `tools/internal/webrooter`。对外 public runtime 快照也已收口为 `web_rooter_enabled` / `web_rooter_api_token_set` 布尔态，不再暴露 `base_url` / `timeout_ms`。
-- `config/web_rooter_settings.go` 的运行期配置解析已补回缺失的 `resolveWebRooterBaseURL` 路径，`serve`/HTTP 入口可重新完整编译并参与 live 调试。
-- `web_rooter` 的 sidecar 边界已补成显式契约并有回归测试锁定：Ghost-OS 只认外置 `base_url`，不负责拉起或管理 upstream Python 进程；桥层继续只开放六个 stateless HTTP action，不接 `knowledge` / `visited` / context snapshot；版本探测与 action 请求都会透传 `X-Trace-ID`；过大响应会返回显式超限错误，不做静默裁切。
-- prompt guidance 已按协议模式分流：普通 native `tool_calls` prompt 不再泄漏 `mutation { ... }`、`tfind(action: ...)` 一类 GraphQL 示例，GraphQL 专用样例只保留在 hidden catalog / GraphQL runtime prompt 路径中。
-- `browser_control` 的 prompt guidance 已补上显式动作约束：系统提示现在会直接列出合法 `action`（`connect|launch|goto|click|type|press|evaluate|content|screenshot|info|close`），并明确 `goto`/`wait`/`content` 用法，减少模型继续误用 `navigate`、独立 `wait`、`extract` 的概率。
-- `script_exec` 的 prompt guidance 已补上运行时约束：明确要求通过注入的 `tools.*` 对象调用能力（而非 `import tools`），并显式禁止 `open/eval/exec/compile/input` 这类会被沙箱拦截的 builtins；同时要求输出简洁结构化结果，降低后续轮次解析歧义。
-- `script_exec` 的 prompt guidance 现已明确 helper 调用优先使用命名参数（如 `tools.list_files(path='...')`、`tools.read_file(path='...')`），减少位置参数触发签名不匹配错误。
-- `screen_action` / `task_manage` / `feed_manage` / `codex_cli` 的 prompt guidance 也已补上显式合法操作约束：分别给出 `action/operation/op` 枚举与关键必填字段；同时修正 `codex_cli` 工具描述中的旧文案 `exec` 为真实枚举值 `start`，避免模型生成非法 `op`。
-- `web_rooter` 的 prompt guidance 已补齐联网分流规则：需要引用、出处、多源交叉验证、学术资料或深度研究时优先走 `web_rooter`；普通即时网页搜继续走 `web_search`，避免模型把所有联网任务都打到同一层搜索能力。
-- `web_search` 的 Tavily / Exa provider 现支持显式自定义 endpoint：运行时配置可分别填写 `web_search_tavily_url` / `web_search_exa_url`，留空时继续走官方接口，填写后请求会直接命中自定义 URL，原有 API key 语义保持不变。
-- `web_search` 在同时配置 Tavily 和 Exa API key 时，工具参数 schema 与 GraphQL 最小示例现会把 `provider` 明确提升为必填，并在工具描述中显式说明原因，避免模型继续按 `web_search(query: ...)` 生成错误调用后表现成“什么都没搜到”。
-- `tfind(action="search")` 的候选工具匹配已从“整句 substring”改为规范化自然语言词匹配：会统一处理空格/下划线/标点，并优先匹配工具名与标签，避免像 `website search tool availability; web_search, browser_control, internet retrieval, web browser` 这类查询继续把 `web_search` / `browser_control` 搜成空结果。
-- GraphQL 文本 sanitize 现可在显式 sanitize 模式下提取并校验嵌入在同一 assistant 文本里的合法 GraphQL 文档：像 `mutation { ... }你好` 这类“工具调用 + 额外文字”不再一律直接 parse error；已知的 `[TOOL_TAG_RESULT]` 后缀剥离语义保持不变，关闭 `graphql_text_sanitize_enabled` 后仍回到严格纯文档模式。
-- 工具可见性语义已拆分为“常驻 allowlist”与“严格 allowlist-only”两层：`tool_allowlist` 现在只定义当前 turn 的 resident 工具；当 `tool_allowlist_only = true` 时，selector 与静态工具面才会一起收紧到 allowlist。非 strict 模式下，selector 仍可为主模型挑选其他未被 `tool_blocklist` 屏蔽的静态工具。
-- `core/bridge/runtime` 已完成一轮 API 面与测试边界清理：移除未被调用的 `SelectionPolicy` 冗余导出别名（`ScopeCatalog`、`SelectorScope`、`AllowlistScope`），将仅测试使用的 `containsToolName` 下沉到 `*_test.go`，并去掉 `toolSelectionPolicy.requiredTools` 空转转发；`agent_runtime_factory_test.go` 同时拆分 helper 文件，主测试文件已回落到 300 行以内。
-- `assistant-text` invocation 与显式工具调用事件闭环已补齐，通用 handler 不再被 GraphQL 反馈格式硬编码污染。
-- 已移除与项目无关的旧业务 GraphQL 工具：`graphql_query`、`graphql_schema_lookup`、`graphql_mutation`；保留 GraphQL 文本协议模式供模型调用普通 Bridge 工具。
-- GraphQL 文本协议的遗留死代码已完成一轮清理：删除未接线的文档预算校验模块、schema render 辅助模块，以及一组未引用的协议错误构造器/工具 ID 辅助函数，`core/bridge/tools` 的 staticcheck(U1000) 不再报告这批不可达路径。
-- `core/bridge/tools` 的 Tag 文本执行路径已继续收口：`parseToolTagCalls` 抽到独立状态机解析器并拆分辅助函数，`codex_cli.Execute` 改为“解析请求 -> 构造 action/params -> 执行”三段，降低圈复杂度并保持现有参数/错误语义。
-- `core/bridge/tools` 本轮继续完成硬性度量收口：`task_manage.go` 与 `tool_search.go` 分别拆出 `types/helpers` 与 `match` 侧文件，主文件已回落至 300 行以内，行为与现有测试保持一致。
-- 已完成一次后端 Agent 工具能力全量实测，并沉淀到 `docs/backend-agent-tool-capability-2026-03-28.md`：在临时测试配置（`max_turns=1`、memory 关闭、全工具 allowlist）下 15 个工具均完成至少一次真实调用；其中 `send_file`、`computer_use` 归类为需调试，`codex_cli`、`browser_control` 受前置配置/会话约束。
-- `screen_action` 截图链路已切到文件引用：`SCREEN_CAPTURE` 改为返回 `image_path`，Bridge 侧截图 artifact 改为基于文件流复制与流式哈希，不再经过 `image_base64 -> decode -> 写文件` 这条高内存路径；`OCR_IMAGE` / `TEMPLATE_MATCH_IMAGE` 的入参也已改为传 `image_path`。
-- native binary 默认定位已改为“部署优先 sidecar 路径”（`native`、`bin/native` 及其上级变体），不再内置 `drivers/native/target/*` 这类仓库相对路径；若需继续按 monorepo 构建目录定位，必须显式通过 `native_binary_candidates` / `GHOST_NATIVE_BINARY_CANDIDATES` 配置。`screen_action` / `computer_use` 对截图 payload 的显式契约校验保持不变：缺失 `image_path` 或命中旧 `image_base64` 字段会直接报结构化错误，不再只给 `empty image_path`。
-- Bridge 启动层已补齐专用回归测试：`core/bridge/app/startup_router_test.go` 与 `startup_error_test.go` 覆盖了 `Run` 的 `serve`/非 `serve` 路由、startup checkpoint 日志、`usageError` 透传以及非 usage 错误包装（`serve dispatch failed`）路径。
-- artifacts 存储读取接口已做一次边界收口：`ResolveStoredPath` / `OpenStoredFile` 移除未使用 options 并固定启用 symlink 逃逸校验，`normalizeIdentifier` 删除重复的路径分隔符分支，`SessionFileArtifact` 不再写入未被消费的 `CreatedAt` 元数据字段。
-- `core/bridge/config` 已完成一轮死代码与复杂度收口：删除未接线私有 env 包装函数与重复 GraphQL env 解析路径（含整文件 `config_graphql_env.go`），并将 runtime 配置构建按职责拆分为 `config_runtime_resolve_helpers.go`、`config_runtime_sections_rss.go`、`config_runtime_sections_tools.go`；`config_runtime_resolve.go` 已降到 300 行以内，相关热点函数均拆到 50 行以内。
-- `core/bridge` 已完成一轮静态质量收口：删除 `memorystore/learned.go` 未使用的 `scanMemoryEntryRows`，清理本地空目录 `core/bridge/test`；`rss_fetch` 去重 URL 校验与 `max_items/include_summary` 处理；`config` 侧修复 `S1016/S1002`；并将 `ReadFileTool.Execute`、`handleTaskByID`、`SendFileTool.Execute`、`buildMutationPolicy` 拆分为小函数，`gocyclo -over 12` 不再命中上述热点。
-- `core/bridge/llm` 已完成一轮可维护性重构：移除未使用 `Provider.Valid()` 与 Anthropic 空转封装；将 `anthropic_stream.ApplyEvent`、`codex_stream.ApplyEvent`、`client.streamJSON`、`toAnthropicRequest` 拆分为小函数以降低复杂度；并按职责拆分 `client.go` / `anthropic.go` / `codex_messages.go`，消除 Codex `function_call` 与 `function_call_output` 的重复映射实现。
-- `core/bridge/orchestration` 已完成一轮死代码与复杂度收口：删除 `export_types.go` 中 5 个未调用导出包装、`runtime_shim.go` 中未接线 selector 导出包装及其专用接口、以及未使用测试 helper；同时重构 `service_usecase_agent` / `service_usecase_human` / `service_router` 与 `session_turn_preparer`，将 `session_turn_preparer.go` 拆分为多文件并降至 300 行以内，`classifyAgentTurnError` 与 `normalizeAgentExecutionError` 的返回签名也已按 Go 约定调整为 `error` 置后。
-- `core/bridge/transport` 与 `core/bridge/orchestration/runtime` 已完成一轮 shim 收口：删除 `orchestration_shim_service.go` 的整层透传方法，`transport` handlers / session events 改为直接调用 `orchestration.Service` 导出方法；同时将 `orchestration/runtime_shim` 的 `toolSelectionPolicy` 改为直接复用 `runtime.SelectionPolicy`，并在 `core/bridge/runtime` 去掉对应导出包装方法，缩短调用链并保持测试通过。
-- Bridge 仍是当前主要开发中心，近期工作以收口边界、减少脆弱耦合、提升可测试性为主。
-
-### Perception: `apps/web` / `apps/cli` / `apps/android`
-
-- Web Console MVP 可用，已支持基础聊天、配置读取与主要交互链路。
-- Web Console 现已补上左下角设置入口：侧边栏底部新增 `Settings` 按钮，可直接打开现有运行时配置弹窗，不再需要依赖隐式入口或额外页面跳转。
-- Web Console 的 Runtime Settings 现已补上 Tavily / Exa 自定义 URL 输入框，可直接查看、保存或清空搜索 endpoint；未填写时仍默认使用官方地址。
-- Web Console 设置弹窗现已完成一轮整体视觉重构：改为左侧导航 + 右侧内容区的白底配置面板，Provider 区切到“列表态 / 编辑态”单视图切换，Runtime 区与 Provider 表单统一为同一套卡片式输入样式，同时保留现有真实配置读写链路。
-- Web Console 设置弹窗已对齐新设计稿：左侧导航扩展为 `General / Provider / Appearance / Data & Memory / Notifications / Security` 六个分组项，`Provider` 与 `General` 继续接真实配置读写，其余分组先提供占位页并保持同一视觉框架。
-- Web Console 会话主链已切到流式：前端现直接消费 Bridge SSE 的 `run_started / completion_delta / tool_call_started / tool_call_finished / awaiting_human / message / done / error` 事件，回复文本和工具状态可在回合进行中实时落屏；回合结束后仍会回填一次 session history 以收口最终持久化内容、工具输出与附件。
-- Web Console 前端的用户侧图片发送链路现已接通：输入区加号按钮可选择多张图片，浏览器会将图片转成 data URL 通过现有 `/api/agent/stream` `images[]` contract 发给 Bridge；前端同时补上发送前预览、纯图片提交、图文混发，以及 session history 里的用户图片回显。
-- Web Console 的聊天消息渲染已切到 Tool-Tag 协议：流式链路通过 `<t:ID>JSON</t>` 状态机实时分流普通文本与工具参数，历史映射会剥离标签仅展示可见文本；纯标签 assistant 消息不会重复渲染原始协议文本。
-- Web Console 的 internal note 渲染已补上 `[TOOL_TAG_RESULT]` 的 `tfind` 结果收口：前端展示时只保留“已加载/可用”的 tool 项，未加载或已过期项不再占据消息区。
-- Web Console 的聊天前端已把流式热路径从“整段 `messages[]` 重建”改成“`committedMessages + streamingAssistantText + streamingTools + pendingQuestions`”分层状态：`completion_delta` 不再复制长历史数组，terminal 后只同步最近一页 session history 做 merge；消息列表同时接通现有 older-history 分页并改为 `@tanstack/react-virtual` 虚拟渲染，显著降低长会话下的内存 churn 和整表重渲染放大。
-- Web Console 流式消息列表已补上显式事件顺序轨道：前端新增 `streamingItemOrder`（assistant/tool/question）并按该顺序渲染 streaming rows，不再固定按“assistant 段 + tool 段 + question 段”分块拼接，工具卡片会随 SSE 到达顺序由上到下展开。
-- Web Console 流式渲染已从“单 assistant 文本缓冲”切到“assistant 分段时间线”：流式文本会在工具/提问事件之间按真实到达顺序拆段插入，`<t:ID>...</t>` 解析也改为输出有序 text/tool 单元，避免运行中出现“工具堆在上面、文本整块压在底部，结束后才对齐”的错位观感。
-- Web Console 会话详情已完成窗口化 hydrate：首次进入只加载最近一页，旧消息通过顶部补页按页回拉；补页时保持滚动位置，切换会话时重置到当前会话尾部，本地 `local:` / `stream-*` 临时消息会在尾页同步时和持久化消息做稳定 ID 合并。
-- Web Console 聊天输入框初始高度已下调一档：输入区初始行数由 `4` 调整为 `3`，在不影响自动增高的前提下减少默认占用空间。
-- Web Console 聊天输入提交交互已改为“先清空再发送”：发送后输入框会立即刷新为空；若发送链路抛错，则自动回填草稿与待发图片，避免内容丢失。
-- CLI 基线可用，已支持基础会话与桥接操作。
-- CLI 启动入口已完成阶段A路由重构：先按原始 argv 快速判定 `--version`/`-v`/`-V`，再进入 clap；`--message` 与 REPL 路径拆为独立 handler，`main` 保持薄入口。
-- CLI 启动观测已完成阶段B：新增 `startup_profiler`，通过 `GHOST_CLI_PROFILE_STARTUP=1` 输出 checkpoint（`entry`、`args_parsed`、`config_loaded`、`client_ready`、`repl_started`、`oneshot_done`）与总耗时；支持 `GHOST_CLI_PROFILE_STARTUP_FILE` 写文件，写入失败显式报错。
-- CLI 启动入口与 profiler 已补齐集成回归：新增 `apps/cli/tests/startup_router_test.rs`，覆盖版本快捷路由（`--version`/`-v`/`-V`）、startup profiler 文件输出、profiler 非法环境变量错误、`--message` 空文本错误路径。
-- CLI REPL 已补上首轮早输入预填充：在初始化 `rustyline` 前短窗口捕获 TTY 输入并注入首轮 `readline_with_initial`，只做预填充不自动发送；非 TTY 自动禁用，Ctrl+C/Ctrl+D 主行为保持与现有路径一致。
-- Android 已接入部分会话与展示能力，但整体成熟度低于 Web 与 CLI。
-- Android 会话层已完成一次高耦合拆分：`ChatViewModel.kt` 拆成 actions/connection/runtime/history/message-state 多文件协作，连接观察、流事件状态机、历史映射与消息更新不再堆在单一文件；`ChatScreen.kt` 也拆分为主屏、历史抽屉、消息气泡和格式化工具文件，相关文件均已回落到 300 行内。
-- Web 流式控制层已完成一次可维护性拆分：`useChatStreamController.ts` 拆分为 `chatStreamControllerSession/types/events`，主 hook 保持编排职责，事件状态机与 Tool-Tag 细节下沉，相关文件均已回落到 300 行内。
-- Android 层 CI 门禁已补齐：新增 `.github/workflows/android-check.yml`，对 `apps/android/**` 变更执行 `lintDebug`、`testDebugUnitTest` 与 `assembleDebug`，避免 Android 代码在无同级自动化检查下直接进入主分支。
-
-### Execution: `drivers/native`
-
-- Native 层已支持截图、输入模拟、脚本执行、窗口/浏览器查询等原子动作。
-- GUI executor 所需的双击、右键、滚动、拖拽、组合键、活动窗口信息等能力已补齐一轮基线。
-- `TEXT_INPUT` 的 Linux/X11 注入路径已从 `xdotool type` 切到 Unicode keysym（`xdotool key UXXXX`）：中英混输不再依赖输入法候选上屏，降低中文输入法开启时的串字/乱序风险；并补充了中英混合字符串编码回归测试。
-- Native 截图子模块已去掉主链路 base64 载荷：`SCREEN_CAPTURE` 返回临时 PNG 文件路径，`OCR_IMAGE` 直接消费 `image_path`，`crop_image` 改为仅复制裁剪区域，避免整图 clone 后再裁切。
-- Native 入口阶段D已收口：`--sandbox-worker` / `--persistent` / oneshot 由统一路由决策函数分流，入口执行结果统一为 `{handled,error}` 语义；oneshot `emit` 写出失败改为显式 stderr + 非零退出，未知参数与冲突参数会直接报错。
-- Native 启动路由回归已补齐：新增 `drivers/native/src/main_startup_tests.rs`，覆盖默认 oneshot、`--sandbox-worker`、`--persistent` 分流和未知参数/冲突参数错误路径，启动入口决策具备自动化锁定。
-- Native 依赖边界已收口：新增 `python-sandbox` feature（默认关闭）承载 `pyo3(auto-initialize)` 与 `reqwest(blocking)`；默认构建不再链接 Python runtime / reqwest / tokio。`SCRIPT_EXEC` 在未启用 feature 时会显式返回 `python-sandbox` 未开启错误，不做静默降级；启用 feature 后原有脚本沙箱与测试链路保持可用。
-- 该层仍遵守“只做原子执行，不承载业务决策”的边界，新增需求应优先走脚本/API，再考虑视觉路径。
-
-## 已完成的主线里程碑
-
-- 三层边界已经明确，跨层直连被持续收口到统一消息总线和共享契约。
-- Bridge 主链路已可运行：模型调用、工具执行、流式返回、会话持久化、人工介入与恢复均已打通。
-- Web、CLI、Bridge、Native 的共享配置与生成契约已建立统一基线。
-- Memory augmentation、任务调度、RSS、浏览器控制、脚本执行、GUI executor 等能力都已有可用 MVP。
-- 多个大文件和巨型模块已完成按职责拆分，仓库整体结构比早期版本清晰很多。
+## 分层状态
+- Central：会话、工具调度、SSE、配置、记忆增强、任务调度主线可用；shared schema 与 `trace_id` 契约已统一，`service_router/service_usecase_agent` 已完成超 300 行拆分收口；transport 已将 config/task/rss 直连入口收敛到 `DispatchAction`，并为 `TASK_LIST` 增加可选 `scope=user|system`；`pro/plan` 模式规则已从 orchestration 迁出到 `bridge/mode` 独立包；本次移除 `orchestration/transport` 配置 shim 透传层，统一直连 `bridge/config` 与 `orchestration` 导出契约。
+- Perception：Web/CLI 可用且已接通流式与用户图片输入；Android 已接入会话与展示基础但成熟度较低，`ConfigPanel` 已完成超 300 行拆分；Web chat 已完成 `hooks/chat` 流程收敛：SSE 事件投影下沉到 `lib/chatRuntime`（projector/runtime/toolTagProjection），`useChatState` 改为 reducer 驱动并补齐事件投影与状态收敛单测。
+- Execution：已支持截图、输入、脚本、窗口查询等原子能力；`CODEX_CLI` 跨请求状态已从 native 移至 bridge（native persistent 仅保留协议复用，不再持有命令 HashMap），仍未达到生产完备；本次已补齐 native 关键路径测试（`input`/`sandbox`/`screen`/`framing`，新增 `sandbox/diff_engine` 独立测试），并将 CI Native 检查升级为默认 + `python-sandbox` 双矩阵（均 `timeout 60s cargo test`）。
 
 ## 当前可用能力
-
-- 会话管理：创建、持久化、流式输出、恢复、基础裁剪。
-- 工具链：`script_exec`、`read_and_summarize`、`web_search`、`rss_fetch`、`browser_control`、`memory_manage`、`computer_use` 等。
-- 配置系统：Provider、模型、运行时配置的读写、解析与校验。
-- 运行时工具暴露继续走 `tool_allowlist` 常驻机制；本地 Bridge 配置已验证可直接将 `script_exec`、`browser_control`、`screen_action`、`computer_use` 与 memory 工具常驻暴露给 Agent，`tfind` 需配合 `tool_search_enabled=true` 才会实际注册。
-- 任务系统：基础调度、立即执行、日志查询。
-- 任务系统已补上 `workflow` 类型地基：继续复用现有调度器、任务存储、`/api/tasks` 与 `TASK_*` action，在不新增独立服务/存储的前提下支持 `start -> end` 最小 workflow 任务创建、查询、手动执行与运行摘要。
-- `workflow` 运行时已扩到线性节点链：现支持固定参数的 `tool` / `llm` / `agent` 节点，继续复用现有 runtime factory、任务存储与调度器；节点间暂不传递输出，`agent` 节点按 fresh session 运行，`tool` 节点受独立 `workflow_tool_allowlist` 显式约束。
-- Web Console / CLI：基础对话和桥接操作可用。
-- Web Console 前端的用户侧图片发送已可用：支持点击加号选择多图、发送纯图片或图文混发，并能在历史消息中回显用户图片。
+- 会话：创建、流式输出、持久化、恢复、分页查看历史与草稿态展示。
+- 工具：`script_exec`、`screen_action`、`computer_use`、`memory_manage`、`rss_fetch`、`web_search` 等可运行；`tfind` 已支持 `kind=tool|skill`、会话级 `dynamic_skill_loads` 与 skill 依赖工具自动装载；`core/bridge/tools` 已完成根包与 `web/memory/screen/graphql/contracts` 子包分层，外部构造器 API 保持兼容。
+- 浏览器工具：`browser_control` 与 native `BROWSER_LAUNCH` 已下线，相关调用会显式报错（`tool not found` / `unsupported action`）。
+- 任务：`agent_message` 与 `workflow` 基线可用，支持创建、查询、调度与手动执行。
+- Agent：新增后端 `mode=plan`（`AGENT_SEND`），仅产出任务编排文本并显式禁止工具/任务执行；`mode` 显式优先于消息内 `pro/prox` 前缀。
+- Web 配置：General 页面已去除底板卡片，改为线性分区样式（分隔线 + 标题层级）区分不同配置域。
+- Web 配置：Tasks 分页 workflow 编辑器画布已按最新 Architecture React 稿 1:1 还原（侧栏/节点/属性抽屉），保存策略升级为实时自动保存（800ms 防抖、失败可重试、状态可见）并保留 `Ctrl/Cmd+S` 立即保存，同时补齐本地草稿缓存（含节点坐标）以保证刷新后画布布局可恢复；节点拖拽改为 `requestAnimationFrame` 节流并在释放时 flush，同时禁用节点 `transform` 过渡，修复拖动滑移；左侧节点库图标已移除，收起态改为在原图标位显示首字母并与折叠按钮/返回图标中轴对齐；workflow 左侧折叠按钮已切换为主页面同款 panel-left SVG 图标，新增右上齿轮悬浮窗用于配置 schedule 与 session 导入，start 变量卡片支持点击全局 portal 弹窗编辑（name/type/required/value/description），并将 name/value 语义拆分（name 为 string 且 max 100，type 仅约束 value）；背景板已改为 canvas 网格，支持滚轮缩放、拖拽平移与 `Shift+滚轮` 平移，右侧属性面板关闭后不再占画布宽度；修复 create 基线已标记 saved 时 `Ctrl/Cmd+S` 被跳过的问题，手动保存改为 force flush；start 变量值输入现按类型即时约束（boolean 下拉、number 数字输入、object/array 实时校验并失焦格式化，非法时禁用保存），变量名输入改为本地草稿并在失焦/回车时提交，避免逐字触发 autosave；本次进一步将 autosave 控制器改为单实例并将 `Ctrl/Cmd+S` 监听改为 capture + 最新回调 ref，修复状态机在渲染期不稳定导致保存状态长期停留 idle 的问题，并修复保存进行中时手动 Save 提前返回导致“点击无反应”的交互问题；workflow 左下 Save 状态位已改为可点击保存按钮并保留状态色反馈，同时补齐保存失败/校验失败浮层显式提示与按钮按压动画反馈；设置页新增 Skills 分页与卡片化删除管理（`/api/skills`，覆盖 repo/user 两类来源），并新增 Tools 分页（`/api/tools`）：一工具一卡片、仅支持启用/禁用（映射 `tool_blocklist`）与提示词覆盖编辑（`tool_prompt_overrides`），不支持新增/删除工具。
+- Workflow：在 start `inputs` 基础上，后端 workflow 节点已扩展 `if/loop`（含 schema、校验与运行时图遍历执行）；Web 画布已新增 `if/loop` 节点编辑，并完成语义收敛：`loop` 改为固定 `loop_id` 的 `start/end` 成对节点（ID/role/loop_id 只读、删除任一端联动删除、导入后端单 loop 节点时自动展开为 `*-start/*-end`，保存时再编译回后端 `max_iterations + body/exit`），`if` 回归普通单节点条件分支（不再使用 `start/end + if_id` 配对）；`TASK_RUN_NOW` 入参保持不变；本次完成编辑器代码收口（移除组件侧重复 `workflowTaskToDraft`、拆分 Start 变量编辑与画布背景/节点层、start 输入名规则与后端正则对齐），并修复前端 `tsc` 的 workflow loop 类型冲突。
 
 ## 当前约束
-
-- `drivers/native` 仍是不完整环节，不能默认视为生产级执行层。
-- Memory、GraphQL runtime、GUI executor 虽已可用，但仍属于快速演进区域。
-- 项目整体仍处于 MVP 骨架阶段，当前优先级是主链路稳定和边界清晰，而不是功能扩张。
-- 本文件只保留项目阶段性摘要，不再记录逐日细粒度变更；详细历史请查看 `git log`。
-- 回归门禁脚本已固定 backend 单测命令为 `timeout 60s go test ./...`（`scripts/e2e/mvp_regression.sh` 与 `.github/workflows/trinity-check.yml` 同步），避免后端测试任务无界阻塞。
+- Native、Memory、GUI executor、GraphQL runtime 仍处快速演进区，不按生产级承诺。
+- 当前优先级是稳定性、可观测性、契约一致性，不做无边界扩功能。
+- 详细变更历史请查 `git log`；本文件仅保留阶段摘要。

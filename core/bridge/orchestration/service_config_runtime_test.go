@@ -11,7 +11,7 @@ import (
 func TestConfigUpdateRejectsNonStringGraphQLHeaders(t *testing.T) {
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
-	if err := service.configStore.Update(configUpdateRequest{
+	if err := service.configStore.Update(configUpdateRequestToStoreRequest(configUpdateRequest{
 		GraphqlSources: []graphqlSourceInput{{
 			Name:       "crm",
 			Endpoint:   "https://crm.example/graphql",
@@ -20,7 +20,7 @@ func TestConfigUpdateRejectsNonStringGraphQLHeaders(t *testing.T) {
 				"X-Tenant": "tenant-1",
 			},
 		}},
-	}); err != nil {
+	})); err != nil {
 		t.Fatalf("seed graphql source: %v", err)
 	}
 
@@ -52,11 +52,11 @@ func TestConfigUpdateRejectsNonStringGraphQLHeaders(t *testing.T) {
 	}
 
 	snapshot := service.configStore.Snapshot()
-	if len(snapshot.GraphqlSources) != 1 {
-		t.Fatalf("unexpected graphql sources: %+v", snapshot.GraphqlSources)
+	if len(snapshot.GraphQLSources) != 1 {
+		t.Fatalf("unexpected graphql sources: %+v", snapshot.GraphQLSources)
 	}
-	if snapshot.GraphqlSources[0].Headers["X-Tenant"] != "tenant-1" {
-		t.Fatalf("graphql headers changed after invalid update: %+v", snapshot.GraphqlSources[0].Headers)
+	if snapshot.GraphQLSources[0].Headers["X-Tenant"] != "tenant-1" {
+		t.Fatalf("graphql headers changed after invalid update: %+v", snapshot.GraphQLSources[0].Headers)
 	}
 }
 
@@ -64,6 +64,7 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
 	raw := json.RawMessage(`{
+		"session_human_log_full_enabled": true,
 		"web_rooter_enabled": true,
 		"web_rooter_base_url": "http://127.0.0.1:9988",
 		"web_rooter_api_token": "rooter-token",
@@ -90,6 +91,15 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	if !snapshot.WebRooterEnabled {
 		t.Fatal("expected web_rooter_enabled in snapshot")
 	}
+	if snapshot.WebRooterBaseURL != "http://127.0.0.1:9988" {
+		t.Fatalf("unexpected web_rooter_base_url in snapshot: %q", snapshot.WebRooterBaseURL)
+	}
+	if snapshot.WebRooterTimeoutMs != 12345 {
+		t.Fatalf("unexpected web_rooter_timeout_ms in snapshot: %d", snapshot.WebRooterTimeoutMs)
+	}
+	if !snapshot.SessionHumanLogFullEnabled {
+		t.Fatal("expected session_human_log_full_enabled in snapshot")
+	}
 	if !snapshot.WebRooterAPITokenSet {
 		t.Fatal("expected web_rooter_api_token_set in snapshot")
 	}
@@ -100,6 +110,9 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	}
 	if !cfg.WebRooterEnabled {
 		t.Fatal("expected web_rooter_enabled in runtime config")
+	}
+	if !cfg.SessionHumanLogFullEnabled {
+		t.Fatal("expected session_human_log_full_enabled in runtime config")
 	}
 	if cfg.WebRooterBaseURL != "http://127.0.0.1:9988" {
 		t.Fatalf("unexpected web_rooter_base_url: %q", cfg.WebRooterBaseURL)

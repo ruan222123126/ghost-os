@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
 )
@@ -18,7 +19,7 @@ func TestSessionAgentRunnerRunTurnInputPersistsUserImages(t *testing.T) {
 	}
 	runner := NewSessionAgentRunner(proTestRuntimeFactory{
 		deps: agentRuntimeDependencies{
-			cfg:          Config{MaxTurns: 3, PromptsPath: "", Provider: ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"}},
+			cfg:          bridgeconfig.Config{MaxTurns: 3, PromptsPath: "", Provider: bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"}},
 			client:       completer,
 			registry:     tools.NewRegistry(),
 			systemPrompt: "base system prompt",

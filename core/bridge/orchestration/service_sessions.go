@@ -52,7 +52,7 @@ func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID
 	}
 
 	logAction(traceID, "SESSION_GET", "success", nil)
-	return buildSessionDetailPayload(sess, page), http.StatusOK, nil
+	return buildSessionDetailPayload(sess, page, params.Before == nil), http.StatusOK, nil
 }
 
 // executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。

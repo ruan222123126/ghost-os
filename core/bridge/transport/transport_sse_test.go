@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/streaming"
 )
 
@@ -108,8 +109,8 @@ func TestSSEEventSinkSerializesConcurrentEmitCalls(t *testing.T) {
 func TestSessionStreamBroadcastSinkPublishesCanonicalEventFromInnerSink(t *testing.T) {
 	recorder := &flushRecorder{ResponseRecorder: httptest.NewRecorder()}
 	sseSink := newSSEEventSink(recorder, recorder, "trace-canonical")
-	hub := newSessionPushHub()
-	streamSink := newSessionStreamBroadcastSink(sseSink, hub)
+	hub := bridgeorchestration.NewSessionPushHub()
+	streamSink := bridgeorchestration.NewSessionStreamBroadcastSink(sseSink, hub)
 
 	subscription, unsubscribe := hub.Subscribe("session-canonical")
 	defer unsubscribe()

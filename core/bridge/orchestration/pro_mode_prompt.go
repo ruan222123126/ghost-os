@@ -3,6 +3,7 @@ package orchestration
 import (
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
 	bridgemode "ghost-os/bridge/mode"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -12,7 +13,7 @@ func newProModeCatalog(base tools.ToolCatalog, allowComplete bool) tools.ToolCat
 	return bridgemode.NewCatalog(base, allowComplete)
 }
 
-func buildProModeSystemPrompt(cfg Config, catalog tools.ToolCatalog, request proModeRequest) (string, error) {
+func buildProModeSystemPrompt(cfg bridgeconfig.Config, catalog tools.ToolCatalog, request proModeRequest) (string, error) {
 	basePrompt, err := buildSystemPromptForCatalog(cfg, catalog)
 	if err != nil {
 		return "", err

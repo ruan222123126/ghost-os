@@ -35,3 +35,15 @@ func TestValidateAgentResponsePayloadRejectsInconsistentSessionEnd(t *testing.T)
 		t.Fatal("expected error but got nil")
 	}
 }
+
+func TestValidateAgentResponsePayloadAcceptsPlanModeWithoutIterationFields(t *testing.T) {
+	err := validateAgentResponsePayload(agentResponse{
+		Message:      "plan output",
+		SessionID:    "session-1",
+		SessionEnded: false,
+		Mode:         agentModePlan,
+	})
+	if err != nil {
+		t.Fatalf("validateAgentResponsePayload returned error: %v", err)
+	}
+}

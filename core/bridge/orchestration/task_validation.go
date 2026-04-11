@@ -3,6 +3,8 @@ package orchestration
 import (
 	"fmt"
 	"strings"
+
+	bridgerss "ghost-os/bridge/rss"
 )
 
 func validateTaskDefinition(task *ScheduledTask) error {
@@ -26,6 +28,7 @@ func validateTaskDefinition(task *ScheduledTask) error {
 func normalizeTaskDefinition(task *ScheduledTask) {
 	task.Message = strings.TrimSpace(task.Message)
 	task.SessionID = strings.TrimSpace(task.SessionID)
+	task.RuntimeOverrides = cloneTaskRuntimeOverrides(task.RuntimeOverrides)
 	task.TaskKind = normalizeTaskKind(task.TaskKind)
 	task.Action = strings.TrimSpace(task.Action)
 	task.ActionParams = cloneTaskActionParams(task.ActionParams)
@@ -55,21 +58,8 @@ func validateSystemTaskDefinition(task *ScheduledTask) error {
 	if task.Action == "" {
 		return fmt.Errorf("%w: action is required for system_action", ErrInvalidTaskConfig)
 	}
-	switch task.Action {
-	case busActionRSSInboxPoll:
-		params, err := decodeRSSInboxPollParams(task.ActionParams)
-		if err != nil {
-			return fmt.Errorf("%w: invalid %s params: %v", ErrInvalidTaskConfig, busActionRSSInboxPoll, err)
-		}
-		task.ActionParams = rssInboxPollParamsToMap(params)
-	case busActionRSSBriefingBuild:
-		params, err := decodeRSSBriefingParams(task.ActionParams)
-		if err != nil {
-			return fmt.Errorf("%w: invalid %s params: %v", ErrInvalidTaskConfig, busActionRSSBriefingBuild, err)
-		}
-		task.ActionParams = rssBriefingParamsToMap(params)
-	default:
-		return fmt.Errorf("%w: unsupported system action %q", ErrInvalidTaskConfig, task.Action)
+	if err := bridgerss.ValidateSystemTaskParams(task); err != nil {
+		return err
 	}
 	return nil
 }

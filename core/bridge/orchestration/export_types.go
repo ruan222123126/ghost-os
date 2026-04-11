@@ -5,8 +5,6 @@ const (
 	BusStatusSuccess             = busStatusSuccess
 	BusStatusError               = busStatusError
 	BusAssistantSessionEndSignal = busAssistantSessionEndSignal
-	BusActionRSSInboxPoll        = busActionRSSInboxPoll
-	BusActionRSSBriefingBuild    = busActionRSSBriefingBuild
 
 	DefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
 	TaskListScopeUser          = taskListScopeUser
@@ -45,11 +43,9 @@ type TaskPayload = taskPayload
 type TaskDeleteResponse = taskDeleteResponse
 type TaskRunPayload = taskRunPayload
 type TaskRunLogPayload = taskRunLogPayload
-type RSSInboxPollParams = rssInboxPollParams
-type RSSInboxListParams = rssInboxListParams
-type RSSInboxGetParams = rssInboxGetParams
-type RSSInboxGroupsParams = rssInboxGroupsParams
-type RSSBriefingParams = rssBriefingParams
+type ToolNameParams = toolNameParams
+type ToolUpdateRequest = toolUpdateRequest
+type ToolPayload = toolPayload
 type SessionPushEventType = sessionPushEventType
 type SessionPushEvent = sessionPushEvent
 type SessionPushHub = sessionPushHub

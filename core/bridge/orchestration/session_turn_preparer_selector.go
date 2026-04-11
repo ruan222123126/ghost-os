@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -40,12 +41,13 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 
 func newTurnSelectorCatalogs(deps agentRuntimeDependencies, sess *session.Session) turnSelectorCatalogs {
 	policy := newToolSelectionPolicy(deps.cfg)
-	residentStaticNames := toolCatalogNames(policy.residentCatalog(deps.registry))
-	selectorStaticNames := toolCatalogNames(policy.selectorCatalog(deps.registry))
+	baseCatalog := tools.NewPromptOverrideCatalog(deps.registry, deps.cfg.ToolSelector.PromptOverrides)
+	residentStaticNames := toolCatalogNames(policy.residentCatalog(baseCatalog))
+	selectorStaticNames := toolCatalogNames(policy.selectorCatalog(baseCatalog))
 	return turnSelectorCatalogs{
-		base:      newSessionTurnCatalog(deps.registry, residentStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
-		selection: newSessionTurnCatalog(deps.registry, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
-		selector:  newSessionTurnCatalog(deps.registry, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, true),
+		base:      newSessionTurnCatalog(baseCatalog, residentStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
+		selection: newSessionTurnCatalog(baseCatalog, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
+		selector:  newSessionTurnCatalog(baseCatalog, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, true),
 	}
 }
 
@@ -100,7 +102,7 @@ func buildScopedTurnCatalog(
 	return scoped, systemPrompt, nil
 }
 
-func (p *sessionTurnPreparer) newSelector(cfg Config, catalog tools.ToolCatalog) selectorEngine {
+func (p *sessionTurnPreparer) newSelector(cfg bridgeconfig.Config, catalog tools.ToolCatalog) selectorEngine {
 	if p != nil && p.selectorFactory != nil {
 		return p.selectorFactory(cfg, catalog)
 	}

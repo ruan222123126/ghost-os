@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -15,10 +16,10 @@ import (
 // sessionTurnPreparer 只负责单轮运行前的装配，避免 runner 继续吸收 selector / memory / inflight 细节。
 type sessionTurnPreparer struct {
 	runtimeFactory  AgentRuntimeFactory
-	configStore     *ConfigStore
+	configStore     bridgeconfig.Store
 	sessionStore    *session.Store
 	runRegistry     *RunRegistry
-	selectorFactory func(Config, tools.ToolCatalog) selectorEngine
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine
 }
 
 type turnPreparationInput struct {
@@ -30,10 +31,10 @@ type turnPreparationInput struct {
 
 func newSessionTurnPreparer(
 	runtimeFactory AgentRuntimeFactory,
-	configStore *ConfigStore,
+	configStore bridgeconfig.Store,
 	sessionStore *session.Store,
 	runRegistry *RunRegistry,
-	selectorFactory func(Config, tools.ToolCatalog) selectorEngine,
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine,
 ) *sessionTurnPreparer {
 	if runtimeFactory == nil {
 		runtimeFactory = newAgentRuntimeFactory()
@@ -58,12 +59,27 @@ func newTurnPreparationInput(userInput llm.Message, traceID string) turnPreparat
 }
 
 func (p *sessionTurnPreparer) prepare(ctx context.Context, userInput llm.Message, sessionID string, traceID string) (*sessionTurnState, error) {
+	return p.prepareWithRuntimeOverrides(ctx, userInput, sessionID, traceID, nil)
+}
+
+func (p *sessionTurnPreparer) prepareWithRuntimeOverrides(
+	ctx context.Context,
+	userInput llm.Message,
+	sessionID string,
+	traceID string,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (*sessionTurnState, error) {
 	if p == nil {
 		p = newSessionTurnPreparer(nil, nil, nil, nil, nil)
 	}
 	input := newTurnPreparationInput(userInput, traceID)
 	deps, historyBuilder, persistence, err := p.buildPrepareDependencies()
 	if err != nil {
+		return nil, err
+	}
+	deps, err = applyTaskRuntimeOverridesToDependencies(deps, runtimeOverrides)
+	if err != nil {
+		deps.Close()
 		return nil, err
 	}
 	state, err := p.prepareSessionTurnState(ctx, deps, historyBuilder, persistence, sessionID, input)
@@ -97,9 +113,14 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 	sessionID string,
 	input turnPreparationInput,
 ) (*sessionTurnState, error) {
-	sess, err := historyBuilder.LoadOrCreateSession(sessionID)
+	sess, created, err := historyBuilder.LoadOrCreateSession(sessionID)
 	if err != nil {
 		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sessionID), err: err}
+	}
+	if created {
+		if err := p.persistCreatedSession(sess); err != nil {
+			return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
+		}
 	}
 	execCtx, cleanup, err := p.prepareExecutionContext(ctx, sess, deps.registry, input.traceID)
 	if err != nil {
@@ -240,4 +261,11 @@ func (p *sessionTurnPreparer) registerRun(ctx context.Context, sessionID string,
 		p.runRegistry.Unregister(trimmedSessionID)
 		cancel()
 	}, nil
+}
+
+func (p *sessionTurnPreparer) persistCreatedSession(sess *session.Session) error {
+	if p == nil || p.sessionStore == nil || sess == nil {
+		return nil
+	}
+	return p.sessionStore.Save(sess)
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"io"
 	"log"
 	"net/http"
@@ -94,8 +95,8 @@ func nextTraceID() string {
 
 // writeSuccess 输出 bus success envelope。
 func writeSuccess(w http.ResponseWriter, code int, payload any, traceID string) {
-	writeEnvelope(w, code, apiResponse{
-		Status:  busStatusSuccess,
+	writeEnvelope(w, code, bridgeorchestration.APIResponse{
+		Status:  bridgeorchestration.BusStatusSuccess,
 		Payload: payload,
 		Error:   "",
 	}, traceID)
@@ -103,8 +104,8 @@ func writeSuccess(w http.ResponseWriter, code int, payload any, traceID string) 
 
 // writeError 输出 bus error envelope。
 func writeError(w http.ResponseWriter, code int, message string, traceID string) {
-	writeEnvelope(w, code, apiResponse{
-		Status:  busStatusError,
+	writeEnvelope(w, code, bridgeorchestration.APIResponse{
+		Status:  bridgeorchestration.BusStatusError,
 		Payload: map[string]any{},
 		Error:   message,
 	}, traceID)
@@ -138,7 +139,7 @@ func respondActionResult(w http.ResponseWriter, traceID string, action string, p
 }
 
 // writeEnvelope 是所有响应的唯一出口，统一 header 与 payload 结构。
-func writeEnvelope(w http.ResponseWriter, code int, response apiResponse, traceID string) {
+func writeEnvelope(w http.ResponseWriter, code int, response bridgeorchestration.APIResponse, traceID string) {
 	w.Header().Set("Content-Type", "application/json")
 	if traceID != "" {
 		w.Header().Set("X-Trace-ID", traceID)

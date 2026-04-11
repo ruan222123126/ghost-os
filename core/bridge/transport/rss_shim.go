@@ -1,6 +1,7 @@
 package transport
 
 import (
+	bridgeconfig "ghost-os/bridge/config"
 	bridgeorchestration "ghost-os/bridge/orchestration"
 )
 
@@ -22,12 +23,12 @@ func NewRSSInboxService(
 	briefingStore *RSSBriefingStore,
 	reportStore *RSSReportStore,
 	classifier RSSInboxClassifier,
-	cfg Config,
+	cfg bridgeconfig.Config,
 ) *RSSInboxService {
 	return bridgeorchestration.NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
 }
 
-func NewLLMRSSBriefingBuilder(client rssBriefingCompleter, cfg Config) RSSBriefingBuilder {
+func NewLLMRSSBriefingBuilder(client rssBriefingCompleter, cfg bridgeconfig.Config) RSSBriefingBuilder {
 	return bridgeorchestration.NewLLMRSSBriefingBuilder(client, cfg)
 }
 

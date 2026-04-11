@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 )
 
@@ -34,7 +35,7 @@ type taskMutationScheduler interface {
 type taskMutationRunner struct {
 	store        taskMutationStore
 	scheduler    taskMutationScheduler
-	configStore  *ConfigStore
+	configStore  bridgeconfig.Store
 	sessionStore *session.Store
 	now          func() time.Time
 }
@@ -120,7 +121,7 @@ func (r taskMutationRunner) buildScheduledTask(params taskCreateParams) (Schedul
 	if err := validateTaskDefinition(&task); err != nil {
 		return ScheduledTask{}, wrapTaskConfigError(err)
 	}
-	if err := r.validateTaskRuntime(task); err != nil {
+	if err := r.validateTaskRuntime(&task); err != nil {
 		return ScheduledTask{}, err
 	}
 	if err := r.ensureTaskSessionExists(task.TaskKind, task.SessionID); err != nil {
@@ -140,16 +141,17 @@ func buildTaskFromCreateParams(params taskCreateParams, now time.Time) (Schedule
 	}
 
 	task := ScheduledTask{
-		Message:         strings.TrimSpace(params.Message),
-		SessionID:       strings.TrimSpace(params.SessionID),
-		TaskKind:        strings.TrimSpace(params.TaskKind),
-		Action:          strings.TrimSpace(params.Action),
-		ActionParams:    cloneTaskActionParams(params.ActionParams),
-		Workflow:        cloneTaskWorkflow(params.Workflow),
-		Enabled:         true,
-		CreatedAt:       now,
-		ScheduleType:    taskScheduleTypeInterval,
-		IntervalSeconds: params.IntervalSeconds,
+		Message:          strings.TrimSpace(params.Message),
+		SessionID:        strings.TrimSpace(params.SessionID),
+		RuntimeOverrides: cloneTaskRuntimeOverrides(params.RuntimeOverrides),
+		TaskKind:         strings.TrimSpace(params.TaskKind),
+		Action:           strings.TrimSpace(params.Action),
+		ActionParams:     cloneTaskActionParams(params.ActionParams),
+		Workflow:         cloneTaskWorkflow(params.Workflow),
+		Enabled:          true,
+		CreatedAt:        now,
+		ScheduleType:     taskScheduleTypeInterval,
+		IntervalSeconds:  params.IntervalSeconds,
 	}
 	if cronExpr != "" {
 		task.ScheduleType = taskScheduleTypeCron
@@ -175,7 +177,7 @@ func (r taskMutationRunner) applyUpdate(task *ScheduledTask, params taskUpdatePa
 	if err := validateTaskDefinition(task); err != nil {
 		return wrapTaskConfigError(err)
 	}
-	if err := r.validateTaskRuntime(*task); err != nil {
+	if err := r.validateTaskRuntime(task); err != nil {
 		return err
 	}
 	if err := r.ensureTaskSessionExists(task.TaskKind, task.SessionID); err != nil {
@@ -191,6 +193,9 @@ func applyTaskPatch(task *ScheduledTask, params taskUpdateParams) (bool, error) 
 	}
 	if params.SessionID != nil {
 		task.SessionID = strings.TrimSpace(*params.SessionID)
+	}
+	if params.RuntimeOverrides != nil {
+		task.RuntimeOverrides = cloneTaskRuntimeOverrides(params.RuntimeOverrides)
 	}
 	if params.TaskKind != nil {
 		task.TaskKind = strings.TrimSpace(*params.TaskKind)

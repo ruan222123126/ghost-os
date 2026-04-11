@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/streaming"
 )
 
@@ -57,7 +58,7 @@ func (s *bridgeService) tryExecuteProModeStream(
 	if prepared.mode != agentModeDefault {
 		return false, "", "", nil
 	}
-	_, matched, parseErr := parseProModeRequest(prepared.message, defaultProMaxIterations)
+	_, matched, parseErr := parseProModeRequest(prepared.message, bridgeconfig.DefaultProMaxIterations)
 	if parseErr != nil {
 		message, resolvedSessionID, err := s.emitProModeParseError(ctx, traceID, sessionID, trackedSink, parseErr)
 		return true, message, resolvedSessionID, err

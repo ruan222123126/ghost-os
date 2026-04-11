@@ -4,6 +4,7 @@ package transport
 
 import (
 	"encoding/json"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"strings"
 )
@@ -13,12 +14,12 @@ func (t *transport) handleBus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req apiRequest
+	var req bridgeorchestration.APIRequest
 	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 		return
 	}
 
-	if err := validateBusRequest(req); err != nil {
+	if err := bridgeorchestration.ValidateBusRequest(req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
@@ -34,13 +35,13 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req agentRequest
+	var req bridgeorchestration.AgentRequest
 	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 		return
 	}
 
 	traceID := resolveTraceID(req.TraceID, r)
-	params, err := json.Marshal(agentParams{
+	params, err := json.Marshal(bridgeorchestration.AgentParams{
 		Mode:      req.Mode,
 		Message:   req.Message,
 		Images:    req.Images,
@@ -51,7 +52,7 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t.dispatchAction(w, r, busActionAgentSend, params, traceID)
+	t.dispatchAction(w, r, bridgeorchestration.BusActionAgentSend, params, traceID)
 }
 
 // handleQuestionAnswer 以高层接口隐藏 HUMAN_RESPONSE + resume 的底层编排细节。
@@ -60,7 +61,7 @@ func (t *transport) handleQuestionAnswer(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var req humanResponseParams
+	var req bridgeorchestration.HumanResponseParams
 	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 		return
 	}
@@ -75,7 +76,7 @@ func (t *transport) handleQuestionAnswerStream(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	var req humanResponseParams
+	var req bridgeorchestration.HumanResponseParams
 	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 		return
 	}
@@ -103,7 +104,7 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req agentRequest
+	var req bridgeorchestration.AgentRequest
 	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 		return
 	}
@@ -133,7 +134,7 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Trace-ID", traceID)
 
 	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
-	_, sessionID, err := t.service.ExecuteAgentStreamAction(r.Context(), agentParams{
+	_, sessionID, err := t.service.ExecuteAgentStreamAction(r.Context(), bridgeorchestration.AgentParams{
 		Mode:      req.Mode,
 		Message:   req.Message,
 		Images:    req.Images,

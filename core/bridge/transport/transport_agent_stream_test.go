@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -33,7 +35,7 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 		message string,
 		sessionID string,
 		traceID string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		sink streaming.Sink,
 	) (string, string, error) {
@@ -149,12 +151,12 @@ func TestHandleAgentStreamSupportsProMode(t *testing.T) {
 		},
 	}
 	service.SetRuntimeFactory(proTestRuntimeFactory{
-		deps: newRuntimeDependencies(
-			Config{
+		deps: bridgeorchestration.NewRuntimeDependencies(
+			bridgeconfig.Config{
 				MaxTurns:         4,
 				ProMaxIterations: 2,
 				PromptsPath:      "",
-				Provider:         ProviderConfig{Model: "gpt-4o"},
+				Provider:         bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			completer,
 			tools.NewRegistry(),
@@ -186,6 +188,62 @@ func TestHandleAgentStreamSupportsProMode(t *testing.T) {
 		t.Fatalf("unexpected message payload type: %T", events[0].Payload)
 	}
 	if payload["text"] != "streamed done" {
+		t.Fatalf("unexpected text: %v", payload["text"])
+	}
+}
+
+func TestHandleAgentStreamSupportsPlanMode(t *testing.T) {
+	handler, service, _ := newTestHandlerWithService(t, nil, nil)
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{
+			{
+				Message: llm.Message{
+					Role: llm.RoleAssistant,
+					Text: "【用户意图】\n- 规划任务\n【任务编排】\n1. task_id=T1; objective=整理目标; inputs=用户消息; depends_on=none; executor=main_ai\n【执行顺序】\n1. 先分析后执行\n【完成判定】\n1. 主AI可直接执行",
+				},
+				FinishReason: llm.FinishStop,
+			},
+		},
+	}
+	service.SetRuntimeFactory(proTestRuntimeFactory{
+		deps: bridgeorchestration.NewRuntimeDependencies(
+			bridgeconfig.Config{
+				MaxTurns: 4,
+				Provider: bridgeconfig.ProviderConfig{Model: "gpt-4o"},
+			},
+			completer,
+			tools.NewRegistry(),
+			"system prompt",
+			nil,
+		),
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent/stream",
+		`{"mode":"plan","message":"pro fix config","trace_id":"trace-plan-stream"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	}
+	events := decodeSSEEvents(t, recorder)
+	if len(events) != 2 {
+		t.Fatalf("unexpected event count: got %d want %d", len(events), 2)
+	}
+	if events[0].Type != streaming.EventMessage || events[1].Type != streaming.EventDone {
+		t.Fatalf("unexpected event types: %+v", events)
+	}
+	payload, ok := events[0].Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected message payload type: %T", events[0].Payload)
+	}
+	text, ok := payload["text"].(string)
+	if !ok {
+		t.Fatalf("unexpected text type: %T", payload["text"])
+	}
+	if !strings.Contains(text, "【任务编排】") {
 		t.Fatalf("unexpected text: %v", payload["text"])
 	}
 }
@@ -250,7 +308,7 @@ func TestHandleAgentStreamClientDisconnectCancelsExecution(t *testing.T) {
 		_ string,
 		_ string,
 		_ string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		_ streaming.Sink,
 	) (string, string, error) {

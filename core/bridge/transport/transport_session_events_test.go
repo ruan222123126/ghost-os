@@ -10,12 +10,14 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
 func TestHandleSessionEventsStreamsAssistantMessage(t *testing.T) {
-	executor := func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	executor := func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		return "sent to phone", "session-push", nil
 	}
 	handler, service, _ := newTestHandlerWithService(t, executor, nil)
@@ -36,8 +38,8 @@ func TestHandleSessionEventsStreamsAssistantMessage(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("unexpected event count: got %d want %d", len(events), 1)
 	}
-	if events[0].Type != sessionPushAssistantMessage {
-		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, sessionPushAssistantMessage)
+	if events[0].Type != bridgeorchestration.SessionPushAssistantMessage {
+		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, bridgeorchestration.SessionPushAssistantMessage)
 	}
 	payload, ok := events[0].Payload.(map[string]any)
 	if !ok {
@@ -49,7 +51,7 @@ func TestHandleSessionEventsStreamsAssistantMessage(t *testing.T) {
 }
 
 func TestHandleSessionEventsStreamsAwaitingHuman(t *testing.T) {
-	executor := func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+	executor := func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 		return "", "session-await", &agent.ErrAwaitingHuman{
 			QuestionID: "q-1",
 			Prompt:     "Approve?",
@@ -73,8 +75,8 @@ func TestHandleSessionEventsStreamsAwaitingHuman(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("unexpected event count: got %d want %d", len(events), 1)
 	}
-	if events[0].Type != sessionPushAwaitingHuman {
-		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, sessionPushAwaitingHuman)
+	if events[0].Type != bridgeorchestration.SessionPushAwaitingHuman {
+		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, bridgeorchestration.SessionPushAwaitingHuman)
 	}
 	payload, ok := events[0].Payload.(map[string]any)
 	if !ok {
@@ -119,7 +121,7 @@ func TestHandleSessionEventsBroadcastsStreamProgress(t *testing.T) {
 		_ string,
 		_ string,
 		traceID string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		sink streaming.Sink,
 	) (string, string, error) {
@@ -182,29 +184,29 @@ func TestHandleSessionEventsBroadcastsStreamProgress(t *testing.T) {
 	if len(events) != 5 {
 		t.Fatalf("unexpected event count: got %d want %d", len(events), 5)
 	}
-	if events[0].Type != sessionPushRunStarted {
-		t.Fatalf("unexpected first event type: got %q want %q", events[0].Type, sessionPushRunStarted)
+	if events[0].Type != bridgeorchestration.SessionPushRunStarted {
+		t.Fatalf("unexpected first event type: got %q want %q", events[0].Type, bridgeorchestration.SessionPushRunStarted)
 	}
-	if events[1].Type != sessionPushToolCallStarted {
-		t.Fatalf("unexpected second event type: got %q want %q", events[1].Type, sessionPushToolCallStarted)
+	if events[1].Type != bridgeorchestration.SessionPushToolCallStarted {
+		t.Fatalf("unexpected second event type: got %q want %q", events[1].Type, bridgeorchestration.SessionPushToolCallStarted)
 	}
-	if events[2].Type != sessionPushToolCallFinished {
-		t.Fatalf("unexpected third event type: got %q want %q", events[2].Type, sessionPushToolCallFinished)
+	if events[2].Type != bridgeorchestration.SessionPushToolCallFinished {
+		t.Fatalf("unexpected third event type: got %q want %q", events[2].Type, bridgeorchestration.SessionPushToolCallFinished)
 	}
-	if events[3].Type != sessionPushDone {
-		t.Fatalf("unexpected fourth event type: got %q want %q", events[3].Type, sessionPushDone)
+	if events[3].Type != bridgeorchestration.SessionPushDone {
+		t.Fatalf("unexpected fourth event type: got %q want %q", events[3].Type, bridgeorchestration.SessionPushDone)
 	}
-	if events[4].Type != sessionPushAssistantMessage {
-		t.Fatalf("unexpected fifth event type: got %q want %q", events[4].Type, sessionPushAssistantMessage)
+	if events[4].Type != bridgeorchestration.SessionPushAssistantMessage {
+		t.Fatalf("unexpected fifth event type: got %q want %q", events[4].Type, bridgeorchestration.SessionPushAssistantMessage)
 	}
 }
 
 type decodedSessionPushEvent struct {
-	ID        string               `json:"id"`
-	Type      sessionPushEventType `json:"type"`
-	TraceID   string               `json:"trace_id"`
-	SessionID string               `json:"session_id"`
-	Payload   any                  `json:"payload"`
+	ID        string                                   `json:"id"`
+	Type      bridgeorchestration.SessionPushEventType `json:"type"`
+	TraceID   string                                   `json:"trace_id"`
+	SessionID string                                   `json:"session_id"`
+	Payload   any                                      `json:"payload"`
 }
 
 func startSessionEventRequest(handler http.Handler, sessionID string) (*httptest.ResponseRecorder, context.CancelFunc, <-chan struct{}) {
@@ -219,7 +221,7 @@ func startSessionEventRequest(handler http.Handler, sessionID string) (*httptest
 	return recorder, cancel, done
 }
 
-func waitForSessionPushSubscriber(t *testing.T, hub *sessionPushHub, sessionID string) {
+func waitForSessionPushSubscriber(t *testing.T, hub *bridgeorchestration.SessionPushHub, sessionID string) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 )
 
@@ -21,12 +22,12 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	t.Setenv("GHOST_RSS_FEEDS_PATH", tempDir+"/rss/feeds.json")
 
 	if executor == nil {
-		executor = func(_ context.Context, _ string, _ string, _ string, _ *ConfigStore, _ *session.Store) (string, string, error) {
+		executor = func(_ context.Context, _ string, _ string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {
 			return "ok", "session-test", nil
 		}
 	}
 
-	store, err := NewConfigStoreFromEnv()
+	store, err := bridgeconfig.NewStoreFromEnv()
 	if err != nil {
 		t.Fatalf("new config store: %v", err)
 	}

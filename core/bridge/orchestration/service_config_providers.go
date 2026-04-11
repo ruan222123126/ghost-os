@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 )
 
@@ -28,7 +29,7 @@ func (s *bridgeService) executeProvidersGetAction(traceID string) (any, int, err
 
 func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (any, int, error) {
 	logAction(traceID, actionConfigProviderCreate, "running", nil)
-	if err := s.configStore.AddProvider(providerConfig{
+	if err := s.configStore.AddProvider(bridgeconfig.ProviderRecord{
 		Name:                       req.Name,
 		Type:                       llm.Provider(req.Type),
 		BaseURL:                    stringValue(req.BaseURL),
@@ -53,7 +54,7 @@ func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, t
 
 func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpdateRequest, traceID string) (any, int, error) {
 	logAction(traceID, actionConfigProviderUpdate, "running", nil)
-	if err := s.configStore.UpdateProvider(name, providerConfig{
+	if err := s.configStore.UpdateProvider(name, bridgeconfig.ProviderRecord{
 		Name:                       req.Name,
 		Type:                       llm.Provider(req.Type),
 		BaseURL:                    stringValue(req.BaseURL),
@@ -113,11 +114,11 @@ func (s *bridgeService) providerListPayload() (providerListResponse, error) {
 	}
 	return providerListResponse{
 		Providers:      buildProviderConfigResponses(providers),
-		ActiveProvider: s.configStore.Snapshot().Provider,
+		ActiveProvider: configResponseFromSnapshot(s.configStore.Snapshot()).Provider,
 	}, nil
 }
 
-func buildProviderConfigResponses(providers []providerConfig) []providerConfigResponse {
+func buildProviderConfigResponses(providers []bridgeconfig.ProviderRecord) []providerConfigResponse {
 	if len(providers) == 0 {
 		return []providerConfigResponse{}
 	}
@@ -141,9 +142,9 @@ func buildProviderConfigResponses(providers []providerConfig) []providerConfigRe
 
 func configProviderStatusCode(err error) int {
 	switch {
-	case errors.Is(err, errProviderNotFound):
+	case errors.Is(err, bridgeconfig.ErrProviderNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, errProviderExists):
+	case errors.Is(err, bridgeconfig.ErrProviderExists):
 		return http.StatusConflict
 	default:
 		return http.StatusBadRequest

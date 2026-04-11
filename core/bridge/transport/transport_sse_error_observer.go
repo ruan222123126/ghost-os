@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"ghost-os/bridge/streaming"
 )
 
@@ -59,11 +60,11 @@ func emitUnhandledStreamError(
 	}
 	event, buildErr := buildFallbackStreamErrorEvent(traceID, sessionID, err)
 	if buildErr != nil {
-		logAction(traceID, busActionAgentSend, "error", buildErr)
+		logAction(traceID, bridgeorchestration.BusActionAgentSend, "error", buildErr)
 		return
 	}
 	if _, emitErr := sink.Emit(ctx, event); emitErr != nil {
-		logAction(traceID, busActionAgentSend, "error", emitErr)
+		logAction(traceID, bridgeorchestration.BusActionAgentSend, "error", emitErr)
 	}
 }
 

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
 
 func TestTransportConfigFromTomlConfig(t *testing.T) {
@@ -20,7 +22,7 @@ cors_origins = ["http://localhost:5173"]
 
 [providers.openai]
 type = "openai"
-base_url = "` + defaultBaseURL + `"
+base_url = "` + bridgeconfig.DefaultBaseURL + `"
 api_key = "file-key"
 `
 	if err := os.WriteFile(configPath, []byte(configBody), 0o600); err != nil {

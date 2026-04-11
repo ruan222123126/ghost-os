@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -14,10 +15,17 @@ import (
 
 var errAgentMessageRequired = errors.New("message or images is required")
 
+const (
+	agentModeDefault = ""
+	agentModePlan    = "plan"
+)
+
 type preparedAgentTurnRequest struct {
-	userInput llm.Message
-	message   string
-	sessionID string
+	userInput        llm.Message
+	message          string
+	mode             string
+	sessionID        string
+	runtimeOverrides *TaskRuntimeOverrides
 }
 
 type finalizedAgentTurn struct {
@@ -31,11 +39,27 @@ func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, int,
 	if err != nil {
 		return preparedAgentTurnRequest{}, http.StatusBadRequest, err
 	}
+	mode, err := normalizeAgentMode(params.Mode)
+	if err != nil {
+		return preparedAgentTurnRequest{}, http.StatusBadRequest, err
+	}
 	return preparedAgentTurnRequest{
 		userInput: userInput,
 		message:   message,
+		mode:      mode,
 		sessionID: strings.TrimSpace(params.SessionID),
 	}, http.StatusOK, nil
+}
+
+func normalizeAgentMode(raw string) (string, error) {
+	mode := strings.ToLower(strings.TrimSpace(raw))
+	if mode == "" {
+		return agentModeDefault, nil
+	}
+	if mode == agentModePlan {
+		return mode, nil
+	}
+	return "", fmt.Errorf("unsupported agent mode: %q", mode)
 }
 
 func (s *bridgeService) validateAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, int, error) {

@@ -9,7 +9,10 @@ import (
 func TestConfigResponseFromSnapshotIncludesWebRooterFlags(t *testing.T) {
 	response := configResponseFromSnapshot(bridgeconfig.Snapshot{
 		GraphQLTextSanitizeEnabled: true,
+		SessionHumanLogFullEnabled: true,
 		WebRooterEnabled:           true,
+		WebRooterBaseURL:           "http://127.0.0.1:9988",
+		WebRooterTimeoutMS:         120000,
 		WebRooterAPITokenSet:       true,
 		WebSearchTavilyURL:         "https://proxy.example/tavily",
 		WebSearchExaURL:            "https://proxy.example/exa",
@@ -20,9 +23,18 @@ func TestConfigResponseFromSnapshotIncludesWebRooterFlags(t *testing.T) {
 	if !response.GraphqlTextSanitizeEnabled {
 		t.Fatal("expected graphql_text_sanitize_enabled to be true")
 	}
+	if !response.SessionHumanLogFullEnabled {
+		t.Fatal("expected session_human_log_full_enabled to be true")
+	}
 
 	if !response.WebRooterEnabled {
 		t.Fatal("expected web_rooter_enabled to be true")
+	}
+	if response.WebRooterBaseURL != "http://127.0.0.1:9988" {
+		t.Fatalf("unexpected web_rooter_base_url: got %q want %q", response.WebRooterBaseURL, "http://127.0.0.1:9988")
+	}
+	if response.WebRooterTimeoutMs != 120000 {
+		t.Fatalf("unexpected web_rooter_timeout_ms: got %d want %d", response.WebRooterTimeoutMs, 120000)
 	}
 	if !response.WebRooterAPITokenSet {
 		t.Fatal("expected web_rooter_api_token_set to be true")

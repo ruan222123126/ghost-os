@@ -8,12 +8,30 @@ import (
 )
 
 var errStructuredAgentRunnerRequired = errors.New("configured agent runner does not support image input")
+var errRuntimeOverrideRunnerRequired = errors.New("configured agent runner does not support runtime_overrides")
+var errRuntimeOverrideWithImages = errors.New("runtime_overrides do not support image input")
 
 func (s *bridgeService) runPreparedAgentTurn(
 	ctx context.Context,
 	prepared preparedAgentTurnRequest,
 	traceID string,
 ) (string, string, error) {
+	if prepared.runtimeOverrides != nil {
+		if hasAgentInputImages(prepared.userInput) {
+			return "", "", errRuntimeOverrideWithImages
+		}
+		runner, ok := s.agentRunner.(SessionTurnRunnerWithOverrides)
+		if !ok {
+			return "", "", errRuntimeOverrideRunnerRequired
+		}
+		return runner.RunTurnWithOverrides(
+			ctx,
+			prepared.message,
+			prepared.sessionID,
+			traceID,
+			prepared.runtimeOverrides,
+		)
+	}
 	if hasAgentInputImages(prepared.userInput) {
 		runner, ok := s.agentRunner.(StructuredSessionTurnRunner)
 		if !ok {

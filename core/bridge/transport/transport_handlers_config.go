@@ -1,8 +1,9 @@
-// Config and provider HTTP handlers.
+// bridgeconfig.Config and provider HTTP handlers.
 
 package transport
 
 import (
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,7 +15,7 @@ func (t *transport) handleConfig(w http.ResponseWriter, r *http.Request) {
 		traceID := resolveTraceID("", r)
 		t.dispatchActionObject(w, r, actionConfigGet, map[string]any{}, traceID)
 	case http.MethodPost:
-		var req configUpdateRequest
+		var req bridgeorchestration.ConfigUpdateRequest
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
@@ -33,7 +34,7 @@ func (t *transport) handleConfigProviders(w http.ResponseWriter, r *http.Request
 		payload, code, err := t.service.ExecuteProvidersGetAction(traceID)
 		respondServiceResult(w, traceID, payload, code, err)
 	case http.MethodPost:
-		var req providerCreateRequest
+		var req bridgeorchestration.ProviderCreateRequest
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
@@ -54,7 +55,7 @@ func (t *transport) handleConfigProviderByName(w http.ResponseWriter, r *http.Re
 
 	switch r.Method {
 	case http.MethodPut:
-		var req providerUpdateRequest
+		var req bridgeorchestration.ProviderUpdateRequest
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
@@ -75,7 +76,7 @@ func (t *transport) handleActiveProvider(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	var req setActiveProviderRequest
+	var req bridgeorchestration.SetActiveProviderRequest
 	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 		return
 	}

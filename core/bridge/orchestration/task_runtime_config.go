@@ -7,19 +7,29 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 )
 
-func loadTaskRuntimeConfig(store *ConfigStore) (TaskConfig, error) {
+func loadTaskRuntimeConfig(store bridgeconfig.Store) (bridgeconfig.TaskConfig, error) {
 	if store != nil {
 		cfg, err := store.Config()
 		if err != nil {
-			return TaskConfig{}, err
+			return bridgeconfig.TaskConfig{}, err
 		}
 		return cfg.Task, nil
 	}
 	return bridgeconfig.LoadTaskConfig()
 }
 
-func (r taskMutationRunner) validateTaskRuntime(task ScheduledTask) error {
-	if normalizeTaskKind(task.TaskKind) != taskKindWorkflow {
+func (r taskMutationRunner) validateTaskRuntime(task *ScheduledTask) error {
+	if task == nil {
+		return invalidTaskConfig("task is nil")
+	}
+	kind := normalizeTaskKind(task.TaskKind)
+	if kind == taskKindAgentMessage {
+		return validateAgentTaskRuntime(task)
+	}
+	if task.RuntimeOverrides != nil {
+		return invalidTaskConfig(kind + " does not allow runtime_overrides")
+	}
+	if kind != taskKindWorkflow {
 		return nil
 	}
 	cfg, err := loadTaskRuntimeConfig(r.configStore)
@@ -29,7 +39,16 @@ func (r taskMutationRunner) validateTaskRuntime(task ScheduledTask) error {
 	return validateWorkflowTaskRuntime(task.Workflow, cfg)
 }
 
-func validateWorkflowTaskRuntime(definition *WorkflowDefinition, cfg TaskConfig) error {
+func validateAgentTaskRuntime(task *ScheduledTask) error {
+	overrides, err := normalizeTaskRuntimeOverrides(task.RuntimeOverrides)
+	if err != nil {
+		return invalidTaskConfig(err.Error())
+	}
+	task.RuntimeOverrides = overrides
+	return nil
+}
+
+func validateWorkflowTaskRuntime(definition *WorkflowDefinition, cfg bridgeconfig.TaskConfig) error {
 	if definition == nil {
 		return invalidTaskConfig("workflow is required")
 	}

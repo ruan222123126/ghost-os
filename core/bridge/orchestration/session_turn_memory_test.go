@@ -2,11 +2,13 @@ package orchestration
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
 	"ghost-os/bridge/memorystore"
@@ -217,14 +219,14 @@ func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
 
 	runner := NewSessionAgentRunner(proTestRuntimeFactory{
 		deps: agentRuntimeDependencies{
-			cfg: Config{
+			cfg: bridgeconfig.Config{
 				MaxTurns:    3,
 				PromptsPath: "",
-				Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
-				ToolSelector: ToolSelectorConfig{
+				Provider:    bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+				ToolSelector: bridgeconfig.ToolSelectorConfig{
 					Allowlist: []string{"tfind"},
 				},
-				ToolSearch: ToolSearchConfig{
+				ToolSearch: bridgeconfig.ToolSearchConfig{
 					Enabled:   true,
 					IdleTurns: 3,
 				},
@@ -257,6 +259,70 @@ func TestSessionRunnerInjectsDynamicToolStateIntoPrompt(t *testing.T) {
 	}
 }
 
+func TestSessionRunnerInjectsDynamicSkillContextIntoPrompt(t *testing.T) {
+	projectRoot := t.TempDir()
+	writePromptSkillFixture(
+		t,
+		filepath.Join(projectRoot, ".agents", "skills", "release"),
+		"release_flow",
+		"Release workflow",
+		"Always run the release checklist before deploy.",
+	)
+	sessionStore := newTempSessionStore(t)
+	sess := session.NewSession("base system prompt")
+	sess.AdvanceToolTurn(3)
+	sess.EnsureDynamicSkillLoaded("release_flow", "tfind")
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{{
+			Message:      llm.Message{Role: llm.RoleAssistant, Text: "continuing"},
+			FinishReason: llm.FinishStop,
+		}},
+	}
+	registry := tools.NewRegistry()
+	for _, name := range []string{"ask_human", "tfind"} {
+		registry.Register(&runnerMockTool{name: name})
+	}
+	runner := NewSessionAgentRunner(proTestRuntimeFactory{
+		deps: agentRuntimeDependencies{
+			cfg: bridgeconfig.Config{
+				MaxTurns:    3,
+				PromptsPath: "",
+				Provider:    bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+				ProjectRoot: projectRoot,
+				ToolSelector: bridgeconfig.ToolSelectorConfig{
+					Allowlist: []string{"tfind"},
+				},
+				ToolSearch: bridgeconfig.ToolSearchConfig{
+					Enabled:   true,
+					IdleTurns: 3,
+				},
+			},
+			client:       completer,
+			registry:     registry,
+			systemPrompt: "base system prompt",
+		},
+	}, nil, sessionStore, nil)
+
+	if _, _, err := runner.RunTurn(context.Background(), "continue", sess.ID, "trace-dynamic-skills"); err != nil {
+		t.Fatalf("run turn: %v", err)
+	}
+	prompt := completer.requests[0].Messages[0].Text
+	for _, snippet := range []string{
+		"## Dynamic Skill Context",
+		"### Skill `release_flow`",
+		"Always run the release checklist before deploy.",
+		filepath.Join(".agents", "skills", "release", "SKILL.md"),
+	} {
+		if !strings.Contains(prompt, snippet) {
+			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
+		}
+	}
+}
+
 func plannedMemoryDecision(primaryEventID string) memoryaug.PlannerDecision {
 	return memoryaug.PlannerDecision{
 		PrimaryEvent: memoryaug.PlannerEventRef{
@@ -281,11 +347,11 @@ func buildMemoryTestDeps(
 	learn memoryaug.LearningService,
 ) agentRuntimeDependencies {
 	return agentRuntimeDependencies{
-		cfg: Config{
+		cfg: bridgeconfig.Config{
 			MaxTurns:    3,
 			PromptsPath: "",
-			Provider:    ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
-			MemoryAugmentation: MemoryAugmentationConfig{
+			Provider:    bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+			MemoryAugmentation: bridgeconfig.MemoryAugmentationConfig{
 				UserScopeID: memorystore.DefaultUserScopeID,
 			},
 		},
@@ -323,4 +389,23 @@ func containsToolDef(defs []llm.ToolDef, name string) bool {
 		}
 	}
 	return false
+}
+
+func writePromptSkillFixture(t *testing.T, dir string, name string, description string, body string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir skill dir: %v", err)
+	}
+	content := strings.Join([]string{
+		"---",
+		"name: " + name,
+		"description: " + description,
+		"---",
+		"",
+		body,
+		"",
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatalf("write skill file: %v", err)
+	}
 }

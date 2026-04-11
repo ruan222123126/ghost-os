@@ -1,9 +1,7 @@
 package orchestration
 
 import (
-	"strings"
-
-	"ghost-os/bridge/llm"
+	bridgeconfig "ghost-os/bridge/config"
 	bridgerss "ghost-os/bridge/rss"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
@@ -32,7 +30,17 @@ type RSSInboxStore = bridgerss.RSSInboxStore
 type RSSReportQuery = bridgerss.RSSReportQuery
 type RSSReportResult = bridgerss.RSSReportResult
 type RSSFeedStore = rsssubscriptions.FeedStore
-type RSSBriefingCompleter = llm.Completer
+type RSSBriefingCompleter = bridgerss.RSSBriefingCompleter
+type RSSActionHandler = bridgerss.ActionHandler
+type RSSSystemTaskCoordinator = bridgerss.SystemTaskCoordinator
+type RSSLogFunc = bridgerss.LogFunc
+
+// Re-exported RSS param types from bridge/rss for backward compatibility.
+type RSSInboxPollParams = bridgerss.InboxPollParams
+type RSSInboxListParams = bridgerss.InboxListParams
+type RSSInboxGetParams = bridgerss.InboxGetParams
+type RSSInboxGroupsParams = bridgerss.InboxGroupsParams
+type RSSBriefingParams = bridgerss.BriefingParams
 
 var (
 	ErrRSSInboxItemNotFound = bridgerss.ErrRSSInboxItemNotFound
@@ -48,19 +56,39 @@ const (
 	defaultRSSBriefingHighlightsLimit = bridgerss.DefaultRSSBriefingHighlightsLimit
 )
 
-func newRSSInboxServiceFromConfig(store *ConfigStore) (*RSSInboxService, error) {
-	if store == nil {
-		return bridgerss.NewRSSInboxServiceFromConfig(nil)
-	}
-	return bridgerss.NewRSSInboxServiceFromConfig(store.Inner())
+// Re-exported RSS action constants from bridge/rss.
+const (
+	busActionRSSInboxPoll     = bridgerss.ActionInboxPoll
+	busActionRSSInboxList     = bridgerss.ActionInboxList
+	busActionRSSInboxGet      = bridgerss.ActionInboxGet
+	busActionRSSInboxGroups   = bridgerss.ActionInboxGroups
+	busActionRSSBriefingBuild = bridgerss.ActionBriefingBuild
+	busActionRSSBriefingGet   = bridgerss.ActionBriefingGet
+)
+
+func newRSSInboxServiceFromConfig(store bridgeconfig.Store) (*RSSInboxService, error) {
+	return bridgerss.NewRSSInboxServiceFromConfig(store)
 }
 
-func NewRSSInboxService(feedStore *RSSFeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg Config) *RSSInboxService {
+func NewRSSInboxService(feedStore *RSSFeedStore, inboxStore *RSSInboxStore, briefingStore *RSSBriefingStore, reportStore *RSSReportStore, classifier RSSInboxClassifier, cfg bridgeconfig.Config) *RSSInboxService {
 	return bridgerss.NewRSSInboxService(feedStore, inboxStore, briefingStore, reportStore, classifier, cfg)
 }
 
-func NewLLMRSSBriefingBuilder(client RSSBriefingCompleter, cfg Config) RSSBriefingBuilder {
+func NewLLMRSSBriefingBuilder(client RSSBriefingCompleter, cfg bridgeconfig.Config) RSSBriefingBuilder {
 	return bridgerss.NewLLMRSSBriefingBuilder(client, cfg)
+}
+
+func NewRSSActionHandler(inbox *RSSInboxService, initErr error, log RSSLogFunc) *RSSActionHandler {
+	return bridgerss.NewActionHandler(inbox, initErr, log)
+}
+
+func NewRSSSystemTaskCoordinator(
+	cfg bridgeconfig.Store,
+	taskStore *TaskStore,
+	scheduler *TaskScheduler,
+	initErr error,
+) *RSSSystemTaskCoordinator {
+	return bridgerss.NewSystemTaskCoordinator(cfg, taskStore, scheduler, initErr)
 }
 
 func NewRSSInboxStore(path string) (*RSSInboxStore, error) {
@@ -73,13 +101,4 @@ func NewRSSBriefingStore(path string) (*RSSBriefingStore, error) {
 
 func NewRSSReportStore(path string) (*RSSReportStore, error) {
 	return bridgerss.NewRSSReportStore(path)
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }

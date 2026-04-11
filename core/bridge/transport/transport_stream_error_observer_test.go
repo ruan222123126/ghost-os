@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
@@ -17,7 +18,7 @@ func TestHandleAgentStreamEmitsFallbackErrorEventWhenServiceReturnsError(t *test
 		message string,
 		incomingSessionID string,
 		_ string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		_ streaming.Sink,
 	) (string, string, error) {
@@ -55,7 +56,7 @@ func TestHandleQuestionAnswerStreamEmitsFallbackErrorEventWhenResumeReturnsError
 		message string,
 		incomingSessionID string,
 		_ string,
-		_ *ConfigStore,
+		_ bridgeconfig.Store,
 		_ *session.Store,
 		_ streaming.Sink,
 	) (string, string, error) {

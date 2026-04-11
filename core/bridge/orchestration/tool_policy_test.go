@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/tools"
 )
 
@@ -55,8 +56,8 @@ func TestNormalizeConfiguredToolLists_AllowsBlockingAskHumanAndToolSearch(t *tes
 }
 
 func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) {
-	policy := newToolSelectionPolicy(Config{
-		ToolSelector: ToolSelectorConfig{
+	policy := newToolSelectionPolicy(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Allowlist: []string{"send_file"},
 			Blocklist: []string{"script_exec"},
 		},
@@ -76,7 +77,7 @@ func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) 
 
 func TestSessionTurnPreparer_SelectToolsForTurn_HasNoResidentToolsWithoutAllowlist(t *testing.T) {
 	preparer := &sessionTurnPreparer{}
-	deps := newRunnerTestDeps(Config{ToolSelector: ToolSelectorConfig{Blocklist: []string{"script_exec"}}, MaxTurns: 6})
+	deps := newRunnerTestDeps(bridgeconfig.Config{ToolSelector: bridgeconfig.ToolSelectorConfig{Blocklist: []string{"script_exec"}}, MaxTurns: 6})
 
 	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-disabled")
 	if err != nil {
@@ -94,8 +95,8 @@ func TestSessionTurnPreparer_SelectToolsForTurn_HasNoResidentToolsWithoutAllowli
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWithoutAllowlistOnly(t *testing.T) {
 	preparer := &sessionTurnPreparer{}
-	deps := newRunnerTestDeps(Config{
-		ToolSelector: ToolSelectorConfig{
+	deps := newRunnerTestDeps(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Allowlist: []string{"script_exec"},
 		},
 		MaxTurns: 6,
@@ -115,9 +116,9 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWit
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"send_file"}, Confidence: 0.9}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
-	deps := newRunnerTestDeps(Config{
-		ToolSelector: ToolSelectorConfig{
+	preparer := &sessionTurnPreparer{selectorFactory: func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Enabled:   true,
 			Mode:      "llm",
 			Allowlist: []string{"ask_human"},
@@ -145,13 +146,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOutsideStrictMode(t *testing.T) {
 	var available []string
 	preparer := &sessionTurnPreparer{
-		selectorFactory: func(_ Config, catalog tools.ToolCatalog) selectorEngine {
+		selectorFactory: func(_ bridgeconfig.Config, catalog tools.ToolCatalog) selectorEngine {
 			available = toolCatalogNames(catalog)
 			return &fakeSelectorEngine{result: ToolSelectorResult{Mode: "all"}}
 		},
 	}
-	deps := newRunnerTestDeps(Config{
-		ToolSelector: ToolSelectorConfig{
+	deps := newRunnerTestDeps(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Enabled:   true,
 			Mode:      "llm",
 			Allowlist: []string{"ask_human"},
@@ -177,13 +178,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOuts
 func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(t *testing.T) {
 	var available []string
 	preparer := &sessionTurnPreparer{
-		selectorFactory: func(_ Config, catalog tools.ToolCatalog) selectorEngine {
+		selectorFactory: func(_ bridgeconfig.Config, catalog tools.ToolCatalog) selectorEngine {
 			available = toolCatalogNames(catalog)
 			return &fakeSelectorEngine{result: ToolSelectorResult{Mode: "all"}}
 		},
 	}
-	deps := newRunnerTestDeps(Config{
-		ToolSelector: ToolSelectorConfig{
+	deps := newRunnerTestDeps(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Enabled:       true,
 			Mode:          "llm",
 			AllowlistOnly: true,
@@ -212,11 +213,11 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 
 func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *testing.T) {
 	preparer := &sessionTurnPreparer{}
-	deps := newRunnerTestDeps(Config{
-		ToolSelector: ToolSelectorConfig{
+	deps := newRunnerTestDeps(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Allowlist: []string{"send_file", "tfind"},
 		},
-		ToolSearch: ToolSearchConfig{
+		ToolSearch: bridgeconfig.ToolSearchConfig{
 			Enabled:   true,
 			IdleTurns: 3,
 		},
@@ -241,9 +242,9 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 
 func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithoutAllowlist(t *testing.T) {
 	selector := &fakeSelectorEngine{result: ToolSelectorResult{Mode: "subset", Tools: []string{"script_exec"}, Confidence: 0.9}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(Config, tools.ToolCatalog) selectorEngine { return selector }}
-	deps := newRunnerTestDeps(Config{
-		ToolSelector: ToolSelectorConfig{
+	preparer := &sessionTurnPreparer{selectorFactory: func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine { return selector }}
+	deps := newRunnerTestDeps(bridgeconfig.Config{
+		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Enabled: true,
 			Mode:    "llm",
 		},

@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeorchestration "ghost-os/bridge/orchestration"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
@@ -31,9 +33,9 @@ func TestHandleRSSInboxListGetAndPoll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new briefing store: %v", err)
 	}
-	rssConfig := Config{
-		Provider: ProviderConfig{Model: "gpt-4o"},
-		Worker:   WorkerConfig{Model: "gpt-4o-mini"},
+	rssConfig := bridgeconfig.Config{
+		Provider: bridgeconfig.ProviderConfig{Model: "gpt-4o"},
+		Worker:   bridgeconfig.WorkerConfig{Model: "gpt-4o-mini"},
 	}
 	rssService := NewRSSInboxService(feedStore, inboxStore, briefingStore, nil, nil, rssConfig)
 	rssService.SetFetcher(testRSSInboxFetcher{byURL: map[string]tools.RSSResult{
@@ -148,7 +150,7 @@ func TestExecuteRSSInboxPollUsecaseUsesTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new inbox store: %v", err)
 	}
-	rssService := NewRSSInboxService(feedStore, inboxStore, nil, nil, nil, Config{})
+	rssService := NewRSSInboxService(feedStore, inboxStore, nil, nil, nil, bridgeconfig.Config{})
 	rssService.SetFetcher(testRSSInboxFetcher{byURL: map[string]tools.RSSResult{
 		feed.URL: {Feed: tools.RSSFeedInfo{Title: feed.Title}, Items: []tools.RSSItem{{ID: "post-1", Title: "Launch", Summary: "Launch summary"}}},
 	}})
@@ -156,7 +158,7 @@ func TestExecuteRSSInboxPollUsecaseUsesTaskID(t *testing.T) {
 	rssService.SetNow(func() time.Time { return time.Date(2026, 3, 8, 15, 0, 0, 0, time.UTC) })
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 	service.SetRSSInboxService(rssService, nil)
-	result, _, err := service.ExecuteRSSInboxPollUsecase(context.Background(), rssInboxPollParams{}, "task-1", "trace-rss-task")
+	result, _, err := service.ExecuteRSSInboxPollUsecase(context.Background(), bridgeorchestration.RSSInboxPollParams{}, "task-1", "trace-rss-task")
 	if err != nil {
 		t.Fatalf("poll usecase returned error: %v", err)
 	}

@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -20,7 +20,7 @@ type agentExecutorFunc func(
 	message string,
 	sessionID string,
 	traceID string,
-	store *ConfigStore,
+	store bridgeconfig.Store,
 	sessionStore *session.Store,
 ) (string, string, error)
 type agentStreamExecutorFunc func(
@@ -28,47 +28,47 @@ type agentStreamExecutorFunc func(
 	message string,
 	sessionID string,
 	traceID string,
-	store *ConfigStore,
+	store bridgeconfig.Store,
 	sessionStore *session.Store,
 	sink streaming.Sink,
 ) (string, string, error)
 
 // bridgeService 负责 action 分发，不承载 transport 细节。
 type bridgeService struct {
-	configStore    *ConfigStore
+	configStore    bridgeconfig.Store
 	sessionStore   *session.Store
 	sessionPush    *sessionPushHub
 	taskStore      *TaskStore
 	taskScheduler  *TaskScheduler
 	taskInitErr    error
-	rssInbox       *RSSInboxService
-	rssInitErr     error
+	rssHandler     *RSSActionHandler
+	skillHandler   *SkillActionHandler
 	agentRunner    SessionTurnRunner
 	runRegistry    *RunRegistry
-	feedStore      *rsssubscriptions.FeedStore
 	runtimeFactory AgentRuntimeFactory
 	actions        map[string]actionHandler
 }
 
 // newBridgeService 组装 action -> handler 映射，并初始化会话与记忆依赖。
-func newBridgeService(store *ConfigStore, sessionStore *session.Store, executor agentExecutorFunc) *bridgeService {
+func newBridgeService(store bridgeconfig.Store, sessionStore *session.Store, executor agentExecutorFunc) *bridgeService {
 	return newBridgeServiceWithStreamExecutor(store, sessionStore, executor, nil)
 }
 
 func newBridgeServiceWithStreamExecutor(
-	store *ConfigStore,
+	store bridgeconfig.Store,
 	sessionStore *session.Store,
 	executor agentExecutorFunc,
 	streamExecutor agentStreamExecutorFunc,
 ) *bridgeService {
 	service := newBridgeServiceState(store, sessionStore)
+	service.skillHandler = NewSkillActionHandler(store, service.skillLogFunc())
 	service.runtimeFactory = newAgentRuntimeFactoryWithTaskManager(service.taskToolManager())
 	service.agentRunner = newServiceAgentRunner(service, executor, streamExecutor)
 	registerDefaultActions(service)
 	return service
 }
 
-func newBridgeServiceState(store *ConfigStore, sessionStore *session.Store) *bridgeService {
+func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store) *bridgeService {
 	return &bridgeService{
 		configStore:  store,
 		sessionStore: sessionStore,
@@ -114,10 +114,16 @@ func (s *bridgeService) BootstrapSystemTasks() error {
 	if s == nil {
 		return nil
 	}
-	if err := s.ensureRSSPollTask(); err != nil {
+	coordinator := NewRSSSystemTaskCoordinator(
+		s.configStore,
+		s.taskStore,
+		s.taskScheduler,
+		s.rssHandlerInitErr(),
+	)
+	if err := coordinator.SyncPollTask(); err != nil {
 		return err
 	}
-	if err := s.ensureRSSBriefingTask(); err != nil {
+	if err := coordinator.SyncBriefingTask(); err != nil {
 		return err
 	}
 	return nil
@@ -165,15 +171,30 @@ func (s *bridgeService) reloadRSSInboxRuntime() error {
 	}
 	service, err := newRSSInboxServiceFromConfig(s.configStore)
 	if err != nil {
-		s.rssInitErr = err
-		s.rssInbox = nil
-		s.feedStore = nil
+		s.rssHandler = NewRSSActionHandler(nil, err, s.rssLogFunc())
 		return err
 	}
-	s.rssInbox = service
-	s.feedStore = service.FeedStore()
-	s.rssInitErr = nil
+	s.rssHandler = NewRSSActionHandler(service, nil, s.rssLogFunc())
 	return nil
+}
+
+func (s *bridgeService) rssHandlerInitErr() error {
+	if s == nil || s.rssHandler == nil {
+		return nil
+	}
+	return s.rssHandler.InitErr()
+}
+
+func (s *bridgeService) rssLogFunc() RSSLogFunc {
+	return func(traceID, action, status string, err error) {
+		logAction(traceID, action, status, err)
+	}
+}
+
+func (s *bridgeService) skillLogFunc() SkillLogFunc {
+	return func(traceID, action, status string, err error) {
+		logAction(traceID, action, status, err)
+	}
 }
 
 // Close 释放 service 级后台资源。
