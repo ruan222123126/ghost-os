@@ -108,7 +108,7 @@ func TestAutoRestart(t *testing.T) {
 	}
 }
 
-func TestFallbackToOneshot(t *testing.T) {
+func TestPersistentProtocolUnsupportedReturnsError(t *testing.T) {
 	t.Setenv("GO_PERSISTENT_HELPER_ONESHOT_ONLY", "1")
 
 	client := newTestPersistentClient(t, persistentHelperOptions{})
@@ -116,15 +116,12 @@ func TestFallbackToOneshot(t *testing.T) {
 		_ = client.Close()
 	}()
 
-	payload, err := client.Call(context.Background(), "PING", nil, "trace-fallback")
-	if err != nil {
-		t.Fatalf("fallback call returned error: %v", err)
+	_, err := client.Call(context.Background(), "PING", nil, "trace-unsupported")
+	if err == nil {
+		t.Fatal("expected persistent protocol unsupported error")
 	}
-	if payload["mode"] != "oneshot" {
-		t.Fatalf("unexpected fallback payload: %+v", payload)
-	}
-	if !client.fallback {
-		t.Fatal("persistent client should mark fallback mode")
+	if !errors.Is(err, errPersistentProtocolUnsupported) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -265,28 +262,10 @@ func TestPersistentClientHelperProcess(t *testing.T) {
 }
 
 func runOneshotCompatHelper() {
-	input, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-
-	var req request
-	if err := json.Unmarshal(input, &req); err != nil {
-		_ = json.NewEncoder(os.Stdout).Encode(response{
-			Status:  "error",
-			Payload: map[string]any{},
-			Error:   fmt.Sprintf("invalid json: %v", err),
-		})
-		os.Exit(0)
-	}
-
 	_ = json.NewEncoder(os.Stdout).Encode(response{
 		Status: "success",
 		Payload: map[string]any{
-			"message":  "PONG",
-			"trace_id": req.TraceID,
-			"mode":     "oneshot",
+			"mode": "oneshot",
 		},
 	})
 	os.Exit(0)

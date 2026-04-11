@@ -28,7 +28,6 @@ type PersistentNativeClient struct {
 	locator           nativeBinaryLocator
 	nextReqID         uint64
 	closed            bool
-	fallback          bool
 	verified          bool
 	handshakeTimeout  time.Duration
 	commandFactory    func(binaryPath string) *exec.Cmd
