@@ -4,7 +4,9 @@ import type {
   AgentErrorPayload,
   AgentIterationSummaryItem,
   AgentRunStartedPayload,
+  AgentSendAwaitingHumanResponse,
   AgentSendResponse,
+  AgentSendSuccessResponse,
   AgentStopResponsePayload,
   AgentStreamEvent,
   AgentStreamMessagePayload,
@@ -14,77 +16,49 @@ import type {
   AskHumanOption,
 } from '@/lib/types';
 import {
+  defineStringEnumValues,
   expectBoolean,
   expectNumber,
   expectRecord,
   expectString,
   expectStringEnum,
-  pickKnownKeys,
   parseOptionalAskHumanOptions,
+  parseOptionalNumber,
   parseOptionalSelectionMode,
   parseOptionalString,
 } from '@/lib/api/shared';
 
-const AGENT_SUCCESS_KEYS = [
-  'message',
-  'session_id',
-  'session_ended',
-  'mode',
-  'iteration_count',
-  'stopped_by',
-  'final_change_log',
-  'iteration_summary',
-  'session_end',
-] as const;
-const AGENT_AWAITING_KEYS = [
-  'status',
-  'session_id',
-  'question_id',
-  'prompt',
-  'selection_mode',
-  'options',
- ] as const;
-const AGENT_STOP_KEYS = ['status', 'message'] as const;
-const SESSION_END_KEYS = ['signal', 'message'] as const;
-const AGENT_STREAM_EVENT_KEYS = ['id', 'step_id', 'trace_id', 'session_id', 'turn', 'type', 'payload', 'at'] as const;
-const AGENT_RUN_STARTED_KEYS = ['session_id'] as const;
-const AGENT_COMPLETION_DELTA_KEYS = [
-  'kind',
-  'text',
-  'tool_call_index',
-  'tool_call_id',
-  'tool_name',
-  'arguments_fragment',
-] as const;
-const AGENT_TOOL_CALL_STARTED_KEYS = ['tool', 'tool_call_id'] as const;
-const AGENT_TOOL_CALL_FINISHED_KEYS = ['tool', 'tool_call_id', 'status', 'error'] as const;
-const AGENT_AWAITING_EVENT_KEYS = ['tool', 'tool_call_id', 'question_id', 'prompt', 'selection_mode', 'options'] as const;
-const AGENT_STREAM_MESSAGE_KEYS = ['text', 'session_id'] as const;
-const AGENT_DONE_KEYS = ['session_id', 'session_ended'] as const;
-const AGENT_ERROR_KEYS = ['message', 'session_id'] as const;
-const ITERATION_SUMMARY_KEYS = [
-  'iteration',
-  'did',
-  'remaining',
-  'completed',
-  'trace_id',
-  'recorded_at',
-  'final_change_log',
-] as const;
-const AGENT_MODES = ['pro', 'prox'] as const;
-const STOP_STATUSES = ['stopped', 'not_running'] as const;
-const SESSION_END_SIGNALS = ['END_SESSION'] as const;
-const AGENT_STREAM_EVENT_TYPES = [
-  'run_started',
-  'completion_delta',
-  'tool_call_started',
-  'tool_call_finished',
-  'awaiting_human',
-  'message',
-  'done',
-  'error',
-] as const;
-const COMPLETION_DELTA_KINDS = ['text', 'tool_call_start', 'tool_call_delta', 'tool_call_end'] as const;
+const AWAITING_HUMAN_STATUSES = defineStringEnumValues<AgentSendAwaitingHumanResponse['status']>({
+  awaiting_human: true,
+});
+const AGENT_MODES = defineStringEnumValues<NonNullable<AgentSendSuccessResponse['mode']>>({
+  pro: true,
+  prox: true,
+  plan: true,
+});
+const STOP_STATUSES = defineStringEnumValues<AgentStopResponsePayload['status']>({
+  stopped: true,
+  not_running: true,
+});
+const SESSION_END_SIGNALS = defineStringEnumValues<AssistantSessionEndSignal['signal']>({
+  END_SESSION: true,
+});
+const AGENT_STREAM_EVENT_TYPES = defineStringEnumValues<AgentStreamEvent['type']>({
+  run_started: true,
+  completion_delta: true,
+  tool_call_started: true,
+  tool_call_finished: true,
+  awaiting_human: true,
+  message: true,
+  done: true,
+  error: true,
+});
+const COMPLETION_DELTA_KINDS = defineStringEnumValues<AgentCompletionDeltaPayload['kind']>({
+  text: true,
+  tool_call_start: true,
+  tool_call_delta: true,
+  tool_call_end: true,
+});
 
 export interface AgentAwaitingHumanStreamPayload {
   tool?: string;
@@ -103,7 +77,7 @@ function parseSessionEndSignal(value: unknown): AssistantSessionEndSignal | null
     return null;
   }
 
-  const record = pickKnownKeys(expectRecord(value, 'agent response.session_end'), SESSION_END_KEYS);
+  const record = expectRecord(value, 'agent response.session_end');
 
   return {
     signal: expectStringEnum(record.signal, SESSION_END_SIGNALS, 'agent response.session_end.signal'),
@@ -112,10 +86,10 @@ function parseSessionEndSignal(value: unknown): AssistantSessionEndSignal | null
 }
 
 function parseAwaitingHumanResponse(payload: unknown): AgentSendResponse {
-  const record = pickKnownKeys(expectRecord(payload, 'agent response'), AGENT_AWAITING_KEYS);
+  const record = expectRecord(payload, 'agent response');
 
   return {
-    status: 'awaiting_human',
+    status: expectStringEnum(record.status, AWAITING_HUMAN_STATUSES, 'agent response.status'),
     session_id: expectString(record.session_id, 'agent response.session_id'),
     question_id: expectString(record.question_id, 'agent response.question_id'),
     prompt: expectString(record.prompt, 'agent response.prompt'),
@@ -125,7 +99,7 @@ function parseAwaitingHumanResponse(payload: unknown): AgentSendResponse {
 }
 
 function parseIterationSummaryItem(value: unknown, label: string): AgentIterationSummaryItem {
-  const record = pickKnownKeys(expectRecord(value, label), ITERATION_SUMMARY_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     iteration: expectNumber(record.iteration, `${label}.iteration`),
@@ -150,7 +124,7 @@ function parseIterationSummary(value: unknown): AgentIterationSummaryItem[] | un
 }
 
 function parseSuccessResponse(payload: unknown): AgentSendResponse {
-  const record = pickKnownKeys(expectRecord(payload, 'agent response'), AGENT_SUCCESS_KEYS);
+  const record = expectRecord(payload, 'agent response');
 
   return {
     message: expectString(record.message, 'agent response.message'),
@@ -170,14 +144,14 @@ function parseSuccessResponse(payload: unknown): AgentSendResponse {
 export function parseAgentSendResponse(payload: unknown): AgentSendResponse {
   const record = expectRecord(payload, 'agent response');
   if (record.status === 'awaiting_human') {
-    return parseAwaitingHumanResponse(payload);
+    return parseAwaitingHumanResponse(record);
   }
 
-  return parseSuccessResponse(payload);
+  return parseSuccessResponse(record);
 }
 
 export function parseAgentStopResponse(payload: unknown): AgentStopResponsePayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent stop response'), AGENT_STOP_KEYS);
+  const record = expectRecord(payload, 'agent stop response');
 
   return {
     status: expectStringEnum(record.status, STOP_STATUSES, 'agent stop response.status'),
@@ -186,7 +160,7 @@ export function parseAgentStopResponse(payload: unknown): AgentStopResponsePaylo
 }
 
 export function parseAgentStreamEvent(payload: unknown): AgentStreamEvent {
-  const record = pickKnownKeys(expectRecord(payload, 'agent stream event'), AGENT_STREAM_EVENT_KEYS);
+  const record = expectRecord(payload, 'agent stream event');
 
   return {
     id: expectString(record.id, 'agent stream event.id'),
@@ -201,7 +175,7 @@ export function parseAgentStreamEvent(payload: unknown): AgentStreamEvent {
 }
 
 export function parseAgentRunStartedPayload(payload: unknown): AgentRunStartedPayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent run_started payload'), AGENT_RUN_STARTED_KEYS);
+  const record = expectRecord(payload, 'agent run_started payload');
 
   return {
     session_id: parseOptionalString(record.session_id, 'agent run_started payload.session_id'),
@@ -209,7 +183,7 @@ export function parseAgentRunStartedPayload(payload: unknown): AgentRunStartedPa
 }
 
 export function parseAgentCompletionDeltaPayload(payload: unknown): AgentCompletionDeltaPayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent completion_delta payload'), AGENT_COMPLETION_DELTA_KEYS);
+  const record = expectRecord(payload, 'agent completion_delta payload');
 
   return {
     kind: expectStringEnum(record.kind, COMPLETION_DELTA_KINDS, 'agent completion_delta payload.kind'),
@@ -224,7 +198,7 @@ export function parseAgentCompletionDeltaPayload(payload: unknown): AgentComplet
 }
 
 export function parseAgentToolCallStartedPayload(payload: unknown): AgentToolCallStartedPayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent tool_call_started payload'), AGENT_TOOL_CALL_STARTED_KEYS);
+  const record = expectRecord(payload, 'agent tool_call_started payload');
 
   return {
     tool: parseOptionalString(record.tool, 'agent tool_call_started payload.tool'),
@@ -233,7 +207,7 @@ export function parseAgentToolCallStartedPayload(payload: unknown): AgentToolCal
 }
 
 export function parseAgentToolCallFinishedPayload(payload: unknown): AgentToolCallFinishedPayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent tool_call_finished payload'), AGENT_TOOL_CALL_FINISHED_KEYS);
+  const record = expectRecord(payload, 'agent tool_call_finished payload');
 
   return {
     tool: parseOptionalString(record.tool, 'agent tool_call_finished payload.tool'),
@@ -244,7 +218,7 @@ export function parseAgentToolCallFinishedPayload(payload: unknown): AgentToolCa
 }
 
 export function parseAgentAwaitingHumanStreamPayload(payload: unknown): AgentAwaitingHumanStreamPayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent awaiting_human payload'), AGENT_AWAITING_EVENT_KEYS);
+  const record = expectRecord(payload, 'agent awaiting_human payload');
 
   return {
     tool: parseOptionalString(record.tool, 'agent awaiting_human payload.tool'),
@@ -257,7 +231,7 @@ export function parseAgentAwaitingHumanStreamPayload(payload: unknown): AgentAwa
 }
 
 export function parseAgentStreamMessagePayload(payload: unknown): AgentStreamMessagePayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent message payload'), AGENT_STREAM_MESSAGE_KEYS);
+  const record = expectRecord(payload, 'agent message payload');
 
   return {
     text: expectString(record.text, 'agent message payload.text'),
@@ -266,7 +240,7 @@ export function parseAgentStreamMessagePayload(payload: unknown): AgentStreamMes
 }
 
 export function parseAgentDonePayload(payload: unknown): AgentDonePayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent done payload'), AGENT_DONE_KEYS);
+  const record = expectRecord(payload, 'agent done payload');
 
   return {
     session_id: parseOptionalString(record.session_id, 'agent done payload.session_id'),
@@ -277,10 +251,11 @@ export function parseAgentDonePayload(payload: unknown): AgentDonePayload {
 }
 
 export function parseAgentErrorPayload(payload: unknown): AgentErrorPayload {
-  const record = pickKnownKeys(expectRecord(payload, 'agent error payload'), AGENT_ERROR_KEYS);
+  const record = expectRecord(payload, 'agent error payload');
 
   return {
     message: expectString(record.message, 'agent error payload.message'),
     session_id: parseOptionalString(record.session_id, 'agent error payload.session_id'),
+    code: parseOptionalNumber(record.code, 'agent error payload.code'),
   };
 }

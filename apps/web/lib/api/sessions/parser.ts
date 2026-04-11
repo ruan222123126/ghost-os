@@ -11,67 +11,30 @@ import type {
   SessionToolResult,
 } from '@/lib/types';
 import {
+  defineStringEnumValues,
   expectBoolean,
   expectNumber,
   expectRecord,
   expectString,
   expectStringEnum,
-  pickKnownKeys,
   parseOptionalAskHumanOptions,
+  parseOptionalBoolean,
   parseOptionalNumber,
   parseOptionalSelectionMode,
   parseOptionalString,
 } from '@/lib/api/shared';
 
-const SESSION_ROLES = ['system', 'internal', 'user', 'assistant', 'tool'] as const;
-const TOOL_RESULT_STATUSES = ['success', 'error'] as const;
-const SESSION_METADATA_KEYS = [
-  'id',
-  'created_at',
-  'updated_at',
-  'message_count',
-  'token_count',
-] as const;
-const SESSION_DETAIL_KEYS = ['id', 'messages', 'created_at', 'updated_at', 'message_count', 'page', 'token_count'] as const;
-const SESSION_MESSAGE_KEYS = [
-  'index',
-  'role',
-  'text',
-  'content',
-  'tool_calls',
-  'tool_result',
-  'human_interaction',
-  'tool_call_id',
-] as const;
-const SESSION_PAGE_KEYS = [
-  'limit',
-  'before',
-  'start_index',
-  'end_index',
-  'has_more_before',
-  'next_before',
-] as const;
-const SESSION_CONTENT_PART_KEYS = ['type', 'text', 'image', 'file'] as const;
-const SESSION_IMAGE_KEYS = ['path', 'url', 'mime_type', 'width', 'height', 'sha256', 'bytes'] as const;
-const SESSION_FILE_KEYS = [
-  'artifact_id',
-  'name',
-  'mime_type',
-  'bytes',
-  'sha256',
-  'download_url',
-  'source_path',
-  'note',
-] as const;
-const SESSION_TOOL_CALL_KEYS = ['id', 'name', 'arguments'] as const;
-const SESSION_TOOL_RESULT_KEYS = ['status', 'tool', 'trace_id', 'output', 'error'] as const;
-const SESSION_HUMAN_INTERACTION_KEYS = [
-  'question_id',
-  'prompt',
-  'selection_mode',
-  'options',
-  'answer',
-] as const;
+const SESSION_ROLES = defineStringEnumValues<SessionMessage['role']>({
+  system: true,
+  internal: true,
+  user: true,
+  assistant: true,
+  tool: true,
+});
+const TOOL_RESULT_STATUSES = defineStringEnumValues<SessionToolResult['status']>({
+  success: true,
+  error: true,
+});
 
 function parseSessionImageContent(
   value: unknown,
@@ -84,7 +47,7 @@ function parseSessionImageContent(
     return null;
   }
 
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_IMAGE_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     path: parseOptionalString(record.path, `${label}.path`),
@@ -108,7 +71,7 @@ function parseSessionFileContent(
     return null;
   }
 
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_FILE_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     artifact_id: expectString(record.artifact_id, `${label}.artifact_id`),
@@ -123,7 +86,7 @@ function parseSessionFileContent(
 }
 
 function parseSessionContentPart(value: unknown, label: string): SessionContentPart {
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_CONTENT_PART_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     type: expectString(record.type, `${label}.type`),
@@ -148,7 +111,7 @@ function parseOptionalSessionContent(
 }
 
 function parseSessionToolCall(value: unknown, label: string): SessionToolCall {
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_TOOL_CALL_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     id: expectString(record.id, `${label}.id`),
@@ -182,7 +145,7 @@ function parseOptionalSessionToolResult(
     return null;
   }
 
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_TOOL_RESULT_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     status: expectStringEnum(record.status, TOOL_RESULT_STATUSES, `${label}.status`),
@@ -204,7 +167,7 @@ function parseOptionalSessionHumanInteraction(
     return null;
   }
 
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_HUMAN_INTERACTION_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     question_id: expectString(record.question_id, `${label}.question_id`),
@@ -216,7 +179,7 @@ function parseOptionalSessionHumanInteraction(
 }
 
 function parseSessionMessage(value: unknown, label: string): SessionMessage {
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_MESSAGE_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     index: expectNumber(record.index, `${label}.index`),
@@ -230,6 +193,7 @@ function parseSessionMessage(value: unknown, label: string): SessionMessage {
       `${label}.human_interaction`,
     ),
     tool_call_id: parseOptionalString(record.tool_call_id, `${label}.tool_call_id`),
+    in_progress: parseOptionalBoolean(record.in_progress, `${label}.in_progress`),
   };
 }
 
@@ -244,7 +208,7 @@ function parseNullableNumber(value: unknown, label: string): number | null | und
 }
 
 function parseSessionPage(value: unknown, label: string): SessionMessagePage {
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_PAGE_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     limit: expectNumber(record.limit, `${label}.limit`),
@@ -257,7 +221,7 @@ function parseSessionPage(value: unknown, label: string): SessionMessagePage {
 }
 
 function parseSessionMetadata(value: unknown, label: string): SessionMetadata {
-  const record = pickKnownKeys(expectRecord(value, label), SESSION_METADATA_KEYS);
+  const record = expectRecord(value, label);
 
   return {
     id: expectString(record.id, `${label}.id`),
@@ -277,7 +241,7 @@ export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
 }
 
 export function parseSessionDetail(payload: unknown): SessionDetail {
-  const record = pickKnownKeys(expectRecord(payload, 'session detail'), SESSION_DETAIL_KEYS);
+  const record = expectRecord(payload, 'session detail');
   if (!Array.isArray(record.messages)) {
     throw new Error('Invalid session detail.messages: expected array');
   }

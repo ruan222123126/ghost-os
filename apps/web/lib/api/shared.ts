@@ -68,6 +68,12 @@ export function expectStringEnum<TValue extends string>(
   return parsed as TValue;
 }
 
+export function defineStringEnumValues<TValue extends string>(
+  values: Record<TValue, true>,
+): readonly TValue[] {
+  return Object.keys(values) as TValue[];
+}
+
 export function expectStringArray(value: unknown, label: string): string[] {
   if (!Array.isArray(value)) {
     throw new Error(`Invalid ${label}: expected array`);
