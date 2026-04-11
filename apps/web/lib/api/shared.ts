@@ -7,11 +7,18 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-// Bridge clients are forward-compatible: response parsers ignore fields they do not recognize.
+// Bridge clients fail fast on contract drift: response parsers reject unknown fields.
 export function pickKnownKeys<TKey extends string>(
   value: Record<string, unknown>,
   allowedKeys: readonly TKey[],
 ): Partial<Record<TKey, unknown>> {
+  const allowed = new Set<string>(allowedKeys);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Invalid payload: unexpected field "${key}"`);
+    }
+  }
+
   const filtered: Partial<Record<TKey, unknown>> = {};
 
   for (const key of allowedKeys) {

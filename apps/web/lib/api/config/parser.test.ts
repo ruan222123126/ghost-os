@@ -2,7 +2,7 @@ import { parseBridgeConfig, parseProviderListResponse } from './parser';
 import type { BridgeConfig, ProviderListResponse } from '@/lib/types';
 
 describe('lib/api/config/parser', () => {
-  it('ignores unknown fields in bridge config payloads', () => {
+  it('rejects unknown fields in bridge config payloads', () => {
     const domain = {
       name: 'people',
       root_queries: ['viewer'],
@@ -43,7 +43,10 @@ describe('lib/api/config/parser', () => {
           idempotency_header: 'Idempotency-Key',
         },
       ],
+      session_human_log_full_enabled: false,
       web_rooter_enabled: false,
+      web_rooter_base_url: 'http://127.0.0.1:8765',
+      web_rooter_timeout_ms: 90000,
       web_rooter_api_token_set: false,
       web_search_tavily_url: 'https://proxy.example/tavily',
       web_search_exa_url: '',
@@ -51,31 +54,33 @@ describe('lib/api/config/parser', () => {
       web_search_exa_api_key_set: false,
     };
 
-    expect(parseBridgeConfig({
-      ...expected,
-      future_field: true,
-      graphql_sources: [
-        {
-          ...expected.graphql_sources[0],
-          extra_source_field: 'ignored',
-          domains: [
-            {
-              ...domain,
-              extra_domain_field: 'ignored',
-            },
-          ],
-        },
-      ],
-      graphql_mutation_policies: [
-        {
-          ...expected.graphql_mutation_policies[0],
-          extra_policy_field: 'ignored',
-        },
-      ],
-    })).toEqual(expected);
+    expect(() => {
+      parseBridgeConfig({
+        ...expected,
+        future_field: true,
+        graphql_sources: [
+          {
+            ...expected.graphql_sources[0],
+            extra_source_field: 'ignored',
+            domains: [
+              {
+                ...domain,
+                extra_domain_field: 'ignored',
+              },
+            ],
+          },
+        ],
+        graphql_mutation_policies: [
+          {
+            ...expected.graphql_mutation_policies[0],
+            extra_policy_field: 'ignored',
+          },
+        ],
+      });
+    }).toThrow('Invalid payload: unexpected field "future_field"');
   });
 
-  it('ignores unknown fields in provider lists', () => {
+  it('rejects unknown fields in provider lists', () => {
     const expected: ProviderListResponse = {
       active_provider: 'crs',
       providers: [
@@ -89,15 +94,17 @@ describe('lib/api/config/parser', () => {
       ],
     };
 
-    expect(parseProviderListResponse({
-      ...expected,
-      future_field: true,
-      providers: [
-        {
-          ...expected.providers[0],
-          extra_provider_field: 'ignored',
-        },
-      ],
-    })).toEqual(expected);
+    expect(() => {
+      parseProviderListResponse({
+        ...expected,
+        future_field: true,
+        providers: [
+          {
+            ...expected.providers[0],
+            extra_provider_field: 'ignored',
+          },
+        ],
+      });
+    }).toThrow('Invalid payload: unexpected field "future_field"');
   });
 });
