@@ -22,6 +22,13 @@ fn resolve_entry_route_selects_persistent() {
 }
 
 #[test]
+fn resolve_entry_route_selects_codex_cli_worker() {
+    let args = vec!["native".to_string(), "--codex-cli-worker".to_string()];
+    let route = resolve_entry_route(&args).expect("codex worker route should resolve");
+    assert_eq!(route, EntryRoute::CodexCLIWorker);
+}
+
+#[test]
 fn route_entry_surfaces_unknown_argument_error() {
     let args = vec!["native".to_string(), "--invalid".to_string()];
     let result = route_entry(&args);

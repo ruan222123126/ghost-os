@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
@@ -18,17 +17,16 @@ const (
 	defaultCodexCLIWaitMSBeforeAsync   = 3000
 	defaultCodexCLIWaitDurationSeconds = 300
 	defaultCodexCLIOutputChars         = 200
-	codexCLIExecutable                 = "codex"
 )
 
 type CodexProjectRootResolver func() (string, error)
 
 type CodexCLITool struct {
+	execution          ExecutionClient
 	manager            *codexCLICommandManager
 	allowedReadPaths   []string
 	allowedWritePaths  []string
 	resolveProjectRoot CodexProjectRootResolver
-	commandFactory     func(name string, args ...string) *exec.Cmd
 }
 
 type codexCLIArgs struct {
@@ -56,10 +54,10 @@ type codexCLIResult struct {
 	Message    string `json:"message,omitempty"`
 }
 
-func NewCodexCLITool(_ ExecutionClient, _ bool) Tool {
+func NewCodexCLITool(client ExecutionClient, _ bool) Tool {
 	return &CodexCLITool{
-		manager:        newCodexCLICommandManager(),
-		commandFactory: exec.Command,
+		execution: client,
+		manager:   newCodexCLICommandManager(),
 	}
 }
 
@@ -93,21 +91,25 @@ func (CodexCLITool) Parameters() json.RawMessage {
 	}`)
 }
 
-func (t *CodexCLITool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {
+func (t *CodexCLITool) Execute(ctx context.Context, argsJSON json.RawMessage, traceID string) (string, error) {
 	request, err := parseCodexCLIRequest(argsJSON)
 	if err != nil {
 		return "", err
 	}
-	result := t.executeRequest(ctx, request)
+	result := t.executeRequest(ctx, request, traceID)
 	return marshalCodexCLIResult(result)
 }
 
-func (t *CodexCLITool) executeRequest(ctx context.Context, request codexCLIRequest) codexCLIResult {
+func (t *CodexCLITool) executeRequest(
+	ctx context.Context,
+	request codexCLIRequest,
+	traceID string,
+) codexCLIResult {
 	switch request.Action {
 	case "CODEX_CLI_START":
-		return t.executeStart(ctx, request)
+		return t.executeStart(ctx, request, traceID)
 	case "CODEX_CLI_STATUS":
-		return t.executeStatus(ctx, request)
+		return t.executeStatus(ctx, request, traceID)
 	default:
 		return codexCLIResult{
 			Status:     "error",

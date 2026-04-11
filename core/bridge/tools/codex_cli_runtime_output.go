@@ -24,6 +24,19 @@ func parseCodexCLISessionID(line string) string {
 	return parseCodexCLITextSessionID(trimmed)
 }
 
+func parseCodexCLISessionIDFromOutput(output string) string {
+	if strings.TrimSpace(output) == "" {
+		return ""
+	}
+	lines := strings.Split(output, "\n")
+	for _, line := range lines {
+		if sessionID := parseCodexCLISessionID(line); sessionID != "" {
+			return sessionID
+		}
+	}
+	return ""
+}
+
 func parseCodexCLIJSONSessionID(trimmed string) string {
 	if !strings.HasPrefix(trimmed, "{") || !strings.HasSuffix(trimmed, "}") {
 		return ""

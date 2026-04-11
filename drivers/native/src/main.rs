@@ -1,6 +1,7 @@
 #![allow(unsafe_op_in_unsafe_fn)]
 
 mod action_router;
+mod codex_cli;
 mod display_scale;
 mod file_actions;
 mod framing;
@@ -20,6 +21,7 @@ pub(crate) use types::Response;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum EntryRoute {
     SandboxWorker,
+    CodexCLIWorker,
     Persistent,
     OneShot,
 }
@@ -70,6 +72,10 @@ fn route_entry(args: &[String]) -> RouteResult {
             script_exec::run_sandbox_worker();
             RouteResult::handled()
         }
+        EntryRoute::CodexCLIWorker => {
+            codex_cli::run_worker();
+            RouteResult::handled()
+        }
         EntryRoute::Persistent => match run_persistent_mode() {
             Ok(()) => RouteResult::handled(),
             Err(err) => RouteResult::error(format!("persistent mode exited: {err}")),
@@ -80,25 +86,34 @@ fn route_entry(args: &[String]) -> RouteResult {
 
 fn resolve_entry_route(args: &[String]) -> Result<EntryRoute, String> {
     let mut sandbox_worker = false;
+    let mut codex_cli_worker = false;
     let mut persistent = false;
 
     for arg in args.iter().skip(1) {
         match arg.as_str() {
             "--sandbox-worker" => sandbox_worker = true,
+            "--codex-cli-worker" => codex_cli_worker = true,
             "--persistent" => persistent = true,
             _ => return Err(format!("unknown argument: {arg}")),
         }
     }
 
-    if sandbox_worker && persistent {
+    let worker_mode_count = [sandbox_worker, codex_cli_worker, persistent]
+        .iter()
+        .filter(|flag| **flag)
+        .count();
+    if worker_mode_count > 1 {
         return Err(
-            "conflicting arguments: --sandbox-worker and --persistent cannot be used together"
+            "conflicting arguments: --sandbox-worker, --codex-cli-worker, and --persistent are mutually exclusive"
                 .to_string(),
         );
     }
 
     if sandbox_worker {
         return Ok(EntryRoute::SandboxWorker);
+    }
+    if codex_cli_worker {
+        return Ok(EntryRoute::CodexCLIWorker);
     }
     if persistent {
         return Ok(EntryRoute::Persistent);

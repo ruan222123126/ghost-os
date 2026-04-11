@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::{Response, file_actions, input, screen, script_exec, shell_actions};
+use crate::{Response, codex_cli, file_actions, input, screen, script_exec, shell_actions};
 
 // dispatch_action 统一处理协议 action 到具体原子能力的映射。
 pub(crate) fn dispatch_action(action: &str, params: &Value, trace_id: &str) -> Response {
@@ -16,6 +16,10 @@ pub(crate) fn dispatch_action(action: &str, params: &Value, trace_id: &str) -> R
     }
 
     if let Some(response) = shell_actions::dispatch_action(action, params) {
+        return response;
+    }
+
+    if let Some(response) = codex_cli::dispatch_action(action, params) {
         return response;
     }
 

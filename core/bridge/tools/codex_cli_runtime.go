@@ -3,16 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
-	"io"
-	"os/exec"
 	"strings"
-	"time"
-)
-
-const (
-	codexCLIUnknownExitCode      = -1
-	codexCLIMaxOutputBufferChars = 4000
-	codexCLIStatusPollInterval   = 500 * time.Millisecond
 )
 
 type codexCLIStartRequest struct {
@@ -36,7 +27,30 @@ type codexCLIStatusRequest struct {
 	outputCharCount     int
 }
 
-func (t *CodexCLITool) executeStart(ctx context.Context, request codexCLIRequest) codexCLIResult {
+type codexCLIStartExecutionPayload struct {
+	outputPath   string
+	exitCodePath string
+	outputTail   string
+	exitCode     *int
+}
+
+type codexCLIStatusExecutionPayload struct {
+	outputTail string
+	exitCode   *int
+}
+
+type codexCLIStartExecutionInput struct {
+	request    codexCLIStartRequest
+	workingDir string
+	outputPath string
+}
+
+type codexCLIStatusExecutionInput struct {
+	command *codexCLICommand
+	request codexCLIStatusRequest
+}
+
+func (t *CodexCLITool) executeStart(ctx context.Context, request codexCLIRequest, traceID string) codexCLIResult {
 	startReq, err := decodeCodexCLIStartRequest(request.Params)
 	if err != nil {
 		return codexCLIErrorResult(err, request.OutputPath)
@@ -45,25 +59,30 @@ func (t *CodexCLITool) executeStart(ctx context.Context, request codexCLIRequest
 	if err != nil {
 		return codexCLIErrorResult(err, request.OutputPath)
 	}
-	command, err := t.startCodexCommand(workingDir, outputPath, startReq)
+	payload, err := t.startWithExecution(ctx, traceID, codexCLIStartExecutionInput{
+		request:    startReq,
+		workingDir: workingDir,
+		outputPath: outputPath,
+	})
 	if err != nil {
 		return codexCLIErrorResult(err, outputPath)
 	}
-	if err := waitBeforeAsync(ctx, startReq.waitMSBeforeAsync); err != nil {
-		return codexCLIErrorResult(err, outputPath)
-	}
-	status, snapshot := codexCLIStatusFromSnapshot(command, startReq.outputCharCount)
+	seq, commandID := t.manager.nextCommandID()
+	command := newCodexCLICommand(seq, commandID, payload.outputPath, payload.exitCodePath)
+	command.applyStatus(payload.outputTail, payload.exitCode)
+	t.manager.insert(command)
+	status, snapshot := codexCLIStatusFromSnapshot(command)
 	return codexCLIResult{
 		Status:     status,
 		CommandID:  command.id,
 		SessionID:  snapshot.sessionID,
 		ExitCode:   snapshot.exitCode,
-		OutputTail: snapshot.outputTail,
+		OutputTail: strings.TrimSpace(payload.outputTail),
 		OutputPath: snapshot.outputPath,
 	}
 }
 
-func (t *CodexCLITool) executeStatus(ctx context.Context, request codexCLIRequest) codexCLIResult {
+func (t *CodexCLITool) executeStatus(ctx context.Context, request codexCLIRequest, traceID string) codexCLIResult {
 	statusReq, err := decodeCodexCLIStatusRequest(request.Params)
 	if err != nil {
 		return codexCLIErrorResult(err, request.OutputPath)
@@ -72,144 +91,203 @@ func (t *CodexCLITool) executeStatus(ctx context.Context, request codexCLIReques
 	if command == nil {
 		return codexCLIResult{Status: "error", Message: "command not found"}
 	}
-	result, err := pollCodexCLIStatus(ctx, command, statusReq)
+	payload, err := t.statusWithExecution(ctx, traceID, codexCLIStatusExecutionInput{
+		command: command,
+		request: statusReq,
+	})
 	if err != nil {
 		return codexCLIErrorResult(err, command.outputPathSnapshot())
 	}
-	return result
+	command.applyStatus(payload.outputTail, payload.exitCode)
+	status, snapshot := codexCLIStatusFromSnapshot(command)
+	return codexCLIResult{
+		Status:     status,
+		CommandID:  command.id,
+		SessionID:  snapshot.sessionID,
+		ExitCode:   snapshot.exitCode,
+		OutputTail: strings.TrimSpace(payload.outputTail),
+		OutputPath: snapshot.outputPath,
+	}
 }
 
-func (t *CodexCLITool) startCodexCommand(
-	workingDir string,
-	outputPath string,
-	startReq codexCLIStartRequest,
-) (*codexCLICommand, error) {
-	seq, commandID := t.manager.nextCommandID()
-	args := buildCodexCLICommandArgs(startReq, workingDir, outputPath)
-	commandExec := t.newCodexCommand(args)
-	commandExec.Dir = workingDir
-	stdout, stderr, err := openCommandPipes(commandExec)
+func (t *CodexCLITool) startWithExecution(
+	ctx context.Context,
+	traceID string,
+	input codexCLIStartExecutionInput,
+) (codexCLIStartExecutionPayload, error) {
+	if t == nil || t.execution == nil {
+		return codexCLIStartExecutionPayload{}, fmt.Errorf("execution client is not configured")
+	}
+	params := buildCodexCLIStartExecutionParams(input.request, input.workingDir, input.outputPath)
+	payload, err := t.execution.Call(ctx, "CODEX_CLI_START", params, traceID)
 	if err != nil {
-		return nil, err
+		return codexCLIStartExecutionPayload{}, fmt.Errorf("execution CODEX_CLI_START failed: %w", err)
 	}
-	if err := commandExec.Start(); err != nil {
-		return nil, fmt.Errorf("spawn codex failed: %w", err)
-	}
-	command := newCodexCLICommand(seq, commandID, outputPath, commandExec)
-	command.startOutputReaders(stdout, stderr)
-	command.startWaiter()
-	t.manager.insert(command)
-	return command, nil
+	return decodeCodexCLIStartExecutionPayload(payload)
 }
 
-func openCommandPipes(command *exec.Cmd) (io.ReadCloser, io.ReadCloser, error) {
-	stdout, err := command.StdoutPipe()
+func (t *CodexCLITool) statusWithExecution(
+	ctx context.Context,
+	traceID string,
+	input codexCLIStatusExecutionInput,
+) (codexCLIStatusExecutionPayload, error) {
+	if t == nil || t.execution == nil {
+		return codexCLIStatusExecutionPayload{}, fmt.Errorf("execution client is not configured")
+	}
+	params, err := buildCodexCLIStatusExecutionParams(input.command, input.request)
 	if err != nil {
-		return nil, nil, fmt.Errorf("attach stdout failed: %w", err)
+		return codexCLIStatusExecutionPayload{}, err
 	}
-	stderr, err := command.StderrPipe()
+	payload, err := t.execution.Call(ctx, "CODEX_CLI_STATUS", params, traceID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("attach stderr failed: %w", err)
+		return codexCLIStatusExecutionPayload{}, fmt.Errorf("execution CODEX_CLI_STATUS failed: %w", err)
 	}
-	return stdout, stderr, nil
+	return decodeCodexCLIStatusExecutionPayload(payload)
 }
 
-func (t *CodexCLITool) newCodexCommand(args []string) *exec.Cmd {
-	if t != nil && t.commandFactory != nil {
-		return t.commandFactory(codexCLIExecutable, args...)
-	}
-	return exec.Command(codexCLIExecutable, args...)
-}
-
-func buildCodexCLICommandArgs(
+func buildCodexCLIStartExecutionParams(
 	request codexCLIStartRequest,
 	workingDir string,
 	outputPath string,
-) []string {
-	args := codexCLIOperationArgs(request)
-	if request.fullAuto {
-		args = append(args, "--full-auto")
+) map[string]any {
+	params := map[string]any{
+		"op":                     request.op,
+		"prompt":                 request.prompt,
+		"working_dir":            workingDir,
+		"use_cwd_flag":           request.cwd != "",
+		"model":                  request.model,
+		"full_auto":              request.fullAuto,
+		"skip_git_repo_check":    request.skipGitRepoCheck,
+		"json":                   request.jsonFlag,
+		"wait_ms_before_async":   request.waitMSBeforeAsync,
+		"output_character_count": request.outputCharCount,
 	}
-	if request.skipGitRepoCheck {
-		args = append(args, "--skip-git-repo-check")
+	if request.sessionID != "" {
+		params["session_id"] = request.sessionID
 	}
-	if request.jsonFlag {
-		args = append(args, "--json")
+	if outputPath != "" {
+		params["output_path"] = outputPath
 	}
-	if request.model != "" {
-		args = append(args, "-m", request.model)
-	}
-	if request.cwd != "" {
-		args = append(args, "-C", workingDir)
-	}
-	if request.outputPath != "" {
-		args = append(args, "-o", outputPath)
-	}
-	return args
+	return params
 }
 
-func codexCLIOperationArgs(request codexCLIStartRequest) []string {
-	switch request.op {
-	case codexCLIOpResume:
-		return []string{"exec", "resume", "--session-id", request.sessionID, request.prompt}
-	case codexCLIOpFork:
-		return []string{"fork", "--session-id", request.sessionID, request.prompt}
-	default:
-		return []string{"exec", request.prompt}
-	}
-}
-
-func codexCLIStatusFromSnapshot(
+func buildCodexCLIStatusExecutionParams(
 	command *codexCLICommand,
-	outputCharCount int,
-) (string, codexCLICommandSnapshot) {
-	snapshot := command.snapshot(outputCharCount)
+	request codexCLIStatusRequest,
+) (map[string]any, error) {
+	if command == nil {
+		return nil, fmt.Errorf("command is nil")
+	}
+	snapshot := command.snapshot()
+	if strings.TrimSpace(snapshot.outputPath) == "" {
+		return nil, fmt.Errorf("command output path is empty")
+	}
+	if strings.TrimSpace(snapshot.exitCodePath) == "" {
+		return nil, fmt.Errorf("command exit code path is empty")
+	}
+	return map[string]any{
+		"output_path":            snapshot.outputPath,
+		"exit_code_path":         snapshot.exitCodePath,
+		"wait_duration_seconds":  request.waitDurationSeconds,
+		"output_character_count": request.outputCharCount,
+	}, nil
+}
+
+func decodeCodexCLIStartExecutionPayload(payload map[string]any) (codexCLIStartExecutionPayload, error) {
+	outputPath, err := requiredPayloadString(payload, "output_path")
+	if err != nil {
+		return codexCLIStartExecutionPayload{}, err
+	}
+	exitCodePath, err := requiredPayloadString(payload, "exit_code_path")
+	if err != nil {
+		return codexCLIStartExecutionPayload{}, err
+	}
+	outputTail, err := optionalPayloadString(payload, "output_tail")
+	if err != nil {
+		return codexCLIStartExecutionPayload{}, err
+	}
+	exitCode, err := optionalPayloadInt(payload, "exit_code")
+	if err != nil {
+		return codexCLIStartExecutionPayload{}, err
+	}
+	return codexCLIStartExecutionPayload{
+		outputPath:   outputPath,
+		exitCodePath: exitCodePath,
+		outputTail:   outputTail,
+		exitCode:     exitCode,
+	}, nil
+}
+
+func decodeCodexCLIStatusExecutionPayload(payload map[string]any) (codexCLIStatusExecutionPayload, error) {
+	outputTail, err := optionalPayloadString(payload, "output_tail")
+	if err != nil {
+		return codexCLIStatusExecutionPayload{}, err
+	}
+	exitCode, err := optionalPayloadInt(payload, "exit_code")
+	if err != nil {
+		return codexCLIStatusExecutionPayload{}, err
+	}
+	return codexCLIStatusExecutionPayload{
+		outputTail: outputTail,
+		exitCode:   exitCode,
+	}, nil
+}
+
+func requiredPayloadString(payload map[string]any, field string) (string, error) {
+	value, err := optionalPayloadString(payload, field)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(value) == "" {
+		return "", fmt.Errorf("invalid payload: missing %s", field)
+	}
+	return value, nil
+}
+
+func optionalPayloadString(payload map[string]any, field string) (string, error) {
+	raw, ok := payload[field]
+	if !ok || raw == nil {
+		return "", nil
+	}
+	value, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("invalid payload: %s must be a string", field)
+	}
+	return strings.TrimSpace(value), nil
+}
+
+func optionalPayloadInt(payload map[string]any, field string) (*int, error) {
+	raw, ok := payload[field]
+	if !ok || raw == nil {
+		return nil, nil
+	}
+	switch value := raw.(type) {
+	case int:
+		result := value
+		return &result, nil
+	case int32:
+		result := int(value)
+		return &result, nil
+	case int64:
+		result := int(value)
+		return &result, nil
+	case float64:
+		result := int(value)
+		if float64(result) != value {
+			return nil, fmt.Errorf("invalid payload: %s must be an integer", field)
+		}
+		return &result, nil
+	default:
+		return nil, fmt.Errorf("invalid payload: %s must be an integer", field)
+	}
+}
+
+func codexCLIStatusFromSnapshot(command *codexCLICommand) (string, codexCLICommandSnapshot) {
+	snapshot := command.snapshot()
 	if snapshot.exitCode != nil {
 		return "done", snapshot
 	}
 	return "running", snapshot
-}
-
-func waitBeforeAsync(ctx context.Context, waitMS int) error {
-	if waitMS <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(time.Duration(waitMS) * time.Millisecond)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
-
-func pollCodexCLIStatus(
-	ctx context.Context,
-	command *codexCLICommand,
-	request codexCLIStatusRequest,
-) (codexCLIResult, error) {
-	deadline := time.Now().Add(time.Duration(request.waitDurationSeconds) * time.Second)
-	ticker := time.NewTicker(codexCLIStatusPollInterval)
-	defer ticker.Stop()
-	for {
-		status, snapshot := codexCLIStatusFromSnapshot(command, request.outputCharCount)
-		if status == "done" || !time.Now().Before(deadline) {
-			return codexCLIResult{
-				Status:     status,
-				CommandID:  command.id,
-				SessionID:  snapshot.sessionID,
-				ExitCode:   snapshot.exitCode,
-				OutputTail: snapshot.outputTail,
-				OutputPath: snapshot.outputPath,
-			}, nil
-		}
-		select {
-		case <-ctx.Done():
-			return codexCLIResult{}, ctx.Err()
-		case <-ticker.C:
-		}
-	}
 }
 
 func codexCLIErrorResult(err error, outputPath string) codexCLIResult {

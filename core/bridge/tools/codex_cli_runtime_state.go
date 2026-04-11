@@ -1,9 +1,7 @@
 package tools
 
 import (
-	"bufio"
-	"io"
-	"os/exec"
+	"strings"
 	"sync"
 )
 
@@ -14,21 +12,20 @@ type codexCLICommandManager struct {
 }
 
 type codexCLICommand struct {
-	seq        uint64
-	id         string
-	outputPath string
-	process    *exec.Cmd
-	mu         sync.Mutex
-	output     string
-	sessionID  string
-	exitCode   *int
+	seq          uint64
+	id           string
+	outputPath   string
+	exitCodePath string
+	mu           sync.Mutex
+	sessionID    string
+	exitCode     *int
 }
 
 type codexCLICommandSnapshot struct {
-	sessionID  string
-	exitCode   *int
-	outputTail string
-	outputPath string
+	sessionID    string
+	exitCode     *int
+	outputPath   string
+	exitCodePath string
 }
 
 func newCodexCLICommandManager() *codexCLICommandManager {
@@ -97,61 +94,25 @@ func newCodexCLICommand(
 	seq uint64,
 	id string,
 	outputPath string,
-	process *exec.Cmd,
+	exitCodePath string,
 ) *codexCLICommand {
 	return &codexCLICommand{
-		seq:        seq,
-		id:         id,
-		outputPath: outputPath,
-		process:    process,
+		seq:          seq,
+		id:           id,
+		outputPath:   strings.TrimSpace(outputPath),
+		exitCodePath: strings.TrimSpace(exitCodePath),
 	}
 }
 
-func (c *codexCLICommand) startOutputReaders(stdout io.ReadCloser, stderr io.ReadCloser) {
-	if stdout != nil {
-		go c.consumeOutput(stdout, "STDOUT: ")
+func (c *codexCLICommand) applyStatus(outputTail string, exitCode *int) {
+	c.setSessionID(parseCodexCLISessionIDFromOutput(outputTail))
+	if exitCode != nil {
+		c.setExitCode(*exitCode)
 	}
-	if stderr != nil {
-		go c.consumeOutput(stderr, "STDERR: ")
-	}
-}
-
-func (c *codexCLICommand) consumeOutput(reader io.ReadCloser, prefix string) {
-	defer reader.Close()
-	buffer := bufio.NewReader(reader)
-	for {
-		line, err := buffer.ReadString('\n')
-		if len(line) > 0 {
-			c.recordOutputLine(line, prefix)
-		}
-		if err != nil {
-			return
-		}
-	}
-}
-
-func (c *codexCLICommand) recordOutputLine(line string, prefix string) {
-	if c == nil || line == "" {
-		return
-	}
-	if sessionID := parseCodexCLISessionID(line); sessionID != "" {
-		c.setSessionID(sessionID)
-	}
-	c.appendOutput(prefix + line)
-}
-
-func (c *codexCLICommand) appendOutput(text string) {
-	if text == "" {
-		return
-	}
-	c.mu.Lock()
-	c.output += text
-	c.output = trimToLastChars(c.output, codexCLIMaxOutputBufferChars)
-	c.mu.Unlock()
 }
 
 func (c *codexCLICommand) setSessionID(sessionID string) {
-	if sessionID == "" {
+	if c == nil || sessionID == "" {
 		return
 	}
 	c.mu.Lock()
@@ -173,47 +134,29 @@ func (c *codexCLICommand) outputPathSnapshot() string {
 	return c.outputPath
 }
 
-func (c *codexCLICommand) startWaiter() {
-	if c == nil || c.process == nil {
-		return
-	}
-	go c.waitForExit()
-}
-
-func (c *codexCLICommand) waitForExit() {
-	waitErr := c.process.Wait()
-	code := codexCLIUnknownExitCode
-	if state := c.process.ProcessState; state != nil {
-		exitCode := state.ExitCode()
-		if exitCode != -1 {
-			code = exitCode
-		}
-	}
-	if exitErr, ok := waitErr.(*exec.ExitError); ok {
-		if exitCode := exitErr.ExitCode(); exitCode != -1 {
-			code = exitCode
-		}
-	}
-	c.setExitCode(code)
+func (c *codexCLICommand) exitCodePathSnapshot() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.exitCodePath
 }
 
 func (c *codexCLICommand) setExitCode(exitCode int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.exitCode != nil {
+	if c == nil {
 		return
 	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	value := exitCode
 	c.exitCode = &value
 }
 
-func (c *codexCLICommand) snapshot(outputChars int) codexCLICommandSnapshot {
+func (c *codexCLICommand) snapshot() codexCLICommandSnapshot {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	result := codexCLICommandSnapshot{
-		sessionID:  c.sessionID,
-		outputTail: trimToLastChars(c.output, outputChars),
-		outputPath: c.outputPath,
+		sessionID:    c.sessionID,
+		outputPath:   c.outputPath,
+		exitCodePath: c.exitCodePath,
 	}
 	if c.exitCode != nil {
 		value := *c.exitCode
