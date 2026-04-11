@@ -115,19 +115,12 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 		return nil, code, err
 	}
 	if params.Cancelled {
-		signal := &assistantSessionEndSignalPayload{
-			Signal:  busAssistantSessionEndSignal,
-			Message: cancelledHumanDialogueMessage,
-		}
-		payload, err := newAgentResponsePayload(cancelledHumanDialogueMessage, sessionID, signal, agentResponseMeta{})
+		result := cancelledHumanTurn(sessionID)
+		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
 		if err != nil {
 			return nil, http.StatusInternalServerError, err
 		}
-		s.publishAssistantSessionPush(traceID, finalizedAgentTurn{
-			message:    cancelledHumanDialogueMessage,
-			sessionID:  sessionID,
-			sessionEnd: signal,
-		})
+		s.publishAssistantSessionPush(traceID, result)
 		return payload, http.StatusOK, nil
 	}
 
@@ -136,44 +129,17 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 
 // executeHumanAnswerAndResumeStreamAction 先写入人类答案，再以 SSE 方式续跑被 ask_human 暂停的回合。
 func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Context, params humanResponseParams, traceID string, sink streaming.Sink) (string, string, error) {
-	sessionID, code, err := requireSessionID(params.SessionID)
+	sessionID, err := s.resolveHumanResumeStreamSession(ctx, params.SessionID, traceID, sink)
 	if err != nil {
-		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", params.SessionID, code, err); emitErr != nil {
-			return "", "", emitErr
-		}
-		return "", "", err
-	}
-
-	if code, inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
-		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, code, inflightErr); emitErr != nil {
-			return "", "", emitErr
-		}
-		return "", sessionID, inflightErr
-	}
-	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
-		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, code, activeErr); emitErr != nil {
-			return "", "", emitErr
-		}
-		return "", sessionID, activeErr
+		return "", sessionID, err
 	}
 
 	params.SessionID = sessionID
-	if _, code, err := s.executeHumanResponseAction(ctx, params, traceID); err != nil {
-		if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, code, err); emitErr != nil {
-			return "", "", emitErr
-		}
+	if err := s.applyHumanResponseForResumeStream(ctx, params, traceID, sink); err != nil {
 		return "", sessionID, err
 	}
 	if params.Cancelled {
-		signal := &assistantSessionEndSignalPayload{
-			Signal:  busAssistantSessionEndSignal,
-			Message: cancelledHumanDialogueMessage,
-		}
-		result := finalizedAgentTurn{
-			message:    cancelledHumanDialogueMessage,
-			sessionID:  sessionID,
-			sessionEnd: signal,
-		}
+		result := cancelledHumanTurn(sessionID)
 		if emitErr := emitDirectAgentStreamResult(ctx, sink, traceID, 0, result); emitErr != nil {
 			return "", "", emitErr
 		}
@@ -182,4 +148,61 @@ func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Cont
 	}
 
 	return s.sessionResumeRunner().ResumeStream(ctx, sessionID, traceID, sink)
+}
+
+func cancelledHumanTurn(sessionID string) finalizedAgentTurn {
+	return finalizedAgentTurn{
+		message:   cancelledHumanDialogueMessage,
+		sessionID: sessionID,
+		sessionEnd: &assistantSessionEndSignalPayload{
+			Signal:  busAssistantSessionEndSignal,
+			Message: cancelledHumanDialogueMessage,
+		},
+	}
+}
+
+func emitHumanResumeStreamError(
+	ctx context.Context,
+	sink streaming.Sink,
+	traceID string,
+	sessionID string,
+	statusCode int,
+	cause error,
+) error {
+	if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, statusCode, cause); emitErr != nil {
+		return emitErr
+	}
+	return cause
+}
+
+func (s *bridgeService) resolveHumanResumeStreamSession(
+	ctx context.Context,
+	rawSessionID string,
+	traceID string,
+	sink streaming.Sink,
+) (string, error) {
+	sessionID, code, err := requireSessionID(rawSessionID)
+	if err != nil {
+		return "", emitHumanResumeStreamError(ctx, sink, traceID, rawSessionID, code, err)
+	}
+	if code, inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
+		return sessionID, emitHumanResumeStreamError(ctx, sink, traceID, sessionID, code, inflightErr)
+	}
+	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
+		return sessionID, emitHumanResumeStreamError(ctx, sink, traceID, sessionID, code, activeErr)
+	}
+	return sessionID, nil
+}
+
+func (s *bridgeService) applyHumanResponseForResumeStream(
+	ctx context.Context,
+	params humanResponseParams,
+	traceID string,
+	sink streaming.Sink,
+) error {
+	_, code, err := s.executeHumanResponseAction(ctx, params, traceID)
+	if err == nil {
+		return nil
+	}
+	return emitHumanResumeStreamError(ctx, sink, traceID, params.SessionID, code, err)
 }

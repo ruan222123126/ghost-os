@@ -13,42 +13,51 @@ func parseSessionEndSignal(raw string) (message string, signal *assistantSession
 	if trimmed == "" {
 		return "", nil, nil
 	}
-
-	var probe map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(trimmed), &probe); err != nil {
+	probe, matched := probeSessionEndSignal(trimmed)
+	if !matched {
 		return trimmed, nil, nil
 	}
-
-	signalValueRaw, hasSignal := probe["signal"]
-	if !hasSignal {
-		return trimmed, nil, nil
-	}
-
-	var signalValue any
-	if err := json.Unmarshal(signalValueRaw, &signalValue); err != nil {
-		return trimmed, nil, nil
-	}
-	signalText, isString := signalValue.(string)
-	if !isString || strings.TrimSpace(signalText) != busAssistantSessionEndSignal {
-		return trimmed, nil, nil
-	}
-
 	if len(probe) != 2 {
 		return "", nil, errors.New("session end signal only allows signal and message fields")
 	}
+	parsed, err := decodeSessionEndSignalPayload(trimmed)
+	if err != nil {
+		return "", nil, err
+	}
+	return parsed.Message, &parsed, nil
+}
 
+func probeSessionEndSignal(raw string) (map[string]json.RawMessage, bool) {
+	var probe map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &probe); err != nil {
+		return nil, false
+	}
+	signalValueRaw, hasSignal := probe["signal"]
+	if !hasSignal {
+		return nil, false
+	}
+	var signalText string
+	if err := json.Unmarshal(signalValueRaw, &signalText); err != nil {
+		return nil, false
+	}
+	if strings.TrimSpace(signalText) != busAssistantSessionEndSignal {
+		return nil, false
+	}
+	return probe, true
+}
+
+func decodeSessionEndSignalPayload(raw string) (assistantSessionEndSignalPayload, error) {
 	var parsed assistantSessionEndSignalPayload
-	if err := json.Unmarshal([]byte(trimmed), &parsed); err != nil {
-		return "", nil, fmt.Errorf("decode session end signal: %w", err)
+	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
+		return assistantSessionEndSignalPayload{}, fmt.Errorf("decode session end signal: %w", err)
 	}
 	parsed.Signal = strings.TrimSpace(parsed.Signal)
 	parsed.Message = strings.TrimSpace(parsed.Message)
 	if parsed.Signal != busAssistantSessionEndSignal {
-		return "", nil, fmt.Errorf("session end signal must set signal=%q", busAssistantSessionEndSignal)
+		return assistantSessionEndSignalPayload{}, fmt.Errorf("session end signal must set signal=%q", busAssistantSessionEndSignal)
 	}
 	if parsed.Message == "" {
-		return "", nil, errors.New("session end signal message is empty")
+		return assistantSessionEndSignalPayload{}, errors.New("session end signal message is empty")
 	}
-
-	return parsed.Message, &parsed, nil
+	return parsed, nil
 }

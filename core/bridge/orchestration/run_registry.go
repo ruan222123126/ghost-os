@@ -37,46 +37,75 @@ func NewRunRegistry() *RunRegistry {
 }
 
 func (r *RunRegistry) Register(sessionID string, traceID string, cancel context.CancelFunc) error {
+	if err := validateRegisterInputs(r, cancel); err != nil {
+		return err
+	}
+	trimmedSessionID, trimmedTraceID, err := normalizeRunHandleIDs(sessionID, traceID)
+	if err != nil {
+		return err
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.ensureRegisterIDsAvailableLocked(trimmedSessionID, trimmedTraceID); err != nil {
+		return err
+	}
+	r.registerHandleLocked(newRunHandle(trimmedSessionID, trimmedTraceID, cancel))
+	return nil
+}
+
+func validateRegisterInputs(r *RunRegistry, cancel context.CancelFunc) error {
 	if r == nil {
 		return ErrRunRegistryNil
 	}
 	if cancel == nil {
 		return errors.New("cancel func is required")
 	}
+	return nil
+}
 
+func normalizeRunHandleIDs(sessionID string, traceID string) (string, string, error) {
 	trimmedSessionID := strings.TrimSpace(sessionID)
 	trimmedTraceID := strings.TrimSpace(traceID)
 	if trimmedSessionID == "" && trimmedTraceID == "" {
-		return errors.New("session_id or trace_id is required")
+		return "", "", errors.New("session_id or trace_id is required")
 	}
+	return trimmedSessionID, trimmedTraceID, nil
+}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if trimmedSessionID != "" {
-		if _, exists := r.bySessionID[trimmedSessionID]; exists {
-			return fmt.Errorf("%w: session_id=%s", ErrSessionInflight, trimmedSessionID)
+func (r *RunRegistry) ensureRegisterIDsAvailableLocked(sessionID string, traceID string) error {
+	if sessionID != "" {
+		if _, exists := r.bySessionID[sessionID]; exists {
+			return fmt.Errorf("%w: session_id=%s", ErrSessionInflight, sessionID)
 		}
 	}
-	if trimmedTraceID != "" {
-		if existing, exists := r.byTraceID[trimmedTraceID]; exists && existing != nil {
-			return fmt.Errorf("%w: trace_id=%s", ErrSessionInflight, trimmedTraceID)
+	if traceID != "" {
+		if existing, exists := r.byTraceID[traceID]; exists && existing != nil {
+			return fmt.Errorf("%w: trace_id=%s", ErrSessionInflight, traceID)
 		}
 	}
+	return nil
+}
 
-	handle := &RunHandle{
-		SessionID: trimmedSessionID,
-		TraceID:   trimmedTraceID,
+func (r *RunRegistry) registerHandleLocked(handle *RunHandle) {
+	if handle == nil {
+		return
+	}
+	if handle.SessionID != "" {
+		r.bySessionID[handle.SessionID] = handle
+	}
+	if handle.TraceID != "" {
+		r.byTraceID[handle.TraceID] = handle
+	}
+}
+
+func newRunHandle(sessionID string, traceID string, cancel context.CancelFunc) *RunHandle {
+	return &RunHandle{
+		SessionID: sessionID,
+		TraceID:   traceID,
 		Cancel:    cancel,
 		StartedAt: time.Now().UTC(),
 	}
-	if trimmedSessionID != "" {
-		r.bySessionID[trimmedSessionID] = handle
-	}
-	if trimmedTraceID != "" {
-		r.byTraceID[trimmedTraceID] = handle
-	}
-	return nil
 }
 
 func (r *RunRegistry) Unregister(sessionID string) {

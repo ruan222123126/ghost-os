@@ -83,42 +83,73 @@ func (s *sessionTurnState) complete(
 	runErr error,
 	onPersistErr func(err error, awaitingHuman bool) error,
 ) (string, string, error) {
-	awaitingHuman := false
-	if runErr != nil {
-		var awaitingErr *agent.ErrAwaitingHuman
-		if errors.As(runErr, &awaitingErr) {
-			awaitingHuman = true
-		} else {
-			if !s.hasCommittedMessages() {
-				return "", "", runErr
-			}
-		}
+	awaitingHuman, err := s.resolveAwaitingHumanState(runErr)
+	if err != nil {
+		return "", "", err
 	}
 
-	newMessages := []llm.Message(nil)
-	if s != nil && s.agent != nil {
-		newMessages = s.agent.GetNewMessages()
-	}
+	newMessages := s.newMessagesForCommit()
 	s.clearAssistantDraftBeforeCommit(newMessages)
-
-	if saveErr := s.persistNewMessages(newMessages, !awaitingHuman); saveErr != nil {
-		if onPersistErr != nil {
-			if emitErr := onPersistErr(saveErr, awaitingHuman); emitErr != nil {
-				return "", "", emitErr
-			}
-		}
-		return "", "", saveErr
+	if err := s.persistTurnCompletion(newMessages, awaitingHuman, onPersistErr); err != nil {
+		return "", "", err
 	}
+	s.resetCommittedMessages()
+	return s.finalizeCompletedTurn(response, runErr, awaitingHuman)
+}
+
+func (s *sessionTurnState) resolveAwaitingHumanState(runErr error) (bool, error) {
+	if runErr == nil {
+		return false, nil
+	}
+	var awaitingErr *agent.ErrAwaitingHuman
+	if errors.As(runErr, &awaitingErr) {
+		return true, nil
+	}
+	if !s.hasCommittedMessages() {
+		return false, runErr
+	}
+	return false, nil
+}
+
+func (s *sessionTurnState) newMessagesForCommit() []llm.Message {
+	if s == nil || s.agent == nil {
+		return nil
+	}
+	return s.agent.GetNewMessages()
+}
+
+func (s *sessionTurnState) persistTurnCompletion(
+	newMessages []llm.Message,
+	awaitingHuman bool,
+	onPersistErr func(err error, awaitingHuman bool) error,
+) error {
+	saveErr := s.persistNewMessages(newMessages, !awaitingHuman)
+	if saveErr == nil {
+		return nil
+	}
+	if onPersistErr != nil {
+		if emitErr := onPersistErr(saveErr, awaitingHuman); emitErr != nil {
+			return emitErr
+		}
+	}
+	return saveErr
+}
+
+func (s *sessionTurnState) resetCommittedMessages() {
 	if s != nil && s.agent != nil {
 		s.agent.ResetNewMessages()
 	}
+}
+
+func (s *sessionTurnState) finalizeCompletedTurn(response string, runErr error, awaitingHuman bool) (string, string, error) {
+	sessionID := s.persistedSessionID()
 	if awaitingHuman {
-		return "", s.persistedSessionID(), runErr
+		return "", sessionID, runErr
 	}
 	if runErr != nil {
-		return "", s.persistedSessionID(), runErr
+		return "", sessionID, runErr
 	}
-	return response, s.persistedSessionID(), nil
+	return response, sessionID, nil
 }
 
 func (s *sessionTurnState) hasCommittedMessages() bool {
