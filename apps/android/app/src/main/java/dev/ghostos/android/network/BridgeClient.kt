@@ -3,6 +3,7 @@ package dev.ghostos.android.network
 import dev.ghostos.android.model.*
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.ProducerScope
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -54,7 +55,10 @@ class BridgeClient(
 
     override suspend fun sendMessage(message: String, sessionId: String?): Result<AgentSendResponse> = withContext(ioDispatcher) {
         runCatching {
-            val payload = AgentRequest(message, sessionId)
+            val payload = AgentRequest(
+                message = message,
+                sessionId = sessionId,
+            )
             val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
 
             val request = Request.Builder()
@@ -130,7 +134,11 @@ class BridgeClient(
     }
 
     override fun streamMessage(message: String, sessionId: String?, traceId: String): Flow<AgentStreamEvent> {
-        val payload = AgentRequest(message, sessionId, traceId)
+        val payload = AgentRequest(
+            message = message,
+            sessionId = sessionId,
+            traceId = traceId,
+        )
         val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
             .url("$baseUrl/api/agent/stream")
@@ -243,28 +251,26 @@ class BridgeClient(
 
                     val source = body.source()
                     var eventName: String? = null
-                    var dataLine: String? = null
+                    val dataLines = mutableListOf<String>()
 
                     while (!source.exhausted()) {
                         val line = source.readUtf8Line() ?: break
-                        when {
-                            line.startsWith("event: ") -> eventName = line.removePrefix("event: ").trim()
-                            line.startsWith("data: ") -> dataLine = line.removePrefix("data: ").trim()
-                            line.isBlank() -> {
-                                val payload = dataLine
-                                if (!payload.isNullOrBlank()) {
-                                    trySend(decoder(payload, eventName))
-                                }
-                                eventName = null
-                                dataLine = null
+                        if (line.isEmpty()) {
+                            this@callbackFlow.emitSseEvent(dataLines, eventName, decoder)
+                            eventName = null
+                            dataLines.clear()
+                            continue
+                        }
+
+                        parseSseField(line)?.let { field ->
+                            when (field.name) {
+                                "event" -> eventName = field.value
+                                "data" -> dataLines += field.value
                             }
                         }
                     }
 
-                    val payload = dataLine
-                    if (!payload.isNullOrBlank()) {
-                        trySend(decoder(payload, eventName))
-                    }
+                    this@callbackFlow.emitSseEvent(dataLines, eventName, decoder)
                 }
             }.onFailure { error ->
                 close(error)
@@ -277,6 +283,15 @@ class BridgeClient(
             call.cancel()
             readerJob.cancel()
         }
+    }
+
+    private suspend fun <T> ProducerScope<T>.emitSseEvent(
+        dataLines: List<String>,
+        eventName: String?,
+        decoder: (String, String?) -> T,
+    ) {
+        if (dataLines.isEmpty()) return
+        send(decoder(dataLines.joinToString("\n"), eventName))
     }
 
     private inline fun <reified T> decodeSuccessEnvelope(responseBody: String): T {
@@ -321,6 +336,21 @@ class BridgeClient(
 
 private fun createClientTraceId(prefix: String): String {
     return "$prefix-${System.currentTimeMillis()}"
+}
+
+private data class SseField(val name: String, val value: String)
+
+private fun parseSseField(line: String): SseField? {
+    if (line.startsWith(":")) return null
+    val separator = line.indexOf(':')
+    if (separator < 0) return SseField(line, "")
+
+    val name = line.substring(0, separator)
+    var value = line.substring(separator + 1)
+    if (value.startsWith(" ")) {
+        value = value.substring(1)
+    }
+    return SseField(name, value)
 }
 
 private fun parseFilename(contentDisposition: String?, fallbackArtifactId: String, mimeType: String): String {

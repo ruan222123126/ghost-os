@@ -47,4 +47,39 @@ class BridgeClientTest {
             server.shutdown()
         }
     }
+
+    @Test
+    fun `observeSessionEvents joins multiline data payload`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "text/event-stream")
+                .setBody(
+                    """
+                    event: assistant_message
+                    data: {"id":"evt-2","type":"assistant_message","session_id":"session-2","payload":{
+                    data:"message":"hello"
+                    data:}}
+                    
+                    """.trimIndent(),
+                ),
+        )
+
+        server.start()
+        try {
+            val client = BridgeClient(
+                baseUrl = server.url("/").toString().removeSuffix("/"),
+                token = "token",
+            )
+
+            val event: SessionPushEvent = client.observeSessionEvents("session-2").first()
+
+            assertEquals("assistant_message", event.type)
+            assertEquals("session-2", event.sessionId)
+            assertEquals("hello", event.payload["message"]?.toString()?.trim('"'))
+        } finally {
+            server.shutdown()
+        }
+    }
 }
