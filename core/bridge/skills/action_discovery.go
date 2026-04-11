@@ -135,12 +135,6 @@ func managedSkillFromDiscovery(source string, root string, item Skill) (managedS
 
 func refreshManagedSkillCatalog(roots skillRoots) error {
 	rootList := managedSkillRootsList(roots)
-	for _, root := range rootList {
-		result := NewCatalogWithRoots([]string{root}).ForceReload()
-		if err := firstSkillDiscoveryError(root, result.Errors); err != nil {
-			return err
-		}
-	}
 	if len(rootList) == 0 {
 		return nil
 	}
