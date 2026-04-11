@@ -22,57 +22,106 @@ func (s *bridgeService) executeAgentActionWithRuntimeOverrides(
 	runtimeOverrides *TaskRuntimeOverrides,
 	traceID string,
 ) (any, int, error) {
+	prepared, code, err := s.prepareAgentTurnWithRuntimeOverrides(params, runtimeOverrides, traceID)
+	if err != nil {
+		return nil, code, err
+	}
+	if payload, code, handled, err := s.executeSpecialAgentMode(ctx, prepared, traceID); handled {
+		return payload, code, err
+	}
+	return s.executeStandardAgentTurnWithPrepared(ctx, prepared, traceID)
+}
+
+func (s *bridgeService) prepareAgentTurnWithRuntimeOverrides(
+	params agentParams,
+	runtimeOverrides *TaskRuntimeOverrides,
+	traceID string,
+) (preparedAgentTurnRequest, int, error) {
 	prepared, code, err := s.validateAgentTurnRequest(params)
 	if err != nil {
 		if !errors.Is(err, errAgentMessageRequired) {
 			logAction(traceID, busActionAgentSend, "error", err)
 		}
-		return nil, code, err
+		return preparedAgentTurnRequest{}, code, err
 	}
 	prepared.runtimeOverrides = cloneTaskRuntimeOverrides(runtimeOverrides)
-	if prepared.mode == agentModePlan {
-		if prepared.runtimeOverrides != nil {
-			err := errors.New("runtime_overrides are not supported in plan mode")
-			logAction(traceID, busActionAgentSend, "error", err)
-			return nil, http.StatusBadRequest, err
-		}
-		logAction(traceID, busActionAgentSend, "running", nil)
-		payload, code, err := s.executePlanModeAction(ctx, prepared, traceID)
-		if err != nil {
-			logAction(traceID, busActionAgentSend, "error", err)
-			return nil, code, err
-		}
-		s.publishAssistantSessionPush(traceID, finalizedAgentTurn{
-			message:   payload.Message,
-			sessionID: payload.SessionID,
-		})
-		logAction(traceID, busActionAgentSend, "success", nil)
-		return payload, code, nil
-	}
-	if _, matched, parseErr := parseProModeRequest(prepared.message, bridgeconfig.DefaultProMaxIterations); matched || parseErr != nil {
-		if parseErr != nil {
-			logAction(traceID, busActionAgentSend, "error", parseErr)
-			return nil, http.StatusBadRequest, parseErr
-		}
-		if prepared.runtimeOverrides != nil {
-			err := errors.New("runtime_overrides are not supported in pro mode")
-			logAction(traceID, busActionAgentSend, "error", err)
-			return nil, http.StatusBadRequest, err
-		}
-		logAction(traceID, busActionAgentSend, "running", nil)
-		payload, code, err := s.executeProModeAction(ctx, prepared, traceID)
-		if err != nil {
-			logAction(traceID, busActionAgentSend, "error", err)
-			return nil, code, err
-		}
-		s.publishAssistantSessionPush(traceID, finalizedAgentTurn{
-			message:   payload.Message,
-			sessionID: payload.SessionID,
-		})
-		logAction(traceID, busActionAgentSend, "success", nil)
-		return payload, code, nil
-	}
+	return prepared, http.StatusOK, nil
+}
 
+func (s *bridgeService) executeSpecialAgentMode(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+) (any, int, bool, error) {
+	if prepared.mode == agentModePlan {
+		payload, code, err := s.executePlanModeWithPrepared(ctx, prepared, traceID)
+		return payload, code, true, err
+	}
+	_, matched, parseErr := parseProModeRequest(prepared.message, bridgeconfig.DefaultProMaxIterations)
+	if !matched && parseErr == nil {
+		return nil, http.StatusOK, false, nil
+	}
+	if parseErr != nil {
+		logAction(traceID, busActionAgentSend, "error", parseErr)
+		return nil, http.StatusBadRequest, true, parseErr
+	}
+	payload, code, err := s.executeProModeWithPrepared(ctx, prepared, traceID)
+	return payload, code, true, err
+}
+
+func (s *bridgeService) executePlanModeWithPrepared(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+) (any, int, error) {
+	if prepared.runtimeOverrides != nil {
+		err := errors.New("runtime_overrides are not supported in plan mode")
+		logAction(traceID, busActionAgentSend, "error", err)
+		return nil, http.StatusBadRequest, err
+	}
+	logAction(traceID, busActionAgentSend, "running", nil)
+	payload, code, err := s.executePlanModeAction(ctx, prepared, traceID)
+	if err != nil {
+		logAction(traceID, busActionAgentSend, "error", err)
+		return nil, code, err
+	}
+	s.publishSpecialModeAgentTurn(traceID, payload.Message, payload.SessionID)
+	return payload, code, nil
+}
+
+func (s *bridgeService) executeProModeWithPrepared(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+) (any, int, error) {
+	if prepared.runtimeOverrides != nil {
+		err := errors.New("runtime_overrides are not supported in pro mode")
+		logAction(traceID, busActionAgentSend, "error", err)
+		return nil, http.StatusBadRequest, err
+	}
+	logAction(traceID, busActionAgentSend, "running", nil)
+	payload, code, err := s.executeProModeAction(ctx, prepared, traceID)
+	if err != nil {
+		logAction(traceID, busActionAgentSend, "error", err)
+		return nil, code, err
+	}
+	s.publishSpecialModeAgentTurn(traceID, payload.Message, payload.SessionID)
+	return payload, code, nil
+}
+
+func (s *bridgeService) publishSpecialModeAgentTurn(traceID string, message string, sessionID string) {
+	s.publishAssistantSessionPush(traceID, finalizedAgentTurn{
+		message:   message,
+		sessionID: sessionID,
+	})
+	logAction(traceID, busActionAgentSend, "success", nil)
+}
+
+func (s *bridgeService) executeStandardAgentTurnWithPrepared(
+	ctx context.Context,
+	prepared preparedAgentTurnRequest,
+	traceID string,
+) (any, int, error) {
 	logAction(traceID, busActionAgentSend, "running", nil)
 	response, sessionID, err := s.runPreparedAgentTurn(ctx, prepared, traceID)
 	if err != nil {
@@ -90,7 +139,6 @@ func (s *bridgeService) executeAgentActionWithRuntimeOverrides(
 		logAction(traceID, busActionAgentSend, "error", err)
 		return nil, code, err
 	}
-
 	payload, payloadErr := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
 	if payloadErr != nil {
 		logAction(traceID, busActionAgentSend, "error", payloadErr)

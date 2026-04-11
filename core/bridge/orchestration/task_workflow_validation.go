@@ -50,6 +50,39 @@ type workflowNodePayloadSpec struct {
 	loop       bool
 }
 
+type workflowNodeValidationSpec struct {
+	payload  workflowNodePayloadSpec
+	validate func(WorkflowNode) error
+}
+
+var workflowNodeValidationSpecs = map[string]workflowNodeValidationSpec{
+	workflowNodeTypeStart: {
+		payload:  workflowNodePayloadSpec{allowStart: true},
+		validate: validateWorkflowStartNode,
+	},
+	workflowNodeTypeTool: {
+		payload:  workflowNodePayloadSpec{tool: true},
+		validate: validateWorkflowToolNode,
+	},
+	workflowNodeTypeLLM: {
+		payload:  workflowNodePayloadSpec{llm: true},
+		validate: validateWorkflowLLMNode,
+	},
+	workflowNodeTypeAgent: {
+		payload:  workflowNodePayloadSpec{agent: true},
+		validate: validateWorkflowAgentNode,
+	},
+	workflowNodeTypeIf: {
+		payload:  workflowNodePayloadSpec{ifNode: true},
+		validate: validateWorkflowIfNode,
+	},
+	workflowNodeTypeLoop: {
+		payload:  workflowNodePayloadSpec{loop: true},
+		validate: validateWorkflowLoopNode,
+	},
+	workflowNodeTypeEnd: {},
+}
+
 func validateWorkflowTaskDefinition(task *ScheduledTask) error {
 	if task.Workflow == nil {
 		return fmt.Errorf("%w: workflow is required for workflow task", ErrInvalidTaskConfig)
@@ -132,51 +165,17 @@ func validateWorkflowNode(node WorkflowNode) error {
 	if node.ID == "" {
 		return fmt.Errorf("%w: workflow node id is required", ErrInvalidTaskConfig)
 	}
-	switch node.Type {
-	case workflowNodeTypeStart:
-		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{allowStart: true}); err != nil {
-			return err
-		}
-		return validateWorkflowStartNode(node)
-	case workflowNodeTypeTool:
-		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{tool: true}); err != nil {
-			return err
-		}
-		if strings.TrimSpace(node.Tool.ToolName) == "" {
-			return fmt.Errorf("%w: workflow tool node %q requires tool_name", ErrInvalidTaskConfig, node.ID)
-		}
-		return nil
-	case workflowNodeTypeLLM:
-		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{llm: true}); err != nil {
-			return err
-		}
-		if strings.TrimSpace(node.LLM.Prompt) == "" {
-			return fmt.Errorf("%w: workflow llm node %q requires prompt", ErrInvalidTaskConfig, node.ID)
-		}
-		return nil
-	case workflowNodeTypeAgent:
-		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{agent: true}); err != nil {
-			return err
-		}
-		if strings.TrimSpace(node.Agent.Message) == "" {
-			return fmt.Errorf("%w: workflow agent node %q requires message", ErrInvalidTaskConfig, node.ID)
-		}
-		return nil
-	case workflowNodeTypeIf:
-		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{ifNode: true}); err != nil {
-			return err
-		}
-		return validateWorkflowIfNode(node)
-	case workflowNodeTypeLoop:
-		if err := validateWorkflowNodePayload(node, workflowNodePayloadSpec{loop: true}); err != nil {
-			return err
-		}
-		return validateWorkflowLoopNode(node)
-	case workflowNodeTypeEnd:
-		return validateWorkflowNodePayload(node, workflowNodePayloadSpec{})
-	default:
+	spec, ok := workflowNodeValidationSpecs[node.Type]
+	if !ok {
 		return fmt.Errorf("%w: unsupported workflow node type %q", ErrInvalidTaskConfig, node.Type)
 	}
+	if err := validateWorkflowNodePayload(node, spec.payload); err != nil {
+		return err
+	}
+	if spec.validate == nil {
+		return nil
+	}
+	return spec.validate(node)
 }
 
 func validateWorkflowNodePayload(node WorkflowNode, spec workflowNodePayloadSpec) error {
@@ -195,6 +194,27 @@ func validateWorkflowNodePayload(node WorkflowNode, spec workflowNodePayloadSpec
 		return nil
 	}
 	return fmt.Errorf("%w: workflow node %q payload does not match type %q", ErrInvalidTaskConfig, node.ID, node.Type)
+}
+
+func validateWorkflowToolNode(node WorkflowNode) error {
+	if strings.TrimSpace(node.Tool.ToolName) == "" {
+		return fmt.Errorf("%w: workflow tool node %q requires tool_name", ErrInvalidTaskConfig, node.ID)
+	}
+	return nil
+}
+
+func validateWorkflowLLMNode(node WorkflowNode) error {
+	if strings.TrimSpace(node.LLM.Prompt) == "" {
+		return fmt.Errorf("%w: workflow llm node %q requires prompt", ErrInvalidTaskConfig, node.ID)
+	}
+	return nil
+}
+
+func validateWorkflowAgentNode(node WorkflowNode) error {
+	if strings.TrimSpace(node.Agent.Message) == "" {
+		return fmt.Errorf("%w: workflow agent node %q requires message", ErrInvalidTaskConfig, node.ID)
+	}
+	return nil
 }
 
 func validateWorkflowIfNode(node WorkflowNode) error {

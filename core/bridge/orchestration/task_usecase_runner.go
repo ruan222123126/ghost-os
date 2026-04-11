@@ -187,54 +187,84 @@ func (r taskMutationRunner) applyUpdate(task *ScheduledTask, params taskUpdatePa
 }
 
 func applyTaskPatch(task *ScheduledTask, params taskUpdateParams) (bool, error) {
-	scheduleChanged := false
+	applyTaskCoreTextFields(task, params)
+	applyTaskRuntimePatch(task, params.RuntimeOverrides)
+	taskKind := applyTaskKindActionPatch(task, params)
+	applyTaskActionParamsPatch(task, params.ActionParams)
+	if err := applyTaskWorkflowPatch(task, taskKind, params.Workflow); err != nil {
+		return false, err
+	}
+	applyTaskEnabledPatch(task, params.Enabled)
+	return applyTaskSchedulePatch(task, params.IntervalSeconds, params.CronExpr)
+}
+
+func applyTaskCoreTextFields(task *ScheduledTask, params taskUpdateParams) {
 	if params.Message != nil {
 		task.Message = strings.TrimSpace(*params.Message)
 	}
 	if params.SessionID != nil {
 		task.SessionID = strings.TrimSpace(*params.SessionID)
 	}
-	if params.RuntimeOverrides != nil {
-		task.RuntimeOverrides = cloneTaskRuntimeOverrides(params.RuntimeOverrides)
+}
+
+func applyTaskRuntimePatch(task *ScheduledTask, runtimeOverrides *TaskRuntimeOverrides) {
+	if runtimeOverrides != nil {
+		task.RuntimeOverrides = cloneTaskRuntimeOverrides(runtimeOverrides)
 	}
+}
+
+func applyTaskKindActionPatch(task *ScheduledTask, params taskUpdateParams) string {
 	if params.TaskKind != nil {
 		task.TaskKind = strings.TrimSpace(*params.TaskKind)
 	}
 	if params.Action != nil {
 		task.Action = strings.TrimSpace(*params.Action)
 	}
-	if params.ActionParams != nil {
-		task.ActionParams = cloneTaskActionParams(*params.ActionParams)
+	return normalizeTaskKind(task.TaskKind)
+}
+
+func applyTaskActionParamsPatch(task *ScheduledTask, actionParams *map[string]any) {
+	if actionParams != nil {
+		task.ActionParams = cloneTaskActionParams(*actionParams)
 	}
-	taskKind := normalizeTaskKind(task.TaskKind)
-	if params.Workflow != nil {
-		if err := ensureWorkflowAllowedForTaskKind(taskKind, params.Workflow); err != nil {
-			return false, err
+}
+
+func applyTaskWorkflowPatch(task *ScheduledTask, taskKind string, workflow *WorkflowDefinition) error {
+	if workflow != nil {
+		if err := ensureWorkflowAllowedForTaskKind(taskKind, workflow); err != nil {
+			return err
 		}
-		task.Workflow = cloneTaskWorkflow(params.Workflow)
+		task.Workflow = cloneTaskWorkflow(workflow)
 	}
 	if taskKind != taskKindWorkflow {
 		task.Workflow = nil
 	}
-	if params.Enabled != nil {
-		task.Enabled = *params.Enabled
+	return nil
+}
+
+func applyTaskEnabledPatch(task *ScheduledTask, enabled *bool) {
+	if enabled != nil {
+		task.Enabled = *enabled
 	}
-	if params.IntervalSeconds != nil && params.CronExpr != nil {
+}
+
+func applyTaskSchedulePatch(task *ScheduledTask, intervalSeconds *int, cronExpr *string) (bool, error) {
+	if intervalSeconds != nil && cronExpr != nil {
 		return false, invalidTaskConfig("exactly one schedule field can be updated at a time")
 	}
-	if params.IntervalSeconds != nil {
+	if intervalSeconds != nil {
 		task.ScheduleType = taskScheduleTypeInterval
-		task.IntervalSeconds = *params.IntervalSeconds
+		task.IntervalSeconds = *intervalSeconds
 		task.CronExpr = ""
-		scheduleChanged = true
+		return true, nil
 	}
-	if params.CronExpr != nil {
+	if cronExpr != nil {
 		task.ScheduleType = taskScheduleTypeCron
-		task.CronExpr = strings.TrimSpace(*params.CronExpr)
+		task.CronExpr = strings.TrimSpace(*cronExpr)
 		task.IntervalSeconds = 0
-		scheduleChanged = true
+		return true, nil
 	}
-	return scheduleChanged, nil
+	return false, nil
 }
 
 func (r taskMutationRunner) refreshNextRunAt(task *ScheduledTask, scheduleChanged bool, previousEnabled bool) error {

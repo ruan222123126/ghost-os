@@ -43,22 +43,28 @@ var (
 )
 
 type ScheduledTask struct {
-	ID              string              `json:"id"`
-	Message         string              `json:"message,omitempty"`
-	SessionID       string              `json:"session_id,omitempty"`
-	TaskKind        string              `json:"task_kind,omitempty"`
-	Action          string              `json:"action,omitempty"`
-	ActionParams    map[string]any      `json:"action_params,omitempty"`
-	Workflow        *WorkflowDefinition `json:"workflow,omitempty"`
-	ScheduleType    string              `json:"schedule_type"`
-	IntervalSeconds int                 `json:"interval_seconds,omitempty"`
-	CronExpr        string              `json:"cron_expr,omitempty"`
-	Enabled         bool                `json:"enabled"`
-	CreatedAt       time.Time           `json:"created_at"`
-	UpdatedAt       time.Time           `json:"updated_at"`
-	LastRunAt       time.Time           `json:"last_run_at,omitempty"`
-	NextRunAt       time.Time           `json:"next_run_at,omitempty"`
-	LastError       string              `json:"last_error,omitempty"`
+	ID               string                `json:"id"`
+	Message          string                `json:"message,omitempty"`
+	SessionID        string                `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
+	TaskKind         string                `json:"task_kind,omitempty"`
+	Action           string                `json:"action,omitempty"`
+	ActionParams     map[string]any        `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
+	ScheduleType     string                `json:"schedule_type"`
+	IntervalSeconds  int                   `json:"interval_seconds,omitempty"`
+	CronExpr         string                `json:"cron_expr,omitempty"`
+	Enabled          bool                  `json:"enabled"`
+	CreatedAt        time.Time             `json:"created_at"`
+	UpdatedAt        time.Time             `json:"updated_at"`
+	LastRunAt        time.Time             `json:"last_run_at,omitempty"`
+	NextRunAt        time.Time             `json:"next_run_at,omitempty"`
+	LastError        string                `json:"last_error,omitempty"`
+}
+
+type TaskRuntimeOverrides struct {
+	Model         string   `json:"model,omitempty"`
+	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
 }
 
 type RunLog struct {
@@ -120,6 +126,16 @@ func CloneActionParams(input map[string]any) map[string]any {
 	return out
 }
 
+func CloneTaskRuntimeOverrides(input *TaskRuntimeOverrides) *TaskRuntimeOverrides {
+	if input == nil {
+		return nil
+	}
+	return &TaskRuntimeOverrides{
+		Model:         strings.TrimSpace(input.Model),
+		ToolAllowlist: append([]string(nil), input.ToolAllowlist...),
+	}
+}
+
 func DecodeParamsMap[T any](input map[string]any) (T, error) {
 	var out T
 	if len(input) == 0 {
@@ -139,9 +155,24 @@ func NormalizeScheduledTask(task *ScheduledTask, validator DefinitionValidator) 
 	if task == nil {
 		return errors.New("task is nil")
 	}
+	normalizeScheduledTaskScalarFields(task)
+	if err := ensureScheduledTaskID(task); err != nil {
+		return err
+	}
+	if validator != nil {
+		if err := validator(task); err != nil {
+			return err
+		}
+	}
+	normalizeScheduledTaskTimestamps(task, time.Now().UTC())
+	return validateScheduledTaskSchedule(task)
+}
+
+func normalizeScheduledTaskScalarFields(task *ScheduledTask) {
 	task.ID = strings.TrimSpace(task.ID)
 	task.Message = strings.TrimSpace(task.Message)
 	task.SessionID = strings.TrimSpace(task.SessionID)
+	task.RuntimeOverrides = CloneTaskRuntimeOverrides(task.RuntimeOverrides)
 	task.TaskKind = NormalizeKind(task.TaskKind)
 	task.Action = strings.TrimSpace(task.Action)
 	task.ActionParams = CloneActionParams(task.ActionParams)
@@ -149,19 +180,21 @@ func NormalizeScheduledTask(task *ScheduledTask, validator DefinitionValidator) 
 	task.ScheduleType = strings.TrimSpace(task.ScheduleType)
 	task.CronExpr = strings.TrimSpace(task.CronExpr)
 	task.LastError = strings.TrimSpace(task.LastError)
+}
+
+func ensureScheduledTaskID(task *ScheduledTask) error {
 	if task.ID == "" {
 		task.ID = newTaskID()
 	}
 	if !IsValidTaskID(task.ID) {
 		return fmt.Errorf("%w: %q", ErrInvalidTaskID, task.ID)
 	}
-	if validator != nil {
-		if err := validator(task); err != nil {
-			return err
-		}
-	}
+	return nil
+}
+
+func normalizeScheduledTaskTimestamps(task *ScheduledTask, now time.Time) {
 	if task.CreatedAt.IsZero() {
-		task.CreatedAt = time.Now().UTC()
+		task.CreatedAt = now
 	} else {
 		task.CreatedAt = task.CreatedAt.UTC()
 	}
@@ -171,6 +204,9 @@ func NormalizeScheduledTask(task *ScheduledTask, validator DefinitionValidator) 
 	if !task.NextRunAt.IsZero() {
 		task.NextRunAt = task.NextRunAt.UTC()
 	}
+}
+
+func validateScheduledTaskSchedule(task *ScheduledTask) error {
 	switch task.ScheduleType {
 	case ScheduleTypeInterval:
 		if task.IntervalSeconds <= 0 || task.CronExpr != "" {
