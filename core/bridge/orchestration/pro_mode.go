@@ -4,33 +4,26 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strconv"
-	"strings"
 
+	bridgemode "ghost-os/bridge/mode"
 	"ghost-os/bridge/session"
-	"ghost-os/bridge/tools"
 )
 
 const (
-	proModePro              = "pro"
-	proModeProx             = "prox"
-	proModeStatusRunning    = "running"
-	proModeStatusCompleted  = "completed"
-	proModeStatusIncomplete = "incomplete"
-	proModeStatusCancelled  = "cancelled"
-	proModeStatusError      = "error"
-	proModeStopCompleted    = "pro_complete"
-	proModeStopMaxLimit     = "max_iterations"
-	proModeStopCancelled    = "cancelled"
-	proModeStopError        = "error"
+	proModePro              = bridgemode.Pro
+	proModeProx             = bridgemode.Prox
+	proModeStatusRunning    = bridgemode.StatusRunning
+	proModeStatusCompleted  = bridgemode.StatusCompleted
+	proModeStatusIncomplete = bridgemode.StatusIncomplete
+	proModeStatusCancelled  = bridgemode.StatusCancelled
+	proModeStatusError      = bridgemode.StatusError
+	proModeStopCompleted    = bridgemode.StopCompleted
+	proModeStopMaxLimit     = bridgemode.StopMaxLimit
+	proModeStopCancelled    = bridgemode.StopCancelled
+	proModeStopError        = bridgemode.StopError
 )
 
-type proModeRequest struct {
-	Mode          string
-	OriginalTask  string
-	MaxIterations int
-	Unlimited     bool
-}
+type proModeRequest = bridgemode.ProRequest
 
 type proModeResult struct {
 	Message        string
@@ -39,71 +32,8 @@ type proModeResult struct {
 	Records        []session.IterationRecord
 }
 
-type proModeCatalog struct {
-	base   tools.ToolCatalog
-	extra  map[string]tools.Tool
-	hidden map[string]bool
-}
-
 func parseProModeRequest(message string, defaultMaxIterations int) (proModeRequest, bool, error) {
-	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
-		return proModeRequest{}, false, nil
-	}
-
-	fields := strings.Fields(trimmed)
-	if len(fields) == 0 {
-		return proModeRequest{}, false, nil
-	}
-
-	mode := strings.ToLower(strings.TrimSpace(fields[0]))
-	if mode != proModePro && mode != proModeProx {
-		return proModeRequest{}, false, nil
-	}
-
-	request, err := parseProModeFields(mode, fields[1:], defaultMaxIterations)
-	if err != nil {
-		return proModeRequest{}, true, err
-	}
-	return request, true, nil
-}
-
-func parseProModeFields(mode string, fields []string, defaultMaxIterations int) (proModeRequest, error) {
-	maxIterations, taskFields, err := splitProModeFields(fields)
-	if err != nil {
-		return proModeRequest{}, err
-	}
-	task := strings.TrimSpace(strings.Join(taskFields, " "))
-	if task == "" {
-		return proModeRequest{}, errors.New("pro/prox task is required")
-	}
-
-	request := proModeRequest{Mode: mode, OriginalTask: task}
-	if mode == proModePro {
-		if maxIterations <= 0 {
-			maxIterations = defaultMaxIterations
-		}
-		request.MaxIterations = maxIterations
-		return request, nil
-	}
-
-	request.MaxIterations = maxIterations
-	request.Unlimited = maxIterations == 0
-	return request, nil
-}
-
-func splitProModeFields(fields []string) (int, []string, error) {
-	if len(fields) == 0 {
-		return 0, nil, nil
-	}
-	parsed, err := strconv.Atoi(fields[0])
-	if err != nil {
-		return 0, fields, nil
-	}
-	if parsed <= 0 {
-		return 0, nil, errors.New("pro/prox max iterations must be > 0")
-	}
-	return parsed, fields[1:], nil
+	return bridgemode.ParseProRequest(message, defaultMaxIterations)
 }
 
 func (s *bridgeService) executeProModeAction(ctx context.Context, prepared preparedAgentTurnRequest, traceID string) (agentResponse, int, error) {
@@ -136,14 +66,5 @@ func mapProModeError(err error) int {
 }
 
 func proModeResultStatus(stoppedBy string) string {
-	switch strings.TrimSpace(stoppedBy) {
-	case proModeStopCompleted:
-		return proModeStatusCompleted
-	case proModeStopMaxLimit:
-		return proModeStatusIncomplete
-	case proModeStopCancelled:
-		return proModeStatusCancelled
-	default:
-		return proModeStatusError
-	}
+	return bridgemode.ResultStatus(stoppedBy)
 }
