@@ -43,9 +43,9 @@ func (s *bridgeService) executeProModeAction(ctx context.Context, prepared prepa
 		if errors.Is(err, session.ErrSessionNotFound) {
 			return agentResponse{}, statusCode, err
 		}
-		normalizedCode, normalizedErr := normalizeAgentExecutionError(err)
-		if normalizedCode != http.StatusInternalServerError {
-			return agentResponse{}, normalizedCode, normalizedErr
+		normalizedKind, normalizedErr := normalizeAgentExecutionError(err)
+		if normalizedKind != ServiceErrorInternal {
+			return agentResponse{}, legacyStatusFromServiceErrorKind(normalizedKind), normalizedErr
 		}
 		return agentResponse{}, statusCode, err
 	}

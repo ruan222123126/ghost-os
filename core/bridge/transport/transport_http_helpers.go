@@ -138,6 +138,36 @@ func respondActionResult(w http.ResponseWriter, traceID string, action string, p
 	return true
 }
 
+func respondServiceContractResult(
+	w http.ResponseWriter,
+	traceID string,
+	result bridgeorchestration.ServiceResult,
+	err error,
+) bool {
+	if err != nil {
+		writeError(w, bridgeorchestration.LegacyStatusFromServiceError(err), err.Error(), traceID)
+		return false
+	}
+	writeSuccess(w, bridgeorchestration.LegacyStatusFromServiceOutcome(result.Outcome), result.Payload, traceID)
+	return true
+}
+
+func respondServiceContractActionResult(
+	w http.ResponseWriter,
+	traceID string,
+	action string,
+	result bridgeorchestration.ServiceResult,
+	err error,
+) bool {
+	if err != nil {
+		logAction(traceID, action, "error", err)
+		writeError(w, bridgeorchestration.LegacyStatusFromServiceError(err), err.Error(), traceID)
+		return false
+	}
+	writeSuccess(w, bridgeorchestration.LegacyStatusFromServiceOutcome(result.Outcome), result.Payload, traceID)
+	return true
+}
+
 // writeEnvelope 是所有响应的唯一出口，统一 header 与 payload 结构。
 func writeEnvelope(w http.ResponseWriter, code int, response bridgeorchestration.APIResponse, traceID string) {
 	w.Header().Set("Content-Type", "application/json")

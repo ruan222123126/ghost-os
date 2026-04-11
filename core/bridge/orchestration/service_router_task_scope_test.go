@@ -46,13 +46,13 @@ func TestTaskListActionRejectsInvalidScope(t *testing.T) {
 	service := newBridgeServiceState(nil, nil)
 	registerTaskActions(service)
 
-	handler, ok := service.actions[busActionTaskList]
+	handler, ok := service.actionHandler(busActionTaskList)
 	if !ok {
 		t.Fatalf("task list action handler is not registered")
 	}
 
-	_, code, err := handler(context.Background(), json.RawMessage(`{"scope":"invalid"}`), "trace-invalid-task-scope")
-	if code != http.StatusBadRequest {
+	_, err := handler(context.Background(), json.RawMessage(`{"scope":"invalid"}`), "trace-invalid-task-scope")
+	if code := legacyStatusFromServiceError(err); code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: got=%d want=%d", code, http.StatusBadRequest)
 	}
 	if err == nil || !strings.Contains(err.Error(), "invalid task scope") {

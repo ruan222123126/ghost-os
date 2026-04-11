@@ -106,17 +106,17 @@ func TestExecuteAgentActionRunsFiniteProMode(t *testing.T) {
 		},
 	}
 
-	payloadAny, code, err := service.executeAgentAction(context.Background(), agentParams{Message: "pro fix config"}, "trace-pro")
+	payloadResult, err := service.executeAgentAction(context.Background(), agentParams{Message: "pro fix config"}, "trace-pro")
 	if err != nil {
 		t.Fatalf("executeAgentAction returned error: %v", err)
 	}
-	if code != 200 {
+	if code := legacyStatusFromServiceOutcome(payloadResult.Outcome); code != 200 {
 		t.Fatalf("unexpected status code: %d", code)
 	}
 
-	payload, ok := payloadAny.(agentResponse)
+	payload, ok := payloadResult.Payload.(agentResponse)
 	if !ok {
-		t.Fatalf("unexpected payload type: %T", payloadAny)
+		t.Fatalf("unexpected payload type: %T", payloadResult.Payload)
 	}
 	if payload.Mode != proModePro {
 		t.Fatalf("unexpected mode: %q", payload.Mode)
@@ -193,14 +193,14 @@ func TestExecuteAgentActionStopsAtProMaxIterations(t *testing.T) {
 		},
 	}
 
-	payloadAny, code, err := service.executeAgentAction(context.Background(), agentParams{Message: "pro 1 fix config"}, "trace-pro-limit")
+	payloadResult, err := service.executeAgentAction(context.Background(), agentParams{Message: "pro 1 fix config"}, "trace-pro-limit")
 	if err != nil {
 		t.Fatalf("executeAgentAction returned error: %v", err)
 	}
-	if code != 200 {
+	if code := legacyStatusFromServiceOutcome(payloadResult.Outcome); code != 200 {
 		t.Fatalf("unexpected status code: %d", code)
 	}
-	payload := payloadAny.(agentResponse)
+	payload := payloadResult.Payload.(agentResponse)
 	if payload.StoppedBy != proModeStopMaxLimit {
 		t.Fatalf("unexpected stopped_by: %q", payload.StoppedBy)
 	}

@@ -103,11 +103,11 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 		return nil, code, err
 	}
 
-	if code, inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
-		return nil, code, inflightErr
+	if inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
+		return nil, legacyStatusFromServiceError(inflightErr), inflightErr
 	}
-	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
-		return nil, code, activeErr
+	if activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
+		return nil, legacyStatusFromServiceError(activeErr), activeErr
 	}
 
 	params.SessionID = sessionID
@@ -185,11 +185,25 @@ func (s *bridgeService) resolveHumanResumeStreamSession(
 	if err != nil {
 		return "", emitHumanResumeStreamError(ctx, sink, traceID, rawSessionID, code, err)
 	}
-	if code, inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
-		return sessionID, emitHumanResumeStreamError(ctx, sink, traceID, sessionID, code, inflightErr)
+	if inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
+		return sessionID, emitHumanResumeStreamError(
+			ctx,
+			sink,
+			traceID,
+			sessionID,
+			legacyStatusFromServiceError(inflightErr),
+			inflightErr,
+		)
 	}
-	if code, activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
-		return sessionID, emitHumanResumeStreamError(ctx, sink, traceID, sessionID, code, activeErr)
+	if activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
+		return sessionID, emitHumanResumeStreamError(
+			ctx,
+			sink,
+			traceID,
+			sessionID,
+			legacyStatusFromServiceError(activeErr),
+			activeErr,
+		)
 	}
 	return sessionID, nil
 }

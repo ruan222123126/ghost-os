@@ -11,7 +11,7 @@ import (
 )
 
 func (s *bridgeService) executeAgentStreamAction(ctx context.Context, params agentParams, traceID string, sink streaming.Sink) (string, string, error) {
-	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPush))
+	trackedSink := newEventTurnTracker(newSessionStreamBroadcastSink(sink, s.sessionPushHub()))
 	sessionID := strings.TrimSpace(params.SessionID)
 
 	prepared, err := s.validateAgentStreamRequest(ctx, params, traceID, sessionID, trackedSink)
@@ -35,13 +35,14 @@ func (s *bridgeService) validateAgentStreamRequest(
 	sessionID string,
 	trackedSink *eventTurnTracker,
 ) (preparedAgentTurnRequest, error) {
-	prepared, code, err := s.validateAgentTurnRequest(params)
+	prepared, err := s.validateAgentTurnRequest(params)
 	if err == nil {
 		return prepared, nil
 	}
 	if !errors.Is(err, errAgentMessageRequired) {
 		logAction(traceID, busActionAgentSend, "error", err)
 	}
+	code := legacyStatusFromServiceError(err)
 	if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, 0, "", sessionID, code, err); emitErr != nil {
 		return preparedAgentTurnRequest{}, emitErr
 	}
@@ -128,7 +129,8 @@ func (s *bridgeService) executeProModeStreamTurn(
 	logAction(traceID, busActionAgentSend, "running", nil)
 	payload, code, err := s.executeProModeAction(ctx, prepared, traceID)
 	if err != nil {
-		statusCode, normalizedErr := normalizeAgentExecutionError(err)
+		kind, normalizedErr := normalizeAgentExecutionError(err)
+		statusCode := legacyStatusFromServiceErrorKind(kind)
 		if code > 0 {
 			statusCode = code
 		}
@@ -178,14 +180,23 @@ func (s *bridgeService) executeStandardAgentStreamTurn(
 		return "", sessionID, normalizedErr
 	}
 
-	result, code, err := s.finalizeAgentTurn(response, sessionID)
+	result, err := s.finalizeAgentTurn(response, sessionID)
 	if err != nil {
 		logAction(traceID, busActionAgentSend, "error", err)
 		stepID, stepErr := streaming.AssistantStepID(trackedSink.finalAssistantTurn())
 		if stepErr != nil {
 			return "", "", stepErr
 		}
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), stepID, sessionID, code, err); emitErr != nil {
+		if emitErr := emitStreamErrorEvent(
+			ctx,
+			trackedSink,
+			traceID,
+			trackedSink.finalAssistantTurn(),
+			stepID,
+			sessionID,
+			legacyStatusFromServiceError(err),
+			err,
+		); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err

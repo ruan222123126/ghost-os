@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	bridgerss "ghost-os/bridge/rss"
@@ -19,10 +18,10 @@ func registerDefaultActions(service *bridgeService) {
 }
 
 func registerAgentActions(service *bridgeService) {
-	registerAction(service, busActionAgentSend, func(ctx context.Context, params agentParams, traceID string) (any, int, error) {
+	registerResultAction(service, busActionAgentSend, func(ctx context.Context, params agentParams, traceID string) (ServiceResult, error) {
 		return service.executeAgentAction(ctx, params, traceID)
 	})
-	registerAction(service, busActionAgentStop, func(ctx context.Context, params agentStopParams, traceID string) (any, int, error) {
+	registerResultAction(service, busActionAgentStop, func(ctx context.Context, params agentStopParams, traceID string) (ServiceResult, error) {
 		return service.executeAgentStopAction(ctx, params, traceID)
 	})
 }
@@ -46,12 +45,13 @@ func registerTaskActions(service *bridgeService) {
 	registerAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (any, int, error) {
 		return service.executeTaskCreateAction(params, traceID)
 	})
-	registerAction(service, busActionTaskList, func(_ context.Context, params taskListParams, traceID string) (any, int, error) {
+	registerResultAction(service, busActionTaskList, func(_ context.Context, params taskListParams, traceID string) (ServiceResult, error) {
 		scope, err := normalizeTaskListScope(params.Scope)
 		if err != nil {
-			return nil, http.StatusBadRequest, err
+			return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 		}
-		return service.executeTaskListAction(scope, traceID)
+		payload, code, err := service.executeTaskListAction(scope, traceID)
+		return serviceResultFromLegacy(payload, code, err)
 	})
 	registerAction(service, busActionTaskGet, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
 		return service.executeTaskGetAction(params, traceID)
@@ -105,11 +105,22 @@ func registerRSSActions(service *bridgeService) {
 
 // registerAction 负责“先解码参数，再调用用例”，避免每个 action 重复样板代码。
 func registerAction[T any](service *bridgeService, action string, handler func(context.Context, T, string) (any, int, error)) {
-	service.actions[action] = func(ctx context.Context, rawParams json.RawMessage, traceID string) (any, int, error) {
+	service.registerAction(action, func(ctx context.Context, rawParams json.RawMessage, traceID string) (ServiceResult, error) {
 		params, err := decodeActionParams[T](rawParams)
 		if err != nil {
-			return nil, http.StatusBadRequest, err
+			return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
+		}
+		payload, code, callErr := handler(ctx, params, traceID)
+		return serviceResultFromLegacy(payload, code, callErr)
+	})
+}
+
+func registerResultAction[T any](service *bridgeService, action string, handler func(context.Context, T, string) (ServiceResult, error)) {
+	service.registerAction(action, func(ctx context.Context, rawParams json.RawMessage, traceID string) (ServiceResult, error) {
+		params, err := decodeActionParams[T](rawParams)
+		if err != nil {
+			return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 		}
 		return handler(ctx, params, traceID)
-	}
+	})
 }

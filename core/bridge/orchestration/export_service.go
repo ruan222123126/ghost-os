@@ -53,7 +53,7 @@ func (s *Service) SessionPushHub() *SessionPushHub {
 	if s == nil || s.inner == nil {
 		return nil
 	}
-	return s.inner.sessionPush
+	return s.inner.sessionPushHub()
 }
 
 func (s *Service) ConfigStore() bridgeconfig.Store {
@@ -107,11 +107,7 @@ func (s *Service) SetRSSInboxService(service *bridgerss.RSSInboxService, initErr
 	if s == nil || s.inner == nil {
 		return
 	}
-	if initErr != nil {
-		s.inner.rssHandler = bridgerss.NewActionHandler(nil, initErr, s.inner.rssLogFunc())
-	} else {
-		s.inner.rssHandler = bridgerss.NewActionHandler(service, nil, s.inner.rssLogFunc())
-	}
+	s.inner.setRSSHandler(service, initErr)
 }
 
 func (s *Service) StartBackgroundRuntimes() error {
@@ -134,12 +130,24 @@ func (s *Service) Close() {
 	}
 }
 
-func (s *Service) DispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (any, int, error) {
+func (s *Service) DispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (ServiceResult, error) {
 	return s.inner.dispatchAction(ctx, action, params, traceID)
 }
 
-func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, traceID string) (any, int, error) {
+func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeAgentAction(ctx, params, traceID)
+}
+
+func LegacyStatusFromServiceOutcome(outcome ServiceOutcome) int {
+	return legacyStatusFromServiceOutcome(outcome)
+}
+
+func LegacyStatusFromServiceError(err error) int {
+	return legacyStatusFromServiceError(err)
+}
+
+func ServiceErrorKindFromError(err error) ServiceErrorKind {
+	return ServiceErrorKindOf(err)
 }
 
 func (s *Service) ExecuteProvidersGetAction(traceID string) (any, int, error) {
@@ -187,11 +195,13 @@ func (s *Service) ExecuteAgentStreamAction(ctx context.Context, params AgentPara
 }
 
 func (s *Service) EnsureSessionNotInflight(sessionID string) (int, error) {
-	return s.inner.ensureSessionNotInflight(sessionID)
+	err := s.inner.ensureSessionNotInflight(sessionID)
+	return LegacyStatusFromServiceError(err), err
 }
 
 func (s *Service) EnsureSessionActive(sessionID string) (int, error) {
-	return s.inner.ensureSessionActive(sessionID)
+	err := s.inner.ensureSessionActive(sessionID)
+	return LegacyStatusFromServiceError(err), err
 }
 
 func (s *Service) ExecuteRSSInboxPollUsecase(
@@ -200,10 +210,10 @@ func (s *Service) ExecuteRSSInboxPollUsecase(
 	taskID string,
 	traceID string,
 ) (bridgerss.RSSInboxPollResult, int, error) {
-	if s == nil || s.inner == nil || s.inner.rssHandler == nil {
+	if s == nil || s.inner == nil || s.inner.rssActionHandler() == nil {
 		return bridgerss.RSSInboxPollResult{}, http.StatusInternalServerError, fmt.Errorf("rss inbox service is not configured")
 	}
-	return s.inner.rssHandler.ExecuteInboxPollUsecase(ctx, params, taskID, traceID)
+	return s.inner.rssActionHandler().ExecuteInboxPollUsecase(ctx, params, taskID, traceID)
 }
 
 func (s *Service) ExecuteSkillListAction(traceID string) (any, int, error) {

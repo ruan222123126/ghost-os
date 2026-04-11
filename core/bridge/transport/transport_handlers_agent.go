@@ -41,13 +41,13 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	traceID := resolveTraceID(req.TraceID, r)
-	payload, code, err := t.service.ExecuteAgentAction(r.Context(), bridgeorchestration.AgentParams{
+	result, err := t.service.ExecuteAgentAction(r.Context(), bridgeorchestration.AgentParams{
 		Mode:      req.Mode,
 		Message:   req.Message,
 		Images:    req.Images,
 		SessionID: req.SessionID,
 	}, traceID)
-	respondActionResult(w, traceID, bridgeorchestration.BusActionAgentSend, payload, code, err)
+	respondServiceContractActionResult(w, traceID, bridgeorchestration.BusActionAgentSend, result, err)
 }
 
 // handleQuestionAnswer 以高层接口隐藏 HUMAN_RESPONSE + resume 的底层编排细节。
@@ -140,8 +140,8 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 
 // dispatchAction 统一调用 service 并按 action 语义输出响应 envelope。
 func (t *transport) dispatchAction(w http.ResponseWriter, r *http.Request, action string, params json.RawMessage, traceID string) {
-	payload, code, err := t.service.DispatchAction(r.Context(), action, params, traceID)
-	respondActionResult(w, traceID, action, payload, code, err)
+	result, err := t.service.DispatchAction(r.Context(), action, params, traceID)
+	respondServiceContractActionResult(w, traceID, action, result, err)
 }
 
 func (t *transport) dispatchActionObject(

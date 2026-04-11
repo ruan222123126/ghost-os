@@ -3,10 +3,6 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"sort"
-	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
 	bridgerss "ghost-os/bridge/rss"
@@ -16,7 +12,7 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-type actionHandler func(ctx context.Context, params json.RawMessage, traceID string) (any, int, error)
+type actionHandler func(ctx context.Context, params json.RawMessage, traceID string) (ServiceResult, error)
 type agentExecutorFunc func(
 	ctx context.Context,
 	message string,
@@ -39,16 +35,13 @@ type agentStreamExecutorFunc func(
 type bridgeService struct {
 	configStore    bridgeconfig.Store
 	sessionStore   *session.Store
-	sessionPush    *sessionPushHub
-	taskStore      *TaskStore
-	taskScheduler  *TaskScheduler
-	taskInitErr    error
-	rssHandler     *bridgerss.ActionHandler
+	lifecycle      *serviceLifecycle
+	runtimeState   *serviceRuntimeState
+	actionRouter   *serviceActionRouter
 	skillHandler   *bridgeskills.ActionHandler
 	agentRunner    SessionTurnRunner
 	runRegistry    *RunRegistry
 	runtimeFactory AgentRuntimeFactory
-	actions        map[string]actionHandler
 }
 
 // newBridgeService 组装 action -> handler 映射，并初始化会话与记忆依赖。
@@ -71,12 +64,15 @@ func newBridgeServiceWithStreamExecutor(
 }
 
 func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store) *bridgeService {
+	runtimeState := newServiceRuntimeState()
+	sessionPush := newSessionPushHub()
 	return &bridgeService{
 		configStore:  store,
 		sessionStore: sessionStore,
-		sessionPush:  newSessionPushHub(),
+		lifecycle:    newServiceLifecycle(runtimeState, sessionPush),
+		runtimeState: runtimeState,
+		actionRouter: newServiceActionRouter(21),
 		runRegistry:  NewRunRegistry(),
-		actions:      make(map[string]actionHandler, 21),
 	}
 }
 
@@ -100,15 +96,47 @@ func (s *bridgeService) taskToolManager() tools.TaskManager {
 	return s
 }
 
+func (s *bridgeService) sessionPushHub() *sessionPushHub {
+	if s == nil || s.lifecycle == nil {
+		return nil
+	}
+	return s.lifecycle.sessionPushHub()
+}
+
+func (s *bridgeService) taskStore() *TaskStore {
+	if s == nil || s.runtimeState == nil {
+		return nil
+	}
+	return s.runtimeState.taskStore()
+}
+
+func (s *bridgeService) taskScheduler() *TaskScheduler {
+	if s == nil || s.runtimeState == nil {
+		return nil
+	}
+	return s.runtimeState.taskScheduler()
+}
+
+func (s *bridgeService) taskInitErr() error {
+	if s == nil || s.runtimeState == nil {
+		return nil
+	}
+	return s.runtimeState.taskInitErr()
+}
+
+func (s *bridgeService) rssActionHandler() *bridgerss.ActionHandler {
+	if s == nil || s.runtimeState == nil {
+		return nil
+	}
+	return s.runtimeState.rssHandler()
+}
+
 // StartBackgroundRuntimes 显式初始化 service 依赖的后台 runtime。
 func (s *bridgeService) StartBackgroundRuntimes() error {
 	if s == nil {
 		return nil
 	}
-	if err := s.initRSSInboxRuntime(); err != nil {
-		return err
-	}
-	return s.initTaskRuntime()
+	return s.runtimeState.start(s.configStore, s, s.rssLogFunc())
 }
 
 // BootstrapSystemTasks 将系统调度任务同步到 task runtime。
@@ -116,48 +144,14 @@ func (s *bridgeService) BootstrapSystemTasks() error {
 	if s == nil {
 		return nil
 	}
-	coordinator := bridgerss.NewSystemTaskCoordinator(
-		s.configStore,
-		s.taskStore,
-		s.taskScheduler,
-		s.rssHandlerInitErr(),
-	)
-	if err := coordinator.SyncPollTask(); err != nil {
-		return err
-	}
-	if err := coordinator.SyncBriefingTask(); err != nil {
-		return err
-	}
-	return nil
+	return s.runtimeState.bootstrapSystemTasks(s.configStore)
 }
 
 func (s *bridgeService) initTaskRuntime() error {
 	if s == nil {
 		return nil
 	}
-	if s.taskStore != nil && s.taskScheduler != nil {
-		s.taskInitErr = nil
-		return nil
-	}
-	taskCfg, err := loadTaskRuntimeConfig(s.configStore)
-	if err != nil {
-		s.taskInitErr = err
-		return err
-	}
-	taskStore, err := NewTaskStore(taskCfg.TasksPath)
-	if err != nil {
-		s.taskInitErr = err
-		return err
-	}
-	scheduler := NewTaskScheduler(taskStore, s)
-	if err := scheduler.Start(); err != nil {
-		s.taskInitErr = err
-		return err
-	}
-	s.taskStore = taskStore
-	s.taskScheduler = scheduler
-	s.taskInitErr = nil
-	return nil
+	return s.runtimeState.initTaskRuntime(s.configStore, s)
 }
 
 func (s *bridgeService) initRSSInboxRuntime() error {
@@ -171,20 +165,14 @@ func (s *bridgeService) reloadRSSInboxRuntime() error {
 	if s == nil {
 		return nil
 	}
-	service, err := newRSSInboxServiceFromConfig(s.configStore)
-	if err != nil {
-		s.rssHandler = bridgerss.NewActionHandler(nil, err, s.rssLogFunc())
-		return err
-	}
-	s.rssHandler = bridgerss.NewActionHandler(service, nil, s.rssLogFunc())
-	return nil
+	return s.runtimeState.reloadRSSInbox(s.configStore, s.rssLogFunc())
 }
 
 func (s *bridgeService) rssHandlerInitErr() error {
-	if s == nil || s.rssHandler == nil {
+	if s == nil || s.runtimeState == nil {
 		return nil
 	}
-	return s.rssHandler.InitErr()
+	return s.runtimeState.rssInitErr()
 }
 
 func (s *bridgeService) rssLogFunc() bridgerss.LogFunc {
@@ -204,33 +192,43 @@ func (s *bridgeService) Close() {
 	if s == nil {
 		return
 	}
-	if s.taskScheduler != nil {
-		s.taskScheduler.Stop()
-	}
-	if s.sessionPush != nil {
-		s.sessionPush.Close()
-	}
+	s.lifecycle.close()
 }
 
 // dispatchAction 根据 action 查找处理器；未知 action 返回显式可选列表。
-func (s *bridgeService) dispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (any, int, error) {
-	handler, ok := s.actions[action]
-	if !ok {
-		return nil, http.StatusBadRequest, s.unsupportedActionError(action)
-	}
-	return handler(ctx, params, traceID)
+func (s *bridgeService) dispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (ServiceResult, error) {
+	return s.actionRouter.dispatch(ctx, action, params, traceID)
 }
 
 // unsupportedActionError 构造稳定错误消息，便于客户端快速定位拼写/版本问题。
 func (s *bridgeService) unsupportedActionError(action string) error {
-	registered := make([]string, 0, len(s.actions))
-	for name := range s.actions {
-		registered = append(registered, name)
+	return s.actionRouter.unsupportedActionError(action)
+}
+
+func (s *bridgeService) registerAction(action string, handler actionHandler) {
+	if s == nil || s.actionRouter == nil {
+		return
 	}
-	sort.Strings(registered)
-	return fmt.Errorf(
-		"unsupported action %q, expected one of: %s",
-		action,
-		strings.Join(registered, "|"),
-	)
+	s.actionRouter.register(action, handler)
+}
+
+func (s *bridgeService) actionHandler(action string) (actionHandler, bool) {
+	if s == nil || s.actionRouter == nil {
+		return nil, false
+	}
+	return s.actionRouter.handler(action)
+}
+
+func (s *bridgeService) registeredActionNames() []string {
+	if s == nil || s.actionRouter == nil {
+		return nil
+	}
+	return s.actionRouter.actionNames()
+}
+
+func (s *bridgeService) setRSSHandler(service *bridgerss.RSSInboxService, initErr error) {
+	if s == nil || s.runtimeState == nil {
+		return
+	}
+	s.runtimeState.setRSSHandler(service, initErr, s.rssLogFunc())
 }

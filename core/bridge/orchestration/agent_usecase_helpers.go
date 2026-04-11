@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"ghost-os/bridge/agent"
@@ -34,21 +33,21 @@ type finalizedAgentTurn struct {
 	sessionEnd *assistantSessionEndSignalPayload
 }
 
-func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, int, error) {
+func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {
 	userInput, message, err := buildAgentUserInput(params.Message, params.Images)
 	if err != nil {
-		return preparedAgentTurnRequest{}, http.StatusBadRequest, err
+		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
 	}
 	mode, err := normalizeAgentMode(params.Mode)
 	if err != nil {
-		return preparedAgentTurnRequest{}, http.StatusBadRequest, err
+		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
 	}
 	return preparedAgentTurnRequest{
 		userInput: userInput,
 		message:   message,
 		mode:      mode,
 		sessionID: strings.TrimSpace(params.SessionID),
-	}, http.StatusOK, nil
+	}, nil
 }
 
 func normalizeAgentMode(raw string) (string, error) {
@@ -62,27 +61,27 @@ func normalizeAgentMode(raw string) (string, error) {
 	return "", fmt.Errorf("unsupported agent mode: %q", mode)
 }
 
-func (s *bridgeService) validateAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, int, error) {
-	prepared, code, err := prepareAgentTurnRequest(params)
+func (s *bridgeService) validateAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {
+	prepared, err := prepareAgentTurnRequest(params)
 	if err != nil {
-		return preparedAgentTurnRequest{}, code, err
+		return preparedAgentTurnRequest{}, err
 	}
-	if code, inflightErr := s.ensureSessionNotInflight(prepared.sessionID); inflightErr != nil {
-		return preparedAgentTurnRequest{}, code, inflightErr
+	if inflightErr := s.ensureSessionNotInflight(prepared.sessionID); inflightErr != nil {
+		return preparedAgentTurnRequest{}, inflightErr
 	}
-	if code, activeErr := s.ensureSessionActive(prepared.sessionID); activeErr != nil {
-		return preparedAgentTurnRequest{}, code, activeErr
+	if activeErr := s.ensureSessionActive(prepared.sessionID); activeErr != nil {
+		return preparedAgentTurnRequest{}, activeErr
 	}
-	return prepared, http.StatusOK, nil
+	return prepared, nil
 }
 
-func classifyAgentTurnError(err error) (*agent.ErrAwaitingHuman, int, bool, error) {
+func classifyAgentTurnError(err error) (*agent.ErrAwaitingHuman, ServiceErrorKind, bool, error) {
 	var awaitingErr *agent.ErrAwaitingHuman
 	if errors.As(err, &awaitingErr) {
-		return awaitingErr, http.StatusAccepted, false, nil
+		return awaitingErr, "", false, nil
 	}
-	statusCode, normalizedErr := normalizeAgentExecutionError(err)
-	return nil, statusCode, errors.Is(normalizedErr, ErrRunCancelled), normalizedErr
+	kind, normalizedErr := normalizeAgentExecutionError(err)
+	return nil, kind, errors.Is(normalizedErr, ErrRunCancelled), normalizedErr
 }
 
 func newAwaitingHumanResponse(sessionID string, awaitingErr *agent.ErrAwaitingHuman) askHumanAwaitingResponse {
@@ -111,21 +110,21 @@ func newAwaitingHumanResponse(sessionID string, awaitingErr *agent.ErrAwaitingHu
 	return response
 }
 
-func (s *bridgeService) finalizeAgentTurn(response string, sessionID string) (finalizedAgentTurn, int, error) {
+func (s *bridgeService) finalizeAgentTurn(response string, sessionID string) (finalizedAgentTurn, error) {
 	normalizedMessage, sessionEndSignal, err := parseSessionEndSignal(response)
 	if err != nil {
-		return finalizedAgentTurn{}, http.StatusInternalServerError, err
+		return finalizedAgentTurn{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	if sessionEndSignal != nil {
-		if code, markErr := s.markSessionEnded(sessionID); markErr != nil {
-			return finalizedAgentTurn{}, code, markErr
+		if markErr := s.markSessionEnded(sessionID); markErr != nil {
+			return finalizedAgentTurn{}, markErr
 		}
 	}
 	return finalizedAgentTurn{
 		message:    normalizedMessage,
 		sessionID:  strings.TrimSpace(sessionID),
 		sessionEnd: sessionEndSignal,
-	}, http.StatusOK, nil
+	}, nil
 }
 
 // emitDirectAgentStreamResult 只用于未经过 agent.RunMessageStreamWithTraceID() 的流式完成路径，例如人工取消后直接结束会话。
@@ -154,15 +153,17 @@ func emitDirectAgentStreamResult(ctx context.Context, sink streaming.Sink, trace
 	return emitStreamEvent(ctx, sink, doneEvent)
 }
 
-func normalizeAgentExecutionError(err error) (int, error) {
+func normalizeAgentExecutionError(err error) (ServiceErrorKind, error) {
 	switch {
-	case errors.Is(err, session.ErrInvalidSessionID):
-		return http.StatusBadRequest, err
+	case errors.Is(err, session.ErrInvalidSessionID), errors.Is(err, errSessionEnded):
+		return ServiceErrorInvalidInput, err
+	case errors.Is(err, session.ErrSessionNotFound):
+		return ServiceErrorNotFound, err
 	case errors.Is(err, ErrSessionInflight):
-		return http.StatusConflict, err
+		return ServiceErrorConflict, err
 	case errors.Is(err, context.Canceled):
-		return http.StatusConflict, ErrRunCancelled
+		return ServiceErrorConflict, ErrRunCancelled
 	default:
-		return http.StatusInternalServerError, err
+		return ServiceErrorInternal, err
 	}
 }

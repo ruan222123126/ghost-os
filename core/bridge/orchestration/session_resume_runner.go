@@ -10,7 +10,7 @@ import (
 type sessionResumeRunner struct {
 	runner   SessionTurnRunner
 	pushes   sessionPushAdapter
-	finalize func(response string, sessionID string) (finalizedAgentTurn, int, error)
+	finalize func(response string, sessionID string) (finalizedAgentTurn, error)
 }
 
 func (s *bridgeService) sessionResumeRunner() sessionResumeRunner {
@@ -24,17 +24,17 @@ func (s *bridgeService) sessionResumeRunner() sessionResumeRunner {
 func (r sessionResumeRunner) Resume(ctx context.Context, sessionID string, traceID string) (any, int, error) {
 	response, resumedSessionID, err := r.runner.RunTurn(ctx, "", sessionID, traceID)
 	if err != nil {
-		awaitingErr, statusCode, _, normalizedErr := classifyAgentTurnError(err)
+		awaitingErr, kind, _, normalizedErr := classifyAgentTurnError(err)
 		if awaitingErr != nil {
 			r.pushes.publishAwaitingHuman(traceID, resumedSessionID, awaitingErr)
 			return newAwaitingHumanResponse(resumedSessionID, awaitingErr), http.StatusAccepted, nil
 		}
-		return nil, statusCode, normalizedErr
+		return nil, legacyStatusFromServiceErrorKind(kind), normalizedErr
 	}
 
-	result, code, err := r.finalize(response, resumedSessionID)
+	result, err := r.finalize(response, resumedSessionID)
 	if err != nil {
-		return nil, code, err
+		return nil, legacyStatusFromServiceError(err), err
 	}
 	payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
 	if err != nil {
@@ -64,13 +64,22 @@ func (r sessionResumeRunner) ResumeStream(
 		return "", resumedSessionID, normalizedErr
 	}
 
-	result, code, err := r.finalize(response, resumedSessionID)
+	result, err := r.finalize(response, resumedSessionID)
 	if err != nil {
 		stepID, stepErr := streaming.AssistantStepID(trackedSink.finalAssistantTurn())
 		if stepErr != nil {
 			return "", "", stepErr
 		}
-		if emitErr := emitStreamErrorEvent(ctx, trackedSink, traceID, trackedSink.finalAssistantTurn(), stepID, resumedSessionID, code, err); emitErr != nil {
+		if emitErr := emitStreamErrorEvent(
+			ctx,
+			trackedSink,
+			traceID,
+			trackedSink.finalAssistantTurn(),
+			stepID,
+			resumedSessionID,
+			legacyStatusFromServiceError(err),
+			err,
+		); emitErr != nil {
 			return "", "", emitErr
 		}
 		return "", "", err
