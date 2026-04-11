@@ -8,6 +8,7 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	bridgeorchestration "ghost-os/bridge/orchestration"
+	bridgerss "ghost-os/bridge/rss"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -85,17 +86,17 @@ func (f testRSSInboxFetcher) Fetch(_ context.Context, feedURL string, _ int) (to
 }
 
 type testRSSInboxClassifier struct {
-	decisions []RSSInboxClassification
-	perFeed   map[string][]RSSInboxClassification
+	decisions []bridgerss.RSSInboxClassification
+	perFeed   map[string][]bridgerss.RSSInboxClassification
 	err       error
 }
 
 func (c testRSSInboxClassifier) Classify(
 	_ context.Context,
 	feed rsssubscriptions.FeedSubscription,
-	_ []RSSInboxCandidate,
+	_ []bridgerss.RSSInboxCandidate,
 	_ string,
-) ([]RSSInboxClassification, error) {
+) ([]bridgerss.RSSInboxClassification, error) {
 	if c.err != nil {
 		return nil, c.err
 	}

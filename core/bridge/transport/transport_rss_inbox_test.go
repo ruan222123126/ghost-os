@@ -25,11 +25,11 @@ func TestHandleRSSInboxListGetAndPoll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert feed: %v", err)
 	}
-	inboxStore, err := NewRSSInboxStore(filepath.Join(t.TempDir(), "inbox.json"))
+	inboxStore, err := bridgerss.NewRSSInboxStore(filepath.Join(t.TempDir(), "inbox.json"))
 	if err != nil {
 		t.Fatalf("new inbox store: %v", err)
 	}
-	briefingStore, err := NewRSSBriefingStore(filepath.Join(t.TempDir(), "briefings.json"))
+	briefingStore, err := bridgerss.NewRSSBriefingStore(filepath.Join(t.TempDir(), "briefings.json"))
 	if err != nil {
 		t.Fatalf("new briefing store: %v", err)
 	}
@@ -37,12 +37,12 @@ func TestHandleRSSInboxListGetAndPoll(t *testing.T) {
 		Provider: bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 		Worker:   bridgeconfig.WorkerConfig{Model: "gpt-4o-mini"},
 	}
-	rssService := NewRSSInboxService(feedStore, inboxStore, briefingStore, nil, nil, rssConfig)
+	rssService := bridgerss.NewRSSInboxService(feedStore, inboxStore, briefingStore, nil, nil, rssConfig)
 	rssService.SetFetcher(testRSSInboxFetcher{byURL: map[string]tools.RSSResult{
 		feed.URL: {Feed: tools.RSSFeedInfo{Title: feed.Title}, Items: []tools.RSSItem{{ID: "post-1", Title: "Launch", Summary: "Launch summary", Link: "https://example.com/launch"}}},
 	}})
-	rssService.SetClassifier(testRSSInboxClassifier{decisions: []RSSInboxClassification{{Index: 0, Keep: true, AISummary: "Launch summary", Importance: "high", Reason: "Useful"}}})
-	rssService.SetBriefingBuilder(NewLLMRSSBriefingBuilder(&fakeSelectorCompleter{response: &llm.CompletionResponse{
+	rssService.SetClassifier(testRSSInboxClassifier{decisions: []bridgerss.RSSInboxClassification{{Index: 0, Keep: true, AISummary: "Launch summary", Importance: "high", Reason: "Useful"}}})
+	rssService.SetBriefingBuilder(bridgerss.NewLLMRSSBriefingBuilder(&fakeSelectorCompleter{response: &llm.CompletionResponse{
 		Message: llm.Message{Role: llm.RoleAssistant, Text: `{
   "title":"Launch Brief",
   "summary":"One launch matters today.",
@@ -50,7 +50,7 @@ func TestHandleRSSInboxListGetAndPoll(t *testing.T) {
 }`},
 	}}, rssConfig))
 	rssService.SetNow(func() time.Time { return time.Date(2026, 3, 8, 14, 0, 0, 0, time.UTC) })
-	service.SetRSSInboxService(rssService, nil)
+	service.SetRSSInbox(rssService)
 
 	pollResp := serveRequest(handler, http.MethodPost, "/api/rss/inbox", `{}`, map[string]string{"Content-Type": "application/json"})
 	if pollResp.Code != http.StatusOK {
@@ -146,18 +146,18 @@ func TestExecuteRSSInboxPollUsecaseUsesTaskID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("upsert feed: %v", err)
 	}
-	inboxStore, err := NewRSSInboxStore(filepath.Join(t.TempDir(), "inbox.json"))
+	inboxStore, err := bridgerss.NewRSSInboxStore(filepath.Join(t.TempDir(), "inbox.json"))
 	if err != nil {
 		t.Fatalf("new inbox store: %v", err)
 	}
-	rssService := NewRSSInboxService(feedStore, inboxStore, nil, nil, nil, bridgeconfig.Config{})
+	rssService := bridgerss.NewRSSInboxService(feedStore, inboxStore, nil, nil, nil, bridgeconfig.Config{})
 	rssService.SetFetcher(testRSSInboxFetcher{byURL: map[string]tools.RSSResult{
 		feed.URL: {Feed: tools.RSSFeedInfo{Title: feed.Title}, Items: []tools.RSSItem{{ID: "post-1", Title: "Launch", Summary: "Launch summary"}}},
 	}})
-	rssService.SetClassifier(testRSSInboxClassifier{decisions: []RSSInboxClassification{{Index: 0, Keep: true, AISummary: "Launch summary", Importance: "normal", Reason: "Useful"}}})
+	rssService.SetClassifier(testRSSInboxClassifier{decisions: []bridgerss.RSSInboxClassification{{Index: 0, Keep: true, AISummary: "Launch summary", Importance: "normal", Reason: "Useful"}}})
 	rssService.SetNow(func() time.Time { return time.Date(2026, 3, 8, 15, 0, 0, 0, time.UTC) })
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
-	service.SetRSSInboxService(rssService, nil)
+	service.SetRSSInbox(rssService)
 	result, _, err := service.ExecuteRSSInboxPollUsecase(context.Background(), bridgerss.InboxPollParams{}, "task-1", "trace-rss-task")
 	if err != nil {
 		t.Fatalf("poll usecase returned error: %v", err)
