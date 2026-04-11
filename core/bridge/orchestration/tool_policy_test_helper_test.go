@@ -6,14 +6,15 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/tools"
 )
 
 type fakeSelectorEngine struct {
-	result ToolSelectorResult
+	result bridgeruntime.ToolSelectorResult
 }
 
-func (f *fakeSelectorEngine) SelectTools(_ context.Context, _ string, _ []llm.Message, _ string, _ string) ToolSelectorResult {
+func (f *fakeSelectorEngine) SelectTools(_ context.Context, _ string, _ []llm.Message, _ string, _ string) bridgeruntime.ToolSelectorResult {
 	return f.result
 }
 

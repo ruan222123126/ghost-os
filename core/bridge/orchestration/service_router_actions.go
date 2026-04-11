@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	bridgerss "ghost-os/bridge/rss"
 )
 
 func registerDefaultActions(service *bridgeService) {
@@ -81,22 +83,22 @@ func normalizeTaskListScope(scope string) (string, error) {
 }
 
 func registerRSSActions(service *bridgeService) {
-	registerAction(service, busActionRSSInboxPoll, func(ctx context.Context, params RSSInboxPollParams, traceID string) (any, int, error) {
+	registerAction(service, bridgerss.ActionInboxPoll, func(ctx context.Context, params bridgerss.InboxPollParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxPollAction(ctx, params, traceID)
 	})
-	registerAction(service, busActionRSSInboxList, func(_ context.Context, params RSSInboxListParams, traceID string) (any, int, error) {
+	registerAction(service, bridgerss.ActionInboxList, func(_ context.Context, params bridgerss.InboxListParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxListAction(params, traceID)
 	})
-	registerAction(service, busActionRSSInboxGet, func(_ context.Context, params RSSInboxGetParams, traceID string) (any, int, error) {
+	registerAction(service, bridgerss.ActionInboxGet, func(_ context.Context, params bridgerss.InboxGetParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxGetAction(params, traceID)
 	})
-	registerAction(service, busActionRSSInboxGroups, func(_ context.Context, params RSSInboxGroupsParams, traceID string) (any, int, error) {
+	registerAction(service, bridgerss.ActionInboxGroups, func(_ context.Context, params bridgerss.InboxGroupsParams, traceID string) (any, int, error) {
 		return service.executeRSSInboxGroupsAction(params, traceID)
 	})
-	registerAction(service, busActionRSSBriefingBuild, func(ctx context.Context, params RSSBriefingParams, traceID string) (any, int, error) {
+	registerAction(service, bridgerss.ActionBriefingBuild, func(ctx context.Context, params bridgerss.BriefingParams, traceID string) (any, int, error) {
 		return service.executeRSSBriefingBuildAction(ctx, params, traceID)
 	})
-	registerAction(service, busActionRSSBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
+	registerAction(service, bridgerss.ActionBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
 		return service.executeRSSBriefingGetAction(traceID)
 	})
 }

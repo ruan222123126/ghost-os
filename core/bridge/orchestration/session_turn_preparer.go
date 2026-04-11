@@ -9,6 +9,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -19,7 +20,7 @@ type sessionTurnPreparer struct {
 	configStore     bridgeconfig.Store
 	sessionStore    *session.Store
 	runRegistry     *RunRegistry
-	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine
 }
 
 type turnPreparationInput struct {
@@ -34,7 +35,7 @@ func newSessionTurnPreparer(
 	configStore bridgeconfig.Store,
 	sessionStore *session.Store,
 	runRegistry *RunRegistry,
-	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine,
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine,
 ) *sessionTurnPreparer {
 	if runtimeFactory == nil {
 		runtimeFactory = newAgentRuntimeFactory()

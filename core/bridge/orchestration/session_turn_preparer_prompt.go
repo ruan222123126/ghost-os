@@ -6,6 +6,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -43,7 +44,7 @@ func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
 	}
 	basePrompt := strings.TrimSpace(systemPrompt)
 	if basePrompt == "" || graphQLMode {
-		prompt, err := buildSystemPromptForSession(
+		prompt, err := bridgeruntime.BuildSystemPromptForSession(
 			deps.cfg,
 			promptCatalog,
 			sess,

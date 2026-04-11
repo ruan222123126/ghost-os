@@ -1,10 +1,11 @@
 package transport
 
 import (
-	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
 	"strconv"
 	"strings"
+
+	bridgerss "ghost-os/bridge/rss"
 )
 
 func (t *transport) handleRSSBriefing(w http.ResponseWriter, r *http.Request) {
@@ -13,7 +14,7 @@ func (t *transport) handleRSSBriefing(w http.ResponseWriter, r *http.Request) {
 		traceID := resolveTraceID("", r)
 		t.dispatchActionObject(w, r, actionRSSBriefingGet, map[string]any{}, traceID)
 	case http.MethodPost:
-		var req bridgeorchestration.RSSBriefingParams
+		var req bridgerss.BriefingParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
@@ -29,7 +30,7 @@ func (t *transport) handleRSSInboxGroups(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	traceID := resolveTraceID("", r)
-	t.dispatchActionObject(w, r, actionRSSInboxGroups, bridgeorchestration.RSSInboxGroupsParams{
+	t.dispatchActionObject(w, r, actionRSSInboxGroups, bridgerss.InboxGroupsParams{
 		FeedID:        strings.TrimSpace(r.URL.Query().Get("feed_id")),
 		Tag:           strings.TrimSpace(r.URL.Query().Get("tag")),
 		Importance:    strings.TrimSpace(r.URL.Query().Get("importance")),
@@ -44,7 +45,7 @@ func (t *transport) handleRSSInbox(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		t.dispatchActionObject(w, r, actionRSSInboxList, bridgeorchestration.RSSInboxListParams{
+		t.dispatchActionObject(w, r, actionRSSInboxList, bridgerss.InboxListParams{
 			FeedID:          strings.TrimSpace(r.URL.Query().Get("feed_id")),
 			Tag:             strings.TrimSpace(r.URL.Query().Get("tag")),
 			Importance:      strings.TrimSpace(r.URL.Query().Get("importance")),
@@ -55,7 +56,7 @@ func (t *transport) handleRSSInbox(w http.ResponseWriter, r *http.Request) {
 			Limit:           parseRSSInboxLimit(r),
 		}, traceID)
 	case http.MethodPost:
-		var req bridgeorchestration.RSSInboxPollParams
+		var req bridgerss.InboxPollParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
@@ -76,7 +77,7 @@ func (t *transport) handleRSSInboxByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	t.dispatchActionObject(w, r, actionRSSInboxGet, bridgeorchestration.RSSInboxGetParams{ID: id}, traceID)
+	t.dispatchActionObject(w, r, actionRSSInboxGet, bridgerss.InboxGetParams{ID: id}, traceID)
 }
 
 func parseRSSInboxLimit(r *http.Request) int {

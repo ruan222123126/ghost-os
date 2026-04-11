@@ -9,6 +9,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -40,14 +41,14 @@ func (p *sessionTurnPreparer) selectToolsForTurn(
 }
 
 func newTurnSelectorCatalogs(deps agentRuntimeDependencies, sess *session.Session) turnSelectorCatalogs {
-	policy := newToolSelectionPolicy(deps.cfg)
+	policy := bridgeruntime.NewToolSelectionPolicy(deps.cfg)
 	baseCatalog := tools.NewPromptOverrideCatalog(deps.registry, deps.cfg.ToolSelector.PromptOverrides)
-	residentStaticNames := toolCatalogNames(policy.residentCatalog(baseCatalog))
-	selectorStaticNames := toolCatalogNames(policy.selectorCatalog(baseCatalog))
+	residentStaticNames := toolCatalogNames(policy.ResidentCatalog(baseCatalog))
+	selectorStaticNames := toolCatalogNames(policy.SelectorCatalog(baseCatalog))
 	return turnSelectorCatalogs{
-		base:      newSessionTurnCatalog(baseCatalog, residentStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
-		selection: newSessionTurnCatalog(baseCatalog, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
-		selector:  newSessionTurnCatalog(baseCatalog, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, true),
+		base:      bridgeruntime.NewSessionTurnCatalog(baseCatalog, residentStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
+		selection: bridgeruntime.NewSessionTurnCatalog(baseCatalog, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, false),
+		selector:  bridgeruntime.NewSessionTurnCatalog(baseCatalog, selectorStaticNames, sess, deps.cfg.ToolSearch.IdleTurns, true),
 	}
 }
 
@@ -82,15 +83,15 @@ func buildScopedTurnCatalog(
 	selectionCatalog tools.ToolCatalog,
 	selected []string,
 ) (tools.ToolCatalog, string, error) {
-	policy := newToolSelectionPolicy(deps.cfg)
-	scoped := newSessionTurnCatalog(
+	policy := bridgeruntime.NewToolSelectionPolicy(deps.cfg)
+	scoped := bridgeruntime.NewSessionTurnCatalog(
 		deps.registry,
-		policy.apply(toolCatalogNames(selectionCatalog), selected),
+		policy.Apply(toolCatalogNames(selectionCatalog), selected),
 		sess,
 		deps.cfg.ToolSearch.IdleTurns,
 		false,
 	)
-	systemPrompt, err := buildSystemPromptForSession(
+	systemPrompt, err := bridgeruntime.BuildSystemPromptForSession(
 		deps.cfg,
 		scoped,
 		sess,
@@ -102,11 +103,11 @@ func buildScopedTurnCatalog(
 	return scoped, systemPrompt, nil
 }
 
-func (p *sessionTurnPreparer) newSelector(cfg bridgeconfig.Config, catalog tools.ToolCatalog) selectorEngine {
+func (p *sessionTurnPreparer) newSelector(cfg bridgeconfig.Config, catalog tools.ToolCatalog) bridgeruntime.SelectorEngine {
 	if p != nil && p.selectorFactory != nil {
 		return p.selectorFactory(cfg, catalog)
 	}
-	return newToolSelectorFromConfig(cfg, catalog)
+	return bridgeruntime.NewSelectorFromConfig(cfg, catalog)
 }
 
 func getRecentMessages(history *agent.History, limit int) []llm.Message {

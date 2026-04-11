@@ -3,19 +3,21 @@ package transport
 import (
 	bridgeconfig "ghost-os/bridge/config"
 	bridgeorchestration "ghost-os/bridge/orchestration"
+	bridgerss "ghost-os/bridge/rss"
+	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
 
-type RSSInboxService = bridgeorchestration.RSSInboxService
-type RSSInboxFetcher = bridgeorchestration.RSSInboxFetcher
-type RSSInboxClassifier = bridgeorchestration.RSSInboxClassifier
-type RSSInboxClassification = bridgeorchestration.RSSInboxClassification
-type RSSInboxCandidate = bridgeorchestration.RSSInboxCandidate
-type RSSInboxStore = bridgeorchestration.RSSInboxStore
-type RSSBriefingStore = bridgeorchestration.RSSBriefingStore
-type RSSReportStore = bridgeorchestration.RSSReportStore
-type RSSBriefingBuilder = bridgeorchestration.RSSBriefingBuilder
-type rssFeedStore = bridgeorchestration.RSSFeedStore
-type rssBriefingCompleter = bridgeorchestration.RSSBriefingCompleter
+type RSSInboxService = bridgerss.RSSInboxService
+type RSSInboxFetcher = bridgerss.RSSInboxFetcher
+type RSSInboxClassifier = bridgerss.RSSInboxClassifier
+type RSSInboxClassification = bridgerss.RSSInboxClassification
+type RSSInboxCandidate = bridgerss.RSSInboxCandidate
+type RSSInboxStore = bridgerss.RSSInboxStore
+type RSSBriefingStore = bridgerss.RSSBriefingStore
+type RSSReportStore = bridgerss.RSSReportStore
+type RSSBriefingBuilder = bridgerss.RSSBriefingBuilder
+type rssFeedStore = rsssubscriptions.FeedStore
+type rssBriefingCompleter = bridgerss.RSSBriefingCompleter
 
 func NewRSSInboxService(
 	feedStore *rssFeedStore,
@@ -29,17 +31,17 @@ func NewRSSInboxService(
 }
 
 func NewLLMRSSBriefingBuilder(client rssBriefingCompleter, cfg bridgeconfig.Config) RSSBriefingBuilder {
-	return bridgeorchestration.NewLLMRSSBriefingBuilder(client, cfg)
+	return bridgerss.NewLLMRSSBriefingBuilder(client, cfg)
 }
 
 func NewRSSInboxStore(path string) (*RSSInboxStore, error) {
-	return bridgeorchestration.NewRSSInboxStore(path)
+	return bridgerss.NewRSSInboxStore(path)
 }
 
 func NewRSSBriefingStore(path string) (*RSSBriefingStore, error) {
-	return bridgeorchestration.NewRSSBriefingStore(path)
+	return bridgerss.NewRSSBriefingStore(path)
 }
 
 func NewRSSReportStore(path string) (*RSSReportStore, error) {
-	return bridgeorchestration.NewRSSReportStore(path)
+	return bridgerss.NewRSSReportStore(path)
 }

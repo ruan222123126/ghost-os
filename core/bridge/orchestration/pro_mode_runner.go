@@ -10,6 +10,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -148,7 +149,7 @@ func (r proModeRunner) runIterations(
 	traceID string,
 ) (proModeResult, error) {
 	baseCatalog := tools.NewPromptOverrideCatalog(deps.registry, deps.cfg.ToolSelector.PromptOverrides)
-	catalog := newProModeCatalog(newToolSelectionPolicy(deps.cfg).residentCatalog(baseCatalog), request.Mode == proModePro)
+	catalog := newProModeCatalog(bridgeruntime.NewToolSelectionPolicy(deps.cfg).ResidentCatalog(baseCatalog), request.Mode == proModePro)
 	systemPrompt, err := buildProModeSystemPrompt(deps.cfg, catalog, request)
 	if err != nil {
 		return proModeResult{}, err

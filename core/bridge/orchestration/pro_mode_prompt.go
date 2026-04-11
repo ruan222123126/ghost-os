@@ -5,6 +5,7 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	bridgemode "ghost-os/bridge/mode"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -14,7 +15,7 @@ func newProModeCatalog(base tools.ToolCatalog, allowComplete bool) tools.ToolCat
 }
 
 func buildProModeSystemPrompt(cfg bridgeconfig.Config, catalog tools.ToolCatalog, request proModeRequest) (string, error) {
-	basePrompt, err := buildSystemPromptForCatalog(cfg, catalog)
+	basePrompt, err := bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
 	if err != nil {
 		return "", err
 	}

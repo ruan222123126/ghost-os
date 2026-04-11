@@ -6,6 +6,7 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -38,7 +39,7 @@ type SessionAgentRunner struct {
 	configStore     bridgeconfig.Store
 	sessionStore    *session.Store
 	runRegistry     *RunRegistry
-	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) selectorEngine
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine
 }
 
 func NewSessionAgentRunner(

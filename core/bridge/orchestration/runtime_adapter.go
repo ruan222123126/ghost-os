@@ -5,7 +5,6 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/memoryaug"
 	bridgeruntime "ghost-os/bridge/runtime"
-	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
@@ -30,6 +29,8 @@ type AgentRuntimeFactory interface {
 	Build(store bridgeconfig.Store) (agentRuntimeDependencies, error)
 }
 
+// runtimeFactoryAdapter 将 runtime 包导出的工厂转换为 orchestration 内部依赖结构，
+// 以便保持编排层测试替身和字段级装配不变。
 type runtimeFactoryAdapter struct {
 	inner bridgeruntime.AgentRuntimeFactory
 }
@@ -61,49 +62,4 @@ func newAgentRuntimeFactory() AgentRuntimeFactory {
 
 func newAgentRuntimeFactoryWithTaskManager(taskManager tools.TaskManager) AgentRuntimeFactory {
 	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactoryWithTaskManager(taskManager)}
-}
-
-type selectorEngine = bridgeruntime.SelectorEngine
-type ToolSelectorResult = bridgeruntime.ToolSelectorResult
-type ToolSelector = bridgeruntime.ToolSelector
-
-type toolSelectionPolicy struct {
-	inner bridgeruntime.SelectionPolicy
-}
-
-func newToolSelectionPolicy(cfg bridgeconfig.Config) toolSelectionPolicy {
-	return toolSelectionPolicy{inner: bridgeruntime.NewToolSelectionPolicy(cfg)}
-}
-
-func (p toolSelectionPolicy) residentCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.inner.ResidentCatalog(catalog)
-}
-
-func (p toolSelectionPolicy) selectorCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.inner.SelectorCatalog(catalog)
-}
-
-func (p toolSelectionPolicy) apply(available []string, selected []string) []string {
-	return p.inner.Apply(available, selected)
-}
-
-func newToolSelectorFromConfig(cfg bridgeconfig.Config, catalog tools.ToolCatalog) selectorEngine {
-	return bridgeruntime.NewSelectorFromConfig(cfg, catalog)
-}
-
-func buildSystemPromptForCatalog(cfg bridgeconfig.Config, catalog tools.ToolCatalog) (string, error) {
-	return bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
-}
-
-func buildSystemPromptForSession(
-	cfg bridgeconfig.Config,
-	catalog tools.ToolCatalog,
-	sess *session.Session,
-	idleTurns int,
-) (string, error) {
-	return bridgeruntime.BuildSystemPromptForSession(cfg, catalog, sess, idleTurns)
-}
-
-func newSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *session.Session, idleTurns int, selector bool) tools.ToolCatalog {
-	return bridgeruntime.NewSessionTurnCatalog(catalog, static, sess, idleTurns, selector)
 }

@@ -10,7 +10,7 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
-	bridgeorchestration "ghost-os/bridge/orchestration"
+	bridgerss "ghost-os/bridge/rss"
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
@@ -158,7 +158,7 @@ func TestExecuteRSSInboxPollUsecaseUsesTaskID(t *testing.T) {
 	rssService.SetNow(func() time.Time { return time.Date(2026, 3, 8, 15, 0, 0, 0, time.UTC) })
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 	service.SetRSSInboxService(rssService, nil)
-	result, _, err := service.ExecuteRSSInboxPollUsecase(context.Background(), bridgeorchestration.RSSInboxPollParams{}, "task-1", "trace-rss-task")
+	result, _, err := service.ExecuteRSSInboxPollUsecase(context.Background(), bridgerss.InboxPollParams{}, "task-1", "trace-rss-task")
 	if err != nil {
 		t.Fatalf("poll usecase returned error: %v", err)
 	}

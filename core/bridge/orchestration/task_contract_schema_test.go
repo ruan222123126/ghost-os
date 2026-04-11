@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	bridgerss "ghost-os/bridge/rss"
 )
 
 func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
@@ -51,8 +53,8 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaRequired(t, defs, "workflowLoopNode", "max_iterations")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "body_node_id")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "exit_node_id")
-	assertSchemaConst(t, defs, "rssInboxPollTaskCreateRequest", "action", busActionRSSInboxPoll)
-	assertSchemaConst(t, defs, "rssBriefingTaskPayload", "action", busActionRSSBriefingBuild)
+	assertSchemaConst(t, defs, "rssInboxPollTaskCreateRequest", "action", bridgerss.ActionInboxPoll)
+	assertSchemaConst(t, defs, "rssBriefingTaskPayload", "action", bridgerss.ActionBriefingBuild)
 }
 
 func loadTaskSchemaDefs(t *testing.T) map[string]any {

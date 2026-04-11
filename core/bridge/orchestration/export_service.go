@@ -7,7 +7,9 @@ import (
 	"net/http"
 
 	bridgeconfig "ghost-os/bridge/config"
+	bridgerss "ghost-os/bridge/rss"
 	"ghost-os/bridge/session"
+	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
@@ -97,20 +99,20 @@ func (s *Service) SetRuntimeFactory(factory AgentRuntimeFactory) {
 	}
 }
 
-func (s *Service) SetRSSInbox(service *RSSInboxService) {
+func (s *Service) SetRSSInbox(service *bridgerss.RSSInboxService) {
 	if s != nil && s.inner != nil && s.inner.rssHandler != nil {
 		_ = s.inner.reloadRSSInboxRuntime()
 	}
 }
 
-func (s *Service) SetRSSInboxService(service *RSSInboxService, initErr error) {
+func (s *Service) SetRSSInboxService(service *bridgerss.RSSInboxService, initErr error) {
 	if s == nil || s.inner == nil {
 		return
 	}
 	if initErr != nil {
-		s.inner.rssHandler = NewRSSActionHandler(nil, initErr, s.inner.rssLogFunc())
+		s.inner.rssHandler = bridgerss.NewActionHandler(nil, initErr, s.inner.rssLogFunc())
 	} else {
-		s.inner.rssHandler = NewRSSActionHandler(service, nil, s.inner.rssLogFunc())
+		s.inner.rssHandler = bridgerss.NewActionHandler(service, nil, s.inner.rssLogFunc())
 	}
 }
 
@@ -192,12 +194,12 @@ func (s *Service) EnsureSessionActive(sessionID string) (int, error) {
 
 func (s *Service) ExecuteRSSInboxPollUsecase(
 	ctx context.Context,
-	params RSSInboxPollParams,
+	params bridgerss.InboxPollParams,
 	taskID string,
 	traceID string,
-) (RSSInboxPollResult, int, error) {
+) (bridgerss.RSSInboxPollResult, int, error) {
 	if s == nil || s.inner == nil || s.inner.rssHandler == nil {
-		return RSSInboxPollResult{}, http.StatusInternalServerError, fmt.Errorf("rss inbox service is not configured")
+		return bridgerss.RSSInboxPollResult{}, http.StatusInternalServerError, fmt.Errorf("rss inbox service is not configured")
 	}
 	return s.inner.rssHandler.ExecuteInboxPollUsecase(ctx, params, taskID, traceID)
 }
@@ -206,7 +208,7 @@ func (s *Service) ExecuteSkillListAction(traceID string) (any, int, error) {
 	return s.inner.executeSkillListAction(traceID)
 }
 
-func (s *Service) ExecuteSkillDeleteAction(params SkillIDParams, traceID string) (any, int, error) {
+func (s *Service) ExecuteSkillDeleteAction(params bridgeskills.SkillIDParams, traceID string) (any, int, error) {
 	return s.inner.executeSkillDeleteAction(params, traceID)
 }
 

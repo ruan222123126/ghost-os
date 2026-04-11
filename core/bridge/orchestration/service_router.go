@@ -9,7 +9,9 @@ import (
 	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
+	bridgerss "ghost-os/bridge/rss"
 	"ghost-os/bridge/session"
+	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
@@ -41,8 +43,8 @@ type bridgeService struct {
 	taskStore      *TaskStore
 	taskScheduler  *TaskScheduler
 	taskInitErr    error
-	rssHandler     *RSSActionHandler
-	skillHandler   *SkillActionHandler
+	rssHandler     *bridgerss.ActionHandler
+	skillHandler   *bridgeskills.ActionHandler
 	agentRunner    SessionTurnRunner
 	runRegistry    *RunRegistry
 	runtimeFactory AgentRuntimeFactory
@@ -114,7 +116,7 @@ func (s *bridgeService) BootstrapSystemTasks() error {
 	if s == nil {
 		return nil
 	}
-	coordinator := NewRSSSystemTaskCoordinator(
+	coordinator := bridgerss.NewSystemTaskCoordinator(
 		s.configStore,
 		s.taskStore,
 		s.taskScheduler,
@@ -171,10 +173,10 @@ func (s *bridgeService) reloadRSSInboxRuntime() error {
 	}
 	service, err := newRSSInboxServiceFromConfig(s.configStore)
 	if err != nil {
-		s.rssHandler = NewRSSActionHandler(nil, err, s.rssLogFunc())
+		s.rssHandler = bridgerss.NewActionHandler(nil, err, s.rssLogFunc())
 		return err
 	}
-	s.rssHandler = NewRSSActionHandler(service, nil, s.rssLogFunc())
+	s.rssHandler = bridgerss.NewActionHandler(service, nil, s.rssLogFunc())
 	return nil
 }
 
@@ -185,13 +187,13 @@ func (s *bridgeService) rssHandlerInitErr() error {
 	return s.rssHandler.InitErr()
 }
 
-func (s *bridgeService) rssLogFunc() RSSLogFunc {
+func (s *bridgeService) rssLogFunc() bridgerss.LogFunc {
 	return func(traceID, action, status string, err error) {
 		logAction(traceID, action, status, err)
 	}
 }
 
-func (s *bridgeService) skillLogFunc() SkillLogFunc {
+func (s *bridgeService) skillLogFunc() bridgeskills.LogFunc {
 	return func(traceID, action, status string, err error) {
 		logAction(traceID, action, status, err)
 	}
