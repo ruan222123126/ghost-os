@@ -1,4 +1,4 @@
-export type SettingsQueryTab = 'tasks';
+export type SettingsQueryTab = 'tasks' | 'skills' | 'tools';
 
 const SETTINGS_QUERY_KEY = 'settings';
 
@@ -7,7 +7,10 @@ export function parseSettingsQuery(rawSearch: string): SettingsQueryTab | null {
   const params = new URLSearchParams(search);
   const tab = params.get(SETTINGS_QUERY_KEY);
 
-  return tab === 'tasks' ? tab : null;
+  if (tab === 'tasks' || tab === 'skills' || tab === 'tools') {
+    return tab;
+  }
+  return null;
 }
 
 export function buildHomeSettingsURL(tab: SettingsQueryTab): string {

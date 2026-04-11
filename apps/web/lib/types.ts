@@ -218,6 +218,28 @@ export interface RSSBriefing {
   highlights: RSSBriefingHighlight[];
 }
 
+export type SkillSource = 'repo' | 'user';
+
+export interface SkillPayload {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  source: SkillSource;
+}
+
+export interface ToolPayload {
+  name: string;
+  enabled: boolean;
+  prompt_override?: string;
+}
+
+export interface ToolUpdateRequest {
+  enabled?: boolean;
+  prompt_override?: string;
+  trace_id?: string;
+}
+
 export type TaskPayload = SharedTaskPayload;
 export type AgentMessageTaskPayload = SharedAgentMessageTaskPayload;
 export type WorkflowTaskPayload = SharedWorkflowTaskPayload;
