@@ -3,16 +3,10 @@ package runtime
 import (
 	"os"
 	"strings"
-	"time"
 
 	"ghost-os/bridge/agent"
-	"ghost-os/bridge/artifacts"
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/execution"
-	"ghost-os/bridge/llm"
 	"ghost-os/bridge/memoryaug"
-	"ghost-os/bridge/memorystore"
-	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/tools"
 )
 
@@ -37,32 +31,11 @@ type taskAwareAgentRuntimeFactory struct {
 	taskManager tools.TaskManager
 }
 
-type runtimeClients struct {
-	primary     agent.Completer
-	worker      agent.Completer
-	workerModel string
-}
-
-type runtimeToolResources struct {
-	artifactStore   *artifacts.SessionArtifactStore
-	executionClient execution.Client
-	feedStore       *rsssubscriptions.FeedStore
-}
-
-type memoryRuntimeResources struct {
-	planner memoryaug.IntentPlanner
-	recall  memoryaug.RecallService
-	learn   memoryaug.LearningService
-	cleanup func()
-}
-
-type coreToolOptions struct {
-	store       *ConfigStore
-	cfg         Config
-	registry    *tools.Registry
-	clients     runtimeClients
-	resources   runtimeToolResources
-	taskManager tools.TaskManager
+type runtimeBuildComponents struct {
+	cfg       Config
+	clients   runtimeClients
+	resources runtimeToolResources
+	registry  *tools.Registry
 }
 
 func newAgentRuntimeFactory() AgentRuntimeFactory {
@@ -73,11 +46,13 @@ func newAgentRuntimeFactoryWithTaskManager(taskManager tools.TaskManager) AgentR
 	if taskManager == nil {
 		return newAgentRuntimeFactory()
 	}
-	return taskAwareAgentRuntimeFactory{taskManager: taskManager}
+	return taskAwareAgentRuntimeFactory{
+		taskManager: taskManager,
+	}
 }
 
 // Build 组装运行 Agent 所需的配置、模型客户端与工具注册表。
-func (defaultAgentRuntimeFactory) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
+func (f defaultAgentRuntimeFactory) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
 	return buildAgentRuntimeDependencies(store, nil)
 }
 
@@ -85,17 +60,32 @@ func (f taskAwareAgentRuntimeFactory) Build(store *ConfigStore) (agentRuntimeDep
 	return buildAgentRuntimeDependencies(store, f.taskManager)
 }
 
-func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskManager) (agentRuntimeDependencies, error) {
-	cfg, err := loadAgentRuntimeConfig(store)
+func buildAgentRuntimeDependencies(
+	store *ConfigStore,
+	taskManager tools.TaskManager,
+) (agentRuntimeDependencies, error) {
+	cfg, err := loadAgentRuntimeBuildConfig(store)
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
-	clients := newRuntimeClients(cfg)
+	components, err := newRuntimeBuildComponents(cfg, store, taskManager)
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	return finalizeAgentRuntimeDependencies(components)
+}
+
+func newRuntimeBuildComponents(
+	cfg Config,
+	store *ConfigStore,
+	taskManager tools.TaskManager,
+) (runtimeBuildComponents, error) {
 	resources, err := newRuntimeToolResources(cfg)
 	if err != nil {
-		return agentRuntimeDependencies{}, err
+		return runtimeBuildComponents{}, err
 	}
 	registry := tools.NewRegistry()
+	clients := newRuntimeClients(cfg)
 	registerCoreTools(coreToolOptions{
 		store:       store,
 		cfg:         cfg,
@@ -104,28 +94,39 @@ func buildAgentRuntimeDependencies(store *ConfigStore, taskManager tools.TaskMan
 		resources:   resources,
 		taskManager: taskManager,
 	})
-	memoryResources, err := setupMemoryAugmentation(cfg, registry)
+	return runtimeBuildComponents{
+		cfg:       cfg,
+		clients:   clients,
+		resources: resources,
+		registry:  registry,
+	}, nil
+}
+
+func finalizeAgentRuntimeDependencies(
+	components runtimeBuildComponents,
+) (agentRuntimeDependencies, error) {
+	memoryResources, err := setupMemoryAugmentation(components.cfg, components.registry)
 	if err != nil {
-		closeRuntimeToolResources(resources)
+		closeRuntimeToolResources(components.resources)
 		return agentRuntimeDependencies{}, err
 	}
-	systemPrompt, err := buildRuntimeSystemPrompt(cfg, registry)
+	systemPrompt, err := buildRuntimeSystemPrompt(components.cfg, components.registry)
 	if err != nil {
 		memoryResources.Close()
-		closeRuntimeToolResources(resources)
+		closeRuntimeToolResources(components.resources)
 		return agentRuntimeDependencies{}, err
 	}
 	return agentRuntimeDependencies{
-		cfg:          cfg,
-		client:       clients.primary,
-		registry:     registry,
+		cfg:          components.cfg,
+		client:       components.clients.primary,
+		registry:     components.registry,
 		systemPrompt: systemPrompt,
 		memoryPlan:   memoryResources.planner,
 		memoryRecall: memoryResources.recall,
 		memoryLearn:  memoryResources.learn,
 		cleanup: func() {
 			memoryResources.Close()
-			closeRuntimeToolResources(resources)
+			closeRuntimeToolResources(components.resources)
 		},
 	}, nil
 }
@@ -136,10 +137,12 @@ func (d agentRuntimeDependencies) Close() {
 	}
 }
 
-func (d memoryRuntimeResources) Close() {
-	if d.cleanup != nil {
-		d.cleanup()
+func loadAgentRuntimeBuildConfig(store *ConfigStore) (Config, error) {
+	cfg, err := loadAgentRuntimeConfig(store)
+	if err != nil {
+		return Config{}, err
 	}
+	return withFileToolPromptOverrides(cfg)
 }
 
 func loadAgentRuntimeConfig(store *ConfigStore) (Config, error) {
@@ -149,125 +152,18 @@ func loadAgentRuntimeConfig(store *ConfigStore) (Config, error) {
 	return store.Config()
 }
 
-func newRuntimeClients(cfg Config) runtimeClients {
-	workerModel := strings.TrimSpace(cfg.Worker.Model)
-	return runtimeClients{
-		primary:     llm.NewClientWithOptions(providerClientOptions(cfg, cfg.Provider.Model)),
-		worker:      llm.NewClientWithOptions(providerClientOptions(cfg, workerModel)),
-		workerModel: workerModel,
-	}
-}
-
-func newRuntimeToolResources(cfg Config) (runtimeToolResources, error) {
-	artifactStore, err := artifacts.NewSessionArtifactStoreFromEnv()
+func withFileToolPromptOverrides(cfg Config) (Config, error) {
+	overrides, err := bridgeconfig.LoadToolPromptOverrides(cfg.PromptsDir)
 	if err != nil {
-		return runtimeToolResources{}, err
+		return Config{}, err
 	}
-	feedStore, err := rsssubscriptions.NewFeedStore(cfg.RSS.FeedsPath)
-	if err != nil {
-		return runtimeToolResources{}, err
-	}
-	return runtimeToolResources{
-		artifactStore:   artifactStore,
-		executionClient: newExecutionClient(executionClientConfigFromConfig(cfg)),
-		feedStore:       feedStore,
-	}, nil
-}
-
-func registerCoreTools(opts coreToolOptions) {
-	opts.registry.Register(tools.NewReadAndSummarizeTool(opts.resources.executionClient, opts.clients.worker, tools.ReadAndSummarizeConfig{
-		WorkerModel:      opts.clients.workerModel,
-		MaxFiles:         opts.cfg.Worker.MaxFiles,
-		MaxParallel:      opts.cfg.Worker.MaxConcurrency,
-		DefaultMaxChunks: opts.cfg.Worker.MaxFileChunks,
-	}))
-	opts.registry.Register(tools.NewSendFileTool(opts.resources.executionClient, opts.resources.artifactStore))
-	opts.registry.Register(tools.NewScriptExecTool(opts.resources.executionClient))
-	opts.registry.Register(tools.NewSetProjectRootTool(opts.store, opts.resources.executionClient, opts.cfg.NativeAllowedReadPaths, opts.cfg.NativeAllowedWritePaths))
-	opts.registry.Register(tools.NewCodexCLITool(opts.resources.executionClient, opts.cfg.NativePersistent))
-	opts.registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{
-		TavilyURL:    opts.cfg.WebSearchTavilyURL,
-		ExaURL:       opts.cfg.WebSearchExaURL,
-		TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey,
-		ExaAPIKey:    opts.cfg.WebSearchExaAPIKey,
-	}))
-	if opts.cfg.WebRooterEnabled {
-		opts.registry.Register(tools.NewWebRooterTool(tools.WebRooterConfig{
-			BaseURL:  opts.cfg.WebRooterBaseURL,
-			APIToken: opts.cfg.WebRooterAPIToken,
-			Timeout:  time.Duration(opts.cfg.WebRooterTimeoutMS) * time.Millisecond,
-		}))
-	}
-	opts.registry.Register(tools.NewFeedManageTool(opts.resources.feedStore))
-	opts.registry.Register(tools.NewRSSFetchTool())
-	opts.registry.Register(tools.NewScreenActionTool(opts.resources.executionClient))
-	opts.registry.Register(tools.NewBrowserControlTool(opts.resources.executionClient))
-	opts.registry.Register(tools.NewTextInputTool(opts.resources.executionClient))
-	opts.registry.Register(tools.NewComputerUseTool(opts.resources.executionClient, opts.clients.primary, opts.resources.artifactStore))
-	if opts.taskManager != nil {
-		opts.registry.Register(tools.NewTaskManageTool(opts.taskManager))
-	}
-	if opts.cfg.ToolSearch.Enabled {
-		opts.registry.Register(tools.NewToolSearchTool(opts.registry, toolVisibilityOptions(opts.cfg), opts.cfg.ToolSearch.IdleTurns))
-	}
-	opts.registry.Register(tools.NewAskHumanTool())
-}
-
-func setupMemoryAugmentation(cfg Config, registry *tools.Registry) (memoryRuntimeResources, error) {
-	settings := memorySettingsFromConfig(cfg)
-	if !settings.Enabled {
-		return memoryRuntimeResources{}, nil
-	}
-	store, err := memorystore.NewStoreWithOptions(memorystore.StoreOptions{
-		Path:               strings.TrimSpace(os.Getenv("GHOST_MEMORY_PATH")),
-		DefaultUserScopeID: settings.UserScopeID,
-	})
-	if err != nil {
-		return memoryRuntimeResources{}, err
-	}
-	memoryClient := llm.NewClientWithOptions(providerClientOptions(cfg, strings.TrimSpace(settings.LLMModel)))
-	planner := memoryaug.NewIntentPlanner(settings, store, memoryClient)
-	recall := memoryaug.NewRecallService(settings, store)
-	learn := memoryaug.NewLearningService(
-		settings,
-		store,
-		memoryaug.NewLLMExtractor(memoryClient),
-		memoryaug.NewEventLLMExtractor(memoryClient),
-	)
-	registry.Register(tools.NewMemoryManageTool(store))
-	registry.Register(tools.NewMemoryLearnedListTool(store))
-	registry.Register(tools.NewMemoryRecallDebugTool(planner, recall, settings.UserScopeID))
-	return memoryRuntimeResources{
-		planner: planner,
-		recall:  recall,
-		learn:   learn,
-		cleanup: func() {
-			_ = store.Close()
-		},
-	}, nil
-}
-
-func memorySettingsFromConfig(cfg Config) memoryaug.Settings {
-	return memoryaug.Settings{
-		Enabled:             cfg.MemoryAugmentation.Enabled,
-		LearningEnabled:     cfg.MemoryAugmentation.LearningEnabled,
-		RecallEnabled:       cfg.MemoryAugmentation.RecallEnabled,
-		MaxRecallItems:      cfg.MemoryAugmentation.MaxRecallItems,
-		MinConfidence:       cfg.MemoryAugmentation.MinConfidence,
-		SessionScopeEnabled: cfg.MemoryAugmentation.SessionScopeEnabled,
-		UserScopeEnabled:    cfg.MemoryAugmentation.UserScopeEnabled,
-		LLMModel:            cfg.MemoryAugmentation.LLMModel,
-		UserScopeID:         cfg.MemoryAugmentation.UserScopeID,
-	}
+	cfg.ToolSelector.PromptOverrides = overrides
+	return cfg, nil
 }
 
 func buildRuntimeSystemPrompt(cfg Config, registry *tools.Registry) (string, error) {
 	catalog := newToolSelectionPolicy(cfg).residentCatalog(registry)
 	return buildSystemPrompt(cfg, catalog)
-}
-
-func closeRuntimeToolResources(resources runtimeToolResources) {
-	_ = closeExecutionClient(resources.executionClient)
 }
 
 func resolvePromptProjectRoot(projectRoot string) string {
