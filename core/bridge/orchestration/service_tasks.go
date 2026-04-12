@@ -44,43 +44,13 @@ func mapTaskError(err error) int {
 }
 
 func buildTaskPayload(task ScheduledTask) taskPayload {
-	return taskPayload{
-		ID:               task.ID,
-		Message:          task.Message,
-		SessionID:        task.SessionID,
-		RuntimeOverrides: cloneTaskRuntimeOverrides(task.RuntimeOverrides),
-		TaskKind:         normalizeTaskKind(task.TaskKind),
-		Action:           task.Action,
-		ActionParams:     cloneTaskActionParams(task.ActionParams),
-		Workflow:         cloneTaskWorkflow(task.Workflow),
-		ScheduleType:     task.ScheduleType,
-		IntervalSeconds:  task.IntervalSeconds,
-		CronExpr:         task.CronExpr,
-		Enabled:          task.Enabled,
-		CreatedAt:        task.CreatedAt,
-		UpdatedAt:        task.UpdatedAt,
-		LastRunAt:        task.LastRunAt,
-		NextRunAt:        task.NextRunAt,
-		LastError:        task.LastError,
-	}
+	payload := cloneScheduledTask(task)
+	payload.TaskKind = normalizeTaskKind(task.TaskKind)
+	return payload
 }
 
 func buildTaskRunLogPayload(run TaskRunLog) taskRunLogPayload {
-	return taskRunLogPayload{
-		TaskID:          run.TaskID,
-		RunID:           run.RunID,
-		TraceID:         run.TraceID,
-		TaskKind:        run.TaskKind,
-		Action:          run.Action,
-		ScheduledAt:     run.ScheduledAt,
-		StartedAt:       run.StartedAt,
-		FinishedAt:      run.FinishedAt,
-		Status:          run.Status,
-		SessionIDInput:  run.SessionIDInput,
-		SessionIDOutput: run.SessionIDOutput,
-		ResponsePreview: run.ResponsePreview,
-		Error:           run.Error,
-	}
+	return run
 }
 
 func includeTaskInScope(task ScheduledTask, scope string) bool {
