@@ -14,34 +14,20 @@ import (
 var errSessionEnded = errors.New("session has already ended")
 
 // requireSessionStore 确保当前 service 已配置持久化会话存储。
-func (s *bridgeService) requireSessionStore() (*session.Store, int, error) {
+func (s *bridgeService) requireSessionStore() (*session.Store, error) {
 	if s.sessionStore == nil {
-		return nil, legacyStatusFromServiceErrorKind(ServiceErrorInternal), errors.New("session store is not configured")
+		return nil, wrapServiceError(ServiceErrorInternal, errors.New("session store is not configured"))
 	}
-	return s.sessionStore, legacyStatusFromServiceOutcome(ServiceOutcomeSuccess), nil
+	return s.sessionStore, nil
 }
 
 // requireSessionID 对输入 id 做最小合法性校验并返回 trim 后值。
-func requireSessionID(id string) (string, int, error) {
+func requireSessionID(id string) (string, error) {
 	trimmed := strings.TrimSpace(id)
 	if trimmed == "" {
-		return "", legacyStatusFromServiceErrorKind(ServiceErrorInvalidInput), errors.New("session id is required")
+		return "", wrapServiceError(ServiceErrorInvalidInput, errors.New("session id is required"))
 	}
-	return trimmed, legacyStatusFromServiceOutcome(ServiceOutcomeSuccess), nil
-}
-
-// mapSessionStorageError 将存储层错误映射到稳定的 HTTP 状态码。
-func mapSessionStorageError(err error) int {
-	switch {
-	case errors.Is(err, session.ErrInvalidSessionID):
-		return legacyStatusFromServiceErrorKind(ServiceErrorInvalidInput)
-	case errors.Is(err, session.ErrSessionNotFound):
-		return legacyStatusFromServiceErrorKind(ServiceErrorNotFound)
-	case errors.Is(err, errSessionEnded):
-		return legacyStatusFromServiceErrorKind(ServiceErrorConflict)
-	default:
-		return legacyStatusFromServiceErrorKind(ServiceErrorInternal)
-	}
+	return trimmed, nil
 }
 
 func mapSessionStorageErrorKind(err error) ServiceErrorKind {

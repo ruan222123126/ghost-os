@@ -50,8 +50,8 @@ func (t *transport) handleSessionsList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteSessionsListAction(traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	result, err := t.service.ExecuteSessionsListAction(traceID)
+	respondServiceContractResult(w, traceID, result, err)
 }
 
 // handleSessionByID 处理单会话查询与删除，并在路径层面做 session id 基本校验。
@@ -109,12 +109,12 @@ func (t *transport) handleSessionResource(w http.ResponseWriter, r *http.Request
 			writeError(w, code, err.Error(), traceID)
 			return
 		}
-		payload, code, err := t.service.ExecuteSessionGetAction(params, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		result, err := t.service.ExecuteSessionGetAction(params, traceID)
+		respondServiceContractResult(w, traceID, result, err)
 	case http.MethodDelete:
 		params := bridgeorchestration.SessionIDParams{ID: sessionID}
-		payload, code, err := t.service.ExecuteSessionDeleteAction(params, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		result, err := t.service.ExecuteSessionDeleteAction(params, traceID)
+		respondServiceContractResult(w, traceID, result, err)
 	default:
 		writeMethodNotAllowed(w)
 	}

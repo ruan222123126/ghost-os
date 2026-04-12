@@ -9,17 +9,6 @@ func serviceResultFromLegacy(payload any, statusCode int, err error) (ServiceRes
 	return serviceResultFromLegacySuccess(payload, statusCode), nil
 }
 
-func legacyStatusFromServiceOutcome(outcome ServiceOutcome) int {
-	switch outcome {
-	case ServiceOutcomeCreated:
-		return http.StatusCreated
-	case ServiceOutcomeAccepted:
-		return http.StatusAccepted
-	default:
-		return http.StatusOK
-	}
-}
-
 func serviceResultFromLegacySuccess(payload any, statusCode int) ServiceResult {
 	switch serviceOutcomeFromLegacyStatus(statusCode) {
 	case ServiceOutcomeCreated:

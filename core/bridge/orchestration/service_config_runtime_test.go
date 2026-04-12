@@ -81,9 +81,8 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	if err != nil {
 		t.Fatalf("config update failed: %v", err)
 	}
-	status := legacyStatusFromServiceOutcome(result.Outcome)
-	if status != http.StatusOK {
-		t.Fatalf("unexpected status: %d", status)
+	if result.Outcome != ServiceOutcomeSuccess {
+		t.Fatalf("unexpected outcome: %s", result.Outcome)
 	}
 
 	snapshot, ok := result.Payload.(configResponse)

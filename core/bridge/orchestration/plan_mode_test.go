@@ -42,8 +42,8 @@ func TestExecuteAgentActionRunsPlanModeWithExplicitModePriority(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeAgentAction returned error: %v", err)
 	}
-	if code := legacyStatusFromServiceOutcome(payloadAny.Outcome); code != 200 {
-		t.Fatalf("unexpected status code: %d", code)
+	if payloadAny.Outcome != ServiceOutcomeSuccess {
+		t.Fatalf("unexpected outcome: %s", payloadAny.Outcome)
 	}
 
 	payload, ok := payloadAny.Payload.(agentResponse)

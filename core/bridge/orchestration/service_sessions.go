@@ -3,22 +3,20 @@
 package orchestration
 
 import (
-	"net/http"
-
 	"ghost-os/bridge/session"
 )
 
 // executeSessionsListAction 汇总全部会话元数据，并映射为 API 返回结构。
-func (s *bridgeService) executeSessionsListAction(traceID string) (any, int, error) {
-	store, code, err := s.requireSessionStore()
+func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult, error) {
+	store, err := s.requireSessionStore()
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
 	summaries, err := store.ListMetadata()
 	if err != nil {
 		logAction(traceID, "SESSIONS_LIST", "error", err)
-		return nil, http.StatusInternalServerError, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 
 	metadata := make([]sessionMetadata, 0, len(summaries))
@@ -27,19 +25,19 @@ func (s *bridgeService) executeSessionsListAction(traceID string) (any, int, err
 	}
 
 	logAction(traceID, "SESSIONS_LIST", "success", nil)
-	return metadata, http.StatusOK, nil
+	return serviceResultSuccess(metadata), nil
 }
 
 // executeSessionGetAction 读取并返回单会话详情页。
-func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID string) (any, int, error) {
-	store, code, err := s.requireSessionStore()
+func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID string) (ServiceResult, error) {
+	store, err := s.requireSessionStore()
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
-	id, code, err := requireSessionID(params.ID)
+	id, err := requireSessionID(params.ID)
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
 	sess, page, err := store.LoadPage(id, session.PageParams{
@@ -48,33 +46,33 @@ func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID
 	})
 	if err != nil {
 		logAction(traceID, "SESSION_GET", "error", err)
-		return nil, mapSessionStorageError(err), err
+		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
 	}
 
 	logAction(traceID, "SESSION_GET", "success", nil)
-	return buildSessionDetailPayload(sess, page, params.Before == nil), http.StatusOK, nil
+	return serviceResultSuccess(buildSessionDetailPayload(sess, page, params.Before == nil)), nil
 }
 
 // executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。
-func (s *bridgeService) executeSessionDeleteAction(params sessionIDParams, traceID string) (any, int, error) {
-	store, code, err := s.requireSessionStore()
+func (s *bridgeService) executeSessionDeleteAction(params sessionIDParams, traceID string) (ServiceResult, error) {
+	store, err := s.requireSessionStore()
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
-	id, code, err := requireSessionID(params.ID)
+	id, err := requireSessionID(params.ID)
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
 	if err := store.Delete(id); err != nil {
 		logAction(traceID, "SESSION_DELETE", "error", err)
-		return nil, mapSessionStorageError(err), err
+		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
 	}
 
 	logAction(traceID, "SESSION_DELETE", "success", nil)
-	return sessionDeleteResponse{
+	return serviceResultSuccess(sessionDeleteResponse{
 		ID:      id,
 		Deleted: true,
-	}, http.StatusOK, nil
+	}), nil
 }

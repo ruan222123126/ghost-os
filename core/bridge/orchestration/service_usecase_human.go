@@ -5,7 +5,6 @@ package orchestration
 import (
 	"context"
 	"errors"
-	"net/http"
 	"strings"
 
 	"ghost-os/bridge/session"
@@ -22,64 +21,62 @@ type validatedHumanResponse struct {
 }
 
 // executeHumanResponseAction 接收 HUMAN_RESPONSE，将答案写回会话并解除 pending 状态。
-func (s *bridgeService) executeHumanResponseAction(_ context.Context, params humanResponseParams, traceID string) (any, int, error) {
-	store, code, err := s.requireSessionStore()
+func (s *bridgeService) executeHumanResponseAction(_ context.Context, params humanResponseParams, traceID string) (ServiceResult, error) {
+	store, err := s.requireSessionStore()
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
-	validated, code, err := validateHumanResponseParams(params)
+	validated, err := validateHumanResponseParams(params)
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 	}
 
 	logAction(traceID, busActionHumanResponse, "running", nil)
 	sess, err := store.Load(validated.sessionID)
 	if err != nil {
-		statusCode := mapSessionStorageError(err)
 		logAction(traceID, busActionHumanResponse, "error", err)
-		return nil, statusCode, err
+		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
 	}
 
 	accepted, err := applyHumanResponse(sess, validated)
 	if err != nil {
 		logAction(traceID, busActionHumanResponse, "error", err)
-		return nil, http.StatusNotFound, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorNotFound, err)
 	}
 
 	if err := store.Save(sess); err != nil {
-		statusCode := mapSessionStorageError(err)
 		logAction(traceID, busActionHumanResponse, "error", err)
-		return nil, statusCode, err
+		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
 	}
 
 	logAction(traceID, busActionHumanResponse, "success", nil)
-	return humanResponseAck{
+	return serviceResultSuccess(humanResponseAck{
 		SessionID:  validated.sessionID,
 		QuestionID: validated.questionID,
 		Accepted:   accepted,
-	}, http.StatusOK, nil
+	}), nil
 }
 
-func validateHumanResponseParams(params humanResponseParams) (validatedHumanResponse, int, error) {
-	sessionID, code, err := requireSessionID(params.SessionID)
+func validateHumanResponseParams(params humanResponseParams) (validatedHumanResponse, error) {
+	sessionID, err := requireSessionID(params.SessionID)
 	if err != nil {
-		return validatedHumanResponse{}, code, err
+		return validatedHumanResponse{}, err
 	}
 	questionID := strings.TrimSpace(params.QuestionID)
 	if questionID == "" {
-		return validatedHumanResponse{}, http.StatusBadRequest, errors.New("question_id is required")
+		return validatedHumanResponse{}, errors.New("question_id is required")
 	}
 	answer := strings.TrimSpace(params.Answer)
 	if !params.Cancelled && answer == "" {
-		return validatedHumanResponse{}, http.StatusBadRequest, errors.New("answer is required")
+		return validatedHumanResponse{}, errors.New("answer is required")
 	}
 	return validatedHumanResponse{
 		sessionID:  sessionID,
 		questionID: questionID,
 		answer:     answer,
 		cancelled:  params.Cancelled,
-	}, http.StatusOK, nil
+	}, nil
 }
 
 func applyHumanResponse(sess *session.Session, request validatedHumanResponse) (bool, error) {
@@ -97,31 +94,31 @@ func applyHumanResponse(sess *session.Session, request validatedHumanResponse) (
 }
 
 // executeHumanAnswerAndResumeAction 先写入人类答案，再继续执行被 ask_human 暂停的回合。
-func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, params humanResponseParams, traceID string) (any, int, error) {
-	sessionID, code, err := requireSessionID(params.SessionID)
+func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, params humanResponseParams, traceID string) (ServiceResult, error) {
+	sessionID, err := requireSessionID(params.SessionID)
 	if err != nil {
-		return nil, code, err
+		return ServiceResult{}, err
 	}
 
 	if inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
-		return nil, legacyStatusFromServiceError(inflightErr), inflightErr
+		return ServiceResult{}, inflightErr
 	}
 	if activeErr := s.ensureSessionActive(sessionID); activeErr != nil {
-		return nil, legacyStatusFromServiceError(activeErr), activeErr
+		return ServiceResult{}, activeErr
 	}
 
 	params.SessionID = sessionID
-	if _, code, err := s.executeHumanResponseAction(ctx, params, traceID); err != nil {
-		return nil, code, err
+	if _, err := s.executeHumanResponseAction(ctx, params, traceID); err != nil {
+		return ServiceResult{}, err
 	}
 	if params.Cancelled {
 		result := cancelledHumanTurn(sessionID)
 		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
 		if err != nil {
-			return nil, http.StatusInternalServerError, err
+			return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 		}
 		s.publishAssistantSessionPush(traceID, result)
-		return payload, http.StatusOK, nil
+		return serviceResultSuccess(payload), nil
 	}
 
 	return s.sessionResumeRunner().Resume(ctx, sessionID, traceID)
@@ -181,9 +178,16 @@ func (s *bridgeService) resolveHumanResumeStreamSession(
 	traceID string,
 	sink streaming.Sink,
 ) (string, error) {
-	sessionID, code, err := requireSessionID(rawSessionID)
+	sessionID, err := requireSessionID(rawSessionID)
 	if err != nil {
-		return "", emitHumanResumeStreamError(ctx, sink, traceID, rawSessionID, code, err)
+		return "", emitHumanResumeStreamError(
+			ctx,
+			sink,
+			traceID,
+			rawSessionID,
+			legacyStatusFromServiceError(err),
+			err,
+		)
 	}
 	if inflightErr := s.ensureSessionNotInflight(sessionID); inflightErr != nil {
 		return sessionID, emitHumanResumeStreamError(
@@ -214,9 +218,16 @@ func (s *bridgeService) applyHumanResponseForResumeStream(
 	traceID string,
 	sink streaming.Sink,
 ) error {
-	_, code, err := s.executeHumanResponseAction(ctx, params, traceID)
+	_, err := s.executeHumanResponseAction(ctx, params, traceID)
 	if err == nil {
 		return nil
 	}
-	return emitHumanResumeStreamError(ctx, sink, traceID, params.SessionID, code, err)
+	return emitHumanResumeStreamError(
+		ctx,
+		sink,
+		traceID,
+		params.SessionID,
+		legacyStatusFromServiceError(err),
+		err,
+	)
 }

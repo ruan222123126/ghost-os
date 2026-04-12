@@ -110,8 +110,8 @@ func TestExecuteAgentActionRunsFiniteProMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeAgentAction returned error: %v", err)
 	}
-	if code := legacyStatusFromServiceOutcome(payloadResult.Outcome); code != 200 {
-		t.Fatalf("unexpected status code: %d", code)
+	if payloadResult.Outcome != ServiceOutcomeSuccess {
+		t.Fatalf("unexpected outcome: %s", payloadResult.Outcome)
 	}
 
 	payload, ok := payloadResult.Payload.(agentResponse)
@@ -197,8 +197,8 @@ func TestExecuteAgentActionStopsAtProMaxIterations(t *testing.T) {
 	if err != nil {
 		t.Fatalf("executeAgentAction returned error: %v", err)
 	}
-	if code := legacyStatusFromServiceOutcome(payloadResult.Outcome); code != 200 {
-		t.Fatalf("unexpected status code: %d", code)
+	if payloadResult.Outcome != ServiceOutcomeSuccess {
+		t.Fatalf("unexpected outcome: %s", payloadResult.Outcome)
 	}
 	payload := payloadResult.Payload.(agentResponse)
 	if payload.StoppedBy != proModeStopMaxLimit {

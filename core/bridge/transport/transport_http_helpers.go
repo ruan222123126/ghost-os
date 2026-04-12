@@ -145,10 +145,10 @@ func respondServiceContractResult(
 	err error,
 ) bool {
 	if err != nil {
-		writeError(w, bridgeorchestration.LegacyStatusFromServiceError(err), err.Error(), traceID)
+		writeError(w, httpStatusFromServiceError(err), err.Error(), traceID)
 		return false
 	}
-	writeSuccess(w, bridgeorchestration.LegacyStatusFromServiceOutcome(result.Outcome), result.Payload, traceID)
+	writeSuccess(w, httpStatusFromServiceOutcome(result.Outcome), result.Payload, traceID)
 	return true
 }
 
@@ -161,11 +161,44 @@ func respondServiceContractActionResult(
 ) bool {
 	if err != nil {
 		logAction(traceID, action, "error", err)
-		writeError(w, bridgeorchestration.LegacyStatusFromServiceError(err), err.Error(), traceID)
+		writeError(w, httpStatusFromServiceError(err), err.Error(), traceID)
 		return false
 	}
-	writeSuccess(w, bridgeorchestration.LegacyStatusFromServiceOutcome(result.Outcome), result.Payload, traceID)
+	writeSuccess(w, httpStatusFromServiceOutcome(result.Outcome), result.Payload, traceID)
 	return true
+}
+
+func httpStatusFromServiceOutcome(outcome bridgeorchestration.ServiceOutcome) int {
+	switch outcome {
+	case bridgeorchestration.ServiceOutcomeCreated:
+		return http.StatusCreated
+	case bridgeorchestration.ServiceOutcomeAccepted:
+		return http.StatusAccepted
+	default:
+		return http.StatusOK
+	}
+}
+
+func httpStatusFromServiceError(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	return httpStatusFromServiceErrorKind(bridgeorchestration.ServiceErrorKindFromError(err))
+}
+
+func httpStatusFromServiceErrorKind(kind bridgeorchestration.ServiceErrorKind) int {
+	switch kind {
+	case bridgeorchestration.ServiceErrorInvalidInput:
+		return http.StatusBadRequest
+	case bridgeorchestration.ServiceErrorNotFound:
+		return http.StatusNotFound
+	case bridgeorchestration.ServiceErrorConflict:
+		return http.StatusConflict
+	case bridgeorchestration.ServiceErrorUnavailable:
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
 }
 
 // writeEnvelope 是所有响应的唯一出口，统一 header 与 payload 结构。

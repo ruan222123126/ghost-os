@@ -138,14 +138,6 @@ func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, tr
 	return s.inner.executeAgentAction(ctx, params, traceID)
 }
 
-func LegacyStatusFromServiceOutcome(outcome ServiceOutcome) int {
-	return legacyStatusFromServiceOutcome(outcome)
-}
-
-func LegacyStatusFromServiceError(err error) int {
-	return legacyStatusFromServiceError(err)
-}
-
 func ServiceErrorKindFromError(err error) ServiceErrorKind {
 	return ServiceErrorKindOf(err)
 }
@@ -170,19 +162,19 @@ func (s *Service) ExecuteSetActiveProviderAction(req SetActiveProviderRequest, t
 	return s.inner.executeSetActiveProviderAction(req, traceID)
 }
 
-func (s *Service) ExecuteSessionsListAction(traceID string) (any, int, error) {
+func (s *Service) ExecuteSessionsListAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionsListAction(traceID)
 }
 
-func (s *Service) ExecuteSessionGetAction(params SessionGetParams, traceID string) (any, int, error) {
+func (s *Service) ExecuteSessionGetAction(params SessionGetParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionGetAction(params, traceID)
 }
 
-func (s *Service) ExecuteSessionDeleteAction(params SessionIDParams, traceID string) (any, int, error) {
+func (s *Service) ExecuteSessionDeleteAction(params SessionIDParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionDeleteAction(params, traceID)
 }
 
-func (s *Service) ExecuteHumanAnswerAndResumeAction(ctx context.Context, params HumanResponseParams, traceID string) (any, int, error) {
+func (s *Service) ExecuteHumanAnswerAndResumeAction(ctx context.Context, params HumanResponseParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeHumanAnswerAndResumeAction(ctx, params, traceID)
 }
 
@@ -196,12 +188,12 @@ func (s *Service) ExecuteAgentStreamAction(ctx context.Context, params AgentPara
 
 func (s *Service) EnsureSessionNotInflight(sessionID string) (int, error) {
 	err := s.inner.ensureSessionNotInflight(sessionID)
-	return LegacyStatusFromServiceError(err), err
+	return legacyStatusFromServiceError(err), err
 }
 
 func (s *Service) EnsureSessionActive(sessionID string) (int, error) {
 	err := s.inner.ensureSessionActive(sessionID)
-	return LegacyStatusFromServiceError(err), err
+	return legacyStatusFromServiceError(err), err
 }
 
 func (s *Service) ExecuteRSSInboxPollUsecase(
@@ -237,5 +229,9 @@ func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, b
 }
 
 func RequireSessionID(id string) (string, int, error) {
-	return requireSessionID(id)
+	sessionID, err := requireSessionID(id)
+	if err != nil {
+		return "", legacyStatusFromServiceError(err), err
+	}
+	return sessionID, http.StatusOK, nil
 }

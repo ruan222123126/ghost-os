@@ -62,8 +62,8 @@ func (t *transport) handleQuestionAnswer(w http.ResponseWriter, r *http.Request)
 	}
 
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteHumanAnswerAndResumeAction(r.Context(), req, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	result, err := t.service.ExecuteHumanAnswerAndResumeAction(r.Context(), req, traceID)
+	respondServiceContractResult(w, traceID, result, err)
 }
 
 func (t *transport) handleQuestionAnswerStream(w http.ResponseWriter, r *http.Request) {
