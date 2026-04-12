@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"errors"
-	"net/http"
 	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
@@ -17,17 +16,17 @@ const (
 	actionConfigProviderSetActive = "CONFIG_PROVIDER_SET_ACTIVE"
 )
 
-func (s *bridgeService) executeProvidersGetAction(traceID string) (any, int, error) {
+func (s *bridgeService) executeProvidersGetAction(traceID string) (ServiceResult, error) {
 	payload, err := s.providerListPayload()
 	if err != nil {
 		logAction(traceID, actionConfigProvidersGet, "error", err)
-		return nil, http.StatusInternalServerError, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, actionConfigProvidersGet, "success", nil)
-	return payload, http.StatusOK, nil
+	return serviceResultSuccess(payload), nil
 }
 
-func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (any, int, error) {
+func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (ServiceResult, error) {
 	logAction(traceID, actionConfigProviderCreate, "running", nil)
 	if err := s.configStore.AddProvider(bridgeconfig.ProviderRecord{
 		Name:                       req.Name,
@@ -41,18 +40,18 @@ func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, t
 		ModelResponseReserveTokens: cloneModelTokenOverrides(req.ModelResponseReserveTokens),
 	}); err != nil {
 		logAction(traceID, actionConfigProviderCreate, "error", err)
-		return nil, configProviderStatusCode(err), err
+		return ServiceResult{}, wrapServiceError(configProviderErrorKind(err), err)
 	}
 	payload, err := s.providerListPayload()
 	if err != nil {
 		logAction(traceID, actionConfigProviderCreate, "error", err)
-		return nil, http.StatusInternalServerError, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, actionConfigProviderCreate, "success", nil)
-	return payload, http.StatusOK, nil
+	return serviceResultSuccess(payload), nil
 }
 
-func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpdateRequest, traceID string) (any, int, error) {
+func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpdateRequest, traceID string) (ServiceResult, error) {
 	logAction(traceID, actionConfigProviderUpdate, "running", nil)
 	if err := s.configStore.UpdateProvider(name, bridgeconfig.ProviderRecord{
 		Name:                       req.Name,
@@ -66,45 +65,45 @@ func (s *bridgeService) executeProviderUpdateAction(name string, req providerUpd
 		ModelResponseReserveTokens: cloneModelTokenOverrides(req.ModelResponseReserveTokens),
 	}); err != nil {
 		logAction(traceID, actionConfigProviderUpdate, "error", err)
-		return nil, configProviderStatusCode(err), err
+		return ServiceResult{}, wrapServiceError(configProviderErrorKind(err), err)
 	}
 	payload, err := s.providerListPayload()
 	if err != nil {
 		logAction(traceID, actionConfigProviderUpdate, "error", err)
-		return nil, http.StatusInternalServerError, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, actionConfigProviderUpdate, "success", nil)
-	return payload, http.StatusOK, nil
+	return serviceResultSuccess(payload), nil
 }
 
-func (s *bridgeService) executeProviderDeleteAction(name string, traceID string) (any, int, error) {
+func (s *bridgeService) executeProviderDeleteAction(name string, traceID string) (ServiceResult, error) {
 	logAction(traceID, actionConfigProviderDelete, "running", nil)
 	if err := s.configStore.DeleteProvider(name); err != nil {
 		logAction(traceID, actionConfigProviderDelete, "error", err)
-		return nil, configProviderStatusCode(err), err
+		return ServiceResult{}, wrapServiceError(configProviderErrorKind(err), err)
 	}
 	payload, err := s.providerListPayload()
 	if err != nil {
 		logAction(traceID, actionConfigProviderDelete, "error", err)
-		return nil, http.StatusInternalServerError, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, actionConfigProviderDelete, "success", nil)
-	return payload, http.StatusOK, nil
+	return serviceResultSuccess(payload), nil
 }
 
-func (s *bridgeService) executeSetActiveProviderAction(req setActiveProviderRequest, traceID string) (any, int, error) {
+func (s *bridgeService) executeSetActiveProviderAction(req setActiveProviderRequest, traceID string) (ServiceResult, error) {
 	logAction(traceID, actionConfigProviderSetActive, "running", nil)
 	if err := s.configStore.SetActiveProvider(req.Name); err != nil {
 		logAction(traceID, actionConfigProviderSetActive, "error", err)
-		return nil, configProviderStatusCode(err), err
+		return ServiceResult{}, wrapServiceError(configProviderErrorKind(err), err)
 	}
 	payload, err := s.providerListPayload()
 	if err != nil {
 		logAction(traceID, actionConfigProviderSetActive, "error", err)
-		return nil, http.StatusInternalServerError, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, actionConfigProviderSetActive, "success", nil)
-	return payload, http.StatusOK, nil
+	return serviceResultSuccess(payload), nil
 }
 
 func (s *bridgeService) providerListPayload() (providerListResponse, error) {
@@ -140,13 +139,13 @@ func buildProviderConfigResponses(providers []bridgeconfig.ProviderRecord) []pro
 	return out
 }
 
-func configProviderStatusCode(err error) int {
+func configProviderErrorKind(err error) ServiceErrorKind {
 	switch {
 	case errors.Is(err, bridgeconfig.ErrProviderNotFound):
-		return http.StatusNotFound
+		return ServiceErrorNotFound
 	case errors.Is(err, bridgeconfig.ErrProviderExists):
-		return http.StatusConflict
+		return ServiceErrorConflict
 	default:
-		return http.StatusBadRequest
+		return ServiceErrorInvalidInput
 	}
 }

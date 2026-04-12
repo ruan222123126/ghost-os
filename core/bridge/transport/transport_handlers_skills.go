@@ -14,8 +14,8 @@ func (t *transport) handleSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteSkillListAction(traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	result, err := t.service.ExecuteSkillListAction(traceID)
+	respondServiceContractResult(w, traceID, result, err)
 }
 
 func (t *transport) handleSkillByID(w http.ResponseWriter, r *http.Request) {
@@ -29,8 +29,8 @@ func (t *transport) handleSkillByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	traceID := resolveTraceID("", r)
-	payload, code, err := t.service.ExecuteSkillDeleteAction(bridgeskills.SkillIDParams{ID: id}, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	result, err := t.service.ExecuteSkillDeleteAction(bridgeskills.SkillIDParams{ID: id}, traceID)
+	respondServiceContractResult(w, traceID, result, err)
 }
 
 func parseSkillPath(rawPath string) (string, error) {

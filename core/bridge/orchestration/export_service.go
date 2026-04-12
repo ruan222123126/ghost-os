@@ -142,23 +142,23 @@ func ServiceErrorKindFromError(err error) ServiceErrorKind {
 	return ServiceErrorKindOf(err)
 }
 
-func (s *Service) ExecuteProvidersGetAction(traceID string) (any, int, error) {
+func (s *Service) ExecuteProvidersGetAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeProvidersGetAction(traceID)
 }
 
-func (s *Service) ExecuteProviderCreateAction(req ProviderCreateRequest, traceID string) (any, int, error) {
+func (s *Service) ExecuteProviderCreateAction(req ProviderCreateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderCreateAction(req, traceID)
 }
 
-func (s *Service) ExecuteProviderUpdateAction(name string, req ProviderUpdateRequest, traceID string) (any, int, error) {
+func (s *Service) ExecuteProviderUpdateAction(name string, req ProviderUpdateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderUpdateAction(name, req, traceID)
 }
 
-func (s *Service) ExecuteProviderDeleteAction(name string, traceID string) (any, int, error) {
+func (s *Service) ExecuteProviderDeleteAction(name string, traceID string) (ServiceResult, error) {
 	return s.inner.executeProviderDeleteAction(name, traceID)
 }
 
-func (s *Service) ExecuteSetActiveProviderAction(req SetActiveProviderRequest, traceID string) (any, int, error) {
+func (s *Service) ExecuteSetActiveProviderAction(req SetActiveProviderRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeSetActiveProviderAction(req, traceID)
 }
 
@@ -186,14 +186,12 @@ func (s *Service) ExecuteAgentStreamAction(ctx context.Context, params AgentPara
 	return s.inner.executeAgentStreamAction(ctx, params, traceID, sink)
 }
 
-func (s *Service) EnsureSessionNotInflight(sessionID string) (int, error) {
-	err := s.inner.ensureSessionNotInflight(sessionID)
-	return legacyStatusFromServiceError(err), err
+func (s *Service) EnsureSessionNotInflight(sessionID string) error {
+	return s.inner.ensureSessionNotInflight(sessionID)
 }
 
-func (s *Service) EnsureSessionActive(sessionID string) (int, error) {
-	err := s.inner.ensureSessionActive(sessionID)
-	return legacyStatusFromServiceError(err), err
+func (s *Service) EnsureSessionActive(sessionID string) error {
+	return s.inner.ensureSessionActive(sessionID)
 }
 
 func (s *Service) ExecuteRSSInboxPollUsecase(
@@ -208,20 +206,20 @@ func (s *Service) ExecuteRSSInboxPollUsecase(
 	return s.inner.rssActionHandler().ExecuteInboxPollUsecase(ctx, params, taskID, traceID)
 }
 
-func (s *Service) ExecuteSkillListAction(traceID string) (any, int, error) {
-	return s.inner.executeSkillListAction(traceID)
+func (s *Service) ExecuteSkillListAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeSkillListActionResult(traceID)
 }
 
-func (s *Service) ExecuteSkillDeleteAction(params bridgeskills.SkillIDParams, traceID string) (any, int, error) {
-	return s.inner.executeSkillDeleteAction(params, traceID)
+func (s *Service) ExecuteSkillDeleteAction(params bridgeskills.SkillIDParams, traceID string) (ServiceResult, error) {
+	return s.inner.executeSkillDeleteActionResult(params, traceID)
 }
 
-func (s *Service) ExecuteToolListAction(traceID string) (any, int, error) {
-	return s.inner.executeToolListAction(traceID)
+func (s *Service) ExecuteToolListAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeToolListActionResult(traceID)
 }
 
-func (s *Service) ExecuteToolUpdateAction(params ToolNameParams, req ToolUpdateRequest, traceID string) (any, int, error) {
-	return s.inner.executeToolUpdateAction(params, req, traceID)
+func (s *Service) ExecuteToolUpdateAction(params ToolNameParams, req ToolUpdateRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executeToolUpdateActionResult(params, req, traceID)
 }
 
 func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, bool) {

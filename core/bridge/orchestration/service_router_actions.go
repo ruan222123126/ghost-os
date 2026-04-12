@@ -42,31 +42,30 @@ func registerHumanActions(service *bridgeService) {
 }
 
 func registerTaskActions(service *bridgeService) {
-	registerLegacyAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (any, int, error) {
-		return service.executeTaskCreateAction(params, traceID)
+	registerAction(service, busActionTaskCreate, func(_ context.Context, params taskCreateParams, traceID string) (ServiceResult, error) {
+		return service.executeTaskCreateActionResult(params, traceID)
 	})
 	registerAction(service, busActionTaskList, func(_ context.Context, params taskListParams, traceID string) (ServiceResult, error) {
 		scope, err := normalizeTaskListScope(params.Scope)
 		if err != nil {
 			return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 		}
-		payload, code, err := service.executeTaskListAction(scope, traceID)
-		return serviceResultFromLegacy(payload, code, err)
+		return service.executeTaskListActionResult(scope, traceID)
 	})
-	registerLegacyAction(service, busActionTaskGet, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
-		return service.executeTaskGetAction(params, traceID)
+	registerAction(service, busActionTaskGet, func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+		return service.executeTaskGetActionResult(params, traceID)
 	})
-	registerLegacyAction(service, busActionTaskUpdate, func(_ context.Context, params taskUpdateParams, traceID string) (any, int, error) {
-		return service.executeTaskUpdateAction(params, traceID)
+	registerAction(service, busActionTaskUpdate, func(_ context.Context, params taskUpdateParams, traceID string) (ServiceResult, error) {
+		return service.executeTaskUpdateActionResult(params, traceID)
 	})
-	registerLegacyAction(service, busActionTaskRunNow, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
-		return service.executeTaskRunNowAction(params, traceID)
+	registerAction(service, busActionTaskRunNow, func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+		return service.executeTaskRunNowActionResult(params, traceID)
 	})
-	registerLegacyAction(service, busActionTaskLogs, func(_ context.Context, params taskLogsParams, traceID string) (any, int, error) {
-		return service.executeTaskLogsAction(params, traceID)
+	registerAction(service, busActionTaskLogs, func(_ context.Context, params taskLogsParams, traceID string) (ServiceResult, error) {
+		return service.executeTaskLogsActionResult(params, traceID)
 	})
-	registerLegacyAction(service, busActionTaskDelete, func(_ context.Context, params taskIDParams, traceID string) (any, int, error) {
-		return service.executeTaskDeleteAction(params, traceID)
+	registerAction(service, busActionTaskDelete, func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+		return service.executeTaskDeleteActionResult(params, traceID)
 	})
 }
 
@@ -83,23 +82,23 @@ func normalizeTaskListScope(scope string) (string, error) {
 }
 
 func registerRSSActions(service *bridgeService) {
-	registerLegacyAction(service, bridgerss.ActionInboxPoll, func(ctx context.Context, params bridgerss.InboxPollParams, traceID string) (any, int, error) {
-		return service.executeRSSInboxPollAction(ctx, params, traceID)
+	registerAction(service, bridgerss.ActionInboxPoll, func(ctx context.Context, params bridgerss.InboxPollParams, traceID string) (ServiceResult, error) {
+		return service.executeRSSInboxPollActionResult(ctx, params, traceID)
 	})
-	registerLegacyAction(service, bridgerss.ActionInboxList, func(_ context.Context, params bridgerss.InboxListParams, traceID string) (any, int, error) {
-		return service.executeRSSInboxListAction(params, traceID)
+	registerAction(service, bridgerss.ActionInboxList, func(_ context.Context, params bridgerss.InboxListParams, traceID string) (ServiceResult, error) {
+		return service.executeRSSInboxListActionResult(params, traceID)
 	})
-	registerLegacyAction(service, bridgerss.ActionInboxGet, func(_ context.Context, params bridgerss.InboxGetParams, traceID string) (any, int, error) {
-		return service.executeRSSInboxGetAction(params, traceID)
+	registerAction(service, bridgerss.ActionInboxGet, func(_ context.Context, params bridgerss.InboxGetParams, traceID string) (ServiceResult, error) {
+		return service.executeRSSInboxGetActionResult(params, traceID)
 	})
-	registerLegacyAction(service, bridgerss.ActionInboxGroups, func(_ context.Context, params bridgerss.InboxGroupsParams, traceID string) (any, int, error) {
-		return service.executeRSSInboxGroupsAction(params, traceID)
+	registerAction(service, bridgerss.ActionInboxGroups, func(_ context.Context, params bridgerss.InboxGroupsParams, traceID string) (ServiceResult, error) {
+		return service.executeRSSInboxGroupsActionResult(params, traceID)
 	})
-	registerLegacyAction(service, bridgerss.ActionBriefingBuild, func(ctx context.Context, params bridgerss.BriefingParams, traceID string) (any, int, error) {
-		return service.executeRSSBriefingBuildAction(ctx, params, traceID)
+	registerAction(service, bridgerss.ActionBriefingBuild, func(ctx context.Context, params bridgerss.BriefingParams, traceID string) (ServiceResult, error) {
+		return service.executeRSSBriefingBuildActionResult(ctx, params, traceID)
 	})
-	registerLegacyAction(service, bridgerss.ActionBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (any, int, error) {
-		return service.executeRSSBriefingGetAction(traceID)
+	registerAction(service, bridgerss.ActionBriefingGet, func(_ context.Context, _ map[string]any, traceID string) (ServiceResult, error) {
+		return service.executeRSSBriefingGetActionResult(traceID)
 	})
 }
 
@@ -111,16 +110,5 @@ func registerAction[T any](service *bridgeService, action string, handler func(c
 			return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 		}
 		return handler(ctx, params, traceID)
-	})
-}
-
-func registerLegacyAction[T any](service *bridgeService, action string, handler func(context.Context, T, string) (any, int, error)) {
-	service.registerAction(action, func(ctx context.Context, rawParams json.RawMessage, traceID string) (ServiceResult, error) {
-		params, err := decodeActionParams[T](rawParams)
-		if err != nil {
-			return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
-		}
-		payload, code, callErr := handler(ctx, params, traceID)
-		return serviceResultFromLegacy(payload, code, callErr)
 	})
 }

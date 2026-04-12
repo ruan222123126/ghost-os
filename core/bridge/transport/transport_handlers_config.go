@@ -31,16 +31,16 @@ func (t *transport) handleConfigProviders(w http.ResponseWriter, r *http.Request
 	switch r.Method {
 	case http.MethodGet:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.ExecuteProvidersGetAction(traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		result, err := t.service.ExecuteProvidersGetAction(traceID)
+		respondServiceContractResult(w, traceID, result, err)
 	case http.MethodPost:
 		var req bridgeorchestration.ProviderCreateRequest
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteProviderCreateAction(req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		result, err := t.service.ExecuteProviderCreateAction(req, traceID)
+		respondServiceContractResult(w, traceID, result, err)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -60,12 +60,12 @@ func (t *transport) handleConfigProviderByName(w http.ResponseWriter, r *http.Re
 			return
 		}
 		traceID := resolveTraceID(req.TraceID, r)
-		payload, code, err := t.service.ExecuteProviderUpdateAction(name, req, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		result, err := t.service.ExecuteProviderUpdateAction(name, req, traceID)
+		respondServiceContractResult(w, traceID, result, err)
 	case http.MethodDelete:
 		traceID := resolveTraceID("", r)
-		payload, code, err := t.service.ExecuteProviderDeleteAction(name, traceID)
-		respondServiceResult(w, traceID, payload, code, err)
+		result, err := t.service.ExecuteProviderDeleteAction(name, traceID)
+		respondServiceContractResult(w, traceID, result, err)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -82,8 +82,8 @@ func (t *transport) handleActiveProvider(w http.ResponseWriter, r *http.Request)
 	}
 
 	traceID := resolveTraceID(req.TraceID, r)
-	payload, code, err := t.service.ExecuteSetActiveProviderAction(req, traceID)
-	respondServiceResult(w, traceID, payload, code, err)
+	result, err := t.service.ExecuteSetActiveProviderAction(req, traceID)
+	respondServiceContractResult(w, traceID, result, err)
 }
 
 func providerNameFromPath(path string) (string, bool) {

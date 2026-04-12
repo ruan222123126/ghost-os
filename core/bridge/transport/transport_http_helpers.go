@@ -111,33 +111,6 @@ func writeError(w http.ResponseWriter, code int, message string, traceID string)
 	}, traceID)
 }
 
-// respondServiceResult 处理 service 返回值并写回统一 envelope。
-func respondServiceResult(w http.ResponseWriter, traceID string, payload any, code int, err error) bool {
-	if err != nil {
-		writeError(w, code, err.Error(), traceID)
-		return false
-	}
-	if code <= 0 {
-		code = http.StatusOK
-	}
-	writeSuccess(w, code, payload, traceID)
-	return true
-}
-
-// respondActionResult 附带 action 级日志记录，便于排查分发链路问题。
-func respondActionResult(w http.ResponseWriter, traceID string, action string, payload any, code int, err error) bool {
-	if err != nil {
-		logAction(traceID, action, "error", err)
-		writeError(w, code, err.Error(), traceID)
-		return false
-	}
-	if code <= 0 {
-		code = http.StatusOK
-	}
-	writeSuccess(w, code, payload, traceID)
-	return true
-}
-
 func respondServiceContractResult(
 	w http.ResponseWriter,
 	traceID string,

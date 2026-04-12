@@ -2,15 +2,15 @@ package orchestration
 
 import "net/http"
 
-func serviceResultFromLegacy(payload any, statusCode int, err error) (ServiceResult, error) {
+func serviceResultFromStatus(payload any, statusCode int, err error) (ServiceResult, error) {
 	if err != nil {
-		return ServiceResult{}, wrapServiceError(serviceErrorKindFromLegacyStatus(statusCode), err)
+		return ServiceResult{}, wrapServiceError(serviceErrorKindFromStatus(statusCode), err)
 	}
-	return serviceResultFromLegacySuccess(payload, statusCode), nil
+	return serviceResultFromStatusSuccess(payload, statusCode), nil
 }
 
-func serviceResultFromLegacySuccess(payload any, statusCode int) ServiceResult {
-	switch serviceOutcomeFromLegacyStatus(statusCode) {
+func serviceResultFromStatusSuccess(payload any, statusCode int) ServiceResult {
+	switch serviceOutcomeFromStatus(statusCode) {
 	case ServiceOutcomeCreated:
 		return serviceResultCreated(payload)
 	case ServiceOutcomeAccepted:
@@ -20,7 +20,7 @@ func serviceResultFromLegacySuccess(payload any, statusCode int) ServiceResult {
 	}
 }
 
-func serviceOutcomeFromLegacyStatus(statusCode int) ServiceOutcome {
+func serviceOutcomeFromStatus(statusCode int) ServiceOutcome {
 	switch statusCode {
 	case http.StatusCreated:
 		return ServiceOutcomeCreated
@@ -31,7 +31,7 @@ func serviceOutcomeFromLegacyStatus(statusCode int) ServiceOutcome {
 	}
 }
 
-func serviceErrorKindFromLegacyStatus(statusCode int) ServiceErrorKind {
+func serviceErrorKindFromStatus(statusCode int) ServiceErrorKind {
 	switch statusCode {
 	case http.StatusBadRequest:
 		return ServiceErrorInvalidInput
@@ -44,6 +44,14 @@ func serviceErrorKindFromLegacyStatus(statusCode int) ServiceErrorKind {
 	default:
 		return ServiceErrorInternal
 	}
+}
+
+func serviceResultFromLegacySuccess(payload any, statusCode int) ServiceResult {
+	return serviceResultFromStatusSuccess(payload, statusCode)
+}
+
+func serviceErrorKindFromLegacyStatus(statusCode int) ServiceErrorKind {
+	return serviceErrorKindFromStatus(statusCode)
 }
 
 func legacyStatusFromServiceErrorKind(kind ServiceErrorKind) int {

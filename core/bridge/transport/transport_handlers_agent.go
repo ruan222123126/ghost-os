@@ -112,12 +112,12 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 
 	traceID := resolveTraceID(req.TraceID, r)
 	if strings.TrimSpace(req.Message) != "" || len(req.Images) > 0 {
-		if code, err := t.service.EnsureSessionNotInflight(req.SessionID); err != nil {
-			respondServiceResult(w, traceID, nil, code, err)
+		if err := t.service.EnsureSessionNotInflight(req.SessionID); err != nil {
+			writeError(w, httpStatusFromServiceError(err), err.Error(), traceID)
 			return
 		}
-		if code, err := t.service.EnsureSessionActive(req.SessionID); err != nil {
-			respondServiceResult(w, traceID, nil, code, err)
+		if err := t.service.EnsureSessionActive(req.SessionID); err != nil {
+			writeError(w, httpStatusFromServiceError(err), err.Error(), traceID)
 			return
 		}
 	}
