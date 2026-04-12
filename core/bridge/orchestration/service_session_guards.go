@@ -59,16 +59,15 @@ func mapSessionStorageErrorKind(err error) ServiceErrorKind {
 
 // ensureSessionActive 在继续已有会话前校验其可续跑状态。
 func (s *bridgeService) ensureSessionActive(sessionID string) error {
-	store := s.sessionStore
-	if store == nil {
-		return nil
-	}
 	id := strings.TrimSpace(sessionID)
 	if id == "" {
 		return nil
 	}
+	if s == nil || s.sessionStore == nil {
+		return wrapServiceError(ServiceErrorInternal, errors.New("session store is not configured"))
+	}
 
-	sess, err := store.Load(id)
+	sess, err := s.sessionStore.Load(id)
 	if err != nil {
 		if errors.Is(err, session.ErrSessionNotFound) {
 			return wrapServiceError(
@@ -85,13 +84,12 @@ func (s *bridgeService) ensureSessionActive(sessionID string) error {
 }
 
 func (s *bridgeService) ensureSessionNotInflight(sessionID string) error {
-	if s == nil || s.runRegistry == nil {
-		return nil
-	}
-
 	id := strings.TrimSpace(sessionID)
 	if id == "" {
 		return nil
+	}
+	if s == nil || s.runRegistry == nil {
+		return wrapServiceError(ServiceErrorInternal, errors.New("run registry is not configured"))
 	}
 	if !s.runRegistry.IsInflight(id) {
 		return nil
