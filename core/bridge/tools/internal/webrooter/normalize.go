@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const responseFieldData = "data"
+
 func NormalizeResponse(action string, payload map[string]any) (Result, error) {
 	success, err := requireBool(payload, "success")
 	if err != nil {
@@ -16,7 +18,8 @@ func NormalizeResponse(action string, payload map[string]any) (Result, error) {
 		return Result{}, actionError(action, err)
 	}
 
-	if _, err := requireField(payload, "data"); err != nil {
+	dataValue, err := requireField(payload, responseFieldData)
+	if err != nil {
 		return Result{}, actionError(action, err)
 	}
 	if _, err := requireArray(payload, "urls"); err != nil {
@@ -37,7 +40,7 @@ func NormalizeResponse(action string, payload map[string]any) (Result, error) {
 			formatUpstreamFailure(content, upstreamError),
 		)
 	}
-	if _, err := requireObject(payload, "data"); err != nil {
+	if _, err := requireObjectValue(responseFieldData, dataValue); err != nil {
 		return Result{}, actionError(action, err)
 	}
 
@@ -144,6 +147,10 @@ func requireObject(payload map[string]any, key string) (map[string]any, error) {
 		return nil, err
 	}
 
+	return requireObjectValue(key, value)
+}
+
+func requireObjectValue(key string, value any) (map[string]any, error) {
 	typed, ok := value.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("response field %q must be an object", key)
@@ -204,7 +211,7 @@ func lookupOptionalField(payload map[string]any, key string) (any, bool) {
 		return value, true
 	}
 
-	data, ok := payload["data"].(map[string]any)
+	data, ok := payload[responseFieldData].(map[string]any)
 	if !ok {
 		return nil, false
 	}
