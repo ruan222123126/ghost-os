@@ -21,7 +21,18 @@ func normalizeProviderConfigs(raw map[string]providerFileConfig, model string) [
 	out := make([]providerConfig, 0, len(names))
 	for _, name := range names {
 		record := raw[name]
-		provider, ok := normalizeProviderRecord(name, record.Type, record.BaseURL, record.APIKey, record.Models, record.ContextWindowTokens, record.ResponseReserveTokens, record.ModelContextWindowTokens, record.ModelResponseReserveTokens, model)
+		provider, ok := normalizeProviderRecord(normalizeProviderRecordInput{
+			Name:                          name,
+			RawType:                       record.Type,
+			BaseURL:                       record.BaseURL,
+			APIKey:                        record.APIKey,
+			Models:                        record.Models,
+			RawContextWindowTokens:        record.ContextWindowTokens,
+			RawResponseReserveTokens:      record.ResponseReserveTokens,
+			RawModelContextWindowTokens:   record.ModelContextWindowTokens,
+			RawModelResponseReserveTokens: record.ModelResponseReserveTokens,
+			Model:                         model,
+		})
 		if !ok {
 			continue
 		}
@@ -33,23 +44,25 @@ func normalizeProviderConfigs(raw map[string]providerFileConfig, model string) [
 	return out
 }
 
-func normalizeProviderRecord(
-	name string,
-	rawType llm.Provider,
-	baseURL string,
-	apiKey *string,
-	models []string,
-	rawContextWindowTokens int,
-	rawResponseReserveTokens int,
-	rawModelContextWindowTokens map[string]int,
-	rawModelResponseReserveTokens map[string]int,
-	model string,
-) (providerConfig, bool) {
-	trimmedName := strings.TrimSpace(name)
-	trimmedBaseURL := strings.TrimSpace(baseURL)
-	normalizedType := normalizedProviderType(rawType, trimmedName, trimmedBaseURL, model)
-	normalizedAPIKey := cloneOptionalStringPointer(apiKey)
-	normalizedModels := normalizeProviderModels(models)
+type normalizeProviderRecordInput struct {
+	Name                          string
+	RawType                       llm.Provider
+	BaseURL                       string
+	APIKey                        *string
+	Models                        []string
+	RawContextWindowTokens        int
+	RawResponseReserveTokens      int
+	RawModelContextWindowTokens   map[string]int
+	RawModelResponseReserveTokens map[string]int
+	Model                         string
+}
+
+func normalizeProviderRecord(input normalizeProviderRecordInput) (providerConfig, bool) {
+	trimmedName := strings.TrimSpace(input.Name)
+	trimmedBaseURL := strings.TrimSpace(input.BaseURL)
+	normalizedType := normalizedProviderType(input.RawType, trimmedName, trimmedBaseURL, input.Model)
+	normalizedAPIKey := cloneOptionalStringPointer(input.APIKey)
+	normalizedModels := normalizeProviderModels(input.Models)
 	if trimmedName == "" && trimmedBaseURL == "" && normalizedAPIKey == nil && len(normalizedModels) == 0 {
 		return providerConfig{}, false
 	}
@@ -66,10 +79,10 @@ func normalizeProviderRecord(
 		BaseURL:                    trimmedBaseURL,
 		APIKey:                     normalizedAPIKey,
 		Models:                     normalizedModels,
-		ContextWindowTokens:        normalizePositiveInt(rawContextWindowTokens),
-		ResponseReserveTokens:      normalizePositiveInt(rawResponseReserveTokens),
-		ModelContextWindowTokens:   normalizeModelTokenOverrides(rawModelContextWindowTokens),
-		ModelResponseReserveTokens: normalizeModelTokenOverrides(rawModelResponseReserveTokens),
+		ContextWindowTokens:        normalizePositiveInt(input.RawContextWindowTokens),
+		ResponseReserveTokens:      normalizePositiveInt(input.RawResponseReserveTokens),
+		ModelContextWindowTokens:   normalizeModelTokenOverrides(input.RawModelContextWindowTokens),
+		ModelResponseReserveTokens: normalizeModelTokenOverrides(input.RawModelResponseReserveTokens),
 	}, true
 }
 

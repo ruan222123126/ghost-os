@@ -135,7 +135,16 @@ func (e toolCallExecutor) finishAwaitingHuman(ctx context.Context, traceID strin
 	prompt := strings.TrimSpace(awaiting.Prompt)
 	selectionMode := strings.TrimSpace(awaiting.SelectionMode)
 	options := append([]tools.AskHumanOption(nil), awaiting.Options...)
-	if err := e.events.awaitingHuman(ctx, traceID, resolved.step.turn, resolved.step.stepID, resolved.toolName, resolved.toolCallID, questionID, prompt, selectionMode, options); err != nil {
+	if err := e.events.awaitingHuman(ctx, traceID, awaitingHumanEventRequest{
+		Turn:          resolved.step.turn,
+		StepID:        resolved.step.stepID,
+		ToolName:      resolved.toolName,
+		ToolCallID:    resolved.toolCallID,
+		QuestionID:    questionID,
+		Prompt:        prompt,
+		SelectionMode: selectionMode,
+		Options:       options,
+	}); err != nil {
 		return toolCallOutcome{}, err
 	}
 	return toolCallOutcome{

@@ -236,14 +236,16 @@ func (a *Agent) finishAssistantTextTurnAwaitingHuman(
 	if err := state.events.awaitingHuman(
 		ctx,
 		state.traceID,
-		turn,
-		stepID,
-		awaiting.Tool.Name,
-		awaiting.Tool.CallID,
-		awaiting.QuestionID,
-		awaiting.Prompt,
-		awaiting.SelectionMode,
-		cloneAssistantTextOptions(awaiting.Options),
+		awaitingHumanEventRequest{
+			Turn:          turn,
+			StepID:        stepID,
+			ToolName:      awaiting.Tool.Name,
+			ToolCallID:    awaiting.Tool.CallID,
+			QuestionID:    awaiting.QuestionID,
+			Prompt:        awaiting.Prompt,
+			SelectionMode: awaiting.SelectionMode,
+			Options:       cloneAssistantTextOptions(awaiting.Options),
+		},
 	); err != nil {
 		return err
 	}

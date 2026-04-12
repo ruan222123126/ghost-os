@@ -83,20 +83,31 @@ func (e agentEventEmitter) toolCallFinished(ctx context.Context, traceID string,
 	return e.emit(ctx, event)
 }
 
-func (e agentEventEmitter) awaitingHuman(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string, questionID string, prompt string, selectionMode string, options []tools.AskHumanOption) error {
+type awaitingHumanEventRequest struct {
+	Turn          int
+	StepID        string
+	ToolName      string
+	ToolCallID    string
+	QuestionID    string
+	Prompt        string
+	SelectionMode string
+	Options       []tools.AskHumanOption
+}
+
+func (e agentEventEmitter) awaitingHuman(ctx context.Context, traceID string, request awaitingHumanEventRequest) error {
 	payload := map[string]any{
-		"tool":         toolName,
-		"tool_call_id": toolCallID,
-		"question_id":  questionID,
-		"prompt":       prompt,
+		"tool":         request.ToolName,
+		"tool_call_id": request.ToolCallID,
+		"question_id":  request.QuestionID,
+		"prompt":       request.Prompt,
 	}
-	if selectionMode != "" {
-		payload["selection_mode"] = selectionMode
+	if request.SelectionMode != "" {
+		payload["selection_mode"] = request.SelectionMode
 	}
-	if len(options) > 0 {
-		payload["options"] = options
+	if len(request.Options) > 0 {
+		payload["options"] = request.Options
 	}
-	event, err := e.newEvent(traceID, turn, stepID, streaming.EventAwaitingHuman, payload)
+	event, err := e.newEvent(traceID, request.Turn, request.StepID, streaming.EventAwaitingHuman, payload)
 	if err != nil {
 		return err
 	}
