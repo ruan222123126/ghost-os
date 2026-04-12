@@ -18,8 +18,7 @@ func NormalizeResponse(action string, payload map[string]any) (Result, error) {
 		return Result{}, actionError(action, err)
 	}
 
-	dataValue, err := requireField(payload, responseFieldData)
-	if err != nil {
+	if err := requireDataField(payload, success); err != nil {
 		return Result{}, actionError(action, err)
 	}
 	if _, err := requireArray(payload, "urls"); err != nil {
@@ -40,22 +39,9 @@ func NormalizeResponse(action string, payload map[string]any) (Result, error) {
 			formatUpstreamFailure(content, upstreamError),
 		)
 	}
-	if _, err := requireObjectValue(responseFieldData, dataValue); err != nil {
-		return Result{}, actionError(action, err)
-	}
 
-	citations, err := optionalArray(payload, "citations")
+	citations, referencesText, err := normalizeOptionalFields(payload)
 	if err != nil {
-		return Result{}, actionError(action, err)
-	}
-	referencesText, err := optionalString(payload, "references_text")
-	if err != nil {
-		return Result{}, actionError(action, err)
-	}
-	if err := validateOptionalObject(payload, "comparison"); err != nil {
-		return Result{}, actionError(action, err)
-	}
-	if err := validateOptionalObject(payload, "mindsearch_compat"); err != nil {
 		return Result{}, actionError(action, err)
 	}
 
@@ -64,6 +50,34 @@ func NormalizeResponse(action string, payload map[string]any) (Result, error) {
 		Citations:      citations,
 		ReferencesText: referencesText,
 	}, nil
+}
+
+func requireDataField(payload map[string]any, success bool) error {
+	if !success {
+		_, err := requireField(payload, responseFieldData)
+		return err
+	}
+
+	_, err := requireObject(payload, responseFieldData)
+	return err
+}
+
+func normalizeOptionalFields(payload map[string]any) ([]any, string, error) {
+	citations, err := optionalArray(payload, "citations")
+	if err != nil {
+		return nil, "", err
+	}
+	referencesText, err := optionalString(payload, "references_text")
+	if err != nil {
+		return nil, "", err
+	}
+	if err := validateOptionalObject(payload, "comparison"); err != nil {
+		return nil, "", err
+	}
+	if err := validateOptionalObject(payload, "mindsearch_compat"); err != nil {
+		return nil, "", err
+	}
+	return citations, referencesText, nil
 }
 
 func actionError(action string, err error) error {

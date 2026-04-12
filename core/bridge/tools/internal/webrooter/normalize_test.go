@@ -50,6 +50,21 @@ func TestNormalizeResponse_RejectsUpstreamSuccessFalseWithoutDataObjectRequireme
 	}
 }
 
+func TestNormalizeResponse_RequiresDataFieldWhenSuccessIsFalse(t *testing.T) {
+	payload := map[string]any{
+		"success":  false,
+		"content":  "fetch failed",
+		"urls":     []any{},
+		"error":    "connection reset",
+		"metadata": map[string]any{},
+	}
+
+	_, err := NormalizeResponse("fetch", payload)
+	if err == nil || !strings.Contains(err.Error(), `response field "data" is required`) {
+		t.Fatalf("expected missing data field error, got %v", err)
+	}
+}
+
 func TestNormalizeResponse_RequiresDataObjectWhenSuccessIsTrue(t *testing.T) {
 	payload := map[string]any{
 		"success":  true,
