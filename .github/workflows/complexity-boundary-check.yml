@@ -1,0 +1,44 @@
+name: complexity-boundary-check
+
+on:
+  pull_request:
+    paths:
+      - "core/bridge/**"
+      - "core/shared/**"
+      - "drivers/native/**"
+      - "apps/web/**"
+      - "scripts/check_complexity_limits.py"
+      - "scripts/complexity_limits_analysis.py"
+      - "scripts/complexity_limits_git.py"
+      - ".github/workflows/complexity-boundary-check.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "core/bridge/**"
+      - "core/shared/**"
+      - "drivers/native/**"
+      - "apps/web/**"
+      - "scripts/check_complexity_limits.py"
+      - "scripts/complexity_limits_analysis.py"
+      - "scripts/complexity_limits_git.py"
+      - ".github/workflows/complexity-boundary-check.yml"
+  workflow_dispatch:
+
+jobs:
+  enforce-limits:
+    name: Enforce Complexity And Layer Boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run complexity and boundary checks
+        run: python3 scripts/check_complexity_limits.py
