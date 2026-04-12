@@ -10,11 +10,13 @@ interface UseBridgeConfigLoadersOptions {
   refreshIntervalMs: number;
   mountedRef: MutableRefObject<boolean>;
   loadConfigFallbackMessage: string;
+  loadProvidersFallbackMessage: string;
   setConfig: (config: BridgeConfig) => void;
   setProviders: (providers: ProviderConfig[]) => void;
   setConfigLoading: (loading: boolean) => void;
   setModelOptionsLoading: (loading: boolean) => void;
-  setConfigError: (error: string) => void;
+  setConfigLoadError: (error: string) => void;
+  setProviderLoadError: (error: string) => void;
 }
 
 interface UseBridgeConfigLoadersResult {
@@ -30,11 +32,13 @@ export function useBridgeConfigLoaders(
     refreshIntervalMs,
     mountedRef,
     loadConfigFallbackMessage,
+    loadProvidersFallbackMessage,
     setConfig,
     setProviders,
     setConfigLoading,
     setModelOptionsLoading,
-    setConfigError,
+    setConfigLoadError,
+    setProviderLoadError,
   } = options;
 
   const loadConfig = useCallback(async (silent = false): Promise<void> => {
@@ -48,12 +52,12 @@ export function useBridgeConfigLoaders(
         return;
       }
       setConfig(loaded);
-      setConfigError('');
+      setConfigLoadError('');
     } catch (error) {
       if (!mountedRef.current || silent) {
         return;
       }
-      setConfigError(toErrorMessage(error, loadConfigFallbackMessage));
+      setConfigLoadError(toErrorMessage(error, loadConfigFallbackMessage));
     } finally {
       if (mountedRef.current && !silent) {
         setConfigLoading(false);
@@ -63,7 +67,7 @@ export function useBridgeConfigLoaders(
     loadConfigFallbackMessage,
     mountedRef,
     setConfig,
-    setConfigError,
+    setConfigLoadError,
     setConfigLoading,
   ]);
 
@@ -78,19 +82,24 @@ export function useBridgeConfigLoaders(
         return;
       }
       setProviders(loaded.providers);
-    } catch {
-      if (!mountedRef.current) {
+      setProviderLoadError('');
+    } catch (error) {
+      if (!mountedRef.current || silent) {
         return;
       }
-      if (!silent) {
-        setProviders([]);
-      }
+      setProviderLoadError(toErrorMessage(error, loadProvidersFallbackMessage));
     } finally {
       if (mountedRef.current && !silent) {
         setModelOptionsLoading(false);
       }
     }
-  }, [mountedRef, setModelOptionsLoading, setProviders]);
+  }, [
+    loadProvidersFallbackMessage,
+    mountedRef,
+    setModelOptionsLoading,
+    setProviderLoadError,
+    setProviders,
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;

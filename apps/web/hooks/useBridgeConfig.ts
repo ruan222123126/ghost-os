@@ -43,23 +43,37 @@ export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridge
   const [configLoading, setConfigLoading] = useState(true);
   const [modelOptionsLoading, setModelOptionsLoading] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
-  const [configError, setConfigError] = useState('');
+  const [configLoadError, setConfigLoadError] = useState('');
+  const [providerLoadError, setProviderLoadError] = useState('');
+  const [saveConfigError, setSaveConfigError] = useState('');
   const mountedRef = useRef(true);
   const loaders = useBridgeConfigLoaders({
     autoRefresh,
     refreshIntervalMs,
     mountedRef,
     loadConfigFallbackMessage: copy.system.failedToLoadConfig,
+    loadProvidersFallbackMessage: copy.system.failedToLoadProviders,
     setConfig,
     setProviders,
     setConfigLoading,
     setModelOptionsLoading,
-    setConfigError,
+    setConfigLoadError,
+    setProviderLoadError,
   });
+
+  const configError = useMemo(() => {
+    if (saveConfigError) {
+      return saveConfigError;
+    }
+    if (configLoadError) {
+      return configLoadError;
+    }
+    return providerLoadError;
+  }, [configLoadError, providerLoadError, saveConfigError]);
 
   const saveConfig = useCallback(async (update: ConfigUpdate): Promise<boolean> => {
     setSavingConfig(true);
-    setConfigError('');
+    setSaveConfigError('');
     try {
       const updated = await updateConfig(update);
       if (!mountedRef.current) {
@@ -69,7 +83,7 @@ export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridge
       return true;
     } catch (error) {
       if (mountedRef.current) {
-        setConfigError(toErrorMessage(error, copy.system.failedToSaveConfig));
+        setSaveConfigError(toErrorMessage(error, copy.system.failedToSaveConfig));
       }
       return false;
     } finally {
