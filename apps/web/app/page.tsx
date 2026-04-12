@@ -3,144 +3,19 @@
 'use client';
 
 import type { FC } from 'react';
-import { useCallback, useEffect, useState } from 'react';
 import { ChatInput } from '@/components/ChatInput';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { MessageList } from '@/components/message/MessageList';
 import { SessionSidebar } from '@/components/SessionSidebar';
-import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
-import { useBridgeConfig } from '@/hooks/useBridgeConfig';
-import { useSessions } from '@/hooks/useSessions';
+import { useHomePageController } from '@/hooks/useHomePageController';
+import { useWebLocale } from '@/lib/i18n/provider';
 import { ignorePromise } from '@/lib/errors';
-import { parseSettingsQuery, stripSettingsQuery } from '@/lib/settingsQuery';
-import type { ChatSendInput } from '@/lib/types';
-import { useRouter } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 const HomePage: FC = () => {
-  const router = useRouter();
-  const [queryString, setQueryString] = useState('');
-  const settingsTabFromQuery = parseSettingsQuery(queryString);
-  const [showConfig, setShowConfig] = useState(false);
-  const {
-    sessions,
-    currentSessionId,
-    loading: sessionsLoading,
-    error: sessionsError,
-    loadSessions,
-    deleteSession,
-    createNewSession,
-    setCurrentSessionId,
-  } = useSessions();
-  const {
-    committedMessages,
-    streamingAssistantSegments,
-    streamingItemOrder,
-    streamingTools,
-    pendingQuestions,
-    loading,
-    historySyncing,
-    historyLoading,
-    loadingOlderHistory,
-    chatError,
-    hasPendingQuestion,
-    hasOlderHistory,
-    canStop,
-    sendChatMessage,
-    stopCurrentRun,
-    answerQuestion,
-    cancelQuestion,
-    loadSessionHistory,
-    loadOlderHistory,
-    clearMessages,
-  } = useBridgeChat({
-    currentSessionId,
-    onSessionResolved: setCurrentSessionId,
-  });
-  const {
-    config,
-    configLoading,
-    savingConfig,
-    configError,
-    modelOptionsLoading,
-    activeModelOption,
-    modelOptions,
-    saveConfig,
-    selectActiveModel,
-    refreshConfig,
-  } = useBridgeConfig({ autoRefresh: !showConfig });
-  const inputDisabled = configLoading || historyLoading || !config || hasPendingQuestion;
-  const topStatusVisible = configLoading || (Boolean(configError) && !showConfig);
-
-  useEffect(() => {
-    const syncLocationSearch = () => {
-      setQueryString(window.location.search);
-    };
-    syncLocationSearch();
-    window.addEventListener('popstate', syncLocationSearch);
-
-    return () => {
-      window.removeEventListener('popstate', syncLocationSearch);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (settingsTabFromQuery === 'tasks') {
-      setShowConfig(true);
-    }
-  }, [settingsTabFromQuery]);
-
-  const handleSendChatMessage = useCallback(
-    async (input: ChatSendInput) => {
-      await sendChatMessage(input);
-      await loadSessions();
-    },
-    [loadSessions, sendChatMessage]
-  );
-
-  const handleSelectSession = useCallback(
-    (id: string) => {
-      setCurrentSessionId(id);
-      ignorePromise(loadSessionHistory(id));
-    },
-    [loadSessionHistory, setCurrentSessionId]
-  );
-
-  const handleDeleteSession = useCallback(
-    async (id: string) => {
-      await deleteSession(id);
-      if (currentSessionId === id) {
-        clearMessages();
-      }
-    },
-    [clearMessages, currentSessionId, deleteSession]
-  );
-
-  const handleNewChat = useCallback(() => {
-    createNewSession();
-    clearMessages();
-  }, [clearMessages, createNewSession]);
-
-  const handleCloseConfig = useCallback(() => {
-    setShowConfig(false);
-    if (!settingsTabFromQuery) {
-      return;
-    }
-    const nextQuery = stripSettingsQuery(queryString);
-    setQueryString(nextQuery);
-    router.replace(nextQuery.length > 0 ? `/${nextQuery}` : '/');
-  }, [queryString, router, settingsTabFromQuery]);
-
-  const handleOpenWorkflowCreate = useCallback(() => {
-    setShowConfig(false);
-    router.push('/workflow/new');
-  }, [router]);
-
-  const handleOpenWorkflowEdit = useCallback((taskID: string) => {
-    setShowConfig(false);
-    router.push(`/workflow/${encodeURIComponent(taskID)}`);
-  }, [router]);
+  const { copy } = useWebLocale();
+  const controller = useHomePageController();
 
   return (
     <>
@@ -148,79 +23,79 @@ const HomePage: FC = () => {
       <div className="ambient ambient-b" aria-hidden="true" />
 
       <main className="app-shell">
-        {topStatusVisible ? (
+        {controller.topStatusVisible ? (
           <header className="topbar">
             <div className="topbar-actions">
-              {configLoading ? <span className="status-chip">Loading runtime…</span> : null}
-              {configError && !showConfig ? <span className="status-chip status-chip-warning">Config needs attention</span> : null}
+              {controller.configLoading ? <span className="status-chip">{copy.chat.topbarLoadingRuntime}</span> : null}
+              {controller.configError && !controller.showConfig ? <span className="status-chip status-chip-warning">{copy.chat.topbarConfigNeedsAttention}</span> : null}
             </div>
           </header>
         ) : null}
 
         <div className="chat-layout">
           <SessionSidebar
-            sessions={sessions}
-            currentSessionId={currentSessionId}
-            loading={sessionsLoading}
-            error={sessionsError}
-            onSelect={handleSelectSession}
+            sessions={controller.sessions}
+            currentSessionId={controller.currentSessionId}
+            loading={controller.sessionsLoading}
+            error={controller.sessionsError}
+            onSelect={controller.selectSession}
             onDelete={(id) => {
-              ignorePromise(handleDeleteSession(id));
+              ignorePromise(controller.deleteSession(id));
             }}
-            onNewChat={handleNewChat}
-            onOpenSettings={() => setShowConfig(true)}
+            onNewChat={controller.newChat}
+            onOpenSettings={controller.openConfig}
           />
 
           <section className="chat panel">
-            {historyLoading ? <div className="status-line info">Loading session history…</div> : null}
-            {historySyncing && !historyLoading ? <div className="status-line info">Syncing latest messages…</div> : null}
-            {configError && !showConfig ? <div className="status-line error">{configError}</div> : null}
+            {controller.historyLoading ? <div className="status-line info">{copy.chat.historyLoading}</div> : null}
+            {controller.historySyncing && !controller.historyLoading ? <div className="status-line info">{copy.chat.historySyncing}</div> : null}
+            {controller.configError && !controller.showConfig ? <div className="status-line error">{controller.configError}</div> : null}
 
             <MessageList
-              key={currentSessionId || 'draft-session'}
-              committedMessages={committedMessages}
-              streamingAssistantSegments={streamingAssistantSegments}
-              streamingItemOrder={streamingItemOrder}
-              streamingTools={streamingTools}
-              pendingQuestions={pendingQuestions}
-              loading={loading}
-              loadingOlderHistory={loadingOlderHistory}
-              hasOlderHistory={hasOlderHistory}
-              loadOlderHistory={loadOlderHistory}
-              onAnswerQuestion={answerQuestion}
-              onCancelQuestion={cancelQuestion}
+              key={controller.currentSessionId || 'draft-session'}
+              committedMessages={controller.committedMessages}
+              streamingAssistantSegments={controller.streamingAssistantSegments}
+              streamingItemOrder={controller.streamingItemOrder}
+              streamingTools={controller.streamingTools}
+              pendingQuestions={controller.pendingQuestions}
+              loading={controller.loading}
+              loadingOlderHistory={controller.loadingOlderHistory}
+              hasOlderHistory={controller.hasOlderHistory}
+              loadOlderHistory={controller.loadOlderHistory}
+              onAnswerQuestion={controller.answerQuestion}
+              onCancelQuestion={controller.cancelQuestion}
             />
 
-            {chatError ? <div className="status-line error">{chatError}</div> : null}
+            {controller.chatError ? <div className="status-line error">{controller.chatError}</div> : null}
 
             <ChatInput
-              loading={loading}
-              disabled={inputDisabled || savingConfig}
-              awaitingQuestion={hasPendingQuestion}
-              modelLoading={modelOptionsLoading || savingConfig}
-              activeModel={activeModelOption}
-              availableModels={modelOptions}
-              canStop={canStop}
-              onSend={handleSendChatMessage}
-              onStop={stopCurrentRun}
-              onSelectModel={config?.model_selection_enabled ? selectActiveModel : undefined}
+              loading={controller.loading}
+              disabled={controller.inputDisabled || controller.savingConfig}
+              awaitingQuestion={controller.hasPendingQuestion}
+              modelLoading={controller.modelOptionsLoading || controller.savingConfig}
+              activeModel={controller.activeModelOption}
+              availableModels={controller.modelOptions}
+              canStop={controller.canStop}
+              onSend={controller.sendMessage}
+              onStop={controller.stopCurrentRun}
+              onSelectModel={controller.config?.model_selection_enabled ? controller.selectActiveModel : undefined}
             />
           </section>
         </div>
       </main>
 
       <ConfigPanel
-        open={showConfig}
-        initialTab={settingsTabFromQuery ?? 'provider'}
-        loading={configLoading}
-        saving={savingConfig}
-        config={config}
-        error={configError}
-        onClose={handleCloseConfig}
-        onOpenWorkflowCreate={handleOpenWorkflowCreate}
-        onOpenWorkflowEdit={(task) => handleOpenWorkflowEdit(task.id)}
-        onSave={saveConfig}
-        onReload={refreshConfig}
+        open={controller.showConfig}
+        initialTab={controller.settingsTabFromQuery ?? 'provider'}
+        loading={controller.configLoading}
+        saving={controller.savingConfig}
+        config={controller.config}
+        error={controller.configError}
+        onClose={controller.closeConfig}
+        onOpenWorkflowCreate={controller.openWorkflowCreate}
+        onOpenWorkflowEdit={controller.openWorkflowEdit}
+        onSave={controller.saveConfig}
+        onReload={controller.refreshConfig}
       />
     </>
   );

@@ -4,15 +4,16 @@ import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CloseIcon,
-  ComingSoonPanel,
   SettingsNavigation,
   type SettingsTab,
 } from '@/components/config/ConfigPanelNavigation';
-import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
-import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSection';
-import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
+import { ConfigPanelSectionContent } from '@/components/config/ConfigPanelSectionContent';
+import { resolveConfigPanelTabError } from '@/components/config/configPanelTabError';
 import { useConfigProviders } from '@/hooks/useConfigProviders';
+import { useConfigSkills } from '@/hooks/useConfigSkills';
 import { useConfigTasks } from '@/hooks/useConfigTasks';
+import { useConfigTools } from '@/hooks/useConfigTools';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
 
 interface ConfigPanelProps {
@@ -44,73 +45,45 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
   onSave,
   onReload,
 }) => {
+  const { copy } = useWebLocale();
   const [activeTab, setActiveTab] = useState<SettingsTab>('provider');
-  const {
-    providers,
-    activeProvider,
-    providersLoading,
-    providerSaving,
-    providerError,
-    editorMode,
-    editor,
-    refreshProviders,
-    beginCreateProvider,
-    editProvider,
-    updateEditor,
-    selectProviderType,
-    submitProvider,
-    activateProvider,
-    deleteProviderByName,
-    cancelEditing,
-  } = useConfigProviders({
+  const providersState = useConfigProviders({
     open,
     onReloadConfig: onReload,
   });
-  const {
-    tasks,
-    tasksLoading,
-    taskSaving,
-    taskError,
-    editorMode: taskEditorMode,
-    editor: taskEditor,
-    refreshTasks,
-    beginCreateTextTask,
-    editTask: editTextTask,
-    updateEditor: updateTaskEditor,
-    submitTask,
-    setTaskEnabled,
-    runTaskNowByID,
-    deleteTaskByID,
-    cancelEditing: cancelTaskEditing,
-  } = useConfigTasks({
-    open,
-  });
+  const skillsState = useConfigSkills({ open });
+  const tasksState = useConfigTasks({ open });
+  const toolsState = useConfigTools({ open });
 
   useEffect(() => {
-    if (!open) {
-      return;
+    if (open) {
+      setActiveTab(initialTab);
     }
-    setActiveTab(initialTab);
   }, [initialTab, open]);
 
   const tabError = useMemo(() => {
-    if (activeTab === 'provider') {
-      return providerError;
-    }
-    if (activeTab === 'tasks') {
-      return taskError;
-    }
-    if (activeTab === 'general') {
-      return error;
-    }
-    return '';
-  }, [activeTab, error, providerError, taskError]);
+    return resolveConfigPanelTabError({
+      activeTab,
+      generalError: error,
+      providerError: providersState.providerError,
+      taskError: tasksState.taskError,
+      skillError: skillsState.skillError,
+      toolError: toolsState.toolError,
+    });
+  }, [
+    activeTab,
+    error,
+    providersState.providerError,
+    tasksState.taskError,
+    skillsState.skillError,
+    toolsState.toolError,
+  ]);
 
   const handleSelectTab = useCallback((tab: SettingsTab) => {
     setActiveTab(tab);
-    cancelEditing();
-    cancelTaskEditing();
-  }, [cancelEditing, cancelTaskEditing]);
+    providersState.cancelEditing();
+    tasksState.cancelEditing();
+  }, [providersState, tasksState]);
 
   if (!open) {
     return null;
@@ -118,14 +91,14 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-6 md:p-12" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-label="Close settings" />
+      <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-label={copy.settings.closeSettingsAria} />
 
       <section className="relative z-10 flex h-[85vh] max-h-[800px] w-full max-w-[1000px] overflow-hidden rounded-[24px] border border-[#E5E5E5] bg-white shadow-2xl">
         <button
           type="button"
           onClick={onClose}
           className="absolute right-6 top-6 z-20 rounded-full bg-[#F5F5F5] p-2 text-[#737373] transition-colors hover:text-[#111111]"
-          aria-label="Close settings"
+          aria-label={copy.settings.closeSettingsAria}
         >
           <CloseIcon />
         </button>
@@ -140,60 +113,20 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
               </div>
             ) : null}
 
-            {activeTab === 'provider' ? (
-              <ProviderSettingsSection
-                providers={providers}
-                activeProvider={activeProvider}
-                loading={providersLoading}
-                saving={providerSaving}
-                editorMode={editorMode}
-                editor={editor}
-                onRefresh={refreshProviders}
-                onBeginCreate={beginCreateProvider}
-                onEdit={editProvider}
-                onChangeEditor={updateEditor}
-                onSelectProviderType={selectProviderType}
-                onSubmit={submitProvider}
-                onActivate={activateProvider}
-                onDelete={deleteProviderByName}
-                onCancelEditing={cancelEditing}
-              />
-            ) : null}
-
-            {activeTab === 'general' ? (
-              <RuntimeSettingsSection
-                loading={loading}
-                saving={saving}
-                config={config}
-                onSave={onSave}
-                onReload={onReload}
-              />
-            ) : null}
-
-            {activeTab === 'tasks' ? (
-              <TaskSettingsSection
-                tasks={tasks}
-                loading={tasksLoading}
-                saving={taskSaving}
-                editorMode={taskEditorMode}
-                editor={taskEditor}
-                onRefresh={refreshTasks}
-                onBeginCreateTextTask={beginCreateTextTask}
-                onEditTextTask={editTextTask}
-                onOpenWorkflowCreate={onOpenWorkflowCreate}
-                onOpenWorkflowEdit={onOpenWorkflowEdit}
-                onChangeEditor={updateTaskEditor}
-                onSubmit={submitTask}
-                onSetEnabled={setTaskEnabled}
-                onRunNow={runTaskNowByID}
-                onDelete={deleteTaskByID}
-                onCancelEditing={cancelTaskEditing}
-              />
-            ) : null}
-
-            {activeTab !== 'provider' && activeTab !== 'general' && activeTab !== 'tasks' ? (
-              <ComingSoonPanel tab={activeTab} />
-            ) : null}
+            <ConfigPanelSectionContent
+              activeTab={activeTab}
+              loading={loading}
+              saving={saving}
+              config={config}
+              onSave={onSave}
+              onReload={onReload}
+              onOpenWorkflowCreate={onOpenWorkflowCreate}
+              onOpenWorkflowEdit={onOpenWorkflowEdit}
+              providersState={providersState}
+              skillsState={skillsState}
+              tasksState={tasksState}
+              toolsState={toolsState}
+            />
           </div>
         </div>
       </section>

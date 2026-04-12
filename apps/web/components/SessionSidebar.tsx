@@ -2,8 +2,17 @@
 
 'use client';
 
-import { useEffect, useMemo, useRef, useState, type FC } from 'react';
+import type { FC } from 'react';
 import { SidebarSettingsButton } from '@/components/SidebarSettingsButton';
+import {
+  IconPanelLeftClose,
+  IconPanelLeftOpen,
+  IconPlus,
+  IconSearch,
+  IconX,
+} from '@/components/sessionSidebarIcons';
+import { useSessionSidebarState } from '@/hooks/useSessionSidebarState';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionSidebarProps {
@@ -17,45 +26,6 @@ interface SessionSidebarProps {
   onOpenSettings: () => void;
 }
 
-const IconPanelLeftClose: FC<{ size?: number }> = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M3.5 4.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M3.5 15.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M8.2 4.5v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M12.7 7.2l-2.5 2.8 2.5 2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const IconPanelLeftOpen: FC<{ size?: number }> = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M3.5 4.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M3.5 15.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M8.2 4.5v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M10.2 7.2l2.5 2.8-2.5 2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const IconSearch: FC<{ size?: number }> = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M8.9 14.7a5.8 5.8 0 1 1 0-11.6 5.8 5.8 0 0 1 0 11.6Z" stroke="currentColor" strokeWidth="1.5" />
-    <path d="M13.3 13.3 17 17" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
-
-const IconPlus: FC<{ size?: number }> = ({ size = 20 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M10 4v12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    <path d="M4 10h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-  </svg>
-);
-
-const IconX: FC<{ size?: number }> = ({ size = 14 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M5 5l10 10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    <path d="M15 5 5 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-  </svg>
-);
-
 export const SessionSidebar: FC<SessionSidebarProps> = ({
   sessions,
   currentSessionId,
@@ -66,59 +36,33 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
   onNewChat,
   onOpenSettings,
 }) => {
-  const [isOpen, setIsOpen] = useState(true);
-  const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-  const filteredSessions = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return sessions;
-    return sessions.filter((session) => session.id.toLowerCase().includes(query));
-  }, [searchQuery, sessions]);
-
-  const toggleSidebar = () => {
-    setIsOpen((open) => !open);
-    if (isOpen) {
-      setIsSearchVisible(false);
-      setSearchQuery('');
-    }
-  };
-
-  const toggleSearch = () => {
-    setIsSearchVisible((visible) => !visible);
-  };
-
-  useEffect(() => {
-    if (isOpen && isSearchVisible) {
-      searchInputRef.current?.focus();
-    }
-  }, [isOpen, isSearchVisible]);
+  const { copy } = useWebLocale();
+  const sidebarState = useSessionSidebarState({ sessions });
 
   return (
     <aside
       className={`sidebar flex flex-col bg-neutral-50 text-black transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
-        isOpen ? 'w-72' : 'w-16'
+        sidebarState.isOpen ? 'w-72' : 'w-16'
       }`}
     >
-      <div className={`flex h-16 items-center p-4 ${isOpen ? 'justify-between' : 'justify-center'}`}>
+      <div className={`flex h-16 items-center p-4 ${sidebarState.isOpen ? 'justify-between' : 'justify-center'}`}>
         <button
           type="button"
-          onClick={toggleSidebar}
+          onClick={sidebarState.toggleSidebar}
           className="flex items-center justify-center p-2 transition-colors hover:bg-white"
-          title={isOpen ? 'Collapse' : 'Expand'}
-          aria-label={isOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          title={sidebarState.isOpen ? copy.chat.sidebarCollapseTitle : copy.chat.sidebarExpandTitle}
+          aria-label={sidebarState.isOpen ? copy.chat.sidebarCollapseAria : copy.chat.sidebarExpandAria}
         >
-          {isOpen ? <IconPanelLeftClose /> : <IconPanelLeftOpen />}
+          {sidebarState.isOpen ? <IconPanelLeftClose /> : <IconPanelLeftOpen />}
         </button>
 
-        {isOpen ? (
+        {sidebarState.isOpen ? (
           <button
             type="button"
-            onClick={toggleSearch}
-            className={`p-2 transition-colors ${isSearchVisible ? 'bg-black text-white' : 'hover:bg-white'}`}
-            title="Search"
-            aria-label="Search sessions"
+            onClick={sidebarState.toggleSearch}
+            className={`p-2 transition-colors ${sidebarState.isSearchVisible ? 'bg-black text-white' : 'hover:bg-white'}`}
+            title={copy.chat.sidebarSearchTitle}
+            aria-label={copy.chat.sidebarSearchAria}
           >
             <IconSearch />
           </button>
@@ -127,26 +71,23 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
 
       <div
         className={`px-3 overflow-hidden transition-all duration-300 ${
-          isSearchVisible && isOpen ? 'mb-2 h-12 opacity-100' : 'mb-0 h-0 opacity-0'
+          sidebarState.isSearchVisible && sidebarState.isOpen ? 'mb-2 h-12 opacity-100' : 'mb-0 h-0 opacity-0'
         }`}
       >
         <div className="relative border-b border-black/10">
           <input
-            ref={searchInputRef}
+            ref={sidebarState.searchInputRef}
             type="text"
-            placeholder="SEARCH..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder={copy.chat.sidebarSearchPlaceholder}
+            value={sidebarState.searchQuery}
+            onChange={(event) => sidebarState.setSearchQuery(event.target.value)}
             className="w-full bg-transparent py-2 pl-1 pr-8 text-xs font-medium uppercase tracking-widest outline-none placeholder:text-neutral-300"
           />
           <button
             type="button"
-            onClick={() => {
-              setSearchQuery('');
-              setIsSearchVisible(false);
-            }}
+            onClick={sidebarState.clearSearch}
             className="absolute right-0 top-1/2 -translate-y-1/2 text-black"
-            aria-label="Clear search"
+            aria-label={copy.chat.sidebarClearSearchAria}
           >
             <IconX />
           </button>
@@ -158,24 +99,24 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
           type="button"
           onClick={() => {
             onNewChat();
-            if (!isOpen) setIsOpen(true);
+            sidebarState.openSidebar();
           }}
           className={`group flex items-center justify-center gap-2 bg-transparent text-black transition-colors hover:bg-white ${
-            isOpen ? 'w-full px-4 py-3' : 'mx-auto h-10 w-10'
+            sidebarState.isOpen ? 'w-full px-4 py-3' : 'mx-auto h-10 w-10'
           }`}
         >
           <IconPlus />
-          {isOpen ? (
-            <span className="text-xs font-bold uppercase tracking-tighter text-neutral-500 group-hover:text-black">New Chat</span>
+          {sidebarState.isOpen ? (
+            <span className="text-xs font-bold uppercase tracking-tighter text-neutral-500 group-hover:text-black">{copy.chat.sidebarNewChat}</span>
           ) : null}
         </button>
       </div>
 
       <div className="mt-6 flex-1 overflow-y-auto px-3">
-        {isOpen ? (
+        {sidebarState.isOpen ? (
           <>
             <div className="mb-4 flex items-center gap-2 border-b border-black/5 px-1 pb-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em]">History</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.chat.sidebarHistory}</span>
             </div>
 
             {error && !loading ? (
@@ -188,11 +129,11 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
                   <div key={`session-skeleton-${index}`} className="h-10 w-full bg-white" />
                 ))}
               </div>
-            ) : filteredSessions.length === 0 ? (
-              <div className="border border-black/10 bg-white px-3 py-3 text-xs text-neutral-600">No sessions.</div>
+            ) : sidebarState.filteredSessions.length === 0 ? (
+              <div className="border border-black/10 bg-white px-3 py-3 text-xs text-neutral-600">{copy.chat.sidebarNoSessions}</div>
             ) : (
               <div className="space-y-0.5">
-                {filteredSessions.map((session) => {
+                {sidebarState.filteredSessions.map((session) => {
                   const shortID = session.id.slice(0, 8);
                   const isActive = session.id === currentSessionId;
 
@@ -214,7 +155,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
                           : 'text-neutral-500 hover:bg-white hover:text-black'
                       }`}
                     >
-                      <span className="flex-1 truncate uppercase tracking-tight">Session {shortID}</span>
+                      <span className="flex-1 truncate uppercase tracking-tight">{copy.chat.sidebarSessionTitle(shortID)}</span>
                       <button
                         type="button"
                         onClick={(event) => {
@@ -222,10 +163,10 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
                           onDelete(session.id);
                         }}
                         className="opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label={`Delete session ${shortID}`}
-                        title="Delete"
+                        aria-label={copy.chat.sidebarDeleteSessionAria(shortID)}
+                        title={copy.chat.sessionDelete}
                       >
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black">Del</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-black">{copy.chat.sidebarDeleteShort}</span>
                       </button>
                     </div>
                   );
@@ -236,7 +177,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         ) : null}
       </div>
 
-      <SidebarSettingsButton collapsed={!isOpen} onClick={onOpenSettings} />
+      <SidebarSettingsButton collapsed={!sidebarState.isOpen} onClick={onOpenSettings} />
     </aside>
   );
 };
