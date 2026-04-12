@@ -1,100 +1,76 @@
 package dev.ghostos.android.network
 
-import dev.ghostos.android.model.*
+import dev.ghostos.android.model.AgentRequest
+import dev.ghostos.android.model.AgentSendResponse
+import dev.ghostos.android.model.AgentStopResponsePayload
+import dev.ghostos.android.model.AgentStreamEvent
+import dev.ghostos.android.model.ApiRequest
+import dev.ghostos.android.model.BridgeConfig
+import dev.ghostos.android.model.DownloadedArtifact
+import dev.ghostos.android.model.HumanResponseRequest
+import dev.ghostos.android.model.SessionDetail
+import dev.ghostos.android.model.SessionMetadata
+import dev.ghostos.android.model.SessionPushEvent
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.ProducerScope
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.launch
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.decodeFromJsonElement
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import java.net.URLEncoder
-import java.util.concurrent.TimeUnit
 
-class BridgeClient(
+private const val JSON_MEDIA_TYPE = "application/json"
+private const val OCTET_STREAM_MIME = "application/octet-stream"
+
+class BridgeClient internal constructor(
     private val baseUrl: String,
     private val token: String,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val dependencies: BridgeClientDependencies,
 ) : BridgeGateway {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(0, TimeUnit.SECONDS)
-        .build()
+    constructor(baseUrl: String, token: String) : this(
+        baseUrl = baseUrl,
+        token = token,
+        dependencies = BridgeClientDependencies(),
+    )
 
-    private val json = Json { ignoreUnknownKeys = true }
+    constructor(baseUrl: String, token: String, ioDispatcher: CoroutineDispatcher) : this(
+        baseUrl = baseUrl,
+        token = token,
+        dependencies = BridgeClientDependencies(ioDispatcher = ioDispatcher),
+    )
+
+    private val json = dependencies.json
+    private val client = dependencies.httpClient
+    private val ioDispatcher = dependencies.ioDispatcher
+    private val traceIdFactory = dependencies.traceIdFactory
+    private val filenameResolver = dependencies.filenameResolver
+    private val decoder = BridgeResponseDecoder(json)
+    private val streamObserver = SseEventStreamObserver(client, ioDispatcher)
 
     override suspend fun testConnection(): Result<BridgeConfig> = withContext(ioDispatcher) {
         runCatching {
-            val request = Request.Builder()
-                .url("$baseUrl/api/config")
-                .header("Authorization", "Bearer $token")
+            val request = authorizedRequestBuilder("/api/config")
                 .get()
                 .build()
-
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: throw Exception("Empty response")
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: $body")
-                }
-                decodeSuccessEnvelope(body)
-            }
+            decoder.decodeSuccessEnvelope(executeJsonRequest(request))
         }
     }
 
     override suspend fun sendMessage(message: String, sessionId: String?): Result<AgentSendResponse> = withContext(ioDispatcher) {
         runCatching {
-            val payload = AgentRequest(
-                message = message,
-                sessionId = sessionId,
-            )
-            val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
-
-            val request = Request.Builder()
-                .url("$baseUrl/api/agent")
-                .header("Authorization", "Bearer $token")
-                .post(body)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string() ?: throw Exception("Empty response")
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: $responseBody")
-                }
-                decodeAgentEnvelope(responseBody)
-            }
+            val payload = AgentRequest(message = message, sessionId = sessionId)
+            val request = postJsonRequest("/api/agent", payload)
+            decoder.decodeAgentEnvelope(executeJsonRequest(request))
         }
     }
 
     override suspend fun answerQuestion(sessionId: String, questionId: String, answer: String): Result<AgentSendResponse> = withContext(ioDispatcher) {
         runCatching {
             val payload = HumanResponseRequest(sessionId, questionId, answer)
-            val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
-
-            val request = Request.Builder()
-                .url("$baseUrl/api/questions/answer")
-                .header("Authorization", "Bearer $token")
-                .post(body)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string() ?: throw Exception("Empty response")
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: $responseBody")
-                }
-                decodeAgentEnvelope(responseBody)
-            }
+            val request = postJsonRequest("/api/questions/answer", payload)
+            decoder.decodeAgentEnvelope(executeJsonRequest(request))
         }
     }
 
@@ -106,274 +82,116 @@ class BridgeClient(
                 throw Exception("session_id or trace_id is required")
             }
 
-            val body = json.encodeToString(
-                ApiRequest(
-                    action = "AGENT_STOP",
-                    params = mapOf(
-                        "session_id" to normalizedSessionId.ifBlank { null },
-                        "trace_id" to normalizedTraceId.ifBlank { null },
-                    ),
-                    traceId = createClientTraceId("android-stop"),
+            val payload = ApiRequest(
+                action = "AGENT_STOP",
+                params = mapOf(
+                    "session_id" to normalizedSessionId.ifBlank { null },
+                    "trace_id" to normalizedTraceId.ifBlank { null },
                 ),
-            ).toRequestBody("application/json".toMediaType())
-
-            val request = Request.Builder()
-                .url("$baseUrl/api/bus")
-                .header("Authorization", "Bearer $token")
-                .post(body)
-                .build()
-
-            client.newCall(request).execute().use { response ->
-                val responseBody = response.body?.string() ?: throw Exception("Empty response")
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: $responseBody")
-                }
-                decodeSuccessEnvelope(responseBody)
-            }
+                traceId = traceIdFactory.create("android-stop"),
+            )
+            val request = postJsonRequest("/api/bus", payload)
+            decoder.decodeSuccessEnvelope(executeJsonRequest(request))
         }
     }
 
     override fun streamMessage(message: String, sessionId: String?, traceId: String): Flow<AgentStreamEvent> {
-        val payload = AgentRequest(
-            message = message,
-            sessionId = sessionId,
-            traceId = traceId,
-        )
-        val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url("$baseUrl/api/agent/stream")
-            .header("Authorization", "Bearer $token")
-            .post(body)
-            .build()
-        return observeEventStream(request, ::decodeAgentStreamEvent)
+        val payload = AgentRequest(message = message, sessionId = sessionId, traceId = traceId)
+        val request = postJsonRequest("/api/agent/stream", payload)
+        return streamObserver.observe(request, decoder::decodeAgentStreamEvent)
     }
 
     override fun streamAnswer(sessionId: String, questionId: String, answer: String, traceId: String): Flow<AgentStreamEvent> {
         val payload = HumanResponseRequest(sessionId, questionId, answer)
-        val body = json.encodeToString(payload).toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url("$baseUrl/api/questions/answer/stream")
-            .header("Authorization", "Bearer $token")
-            .header("X-Trace-ID", traceId)
-            .post(body)
-            .build()
-        return observeEventStream(request, ::decodeAgentStreamEvent)
+        val request = postJsonRequest("/api/questions/answer/stream", payload, "X-Trace-ID" to traceId)
+        return streamObserver.observe(request, decoder::decodeAgentStreamEvent)
     }
 
     override suspend fun listSessions(): Result<List<SessionMetadata>> = withContext(ioDispatcher) {
         runCatching {
-            val request = Request.Builder()
-                .url("$baseUrl/api/sessions")
-                .header("Authorization", "Bearer $token")
+            val request = authorizedRequestBuilder("/api/sessions")
                 .get()
                 .build()
-
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: throw Exception("Empty response")
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: $body")
-                }
-                decodeSuccessEnvelope(body)
-            }
+            decoder.decodeSuccessEnvelope(executeJsonRequest(request))
         }
     }
 
     override suspend fun getSession(sessionId: String): Result<SessionDetail> = withContext(ioDispatcher) {
         runCatching {
-            val encodedID = URLEncoder.encode(sessionId, Charsets.UTF_8.name())
-            val request = Request.Builder()
-                .url("$baseUrl/api/sessions/$encodedID")
-                .header("Authorization", "Bearer $token")
+            val encodedSessionID = encodePathSegment(sessionId)
+            val request = authorizedRequestBuilder("/api/sessions/$encodedSessionID")
                 .get()
                 .build()
-
-            client.newCall(request).execute().use { response ->
-                val body = response.body?.string() ?: throw Exception("Empty response")
-                if (!response.isSuccessful) {
-                    throw Exception("HTTP ${response.code}: $body")
-                }
-                decodeSuccessEnvelope(body)
-            }
+            decoder.decodeSuccessEnvelope(executeJsonRequest(request))
         }
     }
 
     override suspend fun downloadSessionArtifact(sessionId: String, artifactId: String): Result<DownloadedArtifact> = withContext(ioDispatcher) {
         runCatching {
-            val encodedSessionID = URLEncoder.encode(sessionId, Charsets.UTF_8.name())
-            val encodedArtifactID = URLEncoder.encode(artifactId, Charsets.UTF_8.name())
-            val request = Request.Builder()
-                .url("$baseUrl/api/sessions/$encodedSessionID/artifacts/$encodedArtifactID")
-                .header("Authorization", "Bearer $token")
+            val encodedSessionID = encodePathSegment(sessionId)
+            val encodedArtifactID = encodePathSegment(artifactId)
+            val request = authorizedRequestBuilder("/api/sessions/$encodedSessionID/artifacts/$encodedArtifactID")
                 .get()
                 .build()
-
-            client.newCall(request).execute().use { response ->
+            executeRequest(request) { response ->
+                val body = response.body ?: throw Exception("Empty response")
                 if (!response.isSuccessful) {
-                    val responseBody = response.body?.string().orEmpty()
+                    val responseBody = body.string()
                     throw Exception("HTTP ${response.code}: $responseBody")
                 }
-                val body = response.body ?: throw Exception("Empty response")
-                val mimeType = response.header("Content-Type")?.trim().orEmpty().ifBlank { "application/octet-stream" }
-                val filename = parseFilename(
+                val mimeType = response.header("Content-Type")?.trim().orEmpty().ifBlank { OCTET_STREAM_MIME }
+                val filename = filenameResolver.resolve(
                     response.header("Content-Disposition"),
                     artifactId,
                     mimeType,
                 )
-                DownloadedArtifact(
-                    filename = filename,
-                    mimeType = mimeType,
-                    bytes = body.bytes(),
-                )
+                DownloadedArtifact(filename = filename, mimeType = mimeType, bytes = body.bytes())
             }
         }
     }
 
     override fun observeSessionEvents(sessionId: String): Flow<SessionPushEvent> {
-        val encodedID = URLEncoder.encode(sessionId, Charsets.UTF_8.name())
-        val request = Request.Builder()
-            .url("$baseUrl/api/sessions/$encodedID/events")
-            .header("Authorization", "Bearer $token")
+        val encodedSessionID = encodePathSegment(sessionId)
+        val request = authorizedRequestBuilder("/api/sessions/$encodedSessionID/events")
             .get()
             .build()
-        return observeEventStream(request, ::decodeSessionPushEvent)
+        return streamObserver.observe(request, decoder::decodeSessionPushEvent)
     }
 
-    private fun <T> observeEventStream(request: Request, decoder: (String, String?) -> T): Flow<T> = callbackFlow {
-        val call = client.newCall(request)
+    private fun authorizedRequestBuilder(path: String): Request.Builder {
+        return Request.Builder()
+            .url("$baseUrl$path")
+            .header("Authorization", "Bearer $token")
+    }
 
-        val readerJob = launch(ioDispatcher) {
-            runCatching {
-                call.execute().use { response ->
-                    val body = response.body ?: throw Exception("Empty response")
-                    if (!response.isSuccessful) {
-                        throw Exception("HTTP ${response.code}: ${body.string()}")
-                    }
+    private inline fun <reified TPayload> postJsonRequest(
+        path: String,
+        payload: TPayload,
+        extraHeader: Pair<String, String>? = null,
+    ): Request {
+        val body = json.encodeToString(payload).toRequestBody(JSON_MEDIA_TYPE.toMediaType())
+        val builder = authorizedRequestBuilder(path).post(body)
+        extraHeader?.let { header ->
+            builder.header(header.first, header.second)
+        }
+        return builder.build()
+    }
 
-                    val source = body.source()
-                    var eventName: String? = null
-                    val dataLines = mutableListOf<String>()
-
-                    while (!source.exhausted()) {
-                        val line = source.readUtf8Line() ?: break
-                        if (line.isEmpty()) {
-                            this@callbackFlow.emitSseEvent(dataLines, eventName, decoder)
-                            eventName = null
-                            dataLines.clear()
-                            continue
-                        }
-
-                        parseSseField(line)?.let { field ->
-                            when (field.name) {
-                                "event" -> eventName = field.value
-                                "data" -> dataLines += field.value
-                            }
-                        }
-                    }
-
-                    this@callbackFlow.emitSseEvent(dataLines, eventName, decoder)
-                }
-            }.onFailure { error ->
-                close(error)
-            }.onSuccess {
-                close()
+    private suspend fun executeJsonRequest(request: Request): String {
+        return executeRequest(request) { response ->
+            val responseBody = response.body?.string() ?: throw Exception("Empty response")
+            if (!response.isSuccessful) {
+                throw Exception("HTTP ${response.code}: $responseBody")
             }
-        }
-
-        awaitClose {
-            call.cancel()
-            readerJob.cancel()
+            responseBody
         }
     }
 
-    private suspend fun <T> ProducerScope<T>.emitSseEvent(
-        dataLines: List<String>,
-        eventName: String?,
-        decoder: (String, String?) -> T,
-    ) {
-        if (dataLines.isEmpty()) return
-        send(decoder(dataLines.joinToString("\n"), eventName))
+    private suspend fun <T> executeRequest(request: Request, handler: (Response) -> T): T {
+        return client.newCall(request).execute().use(handler)
     }
 
-    private inline fun <reified T> decodeSuccessEnvelope(responseBody: String): T {
-        val envelope = json.decodeFromString<ApiEnvelope<T>>(responseBody)
-        if (envelope.status == "error") {
-            throw Exception(envelope.error.ifBlank { "Bridge returned an unknown error" })
-        }
-        return envelope.payload ?: throw Exception("No payload")
+    private fun encodePathSegment(value: String): String {
+        return URLEncoder.encode(value, Charsets.UTF_8.name())
     }
-
-    private fun decodeAgentEnvelope(responseBody: String): AgentSendResponse {
-        val envelope = json.decodeFromString<ApiEnvelope<JsonElement>>(responseBody)
-        if (envelope.status == "error") {
-            throw Exception(envelope.error.ifBlank { "Bridge returned an unknown error" })
-        }
-
-        val payload = envelope.payload ?: throw Exception("No payload")
-        val payloadStatus = payload.jsonObject["status"]?.jsonPrimitive?.contentOrNull
-        return if (payloadStatus == "awaiting_human") {
-            json.decodeFromJsonElement<AgentAwaitingHumanResponse>(payload)
-        } else {
-            json.decodeFromJsonElement<AgentSendSuccessResponse>(payload)
-        }
-    }
-
-    private fun decodeSessionPushEvent(data: String, eventName: String?): SessionPushEvent {
-        val event = json.decodeFromString<SessionPushEvent>(data)
-        if (!eventName.isNullOrBlank() && event.type != eventName) {
-            throw Exception("Unexpected event type: ${event.type} (header=$eventName)")
-        }
-        return event
-    }
-
-    private fun decodeAgentStreamEvent(data: String, eventName: String?): AgentStreamEvent {
-        val event = json.decodeFromString<AgentStreamEvent>(data)
-        if (!eventName.isNullOrBlank() && event.type != eventName) {
-            throw Exception("Unexpected event type: ${event.type} (header=$eventName)")
-        }
-        return event
-    }
-}
-
-private fun createClientTraceId(prefix: String): String {
-    return "$prefix-${System.currentTimeMillis()}"
-}
-
-private data class SseField(val name: String, val value: String)
-
-private fun parseSseField(line: String): SseField? {
-    if (line.startsWith(":")) return null
-    val separator = line.indexOf(':')
-    if (separator < 0) return SseField(line, "")
-
-    val name = line.substring(0, separator)
-    var value = line.substring(separator + 1)
-    if (value.startsWith(" ")) {
-        value = value.substring(1)
-    }
-    return SseField(name, value)
-}
-
-private fun parseFilename(contentDisposition: String?, fallbackArtifactId: String, mimeType: String): String {
-    val header = contentDisposition?.trim().orEmpty()
-    if (header.isNotEmpty()) {
-        Regex("""filename=\"([^\"]+)\"""")
-            .find(header)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { return it }
-    }
-
-    val extension = when (mimeType.substringBefore(';').trim().lowercase()) {
-        "text/plain" -> ".txt"
-        "text/markdown" -> ".md"
-        "application/json" -> ".json"
-        "application/pdf" -> ".pdf"
-        "image/png" -> ".png"
-        "image/jpeg" -> ".jpg"
-        "image/gif" -> ".gif"
-        else -> ""
-    }
-    return if (fallbackArtifactId.endsWith(extension) || extension.isEmpty()) fallbackArtifactId else "$fallbackArtifactId$extension"
 }

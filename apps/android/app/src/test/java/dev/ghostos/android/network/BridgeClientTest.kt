@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -78,6 +79,42 @@ class BridgeClientTest {
             assertEquals("assistant_message", event.type)
             assertEquals("session-2", event.sessionId)
             assertEquals("hello", event.payload["message"]?.toString()?.trim('"'))
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `stopRun uses injected trace id factory output`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{"status":"success","payload":{"status":"ok","message":"stopped"}}"""),
+        )
+
+        server.start()
+        try {
+            val client = BridgeClient(
+                baseUrl = server.url("/").toString().removeSuffix("/"),
+                token = "token",
+                dependencies = BridgeClientDependencies(
+                    traceIdFactory = object : ClientTraceIdFactory {
+                        override fun create(prefix: String): String = "$prefix-fixed-id"
+                    },
+                ),
+            )
+
+            val result = client.stopRun(sessionId = "session-3", traceId = null)
+            assertTrue(result.isSuccess)
+
+            val recorded = server.takeRequest()
+            val body = recorded.body.readUtf8()
+            assertEquals("/api/bus", recorded.path)
+            assertTrue(body.contains("\"trace_id\":\"android-stop-fixed-id\""))
+            assertTrue(body.contains("\"action\":\"AGENT_STOP\""))
+            assertTrue(body.contains("\"session_id\":\"session-3\""))
         } finally {
             server.shutdown()
         }
