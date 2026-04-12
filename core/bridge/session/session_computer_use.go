@@ -2,30 +2,28 @@ package session
 
 import (
 	"time"
-
-	"ghost-os/bridge/guiagent"
 )
 
-func (s *Session) SetPendingComputerUseRun(questionID string, state guiagent.State) {
+func (s *Session) SetPendingComputerUseRun(questionID string, state PendingComputerUseRunState) {
 	if s == nil || questionID == "" {
 		return
 	}
 	if s.PendingComputerUseRuns == nil {
-		s.PendingComputerUseRuns = make(map[string]guiagent.State, 2)
+		s.PendingComputerUseRuns = make(map[string]PendingComputerUseRunState, 2)
 	}
-	s.PendingComputerUseRuns[questionID] = guiagent.CloneState(state)
+	s.PendingComputerUseRuns[questionID] = clonePendingComputerUseRunState(state)
 	s.UpdatedAt = time.Now().UTC()
 }
 
-func (s *Session) PendingComputerUseRun(questionID string) (guiagent.State, bool) {
+func (s *Session) PendingComputerUseRun(questionID string) (PendingComputerUseRunState, bool) {
 	if s == nil || len(s.PendingComputerUseRuns) == 0 {
-		return guiagent.State{}, false
+		return PendingComputerUseRunState{}, false
 	}
 	state, ok := s.PendingComputerUseRuns[questionID]
 	if !ok {
-		return guiagent.State{}, false
+		return PendingComputerUseRunState{}, false
 	}
-	return guiagent.CloneState(state), true
+	return clonePendingComputerUseRunState(state), true
 }
 
 func (s *Session) RemovePendingComputerUseRun(questionID string) {

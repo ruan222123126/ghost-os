@@ -4,7 +4,6 @@ import (
 	"strings"
 	"time"
 
-	"ghost-os/bridge/guiagent"
 	"ghost-os/bridge/llm"
 )
 
@@ -12,22 +11,24 @@ import (
 //
 // 注意：Session 非并发安全（包含 slice/map），同一个会话必须由上层保证串行访问。
 type Session struct {
-	ID                     string                          `json:"id"`
-	Messages               []llm.Message                   `json:"messages"`
-	CreatedAt              time.Time                       `json:"created_at"`
-	UpdatedAt              time.Time                       `json:"updated_at"`
-	EndedAt                time.Time                       `json:"ended_at,omitempty"`
-	TurnIndex              int                             `json:"turn_index,omitempty"`
-	TokenCount             int                             `json:"token_count"`
-	MessageCount           int                             `json:"message_count"`
-	WindowStart            int                             `json:"window_start,omitempty"`
-	WindowTokenCount       int                             `json:"window_token_count,omitempty"`
-	ConversationState      llm.ConversationState           `json:"conversation_state,omitempty"`
-	IterationRuntime       *IterationRuntime               `json:"iteration_runtime,omitempty"`
-	PendingQuestions       map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
-	HumanAnswers           map[string]string               `json:"human_answers,omitempty"`
-	PendingComputerUseRuns map[string]guiagent.State       `json:"pending_computer_use_runs,omitempty"`
-	DynamicToolLoads       map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
+	ID                     string                                `json:"id"`
+	Messages               []llm.Message                         `json:"messages"`
+	CreatedAt              time.Time                             `json:"created_at"`
+	UpdatedAt              time.Time                             `json:"updated_at"`
+	EndedAt                time.Time                             `json:"ended_at,omitempty"`
+	TurnIndex              int                                   `json:"turn_index,omitempty"`
+	TokenCount             int                                   `json:"token_count"`
+	MessageCount           int                                   `json:"message_count"`
+	WindowStart            int                                   `json:"window_start,omitempty"`
+	WindowTokenCount       int                                   `json:"window_token_count,omitempty"`
+	ConversationState      llm.ConversationState                 `json:"conversation_state,omitempty"`
+	IterationRuntime       *IterationRuntime                     `json:"iteration_runtime,omitempty"`
+	PendingQuestions       map[string]PendingHumanQuestion       `json:"pending_questions,omitempty"`
+	HumanAnswers           map[string]string                     `json:"human_answers,omitempty"`
+	PendingComputerUseRuns map[string]PendingComputerUseRunState `json:"pending_computer_use_runs,omitempty"`
+	DynamicToolLoads       map[string]DynamicToolLoad            `json:"dynamic_tool_loads,omitempty"`
+	DynamicSkillLoads      map[string]DynamicSkillLoad           `json:"dynamic_skill_loads,omitempty"`
+	AssistantDraft         *AssistantDraft                       `json:"assistant_draft,omitempty"`
 
 	persistedMessageCount int
 	persistedMessages     []llm.Message

@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strings"
 	"time"
-
-	"ghost-os/bridge/guiagent"
 )
 
 func decodeStoredSession(expectedID string, data []byte, now time.Time) (*Session, error) {
@@ -42,6 +40,7 @@ func normalizeLoadedSession(session *Session, expectedID string, now time.Time) 
 	session.TokenCount = session.WindowTokenCount
 	session.MessageCount = len(session.Messages)
 	session.WindowStart = 0
+	session.AssistantDraft = cloneAssistantDraft(session.AssistantDraft)
 	session.persistedMessageCount = 0
 	session.persistedMessages = nil
 }
@@ -59,14 +58,14 @@ func clonePendingQuestions(raw map[string]PendingHumanQuestion) map[string]Pendi
 	return out
 }
 
-func clonePendingComputerUseRuns(raw map[string]guiagent.State) map[string]guiagent.State {
+func clonePendingComputerUseRuns(raw map[string]PendingComputerUseRunState) map[string]PendingComputerUseRunState {
 	if len(raw) == 0 {
 		return nil
 	}
 
-	out := make(map[string]guiagent.State, len(raw))
+	out := make(map[string]PendingComputerUseRunState, len(raw))
 	for questionID, state := range raw {
-		out[questionID] = guiagent.CloneState(state)
+		out[questionID] = clonePendingComputerUseRunState(state)
 	}
 	return out
 }
@@ -103,6 +102,18 @@ func cloneDynamicToolLoads(raw map[string]DynamicToolLoad) map[string]DynamicToo
 	out := make(map[string]DynamicToolLoad, len(raw))
 	for toolName, load := range raw {
 		out[toolName] = normalizeDynamicToolLoad(toolName, load)
+	}
+	return out
+}
+
+func cloneDynamicSkillLoads(raw map[string]DynamicSkillLoad) map[string]DynamicSkillLoad {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make(map[string]DynamicSkillLoad, len(raw))
+	for skillName, load := range raw {
+		out[skillName] = normalizeDynamicSkillLoad(skillName, load)
 	}
 	return out
 }

@@ -5,19 +5,20 @@ import (
 	"fmt"
 	"time"
 
-	"ghost-os/bridge/guiagent"
 	"ghost-os/bridge/llm"
 )
 
 const sessionTimeLayout = time.RFC3339Nano
 
 type sessionStoredState struct {
-	ConversationState      llm.ConversationState           `json:"conversation_state,omitempty"`
-	IterationRuntime       *IterationRuntime               `json:"iteration_runtime,omitempty"`
-	PendingQuestions       map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
-	HumanAnswers           map[string]string               `json:"human_answers,omitempty"`
-	PendingComputerUseRuns map[string]guiagent.State       `json:"pending_computer_use_runs,omitempty"`
-	DynamicToolLoads       map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
+	ConversationState      llm.ConversationState                 `json:"conversation_state,omitempty"`
+	IterationRuntime       *IterationRuntime                     `json:"iteration_runtime,omitempty"`
+	PendingQuestions       map[string]PendingHumanQuestion       `json:"pending_questions,omitempty"`
+	HumanAnswers           map[string]string                     `json:"human_answers,omitempty"`
+	PendingComputerUseRuns map[string]PendingComputerUseRunState `json:"pending_computer_use_runs,omitempty"`
+	DynamicToolLoads       map[string]DynamicToolLoad            `json:"dynamic_tool_loads,omitempty"`
+	DynamicSkillLoads      map[string]DynamicSkillLoad           `json:"dynamic_skill_loads,omitempty"`
+	AssistantDraft         *AssistantDraft                       `json:"assistant_draft,omitempty"`
 }
 
 type sessionRecord struct {
@@ -41,6 +42,8 @@ func encodeSessionState(sess *Session) (string, error) {
 		HumanAnswers:           cloneHumanAnswers(sess.HumanAnswers),
 		PendingComputerUseRuns: clonePendingComputerUseRuns(sess.PendingComputerUseRuns),
 		DynamicToolLoads:       cloneDynamicToolLoads(sess.DynamicToolLoads),
+		DynamicSkillLoads:      cloneDynamicSkillLoads(sess.DynamicSkillLoads),
+		AssistantDraft:         cloneAssistantDraft(sess.AssistantDraft),
 	}
 	encoded, err := json.Marshal(state)
 	if err != nil {
@@ -79,6 +82,8 @@ func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 		HumanAnswers:           cloneHumanAnswers(record.State.HumanAnswers),
 		PendingComputerUseRuns: clonePendingComputerUseRuns(record.State.PendingComputerUseRuns),
 		DynamicToolLoads:       cloneDynamicToolLoads(record.State.DynamicToolLoads),
+		DynamicSkillLoads:      cloneDynamicSkillLoads(record.State.DynamicSkillLoads),
+		AssistantDraft:         cloneAssistantDraft(record.State.AssistantDraft),
 	}
 	sess.setPersistedSnapshot()
 	return sess
