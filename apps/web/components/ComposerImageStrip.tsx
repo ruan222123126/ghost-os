@@ -4,6 +4,7 @@
 
 import type { FC } from 'react';
 import Image from 'next/image';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatImageDraft } from '@/lib/types';
 
 interface ComposerImageStripProps {
@@ -12,12 +13,14 @@ interface ComposerImageStripProps {
 }
 
 export const ComposerImageStrip: FC<ComposerImageStripProps> = ({ images, onRemove }) => {
+  const { copy } = useWebLocale();
+
   if (images.length === 0) {
     return null;
   }
 
   return (
-    <div className="composer-image-strip" aria-label="Selected images">
+    <div className="composer-image-strip" aria-label={copy.chat.imageStripAria}>
       {images.map((image) => (
         <div key={image.id} className="composer-image-card">
           <Image
@@ -35,7 +38,7 @@ export const ComposerImageStrip: FC<ComposerImageStripProps> = ({ images, onRemo
           <button
             type="button"
             className="composer-image-remove"
-            aria-label={`Remove ${image.name}`}
+            aria-label={copy.chat.imageRemoveAria(image.name)}
             onClick={() => onRemove(image.id)}
           >
             <span aria-hidden="true">×</span>

@@ -1,0 +1,138 @@
+.workflow-arch-settings-popover {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.workflow-arch-settings-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgb(0 0 0 / 0.4);
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+}
+
+.workflow-arch-settings-panel {
+  position: relative;
+  z-index: 1;
+  width: min(560px, calc(100vw - 32px));
+  border: 1px solid #e5e5e5;
+  border-radius: 24px;
+  background: #ffffff;
+  box-shadow: 0 32px 90px rgb(17 17 17 / 0.18);
+}
+
+.workflow-arch-settings-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 999px;
+  background: #f5f5f5;
+  color: #737373;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.workflow-arch-settings-close:hover {
+  background: #e5e5e5;
+  color: #111111;
+}
+
+.workflow-arch-settings-head {
+  padding: 30px 32px 16px;
+  border-bottom: 1px solid #f5f5f5;
+}
+
+.workflow-arch-settings-head h2 {
+  margin: 0;
+  color: #111111;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.workflow-arch-settings-head p {
+  margin: 10px 0 0;
+  color: #737373;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.workflow-arch-settings-body {
+  padding: 20px 32px 32px;
+  display: grid;
+  gap: 14px;
+}
+
+.workflow-arch-settings-body label {
+  display: grid;
+  gap: 6px;
+}
+
+.workflow-arch-settings-body label span {
+  color: #737373;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.workflow-arch-settings-body input,
+.workflow-arch-settings-body select {
+  width: 100%;
+  border: 1px solid #d4d4d4;
+  border-radius: 0;
+  background: #ffffff;
+  color: #111111;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.workflow-arch-settings-body input:focus,
+.workflow-arch-settings-body select:focus {
+  outline: none;
+  border-color: #000000;
+}
+
+.workflow-arch-settings-import {
+  margin-top: 8px;
+  border: 1px solid #111111;
+  background: #111111;
+  color: #ffffff;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+
+.workflow-arch-settings-import:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .workflow-arch-settings-panel {
+    width: calc(100vw - 20px);
+  }
+
+  .workflow-arch-settings-head {
+    padding: 24px 20px 14px;
+  }
+
+  .workflow-arch-settings-body {
+    padding: 18px 20px 22px;
+  }
+}

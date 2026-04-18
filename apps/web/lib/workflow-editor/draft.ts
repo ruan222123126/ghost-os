@@ -6,29 +6,30 @@ import type {
 } from '@/lib/types';
 import {
   DECIMAL_RADIX,
+  DEFAULT_LOOP_MAX_ITERATIONS,
   DEFAULT_END_NODE_ID,
   DEFAULT_INTERVAL_SECONDS,
   DEFAULT_START_NODE_ID,
   MIN_INTERVAL_SECONDS,
-  NODE_X_GAP,
-  NODE_Y_BASE,
 } from '@/lib/workflow-editor/constants';
+import { buildCanvasGraphFromWorkflowDefinition } from '@/lib/workflow-editor/draftExpand';
+import { compileLoopPairsForTransport } from '@/lib/workflow-editor/loopCompile';
 import type {
   WorkflowCanvasDraft,
-  WorkflowCanvasEdgeDraft,
   WorkflowCanvasNodeDraft,
   WorkflowCreatePayload,
   WorkflowDefinitionImport,
   WorkflowUpdatePayload,
 } from '@/lib/workflow-editor/types';
 
-const DEFAULT_TOOL_ARGUMENTS_MODE = 'kv';
-
 export function createEmptyWorkflowDraft(mode: 'create' | 'edit' = 'create'): WorkflowCanvasDraft {
-  const nodes = [
-    createCanvasNode({ id: DEFAULT_START_NODE_ID, type: 'start' }, 0),
-    createCanvasNode({ id: DEFAULT_END_NODE_ID, type: 'end' }, 1),
-  ];
+  const graph = buildCanvasGraphFromWorkflowDefinition({
+    nodes: [
+      { id: DEFAULT_START_NODE_ID, type: 'start' },
+      { id: DEFAULT_END_NODE_ID, type: 'end' },
+    ],
+    edges: [{ from_node_id: DEFAULT_START_NODE_ID, to_node_id: DEFAULT_END_NODE_ID }],
+  });
 
   return {
     mode,
@@ -37,8 +38,8 @@ export function createEmptyWorkflowDraft(mode: 'create' | 'edit' = 'create'): Wo
       intervalSeconds: DEFAULT_INTERVAL_SECONDS,
       cronExpr: '',
     },
-    nodes,
-    edges: [buildEdgeDraft(DEFAULT_START_NODE_ID, DEFAULT_END_NODE_ID, 0)],
+    nodes: graph.nodes,
+    edges: graph.edges,
   };
 }
 
@@ -58,21 +59,20 @@ export function workflowTaskToDraft(task: WorkflowTaskPayload): WorkflowCanvasDr
 }
 
 export function workflowDefinitionToDraft(input: WorkflowDefinitionImport): WorkflowCanvasDraft {
-  const nodes = input.workflow.nodes.map((node, index) => createCanvasNode(node, index));
-  const edges = input.workflow.edges.map((edge, index) => buildEdgeDraft(edge.from_node_id, edge.to_node_id, index));
-
+  const graph = buildCanvasGraphFromWorkflowDefinition(input.workflow);
   return {
     mode: 'create',
     schedule: scheduleDraftFromTask(input.scheduleType, input.intervalSeconds, input.cronExpr),
-    nodes,
-    edges,
+    nodes: graph.nodes,
+    edges: graph.edges,
   };
 }
 
 export function draftToWorkflowDefinition(draft: WorkflowCanvasDraft): WorkflowDefinition {
+  const transport = compileLoopPairsForTransport(draft.nodes, draft.edges);
   return {
-    nodes: draft.nodes.map((node) => buildWorkflowNode(node)),
-    edges: draft.edges.map((edge) => ({
+    nodes: transport.nodes.map((node) => buildWorkflowNode(node)),
+    edges: transport.edges.map((edge) => ({
       from_node_id: edge.from_node_id,
       to_node_id: edge.to_node_id,
     })),
@@ -97,8 +97,8 @@ export function draftToWorkflowUpdatePayload(draft: WorkflowCanvasDraft): Workfl
 
 export function withWorkflowContent(
   draft: WorkflowCanvasDraft,
-  nodes: WorkflowCanvasNodeDraft[],
-  edges: WorkflowCanvasEdgeDraft[],
+  nodes: WorkflowCanvasDraft['nodes'],
+  edges: WorkflowCanvasDraft['edges'],
 ): WorkflowCanvasDraft {
   return {
     ...draft,
@@ -128,43 +128,8 @@ function scheduleDraftFromTask(
   };
 }
 
-function createCanvasNode(node: WorkflowNode, index: number): WorkflowCanvasNodeDraft {
-  return {
-    id: node.id,
-    type: node.type,
-    position: {
-      x: index * NODE_X_GAP,
-      y: NODE_Y_BASE,
-    },
-    ui: {
-      toolArgumentsMode: DEFAULT_TOOL_ARGUMENTS_MODE,
-    },
-    start: node.start ? { inputs: cloneInputs(node.start.inputs) } : undefined,
-    tool: node.tool
-      ? {
-        tool_name: node.tool.tool_name,
-        arguments: cloneObject(node.tool.arguments),
-      }
-      : undefined,
-    llm: node.llm
-      ? {
-        prompt: node.llm.prompt,
-        system_prompt: node.llm.system_prompt,
-      }
-      : undefined,
-    agent: node.agent ? { message: node.agent.message } : undefined,
-  };
-}
-
-function buildEdgeDraft(fromNodeID: string, toNodeID: string, index: number): WorkflowCanvasEdgeDraft {
-  return {
-    id: `edge-${index}-${fromNodeID}-${toNodeID}`,
-    from_node_id: fromNodeID,
-    to_node_id: toNodeID,
-  };
-}
-
 function buildWorkflowNode(node: WorkflowCanvasNodeDraft): WorkflowNode {
+  const loopIterations = node.loop?.max_iterations ?? DEFAULT_LOOP_MAX_ITERATIONS;
   return {
     id: node.id,
     type: node.type,
@@ -182,6 +147,22 @@ function buildWorkflowNode(node: WorkflowCanvasNodeDraft): WorkflowNode {
       }
       : undefined,
     agent: node.type === 'agent' ? { message: node.agent?.message ?? '' } : undefined,
+    if: node.type === 'if'
+      ? {
+        source_node_id: node.if?.source_node_id?.trim() || undefined,
+        operator: node.if?.operator ?? 'equals',
+        value: node.if?.value ?? '',
+        true_node_id: node.if?.true_node_id ?? '',
+        false_node_id: node.if?.false_node_id ?? '',
+      }
+      : undefined,
+    loop: node.type === 'loop'
+      ? {
+        max_iterations: normalizeLoopIterations(loopIterations),
+        body_node_id: node.loop?.body_node_id ?? '',
+        exit_node_id: node.loop?.exit_node_id ?? '',
+      }
+      : undefined,
   };
 }
 
@@ -219,9 +200,7 @@ function cloneInputs(inputs?: WorkflowInputVariable[]): WorkflowInputVariable[] 
     return undefined;
   }
 
-  return inputs.map((input) => ({
-    ...input,
-  }));
+  return inputs.map((input) => ({ ...input }));
 }
 
 function cloneObject(input?: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -230,4 +209,11 @@ function cloneObject(input?: Record<string, unknown>): Record<string, unknown> |
   }
 
   return { ...input };
+}
+
+function normalizeLoopIterations(value: number): number {
+  if (!Number.isFinite(value) || value < 1) {
+    return DEFAULT_LOOP_MAX_ITERATIONS;
+  }
+  return Math.floor(value);
 }

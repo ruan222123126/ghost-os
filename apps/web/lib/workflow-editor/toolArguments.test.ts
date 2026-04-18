@@ -26,4 +26,18 @@ describe('lib/workflow-editor/toolArguments', () => {
   it('throws when JSON mode is not object', () => {
     expect(() => jsonTextToToolArguments('[]')).toThrow('tool arguments JSON must be an object');
   });
+
+  it('keeps template references in typed rows', () => {
+    expect(rowsToToolArguments([
+      { key: 'limit', valueType: 'number', value: '${inputs.limit}' },
+      { key: 'strict', valueType: 'boolean', value: '${outputs.if-node.ok}' },
+      { key: 'payload', valueType: 'object', value: '${outputs.tool-node.data}' },
+      { key: 'items', valueType: 'array', value: '${inputs.items}' },
+    ])).toEqual({
+      limit: '${inputs.limit}',
+      strict: '${outputs.if-node.ok}',
+      payload: '${outputs.tool-node.data}',
+      items: '${inputs.items}',
+    });
+  });
 });

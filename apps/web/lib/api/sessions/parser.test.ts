@@ -80,6 +80,27 @@ describe('lib/api/sessions/parser', () => {
     expect(parseSessionDetail(payload)).toEqual(payload);
   });
 
+  it('parses assistant draft messages with in_progress flag', () => {
+    const payload: SessionDetail = {
+      id: 'session-draft',
+      created_at: '2026-04-04T10:00:00Z',
+      updated_at: '2026-04-04T10:05:00Z',
+      message_count: 2,
+      page: SESSION_PAGE,
+      token_count: 256,
+      messages: [
+        {
+          index: 2,
+          role: 'assistant',
+          text: 'partial answer',
+          in_progress: true,
+        },
+      ],
+    };
+
+    expect(parseSessionDetail(payload)).toEqual(payload);
+  });
+
   it('ignores unknown fields in session detail payloads', () => {
     const payload = {
       id: 'session-1',

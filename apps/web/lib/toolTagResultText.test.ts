@@ -9,8 +9,8 @@ describe('toolTagResultText', () => {
       output: {
         action: 'list',
         items: [
-          { name: 'browser_control', status: 'active', available_now: true },
-          { name: 'computer_use', status: 'pending', available_next_turn: true },
+          { name: 'screen_control', status: 'active', available_now: true },
+          { name: 'text_input', status: 'pending', available_next_turn: true },
           { name: 'web_search', status: 'expired', available_now: false },
           { name: 'rss_fetch', status: 'unloaded' },
         ],
@@ -21,8 +21,8 @@ describe('toolTagResultText', () => {
     const payload = parseToolTagResult(filtered);
 
     expect(payload?.output?.items).toEqual([
-      { name: 'browser_control', status: 'active', available_now: true },
-      { name: 'computer_use', status: 'pending', available_next_turn: true },
+      { name: 'screen_control', status: 'active', available_now: true },
+      { name: 'text_input', status: 'pending', available_next_turn: true },
     ]);
   });
 

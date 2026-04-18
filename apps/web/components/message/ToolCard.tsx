@@ -1,6 +1,7 @@
 'use client';
 
 import type { FC } from 'react';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { ToolChatMessage } from '@/lib/types';
 import { formatToolAction, formatToolDetails } from './format';
 
@@ -39,7 +40,9 @@ interface ToolCardProps {
 }
 
 export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool }) => {
-  const action = formatToolAction(tool);
+  const { copy } = useWebLocale();
+  const actionValue = formatToolAction(tool);
+  const action = actionValue === 'Tool' ? copy.chat.toolFallbackName : actionValue;
   const details = formatToolDetails(tool);
   const hasError = isToolError(tool.toolStatus);
 
@@ -63,7 +66,7 @@ export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool }) => {
 
       {isOpen ? (
         <div className="tool-details">
-          <pre>{details || 'Preparing tool output...'}</pre>
+          <pre>{details || copy.chat.toolPreparingOutput}</pre>
         </div>
       ) : null}
     </div>

@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ChatMessage, PendingQuestionMessage } from '@/lib/types';
+import { useWebLocale } from '@/lib/i18n/provider';
 import { EmptyState } from './EmptyState';
 import { MessageRow } from './MessageRow';
 import { getOrderedStreamingRows, type StreamingMessageRow } from './streamingRows';
@@ -26,6 +27,7 @@ export const MessageList: FC<MessageListProps> = ({
   onAnswerQuestion,
   onCancelQuestion,
 }) => {
+  const { copy } = useWebLocale();
   const scrollElementRef = useRef<HTMLDivElement>(null);
   const prependAnchorRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
   const shouldAutoFollowRef = useRef(true);
@@ -167,6 +169,7 @@ export const MessageList: FC<MessageListProps> = ({
               style={{ transform: `translateY(${virtualItem.start}px)` }}
             >
               {renderRow(row, {
+                copy,
                 loading,
                 openToolCards,
                 onAnswerQuestion,
@@ -184,6 +187,7 @@ export const MessageList: FC<MessageListProps> = ({
 function renderRow(
   row: MessageListRow,
   options: {
+    copy: ReturnType<typeof useWebLocale>['copy'];
     loading: boolean;
     onAnswerQuestion: MessageListProps['onAnswerQuestion'];
     onCancelQuestion: MessageListProps['onCancelQuestion'];
@@ -195,7 +199,7 @@ function renderRow(
     case 'history_loading':
       return (
         <div className="message-row is-history-loading">
-          <div className="message-note is-history-loading">Loading older messages...</div>
+          <div className="message-note is-history-loading">{options.copy.chat.loadingOlderMessages}</div>
         </div>
       );
     case 'thinking':

@@ -1,4 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   ChatMessage,
   ChatSendInput,
@@ -21,6 +22,7 @@ export interface UseBridgeChatResult {
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
   loading: boolean;
+  historySyncing: boolean;
   historyLoading: boolean;
   loadingOlderHistory: boolean;
   chatError: string;
@@ -56,6 +58,7 @@ export interface ChatStateControls {
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
   loading: boolean;
+  historySyncing: boolean;
   historyLoading: boolean;
   loadingOlderHistory: boolean;
   chatError: string;
@@ -67,6 +70,8 @@ export interface ChatStateControls {
   stopPendingRef: MutableRefObject<boolean>;
   setCommittedMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setLoading: (value: boolean) => void;
+  beginHistorySync: () => void;
+  endHistorySync: () => void;
   setHistoryLoading: (value: boolean) => void;
   setLoadingOlderHistory: (value: boolean) => void;
   setChatError: (value: string) => void;
@@ -74,6 +79,7 @@ export interface ChatStateControls {
   setStopPending: (value: boolean) => void;
   setHasOlderHistory: (value: boolean) => void;
   setNextHistoryBefore: (value: number | null) => void;
+  applyRuntimeActions: (actions: ChatRuntimeAction[]) => void;
   appendCommittedMessages: (nextMessages: ChatMessage[]) => void;
   clearChatError: () => void;
   replaceWithErrorMessage: (messageText: string) => void;

@@ -49,7 +49,7 @@ describe('chatMessages', () => {
     const messages = withSessionIndices([
       {
         role: 'internal',
-        text: '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"browser_control","status":"active","available_now":true},{"name":"web_search","status":"expired"},{"name":"computer_use","status":"pending","available_next_turn":true}]}}',
+        text: '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"screen_control","status":"active","available_now":true},{"name":"web_search","status":"expired"},{"name":"text_input","status":"pending","available_next_turn":true}]}}',
       },
     ]);
 
@@ -58,7 +58,7 @@ describe('chatMessages', () => {
     expect(mapped).toHaveLength(1);
     expect(mapped[0]).toMatchObject({ kind: 'system' });
     expect(mapped[0].content).toBe(
-      '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"browser_control","status":"active","available_now":true},{"name":"computer_use","status":"pending","available_next_turn":true}]}}',
+      '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"screen_control","status":"active","available_now":true},{"name":"text_input","status":"pending","available_next_turn":true}]}}',
     );
   });
 
@@ -237,6 +237,21 @@ describe('chatMessages', () => {
     const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(0);
+  });
+
+  it('marks assistant draft messages as in progress', () => {
+    const messages = withSessionIndices([
+      { role: 'assistant', text: 'partial answer', in_progress: true },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'assistant',
+      content: 'partial answer',
+      inProgress: true,
+    });
   });
 
   it('replaces pending question cards with the user answer', () => {

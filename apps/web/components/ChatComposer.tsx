@@ -7,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import { ComposerMetaRow } from '@/components/ComposerMetaRow';
 import { ComposerToolbar } from '@/components/ComposerToolbar';
 import { ignorePromise } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 
 interface ChatComposerProps {
   value: string;
@@ -54,8 +55,8 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   canStop = false,
   canSubmit,
   disabled = false,
-  ariaLabel = 'Message input',
-  placeholder = 'Type a task for Ghost-OS...',
+  ariaLabel,
+  placeholder,
   rows = 1,
   hint,
   preview,
@@ -63,8 +64,11 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   toolbar,
   onSelectFiles,
 }) => {
+  const { copy } = useWebLocale();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const effectiveAriaLabel = ariaLabel ?? copy.chat.composerMessageInputAria;
+  const effectivePlaceholder = placeholder ?? copy.chat.composerInputPlaceholder;
   const hasToolbar = toolbar !== undefined && toolbar !== null;
   const showStopAction = sending && onStop !== undefined;
   const canSend = canSubmit ?? value.trim().length > 0;
@@ -73,11 +77,11 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   const uploadDisabled = disabled || sending || onSelectFiles === undefined;
   const actionLabel = showStopAction
     ? canStop
-      ? 'Stop agent run'
-      : 'Stopping agent run'
+      ? copy.chat.composerStopRun
+      : copy.chat.composerStoppingRun
     : sending
-      ? 'Sending message'
-      : 'Send message';
+      ? copy.chat.composerSending
+      : copy.chat.composerSend;
 
   useEffect(() => {
     syncTextareaHeight();
@@ -148,11 +152,11 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           ref={textareaRef}
           value={value}
           disabled={disabled}
-          aria-label={ariaLabel}
+          aria-label={effectiveAriaLabel}
           onChange={(event) => onChange(event.target.value)}
           onInput={syncTextareaHeight}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
+          placeholder={effectivePlaceholder}
           rows={rows}
           className="composer-textarea"
         />
@@ -173,13 +177,13 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           <div
             className="composer-footer-start"
             role={hasToolbar ? 'toolbar' : undefined}
-            aria-label={hasToolbar ? 'Composer tools' : undefined}
+            aria-label={hasToolbar ? copy.chat.composerToolsAria : undefined}
           >
             <button
               type="button"
               className={`composer-plus-btn${uploadDisabled ? ' is-placeholder' : ''}`}
-              aria-label="Upload images"
-              title="Upload images"
+              aria-label={copy.chat.composerUploadImagesAria}
+              title={copy.chat.composerUploadImagesTitle}
               disabled={uploadDisabled}
               onClick={handleAttachmentClick}
             >

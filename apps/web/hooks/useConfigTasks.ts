@@ -12,6 +12,7 @@ import {
   taskUpdateRequestFromEditor,
 } from '@/lib/configTasks';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentMessageTaskPayload, TaskPayload } from '@/lib/types';
 
 interface UseConfigTasksOptions {
@@ -41,6 +42,7 @@ function isAgentMessageTask(task: TaskPayload): task is AgentMessageTaskPayload 
 }
 
 export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksResult {
+  const { copy } = useWebLocale();
   const { open } = options;
   const [tasks, setTasks] = useState<TaskPayload[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
@@ -66,11 +68,11 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
       applyTaskList(await listTasks());
       setTaskError('');
     } catch (error) {
-      setTaskError(toErrorMessage(error, 'failed to load tasks'));
+      setTaskError(toErrorMessage(error, copy.system.failedToLoadTasks));
     } finally {
       setTasksLoading(false);
     }
-  }, [applyTaskList]);
+  }, [applyTaskList, copy.system.failedToLoadTasks]);
 
   useEffect(() => {
     if (open) {
@@ -87,12 +89,13 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     try {
       return await action();
     } catch (error) {
-      setTaskError(toErrorMessage(error, fallbackMessage));
+      const message = toErrorMessage(error, fallbackMessage);
+      setTaskError(localizeTaskEditorError(message, copy));
       return null;
     } finally {
       setTaskSaving(false);
     }
-  }, []);
+  }, [copy]);
 
   const upsertTask = useCallback((task: TaskPayload) => {
     setTasks((state) => {
@@ -110,7 +113,7 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     const action = editorMode === 'edit'
       ? () => updateTask(editingTaskID, taskUpdateRequestFromEditor(editor))
       : () => createTask(taskCreateRequestFromEditor(editor));
-    const task = await runMutation(action, 'failed to save task');
+    const task = await runMutation(action, copy.system.failedToSaveTask);
     if (!task) {
       return false;
     }
@@ -118,18 +121,18 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     upsertTask(task);
     resetEditor();
     return true;
-  }, [editor, editorMode, editingTaskID, resetEditor, runMutation, upsertTask]);
+  }, [copy.system.failedToSaveTask, editor, editorMode, editingTaskID, resetEditor, runMutation, upsertTask]);
 
   const setTaskEnabled = useCallback(async (id: string, enabled: boolean) => {
     const payload: Pick<TaskUpdateRequest, 'enabled'> = { enabled };
-    const task = await runMutation(() => updateTask(id, payload), 'failed to update task');
+    const task = await runMutation(() => updateTask(id, payload), copy.system.failedToUpdateTask);
     if (task) {
       upsertTask(task);
     }
-  }, [runMutation, upsertTask]);
+  }, [copy.system.failedToUpdateTask, runMutation, upsertTask]);
 
   const deleteTaskByID = useCallback(async (id: string) => {
-    const result = await runMutation(() => deleteTask(id), 'failed to delete task');
+    const result = await runMutation(() => deleteTask(id), copy.system.failedToDeleteTask);
     if (result === null) {
       return;
     }
@@ -138,15 +141,15 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     if (editingTaskID === id) {
       resetEditor();
     }
-  }, [editingTaskID, resetEditor, runMutation]);
+  }, [copy.system.failedToDeleteTask, editingTaskID, resetEditor, runMutation]);
 
   const runTaskNowByID = useCallback(async (id: string) => {
-    const result = await runMutation(() => runTaskNow(id), 'failed to run task');
+    const result = await runMutation(() => runTaskNow(id), copy.system.failedToRunTask);
     if (result === null) {
       return;
     }
     await refreshTasks();
-  }, [refreshTasks, runMutation]);
+  }, [copy.system.failedToRunTask, refreshTasks, runMutation]);
 
   const updateEditor = useCallback((patch: Partial<TaskEditorState>) => {
     setEditor((state) => ({ ...state, ...patch }));
@@ -154,14 +157,14 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
 
   const editTask = useCallback((task: TaskPayload) => {
     if (!isAgentMessageTask(task)) {
-      setTaskError('text task editor only supports agent_message tasks');
+      setTaskError(copy.system.textTaskEditorOnlySupportsAgentMessage);
       return;
     }
     setEditorMode('edit');
     setEditingTaskID(task.id);
     setEditor(editorStateFromTask(task));
     setTaskError('');
-  }, []);
+  }, [copy.system.textTaskEditorOnlySupportsAgentMessage]);
 
   return {
     tasks,
@@ -180,4 +183,20 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     deleteTaskByID,
     cancelEditing: resetEditor,
   };
+}
+
+function localizeTaskEditorError(
+  message: string,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+): string {
+  if (message === 'interval seconds must be a positive integer') {
+    return copy.system.intervalSecondsPositiveInteger;
+  }
+  if (message === 'message is required') {
+    return copy.system.messageRequired;
+  }
+  if (message === 'cron expression is required') {
+    return copy.system.cronExpressionRequired;
+  }
+  return message;
 }

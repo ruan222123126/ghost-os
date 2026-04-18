@@ -3,6 +3,7 @@
 'use client';
 
 import type { FC, MouseEvent } from 'react';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionItemProps {
@@ -12,7 +13,11 @@ interface SessionItemProps {
   onDelete: (id: string) => void;
 }
 
-function formatRelativeTime(value: string): string {
+function formatRelativeTime(
+  value: string,
+  locale: ReturnType<typeof useWebLocale>['locale'],
+  copy: ReturnType<typeof useWebLocale>['copy'],
+): string {
   const timestamp = Date.parse(value);
   if (Number.isNaN(timestamp)) {
     return value;
@@ -20,21 +25,22 @@ function formatRelativeTime(value: string): string {
 
   const diffSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
   if (diffSeconds < 60) {
-    return 'just now';
+    return copy.chat.sessionRelativeNow;
   }
   if (diffSeconds < 3600) {
-    return `${Math.floor(diffSeconds / 60)}m ago`;
+    return copy.chat.sessionRelativeMinutes(Math.floor(diffSeconds / 60));
   }
   if (diffSeconds < 86400) {
-    return `${Math.floor(diffSeconds / 3600)}h ago`;
+    return copy.chat.sessionRelativeHours(Math.floor(diffSeconds / 3600));
   }
   if (diffSeconds < 604800) {
-    return `${Math.floor(diffSeconds / 86400)}d ago`;
+    return copy.chat.sessionRelativeDays(Math.floor(diffSeconds / 86400));
   }
-  return new Date(timestamp).toLocaleDateString();
+  return new Date(timestamp).toLocaleDateString(locale);
 }
 
 export const SessionItem: FC<SessionItemProps> = ({ session, isActive, onSelect, onDelete }) => {
+  const { copy, locale } = useWebLocale();
   const shortID = session.id.slice(0, 8);
 
   return (
@@ -52,8 +58,8 @@ export const SessionItem: FC<SessionItemProps> = ({ session, isActive, onSelect,
     >
       <div className="session-card-head">
         <div>
-          <p className="session-card-title mono">Session {shortID}</p>
-          <p className="session-card-meta">Created {formatRelativeTime(session.created_at)}</p>
+          <p className="session-card-title mono">{copy.chat.sidebarSessionTitle(shortID)}</p>
+          <p className="session-card-meta">{copy.chat.sessionCreatedPrefix} {formatRelativeTime(session.created_at, locale, copy)}</p>
         </div>
 
         <button
@@ -63,9 +69,9 @@ export const SessionItem: FC<SessionItemProps> = ({ session, isActive, onSelect,
             onDelete(session.id);
           }}
           className="button-danger session-card-delete"
-          aria-label={`Delete session ${shortID}`}
+          aria-label={copy.chat.sessionDeleteAria(shortID)}
         >
-          Delete
+          {copy.chat.sessionDelete}
         </button>
       </div>
     </div>

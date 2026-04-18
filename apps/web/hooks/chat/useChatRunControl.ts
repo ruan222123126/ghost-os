@@ -4,6 +4,7 @@ import { createClientTraceId } from '@/lib/api/trace';
 import { draftImagesToChatImages, draftImagesToSessionImages } from '@/lib/chatImageDrafts';
 import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, toErrorMessage } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatSendInput } from '@/lib/types';
 import type { ChatStateControls, StreamAgentRunInput, UseBridgeChatOptions } from './types';
 
@@ -23,6 +24,7 @@ interface UseChatRunControlOptions {
 }
 
 export function useChatRunControl(options: UseChatRunControlOptions) {
+  const { copy } = useWebLocale();
   const {
     appendErrorMessage,
     appendCommittedMessages,
@@ -66,7 +68,7 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
       });
     } catch (error) {
       if (!shouldSuppressRunError(error, stopPendingRef.current)) {
-        appendErrorMessage(toErrorMessage(error));
+        appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
       setLoading(false);
@@ -74,6 +76,7 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
       setStopPending(false);
     }
   }, [
+    copy.system.genericRequestFailed,
     appendCommittedMessages,
     appendErrorMessage,
     clearChatError,
@@ -98,10 +101,10 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
       await stopAgent(run.sessionId || undefined, run.traceId || undefined);
       run.abortController?.abort();
     } catch (error) {
-      setChatError(toErrorMessage(error));
+      setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
       setStopPending(false);
     }
-  }, [activeRunRef, clearChatError, setChatError, setStopPending, stopPendingRef]);
+  }, [activeRunRef, clearChatError, copy.system.genericRequestFailed, setChatError, setStopPending, stopPendingRef]);
 
   return {
     sendChatMessage,

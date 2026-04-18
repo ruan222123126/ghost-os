@@ -28,15 +28,14 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   const { runAgentStream, runHumanStream } = useChatStreamController({
     currentSessionId: options.currentSessionId,
     activeRunRef: state.activeRunRef,
-    appendCommittedMessages: state.appendCommittedMessages,
-    appendStreamingAssistantText: state.appendStreamingAssistantText,
-    clearStreamingAssistantText: state.clearStreamingAssistantText,
+    applyRuntimeActions: state.applyRuntimeActions,
     clearStreamingState: state.clearStreamingState,
+    endHistorySync: state.endHistorySync,
     onSessionResolved: options.onSessionResolved,
+    setChatError: state.setChatError,
     setActiveRun: state.setActiveRun,
+    beginHistorySync: state.beginHistorySync,
     syncRecentHistory,
-    upsertPendingQuestion: state.upsertPendingQuestion,
-    upsertStreamingTool: state.upsertStreamingTool,
   });
   const { sendChatMessage, stopCurrentRun } = useChatRunControl({
     appendErrorMessage: state.appendErrorMessage,
@@ -77,6 +76,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     streamingTools: state.streamingTools,
     pendingQuestions: state.pendingQuestions,
     loading: state.loading,
+    historySyncing: state.historySyncing,
     historyLoading: state.historyLoading,
     loadingOlderHistory: state.loadingOlderHistory,
     chatError: state.chatError,

@@ -50,6 +50,7 @@ export interface WorkflowEditorControllerRuntime {
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const AUTOSAVE_RETRY_MS = 2000;
+const DRAFT_PERSIST_DEBOUNCE_MS = 220;
 
 export function useAutosaveController(
   persistSnapshotRef: MutableRefObject<(snapshot: AutosaveSnapshot<WorkflowUpdatePayload>) => Promise<void>>,
@@ -135,7 +136,12 @@ export function useDraftPersistence(options: {
     if (isLoading) {
       return;
     }
-    storeDraft(draft, runtimeRef.current.taskID);
+    const timer = window.setTimeout(() => {
+      storeDraft(draft, runtimeRef.current.taskID);
+    }, DRAFT_PERSIST_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
   }, [draft, isLoading, runtimeRef]);
 }
 

@@ -1,196 +1,160 @@
-import { useCallback, useRef, useState } from 'react';
-import { buildErrorMessage } from '@/lib/chatMessages';
-import {
-  appendStreamingAssistantState,
-  clearPendingQuestionState,
-  clearStreamingAssistantState,
-  clearStreamingToolState,
-  markStreamingAssistantBoundary,
-  removePendingQuestionState,
-  STREAMING_ASSISTANT_ORDER_PREFIX,
-  STREAMING_QUESTION_ORDER_PREFIX,
-  STREAMING_TOOL_ORDER_PREFIX,
-  upsertPendingQuestionState,
-  upsertStreamingToolState,
-} from '@/lib/chatStream';
+import { useCallback, useReducer, useRef, type SetStateAction } from 'react';
+import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type { ChatMessage, PendingQuestionMessage, StreamingToolState } from '@/lib/types';
 import type { ActiveAgentRun, ChatStateControls } from './types';
-
-function appendUniqueOrderKey(order: string[], key: string): string[] {
-  return order.includes(key) ? order : [...order, key];
-}
-
-function removeOrderKey(order: string[], key: string): string[] {
-  return order.filter((current) => current !== key);
-}
-
-function removeOrderKeyByPrefix(order: string[], prefix: string): string[] {
-  return order.filter((current) => !current.startsWith(prefix));
-}
-
-function assistantOrderKey(segmentId: string): string {
-  return `${STREAMING_ASSISTANT_ORDER_PREFIX}${segmentId}`;
-}
-
-function toolOrderKey(toolId: string): string {
-  return `${STREAMING_TOOL_ORDER_PREFIX}${toolId}`;
-}
-
-function questionOrderKey(questionId: string): string {
-  return `${STREAMING_QUESTION_ORDER_PREFIX}${questionId}`;
-}
+import {
+  chatStateReducer,
+  createInitialChatState,
+} from './chatStateReducer';
+import { buildChatStateView } from './chatStateRuntime';
 
 export function useChatState(): ChatStateControls {
-  const [committedMessages, setCommittedMessages] = useState<ChatMessage[]>([]);
-  const [streamingAssistantState, setStreamingAssistantState] = useState(clearStreamingAssistantState);
-  const [streamingItemOrder, setStreamingItemOrder] = useState<string[]>([]);
-  const [streamingToolState, setStreamingToolState] = useState(clearStreamingToolState);
-  const [pendingQuestionState, setPendingQuestionState] = useState(clearPendingQuestionState);
-  const [loading, setLoading] = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [loadingOlderHistory, setLoadingOlderHistory] = useState(false);
-  const [chatError, setChatError] = useState('');
-  const [activeRun, setActiveRunState] = useState<ActiveAgentRun | null>(null);
-  const [stopPending, setStopPendingState] = useState(false);
-  const [hasOlderHistory, setHasOlderHistory] = useState(false);
-  const [nextHistoryBefore, setNextHistoryBefore] = useState<number | null>(null);
+  const [state, dispatch] = useReducer(chatStateReducer, undefined, createInitialChatState);
+  const view = buildChatStateView(state);
   const activeRunRef = useRef<ActiveAgentRun | null>(null);
   const stopPendingRef = useRef(false);
+  const historySyncCountRef = useRef(0);
+
+  const applyRuntimeActions = useCallback((actions: ChatRuntimeAction[]) => {
+    if (actions.length === 0) {
+      return;
+    }
+    dispatch({ type: 'apply_runtime_actions', actions });
+  }, []);
+
+  const setCommittedMessages = useCallback((updater: SetStateAction<ChatMessage[]>) => {
+    dispatch({ type: 'set_committed_messages', updater });
+  }, []);
+
+  const setLoading = useCallback((value: boolean) => {
+    dispatch({ type: 'set_scalar', key: 'loading', value });
+  }, []);
 
   const setActiveRun = useCallback((value: ActiveAgentRun | null) => {
     activeRunRef.current = value;
-    setActiveRunState(value);
+    dispatch({ type: 'set_scalar', key: 'activeRun', value });
   }, []);
 
   const setStopPending = useCallback((value: boolean) => {
     stopPendingRef.current = value;
-    setStopPendingState(value);
+    dispatch({ type: 'set_scalar', key: 'stopPending', value });
   }, []);
 
-  const appendCommittedMessages = useCallback((nextMessages: ChatMessage[]) => {
-    if (nextMessages.length === 0) {
+  const beginHistorySync = useCallback(() => {
+    historySyncCountRef.current += 1;
+    dispatch({ type: 'set_scalar', key: 'historySyncing', value: true });
+  }, []);
+
+  const endHistorySync = useCallback(() => {
+    if (historySyncCountRef.current === 0) {
+      dispatch({ type: 'set_scalar', key: 'historySyncing', value: false });
       return;
     }
-
-    setCommittedMessages((previous) => [...previous, ...nextMessages]);
-  }, []);
-
-  const clearChatError = useCallback(() => {
-    setChatError('');
-  }, []);
-
-  const clearStreamingTools = useCallback(() => {
-    setStreamingToolState(clearStreamingToolState());
-    setStreamingItemOrder((previous) => removeOrderKeyByPrefix(previous, STREAMING_TOOL_ORDER_PREFIX));
-  }, []);
-
-  const clearPendingQuestions = useCallback(() => {
-    setPendingQuestionState(clearPendingQuestionState());
-    setStreamingItemOrder((previous) => removeOrderKeyByPrefix(previous, STREAMING_QUESTION_ORDER_PREFIX));
-  }, []);
-
-  const clearStreamingAssistantText = useCallback(() => {
-    setStreamingAssistantState(clearStreamingAssistantState());
-    setStreamingItemOrder((previous) => removeOrderKeyByPrefix(previous, STREAMING_ASSISTANT_ORDER_PREFIX));
-  }, []);
-
-  const clearStreamingState = useCallback(() => {
-    clearStreamingAssistantText();
-    clearStreamingTools();
-  }, [clearStreamingAssistantText, clearStreamingTools]);
-
-  const replaceWithErrorMessage = useCallback((messageText: string) => {
-    setCommittedMessages([buildErrorMessage(messageText)]);
-    setStreamingAssistantState(clearStreamingAssistantState());
-    setStreamingItemOrder([]);
-    setStreamingToolState(clearStreamingToolState());
-    setPendingQuestionState(clearPendingQuestionState());
-  }, []);
-
-  const appendErrorMessage = useCallback((messageText: string) => {
-    setChatError(messageText);
-    appendCommittedMessages([buildErrorMessage(messageText)]);
-  }, [appendCommittedMessages]);
-
-  const appendStreamingAssistantTextState = useCallback((text: string) => {
-    if (!text) {
-      return;
-    }
-
-    setStreamingAssistantState((previous) => {
-      const result = appendStreamingAssistantState(previous, text);
-      const createdSegmentId = result.createdSegmentId;
-      if (createdSegmentId) {
-        setStreamingItemOrder((currentOrder) => {
-          return appendUniqueOrderKey(currentOrder, assistantOrderKey(createdSegmentId));
-        });
-      }
-      return result.state;
+    historySyncCountRef.current -= 1;
+    dispatch({
+      type: 'set_scalar',
+      key: 'historySyncing',
+      value: historySyncCountRef.current > 0,
     });
   }, []);
 
-  const upsertStreamingTool = useCallback((tool: StreamingToolState) => {
-    const toolId = tool.id.trim();
-    setStreamingAssistantState(markStreamingAssistantBoundary);
-    if (toolId) {
-      setStreamingItemOrder((previous) => appendUniqueOrderKey(previous, toolOrderKey(toolId)));
-    }
-    setStreamingToolState((previous) => upsertStreamingToolState(previous, tool));
+  const appendCommittedMessages = useCallback((nextMessages: ChatMessage[]) => {
+    applyRuntimeActions([{ type: 'append_committed_messages', messages: nextMessages }]);
+  }, [applyRuntimeActions]);
+
+  const clearChatError = useCallback(() => {
+    dispatch({ type: 'set_scalar', key: 'chatError', value: '' });
   }, []);
+
+  const setHistoryLoading = useCallback((value: boolean) => {
+    dispatch({ type: 'set_scalar', key: 'historyLoading', value });
+  }, []);
+
+  const setLoadingOlderHistory = useCallback((value: boolean) => {
+    dispatch({ type: 'set_scalar', key: 'loadingOlderHistory', value });
+  }, []);
+
+  const setChatError = useCallback((value: string) => {
+    dispatch({ type: 'set_scalar', key: 'chatError', value });
+  }, []);
+
+  const setHasOlderHistory = useCallback((value: boolean) => {
+    dispatch({ type: 'set_scalar', key: 'hasOlderHistory', value });
+  }, []);
+
+  const setNextHistoryBefore = useCallback((value: number | null) => {
+    dispatch({ type: 'set_scalar', key: 'nextHistoryBefore', value });
+  }, []);
+
+  const clearStreamingTools = useCallback(() => {
+    applyRuntimeActions([{ type: 'clear_streaming_tools' }]);
+  }, [applyRuntimeActions]);
+
+  const clearPendingQuestions = useCallback(() => {
+    applyRuntimeActions([{ type: 'clear_pending_questions' }]);
+  }, [applyRuntimeActions]);
+
+  const clearStreamingAssistantText = useCallback(() => {
+    applyRuntimeActions([{ type: 'clear_streaming_assistant_text' }]);
+  }, [applyRuntimeActions]);
+
+  const clearStreamingState = useCallback(() => {
+    applyRuntimeActions([
+      { type: 'clear_streaming_assistant_text' },
+      { type: 'clear_streaming_tools' },
+    ]);
+  }, [applyRuntimeActions]);
+
+  const replaceWithErrorMessage = useCallback((messageText: string) => {
+    dispatch({ type: 'replace_with_error_message', messageText });
+  }, []);
+
+  const appendErrorMessage = useCallback((messageText: string) => {
+    dispatch({ type: 'append_error_message', messageText });
+  }, []);
+
+  const appendStreamingAssistantText = useCallback((text: string) => {
+    applyRuntimeActions([{ type: 'append_streaming_assistant_text', text }]);
+  }, [applyRuntimeActions]);
+
+  const upsertStreamingTool = useCallback((tool: StreamingToolState) => {
+    applyRuntimeActions([{ type: 'upsert_streaming_tool', tool }]);
+  }, [applyRuntimeActions]);
 
   const upsertPendingQuestion = useCallback((question: PendingQuestionMessage) => {
-    const questionId = question.questionId.trim();
-    setStreamingAssistantState(markStreamingAssistantBoundary);
-    if (questionId) {
-      setStreamingItemOrder((previous) => appendUniqueOrderKey(previous, questionOrderKey(questionId)));
-    }
-    setPendingQuestionState((previous) => upsertPendingQuestionState(previous, question));
-  }, []);
+    applyRuntimeActions([{ type: 'upsert_pending_question', question }]);
+  }, [applyRuntimeActions]);
 
   const removePendingQuestion = useCallback((questionId: string) => {
-    const trimmedQuestionId = questionId.trim();
-    if (trimmedQuestionId) {
-      setStreamingItemOrder((previous) => removeOrderKey(previous, questionOrderKey(trimmedQuestionId)));
-    }
-    setPendingQuestionState((previous) => removePendingQuestionState(previous, questionId));
-  }, []);
+    applyRuntimeActions([{ type: 'remove_pending_question', questionId }]);
+  }, [applyRuntimeActions]);
 
   const clearMessages = useCallback(() => {
-    clearChatError();
-    setCommittedMessages([]);
-    setStreamingAssistantState(clearStreamingAssistantState());
-    setStreamingItemOrder([]);
-    setStreamingToolState(clearStreamingToolState());
-    setPendingQuestionState(clearPendingQuestionState());
-    setLoadingOlderHistory(false);
-    setHasOlderHistory(false);
-    setNextHistoryBefore(null);
-  }, [clearChatError]);
+    historySyncCountRef.current = 0;
+    dispatch({ type: 'clear_messages' });
+  }, []);
 
   return {
-    committedMessages,
-    streamingAssistantSegments: streamingAssistantState.order
-      .map((segmentId) => streamingAssistantState.segmentsById[segmentId])
-      .filter((segment) => segment !== undefined),
-    streamingItemOrder,
-    streamingTools: streamingToolState.order
-      .map((toolId) => streamingToolState.toolsById[toolId])
-      .filter((tool) => tool !== undefined),
-    pendingQuestions: pendingQuestionState.order
-      .map((questionId) => pendingQuestionState.questionsById[questionId])
-      .filter((question) => question !== undefined),
-    loading,
-    historyLoading,
-    loadingOlderHistory,
-    chatError,
-    activeRun,
-    stopPending,
-    hasOlderHistory,
-    nextHistoryBefore,
+    committedMessages: state.committedMessages,
+    streamingAssistantSegments: view.streamingAssistantSegments,
+    streamingItemOrder: state.streamingItemOrder,
+    streamingTools: view.streamingTools,
+    pendingQuestions: view.pendingQuestions,
+    loading: state.loading,
+    historySyncing: state.historySyncing,
+    historyLoading: state.historyLoading,
+    loadingOlderHistory: state.loadingOlderHistory,
+    chatError: state.chatError,
+    activeRun: state.activeRun,
+    stopPending: state.stopPending,
+    hasOlderHistory: state.hasOlderHistory,
+    nextHistoryBefore: state.nextHistoryBefore,
     activeRunRef,
     stopPendingRef,
     setCommittedMessages,
     setLoading,
+    beginHistorySync,
+    endHistorySync,
     setHistoryLoading,
     setLoadingOlderHistory,
     setChatError,
@@ -198,11 +162,12 @@ export function useChatState(): ChatStateControls {
     setStopPending,
     setHasOlderHistory,
     setNextHistoryBefore,
+    applyRuntimeActions,
     appendCommittedMessages,
     clearChatError,
     replaceWithErrorMessage,
     appendErrorMessage,
-    appendStreamingAssistantText: appendStreamingAssistantTextState,
+    appendStreamingAssistantText,
     clearStreamingAssistantText,
     clearStreamingState,
     upsertStreamingTool,

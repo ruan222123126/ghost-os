@@ -3,6 +3,7 @@
 'use client';
 
 import type { FC } from 'react';
+import { SessionSidebarHistory } from '@/components/SessionSidebarHistory';
 import { SidebarSettingsButton } from '@/components/SidebarSettingsButton';
 import {
   IconPanelLeftClose,
@@ -37,7 +38,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
   onOpenSettings,
 }) => {
   const { copy } = useWebLocale();
-  const sidebarState = useSessionSidebarState({ sessions });
+  const sidebarState = useSessionSidebarState();
 
   return (
     <aside
@@ -112,70 +113,16 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         </button>
       </div>
 
-      <div className="mt-6 flex-1 overflow-y-auto px-3">
-        {sidebarState.isOpen ? (
-          <>
-            <div className="mb-4 flex items-center gap-2 border-b border-black/5 px-1 pb-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.chat.sidebarHistory}</span>
-            </div>
-
-            {error && !loading ? (
-              <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{error}</div>
-            ) : null}
-
-            {loading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <div key={`session-skeleton-${index}`} className="h-10 w-full bg-white" />
-                ))}
-              </div>
-            ) : sidebarState.filteredSessions.length === 0 ? (
-              <div className="border border-black/10 bg-white px-3 py-3 text-xs text-neutral-600">{copy.chat.sidebarNoSessions}</div>
-            ) : (
-              <div className="space-y-0.5">
-                {sidebarState.filteredSessions.map((session) => {
-                  const shortID = session.id.slice(0, 8);
-                  const isActive = session.id === currentSessionId;
-
-                  return (
-                    <div
-                      key={session.id}
-                      onClick={() => onSelect(session.id)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          onSelect(session.id);
-                        }
-                      }}
-                      className={`group relative flex w-full items-center gap-3 px-3 py-3 text-left text-xs transition-colors ${
-                        isActive
-                          ? 'bg-white font-bold text-black shadow-sm ring-1 ring-black/5'
-                          : 'text-neutral-500 hover:bg-white hover:text-black'
-                      }`}
-                    >
-                      <span className="flex-1 truncate uppercase tracking-tight">{copy.chat.sidebarSessionTitle(shortID)}</span>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onDelete(session.id);
-                        }}
-                        className="opacity-0 transition-opacity group-hover:opacity-100"
-                        aria-label={copy.chat.sidebarDeleteSessionAria(shortID)}
-                        title={copy.chat.sessionDelete}
-                      >
-                        <span className="text-[10px] font-black uppercase tracking-widest text-black">{copy.chat.sidebarDeleteShort}</span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        ) : null}
-      </div>
+      <SessionSidebarHistory
+        isOpen={sidebarState.isOpen}
+        sessions={sessions}
+        searchQuery={sidebarState.searchQuery}
+        currentSessionId={currentSessionId}
+        loading={loading}
+        error={error}
+        onSelect={onSelect}
+        onDelete={onDelete}
+      />
 
       <SidebarSettingsButton collapsed={!sidebarState.isOpen} onClick={onOpenSettings} />
     </aside>

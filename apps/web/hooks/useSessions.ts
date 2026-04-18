@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { deleteSession as deleteSessionRequest, listSessions } from '@/lib/api/sessions/api';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
 
 interface UseSessionsResult {
@@ -19,6 +20,7 @@ interface UseSessionsResult {
 }
 
 export function useSessions(): UseSessionsResult {
+  const { copy } = useWebLocale();
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [currentSessionId, setCurrentSessionIdState] = useState('');
   const [loading, setLoading] = useState(false);
@@ -31,11 +33,11 @@ export function useSessions(): UseSessionsResult {
       const loaded = await listSessions();
       setSessions(loaded);
     } catch (error) {
-      setError(toErrorMessage(error));
+      setError(toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [copy.system.genericRequestFailed]);
 
   const setCurrentSessionId = useCallback((id: string) => {
     setCurrentSessionIdState(id.trim());
@@ -57,9 +59,9 @@ export function useSessions(): UseSessionsResult {
       setSessions((previous) => previous.filter((session) => session.id !== trimmedID));
       setCurrentSessionIdState((previous) => (previous === trimmedID ? '' : previous));
     } catch (error) {
-      setError(toErrorMessage(error));
+      setError(toErrorMessage(error, copy.system.genericRequestFailed));
     }
-  }, []);
+  }, [copy.system.genericRequestFailed]);
 
   useEffect(() => {
     ignorePromise(loadSessions());

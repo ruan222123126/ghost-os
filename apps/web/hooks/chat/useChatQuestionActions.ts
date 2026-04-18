@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { createClientTraceId } from '@/lib/api/trace';
 import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, toErrorMessage } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { PendingQuestionMessage } from '@/lib/types';
 import type { ChatStateControls } from './types';
 
@@ -28,6 +29,7 @@ interface UseChatQuestionActionsOptions {
 }
 
 export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
+  const { copy } = useWebLocale();
   const {
     appendCommittedMessages,
     appendErrorMessage,
@@ -50,7 +52,7 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       return;
     }
     if (!trimmedAnswer) {
-      setChatError('Answer cannot be empty');
+      setChatError(copy.chat.answerCannotBeEmpty);
       return;
     }
 
@@ -80,7 +82,7 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       });
     } catch (error) {
       if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current)) {
-        appendErrorMessage(toErrorMessage(error));
+        appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
       setLoading(false);
@@ -88,6 +90,8 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       setStopPending(false);
     }
   }, [
+    copy.chat.answerCannotBeEmpty,
+    copy.system.genericRequestFailed,
     appendCommittedMessages,
     appendErrorMessage,
     clearChatError,
@@ -132,7 +136,7 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       });
     } catch (error) {
       if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current)) {
-        appendErrorMessage(toErrorMessage(error));
+        appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
       setLoading(false);
@@ -140,6 +144,7 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       setStopPending(false);
     }
   }, [
+    copy.system.genericRequestFailed,
     appendErrorMessage,
     clearChatError,
     clearStreamingState,

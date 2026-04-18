@@ -4,6 +4,7 @@
 
 import type { FC } from 'react';
 import { SessionItem } from '@/components/SessionItem';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionListProps {
@@ -16,6 +17,8 @@ interface SessionListProps {
 }
 
 export const SessionList: FC<SessionListProps> = ({ sessions, currentSessionId, loading, error: _error, onSelect, onDelete }) => {
+  const { copy } = useWebLocale();
+
   if (loading) {
     return (
       <div className="session-list">
@@ -27,7 +30,7 @@ export const SessionList: FC<SessionListProps> = ({ sessions, currentSessionId, 
   }
 
   if (sessions.length === 0) {
-    return <div className="empty-state">No sessions yet. Start a new chat to create the first session.</div>;
+    return <div className="empty-state">{copy.chat.sidebarNoSessions}</div>;
   }
 
   return (

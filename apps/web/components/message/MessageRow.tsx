@@ -1,10 +1,12 @@
 import type { FC } from 'react';
 import { QuestionInput } from '@/components/QuestionInput';
-import type { PendingQuestionMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
+import { useWebLocale } from '@/lib/i18n/provider';
+import type { AssistantChatMessage, PendingQuestionMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageCopyButton } from './MessageCopyButton';
 import { MessageImageGallery } from './MessageImageGallery';
 import { ToolCard } from './ToolCard';
+import { AssistantMarkdownContent } from './AssistantMarkdownContent';
 import type { MessageRowProps } from './types';
 
 const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
@@ -16,18 +18,23 @@ const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
   </div>
 );
 
-const AssistantMessageRow: FC<{ content: string }> = ({ content }) => (
-  <div className="message-row is-assistant">
-    <div className="message-stack">
-      <div className="message-content">{content}</div>
-      {content ? (
-        <div className="message-actions">
-          <MessageCopyButton text={content} />
-        </div>
-      ) : null}
+const AssistantMessageRow: FC<{ message: AssistantChatMessage }> = ({ message }) => {
+  const { copy } = useWebLocale();
+
+  return (
+    <div className="message-row is-assistant">
+      <div className="message-stack">
+        {message.inProgress ? <div className="message-draft-flag">{copy.chat.assistantDraftFlag}</div> : null}
+        <AssistantMarkdownContent content={message.content} />
+        {message.content ? (
+          <div className="message-actions">
+            <MessageCopyButton text={message.content} />
+          </div>
+        ) : null}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 const ToolMessageRow: FC<{
   isOpen: boolean;
@@ -80,7 +87,7 @@ export const MessageRow: FC<MessageRowProps> = ({
     case 'user':
       return <UserMessageRow message={message} />;
     case 'assistant':
-      return <AssistantMessageRow content={message.content} />;
+      return <AssistantMessageRow message={message} />;
     case 'tool':
       return (
         <ToolMessageRow

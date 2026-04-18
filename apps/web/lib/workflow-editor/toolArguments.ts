@@ -82,7 +82,11 @@ function parseRowValue(row: WorkflowToolArgumentRow, index: number): unknown {
   }
 }
 
-function parseNumber(raw: string, index: number): number {
+function parseNumber(raw: string, index: number): unknown {
+  const templateReference = parseTemplateReference(raw);
+  if (templateReference) {
+    return templateReference;
+  }
   const value = Number(raw.trim());
   if (!Number.isFinite(value)) {
     throw new Error(`tool argument row[${index}] number value is invalid`);
@@ -91,7 +95,11 @@ function parseNumber(raw: string, index: number): number {
   return value;
 }
 
-function parseBoolean(raw: string, index: number): boolean {
+function parseBoolean(raw: string, index: number): unknown {
+  const templateReference = parseTemplateReference(raw);
+  if (templateReference) {
+    return templateReference;
+  }
   const normalized = raw.trim().toLowerCase();
   if (normalized === 'true') {
     return true;
@@ -102,7 +110,11 @@ function parseBoolean(raw: string, index: number): boolean {
   throw new Error(`tool argument row[${index}] boolean value must be true or false`);
 }
 
-function parseJSONObject(raw: string, index: number): Record<string, unknown> {
+function parseJSONObject(raw: string, index: number): unknown {
+  const templateReference = parseTemplateReference(raw);
+  if (templateReference) {
+    return templateReference;
+  }
   const parsed = JSON.parse(raw) as unknown;
   if (!isPlainObject(parsed)) {
     throw new Error(`tool argument row[${index}] object value must be valid JSON object`);
@@ -111,7 +123,11 @@ function parseJSONObject(raw: string, index: number): Record<string, unknown> {
   return parsed;
 }
 
-function parseJSONArray(raw: string, index: number): unknown[] {
+function parseJSONArray(raw: string, index: number): unknown {
+  const templateReference = parseTemplateReference(raw);
+  if (templateReference) {
+    return templateReference;
+  }
   const parsed = JSON.parse(raw) as unknown;
   if (!Array.isArray(parsed)) {
     throw new Error(`tool argument row[${index}] array value must be valid JSON array`);
@@ -153,4 +169,12 @@ function serializeValue(valueType: ToolArgumentValueType, value: unknown): strin
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseTemplateReference(raw: string): string | undefined {
+  const trimmed = raw.trim();
+  if (/^\$\{[^}]+\}$/.test(trimmed)) {
+    return trimmed;
+  }
+  return undefined;
 }

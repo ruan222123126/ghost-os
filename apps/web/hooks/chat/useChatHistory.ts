@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { getSession } from '@/lib/api/sessions/api';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
 import { toErrorMessage } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatMessage, SessionDetail } from '@/lib/types';
 import type { ChatStateControls } from './types';
 
@@ -22,6 +23,7 @@ interface UseChatHistoryOptions {
 }
 
 export function useChatHistory(options: UseChatHistoryOptions) {
+  const { copy } = useWebLocale();
   const {
     clearChatError,
     clearPendingQuestions,
@@ -73,13 +75,14 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     try {
       await hydrateSessionHistory(id);
     } catch (error) {
-      const messageText = toErrorMessage(error);
+      const messageText = toErrorMessage(error, copy.system.genericRequestFailed);
       setChatError(messageText);
       replaceWithErrorMessage(messageText);
     } finally {
       setHistoryLoading(false);
     }
   }, [
+    copy.system.genericRequestFailed,
     clearChatError,
     clearPendingQuestions,
     clearStreamingState,
@@ -109,11 +112,12 @@ export function useChatHistory(options: UseChatHistoryOptions) {
       const older = mapSessionMessagesToChat(detail.id, detail.messages);
       setCommittedMessages((previous) => prependUniqueCommittedMessages(previous, older));
     } catch (error) {
-      setChatError(toErrorMessage(error));
+      setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
       setLoadingOlderHistory(false);
     }
   }, [
+    copy.system.genericRequestFailed,
     clearChatError,
     nextHistoryBefore,
     setChatError,

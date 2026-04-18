@@ -31,7 +31,7 @@ export function shouldStartPan(event: ReactMouseEvent<HTMLElement>): boolean {
   if (!(target instanceof Element)) {
     return false;
   }
-  return !target.closest('.workflow-arch-node');
+  return !target.closest('.workflow-arch-node, .workflow-arch-edge-hitbox');
 }
 
 export function applyPendingNodeMoveToDraft(

@@ -11,6 +11,30 @@ export type WorkflowEditorMode = 'create' | 'edit';
 export type WorkflowToolArgumentsMode = 'json' | 'kv';
 export type WorkflowScheduleMode = 'interval' | 'cron';
 export type WorkflowNodeType = WorkflowNode['type'];
+export type ScreenControlAtomicAction =
+  | 'screenshot'
+  | 'find_text'
+  | 'find_icon'
+  | 'click'
+  | 'click_text'
+  | 'click_icon';
+
+export interface ScreenControlFindIconParams {
+  template_path: string;
+  template_name?: string;
+  threshold?: number;
+  max_results?: number;
+}
+
+export interface ScreenControlClickParams {
+  x: number;
+  y: number;
+}
+
+export interface ScreenControlComposerStep {
+  action: ScreenControlAtomicAction;
+  params?: Record<string, unknown>;
+}
 
 export interface WorkflowCanvasPosition {
   x: number;
@@ -19,6 +43,9 @@ export interface WorkflowCanvasPosition {
 
 export interface WorkflowCanvasNodeUIState {
   toolArgumentsMode: WorkflowToolArgumentsMode;
+  screenControlComposer?: {
+    steps: ScreenControlComposerStep[];
+  };
 }
 
 export interface WorkflowCanvasNodeDraft {
@@ -39,6 +66,20 @@ export interface WorkflowCanvasNodeDraft {
   };
   agent?: {
     message: string;
+  };
+  if?: {
+    source_node_id?: string;
+    operator: 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'is_empty' | 'not_empty';
+    value?: string;
+    true_node_id?: string;
+    false_node_id?: string;
+  };
+  loop?: {
+    role: 'start' | 'end';
+    loop_id: string;
+    max_iterations?: number;
+    body_node_id?: string;
+    exit_node_id?: string;
   };
 }
 

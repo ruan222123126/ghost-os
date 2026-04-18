@@ -1,7 +1,8 @@
 'use client';
 
-import type { KeyboardEvent } from 'react';
+import { useMemo, type KeyboardEvent } from 'react';
 import { ignorePromise } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentMessageTaskPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
 
 const TASK_SKELETON_COUNT = 3;
@@ -28,7 +29,9 @@ interface TaskCardProps {
 }
 
 export function TaskList(props: TaskListProps) {
+  const { copy } = useWebLocale();
   const { tasks, loading, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
+  const orderedTasks = useMemo(() => prioritizeEnabledTasks(tasks), [tasks]);
 
   if (loading) {
     return (
@@ -46,14 +49,14 @@ export function TaskList(props: TaskListProps) {
   if (tasks.length === 0) {
     return (
       <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
-        No tasks configured yet.
+        {copy.settings.tasksNoItems}
       </div>
     );
   }
 
   return (
     <div className="grid grid-cols-1 gap-3">
-      {tasks.map((task) => (
+      {orderedTasks.map((task) => (
         <TaskCard
           key={task.id}
           task={task}
@@ -70,8 +73,9 @@ export function TaskList(props: TaskListProps) {
 }
 
 function TaskCard(props: TaskCardProps) {
+  const { copy } = useWebLocale();
   const { task, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
-  const toggleLabel = task.enabled ? 'Disable' : 'Enable';
+  const toggleLabel = task.enabled ? copy.settings.tasksDisable : copy.settings.tasksEnable;
   const editable = task.task_kind === 'agent_message' || task.task_kind === 'workflow';
 
   return (
@@ -89,18 +93,18 @@ function TaskCard(props: TaskCardProps) {
       <div className="min-w-0">
         <div className="mb-2 flex items-center gap-2">
           <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
-            {task.enabled ? 'Enabled' : 'Disabled'}
+            {task.enabled ? copy.settings.enabled : copy.settings.disabled}
           </span>
           <span className="inline-flex whitespace-nowrap rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
-            {formatTaskKind(task)}
+            {formatTaskKind(task, copy)}
           </span>
           <span className="font-mono text-[11px] text-[#737373]">{task.id}</span>
         </div>
-        <p className="mb-1 line-clamp-2 text-[14px] text-[#111111]">{formatPrimaryText(task)}</p>
-        <p className="text-[12px] text-[#737373]">{formatSchedule(task)}</p>
-        <p className="truncate font-mono text-[12px] text-[#737373]">{formatSecondaryLine(task)}</p>
+        <p className="mb-1 line-clamp-2 text-[14px] text-[#111111]">{formatPrimaryText(task, copy)}</p>
+        <p className="text-[12px] text-[#737373]">{formatSchedule(task, copy)}</p>
+        <p className="truncate font-mono text-[12px] text-[#737373]">{formatSecondaryLine(task, copy)}</p>
         {task.task_kind === 'agent_message' ? (
-          <p className="truncate text-[12px] text-[#737373]">{formatRuntimeOverrides(task)}</p>
+          <p className="truncate text-[12px] text-[#737373]">{formatRuntimeOverrides(task, copy)}</p>
         ) : null}
       </div>
 
@@ -114,7 +118,7 @@ function TaskCard(props: TaskCardProps) {
           }}
           className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Run now
+          {copy.settings.tasksRun}
         </button>
         <button
           type="button"
@@ -137,8 +141,8 @@ function TaskCard(props: TaskCardProps) {
             }
           }}
           className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={`Edit task ${task.id}`}
-          title={editable ? 'Edit task' : 'Edit unavailable'}
+          aria-label={copy.settings.tasksEditAria(task.id)}
+          title={editable ? copy.settings.tasksEditTitle : copy.settings.tasksEditUnavailableTitle}
         >
           <EditIcon />
         </button>
@@ -147,10 +151,10 @@ function TaskCard(props: TaskCardProps) {
           disabled={controlsDisabled}
           onClick={(event) => {
             event.stopPropagation();
-            handleTaskDelete(task.id, onDelete);
+            handleTaskDelete(task.id, onDelete, copy.settings.tasksDeleteConfirm(task.id));
           }}
           className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={`Delete task ${task.id}`}
+          aria-label={copy.settings.tasksDeleteAria(task.id)}
         >
           <TrashIcon />
         </button>
@@ -159,39 +163,39 @@ function TaskCard(props: TaskCardProps) {
   );
 }
 
-function formatTaskKind(task: TaskPayload): string {
-  return task.task_kind === 'workflow' ? 'Workflow' : 'Text Task';
+function formatTaskKind(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
+  return task.task_kind === 'workflow' ? copy.settings.tasksWorkflowKind : copy.settings.tasksTextKind;
 }
 
-function formatPrimaryText(task: TaskPayload): string {
+function formatPrimaryText(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.task_kind === 'agent_message') {
     return task.message;
   }
 
   const workflowTask = task as WorkflowTaskPayload;
-  return `Workflow with ${workflowAgentNodeCount(workflowTask)} agent steps`;
+  return copy.settings.tasksWorkflowWithSteps(workflowAgentNodeCount(workflowTask));
 }
 
-function formatSchedule(task: TaskPayload): string {
+function formatSchedule(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.schedule_type === 'interval') {
-    return `Every ${task.interval_seconds ?? 0}s`;
+    return copy.settings.tasksEverySeconds(task.interval_seconds ?? 0);
   }
 
-  return `Cron ${task.cron_expr ?? ''}`;
+  return copy.settings.tasksCron(task.cron_expr ?? '');
 }
 
-function formatSecondaryLine(task: TaskPayload): string {
+function formatSecondaryLine(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.task_kind === 'agent_message') {
-    return `Session: ${task.session_id?.trim() ? task.session_id : '(new each run)'}`;
+    return copy.settings.tasksSessionLabel(task.session_id?.trim() ? task.session_id : copy.settings.tasksSessionNewEachRun);
   }
 
-  return 'Session: workflow-managed';
+  return copy.settings.tasksSessionWorkflowManaged;
 }
 
-function formatRuntimeOverrides(task: AgentMessageTaskPayload): string {
+function formatRuntimeOverrides(task: AgentMessageTaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
   const overrides = task.runtime_overrides;
   if (!overrides) {
-    return 'Runtime: global defaults';
+    return copy.settings.tasksRuntimeGlobalDefaults;
   }
   const parts: string[] = [];
   if (overrides.model) {
@@ -201,10 +205,10 @@ function formatRuntimeOverrides(task: AgentMessageTaskPayload): string {
     parts.push(`tools=${overrides.tool_allowlist.join(',')}`);
   }
   if (parts.length === 0) {
-    return 'Runtime: global defaults';
+    return copy.settings.tasksRuntimeGlobalDefaults;
   }
 
-  return `Runtime: ${parts.join(' | ')}`;
+  return copy.settings.tasksRuntimeLabel(parts.join(' | '));
 }
 
 function workflowAgentNodeCount(task: WorkflowTaskPayload): number {
@@ -243,12 +247,26 @@ function handleTaskEdit(
   }
 }
 
-function handleTaskDelete(id: string, onDelete: (id: string) => Promise<void>) {
-  if (!window.confirm(`Delete task "${id}"?`)) {
+function handleTaskDelete(id: string, onDelete: (id: string) => Promise<void>, message: string) {
+  if (!window.confirm(message)) {
     return;
   }
 
   ignorePromise(onDelete(id));
+}
+
+function prioritizeEnabledTasks(tasks: TaskPayload[]): TaskPayload[] {
+  const enabledTasks: TaskPayload[] = [];
+  const disabledTasks: TaskPayload[] = [];
+
+  for (const task of tasks) {
+    if (task.enabled) {
+      enabledTasks.push(task);
+      continue;
+    }
+    disabledTasks.push(task);
+  }
+  return [...enabledTasks, ...disabledTasks];
 }
 
 function EditIcon() {

@@ -21,6 +21,7 @@ interface NormalizedSessionMessage {
   index: number;
   role: SessionMessageRole | '';
   text: string;
+  inProgress?: boolean;
   content?: SessionContentPart[];
   toolCalls?: unknown[];
   toolCallId?: string;
@@ -42,6 +43,7 @@ function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMess
     index: message.index,
     role: message.role,
     text: message.text ?? '',
+    inProgress: message.in_progress,
     content: message.content ?? undefined,
     toolCalls: message.tool_calls,
     toolCallId: message.tool_call_id,
@@ -128,11 +130,12 @@ export function buildUserMessage(content: string, options?: BuildUserMessageOpti
   };
 }
 
-export function buildAssistantMessage(content: string, id?: string): ChatMessage {
+export function buildAssistantMessage(content: string, id?: string, inProgress?: boolean): ChatMessage {
   return {
     id: id ?? nextChatMessageID(),
     kind: 'assistant',
     content,
+    inProgress,
   };
 }
 
@@ -213,6 +216,7 @@ export function mapSessionMessageToChatMessages(sessionId: string, message: Sess
       return [buildAssistantMessage(
         visibleText,
         buildSessionMessageID(sessionId, normalized.index, 'assistant'),
+        normalized.inProgress,
       )];
     case 'system':
       return [buildSystemMessage(

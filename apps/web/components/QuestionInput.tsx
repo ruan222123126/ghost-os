@@ -5,6 +5,7 @@
 import type { FC } from 'react';
 import { useMemo, useState } from 'react';
 import { ignorePromise } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { AskHumanOption } from '@/lib/types';
 
 interface QuestionInputProps {
@@ -60,6 +61,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
   onAnswer,
   onCancel,
 }) => {
+  const { copy } = useWebLocale();
   const normalizedOptions = useMemo(() => normalizeOptions(options), [options]);
   const hasOptions = normalizedOptions.length > 0;
   const mode = selectionMode === 'multiple' ? 'multiple' : 'single';
@@ -117,7 +119,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
     <div className="question-card">
       {hasOptions ? (
         <>
-          <div className="field-hint">{mode === 'multiple' ? 'Choose one or more options' : 'Choose one option'}</div>
+          <div className="field-hint">{mode === 'multiple' ? copy.chat.questionChooseMultiple : copy.chat.questionChooseSingle}</div>
           <div className="choice-list">
             {normalizedOptions.map((option, index) => {
               const checked = effectiveSelections.includes(index);
@@ -143,7 +145,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
         <textarea
           value={customText}
           disabled={loading}
-          aria-label={hasOptions ? 'Custom answer' : 'Answer question'}
+          aria-label={hasOptions ? copy.chat.questionCustomAnswerAria : copy.chat.questionAnswerAria}
           onChange={(event) => setCustomText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && !event.shiftKey) {
@@ -151,7 +153,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
               ignorePromise(submit());
             }
           }}
-          placeholder={hasOptions ? 'Type your custom answer...' : 'Type your answer...'}
+          placeholder={hasOptions ? copy.chat.questionCustomPlaceholder : copy.chat.questionAnswerPlaceholder}
           rows={hasOptions ? 3 : 2}
           className="textarea mono"
         />
@@ -159,7 +161,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
 
       <div className="question-actions">
         <span className="field-hint">
-          {hasOptions ? 'Submit your selection, or cancel this question' : 'Enter to submit answer, or cancel'}
+          {hasOptions ? copy.chat.questionSelectionHint : copy.chat.questionAnswerHint}
         </span>
 
         <div className="question-actions">
@@ -171,7 +173,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
             disabled={loading}
             className="button-secondary"
           >
-            Cancel
+            {copy.chat.questionCancel}
           </button>
           <button
             type="button"
@@ -181,7 +183,7 @@ export const QuestionInput: FC<QuestionInputProps> = ({
             disabled={loading || !canSubmit}
             className="button"
           >
-            {loading ? 'Submitting...' : 'Submit'}
+            {loading ? copy.chat.questionSubmitting : copy.chat.questionSubmit}
           </button>
         </div>
       </div>

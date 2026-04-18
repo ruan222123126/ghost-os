@@ -2,6 +2,7 @@
 
 import type { FC } from 'react';
 import { useState } from 'react';
+import { useWebLocale } from '@/lib/i18n/provider';
 
 const COPY_RESET_DELAY_MS = 2000;
 
@@ -59,6 +60,7 @@ function copyWithTextArea(text: string): boolean {
 }
 
 export const MessageCopyButton: FC<{ text: string }> = ({ text }) => {
+  const { copy } = useWebLocale();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -78,7 +80,7 @@ export const MessageCopyButton: FC<{ text: string }> = ({ text }) => {
   return (
     <button type="button" onClick={handleCopy} className={`copy-button${copied ? ' is-copied' : ''}`}>
       {copied ? <CheckIcon className="copy-icon" /> : <CopyIcon className="copy-icon" />}
-      <span className="copy-label">{copied ? 'Copied' : 'Copy'}</span>
+      <span className="copy-label">{copied ? copy.chat.copied : copy.chat.copy}</span>
     </button>
   );
 };
