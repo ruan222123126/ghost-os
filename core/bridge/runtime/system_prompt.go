@@ -5,6 +5,7 @@ import (
 	goruntime "runtime"
 	"strconv"
 
+	bridgeconfig "ghost-os/bridge/config"
 	ctxmgr "ghost-os/bridge/context"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -15,6 +16,23 @@ func buildSystemPrompt(cfg Config, catalog tools.ToolCatalog) (string, error) {
 }
 
 func buildSystemPromptForSession(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+) (string, error) {
+	basePrompt, err := buildBaseSystemPrompt(cfg, catalog, sess, idleTurns)
+	if err != nil {
+		return "", err
+	}
+	systemPrompts, err := bridgeconfig.LoadSystemPromptFiles(cfg.PromptsDir)
+	if err != nil {
+		return "", fmt.Errorf("load system prompts: %w", err)
+	}
+	return bridgeconfig.RenderSystemPrompt(systemPrompts, basePrompt), nil
+}
+
+func buildBaseSystemPrompt(
 	cfg Config,
 	catalog tools.ToolCatalog,
 	sess *session.Session,
@@ -48,10 +66,11 @@ func systemPromptVars(
 	idleTurns int,
 ) map[string]string {
 	return map[string]string{
-		"os_type":            goruntime.GOOS,
-		"tool_guidance":      tools.FormatPromptGuidanceForCatalog(catalog),
-		"dynamic_tool_state": formatDynamicToolState(sess, idleTurns),
-		"max_turns":          strconv.Itoa(cfg.MaxTurns),
-		"project_root":       resolvePromptProjectRoot(cfg.ProjectRoot),
+		"os_type":               goruntime.GOOS,
+		"tool_guidance":         tools.FormatPromptGuidanceForCatalog(catalog),
+		"dynamic_tool_state":    formatDynamicToolState(sess, idleTurns),
+		"dynamic_skill_context": formatDynamicSkillContext(cfg, sess, idleTurns),
+		"max_turns":             strconv.Itoa(cfg.MaxTurns),
+		"project_root":          resolvePromptProjectRoot(cfg.ProjectRoot),
 	}
 }

@@ -12,6 +12,7 @@ const (
 	defaultPromptPath    = "prompts.yaml"
 	defaultToolGuidance  = "- Use only the tools included in the structured tool schema for this turn."
 	defaultDynamicState  = "- No dynamic tools loaded."
+	defaultSkillContext  = "- No dynamic skills loaded."
 )
 
 var (
@@ -71,11 +72,12 @@ func (pm *PromptManager) Render(vars map[string]string) string {
 	}
 
 	merged := map[string]string{
-		"core_job":            strings.TrimSpace(pm.config.System.CoreJob),
-		"tool_guidance":       defaultToolGuidance,
-		"dynamic_tool_state":  defaultDynamicState,
-		"runtime_constraints": strings.TrimSpace(pm.config.System.RuntimeConstraints),
-		"response_rules":      strings.TrimSpace(pm.config.System.ResponseRules),
+		"core_job":              strings.TrimSpace(pm.config.System.CoreJob),
+		"tool_guidance":         defaultToolGuidance,
+		"dynamic_tool_state":    defaultDynamicState,
+		"dynamic_skill_context": defaultSkillContext,
+		"runtime_constraints":   strings.TrimSpace(pm.config.System.RuntimeConstraints),
+		"response_rules":        strings.TrimSpace(pm.config.System.ResponseRules),
 	}
 	for key, value := range vars {
 		merged[key] = value

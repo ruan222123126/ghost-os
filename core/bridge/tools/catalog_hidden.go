@@ -6,10 +6,6 @@ type structuredToolHiddenCatalog struct {
 	base ToolCatalog
 }
 
-type graphQLToolDefSource interface {
-	GraphQLToolDefs() []llm.ToolDef
-}
-
 func NewStructuredToolHiddenCatalog(base ToolCatalog) ToolCatalog {
 	if base == nil {
 		return nil

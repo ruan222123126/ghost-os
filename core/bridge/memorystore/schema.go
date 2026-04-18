@@ -7,6 +7,114 @@ import (
 	"strings"
 )
 
+type schemaStatement struct {
+	name string
+	sql  string
+}
+
+var tableStatements = []schemaStatement{
+	{
+		name: "memories",
+		sql: `CREATE TABLE IF NOT EXISTS memories (
+			uri TEXT PRIMARY KEY,
+			content TEXT NOT NULL,
+			metadata_json TEXT,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			last_used_at DATETIME
+		)`,
+	},
+	{
+		name: "learned memories",
+		sql: `CREATE TABLE IF NOT EXISTS learned_memories (
+			id TEXT PRIMARY KEY,
+			scope_type TEXT NOT NULL,
+			scope_id TEXT NOT NULL,
+			source_kind TEXT NOT NULL,
+			memory_type TEXT NOT NULL,
+			memory_key TEXT,
+			content TEXT NOT NULL,
+			summary TEXT NOT NULL,
+			metadata_json TEXT,
+			confidence REAL NOT NULL,
+			status TEXT NOT NULL,
+			superseded_by TEXT,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			last_used_at DATETIME
+		)`,
+	},
+	{
+		name: "learning events",
+		sql: `CREATE TABLE IF NOT EXISTS memory_learning_events (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			trace_id TEXT,
+			status TEXT NOT NULL,
+			input_json TEXT,
+			filtered_json TEXT,
+			candidates_json TEXT,
+			result_json TEXT,
+			error_text TEXT,
+			created_at DATETIME NOT NULL
+		)`,
+	},
+	{
+		name: "event nodes",
+		sql: `CREATE TABLE IF NOT EXISTS event_nodes (
+			id TEXT PRIMARY KEY,
+			session_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			summary TEXT NOT NULL,
+			status TEXT NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			last_activated_at DATETIME
+		)`,
+	},
+	{
+		name: "event edges",
+		sql: `CREATE TABLE IF NOT EXISTS event_edges (
+			session_id TEXT NOT NULL,
+			from_event_id TEXT NOT NULL,
+			to_event_id TEXT NOT NULL,
+			edge_type TEXT NOT NULL,
+			confidence REAL NOT NULL,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			PRIMARY KEY (session_id, from_event_id, to_event_id, edge_type)
+		)`,
+	},
+	{
+		name: "event memories",
+		sql: `CREATE TABLE IF NOT EXISTS event_memories (
+			id TEXT PRIMARY KEY,
+			event_id TEXT NOT NULL,
+			memory_type TEXT NOT NULL,
+			memory_key TEXT,
+			content TEXT NOT NULL,
+			summary TEXT NOT NULL,
+			metadata_json TEXT,
+			confidence REAL NOT NULL,
+			status TEXT NOT NULL,
+			superseded_by TEXT,
+			created_at DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			last_used_at DATETIME
+		)`,
+	},
+	{
+		name: "session event state",
+		sql: `CREATE TABLE IF NOT EXISTS session_event_state (
+			session_id TEXT PRIMARY KEY,
+			primary_event_id TEXT,
+			active_event_ids_json TEXT NOT NULL,
+			planner_snapshot_json TEXT,
+			updated_at DATETIME NOT NULL
+		)`,
+	},
+}
+
 func initSchema(db *sql.DB) error {
 	if db == nil {
 		return errors.New("memory database is nil")
@@ -33,98 +141,17 @@ func initSchema(db *sql.DB) error {
 }
 
 func createTables(db *sql.DB) error {
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS memories (
-		uri TEXT PRIMARY KEY,
-		content TEXT NOT NULL,
-		metadata_json TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_used_at DATETIME
-	)`); err != nil {
-		return fmt.Errorf("create memories table: %w", err)
+	for _, statement := range tableStatements {
+		if err := executeSchemaStatement(db, statement); err != nil {
+			return err
+		}
 	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS learned_memories (
-		id TEXT PRIMARY KEY,
-		scope_type TEXT NOT NULL,
-		scope_id TEXT NOT NULL,
-		source_kind TEXT NOT NULL,
-		memory_type TEXT NOT NULL,
-		memory_key TEXT,
-		content TEXT NOT NULL,
-		summary TEXT NOT NULL,
-		metadata_json TEXT,
-		confidence REAL NOT NULL,
-		status TEXT NOT NULL,
-		superseded_by TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_used_at DATETIME
-	)`); err != nil {
-		return fmt.Errorf("create learned memories table: %w", err)
-	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS memory_learning_events (
-		id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		trace_id TEXT,
-		status TEXT NOT NULL,
-		input_json TEXT,
-		filtered_json TEXT,
-		candidates_json TEXT,
-		result_json TEXT,
-		error_text TEXT,
-		created_at DATETIME NOT NULL
-	)`); err != nil {
-		return fmt.Errorf("create learning events table: %w", err)
-	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS event_nodes (
-		id TEXT PRIMARY KEY,
-		session_id TEXT NOT NULL,
-		title TEXT NOT NULL,
-		summary TEXT NOT NULL,
-		status TEXT NOT NULL,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_activated_at DATETIME
-	)`); err != nil {
-		return fmt.Errorf("create event nodes table: %w", err)
-	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS event_edges (
-		session_id TEXT NOT NULL,
-		from_event_id TEXT NOT NULL,
-		to_event_id TEXT NOT NULL,
-		edge_type TEXT NOT NULL,
-		confidence REAL NOT NULL,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		PRIMARY KEY (session_id, from_event_id, to_event_id, edge_type)
-	)`); err != nil {
-		return fmt.Errorf("create event edges table: %w", err)
-	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS event_memories (
-		id TEXT PRIMARY KEY,
-		event_id TEXT NOT NULL,
-		memory_type TEXT NOT NULL,
-		memory_key TEXT,
-		content TEXT NOT NULL,
-		summary TEXT NOT NULL,
-		metadata_json TEXT,
-		confidence REAL NOT NULL,
-		status TEXT NOT NULL,
-		superseded_by TEXT,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		last_used_at DATETIME
-	)`); err != nil {
-		return fmt.Errorf("create event memories table: %w", err)
-	}
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS session_event_state (
-		session_id TEXT PRIMARY KEY,
-		primary_event_id TEXT,
-		active_event_ids_json TEXT NOT NULL,
-		planner_snapshot_json TEXT,
-		updated_at DATETIME NOT NULL
-	)`); err != nil {
-		return fmt.Errorf("create session event state table: %w", err)
+	return nil
+}
+
+func executeSchemaStatement(db *sql.DB, statement schemaStatement) error {
+	if _, err := db.Exec(statement.sql); err != nil {
+		return fmt.Errorf("create %s table: %w", statement.name, err)
 	}
 	return nil
 }

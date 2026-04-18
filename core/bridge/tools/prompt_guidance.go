@@ -19,12 +19,11 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 	lines = append(lines, toolSearchPromptGuidance(protocol, names)...)
 	lines = append(lines, humanPromptGuidance(protocol, names)...)
 	lines = append(lines, webRooterPromptGuidance(names)...)
-	lines = append(lines, browserControlPromptGuidance(names)...)
 	lines = append(lines, taskManagePromptGuidance(names)...)
 	lines = append(lines, feedManageOperationPromptGuidance(names)...)
 	lines = append(lines, codexCLIPromptGuidance(names)...)
+	lines = append(lines, screenControlPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
-	lines = append(lines, computerUsePromptGuidance(names)...)
 	return strings.Join(lines, "\n")
 }
 
@@ -90,10 +89,12 @@ func toolSearchPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 			"- Use `tfind` when the currently visible tools are insufficient.",
 			"- Do not use `tfind` for greetings, small talk, or ordinary plain-text replies when no extra capability is needed.",
 			"- When you are unsure which tools are visible, start with the listed `tfind` id and call `<t:ID>{\"action\":\"search\",\"query\":\"...\"}</t>`.",
+			"- Search skills with `kind=\"skill\"`, for example: `<t:ID>{\"action\":\"search\",\"kind\":\"skill\",\"query\":\"release\"}</t>`.",
 			"- When calling tools, keep the assistant message focused on tool tags and avoid extra wrappers.",
 			"- After `tfind(action: load)`, the loaded tool becomes available in the same user turn on the next completion.",
-			"- Minimal `tfind(action: load)` tag example: `<t:ID>{\"action\":\"load\",\"tool_names\":[\"browser_control\"]}</t>`.",
-			"- Use `tfind(action: list)` only to inspect the current dynamic tool load state.",
+			"- Load skills with `kind=\"skill\"`; skill dependencies can auto-load required tools.",
+			"- Minimal `tfind(action: load)` tag example: `<t:ID>{\"action\":\"load\",\"tool_names\":[\"web_rooter\"]}</t>`.",
+			"- Use `tfind(action: list)` only to inspect the current dynamic tool/skill load state.",
 			"- Unload tools you no longer need with `tfind(action: unload)`.",
 			"- Never repeat or fabricate `[TOOL_TAG_RESULT]` in assistant text.",
 		}
@@ -102,8 +103,9 @@ func toolSearchPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 		"- Use `tfind` when the currently visible tools are insufficient.",
 		"- Do not use `tfind` for greetings, small talk, or ordinary plain-text replies when no extra capability is needed.",
 		"- Start with `tfind` using `action=search` to find the smallest suitable optional tool.",
+		"- Use `kind=skill` when searching or loading skills from SKILL.md.",
 		"- After `tfind` with `action=load`, the loaded tool becomes available in the same user turn on the next completion.",
-		"- Use `tfind` with `action=list` only to inspect the current dynamic tool load state.",
+		"- Use `tfind` with `action=list` only to inspect the current dynamic tool/skill load state.",
 		"- Unload tools you no longer need with `tfind` using `action=unload`.",
 	}
 }
@@ -133,18 +135,6 @@ func webRooterPromptGuidance(names map[string]bool) []string {
 		lines = append(lines, "- Use `web_search` for lighter real-time web lookups when citation-rich research is unnecessary.")
 	}
 	return lines
-}
-
-func browserControlPromptGuidance(names map[string]bool) []string {
-	if !names["browser_control"] {
-		return nil
-	}
-	return []string{
-		"- `browser_control` action must be one of: connect, launch, goto, click, type, press, evaluate, content, screenshot, info, close.",
-		"- For page navigation use `action=\"goto\"` with `params.url`; do not use `navigate`.",
-		"- There is no standalone browser `wait` action. Use `params.wait` (`none|dom|load`) and optional `params.wait_ms` inside `goto`.",
-		"- For DOM/content extraction use `action=\"content\"` or `action=\"evaluate\"`; do not use `extract`.",
-	}
 }
 
 func taskManagePromptGuidance(names map[string]bool) []string {
@@ -177,6 +167,17 @@ func codexCLIPromptGuidance(names map[string]bool) []string {
 	}
 }
 
+func screenControlPromptGuidance(names map[string]bool) []string {
+	if !names[screenControlToolName] {
+		return nil
+	}
+	return []string{
+		"- `screen_control` is the unified atomic screen entrypoint; use `action` (optionally with `mode=\"atomic\"`) for direct screen operations.",
+		"- `screen_control` atomic action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
+		"- For `screen_control` `action=\"click_icon\"`, providing both `params.x` and `params.y` performs a direct click and skips template matching.",
+	}
+}
+
 func screenPromptGuidance(names map[string]bool) []string {
 	if !names["screen_action"] {
 		return nil
@@ -184,21 +185,6 @@ func screenPromptGuidance(names map[string]bool) []string {
 	return []string{
 		"- `screen_action` action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
 		"- Prefer `screen_action.click_text` when visible labels exist; use `click_icon` only for unlabeled or template-driven targets.",
+		"- For `screen_action.click_icon`, providing both `x` and `y` performs a direct click and skips template matching.",
 	}
-}
-
-func computerUsePromptGuidance(names map[string]bool) []string {
-	if !names[computerUseToolName] {
-		return nil
-	}
-	lines := []string{
-		"- Use `computer_use` only for desktop visual tasks that cannot be solved through scripts, APIs, or DOM/browser-native control.",
-	}
-	if names["browser_control"] {
-		lines = append(lines, "- Prefer `browser_control` for browser tasks before using `computer_use`.")
-	}
-	if names["script_exec"] {
-		lines = append(lines, "- Prefer `script_exec` for scriptable local operations before using `computer_use`.")
-	}
-	return lines
 }

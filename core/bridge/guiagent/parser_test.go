@@ -23,3 +23,17 @@ func TestParseDecisionRejectsInvalidBox(t *testing.T) {
 		t.Fatalf("unexpected error: %+v", err)
 	}
 }
+
+func TestParseDecisionRejectsNestedActionField(t *testing.T) {
+	_, err := ParseDecision(`{"thought":"done","action":{"action":"finished"}}`)
+	if err == nil {
+		t.Fatal("expected parse error")
+	}
+	runErr, ok := err.(*RunError)
+	if !ok || runErr.Code != ErrorModelOutputParse {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+	if runErr.Message != `invalid action payload: expected "action.type", got nested "action.action"` {
+		t.Fatalf("unexpected message: %q", runErr.Message)
+	}
+}

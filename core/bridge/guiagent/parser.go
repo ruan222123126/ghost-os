@@ -16,7 +16,7 @@ func ParseDecision(raw string) (Decision, error) {
 	decoder := json.NewDecoder(strings.NewReader(trimmed))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&decision); err != nil {
-		return Decision{}, &RunError{Code: ErrorModelOutputParse, Message: err.Error()}
+		return Decision{}, classifyParseDecisionError(err)
 	}
 	if decoder.More() {
 		return Decision{}, &RunError{Code: ErrorModelOutputParse, Message: "model output must contain exactly one JSON object"}
@@ -25,6 +25,17 @@ func ParseDecision(raw string) (Decision, error) {
 		return Decision{}, err
 	}
 	return decision, nil
+}
+
+func classifyParseDecisionError(err error) error {
+	message := strings.TrimSpace(err.Error())
+	if strings.Contains(message, `unknown field "action"`) {
+		return &RunError{
+			Code:    ErrorModelOutputParse,
+			Message: `invalid action payload: expected "action.type", got nested "action.action"`,
+		}
+	}
+	return &RunError{Code: ErrorModelOutputParse, Message: message}
 }
 
 type actionValidator func(Action) error

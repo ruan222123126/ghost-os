@@ -19,10 +19,6 @@ func (e toolCallExecutor) execute(ctx context.Context, traceID string, turn int,
 		if outcome.executed {
 			stats.executed++
 		}
-		if outcome.browserSessionInvalid {
-			stats.browserSessionInvalidFailures++
-			stats.browserSessionInvalidLastError = outcome.browserSessionInvalidInfo
-		}
 		if outcome.stopErr != nil {
 			return stats, outcome.stopErr
 		}
@@ -99,12 +95,7 @@ func (e toolCallExecutor) finishToolFailure(ctx context.Context, traceID string,
 	if err := e.events.toolCallFinished(ctx, traceID, resolved.step.turn, resolved.step.stepID, resolved.toolName, resolved.toolCallID, "error", toolErr); err != nil {
 		return toolCallOutcome{}, err
 	}
-	outcome := toolCallOutcome{executed: true}
-	if isBrowserSessionInvalidToolFailure(resolved.toolName, toolErr) {
-		outcome.browserSessionInvalid = true
-		outcome.browserSessionInvalidInfo = strings.TrimSpace(toolErr.Error())
-	}
-	return outcome, nil
+	return toolCallOutcome{executed: true}, nil
 }
 
 func (e toolCallExecutor) finishSuccessfulToolCall(ctx context.Context, traceID string, resolved resolvedToolCall, output string, meta tools.ExecuteMeta) (toolCallOutcome, error) {
@@ -169,11 +160,4 @@ func newIterationHandoffError(signal *tools.IterationHandoffSignal) *ErrIteratio
 		FinalMessage:   strings.TrimSpace(signal.FinalMessage),
 		FinalChangeLog: strings.TrimSpace(signal.FinalChangeLog),
 	}
-}
-
-func isBrowserSessionInvalidToolFailure(toolName string, toolErr error) bool {
-	if strings.TrimSpace(toolName) != "browser_control" {
-		return false
-	}
-	return tools.IsBrowserSessionInvalidToolError(toolErr)
 }

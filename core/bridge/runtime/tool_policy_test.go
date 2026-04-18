@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -71,6 +72,7 @@ func TestToolSelectionPolicy_ApplyKeepsResidentAndSelectedTools(t *testing.T) {
 }
 
 func TestBuildRuntimeSystemPromptUsesResidentCatalog(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "script_exec"} {
 		registry.Register(&catalogMockTool{name: name})
@@ -78,6 +80,7 @@ func TestBuildRuntimeSystemPromptUsesResidentCatalog(t *testing.T) {
 
 	prompt, err := buildRuntimeSystemPrompt(Config{
 		MaxTurns: 3,
+		PromptsDir: filepath.Join(tempDir, "prompts"),
 		ToolSelector: ToolSelectorConfig{
 			Allowlist: []string{"ask_human"},
 		},

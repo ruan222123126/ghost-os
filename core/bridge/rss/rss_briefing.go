@@ -13,7 +13,6 @@ const (
 	maxRSSBriefingGroupLimit          = 20
 	defaultRSSBriefingHighlightsLimit = 5
 	maxRSSBriefingHighlightsLimit     = 10
-	defaultRSSBriefingTaskID          = "system-rss-briefing-build"
 )
 
 type RSSBriefingQuery struct {

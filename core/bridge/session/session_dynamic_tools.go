@@ -27,6 +27,7 @@ func (s *Session) AdvanceToolTurn(idleTurns int) []string {
 
 	s.TurnIndex++
 	expired := s.pruneExpiredDynamicTools(idleTurns)
+	s.pruneExpiredDynamicSkills(idleTurns)
 	s.UpdatedAt = time.Now().UTC()
 	return expired
 }

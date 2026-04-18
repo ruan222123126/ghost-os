@@ -12,6 +12,9 @@ const maxPromptHistorySteps = 5
 const systemPrompt = `You are a desktop GUI executor.
 Return exactly one JSON object with fields "thought" and "action".
 Do not return markdown fences or extra prose.
+Inside "action", use field "type" to choose the action name.
+Strict shape example: {"thought":"done","action":{"type":"finished"}}.
+Never use {"action":{"action":"..."}}.
 Use normalized coordinates in target.box and destination.box as [x1,y1,x2,y2] within 0..1.
 Available actions: click, double_click, right_click, type, hotkey, scroll, drag, wait, finished, call_user.
 For click actions provide action.target.box.

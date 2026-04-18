@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/skills"
 	"ghost-os/bridge/tools/internal/tooljson"
 )
 
@@ -16,39 +17,72 @@ const (
 	toolSearchActionLoad   = "load"
 	toolSearchActionUnload = "unload"
 	toolSearchActionList   = "list"
+	toolSearchKindTool     = "tool"
+	toolSearchKindSkill    = "skill"
 )
 
 type ToolSearchTool struct {
-	catalog    ToolCatalog
-	visibility VisibilityOptions
-	idleTurns  int
+	catalog      ToolCatalog
+	visibility   VisibilityOptions
+	idleTurns    int
+	skillCatalog *skills.Catalog
+}
+
+type ToolSearchOptions struct {
+	ProjectRoot  string
+	SkillCatalog *skills.Catalog
 }
 
 type toolSearchArgs struct {
 	Action    string   `json:"action"`
+	Kind      string   `json:"kind,omitempty"`
 	Query     string   `json:"query,omitempty"`
 	ToolNames []string `json:"tool_names,omitempty"`
 }
 
 type toolSearchItem struct {
-	Name               string `json:"name"`
-	Summary            string `json:"summary"`
-	Status             string `json:"status,omitempty"`
-	AvailableNow       bool   `json:"available_now,omitempty"`
-	AvailableNextTurn  bool   `json:"available_next_turn,omitempty"`
-	RemainingIdleTurns int    `json:"remaining_idle_turns,omitempty"`
+	Kind               string                     `json:"kind"`
+	Name               string                     `json:"name"`
+	Summary            string                     `json:"summary"`
+	Path               string                     `json:"path,omitempty"`
+	Error              string                     `json:"error,omitempty"`
+	Status             string                     `json:"status,omitempty"`
+	AvailableNow       bool                       `json:"available_now,omitempty"`
+	AvailableNextTurn  bool                       `json:"available_next_turn,omitempty"`
+	RemainingIdleTurns int                        `json:"remaining_idle_turns,omitempty"`
+	Dependencies       []toolSearchDependencyItem `json:"dependencies,omitempty"`
 }
 
 type toolSearchPayload struct {
-	Action string           `json:"action"`
-	Items  []toolSearchItem `json:"items,omitempty"`
+	Action string            `json:"action"`
+	Kind   string            `json:"kind"`
+	Items  []toolSearchItem  `json:"items,omitempty"`
+	Errors []toolSearchError `json:"errors,omitempty"`
 }
 
-func NewToolSearchTool(catalog ToolCatalog, visibility VisibilityOptions, idleTurns int) Tool {
+type toolSearchDependencyItem struct {
+	Kind   string `json:"kind"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+type toolSearchError struct {
+	Path  string `json:"path"`
+	Error string `json:"error"`
+}
+
+func NewToolSearchTool(
+	catalog ToolCatalog,
+	visibility VisibilityOptions,
+	idleTurns int,
+	options ...ToolSearchOptions,
+) Tool {
+	resolved := resolveToolSearchOptions(options)
 	return &ToolSearchTool{
-		catalog:    catalog,
-		visibility: visibility,
-		idleTurns:  idleTurns,
+		catalog:      catalog,
+		visibility:   visibility,
+		idleTurns:    idleTurns,
+		skillCatalog: resolveSkillCatalog(resolved),
 	}
 }
 
@@ -57,7 +91,7 @@ func (ToolSearchTool) Name() string {
 }
 
 func (ToolSearchTool) Description() string {
-	return "Find optional tools and load or unload them for this session."
+	return "Find optional tools or skills, and load or unload them for this session."
 }
 
 func (ToolSearchTool) Parameters() json.RawMessage {
@@ -65,10 +99,11 @@ func (ToolSearchTool) Parameters() json.RawMessage {
 		"type":"object",
 		"properties":{
 			"action":{"type":"string","enum":["search","load","unload","list"]},
+			"kind":{"type":"string","enum":["tool","skill"],"description":"Optional target kind; default is tool."},
 			"query":{"type":"string","description":"Optional search text for action=search."},
 			"tool_names":{
 				"type":"array",
-				"description":"Tool names to load or unload.",
+				"description":"Names to load or unload.",
 				"items":{"type":"string"}
 			}
 		},
@@ -88,22 +123,32 @@ func (t *ToolSearchTool) Execute(ctx context.Context, argsJSON json.RawMessage, 
 		return "", fmt.Errorf("decode args: %w", err)
 	}
 
-	action := strings.ToLower(strings.TrimSpace(args.Action))
-	switch action {
+	switch normalizeToolSearchKind(args.Kind) {
+	case toolSearchKindTool:
+		return t.executeToolAction(args, sess)
+	case toolSearchKindSkill:
+		return t.executeSkillAction(args, sess)
+	default:
+		return "", fmt.Errorf("kind must be one of: tool, skill")
+	}
+}
+
+func (t *ToolSearchTool) executeToolAction(args toolSearchArgs, sess *session.Session) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(args.Action)) {
 	case toolSearchActionSearch:
-		return t.search(args.Query, sess)
+		return t.searchTools(args.Query, sess)
 	case toolSearchActionLoad:
-		return t.load(sess, args.ToolNames)
+		return t.loadTools(sess, args.ToolNames)
 	case toolSearchActionUnload:
-		return t.unload(sess, args.ToolNames)
+		return t.unloadTools(sess, args.ToolNames)
 	case toolSearchActionList:
-		return t.list(sess)
+		return t.listTools(sess)
 	default:
 		return "", fmt.Errorf("action must be one of: search, load, unload, list")
 	}
 }
 
-func (t *ToolSearchTool) search(query string, sess *session.Session) (string, error) {
+func (t *ToolSearchTool) searchTools(query string, sess *session.Session) (string, error) {
 	items := make([]toolSearchItem, 0)
 	for _, name := range SearchCandidateToolNames(t.availableToolNames(), t.loadedToolNames(sess), t.visibility) {
 		metadata, ok := ToolMetadataByName(name)
@@ -111,14 +156,15 @@ func (t *ToolSearchTool) search(query string, sess *session.Session) (string, er
 			continue
 		}
 		items = append(items, toolSearchItem{
+			Kind:    toolSearchKindTool,
 			Name:    name,
 			Summary: toolShortDescription(name, metadata.ShortDesc),
 		})
 	}
-	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionSearch, Items: items})
+	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionSearch, Kind: toolSearchKindTool, Items: items})
 }
 
-func (t *ToolSearchTool) load(sess *session.Session, toolNames []string) (string, error) {
+func (t *ToolSearchTool) loadTools(sess *session.Session, toolNames []string) (string, error) {
 	names := normalizeVisibleToolNames(toolNames)
 	if len(names) == 0 {
 		return "", fmt.Errorf("tool_names is required for load")
@@ -134,6 +180,7 @@ func (t *ToolSearchTool) load(sess *session.Session, toolNames []string) (string
 		result := sess.EnsureDynamicToolLoaded(name, ToolSearchToolName)
 		availableNow := result.Load.VisibleForTurn(sess.TurnIndex) && !result.Load.ExpiredAtTurn(sess.TurnIndex, t.idleTurns)
 		items = append(items, toolSearchItem{
+			Kind:              toolSearchKindTool,
 			Name:              name,
 			Summary:           toolShortDescription(name, ""),
 			Status:            loadStatus(result.AlreadyLoaded),
@@ -141,10 +188,10 @@ func (t *ToolSearchTool) load(sess *session.Session, toolNames []string) (string
 			AvailableNextTurn: availableNextTurn(result.Load, sess.TurnIndex, t.idleTurns),
 		})
 	}
-	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionLoad, Items: items})
+	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionLoad, Kind: toolSearchKindTool, Items: items})
 }
 
-func (t *ToolSearchTool) unload(sess *session.Session, toolNames []string) (string, error) {
+func (t *ToolSearchTool) unloadTools(sess *session.Session, toolNames []string) (string, error) {
 	names := normalizeVisibleToolNames(toolNames)
 	if len(names) == 0 {
 		return "", fmt.Errorf("tool_names is required for unload")
@@ -156,23 +203,25 @@ func (t *ToolSearchTool) unload(sess *session.Session, toolNames []string) (stri
 			return "", fmt.Errorf("tool %q is not currently loaded", name)
 		}
 		items = append(items, toolSearchItem{
+			Kind:    toolSearchKindTool,
 			Name:    name,
 			Summary: toolShortDescription(name, ""),
 			Status:  "unloaded",
 		})
 	}
-	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionUnload, Items: items})
+	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionUnload, Kind: toolSearchKindTool, Items: items})
 }
 
-func (t *ToolSearchTool) list(sess *session.Session) (string, error) {
+func (t *ToolSearchTool) listTools(sess *session.Session) (string, error) {
 	loads := sess.DynamicToolLoadsSnapshot()
 	if len(loads) == 0 {
-		return tooljson.Encode(toolSearchPayload{Action: toolSearchActionList})
+		return tooljson.Encode(toolSearchPayload{Action: toolSearchActionList, Kind: toolSearchKindTool})
 	}
 
 	items := make([]toolSearchItem, 0, len(loads))
 	for _, load := range loads {
 		items = append(items, toolSearchItem{
+			Kind:               toolSearchKindTool,
 			Name:               load.ToolName,
 			Summary:            toolShortDescription(load.ToolName, ""),
 			Status:             listStatus(load, sess.TurnIndex, t.idleTurns),
@@ -184,7 +233,7 @@ func (t *ToolSearchTool) list(sess *session.Session) (string, error) {
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].Name < items[j].Name
 	})
-	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionList, Items: items})
+	return tooljson.Encode(toolSearchPayload{Action: toolSearchActionList, Kind: toolSearchKindTool, Items: items})
 }
 
 func (t *ToolSearchTool) availableToolNames() []string {
@@ -201,6 +250,28 @@ func (t *ToolSearchTool) loadedToolNames(sess *session.Session) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+func resolveToolSearchOptions(options []ToolSearchOptions) ToolSearchOptions {
+	if len(options) == 0 {
+		return ToolSearchOptions{}
+	}
+	return options[0]
+}
+
+func resolveSkillCatalog(options ToolSearchOptions) *skills.Catalog {
+	if options.SkillCatalog != nil {
+		return options.SkillCatalog
+	}
+	return skills.NewCatalog(options.ProjectRoot)
+}
+
+func normalizeToolSearchKind(raw string) string {
+	kind := strings.ToLower(strings.TrimSpace(raw))
+	if kind == "" {
+		return toolSearchKindTool
+	}
+	return kind
 }
 
 func loadStatus(alreadyLoaded bool) string {
@@ -221,10 +292,4 @@ func listStatus(load session.DynamicToolLoad, currentTurn int, idleTurns int) st
 	default:
 		return "active"
 	}
-}
-
-func availableNextTurn(load session.DynamicToolLoad, currentTurn int, idleTurns int) bool {
-	return !load.VisibleForTurn(currentTurn) &&
-		!load.ExpiredAtTurn(currentTurn, idleTurns) &&
-		load.LoadedAtTurn > currentTurn
 }

@@ -3,6 +3,8 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
@@ -41,6 +43,9 @@ func newRunnerTestRegistry() *tools.Registry {
 }
 
 func newRunnerTestDeps(cfg bridgeconfig.Config) agentRuntimeDependencies {
+	if strings.TrimSpace(cfg.PromptsDir) == "" {
+		cfg.PromptsDir = os.Getenv("GHOST_PROMPTS_DIR")
+	}
 	return agentRuntimeDependencies{
 		cfg:      cfg,
 		registry: newRunnerTestRegistry(),

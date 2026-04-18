@@ -18,10 +18,8 @@ import (
 var errToolCallIDRequired = errors.New("tool_call.id is empty")
 
 type toolCallTurnStats struct {
-	totalCalls                     int
-	executed                       int
-	browserSessionInvalidFailures  int
-	browserSessionInvalidLastError string
+	totalCalls int
+	executed   int
 }
 
 func (s toolCallTurnStats) nonExecutable() bool {

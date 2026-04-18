@@ -123,12 +123,10 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}, ShortDesc: "CRUD explicit memory."},
 		{Name: "memory_learned_list", Domain: "memory", Tags: []string{"memory", "learned", "read", "debug"}, ShortDesc: "List learned memory."},
 		{Name: "memory_recall_debug", Domain: "memory", Tags: []string{"memory", "recall", "debug", "read"}, ShortDesc: "Inspect memory recall."},
-		{Name: "screen_action", Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "native"}, ShortDesc: "Use OCR or click on screen."},
-		{Name: computerUseToolName, Domain: "screen", Tags: []string{"desktop", "visual", "executor", "gui"}, ShortDesc: "Run a goal-driven desktop GUI executor."},
-		{Name: "browser_control", Domain: "browser", Tags: []string{"browser", "automation", "web", "dom"}, ShortDesc: "Control a browser tab."},
+		{Name: screenControlToolName, Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "desktop", "gui"}, ShortDesc: "Unified screen control entrypoint."},
 		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}, ShortDesc: "Type into the focused field."},
 		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}, ShortDesc: "Manage scheduled tasks."},
-		{Name: ToolSearchToolName, Domain: "tools", Tags: []string{"search", "load", "unload", "catalog"}, ShortDesc: "Find or load optional tools."},
+		{Name: ToolSearchToolName, Domain: "tools", Tags: []string{"search", "load", "unload", "catalog", "skill"}, ShortDesc: "Find or load optional tools and skills."},
 		{Name: AskHumanToolName, Domain: "human", Tags: []string{"interactive", "safety"}, ShortDesc: "Ask the user when blocked."},
 	}
 }

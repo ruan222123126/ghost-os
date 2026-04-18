@@ -192,8 +192,6 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 		ToolSearchToolName,
 		"memory_manage",
 		"screen_action",
-		computerUseToolName,
-		"browser_control",
 		"script_exec",
 	} {
 		registry.Register(&mockTool{name: name})
@@ -208,17 +206,15 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 		`<t:ID>{"action":"search","query":"..."}</t>`,
 		"Do not use `tfind` for greetings",
 		"keep the assistant message focused on tool tags",
-		`<t:ID>{"action":"load","tool_names":["browser_control"]}</t>`,
+		`<t:ID>{"action":"load","tool_names":["web_rooter"]}</t>`,
 		"same user turn on the next completion",
-		"`tfind(action: list)` only to inspect the current dynamic tool load state",
+		"`tfind(action: list)` only to inspect the current dynamic tool/skill load state",
 		"Never repeat or fabricate `[TOOL_TAG_RESULT]`",
 		"`memory_manage` only for explicit long-term notes",
 		"Minimal `memory_manage` create tag example",
 		`<t:ID>{"operation":"create","uri":"user://preferences/editor","content":"Prefer vim keybindings"}</t>`,
 		"`screen_action.click_text`",
-		"`computer_use` only for desktop visual tasks",
-		"`browser_control` for browser tasks",
-		"`script_exec` for scriptable local operations",
+		"use plain Python plus the injected `tools` object",
 		"Do not use `import tools` or `from tools...`",
 		"Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`)",
 		"Minimal `script_exec` tag example",
@@ -253,25 +249,6 @@ func TestFormatPromptGuidanceForCatalog_IncludesWebRooterHintWhenVisible(t *test
 	}
 }
 
-func TestFormatPromptGuidanceForCatalog_IncludesBrowserControlActionHints(t *testing.T) {
-	registry := NewRegistry()
-	registry.Register(&mockTool{name: "browser_control"})
-
-	guidance := FormatPromptGuidanceForCatalog(registry)
-	for _, snippet := range []string{
-		"`browser_control` action must be one of",
-		"`action=\"goto\"`",
-		"do not use `navigate`",
-		"no standalone browser `wait` action",
-		"`params.wait` (`none|dom|load`)",
-		"do not use `extract`",
-	} {
-		if !strings.Contains(guidance, snippet) {
-			t.Fatalf("expected browser_control guidance to contain %q, got %q", snippet, guidance)
-		}
-	}
-}
-
 func TestFormatPromptGuidanceForCatalog_IncludesTaskFeedAndCodexActionHints(t *testing.T) {
 	registry := NewRegistry()
 	for _, name := range []string{"task_manage", "feed_manage", "codex_cli"} {
@@ -301,9 +278,29 @@ func TestFormatPromptGuidanceForCatalog_IncludesScreenActionList(t *testing.T) {
 	for _, snippet := range []string{
 		"`screen_action` action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
 		"`screen_action.click_text`",
+		"`screen_action.click_icon`",
+		"direct click and skips template matching",
 	} {
 		if !strings.Contains(guidance, snippet) {
 			t.Fatalf("expected screen_action guidance to contain %q, got %q", snippet, guidance)
+		}
+	}
+}
+
+func TestFormatPromptGuidanceForCatalog_IncludesScreenControlHints(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: screenControlToolName})
+
+	guidance := FormatPromptGuidanceForCatalog(registry)
+	for _, snippet := range []string{
+		"`screen_control` is the unified atomic screen entrypoint",
+		"`screen_control` atomic action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
+		"`mode=\"atomic\"`",
+		"`action=\"click_icon\"`",
+		"direct click and skips template matching",
+	} {
+		if !strings.Contains(guidance, snippet) {
+			t.Fatalf("expected screen_control guidance to contain %q, got %q", snippet, guidance)
 		}
 	}
 }

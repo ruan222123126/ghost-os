@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 
@@ -19,6 +20,9 @@ type proTestRuntimeFactory struct {
 func (f proTestRuntimeFactory) Build(bridgeconfig.Store) (agentRuntimeDependencies, error) {
 	if f.err != nil {
 		return agentRuntimeDependencies{}, f.err
+	}
+	if strings.TrimSpace(f.deps.cfg.PromptsDir) == "" {
+		f.deps.cfg.PromptsDir = os.Getenv("GHOST_PROMPTS_DIR")
 	}
 	return f.deps, nil
 }

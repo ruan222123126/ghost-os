@@ -660,7 +660,7 @@ func TestToCodexRequestDoesNotInjectTypeIntoPropertiesContainer(t *testing.T) {
 		},
 		Tools: []ToolDef{
 			{
-				Name:        "browser_control",
+				Name:        "screen_control",
 				Description: "browser",
 				Parameters: json.RawMessage(`{
 					"type":"object",

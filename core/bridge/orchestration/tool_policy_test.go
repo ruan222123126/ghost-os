@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 
 	"ghost-os/bridge/agent"
@@ -125,6 +126,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 			Allowlist: []string{"ask_human"},
 		},
 		MaxTurns: 6,
+		PromptsDir: filepath.Join(t.TempDir(), "prompts"),
 	})
 
 	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-subset")
@@ -250,6 +252,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithout
 			Mode:    "llm",
 		},
 		MaxTurns: 6,
+		PromptsDir: filepath.Join(t.TempDir(), "prompts"),
 	})
 
 	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-empty-resident-subset")

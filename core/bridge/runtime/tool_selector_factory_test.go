@@ -10,6 +10,8 @@ import (
 )
 
 func TestBuildSystemPromptForCatalogIncludesProjectRootRegression(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
 	registry.Register(&catalogMockTool{name: "ask_human"})
 	registry.Register(&catalogMockTool{name: "script_exec"})
@@ -17,6 +19,7 @@ func TestBuildSystemPromptForCatalogIncludesProjectRootRegression(t *testing.T) 
 	prompt, err := buildSystemPromptForCatalog(Config{
 		MaxTurns:    3,
 		ProjectRoot: "/tmp/ghost-os-project",
+		PromptsDir:  promptsDir,
 	}, registry)
 	if err != nil {
 		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
@@ -30,13 +33,15 @@ func TestBuildSystemPromptForCatalogIncludesProjectRootRegression(t *testing.T) 
 }
 
 func TestBuildSystemPromptForCatalogUsesOnlyScopedToolGuidance(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec", "screen_action"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
 	prompt, err := buildSystemPromptForCatalog(
-		Config{MaxTurns: 3},
+		Config{MaxTurns: 3, PromptsDir: promptsDir},
 		tools.NewScopedCatalog(registry, []string{"ask_human", "read_and_summarize", "script_exec"}),
 	)
 	if err != nil {
@@ -55,12 +60,14 @@ func TestBuildSystemPromptForCatalogUsesOnlyScopedToolGuidance(t *testing.T) {
 }
 
 func TestBuildSystemPromptForCatalogInjectsRSSGuidanceOnlyWhenVisible(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "feed_manage"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
-	withRSS, err := buildSystemPromptForCatalog(Config{MaxTurns: 3}, registry)
+	withRSS, err := buildSystemPromptForCatalog(Config{MaxTurns: 3, PromptsDir: promptsDir}, registry)
 	if err != nil {
 		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
 	}
@@ -69,7 +76,7 @@ func TestBuildSystemPromptForCatalogInjectsRSSGuidanceOnlyWhenVisible(t *testing
 	}
 
 	withoutRSS, err := buildSystemPromptForCatalog(
-		Config{MaxTurns: 3},
+		Config{MaxTurns: 3, PromptsDir: promptsDir},
 		tools.NewScopedCatalog(registry, []string{"ask_human"}),
 	)
 	if err != nil {
@@ -84,10 +91,12 @@ func TestBuildSystemPromptForCatalogInjectsRSSGuidanceOnlyWhenVisible(t *testing
 }
 
 func TestBuildSystemPromptForCatalogIncludesDynamicToolStateSection(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
 	registry.Register(&catalogMockTool{name: "ask_human"})
 
-	prompt, err := buildSystemPromptForCatalog(Config{MaxTurns: 3}, registry)
+	prompt, err := buildSystemPromptForCatalog(Config{MaxTurns: 3, PromptsDir: promptsDir}, registry)
 	if err != nil {
 		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
 	}
@@ -99,6 +108,8 @@ func TestBuildSystemPromptForCatalogIncludesDynamicToolStateSection(t *testing.T
 }
 
 func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *testing.T) {
+	tempDir := setupRuntimeFactoryTestEnv(t)
+	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "web_search"} {
 		registry.Register(&catalogMockTool{name: name})
@@ -110,7 +121,7 @@ func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *te
 	sess.EnsureDynamicToolLoaded("web_search", "tfind")
 
 	immediate, err := buildSystemPromptForSession(
-		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}},
+		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}, PromptsDir: promptsDir},
 		catalog,
 		sess,
 		3,
@@ -124,7 +135,7 @@ func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *te
 
 	sess.AdvanceToolTurn(3)
 	active, err := buildSystemPromptForSession(
-		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}},
+		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}, PromptsDir: promptsDir},
 		catalog,
 		sess,
 		3,

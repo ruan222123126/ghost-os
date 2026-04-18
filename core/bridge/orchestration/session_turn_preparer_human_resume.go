@@ -84,9 +84,6 @@ func resolveHumanAnswerResumer(
 		return nil
 	}
 	tool := registry.Get(strings.TrimSpace(toolName))
-	if tool == nil && strings.TrimSpace(toolName) == "computer_use" {
-		tool = registry.Get("screen_control")
-	}
 	if tool == nil {
 		return nil
 	}

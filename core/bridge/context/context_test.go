@@ -115,6 +115,9 @@ func TestNewPromptManagerWithDefault(t *testing.T) {
 	if !strings.Contains(rendered, defaultDynamicState) {
 		t.Fatalf("rendered prompt missing dynamic tool state default: %q", rendered)
 	}
+	if !strings.Contains(rendered, defaultSkillContext) {
+		t.Fatalf("rendered prompt missing dynamic skill context default: %q", rendered)
+	}
 }
 
 func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
@@ -137,8 +140,10 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 		for _, snippet := range []string{
 			"## Tool Guidance",
 			"## Dynamic Tool State",
+			"## Dynamic Skill Context",
 			defaultToolGuidance,
 			defaultDynamicState,
+			defaultSkillContext,
 		} {
 			if !strings.Contains(prompt, snippet) {
 				t.Fatalf("prompt missing %q: %q", snippet, prompt)
@@ -156,6 +161,7 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			"screen_action.click_text",
 			"tools.read_file reads at most 200 lines",
 			"{{dynamic_tool_state}}",
+			"{{dynamic_skill_context}}",
 		} {
 			if strings.Contains(prompt, snippet) {
 				t.Fatalf("prompt should not include %q: %q", snippet, prompt)

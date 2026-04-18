@@ -20,9 +20,7 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		"memory_manage",
 		"memory_learned_list",
 		"memory_recall_debug",
-		"screen_action",
-		"computer_use",
-		"browser_control",
+		"screen_control",
 		"text_input",
 		"task_manage",
 		"tfind",
@@ -106,7 +104,7 @@ func TestFormatPromptToolsForCatalog_UsesShortDescriptions(t *testing.T) {
 	if !strings.Contains(formatted, "- script_exec: Run a Python script in sandbox.") {
 		t.Fatalf("unexpected prompt tool list: %q", formatted)
 	}
-	if !strings.Contains(formatted, "- tfind: Find or load optional tools.") {
+	if !strings.Contains(formatted, "- tfind: Find or load optional tools and skills.") {
 		t.Fatalf("unexpected prompt tool list: %q", formatted)
 	}
 }

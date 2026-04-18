@@ -34,8 +34,6 @@ const (
 	defaultRSSPollInterval            = bridgeconfig.DefaultRSSPollInterval
 	defaultRSSPollMaxItemsPerFeed     = bridgeconfig.DefaultRSSPollMaxItemsPerFeed
 	defaultRSSAIBatchSize             = bridgeconfig.DefaultRSSAIBatchSize
-	DefaultRSSPollTaskID              = defaultRSSPollTaskID
-	DefaultRSSBriefingTaskID          = defaultRSSBriefingTaskID
 	DefaultRSSReportTimeout           = defaultRSSReportTimeout
 	DefaultRSSAggregateWindowHours    = defaultRSSAggregateWindowHours
 	DefaultRSSAggregateItemLimit      = defaultRSSAggregateItemLimit

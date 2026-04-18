@@ -16,6 +16,7 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	t.Setenv("GHOST_CONFIG_PATH", tempDir+"/config.toml")
 	t.Setenv("GHOST_API_KEY", "test-key")
 	t.Setenv("GHOST_TASKS_PATH", tempDir+"/tasks")
+	t.Setenv("GHOST_PROMPTS_DIR", tempDir+"/prompts")
 	t.Setenv("GHOST_RSS_POLL_ENABLED", "false")
 	t.Setenv("GHOST_RSS_BRIEFING_ENABLED", "false")
 	t.Setenv("GHOST_RSS_INBOX_PATH", tempDir+"/rss/inbox.json")

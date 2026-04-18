@@ -8,8 +8,6 @@ import (
 	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 )
 
-const defaultRSSPollTaskID = "system-rss-inbox-poll"
-
 type RSSInboxPollOptions struct {
 	MaxItemsPerFeed int
 	AIBatchSize     int

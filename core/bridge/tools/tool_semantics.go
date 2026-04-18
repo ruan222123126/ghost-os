@@ -6,32 +6,8 @@ func (AskHumanTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (*BrowserControlTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
 func (CodexCLITool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (ComputerUseTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (FeedManageTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (MemoryLearnedListTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{ReadOnly: true}
-}
-
-func (MemoryManageTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (MemoryRecallDebugTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{ReadOnly: true}
 }
 
 func (ProCompleteTool) ToolSemantics() llm.ToolSemantics {
@@ -44,14 +20,6 @@ func (ProUpdateRecordTool) ToolSemantics() llm.ToolSemantics {
 
 func (ReadAndSummarizeTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{ReadOnly: true}
-}
-
-func (RSSFetchTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{ReadOnly: true}
-}
-
-func (ScreenActionTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
 }
 
 func (ScriptExecTool) ToolSemantics() llm.ToolSemantics {
@@ -70,18 +38,6 @@ func (TaskManageTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (TextInputTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
 func (ToolSearchTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (WebSearchTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{ReadOnly: true}
-}
-
-func (WebRooterTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{ReadOnly: true}
 }

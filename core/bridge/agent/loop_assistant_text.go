@@ -115,13 +115,6 @@ func (a *Agent) finishAssistantTextToolInvocations(
 			}
 			return a.handleToolCallExecutionError(ctx, turn, err, state)
 		}
-		if err := state.updateBrowserSessionInvalidPolicy(
-			ctx,
-			turn,
-			browserSessionInvalidStatsFromOutcome(outcome),
-		); err != nil {
-			return err
-		}
 		if outcome.executed {
 			for _, message := range buildAssistantTextToolFeedback(
 				&invocation.Invocation,
@@ -178,16 +171,6 @@ func cloneAssistantTextArguments(raw json.RawMessage) json.RawMessage {
 	cloned := make([]byte, len(raw))
 	copy(cloned, raw)
 	return json.RawMessage(cloned)
-}
-
-func browserSessionInvalidStatsFromOutcome(outcome toolCallOutcome) toolCallTurnStats {
-	if !outcome.browserSessionInvalid {
-		return toolCallTurnStats{}
-	}
-	return toolCallTurnStats{
-		browserSessionInvalidFailures:  1,
-		browserSessionInvalidLastError: outcome.browserSessionInvalidInfo,
-	}
 }
 
 func assistantTextToolInvocations(result AssistantTextResult) []AssistantTextToolInvocationEntry {
