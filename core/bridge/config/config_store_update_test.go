@@ -16,6 +16,7 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "snapshot-tavily")
 	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "true")
 	t.Setenv("GHOST_WEB_ROOTER_API_TOKEN", "snapshot-rooter-token")
+	t.Setenv("GHOST_SESSION_HUMAN_LOG_FULL_ENABLED", "true")
 
 	store, err := newStoreFromEnv()
 	if err != nil {
@@ -38,8 +39,21 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if !snapshot.WebRooterEnabled {
 		t.Fatal("expected web_rooter_enabled to be true")
 	}
+	if snapshot.WebRooterBaseURL != defaultWebRooterBaseURL {
+		t.Fatalf("unexpected web_rooter_base_url: got %q want %q", snapshot.WebRooterBaseURL, defaultWebRooterBaseURL)
+	}
+	if snapshot.WebRooterTimeoutMS != defaultWebRooterTimeoutMS {
+		t.Fatalf(
+			"unexpected web_rooter_timeout_ms: got %d want %d",
+			snapshot.WebRooterTimeoutMS,
+			defaultWebRooterTimeoutMS,
+		)
+	}
 	if !snapshot.WebRooterAPITokenSet {
 		t.Fatal("expected web_rooter_api_token_set to be true")
+	}
+	if !snapshot.SessionHumanLogFullEnabled {
+		t.Fatal("expected session_human_log_full_enabled to be true")
 	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
@@ -60,6 +74,9 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	}
 	if fileCfg.WebRooterAPIToken != nil {
 		t.Fatalf("snapshot should not persist web_rooter api token, got %#v", fileCfg.WebRooterAPIToken)
+	}
+	if fileCfg.SessionHumanLogFullEnabled != nil {
+		t.Fatalf("snapshot should not persist session_human_log_full_enabled, got %#v", fileCfg.SessionHumanLogFullEnabled)
 	}
 }
 
@@ -169,5 +186,38 @@ func TestConfigStoreUpdatePersistsGraphQLTextSanitizeSetting(t *testing.T) {
 	}
 	if fileCfg.GraphQLTextSanitizeEnabled == nil || *fileCfg.GraphQLTextSanitizeEnabled {
 		t.Fatalf("unexpected persisted graphql_text_sanitize_enabled: %#v", fileCfg.GraphQLTextSanitizeEnabled)
+	}
+}
+
+func TestConfigStoreUpdatePersistsSessionHumanLogFullEnabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	enabled := true
+	if err := store.Update(configUpdateRequest{
+		SessionHumanLogFullEnabled: &enabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !store.RuntimeConfig().SessionHumanLogFullEnabled {
+		t.Fatal("expected runtime session_human_log_full_enabled to be true")
+	}
+	if !store.Snapshot().SessionHumanLogFullEnabled {
+		t.Fatal("expected snapshot session_human_log_full_enabled to be true")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.SessionHumanLogFullEnabled == nil || !*fileCfg.SessionHumanLogFullEnabled {
+		t.Fatalf("unexpected persisted session_human_log_full_enabled: %#v", fileCfg.SessionHumanLogFullEnabled)
 	}
 }

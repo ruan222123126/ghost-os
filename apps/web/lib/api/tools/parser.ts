@@ -11,6 +11,7 @@ const TOOL_PAYLOAD_KEYS = [
   'name',
   'enabled',
   'prompt_override',
+  'input_schema',
 ] as const;
 
 function parseToolPayloadWithLabel(value: unknown, label: string): ToolPayload {
@@ -19,7 +20,21 @@ function parseToolPayloadWithLabel(value: unknown, label: string): ToolPayload {
     name: expectString(record.name, `${label}.name`),
     enabled: expectBoolean(record.enabled, `${label}.enabled`),
     prompt_override: parseOptionalString(record.prompt_override, `${label}.prompt_override`),
+    input_schema: parseOptionalInputSchema(record.input_schema, `${label}.input_schema`),
   };
+}
+
+function parseOptionalInputSchema(
+  value: unknown,
+  label: string,
+): Record<string, unknown> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value === 'boolean') {
+    return undefined;
+  }
+  return expectRecord(value, label);
 }
 
 export function parseToolPayload(payload: unknown): ToolPayload {

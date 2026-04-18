@@ -80,3 +80,32 @@ func parseStringCSV(raw string) []string {
 	}
 	return values
 }
+
+func normalizeToolPromptOverrides(raw map[string]string) (map[string]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+
+	validNames := validConfiguredToolNames()
+	out := make(map[string]string, len(raw))
+	for key, value := range raw {
+		name := strings.TrimSpace(key)
+		if name == "" {
+			return nil, fmt.Errorf("invalid tool_prompt_overrides: tool name cannot be empty")
+		}
+		if !validNames[name] {
+			return nil, fmt.Errorf("unknown tool in tool_prompt_overrides: %s", name)
+		}
+
+		prompt := strings.TrimSpace(value)
+		if prompt == "" {
+			continue
+		}
+		out[name] = prompt
+	}
+
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}

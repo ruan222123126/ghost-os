@@ -84,8 +84,10 @@ function renderSkillList(
     return renderToStaticMarkup(
       React.createElement(
         WebLocaleProvider,
-        null,
-        React.createElement(SkillList, props),
+        {
+          children: React.createElement(SkillList, props),
+          initialLocale: locale,
+        },
       ),
     );
   } finally {

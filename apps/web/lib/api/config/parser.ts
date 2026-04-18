@@ -33,7 +33,10 @@ const BRIDGE_CONFIG_KEYS = [
   'graphql_text_sanitize_enabled',
   'graphql_sources',
   'graphql_mutation_policies',
+  'session_human_log_full_enabled',
   'web_rooter_enabled',
+  'web_rooter_base_url',
+  'web_rooter_timeout_ms',
   'web_rooter_api_token_set',
   'web_search_tavily_url',
   'web_search_exa_url',
@@ -247,9 +250,21 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
         `bridge config.graphql_mutation_policies[${index}]`,
       );
     }),
+    session_human_log_full_enabled: expectBoolean(
+      record.session_human_log_full_enabled,
+      'bridge config.session_human_log_full_enabled',
+    ),
     web_rooter_enabled: expectBoolean(
       record.web_rooter_enabled,
       'bridge config.web_rooter_enabled',
+    ),
+    web_rooter_base_url: expectString(
+      record.web_rooter_base_url,
+      'bridge config.web_rooter_base_url',
+    ),
+    web_rooter_timeout_ms: expectNumber(
+      record.web_rooter_timeout_ms,
+      'bridge config.web_rooter_timeout_ms',
     ),
     web_rooter_api_token_set: expectBoolean(
       record.web_rooter_api_token_set,

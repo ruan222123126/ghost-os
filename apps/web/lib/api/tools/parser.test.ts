@@ -7,6 +7,12 @@ describe('lib/api/tools/parser', () => {
         name: 'script_exec',
         enabled: true,
         prompt_override: 'use with named parameters',
+        input_schema: {
+          type: 'object',
+          properties: {
+            command: { type: 'string' },
+          },
+        },
       },
       {
         name: 'web_search',
@@ -19,11 +25,18 @@ describe('lib/api/tools/parser', () => {
         name: 'script_exec',
         enabled: true,
         prompt_override: 'use with named parameters',
+        input_schema: {
+          type: 'object',
+          properties: {
+            command: { type: 'string' },
+          },
+        },
       },
       {
         name: 'web_search',
         enabled: false,
         prompt_override: undefined,
+        input_schema: undefined,
       },
     ]);
   });
@@ -33,12 +46,14 @@ describe('lib/api/tools/parser', () => {
       name: 'script_exec',
       enabled: true,
       prompt_override: 'custom prompt',
+      input_schema: { type: 'object' },
     };
 
     expect(parseToolPayload(payload)).toEqual({
       name: 'script_exec',
       enabled: true,
       prompt_override: 'custom prompt',
+      input_schema: { type: 'object' },
     });
   });
 
@@ -49,5 +64,31 @@ describe('lib/api/tools/parser', () => {
         enabled: 'yes',
       });
     }).toThrow('tool payload.enabled');
+  });
+
+  it('treats null input_schema as undefined', () => {
+    expect(parseToolPayload({
+      name: 'web_search',
+      enabled: true,
+      input_schema: null,
+    })).toEqual({
+      name: 'web_search',
+      enabled: true,
+      prompt_override: undefined,
+      input_schema: undefined,
+    });
+  });
+
+  it('treats boolean input_schema as undefined', () => {
+    expect(parseToolPayload({
+      name: 'web_search',
+      enabled: true,
+      input_schema: true,
+    })).toEqual({
+      name: 'web_search',
+      enabled: true,
+      prompt_override: undefined,
+      input_schema: undefined,
+    });
   });
 });

@@ -29,6 +29,13 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "plan"
+          ],
+          "description": "Optional execution mode. `plan` means plan-only orchestration: infer user intent and output a task plan for the main executor AI without running tools or tasks."
+        },
         "message": {
           "type": "string",
           "minLength": 1,
@@ -125,7 +132,8 @@
           "type": "string",
           "enum": [
             "pro",
-            "prox"
+            "prox",
+            "plan"
           ]
         },
         "iteration_count": {

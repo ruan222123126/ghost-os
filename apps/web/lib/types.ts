@@ -232,6 +232,7 @@ export interface ToolPayload {
   name: string;
   enabled: boolean;
   prompt_override?: string;
+  input_schema?: Record<string, unknown>;
 }
 
 export interface ToolUpdateRequest {

@@ -8,16 +8,17 @@ func buildToolSelectorConfig(fileCfg bridgeFileConfig, env envSnapshot) (ToolSel
 		return ToolSelectorConfig{}, err
 	}
 	return ToolSelectorConfig{
-		Enabled:       settings.Enabled,
-		Mode:          strings.ToLower(valueOrEnvWithEnv(fileCfg.ToolSelectorMode, env, "GHOST_TOOL_SELECTOR_MODE", "llm")),
-		Model:         valueOrEnvWithEnv(fileCfg.ToolSelectorModel, env, "GHOST_TOOL_SELECTOR_MODEL", ""),
-		TimeoutMS:     settings.TimeoutMS,
-		Confidence:    settings.Confidence,
-		Shadow:        settings.Shadow,
-		RecentMsgs:    settings.RecentMsgs,
-		AllowlistOnly: settings.AllowlistOnly,
-		Allowlist:     toolNameListOrEnvWithEnv(fileCfg.ToolAllowlist, env, "GHOST_TOOL_ALLOWLIST"),
-		Blocklist:     toolNameListOrEnvWithEnv(fileCfg.ToolBlocklist, env, "GHOST_TOOL_BLOCKLIST"),
+		Enabled:         settings.Enabled,
+		Mode:            strings.ToLower(valueOrEnvWithEnv(fileCfg.ToolSelectorMode, env, "GHOST_TOOL_SELECTOR_MODE", "llm")),
+		Model:           valueOrEnvWithEnv(fileCfg.ToolSelectorModel, env, "GHOST_TOOL_SELECTOR_MODEL", ""),
+		TimeoutMS:       settings.TimeoutMS,
+		Confidence:      settings.Confidence,
+		Shadow:          settings.Shadow,
+		RecentMsgs:      settings.RecentMsgs,
+		AllowlistOnly:   settings.AllowlistOnly,
+		Allowlist:       toolNameListOrEnvWithEnv(fileCfg.ToolAllowlist, env, "GHOST_TOOL_ALLOWLIST"),
+		Blocklist:       toolNameListOrEnvWithEnv(fileCfg.ToolBlocklist, env, "GHOST_TOOL_BLOCKLIST"),
+		PromptOverrides: cloneStringMap(fileCfg.ToolPromptOverrides),
 	}, nil
 }
 

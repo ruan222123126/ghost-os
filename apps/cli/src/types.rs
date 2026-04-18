@@ -60,6 +60,7 @@ impl ConfigUpdate {
             graphql_sources: None,
             graphql_source_upsert: None,
             graphql_mutation_policies: None,
+            session_human_log_full_enabled: None,
             web_rooter_enabled: None,
             web_rooter_base_url: None,
             web_rooter_api_token: None,

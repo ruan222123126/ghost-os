@@ -5,6 +5,7 @@ package dev.ghostos.android.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 @Serializable
@@ -36,6 +37,7 @@ data class AssistantSessionEndSignal(
 
 @Serializable
 data class AgentRequest(
+    val mode: String? = null,
     val message: String? = null,
     val images: List<SessionImageContent>? = null,
     @SerialName("session_id")
@@ -270,7 +272,9 @@ data class SessionMessage(
     @SerialName("human_interaction")
     val humanInteraction: SessionHumanInteraction? = null,
     @SerialName("tool_call_id")
-    val toolCallId: String? = null
+    val toolCallId: String? = null,
+    @SerialName("in_progress")
+    val inProgress: Boolean? = null
 )
 
 @Serializable
@@ -355,8 +359,14 @@ data class BridgeConfig(
     val graphqlSources: List<GraphQLSourceResponse>,
     @SerialName("graphql_mutation_policies")
     val graphqlMutationPolicies: List<GraphQLMutationPolicyResponse>,
+    @SerialName("session_human_log_full_enabled")
+    val sessionHumanLogFullEnabled: Boolean,
     @SerialName("web_rooter_enabled")
     val webRooterEnabled: Boolean,
+    @SerialName("web_rooter_base_url")
+    val webRooterBaseUrl: String,
+    @SerialName("web_rooter_timeout_ms")
+    val webRooterTimeoutMs: Int,
     @SerialName("web_rooter_api_token_set")
     val webRooterApiTokenSet: Boolean,
     @SerialName("web_search_tavily_url")
@@ -400,6 +410,8 @@ data class ConfigUpdate(
     val graphqlSourceUpsert: GraphQLSourceInput? = null,
     @SerialName("graphql_mutation_policies")
     val graphqlMutationPolicies: List<GraphQLMutationPolicyInput>? = null,
+    @SerialName("session_human_log_full_enabled")
+    val sessionHumanLogFullEnabled: Boolean? = null,
     @SerialName("web_rooter_enabled")
     val webRooterEnabled: Boolean? = null,
     @SerialName("web_rooter_base_url")
@@ -620,9 +632,12 @@ data class SetActiveProviderRequest(
 data class WorkflowNode(
     val id: String,
     val type: String,
+    val start: WorkflowStartNode? = null,
     val tool: WorkflowToolNode? = null,
     val llm: WorkflowLLMNode? = null,
-    val agent: WorkflowAgentNode? = null
+    val agent: WorkflowAgentNode? = null,
+    val if: WorkflowIfNode? = null,
+    val loop: WorkflowLoopNode? = null
 )
 
 @Serializable
@@ -640,36 +655,12 @@ data class WorkflowDefinition(
 )
 
 @Serializable
-data class RSSInboxPollTaskActionParams(
-    @SerialName("max_items_per_feed")
-    val maxItemsPerFeed: Int? = null,
-    @SerialName("ai_batch_size")
-    val aiBatchSize: Int? = null
-)
-
-@Serializable
-data class RSSBriefingTaskActionParams(
-    @SerialName("feed_id")
-    val feedId: String? = null,
-    val tag: String? = null,
-    val importance: String? = null,
-    @SerialName("window_hours")
-    val windowHours: Int? = null,
-    @SerialName("group_limit")
-    val groupLimit: Int? = null,
-    @SerialName("item_limit")
-    val itemLimit: Int? = null,
-    @SerialName("items_per_group")
-    val itemsPerGroup: Int? = null,
-    @SerialName("highlights_limit")
-    val highlightsLimit: Int? = null
-)
-
-@Serializable
 data class AgentMessageTaskCreateRequest(
     val message: String,
     @SerialName("session_id")
     val sessionId: String? = null,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null,
     @SerialName("task_kind")
     val taskKind: String? = null,
     @SerialName("interval_seconds")
@@ -681,26 +672,18 @@ data class AgentMessageTaskCreateRequest(
 ) : TaskCreateRequest
 
 @Serializable
+data class TaskRuntimeOverrides(
+    val model: String? = null,
+    @SerialName("tool_allowlist")
+    val toolAllowlist: List<String>? = null
+)
+
+@Serializable
 data class WorkflowToolNode(
     @SerialName("tool_name")
     val toolName: String,
     val arguments: JsonObject? = null
 )
-
-@Serializable
-data class RSSInboxPollTaskCreateRequest(
-    @SerialName("task_kind")
-    val taskKind: String,
-    val action: String,
-    @SerialName("action_params")
-    val actionParams: RSSInboxPollTaskActionParams? = null,
-    @SerialName("interval_seconds")
-    val intervalSeconds: Int? = null,
-    @SerialName("cron_expr")
-    val cronExpr: String? = null,
-    @SerialName("trace_id")
-    val traceId: String? = null
-) : TaskCreateRequest
 
 @Serializable
 data class WorkflowLLMNode(
@@ -710,23 +693,20 @@ data class WorkflowLLMNode(
 )
 
 @Serializable
-data class RSSBriefingTaskCreateRequest(
-    @SerialName("task_kind")
-    val taskKind: String,
-    val action: String,
-    @SerialName("action_params")
-    val actionParams: RSSBriefingTaskActionParams? = null,
-    @SerialName("interval_seconds")
-    val intervalSeconds: Int? = null,
-    @SerialName("cron_expr")
-    val cronExpr: String? = null,
-    @SerialName("trace_id")
-    val traceId: String? = null
-) : TaskCreateRequest
-
-@Serializable
 data class WorkflowAgentNode(
     val message: String
+)
+
+@Serializable
+data class WorkflowIfNode(
+    @SerialName("source_node_id")
+    val sourceNodeId: String? = null,
+    val operator: String,
+    val value: String? = null,
+    @SerialName("true_node_id")
+    val trueNodeId: String,
+    @SerialName("false_node_id")
+    val falseNodeId: String
 )
 
 @Serializable
@@ -743,16 +723,25 @@ data class WorkflowTaskCreateRequest(
 ) : TaskCreateRequest
 
 @Serializable
+data class WorkflowLoopNode(
+    @SerialName("max_iterations")
+    val maxIterations: Int,
+    @SerialName("body_node_id")
+    val bodyNodeId: String,
+    @SerialName("exit_node_id")
+    val exitNodeId: String
+)
+
+@Serializable
 data class TaskUpdateRequest(
     val id: String,
     val message: String? = null,
     @SerialName("session_id")
     val sessionId: String? = null,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null,
     @SerialName("task_kind")
     val taskKind: String? = null,
-    val action: String? = null,
-    @SerialName("action_params")
-    val actionParams: JsonObject? = null,
     val workflow: WorkflowDefinition? = null,
     @SerialName("interval_seconds")
     val intervalSeconds: Int? = null,
@@ -769,62 +758,10 @@ data class AgentMessageTaskPayload(
     val message: String,
     @SerialName("session_id")
     val sessionId: String? = null,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null,
     @SerialName("task_kind")
     val taskKind: String,
-    @SerialName("schedule_type")
-    val scheduleType: String,
-    @SerialName("interval_seconds")
-    val intervalSeconds: Int? = null,
-    @SerialName("cron_expr")
-    val cronExpr: String? = null,
-    val enabled: Boolean,
-    @SerialName("created_at")
-    val createdAt: String,
-    @SerialName("updated_at")
-    val updatedAt: String,
-    @SerialName("last_run_at")
-    val lastRunAt: String? = null,
-    @SerialName("next_run_at")
-    val nextRunAt: String? = null,
-    @SerialName("last_error")
-    val lastError: String? = null
-) : TaskPayload
-
-@Serializable
-data class RSSInboxPollTaskPayload(
-    val id: String,
-    @SerialName("task_kind")
-    val taskKind: String,
-    val action: String,
-    @SerialName("action_params")
-    val actionParams: RSSInboxPollTaskActionParams? = null,
-    @SerialName("schedule_type")
-    val scheduleType: String,
-    @SerialName("interval_seconds")
-    val intervalSeconds: Int? = null,
-    @SerialName("cron_expr")
-    val cronExpr: String? = null,
-    val enabled: Boolean,
-    @SerialName("created_at")
-    val createdAt: String,
-    @SerialName("updated_at")
-    val updatedAt: String,
-    @SerialName("last_run_at")
-    val lastRunAt: String? = null,
-    @SerialName("next_run_at")
-    val nextRunAt: String? = null,
-    @SerialName("last_error")
-    val lastError: String? = null
-) : TaskPayload
-
-@Serializable
-data class RSSBriefingTaskPayload(
-    val id: String,
-    @SerialName("task_kind")
-    val taskKind: String,
-    val action: String,
-    @SerialName("action_params")
-    val actionParams: RSSBriefingTaskActionParams? = null,
     @SerialName("schedule_type")
     val scheduleType: String,
     @SerialName("interval_seconds")
@@ -868,3 +805,17 @@ data class WorkflowTaskPayload(
     @SerialName("last_error")
     val lastError: String? = null
 ) : TaskPayload
+
+@Serializable
+data class WorkflowStartNode(
+    val inputs: List<WorkflowInputVariable>? = null
+)
+
+@Serializable
+data class WorkflowInputVariable(
+    val name: String,
+    val type: String,
+    val required: Boolean? = null,
+    val default: JsonElement? = null,
+    val description: String? = null
+)

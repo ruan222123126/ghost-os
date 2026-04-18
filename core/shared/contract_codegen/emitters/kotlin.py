@@ -28,6 +28,9 @@ def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) 
 
 
 def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if not prop_schema:
+        return "JsonElement"
+
     ref_value = prop_schema.get("$ref")
     if ref_value:
         ref_name = schema_ref_name(ref_value)
@@ -103,6 +106,7 @@ package dev.ghostos.android.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
 @Serializable

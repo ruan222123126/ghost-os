@@ -45,6 +45,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.PromptsDir = cloneOptionalStringPointer(cfg.PromptsDir)
 	cfg.TasksPath = cloneOptionalStringPointer(cfg.TasksPath)
 	cfg.SessionsPath = cloneOptionalStringPointer(cfg.SessionsPath)
+	cfg.SessionHumanLogFullEnabled = cloneBoolPointer(cfg.SessionHumanLogFullEnabled)
 	cfg.RSSFeedsPath = cloneOptionalStringPointer(cfg.RSSFeedsPath)
 	cfg.RSSInboxPath = cloneOptionalStringPointer(cfg.RSSInboxPath)
 	cfg.RSSBriefingsPath = cloneOptionalStringPointer(cfg.RSSBriefingsPath)
@@ -100,6 +101,11 @@ func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) error {
 	cfg.ToolAllowlist = normalizeConfiguredToolNames(cfg.ToolAllowlist)
 	cfg.ToolBlocklist = normalizeConfiguredToolNames(cfg.ToolBlocklist)
 	cfg.WorkflowToolAllowlist = normalizeConfiguredToolNames(cfg.WorkflowToolAllowlist)
+	promptOverrides, err := normalizeToolPromptOverrides(cfg.ToolPromptOverrides)
+	if err != nil {
+		return err
+	}
+	cfg.ToolPromptOverrides = promptOverrides
 	return nil
 }
 

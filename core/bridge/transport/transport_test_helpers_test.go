@@ -48,6 +48,7 @@ func newTestHandlerWithService(t *testing.T, executor bridgeorchestration.AgentE
 	t.Setenv("GHOST_TASKS_PATH", tempDir+"/tasks")
 	t.Setenv("GHOST_RSS_POLL_ENABLED", "false")
 	t.Setenv("GHOST_RSS_BRIEFING_ENABLED", "false")
+	t.Setenv("GHOST_PROMPTS_DIR", tempDir+"/prompts")
 	t.Setenv("GHOST_RSS_INBOX_PATH", tempDir+"/rss/inbox.json")
 	t.Setenv("GHOST_RSS_FEEDS_PATH", tempDir+"/rss/feeds.json")
 	if executor == nil {

@@ -46,4 +46,8 @@ var (
 	ErrProviderNotFound        = errProviderNotFound
 	ErrProviderExists          = errProviderExists
 	ErrModelSelectionDisabled  = errModelSelectionDisabled
+	ErrToolNameRequired        = errToolNameRequired
+	ErrToolNotFound            = errToolNotFound
+	ErrToolUpdateEmpty         = errToolUpdateEmpty
+	ErrSystemPromptUpdateEmpty = errSystemPromptUpdateEmpty
 )

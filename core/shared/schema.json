@@ -180,20 +180,11 @@
         "setActiveProviderRequest": {
             "$ref": "./schema/defs/config_runtime.json#/$defs/setActiveProviderRequest"
         },
-        "rssInboxPollTaskActionParams": {
-            "$ref": "./schema/defs/tasks.json#/$defs/rssInboxPollTaskActionParams"
-        },
-        "rssBriefingTaskActionParams": {
-            "$ref": "./schema/defs/tasks.json#/$defs/rssBriefingTaskActionParams"
+        "taskRuntimeOverrides": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRuntimeOverrides"
         },
         "agentMessageTaskCreateRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/agentMessageTaskCreateRequest"
-        },
-        "rssInboxPollTaskCreateRequest": {
-            "$ref": "./schema/defs/tasks.json#/$defs/rssInboxPollTaskCreateRequest"
-        },
-        "rssBriefingTaskCreateRequest": {
-            "$ref": "./schema/defs/tasks.json#/$defs/rssBriefingTaskCreateRequest"
         },
         "workflowTaskCreateRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowTaskCreateRequest"
@@ -213,12 +204,6 @@
         "agentMessageTaskPayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/agentMessageTaskPayload"
         },
-        "rssInboxPollTaskPayload": {
-            "$ref": "./schema/defs/tasks.json#/$defs/rssInboxPollTaskPayload"
-        },
-        "rssBriefingTaskPayload": {
-            "$ref": "./schema/defs/tasks.json#/$defs/rssBriefingTaskPayload"
-        },
         "workflowTaskPayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowTaskPayload"
         },
@@ -231,6 +216,12 @@
         "workflowNode": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowNode"
         },
+        "workflowStartNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowStartNode"
+        },
+        "workflowInputVariable": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowInputVariable"
+        },
         "workflowToolNode": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowToolNode"
         },
@@ -239,6 +230,12 @@
         },
         "workflowAgentNode": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowAgentNode"
+        },
+        "workflowIfNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowIfNode"
+        },
+        "workflowLoopNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/workflowLoopNode"
         },
         "workflowEdge": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowEdge"

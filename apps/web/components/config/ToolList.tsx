@@ -32,6 +32,7 @@ export function ToolList(props: ToolListProps) {
   const { copy } = useWebLocale();
   const { tools, loading, controlsDisabled, onUpdate } = props;
   const { activeTool, openTool, closeTool } = useActiveTool(tools);
+  const orderedTools = useMemo(() => prioritizeEnabledTools(tools), [tools]);
 
   if (loading) {
     return (
@@ -57,7 +58,7 @@ export function ToolList(props: ToolListProps) {
   return (
     <>
       <div className="grid grid-cols-1 gap-3">
-        {tools.map((tool) => (
+        {orderedTools.map((tool) => (
           <ToolCard
             key={tool.name}
             tool={tool}
@@ -266,6 +267,20 @@ function ToolPromptActions(props: {
       </button>
     </div>
   );
+}
+
+function prioritizeEnabledTools(tools: ToolPayload[]): ToolPayload[] {
+  const enabledTools: ToolPayload[] = [];
+  const disabledTools: ToolPayload[] = [];
+
+  for (const tool of tools) {
+    if (tool.enabled) {
+      enabledTools.push(tool);
+      continue;
+    }
+    disabledTools.push(tool);
+  }
+  return [...enabledTools, ...disabledTools];
 }
 
 function hasPromptOverride(tool: ToolPayload): boolean {

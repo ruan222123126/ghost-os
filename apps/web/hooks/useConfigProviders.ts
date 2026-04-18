@@ -18,6 +18,7 @@ import {
   stringsEqualIgnoreCase,
 } from '@/lib/configProviders';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { ProviderConfig, ProviderListResponse } from '@/lib/types';
 
 interface UseConfigProvidersOptions {
@@ -45,6 +46,7 @@ interface UseConfigProvidersResult {
 }
 
 export function useConfigProviders(options: UseConfigProvidersOptions): UseConfigProvidersResult {
+  const { copy } = useWebLocale();
   const { open, onReloadConfig } = options;
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [activeProvider, setActiveProviderName] = useState('');
@@ -72,11 +74,11 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
       applyProviderList(await getProviders());
       setProviderError('');
     } catch (error) {
-      setProviderError(toErrorMessage(error, 'failed to load providers'));
+      setProviderError(toErrorMessage(error, copy.system.failedToLoadProviders));
     } finally {
       setProvidersLoading(false);
     }
-  }, [applyProviderList]);
+  }, [applyProviderList, copy.system.failedToLoadProviders]);
 
   useEffect(() => {
     if (open) {
@@ -117,22 +119,22 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
       ? () => updateProvider(editingName, providerInputFromEditor(editor))
       : () => createProvider(providerInputFromEditor(editor));
 
-    return runProviderMutation(action, 'failed to save provider', () => {
+    return runProviderMutation(action, copy.system.failedToSaveProvider, () => {
       resetEditor();
     });
-  }, [editor, editorMode, editingName, resetEditor, runProviderMutation]);
+  }, [copy.system.failedToSaveProvider, editor, editorMode, editingName, resetEditor, runProviderMutation]);
 
   const activateProvider = useCallback(async (name: string) => {
-    await runProviderMutation(() => setActiveProvider(name), 'failed to switch provider');
-  }, [runProviderMutation]);
+    await runProviderMutation(() => setActiveProvider(name), copy.system.failedToSwitchProvider);
+  }, [copy.system.failedToSwitchProvider, runProviderMutation]);
 
   const deleteProviderByName = useCallback(async (name: string) => {
-    await runProviderMutation(() => deleteProvider(name), 'failed to delete provider', () => {
+    await runProviderMutation(() => deleteProvider(name), copy.system.failedToDeleteProvider, () => {
       if (stringsEqualIgnoreCase(editingName, name)) {
         resetEditor();
       }
     });
-  }, [editingName, resetEditor, runProviderMutation]);
+  }, [copy.system.failedToDeleteProvider, editingName, resetEditor, runProviderMutation]);
 
   const editProvider = useCallback((provider: ProviderConfig) => {
     setEditorMode('edit');

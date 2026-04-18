@@ -47,7 +47,8 @@
             { "type": "null" }
           ]
         },
-        "tool_call_id": { "type": "string" }
+        "tool_call_id": { "type": "string" },
+        "in_progress": { "type": "boolean" }
       },
       "x-codegen": {
         "order": 160,

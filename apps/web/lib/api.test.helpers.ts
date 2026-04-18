@@ -12,9 +12,12 @@ export function mockFetchJSON(
   body: unknown,
   options: { ok?: boolean; status?: number } = {}
 ) {
+  const raw = JSON.stringify(body);
   fetchMock.mockResolvedValue({
     ok: options.ok ?? true,
     status: options.status ?? 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
     json: async () => body,
+    text: async () => raw,
   });
 }

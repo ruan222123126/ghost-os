@@ -63,6 +63,9 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.WebSearchExaAPIKey != nil {
 		fileCfg.WebSearchExaAPIKey = cloneOptionalStringPointer(req.WebSearchExaAPIKey)
 	}
+	if req.SessionHumanLogFullEnabled != nil {
+		fileCfg.SessionHumanLogFullEnabled = cloneBoolPointer(req.SessionHumanLogFullEnabled)
+	}
 	if req.WebRooterEnabled != nil {
 		fileCfg.WebRooterEnabled = cloneBoolPointer(req.WebRooterEnabled)
 	}

@@ -12,6 +12,9 @@ var (
 	errProviderNotFound        = errors.New("provider not found")
 	errProviderExists          = errors.New("provider already exists")
 	errModelSelectionDisabled  = errors.New("model selection is disabled by tool_allowlist_only")
+	errToolNameRequired        = errors.New("tool name is required")
+	errToolNotFound            = errors.New("tool not found")
+	errToolUpdateEmpty         = errors.New("at least one of enabled or prompt_override is required")
 )
 
 // store 管理 bridge 运行态可变配置，避免直接写入进程环境变量。
@@ -22,7 +25,16 @@ type store struct {
 
 // newStoreFromEnv 用配置文件 + 环境变量回退初始化可热更新配置存储。
 func newStoreFromEnv() (*store, error) {
-	runtime, err := runtimeConfigFromEnv()
+	env := currentEnv()
+	fileCfg, configPath, err := loadBridgeFileConfig()
+	if err != nil {
+		return nil, err
+	}
+	fileCfg, err = migrateLegacyToolPromptOverrides(fileCfg, configPath, env)
+	if err != nil {
+		return nil, err
+	}
+	runtime, err := resolveRuntimeConfig(fileCfg, env)
 	if err != nil {
 		return nil, err
 	}
@@ -57,4 +69,19 @@ func (s *store) ListProviders() ([]ProviderRecord, error) {
 		return nil, err
 	}
 	return providerRecordsFromConfigs(normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))), nil
+}
+
+func (s *store) SystemPrompts() (SystemPromptFiles, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	fileCfg, _, err := s.loadStoredFileConfigLocked()
+	if err != nil {
+		return SystemPromptFiles{}, err
+	}
+	promptsDir, err := resolvePromptsDir(fileCfg, currentEnv())
+	if err != nil {
+		return SystemPromptFiles{}, err
+	}
+	return LoadSystemPromptFiles(promptsDir)
 }

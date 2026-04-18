@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -8,16 +9,18 @@ import (
 )
 
 func TestResolveUsesProvidedEnvSnapshot(t *testing.T) {
+	processPromptsDir := filepath.Join(t.TempDir(), "process-prompts")
+	snapshotPromptsDir := filepath.Join(t.TempDir(), "snapshot-prompts")
 	t.Setenv("GHOST_API_KEY", "process-key")
 	t.Setenv("GHOST_SESSIONS_PATH", "/process/sessions")
-	t.Setenv("GHOST_PROMPTS_DIR", "/process/prompts")
+	t.Setenv("GHOST_PROMPTS_DIR", processPromptsDir)
 	t.Setenv("GHOST_NATIVE_BINARY_PATH", "/process/native")
 
 	env := envSnapshot{
 		"GHOST_PROVIDER":           "openai",
 		"GHOST_API_KEY":            "snapshot-key",
 		"GHOST_SESSIONS_PATH":      "/snapshot/sessions",
-		"GHOST_PROMPTS_DIR":        "/snapshot/prompts",
+		"GHOST_PROMPTS_DIR":        snapshotPromptsDir,
 		"GHOST_NATIVE_BINARY_PATH": "/snapshot/native",
 	}
 
@@ -31,8 +34,8 @@ func TestResolveUsesProvidedEnvSnapshot(t *testing.T) {
 	if cfg.SessionsPath != "/snapshot/sessions" {
 		t.Fatalf("unexpected sessions path: got %q want %q", cfg.SessionsPath, "/snapshot/sessions")
 	}
-	if cfg.PromptsDir != "/snapshot/prompts" {
-		t.Fatalf("unexpected prompts dir: got %q want %q", cfg.PromptsDir, "/snapshot/prompts")
+	if cfg.PromptsDir != snapshotPromptsDir {
+		t.Fatalf("unexpected prompts dir: got %q want %q", cfg.PromptsDir, snapshotPromptsDir)
 	}
 	if cfg.NativeBinaryPath != "/snapshot/native" {
 		t.Fatalf("unexpected native binary path: got %q want %q", cfg.NativeBinaryPath, "/snapshot/native")
@@ -104,6 +107,11 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_CODEX_STATELESS_RETRY_ENABLED": "maybe"},
 			want: "invalid GHOST_CODEX_STATELESS_RETRY_ENABLED",
 		},
+		{
+			name: "session human log full bool",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_SESSION_HUMAN_LOG_FULL_ENABLED": "maybe"},
+			want: "invalid GHOST_SESSION_HUMAN_LOG_FULL_ENABLED",
+		},
 	}
 
 	for _, tc := range cases {
@@ -113,6 +121,27 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestResolveConfigLoadsSessionHumanLogModeFromEnvAndFile(t *testing.T) {
+	cfg, err := resolveConfig(
+		bridgeFileConfig{
+			SessionHumanLogFullEnabled: boolPtr(true),
+		},
+		envSnapshot{
+			"GHOST_PROVIDER":                           "custom",
+			"GHOST_SESSION_HUMAN_LOG_FULL_ENABLED":     "false",
+			"GHOST_CODEX_STATELESS_RETRY_ENABLED":      "false",
+			"GHOST_MEMORY_AUGMENTATION_ENABLED":        "true",
+			"GHOST_MEMORY_AUGMENTATION_RECALL_ENABLED": "true",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if !cfg.SessionHumanLogFullEnabled {
+		t.Fatal("expected session_human_log_full_enabled to be true from file override")
 	}
 }
 

@@ -14,7 +14,10 @@ type Snapshot struct {
 	GraphQLTextSanitizeEnabled bool                            `json:"graphql_text_sanitize_enabled"`
 	GraphQLSources             []GraphQLSourceSnapshot         `json:"graphql_sources"`
 	GraphQLMutationPolicies    []GraphQLMutationPolicySnapshot `json:"graphql_mutation_policies"`
+	SessionHumanLogFullEnabled bool                            `json:"session_human_log_full_enabled"`
 	WebRooterEnabled           bool                            `json:"web_rooter_enabled"`
+	WebRooterBaseURL           string                          `json:"web_rooter_base_url"`
+	WebRooterTimeoutMS         int                             `json:"web_rooter_timeout_ms"`
 	WebRooterAPITokenSet       bool                            `json:"web_rooter_api_token_set"`
 	WebSearchTavilyURL         string                          `json:"web_search_tavily_url"`
 	WebSearchExaURL            string                          `json:"web_search_exa_url"`
@@ -34,6 +37,7 @@ type UpdateRequest struct {
 	GraphQLSources             []GraphQLSourceInput         `json:"graphql_sources,omitempty"`
 	GraphQLSourceUpsert        *GraphQLSourceInput          `json:"graphql_source_upsert,omitempty"`
 	GraphQLMutationPolicies    []GraphQLMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
+	SessionHumanLogFullEnabled *bool                        `json:"session_human_log_full_enabled,omitempty"`
 	WebRooterEnabled           *bool                        `json:"web_rooter_enabled,omitempty"`
 	WebRooterBaseURL           *string                      `json:"web_rooter_base_url,omitempty"`
 	WebRooterAPIToken          *string                      `json:"web_rooter_api_token,omitempty"`

@@ -1,6 +1,7 @@
 import type { FC } from 'react';
+import { useWebLocale } from '@/lib/i18n/provider';
 
-export type SettingsTab = 'general' | 'provider' | 'tasks' | 'appearance' | 'data' | 'notifications' | 'security';
+export type SettingsTab = 'general' | 'provider' | 'tasks' | 'skills' | 'tools' | 'appearance' | 'data' | 'notifications' | 'security';
 
 interface IconProps {
   size?: number;
@@ -8,7 +9,6 @@ interface IconProps {
 
 interface TabDefinition {
   id: SettingsTab;
-  label: string;
   group: 'system' | 'preferences';
   icon: FC<IconProps>;
 }
@@ -64,6 +64,20 @@ const TaskIcon: FC<IconProps> = ({ size = 16 }) => (
   </svg>
 );
 
+const SkillIcon: FC<IconProps> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M10 3.2 11.5 7l3.8 1.5-3.8 1.5-1.5 3.8-1.5-3.8L4.7 8.5 8.5 7 10 3.2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <path d="M14.8 12.8 15.5 14.5l1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7.7-1.7Z" fill="currentColor" />
+  </svg>
+);
+
+const ToolIcon: FC<IconProps> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="m12.4 3.7 3.9 3.9-3 3-3.9-3.9 3-3Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <path d="m9.8 8.3-5.3 5.3a1.8 1.8 0 1 0 2.6 2.6l5.3-5.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+
 const DatabaseIcon: FC<IconProps> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <ellipse cx="10" cy="5" rx="6.5" ry="2.5" stroke="currentColor" strokeWidth="1.3" />
@@ -87,17 +101,16 @@ const ShieldIcon: FC<IconProps> = ({ size = 16 }) => (
 );
 
 const tabs: TabDefinition[] = [
-  { id: 'general', label: 'General', group: 'system', icon: SettingsIcon },
-  { id: 'provider', label: 'Provider', group: 'system', icon: ServerIcon },
-  { id: 'tasks', label: 'Tasks', group: 'system', icon: TaskIcon },
-  { id: 'appearance', label: 'Appearance', group: 'system', icon: PaletteIcon },
-  { id: 'data', label: 'Data & Memory', group: 'preferences', icon: DatabaseIcon },
-  { id: 'notifications', label: 'Notifications', group: 'preferences', icon: BellIcon },
-  { id: 'security', label: 'Security', group: 'preferences', icon: ShieldIcon },
+  { id: 'general', group: 'system', icon: SettingsIcon },
+  { id: 'provider', group: 'system', icon: ServerIcon },
+  { id: 'tasks', group: 'system', icon: TaskIcon },
+  { id: 'skills', group: 'system', icon: SkillIcon },
+  { id: 'tools', group: 'system', icon: ToolIcon },
+  { id: 'appearance', group: 'system', icon: PaletteIcon },
+  { id: 'data', group: 'preferences', icon: DatabaseIcon },
+  { id: 'notifications', group: 'preferences', icon: BellIcon },
+  { id: 'security', group: 'preferences', icon: ShieldIcon },
 ];
-
-const systemTabs = tabs.filter((tab) => tab.group === 'system');
-const preferenceTabs = tabs.filter((tab) => tab.group === 'preferences');
 
 function Kicker(props: { children: string }) {
   return (
@@ -111,19 +124,22 @@ export function SettingsNavigation(props: {
   activeTab: SettingsTab;
   onSelectTab: (tab: SettingsTab) => void;
 }) {
+  const { copy } = useWebLocale();
   const { activeTab, onSelectTab } = props;
+  const systemTabs = tabs.filter((tab) => tab.group === 'system');
+  const preferenceTabs = tabs.filter((tab) => tab.group === 'preferences');
 
   return (
     <aside className="w-[240px] shrink-0 border-r border-[#E5E5E5] bg-[#FAFAFA]">
       <div className="px-8 pb-4 pt-8">
         <h2 id="settings-title" className="text-[18px] font-semibold tracking-tight text-[#111111]">
-          Configuration
+          {copy.settings.panelTitle}
         </h2>
       </div>
 
       <nav className="max-h-full space-y-6 overflow-y-auto px-4 pb-8">
-        <SettingsNavGroup title="System" tabs={systemTabs} activeTab={activeTab} onSelectTab={onSelectTab} />
-        <SettingsNavGroup title="Preferences" tabs={preferenceTabs} activeTab={activeTab} onSelectTab={onSelectTab} />
+        <SettingsNavGroup title={copy.settings.groupSystem} tabs={systemTabs} activeTab={activeTab} onSelectTab={onSelectTab} />
+        <SettingsNavGroup title={copy.settings.groupPreferences} tabs={preferenceTabs} activeTab={activeTab} onSelectTab={onSelectTab} />
       </nav>
     </aside>
   );
@@ -159,6 +175,7 @@ function SettingsNavItem(props: {
   active: boolean;
   onSelectTab: (tab: SettingsTab) => void;
 }) {
+  const { copy } = useWebLocale();
   const { tab, active, onSelectTab } = props;
   const Icon = tab.icon;
 
@@ -173,21 +190,49 @@ function SettingsNavItem(props: {
       }`}
     >
       <Icon size={16} />
-      <span>{tab.label}</span>
+      <span>{labelForTab(copy, tab.id)}</span>
     </button>
   );
 }
 
 export function ComingSoonPanel(props: { tab: SettingsTab }) {
-  const currentTab = tabs.find((tab) => tab.id === props.tab);
+  const { copy } = useWebLocale();
 
   return (
     <section className="py-20 text-center">
       <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#F5F5F5] text-[#737373]">
         <SettingsIcon size={24} />
       </div>
-      <h3 className="mb-1 text-[16px] font-medium text-[#111111]">{currentTab?.label ?? 'Section'}</h3>
-      <p className="text-[13px] text-[#737373]">Under active development.</p>
+      <h3 className="mb-1 text-[16px] font-medium text-[#111111]">{labelForTab(copy, props.tab) || copy.settings.comingSoonSection}</h3>
+      <p className="text-[13px] text-[#737373]">{copy.settings.comingSoonDescription}</p>
     </section>
   );
+}
+
+function labelForTab(copy: ReturnType<typeof useWebLocale>['copy'], tab: SettingsTab): string {
+  if (tab === 'general') {
+    return copy.settings.tabGeneral;
+  }
+  if (tab === 'provider') {
+    return copy.settings.tabProvider;
+  }
+  if (tab === 'tasks') {
+    return copy.settings.tabTasks;
+  }
+  if (tab === 'skills') {
+    return copy.settings.tabSkills;
+  }
+  if (tab === 'tools') {
+    return copy.settings.tabTools;
+  }
+  if (tab === 'appearance') {
+    return copy.settings.tabAppearance;
+  }
+  if (tab === 'data') {
+    return copy.settings.tabDataMemory;
+  }
+  if (tab === 'notifications') {
+    return copy.settings.tabNotifications;
+  }
+  return copy.settings.tabSecurity;
 }

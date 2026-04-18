@@ -58,6 +58,33 @@ describe('components/config/ToolList', () => {
     expect(html).toContain('自定义');
     expect(html).toContain('已启用');
   });
+
+  it('renders enabled tools before disabled tools', () => {
+    const html = renderToolList({
+      tools: [
+        { name: 'web_search', enabled: false },
+        { name: 'script_exec', enabled: true },
+        { name: 'memory_manage', enabled: true },
+        { name: 'rss_fetch', enabled: false },
+      ],
+      loading: false,
+      controlsDisabled: false,
+      onUpdate: async () => {},
+    });
+
+    const scriptExecIndex = html.indexOf('script_exec');
+    const memoryManageIndex = html.indexOf('memory_manage');
+    const webSearchIndex = html.indexOf('web_search');
+    const rssFetchIndex = html.indexOf('rss_fetch');
+
+    expect(scriptExecIndex).toBeGreaterThan(-1);
+    expect(memoryManageIndex).toBeGreaterThan(-1);
+    expect(webSearchIndex).toBeGreaterThan(-1);
+    expect(rssFetchIndex).toBeGreaterThan(-1);
+    expect(scriptExecIndex).toBeLessThan(memoryManageIndex);
+    expect(memoryManageIndex).toBeLessThan(webSearchIndex);
+    expect(webSearchIndex).toBeLessThan(rssFetchIndex);
+  });
 });
 
 function renderToolList(
@@ -77,8 +104,10 @@ function renderToolList(
     return renderToStaticMarkup(
       React.createElement(
         WebLocaleProvider,
-        null,
-        React.createElement(ToolList, props),
+        {
+          children: React.createElement(ToolList, props),
+          initialLocale: locale,
+        },
       ),
     );
   } finally {

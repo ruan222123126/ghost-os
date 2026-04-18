@@ -96,6 +96,7 @@ type bridgeFileConfig struct {
 	TasksPath                             *string                           `toml:"tasks_path,omitempty"`
 	WorkflowToolAllowlist                 []string                          `toml:"workflow_tool_allowlist,omitempty"`
 	SessionsPath                          *string                           `toml:"sessions_path,omitempty"`
+	SessionHumanLogFullEnabled            *bool                             `toml:"session_human_log_full_enabled,omitempty"`
 	RSSFeedsPath                          *string                           `toml:"rss_feeds_path,omitempty"`
 	RSSInboxPath                          *string                           `toml:"rss_inbox_path,omitempty"`
 	RSSBriefingsPath                      *string                           `toml:"rss_briefings_path,omitempty"`
@@ -139,6 +140,7 @@ type bridgeFileConfig struct {
 	ToolAllowlistOnly                     *bool                             `toml:"tool_allowlist_only,omitempty"`
 	ToolAllowlist                         []string                          `toml:"tool_allowlist,omitempty"`
 	ToolBlocklist                         []string                          `toml:"tool_blocklist,omitempty"`
+	ToolPromptOverrides                   map[string]string                 `toml:"tool_prompt_overrides,omitempty"`
 	MemoryAugmentationEnabled             *bool                             `toml:"memory_augmentation_enabled,omitempty"`
 	MemoryAugmentationLearningEnabled     *bool                             `toml:"memory_augmentation_learning_enabled,omitempty"`
 	MemoryAugmentationRecallEnabled       *bool                             `toml:"memory_augmentation_recall_enabled,omitempty"`

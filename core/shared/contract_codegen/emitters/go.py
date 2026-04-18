@@ -41,6 +41,9 @@ def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) 
 
 
 def _inner_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
+    if not prop_schema:
+        return "any"
+
     ref_value = prop_schema.get("$ref")
     if ref_value:
         ref_name = schema_ref_name(ref_value)

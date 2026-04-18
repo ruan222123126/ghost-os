@@ -24,20 +24,39 @@ interface WebLocaleContextValue {
 }
 
 const WebLocaleContext = createContext<WebLocaleContextValue | null>(null);
+const DEFAULT_LOCALE: WebLocale = 'en-US';
+
+interface WebLocaleProviderProps {
+  children: ReactNode;
+  initialLocale?: WebLocale;
+}
 
 function resolveLocaleFromWindow(): WebLocale {
   if (typeof window === 'undefined') {
-    return 'en-US';
+    return DEFAULT_LOCALE;
   }
-  return resolveInitialLocale({
-    storedLocale: window.localStorage.getItem(WEB_LOCALE_STORAGE_KEY),
-    browserLocale: window.navigator.language,
-  });
+  try {
+    return resolveInitialLocale({
+      storedLocale: window.localStorage.getItem(WEB_LOCALE_STORAGE_KEY),
+      browserLocale: window.navigator.language,
+    });
+  } catch {
+    return DEFAULT_LOCALE;
+  }
 }
 
-export function WebLocaleProvider(props: { children: ReactNode }) {
-  const { children } = props;
-  const [locale, setLocaleState] = useState<WebLocale>(resolveLocaleFromWindow);
+function isLocaleDifferent(current: WebLocale, next: WebLocale): boolean {
+  return current !== next;
+}
+
+export function WebLocaleProvider(props: WebLocaleProviderProps) {
+  const { children, initialLocale = DEFAULT_LOCALE } = props;
+  const [locale, setLocaleState] = useState<WebLocale>(initialLocale);
+
+  useEffect(() => {
+    const nextLocale = resolveLocaleFromWindow();
+    setLocaleState((current) => isLocaleDifferent(current, nextLocale) ? nextLocale : current);
+  }, []);
 
   useEffect(() => {
     if (typeof document === 'undefined') {

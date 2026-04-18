@@ -30,5 +30,4 @@ var workflowToolDenylist = map[string]string{
 	configToolNameAskHuman: "requires an active session",
 	configToolNameTFind:    "requires an active session",
 	"send_file":            "requires an active session",
-	"computer_use":         "requires an active session",
 }

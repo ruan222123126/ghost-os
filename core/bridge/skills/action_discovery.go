@@ -37,10 +37,25 @@ func (h *ActionHandler) resolveSkillRoots() (skillRoots, error) {
 	if err != nil {
 		return skillRoots{}, fmt.Errorf("resolve user home: %w", err)
 	}
+	userRoot := filepath.Join(strings.TrimSpace(homeDir), ".ghost-os", "skills")
+	if err := ensureManagedSkillRoot(userRoot); err != nil {
+		return skillRoots{}, err
+	}
 	return skillRoots{
 		Repo: filepath.Join(repoRoot, ".agents", "skills"),
-		User: filepath.Join(strings.TrimSpace(homeDir), ".ghost-os", "skills"),
+		User: userRoot,
 	}, nil
+}
+
+func ensureManagedSkillRoot(path string) error {
+	root := strings.TrimSpace(path)
+	if root == "" {
+		return fmt.Errorf("%w: %s", ErrSkillSourceNotFound, skillSourceUser)
+	}
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return fmt.Errorf("ensure user skill root: %w", err)
+	}
+	return nil
 }
 
 func resolveManagedRepoRoot(projectRoot string) (string, error) {

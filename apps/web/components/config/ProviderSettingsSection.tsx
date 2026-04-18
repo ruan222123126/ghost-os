@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ProviderEditorForm } from '@/components/config/ProviderEditorForm';
 import { ProviderList } from '@/components/config/ProviderList';
 import { ignorePromise } from '@/lib/errors';
+import { useWebLocale } from '@/lib/i18n/provider';
 import type { ProviderEditorState } from '@/lib/configProviders';
 import type { ProviderConfig } from '@/lib/types';
 
@@ -26,6 +27,7 @@ interface ProviderSettingsSectionProps {
 }
 
 export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
+  const { copy } = useWebLocale();
   const {
     providers,
     activeProvider,
@@ -86,8 +88,8 @@ export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
     <section>
       <header className="mb-10 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="mb-2 text-[28px] font-semibold tracking-tight text-[#111111]">Provider</h1>
-          <p className="text-[14px] text-[#737373]">Manage your service connections.</p>
+          <h1 className="mb-2 text-[28px] font-semibold tracking-tight text-[#111111]">{copy.settings.providerTitle}</h1>
+          <p className="text-[14px] text-[#737373]">{copy.settings.providerDescription}</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -99,7 +101,7 @@ export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
             }}
             className="rounded-full border border-[#E5E5E5] px-4 py-2 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Refresh
+            {copy.settings.refresh}
           </button>
           <button
             type="button"
@@ -107,7 +109,7 @@ export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
             onClick={handleBeginCreate}
             className="rounded-full bg-[#111111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Add
+            {copy.settings.providerAdd}
           </button>
         </div>
       </header>
