@@ -53,6 +53,9 @@ func validateWorkflowTaskRuntime(definition *WorkflowDefinition, cfg bridgeconfi
 		return invalidTaskConfig("workflow is required")
 	}
 	allowed := workflowToolAllowlistSet(cfg.WorkflowToolAllowlist)
+	if len(allowed) == 0 {
+		return nil
+	}
 	for _, node := range definition.Nodes {
 		if node.Type != workflowNodeTypeTool {
 			continue

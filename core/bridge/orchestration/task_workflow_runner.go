@@ -9,17 +9,19 @@ import (
 )
 
 type workflowNodeOutcome struct {
-	status     string
-	sessionID  string
-	preview    string
-	outputText string
-	err        error
+	status      string
+	sessionID   string
+	preview     string
+	outputText  string
+	outputValue any
+	err         error
 }
 
 type workflowRunState struct {
 	lastOutputText string
 	nodeOutputs    map[string]string
 	loopIterations map[string]int
+	variables      workflowVariableStore
 }
 
 func newWorkflowRunState(nodeCount int) workflowRunState {
@@ -27,6 +29,7 @@ func newWorkflowRunState(nodeCount int) workflowRunState {
 		lastOutputText: "",
 		nodeOutputs:    make(map[string]string, nodeCount),
 		loopIterations: make(map[string]int, nodeCount),
+		variables:      newWorkflowVariableStore(),
 	}
 }
 
@@ -37,6 +40,7 @@ func (s *workflowRunState) recordNode(nodeID string, outcome workflowNodeOutcome
 	}
 	s.lastOutputText = output
 	s.nodeOutputs[nodeID] = output
+	s.variables.recordNode(nodeID, output, outcome.outputValue, outcome.status)
 }
 
 func (s workflowRunState) sourceText(sourceNodeID string) string {
@@ -106,43 +110,16 @@ func (r workflowTaskRunner) loadRuntimeDependencies() (agentRuntimeDependencies,
 }
 
 func (r workflowTaskRunner) executePlan(ctx context.Context, deps agentRuntimeDependencies) bridgeTasks.ExecutionResult {
-	state := newWorkflowRunState(len(r.plan.nodes))
-	lastSessionID := ""
-	lastNode := WorkflowNode{}
-	lastPreview := ""
-	currentNodeID := r.plan.startID
-	for {
-		node, ok := r.plan.node(currentNodeID)
-		if !ok {
-			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: fmt.Sprintf("workflow node %q is missing", currentNodeID)}
-		}
-		if node.Type == workflowNodeTypeEnd {
-			return buildWorkflowSuccessResult(lastNode, lastPreview, lastSessionID, r.plan)
-		}
-		step := r.executeStep(ctx, deps, node, &state)
-		if step.err != nil {
-			return bridgeTasks.ExecutionResult{
-				Status: taskRunStatusError,
-				Error:  fmt.Sprintf("workflow node %s (%s) failed: %v", node.ID, node.Type, step.err),
-			}
-		}
-		if strings.TrimSpace(step.outcome.sessionID) != "" {
-			lastSessionID = strings.TrimSpace(step.outcome.sessionID)
-		}
-		if step.outcome.status == taskRunStatusAwaitingHuman {
-			return bridgeTasks.ExecutionResult{
-				Status:          taskRunStatusAwaitingHuman,
-				SessionIDOutput: lastSessionID,
-				ResponsePreview: fmt.Sprintf("workflow awaiting human at %s: %s", node.ID, step.outcome.preview),
-			}
-		}
-		if step.executed {
-			state.recordNode(node.ID, step.outcome)
-			lastNode = node
-			lastPreview = step.outcome.preview
-		}
-		currentNodeID = step.nextNodeID
+	startNode, state, err := r.initRunState()
+	if err != nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
+	branches := r.plan.nextNodeIDs(startNode.ID)
+	if len(branches) > 1 {
+		return r.executeParallelBranches(ctx, deps, startNode, branches)
+	}
+	result := r.executePath(ctx, deps, r.plan.startID, &state)
+	return r.pathResultToExecutionResult(result)
 }
 
 type workflowStepResult struct {
@@ -163,9 +140,9 @@ func (r workflowTaskRunner) executeStep(
 		nextID, err := r.plan.singleNextNodeID(node.ID)
 		return workflowStepResult{nextNodeID: nextID, err: err}
 	case workflowNodeTypeTool, workflowNodeTypeLLM, workflowNodeTypeAgent:
-		return r.executeActionStep(ctx, deps, node)
+		return r.executeActionStep(ctx, deps, node, state)
 	case workflowNodeTypeIf:
-		nextID, err := selectWorkflowIfNextNode(node, *state)
+		nextID, err := selectWorkflowIfNextNode(node, state)
 		return workflowStepResult{nextNodeID: nextID, err: err}
 	case workflowNodeTypeLoop:
 		nextID, err := selectWorkflowLoopNextNode(node, state)
@@ -179,8 +156,9 @@ func (r workflowTaskRunner) executeActionStep(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
 	node WorkflowNode,
+	state *workflowRunState,
 ) workflowStepResult {
-	outcome := r.executeActionNode(ctx, deps, node)
+	outcome := r.executeActionNode(ctx, deps, node, state)
 	if outcome.err != nil || outcome.status == taskRunStatusAwaitingHuman {
 		return workflowStepResult{outcome: outcome, executed: true, err: outcome.err}
 	}
@@ -197,25 +175,38 @@ func (r workflowTaskRunner) executeActionNode(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
 	node WorkflowNode,
+	state *workflowRunState,
 ) workflowNodeOutcome {
+	resolvedNode, err := resolveWorkflowActionNode(node, state.variables)
+	if err != nil {
+		return workflowNodeOutcome{err: err}
+	}
 	switch node.Type {
 	case workflowNodeTypeTool:
-		return executeWorkflowToolNode(ctx, deps, node, r.traceID)
+		return executeWorkflowToolNode(ctx, deps, resolvedNode, r.traceID)
 	case workflowNodeTypeLLM:
-		return executeWorkflowLLMNode(ctx, deps, node)
+		return executeWorkflowLLMNode(ctx, deps, resolvedNode)
 	case workflowNodeTypeAgent:
-		return r.executeAgentNode(ctx, node)
+		return r.executeAgentNode(ctx, resolvedNode)
 	default:
 		return workflowNodeOutcome{err: fmt.Errorf("unsupported workflow node type %q", node.Type)}
 	}
 }
 
-func selectWorkflowIfNextNode(node WorkflowNode, state workflowRunState) (string, error) {
+func selectWorkflowIfNextNode(node WorkflowNode, state *workflowRunState) (string, error) {
 	if node.If == nil {
 		return "", fmt.Errorf("workflow if node %q payload is missing", node.ID)
 	}
 	sourceText := state.sourceText(node.If.SourceNodeID)
-	matched, err := evaluateWorkflowIfCondition(node.If.Operator, sourceText, node.If.Value)
+	targetValue := node.If.Value
+	if requiresWorkflowIfValue(node.If.Operator) {
+		resolvedValue, err := state.variables.resolveString(node.If.Value)
+		if err != nil {
+			return "", fmt.Errorf("workflow if node %q resolve value: %w", node.ID, err)
+		}
+		targetValue = resolvedValue
+	}
+	matched, err := evaluateWorkflowIfCondition(node.If.Operator, sourceText, targetValue)
 	if err != nil {
 		return "", fmt.Errorf("workflow if node %q: %w", node.ID, err)
 	}

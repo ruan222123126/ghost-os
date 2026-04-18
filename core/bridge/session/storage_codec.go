@@ -58,18 +58,6 @@ func clonePendingQuestions(raw map[string]PendingHumanQuestion) map[string]Pendi
 	return out
 }
 
-func clonePendingComputerUseRuns(raw map[string]PendingComputerUseRunState) map[string]PendingComputerUseRunState {
-	if len(raw) == 0 {
-		return nil
-	}
-
-	out := make(map[string]PendingComputerUseRunState, len(raw))
-	for questionID, state := range raw {
-		out[questionID] = clonePendingComputerUseRunState(state)
-	}
-	return out
-}
-
 func cloneHumanAnswers(raw map[string]string) map[string]string {
 	if len(raw) == 0 {
 		return nil

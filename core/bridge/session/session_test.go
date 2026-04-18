@@ -180,3 +180,56 @@ func TestDynamicToolLoadLifecycle(t *testing.T) {
 		t.Fatalf("expected web_search to expire after idle turns, got %v", expired)
 	}
 }
+
+func TestAppendAssistantDraftSameTurn(t *testing.T) {
+	s := NewSession("")
+	when := time.Date(2026, 4, 4, 10, 0, 0, 0, time.UTC)
+
+	if ok := s.AppendAssistantDraft("hello", "trace-1", 2, when); !ok {
+		t.Fatal("expected first draft append to succeed")
+	}
+	if ok := s.AppendAssistantDraft(" world", "trace-1", 2, when.Add(time.Second)); !ok {
+		t.Fatal("expected second draft append to succeed")
+	}
+	if s.AssistantDraft == nil {
+		t.Fatal("expected assistant draft")
+	}
+	if s.AssistantDraft.Text != "hello world" {
+		t.Fatalf("unexpected assistant draft text: %q", s.AssistantDraft.Text)
+	}
+	if s.AssistantDraft.TraceID != "trace-1" || s.AssistantDraft.Turn != 2 {
+		t.Fatalf("unexpected assistant draft metadata: %+v", s.AssistantDraft)
+	}
+}
+
+func TestAppendAssistantDraftReplacesDifferentTurn(t *testing.T) {
+	s := NewSession("")
+	if ok := s.AppendAssistantDraft("old", "trace-old", 1, time.Now().UTC()); !ok {
+		t.Fatal("expected initial draft append")
+	}
+	if ok := s.AppendAssistantDraft("new", "trace-new", 2, time.Now().UTC()); !ok {
+		t.Fatal("expected replacement draft append")
+	}
+	if s.AssistantDraft == nil {
+		t.Fatal("expected replacement assistant draft")
+	}
+	if s.AssistantDraft.Text != "new" {
+		t.Fatalf("expected replaced draft text, got %q", s.AssistantDraft.Text)
+	}
+	if s.AssistantDraft.TraceID != "trace-new" || s.AssistantDraft.Turn != 2 {
+		t.Fatalf("unexpected replacement metadata: %+v", s.AssistantDraft)
+	}
+}
+
+func TestClearAssistantDraft(t *testing.T) {
+	s := NewSession("")
+	if ok := s.AppendAssistantDraft("partial", "trace-1", 1, time.Now().UTC()); !ok {
+		t.Fatal("expected draft append")
+	}
+	if ok := s.ClearAssistantDraft(time.Now().UTC()); !ok {
+		t.Fatal("expected clear assistant draft to return true")
+	}
+	if s.AssistantDraft != nil {
+		t.Fatalf("expected assistant draft to be cleared, got %+v", s.AssistantDraft)
+	}
+}

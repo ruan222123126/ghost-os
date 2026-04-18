@@ -222,6 +222,26 @@ func (s *Service) ExecuteToolUpdateAction(params ToolNameParams, req ToolUpdateR
 	return s.inner.executeToolUpdateActionResult(params, req, traceID)
 }
 
+func (s *Service) ExecuteSystemPromptGetAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeSystemPromptGetAction(traceID)
+}
+
+func (s *Service) ExecuteSystemPromptUpdateAction(req bridgeconfig.SystemPromptUpdateRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executeSystemPromptUpdateAction(req, traceID)
+}
+
+func (s *Service) ExecuteFindIconTemplateUploadAction(req FindIconTemplateUploadRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executeFindIconTemplateUploadActionResult(req, traceID)
+}
+
+func (s *Service) ExecuteFindIconPreviewAction(
+	ctx context.Context,
+	req FindIconPreviewRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.inner.executeFindIconPreviewActionResult(ctx, req, traceID)
+}
+
 func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, bool) {
 	return s.inner.pendingQuestionSnapshot(sessionID)
 }

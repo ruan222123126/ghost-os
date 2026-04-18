@@ -30,9 +30,10 @@ var (
 
 // Store 提供会话状态与消息历史的持久化能力。
 type Store struct {
-	baseDir string
-	db      *sql.DB
-	mu      sync.Mutex
+	baseDir  string
+	db       *sql.DB
+	humanLog *sessionHumanLogWriter
+	mu       sync.Mutex
 }
 
 // SessionMetadata 表示列表场景需要的轻量会话信息。
@@ -68,8 +69,12 @@ type MessagePage struct {
 }
 
 // NewStore 初始化 SQLite 会话存储。
-func NewStore(baseDir string) (*Store, error) {
+func NewStore(baseDir string, options ...StoreOptions) (*Store, error) {
 	resolved, err := resolveBaseDir(baseDir)
+	if err != nil {
+		return nil, err
+	}
+	resolvedOptions, err := resolveStoreOptions(options)
 	if err != nil {
 		return nil, err
 	}
@@ -87,10 +92,16 @@ func NewStore(baseDir string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	humanLog, err := newSessionHumanLogWriter(resolved, resolvedOptions)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 
 	return &Store{
-		baseDir: resolved,
-		db:      db,
+		baseDir:  resolved,
+		db:       db,
+		humanLog: humanLog,
 	}, nil
 }
 
@@ -101,25 +112,18 @@ func (s *Store) Load(sessionID string) (*Session, error) {
 		return nil, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := s.importLegacySessionLocked(id); err != nil {
+	var sess *Session
+	if err := s.withSessionLock(id, false, func() error {
+		return s.withTx("load session", func(tx *sql.Tx) error {
+			loaded, loadErr := loadSessionTx(tx, id)
+			if loadErr != nil {
+				return loadErr
+			}
+			sess = loaded
+			return nil
+		})
+	}); err != nil {
 		return nil, err
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("begin load session: %w", err)
-	}
-	defer rollbackTx(tx)
-
-	sess, err := loadSessionTx(tx, id)
-	if err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit load session: %w", err)
 	}
 	return sess, nil
 }
@@ -131,29 +135,26 @@ func (s *Store) LoadPage(sessionID string, params PageParams) (*Session, Message
 		return nil, MessagePage{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := s.importLegacySessionLocked(id); err != nil {
+	var (
+		sess *Session
+		page MessagePage
+	)
+	if err := s.withSessionLock(id, false, func() error {
+		return s.withTx("load session page", func(tx *sql.Tx) error {
+			loaded, loadErr := loadSessionTx(tx, id)
+			if loadErr != nil {
+				return loadErr
+			}
+			loadedPage, pageErr := loadMessagePageTx(tx, id, loaded.MessageCount, params)
+			if pageErr != nil {
+				return pageErr
+			}
+			sess = loaded
+			page = loadedPage
+			return nil
+		})
+	}); err != nil {
 		return nil, MessagePage{}, err
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, MessagePage{}, fmt.Errorf("begin load session page: %w", err)
-	}
-	defer rollbackTx(tx)
-
-	sess, err := loadSessionTx(tx, id)
-	if err != nil {
-		return nil, MessagePage{}, err
-	}
-	page, err := loadMessagePageTx(tx, id, sess.MessageCount, params)
-	if err != nil {
-		return nil, MessagePage{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, MessagePage{}, fmt.Errorf("commit load session page: %w", err)
 	}
 	return sess, page, nil
 }
@@ -168,25 +169,14 @@ func (s *Store) Save(sess *Session) error {
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if err := s.importLegacySessionLocked(id); err != nil && !errors.Is(err, ErrSessionNotFound) {
-		return err
-	}
-
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin save session: %w", err)
-	}
-	defer rollbackTx(tx)
-	if err := saveSessionTx(tx, id, sess); err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit save session: %w", err)
-	}
-	return nil
+	return s.withSessionLock(id, true, func() error {
+		if err := s.withTx("save session", func(tx *sql.Tx) error {
+			return saveSessionTx(tx, id, sess)
+		}); err != nil {
+			return err
+		}
+		return s.syncSessionHumanLogLocked(id)
+	})
 }
 
 func saveSessionTx(tx *sql.Tx, sessionID string, sess *Session) error {
@@ -223,30 +213,30 @@ func (s *Store) Delete(sessionID string) error {
 		return err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	return s.withStoreLock(func() error {
+		deleted := false
+		if err := s.withTx("delete session", func(tx *sql.Tx) error {
+			removed, deleteErr := deleteSessionTx(tx, id)
+			if deleteErr != nil {
+				return deleteErr
+			}
+			deleted = removed
+			return nil
+		}); err != nil {
+			return err
+		}
+		if deleted {
+			_ = removeLegacySessionFile(s, id)
+			return nil
+		}
 
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin delete session: %w", err)
-	}
-	defer rollbackTx(tx)
-
-	deleted, err := deleteSessionTx(tx, id)
-	if err != nil {
-		return err
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit delete session: %w", err)
-	}
-	if deleted {
-		_ = removeLegacySessionFile(s, id)
-		return nil
-	}
-	if removed, err := deleteLegacySessionFile(s, id); err != nil {
-		return err
-	} else if removed {
-		return nil
-	}
-	return fmt.Errorf("%w: %s", ErrSessionNotFound, id)
+		removed, deleteErr := deleteLegacySessionFile(s, id)
+		if deleteErr != nil {
+			return deleteErr
+		}
+		if removed {
+			return nil
+		}
+		return fmt.Errorf("%w: %s", ErrSessionNotFound, id)
+	})
 }

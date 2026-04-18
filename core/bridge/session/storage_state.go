@@ -11,14 +11,13 @@ import (
 const sessionTimeLayout = time.RFC3339Nano
 
 type sessionStoredState struct {
-	ConversationState      llm.ConversationState                 `json:"conversation_state,omitempty"`
-	IterationRuntime       *IterationRuntime                     `json:"iteration_runtime,omitempty"`
-	PendingQuestions       map[string]PendingHumanQuestion       `json:"pending_questions,omitempty"`
-	HumanAnswers           map[string]string                     `json:"human_answers,omitempty"`
-	PendingComputerUseRuns map[string]PendingComputerUseRunState `json:"pending_computer_use_runs,omitempty"`
-	DynamicToolLoads       map[string]DynamicToolLoad            `json:"dynamic_tool_loads,omitempty"`
-	DynamicSkillLoads      map[string]DynamicSkillLoad           `json:"dynamic_skill_loads,omitempty"`
-	AssistantDraft         *AssistantDraft                       `json:"assistant_draft,omitempty"`
+	ConversationState llm.ConversationState           `json:"conversation_state,omitempty"`
+	IterationRuntime  *IterationRuntime               `json:"iteration_runtime,omitempty"`
+	PendingQuestions  map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
+	HumanAnswers      map[string]string               `json:"human_answers,omitempty"`
+	DynamicToolLoads  map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
+	DynamicSkillLoads map[string]DynamicSkillLoad     `json:"dynamic_skill_loads,omitempty"`
+	AssistantDraft    *AssistantDraft                 `json:"assistant_draft,omitempty"`
 }
 
 type sessionRecord struct {
@@ -36,14 +35,13 @@ type sessionRecord struct {
 
 func encodeSessionState(sess *Session) (string, error) {
 	state := sessionStoredState{
-		ConversationState:      sess.ConversationState,
-		IterationRuntime:       cloneIterationRuntime(sess.IterationRuntime),
-		PendingQuestions:       clonePendingQuestions(sess.PendingQuestions),
-		HumanAnswers:           cloneHumanAnswers(sess.HumanAnswers),
-		PendingComputerUseRuns: clonePendingComputerUseRuns(sess.PendingComputerUseRuns),
-		DynamicToolLoads:       cloneDynamicToolLoads(sess.DynamicToolLoads),
-		DynamicSkillLoads:      cloneDynamicSkillLoads(sess.DynamicSkillLoads),
-		AssistantDraft:         cloneAssistantDraft(sess.AssistantDraft),
+		ConversationState: sess.ConversationState,
+		IterationRuntime:  cloneIterationRuntime(sess.IterationRuntime),
+		PendingQuestions:  clonePendingQuestions(sess.PendingQuestions),
+		HumanAnswers:      cloneHumanAnswers(sess.HumanAnswers),
+		DynamicToolLoads:  cloneDynamicToolLoads(sess.DynamicToolLoads),
+		DynamicSkillLoads: cloneDynamicSkillLoads(sess.DynamicSkillLoads),
+		AssistantDraft:    cloneAssistantDraft(sess.AssistantDraft),
 	}
 	encoded, err := json.Marshal(state)
 	if err != nil {
@@ -66,24 +64,23 @@ func decodeSessionState(raw string) (sessionStoredState, error) {
 
 func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 	sess := &Session{
-		ID:                     record.ID,
-		Messages:               llm.CloneMessages(messages),
-		CreatedAt:              record.CreatedAt,
-		UpdatedAt:              record.UpdatedAt,
-		EndedAt:                record.EndedAt,
-		TurnIndex:              record.TurnIndex,
-		TokenCount:             record.TokenCount,
-		MessageCount:           record.MessageCount,
-		WindowStart:            record.WindowStart,
-		WindowTokenCount:       record.WindowTokenCount,
-		ConversationState:      record.State.ConversationState,
-		IterationRuntime:       cloneIterationRuntime(record.State.IterationRuntime),
-		PendingQuestions:       clonePendingQuestions(record.State.PendingQuestions),
-		HumanAnswers:           cloneHumanAnswers(record.State.HumanAnswers),
-		PendingComputerUseRuns: clonePendingComputerUseRuns(record.State.PendingComputerUseRuns),
-		DynamicToolLoads:       cloneDynamicToolLoads(record.State.DynamicToolLoads),
-		DynamicSkillLoads:      cloneDynamicSkillLoads(record.State.DynamicSkillLoads),
-		AssistantDraft:         cloneAssistantDraft(record.State.AssistantDraft),
+		ID:                record.ID,
+		Messages:          llm.CloneMessages(messages),
+		CreatedAt:         record.CreatedAt,
+		UpdatedAt:         record.UpdatedAt,
+		EndedAt:           record.EndedAt,
+		TurnIndex:         record.TurnIndex,
+		TokenCount:        record.TokenCount,
+		MessageCount:      record.MessageCount,
+		WindowStart:       record.WindowStart,
+		WindowTokenCount:  record.WindowTokenCount,
+		ConversationState: record.State.ConversationState,
+		IterationRuntime:  cloneIterationRuntime(record.State.IterationRuntime),
+		PendingQuestions:  clonePendingQuestions(record.State.PendingQuestions),
+		HumanAnswers:      cloneHumanAnswers(record.State.HumanAnswers),
+		DynamicToolLoads:  cloneDynamicToolLoads(record.State.DynamicToolLoads),
+		DynamicSkillLoads: cloneDynamicSkillLoads(record.State.DynamicSkillLoads),
+		AssistantDraft:    cloneAssistantDraft(record.State.AssistantDraft),
 	}
 	sess.setPersistedSnapshot()
 	return sess

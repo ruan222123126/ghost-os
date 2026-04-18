@@ -350,6 +350,7 @@ func buildMemoryTestDeps(
 		cfg: bridgeconfig.Config{
 			MaxTurns:    3,
 			PromptsPath: "",
+			PromptsDir:  os.Getenv("GHOST_PROMPTS_DIR"),
 			Provider:    bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 			MemoryAugmentation: bridgeconfig.MemoryAugmentationConfig{
 				UserScopeID: memorystore.DefaultUserScopeID,
@@ -366,6 +367,7 @@ func buildMemoryTestDeps(
 
 func newTempSessionStore(t *testing.T) *session.Store {
 	t.Helper()
+	t.Setenv("GHOST_PROMPTS_DIR", filepath.Join(t.TempDir(), "prompts"))
 	store, err := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
 	if err != nil {
 		t.Fatalf("new session store: %v", err)

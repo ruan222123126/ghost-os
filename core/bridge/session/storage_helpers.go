@@ -60,3 +60,37 @@ func deleteLegacySessionFile(store *Store, sessionID string) (bool, error) {
 	}
 	return true, nil
 }
+
+func (s *Store) withStoreLock(fn func() error) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return fn()
+}
+
+func (s *Store) withSessionLock(sessionID string, allowMissingLegacy bool, fn func() error) error {
+	return s.withStoreLock(func() error {
+		if err := s.importLegacySessionLocked(sessionID); err != nil {
+			if allowMissingLegacy && errors.Is(err, ErrSessionNotFound) {
+				return fn()
+			}
+			return err
+		}
+		return fn()
+	})
+}
+
+func (s *Store) withTx(action string, fn func(tx *sql.Tx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin %s: %w", action, err)
+	}
+	defer rollbackTx(tx)
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit %s: %w", action, err)
+	}
+	return nil
+}

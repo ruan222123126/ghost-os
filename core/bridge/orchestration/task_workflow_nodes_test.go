@@ -30,6 +30,29 @@ func TestValidateTaskDefinitionWorkflowAcceptsLinearNodeChain(t *testing.T) {
 	}
 }
 
+func TestValidateTaskDefinitionWorkflowAcceptsStartParallelBranches(t *testing.T) {
+	task := ScheduledTask{
+		TaskKind: taskKindWorkflow,
+		Workflow: &WorkflowDefinition{
+			Nodes: []WorkflowNode{
+				{ID: "start-node", Type: workflowNodeTypeStart},
+				{ID: "agent-a", Type: workflowNodeTypeAgent, Agent: &WorkflowAgentNode{Message: "a"}},
+				{ID: "agent-b", Type: workflowNodeTypeAgent, Agent: &WorkflowAgentNode{Message: "b"}},
+				{ID: "end-node", Type: workflowNodeTypeEnd},
+			},
+			Edges: []WorkflowEdge{
+				{FromNodeID: "start-node", ToNodeID: "agent-a"},
+				{FromNodeID: "start-node", ToNodeID: "agent-b"},
+				{FromNodeID: "agent-a", ToNodeID: "end-node"},
+				{FromNodeID: "agent-b", ToNodeID: "end-node"},
+			},
+		},
+	}
+	if err := validateTaskDefinition(&task); err != nil {
+		t.Fatalf("validate workflow start parallel branches: %v", err)
+	}
+}
+
 func TestValidateTaskDefinitionWorkflowRejectsNodePayloadMismatch(t *testing.T) {
 	task := ScheduledTask{
 		TaskKind: taskKindWorkflow,

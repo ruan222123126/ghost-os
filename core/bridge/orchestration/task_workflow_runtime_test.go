@@ -6,7 +6,9 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
@@ -112,6 +114,51 @@ func TestTaskWorkflowRunNowRoutesIfNodeByToolOutput(t *testing.T) {
 	}
 }
 
+func TestTaskWorkflowRunNowResolvesTemplateInIfValue(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	tool := &workflowTestTool{name: "script_exec", output: "status=ok"}
+	registry := tools.NewRegistry()
+	registry.Register(tool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(
+			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}},
+			&workflowTestCompleter{},
+			registry,
+			"",
+			nil,
+		),
+	}
+	agentRunner := &workflowTestRunner{message: "if template branch done", sessionID: "if-template-session"}
+	service.agentRunner = agentRunner
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithTemplatedIfNode("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-if-template-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-if-template-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if run.Run.SessionIDOutput != "if-template-session" {
+		t.Fatalf("unexpected session output: %#v", run.Run)
+	}
+	if len(agentRunner.calls) != 1 || agentRunner.calls[0].message != "true branch message" {
+		t.Fatalf("unexpected agent branch: %#v", agentRunner.calls)
+	}
+}
+
 func TestTaskWorkflowRunNowExecutesLoopBodyByMaxIterations(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
@@ -143,6 +190,65 @@ func TestTaskWorkflowRunNowExecutesLoopBodyByMaxIterations(t *testing.T) {
 	}
 	if len(tool.calls) != 3 {
 		t.Fatalf("unexpected loop execution count: got %d want 3", len(tool.calls))
+	}
+}
+
+func TestTaskWorkflowRunNowExecutesStartBranchesInParallel(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	tool := newWorkflowParallelProbeTool("script_exec")
+	registry := tools.NewRegistry()
+	registry.Register(tool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(
+			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}},
+			&workflowTestCompleter{},
+			registry,
+			"",
+			nil,
+		),
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithParallelStartToolBranches("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-parallel-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	type runNowOutcome struct {
+		raw  any
+		code int
+		err  error
+	}
+	outcomeCh := make(chan runNowOutcome, 1)
+	go func() {
+		raw, runCode, runErr := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-parallel-run")
+		outcomeCh <- runNowOutcome{raw: raw, code: runCode, err: runErr}
+	}()
+
+	if !tool.waitStarted(2, 2*time.Second) {
+		tool.release()
+		t.Fatal("expected both start branches to run before release")
+	}
+	tool.release()
+	outcome := <-outcomeCh
+	if outcome.err != nil || outcome.code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", outcome.code, outcome.err)
+	}
+	run := outcome.raw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if !strings.Contains(run.Run.ResponsePreview, "workflow completed in parallel") {
+		t.Fatalf("unexpected run preview: %#v", run.Run)
+	}
+	if tool.maxConcurrency() < 2 {
+		t.Fatalf("expected concurrent execution, got max=%d", tool.maxConcurrency())
 	}
 }
 
@@ -182,7 +288,7 @@ func TestTaskWorkflowRunNowStopsOnAgentAwaitingHuman(t *testing.T) {
 	}
 }
 
-func TestTaskWorkflowRunNowFailsWhenAllowlistChanges(t *testing.T) {
+func TestTaskWorkflowRunNowAllowsAllToolsWhenAllowlistCleared(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
@@ -208,18 +314,114 @@ func TestTaskWorkflowRunNowFailsWhenAllowlistChanges(t *testing.T) {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
 	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if strings.TrimSpace(run.Run.Error) != "" {
+		t.Fatalf("unexpected run error: %#v", run.Run)
+	}
+}
+
+func TestTaskWorkflowRunNowResolvesTemplatedToolArguments(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	tool := &workflowTestTool{
+		name:    "script_exec",
+		outputs: []string{`{"cwd":"/workspace","ok":true}`},
+		output:  `{"status":"done"}`,
+	}
+	registry := tools.NewRegistry()
+	registry.Register(tool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(
+			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}},
+			&workflowTestCompleter{},
+			registry,
+			"",
+			nil,
+		),
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithTemplatedToolChain("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-template-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-template-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if len(tool.calls) != 2 {
+		t.Fatalf("unexpected tool call count: %#v", tool.calls)
+	}
+	if tool.calls[0]["command"] != "pwd" {
+		t.Fatalf("unexpected first tool args: %#v", tool.calls[0])
+	}
+	if tool.calls[1]["command"] != "echo /workspace" {
+		t.Fatalf("unexpected second tool command: %#v", tool.calls[1])
+	}
+	if literal, ok := tool.calls[1]["ok"].(bool); !ok || !literal {
+		t.Fatalf("unexpected second tool bool arg: %#v", tool.calls[1])
+	}
+	if tool.calls[1]["text"] != "run pwd" {
+		t.Fatalf("unexpected second tool text arg: %#v", tool.calls[1])
+	}
+}
+
+func TestTaskWorkflowRunNowFailsOnUndefinedTemplateVariable(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	registry := tools.NewRegistry()
+	registry.Register(&workflowTestTool{name: "script_exec", output: `{"status":"ok"}`})
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(
+			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}},
+			&workflowTestCompleter{},
+			registry,
+			"",
+			nil,
+		),
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithUndefinedTemplate("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-template-missing-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-template-missing-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
 	if run.Run.Status != taskRunStatusError {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
-	if !strings.Contains(run.Run.Error, `workflow tool "script_exec" is not allowed`) {
+	if !strings.Contains(run.Run.Error, `workflow template variable "outputs.missing.status" is not defined`) {
 		t.Fatalf("unexpected run error: %#v", run.Run)
 	}
 }
 
 type workflowTestTool struct {
-	name   string
-	output string
-	calls  []map[string]any
+	name    string
+	output  string
+	outputs []string
+	calls   []map[string]any
 }
 
 func (t *workflowTestTool) Name() string                { return t.name }
@@ -232,7 +434,73 @@ func (t *workflowTestTool) Execute(_ context.Context, args json.RawMessage, _ st
 		return "", err
 	}
 	t.calls = append(t.calls, decoded)
+	callIndex := len(t.calls) - 1
+	if callIndex >= 0 && callIndex < len(t.outputs) {
+		return t.outputs[callIndex], nil
+	}
 	return t.output, nil
+}
+
+type workflowParallelProbeTool struct {
+	name        string
+	startedCh   chan struct{}
+	releaseOnce sync.Once
+	releaseCh   chan struct{}
+	mu          sync.Mutex
+	active      int
+	maxActive   int
+}
+
+func newWorkflowParallelProbeTool(name string) *workflowParallelProbeTool {
+	return &workflowParallelProbeTool{
+		name:      name,
+		startedCh: make(chan struct{}, 8),
+		releaseCh: make(chan struct{}),
+	}
+}
+
+func (t *workflowParallelProbeTool) Name() string        { return t.name }
+func (t *workflowParallelProbeTool) Description() string { return "workflow parallel probe tool" }
+func (t *workflowParallelProbeTool) Parameters() json.RawMessage {
+	return json.RawMessage(`{"type":"object"}`)
+}
+
+func (t *workflowParallelProbeTool) Execute(_ context.Context, _ json.RawMessage, _ string) (string, error) {
+	t.mu.Lock()
+	t.active++
+	if t.active > t.maxActive {
+		t.maxActive = t.active
+	}
+	t.mu.Unlock()
+	t.startedCh <- struct{}{}
+	<-t.releaseCh
+	t.mu.Lock()
+	t.active--
+	t.mu.Unlock()
+	return `{"status":"ok"}`, nil
+}
+
+func (t *workflowParallelProbeTool) waitStarted(count int, timeout time.Duration) bool {
+	for i := 0; i < count; i++ {
+		select {
+		case <-t.startedCh:
+		case <-time.After(timeout):
+			return false
+		}
+	}
+	return true
+}
+
+func (t *workflowParallelProbeTool) release() {
+	t.releaseOnce.Do(func() {
+		close(t.releaseCh)
+	})
+}
+
+func (t *workflowParallelProbeTool) maxConcurrency() int {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.maxActive
 }
 
 type workflowTestCompleter struct {
@@ -293,6 +561,23 @@ func workflowWithToolNode(toolName string) *WorkflowDefinition {
 	}
 }
 
+func workflowWithParallelStartToolBranches(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{ID: "tool-a", Type: workflowNodeTypeTool, Tool: &WorkflowToolNode{ToolName: toolName, Arguments: map[string]any{"command": "echo a"}}},
+			{ID: "tool-b", Type: workflowNodeTypeTool, Tool: &WorkflowToolNode{ToolName: toolName, Arguments: map[string]any{"command": "echo b"}}},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "tool-a"},
+			{FromNodeID: "start-node", ToNodeID: "tool-b"},
+			{FromNodeID: "tool-a", ToNodeID: "end-node"},
+			{FromNodeID: "tool-b", ToNodeID: "end-node"},
+		},
+	}
+}
+
 func workflowWithAgentNode() *WorkflowDefinition {
 	return &WorkflowDefinition{
 		Nodes: []WorkflowNode{
@@ -319,6 +604,43 @@ func workflowWithIfNode(toolName string) *WorkflowDefinition {
 					SourceNodeID: "tool-node",
 					Operator:     workflowIfOperatorContains,
 					Value:        "ok",
+					TrueNodeID:   "agent-true",
+					FalseNodeID:  "agent-false",
+				},
+			},
+			{ID: "agent-true", Type: workflowNodeTypeAgent, Agent: &WorkflowAgentNode{Message: "true branch message"}},
+			{ID: "agent-false", Type: workflowNodeTypeAgent, Agent: &WorkflowAgentNode{Message: "false branch message"}},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "tool-node"},
+			{FromNodeID: "tool-node", ToNodeID: "if-node"},
+			{FromNodeID: "if-node", ToNodeID: "agent-true"},
+			{FromNodeID: "if-node", ToNodeID: "agent-false"},
+			{FromNodeID: "agent-true", ToNodeID: "end-node"},
+			{FromNodeID: "agent-false", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithTemplatedIfNode(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{
+				ID:   "start-node",
+				Type: workflowNodeTypeStart,
+				Start: &WorkflowStartNode{Inputs: []WorkflowInputVariable{
+					{Name: "token", Type: workflowInputTypeString, Default: []byte(`"ok"`)},
+				}},
+			},
+			{ID: "tool-node", Type: workflowNodeTypeTool, Tool: &WorkflowToolNode{ToolName: toolName, Arguments: map[string]any{"command": "pwd"}}},
+			{
+				ID:   "if-node",
+				Type: workflowNodeTypeIf,
+				If: &WorkflowIfNode{
+					SourceNodeID: "tool-node",
+					Operator:     workflowIfOperatorContains,
+					Value:        "${inputs.token}",
 					TrueNodeID:   "agent-true",
 					FalseNodeID:  "agent-false",
 				},
@@ -377,6 +699,71 @@ func workflowWithToolLLMAndAgentNodes(toolName string) *WorkflowDefinition {
 			{FromNodeID: "tool-node", ToNodeID: "llm-node"},
 			{FromNodeID: "llm-node", ToNodeID: "agent-node"},
 			{FromNodeID: "agent-node", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithTemplatedToolChain(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{
+				ID:   "start-node",
+				Type: workflowNodeTypeStart,
+				Start: &WorkflowStartNode{Inputs: []WorkflowInputVariable{
+					{
+						Name:    "command",
+						Type:    workflowInputTypeString,
+						Default: []byte(`"pwd"`),
+					},
+				}},
+			},
+			{
+				ID:   "tool-read",
+				Type: workflowNodeTypeTool,
+				Tool: &WorkflowToolNode{
+					ToolName:  toolName,
+					Arguments: map[string]any{"command": "${inputs.command}"},
+				},
+			},
+			{
+				ID:   "tool-use",
+				Type: workflowNodeTypeTool,
+				Tool: &WorkflowToolNode{
+					ToolName: toolName,
+					Arguments: map[string]any{
+						"command": "echo ${outputs.tool-read.cwd}",
+						"ok":      "${outputs.tool-read.ok}",
+						"text":    "run ${inputs.command}",
+					},
+				},
+			},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "tool-read"},
+			{FromNodeID: "tool-read", ToNodeID: "tool-use"},
+			{FromNodeID: "tool-use", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithUndefinedTemplate(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{
+				ID:   "tool-node",
+				Type: workflowNodeTypeTool,
+				Tool: &WorkflowToolNode{
+					ToolName:  toolName,
+					Arguments: map[string]any{"command": "${outputs.missing.status}"},
+				},
+			},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "tool-node"},
+			{FromNodeID: "tool-node", ToNodeID: "end-node"},
 		},
 	}
 }

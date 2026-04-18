@@ -3,8 +3,6 @@ package orchestration
 import (
 	"fmt"
 	"strings"
-
-	bridgerss "ghost-os/bridge/rss"
 )
 
 func validateTaskDefinition(task *ScheduledTask) error {
@@ -58,8 +56,5 @@ func validateSystemTaskDefinition(task *ScheduledTask) error {
 	if task.Action == "" {
 		return fmt.Errorf("%w: action is required for system_action", ErrInvalidTaskConfig)
 	}
-	if err := bridgerss.ValidateSystemTaskParams(task); err != nil {
-		return err
-	}
-	return nil
+	return fmt.Errorf("%w: unsupported system action %q", ErrInvalidTaskConfig, task.Action)
 }

@@ -1,6 +1,12 @@
 package orchestration
 
 import (
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+
 	bridgeconfig "ghost-os/bridge/config"
 	bridgerss "ghost-os/bridge/rss"
 )
@@ -34,20 +40,65 @@ func (s *serviceRuntimeState) start(configStore bridgeconfig.Store, schedulerSer
 	return s.initTaskRuntime(configStore, schedulerService)
 }
 
-func (s *serviceRuntimeState) bootstrapSystemTasks(configStore bridgeconfig.Store) error {
+func (s *serviceRuntimeState) bootstrapSystemTasks(_ bridgeconfig.Store) error {
 	if s == nil {
 		return nil
 	}
-	coordinator := bridgerss.NewSystemTaskCoordinator(
-		configStore,
-		s.tasks.store,
-		s.tasks.scheduler,
-		s.rss.initErr(),
-	)
-	if err := coordinator.SyncPollTask(); err != nil {
+	return s.removeDeprecatedSystemTasks()
+}
+
+func (s *serviceRuntimeState) removeDeprecatedSystemTasks() error {
+	if s == nil || s.tasks.store == nil || s.tasks.scheduler == nil {
+		return nil
+	}
+	tasksDir := strings.TrimSpace(s.tasks.store.TasksDir())
+	if tasksDir == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
 		return err
 	}
-	return coordinator.SyncBriefingTask()
+	for _, entry := range entries {
+		taskID, ok := parseSystemTaskEntryID(entry.Name(), entry.IsDir())
+		if !ok {
+			continue
+		}
+		path := filepath.Join(tasksDir, entry.Name())
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		if !isSystemTaskDocument(data) {
+			continue
+		}
+		_ = s.tasks.scheduler.Unregister(taskID)
+		if deleteErr := s.tasks.store.DeleteTask(taskID); deleteErr != nil && !errors.Is(deleteErr, ErrTaskNotFound) {
+			return deleteErr
+		}
+	}
+	return nil
+}
+
+func parseSystemTaskEntryID(name string, isDir bool) (string, bool) {
+	if isDir || filepath.Ext(name) != ".json" {
+		return "", false
+	}
+	id := strings.TrimSpace(strings.TrimSuffix(name, ".json"))
+	if id == "" {
+		return "", false
+	}
+	return id, true
+}
+
+func isSystemTaskDocument(data []byte) bool {
+	var task struct {
+		TaskKind string `json:"task_kind"`
+	}
+	if err := json.Unmarshal(data, &task); err != nil {
+		return false
+	}
+	return normalizeTaskKind(task.TaskKind) == taskKindSystemAction
 }
 
 func (s *serviceRuntimeState) close() {

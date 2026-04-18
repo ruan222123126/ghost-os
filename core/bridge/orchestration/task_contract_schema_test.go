@@ -6,22 +6,16 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
-
-	bridgerss "ghost-os/bridge/rss"
 )
 
 func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	defs := loadTaskSchemaDefs(t)
 	assertSchemaOneOfRefs(t, defs, "taskCreateRequest",
 		"agentMessageTaskCreateRequest",
-		"rssInboxPollTaskCreateRequest",
-		"rssBriefingTaskCreateRequest",
 		"workflowTaskCreateRequest",
 	)
 	assertSchemaOneOfRefs(t, defs, "taskPayload",
 		"agentMessageTaskPayload",
-		"rssInboxPollTaskPayload",
-		"rssBriefingTaskPayload",
 		"workflowTaskPayload",
 	)
 	assertSchemaRequired(t, defs, "agentMessageTaskCreateRequest", "message")
@@ -30,8 +24,6 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "model")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "tool_allowlist")
 	assertSchemaProperty(t, defs, "agentMessageTaskCreateRequest", "runtime_overrides")
-	assertSchemaProperty(t, defs, "taskUpdateRequest", "action")
-	assertSchemaProperty(t, defs, "taskUpdateRequest", "action_params")
 	assertSchemaProperty(t, defs, "taskUpdateRequest", "runtime_overrides")
 	assertSchemaProperty(t, defs, "agentMessageTaskPayload", "runtime_overrides")
 	assertSchemaProperty(t, defs, "workflowNode", "start")
@@ -53,8 +45,6 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaRequired(t, defs, "workflowLoopNode", "max_iterations")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "body_node_id")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "exit_node_id")
-	assertSchemaConst(t, defs, "rssInboxPollTaskCreateRequest", "action", bridgerss.ActionInboxPoll)
-	assertSchemaConst(t, defs, "rssBriefingTaskPayload", "action", bridgerss.ActionBriefingBuild)
 }
 
 func loadTaskSchemaDefs(t *testing.T) map[string]any {
@@ -113,14 +103,6 @@ func assertSchemaProperty(t *testing.T, defs map[string]any, name string, field 
 	properties := schemaProperties(t, defs, name)
 	if _, ok := properties[field]; !ok {
 		t.Fatalf("field %q missing in %s", field, name)
-	}
-}
-
-func assertSchemaConst(t *testing.T, defs map[string]any, name string, field string, want string) {
-	t.Helper()
-	property, ok := schemaProperties(t, defs, name)[field].(map[string]any)
-	if !ok || property["const"] != want {
-		t.Fatalf("unexpected const in %s.%s: %#v", name, field, property)
 	}
 }
 

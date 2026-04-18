@@ -33,6 +33,20 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 			LastCalledTurn: 2,
 		},
 	}
+	s.DynamicSkillLoads = map[string]DynamicSkillLoad{
+		"release_flow": {
+			SkillName:      "release_flow",
+			LoadedBy:       "tfind",
+			LoadedAtTurn:   1,
+			LastCalledTurn: 2,
+		},
+	}
+	s.AssistantDraft = &AssistantDraft{
+		Text:      "partial answer",
+		TraceID:   "trace-draft",
+		Turn:      4,
+		UpdatedAt: s.UpdatedAt,
+	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
 	s.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "hi"})
 
@@ -58,6 +72,12 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.DynamicToolLoads, s.DynamicToolLoads) {
 		t.Fatalf("dynamic tool loads mismatch: got=%+v want=%+v", loaded.DynamicToolLoads, s.DynamicToolLoads)
+	}
+	if !reflect.DeepEqual(loaded.DynamicSkillLoads, s.DynamicSkillLoads) {
+		t.Fatalf("dynamic skill loads mismatch: got=%+v want=%+v", loaded.DynamicSkillLoads, s.DynamicSkillLoads)
+	}
+	if !reflect.DeepEqual(loaded.AssistantDraft, s.AssistantDraft) {
+		t.Fatalf("assistant draft mismatch: got=%+v want=%+v", loaded.AssistantDraft, s.AssistantDraft)
 	}
 	if loaded.TokenCount <= 0 {
 		t.Fatalf("unexpected token count: got %d want > 0", loaded.TokenCount)

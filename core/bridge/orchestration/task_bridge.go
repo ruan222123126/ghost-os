@@ -153,12 +153,9 @@ func taskExecutionResultFromAgentPayload(payload any) bridgeTasks.ExecutionResul
 	}
 }
 
-func (a taskExecutorAdapter) executeSystemTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
+func (a taskExecutorAdapter) executeSystemTask(_ context.Context, task ScheduledTask, _ string) bridgeTasks.ExecutionResult {
 	if a.service == nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
-	}
-	if handler := a.service.rssActionHandler(); handler != nil {
-		return handler.ExecuteSystemTask(ctx, task, traceID)
 	}
 	return bridgeTasks.ExecutionResult{
 		Status: taskRunStatusError,
