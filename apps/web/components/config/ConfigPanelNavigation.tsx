@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 
-export type SettingsTab = 'general' | 'provider' | 'tasks' | 'skills' | 'tools' | 'appearance' | 'data' | 'notifications' | 'security';
+export type SettingsTab = 'general' | 'provider' | 'tasks' | 'skills' | 'tools' | 'prompts' | 'appearance' | 'data' | 'notifications' | 'security';
 
 interface IconProps {
   size?: number;
@@ -78,6 +78,13 @@ const ToolIcon: FC<IconProps> = ({ size = 16 }) => (
   </svg>
 );
 
+const PromptIcon: FC<IconProps> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M4 4.5h12v8H8.4L4 16v-3.5H4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    <path d="M7 7.2h6M7 9.8h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+
 const DatabaseIcon: FC<IconProps> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <ellipse cx="10" cy="5" rx="6.5" ry="2.5" stroke="currentColor" strokeWidth="1.3" />
@@ -106,6 +113,7 @@ const tabs: TabDefinition[] = [
   { id: 'tasks', group: 'system', icon: TaskIcon },
   { id: 'skills', group: 'system', icon: SkillIcon },
   { id: 'tools', group: 'system', icon: ToolIcon },
+  { id: 'prompts', group: 'system', icon: PromptIcon },
   { id: 'appearance', group: 'system', icon: PaletteIcon },
   { id: 'data', group: 'preferences', icon: DatabaseIcon },
   { id: 'notifications', group: 'preferences', icon: BellIcon },
@@ -224,6 +232,9 @@ function labelForTab(copy: ReturnType<typeof useWebLocale>['copy'], tab: Setting
   }
   if (tab === 'tools') {
     return copy.settings.tabTools;
+  }
+  if (tab === 'prompts') {
+    return copy.settings.tabPrompts;
   }
   if (tab === 'appearance') {
     return copy.settings.tabAppearance;

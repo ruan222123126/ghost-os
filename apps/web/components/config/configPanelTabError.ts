@@ -4,13 +4,14 @@ interface ResolveTabErrorOptions {
   activeTab: SettingsTab;
   generalError: string;
   providerError: string;
+  promptError: string;
   taskError: string;
   skillError: string;
   toolError: string;
 }
 
 export function resolveConfigPanelTabError(options: ResolveTabErrorOptions): string {
-  const { activeTab, generalError, providerError, taskError, skillError, toolError } = options;
+  const { activeTab, generalError, providerError, promptError, taskError, skillError, toolError } = options;
 
   if (activeTab === 'provider') {
     return providerError;
@@ -23,6 +24,9 @@ export function resolveConfigPanelTabError(options: ResolveTabErrorOptions): str
   }
   if (activeTab === 'tools') {
     return toolError;
+  }
+  if (activeTab === 'prompts') {
+    return promptError;
   }
   if (activeTab === 'general') {
     return generalError;

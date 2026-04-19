@@ -1,10 +1,12 @@
 import { ComingSoonPanel, type SettingsTab } from '@/components/config/ConfigPanelNavigation';
 import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
+import { PromptsSettingsSection } from '@/components/config/PromptsSettingsSection';
 import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSection';
 import { SkillSettingsSection } from '@/components/config/SkillSettingsSection';
 import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
 import { ToolSettingsSection } from '@/components/config/ToolSettingsSection';
 import type { useConfigProviders } from '@/hooks/useConfigProviders';
+import type { useConfigPrompts } from '@/hooks/useConfigPrompts';
 import type { useConfigSkills } from '@/hooks/useConfigSkills';
 import type { useConfigTasks } from '@/hooks/useConfigTasks';
 import type { useConfigTools } from '@/hooks/useConfigTools';
@@ -20,6 +22,7 @@ interface ConfigPanelSectionContentProps {
   onOpenWorkflowCreate: () => void;
   onOpenWorkflowEdit: (task: WorkflowTaskPayload) => void;
   providersState: ReturnType<typeof useConfigProviders>;
+  promptsState: ReturnType<typeof useConfigPrompts>;
   skillsState: ReturnType<typeof useConfigSkills>;
   tasksState: ReturnType<typeof useConfigTasks>;
   toolsState: ReturnType<typeof useConfigTools>;
@@ -36,6 +39,7 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
     onOpenWorkflowCreate,
     onOpenWorkflowEdit,
     providersState,
+    promptsState,
     skillsState,
     tasksState,
     toolsState,
@@ -118,6 +122,18 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         saving={toolsState.toolSaving}
         onRefresh={toolsState.refreshTools}
         onUpdate={toolsState.updateToolByName}
+      />
+    );
+  }
+
+  if (activeTab === 'prompts') {
+    return (
+      <PromptsSettingsSection
+        prompts={promptsState.prompts}
+        loading={promptsState.promptsLoading}
+        saving={promptsState.promptSaving}
+        onRefresh={promptsState.refreshPrompts}
+        onSaveField={promptsState.savePromptField}
       />
     );
   }
