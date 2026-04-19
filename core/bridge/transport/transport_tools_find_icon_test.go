@@ -62,7 +62,7 @@ func TestHandleFindIconPreview(t *testing.T) {
 	registry.Register(tool)
 	service.SetRuntimeFactory(proTestRuntimeFactory{
 		deps: bridgeorchestration.NewRuntimeDependencies(
-			bridgeconfig.Config{},
+			bridgeconfig.Config{PromptsDir: os.Getenv("GHOST_PROMPTS_DIR")},
 			nil,
 			registry,
 			"",
@@ -118,7 +118,7 @@ func TestHandleFindIconPreviewHoverAfterMatchMovesMouse(t *testing.T) {
 	registry.Register(tool)
 	service.SetRuntimeFactory(proTestRuntimeFactory{
 		deps: bridgeorchestration.NewRuntimeDependencies(
-			bridgeconfig.Config{},
+			bridgeconfig.Config{PromptsDir: os.Getenv("GHOST_PROMPTS_DIR")},
 			nil,
 			registry,
 			"",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -156,6 +157,7 @@ func TestHandleAgentStreamSupportsProMode(t *testing.T) {
 				MaxTurns:         4,
 				ProMaxIterations: 2,
 				PromptsPath:      "",
+				PromptsDir:       os.Getenv("GHOST_PROMPTS_DIR"),
 				Provider:         bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			completer,
@@ -209,6 +211,7 @@ func TestHandleAgentStreamSupportsPlanMode(t *testing.T) {
 		deps: bridgeorchestration.NewRuntimeDependencies(
 			bridgeconfig.Config{
 				MaxTurns: 4,
+				PromptsDir: os.Getenv("GHOST_PROMPTS_DIR"),
 				Provider: bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			completer,

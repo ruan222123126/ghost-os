@@ -3,8 +3,6 @@ package transport
 import (
 	"context"
 	"errors"
-	"os"
-	"strings"
 	"testing"
 
 	bridgeconfig "ghost-os/bridge/config"
@@ -118,9 +116,6 @@ type proTestRuntimeFactory struct {
 func (f proTestRuntimeFactory) Build(bridgeconfig.Store) (bridgeorchestration.RuntimeDependencies, error) {
 	if f.err != nil {
 		return bridgeorchestration.RuntimeDependencies{}, f.err
-	}
-	if strings.TrimSpace(f.deps.cfg.PromptsDir) == "" {
-		f.deps.cfg.PromptsDir = os.Getenv("GHOST_PROMPTS_DIR")
 	}
 	return f.deps, nil
 }
