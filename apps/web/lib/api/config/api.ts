@@ -4,9 +4,15 @@ import type {
   ProviderConfigInput,
   ProviderListResponse,
   SetActiveProviderRequest,
+  SystemPromptPayload,
+  SystemPromptUpdateRequest,
 } from '@/lib/types';
 import { requestJSON } from '@/lib/api/client';
-import { parseBridgeConfig, parseProviderListResponse } from '@/lib/api/config/parser';
+import {
+  parseBridgeConfig,
+  parseProviderListResponse,
+  parseSystemPromptResponse,
+} from '@/lib/api/config/parser';
 
 export async function getConfig(): Promise<BridgeConfig> {
   return requestJSON('/api/config', {}, parseBridgeConfig);
@@ -53,4 +59,17 @@ export async function setActiveProvider(name: string): Promise<ProviderListRespo
     method: 'PUT',
     body: JSON.stringify(body),
   }, parseProviderListResponse);
+}
+
+export async function getSystemPrompts(): Promise<SystemPromptPayload> {
+  return requestJSON('/api/prompts/system', {}, parseSystemPromptResponse);
+}
+
+export async function updateSystemPrompts(
+  update: SystemPromptUpdateRequest,
+): Promise<SystemPromptPayload> {
+  return requestJSON('/api/prompts/system', {
+    method: 'PATCH',
+    body: JSON.stringify(update),
+  }, parseSystemPromptResponse);
 }

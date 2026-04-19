@@ -5,6 +5,7 @@ import type {
   GraphQLSourceResponse,
   ProviderConfig,
   ProviderListResponse,
+  SystemPromptPayload,
 } from '@/lib/types';
 import {
   expectBoolean,
@@ -53,6 +54,13 @@ const PROVIDER_CONFIG_KEYS = [
   'model_context_window_tokens',
   'model_response_reserve_tokens',
   'api_key_set',
+] as const;
+const SYSTEM_PROMPT_KEYS = [
+  'global_template',
+  'core_prompt',
+  'tool_prompt',
+  'tool_key_spec',
+  'rendered_prompt',
 ] as const;
 const PROVIDER_LIST_KEYS = ['providers', 'active_provider'] as const;
 const GRAPHQL_DOMAIN_KEYS = [
@@ -286,6 +294,18 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
       record.web_search_exa_api_key_set,
       'bridge config.web_search_exa_api_key_set',
     ),
+  };
+}
+
+export function parseSystemPromptResponse(payload: unknown): SystemPromptPayload {
+  const record = pickKnownKeys(expectRecord(payload, 'system prompt'), SYSTEM_PROMPT_KEYS);
+
+  return {
+    global_template: expectString(record.global_template, 'system prompt.global_template'),
+    core_prompt: expectString(record.core_prompt, 'system prompt.core_prompt'),
+    tool_prompt: expectString(record.tool_prompt, 'system prompt.tool_prompt'),
+    tool_key_spec: expectString(record.tool_key_spec, 'system prompt.tool_key_spec'),
+    rendered_prompt: expectString(record.rendered_prompt, 'system prompt.rendered_prompt'),
   };
 }
 
