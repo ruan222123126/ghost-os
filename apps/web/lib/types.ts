@@ -241,6 +241,22 @@ export interface ToolUpdateRequest {
   trace_id?: string;
 }
 
+export interface SystemPromptPayload {
+  global_template: string;
+  core_prompt: string;
+  tool_prompt: string;
+  tool_key_spec: string;
+  rendered_prompt: string;
+}
+
+export interface SystemPromptUpdateRequest {
+  global_template?: string;
+  core_prompt?: string;
+  tool_prompt?: string;
+  tool_key_spec?: string;
+  trace_id?: string;
+}
+
 export type TaskPayload = SharedTaskPayload;
 export type AgentMessageTaskPayload = SharedAgentMessageTaskPayload;
 export type WorkflowTaskPayload = SharedWorkflowTaskPayload;

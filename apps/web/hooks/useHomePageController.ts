@@ -84,7 +84,7 @@ function useSettingsQueryState(): SettingsQueryState {
 }
 
 function shouldForceOpenSettings(tab: SettingsQueryTab | null): boolean {
-  return tab === 'tasks' || tab === 'skills' || tab === 'tools';
+  return tab === 'tasks' || tab === 'skills' || tab === 'tools' || tab === 'prompts';
 }
 
 export function useHomePageController(): HomePageController {
