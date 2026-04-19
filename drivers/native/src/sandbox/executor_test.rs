@@ -31,6 +31,19 @@ fn test_module_restriction() {
 }
 
 #[test]
+fn test_json_module_is_allowed() {
+    let sandbox = PythonSandbox::new(SandboxConfig::default());
+    let result = sandbox.execute_blocking("import json\nprint(json.dumps({'ok': True}))");
+
+    assert!(
+        result.error.is_none(),
+        "unexpected json import error: {:?}",
+        result.error
+    );
+    assert!(result.output.contains("{\"ok\": true}"));
+}
+
+#[test]
 fn test_tool_call_bash_exec() {
     let sandbox = PythonSandbox::new(SandboxConfig::default());
 

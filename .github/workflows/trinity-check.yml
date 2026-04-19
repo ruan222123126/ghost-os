@@ -89,10 +89,18 @@ jobs:
         run: timeout 60s go test ./...
 
   native-check:
-    name: Native (Rust)
+    name: Native (Rust) / ${{ matrix.variant }}
     needs: changes
     if: ${{ needs.changes.outputs.native == 'true' }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: default
+            feature_args: ""
+          - variant: python-sandbox
+            feature_args: "--features python-sandbox"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -101,7 +109,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Run tests
-        run: cargo test --manifest-path drivers/native/Cargo.toml
+        run: |
+          if [ -n "${{ matrix.feature_args }}" ]; then
+            timeout 60s cargo test --manifest-path drivers/native/Cargo.toml ${{ matrix.feature_args }}
+          else
+            timeout 60s cargo test --manifest-path drivers/native/Cargo.toml
+          fi
 
   web-check:
     name: Web (pnpm)

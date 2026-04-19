@@ -1,3 +1,4 @@
+use super::ime_guard::X11InputMethodGuard;
 use super::window_guard::is_wayland_session;
 use crate::Response;
 use crate::json_params::{optional_bool, required_text};
@@ -6,6 +7,11 @@ use std::process::Command;
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
 use enigo::{Enigo, Key, KeyboardControllable};
+#[cfg(target_os = "linux")]
+#[path = "keyboard_x11.rs"]
+mod keyboard_x11;
+#[cfg(target_os = "linux")]
+use self::keyboard_x11::{active_window_id_for_xdotool, type_lines_with_xdotool};
 
 pub(crate) fn handle_text_input(params: &Value) -> Response {
     let text = match required_text(params, "text") {
@@ -17,15 +23,20 @@ pub(crate) fn handle_text_input(params: &Value) -> Response {
         Err(err) => return Response::error(err),
     };
     let normalized = normalize_input_text(&text);
-    if let Err(err) = perform_text_input(&normalized, submit) {
-        return Response::error(err);
-    }
-    Response::success(json!({
+    let ime_restore_error = match perform_text_input(&normalized, submit) {
+        Ok(error) => error,
+        Err(err) => return Response::error(err),
+    };
+    let mut payload = json!({
         "typed": true,
         "submitted": submit,
         "characters": normalized.chars().count(),
         "lines": normalized.split('\n').count(),
-    }))
+    });
+    if let Some(error) = ime_restore_error {
+        payload["ime_restore_error"] = json!(error);
+    }
+    Response::success(payload)
 }
 
 pub(crate) fn handle_key_hotkey(params: &Value) -> Response {
@@ -90,7 +101,7 @@ fn normalize_hotkey_key(key: &str) -> Result<String, String> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
-fn perform_text_input(text: &str, submit: bool) -> Result<(), String> {
+fn perform_text_input(text: &str, submit: bool) -> Result<Option<String>, String> {
     let mut enigo = Enigo::new();
     let lines: Vec<&str> = text.split('\n').collect();
     for (index, segment) in lines.iter().enumerate() {
@@ -101,29 +112,24 @@ fn perform_text_input(text: &str, submit: bool) -> Result<(), String> {
             enigo.key_click(Key::Return);
         }
     }
-    Ok(())
+    Ok(None)
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
-fn perform_text_input(_text: &str, _submit: bool) -> Result<(), String> {
+fn perform_text_input(_text: &str, _submit: bool) -> Result<Option<String>, String> {
     Err("text input is not supported on this platform".to_string())
 }
 
 #[cfg(target_os = "linux")]
-fn perform_text_input(text: &str, submit: bool) -> Result<(), String> {
+fn perform_text_input(text: &str, submit: bool) -> Result<Option<String>, String> {
     if is_wayland_session() {
-        return perform_text_input_wayland(text, submit);
+        perform_text_input_wayland(text, submit)?;
+        return Ok(None);
     }
-    let lines: Vec<&str> = text.split('\n').collect();
-    for (index, segment) in lines.iter().enumerate() {
-        if !segment.is_empty() {
-            type_text_with_xdotool(segment)?;
-        }
-        if index + 1 < lines.len() || submit {
-            trigger_xdotool_key("Return")?;
-        }
-    }
-    Ok(())
+    let window_id = active_window_id_for_xdotool()?;
+    let ime_guard = X11InputMethodGuard::activate()?;
+    let typing_result = type_lines_with_xdotool(&window_id, text, submit);
+    finalize_restore_result(typing_result, ime_guard.restore())
 }
 
 #[cfg(target_os = "linux")]
@@ -145,40 +151,20 @@ fn perform_hotkey(keys: &[String]) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn type_text_with_xdotool(text: &str) -> Result<(), String> {
-    let mut command = Command::new("xdotool");
-    command.args(["key", "--clearmodifiers", "--delay", "0"]);
-    for keysym in text_to_xdotool_keysyms(text) {
-        command.arg(keysym);
+fn finalize_restore_result(
+    typing_result: Result<(), String>,
+    restore_result: Result<(), String>,
+) -> Result<Option<String>, String> {
+    match (typing_result, restore_result) {
+        (Err(type_err), Err(restore_err)) => Err(format!(
+            "{type_err}; restore input method failed: {restore_err}"
+        )),
+        (Err(type_err), Ok(())) => Err(type_err),
+        (Ok(()), Err(restore_err)) => {
+            Ok(Some(format!("restore input method failed: {restore_err}")))
+        }
+        (Ok(()), Ok(())) => Ok(None),
     }
-    run_xdotool(command)
-}
-
-#[cfg(target_os = "linux")]
-fn trigger_xdotool_key(keysym: &str) -> Result<(), String> {
-    let mut command = Command::new("xdotool");
-    command.args(["key", "--clearmodifiers", keysym]);
-    run_xdotool(command)
-}
-
-#[cfg(target_os = "linux")]
-fn run_xdotool(mut command: Command) -> Result<(), String> {
-    let status = command
-        .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-    if status.success() {
-        return Ok(());
-    }
-    Err(format!(
-        "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-    ))
-}
-
-#[cfg(target_os = "linux")]
-fn text_to_xdotool_keysyms(text: &str) -> Vec<String> {
-    text.chars()
-        .map(|ch| format!("U{:04X}", ch as u32))
-        .collect()
 }
 
 #[cfg(target_os = "linux")]
@@ -227,49 +213,6 @@ fn perform_text_input_wayland(text: &str, submit: bool) -> Result<(), String> {
 fn perform_hotkey(_keys: &[String]) -> Result<(), String> {
     Err("hotkey input is not supported on this platform".to_string())
 }
-
 #[cfg(test)]
-mod tests {
-    #[cfg(target_os = "linux")]
-    use super::text_to_xdotool_keysyms;
-    use super::{handle_text_input, normalize_hotkey_key, normalize_input_text, parse_hotkey_keys};
-    use serde_json::json;
-
-    #[test]
-    fn normalize_input_text_flattens_crlf() {
-        assert_eq!(normalize_input_text("a\r\nb\rc"), "a\nb\nc");
-    }
-
-    #[test]
-    fn handle_text_input_rejects_empty_string() {
-        let response = handle_text_input(&json!({"text":""}));
-        assert_eq!(response.status, "error");
-        assert_eq!(response.error, "text is required");
-    }
-
-    #[test]
-    fn normalize_hotkey_key_maps_common_modifiers() {
-        assert_eq!(normalize_hotkey_key("CTRL").expect("must parse"), "ctrl");
-        assert_eq!(normalize_hotkey_key("enter").expect("must parse"), "Return");
-    }
-
-    #[test]
-    fn parse_hotkey_keys_requires_array() {
-        let err = parse_hotkey_keys(&json!({"keys":["CTRL","L"]})).expect("must parse");
-        assert_eq!(err, vec!["ctrl".to_string(), "L".to_string()]);
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn text_to_xdotool_keysyms_encodes_mixed_language() {
-        let got = text_to_xdotool_keysyms("我是 Ghost-OS 的 AI 助手");
-        assert_eq!(
-            got,
-            vec![
-                "U6211", "U662F", "U0020", "U0047", "U0068", "U006F", "U0073", "U0074", "U002D",
-                "U004F", "U0053", "U0020", "U7684", "U0020", "U0041", "U0049", "U0020", "U52A9",
-                "U624B",
-            ]
-        );
-    }
-}
+#[path = "keyboard_tests.rs"]
+mod tests;

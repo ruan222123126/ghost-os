@@ -43,12 +43,46 @@ import builtins
 
 _GHOST_ALLOWED_MODULES = set({allowed_modules_json})
 _GHOST_ORIGINAL_IMPORT = builtins.__import__
+_GHOST_IMPORT_DEPTH = 0
+_GHOST_ORIGINAL_BUILTINS = {{
+    "open": builtins.open,
+    "eval": builtins.eval,
+    "exec": builtins.exec,
+    "compile": builtins.compile,
+    "input": builtins.input,
+}}
 
 def _ghost_restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
+    global _GHOST_IMPORT_DEPTH
     root = name.split(".", 1)[0]
-    if root not in _GHOST_ALLOWED_MODULES:
+    allowed = root in _GHOST_ALLOWED_MODULES
+    if not allowed and _GHOST_IMPORT_DEPTH > 0:
+        allowed = True
+    if not allowed and isinstance(globals, dict):
+        importer_name = str(globals.get("__name__") or "")
+        importer_package = str(globals.get("__package__") or "")
+        importer_scope = importer_package or importer_name
+        if importer_scope and importer_name != "__main__":
+            importer_root = importer_scope.split(".", 1)[0]
+            if importer_root in _GHOST_ALLOWED_MODULES:
+                allowed = True
+        elif level > 0 and importer_scope:
+            importer_root = importer_scope.split(".", 1)[0]
+            allowed = importer_root in _GHOST_ALLOWED_MODULES
+    if not allowed:
         raise ImportError(f"Module '{{name}}' is not allowed in sandbox")
-    return _GHOST_ORIGINAL_IMPORT(name, globals, locals, fromlist, level)
+
+    previous_builtins = {{}}
+    for _builtin_name, _original in _GHOST_ORIGINAL_BUILTINS.items():
+        previous_builtins[_builtin_name] = getattr(builtins, _builtin_name)
+        setattr(builtins, _builtin_name, _original)
+    _GHOST_IMPORT_DEPTH += 1
+    try:
+        return _GHOST_ORIGINAL_IMPORT(name, globals, locals, fromlist, level)
+    finally:
+        _GHOST_IMPORT_DEPTH -= 1
+        for _builtin_name, _previous in previous_builtins.items():
+            setattr(builtins, _builtin_name, _previous)
 
 def _ghost_blocked_builtin(*_args, **_kwargs):
     raise PermissionError("This builtin is not allowed in sandbox")

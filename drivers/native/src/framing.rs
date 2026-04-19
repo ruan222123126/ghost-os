@@ -135,6 +135,63 @@ mod tests {
     }
 
     #[test]
+    fn read_frame_surfaces_json_decode_error() {
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&(4_u32).to_be_bytes());
+        frame.extend_from_slice(b"{bad");
+        let mut reader = Cursor::new(frame);
+        let err = read_frame(&mut reader).expect_err("must fail");
+        match err {
+            ReadFrameError::Request {
+                message,
+                request_id,
+            } => {
+                assert!(message.contains("invalid json"));
+                assert_eq!(request_id, None);
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn read_frame_preserves_request_id_when_schema_invalid() {
+        let payload = json!({
+            "action": 123,
+            "params": {},
+            "request_id": " req-99 "
+        });
+        let bytes = encode_payload(&payload);
+        let mut reader = Cursor::new(bytes);
+        let err = read_frame(&mut reader).expect_err("must fail");
+        match err {
+            ReadFrameError::Request {
+                message,
+                request_id,
+            } => {
+                assert!(message.contains("invalid request"));
+                assert_eq!(request_id, Some("req-99".to_string()));
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn read_frame_surfaces_payload_truncation_as_protocol_error() {
+        let payload = br#"{"action":"PING"}"#;
+        let mut frame = Vec::new();
+        frame.extend_from_slice(&((payload.len() as u32 + 5).to_be_bytes()));
+        frame.extend_from_slice(payload);
+        let mut reader = Cursor::new(frame);
+        let err = read_frame(&mut reader).expect_err("must fail");
+        match err {
+            ReadFrameError::Protocol(message) => {
+                assert!(message.contains("read frame payload failed"));
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
     fn write_frame_roundtrip_preserves_response() {
         let response = Response::success(json!({
             "message": "PONG"

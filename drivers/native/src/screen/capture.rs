@@ -70,25 +70,33 @@ fn select_monitor<'a>(
     monitors: &'a [Monitor],
     display_id: Option<u32>,
 ) -> Result<&'a Monitor, String> {
-    if let Some(id) = display_id {
-        return monitors
-            .iter()
-            .find(|monitor| monitor.id() == id)
-            .ok_or_else(|| {
-                format!(
-                    "display_id {id} is not found; available displays: {}",
-                    monitors
-                        .iter()
-                        .map(|monitor| monitor.id().to_string())
-                        .collect::<Vec<_>>()
-                        .join(",")
-                )
-            });
-    }
-    Ok(monitors
+    let primary = monitors
         .iter()
         .find(|monitor| monitor.is_primary())
-        .unwrap_or(&monitors[0]))
+        .unwrap_or(&monitors[0]);
+    let available_ids = monitors.iter().map(Monitor::id).collect::<Vec<_>>();
+    let selected_id = resolve_display_id(display_id, &available_ids, primary.id());
+    monitors
+        .iter()
+        .find(|monitor| monitor.id() == selected_id)
+        .ok_or_else(|| {
+            format!(
+                "selected display_id {selected_id} is not found; available displays: {}",
+                available_ids
+                    .iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        })
+}
+
+fn resolve_display_id(display_id: Option<u32>, available_ids: &[u32], primary_id: u32) -> u32 {
+    match display_id {
+        Some(requested_id) if available_ids.contains(&requested_id) => requested_id,
+        Some(_) => primary_id,
+        None => primary_id,
+    }
 }
 
 fn monitor_scale(monitor: &Monitor, width: u32, height: u32) -> (f64, f64) {
@@ -109,7 +117,7 @@ fn monitor_scale(monitor: &Monitor, width: u32, height: u32) -> (f64, f64) {
 
 #[cfg(test)]
 mod tests {
-    use super::monitor_scale;
+    use super::{monitor_scale, resolve_display_id};
     use crate::screen::types::sanitize_scale;
 
     #[test]
@@ -147,5 +155,17 @@ mod tests {
         assert_eq!(fake.scale(100, 200), (1.0, 1.0));
 
         let _ = monitor_scale;
+    }
+
+    #[test]
+    fn resolve_display_id_falls_back_to_primary_for_unknown_display() {
+        let selected = resolve_display_id(Some(999), &[67, 68], 67);
+        assert_eq!(selected, 67);
+    }
+
+    #[test]
+    fn resolve_display_id_keeps_requested_display_when_available() {
+        let selected = resolve_display_id(Some(68), &[67, 68], 67);
+        assert_eq!(selected, 68);
     }
 }

@@ -1183,6 +1183,7 @@ dependencies = [
  "ignore",
  "libc",
  "pyo3",
+ "rayon",
  "regex",
  "reqwest",
  "serde",

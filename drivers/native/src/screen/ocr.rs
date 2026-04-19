@@ -186,7 +186,9 @@ fn item_position_order(a: &OcrItem, b: &OcrItem) -> Ordering {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_tesseract_language, parse_languages, parse_tesseract_tsv};
+    use super::{
+        item_position_order, map_tesseract_language, parse_languages, parse_tesseract_tsv,
+    };
     use crate::screen::types::{ScreenBoundingBox, ScreenPoint};
     use serde_json::json;
 
@@ -201,6 +203,24 @@ mod tests {
         assert_eq!(map_tesseract_language("zh"), "chi_sim");
         assert_eq!(map_tesseract_language("en"), "eng");
         assert_eq!(map_tesseract_language("deu"), "deu");
+    }
+
+    #[test]
+    fn parse_languages_deduplicates_and_sorts() {
+        let languages = parse_languages(&json!({
+            "languages": ["EN", "zh", "eng", "zh-cn"]
+        }))
+        .expect("must parse");
+        assert_eq!(languages, vec!["chi_sim".to_string(), "eng".to_string()]);
+    }
+
+    #[test]
+    fn parse_languages_rejects_non_string_items() {
+        let err = parse_languages(&json!({
+            "languages": ["en", 1]
+        }))
+        .expect_err("must fail");
+        assert!(err.contains("non-empty strings"));
     }
 
     #[test]
@@ -223,5 +243,55 @@ mod tests {
             }
         );
         assert_eq!(items[0].center, ScreenPoint { x: 130, y: 226 });
+    }
+
+    #[test]
+    fn parse_tesseract_tsv_rejects_invalid_numeric_fields() {
+        let input = "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n\
+5\t1\t1\t1\t1\t1\tnan\t20\t40\t12\t95.5\t文件\n";
+        let err = parse_tesseract_tsv(input, 0, 0, 0.1).expect_err("must fail");
+        assert!(err.contains("decode tesseract left failed"));
+    }
+
+    #[test]
+    fn item_position_order_prefers_top_then_left() {
+        let mut items = vec![
+            crate::screen::types::OcrItem {
+                text: "B".to_string(),
+                confidence: 1.0,
+                bbox: ScreenBoundingBox {
+                    x: 20,
+                    y: 10,
+                    width: 5,
+                    height: 5,
+                },
+                center: ScreenPoint { x: 22, y: 12 },
+            },
+            crate::screen::types::OcrItem {
+                text: "A".to_string(),
+                confidence: 1.0,
+                bbox: ScreenBoundingBox {
+                    x: 10,
+                    y: 10,
+                    width: 5,
+                    height: 5,
+                },
+                center: ScreenPoint { x: 12, y: 12 },
+            },
+            crate::screen::types::OcrItem {
+                text: "C".to_string(),
+                confidence: 1.0,
+                bbox: ScreenBoundingBox {
+                    x: 5,
+                    y: 11,
+                    width: 5,
+                    height: 5,
+                },
+                center: ScreenPoint { x: 7, y: 13 },
+            },
+        ];
+        items.sort_by(item_position_order);
+        let ordered: Vec<String> = items.into_iter().map(|item| item.text).collect();
+        assert_eq!(ordered, vec!["A", "B", "C"]);
     }
 }

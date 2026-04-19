@@ -50,6 +50,11 @@ Always choose implementation path in this order:
 2. **Level 2 (API/Native)**: use native system/browser APIs.
 3. **Level 3 (Vision)**: screenshot-recognize-click as last resort only.
 
+## Agent Collaboration Strategy
+
+1. If a task can be split into independent and bounded subtasks, prefer multi-agent parallel execution.
+2. Assign clear ownership per agent (module/file scope) and keep traceability for each subtask output.
+
 ## Communication and Contract Rules
 
 1. Components communicate through a standardized message bus.

@@ -85,6 +85,17 @@ fn resolve_drag_point(x: i32, y: i32, display_id: Option<u32>) -> (i32, i32, f64
     )
 }
 
+fn drag_duration(duration_ms: i32) -> Duration {
+    Duration::from_millis(duration_ms.max(0) as u64)
+}
+
+fn map_xdotool_spawn_error(err: std::io::Error) -> String {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        return "xdotool is not installed".to_string();
+    }
+    format!("spawn xdotool failed: {err}")
+}
+
 #[cfg(target_os = "linux")]
 fn perform_mouse_drag(
     start_x: i32,
@@ -96,54 +107,36 @@ fn perform_mouse_drag(
     if super::window_guard::is_wayland_session() {
         return Err("mouse drag is not supported on Wayland".to_string());
     }
-    let status = Command::new("xdotool")
-        .args([
-            "mousemove",
-            "--sync",
-            &start_x.to_string(),
-            &start_y.to_string(),
-        ])
-        .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-    if !status.success() {
-        return Err(format!(
-            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-        ));
-    }
-    let status = Command::new("xdotool")
-        .args(["mousedown", "1"])
-        .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-    if !status.success() {
-        return Err(format!(
-            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-        ));
-    }
-    thread::sleep(Duration::from_millis(duration_ms as u64));
-    let status = Command::new("xdotool")
-        .args([
-            "mousemove",
-            "--sync",
-            &end_x.to_string(),
-            &end_y.to_string(),
-        ])
-        .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-    if !status.success() {
-        return Err(format!(
-            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-        ));
-    }
-    let status = Command::new("xdotool")
-        .args(["mouseup", "1"])
-        .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
-    if !status.success() {
-        return Err(format!(
-            "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
-        ));
-    }
+    run_xdotool_drag_step(&[
+        "mousemove",
+        "--sync",
+        &start_x.to_string(),
+        &start_y.to_string(),
+    ])?;
+    run_xdotool_drag_step(&["mousedown", "1"])?;
+    thread::sleep(drag_duration(duration_ms));
+    run_xdotool_drag_step(&[
+        "mousemove",
+        "--sync",
+        &end_x.to_string(),
+        &end_y.to_string(),
+    ])?;
+    run_xdotool_drag_step(&["mouseup", "1"])?;
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_xdotool_drag_step(args: &[&str]) -> Result<(), String> {
+    let status = Command::new("xdotool")
+        .args(args)
+        .status()
+        .map_err(map_xdotool_spawn_error)?;
+    if status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
+    ))
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -157,7 +150,7 @@ fn perform_mouse_drag(
     let mut enigo = Enigo::new();
     enigo.mouse_move_to(start_x, start_y);
     enigo.mouse_down(MouseButton::Left);
-    thread::sleep(Duration::from_millis(duration_ms as u64));
+    thread::sleep(drag_duration(duration_ms));
     enigo.mouse_move_to(end_x, end_y);
     enigo.mouse_up(MouseButton::Left);
     Ok(())
@@ -175,28 +168,5 @@ fn perform_mouse_drag(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{parse_drag_request, resolve_drag_point};
-    use crate::display_scale::record_display_scale;
-    use serde_json::json;
-
-    #[test]
-    fn parse_drag_request_defaults_duration() {
-        let request = parse_drag_request(&json!({
-            "start_x": 1,
-            "start_y": 2,
-            "end_x": 3,
-            "end_y": 4
-        }))
-        .expect("must parse");
-        assert_eq!(request.duration_ms, 150);
-    }
-
-    #[test]
-    fn resolve_drag_point_uses_display_scale() {
-        record_display_scale(9, 2.0, 2.0);
-        let (x, y, sx, sy) = resolve_drag_point(200, 100, Some(9));
-        assert_eq!((x, y), (100, 50));
-        assert_eq!((sx, sy), (2.0, 2.0));
-    }
-}
+#[path = "mouse_drag_tests.rs"]
+mod tests;

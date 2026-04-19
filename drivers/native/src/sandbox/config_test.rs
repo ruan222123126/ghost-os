@@ -1,4 +1,4 @@
-use super::{default_media_mounts, normalize_existing_dirs};
+use super::{default_media_mounts, merge_path_lists, normalize_existing_dirs, parse_path_list_csv};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -78,4 +78,35 @@ fn default_media_mounts_for_base(
 fn test_default_media_mounts_handles_unknown_user_dir() {
     let mounts = default_media_mounts(PathBuf::from("/").as_path());
     assert!(mounts.is_empty());
+}
+
+#[test]
+fn test_parse_path_list_csv_trims_and_discards_empty_items() {
+    let parsed = parse_path_list_csv(" /tmp/a, ,/tmp/b ,, /tmp/c ");
+    assert_eq!(
+        parsed,
+        vec![
+            PathBuf::from("/tmp/a"),
+            PathBuf::from("/tmp/b"),
+            PathBuf::from("/tmp/c")
+        ]
+    );
+}
+
+#[test]
+fn test_merge_path_lists_deduplicates_and_preserves_order() {
+    let merged = merge_path_lists(
+        vec!["/a".to_string(), "/b".to_string()],
+        vec!["/b".to_string(), "/c".to_string(), "/a".to_string()],
+    );
+    assert_eq!(
+        merged,
+        vec!["/a".to_string(), "/b".to_string(), "/c".to_string()]
+    );
+}
+
+#[test]
+fn test_merge_path_lists_returns_dot_when_base_and_extra_are_empty() {
+    let merged = merge_path_lists(Vec::new(), Vec::new());
+    assert_eq!(merged, vec![".".to_string()]);
 }

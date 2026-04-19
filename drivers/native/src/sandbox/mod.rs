@@ -156,25 +156,31 @@ fn normalize_existing_dirs(paths: Vec<PathBuf>) -> Vec<String> {
 }
 
 fn merge_allowed_paths_from_env(config: &mut SandboxConfig) {
-    let extra_reads =
-        normalize_existing_dirs_optional(parse_env_path_list("GHOST_NATIVE_ALLOWED_READ_PATHS"));
+    let extra_reads = normalize_existing_dirs_optional(parse_env_path_list_var(
+        "GHOST_NATIVE_ALLOWED_READ_PATHS",
+    ));
     if !extra_reads.is_empty() {
         config.allowed_read_paths =
             merge_path_lists(config.allowed_read_paths.clone(), extra_reads);
     }
 
-    let extra_writes =
-        normalize_existing_dirs_optional(parse_env_path_list("GHOST_NATIVE_ALLOWED_WRITE_PATHS"));
+    let extra_writes = normalize_existing_dirs_optional(parse_env_path_list_var(
+        "GHOST_NATIVE_ALLOWED_WRITE_PATHS",
+    ));
     if !extra_writes.is_empty() {
         config.allowed_write_paths =
             merge_path_lists(config.allowed_write_paths.clone(), extra_writes);
     }
 }
 
-fn parse_env_path_list(var_name: &str) -> Vec<PathBuf> {
+fn parse_env_path_list_var(var_name: &str) -> Vec<PathBuf> {
     let Ok(raw) = std::env::var(var_name) else {
         return Vec::new();
     };
+    parse_path_list_csv(&raw)
+}
+
+fn parse_path_list_csv(raw: &str) -> Vec<PathBuf> {
     raw.split(',')
         .map(str::trim)
         .filter(|value| !value.is_empty())
@@ -241,3 +247,5 @@ mod tools_test;
 
 #[cfg(test)]
 mod config_test;
+#[cfg(test)]
+mod diff_engine_test;

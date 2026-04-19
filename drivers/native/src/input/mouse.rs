@@ -115,6 +115,19 @@ fn button_name(button: ClickButton) -> &'static str {
     }
 }
 
+fn normalized_repeat(repeat: usize) -> usize {
+    repeat.max(1)
+}
+
+fn map_spawn_error(program: &str, err: std::io::Error, not_found_message: Option<&str>) -> String {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        return not_found_message
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{program} is not installed"));
+    }
+    format!("spawn {program} failed: {err}")
+}
+
 #[cfg(target_os = "linux")]
 fn perform_mouse_click(x: i32, y: i32, button: ClickButton, repeat: usize) -> Result<(), String> {
     if super::window_guard::is_wayland_session() {
@@ -125,7 +138,7 @@ fn perform_mouse_click(x: i32, y: i32, button: ClickButton, repeat: usize) -> Re
         ClickButton::Middle => "2",
         ClickButton::Right => "3",
     };
-    let repeat_value = repeat.max(1).to_string();
+    let repeat_value = normalized_repeat(repeat).to_string();
     let status = Command::new("xdotool")
         .args([
             "mousemove",
@@ -138,7 +151,7 @@ fn perform_mouse_click(x: i32, y: i32, button: ClickButton, repeat: usize) -> Re
             button_id,
         ])
         .status()
-        .map_err(|err| format!("spawn xdotool failed: {err}"))?;
+        .map_err(|err| map_spawn_error("xdotool", err, None))?;
     if !status.success() {
         return Err(format!(
             "xdotool exited with status {status}; ensure xdotool is installed and graphical session is active"
@@ -159,7 +172,13 @@ fn perform_mouse_click_wayland(
         ClickButton::Middle => "2",
         ClickButton::Right => "3",
     };
+    ydotool_move(x, y)?;
+    ydotool_click(button_id, normalized_repeat(repeat))?;
+    Ok(())
+}
 
+#[cfg(target_os = "linux")]
+fn ydotool_move(x: i32, y: i32) -> Result<(), String> {
     let mut move_status = Command::new("ydotool")
         .args(["mousemove", "--absolute", &x.to_string(), &y.to_string()])
         .status();
@@ -170,30 +189,22 @@ fn perform_mouse_click_wayland(
                 .status();
         }
     }
-    let status = move_status.map_err(|err| {
-        if err.kind() == std::io::ErrorKind::NotFound {
-            "ydotool is not installed (required on Wayland for mouse input)".to_string()
-        } else {
-            format!("spawn ydotool failed: {err}")
-        }
-    })?;
-    if !status.success() {
-        return Err(format!(
-            "ydotool mousemove exited with status {status}; ensure ydotoold is running"
-        ));
+    let status = move_status.map_err(|err| map_spawn_ydotool_error(err))?;
+    if status.success() {
+        return Ok(());
     }
+    Err(format!(
+        "ydotool mousemove exited with status {status}; ensure ydotoold is running"
+    ))
+}
 
-    for _ in 0..repeat.max(1) {
+#[cfg(target_os = "linux")]
+fn ydotool_click(button_id: &str, repeat: usize) -> Result<(), String> {
+    for _ in 0..repeat {
         let status = Command::new("ydotool")
             .args(["click", button_id])
             .status()
-            .map_err(|err| {
-                if err.kind() == std::io::ErrorKind::NotFound {
-                    "ydotool is not installed (required on Wayland for mouse input)".to_string()
-                } else {
-                    format!("spawn ydotool failed: {err}")
-                }
-            })?;
+            .map_err(map_spawn_ydotool_error)?;
         if !status.success() {
             return Err(format!(
                 "ydotool click exited with status {status}; ensure ydotoold is running"
@@ -201,6 +212,15 @@ fn perform_mouse_click_wayland(
         }
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn map_spawn_ydotool_error(err: std::io::Error) -> String {
+    map_spawn_error(
+        "ydotool",
+        err,
+        Some("ydotool is not installed (required on Wayland for mouse input)"),
+    )
 }
 
 #[cfg(any(target_os = "macos", target_os = "windows"))]
@@ -229,28 +249,5 @@ fn perform_mouse_click(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{button_name, parse_click_button, resolve_target_point};
-    use crate::display_scale::record_display_scale;
-    use serde_json::json;
-
-    #[test]
-    fn parse_click_button_defaults_to_left() {
-        let button = parse_click_button(&json!({})).expect("must parse");
-        assert_eq!(button_name(button), "left");
-    }
-
-    #[test]
-    fn parse_click_button_rejects_unsupported_values() {
-        let err = parse_click_button(&json!({"button":"forward"})).expect_err("must fail");
-        assert!(err.contains("button must be one of"));
-    }
-
-    #[test]
-    fn resolve_target_point_uses_cached_display_scale() {
-        record_display_scale(7, 2.0, 1.5);
-        let (x, y, sx, sy) = resolve_target_point(400, 300, Some(7));
-        assert_eq!((x, y), (200, 200));
-        assert_eq!((sx, sy), (2.0, 1.5));
-    }
-}
+#[path = "mouse_tests.rs"]
+mod tests;
