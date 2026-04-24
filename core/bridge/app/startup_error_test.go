@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestRunServeWrapsStartupErrors(t *testing.T) {
+func TestRunServeReturnsDispatchError(t *testing.T) {
 	logs := captureStartupLogs(t)
 	withRunDispatcher(t, commandDispatcher{
 		runPing: noCallPing(t),
@@ -21,8 +21,11 @@ func TestRunServeWrapsStartupErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected serve startup error")
 	}
-	if !strings.Contains(err.Error(), "serve dispatch failed") {
-		t.Fatalf("expected serve startup wrapper, got %v", err)
+	if strings.Contains(err.Error(), "serve dispatch failed") {
+		t.Fatalf("dispatch error should not add extra run wrapper, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "serve command failed") {
+		t.Fatalf("expected dispatch-stage serve wrapper, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "listen failed") {
 		t.Fatalf("expected wrapped cause, got %v", err)

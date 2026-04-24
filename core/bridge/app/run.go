@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"strings"
 )
@@ -17,6 +16,7 @@ func Run(ctx context.Context, args []string) (string, error) {
 		return dispatcher.dispatch(ctx, args)
 	}
 
+	// startup checkpoint 仅用于 serve 启动路径，便于定位长生命周期服务初始化阶段。
 	log.Print("startup checkpoint stage=dispatch status=begin")
 	output, err := dispatcher.dispatch(ctx, args)
 	if err == nil {
@@ -29,9 +29,8 @@ func Run(ctx context.Context, args []string) (string, error) {
 		return "", err
 	}
 
-	wrapped := fmt.Errorf("serve dispatch failed: %w", err)
-	log.Printf("startup checkpoint stage=dispatch status=error error=%v", wrapped)
-	return "", wrapped
+	log.Printf("startup checkpoint stage=dispatch status=error error=%v", err)
+	return "", err
 }
 
 // IsServeSubcommand 返回参数是否表示 serve 子命令。
