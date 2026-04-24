@@ -21,7 +21,6 @@
 
 | 工具 | 实测结果 | 结论 | 关键信息 |
 |---|---|---|---|
-| `read_and_summarize` | `tool_result.status=success` | 可用 | 成功读取并总结 `go.mod` |
 | `send_file` | `tool_result.status=error` | 需调试 | `EXPORT_FILE ... path not in allowed directories` |
 | `script_exec` | `tool_result.status=success` | 可用 | 脚本输出正常返回 |
 | `set_project_root` | `tool_result.status=success` | 可用 | 成功持久化并即时生效 |
@@ -38,7 +37,7 @@
 | `ask_human` | API 返回 `awaiting_human` | 可用 | 返回 `question_id/prompt/options`，进入等待人工状态 |
 
 ## 汇总
-- 可用（11）：`read_and_summarize`、`script_exec`、`set_project_root`、`web_search`、`feed_manage`、`rss_fetch`、`screen_action`、`text_input`、`task_manage`、`tfind`、`ask_human`
+- 可用（10）：`script_exec`、`set_project_root`、`web_search`、`feed_manage`、`rss_fetch`、`screen_action`、`text_input`、`task_manage`、`tfind`、`ask_human`
 - 需配置/前置条件（2）：`codex_cli`、`browser_control`
 - 需调试（2）：`send_file`、`computer_use`
 

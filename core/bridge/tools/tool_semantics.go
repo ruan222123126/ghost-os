@@ -18,19 +18,7 @@ func (ProUpdateRecordTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (ReadAndSummarizeTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{ReadOnly: true}
-}
-
 func (ScriptExecTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (SendFileTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (SetProjectRootTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 

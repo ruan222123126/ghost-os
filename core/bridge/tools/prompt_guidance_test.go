@@ -7,16 +7,15 @@ import (
 
 func TestFormatPromptGuidanceForCatalog_UsesScopedToolHints(t *testing.T) {
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec", "screen_action", ToolSearchToolName} {
+	for _, name := range []string{"ask_human", "script_exec", "screen_action", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
 
-	scoped := NewScopedCatalog(registry, []string{"ask_human", "read_and_summarize", "script_exec", ToolSearchToolName})
+	scoped := NewScopedCatalog(registry, []string{"ask_human", "script_exec", ToolSearchToolName})
 	guidance := FormatPromptGuidanceForCatalog(scoped)
 
 	for _, snippet := range []string{
 		"structured tool schema",
-		"`read_and_summarize`",
 		"`script_exec`",
 		"`ask_human`",
 		"`action=search`",
@@ -61,23 +60,6 @@ func TestFormatPromptGuidanceForCatalog_IncludesToolSearchWorkflowOnlyWhenVisibl
 	}
 }
 
-func TestFormatPromptGuidanceForCatalog_IncludesRSSPipelineOnlyWhenVisible(t *testing.T) {
-	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "feed_manage"} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	withRSS := FormatPromptGuidanceForCatalog(registry)
-	if !strings.Contains(withRSS, "RSS inbox polling and AI filtering") {
-		t.Fatalf("expected RSS guidance when rss tools are visible, got %q", withRSS)
-	}
-
-	withoutRSS := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human"}))
-	if strings.Contains(withoutRSS, "RSS inbox polling and AI filtering") {
-		t.Fatalf("expected RSS guidance to stay hidden when rss tools are not visible, got %q", withoutRSS)
-	}
-}
-
 func TestFormatPromptGuidanceForCatalog_AskHumanRequiresCustomOption(t *testing.T) {
 	registry := NewRegistry()
 	registry.Register(&mockTool{name: "ask_human"})
@@ -88,56 +70,6 @@ func TestFormatPromptGuidanceForCatalog_AskHumanRequiresCustomOption(t *testing.
 	}
 	if strings.Contains(guidance, "mutation { ask_human(") {
 		t.Fatalf("expected native ask_human guidance to avoid GraphQL examples, got %q", guidance)
-	}
-}
-
-func TestFormatPromptGuidanceForCatalog_IncludesMemoryWorkflowWhenVisible(t *testing.T) {
-	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "memory_manage"} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	guidance := FormatPromptGuidanceForCatalog(registry)
-	for _, snippet := range []string{
-		"`memory_manage`",
-		"stable URI",
-		"`create` for the first write",
-		"`system://index`",
-		"do not guess URIs",
-	} {
-		if !strings.Contains(guidance, snippet) {
-			t.Fatalf("expected memory guidance to contain %q, got %q", snippet, guidance)
-		}
-	}
-	if strings.Contains(guidance, "mutation { memory_manage(") {
-		t.Fatalf("expected native memory guidance to avoid GraphQL examples, got %q", guidance)
-	}
-}
-
-func TestFormatPromptGuidanceForCatalog_WorkspaceGuidanceRequiresBothTools(t *testing.T) {
-	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "read_and_summarize", "script_exec"} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	withBoth := FormatPromptGuidanceForCatalog(registry)
-	if !strings.Contains(withBoth, "Use `read_and_summarize` for broad local triage, then use `script_exec`") {
-		t.Fatalf("expected combined workspace guidance to mention both tools, got %q", withBoth)
-	}
-	if strings.Contains(withBoth, "mutation { script_exec(") {
-		t.Fatalf("expected native workspace guidance to avoid GraphQL examples, got %q", withBoth)
-	}
-
-	onlyScriptExec := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human", "script_exec"}))
-	if strings.Contains(onlyScriptExec, "`script_exec` for exact workspace reads") ||
-		strings.Contains(onlyScriptExec, "`read_and_summarize` for broad local triage") {
-		t.Fatalf("expected workspace guidance to stay hidden when read_and_summarize is not visible, got %q", onlyScriptExec)
-	}
-
-	onlyReadAndSummarize := FormatPromptGuidanceForCatalog(NewScopedCatalog(registry, []string{"ask_human", "read_and_summarize"}))
-	if strings.Contains(onlyReadAndSummarize, "`read_and_summarize` for broad local triage") ||
-		strings.Contains(onlyReadAndSummarize, "broad multi-file triage") {
-		t.Fatalf("expected workspace guidance to stay hidden when script_exec is not visible, got %q", onlyReadAndSummarize)
 	}
 }
 
@@ -156,9 +88,6 @@ func TestFormatPromptGuidanceForCatalog_IncludesScriptExecUsageHintsWhenVisible(
 			t.Fatalf("expected script_exec guidance to contain %q, got %q", snippet, guidance)
 		}
 	}
-	if strings.Contains(guidance, "`read_and_summarize` for broad local triage") {
-		t.Fatalf("expected workspace-combo guidance to stay hidden when read_and_summarize is not visible, got %q", guidance)
-	}
 }
 
 func TestFormatPromptGuidanceForCatalog_NativeCatalogOmitsGraphQLSyntax(t *testing.T) {
@@ -166,7 +95,6 @@ func TestFormatPromptGuidanceForCatalog_NativeCatalogOmitsGraphQLSyntax(t *testi
 	for _, name := range []string{
 		AskHumanToolName,
 		ToolSearchToolName,
-		"read_and_summarize",
 		"script_exec",
 	} {
 		registry.Register(&mockTool{name: name})
@@ -190,7 +118,6 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 	for _, name := range []string{
 		AskHumanToolName,
 		ToolSearchToolName,
-		"memory_manage",
 		"screen_action",
 		"script_exec",
 	} {
@@ -210,9 +137,6 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 		"same user turn on the next completion",
 		"`tfind(action: list)` only to inspect the current dynamic tool/skill load state",
 		"Never repeat or fabricate `[TOOL_TAG_RESULT]`",
-		"`memory_manage` only for explicit long-term notes",
-		"Minimal `memory_manage` create tag example",
-		`<t:ID>{"operation":"create","uri":"user://preferences/editor","content":"Prefer vim keybindings"}</t>`,
 		"`screen_action.click_text`",
 		"use plain Python plus the injected `tools` object",
 		"Do not use `import tools` or `from tools...`",
@@ -249,19 +173,17 @@ func TestFormatPromptGuidanceForCatalog_IncludesWebRooterHintWhenVisible(t *test
 	}
 }
 
-func TestFormatPromptGuidanceForCatalog_IncludesTaskFeedAndCodexActionHints(t *testing.T) {
+func TestFormatPromptGuidanceForCatalog_IncludesTaskAndCodexActionHints(t *testing.T) {
 	registry := NewRegistry()
-	for _, name := range []string{"task_manage", "feed_manage", "codex_cli"} {
+	for _, name := range []string{"task_manage", "codex_cli"} {
 		registry.Register(&mockTool{name: name})
 	}
 
 	guidance := FormatPromptGuidanceForCatalog(registry)
 	for _, snippet := range []string{
 		"`task_manage` operation must be one of: create, update, delete, list, get.",
-		"`feed_manage` operation must be one of: subscribe, list, update, unsubscribe.",
 		"`codex_cli` `op` must be one of: start, resume, fork, status (not `exec`).",
 		"`task_manage` requires `id` for update/delete/get",
-		"`feed_manage` requires `url` for subscribe",
 		"`codex_cli` requires `prompt` for start/resume/fork",
 	} {
 		if !strings.Contains(guidance, snippet) {

@@ -96,11 +96,11 @@ tool_selector_recent_messages = 6
 # - if tool_allowlist is empty, no tools are resident by default
 # - allowlist tools are always forced into the final runnable set
 # - blocklist tools are always removed from the final runnable set
-# tool_allowlist = ["script_exec", "read_and_summarize"]
+# tool_allowlist = ["script_exec", "web_search"]
 # tool_blocklist = ["web_search"]
 # Workflow task tool nodes are unrestricted by default.
 # Set workflow_tool_allowlist only when you need explicit restrictions.
-# Tools that require an active session, such as ask_human, tfind, and send_file,
+# Tools that require an active session, such as ask_human and tfind,
 # are rejected from this list at config-load time.
 # workflow_tool_allowlist = ["script_exec", "web_search"]
 

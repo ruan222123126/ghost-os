@@ -111,18 +111,11 @@ func (sc *ScopedCatalog) ToolDefs() []llm.ToolDef {
 // GetToolMetadata 返回稳定顺序的 selector 元数据清单。
 func GetToolMetadata() []ToolMetadata {
 	return []ToolMetadata{
-		{Name: "read_and_summarize", Domain: "file", Tags: []string{"read", "summarize", "batch", "triage"}, ShortDesc: "Read many files and summarize."},
-		{Name: "send_file", Domain: "file", Tags: []string{"export", "download", "artifact"}, ShortDesc: "Export a file artifact."},
-		{Name: "set_project_root", Domain: "workspace", Tags: []string{"root", "workspace", "config"}, ShortDesc: "Set the workspace root."},
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
+		{Name: "image_generate", Domain: "web", Tags: []string{"image", "generation", "artifact", "openai"}, ShortDesc: "Generate images from a text prompt."},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
 		{Name: webRooterToolName, Domain: "web", Tags: []string{"research", "citation", "crawl", "academic"}, ShortDesc: "Citation-rich web research via external web-rooter service."},
-		{Name: "feed_manage", Domain: "web", Tags: []string{"feed", "rss", "manage", "crud"}, ShortDesc: "Manage RSS/Atom sources."},
-		{Name: "rss_fetch", Domain: "web", Tags: []string{"feed", "rss", "atom", "updates"}, ShortDesc: "Fetch one RSS/Atom feed."},
-		{Name: "memory_manage", Domain: "memory", Tags: []string{"memory", "store", "recall", "crud"}, ShortDesc: "CRUD explicit memory."},
-		{Name: "memory_learned_list", Domain: "memory", Tags: []string{"memory", "learned", "read", "debug"}, ShortDesc: "List learned memory."},
-		{Name: "memory_recall_debug", Domain: "memory", Tags: []string{"memory", "recall", "debug", "read"}, ShortDesc: "Inspect memory recall."},
 		{Name: screenControlToolName, Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "desktop", "gui"}, ShortDesc: "Unified screen control entrypoint."},
 		{Name: "text_input", Domain: "screen", Tags: []string{"input", "text", "keyboard", "native"}, ShortDesc: "Type into the focused field."},
 		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}, ShortDesc: "Manage scheduled tasks."},

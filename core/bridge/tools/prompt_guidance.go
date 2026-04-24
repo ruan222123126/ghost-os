@@ -12,37 +12,15 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 	if preamble := promptGuidancePreamble(catalog); preamble != "" {
 		lines = append(lines, preamble)
 	}
-	lines = append(lines, rssPromptGuidance(names)...)
 	lines = append(lines, scriptExecPromptGuidance(protocol, names)...)
-	lines = append(lines, workspacePromptGuidance(names)...)
-	lines = append(lines, memoryPromptGuidance(protocol, names)...)
 	lines = append(lines, toolSearchPromptGuidance(protocol, names)...)
 	lines = append(lines, humanPromptGuidance(protocol, names)...)
 	lines = append(lines, webRooterPromptGuidance(names)...)
 	lines = append(lines, taskManagePromptGuidance(names)...)
-	lines = append(lines, feedManageOperationPromptGuidance(names)...)
 	lines = append(lines, codexCLIPromptGuidance(names)...)
 	lines = append(lines, screenControlPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
 	return strings.Join(lines, "\n")
-}
-
-func rssPromptGuidance(names map[string]bool) []string {
-	if !names["feed_manage"] && !names["rss_fetch"] {
-		return nil
-	}
-	return []string{
-		"- RSS inbox polling and AI filtering are backend system pipelines. Use visible RSS tools only for explicit feed management or feed retrieval work.",
-	}
-}
-
-func workspacePromptGuidance(names map[string]bool) []string {
-	if !names["script_exec"] || !names["read_and_summarize"] {
-		return nil
-	}
-	return []string{
-		"- Use `read_and_summarize` for broad local triage, then use `script_exec` for exact reads, searches, edits, and shell/script work.",
-	}
 }
 
 func scriptExecPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
@@ -57,25 +35,6 @@ func scriptExecPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 	}
 	if protocol == promptGuidanceProtocolGraphQL {
 		lines = append(lines, "- Minimal `script_exec` tag example: `<t:ID>{\"script\":\"print(\\\"ok\\\")\"}</t>` (replace `ID` with the listed tool id).")
-	}
-	return lines
-}
-
-func memoryPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool) []string {
-	if !names["memory_manage"] {
-		return nil
-	}
-	lines := []string{
-		"- Use `memory_manage` only for explicit long-term notes that should persist by stable URI.",
-		"- Prefer URIs like `user://preferences/editor` or `project://roadmap/current`; use `create` for the first write.",
-		"- Before `update` or `delete`, first confirm the exact URI with `read`, `list`, or `read` on `system://index`; do not guess URIs.",
-		"- `system://index` and `system://recent` are read-only discovery entries.",
-	}
-	if protocol == promptGuidanceProtocolGraphQL {
-		lines = append(
-			lines,
-			"- Minimal `memory_manage` create tag example: `<t:ID>{\"operation\":\"create\",\"uri\":\"user://preferences/editor\",\"content\":\"Prefer vim keybindings\"}</t>`.",
-		)
 	}
 	return lines
 }
@@ -144,16 +103,6 @@ func taskManagePromptGuidance(names map[string]bool) []string {
 	return []string{
 		"- `task_manage` operation must be one of: create, update, delete, list, get.",
 		"- `task_manage` requires `id` for update/delete/get; `message` is required for create.",
-	}
-}
-
-func feedManageOperationPromptGuidance(names map[string]bool) []string {
-	if !names["feed_manage"] {
-		return nil
-	}
-	return []string{
-		"- `feed_manage` operation must be one of: subscribe, list, update, unsubscribe.",
-		"- `feed_manage` requires `url` for subscribe and `feed_id` for update/unsubscribe.",
 	}
 }
 

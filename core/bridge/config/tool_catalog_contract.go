@@ -7,18 +7,11 @@ const (
 )
 
 var configuredToolCatalog = []string{
-	"read_and_summarize",
-	"send_file",
-	"set_project_root",
 	"script_exec",
 	"codex_cli",
+	"image_generate",
 	"web_search",
 	"web_rooter",
-	"feed_manage",
-	"rss_fetch",
-	"memory_manage",
-	"memory_learned_list",
-	"memory_recall_debug",
 	"screen_control",
 	"text_input",
 	"task_manage",
@@ -29,5 +22,5 @@ var configuredToolCatalog = []string{
 var workflowToolDenylist = map[string]string{
 	configToolNameAskHuman: "requires an active session",
 	configToolNameTFind:    "requires an active session",
-	"send_file":            "requires an active session",
+	"image_generate":       "requires an active session",
 }

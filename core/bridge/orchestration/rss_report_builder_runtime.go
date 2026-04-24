@@ -13,9 +13,7 @@ import (
 
 var defaultRSSReportToolScope = []string{
 	"script_exec",
-	"read_and_summarize",
 	"web_search",
-	"rss_fetch",
 }
 
 type runtimeRSSReportRunner struct {

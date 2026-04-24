@@ -8,18 +8,11 @@ import (
 func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 	metadata := GetToolMetadata()
 	expected := []string{
-		"read_and_summarize",
-		"send_file",
-		"set_project_root",
 		"script_exec",
 		"codex_cli",
+		"image_generate",
 		"web_search",
 		"web_rooter",
-		"feed_manage",
-		"rss_fetch",
-		"memory_manage",
-		"memory_learned_list",
-		"memory_recall_debug",
 		"screen_control",
 		"text_input",
 		"task_manage",
