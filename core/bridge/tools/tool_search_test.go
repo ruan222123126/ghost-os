@@ -37,13 +37,13 @@ type toolSearchResponse struct {
 
 func TestToolSearchTool_SearchLoadListAndUnload(t *testing.T) {
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "send_file", "script_exec", "web_search", ToolSearchToolName} {
+	for _, name := range []string{"ask_human", "codex_cli", "script_exec", "web_search", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
 
 	tool := NewToolSearchTool(registry, VisibilityOptions{
 		ToolSearchEnabled: true,
-		Allowlist:         []string{"send_file"},
+		Allowlist:         []string{"codex_cli"},
 	}, 3)
 
 	sess := session.NewSession("")
@@ -87,13 +87,13 @@ func TestToolSearchTool_SearchLoadListAndUnload(t *testing.T) {
 
 func TestToolSearchTool_SearchMatchesNaturalLanguageQuery(t *testing.T) {
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "send_file", "screen_control", "web_search", ToolSearchToolName} {
+	for _, name := range []string{"ask_human", "codex_cli", "screen_control", "web_search", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
 
 	tool := NewToolSearchTool(registry, VisibilityOptions{
 		ToolSearchEnabled: true,
-		Allowlist:         []string{"send_file"},
+		Allowlist:         []string{"codex_cli"},
 	}, 3)
 
 	sess := session.NewSession("")
@@ -126,12 +126,12 @@ func TestToolSearchTool_SkillKindSearchLoadListAndUnload(t *testing.T) {
 		"policy:\n  allow_implicit_invocation: true\ndependencies:\n  tools:\n    - web_search\n",
 	)
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "send_file", "script_exec", "web_search", ToolSearchToolName} {
+	for _, name := range []string{"ask_human", "codex_cli", "script_exec", "web_search", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
 	tool := NewToolSearchTool(
 		registry,
-		VisibilityOptions{ToolSearchEnabled: true, Allowlist: []string{"send_file"}},
+		VisibilityOptions{ToolSearchEnabled: true, Allowlist: []string{"codex_cli"}},
 		3,
 		ToolSearchOptions{
 			ProjectRoot: repoRoot,
@@ -185,12 +185,12 @@ func TestToolSearchTool_SkillSearchIncludesDiscoveryErrors(t *testing.T) {
 		"",
 	)
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "send_file", ToolSearchToolName} {
+	for _, name := range []string{"ask_human", "codex_cli", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
 	tool := NewToolSearchTool(
 		registry,
-		VisibilityOptions{ToolSearchEnabled: true, Allowlist: []string{"send_file"}},
+		VisibilityOptions{ToolSearchEnabled: true, Allowlist: []string{"codex_cli"}},
 		3,
 		ToolSearchOptions{
 			ProjectRoot: repoRoot,

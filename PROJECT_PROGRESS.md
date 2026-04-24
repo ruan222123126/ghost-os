@@ -17,7 +17,7 @@
 
 ## 当前可用能力
 - 会话：创建、流式输出、持久化、恢复、分页历史、草稿态展示。
-- 工具：`script_exec`、`screen_action`、`memory_manage`、`rss_fetch`、`web_search`、`image_generate`、`tfind` 可运行，`read_and_summarize` 已从运行时与契约移除；`screen_action` 已为 OCR/icon 链路增加短 TTL 截图复用（`reuse_cache`/`cache_ttl_ms`），降低高频识别场景重复截图带来的闪屏感。
+- 工具：`script_exec`、`screen_action`、`web_search`、`image_generate`、`tfind` 可运行，`read_and_summarize` 已从运行时与契约移除；`screen_action` 已为 OCR/icon 链路增加短 TTL 截图复用（`reuse_cache`/`cache_ttl_ms`），降低高频识别场景重复截图带来的闪屏感。
 - 任务：`agent_message` 与 `workflow` 基线可用，支持创建、查询、调度、手动执行；Web bridge 已修复无 body POST 透传，任务“运行”按钮不再误报 `invalid JSON body`。
 - Agent：支持后端 `mode=plan`（仅输出编排文本，禁止工具与任务执行）。
 - Workflow：`if/loop` 运行时与画布编辑可用；工具节点按 `input_schema` 固定参数；支持节点复制与连线编辑；`screen_control` 已收敛为 atomic-only，屏幕编排动作已移除 `ocr_scan`、将 `click_text` 收敛为 `find_text`、并支持 `click` 坐标编辑后直连原子点击；`find_icon` 支持模板上传与即时识别预览，预览请求默认 `max_results=1`，native 匹配在 single-result 路径并行化+提前剪枝，缓解“检测中”长时间卡住；`hover_after_match` 现在会在前端测试与工作流运行时都透传为真实 `MOUSE_MOVE` 悬停，若 native 产物过旧则显式提示重编 `drivers/native`；运行时仍支持 `workflow_template_data_url` 自动落盘并输出 `exists/match_count/primary_match` 便于流程判断。

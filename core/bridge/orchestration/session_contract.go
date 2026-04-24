@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
-	"ghost-os/bridge/artifacts"
 	"ghost-os/bridge/llm"
 	bridgesession "ghost-os/bridge/session"
 )
@@ -106,23 +105,6 @@ func projectToolSessionMessage(payload *sessionMessage, rawText string) {
 	if !ok {
 		payload.Text = rawText
 		return
-	}
-
-	if sendFileResult, ok := decodeSessionFileResult(result); ok {
-		payload.Content = []sessionContentPart{{
-			Type: "file",
-			File: &sessionFileContent{
-				ArtifactID:  sendFileResult.Artifact.ArtifactID,
-				Name:        sendFileResult.Artifact.Name,
-				MimeType:    sendFileResult.Artifact.MimeType,
-				Bytes:       int(sendFileResult.Artifact.Bytes),
-				SHA256:      sendFileResult.Artifact.SHA256,
-				DownloadURL: sendFileResult.Artifact.DownloadURL,
-				SourcePath:  sendFileResult.Artifact.SourcePath,
-				Note:        sendFileResult.Artifact.Note,
-			},
-		}}
-		result.Output = strings.TrimSpace(sendFileResult.Message)
 	}
 
 	humanInteraction := decodeSessionHumanInteraction(result)
@@ -268,11 +250,4 @@ func cloneSessionHumanInteractionOptions(options []askHumanOption) []askHumanOpt
 		return nil
 	}
 	return cloned
-}
-
-func decodeSessionFileResult(result agent.ToolResultEnvelope) (artifacts.SendFileResult, bool) {
-	if strings.TrimSpace(result.Tool) != "send_file" || strings.TrimSpace(result.Output) == "" {
-		return artifacts.SendFileResult{}, false
-	}
-	return artifacts.DecodeSendFileResult(result.Output)
 }

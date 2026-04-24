@@ -60,13 +60,13 @@ func TestNormalizeConfiguredToolLists_AllowsBlockingAskHumanAndToolSearch(t *tes
 func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) {
 	policy := bridgeruntime.NewToolSelectionPolicy(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
-			Allowlist: []string{"send_file"},
+			Allowlist: []string{"codex_cli"},
 			Blocklist: []string{"script_exec"},
 		},
 	})
 
-	selected := policy.Apply([]string{"ask_human", "script_exec", "send_file", "web_search"}, []string{"script_exec", "web_search"})
-	expected := []string{"send_file", "web_search"}
+	selected := policy.Apply([]string{"ask_human", "script_exec", "codex_cli", "web_search"}, []string{"script_exec", "web_search"})
+	expected := []string{"codex_cli", "web_search"}
 	if len(selected) != len(expected) {
 		t.Fatalf("unexpected tool count: got %v want %v", selected, expected)
 	}
@@ -85,7 +85,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_HasNoResidentToolsWithoutAllowli
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	for _, name := range []string{"script_exec", "ask_human", "send_file", "web_search"} {
+	for _, name := range []string{"script_exec", "ask_human", "codex_cli", "web_search"} {
 		if catalog.Get(name) != nil {
 			t.Fatalf("expected %q to stay hidden without allowlist, got visible catalog", name)
 		}
@@ -111,13 +111,13 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWit
 	if catalog.Get("script_exec") == nil {
 		t.Fatal("expected allowlisted tool to remain available")
 	}
-	if catalog.Get("ask_human") != nil || catalog.Get("web_search") != nil || catalog.Get("send_file") != nil {
+	if catalog.Get("ask_human") != nil || catalog.Get("web_search") != nil || catalog.Get("codex_cli") != nil {
 		t.Fatalf("expected non-allowlisted tools to stay hidden")
 	}
 }
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *testing.T) {
-	selector := &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "subset", Tools: []string{"send_file"}, Confidence: 0.9}}
+	selector := &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "subset", Tools: []string{"codex_cli"}, Confidence: 0.9}}
 	preparer := &sessionTurnPreparer{selectorFactory: func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine { return selector }}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
@@ -125,7 +125,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 			Mode:      "llm",
 			Allowlist: []string{"ask_human"},
 		},
-		MaxTurns: 6,
+		MaxTurns:   6,
 		PromptsDir: filepath.Join(t.TempDir(), "prompts"),
 	})
 
@@ -133,7 +133,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	if catalog.Get("ask_human") == nil || catalog.Get("send_file") == nil {
+	if catalog.Get("ask_human") == nil || catalog.Get("codex_cli") == nil {
 		t.Fatal("expected resident and selector-selected tools to remain in scoped subset")
 	}
 	for _, name := range []string{"web_search", "script_exec", "tfind"} {
@@ -171,7 +171,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOuts
 	if containsToolName(available, "script_exec") {
 		t.Fatalf("expected selector-visible catalog to exclude blocked tool, got %v", available)
 	}
-	for _, name := range []string{"ask_human", "send_file", "web_search"} {
+	for _, name := range []string{"ask_human", "codex_cli", "web_search"} {
 		if !containsToolName(available, name) {
 			t.Fatalf("expected selector-visible catalog to include %q outside strict mode, got %v", name, available)
 		}
@@ -203,7 +203,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 	if catalog.Get("script_exec") == nil {
 		t.Fatal("expected allowlisted tool to remain available")
 	}
-	if catalog.Get("web_search") != nil || catalog.Get("send_file") != nil {
+	if catalog.Get("web_search") != nil || catalog.Get("codex_cli") != nil {
 		t.Fatal("expected non-allowlisted tools to be hidden")
 	}
 	if catalog.Get("ask_human") != nil {
@@ -218,7 +218,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
-			Allowlist: []string{"send_file", "tfind"},
+			Allowlist: []string{"codex_cli", "tfind"},
 		},
 		ToolSearch: bridgeconfig.ToolSearchConfig{
 			Enabled:   true,
@@ -231,7 +231,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	for _, name := range []string{"send_file", "tfind"} {
+	for _, name := range []string{"codex_cli", "tfind"} {
 		if catalog.Get(name) == nil {
 			t.Fatalf("expected %q to remain visible", name)
 		}
@@ -251,7 +251,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithout
 			Enabled: true,
 			Mode:    "llm",
 		},
-		MaxTurns: 6,
+		MaxTurns:   6,
 		PromptsDir: filepath.Join(t.TempDir(), "prompts"),
 	})
 
@@ -262,7 +262,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithout
 	if catalog.Get("script_exec") == nil {
 		t.Fatal("expected selector to enable non-resident tool")
 	}
-	for _, name := range []string{"ask_human", "send_file", "web_search"} {
+	for _, name := range []string{"ask_human", "codex_cli", "web_search"} {
 		if catalog.Get(name) != nil {
 			t.Fatalf("expected %q to stay hidden outside scoped subset", name)
 		}

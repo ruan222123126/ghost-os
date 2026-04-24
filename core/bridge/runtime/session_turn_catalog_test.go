@@ -25,7 +25,7 @@ func (m *catalogMockTool) Execute(context.Context, json.RawMessage, string) (str
 
 func TestSessionTurnCatalog_ExposesLoadedToolsImmediately(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "send_file", "web_search", "tfind"} {
+	for _, name := range []string{"ask_human", "codex_cli", "web_search", "tfind"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
@@ -33,7 +33,7 @@ func TestSessionTurnCatalog_ExposesLoadedToolsImmediately(t *testing.T) {
 	sess.AdvanceToolTurn(3)
 	sess.EnsureDynamicToolLoaded("web_search", "tfind")
 
-	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "send_file", "tfind"}, sess, 3, false)
+	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "codex_cli", "tfind"}, sess, 3, false)
 	if catalog.Get("web_search") == nil {
 		t.Fatal("expected loaded tool to become available immediately")
 	}
@@ -41,7 +41,7 @@ func TestSessionTurnCatalog_ExposesLoadedToolsImmediately(t *testing.T) {
 
 func TestSessionTurnCatalog_HidesToolSearchFromSelector(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "send_file", "web_search", "tfind"} {
+	for _, name := range []string{"ask_human", "codex_cli", "web_search", "tfind"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
@@ -50,7 +50,7 @@ func TestSessionTurnCatalog_HidesToolSearchFromSelector(t *testing.T) {
 	sess.EnsureDynamicToolLoaded("web_search", "tfind")
 	sess.AdvanceToolTurn(3)
 
-	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "send_file", "tfind"}, sess, 3, true)
+	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "codex_cli", "tfind"}, sess, 3, true)
 	if catalog.Get("tfind") != nil {
 		t.Fatal("expected selector catalog to exclude tfind")
 	}

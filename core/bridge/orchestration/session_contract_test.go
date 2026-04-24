@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"ghost-os/bridge/agent"
-	"ghost-os/bridge/artifacts"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
 )
@@ -99,55 +98,6 @@ func TestBuildSessionMessagePayloadProjectsAnsweredAskHuman(t *testing.T) {
 	}
 	if payload.HumanInteraction.Answer != "PostgreSQL" {
 		t.Fatalf("unexpected answer: got %q want %q", payload.HumanInteraction.Answer, "PostgreSQL")
-	}
-}
-
-func TestBuildSessionMessagePayloadProjectsSendFileAttachment(t *testing.T) {
-	result, err := artifacts.EncodeSendFileResult(artifacts.SendFileResult{
-		Message: "Sent file: report.txt",
-		Artifact: artifacts.PublicSessionFileArtifact{
-			ArtifactID:  "artifact-1",
-			Name:        "report.txt",
-			MimeType:    "text/plain",
-			Bytes:       12,
-			SHA256:      "abc123",
-			DownloadURL: "/api/sessions/session-1/artifacts/artifact-1",
-			SourcePath:  "/tmp/report.txt",
-			Note:        "share with the client",
-		},
-	})
-	if err != nil {
-		t.Fatalf("encode send_file result: %v", err)
-	}
-
-	payload := buildSessionMessagePayload(7, llm.Message{
-		Role: llm.RoleTool,
-		Text: agent.FormatToolResult("send_file", "trace-file", result, nil),
-	})
-	if payload.Index != 7 {
-		t.Fatalf("unexpected index: got %d want %d", payload.Index, 7)
-	}
-
-	if payload.ToolResult == nil {
-		t.Fatal("expected tool_result projection")
-	}
-	if payload.ToolResult.Output != "Sent file: report.txt" {
-		t.Fatalf("unexpected tool output: %q", payload.ToolResult.Output)
-	}
-	if payload.Text != "Sent file: report.txt" {
-		t.Fatalf("unexpected projected text: %q", payload.Text)
-	}
-	if len(payload.Content) != 1 || payload.Content[0].File == nil {
-		t.Fatalf("expected file content projection, got %+v", payload.Content)
-	}
-	if payload.Content[0].Type != "file" {
-		t.Fatalf("unexpected content type: %q", payload.Content[0].Type)
-	}
-	if payload.Content[0].File.ArtifactID != "artifact-1" {
-		t.Fatalf("unexpected artifact id: %q", payload.Content[0].File.ArtifactID)
-	}
-	if payload.Content[0].File.DownloadURL != "/api/sessions/session-1/artifacts/artifact-1" {
-		t.Fatalf("unexpected download URL: %q", payload.Content[0].File.DownloadURL)
 	}
 }
 
