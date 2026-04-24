@@ -47,7 +47,7 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunSt
 		return state, err
 	}
 
-	history := a.history.Clone()
+	history := cloneHistoryForRun(a.history)
 	lifecycle = a.streamLifecycle
 	events := newAgentEventEmitter(sink, lifecycle.SessionID)
 	return agentRunState{
@@ -62,6 +62,17 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunSt
 		lifecycle:              lifecycle,
 		strictToolCallProtocol: a.strictToolCallProtocol,
 	}, nil
+}
+
+func cloneHistoryForRun(history *History) *History {
+	cloned := history.Clone()
+	maxMessages := history.maxMessages
+	if maxMessages <= 0 {
+		maxMessages = DefaultMaxHistoryMessages
+	}
+	cloned.maxMessages = maxMessages
+	cloned.trimToMax()
+	return cloned
 }
 
 func validateAgentForRun(a *Agent) error {

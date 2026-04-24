@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -163,7 +164,10 @@ func (a *Agent) runWithSink(ctx context.Context, userInput llm.Message, traceID 
 		runErr := fmt.Errorf("initialize agent runtime: %w", err)
 		if sink != nil {
 			if emitErr := state.terminalRunError(ctx, 0, runErr); emitErr != nil {
-				return "", emitErr
+				if errors.Is(emitErr, runErr) {
+					return "", runErr
+				}
+				return "", errors.Join(runErr, fmt.Errorf("emit runtime initialization error event: %w", emitErr))
 			}
 		}
 		return "", runErr
