@@ -178,7 +178,7 @@ func TestTaskWorkflowCreateRejectsToolOutsideAllowlist(t *testing.T) {
 
 	_, code, err := service.executeTaskCreateAction(taskCreateParams{
 		TaskKind:        taskKindWorkflow,
-		Workflow:        workflowWithToolNode("rss_fetch"),
+		Workflow:        workflowWithToolNode("web_search"),
 		IntervalSeconds: 60,
 	}, "trace-workflow-tool-reject")
 	if err == nil {
@@ -187,7 +187,7 @@ func TestTaskWorkflowCreateRejectsToolOutsideAllowlist(t *testing.T) {
 	if code != http.StatusBadRequest {
 		t.Fatalf("unexpected status code: got %d want %d", code, http.StatusBadRequest)
 	}
-	if !strings.Contains(err.Error(), `workflow tool "rss_fetch" is not allowed`) {
+	if !strings.Contains(err.Error(), `workflow tool "web_search" is not allowed`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -156,8 +156,6 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			"RSS inbox polling and AI filtering",
 			"Available tools:",
 			"Tool list:",
-			"feed_manage",
-			"rss_fetch",
 			"screen_action.click_text",
 			"tools.read_file reads at most 200 lines",
 			"{{dynamic_tool_state}}",

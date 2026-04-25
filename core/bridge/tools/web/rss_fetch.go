@@ -44,8 +44,22 @@ type rssFetchArgs struct {
 	IncludeSummary *bool  `json:"include_summary,omitempty"`
 }
 
-func NewRSSFetchTool() Tool {
-	return newDefaultRSSFetchTool()
+func newDefaultRSSFetchTool() *RSSFetchTool {
+	tool := &RSSFetchTool{
+		validateURL: validateRSSURL,
+		now:         time.Now,
+		bodyLimit:   defaultRSSBodyLimitBytes,
+	}
+	tool.httpClient = &http.Client{
+		Timeout: defaultRSSFetchTimeout,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRSSRedirects {
+				return fmt.Errorf("too many redirects")
+			}
+			return tool.validateRequestURL(req.Context(), req.URL)
+		},
+	}
+	return tool
 }
 
 func FetchRSS(ctx context.Context, rawURL string, opts RSSFetchOptions) (RSSResult, error) {
@@ -61,27 +75,6 @@ func FetchRSS(ctx context.Context, rawURL string, opts RSSFetchOptions) (RSSResu
 	}
 	applyRSSResultOptions(&result, maxItems, opts.IncludeSummary)
 	return result, nil
-}
-
-func (RSSFetchTool) Name() string {
-	return "rss_fetch"
-}
-
-func (RSSFetchTool) Description() string {
-	return "Fetch an HTTPS RSS or Atom feed and return normalized items sorted by newest first."
-}
-
-func (RSSFetchTool) Parameters() json.RawMessage {
-	return json.RawMessage(`{
-		"type":"object",
-		"properties":{
-			"url":{"type":"string","description":"HTTPS RSS or Atom feed URL."},
-			"max_items":{"type":"integer","minimum":1,"maximum":50,"description":"Maximum number of items to return (default: 10)."},
-			"include_summary":{"type":"boolean","description":"Whether to include cleaned item summaries (default: true)."}
-		},
-		"required":["url"],
-		"additionalProperties":false
-	}`)
 }
 
 func (t *RSSFetchTool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {

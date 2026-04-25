@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 
-	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
+	"ghost-os/bridge/artifacts"
 	toolweb "ghost-os/bridge/tools/web"
 )
 
@@ -12,6 +12,8 @@ const webRooterToolName = "web_rooter"
 type WebSearchConfig = toolweb.WebSearchConfig
 
 type WebRooterConfig = toolweb.WebRooterConfig
+
+type ImageGenerateConfig = toolweb.ImageGenerateConfig
 
 type RSSFetchOptions = toolweb.RSSFetchOptions
 
@@ -25,9 +27,7 @@ type WebSearchTool = toolweb.WebSearchTool
 
 type WebRooterTool = toolweb.WebRooterTool
 
-type RSSFetchTool = toolweb.RSSFetchTool
-
-type FeedManageTool = toolweb.FeedManageTool
+type ImageGenerateTool = toolweb.ImageGenerateTool
 
 func NewWebSearchTool(cfg WebSearchConfig) Tool {
 	return toolweb.NewWebSearchTool(cfg)
@@ -37,12 +37,8 @@ func NewWebRooterTool(cfg WebRooterConfig) Tool {
 	return toolweb.NewWebRooterTool(cfg)
 }
 
-func NewRSSFetchTool() Tool {
-	return toolweb.NewRSSFetchTool()
-}
-
-func NewFeedManageTool(store *rsssubscriptions.FeedStore) Tool {
-	return toolweb.NewFeedManageTool(store)
+func NewImageGenerateTool(cfg ImageGenerateConfig, store *artifacts.SessionArtifactStore) Tool {
+	return toolweb.NewImageGenerateTool(cfg, store)
 }
 
 func FetchRSS(ctx context.Context, rawURL string, opts RSSFetchOptions) (RSSResult, error) {

@@ -8,7 +8,7 @@ import (
 )
 
 func TestValidateWorkflowTaskRuntimeAllowsAllToolsWhenAllowlistEmpty(t *testing.T) {
-	definition := workflowWithToolNode("rss_fetch")
+	definition := workflowWithToolNode("web_search")
 
 	err := validateWorkflowTaskRuntime(definition, bridgeconfig.TaskConfig{})
 	if err != nil {
@@ -17,14 +17,14 @@ func TestValidateWorkflowTaskRuntimeAllowsAllToolsWhenAllowlistEmpty(t *testing.
 }
 
 func TestValidateWorkflowTaskRuntimeRejectsToolOutsideExplicitAllowlist(t *testing.T) {
-	definition := workflowWithToolNode("rss_fetch")
+	definition := workflowWithToolNode("web_search")
 	cfg := bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}
 
 	err := validateWorkflowTaskRuntime(definition, cfg)
 	if err == nil {
 		t.Fatal("expected workflow tool validation to fail")
 	}
-	if !strings.Contains(err.Error(), `workflow tool "rss_fetch" is not allowed`) {
+	if !strings.Contains(err.Error(), `workflow tool "web_search" is not allowed`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -127,7 +127,7 @@ func TestRSSFetchToolExecuteParsesAtomAndRespectsSummaryToggle(t *testing.T) {
 }
 
 func TestRSSFetchToolRequiresHTTPSURL(t *testing.T) {
-	tool := NewRSSFetchTool()
+	tool := newDefaultRSSFetchTool()
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"url":"http://example.com/feed.xml"}`), "trace-rss-3")
 	if err == nil {
 		t.Fatal("expected error for non-https url")
