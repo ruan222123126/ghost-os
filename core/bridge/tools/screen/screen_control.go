@@ -11,17 +11,18 @@ import (
 )
 
 const (
-	screenControlToolName = "screen_control"
-	screenControlModeAtom = "atomic"
+	screenControlToolName        = "screen_control"
+	screenControlModeAtom        = "atomic"
+	screenControlActionTextInput = "text_input"
 )
 
-const screenControlDescription = "Unified screen control entrypoint for direct screenshot/OCR/click actions (atomic only)."
+const screenControlDescription = "Unified screen control entrypoint for direct screenshot/OCR/click/input actions (atomic only)."
 
 const screenControlSchema = `{
 	"type":"object",
 	"properties":{
 		"mode":{"type":"string","enum":["atomic"],"description":"Optional; when provided it must be atomic."},
-		"action":{"type":"string","enum":["screenshot","ocr_scan","click_text","find_icon","click_icon"],"description":"Required atomic action."},
+		"action":{"type":"string","enum":["screenshot","ocr_scan","click_text","find_icon","click_icon","mouse_position","text_input"],"description":"Required atomic action."},
 		"params":{"type":"object","description":"Optional parameters for atomic actions."},
 		"display_id":{"type":"integer","minimum":0,"description":"Optional display id forwarded into params.display_id."}
 	},
@@ -31,6 +32,7 @@ const screenControlSchema = `{
 
 type ScreenControlTool struct {
 	screenAction Tool
+	execution    ExecutionClient
 }
 
 type screenControlArgs struct {
@@ -49,6 +51,7 @@ func NewScreenControlTool(
 ) Tool {
 	return &ScreenControlTool{
 		screenAction: NewScreenActionTool(client),
+		execution:    client,
 	}
 }
 
@@ -117,6 +120,10 @@ func (t *ScreenControlTool) executeAtomic(
 	args screenControlArgs,
 	traceID string,
 ) (string, error) {
+	normalizedAction := strings.ToLower(strings.TrimSpace(args.Action))
+	if normalizedAction == screenControlActionTextInput {
+		return t.executeTextInput(ctx, args, traceID)
+	}
 	if t == nil || t.screenAction == nil {
 		return "", fmt.Errorf("screen_action backend is not configured")
 	}
@@ -132,6 +139,67 @@ func (t *ScreenControlTool) executeAtomic(
 		return "", fmt.Errorf("encode atomic args: %w", err)
 	}
 	return t.screenAction.Execute(ctx, payload, traceID)
+}
+
+func (t *ScreenControlTool) executeTextInput(
+	ctx context.Context,
+	args screenControlArgs,
+	traceID string,
+) (string, error) {
+	if t == nil || t.execution == nil {
+		return "", fmt.Errorf("text_input backend is not configured")
+	}
+	if args.DisplayID != nil {
+		return "", fmt.Errorf("display_id is not supported for action=%q", screenControlActionTextInput)
+	}
+	text, submit, err := parseScreenControlTextInputParams(args.Params)
+	if err != nil {
+		return "", err
+	}
+	params := map[string]any{"text": text}
+	if submit {
+		params["submit"] = true
+	}
+	payload, err := t.execution.Call(ctx, "TEXT_INPUT", params, traceID)
+	if err != nil {
+		return "", fmt.Errorf("execution TEXT_INPUT failed: %w", err)
+	}
+	result := cloneScreenControlParams(payload)
+	result["action"] = screenControlActionTextInput
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return "", fmt.Errorf("encode payload: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func parseScreenControlTextInputParams(params map[string]any) (string, bool, error) {
+	for key := range params {
+		if key == "text" || key == "submit" {
+			continue
+		}
+		return "", false, fmt.Errorf("params.%s is not supported for action=%q", key, screenControlActionTextInput)
+	}
+	value, exists := params["text"]
+	if !exists || value == nil {
+		return "", false, fmt.Errorf("params.text is required for action=%q", screenControlActionTextInput)
+	}
+	text, ok := value.(string)
+	if !ok {
+		return "", false, fmt.Errorf("params.text must be a string")
+	}
+	if text == "" {
+		return "", false, fmt.Errorf("params.text is required for action=%q", screenControlActionTextInput)
+	}
+	submitValue, exists := params["submit"]
+	if !exists {
+		return text, false, nil
+	}
+	submit, ok := submitValue.(bool)
+	if !ok {
+		return "", false, fmt.Errorf("params.submit must be a boolean")
+	}
+	return text, submit, nil
 }
 
 func (t *ScreenControlTool) InterpretResult(output string) ExecuteMeta {

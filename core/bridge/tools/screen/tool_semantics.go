@@ -6,6 +6,6 @@ func (ScreenActionTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (TextInputTool) ToolSemantics() llm.ToolSemantics {
+func (ScreenControlTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }

@@ -13,7 +13,6 @@ var configuredToolCatalog = []string{
 	"web_search",
 	"web_rooter",
 	"screen_control",
-	"text_input",
 	"task_manage",
 	configToolNameTFind,
 	configToolNameAskHuman,

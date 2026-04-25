@@ -122,8 +122,9 @@ func screenControlPromptGuidance(names map[string]bool) []string {
 	}
 	return []string{
 		"- `screen_control` is the unified atomic screen entrypoint; use `action` (optionally with `mode=\"atomic\"`) for direct screen operations.",
-		"- `screen_control` atomic action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
+		"- `screen_control` atomic action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon, mouse_position, text_input.",
 		"- For `screen_control` `action=\"click_icon\"`, providing both `params.x` and `params.y` performs a direct click and skips template matching.",
+		"- For `screen_control` `action=\"text_input\"`, set `params.text`; optional `params.submit=true` presses Enter after typing.",
 	}
 }
 

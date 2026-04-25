@@ -118,3 +118,67 @@ func TestScreenControlRejectsWorkflowOnlyUploadKey(t *testing.T) {
 		t.Fatalf("expected workflow-only param error, got %v", err)
 	}
 }
+
+func TestScreenControlTextInputMapsToNativeTextInput(t *testing.T) {
+	var gotAction string
+	var gotParams map[string]any
+	tool := NewScreenControlTool(
+		mockExecutionClient{
+			callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
+				gotAction = action
+				gotParams = params
+				if traceID != "trace-screen-control-text-1" {
+					t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-screen-control-text-1")
+				}
+				return map[string]any{"typed": true, "submitted": true, "characters": 11}, nil
+			},
+		},
+		nil,
+		nil,
+	).(*ScreenControlTool)
+
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"action":"text_input","params":{"text":"hello\nworld","submit":true}}`),
+		"trace-screen-control-text-1",
+	)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if gotAction != "TEXT_INPUT" {
+		t.Fatalf("unexpected native action: got %q want %q", gotAction, "TEXT_INPUT")
+	}
+	if gotParams["text"] != "hello\nworld" || gotParams["submit"] != true {
+		t.Fatalf("unexpected text_input forwarding: %+v", gotParams)
+	}
+	if !strings.Contains(output, `"action":"text_input"`) || !strings.Contains(output, `"typed":true`) {
+		t.Fatalf("unexpected output: %s", output)
+	}
+}
+
+func TestScreenControlTextInputRejectsInvalidParams(t *testing.T) {
+	tool := NewScreenControlTool(mockExecutionClient{
+		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
+			t.Fatal("execution should not be called")
+			return nil, nil
+		},
+	}, nil, nil)
+
+	_, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"action":"text_input","display_id":1,"params":{"text":"ghost"}}`),
+		"trace-screen-control-text-2",
+	)
+	if err == nil || !strings.Contains(err.Error(), "display_id is not supported") {
+		t.Fatalf("expected display_id rejection error, got %v", err)
+	}
+
+	_, err = tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"action":"text_input","params":{"text":"ghost","display_id":1}}`),
+		"trace-screen-control-text-3",
+	)
+	if err == nil || !strings.Contains(err.Error(), "params.display_id is not supported") {
+		t.Fatalf("expected params key rejection error, got %v", err)
+	}
+}

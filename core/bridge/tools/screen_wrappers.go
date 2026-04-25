@@ -14,8 +14,6 @@ type ScreenActionTool = toolscreen.ScreenActionTool
 
 type ScreenControlTool = toolscreen.ScreenControlTool
 
-type TextInputTool = toolscreen.TextInputTool
-
 func NewScreenActionTool(client ExecutionClient) Tool {
 	return toolscreen.NewScreenActionTool(client)
 }
@@ -26,8 +24,4 @@ func NewScreenControlTool(
 	artifactStore *artifacts.SessionArtifactStore,
 ) Tool {
 	return toolscreen.NewScreenControlTool(client, model, artifactStore)
-}
-
-func NewTextInputTool(client ExecutionClient) Tool {
-	return toolscreen.NewTextInputTool(client)
 }

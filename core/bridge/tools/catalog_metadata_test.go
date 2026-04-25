@@ -14,7 +14,6 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 		"web_search",
 		"web_rooter",
 		"screen_control",
-		"text_input",
 		"task_manage",
 		"tfind",
 		"ask_human",

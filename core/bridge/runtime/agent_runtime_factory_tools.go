@@ -91,7 +91,6 @@ func registerRuntimeInteractionTools(opts coreToolOptions) {
 			opts.resources.artifactStore,
 		),
 	)
-	opts.registry.Register(tools.NewTextInputTool(opts.resources.executionClient))
 }
 
 func registerRuntimeOptionalTools(opts coreToolOptions) {

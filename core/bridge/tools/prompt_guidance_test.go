@@ -216,9 +216,10 @@ func TestFormatPromptGuidanceForCatalog_IncludesScreenControlHints(t *testing.T)
 	guidance := FormatPromptGuidanceForCatalog(registry)
 	for _, snippet := range []string{
 		"`screen_control` is the unified atomic screen entrypoint",
-		"`screen_control` atomic action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon.",
+		"`screen_control` atomic action must be one of: screenshot, ocr_scan, click_text, find_icon, click_icon, mouse_position, text_input.",
 		"`mode=\"atomic\"`",
 		"`action=\"click_icon\"`",
+		"`action=\"text_input\"`",
 		"direct click and skips template matching",
 	} {
 		if !strings.Contains(guidance, snippet) {
