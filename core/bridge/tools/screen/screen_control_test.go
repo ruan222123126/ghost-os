@@ -106,6 +106,97 @@ func TestScreenControlModeValidation(t *testing.T) {
 	}
 }
 
+func TestScreenControlRejectsRemovedAtomicActions(t *testing.T) {
+	tool := NewScreenControlTool(nil, nil, nil)
+
+	_, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"mode":"atomic","action":"ocr_scan"}`),
+		"trace-screen-control-validate-7",
+	)
+	if err == nil || !strings.Contains(err.Error(), `action="ocr_scan" is removed`) {
+		t.Fatalf("expected ocr_scan removal error, got %v", err)
+	}
+
+	_, err = tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"mode":"atomic","action":"click_text","params":{"text":"Submit"}}`),
+		"trace-screen-control-validate-8",
+	)
+	if err == nil || !strings.Contains(err.Error(), `action="click_text" is removed`) {
+		t.Fatalf("expected click_text removal error, got %v", err)
+	}
+}
+
+func TestScreenControlFindTextMapsToBackendClickText(t *testing.T) {
+	imagePath := writeScreenActionTestPNG(t)
+	screenshotsDir := t.TempDir()
+	t.Setenv("GHOST_SCREENSHOTS_PATH", screenshotsDir)
+
+	var calls []string
+	tool := NewScreenControlTool(
+		mockExecutionClient{
+			callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
+				calls = append(calls, action)
+				switch action {
+				case "SCREEN_CAPTURE":
+					return map[string]any{
+						"image_path":   imagePath,
+						"image_width":  1,
+						"image_height": 1,
+						"display_id":   7,
+						"scale_x":      2,
+						"scale_y":      2,
+					}, nil
+				case "OCR_IMAGE":
+					return map[string]any{
+						"items": []any{
+							map[string]any{
+								"text":       "Submit",
+								"confidence": 0.99,
+								"bbox": map[string]any{
+									"x": 80, "y": 100, "width": 40, "height": 30,
+								},
+								"center": map[string]any{"x": 50, "y": 65},
+							},
+						},
+					}, nil
+				case "MOUSE_CLICK":
+					if params["display_id"] != 7 || params["x"] != 50 || params["y"] != 65 {
+						t.Fatalf("unexpected mouse click params: %+v", params)
+					}
+					return map[string]any{"clicked": true}, nil
+				default:
+					t.Fatalf("unexpected action: %s", action)
+					return nil, nil
+				}
+			},
+		},
+		nil,
+		nil,
+	).(*ScreenControlTool)
+
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"action":"find_text","params":{"display_id":7,"text":"Submit"}}`),
+		"trace-screen-control-find-text-1",
+	)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if strings.Join(calls, ",") != "SCREEN_CAPTURE,OCR_IMAGE,MOUSE_CLICK" {
+		t.Fatalf("unexpected action sequence: %v", calls)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if payload["action"] != "find_text" || payload["clicked"] != true {
+		t.Fatalf("unexpected find_text payload: %+v", payload)
+	}
+}
+
 func TestScreenControlRejectsWorkflowOnlyUploadKey(t *testing.T) {
 	tool := NewScreenControlTool(nil, nil, nil)
 

@@ -13,16 +13,17 @@ import (
 const (
 	screenControlToolName        = "screen_control"
 	screenControlModeAtom        = "atomic"
+	screenControlActionFindText  = "find_text"
 	screenControlActionTextInput = "text_input"
 )
 
-const screenControlDescription = "Unified screen control entrypoint for direct screenshot/OCR/click/input actions (atomic only)."
+const screenControlDescription = "Unified screen control entrypoint for direct screenshot/text/icon/click/input actions (atomic only)."
 
 const screenControlSchema = `{
 	"type":"object",
 	"properties":{
 		"mode":{"type":"string","enum":["atomic"],"description":"Optional; when provided it must be atomic."},
-		"action":{"type":"string","enum":["screenshot","ocr_scan","click_text","find_icon","click_icon","mouse_position","text_input"],"description":"Required atomic action."},
+		"action":{"type":"string","enum":["screenshot","find_text","find_icon","click_icon","mouse_position","text_input"],"description":"Required atomic action."},
 		"params":{"type":"object","description":"Optional parameters for atomic actions."},
 		"display_id":{"type":"integer","minimum":0,"description":"Optional display id forwarded into params.display_id."}
 	},
@@ -120,8 +121,11 @@ func (t *ScreenControlTool) executeAtomic(
 	args screenControlArgs,
 	traceID string,
 ) (string, error) {
-	normalizedAction := strings.ToLower(strings.TrimSpace(args.Action))
-	if normalizedAction == screenControlActionTextInput {
+	requestedAction, backendAction, err := normalizeScreenControlAction(args.Action)
+	if err != nil {
+		return "", err
+	}
+	if backendAction == screenControlActionTextInput {
 		return t.executeTextInput(ctx, args, traceID)
 	}
 	if t == nil || t.screenAction == nil {
@@ -132,13 +136,20 @@ func (t *ScreenControlTool) executeAtomic(
 		return "", err
 	}
 	payload, err := json.Marshal(screenActionArgs{
-		Action: strings.TrimSpace(args.Action),
+		Action: backendAction,
 		Params: params,
 	})
 	if err != nil {
 		return "", fmt.Errorf("encode atomic args: %w", err)
 	}
-	return t.screenAction.Execute(ctx, payload, traceID)
+	output, err := t.screenAction.Execute(ctx, payload, traceID)
+	if err != nil {
+		return "", err
+	}
+	if requestedAction == backendAction {
+		return output, nil
+	}
+	return rewriteScreenControlActionOutput(output, requestedAction)
 }
 
 func (t *ScreenControlTool) executeTextInput(
@@ -207,6 +218,43 @@ func (t *ScreenControlTool) InterpretResult(output string) ExecuteMeta {
 		return ExecuteMeta{}
 	}
 	return InterpretExecuteResult(t.screenAction, output)
+}
+
+func normalizeScreenControlAction(action string) (string, string, error) {
+	normalized := strings.ToLower(strings.TrimSpace(action))
+	switch normalized {
+	case "":
+		return "", "", fmt.Errorf("action is required")
+	case screenControlActionTextInput:
+		return normalized, normalized, nil
+	case "screenshot", "find_icon", "click_icon", "mouse_position":
+		return normalized, normalized, nil
+	case screenControlActionFindText:
+		return normalized, "click_text", nil
+	case "ocr_scan":
+		return "", "", fmt.Errorf("action=%q is removed from screen_control", normalized)
+	case "click_text":
+		return "", "", fmt.Errorf("action=%q is removed from screen_control; use action=%q", normalized, screenControlActionFindText)
+	default:
+		return "", "", fmt.Errorf("unsupported action=%q", normalized)
+	}
+}
+
+func rewriteScreenControlActionOutput(output string, action string) (string, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return "", fmt.Errorf("screen_control output is empty")
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
+		return "", fmt.Errorf("decode screen_control output: %w", err)
+	}
+	payload["action"] = action
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("encode screen_control output: %w", err)
+	}
+	return string(encoded), nil
 }
 
 func buildScreenControlAtomicParams(
