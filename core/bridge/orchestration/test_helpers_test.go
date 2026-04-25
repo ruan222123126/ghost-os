@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"testing"
 
 	bridgeconfig "ghost-os/bridge/config"
@@ -44,4 +45,15 @@ func newTestHandlerWithService(t *testing.T, executor agentExecutorFunc, streamE
 	}
 	t.Cleanup(service.Close)
 	return nil, service, sessionStore
+}
+
+func newTempSessionStore(t *testing.T) *session.Store {
+	t.Helper()
+
+	t.Setenv("GHOST_PROMPTS_DIR", filepath.Join(t.TempDir(), "prompts"))
+	store, err := session.NewStore(filepath.Join(t.TempDir(), "sessions"))
+	if err != nil {
+		t.Fatalf("new session store: %v", err)
+	}
+	return store
 }

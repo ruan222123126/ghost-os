@@ -102,7 +102,7 @@ func (p *sessionTurnPreparer) buildPrepareDependencies() (agentRuntimeDependenci
 		p.sessionStore,
 		deps.cfg.ToolSearch.IdleTurns,
 	)
-	persistence := newSessionTurnCommitter(p.sessionStore, deps.memoryLearn)
+	persistence := newSessionTurnCommitter(p.sessionStore)
 	return deps, historyBuilder, persistence, nil
 }
 
@@ -127,20 +127,19 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 	if err != nil {
 		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), statusCode: http.StatusConflict, err: err}
 	}
-	history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, err := p.prepareHistoryAndEnvironment(
+	history, preTurnMessages, catalog, systemPrompt, err := p.prepareHistoryAndEnvironment(
 		execCtx,
 		deps,
 		historyBuilder,
 		sess,
 		input.rawUserMessage,
-		input.userMessage,
 		input.traceID,
 	)
 	if err != nil {
 		cleanup()
 		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
 	}
-	runAgent := p.buildTurnAgent(deps, sess, catalog, history, systemPrompt, memoryBlock)
+	runAgent := p.buildTurnAgent(deps, sess, catalog, history, systemPrompt)
 	return &sessionTurnState{
 		sessionStore:    p.sessionStore,
 		deps:            deps,
@@ -150,7 +149,6 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 		execCtx:         execCtx,
 		traceID:         input.traceID,
 		userMessage:     input.userMessage,
-		memoryCtx:       memoryCtx,
 		preTurnMessages: preTurnMessages,
 		turnStartedAt:   input.startedAt,
 		cleanup:         cleanup,
@@ -182,7 +180,6 @@ func (p *sessionTurnPreparer) buildTurnAgent(
 	catalog tools.ToolCatalog,
 	history *agent.History,
 	systemPrompt string,
-	memoryBlock string,
 ) *agent.Agent {
 	runCatalog := catalog
 	if graphQLToolRuntimeEnabled(deps.cfg) {
@@ -194,7 +191,7 @@ func (p *sessionTurnPreparer) buildTurnAgent(
 		return runAgent
 	}
 	runAgent.SetBeforeCompletionHook(
-		p.newGraphQLSystemPromptRefreshHook(deps, sess, catalog, systemPrompt, memoryBlock),
+		p.newGraphQLSystemPromptRefreshHook(deps, sess, catalog, systemPrompt),
 	)
 	runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(
 		tools.NewGraphQLTextExecutorWithOptions(catalog, tools.GraphQLTextExecutorOptions{
@@ -211,9 +208,8 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	historyBuilder *SessionHistoryBuilder,
 	sess *session.Session,
 	rawUserMessage string,
-	trimmedUserMessage string,
 	traceID string,
-) (*agent.History, []llm.Message, tools.ToolCatalog, string, string, *turnMemoryContext, error) {
+) (*agent.History, []llm.Message, tools.ToolCatalog, string, error) {
 	preTurnMessages := llm.CloneMessages(sess.Messages)
 	askHumanContinuation := hasAnsweredHumanResponse(sess)
 	sess.AdvanceToolTurn(deps.cfg.ToolSearch.IdleTurns)
@@ -221,24 +217,21 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 
 	catalog, systemPrompt, err := p.selectToolsForTurn(ctx, deps, sess, history, rawUserMessage, askHumanContinuation, traceID)
 	if err != nil {
-		return nil, nil, nil, "", "", nil, err
+		return nil, nil, nil, "", err
 	}
-	finalPrompt, memoryBlock, memoryCtx, err := p.buildSystemPromptWithMemory(
-		ctx,
+	finalPrompt, err := p.buildTurnSystemPrompt(
 		deps,
 		sess,
-		history,
-		trimmedUserMessage,
-		systemPrompt,
 		catalog,
+		systemPrompt,
 	)
 	if err != nil {
-		return nil, nil, nil, "", "", nil, err
+		return nil, nil, nil, "", err
 	}
 	if finalPrompt != "" {
 		history.UpdateSystemPrompt(finalPrompt)
 	}
-	return history, preTurnMessages, catalog, systemPrompt, memoryBlock, memoryCtx, nil
+	return history, preTurnMessages, catalog, systemPrompt, nil
 }
 
 func hasAnsweredHumanResponse(sess *session.Session) bool {

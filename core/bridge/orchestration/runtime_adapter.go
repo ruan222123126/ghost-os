@@ -3,7 +3,6 @@ package orchestration
 import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/memoryaug"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/tools"
 )
@@ -13,9 +12,6 @@ type agentRuntimeDependencies struct {
 	client       agent.Completer
 	registry     *tools.Registry
 	systemPrompt string
-	memoryPlan   memoryaug.IntentPlanner
-	memoryRecall memoryaug.RecallService
-	memoryLearn  memoryaug.LearningService
 	cleanup      func()
 }
 
@@ -49,9 +45,6 @@ func (f runtimeFactoryAdapter) Build(store bridgeconfig.Store) (agentRuntimeDepe
 		client:       deps.Client(),
 		registry:     deps.Registry(),
 		systemPrompt: deps.SystemPrompt(),
-		memoryPlan:   deps.MemoryPlanner(),
-		memoryRecall: deps.MemoryRecall(),
-		memoryLearn:  deps.MemoryLearning(),
 		cleanup:      deps.Close,
 	}, nil
 }

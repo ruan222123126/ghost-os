@@ -87,6 +87,21 @@ func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeFactoryRegistersImageGenerate(t *testing.T) {
+	setupRuntimeFactoryTestEnv(t)
+	store := newRuntimeTestStore(t)
+
+	deps, err := newAgentRuntimeFactory().Build(store)
+	if err != nil {
+		t.Fatalf("build runtime deps: %v", err)
+	}
+	t.Cleanup(deps.Close)
+
+	if deps.registry.Get("image_generate") == nil {
+		t.Fatal("expected image_generate to be registered")
+	}
+}
+
 func TestAgentRuntimeFactoryLoadsToolPromptOverridesFromFiles(t *testing.T) {
 	const (
 		testDirPerm  = 0o755
@@ -250,34 +265,4 @@ idempotency_header = "Idempotency-Key"
 		t.Fatalf("build runtime deps: %v", err)
 	}
 	t.Cleanup(deps.Close)
-}
-
-func TestAgentRuntimeFactorySkipsMemoryAugmentationWhenDisabled(t *testing.T) {
-	tempDir := setupRuntimeFactoryTestEnv(t)
-	memoryPath := filepath.Join(tempDir, "disabled-memory", "memory.db")
-
-	t.Setenv("GHOST_MEMORY_PATH", memoryPath)
-	t.Setenv("GHOST_MEMORY_AUGMENTATION_ENABLED", "false")
-
-	store := newRuntimeTestStore(t)
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.memoryRecall != nil {
-		t.Fatal("expected memory recall service to stay disabled")
-	}
-	if deps.memoryLearn != nil {
-		t.Fatal("expected memory learning service to stay disabled")
-	}
-	for _, name := range []string{"memory_manage", "memory_learned_list", "memory_recall_debug"} {
-		if deps.registry.Get(name) != nil {
-			t.Fatalf("expected %s to stay hidden when memory augmentation is disabled", name)
-		}
-	}
-	if _, err := os.Stat(memoryPath); !os.IsNotExist(err) {
-		t.Fatalf("expected disabled memory augmentation to avoid creating sqlite db, got err=%v", err)
-	}
 }

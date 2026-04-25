@@ -7,7 +7,6 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/execution"
 	"ghost-os/bridge/llm"
-	"ghost-os/bridge/memoryaug"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
@@ -40,18 +39,6 @@ func (d agentRuntimeDependencies) Registry() *tools.Registry {
 
 func (d agentRuntimeDependencies) SystemPrompt() string {
 	return d.systemPrompt
-}
-
-func (d agentRuntimeDependencies) MemoryPlanner() memoryaug.IntentPlanner {
-	return d.memoryPlan
-}
-
-func (d agentRuntimeDependencies) MemoryRecall() memoryaug.RecallService {
-	return d.memoryRecall
-}
-
-func (d agentRuntimeDependencies) MemoryLearning() memoryaug.LearningService {
-	return d.memoryLearn
 }
 
 func WrapConfigStore(store bridgeconfig.Store) *ConfigStore {

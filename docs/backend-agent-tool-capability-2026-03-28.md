@@ -11,7 +11,6 @@
 
 为避免会话历史干扰和工具选择收敛导致的误判，本次用临时测试配置启动同代码后端：
 - `max_turns = 1`（每次只执行一次 completion，聚焦“是否成功触发并执行工具”）
-- `memory_augmentation_enabled = false`
 - `tool_allowlist` 临时扩展为全部待测工具
 - 会话/任务/RSS/artifact 路径落在 `/tmp/ghost-os-test/*`
 

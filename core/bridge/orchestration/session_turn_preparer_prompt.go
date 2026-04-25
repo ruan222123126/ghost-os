@@ -11,26 +11,6 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-func (p *sessionTurnPreparer) buildSystemPromptWithMemory(
-	ctx context.Context,
-	deps agentRuntimeDependencies,
-	sess *session.Session,
-	history *agent.History,
-	userMessage string,
-	systemPrompt string,
-	catalog tools.ToolCatalog,
-) (string, string, *turnMemoryContext, error) {
-	basePrompt, err := p.buildCompletionSystemPrompt(deps, sess, catalog, systemPrompt)
-	if err != nil {
-		return "", "", nil, err
-	}
-	memoryCtx, memoryBlock, err := p.prepareTurnMemory(ctx, deps, sess, history, userMessage)
-	if err != nil {
-		return "", "", nil, err
-	}
-	return composeTurnSystemPrompt(basePrompt, memoryBlock), memoryBlock, memoryCtx, nil
-}
-
 func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
 	deps agentRuntimeDependencies,
 	sess *session.Session,
@@ -64,16 +44,13 @@ func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
 	return basePrompt, nil
 }
 
-func composeTurnSystemPrompt(basePrompt string, memoryBlock string) string {
-	trimmedBase := strings.TrimSpace(basePrompt)
-	trimmedMemory := strings.TrimSpace(memoryBlock)
-	if trimmedMemory == "" {
-		return trimmedBase
-	}
-	if trimmedBase == "" {
-		return trimmedMemory
-	}
-	return trimmedBase + "\n\n" + trimmedMemory
+func (p *sessionTurnPreparer) buildTurnSystemPrompt(
+	deps agentRuntimeDependencies,
+	sess *session.Session,
+	catalog tools.ToolCatalog,
+	systemPrompt string,
+) (string, error) {
+	return p.buildCompletionSystemPrompt(deps, sess, catalog, systemPrompt)
 }
 
 func (p *sessionTurnPreparer) newGraphQLSystemPromptRefreshHook(
@@ -81,7 +58,6 @@ func (p *sessionTurnPreparer) newGraphQLSystemPromptRefreshHook(
 	sess *session.Session,
 	catalog tools.ToolCatalog,
 	systemPrompt string,
-	memoryBlock string,
 ) agent.BeforeCompletionHook {
 	return func(_ context.Context, _ int, history *agent.History) error {
 		if history == nil {
@@ -91,7 +67,7 @@ func (p *sessionTurnPreparer) newGraphQLSystemPromptRefreshHook(
 		if err != nil {
 			return err
 		}
-		history.UpdateSystemPrompt(composeTurnSystemPrompt(prompt, memoryBlock))
+		history.UpdateSystemPrompt(prompt)
 		return nil
 	}
 }

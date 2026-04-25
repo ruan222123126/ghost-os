@@ -40,7 +40,6 @@ type sessionTurnState struct {
 	execCtx         context.Context
 	traceID         string
 	userMessage     string
-	memoryCtx       *turnMemoryContext
 	preTurnMessages []llm.Message
 	turnStartedAt   time.Time
 	cleanup         func()
@@ -75,7 +74,7 @@ func (s *sessionTurnState) persistNewMessages(newMessages []llm.Message, complet
 		return nil
 	}
 	s.sess.ConversationState = s.agent.GetConversationState()
-	return s.persistence.CommitTurn(s.execCtx, s.sess, newMessages, s.traceID, completed, s.memoryCtx)
+	return s.persistence.CommitTurn(s.execCtx, s.sess, newMessages, s.traceID, completed)
 }
 
 func (s *sessionTurnState) complete(

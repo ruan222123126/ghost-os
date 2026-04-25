@@ -49,7 +49,6 @@ func setupRuntimeFactoryTestEnv(t *testing.T) string {
 	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(tempDir, "config.toml"))
 	t.Setenv("GHOST_API_KEY", "test-key")
 	t.Setenv("GHOST_ARTIFACTS_PATH", filepath.Join(tempDir, "artifacts"))
-	t.Setenv("GHOST_MEMORY_PATH", filepath.Join(tempDir, "memory", "memory.db"))
 	t.Setenv("GHOST_PROMPTS_DIR", filepath.Join(tempDir, "prompts"))
 	t.Setenv("GHOST_RSS_FEEDS_PATH", filepath.Join(tempDir, "rss", "feeds.json"))
 	return tempDir

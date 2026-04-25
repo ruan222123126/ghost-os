@@ -34,9 +34,6 @@ const (
 	DefaultToolSelectorConfidence  = defaultToolSelectorConfidence
 	DefaultToolSelectorRecentMsgs  = defaultToolSelectorRecentMsgs
 	DefaultToolSearchIdleTurns     = defaultToolSearchIdleTurns
-	DefaultMemoryRecallItems       = defaultMemoryRecallItems
-	DefaultMemoryMinConfidence     = defaultMemoryMinConfidence
-	DefaultMemoryUserScopeID       = defaultMemoryUserScopeID
 )
 
 var (

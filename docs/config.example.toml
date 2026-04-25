@@ -105,16 +105,6 @@ tool_selector_recent_messages = 6
 # workflow_tool_allowlist = ["script_exec", "web_search"]
 
 # mem0-style memory augmentation
-memory_augmentation_enabled = true
-memory_augmentation_learning_enabled = true
-memory_augmentation_recall_enabled = true
-memory_augmentation_max_recall_items = 8
-memory_augmentation_min_confidence = 0.7
-memory_augmentation_session_scope_enabled = true
-memory_augmentation_user_scope_enabled = true
-# memory_augmentation_llm_model = "gpt-4o-mini"
-memory_augmentation_user_scope_id = "local-user"
-
 # Responses API request options (optional)
 # response_prompt_cache_key = "ghost-session-cache-key"
 # response_prompt_cache_retention = "retain"

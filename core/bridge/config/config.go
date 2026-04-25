@@ -32,7 +32,6 @@ type Config struct {
 	GraphQL                       GraphQLConfig
 	ToolSelector                  ToolSelectorConfig
 	ToolSearch                    ToolSearchConfig
-	MemoryAugmentation            MemoryAugmentationConfig
 	NativePersistent              bool
 	NativeBinaryPath              string
 	NativeBinaryRoots             []string

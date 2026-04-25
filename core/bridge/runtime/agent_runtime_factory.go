@@ -6,7 +6,6 @@ import (
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/memoryaug"
 	"ghost-os/bridge/tools"
 )
 
@@ -15,9 +14,6 @@ type agentRuntimeDependencies struct {
 	client       agent.Completer
 	registry     *tools.Registry
 	systemPrompt string
-	memoryPlan   memoryaug.IntentPlanner
-	memoryRecall memoryaug.RecallService
-	memoryLearn  memoryaug.LearningService
 	cleanup      func()
 }
 
@@ -68,7 +64,7 @@ func buildAgentRuntimeDependencies(
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
-	components, err := newRuntimeBuildComponents(cfg, store, taskManager)
+	components, err := newRuntimeBuildComponents(cfg, taskManager)
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
@@ -77,7 +73,6 @@ func buildAgentRuntimeDependencies(
 
 func newRuntimeBuildComponents(
 	cfg Config,
-	store *ConfigStore,
 	taskManager tools.TaskManager,
 ) (runtimeBuildComponents, error) {
 	resources, err := newRuntimeToolResources(cfg)
@@ -87,7 +82,6 @@ func newRuntimeBuildComponents(
 	registry := tools.NewRegistry()
 	clients := newRuntimeClients(cfg)
 	registerCoreTools(coreToolOptions{
-		store:       store,
 		cfg:         cfg,
 		registry:    registry,
 		clients:     clients,
@@ -105,14 +99,8 @@ func newRuntimeBuildComponents(
 func finalizeAgentRuntimeDependencies(
 	components runtimeBuildComponents,
 ) (agentRuntimeDependencies, error) {
-	memoryResources, err := setupMemoryAugmentation(components.cfg, components.registry)
-	if err != nil {
-		closeRuntimeToolResources(components.resources)
-		return agentRuntimeDependencies{}, err
-	}
 	systemPrompt, err := buildRuntimeSystemPrompt(components.cfg, components.registry)
 	if err != nil {
-		memoryResources.Close()
 		closeRuntimeToolResources(components.resources)
 		return agentRuntimeDependencies{}, err
 	}
@@ -121,11 +109,7 @@ func finalizeAgentRuntimeDependencies(
 		client:       components.clients.primary,
 		registry:     components.registry,
 		systemPrompt: systemPrompt,
-		memoryPlan:   memoryResources.planner,
-		memoryRecall: memoryResources.recall,
-		memoryLearn:  memoryResources.learn,
 		cleanup: func() {
-			memoryResources.Close()
 			closeRuntimeToolResources(components.resources)
 		},
 	}, nil

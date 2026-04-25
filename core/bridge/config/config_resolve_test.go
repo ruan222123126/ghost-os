@@ -130,11 +130,9 @@ func TestResolveConfigLoadsSessionHumanLogModeFromEnvAndFile(t *testing.T) {
 			SessionHumanLogFullEnabled: boolPtr(true),
 		},
 		envSnapshot{
-			"GHOST_PROVIDER":                           "custom",
-			"GHOST_SESSION_HUMAN_LOG_FULL_ENABLED":     "false",
-			"GHOST_CODEX_STATELESS_RETRY_ENABLED":      "false",
-			"GHOST_MEMORY_AUGMENTATION_ENABLED":        "true",
-			"GHOST_MEMORY_AUGMENTATION_RECALL_ENABLED": "true",
+			"GHOST_PROVIDER":                       "custom",
+			"GHOST_SESSION_HUMAN_LOG_FULL_ENABLED": "false",
+			"GHOST_CODEX_STATELESS_RETRY_ENABLED":  "false",
 		},
 	)
 	if err != nil {

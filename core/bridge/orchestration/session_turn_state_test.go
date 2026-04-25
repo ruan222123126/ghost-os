@@ -107,7 +107,7 @@ func TestSessionTurnStatePersistsCommittedGraphQLTextTurnOnLaterError(t *testing
 
 	turn := &sessionTurnState{
 		sessionStore: sessionStore,
-		persistence:  newSessionTurnCommitter(sessionStore, nil),
+		persistence:  newSessionTurnCommitter(sessionStore),
 		sess:         sess,
 		agent:        runAgent,
 		execCtx:      execCtx,
@@ -177,7 +177,7 @@ func TestSessionTurnStatePersistsCommittedToolTurnOnLaterError(t *testing.T) {
 
 	turn := &sessionTurnState{
 		sessionStore: sessionStore,
-		persistence:  newSessionTurnCommitter(sessionStore, nil),
+		persistence:  newSessionTurnCommitter(sessionStore),
 		sess:         sess,
 		agent:        runAgent,
 		execCtx:      execCtx,

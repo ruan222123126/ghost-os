@@ -48,16 +48,15 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 }
 
 type configSections struct {
-	Provider           ProviderConfig
-	RSS                RSSConfig
-	Worker             WorkerConfig
-	Task               TaskConfig
-	ToolSelector       ToolSelectorConfig
-	ToolSearch         ToolSearchConfig
-	MemoryAugmentation MemoryAugmentationConfig
-	PromptsDir         string
-	ProMaxIterations   int
-	MaxTurns           int
+	Provider         ProviderConfig
+	RSS              RSSConfig
+	Worker           WorkerConfig
+	Task             TaskConfig
+	ToolSelector     ToolSelectorConfig
+	ToolSearch       ToolSearchConfig
+	PromptsDir       string
+	ProMaxIterations int
+	MaxTurns         int
 }
 
 func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig) (configSections, error) {
@@ -78,26 +77,24 @@ func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime ru
 		return configSections{}, err
 	}
 	return configSections{
-		Provider:           provider,
-		RSS:                features.RSS,
-		Worker:             features.Worker,
-		Task:               features.Task,
-		ToolSelector:       features.ToolSelector,
-		ToolSearch:         features.ToolSearch,
-		MemoryAugmentation: features.MemoryAugmentation,
-		PromptsDir:         promptsDir,
-		ProMaxIterations:   proMaxIterations,
-		MaxTurns:           maxTurns,
+		Provider:         provider,
+		RSS:              features.RSS,
+		Worker:           features.Worker,
+		Task:             features.Task,
+		ToolSelector:     features.ToolSelector,
+		ToolSearch:       features.ToolSearch,
+		PromptsDir:       promptsDir,
+		ProMaxIterations: proMaxIterations,
+		MaxTurns:         maxTurns,
 	}, nil
 }
 
 type runtimeFeatureSections struct {
-	RSS                RSSConfig
-	Worker             WorkerConfig
-	Task               TaskConfig
-	ToolSelector       ToolSelectorConfig
-	ToolSearch         ToolSearchConfig
-	MemoryAugmentation MemoryAugmentationConfig
+	RSS          RSSConfig
+	Worker       WorkerConfig
+	Task         TaskConfig
+	ToolSelector ToolSelectorConfig
+	ToolSearch   ToolSearchConfig
 }
 
 func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (runtimeFeatureSections, error) {
@@ -121,17 +118,12 @@ func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (r
 	if err != nil {
 		return runtimeFeatureSections{}, err
 	}
-	memoryAugmentation, err := buildMemoryAugmentationConfig(fileCfg, env)
-	if err != nil {
-		return runtimeFeatureSections{}, err
-	}
 	return runtimeFeatureSections{
-		RSS:                rss,
-		Worker:             worker,
-		Task:               task,
-		ToolSelector:       toolSelector,
-		ToolSearch:         toolSearch,
-		MemoryAugmentation: memoryAugmentation,
+		RSS:          rss,
+		Worker:       worker,
+		Task:         task,
+		ToolSelector: toolSelector,
+		ToolSearch:   toolSearch,
 	}, nil
 }
 
@@ -161,7 +153,6 @@ func composeConfig(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeCon
 		GraphQL:                    runtime.GraphQL,
 		ToolSelector:               sections.ToolSelector,
 		ToolSearch:                 sections.ToolSearch,
-		MemoryAugmentation:         sections.MemoryAugmentation,
 		NativePersistent:           runtime.NativePersistent,
 		NativeBinaryPath:           resolveNativeBinaryPath(fileCfg, env),
 		NativeBinaryRoots:          resolveNativeBinaryRoots(fileCfg, env),
@@ -229,11 +220,6 @@ func finalizeLoadedConfig(cfg Config) (Config, error) {
 	if strings.TrimSpace(cfg.WebRooterBaseURL) == "" {
 		return Config{}, errors.New("web_rooter_base_url must not be empty")
 	}
-	if !cfg.MemoryAugmentation.SessionScopeEnabled && !cfg.MemoryAugmentation.UserScopeEnabled {
-		cfg.MemoryAugmentation.RecallEnabled = false
-		cfg.MemoryAugmentation.LearningEnabled = false
-	}
-
 	return cfg, nil
 }
 

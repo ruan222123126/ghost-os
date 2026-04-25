@@ -66,8 +66,6 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.AnthropicVersion = cloneOptionalStringPointer(cfg.AnthropicVersion)
 	cfg.ToolSelectorMode = cloneOptionalStringPointer(cfg.ToolSelectorMode)
 	cfg.ToolSelectorModel = cloneOptionalStringPointer(cfg.ToolSelectorModel)
-	cfg.MemoryAugmentationLLMModel = cloneOptionalStringPointer(cfg.MemoryAugmentationLLMModel)
-	cfg.MemoryAugmentationUserScopeID = cloneOptionalStringPointer(cfg.MemoryAugmentationUserScopeID)
 	cfg.BindAddr = cloneOptionalStringPointer(cfg.BindAddr)
 	cfg.APIToken = cloneOptionalStringPointer(cfg.APIToken)
 	cfg.NativeBinaryPath = cloneOptionalStringPointer(cfg.NativeBinaryPath)
