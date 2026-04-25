@@ -17,7 +17,7 @@ interface PromptsSettingsSectionProps {
 interface PromptEditorCardProps {
   field: SystemPromptField;
   title: string;
-  description: string;
+  description?: string;
   savedValue: string;
   controlsDisabled: boolean;
   rows?: number;
@@ -55,15 +55,10 @@ export function PromptsSettingsSection(props: PromptsSettingsSectionProps) {
       {loading && prompts === null ? <LoadingPromptsNotice text={copy.settings.promptsLoading} /> : null}
 
       <div className="space-y-4">
-        <PromptEditorCard
-          field="global_template"
-          title={copy.settings.promptsGlobalTemplateLabel}
-          description={copy.settings.promptsGlobalTemplateDescription}
-          savedValue={prompts?.global_template ?? ''}
-          controlsDisabled={controlsDisabled || prompts === null}
-          rows={10}
-          monospace
-          onSaveField={onSaveField}
+        <RenderedPromptCard
+          title={copy.settings.promptsRenderedPromptLabel}
+          description={copy.settings.promptsRenderedPromptDescription}
+          value={prompts?.rendered_prompt ?? ''}
         />
 
         <PromptEditorCard
@@ -74,32 +69,6 @@ export function PromptsSettingsSection(props: PromptsSettingsSectionProps) {
           controlsDisabled={controlsDisabled || prompts === null}
           rows={8}
           onSaveField={onSaveField}
-        />
-
-        <PromptEditorCard
-          field="tool_prompt"
-          title={copy.settings.promptsToolPromptLabel}
-          description={copy.settings.promptsToolPromptDescription}
-          savedValue={prompts?.tool_prompt ?? ''}
-          controlsDisabled={controlsDisabled || prompts === null}
-          rows={8}
-          onSaveField={onSaveField}
-        />
-
-        <PromptEditorCard
-          field="tool_key_spec"
-          title={copy.settings.promptsToolKeySpecLabel}
-          description={copy.settings.promptsToolKeySpecDescription}
-          savedValue={prompts?.tool_key_spec ?? ''}
-          controlsDisabled={controlsDisabled || prompts === null}
-          rows={8}
-          onSaveField={onSaveField}
-        />
-
-        <RenderedPromptCard
-          title={copy.settings.promptsRenderedPromptLabel}
-          description={copy.settings.promptsRenderedPromptDescription}
-          value={prompts?.rendered_prompt ?? ''}
         />
       </div>
     </section>
@@ -130,7 +99,7 @@ function PromptEditorCard(props: PromptEditorCardProps) {
     <section className="rounded-[16px] border border-[#E5E5E5] bg-white p-6">
       <div className="mb-3">
         <h2 className="text-[16px] font-semibold text-[#111111]">{title}</h2>
-        <p className="mt-1 text-[13px] text-[#737373]">{description}</p>
+        {description ? <p className="mt-1 text-[13px] text-[#737373]">{description}</p> : null}
       </div>
       <textarea
         value={draft}
