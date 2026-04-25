@@ -139,6 +139,14 @@ export function buildAssistantMessage(content: string, id?: string, inProgress?:
   };
 }
 
+export function buildThinkingMessage(content: string, id?: string): ChatMessage {
+  return {
+    id: id ?? nextChatMessageID(),
+    kind: 'thinking',
+    content,
+  };
+}
+
 export function buildSystemMessage(content: string, id?: string): ChatMessage {
   return {
     id: id ?? nextChatMessageID(),
@@ -190,6 +198,7 @@ function mapToolSessionMessage(sessionId: string, message: NormalizedSessionMess
     id: buildSessionMessageID(sessionId, message.index, 'tool'),
     kind: 'tool',
     content: toolResult ? formatToolContent(toolResult, message.text) : message.text || '[tool]',
+    images: imagesFromContent(message.content),
     attachments: attachmentsFromContent(message.content),
     rawOutput: toolResult?.output,
     toolCallId: message.toolCallId,

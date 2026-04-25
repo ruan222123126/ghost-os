@@ -10,6 +10,8 @@ import type { AgentStreamEvent } from '@/lib/types';
 export interface ChatRuntimeState {
   assistantBuffer: string;
   assistantMessageId: string;
+  thinkingBuffer: string;
+  thinkingMessageId: string;
   pendingPreviewQueue: string[];
   previewToolArgs: Map<string, string>;
   previewToolCallSeqToID: Map<number, string>;
@@ -25,6 +27,8 @@ export function createChatRuntimeState(traceId: string, sessionId?: string): Cha
   return {
     assistantBuffer: '',
     assistantMessageId: `stream-assistant:${trimmedTraceId}`,
+    thinkingBuffer: '',
+    thinkingMessageId: `stream-thinking:${trimmedTraceId}`,
     pendingPreviewQueue: [],
     previewToolArgs: new Map(),
     previewToolCallSeqToID: new Map(),

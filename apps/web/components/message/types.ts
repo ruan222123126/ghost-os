@@ -8,6 +8,7 @@ import type {
 export interface MessageListProps {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingThinkingText: string;
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
@@ -22,8 +23,10 @@ export interface MessageListProps {
 export interface MessageRowProps {
   message: ChatMessage;
   isToolCardOpen?: boolean;
+  isThinkingPanelOpen?: boolean;
   loading: boolean;
   onToggleToolCard?: (messageId: string) => void;
+  onToggleThinkingPanel?: (messageId: string) => void;
   onAnswerQuestion: (questionId: string, answer: string) => Promise<void>;
   onCancelQuestion: (questionId: string) => Promise<void>;
 }
@@ -41,4 +44,6 @@ export type MessageListRow =
   | {
     key: 'thinking';
     kind: 'thinking';
+    thinkingText?: string;
+    thinkingExpanded?: boolean;
   };

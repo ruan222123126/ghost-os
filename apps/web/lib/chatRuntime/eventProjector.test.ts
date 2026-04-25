@@ -125,6 +125,78 @@ describe('lib/chatRuntime/eventProjector', () => {
     ]);
   });
 
+  it('projects thinking deltas into streaming thinking actions', () => {
+    const runtime = createChatRuntimeState('trace-1', 'session-1');
+    const actions = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'thinking',
+          thinking: 'Analyzing...',
+        },
+        { traceId: 'trace-1' },
+      ),
+    });
+
+    expect(actions).toEqual([
+      {
+        type: 'append_streaming_thinking_text',
+        text: 'Analyzing...',
+      },
+    ]);
+  });
+
+  it('commits thinking message before assistant output when message is finalized', () => {
+    const runtime = createChatRuntimeState('trace-5', 'session-5');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'thinking',
+          thinking: 'step 1\nstep 2',
+        },
+        { traceId: 'trace-5' },
+      ),
+    });
+
+    const actions = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'message',
+        {
+          text: 'final answer',
+        },
+        { traceId: 'trace-5' },
+      ),
+    });
+
+    expect(actions).toEqual([
+      {
+        type: 'clear_streaming_assistant_text',
+      },
+      {
+        type: 'clear_streaming_thinking_text',
+      },
+      {
+        type: 'append_committed_messages',
+        messages: [
+          {
+            id: 'stream-thinking:trace-5',
+            kind: 'thinking',
+            content: 'step 1\nstep 2',
+          },
+          {
+            id: 'stream-assistant:trace-5',
+            kind: 'assistant',
+            content: 'final answer',
+          },
+        ],
+      },
+    ]);
+  });
+
   it('finalizes message event by clearing stream text and committing assistant message', () => {
     const runtime = createChatRuntimeState('trace-3', 'session-3');
     projectAgentEvent({
@@ -155,6 +227,9 @@ describe('lib/chatRuntime/eventProjector', () => {
         type: 'clear_streaming_assistant_text',
       },
       {
+        type: 'clear_streaming_thinking_text',
+      },
+      {
         type: 'append_committed_messages',
         messages: [
           {
@@ -163,6 +238,26 @@ describe('lib/chatRuntime/eventProjector', () => {
             content: 'hi there',
           },
         ],
+      },
+    ]);
+  });
+
+  it('clears streaming thinking on terminal error events', () => {
+    const runtime = createChatRuntimeState('trace-3', 'session-3');
+    const actions = projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'error',
+        {
+          message: 'boom',
+        },
+        { traceId: 'trace-3' },
+      ),
+    });
+
+    expect(actions).toEqual([
+      {
+        type: 'clear_streaming_thinking_text',
       },
     ]);
   });

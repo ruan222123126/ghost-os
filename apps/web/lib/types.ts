@@ -80,6 +80,12 @@ export interface AssistantChatMessage {
   inProgress?: boolean;
 }
 
+export interface ThinkingChatMessage {
+  id: string;
+  kind: 'thinking';
+  content: string;
+}
+
 export interface SystemChatMessage {
   id: string;
   kind: 'system';
@@ -90,6 +96,7 @@ export interface ToolChatMessage {
   id: string;
   kind: 'tool';
   content: string;
+  images?: ChatImage[];
   attachments?: ChatFileAttachment[];
   toolName?: string;
   toolStatus?: string;
@@ -176,6 +183,7 @@ export interface QuestionChatMessage {
 export type ChatMessage =
   | UserChatMessage
   | AssistantChatMessage
+  | ThinkingChatMessage
   | SystemChatMessage
   | ToolChatMessage
   | ErrorChatMessage

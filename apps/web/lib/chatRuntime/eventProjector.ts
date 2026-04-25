@@ -5,7 +5,7 @@ import {
   parseAgentToolCallFinishedPayload,
   parseAgentToolCallStartedPayload,
 } from '@/lib/api/agent/parser';
-import { buildAssistantMessage } from '@/lib/chatMessages';
+import { buildAssistantMessage, buildThinkingMessage } from '@/lib/chatMessages';
 import { consumeToolTagStreamChunk, stripToolTagCalls } from '@/lib/toolTagText';
 import type { AgentStreamEvent, PendingQuestionMessage } from '@/lib/types';
 import type { ChatRuntimeAction } from './actions';
@@ -34,6 +34,10 @@ export function projectAgentEvent(options: ProjectAgentEventOptions): ChatRuntim
       return [projectAwaitingHuman(options)];
     case 'message':
       return projectMessage(options);
+    case 'done':
+    case 'error':
+      options.runtime.thinkingBuffer = '';
+      return [{ type: 'clear_streaming_thinking_text' }];
     default:
       return [];
   }
@@ -41,6 +45,13 @@ export function projectAgentEvent(options: ProjectAgentEventOptions): ChatRuntim
 
 function projectCompletionDelta({ event, runtime }: ProjectAgentEventOptions): ChatRuntimeAction[] {
   const payload = parseAgentCompletionDeltaPayload(event.payload);
+  if (payload.kind === 'thinking') {
+    if (!payload.thinking) {
+      return [];
+    }
+    runtime.thinkingBuffer = `${runtime.thinkingBuffer}${payload.thinking}`;
+    return [{ type: 'append_streaming_thinking_text', text: payload.thinking }];
+  }
   if (payload.kind !== 'text' || !payload.text) {
     return [];
   }
@@ -104,21 +115,40 @@ function projectMessage({ event, runtime }: ProjectAgentEventOptions): ChatRunti
   const finalized = consumeToolTagStreamChunk(runtime.toolTagState, '', true);
   const actions = projectToolTagUnits(runtime, event.trace_id, finalized.units);
   actions.push({ type: 'clear_streaming_assistant_text' });
+  actions.push({ type: 'clear_streaming_thinking_text' });
+  const thinkingText = runtime.thinkingBuffer.trim();
+  runtime.thinkingBuffer = '';
+  const committedMessages = thinkingText
+    ? [buildThinkingMessage(thinkingText, runtime.thinkingMessageId)]
+    : [];
 
   if (!payload.text.trim()) {
     runtime.assistantBuffer = '';
+    if (committedMessages.length > 0) {
+      actions.push({
+        type: 'append_committed_messages',
+        messages: committedMessages,
+      });
+    }
     return actions;
   }
 
   const visibleAssistantText = stripToolTagCalls(payload.text);
   if (!visibleAssistantText.trim()) {
     runtime.assistantBuffer = '';
+    if (committedMessages.length > 0) {
+      actions.push({
+        type: 'append_committed_messages',
+        messages: committedMessages,
+      });
+    }
     return actions;
   }
 
+  committedMessages.push(buildAssistantMessage(visibleAssistantText, runtime.assistantMessageId));
   actions.push({
     type: 'append_committed_messages',
-    messages: [buildAssistantMessage(visibleAssistantText, runtime.assistantMessageId)],
+    messages: committedMessages,
   });
   runtime.assistantBuffer = '';
   return actions;

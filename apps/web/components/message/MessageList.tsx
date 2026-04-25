@@ -8,7 +8,13 @@ import { EmptyState } from './EmptyState';
 import { MessageRow } from './MessageRow';
 import { getOrderedStreamingRows, type StreamingMessageRow } from './streamingRows';
 import { ThinkingIndicator } from './ThinkingIndicator';
-import { shouldShowThinkingIndicator } from './thinkingState';
+import { ThinkingPanel } from './ThinkingPanel';
+import {
+  hasAssistantStreamedVisibleText,
+  shouldAutoCollapseThinkingPanel,
+  shouldExpandThinkingPanelByDefault,
+  shouldShowThinkingIndicator,
+} from './thinkingState';
 import type { MessageListProps, MessageListRow } from './types';
 const BOTTOM_FOLLOW_THRESHOLD_PX = 120;
 const LOAD_OLDER_TRIGGER_ROWS = 5;
@@ -17,6 +23,7 @@ const MESSAGE_LIST_OVERSCAN = 8;
 export const MessageList: FC<MessageListProps> = ({
   committedMessages,
   streamingAssistantSegments,
+  streamingThinkingText,
   streamingItemOrder,
   streamingTools,
   pendingQuestions,
@@ -33,6 +40,11 @@ export const MessageList: FC<MessageListProps> = ({
   const shouldAutoFollowRef = useRef(true);
   const olderLoadPendingRef = useRef(false);
   const [openToolCards, setOpenToolCards] = useState<Record<string, boolean>>({});
+  const [openThinkingPanels, setOpenThinkingPanels] = useState<Record<string, boolean>>({});
+  const [thinkingExpanded, setThinkingExpanded] = useState(true);
+  const previousHasThinkingTextRef = useRef(false);
+  const previousHasAssistantTextRef = useRef(false);
+  const thinkingAutoCollapsedRef = useRef(false);
   const visibleCommittedMessages = getVisibleCommittedMessages(committedMessages, pendingQuestions);
   const streamingRows = getOrderedStreamingRows({
     pendingQuestions,
@@ -40,7 +52,15 @@ export const MessageList: FC<MessageListProps> = ({
     streamingItemOrder,
     streamingTools,
   });
-  const showThinking = shouldShowThinkingIndicator({ loading, streamingAssistantSegments, streamingTools });
+  const hasThinkingText = streamingThinkingText.trim().length > 0;
+  const hasAssistantText = hasAssistantStreamedVisibleText(streamingAssistantSegments);
+  const showThinkingIndicator = shouldShowThinkingIndicator({
+    loading,
+    streamingThinkingText,
+    streamingAssistantSegments,
+    streamingTools,
+  });
+  const showThinking = hasThinkingText || showThinkingIndicator;
   const rowCount = getRowCount(
     visibleCommittedMessages,
     streamingRows,
@@ -52,6 +72,8 @@ export const MessageList: FC<MessageListProps> = ({
     estimateSize: estimateMessageRowSize,
     getItemKey: (index) => getRowAtIndex(index, {
       committedMessages: visibleCommittedMessages,
+      thinkingExpanded,
+      thinkingText: hasThinkingText ? streamingThinkingText : undefined,
       showThinking,
       loadingOlderHistory,
       streamingRows,
@@ -66,6 +88,17 @@ export const MessageList: FC<MessageListProps> = ({
       ...previous,
       [messageId]: !previous[messageId],
     }));
+  }, []);
+
+  const handleToggleThinkingPanel = useCallback((messageId: string) => {
+    setOpenThinkingPanels((previous) => ({
+      ...previous,
+      [messageId]: !previous[messageId],
+    }));
+  }, []);
+
+  const handleToggleThinkingExpanded = useCallback(() => {
+    setThinkingExpanded((previous) => !previous);
   }, []);
 
   const handleLoadOlderHistory = useCallback(async () => {
@@ -105,6 +138,33 @@ export const MessageList: FC<MessageListProps> = ({
       container.removeEventListener('scroll', handleScroll);
     };
   }, []);
+
+  useEffect(() => {
+    if (!hasThinkingText) {
+      previousHasThinkingTextRef.current = false;
+      previousHasAssistantTextRef.current = hasAssistantText;
+      thinkingAutoCollapsedRef.current = false;
+      return;
+    }
+
+    if (shouldExpandThinkingPanelByDefault(hasThinkingText, previousHasThinkingTextRef.current)) {
+      setThinkingExpanded(true);
+      thinkingAutoCollapsedRef.current = false;
+    }
+
+    if (shouldAutoCollapseThinkingPanel({
+      hasThinkingText,
+      hasAssistantText,
+      hadAssistantText: previousHasAssistantTextRef.current,
+      alreadyAutoCollapsed: thinkingAutoCollapsedRef.current,
+    })) {
+      setThinkingExpanded(false);
+      thinkingAutoCollapsedRef.current = true;
+    }
+
+    previousHasThinkingTextRef.current = true;
+    previousHasAssistantTextRef.current = hasAssistantText;
+  }, [hasAssistantText, hasThinkingText]);
 
   useEffect(() => {
     if (!hasOlderHistory || loadingOlderHistory || virtualItems.length === 0) {
@@ -153,6 +213,8 @@ export const MessageList: FC<MessageListProps> = ({
         {virtualItems.map((virtualItem) => {
           const row = getRowAtIndex(virtualItem.index, {
             committedMessages: visibleCommittedMessages,
+            thinkingExpanded,
+            thinkingText: hasThinkingText ? streamingThinkingText : undefined,
             showThinking,
             loadingOlderHistory,
             streamingRows,
@@ -174,7 +236,10 @@ export const MessageList: FC<MessageListProps> = ({
                 openToolCards,
                 onAnswerQuestion,
                 onCancelQuestion,
+                onToggleThinkingExpanded: handleToggleThinkingExpanded,
+                onToggleThinkingPanel: handleToggleThinkingPanel,
                 onToggleToolCard: handleToggleToolCard,
+                openThinkingPanels,
               })}
             </div>
           );
@@ -191,7 +256,10 @@ function renderRow(
     loading: boolean;
     onAnswerQuestion: MessageListProps['onAnswerQuestion'];
     onCancelQuestion: MessageListProps['onCancelQuestion'];
+    onToggleThinkingExpanded: () => void;
+    onToggleThinkingPanel: (messageId: string) => void;
     onToggleToolCard: (messageId: string) => void;
+    openThinkingPanels: Record<string, boolean>;
     openToolCards: Record<string, boolean>;
   },
 ) {
@@ -203,15 +271,26 @@ function renderRow(
         </div>
       );
     case 'thinking':
+      if (row.thinkingText) {
+        return (
+          <ThinkingPanel
+            expanded={Boolean(row.thinkingExpanded)}
+            text={row.thinkingText}
+            onToggleExpanded={options.onToggleThinkingExpanded}
+          />
+        );
+      }
       return <ThinkingIndicator />;
     case 'message':
       return (
         <MessageRow
           message={row.message}
           isToolCardOpen={Boolean(options.openToolCards[row.message.id])}
+          isThinkingPanelOpen={Boolean(options.openThinkingPanels[row.message.id])}
           loading={options.loading}
           onAnswerQuestion={options.onAnswerQuestion}
           onCancelQuestion={options.onCancelQuestion}
+          onToggleThinkingPanel={options.onToggleThinkingPanel}
           onToggleToolCard={options.onToggleToolCard}
         />
       );
@@ -236,6 +315,8 @@ function getRowAtIndex(
   index: number,
   options: {
     committedMessages: ChatMessage[];
+    thinkingExpanded: boolean;
+    thinkingText?: string;
     showThinking: boolean;
     loadingOlderHistory: boolean;
     streamingRows: StreamingMessageRow[];
@@ -259,17 +340,24 @@ function getRowAtIndex(
   }
   cursor -= options.committedMessages.length;
 
+  if (options.showThinking) {
+    if (cursor === 0) {
+      return {
+        key: 'thinking',
+        kind: 'thinking',
+        thinkingText: options.thinkingText,
+        thinkingExpanded: options.thinkingExpanded,
+      };
+    }
+    cursor -= 1;
+  }
+
   if (cursor < options.streamingRows.length) {
     return {
       key: options.streamingRows[cursor].key,
       kind: 'message',
       message: options.streamingRows[cursor].message,
     };
-  }
-  cursor -= options.streamingRows.length;
-
-  if (options.showThinking && cursor === 0) {
-    return { key: 'thinking', kind: 'thinking' };
   }
 
   throw new Error(`message row index out of range: ${index}`);

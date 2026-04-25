@@ -156,6 +156,9 @@ function prependUniqueCommittedMessages(previous: ChatMessage[], older: ChatMess
 function mergeLatestCommittedMessages(previous: ChatMessage[], latest: ChatMessage[]): ChatMessage[] {
   const latestIDs = new Set(latest.map((message) => message.id));
   const preserved = previous.filter((message) => {
+    if (message.kind === 'thinking') {
+      return true;
+    }
     if (message.id.startsWith('stream-') || message.id.startsWith('local:')) {
       return false;
     }
