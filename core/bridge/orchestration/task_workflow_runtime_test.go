@@ -57,6 +57,11 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 	if run.Run.SessionIDOutput != "workflow-session" {
 		t.Fatalf("unexpected session output: %#v", run.Run)
 	}
+	assertWorkflowNodeResultsSequence(
+		t,
+		run.Run.NodeResults,
+		[]string{"start-node", "tool-node", "llm-node", "agent-node", "end-node"},
+	)
 	if len(tool.calls) != 1 || tool.calls[0]["command"] != "pwd" {
 		t.Fatalf("unexpected tool calls: %#v", tool.calls)
 	}
@@ -246,6 +251,15 @@ func TestTaskWorkflowRunNowExecutesStartBranchesInParallel(t *testing.T) {
 	}
 	if !strings.Contains(run.Run.ResponsePreview, "workflow completed in parallel") {
 		t.Fatalf("unexpected run preview: %#v", run.Run)
+	}
+	assertWorkflowNodeResultsMonotonic(t, run.Run.NodeResults)
+	for _, node := range run.Run.NodeResults {
+		if !strings.HasPrefix(node.NodeID, "tool-") {
+			continue
+		}
+		if strings.TrimSpace(node.BranchID) == "" {
+			t.Fatalf("expected tool branch node to include branch_id: %#v", node)
+		}
 	}
 	if tool.maxConcurrency() < 2 {
 		t.Fatalf("expected concurrent execution, got max=%d", tool.maxConcurrency())
@@ -558,6 +572,38 @@ func workflowWithToolNode(toolName string) *WorkflowDefinition {
 			{FromNodeID: "start-node", ToNodeID: "tool-node"},
 			{FromNodeID: "tool-node", ToNodeID: "end-node"},
 		},
+	}
+}
+
+func assertWorkflowNodeResultsSequence(t *testing.T, nodeResults []RunNodeResult, expectedNodeIDs []string) {
+	t.Helper()
+	if len(nodeResults) != len(expectedNodeIDs) {
+		t.Fatalf("unexpected node result count: got %d want %d", len(nodeResults), len(expectedNodeIDs))
+	}
+	for index, node := range nodeResults {
+		if node.CompletedSeq != index+1 {
+			t.Fatalf("unexpected completed_seq at index=%d: %#v", index, node)
+		}
+		if node.NodeID != expectedNodeIDs[index] {
+			t.Fatalf("unexpected node order at index=%d: got %q want %q", index, node.NodeID, expectedNodeIDs[index])
+		}
+		if strings.TrimSpace(node.Status) == "" || node.StartedAt.IsZero() || node.FinishedAt.IsZero() {
+			t.Fatalf("expected non-empty status/timestamps: %#v", node)
+		}
+	}
+}
+
+func assertWorkflowNodeResultsMonotonic(t *testing.T, nodeResults []RunNodeResult) {
+	t.Helper()
+	if len(nodeResults) == 0 {
+		t.Fatal("expected workflow node results")
+	}
+	lastSeq := 0
+	for index, node := range nodeResults {
+		if node.CompletedSeq <= lastSeq {
+			t.Fatalf("completed_seq must be strictly increasing at index=%d: %#v", index, node)
+		}
+		lastSeq = node.CompletedSeq
 	}
 }
 

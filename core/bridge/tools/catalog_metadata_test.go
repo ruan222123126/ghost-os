@@ -10,11 +10,8 @@ func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 	expected := []string{
 		"script_exec",
 		"codex_cli",
-		"image_generate",
 		"web_search",
-		"web_rooter",
 		"screen_control",
-		"task_manage",
 		"tfind",
 		"ask_human",
 	}

@@ -66,6 +66,8 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 
 	raw := json.RawMessage(`{
 		"session_human_log_full_enabled": true,
+		"assistant_markdown_enabled": false,
+		"memory_mode_enabled": true,
 		"web_rooter_enabled": true,
 		"web_rooter_base_url": "http://127.0.0.1:9988",
 		"web_rooter_api_token": "rooter-token",
@@ -101,6 +103,12 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	if !snapshot.SessionHumanLogFullEnabled {
 		t.Fatal("expected session_human_log_full_enabled in snapshot")
 	}
+	if snapshot.AssistantMarkdownEnabled {
+		t.Fatal("expected assistant_markdown_enabled to be false in snapshot")
+	}
+	if !snapshot.MemoryModeEnabled {
+		t.Fatal("expected memory_mode_enabled to be true in snapshot")
+	}
 	if !snapshot.WebRooterAPITokenSet {
 		t.Fatal("expected web_rooter_api_token_set in snapshot")
 	}
@@ -114,6 +122,12 @@ func TestConfigUpdatePropagatesWebRooterFieldsThroughOrchestration(t *testing.T)
 	}
 	if !cfg.SessionHumanLogFullEnabled {
 		t.Fatal("expected session_human_log_full_enabled in runtime config")
+	}
+	if cfg.AssistantMarkdownEnabled {
+		t.Fatal("expected assistant_markdown_enabled to be false in runtime config")
+	}
+	if !cfg.MemoryModeEnabled {
+		t.Fatal("expected memory_mode_enabled to be true in runtime config")
 	}
 	if cfg.WebRooterBaseURL != "http://127.0.0.1:9988" {
 		t.Fatalf("unexpected web_rooter_base_url: %q", cfg.WebRooterBaseURL)

@@ -73,8 +73,6 @@ func summarizeResult(toolName string, raw string) string {
 	switch toolName {
 	case "list_files":
 		return summarizeJSONList(result, "entries")
-	case "search_files":
-		return summarizeJSONList(result, "matches")
 	case "read_file":
 		return fmt.Sprintf("returned %d lines", countLines(result))
 	default:

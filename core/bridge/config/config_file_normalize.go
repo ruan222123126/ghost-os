@@ -46,6 +46,8 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.TasksPath = cloneOptionalStringPointer(cfg.TasksPath)
 	cfg.SessionsPath = cloneOptionalStringPointer(cfg.SessionsPath)
 	cfg.SessionHumanLogFullEnabled = cloneBoolPointer(cfg.SessionHumanLogFullEnabled)
+	cfg.AssistantMarkdownEnabled = cloneBoolPointer(cfg.AssistantMarkdownEnabled)
+	cfg.MemoryModeEnabled = cloneBoolPointer(cfg.MemoryModeEnabled)
 	cfg.RSSFeedsPath = cloneOptionalStringPointer(cfg.RSSFeedsPath)
 	cfg.RSSInboxPath = cloneOptionalStringPointer(cfg.RSSInboxPath)
 	cfg.RSSBriefingsPath = cloneOptionalStringPointer(cfg.RSSBriefingsPath)

@@ -1,10 +1,13 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
+	"time"
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/streaming"
@@ -196,5 +199,74 @@ func TestToolCallExecutorExecuteSingleClosesExplicitInvalidInvocation(t *testing
 	}
 	if payload["tool_call_id"] != "call-explicit-1" {
 		t.Fatalf("unexpected tool_call_id in finish event: %+v", payload)
+	}
+}
+
+func TestExecuteToolSafelySkipsExecutionWhenContextCanceled(t *testing.T) {
+	tool := newStaticTool("echo", "ok")
+	executor := newToolCallExecutor(newFakeToolCatalog(tool), NewHistory(""), nil, newAgentEventEmitter(nil, nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	output, err := executor.executeToolSafely(ctx, tool, json.RawMessage(`{"message":"hello"}`), "trace-cancel", "echo")
+	if err == nil {
+		t.Fatal("expected cancellation error but got nil")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled error, got: %v", err)
+	}
+	if output != "" {
+		t.Fatalf("unexpected output when canceled: %q", output)
+	}
+	if tool.callCount != 0 {
+		t.Fatalf("tool should not be executed when context is canceled, callCount=%d", tool.callCount)
+	}
+}
+
+func TestExecuteToolSafelySkipsExecutionWhenContextDeadlineExceeded(t *testing.T) {
+	tool := newStaticTool("echo", "ok")
+	executor := newToolCallExecutor(newFakeToolCatalog(tool), NewHistory(""), nil, newAgentEventEmitter(nil, nil))
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	output, err := executor.executeToolSafely(ctx, tool, json.RawMessage(`{"message":"hello"}`), "trace-deadline", "echo")
+	if err == nil {
+		t.Fatal("expected deadline exceeded error but got nil")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected context deadline exceeded error, got: %v", err)
+	}
+	if output != "" {
+		t.Fatalf("unexpected output when context deadline exceeded: %q", output)
+	}
+	if tool.callCount != 0 {
+		t.Fatalf("tool should not be executed when context deadline exceeded, callCount=%d", tool.callCount)
+	}
+}
+
+func TestToolCallLoggingDisabledSkipsArgSummary(t *testing.T) {
+	prev := debugToolCallLogs
+	debugToolCallLogs = false
+	defer func() {
+		debugToolCallLogs = prev
+	}()
+
+	var stderr bytes.Buffer
+	tool := newStaticTool("echo", "ok")
+	executor := newToolCallExecutor(newFakeToolCatalog(tool), NewHistory(""), &stderr, newAgentEventEmitter(nil, nil))
+
+	_, err := executor.executeSingle(
+		context.Background(),
+		"trace-log-off",
+		1,
+		"echo",
+		"call-log-off",
+		json.RawMessage(`{"message":"hello"}`),
+	)
+	if err != nil {
+		t.Fatalf("executeSingle returned error: %v", err)
+	}
+	if strings.Contains(stderr.String(), "tool_call:") {
+		t.Fatalf("unexpected tool_call log when debug disabled: %q", stderr.String())
 	}
 }

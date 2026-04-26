@@ -33,9 +33,9 @@ func writeSystemPromptFilesToRoots(roots []string, files SystemPromptFiles) erro
 
 func writeSystemPromptFilesToRoot(root string, files SystemPromptFiles) error {
 	for _, key := range systemPromptFileKeys() {
-		content, ok := systemPromptFileValue(files, key)
-		if !ok {
-			return fmt.Errorf("unknown system prompt key: %s", key)
+		content, err := systemPromptFileValue(files, key)
+		if err != nil {
+			return err
 		}
 		if err := writeSystemPromptFileIfChanged(root, key, content); err != nil {
 			return err
@@ -94,9 +94,34 @@ func systemPromptFilePath(root string, key string) (string, error) {
 
 func systemPromptFileName(key string) (string, bool) {
 	switch key {
-	case systemPromptGlobalTemplateKey, systemPromptCorePromptKey, systemPromptToolPromptKey, systemPromptToolKeySpecKey:
+	case systemPromptCorePromptKey:
 		return key + systemPromptFileExt, true
+	case systemPromptPromptLibraryKey:
+		return key + systemPromptJSONExt, true
 	default:
 		return "", false
 	}
+}
+
+func removeLegacySystemPromptFiles(roots []string) error {
+	for _, root := range roots {
+		if err := removeLegacySystemPromptFilesFromRoot(root); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func removeLegacySystemPromptFilesFromRoot(root string) error {
+	for _, key := range legacySystemPromptFileKeys() {
+		path := filepath.Join(strings.TrimSpace(root), key+systemPromptFileExt)
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove legacy system prompt file %s: %w", path, err)
+		}
+	}
+	return nil
+}
+
+func legacySystemPromptFileKeys() []string {
+	return []string{"global_template", "tool_prompt", "tool_key_spec"}
 }

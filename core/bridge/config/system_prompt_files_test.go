@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -16,11 +17,11 @@ func TestLoadSystemPromptFilesCreatesDefaultFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadSystemPromptFiles: %v", err)
 	}
-	if files.GlobalTemplate != defaultSystemPromptGlobalTemplate {
-		t.Fatalf("unexpected global template: got %q want %q", files.GlobalTemplate, defaultSystemPromptGlobalTemplate)
+	if files.CorePrompt != "" {
+		t.Fatalf("expected core prompt file to start empty, got %+v", files)
 	}
-	if files.CorePrompt != "" || files.ToolPrompt != "" || files.ToolKeySpec != "" {
-		t.Fatalf("expected local prompt files to start empty, got %+v", files)
+	if len(files.PromptLibrary) != 0 {
+		t.Fatalf("expected prompt library to start empty, got %+v", files.PromptLibrary)
 	}
 
 	root := filepath.Join(promptsDir, systemPromptDirName)
@@ -37,26 +38,21 @@ func TestUpdateSystemPromptFilesRoundTripAndAllowsEmptyStrings(t *testing.T) {
 	}
 
 	updated, err := UpdateSystemPromptFiles(promptsDir, SystemPromptUpdateRequest{
-		GlobalTemplate: stringPointer("{{base_prompt}}\n{{core_prompt}}\n{{tool_prompt}}\n{{tool_key_spec}}"),
-		CorePrompt:     stringPointer("core block"),
-		ToolPrompt:     stringPointer("tool block"),
-		ToolKeySpec:    stringPointer(""),
+		CorePrompt: stringPointer("core block"),
 	})
 	if err != nil {
 		t.Fatalf("UpdateSystemPromptFiles: %v", err)
 	}
-	if updated.GlobalTemplate != "{{base_prompt}}\n{{core_prompt}}\n{{tool_prompt}}\n{{tool_key_spec}}" {
-		t.Fatalf("unexpected global template: %+v", updated)
-	}
-	if updated.CorePrompt != "core block" || updated.ToolPrompt != "tool block" || updated.ToolKeySpec != "" {
+	if updated.CorePrompt != "core block" {
 		t.Fatalf("unexpected updated prompts: %+v", updated)
 	}
+	assertSingleCoreJobCard(t, updated.PromptLibrary, "core block")
 
 	reloaded, err := LoadSystemPromptFiles(promptsDir)
 	if err != nil {
 		t.Fatalf("LoadSystemPromptFiles after update: %v", err)
 	}
-	if reloaded != updated {
+	if !reflect.DeepEqual(reloaded, updated) {
 		t.Fatalf("unexpected reloaded prompts: got %+v want %+v", reloaded, updated)
 	}
 
@@ -91,6 +87,26 @@ func TestSystemPromptFilesSyncBetweenGhostAndGhostOS(t *testing.T) {
 	if err := os.Chtimes(ghostPath, newer, newer); err != nil {
 		t.Fatalf("Chtimes(%s): %v", ghostPath, err)
 	}
+	ghostPromptLibrary := []SystemPromptLibraryItem{
+		{
+			ID:          "core-job",
+			Name:        "Core Job",
+			InsertPoint: SystemPromptInsertPointCoreJob,
+			Content:     "from ghost",
+			Active:      true,
+		},
+	}
+	ghostLibraryRaw, err := marshalPromptLibrary(ghostPromptLibrary)
+	if err != nil {
+		t.Fatalf("marshalPromptLibrary: %v", err)
+	}
+	ghostLibraryPath := filepath.Join(ghostRoot, systemPromptPromptLibraryKey+systemPromptJSONExt)
+	if err := os.WriteFile(ghostLibraryPath, []byte(ghostLibraryRaw), systemPromptFilePerm); err != nil {
+		t.Fatalf("WriteFile(%s): %v", ghostLibraryPath, err)
+	}
+	if err := os.Chtimes(ghostLibraryPath, newer, newer); err != nil {
+		t.Fatalf("Chtimes(%s): %v", ghostLibraryPath, err)
+	}
 
 	reloaded, err := LoadSystemPromptFiles(primaryPromptsDir)
 	if err != nil {
@@ -104,20 +120,36 @@ func TestSystemPromptFilesSyncBetweenGhostAndGhostOS(t *testing.T) {
 	assertSystemPromptFile(t, ghostRoot, systemPromptCorePromptKey, "from ghost")
 }
 
-func TestRenderSystemPromptPreservesUnknownPlaceholders(t *testing.T) {
-	rendered := RenderSystemPrompt(SystemPromptFiles{
-		GlobalTemplate: "{{base_prompt}}\n{{unknown}}\n{{core_prompt}}",
-		CorePrompt:     "core",
-	}, "base")
+func TestLoadSystemPromptFilesRemovesLegacyPromptFiles(t *testing.T) {
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	root := filepath.Join(promptsDir, systemPromptDirName)
+	if err := os.MkdirAll(root, systemPromptDirPerm); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", root, err)
+	}
+	for _, key := range append(systemPromptFileKeys(), legacySystemPromptFileKeys()...) {
+		if err := os.WriteFile(filepath.Join(root, key+systemPromptFileExt), nil, systemPromptFilePerm); err != nil {
+			t.Fatalf("WriteFile(%s): %v", key, err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, systemPromptInitFile), []byte("initialized"), systemPromptFilePerm); err != nil {
+		t.Fatalf("WriteFile(init marker): %v", err)
+	}
 
-	if !strings.Contains(rendered, "base") {
-		t.Fatalf("expected base prompt in rendered output, got %q", rendered)
+	files, err := LoadSystemPromptFiles(promptsDir)
+	if err != nil {
+		t.Fatalf("LoadSystemPromptFiles: %v", err)
 	}
-	if !strings.Contains(rendered, "{{unknown}}") {
-		t.Fatalf("expected unknown placeholder to remain, got %q", rendered)
+	if files.CorePrompt != "" {
+		t.Fatalf("expected empty core prompt after migration, got %+v", files)
 	}
-	if !strings.Contains(rendered, "core") {
-		t.Fatalf("expected core prompt in rendered output, got %q", rendered)
+	if len(files.PromptLibrary) != 0 {
+		t.Fatalf("expected empty prompt library after migration, got %+v", files.PromptLibrary)
+	}
+	for _, key := range legacySystemPromptFileKeys() {
+		path := filepath.Join(root, key+systemPromptFileExt)
+		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected legacy prompt file removed: %s", path)
+		}
 	}
 }
 

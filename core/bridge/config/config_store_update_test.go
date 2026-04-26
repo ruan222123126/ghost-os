@@ -55,6 +55,12 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if !snapshot.SessionHumanLogFullEnabled {
 		t.Fatal("expected session_human_log_full_enabled to be true")
 	}
+	if !snapshot.AssistantMarkdownEnabled {
+		t.Fatal("expected assistant_markdown_enabled to be true")
+	}
+	if snapshot.MemoryModeEnabled {
+		t.Fatal("expected memory_mode_enabled to be false")
+	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
@@ -77,6 +83,12 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	}
 	if fileCfg.SessionHumanLogFullEnabled != nil {
 		t.Fatalf("snapshot should not persist session_human_log_full_enabled, got %#v", fileCfg.SessionHumanLogFullEnabled)
+	}
+	if fileCfg.AssistantMarkdownEnabled != nil {
+		t.Fatalf("snapshot should not persist assistant_markdown_enabled, got %#v", fileCfg.AssistantMarkdownEnabled)
+	}
+	if fileCfg.MemoryModeEnabled != nil {
+		t.Fatalf("snapshot should not persist memory_mode_enabled, got %#v", fileCfg.MemoryModeEnabled)
 	}
 }
 
@@ -219,5 +231,71 @@ func TestConfigStoreUpdatePersistsSessionHumanLogFullEnabled(t *testing.T) {
 	}
 	if fileCfg.SessionHumanLogFullEnabled == nil || !*fileCfg.SessionHumanLogFullEnabled {
 		t.Fatalf("unexpected persisted session_human_log_full_enabled: %#v", fileCfg.SessionHumanLogFullEnabled)
+	}
+}
+
+func TestConfigStoreUpdatePersistsAssistantMarkdownEnabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	disabled := false
+	if err := store.Update(configUpdateRequest{
+		AssistantMarkdownEnabled: &disabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if store.RuntimeConfig().AssistantMarkdownEnabled {
+		t.Fatal("expected runtime assistant_markdown_enabled to be false")
+	}
+	if store.Snapshot().AssistantMarkdownEnabled {
+		t.Fatal("expected snapshot assistant_markdown_enabled to be false")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.AssistantMarkdownEnabled == nil || *fileCfg.AssistantMarkdownEnabled {
+		t.Fatalf("unexpected persisted assistant_markdown_enabled: %#v", fileCfg.AssistantMarkdownEnabled)
+	}
+}
+
+func TestConfigStoreUpdatePersistsMemoryModeEnabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	enabled := true
+	if err := store.Update(configUpdateRequest{
+		MemoryModeEnabled: &enabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !store.RuntimeConfig().MemoryModeEnabled {
+		t.Fatal("expected runtime memory_mode_enabled to be true")
+	}
+	if !store.Snapshot().MemoryModeEnabled {
+		t.Fatal("expected snapshot memory_mode_enabled to be true")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.MemoryModeEnabled == nil || !*fileCfg.MemoryModeEnabled {
+		t.Fatalf("unexpected persisted memory_mode_enabled: %#v", fileCfg.MemoryModeEnabled)
 	}
 }

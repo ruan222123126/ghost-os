@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -49,6 +50,8 @@ func (r workflowTaskRunner) executePath(
 	deps agentRuntimeDependencies,
 	startNodeID string,
 	state *workflowRunState,
+	recorder *workflowNodeResultRecorder,
+	branchID string,
 ) workflowPathResult {
 	currentNodeID := strings.TrimSpace(startNodeID)
 	lastSessionID := ""
@@ -62,7 +65,19 @@ func (r workflowTaskRunner) executePath(
 		if !ok {
 			return workflowPathResult{status: taskRunStatusError, err: fmt.Errorf("workflow node %q is missing", currentNodeID)}
 		}
+		startedAt := time.Now().UTC()
+		nodeInput := workflowNodeInputSnapshot(node)
 		if node.Type == workflowNodeTypeEnd {
+			recorder.record(workflowNodeRecord{
+				NodeID:    node.ID,
+				NodeType:  node.Type,
+				Status:    taskRunStatusSuccess,
+				StartedAt: startedAt,
+				BranchID:  branchID,
+				Input:     nodeInput,
+				Output:    workflowEndNodeOutputSnapshot(),
+				Preview:   "end node reached",
+			})
 			return workflowPathResult{
 				status:      taskRunStatusSuccess,
 				sessionID:   lastSessionID,
@@ -71,15 +86,48 @@ func (r workflowTaskRunner) executePath(
 			}
 		}
 		step := r.executeStep(ctx, deps, node, state)
+		if step.executed {
+			nodeInput = workflowNodeInputFromOutcome(node, step.outcome)
+		}
 		if step.err != nil {
+			nodeErr := fmt.Sprintf("workflow node %s (%s) failed: %v", node.ID, node.Type, step.err)
+			recorder.record(workflowNodeRecord{
+				NodeID:    node.ID,
+				NodeType:  node.Type,
+				Status:    taskRunStatusError,
+				StartedAt: startedAt,
+				BranchID:  branchID,
+				Input:     nodeInput,
+				Output:    workflowNodeOutputSnapshot(step.nextNodeID, step.outcome),
+				Preview:   strings.TrimSpace(step.outcome.preview),
+				Error:     nodeErr,
+			})
 			return workflowPathResult{
 				status: taskRunStatusError,
-				err:    fmt.Errorf("workflow node %s (%s) failed: %w", node.ID, node.Type, step.err),
+				err:    fmt.Errorf("%s", nodeErr),
 			}
 		}
 		if sessionID := strings.TrimSpace(step.outcome.sessionID); sessionID != "" {
 			lastSessionID = sessionID
 		}
+		stepStatus := strings.TrimSpace(step.outcome.status)
+		if stepStatus == "" {
+			stepStatus = taskRunStatusSuccess
+		}
+		stepPreview := strings.TrimSpace(step.outcome.preview)
+		if stepPreview == "" && strings.TrimSpace(step.nextNodeID) != "" {
+			stepPreview = "next: " + strings.TrimSpace(step.nextNodeID)
+		}
+		recorder.record(workflowNodeRecord{
+			NodeID:    node.ID,
+			NodeType:  node.Type,
+			Status:    stepStatus,
+			StartedAt: startedAt,
+			BranchID:  branchID,
+			Input:     nodeInput,
+			Output:    workflowNodeOutputSnapshot(step.nextNodeID, step.outcome),
+			Preview:   stepPreview,
+		})
 		if step.outcome.status == taskRunStatusAwaitingHuman {
 			return workflowPathResult{
 				status:         taskRunStatusAwaitingHuman,
@@ -102,13 +150,14 @@ func (r workflowTaskRunner) executeParallelBranches(
 	deps agentRuntimeDependencies,
 	startNode WorkflowNode,
 	branchNodeIDs []string,
+	recorder *workflowNodeResultRecorder,
 ) bridgeTasks.ExecutionResult {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	resultCh := make(chan workflowParallelBranchResult, len(branchNodeIDs))
 	results := make([]workflowParallelBranchResult, len(branchNodeIDs))
 	for index, nodeID := range branchNodeIDs {
-		go r.runParallelBranch(runCtx, deps, startNode, nodeID, index, resultCh)
+		go r.runParallelBranch(runCtx, deps, startNode, nodeID, index, resultCh, recorder)
 	}
 	terminalIndex := -1
 	for range branchNodeIDs {
@@ -133,13 +182,14 @@ func (r workflowTaskRunner) runParallelBranch(
 	branchNodeID string,
 	index int,
 	resultCh chan<- workflowParallelBranchResult,
+	recorder *workflowNodeResultRecorder,
 ) {
 	state, err := r.newBranchState(startNode)
 	path := workflowPathResult{}
 	if err != nil {
 		path = workflowPathResult{status: taskRunStatusError, err: err}
 	} else {
-		path = r.executePath(ctx, deps, branchNodeID, &state)
+		path = r.executePath(ctx, deps, branchNodeID, &state, recorder, strings.TrimSpace(branchNodeID))
 	}
 	resultCh <- workflowParallelBranchResult{
 		index:       index,

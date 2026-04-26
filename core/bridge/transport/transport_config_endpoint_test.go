@@ -19,7 +19,7 @@ func TestHandleConfigMethodNotAllowed(t *testing.T) {
 func TestConfigUpdateThenGetUsesStore(t *testing.T) {
 	handler := newTestHandler(t, nil)
 
-	update := serveRequest(handler, http.MethodPost, "/api/config", `{"provider":"custom","api_key":"new-key","base_url":"http://localhost:1234","model":"local-model","chat_path":"/v1/messages"}`, nil)
+	update := serveRequest(handler, http.MethodPost, "/api/config", `{"provider":"custom","api_key":"new-key","base_url":"http://localhost:1234","model":"local-model","chat_path":"/v1/messages","assistant_markdown_enabled":false,"memory_mode_enabled":true}`, nil)
 	if update.Code != http.StatusOK {
 		t.Fatalf("unexpected update status: got %d want %d", update.Code, http.StatusOK)
 	}
@@ -54,6 +54,12 @@ func TestConfigUpdateThenGetUsesStore(t *testing.T) {
 	if payload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", payload["model_selection_enabled"])
 	}
+	if payload["assistant_markdown_enabled"] != false {
+		t.Fatalf("unexpected assistant_markdown_enabled: got %v want false", payload["assistant_markdown_enabled"])
+	}
+	if payload["memory_mode_enabled"] != true {
+		t.Fatalf("unexpected memory_mode_enabled: got %v want true", payload["memory_mode_enabled"])
+	}
 }
 
 func TestConfigUpdateEmptyBaseURLAndModelResetDefaults(t *testing.T) {
@@ -82,6 +88,12 @@ func TestConfigUpdateEmptyBaseURLAndModelResetDefaults(t *testing.T) {
 	if payload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", payload["model_selection_enabled"])
 	}
+	if payload["assistant_markdown_enabled"] != true {
+		t.Fatalf("unexpected assistant_markdown_enabled: got %v want true", payload["assistant_markdown_enabled"])
+	}
+	if payload["memory_mode_enabled"] != false {
+		t.Fatalf("unexpected memory_mode_enabled: got %v want false", payload["memory_mode_enabled"])
+	}
 }
 
 func TestConfigGetReturnsEmptyGraphQLArraysWhenUnset(t *testing.T) {
@@ -107,5 +119,11 @@ func TestConfigGetReturnsEmptyGraphQLArraysWhenUnset(t *testing.T) {
 			"expected graphql_mutation_policies to be an empty array, got %#v",
 			payload["graphql_mutation_policies"],
 		)
+	}
+	if payload["assistant_markdown_enabled"] != true {
+		t.Fatalf("unexpected assistant_markdown_enabled: got %v want true", payload["assistant_markdown_enabled"])
+	}
+	if payload["memory_mode_enabled"] != false {
+		t.Fatalf("unexpected memory_mode_enabled: got %v want false", payload["memory_mode_enabled"])
 	}
 }

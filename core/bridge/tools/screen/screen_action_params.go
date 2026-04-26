@@ -1,10 +1,23 @@
 package screen
 
 import (
+	"context"
 	"fmt"
+	"strings"
 
 	"ghost-os/bridge/tools/internal/toolparams"
 )
+
+const (
+	clickPositionTypeKey      = "position_type"
+	clickPositionTypeAbsolute = "absolute"
+	clickPositionTypeRelative = "relative"
+)
+
+type resolvedScreenPoint struct {
+	Point     screenPoint
+	DisplayID *int
+}
 
 func parseOptionalPoint(params map[string]any) (screenPoint, bool, error) {
 	if len(params) == 0 {
@@ -20,6 +33,52 @@ func parseOptionalPoint(params map[string]any) (screenPoint, bool, error) {
 		return screenPoint{}, false, fmt.Errorf("x and y must both be provided for direct click")
 	}
 	return screenPoint{X: x, Y: y}, true, nil
+}
+
+func (t *ScreenActionTool) resolveOptionalPoint(
+	ctx context.Context,
+	traceID string,
+	params map[string]any,
+) (resolvedScreenPoint, bool, error) {
+	point, ok, err := parseOptionalPoint(params)
+	if err != nil || !ok {
+		return resolvedScreenPoint{}, ok, err
+	}
+	if readClickPositionType(params) != clickPositionTypeRelative {
+		return resolvedScreenPoint{
+			Point:     point,
+			DisplayID: optionalDisplayIDPointer(params),
+		}, true, nil
+	}
+	position, err := t.queryMousePosition(ctx, traceID)
+	if err != nil {
+		return resolvedScreenPoint{}, false, err
+	}
+	return resolvedScreenPoint{
+		Point: screenPoint{
+			X: position.X + point.X,
+			Y: position.Y + point.Y,
+		},
+		DisplayID: position.DisplayID,
+	}, true, nil
+}
+
+func readClickPositionType(params map[string]any) string {
+	switch strings.ToLower(toolparams.OptionalString(params, clickPositionTypeKey, clickPositionTypeAbsolute)) {
+	case clickPositionTypeRelative:
+		return clickPositionTypeRelative
+	default:
+		return clickPositionTypeAbsolute
+	}
+}
+
+func optionalDisplayIDPointer(params map[string]any) *int {
+	displayID, ok := toolparams.OptionalInt(params, "display_id")
+	if !ok {
+		return nil
+	}
+	value := displayID
+	return &value
 }
 
 func parseOptionalRegion(params map[string]any) (screenRegion, bool, error) {
@@ -80,6 +139,27 @@ func appendDisplayIDFromParams(params map[string]any, payload map[string]any) {
 	if displayID, ok := toolparams.OptionalInt(params, "display_id"); ok {
 		payload["display_id"] = displayID
 	}
+}
+
+func appendDisplayIDValue(displayID *int, payload map[string]any) {
+	if displayID != nil {
+		payload["display_id"] = *displayID
+	}
+}
+
+func appendPositionTypeFromParams(params map[string]any, payload map[string]any) {
+	if len(params) == 0 {
+		return
+	}
+	raw, ok := params[clickPositionTypeKey].(string)
+	if !ok {
+		return
+	}
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value == "" {
+		return
+	}
+	payload[clickPositionTypeKey] = value
 }
 
 func buildScreenCaptureParams(params map[string]any) (map[string]any, error) {

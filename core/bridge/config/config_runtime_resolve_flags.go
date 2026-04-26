@@ -20,3 +20,17 @@ func resolveRuntimeSessionHumanLogFullEnabled(fileCfg bridgeFileConfig, fallback
 	}
 	return fallback.SessionHumanLogFullEnabled
 }
+
+func resolveRuntimeAssistantMarkdownEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.AssistantMarkdownEnabled != nil {
+		return *fileCfg.AssistantMarkdownEnabled
+	}
+	return fallback.AssistantMarkdownEnabled
+}
+
+func resolveRuntimeMemoryModeEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.MemoryModeEnabled != nil {
+		return *fileCfg.MemoryModeEnabled
+	}
+	return fallback.MemoryModeEnabled
+}

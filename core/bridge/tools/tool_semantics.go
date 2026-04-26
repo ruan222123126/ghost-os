@@ -22,10 +22,6 @@ func (ScriptExecTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (TaskManageTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
 func (ToolSearchTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }

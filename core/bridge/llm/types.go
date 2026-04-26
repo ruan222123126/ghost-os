@@ -28,11 +28,13 @@ const (
 
 // Message 是 provider 无关的会话消息结构。
 type Message struct {
-	Role       Role
-	Text       string
-	Content    []ContentPart
-	ToolCalls  []ToolCall
-	ToolCallID string
+	Role    Role
+	Text    string
+	Content []ContentPart
+	// ReasoningContent 保留 provider 返回的 reasoning_content，供后续请求原样回传。
+	ReasoningContent json.RawMessage `json:",omitempty"`
+	ToolCalls        []ToolCall
+	ToolCallID       string
 }
 
 const (
@@ -145,6 +147,7 @@ type DeltaKind string
 
 const (
 	DeltaKindText          DeltaKind = "text"
+	DeltaKindThinking      DeltaKind = "thinking"
 	DeltaKindToolCallStart DeltaKind = "tool_call_start"
 	DeltaKindToolCallDelta DeltaKind = "tool_call_delta"
 	DeltaKindToolCallEnd   DeltaKind = "tool_call_end"
@@ -153,6 +156,7 @@ const (
 type LLMDelta struct {
 	Kind              DeltaKind
 	Text              string
+	Thinking          string
 	ToolCallIndex     int
 	ToolCallID        string
 	ToolName          string
@@ -177,9 +181,10 @@ func CloneMessages(messages []Message) []Message {
 	out := make([]Message, len(messages))
 	for i, msg := range messages {
 		out[i] = Message{
-			Role:       msg.Role,
-			Text:       msg.Text,
-			ToolCallID: msg.ToolCallID,
+			Role:             msg.Role,
+			Text:             msg.Text,
+			ReasoningContent: cloneRawJSON(msg.ReasoningContent),
+			ToolCallID:       msg.ToolCallID,
 		}
 		if len(msg.Content) > 0 {
 			out[i].Content = cloneContentParts(msg.Content)

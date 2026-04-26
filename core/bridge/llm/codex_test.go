@@ -17,8 +17,8 @@ func TestCodexToCompletionResponseMapsToolCalls(t *testing.T) {
 			{
 				Type:      "function_call",
 				ID:        "fc_1",
-				Name:      "search_files",
-				Arguments: `{"query":"codex"}`,
+				Name:      "read_file",
+				Arguments: `{"path":"README.md"}`,
 			},
 		},
 		Usage: &codexUsage{InputTokens: 10, OutputTokens: 4, TotalTokens: 14},
@@ -35,10 +35,10 @@ func TestCodexToCompletionResponseMapsToolCalls(t *testing.T) {
 	if resp.Message.ToolCalls[0].ID != "fc_1" {
 		t.Fatalf("unexpected tool id: got %q want %q", resp.Message.ToolCalls[0].ID, "fc_1")
 	}
-	if resp.Message.ToolCalls[0].Name != "search_files" {
-		t.Fatalf("unexpected tool name: got %q want %q", resp.Message.ToolCalls[0].Name, "search_files")
+	if resp.Message.ToolCalls[0].Name != "read_file" {
+		t.Fatalf("unexpected tool name: got %q want %q", resp.Message.ToolCalls[0].Name, "read_file")
 	}
-	if got := string(resp.Message.ToolCalls[0].Arguments); got != `{"query":"codex"}` {
+	if got := string(resp.Message.ToolCalls[0].Arguments); got != `{"path":"README.md"}` {
 		t.Fatalf("unexpected tool arguments: got %q", got)
 	}
 	if resp.Usage.TotalTokens != 14 {

@@ -52,7 +52,3 @@ func (f runtimeFactoryAdapter) Build(store bridgeconfig.Store) (agentRuntimeDepe
 func newAgentRuntimeFactory() AgentRuntimeFactory {
 	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactory()}
 }
-
-func newAgentRuntimeFactoryWithTaskManager(taskManager tools.TaskManager) AgentRuntimeFactory {
-	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactoryWithTaskManager(taskManager)}
-}

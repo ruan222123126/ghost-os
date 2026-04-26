@@ -9,11 +9,8 @@ const (
 var configuredToolCatalog = []string{
 	"script_exec",
 	"codex_cli",
-	"image_generate",
 	"web_search",
-	"web_rooter",
 	"screen_control",
-	"task_manage",
 	configToolNameTFind,
 	configToolNameAskHuman,
 }
@@ -21,5 +18,4 @@ var configuredToolCatalog = []string{
 var workflowToolDenylist = map[string]string{
 	configToolNameAskHuman: "requires an active session",
 	configToolNameTFind:    "requires an active session",
-	"image_generate":       "requires an active session",
 }

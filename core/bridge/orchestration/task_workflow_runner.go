@@ -4,17 +4,19 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 type workflowNodeOutcome struct {
-	status      string
-	sessionID   string
-	preview     string
-	outputText  string
-	outputValue any
-	err         error
+	status        string
+	sessionID     string
+	preview       string
+	outputText    string
+	outputValue   any
+	inputSnapshot any
+	err           error
 }
 
 type workflowRunState struct {
@@ -114,12 +116,28 @@ func (r workflowTaskRunner) executePlan(ctx context.Context, deps agentRuntimeDe
 	if err != nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
+	recorder := newWorkflowNodeResultRecorder(len(r.plan.nodes))
 	branches := r.plan.nextNodeIDs(startNode.ID)
 	if len(branches) > 1 {
-		return r.executeParallelBranches(ctx, deps, startNode, branches)
+		recorder.record(workflowNodeRecord{
+			NodeID:    startNode.ID,
+			NodeType:  startNode.Type,
+			Status:    taskRunStatusSuccess,
+			StartedAt: time.Now().UTC(),
+			Input:     workflowNodeInputSnapshot(startNode),
+			Output: map[string]any{
+				"next_node_ids": append([]string(nil), branches...),
+			},
+			Preview: fmt.Sprintf("parallel branches: %s", strings.Join(branches, ", ")),
+		})
+		result := r.executeParallelBranches(ctx, deps, startNode, branches, recorder)
+		result.NodeResults = recorder.snapshot()
+		return result
 	}
-	result := r.executePath(ctx, deps, r.plan.startID, &state)
-	return r.pathResultToExecutionResult(result)
+	result := r.executePath(ctx, deps, r.plan.startID, &state, recorder, "")
+	execution := r.pathResultToExecutionResult(result)
+	execution.NodeResults = recorder.snapshot()
+	return execution
 }
 
 type workflowStepResult struct {
@@ -179,17 +197,28 @@ func (r workflowTaskRunner) executeActionNode(
 ) workflowNodeOutcome {
 	resolvedNode, err := resolveWorkflowActionNode(node, state.variables)
 	if err != nil {
-		return workflowNodeOutcome{err: err}
+		return workflowNodeOutcome{
+			err:           err,
+			inputSnapshot: workflowNodeInputSnapshot(node),
+		}
+	}
+	inputSnapshot := workflowNodeInputSnapshot(resolvedNode)
+	buildOutcome := func(outcome workflowNodeOutcome) workflowNodeOutcome {
+		outcome.inputSnapshot = inputSnapshot
+		return outcome
 	}
 	switch node.Type {
 	case workflowNodeTypeTool:
-		return executeWorkflowToolNode(ctx, deps, resolvedNode, r.traceID)
+		return buildOutcome(executeWorkflowToolNode(ctx, deps, resolvedNode, r.traceID))
 	case workflowNodeTypeLLM:
-		return executeWorkflowLLMNode(ctx, deps, resolvedNode)
+		return buildOutcome(executeWorkflowLLMNode(ctx, deps, resolvedNode))
 	case workflowNodeTypeAgent:
-		return r.executeAgentNode(ctx, resolvedNode)
+		return buildOutcome(r.executeAgentNode(ctx, resolvedNode))
 	default:
-		return workflowNodeOutcome{err: fmt.Errorf("unsupported workflow node type %q", node.Type)}
+		return workflowNodeOutcome{
+			err:           fmt.Errorf("unsupported workflow node type %q", node.Type),
+			inputSnapshot: inputSnapshot,
+		}
 	}
 }
 

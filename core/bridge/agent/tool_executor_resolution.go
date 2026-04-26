@@ -86,7 +86,7 @@ func (e toolCallExecutor) resolveToolCall(ctx context.Context, traceID string, s
 		return resolvedToolCall{}, outcome, true, finishErr
 	}
 
-	fmt.Fprintf(e.stderr, "[%s] tool_call: %s %s\n", traceID, toolName, summarizeToolArgs(args))
+	e.logToolCall(traceID, toolName, args)
 	tool := e.tools.Get(toolName)
 	if tool == nil {
 		outcome, finishErr := e.finishMissingToolCall(ctx, traceID, step, toolCallID, toolName)
@@ -120,7 +120,7 @@ func (e toolCallExecutor) resolveExplicitToolCall(
 	if err != nil {
 		return e.finishExplicitToolCallValidationError(ctx, traceID, step, toolCallID, toolName, err)
 	}
-	fmt.Fprintf(e.stderr, "[%s] tool_call: %s %s\n", traceID, toolName, summarizeToolArgs(normalizedArgs))
+	e.logToolCall(traceID, toolName, normalizedArgs)
 	tool := e.tools.Get(toolName)
 	if tool == nil {
 		outcome, finishErr := e.finishMissingToolCall(ctx, traceID, step, toolCallID, toolName)

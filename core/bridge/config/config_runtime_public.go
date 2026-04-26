@@ -16,6 +16,8 @@ func snapshotFromRuntimeConfig(runtime runtimeConfig) Snapshot {
 		GraphQLSources:             graphQLSourceSnapshotsFromRuntime(runtime.GraphQL.Sources),
 		GraphQLMutationPolicies:    graphQLMutationPolicySnapshots(runtime.GraphQL.MutationPolicies),
 		SessionHumanLogFullEnabled: runtime.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   runtime.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          runtime.MemoryModeEnabled,
 		WebRooterEnabled:           runtime.WebRooterEnabled,
 		WebRooterBaseURL:           runtime.WebRooterBaseURL,
 		WebRooterTimeoutMS:         runtime.WebRooterTimeoutMS,

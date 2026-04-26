@@ -10,67 +10,6 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-func TestAgentRuntimeFactoryRegistersTaskManageWhenTaskManagerPresent(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactoryWithTaskManager(fakeTaskManager{}).Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.registry.Get("task_manage") == nil {
-		t.Fatal("expected task_manage to be registered when task manager is present")
-	}
-}
-
-func TestAgentRuntimeFactorySkipsTaskManageWithoutTaskManager(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.registry.Get("task_manage") != nil {
-		t.Fatal("expected task_manage to stay hidden without a task manager")
-	}
-}
-
-func TestAgentRuntimeFactorySkipsWebRooterWhenDisabled(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.registry.Get("web_rooter") != nil {
-		t.Fatal("expected web_rooter to stay hidden when disabled")
-	}
-}
-
-func TestAgentRuntimeFactoryRegistersWebRooterWhenEnabled(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "true")
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.registry.Get("web_rooter") == nil {
-		t.Fatal("expected web_rooter to be registered")
-	}
-}
-
 func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
 	setupRuntimeFactoryTestEnv(t)
 	t.Setenv("GHOST_TOOL_SEARCH_ENABLED", "true")
@@ -84,21 +23,6 @@ func TestAgentRuntimeFactoryRegistersToolSearchWhenEnabled(t *testing.T) {
 
 	if deps.registry.Get("tfind") == nil {
 		t.Fatal("expected tfind to be registered when tool search is enabled")
-	}
-}
-
-func TestAgentRuntimeFactoryRegistersImageGenerate(t *testing.T) {
-	setupRuntimeFactoryTestEnv(t)
-	store := newRuntimeTestStore(t)
-
-	deps, err := newAgentRuntimeFactory().Build(store)
-	if err != nil {
-		t.Fatalf("build runtime deps: %v", err)
-	}
-	t.Cleanup(deps.Close)
-
-	if deps.registry.Get("image_generate") == nil {
-		t.Fatal("expected image_generate to be registered")
 	}
 }
 

@@ -11,7 +11,6 @@ import (
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
-	"ghost-os/bridge/tools"
 )
 
 type AgentExecutorFunc = agentExecutorFunc
@@ -75,13 +74,6 @@ func (s *Service) RunRegistry() *RunRegistry {
 		return nil
 	}
 	return s.inner.runRegistry
-}
-
-func (s *Service) TaskToolManager() tools.TaskManager {
-	if s == nil || s.inner == nil {
-		return nil
-	}
-	return s.inner.taskToolManager()
 }
 
 func (s *Service) SetAgentRunner(runner SessionTurnRunner) {
@@ -240,6 +232,14 @@ func (s *Service) ExecuteFindIconPreviewAction(
 	traceID string,
 ) (ServiceResult, error) {
 	return s.inner.executeFindIconPreviewActionResult(ctx, req, traceID)
+}
+
+func (s *Service) ExecuteMousePositionAction(
+	ctx context.Context,
+	req MousePositionRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.inner.executeMousePositionActionResult(ctx, req, traceID)
 }
 
 func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, bool) {

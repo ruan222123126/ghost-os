@@ -23,10 +23,6 @@ type AgentRuntimeFactory interface {
 
 type defaultAgentRuntimeFactory struct{}
 
-type taskAwareAgentRuntimeFactory struct {
-	taskManager tools.TaskManager
-}
-
 type runtimeBuildComponents struct {
 	cfg       Config
 	clients   runtimeClients
@@ -38,33 +34,19 @@ func newAgentRuntimeFactory() AgentRuntimeFactory {
 	return defaultAgentRuntimeFactory{}
 }
 
-func newAgentRuntimeFactoryWithTaskManager(taskManager tools.TaskManager) AgentRuntimeFactory {
-	if taskManager == nil {
-		return newAgentRuntimeFactory()
-	}
-	return taskAwareAgentRuntimeFactory{
-		taskManager: taskManager,
-	}
-}
-
 // Build 组装运行 Agent 所需的配置、模型客户端与工具注册表。
 func (f defaultAgentRuntimeFactory) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
-	return buildAgentRuntimeDependencies(store, nil)
-}
-
-func (f taskAwareAgentRuntimeFactory) Build(store *ConfigStore) (agentRuntimeDependencies, error) {
-	return buildAgentRuntimeDependencies(store, f.taskManager)
+	return buildAgentRuntimeDependencies(store)
 }
 
 func buildAgentRuntimeDependencies(
 	store *ConfigStore,
-	taskManager tools.TaskManager,
 ) (agentRuntimeDependencies, error) {
 	cfg, err := loadAgentRuntimeBuildConfig(store)
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
-	components, err := newRuntimeBuildComponents(cfg, taskManager)
+	components, err := newRuntimeBuildComponents(cfg)
 	if err != nil {
 		return agentRuntimeDependencies{}, err
 	}
@@ -73,7 +55,6 @@ func buildAgentRuntimeDependencies(
 
 func newRuntimeBuildComponents(
 	cfg Config,
-	taskManager tools.TaskManager,
 ) (runtimeBuildComponents, error) {
 	resources, err := newRuntimeToolResources(cfg)
 	if err != nil {
@@ -82,11 +63,10 @@ func newRuntimeBuildComponents(
 	registry := tools.NewRegistry()
 	clients := newRuntimeClients(cfg)
 	registerCoreTools(coreToolOptions{
-		cfg:         cfg,
-		registry:    registry,
-		clients:     clients,
-		resources:   resources,
-		taskManager: taskManager,
+		cfg:       cfg,
+		registry:  registry,
+		clients:   clients,
+		resources: resources,
 	})
 	return runtimeBuildComponents{
 		cfg:       cfg,

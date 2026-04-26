@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
+NATIVE_BINARY_NAME = "native.exe" if os.name == "nt" else "native"
+NATIVE_REQUIRED_FEATURE = "python-sandbox"
 
 
 # resolve_go_bin 在常见安装位置中定位 go 可执行文件。
@@ -35,16 +37,19 @@ def resolve_go_bin() -> str:
 
 
 # run 统一执行子命令，并在找不到 go 时回退到 bash -lc。
-def run(cmd: list[str], cwd: Path | None = None) -> int:
+def run(cmd: list[str], cwd: Path | None = None, env: dict[str, str] | None = None) -> int:
     location = cwd if cwd else ROOT
+    merged_env = os.environ.copy()
+    if env:
+        merged_env.update(env)
     try:
-        result = subprocess.run(cmd, cwd=location)
+        result = subprocess.run(cmd, cwd=location, env=merged_env)
         return result.returncode
     except FileNotFoundError:
         if cmd and Path(cmd[0]).name == "go":
             # 兼容仅在 shell 初始化后才可见 Go 路径的环境。
             shell_cmd = " ".join(shlex.quote(arg) for arg in cmd)
-            result = subprocess.run(["bash", "-lc", shell_cmd], cwd=location)
+            result = subprocess.run(["bash", "-lc", shell_cmd], cwd=location, env=merged_env)
             return result.returncode
         raise
 
@@ -52,7 +57,18 @@ def run(cmd: list[str], cwd: Path | None = None) -> int:
 # build_rust 编译 native Rust 二进制（release）。
 def build_rust() -> int:
     print("build rust native...")
-    return run(["cargo", "build", "--release"], ROOT / "drivers/native")
+    return run(
+        ["cargo", "build", "--release", "--features", NATIVE_REQUIRED_FEATURE],
+        ROOT / "drivers/native",
+    )
+
+
+def build_rust_debug() -> int:
+    print("build rust debug...")
+    return run(
+        ["cargo", "build", "--features", NATIVE_REQUIRED_FEATURE],
+        ROOT / "drivers/native",
+    )
 
 
 # build_go 编译 bridge Go 二进制到 bin 目录。
@@ -62,27 +78,64 @@ def build_go() -> int:
     return run([resolve_go_bin(), "build", "-o", "../../bin/ghost-bridge"], ROOT / "core/bridge")
 
 
+def native_debug_binary() -> Path:
+    return ROOT / "drivers/native/target/debug" / NATIVE_BINARY_NAME
+
+
+def native_release_binary() -> Path:
+    return ROOT / "drivers/native/target/release" / NATIVE_BINARY_NAME
+
+
+def stage_native_binary(source: Path) -> int:
+    if not source.is_file():
+        print(f"missing native binary: {source}", file=sys.stderr)
+        return 1
+    target = ROOT / "bin" / NATIVE_BINARY_NAME
+    shutil.copy2(source, target)
+    return 0
+
+
+def bridge_native_env(native_path: Path) -> dict[str, str]:
+    if os.environ.get("GHOST_NATIVE_BINARY_PATH") or os.environ.get("GHOST_NATIVE_BIN"):
+        return {}
+    return {"GHOST_NATIVE_BINARY_PATH": str(native_path)}
+
+
+def run_bridge(command: list[str], require_native_debug: bool = False) -> int:
+    env: dict[str, str] | None = None
+    if require_native_debug:
+        if build_rust_debug() != 0:
+            return 1
+        env = bridge_native_env(native_debug_binary())
+    return run([resolve_go_bin(), "run", "."] + command, ROOT / "core/bridge", env=env)
+
+
+def build() -> int:
+    if build_rust() != 0:
+        return 1
+    if build_go() != 0:
+        return 1
+    return stage_native_binary(native_release_binary())
+
+
 # ping 执行最小联通性验证：编译 native(debug) 后运行 bridge ping。
 def ping() -> int:
-    print("build rust debug...")
-    if run(["cargo", "build"], ROOT / "drivers/native") != 0:
-        return 1
     print("run bridge ping...")
-    return run([resolve_go_bin(), "run", ".", "ping"], ROOT / "core/bridge")
+    return run_bridge(["ping"], require_native_debug=True)
 
 
 # agent 运行 bridge agent 子命令，消息默认走最小问候语。
 def agent() -> int:
     msg = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else "Hello, what can you do?"
     print("run bridge agent...")
-    return run([resolve_go_bin(), "run", ".", "agent", msg], ROOT / "core/bridge")
+    return run_bridge(["agent", msg], require_native_debug=True)
 
 
 # serve 启动 bridge HTTP 服务，默认监听 8080。
 def serve() -> int:
     port = sys.argv[2] if len(sys.argv) > 2 else "8080"
     print(f"run bridge http server on :{port}...")
-    return run([resolve_go_bin(), "run", ".", "serve", port], ROOT / "core/bridge")
+    return run_bridge(["serve", port], require_native_debug=True)
 
 
 # web_dev 启动 Next.js Web 开发服务。
@@ -164,9 +217,7 @@ def init_web() -> int:
 def main() -> int:
     action = sys.argv[1] if len(sys.argv) > 1 else "help"
     if action == "build":
-        if build_rust() != 0:
-            return 1
-        return build_go()
+        return build()
     if action == "ping":
         return ping()
     if action == "agent":

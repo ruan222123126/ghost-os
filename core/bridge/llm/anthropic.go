@@ -28,6 +28,7 @@ type anthropicTool struct {
 type anthropicContentBlock struct {
 	Type      string                `json:"type"`
 	Text      string                `json:"text,omitempty"`
+	Thinking  string                `json:"thinking,omitempty"`
 	Source    *anthropicImageSource `json:"source,omitempty"`
 	ID        string                `json:"id,omitempty"`
 	Name      string                `json:"name,omitempty"`
@@ -69,6 +70,7 @@ type anthropicStreamEvent struct {
 type anthropicStreamDelta struct {
 	Type        string `json:"type"`
 	Text        string `json:"text,omitempty"`
+	Thinking    string `json:"thinking,omitempty"`
 	PartialJSON string `json:"partial_json,omitempty"`
 	StopReason  string `json:"stop_reason,omitempty"`
 }

@@ -183,6 +183,8 @@ func composeConfig(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeCon
 		WebSearchTavilyAPIKey:      runtime.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:         runtime.WebSearchExaAPIKey,
 		SessionHumanLogFullEnabled: runtime.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   runtime.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          runtime.MemoryModeEnabled,
 		WebRooterEnabled:           runtime.WebRooterEnabled,
 		WebRooterBaseURL:           runtime.WebRooterBaseURL,
 		WebRooterAPIToken:          runtime.WebRooterAPIToken,

@@ -78,22 +78,6 @@ func (t *ScreenActionTool) captureAndOCR(
 	}, nil
 }
 
-func (t *ScreenActionTool) captureScreen(
-	ctx context.Context,
-	params map[string]any,
-	traceID string,
-) (screenCapturePayload, error) {
-	callParams, err := buildScreenCaptureParams(params)
-	if err != nil {
-		return screenCapturePayload{}, err
-	}
-	payload, err := t.execution.Call(ctx, "SCREEN_CAPTURE", callParams, traceID)
-	if err != nil {
-		return screenCapturePayload{}, fmt.Errorf("execution SCREEN_CAPTURE failed: %w", err)
-	}
-	return decodeScreenCapturePayload(payload)
-}
-
 func (t *ScreenActionTool) runOCRImage(
 	ctx context.Context,
 	capture screenCapturePayload,

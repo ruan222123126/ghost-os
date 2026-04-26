@@ -76,18 +76,26 @@ func validateAssistantTextInvocations(result AssistantTextResult) error {
 	return validateAssistantTextSingleInvocation(result.Tool, result.Invocation)
 }
 
+func validateToolRef(tool AssistantTextToolRef, contextPrefix string) error {
+	if strings.TrimSpace(tool.Name) == "" {
+		return fmt.Errorf("%s empty tool name", contextPrefix)
+	}
+	if strings.TrimSpace(tool.CallID) == "" {
+		return fmt.Errorf("%s empty tool_call_id", contextPrefix)
+	}
+	return nil
+}
+
 func validateAssistantTextBatchInvocations(entries []AssistantTextToolInvocationEntry) error {
 	for index, entry := range entries {
-		if strings.TrimSpace(entry.Tool.Name) == "" {
-			return fmt.Errorf("recognized assistant text handler returned empty tool name in invocations[%d]", index)
-		}
-		if strings.TrimSpace(entry.Tool.CallID) == "" {
-			return fmt.Errorf("recognized assistant text handler returned empty tool_call_id in invocations[%d]", index)
+		contextPrefix := fmt.Sprintf("recognized assistant text handler returned in invocations[%d]", index)
+		if err := validateToolRef(entry.Tool, contextPrefix); err != nil {
+			return err
 		}
 		if err := validateAssistantTextArguments(
 			entry.Invocation.Arguments,
-			fmt.Sprintf("recognized assistant text handler returned empty tool arguments in invocations[%d]", index),
-			fmt.Sprintf("recognized assistant text handler returned invalid tool arguments in invocations[%d]", index),
+			fmt.Sprintf("%s empty tool arguments", contextPrefix),
+			fmt.Sprintf("%s invalid tool arguments", contextPrefix),
 		); err != nil {
 			return err
 		}
@@ -99,19 +107,17 @@ func validateAssistantTextSingleInvocation(
 	tool AssistantTextToolRef,
 	invocation *AssistantTextToolInvocation,
 ) error {
-	if strings.TrimSpace(tool.Name) == "" {
-		return fmt.Errorf("recognized assistant text handler returned empty tool name")
-	}
-	if strings.TrimSpace(tool.CallID) == "" {
-		return fmt.Errorf("recognized assistant text handler returned empty tool_call_id")
+	contextPrefix := "recognized assistant text handler returned"
+	if err := validateToolRef(tool, contextPrefix); err != nil {
+		return err
 	}
 	if invocation == nil {
 		return nil
 	}
 	return validateAssistantTextArguments(
 		invocation.Arguments,
-		"recognized assistant text handler returned empty tool arguments",
-		"recognized assistant text handler returned invalid tool arguments",
+		contextPrefix+" empty tool arguments",
+		contextPrefix+" invalid tool arguments",
 	)
 }
 
@@ -129,13 +135,8 @@ func validateAssistantTextAwaitingHuman(awaiting *AssistantTextAwaitingHuman) er
 	if awaiting == nil {
 		return nil
 	}
-	if strings.TrimSpace(awaiting.Tool.Name) == "" {
-		return fmt.Errorf("recognized assistant text handler returned empty awaiting-human tool name")
-	}
-	if strings.TrimSpace(awaiting.Tool.CallID) == "" {
-		return fmt.Errorf("recognized assistant text handler returned empty awaiting-human tool_call_id")
-	}
-	return nil
+	contextPrefix := "recognized assistant text handler returned awaiting-human"
+	return validateToolRef(awaiting.Tool, contextPrefix)
 }
 
 func cloneAssistantTextFeedback(messages []llm.Message) []llm.Message {

@@ -71,3 +71,27 @@ func TestLLMDeltaBridgeConvertsToolCallDelta(t *testing.T) {
 		t.Fatalf("unexpected arguments fragment: got %v want %q", payload["arguments_fragment"], `{"query":`)
 	}
 }
+
+func TestLLMDeltaBridgeConvertsThinkingDelta(t *testing.T) {
+	sink := &recordingEventSink{}
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1)
+	if err != nil {
+		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
+	}
+
+	err = bridge.OnDelta(context.Background(), llm.LLMDelta{
+		Kind:     llm.DeltaKindThinking,
+		Thinking: "let me reason...",
+	})
+	if err != nil {
+		t.Fatalf("OnDelta returned error: %v", err)
+	}
+
+	payload := sink.events[0].Payload.(map[string]any)
+	if payload["kind"] != string(llm.DeltaKindThinking) {
+		t.Fatalf("unexpected kind: got %v want %q", payload["kind"], llm.DeltaKindThinking)
+	}
+	if payload["thinking"] != "let me reason..." {
+		t.Fatalf("unexpected thinking: got %v", payload["thinking"])
+	}
+}

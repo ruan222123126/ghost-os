@@ -28,6 +28,8 @@ func configUpdateRequestToStoreRequest(req configUpdateRequest) bridgeconfig.Upd
 		GraphQLSourceUpsert:        graphQLSourceInputPointer(req.GraphqlSourceUpsert),
 		GraphQLMutationPolicies:    graphQLMutationPolicyInputs(req.GraphqlMutationPolicies),
 		SessionHumanLogFullEnabled: req.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   req.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          req.MemoryModeEnabled,
 		WebRooterEnabled:           req.WebRooterEnabled,
 		WebRooterBaseURL:           req.WebRooterBaseURL,
 		WebRooterAPIToken:          req.WebRooterAPIToken,

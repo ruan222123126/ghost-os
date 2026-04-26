@@ -55,3 +55,15 @@ type findIconPreviewPayload struct {
 	Region     *findIconPreviewRegion `json:"region,omitempty"`
 	Hovered    bool                   `json:"hovered,omitempty"`
 }
+
+type mousePositionRequest struct {
+	TraceID string `json:"trace_id,omitempty"`
+}
+
+type mousePositionPayload struct {
+	X         int      `json:"x"`
+	Y         int      `json:"y"`
+	DisplayID *int     `json:"display_id,omitempty"`
+	ScaleX    *float64 `json:"scale_x,omitempty"`
+	ScaleY    *float64 `json:"scale_y,omitempty"`
+}

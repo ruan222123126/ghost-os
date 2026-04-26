@@ -69,9 +69,10 @@
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["text", "tool_call_start", "tool_call_delta", "tool_call_end"]
+          "enum": ["text", "thinking", "tool_call_start", "tool_call_delta", "tool_call_end"]
         },
         "text": { "type": "string" },
+        "thinking": { "type": "string" },
         "tool_call_index": { "type": "integer", "minimum": 0 },
         "tool_call_id": { "type": "string" },
         "tool_name": { "type": "string" },

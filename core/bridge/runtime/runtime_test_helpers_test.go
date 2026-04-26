@@ -1,36 +1,12 @@
 package runtime
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/tools"
 )
-
-type fakeTaskManager struct{}
-
-func (fakeTaskManager) CreateAgentTask(context.Context, tools.TaskCreateRequest, string) (tools.TaskPayload, error) {
-	return tools.TaskPayload{}, nil
-}
-
-func (fakeTaskManager) UpdateAgentTask(context.Context, tools.TaskUpdateRequest, string) (tools.TaskPayload, error) {
-	return tools.TaskPayload{}, nil
-}
-
-func (fakeTaskManager) GetTask(context.Context, string, string) (tools.TaskPayload, error) {
-	return tools.TaskPayload{}, nil
-}
-
-func (fakeTaskManager) ListTasks(context.Context, string) ([]tools.TaskPayload, error) {
-	return nil, nil
-}
-
-func (fakeTaskManager) DeleteTask(context.Context, string, string) (tools.TaskDeleteResult, error) {
-	return tools.TaskDeleteResult{}, nil
-}
 
 func newRuntimeTestStore(t *testing.T) *ConfigStore {
 	t.Helper()

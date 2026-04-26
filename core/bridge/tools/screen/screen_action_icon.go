@@ -13,14 +13,18 @@ func (t *ScreenActionTool) executeFindIcon(ctx context.Context, params map[strin
 	if err != nil {
 		return "", err
 	}
-	return tooljson.Encode(buildFindIconPayload(payload, params))
+	hovered, err := t.hoverFirstFindIconMatch(ctx, traceID, payload, params)
+	if err != nil {
+		return "", err
+	}
+	return tooljson.Encode(applyFindIconHoverResult(buildFindIconPayload(payload, params), hovered))
 }
 
 func (t *ScreenActionTool) executeClickIcon(ctx context.Context, params map[string]any, traceID string) (string, error) {
 	if shouldHoverOnly(params) {
 		return t.executeHoverIcon(ctx, params, traceID)
 	}
-	if request, ok, err := parseDirectClickRequest(params); err != nil {
+	if request, ok, err := t.parseDirectClickRequest(ctx, traceID, params); err != nil {
 		return "", err
 	} else if ok {
 		logClickIcon(traceID, true, params)
@@ -54,7 +58,7 @@ func shouldHoverOnly(params map[string]any) bool {
 }
 
 func (t *ScreenActionTool) executeHoverIcon(ctx context.Context, params map[string]any, traceID string) (string, error) {
-	point, hasPoint, err := parseOptionalPoint(params)
+	point, hasPoint, err := t.resolveOptionalPoint(ctx, traceID, params)
 	if err != nil {
 		return "", err
 	}
@@ -77,27 +81,30 @@ func (t *ScreenActionTool) executeHoverIcon(ctx context.Context, params map[stri
 func (t *ScreenActionTool) hoverDirectPoint(
 	ctx context.Context,
 	traceID string,
-	point screenPoint,
+	point resolvedScreenPoint,
 	params map[string]any,
 ) (string, error) {
 	movePayload := map[string]any{
-		"x": point.X,
-		"y": point.Y,
+		"x": point.Point.X,
+		"y": point.Point.Y,
 	}
-	appendDisplayIDFromParams(params, movePayload)
+	appendDisplayIDValue(point.DisplayID, movePayload)
 	appendActiveWindowConstraints(params, movePayload)
-	if _, err := t.execution.Call(ctx, "MOUSE_MOVE", movePayload, traceID); err != nil {
-		return "", fmt.Errorf("execution MOUSE_MOVE failed: %w", err)
+	if err := t.executeMouseMove(ctx, traceID, movePayload); err != nil {
+		return "", err
 	}
-	return tooljson.Encode(map[string]any{
+	result := map[string]any{
 		"action":        "click_icon",
 		"template_path": toolparams.OptionalString(params, "template_path", ""),
 		"hovered":       true,
 		"direct":        true,
 		"selected": map[string]any{
-			"center": point,
+			"center": point.Point,
 		},
-	})
+	}
+	appendDisplayIDValue(point.DisplayID, result)
+	appendPositionTypeFromParams(params, result)
+	return tooljson.Encode(result)
 }
 
 func (t *ScreenActionTool) hoverMatchedPoint(
@@ -107,14 +114,8 @@ func (t *ScreenActionTool) hoverMatchedPoint(
 	payload iconMatchPayload,
 	params map[string]any,
 ) (string, error) {
-	movePayload := map[string]any{
-		"x": selected.Center.X,
-		"y": selected.Center.Y,
-	}
-	appendDisplayIDFromIcon(payload, movePayload)
-	appendActiveWindowConstraints(params, movePayload)
-	if _, err := t.execution.Call(ctx, "MOUSE_MOVE", movePayload, traceID); err != nil {
-		return "", fmt.Errorf("execution MOUSE_MOVE failed: %w", err)
+	if err := t.moveMouseToIconMatch(ctx, traceID, selected, payload, params); err != nil {
+		return "", err
 	}
 	return tooljson.Encode(map[string]any{
 		"action":          "click_icon",
@@ -161,19 +162,24 @@ func (t *ScreenActionTool) clickDirectPoint(ctx context.Context, traceID string,
 	return tooljson.Encode(result)
 }
 
-func parseDirectClickRequest(params map[string]any) (directClickRequest, bool, error) {
-	point, ok, err := parseOptionalPoint(params)
+func (t *ScreenActionTool) parseDirectClickRequest(
+	ctx context.Context,
+	traceID string,
+	params map[string]any,
+) (directClickRequest, bool, error) {
+	point, ok, err := t.resolveOptionalPoint(ctx, traceID, params)
 	if err != nil || !ok {
 		return directClickRequest{}, ok, err
 	}
 	extra := map[string]any{
 		"template_path": toolparams.OptionalString(params, "template_path", ""),
 	}
-	appendDisplayIDFromParams(params, extra)
+	appendDisplayIDValue(point.DisplayID, extra)
+	appendPositionTypeFromParams(params, extra)
 	appendActiveWindowConstraints(params, extra)
 	return directClickRequest{
 		Action: "click_icon",
-		Point:  point,
+		Point:  point.Point,
 		Button: toolparams.OptionalString(params, "button", ""),
 		Extra:  extra,
 	}, true, nil

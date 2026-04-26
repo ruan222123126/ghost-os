@@ -39,6 +39,8 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 		WebSearchTavilyAPIKey:      settings.WebSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         settings.WebSearch.ExaAPIKey,
 		SessionHumanLogFullEnabled: settings.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   settings.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          settings.MemoryModeEnabled,
 		WebRooterEnabled:           settings.WebRooter.Enabled,
 		WebRooterBaseURL:           settings.WebRooter.BaseURL,
 		WebRooterAPIToken:          settings.WebRooter.APIToken,
@@ -56,6 +58,8 @@ type runtimeFallbackSettings struct {
 	AllowlistOnly              bool
 	NativePersistent           bool
 	SessionHumanLogFullEnabled bool
+	AssistantMarkdownEnabled   bool
+	MemoryModeEnabled          bool
 }
 
 func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, error) {
@@ -84,6 +88,8 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 		AllowlistOnly:              allowlistOnly,
 		NativePersistent:           nativePersistent,
 		SessionHumanLogFullEnabled: sessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   defaultAssistantMarkdownEnabled,
+		MemoryModeEnabled:          defaultMemoryModeEnabled,
 	}, nil
 }
 
@@ -147,6 +153,8 @@ type runtimeFileSettings struct {
 	CodexStatelessRetryEnabled bool
 	AllowlistOnly              bool
 	SessionHumanLogFullEnabled bool
+	AssistantMarkdownEnabled   bool
+	MemoryModeEnabled          bool
 }
 
 type runtimeConfigBuildInput struct {
@@ -187,6 +195,8 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 		CodexStatelessRetryEnabled: resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
 		AllowlistOnly:              resolveRuntimeAllowlistOnly(fileCfg, fallback),
 		SessionHumanLogFullEnabled: resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
+		AssistantMarkdownEnabled:   resolveRuntimeAssistantMarkdownEnabled(fileCfg, fallback),
+		MemoryModeEnabled:          resolveRuntimeMemoryModeEnabled(fileCfg, fallback),
 	}, nil
 }
 
@@ -213,6 +223,8 @@ func runtimeConfigWithProviders(input runtimeConfigBuildInput, providers []provi
 		WebSearchTavilyAPIKey:      input.Settings.WebSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         input.Settings.WebSearch.ExaAPIKey,
 		SessionHumanLogFullEnabled: input.Settings.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   input.Settings.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          input.Settings.MemoryModeEnabled,
 		WebRooterEnabled:           input.Settings.WebRooter.Enabled,
 		WebRooterBaseURL:           input.Settings.WebRooter.BaseURL,
 		WebRooterAPIToken:          input.Settings.WebRooter.APIToken,
@@ -244,6 +256,8 @@ func runtimeConfigWithoutProviders(input runtimeConfigBuildInput) runtimeConfig 
 		WebSearchTavilyAPIKey:      input.Settings.WebSearch.TavilyAPIKey,
 		WebSearchExaAPIKey:         input.Settings.WebSearch.ExaAPIKey,
 		SessionHumanLogFullEnabled: input.Settings.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   input.Settings.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          input.Settings.MemoryModeEnabled,
 		WebRooterEnabled:           input.Settings.WebRooter.Enabled,
 		WebRooterBaseURL:           input.Settings.WebRooter.BaseURL,
 		WebRooterAPIToken:          input.Settings.WebRooter.APIToken,

@@ -14,6 +14,7 @@ type ExecutionResult struct {
 	Status          string
 	SessionIDOutput string
 	ResponsePreview string
+	NodeResults     []RunNodeResult
 	Error           string
 }
 

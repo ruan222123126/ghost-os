@@ -9,7 +9,6 @@ import (
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
-	"ghost-os/bridge/tools"
 )
 
 type actionHandler func(ctx context.Context, params json.RawMessage, traceID string) (ServiceResult, error)
@@ -57,7 +56,7 @@ func newBridgeServiceWithStreamExecutor(
 ) *bridgeService {
 	service := newBridgeServiceState(store, sessionStore)
 	service.skillHandler = NewSkillActionHandler(store, service.skillLogFunc())
-	service.runtimeFactory = newAgentRuntimeFactoryWithTaskManager(service.taskToolManager())
+	service.runtimeFactory = newAgentRuntimeFactory()
 	service.agentRunner = newServiceAgentRunner(service, executor, streamExecutor)
 	registerDefaultActions(service)
 	return service
@@ -87,13 +86,6 @@ func newServiceAgentRunner(service *bridgeService, executor agentExecutorFunc, s
 		service.sessionStore,
 		service.runRegistry,
 	)
-}
-
-func (s *bridgeService) taskToolManager() tools.TaskManager {
-	if s == nil {
-		return nil
-	}
-	return s
 }
 
 func (s *bridgeService) sessionPushHub() *sessionPushHub {

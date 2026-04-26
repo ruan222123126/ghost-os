@@ -66,6 +66,12 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.SessionHumanLogFullEnabled != nil {
 		fileCfg.SessionHumanLogFullEnabled = cloneBoolPointer(req.SessionHumanLogFullEnabled)
 	}
+	if req.AssistantMarkdownEnabled != nil {
+		fileCfg.AssistantMarkdownEnabled = cloneBoolPointer(req.AssistantMarkdownEnabled)
+	}
+	if req.MemoryModeEnabled != nil {
+		fileCfg.MemoryModeEnabled = cloneBoolPointer(req.MemoryModeEnabled)
+	}
 	if req.WebRooterEnabled != nil {
 		fileCfg.WebRooterEnabled = cloneBoolPointer(req.WebRooterEnabled)
 	}

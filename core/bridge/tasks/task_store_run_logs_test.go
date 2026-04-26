@@ -200,6 +200,77 @@ func TestTaskStoreAppendRunLogToleratesCorruptedLogFiles(t *testing.T) {
 	}
 }
 
+func TestTaskStoreRunLogRoundTripNodeResults(t *testing.T) {
+	store, err := NewStore(t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("new task store: %v", err)
+	}
+
+	const taskID = "task-node-results"
+	startedAt := time.Unix(1_700_010_000, 0).In(time.FixedZone("test+8", 8*60*60))
+	finishedAt := startedAt.Add(2 * time.Second)
+	run := TaskRunLog{
+		TaskID:      taskID,
+		RunID:       "run-node-results",
+		ScheduledAt: startedAt,
+		StartedAt:   startedAt,
+		Status:      RunStatusSuccess,
+		NodeResults: []RunNodeResult{
+			{
+				NodeID:       " tool-node ",
+				NodeType:     " tool ",
+				Status:       " success ",
+				StartedAt:    startedAt,
+				FinishedAt:   finishedAt,
+				CompletedSeq: 2,
+				BranchID:     " branch-a ",
+				Input: map[string]any{
+					"command": "pwd",
+					"flags":   []any{"-P"},
+				},
+				Output: map[string]any{
+					"ok": true,
+				},
+				Preview: " tool script_exec executed ",
+				Error:   " ",
+			},
+		},
+	}
+	appendTaskRunLogForTest(t, store, run)
+
+	logs, err := store.ListRunLogs(taskID, 1)
+	if err != nil {
+		t.Fatalf("list run logs: %v", err)
+	}
+	if len(logs) != 1 {
+		t.Fatalf("unexpected log count: got %d want 1", len(logs))
+	}
+	if len(logs[0].NodeResults) != 1 {
+		t.Fatalf("unexpected node result count: got %d want 1", len(logs[0].NodeResults))
+	}
+	node := logs[0].NodeResults[0]
+	if node.NodeID != "tool-node" || node.NodeType != "tool" || node.Status != RunStatusSuccess {
+		t.Fatalf("unexpected node identity: %#v", node)
+	}
+	if node.CompletedSeq != 2 || node.BranchID != "branch-a" {
+		t.Fatalf("unexpected node ordering fields: %#v", node)
+	}
+	if !node.StartedAt.Equal(startedAt.UTC()) || !node.FinishedAt.Equal(finishedAt.UTC()) {
+		t.Fatalf("unexpected node timestamps: %#v", node)
+	}
+	input, ok := node.Input.(map[string]any)
+	if !ok || input["command"] != "pwd" {
+		t.Fatalf("unexpected node input snapshot: %#v", node.Input)
+	}
+	output, ok := node.Output.(map[string]any)
+	if !ok || output["ok"] != true {
+		t.Fatalf("unexpected node output snapshot: %#v", node.Output)
+	}
+	if node.Preview != "tool script_exec executed" || node.Error != "" {
+		t.Fatalf("unexpected node preview/error: %#v", node)
+	}
+}
+
 func appendTaskRunLogForTest(t *testing.T, store *TaskStore, run TaskRunLog) {
 	t.Helper()
 	if err := store.AppendRunLog(run); err != nil {

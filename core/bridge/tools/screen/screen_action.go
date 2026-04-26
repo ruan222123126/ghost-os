@@ -9,15 +9,15 @@ import (
 	"ghost-os/bridge/llm"
 )
 
-const screenActionDescription = "Run desktop screen perception actions such as screenshot capture, OCR scan, visible-text click, or template icon matching. click_text always verifies the visible OCR label before clicking; optional x and y are used only to choose among verified matches. click_icon supports hover_only=true to move mouse without clicking."
+const screenActionDescription = "Run desktop screen perception actions such as screenshot capture, OCR scan, visible-text click, cursor position query, or template icon matching. click_text always verifies the visible OCR label before clicking; optional x and y are used only to choose among verified matches. click_icon supports hover_only=true to move mouse without clicking, and find_icon supports hover_after_match=true to move to the first match while still returning match data."
 
 const screenActionSchema = `{
 	"type":"object",
 	"properties":{
-		"action":{"type":"string","enum":["screenshot","ocr_scan","click_text","find_icon","click_icon"]},
+		"action":{"type":"string","enum":["screenshot","ocr_scan","click_text","find_icon","click_icon","mouse_position"]},
 		"params":{
 			"type":"object",
-			"description":"Action-specific parameters. screenshot supports display_id. OCR/icon actions support display_id and optional region. click_text requires text and treats optional x/y only as a candidate hint. click_icon accepts template_path or optional x/y direct-click coordinates; set hover_only=true to move mouse without clicking.",
+			"description":"Action-specific parameters. screenshot supports display_id. OCR/icon actions support display_id and optional region. click_text requires text and treats optional x/y only as a candidate hint. click_icon accepts template_path or optional x/y direct-click coordinates; set hover_only=true to move mouse without clicking. find_icon accepts hover_after_match=true to move to the first match while preserving find_icon output. mouse_position ignores params and returns the current cursor coordinates.",
 			"properties":{
 				"display_id":{"type":"number","minimum":0,"description":"Optional display ID."},
 				"region":{
@@ -37,15 +37,17 @@ const screenActionSchema = `{
 				"allow_single_char":{"type":"boolean","description":"Allow click_text to target a single visible character."},
 				"x":{"type":"number","description":"Optional X hint or direct click coordinate."},
 				"y":{"type":"number","description":"Optional Y hint or direct click coordinate."},
+				"position_type":{"type":"string","enum":["absolute","relative"],"description":"Optional direct-click coordinate origin. absolute uses screen coordinates; relative offsets from the current mouse position at execution time."},
 				"match_mode":{"type":"string","enum":["exact","contains","case_insensitive","normalized","fuzzy"],"description":"Text match mode for click_text."},
 				"max_distance":{"type":"number","minimum":1,"description":"Optional max edit distance for fuzzy match_mode."},
 				"occurrence":{"type":"number","minimum":1,"description":"Select the Nth matching OCR result."},
 				"button":{"type":"string","enum":["left","right","middle"],"description":"Optional mouse button for click actions."},
 				"hover_only":{"type":"boolean","description":"Optional; when true click_icon performs mouse move without clicking."},
+				"hover_after_match":{"type":"boolean","description":"Optional; when true find_icon moves the mouse to the first match center and still returns find_icon output."},
 				"ensure_active_window_title":{"type":"string","description":"Optional active window title substring to verify before clicking."},
 				"ensure_active_window_class":{"type":"string","description":"Optional active window class substring to verify before clicking."},
-				"reuse_cache":{"type":"boolean","description":"Optional reuse of recent OCR cache for click_text."},
-				"cache_ttl_ms":{"type":"number","minimum":0,"description":"Optional OCR cache TTL in milliseconds (default 1000)."},
+				"reuse_cache":{"type":"boolean","description":"Optional reuse of recent capture/OCR cache for OCR/icon actions and click_text."},
+				"cache_ttl_ms":{"type":"number","minimum":0,"description":"Optional capture/OCR cache TTL in milliseconds (default 1000)."},
 				"template_path":{"type":"string","description":"Template image path for find_icon or click_icon."},
 				"threshold":{"type":"number","minimum":0,"maximum":1,"description":"Optional icon match threshold."},
 				"max_results":{"type":"number","minimum":1,"description":"Optional maximum icon matches to return."},
@@ -68,8 +70,9 @@ const screenActionSchema = `{
 }`
 
 type ScreenActionTool struct {
-	execution ExecutionClient
-	ocrCache  *screenOCRCache
+	execution    ExecutionClient
+	ocrCache     *screenOCRCache
+	captureCache *screenCaptureCache
 }
 
 type screenActionArgs struct {
@@ -172,8 +175,9 @@ type screenActionResult struct {
 
 func NewScreenActionTool(client ExecutionClient) Tool {
 	return &ScreenActionTool{
-		execution: client,
-		ocrCache:  &screenOCRCache{},
+		execution:    client,
+		ocrCache:     &screenOCRCache{},
+		captureCache: &screenCaptureCache{},
 	}
 }
 
@@ -210,6 +214,8 @@ func (t *ScreenActionTool) Execute(ctx context.Context, argsJSON json.RawMessage
 		return t.executeFindIcon(ctx, args.Params, traceID)
 	case "click_icon":
 		return t.executeClickIcon(ctx, args.Params, traceID)
+	case "mouse_position":
+		return t.executeMousePosition(ctx, traceID)
 	default:
 		return "", fmt.Errorf("unsupported screen action %q", args.Action)
 	}
@@ -220,6 +226,13 @@ func (t *ScreenActionTool) ensureOCRCache() *screenOCRCache {
 		t.ocrCache = &screenOCRCache{}
 	}
 	return t.ocrCache
+}
+
+func (t *ScreenActionTool) ensureCaptureCache() *screenCaptureCache {
+	if t.captureCache == nil {
+		t.captureCache = &screenCaptureCache{}
+	}
+	return t.captureCache
 }
 
 func (ScreenActionTool) InterpretResult(output string) ExecuteMeta {

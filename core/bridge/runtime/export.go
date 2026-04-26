@@ -66,10 +66,6 @@ func NewAgentRuntimeFactory() AgentRuntimeFactory {
 	return newAgentRuntimeFactory()
 }
 
-func NewAgentRuntimeFactoryWithTaskManager(taskManager tools.TaskManager) AgentRuntimeFactory {
-	return newAgentRuntimeFactoryWithTaskManager(taskManager)
-}
-
 func NewToolSelectionPolicy(cfg Config) SelectionPolicy {
 	return SelectionPolicy{toolSelectionPolicy: newToolSelectionPolicy(cfg)}
 }

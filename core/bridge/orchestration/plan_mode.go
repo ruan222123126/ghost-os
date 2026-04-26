@@ -31,7 +31,7 @@ func newPlanModeRunner(service *bridgeService) planModeRunner {
 	}
 	factory := service.runtimeFactory
 	if factory == nil {
-		factory = newAgentRuntimeFactoryWithTaskManager(service.taskToolManager())
+		factory = newAgentRuntimeFactory()
 	}
 	return planModeRunner{
 		runtimeFactory: factory,

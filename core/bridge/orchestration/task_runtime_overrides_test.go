@@ -118,6 +118,25 @@ func TestTaskRunNowAppliesRuntimeOverrideToolAllowlist(t *testing.T) {
 	if run.Run.Status != taskRunStatusSuccess {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
+	if len(run.Run.NodeResults) != 1 {
+		t.Fatalf("expected one agent_message node result, got %#v", run.Run.NodeResults)
+	}
+	node := run.Run.NodeResults[0]
+	if node.NodeID != taskKindAgentMessage || node.NodeType != taskKindAgentMessage || node.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected agent node identity: %#v", node)
+	}
+	input, ok := node.Input.(map[string]any)
+	message, hasMessage := input["message"].(string)
+	if !ok || !hasMessage || strings.TrimSpace(message) != "use narrowed tool set" {
+		t.Fatalf("unexpected agent node input: %#v", node.Input)
+	}
+	output, ok := node.Output.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected agent node output: %#v", node.Output)
+	}
+	if _, exists := output["response_preview"]; !exists {
+		t.Fatalf("expected response_preview in node output: %#v", node.Output)
+	}
 	if len(completer.requests) != 1 {
 		t.Fatalf("expected one completion request, got %d", len(completer.requests))
 	}

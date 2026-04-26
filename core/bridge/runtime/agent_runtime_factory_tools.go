@@ -1,8 +1,6 @@
 package runtime
 
 import (
-	"time"
-
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/artifacts"
 	"ghost-os/bridge/execution"
@@ -20,11 +18,10 @@ type runtimeToolResources struct {
 }
 
 type coreToolOptions struct {
-	cfg         Config
-	registry    *tools.Registry
-	clients     runtimeClients
-	resources   runtimeToolResources
-	taskManager tools.TaskManager
+	cfg       Config
+	registry  *tools.Registry
+	clients   runtimeClients
+	resources runtimeToolResources
 }
 
 func newRuntimeClients(cfg Config) runtimeClients {
@@ -59,28 +56,12 @@ func registerRuntimeExecutionTools(opts coreToolOptions) {
 }
 
 func registerRuntimeWebTools(opts coreToolOptions) {
-	opts.registry.Register(tools.NewImageGenerateTool(
-		tools.ImageGenerateConfig{
-			Provider: opts.cfg.Provider.Type,
-			BaseURL:  opts.cfg.Provider.BaseURL,
-			APIKey:   opts.cfg.Provider.APIKey,
-			Headers:  opts.cfg.Provider.Headers,
-		},
-		opts.resources.artifactStore,
-	))
 	opts.registry.Register(tools.NewWebSearchTool(tools.WebSearchConfig{
 		TavilyURL:    opts.cfg.WebSearchTavilyURL,
 		ExaURL:       opts.cfg.WebSearchExaURL,
 		TavilyAPIKey: opts.cfg.WebSearchTavilyAPIKey,
 		ExaAPIKey:    opts.cfg.WebSearchExaAPIKey,
 	}))
-	if opts.cfg.WebRooterEnabled {
-		opts.registry.Register(tools.NewWebRooterTool(tools.WebRooterConfig{
-			BaseURL:  opts.cfg.WebRooterBaseURL,
-			APIToken: opts.cfg.WebRooterAPIToken,
-			Timeout:  time.Duration(opts.cfg.WebRooterTimeoutMS) * time.Millisecond,
-		}))
-	}
 }
 
 func registerRuntimeInteractionTools(opts coreToolOptions) {
@@ -94,9 +75,6 @@ func registerRuntimeInteractionTools(opts coreToolOptions) {
 }
 
 func registerRuntimeOptionalTools(opts coreToolOptions) {
-	if opts.taskManager != nil {
-		opts.registry.Register(tools.NewTaskManageTool(opts.taskManager))
-	}
 	if opts.cfg.ToolSearch.Enabled {
 		opts.registry.Register(
 			tools.NewToolSearchTool(

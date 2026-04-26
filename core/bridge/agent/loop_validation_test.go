@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -65,4 +66,41 @@ func TestRunStreamRejectsInvalidAgentRuntimeWithErrorEvent(t *testing.T) {
 	if sink.events[0].StepID != stepID {
 		t.Fatalf("unexpected step id: got %q want %q", sink.events[0].StepID, stepID)
 	}
+}
+
+func TestRunStreamRejectsInvalidAgentRuntimePreservesRunErrorOnEmitFailure(t *testing.T) {
+	sinkErr := errors.New("sink unavailable")
+	sink := failingEventSink{err: sinkErr}
+	agent := &Agent{
+		tools:    newFakeToolCatalog(),
+		history:  NewHistory("system"),
+		maxTurns: 1,
+	}
+
+	_, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-invalid-emit",
+		sink,
+	)
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "initialize agent runtime") {
+		t.Fatalf("missing runtime init error context: %v", err)
+	}
+	if !strings.Contains(err.Error(), errAgentCompleterRequired.Error()) {
+		t.Fatalf("missing root cause in error: %v", err)
+	}
+	if !errors.Is(err, sinkErr) {
+		t.Fatalf("expected joined sink error, got: %v", err)
+	}
+}
+
+type failingEventSink struct {
+	err error
+}
+
+func (f failingEventSink) Emit(_ context.Context, _ streaming.Event) (streaming.Event, error) {
+	return streaming.Event{}, f.err
 }

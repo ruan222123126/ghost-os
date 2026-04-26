@@ -4,6 +4,7 @@ import (
 	"fmt"
 	goruntime "runtime"
 	"strconv"
+	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
 	ctxmgr "ghost-os/bridge/context"
@@ -21,7 +22,7 @@ func buildSystemPromptForSession(
 	sess *session.Session,
 	idleTurns int,
 ) (string, error) {
-	basePrompt, err := buildBaseSystemPrompt(cfg, catalog, sess, idleTurns)
+	basePrompt, err := buildBaseSystemPrompt(cfg, catalog, sess, idleTurns, "", "")
 	if err != nil {
 		return "", err
 	}
@@ -29,7 +30,22 @@ func buildSystemPromptForSession(
 	if err != nil {
 		return "", fmt.Errorf("load system prompts: %w", err)
 	}
-	return bridgeconfig.RenderSystemPrompt(systemPrompts, basePrompt), nil
+	memorySection, err := resolveMemorySection(cfg, systemPrompts.PromptLibrary)
+	if err != nil {
+		return "", fmt.Errorf("resolve memory section: %w", err)
+	}
+	coreJobOverride := strings.TrimSpace(systemPrompts.CorePrompt)
+	if coreJobOverride == "" && strings.TrimSpace(memorySection) == "" {
+		return basePrompt, nil
+	}
+	return buildBaseSystemPrompt(
+		cfg,
+		catalog,
+		sess,
+		idleTurns,
+		coreJobOverride,
+		memorySection,
+	)
 }
 
 func buildBaseSystemPrompt(
@@ -37,12 +53,18 @@ func buildBaseSystemPrompt(
 	catalog tools.ToolCatalog,
 	sess *session.Session,
 	idleTurns int,
+	coreJobOverride string,
+	memorySection string,
 ) (string, error) {
 	promptManager, err := loadPromptManager(cfg)
 	if err != nil {
 		return "", err
 	}
-	return promptManager.Render(systemPromptVars(cfg, catalog, sess, idleTurns)), nil
+	vars := systemPromptVars(cfg, catalog, sess, idleTurns, memorySection)
+	if trimmed := strings.TrimSpace(coreJobOverride); trimmed != "" {
+		vars["core_job"] = trimmed
+	}
+	return promptManager.Render(vars), nil
 }
 
 func loadPromptManager(cfg Config) (*ctxmgr.PromptManager, error) {
@@ -64,9 +86,11 @@ func systemPromptVars(
 	catalog tools.ToolCatalog,
 	sess *session.Session,
 	idleTurns int,
+	memorySection string,
 ) map[string]string {
 	return map[string]string{
 		"os_type":               goruntime.GOOS,
+		"memory":                strings.TrimSpace(memorySection),
 		"tool_guidance":         tools.FormatPromptGuidanceForCatalog(catalog),
 		"dynamic_tool_state":    formatDynamicToolState(sess, idleTurns),
 		"dynamic_skill_context": formatDynamicSkillContext(cfg, sess, idleTurns),

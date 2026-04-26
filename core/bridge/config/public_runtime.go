@@ -15,6 +15,8 @@ type Snapshot struct {
 	GraphQLSources             []GraphQLSourceSnapshot         `json:"graphql_sources"`
 	GraphQLMutationPolicies    []GraphQLMutationPolicySnapshot `json:"graphql_mutation_policies"`
 	SessionHumanLogFullEnabled bool                            `json:"session_human_log_full_enabled"`
+	AssistantMarkdownEnabled   bool                            `json:"assistant_markdown_enabled"`
+	MemoryModeEnabled          bool                            `json:"memory_mode_enabled"`
 	WebRooterEnabled           bool                            `json:"web_rooter_enabled"`
 	WebRooterBaseURL           string                          `json:"web_rooter_base_url"`
 	WebRooterTimeoutMS         int                             `json:"web_rooter_timeout_ms"`
@@ -38,6 +40,8 @@ type UpdateRequest struct {
 	GraphQLSourceUpsert        *GraphQLSourceInput          `json:"graphql_source_upsert,omitempty"`
 	GraphQLMutationPolicies    []GraphQLMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
 	SessionHumanLogFullEnabled *bool                        `json:"session_human_log_full_enabled,omitempty"`
+	AssistantMarkdownEnabled   *bool                        `json:"assistant_markdown_enabled,omitempty"`
+	MemoryModeEnabled          *bool                        `json:"memory_mode_enabled,omitempty"`
 	WebRooterEnabled           *bool                        `json:"web_rooter_enabled,omitempty"`
 	WebRooterBaseURL           *string                      `json:"web_rooter_base_url,omitempty"`
 	WebRooterAPIToken          *string                      `json:"web_rooter_api_token,omitempty"`

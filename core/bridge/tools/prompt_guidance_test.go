@@ -81,6 +81,7 @@ func TestFormatPromptGuidanceForCatalog_IncludesScriptExecUsageHintsWhenVisible(
 	for _, snippet := range []string{
 		"injected `tools` object",
 		"Do not use `import tools` or `from tools...`",
+		"prefer `tools.search_files` before shelling out with `tools.bash_exec`",
 		"Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`)",
 		"Print concise, structured output",
 	} {
@@ -133,13 +134,14 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 		`<t:ID>{"action":"search","query":"..."}</t>`,
 		"Do not use `tfind` for greetings",
 		"keep the assistant message focused on tool tags",
-		`<t:ID>{"action":"load","tool_names":["web_rooter"]}</t>`,
+		`<t:ID>{"action":"load","tool_names":["web_search"]}</t>`,
 		"same user turn on the next completion",
 		"`tfind(action: list)` only to inspect the current dynamic tool/skill load state",
 		"Never repeat or fabricate `[TOOL_TAG_RESULT]`",
 		"`screen_action.click_text`",
 		"use plain Python plus the injected `tools` object",
 		"Do not use `import tools` or `from tools...`",
+		"prefer `tools.search_files` before shelling out with `tools.bash_exec`",
 		"Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`)",
 		"Minimal `script_exec` tag example",
 	} {
@@ -152,38 +154,15 @@ func TestFormatPromptGuidanceForCatalog_GraphQLHiddenCatalogKeepsUsageHints(t *t
 	}
 }
 
-func TestFormatPromptGuidanceForCatalog_IncludesWebRooterHintWhenVisible(t *testing.T) {
+func TestFormatPromptGuidanceForCatalog_IncludesCodexActionHints(t *testing.T) {
 	registry := NewRegistry()
-	for _, name := range []string{AskHumanToolName, webRooterToolName, "web_search"} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	guidance := FormatPromptGuidanceForCatalog(registry)
-	if !strings.Contains(guidance, "`web_rooter`") {
-		t.Fatalf("expected web_rooter guidance, got %q", guidance)
-	}
-	if !strings.Contains(guidance, "provide every action parameter explicitly in `params`") {
-		t.Fatalf("expected explicit params guidance, got %q", guidance)
-	}
-	if !strings.Contains(guidance, "Prefer `web_rooter` when the task needs citations") {
-		t.Fatalf("expected citation-first web_rooter guidance, got %q", guidance)
-	}
-	if !strings.Contains(guidance, "Use `web_search` for lighter real-time web lookups") {
-		t.Fatalf("expected quick lookup web_search guidance, got %q", guidance)
-	}
-}
-
-func TestFormatPromptGuidanceForCatalog_IncludesTaskAndCodexActionHints(t *testing.T) {
-	registry := NewRegistry()
-	for _, name := range []string{"task_manage", "codex_cli"} {
+	for _, name := range []string{"codex_cli"} {
 		registry.Register(&mockTool{name: name})
 	}
 
 	guidance := FormatPromptGuidanceForCatalog(registry)
 	for _, snippet := range []string{
-		"`task_manage` operation must be one of: create, update, delete, list, get.",
 		"`codex_cli` `op` must be one of: start, resume, fork, status (not `exec`).",
-		"`task_manage` requires `id` for update/delete/get",
 		"`codex_cli` requires `prompt` for start/resume/fork",
 	} {
 		if !strings.Contains(guidance, snippet) {

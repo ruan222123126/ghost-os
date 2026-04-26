@@ -17,6 +17,8 @@ func configResponseFromSnapshot(snapshot bridgeconfig.Snapshot) configResponse {
 		GraphqlSources:             graphQLSourceResponses(snapshot.GraphQLSources),
 		GraphqlMutationPolicies:    graphQLMutationPolicyResponses(snapshot.GraphQLMutationPolicies),
 		SessionHumanLogFullEnabled: snapshot.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   snapshot.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          snapshot.MemoryModeEnabled,
 		WebRooterEnabled:           snapshot.WebRooterEnabled,
 		WebRooterBaseURL:           snapshot.WebRooterBaseURL,
 		WebRooterTimeoutMs:         snapshot.WebRooterTimeoutMS,

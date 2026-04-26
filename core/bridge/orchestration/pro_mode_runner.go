@@ -28,7 +28,7 @@ func newProModeRunner(service *bridgeService) proModeRunner {
 	}
 	factory := service.runtimeFactory
 	if factory == nil {
-		factory = newAgentRuntimeFactoryWithTaskManager(service.taskToolManager())
+		factory = newAgentRuntimeFactory()
 	}
 	return proModeRunner{
 		runtimeFactory: factory,

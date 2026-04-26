@@ -18,6 +18,7 @@ const (
 	EventToolCallFinished EventType = "tool_call_finished"
 	EventAwaitingHuman    EventType = "awaiting_human"
 	EventMessage          EventType = "message"
+	EventDone             EventType = "done"
 	EventError            EventType = "error"
 )
 

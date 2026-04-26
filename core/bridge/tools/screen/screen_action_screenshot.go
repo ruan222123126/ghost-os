@@ -17,7 +17,7 @@ import (
 const screenImageMimeType = "image/png"
 
 func (t *ScreenActionTool) executeScreenshot(ctx context.Context, params map[string]any, traceID string) (string, error) {
-	payload, err := t.captureScreen(ctx, params, traceID)
+	payload, err := t.captureScreenFresh(ctx, params, traceID)
 	if err != nil {
 		return "", err
 	}

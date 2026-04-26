@@ -54,6 +54,8 @@ type Config struct {
 	WebSearchTavilyAPIKey         string
 	WebSearchExaAPIKey            string
 	SessionHumanLogFullEnabled    bool
+	AssistantMarkdownEnabled      bool
+	MemoryModeEnabled             bool
 	WebRooterEnabled              bool
 	WebRooterBaseURL              string
 	WebRooterAPIToken             string

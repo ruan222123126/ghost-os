@@ -34,6 +34,7 @@ func (tokenEstimator) Estimate(msg llm.Message) int {
 func collectMessageText(msg llm.Message) string {
 	var builder strings.Builder
 	appendTrimmed(&builder, msg.Text)
+	appendTrimmed(&builder, string(msg.ReasoningContent))
 	appendContentText(&builder, msg.Content)
 	appendTrimmed(&builder, msg.ToolCallID)
 	appendToolCalls(&builder, msg.ToolCalls)

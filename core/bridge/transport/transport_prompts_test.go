@@ -12,11 +12,9 @@ import (
 )
 
 type systemPromptResponsePayload struct {
-	GlobalTemplate string `json:"global_template"`
-	CorePrompt     string `json:"core_prompt"`
-	ToolPrompt     string `json:"tool_prompt"`
-	ToolKeySpec    string `json:"tool_key_spec"`
-	RenderedPrompt string `json:"rendered_prompt"`
+	CorePrompt     string                                 `json:"core_prompt"`
+	RenderedPrompt string                                 `json:"rendered_prompt"`
+	PromptLibrary  []bridgeconfig.SystemPromptLibraryItem `json:"prompt_library"`
 }
 
 func TestHandleSystemPromptsGetAndPatch(t *testing.T) {
@@ -24,10 +22,7 @@ func TestHandleSystemPromptsGetAndPatch(t *testing.T) {
 	promptsDir := os.Getenv("GHOST_PROMPTS_DIR")
 
 	if _, err := bridgeconfig.UpdateSystemPromptFiles(promptsDir, bridgeconfig.SystemPromptUpdateRequest{
-		GlobalTemplate: ptr("BEGIN\n{{base_prompt}}\nEND\n{{core_prompt}}\n{{tool_prompt}}\n{{tool_key_spec}}"),
-		CorePrompt:     ptr("core block"),
-		ToolPrompt:     ptr("tool block"),
-		ToolKeySpec:    ptr("key block"),
+		CorePrompt: ptr("core block"),
 	}); err != nil {
 		t.Fatalf("UpdateSystemPromptFiles: %v", err)
 	}
@@ -37,11 +32,17 @@ func TestHandleSystemPromptsGetAndPatch(t *testing.T) {
 		t.Fatalf("unexpected GET status: got %d body=%s", getResp.Code, getResp.Body.String())
 	}
 	got := decodeSystemPromptPayload(t, getResp)
-	if got.GlobalTemplate != "BEGIN\n{{base_prompt}}\nEND\n{{core_prompt}}\n{{tool_prompt}}\n{{tool_key_spec}}" {
-		t.Fatalf("unexpected template: %+v", got)
+	if got.CorePrompt != "core block" {
+		t.Fatalf("unexpected payload: %+v", got)
 	}
-	if !strings.Contains(got.RenderedPrompt, "core block") || !strings.Contains(got.RenderedPrompt, "tool block") || !strings.Contains(got.RenderedPrompt, "key block") {
-		t.Fatalf("expected rendered prompt to include local injections, got %q", got.RenderedPrompt)
+	if len(got.PromptLibrary) != 1 || !got.PromptLibrary[0].Active {
+		t.Fatalf("expected single active prompt library card, got %+v", got.PromptLibrary)
+	}
+	if !strings.Contains(got.RenderedPrompt, "core block") {
+		t.Fatalf("expected rendered prompt to include core job override, got %q", got.RenderedPrompt)
+	}
+	if strings.Count(got.RenderedPrompt, "core block") != 1 {
+		t.Fatalf("expected rendered prompt to include core job once, got %q", got.RenderedPrompt)
 	}
 
 	patchResp := serveRequest(handler, http.MethodPatch, "/api/prompts/system", `{"core_prompt":"patched core"}`, nil)
@@ -52,8 +53,14 @@ func TestHandleSystemPromptsGetAndPatch(t *testing.T) {
 	if updated.CorePrompt != "patched core" {
 		t.Fatalf("unexpected updated payload: %+v", updated)
 	}
+	if len(updated.PromptLibrary) != 1 || updated.PromptLibrary[0].Content != "patched core" {
+		t.Fatalf("expected updated prompt library to match patched core, got %+v", updated.PromptLibrary)
+	}
 	if !strings.Contains(updated.RenderedPrompt, "patched core") {
-		t.Fatalf("expected rendered prompt to include patched core prompt, got %q", updated.RenderedPrompt)
+		t.Fatalf("expected rendered prompt to include patched core job, got %q", updated.RenderedPrompt)
+	}
+	if strings.Count(updated.RenderedPrompt, "patched core") != 1 {
+		t.Fatalf("expected patched core job to render once, got %q", updated.RenderedPrompt)
 	}
 }
 
@@ -61,6 +68,21 @@ func TestHandleSystemPromptsRejectsEmptyPatch(t *testing.T) {
 	handler := newTestHandler(t, nil)
 
 	resp := serveRequest(handler, http.MethodPatch, "/api/prompts/system", `{}`, nil)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected PATCH status: got %d body=%s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestHandleSystemPromptsRejectsPatchWithCorePromptAndPromptLibrary(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	resp := serveRequest(
+		handler,
+		http.MethodPatch,
+		"/api/prompts/system",
+		`{"core_prompt":"patched","prompt_library":[{"id":"card-a","name":"A","insert_point":"core_job","content":"patched","active":true}]}`,
+		nil,
+	)
 	if resp.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected PATCH status: got %d body=%s", resp.Code, resp.Body.String())
 	}

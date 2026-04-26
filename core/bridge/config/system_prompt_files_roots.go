@@ -102,9 +102,9 @@ func ensureSystemPromptFile(root string, key string, defaults SystemPromptFiles,
 	if err != nil {
 		return err
 	}
-	content, ok := systemPromptFileValue(defaults, key)
-	if !ok {
-		return fmt.Errorf("unknown system prompt key: %s", key)
+	content, err := systemPromptFileValue(defaults, key)
+	if err != nil {
+		return err
 	}
 	trimmed := strings.TrimSpace(content)
 

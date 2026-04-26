@@ -26,7 +26,7 @@ var scriptExecAllowedHelpers = []string{
 	"tools.fetch_webpage(url)",
 	"tools.list_files(path='.')",
 	"tools.read_file(path, start_line=None, end_line=None)",
-	"tools.search_files(keyword, dir_path='.', case_sensitive=True)",
+	"tools.search_files(query, path='.', max_results=50)",
 	"tools.write_file(path, content, mode='write')",
 }
 

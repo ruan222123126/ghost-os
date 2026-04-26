@@ -37,9 +37,9 @@ func TestScriptExecToolDescriptionListsHelpers(t *testing.T) {
 		"tools.bash_exec(",
 		"tools.list_files(",
 		"tools.read_file(",
+		"tools.search_files(",
 		"tools.write_file(",
 		"tools.apply_diff(",
-		"tools.search_files(",
 		"tools.fetch_webpage(",
 		"Sandbox limits are enforced",
 	}

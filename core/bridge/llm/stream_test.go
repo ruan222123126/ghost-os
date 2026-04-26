@@ -97,6 +97,76 @@ func TestCompleteStreamOpenAITextDeltas(t *testing.T) {
 	}
 }
 
+func TestCompleteStreamOpenAIReasoningDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`data: {"id":"chatcmpl-r1","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"Analyzing"},"finish_reason":null}]}`,
+			"",
+			`data: {"id":"chatcmpl-r1","choices":[{"index":0,"delta":{"content":"Hello"},"finish_reason":"stop"}]}`,
+			"",
+			`data: [DONE]`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderOpenAI)
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "say hello"},
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.Message.Text != "Hello" {
+		t.Fatalf("unexpected text: got %q want %q", resp.Message.Text, "Hello")
+	}
+	if got := string(resp.Message.ReasoningContent); got != `"Analyzing"` {
+		t.Fatalf("unexpected reasoning_content: got %q want %q", got, `"Analyzing"`)
+	}
+	if len(sink.deltas) != 2 {
+		t.Fatalf("unexpected delta count: got %d want 2", len(sink.deltas))
+	}
+	if sink.deltas[0].Kind != DeltaKindThinking || sink.deltas[0].Thinking != "Analyzing" {
+		t.Fatalf("unexpected first delta: %+v", sink.deltas[0])
+	}
+	if sink.deltas[1].Kind != DeltaKindText || sink.deltas[1].Text != "Hello" {
+		t.Fatalf("unexpected second delta: %+v", sink.deltas[1])
+	}
+}
+
+func TestCompleteStreamOpenAIReasoningDeltaRejectsUnsupportedPayload(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`data: {"id":"chatcmpl-r2","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":{"foo":"bar"}},"finish_reason":null}]}`,
+			"",
+			`data: [DONE]`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderOpenAI)
+	sink := &recordingLLMStreamSink{}
+
+	_, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "status"},
+		},
+	}, sink)
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported openai stream reasoning_content") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestCompleteStreamOpenAIToolCallSequence(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -198,6 +268,69 @@ func TestCompleteStreamAnthropicTextDeltas(t *testing.T) {
 	}
 	if len(sink.deltas) != 2 || sink.deltas[0].Text != "Hello" || sink.deltas[1].Text != " world" {
 		t.Fatalf("unexpected deltas: %+v", sink.deltas)
+	}
+}
+
+func TestCompleteStreamAnthropicThinkingDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: message_start`,
+			`data: {"type":"message_start","message":{"id":"msg_t1","role":"assistant","content":[],"stop_reason":"","usage":{"input_tokens":9,"output_tokens":0}}}`,
+			"",
+			`event: content_block_start`,
+			`data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":"Analyzing"}}`,
+			"",
+			`event: content_block_delta`,
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":" step"}}`,
+			"",
+			`event: content_block_stop`,
+			`data: {"type":"content_block_stop","index":0}`,
+			"",
+			`event: content_block_start`,
+			`data: {"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}`,
+			"",
+			`event: content_block_delta`,
+			`data: {"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"Done"}}`,
+			"",
+			`event: content_block_stop`,
+			`data: {"type":"content_block_stop","index":1}`,
+			"",
+			`event: message_delta`,
+			`data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`,
+			"",
+			`event: message_stop`,
+			`data: {"type":"message_stop"}`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := newStreamTestClient(server, ProviderAnthropic)
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "status"},
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.Message.Text != "Done" {
+		t.Fatalf("unexpected text: got %q want %q", resp.Message.Text, "Done")
+	}
+	if len(sink.deltas) != 3 {
+		t.Fatalf("unexpected delta count: got %d want 3", len(sink.deltas))
+	}
+	if sink.deltas[0].Kind != DeltaKindThinking || sink.deltas[0].Thinking != "Analyzing" {
+		t.Fatalf("unexpected first delta: %+v", sink.deltas[0])
+	}
+	if sink.deltas[1].Kind != DeltaKindThinking || sink.deltas[1].Thinking != " step" {
+		t.Fatalf("unexpected second delta: %+v", sink.deltas[1])
+	}
+	if sink.deltas[2].Kind != DeltaKindText || sink.deltas[2].Text != "Done" {
+		t.Fatalf("unexpected third delta: %+v", sink.deltas[2])
 	}
 }
 
@@ -373,6 +506,60 @@ func TestCompleteStreamCodexTextDeltas(t *testing.T) {
 	}
 	if len(sink.deltas) != 2 || sink.deltas[0].Text != "Hel" || sink.deltas[1].Text != "lo" {
 		t.Fatalf("unexpected deltas: %+v", sink.deltas)
+	}
+}
+
+func TestCompleteStreamCodexThinkingDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte(strings.Join([]string{
+			`event: response.reasoning_summary_text.delta`,
+			`data: {"type":"response.reasoning_summary_text.delta","delta":"Analyzing"}`,
+			"",
+			`event: response.reasoning_text.delta`,
+			`data: {"type":"response.reasoning_text.delta","delta":" detail"}`,
+			"",
+			`event: response.output_text.delta`,
+			`data: {"type":"response.output_text.delta","delta":"Done"}`,
+			"",
+			`event: response.completed`,
+			`data: {"type":"response.completed","response":{"id":"resp_t2","status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Done"}]}],"usage":{"input_tokens":5,"output_tokens":2,"total_tokens":7}}}`,
+			"",
+		}, "\n")))
+	}))
+	defer server.Close()
+
+	client := NewClientWithOptions(ClientOptions{
+		Provider:                   ProviderCodex,
+		BaseURL:                    server.URL,
+		Model:                      "test-model",
+		CodexStatelessRetryEnabled: true,
+	})
+	client.httpClient = server.Client()
+	sink := &recordingLLMStreamSink{}
+
+	resp, err := client.CompleteStream(context.Background(), CompletionRequest{
+		Messages: []Message{
+			{Role: RoleUser, Text: "status"},
+		},
+	}, sink)
+	if err != nil {
+		t.Fatalf("CompleteStream returned error: %v", err)
+	}
+	if resp.Message.Text != "Done" {
+		t.Fatalf("unexpected text: got %q want %q", resp.Message.Text, "Done")
+	}
+	if len(sink.deltas) != 3 {
+		t.Fatalf("unexpected delta count: got %d want 3", len(sink.deltas))
+	}
+	if sink.deltas[0].Kind != DeltaKindThinking || sink.deltas[0].Thinking != "Analyzing" {
+		t.Fatalf("unexpected first delta: %+v", sink.deltas[0])
+	}
+	if sink.deltas[1].Kind != DeltaKindThinking || sink.deltas[1].Thinking != " detail" {
+		t.Fatalf("unexpected second delta: %+v", sink.deltas[1])
+	}
+	if sink.deltas[2].Kind != DeltaKindText || sink.deltas[2].Text != "Done" {
+		t.Fatalf("unexpected third delta: %+v", sink.deltas[2])
 	}
 }
 

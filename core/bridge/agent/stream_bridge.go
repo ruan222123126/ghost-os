@@ -39,6 +39,8 @@ func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error 
 	switch delta.Kind {
 	case llm.DeltaKindText:
 		payload["text"] = delta.Text
+	case llm.DeltaKindThinking:
+		payload["thinking"] = delta.Thinking
 	case llm.DeltaKindToolCallStart:
 		payload["tool_call_index"] = delta.ToolCallIndex
 		payload["tool_call_id"] = delta.ToolCallID

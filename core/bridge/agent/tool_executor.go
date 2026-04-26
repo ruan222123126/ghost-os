@@ -16,6 +16,7 @@ import (
 )
 
 var errToolCallIDRequired = errors.New("tool_call.id is empty")
+var debugToolCallLogs = isTruthyEnv("GHOST_BRIDGE_DEBUG") || isTruthyEnv("GHOST_DEBUG") || isTruthyEnv("DEBUG")
 
 type toolCallTurnStats struct {
 	totalCalls int
@@ -72,6 +73,9 @@ func (e toolCallExecutor) executeToolSafely(ctx context.Context, tool tools.Tool
 	if tool == nil {
 		return "", errors.New("tool is nil")
 	}
+	if cancelErr := contextCanceled(ctx); cancelErr != nil {
+		return "", cancelErr
+	}
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			err = fmt.Errorf("execute panic: %v", recovered)
@@ -80,6 +84,13 @@ func (e toolCallExecutor) executeToolSafely(ctx context.Context, tool tools.Tool
 	}()
 
 	return tool.Execute(ctx, args, traceID)
+}
+
+func (e toolCallExecutor) logToolCall(traceID string, toolName string, args json.RawMessage) {
+	if !debugToolCallLogs {
+		return
+	}
+	fmt.Fprintf(e.stderr, "[%s] tool_call: %s %s\n", traceID, toolName, summarizeToolArgs(args))
 }
 
 func (e toolCallExecutor) postProcessToolResultSafely(tool tools.Tool, output string, traceID string, toolName string) (processed string, meta tools.ExecuteMeta, err error) {
@@ -172,4 +183,30 @@ func summarizeToolArgs(args json.RawMessage) string {
 	}
 	sort.Strings(keys)
 	return fmt.Sprintf("args_keys=[%s]", strings.Join(keys, ","))
+}
+
+func contextCanceled(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
+}
+
+func isTruthyEnv(key string) bool {
+	value := strings.TrimSpace(os.Getenv(strings.TrimSpace(key)))
+	if value == "" {
+		return false
+	}
+
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
 }

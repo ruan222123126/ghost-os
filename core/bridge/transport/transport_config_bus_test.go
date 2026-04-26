@@ -35,8 +35,14 @@ func TestBusConfigGetAndUpdateRegression(t *testing.T) {
 	if payload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", payload["model_selection_enabled"])
 	}
+	if payload["assistant_markdown_enabled"] != true {
+		t.Fatalf("unexpected assistant_markdown_enabled: got %v want true", payload["assistant_markdown_enabled"])
+	}
+	if payload["memory_mode_enabled"] != false {
+		t.Fatalf("unexpected memory_mode_enabled: got %v want false", payload["memory_mode_enabled"])
+	}
 
-	updateResp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"CONFIG_UPDATE","params":{"provider":"custom","model":"local"},"trace_id":"trace-config-update"}`, nil)
+	updateResp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"CONFIG_UPDATE","params":{"provider":"custom","model":"local","assistant_markdown_enabled":false,"memory_mode_enabled":true},"trace_id":"trace-config-update"}`, nil)
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("unexpected status for config update: got %d want %d", updateResp.Code, http.StatusOK)
 	}
@@ -50,5 +56,11 @@ func TestBusConfigGetAndUpdateRegression(t *testing.T) {
 	}
 	if updatePayload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", updatePayload["model_selection_enabled"])
+	}
+	if updatePayload["assistant_markdown_enabled"] != false {
+		t.Fatalf("unexpected assistant_markdown_enabled: got %v want false", updatePayload["assistant_markdown_enabled"])
+	}
+	if updatePayload["memory_mode_enabled"] != true {
+		t.Fatalf("unexpected memory_mode_enabled: got %v want true", updatePayload["memory_mode_enabled"])
 	}
 }

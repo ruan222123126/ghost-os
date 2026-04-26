@@ -43,6 +43,7 @@ func (s *TaskScheduler) executeRun(
 		SessionIDInput:  task.SessionID,
 		SessionIDOutput: result.SessionIDOutput,
 		ResponsePreview: result.ResponsePreview,
+		NodeResults:     CloneRunNodeResults(result.NodeResults),
 		Error:           result.Error,
 	}
 	if err := s.store.AppendRunLog(run); err != nil {

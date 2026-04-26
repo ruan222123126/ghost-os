@@ -236,6 +236,53 @@ func TestScreenActionToolExecuteClickIconUsesAtomicMatcher(t *testing.T) {
 	}
 }
 
+func TestScreenActionToolExecuteClickIconRelativeDirectPointUsesCurrentMousePosition(t *testing.T) {
+	var actions []string
+	tool := NewScreenActionTool(mockExecutionClient{
+		callFunc: func(_ context.Context, action string, params map[string]any, _ string) (map[string]any, error) {
+			actions = append(actions, action)
+			switch action {
+			case "MOUSE_POSITION":
+				return map[string]any{
+					"x":          300,
+					"y":          400,
+					"display_id": 7,
+					"scale_x":    1.0,
+					"scale_y":    1.0,
+				}, nil
+			case "MOUSE_CLICK":
+				if params["x"] != 288 || params["y"] != 424 || params["display_id"] != 7 {
+					t.Fatalf("unexpected mouse click params: %+v", params)
+				}
+				return map[string]any{"clicked": true}, nil
+			default:
+				t.Fatalf("unexpected action: %s", action)
+				return nil, nil
+			}
+		},
+	})
+
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"action":"click_icon","params":{"x":-12,"y":24,"display_id":3,"position_type":"relative"}}`),
+		"trace-click-icon-relative-1",
+	)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if strings.Join(actions, ",") != "MOUSE_POSITION,MOUSE_CLICK" {
+		t.Fatalf("unexpected action sequence: %v", actions)
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("decode output: %v", err)
+	}
+	if payload["clicked"] != true || payload["display_id"] != float64(7) || payload["position_type"] != "relative" {
+		t.Fatalf("unexpected click_icon relative payload: %+v", payload)
+	}
+}
+
 func TestScreenActionToolExecuteFindIconReturnsExists(t *testing.T) {
 	imagePath := writeScreenActionTestPNG(t)
 	tool := NewScreenActionTool(mockExecutionClient{

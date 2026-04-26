@@ -15,8 +15,6 @@ func FormatPromptGuidanceForCatalog(catalog ToolCatalog) string {
 	lines = append(lines, scriptExecPromptGuidance(protocol, names)...)
 	lines = append(lines, toolSearchPromptGuidance(protocol, names)...)
 	lines = append(lines, humanPromptGuidance(protocol, names)...)
-	lines = append(lines, webRooterPromptGuidance(names)...)
-	lines = append(lines, taskManagePromptGuidance(names)...)
 	lines = append(lines, codexCLIPromptGuidance(names)...)
 	lines = append(lines, screenControlPromptGuidance(names)...)
 	lines = append(lines, screenPromptGuidance(names)...)
@@ -28,9 +26,10 @@ func scriptExecPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 		return nil
 	}
 	lines := []string{
-		"- In `script_exec`, use plain Python plus the injected `tools` object, and call helper methods with named parameters (for example `tools.list_files(path='...')` or `tools.read_file(path='...')`).",
+		"- In `script_exec`, use plain Python plus the injected `tools` object, and call helper methods with named parameters (for example `tools.search_files(query='token', path='.')` or `tools.read_file(path='...')`).",
 		"- Do not use `import tools` or `from tools...`; `tools` is a runtime object, not an importable module.",
-		"- Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`); use `tools.read_file`, `tools.write_file`, `tools.apply_diff`, or `tools.bash_exec` instead.",
+		"- For text retrieval, prefer `tools.search_files` before shelling out with `tools.bash_exec`; use `tools.bash_exec` only when helpers cannot cover the workflow.",
+		"- Do not call blocked builtins (`open`, `eval`, `exec`, `compile`, `input`); use `tools.read_file`, `tools.write_file`, `tools.apply_diff`, `tools.search_files`, or `tools.bash_exec` instead.",
 		"- Print concise, structured output (for example JSON) so later turns can parse results reliably.",
 	}
 	if protocol == promptGuidanceProtocolGraphQL {
@@ -52,7 +51,7 @@ func toolSearchPromptGuidance(protocol promptGuidanceProtocol, names map[string]
 			"- When calling tools, keep the assistant message focused on tool tags and avoid extra wrappers.",
 			"- After `tfind(action: load)`, the loaded tool becomes available in the same user turn on the next completion.",
 			"- Load skills with `kind=\"skill\"`; skill dependencies can auto-load required tools.",
-			"- Minimal `tfind(action: load)` tag example: `<t:ID>{\"action\":\"load\",\"tool_names\":[\"web_rooter\"]}</t>`.",
+			"- Minimal `tfind(action: load)` tag example: `<t:ID>{\"action\":\"load\",\"tool_names\":[\"web_search\"]}</t>`.",
 			"- Use `tfind(action: list)` only to inspect the current dynamic tool/skill load state.",
 			"- Unload tools you no longer need with `tfind(action: unload)`.",
 			"- Never repeat or fabricate `[TOOL_TAG_RESULT]` in assistant text.",
@@ -80,30 +79,6 @@ func humanPromptGuidance(protocol promptGuidanceProtocol, names map[string]bool)
 		lines = append(lines, "- Minimal `ask_human` tag example: `<t:ID>{\"prompt\":\"Which environment should I use?\",\"options\":[{\"label\":\"staging\"},{\"label\":\"Other\",\"allow_custom\":true}]}</t>`.")
 	}
 	return lines
-}
-
-func webRooterPromptGuidance(names map[string]bool) []string {
-	if !names[webRooterToolName] {
-		return nil
-	}
-	lines := []string{
-		"- Use `web_rooter` for stateless HTTP web research only. Choose exactly one supported `action`, and provide every action parameter explicitly in `params`.",
-		"- Prefer `web_rooter` when the task needs citations, source attribution, multi-source cross-checking, academic material, or deeper research.",
-	}
-	if names["web_search"] {
-		lines = append(lines, "- Use `web_search` for lighter real-time web lookups when citation-rich research is unnecessary.")
-	}
-	return lines
-}
-
-func taskManagePromptGuidance(names map[string]bool) []string {
-	if !names["task_manage"] {
-		return nil
-	}
-	return []string{
-		"- `task_manage` operation must be one of: create, update, delete, list, get.",
-		"- `task_manage` requires `id` for update/delete/get; `message` is required for create.",
-	}
 }
 
 func codexCLIPromptGuidance(names map[string]bool) []string {

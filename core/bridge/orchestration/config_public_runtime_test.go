@@ -10,6 +10,8 @@ func TestConfigResponseFromSnapshotIncludesWebRooterFlags(t *testing.T) {
 	response := configResponseFromSnapshot(bridgeconfig.Snapshot{
 		GraphQLTextSanitizeEnabled: true,
 		SessionHumanLogFullEnabled: true,
+		AssistantMarkdownEnabled:   false,
+		MemoryModeEnabled:          true,
 		WebRooterEnabled:           true,
 		WebRooterBaseURL:           "http://127.0.0.1:9988",
 		WebRooterTimeoutMS:         120000,
@@ -25,6 +27,12 @@ func TestConfigResponseFromSnapshotIncludesWebRooterFlags(t *testing.T) {
 	}
 	if !response.SessionHumanLogFullEnabled {
 		t.Fatal("expected session_human_log_full_enabled to be true")
+	}
+	if response.AssistantMarkdownEnabled {
+		t.Fatal("expected assistant_markdown_enabled to be false")
+	}
+	if !response.MemoryModeEnabled {
+		t.Fatal("expected memory_mode_enabled to be true")
 	}
 
 	if !response.WebRooterEnabled {

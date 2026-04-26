@@ -8,6 +8,8 @@ system:
     ## Core Job
     {{core_job}}
 
+    {{memory}}
+
     ## Tool Guidance
     {{tool_guidance}}
 

@@ -231,6 +231,7 @@ func newHTTPHandler(service *bridgeorchestration.Service, options serverOptions)
 	mux.HandleFunc("/api/skills/", transport.handleSkillByID)
 	mux.HandleFunc("/api/tools/screen/find-icon/template", transport.handleFindIconTemplateUpload)
 	mux.HandleFunc("/api/tools/screen/find-icon/preview", transport.handleFindIconPreview)
+	mux.HandleFunc("/api/tools/screen/mouse-position", transport.handleMousePosition)
 	mux.HandleFunc("/api/tools", transport.handleTools)
 	mux.HandleFunc("/api/tools/", transport.handleToolByName)
 

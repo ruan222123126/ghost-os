@@ -73,6 +73,7 @@ func (pm *PromptManager) Render(vars map[string]string) string {
 
 	merged := map[string]string{
 		"core_job":              strings.TrimSpace(pm.config.System.CoreJob),
+		"memory":                "",
 		"tool_guidance":         defaultToolGuidance,
 		"dynamic_tool_state":    defaultDynamicState,
 		"dynamic_skill_context": defaultSkillContext,

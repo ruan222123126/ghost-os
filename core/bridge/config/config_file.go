@@ -97,6 +97,8 @@ type bridgeFileConfig struct {
 	WorkflowToolAllowlist         []string                          `toml:"workflow_tool_allowlist,omitempty"`
 	SessionsPath                  *string                           `toml:"sessions_path,omitempty"`
 	SessionHumanLogFullEnabled    *bool                             `toml:"session_human_log_full_enabled,omitempty"`
+	AssistantMarkdownEnabled      *bool                             `toml:"assistant_markdown_enabled,omitempty"`
+	MemoryModeEnabled             *bool                             `toml:"memory_mode_enabled,omitempty"`
 	RSSFeedsPath                  *string                           `toml:"rss_feeds_path,omitempty"`
 	RSSInboxPath                  *string                           `toml:"rss_inbox_path,omitempty"`
 	RSSBriefingsPath              *string                           `toml:"rss_briefings_path,omitempty"`

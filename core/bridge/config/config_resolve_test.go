@@ -143,6 +143,43 @@ func TestResolveConfigLoadsSessionHumanLogModeFromEnvAndFile(t *testing.T) {
 	}
 }
 
+func TestResolveConfigLoadsAssistantMarkdownModeFromDefaultsAndFile(t *testing.T) {
+	defaultCfg, err := resolveConfig(
+		bridgeFileConfig{},
+		envSnapshot{
+			"GHOST_PROVIDER": "custom",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig default: %v", err)
+	}
+	if !defaultCfg.AssistantMarkdownEnabled {
+		t.Fatal("expected assistant_markdown_enabled to default to true")
+	}
+	if defaultCfg.MemoryModeEnabled {
+		t.Fatal("expected memory_mode_enabled to default to false")
+	}
+
+	fileOverrideCfg, err := resolveConfig(
+		bridgeFileConfig{
+			AssistantMarkdownEnabled: boolPtr(false),
+			MemoryModeEnabled:        boolPtr(true),
+		},
+		envSnapshot{
+			"GHOST_PROVIDER": "custom",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig file override: %v", err)
+	}
+	if fileOverrideCfg.AssistantMarkdownEnabled {
+		t.Fatal("expected assistant_markdown_enabled to be false from file override")
+	}
+	if !fileOverrideCfg.MemoryModeEnabled {
+		t.Fatal("expected memory_mode_enabled to be true from file override")
+	}
+}
+
 func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 	cases := []struct {
 		name    string

@@ -15,10 +15,11 @@ type openAIRequest struct {
 }
 
 type openAIMessage struct {
-	Role       string           `json:"role"`
-	Content    any              `json:"content"`
-	ToolCalls  []openAIToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string           `json:"tool_call_id,omitempty"`
+	Role             string           `json:"role"`
+	Content          any              `json:"content"`
+	ReasoningContent json.RawMessage  `json:"reasoning_content,omitempty"`
+	ToolCalls        []openAIToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string           `json:"tool_call_id,omitempty"`
 }
 
 type openAIContentPart struct {
@@ -84,9 +85,11 @@ type openAIStreamChoice struct {
 }
 
 type openAIStreamDelta struct {
-	Role      string                 `json:"role,omitempty"`
-	Content   string                 `json:"content,omitempty"`
-	ToolCalls []openAIStreamToolCall `json:"tool_calls,omitempty"`
+	Role             string                 `json:"role,omitempty"`
+	Content          string                 `json:"content,omitempty"`
+	ReasoningContent any                    `json:"reasoning_content,omitempty"`
+	Reasoning        any                    `json:"reasoning,omitempty"`
+	ToolCalls        []openAIStreamToolCall `json:"tool_calls,omitempty"`
 }
 
 type openAIStreamToolCall struct {
@@ -191,6 +194,11 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 		}
 		out.Content = content
 	case RoleAssistant:
+		reasoningContent, err := normalizeOpenAIReasoningContent(msg.ReasoningContent)
+		if err != nil {
+			return openAIMessage{}, err
+		}
+		out.ReasoningContent = reasoningContent
 		if strings.TrimSpace(msg.Text) != "" {
 			out.Content = msg.Text
 		}
@@ -220,6 +228,17 @@ func toOpenAIMessage(msg Message) (openAIMessage, error) {
 	}
 
 	return out, nil
+}
+
+func normalizeOpenAIReasoningContent(raw json.RawMessage) (json.RawMessage, error) {
+	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
+	if !json.Valid([]byte(trimmed)) {
+		return nil, fmt.Errorf("assistant reasoning_content must be valid JSON")
+	}
+	return cloneRawJSON(json.RawMessage(trimmed)), nil
 }
 
 func toOpenAIContent(text string, content []ContentPart) (any, error) {

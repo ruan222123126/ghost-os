@@ -17,11 +17,9 @@ const (
 )
 
 type systemPromptResponse struct {
-	GlobalTemplate string `json:"global_template"`
-	CorePrompt     string `json:"core_prompt"`
-	ToolPrompt     string `json:"tool_prompt"`
-	ToolKeySpec    string `json:"tool_key_spec"`
-	RenderedPrompt string `json:"rendered_prompt"`
+	CorePrompt     string                                 `json:"core_prompt"`
+	RenderedPrompt string                                 `json:"rendered_prompt"`
+	PromptLibrary  []bridgeconfig.SystemPromptLibraryItem `json:"prompt_library"`
 }
 
 type systemPromptPreviewCatalog struct {
@@ -114,11 +112,9 @@ func (s *bridgeService) renderSystemPromptPreview(cfg bridgeconfig.Config) (stri
 
 func systemPromptResponseFrom(files bridgeconfig.SystemPromptFiles, rendered string) systemPromptResponse {
 	return systemPromptResponse{
-		GlobalTemplate: files.GlobalTemplate,
 		CorePrompt:     files.CorePrompt,
-		ToolPrompt:     files.ToolPrompt,
-		ToolKeySpec:    files.ToolKeySpec,
 		RenderedPrompt: rendered,
+		PromptLibrary:  files.PromptLibrary,
 	}
 }
 
@@ -136,7 +132,7 @@ func systemPromptPreviewToolNames(cfg bridgeconfig.Config) []string {
 }
 
 func reqHasSystemPromptUpdate(req bridgeconfig.SystemPromptUpdateRequest) bool {
-	return req.GlobalTemplate != nil || req.CorePrompt != nil || req.ToolPrompt != nil || req.ToolKeySpec != nil
+	return req.CorePrompt != nil || req.PromptLibrary != nil
 }
 
 func mapSystemPromptError(err error) error {
@@ -144,6 +140,12 @@ func mapSystemPromptError(err error) error {
 		return nil
 	}
 	if errors.Is(err, bridgeconfig.ErrSystemPromptUpdateEmpty) {
+		return wrapServiceError(ServiceErrorInvalidInput, err)
+	}
+	if errors.Is(err, bridgeconfig.ErrSystemPromptUpdateConflict) {
+		return wrapServiceError(ServiceErrorInvalidInput, err)
+	}
+	if errors.Is(err, bridgeconfig.ErrSystemPromptLibraryInvalid) {
 		return wrapServiceError(ServiceErrorInvalidInput, err)
 	}
 	return wrapServiceError(ServiceErrorInternal, err)

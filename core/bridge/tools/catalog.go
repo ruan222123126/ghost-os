@@ -113,11 +113,8 @@ func GetToolMetadata() []ToolMetadata {
 	return []ToolMetadata{
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
-		{Name: "image_generate", Domain: "web", Tags: []string{"image", "generation", "artifact", "openai"}, ShortDesc: "Generate images from a text prompt."},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
-		{Name: webRooterToolName, Domain: "web", Tags: []string{"research", "citation", "crawl", "academic"}, ShortDesc: "Citation-rich web research via external web-rooter service."},
 		{Name: screenControlToolName, Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "input", "text", "keyboard", "desktop", "gui"}, ShortDesc: "Unified screen control entrypoint."},
-		{Name: "task_manage", Domain: "task", Tags: []string{"schedule", "manage", "automation"}, ShortDesc: "Manage scheduled tasks."},
 		{Name: ToolSearchToolName, Domain: "tools", Tags: []string{"search", "load", "unload", "catalog", "skill"}, ShortDesc: "Find or load optional tools and skills."},
 		{Name: AskHumanToolName, Domain: "human", Tags: []string{"interactive", "safety"}, ShortDesc: "Ask the user when blocked."},
 	}

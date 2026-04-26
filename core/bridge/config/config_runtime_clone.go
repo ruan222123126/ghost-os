@@ -24,6 +24,8 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 		WebSearchTavilyAPIKey:      raw.WebSearchTavilyAPIKey,
 		WebSearchExaAPIKey:         raw.WebSearchExaAPIKey,
 		SessionHumanLogFullEnabled: raw.SessionHumanLogFullEnabled,
+		AssistantMarkdownEnabled:   raw.AssistantMarkdownEnabled,
+		MemoryModeEnabled:          raw.MemoryModeEnabled,
 		WebRooterEnabled:           raw.WebRooterEnabled,
 		WebRooterBaseURL:           raw.WebRooterBaseURL,
 		WebRooterAPIToken:          raw.WebRooterAPIToken,

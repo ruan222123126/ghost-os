@@ -92,6 +92,9 @@ func (a *anthropicStreamAccumulator) handleContentBlockStart(
 		}
 		return a.emitTextDelta(ctx, sink, state, event.ContentBlock.Text)
 	}
+	if state.kind == "thinking" {
+		return a.emitThinkingDelta(ctx, sink, extractAnthropicThinkingText(event.ContentBlock))
+	}
 	if state.kind != "tool_use" {
 		return nil
 	}
@@ -114,6 +117,9 @@ func (a *anthropicStreamAccumulator) handleContentBlockDelta(
 	case "text_delta":
 		state.kind = "text"
 		return a.emitTextDelta(ctx, sink, state, event.Delta.Text)
+	case "thinking_delta":
+		state.kind = "thinking"
+		return a.emitThinkingDelta(ctx, sink, extractAnthropicThinkingDelta(event.Delta))
 	case "input_json_delta":
 		state.kind = "tool_use"
 		tool := state.ensureTool()
@@ -139,6 +145,20 @@ func (a *anthropicStreamAccumulator) emitTextDelta(
 	return sink.OnDelta(ctx, LLMDelta{
 		Kind: DeltaKindText,
 		Text: text,
+	})
+}
+
+func (a *anthropicStreamAccumulator) emitThinkingDelta(
+	ctx context.Context,
+	sink LLMStreamSink,
+	thinking string,
+) error {
+	if thinking == "" {
+		return nil
+	}
+	return sink.OnDelta(ctx, LLMDelta{
+		Kind:     DeltaKindThinking,
+		Thinking: thinking,
 	})
 }
 
@@ -224,4 +244,24 @@ func (s *anthropicStreamBlockState) ensureTool() *toolCallStreamState {
 	}
 	s.tool = &toolCallStreamState{index: s.index}
 	return s.tool
+}
+
+func extractAnthropicThinkingText(block *anthropicContentBlock) string {
+	if block == nil {
+		return ""
+	}
+	if strings.TrimSpace(block.Thinking) != "" {
+		return block.Thinking
+	}
+	return block.Text
+}
+
+func extractAnthropicThinkingDelta(delta *anthropicStreamDelta) string {
+	if delta == nil {
+		return ""
+	}
+	if strings.TrimSpace(delta.Thinking) != "" {
+		return delta.Thinking
+	}
+	return delta.Text
 }

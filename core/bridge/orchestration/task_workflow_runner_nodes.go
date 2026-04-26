@@ -12,12 +12,27 @@ import (
 
 const (
 	workflowScreenControlAtomicMode      = "atomic"
+	workflowScreenControlStepsKey        = "workflow_steps"
+	workflowScreenControlActionKey       = "action"
+	workflowScreenControlParamsKey       = "params"
 	workflowFindIconDataURLParam         = "workflow_template_data_url"
 	workflowLegacyFindIconDataURLParam   = "template_data_url"
 	workflowLegacyFindIconDataURLAlias   = "data_url"
 	workflowFindIconDefaultTemplateName  = "workflow-find-icon-template.png"
 	workflowFindIconLegacyDataURLMessage = "legacy find_icon data_url keys are not supported; use params.workflow_template_data_url"
 )
+
+type workflowScreenControlStep struct {
+	Action     string
+	ToolAction string
+	Params     map[string]any
+}
+
+type workflowToolCallResult struct {
+	outputText   string
+	outputValue  any
+	awaitingText string
+}
 
 func executeWorkflowToolNode(
 	ctx context.Context,
@@ -37,20 +52,33 @@ func executeWorkflowToolNode(
 	if err != nil {
 		return workflowNodeOutcome{err: err}
 	}
-	args, err := encodeWorkflowToolArguments(preparedArgs)
+	if toolName != screenControlToolID {
+		return executeWorkflowPreparedToolCall(ctx, tool, node.ID, traceID, toolName, preparedArgs)
+	}
+	steps, baseArgs, err := parseWorkflowScreenControlSteps(preparedArgs)
 	if err != nil {
 		return workflowNodeOutcome{err: err}
 	}
-	output, err := tool.Execute(tools.WithToolCallID(ctx, workflowNodeToolCallID(node.ID)), args, traceID)
+	if len(steps) == 0 {
+		return executeWorkflowPreparedToolCall(ctx, tool, node.ID, traceID, toolName, preparedArgs)
+	}
+	return executeWorkflowScreenControlStepSequence(ctx, tool, node.ID, traceID, baseArgs, steps)
+}
+
+func executeWorkflowPreparedToolCall(
+	ctx context.Context,
+	tool tools.Tool,
+	nodeID string,
+	traceID string,
+	toolName string,
+	arguments map[string]any,
+) workflowNodeOutcome {
+	result, err := executeWorkflowToolCall(ctx, tool, nodeID, traceID, arguments)
 	if err != nil {
 		return workflowNodeOutcome{err: err}
 	}
-	_, meta, err := tools.PostProcessExecuteResult(tool, output, traceID)
-	if err != nil {
-		return workflowNodeOutcome{err: err}
-	}
-	if meta.AwaitingHuman != nil {
-		prompt := truncateRunes(strings.TrimSpace(meta.AwaitingHuman.Prompt), maxTaskResponsePreviewRunes)
+	if result.awaitingText != "" {
+		prompt := truncateRunes(result.awaitingText, maxTaskResponsePreviewRunes)
 		return workflowNodeOutcome{
 			status:      taskRunStatusAwaitingHuman,
 			preview:     prompt,
@@ -58,13 +86,219 @@ func executeWorkflowToolNode(
 			outputValue: prompt,
 		}
 	}
-	outputText := strings.TrimSpace(output)
 	return workflowNodeOutcome{
 		status:      taskRunStatusSuccess,
 		preview:     fmt.Sprintf("tool %s executed", toolName),
-		outputText:  outputText,
-		outputValue: decodeWorkflowNodeOutput(outputText),
+		outputText:  result.outputText,
+		outputValue: result.outputValue,
 	}
+}
+
+func executeWorkflowToolCall(
+	ctx context.Context,
+	tool tools.Tool,
+	nodeID string,
+	traceID string,
+	arguments map[string]any,
+) (workflowToolCallResult, error) {
+	args, err := encodeWorkflowToolArguments(arguments)
+	if err != nil {
+		return workflowToolCallResult{}, err
+	}
+	output, err := tool.Execute(tools.WithToolCallID(ctx, workflowNodeToolCallID(nodeID)), args, traceID)
+	if err != nil {
+		return workflowToolCallResult{}, err
+	}
+	processed, meta, err := tools.PostProcessExecuteResult(tool, output, traceID)
+	if err != nil {
+		return workflowToolCallResult{}, err
+	}
+	result := workflowToolCallResult{
+		outputText:  strings.TrimSpace(processed),
+		outputValue: decodeWorkflowNodeOutput(strings.TrimSpace(processed)),
+	}
+	if meta.AwaitingHuman != nil {
+		result.awaitingText = strings.TrimSpace(meta.AwaitingHuman.Prompt)
+	}
+	return result, nil
+}
+
+func parseWorkflowScreenControlSteps(arguments map[string]any) ([]workflowScreenControlStep, map[string]any, error) {
+	rawSteps, hasWorkflowSteps := arguments[workflowScreenControlStepsKey]
+	if !hasWorkflowSteps {
+		return nil, nil, nil
+	}
+	if _, hasAction := arguments[workflowScreenControlActionKey]; hasAction {
+		return nil, nil, fmt.Errorf("screen_control workflow_steps conflicts with action/params")
+	}
+	if _, hasParams := arguments[workflowScreenControlParamsKey]; hasParams {
+		return nil, nil, fmt.Errorf("screen_control workflow_steps conflicts with action/params")
+	}
+	stepsRaw, ok := normalizeWorkflowScreenControlStepList(rawSteps)
+	if !ok {
+		return nil, nil, fmt.Errorf("screen_control workflow_steps must be an array")
+	}
+	if len(stepsRaw) == 0 {
+		return nil, nil, fmt.Errorf("screen_control workflow_steps must contain at least 1 step")
+	}
+	steps := make([]workflowScreenControlStep, 0, len(stepsRaw))
+	for index := range stepsRaw {
+		rawStep, ok := stepsRaw[index].(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf("screen_control workflow_steps[%d] must be an object", index+1)
+		}
+		step, err := decodeWorkflowScreenControlStep(rawStep, index)
+		if err != nil {
+			return nil, nil, err
+		}
+		steps = append(steps, step)
+	}
+	baseArgs := cloneTaskActionParams(arguments)
+	delete(baseArgs, workflowScreenControlStepsKey)
+	return steps, baseArgs, nil
+}
+
+func normalizeWorkflowScreenControlStepList(input any) ([]any, bool) {
+	if steps, ok := input.([]any); ok {
+		return steps, true
+	}
+	if typed, ok := input.([]map[string]any); ok {
+		steps := make([]any, 0, len(typed))
+		for index := range typed {
+			steps = append(steps, typed[index])
+		}
+		return steps, true
+	}
+	return nil, false
+}
+
+func decodeWorkflowScreenControlStep(rawStep map[string]any, index int) (workflowScreenControlStep, error) {
+	action := strings.ToLower(strings.TrimSpace(workflowMapString(rawStep, workflowScreenControlActionKey)))
+	if action == "" {
+		return workflowScreenControlStep{}, fmt.Errorf("screen_control workflow_steps[%d] requires action", index+1)
+	}
+	toolAction, err := mapWorkflowScreenControlStepAction(action)
+	if err != nil {
+		return workflowScreenControlStep{}, fmt.Errorf("screen_control workflow_steps[%d]: %w", index+1, err)
+	}
+	params, err := workflowMapObject(rawStep, workflowScreenControlParamsKey)
+	if err != nil {
+		return workflowScreenControlStep{}, fmt.Errorf("screen_control workflow_steps[%d]: %w", index+1, err)
+	}
+	return workflowScreenControlStep{
+		Action:     action,
+		ToolAction: toolAction,
+		Params:     params,
+	}, nil
+}
+
+func mapWorkflowScreenControlStepAction(action string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "screenshot":
+		return "screenshot", nil
+	case "find_text":
+		return "find_text", nil
+	case "find_icon":
+		return "find_icon", nil
+	case "click":
+		return "click_icon", nil
+	default:
+		return "", fmt.Errorf("unsupported action %q", action)
+	}
+}
+
+func workflowMapObject(record map[string]any, key string) (map[string]any, error) {
+	rawValue, exists := record[key]
+	if !exists || rawValue == nil {
+		return map[string]any{}, nil
+	}
+	value, ok := rawValue.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%s must be an object", key)
+	}
+	return cloneTaskActionParams(value), nil
+}
+
+func executeWorkflowScreenControlStepSequence(
+	ctx context.Context,
+	tool tools.Tool,
+	nodeID string,
+	traceID string,
+	baseArgs map[string]any,
+	steps []workflowScreenControlStep,
+) workflowNodeOutcome {
+	stepResults := make([]map[string]any, 0, len(steps))
+	var finalOutput any
+	for index := range steps {
+		step := steps[index]
+		stepArgs, err := prepareWorkflowScreenControlStepArguments(baseArgs, step)
+		if err != nil {
+			return workflowNodeOutcome{err: fmt.Errorf("workflow screen_control step %d (%s) failed: %w", index+1, step.Action, err)}
+		}
+		result, err := executeWorkflowToolCall(ctx, tool, nodeID, traceID, stepArgs)
+		if err != nil {
+			return workflowNodeOutcome{err: fmt.Errorf("workflow screen_control step %d (%s) failed: %w", index+1, step.Action, err)}
+		}
+		finalOutput = result.outputValue
+		stepResults = append(stepResults, map[string]any{
+			"step_index":  index + 1,
+			"action":      step.Action,
+			"tool_action": step.ToolAction,
+			"output":      result.outputValue,
+		})
+		if result.awaitingText != "" {
+			return workflowNodeOutcome{
+				status:      taskRunStatusAwaitingHuman,
+				preview:     truncateRunes(result.awaitingText, maxTaskResponsePreviewRunes),
+				outputText:  result.awaitingText,
+				outputValue: buildWorkflowScreenControlStepSequenceOutput(stepResults, finalOutput),
+			}
+		}
+	}
+	outputValue := buildWorkflowScreenControlStepSequenceOutput(stepResults, finalOutput)
+	return workflowNodeOutcome{
+		status:      taskRunStatusSuccess,
+		preview:     fmt.Sprintf("tool %s executed %d workflow steps", screenControlToolID, len(stepResults)),
+		outputText:  encodeWorkflowNodeOutputText(outputValue),
+		outputValue: outputValue,
+	}
+}
+
+func prepareWorkflowScreenControlStepArguments(
+	baseArgs map[string]any,
+	step workflowScreenControlStep,
+) (map[string]any, error) {
+	args := cloneTaskActionParams(baseArgs)
+	if args == nil {
+		args = map[string]any{}
+	}
+	args["mode"] = workflowScreenControlAtomicMode
+	args[workflowScreenControlActionKey] = step.ToolAction
+	params := cloneTaskActionParams(step.Params)
+	if params == nil {
+		params = map[string]any{}
+	}
+	args[workflowScreenControlParamsKey] = params
+	return prepareWorkflowToolArguments(screenControlToolID, args)
+}
+
+func buildWorkflowScreenControlStepSequenceOutput(
+	steps []map[string]any,
+	finalOutput any,
+) map[string]any {
+	return map[string]any{
+		"step_count":   len(steps),
+		"steps":        steps,
+		"final_output": finalOutput,
+	}
+}
+
+func encodeWorkflowNodeOutputText(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return strings.TrimSpace(fmt.Sprintf("%v", value))
+	}
+	return strings.TrimSpace(string(encoded))
 }
 
 func encodeWorkflowToolArguments(arguments map[string]any) (json.RawMessage, error) {

@@ -43,10 +43,16 @@ func openAIToCompletionResponse(response openAIResponse) (*CompletionResponse, e
 }
 
 func openAIToMessage(msg openAIMessage) (Message, error) {
+	reasoningContent, err := normalizeOpenAIReasoningContent(msg.ReasoningContent)
+	if err != nil {
+		return Message{}, err
+	}
+
 	out := Message{
-		Role:       Role(strings.TrimSpace(msg.Role)),
-		Text:       contentToText(msg.Content),
-		ToolCallID: strings.TrimSpace(msg.ToolCallID),
+		Role:             Role(strings.TrimSpace(msg.Role)),
+		Text:             contentToText(msg.Content),
+		ReasoningContent: reasoningContent,
+		ToolCallID:       strings.TrimSpace(msg.ToolCallID),
 	}
 
 	if out.Role == "" {

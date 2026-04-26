@@ -277,3 +277,73 @@ func TestToOpenAIRequestBuildsUserImageContentParts(t *testing.T) {
 		t.Fatalf("expected user text in content, got: %s", string(encoded))
 	}
 }
+
+func TestToOpenAIRequestIncludesAssistantReasoningContent(t *testing.T) {
+	request, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{
+			{
+				Role:             RoleAssistant,
+				ReasoningContent: json.RawMessage(`"thinking step"`),
+				ToolCalls: []ToolCall{
+					{
+						ID:        "call-1",
+						Name:      "script_exec",
+						Arguments: json.RawMessage(`{"script":"print(1)"}`),
+					},
+				},
+			},
+			{
+				Role:       RoleTool,
+				ToolCallID: "call-1",
+				Text:       `{"status":"success","tool":"script_exec","output":"ok"}`,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toOpenAIRequest returned error: %v", err)
+	}
+	if len(request.Messages) != 2 {
+		t.Fatalf("unexpected message count: got %d want %d", len(request.Messages), 2)
+	}
+	if got := string(request.Messages[0].ReasoningContent); got != `"thinking step"` {
+		t.Fatalf("unexpected reasoning_content: got %q want %q", got, `"thinking step"`)
+	}
+}
+
+func TestToOpenAIRequestRejectsInvalidAssistantReasoningContent(t *testing.T) {
+	_, err := toOpenAIRequest("gpt-4o", CompletionRequest{
+		Messages: []Message{
+			{
+				Role:             RoleAssistant,
+				ReasoningContent: json.RawMessage(`not-json`),
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected error but got nil")
+	}
+	if !strings.Contains(err.Error(), "assistant reasoning_content must be valid JSON") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOpenAIToCompletionResponsePreservesReasoningContent(t *testing.T) {
+	resp, err := openAIToCompletionResponse(openAIResponse{
+		Choices: []openAIChoice{
+			{
+				Message: openAIMessage{
+					Role:             "assistant",
+					Content:          "ok",
+					ReasoningContent: json.RawMessage(`"analysis"`),
+				},
+				FinishReason: "stop",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("openAIToCompletionResponse returned error: %v", err)
+	}
+	if got := string(resp.Message.ReasoningContent); got != `"analysis"` {
+		t.Fatalf("unexpected reasoning_content: got %q want %q", got, `"analysis"`)
+	}
+}

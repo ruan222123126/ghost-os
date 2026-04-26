@@ -41,6 +41,8 @@ func (a *codexStreamAccumulator) ApplyEvent(ctx context.Context, sink LLMStreamS
 		return nil
 	case "response.output_text.delta":
 		return a.handleOutputTextDelta(ctx, sink, event.Delta)
+	case "response.reasoning_summary_text.delta", "response.reasoning_text.delta":
+		return a.handleThinkingDelta(ctx, sink, event.Delta)
 	case "response.function_call_arguments.delta":
 		return a.handleToolArgumentsDelta(ctx, sink, event.OutputIndex, event.Delta)
 	case "response.output_item.added":
@@ -66,6 +68,20 @@ func (a *codexStreamAccumulator) handleOutputTextDelta(
 	return sink.OnDelta(ctx, LLMDelta{
 		Kind: DeltaKindText,
 		Text: delta,
+	})
+}
+
+func (a *codexStreamAccumulator) handleThinkingDelta(
+	ctx context.Context,
+	sink LLMStreamSink,
+	delta string,
+) error {
+	if delta == "" {
+		return nil
+	}
+	return sink.OnDelta(ctx, LLMDelta{
+		Kind:     DeltaKindThinking,
+		Thinking: delta,
 	})
 }
 

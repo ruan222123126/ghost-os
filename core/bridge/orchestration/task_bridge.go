@@ -50,6 +50,7 @@ type WorkflowAgentNode = bridgeTasks.WorkflowAgentNode
 type WorkflowIfNode = bridgeTasks.WorkflowIfNode
 type WorkflowLoopNode = bridgeTasks.WorkflowLoopNode
 type WorkflowEdge = bridgeTasks.WorkflowEdge
+type RunNodeResult = bridgeTasks.RunNodeResult
 type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
 type TaskStore = bridgeTasks.Store
@@ -112,10 +113,15 @@ func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, tr
 }
 
 func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
-	return a.runAgentAction(ctx, agentParams{
+	startedAt := time.Now().UTC()
+	result := a.runAgentAction(ctx, agentParams{
 		Message:   task.Message,
 		SessionID: task.SessionID,
 	}, cloneTaskRuntimeOverrides(task.RuntimeOverrides), traceID)
+	result.NodeResults = []bridgeTasks.RunNodeResult{
+		buildAgentMessageNodeResult(task, result, startedAt, time.Now().UTC()),
+	}
+	return result
 }
 
 func (a taskExecutorAdapter) runAgentAction(
@@ -150,6 +156,49 @@ func taskExecutionResultFromAgentPayload(payload any) bridgeTasks.ExecutionResul
 		}
 	default:
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusSuccess}
+	}
+}
+
+func buildAgentMessageNodeResult(
+	task ScheduledTask,
+	result bridgeTasks.ExecutionResult,
+	startedAt time.Time,
+	finishedAt time.Time,
+) bridgeTasks.RunNodeResult {
+	status := strings.TrimSpace(result.Status)
+	if status == "" {
+		status = taskRunStatusError
+	}
+	input := map[string]any{
+		"message":    task.Message,
+		"session_id": strings.TrimSpace(task.SessionID),
+	}
+	runtimePayload := map[string]any{}
+	if runtimeOverrides := cloneTaskRuntimeOverrides(task.RuntimeOverrides); runtimeOverrides != nil {
+		runtimePayload = map[string]any{
+			"model":          runtimeOverrides.Model,
+			"tool_allowlist": append([]string(nil), runtimeOverrides.ToolAllowlist...),
+		}
+	}
+	input["runtime_overrides"] = runtimePayload
+	output := map[string]any{
+		"session_id_output": strings.TrimSpace(result.SessionIDOutput),
+		"response_preview":  strings.TrimSpace(result.ResponsePreview),
+	}
+	if strings.TrimSpace(result.Error) != "" {
+		output["error"] = strings.TrimSpace(result.Error)
+	}
+	return bridgeTasks.RunNodeResult{
+		NodeID:       taskKindAgentMessage,
+		NodeType:     taskKindAgentMessage,
+		Status:       status,
+		StartedAt:    startedAt,
+		FinishedAt:   finishedAt,
+		CompletedSeq: 1,
+		Input:        input,
+		Output:       output,
+		Preview:      strings.TrimSpace(result.ResponsePreview),
+		Error:        strings.TrimSpace(result.Error),
 	}
 }
 
