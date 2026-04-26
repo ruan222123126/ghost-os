@@ -3,6 +3,7 @@ mod keyboard;
 mod mouse;
 mod mouse_drag;
 mod mouse_move;
+mod mouse_position;
 mod mouse_scroll;
 mod window_guard;
 
@@ -17,6 +18,7 @@ pub(crate) fn dispatch_action(action: &str, params: &Value) -> Option<Response> 
         "MOUSE_DOUBLE_CLICK" => Some(mouse::handle_mouse_double_click(params)),
         "MOUSE_RIGHT_CLICK" => Some(mouse::handle_mouse_right_click(params)),
         "MOUSE_MOVE" => Some(mouse_move::handle_mouse_move(params)),
+        "MOUSE_POSITION" => Some(mouse_position::handle_mouse_position(params)),
         "MOUSE_DRAG" => Some(mouse_drag::handle_mouse_drag(params)),
         "MOUSE_SCROLL" => Some(mouse_scroll::handle_mouse_scroll(params)),
         "ACTIVE_WINDOW_INFO" => Some(window_guard::handle_active_window_info(params)),

@@ -4,7 +4,8 @@ use pyo3::prelude::*;
 use std::sync::{Arc, Mutex};
 
 use super::file_tools::{
-    apply_diff_py, list_files_py, read_file_py, search_files_py, write_file_py,
+    DEFAULT_SEARCH_MAX_RESULTS, apply_diff_py, list_files_py, read_file_py, search_files_py,
+    write_file_py,
 };
 use super::shell_tools::bash_exec_py;
 use super::tool_runtime::ToolRuntime;
@@ -38,6 +39,17 @@ impl ToolsProxy {
         list_files_py(&self.runtime, path)
     }
 
+    #[pyo3(signature = (*, query, path=".".to_string(), max_results=DEFAULT_SEARCH_MAX_RESULTS))]
+    fn search_files(
+        &self,
+        py: Python<'_>,
+        query: String,
+        path: String,
+        max_results: usize,
+    ) -> PyResult<Vec<PyObject>> {
+        search_files_py(&self.runtime, py, query, path, max_results)
+    }
+
     #[pyo3(signature = (*, path, start_line=None, end_line=None))]
     fn read_file(
         &self,
@@ -56,16 +68,6 @@ impl ToolsProxy {
     #[pyo3(signature = (*, path, diff_text))]
     fn apply_diff(&self, path: String, diff_text: String) -> PyResult<String> {
         apply_diff_py(&self.runtime, path, diff_text)
-    }
-
-    #[pyo3(signature = (*, keyword, dir_path=".".to_string(), case_sensitive=true))]
-    fn search_files(
-        &self,
-        keyword: String,
-        dir_path: String,
-        case_sensitive: bool,
-    ) -> PyResult<Vec<String>> {
-        search_files_py(&self.runtime, keyword, dir_path, case_sensitive)
     }
 
     #[pyo3(signature = (*, url))]

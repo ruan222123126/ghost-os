@@ -5,6 +5,9 @@ mod ocr;
 mod params;
 mod template_match;
 pub(crate) mod types;
+mod wayland_gstreamer;
+mod wayland_portal_response;
+mod wayland_screencast;
 
 use crate::Response;
 use serde_json::Value;

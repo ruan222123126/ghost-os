@@ -1,122 +1,185 @@
-use ignore::WalkBuilder;
-use regex::{Regex, RegexBuilder};
-use std::fs;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use crate::sandbox::SandboxConfig;
-use crate::sandbox::path_policy::{is_blocked_path, resolve_read_path};
+use crate::sandbox::path_policy::resolve_read_path;
 
-pub(crate) struct SearchFilesOutput {
-    pub(crate) dir_path: std::path::PathBuf,
-    pub(crate) matches: Vec<String>,
+pub(crate) const DEFAULT_SEARCH_MAX_RESULTS: usize = 50;
+const RG_EXIT_MATCH: i32 = 0;
+const RG_EXIT_NO_MATCH: i32 = 1;
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
+pub(crate) struct SearchMatchOutput {
+    pub(crate) path: String,
+    pub(crate) line: usize,
+    pub(crate) text: String,
 }
 
 pub(crate) fn search_files_impl(
     config: &SandboxConfig,
-    keyword: &str,
-    dir_path: &str,
-    case_sensitive: bool,
-) -> Result<SearchFilesOutput, String> {
-    let keyword = keyword.trim();
-    if keyword.is_empty() {
-        return Err("keyword is required".to_string());
+    query: &str,
+    path: &str,
+    max_results: usize,
+) -> Result<Vec<SearchMatchOutput>, String> {
+    let query = normalize_query(query)?;
+    validate_max_results(max_results)?;
+    let root = resolve_search_root(config, path)?;
+    let mut matches = run_ripgrep_search(query, &root)?;
+    sort_matches(&mut matches);
+    if matches.len() > max_results {
+        matches.truncate(max_results);
     }
+    Ok(matches)
+}
 
-    let canonical_dir = resolve_read_path(dir_path, config)?;
-    if !canonical_dir.is_dir() {
-        return Err(format!(
-            "search path is not a directory: {}",
-            canonical_dir.display()
-        ));
+fn normalize_query(query: &str) -> Result<&str, String> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Err("query is required".to_string());
     }
+    Ok(query)
+}
 
-    let matcher = RegexBuilder::new(keyword)
-        .case_insensitive(!case_sensitive)
-        .build()
-        .map_err(|err| format!("invalid regex pattern: {err}"))?;
+fn validate_max_results(max_results: usize) -> Result<(), String> {
+    if max_results == 0 {
+        return Err("max_results must be >= 1".to_string());
+    }
+    Ok(())
+}
 
-    let mut walk_builder = WalkBuilder::new(&canonical_dir);
-    walk_builder.standard_filters(true);
-    walk_builder.max_depth(Some(config.max_search_depth));
+fn resolve_search_root(config: &SandboxConfig, path: &str) -> Result<PathBuf, String> {
+    let target = normalize_search_path(path);
+    let canonical = resolve_read_path(&target, config)?;
+    if !canonical.is_dir() {
+        return Err(format!("path is not a directory: {}", canonical.display()));
+    }
+    Ok(canonical)
+}
 
-    let mut files_scanned = 0usize;
+fn normalize_search_path(path: &str) -> String {
+    let path = path.trim();
+    if path.is_empty() {
+        return ".".to_string();
+    }
+    path.to_string()
+}
+
+fn run_ripgrep_search(query: &str, root: &Path) -> Result<Vec<SearchMatchOutput>, String> {
+    let output = Command::new("rg")
+        .arg("--json")
+        .arg("--fixed-strings")
+        .arg("--line-number")
+        .arg("--no-heading")
+        .arg(query)
+        .arg(root)
+        .output()
+        .map_err(format_ripgrep_spawn_error)?;
+
+    if !is_ripgrep_ok_status(output.status.code()) {
+        return Err(format_ripgrep_failure(output.status.code(), &output.stderr));
+    }
+    parse_ripgrep_matches(&output.stdout)
+}
+
+fn format_ripgrep_spawn_error(err: std::io::Error) -> String {
+    if err.kind() == std::io::ErrorKind::NotFound {
+        return "ripgrep (rg) is required but was not found in PATH".to_string();
+    }
+    format!("failed to execute ripgrep: {err}")
+}
+
+fn is_ripgrep_ok_status(code: Option<i32>) -> bool {
+    matches!(code, Some(RG_EXIT_MATCH) | Some(RG_EXIT_NO_MATCH))
+}
+
+fn format_ripgrep_failure(code: Option<i32>, stderr: &[u8]) -> String {
+    let stderr_text = String::from_utf8_lossy(stderr).trim().to_string();
+    if stderr_text.is_empty() {
+        return format!("ripgrep failed with status {:?}", code);
+    }
+    format!("ripgrep failed: {stderr_text}")
+}
+
+fn parse_ripgrep_matches(stdout: &[u8]) -> Result<Vec<SearchMatchOutput>, String> {
     let mut matches = Vec::new();
-
-    'walk: for entry in walk_builder.build() {
-        let Some(path) = eligible_search_path(entry, config, &mut files_scanned) else {
+    for raw in stdout.split(|byte| *byte == b'\n') {
+        if raw.is_empty() {
             continue;
-        };
-        if files_scanned > config.max_search_files {
-            break;
         }
-
-        let content = match fs::read(&path) {
-            Ok(content) => content,
-            Err(_) => continue,
-        };
-        let display_path = relative_display_path(&path, &canonical_dir);
-        if push_file_matches(
-            &content,
-            &matcher,
-            &display_path,
-            &mut matches,
-            config.max_search_matches,
-        ) {
-            break 'walk;
+        let text = std::str::from_utf8(raw)
+            .map_err(|err| format!("invalid ripgrep json output encoding: {err}"))?;
+        if let Some(entry) = parse_ripgrep_event(text)? {
+            matches.push(entry);
         }
     }
-
-    Ok(SearchFilesOutput {
-        dir_path: canonical_dir,
-        matches,
-    })
+    Ok(matches)
 }
 
-fn eligible_search_path(
-    entry: Result<ignore::DirEntry, ignore::Error>,
-    config: &SandboxConfig,
-    files_scanned: &mut usize,
-) -> Option<PathBuf> {
-    let entry = entry.ok()?;
-    let file_type = entry.file_type()?;
-    if !file_type.is_file() {
-        return None;
+fn parse_ripgrep_event(raw: &str) -> Result<Option<SearchMatchOutput>, String> {
+    let event: RipgrepEvent =
+        serde_json::from_str(raw).map_err(|err| format!("invalid ripgrep json event: {err}"))?;
+    if event.kind != "match" {
+        return Ok(None);
     }
 
-    *files_scanned += 1;
-    let path = entry.into_path();
-    if is_blocked_path(&path, &config.blocked_patterns) {
-        return None;
-    }
-    Some(path)
+    let data = event
+        .data
+        .ok_or_else(|| "invalid ripgrep match event: missing data".to_string())?;
+    Ok(Some(SearchMatchOutput {
+        path: decode_ripgrep_text(data.path, "path")?,
+        line: data
+            .line_number
+            .ok_or_else(|| "invalid ripgrep match event: missing line_number".to_string())?,
+        text: decode_ripgrep_text(data.lines, "lines")?
+            .trim_end_matches('\n')
+            .to_string(),
+    }))
 }
 
-fn relative_display_path(path: &Path, canonical_dir: &Path) -> String {
-    path.strip_prefix(canonical_dir)
-        .unwrap_or(path)
-        .to_string_lossy()
-        .to_string()
+fn decode_ripgrep_text(field: Option<RipgrepTextField>, label: &str) -> Result<String, String> {
+    let field =
+        field.ok_or_else(|| format!("invalid ripgrep match event: missing {label} field"))?;
+    if let Some(text) = field.text {
+        return Ok(text);
+    }
+
+    let encoded = field
+        .bytes
+        .ok_or_else(|| format!("invalid ripgrep match event: missing {label} content"))?;
+    let decoded = BASE64_STANDARD
+        .decode(encoded)
+        .map_err(|err| format!("invalid ripgrep {label} bytes: {err}"))?;
+    String::from_utf8(decoded).map_err(|err| format!("invalid ripgrep {label} utf-8: {err}"))
 }
 
-fn push_file_matches(
-    content: &[u8],
-    matcher: &Regex,
-    display_path: &str,
-    matches: &mut Vec<String>,
-    max_matches: usize,
-) -> bool {
-    if content.contains(&0) {
-        return false;
-    }
+fn sort_matches(matches: &mut [SearchMatchOutput]) {
+    matches.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then(left.line.cmp(&right.line))
+            .then(left.text.cmp(&right.text))
+    });
+}
 
-    let text = String::from_utf8_lossy(content);
-    for (line_number, line) in text.lines().enumerate() {
-        if matcher.is_match(line) {
-            matches.push(format!("{}:{}:{}", display_path, line_number + 1, line));
-            if matches.len() >= max_matches {
-                return true;
-            }
-        }
-    }
-    false
+#[derive(Debug, Deserialize)]
+struct RipgrepEvent {
+    #[serde(rename = "type")]
+    kind: String,
+    data: Option<RipgrepMatchData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RipgrepMatchData {
+    path: Option<RipgrepTextField>,
+    lines: Option<RipgrepTextField>,
+    line_number: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RipgrepTextField {
+    text: Option<String>,
+    bytes: Option<String>,
 }

@@ -3,6 +3,8 @@ mod bindings;
 mod export;
 mod read_write;
 mod search;
+#[cfg(test)]
+mod search_test;
 
 #[cfg(feature = "python-sandbox")]
 pub(crate) use bindings::{
@@ -10,4 +12,4 @@ pub(crate) use bindings::{
 };
 pub(crate) use export::export_file_impl;
 pub(crate) use read_write::{apply_diff_impl, list_files_impl, read_file_impl};
-pub(crate) use search::search_files_impl;
+pub(crate) use search::DEFAULT_SEARCH_MAX_RESULTS;

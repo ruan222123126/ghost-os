@@ -6,9 +6,7 @@ use std::{
 };
 
 use super::dispatch_action;
-use super::handlers::{
-    handle_apply_diff, handle_export_file, handle_list_files, handle_read_file, handle_search_files,
-};
+use super::handlers::{handle_apply_diff, handle_export_file, handle_list_files, handle_read_file};
 
 #[test]
 fn handle_read_file_returns_numbered_content() {
@@ -69,40 +67,6 @@ fn handle_list_files_blocks_sensitive_directory_names() {
     assert!(response.error.contains("sensitive file blocked"));
 
     fs::remove_dir_all(root).ok();
-}
-
-#[test]
-fn handle_search_files_returns_matches() {
-    let root = make_temp_dir();
-    let src = root.join("src");
-    fs::create_dir_all(&src).expect("create src");
-    fs::write(src.join("a.txt"), "TODO: first\nnoop\nTODO: second\n").expect("write a.txt");
-
-    let response = handle_search_files(&json!({
-        "keyword": "TODO",
-        "dir_path": root.to_string_lossy(),
-    }));
-
-    assert_eq!(response.status, "success");
-    let matches = response.payload["matches"]
-        .as_array()
-        .expect("matches should be an array");
-    assert_eq!(matches.len(), 2);
-    assert_eq!(matches[0], "src/a.txt:1:TODO: first");
-    assert_eq!(matches[1], "src/a.txt:3:TODO: second");
-
-    fs::remove_dir_all(root).ok();
-}
-
-#[test]
-fn handle_search_files_rejects_invalid_case_sensitive_type() {
-    let response = handle_search_files(&json!({
-        "keyword": "TODO",
-        "case_sensitive": "yes"
-    }));
-
-    assert_eq!(response.status, "error");
-    assert!(response.error.contains("case_sensitive must be a boolean"));
 }
 
 #[test]

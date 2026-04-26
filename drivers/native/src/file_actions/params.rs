@@ -10,12 +10,6 @@ pub(super) struct ReadFileRequest {
     pub(super) end_line: Option<usize>,
 }
 
-pub(super) struct SearchFilesRequest {
-    pub(super) keyword: String,
-    pub(super) dir_path: String,
-    pub(super) case_sensitive: bool,
-}
-
 pub(super) struct ApplyDiffRequest {
     pub(super) path: String,
     pub(super) diff_text: String,
@@ -49,23 +43,6 @@ impl ReadFileRequest {
             path: required_string(params, "path")?,
             start_line: optional_usize(params, "start_line")?,
             end_line: optional_usize(params, "end_line")?,
-        })
-    }
-}
-
-impl SearchFilesRequest {
-    pub(super) fn parse(params: &Value) -> Result<Self, String> {
-        let dir_path = params
-            .get("dir_path")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(".");
-
-        Ok(Self {
-            keyword: required_string(params, "keyword")?,
-            dir_path: dir_path.to_string(),
-            case_sensitive: optional_bool(params, "case_sensitive")?.unwrap_or(true),
         })
     }
 }
@@ -111,13 +88,4 @@ fn optional_usize(params: &Value, field: &str) -> Result<Option<usize>, String> 
     usize::try_from(value)
         .map(Some)
         .map_err(|_| format!("{field} is too large"))
-}
-
-fn optional_bool(params: &Value, field: &str) -> Result<Option<bool>, String> {
-    let Some(raw) = params.get(field) else {
-        return Ok(None);
-    };
-    raw.as_bool()
-        .map(Some)
-        .ok_or_else(|| format!("{field} must be a boolean"))
 }

@@ -1,10 +1,16 @@
 use super::image_ops::crop_image;
 use super::params::{parse_capture_region, parse_optional_display_id};
 use super::types::{CapturePayload, CapturedImage, sanitize_scale, scale_coordinate};
+use super::wayland_screencast;
 use crate::Response;
 use crate::display_scale::record_display_scale;
 use serde_json::Value;
+use std::env::var_os;
+use std::sync::OnceLock;
 use xcap::Monitor;
+use xcap::image::RgbaImage;
+
+static CAPTURE_BACKEND_LOGGED: OnceLock<()> = OnceLock::new();
 
 pub(crate) fn handle_screen_capture(params: &Value) -> Response {
     let captured = match capture_screen(params) {
@@ -28,16 +34,14 @@ pub(crate) fn capture_screen(params: &Value) -> Result<CapturedImage, String> {
         return Err("no monitor is available".to_string());
     }
     let monitor = select_monitor(&monitors, display_id)?;
-    let image = monitor
-        .capture_image()
-        .map_err(|err| format!("capture monitor {} failed: {err}", monitor.id()))?;
-    let region = parse_capture_region(params, image.width(), image.height())?;
-    let cropped = crop_image(&image, region)?;
-    let (scale_x, scale_y) = monitor_scale(monitor, image.width(), image.height());
+    let source = capture_monitor_image(monitor)?;
+    let region = parse_capture_region(params, source.image.width(), source.image.height())?;
+    let cropped = crop_image(&source.image, region)?;
+    let (scale_x, scale_y, base_origin_x, base_origin_y) = capture_transform(monitor, &source);
     record_display_scale(monitor.id(), scale_x, scale_y);
 
-    let origin_x = scale_coordinate(monitor.x(), scale_x) + region.x;
-    let origin_y = scale_coordinate(monitor.y(), scale_y) + region.y;
+    let origin_x = base_origin_x + region.x;
+    let origin_y = base_origin_y + region.y;
     Ok(CapturedImage {
         display_id: monitor.id(),
         scale_x,
@@ -47,6 +51,108 @@ pub(crate) fn capture_screen(params: &Value) -> Result<CapturedImage, String> {
         region,
         image: cropped,
     })
+}
+
+struct CaptureSource {
+    image: RgbaImage,
+    logical_size: Option<(i32, i32)>,
+    origin: Option<(i32, i32)>,
+}
+
+fn capture_monitor_image(monitor: &Monitor) -> Result<CaptureSource, String> {
+    if !is_wayland_session() {
+        log_capture_backend("xcap");
+        let image = monitor
+            .capture_image()
+            .map_err(|err| format!("capture monitor {} failed: {err}", monitor.id()))?;
+        return Ok(CaptureSource {
+            image,
+            logical_size: None,
+            origin: None,
+        });
+    }
+
+    log_capture_backend("portal-screencast");
+    let frame = wayland_screencast::capture_frame()
+        .map_err(|err| format!("wayland capture failed: {err}"))?;
+    Ok(CaptureSource {
+        image: frame.image,
+        logical_size: frame.logical_size,
+        origin: frame.origin,
+    })
+}
+
+fn capture_transform(monitor: &Monitor, source: &CaptureSource) -> (f64, f64, i32, i32) {
+    let fallback = monitor_scale(monitor, source.image.width(), source.image.height());
+    let scale = source
+        .logical_size
+        .map(|(width, height)| {
+            scale_from_logical_size(source.image.width(), source.image.height(), width, height)
+        })
+        .unwrap_or(fallback);
+    let base_origin = source.origin.unwrap_or((monitor.x(), monitor.y()));
+    (
+        scale.0,
+        scale.1,
+        scale_coordinate(base_origin.0, scale.0),
+        scale_coordinate(base_origin.1, scale.1),
+    )
+}
+
+fn scale_from_logical_size(
+    width: u32,
+    height: u32,
+    logical_width: i32,
+    logical_height: i32,
+) -> (f64, f64) {
+    let scale_x = if logical_width > 0 {
+        f64::from(width) / f64::from(logical_width)
+    } else {
+        1.0
+    };
+    let scale_y = if logical_height > 0 {
+        f64::from(height) / f64::from(logical_height)
+    } else {
+        1.0
+    };
+    (sanitize_scale(scale_x), sanitize_scale(scale_y))
+}
+
+fn is_wayland_session() -> bool {
+    let xdg_session_type = var_os("XDG_SESSION_TYPE")
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_lowercase();
+    let wayland_display = var_os("WAYLAND_DISPLAY")
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_lowercase();
+    xdg_session_type == "wayland" || wayland_display.contains("wayland")
+}
+
+fn log_capture_backend(backend: &str) {
+    if CAPTURE_BACKEND_LOGGED.set(()).is_err() {
+        return;
+    }
+    eprintln!(
+        "ghost-native: screen capture backend={} session_type={} wayland_display={} display={}",
+        backend,
+        capture_env_value("XDG_SESSION_TYPE"),
+        capture_env_value("WAYLAND_DISPLAY"),
+        capture_env_value("DISPLAY"),
+    );
+}
+
+fn capture_env_value(name: &str) -> String {
+    let value = var_os(name)
+        .unwrap_or_default()
+        .to_string_lossy()
+        .trim()
+        .to_string();
+    if value.is_empty() {
+        return "<unset>".to_string();
+    }
+    value
 }
 
 fn capture_payload(captured: CapturedImage) -> Result<CapturePayload, String> {

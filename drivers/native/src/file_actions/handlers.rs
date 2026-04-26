@@ -4,13 +4,11 @@ use serde_json::json;
 use crate::Response;
 use crate::sandbox::SandboxConfig;
 use crate::sandbox::file_tools::{
-    apply_diff_impl, export_file_impl, list_files_impl, read_file_impl, search_files_impl,
+    apply_diff_impl, export_file_impl, list_files_impl, read_file_impl,
 };
 
 use super::format::format_numbered_content;
-use super::params::{
-    ApplyDiffRequest, ExportFileRequest, ListFilesRequest, ReadFileRequest, SearchFilesRequest,
-};
+use super::params::{ApplyDiffRequest, ExportFileRequest, ListFilesRequest, ReadFileRequest};
 
 pub(super) fn handle_list_files(params: &Value) -> Response {
     let request = ListFilesRequest::parse(params);
@@ -48,29 +46,6 @@ pub(super) fn handle_read_file(params: &Value) -> Response {
         "returned_end_line": result.returned_end_line,
         "total_lines": result.total_lines,
         "content": format_numbered_content(&result.content, result.returned_start_line),
-    }))
-}
-
-pub(super) fn handle_search_files(params: &Value) -> Response {
-    let request = match SearchFilesRequest::parse(params) {
-        Ok(request) => request,
-        Err(err) => return Response::error(err),
-    };
-    let result = match search_files_impl(
-        &sandbox_config(),
-        &request.keyword,
-        &request.dir_path,
-        request.case_sensitive,
-    ) {
-        Ok(result) => result,
-        Err(err) => return Response::error(err),
-    };
-
-    Response::success(json!({
-        "dir_path": result.dir_path.display().to_string(),
-        "keyword": request.keyword,
-        "case_sensitive": request.case_sensitive,
-        "matches": result.matches,
     }))
 }
 

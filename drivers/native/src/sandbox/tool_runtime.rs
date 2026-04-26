@@ -10,10 +10,10 @@ use super::{SandboxConfig, ToolCallLog};
 pub(crate) const SCRIPT_SANDBOX_ALLOWED_TOOLS: &[&str] = &[
     "bash_exec",
     "list_files",
+    "search_files",
     "read_file",
     "write_file",
     "apply_diff",
-    "search_files",
     "fetch_webpage",
 ];
 

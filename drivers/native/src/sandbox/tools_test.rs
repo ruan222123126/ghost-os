@@ -94,6 +94,59 @@ fn test_list_files_returns_stable_sorted_entries() {
 }
 
 #[test]
+fn test_search_files_returns_structured_matches_and_logs() {
+    let root = make_temp_dir();
+    let file = root.join("search.txt");
+    fs::write(&file, "alpha\nneedle-one\nneedle-two\n").expect("write fixture");
+
+    let sandbox = sandbox_for(&root);
+    let script = format!(
+        "import json\nmatches = tools.search_files(query='needle', path='{}')\nprint(json.dumps(matches))",
+        escape_python_path(&root)
+    );
+
+    let result = sandbox.execute_blocking(&script);
+    assert!(
+        result.error.is_none(),
+        "unexpected error: {:?}",
+        result.error
+    );
+    assert!(result.output.contains("\"line\": 2"));
+    assert!(result.output.contains("\"text\": \"needle-one\""));
+    assert_eq!(result.tool_calls_log.len(), 1);
+    assert_eq!(result.tool_calls_log[0].tool, "search_files");
+    assert_eq!(result.tool_calls_log[0].args["max_results"], 50);
+    assert!(result.tool_calls_log[0].result.contains("\"path\""));
+    assert!(result.tool_calls_log[0].result.contains("\"line\""));
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn test_search_files_respects_max_results_parameter() {
+    let root = make_temp_dir();
+    let file = root.join("search-limit.txt");
+    fs::write(&file, "needle-a\nneedle-b\nneedle-c\n").expect("write fixture");
+
+    let sandbox = sandbox_for(&root);
+    let script = format!(
+        "matches = tools.search_files(query='needle', path='{}', max_results=2)\nprint(len(matches))",
+        escape_python_path(&root)
+    );
+
+    let result = sandbox.execute_blocking(&script);
+    assert!(
+        result.error.is_none(),
+        "unexpected error: {:?}",
+        result.error
+    );
+    assert_eq!(result.output.trim(), "2");
+    assert_eq!(result.tool_calls_log[0].args["max_results"], 2);
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn test_read_file_paginated_range() {
     let root = make_temp_dir();
     let file = root.join("notes.txt");
@@ -238,34 +291,6 @@ fn test_apply_diff_mismatch_returns_error() {
 }
 
 #[test]
-fn test_search_files_returns_grep_style_matches() {
-    let root = make_temp_dir();
-    let src = root.join("src");
-    fs::create_dir_all(&src).expect("create src dir");
-
-    fs::write(src.join("a.txt"), "TODO: first\nnone\nTODO: second\n").expect("write a.txt");
-    fs::write(src.join("b.txt"), "todo: lowercase\n").expect("write b.txt");
-
-    let sandbox = sandbox_for(&root);
-    let script = format!(
-        "matches = tools.search_files(keyword='TODO', dir_path='{path}', case_sensitive=True)\nfor item in matches:\n    print(item)",
-        path = escape_python_path(&root)
-    );
-
-    let result = sandbox.execute_blocking(&script);
-    assert!(
-        result.error.is_none(),
-        "unexpected error: {:?}",
-        result.error
-    );
-    assert!(result.output.contains("src/a.txt:1:TODO: first"));
-    assert!(result.output.contains("src/a.txt:3:TODO: second"));
-    assert!(!result.output.contains("lowercase"));
-
-    fs::remove_dir_all(root).ok();
-}
-
-#[test]
 fn test_bash_exec_truncates_large_stdout() {
     let root = make_temp_dir();
     let sandbox = sandbox_for(&root);
@@ -351,10 +376,10 @@ fn test_script_sandbox_allowed_tools_are_explicit() {
         [
             "bash_exec",
             "list_files",
+            "search_files",
             "read_file",
             "write_file",
             "apply_diff",
-            "search_files",
             "fetch_webpage",
         ]
     );
