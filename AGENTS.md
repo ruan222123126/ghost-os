@@ -15,12 +15,6 @@ See `PROJECT_PROGRESS.md` before implementation. Current baseline is MVP stabili
 
 Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital twin execution layer. Users should be able to command AI via Web/CLI as if operating their own hands on a remote machine.
 
-## Core Philosophy
-
-1. **Minimalist**: prefer native, lightweight, high-performance Rust/Go implementations.
-2. **Bash-First**: default to scriptable operations (Bash/PowerShell/Python); use visual fallback only when GUI cannot be scripted.
-3. **Seamless Ecosystem**: browser, CLI, and backend are one coordinated system.
-4. **Clean & Aesthetic**: code stays concise and explicit; UX defaults to high-contrast dark style.
 
 ## Package Management
 
@@ -43,12 +37,7 @@ Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital tw
    - Interaction and feedback.
    - Web rendering, browser structure access, immersive CLI control.
 
-## Decision Priority
 
-Always choose implementation path in this order:
-1. **Level 1 (Scripting)**: solve with local scripts first.
-2. **Level 2 (API/Native)**: use native system/browser APIs.
-3. **Level 3 (Vision)**: screenshot-recognize-click as last resort only.
 
 ## Agent Collaboration Strategy
 
@@ -63,16 +52,14 @@ Always choose implementation path in this order:
 4. Cross-process payloads must strictly follow `core/shared/schema.json`:
    - Request: `{ "action": "string", "params": "object", "trace_id": "string" }`
    - Response: `{ "status": "success|error", "payload": "object", "error": "string" }`
-5. Assistant text tool-calls must use the Tool-Tag protocol:
-   - Tool call text: `<t:ID>JSON</t>`
-   - Internal feedback tag: `[TOOL_TAG_RESULT]`
+
 
 ## Engineering Aesthetics
 
 1. Write only necessary code.
 2. Explicit over implicit; avoid over-abstraction.
 3. Keep a minimal, functional style.
-4. Default dark mode for Web/terminal output.
+
 
 ## Commenting Guidelines
 
