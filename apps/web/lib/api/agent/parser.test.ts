@@ -1,4 +1,5 @@
 import {
+  parseAgentCompletionDeltaPayload,
   parseAgentErrorPayload,
   parseAgentSendResponse,
 } from './parser';
@@ -54,6 +55,22 @@ describe('lib/api/agent/parser', () => {
       message: 'bridge unavailable',
       session_id: 'session-err',
       code: 502,
+    });
+  });
+
+  it('parses thinking completion delta payloads', () => {
+    expect(parseAgentCompletionDeltaPayload({
+      kind: 'thinking',
+      thinking: 'Analyzing…',
+      ignored: true,
+    })).toEqual({
+      kind: 'thinking',
+      thinking: 'Analyzing…',
+      text: undefined,
+      tool_call_index: undefined,
+      tool_call_id: undefined,
+      tool_name: undefined,
+      arguments_fragment: undefined,
     });
   });
 });

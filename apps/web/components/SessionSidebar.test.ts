@@ -6,41 +6,43 @@ import { SESSION_SIDEBAR_GROUPING_STORAGE_KEY } from '@/hooks/useSessionSidebarG
 import type { SessionMetadata } from '@/lib/types';
 
 describe('components/SessionSidebar', () => {
-  it('renders sessions in stable order', () => {
-    const sessions: SessionMetadata[] = [
-      createSession('aaaabbbb-session-1'),
-      createSession('ccccdddd-session-2'),
-      createSession('eeeeffff-session-3'),
-    ];
-
-    const html = renderSidebar(sessions);
-
-    expect(html).toContain('Unclassified');
-    expect(html.indexOf('Session aaaabbbb')).toBeLessThan(html.indexOf('Session ccccdddd'));
-    expect(html.indexOf('Session ccccdddd')).toBeLessThan(html.indexOf('Session eeeeffff'));
-  });
-
-  it('renders sessions in source order when grouping is enabled', () => {
+  it('renders flat sessions by recent activity when grouping is disabled', () => {
     const sessions: SessionMetadata[] = [
       createSession('older-3333', '2026-04-10T00:00:00Z'),
       createSession('latest-1111', '2026-04-12T12:00:00Z'),
       createSession('middle-2222', '2026-04-11T08:00:00Z'),
     ];
 
-    const html = renderSidebar(sessions);
+    const html = renderSidebar(sessions, { groupingEnabled: false });
 
-    expect(html.indexOf('Session older-33')).toBeLessThan(html.indexOf('Session latest-1'));
     expect(html.indexOf('Session latest-1')).toBeLessThan(html.indexOf('Session middle-2'));
+    expect(html.indexOf('Session middle-2')).toBeLessThan(html.indexOf('Session older-33'));
+  });
+
+  it('sorts grouped sessions by recent activity', () => {
+    const sessions: SessionMetadata[] = [
+      createSession('older-3333', '2026-04-10T00:00:00Z'),
+      createSession('latest-1111', '2026-04-12T12:00:00Z'),
+      createSession('middle-2222', '2026-04-11T08:00:00Z'),
+    ];
+    const html = renderSidebar(sessions, { groupingEnabled: true });
+
+    expect(html.indexOf('Session latest-1')).toBeLessThan(html.indexOf('Session middle-2'));
+    expect(html.indexOf('Session middle-2')).toBeLessThan(html.indexOf('Session older-33'));
   });
 });
 
 function renderSidebar(
   sessions: SessionMetadata[],
+  options?: {
+    groupingEnabled?: boolean;
+  },
 ): string {
   const originalWindow = (globalThis as { window?: unknown }).window;
+  const groupingEnabled = options?.groupingEnabled ?? true;
   const store = {
     'ghost.web.locale': 'en-US',
-    [SESSION_SIDEBAR_GROUPING_STORAGE_KEY]: '1',
+    [SESSION_SIDEBAR_GROUPING_STORAGE_KEY]: groupingEnabled ? '1' : '0',
   };
 
   (globalThis as { window?: unknown }).window = {

@@ -8,9 +8,11 @@ import {
   formatCodeLanguageLabel,
   shouldRenderAssistantMarkdown,
 } from './assistantMarkdown';
+import { MessageCopyButton } from './MessageCopyButton';
 
 interface AssistantMarkdownContentProps {
   content: string;
+  enabled?: boolean;
 }
 
 interface CodeBlockData {
@@ -45,23 +47,31 @@ const MARKDOWN_COMPONENTS: Components = {
 
     const language = extractCodeLanguage(block.className);
     const languageLabel = formatCodeLanguageLabel(language);
+    const codeContent = trimSingleTrailingLineBreak(block.content);
     return (
       <div className="assistant-code-block">
         <div className="assistant-code-header">
           <span className="assistant-code-language">{languageLabel}</span>
+          <MessageCopyButton text={codeContent} variant="code" />
         </div>
         <pre>
-          <code className={block.className}>{trimSingleTrailingLineBreak(block.content)}</code>
+          <code className={block.className}>{codeContent}</code>
         </pre>
       </div>
     );
   },
 };
 
-const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({ content }) => {
+const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({
+  content,
+  enabled = true,
+}) => {
   const shouldRenderMarkdown = useMemo(() => {
+    if (!enabled) {
+      return false;
+    }
     return shouldRenderAssistantMarkdown(content);
-  }, [content]);
+  }, [content, enabled]);
 
   if (!shouldRenderMarkdown) {
     return <div className="message-content">{content}</div>;

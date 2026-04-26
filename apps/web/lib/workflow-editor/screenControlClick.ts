@@ -8,6 +8,7 @@ import { withToolArguments } from '@/lib/workflow-editor/nodePatches';
 const ATOMIC_MODE = 'atomic';
 const CLICK_ACTION = 'click';
 const CLICK_ICON_ACTION = 'click_icon';
+const DISPLAY_ID_KEY = 'display_id';
 const SCREEN_CONTROL_PARAMS_KEY = 'params';
 
 export function normalizeClickComposerParams(
@@ -46,11 +47,20 @@ export function syncClickStepToToolArguments(
 
   const sourceArgs = asRecord(node.tool?.arguments);
   const sourceParams = asRecord(sourceArgs[SCREEN_CONTROL_PARAMS_KEY]);
+  const stepParams = asRecord(step.params);
+  const displayIDDirective = readDisplayIDDirective(stepParams);
   const nextParams: Record<string, unknown> = {
     ...sourceParams,
+    ...stepParams,
     x: clickParams.x,
     y: clickParams.y,
   };
+  if (displayIDDirective.kind === 'set') {
+    nextParams[DISPLAY_ID_KEY] = displayIDDirective.value;
+  }
+  if (displayIDDirective.kind === 'clear') {
+    delete nextParams[DISPLAY_ID_KEY];
+  }
 
   return withToolArguments(node, {
     ...sourceArgs,
@@ -72,4 +82,20 @@ function readCoordinate(input: unknown): number | undefined {
     return undefined;
   }
   return input;
+}
+
+function readDisplayIDDirective(
+  params: Record<string, unknown>,
+): { kind: 'keep' } | { kind: 'clear' } | { kind: 'set'; value: number } {
+  if (!Object.prototype.hasOwnProperty.call(params, DISPLAY_ID_KEY)) {
+    return { kind: 'keep' };
+  }
+  const raw = params[DISPLAY_ID_KEY];
+  if (raw === null) {
+    return { kind: 'clear' };
+  }
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0) {
+    return { kind: 'set', value: raw };
+  }
+  return { kind: 'keep' };
 }

@@ -1,9 +1,14 @@
 import { useCallback } from 'react';
 import { getSession } from '@/lib/api/sessions/api';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
+import {
+  mergeSessionMessagesWithPersistedThinking,
+  persistSessionThinkingSnapshot,
+} from '@/lib/chatThinkingPersistence';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatMessage, SessionDetail } from '@/lib/types';
+import { mergeLatestCommittedMessages } from './chatHistoryMerge';
 import type { ChatStateControls } from './types';
 
 const HISTORY_PAGE_LIMIT = 100;
@@ -43,7 +48,12 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
     clearStreamingState();
     clearPendingQuestions();
-    setCommittedMessages(mapSessionMessagesToChat(detail.id, detail.messages));
+    const merged = mergeSessionMessagesWithPersistedThinking(
+      detail.id,
+      mapSessionMessagesToChat(detail.id, detail.messages),
+    );
+    setCommittedMessages(merged);
+    persistSessionThinkingSnapshot(detail.id, merged);
   }, [
     clearPendingQuestions,
     clearStreamingState,
@@ -55,8 +65,15 @@ export function useChatHistory(options: UseChatHistoryOptions) {
   const syncRecentHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
     applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
-    const latest = mapSessionMessagesToChat(detail.id, detail.messages);
-    setCommittedMessages((previous) => mergeLatestCommittedMessages(previous, latest));
+    const latest = mergeSessionMessagesWithPersistedThinking(
+      detail.id,
+      mapSessionMessagesToChat(detail.id, detail.messages),
+    );
+    setCommittedMessages((previous) => {
+      const merged = mergeLatestCommittedMessages(previous, latest);
+      persistSessionThinkingSnapshot(detail.id, merged);
+      return merged;
+    });
   }, [setCommittedMessages, setHasOlderHistory, setNextHistoryBefore]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
@@ -109,8 +126,15 @@ export function useChatHistory(options: UseChatHistoryOptions) {
         limit: HISTORY_PAGE_LIMIT,
       });
       applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
-      const older = mapSessionMessagesToChat(detail.id, detail.messages);
-      setCommittedMessages((previous) => prependUniqueCommittedMessages(previous, older));
+      const older = mergeSessionMessagesWithPersistedThinking(
+        detail.id,
+        mapSessionMessagesToChat(detail.id, detail.messages),
+      );
+      setCommittedMessages((previous) => {
+        const merged = prependUniqueCommittedMessages(previous, older);
+        persistSessionThinkingSnapshot(detail.id, merged);
+        return merged;
+      });
     } catch (error) {
       setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
@@ -151,19 +175,4 @@ function prependUniqueCommittedMessages(previous: ChatMessage[], older: ChatMess
 
   const olderIDs = new Set(older.map((message) => message.id));
   return [...older, ...previous.filter((message) => !olderIDs.has(message.id))];
-}
-
-function mergeLatestCommittedMessages(previous: ChatMessage[], latest: ChatMessage[]): ChatMessage[] {
-  const latestIDs = new Set(latest.map((message) => message.id));
-  const preserved = previous.filter((message) => {
-    if (message.kind === 'thinking') {
-      return true;
-    }
-    if (message.id.startsWith('stream-') || message.id.startsWith('local:')) {
-      return false;
-    }
-    return !latestIDs.has(message.id);
-  });
-
-  return [...preserved, ...latest];
 }

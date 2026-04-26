@@ -7,6 +7,7 @@ import {
   type SessionPartitionStoreV1,
   type SessionPartitionView,
 } from '@/lib/sessionSidebarPartitionsModel';
+import { sortSessionIDsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
 
 export {
   SESSION_PARTITION_STORAGE_KEY,
@@ -196,6 +197,7 @@ function buildOrderedSessionIDsByPartition(
   store: SessionPartitionStoreV1,
   partitionIDs: string[],
 ): Record<string, string[]> {
+  const sessionByID = new Map(sessions.map((session) => [session.id, session]));
   const grouped = Object.fromEntries(partitionIDs.map((partitionID) => [partitionID, [] as string[]]));
 
   for (const session of sessions) {
@@ -205,7 +207,7 @@ function buildOrderedSessionIDsByPartition(
   }
 
   for (const partitionID of partitionIDs) {
-    grouped[partitionID] = sortByPreferredOrder(grouped[partitionID], store.orders[partitionID] ?? []);
+    grouped[partitionID] = sortSessionIDsByRecentActivity(grouped[partitionID], sessionByID);
   }
 
   return grouped;
@@ -244,14 +246,6 @@ function buildOrdersFromGrouped(grouped: Record<string, string[]>): Record<strin
     }
   }
   return orders;
-}
-
-function sortByPreferredOrder(sessionIDs: string[], preferredOrder: string[]): string[] {
-  const present = new Set(sessionIDs);
-  const head = preferredOrder.filter((sessionID) => present.has(sessionID));
-  const headSet = new Set(head);
-  const tail = sessionIDs.filter((sessionID) => !headSet.has(sessionID));
-  return [...head, ...tail];
 }
 
 function dedupePartitions(partitions: SessionPartition[]): SessionPartition[] {

@@ -249,19 +249,25 @@ export interface ToolUpdateRequest {
   trace_id?: string;
 }
 
+export type PromptInsertPoint = 'core_job' | 'memory';
+
+export interface PromptLibraryItem {
+  id: string;
+  name: string;
+  insert_point: PromptInsertPoint;
+  content: string;
+  active: boolean;
+}
+
 export interface SystemPromptPayload {
-  global_template: string;
   core_prompt: string;
-  tool_prompt: string;
-  tool_key_spec: string;
   rendered_prompt: string;
+  prompt_library: PromptLibraryItem[];
 }
 
 export interface SystemPromptUpdateRequest {
-  global_template?: string;
   core_prompt?: string;
-  tool_prompt?: string;
-  tool_key_spec?: string;
+  prompt_library?: PromptLibraryItem[];
   trace_id?: string;
 }
 
@@ -273,6 +279,37 @@ export type WorkflowDefinition = SharedWorkflowDefinition;
 export type WorkflowNode = SharedWorkflowNode;
 export type WorkflowEdge = SharedWorkflowEdge;
 export type WorkflowInputVariable = SharedWorkflowInputVariable;
+
+export interface TaskRunNodeResult {
+  node_id: string;
+  node_type: string;
+  status: string;
+  started_at?: string;
+  finished_at?: string;
+  completed_seq?: number;
+  branch_id?: string;
+  input?: unknown;
+  output?: unknown;
+  preview?: string;
+  error?: string;
+}
+
+export interface TaskRunLog {
+  task_id: string;
+  run_id: string;
+  trace_id: string;
+  task_kind?: 'agent_message' | 'workflow';
+  action?: string;
+  scheduled_at: string;
+  started_at?: string;
+  finished_at?: string;
+  status: 'success' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
+  session_id_input?: string;
+  session_id_output?: string;
+  response_preview?: string;
+  node_results?: TaskRunNodeResult[];
+  error?: string;
+}
 
 export interface TextTaskCreateRequest extends Omit<SharedAgentMessageTaskCreateRequest, 'task_kind' | 'trace_id'> {
   task_kind: 'agent_message';

@@ -11,6 +11,7 @@ describe('hooks/chat/chatStateReducer', () => {
     state = chatStateReducer(state, {
       type: 'apply_runtime_actions',
       actions: [
+        { type: 'append_streaming_thinking_text', text: 'thinking...' },
         { type: 'append_streaming_assistant_text', text: 'alpha' },
         {
           type: 'upsert_streaming_tool',
@@ -39,6 +40,7 @@ describe('hooks/chat/chatStateReducer', () => {
       { id: 'stream-segment:assistant:1', content: 'alpha' },
       { id: 'stream-segment:assistant:2', content: 'omega' },
     ]);
+    expect(view.streamingThinkingText).toBe('thinking...');
     expect(state.streamingItemOrder).toEqual([
       'assistant:stream-segment:assistant:1',
       'tool:tool-1',
@@ -81,7 +83,10 @@ describe('hooks/chat/chatStateReducer', () => {
     });
     state = chatStateReducer(state, {
       type: 'apply_runtime_actions',
-      actions: [{ type: 'append_streaming_assistant_text', text: 'partial' }],
+      actions: [
+        { type: 'append_streaming_assistant_text', text: 'partial' },
+        { type: 'append_streaming_thinking_text', text: 'thinking...' },
+      ],
     });
     state = chatStateReducer(state, { type: 'clear_messages' });
 
@@ -92,6 +97,7 @@ describe('hooks/chat/chatStateReducer', () => {
     expect(state.hasOlderHistory).toBe(false);
     expect(state.nextHistoryBefore).toBeNull();
     expect(view.streamingAssistantSegments).toEqual([]);
+    expect(view.streamingThinkingText).toBe('');
     expect(view.streamingTools).toEqual([]);
     expect(view.pendingQuestions).toEqual([]);
   });

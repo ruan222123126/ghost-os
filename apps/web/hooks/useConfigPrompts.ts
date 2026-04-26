@@ -4,9 +4,7 @@ import { useCallback, useEffect, useReducer } from 'react';
 import { getSystemPrompts, updateSystemPrompts } from '@/lib/api/config/api';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { SystemPromptPayload, SystemPromptUpdateRequest } from '@/lib/types';
-
-export type SystemPromptField = 'global_template' | 'core_prompt' | 'tool_prompt' | 'tool_key_spec';
+import type { PromptLibraryItem, SystemPromptPayload } from '@/lib/types';
 
 interface UseConfigPromptsOptions {
   open: boolean;
@@ -18,7 +16,7 @@ interface UseConfigPromptsResult {
   promptSaving: boolean;
   promptError: string;
   refreshPrompts: () => Promise<void>;
-  savePromptField: (field: SystemPromptField, value: string) => Promise<void>;
+  savePromptLibrary: (promptLibrary: PromptLibraryItem[]) => Promise<void>;
 }
 
 export interface ConfigPromptsState {
@@ -95,10 +93,10 @@ export function useConfigPrompts(options: UseConfigPromptsOptions): UseConfigPro
     }
   }, [open, refreshPrompts]);
 
-  const savePromptField = useCallback(async (field: SystemPromptField, value: string) => {
+  const savePromptLibrary = useCallback(async (promptLibrary: PromptLibraryItem[]) => {
     dispatch({ type: 'save_start' });
     try {
-      const update: SystemPromptUpdateRequest = { [field]: value } as SystemPromptUpdateRequest;
+      const update = { prompt_library: promptLibrary };
       const payload = await updateSystemPrompts(update);
       dispatch({ type: 'save_success', prompts: payload });
     } catch (error) {
@@ -112,6 +110,6 @@ export function useConfigPrompts(options: UseConfigPromptsOptions): UseConfigPro
     promptSaving: state.saving,
     promptError: state.error,
     refreshPrompts,
-    savePromptField,
+    savePromptLibrary,
   };
 }

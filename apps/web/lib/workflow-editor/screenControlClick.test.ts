@@ -68,4 +68,119 @@ describe('lib/workflow-editor/screenControlClick', () => {
       },
     });
   });
+
+  it('prefers click step display_id over source params', () => {
+    const node: WorkflowCanvasNodeDraft = {
+      id: 'tool-node',
+      type: 'tool',
+      position: { x: 0, y: 0 },
+      ui: { toolArgumentsMode: 'kv' },
+      tool: {
+        tool_name: 'screen_control',
+        arguments: {
+          mode: 'atomic',
+          action: 'click_icon',
+          params: {
+            display_id: 2,
+          },
+        },
+      },
+    };
+    const step: ScreenControlComposerStep = {
+      action: 'click',
+      params: {
+        x: 30,
+        y: 40,
+        display_id: 9,
+      },
+    };
+
+    expect(syncClickStepToToolArguments(node, step).tool?.arguments).toEqual({
+      mode: 'atomic',
+      action: 'click_icon',
+      params: {
+        display_id: 9,
+        x: 30,
+        y: 40,
+      },
+    });
+  });
+
+  it('clears source display_id when step params explicitly set null', () => {
+    const node: WorkflowCanvasNodeDraft = {
+      id: 'tool-node',
+      type: 'tool',
+      position: { x: 0, y: 0 },
+      ui: { toolArgumentsMode: 'kv' },
+      tool: {
+        tool_name: 'screen_control',
+        arguments: {
+          mode: 'atomic',
+          action: 'click_icon',
+          params: {
+            display_id: 2,
+            threshold: 0.9,
+          },
+        },
+      },
+    };
+    const step: ScreenControlComposerStep = {
+      action: 'click',
+      params: {
+        x: 30,
+        y: 40,
+        display_id: null,
+      },
+    };
+
+    expect(syncClickStepToToolArguments(node, step).tool?.arguments).toEqual({
+      mode: 'atomic',
+      action: 'click_icon',
+      params: {
+        threshold: 0.9,
+        x: 30,
+        y: 40,
+      },
+    });
+  });
+
+  it('keeps click step position_type for relative cursor offsets', () => {
+    const node: WorkflowCanvasNodeDraft = {
+      id: 'tool-node',
+      type: 'tool',
+      position: { x: 0, y: 0 },
+      ui: { toolArgumentsMode: 'kv' },
+      tool: {
+        tool_name: 'screen_control',
+        arguments: {
+          mode: 'atomic',
+          action: 'click_icon',
+          params: {
+            display_id: 2,
+            threshold: 0.9,
+          },
+        },
+      },
+    };
+    const step: ScreenControlComposerStep = {
+      action: 'click',
+      params: {
+        x: -12,
+        y: 24,
+        position_type: 'relative',
+        display_id: null,
+      },
+    };
+
+    expect(syncClickStepToToolArguments(node, step).tool?.arguments).toEqual({
+      mode: 'atomic',
+      action: 'click_icon',
+      params: {
+        threshold: 0.9,
+        x: -12,
+        y: 24,
+        position_type: 'relative',
+      },
+    });
+  });
 });

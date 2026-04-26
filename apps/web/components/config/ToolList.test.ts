@@ -64,7 +64,7 @@ describe('components/config/ToolList', () => {
       tools: [
         { name: 'web_search', enabled: false },
         { name: 'script_exec', enabled: true },
-        { name: 'task_manage', enabled: true },
+        { name: 'screen_control', enabled: true },
         { name: 'codex_cli', enabled: false },
       ],
       loading: false,
@@ -73,16 +73,16 @@ describe('components/config/ToolList', () => {
     });
 
     const scriptExecIndex = html.indexOf('script_exec');
-    const taskManageIndex = html.indexOf('task_manage');
+    const screenControlIndex = html.indexOf('screen_control');
     const webSearchIndex = html.indexOf('web_search');
     const codexCLIIndex = html.indexOf('codex_cli');
 
     expect(scriptExecIndex).toBeGreaterThan(-1);
-    expect(taskManageIndex).toBeGreaterThan(-1);
+    expect(screenControlIndex).toBeGreaterThan(-1);
     expect(webSearchIndex).toBeGreaterThan(-1);
     expect(codexCLIIndex).toBeGreaterThan(-1);
-    expect(scriptExecIndex).toBeLessThan(taskManageIndex);
-    expect(taskManageIndex).toBeLessThan(webSearchIndex);
+    expect(scriptExecIndex).toBeLessThan(screenControlIndex);
+    expect(screenControlIndex).toBeLessThan(webSearchIndex);
     expect(webSearchIndex).toBeLessThan(codexCLIIndex);
   });
 });

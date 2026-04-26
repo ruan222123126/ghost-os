@@ -247,4 +247,77 @@ describe('lib/workflow-editor/draft', () => {
       ]),
     );
   });
+
+  it('hydrates screen_control composer steps from workflow_steps arguments', () => {
+    const draft = workflowDefinitionToDraft({
+      scheduleType: 'interval',
+      intervalSeconds: 60,
+      workflow: {
+        nodes: [
+          { id: 'start', type: 'start' },
+          {
+            id: 'tool',
+            type: 'tool',
+            tool: {
+              tool_name: 'screen_control',
+              arguments: {
+                mode: 'atomic',
+                workflow_steps: [
+                  { action: 'screenshot' },
+                  { action: 'find_icon', params: { template_path: '/tmp/icon.png', threshold: 0.92 } },
+                  { action: 'click', params: { x: 120, y: 240 } },
+                ],
+              },
+            },
+          },
+          { id: 'end', type: 'end' },
+        ],
+        edges: [
+          { from_node_id: 'start', to_node_id: 'tool' },
+          { from_node_id: 'tool', to_node_id: 'end' },
+        ],
+      },
+    });
+
+    const toolNode = draft.nodes.find((node) => node.id === 'tool');
+    expect(toolNode?.ui.screenControlComposer?.steps).toEqual([
+      { action: 'screenshot' },
+      { action: 'find_icon', params: { template_path: '/tmp/icon.png', threshold: 0.92 } },
+      { action: 'click', params: { x: 120, y: 240 } },
+    ]);
+  });
+
+  it('hydrates single screen_control action into composer queue when workflow_steps is absent', () => {
+    const draft = workflowDefinitionToDraft({
+      scheduleType: 'interval',
+      intervalSeconds: 60,
+      workflow: {
+        nodes: [
+          { id: 'start', type: 'start' },
+          {
+            id: 'tool',
+            type: 'tool',
+            tool: {
+              tool_name: 'screen_control',
+              arguments: {
+                mode: 'atomic',
+                action: 'click_icon',
+                params: { x: 16, y: 24 },
+              },
+            },
+          },
+          { id: 'end', type: 'end' },
+        ],
+        edges: [
+          { from_node_id: 'start', to_node_id: 'tool' },
+          { from_node_id: 'tool', to_node_id: 'end' },
+        ],
+      },
+    });
+
+    const toolNode = draft.nodes.find((node) => node.id === 'tool');
+    expect(toolNode?.ui.screenControlComposer?.steps).toEqual([
+      { action: 'click', params: { x: 16, y: 24 } },
+    ]);
+  });
 });

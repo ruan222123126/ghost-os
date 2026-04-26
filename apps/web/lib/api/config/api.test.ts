@@ -3,9 +3,11 @@ import {
   deleteProvider,
   getConfig,
   getProviders,
+  getSystemPrompts,
   setActiveProvider,
   updateConfig,
   updateProvider,
+  updateSystemPrompts,
 } from './api';
 import { installFetchMock, mockFetchJSON, fetchMock } from '@/lib/api.test.helpers';
 import type {
@@ -13,6 +15,8 @@ import type {
   ConfigUpdate,
   ProviderConfigInput,
   ProviderListResponse,
+  SystemPromptPayload,
+  SystemPromptUpdateRequest,
 } from '@/lib/types';
 
 describe('lib/api/config/api', () => {
@@ -53,6 +57,8 @@ describe('lib/api/config/api', () => {
         idempotency_header: 'Idempotency-Key',
       }],
       session_human_log_full_enabled: false,
+      assistant_markdown_enabled: true,
+      memory_mode_enabled: false,
       web_rooter_enabled: false,
       web_rooter_base_url: 'http://127.0.0.1:8765',
       web_rooter_timeout_ms: 90000,
@@ -119,6 +125,8 @@ describe('lib/api/config/api', () => {
         idempotency_header: 'Idempotency-Key',
       }],
       session_human_log_full_enabled: false,
+      assistant_markdown_enabled: false,
+      memory_mode_enabled: true,
       web_rooter_enabled: false,
       web_rooter_base_url: 'http://127.0.0.1:8765',
       web_rooter_timeout_ms: 90000,
@@ -254,7 +262,71 @@ describe('lib/api/config/api', () => {
       '/api/config/active-provider',
       expect.objectContaining({
         method: 'PUT',
-        body: JSON.stringify({ name: 'crs' }),
+      body: JSON.stringify({ name: 'crs' }),
+      }),
+    );
+  });
+
+  it('getSystemPrompts reads /api/prompts/system with GET', async () => {
+    const expected: SystemPromptPayload = {
+      core_prompt: 'core guidance',
+      rendered_prompt: 'base prompt with core guidance',
+      prompt_library: [
+        {
+          id: 'core-job',
+          name: 'Core Job',
+          insert_point: 'core_job',
+          content: 'core guidance',
+          active: true,
+        },
+      ],
+    };
+
+    mockFetchJSON({
+      status: 'success',
+      payload: expected,
+      error: '',
+    });
+
+    const prompts = await getSystemPrompts();
+
+    expect(prompts).toEqual(expected);
+    expect(fetchMock).toHaveBeenCalledWith('/api/prompts/system', expect.any(Object));
+  });
+
+  it('updateSystemPrompts patches a single prompt field and preserves trace id', async () => {
+    const update: SystemPromptUpdateRequest = {
+      core_prompt: 'updated core guidance',
+      trace_id: 'trace-123',
+    };
+    const expected: SystemPromptPayload = {
+      core_prompt: 'updated core guidance',
+      rendered_prompt: 'base prompt with updated core guidance',
+      prompt_library: [
+        {
+          id: 'core-job',
+          name: 'Core Job',
+          insert_point: 'core_job',
+          content: 'updated core guidance',
+          active: true,
+        },
+      ],
+    };
+
+    mockFetchJSON({
+      status: 'success',
+      payload: expected,
+      error: '',
+    });
+
+    const prompts = await updateSystemPrompts(update);
+
+    expect(prompts).toEqual(expected);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/prompts/system',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify(update),
       }),
     );
   });

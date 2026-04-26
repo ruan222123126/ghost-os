@@ -1,4 +1,4 @@
-import { createTask, deleteTask, getTask, listTasks, runTaskNow, updateTask } from './api';
+import { createTask, deleteTask, getTask, listTaskLogs, listTasks, runTaskNow, updateTask } from './api';
 import { fetchMock, installFetchMock, mockFetchJSON } from '@/lib/api.test.helpers';
 import type { AgentMessageTaskPayload, TextTaskCreateRequest, TextTaskUpdateRequest } from '@/lib/types';
 
@@ -162,5 +162,39 @@ describe('lib/api/tasks/api', () => {
         method: 'POST',
       }),
     );
+  });
+
+  it('listTaskLogs calls GET /api/tasks/:id/logs?limit=', async () => {
+    mockFetchJSON({
+      status: 'success',
+      payload: [
+        {
+          task_id: 'task-6',
+          run_id: 'run-1',
+          trace_id: 'trace-1',
+          task_kind: 'agent_message',
+          scheduled_at: '2026-04-05T07:00:00Z',
+          started_at: '2026-04-05T07:00:01Z',
+          finished_at: '2026-04-05T07:00:02Z',
+          status: 'success',
+          node_results: [
+            {
+              node_id: 'agent_message',
+              node_type: 'agent_message',
+              status: 'success',
+              started_at: '2026-04-05T07:00:01Z',
+              finished_at: '2026-04-05T07:00:02Z',
+              completed_seq: 1,
+            },
+          ],
+        },
+      ],
+      error: '',
+    });
+
+    const logs = await listTaskLogs('task-6', 15);
+
+    expect(logs).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledWith('/api/tasks/task-6/logs?limit=15', expect.any(Object));
   });
 });

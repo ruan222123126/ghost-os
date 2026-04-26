@@ -198,6 +198,7 @@ data class SessionContentPart(
 data class AgentCompletionDeltaPayload(
     val kind: String,
     val text: String? = null,
+    val thinking: String? = null,
     @SerialName("tool_call_index")
     val toolCallIndex: Int? = null,
     @SerialName("tool_call_id")
@@ -361,6 +362,10 @@ data class BridgeConfig(
     val graphqlMutationPolicies: List<GraphQLMutationPolicyResponse>,
     @SerialName("session_human_log_full_enabled")
     val sessionHumanLogFullEnabled: Boolean,
+    @SerialName("assistant_markdown_enabled")
+    val assistantMarkdownEnabled: Boolean,
+    @SerialName("memory_mode_enabled")
+    val memoryModeEnabled: Boolean,
     @SerialName("web_rooter_enabled")
     val webRooterEnabled: Boolean,
     @SerialName("web_rooter_base_url")
@@ -412,6 +417,10 @@ data class ConfigUpdate(
     val graphqlMutationPolicies: List<GraphQLMutationPolicyInput>? = null,
     @SerialName("session_human_log_full_enabled")
     val sessionHumanLogFullEnabled: Boolean? = null,
+    @SerialName("assistant_markdown_enabled")
+    val assistantMarkdownEnabled: Boolean? = null,
+    @SerialName("memory_mode_enabled")
+    val memoryModeEnabled: Boolean? = null,
     @SerialName("web_rooter_enabled")
     val webRooterEnabled: Boolean? = null,
     @SerialName("web_rooter_base_url")

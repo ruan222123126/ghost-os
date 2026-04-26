@@ -32,7 +32,9 @@ export async function forwardBridge(options: ForwardBridgeOptions): Promise<Resp
     if (!parsed.ok) {
       return parsed.response;
     }
-    init.body = JSON.stringify(parsed.body);
+    if (parsed.hasBody) {
+      init.body = JSON.stringify(parsed.body);
+    }
   }
 
   try {

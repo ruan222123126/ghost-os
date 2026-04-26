@@ -1,4 +1,4 @@
-import { parseTaskPayload, parseTaskPayloadList } from './parser';
+import { parseTaskPayload, parseTaskPayloadList, parseTaskRunLogList } from './parser';
 import type { AgentMessageTaskPayload } from '@/lib/types';
 
 describe('lib/api/tasks/parser', () => {
@@ -267,5 +267,83 @@ describe('lib/api/tasks/parser', () => {
         },
       });
     }).toThrow('task.workflow.nodes[0].start.inputs[0].default');
+  });
+
+  it('parses task run logs with node_results', () => {
+    const logs = parseTaskRunLogList([
+      {
+        task_id: 'task-log-1',
+        run_id: 'run-1',
+        trace_id: 'trace-1',
+        task_kind: 'workflow',
+        scheduled_at: '2026-04-05T07:00:00Z',
+        started_at: '2026-04-05T07:00:01Z',
+        finished_at: '2026-04-05T07:00:02Z',
+        status: 'success',
+        node_results: [
+          {
+            node_id: 'start-node',
+            node_type: 'start',
+            status: 'success',
+            started_at: '2026-04-05T07:00:01Z',
+            finished_at: '2026-04-05T07:00:01Z',
+            completed_seq: 1,
+            output: { next_node_id: 'tool-node' },
+          },
+        ],
+      },
+    ]);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].node_results?.[0]).toMatchObject({
+      node_id: 'start-node',
+      completed_seq: 1,
+    });
+  });
+
+  it('accepts task run log when node_results is missing', () => {
+    const logs = parseTaskRunLogList([
+      {
+        task_id: 'task-log-2',
+        run_id: 'run-2',
+        trace_id: 'trace-2',
+        scheduled_at: '2026-04-05T07:00:00Z',
+        status: 'success',
+      },
+    ]);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].node_results).toBeUndefined();
+  });
+
+  it('accepts task run log when node_results is null', () => {
+    const logs = parseTaskRunLogList([
+      {
+        task_id: 'task-log-3',
+        run_id: 'run-3',
+        trace_id: 'trace-3',
+        scheduled_at: '2026-04-05T07:00:00Z',
+        status: 'success',
+        node_results: null,
+      },
+    ]);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].node_results).toBeUndefined();
+  });
+
+  it('throws when task run log node_results is non-array object', () => {
+    expect(() => {
+      parseTaskRunLogList([
+        {
+          task_id: 'task-log-4',
+          run_id: 'run-4',
+          trace_id: 'trace-4',
+          scheduled_at: '2026-04-05T07:00:00Z',
+          status: 'success',
+          node_results: {},
+        },
+      ]);
+    }).toThrow('node_results');
   });
 });

@@ -2,6 +2,7 @@
 
 import type { FC, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { ChatCopy } from '@/lib/i18n/messages/chat';
+import { compareSessionsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionSidebarFlatListProps {
@@ -106,23 +107,5 @@ export function buildFlatSessionList(
   const query = searchQuery.trim().toLowerCase();
   return sessions
     .filter((session) => session.id.toLowerCase().includes(query))
-    .sort(compareByLatestUpdatedAt);
-}
-
-function compareByLatestUpdatedAt(left: SessionMetadata, right: SessionMetadata): number {
-  const rightTime = resolveTimestamp(right);
-  const leftTime = resolveTimestamp(left);
-  if (rightTime !== leftTime) {
-    return rightTime - leftTime;
-  }
-  return right.id.localeCompare(left.id);
-}
-
-function resolveTimestamp(session: SessionMetadata): number {
-  return parseTimestamp(session.updated_at) ?? parseTimestamp(session.created_at) ?? 0;
-}
-
-function parseTimestamp(value: string): number | undefined {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? undefined : parsed;
+    .sort(compareSessionsByRecentActivity);
 }

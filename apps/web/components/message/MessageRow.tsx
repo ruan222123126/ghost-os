@@ -43,7 +43,10 @@ const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
   </div>
 );
 
-const AssistantMessageRow: FC<{ message: AssistantChatMessage }> = ({ message }) => {
+const AssistantMessageRow: FC<{
+  message: AssistantChatMessage;
+  assistantMarkdownEnabled: boolean;
+}> = ({ message, assistantMarkdownEnabled }) => {
   const { copy } = useWebLocale();
 
   return (
@@ -55,7 +58,7 @@ const AssistantMessageRow: FC<{ message: AssistantChatMessage }> = ({ message })
         </span>
         {message.inProgress ? <div className="message-draft-flag">{copy.chat.assistantDraftFlag}</div> : null}
         <div className="message-assistant-body">
-          <AssistantMarkdownContent content={message.content} />
+          <AssistantMarkdownContent content={message.content} enabled={assistantMarkdownEnabled} />
         </div>
         {message.content ? (
           <div className="message-actions">
@@ -121,6 +124,7 @@ const QuestionMessageRow: FC<{
 
 export const MessageRow: FC<MessageRowProps> = ({
   message,
+  assistantMarkdownEnabled = true,
   isToolCardOpen = false,
   isThinkingPanelOpen = false,
   loading,
@@ -133,7 +137,7 @@ export const MessageRow: FC<MessageRowProps> = ({
     case 'user':
       return <UserMessageRow message={message} />;
     case 'assistant':
-      return <AssistantMessageRow message={message} />;
+      return <AssistantMessageRow message={message} assistantMarkdownEnabled={assistantMarkdownEnabled} />;
     case 'tool':
       return (
         <ToolMessageRow

@@ -61,12 +61,12 @@ export function SkillList(props: SkillListProps) {
             <p className="truncate font-mono text-[12px] text-[#737373]">{skill.path}</p>
           </div>
 
-          <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
             <button
               type="button"
               disabled={controlsDisabled}
               onClick={() => requestSkillDelete({ id: skill.id, onDelete, message: copy.settings.skillsDeleteConfirm(skill.name) })}
-              className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {copy.settings.skillsDelete}
             </button>

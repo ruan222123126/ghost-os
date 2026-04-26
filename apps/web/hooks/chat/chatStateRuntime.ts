@@ -21,6 +21,7 @@ import type { ChatStateStore } from './chatStateReducer';
 
 export function buildChatStateView(state: ChatStateStore): {
   streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingThinkingText: string;
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
 } {
@@ -28,6 +29,7 @@ export function buildChatStateView(state: ChatStateStore): {
     streamingAssistantSegments: state.streamingAssistantState.order
       .map((segmentId) => state.streamingAssistantState.segmentsById[segmentId])
       .filter((segment): segment is StreamingAssistantSegment => segment !== undefined),
+    streamingThinkingText: state.streamingThinkingText,
     streamingTools: state.streamingToolState.order
       .map((toolId) => state.streamingToolState.toolsById[toolId])
       .filter((tool): tool is StreamingToolState => tool !== undefined),
@@ -54,6 +56,10 @@ function applyRuntimeAction(state: ChatStateStore, action: ChatRuntimeAction): C
       return appendStreamingAssistantTextState(state, action.text);
     case 'clear_streaming_assistant_text':
       return clearStreamingAssistantTextState(state);
+    case 'append_streaming_thinking_text':
+      return appendStreamingThinkingTextState(state, action.text);
+    case 'clear_streaming_thinking_text':
+      return clearStreamingThinkingTextState(state);
     case 'append_committed_messages':
       return appendCommittedMessagesState(state, action.messages);
     case 'upsert_streaming_tool':
@@ -93,6 +99,26 @@ function clearStreamingAssistantTextState(state: ChatStateStore): ChatStateStore
     ...state,
     streamingAssistantState: clearStreamingAssistantState(),
     streamingItemOrder: removeOrderKeyByPrefix(state.streamingItemOrder, STREAMING_ASSISTANT_ORDER_PREFIX),
+  };
+}
+
+function appendStreamingThinkingTextState(state: ChatStateStore, text: string): ChatStateStore {
+  if (!text) {
+    return state;
+  }
+  return {
+    ...state,
+    streamingThinkingText: `${state.streamingThinkingText}${text}`,
+  };
+}
+
+function clearStreamingThinkingTextState(state: ChatStateStore): ChatStateStore {
+  if (!state.streamingThinkingText) {
+    return state;
+  }
+  return {
+    ...state,
+    streamingThinkingText: '',
   };
 }
 

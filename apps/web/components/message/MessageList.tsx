@@ -22,6 +22,7 @@ const MESSAGE_LIST_OVERSCAN = 8;
 
 export const MessageList: FC<MessageListProps> = ({
   committedMessages,
+  assistantMarkdownEnabled,
   streamingAssistantSegments,
   streamingThinkingText,
   streamingItemOrder,
@@ -232,6 +233,7 @@ export const MessageList: FC<MessageListProps> = ({
             >
               {renderRow(row, {
                 copy,
+                assistantMarkdownEnabled,
                 loading,
                 openToolCards,
                 onAnswerQuestion,
@@ -253,6 +255,7 @@ function renderRow(
   row: MessageListRow,
   options: {
     copy: ReturnType<typeof useWebLocale>['copy'];
+    assistantMarkdownEnabled: boolean;
     loading: boolean;
     onAnswerQuestion: MessageListProps['onAnswerQuestion'];
     onCancelQuestion: MessageListProps['onCancelQuestion'];
@@ -285,6 +288,7 @@ function renderRow(
       return (
         <MessageRow
           message={row.message}
+          assistantMarkdownEnabled={options.assistantMarkdownEnabled}
           isToolCardOpen={Boolean(options.openToolCards[row.message.id])}
           isThinkingPanelOpen={Boolean(options.openThinkingPanels[row.message.id])}
           loading={options.loading}

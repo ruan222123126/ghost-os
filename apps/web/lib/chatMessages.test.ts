@@ -136,6 +136,51 @@ describe('chatMessages', () => {
     });
   });
 
+  it('maps tool image content into tool chat message images', () => {
+    const messages = withSessionIndices([
+      {
+        role: 'tool',
+        text: 'Generated 1 image(s).',
+        content: [
+          {
+            type: 'image',
+            image: {
+              url: '/api/sessions/session-test/artifacts/artifact-1',
+              mime_type: 'image/png',
+              width: 512,
+              height: 512,
+              bytes: 1024,
+              sha256: 'abc',
+            },
+          },
+        ],
+        tool_result: {
+          status: 'success',
+          tool: 'screen_action',
+          output: 'Generated 1 image(s).',
+        },
+      },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'tool',
+      toolName: 'screen_action',
+      images: [
+        {
+          url: '/api/sessions/session-test/artifacts/artifact-1',
+          mimeType: 'image/png',
+          width: 512,
+          height: 512,
+          bytes: 1024,
+          sha256: 'abc',
+        },
+      ],
+    });
+  });
+
   it('keeps path-only user images visible instead of dropping them', () => {
     const messages = withSessionIndices([
       {

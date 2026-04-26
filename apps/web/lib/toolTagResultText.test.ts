@@ -12,7 +12,7 @@ describe('toolTagResultText', () => {
           { name: 'screen_control', status: 'active', available_now: true },
           { name: 'text_input', status: 'pending', available_next_turn: true },
           { name: 'web_search', status: 'expired', available_now: false },
-          { name: 'task_manage', status: 'unloaded' },
+          { name: 'screen_action', status: 'unloaded' },
         ],
       },
     })}`;

@@ -7,9 +7,8 @@ import {
   appendScreenControlComposerStep,
   moveScreenControlComposerStep,
   removeScreenControlComposerStep,
-  syncClickStepToToolArguments,
+  syncScreenControlComposerStepsToToolArguments,
   updateScreenControlComposerStep,
-  syncFindIconStepToToolArguments,
   type ScreenControlAtomicAction,
   type ScreenControlComposerStep,
   type WorkflowCanvasNodeDraft,
@@ -110,14 +109,12 @@ function useScreenComposerState(options: {
   }, [isScreenControlTool]);
 
   const updateSteps = (nextSteps: ScreenControlComposerStep[]) => {
-    onUpdateNode(withScreenControlComposerSteps(selectedNode, nextSteps));
+    const nodeWithSteps = withScreenControlComposerSteps(selectedNode, nextSteps);
+    onUpdateNode(syncScreenControlComposerStepsToToolArguments(nodeWithSteps, nextSteps));
   };
 
   const updateStepAt = (index: number, step: ScreenControlComposerStep) => {
-    const nextSteps = updateScreenControlComposerStep(steps, index, step);
-    const nodeWithSteps = withScreenControlComposerSteps(selectedNode, nextSteps);
-    const afterFindIconSync = syncFindIconStepToToolArguments(nodeWithSteps, step);
-    onUpdateNode(syncClickStepToToolArguments(afterFindIconSync, step));
+    updateSteps(updateScreenControlComposerStep(steps, index, step));
   };
 
   return {

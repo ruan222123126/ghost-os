@@ -1,6 +1,7 @@
 import { ComingSoonPanel, type SettingsTab } from '@/components/config/ConfigPanelNavigation';
+import { PromptsLibrarySettingsSection } from '@/components/config/PromptsLibrarySettingsSection';
+import { PromptsPreviewSettingsSection } from '@/components/config/PromptsPreviewSettingsSection';
 import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
-import { PromptsSettingsSection } from '@/components/config/PromptsSettingsSection';
 import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSection';
 import { SkillSettingsSection } from '@/components/config/SkillSettingsSection';
 import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
@@ -126,14 +127,25 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
     );
   }
 
-  if (activeTab === 'prompts') {
+  if (activeTab === 'prompts_library') {
     return (
-      <PromptsSettingsSection
+      <PromptsLibrarySettingsSection
         prompts={promptsState.prompts}
         loading={promptsState.promptsLoading}
         saving={promptsState.promptSaving}
         onRefresh={promptsState.refreshPrompts}
-        onSaveField={promptsState.savePromptField}
+        onSavePromptLibrary={promptsState.savePromptLibrary}
+      />
+    );
+  }
+
+  if (activeTab === 'prompts_preview') {
+    return (
+      <PromptsPreviewSettingsSection
+        prompts={promptsState.prompts}
+        loading={promptsState.promptsLoading}
+        saving={promptsState.promptSaving}
+        onRefresh={promptsState.refreshPrompts}
       />
     );
   }

@@ -220,6 +220,8 @@ pub struct AgentCompletionDeltaPayload {
     #[serde(default)]
     pub text: Option<String>,
     #[serde(default)]
+    pub thinking: Option<String>,
+    #[serde(default)]
     pub tool_call_index: Option<i64>,
     #[serde(default)]
     pub tool_call_id: Option<String>,
@@ -373,6 +375,8 @@ pub struct BridgeConfig {
     pub graphql_sources: Vec<GraphQLSourceResponse>,
     pub graphql_mutation_policies: Vec<GraphQLMutationPolicyResponse>,
     pub session_human_log_full_enabled: bool,
+    pub assistant_markdown_enabled: bool,
+    pub memory_mode_enabled: bool,
     pub web_rooter_enabled: bool,
     pub web_rooter_base_url: String,
     pub web_rooter_timeout_ms: i64,
@@ -417,6 +421,10 @@ pub struct ConfigUpdate {
     pub graphql_mutation_policies: Option<Vec<GraphQLMutationPolicyInput>>,
     #[serde(default)]
     pub session_human_log_full_enabled: Option<bool>,
+    #[serde(default)]
+    pub assistant_markdown_enabled: Option<bool>,
+    #[serde(default)]
+    pub memory_mode_enabled: Option<bool>,
     #[serde(default)]
     pub web_rooter_enabled: Option<bool>,
     #[serde(default)]

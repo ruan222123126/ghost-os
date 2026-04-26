@@ -16,6 +16,7 @@ interface HomePageController {
   sessionsError: string;
   committedMessages: ReturnType<typeof useBridgeChat>['committedMessages'];
   streamingAssistantSegments: ReturnType<typeof useBridgeChat>['streamingAssistantSegments'];
+  streamingThinkingText: ReturnType<typeof useBridgeChat>['streamingThinkingText'];
   streamingItemOrder: ReturnType<typeof useBridgeChat>['streamingItemOrder'];
   streamingTools: ReturnType<typeof useBridgeChat>['streamingTools'];
   pendingQuestions: ReturnType<typeof useBridgeChat>['pendingQuestions'];
@@ -84,7 +85,13 @@ function useSettingsQueryState(): SettingsQueryState {
 }
 
 function shouldForceOpenSettings(tab: SettingsQueryTab | null): boolean {
-  return tab === 'tasks' || tab === 'skills' || tab === 'tools' || tab === 'prompts';
+  return (
+    tab === 'tasks'
+    || tab === 'skills'
+    || tab === 'tools'
+    || tab === 'prompts_library'
+    || tab === 'prompts_preview'
+  );
 }
 
 export function useHomePageController(): HomePageController {
@@ -143,6 +150,7 @@ export function useHomePageController(): HomePageController {
     sessionsError: sessions.error,
     committedMessages: chat.committedMessages,
     streamingAssistantSegments: chat.streamingAssistantSegments,
+    streamingThinkingText: chat.streamingThinkingText,
     streamingItemOrder: chat.streamingItemOrder,
     streamingTools: chat.streamingTools,
     pendingQuestions: chat.pendingQuestions,

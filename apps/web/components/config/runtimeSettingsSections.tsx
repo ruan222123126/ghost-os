@@ -110,6 +110,24 @@ export function SessionSection(props: SectionProps) {
   return (
     <Card title={copy.settings.runtimeSessionTitle} copy={copy.settings.runtimeSessionCopy}>
       <ToggleField
+        label={isZh ? 'Assistant Markdown 渲染' : 'Assistant Markdown Rendering'}
+        description={isZh
+          ? '关闭后，assistant 文本始终按纯文本显示，不进行 Markdown 解析。'
+          : 'When disabled, assistant messages are always shown as plain text without Markdown parsing.'}
+        checked={formState.assistantMarkdownEnabled}
+        disabled={controlsDisabled}
+        onChange={(checked) => onChange({ assistantMarkdownEnabled: checked })}
+      />
+      <ToggleField
+        label={isZh ? '记忆模式' : 'Memory Mode'}
+        description={isZh
+          ? '启用后在系统提示词注入 Memory 段，并自动确保当天记忆文档存在。'
+          : 'When enabled, injects a Memory section into the system prompt and ensures today\'s memory file exists.'}
+        checked={formState.memoryModeEnabled}
+        disabled={controlsDisabled}
+        onChange={(checked) => onChange({ memoryModeEnabled: checked })}
+      />
+      <ToggleField
         label={isZh ? '会话人类日志（完整工具输出）' : 'Session Human Log (Full Tool Output)'}
         description={isZh
           ? '启用后，工具消息将以完整 output/error 写入会话 markdown 日志。'

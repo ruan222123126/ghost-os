@@ -98,9 +98,14 @@ export function useChatState(): ChatStateControls {
     applyRuntimeActions([{ type: 'clear_streaming_assistant_text' }]);
   }, [applyRuntimeActions]);
 
+  const clearStreamingThinkingText = useCallback(() => {
+    applyRuntimeActions([{ type: 'clear_streaming_thinking_text' }]);
+  }, [applyRuntimeActions]);
+
   const clearStreamingState = useCallback(() => {
     applyRuntimeActions([
       { type: 'clear_streaming_assistant_text' },
+      { type: 'clear_streaming_thinking_text' },
       { type: 'clear_streaming_tools' },
     ]);
   }, [applyRuntimeActions]);
@@ -137,6 +142,7 @@ export function useChatState(): ChatStateControls {
   return {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: view.streamingAssistantSegments,
+    streamingThinkingText: view.streamingThinkingText,
     streamingItemOrder: state.streamingItemOrder,
     streamingTools: view.streamingTools,
     pendingQuestions: view.pendingQuestions,
@@ -169,6 +175,7 @@ export function useChatState(): ChatStateControls {
     appendErrorMessage,
     appendStreamingAssistantText,
     clearStreamingAssistantText,
+    clearStreamingThinkingText,
     clearStreamingState,
     upsertStreamingTool,
     clearStreamingTools,

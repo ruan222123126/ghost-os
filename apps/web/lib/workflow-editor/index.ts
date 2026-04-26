@@ -7,5 +7,6 @@ export * from '@/lib/workflow-editor/types';
 export * from '@/lib/workflow-editor/validation';
 export * from '@/lib/workflow-editor/nodePatches';
 export * from '@/lib/workflow-editor/screenControlComposer';
+export * from '@/lib/workflow-editor/screenControlComposerSync';
 export * from '@/lib/workflow-editor/screenControlClick';
 export * from '@/lib/workflow-editor/screenControlFindIcon';

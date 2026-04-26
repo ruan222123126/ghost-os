@@ -13,6 +13,8 @@ export interface RuntimeFormState {
   graphqlToolRuntimeEnabled: boolean;
   graphqlTextSanitizeEnabled: boolean;
   sessionHumanLogFullEnabled: boolean;
+  assistantMarkdownEnabled: boolean;
+  memoryModeEnabled: boolean;
   webRooterEnabled: boolean;
   webRooterBaseURL: string;
   webRooterAPIToken: string;
@@ -33,6 +35,8 @@ export function createRuntimeFormState(config: BridgeConfig | null): RuntimeForm
     graphqlToolRuntimeEnabled: config?.graphql_tool_runtime_enabled ?? true,
     graphqlTextSanitizeEnabled: config?.graphql_text_sanitize_enabled ?? true,
     sessionHumanLogFullEnabled: config?.session_human_log_full_enabled ?? false,
+    assistantMarkdownEnabled: config?.assistant_markdown_enabled ?? true,
+    memoryModeEnabled: config?.memory_mode_enabled ?? false,
     webRooterEnabled: config?.web_rooter_enabled ?? false,
     webRooterBaseURL: config?.web_rooter_base_url ?? '',
     webRooterAPIToken: '',
@@ -80,6 +84,8 @@ function buildRuntimeScalarUpdate(
     graphql_tool_runtime_enabled: formState.graphqlToolRuntimeEnabled,
     graphql_text_sanitize_enabled: formState.graphqlTextSanitizeEnabled,
     session_human_log_full_enabled: formState.sessionHumanLogFullEnabled,
+    assistant_markdown_enabled: formState.assistantMarkdownEnabled,
+    memory_mode_enabled: formState.memoryModeEnabled,
     web_rooter_enabled: formState.webRooterEnabled,
     web_search_tavily_url: formState.webSearchTavilyURL,
     web_search_exa_url: formState.webSearchExaURL,

@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, type KeyboardEvent } from 'react';
-import { ignorePromise } from '@/lib/errors';
+import { useMemo, useState, type KeyboardEvent } from 'react';
+import { listTaskLogs } from '@/lib/api/tasks/api';
+import { TaskLogsModal } from '@/components/config/TaskLogsModal';
+import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { AgentMessageTaskPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
+import type { AgentMessageTaskPayload, TaskPayload, TaskRunLog, WorkflowTaskPayload } from '@/lib/types';
 
 const TASK_SKELETON_COUNT = 3;
 
@@ -23,6 +25,7 @@ interface TaskCardProps {
   controlsDisabled: boolean;
   onEditTextTask: (task: AgentMessageTaskPayload) => void;
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
+  onOpenLogs: (id: string) => Promise<void>;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
   onRunNow: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -32,6 +35,31 @@ export function TaskList(props: TaskListProps) {
   const { copy } = useWebLocale();
   const { tasks, loading, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
   const orderedTasks = useMemo(() => prioritizeEnabledTasks(tasks), [tasks]);
+  const [logsTaskID, setLogsTaskID] = useState('');
+  const [logsData, setLogsData] = useState<TaskRunLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState('');
+
+  const openLogs = async (taskID: string): Promise<void> => {
+    setLogsTaskID(taskID);
+    setLogsLoading(true);
+    setLogsError('');
+    setLogsData([]);
+    try {
+      setLogsData(await listTaskLogs(taskID, 20));
+    } catch (error) {
+      setLogsError(toErrorMessage(error, copy.settings.tasksLogsEmpty));
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const closeLogs = () => {
+    setLogsTaskID('');
+    setLogsData([]);
+    setLogsError('');
+    setLogsLoading(false);
+  };
 
   if (loading) {
     return (
@@ -63,18 +91,28 @@ export function TaskList(props: TaskListProps) {
           controlsDisabled={controlsDisabled}
           onEditTextTask={onEditTextTask}
           onEditWorkflowTask={onEditWorkflowTask}
+          onOpenLogs={openLogs}
           onSetEnabled={onSetEnabled}
           onRunNow={onRunNow}
           onDelete={onDelete}
         />
       ))}
+      {logsTaskID ? (
+        <TaskLogsModal
+          taskID={logsTaskID}
+          logs={logsData}
+          loading={logsLoading}
+          error={logsError}
+          onClose={closeLogs}
+        />
+      ) : null}
     </div>
   );
 }
 
 function TaskCard(props: TaskCardProps) {
   const { copy } = useWebLocale();
-  const { task, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
+  const { task, controlsDisabled, onEditTextTask, onEditWorkflowTask, onOpenLogs, onSetEnabled, onRunNow, onDelete } = props;
   const toggleLabel = task.enabled ? copy.settings.tasksDisable : copy.settings.tasksEnable;
   const editable = task.task_kind === 'agent_message' || task.task_kind === 'workflow';
 
@@ -109,6 +147,17 @@ function TaskCard(props: TaskCardProps) {
       </div>
 
       <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <button
+          type="button"
+          disabled={controlsDisabled}
+          onClick={(event) => {
+            event.stopPropagation();
+            ignorePromise(onOpenLogs(task.id));
+          }}
+          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {copy.settings.tasksLogs}
+        </button>
         <button
           type="button"
           disabled={controlsDisabled}
@@ -173,7 +222,7 @@ function formatPrimaryText(task: TaskPayload, copy: ReturnType<typeof useWebLoca
   }
 
   const workflowTask = task as WorkflowTaskPayload;
-  return copy.settings.tasksWorkflowWithSteps(workflowAgentNodeCount(workflowTask));
+  return copy.settings.tasksWorkflowWithSteps(workflowStepCount(workflowTask));
 }
 
 function formatSchedule(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
@@ -211,8 +260,8 @@ function formatRuntimeOverrides(task: AgentMessageTaskPayload, copy: ReturnType<
   return copy.settings.tasksRuntimeLabel(parts.join(' | '));
 }
 
-function workflowAgentNodeCount(task: WorkflowTaskPayload): number {
-  return task.workflow.nodes.filter((node) => node.type === 'agent').length;
+function workflowStepCount(task: WorkflowTaskPayload): number {
+  return task.workflow.nodes.filter((node) => node.type !== 'start' && node.type !== 'end').length;
 }
 
 function handleCardKeyDown(

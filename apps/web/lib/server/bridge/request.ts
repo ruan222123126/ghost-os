@@ -16,7 +16,8 @@ export function methodAcceptsJSONBody(method: BridgeMethod): boolean {
 type ParsedJSONBody =
   | {
       ok: true;
-      body: unknown;
+      hasBody: boolean;
+      body?: unknown;
     }
   | {
       ok: false;
@@ -24,10 +25,19 @@ type ParsedJSONBody =
     };
 
 export async function parseJSONBody(request: Request): Promise<ParsedJSONBody> {
+  const raw = await request.text();
+  if (raw.trim() === '') {
+    return {
+      ok: true,
+      hasBody: false,
+    };
+  }
+
   try {
     return {
       ok: true,
-      body: await request.json(),
+      hasBody: true,
+      body: JSON.parse(raw),
     };
   } catch {
     return {

@@ -7,6 +7,7 @@ import type {
 
 export interface MessageListProps {
   committedMessages: ChatMessage[];
+  assistantMarkdownEnabled: boolean;
   streamingAssistantSegments: StreamingAssistantSegment[];
   streamingThinkingText: string;
   streamingItemOrder: string[];
@@ -22,6 +23,7 @@ export interface MessageListProps {
 
 export interface MessageRowProps {
   message: ChatMessage;
+  assistantMarkdownEnabled: boolean;
   isToolCardOpen?: boolean;
   isThinkingPanelOpen?: boolean;
   loading: boolean;

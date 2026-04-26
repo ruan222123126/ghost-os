@@ -9,6 +9,13 @@ export type ChatRuntimeAction =
     type: 'clear_streaming_assistant_text';
   }
   | {
+    type: 'append_streaming_thinking_text';
+    text: string;
+  }
+  | {
+    type: 'clear_streaming_thinking_text';
+  }
+  | {
     type: 'append_committed_messages';
     messages: ChatMessage[];
   }

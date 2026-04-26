@@ -5,6 +5,12 @@ import { useState } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 const COPY_RESET_DELAY_MS = 2000;
+const CODE_BUTTON_VARIANT = 'code';
+
+interface MessageCopyButtonProps {
+  text: string;
+  variant?: 'default' | 'code';
+}
 
 const CopyIcon: FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -59,9 +65,20 @@ function copyWithTextArea(text: string): boolean {
   }
 }
 
-export const MessageCopyButton: FC<{ text: string }> = ({ text }) => {
+export const MessageCopyButton: FC<MessageCopyButtonProps> = ({
+  text,
+  variant = 'default',
+}) => {
   const { copy } = useWebLocale();
   const [copied, setCopied] = useState(false);
+  const isCodeVariant = variant === CODE_BUTTON_VARIANT;
+  const buttonClassName = [
+    'copy-button',
+    isCodeVariant ? 'is-code-block' : '',
+    copied ? 'is-copied' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const handleCopy = async () => {
     if (!text) {
@@ -78,7 +95,12 @@ export const MessageCopyButton: FC<{ text: string }> = ({ text }) => {
   };
 
   return (
-    <button type="button" onClick={handleCopy} className={`copy-button${copied ? ' is-copied' : ''}`}>
+    <button
+      type="button"
+      onClick={handleCopy}
+      className={buttonClassName}
+      aria-label={copied ? copy.chat.copied : copy.chat.copy}
+    >
       {copied ? <CheckIcon className="copy-icon" /> : <CopyIcon className="copy-icon" />}
       <span className="copy-label">{copied ? copy.chat.copied : copy.chat.copy}</span>
     </button>

@@ -1,4 +1,4 @@
-import type { TaskPayload } from '@/lib/types';
+import type { TaskPayload, TaskRunLog, TaskRunNodeResult } from '@/lib/types';
 import {
   expectBoolean,
   expectRecord,
@@ -32,6 +32,36 @@ const TASK_PAYLOAD_KEYS = [
   'last_error',
 ] as const;
 const TASK_RUNTIME_OVERRIDE_KEYS = ['model', 'tool_allowlist'] as const;
+const TASK_RUN_STATUS = ['success', 'cancelled', 'error', 'skipped', 'awaiting_human'] as const;
+const TASK_RUN_LOG_KEYS = [
+  'task_id',
+  'run_id',
+  'trace_id',
+  'task_kind',
+  'action',
+  'scheduled_at',
+  'started_at',
+  'finished_at',
+  'status',
+  'session_id_input',
+  'session_id_output',
+  'response_preview',
+  'node_results',
+  'error',
+] as const;
+const TASK_RUN_NODE_RESULT_KEYS = [
+  'node_id',
+  'node_type',
+  'status',
+  'started_at',
+  'finished_at',
+  'completed_seq',
+  'branch_id',
+  'input',
+  'output',
+  'preview',
+  'error',
+] as const;
 
 interface ParsedTaskBase {
   id: string;
@@ -118,4 +148,66 @@ export function parseTaskPayloadList(payload: unknown): TaskPayload[] {
     throw new Error('Invalid tasks list: expected array');
   }
   return payload.map((task, index) => parseTaskPayloadWithLabel(task, `tasks list[${index}]`));
+}
+
+function parseTaskRunNodeResult(value: unknown, label: string): TaskRunNodeResult {
+  const record = pickKnownKeys(expectRecord(value, label), TASK_RUN_NODE_RESULT_KEYS);
+  return {
+    node_id: expectString(record.node_id, `${label}.node_id`),
+    node_type: expectString(record.node_type, `${label}.node_type`),
+    status: expectString(record.status, `${label}.status`),
+    started_at: parseOptionalString(record.started_at, `${label}.started_at`),
+    finished_at: parseOptionalString(record.finished_at, `${label}.finished_at`),
+    completed_seq: parseOptionalNumber(record.completed_seq, `${label}.completed_seq`),
+    branch_id: parseOptionalString(record.branch_id, `${label}.branch_id`),
+    input: record.input,
+    output: record.output,
+    preview: parseOptionalString(record.preview, `${label}.preview`),
+    error: parseOptionalString(record.error, `${label}.error`),
+  };
+}
+
+function parseTaskRunNodeResultList(value: unknown, label: string): TaskRunNodeResult[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid ${label}: expected array`);
+  }
+  return value.map((item, index) => parseTaskRunNodeResult(item, `${label}[${index}]`));
+}
+
+function parseTaskRunLogWithLabel(value: unknown, label: string): TaskRunLog {
+  const record = pickKnownKeys(expectRecord(value, label), TASK_RUN_LOG_KEYS);
+  const rawTaskKind = parseOptionalString(record.task_kind, `${label}.task_kind`);
+  if (rawTaskKind !== undefined && rawTaskKind !== 'agent_message' && rawTaskKind !== 'workflow') {
+    throw new Error(`Invalid ${label}.task_kind: unexpected value "${rawTaskKind}"`);
+  }
+  return {
+    task_id: expectString(record.task_id, `${label}.task_id`),
+    run_id: expectString(record.run_id, `${label}.run_id`),
+    trace_id: expectString(record.trace_id, `${label}.trace_id`),
+    task_kind: rawTaskKind,
+    action: parseOptionalString(record.action, `${label}.action`),
+    scheduled_at: expectString(record.scheduled_at, `${label}.scheduled_at`),
+    started_at: parseOptionalString(record.started_at, `${label}.started_at`),
+    finished_at: parseOptionalString(record.finished_at, `${label}.finished_at`),
+    status: expectStringEnum(record.status, TASK_RUN_STATUS, `${label}.status`),
+    session_id_input: parseOptionalString(record.session_id_input, `${label}.session_id_input`),
+    session_id_output: parseOptionalString(record.session_id_output, `${label}.session_id_output`),
+    response_preview: parseOptionalString(record.response_preview, `${label}.response_preview`),
+    node_results: parseTaskRunNodeResultList(record.node_results, `${label}.node_results`),
+    error: parseOptionalString(record.error, `${label}.error`),
+  };
+}
+
+export function parseTaskRunLog(payload: unknown): TaskRunLog {
+  return parseTaskRunLogWithLabel(payload, 'task run log');
+}
+
+export function parseTaskRunLogList(payload: unknown): TaskRunLog[] {
+  if (!Array.isArray(payload)) {
+    throw new Error('Invalid task run logs list: expected array');
+  }
+  return payload.map((item, index) => parseTaskRunLogWithLabel(item, `task run logs[${index}]`));
 }

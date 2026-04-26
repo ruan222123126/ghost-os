@@ -1,7 +1,14 @@
 import type { FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 
-export type SettingsTab = 'general' | 'provider' | 'tasks' | 'skills' | 'tools' | 'prompts' | 'appearance' | 'data' | 'notifications' | 'security';
+export type SettingsTab =
+  | 'general'
+  | 'provider'
+  | 'tasks'
+  | 'skills'
+  | 'tools'
+  | 'prompts_library'
+  | 'prompts_preview';
 
 interface IconProps {
   size?: number;
@@ -9,7 +16,7 @@ interface IconProps {
 
 interface TabDefinition {
   id: SettingsTab;
-  group: 'system' | 'preferences';
+  group: 'system' | 'prompts';
   icon: FC<IconProps>;
 }
 
@@ -38,21 +45,6 @@ const ServerIcon: FC<IconProps> = ({ size = 16 }) => (
     <rect x="3" y="12" width="14" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
     <circle cx="6" cy="6" r="0.9" fill="currentColor" />
     <circle cx="6" cy="14" r="0.9" fill="currentColor" />
-  </svg>
-);
-
-const PaletteIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path
-      d="M10 3a7 7 0 1 0 0 14h1.4a2.6 2.6 0 0 0 0-5.2h-1.2a1.8 1.8 0 1 1 0-3.6h4A2.8 2.8 0 0 0 17 5.4C15.9 3.9 13.9 3 10 3Z"
-      stroke="currentColor"
-      strokeWidth="1.3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle cx="6.8" cy="8" r="0.9" fill="currentColor" />
-    <circle cx="9.7" cy="6.8" r="0.9" fill="currentColor" />
-    <circle cx="12.7" cy="7.4" r="0.9" fill="currentColor" />
   </svg>
 );
 
@@ -85,39 +77,14 @@ const PromptIcon: FC<IconProps> = ({ size = 16 }) => (
   </svg>
 );
 
-const DatabaseIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <ellipse cx="10" cy="5" rx="6.5" ry="2.5" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M3.5 5v8c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5V5" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M3.5 9.2C3.5 10.6 6.4 11.7 10 11.7s6.5-1.1 6.5-2.5" stroke="currentColor" strokeWidth="1.3" />
-  </svg>
-);
-
-const BellIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M10 3.5a4 4 0 0 0-4 4V10l-1.5 2.6h11L14 10V7.5a4 4 0 0 0-4-4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="M8.2 14.6a2 2 0 0 0 3.6 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
-
-const ShieldIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M10 2.8 15.8 5v4.6c0 3.2-2.1 5.7-5.8 7.6-3.7-1.9-5.8-4.4-5.8-7.6V5L10 2.8Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="m7.7 9.9 1.6 1.6 3.1-3.1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
 const tabs: TabDefinition[] = [
   { id: 'general', group: 'system', icon: SettingsIcon },
   { id: 'provider', group: 'system', icon: ServerIcon },
   { id: 'tasks', group: 'system', icon: TaskIcon },
   { id: 'skills', group: 'system', icon: SkillIcon },
   { id: 'tools', group: 'system', icon: ToolIcon },
-  { id: 'prompts', group: 'system', icon: PromptIcon },
-  { id: 'appearance', group: 'system', icon: PaletteIcon },
-  { id: 'data', group: 'preferences', icon: DatabaseIcon },
-  { id: 'notifications', group: 'preferences', icon: BellIcon },
-  { id: 'security', group: 'preferences', icon: ShieldIcon },
+  { id: 'prompts_library', group: 'prompts', icon: PromptIcon },
+  { id: 'prompts_preview', group: 'prompts', icon: PromptIcon },
 ];
 
 function Kicker(props: { children: string }) {
@@ -135,7 +102,7 @@ export function SettingsNavigation(props: {
   const { copy } = useWebLocale();
   const { activeTab, onSelectTab } = props;
   const systemTabs = tabs.filter((tab) => tab.group === 'system');
-  const preferenceTabs = tabs.filter((tab) => tab.group === 'preferences');
+  const promptsTabs = tabs.filter((tab) => tab.group === 'prompts');
 
   return (
     <aside className="w-[240px] shrink-0 border-r border-[#E5E5E5] bg-[#FAFAFA]">
@@ -145,24 +112,37 @@ export function SettingsNavigation(props: {
         </h2>
       </div>
 
-      <nav className="max-h-full space-y-6 overflow-y-auto px-4 pb-8">
-        <SettingsNavGroup title={copy.settings.groupSystem} tabs={systemTabs} activeTab={activeTab} onSelectTab={onSelectTab} />
-        <SettingsNavGroup title={copy.settings.groupPreferences} tabs={preferenceTabs} activeTab={activeTab} onSelectTab={onSelectTab} />
+      <nav className="max-h-full space-y-6 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-8">
+        <SettingsNavGroup
+          groupID="system"
+          title={copy.settings.groupSystem}
+          tabs={systemTabs}
+          activeTab={activeTab}
+          onSelectTab={onSelectTab}
+        />
+        <SettingsNavGroup
+          groupID="prompts"
+          title={copy.settings.groupPrompts}
+          tabs={promptsTabs}
+          activeTab={activeTab}
+          onSelectTab={onSelectTab}
+        />
       </nav>
     </aside>
   );
 }
 
 function SettingsNavGroup(props: {
+  groupID: TabDefinition['group'];
   title: string;
   tabs: TabDefinition[];
   activeTab: SettingsTab;
   onSelectTab: (tab: SettingsTab) => void;
 }) {
-  const { title, tabs: groupTabs, activeTab, onSelectTab } = props;
+  const { groupID, title, tabs: groupTabs, activeTab, onSelectTab } = props;
 
   return (
-    <div>
+    <div data-testid={`settings-nav-group-${groupID}`}>
       <Kicker>{title}</Kicker>
       <div className="space-y-1">
         {groupTabs.map((tab) => (
@@ -233,17 +213,11 @@ function labelForTab(copy: ReturnType<typeof useWebLocale>['copy'], tab: Setting
   if (tab === 'tools') {
     return copy.settings.tabTools;
   }
-  if (tab === 'prompts') {
-    return copy.settings.tabPrompts;
+  if (tab === 'prompts_library') {
+    return copy.settings.tabPromptsLibrary;
   }
-  if (tab === 'appearance') {
-    return copy.settings.tabAppearance;
+  if (tab === 'prompts_preview') {
+    return copy.settings.tabPromptsPreview;
   }
-  if (tab === 'data') {
-    return copy.settings.tabDataMemory;
-  }
-  if (tab === 'notifications') {
-    return copy.settings.tabNotifications;
-  }
-  return copy.settings.tabSecurity;
+  return copy.settings.tabGeneral;
 }

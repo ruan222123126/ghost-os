@@ -95,9 +95,12 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-6 md:p-12" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} aria-label={copy.settings.closeSettingsAria} />
+      <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-label={copy.settings.closeSettingsAria} />
 
-      <section className="relative z-10 flex h-[85vh] max-h-[800px] w-full max-w-[1000px] overflow-hidden rounded-[24px] border border-[#E5E5E5] bg-white shadow-2xl">
+      <section
+        data-testid="config-panel-shell"
+        className="relative z-10 flex h-[85vh] max-h-[800px] w-full max-w-[1000px] overflow-hidden rounded-[24px] border border-[#E5E5E5] bg-white shadow-2xl"
+      >
         <button
           type="button"
           onClick={onClose}
@@ -109,8 +112,11 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 
         <SettingsNavigation activeTab={activeTab} onSelectTab={handleSelectTab} />
 
-        <div className="relative flex-1 overflow-y-auto bg-white">
-          <div className="mx-auto max-w-2xl px-12 pb-24 pt-12">
+        <div className="relative flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-white">
+          <div
+            data-testid="config-panel-content"
+            className="mx-auto w-full max-w-2xl px-8 pb-24 pt-12 md:px-12"
+          >
             {tabError ? (
               <div className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {tabError}

@@ -147,8 +147,9 @@ export interface SessionContentPart {
 }
 
 export interface AgentCompletionDeltaPayload {
-  kind: 'text' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end';
+  kind: 'text' | 'thinking' | 'tool_call_start' | 'tool_call_delta' | 'tool_call_end';
   text?: string;
+  thinking?: string;
   tool_call_index?: number;
   tool_call_id?: string;
   tool_name?: string;
@@ -258,6 +259,8 @@ export interface BridgeConfig {
   graphql_sources: GraphQLSourceResponse[];
   graphql_mutation_policies: GraphQLMutationPolicyResponse[];
   session_human_log_full_enabled: boolean;
+  assistant_markdown_enabled: boolean;
+  memory_mode_enabled: boolean;
   web_rooter_enabled: boolean;
   web_rooter_base_url: string;
   web_rooter_timeout_ms: number;
@@ -287,6 +290,8 @@ export interface ConfigUpdate {
   graphql_source_upsert?: GraphQLSourceInput;
   graphql_mutation_policies?: GraphQLMutationPolicyInput[];
   session_human_log_full_enabled?: boolean;
+  assistant_markdown_enabled?: boolean;
+  memory_mode_enabled?: boolean;
   web_rooter_enabled?: boolean;
   web_rooter_base_url?: string;
   web_rooter_api_token?: string;

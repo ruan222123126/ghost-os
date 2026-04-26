@@ -237,6 +237,22 @@
   color: rgb(34 197 94);
 }
 
+.copy-button.is-code-block {
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid rgb(216 216 216 / 0.92);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.86);
+  color: rgb(97 97 97);
+  letter-spacing: 0.08em;
+}
+
+.copy-button.is-code-block:hover {
+  color: rgb(23 23 23);
+  background: rgb(255 255 255 / 0.96);
+  border-color: rgb(188 188 188 / 0.98);
+}
+
 .copy-icon {
   width: 12px;
   height: 12px;

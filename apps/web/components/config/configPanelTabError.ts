@@ -25,7 +25,7 @@ export function resolveConfigPanelTabError(options: ResolveTabErrorOptions): str
   if (activeTab === 'tools') {
     return toolError;
   }
-  if (activeTab === 'prompts') {
+  if (activeTab === 'prompts_library' || activeTab === 'prompts_preview') {
     return promptError;
   }
   if (activeTab === 'general') {

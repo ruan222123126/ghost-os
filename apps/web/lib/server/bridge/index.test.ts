@@ -187,6 +187,36 @@ describe('lib/server/bridge', () => {
     });
   });
 
+  it('forwards bodyless POST requests without treating them as invalid JSON', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const request = new Request('http://localhost/api/tasks/task-5/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const response = await forwardBridge({
+      path: '/api/tasks/task-5/run',
+      method: 'POST',
+      request,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.body).toBeUndefined();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: 'success',
+      payload: { ok: true },
+      error: '',
+    });
+  });
+
   it('returns a 502 envelope when the bridge is unavailable', async () => {
     fetchMock.mockRejectedValue(new Error('bridge offline'));
 

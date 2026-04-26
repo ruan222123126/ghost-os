@@ -1,5 +1,5 @@
-import { parseBridgeConfig, parseProviderListResponse } from './parser';
-import type { BridgeConfig, ProviderListResponse } from '@/lib/types';
+import { parseBridgeConfig, parseProviderListResponse, parseSystemPromptResponse } from './parser';
+import type { BridgeConfig, ProviderListResponse, SystemPromptPayload } from '@/lib/types';
 
 describe('lib/api/config/parser', () => {
   it('rejects unknown fields in bridge config payloads', () => {
@@ -44,6 +44,8 @@ describe('lib/api/config/parser', () => {
         },
       ],
       session_human_log_full_enabled: false,
+      assistant_markdown_enabled: true,
+      memory_mode_enabled: false,
       web_rooter_enabled: false,
       web_rooter_base_url: 'http://127.0.0.1:8765',
       web_rooter_timeout_ms: 90000,
@@ -80,6 +82,36 @@ describe('lib/api/config/parser', () => {
     }).toThrow('Invalid payload: unexpected field "future_field"');
   });
 
+  it('parses assistant_markdown_enabled from bridge config payloads', () => {
+    const parsed = parseBridgeConfig({
+      provider: 'crs',
+      provider_type: 'custom',
+      base_url: 'https://lldai.online/openai',
+      model: 'gpt-5.4',
+      chat_path: '/v1/chat',
+      api_key_set: true,
+      model_selection_enabled: true,
+      graphql_default_source: '',
+      graphql_tool_runtime_enabled: false,
+      graphql_text_sanitize_enabled: true,
+      graphql_sources: [],
+      graphql_mutation_policies: [],
+      session_human_log_full_enabled: false,
+      assistant_markdown_enabled: false,
+      memory_mode_enabled: true,
+      web_rooter_enabled: false,
+      web_rooter_base_url: 'http://127.0.0.1:8765',
+      web_rooter_timeout_ms: 90000,
+      web_rooter_api_token_set: false,
+      web_search_tavily_url: '',
+      web_search_exa_url: '',
+      web_search_tavily_api_key_set: false,
+      web_search_exa_api_key_set: false,
+    });
+
+    expect(parsed.assistant_markdown_enabled).toBe(false);
+  });
+
   it('rejects unknown fields in provider lists', () => {
     const expected: ProviderListResponse = {
       active_provider: 'crs',
@@ -106,5 +138,83 @@ describe('lib/api/config/parser', () => {
         ],
       });
     }).toThrow('Invalid payload: unexpected field "future_field"');
+  });
+
+  it('parses system prompt payloads and rejects unknown fields', () => {
+    const expected: SystemPromptPayload = {
+      core_prompt: 'core guidance',
+      rendered_prompt: 'base prompt with core guidance',
+      prompt_library: [
+        {
+          id: 'core-job',
+          name: 'Core Job',
+          insert_point: 'core_job',
+          content: 'core guidance',
+          active: true,
+        },
+      ],
+    };
+
+    expect(parseSystemPromptResponse(expected)).toEqual(expected);
+
+    expect(() => {
+      parseSystemPromptResponse({
+        ...expected,
+        future_field: true,
+      });
+    }).toThrow('Invalid payload: unexpected field "future_field"');
+  });
+
+  it('rejects invalid prompt_library insert_point and unknown item fields', () => {
+    expect(() => {
+      parseSystemPromptResponse({
+        core_prompt: '',
+        rendered_prompt: '',
+        prompt_library: [
+          {
+            id: 'core-job',
+            name: 'Core Job',
+            insert_point: 'invalid',
+            content: '',
+            active: true,
+          },
+        ],
+      });
+    }).toThrow('Invalid system prompt.prompt_library[0].insert_point: unexpected value "invalid"');
+
+    expect(() => {
+      parseSystemPromptResponse({
+        core_prompt: '',
+        rendered_prompt: '',
+        prompt_library: [
+          {
+            id: 'core-job',
+            name: 'Core Job',
+            insert_point: 'core_job',
+            content: '',
+            active: true,
+            extra: true,
+          },
+        ],
+      });
+    }).toThrow('Invalid payload: unexpected field "extra"');
+  });
+
+  it('accepts memory prompt_library insert_point', () => {
+    const parsed = parseSystemPromptResponse({
+      core_prompt: '',
+      rendered_prompt: 'rendered',
+      prompt_library: [
+        {
+          id: 'memory-card',
+          name: 'Memory',
+          insert_point: 'memory',
+          content: 'memory guidance',
+          active: true,
+        },
+      ],
+    });
+
+    expect(parsed.prompt_library[0].insert_point).toBe('memory');
   });
 });

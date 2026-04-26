@@ -16,6 +16,7 @@ import type { ActiveAgentRun } from './types';
 export interface ChatStateStore {
   committedMessages: ChatMessage[];
   streamingAssistantState: StreamingAssistantState;
+  streamingThinkingText: string;
   streamingItemOrder: string[];
   streamingToolState: StreamingToolTableState;
   pendingQuestionState: PendingQuestionState;
@@ -83,6 +84,7 @@ export function createInitialChatState(): ChatStateStore {
   return {
     committedMessages: [],
     streamingAssistantState: clearStreamingAssistantState(),
+    streamingThinkingText: '',
     streamingItemOrder: [],
     streamingToolState: clearStreamingToolState(),
     pendingQuestionState: clearPendingQuestionState(),
@@ -132,6 +134,7 @@ function replaceWithErrorMessageState(state: ChatStateStore, messageText: string
     ...state,
     committedMessages: [buildErrorMessage(messageText)],
     streamingAssistantState: clearStreamingAssistantState(),
+    streamingThinkingText: '',
     streamingItemOrder: [],
     streamingToolState: clearStreamingToolState(),
     pendingQuestionState: clearPendingQuestionState(),
@@ -152,6 +155,7 @@ function clearMessagesState(state: ChatStateStore): ChatStateStore {
     chatError: '',
     committedMessages: [],
     streamingAssistantState: clearStreamingAssistantState(),
+    streamingThinkingText: '',
     streamingItemOrder: [],
     streamingToolState: clearStreamingToolState(),
     pendingQuestionState: clearPendingQuestionState(),

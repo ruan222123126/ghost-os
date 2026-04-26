@@ -21,6 +21,7 @@ import {
 } from '@/lib/api/shared';
 
 const PROVIDER_TYPES = ['openai', 'anthropic', 'custom', 'codex'] as const;
+const PROMPT_INSERT_POINTS = ['core_job', 'memory'] as const;
 const BRIDGE_CONFIG_KEYS = [
   'provider',
   'provider_type',
@@ -35,6 +36,8 @@ const BRIDGE_CONFIG_KEYS = [
   'graphql_sources',
   'graphql_mutation_policies',
   'session_human_log_full_enabled',
+  'assistant_markdown_enabled',
+  'memory_mode_enabled',
   'web_rooter_enabled',
   'web_rooter_base_url',
   'web_rooter_timeout_ms',
@@ -56,11 +59,16 @@ const PROVIDER_CONFIG_KEYS = [
   'api_key_set',
 ] as const;
 const SYSTEM_PROMPT_KEYS = [
-  'global_template',
   'core_prompt',
-  'tool_prompt',
-  'tool_key_spec',
   'rendered_prompt',
+  'prompt_library',
+] as const;
+const PROMPT_LIBRARY_ITEM_KEYS = [
+  'id',
+  'name',
+  'insert_point',
+  'content',
+  'active',
 ] as const;
 const PROVIDER_LIST_KEYS = ['providers', 'active_provider'] as const;
 const GRAPHQL_DOMAIN_KEYS = [
@@ -220,6 +228,18 @@ function parseGraphQLMutationPolicyResponse(
   };
 }
 
+function parsePromptLibraryItem(value: unknown, label: string) {
+  const record = pickKnownKeys(expectRecord(value, label), PROMPT_LIBRARY_ITEM_KEYS);
+
+  return {
+    id: expectString(record.id, `${label}.id`),
+    name: expectString(record.name, `${label}.name`),
+    insert_point: expectStringEnum(record.insert_point, PROMPT_INSERT_POINTS, `${label}.insert_point`),
+    content: expectString(record.content, `${label}.content`),
+    active: expectBoolean(record.active, `${label}.active`),
+  };
+}
+
 export function parseBridgeConfig(payload: unknown): BridgeConfig {
   const record = pickKnownKeys(expectRecord(payload, 'bridge config'), BRIDGE_CONFIG_KEYS);
   if (!Array.isArray(record.graphql_sources)) {
@@ -262,6 +282,14 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
       record.session_human_log_full_enabled,
       'bridge config.session_human_log_full_enabled',
     ),
+    assistant_markdown_enabled: expectBoolean(
+      record.assistant_markdown_enabled,
+      'bridge config.assistant_markdown_enabled',
+    ),
+    memory_mode_enabled: expectBoolean(
+      record.memory_mode_enabled,
+      'bridge config.memory_mode_enabled',
+    ),
     web_rooter_enabled: expectBoolean(
       record.web_rooter_enabled,
       'bridge config.web_rooter_enabled',
@@ -299,13 +327,16 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
 
 export function parseSystemPromptResponse(payload: unknown): SystemPromptPayload {
   const record = pickKnownKeys(expectRecord(payload, 'system prompt'), SYSTEM_PROMPT_KEYS);
+  if (!Array.isArray(record.prompt_library)) {
+    throw new Error('Invalid system prompt.prompt_library: expected array');
+  }
 
   return {
-    global_template: expectString(record.global_template, 'system prompt.global_template'),
     core_prompt: expectString(record.core_prompt, 'system prompt.core_prompt'),
-    tool_prompt: expectString(record.tool_prompt, 'system prompt.tool_prompt'),
-    tool_key_spec: expectString(record.tool_key_spec, 'system prompt.tool_key_spec'),
     rendered_prompt: expectString(record.rendered_prompt, 'system prompt.rendered_prompt'),
+    prompt_library: record.prompt_library.map((entry, index) => {
+      return parsePromptLibraryItem(entry, `system prompt.prompt_library[${index}]`);
+    }),
   };
 }
 

@@ -55,6 +55,7 @@ const AGENT_STREAM_EVENT_TYPES = defineStringEnumValues<AgentStreamEvent['type']
 });
 const COMPLETION_DELTA_KINDS = defineStringEnumValues<AgentCompletionDeltaPayload['kind']>({
   text: true,
+  thinking: true,
   tool_call_start: true,
   tool_call_delta: true,
   tool_call_end: true,
@@ -188,6 +189,7 @@ export function parseAgentCompletionDeltaPayload(payload: unknown): AgentComplet
   return {
     kind: expectStringEnum(record.kind, COMPLETION_DELTA_KINDS, 'agent completion_delta payload.kind'),
     text: parseOptionalString(record.text, 'agent completion_delta payload.text'),
+    thinking: parseOptionalString(record.thinking, 'agent completion_delta payload.thinking'),
     tool_call_index: record.tool_call_index === undefined
       ? undefined
       : expectNumber(record.tool_call_index, 'agent completion_delta payload.tool_call_index'),

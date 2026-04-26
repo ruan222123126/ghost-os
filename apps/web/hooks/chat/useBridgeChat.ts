@@ -1,4 +1,5 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
+import { persistSessionThinkingSnapshot } from '@/lib/chatThinkingPersistence';
 import { useChatHistory } from './useChatHistory';
 import { useChatQuestionActions } from './useChatQuestionActions';
 import { useChatRunControl } from './useChatRunControl';
@@ -8,6 +9,14 @@ import type { UseBridgeChatOptions, UseBridgeChatResult } from './types';
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
   const state = useChatState();
+  useEffect(() => {
+    const sessionId = options.currentSessionId.trim();
+    if (!sessionId) {
+      return;
+    }
+    persistSessionThinkingSnapshot(sessionId, state.committedMessages);
+  }, [options.currentSessionId, state.committedMessages]);
+
   const {
     loadOlderHistory,
     loadSessionHistory,
@@ -72,6 +81,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   return {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: state.streamingAssistantSegments,
+    streamingThinkingText: state.streamingThinkingText,
     streamingItemOrder: state.streamingItemOrder,
     streamingTools: state.streamingTools,
     pendingQuestions: state.pendingQuestions,

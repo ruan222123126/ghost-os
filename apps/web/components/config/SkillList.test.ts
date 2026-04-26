@@ -29,6 +29,7 @@ describe('components/config/SkillList', () => {
     expect(html).toContain('/tmp/project/.agents/skills/release');
     expect(html).toContain('Repo');
     expect(html).toContain('Delete');
+    expect(html).toContain('whitespace-nowrap');
   });
 
   it('renders empty state and loading skeleton', () => {

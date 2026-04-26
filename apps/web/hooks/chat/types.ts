@@ -18,6 +18,7 @@ export interface ActiveAgentRun {
 export interface UseBridgeChatResult {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingThinkingText: string;
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
@@ -54,6 +55,7 @@ export interface StreamAgentRunInput {
 export interface ChatStateControls {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingThinkingText: string;
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
@@ -86,6 +88,7 @@ export interface ChatStateControls {
   appendErrorMessage: (messageText: string) => void;
   appendStreamingAssistantText: (text: string) => void;
   clearStreamingAssistantText: () => void;
+  clearStreamingThinkingText: () => void;
   clearStreamingState: () => void;
   upsertStreamingTool: (tool: StreamingToolState) => void;
   clearStreamingTools: () => void;

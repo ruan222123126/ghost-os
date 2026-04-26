@@ -43,7 +43,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
   return (
     <aside
       className={`sidebar flex flex-col bg-neutral-50 text-black transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
-        sidebarState.isOpen ? 'w-72' : 'w-16'
+        sidebarState.isOpen ? 'w-[19rem]' : 'w-16'
       }`}
     >
       <div className={`flex h-16 items-center p-4 ${sidebarState.isOpen ? 'justify-between' : 'justify-center'}`}>
