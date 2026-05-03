@@ -80,6 +80,69 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 	}
 }
 
+func TestTaskWorkflowRunNowPassesAgentRuntimeOverrides(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+	configureRuntimeOverrideProviders(t, service)
+	agentRunner := &workflowTestRunner{message: "agent done", sessionID: "workflow-session"}
+	service.agentRunner = agentRunner
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind: taskKindWorkflow,
+		Workflow: &WorkflowDefinition{
+			Nodes: []WorkflowNode{
+				{ID: "start-node", Type: workflowNodeTypeStart},
+				{
+					ID:   "agent-node",
+					Type: workflowNodeTypeAgent,
+					Agent: &WorkflowAgentNode{
+						Message: "run agent",
+						RuntimeOverrides: &TaskRuntimeOverrides{
+							ProviderName:      "openai-main",
+							Model:             "gpt-5.4",
+							SystemPrompt:      "override prompt",
+							ToolAllowlistOnly: boolPointer(true),
+							ToolAllowlist:     []string{"script_exec"},
+							MaxTurns:          intPointer(2),
+						},
+					},
+				},
+				{ID: "end-node", Type: workflowNodeTypeEnd},
+			},
+			Edges: []WorkflowEdge{
+				{FromNodeID: "start-node", ToNodeID: "agent-node"},
+				{FromNodeID: "agent-node", ToNodeID: "end-node"},
+			},
+		},
+		IntervalSeconds: 60,
+	}, "trace-workflow-agent-override-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-agent-override-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if len(agentRunner.calls) != 1 {
+		t.Fatalf("expected one agent runner call, got %#v", agentRunner.calls)
+	}
+	if agentRunner.calls[0].runtimeOverrides == nil {
+		t.Fatalf("expected runtime overrides to be forwarded, got %#v", agentRunner.calls[0])
+	}
+	if agentRunner.calls[0].runtimeOverrides.ProviderName != "openai-main" ||
+		agentRunner.calls[0].runtimeOverrides.Model != "gpt-5.4" {
+		t.Fatalf("unexpected provider/model overrides: %#v", agentRunner.calls[0].runtimeOverrides)
+	}
+	if agentRunner.calls[0].runtimeOverrides.MaxTurns == nil || *agentRunner.calls[0].runtimeOverrides.MaxTurns != 2 {
+		t.Fatalf("unexpected max_turns override: %#v", agentRunner.calls[0].runtimeOverrides)
+	}
+}
+
 func TestTaskWorkflowRunNowRoutesIfNodeByToolOutput(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
@@ -119,7 +182,7 @@ func TestTaskWorkflowRunNowRoutesIfNodeByToolOutput(t *testing.T) {
 	}
 }
 
-func TestTaskWorkflowRunNowResolvesTemplateInIfValue(t *testing.T) {
+func TestTaskWorkflowRunNowKeepsIfValueLiteral(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
@@ -159,7 +222,7 @@ func TestTaskWorkflowRunNowResolvesTemplateInIfValue(t *testing.T) {
 	if run.Run.SessionIDOutput != "if-template-session" {
 		t.Fatalf("unexpected session output: %#v", run.Run)
 	}
-	if len(agentRunner.calls) != 1 || agentRunner.calls[0].message != "true branch message" {
+	if len(agentRunner.calls) != 1 || agentRunner.calls[0].message != "false branch message" {
 		t.Fatalf("unexpected agent branch: %#v", agentRunner.calls)
 	}
 }
@@ -306,8 +369,9 @@ func TestTaskWorkflowRunNowAllowsAllToolsWhenAllowlistCleared(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
+	tool := &workflowTestTool{name: "script_exec", output: `{"status":"ok"}`}
 	registry := tools.NewRegistry()
-	registry.Register(&workflowTestTool{name: "script_exec", output: `{"status":"ok"}`})
+	registry.Register(tool)
 	service.runtimeFactory = proTestRuntimeFactory{
 		deps: NewRuntimeDependencies(bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}}, &workflowTestCompleter{}, registry, "", nil),
 	}
@@ -336,7 +400,7 @@ func TestTaskWorkflowRunNowAllowsAllToolsWhenAllowlistCleared(t *testing.T) {
 	}
 }
 
-func TestTaskWorkflowRunNowResolvesTemplatedToolArguments(t *testing.T) {
+func TestTaskWorkflowRunNowKeepsDeprecatedTemplateTokensLiteral(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
@@ -378,26 +442,122 @@ func TestTaskWorkflowRunNowResolvesTemplatedToolArguments(t *testing.T) {
 	if len(tool.calls) != 2 {
 		t.Fatalf("unexpected tool call count: %#v", tool.calls)
 	}
-	if tool.calls[0]["command"] != "pwd" {
+	if tool.calls[0]["command"] != "${inputs.command}" {
 		t.Fatalf("unexpected first tool args: %#v", tool.calls[0])
 	}
-	if tool.calls[1]["command"] != "echo /workspace" {
+	if tool.calls[1]["command"] != "echo ${outputs.tool-read.cwd}" {
 		t.Fatalf("unexpected second tool command: %#v", tool.calls[1])
 	}
-	if literal, ok := tool.calls[1]["ok"].(bool); !ok || !literal {
-		t.Fatalf("unexpected second tool bool arg: %#v", tool.calls[1])
+	if tool.calls[1]["ok"] != "${outputs.tool-read.ok}" {
+		t.Fatalf("unexpected second tool ok arg: %#v", tool.calls[1])
 	}
-	if tool.calls[1]["text"] != "run pwd" {
+	if tool.calls[1]["text"] != "run ${inputs.command}" {
 		t.Fatalf("unexpected second tool text arg: %#v", tool.calls[1])
 	}
 }
 
-func TestTaskWorkflowRunNowFailsOnUndefinedTemplateVariable(t *testing.T) {
+func TestTaskWorkflowRunNowResolvesFindIconVariableForDownstreamTool(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "screen_control,script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	screenTool := &workflowTestTool{
+		name:   "screen_control",
+		output: `{"matches":[{"center":{"x":321,"y":654}}],"display_id":7}`,
+	}
+	scriptTool := &workflowTestTool{name: "script_exec", output: `{"status":"ok"}`}
+	registry := tools.NewRegistry()
+	registry.Register(screenTool)
+	registry.Register(scriptTool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(
+			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"screen_control", "script_exec"}}},
+			&workflowTestCompleter{},
+			registry,
+			"",
+			nil,
+		),
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithFindIconVariableConsumer("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-find-icon-variable-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-find-icon-variable-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusSuccess {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if len(scriptTool.calls) != 1 {
+		t.Fatalf("unexpected script_exec call count: %#v", scriptTool.calls)
+	}
+	if scriptTool.calls[0]["x"] != float64(321) || scriptTool.calls[0]["y"] != float64(654) {
+		t.Fatalf("unexpected resolved coordinates: %#v", scriptTool.calls[0])
+	}
+	point, ok := scriptTool.calls[0]["point"].(map[string]any)
+	if !ok || point["display_id"] != float64(7) {
+		t.Fatalf("unexpected resolved point payload: %#v", scriptTool.calls[0]["point"])
+	}
+	if scriptTool.calls[0]["label"] != "prefix 321" {
+		t.Fatalf("unexpected resolved label: %#v", scriptTool.calls[0]["label"])
+	}
+}
+
+func TestTaskWorkflowRunNowFailsWhenFindIconVariableUsedBeforeDefinition(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 
+	tool := &workflowTestTool{name: "script_exec", output: `{"status":"ok"}`}
 	registry := tools.NewRegistry()
-	registry.Register(&workflowTestTool{name: "script_exec", output: `{"status":"ok"}`})
+	registry.Register(tool)
+	service.runtimeFactory = proTestRuntimeFactory{
+		deps: NewRuntimeDependencies(
+			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}},
+			&workflowTestCompleter{},
+			registry,
+			"",
+			nil,
+		),
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindWorkflow,
+		Workflow:        workflowWithUndefinedFindIconVariable("script_exec"),
+		IntervalSeconds: 60,
+	}, "trace-workflow-find-icon-missing-create")
+	if err != nil || code != http.StatusCreated {
+		t.Fatalf("create workflow task: code=%d err=%v", code, err)
+	}
+	created := createdRaw.(taskPayload)
+
+	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-find-icon-missing-run")
+	if err != nil || code != http.StatusOK {
+		t.Fatalf("run workflow task: code=%d err=%v", code, err)
+	}
+	run := runRaw.(taskRunPayload)
+	if run.Run.Status != taskRunStatusError {
+		t.Fatalf("unexpected run status: %#v", run.Run)
+	}
+	if !strings.Contains(run.Run.Error, `workflow variable "find_icon" is not defined`) {
+		t.Fatalf("unexpected run error: %#v", run.Run)
+	}
+}
+
+func TestTaskWorkflowRunNowKeepsUndefinedTemplateLiteral(t *testing.T) {
+	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "script_exec")
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+
+	tool := &workflowTestTool{name: "script_exec", output: `{"status":"ok"}`}
+	registry := tools.NewRegistry()
+	registry.Register(tool)
 	service.runtimeFactory = proTestRuntimeFactory{
 		deps: NewRuntimeDependencies(
 			bridgeconfig.Config{Task: bridgeconfig.TaskConfig{WorkflowToolAllowlist: []string{"script_exec"}}},
@@ -423,11 +583,11 @@ func TestTaskWorkflowRunNowFailsOnUndefinedTemplateVariable(t *testing.T) {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
 	run := runRaw.(taskRunPayload)
-	if run.Run.Status != taskRunStatusError {
+	if run.Run.Status != taskRunStatusSuccess {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
-	if !strings.Contains(run.Run.Error, `workflow template variable "outputs.missing.status" is not defined`) {
-		t.Fatalf("unexpected run error: %#v", run.Run)
+	if len(tool.calls) != 1 || tool.calls[0]["command"] != "${outputs.missing.status}" {
+		t.Fatalf("unexpected literal template argument: %#v", tool.calls)
 	}
 }
 
@@ -535,8 +695,9 @@ func (c *workflowTestCompleter) Complete(_ context.Context, request llm.Completi
 }
 
 type workflowRunnerCall struct {
-	message   string
-	sessionID string
+	message          string
+	sessionID        string
+	runtimeOverrides *TaskRuntimeOverrides
 }
 
 type workflowTestRunner struct {
@@ -548,6 +709,21 @@ type workflowTestRunner struct {
 
 func (r *workflowTestRunner) RunTurn(_ context.Context, message string, sessionID string, _ string) (string, string, error) {
 	r.calls = append(r.calls, workflowRunnerCall{message: message, sessionID: sessionID})
+	return r.message, r.sessionID, r.err
+}
+
+func (r *workflowTestRunner) RunTurnWithOverrides(
+	_ context.Context,
+	message string,
+	sessionID string,
+	_ string,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (string, string, error) {
+	r.calls = append(r.calls, workflowRunnerCall{
+		message:          message,
+		sessionID:        sessionID,
+		runtimeOverrides: cloneTaskRuntimeOverrides(runtimeOverrides),
+	})
 	return r.message, r.sessionID, r.err
 }
 
@@ -803,6 +979,66 @@ func workflowWithUndefinedTemplate(toolName string) *WorkflowDefinition {
 				Tool: &WorkflowToolNode{
 					ToolName:  toolName,
 					Arguments: map[string]any{"command": "${outputs.missing.status}"},
+				},
+			},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "tool-node"},
+			{FromNodeID: "tool-node", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithFindIconVariableConsumer(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{
+				ID:   "screen-node",
+				Type: workflowNodeTypeTool,
+				Tool: &WorkflowToolNode{
+					ToolName: "screen_control",
+					Arguments: map[string]any{
+						"mode":   "atomic",
+						"action": "find_icon",
+						"params": map[string]any{"template_path": "/tmp/icon.png"},
+					},
+				},
+			},
+			{
+				ID:   "tool-use",
+				Type: workflowNodeTypeTool,
+				Tool: &WorkflowToolNode{
+					ToolName: toolName,
+					Arguments: map[string]any{
+						"x":     "${find_icon.x}",
+						"y":     "${find_icon.y}",
+						"point": "${find_icon}",
+						"label": "prefix ${find_icon.x}",
+					},
+				},
+			},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "screen-node"},
+			{FromNodeID: "screen-node", ToNodeID: "tool-use"},
+			{FromNodeID: "tool-use", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func workflowWithUndefinedFindIconVariable(toolName string) *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{
+				ID:   "tool-node",
+				Type: workflowNodeTypeTool,
+				Tool: &WorkflowToolNode{
+					ToolName:  toolName,
+					Arguments: map[string]any{"point": "${find_icon}"},
 				},
 			},
 			{ID: "end-node", Type: workflowNodeTypeEnd},

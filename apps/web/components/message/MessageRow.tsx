@@ -36,21 +36,36 @@ const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
 const AssistantMessageRow: FC<{
   message: AssistantChatMessage;
   assistantMarkdownEnabled: boolean;
-}> = ({ message, assistantMarkdownEnabled }) => {
+  hasTrailingTool?: boolean;
+}> = ({ message, assistantMarkdownEnabled, hasTrailingTool = false }) => {
   const { copy } = useWebLocale();
+  const assistantFrameClassName = [
+    'message-assistant-frame',
+    hasTrailingTool ? 'has-trailing-tool' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const actionClassName = [
+    'message-actions',
+    hasTrailingTool ? 'is-inline-with-body' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   return (
     <div className="message-row is-assistant">
       <div className="message-stack">
         {message.inProgress ? <div className="message-draft-flag">{copy.chat.assistantDraftFlag}</div> : null}
-        <div className="message-assistant-body">
-          <AssistantMarkdownContent content={message.content} enabled={assistantMarkdownEnabled} />
-        </div>
-        {message.content ? (
-          <div className="message-actions">
-            <MessageCopyButton text={message.content} />
+        <div className={assistantFrameClassName}>
+          <div className="message-assistant-body">
+            <AssistantMarkdownContent content={message.content} enabled={assistantMarkdownEnabled} />
           </div>
-        ) : null}
+          {message.content ? (
+            <div className={actionClassName}>
+              <MessageCopyButton text={message.content} />
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -118,6 +133,7 @@ export const MessageRow: FC<MessageRowProps> = ({
   message,
   assistantMarkdownEnabled = true,
   toolCallCompactOutputEnabled = false,
+  hasTrailingTool = false,
   isToolCardOpen = false,
   isThinkingPanelOpen = false,
   loading,
@@ -130,7 +146,13 @@ export const MessageRow: FC<MessageRowProps> = ({
     case 'user':
       return <UserMessageRow message={message} />;
     case 'assistant':
-      return <AssistantMessageRow message={message} assistantMarkdownEnabled={assistantMarkdownEnabled} />;
+      return (
+        <AssistantMessageRow
+          message={message}
+          assistantMarkdownEnabled={assistantMarkdownEnabled}
+          hasTrailingTool={hasTrailingTool}
+        />
+      );
     case 'tool':
       return (
         <ToolMessageRow

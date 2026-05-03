@@ -44,7 +44,8 @@ type WorkflowLLMNode struct {
 }
 
 type WorkflowAgentNode struct {
-	Message string `json:"message"`
+	Message          string                `json:"message"`
+	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
 }
 
 type WorkflowIfNode struct {
@@ -149,7 +150,10 @@ func cloneWorkflowAgentNode(input *WorkflowAgentNode) *WorkflowAgentNode {
 	if input == nil {
 		return nil
 	}
-	return &WorkflowAgentNode{Message: strings.TrimSpace(input.Message)}
+	return &WorkflowAgentNode{
+		Message:          strings.TrimSpace(input.Message),
+		RuntimeOverrides: CloneTaskRuntimeOverrides(input.RuntimeOverrides),
+	}
 }
 
 func cloneWorkflowIfNode(input *WorkflowIfNode) *WorkflowIfNode {

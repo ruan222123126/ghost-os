@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -101,13 +102,57 @@ func TestBuildSessionMessagePayloadProjectsAnsweredAskHuman(t *testing.T) {
 	}
 }
 
-func TestBuildSessionDetailPayloadIncludesAssistantDraftForLatestWindow(t *testing.T) {
+func TestBuildSessionMessagePayloadProjectsAssistantThinking(t *testing.T) {
+	payload := buildSessionMessagePayload(2, llm.Message{
+		Role:             llm.RoleAssistant,
+		Text:             "done",
+		ReasoningContent: json.RawMessage(`["step 1", {"summary_text":"step 2"}]`),
+	})
+
+	if payload.Thinking != "step 1\nstep 2" {
+		t.Fatalf("unexpected thinking: %q", payload.Thinking)
+	}
+}
+
+func TestBuildSessionMessagePayloadProjectsToolCallAssistantThinking(t *testing.T) {
+	payload := buildSessionMessagePayload(4, llm.Message{
+		Role:             llm.RoleAssistant,
+		ReasoningContent: json.RawMessage(`{"summary_text":"before tool"}`),
+		ToolCalls: []llm.ToolCall{{
+			ID:        "call-1",
+			Name:      "read_file",
+			Arguments: json.RawMessage(`{"path":"README.md"}`),
+		}},
+	})
+
+	if payload.Thinking != "before tool" {
+		t.Fatalf("unexpected thinking: %q", payload.Thinking)
+	}
+	if len(payload.ToolCalls) != 1 {
+		t.Fatalf("expected tool calls to stay projected, got %+v", payload.ToolCalls)
+	}
+}
+
+func TestBuildSessionDetailPayloadIncludesTurnDraftForLatestWindow(t *testing.T) {
 	sess := session.NewSession("system prompt")
 	sess.ID = "session-draft-detail"
-	sess.AssistantDraft = &session.AssistantDraft{
-		Text:    "partial answer",
+	sess.TurnDraft = &session.TurnDraft{
 		TraceID: "trace-draft",
 		Turn:    1,
+		AssistantSegments: []session.TurnDraftSegment{
+			{ID: "stream-segment:assistant:1", Content: "partial answer"},
+		},
+		ThinkingSegments: []session.TurnDraftSegment{
+			{ID: "stream-segment:thinking:1", Content: "analyzing"},
+		},
+		Tools: []session.TurnDraftTool{
+			{ID: "stream-tool:trace-draft:call-1", Content: `{"path":"README.md"}`, ToolName: "read_file"},
+		},
+		ItemOrder: []string{
+			"thinking:stream-segment:thinking:1",
+			"tool:stream-tool:trace-draft:call-1",
+			"assistant:stream-segment:assistant:1",
+		},
 	}
 
 	page := session.MessagePage{
@@ -120,29 +165,27 @@ func TestBuildSessionDetailPayloadIncludesAssistantDraftForLatestWindow(t *testi
 		},
 	}
 	payload := buildSessionDetailPayload(sess, page, true)
-	if len(payload.Messages) != 2 {
-		t.Fatalf("expected draft to be appended, got %d messages", len(payload.Messages))
+	if len(payload.Messages) != 1 {
+		t.Fatalf("expected messages to stay committed-only, got %d messages", len(payload.Messages))
 	}
-	draft := payload.Messages[1]
-	if draft.Role != string(llm.RoleAssistant) {
-		t.Fatalf("unexpected draft role: %q", draft.Role)
+	if payload.TurnDraft == nil {
+		t.Fatal("expected latest window to include turn_draft")
 	}
-	if draft.Text != "partial answer" {
-		t.Fatalf("unexpected draft text: %q", draft.Text)
+	if payload.TurnDraft.TraceID != "trace-draft" || payload.TurnDraft.Turn != 1 {
+		t.Fatalf("unexpected turn_draft header: %+v", payload.TurnDraft)
 	}
-	if !draft.InProgress {
-		t.Fatal("expected draft message in_progress=true")
+	if len(payload.TurnDraft.AssistantSegments) != 1 || payload.TurnDraft.AssistantSegments[0].Content != "partial answer" {
+		t.Fatalf("unexpected assistant segments: %+v", payload.TurnDraft.AssistantSegments)
 	}
-	if draft.Index != sess.MessageCount {
-		t.Fatalf("unexpected draft index: got %d want %d", draft.Index, sess.MessageCount)
+	if len(payload.TurnDraft.ThinkingSegments) != 1 || payload.TurnDraft.ThinkingSegments[0].Content != "analyzing" {
+		t.Fatalf("unexpected thinking segments: %+v", payload.TurnDraft.ThinkingSegments)
 	}
 }
 
-func TestBuildSessionDetailPayloadSkipsAssistantDraftForOlderWindow(t *testing.T) {
+func TestBuildSessionDetailPayloadSkipsTurnDraftForOlderWindow(t *testing.T) {
 	sess := session.NewSession("system prompt")
 	sess.ID = "session-draft-older-window"
-	sess.AssistantDraft = &session.AssistantDraft{
-		Text:    "partial answer",
+	sess.TurnDraft = &session.TurnDraft{
 		TraceID: "trace-draft",
 		Turn:    1,
 	}
@@ -159,5 +202,8 @@ func TestBuildSessionDetailPayloadSkipsAssistantDraftForOlderWindow(t *testing.T
 	payload := buildSessionDetailPayload(sess, page, false)
 	if len(payload.Messages) != 1 {
 		t.Fatalf("expected old page to skip draft, got %d messages", len(payload.Messages))
+	}
+	if payload.TurnDraft != nil {
+		t.Fatalf("expected old page to skip turn_draft, got %+v", payload.TurnDraft)
 	}
 }

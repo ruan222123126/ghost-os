@@ -25,11 +25,12 @@ func buildSessionDetailPayload(
 	page bridgesession.MessagePage,
 	includeDraft bool,
 ) sessionDetail {
+	turnDraft := buildSessionTurnDraftPayload(sess, includeDraft)
 	messages := make([]sessionMessage, 0, len(page.Messages))
 	for _, item := range page.Messages {
 		messages = append(messages, buildSessionMessagePayload(item.Index, item.Message))
 	}
-	if includeDraft {
+	if includeDraft && turnDraft == nil {
 		if draft, ok := buildAssistantDraftSessionMessage(sess); ok {
 			messages = append(messages, draft)
 		}
@@ -43,6 +44,7 @@ func buildSessionDetailPayload(
 		MessageCount: sess.MessageCount,
 		Page:         buildSessionMessagePagePayload(page),
 		TokenCount:   sess.TokenCount,
+		TurnDraft:    turnDraft,
 	}
 }
 
@@ -72,6 +74,11 @@ func buildSessionMessagePayload(index int, message llm.Message) sessionMessage {
 	}
 	if len(message.ToolCalls) > 0 {
 		payload.ToolCalls = buildSessionToolCalls(message.ToolCalls)
+	}
+	if payload.Role == string(llm.RoleAssistant) {
+		if thinking := extractReasoningDisplayText(message.ReasoningContent); thinking != "" {
+			payload.Thinking = thinking
+		}
 	}
 	if strings.TrimSpace(message.ToolCallID) != "" {
 		payload.ToolCallID = message.ToolCallID

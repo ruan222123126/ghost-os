@@ -209,6 +209,7 @@ export interface SessionMessage {
   human_interaction?: SessionHumanInteraction | null;
   tool_call_id?: string;
   in_progress?: boolean;
+  thinking?: string;
 }
 
 export interface AgentDonePayload {
@@ -251,6 +252,30 @@ export interface SessionMessagePage {
   next_before?: number | null;
 }
 
+export interface SessionTurnDraftSegment {
+  id: string;
+  content: string;
+}
+
+export interface SessionTurnDraftTool {
+  id: string;
+  content: string;
+  tool_input?: string;
+  tool_name?: string;
+  tool_status?: string;
+  tool_call_id?: string;
+  trace_id?: string;
+}
+
+export interface SessionTurnDraft {
+  trace_id: string;
+  turn: number;
+  assistant_segments: SessionTurnDraftSegment[];
+  thinking_segments: SessionTurnDraftSegment[];
+  tools: SessionTurnDraftTool[];
+  item_order: string[];
+}
+
 export interface AgentErrorPayload {
   message: string;
   session_id?: string;
@@ -265,6 +290,7 @@ export interface SessionDetail {
   message_count: number;
   page: SessionMessagePage;
   token_count: number;
+  turn_draft?: SessionTurnDraft | null;
 }
 
 export interface BridgeConfig {
@@ -394,8 +420,12 @@ export interface AgentMessageTaskCreateRequest {
 }
 
 export interface TaskRuntimeOverrides {
+  provider_name?: string;
   model?: string;
+  system_prompt?: string;
   tool_allowlist?: string[];
+  tool_allowlist_only?: boolean;
+  max_turns?: number;
 }
 
 export interface WorkflowToolNode {
@@ -410,6 +440,7 @@ export interface WorkflowLLMNode {
 
 export interface WorkflowAgentNode {
   message: string;
+  runtime_overrides?: TaskRuntimeOverrides;
 }
 
 export interface WorkflowIfNode {

@@ -1,14 +1,11 @@
 import { useCallback } from 'react';
 import { getSession } from '@/lib/api/sessions/api';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
-import {
-  mergeSessionMessagesWithPersistedThinking,
-  persistSessionThinkingSnapshot,
-} from '@/lib/chatThinkingPersistence';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatMessage, SessionDetail } from '@/lib/types';
 import { mergeLatestCommittedMessages } from './chatHistoryMerge';
+import { useChatHistoryRecovery } from './useChatHistoryRecovery';
 import type { ChatStateControls } from './types';
 
 const HISTORY_PAGE_LIMIT = 100;
@@ -17,6 +14,8 @@ interface UseChatHistoryOptions {
   clearChatError: ChatStateControls['clearChatError'];
   clearPendingQuestions: ChatStateControls['clearPendingQuestions'];
   clearStreamingState: ChatStateControls['clearStreamingState'];
+  applyRuntimeActions: ChatStateControls['applyRuntimeActions'];
+  hydrateTurnDraft: ChatStateControls['hydrateTurnDraft'];
   replaceWithErrorMessage: ChatStateControls['replaceWithErrorMessage'];
   setCommittedMessages: ChatStateControls['setCommittedMessages'];
   setHasOlderHistory: ChatStateControls['setHasOlderHistory'];
@@ -24,6 +23,11 @@ interface UseChatHistoryOptions {
   setLoadingOlderHistory: ChatStateControls['setLoadingOlderHistory'];
   setNextHistoryBefore: ChatStateControls['setNextHistoryBefore'];
   setChatError: ChatStateControls['setChatError'];
+  setActiveRun: ChatStateControls['setActiveRun'];
+  setLoading: ChatStateControls['setLoading'];
+  setStopPending: ChatStateControls['setStopPending'];
+  beginHistorySync: ChatStateControls['beginHistorySync'];
+  endHistorySync: ChatStateControls['endHistorySync'];
   nextHistoryBefore: ChatStateControls['nextHistoryBefore'];
 }
 
@@ -33,6 +37,8 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     clearChatError,
     clearPendingQuestions,
     clearStreamingState,
+    applyRuntimeActions,
+    hydrateTurnDraft,
     replaceWithErrorMessage,
     setCommittedMessages,
     setHasOlderHistory,
@@ -40,54 +46,85 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     setLoadingOlderHistory,
     setNextHistoryBefore,
     setChatError,
+    setActiveRun,
+    setLoading,
+    setStopPending,
+    beginHistorySync,
+    endHistorySync,
     nextHistoryBefore,
   } = options;
+  const { recoverTurnDraft, stopRecoveredRun } = useChatHistoryRecovery({
+    applyRuntimeActions,
+    beginHistorySync,
+    clearPendingQuestions,
+    clearStreamingState,
+    endHistorySync,
+    hydrateTurnDraft,
+    setActiveRun,
+    setChatError,
+    setCommittedMessages,
+    setHasOlderHistory,
+    setLoading,
+    setNextHistoryBefore,
+    setStopPending,
+  });
 
   const hydrateSessionHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
     applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
-    clearStreamingState();
     clearPendingQuestions();
-    const merged = mergeSessionMessagesWithPersistedThinking(
-      detail.id,
-      mapSessionMessagesToChat(detail.id, detail.messages),
-    );
-    setCommittedMessages(merged);
-    persistSessionThinkingSnapshot(detail.id, merged);
+    setCommittedMessages(mapSessionMessagesToChat(detail.id, detail.messages));
+    if (detail.turn_draft) {
+      recoverTurnDraft(detail.id, detail.turn_draft);
+      return;
+    }
+    stopRecoveredRun();
+    clearStreamingState();
+    hydrateTurnDraft(null);
+    setActiveRun(null);
+    setLoading(false);
+    setStopPending(false);
   }, [
     clearPendingQuestions,
     clearStreamingState,
+    hydrateTurnDraft,
+    recoverTurnDraft,
+    setActiveRun,
     setCommittedMessages,
     setHasOlderHistory,
+    setLoading,
     setNextHistoryBefore,
+    setStopPending,
+    stopRecoveredRun,
   ]);
 
   const syncRecentHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
     applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
-    const latest = mergeSessionMessagesWithPersistedThinking(
-      detail.id,
-      mapSessionMessagesToChat(detail.id, detail.messages),
-    );
+    const latest = mapSessionMessagesToChat(detail.id, detail.messages);
     setCommittedMessages((previous) => {
-      const merged = mergeLatestCommittedMessages(previous, latest);
-      persistSessionThinkingSnapshot(detail.id, merged);
-      return merged;
+      return mergeLatestCommittedMessages(previous, latest);
     });
   }, [setCommittedMessages, setHasOlderHistory, setNextHistoryBefore]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();
     if (!id) {
+      stopRecoveredRun();
       clearStreamingState();
+      hydrateTurnDraft(null);
       clearPendingQuestions();
       setCommittedMessages([]);
       setHasOlderHistory(false);
       setNextHistoryBefore(null);
+      setActiveRun(null);
+      setLoading(false);
+      setStopPending(false);
       return;
     }
 
     clearChatError();
+    stopRecoveredRun();
     setHistoryLoading(true);
     try {
       await hydrateSessionHistory(id);
@@ -103,13 +140,17 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     clearChatError,
     clearPendingQuestions,
     clearStreamingState,
+    hydrateTurnDraft,
     hydrateSessionHistory,
     replaceWithErrorMessage,
+    setActiveRun,
     setChatError,
     setCommittedMessages,
     setHasOlderHistory,
     setHistoryLoading,
+    setLoading,
     setNextHistoryBefore,
+    stopRecoveredRun,
   ]);
 
   const loadOlderHistory = useCallback(async (sessionId: string) => {
@@ -126,14 +167,9 @@ export function useChatHistory(options: UseChatHistoryOptions) {
         limit: HISTORY_PAGE_LIMIT,
       });
       applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
-      const older = mergeSessionMessagesWithPersistedThinking(
-        detail.id,
-        mapSessionMessagesToChat(detail.id, detail.messages),
-      );
+      const older = mapSessionMessagesToChat(detail.id, detail.messages);
       setCommittedMessages((previous) => {
-        const merged = prependUniqueCommittedMessages(previous, older);
-        persistSessionThinkingSnapshot(detail.id, merged);
-        return merged;
+        return prependUniqueCommittedMessages(previous, older);
       });
     } catch (error) {
       setChatError(toErrorMessage(error, copy.system.genericRequestFailed));

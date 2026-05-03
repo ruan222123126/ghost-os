@@ -3,6 +3,7 @@ import type {
   WorkflowInputVariable,
   WorkflowNode,
 } from '@/lib/types';
+import { cloneWorkflowTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
 import {
   LOOP_ROLE_END,
   LOOP_ROLE_START,
@@ -70,7 +71,12 @@ function createCanvasNode(node: WorkflowCanvasNodeSource, index: number): Workfl
         system_prompt: node.llm.system_prompt,
       }
       : undefined,
-    agent: node.agent ? { message: node.agent.message } : undefined,
+    agent: node.agent
+      ? {
+        message: node.agent.message,
+        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
+      }
+      : undefined,
     if: node.if
       ? {
         source_node_id: node.if.source_node_id,
@@ -187,7 +193,12 @@ function workflowNodeToCanvasSource(node: WorkflowNode): WorkflowCanvasNodeSourc
         system_prompt: node.llm.system_prompt,
       }
       : undefined,
-    agent: node.agent ? { message: node.agent.message } : undefined,
+    agent: node.agent
+      ? {
+        message: node.agent.message,
+        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
+      }
+      : undefined,
     if: node.if
       ? {
         source_node_id: node.if.source_node_id,

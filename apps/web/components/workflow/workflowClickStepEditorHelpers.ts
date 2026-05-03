@@ -7,17 +7,26 @@ import {
 
 export const CLICK_POSITION_TYPE_KEY = 'position_type';
 export const CLICK_DISPLAY_ID_KEY = 'display_id';
+export const CLICK_COORDINATE_REF_KEY = 'coordinate_ref';
 export const POSITION_TYPE_RELATIVE = 'relative';
 export const POSITION_TYPE_ABSOLUTE = 'absolute';
 export const CLICK_MOUSE_POLL_MS = 120;
+export const CLICK_COORDINATE_SOURCE_MANUAL = 'manual';
+export const CLICK_COORDINATE_SOURCE_FIND_ICON = 'find_icon';
+export const SCREEN_CONTROL_FIND_ICON_COORDINATE_REF = '${find_icon}';
 
 export type ClickPositionType =
   | typeof POSITION_TYPE_RELATIVE
   | typeof POSITION_TYPE_ABSOLUTE;
 
+export type ClickCoordinateSource =
+  | typeof CLICK_COORDINATE_SOURCE_MANUAL
+  | typeof CLICK_COORDINATE_SOURCE_FIND_ICON;
+
 export interface ClickEditorState {
   x: string;
   y: string;
+  coordinateSource: ClickCoordinateSource;
   positionType: ClickPositionType;
   displayID?: number | null;
 }
@@ -30,6 +39,7 @@ export function buildInitialEditorState(
   return {
     x: params === undefined ? '' : String(params.x),
     y: params === undefined ? '' : String(params.y),
+    coordinateSource: parseCoordinateSource(source[CLICK_COORDINATE_REF_KEY]),
     positionType: parsePositionType(source[CLICK_POSITION_TYPE_KEY]),
     displayID: parseOptionalDisplayID(source[CLICK_DISPLAY_ID_KEY]),
   };
@@ -39,6 +49,9 @@ export function buildSavedClickStep(
   step: ScreenControlComposerStep,
   state: ClickEditorState,
 ): ScreenControlComposerStep {
+  if (state.coordinateSource === CLICK_COORDINATE_SOURCE_FIND_ICON) {
+    return buildFindIconReferenceClickStep(step);
+  }
   const baseStep = withClickComposerParams(step, {
     x: parseCoordinate(state.x, 'x'),
     y: parseCoordinate(state.y, 'y'),
@@ -69,6 +82,7 @@ export function applyMousePositionToState(
     ...state,
     x: String(position.x),
     y: String(position.y),
+    coordinateSource: CLICK_COORDINATE_SOURCE_MANUAL,
     positionType: POSITION_TYPE_ABSOLUTE,
     displayID: position.display_id ?? null,
   };
@@ -96,6 +110,29 @@ export function parsePositionType(raw: unknown): ClickPositionType {
     return POSITION_TYPE_ABSOLUTE;
   }
   return POSITION_TYPE_RELATIVE;
+}
+
+function parseCoordinateSource(raw: unknown): ClickCoordinateSource {
+  if (raw === SCREEN_CONTROL_FIND_ICON_COORDINATE_REF) {
+    return CLICK_COORDINATE_SOURCE_FIND_ICON;
+  }
+  return CLICK_COORDINATE_SOURCE_MANUAL;
+}
+
+function buildFindIconReferenceClickStep(
+  step: ScreenControlComposerStep,
+): ScreenControlComposerStep {
+  const nextParams = { ...asRecord(step.params) };
+  nextParams[CLICK_COORDINATE_REF_KEY] = SCREEN_CONTROL_FIND_ICON_COORDINATE_REF;
+  delete nextParams.x;
+  delete nextParams.y;
+  delete nextParams[CLICK_POSITION_TYPE_KEY];
+  delete nextParams[CLICK_DISPLAY_ID_KEY];
+  return {
+    ...step,
+    action: 'click',
+    params: nextParams,
+  };
 }
 
 function parseOptionalDisplayID(raw: unknown): number | null | undefined {

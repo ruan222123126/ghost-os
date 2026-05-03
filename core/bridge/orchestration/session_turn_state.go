@@ -90,6 +90,7 @@ func (s *sessionTurnState) complete(
 
 	newMessages := s.newMessagesForCommit()
 	s.clearAssistantDraftBeforeCommit(newMessages, runErr, awaitingHuman)
+	s.clearTurnDraftBeforeCommit(runErr, awaitingHuman)
 	if err := s.persistTurnCompletion(newMessages, awaitingHuman, onPersistErr); err != nil {
 		return "", "", err
 	}
@@ -182,6 +183,16 @@ func (s *sessionTurnState) clearAssistantDraftBeforeCommit(
 		return
 	}
 	s.sess.ClearAssistantDraft(time.Now().UTC())
+}
+
+func (s *sessionTurnState) clearTurnDraftBeforeCommit(runErr error, awaitingHuman bool) {
+	if s == nil || s.sess == nil || s.sess.TurnDraft == nil {
+		return
+	}
+	if runErr != nil && !awaitingHuman {
+		return
+	}
+	s.sess.ClearTurnDraft(time.Now().UTC())
 }
 
 func (s *sessionTurnState) messagesForPersistence(

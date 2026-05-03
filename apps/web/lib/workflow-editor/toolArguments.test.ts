@@ -27,17 +27,21 @@ describe('lib/workflow-editor/toolArguments', () => {
     expect(() => jsonTextToToolArguments('[]')).toThrow('tool arguments JSON must be an object');
   });
 
-  it('keeps template references in typed rows', () => {
+  it('keeps find_icon references in typed rows', () => {
     expect(rowsToToolArguments([
-      { key: 'limit', valueType: 'number', value: '${inputs.limit}' },
-      { key: 'strict', valueType: 'boolean', value: '${outputs.if-node.ok}' },
-      { key: 'payload', valueType: 'object', value: '${outputs.tool-node.data}' },
-      { key: 'items', valueType: 'array', value: '${inputs.items}' },
+      { key: 'limit', valueType: 'number', value: '${find_icon.x}' },
+      { key: 'payload', valueType: 'object', value: '${find_icon}' },
+      { key: 'items', valueType: 'array', value: '${find_icon.matches}' },
     ])).toEqual({
-      limit: '${inputs.limit}',
-      strict: '${outputs.if-node.ok}',
-      payload: '${outputs.tool-node.data}',
-      items: '${inputs.items}',
+      limit: '${find_icon.x}',
+      payload: '${find_icon}',
+      items: '${find_icon.matches}',
     });
+  });
+
+  it('rejects deprecated non-find_icon references in typed rows', () => {
+    expect(() => rowsToToolArguments([
+      { key: 'limit', valueType: 'number', value: '${inputs.limit}' },
+    ])).toThrow('number value is invalid');
   });
 });

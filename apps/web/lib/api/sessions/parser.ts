@@ -25,6 +25,7 @@ import {
   parseOptionalSelectionMode,
   parseOptionalString,
 } from '@/lib/api/shared';
+import { parseOptionalSessionTurnDraft } from './parser.turnDraft';
 
 const SESSION_ROLES = defineStringEnumValues<SessionMessage['role']>({
   system: true,
@@ -196,6 +197,7 @@ function parseSessionMessage(value: unknown, label: string): SessionMessage {
     ),
     tool_call_id: parseOptionalString(record.tool_call_id, `${label}.tool_call_id`),
     in_progress: parseOptionalBoolean(record.in_progress, `${label}.in_progress`),
+    thinking: parseOptionalString(record.thinking, `${label}.thinking`),
   };
 }
 
@@ -239,10 +241,7 @@ function parseSessionSidebarPartition(
   label: string,
 ): SessionSidebarPartition {
   const record = expectRecord(value, label);
-  return {
-    id: expectString(record.id, `${label}.id`),
-    name: expectString(record.name, `${label}.name`),
-  };
+  return { id: expectString(record.id, `${label}.id`), name: expectString(record.name, `${label}.name`) };
 }
 
 export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
@@ -263,26 +262,15 @@ export function parseSessionSidebarPartitionState(payload: unknown): SessionSide
     throw new Error('Invalid session sidebar partition state.partitions: expected array');
   }
 
-  const assignmentsRecord = expectRecord(
-    record.assignments,
-    'session sidebar partition state.assignments',
-  );
+  const assignmentsRecord = expectRecord(record.assignments, 'session sidebar partition state.assignments');
   const assignments: Record<string, string> = {};
   for (const [sessionID, partitionID] of Object.entries(assignmentsRecord)) {
-    assignments[sessionID] = expectString(
-      partitionID,
-      `session sidebar partition state.assignments.${sessionID}`,
-    );
+    assignments[sessionID] = expectString(partitionID, `session sidebar partition state.assignments.${sessionID}`);
   }
 
   return {
     version: 1,
-    partitions: record.partitions.map((partition, index) => {
-      return parseSessionSidebarPartition(
-        partition,
-        `session sidebar partition state.partitions[${index}]`,
-      );
-    }),
+    partitions: record.partitions.map((partition, index) => parseSessionSidebarPartition(partition, `session sidebar partition state.partitions[${index}]`)),
     assignments,
   };
 }
@@ -295,13 +283,12 @@ export function parseSessionDetail(payload: unknown): SessionDetail {
 
   return {
     id: expectString(record.id, 'session detail.id'),
-    messages: record.messages.map((message, index) => {
-      return parseSessionMessage(message, `session detail.messages[${index}]`);
-    }),
+    messages: record.messages.map((message, index) => parseSessionMessage(message, `session detail.messages[${index}]`)),
     created_at: expectString(record.created_at, 'session detail.created_at'),
     updated_at: expectString(record.updated_at, 'session detail.updated_at'),
     message_count: expectNumber(record.message_count, 'session detail.message_count'),
     page: parseSessionPage(record.page, 'session detail.page'),
     token_count: expectNumber(record.token_count, 'session detail.token_count'),
+    turn_draft: parseOptionalSessionTurnDraft(record.turn_draft, 'session detail.turn_draft'),
   };
 }

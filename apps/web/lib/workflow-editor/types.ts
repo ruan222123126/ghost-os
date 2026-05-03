@@ -1,4 +1,5 @@
 import type {
+  TaskRuntimeOverrides,
   TaskUpdateRequest,
   WorkflowDefinition,
   WorkflowInputVariable,
@@ -12,7 +13,6 @@ export type WorkflowEditorKind = 'workflow' | 'orchestration';
 export type WorkflowToolArgumentsMode = 'json' | 'kv';
 export type WorkflowScheduleMode = 'interval' | 'cron';
 export type WorkflowNodeType = WorkflowNode['type'];
-export type WorkflowVariableSection = 'start' | 'builtin' | 'upstream';
 export type ScreenControlAtomicAction =
   | 'screenshot'
   | 'find_text'
@@ -68,6 +68,7 @@ export interface WorkflowCanvasNodeDraft {
   };
   agent?: {
     message: string;
+    runtime_overrides?: TaskRuntimeOverrides;
   };
   if?: {
     source_node_id?: string;
@@ -109,20 +110,6 @@ export interface WorkflowCanvasDraft {
 export interface WorkflowValidationResult {
   valid: boolean;
   errors: string[];
-}
-
-export interface WorkflowVariableOption {
-  token: string;
-  label: string;
-  section: WorkflowVariableSection;
-  searchText: string;
-}
-
-export interface VariableTriggerRange {
-  start: number;
-  end: number;
-  query: string;
-  trigger: '{' | '${';
 }
 
 export interface SessionImportResult {

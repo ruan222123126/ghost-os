@@ -28,6 +28,7 @@ type Session struct {
 	DynamicToolLoads  map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
 	DynamicSkillLoads map[string]DynamicSkillLoad     `json:"dynamic_skill_loads,omitempty"`
 	AssistantDraft    *AssistantDraft                 `json:"assistant_draft,omitempty"`
+	TurnDraft         *TurnDraft                      `json:"turn_draft,omitempty"`
 
 	persistedMessageCount int
 	persistedMessages     []llm.Message

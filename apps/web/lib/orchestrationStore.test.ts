@@ -29,7 +29,17 @@ describe('lib/orchestrationStore', () => {
           type: 'agent' as const,
           position: { x: 120, y: 160 },
           ui: { toolArgumentsMode: 'json' as const },
-          agent: { message: '执行编排' },
+          agent: {
+            message: '执行编排',
+            runtime_overrides: {
+              provider_name: 'openai-main',
+              model: 'gpt-5.4',
+              system_prompt: '只输出结果',
+              tool_allowlist_only: true,
+              tool_allowlist: ['script_exec'],
+              max_turns: 2,
+            },
+          },
         },
       ],
     };
@@ -43,6 +53,14 @@ describe('lib/orchestrationStore', () => {
       name: '晨间编排',
     }));
     expect(loaded?.draft.nodes).toHaveLength(3);
+    expect(loaded?.draft.nodes[2]?.agent?.runtime_overrides).toEqual({
+      provider_name: 'openai-main',
+      model: 'gpt-5.4',
+      system_prompt: '只输出结果',
+      tool_allowlist_only: true,
+      tool_allowlist: ['script_exec'],
+      max_turns: 2,
+    });
     expect(listOrchestrationSummaries(storage)[0]?.stepCount).toBe(1);
   });
 

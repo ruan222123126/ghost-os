@@ -238,6 +238,7 @@ type sessionMessage struct {
 	HumanInteraction *sessionHumanInteraction `json:"human_interaction,omitempty"`
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	InProgress bool `json:"in_progress,omitempty"`
+	Thinking string `json:"thinking,omitempty"`
 }
 
 // agentDonePayload 对齐 core/shared/schema.json 的 agentDonePayload。
@@ -286,6 +287,33 @@ type sessionMessagePage struct {
 	NextBefore *int `json:"next_before,omitempty"`
 }
 
+// sessionTurnDraftSegment 对齐 core/shared/schema.json 的 sessionTurnDraftSegment。
+type sessionTurnDraftSegment struct {
+	ID string `json:"id"`
+	Content string `json:"content"`
+}
+
+// sessionTurnDraftTool 对齐 core/shared/schema.json 的 sessionTurnDraftTool。
+type sessionTurnDraftTool struct {
+	ID string `json:"id"`
+	Content string `json:"content"`
+	ToolInput string `json:"tool_input,omitempty"`
+	ToolName string `json:"tool_name,omitempty"`
+	ToolStatus string `json:"tool_status,omitempty"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	TraceID string `json:"trace_id,omitempty"`
+}
+
+// sessionTurnDraft 对齐 core/shared/schema.json 的 sessionTurnDraft。
+type sessionTurnDraft struct {
+	TraceID string `json:"trace_id"`
+	Turn int `json:"turn"`
+	AssistantSegments []sessionTurnDraftSegment `json:"assistant_segments"`
+	ThinkingSegments []sessionTurnDraftSegment `json:"thinking_segments"`
+	Tools []sessionTurnDraftTool `json:"tools"`
+	ItemOrder []string `json:"item_order"`
+}
+
 // agentErrorPayload 对齐 core/shared/schema.json 的 agentErrorPayload。
 type agentErrorPayload struct {
 	Message string `json:"message"`
@@ -302,6 +330,7 @@ type sessionDetail struct {
 	MessageCount int `json:"message_count"`
 	Page sessionMessagePage `json:"page"`
 	TokenCount int `json:"token_count"`
+	TurnDraft *sessionTurnDraft `json:"turn_draft,omitempty"`
 }
 
 // configResponse 对齐 core/shared/schema.json 的 bridgeConfig。
@@ -431,6 +460,16 @@ type workflowDefinitionContract struct {
 	Edges []workflowEdgeContract `json:"edges"`
 }
 
+// taskRuntimeOverridesContract 对齐 core/shared/schema.json 的 taskRuntimeOverrides。
+type taskRuntimeOverridesContract struct {
+	ProviderName string `json:"provider_name,omitempty"`
+	Model string `json:"model,omitempty"`
+	SystemPrompt string `json:"system_prompt,omitempty"`
+	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
+	ToolAllowlistOnly *bool `json:"tool_allowlist_only,omitempty"`
+	MaxTurns *int `json:"max_turns,omitempty"`
+}
+
 // workflowToolNodeContract 对齐 core/shared/schema.json 的 workflowToolNode。
 type workflowToolNodeContract struct {
 	ToolName string `json:"tool_name"`
@@ -446,6 +485,7 @@ type workflowLLMNodeContract struct {
 // workflowAgentNodeContract 对齐 core/shared/schema.json 的 workflowAgentNode。
 type workflowAgentNodeContract struct {
 	Message string `json:"message"`
+	RuntimeOverrides taskRuntimeOverridesContract `json:"runtime_overrides,omitempty"`
 }
 
 // workflowIfNodeContract 对齐 core/shared/schema.json 的 workflowIfNode。

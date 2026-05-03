@@ -127,7 +127,7 @@ function serializeSchemaValue(value: unknown, valueType: WorkflowToolArgumentRow
   if (value === undefined || valueType === 'null') {
     return '';
   }
-  if (typeof value === 'string' && isTemplateReference(value)) {
+  if (typeof value === 'string' && isFindIconReference(value)) {
     return value;
   }
   if (valueType === 'object' || valueType === 'array') {
@@ -136,8 +136,8 @@ function serializeSchemaValue(value: unknown, valueType: WorkflowToolArgumentRow
   return String(value);
 }
 
-function isTemplateReference(value: string): boolean {
-  return /^\$\{[^}]+\}$/.test(value.trim());
+function isFindIconReference(value: string): boolean {
+  return /^\$\{find_icon(?:\.[A-Za-z0-9_-]+)*\}$/.test(value.trim());
 }
 
 export function extractSchemaFields(

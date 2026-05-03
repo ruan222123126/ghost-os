@@ -91,6 +91,9 @@ func TestRunTurnStreamInputPersistsAssistantDraftOnError(t *testing.T) {
 	if loaded.AssistantDraft.Text != "partial answer" {
 		t.Fatalf("unexpected assistant draft: %q", loaded.AssistantDraft.Text)
 	}
+	if loaded.TurnDraft != nil {
+		t.Fatalf("expected turn_draft to be cleared after error, got %+v", loaded.TurnDraft)
+	}
 }
 
 func TestRunTurnStreamInputPersistsAssistantDraftOnCancel(t *testing.T) {
@@ -136,6 +139,9 @@ func TestRunTurnStreamInputPersistsAssistantDraftOnCancel(t *testing.T) {
 	if loaded.AssistantDraft.Text != "partial answer" {
 		t.Fatalf("unexpected assistant draft: %q", loaded.AssistantDraft.Text)
 	}
+	if loaded.TurnDraft != nil {
+		t.Fatalf("expected turn_draft to be cleared after cancellation, got %+v", loaded.TurnDraft)
+	}
 }
 
 func TestRunTurnInputClearsAssistantDraftOnSuccess(t *testing.T) {
@@ -143,6 +149,10 @@ func TestRunTurnInputClearsAssistantDraftOnSuccess(t *testing.T) {
 	sess := newPersistedSessionForDraftTests(t, sessionStore, "session-success-clear-draft")
 	sess.AssistantDraft = &session.AssistantDraft{
 		Text:    "stale draft",
+		TraceID: "trace-old",
+		Turn:    1,
+	}
+	sess.TurnDraft = &session.TurnDraft{
 		TraceID: "trace-old",
 		Turn:    1,
 	}
@@ -173,6 +183,9 @@ func TestRunTurnInputClearsAssistantDraftOnSuccess(t *testing.T) {
 	}
 	if loaded.AssistantDraft != nil {
 		t.Fatalf("expected assistant draft to be cleared, got %+v", loaded.AssistantDraft)
+	}
+	if loaded.TurnDraft != nil {
+		t.Fatalf("expected turn_draft to be cleared, got %+v", loaded.TurnDraft)
 	}
 }
 

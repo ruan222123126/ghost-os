@@ -6,8 +6,10 @@ import {
   expectStringEnum,
   pickKnownKeys,
   parseOptionalBoolean,
+  parseOptionalNumber,
   parseOptionalRecord,
   parseOptionalString,
+  parseOptionalStringArray,
 } from '@/lib/api/shared';
 
 const WORKFLOW_KEYS = ['nodes', 'edges'] as const;
@@ -17,7 +19,15 @@ const WORKFLOW_INPUT_VARIABLE_KEYS = ['name', 'type', 'required', 'default', 'de
 const WORKFLOW_INPUT_VARIABLE_TYPES = ['string', 'number', 'boolean', 'object', 'array'] as const;
 const WORKFLOW_TOOL_KEYS = ['tool_name', 'arguments'] as const;
 const WORKFLOW_LLM_KEYS = ['prompt', 'system_prompt'] as const;
-const WORKFLOW_AGENT_KEYS = ['message'] as const;
+const WORKFLOW_AGENT_KEYS = ['message', 'runtime_overrides'] as const;
+const TASK_RUNTIME_OVERRIDE_KEYS = [
+  'provider_name',
+  'model',
+  'system_prompt',
+  'tool_allowlist',
+  'tool_allowlist_only',
+  'max_turns',
+] as const;
 const WORKFLOW_IF_KEYS = ['source_node_id', 'operator', 'value', 'true_node_id', 'false_node_id'] as const;
 const WORKFLOW_LOOP_KEYS = ['max_iterations', 'body_node_id', 'exit_node_id'] as const;
 const WORKFLOW_IF_OPERATORS = ['equals', 'not_equals', 'contains', 'not_contains', 'is_empty', 'not_empty'] as const;
@@ -36,13 +46,25 @@ interface ParsedWorkflowStartNode {
   inputs?: ParsedWorkflowInputVariable[];
 }
 
+interface ParsedTaskRuntimeOverrides {
+  provider_name?: string;
+  model?: string;
+  system_prompt?: string;
+  tool_allowlist?: string[];
+  tool_allowlist_only?: boolean;
+  max_turns?: number;
+}
+
 interface ParsedWorkflowNode {
   id: string;
   type: 'start' | 'tool' | 'llm' | 'agent' | 'if' | 'loop' | 'end';
   start?: ParsedWorkflowStartNode;
   tool?: { tool_name: string; arguments?: Record<string, unknown> };
   llm?: { prompt: string; system_prompt?: string };
-  agent?: { message: string };
+  agent?: {
+    message: string;
+    runtime_overrides?: ParsedTaskRuntimeOverrides;
+  };
   if?: {
     source_node_id?: string;
     operator: (typeof WORKFLOW_IF_OPERATORS)[number];
@@ -158,7 +180,40 @@ function parseWorkflowLLMNode(value: Record<string, unknown>, label: string): Pa
 
 function parseWorkflowAgentNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['agent'] {
   const picked = pickKnownKeys(value, WORKFLOW_AGENT_KEYS);
-  return { message: expectString(picked.message, `${label}.message`) };
+  return {
+    message: expectString(picked.message, `${label}.message`),
+    runtime_overrides: parseTaskRuntimeOverrides(picked.runtime_overrides, `${label}.runtime_overrides`),
+  };
+}
+
+function parseTaskRuntimeOverrides(
+  value: unknown,
+  label: string,
+): ParsedTaskRuntimeOverrides | undefined {
+  const record = parseOptionalRecord(value, label);
+  if (record === undefined) {
+    return undefined;
+  }
+  const picked = pickKnownKeys(record, TASK_RUNTIME_OVERRIDE_KEYS);
+  const parsed = {
+    provider_name: parseOptionalString(picked.provider_name, `${label}.provider_name`),
+    model: parseOptionalString(picked.model, `${label}.model`),
+    system_prompt: parseOptionalString(picked.system_prompt, `${label}.system_prompt`),
+    tool_allowlist: parseOptionalStringArray(picked.tool_allowlist, `${label}.tool_allowlist`),
+    tool_allowlist_only: parseOptionalBoolean(picked.tool_allowlist_only, `${label}.tool_allowlist_only`),
+    max_turns: parseOptionalNumber(picked.max_turns, `${label}.max_turns`),
+  };
+  if (
+    !parsed.provider_name
+    && !parsed.model
+    && !parsed.system_prompt
+    && !parsed.tool_allowlist?.length
+    && parsed.tool_allowlist_only === undefined
+    && parsed.max_turns === undefined
+  ) {
+    return undefined;
+  }
+  return parsed;
 }
 
 function parseWorkflowIfNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['if'] {

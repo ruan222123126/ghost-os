@@ -127,6 +127,25 @@
   padding: 0;
 }
 
+.message-assistant-frame {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  --message-inline-copy-slot: 72px;
+}
+
+.message-assistant-frame.has-trailing-tool {
+  position: relative;
+  width: min(100%, 820px);
+}
+
+.message-assistant-frame.has-trailing-tool .message-assistant-body {
+  max-width: none;
+  min-width: 0;
+  padding-right: var(--message-inline-copy-slot);
+}
+
 .message-content {
   color: rgb(38 38 38);
   font-size: 15px;
@@ -201,6 +220,12 @@
 
 .message-row:hover .message-actions {
   opacity: 1;
+}
+
+.message-actions.is-inline-with-body {
+  position: absolute;
+  top: 0;
+  right: 0;
 }
 
 .copy-button {

@@ -56,6 +56,9 @@ export function OrchestrationEditorClient(props: OrchestrationEditorClientProps)
       validationErrors={controller.validationErrors}
       importSessionID={controller.importSessionID}
       importLoading={controller.importLoading}
+      agentRuntimeCatalog={controller.agentRuntimeCatalog}
+      agentRuntimeLoading={controller.agentRuntimeLoading}
+      agentRuntimeError={controller.agentRuntimeError}
       workflowCopy={controller.workflowCopy}
       nodeLibraryTypes={ORCHESTRATION_NODE_LIBRARY_TYPES}
       localizeValidationError={controller.localizeValidationError}

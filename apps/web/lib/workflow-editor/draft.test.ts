@@ -68,6 +68,14 @@ describe('lib/workflow-editor/draft', () => {
             type: 'agent',
             agent: {
               message: 'Send summary to session',
+              runtime_overrides: {
+                provider_name: 'openai-main',
+                model: 'gpt-5.4',
+                system_prompt: 'You are concise.',
+                tool_allowlist_only: true,
+                tool_allowlist: ['script_exec'],
+                max_turns: 3,
+              },
             },
           },
           {

@@ -25,6 +25,7 @@ interface NormalizedSessionMessage {
   index: number;
   role: SessionMessageRole | '';
   text: string;
+  thinking: string;
   inProgress?: boolean;
   content?: SessionContentPart[];
   toolCalls?: unknown[];
@@ -47,6 +48,7 @@ function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMess
     index: message.index,
     role: message.role,
     text: message.text ?? '',
+    thinking: message.thinking ?? '',
     inProgress: message.in_progress,
     content: message.content ?? undefined,
     toolCalls: message.tool_calls,
@@ -97,17 +99,9 @@ function buildSessionQuestionMessages(sessionId: string, message: NormalizedSess
     return [];
   }
 
-  const mapped: ChatMessage[] = [buildQuestionMessage(
-    message.humanInteraction.prompt,
-    message.humanInteraction.question_id,
-    message.humanInteraction.selection_mode,
-    message.humanInteraction.options,
-    buildSessionMessageID(sessionId, message.index, 'question'),
-  )];
+  const mapped: ChatMessage[] = [buildQuestionMessage(message.humanInteraction.prompt, message.humanInteraction.question_id, message.humanInteraction.selection_mode, message.humanInteraction.options, buildSessionMessageID(sessionId, message.index, 'question'))];
   if (message.humanInteraction.answer) {
-    mapped.push(buildUserMessage(message.humanInteraction.answer, {
-      id: buildSessionMessageID(sessionId, message.index, 'answer'),
-    }));
+    mapped.push(buildUserMessage(message.humanInteraction.answer, { id: buildSessionMessageID(sessionId, message.index, 'answer') }));
   }
   return mapped;
 }
@@ -195,15 +189,25 @@ function mapToolSessionMessage(
 
   const toolResult = message.toolResult;
   const matchedToolCall = resolveSessionToolCall(message.toolCallId, toolCallLookup);
-  return [buildToolChatMessage({
-    content: message.content,
-    index: message.index,
-    sessionId,
-    text: message.text,
-    toolCallId: message.toolCallId,
-    toolCall: matchedToolCall,
-    toolResult,
-  })];
+  return [buildToolChatMessage({ content: message.content, index: message.index, sessionId, text: message.text, toolCallId: message.toolCallId, toolCall: matchedToolCall, toolResult })];
+}
+
+function buildSessionAssistantMessages(
+  sessionId: string,
+  message: NormalizedSessionMessage,
+): ChatMessage[] {
+  const mapped: ChatMessage[] = [];
+  if (message.thinking.trim()) {
+    mapped.push(buildThinkingMessage(message.thinking, buildSessionMessageID(sessionId, message.index, 'thinking')));
+  }
+
+  const visibleText = stripToolTagCalls(message.text);
+  if (!visibleText.trim()) {
+    return mapped;
+  }
+
+  mapped.push(buildAssistantMessage(visibleText, buildSessionMessageID(sessionId, message.index, 'assistant'), message.inProgress));
+  return mapped;
 }
 
 export function mapSessionMessageToChatMessages(
@@ -214,32 +218,13 @@ export function mapSessionMessageToChatMessages(
   const normalized = normalizeSessionMessage(message);
   switch (normalized.role) {
     case 'user':
-      return [buildUserMessage(normalized.text, {
-        id: buildSessionMessageID(sessionId, normalized.index, 'user'),
-        images: imagesFromContent(normalized.content),
-      })];
+      return [buildUserMessage(normalized.text, { id: buildSessionMessageID(sessionId, normalized.index, 'user'), images: imagesFromContent(normalized.content) })];
     case 'assistant':
-      const visibleText = stripToolTagCalls(normalized.text);
-      if (!visibleText.trim()) {
-        return [];
-      }
-      return [buildAssistantMessage(
-        visibleText,
-        buildSessionMessageID(sessionId, normalized.index, 'assistant'),
-        normalized.inProgress,
-      )];
+      return buildSessionAssistantMessages(sessionId, normalized);
     case 'system':
-      return [buildSystemMessage(
-        normalized.text || '[system]',
-        buildSessionMessageID(sessionId, normalized.index, 'system'),
-        'system',
-      )];
+      return [buildSystemMessage(normalized.text || '[system]', buildSessionMessageID(sessionId, normalized.index, 'system'), 'system')];
     case 'internal':
-      return [buildSystemMessage(
-        filterToolTagResultToLoadedTools(normalized.text) || '[internal]',
-        buildSessionMessageID(sessionId, normalized.index, 'internal'),
-        'internal',
-      )];
+      return [buildSystemMessage(filterToolTagResultToLoadedTools(normalized.text) || '[internal]', buildSessionMessageID(sessionId, normalized.index, 'internal'), 'internal')];
     case 'tool':
       return mapToolSessionMessage(sessionId, normalized, toolCallLookup);
     default:
@@ -266,10 +251,7 @@ export function mapAgentReplyToChatMessages(reply: AgentSendResponse): ChatMessa
 }
 
 export function findPendingQuestion(messages: ChatMessage[], questionId: string): PendingQuestionMessage | undefined {
-  return messages.find(
-    (message): message is PendingQuestionMessage =>
-      message.kind === 'pending_question' && message.questionId === questionId,
-  );
+  return messages.find((message): message is PendingQuestionMessage => message.kind === 'pending_question' && message.questionId === questionId);
 }
 
 export function hasPendingQuestion(messages: ChatMessage[]): boolean {
@@ -277,16 +259,9 @@ export function hasPendingQuestion(messages: ChatMessage[]): boolean {
 }
 
 export function replacePendingQuestionWithUserAnswer(messages: ChatMessage[], questionId: string, answer: string): ChatMessage[] {
-  return messages.flatMap((message) => {
-    if (message.kind === 'pending_question' && message.questionId === questionId) {
-      return [buildUserMessage(answer)];
-    }
-    return [message];
-  });
+  return messages.flatMap((message) => message.kind === 'pending_question' && message.questionId === questionId ? [buildUserMessage(answer)] : [message]);
 }
 
 export function removePendingQuestion(messages: ChatMessage[], questionId: string): ChatMessage[] {
-  return messages.filter(
-    (message) => !(message.kind === 'pending_question' && message.questionId === questionId),
-  );
+  return messages.filter((message) => !(message.kind === 'pending_question' && message.questionId === questionId));
 }

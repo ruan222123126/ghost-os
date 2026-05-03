@@ -47,6 +47,24 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 		Turn:      4,
 		UpdatedAt: s.UpdatedAt,
 	}
+	s.TurnDraft = &TurnDraft{
+		TraceID: "trace-draft",
+		Turn:    4,
+		AssistantSegments: []TurnDraftSegment{
+			{ID: "stream-segment:assistant:1", Content: "partial answer"},
+		},
+		ThinkingSegments: []TurnDraftSegment{
+			{ID: "stream-segment:thinking:1", Content: "analyzing"},
+		},
+		Tools: []TurnDraftTool{
+			{ID: "stream-tool:trace-draft:call-1", Content: `{"path":"README.md"}`, ToolName: "read_file"},
+		},
+		ItemOrder: []string{
+			"thinking:stream-segment:thinking:1",
+			"tool:stream-tool:trace-draft:call-1",
+			"assistant:stream-segment:assistant:1",
+		},
+	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
 	s.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: "hi"})
 
@@ -78,6 +96,9 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.AssistantDraft, s.AssistantDraft) {
 		t.Fatalf("assistant draft mismatch: got=%+v want=%+v", loaded.AssistantDraft, s.AssistantDraft)
+	}
+	if !reflect.DeepEqual(loaded.TurnDraft, s.TurnDraft) {
+		t.Fatalf("turn draft mismatch: got=%+v want=%+v", loaded.TurnDraft, s.TurnDraft)
 	}
 	if loaded.TokenCount <= 0 {
 		t.Fatalf("unexpected token count: got %d want > 0", loaded.TokenCount)

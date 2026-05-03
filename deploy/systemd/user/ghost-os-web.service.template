@@ -1,0 +1,19 @@
+[Unit]
+Description=Ghost-OS Web Console
+After=network-online.target ghost-os-bridge.service
+Wants=network-online.target
+PartOf=ghost-os.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT__/apps/web
+Environment=HOME=%h
+EnvironmentFile=-%h/.config/ghost-os/autostart.env
+ExecStart=__ROOT__/scripts/autostart/start-web.sh
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=ghost-os.target

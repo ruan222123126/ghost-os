@@ -30,19 +30,11 @@ func (r workflowTaskRunner) initRunState() (WorkflowNode, workflowRunState, erro
 	if !ok {
 		return WorkflowNode{}, workflowRunState{}, fmt.Errorf("workflow start node %q is missing", r.plan.startID)
 	}
-	state := newWorkflowRunState(len(r.plan.nodes))
-	if err := state.variables.seedInputs(startNode.Start); err != nil {
-		return WorkflowNode{}, workflowRunState{}, err
-	}
-	return startNode, state, nil
+	return startNode, newWorkflowRunState(len(r.plan.nodes)), nil
 }
 
-func (r workflowTaskRunner) newBranchState(startNode WorkflowNode) (workflowRunState, error) {
-	state := newWorkflowRunState(len(r.plan.nodes))
-	if err := state.variables.seedInputs(startNode.Start); err != nil {
-		return workflowRunState{}, err
-	}
-	return state, nil
+func (r workflowTaskRunner) newBranchState(_ WorkflowNode) (workflowRunState, error) {
+	return newWorkflowRunState(len(r.plan.nodes)), nil
 }
 
 func (r workflowTaskRunner) executePath(
@@ -137,7 +129,7 @@ func (r workflowTaskRunner) executePath(
 			}
 		}
 		if step.executed {
-			state.recordNode(node.ID, step.outcome)
+			state.recordNode(node, step.outcome)
 			lastNode = node
 			lastPreview = step.outcome.preview
 		}

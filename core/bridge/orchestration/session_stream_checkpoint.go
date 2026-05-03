@@ -45,25 +45,36 @@ func (s *sessionDraftCheckpointSink) Emit(ctx context.Context, event streaming.E
 
 func (s *sessionDraftCheckpointSink) persistDraftBeforeEvent(ctx context.Context, event streaming.Event) error {
 	switch event.Type {
-	case streaming.EventCompletionDelta:
-		return s.persistCompletionDelta(ctx, event)
+	case streaming.EventRunStarted,
+		streaming.EventCompletionDelta,
+		streaming.EventToolCallStarted,
+		streaming.EventToolCallFinished:
+		return s.persistTurnDraftEvent(ctx, event)
 	case streaming.EventAwaitingHuman, streaming.EventDone, streaming.EventError:
-		return s.saveDraftIfNeeded(ctx, true)
+		return s.persistTerminalTurnDraftEvent(ctx, event)
 	default:
 		return nil
 	}
 }
 
-func (s *sessionDraftCheckpointSink) persistCompletionDelta(ctx context.Context, event streaming.Event) error {
+func (s *sessionDraftCheckpointSink) persistTurnDraftEvent(ctx context.Context, event streaming.Event) error {
+	draftChanged := projectSessionTurnDraft(s.sess, event, s.nowUTC())
+	if draftChanged {
+		s.dirty = true
+	}
+
 	text, ok := completionDeltaText(event.Payload)
-	if !ok {
-		return nil
+	if ok && s.sess.AppendAssistantDraft(text, event.TraceID, event.Turn, s.nowUTC()) {
+		s.dirty = true
 	}
-	if !s.sess.AppendAssistantDraft(text, event.TraceID, event.Turn, s.nowUTC()) {
-		return nil
-	}
-	s.dirty = true
 	return s.saveDraftIfNeeded(ctx, false)
+}
+
+func (s *sessionDraftCheckpointSink) persistTerminalTurnDraftEvent(ctx context.Context, event streaming.Event) error {
+	if projectSessionTurnDraft(s.sess, event, s.nowUTC()) {
+		s.dirty = true
+	}
+	return s.saveDraftIfNeeded(ctx, true)
 }
 
 func (s *sessionDraftCheckpointSink) saveDraftIfNeeded(ctx context.Context, force bool) error {

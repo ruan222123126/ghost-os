@@ -1,3 +1,4 @@
+import { cloneWorkflowTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
 import {
   DEFAULT_LOOP_MAX_ITERATIONS,
   LOOP_ROLE_END,
@@ -202,7 +203,12 @@ function cloneNode(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft {
     start: node.start ? { inputs: node.start.inputs?.map((input) => ({ ...input })) } : undefined,
     tool: node.tool ? { ...node.tool, arguments: node.tool.arguments ? { ...node.tool.arguments } : undefined } : undefined,
     llm: node.llm ? { ...node.llm } : undefined,
-    agent: node.agent ? { ...node.agent } : undefined,
+    agent: node.agent
+      ? {
+        ...node.agent,
+        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
+      }
+      : undefined,
     if: node.if ? { ...node.if } : undefined,
     loop: node.loop ? { ...node.loop } : undefined,
   };

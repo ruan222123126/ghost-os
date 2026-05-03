@@ -30,6 +30,9 @@ export function WorkflowEditorClient(props: WorkflowEditorClientProps) {
       validationErrors={controller.validationErrors}
       importSessionID={controller.importSessionID}
       importLoading={controller.importLoading}
+      agentRuntimeCatalog={controller.agentRuntimeCatalog}
+      agentRuntimeLoading={controller.agentRuntimeLoading}
+      agentRuntimeError={controller.agentRuntimeError}
       onChangeImportSessionID={controller.onChangeImportSessionID}
       onImportFromSession={controller.onImportFromSession}
       onScheduleChange={controller.onScheduleChange}

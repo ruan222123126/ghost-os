@@ -140,4 +140,29 @@ describe('lib/workflow-editor/screenControlComposerSync', () => {
       keep_top_level: true,
     });
   });
+
+  it('keeps coordinate_ref inside multi-step click workflow steps', () => {
+    const node: WorkflowCanvasNodeDraft = {
+      id: 'tool-node',
+      type: 'tool',
+      position: { x: 0, y: 0 },
+      ui: { toolArgumentsMode: 'kv' },
+      tool: {
+        tool_name: 'screen_control',
+        arguments: { keep_top_level: true },
+      },
+    };
+    const steps: ScreenControlComposerStep[] = [
+      { action: 'find_icon', params: { template_path: '/tmp/icon.png' } },
+      { action: 'click', params: { coordinate_ref: '${find_icon}' } },
+    ];
+
+    expect(syncScreenControlComposerStepsToToolArguments(node, steps).tool?.arguments).toEqual({
+      keep_top_level: true,
+      workflow_steps: [
+        { action: 'find_icon', params: { template_path: '/tmp/icon.png' } },
+        { action: 'click', params: { coordinate_ref: '${find_icon}' } },
+      ],
+    });
+  });
 });

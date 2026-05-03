@@ -195,6 +195,54 @@ describe('hooks/chat/chatStateReducer', () => {
       toolInput: '{"command":"echo ok"}',
     });
   });
+
+  it('hydrates streaming draft state from server turn_draft', () => {
+    const state = chatStateReducer(createInitialState(), {
+      type: 'hydrate_turn_draft',
+      draft: {
+        trace_id: 'trace-draft',
+        turn: 3,
+        assistant_segments: [{ id: 'stream-segment:assistant:1', content: 'partial answer' }],
+        thinking_segments: [{ id: 'stream-segment:thinking:1', content: 'analysis' }],
+        tools: [{
+          id: 'stream-tool:trace-draft:call-1',
+          content: '{"path":"README.md"}',
+          tool_name: 'read_file',
+          tool_status: 'running',
+          tool_call_id: 'call-1',
+          trace_id: 'trace-draft',
+        }],
+        item_order: [
+          'thinking:stream-segment:thinking:1',
+          'tool:stream-tool:trace-draft:call-1',
+          'assistant:stream-segment:assistant:1',
+        ],
+      },
+    });
+
+    const view = buildChatStateView(state);
+    expect(view.streamingThinkingSegments).toEqual([
+      { id: 'stream-segment:thinking:1', content: 'analysis' },
+    ]);
+    expect(view.streamingAssistantSegments).toEqual([
+      { id: 'stream-segment:assistant:1', content: 'partial answer' },
+    ]);
+    expect(view.streamingTools).toEqual([
+      {
+        id: 'stream-tool:trace-draft:call-1',
+        content: '{"path":"README.md"}',
+        toolName: 'read_file',
+        toolStatus: 'running',
+        toolCallId: 'call-1',
+        traceId: 'trace-draft',
+      },
+    ]);
+    expect(state.streamingItemOrder).toEqual([
+      'thinking:stream-segment:thinking:1',
+      'tool:stream-tool:trace-draft:call-1',
+      'assistant:stream-segment:assistant:1',
+    ]);
+  });
 });
 
 function createInitialState(): ChatStateStore {

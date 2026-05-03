@@ -10,6 +10,7 @@ import {
   getMessageListRowAtIndex,
   getMessageListRowCount,
 } from './messageListRows';
+import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
 import { buildMessageListLayoutSignature } from './messageListScroll';
 import { filterCommittedMessagesForDisplay } from './messageVisibility';
 import { getOrderedStreamingRows, type StreamingMessageRow } from './streamingRows';
@@ -73,6 +74,12 @@ export const MessageList: FC<MessageListProps> = ({
     streamingAssistantSegments,
     streamingTools,
   });
+  const messageRowSource = {
+    committedMessages: visibleCommittedMessages,
+    showThinkingIndicator,
+    loadingOlderHistory,
+    streamingRows,
+  };
   const rowCount = getMessageListRowCount(
     visibleCommittedMessages,
     streamingRows,
@@ -82,12 +89,7 @@ export const MessageList: FC<MessageListProps> = ({
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
     estimateSize: estimateMessageRowSize,
-    getItemKey: (index) => getMessageListRowAtIndex(index, {
-      committedMessages: visibleCommittedMessages,
-      showThinkingIndicator,
-      loadingOlderHistory,
-      streamingRows,
-    }).key,
+    getItemKey: (index) => getMessageListRowAtIndex(index, messageRowSource).key,
     getScrollElement: () => scrollElementRef.current,
     overscan: MESSAGE_LIST_OVERSCAN,
     useAnimationFrameWithResizeObserver: true,
@@ -166,12 +168,13 @@ export const MessageList: FC<MessageListProps> = ({
     <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
       <div className="messages-viewport" style={{ height: rowVirtualizer.getTotalSize() }}>
         {virtualItems.map((virtualItem) => {
-          const row = getMessageListRowAtIndex(virtualItem.index, {
-            committedMessages: visibleCommittedMessages,
-            showThinkingIndicator,
-            loadingOlderHistory,
-            streamingRows,
-          });
+          const row = getMessageListRowAtIndex(virtualItem.index, messageRowSource);
+          const hasTrailingTool = shouldPlaceAssistantCopyInline(
+            row,
+            virtualItem.index,
+            rowCount,
+            (index) => getMessageListRowAtIndex(index, messageRowSource),
+          );
 
           return (
             <div
@@ -184,6 +187,7 @@ export const MessageList: FC<MessageListProps> = ({
               {renderRow(row, {
                 copy,
                 assistantMarkdownEnabled,
+                hasTrailingTool,
                 toolCallCompactOutputEnabled,
                 loading,
                 openToolCards,
@@ -206,6 +210,7 @@ function renderRow(
   options: {
     copy: ReturnType<typeof useWebLocale>['copy'];
     assistantMarkdownEnabled: boolean;
+    hasTrailingTool: boolean;
     toolCallCompactOutputEnabled: boolean;
     loading: boolean;
     onAnswerQuestion: MessageListProps['onAnswerQuestion'];
@@ -230,6 +235,7 @@ function renderRow(
         <MessageRow
           message={row.message}
           assistantMarkdownEnabled={options.assistantMarkdownEnabled}
+          hasTrailingTool={options.hasTrailingTool}
           toolCallCompactOutputEnabled={options.toolCallCompactOutputEnabled}
           isToolCardOpen={Boolean(options.openToolCards[row.message.id])}
           isThinkingPanelOpen={Boolean(options.openThinkingPanels[row.message.id])}

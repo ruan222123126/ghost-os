@@ -2,11 +2,7 @@
 
 import { WorkflowVariableAutocompleteField } from '@/components/workflow/WorkflowVariableAutocompleteField';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type {
-  WorkflowCanvasDraft,
-  WorkflowCanvasNodeDraft,
-  WorkflowEditorKind,
-} from '@/lib/workflow-editor';
+import type { WorkflowCanvasNodeDraft, WorkflowEditorKind } from '@/lib/workflow-editor';
 import {
   DEFAULT_LOOP_MAX_ITERATIONS,
   LOOP_ROLE_START,
@@ -14,14 +10,14 @@ import {
 } from '@/lib/workflow-editor/constants';
 
 interface WorkflowCanvasConditionalEditorProps {
-  editorKind?: WorkflowEditorKind;
-  draft?: WorkflowCanvasDraft;
+  editorKind: WorkflowEditorKind;
   selectedNode: WorkflowCanvasNodeDraft;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
 
 export function IfEditor(props: WorkflowCanvasConditionalEditorProps) {
-  const { editorKind, draft, selectedNode, onUpdateNode } = props;
+  const { copy } = useWebLocale();
+  const { editorKind, selectedNode, onUpdateNode } = props;
   const config = selectedNode.if ?? buildDefaultIfConfig();
   const requiresValue = config.operator !== 'is_empty' && config.operator !== 'not_empty';
 
@@ -29,20 +25,17 @@ export function IfEditor(props: WorkflowCanvasConditionalEditorProps) {
     <div className="workflow-arch-prop-group">
       <IfStartEditorFields
         editorKind={editorKind}
-        draft={draft}
-        selectedNode={selectedNode}
         config={config}
         requiresValue={requiresValue}
         onPatch={(patch) => onUpdateNode(withIfPatch(selectedNode, patch))}
       />
+      {editorKind === 'workflow' ? <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p> : null}
     </div>
   );
 }
 
 interface IfStartEditorFieldsProps {
-  editorKind?: WorkflowEditorKind;
-  draft?: WorkflowCanvasDraft;
-  selectedNode: WorkflowCanvasNodeDraft;
+  editorKind: WorkflowEditorKind;
   config: NonNullable<WorkflowCanvasNodeDraft['if']>;
   requiresValue: boolean;
   onPatch: (patch: Partial<NonNullable<WorkflowCanvasNodeDraft['if']>>) => void;
@@ -50,14 +43,7 @@ interface IfStartEditorFieldsProps {
 
 function IfStartEditorFields(props: IfStartEditorFieldsProps) {
   const { copy } = useWebLocale();
-  const {
-    editorKind,
-    draft,
-    selectedNode,
-    config,
-    requiresValue,
-    onPatch,
-  } = props;
+  const { editorKind, config, requiresValue, onPatch } = props;
 
   return (
     <>
@@ -80,10 +66,8 @@ function IfStartEditorFields(props: IfStartEditorFieldsProps) {
       {requiresValue ? (
         <>
           <label className="workflow-arch-field-label">{copy.workflow.ifCompareValue}</label>
-          {editorKind === 'workflow' && draft ? (
+          {editorKind === 'workflow' ? (
             <WorkflowVariableAutocompleteField
-              draft={draft}
-              selectedNode={selectedNode}
               mode="input"
               value={config.value ?? ''}
               placeholder={copy.workflow.ifComparePlaceholder}

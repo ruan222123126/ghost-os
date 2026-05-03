@@ -26,7 +26,7 @@ interface WorkflowCanvasNodeProps {
 const PRIMARY_MOUSE_BUTTON = 0;
 
 export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
-  const { copy } = useWebLocale();
+  const { locale, copy } = useWebLocale();
   const {
     node,
     metadata,
@@ -66,7 +66,7 @@ export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
       <header className="workflow-arch-node-header">
         <span>{metadata.label}</span>
       </header>
-      <div className="workflow-arch-node-body">{renderNodeSummary(node, copy)}</div>
+      <div className="workflow-arch-node-body">{renderNodeSummary(node, copy, locale)}</div>
 
       {node.type !== 'start' ? (
         <div
@@ -91,13 +91,16 @@ export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
   );
 }
 
-function renderNodeSummary(node: WorkflowCanvasNodeDraft, copy: ReturnType<typeof useWebLocale>['copy']) {
+function renderNodeSummary(
+  node: WorkflowCanvasNodeDraft,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  locale: string,
+) {
   if (node.type === 'start') {
-    const variables = node.start?.inputs?.length ?? 0;
     return (
       <div className="workflow-arch-summary">
         <p className="workflow-arch-summary-label">{copy.workflow.nodeInputConfiguration}</p>
-        <p>{copy.workflow.nodeVariables(variables)}</p>
+        <p>{startNodeSummary(locale)}</p>
       </div>
     );
   }
@@ -163,4 +166,11 @@ function renderNodeSummary(node: WorkflowCanvasNodeDraft, copy: ReturnType<typeo
       <p>{copy.workflow.nodeStandardToolsActive}</p>
     </div>
   );
+}
+
+function startNodeSummary(locale: string): string {
+  if (locale === 'zh-CN') {
+    return '通用变量已关闭';
+  }
+  return 'General variables disabled';
 }

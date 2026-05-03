@@ -102,16 +102,39 @@ describe('components/message/MessageRow', () => {
     expect(html).not.toContain('// SYSTEM_OUTPUT');
     expect(html).not.toContain('message-channel-icon');
   });
+
+  it('moves the assistant copy action inline when tools follow', () => {
+    const message: AssistantChatMessage = {
+      id: 'assistant-3',
+      kind: 'assistant',
+      content: 'needs more tools',
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      hasTrailingTool: true,
+      toolCallCompactOutputEnabled: false,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+    });
+
+    expect(html).toContain('message-assistant-frame has-trailing-tool');
+    expect(html).toContain('message-actions is-inline-with-body');
+  });
 });
 
 function renderMessageRow(props: MessageRowProps): string {
+  const providerProps = {
+    initialLocale: 'en-US',
+  } as React.ComponentProps<typeof WebLocaleProvider>;
+
   return renderToStaticMarkup(
     React.createElement(
       WebLocaleProvider,
-      {
-        initialLocale: 'en-US',
-        children: React.createElement(MessageRow, props),
-      },
+      providerProps,
+      React.createElement(MessageRow, props),
     ),
   );
 }

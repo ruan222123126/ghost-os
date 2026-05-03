@@ -8,11 +8,12 @@ import (
 )
 
 type agentRuntimeDependencies struct {
-	cfg          bridgeconfig.Config
-	client       agent.Completer
-	registry     *tools.Registry
-	systemPrompt string
-	cleanup      func()
+	cfg                  bridgeconfig.Config
+	client               agent.Completer
+	registry             *tools.Registry
+	systemPrompt         string
+	systemPromptOverride bool
+	cleanup              func()
 }
 
 func (d agentRuntimeDependencies) Close() {

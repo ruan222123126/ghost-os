@@ -1,25 +1,10 @@
 'use client';
 
-import type {
-  KeyboardEvent,
-  MouseEvent,
-  RefObject,
-  SyntheticEvent,
-} from 'react';
+import type { KeyboardEvent, MouseEvent, RefObject, SyntheticEvent } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type {
-  WorkflowCanvasDraft,
-  WorkflowCanvasNodeDraft,
-  WorkflowVariableOption,
-} from '@/lib/workflow-editor';
-import {
-  useWorkflowVariableAutocomplete,
-  type WorkflowVariableAutocompleteState,
-} from './useWorkflowVariableAutocomplete';
+import { useWorkflowVariableAutocomplete, type WorkflowVariableAutocompleteState } from '@/components/workflow/useWorkflowVariableAutocomplete';
 
 interface WorkflowVariableAutocompleteFieldProps {
-  draft: WorkflowCanvasDraft;
-  selectedNode: WorkflowCanvasNodeDraft;
   mode: 'input' | 'textarea';
   value: string;
   rows?: number;
@@ -39,13 +24,27 @@ export function WorkflowVariableAutocompleteField(props: WorkflowVariableAutocom
     <div className="workflow-variable-autocomplete" data-testid="workflow-variable-autocomplete">
       <AutocompleteFieldInput {...props} state={state} />
       {state.dropdownOpen ? (
-        <AutocompleteOptions
-          locale={locale}
-          activeIndex={state.activeIndex}
-          options={state.filteredOptions}
-          onMouseDown={state.handleOptionMouseDown}
-          onClick={state.handleOptionClick}
-        />
+        <div className="workflow-variable-autocomplete__dropdown" role="listbox">
+          {state.filteredOptions.length > 0 ? (
+            state.filteredOptions.map((option, index) => (
+              <button
+                key={option.token}
+                type="button"
+                className={`workflow-variable-autocomplete__option ${index === state.activeIndex ? 'workflow-variable-autocomplete__option--active' : ''}`}
+                onMouseDown={state.handleOptionMouseDown}
+                onClick={() => state.handleOptionClick(option)}
+              >
+                <span className="workflow-variable-autocomplete__option-head">
+                  <strong>{option.label}</strong>
+                  <span>{locale === 'zh-CN' ? '内置' : 'Built-in'}</span>
+                </span>
+                <code>{option.token}</code>
+              </button>
+            ))
+          ) : (
+            <p className="workflow-variable-autocomplete__empty">{locale === 'zh-CN' ? '无匹配变量' : 'No matching variables'}</p>
+          )}
+        </div>
       ) : null}
     </div>
   );
@@ -88,60 +87,4 @@ function AutocompleteFieldInput(
       onChange={(event) => state.handleChange(event.currentTarget)}
     />
   );
-}
-
-function AutocompleteOptions(props: {
-  locale: string;
-  activeIndex: number;
-  options: WorkflowVariableOption[];
-  onMouseDown: (event: MouseEvent<HTMLButtonElement>) => void;
-  onClick: (option: WorkflowVariableOption) => void;
-}) {
-  const { locale, activeIndex, options, onMouseDown, onClick } = props;
-  return (
-    <div className="workflow-variable-autocomplete__dropdown" role="listbox">
-      {options.length > 0 ? (
-        options.map((option, index) => (
-          <button
-            key={`${option.token}:${option.section}`}
-            type="button"
-            className={`workflow-variable-autocomplete__option ${index === activeIndex ? 'workflow-variable-autocomplete__option--active' : ''}`}
-            onMouseDown={onMouseDown}
-            onClick={() => onClick(option)}
-          >
-            <span className="workflow-variable-autocomplete__option-head">
-              <strong>{option.label}</strong>
-              <span>{sectionLabel(option.section, locale)}</span>
-            </span>
-            <code>{option.token}</code>
-          </button>
-        ))
-      ) : (
-        <p className="workflow-variable-autocomplete__empty">{emptyLabel(locale)}</p>
-      )}
-    </div>
-  );
-}
-
-function sectionLabel(section: WorkflowVariableOption['section'], locale: string): string {
-  if (locale === 'zh-CN') {
-    if (section === 'start') {
-      return '开始';
-    }
-    if (section === 'builtin') {
-      return '内置';
-    }
-    return '上游';
-  }
-  if (section === 'start') {
-    return 'Start';
-  }
-  if (section === 'builtin') {
-    return 'Built-in';
-  }
-  return 'Upstream';
-}
-
-function emptyLabel(locale: string): string {
-  return locale === 'zh-CN' ? '无匹配变量' : 'No matching variables';
 }

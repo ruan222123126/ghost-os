@@ -1,14 +1,20 @@
+import { writeFileSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { forwardBridge, forwardBridgeDownload } from './index';
 
 describe('lib/server/bridge', () => {
   const fetchMock = jest.fn();
   const originalEnv = { ...process.env };
+  const emptyConfigPath = path.join(os.tmpdir(), 'ghost-os-web-empty-config.toml');
 
   beforeEach(() => {
     fetchMock.mockReset();
     process.env = { ...originalEnv };
     delete process.env.GHOST_API_TOKEN;
-    delete process.env.GHOST_CONFIG_PATH;
+    writeFileSync(emptyConfigPath, '', 'utf8');
+    process.env.GHOST_CONFIG_PATH = emptyConfigPath;
     Object.defineProperty(global, 'fetch', {
       value: fetchMock,
       writable: true,
@@ -66,6 +72,24 @@ describe('lib/server/bridge', () => {
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     const headers = new Headers(init.headers);
     expect(headers.get('X-API-Token')).toBe('secret-token');
+  });
+
+  it('falls back to api_token from bridge config when env token is absent', async () => {
+    const configPath = path.join(os.tmpdir(), `ghost-os-web-auth-${Date.now()}.toml`);
+    writeFileSync(configPath, 'api_token = "config-token"\n', 'utf8');
+    process.env.GHOST_CONFIG_PATH = configPath;
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await forwardBridge({ path: '/api/config', method: 'GET' });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-API-Token')).toBe('config-token');
   });
 
   it('does not inject bridge auth when request and env token are both absent', async () => {

@@ -1,5 +1,4 @@
-import { useCallback, useEffect } from 'react';
-import { persistSessionThinkingSnapshot } from '@/lib/chatThinkingPersistence';
+import { useCallback } from 'react';
 import { useChatHistory } from './useChatHistory';
 import { useChatQuestionActions } from './useChatQuestionActions';
 import { useChatRunControl } from './useChatRunControl';
@@ -9,13 +8,6 @@ import type { UseBridgeChatOptions, UseBridgeChatResult } from './types';
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
   const state = useChatState();
-  useEffect(() => {
-    const sessionId = options.currentSessionId.trim();
-    if (!sessionId) {
-      return;
-    }
-    persistSessionThinkingSnapshot(sessionId, state.committedMessages);
-  }, [options.currentSessionId, state.committedMessages]);
 
   const {
     loadOlderHistory,
@@ -25,6 +17,8 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     clearChatError: state.clearChatError,
     clearPendingQuestions: state.clearPendingQuestions,
     clearStreamingState: state.clearStreamingState,
+    applyRuntimeActions: state.applyRuntimeActions,
+    hydrateTurnDraft: state.hydrateTurnDraft,
     replaceWithErrorMessage: state.replaceWithErrorMessage,
     setCommittedMessages: state.setCommittedMessages,
     setHasOlderHistory: state.setHasOlderHistory,
@@ -32,6 +26,11 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     setLoadingOlderHistory: state.setLoadingOlderHistory,
     setNextHistoryBefore: state.setNextHistoryBefore,
     setChatError: state.setChatError,
+    setActiveRun: state.setActiveRun,
+    setLoading: state.setLoading,
+    setStopPending: state.setStopPending,
+    beginHistorySync: state.beginHistorySync,
+    endHistorySync: state.endHistorySync,
     nextHistoryBefore: state.nextHistoryBefore,
   });
   const { runAgentStream, runHumanStream } = useChatStreamController({

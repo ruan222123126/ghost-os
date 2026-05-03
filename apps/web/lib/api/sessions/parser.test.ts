@@ -101,9 +101,21 @@ describe('lib/api/sessions/parser', () => {
           index: 2,
           role: 'assistant',
           text: 'partial answer',
+          thinking: 'step 1',
           in_progress: true,
         },
       ],
+      turn_draft: {
+        trace_id: 'trace-draft',
+        turn: 2,
+        assistant_segments: [{ id: 'stream-segment:assistant:1', content: 'partial answer' }],
+        thinking_segments: [{ id: 'stream-segment:thinking:1', content: 'step 1' }],
+        tools: [],
+        item_order: [
+          'thinking:stream-segment:thinking:1',
+          'assistant:stream-segment:assistant:1',
+        ],
+      },
     };
 
     expect(parseSessionDetail(payload)).toEqual(payload);

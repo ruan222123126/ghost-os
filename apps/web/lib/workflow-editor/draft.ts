@@ -4,6 +4,7 @@ import type {
   WorkflowNode,
   WorkflowTaskPayload,
 } from '@/lib/types';
+import { cloneWorkflowTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
 import {
   DECIMAL_RADIX,
   DEFAULT_LOOP_MAX_ITERATIONS,
@@ -146,7 +147,12 @@ function buildWorkflowNode(node: WorkflowCanvasNodeDraft): WorkflowNode {
         system_prompt: node.llm?.system_prompt,
       }
       : undefined,
-    agent: node.type === 'agent' ? { message: node.agent?.message ?? '' } : undefined,
+    agent: node.type === 'agent'
+      ? {
+        message: node.agent?.message ?? '',
+        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent?.runtime_overrides),
+      }
+      : undefined,
     if: node.type === 'if'
       ? {
         source_node_id: node.if?.source_node_id?.trim() || undefined,

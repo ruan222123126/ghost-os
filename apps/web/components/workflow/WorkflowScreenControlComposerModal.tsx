@@ -140,6 +140,7 @@ function ComposerQueuePanel(props: {
           open
           stepIndex={editingIndex ?? 0}
           step={editingStep}
+          canUseFindIconReference={hasEarlierFindIconStep(steps, editingIndex ?? 0)}
           onClose={() => setEditingIndex(null)}
           onSave={(index, step) => {
             onUpdateStep(index, step);
@@ -190,4 +191,13 @@ function isEditableComposerAction(action: ScreenControlAtomicAction | undefined)
   }
   const normalized = normalizeScreenControlComposerAction(action);
   return normalized === 'find_icon' || normalized === 'click';
+}
+
+function hasEarlierFindIconStep(steps: ScreenControlComposerStep[], stepIndex: number): boolean {
+  for (let index = 0; index < stepIndex; index += 1) {
+    if (normalizeScreenControlComposerAction(steps[index]?.action ?? 'screenshot') === 'find_icon') {
+      return true;
+    }
+  }
+  return false;
 }

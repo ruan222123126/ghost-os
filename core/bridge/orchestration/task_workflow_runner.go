@@ -22,8 +22,8 @@ type workflowNodeOutcome struct {
 type workflowRunState struct {
 	lastOutputText string
 	nodeOutputs    map[string]string
+	findIconOutput any
 	loopIterations map[string]int
-	variables      workflowVariableStore
 }
 
 func newWorkflowRunState(nodeCount int) workflowRunState {
@@ -31,18 +31,19 @@ func newWorkflowRunState(nodeCount int) workflowRunState {
 		lastOutputText: "",
 		nodeOutputs:    make(map[string]string, nodeCount),
 		loopIterations: make(map[string]int, nodeCount),
-		variables:      newWorkflowVariableStore(),
 	}
 }
 
-func (s *workflowRunState) recordNode(nodeID string, outcome workflowNodeOutcome) {
+func (s *workflowRunState) recordNode(node WorkflowNode, outcome workflowNodeOutcome) {
 	output := strings.TrimSpace(outcome.outputText)
 	if output == "" {
 		output = strings.TrimSpace(outcome.preview)
 	}
 	s.lastOutputText = output
-	s.nodeOutputs[nodeID] = output
-	s.variables.recordNode(nodeID, output, outcome.outputValue, outcome.status)
+	s.nodeOutputs[node.ID] = output
+	if findIconOutput, ok := extractWorkflowFindIconOutput(node, outcome.outputValue); ok {
+		s.findIconOutput = findIconOutput
+	}
 }
 
 func (s workflowRunState) sourceText(sourceNodeID string) string {
@@ -70,6 +71,9 @@ func (a taskExecutorAdapter) executeWorkflowTask(
 			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 		}
 		if err := validateWorkflowTaskRuntime(task.Workflow, cfg); err != nil {
+			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+		}
+		if err := validateWorkflowAgentRuntime(task.Workflow, a.service.configStore); err != nil {
 			return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 		}
 	}
@@ -195,7 +199,7 @@ func (r workflowTaskRunner) executeActionNode(
 	node WorkflowNode,
 	state *workflowRunState,
 ) workflowNodeOutcome {
-	resolvedNode, err := resolveWorkflowActionNode(node, state.variables)
+	resolvedNode, err := resolveWorkflowActionNode(node, state.findIconOutput)
 	if err != nil {
 		return workflowNodeOutcome{
 			err:           err,
@@ -227,13 +231,9 @@ func selectWorkflowIfNextNode(node WorkflowNode, state *workflowRunState) (strin
 		return "", fmt.Errorf("workflow if node %q payload is missing", node.ID)
 	}
 	sourceText := state.sourceText(node.If.SourceNodeID)
-	targetValue := node.If.Value
-	if requiresWorkflowIfValue(node.If.Operator) {
-		resolvedValue, err := state.variables.resolveString(node.If.Value)
-		if err != nil {
-			return "", fmt.Errorf("workflow if node %q resolve value: %w", node.ID, err)
-		}
-		targetValue = resolvedValue
+	targetValue, err := resolveWorkflowIfValue(node.If.Value, state.findIconOutput)
+	if err != nil {
+		return "", fmt.Errorf("workflow if node %q resolve value: %w", node.ID, err)
 	}
 	matched, err := evaluateWorkflowIfCondition(node.If.Operator, sourceText, targetValue)
 	if err != nil {

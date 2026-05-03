@@ -1,3 +1,5 @@
+import { readBridgeAPIToken } from './config';
+
 function hasAuthHeaders(headers: Headers): boolean {
   return headers.has('X-API-Token') || headers.has('Authorization');
 }
@@ -19,6 +21,14 @@ function forwardedAuthHeaders(request?: Request): Headers | undefined {
   return Array.from(headers.keys()).length > 0 ? headers : undefined;
 }
 
+async function configuredBridgeToken(): Promise<string | undefined> {
+  const envToken = process.env.GHOST_API_TOKEN?.trim();
+  if (envToken) {
+    return envToken;
+  }
+  return readBridgeAPIToken();
+}
+
 export async function resolveBridgeHeaders(headers: HeadersInit | undefined, request?: Request): Promise<Headers> {
   const merged = new Headers(headers);
   if (hasAuthHeaders(merged)) {
@@ -33,7 +43,7 @@ export async function resolveBridgeHeaders(headers: HeadersInit | undefined, req
     return merged;
   }
 
-  const token = process.env.GHOST_API_TOKEN?.trim();
+  const token = await configuredBridgeToken();
   if (token) {
     merged.set('X-API-Token', token);
   }

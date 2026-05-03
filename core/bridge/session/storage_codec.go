@@ -41,6 +41,7 @@ func normalizeLoadedSession(session *Session, expectedID string, now time.Time) 
 	session.MessageCount = len(session.Messages)
 	session.WindowStart = 0
 	session.AssistantDraft = cloneAssistantDraft(session.AssistantDraft)
+	session.TurnDraft = cloneTurnDraft(session.TurnDraft)
 	session.persistedMessageCount = 0
 	session.persistedMessages = nil
 }

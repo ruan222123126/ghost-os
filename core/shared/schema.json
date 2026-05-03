@@ -150,6 +150,15 @@
         "sessionMessagePage": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMessagePage"
         },
+        "sessionTurnDraftSegment": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftSegment"
+        },
+        "sessionTurnDraftTool": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftTool"
+        },
+        "sessionTurnDraft": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraft"
+        },
         "sessionDetail": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionDetail"
         },

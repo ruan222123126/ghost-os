@@ -79,13 +79,8 @@ func (p *sessionTurnPreparer) prepareWithRuntimeOverrides(
 		p = newSessionTurnPreparer(nil, nil, nil, nil, nil)
 	}
 	input := newTurnPreparationInput(userInput, traceID)
-	deps, historyBuilder, persistence, err := p.buildPrepareDependencies()
+	deps, historyBuilder, persistence, err := p.buildPrepareDependencies(runtimeOverrides)
 	if err != nil {
-		return nil, err
-	}
-	deps, err = applyTaskRuntimeOverridesToDependencies(deps, runtimeOverrides)
-	if err != nil {
-		deps.Close()
 		return nil, err
 	}
 	state, err := p.prepareSessionTurnState(ctx, deps, historyBuilder, persistence, sessionID, input)
@@ -96,11 +91,18 @@ func (p *sessionTurnPreparer) prepareWithRuntimeOverrides(
 	return state, nil
 }
 
-func (p *sessionTurnPreparer) buildPrepareDependencies() (agentRuntimeDependencies, *SessionHistoryBuilder, *SessionTurnCommitter, error) {
-	deps, err := p.runtimeFactory.Build(p.configStore)
+func (p *sessionTurnPreparer) buildPrepareDependencies(
+	runtimeOverrides *TaskRuntimeOverrides,
+) (agentRuntimeDependencies, *SessionHistoryBuilder, *SessionTurnCommitter, error) {
+	normalized, err := normalizeTaskRuntimeOverrides(runtimeOverrides)
 	if err != nil {
 		return agentRuntimeDependencies{}, nil, nil, err
 	}
+	deps, err := p.runtimeFactory.Build(newTaskRuntimeOverrideStore(p.configStore, normalized))
+	if err != nil {
+		return agentRuntimeDependencies{}, nil, nil, err
+	}
+	deps = applyTaskRuntimePromptOverride(deps, normalized)
 	historyBuilder := newSessionHistoryBuilder(
 		deps.cfg.Provider,
 		deps.systemPrompt,
@@ -111,6 +113,18 @@ func (p *sessionTurnPreparer) buildPrepareDependencies() (agentRuntimeDependenci
 	)
 	persistence := newSessionTurnCommitter(p.sessionStore)
 	return deps, historyBuilder, persistence, nil
+}
+
+func applyTaskRuntimePromptOverride(
+	deps agentRuntimeDependencies,
+	runtimeOverrides *TaskRuntimeOverrides,
+) agentRuntimeDependencies {
+	if runtimeOverrides == nil || strings.TrimSpace(runtimeOverrides.SystemPrompt) == "" {
+		return deps
+	}
+	deps.systemPrompt = strings.TrimSpace(runtimeOverrides.SystemPrompt)
+	deps.systemPromptOverride = true
+	return deps
 }
 
 func (p *sessionTurnPreparer) prepareSessionTurnState(

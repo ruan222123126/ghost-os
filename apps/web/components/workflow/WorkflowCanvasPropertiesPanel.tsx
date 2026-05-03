@@ -2,13 +2,19 @@
 
 import { WorkflowCanvasNodeEditorContent } from '@/components/workflow/WorkflowCanvasNodeEditorContent';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { WorkflowCanvasDraft, WorkflowCanvasNodeDraft, WorkflowEditorKind } from '@/lib/workflow-editor';
+import type {
+  WorkflowAgentRuntimeCatalog,
+  WorkflowCanvasNodeDraft,
+  WorkflowEditorKind,
+} from '@/lib/workflow-editor';
 import { isProtectedBoundaryNode } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasPropertiesPanelProps {
   editorKind: WorkflowEditorKind;
-  draft: WorkflowCanvasDraft;
   selectedNode?: WorkflowCanvasNodeDraft;
+  agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
+  agentRuntimeLoading: boolean;
+  agentRuntimeError: string;
   onClose: () => void;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
   onDeleteNode: (nodeID: string) => void;
@@ -16,7 +22,16 @@ interface WorkflowCanvasPropertiesPanelProps {
 
 export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPanelProps) {
   const { copy } = useWebLocale();
-  const { editorKind, draft, selectedNode, onClose, onUpdateNode, onDeleteNode } = props;
+  const {
+    agentRuntimeCatalog,
+    agentRuntimeError,
+    agentRuntimeLoading,
+    editorKind,
+    selectedNode,
+    onClose,
+    onUpdateNode,
+    onDeleteNode,
+  } = props;
   const allowDelete = !isProtectedBoundaryNode(selectedNode);
 
   return (
@@ -39,8 +54,10 @@ export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPan
           <section className="workflow-arch-properties-content">
             <WorkflowCanvasNodeEditorContent
               editorKind={editorKind}
-              draft={draft}
               selectedNode={selectedNode}
+              agentRuntimeCatalog={agentRuntimeCatalog}
+              agentRuntimeLoading={agentRuntimeLoading}
+              agentRuntimeError={agentRuntimeError}
               onUpdateNode={onUpdateNode}
             />
           </section>

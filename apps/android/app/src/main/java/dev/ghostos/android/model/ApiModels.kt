@@ -282,7 +282,8 @@ data class SessionMessage(
     @SerialName("tool_call_id")
     val toolCallId: String? = null,
     @SerialName("in_progress")
-    val inProgress: Boolean? = null
+    val inProgress: Boolean? = null,
+    val thinking: String? = null
 )
 
 @Serializable
@@ -343,6 +344,42 @@ data class SessionMessagePage(
 )
 
 @Serializable
+data class SessionTurnDraftSegment(
+    val id: String,
+    val content: String
+)
+
+@Serializable
+data class SessionTurnDraftTool(
+    val id: String,
+    val content: String,
+    @SerialName("tool_input")
+    val toolInput: String? = null,
+    @SerialName("tool_name")
+    val toolName: String? = null,
+    @SerialName("tool_status")
+    val toolStatus: String? = null,
+    @SerialName("tool_call_id")
+    val toolCallId: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+)
+
+@Serializable
+data class SessionTurnDraft(
+    @SerialName("trace_id")
+    val traceId: String,
+    val turn: Int,
+    @SerialName("assistant_segments")
+    val assistantSegments: List<SessionTurnDraftSegment>,
+    @SerialName("thinking_segments")
+    val thinkingSegments: List<SessionTurnDraftSegment>,
+    val tools: List<SessionTurnDraftTool>,
+    @SerialName("item_order")
+    val itemOrder: List<String>
+)
+
+@Serializable
 data class AgentErrorPayload(
     val message: String,
     @SerialName("session_id")
@@ -362,7 +399,9 @@ data class SessionDetail(
     val messageCount: Int,
     val page: SessionMessagePage,
     @SerialName("token_count")
-    val tokenCount: Int
+    val tokenCount: Int,
+    @SerialName("turn_draft")
+    val turnDraft: SessionTurnDraft? = null
 )
 
 @Serializable
@@ -569,9 +608,17 @@ data class AgentMessageTaskCreateRequest(
 
 @Serializable
 data class TaskRuntimeOverrides(
+    @SerialName("provider_name")
+    val providerName: String? = null,
     val model: String? = null,
+    @SerialName("system_prompt")
+    val systemPrompt: String? = null,
     @SerialName("tool_allowlist")
-    val toolAllowlist: List<String>? = null
+    val toolAllowlist: List<String>? = null,
+    @SerialName("tool_allowlist_only")
+    val toolAllowlistOnly: Boolean? = null,
+    @SerialName("max_turns")
+    val maxTurns: Int? = null
 )
 
 @Serializable
@@ -590,7 +637,9 @@ data class WorkflowLLMNode(
 
 @Serializable
 data class WorkflowAgentNode(
-    val message: String
+    val message: String,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null
 )
 
 @Serializable

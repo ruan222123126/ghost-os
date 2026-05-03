@@ -24,7 +24,7 @@ func (r taskMutationRunner) validateTaskRuntime(task *ScheduledTask) error {
 	}
 	kind := normalizeTaskKind(task.TaskKind)
 	if kind == taskKindAgentMessage {
-		return validateAgentTaskRuntime(task)
+		return validateAgentTaskRuntime(task, r.configStore)
 	}
 	if task.RuntimeOverrides != nil {
 		return invalidTaskConfig(kind + " does not allow runtime_overrides")
@@ -36,12 +36,18 @@ func (r taskMutationRunner) validateTaskRuntime(task *ScheduledTask) error {
 	if err != nil {
 		return err
 	}
-	return validateWorkflowTaskRuntime(task.Workflow, cfg)
+	if err := validateWorkflowTaskRuntime(task.Workflow, cfg); err != nil {
+		return err
+	}
+	return validateWorkflowAgentRuntime(task.Workflow, r.configStore)
 }
 
-func validateAgentTaskRuntime(task *ScheduledTask) error {
+func validateAgentTaskRuntime(task *ScheduledTask, store bridgeconfig.Store) error {
 	overrides, err := normalizeTaskRuntimeOverrides(task.RuntimeOverrides)
 	if err != nil {
+		return invalidTaskConfig(err.Error())
+	}
+	if err := validateTaskRuntimeOverridesWithStore(overrides, store, false); err != nil {
 		return invalidTaskConfig(err.Error())
 	}
 	task.RuntimeOverrides = overrides
@@ -81,4 +87,40 @@ func workflowToolAllowlistSet(names []string) map[string]bool {
 		}
 	}
 	return out
+}
+
+func validateWorkflowAgentRuntime(definition *WorkflowDefinition, store bridgeconfig.Store) error {
+	if definition == nil {
+		return invalidTaskConfig("workflow is required")
+	}
+	for index := range definition.Nodes {
+		node := &definition.Nodes[index]
+		if node.Type != workflowNodeTypeAgent || node.Agent == nil {
+			continue
+		}
+		overrides, err := normalizeWorkflowAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
+		if err != nil {
+			return invalidTaskConfig(fmt.Sprintf("workflow agent node %q %v", node.ID, err))
+		}
+		if err := validateTaskRuntimeOverridesWithStore(overrides, store, true); err != nil {
+			return invalidTaskConfig(fmt.Sprintf("workflow agent node %q %v", node.ID, err))
+		}
+		node.Agent.RuntimeOverrides = overrides
+	}
+	return nil
+}
+
+func validateTaskRuntimeOverridesWithStore(
+	overrides *TaskRuntimeOverrides,
+	store bridgeconfig.Store,
+	requireProviderModelPair bool,
+) error {
+	if overrides == nil || store == nil {
+		return nil
+	}
+	catalog, err := loadTaskRuntimeProviderCatalog(store)
+	if err != nil {
+		return err
+	}
+	return validateTaskRuntimeOverridesAgainstCatalog(overrides, catalog, requireProviderModelPair)
 }

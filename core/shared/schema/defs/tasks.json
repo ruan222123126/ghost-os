@@ -205,6 +205,9 @@
                 "message": {
                     "type": "string",
                     "minLength": 1
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
                 }
             },
             "x-codegen": {
@@ -387,7 +390,15 @@
             "type": "object",
             "additionalProperties": false,
             "properties": {
+                "provider_name": {
+                    "type": "string",
+                    "minLength": 1
+                },
                 "model": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "system_prompt": {
                     "type": "string",
                     "minLength": 1
                 },
@@ -397,10 +408,22 @@
                         "type": "string",
                         "minLength": 1
                     }
+                },
+                "tool_allowlist_only": {
+                    "type": "boolean",
+                    "x-go-pointer": true
+                },
+                "max_turns": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "x-go-pointer": true
                 }
             },
             "x-codegen": {
                 "order": 245,
+                "go": {
+                    "name": "taskRuntimeOverridesContract"
+                },
                 "ts": {
                     "name": "TaskRuntimeOverrides"
                 },

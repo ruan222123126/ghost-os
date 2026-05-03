@@ -28,6 +28,7 @@ export interface MessageRowProps {
   message: ChatMessage;
   assistantMarkdownEnabled: boolean;
   toolCallCompactOutputEnabled: boolean;
+  hasTrailingTool?: boolean;
   isToolCardOpen?: boolean;
   isThinkingPanelOpen?: boolean;
   loading: boolean;

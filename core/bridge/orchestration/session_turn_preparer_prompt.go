@@ -14,6 +14,9 @@ func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
 	catalog tools.ToolCatalog,
 	systemPrompt string,
 ) (string, error) {
+	if deps.systemPromptOverride {
+		return strings.TrimSpace(deps.systemPrompt), nil
+	}
 	basePrompt := strings.TrimSpace(systemPrompt)
 	if basePrompt == "" {
 		prompt, err := bridgeruntime.BuildSystemPromptForSession(

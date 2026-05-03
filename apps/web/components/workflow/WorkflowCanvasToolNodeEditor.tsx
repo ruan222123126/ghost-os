@@ -10,7 +10,6 @@ import {
   removeScreenControlComposerStep,
   syncScreenControlComposerStepsToToolArguments,
   updateScreenControlComposerStep,
-  type WorkflowCanvasDraft,
   type WorkflowEditorKind,
   type ScreenControlAtomicAction,
   type ScreenControlComposerStep,
@@ -28,7 +27,6 @@ import {
 
 interface WorkflowCanvasToolNodeEditorProps {
   editorKind: WorkflowEditorKind;
-  draft: WorkflowCanvasDraft;
   selectedNode: WorkflowCanvasNodeDraft;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
@@ -47,7 +45,7 @@ interface ScreenComposerState {
 
 export function WorkflowCanvasToolNodeEditor(props: WorkflowCanvasToolNodeEditorProps) {
   const { copy } = useWebLocale();
-  const { editorKind, draft, selectedNode, onUpdateNode } = props;
+  const { editorKind, selectedNode, onUpdateNode } = props;
   const selectedToolName = selectedNode.tool?.tool_name ?? '';
   const { options: toolOptions, loading: toolOptionsLoading, error: toolOptionsError } = useWorkflowToolOptions(selectedToolName);
   const selectedTool = useMemo(
@@ -71,8 +69,6 @@ export function WorkflowCanvasToolNodeEditor(props: WorkflowCanvasToolNodeEditor
       />
       <ToolSchemaRows
         editorKind={editorKind}
-        draft={draft}
-        selectedNode={selectedNode}
         selectedToolName={selectedToolName}
         schemaFields={schemaFields}
         rows={rows}
@@ -85,7 +81,7 @@ export function WorkflowCanvasToolNodeEditor(props: WorkflowCanvasToolNodeEditor
       ) : null}
       {toolOptionsError ? <p className="workflow-arch-field-note workflow-arch-field-note--error">{toolOptionsError}</p> : null}
       {errorText ? <p className="workflow-arch-field-note workflow-arch-field-note--error">{errorText}</p> : null}
-      <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p>
+      {editorKind === 'workflow' ? <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p> : null}
       <WorkflowScreenControlComposerModal
         open={composer.open}
         steps={composer.steps}
@@ -162,15 +158,13 @@ function ToolNameSelect(props: {
 
 function ToolSchemaRows(props: {
   editorKind: WorkflowEditorKind;
-  draft: WorkflowCanvasDraft;
-  selectedNode: WorkflowCanvasNodeDraft;
   selectedToolName: string;
   schemaFields: ToolSchemaField[];
   rows: WorkflowToolArgumentRow[];
   onRowValueChange: (index: number, value: string) => void;
 }) {
   const { copy } = useWebLocale();
-  const { editorKind, draft, selectedNode, selectedToolName, schemaFields, rows, onRowValueChange } = props;
+  const { editorKind, selectedToolName, schemaFields, rows, onRowValueChange } = props;
 
   return (
     <>
@@ -181,8 +175,6 @@ function ToolSchemaRows(props: {
             <ToolSchemaRow
               key={field.key}
               editorKind={editorKind}
-              draft={draft}
-              selectedNode={selectedNode}
               field={field}
               row={rows[index]}
               onValueChange={(value) => onRowValueChange(index, value)}
@@ -198,14 +190,12 @@ function ToolSchemaRows(props: {
 
 function ToolSchemaRow(props: {
   editorKind: WorkflowEditorKind;
-  draft: WorkflowCanvasDraft;
-  selectedNode: WorkflowCanvasNodeDraft;
   field: ToolSchemaField;
   row: WorkflowToolArgumentRow | undefined;
   onValueChange: (value: string) => void;
 }) {
   const { copy } = useWebLocale();
-  const { editorKind, draft, selectedNode, field, row, onValueChange } = props;
+  const { editorKind, field, row, onValueChange } = props;
   const value = row?.value ?? '';
 
   return (
@@ -213,8 +203,6 @@ function ToolSchemaRow(props: {
       <input type="text" readOnly value={field.key} className="workflow-arch-tool-key" />
       {editorKind === 'workflow' ? (
         <WorkflowVariableAutocompleteField
-          draft={draft}
-          selectedNode={selectedNode}
           mode="input"
           value={value}
           disabled={field.valueType === 'null'}

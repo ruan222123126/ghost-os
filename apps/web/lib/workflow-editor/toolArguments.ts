@@ -83,9 +83,9 @@ function parseRowValue(row: WorkflowToolArgumentRow, index: number): unknown {
 }
 
 function parseNumber(raw: string, index: number): unknown {
-  const templateReference = parseTemplateReference(raw);
-  if (templateReference) {
-    return templateReference;
+  const reference = parseFindIconReference(raw);
+  if (reference) {
+    return reference;
   }
   const value = Number(raw.trim());
   if (!Number.isFinite(value)) {
@@ -96,9 +96,9 @@ function parseNumber(raw: string, index: number): unknown {
 }
 
 function parseBoolean(raw: string, index: number): unknown {
-  const templateReference = parseTemplateReference(raw);
-  if (templateReference) {
-    return templateReference;
+  const reference = parseFindIconReference(raw);
+  if (reference) {
+    return reference;
   }
   const normalized = raw.trim().toLowerCase();
   if (normalized === 'true') {
@@ -111,9 +111,9 @@ function parseBoolean(raw: string, index: number): unknown {
 }
 
 function parseJSONObject(raw: string, index: number): unknown {
-  const templateReference = parseTemplateReference(raw);
-  if (templateReference) {
-    return templateReference;
+  const reference = parseFindIconReference(raw);
+  if (reference) {
+    return reference;
   }
   const parsed = JSON.parse(raw) as unknown;
   if (!isPlainObject(parsed)) {
@@ -124,9 +124,9 @@ function parseJSONObject(raw: string, index: number): unknown {
 }
 
 function parseJSONArray(raw: string, index: number): unknown {
-  const templateReference = parseTemplateReference(raw);
-  if (templateReference) {
-    return templateReference;
+  const reference = parseFindIconReference(raw);
+  if (reference) {
+    return reference;
   }
   const parsed = JSON.parse(raw) as unknown;
   if (!Array.isArray(parsed)) {
@@ -160,6 +160,9 @@ function serializeValue(valueType: ToolArgumentValueType, value: unknown): strin
   if (valueType === 'null') {
     return '';
   }
+  if (typeof value === 'string' && isFindIconReference(value)) {
+    return value;
+  }
   if (valueType === 'object' || valueType === 'array') {
     return JSON.stringify(value, null, 2);
   }
@@ -171,10 +174,11 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function parseTemplateReference(raw: string): string | undefined {
+function parseFindIconReference(raw: string): string | undefined {
   const trimmed = raw.trim();
-  if (/^\$\{[^}]+\}$/.test(trimmed)) {
-    return trimmed;
-  }
-  return undefined;
+  return isFindIconReference(trimmed) ? trimmed : undefined;
+}
+
+function isFindIconReference(value: string): boolean {
+  return /^\$\{find_icon(?:\.[A-Za-z0-9_-]+)*\}$/.test(value.trim());
 }

@@ -1,51 +1,13 @@
-import type { WorkflowInputVariable } from '@/lib/types';
+import { cloneWorkflowTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
 import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor/screenControlComposer';
 import type {
   ScreenControlComposerStep,
   WorkflowCanvasNodeDraft,
 } from '@/lib/workflow-editor/types';
 
-const DEFAULT_NEW_INPUT: WorkflowInputVariable = {
-  name: 'new_variable',
-  type: 'string',
-  required: false,
-};
-
 const EMPTY_SYSTEM_PROMPT = '';
 const DEFAULT_TOOL_ARGUMENTS_MODE = 'kv' as const;
 const EMPTY_TOOL_NAME = '';
-
-export function withAddedStartInput(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft {
-  const inputs = [...(node.start?.inputs ?? []), { ...DEFAULT_NEW_INPUT }];
-  return { ...node, start: { inputs } };
-}
-
-export function withRemovedStartInput(node: WorkflowCanvasNodeDraft, index: number): WorkflowCanvasNodeDraft {
-  const inputs = (node.start?.inputs ?? []).filter((_, inputIndex) => inputIndex !== index);
-  return { ...node, start: { inputs } };
-}
-
-export function withUpdatedStartInput(
-  node: WorkflowCanvasNodeDraft,
-  index: number,
-  nextInput: WorkflowInputVariable,
-): WorkflowCanvasNodeDraft {
-  const inputs = (node.start?.inputs ?? []).map((input, inputIndex) => (
-    inputIndex === index ? nextInput : input
-  ));
-  return { ...node, start: { inputs } };
-}
-
-export function withRenamedStartInput(
-  node: WorkflowCanvasNodeDraft,
-  index: number,
-  name: string,
-): WorkflowCanvasNodeDraft {
-  const inputs = (node.start?.inputs ?? []).map((input, inputIndex) => (
-    inputIndex === index ? { ...input, name } : input
-  ));
-  return { ...node, start: { inputs } };
-}
 
 export function withLLMPrompt(node: WorkflowCanvasNodeDraft, prompt: string): WorkflowCanvasNodeDraft {
   return { ...node, llm: { prompt, system_prompt: node.llm?.system_prompt ?? EMPTY_SYSTEM_PROMPT } };
@@ -56,7 +18,26 @@ export function withLLMSystemPrompt(node: WorkflowCanvasNodeDraft, systemPrompt:
 }
 
 export function withAgentMessage(node: WorkflowCanvasNodeDraft, message: string): WorkflowCanvasNodeDraft {
-  return { ...node, agent: { message } };
+  return {
+    ...node,
+    agent: {
+      message,
+      runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent?.runtime_overrides),
+    },
+  };
+}
+
+export function withAgentRuntimeOverrides(
+  node: WorkflowCanvasNodeDraft,
+  runtimeOverrides?: NonNullable<WorkflowCanvasNodeDraft['agent']>['runtime_overrides'],
+): WorkflowCanvasNodeDraft {
+  return {
+    ...node,
+    agent: {
+      message: node.agent?.message ?? '',
+      runtime_overrides: cloneWorkflowTaskRuntimeOverrides(runtimeOverrides),
+    },
+  };
 }
 
 export function withToolName(node: WorkflowCanvasNodeDraft, toolName: string): WorkflowCanvasNodeDraft {

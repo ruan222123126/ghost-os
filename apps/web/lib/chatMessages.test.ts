@@ -275,6 +275,44 @@ describe('chatMessages', () => {
     });
   });
 
+  it('renders thinking before assistant text from session history', () => {
+    const messages = withSessionIndices([
+      { role: 'assistant', text: '结论如下。', thinking: '先分析上下文' },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(2);
+    expect(mapped[0]).toMatchObject({ kind: 'thinking', content: '先分析上下文' });
+    expect(mapped[1]).toMatchObject({ kind: 'assistant', content: '结论如下。' });
+  });
+
+  it('keeps thinking-only tool loop assistants in history order', () => {
+    const messages = withSessionIndices([
+      { role: 'assistant', thinking: '先准备调用工具', tool_calls: [{ id: 'call-1', name: 'read_file', arguments: { path: 'README.md' } }] },
+      {
+        role: 'tool',
+        text: 'README.md contents',
+        tool_call_id: 'call-1',
+        tool_result: {
+          status: 'success',
+          tool: 'read_file',
+          output: 'README.md contents',
+        },
+      },
+      { role: 'assistant', thinking: '工具结果已返回', text: '最终答案' },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped.map((message) => message.kind)).toEqual([
+      'thinking',
+      'tool',
+      'thinking',
+      'assistant',
+    ]);
+  });
+
   it('does not render pure tool-tag assistant messages as raw text', () => {
     const messages = withSessionIndices([
       { role: 'assistant', text: '<t:1>{"provider":"tavily","query":"OpenAI"}</t>' },

@@ -1,14 +1,33 @@
-import type {
-  VariableTriggerRange,
-  WorkflowVariableOption,
-} from '@/lib/workflow-editor/types';
+export interface WorkflowAutocompleteOption {
+  token: string;
+  label: string;
+  section: 'builtin';
+  searchText: string;
+}
 
-const VARIABLE_QUERY_PATTERN = /^[A-Za-z0-9._-]*$/;
+export interface VariableTriggerRange {
+  start: number;
+  end: number;
+  query: string;
+}
 
 export interface VariableAutocompleteApplyResult {
   value: string;
   caretPosition: number;
 }
+
+const VARIABLE_QUERY_PATTERN = /^[A-Za-z0-9._-]*$/;
+
+export const WORKFLOW_FIND_ICON_VARIABLE = '${find_icon}';
+
+export const WORKFLOW_AUTOCOMPLETE_OPTIONS: WorkflowAutocompleteOption[] = [
+  {
+    token: WORKFLOW_FIND_ICON_VARIABLE,
+    label: 'find_icon',
+    section: 'builtin',
+    searchText: 'find_icon ${find_icon} builtin',
+  },
+];
 
 export function resolveVariableTriggerRange(
   value: string,
@@ -18,7 +37,6 @@ export function resolveVariableTriggerRange(
   if (safeCaretPosition === 0) {
     return undefined;
   }
-
   for (let index = safeCaretPosition - 1; index >= 0; index -= 1) {
     const current = value[index];
     if (current === '{') {
@@ -26,40 +44,34 @@ export function resolveVariableTriggerRange(
       if (!VARIABLE_QUERY_PATTERN.test(query)) {
         return undefined;
       }
-
-      const triggeredByTemplate = index > 0 && value[index - 1] === '$';
       return {
-        start: triggeredByTemplate ? index - 1 : index,
+        start: index > 0 && value[index-1] === '$' ? index - 1 : index,
         end: safeCaretPosition,
         query,
-        trigger: triggeredByTemplate ? '${' : '{',
       };
     }
-
     if (!VARIABLE_QUERY_PATTERN.test(current)) {
       return undefined;
     }
   }
-
   return undefined;
 }
 
 export function filterWorkflowVariableOptions(
-  options: WorkflowVariableOption[],
+  options: WorkflowAutocompleteOption[],
   query: string,
-): WorkflowVariableOption[] {
+): WorkflowAutocompleteOption[] {
   const normalizedQuery = query.trim().toLowerCase();
   if (normalizedQuery.length === 0) {
     return options;
   }
-
   return options.filter((option) => option.searchText.includes(normalizedQuery));
 }
 
 export function applyVariableOption(
   value: string,
   range: VariableTriggerRange,
-  option: WorkflowVariableOption,
+  option: WorkflowAutocompleteOption,
 ): VariableAutocompleteApplyResult {
   const nextValue = `${value.slice(0, range.start)}${option.token}${value.slice(range.end)}`;
   return {

@@ -315,6 +315,8 @@ pub struct SessionMessage {
     pub tool_call_id: Option<String>,
     #[serde(default)]
     pub in_progress: Option<bool>,
+    #[serde(default)]
+    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -371,6 +373,38 @@ pub struct SessionMessagePage {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionTurnDraftSegment {
+    pub id: String,
+    pub content: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionTurnDraftTool {
+    pub id: String,
+    pub content: String,
+    #[serde(default)]
+    pub tool_input: Option<String>,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub tool_status: Option<String>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionTurnDraft {
+    pub trace_id: String,
+    pub turn: i64,
+    pub assistant_segments: Vec<SessionTurnDraftSegment>,
+    pub thinking_segments: Vec<SessionTurnDraftSegment>,
+    pub tools: Vec<SessionTurnDraftTool>,
+    pub item_order: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentErrorPayload {
     pub message: String,
     #[serde(default)]
@@ -388,6 +422,8 @@ pub struct SessionDetail {
     pub message_count: i64,
     pub page: SessionMessagePage,
     pub token_count: i64,
+    #[serde(default)]
+    pub turn_draft: Option<SessionTurnDraft>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -585,9 +621,17 @@ pub struct AgentMessageTaskCreateRequest {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct TaskRuntimeOverrides {
     #[serde(default)]
+    pub provider_name: Option<String>,
+    #[serde(default)]
     pub model: Option<String>,
     #[serde(default)]
+    pub system_prompt: Option<String>,
+    #[serde(default)]
     pub tool_allowlist: Option<Vec<String>>,
+    #[serde(default)]
+    pub tool_allowlist_only: Option<bool>,
+    #[serde(default)]
+    pub max_turns: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -607,6 +651,8 @@ pub struct WorkflowLLMNode {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct WorkflowAgentNode {
     pub message: String,
+    #[serde(default)]
+    pub runtime_overrides: Option<TaskRuntimeOverrides>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

@@ -1,4 +1,8 @@
 import {
+  type WorkflowAgentRuntimeCatalog,
+  validateWorkflowAgentRuntimeNodes,
+} from '@/lib/workflow-editor/agentRuntime';
+import {
   INPUT_NAME_PATTERN,
   INPUT_NAME_MAX_LENGTH,
   LOOP_ROLE_END,
@@ -9,7 +13,11 @@ import type { WorkflowCanvasNodeDraft } from '@/lib/workflow-editor/types';
 
 const SUPPORTED_INPUT_TYPES = ['string', 'number', 'boolean', 'object', 'array'] as const;
 
-export function validateNodePayloads(nodes: WorkflowCanvasNodeDraft[], errors: string[]): void {
+export function validateNodePayloads(
+  nodes: WorkflowCanvasNodeDraft[],
+  errors: string[],
+  agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog,
+): void {
   for (const node of nodes) {
     switch (node.type) {
       case 'start':
@@ -39,6 +47,7 @@ export function validateNodePayloads(nodes: WorkflowCanvasNodeDraft[], errors: s
         errors.push(`unsupported workflow node type "${String(node.type)}"`);
     }
   }
+  validateWorkflowAgentRuntimeNodes(nodes, agentRuntimeCatalog, errors);
 }
 
 function validateStartNodePayload(node: WorkflowCanvasNodeDraft, errors: string[]): void {

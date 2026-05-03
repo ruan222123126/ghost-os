@@ -1,6 +1,11 @@
 import { useCallback, useReducer, useRef, type SetStateAction } from 'react';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
-import type { ChatMessage, PendingQuestionMessage, StreamingToolState } from '@/lib/types';
+import type {
+  ChatMessage,
+  PendingQuestionMessage,
+  SessionTurnDraft,
+  StreamingToolState,
+} from '@/lib/types';
 import type { ActiveAgentRun, ChatStateControls } from './types';
 import {
   chatStateReducer,
@@ -139,6 +144,10 @@ export function useChatState(): ChatStateControls {
     dispatch({ type: 'clear_messages' });
   }, []);
 
+  const hydrateTurnDraft = useCallback((draft: SessionTurnDraft | null | undefined) => {
+    dispatch({ type: 'hydrate_turn_draft', draft });
+  }, []);
+
   return {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: view.streamingAssistantSegments,
@@ -182,6 +191,7 @@ export function useChatState(): ChatStateControls {
     upsertPendingQuestion,
     removePendingQuestion,
     clearPendingQuestions,
+    hydrateTurnDraft,
     clearMessages,
   };
 }

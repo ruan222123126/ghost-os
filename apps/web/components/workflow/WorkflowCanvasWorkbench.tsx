@@ -10,6 +10,7 @@ import { useWebLocale } from '@/lib/i18n/provider';
 import type { WebLocale } from '@/lib/i18n/locale';
 import type {
   AutosaveState,
+  WorkflowAgentRuntimeCatalog,
   WorkflowCanvasDraft,
   WorkflowEditorKind,
   WorkflowCanvasNodeDraft,
@@ -25,6 +26,9 @@ interface WorkflowCanvasWorkbenchProps {
   validationErrors: string[];
   importSessionID: string;
   importLoading: boolean;
+  agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
+  agentRuntimeLoading: boolean;
+  agentRuntimeError: string;
   workflowCopy?: WorkflowCopy;
   nodeLibraryTypes?: readonly WorkflowNodeType[];
   localizeValidationError?: (message: string, locale: WebLocale) => string;
@@ -53,6 +57,9 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
     validationErrors,
     importSessionID,
     importLoading,
+    agentRuntimeCatalog,
+    agentRuntimeLoading,
+    agentRuntimeError,
     workflowCopy = copy.workflow,
     nodeLibraryTypes,
     localizeValidationError,
@@ -114,8 +121,10 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
       />
       <WorkflowCanvasPropertiesPanel
         editorKind={editorKind}
-        draft={draft}
         selectedNode={selectedNode}
+        agentRuntimeCatalog={agentRuntimeCatalog}
+        agentRuntimeLoading={agentRuntimeLoading}
+        agentRuntimeError={agentRuntimeError}
         onClose={() => onSelectNode(undefined)}
         onUpdateNode={onUpdateNode}
         onDeleteNode={onDeleteNode}

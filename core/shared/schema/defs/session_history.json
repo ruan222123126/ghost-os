@@ -48,7 +48,8 @@
           ]
         },
         "tool_call_id": { "type": "string" },
-        "in_progress": { "type": "boolean" }
+        "in_progress": { "type": "boolean" },
+        "thinking": { "type": "string" }
       },
       "x-codegen": {
         "order": 160,
@@ -214,6 +215,97 @@
         "kotlin": { "name": "SessionMessagePage" }
       }
     },
+    "sessionTurnDraftSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "content"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "content": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 176,
+        "go": { "name": "sessionTurnDraftSegment" },
+        "ts": { "name": "SessionTurnDraftSegment" },
+        "rust": { "name": "SessionTurnDraftSegment" },
+        "kotlin": { "name": "SessionTurnDraftSegment" }
+      }
+    },
+    "sessionTurnDraftTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "content"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "content": { "type": "string" },
+        "tool_input": { "type": "string" },
+        "tool_name": { "type": "string" },
+        "tool_status": { "type": "string" },
+        "tool_call_id": { "type": "string" },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 177,
+        "go": { "name": "sessionTurnDraftTool" },
+        "ts": { "name": "SessionTurnDraftTool" },
+        "rust": { "name": "SessionTurnDraftTool" },
+        "kotlin": { "name": "SessionTurnDraftTool" }
+      }
+    },
+    "sessionTurnDraft": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "trace_id",
+        "turn",
+        "assistant_segments",
+        "thinking_segments",
+        "tools",
+        "item_order"
+      ],
+      "properties": {
+        "trace_id": { "type": "string", "minLength": 1 },
+        "turn": { "type": "integer", "minimum": 0 },
+        "assistant_segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftSegment"
+          }
+        },
+        "thinking_segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftSegment"
+          }
+        },
+        "tools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftTool"
+          }
+        },
+        "item_order": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 178,
+        "go": { "name": "sessionTurnDraft" },
+        "ts": { "name": "SessionTurnDraft" },
+        "rust": { "name": "SessionTurnDraft" },
+        "kotlin": { "name": "SessionTurnDraft" }
+      }
+    },
     "sessionDetail": {
       "type": "object",
       "additionalProperties": false,
@@ -240,7 +332,13 @@
         "page": {
           "$ref": "#/$defs/sessionMessagePage"
         },
-        "token_count": { "type": "integer", "minimum": 0 }
+        "token_count": { "type": "integer", "minimum": 0 },
+        "turn_draft": {
+          "oneOf": [
+            { "$ref": "#/$defs/sessionTurnDraft" },
+            { "type": "null" }
+          ]
+        }
       },
       "x-codegen": {
         "order": 180,

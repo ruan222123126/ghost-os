@@ -2,11 +2,12 @@
 import type { ReactNode } from 'react';
 import type { WebLocale } from '@/lib/i18n/locale';
 import {
-  POSITION_TYPE_ABSOLUTE,
-  POSITION_TYPE_RELATIVE,
   type ClickEditorState,
-  type ClickPositionType,
 } from '@/components/workflow/workflowClickStepEditorHelpers';
+import {
+  ClickEditorCoordinateFields,
+  ClickEditorPositionTypeField,
+} from '@/components/workflow/workflowClickStepEditorFields';
 interface WorkflowClickStepEditorModalViewProps {
   locale: WebLocale;
   closeAria: string;
@@ -15,6 +16,7 @@ interface WorkflowClickStepEditorModalViewProps {
   stepTag: string;
   errorText: string;
   state: ClickEditorState;
+  canUseFindIconReference: boolean;
   saving: boolean;
   captureActive: boolean;
   captureLoading: boolean;
@@ -33,6 +35,10 @@ interface ClickEditorText {
   cancel: string;
   save: string;
   saving: string;
+  manualCoordinates: string;
+  findIconReference: string;
+  findIconUnavailable: string;
+  findIconReferenceHint: string;
   pickMouse: string;
   captureReady: string;
   captureHint: string;
@@ -47,6 +53,7 @@ export function WorkflowClickStepEditorModalView(props: WorkflowClickStepEditorM
     stepTag,
     errorText,
     state,
+    canUseFindIconReference,
     saving,
     captureActive,
     captureLoading,
@@ -68,16 +75,28 @@ export function WorkflowClickStepEditorModalView(props: WorkflowClickStepEditorM
           stepTag={stepTag}
         />
         <div className="space-y-6 p-6">
-          <PositionTypeField
-            value={state.positionType}
-            onChange={(value) => onStateChange({ ...state, positionType: value })}
-          />
-          <CoordinateFields
-            text={text}
+          {state.coordinateSource === 'manual' ? (
+            <ClickEditorPositionTypeField
+              value={state.positionType}
+              onChange={(value) => onStateChange({ ...state, positionType: value })}
+            />
+          ) : null}
+          <ClickEditorCoordinateFields
+            coordinateSource={state.coordinateSource}
+            canUseFindIconReference={canUseFindIconReference}
             x={state.x}
             y={state.y}
             captureActive={captureActive}
             captureLoading={captureLoading}
+            manualLabel={text.manualCoordinates}
+            findIconLabel={text.findIconReference}
+            unavailableHint={text.findIconUnavailable}
+            referenceHint={text.findIconReferenceHint}
+            captureReady={text.captureReady}
+            captureHint={text.captureHint}
+            coordinateHint={text.coordinateHint}
+            pickMouse={text.pickMouse}
+            onCoordinateSourceChange={(value) => onStateChange({ ...state, coordinateSource: value })}
             onStartCapture={onStartCapture}
             onXChange={(value) => onStateChange({ ...state, x: value })}
             onYChange={(value) => onStateChange({ ...state, y: value })}
@@ -164,106 +183,16 @@ function ClickEditorFooter(props: {
   );
 }
 
-function PositionTypeField(props: {
-  value: ClickPositionType;
-  onChange: (value: ClickPositionType) => void;
-}) {
-  const { value, onChange } = props;
-  return (
-    <div className="space-y-2">
-      <label className="block text-xs font-medium text-gray-700">位置基准</label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(event) => onChange(event.target.value === POSITION_TYPE_ABSOLUTE ? POSITION_TYPE_ABSOLUTE : POSITION_TYPE_RELATIVE)}
-          className="h-10 w-full cursor-pointer appearance-none border border-gray-200 bg-white pl-3 pr-10 text-sm outline-none transition-colors hover:border-gray-300 focus:border-black focus:ring-1 focus:ring-black"
-        >
-          <option value={POSITION_TYPE_RELATIVE}>相对于鼠标原本位置 (Relative)</option>
-          <option value={POSITION_TYPE_ABSOLUTE}>屏幕绝对位置 (Absolute)</option>
-        </select>
-        <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-          <ChevronDownIcon />
-        </span>
-      </div>
-      <p className="text-[11px] text-gray-500">
-        <span className="text-gray-800">必填</span> · enum · 决定坐标系原点.
-      </p>
-    </div>
-  );
-}
-
-function CoordinateFields(props: {
-  text: ClickEditorText;
-  x: string;
-  y: string;
-  captureActive: boolean;
-  captureLoading: boolean;
-  onStartCapture: () => void;
-  onXChange: (value: string) => void;
-  onYChange: (value: string) => void;
-}) {
-  const {
-    text,
-    x,
-    y,
-    captureActive,
-    captureLoading,
-    onStartCapture,
-    onXChange,
-    onYChange,
-  } = props;
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <label className="block text-xs font-medium text-gray-700">坐标参数</label>
-        <button
-          type="button"
-          onClick={onStartCapture}
-          disabled={captureActive || captureLoading}
-          className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700 transition-colors hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {captureActive ? text.captureReady : text.pickMouse}
-        </button>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <CoordinateInput axis="X" value={x} onChange={onXChange} />
-        <CoordinateInput axis="Y" value={y} onChange={onYChange} />
-      </div>
-      <p className="text-[11px] text-gray-500">
-        {captureActive ? text.captureHint : text.coordinateHint}
-      </p>
-    </div>
-  );
-}
-
-function CoordinateInput(props: {
-  axis: 'X' | 'Y';
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const { axis, value, onChange } = props;
-  return (
-    <div className="flex bg-gray-50/50">
-      <span className="flex w-12 flex-none items-center justify-center border border-r-0 border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-        {axis}
-      </span>
-      <input
-        type="number"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder="0"
-        className="w-full border border-gray-200 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-black focus:ring-1 focus:ring-black"
-      />
-    </div>
-  );
-}
-
 function viewText(locale: WebLocale): ClickEditorText {
   if (locale === 'zh-CN') {
     return {
       cancel: '取消',
       save: '保存设置',
       saving: '保存中…',
+      manualCoordinates: '手动填写坐标',
+      findIconReference: '使用最近一次 find_icon 坐标',
+      findIconUnavailable: '前面还没有可引用的 find_icon 步骤。',
+      findIconReferenceHint: '会在运行时读取当前工具内最近一次成功 find_icon 的首个匹配中心点。',
       pickMouse: '获取鼠标位置',
       captureReady: '按 Enter 确认',
       captureHint: '正在追踪鼠标位置，按 Enter 确认，按 Esc 取消。',
@@ -274,6 +203,10 @@ function viewText(locale: WebLocale): ClickEditorText {
     cancel: 'Cancel',
     save: 'Save',
     saving: 'Saving…',
+    manualCoordinates: 'Enter coordinates manually',
+    findIconReference: 'Use the latest find_icon coordinates',
+    findIconUnavailable: 'No earlier find_icon step is available in this composer.',
+    findIconReferenceHint: 'At runtime this reads the first match center from the latest successful find_icon step in the same tool.',
     pickMouse: 'Pick Mouse Position',
     captureReady: 'Press Enter to Confirm',
     captureHint: 'Tracking the cursor. Press Enter to confirm or Esc to cancel.',
@@ -285,14 +218,6 @@ function CloseIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

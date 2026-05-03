@@ -1,3 +1,4 @@
+import type { WorkflowAgentRuntimeCatalog } from '@/lib/workflow-editor/agentRuntime';
 import {
   END_NODE_TYPE,
   START_NODE_TYPE,
@@ -18,11 +19,18 @@ export interface WorkflowGraphData {
   outdegree: Map<string, number>;
 }
 
-export function validateWorkflowDraft(draft: WorkflowCanvasDraft): WorkflowValidationResult {
+export interface WorkflowValidationOptions {
+  agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
+}
+
+export function validateWorkflowDraft(
+  draft: WorkflowCanvasDraft,
+  options?: WorkflowValidationOptions,
+): WorkflowValidationResult {
   const errors: string[] = [];
   const graph = buildWorkflowGraphData(draft.nodes, draft.edges, errors);
   validateNodeKinds(draft.nodes, errors);
-  validateNodePayloads(draft.nodes, errors);
+  validateNodePayloads(draft.nodes, errors, options?.agentRuntimeCatalog);
   validateWorkflowGraphRules(draft.nodes, graph, errors);
   return { valid: errors.length === 0, errors };
 }

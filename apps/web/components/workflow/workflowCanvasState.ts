@@ -23,6 +23,7 @@ const LOOP_END_NODE_SUFFIX = 'end';
 
 interface AddNodeOptions {
   position?: WorkflowCanvasPosition;
+  source?: Partial<WorkflowCanvasNodeDraft>;
 }
 
 interface ConnectNodesOptions {
@@ -45,6 +46,7 @@ export function addNode(
   const index = draft.nodes.length;
   const node = createDraftNode(buildNodeID(type, index), type, index, {
     position: options?.position,
+    ...options?.source,
   });
 
   return {

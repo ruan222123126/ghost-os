@@ -233,9 +233,10 @@ func executeWorkflowScreenControlStepSequence(
 ) workflowNodeOutcome {
 	stepResults := make([]map[string]any, 0, len(steps))
 	var finalOutput any
+	var lastFindIconOutput any
 	for index := range steps {
 		step := steps[index]
-		stepArgs, err := prepareWorkflowScreenControlStepArguments(baseArgs, step)
+		stepArgs, err := prepareWorkflowScreenControlStepArguments(baseArgs, step, lastFindIconOutput)
 		if err != nil {
 			return workflowNodeOutcome{err: fmt.Errorf("workflow screen_control step %d (%s) failed: %w", index+1, step.Action, err)}
 		}
@@ -250,6 +251,9 @@ func executeWorkflowScreenControlStepSequence(
 			"tool_action": step.ToolAction,
 			"output":      result.outputValue,
 		})
+		if step.Action == "find_icon" {
+			lastFindIconOutput = result.outputValue
+		}
 		if result.awaitingText != "" {
 			return workflowNodeOutcome{
 				status:      taskRunStatusAwaitingHuman,
@@ -299,6 +303,7 @@ func randomWorkflowScreenControlStepDelay() time.Duration {
 func prepareWorkflowScreenControlStepArguments(
 	baseArgs map[string]any,
 	step workflowScreenControlStep,
+	lastFindIconOutput any,
 ) (map[string]any, error) {
 	args := cloneTaskActionParams(baseArgs)
 	if args == nil {
@@ -306,7 +311,10 @@ func prepareWorkflowScreenControlStepArguments(
 	}
 	args["mode"] = workflowScreenControlAtomicMode
 	args[workflowScreenControlActionKey] = step.ToolAction
-	params := cloneTaskActionParams(step.Params)
+	params, err := resolveWorkflowScreenControlStepParams(step, lastFindIconOutput)
+	if err != nil {
+		return nil, err
+	}
 	if params == nil {
 		params = map[string]any{}
 	}
@@ -563,7 +571,7 @@ func (r workflowTaskRunner) executeAgentNode(ctx context.Context, node WorkflowN
 	result := r.adapter.runAgentAction(ctx, agentParams{
 		Message:   node.Agent.Message,
 		SessionID: "",
-	}, nil, r.traceID)
+	}, cloneTaskRuntimeOverrides(node.Agent.RuntimeOverrides), r.traceID)
 	if strings.TrimSpace(result.Error) != "" {
 		return workflowNodeOutcome{err: fmt.Errorf("%s", result.Error)}
 	}

@@ -32,11 +32,26 @@ func TestCloneWorkflowDefinitionClonesStartInputsAndDefaults(t *testing.T) {
 				},
 			},
 			{
+				ID:   "agent-node",
+				Type: "agent",
+				Agent: &WorkflowAgentNode{
+					Message: "run agent",
+					RuntimeOverrides: &TaskRuntimeOverrides{
+						ProviderName:      "openai-main",
+						Model:             "gpt-5.4",
+						SystemPrompt:      "be concise",
+						ToolAllowlist:     []string{"script_exec"},
+						ToolAllowlistOnly: boolPointer(true),
+						MaxTurns:          intPointer(3),
+					},
+				},
+			},
+			{
 				ID:   "loop-node",
 				Type: "loop",
 				Loop: &WorkflowLoopNode{
 					MaxIterations: 3,
-					BodyNodeID:    "if-node",
+					BodyNodeID:    "agent-node",
 					ExitNodeID:    "end-node",
 				},
 			},
@@ -44,9 +59,9 @@ func TestCloneWorkflowDefinitionClonesStartInputsAndDefaults(t *testing.T) {
 		},
 		Edges: []WorkflowEdge{
 			{FromNodeID: "start-node", ToNodeID: "if-node"},
-			{FromNodeID: "if-node", ToNodeID: "loop-node"},
+			{FromNodeID: "if-node", ToNodeID: "agent-node"},
 			{FromNodeID: "if-node", ToNodeID: "end-node"},
-			{FromNodeID: "loop-node", ToNodeID: "if-node"},
+			{FromNodeID: "agent-node", ToNodeID: "loop-node"},
 			{FromNodeID: "loop-node", ToNodeID: "end-node"},
 		},
 	}
@@ -74,10 +89,27 @@ func TestCloneWorkflowDefinitionClonesStartInputsAndDefaults(t *testing.T) {
 		t.Fatalf("cloned default payload should not change, got %s", string(cloned.Nodes[0].Start.Inputs[0].Default))
 	}
 
-	if cloned.Nodes[1].If == nil || cloned.Nodes[2].Loop == nil {
+	if cloned.Nodes[1].If == nil || cloned.Nodes[3].Loop == nil {
 		t.Fatalf("expected if and loop payloads to be cloned: %#v", cloned.Nodes)
 	}
-	if cloned.Nodes[1].If == original.Nodes[1].If || cloned.Nodes[2].Loop == original.Nodes[2].Loop {
+	if cloned.Nodes[1].If == original.Nodes[1].If || cloned.Nodes[3].Loop == original.Nodes[3].Loop {
 		t.Fatal("expected if/loop payload to be deep cloned")
 	}
+	if cloned.Nodes[2].Agent == nil || cloned.Nodes[2].Agent == original.Nodes[2].Agent {
+		t.Fatal("expected agent payload to be deep cloned")
+	}
+	if cloned.Nodes[2].Agent.RuntimeOverrides == nil || cloned.Nodes[2].Agent.RuntimeOverrides == original.Nodes[2].Agent.RuntimeOverrides {
+		t.Fatal("expected agent runtime overrides to be deep cloned")
+	}
+	if cloned.Nodes[2].Agent.RuntimeOverrides.ToolAllowlistOnly == original.Nodes[2].Agent.RuntimeOverrides.ToolAllowlistOnly {
+		t.Fatal("expected tool_allowlist_only pointer to be cloned")
+	}
+}
+
+func boolPointer(value bool) *bool {
+	return &value
+}
+
+func intPointer(value int) *int {
+	return &value
 }

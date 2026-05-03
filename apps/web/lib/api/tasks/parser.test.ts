@@ -222,6 +222,61 @@ describe('lib/api/tasks/parser', () => {
     });
   });
 
+  it('parses workflow agent runtime_overrides', () => {
+    const parsed = parseTaskPayload({
+      id: 'workflow-agent-override',
+      task_kind: 'workflow',
+      schedule_type: 'interval',
+      interval_seconds: 60,
+      enabled: true,
+      created_at: '2026-04-05T07:00:00Z',
+      updated_at: '2026-04-05T08:00:00Z',
+      workflow: {
+        nodes: [
+          { id: 'start', type: 'start' },
+          {
+            id: 'agent',
+            type: 'agent',
+            agent: {
+              message: 'run agent',
+              runtime_overrides: {
+                provider_name: 'openai-main',
+                model: 'gpt-5.4',
+                system_prompt: 'Be concise',
+                tool_allowlist_only: true,
+                tool_allowlist: ['script_exec'],
+                max_turns: 3,
+              },
+            },
+          },
+          { id: 'end', type: 'end' },
+        ],
+        edges: [
+          { from_node_id: 'start', to_node_id: 'agent' },
+          { from_node_id: 'agent', to_node_id: 'end' },
+        ],
+      },
+    });
+
+    expect(parsed.task_kind).toBe('workflow');
+    if (parsed.task_kind !== 'workflow') {
+      throw new Error('Expected workflow task payload');
+    }
+    expect(parsed.workflow.nodes.find((node) => node.id === 'agent')).toMatchObject({
+      agent: {
+        message: 'run agent',
+        runtime_overrides: {
+          provider_name: 'openai-main',
+          model: 'gpt-5.4',
+          system_prompt: 'Be concise',
+          tool_allowlist_only: true,
+          tool_allowlist: ['script_exec'],
+          max_turns: 3,
+        },
+      },
+    });
+  });
+
   it('throws when required fields are missing', () => {
     expect(() => {
       parseTaskPayload({

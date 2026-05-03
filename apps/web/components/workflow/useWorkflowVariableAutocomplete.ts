@@ -3,18 +3,15 @@
 import type { Dispatch, KeyboardEvent, MouseEvent, RefObject, SetStateAction } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  WORKFLOW_AUTOCOMPLETE_OPTIONS,
   applyVariableOption,
-  buildWorkflowVariableSuggestions,
   filterWorkflowVariableOptions,
   resolveVariableTriggerRange,
-  type WorkflowCanvasDraft,
-  type WorkflowCanvasNodeDraft,
-  type WorkflowVariableOption,
-} from '@/lib/workflow-editor';
+  type VariableTriggerRange,
+  type WorkflowAutocompleteOption,
+} from '@/components/workflow/workflowVariableAutocomplete';
 
-export interface WorkflowVariableAutocompleteProps {
-  draft: WorkflowCanvasDraft;
-  selectedNode: WorkflowCanvasNodeDraft;
+interface WorkflowVariableAutocompleteProps {
   value: string;
   disabled?: boolean;
   readOnly?: boolean;
@@ -23,37 +20,36 @@ export interface WorkflowVariableAutocompleteProps {
 
 export interface WorkflowVariableAutocompleteState {
   activeIndex: number;
-  filteredOptions: WorkflowVariableOption[];
+  filteredOptions: WorkflowAutocompleteOption[];
   dropdownOpen: boolean;
   fieldRef: RefObject<FieldElement>;
   syncCaretPosition: (target: FieldElement) => void;
   handleChange: (target: FieldElement) => void;
   handleKeyDown: (event: KeyboardEvent<FieldElement>) => void;
   handleOptionMouseDown: (event: MouseEvent<HTMLButtonElement>) => void;
-  handleOptionClick: (option: WorkflowVariableOption) => void;
+  handleOptionClick: (option: WorkflowAutocompleteOption) => void;
   handleFocus: () => void;
   handleBlur: () => void;
 }
 
 type FieldElement = HTMLInputElement | HTMLTextAreaElement;
 
-const EMPTY_OPTIONS: WorkflowVariableOption[] = [];
+const EMPTY_OPTIONS: WorkflowAutocompleteOption[] = [];
 
 export function useWorkflowVariableAutocomplete(
   props: WorkflowVariableAutocompleteProps,
 ): WorkflowVariableAutocompleteState {
-  const { draft, selectedNode, value, disabled = false, readOnly = false, onChange } = props;
+  const { value, disabled = false, readOnly = false, onChange } = props;
   const fieldRef = useRef<FieldElement | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [caretPosition, setCaretPosition] = useState(value.length);
   const [dismissedRangeKey, setDismissedRangeKey] = useState<string>();
   const [isFocused, setIsFocused] = useState(false);
   const [pendingCaretPosition, setPendingCaretPosition] = useState<number>();
-  const options = useMemo(() => buildWorkflowVariableSuggestions(draft, selectedNode), [draft, selectedNode]);
   const triggerRange = useMemo(() => resolveVariableTriggerRange(value, caretPosition), [caretPosition, value]);
   const filteredOptions = useMemo(
-    () => (triggerRange ? filterWorkflowVariableOptions(options, triggerRange.query) : EMPTY_OPTIONS),
-    [options, triggerRange],
+    () => (triggerRange ? filterWorkflowVariableOptions(WORKFLOW_AUTOCOMPLETE_OPTIONS, triggerRange.query) : EMPTY_OPTIONS),
+    [triggerRange],
   );
   const rangeKey = triggerRange ? `${triggerRange.start}:${triggerRange.end}:${triggerRange.query}` : undefined;
   const dropdownOpen = isFocused && !disabled && !readOnly && Boolean(triggerRange) && dismissedRangeKey !== rangeKey;
@@ -111,29 +107,17 @@ function handleFieldChange(
 function handleAutocompleteKeyDown(input: {
   event: KeyboardEvent<FieldElement>;
   dropdownOpen: boolean;
-  filteredOptions: WorkflowVariableOption[];
+  filteredOptions: WorkflowAutocompleteOption[];
   activeIndex: number;
   rangeKey?: string;
   value: string;
-  triggerRange: ReturnType<typeof resolveVariableTriggerRange>;
+  triggerRange: VariableTriggerRange | undefined;
   onChange: (value: string) => void;
   setActiveIndex: Dispatch<SetStateAction<number>>;
   setDismissedRangeKey: Dispatch<SetStateAction<string | undefined>>;
   setPendingCaretPosition: Dispatch<SetStateAction<number | undefined>>;
 }) {
-  const {
-    event,
-    dropdownOpen,
-    filteredOptions,
-    activeIndex,
-    rangeKey,
-    value,
-    triggerRange,
-    onChange,
-    setActiveIndex,
-    setDismissedRangeKey,
-    setPendingCaretPosition,
-  } = input;
+  const { event, dropdownOpen, filteredOptions, activeIndex, rangeKey, value, triggerRange, onChange, setActiveIndex, setDismissedRangeKey, setPendingCaretPosition } = input;
   if (!dropdownOpen || filteredOptions.length === 0) {
     if (event.key === 'Escape') {
       setDismissedRangeKey(undefined);
@@ -172,8 +156,8 @@ function handleAutocompleteKeyDown(input: {
 }
 
 function commitVariableOption(input: {
-  option: WorkflowVariableOption;
-  triggerRange: ReturnType<typeof resolveVariableTriggerRange>;
+  option: WorkflowAutocompleteOption;
+  triggerRange: VariableTriggerRange | undefined;
   value: string;
   onChange: (value: string) => void;
   setActiveIndex: Dispatch<SetStateAction<number>>;
@@ -204,10 +188,7 @@ function useResetDismissedRange(
   }, [dismissedRangeKey, rangeKey, setDismissedRangeKey]);
 }
 
-function useClampActiveIndex(
-  optionCount: number,
-  setActiveIndex: Dispatch<SetStateAction<number>>,
-) {
+function useClampActiveIndex(optionCount: number, setActiveIndex: Dispatch<SetStateAction<number>>) {
   useEffect(() => {
     setActiveIndex((current) => {
       if (optionCount === 0) {

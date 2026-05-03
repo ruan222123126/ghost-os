@@ -22,9 +22,12 @@ import { buildHomeSettingsURL } from '@/lib/settingsQuery';
 import {
   type AutosaveSnapshot,
   createEmptyWorkflowDraft,
+  enabledWorkflowAgentToolNames,
   importWorkflowFromSessionTasks,
+  normalizeWorkflowDraftAgentNodes,
   validateWorkflowDraft,
   withWorkflowContent,
+  type WorkflowAgentRuntimeCatalog,
 } from '@/lib/workflow-editor';
 import type {
   AutosaveState,
@@ -34,7 +37,12 @@ import type {
   WorkflowNodeType,
   WorkflowUpdatePayload,
 } from '@/lib/workflow-editor';
-import type { WebCopy } from '@/lib/i18n/messages';
+import { useWorkflowAgentRuntimeCatalog } from './useWorkflowAgentRuntimeCatalog';
+import type {
+  UseWorkflowEditorControllerOptions,
+  UseWorkflowEditorControllerResult,
+  WorkflowEditorPhase,
+} from './workflowEditorControllerTypes';
 import {
   buildAutosaveSnapshot,
   resolveSaveBlockReason,
@@ -49,38 +57,6 @@ import {
   useSeedAutosaveBaseline,
   useWorkflowBootstrap,
 } from './workflowEditorControllerInternals';
-
-type WorkflowEditorMode = 'create' | 'edit';
-type WorkflowEditorPhase = 'loading' | 'ready';
-
-interface UseWorkflowEditorControllerOptions {
-  mode: WorkflowEditorMode;
-  taskID?: string;
-  copy: WebCopy;
-}
-
-interface UseWorkflowEditorControllerResult {
-  phase: WorkflowEditorPhase;
-  draft: WorkflowCanvasDraft;
-  autosaveState: AutosaveState;
-  actionError: string;
-  importSessionID: string;
-  importLoading: boolean;
-  validationErrors: string[];
-  onChangeImportSessionID: (value: string) => void;
-  onImportFromSession: () => Promise<void>;
-  onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
-  onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => void;
-  onSelectNode: (nodeID?: string) => void;
-  onMoveNode: (nodeID: string, position: WorkflowCanvasPosition) => void;
-  onConnectNodes: (sourceNodeID: string, targetNodeID: string) => void;
-  onDeleteEdge: (edgeID: string) => void;
-  onDuplicateNode: (nodeID: string) => void;
-  onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
-  onDeleteNode: (nodeID: string) => void;
-  onSave: () => Promise<void>;
-  onBack: () => void;
-}
 
 export function useWorkflowEditorController(
   options: UseWorkflowEditorControllerOptions,
@@ -97,13 +73,28 @@ export function useWorkflowEditorController(
   const [actionError, setActionError] = useState('');
   const [importSessionID, setImportSessionID] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [agentNormalizationEnabled, setAgentNormalizationEnabled] = useState(false);
   const runtimeRef = useRef<WorkflowEditorControllerRuntime>({
     taskID,
     routeReplaced: mode === 'edit',
     baselineSeeded: false,
   });
-  const validation = useMemo(() => validateWorkflowDraft(draft), [draft]);
-  const snapshotBuild = useMemo(() => buildAutosaveSnapshot(draft), [draft]);
+  const agentRuntimeState = useWorkflowAgentRuntimeCatalog();
+  const agentRuntimeReady = agentRuntimeState.catalog !== undefined;
+  const enabledToolNames = useMemo(
+    () => enabledWorkflowAgentToolNames(agentRuntimeState.catalog?.tools ?? []),
+    [agentRuntimeState.catalog?.tools],
+  );
+  const editableDraft = useMemo(() => {
+    if (!agentNormalizationEnabled || !agentRuntimeReady) {
+      return draft;
+    }
+    return normalizeWorkflowDraftAgentNodes(draft, enabledToolNames);
+  }, [agentNormalizationEnabled, agentRuntimeReady, draft, enabledToolNames]);
+  const validation = useMemo(() => validateWorkflowDraft(editableDraft, {
+    agentRuntimeCatalog: agentRuntimeState.catalog,
+  }), [agentRuntimeState.catalog, editableDraft]);
+  const snapshotBuild = useMemo(() => buildAutosaveSnapshot(editableDraft), [editableDraft]);
   const currentSnapshot = snapshotBuild.snapshot;
   const persistSnapshotRef = useRef<(snapshot: AutosaveSnapshot<WorkflowUpdatePayload>) => Promise<void>>(
     async () => undefined,
@@ -142,35 +133,54 @@ export function useWorkflowEditorController(
     validationErrors: validation.errors,
   });
 
+  useEffect(() => {
+    if (!agentNormalizationEnabled || !agentRuntimeReady) {
+      return;
+    }
+    const selectedNode = draft.nodes.find((node) => node.id === draft.selectedNodeId);
+    if (selectedNode?.type !== 'agent' || selectedNode.agent?.runtime_overrides) {
+      return;
+    }
+    setDraft((state) => normalizeWorkflowDraftAgentNodes(state, enabledToolNames));
+  }, [agentNormalizationEnabled, agentRuntimeReady, draft.nodes, draft.selectedNodeId, enabledToolNames]);
+
   const handleImport = useCallback(async () => {
     setImportLoading(true);
     setActionError('');
     try {
       const tasks = await listTasks();
       const imported = importWorkflowFromSessionTasks(tasks, importSessionID);
-      setDraft((state) => withWorkflowContent(state, imported.nodes, imported.edges));
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(withWorkflowContent(state, imported.nodes, imported.edges), enabledToolNames)
+        : withWorkflowContent(state, imported.nodes, imported.edges));
     } catch (error) {
       setActionError(toErrorMessage(error, copy.system.failedToImportSessionTasks));
     } finally {
       setImportLoading(false);
     }
-  }, [copy.system.failedToImportSessionTasks, importSessionID]);
+  }, [agentRuntimeReady, copy.system.failedToImportSessionTasks, enabledToolNames, importSessionID]);
 
   const handleSave = useCallback(async () => {
     setActionError('');
-    const blockReason = resolveSaveBlockReason(validation.errors, snapshotBuild.errorMessage);
-    if (blockReason || !currentSnapshot) {
+    setAgentNormalizationEnabled(true);
+    const saveDraft = agentRuntimeReady
+      ? normalizeWorkflowDraftAgentNodes(draft, enabledToolNames)
+      : draft;
+    const saveSnapshot = buildAutosaveSnapshot(saveDraft);
+    const blockReason = resolveSaveBlockReason(validation.errors, saveSnapshot.errorMessage);
+    if (blockReason || !saveSnapshot.snapshot) {
       const reason = blockReason ?? VALIDATION_BLOCKED_TEXT;
       autosaveController.markBlocked(reason);
       setActionError(reason);
       return;
     }
     try {
-      await autosaveController.flush(currentSnapshot, { force: true });
+      await autosaveController.flush(saveSnapshot.snapshot, { force: true });
     } catch (error) {
       setActionError(toErrorMessage(error, copy.system.failedToSaveWorkflow));
     }
-  }, [autosaveController, copy.system.failedToSaveWorkflow, currentSnapshot, snapshotBuild.errorMessage, validation.errors]);
+  }, [agentRuntimeReady, autosaveController, copy.system.failedToSaveWorkflow, draft, enabledToolNames, validation.errors]);
 
   const handleBack = useCallback(() => {
     router.push(buildHomeSettingsURL('tasks'));
@@ -183,20 +193,84 @@ export function useWorkflowEditorController(
     actionError,
     importSessionID,
     importLoading,
+    agentRuntimeCatalog: agentRuntimeState.catalog,
+    agentRuntimeLoading: agentRuntimeState.loading,
+    agentRuntimeError: agentRuntimeState.error,
     validationErrors: validation.errors,
     onChangeImportSessionID: setImportSessionID,
     onImportFromSession: handleImport,
-    onScheduleChange: (patch) => setDraft((state) => ({ ...state, schedule: { ...state.schedule, ...patch } })),
-    onAddNode: (type, position) => setDraft((state) => addNode(state, type, { position })),
-    onSelectNode: (nodeID) => setDraft((state) => ({ ...state, selectedNodeId: nodeID })),
-    onMoveNode: (nodeID, position) => setDraft((state) => moveNode(state, nodeID, position)),
-    onConnectNodes: (sourceNodeID, targetNodeID) => {
-      setDraft((state) => connectNodesByID(state, { sourceNodeID, targetNodeID }));
+    onScheduleChange: (patch) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes({ ...state, schedule: { ...state.schedule, ...patch } }, enabledToolNames)
+        : { ...state, schedule: { ...state.schedule, ...patch } });
     },
-    onDeleteEdge: (edgeID) => setDraft((state) => removeEdge(state, edgeID)),
-    onDuplicateNode: (nodeID) => setDraft((state) => duplicateNode(state, nodeID)),
-    onUpdateNode: (node) => setDraft((state) => updateNode(state, node)),
-    onDeleteNode: (nodeID) => setDraft((state) => removeNode(state, nodeID)),
+    onAddNode: (type, position) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => addNode(state, type, {
+        position,
+        source: type === 'agent' && agentRuntimeReady
+          ? {
+            agent: {
+              message: '',
+              runtime_overrides: {
+                tool_allowlist_only: true,
+                tool_allowlist: [...enabledToolNames],
+              },
+            },
+          }
+          : undefined,
+      }));
+    },
+    onSelectNode: (nodeID) => {
+      const selectedNode = draft.nodes.find((node) => node.id === nodeID);
+      if (selectedNode?.type === 'agent') {
+        setAgentNormalizationEnabled(true);
+      }
+      setDraft((state) => {
+        const next = { ...state, selectedNodeId: nodeID };
+        if (!agentRuntimeReady || selectedNode?.type !== 'agent') {
+          return next;
+        }
+        return normalizeWorkflowDraftAgentNodes(next, enabledToolNames);
+      });
+    },
+    onMoveNode: (nodeID, position) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(moveNode(state, nodeID, position), enabledToolNames)
+        : moveNode(state, nodeID, position));
+    },
+    onConnectNodes: (sourceNodeID, targetNodeID) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(connectNodesByID(state, { sourceNodeID, targetNodeID }), enabledToolNames)
+        : connectNodesByID(state, { sourceNodeID, targetNodeID }));
+    },
+    onDeleteEdge: (edgeID) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(removeEdge(state, edgeID), enabledToolNames)
+        : removeEdge(state, edgeID));
+    },
+    onDuplicateNode: (nodeID) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(duplicateNode(state, nodeID), enabledToolNames)
+        : duplicateNode(state, nodeID));
+    },
+    onUpdateNode: (node) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(updateNode(state, node), enabledToolNames)
+        : updateNode(state, node));
+    },
+    onDeleteNode: (nodeID) => {
+      setAgentNormalizationEnabled(true);
+      setDraft((state) => agentRuntimeReady
+        ? normalizeWorkflowDraftAgentNodes(removeNode(state, nodeID), enabledToolNames)
+        : removeNode(state, nodeID));
+    },
     onSave: handleSave,
     onBack: handleBack,
   };

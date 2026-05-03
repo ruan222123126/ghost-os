@@ -5,7 +5,7 @@ import type {
   WorkflowCanvasPosition,
   WorkflowNodeType,
 } from '@/lib/workflow-editor';
-import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor';
+import { cloneWorkflowTaskRuntimeOverrides, normalizeScreenControlComposerAction } from '@/lib/workflow-editor';
 import { LOOP_ROLE_END, LOOP_ROLE_START } from '@/lib/workflow-editor/constants';
 
 const LOOP_NODE_ID_PREFIX = 'loop';
@@ -134,7 +134,12 @@ function cloneNodeForDuplicate(
       }
       : undefined,
     llm: node.llm ? { ...node.llm } : undefined,
-    agent: node.agent ? { ...node.agent } : undefined,
+    agent: node.agent
+      ? {
+        ...node.agent,
+        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
+      }
+      : undefined,
     if: node.if ? { ...node.if } : undefined,
     loop: patch.loop ?? (node.loop ? { ...node.loop } : undefined),
   };

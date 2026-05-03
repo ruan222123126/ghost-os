@@ -175,10 +175,7 @@ func buildAgentMessageNodeResult(
 	}
 	runtimePayload := map[string]any{}
 	if runtimeOverrides := cloneTaskRuntimeOverrides(task.RuntimeOverrides); runtimeOverrides != nil {
-		runtimePayload = map[string]any{
-			"model":          runtimeOverrides.Model,
-			"tool_allowlist": append([]string(nil), runtimeOverrides.ToolAllowlist...),
-		}
+		runtimePayload = taskRuntimeOverrideSnapshot(runtimeOverrides)
 	}
 	input["runtime_overrides"] = runtimePayload
 	output := map[string]any{
@@ -200,6 +197,27 @@ func buildAgentMessageNodeResult(
 		Preview:      strings.TrimSpace(result.ResponsePreview),
 		Error:        strings.TrimSpace(result.Error),
 	}
+}
+
+func taskRuntimeOverrideSnapshot(runtimeOverrides *TaskRuntimeOverrides) map[string]any {
+	if runtimeOverrides == nil {
+		return map[string]any{}
+	}
+	snapshot := map[string]any{
+		"provider_name": strings.TrimSpace(runtimeOverrides.ProviderName),
+		"model":         strings.TrimSpace(runtimeOverrides.Model),
+		"system_prompt": strings.TrimSpace(runtimeOverrides.SystemPrompt),
+	}
+	if runtimeOverrides.ToolAllowlistOnly != nil {
+		snapshot["tool_allowlist_only"] = *runtimeOverrides.ToolAllowlistOnly
+	}
+	if runtimeOverrides.MaxTurns != nil {
+		snapshot["max_turns"] = *runtimeOverrides.MaxTurns
+	}
+	if runtimeOverrides.ToolAllowlist != nil {
+		snapshot["tool_allowlist"] = append([]string(nil), runtimeOverrides.ToolAllowlist...)
+	}
+	return snapshot
 }
 
 func (a taskExecutorAdapter) executeSystemTask(_ context.Context, task ScheduledTask, _ string) bridgeTasks.ExecutionResult {

@@ -5,6 +5,7 @@ import {
   expectString,
   expectStringEnum,
   pickKnownKeys,
+  parseOptionalBoolean,
   parseOptionalNumber,
   parseOptionalRecord,
   parseOptionalStringArray,
@@ -31,7 +32,14 @@ const TASK_PAYLOAD_KEYS = [
   'next_run_at',
   'last_error',
 ] as const;
-const TASK_RUNTIME_OVERRIDE_KEYS = ['model', 'tool_allowlist'] as const;
+const TASK_RUNTIME_OVERRIDE_KEYS = [
+  'provider_name',
+  'model',
+  'system_prompt',
+  'tool_allowlist',
+  'tool_allowlist_only',
+  'max_turns',
+] as const;
 const TASK_RUN_STATUS = ['success', 'cancelled', 'error', 'skipped', 'awaiting_human'] as const;
 const TASK_RUN_LOG_KEYS = [
   'task_id',
@@ -78,8 +86,12 @@ interface ParsedTaskBase {
 }
 
 interface ParsedTaskRuntimeOverrides {
+  provider_name?: string;
   model?: string;
+  system_prompt?: string;
   tool_allowlist?: string[];
+  tool_allowlist_only?: boolean;
+  max_turns?: number;
 }
 
 function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRuntimeOverrides | undefined {
@@ -89,10 +101,21 @@ function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRun
   }
   const picked = pickKnownKeys(record, TASK_RUNTIME_OVERRIDE_KEYS);
   const parsed: ParsedTaskRuntimeOverrides = {
+    provider_name: parseOptionalString(picked.provider_name, `${label}.provider_name`),
     model: parseOptionalString(picked.model, `${label}.model`),
+    system_prompt: parseOptionalString(picked.system_prompt, `${label}.system_prompt`),
     tool_allowlist: parseOptionalStringArray(picked.tool_allowlist, `${label}.tool_allowlist`),
+    tool_allowlist_only: parseOptionalBoolean(picked.tool_allowlist_only, `${label}.tool_allowlist_only`),
+    max_turns: parseOptionalNumber(picked.max_turns, `${label}.max_turns`),
   };
-  if (!parsed.model && (!parsed.tool_allowlist || parsed.tool_allowlist.length === 0)) {
+  if (
+    !parsed.provider_name
+    && !parsed.model
+    && !parsed.system_prompt
+    && (!parsed.tool_allowlist || parsed.tool_allowlist.length === 0)
+    && parsed.tool_allowlist_only === undefined
+    && parsed.max_turns === undefined
+  ) {
     return undefined;
   }
   return parsed;

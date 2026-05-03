@@ -11,8 +11,9 @@ import {
   type StreamingToolTableState,
 } from '@/lib/chatStream';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
-import type { ChatMessage } from '@/lib/types';
+import type { ChatMessage, SessionTurnDraft } from '@/lib/types';
 import { applyRuntimeActionsToState } from './chatStateRuntime';
+import { buildDraftHydratedState } from './chatStateDraft';
 import type { ActiveAgentRun } from './types';
 
 export interface ChatStateStore {
@@ -74,13 +75,19 @@ interface ClearMessagesAction {
   type: 'clear_messages';
 }
 
+interface HydrateTurnDraftAction {
+  type: 'hydrate_turn_draft';
+  draft: SessionTurnDraft | null | undefined;
+}
+
 export type ChatStateAction =
   | SetScalarAction
   | SetCommittedMessagesAction
   | ApplyRuntimeActionsAction
   | ReplaceWithErrorMessageAction
   | AppendErrorMessageAction
-  | ClearMessagesAction;
+  | ClearMessagesAction
+  | HydrateTurnDraftAction;
 
 export function createInitialChatState(): ChatStateStore {
   return {
@@ -116,6 +123,8 @@ export function chatStateReducer(state: ChatStateStore, action: ChatStateAction)
       return appendErrorMessageState(state, action.messageText);
     case 'clear_messages':
       return clearMessagesState(state);
+    case 'hydrate_turn_draft':
+      return hydrateTurnDraftState(state, action.draft);
     default:
       return state;
   }
@@ -165,5 +174,19 @@ function clearMessagesState(state: ChatStateStore): ChatStateStore {
     historySyncing: false,
     hasOlderHistory: false,
     nextHistoryBefore: null,
+  };
+}
+
+function hydrateTurnDraftState(
+  state: ChatStateStore,
+  draft: SessionTurnDraft | null | undefined,
+): ChatStateStore {
+  const hydrated = buildDraftHydratedState(draft);
+  return {
+    ...state,
+    streamingAssistantState: hydrated.streamingAssistantState,
+    streamingThinkingState: hydrated.streamingThinkingState,
+    streamingItemOrder: hydrated.streamingItemOrder,
+    streamingToolState: hydrated.streamingToolState,
   };
 }

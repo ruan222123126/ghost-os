@@ -1,0 +1,7 @@
+[Unit]
+Description=Ghost-OS user stack
+Wants=ghost-os-bridge.service
+Wants=ghost-os-web.service
+
+[Install]
+WantedBy=default.target

@@ -8,6 +8,7 @@ import { useWebLocale } from '@/lib/i18n/provider';
 import type { ScreenControlComposerStep } from '@/lib/workflow-editor';
 import { WorkflowClickStepEditorModalView } from '@/components/workflow/WorkflowClickStepEditorModalView';
 import {
+  CLICK_COORDINATE_SOURCE_FIND_ICON,
   CLICK_MOUSE_POLL_MS,
   applyMousePositionToState,
   buildInitialEditorState,
@@ -20,6 +21,7 @@ interface WorkflowClickStepEditorModalProps {
   open: boolean;
   stepIndex: number;
   step: ScreenControlComposerStep;
+  canUseFindIconReference: boolean;
   onClose: () => void;
   onSave: (stepIndex: number, step: ScreenControlComposerStep) => void;
 }
@@ -44,7 +46,7 @@ function WorkflowClickStepEditorModalContent(
   props: WorkflowClickStepEditorModalProps,
 ) {
   const { locale, copy } = useWebLocale();
-  const { step, stepIndex, onClose, onSave } = props;
+  const { step, stepIndex, canUseFindIconReference, onClose, onSave } = props;
   const initial = useMemo(() => buildInitialEditorState(step), [step]);
   const [state, setState] = useState<ClickEditorState>(initial);
   const [saving, setSaving] = useState(false);
@@ -146,6 +148,7 @@ function WorkflowClickStepEditorModalContent(
       step,
       stepIndex,
       state,
+      canUseFindIconReference,
       onSave,
       setSaving,
       setErrorText,
@@ -161,6 +164,7 @@ function WorkflowClickStepEditorModalContent(
       stepTag={buildStepTag(stepIndex)}
       errorText={errorText}
       state={state}
+      canUseFindIconReference={canUseFindIconReference}
       saving={saving}
       captureActive={captureActive}
       captureLoading={captureLoading}
@@ -176,16 +180,20 @@ function handleSaveClick(options: {
   step: ScreenControlComposerStep;
   stepIndex: number;
   state: ClickEditorState;
+  canUseFindIconReference: boolean;
   onSave: (stepIndex: number, step: ScreenControlComposerStep) => void;
   setSaving: (value: boolean) => void;
   setErrorText: (value: string) => void;
   fallbackError: string;
 }) {
-  const { step, stepIndex, state, onSave, setSaving, setErrorText, fallbackError } = options;
+  const { step, stepIndex, state, canUseFindIconReference, onSave, setSaving, setErrorText, fallbackError } = options;
   setSaving(true);
   setErrorText('');
 
   try {
+    if (state.coordinateSource === CLICK_COORDINATE_SOURCE_FIND_ICON && !canUseFindIconReference) {
+      throw new Error('find_icon reference is not available');
+    }
     onSave(stepIndex, buildSavedClickStep(step, state));
   } catch (error) {
     setErrorText(toErrorMessage(error, fallbackError));
