@@ -5,41 +5,55 @@ import { WorkflowCanvasStartVariablesEditor } from '@/components/workflow/Workfl
 import { WorkflowCanvasToolNodeEditor } from '@/components/workflow/WorkflowCanvasToolNodeEditor';
 import { useWebLocale } from '@/lib/i18n/provider';
 import {
+  type WorkflowCanvasDraft,
   type WorkflowCanvasNodeDraft,
+  type WorkflowEditorKind,
   withAgentMessage,
   withLLMPrompt,
   withLLMSystemPrompt,
 } from '@/lib/workflow-editor';
+import { WorkflowVariableAutocompleteField } from './WorkflowVariableAutocompleteField';
 
 interface WorkflowCanvasNodeEditorContentProps {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
   selectedNode: WorkflowCanvasNodeDraft;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
 
 interface NodeEditorProps {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
   selectedNode: WorkflowCanvasNodeDraft;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
 
 export function WorkflowCanvasNodeEditorContent(props: WorkflowCanvasNodeEditorContentProps) {
-  const { selectedNode, onUpdateNode } = props;
+  const { editorKind, draft, selectedNode, onUpdateNode } = props;
   if (selectedNode.type === 'start') {
     return <WorkflowCanvasStartVariablesEditor selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
   }
   if (selectedNode.type === 'llm') {
-    return <LLMEditor selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
+    return <LLMEditor editorKind={editorKind} draft={draft} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
   }
   if (selectedNode.type === 'if') {
-    return <IfEditor selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
+    return <IfEditor editorKind={editorKind} draft={draft} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
   }
   if (selectedNode.type === 'loop') {
     return <LoopEditor selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
   }
   if (selectedNode.type === 'tool') {
-    return <WorkflowCanvasToolNodeEditor selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
+    return (
+      <WorkflowCanvasToolNodeEditor
+        editorKind={editorKind}
+        draft={draft}
+        selectedNode={selectedNode}
+        onUpdateNode={onUpdateNode}
+      />
+    );
   }
   if (selectedNode.type === 'agent') {
-    return <AgentEditor selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
+    return <AgentEditor editorKind={editorKind} draft={draft} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
   }
   return <EndEditor />;
 }
@@ -57,18 +71,26 @@ function LLMEditor(props: NodeEditorProps) {
         <option>Engine: Llama 3 70B</option>
       </select>
       <label className="workflow-arch-field-label">{copy.workflow.llmSystemDirectives}</label>
-      <textarea
-        rows={6}
+      <TemplateEnabledField
+        editorKind={props.editorKind}
+        draft={props.draft}
+        selectedNode={selectedNode}
+        mode="textarea"
         value={selectedNode.llm?.system_prompt ?? ''}
+        rows={6}
         placeholder={copy.workflow.llmSystemPromptPlaceholder}
-        onChange={(event) => onUpdateNode(withLLMSystemPrompt(selectedNode, event.target.value))}
+        onChange={(value) => onUpdateNode(withLLMSystemPrompt(selectedNode, value))}
       />
       <label className="workflow-arch-field-label">{copy.workflow.llmPrompt}</label>
-      <textarea
-        rows={8}
+      <TemplateEnabledField
+        editorKind={props.editorKind}
+        draft={props.draft}
+        selectedNode={selectedNode}
+        mode="textarea"
         value={selectedNode.llm?.prompt ?? ''}
+        rows={8}
         placeholder={copy.workflow.llmPromptPlaceholder}
-        onChange={(event) => onUpdateNode(withLLMPrompt(selectedNode, event.target.value))}
+        onChange={(value) => onUpdateNode(withLLMPrompt(selectedNode, value))}
       />
       <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p>
     </div>
@@ -81,11 +103,15 @@ function AgentEditor(props: NodeEditorProps) {
   return (
     <div className="workflow-arch-prop-group">
       <label className="workflow-arch-field-label">{copy.workflow.agentMessage}</label>
-      <textarea
-        rows={9}
+      <TemplateEnabledField
+        editorKind={props.editorKind}
+        draft={props.draft}
+        selectedNode={selectedNode}
+        mode="textarea"
         value={selectedNode.agent?.message ?? ''}
+        rows={9}
         placeholder={copy.workflow.agentMessagePlaceholder}
-        onChange={(event) => onUpdateNode(withAgentMessage(selectedNode, event.target.value))}
+        onChange={(value) => onUpdateNode(withAgentMessage(selectedNode, value))}
       />
       <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p>
     </div>
@@ -98,5 +124,53 @@ function EndEditor() {
     <div className="workflow-arch-end-tip">
       <p>{copy.workflow.terminus}</p>
     </div>
+  );
+}
+
+interface TemplateEnabledFieldProps {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
+  selectedNode: WorkflowCanvasNodeDraft;
+  mode: 'input' | 'textarea';
+  value: string;
+  rows?: number;
+  placeholder?: string;
+  onChange: (value: string) => void;
+}
+
+function TemplateEnabledField(props: TemplateEnabledFieldProps) {
+  const { editorKind, draft, selectedNode, mode, value, rows, placeholder, onChange } = props;
+  if (editorKind === 'workflow') {
+    return (
+      <WorkflowVariableAutocompleteField
+        draft={draft}
+        selectedNode={selectedNode}
+        mode={mode}
+        value={value}
+        rows={rows}
+        placeholder={placeholder}
+        onChange={onChange}
+      />
+    );
+  }
+
+  if (mode === 'textarea') {
+    return (
+      <textarea
+        rows={rows}
+        value={value}
+        placeholder={placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+
+  return (
+    <input
+      type="text"
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+    />
   );
 }

@@ -10,6 +10,7 @@ describe('lib/api/skills/parser', () => {
         description: 'repo release skill',
         path: '/tmp/project/.agents/skills/release',
         source: 'repo',
+        enabled: true,
       },
       {
         id: 'skill_user_release',
@@ -17,6 +18,7 @@ describe('lib/api/skills/parser', () => {
         description: 'user release skill',
         path: '/tmp/home/.ghost-os/skills/release',
         source: 'user',
+        enabled: false,
       },
     ];
 
@@ -32,6 +34,7 @@ describe('lib/api/skills/parser', () => {
           description: 'repo release skill',
           path: '/tmp/project/.agents/skills/release',
           source: 'repo',
+          enabled: true,
           unknown: 'ignored',
         },
       ]);
@@ -47,6 +50,7 @@ describe('lib/api/skills/parser', () => {
           description: 'invalid source',
           path: '/tmp/invalid',
           source: 'third_party',
+          enabled: true,
         },
       ]);
     }).toThrow('skills list[0].source');

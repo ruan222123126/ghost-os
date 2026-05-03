@@ -5,8 +5,10 @@ export type SettingsTab =
   | 'general'
   | 'provider'
   | 'tasks'
+  | 'orchestration'
   | 'skills'
   | 'tools'
+  | 'presets'
   | 'prompts_library'
   | 'prompts_preview';
 
@@ -56,6 +58,15 @@ const TaskIcon: FC<IconProps> = ({ size = 16 }) => (
   </svg>
 );
 
+const OrchestrationIcon: FC<IconProps> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <rect x="3" y="4" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+    <rect x="12" y="4" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+    <rect x="7.5" y="12" width="5" height="4" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M10 9v3M8 12h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+  </svg>
+);
+
 const SkillIcon: FC<IconProps> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path d="M10 3.2 11.5 7l3.8 1.5-3.8 1.5-1.5 3.8-1.5-3.8L4.7 8.5 8.5 7 10 3.2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
@@ -81,8 +92,10 @@ const tabs: TabDefinition[] = [
   { id: 'general', group: 'system', icon: SettingsIcon },
   { id: 'provider', group: 'system', icon: ServerIcon },
   { id: 'tasks', group: 'system', icon: TaskIcon },
+  { id: 'orchestration', group: 'system', icon: OrchestrationIcon },
   { id: 'skills', group: 'system', icon: SkillIcon },
   { id: 'tools', group: 'system', icon: ToolIcon },
+  { id: 'presets', group: 'system', icon: PromptIcon },
   { id: 'prompts_library', group: 'prompts', icon: PromptIcon },
   { id: 'prompts_preview', group: 'prompts', icon: PromptIcon },
 ];
@@ -207,11 +220,17 @@ function labelForTab(copy: ReturnType<typeof useWebLocale>['copy'], tab: Setting
   if (tab === 'tasks') {
     return copy.settings.tabTasks;
   }
+  if (tab === 'orchestration') {
+    return copy.settings.tabOrchestration;
+  }
   if (tab === 'skills') {
     return copy.settings.tabSkills;
   }
   if (tab === 'tools') {
     return copy.settings.tabTools;
+  }
+  if (tab === 'presets') {
+    return copy.settings.tabPresets;
   }
   if (tab === 'prompts_library') {
     return copy.settings.tabPromptsLibrary;

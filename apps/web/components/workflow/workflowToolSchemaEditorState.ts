@@ -37,7 +37,7 @@ export function useToolSchemaRowsState(options: {
   useEffect(() => {
     setRows(buildSchemaRows(schemaFields, selectedNode.tool?.arguments));
     setErrorText('');
-  }, [schemaFields, schemaFingerprint, selectedNode.id, selectedNode.tool?.arguments]);
+  }, [schemaFingerprint, selectedNode.id, selectedNode.tool?.arguments]);
 
   return {
     rows,

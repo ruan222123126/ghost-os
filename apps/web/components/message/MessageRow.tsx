@@ -17,16 +17,6 @@ import { ThinkingPanel } from './ThinkingPanel';
 import type { MessageRowProps } from './types';
 
 const USER_CHANNEL_LABEL = '// USER_INPUT';
-const ASSISTANT_CHANNEL_LABEL = '// SYSTEM_OUTPUT';
-
-const BotGlyph: FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
-    <rect x="4.5" y="5.5" width="11" height="10" rx="2.5" stroke="currentColor" strokeWidth="1.4" />
-    <circle cx="8" cy="10.5" r="1" fill="currentColor" />
-    <circle cx="12" cy="10.5" r="1" fill="currentColor" />
-    <path d="M10 5.5V3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
 
 const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
   <div className="message-row is-user">
@@ -52,10 +42,6 @@ const AssistantMessageRow: FC<{
   return (
     <div className="message-row is-assistant">
       <div className="message-stack">
-        <span className="message-channel-label is-assistant">
-          <BotGlyph className="message-channel-icon" />
-          {ASSISTANT_CHANNEL_LABEL}
-        </span>
         {message.inProgress ? <div className="message-draft-flag">{copy.chat.assistantDraftFlag}</div> : null}
         <div className="message-assistant-body">
           <AssistantMarkdownContent content={message.content} enabled={assistantMarkdownEnabled} />
@@ -73,11 +59,17 @@ const AssistantMessageRow: FC<{
 const ToolMessageRow: FC<{
   isOpen: boolean;
   message: ToolChatMessage;
+  toolCallCompactOutputEnabled: boolean;
   onToggle: () => void;
-}> = ({ isOpen, message, onToggle }) => (
+}> = ({ isOpen, message, toolCallCompactOutputEnabled, onToggle }) => (
   <div className="message-row is-tool">
     <div className="message-stack">
-      <ToolCard isOpen={isOpen} onToggle={onToggle} tool={message} />
+      <ToolCard
+        isOpen={isOpen}
+        onToggle={onToggle}
+        tool={message}
+        toolCallCompactOutputEnabled={toolCallCompactOutputEnabled}
+      />
       {message.images?.length ? <MessageImageGallery images={message.images} /> : null}
       {message.attachments?.length ? <MessageAttachments attachments={message.attachments} /> : null}
     </div>
@@ -125,6 +117,7 @@ const QuestionMessageRow: FC<{
 export const MessageRow: FC<MessageRowProps> = ({
   message,
   assistantMarkdownEnabled = true,
+  toolCallCompactOutputEnabled = false,
   isToolCardOpen = false,
   isThinkingPanelOpen = false,
   loading,
@@ -143,6 +136,7 @@ export const MessageRow: FC<MessageRowProps> = ({
         <ToolMessageRow
           isOpen={isToolCardOpen}
           message={message}
+          toolCallCompactOutputEnabled={toolCallCompactOutputEnabled}
           onToggle={() => onToggleToolCard?.(message.id)}
         />
       );

@@ -23,6 +23,7 @@ export function WorkflowEditorClient(props: WorkflowEditorClientProps) {
 
   return (
     <WorkflowCanvasWorkbench
+      editorKind="workflow"
       draft={controller.draft}
       autosaveState={controller.autosaveState}
       actionError={controller.actionError}

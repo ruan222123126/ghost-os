@@ -1,6 +1,7 @@
 'use client';
 
 import type { WorkflowCanvasDraft } from '@/lib/workflow-editor';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 interface WorkflowCanvasSettingsModalProps {
@@ -8,6 +9,7 @@ interface WorkflowCanvasSettingsModalProps {
   schedule: WorkflowCanvasDraft['schedule'];
   importSessionID: string;
   importLoading: boolean;
+  workflowCopy: WorkflowCopy;
   onClose: () => void;
   onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
   onChangeImportSessionID: (value: string) => void;
@@ -21,6 +23,7 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
     schedule,
     importSessionID,
     importLoading,
+    workflowCopy,
     onClose,
     onScheduleChange,
     onChangeImportSessionID,
@@ -33,30 +36,30 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
 
   return (
     <div className="workflow-arch-settings-popover" role="dialog" aria-modal="true" aria-labelledby="workflow-settings-title">
-      <button type="button" className="workflow-arch-settings-backdrop" onClick={onClose} aria-label={copy.workflow.closeWorkflowSettingsAria} />
+      <button type="button" className="workflow-arch-settings-backdrop" onClick={onClose} aria-label={workflowCopy.closeWorkflowSettingsAria} />
       <section className="workflow-arch-settings-panel">
-        <button type="button" className="workflow-arch-settings-close" onClick={onClose} aria-label={copy.workflow.closeWorkflowSettingsAria}>
+        <button type="button" className="workflow-arch-settings-close" onClick={onClose} aria-label={workflowCopy.closeWorkflowSettingsAria}>
           <IconClose />
         </button>
         <header className="workflow-arch-settings-head">
-          <h2 id="workflow-settings-title">{copy.workflow.modalTitle}</h2>
-          <p>{copy.workflow.modalDescription}</p>
+          <h2 id="workflow-settings-title">{workflowCopy.modalTitle}</h2>
+          <p>{workflowCopy.modalDescription}</p>
         </header>
         <div className="workflow-arch-settings-body">
           <label>
-            <span>{copy.workflow.modalScheduleMode}</span>
+            <span>{workflowCopy.modalScheduleMode}</span>
             <select
               value={schedule.mode}
               onChange={(event) =>
                 onScheduleChange({ mode: event.target.value as WorkflowCanvasDraft['schedule']['mode'] })}
             >
-              <option value="interval">{copy.workflow.modalInterval}</option>
-              <option value="cron">{copy.workflow.modalCron}</option>
+              <option value="interval">{workflowCopy.modalInterval}</option>
+              <option value="cron">{workflowCopy.modalCron}</option>
             </select>
           </label>
           {schedule.mode === 'interval' ? (
             <label>
-              <span>{copy.workflow.modalIntervalSeconds}</span>
+              <span>{workflowCopy.modalIntervalSeconds}</span>
               <input
                 value={schedule.intervalSeconds}
                 placeholder="300"
@@ -65,7 +68,7 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
             </label>
           ) : (
             <label>
-              <span>{copy.workflow.modalCronExpr}</span>
+              <span>{workflowCopy.modalCronExpr}</span>
               <input
                 value={schedule.cronExpr}
                 placeholder="*/5 * * * *"
@@ -74,7 +77,7 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
             </label>
           )}
           <label>
-            <span>{copy.workflow.modalSessionID}</span>
+            <span>{workflowCopy.modalSessionID}</span>
             <input
               value={importSessionID}
               placeholder="session-xxxx"
@@ -82,7 +85,7 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
             />
           </label>
           <button type="button" className="workflow-arch-settings-import" onClick={onImportFromSession} disabled={importLoading}>
-            {importLoading ? copy.workflow.modalImporting : copy.workflow.modalImportTextTasks}
+            {importLoading ? workflowCopy.modalImporting : workflowCopy.modalImportTextTasks}
           </button>
         </div>
       </section>

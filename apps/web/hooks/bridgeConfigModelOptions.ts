@@ -7,13 +7,8 @@ export function buildProviderModelOptions(
   const options: ProviderModelOption[] = [];
   const seen = new Set<string>();
   const currentProvider = config?.provider ?? '';
-  const orderedProviders = [...providers].sort((left, right) => {
-    const leftIsActive = stringsEqualIgnoreCase(left.name, currentProvider);
-    const rightIsActive = stringsEqualIgnoreCase(right.name, currentProvider);
-    if (leftIsActive === rightIsActive) {
-      return 0;
-    }
-    return leftIsActive ? -1 : 1;
+  const activeProviders = providers.filter((provider) => {
+    return stringsEqualIgnoreCase(provider.name, currentProvider);
   });
 
   const pushOption = (provider: ProviderConfig | null, model: string) => {
@@ -36,13 +31,13 @@ export function buildProviderModelOptions(
     });
   };
 
-  for (const provider of orderedProviders) {
+  for (const provider of activeProviders) {
     for (const model of provider.models ?? []) {
       pushOption(provider, model);
     }
 
     // Active runtime model must stay selectable even if the provider card has no explicit model list yet.
-    if (config && stringsEqualIgnoreCase(provider.name, config.provider)) {
+    if (config) {
       pushOption(provider, config.model);
     }
   }

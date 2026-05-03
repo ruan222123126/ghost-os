@@ -1,10 +1,14 @@
-import type { StreamingAssistantSegment, StreamingToolState } from '@/lib/types';
+import type {
+  StreamingAssistantSegment,
+  StreamingThinkingSegment,
+  StreamingToolState,
+} from '@/lib/types';
 
 const ACTIVE_TOOL_STATUSES = new Set(['running', 'pending', 'in_progress']);
 
 interface ThinkingStateOptions {
   loading: boolean;
-  streamingThinkingText: string;
+  streamingThinkingSegments: StreamingThinkingSegment[];
   streamingAssistantSegments: StreamingAssistantSegment[];
   streamingTools: StreamingToolState[];
 }
@@ -13,7 +17,7 @@ export function shouldShowThinkingIndicator(options: ThinkingStateOptions): bool
   if (!options.loading) {
     return false;
   }
-  if (options.streamingThinkingText.trim()) {
+  if (hasStreamingThinkingText(options.streamingThinkingSegments)) {
     return false;
   }
   if (options.streamingAssistantSegments.length > 0) {
@@ -26,6 +30,21 @@ export function hasAssistantStreamedVisibleText(
   segments: StreamingAssistantSegment[],
 ): boolean {
   return segments.some((segment) => segment.content.trim().length > 0);
+}
+
+export function hasStreamingThinkingText(segments: StreamingThinkingSegment[]): boolean {
+  return segments.some((segment) => segment.content.trim().length > 0);
+}
+
+export function getLatestStreamingThinkingId(segments: StreamingThinkingSegment[]): string | null {
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    if (!segment.content.trim()) {
+      continue;
+    }
+    return segment.id;
+  }
+  return null;
 }
 
 export function shouldExpandThinkingPanelByDefault(

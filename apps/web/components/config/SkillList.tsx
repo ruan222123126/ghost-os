@@ -10,6 +10,7 @@ interface SkillListProps {
   skills: SkillPayload[];
   loading: boolean;
   controlsDisabled: boolean;
+  onUpdate: (id: string, enabled: boolean) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
@@ -22,7 +23,7 @@ interface SkillDeleteRequest {
 
 export function SkillList(props: SkillListProps) {
   const { copy } = useWebLocale();
-  const { skills, loading, controlsDisabled, onDelete } = props;
+  const { skills, loading, controlsDisabled, onUpdate, onDelete } = props;
 
   if (loading) {
     return (
@@ -47,12 +48,15 @@ export function SkillList(props: SkillListProps) {
 
   return (
     <div className="grid grid-cols-1 gap-3">
-      {skills.map((skill) => (
+      {sortSkillsForDisplay(skills).map((skill) => (
         <article key={skill.id} className="group flex items-start justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]">
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-2">
               <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
                 {formatSource(skill.source, copy)}
+              </span>
+              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${skill.enabled ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-[#F5F5F5] text-[#737373]'}`}>
+                {skill.enabled ? copy.settings.enabled : copy.settings.disabled}
               </span>
               <span className="font-mono text-[11px] text-[#737373]">{skill.id}</span>
             </div>
@@ -62,6 +66,16 @@ export function SkillList(props: SkillListProps) {
           </div>
 
           <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <button
+              type="button"
+              disabled={controlsDisabled}
+              onClick={() => {
+                ignorePromise(onUpdate(skill.id, !skill.enabled));
+              }}
+              className="shrink-0 whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {skill.enabled ? copy.settings.skillsDisable : copy.settings.skillsEnable}
+            </button>
             <button
               type="button"
               disabled={controlsDisabled}
@@ -82,6 +96,18 @@ function formatSource(
   copy: ReturnType<typeof useWebLocale>['copy'],
 ): string {
   return source === 'repo' ? copy.settings.skillsSourceRepo : copy.settings.skillsSourceUser;
+}
+
+export function sortSkillsForDisplay(skills: SkillPayload[]): SkillPayload[] {
+  return [...skills].sort((left, right) => {
+    if (left.enabled !== right.enabled) {
+      return left.enabled ? -1 : 1;
+    }
+    if (left.name !== right.name) {
+      return left.name.localeCompare(right.name);
+    }
+    return left.source.localeCompare(right.source);
+  });
 }
 
 export function requestSkillDelete(input: SkillDeleteRequest) {

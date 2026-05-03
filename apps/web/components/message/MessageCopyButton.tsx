@@ -72,6 +72,7 @@ export const MessageCopyButton: FC<MessageCopyButtonProps> = ({
   const { copy } = useWebLocale();
   const [copied, setCopied] = useState(false);
   const isCodeVariant = variant === CODE_BUTTON_VARIANT;
+  const buttonLabel = copied ? copy.chat.copied : copy.chat.copy;
   const buttonClassName = [
     'copy-button',
     isCodeVariant ? 'is-code-block' : '',
@@ -99,10 +100,14 @@ export const MessageCopyButton: FC<MessageCopyButtonProps> = ({
       type="button"
       onClick={handleCopy}
       className={buttonClassName}
-      aria-label={copied ? copy.chat.copied : copy.chat.copy}
+      aria-label={buttonLabel}
     >
-      {copied ? <CheckIcon className="copy-icon" /> : <CopyIcon className="copy-icon" />}
-      <span className="copy-label">{copied ? copy.chat.copied : copy.chat.copy}</span>
+      {isCodeVariant || !copied ? (
+        <CopyIcon className="copy-icon" />
+      ) : (
+        <CheckIcon className="copy-icon" />
+      )}
+      {!isCodeVariant ? <span className="copy-label">{buttonLabel}</span> : null}
     </button>
   );
 };

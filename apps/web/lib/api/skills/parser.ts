@@ -1,5 +1,6 @@
 import type { SkillPayload } from '@/lib/types';
 import {
+  expectBoolean,
   expectRecord,
   expectString,
   expectStringEnum,
@@ -12,8 +13,13 @@ const SKILL_PAYLOAD_KEYS = [
   'description',
   'path',
   'source',
+  'enabled',
 ] as const;
 const SKILL_SOURCES = ['repo', 'user'] as const;
+
+export function parseSkillPayload(value: unknown): SkillPayload {
+  return parseSkillPayloadWithLabel(value, 'skill');
+}
 
 function parseSkillPayloadWithLabel(value: unknown, label: string): SkillPayload {
   const record = pickKnownKeys(expectRecord(value, label), SKILL_PAYLOAD_KEYS);
@@ -23,6 +29,7 @@ function parseSkillPayloadWithLabel(value: unknown, label: string): SkillPayload
     description: expectString(record.description, `${label}.description`),
     path: expectString(record.path, `${label}.path`),
     source: expectStringEnum(record.source, SKILL_SOURCES, `${label}.source`),
+    enabled: expectBoolean(record.enabled, `${label}.enabled`),
   };
 }
 

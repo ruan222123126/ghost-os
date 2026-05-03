@@ -1,6 +1,7 @@
-import { buildAssistantMessage } from '@/lib/chatMessages';
+import { buildAssistantMessage, buildThinkingMessage } from '@/lib/chatMessages';
 import {
   STREAMING_ASSISTANT_ORDER_PREFIX,
+  STREAMING_THINKING_ORDER_PREFIX,
   STREAMING_QUESTION_ORDER_PREFIX,
   STREAMING_TOOL_ORDER_PREFIX,
 } from '@/lib/chatStream';
@@ -8,6 +9,7 @@ import type {
   ChatMessage,
   PendingQuestionMessage,
   StreamingAssistantSegment,
+  StreamingThinkingSegment,
   ToolChatMessage,
 } from '@/lib/types';
 import type { MessageListProps } from './types';
@@ -20,12 +22,14 @@ export interface StreamingMessageRow {
 interface StreamingRowOrderInput {
   pendingQuestions: PendingQuestionMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
+  streamingThinkingSegments: StreamingThinkingSegment[];
   streamingItemOrder: string[];
   streamingTools: MessageListProps['streamingTools'];
 }
 
 interface StreamingOrderLookup {
   assistantSegmentsById: Map<string, StreamingAssistantSegment>;
+  thinkingSegmentsById: Map<string, StreamingThinkingSegment>;
   questionsById: Map<string, PendingQuestionMessage>;
   toolsById: Map<string, MessageListProps['streamingTools'][number]>;
 }
@@ -35,6 +39,9 @@ export function getOrderedStreamingRows(options: StreamingRowOrderInput): Stream
   const rowKeys = new Set<string>();
   const assistantSegmentsById = new Map(
     options.streamingAssistantSegments.map((segment) => [segment.id, segment]),
+  );
+  const thinkingSegmentsById = new Map(
+    options.streamingThinkingSegments.map((segment) => [segment.id, segment]),
   );
   const toolsById = new Map(
     options.streamingTools.map((tool) => [tool.id, tool]),
@@ -46,6 +53,7 @@ export function getOrderedStreamingRows(options: StreamingRowOrderInput): Stream
   for (const orderKey of options.streamingItemOrder) {
     const row = mapStreamingOrderToRow(orderKey, {
       assistantSegmentsById,
+      thinkingSegmentsById,
       questionsById,
       toolsById,
     });
@@ -67,6 +75,10 @@ function appendMissingStreamingRows(
 ): void {
   for (const segment of options.streamingAssistantSegments) {
     appendStreamingRow(rows, rowKeys, buildStreamingAssistantRow(segment));
+  }
+
+  for (const segment of options.streamingThinkingSegments) {
+    appendStreamingRow(rows, rowKeys, buildStreamingThinkingRow(segment));
   }
 
   for (const tool of options.streamingTools) {
@@ -104,6 +116,12 @@ function mapStreamingOrderToRow(
     return segment ? buildStreamingAssistantRow(segment) : null;
   }
 
+  if (orderKey.startsWith(STREAMING_THINKING_ORDER_PREFIX)) {
+    const thinkingSegmentId = orderKey.slice(STREAMING_THINKING_ORDER_PREFIX.length);
+    const segment = options.thinkingSegmentsById.get(thinkingSegmentId);
+    return segment ? buildStreamingThinkingRow(segment) : null;
+  }
+
   if (orderKey.startsWith(STREAMING_TOOL_ORDER_PREFIX)) {
     const toolId = orderKey.slice(STREAMING_TOOL_ORDER_PREFIX.length);
     const tool = options.toolsById.get(toolId);
@@ -131,6 +149,13 @@ function buildStreamingAssistantRow(segment: StreamingAssistantSegment): Streami
   };
 }
 
+function buildStreamingThinkingRow(segment: StreamingThinkingSegment): StreamingMessageRow {
+  return {
+    key: segment.id,
+    message: buildThinkingMessage(segment.content, segment.id),
+  };
+}
+
 function buildStreamingToolRow(
   tool: MessageListProps['streamingTools'][number],
 ): StreamingMessageRow {
@@ -145,6 +170,7 @@ function buildStreamingToolMessage(tool: MessageListProps['streamingTools'][numb
     id: tool.id,
     kind: 'tool',
     content: tool.content,
+    ...(tool.toolInput ? { toolInput: tool.toolInput } : {}),
     toolCallId: tool.toolCallId,
     toolName: tool.toolName,
     toolStatus: tool.toolStatus,

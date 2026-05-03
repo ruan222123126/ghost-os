@@ -1,5 +1,5 @@
 const TOOL_TAG_RESULT_PREFIX = '[TOOL_TAG_RESULT]';
-const TOOL_SEARCH_NAME = 'tfind';
+const TOOL_SEARCH_NAME = 'sfind';
 const LOADED_TOOL_STATUSES = new Set([
   'active',
   'already_loaded',

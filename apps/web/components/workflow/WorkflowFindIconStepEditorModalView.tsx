@@ -7,7 +7,8 @@ export interface FindIconEditorPanelState {
   hoverAfterMatch: boolean;
 }
 export interface FindIconEditorPreview {
-  objectURL: string;
+  url: string;
+  revocable: boolean;
 }
 export interface FindIconEditorShellProps {
   closeAria: string;
@@ -196,7 +197,7 @@ function FindIconImageField(props: FindIconImageFieldProps) {
       />
       <FindIconImageCard
         hasTemplate={hasTemplate}
-        previewURL={preview?.objectURL}
+        previewURL={preview?.url}
         templateName={state.templateName}
         templatePath={state.templatePath}
         uploading={uploading}

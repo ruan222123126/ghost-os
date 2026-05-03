@@ -13,14 +13,16 @@ import {
 } from '@/components/workflow/workflowCanvasStageHelpers';
 import type { CanvasViewport } from '@/components/workflow/workflowCanvasViewport';
 import { metadataForNodeType } from '@/components/workflow/workflowNodeMeta';
-import { useWebLocale } from '@/lib/i18n/provider';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import type {
   WorkflowCanvasDraft,
   WorkflowCanvasNodeDraft,
 } from '@/lib/workflow-editor';
+import { isProtectedBoundaryNode } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasStageNodesProps {
   draft: WorkflowCanvasDraft;
+  workflowCopy: WorkflowCopy;
   nodeMap: Map<string, WorkflowCanvasNodeDraft>;
   canvasRef: RefObject<HTMLDivElement>;
   viewport: CanvasViewport;
@@ -33,9 +35,9 @@ interface WorkflowCanvasStageNodesProps {
 }
 
 export function WorkflowCanvasStageNodes(props: WorkflowCanvasStageNodesProps) {
-  const { copy } = useWebLocale();
   const {
     draft,
+    workflowCopy,
     nodeMap,
     canvasRef,
     viewport,
@@ -53,12 +55,20 @@ export function WorkflowCanvasStageNodes(props: WorkflowCanvasStageNodesProps) {
         <WorkflowCanvasNode
           key={node.id}
           node={node}
-          metadata={metadataForNodeType(node.type, copy)}
+          metadata={metadataForNodeType(node.type, workflowCopy)}
           selected={draft.selectedNodeId === node.id}
           targetable={Boolean(connectingSourceNodeID && connectingSourceNodeID !== node.id && node.type !== 'start')}
           connectingSourceNodeID={connectingSourceNodeID}
           onSelectNode={onSelectNode}
-          onOpenContextMenu={onOpenContextMenu}
+          onOpenContextMenu={(event, nodeID) => {
+            if (isProtectedBoundaryNode(node)) {
+              event.preventDefault();
+              event.stopPropagation();
+              onSelectNode(nodeID);
+              return;
+            }
+            onOpenContextMenu(event, nodeID);
+          }}
           onStartDrag={(event, nodeID) =>
             onChangeDragState(startDrag({
               event,

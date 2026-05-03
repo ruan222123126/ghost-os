@@ -5,6 +5,7 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
+  overflow-anchor: none;
   padding: 32px 22px 84px;
   background: rgb(255 255 255);
 }
@@ -12,6 +13,7 @@
 .messages-viewport {
   position: relative;
   width: 100%;
+  overflow-anchor: none;
 }
 
 .messages-virtual-row {
@@ -63,6 +65,7 @@
 
 .message-row.is-user .message-stack {
   align-items: flex-end;
+  width: 100%;
 }
 
 .message-row.is-assistant .message-stack,
@@ -88,17 +91,6 @@
 .message-channel-label.is-user {
   margin-bottom: 2px;
   color: rgb(163 163 163);
-}
-
-.message-channel-label.is-assistant {
-  margin-bottom: 2px;
-  color: rgb(10 10 10);
-}
-
-.message-channel-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
 }
 
 .message-bubble {
@@ -132,7 +124,7 @@
 
 .message-assistant-body {
   max-width: min(90%, 820px);
-  padding: 6px 0 0;
+  padding: 0;
 }
 
 .message-content {
@@ -238,19 +230,16 @@
 }
 
 .copy-button.is-code-block {
-  gap: 4px;
-  padding: 4px 8px;
-  border: 1px solid rgb(216 216 216 / 0.92);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 0.86);
-  color: rgb(97 97 97);
-  letter-spacing: 0.08em;
+  gap: 0;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: rgb(125 125 125);
 }
 
 .copy-button.is-code-block:hover {
   color: rgb(23 23 23);
-  background: rgb(255 255 255 / 0.96);
-  border-color: rgb(188 188 188 / 0.98);
+  background: transparent;
 }
 
 .copy-icon {
@@ -381,7 +370,11 @@
 }
 
 .tool-details.is-success {
-  background: rgb(10 10 10);
+  background: rgb(245 245 245);
+}
+
+.tool-details.is-success pre {
+  color: rgb(23 23 23);
 }
 
 .tool-details.is-running {

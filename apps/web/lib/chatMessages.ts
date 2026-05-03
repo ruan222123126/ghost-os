@@ -10,10 +10,14 @@ import type {
   SessionHumanInteraction,
   SessionMessage,
   SessionMessageRole,
+  SessionToolCall,
   SessionToolResult,
+  SystemChatMessageSourceRole,
   ToolChatMessage,
 } from '@/lib/types';
-import { attachmentsFromContent, imagesFromContent } from './chatMessageMedia';
+import { imagesFromContent } from './chatMessageMedia';
+import { buildSessionToolCallLookup } from './chatToolCalls';
+import { buildToolChatMessage, resolveSessionToolCall } from './chatToolMessages';
 import { filterToolTagResultToLoadedTools } from '@/lib/toolTagResultText';
 import { stripToolTagCalls } from '@/lib/toolTagText';
 
@@ -54,19 +58,6 @@ function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMess
 
 function buildSessionMessageID(sessionId: string, messageIndex: number, suffix: string): string {
   return `session:${sessionId}:message:${messageIndex}:${suffix}`;
-}
-
-function formatToolContent(toolResult: SessionToolResult, fallbackText: string): string {
-  if (toolResult.error) {
-    return toolResult.error;
-  }
-  if (toolResult.output) {
-    return toolResult.output;
-  }
-  if (toolResult.tool) {
-    return `[${toolResult.tool}]`;
-  }
-  return fallbackText || '[tool]';
 }
 
 function cloneAskHumanOptions(options?: AskHumanOption[]): AskHumanOption[] | undefined {
@@ -147,11 +138,16 @@ export function buildThinkingMessage(content: string, id?: string): ChatMessage 
   };
 }
 
-export function buildSystemMessage(content: string, id?: string): ChatMessage {
+export function buildSystemMessage(
+  content: string,
+  id?: string,
+  sourceRole: SystemChatMessageSourceRole = 'system',
+): ChatMessage {
   return {
     id: id ?? nextChatMessageID(),
     kind: 'system',
     content,
+    sourceRole,
   };
 }
 
@@ -188,28 +184,33 @@ export function buildPendingQuestionMessage(response: AgentSendAwaitingHumanResp
   };
 }
 
-function mapToolSessionMessage(sessionId: string, message: NormalizedSessionMessage): ChatMessage[] {
+function mapToolSessionMessage(
+  sessionId: string,
+  message: NormalizedSessionMessage,
+  toolCallLookup?: Map<string, SessionToolCall>,
+): ChatMessage[] {
   if (message.humanInteraction?.prompt) {
     return buildSessionQuestionMessages(sessionId, message);
   }
 
   const toolResult = message.toolResult;
-  return [{
-    id: buildSessionMessageID(sessionId, message.index, 'tool'),
-    kind: 'tool',
-    content: toolResult ? formatToolContent(toolResult, message.text) : message.text || '[tool]',
-    images: imagesFromContent(message.content),
-    attachments: attachmentsFromContent(message.content),
-    rawOutput: toolResult?.output,
+  const matchedToolCall = resolveSessionToolCall(message.toolCallId, toolCallLookup);
+  return [buildToolChatMessage({
+    content: message.content,
+    index: message.index,
+    sessionId,
+    text: message.text,
     toolCallId: message.toolCallId,
-    toolCalls: message.toolCalls,
-    toolName: toolResult?.tool,
-    toolStatus: toolResult?.status,
-    traceId: toolResult?.trace_id,
-  }];
+    toolCall: matchedToolCall,
+    toolResult,
+  })];
 }
 
-export function mapSessionMessageToChatMessages(sessionId: string, message: SessionMessage): ChatMessage[] {
+export function mapSessionMessageToChatMessages(
+  sessionId: string,
+  message: SessionMessage,
+  toolCallLookup?: Map<string, SessionToolCall>,
+): ChatMessage[] {
   const normalized = normalizeSessionMessage(message);
   switch (normalized.role) {
     case 'user':
@@ -231,14 +232,16 @@ export function mapSessionMessageToChatMessages(sessionId: string, message: Sess
       return [buildSystemMessage(
         normalized.text || '[system]',
         buildSessionMessageID(sessionId, normalized.index, 'system'),
+        'system',
       )];
     case 'internal':
       return [buildSystemMessage(
         filterToolTagResultToLoadedTools(normalized.text) || '[internal]',
         buildSessionMessageID(sessionId, normalized.index, 'internal'),
+        'internal',
       )];
     case 'tool':
-      return mapToolSessionMessage(sessionId, normalized);
+      return mapToolSessionMessage(sessionId, normalized, toolCallLookup);
     default:
       return [];
   }
@@ -246,9 +249,10 @@ export function mapSessionMessageToChatMessages(sessionId: string, message: Sess
 
 export function mapSessionMessagesToChat(sessionId: string, messages: SessionMessage[]): ChatMessage[] {
   const mapped: ChatMessage[] = [];
+  const toolCallLookup = buildSessionToolCallLookup(messages);
 
   for (const message of messages) {
-    mapped.push(...mapSessionMessageToChatMessages(sessionId, message));
+    mapped.push(...mapSessionMessageToChatMessages(sessionId, message, toolCallLookup));
   }
 
   return mapped;

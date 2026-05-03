@@ -4,21 +4,24 @@ import type {
 } from '@/lib/types';
 import type { WebLocale } from '@/lib/i18n/locale';
 
+const DEFAULT_MAX_TURNS = 20;
+const DEFAULT_LLM_COMPLETION_RETRY_COUNT = 1;
+const DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS = 200;
+
 export interface RuntimeFormState {
   provider: string;
-  apiKey: string;
-  baseURL: string;
   model: string;
   chatPath: string;
-  graphqlToolRuntimeEnabled: boolean;
-  graphqlTextSanitizeEnabled: boolean;
+  projectRoot: string;
+  maxTurns: string;
+  llmCompletionRetryCount: string;
+  llmCompletionRetryIntervalMS: string;
   sessionHumanLogFullEnabled: boolean;
+  sessionSystemPromptVisibleEnabled: boolean;
   assistantMarkdownEnabled: boolean;
+  toolCallCompactOutputEnabled: boolean;
   memoryModeEnabled: boolean;
-  webRooterEnabled: boolean;
-  webRooterBaseURL: string;
-  webRooterAPIToken: string;
-  webRooterTimeoutMS: string;
+  microcompactEnabled: boolean;
   webSearchTavilyURL: string;
   webSearchExaURL: string;
   webSearchTavilyAPIKey: string;
@@ -28,19 +31,18 @@ export interface RuntimeFormState {
 export function createRuntimeFormState(config: BridgeConfig | null): RuntimeFormState {
   return {
     provider: config?.provider ?? '',
-    apiKey: '',
-    baseURL: config?.base_url ?? '',
     model: config?.model ?? '',
     chatPath: config?.chat_path ?? '',
-    graphqlToolRuntimeEnabled: config?.graphql_tool_runtime_enabled ?? true,
-    graphqlTextSanitizeEnabled: config?.graphql_text_sanitize_enabled ?? true,
+    projectRoot: config?.project_root ?? '',
+    maxTurns: String(config?.max_turns ?? DEFAULT_MAX_TURNS),
+    llmCompletionRetryCount: String(config?.llm_completion_retry_count ?? DEFAULT_LLM_COMPLETION_RETRY_COUNT),
+    llmCompletionRetryIntervalMS: String(config?.llm_completion_retry_interval_ms ?? DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS),
     sessionHumanLogFullEnabled: config?.session_human_log_full_enabled ?? false,
+    sessionSystemPromptVisibleEnabled: config?.session_system_prompt_visible_enabled ?? true,
     assistantMarkdownEnabled: config?.assistant_markdown_enabled ?? true,
+    toolCallCompactOutputEnabled: config?.tool_call_compact_output_enabled ?? false,
     memoryModeEnabled: config?.memory_mode_enabled ?? false,
-    webRooterEnabled: config?.web_rooter_enabled ?? false,
-    webRooterBaseURL: config?.web_rooter_base_url ?? '',
-    webRooterAPIToken: '',
-    webRooterTimeoutMS: config ? String(config.web_rooter_timeout_ms) : '',
+    microcompactEnabled: config?.microcompact_enabled ?? false,
     webSearchTavilyURL: config?.web_search_tavily_url ?? '',
     webSearchExaURL: config?.web_search_exa_url ?? '',
     webSearchTavilyAPIKey: '',
@@ -65,11 +67,9 @@ export function buildSecretPlaceholder(
 export function buildRuntimeUpdate(
   modelSelectionEnabled: boolean,
   formState: RuntimeFormState,
-  locale: WebLocale,
 ): ConfigUpdate {
   const update = buildRuntimeScalarUpdate(modelSelectionEnabled, formState);
   applySecretUpdate(update, formState);
-  applyWebRooterUpdate(update, formState, locale);
   return update;
 }
 
@@ -79,14 +79,23 @@ function buildRuntimeScalarUpdate(
 ): ConfigUpdate {
   const update: ConfigUpdate = {
     provider: formState.provider,
-    base_url: formState.baseURL,
     chat_path: formState.chatPath,
-    graphql_tool_runtime_enabled: formState.graphqlToolRuntimeEnabled,
-    graphql_text_sanitize_enabled: formState.graphqlTextSanitizeEnabled,
+    project_root: formState.projectRoot,
+    max_turns: parsePositiveInteger(formState.maxTurns, 'max_turns'),
+    llm_completion_retry_count: parseNonNegativeInteger(
+      formState.llmCompletionRetryCount,
+      'llm_completion_retry_count',
+    ),
+    llm_completion_retry_interval_ms: parseNonNegativeInteger(
+      formState.llmCompletionRetryIntervalMS,
+      'llm_completion_retry_interval_ms',
+    ),
     session_human_log_full_enabled: formState.sessionHumanLogFullEnabled,
+    session_system_prompt_visible_enabled: formState.sessionSystemPromptVisibleEnabled,
     assistant_markdown_enabled: formState.assistantMarkdownEnabled,
+    tool_call_compact_output_enabled: formState.toolCallCompactOutputEnabled,
     memory_mode_enabled: formState.memoryModeEnabled,
-    web_rooter_enabled: formState.webRooterEnabled,
+    microcompact_enabled: formState.microcompactEnabled,
     web_search_tavily_url: formState.webSearchTavilyURL,
     web_search_exa_url: formState.webSearchExaURL,
   };
@@ -99,12 +108,6 @@ function buildRuntimeScalarUpdate(
 }
 
 function applySecretUpdate(update: ConfigUpdate, formState: RuntimeFormState) {
-  if (formState.apiKey.trim()) {
-    update.api_key = formState.apiKey;
-  }
-  if (formState.webRooterAPIToken.trim()) {
-    update.web_rooter_api_token = formState.webRooterAPIToken;
-  }
   if (formState.webSearchTavilyAPIKey.trim()) {
     update.web_search_tavily_api_key = formState.webSearchTavilyAPIKey;
   }
@@ -113,27 +116,18 @@ function applySecretUpdate(update: ConfigUpdate, formState: RuntimeFormState) {
   }
 }
 
-function applyWebRooterUpdate(update: ConfigUpdate, formState: RuntimeFormState, locale: WebLocale) {
-  const baseURL = formState.webRooterBaseURL.trim();
-  if (baseURL) {
-    update.web_rooter_base_url = baseURL;
+function parsePositiveInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a positive integer`);
   }
-
-  const timeoutValue = formState.webRooterTimeoutMS.trim();
-  if (timeoutValue) {
-    update.web_rooter_timeout_ms = parsePositiveInteger(
-      timeoutValue,
-      locale === 'zh-CN' ? 'Web Rooter 超时（毫秒）' : 'Web Rooter Timeout (ms)',
-      locale,
-    );
-  }
+  return Number(trimmed);
 }
 
-function parsePositiveInteger(value: string, label: string, locale: WebLocale): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(locale === 'zh-CN' ? `${label} 必须为正整数。` : `${label} must be a positive integer.`);
+function parseNonNegativeInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a non-negative integer`);
   }
-
-  return parsed;
+  return Number(trimmed);
 }

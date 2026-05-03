@@ -18,6 +18,12 @@ interface LoopNodePair {
   end?: WorkflowCanvasNodeDraft;
 }
 
+interface LoopPairTopology {
+  bodyNodeID: string;
+  exitNodeID: string;
+  incomingToEnd: WorkflowCanvasEdgeDraft[];
+}
+
 export function compileLoopPairsForTransport(
   nodes: WorkflowCanvasNodeDraft[],
   edges: WorkflowCanvasEdgeDraft[],
@@ -72,48 +78,76 @@ function compileSingleLoopPair(
   edges: WorkflowCanvasEdgeDraft[],
 ): WorkflowCanvasEdgeDraft[] {
   const originalStartNodeID = startNode.id;
+  assertLoopPairIDs(loopID, startNode.id, endNode.id);
+  const topology = resolveLoopPairTopology(loopID, startNode, endNode, edges);
+
+  startNode.id = loopID;
+  startNode.loop = {
+    role: LOOP_ROLE_START,
+    loop_id: loopID,
+    max_iterations: resolveLoopIterations(startNode.loop?.max_iterations, endNode.loop?.max_iterations),
+    body_node_id: topology.bodyNodeID,
+    exit_node_id: topology.exitNodeID,
+  };
+
+  return compileLoopPairEdges({
+    loopID,
+    loopStartID: originalStartNodeID,
+    loopEndID: endNode.id,
+    exitNodeID: topology.exitNodeID,
+    incomingToEnd: topology.incomingToEnd,
+    edges,
+  });
+}
+
+function assertLoopPairIDs(loopID: string, startNodeID: string, endNodeID: string): void {
   const expectedStartID = `${loopID}-${LOOP_ROLE_START}`;
   const expectedEndID = `${loopID}-${LOOP_ROLE_END}`;
-  if (startNode.id !== expectedStartID || endNode.id !== expectedEndID) {
+  if (startNodeID !== expectedStartID || endNodeID !== expectedEndID) {
     throw new Error(`loop "${loopID}" nodes must use fixed ids "${expectedStartID}" / "${expectedEndID}"`);
   }
+}
+
+function resolveLoopPairTopology(
+  loopID: string,
+  startNode: WorkflowCanvasNodeDraft,
+  endNode: WorkflowCanvasNodeDraft,
+  edges: WorkflowCanvasEdgeDraft[],
+): LoopPairTopology {
   const startOutgoing = collectOutgoingEdges(edges, startNode.id);
   const endOutgoing = collectOutgoingEdges(edges, endNode.id);
   const incomingToEnd = collectIncomingEdges(edges, endNode.id);
   if (startOutgoing.length !== 1) {
     throw new Error(`loop "${loopID}" start node must have exactly one outgoing edge`);
   }
-  if (endOutgoing.length !== 2) {
-    throw new Error(`loop "${loopID}" end node must have exactly two outgoing edges`);
+  if (endOutgoing.length !== 1 || endOutgoing[0].to_node_id === startNode.id) {
+    throw new Error(`loop "${loopID}" end node must contain exactly one exit edge`);
   }
   if (incomingToEnd.length === 0) {
     throw new Error(`loop "${loopID}" end node must have at least one incoming edge`);
   }
-  const loopBackEdge = endOutgoing.find((edge) => edge.to_node_id === startNode.id);
-  if (!loopBackEdge) {
-    throw new Error(`loop "${loopID}" end node must connect back to the loop start node`);
-  }
-  const exitEdge = endOutgoing.find((edge) => edge.to_node_id !== startNode.id);
-  if (!exitEdge) {
-    throw new Error(`loop "${loopID}" end node must contain an exit edge`);
-  }
-
-  startNode.id = loopID;
-  const bodyNodeID = startOutgoing[0].to_node_id;
-  startNode.loop = {
-    role: LOOP_ROLE_START,
-    loop_id: loopID,
-    max_iterations: resolveLoopIterations(startNode.loop?.max_iterations, endNode.loop?.max_iterations),
-    body_node_id: bodyNodeID,
-    exit_node_id: exitEdge.to_node_id,
+  return {
+    bodyNodeID: startOutgoing[0].to_node_id,
+    exitNodeID: endOutgoing[0].to_node_id,
+    incomingToEnd,
   };
+}
 
+function compileLoopPairEdges(options: {
+  loopID: string;
+  loopStartID: string;
+  loopEndID: string;
+  exitNodeID: string;
+  incomingToEnd: WorkflowCanvasEdgeDraft[];
+  edges: WorkflowCanvasEdgeDraft[];
+}): WorkflowCanvasEdgeDraft[] {
+  const { loopID, loopStartID, loopEndID, exitNodeID, incomingToEnd, edges } = options;
   const rewired = edges
-    .filter((edge) => edge.from_node_id !== endNode.id && edge.to_node_id !== endNode.id)
+    .filter((edge) => edge.from_node_id !== loopEndID && edge.to_node_id !== loopEndID)
     .map((edge) => ({
       ...edge,
-      from_node_id: edge.from_node_id === originalStartNodeID ? loopID : edge.from_node_id,
-      to_node_id: edge.to_node_id === originalStartNodeID ? loopID : edge.to_node_id,
+      from_node_id: edge.from_node_id === loopStartID ? loopID : edge.from_node_id,
+      to_node_id: edge.to_node_id === loopStartID ? loopID : edge.to_node_id,
     }));
   for (const edge of incomingToEnd) {
     rewired.push({
@@ -123,9 +157,9 @@ function compileSingleLoopPair(
     });
   }
   rewired.push({
-    id: `edge-loop-exit-${loopID}-${loopID}-${exitEdge.to_node_id}`,
+    id: `edge-loop-exit-${loopID}-${loopID}-${exitNodeID}`,
     from_node_id: loopID,
-    to_node_id: exitEdge.to_node_id,
+    to_node_id: exitNodeID,
   });
   return dedupeEdges(rewired);
 }

@@ -6,6 +6,7 @@ describe('components/config/configPanelTabError', () => {
       activeTab: 'prompts_library',
       generalError: 'general',
       providerError: 'provider',
+      presetError: 'preset',
       promptError: 'prompt',
       taskError: 'task',
       skillError: 'skill',
@@ -16,10 +17,24 @@ describe('components/config/configPanelTabError', () => {
       activeTab: 'prompts_preview',
       generalError: 'general',
       providerError: 'provider',
+      presetError: 'preset',
       promptError: 'prompt',
       taskError: 'task',
       skillError: 'skill',
       toolError: 'tool',
     })).toBe('prompt');
+  });
+
+  it('returns the preset error for presets tab', () => {
+    expect(resolveConfigPanelTabError({
+      activeTab: 'presets',
+      generalError: 'general',
+      providerError: 'provider',
+      presetError: 'preset',
+      promptError: 'prompt',
+      taskError: 'task',
+      skillError: 'skill',
+      toolError: 'tool',
+    })).toBe('preset');
   });
 });

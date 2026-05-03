@@ -7,6 +7,7 @@ describe('lib/api/tools/parser', () => {
         name: 'script_exec',
         enabled: true,
         prompt_override: 'use with named parameters',
+        sandbox_memory_mb: 384,
         input_schema: {
           type: 'object',
           properties: {
@@ -25,6 +26,7 @@ describe('lib/api/tools/parser', () => {
         name: 'script_exec',
         enabled: true,
         prompt_override: 'use with named parameters',
+        sandbox_memory_mb: 384,
         input_schema: {
           type: 'object',
           properties: {
@@ -36,6 +38,7 @@ describe('lib/api/tools/parser', () => {
         name: 'web_search',
         enabled: false,
         prompt_override: undefined,
+        sandbox_memory_mb: undefined,
         input_schema: undefined,
       },
     ]);
@@ -46,6 +49,7 @@ describe('lib/api/tools/parser', () => {
       name: 'script_exec',
       enabled: true,
       prompt_override: 'custom prompt',
+      sandbox_memory_mb: 320,
       input_schema: { type: 'object' },
     };
 
@@ -53,6 +57,7 @@ describe('lib/api/tools/parser', () => {
       name: 'script_exec',
       enabled: true,
       prompt_override: 'custom prompt',
+      sandbox_memory_mb: 320,
       input_schema: { type: 'object' },
     });
   });
@@ -75,6 +80,7 @@ describe('lib/api/tools/parser', () => {
       name: 'web_search',
       enabled: true,
       prompt_override: undefined,
+      sandbox_memory_mb: undefined,
       input_schema: undefined,
     });
   });
@@ -88,6 +94,7 @@ describe('lib/api/tools/parser', () => {
       name: 'web_search',
       enabled: true,
       prompt_override: undefined,
+      sandbox_memory_mb: undefined,
       input_schema: undefined,
     });
   });

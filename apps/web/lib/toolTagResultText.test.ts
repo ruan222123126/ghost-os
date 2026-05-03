@@ -3,16 +3,16 @@ import { filterToolTagResultToLoadedTools } from './toolTagResultText';
 const TOOL_TAG_RESULT_PREFIX = '[TOOL_TAG_RESULT]\n';
 
 describe('toolTagResultText', () => {
-  it('keeps only loaded tfind items in tool-tag result payload', () => {
+  it('keeps only loaded sfind items in tool-tag result payload', () => {
     const raw = `${TOOL_TAG_RESULT_PREFIX}${JSON.stringify({
-      tool: 'tfind',
+      tool: 'sfind',
       output: {
         action: 'list',
         items: [
-          { name: 'screen_control', status: 'active', available_now: true },
-          { name: 'text_input', status: 'pending', available_next_turn: true },
-          { name: 'web_search', status: 'expired', available_now: false },
-          { name: 'screen_action', status: 'unloaded' },
+          { name: 'release_flow', status: 'active', available_now: true },
+          { name: 'ship_checklist', status: 'pending', available_next_turn: true },
+          { name: 'incident_triage', status: 'expired', available_now: false },
+          { name: 'deploy_runbook', status: 'unloaded' },
         ],
       },
     })}`;
@@ -21,12 +21,12 @@ describe('toolTagResultText', () => {
     const payload = parseToolTagResult(filtered);
 
     expect(payload?.output?.items).toEqual([
-      { name: 'screen_control', status: 'active', available_now: true },
-      { name: 'text_input', status: 'pending', available_next_turn: true },
+      { name: 'release_flow', status: 'active', available_now: true },
+      { name: 'ship_checklist', status: 'pending', available_next_turn: true },
     ]);
   });
 
-  it('keeps non-tfind tool-tag results untouched', () => {
+  it('keeps non-sfind tool-tag results untouched', () => {
     const raw = `${TOOL_TAG_RESULT_PREFIX}${JSON.stringify({
       tool: 'web_search',
       output: {

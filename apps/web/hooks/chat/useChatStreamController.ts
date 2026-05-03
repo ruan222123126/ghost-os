@@ -97,17 +97,22 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
   const runAgentStream = useCallback(
     async (run: StreamAgentRunInput) => {
       const runtime = createChatRuntimeState(run.traceId, run.sessionId);
-      const result = await streamMessage({
-        images: run.images,
-        message: run.message,
-        onEvent: async (event) => {
-          applyEvent(runtime, event);
-        },
-        sessionId: run.sessionId,
-        signal: run.signal,
-        traceId: run.traceId,
-      });
-      syncSession(runtime, result.sessionId || runtime.sessionId);
+      try {
+        const result = await streamMessage({
+          images: run.images,
+          message: run.message,
+          onEvent: async (event) => {
+            applyEvent(runtime, event);
+          },
+          sessionId: run.sessionId,
+          signal: run.signal,
+          traceId: run.traceId,
+        });
+        syncSession(runtime, result.sessionId || runtime.sessionId);
+      } catch (error) {
+        syncSession(runtime, runtime.sessionId);
+        throw error;
+      }
     },
     [applyEvent, syncSession],
   );
@@ -115,18 +120,23 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
   const runHumanStream = useCallback(
     async (run: StreamHumanRunOptions) => {
       const runtime = createChatRuntimeState(run.traceId, run.sessionId);
-      const result = await streamHumanResponse({
-        answer: run.answer,
-        cancelled: run.cancelled,
-        onEvent: async (event) => {
-          applyEvent(runtime, event);
-        },
-        questionId: run.questionId,
-        sessionId: run.sessionId,
-        signal: run.signal,
-        traceId: run.traceId,
-      });
-      syncSession(runtime, result.sessionId || runtime.sessionId);
+      try {
+        const result = await streamHumanResponse({
+          answer: run.answer,
+          cancelled: run.cancelled,
+          onEvent: async (event) => {
+            applyEvent(runtime, event);
+          },
+          questionId: run.questionId,
+          sessionId: run.sessionId,
+          signal: run.signal,
+          traceId: run.traceId,
+        });
+        syncSession(runtime, result.sessionId || runtime.sessionId);
+      } catch (error) {
+        syncSession(runtime, runtime.sessionId);
+        throw error;
+      }
     },
     [applyEvent, syncSession],
   );

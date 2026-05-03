@@ -2,14 +2,17 @@ import type {
   ChatMessage,
   PendingQuestionMessage,
   StreamingAssistantSegment,
+  StreamingThinkingSegment,
   StreamingToolState,
 } from '@/lib/types';
 
 export interface MessageListProps {
   committedMessages: ChatMessage[];
+  showSystemPromptMessages: boolean;
   assistantMarkdownEnabled: boolean;
+  toolCallCompactOutputEnabled: boolean;
   streamingAssistantSegments: StreamingAssistantSegment[];
-  streamingThinkingText: string;
+  streamingThinkingSegments: StreamingThinkingSegment[];
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
@@ -24,6 +27,7 @@ export interface MessageListProps {
 export interface MessageRowProps {
   message: ChatMessage;
   assistantMarkdownEnabled: boolean;
+  toolCallCompactOutputEnabled: boolean;
   isToolCardOpen?: boolean;
   isThinkingPanelOpen?: boolean;
   loading: boolean;
@@ -44,8 +48,6 @@ export type MessageListRow =
     kind: 'history_loading';
   }
   | {
-    key: 'thinking';
-    kind: 'thinking';
-    thinkingText?: string;
-    thinkingExpanded?: boolean;
+    key: 'thinking-indicator';
+    kind: 'thinking_indicator';
   };

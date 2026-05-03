@@ -18,6 +18,7 @@ import './styles/workflow-layout.css';
 import './styles/workflow-sidebar.css';
 import './styles/workflow-node.css';
 import './styles/workflow-properties.css';
+import './styles/workflow-variable-autocomplete.css';
 import './styles/workflow-settings.css';
 import './styles/workflow-input-modal.css';
 import './styles/workflow-screen-composer.css';

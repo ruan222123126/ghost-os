@@ -10,6 +10,7 @@ import {
 import { ConfigPanelSectionContent } from '@/components/config/ConfigPanelSectionContent';
 import { resolveConfigPanelTabError } from '@/components/config/configPanelTabError';
 import { useConfigProviders } from '@/hooks/useConfigProviders';
+import { useConfigPresets } from '@/hooks/useConfigPresets';
 import { useConfigPrompts } from '@/hooks/useConfigPrompts';
 import { useConfigSkills } from '@/hooks/useConfigSkills';
 import { useConfigTasks } from '@/hooks/useConfigTasks';
@@ -52,6 +53,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
     open,
     onReloadConfig: onReload,
   });
+  const presetsState = useConfigPresets({ open });
   const promptsState = useConfigPrompts({ open });
   const skillsState = useConfigSkills({ open });
   const tasksState = useConfigTasks({ open });
@@ -68,6 +70,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
       activeTab,
       generalError: error,
       providerError: providersState.providerError,
+      presetError: presetsState.presetError,
       promptError: promptsState.promptError,
       taskError: tasksState.taskError,
       skillError: skillsState.skillError,
@@ -77,6 +80,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
     activeTab,
     error,
     providersState.providerError,
+    presetsState.presetError,
     promptsState.promptError,
     tasksState.taskError,
     skillsState.skillError,
@@ -129,10 +133,11 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
               saving={saving}
               config={config}
               onSave={onSave}
-              onReload={onReload}
+              onRefreshConfig={onReload}
               onOpenWorkflowCreate={onOpenWorkflowCreate}
               onOpenWorkflowEdit={onOpenWorkflowEdit}
               providersState={providersState}
+              presetsState={presetsState}
               promptsState={promptsState}
               skillsState={skillsState}
               tasksState={tasksState}

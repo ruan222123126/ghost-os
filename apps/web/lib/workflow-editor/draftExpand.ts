@@ -263,7 +263,6 @@ function rewriteLoopEdgesForDraft(
     });
   }
   for (const [loopID, loop] of loopNodes.entries()) {
-    rewritten.push({ from_node_id: loopEndNodeID(loopID), to_node_id: loopStartNodeID(loopID) });
     rewritten.push({ from_node_id: loopEndNodeID(loopID), to_node_id: loop.exit_node_id });
   }
   return dedupeWorkflowEdges(rewritten);

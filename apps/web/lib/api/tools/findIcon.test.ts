@@ -1,4 +1,5 @@
 import {
+  buildFindIconTemplatePreviewURL,
   previewFindIcon,
   uploadFindIconTemplate,
 } from './findIcon';
@@ -65,5 +66,10 @@ describe('lib/api/tools/findIcon', () => {
         method: 'POST',
       }),
     );
+  });
+
+  it('buildFindIconTemplatePreviewURL encodes template path in query', () => {
+    expect(buildFindIconTemplatePreviewURL('/tmp/icon a.png'))
+      .toBe('/api/tools/screen/find-icon/template-preview?template_path=%2Ftmp%2Ficon%20a.png');
   });
 });

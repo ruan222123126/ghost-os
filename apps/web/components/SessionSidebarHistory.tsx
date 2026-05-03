@@ -50,10 +50,19 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   const { enabled: groupingEnabled } = useSessionSidebarGroupingPreference();
   const [sessionContextMenu, setSessionContextMenu] = useState<SessionContextMenuState>();
   const [renameDialog, setRenameDialog] = useState<RenameDialogState>(EMPTY_RENAME_DIALOG_STATE);
-  const { partitionViews, addPartition, renamePartition, deletePartition, moveSession } = useSessionSidebarPartitions({
+  const {
+    partitionViews,
+    partitionError,
+    addPartition,
+    renamePartition,
+    deletePartition,
+    moveSession,
+  } = useSessionSidebarPartitions({
     sessions: props.sessions,
+    sessionsLoaded: !props.loading,
     searchQuery: props.searchQuery,
     unclassifiedName: copy.chat.sidebarPartitionUnclassified,
+    requestFailedText: copy.system.genericRequestFailed,
   });
   const ui = useSessionSidebarHistoryUI({
     isOpen: props.isOpen,
@@ -206,6 +215,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
         <span className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.chat.sidebarHistory}</span>
       </div>
       {ui.statusMessage ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{ui.statusMessage}</div> : null}
+      {partitionError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{partitionError}</div> : null}
       {props.error && !props.loading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}
       <SessionSidebarHistoryBody
         copy={copy.chat}

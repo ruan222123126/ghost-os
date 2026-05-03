@@ -54,9 +54,11 @@ const HomePage: FC = () => {
             <MessageList
               key={controller.currentSessionId || 'draft-session'}
               committedMessages={controller.committedMessages}
+              showSystemPromptMessages={controller.config?.session_system_prompt_visible_enabled ?? true}
               assistantMarkdownEnabled={controller.config?.assistant_markdown_enabled ?? true}
+              toolCallCompactOutputEnabled={controller.config?.tool_call_compact_output_enabled ?? false}
               streamingAssistantSegments={controller.streamingAssistantSegments}
-              streamingThinkingText={controller.streamingThinkingText}
+              streamingThinkingSegments={controller.streamingThinkingSegments}
               streamingItemOrder={controller.streamingItemOrder}
               streamingTools={controller.streamingTools}
               pendingQuestions={controller.pendingQuestions}

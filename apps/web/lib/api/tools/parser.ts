@@ -3,6 +3,7 @@ import {
   expectBoolean,
   expectRecord,
   expectString,
+  parseOptionalNumber,
   parseOptionalString,
   pickKnownKeys,
 } from '@/lib/api/shared';
@@ -11,6 +12,7 @@ const TOOL_PAYLOAD_KEYS = [
   'name',
   'enabled',
   'prompt_override',
+  'sandbox_memory_mb',
   'input_schema',
 ] as const;
 
@@ -20,6 +22,7 @@ function parseToolPayloadWithLabel(value: unknown, label: string): ToolPayload {
     name: expectString(record.name, `${label}.name`),
     enabled: expectBoolean(record.enabled, `${label}.enabled`),
     prompt_override: parseOptionalString(record.prompt_override, `${label}.prompt_override`),
+    sandbox_memory_mb: parseOptionalNumber(record.sandbox_memory_mb, `${label}.sandbox_memory_mb`),
     input_schema: parseOptionalInputSchema(record.input_schema, `${label}.input_schema`),
   };
 }

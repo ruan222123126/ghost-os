@@ -17,6 +17,15 @@ function buildAssistantMessage(id: string, content: string): ChatMessage {
   };
 }
 
+function buildToolMessage(id: string, content: string, toolCallId?: string): ChatMessage {
+  return {
+    id,
+    kind: 'tool',
+    content,
+    toolCallId,
+  };
+}
+
 function buildThinkingMessage(id: string, content: string): ChatMessage {
   return {
     id,
@@ -79,6 +88,32 @@ describe('hooks/chat/useChatHistory mergeLatestCommittedMessages', () => {
     ]);
   });
 
+  it('keeps thinking interleaved with tool calls when recent history sync completes', () => {
+    const previous = [
+      buildUserMessage('local:user:trace-3', 'question'),
+      buildThinkingMessage('stream-thinking:trace-3:1', 'before tool'),
+      buildToolMessage('stream-tool:trace-3:call-1', 'ls -la', 'call-1'),
+      buildThinkingMessage('stream-thinking:trace-3:2', 'after tool'),
+      buildAssistantMessage('stream-assistant:trace-3', 'answer'),
+    ];
+
+    const latest = [
+      buildUserMessage('session:user:3', 'question'),
+      buildToolMessage('session:tool:3', 'ls -la', 'call-1'),
+      buildAssistantMessage('session:assistant:3', 'answer'),
+    ];
+
+    const merged = mergeLatestCommittedMessages(previous, latest);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:3',
+      'stream-thinking:trace-3:1',
+      'session:tool:3',
+      'stream-thinking:trace-3:2',
+      'session:assistant:3',
+    ]);
+  });
+
   it('keeps unmatched old thinking in preserved history order', () => {
     const previous = [
       buildUserMessage('session:user:old', 'older question'),
@@ -112,9 +147,10 @@ describe('hooks/chat/useChatHistory mergePersistedThinkingMessages', () => {
     ];
 
     const merged = mergePersistedThinkingMessages(latest, [{
+      anchorId: 'session:assistant:1',
+      anchorKind: 'assistant',
       id: 'stream-thinking:trace-1',
       content: 'analyzing...',
-      assistantId: 'session:assistant:1',
     }]);
 
     expect(merged.map((message) => message.id)).toEqual([
@@ -131,14 +167,39 @@ describe('hooks/chat/useChatHistory mergePersistedThinkingMessages', () => {
     ];
 
     const merged = mergePersistedThinkingMessages(latest, [{
+      anchorContent: 'answer',
+      anchorKind: 'assistant',
       id: 'stream-thinking:trace-1',
       content: 'analyzing...',
-      assistantContent: 'answer',
     }]);
 
     expect(merged.map((message) => message.id)).toEqual([
       'session:user:1',
       'stream-thinking:trace-1',
+      'session:assistant:1',
+    ]);
+  });
+
+  it('inserts persisted thinking before matched tool by tool call id', () => {
+    const latest = [
+      buildUserMessage('session:user:1', 'question'),
+      buildToolMessage('session:tool:1', 'ls -la', 'call-1'),
+      buildAssistantMessage('session:assistant:1', 'answer'),
+    ];
+
+    const merged = mergePersistedThinkingMessages(latest, [{
+      anchorContent: 'ls -la',
+      anchorKind: 'tool',
+      anchorRef: 'stream-tool:1',
+      anchorToolCallId: 'call-1',
+      id: 'stream-thinking:trace-1',
+      content: 'analyzing...',
+    }]);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:1',
+      'stream-thinking:trace-1',
+      'session:tool:1',
       'session:assistant:1',
     ]);
   });

@@ -1,10 +1,14 @@
 import {
   appendStreamingAssistantState,
+  appendStreamingThinkingState,
   clearStreamingAssistantState,
+  clearStreamingThinkingState,
   markStreamingAssistantBoundary,
+  markStreamingThinkingBoundary,
   type PendingQuestionState,
   removePendingQuestionState,
   type StreamingAssistantState,
+  type StreamingThinkingState,
   type StreamingToolTableState,
   upsertPendingQuestionState,
   upsertStreamingToolState,
@@ -25,6 +29,22 @@ describe('lib/chatStream', () => {
     ]);
     expect(state.segmentsById['stream-segment:assistant:1']?.content).toBe('hello world');
     expect(state.segmentsById['stream-segment:assistant:2']?.content).toBe('after tool');
+  });
+
+  it('appends thinking deltas into timeline segments and splits on boundary', () => {
+    let state: StreamingThinkingState = clearStreamingThinkingState();
+
+    state = appendStreamingThinkingState(state, 'plan').state;
+    state = appendStreamingThinkingState(state, ' details').state;
+    state = markStreamingThinkingBoundary(state);
+    state = appendStreamingThinkingState(state, 'after tool').state;
+
+    expect(state.order).toEqual([
+      'stream-segment:thinking:1',
+      'stream-segment:thinking:2',
+    ]);
+    expect(state.segmentsById['stream-segment:thinking:1']?.content).toBe('plan details');
+    expect(state.segmentsById['stream-segment:thinking:2']?.content).toBe('after tool');
   });
 
   it('upserts streaming tools without rewriting the order', () => {

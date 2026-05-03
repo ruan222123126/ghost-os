@@ -26,6 +26,13 @@ describe('hooks/useConfigPrompts', () => {
         active: true,
       },
     ],
+    tool_definitions: [
+      {
+        name: 'script_exec',
+        description: 'Run a script.',
+        parameters: { type: 'object' },
+      },
+    ],
   };
 
   beforeEach(() => {

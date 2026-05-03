@@ -1,12 +1,16 @@
 import {
   appendStreamingAssistantState,
+  appendStreamingThinkingState,
   clearPendingQuestionState,
   clearStreamingAssistantState,
+  clearStreamingThinkingState,
   clearStreamingToolState,
   markStreamingAssistantBoundary,
+  markStreamingThinkingBoundary,
   removePendingQuestionState,
   STREAMING_ASSISTANT_ORDER_PREFIX,
   STREAMING_QUESTION_ORDER_PREFIX,
+  STREAMING_THINKING_ORDER_PREFIX,
   STREAMING_TOOL_ORDER_PREFIX,
   upsertPendingQuestionState,
   upsertStreamingToolState,
@@ -15,13 +19,15 @@ import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   PendingQuestionMessage,
   StreamingAssistantSegment,
+  StreamingThinkingSegment,
   StreamingToolState,
 } from '@/lib/types';
 import type { ChatStateStore } from './chatStateReducer';
+import { finalizeStreamingTurnState } from './chatStateFinalization';
 
 export function buildChatStateView(state: ChatStateStore): {
   streamingAssistantSegments: StreamingAssistantSegment[];
-  streamingThinkingText: string;
+  streamingThinkingSegments: StreamingThinkingSegment[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
 } {
@@ -29,7 +35,9 @@ export function buildChatStateView(state: ChatStateStore): {
     streamingAssistantSegments: state.streamingAssistantState.order
       .map((segmentId) => state.streamingAssistantState.segmentsById[segmentId])
       .filter((segment): segment is StreamingAssistantSegment => segment !== undefined),
-    streamingThinkingText: state.streamingThinkingText,
+    streamingThinkingSegments: state.streamingThinkingState.order
+      .map((segmentId) => state.streamingThinkingState.segmentsById[segmentId])
+      .filter((segment): segment is StreamingThinkingSegment => segment !== undefined),
     streamingTools: state.streamingToolState.order
       .map((toolId) => state.streamingToolState.toolsById[toolId])
       .filter((tool): tool is StreamingToolState => tool !== undefined),
@@ -60,8 +68,12 @@ function applyRuntimeAction(state: ChatStateStore, action: ChatRuntimeAction): C
       return appendStreamingThinkingTextState(state, action.text);
     case 'clear_streaming_thinking_text':
       return clearStreamingThinkingTextState(state);
+    case 'mark_streaming_thinking_boundary':
+      return markStreamingThinkingBoundaryState(state);
     case 'append_committed_messages':
       return appendCommittedMessagesState(state, action.messages);
+    case 'finalize_streaming_turn':
+      return finalizeStreamingTurnState(state, action.assistantMessageId, action.assistantText);
     case 'upsert_streaming_tool':
       return upsertStreamingToolRuntimeState(state, action.tool);
     case 'clear_streaming_tools':
@@ -106,19 +118,30 @@ function appendStreamingThinkingTextState(state: ChatStateStore, text: string): 
   if (!text) {
     return state;
   }
+  const result = appendStreamingThinkingState(state.streamingThinkingState, text);
+  let nextOrder = state.streamingItemOrder;
+  if (result.createdSegmentId) {
+    nextOrder = appendUniqueOrderKey(nextOrder, thinkingOrderKey(result.createdSegmentId));
+  }
   return {
     ...state,
-    streamingThinkingText: `${state.streamingThinkingText}${text}`,
+    streamingThinkingState: result.state,
+    streamingItemOrder: nextOrder,
   };
 }
 
 function clearStreamingThinkingTextState(state: ChatStateStore): ChatStateStore {
-  if (!state.streamingThinkingText) {
-    return state;
-  }
   return {
     ...state,
-    streamingThinkingText: '',
+    streamingThinkingState: clearStreamingThinkingState(),
+    streamingItemOrder: removeOrderKeyByPrefix(state.streamingItemOrder, STREAMING_THINKING_ORDER_PREFIX),
+  };
+}
+
+function markStreamingThinkingBoundaryState(state: ChatStateStore): ChatStateStore {
+  return {
+    ...state,
+    streamingThinkingState: markStreamingThinkingBoundary(state.streamingThinkingState),
   };
 }
 
@@ -140,6 +163,7 @@ function upsertStreamingToolRuntimeState(state: ChatStateStore, tool: StreamingT
   return {
     ...state,
     streamingAssistantState: markStreamingAssistantBoundary(state.streamingAssistantState),
+    streamingThinkingState: markStreamingThinkingBoundary(state.streamingThinkingState),
     streamingItemOrder: toolId
       ? appendUniqueOrderKey(state.streamingItemOrder, toolOrderKey(toolId))
       : state.streamingItemOrder,
@@ -163,6 +187,7 @@ function upsertPendingQuestionRuntimeState(
   return {
     ...state,
     streamingAssistantState: markStreamingAssistantBoundary(state.streamingAssistantState),
+    streamingThinkingState: markStreamingThinkingBoundary(state.streamingThinkingState),
     streamingItemOrder: questionId
       ? appendUniqueOrderKey(state.streamingItemOrder, questionOrderKey(questionId))
       : state.streamingItemOrder,
@@ -203,6 +228,10 @@ function removeOrderKeyByPrefix(order: string[], prefix: string): string[] {
 
 function assistantOrderKey(segmentId: string): string {
   return `${STREAMING_ASSISTANT_ORDER_PREFIX}${segmentId}`;
+}
+
+function thinkingOrderKey(segmentId: string): string {
+  return `${STREAMING_THINKING_ORDER_PREFIX}${segmentId}`;
 }
 
 function toolOrderKey(toolId: string): string {

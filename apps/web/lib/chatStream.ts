@@ -1,15 +1,30 @@
 import type {
   PendingQuestionMessage,
   StreamingAssistantSegment,
+  StreamingThinkingSegment,
   StreamingToolState,
 } from '@/lib/types';
 
 export const STREAMING_ASSISTANT_ORDER_PREFIX = 'assistant:';
+export const STREAMING_THINKING_ORDER_PREFIX = 'thinking:';
 export const STREAMING_TOOL_ORDER_PREFIX = 'tool:';
 export const STREAMING_QUESTION_ORDER_PREFIX = 'question:';
 
 const ASSISTANT_SEGMENT_ID_PREFIX = 'stream-segment:assistant:';
-const INITIAL_ASSISTANT_SEGMENT_SEQUENCE = 1;
+const THINKING_SEGMENT_ID_PREFIX = 'stream-segment:thinking:';
+const INITIAL_STREAMING_SEGMENT_SEQUENCE = 1;
+
+interface StreamingSegmentBase {
+  id: string;
+  content: string;
+}
+
+interface StreamingSegmentState<TSegment extends StreamingSegmentBase> {
+  activeSegmentId: string;
+  nextSegmentSeq: number;
+  order: string[];
+  segmentsById: Record<string, TSegment>;
+}
 
 export interface PendingQuestionState {
   order: string[];
@@ -21,85 +36,46 @@ export interface StreamingToolTableState {
   toolsById: Record<string, StreamingToolState>;
 }
 
-export interface StreamingAssistantState {
-  activeSegmentId: string;
-  nextSegmentSeq: number;
-  order: string[];
-  segmentsById: Record<string, StreamingAssistantSegment>;
-}
+export type StreamingAssistantState = StreamingSegmentState<StreamingAssistantSegment>;
+export type StreamingThinkingState = StreamingSegmentState<StreamingThinkingSegment>;
 
-interface AppendStreamingAssistantResult {
+interface AppendStreamingSegmentResult<TState> {
   createdSegmentId?: string;
-  state: StreamingAssistantState;
+  state: TState;
 }
 
 export function clearStreamingAssistantState(): StreamingAssistantState {
-  return {
-    activeSegmentId: '',
-    nextSegmentSeq: INITIAL_ASSISTANT_SEGMENT_SEQUENCE,
-    order: [],
-    segmentsById: {},
-  };
+  return clearStreamingSegmentState<StreamingAssistantSegment>();
+}
+
+export function clearStreamingThinkingState(): StreamingThinkingState {
+  return clearStreamingSegmentState<StreamingThinkingSegment>();
 }
 
 export function markStreamingAssistantBoundary(
   state: StreamingAssistantState,
 ): StreamingAssistantState {
-  if (!state.activeSegmentId) {
-    return state;
-  }
-  return {
-    ...state,
-    activeSegmentId: '',
-  };
+  return markStreamingSegmentBoundary(state);
+}
+
+export function markStreamingThinkingBoundary(
+  state: StreamingThinkingState,
+): StreamingThinkingState {
+  return markStreamingSegmentBoundary(state);
 }
 
 export function appendStreamingAssistantState(
   state: StreamingAssistantState,
   delta: string,
-): AppendStreamingAssistantResult {
-  if (!delta) {
-    return { state };
-  }
-
-  const segmentId = state.activeSegmentId || createAssistantSegmentID(state.nextSegmentSeq);
-  const currentSegment = state.segmentsById[segmentId];
-  if (currentSegment) {
-    return {
-      state: {
-        ...state,
-        activeSegmentId: segmentId,
-        segmentsById: {
-          ...state.segmentsById,
-          [segmentId]: {
-            ...currentSegment,
-            content: `${currentSegment.content}${delta}`,
-          },
-        },
-      },
-    };
-  }
-
-  return {
-    createdSegmentId: segmentId,
-    state: {
-      ...state,
-      activeSegmentId: segmentId,
-      nextSegmentSeq: state.activeSegmentId ? state.nextSegmentSeq : state.nextSegmentSeq + 1,
-      order: [...state.order, segmentId],
-      segmentsById: {
-        ...state.segmentsById,
-        [segmentId]: {
-          id: segmentId,
-          content: delta,
-        },
-      },
-    },
-  };
+): AppendStreamingSegmentResult<StreamingAssistantState> {
+  return appendStreamingSegmentState(state, delta, createAssistantSegmentID);
 }
 
-function createAssistantSegmentID(sequence: number): string {
-  return `${ASSISTANT_SEGMENT_ID_PREFIX}${sequence}`;
+export function appendStreamingThinkingState(
+  state: StreamingThinkingState,
+  delta: string,
+): AppendStreamingSegmentResult<StreamingThinkingState> {
+  return appendStreamingSegmentState(state, delta, createThinkingSegmentID);
 }
 
 export function upsertStreamingToolState(
@@ -170,4 +146,82 @@ export function clearPendingQuestionState(): PendingQuestionState {
     order: [],
     questionsById: {},
   };
+}
+
+function clearStreamingSegmentState<TSegment extends StreamingSegmentBase>(): StreamingSegmentState<TSegment> {
+  return {
+    activeSegmentId: '',
+    nextSegmentSeq: INITIAL_STREAMING_SEGMENT_SEQUENCE,
+    order: [],
+    segmentsById: {},
+  };
+}
+
+function markStreamingSegmentBoundary<TSegment extends StreamingSegmentBase>(
+  state: StreamingSegmentState<TSegment>,
+): StreamingSegmentState<TSegment> {
+  if (!state.activeSegmentId) {
+    return state;
+  }
+  return {
+    ...state,
+    activeSegmentId: '',
+  };
+}
+
+function appendStreamingSegmentState<TSegment extends StreamingSegmentBase>(
+  state: StreamingSegmentState<TSegment>,
+  delta: string,
+  createSegmentID: (sequence: number) => string,
+): AppendStreamingSegmentResult<StreamingSegmentState<TSegment>> {
+  if (!delta) {
+    return { state };
+  }
+
+  const segmentId = state.activeSegmentId || createSegmentID(state.nextSegmentSeq);
+  const currentSegment = state.segmentsById[segmentId];
+  if (currentSegment) {
+    return {
+      state: {
+        ...state,
+        activeSegmentId: segmentId,
+        segmentsById: {
+          ...state.segmentsById,
+          [segmentId]: {
+            ...currentSegment,
+            content: `${currentSegment.content}${delta}`,
+          },
+        },
+      },
+    };
+  }
+
+  return {
+    createdSegmentId: segmentId,
+    state: {
+      ...state,
+      activeSegmentId: segmentId,
+      nextSegmentSeq: state.activeSegmentId ? state.nextSegmentSeq : state.nextSegmentSeq + 1,
+      order: [...state.order, segmentId],
+      segmentsById: {
+        ...state.segmentsById,
+        [segmentId]: {
+          id: segmentId,
+          content: delta,
+        } as TSegment,
+      },
+    },
+  };
+}
+
+function createAssistantSegmentID(sequence: number): string {
+  return createSegmentID(ASSISTANT_SEGMENT_ID_PREFIX, sequence);
+}
+
+function createThinkingSegmentID(sequence: number): string {
+  return createSegmentID(THINKING_SEGMENT_ID_PREFIX, sequence);
+}
+
+function createSegmentID(prefix: string, sequence: number): string {
+  return `${prefix}${sequence}`;
 }

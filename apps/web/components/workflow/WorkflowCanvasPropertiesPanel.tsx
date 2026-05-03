@@ -2,9 +2,12 @@
 
 import { WorkflowCanvasNodeEditorContent } from '@/components/workflow/WorkflowCanvasNodeEditorContent';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { WorkflowCanvasNodeDraft } from '@/lib/workflow-editor';
+import type { WorkflowCanvasDraft, WorkflowCanvasNodeDraft, WorkflowEditorKind } from '@/lib/workflow-editor';
+import { isProtectedBoundaryNode } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasPropertiesPanelProps {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
   selectedNode?: WorkflowCanvasNodeDraft;
   onClose: () => void;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
@@ -13,7 +16,8 @@ interface WorkflowCanvasPropertiesPanelProps {
 
 export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPanelProps) {
   const { copy } = useWebLocale();
-  const { selectedNode, onClose, onUpdateNode, onDeleteNode } = props;
+  const { editorKind, draft, selectedNode, onClose, onUpdateNode, onDeleteNode } = props;
+  const allowDelete = !isProtectedBoundaryNode(selectedNode);
 
   return (
     <aside className={`workflow-arch-properties ${selectedNode ? 'workflow-arch-properties--open' : ''}`}>
@@ -33,14 +37,21 @@ export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPan
             <strong>{labelOfNodeType(selectedNode.type, copy.workflow)}</strong>
           </section>
           <section className="workflow-arch-properties-content">
-            <WorkflowCanvasNodeEditorContent selectedNode={selectedNode} onUpdateNode={onUpdateNode} />
+            <WorkflowCanvasNodeEditorContent
+              editorKind={editorKind}
+              draft={draft}
+              selectedNode={selectedNode}
+              onUpdateNode={onUpdateNode}
+            />
           </section>
-          <section className="workflow-arch-properties-footer">
-            <button type="button" className="workflow-arch-danger-button" onClick={() => onDeleteNode(selectedNode.id)}>
-              <span aria-hidden>⌫</span>
-              {copy.workflow.deleteInstance}
-            </button>
-          </section>
+          {allowDelete ? (
+            <section className="workflow-arch-properties-footer">
+              <button type="button" className="workflow-arch-danger-button" onClick={() => onDeleteNode(selectedNode.id)}>
+                <span aria-hidden>⌫</span>
+                {copy.workflow.deleteInstance}
+              </button>
+            </section>
+          ) : null}
         </>
       ) : null}
     </aside>

@@ -7,6 +7,8 @@ import { WorkflowCanvasStageNodes } from '@/components/workflow/WorkflowCanvasSt
 import { renderEdge } from '@/components/workflow/workflowCanvasStageHelpers';
 import { useWorkflowCanvasStageInteractions } from '@/components/workflow/useWorkflowCanvasStageInteractions';
 import { localizeWorkflowValidationError } from '@/lib/i18n/workflowValidation';
+import type { WebLocale } from '@/lib/i18n/locale';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type {
   WorkflowCanvasDraft,
@@ -17,6 +19,8 @@ interface WorkflowCanvasStageProps {
   draft: WorkflowCanvasDraft;
   actionError: string;
   validationErrors: string[];
+  workflowCopy: WorkflowCopy;
+  localizeValidationError?: (message: string, locale: WebLocale) => string;
   onSelectNode: (nodeID?: string) => void;
   onMoveNode: (nodeID: string, position: WorkflowCanvasPosition) => void;
   onConnectNodes: (sourceNodeID: string, targetNodeID: string) => void;
@@ -31,6 +35,8 @@ export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
     draft,
     actionError,
     validationErrors,
+    workflowCopy,
+    localizeValidationError = localizeWorkflowValidationError,
     onSelectNode,
     onMoveNode,
     onConnectNodes,
@@ -63,6 +69,7 @@ export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
         </svg>
         <WorkflowCanvasStageNodes
           draft={interactions.renderDraft}
+          workflowCopy={workflowCopy}
           nodeMap={interactions.nodeMap}
           canvasRef={interactions.canvasRef}
           viewport={interactions.viewport}
@@ -91,7 +98,7 @@ export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
           <p>{copy.workflow.stageValidation}</p>
           <ul>
             {validationErrors.slice(0, 3).map((error) => (
-              <li key={error}>{localizeWorkflowValidationError(error, locale)}</li>
+              <li key={error}>{localizeValidationError(error, locale)}</li>
             ))}
           </ul>
           {validationErrors.length > 3 ? (

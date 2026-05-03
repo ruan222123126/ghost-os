@@ -1,4 +1,8 @@
-import type { StreamingAssistantSegment, StreamingToolState } from '@/lib/types';
+import type {
+  StreamingAssistantSegment,
+  StreamingThinkingSegment,
+  StreamingToolState,
+} from '@/lib/types';
 import {
   hasAssistantStreamedVisibleText,
   shouldAutoCollapseThinkingPanel,
@@ -21,11 +25,18 @@ function buildAssistantSegment(content: string): StreamingAssistantSegment {
   };
 }
 
+function buildThinkingSegment(content: string): StreamingThinkingSegment {
+  return {
+    id: 'thinking-segment-1',
+    content,
+  };
+}
+
 describe('shouldShowThinkingIndicator', () => {
   it('returns false when loading is false', () => {
     expect(shouldShowThinkingIndicator({
       loading: false,
-      streamingThinkingText: '',
+      streamingThinkingSegments: [],
       streamingAssistantSegments: [],
       streamingTools: [],
     })).toBe(false);
@@ -34,7 +45,7 @@ describe('shouldShowThinkingIndicator', () => {
   it('returns true when loading without text output and tool activity', () => {
     expect(shouldShowThinkingIndicator({
       loading: true,
-      streamingThinkingText: '',
+      streamingThinkingSegments: [],
       streamingAssistantSegments: [],
       streamingTools: [],
     })).toBe(true);
@@ -43,7 +54,7 @@ describe('shouldShowThinkingIndicator', () => {
   it('returns false when assistant has streamed text', () => {
     expect(shouldShowThinkingIndicator({
       loading: true,
-      streamingThinkingText: '',
+      streamingThinkingSegments: [],
       streamingAssistantSegments: [buildAssistantSegment('hello')],
       streamingTools: [],
     })).toBe(false);
@@ -52,7 +63,7 @@ describe('shouldShowThinkingIndicator', () => {
   it('returns false when streaming thinking text exists', () => {
     expect(shouldShowThinkingIndicator({
       loading: true,
-      streamingThinkingText: 'analyzing',
+      streamingThinkingSegments: [buildThinkingSegment('analyzing')],
       streamingAssistantSegments: [],
       streamingTools: [],
     })).toBe(false);
@@ -62,7 +73,7 @@ describe('shouldShowThinkingIndicator', () => {
     for (const status of ['pending', 'running', 'in_progress']) {
       expect(shouldShowThinkingIndicator({
         loading: true,
-        streamingThinkingText: '',
+        streamingThinkingSegments: [],
         streamingAssistantSegments: [],
         streamingTools: [buildStreamingTool(status)],
       })).toBe(false);
@@ -72,7 +83,7 @@ describe('shouldShowThinkingIndicator', () => {
   it('returns true when tools are finished', () => {
     expect(shouldShowThinkingIndicator({
       loading: true,
-      streamingThinkingText: '',
+      streamingThinkingSegments: [],
       streamingAssistantSegments: [],
       streamingTools: [buildStreamingTool('success'), buildStreamingTool('error')],
     })).toBe(true);

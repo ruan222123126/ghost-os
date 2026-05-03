@@ -5,8 +5,8 @@ import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PromptLibraryItem, SystemPromptPayload } from '@/lib/types';
 import {
+  applyPromptLibraryActivationRules,
   confirmPromptDeletion,
-  enforceExclusiveActivation,
   newPromptLibraryCard,
   normalizePromptLibraryCard,
   type PromptLibraryEditorState,
@@ -58,7 +58,11 @@ export function PromptsLibrarySettingsSection(props: PromptsLibrarySettingsSecti
     const nextPromptLibrary = editor.mode === 'create'
       ? [...promptLibrary, normalizedDraft]
       : updateCard(normalizedDraft.id, () => normalizedDraft);
-    const syncedPromptLibrary = enforceExclusiveActivation(nextPromptLibrary, normalizedDraft.id);
+    const syncedPromptLibrary = applyPromptLibraryActivationRules(
+      promptLibrary,
+      nextPromptLibrary,
+      normalizedDraft.id,
+    );
 
     await savePromptLibrary(syncedPromptLibrary);
     setEditor(null);
@@ -77,7 +81,7 @@ export function PromptsLibrarySettingsSection(props: PromptsLibrarySettingsSecti
 
   const toggleCard = async (card: PromptLibraryItem) => {
     const toggled = updateCard(card.id, (item) => ({ ...item, active: !item.active }));
-    const synced = enforceExclusiveActivation(toggled, card.id);
+    const synced = applyPromptLibraryActivationRules(promptLibrary, toggled, card.id);
     await savePromptLibrary(synced);
   };
 
@@ -118,31 +122,26 @@ export function PromptsLibrarySettingsSection(props: PromptsLibrarySettingsSecti
 
       {loading && prompts === null ? <LoadingPromptsNotice text={copy.settings.promptsLoading} /> : null}
 
-      <section className="rounded-[16px] border border-[#E5E5E5] bg-white p-5">
-        <div className="mb-4">
-          <h2 className="text-[18px] font-semibold text-[#111111]">{copy.settings.promptsLibraryTitle}</h2>
-        </div>
-        {promptLibrary.length === 0 ? <PromptLibraryEmptyNotice /> : null}
-        <div className="space-y-3">
-          {promptLibrary.map((item, index) => (
-            <PromptLibraryCard
-              key={item.id}
-              item={item}
-              index={index}
-              controlsDisabled={listDisabled}
-              onToggle={() => {
-                ignorePromise(toggleCard(item));
-              }}
-              onEdit={() => {
-                setEditor({ mode: 'edit', original: item, draft: item });
-              }}
-              onDelete={() => {
-                ignorePromise(deleteCard(item));
-              }}
-            />
-          ))}
-        </div>
-      </section>
+      {promptLibrary.length === 0 ? <PromptLibraryEmptyNotice /> : null}
+      <div className="space-y-3">
+        {promptLibrary.map((item, index) => (
+          <PromptLibraryCard
+            key={item.id}
+            item={item}
+            index={index}
+            controlsDisabled={listDisabled}
+            onToggle={() => {
+              ignorePromise(toggleCard(item));
+            }}
+            onEdit={() => {
+              setEditor({ mode: 'edit', original: item, draft: item });
+            }}
+            onDelete={() => {
+              ignorePromise(deleteCard(item));
+            }}
+          />
+        ))}
+      </div>
 
       {editor === null ? null : (
         <PromptLibraryEditor
@@ -155,14 +154,6 @@ export function PromptsLibrarySettingsSection(props: PromptsLibrarySettingsSecti
               return;
             }
             ignorePromise(deleteCard(editor.draft));
-          }}
-          onReset={() => {
-            setEditor((current) => {
-              if (current === null) {
-                return current;
-              }
-              return { ...current, draft: current.original };
-            });
           }}
           onSave={() => {
             ignorePromise(saveEditor());

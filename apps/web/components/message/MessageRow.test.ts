@@ -47,6 +47,7 @@ describe('components/message/MessageRow', () => {
     const html = renderMessageRow({
       message,
       assistantMarkdownEnabled: true,
+      toolCallCompactOutputEnabled: false,
       loading: false,
       isToolCardOpen: false,
       onAnswerQuestion: async () => undefined,
@@ -70,6 +71,7 @@ describe('components/message/MessageRow', () => {
     renderMessageRow({
       message,
       assistantMarkdownEnabled: false,
+      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
@@ -79,6 +81,26 @@ describe('components/message/MessageRow', () => {
       content: '# title',
       enabled: false,
     }));
+  });
+
+  it('renders assistant content without the system output label or icon', () => {
+    const message: AssistantChatMessage = {
+      id: 'assistant-2',
+      kind: 'assistant',
+      content: 'plain answer',
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      toolCallCompactOutputEnabled: false,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+    });
+
+    expect(html).not.toContain('// SYSTEM_OUTPUT');
+    expect(html).not.toContain('message-channel-icon');
   });
 });
 

@@ -92,7 +92,7 @@ describe('lib/workflow-editor/draft', () => {
 
     expect(draft.schedule.mode).toBe('interval');
     expect(draft.nodes).toHaveLength(8);
-    expect(draft.edges).toHaveLength(9);
+    expect(draft.edges).toHaveLength(8);
 
     const definition = draftToWorkflowDefinition(draft);
 
@@ -184,7 +184,6 @@ describe('lib/workflow-editor/draft', () => {
         expect.objectContaining({ from_node_id: 'start', to_node_id: 'main-loop-start' }),
         expect.objectContaining({ from_node_id: 'main-loop-start', to_node_id: 'tool-node' }),
         expect.objectContaining({ from_node_id: 'tool-node', to_node_id: 'main-loop-end' }),
-        expect.objectContaining({ from_node_id: 'main-loop-end', to_node_id: 'main-loop-start' }),
         expect.objectContaining({ from_node_id: 'main-loop-end', to_node_id: 'end' }),
       ]),
     );

@@ -7,9 +7,23 @@ import { PromptsPreviewSettingsSection } from './PromptsPreviewSettingsSection';
 describe('components/config/PromptsPreviewSettingsSection', () => {
   it('renders read-only preview without textarea editors', () => {
     const prompts: SystemPromptPayload = {
-      core_prompt: '## Role\nOperator',
-      rendered_prompt: 'Rendered final prompt',
+      core_prompt: 'Operator',
+      rendered_prompt: [
+        'Role: Operator',
+        '',
+        'Job:',
+        'Coordinate work',
+        '',
+        'Context: OS: linux | Root: /repo | Max turns: 20',
+      ].join('\n'),
       prompt_library: [],
+      tool_definitions: [
+        {
+          name: 'script_exec',
+          description: 'Run a script.',
+          parameters: { type: 'object' },
+        },
+      ],
     };
 
     const renderer = renderSection({
@@ -20,7 +34,12 @@ describe('components/config/PromptsPreviewSettingsSection', () => {
     });
 
     expect(textContent(renderer.root.findByType('h1'))).toBe('Preview');
-    expect(textContent(findByTestID(renderer.root, 'prompts-rendered-preview'))).toBe('Rendered final prompt');
+    const previewText = textContent(findByTestID(renderer.root, 'prompts-rendered-preview'));
+    expect(previewText).toContain('Role: Operator');
+    expect(previewText).toContain('Job:');
+    expect(previewText).toContain('Context: OS: linux | Root: /repo | Max turns: 20');
+    expect(previewText).toContain('\n\ntools:\n[');
+    expect(previewText).toContain('"name": "script_exec"');
     expect(renderer.root.findAllByType('textarea')).toHaveLength(0);
     expect(renderer.root.findAll((node) => String(node.props['data-testid'] ?? '').startsWith('prompt-save-'))).toHaveLength(0);
   });
@@ -33,7 +52,9 @@ describe('components/config/PromptsPreviewSettingsSection', () => {
       onRefresh: async () => undefined,
     });
 
-    expect(textContent(findByTestID(renderer.root, 'prompts-rendered-preview'))).toBe('Rendered prompt is empty.');
+    const previewText = textContent(findByTestID(renderer.root, 'prompts-rendered-preview'));
+    expect(previewText).toContain('Rendered prompt is empty.');
+    expect(previewText).toContain('\n\ntools:\n[]');
     expect(renderer.root.findAllByType('textarea')).toHaveLength(0);
   });
 });

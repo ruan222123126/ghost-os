@@ -1,47 +1,41 @@
 import type {
   BridgeConfig,
-  GraphQLDomainResponse,
-  GraphQLMutationPolicyResponse,
-  GraphQLSourceResponse,
   ProviderConfig,
   ProviderListResponse,
   SystemPromptPayload,
+  SystemPromptToolDefinition,
 } from '@/lib/types';
 import {
   expectBoolean,
   expectNumber,
   expectRecord,
   expectString,
-  expectStringArray,
   expectStringEnum,
   parseOptionalNumberRecord,
   pickKnownKeys,
-  parseOptionalStringRecord,
   parseOptionalStringArray,
 } from '@/lib/api/shared';
 
 const PROVIDER_TYPES = ['openai', 'anthropic', 'custom', 'codex'] as const;
-const PROMPT_INSERT_POINTS = ['core_job', 'memory'] as const;
+const PROMPT_INSERT_POINTS = ['rule', 'core_job', 'memory', 'context'] as const;
 const BRIDGE_CONFIG_KEYS = [
   'provider',
   'provider_type',
   'base_url',
   'model',
   'chat_path',
+  'project_root',
+  'max_turns',
+  'llm_completion_retry_count',
+  'llm_completion_retry_interval_ms',
   'api_key_set',
   'model_selection_enabled',
-  'graphql_default_source',
-  'graphql_tool_runtime_enabled',
-  'graphql_text_sanitize_enabled',
-  'graphql_sources',
-  'graphql_mutation_policies',
   'session_human_log_full_enabled',
+  'session_system_prompt_visible_enabled',
   'assistant_markdown_enabled',
+  'tool_call_compact_output_enabled',
   'memory_mode_enabled',
-  'web_rooter_enabled',
-  'web_rooter_base_url',
-  'web_rooter_timeout_ms',
-  'web_rooter_api_token_set',
+  'microcompact_enabled',
   'web_search_tavily_url',
   'web_search_exa_url',
   'web_search_tavily_api_key_set',
@@ -62,6 +56,7 @@ const SYSTEM_PROMPT_KEYS = [
   'core_prompt',
   'rendered_prompt',
   'prompt_library',
+  'tool_definitions',
 ] as const;
 const PROMPT_LIBRARY_ITEM_KEYS = [
   'id',
@@ -70,47 +65,12 @@ const PROMPT_LIBRARY_ITEM_KEYS = [
   'content',
   'active',
 ] as const;
+const SYSTEM_PROMPT_TOOL_DEFINITION_KEYS = [
+  'name',
+  'description',
+  'parameters',
+] as const;
 const PROVIDER_LIST_KEYS = ['providers', 'active_provider'] as const;
-const GRAPHQL_DOMAIN_KEYS = [
-  'name',
-  'description',
-  'root_queries',
-  'types',
-  'max_depth',
-  'max_fields',
-  'max_root_fields',
-] as const;
-const GRAPHQL_SOURCE_KEYS = [
-  'name',
-  'description',
-  'endpoint',
-  'schema_path',
-  'timeout_ms',
-  'max_response_bytes',
-  'max_depth',
-  'max_fields',
-  'max_root_fields',
-  'max_fragments',
-  'headers',
-  'api_key_set',
-  'domains',
-] as const;
-const GRAPHQL_MUTATION_POLICY_KEYS = [
-  'name',
-  'description',
-  'source',
-  'domain',
-  'root_mutation',
-  'approval_required',
-  'idempotency_mode',
-  'idempotency_header',
-  'idempotency_variable_path',
-  'max_depth',
-  'max_fields',
-  'max_root_fields',
-  'max_fragments',
-] as const;
-const GRAPHQL_IDEMPOTENCY_MODES = ['header', 'variable_path'] as const;
 
 function parseProviderConfig(value: unknown, label: string): ProviderConfig {
   const record = pickKnownKeys(expectRecord(value, label), PROVIDER_CONFIG_KEYS);
@@ -138,96 +98,6 @@ function parseProviderConfig(value: unknown, label: string): ProviderConfig {
   };
 }
 
-function parseGraphQLDomainResponse(value: unknown, label: string): GraphQLDomainResponse {
-  const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_DOMAIN_KEYS);
-
-  return {
-    name: expectString(record.name, `${label}.name`),
-    description: record.description === undefined
-      ? undefined
-      : expectString(record.description, `${label}.description`),
-    root_queries: expectStringArray(record.root_queries, `${label}.root_queries`),
-    types: parseOptionalStringArray(record.types, `${label}.types`),
-    max_depth: record.max_depth === undefined ? undefined : expectNumber(record.max_depth, `${label}.max_depth`),
-    max_fields: record.max_fields === undefined ? undefined : expectNumber(record.max_fields, `${label}.max_fields`),
-    max_root_fields: record.max_root_fields === undefined
-      ? undefined
-      : expectNumber(record.max_root_fields, `${label}.max_root_fields`),
-  };
-}
-
-function parseGraphQLSourceResponse(value: unknown, label: string): GraphQLSourceResponse {
-  const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_SOURCE_KEYS);
-
-  let domains: GraphQLDomainResponse[] | undefined;
-  if (record.domains !== undefined) {
-    if (!Array.isArray(record.domains)) {
-      throw new Error(`Invalid ${label}.domains: expected array`);
-    }
-    domains = record.domains.map((entry, index) => {
-      return parseGraphQLDomainResponse(entry, `${label}.domains[${index}]`);
-    });
-  }
-
-  return {
-    name: expectString(record.name, `${label}.name`),
-    description: record.description === undefined
-      ? undefined
-      : expectString(record.description, `${label}.description`),
-    endpoint: expectString(record.endpoint, `${label}.endpoint`),
-    schema_path: expectString(record.schema_path, `${label}.schema_path`),
-    timeout_ms: expectNumber(record.timeout_ms, `${label}.timeout_ms`),
-    max_response_bytes: expectNumber(record.max_response_bytes, `${label}.max_response_bytes`),
-    max_depth: expectNumber(record.max_depth, `${label}.max_depth`),
-    max_fields: expectNumber(record.max_fields, `${label}.max_fields`),
-    max_root_fields: expectNumber(record.max_root_fields, `${label}.max_root_fields`),
-    max_fragments: expectNumber(record.max_fragments, `${label}.max_fragments`),
-    headers: parseOptionalStringRecord(record.headers, `${label}.headers`),
-    api_key_set: expectBoolean(record.api_key_set, `${label}.api_key_set`),
-    domains,
-  };
-}
-
-function parseGraphQLMutationPolicyResponse(
-  value: unknown,
-  label: string,
-): GraphQLMutationPolicyResponse {
-  const record = pickKnownKeys(expectRecord(value, label), GRAPHQL_MUTATION_POLICY_KEYS);
-  const approvalRequired = record.approval_required === undefined
-    ? undefined
-    : expectBoolean(record.approval_required, `${label}.approval_required`);
-
-  return {
-    name: expectString(record.name, `${label}.name`),
-    description: record.description === undefined
-      ? undefined
-      : expectString(record.description, `${label}.description`),
-    source: expectString(record.source, `${label}.source`),
-    domain: expectString(record.domain, `${label}.domain`),
-    root_mutation: expectString(record.root_mutation, `${label}.root_mutation`),
-    ...(approvalRequired === undefined ? {} : { approval_required: approvalRequired }),
-    idempotency_mode: expectStringEnum(
-      record.idempotency_mode,
-      GRAPHQL_IDEMPOTENCY_MODES,
-      `${label}.idempotency_mode`,
-    ),
-    idempotency_header: record.idempotency_header === undefined
-      ? undefined
-      : expectString(record.idempotency_header, `${label}.idempotency_header`),
-    idempotency_variable_path: record.idempotency_variable_path === undefined
-      ? undefined
-      : expectString(record.idempotency_variable_path, `${label}.idempotency_variable_path`),
-    max_depth: record.max_depth === undefined ? undefined : expectNumber(record.max_depth, `${label}.max_depth`),
-    max_fields: record.max_fields === undefined ? undefined : expectNumber(record.max_fields, `${label}.max_fields`),
-    max_root_fields: record.max_root_fields === undefined
-      ? undefined
-      : expectNumber(record.max_root_fields, `${label}.max_root_fields`),
-    max_fragments: record.max_fragments === undefined
-      ? undefined
-      : expectNumber(record.max_fragments, `${label}.max_fragments`),
-  };
-}
-
 function parsePromptLibraryItem(value: unknown, label: string) {
   const record = pickKnownKeys(expectRecord(value, label), PROMPT_LIBRARY_ITEM_KEYS);
 
@@ -240,14 +110,31 @@ function parsePromptLibraryItem(value: unknown, label: string) {
   };
 }
 
+function parseSystemPromptToolDefinition(
+  value: unknown,
+  label: string,
+): SystemPromptToolDefinition {
+  const record = pickKnownKeys(expectRecord(value, label), SYSTEM_PROMPT_TOOL_DEFINITION_KEYS);
+
+  return {
+    name: expectString(record.name, `${label}.name`),
+    description: expectString(record.description, `${label}.description`),
+    parameters: parseOptionalToolDefinitionParameters(record.parameters, `${label}.parameters`),
+  };
+}
+
+function parseOptionalToolDefinitionParameters(
+  value: unknown,
+  label: string,
+): Record<string, unknown> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return expectRecord(value, label);
+}
+
 export function parseBridgeConfig(payload: unknown): BridgeConfig {
   const record = pickKnownKeys(expectRecord(payload, 'bridge config'), BRIDGE_CONFIG_KEYS);
-  if (!Array.isArray(record.graphql_sources)) {
-    throw new Error('Invalid bridge config.graphql_sources: expected array');
-  }
-  if (!Array.isArray(record.graphql_mutation_policies)) {
-    throw new Error('Invalid bridge config.graphql_mutation_policies: expected array');
-  }
 
   return {
     provider: expectString(record.provider, 'bridge config.provider'),
@@ -255,56 +142,44 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
     base_url: expectString(record.base_url, 'bridge config.base_url'),
     model: expectString(record.model, 'bridge config.model'),
     chat_path: expectString(record.chat_path, 'bridge config.chat_path'),
+    project_root: expectString(record.project_root, 'bridge config.project_root'),
+    max_turns: expectNumber(record.max_turns, 'bridge config.max_turns'),
+    llm_completion_retry_count: expectNumber(
+      record.llm_completion_retry_count,
+      'bridge config.llm_completion_retry_count',
+    ),
+    llm_completion_retry_interval_ms: expectNumber(
+      record.llm_completion_retry_interval_ms,
+      'bridge config.llm_completion_retry_interval_ms',
+    ),
     api_key_set: expectBoolean(record.api_key_set, 'bridge config.api_key_set'),
     model_selection_enabled: expectBoolean(
       record.model_selection_enabled,
       'bridge config.model_selection_enabled',
     ),
-    graphql_default_source: expectString(record.graphql_default_source, 'bridge config.graphql_default_source'),
-    graphql_tool_runtime_enabled: expectBoolean(
-      record.graphql_tool_runtime_enabled,
-      'bridge config.graphql_tool_runtime_enabled',
-    ),
-    graphql_text_sanitize_enabled: expectBoolean(
-      record.graphql_text_sanitize_enabled,
-      'bridge config.graphql_text_sanitize_enabled',
-    ),
-    graphql_sources: record.graphql_sources.map((entry, index) => {
-      return parseGraphQLSourceResponse(entry, `bridge config.graphql_sources[${index}]`);
-    }),
-    graphql_mutation_policies: record.graphql_mutation_policies.map((entry, index) => {
-      return parseGraphQLMutationPolicyResponse(
-        entry,
-        `bridge config.graphql_mutation_policies[${index}]`,
-      );
-    }),
     session_human_log_full_enabled: expectBoolean(
       record.session_human_log_full_enabled,
       'bridge config.session_human_log_full_enabled',
+    ),
+    session_system_prompt_visible_enabled: expectBoolean(
+      record.session_system_prompt_visible_enabled,
+      'bridge config.session_system_prompt_visible_enabled',
     ),
     assistant_markdown_enabled: expectBoolean(
       record.assistant_markdown_enabled,
       'bridge config.assistant_markdown_enabled',
     ),
+    tool_call_compact_output_enabled: expectBoolean(
+      record.tool_call_compact_output_enabled,
+      'bridge config.tool_call_compact_output_enabled',
+    ),
     memory_mode_enabled: expectBoolean(
       record.memory_mode_enabled,
       'bridge config.memory_mode_enabled',
     ),
-    web_rooter_enabled: expectBoolean(
-      record.web_rooter_enabled,
-      'bridge config.web_rooter_enabled',
-    ),
-    web_rooter_base_url: expectString(
-      record.web_rooter_base_url,
-      'bridge config.web_rooter_base_url',
-    ),
-    web_rooter_timeout_ms: expectNumber(
-      record.web_rooter_timeout_ms,
-      'bridge config.web_rooter_timeout_ms',
-    ),
-    web_rooter_api_token_set: expectBoolean(
-      record.web_rooter_api_token_set,
-      'bridge config.web_rooter_api_token_set',
+    microcompact_enabled: expectBoolean(
+      record.microcompact_enabled,
+      'bridge config.microcompact_enabled',
     ),
     web_search_tavily_url: expectString(
       record.web_search_tavily_url,
@@ -330,12 +205,19 @@ export function parseSystemPromptResponse(payload: unknown): SystemPromptPayload
   if (!Array.isArray(record.prompt_library)) {
     throw new Error('Invalid system prompt.prompt_library: expected array');
   }
+  const rawToolDefinitions = record.tool_definitions;
+  if (rawToolDefinitions !== undefined && !Array.isArray(rawToolDefinitions)) {
+    throw new Error('Invalid system prompt.tool_definitions: expected array');
+  }
 
   return {
     core_prompt: expectString(record.core_prompt, 'system prompt.core_prompt'),
     rendered_prompt: expectString(record.rendered_prompt, 'system prompt.rendered_prompt'),
     prompt_library: record.prompt_library.map((entry, index) => {
       return parsePromptLibraryItem(entry, `system prompt.prompt_library[${index}]`);
+    }),
+    tool_definitions: (rawToolDefinitions ?? []).map((entry, index) => {
+      return parseSystemPromptToolDefinition(entry, `system prompt.tool_definitions[${index}]`);
     }),
   };
 }

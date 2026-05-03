@@ -157,6 +157,7 @@ export function parseAgentStopResponse(payload: unknown): AgentStopResponsePaylo
   return {
     status: expectStringEnum(record.status, STOP_STATUSES, 'agent stop response.status'),
     message: expectString(record.message, 'agent stop response.message'),
+    session_id: parseOptionalString(record.session_id, 'agent stop response.session_id'),
   };
 }
 
@@ -205,6 +206,7 @@ export function parseAgentToolCallStartedPayload(payload: unknown): AgentToolCal
   return {
     tool: parseOptionalString(record.tool, 'agent tool_call_started payload.tool'),
     tool_call_id: parseOptionalString(record.tool_call_id, 'agent tool_call_started payload.tool_call_id'),
+    arguments_json: parseOptionalString(record.arguments_json, 'agent tool_call_started payload.arguments_json'),
   };
 }
 
@@ -216,6 +218,7 @@ export function parseAgentToolCallFinishedPayload(payload: unknown): AgentToolCa
     tool_call_id: parseOptionalString(record.tool_call_id, 'agent tool_call_finished payload.tool_call_id'),
     status: parseOptionalString(record.status, 'agent tool_call_finished payload.status'),
     error: parseOptionalString(record.error, 'agent tool_call_finished payload.error'),
+    output: parseOptionalString(record.output, 'agent tool_call_finished payload.output'),
   };
 }
 

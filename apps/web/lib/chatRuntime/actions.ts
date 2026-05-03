@@ -16,8 +16,16 @@ export type ChatRuntimeAction =
     type: 'clear_streaming_thinking_text';
   }
   | {
+    type: 'mark_streaming_thinking_boundary';
+  }
+  | {
     type: 'append_committed_messages';
     messages: ChatMessage[];
+  }
+  | {
+    type: 'finalize_streaming_turn';
+    assistantMessageId: string;
+    assistantText: string;
   }
   | {
     type: 'upsert_streaming_tool';

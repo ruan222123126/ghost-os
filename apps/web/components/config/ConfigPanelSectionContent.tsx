@@ -1,4 +1,6 @@
 import { ComingSoonPanel, type SettingsTab } from '@/components/config/ConfigPanelNavigation';
+import { OrchestrationSettingsSection } from '@/components/config/OrchestrationSettingsSection';
+import { PresetSettingsSection } from '@/components/config/PresetSettingsSection';
 import { PromptsLibrarySettingsSection } from '@/components/config/PromptsLibrarySettingsSection';
 import { PromptsPreviewSettingsSection } from '@/components/config/PromptsPreviewSettingsSection';
 import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
@@ -7,6 +9,7 @@ import { SkillSettingsSection } from '@/components/config/SkillSettingsSection';
 import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
 import { ToolSettingsSection } from '@/components/config/ToolSettingsSection';
 import type { useConfigProviders } from '@/hooks/useConfigProviders';
+import type { useConfigPresets } from '@/hooks/useConfigPresets';
 import type { useConfigPrompts } from '@/hooks/useConfigPrompts';
 import type { useConfigSkills } from '@/hooks/useConfigSkills';
 import type { useConfigTasks } from '@/hooks/useConfigTasks';
@@ -19,10 +22,11 @@ interface ConfigPanelSectionContentProps {
   saving: boolean;
   config: BridgeConfig | null;
   onSave: (update: ConfigUpdate) => Promise<boolean>;
-  onReload: () => Promise<void>;
+  onRefreshConfig: () => Promise<void>;
   onOpenWorkflowCreate: () => void;
   onOpenWorkflowEdit: (task: WorkflowTaskPayload) => void;
   providersState: ReturnType<typeof useConfigProviders>;
+  presetsState: ReturnType<typeof useConfigPresets>;
   promptsState: ReturnType<typeof useConfigPrompts>;
   skillsState: ReturnType<typeof useConfigSkills>;
   tasksState: ReturnType<typeof useConfigTasks>;
@@ -36,10 +40,11 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
     saving,
     config,
     onSave,
-    onReload,
+    onRefreshConfig,
     onOpenWorkflowCreate,
     onOpenWorkflowEdit,
     providersState,
+    presetsState,
     promptsState,
     skillsState,
     tasksState,
@@ -75,7 +80,6 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         saving={saving}
         config={config}
         onSave={onSave}
-        onReload={onReload}
       />
     );
   }
@@ -103,6 +107,10 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
     );
   }
 
+  if (activeTab === 'orchestration') {
+    return <OrchestrationSettingsSection />;
+  }
+
   if (activeTab === 'skills') {
     return (
       <SkillSettingsSection
@@ -110,6 +118,7 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         loading={skillsState.skillsLoading}
         saving={skillsState.skillSaving}
         onRefresh={skillsState.refreshSkills}
+        onUpdate={skillsState.updateSkillByID}
         onDelete={skillsState.deleteSkillByID}
       />
     );
@@ -123,6 +132,33 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         saving={toolsState.toolSaving}
         onRefresh={toolsState.refreshTools}
         onUpdate={toolsState.updateToolByName}
+      />
+    );
+  }
+
+  if (activeTab === 'presets') {
+    return (
+      <PresetSettingsSection
+        config={config}
+        presets={presetsState.presets}
+        loading={presetsState.presetsLoading}
+        saving={presetsState.presetSaving}
+        tools={toolsState.tools}
+        toolsLoading={toolsState.toolsLoading}
+        prompts={promptsState.prompts}
+        promptsLoading={promptsState.promptsLoading}
+        onRefresh={presetsState.refreshPresets}
+        onCreatePreset={presetsState.createPreset}
+        onUpdatePreset={presetsState.updatePresetByID}
+        onDeletePreset={presetsState.deletePresetByID}
+        onActivatePreset={async (id: string) => {
+          await presetsState.activatePresetByID(id);
+          await Promise.all([
+            onRefreshConfig(),
+            toolsState.refreshTools(),
+            promptsState.refreshPrompts(),
+          ]);
+        }}
       />
     );
   }

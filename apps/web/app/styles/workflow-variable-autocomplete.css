@@ -1,0 +1,81 @@
+.workflow-variable-autocomplete {
+  position: relative;
+}
+
+.workflow-variable-autocomplete__field {
+  position: relative;
+  z-index: 1;
+}
+
+.workflow-variable-autocomplete__dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  max-height: 220px;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  border: 1px solid #e5e5e5;
+  background: #ffffff;
+  box-shadow: 0 12px 24px rgb(0 0 0 / 0.08);
+  padding: 8px;
+}
+
+.workflow-variable-autocomplete__option {
+  width: 100%;
+  border: 1px solid transparent;
+  background: #ffffff;
+  color: #171717;
+  cursor: pointer;
+  padding: 10px 12px;
+  text-align: left;
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.workflow-variable-autocomplete__option:hover,
+.workflow-variable-autocomplete__option.workflow-variable-autocomplete__option--active {
+  border-color: #d4d4d4;
+  background: #fafafa;
+}
+
+.workflow-variable-autocomplete__option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workflow-variable-autocomplete__option-head strong {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.workflow-variable-autocomplete__option-head span {
+  color: #737373;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.workflow-variable-autocomplete__option code {
+  display: block;
+  margin-top: 6px;
+  color: #525252;
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.workflow-variable-autocomplete__empty {
+  margin: 0;
+  color: #737373;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px 12px;
+}

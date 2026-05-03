@@ -94,7 +94,6 @@ describe('lib/workflow-editor/validation', () => {
       { id: 'edge-c', from_node_id: 'if-1', to_node_id: 'end-node' },
       { id: 'edge-d', from_node_id: 'sync-loop-start', to_node_id: 'tool-1' },
       { id: 'edge-e', from_node_id: 'tool-1', to_node_id: 'sync-loop-end' },
-      { id: 'edge-f', from_node_id: 'sync-loop-end', to_node_id: 'sync-loop-start' },
       { id: 'edge-g', from_node_id: 'sync-loop-end', to_node_id: 'end-node' },
     ];
 
@@ -102,6 +101,58 @@ describe('lib/workflow-editor/validation', () => {
 
     expect(result.valid).toBe(true);
     expect(result.errors).toEqual([]);
+  });
+
+  it('rejects loop end node with non-exit back edge', () => {
+    const draft = createEmptyWorkflowDraft();
+    draft.nodes = [
+      draft.nodes[0],
+      {
+        id: 'sync-loop-start',
+        type: 'loop',
+        position: { x: 260, y: 80 },
+        ui: { toolArgumentsMode: 'kv' },
+        loop: {
+          role: 'start',
+          loop_id: 'sync-loop',
+          max_iterations: 2,
+        },
+      },
+      {
+        id: 'tool-1',
+        type: 'tool',
+        position: { x: 480, y: 80 },
+        ui: { toolArgumentsMode: 'kv' },
+        tool: { tool_name: 'script_exec' },
+      },
+      {
+        id: 'sync-loop-end',
+        type: 'loop',
+        position: { x: 700, y: 80 },
+        ui: { toolArgumentsMode: 'kv' },
+        loop: {
+          role: 'end',
+          loop_id: 'sync-loop',
+        },
+      },
+      draft.nodes[1],
+    ];
+    draft.edges = [
+      { id: 'edge-a', from_node_id: 'start-node', to_node_id: 'sync-loop-start' },
+      { id: 'edge-b', from_node_id: 'sync-loop-start', to_node_id: 'tool-1' },
+      { id: 'edge-c', from_node_id: 'tool-1', to_node_id: 'sync-loop-end' },
+      { id: 'edge-d', from_node_id: 'sync-loop-end', to_node_id: 'sync-loop-start' },
+      { id: 'edge-e', from_node_id: 'sync-loop-end', to_node_id: 'end-node' },
+    ];
+
+    const result = validateWorkflowDraft(draft);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([
+        'workflow node "sync-loop-end" must have in>=1 and out=1',
+      ]),
+    );
   });
 
   it('rejects invalid if/loop setup and payload mismatch', () => {

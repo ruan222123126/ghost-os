@@ -7,6 +7,8 @@ import type {
   SessionMessage,
   SessionMessagePage,
   SessionMetadata,
+  SessionSidebarPartition,
+  SessionSidebarPartitionState,
   SessionToolCall,
   SessionToolResult,
 } from '@/lib/types';
@@ -232,12 +234,57 @@ function parseSessionMetadata(value: unknown, label: string): SessionMetadata {
   };
 }
 
+function parseSessionSidebarPartition(
+  value: unknown,
+  label: string,
+): SessionSidebarPartition {
+  const record = expectRecord(value, label);
+  return {
+    id: expectString(record.id, `${label}.id`),
+    name: expectString(record.name, `${label}.name`),
+  };
+}
+
 export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
   if (!Array.isArray(payload)) {
     throw new Error('Invalid sessions list: expected array');
   }
 
   return payload.map((session, index) => parseSessionMetadata(session, `sessions list[${index}]`));
+}
+
+export function parseSessionSidebarPartitionState(payload: unknown): SessionSidebarPartitionState {
+  const record = expectRecord(payload, 'session sidebar partition state');
+  const version = expectNumber(record.version, 'session sidebar partition state.version');
+  if (version !== 1) {
+    throw new Error(`Invalid session sidebar partition state.version: expected 1, got ${version}`);
+  }
+  if (!Array.isArray(record.partitions)) {
+    throw new Error('Invalid session sidebar partition state.partitions: expected array');
+  }
+
+  const assignmentsRecord = expectRecord(
+    record.assignments,
+    'session sidebar partition state.assignments',
+  );
+  const assignments: Record<string, string> = {};
+  for (const [sessionID, partitionID] of Object.entries(assignmentsRecord)) {
+    assignments[sessionID] = expectString(
+      partitionID,
+      `session sidebar partition state.assignments.${sessionID}`,
+    );
+  }
+
+  return {
+    version: 1,
+    partitions: record.partitions.map((partition, index) => {
+      return parseSessionSidebarPartition(
+        partition,
+        `session sidebar partition state.partitions[${index}]`,
+      );
+    }),
+    assignments,
+  };
 }
 
 export function parseSessionDetail(payload: unknown): SessionDetail {

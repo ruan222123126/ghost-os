@@ -42,12 +42,6 @@ export type {
   AgentRunStartedPayload,
   BridgeConfig,
   ConfigUpdate,
-  GraphQLDomainInput,
-  GraphQLDomainResponse,
-  GraphQLMutationPolicyInput,
-  GraphQLMutationPolicyResponse,
-  GraphQLSourceInput,
-  GraphQLSourceResponse,
   HumanResponseAck,
   HumanResponseRequest,
   ProviderConfig,
@@ -60,6 +54,9 @@ export type {
   SessionHumanInteraction,
   SessionMessage,
   SessionMetadata,
+  SessionSidebarPartition,
+  SessionSidebarPartitionPutRequest,
+  SessionSidebarPartitionState,
   SessionMessagePage,
   SessionToolCall,
   SessionToolResult,
@@ -86,10 +83,13 @@ export interface ThinkingChatMessage {
   content: string;
 }
 
+export type SystemChatMessageSourceRole = 'system' | 'internal';
+
 export interface SystemChatMessage {
   id: string;
   kind: 'system';
   content: string;
+  sourceRole?: SystemChatMessageSourceRole;
 }
 
 export interface ToolChatMessage {
@@ -98,6 +98,7 @@ export interface ToolChatMessage {
   content: string;
   images?: ChatImage[];
   attachments?: ChatFileAttachment[];
+  toolInput?: string;
   toolName?: string;
   toolStatus?: string;
   toolCallId?: string;
@@ -109,6 +110,7 @@ export interface ToolChatMessage {
 export interface StreamingToolState {
   id: string;
   content: string;
+  toolInput?: string;
   toolName?: string;
   toolStatus?: string;
   toolCallId?: string;
@@ -116,6 +118,11 @@ export interface StreamingToolState {
 }
 
 export interface StreamingAssistantSegment {
+  id: string;
+  content: string;
+}
+
+export interface StreamingThinkingSegment {
   id: string;
   content: string;
 }
@@ -234,22 +241,30 @@ export interface SkillPayload {
   description: string;
   path: string;
   source: SkillSource;
+  enabled: boolean;
+}
+
+export interface SkillUpdateRequest {
+  enabled: boolean;
+  trace_id?: string;
 }
 
 export interface ToolPayload {
   name: string;
   enabled: boolean;
   prompt_override?: string;
+  sandbox_memory_mb?: number;
   input_schema?: Record<string, unknown>;
 }
 
 export interface ToolUpdateRequest {
   enabled?: boolean;
   prompt_override?: string;
+  sandbox_memory_mb?: number;
   trace_id?: string;
 }
 
-export type PromptInsertPoint = 'core_job' | 'memory';
+export type PromptInsertPoint = 'rule' | 'core_job' | 'memory' | 'context';
 
 export interface PromptLibraryItem {
   id: string;
@@ -259,15 +274,50 @@ export interface PromptLibraryItem {
   active: boolean;
 }
 
+export interface SystemPromptToolDefinition {
+  name: string;
+  description: string;
+  parameters?: Record<string, unknown>;
+}
+
 export interface SystemPromptPayload {
   core_prompt: string;
   rendered_prompt: string;
   prompt_library: PromptLibraryItem[];
+  tool_definitions: SystemPromptToolDefinition[];
 }
 
 export interface SystemPromptUpdateRequest {
   core_prompt?: string;
   prompt_library?: PromptLibraryItem[];
+  trace_id?: string;
+}
+
+export interface PresetPromptRefs {
+  rule?: string;
+  core_job?: string;
+  memory?: string;
+  context?: string[];
+}
+
+export interface PresetPayload {
+  id: string;
+  name: string;
+  tool_allowlist: string[];
+  prompt_refs: PresetPromptRefs;
+}
+
+export interface PresetCreateRequest {
+  name: string;
+  tool_allowlist?: string[];
+  prompt_refs?: PresetPromptRefs;
+  trace_id?: string;
+}
+
+export interface PresetUpdateRequest {
+  name?: string;
+  tool_allowlist?: string[];
+  prompt_refs?: PresetPromptRefs;
   trace_id?: string;
 }
 

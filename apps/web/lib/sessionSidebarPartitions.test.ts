@@ -131,7 +131,7 @@ describe('lib/sessionSidebarPartitions', () => {
     expect(views[0].sessions.map((session) => session.id)).toEqual(['session-2']);
   });
 
-  it('prunes deleted sessions from assignments and order records', () => {
+  it('prunes deleted sessions from assignments', () => {
     const sessions = sampleSessions();
     let store = createInitialSessionPartitionStore();
     store = createSessionPartition(store, 'Work', 'partition-work');
@@ -146,8 +146,6 @@ describe('lib/sessionSidebarPartitions', () => {
     const sanitized = sanitizeSessionPartitionStore(store, sessions.slice(0, 2));
 
     expect(sanitized.assignments).toEqual({ 'session-2': 'partition-work' });
-    expect(sanitized.orders['partition-work']).toEqual(['session-2']);
-    expect(sanitized.orders['__unclassified__']).toEqual(['session-1']);
   });
 
   it('falls back to created_at and treats invalid timestamps as oldest', () => {

@@ -168,7 +168,10 @@ function shouldSuppressQuestionStreamError(error: unknown, stopPending: boolean)
     return false;
   }
 
-  return isAbortError(error) || toErrorMessage(error) === 'agent stream closed before terminal event';
+  const message = toErrorMessage(error);
+  return isAbortError(error)
+    || message === 'agent stream closed before terminal event'
+    || message === 'agent run cancelled';
 }
 
 function findPendingQuestion(

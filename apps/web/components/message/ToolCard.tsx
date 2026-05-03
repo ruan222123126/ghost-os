@@ -1,14 +1,21 @@
 'use client';
 
-import type { FC } from 'react';
+import type { CSSProperties, FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ToolChatMessage } from '@/lib/types';
-import { formatToolAction, formatToolDetails } from './format';
+import { formatToolAction, formatToolCardDetails } from './format';
 
 type ToolTone = 'running' | 'success' | 'error';
 
 const RUNNING_STATUSES = new Set(['running', 'pending', 'in_progress']);
 const ERROR_STATUSES = new Set(['error', 'failed']);
+const PROMOTED_TITLE_STYLE: CSSProperties = {
+  fontFamily: 'var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: '11px',
+  fontWeight: 600,
+  letterSpacing: '0',
+  textTransform: 'none',
+};
 
 const CheckIcon: FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -80,13 +87,14 @@ interface ToolCardProps {
   isOpen: boolean;
   onToggle: () => void;
   tool: ToolChatMessage;
+  toolCallCompactOutputEnabled: boolean;
 }
 
-export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool }) => {
+export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool, toolCallCompactOutputEnabled }) => {
   const { copy } = useWebLocale();
   const actionValue = formatToolAction(tool);
-  const action = actionValue === 'Tool' ? copy.chat.toolFallbackName : actionValue;
-  const details = formatToolDetails(tool);
+  const action = actionValue.text === 'Tool' ? copy.chat.toolFallbackName : actionValue.text;
+  const details = formatToolCardDetails(tool, { compactOutputEnabled: toolCallCompactOutputEnabled });
   const tone = getToolTone(tool.toolStatus);
   const statusLabel = getStatusLabel(tone, tool.toolStatus);
 
@@ -100,7 +108,13 @@ export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool }) => {
         <span className="tool-card-heading">
           <ChevronIcon expanded={isOpen} className="tool-chevron" />
           <TerminalIcon className="tool-terminal-icon" />
-          <span className="tool-card-title" title={action}>{action}</span>
+          <span
+            className="tool-card-title"
+            style={actionValue.variant === 'default' ? undefined : PROMOTED_TITLE_STYLE}
+            title={action}
+          >
+            {action}
+          </span>
         </span>
         <span className={`tool-card-status is-${tone}`}>
           {tone === 'running'

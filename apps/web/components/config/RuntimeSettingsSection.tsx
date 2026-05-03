@@ -1,7 +1,6 @@
 'use client';
 
-import type { FormEvent } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useSessionSidebarGroupingPreference } from '@/hooks/useSessionSidebarGroupingPreference';
 import { isWebLocale } from '@/lib/i18n/locale';
@@ -13,71 +12,50 @@ import {
   type RuntimeFormState,
 } from '@/components/config/runtimeSettingsForm';
 import {
-  GraphQLSection,
+  Card,
+  SelectField,
+  ToggleField,
+} from '@/components/config/runtimeSettingsFieldComponents';
+import {
   RuntimeCoreSection,
   SessionSection,
-  WebRooterSection,
   WebSearchSection,
 } from '@/components/config/runtimeSettingsSections';
+
+const AUTO_SAVE_DEBOUNCE_MS = 500;
+
+type LocaleValue = ReturnType<typeof useWebLocale>['locale'];
 
 interface RuntimeSettingsSectionProps {
   loading: boolean;
   saving: boolean;
   config: BridgeConfig | null;
   onSave: (update: ConfigUpdate) => Promise<boolean>;
-  onReload: () => Promise<void>;
+}
+
+interface RuntimeSettingsState {
+  formState: RuntimeFormState;
+  submitError: string;
+  modelSelectionEnabled: boolean;
+  controlsDisabled: boolean;
+  updateForm: (patch: Partial<RuntimeFormState>) => void;
 }
 
 export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
   const { locale, setLocale, copy } = useWebLocale();
   const groupingPreference = useSessionSidebarGroupingPreference();
-  const { loading, saving, config, onSave, onReload } = props;
-  const [formState, setFormState] = useState<RuntimeFormState>(() => createRuntimeFormState(null));
-  const [submitError, setSubmitError] = useState('');
-  const modelSelectionEnabled = config?.model_selection_enabled ?? true;
-  const controlsDisabled = loading || saving;
-
-  useEffect(() => {
-    setFormState(createRuntimeFormState(config));
-    setSubmitError('');
-  }, [config]);
-
-  const updateForm = (patch: Partial<RuntimeFormState>) => {
-    setFormState((prev) => ({ ...prev, ...patch }));
-  };
+  const runtimeState = useRuntimeSettingsState({
+    loading: props.loading,
+    saving: props.saving,
+    config: props.config,
+    onSave: props.onSave,
+    invalidRuntimeMessage: copy.system.invalidRuntimeSettings,
+  });
 
   return (
     <section>
-      <header className="mb-10">
-        <h1 className="mb-2 text-[28px] font-semibold tracking-tight text-[#111111]">{copy.settings.generalTitle}</h1>
-        <p className="text-[14px] text-[#737373]">
-          {copy.settings.generalDescription}
-        </p>
-      </header>
-
-      <section className="mb-8 rounded-[16px] border border-[#E5E5E5] bg-white p-6">
-        <div className="mb-3">
-          <h2 className="text-[16px] font-semibold text-[#111111]">{copy.settings.languageTitle}</h2>
-          <p className="mt-1 text-[13px] text-[#737373]">{copy.settings.languageDescription}</p>
-        </div>
-        <label className="block">
-          <span className="mb-2 block text-[13px] font-medium text-[#111111]">{copy.settings.languageLabel}</span>
-          <select
-            value={locale}
-            onChange={(event) => {
-              const nextLocale = event.target.value;
-              if (isWebLocale(nextLocale)) {
-                setLocale(nextLocale);
-              }
-            }}
-            className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
-          >
-            <option value="zh-CN">{copy.settings.languageOptionZh}</option>
-            <option value="en-US">{copy.settings.languageOptionEn}</option>
-          </select>
-        </label>
-      </section>
-
+      <RuntimeHeader title={copy.settings.generalTitle} description={copy.settings.generalDescription} />
+      <LanguageCard locale={locale} setLocale={setLocale} />
       <SidebarGroupingPreferenceCard
         title={copy.settings.sidebarGroupingTitle}
         description={copy.settings.sidebarGroupingDescription}
@@ -85,79 +63,166 @@ export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
         enabled={groupingPreference.enabled}
         onChange={groupingPreference.setEnabled}
       />
-
-      <form
-        className="space-y-0"
-        onSubmit={(event) =>
-          handleRuntimeSubmit(
-            event,
-            modelSelectionEnabled,
-            formState,
-            locale,
-            onSave,
-            setSubmitError,
-            copy.system.invalidRuntimeSettings,
-          )}
-      >
-        {loading ? <InlineNotice text={copy.settings.loadingRuntimeConfig} /> : null}
-        {submitError ? <InlineError text={submitError} /> : null}
-
-        <RuntimeCoreSection
-          formState={formState}
-          controlsDisabled={controlsDisabled}
-          modelSelectionEnabled={modelSelectionEnabled}
-          onChange={updateForm}
-          config={config}
-        />
-
-        <GraphQLSection
-          formState={formState}
-          controlsDisabled={controlsDisabled}
-          onChange={updateForm}
-        />
-
-        <SessionSection
-          formState={formState}
-          controlsDisabled={controlsDisabled}
-          onChange={updateForm}
-        />
-
-        <WebRooterSection
-          formState={formState}
-          controlsDisabled={controlsDisabled}
-          onChange={updateForm}
-          config={config}
-        />
-
-        <WebSearchSection
-          formState={formState}
-          controlsDisabled={controlsDisabled}
-          onChange={updateForm}
-          config={config}
-        />
-
-        <div className="flex items-center justify-end gap-3 pt-8">
-          <button
-            type="button"
-            disabled={controlsDisabled}
-            onClick={() => {
-              ignorePromise(onReload());
-            }}
-            className="rounded-full border border-[#E5E5E5] px-6 py-2.5 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {copy.settings.reload}
-          </button>
-          <button
-            type="submit"
-            disabled={controlsDisabled}
-            className="rounded-full bg-[#111111] px-8 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {saving ? copy.settings.saving : copy.settings.save}
-          </button>
-        </div>
-      </form>
+      <RuntimePanels config={props.config} state={runtimeState} loading={props.loading} />
     </section>
   );
+}
+
+function useRuntimeSettingsState(options: {
+  loading: boolean;
+  saving: boolean;
+  config: BridgeConfig | null;
+  onSave: (update: ConfigUpdate) => Promise<boolean>;
+  invalidRuntimeMessage: string;
+}): RuntimeSettingsState {
+  const { loading, saving, config, onSave, invalidRuntimeMessage } = options;
+  const baselineFormState = useMemo(() => createRuntimeFormState(config), [config]);
+  const [formState, setFormState] = useState<RuntimeFormState>(() => baselineFormState);
+  const [submitError, setSubmitError] = useState('');
+  const modelSelectionEnabled = config?.model_selection_enabled ?? true;
+
+  useEffect(() => {
+    setFormState(baselineFormState);
+    setSubmitError('');
+  }, [baselineFormState]);
+
+  const baselineSignature = useMemo(() => runtimeFormSignature(baselineFormState), [baselineFormState]);
+  const formSignature = useMemo(() => runtimeFormSignature(formState), [formState]);
+
+  useRuntimeAutoSave({
+    loading,
+    saving,
+    config,
+    formState,
+    formSignature,
+    baselineSignature,
+    modelSelectionEnabled,
+    onSave,
+    setSubmitError,
+    invalidRuntimeMessage,
+  });
+
+  return {
+    formState,
+    submitError,
+    modelSelectionEnabled,
+    controlsDisabled: loading,
+    updateForm: (patch) => setFormState((prev) => ({ ...prev, ...patch })),
+  };
+}
+
+function useRuntimeAutoSave(options: {
+  loading: boolean;
+  saving: boolean;
+  config: BridgeConfig | null;
+  formState: RuntimeFormState;
+  formSignature: string;
+  baselineSignature: string;
+  modelSelectionEnabled: boolean;
+  onSave: (update: ConfigUpdate) => Promise<boolean>;
+  setSubmitError: (message: string) => void;
+  invalidRuntimeMessage: string;
+}) {
+  const { loading, saving, config, formState, formSignature, baselineSignature, modelSelectionEnabled, onSave, setSubmitError, invalidRuntimeMessage } = options;
+  const lastAttemptedFormSignatureRef = useRef('');
+
+  useEffect(() => {
+    if (loading || saving || config === null) {
+      return;
+    }
+    if (formSignature === baselineSignature) {
+      lastAttemptedFormSignatureRef.current = '';
+      return;
+    }
+    if (formSignature === lastAttemptedFormSignatureRef.current) {
+      return;
+    }
+
+    let update: ConfigUpdate;
+    try {
+      update = buildRuntimeUpdate(modelSelectionEnabled, formState);
+      setSubmitError('');
+    } catch (error) {
+      setSubmitError(toErrorMessage(error, invalidRuntimeMessage));
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      lastAttemptedFormSignatureRef.current = formSignature;
+      ignorePromise(onSave(update));
+    }, AUTO_SAVE_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [baselineSignature, config, formSignature, formState, invalidRuntimeMessage, loading, modelSelectionEnabled, onSave, saving, setSubmitError]);
+}
+
+function RuntimeHeader(props: { title: string; description: string }) {
+  const { title, description } = props;
+
+  return (
+    <header className="mb-10">
+      <h1 className="mb-2 text-[28px] font-semibold tracking-tight text-[#111111]">{title}</h1>
+      <p className="text-[14px] text-[#737373]">{description}</p>
+    </header>
+  );
+}
+
+function LanguageCard(props: {
+  locale: LocaleValue;
+  setLocale: ReturnType<typeof useWebLocale>['setLocale'];
+}) {
+  const { copy } = useWebLocale();
+  const { locale, setLocale } = props;
+  const options = [
+    { value: 'zh-CN', label: copy.settings.languageOptionZh },
+    { value: 'en-US', label: copy.settings.languageOptionEn },
+  ] as const;
+
+  return (
+    <Card title={copy.settings.languageTitle} copy={copy.settings.languageDescription}>
+      <SelectField
+        label={copy.settings.languageLabel}
+        value={locale}
+        onChange={(value) => handleLocaleChange(value, setLocale)}
+        options={options}
+      />
+    </Card>
+  );
+}
+
+function handleLocaleChange(value: string, setLocale: ReturnType<typeof useWebLocale>['setLocale']) {
+  if (isWebLocale(value)) {
+    setLocale(value);
+  }
+}
+
+function RuntimePanels(props: { config: BridgeConfig | null; state: RuntimeSettingsState; loading: boolean }) {
+  const { copy } = useWebLocale();
+  const { config, state, loading } = props;
+
+  return (
+    <div className="space-y-0">
+      {loading ? <InlineNotice text={copy.settings.loadingRuntimeConfig} /> : null}
+      {state.submitError ? <InlineError text={state.submitError} /> : null}
+      <RuntimeCoreSection
+        formState={state.formState}
+        controlsDisabled={state.controlsDisabled}
+        modelSelectionEnabled={state.modelSelectionEnabled}
+        onChange={state.updateForm}
+        config={config}
+      />
+      <SessionSection formState={state.formState} controlsDisabled={state.controlsDisabled} onChange={state.updateForm} />
+      <WebSearchSection
+        formState={state.formState}
+        controlsDisabled={state.controlsDisabled}
+        onChange={state.updateForm}
+        config={config}
+      />
+    </div>
+  );
+}
+
+function runtimeFormSignature(formState: RuntimeFormState): string {
+  return JSON.stringify(formState);
 }
 
 function SidebarGroupingPreferenceCard(props: {
@@ -167,24 +232,17 @@ function SidebarGroupingPreferenceCard(props: {
   enabled: boolean;
   onChange: (enabled: boolean) => void;
 }) {
-  const { copy } = useWebLocale();
   const { title, description, label, enabled, onChange } = props;
 
   return (
-    <section className="mb-8 rounded-[16px] border border-[#E5E5E5] bg-white p-6">
-      <div className="mb-3">
-        <h2 className="text-[16px] font-semibold text-[#111111]">{title}</h2>
-        <p className="mt-1 text-[13px] text-[#737373]">{description}</p>
-      </div>
-      <label className="inline-flex items-center gap-2 text-[13px] text-[#111111]">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <span>{label}: {enabled ? copy.settings.runtimeToggleEnabled : copy.settings.runtimeToggleDisabled}</span>
-      </label>
-    </section>
+    <Card title={title} copy={description}>
+      <ToggleField
+        label={label}
+        checked={enabled}
+        disabled={false}
+        onChange={onChange}
+      />
+    </Card>
   );
 }
 
@@ -202,27 +260,4 @@ function InlineError(props: { text: string }) {
       {props.text}
     </div>
   );
-}
-
-function handleRuntimeSubmit(
-  event: FormEvent<HTMLFormElement>,
-  modelSelectionEnabled: boolean,
-  formState: RuntimeFormState,
-  locale: ReturnType<typeof useWebLocale>['locale'],
-  onSave: (update: ConfigUpdate) => Promise<boolean>,
-  setSubmitError: (message: string) => void,
-  fallbackMessage: string,
-) {
-  event.preventDefault();
-  setSubmitError('');
-
-  let update: ConfigUpdate;
-  try {
-    update = buildRuntimeUpdate(modelSelectionEnabled, formState, locale);
-  } catch (error) {
-    setSubmitError(toErrorMessage(error, fallbackMessage));
-    return;
-  }
-
-  ignorePromise(onSave(update));
 }

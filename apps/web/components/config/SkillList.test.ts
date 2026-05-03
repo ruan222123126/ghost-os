@@ -2,7 +2,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { WebLocale } from '@/lib/i18n/locale';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import { SkillList, requestSkillDelete } from './SkillList';
+import { SkillList, requestSkillDelete, sortSkillsForDisplay } from './SkillList';
 import type { SkillPayload } from '@/lib/types';
 
 describe('components/config/SkillList', () => {
@@ -13,6 +13,7 @@ describe('components/config/SkillList', () => {
       description: 'Automate release flow',
       path: '/tmp/project/.agents/skills/release',
       source: 'repo',
+      enabled: true,
     },
   ];
 
@@ -21,6 +22,7 @@ describe('components/config/SkillList', () => {
       skills,
       loading: false,
       controlsDisabled: false,
+      onUpdate: async () => {},
       onDelete: async () => {},
     });
 
@@ -28,6 +30,8 @@ describe('components/config/SkillList', () => {
     expect(html).toContain('Automate release flow');
     expect(html).toContain('/tmp/project/.agents/skills/release');
     expect(html).toContain('Repo');
+    expect(html).toContain('Enabled');
+    expect(html).toContain('Disable');
     expect(html).toContain('Delete');
     expect(html).toContain('whitespace-nowrap');
   });
@@ -37,6 +41,7 @@ describe('components/config/SkillList', () => {
       skills: [],
       loading: false,
       controlsDisabled: false,
+      onUpdate: async () => {},
       onDelete: async () => {},
     });
     expect(emptyHTML).toContain('No skills found.');
@@ -45,9 +50,19 @@ describe('components/config/SkillList', () => {
       skills: [],
       loading: true,
       controlsDisabled: true,
+      onUpdate: async () => {},
       onDelete: async () => {},
     });
     expect(loadingHTML.match(/animate-pulse/g)?.length ?? 0).toBe(3);
+  });
+
+  it('sorts enabled skills before disabled skills', () => {
+    const sorted = sortSkillsForDisplay([
+      { ...skills[0], id: 'disabled', enabled: false },
+      { ...skills[0], id: 'enabled', enabled: true, name: 'alpha' },
+    ]);
+
+    expect(sorted.map((item) => item.id)).toEqual(['enabled', 'disabled']);
   });
 
   it('uses confirmation before delete', async () => {

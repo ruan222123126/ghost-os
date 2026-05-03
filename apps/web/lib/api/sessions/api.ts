@@ -1,8 +1,14 @@
-import type { SessionDetail, SessionMetadata } from '@/lib/types';
+import type {
+  SessionDetail,
+  SessionMetadata,
+  SessionSidebarPartitionState,
+} from '@/lib/types';
 import { requestJSON } from '@/lib/api/client';
+import { createClientTraceId } from '@/lib/api/trace';
 import {
   parseSessionDetail,
   parseSessionMetadataList,
+  parseSessionSidebarPartitionState,
 } from '@/lib/api/sessions/parser';
 
 export interface GetSessionOptions {
@@ -22,6 +28,23 @@ export async function deleteSession(id: string): Promise<void> {
   await requestJSON<Record<string, unknown>>(`/api/sessions/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+export async function getSessionSidebarPartitions(): Promise<SessionSidebarPartitionState> {
+  return requestJSON('/api/sessions/partitions', {}, parseSessionSidebarPartitionState);
+}
+
+export async function putSessionSidebarPartitions(
+  state: SessionSidebarPartitionState,
+  traceId = createClientTraceId('session-partitions'),
+): Promise<SessionSidebarPartitionState> {
+  return requestJSON('/api/sessions/partitions', {
+    method: 'PUT',
+    body: JSON.stringify({
+      ...state,
+      trace_id: traceId,
+    }),
+  }, parseSessionSidebarPartitionState);
 }
 
 function buildSessionPath(id: string, options: GetSessionOptions): string {

@@ -5,22 +5,29 @@ import { WorkflowCanvasPropertiesPanel } from '@/components/workflow/WorkflowCan
 import { WorkflowCanvasSettingsModal } from '@/components/workflow/WorkflowCanvasSettingsModal';
 import { WorkflowCanvasSidebar } from '@/components/workflow/WorkflowCanvasSidebar';
 import { WorkflowCanvasStage } from '@/components/workflow/WorkflowCanvasStage';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { useWebLocale } from '@/lib/i18n/provider';
+import type { WebLocale } from '@/lib/i18n/locale';
 import type {
   AutosaveState,
   WorkflowCanvasDraft,
+  WorkflowEditorKind,
   WorkflowCanvasNodeDraft,
   WorkflowCanvasPosition,
   WorkflowNodeType,
 } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasWorkbenchProps {
+  editorKind: WorkflowEditorKind;
   draft: WorkflowCanvasDraft;
   autosaveState: AutosaveState;
   actionError: string;
   validationErrors: string[];
   importSessionID: string;
   importLoading: boolean;
+  workflowCopy?: WorkflowCopy;
+  nodeLibraryTypes?: readonly WorkflowNodeType[];
+  localizeValidationError?: (message: string, locale: WebLocale) => string;
   onChangeImportSessionID: (value: string) => void;
   onImportFromSession: () => void;
   onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
@@ -39,12 +46,16 @@ interface WorkflowCanvasWorkbenchProps {
 export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
   const { copy } = useWebLocale();
   const {
+    editorKind,
     draft,
     autosaveState,
     actionError,
     validationErrors,
     importSessionID,
     importLoading,
+    workflowCopy = copy.workflow,
+    nodeLibraryTypes,
+    localizeValidationError,
     onChangeImportSessionID,
     onImportFromSession,
     onScheduleChange,
@@ -69,13 +80,16 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
 
   return (
     <main className="workflow-arch-root">
-      <div className="workflow-arch-watermark">{copy.workflow.watermark}</div>
+      <div className="workflow-arch-watermark">{workflowCopy.watermark}</div>
       <WorkflowCanvasSidebar
         isOpen={isSidebarOpen}
         draft={draft}
         autosaveState={autosaveState}
         importSessionID={importSessionID}
         importLoading={importLoading}
+        workflowCopy={workflowCopy}
+        nodeLibraryTypes={nodeLibraryTypes}
+        localizeValidationError={localizeValidationError}
         onToggle={() => setIsSidebarOpen((open) => !open)}
         onAddNode={onAddNode}
         onChangeImportSessionID={onChangeImportSessionID}
@@ -89,6 +103,8 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
         draft={draft}
         actionError={actionError}
         validationErrors={validationErrors}
+        workflowCopy={workflowCopy}
+        localizeValidationError={localizeValidationError}
         onSelectNode={onSelectNode}
         onMoveNode={onMoveNode}
         onConnectNodes={onConnectNodes}
@@ -97,6 +113,8 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
         onDeleteNode={onDeleteNode}
       />
       <WorkflowCanvasPropertiesPanel
+        editorKind={editorKind}
+        draft={draft}
         selectedNode={selectedNode}
         onClose={() => onSelectNode(undefined)}
         onUpdateNode={onUpdateNode}
@@ -107,6 +125,7 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
         schedule={draft.schedule}
         importSessionID={importSessionID}
         importLoading={importLoading}
+        workflowCopy={workflowCopy}
         onClose={() => setIsSettingsOpen(false)}
         onScheduleChange={onScheduleChange}
         onChangeImportSessionID={onChangeImportSessionID}

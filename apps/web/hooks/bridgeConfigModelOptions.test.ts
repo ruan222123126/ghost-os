@@ -1,0 +1,87 @@
+import type { BridgeConfig, ProviderConfig } from '@/lib/types';
+import { buildProviderModelOptions } from './bridgeConfigModelOptions';
+
+function buildConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
+  return {
+    provider: 'anthropic-main',
+    provider_type: 'anthropic',
+    base_url: 'https://api.anthropic.com',
+    model: 'claude-3-7-sonnet',
+    chat_path: '/v1/messages',
+    project_root: '',
+    max_turns: 20,
+    llm_completion_retry_count: 1,
+    llm_completion_retry_interval_ms: 200,
+    api_key_set: true,
+    model_selection_enabled: true,
+    session_human_log_full_enabled: false,
+    session_system_prompt_visible_enabled: true,
+    assistant_markdown_enabled: true,
+    tool_call_compact_output_enabled: false,
+    memory_mode_enabled: false,
+    microcompact_enabled: false,
+    web_search_tavily_url: '',
+    web_search_exa_url: '',
+    web_search_tavily_api_key_set: false,
+    web_search_exa_api_key_set: false,
+    ...overrides,
+  };
+}
+
+function buildProvider(overrides: Partial<ProviderConfig> & Pick<ProviderConfig, 'name' | 'type'>): ProviderConfig {
+  return {
+    name: overrides.name,
+    type: overrides.type,
+    base_url: overrides.base_url ?? '',
+    models: overrides.models,
+    context_window_tokens: overrides.context_window_tokens,
+    response_reserve_tokens: overrides.response_reserve_tokens,
+    model_context_window_tokens: overrides.model_context_window_tokens,
+    model_response_reserve_tokens: overrides.model_response_reserve_tokens,
+    api_key_set: overrides.api_key_set ?? true,
+  };
+}
+
+describe('hooks/bridgeConfigModelOptions', () => {
+  it('only exposes models from the active provider group', () => {
+    const options = buildProviderModelOptions(buildConfig(), [
+      buildProvider({ name: 'openai-main', type: 'openai', models: ['gpt-5.4'] }),
+      buildProvider({ name: 'anthropic-main', type: 'anthropic', models: ['claude-3-7-sonnet', 'claude-3-5-haiku'] }),
+    ]);
+
+    expect(options).toEqual([
+      {
+        providerName: 'anthropic-main',
+        providerType: 'anthropic',
+        model: 'claude-3-7-sonnet',
+      },
+      {
+        providerName: 'anthropic-main',
+        providerType: 'anthropic',
+        model: 'claude-3-5-haiku',
+      },
+    ]);
+  });
+
+  it('keeps the active runtime model selectable when the active provider card omits it', () => {
+    const options = buildProviderModelOptions(buildConfig({
+      model: 'claude-opus-4',
+    }), [
+      buildProvider({ name: 'anthropic-main', type: 'anthropic', models: ['claude-3-5-haiku'] }),
+      buildProvider({ name: 'openai-main', type: 'openai', models: ['gpt-5.4'] }),
+    ]);
+
+    expect(options).toEqual([
+      {
+        providerName: 'anthropic-main',
+        providerType: 'anthropic',
+        model: 'claude-3-5-haiku',
+      },
+      {
+        providerName: 'anthropic-main',
+        providerType: 'anthropic',
+        model: 'claude-opus-4',
+      },
+    ]);
+  });
+});

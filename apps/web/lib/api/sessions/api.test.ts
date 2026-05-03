@@ -1,6 +1,16 @@
-import { deleteSession, getSession, listSessions } from './api';
+import {
+  deleteSession,
+  getSession,
+  getSessionSidebarPartitions,
+  listSessions,
+  putSessionSidebarPartitions,
+} from './api';
 import { fetchMock, installFetchMock, mockFetchJSON } from '@/lib/api.test.helpers';
-import type { SessionDetail, SessionMetadata } from '@/lib/types';
+import type {
+  SessionDetail,
+  SessionMetadata,
+  SessionSidebarPartitionState,
+} from '@/lib/types';
 
 const SESSION_PAGE = {
   limit: 100,
@@ -183,5 +193,45 @@ describe('lib/api/sessions/api', () => {
         method: 'DELETE',
       }),
     );
+  });
+
+  it('getSessionSidebarPartitions reads /api/sessions/partitions with GET', async () => {
+    const expected: SessionSidebarPartitionState = {
+      version: 1,
+      partitions: [{ id: 'work', name: 'Work' }],
+      assignments: { 'session-1': 'work' },
+    };
+
+    mockFetchJSON({
+      status: 'success',
+      payload: expected,
+      error: '',
+    });
+
+    await expect(getSessionSidebarPartitions()).resolves.toEqual(expected);
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/partitions', expect.any(Object));
+  });
+
+  it('putSessionSidebarPartitions sends the full state payload', async () => {
+    const expected: SessionSidebarPartitionState = {
+      version: 1,
+      partitions: [{ id: 'work', name: 'Work' }],
+      assignments: { 'session-1': 'work' },
+    };
+
+    mockFetchJSON({
+      status: 'success',
+      payload: expected,
+      error: '',
+    });
+
+    await expect(putSessionSidebarPartitions(expected, 'trace-session-partitions')).resolves.toEqual(expected);
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/partitions', expect.objectContaining({
+      method: 'PUT',
+      body: JSON.stringify({
+        ...expected,
+        trace_id: 'trace-session-partitions',
+      }),
+    }));
   });
 });

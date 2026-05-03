@@ -10,12 +10,13 @@ interface SkillSettingsSectionProps {
   loading: boolean;
   saving: boolean;
   onRefresh: () => Promise<void>;
+  onUpdate: (id: string, enabled: boolean) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
 
 export function SkillSettingsSection(props: SkillSettingsSectionProps) {
   const { copy } = useWebLocale();
-  const { skills, loading, saving, onRefresh, onDelete } = props;
+  const { skills, loading, saving, onRefresh, onUpdate, onDelete } = props;
   const controlsDisabled = loading || saving;
 
   return (
@@ -44,6 +45,7 @@ export function SkillSettingsSection(props: SkillSettingsSectionProps) {
         skills={skills}
         loading={loading}
         controlsDisabled={controlsDisabled}
+        onUpdate={onUpdate}
         onDelete={onDelete}
       />
     </section>

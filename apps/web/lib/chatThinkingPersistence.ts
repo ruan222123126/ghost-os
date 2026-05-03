@@ -1,5 +1,6 @@
 import type { PersistedThinkingMessage } from '@/hooks/chat/chatHistoryMerge';
 import { mergePersistedThinkingMessages } from '@/hooks/chat/chatHistoryMerge';
+import { findNextThinkingAnchor, type ThinkingAnchorKind } from './chatThinkingAnchors';
 import type { ChatMessage } from '@/lib/types';
 
 const CHAT_THINKING_STORAGE_KEY = 'ghostos:web:chat-thinking:v1';
@@ -48,18 +49,21 @@ export function collectPersistedThinkingMessages(messages: ChatMessage[]): Persi
       continue;
     }
 
-    const anchorAssistant = findAnchorAssistant(messages, index + 1);
-    if (!anchorAssistant) {
+    const anchor = findNextThinkingAnchor(messages, index + 1);
+    if (!anchor) {
       continue;
     }
 
     const entry: PersistedThinkingMessage = {
+      anchorContent: optionalTrimmed(anchor.content),
+      anchorId: optionalTrimmed(anchor.id),
+      anchorKind: anchor.kind,
+      anchorRef: optionalTrimmed(anchor.ref),
+      anchorToolCallId: optionalTrimmed(anchor.toolCallId),
       id: message.id,
       content: message.content,
-      assistantContent: optionalTrimmed(anchorAssistant.content),
-      assistantId: isLocalOrStreamingMessage(anchorAssistant.id) ? undefined : anchorAssistant.id,
     };
-    if (!entry.assistantId && !entry.assistantContent) {
+    if (!hasPersistedAnchor(entry)) {
       continue;
     }
     persisted.push(entry);
@@ -132,10 +136,19 @@ function parsePersistedThinkingMessage(value: unknown): PersistedThinkingMessage
     return null;
   }
   return {
+    anchorContent: optionalTrimmed(value.anchorContent) ?? optionalTrimmed(value.assistantContent),
+    anchorId: optionalTrimmed(value.anchorId) ?? optionalTrimmed(value.assistantId),
+    anchorKind: parseAnchorKind(value.anchorKind)
+      ?? (optionalTrimmed(value.assistantId) || optionalTrimmed(value.assistantContent)
+        ? 'assistant'
+        : undefined),
+    anchorRef: optionalTrimmed(value.anchorRef)
+      ?? optionalTrimmed(value.anchorId)
+      ?? optionalTrimmed(value.assistantId)
+      ?? optionalTrimmed(value.assistantContent),
+    anchorToolCallId: optionalTrimmed(value.anchorToolCallId),
     id,
     content,
-    assistantId: optionalTrimmed(value.assistantId),
-    assistantContent: optionalTrimmed(value.assistantContent),
   };
 }
 
@@ -154,25 +167,29 @@ function dedupePersistedThinkingMessages(messages: PersistedThinkingMessage[]): 
   return deduped;
 }
 
-function findAnchorAssistant(messages: ChatMessage[], startIndex: number): ChatMessage | null {
-  for (let index = startIndex; index < messages.length; index += 1) {
-    const message = messages[index];
-    if (message.kind === 'assistant') {
-      return message;
-    }
-    if (message.kind === 'user' || message.kind === 'question' || message.kind === 'pending_question') {
-      return null;
-    }
-  }
-  return null;
-}
-
 function createEmptyPersistedThinkingStore(): PersistedThinkingStore {
   return { sessions: {} };
 }
 
-function isLocalOrStreamingMessage(id: string): boolean {
-  return id.startsWith('stream-') || id.startsWith('local:');
+function hasPersistedAnchor(message: PersistedThinkingMessage): boolean {
+  return Boolean(
+    message.anchorId
+      || message.anchorToolCallId
+      || message.anchorContent,
+  );
+}
+
+function parseAnchorKind(value: unknown): ThinkingAnchorKind | undefined {
+  switch (value) {
+    case 'assistant':
+    case 'tool':
+    case 'system':
+    case 'question':
+    case 'pending_question':
+      return value;
+    default:
+      return undefined;
+  }
 }
 
 function optionalTrimmed(value: unknown): string | undefined {

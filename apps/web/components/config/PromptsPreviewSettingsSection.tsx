@@ -15,6 +15,11 @@ export function PromptsPreviewSettingsSection(props: PromptsPreviewSettingsSecti
   const { copy } = useWebLocale();
   const { prompts, loading, saving, onRefresh } = props;
   const controlsDisabled = loading || saving;
+  const previewContent = formatCombinedPreview({
+    renderedPrompt: prompts?.rendered_prompt ?? '',
+    toolDefinitions: prompts?.tool_definitions ?? [],
+    emptyPromptText: copy.settings.promptsRenderedEmpty,
+  });
 
   return (
     <section>
@@ -37,17 +42,11 @@ export function PromptsPreviewSettingsSection(props: PromptsPreviewSettingsSecti
 
       {loading && prompts === null ? <LoadingPromptsNotice text={copy.settings.promptsLoading} /> : null}
 
-      <section className="rounded-[16px] border border-[#E5E5E5] bg-white p-5">
-        <div className="mb-4">
-          <h2 className="text-[18px] font-semibold text-[#111111]">{copy.settings.promptsPreviewTitle}</h2>
-        </div>
-        <pre
-          data-testid="prompts-rendered-preview"
-          className="max-h-[620px] overflow-auto whitespace-pre-wrap break-words rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2 font-mono text-[12px] leading-6 text-[#111111]"
-        >
-          {(prompts?.rendered_prompt ?? '').trim() === '' ? copy.settings.promptsRenderedEmpty : prompts?.rendered_prompt}
-        </pre>
-      </section>
+      <PreviewCard
+        title={copy.settings.promptsPreviewTitle}
+        testID="prompts-rendered-preview"
+        content={previewContent}
+      />
     </section>
   );
 }
@@ -58,4 +57,31 @@ function LoadingPromptsNotice(props: { text: string }) {
       {props.text}
     </div>
   );
+}
+
+function PreviewCard(props: { title: string; testID: string; content: string }) {
+  return (
+    <section className="rounded-[16px] border border-[#E5E5E5] bg-white p-5">
+      <div className="mb-4">
+        <h2 className="text-[18px] font-semibold text-[#111111]">{props.title}</h2>
+      </div>
+      <pre
+        data-testid={props.testID}
+        className="max-h-[620px] overflow-auto whitespace-pre-wrap break-words rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2 font-mono text-[12px] leading-6 text-[#111111]"
+      >
+        {props.content}
+      </pre>
+    </section>
+  );
+}
+
+function formatCombinedPreview(props: {
+  renderedPrompt: string;
+  toolDefinitions: SystemPromptPayload['tool_definitions'];
+  emptyPromptText: string;
+}): string {
+  const promptPreview = props.renderedPrompt.trim() === '' ? props.emptyPromptText : props.renderedPrompt;
+  const toolDefinitionsPreview = JSON.stringify(props.toolDefinitions, null, 2);
+
+  return `${promptPreview}\n\ntools:\n${toolDefinitionsPreview}`;
 }

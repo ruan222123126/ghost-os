@@ -200,11 +200,11 @@ async function handleUploadTemplateFile(options: {
       templatePath: uploaded.template_path,
       templateName: uploaded.template_name,
     }));
-  const objectURL = URL.createObjectURL(file);
-  setPreview((current) => {
+    const objectURL = URL.createObjectURL(file);
+    setPreview((current) => {
       revokeFindIconPreviewURL(current);
-      return { objectURL };
-  });
+      return { url: objectURL, revocable: true };
+    });
   } catch (error) {
     setErrorText(toErrorMessage(error, fallbackError));
   } finally {

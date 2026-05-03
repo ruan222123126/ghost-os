@@ -1,5 +1,13 @@
-import { parseSessionDetail, parseSessionMetadataList } from './parser';
-import type { SessionDetail, SessionMetadata } from '@/lib/types';
+import {
+  parseSessionDetail,
+  parseSessionMetadataList,
+  parseSessionSidebarPartitionState,
+} from './parser';
+import type {
+  SessionDetail,
+  SessionMetadata,
+  SessionSidebarPartitionState,
+} from '@/lib/types';
 
 const SESSION_PAGE = {
   limit: 100,
@@ -137,5 +145,27 @@ describe('lib/api/sessions/parser', () => {
         },
       ],
     });
+  });
+
+  it('parses session sidebar partition state', () => {
+    const payload: SessionSidebarPartitionState = {
+      version: 1,
+      partitions: [{ id: 'work', name: 'Work' }],
+      assignments: { 'session-1': 'work' },
+    };
+
+    expect(parseSessionSidebarPartitionState(payload)).toEqual({
+      version: 1,
+      partitions: [{ id: 'work', name: 'Work' }],
+      assignments: { 'session-1': 'work' },
+    });
+  });
+
+  it('rejects invalid session sidebar partition field types', () => {
+    expect(() => parseSessionSidebarPartitionState({
+      version: 1,
+      partitions: [{ id: 'work', name: 'Work' }],
+      assignments: { 'session-1': 1 },
+    })).toThrow('Invalid session sidebar partition state.assignments.session-1: expected string');
   });
 });

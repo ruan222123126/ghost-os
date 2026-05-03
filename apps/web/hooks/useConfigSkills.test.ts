@@ -12,6 +12,7 @@ describe('hooks/useConfigSkills reducer', () => {
       description: 'repo skill',
       path: '/tmp/project/.agents/skills/release',
       source: 'repo',
+      enabled: true,
     },
     {
       id: 'skill_user',
@@ -19,6 +20,7 @@ describe('hooks/useConfigSkills reducer', () => {
       description: 'user skill',
       path: '/tmp/home/.ghost-os/skills/release',
       source: 'user',
+      enabled: false,
     },
   ];
 
@@ -51,5 +53,20 @@ describe('hooks/useConfigSkills reducer', () => {
     const failed = configSkillsReducer(saving, { type: 'delete_error', error: 'permission denied' });
     expect(failed.saving).toBe(false);
     expect(failed.error).toBe('permission denied');
+  });
+
+  it('replaces updated skill on save success', () => {
+    const baseState = {
+      ...initialConfigSkillsState,
+      skills: sampleSkills,
+      saving: true,
+    };
+
+    const next = configSkillsReducer(baseState, {
+      type: 'update_success',
+      skill: { ...sampleSkills[1], enabled: true },
+    });
+    expect(next.saving).toBe(false);
+    expect(next.skills[1].enabled).toBe(true);
   });
 });

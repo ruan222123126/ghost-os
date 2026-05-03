@@ -11,9 +11,12 @@ import type { ChatStateControls, StreamAgentRunInput, UseBridgeChatOptions } fro
 interface UseChatRunControlOptions {
   appendErrorMessage: ChatStateControls['appendErrorMessage'];
   appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
+  beginHistorySync: ChatStateControls['beginHistorySync'];
   clearChatError: ChatStateControls['clearChatError'];
   clearStreamingState: ChatStateControls['clearStreamingState'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
+  endHistorySync: ChatStateControls['endHistorySync'];
+  onSessionResolved: UseBridgeChatOptions['onSessionResolved'];
   runAgentStream: (run: StreamAgentRunInput) => Promise<void>;
   activeRunRef: ChatStateControls['activeRunRef'];
   setActiveRun: ChatStateControls['setActiveRun'];
@@ -21,6 +24,7 @@ interface UseChatRunControlOptions {
   setStopPending: ChatStateControls['setStopPending'];
   setChatError: ChatStateControls['setChatError'];
   stopPendingRef: ChatStateControls['stopPendingRef'];
+  syncRecentHistory: (sessionId: string) => Promise<void>;
 }
 
 export function useChatRunControl(options: UseChatRunControlOptions) {
@@ -28,9 +32,12 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
   const {
     appendErrorMessage,
     appendCommittedMessages,
+    beginHistorySync,
     clearChatError,
     clearStreamingState,
     currentSessionId,
+    endHistorySync,
+    onSessionResolved,
     runAgentStream,
     activeRunRef,
     setActiveRun,
@@ -38,7 +45,37 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     setStopPending,
     setChatError,
     stopPendingRef,
+    syncRecentHistory,
   } = options;
+
+  const syncStoppedRunHistory = useCallback(async (sessionId: string) => {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId) {
+      return;
+    }
+    if (trimmedSessionId !== currentSessionId) {
+      onSessionResolved?.(trimmedSessionId);
+    }
+
+    beginHistorySync();
+    try {
+      await syncRecentHistory(trimmedSessionId);
+      clearStreamingState();
+    } catch (error) {
+      setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+    } finally {
+      endHistorySync();
+    }
+  }, [
+    beginHistorySync,
+    clearStreamingState,
+    copy.system.genericRequestFailed,
+    currentSessionId,
+    endHistorySync,
+    onSessionResolved,
+    setChatError,
+    syncRecentHistory,
+  ]);
 
   const sendChatMessage = useCallback(async (input: ChatSendInput) => {
     if (!hasSendPayload(input)) {
@@ -98,13 +135,22 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     clearChatError();
     setStopPending(true);
     try {
-      await stopAgent(run.sessionId || undefined, run.traceId || undefined);
+      const response = await stopAgent(run.sessionId || undefined, run.traceId || undefined);
       run.abortController?.abort();
+      await syncStoppedRunHistory(resolveStopSessionId(response.session_id, run.sessionId));
     } catch (error) {
       setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
       setStopPending(false);
     }
-  }, [activeRunRef, clearChatError, copy.system.genericRequestFailed, setChatError, setStopPending, stopPendingRef]);
+  }, [
+    activeRunRef,
+    clearChatError,
+    copy.system.genericRequestFailed,
+    setChatError,
+    setStopPending,
+    stopPendingRef,
+    syncStoppedRunHistory,
+  ]);
 
   return {
     sendChatMessage,
@@ -121,5 +167,16 @@ function shouldSuppressRunError(error: unknown, stopPending: boolean): boolean {
     return false;
   }
 
-  return isAbortError(error) || toErrorMessage(error) === 'agent stream closed before terminal event';
+  const message = toErrorMessage(error);
+  return isAbortError(error)
+    || message === 'agent stream closed before terminal event'
+    || message === 'agent run cancelled';
+}
+
+function resolveStopSessionId(stoppedSessionId?: string, activeSessionId?: string): string {
+  const trimmedStoppedSessionId = stoppedSessionId?.trim();
+  if (trimmedStoppedSessionId) {
+    return trimmedStoppedSessionId;
+  }
+  return activeSessionId?.trim() ?? '';
 }

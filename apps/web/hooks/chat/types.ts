@@ -6,6 +6,7 @@ import type {
   PendingQuestionMessage,
   SessionImageContent,
   StreamingAssistantSegment,
+  StreamingThinkingSegment,
   StreamingToolState,
 } from '@/lib/types';
 
@@ -18,7 +19,7 @@ export interface ActiveAgentRun {
 export interface UseBridgeChatResult {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
-  streamingThinkingText: string;
+  streamingThinkingSegments: StreamingThinkingSegment[];
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
@@ -55,7 +56,7 @@ export interface StreamAgentRunInput {
 export interface ChatStateControls {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
-  streamingThinkingText: string;
+  streamingThinkingSegments: StreamingThinkingSegment[];
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];

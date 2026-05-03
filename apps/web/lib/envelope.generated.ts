@@ -37,6 +37,7 @@ export interface AgentRequest {
   message?: string;
   images?: SessionImageContent[];
   session_id?: string;
+  project_root?: string;
   trace_id?: string;
 }
 
@@ -79,6 +80,7 @@ export interface AgentSendAwaitingHumanResponse {
 export interface AgentStopResponsePayload {
   status: 'stopped' | 'not_running';
   message: string;
+  session_id?: string;
 }
 
 export interface HumanResponseRequest {
@@ -165,6 +167,7 @@ export interface SessionToolCall {
 export interface AgentToolCallStartedPayload {
   tool?: string;
   tool_call_id?: string;
+  arguments_json?: string;
 }
 
 export interface SessionToolResult {
@@ -180,6 +183,7 @@ export interface AgentToolCallFinishedPayload {
   tool_call_id?: string;
   status?: string;
   error?: string;
+  output?: string;
 }
 
 export interface SessionHumanInteraction {
@@ -220,6 +224,24 @@ export interface SessionMetadata {
   token_count: number;
 }
 
+export interface SessionSidebarPartition {
+  id: string;
+  name: string;
+}
+
+export interface SessionSidebarPartitionState {
+  version: number;
+  partitions: SessionSidebarPartition[];
+  assignments: Record<string, string>;
+}
+
+export interface SessionSidebarPartitionPutRequest {
+  version: number;
+  partitions: SessionSidebarPartition[];
+  assignments: Record<string, string>;
+  trace_id?: string;
+}
+
 export interface SessionMessagePage {
   limit: number;
   before?: number | null;
@@ -251,20 +273,18 @@ export interface BridgeConfig {
   base_url: string;
   model: string;
   chat_path: string;
+  project_root: string;
+  max_turns: number;
+  llm_completion_retry_count: number;
+  llm_completion_retry_interval_ms: number;
   api_key_set: boolean;
   model_selection_enabled: boolean;
-  graphql_default_source: string;
-  graphql_tool_runtime_enabled: boolean;
-  graphql_text_sanitize_enabled: boolean;
-  graphql_sources: GraphQLSourceResponse[];
-  graphql_mutation_policies: GraphQLMutationPolicyResponse[];
   session_human_log_full_enabled: boolean;
+  session_system_prompt_visible_enabled: boolean;
   assistant_markdown_enabled: boolean;
+  tool_call_compact_output_enabled: boolean;
   memory_mode_enabled: boolean;
-  web_rooter_enabled: boolean;
-  web_rooter_base_url: string;
-  web_rooter_timeout_ms: number;
-  web_rooter_api_token_set: boolean;
+  microcompact_enabled: boolean;
   web_search_tavily_url: string;
   web_search_exa_url: string;
   web_search_tavily_api_key_set: boolean;
@@ -283,19 +303,16 @@ export interface ConfigUpdate {
   base_url?: string;
   model?: string;
   chat_path?: string;
-  graphql_default_source?: string;
-  graphql_tool_runtime_enabled?: boolean;
-  graphql_text_sanitize_enabled?: boolean;
-  graphql_sources?: GraphQLSourceInput[];
-  graphql_source_upsert?: GraphQLSourceInput;
-  graphql_mutation_policies?: GraphQLMutationPolicyInput[];
+  project_root?: string;
+  max_turns?: number;
+  llm_completion_retry_count?: number;
+  llm_completion_retry_interval_ms?: number;
   session_human_log_full_enabled?: boolean;
+  session_system_prompt_visible_enabled?: boolean;
   assistant_markdown_enabled?: boolean;
+  tool_call_compact_output_enabled?: boolean;
   memory_mode_enabled?: boolean;
-  web_rooter_enabled?: boolean;
-  web_rooter_base_url?: string;
-  web_rooter_api_token?: string;
-  web_rooter_timeout_ms?: number;
+  microcompact_enabled?: boolean;
   web_search_tavily_url?: string;
   web_search_exa_url?: string;
   web_search_tavily_api_key?: string;
@@ -308,90 +325,6 @@ export interface SessionPushAwaitingHumanPayload {
   prompt: string;
   selection_mode?: 'single' | 'multiple';
   options?: AskHumanOption[];
-}
-
-export interface GraphQLDomainResponse {
-  name: string;
-  description?: string;
-  root_queries: string[];
-  types?: string[];
-  max_depth?: number;
-  max_fields?: number;
-  max_root_fields?: number;
-}
-
-export interface GraphQLSourceResponse {
-  name: string;
-  description?: string;
-  endpoint: string;
-  schema_path: string;
-  timeout_ms: number;
-  max_response_bytes: number;
-  max_depth: number;
-  max_fields: number;
-  max_root_fields: number;
-  max_fragments: number;
-  headers?: Record<string, string>;
-  api_key_set: boolean;
-  domains?: GraphQLDomainResponse[];
-}
-
-export interface GraphQLDomainInput {
-  name: string;
-  description?: string;
-  root_queries: string[];
-  types?: string[];
-  max_depth?: number;
-  max_fields?: number;
-  max_root_fields?: number;
-}
-
-export interface GraphQLMutationPolicyResponse {
-  name: string;
-  description?: string;
-  source: string;
-  domain: string;
-  root_mutation: string;
-  approval_required?: boolean;
-  idempotency_mode: 'header' | 'variable_path';
-  idempotency_header?: string;
-  idempotency_variable_path?: string;
-  max_depth?: number;
-  max_fields?: number;
-  max_root_fields?: number;
-  max_fragments?: number;
-}
-
-export interface GraphQLMutationPolicyInput {
-  name: string;
-  description?: string;
-  source: string;
-  domain: string;
-  root_mutation: string;
-  approval_required?: boolean;
-  idempotency_mode: 'header' | 'variable_path';
-  idempotency_header?: string;
-  idempotency_variable_path?: string;
-  max_depth?: number;
-  max_fields?: number;
-  max_root_fields?: number;
-  max_fragments?: number;
-}
-
-export interface GraphQLSourceInput {
-  name: string;
-  description?: string;
-  endpoint: string;
-  api_key?: string;
-  schema_path: string;
-  timeout_ms?: number;
-  max_response_bytes?: number;
-  headers?: Record<string, string>;
-  max_depth?: number;
-  max_fields?: number;
-  max_root_fields?: number;
-  max_fragments?: number;
-  domains?: GraphQLDomainInput[];
 }
 
 export interface ProviderConfig {

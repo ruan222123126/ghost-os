@@ -95,7 +95,6 @@ export function deleteSessionPartition(input: DeleteSessionPartitionInput): Sess
     ...sanitized,
     partitions: sanitized.partitions.filter((partition) => partition.id !== normalizedID),
     assignments: removePartitionAssignments(sanitized.assignments, normalizedID),
-    orders: removePartitionOrders(sanitized.orders, normalizedID),
   };
 }
 
@@ -114,17 +113,6 @@ function removePartitionAssignments(assignments: Record<string, string>, partiti
       continue;
     }
     next[sessionID] = assignedPartitionID;
-  }
-  return next;
-}
-
-function removePartitionOrders(orders: Record<string, string[]>, partitionID: string): Record<string, string[]> {
-  const next: Record<string, string[]> = {};
-  for (const [id, sessionIDs] of Object.entries(orders)) {
-    if (id === partitionID) {
-      continue;
-    }
-    next[id] = [...sessionIDs];
   }
   return next;
 }

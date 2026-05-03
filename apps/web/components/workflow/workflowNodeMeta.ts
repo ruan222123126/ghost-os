@@ -1,6 +1,7 @@
 import type { WorkflowNodeType } from '@/lib/workflow-editor';
 import type { WorkflowNodeMeta } from '@/components/workflow/WorkflowCanvasNode';
 import type { WebCopy } from '@/lib/i18n/messages';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 
 const NODE_GLYPH_MAP: Record<WorkflowNodeType, string> = {
   start: '⚡',
@@ -13,8 +14,6 @@ const NODE_GLYPH_MAP: Record<WorkflowNodeType, string> = {
 };
 
 const NODE_LIBRARY_ORDER: WorkflowNodeType[] = [
-  'start',
-  'end',
   'agent',
   'llm',
   'tool',
@@ -22,15 +21,21 @@ const NODE_LIBRARY_ORDER: WorkflowNodeType[] = [
   'loop',
 ];
 
-export function nodeLibraryForCopy(copy: WebCopy): WorkflowNodeMeta[] {
-  return NODE_LIBRARY_ORDER.map((type) => ({
+export function nodeLibraryForCopy(
+  copy: WorkflowCopy | WebCopy,
+  nodeTypes: readonly WorkflowNodeType[] = NODE_LIBRARY_ORDER,
+): WorkflowNodeMeta[] {
+  return nodeTypes.map((type) => ({
     id: type,
     label: labelByType(copy, type),
     glyph: NODE_GLYPH_MAP[type],
   }));
 }
 
-export function metadataForNodeType(type: WorkflowNodeType, copy: WebCopy): WorkflowNodeMeta {
+export function metadataForNodeType(
+  type: WorkflowNodeType,
+  copy: WorkflowCopy | WebCopy,
+): WorkflowNodeMeta {
   return {
     id: type,
     label: labelByType(copy, type),
@@ -38,8 +43,8 @@ export function metadataForNodeType(type: WorkflowNodeType, copy: WebCopy): Work
   };
 }
 
-function labelByType(copy: WebCopy, type: WorkflowNodeType): string {
-  const labels = copy.workflow.nodeLabels;
+function labelByType(copy: WorkflowCopy | WebCopy, type: WorkflowNodeType): string {
+  const labels = 'workflow' in copy ? copy.workflow.nodeLabels : copy.nodeLabels;
   if (type === 'start') {
     return labels.start;
   }

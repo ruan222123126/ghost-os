@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { buildFindIconTemplatePreviewURL } from '@/lib/api/tools/findIcon';
 import type {
   FindIconEditorPanelState,
   FindIconEditorPreview,
@@ -22,7 +23,7 @@ export function useFindIconEditorResetState(
     setTestResult('idle');
     setPreview((current) => {
       revokeFindIconPreviewURL(current);
-      return null;
+      return buildInitialFindIconPreview(initial.templatePath);
     });
   }, [initial, setErrorText, setPreview, setState, setTesting, setTestResult]);
 }
@@ -49,7 +50,18 @@ export function clearFindIconTemplateSelection(
 }
 
 export function revokeFindIconPreviewURL(preview: FindIconEditorPreview | null) {
-  if (preview?.objectURL) {
-    URL.revokeObjectURL(preview.objectURL);
+  if (preview?.revocable && preview.url) {
+    URL.revokeObjectURL(preview.url);
   }
+}
+
+function buildInitialFindIconPreview(templatePath: string): FindIconEditorPreview | null {
+  const previewURL = buildFindIconTemplatePreviewURL(templatePath);
+  if (!previewURL) {
+    return null;
+  }
+  return {
+    url: previewURL,
+    revocable: false,
+  };
 }

@@ -1,8 +1,5 @@
 import type { BridgeConfig } from '@/lib/types';
-import {
-  buildSecretPlaceholder,
-  type RuntimeFormState,
-} from '@/components/config/runtimeSettingsForm';
+import { buildSecretPlaceholder, type RuntimeFormState } from '@/components/config/runtimeSettingsForm';
 import {
   Card,
   TextField,
@@ -23,6 +20,7 @@ interface ConfigSectionProps extends SectionProps {
 export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionEnabled: boolean }) {
   const { copy, locale } = useWebLocale();
   const { formState, controlsDisabled, modelSelectionEnabled, onChange, config } = props;
+  const chatPathPlaceholder = runtimeChatPathPlaceholder(config, locale);
 
   return (
     <Card title={copy.settings.runtimeCoreTitle} copy={copy.settings.runtimeCoreCopy}>
@@ -33,23 +31,6 @@ export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionE
         disabled={controlsDisabled}
         mono
         onChange={(value) => onChange({ provider: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeProviderApiKeyLabel}
-        description={copy.settings.runtimeProviderApiKeyDescription}
-        value={formState.apiKey}
-        disabled={controlsDisabled}
-        type="password"
-        placeholder={buildSecretPlaceholder(config?.api_key_set, copy.settings.runtimeProviderApiKeyLabel, locale)}
-        onChange={(value) => onChange({ apiKey: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeBaseURLLabel}
-        description={copy.settings.runtimeBaseURLDescription}
-        value={formState.baseURL}
-        disabled={controlsDisabled}
-        mono
-        onChange={(value) => onChange({ baseURL: value })}
       />
       <TextField
         label={copy.settings.runtimeModelLabel}
@@ -67,39 +48,69 @@ export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionE
         value={formState.chatPath}
         disabled={controlsDisabled}
         mono
+        placeholder={chatPathPlaceholder}
         onChange={(value) => onChange({ chatPath: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeProjectRootLabel}
+        description={copy.settings.runtimeProjectRootDescription}
+        value={formState.projectRoot}
+        disabled={controlsDisabled}
+        mono
+        placeholder={copy.settings.runtimeProjectRootPlaceholder}
+        onChange={(value) => onChange({ projectRoot: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeMaxTurnsLabel}
+        description={copy.settings.runtimeMaxTurnsDescription}
+        value={formState.maxTurns}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ maxTurns: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeLLMCompletionRetryCountLabel}
+        description={copy.settings.runtimeLLMCompletionRetryCountDescription}
+        value={formState.llmCompletionRetryCount}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ llmCompletionRetryCount: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeLLMCompletionRetryIntervalMSLabel}
+        description={copy.settings.runtimeLLMCompletionRetryIntervalMSDescription}
+        value={formState.llmCompletionRetryIntervalMS}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ llmCompletionRetryIntervalMS: value })}
       />
     </Card>
   );
 }
 
-export function GraphQLSection(props: SectionProps) {
-  const { locale, copy } = useWebLocale();
-  const { formState, controlsDisabled, onChange } = props;
-  const isZh = locale === 'zh-CN';
+function runtimeChatPathPlaceholder(config: BridgeConfig | null, locale: string): string {
+  const defaultPath = defaultChatPath(config?.provider_type);
+  if (defaultPath === '') {
+    return '';
+  }
+  if (locale === 'zh-CN') {
+    return `留空使用默认: ${defaultPath}`;
+  }
+  return `Leave blank to use default: ${defaultPath}`;
+}
 
-  return (
-    <Card title={copy.settings.runtimeGraphQLTitle} copy={copy.settings.runtimeGraphQLCopy}>
-      <ToggleField
-        label={isZh ? '启用 GraphQL 工具运行时' : 'GraphQL Tool Runtime Enabled'}
-        description={isZh
-          ? '启用后，Assistant 文本工具调用切换为 GraphQL 文档协议。'
-          : 'When enabled, assistant text tool-calls switch to the GraphQL document protocol.'}
-        checked={formState.graphqlToolRuntimeEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ graphqlToolRuntimeEnabled: checked })}
-      />
-      <ToggleField
-        label={isZh ? '启用 GraphQL 文本清洗' : 'GraphQL Text Sanitize Enabled'}
-        description={isZh
-          ? '仅在 GraphQL 工具运行时生效，用于清理模型输出中的已知格式噪声。'
-          : 'Only applies in GraphQL tool runtime mode; cleans known formatting artifacts from model output.'}
-        checked={formState.graphqlTextSanitizeEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ graphqlTextSanitizeEnabled: checked })}
-      />
-    </Card>
-  );
+function defaultChatPath(providerType: BridgeConfig['provider_type'] | undefined): string {
+  switch (providerType) {
+    case 'anthropic':
+      return '/v1/messages';
+    case 'codex':
+      return '/responses';
+    case 'openai':
+    case 'custom':
+      return '/chat/completions';
+    default:
+      return '';
+  }
 }
 
 export function SessionSection(props: SectionProps) {
@@ -119,13 +130,40 @@ export function SessionSection(props: SectionProps) {
         onChange={(checked) => onChange({ assistantMarkdownEnabled: checked })}
       />
       <ToggleField
+        label={isZh ? '显示系统提示词' : 'Show System Prompt'}
+        description={isZh
+          ? '关闭后，会话首条 system 提示词不再显示在消息区，但仍保留在真实会话历史里。'
+          : 'When disabled, the first system prompt is hidden from the message list but still kept in session history.'}
+        checked={formState.sessionSystemPromptVisibleEnabled}
+        disabled={controlsDisabled}
+        onChange={(checked) => onChange({ sessionSystemPromptVisibleEnabled: checked })}
+      />
+      <ToggleField
+        label={isZh ? '精简工具调用输出' : 'Compact Tool Call Output'}
+        description={isZh
+          ? '启用后，工具详情仅显示 step 序列与失败 error 行。'
+          : 'When enabled, tool details only show ordered steps plus a failure error line.'}
+        checked={formState.toolCallCompactOutputEnabled}
+        disabled={controlsDisabled}
+        onChange={(checked) => onChange({ toolCallCompactOutputEnabled: checked })}
+      />
+      <ToggleField
         label={isZh ? '记忆模式' : 'Memory Mode'}
         description={isZh
-          ? '启用后在系统提示词注入 Memory 段，并自动确保当天记忆文档存在。'
-          : 'When enabled, injects a Memory section into the system prompt and ensures today\'s memory file exists.'}
+          ? '启用后仅确保当天记忆文档存在，不再向系统提示词注入 Memory 段。'
+          : 'When enabled, only ensures today\'s memory file exists and no longer injects a Memory section into the system prompt.'}
         checked={formState.memoryModeEnabled}
         disabled={controlsDisabled}
         onChange={(checked) => onChange({ memoryModeEnabled: checked })}
+      />
+      <ToggleField
+        label={isZh ? 'Microcompact 请求压缩' : 'Microcompact Request Compression'}
+        description={isZh
+          ? '启用后，请求前会压缩较旧的高膨胀工具结果视图，但不会改写会话持久化历史。'
+          : 'When enabled, older high-expansion tool-result spans are compacted before requests without rewriting persisted session history.'}
+        checked={formState.microcompactEnabled}
+        disabled={controlsDisabled}
+        onChange={(checked) => onChange({ microcompactEnabled: checked })}
       />
       <ToggleField
         label={isZh ? '会话人类日志（完整工具输出）' : 'Session Human Log (Full Tool Output)'}
@@ -135,51 +173,6 @@ export function SessionSection(props: SectionProps) {
         checked={formState.sessionHumanLogFullEnabled}
         disabled={controlsDisabled}
         onChange={(checked) => onChange({ sessionHumanLogFullEnabled: checked })}
-      />
-    </Card>
-  );
-}
-
-export function WebRooterSection(props: ConfigSectionProps) {
-  const { locale, copy } = useWebLocale();
-  const { formState, controlsDisabled, onChange, config } = props;
-  const isZh = locale === 'zh-CN';
-
-  return (
-    <Card title={copy.settings.runtimeWebRooterTitle} copy={copy.settings.runtimeWebRooterCopy}>
-      <ToggleField
-        label={isZh ? '启用 Web Rooter' : 'Web Rooter Enabled'}
-        description={isZh ? '启用 web_rooter 工具集成。' : 'Enable web_rooter tool integration.'}
-        checked={formState.webRooterEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ webRooterEnabled: checked })}
-      />
-      <TextField
-        label={isZh ? 'Web Rooter Base URL' : 'Web Rooter Base URL'}
-        description={isZh ? 'web_rooter 服务基础 URL。' : 'Base URL for the web_rooter service.'}
-        value={formState.webRooterBaseURL}
-        disabled={controlsDisabled}
-        mono
-        placeholder="http://127.0.0.1:8765"
-        onChange={(value) => onChange({ webRooterBaseURL: value })}
-      />
-      <TextField
-        label={isZh ? 'Web Rooter API Token' : 'Web Rooter API Token'}
-        description={isZh ? '留空会保留当前已保存 token。' : 'Blank keeps currently saved token.'}
-        value={formState.webRooterAPIToken}
-        disabled={controlsDisabled}
-        type="password"
-        placeholder={buildSecretPlaceholder(config?.web_rooter_api_token_set, isZh ? 'Web Rooter API token' : 'Web Rooter API token', locale)}
-        onChange={(value) => onChange({ webRooterAPIToken: value })}
-      />
-      <TextField
-        label={isZh ? 'Web Rooter Timeout（毫秒）' : 'Web Rooter Timeout (ms)'}
-        description={isZh ? '正整数超时，单位毫秒。' : 'Positive timeout in milliseconds.'}
-        value={formState.webRooterTimeoutMS}
-        disabled={controlsDisabled}
-        type="number"
-        placeholder="90000"
-        onChange={(value) => onChange({ webRooterTimeoutMS: value })}
       />
     </Card>
   );

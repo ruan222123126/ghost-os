@@ -6,6 +6,7 @@ import type {
   WorkflowNodeType,
 } from '@/lib/workflow-editor';
 import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor';
+import { isProtectedBoundaryNodeType } from '@/lib/workflow-editor/boundaryNodes';
 import {
   DEFAULT_LOOP_MAX_ITERATIONS,
   LOOP_ROLE_END,
@@ -34,6 +35,9 @@ export function addNode(
   type: WorkflowNodeType,
   options?: AddNodeOptions,
 ): WorkflowCanvasDraft {
+  if (isProtectedBoundaryNodeType(type)) {
+    return draft;
+  }
   if (type === 'loop') {
     return addLoopNodePair(draft, options?.position);
   }
@@ -51,10 +55,18 @@ export function addNode(
 }
 
 export function duplicateNode(draft: WorkflowCanvasDraft, nodeID: string): WorkflowCanvasDraft {
+  const source = draft.nodes.find((node) => node.id === nodeID);
+  if (!source || isProtectedBoundaryNodeType(source.type)) {
+    return draft;
+  }
   return duplicateWorkflowNode(draft, nodeID);
 }
 
 export function removeNode(draft: WorkflowCanvasDraft, nodeID: string): WorkflowCanvasDraft {
+  const target = draft.nodes.find((node) => node.id === nodeID);
+  if (!target || isProtectedBoundaryNodeType(target.type)) {
+    return draft;
+  }
   const removableNodeIDs = findRemovableNodeIDs(draft.nodes, nodeID);
   return {
     ...draft,

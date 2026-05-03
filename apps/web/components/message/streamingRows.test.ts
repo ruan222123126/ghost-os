@@ -1,6 +1,7 @@
 import type {
   PendingQuestionMessage,
   StreamingAssistantSegment,
+  StreamingThinkingSegment,
   StreamingToolState,
 } from '@/lib/types';
 import { getOrderedStreamingRows } from './streamingRows';
@@ -33,17 +34,32 @@ function buildAssistantSegment(id: string, content = 'assistant text'): Streamin
   };
 }
 
+function buildThinkingSegment(id: string, content = 'thinking text'): StreamingThinkingSegment {
+  return {
+    id,
+    content,
+  };
+}
+
 describe('components/message/streamingRows', () => {
   it('renders streaming rows in explicit event order', () => {
     const rows = getOrderedStreamingRows({
       pendingQuestions: [buildQuestion('q-1', 'question-1')],
       streamingAssistantSegments: [buildAssistantSegment('assistant-segment-1')],
-      streamingItemOrder: ['tool:tool-2', 'assistant:assistant-segment-1', 'question:q-1', 'tool:tool-1'],
+      streamingThinkingSegments: [buildThinkingSegment('thinking-segment-1')],
+      streamingItemOrder: [
+        'tool:tool-2',
+        'thinking:thinking-segment-1',
+        'assistant:assistant-segment-1',
+        'question:q-1',
+        'tool:tool-1',
+      ],
       streamingTools: [buildTool('tool-1'), buildTool('tool-2')],
     });
 
     expect(rows.map((row) => row.key)).toEqual([
       'tool-2',
+      'thinking-segment-1',
       'assistant-segment-1',
       'question-1',
       'tool-1',
@@ -54,12 +70,14 @@ describe('components/message/streamingRows', () => {
     const rows = getOrderedStreamingRows({
       pendingQuestions: [buildQuestion('q-1', 'question-1')],
       streamingAssistantSegments: [buildAssistantSegment('assistant-segment-1')],
+      streamingThinkingSegments: [buildThinkingSegment('thinking-segment-1')],
       streamingItemOrder: [],
       streamingTools: [buildTool('tool-1')],
     });
 
     expect(rows.map((row) => row.key)).toEqual([
       'assistant-segment-1',
+      'thinking-segment-1',
       'tool-1',
       'question-1',
     ]);
@@ -69,10 +87,35 @@ describe('components/message/streamingRows', () => {
     const rows = getOrderedStreamingRows({
       pendingQuestions: [],
       streamingAssistantSegments: [],
-      streamingItemOrder: ['assistant:missing', 'tool:missing', 'question:missing'],
+      streamingThinkingSegments: [],
+      streamingItemOrder: ['assistant:missing', 'thinking:missing', 'tool:missing', 'question:missing'],
       streamingTools: [],
     });
 
     expect(rows).toEqual([]);
+  });
+
+  it('preserves toolInput on streaming tool rows', () => {
+    const rows = getOrderedStreamingRows({
+      pendingQuestions: [],
+      streamingAssistantSegments: [],
+      streamingThinkingSegments: [],
+      streamingItemOrder: ['tool:tool-bash'],
+      streamingTools: [{
+        id: 'tool-bash',
+        content: '{"command":"which agent-browser"}',
+        toolInput: '{"command":"which agent-browser"}',
+        toolName: 'bash_exec',
+        toolStatus: 'running',
+        traceId: 'trace-bash',
+      }],
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].message).toMatchObject({
+      kind: 'tool',
+      toolInput: '{"command":"which agent-browser"}',
+      toolName: 'bash_exec',
+    });
   });
 });

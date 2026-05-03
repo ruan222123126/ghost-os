@@ -2,6 +2,9 @@ import {
   parseAgentCompletionDeltaPayload,
   parseAgentErrorPayload,
   parseAgentSendResponse,
+  parseAgentStopResponse,
+  parseAgentToolCallFinishedPayload,
+  parseAgentToolCallStartedPayload,
 } from './parser';
 
 describe('lib/api/agent/parser', () => {
@@ -58,6 +61,19 @@ describe('lib/api/agent/parser', () => {
     });
   });
 
+  it('parses stop payloads with optional session id', () => {
+    expect(parseAgentStopResponse({
+      status: 'stopped',
+      message: 'agent run cancelled successfully',
+      session_id: 'session-stop',
+      ignored: true,
+    })).toEqual({
+      status: 'stopped',
+      message: 'agent run cancelled successfully',
+      session_id: 'session-stop',
+    });
+  });
+
   it('parses thinking completion delta payloads', () => {
     expect(parseAgentCompletionDeltaPayload({
       kind: 'thinking',
@@ -71,6 +87,31 @@ describe('lib/api/agent/parser', () => {
       tool_call_id: undefined,
       tool_name: undefined,
       arguments_fragment: undefined,
+    });
+  });
+
+  it('parses tool lifecycle payload fields for arguments and output', () => {
+    expect(parseAgentToolCallStartedPayload({
+      tool: 'script_exec',
+      tool_call_id: 'call-1',
+      arguments_json: '{"script":"print(1)"}',
+    })).toEqual({
+      tool: 'script_exec',
+      tool_call_id: 'call-1',
+      arguments_json: '{"script":"print(1)"}',
+    });
+
+    expect(parseAgentToolCallFinishedPayload({
+      tool: 'script_exec',
+      tool_call_id: 'call-1',
+      status: 'success',
+      output: '{"summary":{"step_count":1},"steps":[]}',
+    })).toEqual({
+      tool: 'script_exec',
+      tool_call_id: 'call-1',
+      status: 'success',
+      error: undefined,
+      output: '{"summary":{"step_count":1},"steps":[]}',
     });
   });
 });

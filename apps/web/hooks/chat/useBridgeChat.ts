@@ -49,9 +49,12 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   const { sendChatMessage, stopCurrentRun } = useChatRunControl({
     appendErrorMessage: state.appendErrorMessage,
     appendCommittedMessages: state.appendCommittedMessages,
+    beginHistorySync: state.beginHistorySync,
     clearChatError: state.clearChatError,
     clearStreamingState: state.clearStreamingState,
     currentSessionId: options.currentSessionId,
+    endHistorySync: state.endHistorySync,
+    onSessionResolved: options.onSessionResolved,
     runAgentStream,
     activeRunRef: state.activeRunRef,
     setActiveRun: state.setActiveRun,
@@ -59,6 +62,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     setStopPending: state.setStopPending,
     setChatError: state.setChatError,
     stopPendingRef: state.stopPendingRef,
+    syncRecentHistory,
   });
   const { answerQuestion, cancelQuestion } = useChatQuestionActions({
     appendCommittedMessages: state.appendCommittedMessages,
@@ -81,7 +85,7 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   return {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: state.streamingAssistantSegments,
-    streamingThinkingText: state.streamingThinkingText,
+    streamingThinkingSegments: state.streamingThinkingSegments,
     streamingItemOrder: state.streamingItemOrder,
     streamingTools: state.streamingTools,
     pendingQuestions: state.pendingQuestions,

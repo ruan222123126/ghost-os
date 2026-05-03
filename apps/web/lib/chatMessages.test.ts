@@ -31,10 +31,11 @@ describe('chatMessages', () => {
     const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(3);
-    expect(mapped[0]).toMatchObject({ kind: 'system', content: 'keep sharp' });
+    expect(mapped[0]).toMatchObject({ kind: 'system', content: 'keep sharp', sourceRole: 'system' });
     expect(mapped[1]).toMatchObject({
       kind: 'system',
       content: '[GRAPHQL_EXECUTION_RESULT]\n{"data":{"viewer":{"id":"1"}}}',
+      sourceRole: 'internal',
     });
     expect(mapped[2]).toMatchObject({
       kind: 'tool',
@@ -45,20 +46,20 @@ describe('chatMessages', () => {
     });
   });
 
-  it('filters tool-tag tfind internal notes to loaded tools only', () => {
+  it('filters tool-tag sfind internal notes to loaded items only', () => {
     const messages = withSessionIndices([
       {
         role: 'internal',
-        text: '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"screen_control","status":"active","available_now":true},{"name":"web_search","status":"expired"},{"name":"text_input","status":"pending","available_next_turn":true}]}}',
+        text: '[TOOL_TAG_RESULT]\n{"tool":"sfind","output":{"action":"list","items":[{"name":"release_flow","status":"active","available_now":true},{"name":"incident_triage","status":"expired"},{"name":"ship_checklist","status":"pending","available_next_turn":true}]}}',
       },
     ]);
 
     const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
 
     expect(mapped).toHaveLength(1);
-    expect(mapped[0]).toMatchObject({ kind: 'system' });
+    expect(mapped[0]).toMatchObject({ kind: 'system', sourceRole: 'internal' });
     expect(mapped[0].content).toBe(
-      '[TOOL_TAG_RESULT]\n{"tool":"tfind","output":{"action":"list","items":[{"name":"screen_control","status":"active","available_now":true},{"name":"text_input","status":"pending","available_next_turn":true}]}}',
+      '[TOOL_TAG_RESULT]\n{"tool":"sfind","output":{"action":"list","items":[{"name":"release_flow","status":"active","available_now":true},{"name":"ship_checklist","status":"pending","available_next_turn":true}]}}',
     );
   });
 

@@ -17,7 +17,7 @@ export function Card(props: { title: string; copy: string; children: ReactNode }
 
 export function TextField(props: {
   label: string;
-  description: string;
+  description?: string;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
@@ -44,7 +44,7 @@ export function TextField(props: {
 
 export function TextAreaField(props: {
   label: string;
-  description: string;
+  description?: string;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
@@ -68,7 +68,7 @@ export function TextAreaField(props: {
 
 export function ToggleField(props: {
   label: string;
-  description: string;
+  description?: string;
   checked: boolean;
   disabled: boolean;
   onChange: (checked: boolean) => void;
@@ -91,13 +91,40 @@ export function ToggleField(props: {
   );
 }
 
-function Field(props: { label: string; description: string; children: ReactNode }) {
+export function SelectField(props: {
+  label: string;
+  description?: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+  options: readonly { value: string; label: string }[];
+}) {
+  const { label, description, value, disabled = false, onChange, options } = props;
+
+  return (
+    <Field label={label} description={description}>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </Field>
+  );
+}
+
+function Field(props: { label: string; description?: string; children: ReactNode }) {
   const { label, description, children } = props;
+  const showDescription = description !== undefined && description.trim() !== '';
 
   return (
     <label className="block">
       <span className="mb-1 block text-[13px] font-medium text-[#111111]">{label}</span>
-      <span className="mb-2 block text-[12px] text-[#737373]">{description}</span>
+      {showDescription ? <span className="mb-2 block text-[12px] text-[#737373]">{description}</span> : null}
       {children}
     </label>
   );

@@ -111,6 +111,19 @@ export function ProviderEditorForm(props: ProviderEditorFormProps) {
               className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 font-mono text-[14px] text-[#111111] placeholder-[#A3A3A3] transition-colors focus:border-[#111111] focus:outline-none"
             />
           </FormField>
+
+          <FormField label={copy.settings.providerContextWindowLabel} description={copy.settings.providerContextWindowDescription}>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={editor.contextWindowTokens}
+              disabled={controlsDisabled}
+              onChange={(event) => onChangeEditor({ contextWindowTokens: event.target.value })}
+              placeholder={copy.settings.providerContextWindowPlaceholder}
+              className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 font-mono text-[14px] text-[#111111] placeholder-[#A3A3A3] transition-colors focus:border-[#111111] focus:outline-none"
+            />
+          </FormField>
         </div>
       </div>
 

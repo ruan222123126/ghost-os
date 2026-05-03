@@ -40,8 +40,11 @@ describe('hooks/chat/chatStateReducer', () => {
       { id: 'stream-segment:assistant:1', content: 'alpha' },
       { id: 'stream-segment:assistant:2', content: 'omega' },
     ]);
-    expect(view.streamingThinkingText).toBe('thinking...');
+    expect(view.streamingThinkingSegments).toEqual([
+      { id: 'stream-segment:thinking:1', content: 'thinking...' },
+    ]);
     expect(state.streamingItemOrder).toEqual([
+      'thinking:stream-segment:thinking:1',
       'assistant:stream-segment:assistant:1',
       'tool:tool-1',
       'assistant:stream-segment:assistant:2',
@@ -97,9 +100,100 @@ describe('hooks/chat/chatStateReducer', () => {
     expect(state.hasOlderHistory).toBe(false);
     expect(state.nextHistoryBefore).toBeNull();
     expect(view.streamingAssistantSegments).toEqual([]);
-    expect(view.streamingThinkingText).toBe('');
+    expect(view.streamingThinkingSegments).toEqual([]);
     expect(view.streamingTools).toEqual([]);
     expect(view.pendingQuestions).toEqual([]);
+  });
+
+  it('finalizes a streaming turn in top-to-bottom thinking and tool order', () => {
+    let state = createInitialState();
+    state = chatStateReducer(state, {
+      type: 'apply_runtime_actions',
+      actions: [
+        { type: 'append_streaming_thinking_text', text: 'before tool' },
+        {
+          type: 'upsert_streaming_tool',
+          tool: {
+            id: 'tool-1',
+            content: 'ls -la',
+            toolCallId: 'call-1',
+            toolStatus: 'success',
+          },
+        },
+        { type: 'append_streaming_thinking_text', text: 'after tool' },
+        {
+          type: 'finalize_streaming_turn',
+          assistantMessageId: 'stream-assistant:trace-1',
+          assistantText: 'final answer',
+        },
+      ],
+    });
+
+    expect(state.committedMessages).toEqual([
+      {
+        id: 'stream-segment:thinking:1',
+        kind: 'thinking',
+        content: 'before tool',
+      },
+      {
+        id: 'tool-1',
+        kind: 'tool',
+        content: 'ls -la',
+        toolCallId: 'call-1',
+        toolStatus: 'success',
+        toolName: undefined,
+        traceId: undefined,
+      },
+      {
+        id: 'stream-segment:thinking:2',
+        kind: 'thinking',
+        content: 'after tool',
+      },
+      {
+        id: 'stream-assistant:trace-1',
+        kind: 'assistant',
+        content: 'final answer',
+      },
+    ]);
+    expect(state.streamingItemOrder).toEqual([]);
+    const view = buildChatStateView(state);
+    expect(view.streamingAssistantSegments).toEqual([]);
+    expect(view.streamingThinkingSegments).toEqual([]);
+    expect(view.streamingTools).toEqual([]);
+  });
+
+  it('preserves bash_exec tool input when a later update replaces the visible output', () => {
+    let state = createInitialState();
+    state = chatStateReducer(state, {
+      type: 'apply_runtime_actions',
+      actions: [
+        {
+          type: 'upsert_streaming_tool',
+          tool: {
+            id: 'tool-bash',
+            content: '{"command":"echo ok"}',
+            toolInput: '{"command":"echo ok"}',
+            toolName: 'bash_exec',
+            toolStatus: 'running',
+          },
+        },
+        {
+          type: 'upsert_streaming_tool',
+          tool: {
+            id: 'tool-bash',
+            content: 'ok',
+            toolName: 'bash_exec',
+            toolStatus: 'success',
+          },
+        },
+      ],
+    });
+
+    expect(buildChatStateView(state).streamingTools[0]).toMatchObject({
+      id: 'tool-bash',
+      content: 'ok',
+      toolInput: '{"command":"echo ok"}',
+    });
   });
 });
 

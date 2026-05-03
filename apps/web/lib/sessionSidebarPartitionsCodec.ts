@@ -10,7 +10,6 @@ export function createInitialSessionPartitionStore(): SessionPartitionStoreV1 {
     version: SESSION_PARTITION_VERSION,
     partitions: [],
     assignments: {},
-    orders: {},
   };
 }
 
@@ -28,7 +27,6 @@ export function parseSessionPartitionStore(raw: string): SessionPartitionStoreV1
     version: SESSION_PARTITION_VERSION,
     partitions: payload.partitions,
     assignments: payload.assignments,
-    orders: payload.orders,
   };
 }
 
@@ -40,7 +38,6 @@ interface ParsedPartitionStore {
   version: number;
   partitions: SessionPartition[];
   assignments: Record<string, string>;
-  orders: Record<string, string[]>;
 }
 
 function parsePartitionStorePayload(raw: string): ParsedPartitionStore {
@@ -55,9 +52,8 @@ function parsePartitionStorePayload(raw: string): ParsedPartitionStore {
   const version = expectNumber(root.version, 'session partition payload.version');
   const partitions = parsePartitions(root.partitions);
   const assignments = parseAssignments(root.assignments);
-  const orders = parseOrders(root.orders);
 
-  return { version, partitions, assignments, orders };
+  return { version, partitions, assignments };
 }
 
 function parsePartitions(value: unknown): SessionPartition[] {
@@ -88,28 +84,6 @@ function parseAssignments(value: unknown): Record<string, string> {
       continue;
     }
     parsed[key] = val;
-  }
-
-  return parsed;
-}
-
-function parseOrders(value: unknown): Record<string, string[]> {
-  const record = expectRecord(value, 'session partition payload.orders');
-  const parsed: Record<string, string[]> = {};
-
-  for (const [key, rawIDs] of Object.entries(record)) {
-    if (!Array.isArray(rawIDs)) {
-      throw new Error(`Invalid session partition payload.orders.${key}: expected array`);
-    }
-
-    const partitionID = key.trim();
-    if (!partitionID) {
-      continue;
-    }
-
-    parsed[partitionID] = rawIDs
-      .map((item, index) => expectString(item, `session partition payload.orders.${key}[${index}]`).trim())
-      .filter((id) => id.length > 0);
   }
 
   return parsed;

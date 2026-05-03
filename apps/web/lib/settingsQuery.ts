@@ -1,4 +1,11 @@
-export type SettingsQueryTab = 'tasks' | 'skills' | 'tools' | 'prompts_library' | 'prompts_preview';
+export type SettingsQueryTab =
+  | 'tasks'
+  | 'orchestration'
+  | 'skills'
+  | 'tools'
+  | 'presets'
+  | 'prompts_library'
+  | 'prompts_preview';
 
 const SETTINGS_QUERY_KEY = 'settings';
 const PROMPTS_LEGACY_QUERY_TAB = 'prompts';
@@ -13,8 +20,10 @@ export function parseSettingsQuery(rawSearch: string): SettingsQueryTab | null {
   }
   if (
     tab === 'tasks'
+    || tab === 'orchestration'
     || tab === 'skills'
     || tab === 'tools'
+    || tab === 'presets'
     || tab === 'prompts_library'
     || tab === 'prompts_preview'
   ) {

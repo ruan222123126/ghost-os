@@ -16,6 +16,12 @@ jest.mock('@/hooks/useConfigPrompts', () => ({
   }),
 }));
 
+jest.mock('@/hooks/useConfigPresets', () => ({
+  useConfigPresets: () => ({
+    presetError: '',
+  }),
+}));
+
 jest.mock('@/hooks/useConfigSkills', () => ({
   useConfigSkills: () => ({
     skillError: '',

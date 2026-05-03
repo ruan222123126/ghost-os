@@ -11,6 +11,27 @@ import { createEmptyWorkflowDraft } from '@/lib/workflow-editor/draft';
 const DUPLICATE_OFFSET = 36;
 
 describe('components/workflow/workflowCanvasState', () => {
+  it('does not add extra start or end nodes', () => {
+    const draft = createEmptyWorkflowDraft();
+
+    expect(addNode(draft, 'start')).toBe(draft);
+    expect(addNode(draft, 'end')).toBe(draft);
+  });
+
+  it('does not remove or duplicate protected start/end nodes', () => {
+    const draft = createEmptyWorkflowDraft();
+    const startNode = draft.nodes.find((node) => node.type === 'start');
+    const endNode = draft.nodes.find((node) => node.type === 'end');
+    if (!startNode || !endNode) {
+      throw new Error('protected boundary nodes missing');
+    }
+
+    expect(removeNode(draft, startNode.id)).toBe(draft);
+    expect(removeNode(draft, endNode.id)).toBe(draft);
+    expect(duplicateNode(draft, startNode.id)).toBe(draft);
+    expect(duplicateNode(draft, endNode.id)).toBe(draft);
+  });
+
   it('adds loop start/end node pair with shared loop_id in one click', () => {
     const draft = createEmptyWorkflowDraft();
     const next = addNode(draft, 'loop', { position: { x: 320, y: 180 } });

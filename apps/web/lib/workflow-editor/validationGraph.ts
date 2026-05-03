@@ -76,8 +76,8 @@ function validateLoopNodeDegree(
   errors: string[],
 ): void {
   if (role === LOOP_ROLE_END) {
-    if (inDegree < 1 || outDegree !== 2) {
-      errors.push(`workflow node "${nodeID}" must have in>=1 and out=2`);
+    if (inDegree < 1 || outDegree !== 1) {
+      errors.push(`workflow node "${nodeID}" must have in>=1 and out=1`);
     }
     return;
   }
@@ -160,10 +160,7 @@ function validateLoopPairCycle(
   if (startOutgoing.length !== 1 || !pathExists(outgoing, startOutgoing[0], end.id)) {
     errors.push(`loop "${loopID}" start branch must reach loop end node`);
   }
-  if (!endOutgoing.includes(start.id)) {
-    errors.push(`loop "${loopID}" end node must connect back to loop start node`);
-  }
-  if (endOutgoing.filter((nextID) => nextID !== start.id).length !== 1) {
+  if (endOutgoing.length !== 1 || endOutgoing[0] === start.id) {
     errors.push(`loop "${loopID}" end node must contain exactly one exit edge`);
   }
 }

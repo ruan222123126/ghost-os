@@ -1,19 +1,23 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  SESSION_PARTITION_STORAGE_KEY,
+  getSessionSidebarPartitions,
+  putSessionSidebarPartitions,
+} from '@/lib/api/sessions/api';
+import { createClientTraceId } from '@/lib/api/trace';
+import { ignorePromise, toErrorMessage } from '@/lib/errors';
+import {
   UNCLASSIFIED_PARTITION_ID,
   buildSessionPartitionViews,
   createInitialSessionPartitionStore,
   createSessionPartition,
   moveSessionToPartition,
-  parseSessionPartitionStore,
   sanitizeSessionPartitionStore,
   storesAreEqual,
-  stringifySessionPartitionStore,
   validatePartitionName,
   type PartitionNameValidationError,
+  type SessionPartitionStoreV1,
   type SessionPartitionView,
 } from '@/lib/sessionSidebarPartitions';
 import {
@@ -22,11 +26,21 @@ import {
   validatePartitionRenameName,
 } from '@/lib/sessionSidebarPartitionMutations';
 import type { SessionMetadata } from '@/lib/types';
+import {
+  buildPartitionID,
+  coercePartitionStore,
+  hasLegacyPartitionData,
+  isEmptyPartitionStore,
+  readLegacyPartitionStore,
+  removeLegacyPartitionStore,
+} from './sessionSidebarPartitionPersistence';
 
 interface UseSessionSidebarPartitionsOptions {
   sessions: SessionMetadata[];
+  sessionsLoaded: boolean;
   searchQuery: string;
   unclassifiedName: string;
+  requestFailedText: string;
 }
 
 interface AddPartitionResult {
@@ -51,6 +65,7 @@ interface DeletePartitionResult {
 
 interface UseSessionSidebarPartitionsResult {
   partitionViews: SessionPartitionView[];
+  partitionError: string;
   addPartition: (name: string) => AddPartitionResult;
   renamePartition: (partitionID: string, name: string) => RenamePartitionResult;
   deletePartition: (partitionID: string) => DeletePartitionResult;
@@ -60,37 +75,130 @@ interface UseSessionSidebarPartitionsResult {
 export function useSessionSidebarPartitions(
   options: UseSessionSidebarPartitionsOptions,
 ): UseSessionSidebarPartitionsResult {
-  const { sessions, searchQuery, unclassifiedName } = options;
+  const { sessions, sessionsLoaded, searchQuery, unclassifiedName, requestFailedText } = options;
   const [store, setStore] = useState(createInitialSessionPartitionStore);
-  const [hasHydratedStore, setHasHydratedStore] = useState(false);
+  const [partitionError, setPartitionError] = useState('');
+  const storeRef = useRef(store);
+  const confirmedRef = useRef(store);
+  const pendingRef = useRef<SessionPartitionStoreV1 | null>(null);
+  const persistingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  const replaceStore = useCallback((next: SessionPartitionStoreV1) => {
+    storeRef.current = next;
+    setStore(next);
+  }, []);
+
+  const flushPersistQueue = useCallback(async () => {
+    if (persistingRef.current) {
+      return;
+    }
+
+    const next = pendingRef.current;
+    if (!next) {
+      return;
+    }
+    pendingRef.current = null;
+    persistingRef.current = true;
+
+    try {
+      const saved = coercePartitionStore(await putSessionSidebarPartitions(
+        next,
+        createClientTraceId('session-partitions'),
+      ));
+      if (!mountedRef.current) {
+        return;
+      }
+
+      confirmedRef.current = saved;
+      if (pendingRef.current === null && storesAreEqual(storeRef.current, next)) {
+        replaceStore(saved);
+      }
+      setPartitionError('');
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      pendingRef.current = null;
+      replaceStore(confirmedRef.current);
+      setPartitionError(toErrorMessage(error, requestFailedText));
+    } finally {
+      persistingRef.current = false;
+      if (mountedRef.current && pendingRef.current) {
+        ignorePromise(flushPersistQueue());
+      }
+    }
+  }, [replaceStore, requestFailedText]);
+
+  const enqueuePersist = useCallback((next: SessionPartitionStoreV1) => {
+    pendingRef.current = next;
+    ignorePromise(flushPersistQueue());
+  }, [flushPersistQueue]);
+
+  const applyOptimisticStore = useCallback((next: SessionPartitionStoreV1) => {
+    setPartitionError('');
+    replaceStore(next);
+    enqueuePersist(next);
+  }, [enqueuePersist, replaceStore]);
+
+  const hydrateStore = useCallback(async () => {
+    try {
+      const remote = coercePartitionStore(await getSessionSidebarPartitions());
+      if (!mountedRef.current) {
+        return;
+      }
+
+      confirmedRef.current = remote;
+      replaceStore(remote);
+      setPartitionError('');
+
+      const legacy = readLegacyPartitionStore();
+      if (!isEmptyPartitionStore(remote) || !hasLegacyPartitionData(legacy)) {
+        return;
+      }
+
+      const migrated = coercePartitionStore(await putSessionSidebarPartitions(
+        legacy,
+        createClientTraceId('session-partitions-migrate'),
+      ));
+      if (!mountedRef.current) {
+        return;
+      }
+
+      confirmedRef.current = migrated;
+      replaceStore(migrated);
+      removeLegacyPartitionStore();
+      setPartitionError('');
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      replaceStore(confirmedRef.current);
+      setPartitionError(toErrorMessage(error, requestFailedText));
+    }
+  }, [replaceStore, requestFailedText]);
 
   useEffect(() => {
-    const loaded = readStoredPartitionStore();
-    setStore((previous) => {
-      if (storesAreEqual(previous, loaded)) {
-        return previous;
-      }
-      return loaded;
-    });
-    setHasHydratedStore(true);
+    ignorePromise(hydrateStore());
+  }, [hydrateStore]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
-    setStore((previous) => {
-      const sanitized = sanitizeSessionPartitionStore(previous, sessions);
-      if (storesAreEqual(previous, sanitized)) {
-        return previous;
-      }
-      return sanitized;
-    });
-  }, [sessions]);
-
-  useEffect(() => {
-    if (!canPersistPartitionStore(hasHydratedStore)) {
+    if (!sessionsLoaded) {
       return;
     }
-    writeStoredPartitionStore(store);
-  }, [hasHydratedStore, store]);
+    const sanitized = sanitizeSessionPartitionStore(storeRef.current, sessions);
+    if (storesAreEqual(storeRef.current, sanitized)) {
+      return;
+    }
+    applyOptimisticStore(sanitized);
+  }, [applyOptimisticStore, sessions, sessionsLoaded]);
 
   const partitionViews = useMemo(() => {
     return buildSessionPartitionViews({
@@ -102,16 +210,16 @@ export function useSessionSidebarPartitions(
   }, [searchQuery, sessions, store, unclassifiedName]);
 
   const addPartition = useCallback((name: string): AddPartitionResult => {
-    const error = validatePartitionName(name, store, unclassifiedName);
+    const current = storeRef.current;
+    const error = validatePartitionName(name, current, unclassifiedName);
     if (error) {
       return { ok: false, error };
     }
 
     const normalizedName = name.trim();
-    const next = createSessionPartition(store, normalizedName, buildPartitionID());
-    setStore(next);
+    applyOptimisticStore(createSessionPartition(current, normalizedName, buildPartitionID()));
     return { ok: true, createdName: normalizedName };
-  }, [store, unclassifiedName]);
+  }, [applyOptimisticStore, unclassifiedName]);
 
   const renamePartition = useCallback((partitionID: string, name: string): RenamePartitionResult => {
     const normalizedID = partitionID.trim();
@@ -119,14 +227,15 @@ export function useSessionSidebarPartitions(
       return { ok: false, error: 'readonly' };
     }
 
-    const partition = store.partitions.find((item) => item.id === normalizedID);
+    const current = storeRef.current;
+    const partition = current.partitions.find((item) => item.id === normalizedID);
     if (!partition) {
       return { ok: false, error: 'missing' };
     }
 
     const error = validatePartitionRenameName({
       value: name,
-      store,
+      store: current,
       partitionID: normalizedID,
       unclassifiedName,
     });
@@ -139,10 +248,9 @@ export function useSessionSidebarPartitions(
       return { ok: true, renamedName: partition.name };
     }
 
-    const next = renameSessionPartition(store, normalizedID, normalizedName);
-    setStore(next);
+    applyOptimisticStore(renameSessionPartition(current, normalizedID, normalizedName));
     return { ok: true, renamedName: normalizedName };
-  }, [store, unclassifiedName]);
+  }, [applyOptimisticStore, unclassifiedName]);
 
   const deletePartition = useCallback((partitionID: string): DeletePartitionResult => {
     const normalizedID = partitionID.trim();
@@ -150,92 +258,40 @@ export function useSessionSidebarPartitions(
       return { ok: false, error: 'readonly' };
     }
 
-    const partition = store.partitions.find((item) => item.id === normalizedID);
+    const current = storeRef.current;
+    const partition = current.partitions.find((item) => item.id === normalizedID);
     if (!partition) {
       return { ok: false, error: 'missing' };
     }
 
-    const next = deleteSessionPartition({
-      store,
+    applyOptimisticStore(deleteSessionPartition({
+      store: current,
       sessions,
       partitionID: normalizedID,
-    });
-    setStore(next);
+    }));
     return { ok: true, deletedName: partition.name };
-  }, [sessions, store]);
+  }, [applyOptimisticStore, sessions]);
 
   const moveSession = useCallback((sessionID: string, partitionID: string, index: number) => {
-    setStore((previous) => {
-      return moveSessionToPartition({
-        store: previous,
+    try {
+      applyOptimisticStore(moveSessionToPartition({
+        store: storeRef.current,
         sessions,
         sessionID,
         targetPartitionID: partitionID,
         targetIndex: index,
-      });
-    });
-  }, [sessions]);
+      }));
+    } catch (error) {
+      setPartitionError(toErrorMessage(error, requestFailedText));
+    }
+  }, [applyOptimisticStore, requestFailedText, sessions]);
 
   return {
     partitionViews,
+    partitionError,
     addPartition,
     renamePartition,
     deletePartition,
     moveSession,
   };
-}
-
-function readStoredPartitionStore(): ReturnType<typeof createInitialSessionPartitionStore> {
-  if (typeof window === 'undefined') {
-    return createInitialSessionPartitionStore();
-  }
-
-  const raw = readStoredPartitionRaw();
-  if (!raw) {
-    return createInitialSessionPartitionStore();
-  }
-
-  return parseStoredPartitionStore(raw);
-}
-
-function readStoredPartitionRaw(): string | null {
-  try {
-    return window.localStorage.getItem(SESSION_PARTITION_STORAGE_KEY);
-  } catch (error) {
-    console.error('[SessionSidebar] failed to read partition store', error);
-    return null;
-  }
-}
-
-function writeStoredPartitionStore(
-  store: ReturnType<typeof createInitialSessionPartitionStore>,
-) {
-  try {
-    window.localStorage.setItem(
-      SESSION_PARTITION_STORAGE_KEY,
-      stringifySessionPartitionStore(store),
-    );
-  } catch (error) {
-    console.error('[SessionSidebar] failed to write partition store', error);
-  }
-}
-
-function parseStoredPartitionStore(raw: string) {
-  try {
-    return parseSessionPartitionStore(raw);
-  } catch (error) {
-    console.error('[SessionSidebar] failed to parse partition store', error);
-    return createInitialSessionPartitionStore();
-  }
-}
-
-function buildPartitionID(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return `partition:${crypto.randomUUID()}`;
-  }
-  return `partition:${Date.now()}:${Math.random().toString(16).slice(2)}`;
-}
-
-function canPersistPartitionStore(hasHydratedStore: boolean): boolean {
-  return hasHydratedStore && typeof window !== 'undefined';
 }

@@ -8,6 +8,7 @@ export interface ProviderEditorState {
   baseURL: string;
   apiKey: string;
   models: string;
+  contextWindowTokens: string;
 }
 
 export const providerTypeOptions: Array<{
@@ -27,6 +28,7 @@ export const emptyProviderEditorState: ProviderEditorState = {
   baseURL: '',
   apiKey: '',
   models: '',
+  contextWindowTokens: '',
 };
 
 export function defaultBaseURLForProviderType(
@@ -50,6 +52,7 @@ export function editorStateFromProvider(provider: ProviderConfig): ProviderEdito
     baseURL: provider.base_url,
     apiKey: '',
     models: provider.models?.join(', ') ?? '',
+    contextWindowTokens: provider.context_window_tokens ? String(provider.context_window_tokens) : '',
   };
 }
 
@@ -80,6 +83,9 @@ export function providerInputFromEditor(editor: ProviderEditorState): ProviderCo
   if (editor.apiKey.trim()) {
     input.api_key = editor.apiKey.trim();
   }
+  if (editor.contextWindowTokens.trim()) {
+    input.context_window_tokens = parsePositiveInteger(editor.contextWindowTokens, 'context_window_tokens');
+  }
 
   return input;
 }
@@ -89,4 +95,12 @@ function parseProviderModels(raw: string): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parsePositiveInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  return Number(trimmed);
 }

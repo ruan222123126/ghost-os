@@ -72,13 +72,21 @@ describe('lib/api/agent/api', () => {
   it('stopAgent posts AGENT_STOP to /api/bus', async () => {
     mockFetchJSON({
       status: 'success',
-      payload: { status: 'stopped', message: 'agent run cancelled successfully' },
+      payload: {
+        status: 'stopped',
+        message: 'agent run cancelled successfully',
+        session_id: 'session-1',
+      },
       error: '',
     });
 
     const response = await stopAgent(' session-1 ', ' trace-run ');
 
-    expect(response).toEqual({ status: 'stopped', message: 'agent run cancelled successfully' });
+    expect(response).toEqual({
+      status: 'stopped',
+      message: 'agent run cancelled successfully',
+      session_id: 'session-1',
+    });
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(fetchMock).toHaveBeenCalledWith('/api/bus', expect.objectContaining({ method: 'POST' }));
     expect(JSON.parse(String(init.body))).toEqual({

@@ -2,6 +2,7 @@ import type { ChatRuntimeAction } from './actions';
 import { TOOL_PENDING_STATUS } from './constants';
 import type { ChatRuntimeState } from './runtimeState';
 import type { ToolTagStreamEvent, ToolTagStreamUnit } from '@/lib/toolTagText';
+import { normalizeToolName } from '@/components/message/toolDetailCommon';
 
 export function projectToolTagUnits(
   runtime: ChatRuntimeState,
@@ -72,11 +73,13 @@ function buildPendingToolAction(
   toolName: string | undefined,
   traceId: string,
 ): ChatRuntimeAction {
+  const toolInput = normalizeToolName(toolName) === 'bash_exec' ? content : '';
   return {
     type: 'upsert_streaming_tool',
     tool: {
       id,
       content,
+      ...(toolInput ? { toolInput } : {}),
       toolName,
       toolStatus: TOOL_PENDING_STATUS,
       traceId,

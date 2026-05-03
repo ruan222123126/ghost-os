@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { WorkflowScreenControlComposerModal } from '@/components/workflow/WorkflowScreenControlComposerModal';
+import { WorkflowVariableAutocompleteField } from '@/components/workflow/WorkflowVariableAutocompleteField';
 import { useWebLocale } from '@/lib/i18n/provider';
 import {
   appendScreenControlComposerStep,
@@ -9,6 +10,8 @@ import {
   removeScreenControlComposerStep,
   syncScreenControlComposerStepsToToolArguments,
   updateScreenControlComposerStep,
+  type WorkflowCanvasDraft,
+  type WorkflowEditorKind,
   type ScreenControlAtomicAction,
   type ScreenControlComposerStep,
   type WorkflowCanvasNodeDraft,
@@ -24,6 +27,8 @@ import {
 } from '@/components/workflow/workflowToolSchemaEditorState';
 
 interface WorkflowCanvasToolNodeEditorProps {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
   selectedNode: WorkflowCanvasNodeDraft;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
@@ -42,7 +47,7 @@ interface ScreenComposerState {
 
 export function WorkflowCanvasToolNodeEditor(props: WorkflowCanvasToolNodeEditorProps) {
   const { copy } = useWebLocale();
-  const { selectedNode, onUpdateNode } = props;
+  const { editorKind, draft, selectedNode, onUpdateNode } = props;
   const selectedToolName = selectedNode.tool?.tool_name ?? '';
   const { options: toolOptions, loading: toolOptionsLoading, error: toolOptionsError } = useWorkflowToolOptions(selectedToolName);
   const selectedTool = useMemo(
@@ -65,6 +70,9 @@ export function WorkflowCanvasToolNodeEditor(props: WorkflowCanvasToolNodeEditor
         onSelect={(toolName) => onUpdateNode(withToolName(selectedNode, toolName))}
       />
       <ToolSchemaRows
+        editorKind={editorKind}
+        draft={draft}
+        selectedNode={selectedNode}
         selectedToolName={selectedToolName}
         schemaFields={schemaFields}
         rows={rows}
@@ -153,13 +161,16 @@ function ToolNameSelect(props: {
 }
 
 function ToolSchemaRows(props: {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
+  selectedNode: WorkflowCanvasNodeDraft;
   selectedToolName: string;
   schemaFields: ToolSchemaField[];
   rows: WorkflowToolArgumentRow[];
   onRowValueChange: (index: number, value: string) => void;
 }) {
   const { copy } = useWebLocale();
-  const { selectedToolName, schemaFields, rows, onRowValueChange } = props;
+  const { editorKind, draft, selectedNode, selectedToolName, schemaFields, rows, onRowValueChange } = props;
 
   return (
     <>
@@ -169,6 +180,9 @@ function ToolSchemaRows(props: {
           {schemaFields.map((field, index) => (
             <ToolSchemaRow
               key={field.key}
+              editorKind={editorKind}
+              draft={draft}
+              selectedNode={selectedNode}
               field={field}
               row={rows[index]}
               onValueChange={(value) => onRowValueChange(index, value)}
@@ -183,24 +197,39 @@ function ToolSchemaRows(props: {
 }
 
 function ToolSchemaRow(props: {
+  editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
+  selectedNode: WorkflowCanvasNodeDraft;
   field: ToolSchemaField;
   row: WorkflowToolArgumentRow | undefined;
   onValueChange: (value: string) => void;
 }) {
   const { copy } = useWebLocale();
-  const { field, row, onValueChange } = props;
+  const { editorKind, draft, selectedNode, field, row, onValueChange } = props;
   const value = row?.value ?? '';
 
   return (
     <div className="workflow-arch-tool-row workflow-arch-tool-row--schema">
       <input type="text" readOnly value={field.key} className="workflow-arch-tool-key" />
-      <input
-        type="text"
-        value={value}
-        disabled={field.valueType === 'null'}
-        placeholder={toolFieldPlaceholder(field, copy)}
-        onChange={(event) => onValueChange(event.target.value)}
-      />
+      {editorKind === 'workflow' ? (
+        <WorkflowVariableAutocompleteField
+          draft={draft}
+          selectedNode={selectedNode}
+          mode="input"
+          value={value}
+          disabled={field.valueType === 'null'}
+          placeholder={toolFieldPlaceholder(field, copy)}
+          onChange={onValueChange}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          disabled={field.valueType === 'null'}
+          placeholder={toolFieldPlaceholder(field, copy)}
+          onChange={(event) => onValueChange(event.target.value)}
+        />
+      )}
       <p className="workflow-arch-field-note">
         {field.required ? `${copy.workflow.inputRequired} · ` : ''}
         {field.schemaType}

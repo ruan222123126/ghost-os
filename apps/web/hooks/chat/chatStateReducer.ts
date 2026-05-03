@@ -3,9 +3,11 @@ import { buildErrorMessage } from '@/lib/chatMessages';
 import {
   clearPendingQuestionState,
   clearStreamingAssistantState,
+  clearStreamingThinkingState,
   clearStreamingToolState,
   type PendingQuestionState,
   type StreamingAssistantState,
+  type StreamingThinkingState,
   type StreamingToolTableState,
 } from '@/lib/chatStream';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
@@ -16,7 +18,7 @@ import type { ActiveAgentRun } from './types';
 export interface ChatStateStore {
   committedMessages: ChatMessage[];
   streamingAssistantState: StreamingAssistantState;
-  streamingThinkingText: string;
+  streamingThinkingState: StreamingThinkingState;
   streamingItemOrder: string[];
   streamingToolState: StreamingToolTableState;
   pendingQuestionState: PendingQuestionState;
@@ -84,7 +86,7 @@ export function createInitialChatState(): ChatStateStore {
   return {
     committedMessages: [],
     streamingAssistantState: clearStreamingAssistantState(),
-    streamingThinkingText: '',
+    streamingThinkingState: clearStreamingThinkingState(),
     streamingItemOrder: [],
     streamingToolState: clearStreamingToolState(),
     pendingQuestionState: clearPendingQuestionState(),
@@ -134,7 +136,7 @@ function replaceWithErrorMessageState(state: ChatStateStore, messageText: string
     ...state,
     committedMessages: [buildErrorMessage(messageText)],
     streamingAssistantState: clearStreamingAssistantState(),
-    streamingThinkingText: '',
+    streamingThinkingState: clearStreamingThinkingState(),
     streamingItemOrder: [],
     streamingToolState: clearStreamingToolState(),
     pendingQuestionState: clearPendingQuestionState(),
@@ -155,7 +157,7 @@ function clearMessagesState(state: ChatStateStore): ChatStateStore {
     chatError: '',
     committedMessages: [],
     streamingAssistantState: clearStreamingAssistantState(),
-    streamingThinkingText: '',
+    streamingThinkingState: clearStreamingThinkingState(),
     streamingItemOrder: [],
     streamingToolState: clearStreamingToolState(),
     pendingQuestionState: clearPendingQuestionState(),

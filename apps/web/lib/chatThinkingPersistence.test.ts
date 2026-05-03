@@ -37,10 +37,32 @@ describe('lib/chatThinkingPersistence', () => {
     ]);
 
     expect(collected).toEqual([{
+      anchorContent: 'answer',
+      anchorId: undefined,
+      anchorKind: 'assistant',
+      anchorRef: 'stream-assistant:1',
+      anchorToolCallId: undefined,
       id: 'stream-thinking:1',
       content: 'analyzing...',
-      assistantContent: 'answer',
-      assistantId: undefined,
+    }]);
+  });
+
+  it('collects thinking with tool anchors when a tool card follows', () => {
+    const collected = collectPersistedThinkingMessages([
+      buildUserMessage('session:user:1', 'question'),
+      buildThinkingMessage('stream-thinking:1', 'analyzing...'),
+      buildToolMessage('stream-tool:1', 'ls -la', 'call-1'),
+      buildAssistantMessage('stream-assistant:1', 'answer'),
+    ]);
+
+    expect(collected).toEqual([{
+      anchorContent: 'ls -la',
+      anchorId: undefined,
+      anchorKind: 'tool',
+      anchorRef: 'stream-tool:1',
+      anchorToolCallId: 'call-1',
+      id: 'stream-thinking:1',
+      content: 'analyzing...',
     }]);
   });
 
@@ -60,6 +82,29 @@ describe('lib/chatThinkingPersistence', () => {
     expect(merged.map((message) => message.id)).toEqual([
       'session:user:1',
       'stream-thinking:1',
+      'session:assistant:1',
+    ]);
+  });
+
+  it('restores thinking before a matched tool call instead of moving it above assistant', () => {
+    const sessionId = 'session-2';
+    persistSessionThinkingSnapshot(sessionId, [
+      buildUserMessage('session:user:1', 'question'),
+      buildThinkingMessage('stream-thinking:1', 'analyzing...'),
+      buildToolMessage('stream-tool:1', 'ls -la', 'call-1'),
+      buildAssistantMessage('stream-assistant:1', 'answer'),
+    ]);
+
+    const merged = mergeSessionMessagesWithPersistedThinking(sessionId, [
+      buildUserMessage('session:user:1', 'question'),
+      buildToolMessage('session:tool:1', 'ls -la', 'call-1'),
+      buildAssistantMessage('session:assistant:1', 'answer'),
+    ]);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:1',
+      'stream-thinking:1',
+      'session:tool:1',
       'session:assistant:1',
     ]);
   });
@@ -93,6 +138,15 @@ function buildAssistantMessage(id: string, content: string): ChatMessage {
     id,
     kind: 'assistant',
     content,
+  };
+}
+
+function buildToolMessage(id: string, content: string, toolCallId?: string): ChatMessage {
+  return {
+    id,
+    kind: 'tool',
+    content,
+    toolCallId,
   };
 }
 

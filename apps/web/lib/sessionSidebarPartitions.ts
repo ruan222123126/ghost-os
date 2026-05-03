@@ -1,5 +1,6 @@
 import type { SessionMetadata } from '@/lib/types';
 import {
+  LEGACY_SESSION_PARTITION_STORAGE_KEY,
   UNCLASSIFIED_PARTITION_ID,
   type BuildSessionPartitionViewsInput,
   type PartitionNameValidationError,
@@ -10,7 +11,7 @@ import {
 import { sortSessionIDsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
 
 export {
-  SESSION_PARTITION_STORAGE_KEY,
+  LEGACY_SESSION_PARTITION_STORAGE_KEY,
   SESSION_PARTITION_VERSION,
   UNCLASSIFIED_PARTITION_ID,
   type BuildSessionPartitionViewsInput,
@@ -83,7 +84,6 @@ export function sanitizeSessionPartitionStore(
     version: store.version,
     partitions,
     assignments: pruneAssignments(store.assignments, knownSessionIDs, partitionIDs),
-    orders: pruneOrders(store.orders, knownSessionIDs, partitionIDs),
   };
 }
 
@@ -118,7 +118,7 @@ export function moveSessionToPartition(input: {
   targetPartitionID: string;
   targetIndex: number;
 }): SessionPartitionStoreV1 {
-  const { store, sessions, sessionID, targetPartitionID, targetIndex } = input;
+  const { store, sessions, sessionID, targetPartitionID } = input;
   const sanitized = sanitizeSessionPartitionStore(store, sessions);
   const knownSessionIDs = new Set(sessions.map((session) => session.id));
   if (!knownSessionIDs.has(sessionID)) {
@@ -130,21 +130,16 @@ export function moveSessionToPartition(input: {
     throw new Error(`Unknown partition id: ${targetPartitionID}`);
   }
 
-  const grouped = buildOrderedSessionIDsByPartition(sessions, sanitized, partitionIDs);
-  const removed = removeSessionFromGrouped(grouped, sessionID);
-  if (!removed) {
-    throw new Error(`Session missing from partition list: ${sessionID}`);
+  const assignments = { ...sanitized.assignments };
+  if (targetPartitionID === UNCLASSIFIED_PARTITION_ID) {
+    delete assignments[sessionID];
+  } else {
+    assignments[sessionID] = targetPartitionID;
   }
-
-  const targetIDs = grouped[targetPartitionID] ?? [];
-  const insertIndex = clamp(targetIndex, 0, targetIDs.length);
-  targetIDs.splice(insertIndex, 0, sessionID);
-  grouped[targetPartitionID] = targetIDs;
 
   return {
     ...sanitized,
-    assignments: buildAssignmentsFromGrouped(grouped),
-    orders: buildOrdersFromGrouped(grouped),
+    assignments,
   };
 }
 
@@ -174,24 +169,6 @@ function pruneAssignments(
   return next;
 }
 
-function pruneOrders(
-  orders: Record<string, string[]>,
-  knownSessionIDs: Set<string>,
-  partitionIDs: Set<string>,
-): Record<string, string[]> {
-  const next: Record<string, string[]> = {};
-
-  for (const partitionID of partitionIDs) {
-    const source = orders[partitionID] ?? [];
-    const filtered = dedupeStrings(source.filter((sessionID) => knownSessionIDs.has(sessionID)));
-    if (filtered.length > 0) {
-      next[partitionID] = filtered;
-    }
-  }
-
-  return next;
-}
-
 function buildOrderedSessionIDsByPartition(
   sessions: SessionMetadata[],
   store: SessionPartitionStoreV1,
@@ -213,41 +190,6 @@ function buildOrderedSessionIDsByPartition(
   return grouped;
 }
 
-function removeSessionFromGrouped(grouped: Record<string, string[]>, sessionID: string): boolean {
-  let removed = false;
-  for (const partitionID of Object.keys(grouped)) {
-    const next = grouped[partitionID].filter((id) => id !== sessionID);
-    if (next.length !== grouped[partitionID].length) {
-      removed = true;
-      grouped[partitionID] = next;
-    }
-  }
-  return removed;
-}
-
-function buildAssignmentsFromGrouped(grouped: Record<string, string[]>): Record<string, string> {
-  const assignments: Record<string, string> = {};
-  for (const [partitionID, ids] of Object.entries(grouped)) {
-    if (partitionID === UNCLASSIFIED_PARTITION_ID) {
-      continue;
-    }
-    for (const sessionID of ids) {
-      assignments[sessionID] = partitionID;
-    }
-  }
-  return assignments;
-}
-
-function buildOrdersFromGrouped(grouped: Record<string, string[]>): Record<string, string[]> {
-  const orders: Record<string, string[]> = {};
-  for (const [partitionID, ids] of Object.entries(grouped)) {
-    if (ids.length > 0) {
-      orders[partitionID] = [...ids];
-    }
-  }
-  return orders;
-}
-
 function dedupePartitions(partitions: SessionPartition[]): SessionPartition[] {
   const seen = new Set<string>();
   const deduped: SessionPartition[] = [];
@@ -265,28 +207,6 @@ function dedupePartitions(partitions: SessionPartition[]): SessionPartition[] {
   return deduped;
 }
 
-function dedupeStrings(values: string[]): string[] {
-  const seen = new Set<string>();
-  const deduped: string[] = [];
-
-  for (const value of values) {
-    if (seen.has(value)) {
-      continue;
-    }
-    seen.add(value);
-    deduped.push(value);
-  }
-
-  return deduped;
-}
-
 function normalizeName(value: string): string {
   return value.trim();
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (max < min) {
-    return min;
-  }
-  return Math.min(Math.max(value, min), max);
 }

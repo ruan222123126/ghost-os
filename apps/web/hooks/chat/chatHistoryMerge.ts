@@ -1,23 +1,30 @@
+import { findNextThinkingAnchor, type ThinkingAnchor, type ThinkingAnchorKind } from '@/lib/chatThinkingAnchors';
 import type { ChatMessage } from '@/lib/types';
 
 interface ThinkingInsertion {
-  assistantContent?: string;
-  assistantId?: string;
+  anchorContent?: string;
+  anchorId?: string;
+  anchorKind?: ThinkingAnchorKind;
+  anchorRef?: string;
+  anchorToolCallId?: string;
   thinking: ChatMessage;
 }
 
 export interface PersistedThinkingMessage {
   id: string;
   content: string;
-  assistantId?: string;
-  assistantContent?: string;
+  anchorId?: string;
+  anchorKind?: ThinkingAnchorKind;
+  anchorRef?: string;
+  anchorContent?: string;
+  anchorToolCallId?: string;
 }
 
 export function mergeLatestCommittedMessages(previous: ChatMessage[], latest: ChatMessage[]): ChatMessage[] {
   const latestIDs = new Set(latest.map((message) => message.id));
   const preserved = previous.filter((message) => shouldPreserveMessage(message, latestIDs));
   const insertions = collectThinkingInsertions(previous, latestIDs);
-  const inserted = insertThinkingBeforeAssistant(latest, insertions);
+  const inserted = insertThinkingBeforeAnchor(latest, insertions);
   const retainedPreserved = preserved.filter((message) => !inserted.thinkingIDs.has(message.id));
   return [...retainedPreserved, ...inserted.messages];
 }
@@ -29,20 +36,23 @@ export function mergePersistedThinkingMessages(
   if (persisted.length === 0) {
     return latest;
   }
-
   const latestIDs = new Set(latest.map((message) => message.id));
   const insertions = persisted
     .filter((message) => message.content.trim() && !latestIDs.has(message.id))
     .map((message): ThinkingInsertion => ({
-      assistantContent: normalizeOptionalText(message.assistantContent),
-      assistantId: normalizeOptionalText(message.assistantId),
+      anchorContent: normalizeOptionalText(message.anchorContent),
+      anchorId: normalizeOptionalText(message.anchorId),
+      anchorKind: message.anchorKind,
+      anchorRef: normalizeOptionalText(message.anchorRef),
+      anchorToolCallId: normalizeOptionalText(message.anchorToolCallId),
       thinking: {
         id: message.id,
         kind: 'thinking',
         content: message.content,
       },
-    }));
-  return insertThinkingBeforeAssistant(latest, insertions).messages;
+    }))
+    .filter(hasThinkingAnchor);
+  return insertThinkingBeforeAnchor(latest, insertions).messages;
 }
 
 function shouldPreserveMessage(message: ChatMessage, latestIDs: Set<string>): boolean {
@@ -58,7 +68,6 @@ function shouldPreserveMessage(message: ChatMessage, latestIDs: Set<string>): bo
 function isLocalOrStreamingMessage(id: string): boolean {
   return id.startsWith('stream-') || id.startsWith('local:');
 }
-
 function normalizeOptionalText(value?: string): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
@@ -66,140 +75,213 @@ function normalizeOptionalText(value?: string): string | undefined {
 
 function collectThinkingInsertions(previous: ChatMessage[], latestIDs: Set<string>): ThinkingInsertion[] {
   const insertions: ThinkingInsertion[] = [];
-
   for (let index = 0; index < previous.length; index += 1) {
     const message = previous[index];
     if (message.kind !== 'thinking' || latestIDs.has(message.id)) {
       continue;
     }
-    const anchorAssistant = findAnchorAssistant(previous, index + 1);
-    if (!anchorAssistant) {
+    const anchor = findNextThinkingAnchor(previous, index + 1);
+    if (!anchor) {
       continue;
     }
-    if (latestIDs.has(anchorAssistant.id)) {
-      insertions.push({ assistantId: anchorAssistant.id, thinking: message });
-      continue;
+    const insertion = buildThinkingInsertion(message, anchor);
+    if (insertion) {
+      insertions.push(insertion);
     }
-    if (!isLocalOrStreamingMessage(anchorAssistant.id)) {
-      continue;
-    }
-    const assistantContent = anchorAssistant.content.trim();
-    if (!assistantContent) {
-      continue;
-    }
-    insertions.push({ assistantContent, thinking: message });
   }
-
   return insertions;
 }
 
-function findAnchorAssistant(messages: ChatMessage[], startIndex: number): ChatMessage | null {
-  for (let index = startIndex; index < messages.length; index += 1) {
-    const message = messages[index];
-    if (message.kind === 'assistant') {
-      return message;
-    }
-    if (message.kind === 'user' || message.kind === 'pending_question' || message.kind === 'question') {
-      return null;
-    }
-  }
-  return null;
+function buildThinkingInsertion(thinking: ChatMessage, anchor: ThinkingAnchor): ThinkingInsertion | null {
+  const insertion: ThinkingInsertion = {
+    anchorContent: normalizeOptionalText(anchor.content),
+    anchorId: normalizeOptionalText(anchor.id),
+    anchorKind: anchor.kind,
+    anchorRef: normalizeOptionalText(anchor.ref),
+    anchorToolCallId: normalizeOptionalText(anchor.toolCallId),
+    thinking,
+  };
+  return hasThinkingAnchor(insertion) ? insertion : null;
 }
 
-function insertThinkingBeforeAssistant(
+function hasThinkingAnchor(insertion: ThinkingInsertion): boolean {
+  return Boolean(
+    insertion.anchorId
+      || insertion.anchorToolCallId
+      || insertion.anchorContent,
+  );
+}
+function insertThinkingBeforeAnchor(
   latest: ChatMessage[],
   insertions: ThinkingInsertion[],
 ): { messages: ChatMessage[]; thinkingIDs: Set<string> } {
   if (insertions.length === 0) {
     return { messages: latest, thinkingIDs: new Set() };
   }
-
-  const latestIndexByID = new Map(latest.map((message, index) => [message.id, index]));
-  const assistantIndexesByContent = buildAssistantIndexesByContent(latest);
-  const usedAssistantIndexes = new Set<number>();
-  const beforeAssistant = new Map<number, ChatMessage[]>();
+  const lookups = buildAnchorLookups(latest);
+  const resolvedIndexesByAnchorRef = new Map<string, number>();
+  const usedAnchorIndexes = new Set<number>();
+  const beforeAnchor = new Map<number, ChatMessage[]>();
   const insertedThinkingIDs = new Set<string>();
 
   for (const insertion of insertions) {
-    const assistantIndex = resolveAssistantIndex({
-      assistantIndexesByContent,
+    const anchorIndex = resolveAnchorIndex({
       insertion,
-      latestIndexByID,
-      usedAssistantIndexes,
+      lookups,
+      resolvedIndexesByAnchorRef,
+      usedAnchorIndexes,
     });
-    if (assistantIndex === null) {
+    if (anchorIndex === null) {
       continue;
     }
-    const before = beforeAssistant.get(assistantIndex) ?? [];
+    const before = beforeAnchor.get(anchorIndex) ?? [];
     before.push(insertion.thinking);
-    beforeAssistant.set(assistantIndex, before);
+    beforeAnchor.set(anchorIndex, before);
     insertedThinkingIDs.add(insertion.thinking.id);
   }
-
   return {
-    messages: composeMessagesWithThinking(latest, beforeAssistant),
+    messages: composeMessagesWithThinking(latest, beforeAnchor),
     thinkingIDs: insertedThinkingIDs,
   };
 }
-
-function buildAssistantIndexesByContent(messages: ChatMessage[]): Map<string, number[]> {
-  const indexesByContent = new Map<string, number[]>();
-
-  for (let index = 0; index < messages.length; index += 1) {
-    const message = messages[index];
-    if (message.kind !== 'assistant') {
-      continue;
-    }
-    const content = message.content.trim();
-    if (!content) {
-      continue;
-    }
-    const indexes = indexesByContent.get(content) ?? [];
-    indexes.push(index);
-    indexesByContent.set(content, indexes);
-  }
-
-  return indexesByContent;
+interface AnchorLookups {
+  indexesByContent: Map<string, number[]>;
+  indexesByID: Map<string, number>;
+  indexesByToolCallId: Map<string, number[]>;
 }
 
-function resolveAssistantIndex(
+function buildAnchorLookups(messages: ChatMessage[]): AnchorLookups {
+  const indexesByContent = new Map<string, number[]>();
+  const indexesByToolCallId = new Map<string, number[]>();
+  const indexesByID = new Map(messages.map((message, index) => [message.id, index]));
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    const content = normalizeOptionalText(message.content);
+    if (content) {
+      const key = buildAnchorContentKey(message.kind, content);
+      const indexes = indexesByContent.get(key) ?? [];
+      indexes.push(index);
+      indexesByContent.set(key, indexes);
+    }
+    if (message.kind !== 'tool') {
+      continue;
+    }
+    const toolCallId = normalizeOptionalText(message.toolCallId);
+    if (!toolCallId) {
+      continue;
+    }
+    const indexes = indexesByToolCallId.get(toolCallId) ?? [];
+    indexes.push(index);
+    indexesByToolCallId.set(toolCallId, indexes);
+  }
+  return {
+    indexesByContent,
+    indexesByID,
+    indexesByToolCallId,
+  };
+}
+function resolveAnchorIndex(
   options: {
-    assistantIndexesByContent: Map<string, number[]>;
     insertion: ThinkingInsertion;
-    latestIndexByID: Map<string, number>;
-    usedAssistantIndexes: Set<number>;
+    lookups: AnchorLookups;
+    resolvedIndexesByAnchorRef: Map<string, number>;
+    usedAnchorIndexes: Set<number>;
   },
 ): number | null {
-  if (options.insertion.assistantId) {
-    const index = options.latestIndexByID.get(options.insertion.assistantId);
-    if (index !== undefined) {
-      options.usedAssistantIndexes.add(index);
-      return index;
+  const anchorRef = buildInsertionAnchorRef(options.insertion);
+  if (anchorRef) {
+    const cached = options.resolvedIndexesByAnchorRef.get(anchorRef);
+    if (cached !== undefined) {
+      return cached;
     }
   }
-  if (!options.insertion.assistantContent) {
+  const resolved = resolveNewAnchorIndex(options.insertion, options.lookups, options.usedAnchorIndexes);
+  if (resolved === null) {
     return null;
   }
-  const candidates = options.assistantIndexesByContent.get(options.insertion.assistantContent);
+  if (anchorRef) {
+    options.resolvedIndexesByAnchorRef.set(anchorRef, resolved);
+  }
+  return resolved;
+}
+function buildInsertionAnchorRef(insertion: ThinkingInsertion): string | undefined {
+  return insertion.anchorRef
+    || insertion.anchorId
+    || (insertion.anchorToolCallId ? `tool:${insertion.anchorToolCallId}` : undefined)
+    || (insertion.anchorKind && insertion.anchorContent
+      ? buildAnchorContentKey(insertion.anchorKind, insertion.anchorContent)
+      : undefined);
+}
+function resolveNewAnchorIndex(
+  insertion: ThinkingInsertion,
+  lookups: AnchorLookups,
+  usedAnchorIndexes: Set<number>,
+): number | null {
+  const idMatch = takeAnchorIndex(insertion.anchorId, lookups.indexesByID, usedAnchorIndexes);
+  if (idMatch !== null) {
+    return idMatch;
+  }
+  const toolMatch = takeAnchorCandidate(
+    insertion.anchorToolCallId,
+    lookups.indexesByToolCallId,
+    usedAnchorIndexes,
+  );
+  if (toolMatch !== null) {
+    return toolMatch;
+  }
+  if (!insertion.anchorKind || !insertion.anchorContent) {
+    return null;
+  }
+  return takeAnchorCandidate(
+    buildAnchorContentKey(insertion.anchorKind, insertion.anchorContent),
+    lookups.indexesByContent,
+    usedAnchorIndexes,
+  );
+}
+function takeAnchorIndex(
+  key: string | undefined,
+  indexesByID: Map<string, number>,
+  usedAnchorIndexes: Set<number>,
+): number | null {
+  if (!key) {
+    return null;
+  }
+  const index = indexesByID.get(key);
+  if (index === undefined || usedAnchorIndexes.has(index)) {
+    return null;
+  }
+  usedAnchorIndexes.add(index);
+  return index;
+}
+function takeAnchorCandidate(
+  key: string | undefined,
+  indexesByKey: Map<string, number[]>,
+  usedAnchorIndexes: Set<number>,
+): number | null {
+  if (!key) {
+    return null;
+  }
+  const candidates = indexesByKey.get(key);
   if (!candidates || candidates.length === 0) {
     return null;
   }
   for (const candidate of candidates) {
-    if (options.usedAssistantIndexes.has(candidate)) {
+    if (usedAnchorIndexes.has(candidate)) {
       continue;
     }
-    options.usedAssistantIndexes.add(candidate);
+    usedAnchorIndexes.add(candidate);
     return candidate;
   }
   return null;
 }
-
+function buildAnchorContentKey(kind: string, content: string): string {
+  return `${kind}:${content}`;
+}
 function composeMessagesWithThinking(
   latest: ChatMessage[],
   beforeAssistant: Map<number, ChatMessage[]>,
 ): ChatMessage[] {
   const messages: ChatMessage[] = [];
-
   for (let index = 0; index < latest.length; index += 1) {
     const before = beforeAssistant.get(index);
     if (before) {
@@ -207,6 +289,5 @@ function composeMessagesWithThinking(
     }
     messages.push(latest[index]);
   }
-
   return messages;
 }
