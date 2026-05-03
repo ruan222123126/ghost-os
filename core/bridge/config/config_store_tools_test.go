@@ -30,6 +30,28 @@ func TestStoreUpdateToolPersistsAllowlistAndPromptOverride(t *testing.T) {
 	}
 }
 
+func TestStoreUpdateToolPersistsScriptExecSandboxMemory(t *testing.T) {
+	configPath, store := newToolStoreForTest(t)
+	mustSeedToolAllowlist(t, configPath, "script_exec")
+
+	memoryMB := 384
+	if err := store.UpdateTool(ToolUpdateRequest{
+		Name:            "script_exec",
+		SandboxMemoryMB: &memoryMB,
+	}); err != nil {
+		t.Fatalf("UpdateTool sandbox memory: %v", err)
+	}
+
+	assertToolSandboxMemory(t, store, "script_exec", 384)
+	fileCfg := mustLoadToolFileConfig(t)
+	if fileCfg.ScriptExecSandboxMemoryMB == nil || *fileCfg.ScriptExecSandboxMemoryMB != 384 {
+		t.Fatalf("unexpected persisted script_exec_sandbox_memory_mb: %+v", fileCfg.ScriptExecSandboxMemoryMB)
+	}
+	if configPath == "" {
+		t.Fatal("config path must not be empty")
+	}
+}
+
 func TestStoreUpdateToolValidatesInput(t *testing.T) {
 	_, store := newToolStoreForTest(t)
 
@@ -42,6 +64,14 @@ func TestStoreUpdateToolValidatesInput(t *testing.T) {
 	}
 	if err := store.UpdateTool(ToolUpdateRequest{Name: "script_exec"}); !errors.Is(err, errToolUpdateEmpty) {
 		t.Fatalf("expected errToolUpdateEmpty, got %v", err)
+	}
+	tooLarge := 1024
+	if err := store.UpdateTool(ToolUpdateRequest{Name: "script_exec", SandboxMemoryMB: &tooLarge}); !errors.Is(err, errToolConfigInvalid) {
+		t.Fatalf("expected errToolConfigInvalid for oversized sandbox memory, got %v", err)
+	}
+	valid := 320
+	if err := store.UpdateTool(ToolUpdateRequest{Name: "web_search", SandboxMemoryMB: &valid}); !errors.Is(err, errToolConfigInvalid) {
+		t.Fatalf("expected errToolConfigInvalid for unsupported tool setting, got %v", err)
 	}
 }
 
@@ -140,6 +170,22 @@ func assertToolState(t *testing.T, store *store, name string, enabled bool, prom
 	}
 	if record.PromptOverride != promptOverride {
 		t.Fatalf("unexpected prompt override for %s: got %q want %q", name, record.PromptOverride, promptOverride)
+	}
+}
+
+func assertToolSandboxMemory(t *testing.T, store *store, name string, want int) {
+	t.Helper()
+
+	items, err := store.ListTools()
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+	record, ok := findToolRecord(items, name)
+	if !ok {
+		t.Fatalf("expected %s in tool list", name)
+	}
+	if record.SandboxMemoryMB == nil || *record.SandboxMemoryMB != want {
+		t.Fatalf("unexpected sandbox memory for %s: got %+v want %d", name, record.SandboxMemoryMB, want)
 	}
 }
 

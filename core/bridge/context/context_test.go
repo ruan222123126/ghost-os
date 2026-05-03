@@ -99,31 +99,29 @@ system:
 func TestNewPromptManagerWithDefault(t *testing.T) {
 	pm := NewPromptManagerWithDefault()
 	rendered := pm.Render(map[string]string{
-		"os_type":   "darwin",
-		"max_turns": "20",
+		"os_type":      "darwin",
+		"max_turns":    "20",
+		"project_root": "/tmp/ghost-os",
+		"context":      "OS: darwin | Root: /tmp/ghost-os | Max turns: 20",
 	})
 
-	if !strings.Contains(rendered, "OS: darwin") {
-		t.Fatalf("rendered prompt missing os variable: %q", rendered)
-	}
-	if !strings.Contains(rendered, defaultToolGuidance) {
-		t.Fatalf("rendered prompt missing default tool guidance: %q", rendered)
-	}
-	if !strings.Contains(rendered, "Max turns: 20") {
-		t.Fatalf("rendered prompt missing max_turns variable: %q", rendered)
-	}
-	if !strings.Contains(rendered, defaultDynamicState) {
-		t.Fatalf("rendered prompt missing dynamic tool state default: %q", rendered)
-	}
-	if !strings.Contains(rendered, defaultSkillContext) {
-		t.Fatalf("rendered prompt missing dynamic skill context default: %q", rendered)
+	for _, snippet := range []string{
+		"Role:",
+		"Job:",
+		"Context:\nOS: darwin | Root: /tmp/ghost-os | Max turns: 20",
+	} {
+		if !strings.Contains(rendered, snippet) {
+			t.Fatalf("rendered prompt missing %q: %q", snippet, rendered)
+		}
 	}
 }
 
 func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 	vars := map[string]string{
-		"os_type":   "linux",
-		"max_turns": "20",
+		"os_type":      "linux",
+		"max_turns":    "20",
+		"project_root": "/tmp/project",
+		"context":      "OS: linux | Root: /tmp/project | Max turns: 20",
 	}
 	fromFile, err := NewPromptManagerWithOptions(PromptLoadOptions{
 		ConfigPath: filepath.Join("..", "prompts.yaml"),
@@ -138,11 +136,12 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 	}
 	for _, prompt := range prompts {
 		for _, snippet := range []string{
-			"## Tool Guidance",
-			"## Dynamic Tool State",
-			"## Dynamic Skill Context",
-			defaultToolGuidance,
-			defaultDynamicState,
+			"Role:",
+			"Job:",
+			"Skills:",
+			"Skill Context:",
+			"Context:\nOS: linux | Root: /tmp/project | Max turns: 20",
+			"- No visible skills available.",
 			defaultSkillContext,
 		} {
 			if !strings.Contains(prompt, snippet) {
@@ -150,6 +149,9 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			}
 		}
 		for _, snippet := range []string{
+			"## Dynamic Tool State",
+			"## Dynamic Skill Context",
+			defaultDynamicState,
 			"## Runtime Constraints",
 			"## Response Rules",
 			"END_SESSION",
@@ -158,8 +160,10 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			"Tool list:",
 			"screen_action.click_text",
 			"tools.read_file reads at most 200 lines",
+			"## Tool Guidance",
 			"{{dynamic_tool_state}}",
 			"{{dynamic_skill_context}}",
+			"## Operating Context",
 		} {
 			if strings.Contains(prompt, snippet) {
 				t.Fatalf("prompt should not include %q: %q", snippet, prompt)

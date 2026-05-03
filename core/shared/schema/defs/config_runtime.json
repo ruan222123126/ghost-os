@@ -9,20 +9,18 @@
         "base_url",
         "model",
         "chat_path",
+        "project_root",
+        "max_turns",
+        "llm_completion_retry_count",
+        "llm_completion_retry_interval_ms",
         "api_key_set",
         "model_selection_enabled",
-        "graphql_default_source",
-        "graphql_tool_runtime_enabled",
-        "graphql_text_sanitize_enabled",
-        "graphql_sources",
-        "graphql_mutation_policies",
         "session_human_log_full_enabled",
+        "session_system_prompt_visible_enabled",
         "assistant_markdown_enabled",
+        "tool_call_compact_output_enabled",
         "memory_mode_enabled",
-        "web_rooter_enabled",
-        "web_rooter_base_url",
-        "web_rooter_timeout_ms",
-        "web_rooter_api_token_set",
+        "microcompact_enabled",
         "web_search_tavily_url",
         "web_search_exa_url",
         "web_search_tavily_api_key_set",
@@ -34,26 +32,18 @@
         "base_url": { "type": "string" },
         "model": { "type": "string" },
         "chat_path": { "type": "string" },
+        "project_root": { "type": "string" },
+        "max_turns": { "type": "integer", "minimum": 1 },
+        "llm_completion_retry_count": { "type": "integer", "minimum": 0 },
+        "llm_completion_retry_interval_ms": { "type": "integer", "minimum": 0 },
         "api_key_set": { "type": "boolean" },
         "model_selection_enabled": { "type": "boolean" },
-        "graphql_default_source": { "type": "string" },
-        "graphql_tool_runtime_enabled": { "type": "boolean" },
-        "graphql_text_sanitize_enabled": { "type": "boolean" },
-        "graphql_sources": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/graphqlSourceResponse" }
-        },
-        "graphql_mutation_policies": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/graphqlMutationPolicyResponse" }
-        },
         "session_human_log_full_enabled": { "type": "boolean" },
+        "session_system_prompt_visible_enabled": { "type": "boolean" },
         "assistant_markdown_enabled": { "type": "boolean" },
+        "tool_call_compact_output_enabled": { "type": "boolean" },
         "memory_mode_enabled": { "type": "boolean" },
-        "web_rooter_enabled": { "type": "boolean" },
-        "web_rooter_base_url": { "type": "string" },
-        "web_rooter_timeout_ms": { "type": "integer", "minimum": 1 },
-        "web_rooter_api_token_set": { "type": "boolean" },
+        "microcompact_enabled": { "type": "boolean" },
         "web_search_tavily_url": { "type": "string" },
         "web_search_exa_url": { "type": "string" },
         "web_search_tavily_api_key_set": { "type": "boolean" },
@@ -76,25 +66,16 @@
         "base_url": { "type": "string", "x-go-pointer": true },
         "model": { "type": "string", "x-go-pointer": true },
         "chat_path": { "type": "string", "x-go-pointer": true },
-        "graphql_default_source": { "type": "string", "x-go-pointer": true },
-        "graphql_tool_runtime_enabled": { "type": "boolean", "x-go-pointer": true },
-        "graphql_text_sanitize_enabled": { "type": "boolean", "x-go-pointer": true },
-        "graphql_sources": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/graphqlSourceInput" }
-        },
-        "graphql_source_upsert": { "$ref": "#/$defs/graphqlSourceInput" },
-        "graphql_mutation_policies": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/graphqlMutationPolicyInput" }
-        },
+        "project_root": { "type": "string", "x-go-pointer": true },
+        "max_turns": { "type": "integer", "minimum": 1, "x-go-pointer": true },
+        "llm_completion_retry_count": { "type": "integer", "minimum": 0, "x-go-pointer": true },
+        "llm_completion_retry_interval_ms": { "type": "integer", "minimum": 0, "x-go-pointer": true },
         "session_human_log_full_enabled": { "type": "boolean", "x-go-pointer": true },
+        "session_system_prompt_visible_enabled": { "type": "boolean", "x-go-pointer": true },
         "assistant_markdown_enabled": { "type": "boolean", "x-go-pointer": true },
+        "tool_call_compact_output_enabled": { "type": "boolean", "x-go-pointer": true },
         "memory_mode_enabled": { "type": "boolean", "x-go-pointer": true },
-        "web_rooter_enabled": { "type": "boolean", "x-go-pointer": true },
-        "web_rooter_base_url": { "type": "string", "x-go-pointer": true },
-        "web_rooter_api_token": { "type": "string", "x-go-pointer": true },
-        "web_rooter_timeout_ms": { "type": "integer", "minimum": 1, "x-go-pointer": true },
+        "microcompact_enabled": { "type": "boolean", "x-go-pointer": true },
         "web_search_tavily_url": { "type": "string", "x-go-pointer": true },
         "web_search_exa_url": { "type": "string", "x-go-pointer": true },
         "web_search_tavily_api_key": { "type": "string", "x-go-pointer": true },
@@ -107,219 +88,6 @@
         "ts": { "name": "ConfigUpdate" },
         "rust": { "name": "ConfigUpdate" },
         "kotlin": { "name": "ConfigUpdate" }
-      }
-    },
-    "graphqlDomainResponse": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "root_queries"
-      ],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "root_queries": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "types": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "max_depth": { "type": "integer", "minimum": 0 },
-        "max_fields": { "type": "integer", "minimum": 0 },
-        "max_root_fields": { "type": "integer", "minimum": 0 }
-      },
-      "x-codegen": {
-        "order": 201,
-        "go": { "name": "graphqlDomainResponse" },
-        "ts": { "name": "GraphQLDomainResponse" },
-        "rust": { "name": "GraphQLDomainResponse" },
-        "kotlin": { "name": "GraphQLDomainResponse" }
-      }
-    },
-    "graphqlSourceResponse": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "endpoint",
-        "schema_path",
-        "timeout_ms",
-        "max_response_bytes",
-        "max_depth",
-        "max_fields",
-        "max_root_fields",
-        "max_fragments",
-        "api_key_set"
-      ],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "endpoint": { "type": "string", "minLength": 1 },
-        "schema_path": { "type": "string", "minLength": 1 },
-        "timeout_ms": { "type": "integer", "minimum": 1 },
-        "max_response_bytes": { "type": "integer", "minimum": 1 },
-        "max_depth": { "type": "integer", "minimum": 1 },
-        "max_fields": { "type": "integer", "minimum": 1 },
-        "max_root_fields": { "type": "integer", "minimum": 1 },
-        "max_fragments": { "type": "integer", "minimum": 1 },
-        "headers": {
-          "type": "object",
-          "additionalProperties": { "type": "string" }
-        },
-        "api_key_set": { "type": "boolean" },
-        "domains": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/graphqlDomainResponse" }
-        }
-      },
-      "x-codegen": {
-        "order": 202,
-        "go": { "name": "graphqlSourceResponse" },
-        "ts": { "name": "GraphQLSourceResponse" },
-        "rust": { "name": "GraphQLSourceResponse" },
-        "kotlin": { "name": "GraphQLSourceResponse" }
-      }
-    },
-    "graphqlDomainInput": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "root_queries"
-      ],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "root_queries": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "types": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
-        "max_depth": { "type": "integer", "minimum": 0 },
-        "max_fields": { "type": "integer", "minimum": 0 },
-        "max_root_fields": { "type": "integer", "minimum": 0 }
-      },
-      "x-codegen": {
-        "order": 203,
-        "go": { "name": "graphqlDomainInput" },
-        "ts": { "name": "GraphQLDomainInput" },
-        "rust": { "name": "GraphQLDomainInput" },
-        "kotlin": { "name": "GraphQLDomainInput" }
-      }
-    },
-    "graphqlMutationPolicyResponse": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "source",
-        "domain",
-        "root_mutation",
-        "idempotency_mode"
-      ],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "source": { "type": "string", "minLength": 1 },
-        "domain": { "type": "string", "minLength": 1 },
-        "root_mutation": { "type": "string", "minLength": 1 },
-        "approval_required": { "type": "boolean" },
-        "idempotency_mode": {
-          "type": "string",
-          "enum": ["header", "variable_path"]
-        },
-        "idempotency_header": { "type": "string", "minLength": 1 },
-        "idempotency_variable_path": { "type": "string", "minLength": 1 },
-        "max_depth": { "type": "integer", "minimum": 0 },
-        "max_fields": { "type": "integer", "minimum": 0 },
-        "max_root_fields": { "type": "integer", "minimum": 0 },
-        "max_fragments": { "type": "integer", "minimum": 0 }
-      },
-      "x-codegen": {
-        "order": 204,
-        "go": { "name": "graphqlMutationPolicyResponse" },
-        "ts": { "name": "GraphQLMutationPolicyResponse" },
-        "rust": { "name": "GraphQLMutationPolicyResponse" },
-        "kotlin": { "name": "GraphQLMutationPolicyResponse" }
-      }
-    },
-    "graphqlMutationPolicyInput": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "source",
-        "domain",
-        "root_mutation",
-        "idempotency_mode"
-      ],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "source": { "type": "string", "minLength": 1 },
-        "domain": { "type": "string", "minLength": 1 },
-        "root_mutation": { "type": "string", "minLength": 1 },
-        "approval_required": { "type": "boolean" },
-        "idempotency_mode": {
-          "type": "string",
-          "enum": ["header", "variable_path"]
-        },
-        "idempotency_header": { "type": "string", "minLength": 1 },
-        "idempotency_variable_path": { "type": "string", "minLength": 1 },
-        "max_depth": { "type": "integer", "minimum": 0 },
-        "max_fields": { "type": "integer", "minimum": 0 },
-        "max_root_fields": { "type": "integer", "minimum": 0 },
-        "max_fragments": { "type": "integer", "minimum": 0 }
-      },
-      "x-codegen": {
-        "order": 205,
-        "go": { "name": "graphqlMutationPolicyInput" },
-        "ts": { "name": "GraphQLMutationPolicyInput" },
-        "rust": { "name": "GraphQLMutationPolicyInput" },
-        "kotlin": { "name": "GraphQLMutationPolicyInput" }
-      }
-    },
-    "graphqlSourceInput": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "name",
-        "endpoint",
-        "schema_path"
-      ],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "description": { "type": "string" },
-        "endpoint": { "type": "string", "minLength": 1 },
-        "api_key": { "type": "string", "x-go-pointer": true },
-        "schema_path": { "type": "string", "minLength": 1 },
-        "timeout_ms": { "type": "integer", "minimum": 1 },
-        "max_response_bytes": { "type": "integer", "minimum": 1 },
-        "headers": {
-          "type": "object",
-          "additionalProperties": { "type": "string" }
-        },
-        "max_depth": { "type": "integer", "minimum": 1 },
-        "max_fields": { "type": "integer", "minimum": 1 },
-        "max_root_fields": { "type": "integer", "minimum": 1 },
-        "max_fragments": { "type": "integer", "minimum": 1 },
-        "domains": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/graphqlDomainInput" }
-        }
-      },
-      "x-codegen": {
-        "order": 206,
-        "go": { "name": "graphqlSourceInput" },
-        "ts": { "name": "GraphQLSourceInput" },
-        "rust": { "name": "GraphQLSourceInput" },
-        "kotlin": { "name": "GraphQLSourceInput" }
       }
     },
     "setActiveProviderRequest": {

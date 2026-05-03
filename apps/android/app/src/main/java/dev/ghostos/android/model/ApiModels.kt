@@ -42,6 +42,8 @@ data class AgentRequest(
     val images: List<SessionImageContent>? = null,
     @SerialName("session_id")
     val sessionId: String? = null,
+    @SerialName("project_root")
+    val projectRoot: String? = null,
     @SerialName("trace_id")
     val traceId: String? = null
 )
@@ -103,7 +105,9 @@ data class AgentAwaitingHumanResponse(
 @Serializable
 data class AgentStopResponsePayload(
     val status: String,
-    val message: String
+    val message: String,
+    @SerialName("session_id")
+    val sessionId: String? = null
 )
 
 @Serializable
@@ -220,7 +224,9 @@ data class SessionToolCall(
 data class AgentToolCallStartedPayload(
     val tool: String? = null,
     @SerialName("tool_call_id")
-    val toolCallId: String? = null
+    val toolCallId: String? = null,
+    @SerialName("arguments_json")
+    val argumentsJson: String? = null
 )
 
 @Serializable
@@ -239,7 +245,8 @@ data class AgentToolCallFinishedPayload(
     @SerialName("tool_call_id")
     val toolCallId: String? = null,
     val status: String? = null,
-    val error: String? = null
+    val error: String? = null,
+    val output: String? = null
 )
 
 @Serializable
@@ -300,6 +307,28 @@ data class SessionMetadata(
 )
 
 @Serializable
+data class SessionSidebarPartition(
+    val id: String,
+    val name: String
+)
+
+@Serializable
+data class SessionSidebarPartitionState(
+    val version: Int,
+    val partitions: List<SessionSidebarPartition>,
+    val assignments: Map<String, String>
+)
+
+@Serializable
+data class SessionSidebarPartitionPutRequest(
+    val version: Int,
+    val partitions: List<SessionSidebarPartition>,
+    val assignments: Map<String, String>,
+    @SerialName("trace_id")
+    val traceId: String? = null
+)
+
+@Serializable
 data class SessionMessagePage(
     val limit: Int,
     val before: Int? = null,
@@ -346,34 +375,30 @@ data class BridgeConfig(
     val model: String,
     @SerialName("chat_path")
     val chatPath: String,
+    @SerialName("project_root")
+    val projectRoot: String,
+    @SerialName("max_turns")
+    val maxTurns: Int,
+    @SerialName("llm_completion_retry_count")
+    val llmCompletionRetryCount: Int,
+    @SerialName("llm_completion_retry_interval_ms")
+    val llmCompletionRetryIntervalMs: Int,
     @SerialName("api_key_set")
     val apiKeySet: Boolean,
     @SerialName("model_selection_enabled")
     val modelSelectionEnabled: Boolean,
-    @SerialName("graphql_default_source")
-    val graphqlDefaultSource: String,
-    @SerialName("graphql_tool_runtime_enabled")
-    val graphqlToolRuntimeEnabled: Boolean,
-    @SerialName("graphql_text_sanitize_enabled")
-    val graphqlTextSanitizeEnabled: Boolean,
-    @SerialName("graphql_sources")
-    val graphqlSources: List<GraphQLSourceResponse>,
-    @SerialName("graphql_mutation_policies")
-    val graphqlMutationPolicies: List<GraphQLMutationPolicyResponse>,
     @SerialName("session_human_log_full_enabled")
     val sessionHumanLogFullEnabled: Boolean,
+    @SerialName("session_system_prompt_visible_enabled")
+    val sessionSystemPromptVisibleEnabled: Boolean,
     @SerialName("assistant_markdown_enabled")
     val assistantMarkdownEnabled: Boolean,
+    @SerialName("tool_call_compact_output_enabled")
+    val toolCallCompactOutputEnabled: Boolean,
     @SerialName("memory_mode_enabled")
     val memoryModeEnabled: Boolean,
-    @SerialName("web_rooter_enabled")
-    val webRooterEnabled: Boolean,
-    @SerialName("web_rooter_base_url")
-    val webRooterBaseUrl: String,
-    @SerialName("web_rooter_timeout_ms")
-    val webRooterTimeoutMs: Int,
-    @SerialName("web_rooter_api_token_set")
-    val webRooterApiTokenSet: Boolean,
+    @SerialName("microcompact_enabled")
+    val microcompactEnabled: Boolean,
     @SerialName("web_search_tavily_url")
     val webSearchTavilyUrl: String,
     @SerialName("web_search_exa_url")
@@ -403,32 +428,26 @@ data class ConfigUpdate(
     val model: String? = null,
     @SerialName("chat_path")
     val chatPath: String? = null,
-    @SerialName("graphql_default_source")
-    val graphqlDefaultSource: String? = null,
-    @SerialName("graphql_tool_runtime_enabled")
-    val graphqlToolRuntimeEnabled: Boolean? = null,
-    @SerialName("graphql_text_sanitize_enabled")
-    val graphqlTextSanitizeEnabled: Boolean? = null,
-    @SerialName("graphql_sources")
-    val graphqlSources: List<GraphQLSourceInput>? = null,
-    @SerialName("graphql_source_upsert")
-    val graphqlSourceUpsert: GraphQLSourceInput? = null,
-    @SerialName("graphql_mutation_policies")
-    val graphqlMutationPolicies: List<GraphQLMutationPolicyInput>? = null,
+    @SerialName("project_root")
+    val projectRoot: String? = null,
+    @SerialName("max_turns")
+    val maxTurns: Int? = null,
+    @SerialName("llm_completion_retry_count")
+    val llmCompletionRetryCount: Int? = null,
+    @SerialName("llm_completion_retry_interval_ms")
+    val llmCompletionRetryIntervalMs: Int? = null,
     @SerialName("session_human_log_full_enabled")
     val sessionHumanLogFullEnabled: Boolean? = null,
+    @SerialName("session_system_prompt_visible_enabled")
+    val sessionSystemPromptVisibleEnabled: Boolean? = null,
     @SerialName("assistant_markdown_enabled")
     val assistantMarkdownEnabled: Boolean? = null,
+    @SerialName("tool_call_compact_output_enabled")
+    val toolCallCompactOutputEnabled: Boolean? = null,
     @SerialName("memory_mode_enabled")
     val memoryModeEnabled: Boolean? = null,
-    @SerialName("web_rooter_enabled")
-    val webRooterEnabled: Boolean? = null,
-    @SerialName("web_rooter_base_url")
-    val webRooterBaseUrl: String? = null,
-    @SerialName("web_rooter_api_token")
-    val webRooterApiToken: String? = null,
-    @SerialName("web_rooter_timeout_ms")
-    val webRooterTimeoutMs: Int? = null,
+    @SerialName("microcompact_enabled")
+    val microcompactEnabled: Boolean? = null,
     @SerialName("web_search_tavily_url")
     val webSearchTavilyUrl: String? = null,
     @SerialName("web_search_exa_url")
@@ -449,138 +468,6 @@ data class SessionPushAwaitingHumanPayload(
     @SerialName("selection_mode")
     val selectionMode: String? = null,
     val options: List<AskHumanOption>? = null
-)
-
-@Serializable
-data class GraphQLDomainResponse(
-    val name: String,
-    val description: String? = null,
-    @SerialName("root_queries")
-    val rootQueries: List<String>,
-    val types: List<String>? = null,
-    @SerialName("max_depth")
-    val maxDepth: Int? = null,
-    @SerialName("max_fields")
-    val maxFields: Int? = null,
-    @SerialName("max_root_fields")
-    val maxRootFields: Int? = null
-)
-
-@Serializable
-data class GraphQLSourceResponse(
-    val name: String,
-    val description: String? = null,
-    val endpoint: String,
-    @SerialName("schema_path")
-    val schemaPath: String,
-    @SerialName("timeout_ms")
-    val timeoutMs: Int,
-    @SerialName("max_response_bytes")
-    val maxResponseBytes: Int,
-    @SerialName("max_depth")
-    val maxDepth: Int,
-    @SerialName("max_fields")
-    val maxFields: Int,
-    @SerialName("max_root_fields")
-    val maxRootFields: Int,
-    @SerialName("max_fragments")
-    val maxFragments: Int,
-    val headers: Map<String, String>? = null,
-    @SerialName("api_key_set")
-    val apiKeySet: Boolean,
-    val domains: List<GraphQLDomainResponse>? = null
-)
-
-@Serializable
-data class GraphQLDomainInput(
-    val name: String,
-    val description: String? = null,
-    @SerialName("root_queries")
-    val rootQueries: List<String>,
-    val types: List<String>? = null,
-    @SerialName("max_depth")
-    val maxDepth: Int? = null,
-    @SerialName("max_fields")
-    val maxFields: Int? = null,
-    @SerialName("max_root_fields")
-    val maxRootFields: Int? = null
-)
-
-@Serializable
-data class GraphQLMutationPolicyResponse(
-    val name: String,
-    val description: String? = null,
-    val source: String,
-    val domain: String,
-    @SerialName("root_mutation")
-    val rootMutation: String,
-    @SerialName("approval_required")
-    val approvalRequired: Boolean? = null,
-    @SerialName("idempotency_mode")
-    val idempotencyMode: String,
-    @SerialName("idempotency_header")
-    val idempotencyHeader: String? = null,
-    @SerialName("idempotency_variable_path")
-    val idempotencyVariablePath: String? = null,
-    @SerialName("max_depth")
-    val maxDepth: Int? = null,
-    @SerialName("max_fields")
-    val maxFields: Int? = null,
-    @SerialName("max_root_fields")
-    val maxRootFields: Int? = null,
-    @SerialName("max_fragments")
-    val maxFragments: Int? = null
-)
-
-@Serializable
-data class GraphQLMutationPolicyInput(
-    val name: String,
-    val description: String? = null,
-    val source: String,
-    val domain: String,
-    @SerialName("root_mutation")
-    val rootMutation: String,
-    @SerialName("approval_required")
-    val approvalRequired: Boolean? = null,
-    @SerialName("idempotency_mode")
-    val idempotencyMode: String,
-    @SerialName("idempotency_header")
-    val idempotencyHeader: String? = null,
-    @SerialName("idempotency_variable_path")
-    val idempotencyVariablePath: String? = null,
-    @SerialName("max_depth")
-    val maxDepth: Int? = null,
-    @SerialName("max_fields")
-    val maxFields: Int? = null,
-    @SerialName("max_root_fields")
-    val maxRootFields: Int? = null,
-    @SerialName("max_fragments")
-    val maxFragments: Int? = null
-)
-
-@Serializable
-data class GraphQLSourceInput(
-    val name: String,
-    val description: String? = null,
-    val endpoint: String,
-    @SerialName("api_key")
-    val apiKey: String? = null,
-    @SerialName("schema_path")
-    val schemaPath: String,
-    @SerialName("timeout_ms")
-    val timeoutMs: Int? = null,
-    @SerialName("max_response_bytes")
-    val maxResponseBytes: Int? = null,
-    val headers: Map<String, String>? = null,
-    @SerialName("max_depth")
-    val maxDepth: Int? = null,
-    @SerialName("max_fields")
-    val maxFields: Int? = null,
-    @SerialName("max_root_fields")
-    val maxRootFields: Int? = null,
-    @SerialName("max_fragments")
-    val maxFragments: Int? = null,
-    val domains: List<GraphQLDomainInput>? = null
 )
 
 @Serializable

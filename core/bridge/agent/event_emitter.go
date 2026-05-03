@@ -56,22 +56,47 @@ func (e agentEventEmitter) runStarted(ctx context.Context, traceID string, build
 	return e.emit(ctx, event)
 }
 
-func (e agentEventEmitter) toolCallStarted(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string) error {
-	event, err := e.newEvent(traceID, turn, stepID, streaming.EventToolCallStarted, map[string]any{
+func (e agentEventEmitter) toolCallStarted(
+	ctx context.Context,
+	traceID string,
+	turn int,
+	stepID string,
+	toolName string,
+	toolCallID string,
+	argumentsJSON string,
+) error {
+	payload := map[string]any{
 		"tool":         toolName,
 		"tool_call_id": toolCallID,
-	})
+	}
+	if strings.TrimSpace(argumentsJSON) != "" {
+		payload["arguments_json"] = argumentsJSON
+	}
+	event, err := e.newEvent(traceID, turn, stepID, streaming.EventToolCallStarted, payload)
 	if err != nil {
 		return err
 	}
 	return e.emit(ctx, event)
 }
 
-func (e agentEventEmitter) toolCallFinished(ctx context.Context, traceID string, turn int, stepID string, toolName string, toolCallID string, status string, toolErr error) error {
+func (e agentEventEmitter) toolCallFinished(
+	ctx context.Context,
+	traceID string,
+	turn int,
+	stepID string,
+	toolName string,
+	toolCallID string,
+	status string,
+	toolErr error,
+	output string,
+) error {
 	payload := map[string]any{
 		"tool":         toolName,
 		"tool_call_id": toolCallID,
 		"status":       status,
+	}
+	if strings.TrimSpace(output) != "" {
+		payload["output"] = output
 	}
 	if toolErr != nil {
 		payload["error"] = toolErr.Error()

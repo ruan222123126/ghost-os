@@ -15,9 +15,9 @@ func (t *ToolSearchTool) executeSkillAction(args toolSearchArgs, sess *session.S
 	case toolSearchActionSearch:
 		return t.searchSkills(args.Query, sess)
 	case toolSearchActionLoad:
-		return t.loadSkills(sess, args.ToolNames)
+		return t.loadSkills(sess, args.SkillNames)
 	case toolSearchActionUnload:
-		return t.unloadSkills(sess, args.ToolNames)
+		return t.unloadSkills(sess, args.SkillNames)
 	case toolSearchActionList:
 		return t.listSkills(sess)
 	default:
@@ -26,7 +26,7 @@ func (t *ToolSearchTool) executeSkillAction(args toolSearchArgs, sess *session.S
 }
 
 func (t *ToolSearchTool) searchSkills(query string, sess *session.Session) (string, error) {
-	discovery := t.skillCatalog.Search(query)
+	discovery := t.searchableSkillCatalog(query)
 	loaded := toolNameSet(t.loadedSkillNames(sess))
 	items := make([]toolSearchItem, 0, len(discovery.Skills))
 	for _, skill := range discovery.Skills {
@@ -46,9 +46,9 @@ func (t *ToolSearchTool) searchSkills(query string, sess *session.Session) (stri
 func (t *ToolSearchTool) loadSkills(sess *session.Session, skillNames []string) (string, error) {
 	names := normalizeVisibleToolNames(skillNames)
 	if len(names) == 0 {
-		return "", fmt.Errorf("tool_names is required for load")
+		return "", fmt.Errorf("skill_names is required for load")
 	}
-	discovery := t.skillCatalog.Discover()
+	discovery := t.discoverSkills()
 	skillMap := indexSkillsByName(discovery.Skills)
 	loadedSet := toolNameSet(t.loadedSkillNames(sess))
 	items := make([]toolSearchItem, 0, len(names))
@@ -78,7 +78,7 @@ func (t *ToolSearchTool) loadOneSkill(
 		name = skill.Name
 	}
 	result := sess.EnsureDynamicSkillLoaded(name, ToolSearchToolName)
-	item := toolSearchItem{
+	return toolSearchItem{
 		Kind:              toolSearchKindSkill,
 		Name:              name,
 		Summary:           skillSummary(skill, exists),
@@ -86,22 +86,13 @@ func (t *ToolSearchTool) loadOneSkill(
 		Status:            loadStatus(result.AlreadyLoaded),
 		AvailableNow:      result.Load.VisibleForTurn(sess.TurnIndex) && !result.Load.ExpiredAtTurn(sess.TurnIndex, t.idleTurns),
 		AvailableNextTurn: availableNextTurnForSkill(result.Load, sess.TurnIndex, t.idleTurns),
-	}
-	if !exists {
-		return item, nil
-	}
-	deps, err := t.loadSkillDependencies(sess, skill.Dependencies.Tools)
-	if err != nil {
-		return toolSearchItem{}, err
-	}
-	item.Dependencies = deps
-	return item, nil
+	}, nil
 }
 
 func (t *ToolSearchTool) unloadSkills(sess *session.Session, skillNames []string) (string, error) {
 	names := normalizeVisibleToolNames(skillNames)
 	if len(names) == 0 {
-		return "", fmt.Errorf("tool_names is required for unload")
+		return "", fmt.Errorf("skill_names is required for unload")
 	}
 	items := make([]toolSearchItem, 0, len(names))
 	for _, name := range names {
@@ -119,7 +110,7 @@ func (t *ToolSearchTool) unloadSkills(sess *session.Session, skillNames []string
 }
 
 func (t *ToolSearchTool) listSkills(sess *session.Session) (string, error) {
-	discovery := t.skillCatalog.Discover()
+	discovery := t.discoverSkills()
 	loads := sess.DynamicSkillLoadsSnapshot()
 	if len(loads) == 0 {
 		return encodeSkillPayload(toolSearchActionList, nil, discovery.Errors)
@@ -152,43 +143,6 @@ func skillListItem(
 		AvailableNextTurn:  availableNextTurnForSkill(load, currentTurn, idleTurns),
 		RemainingIdleTurns: load.RemainingIdleTurns(currentTurn, idleTurns),
 	}
-}
-
-func (t *ToolSearchTool) loadSkillDependencies(
-	sess *session.Session,
-	dependencies []string,
-) ([]toolSearchDependencyItem, error) {
-	names := normalizeVisibleToolNames(dependencies)
-	if len(names) == 0 {
-		return nil, nil
-	}
-	available := t.availableToolNames()
-	loaded := t.loadedToolNames(sess)
-	candidateSet := toolNameSet(SearchCandidateToolNames(available, loaded, t.visibility))
-	staticSet := toolNameSet(StaticVisibleToolNames(available, t.visibility))
-	loadedSet := toolNameSet(loaded)
-	items := make([]toolSearchDependencyItem, 0, len(names))
-	for _, name := range names {
-		if !isDependencyToolLoadable(name, candidateSet, staticSet, loadedSet) {
-			return nil, fmt.Errorf("skill dependency tool %q is not loadable in this session", name)
-		}
-		load := sess.EnsureDynamicToolLoaded(name, ToolSearchToolName)
-		items = append(items, toolSearchDependencyItem{
-			Kind:   toolSearchKindTool,
-			Name:   name,
-			Status: loadStatus(load.AlreadyLoaded),
-		})
-	}
-	return items, nil
-}
-
-func isDependencyToolLoadable(
-	name string,
-	candidateSet map[string]bool,
-	staticSet map[string]bool,
-	loadedSet map[string]bool,
-) bool {
-	return candidateSet[name] || staticSet[name] || loadedSet[name]
 }
 
 func loadedSkillNames(sess *session.Session) []string {
@@ -280,4 +234,18 @@ func availableNextTurnForSkill(load session.DynamicSkillLoad, currentTurn int, i
 	return !load.VisibleForTurn(currentTurn) &&
 		!load.ExpiredAtTurn(currentTurn, idleTurns) &&
 		load.LoadedAtTurn > currentTurn
+}
+
+func (t *ToolSearchTool) discoverSkills() skills.DiscoveryResult {
+	if t != nil && t.skillCatalog != nil {
+		return t.skillCatalog.Discover()
+	}
+	return skills.DiscoverRuntimeVisibleSkills(t.skillConfig)
+}
+
+func (t *ToolSearchTool) searchableSkillCatalog(query string) skills.DiscoveryResult {
+	if t != nil && t.skillCatalog != nil {
+		return t.skillCatalog.Search(query)
+	}
+	return skills.SearchRuntimeVisibleSkills(t.skillConfig, query)
 }

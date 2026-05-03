@@ -29,9 +29,10 @@ type Config struct {
 	Provider                      ProviderConfig
 	RSS                           RSSConfig
 	Worker                        WorkerConfig
-	GraphQL                       GraphQLConfig
 	ToolSelector                  ToolSelectorConfig
 	ToolSearch                    ToolSearchConfig
+	SkillBlocklist                []string
+	ScriptExecSandboxMemoryMB     int
 	NativePersistent              bool
 	NativeBinaryPath              string
 	NativeBinaryRoots             []string
@@ -53,13 +54,14 @@ type Config struct {
 	WebSearchExaURL               string
 	WebSearchTavilyAPIKey         string
 	WebSearchExaAPIKey            string
+	LLMCompletionRetryCount       int
+	LLMCompletionRetryIntervalMS  int
 	SessionHumanLogFullEnabled    bool
+	SessionSystemPromptVisible    bool
 	AssistantMarkdownEnabled      bool
+	ToolCallCompactOutputEnabled  bool
 	MemoryModeEnabled             bool
-	WebRooterEnabled              bool
-	WebRooterBaseURL              string
-	WebRooterAPIToken             string
-	WebRooterTimeoutMS            int
+	MicrocompactEnabled           bool
 	ProMaxIterations              int
 	MaxTurns                      int
 }

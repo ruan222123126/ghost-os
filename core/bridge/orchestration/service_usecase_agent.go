@@ -156,7 +156,7 @@ func (s *bridgeService) executeStandardAgentTurnWithPrepared(
 	return serviceResultSuccess(payload), nil
 }
 
-func (s *bridgeService) executeAgentStopAction(_ context.Context, params agentStopParams, traceID string) (ServiceResult, error) {
+func (s *bridgeService) executeAgentStopAction(ctx context.Context, params agentStopParams, traceID string) (ServiceResult, error) {
 	sessionID := strings.TrimSpace(params.SessionID)
 	stopTraceID := strings.TrimSpace(params.TraceID)
 	if sessionID == "" && stopTraceID == "" {
@@ -166,11 +166,14 @@ func (s *bridgeService) executeAgentStopAction(_ context.Context, params agentSt
 		return ServiceResult{}, wrapServiceError(ServiceErrorUnavailable, errors.New("run registry is not available"))
 	}
 
-	var err error
+	var (
+		err    error
+		handle *RunHandle
+	)
 	if sessionID != "" {
-		err = s.runRegistry.CancelBySessionID(sessionID)
+		handle, err = s.runRegistry.CancelAndWaitBySessionID(ctx, sessionID)
 	} else {
-		err = s.runRegistry.CancelByTraceID(stopTraceID)
+		handle, err = s.runRegistry.CancelAndWaitByTraceID(ctx, stopTraceID)
 	}
 	if err != nil {
 		if errors.Is(err, ErrRunNotFound) {
@@ -186,7 +189,18 @@ func (s *bridgeService) executeAgentStopAction(_ context.Context, params agentSt
 
 	logAction(traceID, busActionAgentStop, "success", nil)
 	return serviceResultSuccess(agentStopResponse{
-		Status:  "stopped",
-		Message: "agent run cancelled successfully",
+		Status:    "stopped",
+		Message:   "agent run cancelled successfully",
+		SessionID: resolveStoppedSessionID(sessionID, handle),
 	}), nil
+}
+
+func resolveStoppedSessionID(sessionID string, handle *RunHandle) string {
+	if trimmedSessionID := strings.TrimSpace(sessionID); trimmedSessionID != "" {
+		return trimmedSessionID
+	}
+	if handle == nil {
+		return ""
+	}
+	return strings.TrimSpace(handle.SessionID)
 }

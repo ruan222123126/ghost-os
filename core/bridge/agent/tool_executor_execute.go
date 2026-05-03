@@ -46,7 +46,7 @@ func (e toolCallExecutor) executeSingleWithStepIndex(
 	toolCallID string,
 	args json.RawMessage,
 ) (toolCallOutcome, error) {
-	step, err := e.startExplicitToolCall(ctx, traceID, turn, stepIndex, toolName, toolCallID)
+	step, err := e.startExplicitToolCall(ctx, traceID, turn, stepIndex, toolName, toolCallID, args)
 	if err != nil {
 		return toolCallOutcome{}, err
 	}
@@ -92,14 +92,14 @@ func (e toolCallExecutor) runResolvedToolCall(ctx context.Context, traceID strin
 
 func (e toolCallExecutor) finishToolFailure(ctx context.Context, traceID string, resolved resolvedToolCall, toolErr error) (toolCallOutcome, error) {
 	appendToolResult(e.history, resolved.toolCallID, resolved.toolName, traceID, "", toolErr, nil)
-	if err := e.events.toolCallFinished(ctx, traceID, resolved.step.turn, resolved.step.stepID, resolved.toolName, resolved.toolCallID, "error", toolErr); err != nil {
+	if err := e.events.toolCallFinished(ctx, traceID, resolved.step.turn, resolved.step.stepID, resolved.toolName, resolved.toolCallID, "error", toolErr, ""); err != nil {
 		return toolCallOutcome{}, err
 	}
 	return toolCallOutcome{executed: true}, nil
 }
 
 func (e toolCallExecutor) finishSuccessfulToolCall(ctx context.Context, traceID string, resolved resolvedToolCall, output string, meta tools.ExecuteMeta) (toolCallOutcome, error) {
-	if err := e.events.toolCallFinished(ctx, traceID, resolved.step.turn, resolved.step.stepID, resolved.toolName, resolved.toolCallID, "success", nil); err != nil {
+	if err := e.events.toolCallFinished(ctx, traceID, resolved.step.turn, resolved.step.stepID, resolved.toolName, resolved.toolCallID, "success", nil, output); err != nil {
 		return toolCallOutcome{}, err
 	}
 	if meta.AwaitingHuman != nil {

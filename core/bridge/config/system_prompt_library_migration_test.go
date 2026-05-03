@@ -73,6 +73,13 @@ func TestUpdateSystemPromptFilesAllowsMemoryInsertPoint(t *testing.T) {
 	promptsDir := filepath.Join(t.TempDir(), "prompts")
 	library := []SystemPromptLibraryItem{
 		{
+			ID:          "rule-card",
+			Name:        "Rule",
+			InsertPoint: SystemPromptInsertPointRule,
+			Content:     "custom rule",
+			Active:      true,
+		},
+		{
 			ID:          "core-job",
 			Name:        "Core Job",
 			InsertPoint: SystemPromptInsertPointCoreJob,
@@ -95,6 +102,31 @@ func TestUpdateSystemPromptFilesAllowsMemoryInsertPoint(t *testing.T) {
 	}
 	if updated.CorePrompt != "core guidance" {
 		t.Fatalf("expected core prompt to compile only from core_job, got %+v", updated)
+	}
+	if !reflect.DeepEqual(updated.PromptLibrary, library) {
+		t.Fatalf("expected prompt library unchanged, got %+v", updated.PromptLibrary)
+	}
+}
+
+func TestUpdateSystemPromptFilesAllowsRuleInsertPointOnly(t *testing.T) {
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	library := []SystemPromptLibraryItem{
+		{
+			ID:          "rule-card",
+			Name:        "Rule",
+			InsertPoint: SystemPromptInsertPointRule,
+			Content:     "custom rule",
+			Active:      true,
+		},
+	}
+	updated, err := UpdateSystemPromptFiles(promptsDir, SystemPromptUpdateRequest{
+		PromptLibrary: &library,
+	})
+	if err != nil {
+		t.Fatalf("UpdateSystemPromptFiles: %v", err)
+	}
+	if updated.CorePrompt != "" {
+		t.Fatalf("expected rule-only library to keep core prompt empty, got %+v", updated)
 	}
 	if !reflect.DeepEqual(updated.PromptLibrary, library) {
 		t.Fatalf("expected prompt library unchanged, got %+v", updated.PromptLibrary)

@@ -138,6 +138,15 @@
         "sessionMetadata": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMetadata"
         },
+        "sessionSidebarPartition": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartition"
+        },
+        "sessionSidebarPartitionState": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartitionState"
+        },
+        "sessionSidebarPartitionPutRequest": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartitionPutRequest"
+        },
         "sessionMessagePage": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMessagePage"
         },
@@ -149,24 +158,6 @@
         },
         "configUpdate": {
             "$ref": "./schema/defs/config_runtime.json#/$defs/configUpdate"
-        },
-        "graphqlDomainResponse": {
-            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainResponse"
-        },
-        "graphqlSourceResponse": {
-            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceResponse"
-        },
-        "graphqlMutationPolicyResponse": {
-            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyResponse"
-        },
-        "graphqlDomainInput": {
-            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlDomainInput"
-        },
-        "graphqlMutationPolicyInput": {
-            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlMutationPolicyInput"
-        },
-        "graphqlSourceInput": {
-            "$ref": "./schema/defs/config_runtime.json#/$defs/graphqlSourceInput"
         },
         "providerConfig": {
             "$ref": "./schema/defs/config_provider.json#/$defs/providerConfig"

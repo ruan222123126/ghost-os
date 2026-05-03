@@ -18,15 +18,6 @@ func TestLoadFailsFastOnInvalidFileHeaders(t *testing.T) {
 			content: "provider_headers = { \"   \" = \"tenant-1\" }\n",
 			want:    "invalid provider_headers: header key cannot be empty",
 		},
-		{
-			name: "graphql source headers",
-			content: "[[graphql_sources]]\n" +
-				"name = \"billing\"\n" +
-				"endpoint = \"https://example.com/graphql\"\n" +
-				"schema_path = \"billing.graphql\"\n" +
-				"headers = { \"   \" = \"tenant-1\" }\n",
-			want: "invalid graphql source \"billing\" headers",
-		},
 	}
 
 	for _, tc := range cases {
@@ -58,20 +49,6 @@ func TestWriteBridgeFileConfigFailsFastOnInvalidHeaders(t *testing.T) {
 				ProviderHeaders: map[string]string{"   ": "tenant-1"},
 			},
 			want: "invalid provider_headers: header key cannot be empty",
-		},
-		{
-			name: "graphql source headers",
-			cfg: bridgeFileConfig{
-				GraphQLSources: []graphQLSourceFileConfig{
-					{
-						Name:       "billing",
-						Endpoint:   "https://example.com/graphql",
-						SchemaPath: "billing.graphql",
-						Headers:    map[string]string{"   ": "tenant-1"},
-					},
-				},
-			},
-			want: "invalid graphql source \"billing\" headers",
 		},
 	}
 

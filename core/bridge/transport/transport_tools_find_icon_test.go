@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -163,6 +164,62 @@ func TestHandleFindIconPreviewHoverAfterMatchMovesMouse(t *testing.T) {
 	hoverParams := decodeMapValue(t, secondCall["params"], "params")
 	if hoverParams["hover_only"] != true || hoverParams["x"] != float64(88) || hoverParams["y"] != float64(99) {
 		t.Fatalf("unexpected hover params: %+v", hoverParams)
+	}
+}
+
+func TestHandleFindIconTemplateDownloadReturnsBinaryImage(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	handler := newTestHandler(t, nil)
+
+	upload := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/tools/screen/find-icon/template",
+		`{"filename":"button.png","mime_type":"image/png","data_url":"data:image/png;base64,R2hvc3Q="}`,
+		nil,
+	)
+	if upload.Code != http.StatusCreated {
+		t.Fatalf("unexpected upload status: got %d body=%s", upload.Code, upload.Body.String())
+	}
+	uploadBody := decodeResponseBody(t, upload)
+	rawPayload, err := json.Marshal(uploadBody.Payload)
+	if err != nil {
+		t.Fatalf("marshal upload payload: %v", err)
+	}
+	var payload bridgeorchestration.FindIconTemplateUploadPayload
+	if err := json.Unmarshal(rawPayload, &payload); err != nil {
+		t.Fatalf("decode upload payload: %v", err)
+	}
+
+	path := "/api/tools/screen/find-icon/template?template_path=" + url.QueryEscape(payload.TemplatePath)
+	download := serveRequest(handler, http.MethodGet, path, "", nil)
+	if download.Code != http.StatusOK {
+		t.Fatalf("unexpected download status: got %d body=%s", download.Code, download.Body.String())
+	}
+	if got := download.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("unexpected content-type: got %q want %q", got, "image/png")
+	}
+	if got := download.Header().Get("Content-Disposition"); !strings.Contains(got, `inline; filename="`) {
+		t.Fatalf("unexpected content-disposition: %q", got)
+	}
+	if download.Body.String() != "Ghost" {
+		t.Fatalf("unexpected download body: %q", download.Body.String())
+	}
+}
+
+func TestHandleFindIconTemplateDownloadRejectsPathOutsideRoot(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	handler := newTestHandler(t, nil)
+
+	path := "/api/tools/screen/find-icon/template?template_path=" + url.QueryEscape("/tmp/not-allowed.png")
+	recorder := serveRequest(handler, http.MethodGet, path, "", nil)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "template_path must be inside workflow template root") {
+		t.Fatalf("unexpected error body: %s", recorder.Body.String())
 	}
 }
 

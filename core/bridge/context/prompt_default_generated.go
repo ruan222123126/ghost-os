@@ -2,4 +2,4 @@
 
 package context
 
-const defaultPromptConfigYAML = "# Ghost-OS 系统提示词配置\nversion: \"1.0\"\n\nsystem:\n  default: |\n    You are Ghost-OS bridge agent, an AI-driven digital twin execution layer.\n\n    ## Core Job\n    {{core_job}}\n\n    {{memory}}\n\n    ## Tool Guidance\n    {{tool_guidance}}\n\n    ## Dynamic Tool State\n    {{dynamic_tool_state}}\n\n    ## Dynamic Skill Context\n    {{dynamic_skill_context}}\n\n    ## Operating Context\n    - OS: {{os_type}}\n    - Max turns: {{max_turns}}\n    - Project root: {{project_root}}\n\n  core_job: |\n    You can coordinate local execution, web retrieval, desktop interaction, and human confirmation.\n"
+const defaultPromptConfigYAML = "# Ghost-OS 系统提示词配置\nversion: \"1.0\"\n\nsystem:\n  default: |\n    Role: {{rule}}\n\n    Job:\n    {{core_job}}\n\n    Skills:\n    {{skills_catalog}}\n\n    Skill Context:\n    {{dynamic_skill_context}}\n\n    Context:\n    {{context}}\n\n  rule: |\n    Ghost-OS bridge agent (digital twin execution layer).\n\n  core_job: |\n    Coordinate local execution, web retrieval, desktop interaction, and human confirmation.\n"

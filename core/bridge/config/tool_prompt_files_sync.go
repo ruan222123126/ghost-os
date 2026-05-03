@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -15,7 +14,7 @@ type toolPromptCandidate struct {
 }
 
 func syncToolPromptRoots(roots []string) error {
-	if len(roots) < 2 {
+	if len(roots) == 0 {
 		return nil
 	}
 
@@ -34,8 +33,7 @@ func syncToolPromptRoots(roots []string) error {
 }
 
 func newestToolPromptContent(roots []string, name string) (string, error) {
-	basePrompt, _ := toolBasePrompt(name)
-	candidates, hasNonDefault, err := loadToolPromptCandidates(roots, name, strings.TrimSpace(basePrompt))
+	candidates, hasNonDefault, err := loadToolPromptCandidates(roots, name)
 	if err != nil {
 		return "", err
 	}
@@ -67,7 +65,6 @@ func newestToolPromptContent(roots []string, name string) (string, error) {
 func loadToolPromptCandidates(
 	roots []string,
 	name string,
-	basePrompt string,
 ) ([]toolPromptCandidate, bool, error) {
 	candidates := make([]toolPromptCandidate, 0, len(roots))
 	hasNonDefault := false
@@ -84,12 +81,12 @@ func loadToolPromptCandidates(
 		if err != nil {
 			return nil, false, err
 		}
-		isBaseDefault := prompt == basePrompt
+		normalizedPrompt, isBaseDefault := normalizeToolPromptDefault(name, prompt)
 		if !isBaseDefault {
 			hasNonDefault = true
 		}
 		candidates = append(candidates, toolPromptCandidate{
-			prompt:        prompt,
+			prompt:        normalizedPrompt,
 			modTime:       info.ModTime(),
 			index:         index,
 			isBaseDefault: isBaseDefault,

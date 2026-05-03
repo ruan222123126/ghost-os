@@ -10,7 +10,8 @@ import (
 
 func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 2)
+	attemptState := &completionAttemptState{}
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 2, attemptState)
 	if err != nil {
 		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
 	}
@@ -43,11 +44,14 @@ func TestLLMDeltaBridgeConvertsTextDelta(t *testing.T) {
 	if payload["kind"] != string(llm.DeltaKindText) || payload["text"] != "Hello" {
 		t.Fatalf("unexpected payload: %+v", payload)
 	}
+	if !attemptState.hasCompletionDeltaEmitted() {
+		t.Fatal("expected attempt state to mark completion delta emitted")
+	}
 }
 
 func TestLLMDeltaBridgeConvertsToolCallDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1)
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1, nil)
 	if err != nil {
 		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
 	}
@@ -74,7 +78,7 @@ func TestLLMDeltaBridgeConvertsToolCallDelta(t *testing.T) {
 
 func TestLLMDeltaBridgeConvertsThinkingDelta(t *testing.T) {
 	sink := &recordingEventSink{}
-	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1)
+	bridge, err := newLLMDeltaBridge(sink, "trace-bridge", "session-bridge", 1, nil)
 	if err != nil {
 		t.Fatalf("newLLMDeltaBridge returned error: %v", err)
 	}

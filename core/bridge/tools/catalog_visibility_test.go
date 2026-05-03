@@ -70,13 +70,13 @@ func TestSearchCandidateToolNames_IncludeHiddenStaticToolsWhenToolSearchEnabled(
 		"ask_human",
 		"script_exec",
 		"web_search",
-		"tfind",
+		"sfind",
 	}, nil, VisibilityOptions{
 		ToolSearchEnabled: true,
 	})
 
 	if !containsTool(candidates, "script_exec") || !containsTool(candidates, "web_search") {
-		t.Fatalf("unexpected tfind candidates: %v", candidates)
+		t.Fatalf("unexpected sfind candidates: %v", candidates)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestSearchCandidateToolNames_ExcludeResidentAndBlockedTools(t *testing.T) {
 		"ask_human",
 		"script_exec",
 		"web_search",
-		"tfind",
+		"sfind",
 	}, nil, VisibilityOptions{
 		Allowlist: []string{"ask_human"},
 		Blocklist: []string{"web_search"},

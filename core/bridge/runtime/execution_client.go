@@ -59,6 +59,12 @@ func executionClientConfigFromConfig(cfg Config) executionClientConfig {
 	}
 }
 
+func interactionExecutionClientConfigFromConfig(cfg Config) executionClientConfig {
+	config := executionClientConfigFromConfig(cfg)
+	config.WorkingDir = ""
+	return config
+}
+
 func executionClientConfigFromEnv() (executionClientConfig, error) {
 	cfg, err := bridgeconfig.LoadExecutionConfig()
 	if err != nil {

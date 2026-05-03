@@ -3,7 +3,6 @@ package config
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"ghost-os/bridge/llm"
 )
@@ -39,11 +38,15 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 	if err := validateRuntimeForExecution(runtime); err != nil {
 		return Config{}, err
 	}
+	scriptExecSandboxMemoryMB, err := resolveScriptExecSandboxMemoryMB(fileCfg, env)
+	if err != nil {
+		return Config{}, err
+	}
 	sections, err := resolveConfigSections(fileCfg, env, runtime)
 	if err != nil {
 		return Config{}, err
 	}
-	cfg := composeConfig(fileCfg, env, runtime, sections)
+	cfg := composeConfig(fileCfg, env, runtime, sections, scriptExecSandboxMemoryMB)
 	return finalizeLoadedConfig(cfg)
 }
 
@@ -145,14 +148,21 @@ func resolveIterationLimits(fileCfg bridgeFileConfig, env envSnapshot) (int, int
 	return proMaxIterations, maxTurns, nil
 }
 
-func composeConfig(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig, sections configSections) Config {
+func composeConfig(
+	fileCfg bridgeFileConfig,
+	env envSnapshot,
+	runtime runtimeConfig,
+	sections configSections,
+	scriptExecSandboxMemoryMB int,
+) Config {
 	return Config{
 		Provider:                   sections.Provider,
 		RSS:                        sections.RSS,
 		Worker:                     sections.Worker,
-		GraphQL:                    runtime.GraphQL,
 		ToolSelector:               sections.ToolSelector,
 		ToolSearch:                 sections.ToolSearch,
+		SkillBlocklist:             normalizeStringList(fileCfg.SkillBlocklist),
+		ScriptExecSandboxMemoryMB:  scriptExecSandboxMemoryMB,
 		NativePersistent:           runtime.NativePersistent,
 		NativeBinaryPath:           resolveNativeBinaryPath(fileCfg, env),
 		NativeBinaryRoots:          resolveNativeBinaryRoots(fileCfg, env),
@@ -177,20 +187,21 @@ func composeConfig(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeCon
 			env,
 			"GHOST_PROMPTS_RESPONSE_RULE_FILES",
 		),
-		SessionsPath:               resolveSessionsPath(fileCfg, env),
-		WebSearchTavilyURL:         runtime.WebSearchTavilyURL,
-		WebSearchExaURL:            runtime.WebSearchExaURL,
-		WebSearchTavilyAPIKey:      runtime.WebSearchTavilyAPIKey,
-		WebSearchExaAPIKey:         runtime.WebSearchExaAPIKey,
-		SessionHumanLogFullEnabled: runtime.SessionHumanLogFullEnabled,
-		AssistantMarkdownEnabled:   runtime.AssistantMarkdownEnabled,
-		MemoryModeEnabled:          runtime.MemoryModeEnabled,
-		WebRooterEnabled:           runtime.WebRooterEnabled,
-		WebRooterBaseURL:           runtime.WebRooterBaseURL,
-		WebRooterAPIToken:          runtime.WebRooterAPIToken,
-		WebRooterTimeoutMS:         runtime.WebRooterTimeoutMS,
-		ProMaxIterations:           sections.ProMaxIterations,
-		MaxTurns:                   sections.MaxTurns,
+		SessionsPath:                 resolveSessionsPath(fileCfg, env),
+		WebSearchTavilyURL:           runtime.WebSearchTavilyURL,
+		WebSearchExaURL:              runtime.WebSearchExaURL,
+		WebSearchTavilyAPIKey:        runtime.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:           runtime.WebSearchExaAPIKey,
+		LLMCompletionRetryCount:      runtime.LLMCompletionRetryCount,
+		LLMCompletionRetryIntervalMS: runtime.LLMCompletionRetryIntervalMS,
+		SessionHumanLogFullEnabled:   runtime.SessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:   runtime.SessionSystemPromptVisible,
+		AssistantMarkdownEnabled:     runtime.AssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled: runtime.ToolCallCompactOutputEnabled,
+		MemoryModeEnabled:            runtime.MemoryModeEnabled,
+		MicrocompactEnabled:          runtime.MicrocompactEnabled,
+		ProMaxIterations:             sections.ProMaxIterations,
+		MaxTurns:                     sections.MaxTurns,
 	}
 }
 
@@ -218,9 +229,6 @@ func finalizeLoadedConfig(cfg Config) (Config, error) {
 	}
 	if cfg.ToolSearch.IdleTurns <= 0 {
 		return Config{}, errors.New("tool_search_idle_turns must be > 0")
-	}
-	if strings.TrimSpace(cfg.WebRooterBaseURL) == "" {
-		return Config{}, errors.New("web_rooter_base_url must not be empty")
 	}
 	return cfg, nil
 }

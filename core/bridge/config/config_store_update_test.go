@@ -14,8 +14,6 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	t.Setenv("GHOST_MODEL", "snapshot-model")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_URL", "https://proxy.example/tavily")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "snapshot-tavily")
-	t.Setenv("GHOST_WEB_ROOTER_ENABLED", "true")
-	t.Setenv("GHOST_WEB_ROOTER_API_TOKEN", "snapshot-rooter-token")
 	t.Setenv("GHOST_SESSION_HUMAN_LOG_FULL_ENABLED", "true")
 
 	store, err := newStoreFromEnv()
@@ -36,30 +34,26 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if snapshot.WebSearchTavilyURL != "https://proxy.example/tavily" {
 		t.Fatalf("unexpected web_search_tavily_url: got %q want %q", snapshot.WebSearchTavilyURL, "https://proxy.example/tavily")
 	}
-	if !snapshot.WebRooterEnabled {
-		t.Fatal("expected web_rooter_enabled to be true")
-	}
-	if snapshot.WebRooterBaseURL != defaultWebRooterBaseURL {
-		t.Fatalf("unexpected web_rooter_base_url: got %q want %q", snapshot.WebRooterBaseURL, defaultWebRooterBaseURL)
-	}
-	if snapshot.WebRooterTimeoutMS != defaultWebRooterTimeoutMS {
-		t.Fatalf(
-			"unexpected web_rooter_timeout_ms: got %d want %d",
-			snapshot.WebRooterTimeoutMS,
-			defaultWebRooterTimeoutMS,
-		)
-	}
-	if !snapshot.WebRooterAPITokenSet {
-		t.Fatal("expected web_rooter_api_token_set to be true")
+	if snapshot.MaxTurns != defaultMaxTurns {
+		t.Fatalf("unexpected max_turns: got %d want %d", snapshot.MaxTurns, defaultMaxTurns)
 	}
 	if !snapshot.SessionHumanLogFullEnabled {
 		t.Fatal("expected session_human_log_full_enabled to be true")
 	}
+	if !snapshot.SessionSystemPromptVisible {
+		t.Fatal("expected session_system_prompt_visible_enabled to be true")
+	}
 	if !snapshot.AssistantMarkdownEnabled {
 		t.Fatal("expected assistant_markdown_enabled to be true")
 	}
+	if snapshot.ToolCallCompactOutputEnabled {
+		t.Fatal("expected tool_call_compact_output_enabled to be false")
+	}
 	if snapshot.MemoryModeEnabled {
 		t.Fatal("expected memory_mode_enabled to be false")
+	}
+	if snapshot.MicrocompactEnabled {
+		t.Fatal("expected microcompact_enabled to be false")
 	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
@@ -75,24 +69,33 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if fileCfg.WebSearchTavilyURL != nil {
 		t.Fatalf("snapshot should not persist web search url, got %#v", fileCfg.WebSearchTavilyURL)
 	}
-	if fileCfg.WebRooterEnabled != nil {
-		t.Fatalf("snapshot should not persist web_rooter enabled, got %#v", fileCfg.WebRooterEnabled)
-	}
-	if fileCfg.WebRooterAPIToken != nil {
-		t.Fatalf("snapshot should not persist web_rooter api token, got %#v", fileCfg.WebRooterAPIToken)
-	}
 	if fileCfg.SessionHumanLogFullEnabled != nil {
 		t.Fatalf("snapshot should not persist session_human_log_full_enabled, got %#v", fileCfg.SessionHumanLogFullEnabled)
+	}
+	if fileCfg.MaxTurns != nil {
+		t.Fatalf("snapshot should not persist max_turns, got %#v", fileCfg.MaxTurns)
+	}
+	if fileCfg.SessionSystemPromptVisible != nil {
+		t.Fatalf("snapshot should not persist session_system_prompt_visible_enabled, got %#v", fileCfg.SessionSystemPromptVisible)
 	}
 	if fileCfg.AssistantMarkdownEnabled != nil {
 		t.Fatalf("snapshot should not persist assistant_markdown_enabled, got %#v", fileCfg.AssistantMarkdownEnabled)
 	}
+	if fileCfg.ToolCallCompactOutputEnabled != nil {
+		t.Fatalf(
+			"snapshot should not persist tool_call_compact_output_enabled, got %#v",
+			fileCfg.ToolCallCompactOutputEnabled,
+		)
+	}
 	if fileCfg.MemoryModeEnabled != nil {
 		t.Fatalf("snapshot should not persist memory_mode_enabled, got %#v", fileCfg.MemoryModeEnabled)
 	}
+	if fileCfg.MicrocompactEnabled != nil {
+		t.Fatalf("snapshot should not persist microcompact_enabled, got %#v", fileCfg.MicrocompactEnabled)
+	}
 }
 
-func TestConfigStoreUpdateLoadsRuntimeGraphQLIntoPatchBase(t *testing.T) {
+func TestConfigStoreUpdatePersistsMaxTurns(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_PROVIDER", "custom")
@@ -103,101 +106,25 @@ func TestConfigStoreUpdateLoadsRuntimeGraphQLIntoPatchBase(t *testing.T) {
 		t.Fatalf("newStoreFromEnv: %v", err)
 	}
 
-	defaultSource := "crm"
-	initialAPIKey := "crm-secret"
+	value := 9
 	if err := store.Update(configUpdateRequest{
-		GraphQLDefaultSource: &defaultSource,
-		GraphQLSources: []GraphQLSourceInput{{
-			Name:       "crm",
-			Endpoint:   "https://crm.example/graphql",
-			APIKey:     &initialAPIKey,
-			SchemaPath: "/schemas/crm.json",
-		}},
-	}); err != nil {
-		t.Fatalf("seed Update: %v", err)
-	}
-
-	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{}); err != nil {
-		t.Fatalf("writeBridgeFileConfig: %v", err)
-	}
-
-	updatedEndpoint := "https://crm-v2.example/graphql"
-	updatedSchemaPath := "/schemas/crm-v2.json"
-	if err := store.Update(configUpdateRequest{
-		GraphQLSourceUpsert: &GraphQLSourceInput{
-			Name:       "crm",
-			Endpoint:   updatedEndpoint,
-			SchemaPath: updatedSchemaPath,
-		},
-	}); err != nil {
-		t.Fatalf("Update after clearing file: %v", err)
-	}
-
-	runtime := store.RuntimeConfig()
-	source := findGraphQLSource(t, runtime.GraphQL.Sources, "crm")
-	if source.APIKey != initialAPIKey {
-		t.Fatalf("unexpected runtime graphql api key: got %q want %q", source.APIKey, initialAPIKey)
-	}
-	if source.Endpoint != updatedEndpoint {
-		t.Fatalf("unexpected runtime graphql endpoint: got %q want %q", source.Endpoint, updatedEndpoint)
-	}
-	if source.SchemaPath != updatedSchemaPath {
-		t.Fatalf("unexpected runtime graphql schema path: got %q want %q", source.SchemaPath, updatedSchemaPath)
-	}
-
-	fileCfg, _, err := loadBridgeFileConfig()
-	if err != nil {
-		t.Fatalf("loadBridgeFileConfig: %v", err)
-	}
-	if len(fileCfg.GraphQLSources) != 1 {
-		t.Fatalf("unexpected persisted graphql sources: %+v", fileCfg.GraphQLSources)
-	}
-	if fileCfg.GraphQLSources[0].APIKey == nil || *fileCfg.GraphQLSources[0].APIKey != initialAPIKey {
-		t.Fatalf("unexpected persisted graphql api key: %#v", fileCfg.GraphQLSources[0].APIKey)
-	}
-	if fileCfg.GraphQLSources[0].Endpoint != updatedEndpoint {
-		t.Fatalf("unexpected persisted graphql endpoint: got %q want %q", fileCfg.GraphQLSources[0].Endpoint, updatedEndpoint)
-	}
-	if fileCfg.GraphQLSources[0].SchemaPath != updatedSchemaPath {
-		t.Fatalf(
-			"unexpected persisted graphql schema path: got %q want %q",
-			fileCfg.GraphQLSources[0].SchemaPath,
-			updatedSchemaPath,
-		)
-	}
-}
-
-func TestConfigStoreUpdatePersistsGraphQLTextSanitizeSetting(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.toml")
-	t.Setenv("GHOST_CONFIG_PATH", configPath)
-	t.Setenv("GHOST_PROVIDER", "custom")
-	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
-
-	store, err := newStoreFromEnv()
-	if err != nil {
-		t.Fatalf("newStoreFromEnv: %v", err)
-	}
-
-	disabled := false
-	if err := store.Update(configUpdateRequest{
-		GraphQLTextSanitizeEnabled: &disabled,
+		MaxTurns: &value,
 	}); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-
-	if store.RuntimeConfig().GraphQL.TextSanitizeEnabled {
-		t.Fatal("expected runtime graphql_text_sanitize_enabled to be false")
+	if store.RuntimeConfig().MaxTurns != value {
+		t.Fatalf("expected runtime max_turns to be %d", value)
 	}
-	if store.Snapshot().GraphQLTextSanitizeEnabled {
-		t.Fatal("expected snapshot graphql_text_sanitize_enabled to be false")
+	if store.Snapshot().MaxTurns != value {
+		t.Fatalf("expected snapshot max_turns to be %d", value)
 	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		t.Fatalf("loadBridgeFileConfig: %v", err)
 	}
-	if fileCfg.GraphQLTextSanitizeEnabled == nil || *fileCfg.GraphQLTextSanitizeEnabled {
-		t.Fatalf("unexpected persisted graphql_text_sanitize_enabled: %#v", fileCfg.GraphQLTextSanitizeEnabled)
+	if fileCfg.MaxTurns == nil || *fileCfg.MaxTurns != value {
+		t.Fatalf("unexpected persisted max_turns: %#v", fileCfg.MaxTurns)
 	}
 }
 
@@ -267,6 +194,75 @@ func TestConfigStoreUpdatePersistsAssistantMarkdownEnabled(t *testing.T) {
 	}
 }
 
+func TestConfigStoreUpdatePersistsSessionSystemPromptVisibleEnabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	disabled := false
+	if err := store.Update(configUpdateRequest{
+		SessionSystemPromptVisible: &disabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if store.RuntimeConfig().SessionSystemPromptVisible {
+		t.Fatal("expected runtime session_system_prompt_visible_enabled to be false")
+	}
+	if store.Snapshot().SessionSystemPromptVisible {
+		t.Fatal("expected snapshot session_system_prompt_visible_enabled to be false")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.SessionSystemPromptVisible == nil || *fileCfg.SessionSystemPromptVisible {
+		t.Fatalf("unexpected persisted session_system_prompt_visible_enabled: %#v", fileCfg.SessionSystemPromptVisible)
+	}
+}
+
+func TestConfigStoreUpdatePersistsToolCallCompactOutputEnabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	enabled := true
+	if err := store.Update(configUpdateRequest{
+		ToolCallCompactOutputEnabled: &enabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !store.RuntimeConfig().ToolCallCompactOutputEnabled {
+		t.Fatal("expected runtime tool_call_compact_output_enabled to be true")
+	}
+	if !store.Snapshot().ToolCallCompactOutputEnabled {
+		t.Fatal("expected snapshot tool_call_compact_output_enabled to be true")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.ToolCallCompactOutputEnabled == nil || !*fileCfg.ToolCallCompactOutputEnabled {
+		t.Fatalf(
+			"unexpected persisted tool_call_compact_output_enabled: %#v",
+			fileCfg.ToolCallCompactOutputEnabled,
+		)
+	}
+}
+
 func TestConfigStoreUpdatePersistsMemoryModeEnabled(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
@@ -297,5 +293,38 @@ func TestConfigStoreUpdatePersistsMemoryModeEnabled(t *testing.T) {
 	}
 	if fileCfg.MemoryModeEnabled == nil || !*fileCfg.MemoryModeEnabled {
 		t.Fatalf("unexpected persisted memory_mode_enabled: %#v", fileCfg.MemoryModeEnabled)
+	}
+}
+
+func TestConfigStoreUpdatePersistsMicrocompactEnabled(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	enabled := true
+	if err := store.Update(configUpdateRequest{
+		MicrocompactEnabled: &enabled,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !store.RuntimeConfig().MicrocompactEnabled {
+		t.Fatal("expected runtime microcompact_enabled to be true")
+	}
+	if !store.Snapshot().MicrocompactEnabled {
+		t.Fatal("expected snapshot microcompact_enabled to be true")
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.MicrocompactEnabled == nil || !*fileCfg.MicrocompactEnabled {
+		t.Fatalf("unexpected persisted microcompact_enabled: %#v", fileCfg.MicrocompactEnabled)
 	}
 }

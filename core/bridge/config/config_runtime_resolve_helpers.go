@@ -55,6 +55,16 @@ func resolveRuntimeProjectRoot(fileCfg bridgeFileConfig, fallback runtimeConfig)
 	return projectRoot
 }
 
+func resolveRuntimeMaxTurns(fileCfg bridgeFileConfig, fallback runtimeConfig) (int, error) {
+	if fileCfg.MaxTurns != nil {
+		if *fileCfg.MaxTurns <= 0 {
+			return 0, fmt.Errorf("invalid max_turns: must be > 0, got %d", *fileCfg.MaxTurns)
+		}
+		return *fileCfg.MaxTurns, nil
+	}
+	return fallback.MaxTurns, nil
+}
+
 func resolveRuntimeNativePersistent(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
 	if fileCfg.NativePersistent != nil {
 		return *fileCfg.NativePersistent
@@ -143,19 +153,13 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	out.ChatPath = strings.TrimSpace(out.ChatPath)
 	out.ResponseOptions = llm.CloneResponseOptions(out.ResponseOptions)
 	out.ProjectRoot = strings.TrimSpace(out.ProjectRoot)
+	if out.MaxTurns <= 0 {
+		out.MaxTurns = defaultMaxTurns
+	}
 	out.WebSearchTavilyURL = strings.TrimSpace(out.WebSearchTavilyURL)
 	out.WebSearchExaURL = strings.TrimSpace(out.WebSearchExaURL)
 	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)
 	out.WebSearchExaAPIKey = strings.TrimSpace(out.WebSearchExaAPIKey)
-	out.WebRooterBaseURL = strings.TrimSpace(out.WebRooterBaseURL)
-	if out.WebRooterBaseURL == "" {
-		out.WebRooterBaseURL = defaultWebRooterBaseURL
-	}
-	out.WebRooterAPIToken = strings.TrimSpace(out.WebRooterAPIToken)
-	if out.WebRooterTimeoutMS <= 0 {
-		out.WebRooterTimeoutMS = defaultWebRooterTimeoutMS
-	}
-	out.GraphQL = normalizeGraphQLConfig(out.GraphQL)
 	return out
 }
 

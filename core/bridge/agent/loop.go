@@ -28,6 +28,7 @@ type Agent struct {
 	strictToolCallProtocol bool
 	history                *History
 	maxTurns               int
+	completionRetryPolicy  *CompletionRetryPolicy
 
 	initialHistoryLen int
 	lastTurn          int
@@ -128,6 +129,14 @@ func (a *Agent) SetResponseOptions(options llm.ResponseOptions) {
 		return
 	}
 	a.responseOptions = llm.CloneResponseOptions(options)
+}
+
+func (a *Agent) SetCompletionRetryPolicy(policy CompletionRetryPolicy) {
+	if a == nil {
+		return
+	}
+	cloned := policy
+	a.completionRetryPolicy = &cloned
 }
 
 // Run 负责循环与退出条件；单步执行下沉给独立协作者处理。

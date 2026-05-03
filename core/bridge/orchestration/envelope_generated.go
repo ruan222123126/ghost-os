@@ -45,6 +45,7 @@ type agentRequest struct {
 	Message string `json:"message,omitempty"`
 	Images []sessionImageContent `json:"images,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
+	ProjectRoot string `json:"project_root,omitempty"`
 	TraceID string `json:"trace_id,omitempty"`
 }
 
@@ -92,6 +93,7 @@ type askHumanAwaitingResponse struct {
 type agentStopResponse struct {
 	Status string `json:"status"`
 	Message string `json:"message"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // humanResponseParams 对齐 core/shared/schema.json 的 humanResponseRequest。
@@ -189,6 +191,7 @@ type sessionToolCall struct {
 type agentToolCallStartedPayload struct {
 	Tool string `json:"tool,omitempty"`
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	ArgumentsJson string `json:"arguments_json,omitempty"`
 }
 
 // sessionToolResult 对齐 core/shared/schema.json 的 sessionToolResult。
@@ -206,6 +209,7 @@ type agentToolCallFinishedPayload struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	Status string `json:"status,omitempty"`
 	Error string `json:"error,omitempty"`
+	Output string `json:"output,omitempty"`
 }
 
 // sessionHumanInteraction 对齐 core/shared/schema.json 的 sessionHumanInteraction。
@@ -251,6 +255,27 @@ type sessionMetadata struct {
 	TokenCount int `json:"token_count"`
 }
 
+// sessionSidebarPartition 对齐 core/shared/schema.json 的 sessionSidebarPartition。
+type sessionSidebarPartition struct {
+	ID string `json:"id"`
+	Name string `json:"name"`
+}
+
+// sessionSidebarPartitionState 对齐 core/shared/schema.json 的 sessionSidebarPartitionState。
+type sessionSidebarPartitionState struct {
+	Version int `json:"version"`
+	Partitions []sessionSidebarPartition `json:"partitions"`
+	Assignments map[string]string `json:"assignments"`
+}
+
+// sessionSidebarPartitionPutRequest 对齐 core/shared/schema.json 的 sessionSidebarPartitionPutRequest。
+type sessionSidebarPartitionPutRequest struct {
+	Version int `json:"version"`
+	Partitions []sessionSidebarPartition `json:"partitions"`
+	Assignments map[string]string `json:"assignments"`
+	TraceID string `json:"trace_id,omitempty"`
+}
+
 // sessionMessagePage 对齐 core/shared/schema.json 的 sessionMessagePage。
 type sessionMessagePage struct {
 	Limit int `json:"limit"`
@@ -286,20 +311,18 @@ type configResponse struct {
 	BaseURL string `json:"base_url"`
 	Model string `json:"model"`
 	ChatPath string `json:"chat_path"`
+	ProjectRoot string `json:"project_root"`
+	MaxTurns int `json:"max_turns"`
+	LlmCompletionRetryCount int `json:"llm_completion_retry_count"`
+	LlmCompletionRetryIntervalMs int `json:"llm_completion_retry_interval_ms"`
 	APIKeySet bool `json:"api_key_set"`
 	ModelSelectionEnabled bool `json:"model_selection_enabled"`
-	GraphqlDefaultSource string `json:"graphql_default_source"`
-	GraphqlToolRuntimeEnabled bool `json:"graphql_tool_runtime_enabled"`
-	GraphqlTextSanitizeEnabled bool `json:"graphql_text_sanitize_enabled"`
-	GraphqlSources []graphqlSourceResponse `json:"graphql_sources"`
-	GraphqlMutationPolicies []graphqlMutationPolicyResponse `json:"graphql_mutation_policies"`
 	SessionHumanLogFullEnabled bool `json:"session_human_log_full_enabled"`
+	SessionSystemPromptVisibleEnabled bool `json:"session_system_prompt_visible_enabled"`
 	AssistantMarkdownEnabled bool `json:"assistant_markdown_enabled"`
+	ToolCallCompactOutputEnabled bool `json:"tool_call_compact_output_enabled"`
 	MemoryModeEnabled bool `json:"memory_mode_enabled"`
-	WebRooterEnabled bool `json:"web_rooter_enabled"`
-	WebRooterBaseURL string `json:"web_rooter_base_url"`
-	WebRooterTimeoutMs int `json:"web_rooter_timeout_ms"`
-	WebRooterAPITokenSet bool `json:"web_rooter_api_token_set"`
+	MicrocompactEnabled bool `json:"microcompact_enabled"`
 	WebSearchTavilyURL string `json:"web_search_tavily_url"`
 	WebSearchExaURL string `json:"web_search_exa_url"`
 	WebSearchTavilyAPIKeySet bool `json:"web_search_tavily_api_key_set"`
@@ -320,19 +343,16 @@ type configUpdateRequest struct {
 	BaseURL *string `json:"base_url,omitempty"`
 	Model *string `json:"model,omitempty"`
 	ChatPath *string `json:"chat_path,omitempty"`
-	GraphqlDefaultSource *string `json:"graphql_default_source,omitempty"`
-	GraphqlToolRuntimeEnabled *bool `json:"graphql_tool_runtime_enabled,omitempty"`
-	GraphqlTextSanitizeEnabled *bool `json:"graphql_text_sanitize_enabled,omitempty"`
-	GraphqlSources []graphqlSourceInput `json:"graphql_sources,omitempty"`
-	GraphqlSourceUpsert graphqlSourceInput `json:"graphql_source_upsert,omitempty"`
-	GraphqlMutationPolicies []graphqlMutationPolicyInput `json:"graphql_mutation_policies,omitempty"`
+	ProjectRoot *string `json:"project_root,omitempty"`
+	MaxTurns *int `json:"max_turns,omitempty"`
+	LlmCompletionRetryCount *int `json:"llm_completion_retry_count,omitempty"`
+	LlmCompletionRetryIntervalMs *int `json:"llm_completion_retry_interval_ms,omitempty"`
 	SessionHumanLogFullEnabled *bool `json:"session_human_log_full_enabled,omitempty"`
+	SessionSystemPromptVisibleEnabled *bool `json:"session_system_prompt_visible_enabled,omitempty"`
 	AssistantMarkdownEnabled *bool `json:"assistant_markdown_enabled,omitempty"`
+	ToolCallCompactOutputEnabled *bool `json:"tool_call_compact_output_enabled,omitempty"`
 	MemoryModeEnabled *bool `json:"memory_mode_enabled,omitempty"`
-	WebRooterEnabled *bool `json:"web_rooter_enabled,omitempty"`
-	WebRooterBaseURL *string `json:"web_rooter_base_url,omitempty"`
-	WebRooterAPIToken *string `json:"web_rooter_api_token,omitempty"`
-	WebRooterTimeoutMs *int `json:"web_rooter_timeout_ms,omitempty"`
+	MicrocompactEnabled *bool `json:"microcompact_enabled,omitempty"`
 	WebSearchTavilyURL *string `json:"web_search_tavily_url,omitempty"`
 	WebSearchExaURL *string `json:"web_search_exa_url,omitempty"`
 	WebSearchTavilyAPIKey *string `json:"web_search_tavily_api_key,omitempty"`
@@ -346,96 +366,6 @@ type awaitingHumanPushPayload struct {
 	Prompt string `json:"prompt"`
 	SelectionMode string `json:"selection_mode,omitempty"`
 	Options []askHumanOption `json:"options,omitempty"`
-}
-
-// graphqlDomainResponse 对齐 core/shared/schema.json 的 graphqlDomainResponse。
-type graphqlDomainResponse struct {
-	Name string `json:"name"`
-	Description string `json:"description,omitempty"`
-	RootQueries []string `json:"root_queries"`
-	Types []string `json:"types,omitempty"`
-	MaxDepth int `json:"max_depth,omitempty"`
-	MaxFields int `json:"max_fields,omitempty"`
-	MaxRootFields int `json:"max_root_fields,omitempty"`
-}
-
-// graphqlSourceResponse 对齐 core/shared/schema.json 的 graphqlSourceResponse。
-type graphqlSourceResponse struct {
-	Name string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Endpoint string `json:"endpoint"`
-	SchemaPath string `json:"schema_path"`
-	TimeoutMs int `json:"timeout_ms"`
-	MaxResponseBytes int `json:"max_response_bytes"`
-	MaxDepth int `json:"max_depth"`
-	MaxFields int `json:"max_fields"`
-	MaxRootFields int `json:"max_root_fields"`
-	MaxFragments int `json:"max_fragments"`
-	Headers map[string]string `json:"headers,omitempty"`
-	APIKeySet bool `json:"api_key_set"`
-	Domains []graphqlDomainResponse `json:"domains,omitempty"`
-}
-
-// graphqlDomainInput 对齐 core/shared/schema.json 的 graphqlDomainInput。
-type graphqlDomainInput struct {
-	Name string `json:"name"`
-	Description string `json:"description,omitempty"`
-	RootQueries []string `json:"root_queries"`
-	Types []string `json:"types,omitempty"`
-	MaxDepth int `json:"max_depth,omitempty"`
-	MaxFields int `json:"max_fields,omitempty"`
-	MaxRootFields int `json:"max_root_fields,omitempty"`
-}
-
-// graphqlMutationPolicyResponse 对齐 core/shared/schema.json 的 graphqlMutationPolicyResponse。
-type graphqlMutationPolicyResponse struct {
-	Name string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Source string `json:"source"`
-	Domain string `json:"domain"`
-	RootMutation string `json:"root_mutation"`
-	ApprovalRequired bool `json:"approval_required,omitempty"`
-	IdempotencyMode string `json:"idempotency_mode"`
-	IdempotencyHeader string `json:"idempotency_header,omitempty"`
-	IdempotencyVariablePath string `json:"idempotency_variable_path,omitempty"`
-	MaxDepth int `json:"max_depth,omitempty"`
-	MaxFields int `json:"max_fields,omitempty"`
-	MaxRootFields int `json:"max_root_fields,omitempty"`
-	MaxFragments int `json:"max_fragments,omitempty"`
-}
-
-// graphqlMutationPolicyInput 对齐 core/shared/schema.json 的 graphqlMutationPolicyInput。
-type graphqlMutationPolicyInput struct {
-	Name string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Source string `json:"source"`
-	Domain string `json:"domain"`
-	RootMutation string `json:"root_mutation"`
-	ApprovalRequired bool `json:"approval_required,omitempty"`
-	IdempotencyMode string `json:"idempotency_mode"`
-	IdempotencyHeader string `json:"idempotency_header,omitempty"`
-	IdempotencyVariablePath string `json:"idempotency_variable_path,omitempty"`
-	MaxDepth int `json:"max_depth,omitempty"`
-	MaxFields int `json:"max_fields,omitempty"`
-	MaxRootFields int `json:"max_root_fields,omitempty"`
-	MaxFragments int `json:"max_fragments,omitempty"`
-}
-
-// graphqlSourceInput 对齐 core/shared/schema.json 的 graphqlSourceInput。
-type graphqlSourceInput struct {
-	Name string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Endpoint string `json:"endpoint"`
-	APIKey *string `json:"api_key,omitempty"`
-	SchemaPath string `json:"schema_path"`
-	TimeoutMs int `json:"timeout_ms,omitempty"`
-	MaxResponseBytes int `json:"max_response_bytes,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	MaxDepth int `json:"max_depth,omitempty"`
-	MaxFields int `json:"max_fields,omitempty"`
-	MaxRootFields int `json:"max_root_fields,omitempty"`
-	MaxFragments int `json:"max_fragments,omitempty"`
-	Domains []graphqlDomainInput `json:"domains,omitempty"`
 }
 
 // providerConfigResponse 对齐 core/shared/schema.json 的 providerConfig。

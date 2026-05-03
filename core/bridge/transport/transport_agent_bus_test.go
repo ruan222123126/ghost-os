@@ -88,6 +88,9 @@ func TestBusAgentStopCancelsRunBySessionID(t *testing.T) {
 	if payload["status"] != "stopped" {
 		t.Fatalf("unexpected stop status payload: got %v want %q", payload["status"], "stopped")
 	}
+	if payload["session_id"] != "session-stop" {
+		t.Fatalf("unexpected stop session_id payload: got %v want %q", payload["session_id"], "session-stop")
+	}
 
 	select {
 	case <-stopped:

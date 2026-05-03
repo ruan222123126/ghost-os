@@ -1,15 +1,17 @@
 package config
 
 type ToolRecord struct {
-	Name           string
-	Enabled        bool
-	PromptOverride string
+	Name            string
+	Enabled         bool
+	PromptOverride  string
+	SandboxMemoryMB *int
 }
 
 type ToolUpdateRequest struct {
-	Name           string
-	Enabled        *bool
-	PromptOverride *string
+	Name            string
+	Enabled         *bool
+	PromptOverride  *string
+	SandboxMemoryMB *int
 }
 
 type ToolSelectorConfig struct {

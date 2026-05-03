@@ -3,10 +3,11 @@ package orchestration
 const defaultMaxRequestBodyBytes int64 = 1 << 20
 
 type agentParams struct {
-	Mode      string                `json:"mode,omitempty"`
-	Message   string                `json:"message,omitempty"`
-	Images    []sessionImageContent `json:"images,omitempty"`
-	SessionID string                `json:"session_id,omitempty"`
+	Mode        string                `json:"mode,omitempty"`
+	Message     string                `json:"message,omitempty"`
+	Images      []sessionImageContent `json:"images,omitempty"`
+	SessionID   string                `json:"session_id,omitempty"`
+	ProjectRoot string                `json:"project_root,omitempty"`
 }
 
 type agentStopParams struct {

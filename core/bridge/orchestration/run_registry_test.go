@@ -92,8 +92,12 @@ func TestRunRegistryCancelBySessionID(t *testing.T) {
 	default:
 		t.Fatal("cancel func was not called")
 	}
+	if registry.Count() != 1 {
+		t.Fatalf("unexpected count before unregister: got %d want %d", registry.Count(), 1)
+	}
+	registry.Unregister("session-1")
 	if registry.Count() != 0 {
-		t.Fatalf("unexpected count: got %d want %d", registry.Count(), 0)
+		t.Fatalf("unexpected count after unregister: got %d want %d", registry.Count(), 0)
 	}
 }
 
@@ -114,8 +118,41 @@ func TestRunRegistryCancelByTraceID(t *testing.T) {
 	default:
 		t.Fatal("cancel func was not called")
 	}
+	if registry.GetByTraceID("trace-1") == nil {
+		t.Fatal("trace handle should remain until unregister")
+	}
+	registry.Unregister("session-1")
 	if registry.GetByTraceID("trace-1") != nil {
-		t.Fatal("trace handle should be removed")
+		t.Fatal("trace handle should be removed after unregister")
+	}
+}
+
+func TestRunRegistryCancelAndWaitByTraceID(t *testing.T) {
+	registry := NewRunRegistry()
+	cancelled := make(chan struct{}, 1)
+	if err := registry.Register("session-1", "trace-1", func() {
+		cancelled <- struct{}{}
+	}); err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+
+	go func() {
+		<-cancelled
+		registry.Unregister("session-1")
+	}()
+
+	handle, err := registry.CancelAndWaitByTraceID(context.Background(), "trace-1")
+	if err != nil {
+		t.Fatalf("CancelAndWaitByTraceID returned error: %v", err)
+	}
+	if handle == nil {
+		t.Fatal("expected run handle")
+	}
+	if handle.SessionID != "session-1" || handle.TraceID != "trace-1" {
+		t.Fatalf("unexpected handle: %+v", handle)
+	}
+	if registry.Count() != 0 {
+		t.Fatalf("unexpected count after wait: got %d want %d", registry.Count(), 0)
 	}
 }
 
@@ -163,6 +200,7 @@ func TestRunRegistryConcurrent(t *testing.T) {
 				t.Errorf("unexpected cancel error: %v", err)
 			}
 			<-ctx.Done()
+			registry.Unregister(sessionID)
 		}(index)
 	}
 

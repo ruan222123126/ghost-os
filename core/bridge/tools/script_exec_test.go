@@ -21,27 +21,39 @@ func (m mockExecutionClient) Call(
 }
 
 func TestScriptExecToolName(t *testing.T) {
-	tool := NewScriptExecTool(nil)
+	tool := NewScriptExecTool(nil, 0)
 	if tool.Name() != "script_exec" {
 		t.Fatalf("unexpected tool name: got %q want %q", tool.Name(), "script_exec")
 	}
 }
 
 func TestScriptExecToolDescriptionListsHelpers(t *testing.T) {
-	tool := NewScriptExecTool(nil)
+	tool := NewScriptExecTool(nil, 0)
 	description := tool.Description()
 
 	expectedSnippets := []string{
-		"primary local workspace tool",
-		"Allowed helpers:",
-		"tools.bash_exec(",
-		"tools.list_files(",
-		"tools.read_file(",
-		"tools.search_files(",
-		"tools.write_file(",
-		"tools.apply_diff(",
-		"tools.fetch_webpage(",
-		"Sandbox limits are enforced",
+		"Python sandbox.",
+		"Each call runs a fresh script",
+		"No state carries across calls",
+		"re-import modules and recreate variables every time",
+		"top-level functions",
+		"positional or named parameters",
+		"do not use tools.*",
+		"list_files(path='.')",
+		"string array",
+		"read_file(path, start_line=None, end_line=None)",
+		"search_files(query, path='.', max_results=50)",
+		"write_file(path, content, mode='write')",
+		"apply_diff(path, diff_text)",
+		"bash_exec(command, max_output_chars=None)",
+		"max_output_chars=N",
+		"fetch_webpage(url)",
+		"open(path, mode) supports UTF-8 text r/w/a only",
+		"json/os/sys are preloaded",
+		"subprocess.run/check_output",
+		"os.popen/os.system",
+		"pathlib remain unavailable",
+		"Output concise JSON/text",
 	}
 	for _, snippet := range expectedSnippets {
 		if !strings.Contains(description, snippet) {
@@ -55,7 +67,7 @@ func TestScriptExecToolExecuteEmptyScript(t *testing.T) {
 		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
 			return map[string]any{}, nil
 		},
-	})
+	}, 0)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"script": ""}`), "trace-test")
 	if err == nil {
@@ -68,7 +80,7 @@ func TestScriptExecToolExecuteScriptTooLong(t *testing.T) {
 		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
 			return map[string]any{}, nil
 		},
-	})
+	}, 0)
 
 	longScript := make([]byte, 11_000)
 	for i := range longScript {
@@ -105,7 +117,7 @@ func TestScriptExecToolExecuteSuccess(t *testing.T) {
 		},
 	}
 
-	tool := NewScriptExecTool(mockClient)
+	tool := NewScriptExecTool(mockClient, 0)
 	output, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -166,7 +178,7 @@ func TestScriptExecToolExecuteCapturesApplyDiffWriteSummary(t *testing.T) {
 		},
 	}
 
-	tool := NewScriptExecTool(mockClient)
+	tool := NewScriptExecTool(mockClient, 0)
 	output, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -209,7 +221,7 @@ func TestScriptExecToolExecuteOmitsUnsetResourceLimits(t *testing.T) {
 		},
 	}
 
-	tool := NewScriptExecTool(mockClient)
+	tool := NewScriptExecTool(mockClient, 0)
 	if _, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-test"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -219,6 +231,28 @@ func TestScriptExecToolExecuteOmitsUnsetResourceLimits(t *testing.T) {
 	}
 	if _, ok := capturedParams["max_memory_mb"]; ok {
 		t.Fatal("max_memory_mb should be omitted when unset")
+	}
+}
+
+func TestScriptExecToolExecuteUsesConfiguredDefaultMemoryLimit(t *testing.T) {
+	var capturedParams map[string]any
+	mockClient := mockExecutionClient{
+		callFunc: func(_ context.Context, _ string, params map[string]any, _ string) (map[string]any, error) {
+			capturedParams = params
+			return map[string]any{
+				"output":         "",
+				"tool_calls_log": []any{},
+			}, nil
+		},
+	}
+
+	tool := NewScriptExecTool(mockClient, 384)
+	if _, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-test"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got, want := capturedParams["max_memory_mb"], 384; got != want {
+		t.Fatalf("unexpected default max_memory_mb forwarding: got %v want %v", got, want)
 	}
 }
 
@@ -234,7 +268,7 @@ func TestScriptExecToolExecuteForwardsResourceLimitsWithoutClamping(t *testing.T
 		},
 	}
 
-	tool := NewScriptExecTool(mockClient)
+	tool := NewScriptExecTool(mockClient, 0)
 	if _, err := tool.Execute(
 		context.Background(),
 		json.RawMessage(`{"script":"print('ok')","timeout_ms":120000,"max_memory_mb":2048}`),
@@ -259,7 +293,7 @@ func TestScriptExecToolExecuteInvalidOutputType(t *testing.T) {
 				"tool_calls_log": []any{},
 			}, nil
 		},
-	})
+	}, 0)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-test")
 	if err == nil {
@@ -274,7 +308,7 @@ func TestScriptExecToolExecuteMissingToolCallsLog(t *testing.T) {
 				"output": "ok",
 			}, nil
 		},
-	})
+	}, 0)
 
 	_, err := tool.Execute(context.Background(), json.RawMessage(`{"script":"print('ok')"}`), "trace-test")
 	if err == nil {

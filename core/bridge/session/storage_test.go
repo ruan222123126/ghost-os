@@ -36,7 +36,7 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	s.DynamicSkillLoads = map[string]DynamicSkillLoad{
 		"release_flow": {
 			SkillName:      "release_flow",
-			LoadedBy:       "tfind",
+			LoadedBy:       "sfind",
 			LoadedAtTurn:   1,
 			LastCalledTurn: 2,
 		},
@@ -202,5 +202,57 @@ func TestStoreRejectsInvalidSessionID(t *testing.T) {
 	_, err = store.Load("../etc/passwd")
 	if !errors.Is(err, ErrInvalidSessionID) {
 		t.Fatalf("expected ErrInvalidSessionID, got: %v", err)
+	}
+}
+
+func TestStoreDeleteRemovesSessionHumanLog(t *testing.T) {
+	baseDir := t.TempDir()
+	store, err := NewStore(baseDir)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	sess := NewSession("system")
+	sess.ID = "session-delete-with-human-log"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "cleanup"})
+	if err := store.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	logPath := filepath.Join(baseDir, "sessions", sess.ID+".md")
+	if _, statErr := os.Stat(logPath); statErr != nil {
+		t.Fatalf("stat human log before delete: %v", statErr)
+	}
+
+	if err := store.Delete(sess.ID); err != nil {
+		t.Fatalf("delete session: %v", err)
+	}
+
+	if _, statErr := os.Stat(logPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected human log removed, got stat error: %v", statErr)
+	}
+	if _, loadErr := store.Load(sess.ID); !errors.Is(loadErr, ErrSessionNotFound) {
+		t.Fatalf("expected session removed, got load error: %v", loadErr)
+	}
+}
+
+func TestStoreDeleteRemovesOrphanSessionHumanLog(t *testing.T) {
+	baseDir := t.TempDir()
+	store, err := NewStore(baseDir)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	sessionID := "session-orphan-human-log"
+	logPath := filepath.Join(baseDir, "sessions", sessionID+".md")
+	if err := os.WriteFile(logPath, []byte("orphan"), 0o600); err != nil {
+		t.Fatalf("write orphan human log: %v", err)
+	}
+
+	if err := store.Delete(sessionID); err != nil {
+		t.Fatalf("delete orphan human log: %v", err)
+	}
+	if _, statErr := os.Stat(logPath); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("expected orphan human log removed, got stat error: %v", statErr)
 	}
 }

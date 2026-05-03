@@ -98,10 +98,7 @@ func validateRemovedConfigKeys(keys []toml.Key) error {
 	if len(removed) == 0 {
 		return nil
 	}
-	return fmt.Errorf(
-		"unsupported legacy config fields: %s; migrate to [providers] and graphql_sources/graphql_mutation_policies",
-		strings.Join(removed, ", "),
-	)
+	return fmt.Errorf("unsupported config fields: %s", strings.Join(removed, ", "))
 }
 
 func collectRemovedConfigKeys(keys []toml.Key) []string {
@@ -128,7 +125,10 @@ func removedConfigKeyName(key toml.Key) string {
 	}
 
 	switch key[0] {
-	case "model_providers", "graphql_headers":
+	case "model_providers",
+		"graphql_headers",
+		"graphql_sources",
+		"graphql_mutation_policies":
 		return key[0]
 	}
 	if len(key) != 1 {
@@ -140,6 +140,9 @@ func removedConfigKeyName(key toml.Key) string {
 		"provider",
 		"api_key",
 		"base_url",
+		"graphql_default_source",
+		"graphql_tool_runtime_enabled",
+		"graphql_text_sanitize_enabled",
 		"graphql_enabled",
 		"graphql_endpoint",
 		"graphql_api_key",

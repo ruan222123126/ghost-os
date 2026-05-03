@@ -181,6 +181,78 @@ func TestPruneMessagesKeepsToolCallAndToolResultTogether(t *testing.T) {
 	}
 }
 
+func TestPruneMessagesKeepsWholeLatestToolTurn(t *testing.T) {
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Text: "system"},
+		{Role: llm.RoleUser, Text: "older"},
+		{Role: llm.RoleAssistant, Text: strings.Repeat("older answer ", 80)},
+		{Role: llm.RoleUser, Text: "browser demo"},
+		{
+			Role:             llm.RoleAssistant,
+			ReasoningContent: json.RawMessage(`"step 1"`),
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call-1",
+				Name:      "script_exec",
+				Arguments: json.RawMessage(`{"script":"one"}`),
+			}},
+		},
+		{Role: llm.RoleTool, ToolCallID: "call-1", Text: strings.Repeat("tool-one ", 60)},
+		{
+			Role:             llm.RoleAssistant,
+			ReasoningContent: json.RawMessage(`"step 2"`),
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call-2",
+				Name:      "script_exec",
+				Arguments: json.RawMessage(`{"script":"two"}`),
+			}},
+		},
+		{Role: llm.RoleTool, ToolCallID: "call-2", Text: strings.Repeat("tool-two ", 60)},
+		{Role: llm.RoleAssistant, Text: "done"},
+	}
+
+	latestTurnTokens := 0
+	for _, msg := range messages[3:] {
+		latestTurnTokens += EstimateTokens(msg)
+	}
+	pruned := PruneMessages(messages, EstimateTokens(messages[0])+latestTurnTokens+8)
+
+	if len(pruned) != len(messages[3:])+1 {
+		t.Fatalf("expected system + full latest turn, got %d messages", len(pruned))
+	}
+	if pruned[1].Role != llm.RoleUser || pruned[1].Text != "browser demo" {
+		t.Fatalf("expected latest user turn boundary to be preserved, got %+v", pruned[1])
+	}
+	if pruned[len(pruned)-1].Role != llm.RoleAssistant || pruned[len(pruned)-1].Text != "done" {
+		t.Fatalf("expected final assistant message to remain, got %+v", pruned[len(pruned)-1])
+	}
+}
+
+func TestPruneMessagesDoesNotTruncateOversizedToolTurn(t *testing.T) {
+	messages := []llm.Message{
+		{Role: llm.RoleSystem, Text: "system"},
+		{Role: llm.RoleUser, Text: "run browser flow"},
+		{
+			Role:             llm.RoleAssistant,
+			ReasoningContent: json.RawMessage(`"thinking"`),
+			ToolCalls: []llm.ToolCall{{
+				ID:        "call-1",
+				Name:      "script_exec",
+				Arguments: json.RawMessage(`{"script":"print(1)"}`),
+			}},
+		},
+		{Role: llm.RoleTool, ToolCallID: "call-1", Text: strings.Repeat("very long tool output ", 120)},
+		{Role: llm.RoleAssistant, Text: "all done"},
+	}
+
+	pruned := PruneMessages(messages, 120)
+	if len(pruned) != len(messages) {
+		t.Fatalf("expected oversized tool turn to stay intact, got %d want %d", len(pruned), len(messages))
+	}
+	if pruned[3].Text != messages[3].Text {
+		t.Fatalf("expected tool output to remain untruncated")
+	}
+}
+
 func TestGetContextLimit(t *testing.T) {
 	if got := GetContextLimit(llm.ProviderOpenAI, "gpt-4o", ContextLimitConfig{}); got != openAIModernContextTokens-openAIResponseReserve {
 		t.Fatalf("unexpected openai limit: got %d", got)

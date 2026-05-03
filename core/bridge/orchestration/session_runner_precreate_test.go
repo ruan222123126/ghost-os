@@ -100,6 +100,25 @@ func TestSessionAgentRunnerPreCreatesSessionBeforeLoopRunTurnStream(t *testing.T
 	assertPreCreatedSessionShellAfterFailure(t, sessionStore, sessionID, systemPrompt)
 }
 
+func TestSessionAgentRunnerRejectsResumeLikeTurnWithoutPendingHumanAnswer(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	sess := session.NewSession("base system prompt")
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	runner := newPreCreateSessionRunner(&preCreateAssertCompleter{
+		t:            t,
+		sessionStore: sessionStore,
+		systemPrompt: "base system prompt",
+	}, sessionStore, "base system prompt")
+
+	_, _, err := runner.RunTurn(context.Background(), "   ", sess.ID, "trace-empty-resume")
+	if err == nil || !strings.Contains(err.Error(), "resume requires pending human answers") {
+		t.Fatalf("expected resume guard error, got %v", err)
+	}
+}
+
 func newPreCreateSessionRunner(
 	completer llm.Completer,
 	sessionStore *session.Store,

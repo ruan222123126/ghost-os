@@ -35,14 +35,29 @@ func TestBusConfigGetAndUpdateRegression(t *testing.T) {
 	if payload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", payload["model_selection_enabled"])
 	}
+	if payload["session_system_prompt_visible_enabled"] != true {
+		t.Fatalf("unexpected session_system_prompt_visible_enabled: got %v want true", payload["session_system_prompt_visible_enabled"])
+	}
+	if payload["max_turns"] != float64(20) {
+		t.Fatalf("unexpected max_turns: got %v want %d", payload["max_turns"], 20)
+	}
 	if payload["assistant_markdown_enabled"] != true {
 		t.Fatalf("unexpected assistant_markdown_enabled: got %v want true", payload["assistant_markdown_enabled"])
+	}
+	if payload["tool_call_compact_output_enabled"] != false {
+		t.Fatalf(
+			"unexpected tool_call_compact_output_enabled: got %v want false",
+			payload["tool_call_compact_output_enabled"],
+		)
 	}
 	if payload["memory_mode_enabled"] != false {
 		t.Fatalf("unexpected memory_mode_enabled: got %v want false", payload["memory_mode_enabled"])
 	}
+	if payload["microcompact_enabled"] != false {
+		t.Fatalf("unexpected microcompact_enabled: got %v want false", payload["microcompact_enabled"])
+	}
 
-	updateResp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"CONFIG_UPDATE","params":{"provider":"custom","model":"local","assistant_markdown_enabled":false,"memory_mode_enabled":true},"trace_id":"trace-config-update"}`, nil)
+	updateResp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"CONFIG_UPDATE","params":{"provider":"custom","model":"local","max_turns":9,"session_system_prompt_visible_enabled":false,"assistant_markdown_enabled":false,"tool_call_compact_output_enabled":true,"memory_mode_enabled":true,"microcompact_enabled":true},"trace_id":"trace-config-update"}`, nil)
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("unexpected status for config update: got %d want %d", updateResp.Code, http.StatusOK)
 	}
@@ -57,10 +72,25 @@ func TestBusConfigGetAndUpdateRegression(t *testing.T) {
 	if updatePayload["model_selection_enabled"] != true {
 		t.Fatalf("unexpected model_selection_enabled: got %v want true", updatePayload["model_selection_enabled"])
 	}
+	if updatePayload["session_system_prompt_visible_enabled"] != false {
+		t.Fatalf("unexpected session_system_prompt_visible_enabled: got %v want false", updatePayload["session_system_prompt_visible_enabled"])
+	}
+	if updatePayload["max_turns"] != float64(9) {
+		t.Fatalf("unexpected max_turns: got %v want %d", updatePayload["max_turns"], 9)
+	}
 	if updatePayload["assistant_markdown_enabled"] != false {
 		t.Fatalf("unexpected assistant_markdown_enabled: got %v want false", updatePayload["assistant_markdown_enabled"])
 	}
+	if updatePayload["tool_call_compact_output_enabled"] != true {
+		t.Fatalf(
+			"unexpected tool_call_compact_output_enabled: got %v want true",
+			updatePayload["tool_call_compact_output_enabled"],
+		)
+	}
 	if updatePayload["memory_mode_enabled"] != true {
 		t.Fatalf("unexpected memory_mode_enabled: got %v want true", updatePayload["memory_mode_enabled"])
+	}
+	if updatePayload["microcompact_enabled"] != true {
+		t.Fatalf("unexpected microcompact_enabled: got %v want true", updatePayload["microcompact_enabled"])
 	}
 }

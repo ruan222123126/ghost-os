@@ -83,6 +83,24 @@ func (w *sessionHumanLogWriter) Sync(db *sql.DB, sessionID string) error {
 	return w.syncExistingFile(db, path, raw, record, mode)
 }
 
+func (w *sessionHumanLogWriter) Delete(sessionID string) (bool, error) {
+	if w == nil {
+		return false, nil
+	}
+	id, err := normalizeSessionID(sessionID)
+	if err != nil {
+		return false, err
+	}
+	path := w.pathForSession(id)
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("delete session human log %q: %w", id, err)
+	}
+	return true, nil
+}
+
 func (w *sessionHumanLogWriter) syncExistingFile(
 	db *sql.DB,
 	path string,

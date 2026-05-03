@@ -9,26 +9,42 @@ import (
 	"strings"
 )
 
-func (h *ActionHandler) discoverManagedSkills() ([]managedSkill, skillRoots, error) {
-	roots, err := h.resolveSkillRoots()
+func (h *ActionHandler) discoverManagedSkills() ([]managedSkill, Config, skillRoots, error) {
+	cfg, err := h.loadConfig()
 	if err != nil {
-		return nil, skillRoots{}, err
+		return nil, Config{}, skillRoots{}, err
+	}
+	roots, err := h.resolveSkillRootsFromConfig(cfg)
+	if err != nil {
+		return nil, Config{}, skillRoots{}, err
 	}
 	items, err := discoverManagedSkillsFromRoots(roots)
 	if err != nil {
-		return nil, skillRoots{}, err
+		return nil, Config{}, skillRoots{}, err
 	}
-	return items, roots, nil
+	return items, cfg, roots, nil
 }
 
 func (h *ActionHandler) resolveSkillRoots() (skillRoots, error) {
+	cfg, err := h.loadConfig()
+	if err != nil {
+		return skillRoots{}, err
+	}
+	return h.resolveSkillRootsFromConfig(cfg)
+}
+
+func (h *ActionHandler) loadConfig() (Config, error) {
 	if h == nil || h.store == nil {
-		return skillRoots{}, errors.New("config store is not configured")
+		return Config{}, errors.New("config store is not configured")
 	}
 	cfg, err := h.store.Config()
 	if err != nil {
-		return skillRoots{}, fmt.Errorf("load config: %w", err)
+		return Config{}, fmt.Errorf("load config: %w", err)
 	}
+	return cfg, nil
+}
+
+func (h *ActionHandler) resolveSkillRootsFromConfig(cfg Config) (skillRoots, error) {
 	repoRoot, err := resolveManagedRepoRoot(cfg.ProjectRoot)
 	if err != nil {
 		return skillRoots{}, err
@@ -45,6 +61,35 @@ func (h *ActionHandler) resolveSkillRoots() (skillRoots, error) {
 		Repo: filepath.Join(repoRoot, ".agents", "skills"),
 		User: userRoot,
 	}, nil
+}
+
+func (h *ActionHandler) findManagedSkillByID(rawID string) (managedSkill, error) {
+	item, _, err := h.findManagedSkillForDelete(rawID)
+	return item, err
+}
+
+func (h *ActionHandler) findManagedSkillForDelete(rawID string) (managedSkill, skillRoots, error) {
+	decoded, err := DecodeSkillID(rawID)
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	roots, err := h.resolveSkillRoots()
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	targetRoot, err := managedSkillRootBySource(roots, decoded.Source)
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	items, err := discoverManagedSkillsBySource(decoded.Source, targetRoot)
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	item, err := findManagedSkill(items, decoded, strings.TrimSpace(rawID))
+	if err != nil {
+		return managedSkill{}, skillRoots{}, err
+	}
+	return item, roots, nil
 }
 
 func ensureManagedSkillRoot(path string) error {

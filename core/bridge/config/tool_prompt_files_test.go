@@ -101,6 +101,35 @@ func TestLoadToolPromptOverridesFromFilesBackfillsLegacyEmptyFilesBeforeInit(t *
 	}
 }
 
+func TestLoadToolPromptOverridesFromFilesMigratesLegacyBasePrompt(t *testing.T) {
+	promptsDir := filepath.Join(t.TempDir(), "prompts")
+	root := filepath.Join(promptsDir, toolPromptDirName)
+	if err := os.MkdirAll(root, toolPromptDirPerm); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", root, err)
+	}
+	legacyPrompts := toolLegacyPromptDefaults["script_exec"]
+	if len(legacyPrompts) == 0 {
+		t.Fatal("missing legacy prompt for script_exec")
+	}
+	scriptPath := filepath.Join(root, "script_exec"+toolPromptFileExt)
+	if err := os.WriteFile(scriptPath, []byte(legacyPrompts[0]), toolPromptFilePerm); err != nil {
+		t.Fatalf("WriteFile(%s): %v", scriptPath, err)
+	}
+
+	overrides, err := loadToolPromptOverridesFromFiles(promptsDir)
+	if err != nil {
+		t.Fatalf("loadToolPromptOverridesFromFiles: %v", err)
+	}
+	basePrompt, ok := ToolBasePrompt("script_exec")
+	if !ok {
+		t.Fatal("missing base prompt for script_exec")
+	}
+	if got := overrides["script_exec"]; got != basePrompt {
+		t.Fatalf("expected script_exec legacy prompt to migrate to base prompt, got %q", got)
+	}
+	assertToolPromptFile(t, promptsDir, "script_exec", basePrompt)
+}
+
 func TestToolPromptFilesSyncBetweenGhostAndGhostOS(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

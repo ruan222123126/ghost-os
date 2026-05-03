@@ -74,7 +74,9 @@ func (r planModeRunner) Execute(
 	if r.runtimeFactory == nil {
 		return agentResponse{}, errPlanModeRuntimeFactoryRequired
 	}
-	deps, err := r.runtimeFactory.Build(r.configStore)
+	deps, err := r.runtimeFactory.Build(
+		applyRequestRuntimeOptionsToStore(r.configStore, prepared.requestRuntime),
+	)
 	if err != nil {
 		return agentResponse{}, err
 	}
@@ -109,6 +111,8 @@ func (r planModeRunner) loadHistory(
 		deps.systemPrompt,
 		r.sessionStore,
 		deps.cfg.ToolSearch.IdleTurns,
+		deps.cfg.MicrocompactEnabled,
+		"",
 	)
 	sess, created, err := historyBuilder.LoadOrCreateSession(sessionID)
 	if err != nil {

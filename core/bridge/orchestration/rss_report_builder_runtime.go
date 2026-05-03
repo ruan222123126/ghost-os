@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"time"
 
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
@@ -45,6 +46,10 @@ func (r runtimeRSSReportRunner) run(ctx context.Context, input bridgerss.RSSRepo
 	systemPrompt := basePrompt + "\n\n" + bridgerss.RSSReportInvestigationSystemPrompt()
 	reportAgent := agent.NewAgent(deps.Client(), scoped, systemPrompt, deps.Config().MaxTurns)
 	reportAgent.SetResponseOptions(llm.CloneResponseOptions(deps.Config().ResponseOptions))
+	reportAgent.SetCompletionRetryPolicy(agent.NewCompletionRetryPolicy(
+		deps.Config().LLMCompletionRetryCount,
+		time.Duration(deps.Config().LLMCompletionRetryIntervalMS)*time.Millisecond,
+	))
 	toolGuidance := bridgerss.RenderRSSReportToolGuidance(tools.CatalogToolNames(scoped))
 	return reportAgent.RunWithTraceID(
 		ctx,

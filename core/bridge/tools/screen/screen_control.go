@@ -17,15 +17,15 @@ const (
 	screenControlActionTextInput = "text_input"
 )
 
-const screenControlDescription = "Unified screen control entrypoint for direct screenshot/text/icon/click/input actions (atomic only)."
+const screenControlDescription = "Screen control. Mode 'atomic' (screenshot/OCR/click) or 'agent' (goal-driven execution)."
 
 const screenControlSchema = `{
 	"type":"object",
 	"properties":{
-		"mode":{"type":"string","enum":["atomic"],"description":"Optional; when provided it must be atomic."},
-		"action":{"type":"string","enum":["screenshot","find_text","find_icon","click_icon","mouse_position","text_input"],"description":"Required atomic action."},
-		"params":{"type":"object","description":"Optional parameters for atomic actions."},
-		"display_id":{"type":"integer","minimum":0,"description":"Optional display id forwarded into params.display_id."}
+		"mode":{"type":"string","enum":["atomic"]},
+		"action":{"type":"string","enum":["screenshot","find_text","find_icon","click_icon","mouse_position","text_input"]},
+		"params":{"type":"object"},
+		"display_id":{"type":"integer","minimum":0}
 	},
 	"required":["action"],
 	"additionalProperties":false

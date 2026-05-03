@@ -49,3 +49,12 @@ func (a *sessionTurnRunnerAdapter) RunTurnStream(ctx context.Context, message st
 	}
 	return a.RunTurn(ctx, message, sessionID, traceID)
 }
+
+func (a *sessionTurnRunnerAdapter) withRequestRuntimeOptions(options *requestRuntimeOptions) SessionTurnRunner {
+	if a == nil || options == nil {
+		return a
+	}
+	cloned := *a
+	cloned.store = applyRequestRuntimeOptionsToStore(a.store, options)
+	return &cloned
+}

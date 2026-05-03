@@ -1,9 +1,6 @@
 package config
 
-import (
-	"errors"
-	"strings"
-)
+import "strings"
 
 // Update 按固定流水线执行：load current file -> apply patch -> normalize -> resolve/validate -> persist。
 func (s *store) Update(req UpdateRequest) error {
@@ -18,7 +15,11 @@ func (s *store) Update(req UpdateRequest) error {
 		return err
 	}
 
-	normalized, runtime, err := resolveConfigForPersist(state.fileCfg, state.current)
+	persistFallback, err := updatePersistFallback(state.current, req)
+	if err != nil {
+		return err
+	}
+	normalized, runtime, err := resolveConfigForPersist(state.fileCfg, persistFallback)
 	if err != nil {
 		return err
 	}
@@ -29,6 +30,46 @@ func (s *store) Update(req UpdateRequest) error {
 	return nil
 }
 
+func updatePersistFallback(current runtimeConfig, req UpdateRequest) (runtimeConfig, error) {
+	fallback := cloneRuntimeConfig(current)
+	if !hasResetStringField(req) {
+		return fallback, nil
+	}
+
+	envFallback, err := runtimeFallbackFromEnv(currentEnv())
+	if err != nil {
+		return runtimeConfig{}, err
+	}
+	if resetsStringValue(req.Model) {
+		fallback.Model = envFallback.Model
+	}
+	if resetsStringValue(req.ChatPath) {
+		fallback.ChatPath = envFallback.ChatPath
+	}
+	if resetsStringValue(req.ProjectRoot) {
+		fallback.ProjectRoot = envFallback.ProjectRoot
+	}
+	if resetsStringValue(req.WebSearchTavilyURL) {
+		fallback.WebSearchTavilyURL = envFallback.WebSearchTavilyURL
+	}
+	if resetsStringValue(req.WebSearchExaURL) {
+		fallback.WebSearchExaURL = envFallback.WebSearchExaURL
+	}
+	return fallback, nil
+}
+
+func hasResetStringField(req UpdateRequest) bool {
+	return resetsStringValue(req.Model) ||
+		resetsStringValue(req.ChatPath) ||
+		resetsStringValue(req.ProjectRoot) ||
+		resetsStringValue(req.WebSearchTavilyURL) ||
+		resetsStringValue(req.WebSearchExaURL)
+}
+
+func resetsStringValue(raw *string) bool {
+	return raw != nil && strings.TrimSpace(*raw) == ""
+}
+
 func applyConfigUpdatePatch(
 	fileCfg *bridgeFileConfig,
 	current runtimeConfig,
@@ -37,19 +78,27 @@ func applyConfigUpdatePatch(
 	if err := applyProviderUpdatePatch(fileCfg, current, req); err != nil {
 		return err
 	}
-	if err := applyGraphQLUpdatePatch(fileCfg, req); err != nil {
-		return err
-	}
-	applyConfigScalarUpdatePatch(fileCfg, req)
-	return nil
+	return applyConfigScalarUpdatePatch(fileCfg, req)
 }
 
-func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) {
+func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) error {
 	if req.Model != nil {
 		fileCfg.Model = cloneOptionalStringPointer(req.Model)
 	}
 	if req.ChatPath != nil {
 		fileCfg.ChatPath = cloneOptionalStringPointer(req.ChatPath)
+	}
+	if err := applyProjectRootUpdate(fileCfg, req.ProjectRoot); err != nil {
+		return err
+	}
+	if req.MaxTurns != nil {
+		fileCfg.MaxTurns = cloneIntPointer(req.MaxTurns)
+	}
+	if req.LLMCompletionRetryCount != nil {
+		fileCfg.LLMCompletionRetryCount = cloneIntPointer(req.LLMCompletionRetryCount)
+	}
+	if req.LLMCompletionRetryIntervalMS != nil {
+		fileCfg.LLMCompletionRetryIntervalMS = cloneIntPointer(req.LLMCompletionRetryIntervalMS)
 	}
 	if req.WebSearchTavilyURL != nil {
 		fileCfg.WebSearchTavilyURL = cloneOptionalStringPointer(req.WebSearchTavilyURL)
@@ -66,24 +115,22 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.SessionHumanLogFullEnabled != nil {
 		fileCfg.SessionHumanLogFullEnabled = cloneBoolPointer(req.SessionHumanLogFullEnabled)
 	}
+	if req.SessionSystemPromptVisible != nil {
+		fileCfg.SessionSystemPromptVisible = cloneBoolPointer(req.SessionSystemPromptVisible)
+	}
 	if req.AssistantMarkdownEnabled != nil {
 		fileCfg.AssistantMarkdownEnabled = cloneBoolPointer(req.AssistantMarkdownEnabled)
+	}
+	if req.ToolCallCompactOutputEnabled != nil {
+		fileCfg.ToolCallCompactOutputEnabled = cloneBoolPointer(req.ToolCallCompactOutputEnabled)
 	}
 	if req.MemoryModeEnabled != nil {
 		fileCfg.MemoryModeEnabled = cloneBoolPointer(req.MemoryModeEnabled)
 	}
-	if req.WebRooterEnabled != nil {
-		fileCfg.WebRooterEnabled = cloneBoolPointer(req.WebRooterEnabled)
+	if req.MicrocompactEnabled != nil {
+		fileCfg.MicrocompactEnabled = cloneBoolPointer(req.MicrocompactEnabled)
 	}
-	if req.WebRooterBaseURL != nil {
-		fileCfg.WebRooterBaseURL = cloneStringPointer(req.WebRooterBaseURL)
-	}
-	if req.WebRooterAPIToken != nil {
-		fileCfg.WebRooterAPIToken = cloneOptionalStringPointer(req.WebRooterAPIToken)
-	}
-	if req.WebRooterTimeoutMS != nil {
-		fileCfg.WebRooterTimeoutMS = cloneIntPointer(req.WebRooterTimeoutMS)
-	}
+	return nil
 }
 
 // SetProjectRoot 更新并持久化 project_root，并刷新运行态快照。
@@ -91,16 +138,15 @@ func (s *store) SetProjectRoot(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return errors.New("project_root is required")
-	}
-
 	fileCfg, configPath, err := s.loadStoredFileConfigLocked()
 	if err != nil {
 		return err
 	}
-	fileCfg.ProjectRoot = stringPointer(trimmed)
+	normalized, err := NormalizeProjectRoot(path)
+	if err != nil {
+		return err
+	}
+	fileCfg.ProjectRoot = stringPointer(normalized)
 	return s.persistLocked(configPath, fileCfg)
 }
 

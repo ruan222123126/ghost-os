@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"ghost-os/bridge/tools"
 )
@@ -45,6 +46,13 @@ func TestExecuteWorkflowToolNodeScreenControlWorkflowStepsSequential(t *testing.
 	}
 	if tool.calls[0]["action"] != "screenshot" || tool.calls[1]["action"] != "click_icon" {
 		t.Fatalf("unexpected call sequence: %#v", tool.calls)
+	}
+	if len(tool.callTimes) != 2 {
+		t.Fatalf("unexpected call time count: %d", len(tool.callTimes))
+	}
+	const minimumObservedDelay = 180 * time.Millisecond
+	if gap := tool.callTimes[1].Sub(tool.callTimes[0]); gap < minimumObservedDelay {
+		t.Fatalf("expected inter-step gap >= %s, got %s", minimumObservedDelay, gap)
 	}
 
 	payload, ok := outcome.outputValue.(map[string]any)
@@ -158,6 +166,17 @@ func TestExecuteWorkflowToolNodeScreenControlSingleActionStillWorks(t *testing.T
 	}
 }
 
+func TestRandomWorkflowScreenControlStepDelayWithinDefaultRange(t *testing.T) {
+	minimum := time.Duration(workflowScreenControlStepDelayMinMS) * time.Millisecond
+	maximum := time.Duration(workflowScreenControlStepDelayMaxMS) * time.Millisecond
+	for range 64 {
+		delay := randomWorkflowScreenControlStepDelay()
+		if delay < minimum || delay > maximum {
+			t.Fatalf("expected delay in [%s, %s], got %s", minimum, maximum, delay)
+		}
+	}
+}
+
 func buildWorkflowScreenControlNode(arguments map[string]any) WorkflowNode {
 	return WorkflowNode{
 		ID:   "tool-node",
@@ -170,10 +189,11 @@ func buildWorkflowScreenControlNode(arguments map[string]any) WorkflowNode {
 }
 
 type workflowScreenControlSequenceTool struct {
-	name    string
-	outputs []string
-	failAt  int
-	calls   []map[string]any
+	name      string
+	outputs   []string
+	failAt    int
+	calls     []map[string]any
+	callTimes []time.Time
 }
 
 func (t *workflowScreenControlSequenceTool) Name() string { return t.name }
@@ -190,6 +210,7 @@ func (t *workflowScreenControlSequenceTool) Execute(_ context.Context, args json
 		return "", err
 	}
 	t.calls = append(t.calls, decoded)
+	t.callTimes = append(t.callTimes, time.Now())
 	if t.failAt > 0 && len(t.calls) == t.failAt {
 		return "", errors.New("forced step failure")
 	}

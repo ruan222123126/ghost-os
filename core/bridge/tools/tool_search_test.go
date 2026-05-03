@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -35,87 +36,43 @@ type toolSearchResponse struct {
 	} `json:"errors"`
 }
 
-func TestToolSearchTool_SearchLoadListAndUnload(t *testing.T) {
+func TestToolSearchTool_HidesBlockedSkillAndFallsBackToUserDuplicate(t *testing.T) {
+	root := t.TempDir()
+	repoRoot := filepath.Join(root, "repo")
+	homeRoot := filepath.Join(root, "home")
+	repoSkills := filepath.Join(repoRoot, ".agents", "skills")
+	userSkills := filepath.Join(homeRoot, ".ghost-os", "skills")
+	writeSkillFile(t, filepath.Join(repoSkills, "release"), "release_flow", "repo release", "repo body", "")
+	writeSkillFile(t, filepath.Join(userSkills, "release"), "release_flow", "user release", "user body", "")
+	t.Setenv("HOME", homeRoot)
+
 	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "codex_cli", "script_exec", "web_search", ToolSearchToolName} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	tool := NewToolSearchTool(registry, VisibilityOptions{
-		ToolSearchEnabled: true,
-		Allowlist:         []string{"codex_cli"},
-	}, 3)
-
-	sess := session.NewSession("")
-	sess.AdvanceToolTurn(3)
-	ctx := WithSession(context.Background(), sess)
-
-	search := decodeToolSearchResponse(t, tool, ctx, `{"action":"search"}`)
-	if len(search.Items) != 2 || search.Items[0].Name != "script_exec" || search.Items[1].Name != "web_search" {
-		t.Fatalf("unexpected search items: %+v", search.Items)
-	}
-	if search.Kind != toolSearchKindTool {
-		t.Fatalf("expected tool kind payload, got %+v", search)
-	}
-
-	load := decodeToolSearchResponse(t, tool, ctx, `{"action":"load","tool_names":["web_search"]}`)
-	if len(load.Items) != 1 || load.Items[0].Status != "loaded" || !load.Items[0].AvailableNow || load.Items[0].AvailableNextTurn {
-		t.Fatalf("unexpected load result: %+v", load.Items)
-	}
-
-	activeNow := decodeToolSearchResponse(t, tool, ctx, `{"action":"list"}`)
-	if len(activeNow.Items) != 1 || activeNow.Items[0].Status != "active" || !activeNow.Items[0].AvailableNow {
-		t.Fatalf("unexpected active list in current turn: %+v", activeNow.Items)
-	}
-
-	sess.AdvanceToolTurn(3)
-	active := decodeToolSearchResponse(t, tool, ctx, `{"action":"list"}`)
-	if len(active.Items) != 1 || active.Items[0].Status != "active" || !active.Items[0].AvailableNow {
-		t.Fatalf("unexpected active list: %+v", active.Items)
-	}
-
-	afterLoadSearch := decodeToolSearchResponse(t, tool, ctx, `{"action":"search"}`)
-	if len(afterLoadSearch.Items) != 1 || afterLoadSearch.Items[0].Name != "script_exec" {
-		t.Fatalf("unexpected search items after load: %+v", afterLoadSearch.Items)
-	}
-
-	unload := decodeToolSearchResponse(t, tool, ctx, `{"action":"unload","tool_names":["web_search"]}`)
-	if len(unload.Items) != 1 || unload.Items[0].Status != "unloaded" {
-		t.Fatalf("unexpected unload result: %+v", unload.Items)
-	}
-}
-
-func TestToolSearchTool_SearchMatchesNaturalLanguageQuery(t *testing.T) {
-	registry := NewRegistry()
-	for _, name := range []string{"ask_human", "codex_cli", "screen_control", "web_search", ToolSearchToolName} {
-		registry.Register(&mockTool{name: name})
-	}
-
-	tool := NewToolSearchTool(registry, VisibilityOptions{
-		ToolSearchEnabled: true,
-		Allowlist:         []string{"codex_cli"},
-	}, 3)
+	registry.Register(&mockTool{name: ToolSearchToolName})
+	tool := NewToolSearchTool(
+		registry,
+		VisibilityOptions{ToolSearchEnabled: true},
+		3,
+		ToolSearchOptions{
+			SkillConfig: skills.Config{
+				ProjectRoot:    repoRoot,
+				SkillBlocklist: []string{encodeToolSearchSkillID("repo", "release")},
+			},
+		},
+	)
 
 	sess := session.NewSession("")
 	sess.AdvanceToolTurn(1)
 	ctx := WithSession(context.Background(), sess)
-
-	search := decodeToolSearchResponse(
-		t,
-		tool,
-		ctx,
-		`{"action":"search","query":"desktop gui click and OCR tool; screen_control, visual automation, plus web_search internet retrieval"}`,
-	)
-
-	if !containsToolSearchItem(search.Items, "screen_control") {
-		t.Fatalf("expected screen_control to match natural-language query, got %+v", search.Items)
+	search := decodeToolSearchResponse(t, tool, ctx, `{"action":"search","query":"release"}`)
+	if len(search.Items) != 1 {
+		t.Fatalf("expected one visible fallback skill, got %+v", search.Items)
 	}
-	if !containsToolSearchItem(search.Items, "web_search") {
-		t.Fatalf("expected web_search to match natural-language query, got %+v", search.Items)
+	if search.Items[0].Summary != "user release" {
+		t.Fatalf("expected user skill to become visible, got %+v", search.Items[0])
 	}
 }
 
-func TestToolSearchTool_SkillKindSearchLoadListAndUnload(t *testing.T) {
+func TestToolSearchTool_SearchLoadListAndUnload(t *testing.T) {
 	repoRoot := t.TempDir()
 	writeSkillFile(
 		t,
@@ -129,6 +86,7 @@ func TestToolSearchTool_SkillKindSearchLoadListAndUnload(t *testing.T) {
 	for _, name := range []string{"ask_human", "codex_cli", "script_exec", "web_search", ToolSearchToolName} {
 		registry.Register(&mockTool{name: name})
 	}
+
 	tool := NewToolSearchTool(
 		registry,
 		VisibilityOptions{ToolSearchEnabled: true, Allowlist: []string{"codex_cli"}},
@@ -140,37 +98,61 @@ func TestToolSearchTool_SkillKindSearchLoadListAndUnload(t *testing.T) {
 			}),
 		},
 	)
+
 	sess := session.NewSession("")
 	sess.AdvanceToolTurn(3)
 	ctx := WithSession(context.Background(), sess)
 
-	search := decodeToolSearchResponse(t, tool, ctx, `{"action":"search","kind":"skill"}`)
-	if search.Kind != toolSearchKindSkill || len(search.Items) != 1 {
-		t.Fatalf("unexpected skill search result: %+v", search)
+	search := decodeToolSearchResponse(t, tool, ctx, `{"action":"search","query":"release deploy"}`)
+	if len(search.Items) != 1 || search.Items[0].Name != "release_flow" {
+		t.Fatalf("unexpected search items: %+v", search.Items)
 	}
-	if search.Items[0].Kind != toolSearchKindSkill || search.Items[0].Name != "release_flow" {
-		t.Fatalf("unexpected skill search item: %+v", search.Items[0])
-	}
-
-	load := decodeToolSearchResponse(t, tool, ctx, `{"action":"load","kind":"skill","tool_names":["release_flow"]}`)
-	if len(load.Items) != 1 || load.Items[0].Status != "loaded" {
-		t.Fatalf("unexpected skill load result: %+v", load.Items)
-	}
-	if len(load.Items[0].Dependencies) != 1 || load.Items[0].Dependencies[0].Name != "web_search" {
-		t.Fatalf("expected dependency tool load result, got %+v", load.Items[0].Dependencies)
-	}
-	if got := sess.VisibleDynamicToolNames(3); len(got) != 1 || got[0] != "web_search" {
-		t.Fatalf("expected dependency tool to be dynamically loaded, got %v", got)
+	if search.Kind != toolSearchKindSkill {
+		t.Fatalf("expected skill kind payload, got %+v", search)
 	}
 
-	list := decodeToolSearchResponse(t, tool, ctx, `{"action":"list","kind":"skill"}`)
-	if len(list.Items) != 1 || list.Items[0].Status != "active" || list.Items[0].Name != "release_flow" {
-		t.Fatalf("unexpected skill list result: %+v", list.Items)
+	load := decodeToolSearchResponse(t, tool, ctx, `{"action":"load","skill_names":["release_flow"]}`)
+	if len(load.Items) != 1 || load.Items[0].Status != "loaded" || !load.Items[0].AvailableNow || load.Items[0].AvailableNextTurn {
+		t.Fatalf("unexpected load result: %+v", load.Items)
+	}
+	if got := sess.VisibleDynamicToolNames(3); len(got) != 0 {
+		t.Fatalf("expected sfind to avoid dynamic tool loads, got %v", got)
 	}
 
-	unload := decodeToolSearchResponse(t, tool, ctx, `{"action":"unload","kind":"skill","tool_names":["release_flow"]}`)
+	activeNow := decodeToolSearchResponse(t, tool, ctx, `{"action":"list"}`)
+	if len(activeNow.Items) != 1 || activeNow.Items[0].Status != "active" || !activeNow.Items[0].AvailableNow || activeNow.Items[0].Name != "release_flow" {
+		t.Fatalf("unexpected active list in current turn: %+v", activeNow.Items)
+	}
+
+	sess.AdvanceToolTurn(3)
+	active := decodeToolSearchResponse(t, tool, ctx, `{"action":"list"}`)
+	if len(active.Items) != 1 || active.Items[0].Status != "active" || !active.Items[0].AvailableNow || active.Items[0].Name != "release_flow" {
+		t.Fatalf("unexpected active list: %+v", active.Items)
+	}
+
+	afterLoadSearch := decodeToolSearchResponse(t, tool, ctx, `{"action":"search","query":"release"}`)
+	if len(afterLoadSearch.Items) != 0 {
+		t.Fatalf("unexpected search items after load: %+v", afterLoadSearch.Items)
+	}
+
+	unload := decodeToolSearchResponse(t, tool, ctx, `{"action":"unload","skill_names":["release_flow"]}`)
 	if len(unload.Items) != 1 || unload.Items[0].Status != "unloaded" {
-		t.Fatalf("unexpected skill unload result: %+v", unload.Items)
+		t.Fatalf("unexpected unload result: %+v", unload.Items)
+	}
+}
+
+func TestToolSearchTool_RejectsNonSkillKind(t *testing.T) {
+	registry := NewRegistry()
+	registry.Register(&mockTool{name: ToolSearchToolName})
+	tool := NewToolSearchTool(registry, VisibilityOptions{ToolSearchEnabled: true}, 3)
+
+	sess := session.NewSession("")
+	sess.AdvanceToolTurn(1)
+	ctx := WithSession(context.Background(), sess)
+
+	_, err := tool.Execute(ctx, json.RawMessage(`{"action":"search","kind":"tool"}`), "trace-test")
+	if err == nil || err.Error() != "sfind supports skills only" {
+		t.Fatalf("expected non-skill kind error, got %v", err)
 	}
 }
 
@@ -203,7 +185,7 @@ func TestToolSearchTool_SkillSearchIncludesDiscoveryErrors(t *testing.T) {
 	sess.AdvanceToolTurn(1)
 	ctx := WithSession(context.Background(), sess)
 
-	search := decodeToolSearchResponse(t, tool, ctx, `{"action":"search","kind":"skill"}`)
+	search := decodeToolSearchResponse(t, tool, ctx, `{"action":"search"}`)
 	if len(search.Errors) == 0 {
 		t.Fatalf("expected explicit discovery errors, got %+v", search)
 	}
@@ -279,4 +261,9 @@ func writeSkillFile(
 	if err := os.WriteFile(configPath, []byte(openAIConfig), 0o644); err != nil {
 		t.Fatalf("write openai config: %v", err)
 	}
+}
+
+func encodeToolSearchSkillID(source string, relativePath string) string {
+	raw := source + "|" + relativePath
+	return "skill_" + base64.RawURLEncoding.EncodeToString([]byte(raw))
 }

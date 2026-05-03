@@ -9,10 +9,6 @@ func normalizeProviderHeaders(raw map[string]string) (map[string]string, error) 
 	return normalizeNamedHeaders(raw, "provider_headers")
 }
 
-func normalizeGraphQLHeaders(raw map[string]string) (map[string]string, error) {
-	return normalizeNamedHeaders(raw, "graphql_headers")
-}
-
 func normalizeResponseMetadata(raw map[string]string) (map[string]string, error) {
 	if len(raw) == 0 {
 		return nil, nil

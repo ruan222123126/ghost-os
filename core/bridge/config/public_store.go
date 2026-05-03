@@ -3,6 +3,7 @@ package config
 type Store interface {
 	Config() (Config, error)
 	Snapshot() Snapshot
+	PublicSnapshot() (Snapshot, error)
 	ListProviders() ([]ProviderRecord, error)
 	AddProvider(ProviderRecord) error
 	UpdateProvider(name string, cfg ProviderRecord) error
@@ -10,8 +11,14 @@ type Store interface {
 	SetActiveProvider(name string) error
 	ListTools() ([]ToolRecord, error)
 	UpdateTool(ToolUpdateRequest) error
+	SetSkillEnabled(skillID string, enabled bool) error
 	SystemPrompts() (SystemPromptFiles, error)
 	UpdateSystemPrompts(SystemPromptUpdateRequest) (SystemPromptFiles, error)
+	Presets() ([]Preset, error)
+	CreatePreset(PresetCreateRequest) (Preset, error)
+	UpdatePreset(string, PresetUpdateRequest) (Preset, error)
+	DeletePreset(string) (Preset, error)
+	ApplyPreset(string) (Preset, error)
 	Update(UpdateRequest) error
 	SetProjectRoot(path string) error
 }

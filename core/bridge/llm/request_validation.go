@@ -13,6 +13,7 @@ var errToolCallNameEmpty = errors.New("tool_call.name is empty")
 var errToolCallArgumentsEmpty = errors.New("tool_call.arguments is empty")
 var errToolCallArgumentsObject = errors.New("tool_call.arguments must be a JSON object")
 var errToolResultCallIDEmpty = errors.New("tool message.tool_call_id is empty")
+var errAssistantReasoningReplayMissing = errors.New("assistant tool_calls replay is missing reasoning_content after thinking mode started")
 
 func validateRequestMessageToolProtocol(messages []Message) error {
 	pending := make(map[string]struct{})
@@ -49,7 +50,7 @@ func validateRequestMessageToolProtocol(messages []Message) error {
 	}
 
 	if len(pending) == 0 {
-		return nil
+		return ValidateReasoningReplay(messages)
 	}
 
 	ids := make([]string, 0, len(pending))
@@ -58,6 +59,47 @@ func validateRequestMessageToolProtocol(messages []Message) error {
 	}
 	sort.Strings(ids)
 	return fmt.Errorf("assistant tool_calls are missing matching tool results: %s", strings.Join(ids, ", "))
+}
+
+// ValidateReasoningReplay ensures a single user-turn tool loop does not drop
+// reasoning_content on later assistant messages once a prior assistant tool
+// turn in that loop has entered thinking mode.
+func ValidateReasoningReplay(messages []Message) error {
+	segmentStart := 0
+	for index, msg := range messages {
+		if msg.Role != RoleUser {
+			continue
+		}
+		if err := validateReasoningReplaySegment(messages[segmentStart:index], segmentStart); err != nil {
+			return err
+		}
+		segmentStart = index + 1
+	}
+	return validateReasoningReplaySegment(messages[segmentStart:], segmentStart)
+}
+
+func validateReasoningReplaySegment(messages []Message, offset int) error {
+	thinkingStarted := false
+	for index, msg := range messages {
+		if msg.Role != RoleAssistant {
+			continue
+		}
+		if hasReasoningReplayContent(msg.ReasoningContent) {
+			if len(msg.ToolCalls) > 0 || thinkingStarted {
+				thinkingStarted = true
+			}
+			continue
+		}
+		if thinkingStarted {
+			return fmt.Errorf("messages[%d]: %w", offset+index, errAssistantReasoningReplayMissing)
+		}
+	}
+	return nil
+}
+
+func hasReasoningReplayContent(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed != "" && trimmed != "null"
 }
 
 func validateToolCallArgumentsObject(raw json.RawMessage) error {

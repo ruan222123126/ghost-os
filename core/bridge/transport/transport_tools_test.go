@@ -11,10 +11,11 @@ import (
 )
 
 type toolResponsePayload struct {
-	Name           string `json:"name"`
-	Enabled        bool   `json:"enabled"`
-	PromptOverride string `json:"prompt_override,omitempty"`
-	InputSchema    any    `json:"input_schema,omitempty"`
+	Name            string `json:"name"`
+	Enabled         bool   `json:"enabled"`
+	PromptOverride  string `json:"prompt_override,omitempty"`
+	SandboxMemoryMB *int   `json:"sandbox_memory_mb,omitempty"`
+	InputSchema     any    `json:"input_schema,omitempty"`
 }
 
 func TestHandleToolsListAndPatch(t *testing.T) {
@@ -30,7 +31,7 @@ func TestHandleToolsListAndPatch(t *testing.T) {
 		handler,
 		http.MethodPatch,
 		"/api/tools/script_exec",
-		`{"enabled":true,"prompt_override":"use only when needed"}`,
+		`{"enabled":true,"prompt_override":"use only when needed","sandbox_memory_mb":384}`,
 		nil,
 	)
 	if update.Code != http.StatusOK {
@@ -45,13 +46,16 @@ func TestHandleToolsListAndPatch(t *testing.T) {
 	if updatedScriptExec.PromptOverride != "use only when needed" {
 		t.Fatalf("unexpected prompt override: %q", updatedScriptExec.PromptOverride)
 	}
+	if updatedScriptExec.SandboxMemoryMB == nil || *updatedScriptExec.SandboxMemoryMB != 384 {
+		t.Fatalf("unexpected sandbox memory: %+v", updatedScriptExec.SandboxMemoryMB)
+	}
 	assertToolPromptFile(t, "script_exec", "use only when needed")
 
 	reset := serveRequest(
 		handler,
 		http.MethodPatch,
 		"/api/tools/script_exec",
-		`{"enabled":false,"prompt_override":""}`,
+		`{"enabled":false,"prompt_override":"","sandbox_memory_mb":256}`,
 		nil,
 	)
 	if reset.Code != http.StatusOK {
@@ -61,6 +65,9 @@ func TestHandleToolsListAndPatch(t *testing.T) {
 	resetScriptExec := mustFindTool(t, afterDisable, "script_exec")
 	if resetScriptExec.Enabled {
 		t.Fatal("expected script_exec to be disabled after reset")
+	}
+	if resetScriptExec.SandboxMemoryMB == nil || *resetScriptExec.SandboxMemoryMB != 256 {
+		t.Fatalf("unexpected reset sandbox memory: %+v", resetScriptExec.SandboxMemoryMB)
 	}
 	assertToolPromptFile(t, "script_exec", "")
 }
@@ -89,6 +96,17 @@ func TestHandleToolPatchValidation(t *testing.T) {
 	if invalidBody.Code != http.StatusBadRequest {
 		t.Fatalf("unexpected status for invalid body: got %d body=%s", invalidBody.Code, invalidBody.Body.String())
 	}
+
+	invalidMemory := serveRequest(
+		handler,
+		http.MethodPatch,
+		"/api/tools/web_search",
+		`{"sandbox_memory_mb":384}`,
+		nil,
+	)
+	if invalidMemory.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status for invalid sandbox memory patch: got %d body=%s", invalidMemory.Code, invalidMemory.Body.String())
+	}
 }
 
 func TestHandleToolsListIncludesInputSchema(t *testing.T) {
@@ -96,18 +114,10 @@ func TestHandleToolsListIncludesInputSchema(t *testing.T) {
 	recorder := serveRequest(handler, http.MethodGet, "/api/tools", "", nil)
 	assertToolsListHasNoNullInputSchema(t, recorder)
 	items := listToolsFromResponse(t, recorder)
-	scriptExec := mustFindTool(t, items, "script_exec")
-	schema, ok := scriptExec.InputSchema.(map[string]any)
-	if !ok {
-		t.Fatalf("expected script_exec input_schema object, got %T", scriptExec.InputSchema)
-	}
-	properties, ok := schema["properties"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected schema.properties object, got %T", schema["properties"])
-	}
-	if _, ok := properties["script"]; !ok {
-		t.Fatalf("expected script_exec schema to contain script property, got %v", properties)
-	}
+	assertToolSchemaHasProperty(t, mustFindTool(t, items, "script_exec"), "script")
+	assertToolSchemaHasProperty(t, mustFindTool(t, items, "search_files"), "query")
+	assertToolSchemaHasProperty(t, mustFindTool(t, items, "write_file"), "content")
+	assertToolSchemaHasProperty(t, mustFindTool(t, items, "bash_exec"), "command")
 }
 
 func assertToolsListHasNoNullInputSchema(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -159,6 +169,22 @@ func mustFindTool(t *testing.T, items []toolResponsePayload, name string) toolRe
 	}
 	t.Fatalf("tool not found: %s", name)
 	return toolResponsePayload{}
+}
+
+func assertToolSchemaHasProperty(t *testing.T, tool toolResponsePayload, property string) {
+	t.Helper()
+
+	schema, ok := tool.InputSchema.(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s input_schema object, got %T", tool.Name, tool.InputSchema)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected %s schema.properties object, got %T", tool.Name, schema["properties"])
+	}
+	if _, ok := properties[property]; !ok {
+		t.Fatalf("expected %s schema to contain %q, got %v", tool.Name, property, properties)
+	}
 }
 
 func assertToolPromptFile(t *testing.T, name string, want string) {

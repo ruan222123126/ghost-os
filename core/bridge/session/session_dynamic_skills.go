@@ -119,6 +119,33 @@ func (s *Session) DynamicSkillLoadsSnapshot() []DynamicSkillLoad {
 	return loads
 }
 
+func (s *Session) PruneInvisibleDynamicSkills(visible []string) []string {
+	if s == nil || len(s.DynamicSkillLoads) == 0 {
+		return nil
+	}
+	allowed := make(map[string]bool, len(visible))
+	for _, name := range visible {
+		trimmed := strings.TrimSpace(name)
+		if trimmed != "" {
+			allowed[trimmed] = true
+		}
+	}
+	removed := make([]string, 0, len(s.DynamicSkillLoads))
+	for name := range s.DynamicSkillLoads {
+		if allowed[name] {
+			continue
+		}
+		delete(s.DynamicSkillLoads, name)
+		removed = append(removed, name)
+	}
+	if len(removed) == 0 {
+		return nil
+	}
+	sort.Strings(removed)
+	s.UpdatedAt = time.Now().UTC()
+	return removed
+}
+
 func (s *Session) pruneExpiredDynamicSkills(idleTurns int) []string {
 	if len(s.DynamicSkillLoads) == 0 {
 		return nil

@@ -24,54 +24,54 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 		return runtimeConfig{}, err
 	}
 	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:               env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
-		APIKey:                     env.defaultValue("GHOST_API_KEY", ""),
-		BaseURL:                    env.defaultValue("GHOST_BASE_URL", ""),
-		Model:                      env.defaultValue("GHOST_MODEL", ""),
-		ChatPath:                   env.defaultValue("GHOST_CHAT_PATH", ""),
-		ResponseOptions:            settings.ResponseOptions,
-		CodexStatelessRetryEnabled: settings.CodexStatelessRetryEnabled,
-		NativePersistent:           settings.NativePersistent,
-		ProjectRoot:                env.defaultValue("GHOST_PROJECT_ROOT", ""),
-		ModelSelectionEnabled:      !settings.AllowlistOnly,
-		WebSearchTavilyURL:         settings.WebSearch.TavilyURL,
-		WebSearchExaURL:            settings.WebSearch.ExaURL,
-		WebSearchTavilyAPIKey:      settings.WebSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:         settings.WebSearch.ExaAPIKey,
-		SessionHumanLogFullEnabled: settings.SessionHumanLogFullEnabled,
-		AssistantMarkdownEnabled:   settings.AssistantMarkdownEnabled,
-		MemoryModeEnabled:          settings.MemoryModeEnabled,
-		WebRooterEnabled:           settings.WebRooter.Enabled,
-		WebRooterBaseURL:           settings.WebRooter.BaseURL,
-		WebRooterAPIToken:          settings.WebRooter.APIToken,
-		WebRooterTimeoutMS:         settings.WebRooter.TimeoutMS,
-		GraphQL:                    settings.GraphQL,
+		ProviderName:                 env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
+		APIKey:                       env.defaultValue("GHOST_API_KEY", ""),
+		BaseURL:                      env.defaultValue("GHOST_BASE_URL", ""),
+		Model:                        env.defaultValue("GHOST_MODEL", ""),
+		ChatPath:                     env.defaultValue("GHOST_CHAT_PATH", ""),
+		ResponseOptions:              settings.ResponseOptions,
+		CodexStatelessRetryEnabled:   settings.CodexStatelessRetryEnabled,
+		NativePersistent:             settings.NativePersistent,
+		ProjectRoot:                  env.defaultValue("GHOST_PROJECT_ROOT", ""),
+		MaxTurns:                     settings.MaxTurns,
+		LLMCompletionRetryCount:      settings.LLMCompletionRetryCount,
+		LLMCompletionRetryIntervalMS: settings.LLMCompletionRetryIntervalMS,
+		ModelSelectionEnabled:        !settings.AllowlistOnly,
+		WebSearchTavilyURL:           settings.WebSearch.TavilyURL,
+		WebSearchExaURL:              settings.WebSearch.ExaURL,
+		WebSearchTavilyAPIKey:        settings.WebSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:           settings.WebSearch.ExaAPIKey,
+		SessionHumanLogFullEnabled:   settings.SessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:   settings.SessionSystemPromptVisible,
+		AssistantMarkdownEnabled:     settings.AssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled: settings.ToolCallCompactOutputEnabled,
+		MemoryModeEnabled:            settings.MemoryModeEnabled,
+		MicrocompactEnabled:          settings.MicrocompactEnabled,
 	}), nil
 }
 
 type runtimeFallbackSettings struct {
-	WebSearch                  webSearchSettings
-	WebRooter                  webRooterSettings
-	ResponseOptions            llm.ResponseOptions
-	GraphQL                    GraphQLConfig
-	CodexStatelessRetryEnabled bool
-	AllowlistOnly              bool
-	NativePersistent           bool
-	SessionHumanLogFullEnabled bool
-	AssistantMarkdownEnabled   bool
-	MemoryModeEnabled          bool
+	WebSearch                    webSearchSettings
+	ResponseOptions              llm.ResponseOptions
+	CodexStatelessRetryEnabled   bool
+	AllowlistOnly                bool
+	NativePersistent             bool
+	MaxTurns                     int
+	LLMCompletionRetryCount      int
+	LLMCompletionRetryIntervalMS int
+	SessionHumanLogFullEnabled   bool
+	SessionSystemPromptVisible   bool
+	AssistantMarkdownEnabled     bool
+	ToolCallCompactOutputEnabled bool
+	MemoryModeEnabled            bool
+	MicrocompactEnabled          bool
 }
 
 func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, error) {
-	webRooter, err := webRooterSettingsFromEnv(env)
-	if err != nil {
+	if err := validateNoRemovedGraphQLEnv(env); err != nil {
 		return runtimeFallbackSettings{}, err
 	}
 	responseOptions, err := responseOptionsFromEnv(env)
-	if err != nil {
-		return runtimeFallbackSettings{}, err
-	}
-	graphQL, err := graphQLSettingsFromEnv(env)
 	if err != nil {
 		return runtimeFallbackSettings{}, err
 	}
@@ -79,17 +79,41 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 	if err != nil {
 		return runtimeFallbackSettings{}, err
 	}
+	maxTurns, err := parsePositiveIntValue(env.value("GHOST_MAX_TURNS"), "GHOST_MAX_TURNS", defaultMaxTurns)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
+	retryCount, err := parseNonNegativeIntValue(
+		env.value("GHOST_LLM_COMPLETION_RETRY_COUNT"),
+		"GHOST_LLM_COMPLETION_RETRY_COUNT",
+		defaultLLMCompletionRetryCount,
+	)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
+	retryIntervalMS, err := parseNonNegativeIntValue(
+		env.value("GHOST_LLM_COMPLETION_RETRY_INTERVAL_MS"),
+		"GHOST_LLM_COMPLETION_RETRY_INTERVAL_MS",
+		defaultLLMCompletionRetryIntervalMS,
+	)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
 	return runtimeFallbackSettings{
-		WebSearch:                  webSearchSettingsFromEnv(env),
-		WebRooter:                  webRooter,
-		ResponseOptions:            responseOptions,
-		GraphQL:                    graphQL,
-		CodexStatelessRetryEnabled: codexRetryEnabled,
-		AllowlistOnly:              allowlistOnly,
-		NativePersistent:           nativePersistent,
-		SessionHumanLogFullEnabled: sessionHumanLogFullEnabled,
-		AssistantMarkdownEnabled:   defaultAssistantMarkdownEnabled,
-		MemoryModeEnabled:          defaultMemoryModeEnabled,
+		WebSearch:                    webSearchSettingsFromEnv(env),
+		ResponseOptions:              responseOptions,
+		CodexStatelessRetryEnabled:   codexRetryEnabled,
+		AllowlistOnly:                allowlistOnly,
+		NativePersistent:             nativePersistent,
+		MaxTurns:                     maxTurns,
+		LLMCompletionRetryCount:      retryCount,
+		LLMCompletionRetryIntervalMS: retryIntervalMS,
+		SessionHumanLogFullEnabled:   sessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:   defaultSessionSystemPromptVisible,
+		AssistantMarkdownEnabled:     defaultAssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled: defaultToolCallCompactOutputEnabled,
+		MemoryModeEnabled:            defaultMemoryModeEnabled,
+		MicrocompactEnabled:          defaultMicrocompactEnabled,
 	}, nil
 }
 
@@ -145,16 +169,20 @@ func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtime
 }
 
 type runtimeFileSettings struct {
-	WebSearch                  webSearchSettings
-	WebRooter                  webRooterSettings
-	ResponseOptions            llm.ResponseOptions
-	GraphQL                    GraphQLConfig
-	Providers                  []providerConfig
-	CodexStatelessRetryEnabled bool
-	AllowlistOnly              bool
-	SessionHumanLogFullEnabled bool
-	AssistantMarkdownEnabled   bool
-	MemoryModeEnabled          bool
+	WebSearch                    webSearchSettings
+	ResponseOptions              llm.ResponseOptions
+	Providers                    []providerConfig
+	CodexStatelessRetryEnabled   bool
+	AllowlistOnly                bool
+	MaxTurns                     int
+	LLMCompletionRetryCount      int
+	LLMCompletionRetryIntervalMS int
+	SessionHumanLogFullEnabled   bool
+	SessionSystemPromptVisible   bool
+	AssistantMarkdownEnabled     bool
+	ToolCallCompactOutputEnabled bool
+	MemoryModeEnabled            bool
+	MicrocompactEnabled          bool
 }
 
 type runtimeConfigBuildInput struct {
@@ -164,20 +192,19 @@ type runtimeConfigBuildInput struct {
 }
 
 func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeFileSettings, error) {
-	webRooter, err := fileWebRooterSettings(fileCfg, webRooterSettings{
-		Enabled:   fallback.WebRooterEnabled,
-		BaseURL:   fallback.WebRooterBaseURL,
-		APIToken:  fallback.WebRooterAPIToken,
-		TimeoutMS: fallback.WebRooterTimeoutMS,
-	})
-	if err != nil {
-		return runtimeFileSettings{}, err
-	}
 	responseOptions, err := fileResponseOptions(fileCfg, fallback.ResponseOptions)
 	if err != nil {
 		return runtimeFileSettings{}, err
 	}
-	graphQL, err := fileGraphQLSettings(fileCfg, fallback.GraphQL)
+	maxTurns, err := resolveRuntimeMaxTurns(fileCfg, fallback)
+	if err != nil {
+		return runtimeFileSettings{}, err
+	}
+	retryCount, err := resolveRuntimeLLMCompletionRetryCount(fileCfg, fallback)
+	if err != nil {
+		return runtimeFileSettings{}, err
+	}
+	retryIntervalMS, err := resolveRuntimeLLMCompletionRetryIntervalMS(fileCfg, fallback)
 	if err != nil {
 		return runtimeFileSettings{}, err
 	}
@@ -188,80 +215,86 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 			TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
 			ExaAPIKey:    fallback.WebSearchExaAPIKey,
 		}),
-		WebRooter:                  webRooter,
-		ResponseOptions:            responseOptions,
-		GraphQL:                    graphQL,
-		Providers:                  normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)),
-		CodexStatelessRetryEnabled: resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
-		AllowlistOnly:              resolveRuntimeAllowlistOnly(fileCfg, fallback),
-		SessionHumanLogFullEnabled: resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
-		AssistantMarkdownEnabled:   resolveRuntimeAssistantMarkdownEnabled(fileCfg, fallback),
-		MemoryModeEnabled:          resolveRuntimeMemoryModeEnabled(fileCfg, fallback),
+		ResponseOptions:              responseOptions,
+		Providers:                    normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)),
+		CodexStatelessRetryEnabled:   resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
+		AllowlistOnly:                resolveRuntimeAllowlistOnly(fileCfg, fallback),
+		MaxTurns:                     maxTurns,
+		LLMCompletionRetryCount:      retryCount,
+		LLMCompletionRetryIntervalMS: retryIntervalMS,
+		SessionHumanLogFullEnabled:   resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
+		SessionSystemPromptVisible:   resolveRuntimeSessionSystemPromptVisible(fileCfg, fallback),
+		AssistantMarkdownEnabled:     resolveRuntimeAssistantMarkdownEnabled(fileCfg, fallback),
+		ToolCallCompactOutputEnabled: resolveRuntimeToolCallCompactOutputEnabled(fileCfg, fallback),
+		MemoryModeEnabled:            resolveRuntimeMemoryModeEnabled(fileCfg, fallback),
+		MicrocompactEnabled:          resolveRuntimeMicrocompactEnabled(fileCfg, fallback),
 	}, nil
 }
 
 func runtimeConfigWithProviders(input runtimeConfigBuildInput, providers []providerConfig) runtimeConfig {
 	active := resolveActiveProvider(providers, stringValue(input.FileCfg.ActiveProvider), input.Fallback)
 	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:               active.Name,
-		Provider:                   active.Type.Normalized(),
-		APIKey:                     resolveRuntimeAPIKey(active, input.Fallback.APIKey),
-		BaseURL:                    resolveRuntimeBaseURL(active.BaseURL, input.Fallback.BaseURL),
-		Model:                      resolveRuntimeModel(input.FileCfg, input.Fallback),
-		ChatPath:                   resolveRuntimeChatPath(input.FileCfg, input.Fallback),
-		ResponseOptions:            input.Settings.ResponseOptions,
-		CodexStatelessRetryEnabled: input.Settings.CodexStatelessRetryEnabled,
-		NativePersistent:           resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
-		ProjectRoot:                resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
-		ModelSelectionEnabled:      !input.Settings.AllowlistOnly,
-		ContextWindowTokens:        active.ContextWindowTokens,
-		ResponseReserveTokens:      active.ResponseReserveTokens,
-		ModelContextWindowTokens:   cloneModelTokenOverrides(active.ModelContextWindowTokens),
-		ModelResponseReserveTokens: cloneModelTokenOverrides(active.ModelResponseReserveTokens),
-		WebSearchTavilyURL:         input.Settings.WebSearch.TavilyURL,
-		WebSearchExaURL:            input.Settings.WebSearch.ExaURL,
-		WebSearchTavilyAPIKey:      input.Settings.WebSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:         input.Settings.WebSearch.ExaAPIKey,
-		SessionHumanLogFullEnabled: input.Settings.SessionHumanLogFullEnabled,
-		AssistantMarkdownEnabled:   input.Settings.AssistantMarkdownEnabled,
-		MemoryModeEnabled:          input.Settings.MemoryModeEnabled,
-		WebRooterEnabled:           input.Settings.WebRooter.Enabled,
-		WebRooterBaseURL:           input.Settings.WebRooter.BaseURL,
-		WebRooterAPIToken:          input.Settings.WebRooter.APIToken,
-		WebRooterTimeoutMS:         input.Settings.WebRooter.TimeoutMS,
-		GraphQL:                    input.Settings.GraphQL,
+		ProviderName:                 active.Name,
+		Provider:                     active.Type.Normalized(),
+		APIKey:                       resolveRuntimeAPIKey(active, input.Fallback.APIKey),
+		BaseURL:                      resolveRuntimeBaseURL(active.BaseURL, input.Fallback.BaseURL),
+		Model:                        resolveRuntimeModel(input.FileCfg, input.Fallback),
+		ChatPath:                     resolveRuntimeChatPath(input.FileCfg, input.Fallback),
+		ResponseOptions:              input.Settings.ResponseOptions,
+		CodexStatelessRetryEnabled:   input.Settings.CodexStatelessRetryEnabled,
+		NativePersistent:             resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
+		ProjectRoot:                  resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
+		MaxTurns:                     input.Settings.MaxTurns,
+		LLMCompletionRetryCount:      input.Settings.LLMCompletionRetryCount,
+		LLMCompletionRetryIntervalMS: input.Settings.LLMCompletionRetryIntervalMS,
+		ModelSelectionEnabled:        !input.Settings.AllowlistOnly,
+		ContextWindowTokens:          active.ContextWindowTokens,
+		ResponseReserveTokens:        active.ResponseReserveTokens,
+		ModelContextWindowTokens:     cloneModelTokenOverrides(active.ModelContextWindowTokens),
+		ModelResponseReserveTokens:   cloneModelTokenOverrides(active.ModelResponseReserveTokens),
+		WebSearchTavilyURL:           input.Settings.WebSearch.TavilyURL,
+		WebSearchExaURL:              input.Settings.WebSearch.ExaURL,
+		WebSearchTavilyAPIKey:        input.Settings.WebSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:           input.Settings.WebSearch.ExaAPIKey,
+		SessionHumanLogFullEnabled:   input.Settings.SessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:   input.Settings.SessionSystemPromptVisible,
+		AssistantMarkdownEnabled:     input.Settings.AssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled: input.Settings.ToolCallCompactOutputEnabled,
+		MemoryModeEnabled:            input.Settings.MemoryModeEnabled,
+		MicrocompactEnabled:          input.Settings.MicrocompactEnabled,
 	})
 }
 
 func runtimeConfigWithoutProviders(input runtimeConfigBuildInput) runtimeConfig {
 	providerName := resolveRuntimeProviderName(input.Fallback)
 	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:               providerName,
-		Provider:                   inferProviderType(providerName, input.Fallback.BaseURL, resolveRuntimeModel(input.FileCfg, input.Fallback)),
-		APIKey:                     input.Fallback.APIKey,
-		BaseURL:                    input.Fallback.BaseURL,
-		Model:                      resolveRuntimeModel(input.FileCfg, input.Fallback),
-		ChatPath:                   resolveRuntimeChatPath(input.FileCfg, input.Fallback),
-		ResponseOptions:            input.Settings.ResponseOptions,
-		CodexStatelessRetryEnabled: input.Settings.CodexStatelessRetryEnabled,
-		NativePersistent:           resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
-		ProjectRoot:                resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
-		ModelSelectionEnabled:      !input.Settings.AllowlistOnly,
-		ContextWindowTokens:        input.Fallback.ContextWindowTokens,
-		ResponseReserveTokens:      input.Fallback.ResponseReserveTokens,
-		ModelContextWindowTokens:   cloneModelTokenOverrides(input.Fallback.ModelContextWindowTokens),
-		ModelResponseReserveTokens: cloneModelTokenOverrides(input.Fallback.ModelResponseReserveTokens),
-		WebSearchTavilyURL:         input.Settings.WebSearch.TavilyURL,
-		WebSearchExaURL:            input.Settings.WebSearch.ExaURL,
-		WebSearchTavilyAPIKey:      input.Settings.WebSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:         input.Settings.WebSearch.ExaAPIKey,
-		SessionHumanLogFullEnabled: input.Settings.SessionHumanLogFullEnabled,
-		AssistantMarkdownEnabled:   input.Settings.AssistantMarkdownEnabled,
-		MemoryModeEnabled:          input.Settings.MemoryModeEnabled,
-		WebRooterEnabled:           input.Settings.WebRooter.Enabled,
-		WebRooterBaseURL:           input.Settings.WebRooter.BaseURL,
-		WebRooterAPIToken:          input.Settings.WebRooter.APIToken,
-		WebRooterTimeoutMS:         input.Settings.WebRooter.TimeoutMS,
-		GraphQL:                    input.Settings.GraphQL,
+		ProviderName:                 providerName,
+		Provider:                     inferProviderType(providerName, input.Fallback.BaseURL, resolveRuntimeModel(input.FileCfg, input.Fallback)),
+		APIKey:                       input.Fallback.APIKey,
+		BaseURL:                      input.Fallback.BaseURL,
+		Model:                        resolveRuntimeModel(input.FileCfg, input.Fallback),
+		ChatPath:                     resolveRuntimeChatPath(input.FileCfg, input.Fallback),
+		ResponseOptions:              input.Settings.ResponseOptions,
+		CodexStatelessRetryEnabled:   input.Settings.CodexStatelessRetryEnabled,
+		NativePersistent:             resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
+		ProjectRoot:                  resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
+		MaxTurns:                     input.Settings.MaxTurns,
+		LLMCompletionRetryCount:      input.Settings.LLMCompletionRetryCount,
+		LLMCompletionRetryIntervalMS: input.Settings.LLMCompletionRetryIntervalMS,
+		ModelSelectionEnabled:        !input.Settings.AllowlistOnly,
+		ContextWindowTokens:          input.Fallback.ContextWindowTokens,
+		ResponseReserveTokens:        input.Fallback.ResponseReserveTokens,
+		ModelContextWindowTokens:     cloneModelTokenOverrides(input.Fallback.ModelContextWindowTokens),
+		ModelResponseReserveTokens:   cloneModelTokenOverrides(input.Fallback.ModelResponseReserveTokens),
+		WebSearchTavilyURL:           input.Settings.WebSearch.TavilyURL,
+		WebSearchExaURL:              input.Settings.WebSearch.ExaURL,
+		WebSearchTavilyAPIKey:        input.Settings.WebSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:           input.Settings.WebSearch.ExaAPIKey,
+		SessionHumanLogFullEnabled:   input.Settings.SessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:   input.Settings.SessionSystemPromptVisible,
+		AssistantMarkdownEnabled:     input.Settings.AssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled: input.Settings.ToolCallCompactOutputEnabled,
+		MemoryModeEnabled:            input.Settings.MemoryModeEnabled,
+		MicrocompactEnabled:          input.Settings.MicrocompactEnabled,
 	})
 }

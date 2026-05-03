@@ -8,11 +8,17 @@ import (
 func TestGetToolMetadata_CoversExpectedTools(t *testing.T) {
 	metadata := GetToolMetadata()
 	expected := []string{
+		"list_files",
+		"read_file",
+		"search_files",
+		"write_file",
+		"apply_diff",
+		"bash_exec",
 		"script_exec",
 		"codex_cli",
 		"web_search",
 		"screen_control",
-		"tfind",
+		"sfind",
 		"ask_human",
 	}
 	seen := make(map[string]ToolMetadata, len(metadata))
@@ -93,7 +99,7 @@ func TestFormatPromptToolsForCatalog_UsesShortDescriptions(t *testing.T) {
 	if !strings.Contains(formatted, "- script_exec: Run a Python script in sandbox.") {
 		t.Fatalf("unexpected prompt tool list: %q", formatted)
 	}
-	if !strings.Contains(formatted, "- tfind: Find or load optional tools and skills.") {
+	if !strings.Contains(formatted, "- sfind: Find or load optional skills from SKILL.md.") {
 		t.Fatalf("unexpected prompt tool list: %q", formatted)
 	}
 }

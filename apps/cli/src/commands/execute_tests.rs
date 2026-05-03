@@ -83,6 +83,7 @@ fn dummy_client() -> BridgeClient {
     BridgeClient::new(Config {
         bridge_url: "http://127.0.0.1:18080".to_string(),
         timeout_secs: 1,
+        startup_project_root: "/tmp/ghost-os".to_string(),
     })
     .unwrap()
 }

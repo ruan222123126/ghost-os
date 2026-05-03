@@ -1,9 +1,9 @@
 package orchestration
 
 import (
+	"encoding/json"
 	"errors"
-	"sort"
-	"strings"
+	"fmt"
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
@@ -17,33 +17,21 @@ const (
 )
 
 type systemPromptResponse struct {
-	CorePrompt     string                                 `json:"core_prompt"`
-	RenderedPrompt string                                 `json:"rendered_prompt"`
-	PromptLibrary  []bridgeconfig.SystemPromptLibraryItem `json:"prompt_library"`
+	CorePrompt      string                                 `json:"core_prompt"`
+	RenderedPrompt  string                                 `json:"rendered_prompt"`
+	PromptLibrary   []bridgeconfig.SystemPromptLibraryItem `json:"prompt_library"`
+	ToolDefinitions []systemPromptToolDefinition           `json:"tool_definitions"`
 }
 
-type systemPromptPreviewCatalog struct {
-	names []string
+type systemPromptToolDefinition struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
 }
 
-func (c systemPromptPreviewCatalog) Get(name string) tools.Tool {
-	_ = name
-	return nil
-}
-
-func (c systemPromptPreviewCatalog) ToolDefs() []llm.ToolDef {
-	if len(c.names) == 0 {
-		return nil
-	}
-	defs := make([]llm.ToolDef, 0, len(c.names))
-	for _, name := range c.names {
-		trimmed := strings.TrimSpace(name)
-		if trimmed == "" {
-			continue
-		}
-		defs = append(defs, llm.ToolDef{Name: trimmed})
-	}
-	return defs
+type systemPromptPreview struct {
+	renderedPrompt  string
+	toolDefinitions []systemPromptToolDefinition
 }
 
 func (s *bridgeService) executeSystemPromptGetAction(traceID string) (ServiceResult, error) {
@@ -59,13 +47,13 @@ func (s *bridgeService) executeSystemPromptGetAction(traceID string) (ServiceRes
 		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 
-	rendered, err := s.renderSystemPromptPreview(cfg)
+	preview, err := s.loadSystemPromptPreview(cfg)
 	if err != nil {
 		logAction(traceID, systemPromptActionGet, "error", err)
-		return ServiceResult{}, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, systemPromptActionGet, "success", nil)
-	return serviceResultSuccess(systemPromptResponseFrom(files, rendered)), nil
+	return serviceResultSuccess(systemPromptResponseFrom(files, preview)), nil
 }
 
 func (s *bridgeService) executeSystemPromptUpdateAction(
@@ -90,45 +78,76 @@ func (s *bridgeService) executeSystemPromptUpdateAction(
 		return ServiceResult{}, mapSystemPromptError(err)
 	}
 
-	rendered, err := s.renderSystemPromptPreview(cfg)
+	preview, err := s.loadSystemPromptPreview(cfg)
 	if err != nil {
 		logAction(traceID, systemPromptActionUpdate, "error", err)
-		return ServiceResult{}, err
+		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
 	}
 	logAction(traceID, systemPromptActionUpdate, "success", nil)
-	return serviceResultSuccess(systemPromptResponseFrom(files, rendered)), nil
+	return serviceResultSuccess(systemPromptResponseFrom(files, preview)), nil
 }
 
-func (s *bridgeService) renderSystemPromptPreview(cfg bridgeconfig.Config) (string, error) {
-	catalog := systemPromptPreviewCatalogFromConfig(cfg)
-	if cfg.GraphQL.ToolRuntimeEnabled {
-		catalog = systemPromptPreviewCatalog{
-			names: systemPromptPreviewToolNames(cfg),
-		}
-		return bridgeruntime.BuildSystemPromptForCatalog(cfg, tools.NewStructuredToolHiddenCatalog(catalog))
+func (s *bridgeService) loadSystemPromptPreview(cfg bridgeconfig.Config) (systemPromptPreview, error) {
+	catalog, cleanup, err := s.loadSystemPromptPreviewCatalog(cfg)
+	if err != nil {
+		return systemPromptPreview{}, err
 	}
-	return bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
+	defer cleanup()
+
+	rendered, err := bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
+	if err != nil {
+		return systemPromptPreview{}, fmt.Errorf("build system prompt preview: %w", err)
+	}
+	return systemPromptPreview{
+		renderedPrompt:  rendered,
+		toolDefinitions: systemPromptToolDefinitionsFrom(catalog.ToolDefs()),
+	}, nil
 }
 
-func systemPromptResponseFrom(files bridgeconfig.SystemPromptFiles, rendered string) systemPromptResponse {
+func (s *bridgeService) loadSystemPromptPreviewCatalog(
+	cfg bridgeconfig.Config,
+) (tools.ToolCatalog, func(), error) {
+	if s == nil || s.runtimeFactory == nil {
+		return nil, func() {}, errors.New("runtime factory unavailable for system prompt preview")
+	}
+
+	deps, err := s.runtimeFactory.Build(s.configStore)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("build runtime dependencies for system prompt preview: %w", err)
+	}
+	if deps.registry == nil {
+		deps.Close()
+		return nil, func() {}, errors.New("tool registry unavailable for system prompt preview")
+	}
+	baseCatalog := tools.NewPromptOverrideCatalog(deps.registry, deps.cfg.ToolSelector.PromptOverrides)
+	return bridgeruntime.NewToolSelectionPolicy(cfg).ResidentCatalog(baseCatalog), deps.Close, nil
+}
+
+func systemPromptResponseFrom(
+	files bridgeconfig.SystemPromptFiles,
+	preview systemPromptPreview,
+) systemPromptResponse {
 	return systemPromptResponse{
-		CorePrompt:     files.CorePrompt,
-		RenderedPrompt: rendered,
-		PromptLibrary:  files.PromptLibrary,
+		CorePrompt:      files.CorePrompt,
+		RenderedPrompt:  preview.renderedPrompt,
+		PromptLibrary:   files.PromptLibrary,
+		ToolDefinitions: preview.toolDefinitions,
 	}
 }
 
-func systemPromptPreviewCatalogFromConfig(cfg bridgeconfig.Config) systemPromptPreviewCatalog {
-	return systemPromptPreviewCatalog{names: systemPromptPreviewToolNames(cfg)}
-}
-
-func systemPromptPreviewToolNames(cfg bridgeconfig.Config) []string {
-	available := make([]string, 0, len(bridgeconfig.ToolBasePrompts()))
-	for name := range bridgeconfig.ToolBasePrompts() {
-		available = append(available, name)
+func systemPromptToolDefinitionsFrom(defs []llm.ToolDef) []systemPromptToolDefinition {
+	if len(defs) == 0 {
+		return nil
 	}
-	sort.Strings(available)
-	return bridgeruntime.NewToolSelectionPolicy(cfg).ResidentScope(available)
+	items := make([]systemPromptToolDefinition, 0, len(defs))
+	for _, def := range defs {
+		items = append(items, systemPromptToolDefinition{
+			Name:        def.Name,
+			Description: def.Description,
+			Parameters:  def.Parameters,
+		})
+	}
+	return items
 }
 
 func reqHasSystemPromptUpdate(req bridgeconfig.SystemPromptUpdateRequest) bool {

@@ -5,16 +5,18 @@ type toolNameParams struct {
 }
 
 type toolUpdateRequest struct {
-	Enabled        *bool   `json:"enabled,omitempty"`
-	PromptOverride *string `json:"prompt_override,omitempty"`
-	TraceID        string  `json:"trace_id,omitempty"`
+	Enabled         *bool   `json:"enabled,omitempty"`
+	PromptOverride  *string `json:"prompt_override,omitempty"`
+	SandboxMemoryMB *int    `json:"sandbox_memory_mb,omitempty"`
+	TraceID         string  `json:"trace_id,omitempty"`
 }
 
 type toolPayload struct {
-	Name           string `json:"name"`
-	Enabled        bool   `json:"enabled"`
-	PromptOverride string `json:"prompt_override,omitempty"`
-	InputSchema    any    `json:"input_schema,omitempty"`
+	Name            string `json:"name"`
+	Enabled         bool   `json:"enabled"`
+	PromptOverride  string `json:"prompt_override,omitempty"`
+	SandboxMemoryMB *int   `json:"sandbox_memory_mb,omitempty"`
+	InputSchema     any    `json:"input_schema,omitempty"`
 }
 
 type findIconTemplateUploadRequest struct {

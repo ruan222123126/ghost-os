@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestCatalogDiscoversSkillsAndDeduplicatesByName(t *testing.T) {
@@ -80,7 +81,7 @@ func TestCatalogReturnsExplicitErrorsForInvalidSkillFiles(t *testing.T) {
 	}
 }
 
-func TestCatalogCachesDiscoveryUntilForceReload(t *testing.T) {
+func TestCatalogDiscoverInvalidatesCacheWhenSkillFilesChange(t *testing.T) {
 	resetDiscoveryCacheForTests()
 	root := t.TempDir()
 	repoSkills := filepath.Join(root, ".agents", "skills")
@@ -93,9 +94,10 @@ func TestCatalogCachesDiscoveryUntilForceReload(t *testing.T) {
 	}
 
 	writeSkillFixture(t, filepath.Join(repoSkills, "s2"), "skill_two", "Skill two", "Body two.", "")
+	bumpModTime(t, filepath.Join(repoSkills, "s2", skillFileName), time.Now().Add(2*time.Second))
 	second := catalog.Discover()
-	if len(second.Skills) != 1 {
-		t.Fatalf("expected cached discover result, got %+v", second)
+	if len(second.Skills) != 2 {
+		t.Fatalf("expected discover cache to refresh after file change, got %+v", second)
 	}
 
 	reloaded := catalog.ForceReload()
@@ -155,4 +157,11 @@ func containsError(errors []DiscoveryError, snippet string) bool {
 		}
 	}
 	return false
+}
+
+func bumpModTime(t *testing.T, path string, next time.Time) {
+	t.Helper()
+	if err := os.Chtimes(path, next, next); err != nil {
+		t.Fatalf("Chtimes(%s): %v", path, err)
+	}
 }

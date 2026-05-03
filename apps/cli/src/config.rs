@@ -27,6 +27,7 @@ impl CliConfigArgs {
 pub struct Config {
     pub bridge_url: String,
     pub timeout_secs: u64,
+    pub startup_project_root: String,
 }
 
 impl Config {
@@ -45,10 +46,12 @@ impl Config {
         };
 
         let timeout_secs = resolve_timeout(timeout)?;
+        let startup_project_root = resolve_startup_project_root()?;
 
         Ok(Self {
             bridge_url,
             timeout_secs,
+            startup_project_root,
         })
     }
 }
@@ -97,6 +100,15 @@ fn validate_bridge_url(raw: &str) -> Result<String> {
     Ok(candidate.trim_end_matches('/').to_string())
 }
 
+fn resolve_startup_project_root() -> Result<String> {
+    let current_dir = env::current_dir().context("failed to resolve CLI startup directory")?;
+    let project_root = current_dir.to_string_lossy().trim().to_string();
+    if project_root.is_empty() {
+        bail!("CLI startup directory is empty");
+    }
+    Ok(project_root)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{CliConfigArgs, Config, validate_bridge_url, validate_timeout};
@@ -128,5 +140,6 @@ mod tests {
 
         assert_eq!(cfg.bridge_url, "http://127.0.0.1:18080");
         assert_eq!(cfg.timeout_secs, 12);
+        assert!(!cfg.startup_project_root.is_empty());
     }
 }

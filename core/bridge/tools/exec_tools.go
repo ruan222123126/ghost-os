@@ -4,14 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"ghost-os/bridge/tools/internal/payloadutil"
 )
 
 type ScriptExecTool struct {
-	execution ExecutionClient
+	execution          ExecutionClient
+	defaultMaxMemoryMB int
 }
 
 type scriptExecArgs struct {
@@ -20,19 +20,26 @@ type scriptExecArgs struct {
 	MaxMemoryMB int    `json:"max_memory_mb,omitempty"`
 }
 
-var scriptExecAllowedHelpers = []string{
-	"tools.apply_diff(path, diff_text)",
-	"tools.bash_exec(command)",
-	"tools.fetch_webpage(url)",
-	"tools.list_files(path='.')",
-	"tools.read_file(path, start_line=None, end_line=None)",
-	"tools.search_files(query, path='.', max_results=50)",
-	"tools.write_file(path, content, mode='write')",
-}
+const scriptExecDescription = "Python sandbox. Each call runs a fresh script. " +
+	"No state carries across calls; re-import modules and recreate variables every time. " +
+	"Helpers are top-level functions and accept positional or named parameters (no import, do not use tools.*): " +
+	"list_files(path='.'), read_file(path, start_line=None, end_line=None), " +
+	"search_files(query, path='.', max_results=50), write_file(path, content, mode='write'), " +
+	"apply_diff(path, diff_text), bash_exec(command, max_output_chars=None), fetch_webpage(url). " +
+	"write_file creates missing parent directories automatically. " +
+	"list_files returns a string array and directory entries end with '/'. " +
+	"For longer shell stdout, request bash_exec(..., max_output_chars=N) explicitly. " +
+	"open(path, mode) supports UTF-8 text r/w/a only; prefer read_file/search_files for text access. " +
+	"Common modules json/os/sys are preloaded for each call. " +
+	"subprocess.run/check_output and os.popen/os.system are compatibility shims backed by the sandbox shell path; non-whitelisted modules like pathlib remain unavailable. " +
+	"Output concise JSON/text."
 
 // NewScriptExecTool 创建 script_exec 工具并绑定 execution 客户端。
-func NewScriptExecTool(client ExecutionClient) Tool {
-	return ScriptExecTool{execution: client}
+func NewScriptExecTool(client ExecutionClient, defaultMaxMemoryMB int) Tool {
+	return ScriptExecTool{
+		execution:          client,
+		defaultMaxMemoryMB: defaultMaxMemoryMB,
+	}
 }
 
 func (ScriptExecTool) Name() string {
@@ -40,29 +47,23 @@ func (ScriptExecTool) Name() string {
 }
 
 func (ScriptExecTool) Description() string {
-	allowedHelpers := append([]string(nil), scriptExecAllowedHelpers...)
-	sort.Strings(allowedHelpers)
-
-	return "Execute a Python script in the fallback sandbox as the primary local workspace tool.\n\nAllowed helpers: " + strings.Join(allowedHelpers, ", ") + ".\nSandbox limits are enforced by the execution layer."
+	return scriptExecDescription
 }
 
 func (ScriptExecTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type": "object",
 		"properties": {
-				"script": {
-					"type": "string",
-					"description": "Python script for fallback sandbox execution."
-				},
-				"timeout_ms": {
-					"type": "integer",
-					"description": "Optional timeout in milliseconds."
-				},
-				"max_memory_mb": {
-					"type": "integer",
-					"description": "Optional memory limit in MB."
-				}
+			"script": {
+				"type": "string"
 			},
+			"timeout_ms": {
+				"type": "integer"
+			},
+			"max_memory_mb": {
+				"type": "integer"
+			}
+		},
 		"required": ["script"],
 		"additionalProperties": false
 	}`)
@@ -93,6 +94,8 @@ func (t ScriptExecTool) Execute(ctx context.Context, argsJSON json.RawMessage, t
 	}
 	if args.MaxMemoryMB > 0 {
 		params["max_memory_mb"] = args.MaxMemoryMB
+	} else if t.defaultMaxMemoryMB > 0 {
+		params["max_memory_mb"] = t.defaultMaxMemoryMB
 	}
 
 	payload, err := t.execution.Call(ctx, "SCRIPT_EXEC", params, traceID)

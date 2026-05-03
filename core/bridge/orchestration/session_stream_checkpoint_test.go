@@ -71,16 +71,67 @@ func TestRunTurnStreamInputPersistsAssistantDraftOnError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected stream run to fail")
 	}
-	if returnedSessionID != "" {
-		t.Fatalf("expected empty returned session id on failed turn, got %q", returnedSessionID)
+	if returnedSessionID != sess.ID {
+		t.Fatalf("expected persisted session id on failed turn, got %q want %q", returnedSessionID, sess.ID)
 	}
 
 	loaded, loadErr := sessionStore.Load(sess.ID)
 	if loadErr != nil {
 		t.Fatalf("load session: %v", loadErr)
 	}
+	if len(loaded.Messages) != 2 {
+		t.Fatalf("expected system + user messages, got %+v", loaded.Messages)
+	}
+	if loaded.Messages[1].Role != llm.RoleUser || loaded.Messages[1].Text != "continue" {
+		t.Fatalf("unexpected persisted user message: %+v", loaded.Messages[1])
+	}
 	if loaded.AssistantDraft == nil {
 		t.Fatal("expected assistant draft to persist on stream error")
+	}
+	if loaded.AssistantDraft.Text != "partial answer" {
+		t.Fatalf("unexpected assistant draft: %q", loaded.AssistantDraft.Text)
+	}
+}
+
+func TestRunTurnStreamInputPersistsAssistantDraftOnCancel(t *testing.T) {
+	sessionStore := newTempSessionStore(t)
+	sess := newPersistedSessionForDraftTests(t, sessionStore, "session-stream-cancel")
+
+	completer := &draftStreamingCompleter{
+		deltas: []llm.LLMDelta{
+			{Kind: llm.DeltaKindText, Text: "partial "},
+			{Kind: llm.DeltaKindText, Text: "answer"},
+		},
+		runErr: context.Canceled,
+	}
+	runner := newDraftTestRunner(sessionStore, completer)
+
+	_, returnedSessionID, err := runner.RunTurnStreamInput(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "continue"},
+		sess.ID,
+		"trace-stream-cancel",
+		streaming.NopSink{},
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
+	if returnedSessionID != sess.ID {
+		t.Fatalf("expected persisted session id on cancellation, got %q want %q", returnedSessionID, sess.ID)
+	}
+
+	loaded, loadErr := sessionStore.Load(sess.ID)
+	if loadErr != nil {
+		t.Fatalf("load session: %v", loadErr)
+	}
+	if len(loaded.Messages) != 2 {
+		t.Fatalf("expected system + user messages, got %+v", loaded.Messages)
+	}
+	if loaded.Messages[1].Role != llm.RoleUser || loaded.Messages[1].Text != "continue" {
+		t.Fatalf("unexpected persisted user message: %+v", loaded.Messages[1])
+	}
+	if loaded.AssistantDraft == nil {
+		t.Fatal("expected assistant draft to persist on cancellation")
 	}
 	if loaded.AssistantDraft.Text != "partial answer" {
 		t.Fatalf("unexpected assistant draft: %q", loaded.AssistantDraft.Text)

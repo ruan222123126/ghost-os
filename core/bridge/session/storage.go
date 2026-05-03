@@ -226,16 +226,25 @@ func (s *Store) Delete(sessionID string) error {
 			return err
 		}
 		if deleted {
-			_ = removeLegacySessionFile(s, id)
-			return nil
+			if err := removeLegacySessionFile(s, id); err != nil {
+				return err
+			}
+			if err := removeSessionHumanLogFile(s, id); err != nil {
+				return err
+			}
+			return s.cleanupSidebarPartitionStateLocked(id)
 		}
 
-		removed, deleteErr := deleteLegacySessionFile(s, id)
-		if deleteErr != nil {
-			return deleteErr
+		legacyRemoved, deleteLegacyErr := deleteLegacySessionFile(s, id)
+		if deleteLegacyErr != nil {
+			return deleteLegacyErr
 		}
-		if removed {
-			return nil
+		humanLogRemoved, deleteHumanLogErr := deleteSessionHumanLogFile(s, id)
+		if deleteHumanLogErr != nil {
+			return deleteHumanLogErr
+		}
+		if legacyRemoved || humanLogRemoved {
+			return s.cleanupSidebarPartitionStateLocked(id)
 		}
 		return fmt.Errorf("%w: %s", ErrSessionNotFound, id)
 	})

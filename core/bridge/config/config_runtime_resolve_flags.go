@@ -21,6 +21,13 @@ func resolveRuntimeSessionHumanLogFullEnabled(fileCfg bridgeFileConfig, fallback
 	return fallback.SessionHumanLogFullEnabled
 }
 
+func resolveRuntimeSessionSystemPromptVisible(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.SessionSystemPromptVisible != nil {
+		return *fileCfg.SessionSystemPromptVisible
+	}
+	return fallback.SessionSystemPromptVisible
+}
+
 func resolveRuntimeAssistantMarkdownEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
 	if fileCfg.AssistantMarkdownEnabled != nil {
 		return *fileCfg.AssistantMarkdownEnabled
@@ -28,9 +35,23 @@ func resolveRuntimeAssistantMarkdownEnabled(fileCfg bridgeFileConfig, fallback r
 	return fallback.AssistantMarkdownEnabled
 }
 
+func resolveRuntimeToolCallCompactOutputEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.ToolCallCompactOutputEnabled != nil {
+		return *fileCfg.ToolCallCompactOutputEnabled
+	}
+	return fallback.ToolCallCompactOutputEnabled
+}
+
 func resolveRuntimeMemoryModeEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
 	if fileCfg.MemoryModeEnabled != nil {
 		return *fileCfg.MemoryModeEnabled
 	}
 	return fallback.MemoryModeEnabled
+}
+
+func resolveRuntimeMicrocompactEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.MicrocompactEnabled != nil {
+		return *fileCfg.MicrocompactEnabled
+	}
+	return fallback.MicrocompactEnabled
 }

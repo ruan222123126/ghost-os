@@ -28,9 +28,10 @@ func (s *bridgeService) executeToolListAction(traceID string) (any, int, error) 
 	payload := make([]toolPayload, 0, len(items))
 	for _, item := range items {
 		entry := toolPayload{
-			Name:           item.Name,
-			Enabled:        item.Enabled,
-			PromptOverride: strings.TrimSpace(item.PromptOverride),
+			Name:            item.Name,
+			Enabled:         item.Enabled,
+			PromptOverride:  strings.TrimSpace(item.PromptOverride),
+			SandboxMemoryMB: cloneOptionalInt(item.SandboxMemoryMB),
 		}
 		if inputSchema, ok := schemaByToolName(schemasByName, item.Name); ok {
 			entry.InputSchema = inputSchema
@@ -63,9 +64,10 @@ func (s *bridgeService) executeToolUpdateAction(
 		}
 		logAction(traceID, busActionToolUpdate, "success", nil)
 		return toolPayload{
-			Name:           item.Name,
-			Enabled:        item.Enabled,
-			PromptOverride: strings.TrimSpace(item.PromptOverride),
+			Name:            item.Name,
+			Enabled:         item.Enabled,
+			PromptOverride:  strings.TrimSpace(item.PromptOverride),
+			SandboxMemoryMB: cloneOptionalInt(item.SandboxMemoryMB),
 		}, http.StatusOK, nil
 	}
 
@@ -77,11 +79,20 @@ func (s *bridgeService) executeToolUpdateAction(
 func mapToolConfigError(err error) int {
 	switch {
 	case errors.Is(err, bridgeconfig.ErrToolNameRequired),
-		errors.Is(err, bridgeconfig.ErrToolUpdateEmpty):
+		errors.Is(err, bridgeconfig.ErrToolUpdateEmpty),
+		errors.Is(err, bridgeconfig.ErrToolConfigInvalid):
 		return http.StatusBadRequest
 	case errors.Is(err, bridgeconfig.ErrToolNotFound):
 		return http.StatusNotFound
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func cloneOptionalInt(raw *int) *int {
+	if raw == nil {
+		return nil
+	}
+	value := *raw
+	return &value
 }

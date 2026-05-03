@@ -5,6 +5,7 @@ import (
 	"ghost-os/bridge/artifacts"
 	"ghost-os/bridge/execution"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/skills"
 	"ghost-os/bridge/tools"
 )
 
@@ -13,8 +14,9 @@ type runtimeClients struct {
 }
 
 type runtimeToolResources struct {
-	artifactStore   *artifacts.SessionArtifactStore
-	executionClient execution.Client
+	artifactStore              *artifacts.SessionArtifactStore
+	workspaceExecutionClient   execution.Client
+	interactionExecutionClient execution.Client
 }
 
 type coreToolOptions struct {
@@ -35,10 +37,12 @@ func newRuntimeToolResources(cfg Config) (runtimeToolResources, error) {
 	if err != nil {
 		return runtimeToolResources{}, err
 	}
-	execCfg := executionClientConfigFromConfig(cfg)
+	workspaceCfg := executionClientConfigFromConfig(cfg)
+	interactionCfg := interactionExecutionClientConfigFromConfig(cfg)
 	return runtimeToolResources{
-		artifactStore:   artifactStore,
-		executionClient: newExecutionClient(execCfg),
+		artifactStore:              artifactStore,
+		workspaceExecutionClient:   newExecutionClient(workspaceCfg),
+		interactionExecutionClient: newExecutionClient(interactionCfg),
 	}, nil
 }
 
@@ -51,8 +55,28 @@ func registerCoreTools(opts coreToolOptions) {
 }
 
 func registerRuntimeExecutionTools(opts coreToolOptions) {
-	opts.registry.Register(tools.NewScriptExecTool(opts.resources.executionClient))
-	opts.registry.Register(tools.NewCodexCLITool(opts.resources.executionClient, opts.cfg.NativePersistent))
+	registerRuntimeFileTools(opts)
+	opts.registry.Register(
+		tools.NewScriptExecTool(
+			opts.resources.workspaceExecutionClient,
+			opts.cfg.ScriptExecSandboxMemoryMB,
+		),
+	)
+	opts.registry.Register(tools.NewBashExecTool(opts.resources.workspaceExecutionClient))
+	opts.registry.Register(
+		tools.NewCodexCLITool(
+			opts.resources.workspaceExecutionClient,
+			opts.cfg.NativePersistent,
+		),
+	)
+}
+
+func registerRuntimeFileTools(opts coreToolOptions) {
+	opts.registry.Register(tools.NewListFilesTool(opts.resources.workspaceExecutionClient))
+	opts.registry.Register(tools.NewReadFileTool(opts.resources.workspaceExecutionClient))
+	opts.registry.Register(tools.NewSearchFilesTool(opts.resources.workspaceExecutionClient))
+	opts.registry.Register(tools.NewWriteFileTool(opts.resources.workspaceExecutionClient))
+	opts.registry.Register(tools.NewApplyDiffTool(opts.resources.workspaceExecutionClient))
 }
 
 func registerRuntimeWebTools(opts coreToolOptions) {
@@ -67,7 +91,7 @@ func registerRuntimeWebTools(opts coreToolOptions) {
 func registerRuntimeInteractionTools(opts coreToolOptions) {
 	opts.registry.Register(
 		tools.NewScreenControlTool(
-			opts.resources.executionClient,
+			opts.resources.interactionExecutionClient,
 			opts.clients.primary,
 			opts.resources.artifactStore,
 		),
@@ -81,12 +105,18 @@ func registerRuntimeOptionalTools(opts coreToolOptions) {
 				opts.registry,
 				toolVisibilityOptions(opts.cfg),
 				opts.cfg.ToolSearch.IdleTurns,
-				tools.ToolSearchOptions{ProjectRoot: opts.cfg.ProjectRoot},
+				tools.ToolSearchOptions{
+					SkillConfig: skills.Config{
+						ProjectRoot:    opts.cfg.ProjectRoot,
+						SkillBlocklist: append([]string(nil), opts.cfg.SkillBlocklist...),
+					},
+				},
 			),
 		)
 	}
 }
 
 func closeRuntimeToolResources(resources runtimeToolResources) {
-	_ = closeExecutionClient(resources.executionClient)
+	_ = closeExecutionClient(resources.workspaceExecutionClient)
+	_ = closeExecutionClient(resources.interactionExecutionClient)
 }

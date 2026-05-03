@@ -49,7 +49,15 @@ func (e toolCallExecutor) startToolCall(ctx context.Context, traceID string, tur
 		rawToolCallID: strings.TrimSpace(call.ID),
 		rawToolName:   strings.TrimSpace(call.Name),
 	}
-	if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, step.rawToolName, step.rawToolCallID); err != nil {
+	if err := e.events.toolCallStarted(
+		ctx,
+		traceID,
+		turn,
+		stepID,
+		step.rawToolName,
+		step.rawToolCallID,
+		string(call.Arguments),
+	); err != nil {
 		return toolCallStep{}, err
 	}
 	return step, nil
@@ -62,6 +70,7 @@ func (e toolCallExecutor) startExplicitToolCall(
 	stepIndex int,
 	toolName string,
 	toolCallID string,
+	args json.RawMessage,
 ) (toolCallStep, error) {
 	stepID, err := streaming.ToolStepID(turn, stepIndex)
 	if err != nil {
@@ -73,7 +82,15 @@ func (e toolCallExecutor) startExplicitToolCall(
 		rawToolCallID: strings.TrimSpace(toolCallID),
 		rawToolName:   strings.TrimSpace(toolName),
 	}
-	if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, step.rawToolName, step.rawToolCallID); err != nil {
+	if err := e.events.toolCallStarted(
+		ctx,
+		traceID,
+		turn,
+		stepID,
+		step.rawToolName,
+		step.rawToolCallID,
+		string(args),
+	); err != nil {
 		return toolCallStep{}, err
 	}
 	return step, nil
@@ -147,7 +164,7 @@ func (e toolCallExecutor) finishExplicitToolCallValidationError(
 
 	resolvedToolCallID := coalesceToolCallID(toolCallID, step.rawToolCallID)
 	resolvedToolName := coalesceToolName(toolName, step.rawToolName, "invalid_tool_call")
-	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, resolvedToolName, resolvedToolCallID, "error", callErr); err != nil {
+	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, resolvedToolName, resolvedToolCallID, "error", callErr, ""); err != nil {
 		return resolvedToolCall{}, toolCallOutcome{}, true, err
 	}
 	return resolvedToolCall{}, toolCallOutcome{}, true, callErr
@@ -161,7 +178,7 @@ func (e toolCallExecutor) finishInvalidToolCall(ctx context.Context, traceID str
 	if resolvedToolCallID != "" {
 		appendToolResult(e.history, resolvedToolCallID, resolvedToolName, traceID, "", callErr, nil)
 	}
-	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, resolvedToolName, resolvedToolCallID, "error", callErr); err != nil {
+	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, resolvedToolName, resolvedToolCallID, "error", callErr, ""); err != nil {
 		return toolCallOutcome{}, err
 	}
 	return toolCallOutcome{}, nil
@@ -170,7 +187,7 @@ func (e toolCallExecutor) finishInvalidToolCall(ctx context.Context, traceID str
 func (e toolCallExecutor) finishMissingToolCall(ctx context.Context, traceID string, step toolCallStep, toolCallID string, toolName string) (toolCallOutcome, error) {
 	toolErr := fmt.Errorf("tool %q not found", toolName)
 	appendToolResult(e.history, toolCallID, toolName, traceID, "", toolErr, nil)
-	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, toolName, toolCallID, "error", toolErr); err != nil {
+	if err := e.events.toolCallFinished(ctx, traceID, step.turn, step.stepID, toolName, toolCallID, "error", toolErr, ""); err != nil {
 		return toolCallOutcome{}, err
 	}
 	return toolCallOutcome{}, nil

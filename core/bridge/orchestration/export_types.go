@@ -27,6 +27,9 @@ type AgentParams = agentParams
 type HumanResponseParams = humanResponseParams
 type SessionIDParams = sessionIDParams
 type SessionGetParams = sessionGetParams
+type SessionSidebarPartition = sessionSidebarPartition
+type SessionSidebarPartitionState = sessionSidebarPartitionState
+type SessionSidebarPartitionPutRequest = sessionSidebarPartitionPutRequest
 type SessionDeleteResponse = sessionDeleteResponse
 type ConfigResponse = configResponse
 type ConfigUpdateRequest = configUpdateRequest
@@ -62,4 +65,8 @@ func ValidateBusRequest(req APIRequest) error {
 
 func NewSessionPushHub() *SessionPushHub {
 	return newSessionPushHub()
+}
+
+func ResolveFindIconTemplateRootPath() (string, error) {
+	return resolveFindIconTemplateRoot()
 }

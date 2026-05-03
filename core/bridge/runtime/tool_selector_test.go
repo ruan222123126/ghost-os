@@ -216,12 +216,12 @@ func TestToolSelector_SelectToolsPassesDecisionHintToWorker(t *testing.T) {
 
 func TestToolSelector_RejectsHiddenToolOutsideCatalog(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "script_exec", "tfind"} {
+	for _, name := range []string{"ask_human", "script_exec", "sfind"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 	catalog := tools.NewScopedCatalog(registry, []string{"ask_human", "script_exec"})
 	selector := NewToolSelectorForCatalog(newSelectorTestConfig(), &fakeSelectorCompleter{
-		response: selectorResponse(`{"mode":"subset","tools":["tfind"],"confidence":0.95,"reason":"bad hidden tool"}`),
+		response: selectorResponse(`{"mode":"subset","tools":["sfind"],"confidence":0.95,"reason":"bad hidden tool"}`),
 	}, catalog)
 
 	result := selector.SelectTools(context.Background(), "find tools", nil, "", "trace-hidden-tool")

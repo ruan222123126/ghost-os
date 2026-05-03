@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -59,6 +60,10 @@ func newTurnPreparationInput(userInput llm.Message, traceID string) turnPreparat
 	}
 }
 
+func isResumeLikeInput(userInput llm.Message) bool {
+	return strings.TrimSpace(userInput.Text) == "" && !hasAgentInputImages(userInput)
+}
+
 func (p *sessionTurnPreparer) prepare(ctx context.Context, userInput llm.Message, sessionID string, traceID string) (*sessionTurnState, error) {
 	return p.prepareWithRuntimeOverrides(ctx, userInput, sessionID, traceID, nil)
 }
@@ -101,6 +106,8 @@ func (p *sessionTurnPreparer) buildPrepareDependencies() (agentRuntimeDependenci
 		deps.systemPrompt,
 		p.sessionStore,
 		deps.cfg.ToolSearch.IdleTurns,
+		deps.cfg.MicrocompactEnabled,
+		"",
 	)
 	persistence := newSessionTurnCommitter(p.sessionStore)
 	return deps, historyBuilder, persistence, nil
@@ -123,11 +130,18 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 			return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
 		}
 	}
+	if isResumeLikeInput(llm.Message{Role: llm.RoleUser, Text: input.rawUserMessage}) && !hasAnsweredHumanResponse(sess) {
+		return nil, &sessionTurnSetupError{
+			sessionID:  strings.TrimSpace(sess.ID),
+			statusCode: http.StatusBadRequest,
+			err:        errors.New("resume requires pending human answers"),
+		}
+	}
 	execCtx, cleanup, err := p.prepareExecutionContext(ctx, sess, deps.registry, input.traceID)
 	if err != nil {
 		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), statusCode: http.StatusConflict, err: err}
 	}
-	history, preTurnMessages, catalog, systemPrompt, err := p.prepareHistoryAndEnvironment(
+	history, preTurnMessages, catalog, _, err := p.prepareHistoryAndEnvironment(
 		execCtx,
 		deps,
 		historyBuilder,
@@ -139,7 +153,7 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 		cleanup()
 		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
 	}
-	runAgent := p.buildTurnAgent(deps, sess, catalog, history, systemPrompt)
+	runAgent := p.buildTurnAgent(deps, catalog, sess, history)
 	return &sessionTurnState{
 		sessionStore:    p.sessionStore,
 		deps:            deps,
@@ -176,29 +190,17 @@ func (p *sessionTurnPreparer) prepareExecutionContext(
 
 func (p *sessionTurnPreparer) buildTurnAgent(
 	deps agentRuntimeDependencies,
-	sess *session.Session,
 	catalog tools.ToolCatalog,
+	sess *session.Session,
 	history *agent.History,
-	systemPrompt string,
 ) *agent.Agent {
-	runCatalog := catalog
-	if graphQLToolRuntimeEnabled(deps.cfg) {
-		runCatalog = tools.NewStructuredToolHiddenCatalog(catalog)
-	}
-	runAgent := agent.NewAgentWithHistory(deps.client, runCatalog, history, deps.cfg.MaxTurns)
+	runAgent := agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns)
 	runAgent.SetResponseOptions(llm.CloneResponseOptions(deps.cfg.ResponseOptions))
-	if !graphQLToolRuntimeEnabled(deps.cfg) {
-		return runAgent
-	}
-	runAgent.SetBeforeCompletionHook(
-		p.newGraphQLSystemPromptRefreshHook(deps, sess, catalog, systemPrompt),
-	)
-	runAgent.AddAssistantTextHandler(agent.NewGraphQLTextTurnHandler(
-		tools.NewGraphQLTextExecutorWithOptions(catalog, tools.GraphQLTextExecutorOptions{
-			SanitizeKnownArtifacts: deps.cfg.GraphQL.TextSanitizeEnabled,
-		}),
+	runAgent.SetCompletionRetryPolicy(agent.NewCompletionRetryPolicy(
+		deps.cfg.LLMCompletionRetryCount,
+		time.Duration(deps.cfg.LLMCompletionRetryIntervalMS)*time.Millisecond,
 	))
-	runAgent.SetStrictToolCallProtocol(true)
+	p.attachCompletionPromptRefresh(runAgent, deps, sess, catalog)
 	return runAgent
 }
 
@@ -213,6 +215,8 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	preTurnMessages := llm.CloneMessages(sess.Messages)
 	askHumanContinuation := hasAnsweredHumanResponse(sess)
 	sess.AdvanceToolTurn(deps.cfg.ToolSearch.IdleTurns)
+	pruneInvisibleSessionSkills(deps.cfg, sess)
+	historyBuilder.traceID = strings.TrimSpace(traceID)
 	history := historyBuilder.BuildHistory(sess)
 
 	catalog, systemPrompt, err := p.selectToolsForTurn(ctx, deps, sess, history, rawUserMessage, askHumanContinuation, traceID)

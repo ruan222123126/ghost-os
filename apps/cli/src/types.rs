@@ -8,10 +8,11 @@ pub use crate::envelope_generated::{
 };
 
 #[derive(Debug, Serialize)]
-pub struct AgentParams<'a> {
-    pub message: &'a str,
+pub struct AgentParams {
+    pub message: String,
+    pub project_root: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<&'a str>,
+    pub session_id: Option<String>,
 }
 
 impl AgentPayload {
@@ -54,17 +55,16 @@ impl ConfigUpdate {
             base_url: None,
             model: None,
             chat_path: None,
-            graphql_default_source: None,
-            graphql_tool_runtime_enabled: None,
-            graphql_text_sanitize_enabled: None,
-            graphql_sources: None,
-            graphql_source_upsert: None,
-            graphql_mutation_policies: None,
+            project_root: None,
+            max_turns: None,
+            llm_completion_retry_count: None,
+            llm_completion_retry_interval_ms: None,
             session_human_log_full_enabled: None,
-            web_rooter_enabled: None,
-            web_rooter_base_url: None,
-            web_rooter_api_token: None,
-            web_rooter_timeout_ms: None,
+            session_system_prompt_visible_enabled: None,
+            assistant_markdown_enabled: None,
+            tool_call_compact_output_enabled: None,
+            memory_mode_enabled: None,
+            microcompact_enabled: None,
             web_search_tavily_url: None,
             web_search_exa_url: None,
             web_search_tavily_api_key: None,

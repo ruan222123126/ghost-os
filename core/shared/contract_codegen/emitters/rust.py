@@ -9,7 +9,7 @@ from contract_codegen.common import (
     schema_ref_name,
 )
 
-RUST_RESERVED_FIELDS = {"type"}
+RUST_RESERVED_FIELDS = {"type", "if", "loop"}
 
 
 def _field_name(name: str) -> str:

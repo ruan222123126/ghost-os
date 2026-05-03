@@ -14,9 +14,6 @@ type AskHumanOption = toolcontracts.AskHumanOption
 // ToolCatalog 定义 Agent 与上下文层共享的最小工具目录契约。
 type ToolCatalog = toolcontracts.ToolCatalog
 
-// GraphQLToolDefSource allows catalog wrappers to expose GraphQL-only tool defs.
-type GraphQLToolDefSource = toolcontracts.GraphQLToolDefSource
-
 // Tool 定义 Agent 可调用的最小工具契约。
 type Tool = toolcontracts.Tool
 

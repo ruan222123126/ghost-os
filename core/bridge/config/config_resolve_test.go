@@ -42,6 +42,25 @@ func TestResolveUsesProvidedEnvSnapshot(t *testing.T) {
 	}
 }
 
+func TestResolveNativeBinaryOverrideBeatsFileConfig(t *testing.T) {
+	cfg, err := resolveConfig(
+		bridgeFileConfig{
+			NativeBinaryPath: stringPointer("/file/native"),
+		},
+		envSnapshot{
+			"GHOST_PROVIDER":                    "custom",
+			"GHOST_NATIVE_BINARY_PATH_OVERRIDE": "/override/native",
+			"GHOST_NATIVE_BINARY_PATH":          "/env/native",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if cfg.NativeBinaryPath != "/override/native" {
+		t.Fatalf("unexpected native binary path: got %q want %q", cfg.NativeBinaryPath, "/override/native")
+	}
+}
+
 func TestResolveRuntimeConfigWithFallbackKeepsSnapshotModelSelection(t *testing.T) {
 	t.Setenv("GHOST_TOOL_ALLOWLIST_ONLY", "false")
 
@@ -93,11 +112,6 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			want: "invalid GHOST_RSS_POLL_INTERVAL",
 		},
 		{
-			name: "web rooter enabled bool",
-			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_WEB_ROOTER_ENABLED": "maybe"},
-			want: "invalid GHOST_WEB_ROOTER_ENABLED",
-		},
-		{
 			name: "response store bool",
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RESPONSE_STORE": "maybe"},
 			want: "invalid GHOST_RESPONSE_STORE",
@@ -143,7 +157,7 @@ func TestResolveConfigLoadsSessionHumanLogModeFromEnvAndFile(t *testing.T) {
 	}
 }
 
-func TestResolveConfigLoadsAssistantMarkdownModeFromDefaultsAndFile(t *testing.T) {
+func TestResolveConfigLoadsSessionDisplayModesFromDefaultsAndFile(t *testing.T) {
 	defaultCfg, err := resolveConfig(
 		bridgeFileConfig{},
 		envSnapshot{
@@ -153,17 +167,33 @@ func TestResolveConfigLoadsAssistantMarkdownModeFromDefaultsAndFile(t *testing.T
 	if err != nil {
 		t.Fatalf("resolveConfig default: %v", err)
 	}
+	if !defaultCfg.SessionSystemPromptVisible {
+		t.Fatal("expected session_system_prompt_visible_enabled to default to true")
+	}
 	if !defaultCfg.AssistantMarkdownEnabled {
 		t.Fatal("expected assistant_markdown_enabled to default to true")
+	}
+	if defaultCfg.ToolCallCompactOutputEnabled {
+		t.Fatal("expected tool_call_compact_output_enabled to default to false")
 	}
 	if defaultCfg.MemoryModeEnabled {
 		t.Fatal("expected memory_mode_enabled to default to false")
 	}
+	if defaultCfg.MicrocompactEnabled {
+		t.Fatal("expected microcompact_enabled to default to false")
+	}
+	if defaultCfg.MaxTurns != defaultMaxTurns {
+		t.Fatalf("expected max_turns to default to %d, got %d", defaultMaxTurns, defaultCfg.MaxTurns)
+	}
 
 	fileOverrideCfg, err := resolveConfig(
 		bridgeFileConfig{
-			AssistantMarkdownEnabled: boolPtr(false),
-			MemoryModeEnabled:        boolPtr(true),
+			MaxTurns:                     intPtr(7),
+			SessionSystemPromptVisible:   boolPtr(false),
+			AssistantMarkdownEnabled:     boolPtr(false),
+			ToolCallCompactOutputEnabled: boolPtr(true),
+			MemoryModeEnabled:            boolPtr(true),
+			MicrocompactEnabled:          boolPtr(true),
 		},
 		envSnapshot{
 			"GHOST_PROVIDER": "custom",
@@ -172,11 +202,23 @@ func TestResolveConfigLoadsAssistantMarkdownModeFromDefaultsAndFile(t *testing.T
 	if err != nil {
 		t.Fatalf("resolveConfig file override: %v", err)
 	}
+	if fileOverrideCfg.SessionSystemPromptVisible {
+		t.Fatal("expected session_system_prompt_visible_enabled to be false from file override")
+	}
 	if fileOverrideCfg.AssistantMarkdownEnabled {
 		t.Fatal("expected assistant_markdown_enabled to be false from file override")
 	}
+	if !fileOverrideCfg.ToolCallCompactOutputEnabled {
+		t.Fatal("expected tool_call_compact_output_enabled to be true from file override")
+	}
 	if !fileOverrideCfg.MemoryModeEnabled {
 		t.Fatal("expected memory_mode_enabled to be true from file override")
+	}
+	if !fileOverrideCfg.MicrocompactEnabled {
+		t.Fatal("expected microcompact_enabled to be true from file override")
+	}
+	if fileOverrideCfg.MaxTurns != 7 {
+		t.Fatalf("expected max_turns to be 7 from file override, got %d", fileOverrideCfg.MaxTurns)
 	}
 }
 
@@ -201,11 +243,6 @@ func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 			fileCfg: bridgeFileConfig{RSSPollInterval: stringPointer("later")},
 			want:    "invalid rss_poll_interval",
 		},
-		{
-			name:    "web rooter timeout",
-			fileCfg: bridgeFileConfig{WebRooterTimeoutMS: intPtr(0)},
-			want:    "invalid web_rooter_timeout_ms",
-		},
 	}
 
 	env := envSnapshot{"GHOST_PROVIDER": "custom"}
@@ -216,58 +253,6 @@ func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", tc.want, err)
 			}
 		})
-	}
-}
-
-func TestResolveConfigLoadsWebRooterDefaults(t *testing.T) {
-	cfg, err := resolveConfig(bridgeFileConfig{}, envSnapshot{"GHOST_PROVIDER": "custom"})
-	if err != nil {
-		t.Fatalf("resolveConfig: %v", err)
-	}
-	if cfg.WebRooterBaseURL != defaultWebRooterBaseURL {
-		t.Fatalf("unexpected web_rooter base url: got %q want %q", cfg.WebRooterBaseURL, defaultWebRooterBaseURL)
-	}
-	if cfg.WebRooterEnabled {
-		t.Fatal("expected web_rooter to stay disabled by default")
-	}
-	if cfg.WebRooterAPIToken != "" {
-		t.Fatalf("expected empty web_rooter api token, got %q", cfg.WebRooterAPIToken)
-	}
-	if cfg.WebRooterTimeoutMS != defaultWebRooterTimeoutMS {
-		t.Fatalf("unexpected web_rooter timeout: got %d want %d", cfg.WebRooterTimeoutMS, defaultWebRooterTimeoutMS)
-	}
-}
-
-func TestResolveConfigAllowsWebRooterOverrides(t *testing.T) {
-	cfg, err := resolveConfig(
-		bridgeFileConfig{
-			WebRooterEnabled:   boolPtr(true),
-			WebRooterBaseURL:   stringPointer("http://127.0.0.1:9999/rooter"),
-			WebRooterAPIToken:  stringPointer("file-rooter-token"),
-			WebRooterTimeoutMS: intPtr(12_345),
-		},
-		envSnapshot{
-			"GHOST_WEB_ROOTER_ENABLED":    "false",
-			"GHOST_PROVIDER":              "custom",
-			"GHOST_WEB_ROOTER_BASE_URL":   "http://127.0.0.1:8765",
-			"GHOST_WEB_ROOTER_API_TOKEN":  "env-rooter-token",
-			"GHOST_WEB_ROOTER_TIMEOUT_MS": "90000",
-		},
-	)
-	if err != nil {
-		t.Fatalf("resolveConfig: %v", err)
-	}
-	if !cfg.WebRooterEnabled {
-		t.Fatal("expected web_rooter enabled override to persist")
-	}
-	if cfg.WebRooterBaseURL != "http://127.0.0.1:9999/rooter" {
-		t.Fatalf("unexpected web_rooter base url override: %q", cfg.WebRooterBaseURL)
-	}
-	if cfg.WebRooterAPIToken != "file-rooter-token" {
-		t.Fatalf("unexpected web_rooter api token override: %q", cfg.WebRooterAPIToken)
-	}
-	if cfg.WebRooterTimeoutMS != 12_345 {
-		t.Fatalf("unexpected web_rooter timeout override: %d", cfg.WebRooterTimeoutMS)
 	}
 }
 

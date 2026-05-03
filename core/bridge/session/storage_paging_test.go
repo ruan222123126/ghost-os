@@ -104,6 +104,40 @@ func TestStoreLoadKeepsOnlyHotWindowInMemory(t *testing.T) {
 	}
 }
 
+func TestStoreLoadExtendsHotWindowToUserBoundary(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	sess := NewSession("")
+	sess.ID = "session-hot-window-boundary"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "turn-start"})
+	for i := 0; i < hotWindowMaxMessages+10; i++ {
+		sess.AddMessage(llm.Message{
+			Role: llm.RoleAssistant,
+			Text: fmt.Sprintf("assistant-%03d", i),
+		})
+	}
+	if err := store.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	loaded, err := store.Load(sess.ID)
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if len(loaded.Messages) <= hotWindowMaxMessages {
+		t.Fatalf("expected load to expand past hot-window size, got %d", len(loaded.Messages))
+	}
+	if loaded.WindowStart != 0 {
+		t.Fatalf("expected window start to be rewound to user boundary, got %d", loaded.WindowStart)
+	}
+	if loaded.Messages[0].Role != llm.RoleUser || loaded.Messages[0].Text != "turn-start" {
+		t.Fatalf("expected first loaded message to be the user boundary, got %+v", loaded.Messages[0])
+	}
+}
+
 func TestStoreSaveRejectsNonAppendOnlyMutation(t *testing.T) {
 	store, err := NewStore(t.TempDir())
 	if err != nil {

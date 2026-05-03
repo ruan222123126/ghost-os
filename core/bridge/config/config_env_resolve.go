@@ -1,6 +1,9 @@
 package config
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func resolveSessionsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
 	return valueOrEnvWithEnv(fileCfg.SessionsPath, env, "GHOST_SESSIONS_PATH", defaultSessionsPath)
@@ -33,7 +36,35 @@ func resolveTasksPath(fileCfg bridgeFileConfig, env envSnapshot) string {
 	return valueOrEnvWithEnv(fileCfg.TasksPath, env, "GHOST_TASKS_PATH", defaultTasksPath)
 }
 
+func resolveScriptExecSandboxMemoryMB(fileCfg bridgeFileConfig, env envSnapshot) (int, error) {
+	const fieldName = "script_exec_sandbox_memory_mb"
+	const envName = "GHOST_SCRIPT_EXEC_SANDBOX_MEMORY_MB"
+
+	if fileCfg.ScriptExecSandboxMemoryMB != nil {
+		value := *fileCfg.ScriptExecSandboxMemoryMB
+		if value <= 0 {
+			return 0, invalidScriptExecSandboxMemoryMB(fieldName, value)
+		}
+		if value > maxScriptExecSandboxMemoryMB {
+			return 0, invalidScriptExecSandboxMemoryMB(fieldName, value)
+		}
+		return value, nil
+	}
+
+	value, err := parsePositiveIntValue(env.value(envName), envName, defaultScriptExecSandboxMemoryMB)
+	if err != nil {
+		return 0, err
+	}
+	if value > maxScriptExecSandboxMemoryMB {
+		return 0, invalidScriptExecSandboxMemoryMB(envName, value)
+	}
+	return value, nil
+}
+
 func resolveNativeBinaryPath(fileCfg bridgeFileConfig, env envSnapshot) string {
+	if override := env.firstNonEmpty("GHOST_NATIVE_BINARY_PATH_OVERRIDE", "GHOST_NATIVE_BIN_OVERRIDE"); override != "" {
+		return override
+	}
 	if fileCfg.NativeBinaryPath != nil {
 		return strings.TrimSpace(*fileCfg.NativeBinaryPath)
 	}
@@ -73,4 +104,13 @@ func resolveProjectRoot(fileCfg bridgeFileConfig, env envSnapshot) string {
 		return strings.TrimSpace(*fileCfg.ProjectRoot)
 	}
 	return env.value("GHOST_PROJECT_ROOT")
+}
+
+func invalidScriptExecSandboxMemoryMB(name string, value int) error {
+	return fmt.Errorf(
+		"invalid %s: must be between 1 and %d, got %d",
+		strings.TrimSpace(name),
+		maxScriptExecSandboxMemoryMB,
+		value,
+	)
 }

@@ -21,6 +21,8 @@ type RunHandle struct {
 	TraceID   string
 	Cancel    context.CancelFunc
 	StartedAt time.Time
+	done      chan struct{}
+	doneOnce  sync.Once
 }
 
 type RunRegistry struct {
@@ -105,6 +107,7 @@ func newRunHandle(sessionID string, traceID string, cancel context.CancelFunc) *
 		TraceID:   traceID,
 		Cancel:    cancel,
 		StartedAt: time.Now().UTC(),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -124,49 +127,11 @@ func (r *RunRegistry) Unregister(sessionID string) {
 }
 
 func (r *RunRegistry) CancelBySessionID(sessionID string) error {
-	if r == nil {
-		return ErrRunNotFound
-	}
-
-	trimmedSessionID := strings.TrimSpace(sessionID)
-	if trimmedSessionID == "" {
-		return ErrRunNotFound
-	}
-
-	r.mu.Lock()
-	handle, ok := r.bySessionID[trimmedSessionID]
-	if !ok || handle == nil {
-		r.mu.Unlock()
-		return ErrRunNotFound
-	}
-	r.unregisterHandleLocked(handle)
-	r.mu.Unlock()
-
-	handle.Cancel()
-	return nil
+	return cancelRunHandle(r.lookupBySessionID, sessionID)
 }
 
 func (r *RunRegistry) CancelByTraceID(traceID string) error {
-	if r == nil {
-		return ErrRunNotFound
-	}
-
-	trimmedTraceID := strings.TrimSpace(traceID)
-	if trimmedTraceID == "" {
-		return ErrRunNotFound
-	}
-
-	r.mu.Lock()
-	handle, ok := r.byTraceID[trimmedTraceID]
-	if !ok || handle == nil {
-		r.mu.Unlock()
-		return ErrRunNotFound
-	}
-	r.unregisterHandleLocked(handle)
-	r.mu.Unlock()
-
-	handle.Cancel()
-	return nil
+	return cancelRunHandle(r.lookupByTraceID, traceID)
 }
 
 func (r *RunRegistry) IsInflight(sessionID string) bool {
@@ -255,12 +220,25 @@ func (r *RunRegistry) unregisterHandleLocked(handle *RunHandle) {
 	if handle.TraceID != "" {
 		delete(r.byTraceID, handle.TraceID)
 	}
+	handle.markDone()
 }
 
 func cloneRunHandle(handle *RunHandle) *RunHandle {
 	if handle == nil {
 		return nil
 	}
-	cloned := *handle
-	return &cloned
+	return &RunHandle{
+		SessionID: handle.SessionID,
+		TraceID:   handle.TraceID,
+		StartedAt: handle.StartedAt,
+	}
+}
+
+func (h *RunHandle) markDone() {
+	if h == nil {
+		return
+	}
+	h.doneOnce.Do(func() {
+		close(h.done)
+	})
 }

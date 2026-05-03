@@ -73,6 +73,7 @@ func (s *sessionTurnState) persistNewMessages(newMessages []llm.Message, complet
 	if s == nil || s.persistence == nil || s.sess == nil || s.agent == nil {
 		return nil
 	}
+	newMessages = s.messagesForPersistence(newMessages, completed)
 	s.sess.ConversationState = s.agent.GetConversationState()
 	return s.persistence.CommitTurn(s.execCtx, s.sess, newMessages, s.traceID, completed)
 }
@@ -88,7 +89,7 @@ func (s *sessionTurnState) complete(
 	}
 
 	newMessages := s.newMessagesForCommit()
-	s.clearAssistantDraftBeforeCommit(newMessages)
+	s.clearAssistantDraftBeforeCommit(newMessages, runErr, awaitingHuman)
 	if err := s.persistTurnCompletion(newMessages, awaitingHuman, onPersistErr); err != nil {
 		return "", "", err
 	}
@@ -104,7 +105,7 @@ func (s *sessionTurnState) resolveAwaitingHumanState(runErr error) (bool, error)
 	if errors.As(runErr, &awaitingErr) {
 		return true, nil
 	}
-	if !s.hasCommittedMessages() {
+	if !s.hasTurnStateToPersist() {
 		return false, runErr
 	}
 	return false, nil
@@ -158,9 +159,63 @@ func (s *sessionTurnState) hasCommittedMessages() bool {
 	return len(s.agent.GetNewMessages()) > 0
 }
 
-func (s *sessionTurnState) clearAssistantDraftBeforeCommit(newMessages []llm.Message) {
-	if s == nil || s.sess == nil || len(newMessages) == 0 {
+func (s *sessionTurnState) hasTurnStateToPersist() bool {
+	return s.hasCommittedMessages() || s.hasCurrentAssistantDraft()
+}
+
+func (s *sessionTurnState) hasCurrentAssistantDraft() bool {
+	if s == nil || s.sess == nil || s.sess.AssistantDraft == nil {
+		return false
+	}
+	return strings.TrimSpace(s.sess.AssistantDraft.TraceID) == strings.TrimSpace(s.traceID)
+}
+
+func (s *sessionTurnState) clearAssistantDraftBeforeCommit(
+	newMessages []llm.Message,
+	runErr error,
+	awaitingHuman bool,
+) {
+	if s == nil || s.sess == nil || (!s.hasCurrentAssistantDraft() && len(newMessages) == 0) {
+		return
+	}
+	if runErr != nil && !awaitingHuman {
 		return
 	}
 	s.sess.ClearAssistantDraft(time.Now().UTC())
+}
+
+func (s *sessionTurnState) messagesForPersistence(
+	newMessages []llm.Message,
+	completed bool,
+) []llm.Message {
+	if s == nil {
+		return newMessages
+	}
+	if len(newMessages) > 0 {
+		return newMessages
+	}
+	if !s.hasCurrentAssistantDraft() {
+		return newMessages
+	}
+	userMessage, ok := normalizePersistenceUserMessage(llm.Message{
+		Role: llm.RoleUser,
+		Text: s.userMessage,
+	})
+	if !ok {
+		return newMessages
+	}
+	return []llm.Message{userMessage}
+}
+
+func normalizePersistenceUserMessage(message llm.Message) (llm.Message, bool) {
+	cloned := llm.CloneMessages([]llm.Message{message})
+	if len(cloned) == 0 {
+		return llm.Message{}, false
+	}
+	cloned[0].Role = llm.RoleUser
+	cloned[0].Text = strings.TrimSpace(cloned[0].Text)
+	if cloned[0].Text == "" && len(cloned[0].Content) == 0 {
+		return llm.Message{}, false
+	}
+	return cloned[0], true
 }

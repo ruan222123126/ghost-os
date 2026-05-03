@@ -59,6 +59,15 @@ func NewSessionAgentRunner(
 	}
 }
 
+func (r *SessionAgentRunner) withRequestRuntimeOptions(options *requestRuntimeOptions) SessionTurnRunner {
+	if r == nil || options == nil {
+		return r
+	}
+	cloned := *r
+	cloned.configStore = applyRequestRuntimeOptionsToStore(r.configStore, options)
+	return &cloned
+}
+
 func (r *SessionAgentRunner) prepareTurn(ctx context.Context, userInput llm.Message, sessionID string, traceID string) (*sessionTurnState, error) {
 	return r.prepareTurnWithRuntimeOverrides(ctx, userInput, sessionID, traceID, nil)
 }

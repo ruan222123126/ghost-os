@@ -202,6 +202,14 @@ func (s *Service) ExecuteSkillListAction(traceID string) (ServiceResult, error) 
 	return s.inner.executeSkillListActionResult(traceID)
 }
 
+func (s *Service) ExecuteSkillUpdateAction(
+	params bridgeskills.SkillIDParams,
+	req bridgeskills.SkillUpdateRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.inner.executeSkillUpdateActionResult(params, req, traceID)
+}
+
 func (s *Service) ExecuteSkillDeleteAction(params bridgeskills.SkillIDParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeSkillDeleteActionResult(params, traceID)
 }
@@ -220,6 +228,26 @@ func (s *Service) ExecuteSystemPromptGetAction(traceID string) (ServiceResult, e
 
 func (s *Service) ExecuteSystemPromptUpdateAction(req bridgeconfig.SystemPromptUpdateRequest, traceID string) (ServiceResult, error) {
 	return s.inner.executeSystemPromptUpdateAction(req, traceID)
+}
+
+func (s *Service) ExecutePresetListAction(traceID string) (ServiceResult, error) {
+	return s.inner.executePresetListAction(traceID)
+}
+
+func (s *Service) ExecutePresetCreateAction(req bridgeconfig.PresetCreateRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executePresetCreateAction(req, traceID)
+}
+
+func (s *Service) ExecutePresetUpdateAction(presetID string, req bridgeconfig.PresetUpdateRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executePresetUpdateAction(presetID, req, traceID)
+}
+
+func (s *Service) ExecutePresetDeleteAction(presetID string, traceID string) (ServiceResult, error) {
+	return s.inner.executePresetDeleteAction(presetID, traceID)
+}
+
+func (s *Service) ExecutePresetApplyAction(presetID string, traceID string) (ServiceResult, error) {
+	return s.inner.executePresetApplyAction(presetID, traceID)
 }
 
 func (s *Service) ExecuteFindIconTemplateUploadAction(req FindIconTemplateUploadRequest, traceID string) (ServiceResult, error) {

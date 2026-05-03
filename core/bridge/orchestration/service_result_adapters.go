@@ -78,6 +78,14 @@ func (s *bridgeService) executeSkillListActionResult(traceID string) (ServiceRes
 	return adaptLegacyResult(s.executeSkillListAction(traceID))
 }
 
+func (s *bridgeService) executeSkillUpdateActionResult(
+	params bridgeskills.SkillIDParams,
+	req bridgeskills.SkillUpdateRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return adaptLegacyResult(s.executeSkillUpdateAction(params, req, traceID))
+}
+
 func (s *bridgeService) executeSkillDeleteActionResult(params bridgeskills.SkillIDParams, traceID string) (ServiceResult, error) {
 	return adaptLegacyResult(s.executeSkillDeleteAction(params, traceID))
 }

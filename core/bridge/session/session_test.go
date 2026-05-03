@@ -145,7 +145,7 @@ func TestDynamicToolLoadLifecycle(t *testing.T) {
 	s := NewSession("")
 	s.AdvanceToolTurn(3)
 
-	loaded := s.EnsureDynamicToolLoaded("web_search", "tfind")
+	loaded := s.EnsureDynamicToolLoaded("web_search", "sfind")
 	if loaded.AlreadyLoaded {
 		t.Fatal("newly loaded tool should not report already_loaded")
 	}

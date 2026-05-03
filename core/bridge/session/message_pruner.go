@@ -38,6 +38,9 @@ func (p messagePruner) Prune(messages []llm.Message, maxTokens int) []llm.Messag
 	keep, total = p.dropRemainingSpans(keep, spans, total, maxTokens)
 	pruned := collectPrunedMessages(messages, spans, keep, systemIndex)
 	if total > maxTokens {
+		if containsToolProtocolMessages(pruned) {
+			return llm.CloneMessages(pruned)
+		}
 		pruned = p.clampMessagesToTokenLimit(pruned, maxTokens)
 	}
 	return llm.CloneMessages(pruned)
@@ -86,7 +89,7 @@ func (p messagePruner) buildMessageSpans(messages []llm.Message, start int) []me
 }
 
 func (p messagePruner) messageSpanAt(messages []llm.Message, start int) messageSpan {
-	end := assistantToolSpanEnd(messages, start)
+	end := conversationTurnSpanEnd(messages, start)
 	return messageSpan{
 		start:  start,
 		end:    end,
@@ -94,12 +97,9 @@ func (p messagePruner) messageSpanAt(messages []llm.Message, start int) messageS
 	}
 }
 
-func assistantToolSpanEnd(messages []llm.Message, start int) int {
+func conversationTurnSpanEnd(messages []llm.Message, start int) int {
 	end := start + 1
-	if messages[start].Role != llm.RoleAssistant || len(messages[start].ToolCalls) == 0 {
-		return end
-	}
-	for end < len(messages) && messages[end].Role == llm.RoleTool {
+	for end < len(messages) && messages[end].Role != llm.RoleUser {
 		end++
 	}
 	return end
@@ -161,4 +161,13 @@ func collectPrunedMessages(messages []llm.Message, spans []messageSpan, keep []b
 		pruned = append(pruned, messages[span.start:span.end]...)
 	}
 	return pruned
+}
+
+func containsToolProtocolMessages(messages []llm.Message) bool {
+	for _, message := range messages {
+		if message.Role == llm.RoleTool || len(message.ToolCalls) > 0 {
+			return true
+		}
+	}
+	return false
 }

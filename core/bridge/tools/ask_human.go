@@ -39,23 +39,22 @@ func (AskHumanTool) Name() string {
 }
 
 func (AskHumanTool) Description() string {
-	return "Pause and ask the user for required input before continuing, optionally with single-choice or multi-choice options."
+	return "Block and ask user for input. If 'options' are provided, the final option MUST set allow_custom=true."
 }
 
 func (AskHumanTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"prompt":{"type":"string","description":"Question for the user."},
-			"selection_mode":{"type":"string","enum":["single","multiple"],"description":"Optional selection mode when presenting predefined choices."},
+			"prompt":{"type":"string"},
+			"selection_mode":{"type":"string","enum":["single","multiple"]},
 			"options":{
 				"type":"array",
-				"description":"Optional selectable choices. If provided, the final option must set allow_custom=true so the user can type a custom answer.",
 				"items":{
 					"type":"object",
 					"properties":{
-						"label":{"type":"string","description":"User-visible option label."},
-						"allow_custom":{"type":"boolean","description":"Only set true on the final option to allow free-text input."}
+						"label":{"type":"string"},
+						"allow_custom":{"type":"boolean"}
 					},
 					"required":["label"],
 					"additionalProperties":false

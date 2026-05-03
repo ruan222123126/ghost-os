@@ -10,7 +10,6 @@ import (
 const (
 	defaultPromptVersion = "1.0"
 	defaultPromptPath    = "prompts.yaml"
-	defaultToolGuidance  = "- Use only the tools included in the structured tool schema for this turn."
 	defaultDynamicState  = "- No dynamic tools loaded."
 	defaultSkillContext  = "- No dynamic skills loaded."
 )
@@ -27,6 +26,7 @@ var (
 
 type PromptSystemConfig struct {
 	Default            string `yaml:"default"`
+	Rule               string `yaml:"rule"`
 	CoreJob            string `yaml:"core_job"`
 	RuntimeConstraints string `yaml:"runtime_constraints"`
 	ResponseRules      string `yaml:"response_rules"`
@@ -72,9 +72,11 @@ func (pm *PromptManager) Render(vars map[string]string) string {
 	}
 
 	merged := map[string]string{
+		"rule":                  strings.TrimSpace(pm.config.System.Rule),
 		"core_job":              strings.TrimSpace(pm.config.System.CoreJob),
 		"memory":                "",
-		"tool_guidance":         defaultToolGuidance,
+		"skills_catalog":        "- No visible skills available.",
+		"tool_guidance":         "",
 		"dynamic_tool_state":    defaultDynamicState,
 		"dynamic_skill_context": defaultSkillContext,
 		"runtime_constraints":   strings.TrimSpace(pm.config.System.RuntimeConstraints),
@@ -83,8 +85,28 @@ func (pm *PromptManager) Render(vars map[string]string) string {
 	for key, value := range vars {
 		merged[key] = value
 	}
+	if strings.TrimSpace(merged["context"]) == "" {
+		merged["context"] = defaultContextSection(merged)
+	}
 
 	return strings.TrimSpace(RenderTemplate(pm.template, merged))
+}
+
+func (pm *PromptManager) ReferencesVariable(name string) bool {
+	if pm == nil {
+		return false
+	}
+	return TemplateReferencesVariable(pm.template, name)
+}
+
+func defaultContextSection(vars map[string]string) string {
+	osType := strings.TrimSpace(vars["os_type"])
+	projectRoot := strings.TrimSpace(vars["project_root"])
+	maxTurns := strings.TrimSpace(vars["max_turns"])
+	if osType == "" && projectRoot == "" && maxTurns == "" {
+		return ""
+	}
+	return fmt.Sprintf("OS: %s | Root: %s | Max turns: %s", osType, projectRoot, maxTurns)
 }
 
 func mustDefaultPromptConfig() PromptConfig {

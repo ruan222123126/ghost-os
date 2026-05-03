@@ -42,10 +42,11 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 	traceID := resolveTraceID(req.TraceID, r)
 	result, err := t.service.ExecuteAgentAction(r.Context(), bridgeorchestration.AgentParams{
-		Mode:      req.Mode,
-		Message:   req.Message,
-		Images:    req.Images,
-		SessionID: req.SessionID,
+		Mode:        req.Mode,
+		Message:     req.Message,
+		Images:      req.Images,
+		SessionID:   req.SessionID,
+		ProjectRoot: req.ProjectRoot,
 	}, traceID)
 	respondServiceContractActionResult(w, traceID, bridgeorchestration.BusActionAgentSend, result, err)
 }
@@ -130,10 +131,11 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 
 	sink := newObservedSSEStreamSink(newSSEEventSink(w, flusher, traceID))
 	_, sessionID, err := t.service.ExecuteAgentStreamAction(r.Context(), bridgeorchestration.AgentParams{
-		Mode:      req.Mode,
-		Message:   req.Message,
-		Images:    req.Images,
-		SessionID: req.SessionID,
+		Mode:        req.Mode,
+		Message:     req.Message,
+		Images:      req.Images,
+		SessionID:   req.SessionID,
+		ProjectRoot: req.ProjectRoot,
 	}, traceID, sink)
 	emitUnhandledStreamError(r.Context(), sink, traceID, firstNonEmpty(sessionID, req.SessionID), err)
 }

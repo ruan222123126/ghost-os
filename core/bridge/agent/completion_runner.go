@@ -16,17 +16,14 @@ var (
 	errCompletionRunnerToolsRequired     = errors.New("completion runner tool catalog is nil")
 )
 
-const (
-	completionRetryMaxAttempts = 2
-	completionRetryBackoff     = 200 * time.Millisecond
-)
-
 // completionRunner 封装一次模型调用，不负责 history 提交。
 type completionRunner struct {
 	completer       Completer
 	tools           ToolCatalog
 	history         *History
 	responseOptions llm.ResponseOptions
+	retryPolicy     CompletionRetryPolicy
+	attemptState    *completionAttemptState
 }
 
 func newCompletionRunner(
@@ -35,15 +32,40 @@ func newCompletionRunner(
 	history *History,
 	responseOptions llm.ResponseOptions,
 ) completionRunner {
+	return newCompletionRunnerWithPolicy(
+		completer,
+		toolCatalog,
+		history,
+		responseOptions,
+		DefaultCompletionRetryPolicy(),
+	)
+}
+
+func newCompletionRunnerWithPolicy(
+	completer Completer,
+	toolCatalog ToolCatalog,
+	history *History,
+	responseOptions llm.ResponseOptions,
+	retryPolicy CompletionRetryPolicy,
+) completionRunner {
 	return completionRunner{
 		completer:       completer,
 		tools:           toolCatalog,
 		history:         history,
 		responseOptions: llm.CloneResponseOptions(responseOptions),
+		retryPolicy:     retryPolicy,
 	}
 }
 
+func (r completionRunner) withAttemptState(state *completionAttemptState) completionRunner {
+	r.attemptState = state
+	return r
+}
+
 func (r completionRunner) complete(ctx context.Context, streamSink streaming.Sink, traceID string, sessionID string, turn int) (*llm.CompletionResponse, error) {
+	if r.attemptState != nil {
+		r.attemptState.reset()
+	}
 	req, err := r.request()
 	if err != nil {
 		return nil, err
@@ -56,17 +78,18 @@ func (r completionRunner) complete(ctx context.Context, streamSink streaming.Sin
 }
 
 func (r completionRunner) completeNonStreaming(ctx context.Context, req llm.CompletionRequest) (*llm.CompletionResponse, error) {
+	maxAttempts := r.retryPolicy.maxAttempts()
 	var lastErr error
-	for attempt := 0; attempt < completionRetryMaxAttempts; attempt++ {
+	for attempt := 0; attempt < maxAttempts; attempt++ {
 		resp, err := r.completer.Complete(ctx, req)
 		if err == nil {
 			return normalizeCompletionResponse(resp)
 		}
 		lastErr = err
-		if !shouldRetryCompletion(ctx, err, attempt, false) {
+		if !shouldRetryCompletion(ctx, err, attempt, maxAttempts, false) {
 			return nil, err
 		}
-		if err := waitCompletionRetry(ctx); err != nil {
+		if err := waitCompletionRetry(ctx, r.retryPolicy.retryIntervalOrZero()); err != nil {
 			return nil, err
 		}
 	}
@@ -82,9 +105,13 @@ func (r completionRunner) completeStreaming(
 	sessionID string,
 	turn int,
 ) (*llm.CompletionResponse, error) {
+	maxAttempts := r.retryPolicy.maxAttempts()
 	var lastErr error
-	for attempt := 0; attempt < completionRetryMaxAttempts; attempt++ {
-		deltaBridge, err := newLLMDeltaBridge(streamSink, traceID, sessionID, turn)
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if r.attemptState != nil {
+			r.attemptState.reset()
+		}
+		deltaBridge, err := newLLMDeltaBridge(streamSink, traceID, sessionID, turn, r.attemptState)
 		if err != nil {
 			return nil, err
 		}
@@ -93,10 +120,10 @@ func (r completionRunner) completeStreaming(
 			return normalizeCompletionResponse(resp)
 		}
 		lastErr = err
-		if !shouldRetryCompletion(ctx, err, attempt, deltaBridge.hasEmitted()) {
+		if !shouldRetryCompletion(ctx, err, attempt, maxAttempts, deltaBridge.hasEmitted()) {
 			return nil, err
 		}
-		if err := waitCompletionRetry(ctx); err != nil {
+		if err := waitCompletionRetry(ctx, r.retryPolicy.retryIntervalOrZero()); err != nil {
 			return nil, err
 		}
 	}
@@ -118,8 +145,14 @@ func normalizeCompletionResponse(resp *llm.CompletionResponse) (*llm.CompletionR
 	return &normalized, nil
 }
 
-func shouldRetryCompletion(ctx context.Context, err error, attempt int, streamEmitted bool) bool {
-	if attempt+1 >= completionRetryMaxAttempts {
+func shouldRetryCompletion(
+	ctx context.Context,
+	err error,
+	attempt int,
+	maxAttempts int,
+	streamEmitted bool,
+) bool {
+	if attempt+1 >= maxAttempts {
 		return false
 	}
 	if streamEmitted {
@@ -131,8 +164,11 @@ func shouldRetryCompletion(ctx context.Context, err error, attempt int, streamEm
 	return llm.IsTransientCompletionError(err)
 }
 
-func waitCompletionRetry(ctx context.Context) error {
-	timer := time.NewTimer(completionRetryBackoff)
+func waitCompletionRetry(ctx context.Context, retryInterval time.Duration) error {
+	if retryInterval == 0 {
+		return ctx.Err()
+	}
+	timer := time.NewTimer(retryInterval)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
@@ -158,4 +194,8 @@ func (r completionRunner) request() (llm.CompletionRequest, error) {
 		ConversationState: r.history.ConversationState(),
 		ResponseOptions:   llm.CloneResponseOptions(r.responseOptions),
 	}, nil
+}
+
+func (r completionRunner) completionDeltaEmitted() bool {
+	return r.attemptState != nil && r.attemptState.hasCompletionDeltaEmitted()
 }

@@ -65,7 +65,8 @@ func normalizePromptLibrary(library []SystemPromptLibraryItem) ([]SystemPromptLi
 		ids[next.ID] = struct{}{}
 		if next.Active {
 			activeCounts[next.InsertPoint] += 1
-			if activeCounts[next.InsertPoint] > maxActivePromptPerInsertPoint {
+			if !insertPointAllowsMultipleActive(next.InsertPoint) &&
+				activeCounts[next.InsertPoint] > maxActivePromptPerInsertPoint {
 				return nil, newPromptLibraryValidationError(
 					"insert_point %q has more than one active item",
 					next.InsertPoint,
@@ -107,7 +108,14 @@ func normalizePromptLibraryItem(item SystemPromptLibraryItem, index int) (System
 }
 
 func isAllowedPromptInsertPoint(insertPoint SystemPromptInsertPoint) bool {
-	return insertPoint == SystemPromptInsertPointCoreJob || insertPoint == SystemPromptInsertPointMemory
+	return insertPoint == SystemPromptInsertPointRule ||
+		insertPoint == SystemPromptInsertPointCoreJob ||
+		insertPoint == SystemPromptInsertPointMemory ||
+		insertPoint == SystemPromptInsertPointContext
+}
+
+func insertPointAllowsMultipleActive(insertPoint SystemPromptInsertPoint) bool {
+	return insertPoint == SystemPromptInsertPointContext
 }
 
 func migrateAndNormalizeSystemPromptFiles(files SystemPromptFiles) (SystemPromptFiles, bool, error) {

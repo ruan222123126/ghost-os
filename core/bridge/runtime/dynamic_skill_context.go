@@ -11,6 +11,18 @@ import (
 const noDynamicSkillsLoaded = "- No dynamic skills loaded."
 
 func formatDynamicSkillContext(cfg Config, sess *session.Session, idleTurns int) string {
+	return formatDynamicSkillContextFromDiscovery(
+		sess,
+		idleTurns,
+		skills.DiscoverRuntimeVisibleSkills(skillRuntimeConfig(cfg)),
+	)
+}
+
+func formatDynamicSkillContextFromDiscovery(
+	sess *session.Session,
+	idleTurns int,
+	discovery skills.DiscoveryResult,
+) string {
 	if sess == nil {
 		return noDynamicSkillsLoaded
 	}
@@ -18,7 +30,6 @@ func formatDynamicSkillContext(cfg Config, sess *session.Session, idleTurns int)
 	if len(loads) == 0 {
 		return noDynamicSkillsLoaded
 	}
-	discovery := skills.NewCatalog(cfg.ProjectRoot).Discover()
 	skillMap := indexSkillsByName(discovery.Skills)
 	blocks := buildDynamicSkillBlocks(loads, sess.TurnIndex, idleTurns, skillMap)
 	if len(discovery.Errors) > 0 {
@@ -58,7 +69,7 @@ func dynamicSkillContextBlock(
 	}
 	switch {
 	case load.ExpiredAtTurn(currentTurn, idleTurns):
-		return fmt.Sprintf("- `%s` is expired and must be loaded again with `tfind(action=\"load\", kind=\"skill\")`.", name)
+		return fmt.Sprintf("- `%s` is expired and must be loaded again with `sfind(action=\"load\")`.", name)
 	case !load.VisibleForTurn(currentTurn):
 		return fmt.Sprintf("- `%s` is pending for a future turn.", name)
 	}

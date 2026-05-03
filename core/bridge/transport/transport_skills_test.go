@@ -16,6 +16,7 @@ type skillResponsePayload struct {
 	Description string `json:"description"`
 	Path        string `json:"path"`
 	Source      string `json:"source"`
+	Enabled     bool   `json:"enabled"`
 }
 
 func TestHandleSkillsListReturnsSourcesAndSupportsEmptyList(t *testing.T) {
@@ -46,6 +47,40 @@ func TestHandleSkillsListReturnsSourcesAndSupportsEmptyList(t *testing.T) {
 	}
 	if !hasSkillSource(items, "repo") || !hasSkillSource(items, "user") {
 		t.Fatalf("expected repo+user sources, got %#v", items)
+	}
+	if !items[0].Enabled || !items[1].Enabled {
+		t.Fatalf("expected enabled=true by default, got %#v", items)
+	}
+}
+
+func TestHandleSkillPatchUpdatesEnabledState(t *testing.T) {
+	projectRoot := t.TempDir()
+	homeRoot := t.TempDir()
+	t.Setenv("GHOST_PROJECT_ROOT", projectRoot)
+	t.Setenv("HOME", homeRoot)
+
+	writeSkillFixture(t, filepath.Join(projectRoot, ".agents", "skills", "release"), "release", "repo skill")
+	handler := newTestHandler(t, nil)
+
+	list := serveRequest(handler, http.MethodGet, "/api/skills", "", nil)
+	items := decodeSkillPayloadList(t, list)
+	if len(items) != 1 {
+		t.Fatalf("expected one skill, got %#v", items)
+	}
+
+	patch := serveRequest(handler, http.MethodPatch, "/api/skills/"+items[0].ID, `{"enabled":false}`, nil)
+	if patch.Code != http.StatusOK {
+		t.Fatalf("unexpected patch status: got %d want %d body=%s", patch.Code, http.StatusOK, patch.Body.String())
+	}
+	updated := decodeSingleSkillPayload(t, patch)
+	if updated.Enabled {
+		t.Fatalf("expected disabled payload, got %#v", updated)
+	}
+
+	refresh := serveRequest(handler, http.MethodGet, "/api/skills", "", nil)
+	refreshed := decodeSkillPayloadList(t, refresh)
+	if len(refreshed) != 1 || refreshed[0].Enabled {
+		t.Fatalf("expected persisted disabled state, got %#v", refreshed)
 	}
 }
 
@@ -103,6 +138,20 @@ func decodeSkillPayloadList(t *testing.T, recorder *httptest.ResponseRecorder) [
 		t.Fatalf("marshal payload: %v", err)
 	}
 	var payload []skillResponsePayload
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode payload: %v", err)
+	}
+	return payload
+}
+
+func decodeSingleSkillPayload(t *testing.T, recorder *httptest.ResponseRecorder) skillResponsePayload {
+	t.Helper()
+	body := decodeResponseBody(t, recorder)
+	raw, err := json.Marshal(body.Payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	var payload skillResponsePayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}

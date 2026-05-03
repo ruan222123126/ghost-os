@@ -10,7 +10,7 @@ import (
 
 const (
 	AskHumanToolName   = "ask_human"
-	ToolSearchToolName = "tfind"
+	ToolSearchToolName = "sfind"
 )
 
 // ToolMetadata 是供轻量 selector 使用的低成本工具描述，不暴露完整 schema。
@@ -111,11 +111,17 @@ func (sc *ScopedCatalog) ToolDefs() []llm.ToolDef {
 // GetToolMetadata 返回稳定顺序的 selector 元数据清单。
 func GetToolMetadata() []ToolMetadata {
 	return []ToolMetadata{
+		{Name: "list_files", Domain: "sandbox", Tags: []string{"file", "list", "directory"}, ShortDesc: "List directory entries inside sandbox."},
+		{Name: "read_file", Domain: "sandbox", Tags: []string{"file", "read", "text"}, ShortDesc: "Read file text by line range."},
+		{Name: "search_files", Domain: "sandbox", Tags: []string{"file", "search", "text"}, ShortDesc: "Search exact text across files."},
+		{Name: "write_file", Domain: "sandbox", Tags: []string{"file", "write", "edit"}, ShortDesc: "Create, overwrite, or append a UTF-8 text file."},
+		{Name: "apply_diff", Domain: "sandbox", Tags: []string{"file", "patch", "edit"}, ShortDesc: "Apply a unified diff to one file."},
+		{Name: "bash_exec", Domain: "sandbox", Tags: []string{"shell", "command", "execute"}, ShortDesc: "Run a shell command in sandbox."},
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},
 		{Name: screenControlToolName, Domain: "screen", Tags: []string{"interactive", "ocr", "icon", "input", "text", "keyboard", "desktop", "gui"}, ShortDesc: "Unified screen control entrypoint."},
-		{Name: ToolSearchToolName, Domain: "tools", Tags: []string{"search", "load", "unload", "catalog", "skill"}, ShortDesc: "Find or load optional tools and skills."},
+		{Name: ToolSearchToolName, Domain: "skills", Tags: []string{"search", "load", "unload", "catalog", "skill"}, ShortDesc: "Find or load optional skills from SKILL.md."},
 		{Name: AskHumanToolName, Domain: "human", Tags: []string{"interactive", "safety"}, ShortDesc: "Ask the user when blocked."},
 	}
 }

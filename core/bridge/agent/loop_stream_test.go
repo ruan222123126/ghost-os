@@ -281,3 +281,16 @@ func TestRunStreamFallsBackToCompleteForNonStreamingCompleter(t *testing.T) {
 		t.Fatalf("unexpected streamed events: %+v", sink.events)
 	}
 }
+
+func eventToolCallID(t *testing.T, event streaming.Event) string {
+	t.Helper()
+	payload, ok := event.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", event.Payload)
+	}
+	toolCallID, ok := payload["tool_call_id"].(string)
+	if !ok {
+		t.Fatalf("unexpected tool_call_id payload: %#v", payload["tool_call_id"])
+	}
+	return toolCallID
+}

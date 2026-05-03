@@ -5,6 +5,8 @@ import (
 	"strings"
 )
 
+const scriptExecToolName = "script_exec"
+
 func (s *store) ListTools() ([]ToolRecord, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -21,6 +23,10 @@ func (s *store) ListTools() ([]ToolRecord, error) {
 	if err != nil {
 		return nil, err
 	}
+	scriptExecSandboxMemoryMB, err := resolveScriptExecSandboxMemoryMB(fileCfg, currentEnv())
+	if err != nil {
+		return nil, err
+	}
 
 	allowlisted := toolNameSetFromSlice(fileCfg.ToolAllowlist)
 	records := make([]ToolRecord, 0, len(configuredToolCatalog))
@@ -29,11 +35,15 @@ func (s *store) ListTools() ([]ToolRecord, error) {
 		if name == "" {
 			continue
 		}
-		records = append(records, ToolRecord{
+		record := ToolRecord{
 			Name:           name,
 			Enabled:        allowlisted[name],
 			PromptOverride: strings.TrimSpace(overrides[name]),
-		})
+		}
+		if name == scriptExecToolName {
+			record.SandboxMemoryMB = intPointer(scriptExecSandboxMemoryMB)
+		}
+		records = append(records, record)
 	}
 	return records, nil
 }
@@ -49,7 +59,7 @@ func (s *store) UpdateTool(req ToolUpdateRequest) error {
 	if !validConfiguredToolNames()[name] {
 		return fmt.Errorf("%w: %s", errToolNotFound, name)
 	}
-	if req.Enabled == nil && req.PromptOverride == nil {
+	if req.Enabled == nil && req.PromptOverride == nil && req.SandboxMemoryMB == nil {
 		return errToolUpdateEmpty
 	}
 
@@ -69,6 +79,20 @@ func (s *store) UpdateTool(req ToolUpdateRequest) error {
 		if writeErr := writeToolPromptOverrideToFile(promptsDir, name, *req.PromptOverride); writeErr != nil {
 			return writeErr
 		}
+	}
+	if req.SandboxMemoryMB != nil {
+		if name != scriptExecToolName {
+			return fmt.Errorf("%w: sandbox_memory_mb is only supported for %s", errToolConfigInvalid, scriptExecToolName)
+		}
+		value := *req.SandboxMemoryMB
+		if value <= 0 || value > maxScriptExecSandboxMemoryMB {
+			return fmt.Errorf(
+				"%w: sandbox_memory_mb must be between 1 and %d",
+				errToolConfigInvalid,
+				maxScriptExecSandboxMemoryMB,
+			)
+		}
+		fileCfg.ScriptExecSandboxMemoryMB = intPointer(value)
 	}
 	fileCfg.ToolPromptOverrides = nil
 	return s.persistLocked(configPath, fileCfg)
@@ -110,4 +134,8 @@ func toolNameSetFromSlice(raw []string) map[string]bool {
 		set[name] = true
 	}
 	return set
+}
+
+func intPointer(value int) *int {
+	return &value
 }

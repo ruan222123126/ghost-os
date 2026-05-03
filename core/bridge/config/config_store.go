@@ -14,7 +14,9 @@ var (
 	errModelSelectionDisabled  = errors.New("model selection is disabled by tool_allowlist_only")
 	errToolNameRequired        = errors.New("tool name is required")
 	errToolNotFound            = errors.New("tool not found")
-	errToolUpdateEmpty         = errors.New("at least one of enabled or prompt_override is required")
+	errToolUpdateEmpty         = errors.New("at least one of enabled, prompt_override, or sandbox_memory_mb is required")
+	errToolConfigInvalid       = errors.New("tool config is invalid")
+	errSkillIDRequired         = errors.New("skill id is required")
 )
 
 // store 管理 bridge 运行态可变配置，避免直接写入进程环境变量。

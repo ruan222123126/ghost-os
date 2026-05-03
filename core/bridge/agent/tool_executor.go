@@ -58,11 +58,11 @@ func (e toolCallExecutor) reportInvalidCalls(ctx context.Context, traceID string
 		}
 		rawToolCallID := strings.TrimSpace(issue.call.ID)
 		rawToolName := strings.TrimSpace(issue.call.Name)
-		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID); err != nil {
+		if err := e.events.toolCallStarted(ctx, traceID, turn, stepID, rawToolName, rawToolCallID, string(issue.call.Arguments)); err != nil {
 			return err
 		}
 		fmt.Fprintf(e.stderr, "[%s] invalid_tool_call: id=%q name=%q error=%v\n", traceID, rawToolCallID, rawToolName, issue.err)
-		if err := e.events.toolCallFinished(ctx, traceID, turn, stepID, rawToolName, rawToolCallID, "error", issue.err); err != nil {
+		if err := e.events.toolCallFinished(ctx, traceID, turn, stepID, rawToolName, rawToolCallID, "error", issue.err, ""); err != nil {
 			return err
 		}
 	}

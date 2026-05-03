@@ -98,8 +98,6 @@ type codexRequestOptions struct {
 	ForceStateless bool
 }
 
-const graphQLTextToolCallIDPrefix = "graphql-text-call-"
-
 func (c *Client) buildCodexProviderRequest(request CompletionRequest) (providerRequest, error) {
 	body, err := toCodexRequest(c.opts.Model, request)
 	if err != nil {
@@ -262,9 +260,6 @@ func codexRequiresStatelessReplay(input []codexInputItem) bool {
 		}
 		if matchedCalls[callID] {
 			continue
-		}
-		if strings.HasPrefix(callID, graphQLTextToolCallIDPrefix) {
-			return true
 		}
 	}
 

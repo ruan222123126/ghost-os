@@ -42,7 +42,9 @@ func (r proModeRunner) Execute(ctx context.Context, prepared preparedAgentTurnRe
 	if r.runtimeFactory == nil {
 		return agentResponse{}, errors.New("agent runtime factory is not configured")
 	}
-	deps, err := r.runtimeFactory.Build(r.configStore)
+	deps, err := r.runtimeFactory.Build(
+		applyRequestRuntimeOptionsToStore(r.configStore, prepared.requestRuntime),
+	)
 	if err != nil {
 		return agentResponse{}, err
 	}
@@ -199,6 +201,10 @@ func (r proModeRunner) runIteration(
 	history := agent.NewHistory(systemPrompt)
 	turnAgent := agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns)
 	turnAgent.SetResponseOptions(llm.CloneResponseOptions(deps.cfg.ResponseOptions))
+	turnAgent.SetCompletionRetryPolicy(agent.NewCompletionRetryPolicy(
+		deps.cfg.LLMCompletionRetryCount,
+		time.Duration(deps.cfg.LLMCompletionRetryIntervalMS)*time.Millisecond,
+	))
 	iterationTraceID := fmt.Sprintf("%s-pro-%d", strings.TrimSpace(traceID), iteration)
 	userPrompt := buildProModeUserPrompt(request, cloneIterationRecords(sess.IterationRuntime), iteration)
 	_, runErr := turnAgent.RunWithTraceID(ctx, userPrompt, iterationTraceID)

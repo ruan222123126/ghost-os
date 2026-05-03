@@ -14,10 +14,12 @@ import (
 
 // SessionHistoryBuilder 负责会话装载与 Agent 历史恢复。
 type SessionHistoryBuilder struct {
-	provider     bridgeconfig.ProviderConfig
-	systemPrompt string
-	sessionStore *session.Store
-	idleTurns    int
+	provider            bridgeconfig.ProviderConfig
+	systemPrompt        string
+	sessionStore        *session.Store
+	idleTurns           int
+	microcompactEnabled bool
+	traceID             string
 }
 
 type resolvedHumanQuestion struct {
@@ -37,12 +39,16 @@ func newSessionHistoryBuilder(
 	systemPrompt string,
 	sessionStore *session.Store,
 	idleTurns int,
+	microcompactEnabled bool,
+	traceID string,
 ) *SessionHistoryBuilder {
 	return &SessionHistoryBuilder{
-		provider:     provider,
-		systemPrompt: strings.TrimSpace(systemPrompt),
-		sessionStore: sessionStore,
-		idleTurns:    idleTurns,
+		provider:            provider,
+		systemPrompt:        strings.TrimSpace(systemPrompt),
+		sessionStore:        sessionStore,
+		idleTurns:           idleTurns,
+		microcompactEnabled: microcompactEnabled,
+		traceID:             strings.TrimSpace(traceID),
 	}
 }
 
@@ -90,9 +96,18 @@ func (b *SessionHistoryBuilder) BuildHistoryWithResolvedQuestions(sess *session.
 		ModelContextWindowTokens:   b.provider.ModelContextWindowTokens,
 		ModelResponseReserveTokens: b.provider.ModelResponseReserveTokens,
 	})
-	rawMessages := sess.GetMessages(contextLimit)
-	projected := projectMessagesForModel(rawMessages, b.idleTurns)
-	messages := messagesWithSystemPrompt(projected, b.systemPrompt)
+	rawMessages := []llm.Message(nil)
+	if sess != nil {
+		rawMessages = sess.Messages
+	}
+	projected := projectMessagesForModel(rawMessages, messageProjectionOptions{
+		IdleTurns:           b.idleTurns,
+		MicrocompactEnabled: b.microcompactEnabled,
+		TraceID:             b.traceID,
+	})
+	sanitized := sanitizeToolProtocolMessages(projected)
+	pruned := session.PruneMessages(sanitized, contextLimit)
+	messages := messagesWithSystemPrompt(pruned, b.systemPrompt)
 	history := agent.NewHistoryFromMessages(messages)
 	if sess != nil && !sess.ConversationState.IsZero() && sess.ConversationState.Matches(b.provider.Type, b.provider.BaseURL, b.provider.Model) {
 		history.SetConversationState(sess.ConversationState)

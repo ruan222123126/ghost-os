@@ -27,12 +27,18 @@ func TestBuildSystemPromptForCatalogIncludesProjectRootRegression(t *testing.T) 
 	if strings.Contains(prompt, "{{project_root}}") {
 		t.Fatalf("expected project_root placeholder to be resolved, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "Project root: /tmp/ghost-os-project") {
+	if !strings.Contains(prompt, "Context:") {
+		t.Fatalf("expected prompt to include context section, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Context:\nOS:") {
+		t.Fatalf("expected prompt to render context block, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Root: /tmp/ghost-os-project") {
 		t.Fatalf("expected prompt to include project root, got %q", prompt)
 	}
 }
 
-func TestBuildSystemPromptForCatalogUsesOnlyScopedToolGuidance(t *testing.T) {
+func TestBuildSystemPromptForCatalogOmitsToolGuidanceSection(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
@@ -47,19 +53,14 @@ func TestBuildSystemPromptForCatalogUsesOnlyScopedToolGuidance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
 	}
-	for _, snippet := range []string{"`script_exec`", "`ask_human`"} {
-		if !strings.Contains(prompt, snippet) {
-			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
-		}
-	}
-	for _, snippet := range []string{"`screen_action`", "Available tools:", "Tool list:"} {
+	for _, snippet := range []string{"## Tool Guidance", "`script_exec`", "`ask_human`", "`screen_action`", "Available tools:", "Tool list:"} {
 		if strings.Contains(prompt, snippet) {
 			t.Fatalf("expected prompt to exclude %q, got %q", snippet, prompt)
 		}
 	}
 }
 
-func TestBuildSystemPromptForCatalogIncludesDynamicToolStateSection(t *testing.T) {
+func TestBuildSystemPromptForCatalogUsesFlatTemplateStructure(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
@@ -69,14 +70,24 @@ func TestBuildSystemPromptForCatalogIncludesDynamicToolStateSection(t *testing.T
 	if err != nil {
 		t.Fatalf("buildSystemPromptForCatalog returned error: %v", err)
 	}
-	for _, snippet := range []string{"## Dynamic Tool State", "No dynamic tools loaded"} {
+	for _, snippet := range []string{"Role:", "Job:", "Context:"} {
 		if !strings.Contains(prompt, snippet) {
 			t.Fatalf("expected prompt to contain %q, got %q", snippet, prompt)
 		}
 	}
+	for _, snippet := range []string{"Skills:", "Skill Context:"} {
+		if !strings.Contains(prompt, snippet) {
+			t.Fatalf("expected prompt to include %q, got %q", snippet, prompt)
+		}
+	}
+	for _, snippet := range []string{"## Dynamic Tool State", "## Dynamic Skill Context"} {
+		if strings.Contains(prompt, snippet) {
+			t.Fatalf("expected prompt to exclude %q, got %q", snippet, prompt)
+		}
+	}
 }
 
-func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *testing.T) {
+func TestBuildSystemPromptForSessionOmitsDynamicToolStateFromFlatTemplate(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	promptsDir := filepath.Join(tempDir, "prompts")
 	registry := tools.NewRegistry()
@@ -87,7 +98,7 @@ func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *te
 
 	sess := session.NewSession("")
 	sess.AdvanceToolTurn(3)
-	sess.EnsureDynamicToolLoaded("web_search", "tfind")
+	sess.EnsureDynamicToolLoaded("web_search", "sfind")
 
 	immediate, err := buildSystemPromptForSession(
 		Config{MaxTurns: 3, ToolSearch: ToolSearchConfig{IdleTurns: 3}, PromptsDir: promptsDir},
@@ -98,8 +109,13 @@ func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *te
 	if err != nil {
 		t.Fatalf("buildSystemPromptForSession returned error: %v", err)
 	}
-	if !strings.Contains(immediate, "`web_search` was loaded in this user turn and is available now.") {
-		t.Fatalf("expected immediate dynamic tool state, got %q", immediate)
+	for _, snippet := range []string{"Role:", "Job:", "Context:"} {
+		if !strings.Contains(immediate, snippet) {
+			t.Fatalf("expected immediate prompt to contain %q, got %q", snippet, immediate)
+		}
+	}
+	if strings.Contains(immediate, "`web_search` was loaded in this user turn and is available now.") {
+		t.Fatalf("expected immediate prompt to omit dynamic tool state, got %q", immediate)
 	}
 
 	sess.AdvanceToolTurn(3)
@@ -112,8 +128,8 @@ func TestBuildSystemPromptForSessionIncludesImmediateAndActiveDynamicTools(t *te
 	if err != nil {
 		t.Fatalf("buildSystemPromptForSession returned error: %v", err)
 	}
-	if !strings.Contains(active, "`web_search` is active in this session; remaining_idle_turns=3.") {
-		t.Fatalf("expected active dynamic tool state, got %q", active)
+	if strings.Contains(active, "`web_search` is active in this session; remaining_idle_turns=3.") {
+		t.Fatalf("expected active prompt to omit dynamic tool state, got %q", active)
 	}
 }
 

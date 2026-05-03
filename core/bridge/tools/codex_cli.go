@@ -66,7 +66,7 @@ func (CodexCLITool) Name() string {
 }
 
 func (CodexCLITool) Description() string {
-	return "Run codex start/resume/fork asynchronously and poll status. For status, pass the command_id (or session_id) via session_id."
+	return "Async codex runner. Rules: 'prompt' required for start/resume/fork. 'session_id' required for resume/fork/status (pass command_id here for status). DO NOT use 'exec'."
 }
 
 func (CodexCLITool) Parameters() json.RawMessage {
@@ -74,17 +74,17 @@ func (CodexCLITool) Parameters() json.RawMessage {
 		"type":"object",
 		"properties":{
 			"op":{"type":"string","enum":["start","resume","fork","status"]},
-			"prompt":{"type":"string","description":"Prompt for start/resume/fork."},
-			"session_id":{"type":"string","description":"Session ID for resume/fork/status. For status, you may pass command_id here."},
-			"cwd":{"type":"string","description":"Optional relative working directory for -C and process cwd."},
-			"output_path":{"type":"string","description":"Optional output path for -o."},
-			"model":{"type":"string","description":"Model name. Defaults to gpt-5.4."},
-			"full_auto":{"type":"boolean","description":"Whether to add --full-auto. Defaults to true."},
-			"skip_git_repo_check":{"type":"boolean","description":"Whether to add --skip-git-repo-check. Defaults to true."},
-			"json":{"type":"boolean","description":"Whether to add --json. Defaults to true."},
-			"wait_ms_before_async":{"type":"integer","minimum":0,"description":"Start wait in ms before returning. Defaults to 3000."},
-			"wait_duration_seconds":{"type":"integer","minimum":0,"description":"Status polling window in seconds. Defaults to 300."},
-			"output_character_count":{"type":"integer","minimum":1,"description":"Max output tail size for status. Defaults to 200."}
+			"prompt":{"type":"string"},
+			"session_id":{"type":"string"},
+			"cwd":{"type":"string"},
+			"output_path":{"type":"string"},
+			"model":{"type":"string","description":"Default: gpt-5.4"},
+			"full_auto":{"type":"boolean","description":"Default: true"},
+			"skip_git_repo_check":{"type":"boolean","description":"Default: true"},
+			"json":{"type":"boolean","description":"Default: true"},
+			"wait_ms_before_async":{"type":"integer"},
+			"wait_duration_seconds":{"type":"integer"},
+			"output_character_count":{"type":"integer"}
 		},
 		"required":["op"],
 		"additionalProperties":false

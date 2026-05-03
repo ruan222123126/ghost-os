@@ -55,6 +55,8 @@ pub struct AgentRequest {
     #[serde(default)]
     pub session_id: Option<String>,
     #[serde(default)]
+    pub project_root: Option<String>,
+    #[serde(default)]
     pub trace_id: Option<String>,
 }
 
@@ -115,6 +117,8 @@ pub struct AgentSendAwaitingHumanResponse {
 pub struct AgentStopResponsePayload {
     pub status: String,
     pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -244,6 +248,8 @@ pub struct AgentToolCallStartedPayload {
     pub tool: Option<String>,
     #[serde(default)]
     pub tool_call_id: Option<String>,
+    #[serde(default)]
+    pub arguments_json: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -268,6 +274,8 @@ pub struct AgentToolCallFinishedPayload {
     pub status: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
+    pub output: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -327,6 +335,28 @@ pub struct SessionMetadata {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionSidebarPartition {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionSidebarPartitionState {
+    pub version: i64,
+    pub partitions: Vec<SessionSidebarPartition>,
+    pub assignments: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionSidebarPartitionPutRequest {
+    pub version: i64,
+    pub partitions: Vec<SessionSidebarPartition>,
+    pub assignments: BTreeMap<String, String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionMessagePage {
     pub limit: i64,
     #[serde(default)]
@@ -367,20 +397,18 @@ pub struct BridgeConfig {
     pub base_url: String,
     pub model: String,
     pub chat_path: String,
+    pub project_root: String,
+    pub max_turns: i64,
+    pub llm_completion_retry_count: i64,
+    pub llm_completion_retry_interval_ms: i64,
     pub api_key_set: bool,
     pub model_selection_enabled: bool,
-    pub graphql_default_source: String,
-    pub graphql_tool_runtime_enabled: bool,
-    pub graphql_text_sanitize_enabled: bool,
-    pub graphql_sources: Vec<GraphQLSourceResponse>,
-    pub graphql_mutation_policies: Vec<GraphQLMutationPolicyResponse>,
     pub session_human_log_full_enabled: bool,
+    pub session_system_prompt_visible_enabled: bool,
     pub assistant_markdown_enabled: bool,
+    pub tool_call_compact_output_enabled: bool,
     pub memory_mode_enabled: bool,
-    pub web_rooter_enabled: bool,
-    pub web_rooter_base_url: String,
-    pub web_rooter_timeout_ms: i64,
-    pub web_rooter_api_token_set: bool,
+    pub microcompact_enabled: bool,
     pub web_search_tavily_url: String,
     pub web_search_exa_url: String,
     pub web_search_tavily_api_key_set: bool,
@@ -408,31 +436,25 @@ pub struct ConfigUpdate {
     #[serde(default)]
     pub chat_path: Option<String>,
     #[serde(default)]
-    pub graphql_default_source: Option<String>,
+    pub project_root: Option<String>,
     #[serde(default)]
-    pub graphql_tool_runtime_enabled: Option<bool>,
+    pub max_turns: Option<i64>,
     #[serde(default)]
-    pub graphql_text_sanitize_enabled: Option<bool>,
+    pub llm_completion_retry_count: Option<i64>,
     #[serde(default)]
-    pub graphql_sources: Option<Vec<GraphQLSourceInput>>,
-    #[serde(default)]
-    pub graphql_source_upsert: Option<GraphQLSourceInput>,
-    #[serde(default)]
-    pub graphql_mutation_policies: Option<Vec<GraphQLMutationPolicyInput>>,
+    pub llm_completion_retry_interval_ms: Option<i64>,
     #[serde(default)]
     pub session_human_log_full_enabled: Option<bool>,
     #[serde(default)]
+    pub session_system_prompt_visible_enabled: Option<bool>,
+    #[serde(default)]
     pub assistant_markdown_enabled: Option<bool>,
+    #[serde(default)]
+    pub tool_call_compact_output_enabled: Option<bool>,
     #[serde(default)]
     pub memory_mode_enabled: Option<bool>,
     #[serde(default)]
-    pub web_rooter_enabled: Option<bool>,
-    #[serde(default)]
-    pub web_rooter_base_url: Option<String>,
-    #[serde(default)]
-    pub web_rooter_api_token: Option<String>,
-    #[serde(default)]
-    pub web_rooter_timeout_ms: Option<i64>,
+    pub microcompact_enabled: Option<bool>,
     #[serde(default)]
     pub web_search_tavily_url: Option<String>,
     #[serde(default)]
@@ -453,135 +475,6 @@ pub struct SessionPushAwaitingHumanPayload {
     pub selection_mode: Option<String>,
     #[serde(default)]
     pub options: Option<Vec<AskHumanOption>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct GraphQLDomainResponse {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub root_queries: Vec<String>,
-    #[serde(default)]
-    pub types: Option<Vec<String>>,
-    #[serde(default)]
-    pub max_depth: Option<i64>,
-    #[serde(default)]
-    pub max_fields: Option<i64>,
-    #[serde(default)]
-    pub max_root_fields: Option<i64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct GraphQLSourceResponse {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub endpoint: String,
-    pub schema_path: String,
-    pub timeout_ms: i64,
-    pub max_response_bytes: i64,
-    pub max_depth: i64,
-    pub max_fields: i64,
-    pub max_root_fields: i64,
-    pub max_fragments: i64,
-    #[serde(default)]
-    pub headers: Option<BTreeMap<String, String>>,
-    pub api_key_set: bool,
-    #[serde(default)]
-    pub domains: Option<Vec<GraphQLDomainResponse>>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct GraphQLDomainInput {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub root_queries: Vec<String>,
-    #[serde(default)]
-    pub types: Option<Vec<String>>,
-    #[serde(default)]
-    pub max_depth: Option<i64>,
-    #[serde(default)]
-    pub max_fields: Option<i64>,
-    #[serde(default)]
-    pub max_root_fields: Option<i64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct GraphQLMutationPolicyResponse {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub source: String,
-    pub domain: String,
-    pub root_mutation: String,
-    #[serde(default)]
-    pub approval_required: Option<bool>,
-    pub idempotency_mode: String,
-    #[serde(default)]
-    pub idempotency_header: Option<String>,
-    #[serde(default)]
-    pub idempotency_variable_path: Option<String>,
-    #[serde(default)]
-    pub max_depth: Option<i64>,
-    #[serde(default)]
-    pub max_fields: Option<i64>,
-    #[serde(default)]
-    pub max_root_fields: Option<i64>,
-    #[serde(default)]
-    pub max_fragments: Option<i64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct GraphQLMutationPolicyInput {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub source: String,
-    pub domain: String,
-    pub root_mutation: String,
-    #[serde(default)]
-    pub approval_required: Option<bool>,
-    pub idempotency_mode: String,
-    #[serde(default)]
-    pub idempotency_header: Option<String>,
-    #[serde(default)]
-    pub idempotency_variable_path: Option<String>,
-    #[serde(default)]
-    pub max_depth: Option<i64>,
-    #[serde(default)]
-    pub max_fields: Option<i64>,
-    #[serde(default)]
-    pub max_root_fields: Option<i64>,
-    #[serde(default)]
-    pub max_fragments: Option<i64>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct GraphQLSourceInput {
-    pub name: String,
-    #[serde(default)]
-    pub description: Option<String>,
-    pub endpoint: String,
-    #[serde(default)]
-    pub api_key: Option<String>,
-    pub schema_path: String,
-    #[serde(default)]
-    pub timeout_ms: Option<i64>,
-    #[serde(default)]
-    pub max_response_bytes: Option<i64>,
-    #[serde(default)]
-    pub headers: Option<BTreeMap<String, String>>,
-    #[serde(default)]
-    pub max_depth: Option<i64>,
-    #[serde(default)]
-    pub max_fields: Option<i64>,
-    #[serde(default)]
-    pub max_root_fields: Option<i64>,
-    #[serde(default)]
-    pub max_fragments: Option<i64>,
-    #[serde(default)]
-    pub domains: Option<Vec<GraphQLDomainInput>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -653,9 +546,11 @@ pub struct WorkflowNode {
     #[serde(default)]
     pub agent: Option<WorkflowAgentNode>,
     #[serde(default)]
-    pub if: Option<WorkflowIfNode>,
+    #[serde(rename = "if")]
+    pub r#if: Option<WorkflowIfNode>,
     #[serde(default)]
-    pub loop: Option<WorkflowLoopNode>,
+    #[serde(rename = "loop")]
+    pub r#loop: Option<WorkflowLoopNode>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

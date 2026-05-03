@@ -36,6 +36,7 @@ type agentRunState struct {
 
 func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunState, error) {
 	lifecycle := StreamLifecyclePayloadBuilder{}
+	attemptState := &completionAttemptState{}
 	state := agentRunState{
 		traceID:   normalizeTraceID(traceID),
 		sink:      sink,
@@ -50,11 +51,15 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunSt
 	history := cloneHistoryForRun(a.history)
 	lifecycle = a.streamLifecycle
 	events := newAgentEventEmitter(sink, lifecycle.SessionID)
+	retryPolicy := DefaultCompletionRetryPolicy()
+	if a.completionRetryPolicy != nil {
+		retryPolicy = *a.completionRetryPolicy
+	}
 	return agentRunState{
 		traceID:                normalizeTraceID(traceID),
 		sink:                   sink,
 		history:                history,
-		completion:             newCompletionRunner(a.completer, a.tools, history, a.responseOptions),
+		completion:             newCompletionRunnerWithPolicy(a.completer, a.tools, history, a.responseOptions, retryPolicy).withAttemptState(attemptState),
 		toolCalls:              newToolCallExecutor(a.tools, history, nil, events),
 		assistantTextHandlers:  append([]AssistantTextHandler(nil), a.assistantTextHandlers...),
 		beforeCompletion:       a.beforeCompletion,

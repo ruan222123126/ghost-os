@@ -25,15 +25,15 @@ func (m *catalogMockTool) Execute(context.Context, json.RawMessage, string) (str
 
 func TestSessionTurnCatalog_ExposesLoadedToolsImmediately(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "codex_cli", "web_search", "tfind"} {
+	for _, name := range []string{"ask_human", "codex_cli", "web_search", "sfind"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
 	sess := session.NewSession("")
 	sess.AdvanceToolTurn(3)
-	sess.EnsureDynamicToolLoaded("web_search", "tfind")
+	sess.EnsureDynamicToolLoaded("web_search", "sfind")
 
-	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "codex_cli", "tfind"}, sess, 3, false)
+	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "codex_cli", "sfind"}, sess, 3, false)
 	if catalog.Get("web_search") == nil {
 		t.Fatal("expected loaded tool to become available immediately")
 	}
@@ -41,18 +41,18 @@ func TestSessionTurnCatalog_ExposesLoadedToolsImmediately(t *testing.T) {
 
 func TestSessionTurnCatalog_HidesToolSearchFromSelector(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "codex_cli", "web_search", "tfind"} {
+	for _, name := range []string{"ask_human", "codex_cli", "web_search", "sfind"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
 	sess := session.NewSession("")
 	sess.AdvanceToolTurn(3)
-	sess.EnsureDynamicToolLoaded("web_search", "tfind")
+	sess.EnsureDynamicToolLoaded("web_search", "sfind")
 	sess.AdvanceToolTurn(3)
 
-	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "codex_cli", "tfind"}, sess, 3, true)
-	if catalog.Get("tfind") != nil {
-		t.Fatal("expected selector catalog to exclude tfind")
+	catalog := newSessionTurnCatalog(registry, []string{"ask_human", "codex_cli", "sfind"}, sess, 3, true)
+	if catalog.Get("sfind") != nil {
+		t.Fatal("expected selector catalog to exclude sfind")
 	}
 	if catalog.Get("web_search") == nil {
 		t.Fatal("expected selector catalog to keep visible loaded tools")

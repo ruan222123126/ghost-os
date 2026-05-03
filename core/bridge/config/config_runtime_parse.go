@@ -76,6 +76,21 @@ func parsePositiveIntValue(raw, fieldName string, fallback int) (int, error) {
 	return value, nil
 }
 
+func parseNonNegativeIntValue(raw, fieldName string, fallback int) (int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return fallback, nil
+	}
+	value, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s: expected non-negative integer, got %q", strings.TrimSpace(fieldName), trimmed)
+	}
+	if value < 0 {
+		return 0, fmt.Errorf("invalid %s: must be >= 0, got %q", strings.TrimSpace(fieldName), trimmed)
+	}
+	return value, nil
+}
+
 func parseFloatValue(raw, fieldName string, fallback float64) (float64, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

@@ -7,8 +7,6 @@ import (
 	"sync"
 )
 
-var discoveryCache sync.Map
-
 type Catalog struct {
 	roots []string
 }
@@ -27,9 +25,11 @@ func (c *Catalog) Discover() DiscoveryResult {
 		return DiscoveryResult{}
 	}
 	key := cacheKey(c.roots)
-	if cached, ok := discoveryCache.Load(key); ok {
-		result, _ := cached.(DiscoveryResult)
-		return cloneDiscoveryResult(result)
+	signature, ok := discoverySignature(c.roots)
+	if ok {
+		if cached, ok := loadDiscoveryCacheEntry(key, signature); ok {
+			return cached
+		}
 	}
 	return c.ForceReload()
 }
@@ -39,7 +39,9 @@ func (c *Catalog) ForceReload() DiscoveryResult {
 		return DiscoveryResult{}
 	}
 	result := discoverSkills(c.roots)
-	discoveryCache.Store(cacheKey(c.roots), result)
+	if signature, ok := discoverySignature(c.roots); ok {
+		storeDiscoveryCacheEntry(cacheKey(c.roots), signature, result)
+	}
 	return cloneDiscoveryResult(result)
 }
 

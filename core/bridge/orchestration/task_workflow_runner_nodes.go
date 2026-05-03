@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/tools"
@@ -15,6 +17,8 @@ const (
 	workflowScreenControlStepsKey        = "workflow_steps"
 	workflowScreenControlActionKey       = "action"
 	workflowScreenControlParamsKey       = "params"
+	workflowScreenControlStepDelayMinMS  = 200
+	workflowScreenControlStepDelayMaxMS  = 300
 	workflowFindIconDataURLParam         = "workflow_template_data_url"
 	workflowLegacyFindIconDataURLParam   = "template_data_url"
 	workflowLegacyFindIconDataURLAlias   = "data_url"
@@ -254,6 +258,11 @@ func executeWorkflowScreenControlStepSequence(
 				outputValue: buildWorkflowScreenControlStepSequenceOutput(stepResults, finalOutput),
 			}
 		}
+		if err := waitWorkflowScreenControlStepTransition(ctx, index, len(steps)); err != nil {
+			return workflowNodeOutcome{
+				err: fmt.Errorf("workflow screen_control step %d (%s) transition delay interrupted: %w", index+1, step.Action, err),
+			}
+		}
 	}
 	outputValue := buildWorkflowScreenControlStepSequenceOutput(stepResults, finalOutput)
 	return workflowNodeOutcome{
@@ -262,6 +271,29 @@ func executeWorkflowScreenControlStepSequence(
 		outputText:  encodeWorkflowNodeOutputText(outputValue),
 		outputValue: outputValue,
 	}
+}
+
+func waitWorkflowScreenControlStepTransition(ctx context.Context, index int, total int) error {
+	if index >= total-1 {
+		return nil
+	}
+	timer := time.NewTimer(randomWorkflowScreenControlStepDelay())
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func randomWorkflowScreenControlStepDelay() time.Duration {
+	span := workflowScreenControlStepDelayMaxMS - workflowScreenControlStepDelayMinMS
+	delayMS := workflowScreenControlStepDelayMinMS
+	if span > 0 {
+		delayMS += rand.IntN(span + 1)
+	}
+	return time.Duration(delayMS) * time.Millisecond
 }
 
 func prepareWorkflowScreenControlStepArguments(

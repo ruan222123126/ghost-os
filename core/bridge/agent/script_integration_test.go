@@ -18,9 +18,9 @@ func TestScriptExecutionEndToEnd(t *testing.T) {
 		t.Skip("skip integration test in short mode")
 	}
 
-	tool := tools.NewScriptExecTool(execution.NewNativeClient())
+	tool := tools.NewScriptExecTool(execution.NewNativeClient(), 0)
 	args, _ := json.Marshal(map[string]any{
-		"script": "files = tools.list_files(path='.')\nprint(f'Found {len(files)} files')",
+		"script": "files = list_files(path='.')\nprint(f'Found {len(files)} files')",
 	})
 
 	output, err := tool.Execute(context.Background(), args, "integration-trace")
@@ -50,14 +50,14 @@ func TestScriptExecutionFileToolWorkflow(t *testing.T) {
 	targetFile := filepath.ToSlash(filepath.Join(tempDir, "sample.txt"))
 
 	script := "target = '" + targetFile + "'\n" +
-		"tools.write_file(path=target, content='alpha\\nbeta\\ngamma\\n')\n" +
-		"tools.apply_diff(path=target, diff_text='''@@ -1,3 +1,3 @@\\n alpha\\n-beta\\n+beta2\\n gamma\\n''')\n" +
+		"write_file(path=target, content='alpha\\nbeta\\ngamma\\n')\n" +
+		"apply_diff(path=target, diff_text='''@@ -1,3 +1,3 @@\\n alpha\\n-beta\\n+beta2\\n gamma\\n''')\n" +
 		"import json\n" +
-		"matches = tools.search_files(query='beta2', path='" + filepath.ToSlash(tempDir) + "', max_results=5)\n" +
-		"print(tools.read_file(path=target, start_line=1, end_line=3))\n" +
+		"matches = search_files(query='beta2', path='" + filepath.ToSlash(tempDir) + "', max_results=5)\n" +
+		"print(read_file(path=target, start_line=1, end_line=3))\n" +
 		"print(json.dumps(matches))\n"
 
-	tool := tools.NewScriptExecTool(execution.NewNativeClient())
+	tool := tools.NewScriptExecTool(execution.NewNativeClient(), 0)
 	args, _ := json.Marshal(map[string]any{"script": script})
 
 	output, err := tool.Execute(context.Background(), args, "integration-trace-tools")

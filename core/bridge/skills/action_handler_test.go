@@ -40,6 +40,9 @@ func TestExecuteListActionIncludesRepoAndUserSources(t *testing.T) {
 	for _, item := range items {
 		seenSources[item.Source] = true
 		seenIDs[item.ID] = true
+		if !item.Enabled {
+			t.Fatalf("expected skills enabled by default, got %#v", item)
+		}
 		if !strings.Contains(item.Path, ".agents/skills") && !strings.Contains(item.Path, ".ghost-os/skills") {
 			t.Fatalf("unexpected skill path: %q", item.Path)
 		}
@@ -66,6 +69,7 @@ func TestExecuteDeleteActionDeletesDirectoryAndReturnsNotFoundOnRepeat(t *testin
 		t.Fatalf("expected one skill, got %#v", items)
 	}
 	target := items[0]
+	handler.store.(*testStore).skillBlocklist = []string{target.ID}
 
 	payload, code, err := handler.ExecuteDeleteAction(SkillIDParams{ID: target.ID}, "trace-skill-delete")
 	if err != nil {
@@ -80,6 +84,9 @@ func TestExecuteDeleteActionDeletesDirectoryAndReturnsNotFoundOnRepeat(t *testin
 	}
 	if _, statErr := os.Stat(target.Path); !os.IsNotExist(statErr) {
 		t.Fatalf("expected skill dir removed, stat err=%v", statErr)
+	}
+	if len(handler.store.(*testStore).skillBlocklist) != 0 {
+		t.Fatalf("expected delete to clear blocklist, got %#v", handler.store.(*testStore).skillBlocklist)
 	}
 
 	_, repeatCode, repeatErr := handler.ExecuteDeleteAction(SkillIDParams{ID: target.ID}, "trace-skill-delete-repeat")
@@ -144,6 +151,45 @@ func TestResolveSkillRootsAutoCreatesUserSkillRoot(t *testing.T) {
 	}
 }
 
+func TestExecuteUpdateActionPersistsEnabledState(t *testing.T) {
+	projectRoot := t.TempDir()
+	homeRoot := t.TempDir()
+	t.Setenv("GHOST_PROJECT_ROOT", projectRoot)
+	t.Setenv("HOME", homeRoot)
+
+	writeSkillMarkdown(t, filepath.Join(projectRoot, ".agents", "skills", "release"), "release", "repo skill")
+	handler := newTestActionHandler(t, projectRoot)
+
+	items := mustListSkills(t, handler)
+	if len(items) != 1 {
+		t.Fatalf("expected one skill, got %#v", items)
+	}
+	target := items[0]
+	disabled := false
+
+	payload, code, err := handler.ExecuteUpdateAction(
+		SkillIDParams{ID: target.ID},
+		SkillUpdateRequest{Enabled: &disabled},
+		"trace-skill-update",
+	)
+	if err != nil {
+		t.Fatalf("update skill: %v", err)
+	}
+	if code != 200 {
+		t.Fatalf("unexpected update code: got %d want 200", code)
+	}
+	updated, ok := payload.(SkillPayload)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", payload)
+	}
+	if updated.Enabled {
+		t.Fatalf("expected disabled payload, got %#v", updated)
+	}
+	if got := handler.store.(*testStore).skillBlocklist; len(got) != 1 || got[0] != target.ID {
+		t.Fatalf("unexpected skill blocklist: %#v", got)
+	}
+}
+
 func TestManagedSkillFromDiscoveryRejectsOutsideWhitelistRoot(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
@@ -192,14 +238,41 @@ func encodeRawSkillIDForTest(source string, relativePath string) string {
 }
 
 type testStore struct {
-	projectRoot string
+	projectRoot    string
+	skillBlocklist []string
 }
 
-func (s testStore) Config() (Config, error) {
-	return Config{ProjectRoot: s.projectRoot}, nil
+func (s *testStore) Config() (Config, error) {
+	return Config{
+		ProjectRoot:    s.projectRoot,
+		SkillBlocklist: append([]string(nil), s.skillBlocklist...),
+	}, nil
+}
+
+func (s *testStore) SetSkillEnabled(skillID string, enabled bool) error {
+	s.skillBlocklist = updateTestSkillBlocklist(s.skillBlocklist, skillID, enabled)
+	return nil
 }
 
 func newTestActionHandler(t *testing.T, projectRoot string) *ActionHandler {
 	t.Helper()
 	return NewActionHandler(&testStore{projectRoot: projectRoot}, nil)
+}
+
+func updateTestSkillBlocklist(raw []string, skillID string, enabled bool) []string {
+	items := skillBlocklistSet(raw)
+	if enabled {
+		delete(items, skillID)
+		return skillIDsFromSet(items)
+	}
+	items[skillID] = true
+	return skillIDsFromSet(items)
+}
+
+func skillIDsFromSet(raw map[string]bool) []string {
+	items := make([]string, 0, len(raw))
+	for item := range raw {
+		items = append(items, item)
+	}
+	return items
 }

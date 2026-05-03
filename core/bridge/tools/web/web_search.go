@@ -82,48 +82,20 @@ func (WebSearchTool) Name() string {
 }
 
 func (t WebSearchTool) Description() string {
-	if t.requiresExplicitProvider() {
-		return "Search the web for current information. The provider argument is required because both Tavily and Exa are configured."
-	}
-	return "Search the web for current information. When both Tavily and Exa are configured, set provider explicitly so the agent can choose per query."
+	return "Search the web for current information."
 }
 
 func (t WebSearchTool) Parameters() json.RawMessage {
-	required := []string{"query"}
-	providerDescription := "Optional API provider to use. Set this explicitly when both Tavily and Exa are configured."
-	if t.requiresExplicitProvider() {
-		required = []string{"provider", "query"}
-		providerDescription = "API provider to use. Required because both Tavily and Exa are configured."
-	}
-
-	schema := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"provider": map[string]any{
-				"type":        "string",
-				"enum":        []string{"tavily", "exa"},
-				"description": providerDescription,
-			},
-			"query": map[string]any{
-				"type":        "string",
-				"description": "Search query string.",
-			},
-			"max_results": map[string]any{
-				"type":        "integer",
-				"minimum":     1,
-				"maximum":     10,
-				"description": "Maximum number of search results to return (default: 5).",
-			},
+	return json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"max_results":{"type":"integer","minimum":1,"maximum":10},
+			"provider":{"type":"string","enum":["tavily","exa"]},
+			"query":{"type":"string"}
 		},
-		"required":             required,
-		"additionalProperties": false,
-	}
-
-	encoded, err := json.Marshal(schema)
-	if err != nil {
-		panic(fmt.Sprintf("marshal web_search parameters: %v", err))
-	}
-	return encoded
+		"required":["provider","query"],
+		"additionalProperties":false
+	}`)
 }
 
 // Execute 校验查询参数，执行搜索并以结构化 JSON 结果返回。

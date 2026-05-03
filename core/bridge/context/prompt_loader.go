@@ -168,6 +168,11 @@ func parsePromptYAML(raw []byte, optional promptSectionOptions) (PromptConfig, e
 
 	requirements := []promptSectionRequirement{
 		{
+			field:       "system.rule",
+			placeholder: "{{rule}}",
+			value:       cfg.System.Rule,
+		},
+		{
 			field:       "system.core_job",
 			placeholder: "{{core_job}}",
 			value:       cfg.System.CoreJob,

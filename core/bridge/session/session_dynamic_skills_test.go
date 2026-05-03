@@ -6,7 +6,7 @@ func TestDynamicSkillLoadLifecycle(t *testing.T) {
 	sess := NewSession("")
 	sess.AdvanceToolTurn(3)
 
-	load := sess.EnsureDynamicSkillLoaded("release_flow", "tfind")
+	load := sess.EnsureDynamicSkillLoaded("release_flow", "sfind")
 	if load.AlreadyLoaded {
 		t.Fatal("newly loaded skill should not report already_loaded")
 	}
@@ -37,7 +37,7 @@ func TestDynamicSkillLoadLifecycle(t *testing.T) {
 func TestUnloadDynamicSkill(t *testing.T) {
 	sess := NewSession("")
 	sess.AdvanceToolTurn(3)
-	sess.EnsureDynamicSkillLoaded("summarize", "tfind")
+	sess.EnsureDynamicSkillLoaded("summarize", "sfind")
 
 	if !sess.UnloadDynamicSkill("summarize") {
 		t.Fatal("expected unload to succeed")

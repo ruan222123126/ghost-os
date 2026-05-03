@@ -52,6 +52,10 @@
           "type": "string",
           "description": "Optional. Omit/empty to start a new session. If provided, must refer to an existing session; otherwise the server returns 404 (omit session_id to start a new session)."
         },
+        "project_root": {
+          "type": "string",
+          "description": "Optional per-request project root override. Applies only to this request and is not persisted."
+        },
         "trace_id": {
           "type": "string",
           "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."

@@ -19,18 +19,40 @@ func (t *transport) handleSkills(w http.ResponseWriter, r *http.Request) {
 }
 
 func (t *transport) handleSkillByID(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodDelete {
+	switch r.Method {
+	case http.MethodPatch:
+		t.handleSkillPatch(w, r)
+	case http.MethodDelete:
+		t.handleSkillDelete(w, r)
+	default:
 		writeMethodNotAllowed(w)
+	}
+}
+
+func (t *transport) handleSkillPatch(w http.ResponseWriter, r *http.Request) {
+	id, err := parseSkillPath(r.URL.Path)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
+	var req bridgeskills.SkillUpdateRequest
+	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
+		return
+	}
+	traceID := resolveTraceID(req.TraceID, r)
+	result, callErr := t.service.ExecuteSkillUpdateAction(bridgeskills.SkillIDParams{ID: id}, req, traceID)
+	respondServiceContractResult(w, traceID, result, callErr)
+}
+
+func (t *transport) handleSkillDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseSkillPath(r.URL.Path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error(), "")
 		return
 	}
 	traceID := resolveTraceID("", r)
-	result, err := t.service.ExecuteSkillDeleteAction(bridgeskills.SkillIDParams{ID: id}, traceID)
-	respondServiceContractResult(w, traceID, result, err)
+	result, callErr := t.service.ExecuteSkillDeleteAction(bridgeskills.SkillIDParams{ID: id}, traceID)
+	respondServiceContractResult(w, traceID, result, callErr)
 }
 
 func parseSkillPath(rawPath string) (string, error) {

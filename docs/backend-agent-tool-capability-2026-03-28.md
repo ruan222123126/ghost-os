@@ -6,7 +6,7 @@
 ## 测试环境
 - 时间：2026-03-28
 - Bridge 实例：`http://127.0.0.1:18080`
-- 调用入口：`POST /api/agent`（GraphQL tool runtime）
+- 调用入口：`POST /api/agent`
 - Provider：`67`（`codex`，模型 `gpt-5.3-codex`）
 
 为避免会话历史干扰和工具选择收敛导致的误判，本次用临时测试配置启动同代码后端：
@@ -31,11 +31,11 @@
 | `browser_control` | `tool_result.status=error` | 依赖前置会话 | `browser session "nope" not found`（需先 `connect/launch`） |
 | `text_input` | `tool_result.status=success` | 可用 | 返回 `typed=true` |
 | `computer_use` | `tool_result.status=error` | 需调试 | `model_completion_failed ... tls: bad record MAC` |
-| `tfind` | `tool_result.status=success` | 可用 | `action=search` 成功执行 |
+| `sfind` | `tool_result.status=success` | 可用 | `action=search` 成功执行 |
 | `ask_human` | API 返回 `awaiting_human` | 可用 | 返回 `question_id/prompt/options`，进入等待人工状态 |
 
 ## 汇总
-- 可用（9）：`script_exec`、`set_project_root`、`web_search`、`feed_manage`、`rss_fetch`、`screen_action`、`text_input`、`tfind`、`ask_human`
+- 可用（9）：`script_exec`、`set_project_root`、`web_search`、`feed_manage`、`rss_fetch`、`screen_action`、`text_input`、`sfind`、`ask_human`
 - 需配置/前置条件（2）：`codex_cli`、`browser_control`
 - 需调试（2）：`send_file`、`computer_use`
 

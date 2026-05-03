@@ -14,9 +14,16 @@ type llmDeltaBridge struct {
 	turn      int
 	stepID    string
 	emitted   bool
+	attempt   *completionAttemptState
 }
 
-func newLLMDeltaBridge(sink streaming.Sink, traceID string, sessionID string, turn int) (*llmDeltaBridge, error) {
+func newLLMDeltaBridge(
+	sink streaming.Sink,
+	traceID string,
+	sessionID string,
+	turn int,
+	attempt *completionAttemptState,
+) (*llmDeltaBridge, error) {
 	stepID, err := streaming.AssistantStepID(turn)
 	if err != nil {
 		return nil, err
@@ -27,11 +34,15 @@ func newLLMDeltaBridge(sink streaming.Sink, traceID string, sessionID string, tu
 		sessionID: sessionID,
 		turn:      turn,
 		stepID:    stepID,
+		attempt:   attempt,
 	}, nil
 }
 
 func (b *llmDeltaBridge) OnDelta(ctx context.Context, delta llm.LLMDelta) error {
 	b.emitted = true
+	if b.attempt != nil {
+		b.attempt.markCompletionDeltaEmitted()
+	}
 	payload := map[string]any{
 		"kind": string(delta.Kind),
 	}

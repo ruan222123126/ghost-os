@@ -16,6 +16,35 @@ type turnOutcome struct {
 
 func (a *Agent) runTurn(ctx context.Context, turn int, state *agentRunState) (turnOutcome, error) {
 	a.lastTurn = turn
+	maxAttempts := state.completion.retryPolicy.maxAttempts()
+	var lastErr error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		outcome, err := a.runTurnOnce(ctx, turn, state)
+		if err == nil {
+			return outcome, nil
+		}
+		lastErr = err
+		if !shouldRetryTurnProcessing(
+			ctx,
+			err,
+			attempt,
+			maxAttempts,
+			state.completion.completionDeltaEmitted(),
+		) {
+			return turnOutcome{}, finalizeTurnProcessingError(ctx, turn, state, err)
+		}
+		if err := waitCompletionRetry(ctx, state.completion.retryPolicy.retryIntervalOrZero()); err != nil {
+			return turnOutcome{}, err
+		}
+	}
+	return turnOutcome{}, finalizeTurnProcessingError(ctx, turn, state, lastErr)
+}
+
+func (a *Agent) runTurnOnce(
+	ctx context.Context,
+	turn int,
+	state *agentRunState,
+) (turnOutcome, error) {
 	resp, err := state.complete(ctx, turn)
 	if err != nil {
 		return turnOutcome{}, state.terminalRunError(ctx, turn, completionTurnError(state.traceID, turn, err))
@@ -96,6 +125,9 @@ func (a *Agent) handleCompletedTextTurn(
 	state *agentRunState,
 	output string,
 ) (turnOutcome, error) {
+	if err := validateAssistantReasoningReplay(state.history, resp.Message); err != nil {
+		return turnOutcome{}, completionTurnError(state.traceID, turn, err)
+	}
 	handled, outcome, err := a.handleAssistantTextTurn(ctx, turn, resp, state)
 	if err != nil || handled {
 		return outcome, err
@@ -134,6 +166,9 @@ func (a *Agent) handleToolCallTurn(
 			a.commitTurn(state.history)
 		}
 		return turnOutcome{}, err
+	}
+	if err := validateAssistantReasoningReplay(state.history, sanitizedMsg); err != nil {
+		return turnOutcome{}, toolCallTurnError(state.traceID, turn, err)
 	}
 
 	acceptAssistantTurn(state.history, sanitizedToolCallResponse(resp, sanitizedMsg, len(issues) > 0))

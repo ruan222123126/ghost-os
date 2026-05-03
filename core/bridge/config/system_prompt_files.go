@@ -27,8 +27,10 @@ var (
 type SystemPromptInsertPoint string
 
 const (
+	SystemPromptInsertPointRule    SystemPromptInsertPoint = "rule"
 	SystemPromptInsertPointCoreJob SystemPromptInsertPoint = "core_job"
 	SystemPromptInsertPointMemory  SystemPromptInsertPoint = "memory"
+	SystemPromptInsertPointContext SystemPromptInsertPoint = "context"
 )
 
 // SystemPromptLibraryItem stores one prompt card in the prompt library.
@@ -62,11 +64,26 @@ func LoadSystemPromptFiles(promptsDir string) (SystemPromptFiles, error) {
 	if err := syncSystemPromptRoots(roots); err != nil {
 		return SystemPromptFiles{}, err
 	}
+	if err := removeLegacySystemPromptFiles(roots); err != nil {
+		return SystemPromptFiles{}, err
+	}
+	if cached, ok, err := loadCachedSystemPromptFiles(roots[0]); err != nil {
+		return SystemPromptFiles{}, err
+	} else if ok {
+		return cached, nil
+	}
 	files, err := readSystemPromptFilesFromRoot(roots[0])
 	if err != nil {
 		return SystemPromptFiles{}, err
 	}
-	return migrateSystemPromptFiles(roots, files)
+	files, err = migrateSystemPromptFiles(roots, files)
+	if err != nil {
+		return SystemPromptFiles{}, err
+	}
+	if err := storeSystemPromptFilesCache(roots[0], files); err != nil {
+		return SystemPromptFiles{}, err
+	}
+	return cloneSystemPromptFiles(files), nil
 }
 
 // UpdateSystemPromptFiles persists a partial update and returns the reloaded files.
@@ -98,7 +115,10 @@ func UpdateSystemPromptFiles(promptsDir string, req SystemPromptUpdateRequest) (
 	if err := writeSystemPromptFilesToRoots(roots, files); err != nil {
 		return SystemPromptFiles{}, err
 	}
-	return files, nil
+	if err := storeSystemPromptFilesCache(roots[0], files); err != nil {
+		return SystemPromptFiles{}, err
+	}
+	return cloneSystemPromptFiles(files), nil
 }
 
 func defaultSystemPromptFiles() SystemPromptFiles {

@@ -36,18 +36,23 @@ func TestLoadBridgeFileConfigRejectsLegacyProviderFields(t *testing.T) {
 	}
 }
 
-func TestLoadBridgeFileConfigRejectsLegacyGraphQLFields(t *testing.T) {
+func TestLoadBridgeFileConfigRejectsRemovedGraphQLFields(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 
 	raw := strings.Join([]string{
-		`graphql_enabled = true`,
-		`graphql_endpoint = "https://legacy.example/graphql"`,
-		`graphql_api_key = "graphql-legacy-key"`,
-		`graphql_schema_path = "/schemas/legacy.json"`,
-		`graphql_timeout_ms = 5000`,
-		`graphql_max_response_bytes = 8192`,
-		`graphql_headers = { "X-Tenant" = "tenant-1" }`,
+		`graphql_tool_runtime_enabled = true`,
+		`graphql_text_sanitize_enabled = false`,
+		`graphql_default_source = "crm"`,
+		`[[graphql_sources]]`,
+		`name = "crm"`,
+		`endpoint = "https://legacy.example/graphql"`,
+		`schema_path = "/schemas/legacy.json"`,
+		`[[graphql_mutation_policies]]`,
+		`name = "approve"`,
+		`source = "crm"`,
+		`domain = "orders"`,
+		`root_mutation = "approveOrder"`,
 	}, "\n")
 	if err := os.WriteFile(configPath, []byte(raw), 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -55,16 +60,14 @@ func TestLoadBridgeFileConfigRejectsLegacyGraphQLFields(t *testing.T) {
 
 	_, _, err := loadBridgeFileConfig()
 	if err == nil {
-		t.Fatal("expected legacy graphql config error")
+		t.Fatal("expected removed graphql config error")
 	}
 	for _, field := range []string{
-		"graphql_enabled",
-		"graphql_endpoint",
-		"graphql_api_key",
-		"graphql_schema_path",
-		"graphql_timeout_ms",
-		"graphql_max_response_bytes",
-		"graphql_headers",
+		"graphql_tool_runtime_enabled",
+		"graphql_text_sanitize_enabled",
+		"graphql_default_source",
+		"graphql_sources",
+		"graphql_mutation_policies",
 	} {
 		if !strings.Contains(err.Error(), field) {
 			t.Fatalf("expected error to mention %q, got %v", field, err)
@@ -72,26 +75,16 @@ func TestLoadBridgeFileConfigRejectsLegacyGraphQLFields(t *testing.T) {
 	}
 }
 
-func TestRuntimeConfigFromEnvRejectsLegacyGraphQLEnvVars(t *testing.T) {
+func TestRuntimeConfigFromEnvRejectsRemovedGraphQLEnvVars(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.toml")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
-	t.Setenv("GHOST_GRAPHQL_ENABLED", "true")
-	t.Setenv("GHOST_GRAPHQL_ENDPOINT", "https://legacy.example/graphql")
+	t.Setenv("GHOST_GRAPHQL_TOOL_RUNTIME_ENABLED", "true")
+	t.Setenv("GHOST_GRAPHQL_TEXT_SANITIZE_ENABLED", "false")
 
 	if _, err := runtimeConfigFromEnv(); err == nil {
-		t.Fatal("expected legacy graphql env config error")
-	} else if !strings.Contains(err.Error(), "GHOST_GRAPHQL_ENABLED") || !strings.Contains(err.Error(), "GHOST_GRAPHQL_ENDPOINT") {
+		t.Fatal("expected removed graphql env config error")
+	} else if !strings.Contains(err.Error(), "GHOST_GRAPHQL_TOOL_RUNTIME_ENABLED") ||
+		!strings.Contains(err.Error(), "GHOST_GRAPHQL_TEXT_SANITIZE_ENABLED") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-}
-
-func findGraphQLSource(t *testing.T, sources []GraphQLSourceConfig, name string) GraphQLSourceConfig {
-	t.Helper()
-	for _, source := range sources {
-		if source.Name == name {
-			return source
-		}
-	}
-	t.Fatalf("graphql source %q was not found in %+v", name, sources)
-	return GraphQLSourceConfig{}
 }

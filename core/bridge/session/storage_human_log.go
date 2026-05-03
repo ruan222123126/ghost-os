@@ -11,3 +11,18 @@ func (s *Store) syncSessionHumanLogLocked(sessionID string) error {
 	}
 	return nil
 }
+
+func removeSessionHumanLogFile(store *Store, sessionID string) error {
+	if store == nil || store.humanLog == nil {
+		return nil
+	}
+	_, err := store.humanLog.Delete(sessionID)
+	return err
+}
+
+func deleteSessionHumanLogFile(store *Store, sessionID string) (bool, error) {
+	if store == nil || store.humanLog == nil {
+		return false, nil
+	}
+	return store.humanLog.Delete(sessionID)
+}

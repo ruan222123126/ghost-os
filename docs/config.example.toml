@@ -29,6 +29,8 @@ models = ["gpt-4o", "gpt-4.1-mini"]
 # base_url = "https://lldai.online/openai"
 # api_key = "sk-your-key"
 # models = ["gpt-5.4", "gpt-4"]
+# context_window_tokens = 1000000
+# response_reserve_tokens = 0
 
 # Anthropic example
 # [providers.anthropic]
@@ -43,6 +45,8 @@ cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 sessions_path = "~/.ghost-os/sessions"
 # Whether assistant messages are rendered as Markdown in Web chat (default: true).
 # assistant_markdown_enabled = true
+# Whether the first session system prompt is visible in Web chat history (default: true).
+# session_system_prompt_visible_enabled = true
 # tasks_path = "~/.ghost-os/tasks"
 # project_root = "/abs/path/to/project"
 # web_search_tavily_api_key = "tvly-..."
@@ -64,11 +68,6 @@ worker_max_concurrency = 4
 worker_max_files = 20
 worker_max_file_chunks = 4
 
-# GraphQL tool runtime: when enabled, the model must emit exactly one GraphQL
-# document that maps one top-level field to one visible bridge tool.
-# Native structured tool_calls are hidden from the model in this mode.
-# graphql_tool_runtime_enabled = false
-
 anthropic_version = "2023-06-01"
 anthropic_max_tokens = 1024
 
@@ -80,7 +79,7 @@ tool_selector_confidence = 0.75
 tool_selector_shadow = false
 tool_selector_recent_messages = 6
 # Resident tools are opt-in: only tools listed in tool_allowlist are exposed at turn start.
-# Session tools loaded later still depend on their own runtime path (for example tfind when enabled and allowlisted).
+# Session skills loaded later still depend on `sfind` itself being enabled and allowlisted.
 # tool_allowlist_only additionally disables runtime model switching from Web/CLI.
 # tool_allowlist_only = true
 # Highest priority hard constraints for tools:
@@ -89,9 +88,11 @@ tool_selector_recent_messages = 6
 # - blocklist tools are always removed from the final runnable set
 # tool_allowlist = ["script_exec", "web_search"]
 # tool_blocklist = ["web_search"]
+# Disabled skills are hidden from runtime prompt + sfind, but still listed in Web Settings.
+# skill_blocklist = ["skill_xxx"]
 # Workflow task tool nodes are unrestricted by default.
 # Set workflow_tool_allowlist only when you need explicit restrictions.
-# Tools that require an active session, such as ask_human and tfind,
+# Tools that require an active session, such as ask_human and sfind,
 # are rejected from this list at config-load time.
 # workflow_tool_allowlist = ["script_exec", "web_search"]
 

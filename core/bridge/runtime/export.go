@@ -103,6 +103,10 @@ func BuildSystemPromptForSession(
 	return buildSystemPromptForSession(cfg, catalog, sess, idleTurns)
 }
 
+func VisibleSkillNames(cfg Config) []string {
+	return visibleSkillNames(cfg)
+}
+
 func NewSessionTurnCatalog(catalog tools.ToolCatalog, static []string, sess *session.Session, idleTurns int, selector bool) tools.ToolCatalog {
 	return newSessionTurnCatalog(catalog, static, sess, idleTurns, selector)
 }

@@ -20,11 +20,6 @@ type ToolCatalog interface {
 	ToolDefs() []llm.ToolDef
 }
 
-// GraphQLToolDefSource allows catalog wrappers to expose GraphQL-only tool defs.
-type GraphQLToolDefSource interface {
-	GraphQLToolDefs() []llm.ToolDef
-}
-
 // Tool 定义 Agent 可调用的最小工具契约。
 type Tool interface {
 	Name() string

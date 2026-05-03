@@ -24,6 +24,7 @@ type preparedAgentTurnRequest struct {
 	message          string
 	mode             string
 	sessionID        string
+	requestRuntime   *requestRuntimeOptions
 	runtimeOverrides *TaskRuntimeOverrides
 }
 
@@ -42,11 +43,16 @@ func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, erro
 	if err != nil {
 		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
 	}
+	requestRuntime, err := normalizeRequestRuntimeOptions(params.ProjectRoot)
+	if err != nil {
+		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
+	}
 	return preparedAgentTurnRequest{
-		userInput: userInput,
-		message:   message,
-		mode:      mode,
-		sessionID: strings.TrimSpace(params.SessionID),
+		userInput:      userInput,
+		message:        message,
+		mode:           mode,
+		sessionID:      strings.TrimSpace(params.SessionID),
+		requestRuntime: requestRuntime,
 	}, nil
 }
 

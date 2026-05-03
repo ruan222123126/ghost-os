@@ -49,10 +49,7 @@ impl BridgeClient {
 
         self.post_json::<_, AgentPayload>(
             "/api/agent",
-            &AgentParams {
-                message: trimmed,
-                session_id,
-            },
+            &self.build_agent_params(trimmed, session_id),
         )
     }
 
@@ -182,6 +179,14 @@ impl BridgeClient {
         }
         anyhow!("Network error while calling {path}: {error}")
     }
+
+    fn build_agent_params(&self, message: &str, session_id: Option<&str>) -> AgentParams {
+        AgentParams {
+            message: message.to_string(),
+            project_root: self.config.startup_project_root.clone(),
+            session_id: session_id.map(str::to_string),
+        }
+    }
 }
 
 fn next_trace_id() -> String {
@@ -225,6 +230,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::parse_api_response;
+    use crate::config::Config;
     use reqwest::StatusCode;
     use serde::Deserialize;
 
@@ -261,5 +267,21 @@ mod tests {
         let err =
             parse_api_response::<MessagePayload>(StatusCode::OK, "{", "/api/agent").unwrap_err();
         assert!(err.to_string().contains("invalid JSON from bridge"));
+    }
+
+    #[test]
+    fn build_agent_params_includes_startup_project_root() {
+        let client = super::BridgeClient::new(Config {
+            bridge_url: "http://127.0.0.1:18080".to_string(),
+            timeout_secs: 3,
+            startup_project_root: "/tmp/ghost-os".to_string(),
+        })
+        .unwrap();
+
+        let params = client.build_agent_params("hello", Some("session-1"));
+
+        assert_eq!(params.message, "hello");
+        assert_eq!(params.project_root, "/tmp/ghost-os");
+        assert_eq!(params.session_id.as_deref(), Some("session-1"));
     }
 }

@@ -83,6 +83,94 @@
         "kotlin": { "name": "SessionMetadata" }
       }
     },
+    "sessionSidebarPartition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 172,
+        "go": { "name": "sessionSidebarPartition" },
+        "ts": { "name": "SessionSidebarPartition" },
+        "rust": { "name": "SessionSidebarPartition" },
+        "kotlin": { "name": "SessionSidebarPartition" }
+      }
+    },
+    "sessionSidebarPartitionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "partitions",
+        "assignments"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [1]
+        },
+        "partitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionSidebarPartition"
+          }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 173,
+        "go": { "name": "sessionSidebarPartitionState" },
+        "ts": { "name": "SessionSidebarPartitionState" },
+        "rust": { "name": "SessionSidebarPartitionState" },
+        "kotlin": { "name": "SessionSidebarPartitionState" }
+      }
+    },
+    "sessionSidebarPartitionPutRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "partitions",
+        "assignments"
+      ],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "enum": [1]
+        },
+        "partitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionSidebarPartition"
+          }
+        },
+        "assignments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 174,
+        "go": { "name": "sessionSidebarPartitionPutRequest" },
+        "ts": { "name": "SessionSidebarPartitionPutRequest" },
+        "rust": { "name": "SessionSidebarPartitionPutRequest" },
+        "kotlin": { "name": "SessionSidebarPartitionPutRequest" }
+      }
+    },
     "sessionMessagePage": {
       "type": "object",
       "additionalProperties": false,

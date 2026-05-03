@@ -54,10 +54,22 @@ LIMIT ?`, sessionID, hotWindowMaxMessages)
 		return nil, 0, 0, nil
 	}
 
-	messages := make([]llm.Message, 0, len(descending))
-	windowStart := descending[len(descending)-1].Index
-	for i := len(descending) - 1; i >= 0; i-- {
-		messages = append(messages, descending[i].Message)
+	ascending := reverseMessageRecords(descending)
+	if shouldExtendHotWindowToUserBoundary(ascending) {
+		prefix, err := loadHotWindowPrefixToUserBoundaryTx(tx, sessionID, ascending[0].Index)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		if len(prefix) > 0 {
+			ascending = append(prefix, ascending...)
+			totalTokens += sumMessageRecordTokens(prefix)
+		}
+	}
+
+	messages := make([]llm.Message, 0, len(ascending))
+	windowStart := ascending[0].Index
+	for _, record := range ascending {
+		messages = append(messages, record.Message)
 	}
 	return messages, windowStart, totalTokens, nil
 }
@@ -209,6 +221,58 @@ func scanMessageRecord(scanner interface{ Scan(...any) error }) (messageRecord, 
 		TokenCount: tokenCount,
 		Message:    message,
 	}, nil
+}
+
+func reverseMessageRecords(descending []messageRecord) []messageRecord {
+	ascending := make([]messageRecord, 0, len(descending))
+	for i := len(descending) - 1; i >= 0; i-- {
+		ascending = append(ascending, descending[i])
+	}
+	return ascending
+}
+
+func shouldExtendHotWindowToUserBoundary(records []messageRecord) bool {
+	if len(records) == 0 {
+		return false
+	}
+	role := records[0].Message.Role
+	return role != llm.RoleSystem && role != llm.RoleUser
+}
+
+func loadHotWindowPrefixToUserBoundaryTx(tx *sql.Tx, sessionID string, beforeIndex int) ([]messageRecord, error) {
+	rows, err := tx.Query(`
+SELECT idx, token_count, message_json
+FROM session_messages
+WHERE session_id = ? AND idx < ?
+ORDER BY idx DESC`, sessionID, beforeIndex)
+	if err != nil {
+		return nil, fmt.Errorf("load hot window prefix: %w", err)
+	}
+	defer rows.Close()
+
+	descending := make([]messageRecord, 0, 16)
+	for rows.Next() {
+		record, err := scanMessageRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		descending = append(descending, record)
+		if record.Message.Role == llm.RoleUser || record.Message.Role == llm.RoleSystem {
+			break
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load hot window prefix: %w", err)
+	}
+	return reverseMessageRecords(descending), nil
+}
+
+func sumMessageRecordTokens(records []messageRecord) int {
+	total := 0
+	for _, record := range records {
+		total += record.TokenCount
+	}
+	return total
 }
 
 func encodeMessageJSON(message llm.Message) (string, error) {

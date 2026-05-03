@@ -9,6 +9,7 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	ctxmgr "ghost-os/bridge/context"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/skills"
 	"ghost-os/bridge/tools"
 )
 
@@ -22,30 +23,42 @@ func buildSystemPromptForSession(
 	sess *session.Session,
 	idleTurns int,
 ) (string, error) {
-	basePrompt, err := buildBaseSystemPrompt(cfg, catalog, sess, idleTurns, "", "")
+	promptManager, err := loadPromptManager(cfg)
 	if err != nil {
 		return "", err
 	}
+	basePrompt := renderSystemPrompt(promptManager, cfg, catalog, sess, idleTurns, systemPromptOverrides{})
 	systemPrompts, err := bridgeconfig.LoadSystemPromptFiles(cfg.PromptsDir)
 	if err != nil {
 		return "", fmt.Errorf("load system prompts: %w", err)
 	}
-	memorySection, err := resolveMemorySection(cfg, systemPrompts.PromptLibrary)
-	if err != nil {
-		return "", fmt.Errorf("resolve memory section: %w", err)
+	if err := prepareMemoryMode(cfg); err != nil {
+		return "", fmt.Errorf("prepare memory mode: %w", err)
 	}
-	coreJobOverride := strings.TrimSpace(systemPrompts.CorePrompt)
-	if coreJobOverride == "" && strings.TrimSpace(memorySection) == "" {
+	contextSection, hasActiveContextCards, err := resolveContextSection(
+		cfg,
+		promptManager,
+		systemPrompts.PromptLibrary,
+	)
+	if err != nil {
+		return "", fmt.Errorf("resolve context section: %w", err)
+	}
+	overrides := systemPromptOverrides{
+		coreJob: strings.TrimSpace(systemPrompts.CorePrompt),
+	}
+	if ruleOverride, found := activePromptContentForInsertPoint(
+		systemPrompts.PromptLibrary,
+		bridgeconfig.SystemPromptInsertPointRule,
+	); found {
+		overrides.rule = &ruleOverride
+	}
+	if hasActiveContextCards {
+		overrides.contextSection = contextSection
+	}
+	if !overrides.hasOverrides() {
 		return basePrompt, nil
 	}
-	return buildBaseSystemPrompt(
-		cfg,
-		catalog,
-		sess,
-		idleTurns,
-		coreJobOverride,
-		memorySection,
-	)
+	return renderSystemPrompt(promptManager, cfg, catalog, sess, idleTurns, overrides), nil
 }
 
 func buildBaseSystemPrompt(
@@ -53,18 +66,51 @@ func buildBaseSystemPrompt(
 	catalog tools.ToolCatalog,
 	sess *session.Session,
 	idleTurns int,
-	coreJobOverride string,
-	memorySection string,
+	overrides systemPromptOverrides,
 ) (string, error) {
 	promptManager, err := loadPromptManager(cfg)
 	if err != nil {
 		return "", err
 	}
-	vars := systemPromptVars(cfg, catalog, sess, idleTurns, memorySection)
-	if trimmed := strings.TrimSpace(coreJobOverride); trimmed != "" {
+	return renderSystemPrompt(promptManager, cfg, catalog, sess, idleTurns, overrides), nil
+}
+
+func renderSystemPrompt(
+	promptManager *ctxmgr.PromptManager,
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+	overrides systemPromptOverrides,
+) string {
+	skillDiscovery := skills.DiscoverRuntimeVisibleSkills(skillRuntimeConfig(cfg))
+	vars := systemPromptVars(
+		cfg,
+		catalog,
+		sess,
+		idleTurns,
+		skillDiscovery,
+		resolvePromptContextSection(cfg, overrides.contextSection),
+	)
+	if overrides.rule != nil {
+		vars["rule"] = strings.TrimSpace(*overrides.rule)
+	}
+	if trimmed := strings.TrimSpace(overrides.coreJob); trimmed != "" {
 		vars["core_job"] = trimmed
 	}
-	return promptManager.Render(vars), nil
+	return promptManager.Render(vars)
+}
+
+type systemPromptOverrides struct {
+	rule           *string
+	coreJob        string
+	contextSection string
+}
+
+func (o systemPromptOverrides) hasOverrides() bool {
+	return o.rule != nil ||
+		o.coreJob != "" ||
+		strings.TrimSpace(o.contextSection) != ""
 }
 
 func loadPromptManager(cfg Config) (*ctxmgr.PromptManager, error) {
@@ -86,15 +132,20 @@ func systemPromptVars(
 	catalog tools.ToolCatalog,
 	sess *session.Session,
 	idleTurns int,
-	memorySection string,
+	skillDiscovery skills.DiscoveryResult,
+	contextSection string,
 ) map[string]string {
 	return map[string]string{
-		"os_type":               goruntime.GOOS,
-		"memory":                strings.TrimSpace(memorySection),
-		"tool_guidance":         tools.FormatPromptGuidanceForCatalog(catalog),
-		"dynamic_tool_state":    formatDynamicToolState(sess, idleTurns),
-		"dynamic_skill_context": formatDynamicSkillContext(cfg, sess, idleTurns),
-		"max_turns":             strconv.Itoa(cfg.MaxTurns),
-		"project_root":          resolvePromptProjectRoot(cfg.ProjectRoot),
+		"os_type":            goruntime.GOOS,
+		"context":            strings.TrimSpace(contextSection),
+		"skills_catalog":     formatVisibleSkillsCatalogFromDiscovery(skillDiscovery),
+		"dynamic_tool_state": formatDynamicToolState(sess, idleTurns),
+		"dynamic_skill_context": formatDynamicSkillContextFromDiscovery(
+			sess,
+			idleTurns,
+			skillDiscovery,
+		),
+		"max_turns":    strconv.Itoa(cfg.MaxTurns),
+		"project_root": resolvePromptProjectRoot(cfg.ProjectRoot),
 	}
 }

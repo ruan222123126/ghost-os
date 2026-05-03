@@ -39,14 +39,14 @@ func TestNormalizeConfiguredToolLists_AllowsCodexCLI(t *testing.T) {
 }
 
 func TestNormalizeConfiguredToolLists_AllowsBlockingAskHumanAndToolSearch(t *testing.T) {
-	allowlist, blocklist, err := normalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec", "tfind"})
+	allowlist, blocklist, err := normalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec", "sfind"})
 	if err != nil {
 		t.Fatalf("normalizeConfiguredToolLists: %v", err)
 	}
 	if len(allowlist) != 0 {
 		t.Fatalf("unexpected allowlist: %v", allowlist)
 	}
-	expected := []string{"ask_human", "script_exec", "tfind"}
+	expected := []string{"ask_human", "script_exec", "sfind"}
 	if len(blocklist) != len(expected) {
 		t.Fatalf("unexpected blocklist: %v", blocklist)
 	}
@@ -136,7 +136,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 	if catalog.Get("ask_human") == nil || catalog.Get("codex_cli") == nil {
 		t.Fatal("expected resident and selector-selected tools to remain in scoped subset")
 	}
-	for _, name := range []string{"web_search", "script_exec", "tfind"} {
+	for _, name := range []string{"web_search", "script_exec", "sfind"} {
 		if catalog.Get(name) != nil {
 			t.Fatalf("expected %q to stay hidden outside scoped subset", name)
 		}
@@ -218,7 +218,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
-			Allowlist: []string{"codex_cli", "tfind"},
+			Allowlist: []string{"codex_cli", "sfind"},
 		},
 		ToolSearch: bridgeconfig.ToolSearchConfig{
 			Enabled:   true,
@@ -231,7 +231,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
-	for _, name := range []string{"codex_cli", "tfind"} {
+	for _, name := range []string{"codex_cli", "sfind"} {
 		if catalog.Get(name) == nil {
 			t.Fatalf("expected %q to remain visible", name)
 		}

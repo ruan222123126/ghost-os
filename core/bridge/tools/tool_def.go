@@ -2,7 +2,7 @@ package tools
 
 import "ghost-os/bridge/llm"
 
-// ToolSemanticProvider 允许工具声明只读/副作用语义，供 GraphQL runtime 等协议复用。
+// ToolSemanticProvider 允许工具声明只读/副作用语义，供运行时协议复用。
 type ToolSemanticProvider interface {
 	ToolSemantics() llm.ToolSemantics
 }

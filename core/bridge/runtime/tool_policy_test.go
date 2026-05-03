@@ -10,7 +10,7 @@ import (
 
 func TestToolSelectionPolicy_ResidentAndSelectorScopesSplitOutsideStrictMode(t *testing.T) {
 	registry := tools.NewRegistry()
-	for _, name := range []string{"ask_human", "script_exec", "web_search", "tfind"} {
+	for _, name := range []string{"ask_human", "script_exec", "web_search", "sfind"} {
 		registry.Register(&catalogMockTool{name: name})
 	}
 
@@ -30,7 +30,7 @@ func TestToolSelectionPolicy_ResidentAndSelectorScopesSplitOutsideStrictMode(t *
 	if containsToolName(selector, "web_search") {
 		t.Fatalf("expected selector catalog to honor blocklist, got %v", selector)
 	}
-	for _, name := range []string{"ask_human", "script_exec", "tfind"} {
+	for _, name := range []string{"ask_human", "script_exec", "sfind"} {
 		if !containsToolName(selector, name) {
 			t.Fatalf("expected selector catalog to include %q outside strict mode, got %v", name, selector)
 		}
@@ -71,7 +71,7 @@ func TestToolSelectionPolicy_ApplyKeepsResidentAndSelectedTools(t *testing.T) {
 	}
 }
 
-func TestBuildRuntimeSystemPromptUsesResidentCatalog(t *testing.T) {
+func TestBuildRuntimeSystemPromptOmitsResidentToolGuidance(t *testing.T) {
 	tempDir := setupRuntimeFactoryTestEnv(t)
 	registry := tools.NewRegistry()
 	for _, name := range []string{"ask_human", "script_exec"} {
@@ -79,7 +79,7 @@ func TestBuildRuntimeSystemPromptUsesResidentCatalog(t *testing.T) {
 	}
 
 	prompt, err := buildRuntimeSystemPrompt(Config{
-		MaxTurns: 3,
+		MaxTurns:   3,
 		PromptsDir: filepath.Join(tempDir, "prompts"),
 		ToolSelector: ToolSelectorConfig{
 			Allowlist: []string{"ask_human"},
@@ -88,10 +88,9 @@ func TestBuildRuntimeSystemPromptUsesResidentCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildRuntimeSystemPrompt returned error: %v", err)
 	}
-	if !strings.Contains(prompt, "`ask_human`") {
-		t.Fatalf("expected resident tool guidance in runtime prompt, got %q", prompt)
-	}
-	if strings.Contains(prompt, "`script_exec`") {
-		t.Fatalf("expected non-resident tool guidance to stay hidden, got %q", prompt)
+	for _, snippet := range []string{"## Tool Guidance", "`ask_human`", "`script_exec`"} {
+		if strings.Contains(prompt, snippet) {
+			t.Fatalf("expected runtime prompt to exclude %q, got %q", snippet, prompt)
+		}
 	}
 }

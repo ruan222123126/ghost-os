@@ -62,6 +62,28 @@ func TestResolveAuxConfigUsesProvidedEnvSnapshot(t *testing.T) {
 	}
 }
 
+func TestResolveAuxConfigNativeBinaryOverrideBeatsFileConfig(t *testing.T) {
+	aux, err := resolveAuxConfig(
+		bridgeFileConfig{
+			NativeBinaryPath: stringPointer("/file/native"),
+		},
+		envSnapshot{
+			"GHOST_NATIVE_BINARY_PATH_OVERRIDE": "/override/native",
+			"GHOST_NATIVE_BINARY_PATH":          "/env/native",
+		},
+	)
+	if err != nil {
+		t.Fatalf("resolveAuxConfig: %v", err)
+	}
+	if aux.Execution.NativeBinaryPath != "/override/native" {
+		t.Fatalf(
+			"unexpected native binary path: got %q want %q",
+			aux.Execution.NativeBinaryPath,
+			"/override/native",
+		)
+	}
+}
+
 func TestResolveAuxConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 	cases := []struct {
 		name string
