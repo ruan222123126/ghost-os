@@ -37,16 +37,26 @@ impl ToolRuntime {
         &self.config
     }
 
-    pub(crate) fn log_success(&self, tool: &str, args: Value, result: impl Into<String>) {
+    pub(crate) fn record_tool_call(
+        &self,
+        tool: &str,
+        args: Value,
+        result: impl Into<String>,
+        error: Option<String>,
+    ) {
         push_tool_log(
             &self.tool_calls_log,
             ToolCallLog {
                 tool: tool.to_string(),
                 args,
                 result: truncate_log_result(&self.config, &result.into()),
-                error: None,
+                error,
             },
         );
+    }
+
+    pub(crate) fn log_success(&self, tool: &str, args: Value, result: impl Into<String>) {
+        self.record_tool_call(tool, args, result, None);
     }
 
     pub(crate) fn log_failure(
@@ -57,29 +67,13 @@ impl ToolRuntime {
         err: impl Into<String>,
     ) -> PyErr {
         let err = err.into();
-        push_tool_log(
-            &self.tool_calls_log,
-            ToolCallLog {
-                tool: tool.to_string(),
-                args,
-                result: truncate_log_result(&self.config, &result.into()),
-                error: Some(err.clone()),
-            },
-        );
+        self.record_tool_call(tool, args, result, Some(err.clone()));
         PyRuntimeError::new_err(err)
     }
 
     pub(crate) fn log_error(&self, tool: &str, args: Value, err: impl Into<String>) -> PyErr {
         let err = err.into();
-        push_tool_log(
-            &self.tool_calls_log,
-            ToolCallLog {
-                tool: tool.to_string(),
-                args,
-                result: String::new(),
-                error: Some(err.clone()),
-            },
-        );
+        self.record_tool_call(tool, args, String::new(), Some(err.clone()));
         PyRuntimeError::new_err(err)
     }
 

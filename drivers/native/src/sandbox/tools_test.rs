@@ -101,7 +101,7 @@ fn test_search_files_returns_structured_matches_and_logs() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "import json\nmatches = tools.search_files(query='needle', path='{}')\nprint(json.dumps(matches))",
+        "import json\nmatches = search_files(query='needle', path='{}')\nprint(json.dumps(matches))",
         escape_python_path(&root)
     );
 
@@ -130,7 +130,7 @@ fn test_search_files_respects_max_results_parameter() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "matches = tools.search_files(query='needle', path='{}', max_results=2)\nprint(len(matches))",
+        "matches = search_files(query='needle', path='{}', max_results=2)\nprint(len(matches))",
         escape_python_path(&root)
     );
 
@@ -158,7 +158,7 @@ fn test_read_file_paginated_range() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "result = tools.read_file(path='{}', start_line=5, end_line=7)\nprint(result)",
+        "result = read_file(path='{}', start_line=5, end_line=7)\nprint(result)",
         escape_python_path(&file)
     );
 
@@ -185,7 +185,7 @@ fn test_read_file_enforces_line_limit() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "tools.read_file(path='{}', start_line=1, end_line=250)",
+        "read_file(path='{}', start_line=1, end_line=250)",
         escape_python_path(&file)
     );
 
@@ -207,9 +207,9 @@ fn test_write_file_write_and_append_modes() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "tools.write_file(path='{path}', content='hello')\n\
-tools.write_file(path='{path}', content=' world', mode='append')\n\
-print(tools.read_file(path='{path}'))",
+        "write_file(path='{path}', content='hello')\n\
+write_file(path='{path}', content=' world', mode='append')\n\
+print(read_file(path='{path}'))",
         path = escape_python_path(&file)
     );
 
@@ -231,7 +231,7 @@ fn test_write_file_blocks_sensitive_patterns() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "tools.write_file(path='{}', content='SECRET=1')",
+        "write_file(path='{}', content='SECRET=1')",
         escape_python_path(&file)
     );
 
@@ -254,8 +254,8 @@ fn test_apply_diff_success() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "tools.apply_diff(path='{path}', diff_text='''@@ -1,3 +1,3 @@\n alpha\n-beta\n+beta2\n gamma\n''')\n\
-print(tools.read_file(path='{path}'))",
+        "apply_diff(path='{path}', diff_text='''@@ -1,3 +1,3 @@\n alpha\n-beta\n+beta2\n gamma\n''')\n\
+print(read_file(path='{path}'))",
         path = escape_python_path(&file)
     );
 
@@ -278,7 +278,7 @@ fn test_apply_diff_mismatch_returns_error() {
 
     let sandbox = sandbox_for(&root);
     let script = format!(
-        "tools.apply_diff(path='{path}', diff_text='''@@ -1,3 +1,3 @@\n one\n-four\n+TWO\n three\n''')",
+        "apply_diff(path='{path}', diff_text='''@@ -1,3 +1,3 @@\n one\n-four\n+TWO\n three\n''')",
         path = escape_python_path(&file)
     );
 
@@ -295,7 +295,7 @@ fn test_bash_exec_truncates_large_stdout() {
     let root = make_temp_dir();
     let sandbox = sandbox_for(&root);
 
-    let script = "output = tools.bash_exec(command=\"printf 'a%.0s' {1..2205}\")\nprint(output)";
+    let script = "output = bash_exec(command=\"printf 'a%.0s' {1..2205}\")\nprint(output)";
     let result = sandbox.execute_blocking(script);
 
     assert!(
@@ -316,6 +316,44 @@ fn test_bash_exec_truncates_large_stdout() {
 }
 
 #[test]
+fn test_bash_exec_respects_explicit_output_limit() {
+    let root = make_temp_dir();
+    let sandbox = sandbox_for(&root);
+
+    let script = "output = bash_exec(command=\"printf 'a%.0s' {1..2205}\", max_output_chars=3000)\nprint(output)";
+    let result = sandbox.execute_blocking(script);
+
+    assert!(
+        result.error.is_none(),
+        "unexpected error: {:?}",
+        result.error
+    );
+    assert!(
+        !result.output.contains("output truncated"),
+        "unexpected truncation marker in output: {}",
+        result.output
+    );
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn test_bash_exec_rejects_zero_output_limit() {
+    let root = make_temp_dir();
+    let sandbox = sandbox_for(&root);
+
+    let result = sandbox.execute_blocking("bash_exec(command='printf test', max_output_chars=0)");
+    assert!(result.error.is_some(), "expected output limit failure");
+    let err = result.error.unwrap_or_default();
+    assert!(
+        err.contains("max_output_chars"),
+        "unexpected error message: {err}"
+    );
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn test_bash_exec_enforces_per_call_timeout_budget() {
     if cfg!(target_os = "windows") {
         return;
@@ -330,7 +368,7 @@ fn test_bash_exec_enforces_per_call_timeout_budget() {
     config.max_shell_timeout_ms = 10;
     let sandbox = PythonSandbox::new(config);
 
-    let result = sandbox.execute_blocking("tools.bash_exec(command='sleep 1')");
+    let result = sandbox.execute_blocking("bash_exec(command='sleep 1')");
     assert!(result.error.is_some(), "expected timeout failure");
     let err = result.error.unwrap_or_default();
     assert!(err.contains("timed out"), "unexpected error message: {err}");
@@ -351,7 +389,7 @@ fn test_tool_call_logs_use_shared_truncation_budget() {
     config.max_tool_log_chars = 32;
     let sandbox = PythonSandbox::new(config);
 
-    let script = format!("tools.read_file(path='{}')", escape_python_path(&file));
+    let script = format!("read_file(path='{}')", escape_python_path(&file));
     let result = sandbox.execute_blocking(&script);
     assert!(
         result.error.is_none(),
@@ -392,7 +430,7 @@ fn test_read_file_blocks_path_outside_allowlist() {
     fs::write(&outside, "outside").expect("write outside fixture");
 
     let sandbox = sandbox_for(&root);
-    let script = format!("tools.read_file(path='{}')", escape_python_path(&outside));
+    let script = format!("read_file(path='{}')", escape_python_path(&outside));
 
     let result = sandbox.execute_blocking(&script);
     assert!(result.error.is_some(), "expected allowlist failure");
@@ -411,7 +449,7 @@ fn test_fetch_webpage_rejects_non_https() {
     let root = make_temp_dir();
     let sandbox = sandbox_for(&root);
 
-    let result = sandbox.execute_blocking("tools.fetch_webpage(url='http://example.com')");
+    let result = sandbox.execute_blocking("fetch_webpage(url='http://example.com')");
     assert!(result.error.is_some(), "expected https-only rejection");
     let err = result.error.unwrap_or_default();
     assert!(
@@ -434,12 +472,12 @@ fn test_fetch_webpage_rate_limit() {
 
     let script = r#"
 try:
-	tools.fetch_webpage(url='https://localhost')
+	fetch_webpage(url='https://localhost')
 except Exception:
 	pass
 
 # Second call should trip the per-script request limit.
-tools.fetch_webpage(url='https://localhost')
+fetch_webpage(url='https://localhost')
 "#;
 
     let result = sandbox.execute_blocking(script);
@@ -447,6 +485,26 @@ tools.fetch_webpage(url='https://localhost')
     let err = result.error.unwrap_or_default();
     assert!(
         err.contains("rate limit"),
+        "unexpected error message: {err}"
+    );
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn test_legacy_tools_read_file_fails_explicitly() {
+    let root = make_temp_dir();
+    let file = root.join("notes.txt");
+    fs::write(&file, "alpha").expect("write fixture");
+
+    let sandbox = sandbox_for(&root);
+    let script = format!("tools.read_file(path='{}')", escape_python_path(&file));
+    let result = sandbox.execute_blocking(&script);
+
+    assert!(result.error.is_some(), "expected name error");
+    let err = result.error.unwrap_or_default();
+    assert!(
+        err.contains("name 'tools' is not defined"),
         "unexpected error message: {err}"
     );
 

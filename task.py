@@ -96,9 +96,14 @@ def stage_native_binary(source: Path) -> int:
 
 
 def bridge_native_env(native_path: Path) -> dict[str, str]:
-    if os.environ.get("GHOST_NATIVE_BINARY_PATH") or os.environ.get("GHOST_NATIVE_BIN"):
+    if (
+        os.environ.get("GHOST_NATIVE_BINARY_PATH_OVERRIDE")
+        or os.environ.get("GHOST_NATIVE_BIN_OVERRIDE")
+        or os.environ.get("GHOST_NATIVE_BINARY_PATH")
+        or os.environ.get("GHOST_NATIVE_BIN")
+    ):
         return {}
-    return {"GHOST_NATIVE_BINARY_PATH": str(native_path)}
+    return {"GHOST_NATIVE_BINARY_PATH_OVERRIDE": str(native_path)}
 
 
 def run_bridge(command: list[str], require_native_debug: bool = False) -> int:

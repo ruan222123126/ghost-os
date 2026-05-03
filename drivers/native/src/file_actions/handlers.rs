@@ -4,14 +4,21 @@ use serde_json::json;
 use crate::Response;
 use crate::sandbox::SandboxConfig;
 use crate::sandbox::file_tools::{
-    apply_diff_impl, export_file_impl, list_files_impl, read_file_impl,
+    apply_diff_impl, export_file_impl, list_files_impl, read_file_impl, search_files_impl,
+    write_file_impl,
 };
 
 use super::format::format_numbered_content;
-use super::params::{ApplyDiffRequest, ExportFileRequest, ListFilesRequest, ReadFileRequest};
+use super::params::{
+    ApplyDiffRequest, ExportFileRequest, ListFilesRequest, ReadFileRequest, SearchFilesRequest,
+    WriteFileRequest,
+};
 
 pub(super) fn handle_list_files(params: &Value) -> Response {
-    let request = ListFilesRequest::parse(params);
+    let request = match ListFilesRequest::parse(params) {
+        Ok(request) => request,
+        Err(err) => return Response::error(err),
+    };
     let result = match list_files_impl(&sandbox_config(), &request.path) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
@@ -20,6 +27,32 @@ pub(super) fn handle_list_files(params: &Value) -> Response {
     Response::success(json!({
         "path": request.path,
         "entries": result.entries,
+    }))
+}
+
+pub(super) fn handle_search_files(params: &Value) -> Response {
+    let request = match SearchFilesRequest::parse(params) {
+        Ok(request) => request,
+        Err(err) => return Response::error(err),
+    };
+    let matches = match search_files_impl(
+        &sandbox_config(),
+        &request.query,
+        &request.path,
+        request.max_results,
+    ) {
+        Ok(matches) => matches,
+        Err(err) => return Response::error(err),
+    };
+
+    Response::success(json!({
+        "matches": matches.iter().map(|item| {
+            json!({
+                "path": &item.path,
+                "line": item.line,
+                "text": &item.text,
+            })
+        }).collect::<Vec<_>>(),
     }))
 }
 
@@ -46,6 +79,26 @@ pub(super) fn handle_read_file(params: &Value) -> Response {
         "returned_end_line": result.returned_end_line,
         "total_lines": result.total_lines,
         "content": format_numbered_content(&result.content, result.returned_start_line),
+    }))
+}
+
+pub(super) fn handle_write_file(params: &Value) -> Response {
+    let request = match WriteFileRequest::parse(params) {
+        Ok(request) => request,
+        Err(err) => return Response::error(err),
+    };
+    let result = match write_file_impl(
+        &sandbox_config(),
+        &request.path,
+        &request.content,
+        &request.mode,
+    ) {
+        Ok(result) => result,
+        Err(err) => return Response::error(err),
+    };
+
+    Response::success(json!({
+        "message": result.message,
     }))
 }
 

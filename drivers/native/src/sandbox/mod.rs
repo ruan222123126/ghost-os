@@ -2,6 +2,8 @@
 
 #[cfg(feature = "python-sandbox")]
 pub mod executor;
+#[cfg(feature = "python-sandbox")]
+pub(crate) mod executor_bootstrap;
 pub(crate) mod file_tools;
 #[cfg(feature = "python-sandbox")]
 pub mod restrictions;
@@ -12,6 +14,9 @@ pub(crate) mod tool_runtime;
 pub mod tools;
 #[cfg(feature = "python-sandbox")]
 pub(crate) mod web_tools;
+
+#[cfg(feature = "python-sandbox")]
+pub(crate) const SCRIPT_EXEC_PRIVATE_TOOLS_NAME: &str = "__ghost_tools";
 
 mod diff_engine;
 pub(crate) mod path_policy;
@@ -64,6 +69,7 @@ impl Default for SandboxConfig {
                 "time".to_string(),
                 "os".to_string(),
                 "sys".to_string(),
+                "subprocess".to_string(),
             ],
             default_script_timeout_ms: 30_000,
             max_script_timeout_ms: 60_000,

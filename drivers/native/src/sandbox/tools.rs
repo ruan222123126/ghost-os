@@ -7,7 +7,7 @@ use super::file_tools::{
     DEFAULT_SEARCH_MAX_RESULTS, apply_diff_py, list_files_py, read_file_py, search_files_py,
     write_file_py,
 };
-use super::shell_tools::bash_exec_py;
+use super::shell_tools::{bash_exec_py, bash_exec_result_py};
 use super::tool_runtime::ToolRuntime;
 use super::web_tools::fetch_webpage_py;
 use super::{SandboxConfig, ToolCallLog};
@@ -29,9 +29,25 @@ impl ToolsProxy {
 // `#[pymethods]` expands these wrappers with redundant `PyErr` conversions that clippy flags.
 #[pymethods]
 impl ToolsProxy {
-    #[pyo3(signature = (*, command))]
-    fn bash_exec(&self, py: Python<'_>, command: String) -> PyResult<String> {
-        bash_exec_py(&self.runtime, py, command)
+    #[pyo3(signature = (*, command, max_output_chars=None))]
+    fn bash_exec(
+        &self,
+        py: Python<'_>,
+        command: String,
+        max_output_chars: Option<usize>,
+    ) -> PyResult<String> {
+        bash_exec_py(&self.runtime, py, command, max_output_chars)
+    }
+
+    #[pyo3(signature = (*, command, timeout_ms=None, max_output_chars=None))]
+    fn _bash_exec_result(
+        &self,
+        py: Python<'_>,
+        command: String,
+        timeout_ms: Option<u64>,
+        max_output_chars: Option<usize>,
+    ) -> PyResult<String> {
+        bash_exec_result_py(&self.runtime, py, command, timeout_ms, max_output_chars)
     }
 
     #[pyo3(signature = (*, path=None))]

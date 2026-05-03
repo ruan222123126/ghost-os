@@ -1,9 +1,7 @@
 use std::fs;
-#[cfg(feature = "python-sandbox")]
 use std::fs::OpenOptions;
-#[cfg(feature = "python-sandbox")]
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::sandbox::SandboxConfig;
 use crate::sandbox::diff_engine::{PatchHunkRange, apply_unified_patch};
@@ -23,7 +21,6 @@ pub(crate) struct ListFilesOutput {
     pub(crate) entries: Vec<String>,
 }
 
-#[cfg(feature = "python-sandbox")]
 pub(crate) struct WriteFileOutput {
     pub(crate) message: String,
 }
@@ -115,7 +112,6 @@ pub(crate) fn list_files_impl(
     Ok(ListFilesOutput { entries: names })
 }
 
-#[cfg(feature = "python-sandbox")]
 pub(crate) fn write_file_impl(
     config: &SandboxConfig,
     path: &str,
@@ -139,12 +135,7 @@ pub(crate) fn write_file_impl(
     let parent = canonical
         .parent()
         .ok_or_else(|| "invalid write path".to_string())?;
-    if !parent.exists() {
-        return Err(format!(
-            "parent directory does not exist: {}",
-            parent.display()
-        ));
-    }
+    ensure_parent_directory(parent)?;
 
     let mut options = OpenOptions::new();
     options.write(true).create(true);
@@ -162,6 +153,15 @@ pub(crate) fn write_file_impl(
 
     Ok(WriteFileOutput {
         message: format!("wrote {} bytes to {}", bytes.len(), canonical.display()),
+    })
+}
+
+fn ensure_parent_directory(parent: &Path) -> Result<(), String> {
+    fs::create_dir_all(parent).map_err(|err| {
+        format!(
+            "failed to create parent directory {}: {err}",
+            parent.display()
+        )
     })
 }
 

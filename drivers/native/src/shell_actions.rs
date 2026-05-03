@@ -2,7 +2,7 @@ use crate::Response;
 use crate::json_params::{optional_usize, required_string};
 use crate::sandbox::SandboxConfig;
 use crate::sandbox::shell_tools::{
-    bash_exec_impl, format_bash_exec_failure, resolve_shell_timeout,
+    bash_exec_impl, format_bash_exec_failure, resolve_shell_output_chars, resolve_shell_timeout,
 };
 use serde_json::{Value, json};
 
@@ -24,8 +24,15 @@ fn handle_bash_exec(params: &Value) -> Response {
         Ok(timeout_ms) => resolve_shell_timeout(&config, timeout_ms.map(|value| value as u64)),
         Err(err) => return Response::error(err),
     };
+    let max_output_chars = match optional_usize(params, "max_output_chars") {
+        Ok(limit) => match resolve_shell_output_chars(&config, limit) {
+            Ok(limit) => Some(limit),
+            Err(err) => return Response::error(err),
+        },
+        Err(err) => return Response::error(err),
+    };
 
-    let result = match bash_exec_impl(&config, &command, Some(timeout_ms)) {
+    let result = match bash_exec_impl(&config, &command, Some(timeout_ms), max_output_chars) {
         Ok(result) => result,
         Err(err) => return Response::error(err),
     };
@@ -61,6 +68,32 @@ mod tests {
         assert!(stdout.contains("hi"), "unexpected stdout: {stdout}");
     }
 
+    #[test]
+    fn handle_bash_exec_accepts_output_limit_override() {
+        let response = handle_bash_exec(&json!({
+            "command": shell_repeat_command(2205),
+            "max_output_chars": 3000
+        }));
+        assert_eq!(response.status, "success");
+        let stdout = response.payload["stdout"]
+            .as_str()
+            .expect("stdout should be a string");
+        assert!(
+            !stdout.contains("output truncated"),
+            "unexpected truncation marker: {stdout}"
+        );
+    }
+
+    #[test]
+    fn handle_bash_exec_rejects_zero_output_limit() {
+        let response = handle_bash_exec(&json!({
+            "command": shell_echo_command("hi"),
+            "max_output_chars": 0
+        }));
+        assert_eq!(response.status, "error");
+        assert!(response.error.contains("max_output_chars"));
+    }
+
     #[cfg(not(target_os = "windows"))]
     #[test]
     fn handle_bash_exec_times_out() {
@@ -82,6 +115,14 @@ mod tests {
             format!("echo {text}")
         } else {
             format!("printf '{text}'")
+        }
+    }
+
+    fn shell_repeat_command(count: usize) -> String {
+        if cfg!(target_os = "windows") {
+            format!("powershell -NoProfile -Command \"[Console]::Write(('a' * {count}))\"")
+        } else {
+            format!("printf 'a%.0s' {{1..{count}}}")
         }
     }
 }

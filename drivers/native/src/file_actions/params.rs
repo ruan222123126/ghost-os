@@ -1,13 +1,28 @@
 use serde_json::Value;
 
+use crate::json_params::{optional_string, optional_usize, required_string};
+use crate::sandbox::file_tools::DEFAULT_SEARCH_MAX_RESULTS;
+
 pub(super) struct ListFilesRequest {
     pub(super) path: String,
+}
+
+pub(super) struct SearchFilesRequest {
+    pub(super) query: String,
+    pub(super) path: String,
+    pub(super) max_results: usize,
 }
 
 pub(super) struct ReadFileRequest {
     pub(super) path: String,
     pub(super) start_line: Option<usize>,
     pub(super) end_line: Option<usize>,
+}
+
+pub(super) struct WriteFileRequest {
+    pub(super) path: String,
+    pub(super) content: String,
+    pub(super) mode: String,
 }
 
 pub(super) struct ApplyDiffRequest {
@@ -24,16 +39,23 @@ pub(super) struct ExportFileRequest {
 }
 
 impl ListFilesRequest {
-    pub(super) fn parse(params: &Value) -> Self {
-        let path = params
-            .get("path")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(".");
-        Self {
-            path: path.to_string(),
-        }
+    pub(super) fn parse(params: &Value) -> Result<Self, String> {
+        Ok(Self {
+            path: optional_string(params, "path")?.unwrap_or_else(|| ".".to_string()),
+        })
+    }
+}
+
+impl SearchFilesRequest {
+    pub(super) fn parse(params: &Value) -> Result<Self, String> {
+        let path = optional_string(params, "path")?.unwrap_or_else(|| ".".to_string());
+        let max_results =
+            optional_usize(params, "max_results")?.unwrap_or(DEFAULT_SEARCH_MAX_RESULTS);
+        Ok(Self {
+            query: required_string(params, "query")?,
+            path,
+            max_results,
+        })
     }
 }
 
@@ -43,6 +65,17 @@ impl ReadFileRequest {
             path: required_string(params, "path")?,
             start_line: optional_usize(params, "start_line")?,
             end_line: optional_usize(params, "end_line")?,
+        })
+    }
+}
+
+impl WriteFileRequest {
+    pub(super) fn parse(params: &Value) -> Result<Self, String> {
+        let mode = optional_text(params, "mode")?.unwrap_or_else(|| "write".to_string());
+        Ok(Self {
+            path: required_string(params, "path")?,
+            content: required_present_string(params, "content")?,
+            mode,
         })
     }
 }
@@ -68,24 +101,19 @@ impl ExportFileRequest {
     }
 }
 
-fn required_string(params: &Value, field: &str) -> Result<String, String> {
+fn required_present_string(params: &Value, field: &str) -> Result<String, String> {
     params
         .get(field)
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .ok_or_else(|| format!("{field} is required"))
 }
 
-fn optional_usize(params: &Value, field: &str) -> Result<Option<usize>, String> {
+fn optional_text(params: &Value, field: &str) -> Result<Option<String>, String> {
     let Some(raw) = params.get(field) else {
         return Ok(None);
     };
-    let value = raw
-        .as_u64()
-        .ok_or_else(|| format!("{field} must be a non-negative integer"))?;
-    usize::try_from(value)
-        .map(Some)
-        .map_err(|_| format!("{field} is too large"))
+    raw.as_str()
+        .map(|value| Some(value.to_string()))
+        .ok_or_else(|| format!("{field} must be a string"))
 }
