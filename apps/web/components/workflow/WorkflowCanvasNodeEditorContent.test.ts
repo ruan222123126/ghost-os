@@ -6,7 +6,7 @@ import type { PresetPayload, ProviderConfig, ToolPayload } from '@/lib/types';
 import type { WorkflowAgentRuntimeCatalog, WorkflowCanvasNodeDraft } from '@/lib/workflow-editor';
 import { WorkflowCanvasNodeEditorContent } from './WorkflowCanvasNodeEditorContent';
 
-jest.mock('@/components/workflow/useWorkflowToolOptions', () => ({
+jest.mock('@/hooks/workflow/useWorkflowToolOptions', () => ({
   useWorkflowToolOptions: () => ({
     options: [
       {

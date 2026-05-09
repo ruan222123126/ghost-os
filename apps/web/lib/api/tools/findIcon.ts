@@ -13,7 +13,6 @@ const FIND_ICON_TEMPLATE_UPLOAD_KEYS = ['template_path', 'template_name', 'sha25
 const FIND_ICON_PREVIEW_KEYS = ['exists', 'match_count', 'matches', 'display_id', 'region', 'hovered'] as const;
 const FIND_ICON_PREVIEW_REGION_KEYS = ['x', 'y', 'width', 'height'] as const;
 const FIND_ICON_TEMPLATE_ENDPOINT = '/api/tools/screen/find-icon/template';
-const FIND_ICON_TEMPLATE_PREVIEW_ENDPOINT = '/api/tools/screen/find-icon/template-preview';
 
 export interface FindIconTemplateUploadRequest {
   filename: string;
@@ -66,14 +65,6 @@ export async function previewFindIcon(input: FindIconPreviewRequest): Promise<Fi
     method: 'POST',
     body: JSON.stringify(input),
   }, parseFindIconPreviewResponse);
-}
-
-export function buildFindIconTemplatePreviewURL(templatePath: string): string {
-  const path = templatePath.trim();
-  if (!path) {
-    return '';
-  }
-  return `${FIND_ICON_TEMPLATE_PREVIEW_ENDPOINT}?template_path=${encodeURIComponent(path)}`;
 }
 
 function parseFindIconTemplateUploadResponse(payload: unknown): FindIconTemplateUploadResponse {

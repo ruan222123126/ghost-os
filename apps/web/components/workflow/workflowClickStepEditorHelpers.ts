@@ -1,4 +1,3 @@
-import type { MousePositionResponse } from '@/lib/api/tools/mousePosition';
 import {
   normalizeClickComposerParams,
   withClickComposerParams,
@@ -29,6 +28,12 @@ export interface ClickEditorState {
   coordinateSource: ClickCoordinateSource;
   positionType: ClickPositionType;
   displayID?: number | null;
+}
+
+interface MousePositionLike {
+  display_id?: number;
+  x: number;
+  y: number;
 }
 
 export function buildInitialEditorState(
@@ -76,7 +81,7 @@ export function buildSavedClickStep(
 
 export function applyMousePositionToState(
   state: ClickEditorState,
-  position: MousePositionResponse,
+  position: MousePositionLike,
 ): ClickEditorState {
   return {
     ...state,

@@ -18,7 +18,7 @@ import {
   withScreenControlComposerSteps,
   withToolName,
 } from '@/lib/workflow-editor';
-import { useWorkflowToolOptions } from '@/components/workflow/useWorkflowToolOptions';
+import { useWorkflowToolOptions } from '@/hooks/workflow/useWorkflowToolOptions';
 import {
   extractSchemaFields,
   type ToolSchemaField,

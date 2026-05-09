@@ -1,9 +1,9 @@
 import {
-  buildFindIconTemplatePreviewURL,
   previewFindIcon,
   uploadFindIconTemplate,
 } from './findIcon';
 import { fetchMock, installFetchMock, mockFetchJSON } from '@/lib/api.test.helpers';
+import { buildFindIconTemplatePreviewURL } from '@/lib/workflow-editor/findIconPreview';
 
 describe('lib/api/tools/findIcon', () => {
   beforeEach(() => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
-import { buildFindIconTemplatePreviewURL } from '@/lib/api/tools/findIcon';
+import { buildFindIconTemplatePreviewURL } from '@/lib/workflow-editor/findIconPreview';
 import type {
   FindIconEditorPanelState,
   FindIconEditorPreview,
