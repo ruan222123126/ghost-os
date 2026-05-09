@@ -117,6 +117,7 @@ func applyTaskRuntimeOverridesToConfig(
 	if taskRuntimeOverrideUsesToolScope(overrides) {
 		cfg.ToolSelector.AllowlistOnly = true
 		cfg.ToolSelector.Allowlist = append([]string(nil), overrides.ToolAllowlist...)
+		cfg.ToolSelector.Blocklist = nil
 	}
 	if overrides.MaxTurns != nil {
 		cfg.MaxTurns = *overrides.MaxTurns

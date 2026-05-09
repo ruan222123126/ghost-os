@@ -9,6 +9,9 @@ func (r taskMutationRunner) Delete(params taskIDParams) (taskDeleteResponse, err
 	if err != nil {
 		return taskDeleteResponse{}, err
 	}
+	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
+		return taskDeleteResponse{}, err
+	}
 	if err := r.scheduler.Unregister(id); err != nil {
 		return taskDeleteResponse{}, err
 	}

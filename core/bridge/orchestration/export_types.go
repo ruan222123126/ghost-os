@@ -9,6 +9,7 @@ const (
 	DefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
 	TaskListScopeUser          = taskListScopeUser
 	TaskListScopeSystem        = taskListScopeSystem
+	TaskListScopeOrchestration = taskListScopeOrchestration
 
 	SessionPushAssistantMessage = sessionPushAssistantMessage
 	SessionPushAwaitingHuman    = sessionPushAwaitingHuman

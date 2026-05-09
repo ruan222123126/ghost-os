@@ -189,6 +189,9 @@
         "workflowTaskCreateRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowTaskCreateRequest"
         },
+        "orchestrationTaskCreateRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationTaskCreateRequest"
+        },
         "taskCreateRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskCreateRequest"
         },
@@ -206,6 +209,9 @@
         },
         "workflowTaskPayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowTaskPayload"
+        },
+        "orchestrationTaskPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationTaskPayload"
         },
         "taskDeletePayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskDeletePayload"
@@ -239,6 +245,21 @@
         },
         "workflowEdge": {
             "$ref": "./schema/defs/tasks.json#/$defs/workflowEdge"
+        },
+        "orchestrationDefinition": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationDefinition"
+        },
+        "orchestrationNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationNode"
+        },
+        "orchestrationGroupNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationGroupNode"
+        },
+        "orchestrationAgentNode": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationAgentNode"
+        },
+        "orchestrationEdge": {
+            "$ref": "./schema/defs/tasks.json#/$defs/orchestrationEdge"
         }
     }
 }

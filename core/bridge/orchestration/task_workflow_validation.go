@@ -87,6 +87,8 @@ func validateWorkflowTaskDefinition(task *ScheduledTask) error {
 	if task.Workflow == nil {
 		return fmt.Errorf("%w: workflow is required for workflow task", ErrInvalidTaskConfig)
 	}
+	task.Name = ""
+	task.Orchestration = nil
 	if task.Message != "" {
 		return fmt.Errorf("%w: workflow task does not allow message", ErrInvalidTaskConfig)
 	}

@@ -103,6 +103,16 @@ func BuildSystemPromptForSession(
 	return buildSystemPromptForSession(cfg, catalog, sess, idleTurns)
 }
 
+func BuildSystemPromptForSessionWithFiles(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+	files bridgeconfig.SystemPromptFiles,
+) (string, error) {
+	return buildSystemPromptForSessionWithFiles(cfg, catalog, sess, idleTurns, files)
+}
+
 func VisibleSkillNames(cfg Config) []string {
 	return visibleSkillNames(cfg)
 }

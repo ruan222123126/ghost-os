@@ -1,40 +1,48 @@
 package orchestration
 
 type taskCreateParams struct {
-	Message          string                `json:"message"`
-	SessionID        string                `json:"session_id,omitempty"`
-	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
-	TaskKind         string                `json:"task_kind,omitempty"`
-	Action           string                `json:"action,omitempty"`
-	ActionParams     map[string]any        `json:"action_params,omitempty"`
-	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
-	IntervalSeconds  int                   `json:"interval_seconds,omitempty"`
-	CronExpr         string                `json:"cron_expr,omitempty"`
-	TraceID          string                `json:"trace_id,omitempty"`
+	Name             string                   `json:"name,omitempty"`
+	Message          string                   `json:"message"`
+	SessionID        string                   `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides    `json:"runtime_overrides,omitempty"`
+	TaskKind         string                   `json:"task_kind,omitempty"`
+	Action           string                   `json:"action,omitempty"`
+	ActionParams     map[string]any           `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition      `json:"workflow,omitempty"`
+	Orchestration    *OrchestrationDefinition `json:"orchestration,omitempty"`
+	IntervalSeconds  int                      `json:"interval_seconds,omitempty"`
+	CronExpr         string                   `json:"cron_expr,omitempty"`
+	TraceID          string                   `json:"trace_id,omitempty"`
+	Scope            string                   `json:"scope,omitempty"`
 }
 
 type taskUpdateParams struct {
-	ID               string                `json:"id,omitempty"`
-	Message          *string               `json:"message,omitempty"`
-	SessionID        *string               `json:"session_id,omitempty"`
-	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
-	TaskKind         *string               `json:"task_kind,omitempty"`
-	Action           *string               `json:"action,omitempty"`
-	ActionParams     *map[string]any       `json:"action_params,omitempty"`
-	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
-	IntervalSeconds  *int                  `json:"interval_seconds,omitempty"`
-	CronExpr         *string               `json:"cron_expr,omitempty"`
-	Enabled          *bool                 `json:"enabled,omitempty"`
-	TraceID          string                `json:"trace_id,omitempty"`
+	ID               string                   `json:"id,omitempty"`
+	Name             *string                  `json:"name,omitempty"`
+	Message          *string                  `json:"message,omitempty"`
+	SessionID        *string                  `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides    `json:"runtime_overrides,omitempty"`
+	TaskKind         *string                  `json:"task_kind,omitempty"`
+	Action           *string                  `json:"action,omitempty"`
+	ActionParams     *map[string]any          `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition      `json:"workflow,omitempty"`
+	Orchestration    *OrchestrationDefinition `json:"orchestration,omitempty"`
+	IntervalSeconds  *int                     `json:"interval_seconds,omitempty"`
+	CronExpr         *string                  `json:"cron_expr,omitempty"`
+	Enabled          *bool                    `json:"enabled,omitempty"`
+	TraceID          string                   `json:"trace_id,omitempty"`
+	Scope            string                   `json:"scope,omitempty"`
 }
 
 type taskIDParams struct {
-	ID string `json:"id"`
+	ID    string `json:"id"`
+	Scope string `json:"scope,omitempty"`
 }
 
 type taskLogsParams struct {
 	ID    string `json:"id"`
 	Limit int    `json:"limit,omitempty"`
+	Scope string `json:"scope,omitempty"`
 }
 
 type taskPayload = ScheduledTask

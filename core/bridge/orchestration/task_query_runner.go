@@ -25,6 +25,9 @@ func (r taskQueryRunner) Get(params taskIDParams) (taskPayload, error) {
 	if err != nil {
 		return taskPayload{}, err
 	}
+	if !includeTaskInScope(*task, params.Scope) {
+		return taskPayload{}, ErrTaskNotFound
+	}
 	return buildTaskPayload(*task), nil
 }
 
@@ -36,8 +39,12 @@ func (r taskQueryRunner) Logs(params taskLogsParams) ([]taskRunLogPayload, error
 	if params.Limit < 0 {
 		return nil, invalidTaskConfig("limit must be >= 0")
 	}
-	if _, err := r.store.LoadTask(id); err != nil {
+	task, err := r.store.LoadTask(id)
+	if err != nil {
 		return nil, err
+	}
+	if !includeTaskInScope(*task, params.Scope) {
+		return nil, ErrTaskNotFound
 	}
 	runs, err := r.store.ListRunLogs(id, params.Limit)
 	if err != nil {

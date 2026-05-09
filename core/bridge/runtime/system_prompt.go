@@ -23,15 +23,25 @@ func buildSystemPromptForSession(
 	sess *session.Session,
 	idleTurns int,
 ) (string, error) {
+	systemPrompts, err := bridgeconfig.LoadSystemPromptFiles(cfg.PromptsDir)
+	if err != nil {
+		return "", fmt.Errorf("load system prompts: %w", err)
+	}
+	return buildSystemPromptForSessionWithFiles(cfg, catalog, sess, idleTurns, systemPrompts)
+}
+
+func buildSystemPromptForSessionWithFiles(
+	cfg Config,
+	catalog tools.ToolCatalog,
+	sess *session.Session,
+	idleTurns int,
+	systemPrompts bridgeconfig.SystemPromptFiles,
+) (string, error) {
 	promptManager, err := loadPromptManager(cfg)
 	if err != nil {
 		return "", err
 	}
 	basePrompt := renderSystemPrompt(promptManager, cfg, catalog, sess, idleTurns, systemPromptOverrides{})
-	systemPrompts, err := bridgeconfig.LoadSystemPromptFiles(cfg.PromptsDir)
-	if err != nil {
-		return "", fmt.Errorf("load system prompts: %w", err)
-	}
 	if err := prepareMemoryMode(cfg); err != nil {
 		return "", fmt.Errorf("prepare memory mode: %w", err)
 	}

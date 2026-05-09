@@ -44,8 +44,12 @@ func buildTaskFromCreateParams(params taskCreateParams, now time.Time) (Schedule
 	if err := ensureWorkflowAllowedForTaskKind(taskKind, params.Workflow); err != nil {
 		return ScheduledTask{}, err
 	}
+	if err := ensureOrchestrationAllowedForTaskKind(taskKind, params.Orchestration); err != nil {
+		return ScheduledTask{}, err
+	}
 
 	task := ScheduledTask{
+		Name:             strings.TrimSpace(params.Name),
 		Message:          strings.TrimSpace(params.Message),
 		SessionID:        strings.TrimSpace(params.SessionID),
 		RuntimeOverrides: cloneTaskRuntimeOverrides(params.RuntimeOverrides),
@@ -53,6 +57,7 @@ func buildTaskFromCreateParams(params taskCreateParams, now time.Time) (Schedule
 		Action:           strings.TrimSpace(params.Action),
 		ActionParams:     cloneTaskActionParams(params.ActionParams),
 		Workflow:         cloneTaskWorkflow(params.Workflow),
+		Orchestration:    cloneTaskOrchestration(params.Orchestration),
 		Enabled:          true,
 		CreatedAt:        now,
 		ScheduleType:     taskScheduleTypeInterval,

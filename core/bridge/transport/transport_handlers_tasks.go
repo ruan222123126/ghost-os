@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"encoding/json"
 	"errors"
 	bridgeorchestration "ghost-os/bridge/orchestration"
 	"net/http"
@@ -18,8 +19,9 @@ func (t *transport) handleTasks(w http.ResponseWriter, r *http.Request) {
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
+		req.Scope = bridgeorchestration.TaskListScopeUser
 		traceID := resolveTraceID(req.TraceID, r)
-		t.dispatchActionObject(w, r, actionTaskCreate, req, traceID)
+		t.dispatchScopedTaskAction(w, r, actionTaskCreate, req, req.Scope, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}
@@ -42,29 +44,14 @@ func (t *transport) handleTaskByID(w http.ResponseWriter, r *http.Request) {
 	}
 	traceID := resolveTraceID("", r)
 	if action != "" {
-		t.handleTaskSubresource(w, r, traceID, id, action)
+		t.handleTaskSubresource(w, r, traceID, id, bridgeorchestration.TaskListScopeUser, action)
 		return
 	}
-	t.handleTaskResource(w, r, traceID, id)
+	t.handleTaskResource(w, r, traceID, id, bridgeorchestration.TaskListScopeUser)
 }
 
 func parseTaskPath(rawPath string) (string, string, error) {
-	path := strings.TrimSpace(strings.TrimPrefix(rawPath, "/api/tasks/"))
-	segments := strings.Split(path, "/")
-	if len(segments) == 0 {
-		return "", "", errors.New("task id is required")
-	}
-	id := strings.TrimSpace(segments[0])
-	if id == "" {
-		return "", "", errors.New("task id is required")
-	}
-	if len(segments) > 2 || (len(segments) == 2 && strings.TrimSpace(segments[1]) == "") {
-		return "", "", errors.New("invalid task path")
-	}
-	if len(segments) == 1 {
-		return id, "", nil
-	}
-	return id, strings.TrimSpace(segments[1]), nil
+	return parseScopedTaskPath(rawPath, "/api/tasks/")
 }
 
 func (t *transport) handleTaskSubresource(
@@ -72,13 +59,14 @@ func (t *transport) handleTaskSubresource(
 	r *http.Request,
 	traceID string,
 	id string,
+	scope string,
 	action string,
 ) {
 	switch action {
 	case "logs":
-		t.handleTaskLogs(w, r, traceID, id)
+		t.handleTaskLogs(w, r, traceID, id, scope)
 	case "run":
-		t.handleTaskRun(w, r, traceID, id)
+		t.handleTaskRun(w, r, traceID, id, scope)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid task path", traceID)
 	}
@@ -89,6 +77,7 @@ func (t *transport) handleTaskLogs(
 	r *http.Request,
 	traceID string,
 	id string,
+	scope string,
 ) {
 	if r.Method != http.MethodGet {
 		writeMethodNotAllowed(w)
@@ -99,7 +88,14 @@ func (t *transport) handleTaskLogs(
 		writeError(w, http.StatusBadRequest, err.Error(), traceID)
 		return
 	}
-	t.dispatchActionObject(w, r, actionTaskLogs, bridgeorchestration.TaskLogsParams{ID: id, Limit: limit}, traceID)
+	t.dispatchScopedTaskAction(
+		w,
+		r,
+		actionTaskLogs,
+		bridgeorchestration.TaskLogsParams{ID: id, Limit: limit, Scope: scope},
+		scope,
+		traceID,
+	)
 }
 
 func (t *transport) handleTaskRun(
@@ -107,12 +103,20 @@ func (t *transport) handleTaskRun(
 	r *http.Request,
 	traceID string,
 	id string,
+	scope string,
 ) {
 	if r.Method != http.MethodPost {
 		writeMethodNotAllowed(w)
 		return
 	}
-	t.dispatchActionObject(w, r, actionTaskRunNow, bridgeorchestration.TaskIDParams{ID: id}, traceID)
+	t.dispatchScopedTaskAction(
+		w,
+		r,
+		actionTaskRunNow,
+		bridgeorchestration.TaskIDParams{ID: id, Scope: scope},
+		scope,
+		traceID,
+	)
 }
 
 func (t *transport) handleTaskResource(
@@ -120,24 +124,55 @@ func (t *transport) handleTaskResource(
 	r *http.Request,
 	traceID string,
 	id string,
+	scope string,
 ) {
-	params := bridgeorchestration.TaskIDParams{ID: id}
+	params := bridgeorchestration.TaskIDParams{ID: id, Scope: scope}
 	switch r.Method {
 	case http.MethodGet:
-		t.dispatchActionObject(w, r, actionTaskGet, params, traceID)
+		t.dispatchScopedTaskAction(w, r, actionTaskGet, params, scope, traceID)
 	case http.MethodPatch:
 		var req bridgeorchestration.TaskUpdateParams
 		if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &req) {
 			return
 		}
 		req.ID = id
+		req.Scope = scope
 		traceID = resolveTraceID(req.TraceID, r)
-		t.dispatchActionObject(w, r, actionTaskUpdate, req, traceID)
+		t.dispatchScopedTaskAction(w, r, actionTaskUpdate, req, scope, traceID)
 	case http.MethodDelete:
-		t.dispatchActionObject(w, r, actionTaskDelete, params, traceID)
+		t.dispatchScopedTaskAction(w, r, actionTaskDelete, params, scope, traceID)
 	default:
 		writeMethodNotAllowed(w)
 	}
+}
+
+func (t *transport) dispatchScopedTaskAction(
+	w http.ResponseWriter,
+	r *http.Request,
+	action string,
+	params any,
+	scope string,
+	traceID string,
+) bool {
+	scopedParams, err := scopedTaskActionParams(params, scope)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to encode action params", traceID)
+		return false
+	}
+	return t.dispatchActionObject(w, r, action, scopedParams, traceID)
+}
+
+func scopedTaskActionParams(params any, scope string) (map[string]any, error) {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+	payload := map[string]any{}
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil, err
+	}
+	payload["scope"] = strings.TrimSpace(scope)
+	return payload, nil
 }
 
 func parseTaskLogsLimit(r *http.Request) (int, error) {

@@ -33,3 +33,14 @@ func ensureWorkflowAllowedForTaskKind(taskKind string, workflow *WorkflowDefinit
 	}
 	return invalidTaskConfig(normalized + " does not allow workflow")
 }
+
+func ensureOrchestrationAllowedForTaskKind(taskKind string, definition *OrchestrationDefinition) error {
+	normalized := normalizeTaskKind(taskKind)
+	if definition == nil || normalized == taskKindOrchestration {
+		return nil
+	}
+	if !isSupportedTaskKind(normalized) {
+		return invalidTaskConfig(fmt.Sprintf("unsupported task_kind %q", normalized))
+	}
+	return invalidTaskConfig(normalized + " does not allow orchestration")
+}

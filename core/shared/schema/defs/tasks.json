@@ -386,6 +386,214 @@
                 }
             }
         },
+        "orchestrationNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "type"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "start",
+                        "group",
+                        "agent",
+                        "end"
+                    ]
+                },
+                "group": {
+                    "$ref": "#/$defs/orchestrationGroupNode"
+                },
+                "agent": {
+                    "$ref": "#/$defs/orchestrationAgentNode"
+                }
+            },
+            "x-codegen": {
+                "order": 243,
+                "go": {
+                    "name": "orchestrationNodeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationNode"
+                },
+                "rust": {
+                    "name": "OrchestrationNode"
+                },
+                "kotlin": {
+                    "name": "OrchestrationNode"
+                }
+            }
+        },
+        "orchestrationGroupNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "title",
+                "shared_context",
+                "speaking_mode",
+                "max_rounds"
+            ],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "shared_context": {
+                    "type": "string"
+                },
+                "speaking_mode": {
+                    "type": "string",
+                    "enum": [
+                        "sequential",
+                        "parallel",
+                        "owner"
+                    ]
+                },
+                "owner_agent_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "minimum": 1
+                }
+            },
+            "x-codegen": {
+                "order": 244,
+                "go": {
+                    "name": "orchestrationGroupNodeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationGroupNode"
+                },
+                "rust": {
+                    "name": "OrchestrationGroupNode"
+                },
+                "kotlin": {
+                    "name": "OrchestrationGroupNode"
+                }
+            }
+        },
+        "orchestrationAgentNode": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "title",
+                "message"
+            ],
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                }
+            },
+            "x-codegen": {
+                "order": 245,
+                "go": {
+                    "name": "orchestrationAgentNodeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationAgentNode"
+                },
+                "rust": {
+                    "name": "OrchestrationAgentNode"
+                },
+                "kotlin": {
+                    "name": "OrchestrationAgentNode"
+                }
+            }
+        },
+        "orchestrationEdge": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "from_node_id",
+                "to_node_id",
+                "kind"
+            ],
+            "properties": {
+                "from_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "to_node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "control",
+                        "member"
+                    ]
+                }
+            },
+            "x-codegen": {
+                "order": 246,
+                "go": {
+                    "name": "orchestrationEdgeContract"
+                },
+                "ts": {
+                    "name": "OrchestrationEdge"
+                },
+                "rust": {
+                    "name": "OrchestrationEdge"
+                },
+                "kotlin": {
+                    "name": "OrchestrationEdge"
+                }
+            }
+        },
+        "orchestrationDefinition": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "nodes",
+                "edges"
+            ],
+            "properties": {
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/orchestrationNode"
+                    }
+                },
+                "edges": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/orchestrationEdge"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 247,
+                "go": {
+                    "name": "orchestrationDefinitionContract"
+                },
+                "ts": {
+                    "name": "OrchestrationDefinition"
+                },
+                "rust": {
+                    "name": "OrchestrationDefinition"
+                },
+                "kotlin": {
+                    "name": "OrchestrationDefinition"
+                }
+            }
+        },
         "taskRuntimeOverrides": {
             "type": "object",
             "additionalProperties": false,
@@ -399,6 +607,10 @@
                     "minLength": 1
                 },
                 "system_prompt": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "preset_id": {
                     "type": "string",
                     "minLength": 1
                 },
@@ -549,6 +761,65 @@
                 }
             }
         },
+        "orchestrationTaskCreateRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_kind",
+                "name",
+                "orchestration"
+            ],
+            "properties": {
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "orchestration"
+                    ]
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "required": [
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "required": [
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 249,
+                "ts": {
+                    "name": "OrchestrationTaskCreateRequest"
+                },
+                "rust": {
+                    "name": "OrchestrationTaskCreateRequest"
+                },
+                "kotlin": {
+                    "name": "OrchestrationTaskCreateRequest"
+                }
+            }
+        },
         "taskCreateRequest": {
             "oneOf": [
                 {
@@ -556,10 +827,13 @@
                 },
                 {
                     "$ref": "#/$defs/workflowTaskCreateRequest"
+                },
+                {
+                    "$ref": "#/$defs/orchestrationTaskCreateRequest"
                 }
             ],
             "x-codegen": {
-                "order": 249,
+                "order": 250,
                 "ts": {
                     "name": "TaskCreateRequest"
                 },
@@ -567,7 +841,8 @@
                     "name": "TaskCreateRequest",
                     "variants": {
                         "agentMessageTaskCreateRequest": "AgentMessage",
-                        "workflowTaskCreateRequest": "Workflow"
+                        "workflowTaskCreateRequest": "Workflow",
+                        "orchestrationTaskCreateRequest": "Orchestration"
                     }
                 },
                 "kotlin": {
@@ -604,6 +879,10 @@
                     "type": "string",
                     "minLength": 1
                 },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
                 "session_id": {
                     "type": "string"
                 },
@@ -614,11 +893,15 @@
                     "type": "string",
                     "enum": [
                         "agent_message",
-                        "workflow"
+                        "workflow",
+                        "orchestration"
                     ]
                 },
                 "workflow": {
                     "$ref": "#/$defs/workflowDefinition"
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
                 },
                 "interval_seconds": {
                     "type": "integer",
@@ -675,10 +958,27 @@
                             "workflow"
                         ]
                     }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "orchestration"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "orchestration"
+                        ]
+                    }
                 }
             ],
             "x-codegen": {
-                "order": 250,
+                "order": 251,
                 "ts": {
                     "name": "TaskUpdateRequest"
                 },
@@ -895,6 +1195,110 @@
                 }
             }
         },
+        "orchestrationTaskPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "name",
+                "task_kind",
+                "orchestration",
+                "schedule_type",
+                "enabled",
+                "created_at",
+                "updated_at"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "orchestration"
+                    ]
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "schedule_type": {
+                    "type": "string",
+                    "enum": [
+                        "interval",
+                        "cron"
+                    ]
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "updated_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "last_run_at": {
+                    "type": "string"
+                },
+                "next_run_at": {
+                    "type": "string"
+                },
+                "last_error": {
+                    "type": "string"
+                }
+            },
+            "oneOf": [
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "interval"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "interval_seconds"
+                    ]
+                },
+                {
+                    "properties": {
+                        "schedule_type": {
+                            "const": "cron"
+                        }
+                    },
+                    "required": [
+                        "schedule_type",
+                        "cron_expr"
+                    ]
+                }
+            ],
+            "x-codegen": {
+                "order": 255,
+                "ts": {
+                    "name": "OrchestrationTaskPayload"
+                },
+                "rust": {
+                    "name": "OrchestrationTaskPayload"
+                },
+                "kotlin": {
+                    "name": "OrchestrationTaskPayload"
+                }
+            }
+        },
         "taskPayload": {
             "oneOf": [
                 {
@@ -902,10 +1306,13 @@
                 },
                 {
                     "$ref": "#/$defs/workflowTaskPayload"
+                },
+                {
+                    "$ref": "#/$defs/orchestrationTaskPayload"
                 }
             ],
             "x-codegen": {
-                "order": 255,
+                "order": 256,
                 "ts": {
                     "name": "TaskPayload"
                 },
@@ -913,7 +1320,8 @@
                     "name": "TaskPayload",
                     "variants": {
                         "agentMessageTaskPayload": "AgentMessage",
-                        "workflowTaskPayload": "Workflow"
+                        "workflowTaskPayload": "Workflow",
+                        "orchestrationTaskPayload": "Orchestration"
                     }
                 },
                 "kotlin": {

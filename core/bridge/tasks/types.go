@@ -24,6 +24,7 @@ const (
 	KindAgentMessage         = "agent_message"
 	KindSystemAction         = "system_action"
 	KindWorkflow             = "workflow"
+	KindOrchestration        = "orchestration"
 	LoadIssueInvalidFilename = "invalid_filename"
 	LoadIssueReadError       = "read_error"
 	LoadIssueDecodeError     = "decode_error"
@@ -43,29 +44,32 @@ var (
 )
 
 type ScheduledTask struct {
-	ID               string                `json:"id"`
-	Message          string                `json:"message,omitempty"`
-	SessionID        string                `json:"session_id,omitempty"`
-	RuntimeOverrides *TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
-	TaskKind         string                `json:"task_kind,omitempty"`
-	Action           string                `json:"action,omitempty"`
-	ActionParams     map[string]any        `json:"action_params,omitempty"`
-	Workflow         *WorkflowDefinition   `json:"workflow,omitempty"`
-	ScheduleType     string                `json:"schedule_type"`
-	IntervalSeconds  int                   `json:"interval_seconds,omitempty"`
-	CronExpr         string                `json:"cron_expr,omitempty"`
-	Enabled          bool                  `json:"enabled"`
-	CreatedAt        time.Time             `json:"created_at"`
-	UpdatedAt        time.Time             `json:"updated_at"`
-	LastRunAt        time.Time             `json:"last_run_at,omitempty"`
-	NextRunAt        time.Time             `json:"next_run_at,omitempty"`
-	LastError        string                `json:"last_error,omitempty"`
+	ID               string                   `json:"id"`
+	Name             string                   `json:"name,omitempty"`
+	Message          string                   `json:"message,omitempty"`
+	SessionID        string                   `json:"session_id,omitempty"`
+	RuntimeOverrides *TaskRuntimeOverrides    `json:"runtime_overrides,omitempty"`
+	TaskKind         string                   `json:"task_kind,omitempty"`
+	Action           string                   `json:"action,omitempty"`
+	ActionParams     map[string]any           `json:"action_params,omitempty"`
+	Workflow         *WorkflowDefinition      `json:"workflow,omitempty"`
+	Orchestration    *OrchestrationDefinition `json:"orchestration,omitempty"`
+	ScheduleType     string                   `json:"schedule_type"`
+	IntervalSeconds  int                      `json:"interval_seconds,omitempty"`
+	CronExpr         string                   `json:"cron_expr,omitempty"`
+	Enabled          bool                     `json:"enabled"`
+	CreatedAt        time.Time                `json:"created_at"`
+	UpdatedAt        time.Time                `json:"updated_at"`
+	LastRunAt        time.Time                `json:"last_run_at,omitempty"`
+	NextRunAt        time.Time                `json:"next_run_at,omitempty"`
+	LastError        string                   `json:"last_error,omitempty"`
 }
 
 type TaskRuntimeOverrides struct {
 	ProviderName      string   `json:"provider_name,omitempty"`
 	Model             string   `json:"model,omitempty"`
 	SystemPrompt      string   `json:"system_prompt,omitempty"`
+	PresetID          string   `json:"preset_id,omitempty"`
 	ToolAllowlist     []string `json:"tool_allowlist,omitempty"`
 	ToolAllowlistOnly *bool    `json:"tool_allowlist_only,omitempty"`
 	MaxTurns          *int     `json:"max_turns,omitempty"`
@@ -120,6 +124,8 @@ func NormalizeKind(kind string) string {
 		return KindSystemAction
 	case KindWorkflow:
 		return KindWorkflow
+	case KindOrchestration:
+		return KindOrchestration
 	default:
 		return normalized
 	}
@@ -127,7 +133,7 @@ func NormalizeKind(kind string) string {
 
 func IsSupportedKind(kind string) bool {
 	switch NormalizeKind(kind) {
-	case KindAgentMessage, KindSystemAction, KindWorkflow:
+	case KindAgentMessage, KindSystemAction, KindWorkflow, KindOrchestration:
 		return true
 	default:
 		return false
@@ -153,6 +159,7 @@ func CloneTaskRuntimeOverrides(input *TaskRuntimeOverrides) *TaskRuntimeOverride
 		ProviderName:      strings.TrimSpace(input.ProviderName),
 		Model:             strings.TrimSpace(input.Model),
 		SystemPrompt:      strings.TrimSpace(input.SystemPrompt),
+		PresetID:          strings.TrimSpace(input.PresetID),
 		ToolAllowlist:     append([]string(nil), input.ToolAllowlist...),
 		ToolAllowlistOnly: cloneOptionalBoolPointer(input.ToolAllowlistOnly),
 		MaxTurns:          cloneOptionalIntPointer(input.MaxTurns),
@@ -209,6 +216,7 @@ func NormalizeScheduledTask(task *ScheduledTask, validator DefinitionValidator) 
 
 func normalizeScheduledTaskScalarFields(task *ScheduledTask) {
 	task.ID = strings.TrimSpace(task.ID)
+	task.Name = strings.TrimSpace(task.Name)
 	task.Message = strings.TrimSpace(task.Message)
 	task.SessionID = strings.TrimSpace(task.SessionID)
 	task.RuntimeOverrides = CloneTaskRuntimeOverrides(task.RuntimeOverrides)
@@ -216,6 +224,7 @@ func normalizeScheduledTaskScalarFields(task *ScheduledTask) {
 	task.Action = strings.TrimSpace(task.Action)
 	task.ActionParams = CloneActionParams(task.ActionParams)
 	task.Workflow = CloneWorkflowDefinition(task.Workflow)
+	task.Orchestration = CloneOrchestrationDefinition(task.Orchestration)
 	task.ScheduleType = strings.TrimSpace(task.ScheduleType)
 	task.CronExpr = strings.TrimSpace(task.CronExpr)
 	task.LastError = strings.TrimSpace(task.LastError)

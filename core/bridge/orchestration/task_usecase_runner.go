@@ -12,8 +12,9 @@ import (
 )
 
 const (
-	taskListScopeUser   = "user"
-	taskListScopeSystem = "system"
+	taskListScopeUser          = "user"
+	taskListScopeSystem        = "system"
+	taskListScopeOrchestration = "orchestration"
 )
 
 type taskQueryRunner struct {
@@ -77,6 +78,13 @@ func wrapTaskConfigError(err error) error {
 	return fmt.Errorf("%w: %v", ErrInvalidTaskConfig, err)
 }
 
+func ensureTaskMatchesScope(task ScheduledTask, scope string) error {
+	if includeTaskInScope(task, scope) {
+		return nil
+	}
+	return ErrTaskNotFound
+}
+
 func (r taskMutationRunner) RunNow(params taskIDParams, traceID string) (taskRunPayload, error) {
 	id, err := normalizeTaskID(params.ID)
 	if err != nil {
@@ -84,6 +92,9 @@ func (r taskMutationRunner) RunNow(params taskIDParams, traceID string) (taskRun
 	}
 	task, err := r.store.LoadTask(id)
 	if err != nil {
+		return taskRunPayload{}, err
+	}
+	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
 		return taskRunPayload{}, err
 	}
 	run, err := r.scheduler.RunNow(*task, traceID)

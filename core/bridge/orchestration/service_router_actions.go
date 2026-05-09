@@ -76,6 +76,8 @@ func normalizeTaskListScope(scope string) (string, error) {
 		return taskListScopeUser, nil
 	case taskListScopeSystem:
 		return taskListScopeSystem, nil
+	case taskListScopeOrchestration:
+		return taskListScopeOrchestration, nil
 	default:
 		return "", fmt.Errorf("invalid task scope %q", scope)
 	}

@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -102,6 +103,11 @@ func (p *sessionTurnPreparer) buildPrepareDependencies(
 	if err != nil {
 		return agentRuntimeDependencies{}, nil, nil, err
 	}
+	deps, err = p.applyTaskRuntimePresetOverride(deps, normalized)
+	if err != nil {
+		deps.Close()
+		return agentRuntimeDependencies{}, nil, nil, err
+	}
 	deps = applyTaskRuntimePromptOverride(deps, normalized)
 	historyBuilder := newSessionHistoryBuilder(
 		deps.cfg.Provider,
@@ -113,6 +119,47 @@ func (p *sessionTurnPreparer) buildPrepareDependencies(
 	)
 	persistence := newSessionTurnCommitter(p.sessionStore)
 	return deps, historyBuilder, persistence, nil
+}
+
+func (p *sessionTurnPreparer) applyTaskRuntimePresetOverride(
+	deps agentRuntimeDependencies,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (agentRuntimeDependencies, error) {
+	if runtimeOverrides == nil || strings.TrimSpace(runtimeOverrides.PresetID) == "" {
+		return deps, nil
+	}
+	if p == nil || p.configStore == nil {
+		return agentRuntimeDependencies{}, errors.New("preset_id requires config store")
+	}
+	files, err := p.configStore.SystemPrompts()
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	presets, err := p.configStore.Presets()
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	preset, ok := bridgeconfig.FindPresetByID(presets, runtimeOverrides.PresetID)
+	if !ok {
+		return agentRuntimeDependencies{}, fmt.Errorf("preset_id %q is not configured", strings.TrimSpace(runtimeOverrides.PresetID))
+	}
+	presetFiles, err := bridgeconfig.ApplyPresetToSystemPromptFiles(files, preset)
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	prompt, err := bridgeruntime.BuildSystemPromptForSessionWithFiles(
+		deps.cfg,
+		bridgeruntime.NewToolSelectionPolicy(deps.cfg).ResidentCatalog(deps.registry),
+		nil,
+		deps.cfg.ToolSearch.IdleTurns,
+		presetFiles,
+	)
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	deps.systemPrompt = strings.TrimSpace(prompt)
+	deps.systemPromptFiles = &presetFiles
+	return deps, nil
 }
 
 func applyTaskRuntimePromptOverride(

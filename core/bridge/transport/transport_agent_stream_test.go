@@ -210,9 +210,9 @@ func TestHandleAgentStreamSupportsPlanMode(t *testing.T) {
 	service.SetRuntimeFactory(proTestRuntimeFactory{
 		deps: bridgeorchestration.NewRuntimeDependencies(
 			bridgeconfig.Config{
-				MaxTurns: 4,
+				MaxTurns:   4,
 				PromptsDir: os.Getenv("GHOST_PROMPTS_DIR"),
-				Provider: bridgeconfig.ProviderConfig{Model: "gpt-4o"},
+				Provider:   bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			completer,
 			tools.NewRegistry(),

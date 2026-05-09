@@ -13,6 +13,7 @@ type agentRuntimeDependencies struct {
 	registry             *tools.Registry
 	systemPrompt         string
 	systemPromptOverride bool
+	systemPromptFiles    *bridgeconfig.SystemPromptFiles
 	cleanup              func()
 }
 

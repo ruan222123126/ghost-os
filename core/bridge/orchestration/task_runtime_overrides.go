@@ -7,6 +7,7 @@ import (
 
 type taskRuntimeOverrideNormalizationOptions struct {
 	requireProviderModelPair bool
+	dropMaxTurns             bool
 }
 
 func normalizeTaskRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOverrides, error) {
@@ -16,6 +17,13 @@ func normalizeTaskRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOve
 func normalizeWorkflowAgentRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOverrides, error) {
 	return normalizeTaskRuntimeOverridesWithOptions(input, taskRuntimeOverrideNormalizationOptions{
 		requireProviderModelPair: true,
+	})
+}
+
+func normalizeOrchestrationAgentRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOverrides, error) {
+	return normalizeTaskRuntimeOverridesWithOptions(input, taskRuntimeOverrideNormalizationOptions{
+		requireProviderModelPair: true,
+		dropMaxTurns:             true,
 	})
 }
 
@@ -34,20 +42,30 @@ func normalizeTaskRuntimeOverridesWithOptions(
 	model := strings.TrimSpace(input.Model)
 	systemPrompt := strings.TrimSpace(input.SystemPrompt)
 	toolAllowlistOnly := normalizeTaskRuntimeBoolPointer(input.ToolAllowlistOnly)
-	maxTurns, err := normalizeTaskRuntimeMaxTurns(input.MaxTurns)
+	maxTurns, err := normalizeTaskRuntimeMaxTurns(input.MaxTurns, options.dropMaxTurns)
 	if err != nil {
 		return nil, err
 	}
+	presetID := strings.TrimSpace(input.PresetID)
 	if err := validateTaskRuntimeProviderModelPair(providerName, model, options); err != nil {
 		return nil, err
 	}
-	if taskRuntimeOverridesEmpty(providerName, model, systemPrompt, allowlist, toolAllowlistOnly, maxTurns) {
+	if taskRuntimeOverridesEmpty(
+		providerName,
+		model,
+		systemPrompt,
+		presetID,
+		allowlist,
+		toolAllowlistOnly,
+		maxTurns,
+	) {
 		return nil, nil
 	}
 	return &TaskRuntimeOverrides{
 		ProviderName:      providerName,
 		Model:             model,
 		SystemPrompt:      systemPrompt,
+		PresetID:          presetID,
 		ToolAllowlist:     allowlist,
 		ToolAllowlistOnly: toolAllowlistOnly,
 		MaxTurns:          maxTurns,
@@ -82,8 +100,11 @@ func normalizeTaskRuntimeBoolPointer(input *bool) *bool {
 	return &value
 }
 
-func normalizeTaskRuntimeMaxTurns(input *int) (*int, error) {
+func normalizeTaskRuntimeMaxTurns(input *int, drop bool) (*int, error) {
 	if input == nil {
+		return nil, nil
+	}
+	if drop {
 		return nil, nil
 	}
 	if *input <= 0 {
@@ -97,6 +118,7 @@ func taskRuntimeOverridesEmpty(
 	providerName string,
 	model string,
 	systemPrompt string,
+	presetID string,
 	allowlist []string,
 	toolAllowlistOnly *bool,
 	maxTurns *int,
@@ -104,6 +126,7 @@ func taskRuntimeOverridesEmpty(
 	return providerName == "" &&
 		model == "" &&
 		systemPrompt == "" &&
+		presetID == "" &&
 		len(allowlist) == 0 &&
 		toolAllowlistOnly == nil &&
 		maxTurns == nil

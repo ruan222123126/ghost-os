@@ -60,6 +60,8 @@ func includeTaskInScope(task ScheduledTask, scope string) bool {
 		return kind == taskKindAgentMessage || kind == taskKindWorkflow
 	case taskListScopeSystem:
 		return kind == taskKindSystemAction
+	case taskListScopeOrchestration:
+		return kind == taskKindOrchestration
 	default:
 		return false
 	}

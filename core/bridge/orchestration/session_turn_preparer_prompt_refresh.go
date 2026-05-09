@@ -16,6 +16,18 @@ func (p *sessionTurnPreparer) attachCompletionPromptRefresh(
 	sess *session.Session,
 	catalog tools.ToolCatalog,
 ) {
+	p.attachDynamicPromptRefresh(runAgent, deps, sess, catalog, func() (string, error) {
+		return p.buildCompletionSystemPrompt(deps, sess, catalog, "")
+	})
+}
+
+func (p *sessionTurnPreparer) attachDynamicPromptRefresh(
+	runAgent *agent.Agent,
+	deps agentRuntimeDependencies,
+	sess *session.Session,
+	catalog tools.ToolCatalog,
+	promptBuilder func() (string, error),
+) {
 	if p == nil || runAgent == nil || sess == nil {
 		return
 	}
@@ -24,7 +36,10 @@ func (p *sessionTurnPreparer) attachCompletionPromptRefresh(
 			return nil
 		}
 		pruneInvisibleSessionSkills(deps.cfg, sess)
-		prompt, err := p.buildCompletionSystemPrompt(deps, sess, catalog, "")
+		if promptBuilder == nil {
+			return nil
+		}
+		prompt, err := promptBuilder()
 		if err != nil {
 			return err
 		}

@@ -22,6 +22,16 @@ const (
 	taskKindAgentMessage         = bridgeTasks.KindAgentMessage
 	taskKindSystemAction         = bridgeTasks.KindSystemAction
 	taskKindWorkflow             = bridgeTasks.KindWorkflow
+	taskKindOrchestration        = bridgeTasks.KindOrchestration
+	orchestrationNodeTypeStart   = bridgeTasks.OrchestrationNodeTypeStart
+	orchestrationNodeTypeGroup   = bridgeTasks.OrchestrationNodeTypeGroup
+	orchestrationNodeTypeAgent   = bridgeTasks.OrchestrationNodeTypeAgent
+	orchestrationNodeTypeEnd     = bridgeTasks.OrchestrationNodeTypeEnd
+	orchestrationEdgeKindControl = bridgeTasks.OrchestrationEdgeKindControl
+	orchestrationEdgeKindMember  = bridgeTasks.OrchestrationEdgeKindMember
+	orchestrationModeSequential  = bridgeTasks.OrchestrationSpeakingModeSequential
+	orchestrationModeParallel    = bridgeTasks.OrchestrationSpeakingModeParallel
+	orchestrationModeOwner       = bridgeTasks.OrchestrationSpeakingModeOwner
 	taskLoadIssueInvalidFilename = bridgeTasks.LoadIssueInvalidFilename
 	taskLoadIssueReadError       = bridgeTasks.LoadIssueReadError
 	taskLoadIssueDecodeError     = bridgeTasks.LoadIssueDecodeError
@@ -50,6 +60,11 @@ type WorkflowAgentNode = bridgeTasks.WorkflowAgentNode
 type WorkflowIfNode = bridgeTasks.WorkflowIfNode
 type WorkflowLoopNode = bridgeTasks.WorkflowLoopNode
 type WorkflowEdge = bridgeTasks.WorkflowEdge
+type OrchestrationDefinition = bridgeTasks.OrchestrationDefinition
+type OrchestrationNode = bridgeTasks.OrchestrationNode
+type OrchestrationGroupNode = bridgeTasks.OrchestrationGroupNode
+type OrchestrationAgentNode = bridgeTasks.OrchestrationAgentNode
+type OrchestrationEdge = bridgeTasks.OrchestrationEdge
 type RunNodeResult = bridgeTasks.RunNodeResult
 type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
@@ -62,6 +77,18 @@ func NewTaskStore(baseDir string) (*TaskStore, error) {
 
 func NewTaskScheduler(store *TaskStore, service *bridgeService) *TaskScheduler {
 	return bridgeTasks.NewTaskScheduler(store, taskExecutorAdapter{service: service})
+}
+
+func NewTaskSchedulerWithTimeout(
+	store *TaskStore,
+	service *bridgeService,
+	executionTimeout time.Duration,
+) *TaskScheduler {
+	return bridgeTasks.NewTaskSchedulerWithTimeout(
+		store,
+		taskExecutorAdapter{service: service},
+		executionTimeout,
+	)
 }
 
 func normalizeTaskKind(kind string) string {
@@ -78,6 +105,10 @@ func cloneTaskActionParams(input map[string]any) map[string]any {
 
 func cloneTaskWorkflow(input *WorkflowDefinition) *WorkflowDefinition {
 	return bridgeTasks.CloneWorkflowDefinition(input)
+}
+
+func cloneTaskOrchestration(input *OrchestrationDefinition) *OrchestrationDefinition {
+	return bridgeTasks.CloneOrchestrationDefinition(input)
 }
 
 func cloneTaskRuntimeOverrides(input *TaskRuntimeOverrides) *TaskRuntimeOverrides {
@@ -100,6 +131,8 @@ func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, tr
 	switch kind := normalizeTaskKind(task.TaskKind); kind {
 	case taskKindWorkflow:
 		return a.executeWorkflowTask(ctx, task, traceID)
+	case taskKindOrchestration:
+		return a.executeOrchestrationTask(ctx, task, traceID)
 	case taskKindSystemAction:
 		return a.executeSystemTask(ctx, task, traceID)
 	case taskKindAgentMessage:
@@ -207,6 +240,7 @@ func taskRuntimeOverrideSnapshot(runtimeOverrides *TaskRuntimeOverrides) map[str
 		"provider_name": strings.TrimSpace(runtimeOverrides.ProviderName),
 		"model":         strings.TrimSpace(runtimeOverrides.Model),
 		"system_prompt": strings.TrimSpace(runtimeOverrides.SystemPrompt),
+		"preset_id":     strings.TrimSpace(runtimeOverrides.PresetID),
 	}
 	if runtimeOverrides.ToolAllowlistOnly != nil {
 		snapshot["tool_allowlist_only"] = *runtimeOverrides.ToolAllowlistOnly

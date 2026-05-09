@@ -13,17 +13,23 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaOneOfRefs(t, defs, "taskCreateRequest",
 		"agentMessageTaskCreateRequest",
 		"workflowTaskCreateRequest",
+		"orchestrationTaskCreateRequest",
 	)
 	assertSchemaOneOfRefs(t, defs, "taskPayload",
 		"agentMessageTaskPayload",
 		"workflowTaskPayload",
+		"orchestrationTaskPayload",
 	)
 	assertSchemaRequired(t, defs, "agentMessageTaskCreateRequest", "message")
 	assertSchemaRequired(t, defs, "workflowTaskCreateRequest", "workflow")
+	assertSchemaRequired(t, defs, "orchestrationTaskCreateRequest", "name")
+	assertSchemaRequired(t, defs, "orchestrationTaskCreateRequest", "orchestration")
 	assertSchemaRequired(t, defs, "taskUpdateRequest", "id")
+	assertSchemaProperty(t, defs, "taskUpdateRequest", "name")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "provider_name")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "model")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "system_prompt")
+	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "preset_id")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "tool_allowlist")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "tool_allowlist_only")
 	assertSchemaProperty(t, defs, "taskRuntimeOverrides", "max_turns")
@@ -36,6 +42,8 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaProperty(t, defs, "workflowNode", "agent")
 	assertSchemaProperty(t, defs, "workflowNode", "if")
 	assertSchemaProperty(t, defs, "workflowNode", "loop")
+	assertSchemaProperty(t, defs, "orchestrationNode", "group")
+	assertSchemaProperty(t, defs, "orchestrationNode", "agent")
 	assertSchemaProperty(t, defs, "workflowStartNode", "inputs")
 	assertSchemaRequired(t, defs, "workflowInputVariable", "name")
 	assertSchemaRequired(t, defs, "workflowInputVariable", "type")
@@ -50,6 +58,14 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaRequired(t, defs, "workflowLoopNode", "max_iterations")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "body_node_id")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "exit_node_id")
+	assertSchemaRequired(t, defs, "orchestrationGroupNode", "title")
+	assertSchemaRequired(t, defs, "orchestrationGroupNode", "shared_context")
+	assertSchemaRequired(t, defs, "orchestrationGroupNode", "speaking_mode")
+	assertSchemaRequired(t, defs, "orchestrationGroupNode", "max_rounds")
+	assertSchemaProperty(t, defs, "orchestrationGroupNode", "owner_agent_id")
+	assertSchemaRequired(t, defs, "orchestrationAgentNode", "title")
+	assertSchemaRequired(t, defs, "orchestrationAgentNode", "message")
+	assertSchemaRequired(t, defs, "orchestrationEdge", "kind")
 }
 
 func loadTaskSchemaDefs(t *testing.T) map[string]any {

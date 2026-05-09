@@ -10,6 +10,9 @@ func (r taskMutationRunner) Create(params taskCreateParams) (taskPayload, error)
 	if err != nil {
 		return taskPayload{}, err
 	}
+	if err := ensureTaskMatchesScope(task, params.Scope); err != nil {
+		return taskPayload{}, err
+	}
 	if err := r.store.SaveTask(&task); err != nil {
 		return taskPayload{}, err
 	}
@@ -29,8 +32,14 @@ func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error)
 	if err != nil {
 		return taskPayload{}, err
 	}
+	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
+		return taskPayload{}, err
+	}
 	previous := cloneScheduledTask(*task)
 	if err := r.applyUpdate(task, params); err != nil {
+		return taskPayload{}, err
+	}
+	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
 		return taskPayload{}, err
 	}
 	if err := r.scheduler.Unregister(id); err != nil {
@@ -50,6 +59,7 @@ func cloneScheduledTask(task ScheduledTask) ScheduledTask {
 	cloned.RuntimeOverrides = cloneTaskRuntimeOverrides(task.RuntimeOverrides)
 	cloned.ActionParams = cloneTaskActionParams(task.ActionParams)
 	cloned.Workflow = cloneTaskWorkflow(task.Workflow)
+	cloned.Orchestration = cloneTaskOrchestration(task.Orchestration)
 	return cloned
 }
 

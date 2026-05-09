@@ -29,17 +29,23 @@ func (r taskMutationRunner) validateTaskRuntime(task *ScheduledTask) error {
 	if task.RuntimeOverrides != nil {
 		return invalidTaskConfig(kind + " does not allow runtime_overrides")
 	}
+	if kind == taskKindWorkflow {
+		cfg, err := loadTaskRuntimeConfig(r.configStore)
+		if err != nil {
+			return err
+		}
+		if err := validateWorkflowTaskRuntime(task.Workflow, cfg); err != nil {
+			return err
+		}
+		return validateWorkflowAgentRuntime(task.Workflow, r.configStore)
+	}
+	if kind == taskKindOrchestration {
+		return validateOrchestrationAgentRuntime(task.Orchestration, r.configStore)
+	}
 	if kind != taskKindWorkflow {
 		return nil
 	}
-	cfg, err := loadTaskRuntimeConfig(r.configStore)
-	if err != nil {
-		return err
-	}
-	if err := validateWorkflowTaskRuntime(task.Workflow, cfg); err != nil {
-		return err
-	}
-	return validateWorkflowAgentRuntime(task.Workflow, r.configStore)
+	return nil
 }
 
 func validateAgentTaskRuntime(task *ScheduledTask, store bridgeconfig.Store) error {
@@ -110,6 +116,27 @@ func validateWorkflowAgentRuntime(definition *WorkflowDefinition, store bridgeco
 	return nil
 }
 
+func validateOrchestrationAgentRuntime(definition *OrchestrationDefinition, store bridgeconfig.Store) error {
+	if definition == nil {
+		return invalidTaskConfig("orchestration is required")
+	}
+	for index := range definition.Nodes {
+		node := &definition.Nodes[index]
+		if node.Type != orchestrationNodeTypeAgent || node.Agent == nil {
+			continue
+		}
+		overrides, err := normalizeOrchestrationAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
+		if err != nil {
+			return invalidTaskConfig(fmt.Sprintf("orchestration agent node %q %v", node.ID, err))
+		}
+		if err := validateTaskRuntimeOverridesWithStore(overrides, store, true); err != nil {
+			return invalidTaskConfig(fmt.Sprintf("orchestration agent node %q %v", node.ID, err))
+		}
+		node.Agent.RuntimeOverrides = overrides
+	}
+	return nil
+}
+
 func validateTaskRuntimeOverridesWithStore(
 	overrides *TaskRuntimeOverrides,
 	store bridgeconfig.Store,
@@ -118,9 +145,29 @@ func validateTaskRuntimeOverridesWithStore(
 	if overrides == nil || store == nil {
 		return nil
 	}
+	if err := validateTaskRuntimePresetWithStore(overrides, store); err != nil {
+		return err
+	}
 	catalog, err := loadTaskRuntimeProviderCatalog(store)
 	if err != nil {
 		return err
 	}
 	return validateTaskRuntimeOverridesAgainstCatalog(overrides, catalog, requireProviderModelPair)
+}
+
+func validateTaskRuntimePresetWithStore(
+	overrides *TaskRuntimeOverrides,
+	store bridgeconfig.Store,
+) error {
+	if overrides == nil || store == nil || strings.TrimSpace(overrides.PresetID) == "" {
+		return nil
+	}
+	presets, err := store.Presets()
+	if err != nil {
+		return err
+	}
+	if _, ok := bridgeconfig.FindPresetByID(presets, overrides.PresetID); ok {
+		return nil
+	}
+	return fmt.Errorf("preset_id %q is not configured", strings.TrimSpace(overrides.PresetID))
 }

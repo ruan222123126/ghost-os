@@ -17,6 +17,19 @@ func (p *sessionTurnPreparer) buildCompletionSystemPrompt(
 	if deps.systemPromptOverride {
 		return strings.TrimSpace(deps.systemPrompt), nil
 	}
+	if deps.systemPromptFiles != nil {
+		prompt, err := bridgeruntime.BuildSystemPromptForSessionWithFiles(
+			deps.cfg,
+			catalog,
+			sess,
+			deps.cfg.ToolSearch.IdleTurns,
+			*deps.systemPromptFiles,
+		)
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimSpace(prompt), nil
+	}
 	basePrompt := strings.TrimSpace(systemPrompt)
 	if basePrompt == "" {
 		prompt, err := bridgeruntime.BuildSystemPromptForSession(

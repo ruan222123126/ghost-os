@@ -34,11 +34,17 @@ func applyTaskPatch(task *ScheduledTask, params taskUpdateParams) (bool, error) 
 	if err := applyTaskWorkflowPatch(task, taskKind, params.Workflow); err != nil {
 		return false, err
 	}
+	if err := applyTaskOrchestrationPatch(task, taskKind, params.Name, params.Orchestration); err != nil {
+		return false, err
+	}
 	applyTaskEnabledPatch(task, params.Enabled)
 	return applyTaskSchedulePatch(task, params.IntervalSeconds, params.CronExpr)
 }
 
 func applyTaskCoreTextFields(task *ScheduledTask, params taskUpdateParams) {
+	if params.Name != nil {
+		task.Name = strings.TrimSpace(*params.Name)
+	}
 	if params.Message != nil {
 		task.Message = strings.TrimSpace(*params.Message)
 	}
@@ -78,6 +84,29 @@ func applyTaskWorkflowPatch(task *ScheduledTask, taskKind string, workflow *Work
 	}
 	if taskKind != taskKindWorkflow {
 		task.Workflow = nil
+	}
+	return nil
+}
+
+func applyTaskOrchestrationPatch(
+	task *ScheduledTask,
+	taskKind string,
+	name *string,
+	definition *OrchestrationDefinition,
+) error {
+	if definition != nil {
+		if err := ensureOrchestrationAllowedForTaskKind(taskKind, definition); err != nil {
+			return err
+		}
+		task.Orchestration = cloneTaskOrchestration(definition)
+	}
+	if taskKind != taskKindOrchestration {
+		task.Name = ""
+		task.Orchestration = nil
+		return nil
+	}
+	if name != nil {
+		task.Name = strings.TrimSpace(*name)
 	}
 	return nil
 }

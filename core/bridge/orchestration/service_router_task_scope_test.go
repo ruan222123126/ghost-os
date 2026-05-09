@@ -19,6 +19,7 @@ func TestNormalizeTaskListScope(t *testing.T) {
 		{name: "user_scope", input: "user", wantScope: taskListScopeUser},
 		{name: "trimmed_user_scope", input: " user ", wantScope: taskListScopeUser},
 		{name: "system_scope", input: "system", wantScope: taskListScopeSystem},
+		{name: "orchestration_scope", input: "orchestration", wantScope: taskListScopeOrchestration},
 		{name: "invalid_scope", input: "admin", wantErr: true},
 	}
 
