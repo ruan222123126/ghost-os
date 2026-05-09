@@ -11,16 +11,14 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
+	groupdomain "ghost-os/bridge/orchestration/internal/domain/group"
 	bridgeTasks "ghost-os/bridge/tasks"
 	"ghost-os/bridge/tools"
 )
 
-type orchestrationTranscriptEntry struct {
-	Round   int    `json:"round"`
-	Speaker string `json:"speaker"`
-	AgentID string `json:"agent_id,omitempty"`
-	Content string `json:"content"`
-}
+type orchestrationTranscript = groupdomain.Transcript
+type orchestrationTranscriptEntry = groupdomain.TranscriptEntry
+type orchestrationDispatchRequest = groupdomain.DispatchCommand
 
 type orchestrationMemberResult struct {
 	Round            int            `json:"round"`
@@ -39,7 +37,7 @@ type orchestrationGroupResult struct {
 	preview         string
 	errText         string
 	completedRounds int
-	transcript      []orchestrationTranscriptEntry
+	transcript      orchestrationTranscript
 	memberResults   []orchestrationMemberResult
 	memberSessions  map[string]string
 	ownerAgentID    string
@@ -51,25 +49,18 @@ type orchestrationRunState struct {
 	memberSessionIDs    map[string]map[string]string
 	ownerSessionIDs     map[string]string
 	lastGroupID         string
-	lastGroupTranscript []orchestrationTranscriptEntry
-}
-
-type orchestrationDispatchRequest struct {
-	Action         string   `json:"action"`
-	ParticipantIDs []string `json:"participant_ids,omitempty"`
-	Order          string   `json:"order,omitempty"`
-	Instruction    string   `json:"instruction,omitempty"`
+	lastGroupTranscript orchestrationTranscript
 }
 
 type orchestrationDispatchResult struct {
-	Round             int                            `json:"round"`
-	Action            string                         `json:"action"`
-	Order             string                         `json:"order,omitempty"`
-	Instruction       string                         `json:"instruction,omitempty"`
-	ParticipantIDs    []string                       `json:"participant_ids,omitempty"`
-	MemberResults     []orchestrationMemberResult    `json:"member_results,omitempty"`
-	PrivateTranscript []orchestrationTranscriptEntry `json:"private_transcript,omitempty"`
-	OwnerVisible      bool                           `json:"owner_visible"`
+	Round             int                         `json:"round"`
+	Action            string                      `json:"action"`
+	Order             string                      `json:"order,omitempty"`
+	Instruction       string                      `json:"instruction,omitempty"`
+	ParticipantIDs    []string                    `json:"participant_ids,omitempty"`
+	MemberResults     []orchestrationMemberResult `json:"member_results,omitempty"`
+	PrivateTranscript orchestrationTranscript     `json:"private_transcript,omitempty"`
+	OwnerVisible      bool                        `json:"owner_visible"`
 }
 
 func (a taskExecutorAdapter) executeOrchestrationTask(
@@ -144,7 +135,7 @@ func (r orchestrationTaskRunner) execute(ctx context.Context) bridgeTasks.Execut
 			}
 		}
 		state.lastGroupID = node.ID
-		state.lastGroupTranscript = append([]orchestrationTranscriptEntry(nil), result.transcript...)
+		state.lastGroupTranscript = result.transcript.Clone()
 		currentID = r.plan.controlNext[currentID]
 	}
 	return bridgeTasks.ExecutionResult{
@@ -171,7 +162,7 @@ func (r orchestrationTaskRunner) executeStandardGroupNode(
 	state *orchestrationRunState,
 ) orchestrationGroupResult {
 	groupID := node.ID
-	transcript := buildInitialGroupTranscript(node, state)
+	transcript := groupdomain.Initial(node, state.lastGroupID, state.lastGroupTranscript)
 	memberOrder := r.plan.groupMember[groupID]
 	memberSessions := cloneGroupSessionIDs(state.memberSessionIDs[groupID])
 	memberResults := make([]orchestrationMemberResult, 0, len(memberOrder)*node.Group.MaxRounds)
@@ -182,12 +173,7 @@ func (r orchestrationTaskRunner) executeStandardGroupNode(
 		failure := selectGroupFailure(roundResults)
 		for _, result := range roundResults {
 			if result.Status == taskRunStatusSuccess {
-				transcript = append(transcript, orchestrationTranscriptEntry{
-					Round:   result.Round,
-					Speaker: result.Title,
-					AgentID: result.AgentID,
-					Content: result.Content,
-				})
+				transcript = transcript.AppendMember(result.Round, result.Title, result.AgentID, result.Content)
 			}
 			if result.SessionID != "" {
 				memberSessions[result.AgentID] = result.SessionID
@@ -209,7 +195,7 @@ func (r orchestrationTaskRunner) executeStandardGroupNode(
 	state.memberSessionIDs[groupID] = cloneGroupSessionIDs(memberSessions)
 	return orchestrationGroupResult{
 		status:          taskRunStatusSuccess,
-		preview:         truncateRunes(formatTranscript(transcript), maxTaskResponsePreviewRunes),
+		preview:         truncateRunes(transcript.Format(), maxTaskResponsePreviewRunes),
 		completedRounds: completedRounds,
 		transcript:      transcript,
 		memberResults:   memberResults,
@@ -223,7 +209,7 @@ func (r orchestrationTaskRunner) executeOwnerGroupNode(
 	state *orchestrationRunState,
 ) orchestrationGroupResult {
 	groupID := node.ID
-	publicTranscript := buildInitialGroupTranscript(node, state)
+	publicTranscript := groupdomain.Initial(node, state.lastGroupID, state.lastGroupTranscript)
 	memberOrder := r.plan.groupMember[groupID]
 	memberSessions := cloneGroupSessionIDs(state.memberSessionIDs[groupID])
 	ownerSessionID := strings.TrimSpace(state.ownerSessionIDs[groupID])
@@ -249,13 +235,13 @@ func (r orchestrationTaskRunner) executeOwnerGroupNode(
 		}
 		ownerSessionID = nextSessionID
 		dispatchResult := newDispatchResult(dispatch, round, node.Group.OwnerAgentID)
-		if dispatch.Action == "end_group" {
+		if dispatch.Action == groupdomain.DispatchActionEndGroup {
 			dispatchResults = append(dispatchResults, dispatchResult)
 			state.memberSessionIDs[groupID] = cloneGroupSessionIDs(memberSessions)
 			state.ownerSessionIDs[groupID] = ownerSessionID
 			return orchestrationGroupResult{
 				status:          taskRunStatusSuccess,
-				preview:         truncateRunes(formatTranscript(publicTranscript), maxTaskResponsePreviewRunes),
+				preview:         truncateRunes(publicTranscript.Format(), maxTaskResponsePreviewRunes),
 				completedRounds: completedRounds,
 				transcript:      publicTranscript,
 				memberResults:   memberResults,
@@ -296,7 +282,7 @@ func (r orchestrationTaskRunner) executeOwnerGroupNode(
 	state.ownerSessionIDs[groupID] = ownerSessionID
 	return orchestrationGroupResult{
 		status:          taskRunStatusSuccess,
-		preview:         truncateRunes(formatTranscript(publicTranscript), maxTaskResponsePreviewRunes),
+		preview:         truncateRunes(publicTranscript.Format(), maxTaskResponsePreviewRunes),
 		completedRounds: completedRounds,
 		transcript:      publicTranscript,
 		memberResults:   memberResults,
@@ -311,7 +297,7 @@ func (r orchestrationTaskRunner) runOwnerDispatch(
 	ctx context.Context,
 	groupNode OrchestrationNode,
 	memberOrder []string,
-	publicTranscript []orchestrationTranscriptEntry,
+	publicTranscript orchestrationTranscript,
 	lastDispatch orchestrationDispatchResult,
 	sessionID string,
 	round int,
@@ -331,7 +317,7 @@ func (r orchestrationTaskRunner) runOwnerDispatchTurn(
 	ownerNode OrchestrationNode,
 	groupNode OrchestrationNode,
 	catalog tools.ToolCatalog,
-	publicTranscript []orchestrationTranscriptEntry,
+	publicTranscript orchestrationTranscript,
 	lastDispatch orchestrationDispatchResult,
 	sessionID string,
 	round int,
@@ -431,49 +417,41 @@ func (r orchestrationTaskRunner) runOwnerDispatchTurn(
 func (r orchestrationTaskRunner) executeOwnerDispatch(
 	ctx context.Context,
 	groupNode OrchestrationNode,
-	publicTranscript []orchestrationTranscriptEntry,
+	publicTranscript orchestrationTranscript,
 	memberSessions map[string]string,
 	result orchestrationDispatchResult,
 	round int,
-) (orchestrationDispatchResult, []orchestrationTranscriptEntry, map[string]string) {
-	participantIDs := normalizeDispatchParticipants(result.ParticipantIDs)
-	if result.Action == "public_once" && len(participantIDs) == 0 {
-		participantIDs = append([]string(nil), r.plan.groupMember[groupNode.ID]...)
-	}
+) (orchestrationDispatchResult, orchestrationTranscript, map[string]string) {
+	participantIDs := append([]string(nil), result.ParticipantIDs...)
 	result.ParticipantIDs = append([]string(nil), participantIDs...)
 	result.OwnerVisible = containsString(participantIDs, strings.TrimSpace(groupNode.Group.OwnerAgentID))
 	updatedSessions := cloneGroupSessionIDs(memberSessions)
 
 	switch result.Action {
-	case "public_once":
-		order := normalizeDispatchOrder(result.Order)
+	case groupdomain.DispatchActionPublicOnce:
+		order := strings.TrimSpace(result.Order)
 		results := r.executeOwnerPublicDispatch(ctx, groupNode, participantIDs, publicTranscript, updatedSessions, round, order, strings.TrimSpace(result.Instruction))
 		result.Order = order
 		result.MemberResults = results
-		nextTranscript := append([]orchestrationTranscriptEntry(nil), publicTranscript...)
+		nextTranscript := publicTranscript.Clone()
 		for _, item := range results {
 			if item.Status == taskRunStatusSuccess {
-				nextTranscript = append(nextTranscript, orchestrationTranscriptEntry{
-					Round:   round,
-					Speaker: item.Title,
-					AgentID: item.AgentID,
-					Content: item.Content,
-				})
+				nextTranscript = nextTranscript.AppendMember(round, item.Title, item.AgentID, item.Content)
 			}
 			if item.SessionID != "" {
 				updatedSessions[item.AgentID] = item.SessionID
 			}
 		}
 		return result, nextTranscript, updatedSessions
-	case "private_once":
+	case groupdomain.DispatchActionPrivateOnce:
 		results, privateTranscript := r.executeOwnerPrivateDispatch(ctx, groupNode, participantIDs, publicTranscript, round, strings.TrimSpace(result.Instruction))
 		result.MemberResults = results
 		if result.OwnerVisible {
 			result.PrivateTranscript = privateTranscript
 		}
-		return result, append([]orchestrationTranscriptEntry(nil), publicTranscript...), updatedSessions
+		return result, publicTranscript.Clone(), updatedSessions
 	default:
-		return result, append([]orchestrationTranscriptEntry(nil), publicTranscript...), updatedSessions
+		return result, publicTranscript.Clone(), updatedSessions
 	}
 }
 
@@ -482,7 +460,7 @@ func newDispatchResult(
 	round int,
 	ownerAgentID string,
 ) orchestrationDispatchResult {
-	participants := normalizeDispatchParticipants(dispatch.ParticipantIDs)
+	participants := append([]string(nil), dispatch.ParticipantIDs...)
 	return orchestrationDispatchResult{
 		Round:          round,
 		Action:         strings.TrimSpace(dispatch.Action),
@@ -520,13 +498,13 @@ func (r orchestrationTaskRunner) executeOwnerPublicDispatch(
 	ctx context.Context,
 	groupNode OrchestrationNode,
 	participantIDs []string,
-	transcript []orchestrationTranscriptEntry,
+	transcript orchestrationTranscript,
 	memberSessions map[string]string,
 	round int,
 	order string,
 	instruction string,
 ) []orchestrationMemberResult {
-	if order == orchestrationModeParallel {
+	if order == groupdomain.SpeakingModeParallel {
 		return r.executeParallelDispatch(ctx, groupNode, participantIDs, transcript, memberSessions, round, instruction)
 	}
 	return r.executeSequentialDispatch(ctx, groupNode, participantIDs, transcript, memberSessions, round, instruction)
@@ -536,19 +514,19 @@ func (r orchestrationTaskRunner) executeSequentialDispatch(
 	ctx context.Context,
 	groupNode OrchestrationNode,
 	participantIDs []string,
-	transcript []orchestrationTranscriptEntry,
+	transcript orchestrationTranscript,
 	memberSessions map[string]string,
 	round int,
 	instruction string,
 ) []orchestrationMemberResult {
 	results := make([]orchestrationMemberResult, 0, len(participantIDs))
-	visibleTranscript := append([]orchestrationTranscriptEntry(nil), transcript...)
+	visibleTranscript := transcript.Clone()
 	for _, agentID := range participantIDs {
 		member := r.runGroupMemberWithInstruction(
 			ctx,
 			groupNode,
 			r.plan.nodes[agentID],
-			formatTranscript(visibleTranscript),
+			visibleTranscript.Format(),
 			round,
 			memberSessions[agentID],
 			instruction,
@@ -556,7 +534,7 @@ func (r orchestrationTaskRunner) executeSequentialDispatch(
 		)
 		results = append(results, member)
 		if member.Status == taskRunStatusSuccess {
-			visibleTranscript = append(visibleTranscript, orchestrationTranscriptEntry{Round: round, Speaker: member.Title, AgentID: member.AgentID, Content: member.Content})
+			visibleTranscript = visibleTranscript.AppendMember(round, member.Title, member.AgentID, member.Content)
 		}
 		if member.Status != taskRunStatusSuccess {
 			return results
@@ -569,12 +547,12 @@ func (r orchestrationTaskRunner) executeParallelDispatch(
 	ctx context.Context,
 	groupNode OrchestrationNode,
 	participantIDs []string,
-	transcript []orchestrationTranscriptEntry,
+	transcript orchestrationTranscript,
 	memberSessions map[string]string,
 	round int,
 	instruction string,
 ) []orchestrationMemberResult {
-	visibleTranscript := formatTranscript(transcript)
+	visibleTranscript := transcript.Format()
 	roundCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	results := make([]orchestrationMemberResult, len(participantIDs))
@@ -606,18 +584,18 @@ func (r orchestrationTaskRunner) executeOwnerPrivateDispatch(
 	ctx context.Context,
 	groupNode OrchestrationNode,
 	participantIDs []string,
-	publicTranscript []orchestrationTranscriptEntry,
+	publicTranscript orchestrationTranscript,
 	round int,
 	instruction string,
-) ([]orchestrationMemberResult, []orchestrationTranscriptEntry) {
-	privateTranscript := append([]orchestrationTranscriptEntry(nil), publicTranscript...)
+) ([]orchestrationMemberResult, orchestrationTranscript) {
+	privateTranscript := publicTranscript.Clone()
 	results := make([]orchestrationMemberResult, 0, len(participantIDs))
 	for _, agentID := range participantIDs {
 		member := r.runGroupMemberWithInstruction(
 			ctx,
 			groupNode,
 			r.plan.nodes[agentID],
-			formatTranscript(privateTranscript),
+			privateTranscript.Format(),
 			round,
 			"",
 			instruction,
@@ -625,12 +603,7 @@ func (r orchestrationTaskRunner) executeOwnerPrivateDispatch(
 		)
 		results = append(results, member)
 		if member.Status == taskRunStatusSuccess {
-			privateTranscript = append(privateTranscript, orchestrationTranscriptEntry{
-				Round:   round,
-				Speaker: member.Title,
-				AgentID: member.AgentID,
-				Content: member.Content,
-			})
+			privateTranscript = privateTranscript.AppendMember(round, member.Title, member.AgentID, member.Content)
 		}
 		if member.Status != taskRunStatusSuccess {
 			return results, privateTranscript
@@ -644,7 +617,7 @@ func (r orchestrationTaskRunner) executeGroupRound(
 	groupID string,
 	groupNode OrchestrationNode,
 	memberOrder []string,
-	transcript []orchestrationTranscriptEntry,
+	transcript orchestrationTranscript,
 	memberSessions map[string]string,
 	round int,
 ) []orchestrationMemberResult {
@@ -654,14 +627,14 @@ func (r orchestrationTaskRunner) executeGroupRound(
 	return r.executeParallelRound(ctx, groupID, groupNode, memberOrder, transcript, memberSessions, round)
 }
 
-func (r orchestrationTaskRunner) executeSequentialRound(ctx context.Context, groupID string, groupNode OrchestrationNode, memberOrder []string, transcript []orchestrationTranscriptEntry, memberSessions map[string]string, round int) []orchestrationMemberResult {
+func (r orchestrationTaskRunner) executeSequentialRound(ctx context.Context, groupID string, groupNode OrchestrationNode, memberOrder []string, transcript orchestrationTranscript, memberSessions map[string]string, round int) []orchestrationMemberResult {
 	results := make([]orchestrationMemberResult, 0, len(memberOrder))
-	visibleTranscript := append([]orchestrationTranscriptEntry(nil), transcript...)
+	visibleTranscript := transcript.Clone()
 	for _, agentID := range memberOrder {
-		member := r.runGroupMember(ctx, groupNode, r.plan.nodes[agentID], formatTranscript(visibleTranscript), round, memberSessions[agentID])
+		member := r.runGroupMember(ctx, groupNode, r.plan.nodes[agentID], visibleTranscript.Format(), round, memberSessions[agentID])
 		results = append(results, member)
 		if member.Status == taskRunStatusSuccess {
-			visibleTranscript = append(visibleTranscript, orchestrationTranscriptEntry{Round: round, Speaker: member.Title, AgentID: member.AgentID, Content: member.Content})
+			visibleTranscript = visibleTranscript.AppendMember(round, member.Title, member.AgentID, member.Content)
 		}
 		if member.Status != taskRunStatusSuccess {
 			return results
@@ -670,8 +643,8 @@ func (r orchestrationTaskRunner) executeSequentialRound(ctx context.Context, gro
 	return results
 }
 
-func (r orchestrationTaskRunner) executeParallelRound(ctx context.Context, groupID string, groupNode OrchestrationNode, memberOrder []string, transcript []orchestrationTranscriptEntry, memberSessions map[string]string, round int) []orchestrationMemberResult {
-	visibleTranscript := formatTranscript(transcript)
+func (r orchestrationTaskRunner) executeParallelRound(ctx context.Context, groupID string, groupNode OrchestrationNode, memberOrder []string, transcript orchestrationTranscript, memberSessions map[string]string, round int) []orchestrationMemberResult {
+	visibleTranscript := transcript.Format()
 	roundCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	results := make([]orchestrationMemberResult, len(memberOrder))
@@ -762,17 +735,6 @@ func (r orchestrationTaskRunner) runGroupMemberWithInstruction(
 	}
 }
 
-func buildInitialGroupTranscript(groupNode OrchestrationNode, state *orchestrationRunState) []orchestrationTranscriptEntry {
-	transcript := make([]orchestrationTranscriptEntry, 0, 2+len(state.lastGroupTranscript))
-	if groupNode.Group.SharedContext != "" {
-		transcript = append(transcript, orchestrationTranscriptEntry{Round: 0, Speaker: "system", Content: groupNode.Group.SharedContext})
-	}
-	if state.lastGroupID != "" && len(state.lastGroupTranscript) > 0 {
-		transcript = append(transcript, orchestrationTranscriptEntry{Round: 0, Speaker: "system", Content: "上游群组 transcript:\n" + formatTranscript(state.lastGroupTranscript)})
-	}
-	return transcript
-}
-
 func buildGroupMemberMessage(
 	groupNode OrchestrationNode,
 	memberNode OrchestrationNode,
@@ -836,7 +798,11 @@ func (t orchestrationDispatchTool) Execute(_ context.Context, argsJSON json.RawM
 	if err := json.Unmarshal(argsJSON, &req); err != nil {
 		return "", fmt.Errorf("decode dispatch args: %w", err)
 	}
-	normalized, err := validateOrchestrationDispatchRequest(req, t.groupNode, t.memberOrder)
+	normalized, err := groupdomain.DispatchValidator{}.Validate(
+		req,
+		groupdomain.NewGroupRef(t.groupNode),
+		t.memberOrder,
+	)
 	if err != nil {
 		return "", err
 	}
@@ -871,76 +837,6 @@ func (r orchestrationTaskRunner) newOwnerDispatchTool(groupNode OrchestrationNod
 	}
 }
 
-func validateOrchestrationDispatchRequest(
-	req orchestrationDispatchRequest,
-	groupNode OrchestrationNode,
-	memberOrder []string,
-) (orchestrationDispatchRequest, error) {
-	action := strings.TrimSpace(req.Action)
-	switch action {
-	case "public_once", "private_once", "end_group":
-	default:
-		return orchestrationDispatchRequest{}, fmt.Errorf("orchestration_dispatch action must be public_once|private_once|end_group")
-	}
-	participants := normalizeDispatchParticipants(req.ParticipantIDs)
-	memberSet := make(map[string]bool, len(memberOrder))
-	for _, memberID := range memberOrder {
-		memberSet[memberID] = true
-	}
-	for _, participantID := range participants {
-		if !memberSet[participantID] {
-			return orchestrationDispatchRequest{}, fmt.Errorf("participant_id %q is not a member of group %q", participantID, groupNode.ID)
-		}
-	}
-	order := normalizeDispatchOrder(req.Order)
-	switch action {
-	case "public_once":
-		if len(participants) == 0 {
-			participants = append([]string(nil), memberOrder...)
-		}
-	case "private_once":
-		if len(participants) < 2 {
-			return orchestrationDispatchRequest{}, fmt.Errorf("private_once requires at least 2 participant_ids")
-		}
-		order = orchestrationModeSequential
-	case "end_group":
-		participants = nil
-		order = ""
-	}
-	return orchestrationDispatchRequest{
-		Action:         action,
-		ParticipantIDs: participants,
-		Order:          order,
-		Instruction:    strings.TrimSpace(req.Instruction),
-	}, nil
-}
-
-func normalizeDispatchParticipants(raw []string) []string {
-	if len(raw) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(raw))
-	seen := make(map[string]bool, len(raw))
-	for _, item := range raw {
-		trimmed := strings.TrimSpace(item)
-		if trimmed == "" || seen[trimmed] {
-			continue
-		}
-		seen[trimmed] = true
-		out = append(out, trimmed)
-	}
-	return out
-}
-
-func normalizeDispatchOrder(raw string) string {
-	switch strings.TrimSpace(raw) {
-	case orchestrationModeParallel:
-		return orchestrationModeParallel
-	default:
-		return orchestrationModeSequential
-	}
-}
-
 func containsString(items []string, target string) bool {
 	for _, item := range items {
 		if strings.TrimSpace(item) == target {
@@ -955,7 +851,7 @@ func buildOwnerControlPrompt(
 	ownerNode OrchestrationNode,
 	groupNode OrchestrationNode,
 	plan orchestrationExecutionPlan,
-	publicTranscript []orchestrationTranscriptEntry,
+	publicTranscript orchestrationTranscript,
 	lastDispatch orchestrationDispatchResult,
 	round int,
 ) string {
@@ -974,7 +870,7 @@ func buildOwnerControlPrompt(
 		ownerPrelude,
 		orchestrationDispatchToolName,
 		strings.Join(memberLines, "\n"),
-		formatTranscript(publicTranscript),
+		publicTranscript.Format(),
 		formatOwnerLastDispatch(lastDispatch),
 		round,
 		orchestrationDispatchToolName,
@@ -1006,14 +902,6 @@ func formatOwnerLastDispatch(dispatch orchestrationDispatchResult) string {
 		strings.Join(dispatch.ParticipantIDs, ","),
 		dispatch.Instruction,
 	)
-}
-
-func formatTranscript(transcript []orchestrationTranscriptEntry) string {
-	lines := make([]string, 0, len(transcript))
-	for _, entry := range transcript {
-		lines = append(lines, strings.TrimSpace(entry.Speaker+": "+entry.Content))
-	}
-	return strings.Join(lines, "\n")
 }
 
 func selectGroupFailure(results []orchestrationMemberResult) *orchestrationMemberResult {

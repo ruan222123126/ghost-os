@@ -1,14 +1,7 @@
 package orchestration
 
-import "strings"
+import sharedtext "ghost-os/bridge/orchestration/internal/shared/text"
 
 func truncateRunes(value string, limit int) string {
-	if limit <= 0 {
-		return ""
-	}
-	runes := []rune(strings.TrimSpace(value))
-	if len(runes) <= limit {
-		return string(runes)
-	}
-	return string(runes[:limit])
+	return sharedtext.TruncateRunes(value, limit)
 }
