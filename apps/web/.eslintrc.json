@@ -60,8 +60,90 @@
   "overrides": [
     {
       "files": [
+        "components/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@/components/workflow/useWorkflowEditorController",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowEditorControllerInternals",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowEditorControllerTypes",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowEditorDraft",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/useWorkflowAgentRuntimeCatalog",
+                "message": "Workflow runtime catalog hook lives in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/useWorkflowCanvasStageInteractions",
+                "message": "Workflow stage interaction hook lives in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowCanvasState",
+                "message": "Workflow canvas reducer lives in @/lib/workflow-editor."
+              },
+              {
+                "name": "@/components/workflow/workflowCanvasStateDuplicate",
+                "message": "Workflow canvas reducer lives in @/lib/workflow-editor."
+              },
+              {
+                "name": "@/components/orchestration/useOrchestrationEditorController",
+                "message": "Orchestration editor controller hook lives in @/hooks/orchestration."
+              },
+              {
+                "name": "@/components/orchestration/orchestrationEditorControllerInternals",
+                "message": "Orchestration editor controller hook lives in @/hooks/orchestration."
+              },
+              {
+                "name": "@/components/orchestration/orchestrationEditorDraft",
+                "message": "Orchestration draft snapshot helpers live in @/lib/orchestration-editor."
+              },
+              {
+                "name": "@/components/orchestration/orchestrationEditorCopy",
+                "message": "Orchestration editor copy helpers live in @/hooks/orchestration."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "@/lib/api/**"
+                ],
+                "message": "Components must not call API clients directly; use hooks/controllers."
+              },
+              {
+                "group": [
+                  "@/lib/*/parser",
+                  "@/lib/**/parser",
+                  "@/lib/**/*.parser"
+                ],
+                "message": "Components must not import protocol parsers directly; use lib view models or hooks."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
         "lib/workflow-editor/**/*.{ts,tsx}",
-        "lib/orchestration-editor/**/*.{ts,tsx}"
+        "lib/orchestration-editor/**/*.{ts,tsx}",
+        "lib/chat-store/**/*.{ts,tsx}",
+        "lib/chat-stream/**/*.{ts,tsx}",
+        "lib/chat-view/**/*.{ts,tsx}",
+        "lib/chatRuntime/**/*.{ts,tsx}"
       ],
       "rules": {
         "no-restricted-imports": [
