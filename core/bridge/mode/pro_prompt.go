@@ -127,13 +127,7 @@ func sortedProToolNames(extra map[string]tools.Tool) []string {
 }
 
 func buildLimitLine(request ProRequest) string {
-	if request.Mode == Pro {
-		return fmt.Sprintf("Max iterations: %d. Only `pro_complete` can stop the run early.", request.MaxIterations)
-	}
-	if request.MaxIterations > 0 {
-		return fmt.Sprintf("Max iterations: %d. You still cannot stop early on your own.", request.MaxIterations)
-	}
-	return "Max iterations: unlimited until the user stops you or an error occurs."
+	return fmt.Sprintf("Max iterations: %d. Only `pro_complete` can stop the run early.", request.MaxIterations)
 }
 
 func buildHistory(records []session.IterationRecord) string {

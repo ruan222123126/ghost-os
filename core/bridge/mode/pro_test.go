@@ -20,15 +20,23 @@ func TestParseProRequest(t *testing.T) {
 		t.Fatalf("unexpected request: %+v", request)
 	}
 
-	request, matched, err = ParseProRequest("prox 7 finish task", 20)
+	request, matched, err = ParseProRequest("pro 7 finish task", 20)
 	if err != nil {
-		t.Fatalf("parse prox mode request: %v", err)
+		t.Fatalf("parse explicit pro iterations: %v", err)
 	}
 	if !matched {
-		t.Fatal("expected prox prefix to match")
+		t.Fatal("expected explicit pro prefix to match")
 	}
-	if request.Mode != Prox || request.MaxIterations != 7 || request.Unlimited {
-		t.Fatalf("unexpected prox request: %+v", request)
+	if request.Mode != Pro || request.MaxIterations != 7 || request.OriginalTask != "finish task" {
+		t.Fatalf("unexpected explicit pro request: %+v", request)
+	}
+
+	_, matched, err = ParseProRequest("prox finish task", 20)
+	if err == nil || !strings.Contains(err.Error(), "prox mode has been removed") {
+		t.Fatalf("expected removed prox error, got matched=%t err=%v", matched, err)
+	}
+	if !matched {
+		t.Fatal("removed prox prefix should be handled explicitly")
 	}
 }
 

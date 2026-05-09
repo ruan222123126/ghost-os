@@ -11,7 +11,6 @@ import (
 
 const (
 	proModePro              = bridgemode.Pro
-	proModeProx             = bridgemode.Prox
 	proModeStatusRunning    = bridgemode.StatusRunning
 	proModeStatusCompleted  = bridgemode.StatusCompleted
 	proModeStatusIncomplete = bridgemode.StatusIncomplete

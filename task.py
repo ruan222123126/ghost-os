@@ -173,7 +173,7 @@ def repo_hygiene() -> int:
     return run(["bash", "scripts/check_repo_hygiene.sh"], ROOT)
 
 
-# gen_contracts 从 core/shared/schema.json 生成三端 envelope 类型。
+# gen_contracts 从 core/shared/schema.json 生成 Go/TS/Rust/Kotlin 契约类型。
 def gen_contracts() -> int:
     print("generate shared contract types...")
     return run(["python3", "core/shared/generate_envelope_types.py"], ROOT)

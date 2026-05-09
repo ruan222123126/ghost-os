@@ -45,7 +45,7 @@ func (ProUpdateRecordTool) Name() string {
 }
 
 func (ProUpdateRecordTool) Description() string {
-	return "End the current pro/prox iteration and hand off to a fresh-memory agent. Use it only after recording what you completed and what remains."
+	return "End the current pro iteration and hand off to a fresh-memory agent. Use it only after recording what you completed and what remains."
 }
 
 func (ProUpdateRecordTool) Parameters() json.RawMessage {

@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// IterationRecord captures the minimal handoff state between fresh-memory pro/prox agents.
+// IterationRecord captures the minimal handoff state between fresh-memory pro agents.
 type IterationRecord struct {
 	Iteration      int       `json:"iteration"`
 	Did            string    `json:"did"`
@@ -16,12 +16,11 @@ type IterationRecord struct {
 	FinalChangeLog string    `json:"final_change_log,omitempty"`
 }
 
-// IterationRuntime stores the latest pro/prox orchestration state without polluting chat history.
+// IterationRuntime stores the latest pro orchestration state without polluting chat history.
 type IterationRuntime struct {
 	Mode           string            `json:"mode,omitempty"`
 	OriginalTask   string            `json:"original_task,omitempty"`
 	MaxIterations  int               `json:"max_iterations,omitempty"`
-	Unlimited      bool              `json:"unlimited,omitempty"`
 	IterationCount int               `json:"iteration_count,omitempty"`
 	Status         string            `json:"status,omitempty"`
 	StoppedBy      string            `json:"stopped_by,omitempty"`
@@ -32,8 +31,8 @@ type IterationRuntime struct {
 	Records        []IterationRecord `json:"records,omitempty"`
 }
 
-// StartIterationRuntime resets the hidden pro/prox iteration state for a new run.
-func (s *Session) StartIterationRuntime(mode string, originalTask string, maxIterations int, unlimited bool) {
+// StartIterationRuntime resets the hidden pro iteration state for a new run.
+func (s *Session) StartIterationRuntime(mode string, originalTask string, maxIterations int) {
 	if s == nil {
 		return
 	}
@@ -43,7 +42,6 @@ func (s *Session) StartIterationRuntime(mode string, originalTask string, maxIte
 		Mode:          strings.TrimSpace(mode),
 		OriginalTask:  strings.TrimSpace(originalTask),
 		MaxIterations: maxIterations,
-		Unlimited:     unlimited,
 		Status:        "running",
 		StartedAt:     now,
 		UpdatedAt:     now,
@@ -68,7 +66,7 @@ func (s *Session) AppendIterationRecord(record IterationRecord) {
 	s.UpdatedAt = record.RecordedAt
 }
 
-// FinishIterationRuntime marks the latest pro/prox run as completed, cancelled, or errored.
+// FinishIterationRuntime marks the latest pro run as completed, cancelled, or errored.
 func (s *Session) FinishIterationRuntime(status string, stoppedBy string, finalMessage string, finalChangeLog string) {
 	if s == nil || s.IterationRuntime == nil {
 		return

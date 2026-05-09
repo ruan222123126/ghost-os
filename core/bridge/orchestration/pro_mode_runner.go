@@ -104,7 +104,7 @@ func (r proModeRunner) run(
 	traceID string,
 ) (agentResponse, error) {
 	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: strings.TrimSpace(originalMessage)})
-	sess.StartIterationRuntime(request.Mode, request.OriginalTask, request.MaxIterations, request.Unlimited)
+	sess.StartIterationRuntime(request.Mode, request.OriginalTask, request.MaxIterations)
 	if err := r.sessionStore.Save(sess); err != nil {
 		return agentResponse{}, err
 	}
@@ -177,7 +177,10 @@ func (r proModeRunner) checkLimit(
 	if err := ctx.Err(); err != nil {
 		return proModeResult{}, true, err
 	}
-	if request.Unlimited || request.MaxIterations <= 0 || iteration <= request.MaxIterations {
+	if request.MaxIterations <= 0 {
+		return proModeResult{}, true, errors.New("pro max iterations must be > 0")
+	}
+	if iteration <= request.MaxIterations {
 		return proModeResult{}, false, nil
 	}
 	records := cloneIterationRecords(sess.IterationRuntime)

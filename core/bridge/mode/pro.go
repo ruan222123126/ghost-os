@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	Pro  = "pro"
-	Prox = "prox"
+	Pro = "pro"
+
+	removedProxMode = "prox"
 
 	StatusRunning    = "running"
 	StatusCompleted  = "completed"
@@ -26,7 +27,6 @@ type ProRequest struct {
 	Mode          string
 	OriginalTask  string
 	MaxIterations int
-	Unlimited     bool
 }
 
 func ParseProRequest(message string, defaultMaxIterations int) (ProRequest, bool, error) {
@@ -41,7 +41,10 @@ func ParseProRequest(message string, defaultMaxIterations int) (ProRequest, bool
 	}
 
 	mode := strings.ToLower(strings.TrimSpace(fields[0]))
-	if mode != Pro && mode != Prox {
+	if mode == removedProxMode {
+		return ProRequest{}, true, errors.New("prox mode has been removed; use pro <max_iterations> <task>")
+	}
+	if mode != Pro {
 		return ProRequest{}, false, nil
 	}
 
@@ -59,21 +62,16 @@ func parseProFields(mode string, fields []string, defaultMaxIterations int) (Pro
 	}
 	task := strings.TrimSpace(strings.Join(taskFields, " "))
 	if task == "" {
-		return ProRequest{}, errors.New("pro/prox task is required")
+		return ProRequest{}, errors.New("pro task is required")
 	}
 
-	request := ProRequest{Mode: mode, OriginalTask: task}
-	if mode == Pro {
-		if maxIterations <= 0 {
-			maxIterations = defaultMaxIterations
-		}
-		request.MaxIterations = maxIterations
-		return request, nil
+	if maxIterations <= 0 {
+		maxIterations = defaultMaxIterations
 	}
-
-	request.MaxIterations = maxIterations
-	request.Unlimited = maxIterations == 0
-	return request, nil
+	if maxIterations <= 0 {
+		return ProRequest{}, errors.New("pro max iterations must be > 0")
+	}
+	return ProRequest{Mode: mode, OriginalTask: task, MaxIterations: maxIterations}, nil
 }
 
 func splitProFields(fields []string) (int, []string, error) {
@@ -85,7 +83,7 @@ func splitProFields(fields []string) (int, []string, error) {
 		return 0, fields, nil
 	}
 	if parsed <= 0 {
-		return 0, nil, errors.New("pro/prox max iterations must be > 0")
+		return 0, nil, errors.New("pro max iterations must be > 0")
 	}
 	return parsed, fields[1:], nil
 }

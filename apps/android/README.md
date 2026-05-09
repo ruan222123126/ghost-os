@@ -53,7 +53,7 @@ adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 app/src/main/java/dev/ghostos/android/
 ├── network/BridgeClient.kt       # HTTP 客户端
-├── model/ApiModels.kt            # 数据模型
+├── model/*Models.kt              # schema 生成的 API 契约模型
 ├── store/SettingsStore.kt        # 本地存储
 ├── viewmodel/ChatViewModel.kt    # 聊天逻辑
 ├── ui/ChatScreen.kt              # 聊天界面

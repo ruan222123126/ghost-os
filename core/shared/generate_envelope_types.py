@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from contract_codegen.emitters.go import render as render_go
-from contract_codegen.emitters.kotlin import render as render_kotlin
+from contract_codegen.emitters.kotlin import GENERATED_HEADER, render_files as render_kotlin_files
 from contract_codegen.emitters.rust import render as render_rust
 from contract_codegen.emitters.ts import render as render_ts
 from contract_codegen.schema_loader import load_schema
@@ -15,7 +15,7 @@ GO_OUTPUT = ROOT / "core" / "bridge" / "orchestration" / "envelope_generated.go"
 GO_PACKAGE = GO_OUTPUT.parent.name
 RUST_OUTPUT = ROOT / "apps" / "cli" / "src" / "envelope_generated.rs"
 TS_OUTPUT = ROOT / "apps" / "web" / "lib" / "envelope.generated.ts"
-KOTLIN_OUTPUT = (
+KOTLIN_OUTPUT_DIR = (
     ROOT
     / "apps"
     / "android"
@@ -27,7 +27,6 @@ KOTLIN_OUTPUT = (
     / "ghostos"
     / "android"
     / "model"
-    / "ApiModels.kt"
 )
 
 
@@ -36,16 +35,29 @@ def _write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _remove_stale_kotlin_outputs(keep_names: set[str]) -> None:
+    if not KOTLIN_OUTPUT_DIR.is_dir():
+        return
+    for path in KOTLIN_OUTPUT_DIR.glob("*.kt"):
+        if path.name in keep_names:
+            continue
+        if path.read_text(encoding="utf-8").startswith(GENERATED_HEADER):
+            path.unlink()
+
+
 def generate() -> None:
     schema = load_schema(SCHEMA_PATH)
     outputs = [
         (GO_OUTPUT, render_go(schema, GO_PACKAGE)),
         (RUST_OUTPUT, render_rust(schema)),
         (TS_OUTPUT, render_ts(schema)),
-        (KOTLIN_OUTPUT, render_kotlin(schema)),
     ]
+    kotlin_outputs = render_kotlin_files(schema)
+    _remove_stale_kotlin_outputs(set(kotlin_outputs))
     for path, content in outputs:
         _write_file(path, content)
+    for filename, content in kotlin_outputs.items():
+        _write_file(KOTLIN_OUTPUT_DIR / filename, content)
 
 
 def main() -> int:

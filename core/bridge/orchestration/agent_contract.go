@@ -89,12 +89,12 @@ func validateAgentResponseSessionEnd(payload agentResponse) error {
 
 func validateAgentResponseMode(payload agentResponse) error {
 	switch payload.Mode {
-	case proModePro, proModeProx:
+	case proModePro:
 		if payload.IterationCount <= 0 {
-			return errors.New("agent response iteration_count must be > 0 for pro/prox mode")
+			return errors.New("agent response iteration_count must be > 0 for pro mode")
 		}
 		if strings.TrimSpace(payload.StoppedBy) == "" {
-			return errors.New("agent response stopped_by is required for pro/prox mode")
+			return errors.New("agent response stopped_by is required for pro mode")
 		}
 		return nil
 	case agentModePlan:

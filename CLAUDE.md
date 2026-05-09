@@ -77,7 +77,7 @@ Ghost-OS 不是传统远程桌面工具，而是 AI 驱动的数字孪生执行�
 ## 共享契约（`core/shared/schema.json`）
 
 - 定义请求/响应的信封格式
-- 类型生成：`python3 task.py gen-contracts` 从 schema 重新生成 TypeScript、Go、Rust 类型
+- 类型生成：`python3 task.py gen-contracts` 从 schema 重新生成 TypeScript、Go、Rust、Kotlin 类型
 - 修改 `schema.json` 后运行此命令，保持各层类型同步
 
 ## 决策优先级

@@ -33,7 +33,6 @@ const AWAITING_HUMAN_STATUSES = defineStringEnumValues<AgentSendAwaitingHumanRes
 });
 const AGENT_MODES = defineStringEnumValues<NonNullable<AgentSendSuccessResponse['mode']>>({
   pro: true,
-  prox: true,
   plan: true,
 });
 const STOP_STATUSES = defineStringEnumValues<AgentStopResponsePayload['status']>({

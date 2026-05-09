@@ -112,7 +112,7 @@ func TestSessionMarkEnded(t *testing.T) {
 
 func TestIterationRuntimeLifecycle(t *testing.T) {
 	s := NewSession("")
-	s.StartIterationRuntime("pro", "fix config", 2, false)
+	s.StartIterationRuntime("pro", "fix config", 2)
 	if s.IterationRuntime == nil {
 		t.Fatal("expected iteration runtime")
 	}

@@ -25,6 +25,15 @@ describe('lib/api/agent/parser', () => {
     });
   });
 
+  it('rejects removed prox success mode', () => {
+    expect(() => parseAgentSendResponse({
+      message: 'legacy response',
+      session_id: 'session-legacy',
+      session_ended: false,
+      mode: 'prox',
+    })).toThrow('agent response.mode');
+  });
+
   it('parses awaiting human responses', () => {
     const payload = {
       status: 'awaiting_human',

@@ -41,7 +41,10 @@ class SchemaLoaderTest(unittest.TestCase):
         self.assertEqual("BridgeConfig", next(spec.target_name for spec in ts_objects if spec.name == "bridgeConfig"))
         self.assertEqual("AgentStreamEvent", next(spec.target_name for spec in ts_objects if spec.name == "agentStreamEvent"))
         self.assertEqual(["AgentSendResponse"], kotlin_union_implementers(schema)["agentResponsePayload"])
-        self.assertEqual(["agentSendResultPayload"], [spec.name for spec in ts_unions])
+        self.assertEqual(
+            ["agentSendResultPayload", "taskCreateRequest", "taskPayload"],
+            [spec.name for spec in ts_unions],
+        )
 
 
 if __name__ == "__main__":

@@ -140,7 +140,6 @@ kt_test    3
 
 ```text
 core/bridge/orchestration/task_orchestration_runner.go      1047
-apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt 858
 core/bridge/orchestration/task_workflow_runner_nodes.go      585
 apps/web/lib/i18n/messages/settings.ts                      500
 apps/web/lib/i18n/messages/workflow.ts                      458
@@ -253,7 +252,7 @@ Native 构建默认使用 `python-sandbox` feature；`ping/agent/serve` 会优�
 1. `core/bridge` 体量最大，`orchestration`、`config`、`tools` 三个目录合计文件数很高，Central Layer 的协调成本明显高于其他层。
 2. `core/bridge/orchestration` 同时承载 service、task、session、runtime adapter、workflow、orchestration runner、tool schema 等职责，职责边界容易继续膨胀。
 3. 多个生产文件超过仓库规则中的 300 行文件限制，其中 orchestration 和 Web workflow/config 相关文件最集中。
-4. 共享契约已经有 schema 和 Go/TS/Rust 生成物，但 Android 侧仍有较大的 `ApiModels.kt`，跨端契约一致性需要特别留意。
+4. 共享契约已经由 schema 统一生成 Go/TS/Rust/Kotlin，仍需依赖生成物同步检查防止跨端漂移。
 5. Web 侧状态分散在 `components`、`hooks`、`lib`，workflow/orchestration/chat streaming/tool preview 的 UI 状态与解析逻辑交织较多。
 6. 根目录没有 `README.md`，入门信息主要分散在 `AGENTS.md`、`PROJECT_PROGRESS.md`、`docs/*`、`task.py`；`PROJECT_PROGRESS.md` 已经明显超过其自身声明的摘要行数。
 7. 当前工作区不是干净基线，已有大量未提交变更；继续修改前需要区分既有改动和本次改动。

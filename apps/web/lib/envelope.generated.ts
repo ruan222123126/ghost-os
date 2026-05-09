@@ -60,7 +60,7 @@ export interface AgentSendSuccessResponse {
   message: string;
   session_id: string;
   session_ended: boolean;
-  mode?: 'pro' | 'prox' | 'plan';
+  mode?: 'pro' | 'plan';
   iteration_count?: number;
   stopped_by?: string;
   final_change_log?: string;

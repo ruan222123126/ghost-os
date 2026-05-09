@@ -7,7 +7,14 @@ on:
       - "core/shared/**"
       - "drivers/native/**"
       - "apps/cli/src/envelope_generated.rs"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/AgentModels.kt"
       - "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/ConfigModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/OrchestrationModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/SessionModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/StreamingModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/TaskModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/WorkflowModels.kt"
       - "apps/web/**"
       - "scripts/check_generated_contracts.sh"
       - ".github/workflows/trinity-check.yml"
@@ -19,7 +26,14 @@ on:
       - "core/shared/**"
       - "drivers/native/**"
       - "apps/cli/src/envelope_generated.rs"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/AgentModels.kt"
       - "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/ConfigModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/OrchestrationModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/SessionModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/StreamingModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/TaskModels.kt"
+      - "apps/android/app/src/main/java/dev/ghostos/android/model/WorkflowModels.kt"
       - "apps/web/**"
       - "scripts/check_generated_contracts.sh"
       - ".github/workflows/trinity-check.yml"
@@ -50,8 +64,15 @@ jobs:
               - 'core/shared/**'
               - 'core/bridge/orchestration/envelope_generated.go'
               - 'apps/web/lib/envelope.generated.ts'
-              - 'apps/cli/src/envelope_generated.rs'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/AgentModels.kt'
               - 'apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/ConfigModels.kt'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/OrchestrationModels.kt'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/SessionModels.kt'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/StreamingModels.kt'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/TaskModels.kt'
+              - 'apps/android/app/src/main/java/dev/ghostos/android/model/WorkflowModels.kt'
+              - 'apps/cli/src/envelope_generated.rs'
               - 'scripts/check_generated_contracts.sh'
             native:
               - 'drivers/native/**'
