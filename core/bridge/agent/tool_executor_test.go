@@ -60,7 +60,7 @@ func TestToolCallExecutorExecuteReturnsAwaitingHumanAfterSuccessEvent(t *testing
 	}
 }
 
-func TestToolCallExecutorExecuteReturnsIterationHandoffWithoutToolResult(t *testing.T) {
+func TestToolCallExecutorExecuteReturnsIterationHandoffWithToolResult(t *testing.T) {
 	tool := &fakeTool{
 		name: "pro_update_record",
 		execute: func(_ context.Context, _ json.RawMessage) (string, error) {
@@ -93,8 +93,16 @@ func TestToolCallExecutorExecuteReturnsIterationHandoffWithoutToolResult(t *test
 	if handoffErr.Did != "inspected config" || handoffErr.Remaining != "apply patch" {
 		t.Fatalf("unexpected handoff payload: %+v", handoffErr)
 	}
-	if len(history.Messages()) != 0 {
-		t.Fatalf("iteration handoff should not append tool result: %+v", history.Messages())
+	messages := history.Messages()
+	if len(messages) != 1 {
+		t.Fatalf("iteration handoff should append one tool result: %+v", messages)
+	}
+	result, ok := ParseToolResultEnvelope(messages[0].Text)
+	if !ok {
+		t.Fatalf("expected tool result envelope, got %q", messages[0].Text)
+	}
+	if result.Status != "success" || result.Tool != "pro_update_record" {
+		t.Fatalf("unexpected tool result: %+v", result)
 	}
 	if len(sink.events) != 2 {
 		t.Fatalf("unexpected event count: got %d want %d", len(sink.events), 2)

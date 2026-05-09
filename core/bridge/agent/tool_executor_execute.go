@@ -109,6 +109,7 @@ func (e toolCallExecutor) finishSuccessfulToolCall(ctx context.Context, traceID 
 		return outcome, err
 	}
 	if meta.Iteration != nil {
+		appendToolResult(e.history, resolved.toolCallID, resolved.toolName, traceID, output, nil, meta.Content)
 		return toolCallOutcome{
 			executed: true,
 			stopErr:  newIterationHandoffError(meta.Iteration),
