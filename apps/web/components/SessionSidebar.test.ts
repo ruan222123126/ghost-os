@@ -57,18 +57,18 @@ function renderSidebar(
       React.createElement(
         WebLocaleProvider,
         {
-          children: React.createElement(SessionSidebar, {
-            sessions,
-            currentSessionId: '',
-            loading: false,
-            error: '',
-            onSelect: () => {},
-            onDelete: () => {},
-            onNewChat: () => {},
-            onOpenSettings: () => {},
-          }),
           initialLocale: 'en-US',
         },
+        React.createElement(SessionSidebar, {
+          sessions,
+          currentSessionId: '',
+          loading: false,
+          error: '',
+          onSelect: () => {},
+          onDelete: () => {},
+          onNewChat: () => {},
+          onOpenSettings: () => {},
+        }),
       ),
     );
   } finally {

@@ -73,7 +73,7 @@ describe('components/config/TaskList', () => {
 });
 
 function renderTaskList(
-  props: React.ComponentProps<typeof TaskList>,
+  props: TaskListTestProps,
   locale: WebLocale = 'en-US',
 ): string {
   const originalWindow = (globalThis as { window?: unknown }).window;
@@ -86,19 +86,36 @@ function renderTaskList(
   };
 
   try {
+    const taskListProps: React.ComponentProps<typeof TaskList> = {
+      logsTaskID: '',
+      logsData: [],
+      logsLoading: false,
+      logsError: '',
+      onOpenLogs: async () => {},
+      onCloseLogs: () => {},
+      ...props,
+    };
     return renderToStaticMarkup(
       React.createElement(
         WebLocaleProvider,
         {
-          children: React.createElement(TaskList, props),
           initialLocale: locale,
         },
+        React.createElement(TaskList, taskListProps),
       ),
     );
   } finally {
     (globalThis as { window?: unknown }).window = originalWindow;
   }
 }
+
+type TaskListTestProps = Omit<
+  React.ComponentProps<typeof TaskList>,
+  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onCloseLogs'
+> & Partial<Pick<
+  React.ComponentProps<typeof TaskList>,
+  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onCloseLogs'
+>>;
 
 function buildLocalStorageMock(locale: WebLocale): Storage {
   return {

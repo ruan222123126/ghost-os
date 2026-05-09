@@ -314,8 +314,7 @@ function renderSection(
     renderer = TestRenderer.create(
       React.createElement(WebLocaleProvider, {
         initialLocale: locale,
-        children: React.createElement(PresetSettingsSection, props),
-      }),
+      }, React.createElement(PresetSettingsSection, props)),
     );
   });
 

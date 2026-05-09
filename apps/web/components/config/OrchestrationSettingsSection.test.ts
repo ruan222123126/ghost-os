@@ -10,7 +10,7 @@ jest.mock('next/navigation', () => ({
   useRouter: () => ({ push }),
 }));
 
-jest.mock('./useOrchestrationSectionState', () => ({
+jest.mock('@/hooks/config/useOrchestrationSectionState', () => ({
   useOrchestrationSectionState: (...args: unknown[]) => useOrchestrationSectionState(...args),
 }));
 
@@ -138,8 +138,7 @@ function renderSection(): TestRenderer.ReactTestRenderer {
     renderer = TestRenderer.create(
       React.createElement(WebLocaleProvider, {
         initialLocale: 'en-US',
-        children: React.createElement(OrchestrationSettingsSection),
-      }),
+      }, React.createElement(OrchestrationSettingsSection)),
     );
   });
 

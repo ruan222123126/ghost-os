@@ -1,27 +1,29 @@
 'use client';
 
-import { type KeyboardEvent, useCallback, useMemo, useState } from 'react';
+import { type KeyboardEvent, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ConfigCardActions } from '@/components/config/ConfigCardActions';
 import { TaskLogsModal } from '@/components/config/TaskLogsModal';
 import { OrchestrationCreateForm } from '@/components/config/OrchestrationCreateForm';
-import { ignorePromise, toErrorMessage } from '@/lib/errors';
+import { useOrchestrationLogs } from '@/hooks/config/useOrchestrationLogs';
+import { useOrchestrationSectionState } from '@/hooks/config/useOrchestrationSectionState';
+import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import { listOrchestrationLogs } from '@/lib/api/orchestrations/api';
-import type { OrchestrationTaskPayload, TaskRunLog } from '@/lib/types';
-import { useOrchestrationSectionState } from './useOrchestrationSectionState';
+import type { OrchestrationTaskPayload } from '@/lib/types';
 
 export function OrchestrationSettingsSection() {
   const { copy } = useWebLocale();
   const router = useRouter();
   const state = useOrchestrationSectionState(copy);
   const logs = useOrchestrationLogs(copy.settings.tasksLogsEmpty);
+  const { runByID } = state;
+  const { open: openLogs, taskID: logsTaskID } = logs;
   const handleRun = useCallback(async (taskID: string) => {
-    await state.runByID(taskID);
-    if (logs.taskID === taskID) {
-      await logs.open(taskID);
+    await runByID(taskID);
+    if (logsTaskID === taskID) {
+      await openLogs(taskID);
     }
-  }, [logs.open, logs.taskID, state.runByID]);
+  }, [logsTaskID, openLogs, runByID]);
 
   if (state.creating) {
     return (
@@ -52,7 +54,7 @@ export function OrchestrationSettingsSection() {
         onOpenEditor={(taskID) => router.push(`/orchestration/${encodeURIComponent(taskID)}`)}
         onRun={handleRun}
         runningOrchestrationID={state.runningOrchestrationID}
-        onOpenLogs={logs.open}
+        onOpenLogs={openLogs}
         onToggleEnabled={state.setEnabledByID}
         onDelete={state.deleteByID}
         controlsDisabled={state.controlsDisabled}
@@ -68,35 +70,6 @@ export function OrchestrationSettingsSection() {
       ) : null}
     </section>
   );
-}
-
-function useOrchestrationLogs(emptyMessage: string) {
-  const [taskID, setTaskID] = useState('');
-  const [entries, setEntries] = useState<TaskRunLog[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const open = useCallback(async (nextTaskID: string) => {
-    setTaskID(nextTaskID);
-    setEntries([]);
-    setError('');
-    setLoading(true);
-    try {
-      setEntries(await listOrchestrationLogs(nextTaskID, 20));
-    } catch (nextError) {
-      setError(toErrorMessage(nextError, emptyMessage));
-    } finally {
-      setLoading(false);
-    }
-  }, [emptyMessage]);
-
-  const close = useCallback(() => {
-    setTaskID('');
-    setEntries([]);
-    setError('');
-  }, []);
-
-  return { taskID, entries, loading, error, open, close };
 }
 
 function SectionHeader(props: {

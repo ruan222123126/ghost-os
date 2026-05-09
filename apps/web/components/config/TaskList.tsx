@@ -1,10 +1,9 @@
 'use client';
 
-import { useMemo, useState, type KeyboardEvent } from 'react';
-import { listTaskLogs } from '@/lib/api/tasks/api';
+import { useMemo, type KeyboardEvent } from 'react';
 import { ConfigCardActions } from '@/components/config/ConfigCardActions';
 import { TaskLogsModal } from '@/components/config/TaskLogsModal';
-import { ignorePromise, toErrorMessage } from '@/lib/errors';
+import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentMessageTaskPayload, TaskPayload, TaskRunLog, WorkflowTaskPayload } from '@/lib/types';
 
@@ -19,6 +18,12 @@ interface TaskListProps {
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
   onRunNow: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  logsTaskID: string;
+  logsData: TaskRunLog[];
+  logsLoading: boolean;
+  logsError: string;
+  onOpenLogs: (id: string) => Promise<void>;
+  onCloseLogs: () => void;
 }
 
 interface TaskCardProps {
@@ -34,33 +39,23 @@ interface TaskCardProps {
 
 export function TaskList(props: TaskListProps) {
   const { copy } = useWebLocale();
-  const { tasks, loading, controlsDisabled, onEditTextTask, onEditWorkflowTask, onSetEnabled, onRunNow, onDelete } = props;
+  const {
+    tasks,
+    loading,
+    controlsDisabled,
+    onEditTextTask,
+    onEditWorkflowTask,
+    onSetEnabled,
+    onRunNow,
+    onDelete,
+    logsTaskID,
+    logsData,
+    logsLoading,
+    logsError,
+    onOpenLogs,
+    onCloseLogs,
+  } = props;
   const orderedTasks = useMemo(() => prioritizeEnabledTasks(tasks), [tasks]);
-  const [logsTaskID, setLogsTaskID] = useState('');
-  const [logsData, setLogsData] = useState<TaskRunLog[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [logsError, setLogsError] = useState('');
-
-  const openLogs = async (taskID: string): Promise<void> => {
-    setLogsTaskID(taskID);
-    setLogsLoading(true);
-    setLogsError('');
-    setLogsData([]);
-    try {
-      setLogsData(await listTaskLogs(taskID, 20));
-    } catch (error) {
-      setLogsError(toErrorMessage(error, copy.settings.tasksLogsEmpty));
-    } finally {
-      setLogsLoading(false);
-    }
-  };
-
-  const closeLogs = () => {
-    setLogsTaskID('');
-    setLogsData([]);
-    setLogsError('');
-    setLogsLoading(false);
-  };
 
   if (loading) {
     return (
@@ -92,7 +87,7 @@ export function TaskList(props: TaskListProps) {
           controlsDisabled={controlsDisabled}
           onEditTextTask={onEditTextTask}
           onEditWorkflowTask={onEditWorkflowTask}
-          onOpenLogs={openLogs}
+          onOpenLogs={onOpenLogs}
           onSetEnabled={onSetEnabled}
           onRunNow={onRunNow}
           onDelete={onDelete}
@@ -104,7 +99,7 @@ export function TaskList(props: TaskListProps) {
           logs={logsData}
           loading={logsLoading}
           error={logsError}
-          onClose={closeLogs}
+          onClose={onCloseLogs}
         />
       ) : null}
     </div>

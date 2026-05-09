@@ -101,9 +101,9 @@ function renderSkillList(
       React.createElement(
         WebLocaleProvider,
         {
-          children: React.createElement(SkillList, props),
           initialLocale: locale,
         },
+        React.createElement(SkillList, props),
       ),
     );
   } finally {

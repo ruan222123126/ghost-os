@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { TaskEditorForm } from '@/components/config/TaskEditorForm';
 import { TaskList } from '@/components/config/TaskList';
+import { useTaskLogs } from '@/hooks/config/useTaskLogs';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { TaskEditorMode, TaskEditorState } from '@/lib/configTasks';
@@ -50,6 +51,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
   const [editorOpen, setEditorOpen] = useState(false);
   const controlsDisabled = loading || saving;
   const sessionOptions = useMemo(() => buildSessionOptions(tasks), [tasks]);
+  const logs = useTaskLogs(copy.settings.tasksLogsEmpty);
 
   const handleBeginCreateTextTask = () => {
     onBeginCreateTextTask();
@@ -138,6 +140,12 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
         onSetEnabled={onSetEnabled}
         onRunNow={onRunNow}
         onDelete={onDelete}
+        logsTaskID={logs.taskID}
+        logsData={logs.entries}
+        logsLoading={logs.loading}
+        logsError={logs.error}
+        onOpenLogs={logs.open}
+        onCloseLogs={logs.close}
       />
     </section>
   );

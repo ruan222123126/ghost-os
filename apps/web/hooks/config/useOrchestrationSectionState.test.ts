@@ -31,7 +31,7 @@ const mockedRunOrchestrationNow = runOrchestrationNow as jest.MockedFunction<typ
 const mockedUpdateOrchestration = updateOrchestration as jest.MockedFunction<typeof updateOrchestration>;
 const mockedMigrateLegacyOrchestrations = migrateLegacyOrchestrations as jest.MockedFunction<typeof migrateLegacyOrchestrations>;
 
-describe('components/config/useOrchestrationSectionState', () => {
+describe('hooks/config/useOrchestrationSectionState', () => {
   const sampleTask: OrchestrationTaskPayload = {
     id: 'orch_1',
     name: '日报编排',

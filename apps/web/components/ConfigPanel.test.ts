@@ -66,7 +66,7 @@ function renderPanel(initialTab: React.ComponentProps<typeof ConfigPanel>['initi
     renderer = TestRenderer.create(
       React.createElement(WebLocaleProvider, {
         initialLocale: 'en-US',
-        children: React.createElement(ConfigPanel, {
+      }, React.createElement(ConfigPanel, {
           open: true,
           initialTab,
           loading: false,
@@ -79,7 +79,7 @@ function renderPanel(initialTab: React.ComponentProps<typeof ConfigPanel>['initi
           onSave: async () => false,
           onReload: async () => undefined,
         }),
-      }),
+      ),
     );
   });
 

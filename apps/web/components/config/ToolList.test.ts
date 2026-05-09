@@ -105,9 +105,9 @@ function renderToolList(
       React.createElement(
         WebLocaleProvider,
         {
-          children: React.createElement(ToolList, props),
           initialLocale: locale,
         },
+        React.createElement(ToolList, props),
       ),
     );
   } finally {
