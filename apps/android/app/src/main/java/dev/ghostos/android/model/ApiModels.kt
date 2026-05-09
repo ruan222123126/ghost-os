@@ -418,6 +418,8 @@ data class BridgeConfig(
     val projectRoot: String,
     @SerialName("max_turns")
     val maxTurns: Int,
+    @SerialName("task_execution_timeout_ms")
+    val taskExecutionTimeoutMs: Int,
     @SerialName("llm_completion_retry_count")
     val llmCompletionRetryCount: Int,
     @SerialName("llm_completion_retry_interval_ms")
@@ -471,6 +473,8 @@ data class ConfigUpdate(
     val projectRoot: String? = null,
     @SerialName("max_turns")
     val maxTurns: Int? = null,
+    @SerialName("task_execution_timeout_ms")
+    val taskExecutionTimeoutMs: Int? = null,
     @SerialName("llm_completion_retry_count")
     val llmCompletionRetryCount: Int? = null,
     @SerialName("llm_completion_retry_interval_ms")
@@ -590,6 +594,27 @@ data class WorkflowDefinition(
 )
 
 @Serializable
+data class OrchestrationNode(
+    val id: String,
+    val type: String,
+    val group: OrchestrationGroupNode? = null,
+    val agent: OrchestrationAgentNode? = null
+)
+
+@Serializable
+data class OrchestrationGroupNode(
+    val title: String,
+    @SerialName("shared_context")
+    val sharedContext: String,
+    @SerialName("speaking_mode")
+    val speakingMode: String,
+    @SerialName("owner_agent_id")
+    val ownerAgentId: String? = null,
+    @SerialName("max_rounds")
+    val maxRounds: Int
+)
+
+@Serializable
 data class AgentMessageTaskCreateRequest(
     val message: String,
     @SerialName("session_id")
@@ -607,12 +632,22 @@ data class AgentMessageTaskCreateRequest(
 ) : TaskCreateRequest
 
 @Serializable
+data class OrchestrationAgentNode(
+    val title: String,
+    val message: String,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null
+)
+
+@Serializable
 data class TaskRuntimeOverrides(
     @SerialName("provider_name")
     val providerName: String? = null,
     val model: String? = null,
     @SerialName("system_prompt")
     val systemPrompt: String? = null,
+    @SerialName("preset_id")
+    val presetId: String? = null,
     @SerialName("tool_allowlist")
     val toolAllowlist: List<String>? = null,
     @SerialName("tool_allowlist_only")
@@ -629,10 +664,25 @@ data class WorkflowToolNode(
 )
 
 @Serializable
+data class OrchestrationEdge(
+    @SerialName("from_node_id")
+    val fromNodeId: String,
+    @SerialName("to_node_id")
+    val toNodeId: String,
+    val kind: String
+)
+
+@Serializable
 data class WorkflowLLMNode(
     val prompt: String,
     @SerialName("system_prompt")
     val systemPrompt: String? = null
+)
+
+@Serializable
+data class OrchestrationDefinition(
+    val nodes: List<OrchestrationNode>,
+    val edges: List<OrchestrationEdge>
 )
 
 @Serializable
@@ -668,6 +718,20 @@ data class WorkflowTaskCreateRequest(
 ) : TaskCreateRequest
 
 @Serializable
+data class OrchestrationTaskCreateRequest(
+    @SerialName("task_kind")
+    val taskKind: String,
+    val name: String,
+    val orchestration: OrchestrationDefinition,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+) : TaskCreateRequest
+
+@Serializable
 data class WorkflowLoopNode(
     @SerialName("max_iterations")
     val maxIterations: Int,
@@ -675,26 +739,6 @@ data class WorkflowLoopNode(
     val bodyNodeId: String,
     @SerialName("exit_node_id")
     val exitNodeId: String
-)
-
-@Serializable
-data class TaskUpdateRequest(
-    val id: String,
-    val message: String? = null,
-    @SerialName("session_id")
-    val sessionId: String? = null,
-    @SerialName("runtime_overrides")
-    val runtimeOverrides: TaskRuntimeOverrides? = null,
-    @SerialName("task_kind")
-    val taskKind: String? = null,
-    val workflow: WorkflowDefinition? = null,
-    @SerialName("interval_seconds")
-    val intervalSeconds: Int? = null,
-    @SerialName("cron_expr")
-    val cronExpr: String? = null,
-    val enabled: Boolean? = null,
-    @SerialName("trace_id")
-    val traceId: String? = null
 )
 
 @Serializable
@@ -727,11 +771,59 @@ data class AgentMessageTaskPayload(
 ) : TaskPayload
 
 @Serializable
+data class TaskUpdateRequest(
+    val id: String,
+    val message: String? = null,
+    val name: String? = null,
+    @SerialName("session_id")
+    val sessionId: String? = null,
+    @SerialName("runtime_overrides")
+    val runtimeOverrides: TaskRuntimeOverrides? = null,
+    @SerialName("task_kind")
+    val taskKind: String? = null,
+    val workflow: WorkflowDefinition? = null,
+    val orchestration: OrchestrationDefinition? = null,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+)
+
+@Serializable
 data class WorkflowTaskPayload(
     val id: String,
     @SerialName("task_kind")
     val taskKind: String,
     val workflow: WorkflowDefinition,
+    @SerialName("schedule_type")
+    val scheduleType: String,
+    @SerialName("interval_seconds")
+    val intervalSeconds: Int? = null,
+    @SerialName("cron_expr")
+    val cronExpr: String? = null,
+    val enabled: Boolean,
+    @SerialName("created_at")
+    val createdAt: String,
+    @SerialName("updated_at")
+    val updatedAt: String,
+    @SerialName("last_run_at")
+    val lastRunAt: String? = null,
+    @SerialName("next_run_at")
+    val nextRunAt: String? = null,
+    @SerialName("last_error")
+    val lastError: String? = null
+) : TaskPayload
+
+@Serializable
+data class OrchestrationTaskPayload(
+    val id: String,
+    val name: String,
+    @SerialName("task_kind")
+    val taskKind: String,
+    val orchestration: OrchestrationDefinition,
     @SerialName("schedule_type")
     val scheduleType: String,
     @SerialName("interval_seconds")

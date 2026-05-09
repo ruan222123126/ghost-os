@@ -435,6 +435,7 @@ pub struct BridgeConfig {
     pub chat_path: String,
     pub project_root: String,
     pub max_turns: i64,
+    pub task_execution_timeout_ms: i64,
     pub llm_completion_retry_count: i64,
     pub llm_completion_retry_interval_ms: i64,
     pub api_key_set: bool,
@@ -475,6 +476,8 @@ pub struct ConfigUpdate {
     pub project_root: Option<String>,
     #[serde(default)]
     pub max_turns: Option<i64>,
+    #[serde(default)]
+    pub task_execution_timeout_ms: Option<i64>,
     #[serde(default)]
     pub llm_completion_retry_count: Option<i64>,
     #[serde(default)]
@@ -602,6 +605,27 @@ pub struct WorkflowDefinition {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct OrchestrationNode {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub r#type: String,
+    #[serde(default)]
+    pub group: Option<OrchestrationGroupNode>,
+    #[serde(default)]
+    pub agent: Option<OrchestrationAgentNode>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct OrchestrationGroupNode {
+    pub title: String,
+    pub shared_context: String,
+    pub speaking_mode: String,
+    #[serde(default)]
+    pub owner_agent_id: Option<String>,
+    pub max_rounds: i64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentMessageTaskCreateRequest {
     pub message: String,
     #[serde(default)]
@@ -619,6 +643,14 @@ pub struct AgentMessageTaskCreateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct OrchestrationAgentNode {
+    pub title: String,
+    pub message: String,
+    #[serde(default)]
+    pub runtime_overrides: Option<TaskRuntimeOverrides>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct TaskRuntimeOverrides {
     #[serde(default)]
     pub provider_name: Option<String>,
@@ -626,6 +658,8 @@ pub struct TaskRuntimeOverrides {
     pub model: Option<String>,
     #[serde(default)]
     pub system_prompt: Option<String>,
+    #[serde(default)]
+    pub preset_id: Option<String>,
     #[serde(default)]
     pub tool_allowlist: Option<Vec<String>>,
     #[serde(default)]
@@ -642,10 +676,23 @@ pub struct WorkflowToolNode {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct OrchestrationEdge {
+    pub from_node_id: String,
+    pub to_node_id: String,
+    pub kind: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct WorkflowLLMNode {
     pub prompt: String,
     #[serde(default)]
     pub system_prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct OrchestrationDefinition {
+    pub nodes: Vec<OrchestrationNode>,
+    pub edges: Vec<OrchestrationEdge>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -679,33 +726,23 @@ pub struct WorkflowTaskCreateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct WorkflowLoopNode {
-    pub max_iterations: i64,
-    pub body_node_id: String,
-    pub exit_node_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct TaskUpdateRequest {
-    pub id: String,
-    #[serde(default)]
-    pub message: Option<String>,
-    #[serde(default)]
-    pub session_id: Option<String>,
-    #[serde(default)]
-    pub runtime_overrides: Option<TaskRuntimeOverrides>,
-    #[serde(default)]
-    pub task_kind: Option<String>,
-    #[serde(default)]
-    pub workflow: Option<WorkflowDefinition>,
+pub struct OrchestrationTaskCreateRequest {
+    pub task_kind: String,
+    pub name: String,
+    pub orchestration: OrchestrationDefinition,
     #[serde(default)]
     pub interval_seconds: Option<i64>,
     #[serde(default)]
     pub cron_expr: Option<String>,
     #[serde(default)]
-    pub enabled: Option<bool>,
-    #[serde(default)]
     pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct WorkflowLoopNode {
+    pub max_iterations: i64,
+    pub body_node_id: String,
+    pub exit_node_id: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -734,10 +771,59 @@ pub struct AgentMessageTaskPayload {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskUpdateRequest {
+    pub id: String,
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub runtime_overrides: Option<TaskRuntimeOverrides>,
+    #[serde(default)]
+    pub task_kind: Option<String>,
+    #[serde(default)]
+    pub workflow: Option<WorkflowDefinition>,
+    #[serde(default)]
+    pub orchestration: Option<OrchestrationDefinition>,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct WorkflowTaskPayload {
     pub id: String,
     pub task_kind: String,
     pub workflow: WorkflowDefinition,
+    pub schedule_type: String,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub last_run_at: Option<String>,
+    #[serde(default)]
+    pub next_run_at: Option<String>,
+    #[serde(default)]
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct OrchestrationTaskPayload {
+    pub id: String,
+    pub name: String,
+    pub task_kind: String,
+    pub orchestration: OrchestrationDefinition,
     pub schedule_type: String,
     #[serde(default)]
     pub interval_seconds: Option<i64>,
@@ -785,6 +871,7 @@ pub enum AgentPayload {
 pub enum TaskCreateRequest {
     AgentMessage(AgentMessageTaskCreateRequest),
     Workflow(WorkflowTaskCreateRequest),
+    Orchestration(OrchestrationTaskCreateRequest),
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq)]
@@ -792,4 +879,5 @@ pub enum TaskCreateRequest {
 pub enum TaskPayload {
     AgentMessage(AgentMessageTaskPayload),
     Workflow(WorkflowTaskPayload),
+    Orchestration(OrchestrationTaskPayload),
 }
