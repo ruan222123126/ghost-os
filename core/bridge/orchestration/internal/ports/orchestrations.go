@@ -6,6 +6,7 @@ import (
 
 	"ghost-os/bridge/orchestration/internal/domain/group"
 	bridgeTasks "ghost-os/bridge/tasks"
+	"ghost-os/bridge/tools"
 )
 
 type MemberAgentRunner interface {
@@ -80,15 +81,35 @@ type OwnerDecisionRunner interface {
 	Decide(ctx context.Context, req OwnerDecisionRequest) (group.DispatchCommand, string, error)
 }
 
+type OwnerDecisionTurnExecutor interface {
+	RunOwnerDecisionTurn(ctx context.Context, req OwnerDecisionTurnRequest) (group.DispatchCommand, string, error)
+}
+
 type OwnerDecisionRequest struct {
 	OwnerNode        bridgeTasks.OrchestrationNode
 	GroupNode        bridgeTasks.OrchestrationNode
+	MemberNodes      map[string]bridgeTasks.OrchestrationNode
 	MemberOrder      []string
 	PublicTranscript group.Transcript
 	LastDispatch     group.DispatchCommand
 	OwnerSessionID   string
 	Round            int
 	TraceID          string
+}
+
+type OwnerDecisionTurnRequest struct {
+	OwnerNode        bridgeTasks.OrchestrationNode
+	GroupNode        bridgeTasks.OrchestrationNode
+	MemberNodes      map[string]bridgeTasks.OrchestrationNode
+	MemberOrder      []string
+	PublicTranscript group.Transcript
+	LastDispatch     group.DispatchCommand
+	RuntimeOverrides *bridgeTasks.TaskRuntimeOverrides
+	UserPrompt       string
+	SessionID        string
+	Round            int
+	TraceID          string
+	Catalog          tools.ToolCatalog
 }
 
 type Clock interface {

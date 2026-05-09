@@ -10,149 +10,214 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
+	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
+	tooladapter "ghost-os/bridge/orchestration/internal/adapters/toolregistry"
+	apporchestrations "ghost-os/bridge/orchestration/internal/app/orchestrations"
+	"ghost-os/bridge/orchestration/internal/domain/group"
+	"ghost-os/bridge/orchestration/internal/ports"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 )
 
-func (r orchestrationTaskRunner) runOwnerDispatch(
-	ctx context.Context,
-	groupNode OrchestrationNode,
-	memberOrder []string,
-	publicTranscript orchestrationTranscript,
-	lastDispatch orchestrationDispatchResult,
-	sessionID string,
-	round int,
-) (orchestrationDispatchRequest, string, error) {
-	ownerNode, ok := r.plan.nodes[groupNode.Group.OwnerAgentID]
-	if !ok || ownerNode.Agent == nil {
-		return orchestrationDispatchRequest{}, sessionID, fmt.Errorf("owner agent %q is not available", groupNode.Group.OwnerAgentID)
-	}
-	registry := tools.NewRegistry()
-	registry.Register(r.newOwnerDispatchTool(groupNode, memberOrder))
-	catalog := tools.NewScopedCatalog(registry, []string{orchestrationDispatchToolName})
-	return r.runOwnerDispatchTurn(ctx, ownerNode, groupNode, catalog, publicTranscript, lastDispatch, sessionID, round)
+type orchestrationOwnerDecisionTurnExecutor struct {
+	service *bridgeService
 }
 
-func (r orchestrationTaskRunner) runOwnerDispatchTurn(
-	ctx context.Context,
-	ownerNode OrchestrationNode,
-	groupNode OrchestrationNode,
-	catalog tools.ToolCatalog,
-	publicTranscript orchestrationTranscript,
-	lastDispatch orchestrationDispatchResult,
-	sessionID string,
-	round int,
-) (orchestrationDispatchRequest, string, error) {
-	if r.adapter.service == nil || r.adapter.service.runtimeFactory == nil {
-		return orchestrationDispatchRequest{}, sessionID, errors.New("owner dispatch runtime is not configured")
+func (r orchestrationTaskRunner) ownerDecisionRunner() ports.OwnerDecisionRunner {
+	return agentadapter.OwnerDecisionRunner{
+		Executor: orchestrationOwnerDecisionTurnExecutor{service: r.adapter.service},
 	}
-	deps, err := r.buildOwnerDispatchDeps(ownerNode)
+}
+
+func (e orchestrationOwnerDecisionTurnExecutor) RunOwnerDecisionTurn(
+	ctx context.Context,
+	req ports.OwnerDecisionTurnRequest,
+) (group.DispatchCommand, string, error) {
+	if e.service == nil || e.service.runtimeFactory == nil {
+		return group.DispatchCommand{}, req.SessionID, errors.New("owner dispatch runtime is not configured")
+	}
+	deps, err := e.buildOwnerDispatchDeps(req.RuntimeOverrides)
 	if err != nil {
-		return orchestrationDispatchRequest{}, sessionID, err
+		return group.DispatchCommand{}, req.SessionID, err
 	}
 	defer deps.Close()
-	systemPrompt := buildOwnerControlPrompt(
-		deps.systemPrompt,
-		ownerNode,
-		groupNode,
-		r.plan,
-		publicTranscript,
-		lastDispatch,
-		round,
-	)
+	systemPrompt := ownerDecisionSystemPrompt(deps.systemPrompt, req)
+	sess, err := e.loadOwnerDispatchSession(req.SessionID, deps, systemPrompt)
+	if err != nil {
+		return group.DispatchCommand{}, req.SessionID, err
+	}
+	response, runErr := e.runOwnerDispatchAgent(ctx, ownerDispatchRunRequest{
+		request:      req,
+		deps:         deps,
+		sess:         sess,
+		systemPrompt: systemPrompt,
+	})
+	if err := e.saveOwnerDispatchSession(sess); err != nil {
+		return group.DispatchCommand{}, sess.ID, err
+	}
+	return decodeOwnerDecisionResponse(response, runErr, sess.ID)
+}
 
+func (e orchestrationOwnerDecisionTurnExecutor) buildOwnerDispatchDeps(
+	runtimeOverrides *TaskRuntimeOverrides,
+) (agentRuntimeDependencies, error) {
+	preparer := e.newOwnerDispatchPreparer()
+	deps, _, _, err := preparer.buildPrepareDependencies(runtimeOverrides)
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	return deps, nil
+}
+
+func (e orchestrationOwnerDecisionTurnExecutor) loadOwnerDispatchSession(
+	sessionID string,
+	deps agentRuntimeDependencies,
+	systemPrompt string,
+) (*session.Session, error) {
 	sess, created, err := newSessionHistoryBuilder(
 		deps.cfg.Provider,
 		systemPrompt,
-		r.adapter.service.sessionStore,
+		e.service.sessionStore,
 		deps.cfg.ToolSearch.IdleTurns,
 		deps.cfg.MicrocompactEnabled,
 		"",
 	).LoadOrCreateSession(sessionID)
 	if err != nil {
-		return orchestrationDispatchRequest{}, sessionID, err
+		return nil, err
 	}
-	if created && r.adapter.service.sessionStore != nil {
-		if err := r.adapter.service.sessionStore.Save(sess); err != nil {
-			return orchestrationDispatchRequest{}, sessionID, err
-		}
+	if created {
+		return sess, e.saveOwnerDispatchSession(sess)
 	}
-
-	preparer := newSessionTurnPreparer(
-		r.adapter.service.runtimeFactory,
-		r.adapter.service.configStore,
-		r.adapter.service.sessionStore,
-		r.adapter.service.runRegistry,
-		nil,
-	)
-	history := agent.NewHistory("")
-	history.SetConversationState(sess.ConversationState)
-	for _, message := range sess.Messages {
-		history.Append(message)
-	}
-	history.UpdateSystemPrompt(systemPrompt)
-	runAgent := agent.NewAgentWithHistory(deps.client, catalog, history, deps.cfg.MaxTurns)
-	runAgent.SetResponseOptions(llm.CloneResponseOptions(deps.cfg.ResponseOptions))
-	runAgent.SetCompletionRetryPolicy(agent.NewCompletionRetryPolicy(
-		deps.cfg.LLMCompletionRetryCount,
-		time.Duration(deps.cfg.LLMCompletionRetryIntervalMS)*time.Millisecond,
-	))
-	preparer.attachDynamicPromptRefresh(runAgent, deps, sess, catalog, func() (string, error) {
-		return systemPrompt, nil
-	})
-
-	userMessage := llm.Message{Role: llm.RoleUser, Text: buildOwnerControlUserPrompt(round)}
-	execCtx, cleanup, err := preparer.prepareExecutionContext(ctx, sess, deps.registry, r.traceID)
-	if err != nil {
-		return orchestrationDispatchRequest{}, sessionID, err
-	}
-	defer cleanup()
-	response, runErr := runAgent.RunMessageWithTraceID(execCtx, userMessage, r.traceID)
-	newMessages := runAgent.GetNewMessages()
-	sess.ConversationState = runAgent.GetConversationState()
-	for _, message := range newMessages {
-		sess.AddMessage(message)
-	}
-	if r.adapter.service.sessionStore != nil {
-		if saveErr := r.adapter.service.sessionStore.Save(sess); saveErr != nil {
-			return orchestrationDispatchRequest{}, sessionID, saveErr
-		}
-	}
-	if runErr != nil {
-		var handoff *agent.ErrIterationHandoff
-		if errors.As(runErr, &handoff) {
-			var request orchestrationDispatchRequest
-			if err := json.Unmarshal([]byte(strings.TrimSpace(handoff.Did)), &request); err != nil {
-				return orchestrationDispatchRequest{}, sess.ID, fmt.Errorf("decode owner dispatch handoff: %w", err)
-			}
-			return request, sess.ID, nil
-		}
-		return orchestrationDispatchRequest{}, sess.ID, runErr
-	}
-	if strings.TrimSpace(response) == "" {
-		return orchestrationDispatchRequest{}, sess.ID, errors.New("owner must call orchestration_dispatch")
-	}
-	return orchestrationDispatchRequest{}, sess.ID, errors.New("owner must call orchestration_dispatch")
+	return sess, nil
 }
 
-func (r orchestrationTaskRunner) buildOwnerDispatchDeps(ownerNode OrchestrationNode) (agentRuntimeDependencies, error) {
-	if r.adapter.service == nil || r.adapter.service.runtimeFactory == nil {
-		return agentRuntimeDependencies{}, errors.New("owner dispatch runtime is not configured")
-	}
-	overrides := cloneTaskRuntimeOverrides(ownerNode.Agent.RuntimeOverrides)
-	normalized, err := normalizeTaskRuntimeOverrides(overrides)
+func (e orchestrationOwnerDecisionTurnExecutor) runOwnerDispatchAgent(
+	ctx context.Context,
+	req ownerDispatchRunRequest,
+) (string, error) {
+	preparer := e.newOwnerDispatchPreparer()
+	runAgent := buildOwnerDispatchAgent(newOwnerDispatchAgentConfig(req))
+	preparer.attachDynamicPromptRefresh(runAgent, req.deps, req.sess, req.request.Catalog, func() (string, error) {
+		return req.systemPrompt, nil
+	})
+	execCtx, cleanup, err := preparer.prepareExecutionContext(ctx, req.sess, req.deps.registry, req.request.TraceID)
 	if err != nil {
-		return agentRuntimeDependencies{}, err
+		return "", err
 	}
-	preparer := newSessionTurnPreparer(
-		r.adapter.service.runtimeFactory,
-		r.adapter.service.configStore,
-		r.adapter.service.sessionStore,
-		r.adapter.service.runRegistry,
+	defer cleanup()
+	response, runErr := runAgent.RunMessageWithTraceID(execCtx, ownerUserMessage(req.request), req.request.TraceID)
+	persistOwnerAgentMessages(req.sess, runAgent)
+	return response, runErr
+}
+
+func (e orchestrationOwnerDecisionTurnExecutor) saveOwnerDispatchSession(
+	sess *session.Session,
+) error {
+	if e.service.sessionStore == nil {
+		return nil
+	}
+	return e.service.sessionStore.Save(sess)
+}
+
+func (e orchestrationOwnerDecisionTurnExecutor) newOwnerDispatchPreparer() *sessionTurnPreparer {
+	return newSessionTurnPreparer(
+		e.service.runtimeFactory,
+		e.service.configStore,
+		e.service.sessionStore,
+		e.service.runRegistry,
 		nil,
 	)
-	deps, _, _, err := preparer.buildPrepareDependencies(normalized)
-	if err != nil {
-		return agentRuntimeDependencies{}, err
+}
+
+type ownerDispatchRunRequest struct {
+	request      ports.OwnerDecisionTurnRequest
+	deps         agentRuntimeDependencies
+	sess         *session.Session
+	systemPrompt string
+}
+
+type ownerDispatchAgentConfig struct {
+	deps         agentRuntimeDependencies
+	sess         *session.Session
+	catalog      tools.ToolCatalog
+	systemPrompt string
+}
+
+func buildOwnerDispatchAgent(cfg ownerDispatchAgentConfig) *agent.Agent {
+	history := agent.NewHistory("")
+	history.SetConversationState(cfg.sess.ConversationState)
+	for _, message := range cfg.sess.Messages {
+		history.Append(message)
 	}
-	return deps, nil
+	history.UpdateSystemPrompt(cfg.systemPrompt)
+	runAgent := agent.NewAgentWithHistory(cfg.deps.client, cfg.catalog, history, cfg.deps.cfg.MaxTurns)
+	runAgent.SetResponseOptions(llm.CloneResponseOptions(cfg.deps.cfg.ResponseOptions))
+	runAgent.SetCompletionRetryPolicy(agent.NewCompletionRetryPolicy(
+		cfg.deps.cfg.LLMCompletionRetryCount,
+		time.Duration(cfg.deps.cfg.LLMCompletionRetryIntervalMS)*time.Millisecond,
+	))
+	return runAgent
+}
+
+func newOwnerDispatchAgentConfig(req ownerDispatchRunRequest) ownerDispatchAgentConfig {
+	return ownerDispatchAgentConfig{
+		deps:         req.deps,
+		sess:         req.sess,
+		catalog:      req.request.Catalog,
+		systemPrompt: req.systemPrompt,
+	}
+}
+
+func ownerDecisionSystemPrompt(basePrompt string, req ports.OwnerDecisionTurnRequest) string {
+	return apporchestrations.BuildOwnerControlPrompt(apporchestrations.OwnerControlPromptRequest{
+		BasePrompt:       basePrompt,
+		OwnerNode:        req.OwnerNode,
+		GroupNode:        req.GroupNode,
+		MemberNodes:      req.MemberNodes,
+		MemberOrder:      append([]string(nil), req.MemberOrder...),
+		PublicTranscript: req.PublicTranscript,
+		LastDispatch:     req.LastDispatch,
+		Round:            req.Round,
+		DispatchToolName: tooladapter.DispatchToolName,
+	})
+}
+
+func ownerUserMessage(req ports.OwnerDecisionTurnRequest) llm.Message {
+	return llm.Message{Role: llm.RoleUser, Text: req.UserPrompt}
+}
+
+func persistOwnerAgentMessages(sess *session.Session, runAgent *agent.Agent) {
+	sess.ConversationState = runAgent.GetConversationState()
+	for _, message := range runAgent.GetNewMessages() {
+		sess.AddMessage(message)
+	}
+}
+
+func decodeOwnerDecisionResponse(
+	response string,
+	runErr error,
+	sessionID string,
+) (group.DispatchCommand, string, error) {
+	if runErr != nil {
+		return decodeOwnerDecisionRunError(runErr, sessionID)
+	}
+	if strings.TrimSpace(response) == "" {
+		return group.DispatchCommand{}, sessionID, errors.New("owner must call orchestration_dispatch")
+	}
+	return group.DispatchCommand{}, sessionID, errors.New("owner must call orchestration_dispatch")
+}
+
+func decodeOwnerDecisionRunError(
+	runErr error,
+	sessionID string,
+) (group.DispatchCommand, string, error) {
+	var handoff *agent.ErrIterationHandoff
+	if !errors.As(runErr, &handoff) {
+		return group.DispatchCommand{}, sessionID, runErr
+	}
+	var request group.DispatchCommand
+	if err := json.Unmarshal([]byte(strings.TrimSpace(handoff.Did)), &request); err != nil {
+		return group.DispatchCommand{}, sessionID, fmt.Errorf("decode owner dispatch handoff: %w", err)
+	}
+	return request, sessionID, nil
 }

@@ -3,15 +3,12 @@ package orchestration
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
 	apporchestrations "ghost-os/bridge/orchestration/internal/app/orchestrations"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
-
-type orchestrationMemberResult = ports.MemberResult
 
 type orchestrationMemberActionInvoker struct {
 	service *bridgeService
@@ -63,57 +60,5 @@ func (r orchestrationTaskRunner) memberRunner() ports.MemberAgentRunner {
 		Executor: agentadapter.MemberAgentRunner{
 			Invoker: orchestrationMemberActionInvoker{service: r.adapter.service},
 		},
-	}
-}
-
-func (r orchestrationTaskRunner) runGroupMember(
-	ctx context.Context,
-	groupNode OrchestrationNode,
-	memberNode OrchestrationNode,
-	transcriptText string,
-	round int,
-	sessionID string,
-) orchestrationMemberResult {
-	return r.runGroupMemberWithInstruction(
-		ctx,
-		groupNode,
-		memberNode,
-		transcriptText,
-		round,
-		sessionID,
-		"",
-		false,
-	)
-}
-
-func (r orchestrationTaskRunner) runGroupMemberWithInstruction(
-	ctx context.Context,
-	groupNode OrchestrationNode,
-	memberNode OrchestrationNode,
-	transcriptText string,
-	round int,
-	sessionID string,
-	instruction string,
-	private bool,
-) orchestrationMemberResult {
-	result, err := r.memberRunner().RunMember(ctx, ports.MemberRunRequest{
-		GroupNode:      groupNode,
-		MemberNode:     memberNode,
-		TranscriptText: transcriptText,
-		Round:          round,
-		SessionID:      sessionID,
-		Instruction:    instruction,
-		Private:        private,
-		TraceID:        r.traceID,
-	})
-	if err == nil {
-		return result
-	}
-	return orchestrationMemberResult{
-		Round:   round,
-		AgentID: strings.TrimSpace(memberNode.ID),
-		Status:  taskRunStatusError,
-		Preview: err.Error(),
-		Error:   err.Error(),
 	}
 }
