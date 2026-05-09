@@ -5,7 +5,7 @@ import {
   MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
-import type { StreamingMessageRow } from './streamingRows';
+import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 
 function buildStreamingRow(message: ChatMessage): StreamingMessageRow {
   return {

@@ -41,7 +41,7 @@ function buildThinkingSegment(id: string, content = 'thinking text'): StreamingT
   };
 }
 
-describe('components/message/streamingRows', () => {
+describe('lib/chat-view/streamingRows', () => {
   it('renders streaming rows in explicit event order', () => {
     const rows = getOrderedStreamingRows({
       pendingQuestions: [buildQuestion('q-1', 'question-1')],

@@ -4,7 +4,7 @@ import {
   STREAMING_THINKING_ORDER_PREFIX,
   STREAMING_QUESTION_ORDER_PREFIX,
   STREAMING_TOOL_ORDER_PREFIX,
-} from '@/lib/chatStream';
+} from '@/lib/chat-stream/streamState';
 import type {
   ChatMessage,
   PendingQuestionMessage,
@@ -12,7 +12,7 @@ import type {
   StreamingThinkingSegment,
   ToolChatMessage,
 } from '@/lib/types';
-import type { MessageListProps } from './types';
+import type { MessageListProps } from '@/components/message/types';
 
 export interface StreamingMessageRow {
   key: string;

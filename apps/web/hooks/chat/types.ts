@@ -1,4 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { ActiveAgentRun } from '@/lib/chat-store/types';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   ChatMessage,
@@ -11,11 +12,7 @@ import type {
   StreamingToolState,
 } from '@/lib/types';
 
-export interface ActiveAgentRun {
-  abortController?: AbortController;
-  sessionId: string;
-  traceId: string;
-}
+export type { ActiveAgentRun } from '@/lib/chat-store/types';
 
 export interface UseBridgeChatResult {
   committedMessages: ChatMessage[];

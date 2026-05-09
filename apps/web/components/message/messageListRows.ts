@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/lib/types';
-import type { StreamingMessageRow } from './streamingRows';
+import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 import type { MessageListRow } from './types';
 
 export function getMessageListRowCount(

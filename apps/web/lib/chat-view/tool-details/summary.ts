@@ -16,9 +16,9 @@ import {
   readString,
   truncateError,
   truncateSummary,
-} from './toolDetailCommon';
-import { buildToolSearchAction } from './toolDetailSfind';
-import { resolveToolCallArgs } from './toolDetailToolCalls';
+} from './common';
+import { buildToolSearchAction } from './sfind';
+import { resolveToolCallArgs } from './toolCalls';
 
 const ACTION_SAMPLE_LIMIT = 2;
 

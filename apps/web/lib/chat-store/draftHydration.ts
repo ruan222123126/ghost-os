@@ -7,7 +7,7 @@ import {
   type StreamingAssistantState,
   type StreamingThinkingState,
   type StreamingToolTableState,
-} from '@/lib/chatStream';
+} from '@/lib/chat-stream/streamState';
 import type { SessionTurnDraft, StreamingToolState } from '@/lib/types';
 
 interface DraftHydratedState {

@@ -2,7 +2,7 @@ import type { ChatRuntimeAction } from './actions';
 import { TOOL_PENDING_STATUS } from './constants';
 import type { ChatRuntimeState } from './runtimeState';
 import type { ToolTagStreamEvent, ToolTagStreamUnit } from '@/lib/toolTagText';
-import { normalizeToolName } from '@/components/message/toolDetailCommon';
+import { normalizeToolName } from '@/lib/chat-view/tool-details/common';
 
 export function projectToolTagUnits(
   runtime: ChatRuntimeState,

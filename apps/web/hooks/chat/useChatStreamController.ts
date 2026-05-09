@@ -2,12 +2,15 @@ import { useCallback } from 'react';
 import { streamHumanResponse, streamMessage } from '@/lib/api/agent/stream';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
 import { createChatRuntimeState } from '@/lib/chatRuntime/runtimeState';
+import {
+  resolveEventSession,
+  resolveStreamSession,
+  type RuntimeSessionResolution,
+} from '@/lib/chat-stream/runSession';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import { isPureToolTagDocument } from '@/lib/toolTagText';
 import type { AgentStreamEvent } from '@/lib/types';
 import type { StreamAgentRunInput } from './types';
-import { syncActiveSession } from './chatStreamControllerSession';
 import type {
   StreamHumanRunOptions,
   ChatRuntimeState,
@@ -29,6 +32,21 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
     syncRecentHistory,
   } = options;
 
+  const applySessionResolution = useCallback(
+    (resolution: RuntimeSessionResolution | null) => {
+      if (!resolution) {
+        return;
+      }
+      if (resolution.nextActiveRun) {
+        setActiveRun(resolution.nextActiveRun);
+      }
+      if (resolution.notifySessionResolved) {
+        onSessionResolved?.(resolution.sessionId);
+      }
+    },
+    [onSessionResolved, setActiveRun],
+  );
+
   const syncRecentHistoryInBackground = useCallback((sessionId: string) => {
     const trimmedSessionId = sessionId.trim();
     if (!trimmedSessionId) {
@@ -47,50 +65,48 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
 
   const syncSession = useCallback(
     (runtime: ChatRuntimeState, sessionId?: string) => {
-      const trimmedSessionId = sessionId?.trim();
-      if (!trimmedSessionId) {
+      const resolution = resolveStreamSession({
+        activeRun: activeRunRef.current,
+        currentSessionId,
+        sessionId,
+      });
+      if (!resolution) {
         return;
       }
 
-      const currentRun = activeRunRef.current;
-      if (currentRun && currentRun.sessionId !== trimmedSessionId) {
-        setActiveRun({ ...currentRun, sessionId: trimmedSessionId });
-      }
-      if (trimmedSessionId !== currentSessionId) {
-        onSessionResolved?.(trimmedSessionId);
-      }
+      applySessionResolution(resolution);
       clearStreamingState();
       runtime.assistantBuffer = '';
-      syncRecentHistoryInBackground(trimmedSessionId);
+      syncRecentHistoryInBackground(resolution.sessionId);
     },
     [
       activeRunRef,
+      applySessionResolution,
       clearStreamingState,
       currentSessionId,
-      onSessionResolved,
-      setActiveRun,
       syncRecentHistoryInBackground,
     ],
   );
 
   const applyEvent = useCallback(
     (runtime: ChatRuntimeState, event: AgentStreamEvent) => {
-      syncActiveSession({
-        activeRunRef,
+      const resolution = resolveEventSession({
+        activeRun: activeRunRef.current,
         currentSessionId,
         event,
-        onSessionResolved,
-        runtime,
-        setActiveRun,
+        runtimeSessionId: runtime.sessionId,
       });
+      applySessionResolution(resolution);
+      if (resolution) {
+        runtime.sessionId = resolution.sessionId;
+      }
       applyRuntimeActions(projectAgentEvent({ event, runtime }));
     },
     [
       activeRunRef,
+      applySessionResolution,
       applyRuntimeActions,
       currentSessionId,
-      onSessionResolved,
-      setActiveRun,
     ],
   );
 
@@ -146,5 +162,3 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
     runHumanStream,
   };
 }
-
-export { isPureToolTagDocument };

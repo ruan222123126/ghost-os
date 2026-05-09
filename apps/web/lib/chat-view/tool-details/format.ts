@@ -1,5 +1,5 @@
 import type { ToolChatMessage } from '@/lib/types';
-import { buildToolDetailCompact } from './toolDetailCompact';
+import { buildToolDetailCompact } from './compact';
 import {
   buildDirectAction,
   isErrorStatus,
@@ -10,10 +10,10 @@ import {
   supportsPromotedActionTitle,
   truncateError,
   type RecordValue,
-} from './toolDetailCommon';
-import { buildToolSearchAction } from './toolDetailSfind';
-import { buildToolDetailError, buildToolDetailSummary } from './toolDetailSummary';
-import { resolveToolCallArgs } from './toolDetailToolCalls';
+} from './common';
+import { buildToolSearchAction } from './sfind';
+import { buildToolDetailError, buildToolDetailSummary } from './summary';
+import { resolveToolCallArgs } from './toolCalls';
 
 const BYTES_PER_KB = 1024;
 const BYTES_PER_MB = BYTES_PER_KB * 1024;

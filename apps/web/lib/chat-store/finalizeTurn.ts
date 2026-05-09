@@ -4,10 +4,10 @@ import {
   clearStreamingToolState,
   STREAMING_THINKING_ORDER_PREFIX,
   STREAMING_TOOL_ORDER_PREFIX,
-} from '@/lib/chatStream';
+} from '@/lib/chat-stream/streamState';
 import { buildThinkingMessage } from '@/lib/chatMessages';
 import type { ChatMessage } from '@/lib/types';
-import type { ChatStateStore } from './chatStateReducer';
+import type { ChatStateStore } from './reducer';
 
 export function finalizeStreamingTurnState(
   state: ChatStateStore,

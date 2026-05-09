@@ -6,8 +6,8 @@ import {
   readString,
   truncateSummary,
   type RecordValue,
-} from './toolDetailCommon';
-import { resolveToolCallArgs } from './toolDetailToolCalls';
+} from './common';
+import { resolveToolCallArgs } from './toolCalls';
 
 const TOOL_SEARCH_NAME = 'sfind';
 const TOOL_SEARCH_ACTION_SEARCH = 'search';

@@ -13,7 +13,7 @@ import {
 import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
 import { buildMessageListLayoutSignature } from './messageListScroll';
 import { filterCommittedMessagesForDisplay } from './messageVisibility';
-import { getOrderedStreamingRows, type StreamingMessageRow } from './streamingRows';
+import { getOrderedStreamingRows, type StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import {
   getLatestStreamingThinkingId,

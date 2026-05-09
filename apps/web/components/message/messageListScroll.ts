@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/lib/types';
-import type { StreamingMessageRow } from './streamingRows';
+import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 
 export const MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX = 120;
 

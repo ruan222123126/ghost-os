@@ -25,8 +25,8 @@ function renderCopyButton(props: React.ComponentProps<typeof MessageCopyButton>)
       WebLocaleProvider,
       {
         initialLocale: 'en-US',
-        children: React.createElement(MessageCopyButton, props),
       },
+      React.createElement(MessageCopyButton, props),
     ),
   );
 }

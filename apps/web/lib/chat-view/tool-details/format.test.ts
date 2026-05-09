@@ -1,7 +1,7 @@
 import type { ToolChatMessage } from '@/lib/types';
 import { formatToolAction, formatToolCardDetails, formatToolDetails } from './format';
 
-describe('components/message/format', () => {
+describe('lib/chat-view/tool-details/format', () => {
   it('aggregates script_exec report actions with readable categories and fixed order', () => {
     const report = {
       summary: { step_count: 8, failed_steps: 0, write_steps: 2 },

@@ -27,7 +27,7 @@ const WebLocaleContext = createContext<WebLocaleContextValue | null>(null);
 const DEFAULT_LOCALE: WebLocale = 'en-US';
 
 interface WebLocaleProviderProps {
-  children: ReactNode;
+  children?: ReactNode;
   initialLocale?: WebLocale;
 }
 

@@ -11,10 +11,10 @@ import {
   readRecord,
   readString,
   truncateError,
-} from './toolDetailCommon';
-import { buildToolSearchAction } from './toolDetailSfind';
-import { resolveToolCallArgs } from './toolDetailToolCalls';
-import { buildToolDetailError } from './toolDetailSummary';
+} from './common';
+import { buildToolSearchAction } from './sfind';
+import { resolveToolCallArgs } from './toolCalls';
+import { buildToolDetailError } from './summary';
 
 export function buildToolDetailCompact(tool: ToolChatMessage): string {
   if (normalizeToolName(tool.toolName) === 'bash_exec') {

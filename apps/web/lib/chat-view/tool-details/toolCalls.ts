@@ -1,5 +1,5 @@
 import type { ToolChatMessage } from '@/lib/types';
-import { normalizeToolName, type RecordValue } from './toolDetailCommon';
+import { normalizeToolName, type RecordValue } from './common';
 
 interface ParsedToolCall {
   id: string;

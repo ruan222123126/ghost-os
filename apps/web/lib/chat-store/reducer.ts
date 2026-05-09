@@ -1,4 +1,3 @@
-import type { SetStateAction } from 'react';
 import { buildErrorMessage } from '@/lib/chatMessages';
 import {
   clearPendingQuestionState,
@@ -9,11 +8,11 @@ import {
   type StreamingAssistantState,
   type StreamingThinkingState,
   type StreamingToolTableState,
-} from '@/lib/chatStream';
+} from '@/lib/chat-stream/streamState';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type { ChatMessage, SessionTurnDraft } from '@/lib/types';
-import { applyRuntimeActionsToState } from './chatStateRuntime';
-import { buildDraftHydratedState } from './chatStateDraft';
+import { buildDraftHydratedState } from './draftHydration';
+import { applyRuntimeActionsToState } from './runtimeReducer';
 import type { ActiveAgentRun } from './types';
 
 export interface ChatStateStore {
@@ -53,7 +52,7 @@ interface SetScalarAction {
 
 interface SetCommittedMessagesAction {
   type: 'set_committed_messages';
-  updater: SetStateAction<ChatMessage[]>;
+  updater: ChatMessageUpdater;
 }
 
 interface ApplyRuntimeActionsAction {
@@ -88,6 +87,8 @@ export type ChatStateAction =
   | AppendErrorMessageAction
   | ClearMessagesAction
   | HydrateTurnDraftAction;
+
+export type ChatMessageUpdater = ChatMessage[] | ((messages: ChatMessage[]) => ChatMessage[]);
 
 export function createInitialChatState(): ChatStateStore {
   return {
@@ -132,7 +133,7 @@ export function chatStateReducer(state: ChatStateStore, action: ChatStateAction)
 
 function applySetCommittedMessages(
   state: ChatStateStore,
-  updater: SetStateAction<ChatMessage[]>,
+  updater: ChatMessageUpdater,
 ): ChatStateStore {
   const nextCommitted = typeof updater === 'function'
     ? updater(state.committedMessages)

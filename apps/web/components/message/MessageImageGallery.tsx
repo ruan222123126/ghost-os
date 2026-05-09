@@ -2,7 +2,7 @@ import Image from 'next/image';
 import type { FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatImage } from '@/lib/types';
-import { formatBytes } from './format';
+import { formatBytes } from '@/lib/chat-view/tool-details/format';
 
 export const MessageImageGallery: FC<{ images: ChatImage[] }> = ({ images }) => {
   const { copy } = useWebLocale();

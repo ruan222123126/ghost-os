@@ -14,7 +14,7 @@ import {
   STREAMING_TOOL_ORDER_PREFIX,
   upsertPendingQuestionState,
   upsertStreamingToolState,
-} from '@/lib/chatStream';
+} from '@/lib/chat-stream/streamState';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   PendingQuestionMessage,
@@ -22,8 +22,8 @@ import type {
   StreamingThinkingSegment,
   StreamingToolState,
 } from '@/lib/types';
-import type { ChatStateStore } from './chatStateReducer';
-import { finalizeStreamingTurnState } from './chatStateFinalization';
+import type { ChatStateStore } from './reducer';
+import { finalizeStreamingTurnState } from './finalizeTurn';
 
 export function buildChatStateView(state: ChatStateStore): {
   streamingAssistantSegments: StreamingAssistantSegment[];

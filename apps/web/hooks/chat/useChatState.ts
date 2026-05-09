@@ -1,4 +1,9 @@
 import { useCallback, useReducer, useRef, type SetStateAction } from 'react';
+import {
+  chatStateReducer,
+  createInitialChatState,
+} from '@/lib/chat-store/reducer';
+import { buildChatStateView } from '@/lib/chat-store/runtimeReducer';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   ChatMessage,
@@ -7,11 +12,6 @@ import type {
   StreamingToolState,
 } from '@/lib/types';
 import type { ActiveAgentRun, ChatStateControls } from './types';
-import {
-  chatStateReducer,
-  createInitialChatState,
-} from './chatStateReducer';
-import { buildChatStateView } from './chatStateRuntime';
 
 export function useChatState(): ChatStateControls {
   const [state, dispatch] = useReducer(chatStateReducer, undefined, createInitialChatState);

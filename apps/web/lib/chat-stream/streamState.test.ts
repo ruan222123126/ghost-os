@@ -12,7 +12,7 @@ import {
   type StreamingToolTableState,
   upsertPendingQuestionState,
   upsertStreamingToolState,
-} from './chatStream';
+} from './streamState';
 
 describe('lib/chatStream', () => {
   it('appends assistant deltas into timeline segments and splits on boundary', () => {

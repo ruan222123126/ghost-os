@@ -2,10 +2,10 @@ import {
   chatStateReducer,
   createInitialChatState,
   type ChatStateStore,
-} from './chatStateReducer';
-import { buildChatStateView } from './chatStateRuntime';
+} from './reducer';
+import { buildChatStateView } from './runtimeReducer';
 
-describe('hooks/chat/chatStateReducer', () => {
+describe('lib/chat-store/reducer', () => {
   it('keeps streaming order and boundaries when applying runtime actions', () => {
     let state = createInitialState();
     state = chatStateReducer(state, {

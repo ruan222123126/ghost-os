@@ -3,7 +3,7 @@
 import type { CSSProperties, FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ToolChatMessage } from '@/lib/types';
-import { formatToolAction, formatToolCardDetails } from './format';
+import { formatToolAction, formatToolCardDetails } from '@/lib/chat-view/tool-details/format';
 
 type ToolTone = 'running' | 'success' | 'error';
 
