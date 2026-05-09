@@ -24,7 +24,7 @@ import {
   mergeOrchestrationDraftWithCachedCanvas,
   ORCHESTRATION_VALIDATION_BLOCKED_TEXT,
   storeOrchestrationDraft,
-} from './orchestrationEditorDraft';
+} from '@/lib/orchestration-editor/snapshot';
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const AUTOSAVE_RETRY_MS = 2000;

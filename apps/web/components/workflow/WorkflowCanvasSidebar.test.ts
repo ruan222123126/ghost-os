@@ -2,9 +2,13 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { copyForWorkflow } from '@/lib/i18n/messages/workflow';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import { createEmptyWorkflowDraft } from '@/lib/workflow-editor/draft';
-import { buildOrchestrationWorkflowCopy } from '@/components/orchestration/orchestrationEditorCopy';
+import { buildOrchestrationWorkflowCopy } from '@/hooks/orchestration/orchestrationEditorCopy';
 import { WorkflowCanvasSidebar } from './WorkflowCanvasSidebar';
+
+const TestLocaleProvider = WebLocaleProvider as React.ComponentType<{
+  initialLocale: 'zh-CN';
+  children?: React.ReactNode;
+}>;
 
 describe('components/workflow/WorkflowCanvasSidebar', () => {
   it('does not expose start or end in the default node library', () => {
@@ -41,26 +45,19 @@ function renderSidebar(nodeLibraryTypes?: readonly ('agent')[]) {
 
   act(() => {
     renderer = TestRenderer.create(
-      React.createElement(WebLocaleProvider, {
+      React.createElement(TestLocaleProvider, {
         initialLocale: 'zh-CN',
-        children: React.createElement(WorkflowCanvasSidebar, {
-          isOpen: true,
-          draft: createEmptyWorkflowDraft(),
-          autosaveState: { phase: 'idle', message: 'Autosave idle', updatedAt: 0 },
-          importSessionID: '',
-          importLoading: false,
-          workflowCopy: buildOrchestrationWorkflowCopy(copyForWorkflow('zh-CN'), 'zh-CN'),
-          nodeLibraryTypes,
-          onToggle: jest.fn(),
-          onAddNode: jest.fn(),
-          onChangeImportSessionID: jest.fn(),
-          onImportFromSession: jest.fn(),
-          onScheduleChange: jest.fn(),
-          onOpenSettings: jest.fn(),
-          onBack: jest.fn(),
-          onSave: jest.fn(),
-        }),
-      }),
+      }, React.createElement(WorkflowCanvasSidebar, {
+        isOpen: true,
+        autosaveState: { phase: 'idle', message: 'Autosave idle', updatedAt: 0 },
+        workflowCopy: buildOrchestrationWorkflowCopy(copyForWorkflow('zh-CN'), 'zh-CN'),
+        nodeLibraryTypes,
+        onToggle: jest.fn(),
+        onAddNode: jest.fn(),
+        onOpenSettings: jest.fn(),
+        onBack: jest.fn(),
+        onSave: jest.fn(),
+      })),
     );
   });
 

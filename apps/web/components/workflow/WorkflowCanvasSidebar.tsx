@@ -7,25 +7,18 @@ import type { WebLocale } from '@/lib/i18n/locale';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import type {
   AutosaveState,
-  WorkflowCanvasDraft,
   WorkflowCanvasPosition,
   WorkflowNodeType,
 } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasSidebarProps {
   isOpen: boolean;
-  draft: WorkflowCanvasDraft;
   autosaveState: AutosaveState;
-  importSessionID: string;
-  importLoading: boolean;
   workflowCopy: WorkflowCopy;
   nodeLibraryTypes?: readonly WorkflowNodeType[];
   localizeValidationError?: (message: string, locale: WebLocale) => string;
   onToggle: () => void;
   onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => void;
-  onChangeImportSessionID: (value: string) => void;
-  onImportFromSession: () => void;
-  onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
   onOpenSettings: () => void;
   onBack: () => void;
   onSave: () => void;

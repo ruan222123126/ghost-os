@@ -5,7 +5,7 @@ import {
 } from '@/components/workflow/WorkflowCanvasNodeContextMenu';
 import { WorkflowCanvasStageNodes } from '@/components/workflow/WorkflowCanvasStageNodes';
 import { renderEdge } from '@/components/workflow/workflowCanvasStageHelpers';
-import { useWorkflowCanvasStageInteractions } from '@/components/workflow/useWorkflowCanvasStageInteractions';
+import { useWorkflowCanvasStageInteractions } from '@/hooks/workflow/useWorkflowCanvasStageInteractions';
 import { localizeWorkflowValidationError } from '@/lib/i18n/workflowValidation';
 import type { WebLocale } from '@/lib/i18n/locale';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';

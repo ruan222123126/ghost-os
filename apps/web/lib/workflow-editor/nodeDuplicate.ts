@@ -1,36 +1,53 @@
+import { cloneWorkflowTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
+import { LOOP_ROLE_END, LOOP_ROLE_START } from '@/lib/workflow-editor/constants';
+import {
+  assertDistinctWorkflowNodeIDs,
+  assertWorkflowLoopID,
+  assertWorkflowNodeID,
+} from '@/lib/workflow-editor/nodeIDs';
+import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor/screenControlComposer';
 import type {
   ScreenControlComposerStep,
   WorkflowCanvasDraft,
   WorkflowCanvasNodeDraft,
   WorkflowCanvasPosition,
-  WorkflowNodeType,
-} from '@/lib/workflow-editor';
-import { cloneWorkflowTaskRuntimeOverrides, normalizeScreenControlComposerAction } from '@/lib/workflow-editor';
-import { LOOP_ROLE_END, LOOP_ROLE_START } from '@/lib/workflow-editor/constants';
+} from '@/lib/workflow-editor/types';
 
-const LOOP_NODE_ID_PREFIX = 'loop';
-const LOOP_START_NODE_SUFFIX = 'start';
-const LOOP_END_NODE_SUFFIX = 'end';
 const DUPLICATE_NODE_OFFSET_X = 36;
 const DUPLICATE_NODE_OFFSET_Y = 36;
 
-export function duplicateWorkflowNode(draft: WorkflowCanvasDraft, nodeID: string): WorkflowCanvasDraft {
-  const source = draft.nodes.find((node) => node.id === nodeID);
+export interface DuplicateNodeOptions {
+  nodeID: string;
+  newNodeId?: string;
+  loopId?: string;
+  startNodeId?: string;
+  endNodeId?: string;
+}
+
+interface LoopNodePair {
+  startNode: WorkflowCanvasNodeDraft;
+  endNode: WorkflowCanvasNodeDraft;
+}
+
+export function duplicateWorkflowNode(draft: WorkflowCanvasDraft, options: DuplicateNodeOptions): WorkflowCanvasDraft {
+  const source = draft.nodes.find((node) => node.id === options.nodeID);
   if (!source) {
     return draft;
   }
   if (source.type === 'loop') {
-    return duplicateLoopNodePair(draft, source);
+    return duplicateLoopNodePair(draft, source, options);
   }
-  return duplicateSingleNode(draft, source);
+  return duplicateSingleNode(draft, source, options.newNodeId);
 }
 
 function duplicateSingleNode(
   draft: WorkflowCanvasDraft,
   sourceNode: WorkflowCanvasNodeDraft,
+  newNodeId?: string,
 ): WorkflowCanvasDraft {
+  const nodeID = assertNewNodeIDAvailable(draft, newNodeId, 'duplicate workflow node id');
   const copiedNode = cloneNodeForDuplicate(sourceNode, {
-    id: buildNodeID(sourceNode.type, draft.nodes.length),
+    id: nodeID,
     position: offsetPosition(sourceNode.position),
   });
   return {
@@ -43,14 +60,15 @@ function duplicateSingleNode(
 function duplicateLoopNodePair(
   draft: WorkflowCanvasDraft,
   sourceNode: WorkflowCanvasNodeDraft,
+  options: DuplicateNodeOptions,
 ): WorkflowCanvasDraft {
   const loopPair = findLoopNodePair(draft.nodes, sourceNode.loop?.loop_id);
   if (!loopPair) {
     return draft;
   }
 
-  const nextLoopID = `${LOOP_NODE_ID_PREFIX}-${Date.now()}-${draft.nodes.length}`;
-  const copiedPair = cloneLoopPair(loopPair, nextLoopID);
+  const loopIDs = assertDuplicateLoopIDsAvailable(draft, options);
+  const copiedPair = cloneLoopPair(loopPair, loopIDs);
   const selectedNodeId = sourceNode.loop?.role === LOOP_ROLE_END
     ? copiedPair.endNode.id
     : copiedPair.startNode.id;
@@ -60,11 +78,6 @@ function duplicateLoopNodePair(
     nodes: [...draft.nodes, copiedPair.startNode, copiedPair.endNode],
     selectedNodeId,
   };
-}
-
-interface LoopNodePair {
-  startNode: WorkflowCanvasNodeDraft;
-  endNode: WorkflowCanvasNodeDraft;
 }
 
 function findLoopNodePair(
@@ -92,30 +105,58 @@ function findLoopNodePair(
   return { startNode, endNode };
 }
 
-function cloneLoopPair(loopPair: LoopNodePair, nextLoopID: string): LoopNodePair {
+function cloneLoopPair(loopPair: LoopNodePair, loopIDs: RequiredLoopIDs): LoopNodePair {
   const startNode = cloneNodeForDuplicate(loopPair.startNode, {
-    id: `${nextLoopID}-${LOOP_START_NODE_SUFFIX}`,
+    id: loopIDs.startNodeId,
     position: offsetPosition(loopPair.startNode.position),
     loop: {
       ...loopPair.startNode.loop,
       role: LOOP_ROLE_START,
-      loop_id: nextLoopID,
+      loop_id: loopIDs.loopId,
     },
   });
   const endNode = cloneNodeForDuplicate(loopPair.endNode, {
-    id: `${nextLoopID}-${LOOP_END_NODE_SUFFIX}`,
+    id: loopIDs.endNodeId,
     position: offsetPosition(loopPair.endNode.position),
     loop: {
       ...loopPair.endNode.loop,
       role: LOOP_ROLE_END,
-      loop_id: nextLoopID,
+      loop_id: loopIDs.loopId,
     },
   });
   return { startNode, endNode };
 }
 
-function buildNodeID(type: WorkflowNodeType, index: number): string {
-  return `${type}-${Date.now()}-${index}`;
+interface RequiredLoopIDs {
+  loopId: string;
+  startNodeId: string;
+  endNodeId: string;
+}
+
+function assertDuplicateLoopIDsAvailable(
+  draft: WorkflowCanvasDraft,
+  options: DuplicateNodeOptions,
+): RequiredLoopIDs {
+  const loopId = assertWorkflowLoopID(options.loopId ?? '');
+  const startNodeId = assertNewNodeIDAvailable(draft, options.startNodeId, 'duplicate loop start node id');
+  const endNodeId = assertNewNodeIDAvailable(draft, options.endNodeId, 'duplicate loop end node id');
+  assertDistinctWorkflowNodeIDs([startNodeId, endNodeId]);
+  if (draft.nodes.some((node) => node.type === 'loop' && node.loop?.loop_id === loopId)) {
+    throw new Error(`workflow loop id already exists: ${loopId}`);
+  }
+  return { loopId, startNodeId, endNodeId };
+}
+
+function assertNewNodeIDAvailable(
+  draft: WorkflowCanvasDraft,
+  nodeID: string | undefined,
+  label: string,
+): string {
+  const nextNodeID = assertWorkflowNodeID(nodeID ?? '', label);
+  if (draft.nodes.some((node) => node.id === nextNodeID)) {
+    throw new Error(`workflow node id already exists: ${nextNodeID}`);
+  }
+  return nextNodeID;
 }
 
 function cloneNodeForDuplicate(

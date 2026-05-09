@@ -2,34 +2,31 @@
 
 import type { WorkflowCanvasDraft } from '@/lib/workflow-editor';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
-import { useWebLocale } from '@/lib/i18n/provider';
 
-interface WorkflowCanvasSettingsModalProps {
-  open: boolean;
-  showImportControls?: boolean;
-  schedule: WorkflowCanvasDraft['schedule'];
-  importSessionID: string;
-  importLoading: boolean;
-  workflowCopy: WorkflowCopy;
-  onClose: () => void;
-  onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
-  onChangeImportSessionID: (value: string) => void;
+export interface WorkflowImportControls {
+  sessionID: string;
+  loading: boolean;
+  onChangeSessionID: (value: string) => void;
   onImportFromSession: () => void;
 }
 
+interface WorkflowCanvasSettingsModalProps {
+  open: boolean;
+  schedule: WorkflowCanvasDraft['schedule'];
+  importControls?: WorkflowImportControls;
+  workflowCopy: WorkflowCopy;
+  onClose: () => void;
+  onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
+}
+
 export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalProps) {
-  const { copy } = useWebLocale();
   const {
     open,
-    showImportControls = true,
     schedule,
-    importSessionID,
-    importLoading,
+    importControls,
     workflowCopy,
     onClose,
     onScheduleChange,
-    onChangeImportSessionID,
-    onImportFromSession,
   } = props;
 
   if (!open) {
@@ -78,18 +75,23 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
               />
             </label>
           )}
-          {showImportControls ? (
+          {importControls ? (
             <>
               <label>
                 <span>{workflowCopy.modalSessionID}</span>
                 <input
-                  value={importSessionID}
+                  value={importControls.sessionID}
                   placeholder="session-xxxx"
-                  onChange={(event) => onChangeImportSessionID(event.target.value)}
+                  onChange={(event) => importControls.onChangeSessionID(event.target.value)}
                 />
               </label>
-              <button type="button" className="workflow-arch-settings-import" onClick={onImportFromSession} disabled={importLoading}>
-                {importLoading ? workflowCopy.modalImporting : workflowCopy.modalImportTextTasks}
+              <button
+                type="button"
+                className="workflow-arch-settings-import"
+                onClick={importControls.onImportFromSession}
+                disabled={importControls.loading}
+              >
+                {importControls.loading ? workflowCopy.modalImporting : workflowCopy.modalImportTextTasks}
               </button>
             </>
           ) : null}

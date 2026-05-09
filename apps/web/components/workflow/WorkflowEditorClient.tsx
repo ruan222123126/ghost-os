@@ -1,8 +1,8 @@
 'use client';
 
 import { WorkflowCanvasWorkbench } from '@/components/workflow/WorkflowCanvasWorkbench';
+import { useWorkflowEditorController } from '@/hooks/workflow/useWorkflowEditorController';
 import { useWebLocale } from '@/lib/i18n/provider';
-import { useWorkflowEditorController } from './useWorkflowEditorController';
 
 interface WorkflowEditorClientProps {
   mode: 'create' | 'edit';
@@ -28,13 +28,15 @@ export function WorkflowEditorClient(props: WorkflowEditorClientProps) {
       autosaveState={controller.autosaveState}
       actionError={controller.actionError}
       validationErrors={controller.validationErrors}
-      importSessionID={controller.importSessionID}
-      importLoading={controller.importLoading}
+      importControls={{
+        sessionID: controller.importSessionID,
+        loading: controller.importLoading,
+        onChangeSessionID: controller.onChangeImportSessionID,
+        onImportFromSession: controller.onImportFromSession,
+      }}
       agentRuntimeCatalog={controller.agentRuntimeCatalog}
       agentRuntimeLoading={controller.agentRuntimeLoading}
       agentRuntimeError={controller.agentRuntimeError}
-      onChangeImportSessionID={controller.onChangeImportSessionID}
-      onImportFromSession={controller.onImportFromSession}
       onScheduleChange={controller.onScheduleChange}
       onAddNode={controller.onAddNode}
       onSelectNode={controller.onSelectNode}

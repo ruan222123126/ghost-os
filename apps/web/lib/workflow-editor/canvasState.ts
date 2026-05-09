@@ -1,30 +1,42 @@
+import { isProtectedBoundaryNodeType } from '@/lib/workflow-editor/boundaryNodes';
+import {
+  DEFAULT_LOOP_MAX_ITERATIONS,
+  LOOP_ROLE_END,
+  LOOP_ROLE_START,
+} from '@/lib/workflow-editor/constants';
+import {
+  createDefaultNodePosition,
+  createDraftNode,
+  createNextNodePosition,
+} from '@/lib/workflow-editor/nodeFactory';
+import {
+  assertDistinctWorkflowNodeIDs,
+  assertWorkflowLoopID,
+  assertWorkflowNodeID,
+} from '@/lib/workflow-editor/nodeIDs';
+import { duplicateWorkflowNode, type DuplicateNodeOptions } from '@/lib/workflow-editor/nodeDuplicate';
 import type {
-  ScreenControlComposerStep,
   WorkflowCanvasDraft,
   WorkflowCanvasNodeDraft,
   WorkflowCanvasPosition,
   WorkflowNodeType,
-} from '@/lib/workflow-editor';
-import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor';
-import { isProtectedBoundaryNodeType } from '@/lib/workflow-editor/boundaryNodes';
-import {
-  DEFAULT_LOOP_MAX_ITERATIONS,
-  DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
-  LOOP_ROLE_END,
-  LOOP_ROLE_START,
-} from '@/lib/workflow-editor/constants';
-import { duplicateWorkflowNode } from '@/components/workflow/workflowCanvasStateDuplicate';
+} from '@/lib/workflow-editor/types';
 
-const NEW_NODE_X_GAP = 260;
-const NEW_NODE_Y = 250;
 const EDGE_ID_PREFIX = 'edge';
-const LOOP_NODE_ID_PREFIX = 'loop';
-const LOOP_START_NODE_SUFFIX = 'start';
-const LOOP_END_NODE_SUFFIX = 'end';
 
-interface AddNodeOptions {
+interface AddRegularNodeOptions {
+  type: Exclude<WorkflowNodeType, 'loop'>;
+  id: string;
   position?: WorkflowCanvasPosition;
   source?: Partial<WorkflowCanvasNodeDraft>;
+}
+
+interface AddLoopNodePairOptions {
+  type: 'loop';
+  loopId: string;
+  startNodeId: string;
+  endNodeId: string;
+  position?: WorkflowCanvasPosition;
 }
 
 interface ConnectNodesOptions {
@@ -32,22 +44,23 @@ interface ConnectNodesOptions {
   targetNodeID: string;
 }
 
-export function addNode(
-  draft: WorkflowCanvasDraft,
-  type: WorkflowNodeType,
-  options?: AddNodeOptions,
-): WorkflowCanvasDraft {
-  if (isProtectedBoundaryNodeType(type)) {
+export type AddNodeOptions = AddRegularNodeOptions | AddLoopNodePairOptions;
+
+export function addNode(draft: WorkflowCanvasDraft, options: AddNodeOptions): WorkflowCanvasDraft {
+  if (isProtectedBoundaryNodeType(options.type)) {
     return draft;
   }
-  if (type === 'loop') {
-    return addLoopNodePair(draft, options?.position);
+  if (options.type === 'loop') {
+    return addLoopNodePair(draft, options);
   }
 
+  assertNodeIDAvailable(draft, options.id, 'workflow node id');
   const index = draft.nodes.length;
-  const node = createDraftNode(buildNodeID(type, index), type, index, {
-    position: options?.position,
-    ...options?.source,
+  const node = createDraftNode({
+    id: options.id,
+    type: options.type,
+    index,
+    source: { position: options.position, ...options.source },
   });
 
   return {
@@ -57,12 +70,12 @@ export function addNode(
   };
 }
 
-export function duplicateNode(draft: WorkflowCanvasDraft, nodeID: string): WorkflowCanvasDraft {
-  const source = draft.nodes.find((node) => node.id === nodeID);
+export function duplicateNode(draft: WorkflowCanvasDraft, options: DuplicateNodeOptions): WorkflowCanvasDraft {
+  const source = draft.nodes.find((node) => node.id === options.nodeID);
   if (!source || isProtectedBoundaryNodeType(source.type)) {
     return draft;
   }
-  return duplicateWorkflowNode(draft, nodeID);
+  return duplicateWorkflowNode(draft, options);
 }
 
 export function removeNode(draft: WorkflowCanvasDraft, nodeID: string): WorkflowCanvasDraft {
@@ -154,73 +167,41 @@ export function removeEdge(draft: WorkflowCanvasDraft, edgeID: string): Workflow
   };
 }
 
-export function createDraftNode(
-  id: string,
-  type: WorkflowNodeType,
-  index: number,
-  source?: Partial<WorkflowCanvasNodeDraft>,
-): WorkflowCanvasNodeDraft {
-  return {
-    id,
-    type,
-    position: source?.position ?? { x: index * NEW_NODE_X_GAP, y: NEW_NODE_Y },
-    ui: buildNodeUI(source?.ui),
-    start: type === 'start' ? source?.start ?? { inputs: [] } : undefined,
-    tool: type === 'tool' ? source?.tool ?? { tool_name: '', arguments: {} } : undefined,
-    llm: type === 'llm' ? source?.llm ?? { prompt: '', system_prompt: '' } : undefined,
-    agent: type === 'agent' ? source?.agent ?? { message: '', title: '' } : undefined,
-    group: type === 'group'
-      ? source?.group ?? {
-        title: '',
-        shared_context: '',
-        speaking_mode: 'sequential',
-        max_rounds: DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
-      }
-      : undefined,
-    if: type === 'if'
-      ? source?.if ?? buildDefaultIfConfig()
-      : undefined,
-    loop: type === 'loop'
-      ? source?.loop ?? {
-        role: LOOP_ROLE_START,
-        loop_id: '',
-        max_iterations: DEFAULT_LOOP_MAX_ITERATIONS,
-      }
-      : undefined,
-  };
-}
-
 function buildEdgeID(sourceNodeID: string, targetNodeID: string, index: number): string {
   return `${EDGE_ID_PREFIX}-${index}-${sourceNodeID}-${targetNodeID}`;
 }
 
-function buildNodeID(type: WorkflowNodeType, index: number): string {
-  return `${type}-${Date.now()}-${index}`;
-}
-
 function addLoopNodePair(
   draft: WorkflowCanvasDraft,
-  position?: WorkflowCanvasPosition,
+  options: AddLoopNodePairOptions,
 ): WorkflowCanvasDraft {
-  const loopID = `${LOOP_NODE_ID_PREFIX}-${Date.now()}-${draft.nodes.length}`;
-  const startNodeID = `${loopID}-${LOOP_START_NODE_SUFFIX}`;
-  const endNodeID = `${loopID}-${LOOP_END_NODE_SUFFIX}`;
+  assertLoopNodeIDsAvailable(draft, options);
   const index = draft.nodes.length;
-  const startPosition = position ?? { x: index * NEW_NODE_X_GAP, y: NEW_NODE_Y };
-  const endPosition = { x: startPosition.x + NEW_NODE_X_GAP, y: startPosition.y };
-  const startNode = createDraftNode(startNodeID, 'loop', index, {
-    position: startPosition,
-    loop: {
-      role: LOOP_ROLE_START,
-      loop_id: loopID,
-      max_iterations: DEFAULT_LOOP_MAX_ITERATIONS,
+  const startPosition = options.position ?? createDefaultNodePosition(index);
+  const endPosition = createNextNodePosition(startPosition);
+  const startNode = createDraftNode({
+    id: options.startNodeId,
+    type: 'loop',
+    index,
+    source: {
+      position: startPosition,
+      loop: {
+        role: LOOP_ROLE_START,
+        loop_id: options.loopId,
+        max_iterations: DEFAULT_LOOP_MAX_ITERATIONS,
+      },
     },
   });
-  const endNode = createDraftNode(endNodeID, 'loop', index + 1, {
-    position: endPosition,
-    loop: {
-      role: LOOP_ROLE_END,
-      loop_id: loopID,
+  const endNode = createDraftNode({
+    id: options.endNodeId,
+    type: 'loop',
+    index: index + 1,
+    source: {
+      position: endPosition,
+      loop: {
+        role: LOOP_ROLE_END,
+        loop_id: options.loopId,
+      },
     },
   });
 
@@ -229,6 +210,23 @@ function addLoopNodePair(
     nodes: [...draft.nodes, startNode, endNode],
     selectedNodeId: startNode.id,
   };
+}
+
+function assertNodeIDAvailable(draft: WorkflowCanvasDraft, nodeID: string, label: string): void {
+  assertWorkflowNodeID(nodeID, label);
+  if (draft.nodes.some((node) => node.id === nodeID)) {
+    throw new Error(`workflow node id already exists: ${nodeID}`);
+  }
+}
+
+function assertLoopNodeIDsAvailable(draft: WorkflowCanvasDraft, options: AddLoopNodePairOptions): void {
+  assertWorkflowLoopID(options.loopId);
+  assertNodeIDAvailable(draft, options.startNodeId, 'workflow loop start node id');
+  assertNodeIDAvailable(draft, options.endNodeId, 'workflow loop end node id');
+  assertDistinctWorkflowNodeIDs([options.startNodeId, options.endNodeId]);
+  if (draft.nodes.some((node) => node.type === 'loop' && node.loop?.loop_id === options.loopId)) {
+    throw new Error(`workflow loop id already exists: ${options.loopId}`);
+  }
 }
 
 function findRemovableNodeIDs(nodes: WorkflowCanvasNodeDraft[], nodeID: string): Set<string> {
@@ -268,41 +266,4 @@ function sanitizeNodeUpdate(currentNode: WorkflowCanvasNodeDraft, nextNode: Work
       max_iterations: maxIterations,
     },
   };
-}
-
-function buildDefaultIfConfig(): NonNullable<WorkflowCanvasNodeDraft['if']> {
-  return {
-    source_node_id: '',
-    operator: 'equals',
-    value: '',
-    true_node_id: '',
-    false_node_id: '',
-  };
-}
-
-function buildNodeUI(sourceUI?: WorkflowCanvasNodeDraft['ui']): WorkflowCanvasNodeDraft['ui'] {
-  return {
-    toolArgumentsMode: sourceUI?.toolArgumentsMode ?? 'kv',
-    screenControlComposer: cloneScreenControlComposer(sourceUI?.screenControlComposer),
-  };
-}
-
-function cloneScreenControlComposer(
-  composer?: WorkflowCanvasNodeDraft['ui']['screenControlComposer'],
-): WorkflowCanvasNodeDraft['ui']['screenControlComposer'] {
-  if (!composer || composer.steps.length === 0) {
-    return undefined;
-  }
-  return {
-    steps: cloneScreenControlComposerSteps(composer.steps),
-  };
-}
-
-function cloneScreenControlComposerSteps(
-  steps: ScreenControlComposerStep[],
-): ScreenControlComposerStep[] {
-  return steps.map((step) => ({
-    action: normalizeScreenControlComposerAction(step.action),
-    params: step.params ? { ...step.params } : undefined,
-  }));
 }

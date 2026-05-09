@@ -6,6 +6,10 @@ import { OrchestrationEditorClient } from './OrchestrationEditorClient';
 
 const renderWorkbench = jest.fn();
 const useOrchestrationEditorController = jest.fn();
+const TestLocaleProvider = WebLocaleProvider as React.ComponentType<{
+  initialLocale: 'zh-CN';
+  children?: React.ReactNode;
+}>;
 
 jest.mock('@/components/workflow/WorkflowCanvasWorkbench', () => ({
   WorkflowCanvasWorkbench: (props: unknown) => {
@@ -14,7 +18,7 @@ jest.mock('@/components/workflow/WorkflowCanvasWorkbench', () => ({
   },
 }));
 
-jest.mock('./useOrchestrationEditorController', () => ({
+jest.mock('@/hooks/orchestration/useOrchestrationEditorController', () => ({
   useOrchestrationEditorController: (...args: unknown[]) => useOrchestrationEditorController(...args),
 }));
 
@@ -32,8 +36,8 @@ describe('components/orchestration/OrchestrationEditorClient', () => {
     expect(renderWorkbench.mock.calls.at(-1)?.[0]).toMatchObject({
       editorKind: 'orchestration',
       nodeLibraryTypes: ['agent', 'group'],
-      showImportControls: false,
     });
+    expect(renderWorkbench.mock.calls.at(-1)?.[0]).not.toHaveProperty('importControls');
   });
 });
 
@@ -42,12 +46,11 @@ function renderClient() {
 
   act(() => {
     renderer = TestRenderer.create(
-      React.createElement(WebLocaleProvider, {
+      React.createElement(TestLocaleProvider, {
         initialLocale: 'zh-CN',
-        children: React.createElement(OrchestrationEditorClient, {
-          orchestrationID: 'orch_1',
-        }),
-      }),
+      }, React.createElement(OrchestrationEditorClient, {
+        orchestrationID: 'orch_1',
+      })),
     );
   });
 
@@ -61,15 +64,11 @@ function buildController() {
     autosaveState: { phase: 'idle', message: 'Autosave idle', updatedAt: 0 },
     actionError: '',
     validationErrors: [],
-    importSessionID: '',
-    importLoading: false,
     presets: [],
     presetLoading: false,
     presetError: '',
     workflowCopy: copyForWorkflow('zh-CN'),
     localizeValidationError: jest.fn(),
-    onChangeImportSessionID: jest.fn(),
-    onImportFromSession: jest.fn(),
     onScheduleChange: jest.fn(),
     onAddNode: jest.fn(),
     onSelectNode: jest.fn(),

@@ -8,36 +8,33 @@ import {
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  addNode,
-  connectNodesByID,
-  duplicateNode,
-  moveNode,
-  removeEdge,
-  removeNode,
-  updateNode,
-} from '@/components/workflow/workflowCanvasState';
 import { listTasks } from '@/lib/api/tasks/api';
 import { toErrorMessage } from '@/lib/errors';
 import { buildHomeSettingsURL } from '@/lib/settingsQuery';
 import {
   type AutosaveSnapshot,
+  connectNodesByID,
   createEmptyWorkflowDraft,
+  defaultWorkflowAgentRuntimeOverrides,
   enabledWorkflowAgentToolNames,
   importWorkflowFromSessionTasks,
+  moveNode,
   normalizeWorkflowDraftAgentNodes,
+  removeEdge,
+  removeNode,
+  updateNode,
   validateWorkflowDraft,
   withWorkflowContent,
-  type WorkflowAgentRuntimeCatalog,
 } from '@/lib/workflow-editor';
 import type {
   AutosaveState,
   WorkflowCanvasDraft,
-  WorkflowCanvasNodeDraft,
-  WorkflowCanvasPosition,
-  WorkflowNodeType,
   WorkflowUpdatePayload,
 } from '@/lib/workflow-editor';
+import {
+  addWorkflowNodeWithGeneratedID,
+  duplicateWorkflowNodeWithGeneratedID,
+} from '@/hooks/workflow/workflowDraftMutations';
 import { useWorkflowAgentRuntimeCatalog } from './useWorkflowAgentRuntimeCatalog';
 import type {
   UseWorkflowEditorControllerOptions,
@@ -211,16 +208,15 @@ export function useWorkflowEditorController(
     },
     onAddNode: (type, position) => {
       setAgentNormalizationEnabled(true);
-      setDraft((state) => addNode(state, type, {
+      setDraft((state) => addWorkflowNodeWithGeneratedID({
+        state,
+        type,
         position,
         source: type === 'agent' && agentRuntimeReady
           ? {
             agent: {
               message: '',
-              runtime_overrides: {
-                tool_allowlist_only: true,
-                tool_allowlist: [...enabledToolNames],
-              },
+              runtime_overrides: defaultWorkflowAgentRuntimeOverrides(enabledToolNames),
             },
           }
           : undefined,
@@ -260,8 +256,8 @@ export function useWorkflowEditorController(
     onDuplicateNode: (nodeID) => {
       setAgentNormalizationEnabled(true);
       setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(duplicateNode(state, nodeID), enabledToolNames)
-        : duplicateNode(state, nodeID));
+        ? normalizeWorkflowDraftAgentNodes(duplicateWorkflowNodeWithGeneratedID(state, nodeID), enabledToolNames)
+        : duplicateWorkflowNodeWithGeneratedID(state, nodeID));
     },
     onUpdateNode: (node) => {
       setAgentNormalizationEnabled(true);

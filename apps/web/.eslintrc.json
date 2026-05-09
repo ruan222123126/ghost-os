@@ -1,3 +1,141 @@
 {
-  "extends": ["next/core-web-vitals"]
+  "extends": ["next/core-web-vitals"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@/components/workflow/useWorkflowEditorController",
+            "message": "Workflow editor controller hooks live in @/hooks/workflow."
+          },
+          {
+            "name": "@/components/workflow/workflowEditorControllerInternals",
+            "message": "Workflow editor controller hooks live in @/hooks/workflow."
+          },
+          {
+            "name": "@/components/workflow/workflowEditorControllerTypes",
+            "message": "Workflow editor controller hooks live in @/hooks/workflow."
+          },
+          {
+            "name": "@/components/workflow/workflowEditorDraft",
+            "message": "Workflow editor controller hooks live in @/hooks/workflow."
+          },
+          {
+            "name": "@/components/workflow/useWorkflowAgentRuntimeCatalog",
+            "message": "Workflow runtime catalog hook lives in @/hooks/workflow."
+          },
+          {
+            "name": "@/components/workflow/useWorkflowCanvasStageInteractions",
+            "message": "Workflow stage interaction hook lives in @/hooks/workflow."
+          },
+          {
+            "name": "@/components/workflow/workflowCanvasState",
+            "message": "Workflow canvas reducer lives in @/lib/workflow-editor."
+          },
+          {
+            "name": "@/components/workflow/workflowCanvasStateDuplicate",
+            "message": "Workflow canvas reducer lives in @/lib/workflow-editor."
+          },
+          {
+            "name": "@/components/orchestration/useOrchestrationEditorController",
+            "message": "Orchestration editor controller hook lives in @/hooks/orchestration."
+          },
+          {
+            "name": "@/components/orchestration/orchestrationEditorControllerInternals",
+            "message": "Orchestration editor controller hook lives in @/hooks/orchestration."
+          },
+          {
+            "name": "@/components/orchestration/orchestrationEditorDraft",
+            "message": "Orchestration draft snapshot helpers live in @/lib/orchestration-editor."
+          },
+          {
+            "name": "@/components/orchestration/orchestrationEditorCopy",
+            "message": "Orchestration editor copy helpers live in @/hooks/orchestration."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "lib/workflow-editor/**/*.{ts,tsx}",
+        "lib/orchestration-editor/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react",
+                "message": "Editor domain libraries must stay UI-framework agnostic."
+              },
+              {
+                "name": "react-dom",
+                "message": "Editor domain libraries must stay UI-framework agnostic."
+              },
+              {
+                "name": "next/navigation",
+                "message": "Editor domain libraries must not depend on Next routing."
+              },
+              {
+                "name": "next/router",
+                "message": "Editor domain libraries must not depend on Next routing."
+              },
+              {
+                "name": "@/components/workflow/useWorkflowEditorController",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowEditorControllerInternals",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowEditorControllerTypes",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowEditorDraft",
+                "message": "Workflow editor controller hooks live in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/useWorkflowAgentRuntimeCatalog",
+                "message": "Workflow runtime catalog hook lives in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/useWorkflowCanvasStageInteractions",
+                "message": "Workflow stage interaction hook lives in @/hooks/workflow."
+              },
+              {
+                "name": "@/components/workflow/workflowCanvasState",
+                "message": "Workflow canvas reducer lives in @/lib/workflow-editor."
+              },
+              {
+                "name": "@/components/workflow/workflowCanvasStateDuplicate",
+                "message": "Workflow canvas reducer lives in @/lib/workflow-editor."
+              },
+              {
+                "name": "@/components/orchestration/useOrchestrationEditorController",
+                "message": "Orchestration editor controller hook lives in @/hooks/orchestration."
+              },
+              {
+                "name": "@/components/orchestration/orchestrationEditorControllerInternals",
+                "message": "Orchestration editor controller hook lives in @/hooks/orchestration."
+              },
+              {
+                "name": "@/components/orchestration/orchestrationEditorDraft",
+                "message": "Orchestration draft snapshot helpers live in @/lib/orchestration-editor."
+              },
+              {
+                "name": "@/components/orchestration/orchestrationEditorCopy",
+                "message": "Orchestration editor copy helpers live in @/hooks/orchestration."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

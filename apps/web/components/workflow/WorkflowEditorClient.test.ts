@@ -5,6 +5,10 @@ import { WorkflowEditorClient } from './WorkflowEditorClient';
 
 const renderWorkbench = jest.fn();
 const useWorkflowEditorController = jest.fn();
+const TestLocaleProvider = WebLocaleProvider as React.ComponentType<{
+  initialLocale: 'zh-CN';
+  children?: React.ReactNode;
+}>;
 
 jest.mock('@/components/workflow/WorkflowCanvasWorkbench', () => ({
   WorkflowCanvasWorkbench: (props: unknown) => {
@@ -13,7 +17,7 @@ jest.mock('@/components/workflow/WorkflowCanvasWorkbench', () => ({
   },
 }));
 
-jest.mock('./useWorkflowEditorController', () => ({
+jest.mock('@/hooks/workflow/useWorkflowEditorController', () => ({
   useWorkflowEditorController: (...args: unknown[]) => useWorkflowEditorController(...args),
 }));
 
@@ -29,6 +33,10 @@ describe('components/workflow/WorkflowEditorClient', () => {
 
     expect(renderWorkbench.mock.calls.at(-1)?.[0]).toMatchObject({
       editorKind: 'workflow',
+      importControls: {
+        sessionID: '',
+        loading: false,
+      },
     });
   });
 });
@@ -36,13 +44,12 @@ describe('components/workflow/WorkflowEditorClient', () => {
 function renderClient() {
   act(() => {
     TestRenderer.create(
-      React.createElement(WebLocaleProvider, {
+      React.createElement(TestLocaleProvider, {
         initialLocale: 'zh-CN',
-        children: React.createElement(WorkflowEditorClient, {
-          mode: 'edit',
-          taskID: 'task-1',
-        }),
-      }),
+      }, React.createElement(WorkflowEditorClient, {
+        mode: 'edit',
+        taskID: 'task-1',
+      })),
     );
   });
 }

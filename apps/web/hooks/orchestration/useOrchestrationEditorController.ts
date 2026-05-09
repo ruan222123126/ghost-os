@@ -8,26 +8,33 @@ import {
   useState,
 } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  addNode,
-  duplicateNode,
-  moveNode,
-  removeEdge,
-  removeNode,
-  updateNode,
-} from '@/components/workflow/workflowCanvasState';
 import { listPresets } from '@/lib/api/presets/api';
-import { useWorkflowAgentRuntimeCatalog } from '@/components/workflow/useWorkflowAgentRuntimeCatalog';
+import { useWorkflowAgentRuntimeCatalog } from '@/hooks/workflow/useWorkflowAgentRuntimeCatalog';
 import type { WebLocale } from '@/lib/i18n/locale';
 import type { WebCopy } from '@/lib/i18n/messages';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { buildHomeSettingsURL } from '@/lib/settingsQuery';
 import type { PresetPayload } from '@/lib/types';
-import { availableWorkflowAgentToolNames, defaultOrchestrationAgentRuntimeOverrides, type AutosaveState, type WorkflowAgentRuntimeCatalog, type WorkflowCanvasDraft, type WorkflowCanvasNodeDraft, type WorkflowCanvasPosition, type WorkflowNodeType } from '@/lib/workflow-editor';
-import { DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX } from '@/lib/workflow-editor/constants';
-import { connectOrchestrationNodes } from '@/lib/orchestration-editor/graph';
+import {
+  availableWorkflowAgentToolNames,
+  type AutosaveState,
+  type WorkflowAgentRuntimeCatalog,
+  type WorkflowCanvasDraft,
+  type WorkflowCanvasNodeDraft,
+  type WorkflowCanvasPosition,
+  type WorkflowNodeType,
+} from '@/lib/workflow-editor';
 import { createEmptyOrchestrationDraft } from '@/lib/orchestration-editor/draft';
-import { buildDefaultOrchestrationGroupNode } from '@/lib/orchestration-editor/groupDefaults';
+import {
+  addOrchestrationNode,
+  buildDefaultOrchestrationNodeSource,
+  connectOrchestrationDraftNodes,
+  duplicateOrchestrationNode,
+  moveOrchestrationNode,
+  removeOrchestrationEdge,
+  removeOrchestrationNode,
+  updateOrchestrationNode,
+} from '@/lib/orchestration-editor/draftReducer';
 import { validateOrchestrationDraft } from '@/lib/orchestration-editor/validation';
 import { migrateLegacyOrchestrations } from '@/lib/orchestration-editor/legacyMigration';
 import { toErrorMessage } from '@/lib/errors';
@@ -37,7 +44,7 @@ import {
 } from './orchestrationEditorCopy';
 import {
   buildOrchestrationAutosaveSnapshot,
-} from './orchestrationEditorDraft';
+} from '@/lib/orchestration-editor/snapshot';
 import {
   useOrchestrationAutosaveController,
   useOrchestrationAutosaveSchedule,
@@ -61,8 +68,6 @@ interface UseOrchestrationEditorControllerResult {
   autosaveState: AutosaveState;
   actionError: string;
   validationErrors: string[];
-  importSessionID: string;
-  importLoading: boolean;
   agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
   agentRuntimeLoading: boolean;
   agentRuntimeError: string;
@@ -71,8 +76,6 @@ interface UseOrchestrationEditorControllerResult {
   presetError: string;
   workflowCopy: WorkflowCopy;
   localizeValidationError: (message: string, locale: WebLocale) => string;
-  onChangeImportSessionID: (value: string) => void;
-  onImportFromSession: () => Promise<void>;
   onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) => void;
   onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => void;
   onSelectNode: (nodeID?: string) => void;
@@ -167,8 +170,6 @@ export function useOrchestrationEditorController(
     autosaveState,
     actionError,
     validationErrors: validation.errors,
-    importSessionID: '',
-    importLoading: false,
     agentRuntimeCatalog: agentRuntimeState.catalog,
     agentRuntimeLoading: agentRuntimeState.loading,
     agentRuntimeError: agentRuntimeState.error,
@@ -177,52 +178,30 @@ export function useOrchestrationEditorController(
     presetError: presetState.error,
     workflowCopy,
     localizeValidationError: localizeOrchestrationValidationError,
-    onChangeImportSessionID: () => undefined,
-    onImportFromSession: async () => undefined,
     onScheduleChange: (patch) => setDraft((state) => ({ ...state, schedule: { ...state.schedule, ...patch } })),
     onAddNode: (type, position) => {
-      setDraft((state) => addNode(state, type, {
+      setDraft((state) => addOrchestrationNode(state, {
+        type,
         position,
-        source: buildNewNodeSource(state, type, toolNames, locale),
+        source: buildDefaultOrchestrationNodeSource({
+          draft: state,
+          type,
+          toolNames,
+          locale,
+        }),
       }));
     },
     onSelectNode: (nodeID) => setDraft((state) => ({ ...state, selectedNodeId: nodeID })),
-    onMoveNode: (nodeID, position) => setDraft((state) => moveNode(state, nodeID, position)),
-    onConnectNodes: (sourceNodeID, targetNodeID) => setDraft((state) => connectOrchestrationNodes(state, sourceNodeID, targetNodeID)),
-    onDeleteEdge: (edgeID) => setDraft((state) => removeEdge(state, edgeID)),
-    onDuplicateNode: (nodeID) => setDraft((state) => duplicateNode(state, nodeID)),
-    onUpdateNode: (node) => setDraft((state) => updateNode(state, node)),
-    onDeleteNode: (nodeID) => setDraft((state) => removeNode(state, nodeID)),
+    onMoveNode: (nodeID, position) => setDraft((state) => moveOrchestrationNode(state, nodeID, position)),
+    onConnectNodes: (sourceNodeID, targetNodeID) =>
+      setDraft((state) => connectOrchestrationDraftNodes(state, sourceNodeID, targetNodeID)),
+    onDeleteEdge: (edgeID) => setDraft((state) => removeOrchestrationEdge(state, edgeID)),
+    onDuplicateNode: (nodeID) => setDraft((state) => duplicateOrchestrationNode(state, nodeID)),
+    onUpdateNode: (node) => setDraft((state) => updateOrchestrationNode(state, node)),
+    onDeleteNode: (nodeID) => setDraft((state) => removeOrchestrationNode(state, nodeID)),
     onSave: handleSave,
     onBack: () => router.push(ORCHESTRATION_SETTINGS_URL),
   };
-}
-
-function buildNewNodeSource(
-  draft: WorkflowCanvasDraft,
-  type: WorkflowNodeType,
-  toolNames: string[],
-  locale: WebLocale,
-): Partial<WorkflowCanvasNodeDraft> | undefined {
-  if (type === 'group') {
-    return {
-      group: buildDefaultOrchestrationGroupNode(countNodesByType(draft, 'group') + 1, locale),
-    };
-  }
-  if (type === 'agent') {
-    return {
-      agent: {
-        title: `${DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX} ${countNodesByType(draft, 'agent') + 1}`,
-        message: '',
-        runtime_overrides: defaultOrchestrationAgentRuntimeOverrides(toolNames),
-      },
-    };
-  }
-  return undefined;
-}
-
-function countNodesByType(draft: WorkflowCanvasDraft, type: WorkflowNodeType): number {
-  return draft.nodes.filter((node) => node.type === type).length;
 }
 
 function useOrchestrationPresetCatalog(loadErrorMessage: string) {
