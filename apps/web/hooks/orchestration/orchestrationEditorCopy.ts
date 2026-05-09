@@ -22,7 +22,7 @@ export function buildOrchestrationWorkflowCopy(
       sidebarReturn: '返回编排设置',
       sidebarSaveAria: (label: string) => `保存编排。${label}`,
       modalTitle: '编排设置',
-      modalDescription: '用于编排调度和会话导入的基础画布设置。',
+      modalDescription: '用于编排调度的基础画布设置。',
     } as unknown as WorkflowCopy;
   }
 
@@ -41,7 +41,7 @@ export function buildOrchestrationWorkflowCopy(
     sidebarReturn: 'Back to Orchestration Settings',
     sidebarSaveAria: (label: string) => `Save orchestration. ${label}`,
     modalTitle: 'Orchestration Settings',
-    modalDescription: 'Basic canvas controls for orchestration scheduling and session import.',
+    modalDescription: 'Basic canvas controls for orchestration scheduling.',
   } as unknown as WorkflowCopy;
 }
 
