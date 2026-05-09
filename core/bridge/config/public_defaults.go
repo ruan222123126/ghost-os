@@ -17,6 +17,7 @@ const (
 	DefaultRSSAIBatchSize               = defaultRSSAIBatchSize
 	DefaultRSSBriefingInterval          = defaultRSSBriefingInterval
 	DefaultTasksPath                    = defaultTasksPath
+	DefaultTaskExecutionTimeoutMS       = defaultTaskExecutionTimeoutMS
 	DefaultAnthropicVersion             = defaultAnthropicVersion
 	DefaultAnthropicMaxTokens           = defaultAnthropicMaxTokens
 	DefaultProMaxIterations             = defaultProMaxIterations

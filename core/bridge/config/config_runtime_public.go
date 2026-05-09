@@ -10,6 +10,7 @@ func snapshotFromRuntimeConfig(runtime runtimeConfig) Snapshot {
 		ChatPath:                     runtime.ChatPath,
 		ProjectRoot:                  runtime.ProjectRoot,
 		MaxTurns:                     runtime.MaxTurns,
+		TaskExecutionTimeoutMS:       runtime.TaskExecutionTimeoutMS,
 		LLMCompletionRetryCount:      runtime.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS: runtime.LLMCompletionRetryIntervalMS,
 		APIKeySet:                    runtime.APIKey != "",

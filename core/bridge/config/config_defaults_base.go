@@ -11,6 +11,7 @@ const (
 	defaultPromptsDir                   = "~/.ghost-os/prompts"
 	defaultSessionsPath                 = "~/.ghost-os/sessions"
 	defaultTasksPath                    = "~/.ghost-os/tasks"
+	defaultTaskExecutionTimeoutMS       = 300000
 	defaultAnthropicVersion             = "2023-06-01"
 	defaultAnthropicMaxTokens           = 1024
 	defaultProMaxIterations             = 20

@@ -9,10 +9,25 @@ func buildTaskConfig(fileCfg bridgeFileConfig, env envSnapshot) (TaskConfig, err
 	if err != nil {
 		return TaskConfig{}, err
 	}
+	executionTimeoutMS, err := resolveTaskExecutionTimeoutMS(fileCfg, env)
+	if err != nil {
+		return TaskConfig{}, err
+	}
 	return TaskConfig{
 		TasksPath:             resolveTasksPath(fileCfg, env),
+		ExecutionTimeoutMS:    executionTimeoutMS,
 		WorkflowToolAllowlist: allowlist,
 	}, nil
+}
+
+func resolveTaskExecutionTimeoutMS(fileCfg bridgeFileConfig, env envSnapshot) (int, error) {
+	return intOrEnvWithEnv(
+		fileCfg.TaskExecutionTimeoutMS,
+		"task_execution_timeout_ms",
+		env,
+		"GHOST_TASK_EXECUTION_TIMEOUT_MS",
+		defaultTaskExecutionTimeoutMS,
+	)
 }
 
 func resolveWorkflowToolAllowlist(fileCfg bridgeFileConfig, env envSnapshot) ([]string, error) {

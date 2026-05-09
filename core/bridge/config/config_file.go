@@ -53,6 +53,7 @@ type bridgeFileConfig struct {
 	PromptsRuntimeConstraintFiles []string                      `toml:"prompts_runtime_constraint_files,omitempty"`
 	PromptsResponseRuleFiles      []string                      `toml:"prompts_response_rule_files,omitempty"`
 	TasksPath                     *string                       `toml:"tasks_path,omitempty"`
+	TaskExecutionTimeoutMS        *int                          `toml:"task_execution_timeout_ms,omitempty"`
 	WorkflowToolAllowlist         []string                      `toml:"workflow_tool_allowlist,omitempty"`
 	SessionsPath                  *string                       `toml:"sessions_path,omitempty"`
 	SessionHumanLogFullEnabled    *bool                         `toml:"session_human_log_full_enabled,omitempty"`

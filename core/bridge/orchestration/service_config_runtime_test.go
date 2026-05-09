@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
@@ -11,6 +12,7 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 
 	raw := json.RawMessage(`{
 		"max_turns": 9,
+		"task_execution_timeout_ms": 600000,
 		"llm_completion_retry_count": 0,
 		"llm_completion_retry_interval_ms": 150,
 		"session_human_log_full_enabled": true,
@@ -43,6 +45,12 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 	}
 	if snapshot.MaxTurns != 9 {
 		t.Fatalf("expected max_turns to be 9 in snapshot, got %d", snapshot.MaxTurns)
+	}
+	if snapshot.TaskExecutionTimeoutMs != 600000 {
+		t.Fatalf(
+			"expected task_execution_timeout_ms to be 600000 in snapshot, got %d",
+			snapshot.TaskExecutionTimeoutMs,
+		)
 	}
 	if snapshot.LlmCompletionRetryCount != 0 {
 		t.Fatalf(
@@ -82,6 +90,12 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 	if cfg.MaxTurns != 9 {
 		t.Fatalf("expected max_turns to be 9 in runtime config, got %d", cfg.MaxTurns)
 	}
+	if cfg.TaskExecutionTimeoutMS != 600000 {
+		t.Fatalf(
+			"expected task_execution_timeout_ms to be 600000 in runtime config, got %d",
+			cfg.TaskExecutionTimeoutMS,
+		)
+	}
 	if cfg.LLMCompletionRetryCount != 0 {
 		t.Fatalf(
 			"expected llm_completion_retry_count to be 0 in runtime config, got %d",
@@ -108,5 +122,12 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 	}
 	if !cfg.MicrocompactEnabled {
 		t.Fatal("expected microcompact_enabled to be true in runtime config")
+	}
+	scheduler := service.taskScheduler()
+	if scheduler == nil {
+		t.Fatal("expected task scheduler to be initialized")
+	}
+	if got := scheduler.ExecutionTimeout(); got != 10*time.Minute {
+		t.Fatalf("expected scheduler timeout to be 10m, got %s", got)
 	}
 }

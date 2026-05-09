@@ -43,6 +43,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.PromptsPath = cloneOptionalStringPointer(cfg.PromptsPath)
 	cfg.PromptsDir = cloneOptionalStringPointer(cfg.PromptsDir)
 	cfg.TasksPath = cloneOptionalStringPointer(cfg.TasksPath)
+	cfg.TaskExecutionTimeoutMS = cloneIntPointer(cfg.TaskExecutionTimeoutMS)
 	cfg.SessionsPath = cloneOptionalStringPointer(cfg.SessionsPath)
 	cfg.SessionHumanLogFullEnabled = cloneBoolPointer(cfg.SessionHumanLogFullEnabled)
 	cfg.SessionSystemPromptVisible = cloneBoolPointer(cfg.SessionSystemPromptVisible)

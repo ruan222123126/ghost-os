@@ -18,7 +18,7 @@ func (s *TaskScheduler) executeRun(
 	defer reg.finishRun()
 
 	startedAt := s.now().UTC()
-	result := s.finalizeExecutionResult(ctx, s.execute(ctx, task, traceID))
+	result := s.finalizeExecutionResult(ctx, reg.executionTimeout(), s.execute(ctx, task, traceID))
 	finishedAt := s.now().UTC()
 
 	reg.mu.Lock()
@@ -54,6 +54,7 @@ func (s *TaskScheduler) executeRun(
 
 func (s *TaskScheduler) finalizeExecutionResult(
 	ctx context.Context,
+	executionTimeout time.Duration,
 	result ExecutionResult,
 ) ExecutionResult {
 	if strings.TrimSpace(result.Status) == "" {
@@ -66,7 +67,10 @@ func (s *TaskScheduler) finalizeExecutionResult(
 		result.Error = "task execution cancelled"
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		result.Status = RunStatusError
-		result.Error = fmt.Sprintf("task execution timed out after %s", s.taskExecutionTimeout())
+		result.Error = fmt.Sprintf(
+			"task execution timed out after %s",
+			normalizeExecutionTimeout(executionTimeout),
+		)
 	}
 
 	return result
@@ -96,10 +100,17 @@ func (s *TaskScheduler) executeWithExecutor(
 }
 
 func (s *TaskScheduler) taskExecutionTimeout() time.Duration {
-	if s == nil || s.executionTimeout <= 0 {
+	if s == nil {
 		return defaultTaskExecutionTimeout
 	}
-	return s.executionTimeout
+	s.mu.Lock()
+	timeout := s.executionTimeout
+	s.mu.Unlock()
+	return normalizeExecutionTimeout(timeout)
+}
+
+func (s *TaskScheduler) ExecutionTimeout() time.Duration {
+	return s.taskExecutionTimeout()
 }
 
 func skippedTaskRunLog(

@@ -11,6 +11,7 @@ func configResponseFromSnapshot(snapshot bridgeconfig.Snapshot) configResponse {
 		ChatPath:                          snapshot.ChatPath,
 		ProjectRoot:                       snapshot.ProjectRoot,
 		MaxTurns:                          snapshot.MaxTurns,
+		TaskExecutionTimeoutMs:            snapshot.TaskExecutionTimeoutMS,
 		LlmCompletionRetryCount:           snapshot.LLMCompletionRetryCount,
 		LlmCompletionRetryIntervalMs:      snapshot.LLMCompletionRetryIntervalMS,
 		APIKeySet:                         snapshot.APIKeySet,

@@ -342,6 +342,7 @@ type configResponse struct {
 	ChatPath string `json:"chat_path"`
 	ProjectRoot string `json:"project_root"`
 	MaxTurns int `json:"max_turns"`
+	TaskExecutionTimeoutMs int `json:"task_execution_timeout_ms"`
 	LlmCompletionRetryCount int `json:"llm_completion_retry_count"`
 	LlmCompletionRetryIntervalMs int `json:"llm_completion_retry_interval_ms"`
 	APIKeySet bool `json:"api_key_set"`
@@ -374,6 +375,7 @@ type configUpdateRequest struct {
 	ChatPath *string `json:"chat_path,omitempty"`
 	ProjectRoot *string `json:"project_root,omitempty"`
 	MaxTurns *int `json:"max_turns,omitempty"`
+	TaskExecutionTimeoutMs *int `json:"task_execution_timeout_ms,omitempty"`
 	LlmCompletionRetryCount *int `json:"llm_completion_retry_count,omitempty"`
 	LlmCompletionRetryIntervalMs *int `json:"llm_completion_retry_interval_ms,omitempty"`
 	SessionHumanLogFullEnabled *bool `json:"session_human_log_full_enabled,omitempty"`
@@ -460,11 +462,36 @@ type workflowDefinitionContract struct {
 	Edges []workflowEdgeContract `json:"edges"`
 }
 
+// orchestrationNodeContract 对齐 core/shared/schema.json 的 orchestrationNode。
+type orchestrationNodeContract struct {
+	ID string `json:"id"`
+	Type string `json:"type"`
+	Group orchestrationGroupNodeContract `json:"group,omitempty"`
+	Agent orchestrationAgentNodeContract `json:"agent,omitempty"`
+}
+
+// orchestrationGroupNodeContract 对齐 core/shared/schema.json 的 orchestrationGroupNode。
+type orchestrationGroupNodeContract struct {
+	Title string `json:"title"`
+	SharedContext string `json:"shared_context"`
+	SpeakingMode string `json:"speaking_mode"`
+	OwnerAgentID string `json:"owner_agent_id,omitempty"`
+	MaxRounds int `json:"max_rounds"`
+}
+
+// orchestrationAgentNodeContract 对齐 core/shared/schema.json 的 orchestrationAgentNode。
+type orchestrationAgentNodeContract struct {
+	Title string `json:"title"`
+	Message string `json:"message"`
+	RuntimeOverrides taskRuntimeOverridesContract `json:"runtime_overrides,omitempty"`
+}
+
 // taskRuntimeOverridesContract 对齐 core/shared/schema.json 的 taskRuntimeOverrides。
 type taskRuntimeOverridesContract struct {
 	ProviderName string `json:"provider_name,omitempty"`
 	Model string `json:"model,omitempty"`
 	SystemPrompt string `json:"system_prompt,omitempty"`
+	PresetID string `json:"preset_id,omitempty"`
 	ToolAllowlist []string `json:"tool_allowlist,omitempty"`
 	ToolAllowlistOnly *bool `json:"tool_allowlist_only,omitempty"`
 	MaxTurns *int `json:"max_turns,omitempty"`
@@ -476,10 +503,23 @@ type workflowToolNodeContract struct {
 	Arguments map[string]any `json:"arguments,omitempty"`
 }
 
+// orchestrationEdgeContract 对齐 core/shared/schema.json 的 orchestrationEdge。
+type orchestrationEdgeContract struct {
+	FromNodeID string `json:"from_node_id"`
+	ToNodeID string `json:"to_node_id"`
+	Kind string `json:"kind"`
+}
+
 // workflowLLMNodeContract 对齐 core/shared/schema.json 的 workflowLLMNode。
 type workflowLLMNodeContract struct {
 	Prompt string `json:"prompt"`
 	SystemPrompt string `json:"system_prompt,omitempty"`
+}
+
+// orchestrationDefinitionContract 对齐 core/shared/schema.json 的 orchestrationDefinition。
+type orchestrationDefinitionContract struct {
+	Nodes []orchestrationNodeContract `json:"nodes"`
+	Edges []orchestrationEdgeContract `json:"edges"`
 }
 
 // workflowAgentNodeContract 对齐 core/shared/schema.json 的 workflowAgentNode。

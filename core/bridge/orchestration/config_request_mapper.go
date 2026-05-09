@@ -24,6 +24,7 @@ func configUpdateRequestToStoreRequest(req configUpdateRequest) bridgeconfig.Upd
 		ChatPath:                     req.ChatPath,
 		ProjectRoot:                  req.ProjectRoot,
 		MaxTurns:                     req.MaxTurns,
+		TaskExecutionTimeoutMS:       req.TaskExecutionTimeoutMs,
 		LLMCompletionRetryCount:      req.LlmCompletionRetryCount,
 		LLMCompletionRetryIntervalMS: req.LlmCompletionRetryIntervalMs,
 		SessionHumanLogFullEnabled:   req.SessionHumanLogFullEnabled,

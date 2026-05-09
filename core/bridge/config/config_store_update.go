@@ -94,6 +94,9 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.MaxTurns != nil {
 		fileCfg.MaxTurns = cloneIntPointer(req.MaxTurns)
 	}
+	if req.TaskExecutionTimeoutMS != nil {
+		fileCfg.TaskExecutionTimeoutMS = cloneIntPointer(req.TaskExecutionTimeoutMS)
+	}
 	if req.LLMCompletionRetryCount != nil {
 		fileCfg.LLMCompletionRetryCount = cloneIntPointer(req.LLMCompletionRetryCount)
 	}

@@ -16,6 +16,7 @@ type runtimeConfig struct {
 	NativePersistent             bool
 	ProjectRoot                  string
 	MaxTurns                     int
+	TaskExecutionTimeoutMS       int
 	ModelSelectionEnabled        bool
 	ContextWindowTokens          int
 	ResponseReserveTokens        int

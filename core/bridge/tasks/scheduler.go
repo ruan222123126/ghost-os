@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
 
 type ExecutionResult struct {
@@ -38,11 +40,19 @@ type TaskScheduler struct {
 	tasks           map[string]*taskRegistration
 }
 
-const defaultTaskExecutionTimeout = 2 * time.Minute
+const defaultTaskExecutionTimeout = time.Duration(bridgeconfig.DefaultTaskExecutionTimeoutMS) * time.Millisecond
 
 var traceCounter uint64
 
 func NewTaskScheduler(store *Store, executor Executor) *TaskScheduler {
+	return NewTaskSchedulerWithTimeout(store, executor, defaultTaskExecutionTimeout)
+}
+
+func NewTaskSchedulerWithTimeout(
+	store *Store,
+	executor Executor,
+	executionTimeout time.Duration,
+) *TaskScheduler {
 	scheduler := &TaskScheduler{
 		store:    store,
 		executor: executor,
@@ -50,11 +60,27 @@ func NewTaskScheduler(store *Store, executor Executor) *TaskScheduler {
 			return time.Now().UTC()
 		},
 		traceID:          nextTraceID,
-		executionTimeout: defaultTaskExecutionTimeout,
+		executionTimeout: normalizeExecutionTimeout(executionTimeout),
 		tasks:            make(map[string]*taskRegistration),
 	}
 	scheduler.execute = scheduler.executeWithExecutor
 	return scheduler
+}
+
+func (s *TaskScheduler) SetExecutionTimeout(timeout time.Duration) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.executionTimeout = normalizeExecutionTimeout(timeout)
+	s.mu.Unlock()
+}
+
+func normalizeExecutionTimeout(timeout time.Duration) time.Duration {
+	if timeout <= 0 {
+		return defaultTaskExecutionTimeout
+	}
+	return timeout
 }
 
 func (s *TaskScheduler) Stop() {

@@ -2,6 +2,8 @@
 
 package orchestration
 
+import "time"
+
 // executeConfigGetAction 返回当前可编辑配置快照，不暴露敏感明文字段。
 func (s *bridgeService) executeConfigGetAction(traceID string) (ServiceResult, error) {
 	response, err := s.publicConfigResponse()
@@ -20,6 +22,7 @@ func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, trace
 		logAction(traceID, busActionConfigUpdate, "error", err)
 		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 	}
+	s.syncTaskSchedulerExecutionTimeout()
 	if s.rssActionHandler() != nil {
 		_ = s.reloadRSSInboxRuntime()
 	}
@@ -35,6 +38,21 @@ func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, trace
 	}
 	logAction(traceID, busActionConfigUpdate, "success", nil)
 	return serviceResultSuccess(response), nil
+}
+
+func (s *bridgeService) syncTaskSchedulerExecutionTimeout() {
+	if s == nil {
+		return
+	}
+	scheduler := s.taskScheduler()
+	if scheduler == nil {
+		return
+	}
+	cfg, err := s.configStore.Config()
+	if err != nil {
+		return
+	}
+	scheduler.SetExecutionTimeout(time.Duration(cfg.Task.ExecutionTimeoutMS) * time.Millisecond)
 }
 
 func (s *bridgeService) publicConfigResponse() (configResponse, error) {

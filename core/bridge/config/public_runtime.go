@@ -9,6 +9,7 @@ type Snapshot struct {
 	ChatPath                     string `json:"chat_path"`
 	ProjectRoot                  string `json:"project_root"`
 	MaxTurns                     int    `json:"max_turns"`
+	TaskExecutionTimeoutMS       int    `json:"task_execution_timeout_ms"`
 	LLMCompletionRetryCount      int    `json:"llm_completion_retry_count"`
 	LLMCompletionRetryIntervalMS int    `json:"llm_completion_retry_interval_ms"`
 	APIKeySet                    bool   `json:"api_key_set"`
@@ -33,6 +34,7 @@ type UpdateRequest struct {
 	ChatPath                     *string `json:"chat_path,omitempty"`
 	ProjectRoot                  *string `json:"project_root,omitempty"`
 	MaxTurns                     *int    `json:"max_turns,omitempty"`
+	TaskExecutionTimeoutMS       *int    `json:"task_execution_timeout_ms,omitempty"`
 	LLMCompletionRetryCount      *int    `json:"llm_completion_retry_count,omitempty"`
 	LLMCompletionRetryIntervalMS *int    `json:"llm_completion_retry_interval_ms,omitempty"`
 	SessionHumanLogFullEnabled   *bool   `json:"session_human_log_full_enabled,omitempty"`

@@ -5,7 +5,17 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	bridgeconfig "ghost-os/bridge/config"
 )
+
+func TestTaskSchedulerDefaultsToFiveMinutes(t *testing.T) {
+	scheduler := NewTaskScheduler(nil, nil)
+	want := 5 * time.Minute
+	if got := scheduler.taskExecutionTimeout(); got != want {
+		t.Fatalf("unexpected default execution timeout: got %s want %s", got, want)
+	}
+}
 
 func TestTaskSchedulerStopCancelsRunningTaskUnit(t *testing.T) {
 	store, err := NewStore(t.TempDir(), nil)
@@ -286,5 +296,87 @@ func TestTaskSchedulerRunKeepsNormalErrorsAsError(t *testing.T) {
 	}
 	if stored.LastError != wantErr.Error() {
 		t.Fatalf("unexpected last_error: got %q want %q", stored.LastError, wantErr.Error())
+	}
+}
+
+func TestTaskSchedulerSetExecutionTimeoutAffectsNewRunsOnly(t *testing.T) {
+	store, err := NewStore(t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("new task store: %v", err)
+	}
+
+	scheduler := NewTaskScheduler(store, nil)
+	firstStarted := make(chan struct{})
+	firstRelease := make(chan struct{})
+	secondStarted := make(chan struct{})
+	runIndex := 0
+	scheduler.execute = func(ctx context.Context, _ ScheduledTask, _ string) ExecutionResult {
+		runIndex++
+		if runIndex == 1 {
+			close(firstStarted)
+			<-firstRelease
+			<-ctx.Done()
+			return ExecutionResult{Status: RunStatusError}
+		}
+		close(secondStarted)
+		<-ctx.Done()
+		return ExecutionResult{Status: RunStatusError}
+	}
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
+
+	scheduler.SetExecutionTimeout(80 * time.Millisecond)
+	task := ScheduledTask{
+		ID:              "timeout-update-task",
+		Message:         "timeout update",
+		ScheduleType:    ScheduleTypeInterval,
+		IntervalSeconds: 60,
+		Enabled:         true,
+	}
+	firstDone := make(chan RunLog, 1)
+	go func() {
+		run, _ := scheduler.RunNow(task, "trace-first")
+		firstDone <- run
+	}()
+
+	select {
+	case <-firstStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first run to start")
+	}
+
+	scheduler.SetExecutionTimeout(20 * time.Millisecond)
+	close(firstRelease)
+
+	firstRun := <-firstDone
+	if firstRun.Error != "task execution timed out after 80ms" {
+		t.Fatalf("unexpected first run timeout: got %q", firstRun.Error)
+	}
+
+	secondRun, err := scheduler.RunNow(task, "trace-second")
+	if err != nil {
+		t.Fatalf("run now second: %v", err)
+	}
+	select {
+	case <-secondStarted:
+	default:
+	}
+	if secondRun.Error != "task execution timed out after 20ms" {
+		t.Fatalf("unexpected second run timeout: got %q", secondRun.Error)
+	}
+}
+
+func TestTaskSchedulerWithConfiguredTimeoutUsesProvidedValue(t *testing.T) {
+	store, err := NewStore(t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("new task store: %v", err)
+	}
+
+	timeout := time.Duration(bridgeconfig.DefaultTaskExecutionTimeoutMS) * time.Millisecond
+	scheduler := NewTaskSchedulerWithTimeout(store, nil, timeout)
+	if got := scheduler.taskExecutionTimeout(); got != timeout {
+		t.Fatalf("unexpected configured timeout: got %s want %s", got, timeout)
 	}
 }

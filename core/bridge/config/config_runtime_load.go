@@ -194,6 +194,7 @@ func composeConfig(
 		WebSearchExaAPIKey:           runtime.WebSearchExaAPIKey,
 		LLMCompletionRetryCount:      runtime.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS: runtime.LLMCompletionRetryIntervalMS,
+		TaskExecutionTimeoutMS:       runtime.TaskExecutionTimeoutMS,
 		SessionHumanLogFullEnabled:   runtime.SessionHumanLogFullEnabled,
 		SessionSystemPromptVisible:   runtime.SessionSystemPromptVisible,
 		AssistantMarkdownEnabled:     runtime.AssistantMarkdownEnabled,

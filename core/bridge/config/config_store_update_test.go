@@ -37,6 +37,13 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	if snapshot.MaxTurns != defaultMaxTurns {
 		t.Fatalf("unexpected max_turns: got %d want %d", snapshot.MaxTurns, defaultMaxTurns)
 	}
+	if snapshot.TaskExecutionTimeoutMS != defaultTaskExecutionTimeoutMS {
+		t.Fatalf(
+			"unexpected task_execution_timeout_ms: got %d want %d",
+			snapshot.TaskExecutionTimeoutMS,
+			defaultTaskExecutionTimeoutMS,
+		)
+	}
 	if !snapshot.SessionHumanLogFullEnabled {
 		t.Fatal("expected session_human_log_full_enabled to be true")
 	}
@@ -74,6 +81,12 @@ func TestConfigStoreSnapshotDoesNotMaterializeRuntimeIntoFile(t *testing.T) {
 	}
 	if fileCfg.MaxTurns != nil {
 		t.Fatalf("snapshot should not persist max_turns, got %#v", fileCfg.MaxTurns)
+	}
+	if fileCfg.TaskExecutionTimeoutMS != nil {
+		t.Fatalf(
+			"snapshot should not persist task_execution_timeout_ms, got %#v",
+			fileCfg.TaskExecutionTimeoutMS,
+		)
 	}
 	if fileCfg.SessionSystemPromptVisible != nil {
 		t.Fatalf("snapshot should not persist session_system_prompt_visible_enabled, got %#v", fileCfg.SessionSystemPromptVisible)
@@ -125,6 +138,39 @@ func TestConfigStoreUpdatePersistsMaxTurns(t *testing.T) {
 	}
 	if fileCfg.MaxTurns == nil || *fileCfg.MaxTurns != value {
 		t.Fatalf("unexpected persisted max_turns: %#v", fileCfg.MaxTurns)
+	}
+}
+
+func TestConfigStoreUpdatePersistsTaskExecutionTimeoutMS(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+
+	store, err := newStoreFromEnv()
+	if err != nil {
+		t.Fatalf("newStoreFromEnv: %v", err)
+	}
+
+	value := 600000
+	if err := store.Update(configUpdateRequest{
+		TaskExecutionTimeoutMS: &value,
+	}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if store.RuntimeConfig().TaskExecutionTimeoutMS != value {
+		t.Fatalf("expected runtime task_execution_timeout_ms to be %d", value)
+	}
+	if store.Snapshot().TaskExecutionTimeoutMS != value {
+		t.Fatalf("expected snapshot task_execution_timeout_ms to be %d", value)
+	}
+
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		t.Fatalf("loadBridgeFileConfig: %v", err)
+	}
+	if fileCfg.TaskExecutionTimeoutMS == nil || *fileCfg.TaskExecutionTimeoutMS != value {
+		t.Fatalf("unexpected persisted task_execution_timeout_ms: %#v", fileCfg.TaskExecutionTimeoutMS)
 	}
 }
 

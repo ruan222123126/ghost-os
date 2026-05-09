@@ -9,6 +9,7 @@ import (
 func TestConfigResponseFromSnapshotIncludesRuntimeFlags(t *testing.T) {
 	response := configResponseFromSnapshot(bridgeconfig.Snapshot{
 		MaxTurns:                     9,
+		TaskExecutionTimeoutMS:       600000,
 		LLMCompletionRetryCount:      0,
 		LLMCompletionRetryIntervalMS: 150,
 		SessionHumanLogFullEnabled:   true,
@@ -29,6 +30,9 @@ func TestConfigResponseFromSnapshotIncludesRuntimeFlags(t *testing.T) {
 	}
 	if response.MaxTurns != 9 {
 		t.Fatalf("unexpected max_turns: got %d want %d", response.MaxTurns, 9)
+	}
+	if response.TaskExecutionTimeoutMs != 600000 {
+		t.Fatalf("unexpected task_execution_timeout_ms: got %d want %d", response.TaskExecutionTimeoutMs, 600000)
 	}
 	if response.LlmCompletionRetryCount != 0 {
 		t.Fatalf("unexpected llm_completion_retry_count: got %d want %d", response.LlmCompletionRetryCount, 0)

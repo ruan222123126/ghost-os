@@ -15,6 +15,7 @@ func cloneRuntimeConfig(raw runtimeConfig) runtimeConfig {
 		NativePersistent:             raw.NativePersistent,
 		ProjectRoot:                  raw.ProjectRoot,
 		MaxTurns:                     raw.MaxTurns,
+		TaskExecutionTimeoutMS:       raw.TaskExecutionTimeoutMS,
 		ModelSelectionEnabled:        raw.ModelSelectionEnabled,
 		ContextWindowTokens:          raw.ContextWindowTokens,
 		ResponseReserveTokens:        raw.ResponseReserveTokens,

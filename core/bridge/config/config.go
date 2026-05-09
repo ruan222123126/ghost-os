@@ -21,6 +21,7 @@ type ExecutionConfig struct {
 
 type TaskConfig struct {
 	TasksPath             string
+	ExecutionTimeoutMS    int
 	WorkflowToolAllowlist []string
 }
 
@@ -56,6 +57,7 @@ type Config struct {
 	WebSearchExaAPIKey            string
 	LLMCompletionRetryCount       int
 	LLMCompletionRetryIntervalMS  int
+	TaskExecutionTimeoutMS        int
 	SessionHumanLogFullEnabled    bool
 	SessionSystemPromptVisible    bool
 	AssistantMarkdownEnabled      bool

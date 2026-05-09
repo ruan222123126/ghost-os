@@ -65,6 +65,19 @@ func resolveRuntimeMaxTurns(fileCfg bridgeFileConfig, fallback runtimeConfig) (i
 	return fallback.MaxTurns, nil
 }
 
+func resolveRuntimeTaskExecutionTimeoutMS(fileCfg bridgeFileConfig, fallback runtimeConfig) (int, error) {
+	if fileCfg.TaskExecutionTimeoutMS != nil {
+		if *fileCfg.TaskExecutionTimeoutMS <= 0 {
+			return 0, fmt.Errorf(
+				"invalid task_execution_timeout_ms: must be > 0, got %d",
+				*fileCfg.TaskExecutionTimeoutMS,
+			)
+		}
+		return *fileCfg.TaskExecutionTimeoutMS, nil
+	}
+	return fallback.TaskExecutionTimeoutMS, nil
+}
+
 func resolveRuntimeNativePersistent(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
 	if fileCfg.NativePersistent != nil {
 		return *fileCfg.NativePersistent
@@ -155,6 +168,9 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	out.ProjectRoot = strings.TrimSpace(out.ProjectRoot)
 	if out.MaxTurns <= 0 {
 		out.MaxTurns = defaultMaxTurns
+	}
+	if out.TaskExecutionTimeoutMS <= 0 {
+		out.TaskExecutionTimeoutMS = defaultTaskExecutionTimeoutMS
 	}
 	out.WebSearchTavilyURL = strings.TrimSpace(out.WebSearchTavilyURL)
 	out.WebSearchExaURL = strings.TrimSpace(out.WebSearchExaURL)

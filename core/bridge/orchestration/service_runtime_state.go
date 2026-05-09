@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
 	bridgerss "ghost-os/bridge/rss"
@@ -195,7 +196,11 @@ func (r *serviceTaskRuntime) start(configStore bridgeconfig.Store, schedulerServ
 		r.initErr = err
 		return err
 	}
-	scheduler := NewTaskScheduler(taskStore, schedulerService)
+	scheduler := NewTaskSchedulerWithTimeout(
+		taskStore,
+		schedulerService,
+		time.Duration(taskCfg.ExecutionTimeoutMS)*time.Millisecond,
+	)
 	if err := scheduler.Start(); err != nil {
 		r.initErr = err
 		return err

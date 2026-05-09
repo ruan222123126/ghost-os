@@ -34,6 +34,7 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 		NativePersistent:             settings.NativePersistent,
 		ProjectRoot:                  env.defaultValue("GHOST_PROJECT_ROOT", ""),
 		MaxTurns:                     settings.MaxTurns,
+		TaskExecutionTimeoutMS:       settings.TaskExecutionTimeoutMS,
 		LLMCompletionRetryCount:      settings.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS: settings.LLMCompletionRetryIntervalMS,
 		ModelSelectionEnabled:        !settings.AllowlistOnly,
@@ -57,6 +58,7 @@ type runtimeFallbackSettings struct {
 	AllowlistOnly                bool
 	NativePersistent             bool
 	MaxTurns                     int
+	TaskExecutionTimeoutMS       int
 	LLMCompletionRetryCount      int
 	LLMCompletionRetryIntervalMS int
 	SessionHumanLogFullEnabled   bool
@@ -83,6 +85,14 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 	if err != nil {
 		return runtimeFallbackSettings{}, err
 	}
+	taskExecutionTimeoutMS, err := parsePositiveIntValue(
+		env.value("GHOST_TASK_EXECUTION_TIMEOUT_MS"),
+		"GHOST_TASK_EXECUTION_TIMEOUT_MS",
+		defaultTaskExecutionTimeoutMS,
+	)
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
 	retryCount, err := parseNonNegativeIntValue(
 		env.value("GHOST_LLM_COMPLETION_RETRY_COUNT"),
 		"GHOST_LLM_COMPLETION_RETRY_COUNT",
@@ -106,6 +116,7 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 		AllowlistOnly:                allowlistOnly,
 		NativePersistent:             nativePersistent,
 		MaxTurns:                     maxTurns,
+		TaskExecutionTimeoutMS:       taskExecutionTimeoutMS,
 		LLMCompletionRetryCount:      retryCount,
 		LLMCompletionRetryIntervalMS: retryIntervalMS,
 		SessionHumanLogFullEnabled:   sessionHumanLogFullEnabled,
@@ -175,6 +186,7 @@ type runtimeFileSettings struct {
 	CodexStatelessRetryEnabled   bool
 	AllowlistOnly                bool
 	MaxTurns                     int
+	TaskExecutionTimeoutMS       int
 	LLMCompletionRetryCount      int
 	LLMCompletionRetryIntervalMS int
 	SessionHumanLogFullEnabled   bool
@@ -200,6 +212,10 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 	if err != nil {
 		return runtimeFileSettings{}, err
 	}
+	taskExecutionTimeoutMS, err := resolveRuntimeTaskExecutionTimeoutMS(fileCfg, fallback)
+	if err != nil {
+		return runtimeFileSettings{}, err
+	}
 	retryCount, err := resolveRuntimeLLMCompletionRetryCount(fileCfg, fallback)
 	if err != nil {
 		return runtimeFileSettings{}, err
@@ -220,6 +236,7 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 		CodexStatelessRetryEnabled:   resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
 		AllowlistOnly:                resolveRuntimeAllowlistOnly(fileCfg, fallback),
 		MaxTurns:                     maxTurns,
+		TaskExecutionTimeoutMS:       taskExecutionTimeoutMS,
 		LLMCompletionRetryCount:      retryCount,
 		LLMCompletionRetryIntervalMS: retryIntervalMS,
 		SessionHumanLogFullEnabled:   resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
@@ -245,6 +262,7 @@ func runtimeConfigWithProviders(input runtimeConfigBuildInput, providers []provi
 		NativePersistent:             resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
 		ProjectRoot:                  resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
 		MaxTurns:                     input.Settings.MaxTurns,
+		TaskExecutionTimeoutMS:       input.Settings.TaskExecutionTimeoutMS,
 		LLMCompletionRetryCount:      input.Settings.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS: input.Settings.LLMCompletionRetryIntervalMS,
 		ModelSelectionEnabled:        !input.Settings.AllowlistOnly,
@@ -279,6 +297,7 @@ func runtimeConfigWithoutProviders(input runtimeConfigBuildInput) runtimeConfig 
 		NativePersistent:             resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
 		ProjectRoot:                  resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
 		MaxTurns:                     input.Settings.MaxTurns,
+		TaskExecutionTimeoutMS:       input.Settings.TaskExecutionTimeoutMS,
 		LLMCompletionRetryCount:      input.Settings.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS: input.Settings.LLMCompletionRetryIntervalMS,
 		ModelSelectionEnabled:        !input.Settings.AllowlistOnly,

@@ -19,7 +19,7 @@ func TestHandleConfigMethodNotAllowed(t *testing.T) {
 func TestConfigUpdateThenGetUsesStore(t *testing.T) {
 	handler := newTestHandler(t, nil)
 
-	update := serveRequest(handler, http.MethodPost, "/api/config", `{"provider":"custom","api_key":"new-key","base_url":"http://localhost:1234","model":"local-model","chat_path":"/v1/messages","max_turns":9,"llm_completion_retry_count":2,"llm_completion_retry_interval_ms":300,"session_system_prompt_visible_enabled":false,"assistant_markdown_enabled":false,"tool_call_compact_output_enabled":true,"memory_mode_enabled":true,"microcompact_enabled":true}`, nil)
+	update := serveRequest(handler, http.MethodPost, "/api/config", `{"provider":"custom","api_key":"new-key","base_url":"http://localhost:1234","model":"local-model","chat_path":"/v1/messages","max_turns":9,"task_execution_timeout_ms":600000,"llm_completion_retry_count":2,"llm_completion_retry_interval_ms":300,"session_system_prompt_visible_enabled":false,"assistant_markdown_enabled":false,"tool_call_compact_output_enabled":true,"memory_mode_enabled":true,"microcompact_enabled":true}`, nil)
 	if update.Code != http.StatusOK {
 		t.Fatalf("unexpected update status: got %d want %d", update.Code, http.StatusOK)
 	}
@@ -47,6 +47,13 @@ func TestConfigUpdateThenGetUsesStore(t *testing.T) {
 	}
 	if payload["max_turns"] != float64(9) {
 		t.Fatalf("unexpected max_turns: got %v want %d", payload["max_turns"], 9)
+	}
+	if payload["task_execution_timeout_ms"] != float64(600000) {
+		t.Fatalf(
+			"unexpected task_execution_timeout_ms: got %v want %d",
+			payload["task_execution_timeout_ms"],
+			600000,
+		)
 	}
 	if payload["llm_completion_retry_count"] != float64(2) {
 		t.Fatalf(
@@ -125,6 +132,13 @@ func TestConfigUpdateEmptyBaseURLAndModelResetDefaults(t *testing.T) {
 	}
 	if payload["max_turns"] != float64(20) {
 		t.Fatalf("unexpected max_turns: got %v want %d", payload["max_turns"], 20)
+	}
+	if payload["task_execution_timeout_ms"] != float64(300000) {
+		t.Fatalf(
+			"unexpected task_execution_timeout_ms: got %v want %d",
+			payload["task_execution_timeout_ms"],
+			300000,
+		)
 	}
 	if payload["llm_completion_retry_count"] != float64(1) {
 		t.Fatalf(
@@ -209,6 +223,13 @@ func TestConfigGetReturnsRuntimeDefaultsWhenUnset(t *testing.T) {
 	}
 	if payload["max_turns"] != float64(20) {
 		t.Fatalf("unexpected max_turns: got %v want %d", payload["max_turns"], 20)
+	}
+	if payload["task_execution_timeout_ms"] != float64(300000) {
+		t.Fatalf(
+			"unexpected task_execution_timeout_ms: got %v want %d",
+			payload["task_execution_timeout_ms"],
+			300000,
+		)
 	}
 	if payload["llm_completion_retry_count"] != float64(1) {
 		t.Fatalf(

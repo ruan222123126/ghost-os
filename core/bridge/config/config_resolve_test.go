@@ -102,6 +102,11 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			want: "invalid GHOST_MAX_TURNS",
 		},
 		{
+			name: "task execution timeout positive int",
+			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_TASK_EXECUTION_TIMEOUT_MS": "0"},
+			want: "invalid GHOST_TASK_EXECUTION_TIMEOUT_MS",
+		},
+		{
 			name: "float range",
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_TOOL_SELECTOR_CONFIDENCE": "1.5"},
 			want: "invalid GHOST_TOOL_SELECTOR_CONFIDENCE",
@@ -185,10 +190,18 @@ func TestResolveConfigLoadsSessionDisplayModesFromDefaultsAndFile(t *testing.T) 
 	if defaultCfg.MaxTurns != defaultMaxTurns {
 		t.Fatalf("expected max_turns to default to %d, got %d", defaultMaxTurns, defaultCfg.MaxTurns)
 	}
+	if defaultCfg.TaskExecutionTimeoutMS != defaultTaskExecutionTimeoutMS {
+		t.Fatalf(
+			"expected task_execution_timeout_ms to default to %d, got %d",
+			defaultTaskExecutionTimeoutMS,
+			defaultCfg.TaskExecutionTimeoutMS,
+		)
+	}
 
 	fileOverrideCfg, err := resolveConfig(
 		bridgeFileConfig{
 			MaxTurns:                     intPtr(7),
+			TaskExecutionTimeoutMS:       intPtr(600000),
 			SessionSystemPromptVisible:   boolPtr(false),
 			AssistantMarkdownEnabled:     boolPtr(false),
 			ToolCallCompactOutputEnabled: boolPtr(true),
@@ -220,6 +233,12 @@ func TestResolveConfigLoadsSessionDisplayModesFromDefaultsAndFile(t *testing.T) 
 	if fileOverrideCfg.MaxTurns != 7 {
 		t.Fatalf("expected max_turns to be 7 from file override, got %d", fileOverrideCfg.MaxTurns)
 	}
+	if fileOverrideCfg.TaskExecutionTimeoutMS != 600000 {
+		t.Fatalf(
+			"expected task_execution_timeout_ms to be 600000 from file override, got %d",
+			fileOverrideCfg.TaskExecutionTimeoutMS,
+		)
+	}
 }
 
 func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
@@ -232,6 +251,11 @@ func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 			name:    "max turns",
 			fileCfg: bridgeFileConfig{MaxTurns: intPtr(0)},
 			want:    "invalid max_turns",
+		},
+		{
+			name:    "task execution timeout",
+			fileCfg: bridgeFileConfig{TaskExecutionTimeoutMS: intPtr(0)},
+			want:    "invalid task_execution_timeout_ms",
 		},
 		{
 			name:    "selector confidence",
