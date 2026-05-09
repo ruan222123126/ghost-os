@@ -5,6 +5,7 @@ import type {
 import type { WebLocale } from '@/lib/i18n/locale';
 
 const DEFAULT_MAX_TURNS = 20;
+const DEFAULT_TASK_EXECUTION_TIMEOUT_MS = 300000;
 const DEFAULT_LLM_COMPLETION_RETRY_COUNT = 1;
 const DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS = 200;
 
@@ -14,6 +15,7 @@ export interface RuntimeFormState {
   chatPath: string;
   projectRoot: string;
   maxTurns: string;
+  taskExecutionTimeoutMS: string;
   llmCompletionRetryCount: string;
   llmCompletionRetryIntervalMS: string;
   sessionHumanLogFullEnabled: boolean;
@@ -35,6 +37,9 @@ export function createRuntimeFormState(config: BridgeConfig | null): RuntimeForm
     chatPath: config?.chat_path ?? '',
     projectRoot: config?.project_root ?? '',
     maxTurns: String(config?.max_turns ?? DEFAULT_MAX_TURNS),
+    taskExecutionTimeoutMS: String(
+      config?.task_execution_timeout_ms ?? DEFAULT_TASK_EXECUTION_TIMEOUT_MS,
+    ),
     llmCompletionRetryCount: String(config?.llm_completion_retry_count ?? DEFAULT_LLM_COMPLETION_RETRY_COUNT),
     llmCompletionRetryIntervalMS: String(config?.llm_completion_retry_interval_ms ?? DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS),
     sessionHumanLogFullEnabled: config?.session_human_log_full_enabled ?? false,
@@ -82,6 +87,10 @@ function buildRuntimeScalarUpdate(
     chat_path: formState.chatPath,
     project_root: formState.projectRoot,
     max_turns: parsePositiveInteger(formState.maxTurns, 'max_turns'),
+    task_execution_timeout_ms: parsePositiveInteger(
+      formState.taskExecutionTimeoutMS,
+      'task_execution_timeout_ms',
+    ),
     llm_completion_retry_count: parseNonNegativeInteger(
       formState.llmCompletionRetryCount,
       'llm_completion_retry_count',

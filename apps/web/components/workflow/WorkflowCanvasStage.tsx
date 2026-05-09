@@ -12,10 +12,12 @@ import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type {
   WorkflowCanvasDraft,
+  WorkflowEditorKind,
   WorkflowCanvasPosition,
 } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasStageProps {
+  editorKind: WorkflowEditorKind;
   draft: WorkflowCanvasDraft;
   actionError: string;
   validationErrors: string[];
@@ -32,6 +34,7 @@ interface WorkflowCanvasStageProps {
 export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
   const { copy, locale } = useWebLocale();
   const {
+    editorKind,
     draft,
     actionError,
     validationErrors,
@@ -68,6 +71,7 @@ export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
           {interactions.renderDraft.edges.map((edge) => renderEdge(edge, interactions.nodeMap, onDeleteEdge))}
         </svg>
         <WorkflowCanvasStageNodes
+          editorKind={editorKind}
           draft={interactions.renderDraft}
           workflowCopy={workflowCopy}
           nodeMap={interactions.nodeMap}

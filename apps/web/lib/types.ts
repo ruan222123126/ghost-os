@@ -3,6 +3,13 @@
 import type {
   AgentMessageTaskCreateRequest as SharedAgentMessageTaskCreateRequest,
   AgentMessageTaskPayload as SharedAgentMessageTaskPayload,
+  OrchestrationAgentNode as SharedOrchestrationAgentNode,
+  OrchestrationDefinition as SharedOrchestrationDefinition,
+  OrchestrationEdge as SharedOrchestrationEdge,
+  OrchestrationGroupNode as SharedOrchestrationGroupNode,
+  OrchestrationNode as SharedOrchestrationNode,
+  OrchestrationTaskCreateRequest as SharedOrchestrationTaskCreateRequest,
+  OrchestrationTaskPayload as SharedOrchestrationTaskPayload,
   AskHumanOption,
   ProviderConfig,
   SessionFileContent as SharedSessionFileContent,
@@ -330,11 +337,17 @@ export interface PresetUpdateRequest {
 export type TaskPayload = SharedTaskPayload;
 export type AgentMessageTaskPayload = SharedAgentMessageTaskPayload;
 export type WorkflowTaskPayload = SharedWorkflowTaskPayload;
+export type OrchestrationTaskPayload = SharedOrchestrationTaskPayload;
 export type TaskRuntimeOverrides = SharedTaskRuntimeOverrides;
 export type WorkflowDefinition = SharedWorkflowDefinition;
 export type WorkflowNode = SharedWorkflowNode;
 export type WorkflowEdge = SharedWorkflowEdge;
 export type WorkflowInputVariable = SharedWorkflowInputVariable;
+export type OrchestrationDefinition = SharedOrchestrationDefinition;
+export type OrchestrationNode = SharedOrchestrationNode;
+export type OrchestrationEdge = SharedOrchestrationEdge;
+export type OrchestrationGroupNode = SharedOrchestrationGroupNode;
+export type OrchestrationAgentNode = SharedOrchestrationAgentNode;
 
 export interface TaskRunNodeResult {
   node_id: string;
@@ -354,7 +367,7 @@ export interface TaskRunLog {
   task_id: string;
   run_id: string;
   trace_id: string;
-  task_kind?: 'agent_message' | 'workflow';
+  task_kind?: 'agent_message' | 'workflow' | 'orchestration';
   action?: string;
   scheduled_at: string;
   started_at?: string;
@@ -378,7 +391,17 @@ export interface WorkflowTaskCreateRequest extends Omit<
   task_kind: 'workflow';
 }
 
-export type TaskCreateRequest = TextTaskCreateRequest | WorkflowTaskCreateRequest;
+export interface OrchestrationTaskCreateRequest extends Omit<
+  SharedOrchestrationTaskCreateRequest,
+  'trace_id'
+> {
+  task_kind: 'orchestration';
+}
+
+export type TaskCreateRequest =
+  | TextTaskCreateRequest
+  | WorkflowTaskCreateRequest
+  | OrchestrationTaskCreateRequest;
 
 export interface TaskUpdateRequest extends Pick<
   SharedTaskUpdateRequest,
@@ -390,6 +413,8 @@ export interface TaskUpdateRequest extends Pick<
   | 'enabled'
   | 'task_kind'
   | 'workflow'
+  | 'name'
+  | 'orchestration'
 > {
 }
 

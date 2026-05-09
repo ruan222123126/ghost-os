@@ -1,18 +1,25 @@
 import type {
+  OrchestrationDefinition,
+  OrchestrationEdge,
+  OrchestrationGroupNode,
+  OrchestrationNode,
   TaskRuntimeOverrides,
   TaskUpdateRequest,
   WorkflowDefinition,
   WorkflowInputVariable,
   WorkflowNode,
+  OrchestrationTaskCreateRequest,
   WorkflowTaskCreateRequest,
   WorkflowTaskPayload,
+  OrchestrationTaskPayload,
 } from '@/lib/types';
 
 export type WorkflowEditorMode = 'create' | 'edit';
 export type WorkflowEditorKind = 'workflow' | 'orchestration';
 export type WorkflowToolArgumentsMode = 'json' | 'kv';
 export type WorkflowScheduleMode = 'interval' | 'cron';
-export type WorkflowNodeType = WorkflowNode['type'];
+export type WorkflowNodeType = WorkflowNode['type'] | OrchestrationNode['type'];
+export type WorkflowEdgeKind = OrchestrationEdge['kind'];
 export type ScreenControlAtomicAction =
   | 'screenshot'
   | 'find_text'
@@ -67,8 +74,16 @@ export interface WorkflowCanvasNodeDraft {
     system_prompt?: string;
   };
   agent?: {
+    title?: string;
     message: string;
     runtime_overrides?: TaskRuntimeOverrides;
+  };
+  group?: {
+    title: string;
+    shared_context: string;
+    speaking_mode: OrchestrationGroupNode['speaking_mode'];
+    owner_agent_id?: string;
+    max_rounds: number;
   };
   if?: {
     source_node_id?: string;
@@ -90,6 +105,7 @@ export interface WorkflowCanvasEdgeDraft {
   id: string;
   from_node_id: string;
   to_node_id: string;
+  kind?: WorkflowEdgeKind;
 }
 
 export interface WorkflowScheduleDraft {
@@ -119,14 +135,22 @@ export interface SessionImportResult {
 
 export type WorkflowUpdatePayload = Pick<
   TaskUpdateRequest,
-  'task_kind' | 'workflow' | 'interval_seconds' | 'cron_expr'
+  'task_kind' | 'name' | 'workflow' | 'orchestration' | 'interval_seconds' | 'cron_expr'
 >;
 
 export type WorkflowCreatePayload = WorkflowTaskCreateRequest;
+export type OrchestrationCreatePayload = OrchestrationTaskCreateRequest;
 
 export interface WorkflowDefinitionImport {
   workflow: WorkflowDefinition;
   scheduleType: WorkflowTaskPayload['schedule_type'];
+  intervalSeconds?: number;
+  cronExpr?: string;
+}
+
+export interface OrchestrationDefinitionImport {
+  orchestration: OrchestrationDefinition;
+  scheduleType: OrchestrationTaskPayload['schedule_type'];
   intervalSeconds?: number;
   cronExpr?: string;
 }

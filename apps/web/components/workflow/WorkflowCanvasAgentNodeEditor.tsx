@@ -1,14 +1,27 @@
 'use client';
 
 import { WorkflowVariableAutocompleteField } from '@/components/workflow/WorkflowVariableAutocompleteField';
-import { useWebLocale } from '@/lib/i18n/provider';
-import type { TaskRuntimeOverrides, ToolPayload } from '@/lib/types';
 import {
+  applyPresetOverride,
+  buildModelOptions,
+  buildPresetOptions,
+  buildProviderOptions,
+  buildToolOptions,
+  nextProviderOverrides,
+  nextRuntimeOverrides,
+  parseOptionalPositiveInteger,
+  toggleToolOverride,
+  toolOrderForEditor,
+} from '@/components/workflow/workflowAgentNodeEditorState';
+import { useWebLocale } from '@/lib/i18n/provider';
+import type { PresetPayload, TaskRuntimeOverrides } from '@/lib/types';
+import {
+  cloneOrchestrationTaskRuntimeOverrides,
   cloneWorkflowTaskRuntimeOverrides,
-  enabledWorkflowAgentToolNames,
   type WorkflowAgentRuntimeCatalog,
   type WorkflowCanvasNodeDraft,
   withAgentMessage,
+  withAgentTitle,
   withAgentRuntimeOverrides,
 } from '@/lib/workflow-editor';
 
@@ -18,13 +31,10 @@ interface WorkflowCanvasAgentNodeEditorProps {
   agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
   agentRuntimeLoading: boolean;
   agentRuntimeError: string;
+  presets?: PresetPayload[];
+  presetLoading?: boolean;
+  presetError?: string;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
-}
-
-interface SelectOption {
-  disabled: boolean;
-  label: string;
-  value: string;
 }
 
 export function WorkflowCanvasAgentNodeEditor(props: WorkflowCanvasAgentNodeEditorProps) {
@@ -34,17 +44,46 @@ export function WorkflowCanvasAgentNodeEditor(props: WorkflowCanvasAgentNodeEdit
     agentRuntimeError,
     agentRuntimeLoading,
     editorKind,
+    presetError = '',
+    presetLoading = false,
+    presets = [],
     selectedNode,
     onUpdateNode,
   } = props;
-  const overrides = cloneWorkflowTaskRuntimeOverrides(selectedNode.agent?.runtime_overrides) ?? {};
+  const overrides = editorKind === 'orchestration'
+    ? cloneOrchestrationTaskRuntimeOverrides(selectedNode.agent?.runtime_overrides) ?? {}
+    : cloneWorkflowTaskRuntimeOverrides(selectedNode.agent?.runtime_overrides) ?? {};
+  const toolOptions = buildToolOptions(
+    agentRuntimeCatalog?.tools ?? [],
+    overrides.tool_allowlist ?? [],
+    copy.workflow,
+    editorKind === 'orchestration',
+  );
+  const toolOrder = toolOrderForEditor(
+    agentRuntimeCatalog?.tools ?? [],
+    editorKind === 'orchestration',
+  );
   const providerOptions = buildProviderOptions(agentRuntimeCatalog, overrides.provider_name ?? '', copy.workflow);
   const modelOptions = buildModelOptions(agentRuntimeCatalog, overrides.provider_name ?? '', overrides.model ?? '', copy.workflow);
-  const toolOptions = buildToolOptions(agentRuntimeCatalog?.tools ?? [], overrides.tool_allowlist ?? [], copy.workflow);
-  const enabledToolNames = enabledWorkflowAgentToolNames(agentRuntimeCatalog?.tools ?? []);
+  const presetOptions = buildPresetOptions(presets, overrides.preset_id ?? '', copy.workflow);
+  const systemPromptLocked = editorKind === 'orchestration' && (overrides.preset_id?.trim().length ?? 0) > 0;
+  const toolStatusText = agentRuntimeLoading
+    ? copy.workflow.agentToolsLoading
+    : (toolOptions.length === 0 ? copy.workflow.agentNoTools : '');
 
   return (
     <div className="workflow-arch-prop-group">
+      {editorKind === 'orchestration' ? (
+        <>
+          <label className="workflow-arch-field-label">{copy.workflow.agentTitle}</label>
+          <input
+            type="text"
+            value={selectedNode.agent?.title ?? ''}
+            placeholder={copy.workflow.agentTitlePlaceholder}
+            onChange={(event) => onUpdateNode(withAgentTitle(selectedNode, event.target.value))}
+          />
+        </>
+      ) : null}
       <label className="workflow-arch-field-label">{copy.workflow.agentMessage}</label>
       <TemplateEnabledField
         editorKind={editorKind}
@@ -80,21 +119,38 @@ export function WorkflowCanvasAgentNodeEditor(props: WorkflowCanvasAgentNodeEdit
           <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
         ))}
       </select>
+      {editorKind === 'orchestration' ? (
+        <>
+          <label className="workflow-arch-field-label">{copy.workflow.agentPreset}</label>
+          <select
+            data-testid="orchestration-agent-preset-select"
+            value={overrides.preset_id ?? ''}
+            onChange={(event) => onUpdateNode(withAgentRuntimeOverrides(
+              selectedNode,
+              nextPresetRuntimeOverrides(overrides, event.target.value, presets, toolOrder),
+            ))}
+          >
+            <option value="">{presetLoading ? copy.workflow.agentPresetLoading : copy.workflow.agentPresetPlaceholder}</option>
+            {presetOptions.map((option) => (
+              <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
+            ))}
+          </select>
+        </>
+      ) : null}
       <label className="workflow-arch-field-label">{copy.workflow.agentSystemPrompt}</label>
       <TemplateEnabledField
         editorKind={editorKind}
         mode="textarea"
         rows={5}
         value={overrides.system_prompt ?? ''}
+        disabled={systemPromptLocked}
         placeholder={copy.workflow.agentSystemPromptPlaceholder}
         onChange={(value) => onUpdateNode(withAgentRuntimeOverrides(selectedNode, nextRuntimeOverrides(overrides, {
           system_prompt: value.trim().length > 0 ? value : undefined,
         })))}
       />
       <label className="workflow-arch-field-label">{copy.workflow.agentToolAllowlist}</label>
-      <div className="workflow-arch-field-note">
-        {agentRuntimeLoading ? copy.workflow.agentToolsLoading : copy.workflow.agentNoTools}
-      </div>
+      {toolStatusText ? <div className="workflow-arch-field-note">{toolStatusText}</div> : null}
       <div className="max-h-48 overflow-y-auto rounded-[18px] border border-[#E5E5E5] bg-white px-3 py-2">
         {toolOptions.map((option) => (
           <label key={option.value} className={`flex items-center gap-2 py-1 text-[13px] ${option.disabled ? 'text-[#A3A3A3]' : 'text-[#171717]'}`}>
@@ -105,161 +161,48 @@ export function WorkflowCanvasAgentNodeEditor(props: WorkflowCanvasAgentNodeEdit
               onChange={() => onUpdateNode(withAgentRuntimeOverrides(selectedNode, toggleToolOverride(
                 overrides,
                 option.value,
-                enabledToolNames,
+                toolOrder,
               )))}
             />
             <span>{option.label}</span>
           </label>
         ))}
       </div>
-      <label className="workflow-arch-field-label">{copy.workflow.agentMaxTurns}</label>
-      <input
-        type="number"
-        min={1}
-        step={1}
-        value={overrides.max_turns === undefined ? '' : String(overrides.max_turns)}
-        onChange={(event) => onUpdateNode(withAgentRuntimeOverrides(selectedNode, nextRuntimeOverrides(overrides, {
-          max_turns: parseOptionalPositiveInteger(event.target.value),
-        })))}
-      />
+      {editorKind === 'workflow' ? (
+        <>
+          <label className="workflow-arch-field-label">{copy.workflow.agentMaxTurns}</label>
+          <input
+            type="number"
+            min={1}
+            step={1}
+            value={overrides.max_turns === undefined ? '' : String(overrides.max_turns)}
+            onChange={(event) => onUpdateNode(withAgentRuntimeOverrides(selectedNode, nextRuntimeOverrides(overrides, {
+              max_turns: parseOptionalPositiveInteger(event.target.value),
+            })))}
+          />
+        </>
+      ) : null}
       {agentRuntimeError.trim().length > 0 ? <p className="workflow-arch-field-note">{agentRuntimeError}</p> : null}
+      {presetError.trim().length > 0 ? <p className="workflow-arch-field-note">{presetError}</p> : null}
       {editorKind === 'workflow' ? <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p> : null}
     </div>
   );
 }
 
-function buildProviderOptions(
-  catalog: WorkflowAgentRuntimeCatalog | undefined,
-  currentValue: string,
-  copy: ReturnType<typeof useWebLocale>['copy']['workflow'],
-): SelectOption[] {
-  const mapped = (catalog?.providers ?? [])
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .map((provider) => ({
-      value: provider.name,
-      label: `${provider.name} (${provider.type})`,
-      disabled: false,
-    }));
-  return withCurrentDisabledOption(mapped, currentValue, copy.agentProviderDisabled, copy.agentProviderUnavailable);
-}
-
-function buildModelOptions(
-  catalog: WorkflowAgentRuntimeCatalog | undefined,
-  providerName: string,
-  currentValue: string,
-  copy: ReturnType<typeof useWebLocale>['copy']['workflow'],
-): SelectOption[] {
-  const provider = (catalog?.providers ?? []).find((item) => item.name === providerName);
-  const mapped = (provider?.models ?? []).map((model) => ({
-    value: model,
-    label: model,
-    disabled: false,
-  }));
-  return withCurrentDisabledOption(mapped, currentValue, copy.agentModelDisabled, copy.agentModelUnavailable);
-}
-
-function buildToolOptions(
-  tools: ToolPayload[],
-  selectedNames: string[],
-  copy: ReturnType<typeof useWebLocale>['copy']['workflow'],
-): SelectOption[] {
-  const mapped = tools
-    .filter((tool) => tool.enabled)
-    .slice()
-    .sort((left, right) => left.name.localeCompare(right.name))
-    .map((tool) => ({ value: tool.name, label: tool.name, disabled: false }));
-  return selectedNames.reduce((options, name) => {
-    return withCurrentDisabledOption(options, name, copy.agentToolDisabled, copy.agentToolUnavailable);
-  }, mapped);
-}
-
-function withCurrentDisabledOption(
-  options: SelectOption[],
-  currentValue: string,
-  disabledLabel: (name: string) => string,
-  unavailableLabel: (name: string) => string,
-): SelectOption[] {
-  const normalized = currentValue.trim();
-  if (normalized.length === 0 || options.some((option) => option.value === normalized)) {
-    return options;
-  }
-  return [{
-    value: normalized,
-    label: unavailableLabel(normalized),
-    disabled: true,
-  }, ...options];
-}
-
-function nextProviderOverrides(
+function nextPresetRuntimeOverrides(
   current: TaskRuntimeOverrides,
-  providerName: string,
-  catalog: WorkflowAgentRuntimeCatalog | undefined,
-): TaskRuntimeOverrides | undefined {
-  const provider = catalog?.providers.find((item) => item.name === providerName);
-  const nextModel = (provider?.models ?? []).includes(current.model ?? '') ? current.model : undefined;
-  return nextRuntimeOverrides(current, {
-    provider_name: providerName || undefined,
-    model: nextModel,
-  });
-}
-
-function toggleToolOverride(
-  current: TaskRuntimeOverrides,
-  toolName: string,
-  enabledToolNames: string[],
-): TaskRuntimeOverrides | undefined {
-  const next = new Set(current.tool_allowlist ?? []);
-  if (next.has(toolName)) {
-    next.delete(toolName);
-  } else {
-    next.add(toolName);
+  presetID: string,
+  presets: PresetPayload[],
+  orderedToolNames: string[],
+) {
+  if (presetID.trim().length === 0) {
+    return nextRuntimeOverrides(current, { preset_id: undefined });
   }
-  const ordered = enabledToolNames.filter((name) => next.has(name));
-  return nextRuntimeOverrides(current, {
-    tool_allowlist_only: true,
-    tool_allowlist: ordered,
-  });
-}
-
-function nextRuntimeOverrides(
-  current: TaskRuntimeOverrides,
-  patch: Partial<TaskRuntimeOverrides>,
-): TaskRuntimeOverrides | undefined {
-  const next = {
-    ...current,
-    ...patch,
-  };
-  if (next.provider_name === undefined) {
-    next.model = undefined;
+  const preset = presets.find((item) => item.id === presetID);
+  if (!preset) {
+    return nextRuntimeOverrides(current, { preset_id: presetID });
   }
-  if (next.tool_allowlist_only === true && next.tool_allowlist === undefined) {
-    next.tool_allowlist = [];
-  }
-  if (!hasMeaningfulRuntimeOverrides(next)) {
-    return undefined;
-  }
-  return next;
-}
-
-function hasMeaningfulRuntimeOverrides(overrides: TaskRuntimeOverrides): boolean {
-  return Boolean(
-    overrides.provider_name
-    || overrides.model
-    || overrides.system_prompt
-    || overrides.tool_allowlist_only
-    || overrides.tool_allowlist?.length
-    || overrides.max_turns,
-  );
-}
-
-function parseOptionalPositiveInteger(raw: string): number | undefined {
-  const value = raw.trim();
-  if (value.length === 0) {
-    return undefined;
-  }
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  return applyPresetOverride(current, preset, orderedToolNames);
 }
 
 function TemplateEnabledField(props: {
@@ -267,22 +210,24 @@ function TemplateEnabledField(props: {
   mode: 'input' | 'textarea';
   value: string;
   rows?: number;
+  disabled?: boolean;
   placeholder?: string;
   onChange: (value: string) => void;
 }) {
-  const { editorKind, mode, value, rows, placeholder, onChange } = props;
+  const { editorKind, mode, value, rows, disabled = false, placeholder, onChange } = props;
   if (editorKind === 'workflow') {
     return (
       <WorkflowVariableAutocompleteField
         mode={mode}
         value={value}
         rows={rows}
+        disabled={disabled}
         placeholder={placeholder}
         onChange={onChange}
       />
     );
   }
   return mode === 'textarea'
-    ? <textarea rows={rows} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
-    : <input type="text" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />;
+    ? <textarea rows={rows} disabled={disabled} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    : <input type="text" disabled={disabled} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />;
 }

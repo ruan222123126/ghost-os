@@ -11,6 +11,7 @@ interface OrchestrationEditorClientProps {
 
 const ORCHESTRATION_NODE_LIBRARY_TYPES: readonly WorkflowNodeType[] = [
   'agent',
+  'group',
 ];
 
 export function OrchestrationEditorClient(props: OrchestrationEditorClientProps) {
@@ -59,8 +60,12 @@ export function OrchestrationEditorClient(props: OrchestrationEditorClientProps)
       agentRuntimeCatalog={controller.agentRuntimeCatalog}
       agentRuntimeLoading={controller.agentRuntimeLoading}
       agentRuntimeError={controller.agentRuntimeError}
+      presets={controller.presets}
+      presetLoading={controller.presetLoading}
+      presetError={controller.presetError}
       workflowCopy={controller.workflowCopy}
       nodeLibraryTypes={ORCHESTRATION_NODE_LIBRARY_TYPES}
+      showImportControls={false}
       localizeValidationError={controller.localizeValidationError}
       onChangeImportSessionID={controller.onChangeImportSessionID}
       onImportFromSession={controller.onImportFromSession}

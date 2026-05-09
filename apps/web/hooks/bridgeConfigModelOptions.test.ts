@@ -10,6 +10,7 @@ function buildConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
     chat_path: '/v1/messages',
     project_root: '',
     max_turns: 20,
+    task_execution_timeout_ms: 300000,
     llm_completion_retry_count: 1,
     llm_completion_retry_interval_ms: 200,
     api_key_set: true,

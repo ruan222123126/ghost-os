@@ -1,4 +1,5 @@
 import { cloneWorkflowTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
+import { DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS } from '@/lib/workflow-editor/constants';
 import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor/screenControlComposer';
 import type {
   ScreenControlComposerStep,
@@ -8,6 +9,8 @@ import type {
 const EMPTY_SYSTEM_PROMPT = '';
 const DEFAULT_TOOL_ARGUMENTS_MODE = 'kv' as const;
 const EMPTY_TOOL_NAME = '';
+const DEFAULT_GROUP_SPEAKING_MODE = 'sequential' as const;
+const DEFAULT_GROUP_MAX_ROUNDS = DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS;
 
 export function withLLMPrompt(node: WorkflowCanvasNodeDraft, prompt: string): WorkflowCanvasNodeDraft {
   return { ...node, llm: { prompt, system_prompt: node.llm?.system_prompt ?? EMPTY_SYSTEM_PROMPT } };
@@ -21,7 +24,19 @@ export function withAgentMessage(node: WorkflowCanvasNodeDraft, message: string)
   return {
     ...node,
     agent: {
+      title: node.agent?.title,
       message,
+      runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent?.runtime_overrides),
+    },
+  };
+}
+
+export function withAgentTitle(node: WorkflowCanvasNodeDraft, title: string): WorkflowCanvasNodeDraft {
+  return {
+    ...node,
+    agent: {
+      title,
+      message: node.agent?.message ?? '',
       runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent?.runtime_overrides),
     },
   };
@@ -34,8 +49,25 @@ export function withAgentRuntimeOverrides(
   return {
     ...node,
     agent: {
+      title: node.agent?.title,
       message: node.agent?.message ?? '',
       runtime_overrides: cloneWorkflowTaskRuntimeOverrides(runtimeOverrides),
+    },
+  };
+}
+
+export function withGroupNode(
+  node: WorkflowCanvasNodeDraft,
+  patch: Partial<NonNullable<WorkflowCanvasNodeDraft['group']>>,
+): WorkflowCanvasNodeDraft {
+  return {
+    ...node,
+    group: {
+      title: patch.title ?? node.group?.title ?? '',
+      shared_context: patch.shared_context ?? node.group?.shared_context ?? '',
+      speaking_mode: patch.speaking_mode ?? node.group?.speaking_mode ?? DEFAULT_GROUP_SPEAKING_MODE,
+      owner_agent_id: patch.owner_agent_id ?? node.group?.owner_agent_id ?? '',
+      max_rounds: patch.max_rounds ?? node.group?.max_rounds ?? DEFAULT_GROUP_MAX_ROUNDS,
     },
   };
 }

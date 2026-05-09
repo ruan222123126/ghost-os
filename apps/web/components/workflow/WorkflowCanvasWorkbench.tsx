@@ -8,6 +8,7 @@ import { WorkflowCanvasStage } from '@/components/workflow/WorkflowCanvasStage';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { WebLocale } from '@/lib/i18n/locale';
+import type { PresetPayload } from '@/lib/types';
 import type {
   AutosaveState,
   WorkflowAgentRuntimeCatalog,
@@ -29,8 +30,12 @@ interface WorkflowCanvasWorkbenchProps {
   agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
   agentRuntimeLoading: boolean;
   agentRuntimeError: string;
+  presets?: PresetPayload[];
+  presetLoading?: boolean;
+  presetError?: string;
   workflowCopy?: WorkflowCopy;
   nodeLibraryTypes?: readonly WorkflowNodeType[];
+  showImportControls?: boolean;
   localizeValidationError?: (message: string, locale: WebLocale) => string;
   onChangeImportSessionID: (value: string) => void;
   onImportFromSession: () => void;
@@ -60,8 +65,12 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
     agentRuntimeCatalog,
     agentRuntimeLoading,
     agentRuntimeError,
+    presets,
+    presetLoading = false,
+    presetError = '',
     workflowCopy = copy.workflow,
     nodeLibraryTypes,
+    showImportControls = true,
     localizeValidationError,
     onChangeImportSessionID,
     onImportFromSession,
@@ -107,6 +116,7 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
         onSave={onSave}
       />
       <WorkflowCanvasStage
+        editorKind={editorKind}
         draft={draft}
         actionError={actionError}
         validationErrors={validationErrors}
@@ -121,16 +131,21 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
       />
       <WorkflowCanvasPropertiesPanel
         editorKind={editorKind}
+        draft={draft}
         selectedNode={selectedNode}
         agentRuntimeCatalog={agentRuntimeCatalog}
         agentRuntimeLoading={agentRuntimeLoading}
         agentRuntimeError={agentRuntimeError}
+        presets={presets}
+        presetLoading={presetLoading}
+        presetError={presetError}
         onClose={() => onSelectNode(undefined)}
         onUpdateNode={onUpdateNode}
         onDeleteNode={onDeleteNode}
       />
       <WorkflowCanvasSettingsModal
         open={isSettingsOpen}
+        showImportControls={showImportControls}
         schedule={draft.schedule}
         importSessionID={importSessionID}
         importLoading={importLoading}

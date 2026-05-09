@@ -79,6 +79,12 @@ export function listOrchestrationSummaries(
     }));
 }
 
+export function listLegacyOrchestrationRecords(
+  storage = getBrowserStorage(),
+): OrchestrationRecord[] {
+  return readAllRecords(storage).map((record) => toPublicRecord(record));
+}
+
 export function saveOrchestrationDraft(
   id: string,
   draft: WorkflowCanvasDraft,
@@ -96,6 +102,14 @@ export function saveOrchestrationDraft(
 
   writeRecord(storage, nextRecord);
   return toPublicRecord(nextRecord);
+}
+
+export function deleteLegacyOrchestration(
+  id: string,
+  storage = getBrowserStorage(),
+) {
+  storage.removeItem(storageKey(id));
+  writeIndex(storage, readIndex(storage).filter((itemID) => itemID !== id));
 }
 
 function getBrowserStorage(): Storage {

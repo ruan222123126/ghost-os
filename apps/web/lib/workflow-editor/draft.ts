@@ -130,6 +130,9 @@ function scheduleDraftFromTask(
 }
 
 function buildWorkflowNode(node: WorkflowCanvasNodeDraft): WorkflowNode {
+  if (node.type === 'group') {
+    throw new Error('group nodes are not supported in workflow definitions');
+  }
   const loopIterations = node.loop?.max_iterations ?? DEFAULT_LOOP_MAX_ITERATIONS;
   return {
     id: node.id,

@@ -69,6 +69,16 @@ export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionE
         onChange={(value) => onChange({ maxTurns: value })}
       />
       <TextField
+        label={locale === 'zh-CN' ? '任务总超时 (ms)' : 'Task Execution Timeout (ms)'}
+        description={locale === 'zh-CN'
+          ? '所有任务类型共享的总执行超时，单位固定为毫秒。更新后仅影响后续新任务。'
+          : 'Shared total execution timeout for all task types in milliseconds. Updates only affect new runs.'}
+        value={formState.taskExecutionTimeoutMS}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ taskExecutionTimeoutMS: value })}
+      />
+      <TextField
         label={copy.settings.runtimeLLMCompletionRetryCountLabel}
         description={copy.settings.runtimeLLMCompletionRetryCountDescription}
         value={formState.llmCompletionRetryCount}

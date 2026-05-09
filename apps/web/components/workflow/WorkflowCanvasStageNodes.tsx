@@ -17,10 +17,13 @@ import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import type {
   WorkflowCanvasDraft,
   WorkflowCanvasNodeDraft,
+  WorkflowEditorKind,
 } from '@/lib/workflow-editor';
 import { isProtectedBoundaryNode } from '@/lib/workflow-editor';
+import { canCreateOrchestrationEdge } from '@/lib/orchestration-editor/graph';
 
 interface WorkflowCanvasStageNodesProps {
+  editorKind: WorkflowEditorKind;
   draft: WorkflowCanvasDraft;
   workflowCopy: WorkflowCopy;
   nodeMap: Map<string, WorkflowCanvasNodeDraft>;
@@ -37,6 +40,7 @@ interface WorkflowCanvasStageNodesProps {
 export function WorkflowCanvasStageNodes(props: WorkflowCanvasStageNodesProps) {
   const {
     draft,
+    editorKind,
     workflowCopy,
     nodeMap,
     canvasRef,
@@ -48,16 +52,26 @@ export function WorkflowCanvasStageNodes(props: WorkflowCanvasStageNodesProps) {
     onChangeDragState,
     onChangeConnectingSourceNodeID,
   } = props;
+  const sourceNode = draft.nodes.find((item) => item.id === connectingSourceNodeID);
 
   return (
     <div className="workflow-arch-node-layer">
       {draft.nodes.map((node) => (
         <WorkflowCanvasNode
           key={node.id}
+          editorKind={editorKind}
           node={node}
           metadata={metadataForNodeType(node.type, workflowCopy)}
           selected={draft.selectedNodeId === node.id}
-          targetable={Boolean(connectingSourceNodeID && connectingSourceNodeID !== node.id && node.type !== 'start')}
+          targetable={Boolean(
+            connectingSourceNodeID
+            && connectingSourceNodeID !== node.id
+            && (
+              editorKind === 'workflow'
+                ? node.type !== 'start'
+                : canCreateOrchestrationEdge(sourceNode, node)
+            )
+          )}
           connectingSourceNodeID={connectingSourceNodeID}
           onSelectNode={onSelectNode}
           onOpenContextMenu={(event, nodeID) => {

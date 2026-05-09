@@ -2,8 +2,10 @@
 
 import { WorkflowCanvasNodeEditorContent } from '@/components/workflow/WorkflowCanvasNodeEditorContent';
 import { useWebLocale } from '@/lib/i18n/provider';
+import type { PresetPayload } from '@/lib/types';
 import type {
   WorkflowAgentRuntimeCatalog,
+  WorkflowCanvasDraft,
   WorkflowCanvasNodeDraft,
   WorkflowEditorKind,
 } from '@/lib/workflow-editor';
@@ -11,10 +13,14 @@ import { isProtectedBoundaryNode } from '@/lib/workflow-editor';
 
 interface WorkflowCanvasPropertiesPanelProps {
   editorKind: WorkflowEditorKind;
+  draft: WorkflowCanvasDraft;
   selectedNode?: WorkflowCanvasNodeDraft;
   agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
   agentRuntimeLoading: boolean;
   agentRuntimeError: string;
+  presets?: PresetPayload[];
+  presetLoading: boolean;
+  presetError: string;
   onClose: () => void;
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
   onDeleteNode: (nodeID: string) => void;
@@ -26,7 +32,11 @@ export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPan
     agentRuntimeCatalog,
     agentRuntimeError,
     agentRuntimeLoading,
+    draft,
     editorKind,
+    presetError,
+    presetLoading,
+    presets,
     selectedNode,
     onClose,
     onUpdateNode,
@@ -54,10 +64,14 @@ export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPan
           <section className="workflow-arch-properties-content">
             <WorkflowCanvasNodeEditorContent
               editorKind={editorKind}
+              draft={draft}
               selectedNode={selectedNode}
               agentRuntimeCatalog={agentRuntimeCatalog}
               agentRuntimeLoading={agentRuntimeLoading}
               agentRuntimeError={agentRuntimeError}
+              presets={presets}
+              presetLoading={presetLoading}
+              presetError={presetError}
               onUpdateNode={onUpdateNode}
             />
           </section>
@@ -90,6 +104,9 @@ function labelOfNodeType(
   }
   if (type === 'loop') {
     return copy.labelLoop;
+  }
+  if (type === 'group') {
+    return copy.labelGroup;
   }
   return type.toUpperCase();
 }

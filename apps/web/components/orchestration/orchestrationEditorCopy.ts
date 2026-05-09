@@ -14,6 +14,7 @@ export function buildOrchestrationWorkflowCopy(
       nodeLabels: {
         ...copy.nodeLabels,
         agent: '角色',
+        group: '群组',
       },
       closeWorkflowSettingsAria: '关闭编排设置',
       sidebarOpenSettingsAria: '打开编排设置',
@@ -32,6 +33,7 @@ export function buildOrchestrationWorkflowCopy(
     nodeLabels: {
       ...copy.nodeLabels,
       agent: 'ROLE',
+      group: 'GROUP',
     },
     closeWorkflowSettingsAria: 'Close orchestration settings',
     sidebarOpenSettingsAria: 'Open orchestration settings',
@@ -47,9 +49,12 @@ export function localizeOrchestrationValidationError(
   message: string,
   locale: WebLocale,
 ): string {
-  const localized = localizeWorkflowValidationError(message, locale);
+  const normalizedMessage = message.replaceAll('orchestration', 'workflow');
+  const localized = localizeWorkflowValidationError(normalizedMessage, locale);
   if (locale === 'zh-CN') {
-    return localized.replaceAll('工作流', '编排');
+    return localized
+      .replaceAll('工作流', '编排')
+      .replaceAll('orchestration', '编排');
   }
   return localized.replaceAll('workflow', 'orchestration');
 }

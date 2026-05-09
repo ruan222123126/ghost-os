@@ -8,6 +8,10 @@ const exactMatchers: Array<{ en: string; zh: string }> = [
   { en: 'workflow edge endpoints are required', zh: '工作流边的起点和终点不能为空' },
   { en: 'workflow requires exactly 1 start node', zh: '工作流必须且仅能有 1 个 start 节点' },
   { en: 'workflow requires exactly 1 end node', zh: '工作流必须且仅能有 1 个 end 节点' },
+  { en: 'workflow start/end nodes must both be present or both be absent', zh: '工作流的 start/end 节点必须同时存在或同时不存在' },
+  { en: 'workflow requires at least 1 group node', zh: '编排至少需要 1 个群组节点' },
+  { en: 'workflow requires exactly 1 entry group', zh: '编排必须且仅能有 1 个入口群组' },
+  { en: 'workflow requires exactly 1 exit group', zh: '编排必须且仅能有 1 个出口群组' },
   { en: 'Validation failed, not saved', zh: '校验失败，未保存' },
   { en: 'failed to build workflow payload', zh: '构建工作流载荷失败' },
 ];
@@ -50,6 +54,14 @@ const regexMatchers: Array<{ pattern: RegExp; zh: (matches: RegExpMatchArray) =>
     zh: (matches) => `Agent 节点 "${matches[1]}" 需要 message`,
   },
   {
+    pattern: /^workflow agent node "([^"]+)" preset_id "([^"]+)" is not available$/,
+    zh: (matches) => `Agent 节点 "${matches[1]}" 的 preset_id "${matches[2]}" 不可用`,
+  },
+  {
+    pattern: /^workflow agent node "([^"]+)" tool_allowlist contains unavailable tool "([^"]+)"$/,
+    zh: (matches) => `Agent 节点 "${matches[1]}" 的 tool_allowlist 包含不可用工具 "${matches[2]}"`,
+  },
+  {
     pattern: /^workflow if node "([^"]+)" requires true_node_id and false_node_id$/,
     zh: (matches) => `If 节点 "${matches[1]}" 需要 true_node_id 和 false_node_id`,
   },
@@ -72,6 +84,22 @@ const regexMatchers: Array<{ pattern: RegExp; zh: (matches: RegExpMatchArray) =>
   {
     pattern: /^unsupported workflow node type "([^"]+)"$/,
     zh: (matches) => `不支持的节点类型："${matches[1]}"`,
+  },
+  {
+    pattern: /^workflow group node "([^"]+)" must have in<=1 and out<=1$/,
+    zh: (matches) => `群组节点 "${matches[1]}" 的控制流入度和出度都不能超过 1`,
+  },
+  {
+    pattern: /^orchestration group node "([^"]+)" requires owner_agent_id in owner mode$/,
+    zh: (matches) => `编排群组节点 "${matches[1]}" 在群主模式下必须设置 owner_agent_id`,
+  },
+  {
+    pattern: /^orchestration group node "([^"]+)" owner_agent_id "([^"]+)" must be an existing member$/,
+    zh: (matches) => `编排群组节点 "${matches[1]}" 的 owner_agent_id "${matches[2]}" 必须属于当前成员`,
+  },
+  {
+    pattern: /^orchestration group node "([^"]+)" requires speaking_mode sequential\|parallel\|owner$/,
+    zh: (matches) => `编排群组节点 "${matches[1]}" 的 speaking_mode 必须是 sequential|parallel|owner`,
   },
 ];
 

@@ -13,6 +13,10 @@ export const INPUT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const LOOP_ROLE_START = 'start';
 export const LOOP_ROLE_END = 'end';
 export const DEFAULT_LOOP_MAX_ITERATIONS = 3;
+export const DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS = 3;
+export const DEFAULT_ORCHESTRATION_GROUP_TITLE_PREFIX = '群组';
+export const DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX = '角色';
+export const DEFAULT_ORCHESTRATION_SPEAKING_MODE = 'sequential';
 export const WORKFLOW_IF_OPERATORS = [
   'equals',
   'not_equals',

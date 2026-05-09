@@ -301,6 +301,7 @@ export interface BridgeConfig {
   chat_path: string;
   project_root: string;
   max_turns: number;
+  task_execution_timeout_ms: number;
   llm_completion_retry_count: number;
   llm_completion_retry_interval_ms: number;
   api_key_set: boolean;
@@ -331,6 +332,7 @@ export interface ConfigUpdate {
   chat_path?: string;
   project_root?: string;
   max_turns?: number;
+  task_execution_timeout_ms?: number;
   llm_completion_retry_count?: number;
   llm_completion_retry_interval_ms?: number;
   session_human_log_full_enabled?: boolean;
@@ -409,6 +411,21 @@ export interface WorkflowDefinition {
   edges: WorkflowEdge[];
 }
 
+export interface OrchestrationNode {
+  id: string;
+  type: 'start' | 'group' | 'agent' | 'end';
+  group?: OrchestrationGroupNode;
+  agent?: OrchestrationAgentNode;
+}
+
+export interface OrchestrationGroupNode {
+  title: string;
+  shared_context: string;
+  speaking_mode: 'sequential' | 'parallel' | 'owner';
+  owner_agent_id?: string;
+  max_rounds: number;
+}
+
 export interface AgentMessageTaskCreateRequest {
   message: string;
   session_id?: string;
@@ -419,10 +436,17 @@ export interface AgentMessageTaskCreateRequest {
   trace_id?: string;
 }
 
+export interface OrchestrationAgentNode {
+  title: string;
+  message: string;
+  runtime_overrides?: TaskRuntimeOverrides;
+}
+
 export interface TaskRuntimeOverrides {
   provider_name?: string;
   model?: string;
   system_prompt?: string;
+  preset_id?: string;
   tool_allowlist?: string[];
   tool_allowlist_only?: boolean;
   max_turns?: number;
@@ -433,9 +457,20 @@ export interface WorkflowToolNode {
   arguments?: Record<string, unknown>;
 }
 
+export interface OrchestrationEdge {
+  from_node_id: string;
+  to_node_id: string;
+  kind: 'control' | 'member';
+}
+
 export interface WorkflowLLMNode {
   prompt: string;
   system_prompt?: string;
+}
+
+export interface OrchestrationDefinition {
+  nodes: OrchestrationNode[];
+  edges: OrchestrationEdge[];
 }
 
 export interface WorkflowAgentNode {
@@ -459,23 +494,19 @@ export interface WorkflowTaskCreateRequest {
   trace_id?: string;
 }
 
+export interface OrchestrationTaskCreateRequest {
+  task_kind: 'orchestration';
+  name: string;
+  orchestration: OrchestrationDefinition;
+  interval_seconds?: number;
+  cron_expr?: string;
+  trace_id?: string;
+}
+
 export interface WorkflowLoopNode {
   max_iterations: number;
   body_node_id: string;
   exit_node_id: string;
-}
-
-export interface TaskUpdateRequest {
-  id: string;
-  message?: string;
-  session_id?: string;
-  runtime_overrides?: TaskRuntimeOverrides;
-  task_kind?: 'agent_message' | 'workflow';
-  workflow?: WorkflowDefinition;
-  interval_seconds?: number;
-  cron_expr?: string;
-  enabled?: boolean;
-  trace_id?: string;
 }
 
 export interface AgentMessageTaskPayload {
@@ -495,10 +526,41 @@ export interface AgentMessageTaskPayload {
   last_error?: string;
 }
 
+export interface TaskUpdateRequest {
+  id: string;
+  message?: string;
+  name?: string;
+  session_id?: string;
+  runtime_overrides?: TaskRuntimeOverrides;
+  task_kind?: 'agent_message' | 'workflow' | 'orchestration';
+  workflow?: WorkflowDefinition;
+  orchestration?: OrchestrationDefinition;
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled?: boolean;
+  trace_id?: string;
+}
+
 export interface WorkflowTaskPayload {
   id: string;
   task_kind: 'workflow';
   workflow: WorkflowDefinition;
+  schedule_type: 'interval' | 'cron';
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
+export interface OrchestrationTaskPayload {
+  id: string;
+  name: string;
+  task_kind: 'orchestration';
+  orchestration: OrchestrationDefinition;
   schedule_type: 'interval' | 'cron';
   interval_seconds?: number;
   cron_expr?: string;
@@ -524,6 +586,6 @@ export interface WorkflowInputVariable {
 
 export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;
 
-export type TaskCreateRequest = AgentMessageTaskCreateRequest | WorkflowTaskCreateRequest;
+export type TaskCreateRequest = AgentMessageTaskCreateRequest | WorkflowTaskCreateRequest | OrchestrationTaskCreateRequest;
 
-export type TaskPayload = AgentMessageTaskPayload | WorkflowTaskPayload;
+export type TaskPayload = AgentMessageTaskPayload | WorkflowTaskPayload | OrchestrationTaskPayload;

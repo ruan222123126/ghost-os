@@ -26,6 +26,7 @@ const BRIDGE_CONFIG_KEYS = [
   'chat_path',
   'project_root',
   'max_turns',
+  'task_execution_timeout_ms',
   'llm_completion_retry_count',
   'llm_completion_retry_interval_ms',
   'api_key_set',
@@ -144,6 +145,10 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
     chat_path: expectString(record.chat_path, 'bridge config.chat_path'),
     project_root: expectString(record.project_root, 'bridge config.project_root'),
     max_turns: expectNumber(record.max_turns, 'bridge config.max_turns'),
+    task_execution_timeout_ms: expectNumber(
+      record.task_execution_timeout_ms,
+      'bridge config.task_execution_timeout_ms',
+    ),
     llm_completion_retry_count: expectNumber(
       record.llm_completion_retry_count,
       'bridge config.llm_completion_retry_count',

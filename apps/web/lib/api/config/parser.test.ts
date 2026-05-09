@@ -11,6 +11,7 @@ describe('lib/api/config/parser', () => {
       chat_path: '/v1/chat',
       project_root: '',
       max_turns: 20,
+      task_execution_timeout_ms: 300000,
       llm_completion_retry_count: 1,
       llm_completion_retry_interval_ms: 200,
       api_key_set: true,
@@ -44,6 +45,7 @@ describe('lib/api/config/parser', () => {
       chat_path: '/v1/chat',
       project_root: '/tmp/ghost-os',
       max_turns: 7,
+      task_execution_timeout_ms: 600000,
       llm_completion_retry_count: 0,
       llm_completion_retry_interval_ms: 150,
       api_key_set: true,
@@ -63,6 +65,7 @@ describe('lib/api/config/parser', () => {
     expect(parsed.session_system_prompt_visible_enabled).toBe(false);
     expect(parsed.assistant_markdown_enabled).toBe(false);
     expect(parsed.max_turns).toBe(7);
+    expect(parsed.task_execution_timeout_ms).toBe(600000);
     expect(parsed.llm_completion_retry_count).toBe(0);
     expect(parsed.llm_completion_retry_interval_ms).toBe(150);
     expect(parsed.tool_call_compact_output_enabled).toBe(true);

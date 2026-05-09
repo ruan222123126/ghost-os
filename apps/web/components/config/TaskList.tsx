@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import { listTaskLogs } from '@/lib/api/tasks/api';
+import { ConfigCardActions } from '@/components/config/ConfigCardActions';
 import { TaskLogsModal } from '@/components/config/TaskLogsModal';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -146,68 +147,39 @@ function TaskCard(props: TaskCardProps) {
         ) : null}
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <button
-          type="button"
-          disabled={controlsDisabled}
-          onClick={(event) => {
-            event.stopPropagation();
-            ignorePromise(onOpenLogs(task.id));
-          }}
-          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {copy.settings.tasksLogs}
-        </button>
-        <button
-          type="button"
-          disabled={controlsDisabled}
-          onClick={(event) => {
-            event.stopPropagation();
-            ignorePromise(onRunNow(task.id));
-          }}
-          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {copy.settings.tasksRun}
-        </button>
-        <button
-          type="button"
-          disabled={controlsDisabled}
-          onClick={(event) => {
-            event.stopPropagation();
-            ignorePromise(onSetEnabled(task.id, !task.enabled));
-          }}
-          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {toggleLabel}
-        </button>
-        <button
-          type="button"
-          disabled={controlsDisabled || !editable}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (editable) {
-              handleTaskEdit(task, onEditTextTask, onEditWorkflowTask);
-            }
-          }}
-          className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={copy.settings.tasksEditAria(task.id)}
-          title={editable ? copy.settings.tasksEditTitle : copy.settings.tasksEditUnavailableTitle}
-        >
-          <EditIcon />
-        </button>
-        <button
-          type="button"
-          disabled={controlsDisabled}
-          onClick={(event) => {
-            event.stopPropagation();
-            handleTaskDelete(task.id, onDelete, copy.settings.tasksDeleteConfirm(task.id));
-          }}
-          className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={copy.settings.tasksDeleteAria(task.id)}
-        >
-          <TrashIcon />
-        </button>
-      </div>
+      <ConfigCardActions
+        pillActions={[
+          {
+            key: 'logs',
+            label: copy.settings.tasksLogs,
+            disabled: controlsDisabled,
+            onClick: () => ignorePromise(onOpenLogs(task.id)),
+          },
+          {
+            key: 'run',
+            label: copy.settings.tasksRun,
+            disabled: controlsDisabled,
+            onClick: () => ignorePromise(onRunNow(task.id)),
+          },
+          {
+            key: 'toggle',
+            label: toggleLabel,
+            disabled: controlsDisabled,
+            onClick: () => ignorePromise(onSetEnabled(task.id, !task.enabled)),
+          },
+        ]}
+        editLabel={copy.settings.tasksEditAria(task.id)}
+        editTitle={editable ? copy.settings.tasksEditTitle : copy.settings.tasksEditUnavailableTitle}
+        editDisabled={controlsDisabled || !editable}
+        onEdit={() => {
+          if (editable) {
+            handleTaskEdit(task, onEditTextTask, onEditWorkflowTask);
+          }
+        }}
+        deleteLabel={copy.settings.tasksDeleteAria(task.id)}
+        deleteDisabled={controlsDisabled}
+        onDelete={() => handleTaskDelete(task.id, onDelete, copy.settings.tasksDeleteConfirm(task.id))}
+      />
     </article>
   );
 }
@@ -297,7 +269,7 @@ function handleTaskEdit(
 }
 
 function handleTaskDelete(id: string, onDelete: (id: string) => Promise<void>, message: string) {
-  if (!window.confirm(message)) {
+  if (!globalThis.confirm(message)) {
     return;
   }
 
@@ -316,23 +288,4 @@ function prioritizeEnabledTasks(tasks: TaskPayload[]): TaskPayload[] {
     disabledTasks.push(task);
   }
   return [...enabledTasks, ...disabledTasks];
-}
-
-function EditIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="m4.6 13.9 8.9-8.9 1.8 1.8-8.9 8.9-2.4.6.6-2.4Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-      <path d="m12.7 5.8 1.8 1.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M4.6 5.5h10.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      <path d="M7.3 5.5V4.2h5.4v1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-      <path d="m6.3 5.5.8 10h5.8l.8-10" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    </svg>
-  );
 }

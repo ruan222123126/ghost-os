@@ -2,7 +2,7 @@
 
 import type { MouseEvent } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { WorkflowCanvasNodeDraft, WorkflowNodeType } from '@/lib/workflow-editor';
+import type { WorkflowCanvasNodeDraft, WorkflowEditorKind, WorkflowNodeType } from '@/lib/workflow-editor';
 
 export interface WorkflowNodeMeta {
   id: WorkflowNodeType;
@@ -11,6 +11,7 @@ export interface WorkflowNodeMeta {
 }
 
 interface WorkflowCanvasNodeProps {
+  editorKind: WorkflowEditorKind;
   node: WorkflowCanvasNodeDraft;
   metadata: WorkflowNodeMeta;
   selected: boolean;
@@ -28,6 +29,7 @@ const PRIMARY_MOUSE_BUTTON = 0;
 export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
   const { locale, copy } = useWebLocale();
   const {
+    editorKind,
     node,
     metadata,
     selected,
@@ -43,6 +45,10 @@ export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
     ? 'workflow-arch-node--selected'
     : 'workflow-arch-node--idle';
   const sourceActive = connectingSourceNodeID === node.id;
+
+  const showInputPort = canShowInputPort(editorKind, node);
+  const showOutputPort = canShowOutputPort(editorKind, node);
+  const headerTitle = resolveNodeHeader(node, metadata.label);
 
   return (
     <article
@@ -64,11 +70,11 @@ export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
     >
       <div className={`workflow-arch-node-topline ${selected ? 'workflow-arch-node-topline--active' : ''}`} />
       <header className="workflow-arch-node-header">
-        <span>{metadata.label}</span>
+        <span>{headerTitle}</span>
       </header>
       <div className="workflow-arch-node-body">{renderNodeSummary(node, copy, locale)}</div>
 
-      {node.type !== 'start' ? (
+      {showInputPort ? (
         <div
           className="workflow-arch-port workflow-arch-port--input"
           onMouseDown={(event) => event.stopPropagation()}
@@ -78,7 +84,7 @@ export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
         </div>
       ) : null}
 
-      {node.type !== 'end' ? (
+      {showOutputPort ? (
         <div
           className="workflow-arch-port workflow-arch-port--output"
           onMouseDown={(event) => event.stopPropagation()}
@@ -117,7 +123,20 @@ function renderNodeSummary(
     return (
       <div className="workflow-arch-summary">
         <p className="workflow-arch-summary-label">{copy.workflow.nodeExecutionIdentity}</p>
+        {node.agent?.title?.trim() ? <p>{node.agent.title.trim()}</p> : null}
         <p>{role ? copy.workflow.nodeRole(role) : copy.workflow.nodeUndefinedRole}</p>
+      </div>
+    );
+  }
+  if (node.type === 'group') {
+    return (
+      <div className="workflow-arch-summary">
+        <p className="workflow-arch-summary-label">{copy.workflow.nodeGroupConfiguration}</p>
+        <p>{node.group?.title?.trim() || copy.workflow.nodeGroupPending}</p>
+        <p>{copy.workflow.nodeGroupRounds(node.group?.max_rounds ?? 0, node.group?.speaking_mode ?? 'sequential')}</p>
+        {node.group?.speaking_mode === 'owner' && node.group.owner_agent_id?.trim()
+          ? <p>{copy.workflow.groupOwnerAgent}: {node.group.owner_agent_id.trim()}</p>
+          : null}
       </div>
     );
   }
@@ -173,4 +192,28 @@ function startNodeSummary(locale: string): string {
     return '通用变量已关闭';
   }
   return 'General variables disabled';
+}
+
+function resolveNodeHeader(node: WorkflowCanvasNodeDraft, fallback: string): string {
+  if (node.type === 'agent' && node.agent?.title?.trim()) {
+    return node.agent.title.trim();
+  }
+  if (node.type === 'group' && node.group?.title?.trim()) {
+    return node.group.title.trim();
+  }
+  return fallback;
+}
+
+function canShowInputPort(editorKind: WorkflowEditorKind, node: WorkflowCanvasNodeDraft): boolean {
+  if (editorKind === 'orchestration' && node.type === 'agent') {
+    return false;
+  }
+  return node.type !== 'start';
+}
+
+function canShowOutputPort(editorKind: WorkflowEditorKind, node: WorkflowCanvasNodeDraft): boolean {
+  if (editorKind === 'orchestration' && node.type === 'end') {
+    return false;
+  }
+  return node.type !== 'end';
 }

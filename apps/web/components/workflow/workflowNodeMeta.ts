@@ -7,6 +7,7 @@ const NODE_GLYPH_MAP: Record<WorkflowNodeType, string> = {
   start: '⚡',
   end: '✕',
   agent: '◈',
+  group: '◎',
   llm: '⌨',
   tool: '⌁',
   if: '?',
@@ -53,6 +54,9 @@ function labelByType(copy: WorkflowCopy | WebCopy, type: WorkflowNodeType): stri
   }
   if (type === 'agent') {
     return labels.agent;
+  }
+  if (type === 'group') {
+    return labels.group;
   }
   if (type === 'llm') {
     return labels.llm;

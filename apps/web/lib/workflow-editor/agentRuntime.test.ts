@@ -37,6 +37,36 @@ describe('lib/workflow-editor/agentRuntime', () => {
     });
   });
 
+  it('reuses the original draft reference when agent normalization makes no changes', () => {
+    const draft = createEmptyWorkflowDraft();
+    draft.nodes = [
+      draft.nodes[0],
+      {
+        id: 'agent-node',
+        type: 'agent',
+        position: { x: 180, y: 120 },
+        ui: { toolArgumentsMode: 'kv' },
+        agent: {
+          message: 'run agent',
+          runtime_overrides: {
+            tool_allowlist_only: true,
+            tool_allowlist: ['script_exec'],
+          },
+        },
+      },
+      draft.nodes[1],
+    ];
+    draft.edges = [
+      { id: 'start-agent', from_node_id: 'start-node', to_node_id: 'agent-node' },
+      { id: 'agent-end', from_node_id: 'agent-node', to_node_id: 'end-node' },
+    ];
+
+    const normalized = normalizeWorkflowDraftAgentNodes(draft, ['script_exec']);
+
+    expect(normalized).toBe(draft);
+    expect(normalized.nodes).toBe(draft.nodes);
+  });
+
   it('rejects provider-without-model and unavailable tools when catalog is loaded', () => {
     const draft = createEmptyWorkflowDraft();
     draft.nodes = [
@@ -94,4 +124,3 @@ function createTool(name: string, enabled: boolean): ToolPayload {
     enabled,
   };
 }
-

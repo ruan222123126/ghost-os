@@ -210,6 +210,7 @@ describe('lib/api/tasks/parser', () => {
       updated_at: '2026-04-05T08:00:00Z',
       runtime_overrides: {
         model: 'gpt-5.4',
+        preset_id: 'preset-a',
         tool_allowlist: ['script_exec'],
       },
     });
@@ -217,6 +218,7 @@ describe('lib/api/tasks/parser', () => {
     expect(parsed).toMatchObject({
       runtime_overrides: {
         model: 'gpt-5.4',
+        preset_id: 'preset-a',
         tool_allowlist: ['script_exec'],
       },
     });

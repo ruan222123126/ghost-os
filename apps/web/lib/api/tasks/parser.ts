@@ -11,17 +11,20 @@ import {
   parseOptionalStringArray,
   parseOptionalString,
 } from '@/lib/api/shared';
+import { parseOrchestrationDefinition } from '@/lib/api/tasks/orchestrationParser';
 import { parseWorkflowDefinition } from '@/lib/api/tasks/workflowParser';
 
-const TASK_KINDS = ['agent_message', 'workflow'] as const;
+const TASK_KINDS = ['agent_message', 'workflow', 'orchestration'] as const;
 const SCHEDULE_TYPES = ['interval', 'cron'] as const;
 const TASK_PAYLOAD_KEYS = [
   'id',
+  'name',
   'message',
   'session_id',
   'runtime_overrides',
   'task_kind',
   'workflow',
+  'orchestration',
   'schedule_type',
   'interval_seconds',
   'cron_expr',
@@ -36,6 +39,7 @@ const TASK_RUNTIME_OVERRIDE_KEYS = [
   'provider_name',
   'model',
   'system_prompt',
+  'preset_id',
   'tool_allowlist',
   'tool_allowlist_only',
   'max_turns',
@@ -73,7 +77,7 @@ const TASK_RUN_NODE_RESULT_KEYS = [
 
 interface ParsedTaskBase {
   id: string;
-  task_kind: 'agent_message' | 'workflow';
+  task_kind: 'agent_message' | 'workflow' | 'orchestration';
   schedule_type: 'interval' | 'cron';
   interval_seconds?: number;
   cron_expr?: string;
@@ -89,6 +93,7 @@ interface ParsedTaskRuntimeOverrides {
   provider_name?: string;
   model?: string;
   system_prompt?: string;
+  preset_id?: string;
   tool_allowlist?: string[];
   tool_allowlist_only?: boolean;
   max_turns?: number;
@@ -104,6 +109,7 @@ function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRun
     provider_name: parseOptionalString(picked.provider_name, `${label}.provider_name`),
     model: parseOptionalString(picked.model, `${label}.model`),
     system_prompt: parseOptionalString(picked.system_prompt, `${label}.system_prompt`),
+    preset_id: parseOptionalString(picked.preset_id, `${label}.preset_id`),
     tool_allowlist: parseOptionalStringArray(picked.tool_allowlist, `${label}.tool_allowlist`),
     tool_allowlist_only: parseOptionalBoolean(picked.tool_allowlist_only, `${label}.tool_allowlist_only`),
     max_turns: parseOptionalNumber(picked.max_turns, `${label}.max_turns`),
@@ -112,6 +118,7 @@ function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRun
     !parsed.provider_name
     && !parsed.model
     && !parsed.system_prompt
+    && !parsed.preset_id
     && (!parsed.tool_allowlist || parsed.tool_allowlist.length === 0)
     && parsed.tool_allowlist_only === undefined
     && parsed.max_turns === undefined
@@ -154,6 +161,13 @@ function parseTaskPayloadWithLabel(value: unknown, label: string): TaskPayload {
       message: expectString(record.message, `${label}.message`),
       session_id: parseOptionalString(record.session_id, `${label}.session_id`),
       runtime_overrides: parseTaskRuntimeOverrides(record.runtime_overrides, `${label}.runtime_overrides`),
+    } as TaskPayload;
+  }
+  if (base.task_kind === 'orchestration') {
+    return {
+      ...base,
+      name: expectString(record.name, `${label}.name`),
+      orchestration: parseOrchestrationDefinition(record.orchestration, `${label}.orchestration`),
     } as TaskPayload;
   }
   return {
@@ -203,7 +217,12 @@ function parseTaskRunNodeResultList(value: unknown, label: string): TaskRunNodeR
 function parseTaskRunLogWithLabel(value: unknown, label: string): TaskRunLog {
   const record = pickKnownKeys(expectRecord(value, label), TASK_RUN_LOG_KEYS);
   const rawTaskKind = parseOptionalString(record.task_kind, `${label}.task_kind`);
-  if (rawTaskKind !== undefined && rawTaskKind !== 'agent_message' && rawTaskKind !== 'workflow') {
+  if (
+    rawTaskKind !== undefined
+    && rawTaskKind !== 'agent_message'
+    && rawTaskKind !== 'workflow'
+    && rawTaskKind !== 'orchestration'
+  ) {
     throw new Error(`Invalid ${label}.task_kind: unexpected value "${rawTaskKind}"`);
   }
   return {

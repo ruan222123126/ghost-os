@@ -6,6 +6,7 @@ import { useWebLocale } from '@/lib/i18n/provider';
 
 interface WorkflowCanvasSettingsModalProps {
   open: boolean;
+  showImportControls?: boolean;
   schedule: WorkflowCanvasDraft['schedule'];
   importSessionID: string;
   importLoading: boolean;
@@ -20,6 +21,7 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
   const { copy } = useWebLocale();
   const {
     open,
+    showImportControls = true,
     schedule,
     importSessionID,
     importLoading,
@@ -76,17 +78,21 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
               />
             </label>
           )}
-          <label>
-            <span>{workflowCopy.modalSessionID}</span>
-            <input
-              value={importSessionID}
-              placeholder="session-xxxx"
-              onChange={(event) => onChangeImportSessionID(event.target.value)}
-            />
-          </label>
-          <button type="button" className="workflow-arch-settings-import" onClick={onImportFromSession} disabled={importLoading}>
-            {importLoading ? workflowCopy.modalImporting : workflowCopy.modalImportTextTasks}
-          </button>
+          {showImportControls ? (
+            <>
+              <label>
+                <span>{workflowCopy.modalSessionID}</span>
+                <input
+                  value={importSessionID}
+                  placeholder="session-xxxx"
+                  onChange={(event) => onChangeImportSessionID(event.target.value)}
+                />
+              </label>
+              <button type="button" className="workflow-arch-settings-import" onClick={onImportFromSession} disabled={importLoading}>
+                {importLoading ? workflowCopy.modalImporting : workflowCopy.modalImportTextTasks}
+              </button>
+            </>
+          ) : null}
         </div>
       </section>
     </div>

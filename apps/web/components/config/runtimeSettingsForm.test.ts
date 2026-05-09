@@ -10,6 +10,7 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     chat_path: '/v1/chat',
     project_root: '',
     max_turns: 20,
+    task_execution_timeout_ms: 300000,
     llm_completion_retry_count: 1,
     llm_completion_retry_interval_ms: 200,
     api_key_set: true,
@@ -32,6 +33,7 @@ describe('components/config/runtimeSettingsForm', () => {
   it('defaults assistant markdown toggle to true when config is absent', () => {
     const form = createRuntimeFormState(null);
     expect(form.maxTurns).toBe('20');
+    expect(form.taskExecutionTimeoutMS).toBe('300000');
     expect(form.llmCompletionRetryCount).toBe('1');
     expect(form.llmCompletionRetryIntervalMS).toBe('200');
     expect(form.sessionSystemPromptVisibleEnabled).toBe(true);
@@ -67,6 +69,7 @@ describe('components/config/runtimeSettingsForm', () => {
       chatPath: '/v1/chat',
       projectRoot: '/tmp/runtime-root',
       maxTurns: '9',
+      taskExecutionTimeoutMS: '600000',
       llmCompletionRetryCount: '0',
       llmCompletionRetryIntervalMS: '250',
       sessionHumanLogFullEnabled: false,
@@ -85,6 +88,7 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(update.assistant_markdown_enabled).toBe(false);
     expect(update.project_root).toBe('/tmp/runtime-root');
     expect(update.max_turns).toBe(9);
+    expect(update.task_execution_timeout_ms).toBe(600000);
     expect(update.llm_completion_retry_count).toBe(0);
     expect(update.llm_completion_retry_interval_ms).toBe(250);
     expect(update.tool_call_compact_output_enabled).toBe(true);

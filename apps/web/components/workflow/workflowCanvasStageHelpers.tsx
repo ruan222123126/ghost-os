@@ -186,7 +186,11 @@ export function renderEdge(
 
   return (
     <g key={edge.id} className="workflow-arch-edge-group">
-      <path d={path} className="workflow-arch-edge-curve" />
+      <path
+        d={path}
+        className="workflow-arch-edge-curve"
+        style={edge.kind === 'member' ? { strokeDasharray: '7 5' } : undefined}
+      />
       <path
         d={path}
         className="workflow-arch-edge-hitbox"

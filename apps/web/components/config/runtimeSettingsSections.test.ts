@@ -14,6 +14,7 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     chat_path: '/v1/chat',
     project_root: '',
     max_turns: 20,
+    task_execution_timeout_ms: 300000,
     llm_completion_retry_count: 1,
     llm_completion_retry_interval_ms: 200,
     api_key_set: true,
@@ -41,6 +42,7 @@ describe('components/config/runtimeSettingsSections', () => {
     expect(content).toContain('Provider Name');
     expect(content).toContain('Model');
     expect(content).toContain('Max Turns');
+    expect(content).toContain('Task Execution Timeout (ms)');
     expect(content).toContain('LLM Retry Count');
     expect(content).toContain('LLM Retry Interval (ms)');
     expect(content).not.toContain('Provider API Key');

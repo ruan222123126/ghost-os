@@ -10,43 +10,41 @@ import {
 import { useRouter } from 'next/navigation';
 import {
   addNode,
-  connectNodesByID,
   duplicateNode,
   moveNode,
   removeEdge,
   removeNode,
   updateNode,
 } from '@/components/workflow/workflowCanvasState';
-import {
-  createEmptyWorkflowDraft,
-  enabledWorkflowAgentToolNames,
-  normalizeWorkflowDraftAgentNodes,
-  type AutosaveState,
-  type WorkflowAgentRuntimeCatalog,
-  type WorkflowCanvasDraft,
-  type WorkflowCanvasNodeDraft,
-  type WorkflowCanvasPosition,
-  type WorkflowNodeType,
-  type WorkflowUpdatePayload,
-  validateWorkflowDraft,
-  withWorkflowContent,
-} from '@/lib/workflow-editor';
-import { buildHomeSettingsURL } from '@/lib/settingsQuery';
+import { listPresets } from '@/lib/api/presets/api';
+import { useWorkflowAgentRuntimeCatalog } from '@/components/workflow/useWorkflowAgentRuntimeCatalog';
 import type { WebLocale } from '@/lib/i18n/locale';
 import type { WebCopy } from '@/lib/i18n/messages';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
-import { useWorkflowAgentRuntimeCatalog } from '@/components/workflow/useWorkflowAgentRuntimeCatalog';
-import {
-  useOrchestrationAutosaveController,
-  useOrchestrationAutosaveSchedule,
-  useOrchestrationBootstrap,
-  useOrchestrationImportAction,
-  useOrchestrationSaveAction,
-} from './orchestrationEditorControllerInternals';
+import { buildHomeSettingsURL } from '@/lib/settingsQuery';
+import type { PresetPayload } from '@/lib/types';
+import { availableWorkflowAgentToolNames, defaultOrchestrationAgentRuntimeOverrides, type AutosaveState, type WorkflowAgentRuntimeCatalog, type WorkflowCanvasDraft, type WorkflowCanvasNodeDraft, type WorkflowCanvasPosition, type WorkflowNodeType } from '@/lib/workflow-editor';
+import { DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX } from '@/lib/workflow-editor/constants';
+import { connectOrchestrationNodes } from '@/lib/orchestration-editor/graph';
+import { createEmptyOrchestrationDraft } from '@/lib/orchestration-editor/draft';
+import { buildDefaultOrchestrationGroupNode } from '@/lib/orchestration-editor/groupDefaults';
+import { validateOrchestrationDraft } from '@/lib/orchestration-editor/validation';
+import { migrateLegacyOrchestrations } from '@/lib/orchestration-editor/legacyMigration';
+import { toErrorMessage } from '@/lib/errors';
 import {
   buildOrchestrationWorkflowCopy,
   localizeOrchestrationValidationError,
 } from './orchestrationEditorCopy';
+import {
+  buildOrchestrationAutosaveSnapshot,
+} from './orchestrationEditorDraft';
+import {
+  useOrchestrationAutosaveController,
+  useOrchestrationAutosaveSchedule,
+  useOrchestrationBootstrap,
+  useOrchestrationDraftPersistence,
+} from './orchestrationEditorControllerInternals';
+
 const ORCHESTRATION_SETTINGS_URL = buildHomeSettingsURL('orchestration');
 
 type EditorPhase = 'loading' | 'ready' | 'missing';
@@ -68,6 +66,9 @@ interface UseOrchestrationEditorControllerResult {
   agentRuntimeCatalog?: WorkflowAgentRuntimeCatalog;
   agentRuntimeLoading: boolean;
   agentRuntimeError: string;
+  presets: PresetPayload[];
+  presetLoading: boolean;
+  presetError: string;
   workflowCopy: WorkflowCopy;
   localizeValidationError: (message: string, locale: WebLocale) => string;
   onChangeImportSessionID: (value: string) => void;
@@ -90,78 +91,75 @@ export function useOrchestrationEditorController(
 ): UseOrchestrationEditorControllerResult {
   const { orchestrationID, copy, locale } = options;
   const router = useRouter();
-  const [draft, setDraft] = useState(() => createEmptyWorkflowDraft('edit'));
+  const [draft, setDraft] = useState(() => createEmptyOrchestrationDraft('edit'));
   const [phase, setPhase] = useState<EditorPhase>('loading');
-  const [autosaveState, setAutosaveState] = useState<AutosaveState>(() => ({
-    phase: 'idle',
-    message: 'Autosave idle',
-    updatedAt: Date.now(),
-  }));
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>({ phase: 'idle', message: 'Autosave idle', updatedAt: Date.now() });
   const [actionError, setActionError] = useState('');
-  const [importSessionID, setImportSessionID] = useState('');
-  const [importLoading, setImportLoading] = useState(false);
-  const [agentNormalizationEnabled, setAgentNormalizationEnabled] = useState(false);
   const draftRef = useRef(draft);
+  const migrationAttemptedRef = useRef(false);
   const agentRuntimeState = useWorkflowAgentRuntimeCatalog();
-  const agentRuntimeReady = agentRuntimeState.catalog !== undefined;
-  const enabledToolNames = useMemo(
-    () => enabledWorkflowAgentToolNames(agentRuntimeState.catalog?.tools ?? []),
+  const presetState = useOrchestrationPresetCatalog(copy.system.failedToLoadPresets);
+  const toolNames = useMemo(
+    () => availableWorkflowAgentToolNames(agentRuntimeState.catalog?.tools ?? []),
     [agentRuntimeState.catalog?.tools],
   );
-  const editableDraft = useMemo(() => {
-    if (!agentNormalizationEnabled || !agentRuntimeReady) {
-      return draft;
-    }
-    return normalizeWorkflowDraftAgentNodes(draft, enabledToolNames);
-  }, [agentNormalizationEnabled, agentRuntimeReady, draft, enabledToolNames]);
-  const validation = useMemo(() => validateWorkflowDraft(editableDraft, {
+  const validation = useMemo(() => validateOrchestrationDraft(draft, {
     agentRuntimeCatalog: agentRuntimeState.catalog,
-  }), [agentRuntimeState.catalog, editableDraft]);
-  const snapshotBuild = useMemo(() => buildAutosaveSnapshot(editableDraft), [editableDraft]);
+    presets: presetState.loading ? undefined : presetState.presets,
+  }), [agentRuntimeState.catalog, draft, presetState.loading, presetState.presets]);
+  const snapshotBuild = useMemo(() => buildOrchestrationAutosaveSnapshot(draft), [draft]);
   const workflowCopy = useMemo(() => buildOrchestrationWorkflowCopy(copy.workflow, locale), [copy.workflow, locale]);
-  const localizeValidationError = useCallback(localizeOrchestrationValidationError, []);
   const autosaveController = useOrchestrationAutosaveController({ orchestrationID, draftRef, setAutosaveState });
-  const handleImport = useOrchestrationImportAction({
-    agentRuntimeReady,
-    enabledToolNames,
-    importSessionID,
-    importErrorMessage: copy.system.failedToImportSessionTasks,
-    setActionError,
-    setAgentNormalizationEnabled,
-    setDraft,
-    setImportLoading,
-  });
-  const handleSave = useOrchestrationSaveAction({
-    agentRuntimeReady,
-    autosaveController,
-    currentDraft: draft,
-    enabledToolNames,
-    locale,
-    localizeValidationError,
-    saveErrorMessage: copy.system.failedToSaveOrchestration,
-    setActionError,
-    setAgentNormalizationEnabled,
-    validationErrors: validation.errors,
-  });
-  const handleBack = useCallback(() => router.push(ORCHESTRATION_SETTINGS_URL), [router]);
 
   useEffect(() => {
     draftRef.current = draft;
   }, [draft]);
 
   useEffect(() => {
-    if (!agentNormalizationEnabled || !agentRuntimeReady) {
+    if (migrationAttemptedRef.current) {
       return;
     }
-    const selectedNode = draft.nodes.find((node) => node.id === draft.selectedNodeId);
-    if (selectedNode?.type !== 'agent' || selectedNode.agent?.runtime_overrides) {
-      return;
-    }
-    setDraft((state) => normalizeWorkflowDraftAgentNodes(state, enabledToolNames));
-  }, [agentNormalizationEnabled, agentRuntimeReady, draft.nodes, draft.selectedNodeId, enabledToolNames]);
+    migrationAttemptedRef.current = true;
+    void migrateLegacyOrchestrations().catch(() => undefined);
+  }, []);
 
-  useOrchestrationBootstrap({ orchestrationID, loadErrorMessage: copy.system.failedToLoadOrchestration, draftRef, setActionError, setDraft, setPhase });
-  useOrchestrationAutosaveSchedule({ autosaveController, currentSnapshot: snapshotBuild.snapshot, locale, localizeValidationError, phase, snapshotErrorMessage: snapshotBuild.errorMessage, validationErrors: validation.errors });
+  useOrchestrationBootstrap({
+    orchestrationID,
+    loadErrorMessage: copy.system.failedToLoadOrchestration,
+    autosaveController,
+    draftRef,
+    setActionError,
+    setDraft,
+    setPhase,
+  });
+  useOrchestrationDraftPersistence({
+    draft,
+    isLoading: phase === 'loading',
+    orchestrationID,
+  });
+  useOrchestrationAutosaveSchedule({
+    autosaveController,
+    currentSnapshot: snapshotBuild.snapshot,
+    phase,
+    snapshotErrorMessage: snapshotBuild.errorMessage,
+    validationErrors: validation.errors,
+  });
+
+  const handleSave = useCallback(async () => {
+    const blockReason = validation.errors[0]?.trim() || snapshotBuild.errorMessage?.trim();
+    if (blockReason || !snapshotBuild.snapshot) {
+      const localized = localizeOrchestrationValidationError(blockReason ?? 'Validation failed, not saved', locale);
+      autosaveController.markBlocked(localized);
+      setActionError(localized);
+      return;
+    }
+    try {
+      await autosaveController.flush(snapshotBuild.snapshot, { force: true });
+      setActionError('');
+    } catch (error) {
+      setActionError(toErrorMessage(error, copy.system.failedToSaveOrchestration));
+    }
+  }, [autosaveController, copy.system.failedToSaveOrchestration, locale, snapshotBuild, validation.errors]);
 
   return {
     phase,
@@ -169,88 +167,93 @@ export function useOrchestrationEditorController(
     autosaveState,
     actionError,
     validationErrors: validation.errors,
-    importSessionID,
-    importLoading,
+    importSessionID: '',
+    importLoading: false,
     agentRuntimeCatalog: agentRuntimeState.catalog,
     agentRuntimeLoading: agentRuntimeState.loading,
     agentRuntimeError: agentRuntimeState.error,
+    presets: presetState.presets,
+    presetLoading: presetState.loading,
+    presetError: presetState.error,
     workflowCopy,
-    localizeValidationError,
-    onChangeImportSessionID: setImportSessionID,
-    onImportFromSession: handleImport,
-    onScheduleChange: (patch) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes({ ...state, schedule: { ...state.schedule, ...patch } }, enabledToolNames)
-        : { ...state, schedule: { ...state.schedule, ...patch } });
-    },
+    localizeValidationError: localizeOrchestrationValidationError,
+    onChangeImportSessionID: () => undefined,
+    onImportFromSession: async () => undefined,
+    onScheduleChange: (patch) => setDraft((state) => ({ ...state, schedule: { ...state.schedule, ...patch } })),
     onAddNode: (type, position) => {
-      setAgentNormalizationEnabled(true);
       setDraft((state) => addNode(state, type, {
         position,
-        source: type === 'agent' && agentRuntimeReady
-          ? {
-            agent: {
-              message: '',
-              runtime_overrides: {
-                tool_allowlist_only: true,
-                tool_allowlist: [...enabledToolNames],
-              },
-            },
-          }
-          : undefined,
+        source: buildNewNodeSource(state, type, toolNames, locale),
       }));
     },
-    onSelectNode: (nodeID) => {
-      const selectedNode = draft.nodes.find((node) => node.id === nodeID);
-      if (selectedNode?.type === 'agent') {
-        setAgentNormalizationEnabled(true);
-      }
-      setDraft((state) => {
-        const next = { ...state, selectedNodeId: nodeID };
-        if (!agentRuntimeReady || selectedNode?.type !== 'agent') {
-          return next;
-        }
-        return normalizeWorkflowDraftAgentNodes(next, enabledToolNames);
-      });
-    },
-    onMoveNode: (nodeID, position) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(moveNode(state, nodeID, position), enabledToolNames)
-        : moveNode(state, nodeID, position));
-    },
-    onConnectNodes: (sourceNodeID, targetNodeID) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(connectNodesByID(state, { sourceNodeID, targetNodeID }), enabledToolNames)
-        : connectNodesByID(state, { sourceNodeID, targetNodeID }));
-    },
-    onDeleteEdge: (edgeID) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(removeEdge(state, edgeID), enabledToolNames)
-        : removeEdge(state, edgeID));
-    },
-    onDuplicateNode: (nodeID) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(duplicateNode(state, nodeID), enabledToolNames)
-        : duplicateNode(state, nodeID));
-    },
-    onUpdateNode: (node) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(updateNode(state, node), enabledToolNames)
-        : updateNode(state, node));
-    },
-    onDeleteNode: (nodeID) => {
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(removeNode(state, nodeID), enabledToolNames)
-        : removeNode(state, nodeID));
-    },
+    onSelectNode: (nodeID) => setDraft((state) => ({ ...state, selectedNodeId: nodeID })),
+    onMoveNode: (nodeID, position) => setDraft((state) => moveNode(state, nodeID, position)),
+    onConnectNodes: (sourceNodeID, targetNodeID) => setDraft((state) => connectOrchestrationNodes(state, sourceNodeID, targetNodeID)),
+    onDeleteEdge: (edgeID) => setDraft((state) => removeEdge(state, edgeID)),
+    onDuplicateNode: (nodeID) => setDraft((state) => duplicateNode(state, nodeID)),
+    onUpdateNode: (node) => setDraft((state) => updateNode(state, node)),
+    onDeleteNode: (nodeID) => setDraft((state) => removeNode(state, nodeID)),
     onSave: handleSave,
-    onBack: handleBack,
+    onBack: () => router.push(ORCHESTRATION_SETTINGS_URL),
   };
+}
+
+function buildNewNodeSource(
+  draft: WorkflowCanvasDraft,
+  type: WorkflowNodeType,
+  toolNames: string[],
+  locale: WebLocale,
+): Partial<WorkflowCanvasNodeDraft> | undefined {
+  if (type === 'group') {
+    return {
+      group: buildDefaultOrchestrationGroupNode(countNodesByType(draft, 'group') + 1, locale),
+    };
+  }
+  if (type === 'agent') {
+    return {
+      agent: {
+        title: `${DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX} ${countNodesByType(draft, 'agent') + 1}`,
+        message: '',
+        runtime_overrides: defaultOrchestrationAgentRuntimeOverrides(toolNames),
+      },
+    };
+  }
+  return undefined;
+}
+
+function countNodesByType(draft: WorkflowCanvasDraft, type: WorkflowNodeType): number {
+  return draft.nodes.filter((node) => node.type === type).length;
+}
+
+function useOrchestrationPresetCatalog(loadErrorMessage: string) {
+  const [presets, setPresets] = useState<PresetPayload[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const next = await listPresets();
+        if (!cancelled) {
+          setPresets(next);
+        }
+      } catch (cause) {
+        if (!cancelled) {
+          setError(toErrorMessage(cause, loadErrorMessage));
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadErrorMessage]);
+
+  return { presets, loading, error };
 }

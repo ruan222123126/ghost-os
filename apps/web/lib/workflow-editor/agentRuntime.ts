@@ -10,11 +10,16 @@ export interface WorkflowAgentRuntimeCatalog {
 }
 
 export function enabledWorkflowAgentToolNames(tools: ToolPayload[]): string[] {
-  const names = tools
-    .filter((tool) => tool.enabled)
-    .map((tool) => tool.name.trim())
-    .filter((name) => name.length > 0);
-  return [...new Set(names)].sort((left, right) => left.localeCompare(right));
+  return normalizeWorkflowAgentToolNames(tools.filter((tool) => tool.enabled).map((tool) => tool.name.trim()));
+}
+
+export function availableWorkflowAgentToolNames(tools: ToolPayload[]): string[] {
+  return normalizeWorkflowAgentToolNames(tools.map((tool) => tool.name.trim()));
+}
+
+function normalizeWorkflowAgentToolNames(names: string[]): string[] {
+  const filtered = names.filter((name) => name.length > 0);
+  return [...new Set(filtered)].sort((left, right) => left.localeCompare(right));
 }
 
 export function defaultWorkflowAgentRuntimeOverrides(enabledToolNames: string[]): TaskRuntimeOverrides {
@@ -24,13 +29,28 @@ export function defaultWorkflowAgentRuntimeOverrides(enabledToolNames: string[])
   };
 }
 
+export function defaultOrchestrationAgentRuntimeOverrides(toolNames: string[]): TaskRuntimeOverrides {
+  return defaultWorkflowAgentRuntimeOverrides(toolNames);
+}
+
 export function normalizeWorkflowDraftAgentNodes(
   draft: WorkflowCanvasDraft,
   enabledToolNames: string[],
 ): WorkflowCanvasDraft {
+  let changed = false;
+  const nodes = draft.nodes.map((node) => {
+    const normalized = normalizeWorkflowAgentNode(node, enabledToolNames);
+    if (normalized !== node) {
+      changed = true;
+    }
+    return normalized;
+  });
+  if (!changed) {
+    return draft;
+  }
   return {
     ...draft,
-    nodes: draft.nodes.map((node) => normalizeWorkflowAgentNode(node, enabledToolNames)),
+    nodes,
   };
 }
 
@@ -53,17 +73,54 @@ export function normalizeWorkflowAgentNode(
 export function cloneWorkflowTaskRuntimeOverrides(
   overrides?: TaskRuntimeOverrides,
 ): TaskRuntimeOverrides | undefined {
+  return cloneTaskRuntimeOverrides(overrides);
+}
+
+export function cloneOrchestrationTaskRuntimeOverrides(
+  overrides?: TaskRuntimeOverrides,
+): TaskRuntimeOverrides | undefined {
+  const cloned = cloneTaskRuntimeOverrides(overrides);
+  if (!cloned) {
+    return undefined;
+  }
+  return normalizeEmptyTaskRuntimeOverrides({
+    ...cloned,
+    max_turns: undefined,
+  });
+}
+
+function cloneTaskRuntimeOverrides(
+  overrides?: TaskRuntimeOverrides,
+): TaskRuntimeOverrides | undefined {
   if (!overrides) {
     return undefined;
   }
-  return {
+  return normalizeEmptyTaskRuntimeOverrides({
     provider_name: overrides.provider_name,
     model: overrides.model,
     system_prompt: overrides.system_prompt,
+    preset_id: overrides.preset_id,
     tool_allowlist: overrides.tool_allowlist ? [...overrides.tool_allowlist] : undefined,
     tool_allowlist_only: overrides.tool_allowlist_only,
     max_turns: overrides.max_turns,
-  };
+  });
+}
+
+function normalizeEmptyTaskRuntimeOverrides(
+  overrides: TaskRuntimeOverrides,
+): TaskRuntimeOverrides | undefined {
+  if (
+    overrides.provider_name === undefined
+    && overrides.model === undefined
+    && overrides.system_prompt === undefined
+    && overrides.preset_id === undefined
+    && overrides.tool_allowlist === undefined
+    && overrides.tool_allowlist_only === undefined
+    && overrides.max_turns === undefined
+  ) {
+    return undefined;
+  }
+  return overrides;
 }
 
 export function validateWorkflowAgentRuntimeNodes(

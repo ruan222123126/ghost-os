@@ -9,6 +9,7 @@ import { normalizeScreenControlComposerAction } from '@/lib/workflow-editor';
 import { isProtectedBoundaryNodeType } from '@/lib/workflow-editor/boundaryNodes';
 import {
   DEFAULT_LOOP_MAX_ITERATIONS,
+  DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
   LOOP_ROLE_END,
   LOOP_ROLE_START,
 } from '@/lib/workflow-editor/constants';
@@ -167,7 +168,15 @@ export function createDraftNode(
     start: type === 'start' ? source?.start ?? { inputs: [] } : undefined,
     tool: type === 'tool' ? source?.tool ?? { tool_name: '', arguments: {} } : undefined,
     llm: type === 'llm' ? source?.llm ?? { prompt: '', system_prompt: '' } : undefined,
-    agent: type === 'agent' ? source?.agent ?? { message: '' } : undefined,
+    agent: type === 'agent' ? source?.agent ?? { message: '', title: '' } : undefined,
+    group: type === 'group'
+      ? source?.group ?? {
+        title: '',
+        shared_context: '',
+        speaking_mode: 'sequential',
+        max_rounds: DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
+      }
+      : undefined,
     if: type === 'if'
       ? source?.if ?? buildDefaultIfConfig()
       : undefined,

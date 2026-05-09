@@ -4,173 +4,118 @@ import {
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
-  useCallback,
   useEffect,
   useRef,
 } from 'react';
-import { listTasks } from '@/lib/api/tasks/api';
+import { getOrchestration, updateOrchestration } from '@/lib/api/orchestrations/api';
 import { toErrorMessage } from '@/lib/errors';
-import { getOrchestrationByID, saveOrchestrationDraft } from '@/lib/orchestrationStore';
+import { orchestrationTaskToDraft } from '@/lib/orchestration-editor/draft';
 import {
   createAutosaveController,
-  importWorkflowFromSessionTasks,
-  normalizeWorkflowDraftAgentNodes,
   type AutosaveController,
+  type AutosaveSnapshot,
   type AutosaveState,
   type WorkflowCanvasDraft,
   type WorkflowUpdatePayload,
-  withWorkflowContent,
 } from '@/lib/workflow-editor';
-import type { WebLocale } from '@/lib/i18n/locale';
 import {
-  buildAutosaveSnapshot,
-  resolveSaveBlockReason,
-  VALIDATION_BLOCKED_TEXT,
-} from '@/components/workflow/workflowEditorDraft';
+  buildOrchestrationAutosaveSnapshot,
+  loadStoredOrchestrationDraft,
+  mergeOrchestrationDraftWithCachedCanvas,
+  ORCHESTRATION_VALIDATION_BLOCKED_TEXT,
+  storeOrchestrationDraft,
+} from './orchestrationEditorDraft';
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const AUTOSAVE_RETRY_MS = 2000;
+const DRAFT_PERSIST_DEBOUNCE_MS = 220;
 
 type EditorPhase = 'loading' | 'ready' | 'missing';
 
 export function useOrchestrationBootstrap(options: {
   orchestrationID: string;
   loadErrorMessage: string;
+  autosaveController: AutosaveController<WorkflowUpdatePayload>;
   draftRef: MutableRefObject<WorkflowCanvasDraft>;
   setActionError: Dispatch<SetStateAction<string>>;
   setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>;
   setPhase: Dispatch<SetStateAction<EditorPhase>>;
 }) {
-  const { orchestrationID, loadErrorMessage, draftRef, setActionError, setDraft, setPhase } = options;
+  const { orchestrationID, loadErrorMessage, autosaveController, draftRef, setActionError, setDraft, setPhase } = options;
   useEffect(() => {
-    try {
-      const orchestration = getOrchestrationByID(orchestrationID);
-      if (!orchestration) {
-        setActionError(loadErrorMessage);
+    let cancelled = false;
+    setPhase('loading');
+    setActionError('');
+    void (async () => {
+      try {
+        const task = await getOrchestration(orchestrationID);
+        const draft = mergeOrchestrationDraftWithCachedCanvas(
+          orchestrationTaskToDraft(task),
+          loadStoredOrchestrationDraft(task.id),
+        );
+        const snapshot = buildOrchestrationAutosaveSnapshot(draft);
+        if (snapshot.snapshot) {
+          autosaveController.markSaved(snapshot.snapshot.fingerprint);
+        }
+        if (!cancelled) {
+          draftRef.current = draft;
+          setDraft(draft);
+          setPhase('ready');
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setActionError(toErrorMessage(error, loadErrorMessage));
         setPhase('missing');
-        return;
       }
-      draftRef.current = orchestration.draft;
-      setDraft(orchestration.draft);
-      setActionError('');
-      setPhase('ready');
-    } catch (error) {
-      setActionError(toErrorMessage(error, loadErrorMessage));
-      setPhase('missing');
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [autosaveController, draftRef, loadErrorMessage, orchestrationID, setActionError, setDraft, setPhase]);
+}
+
+export function useOrchestrationDraftPersistence(options: {
+  draft: WorkflowCanvasDraft;
+  isLoading: boolean;
+  orchestrationID: string;
+}) {
+  const { draft, isLoading, orchestrationID } = options;
+  useEffect(() => {
+    if (isLoading) {
+      return;
     }
-  }, [draftRef, loadErrorMessage, orchestrationID, setActionError, setDraft, setPhase]);
+    const timer = window.setTimeout(() => {
+      storeOrchestrationDraft(draft, orchestrationID);
+    }, DRAFT_PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, isLoading, orchestrationID]);
 }
 
 export function useOrchestrationAutosaveSchedule(options: {
   autosaveController: AutosaveController<WorkflowUpdatePayload>;
-  currentSnapshot?: { fingerprint: string; payload: WorkflowUpdatePayload };
-  locale: WebLocale;
-  localizeValidationError: (message: string, locale: WebLocale) => string;
+  currentSnapshot?: AutosaveSnapshot<WorkflowUpdatePayload>;
   phase: EditorPhase;
   snapshotErrorMessage?: string;
   validationErrors: string[];
 }) {
-  const { autosaveController, currentSnapshot, locale, localizeValidationError, phase, snapshotErrorMessage, validationErrors } = options;
+  const { autosaveController, currentSnapshot, phase, snapshotErrorMessage, validationErrors } = options;
   useEffect(() => {
     if (phase !== 'ready') {
       return;
     }
-    const blockReason = resolveSaveBlockReason(validationErrors, snapshotErrorMessage);
+    const blockReason = validationErrors[0]?.trim() || snapshotErrorMessage?.trim();
     if (blockReason) {
-      autosaveController.markBlocked(localizeValidationError(blockReason, locale));
+      autosaveController.markBlocked(blockReason);
       return;
     }
     if (!currentSnapshot) {
-      autosaveController.markBlocked(VALIDATION_BLOCKED_TEXT);
+      autosaveController.markBlocked(ORCHESTRATION_VALIDATION_BLOCKED_TEXT);
       return;
     }
     autosaveController.schedule(currentSnapshot);
-  }, [autosaveController, currentSnapshot, locale, localizeValidationError, phase, snapshotErrorMessage, validationErrors]);
-}
-
-export function useOrchestrationImportAction(options: {
-  agentRuntimeReady: boolean;
-  enabledToolNames: string[];
-  importSessionID: string;
-  importErrorMessage: string;
-  setActionError: Dispatch<SetStateAction<string>>;
-  setAgentNormalizationEnabled: Dispatch<SetStateAction<boolean>>;
-  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>;
-  setImportLoading: Dispatch<SetStateAction<boolean>>;
-}) {
-  const {
-    agentRuntimeReady,
-    enabledToolNames,
-    importSessionID,
-    importErrorMessage,
-    setActionError,
-    setAgentNormalizationEnabled,
-    setDraft,
-    setImportLoading,
-  } = options;
-  return useCallback(async () => {
-    setImportLoading(true);
-    setActionError('');
-    try {
-      const tasks = await listTasks();
-      const imported = importWorkflowFromSessionTasks(tasks, importSessionID);
-      setAgentNormalizationEnabled(true);
-      setDraft((state) => agentRuntimeReady
-        ? normalizeWorkflowDraftAgentNodes(withWorkflowContent(state, imported.nodes, imported.edges), enabledToolNames)
-        : withWorkflowContent(state, imported.nodes, imported.edges));
-    } catch (error) {
-      setActionError(toErrorMessage(error, importErrorMessage));
-    } finally {
-      setImportLoading(false);
-    }
-  }, [agentRuntimeReady, enabledToolNames, importErrorMessage, importSessionID, setActionError, setAgentNormalizationEnabled, setDraft, setImportLoading]);
-}
-
-export function useOrchestrationSaveAction(options: {
-  agentRuntimeReady: boolean;
-  autosaveController: AutosaveController<WorkflowUpdatePayload>;
-  currentDraft: WorkflowCanvasDraft;
-  enabledToolNames: string[];
-  locale: WebLocale;
-  localizeValidationError: (message: string, locale: WebLocale) => string;
-  saveErrorMessage: string;
-  setActionError: Dispatch<SetStateAction<string>>;
-  setAgentNormalizationEnabled: Dispatch<SetStateAction<boolean>>;
-  validationErrors: string[];
-}) {
-  const {
-    agentRuntimeReady,
-    autosaveController,
-    currentDraft,
-    enabledToolNames,
-    locale,
-    localizeValidationError,
-    saveErrorMessage,
-    setActionError,
-    setAgentNormalizationEnabled,
-    validationErrors,
-  } = options;
-  return useCallback(async () => {
-    setActionError('');
-    setAgentNormalizationEnabled(true);
-    const saveDraft = agentRuntimeReady
-      ? normalizeWorkflowDraftAgentNodes(currentDraft, enabledToolNames)
-      : currentDraft;
-    const saveSnapshot = buildAutosaveSnapshot(saveDraft);
-    const blockReason = resolveSaveBlockReason(validationErrors, saveSnapshot.errorMessage);
-    if (blockReason || !saveSnapshot.snapshot) {
-      const reason = blockReason ?? VALIDATION_BLOCKED_TEXT;
-      const localizedReason = localizeValidationError(reason, locale);
-      autosaveController.markBlocked(localizedReason);
-      setActionError(localizedReason);
-      return;
-    }
-    try {
-      await autosaveController.flush(saveSnapshot.snapshot, { force: true });
-    } catch (error) {
-      setActionError(toErrorMessage(error, saveErrorMessage));
-    }
-  }, [agentRuntimeReady, autosaveController, currentDraft, enabledToolNames, locale, localizeValidationError, saveErrorMessage, setActionError, setAgentNormalizationEnabled, validationErrors]);
+  }, [autosaveController, currentSnapshot, phase, snapshotErrorMessage, validationErrors]);
 }
 
 export function useOrchestrationAutosaveController(options: {
@@ -184,8 +129,9 @@ export function useOrchestrationAutosaveController(options: {
     autosaveControllerRef.current = createAutosaveController({
       debounceMs: AUTOSAVE_DEBOUNCE_MS,
       retryMs: AUTOSAVE_RETRY_MS,
-      persist: async () => {
-        saveOrchestrationDraft(orchestrationID, draftRef.current);
+      persist: async (snapshot) => {
+        draftRef.current = { ...draftRef.current, taskId: orchestrationID, mode: 'edit' };
+        await updateOrchestration(orchestrationID, snapshot.payload);
       },
       onStateChange: setAutosaveState,
     });
@@ -197,4 +143,3 @@ export function useOrchestrationAutosaveController(options: {
   }, [autosaveController]);
   return autosaveController;
 }
-

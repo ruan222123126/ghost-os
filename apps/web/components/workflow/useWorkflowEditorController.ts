@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -141,7 +142,10 @@ export function useWorkflowEditorController(
     if (selectedNode?.type !== 'agent' || selectedNode.agent?.runtime_overrides) {
       return;
     }
-    setDraft((state) => normalizeWorkflowDraftAgentNodes(state, enabledToolNames));
+    setDraft((state) => {
+      const normalized = normalizeWorkflowDraftAgentNodes(state, enabledToolNames);
+      return normalized === state ? state : normalized;
+    });
   }, [agentNormalizationEnabled, agentRuntimeReady, draft.nodes, draft.selectedNodeId, enabledToolNames]);
 
   const handleImport = useCallback(async () => {

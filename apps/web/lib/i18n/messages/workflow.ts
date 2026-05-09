@@ -40,6 +40,7 @@ const workflowCatalog = {
     labelLLMModel: 'LLM MODEL',
     labelIfBranch: 'IF BRANCH',
     labelLoop: 'LOOP',
+    labelGroup: 'GROUP',
     llmModelConfiguration: 'Model Configuration',
     llmSystemDirectives: 'System Directives',
     llmSystemPromptPlaceholder: 'Enter system prompt instructions here...',
@@ -91,6 +92,8 @@ const workflowCatalog = {
     clickEditorCloseAria: 'Close click editor',
     runtimeVariableHint: 'Available variable: ${find_icon}. Type { to insert it.',
     agentMessage: 'Agent Message',
+    agentTitle: 'Title',
+    agentTitlePlaceholder: 'e.g. Researcher',
     agentMessagePlaceholder: 'Message sent to the agent runtime...',
     agentProvider: 'Provider',
     agentProviderPlaceholder: 'Inherit current provider',
@@ -101,6 +104,10 @@ const workflowCatalog = {
     agentModelPlaceholder: 'Select a model',
     agentModelDisabled: (name: string) => `${name} (disabled)`,
     agentModelUnavailable: (name: string) => `${name} (unavailable)`,
+    agentPreset: 'Preset',
+    agentPresetPlaceholder: 'No preset mounted',
+    agentPresetLoading: 'Loading presets...',
+    agentPresetUnavailable: (name: string) => `${name} (unavailable)`,
     agentSystemPrompt: 'System Prompt',
     agentSystemPromptPlaceholder: 'Replace the global agent system prompt...',
     agentToolAllowlist: 'Tools',
@@ -109,6 +116,19 @@ const workflowCatalog = {
     agentToolUnavailable: (name: string) => `${name} (unavailable)`,
     agentNoTools: 'No enabled tools. Leave all unchecked to run as plain text.',
     agentMaxTurns: 'Max Turns',
+    groupTitle: 'Group Title',
+    groupTitlePlaceholder: 'e.g. Review Group',
+    groupSharedContext: 'Shared Context',
+    groupSharedContextPlaceholder: 'Visible to every member in the group...',
+    groupSpeakingMode: 'Speaking Mode',
+    groupSpeakingModeSequential: 'Sequential',
+    groupSpeakingModeParallel: 'Parallel',
+    groupSpeakingModeOwner: 'Owner',
+    groupOwnerAgent: 'Owner Member',
+    groupOwnerAgentPlaceholder: 'Select an existing member',
+    groupOwnerDispatchNote: 'The owner gets a runtime-only orchestration_dispatch tool and must dispatch exactly one sub-round each turn.',
+    groupMaxRounds: 'Max Rounds',
+    groupOwnerMaxRoundsHint: 'In owner mode, max rounds means the maximum number of dispatches.',
     moduleArchitecture: 'Module Architecture',
     moduleUnderDeployment: 'Currently Under Deployment',
     terminus: 'Terminus',
@@ -163,6 +183,9 @@ const workflowCatalog = {
     nodeExecutionIdentity: 'Execution identity',
     nodeRole: (role: string) => `Role: ${role}`,
     nodeUndefinedRole: 'Undefined Role',
+    nodeGroupConfiguration: 'Group configuration',
+    nodeGroupPending: 'Group title pending',
+    nodeGroupRounds: (count: number, mode: string) => `Rounds: ${count} · ${mode}`,
     nodeToolConfiguration: 'Tool configuration',
     nodeToolUnset: 'Tool not configured',
     nodeToolSelected: (name: string) => `Tool: ${name}`,
@@ -179,6 +202,7 @@ const workflowCatalog = {
       start: 'START',
       end: 'END',
       agent: 'AGENT',
+      group: 'GROUP',
       llm: 'LLM MODEL',
       tool: 'TOOLS USE',
       if: 'IF BRANCH',
@@ -223,6 +247,7 @@ const workflowCatalog = {
     labelLLMModel: 'LLM 模型',
     labelIfBranch: '条件分支',
     labelLoop: '循环',
+    labelGroup: '群组',
     llmModelConfiguration: '模型配置',
     llmSystemDirectives: '系统指令',
     llmSystemPromptPlaceholder: '在此输入系统提示词…',
@@ -274,6 +299,8 @@ const workflowCatalog = {
     clickEditorCloseAria: '关闭 click 编辑器',
     runtimeVariableHint: '可用变量：${find_icon}。输入 { 可插入。',
     agentMessage: 'Agent 消息',
+    agentTitle: '标题',
+    agentTitlePlaceholder: '例如 研究员',
     agentMessagePlaceholder: '发送给 Agent 运行时的消息…',
     agentProvider: 'Provider',
     agentProviderPlaceholder: '继承当前 Provider',
@@ -284,6 +311,10 @@ const workflowCatalog = {
     agentModelPlaceholder: '请选择模型',
     agentModelDisabled: (name: string) => `${name}（已禁用）`,
     agentModelUnavailable: (name: string) => `${name}（不可用）`,
+    agentPreset: '预设',
+    agentPresetPlaceholder: '未挂载预设',
+    agentPresetLoading: '预设加载中…',
+    agentPresetUnavailable: (name: string) => `${name}（不可用）`,
     agentSystemPrompt: '系统提示词',
     agentSystemPromptPlaceholder: '替换全局 Agent 系统提示词…',
     agentToolAllowlist: '工具',
@@ -292,6 +323,19 @@ const workflowCatalog = {
     agentToolUnavailable: (name: string) => `${name}（不可用）`,
     agentNoTools: '当前没有启用工具；全部不选即表示纯文本 Agent。',
     agentMaxTurns: '最大轮数',
+    groupTitle: '群组标题',
+    groupTitlePlaceholder: '例如 评审组',
+    groupSharedContext: '共享上下文',
+    groupSharedContextPlaceholder: '该群组内所有成员都能看到的共享上下文…',
+    groupSpeakingMode: '发言模式',
+    groupSpeakingModeSequential: '顺序',
+    groupSpeakingModeParallel: '并行',
+    groupSpeakingModeOwner: '群主',
+    groupOwnerAgent: '群主成员',
+    groupOwnerAgentPlaceholder: '请选择现有成员',
+    groupOwnerDispatchNote: '群主会在运行时自动获得专用 orchestration_dispatch 工具，并且每次控制回合必须只发起一次子回合指派。',
+    groupMaxRounds: '最大轮次',
+    groupOwnerMaxRoundsHint: '在群主模式下，max_rounds 表示最多可指派次数。',
     moduleArchitecture: '模块架构',
     moduleUnderDeployment: '当前功能部署中',
     terminus: '终点',
@@ -346,6 +390,9 @@ const workflowCatalog = {
     nodeExecutionIdentity: '执行身份',
     nodeRole: (role: string) => `角色：${role}`,
     nodeUndefinedRole: '未定义角色',
+    nodeGroupConfiguration: '群组配置',
+    nodeGroupPending: '待设置群组标题',
+    nodeGroupRounds: (count: number, mode: string) => `轮次：${count} · ${mode}`,
     nodeToolConfiguration: '工具配置',
     nodeToolUnset: '未配置工具',
     nodeToolSelected: (name: string) => `工具：${name}`,
@@ -362,6 +409,7 @@ const workflowCatalog = {
       start: '开始',
       end: '结束',
       agent: '代理',
+      group: '群组',
       llm: 'LLM 模型',
       tool: '工具调用',
       if: '条件分支',
@@ -387,6 +435,9 @@ export function nodeLabelForType(copy: WorkflowCopy, type: WorkflowNodeType): st
   if (type === 'agent') {
     return map.agent;
   }
+  if (type === 'group') {
+    return map.group;
+  }
   if (type === 'llm') {
     return map.llm;
   }
@@ -399,7 +450,7 @@ export function nodeLabelForType(copy: WorkflowCopy, type: WorkflowNodeType): st
   if (type === 'loop') {
     return map.loop;
   }
-  return map.loop;
+  return map.group;
 }
 
 export function nodeTypeLabelForProperties(copy: WorkflowCopy, type: WorkflowCanvasNodeDraft['type']): string {

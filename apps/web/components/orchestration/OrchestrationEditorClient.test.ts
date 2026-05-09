@@ -25,13 +25,14 @@ describe('components/orchestration/OrchestrationEditorClient', () => {
     useOrchestrationEditorController.mockReturnValue(buildController());
   });
 
-  it('limits orchestration library nodes to agent only', () => {
+  it('limits orchestration library nodes to agent and group only', () => {
     renderClient();
 
     expect(renderWorkbench).toHaveBeenCalled();
     expect(renderWorkbench.mock.calls.at(-1)?.[0]).toMatchObject({
       editorKind: 'orchestration',
-      nodeLibraryTypes: ['agent'],
+      nodeLibraryTypes: ['agent', 'group'],
+      showImportControls: false,
     });
   });
 });
@@ -62,6 +63,9 @@ function buildController() {
     validationErrors: [],
     importSessionID: '',
     importLoading: false,
+    presets: [],
+    presetLoading: false,
+    presetError: '',
     workflowCopy: copyForWorkflow('zh-CN'),
     localizeValidationError: jest.fn(),
     onChangeImportSessionID: jest.fn(),

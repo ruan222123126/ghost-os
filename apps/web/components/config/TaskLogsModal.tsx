@@ -100,6 +100,7 @@ function TaskRunNodeResults(props: { nodeResults: TaskRunNodeResult[] | undefine
 
 function TaskRunNodeCard(props: { node: TaskRunNodeResult }) {
   const { node } = props;
+  const orchestrationGroupOutput = parseOrchestrationGroupOutput(node.output);
   return (
     <details className="rounded-[10px] border border-[#E5E5E5] bg-white p-2">
       <summary className="cursor-pointer list-none text-[12px]">
@@ -114,6 +115,7 @@ function TaskRunNodeCard(props: { node: TaskRunNodeResult }) {
         {node.error ? <p className="text-[#B91C1C]">error: {node.error}</p> : null}
         <p className="text-[#525252]">started: {formatLogTime(node.started_at)}</p>
         <p className="text-[#525252]">finished: {formatLogTime(node.finished_at)}</p>
+        {orchestrationGroupOutput ? <OrchestrationRoundsBlock output={orchestrationGroupOutput} /> : null}
         <TaskJSONBlock label="input" value={node.input} />
         <TaskJSONBlock label="output" value={node.output} />
       </div>
@@ -150,4 +152,85 @@ function formatLogTime(value: string | undefined): string {
     return value;
   }
   return date.toISOString();
+}
+
+function OrchestrationRoundsBlock(props: {
+  output: {
+    completed_rounds?: number;
+    owner_agent_id?: string;
+    owner_session_id?: string;
+    member_results: Array<{ round?: number; title?: string; status?: string; content?: string; error?: string }>;
+    dispatch_results?: Array<{
+      round?: number;
+      action?: string;
+      order?: string;
+      instruction?: string;
+      participant_ids?: string[];
+    }>;
+  };
+}) {
+  const grouped = new Map<number, Array<{ title?: string; status?: string; content?: string; error?: string }>>();
+  for (const item of props.output.member_results) {
+    const round = item.round ?? 0;
+    grouped.set(round, [...(grouped.get(round) ?? []), item]);
+  }
+  return (
+    <div className="rounded-[8px] border border-[#E5E5E5] bg-[#FAFAFA] p-2">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#737373]">
+        rounds: {props.output.completed_rounds ?? 0}
+      </p>
+      {props.output.owner_agent_id ? <p className="mb-2 text-[12px] text-[#525252]">owner: {props.output.owner_agent_id}</p> : null}
+      {props.output.owner_session_id ? <p className="mb-2 text-[12px] text-[#525252]">owner_session: {props.output.owner_session_id}</p> : null}
+      {props.output.dispatch_results?.length
+        ? props.output.dispatch_results.map((item, index) => (
+          <p key={`dispatch-${index}`} className="text-[12px] text-[#111111]">
+            dispatch {item.round ?? index + 1}: {item.action ?? 'unknown'} {item.order ? `[${item.order}]` : ''}
+            {item.participant_ids?.length ? ` -> ${item.participant_ids.join(', ')}` : ''}
+            {item.instruction ? ` :: ${item.instruction}` : ''}
+          </p>
+        ))
+        : null}
+      {[...grouped.entries()].map(([round, items]) => (
+        <div key={round} className="mb-2 last:mb-0">
+          <p className="text-[11px] font-semibold text-[#525252]">round {round}</p>
+          {items.map((item, index) => (
+            <p key={`${round}-${index}`} className="text-[12px] text-[#111111]">
+              {item.title ?? 'member'} [{item.status ?? 'unknown'}]: {item.error ?? item.content ?? ''}
+            </p>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function parseOrchestrationGroupOutput(value: unknown) {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.member_results)) {
+    return undefined;
+  }
+  return {
+    completed_rounds: typeof record.completed_rounds === 'number' ? record.completed_rounds : undefined,
+    owner_agent_id: typeof record.owner_agent_id === 'string' ? record.owner_agent_id : undefined,
+    owner_session_id: typeof record.owner_session_id === 'string' ? record.owner_session_id : undefined,
+    member_results: record.member_results.filter((item) => typeof item === 'object' && item !== null) as Array<{
+      round?: number;
+      title?: string;
+      status?: string;
+      content?: string;
+      error?: string;
+    }>,
+    dispatch_results: Array.isArray(record.dispatch_results)
+      ? record.dispatch_results.filter((item) => typeof item === 'object' && item !== null) as Array<{
+        round?: number;
+        action?: string;
+        order?: string;
+        instruction?: string;
+        participant_ids?: string[];
+      }>
+      : undefined,
+  };
 }
