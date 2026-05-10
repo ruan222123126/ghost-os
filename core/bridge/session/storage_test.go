@@ -41,6 +41,17 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 			LastCalledTurn: 2,
 		},
 	}
+	relayTimeoutMS := 0
+	s.StartRelayRuntime("fix config", "ai_decides", 0, &relayTimeoutMS)
+	s.AppendRelayRecord(RelayRecord{
+		Round:          1,
+		Did:            "inspected config",
+		Remaining:      "apply patch",
+		FailedAttempts: []string{"bad command"},
+		NextStep:       "patch config",
+		TraceID:        "trace-relay-1",
+	})
+	s.FinishRelayRuntime("completed", "relay_complete", "done", "patched config")
 	s.AssistantDraft = &AssistantDraft{
 		Text:      "partial answer",
 		TraceID:   "trace-draft",
@@ -93,6 +104,9 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	}
 	if !reflect.DeepEqual(loaded.DynamicSkillLoads, s.DynamicSkillLoads) {
 		t.Fatalf("dynamic skill loads mismatch: got=%+v want=%+v", loaded.DynamicSkillLoads, s.DynamicSkillLoads)
+	}
+	if !reflect.DeepEqual(loaded.RelayRuntime, s.RelayRuntime) {
+		t.Fatalf("relay runtime mismatch: got=%+v want=%+v", loaded.RelayRuntime, s.RelayRuntime)
 	}
 	if !reflect.DeepEqual(loaded.AssistantDraft, s.AssistantDraft) {
 		t.Fatalf("assistant draft mismatch: got=%+v want=%+v", loaded.AssistantDraft, s.AssistantDraft)

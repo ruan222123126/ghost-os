@@ -13,6 +13,7 @@ import (
 func buildSessionMetadataPayload(summary bridgesession.SessionMetadata) sessionMetadata {
 	return sessionMetadata{
 		ID:           summary.ID,
+		Title:        strings.TrimSpace(summary.Title),
 		CreatedAt:    summary.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    summary.UpdatedAt.UTC().Format(time.RFC3339),
 		MessageCount: summary.MessageCount,
@@ -38,6 +39,7 @@ func buildSessionDetailPayload(
 
 	return sessionDetail{
 		ID:           sess.ID,
+		Title:        strings.TrimSpace(sess.Title),
 		Messages:     messages,
 		CreatedAt:    sess.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:    sess.UpdatedAt.UTC().Format(time.RFC3339),

@@ -157,8 +157,24 @@ func newIterationHandoffError(signal *tools.IterationHandoffSignal) *ErrIteratio
 	return &ErrIterationHandoff{
 		Did:            strings.TrimSpace(signal.Did),
 		Remaining:      strings.TrimSpace(signal.Remaining),
+		FailedAttempts: trimStringSlice(signal.FailedAttempts),
+		NextStep:       strings.TrimSpace(signal.NextStep),
 		Completed:      signal.Completed,
 		FinalMessage:   strings.TrimSpace(signal.FinalMessage),
 		FinalChangeLog: strings.TrimSpace(signal.FinalChangeLog),
 	}
+}
+
+func trimStringSlice(input []string) []string {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(input))
+	for _, raw := range input {
+		value := strings.TrimSpace(raw)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
 }

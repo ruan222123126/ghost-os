@@ -9,11 +9,11 @@ func (s *TaskScheduler) beginManualRun(
 	if reg == nil {
 		reg = &taskRegistration{task: task}
 	}
-	task, runCtx, skipped, reason := reg.beginRun(task, s.taskExecutionTimeout())
+	task, runCtx, skipped, reason := reg.beginRun(task, s.taskExecutionTimeoutForTask(task))
 	if reason != skipRunReasonRegistrationRetired {
 		return task, runCtx, reg, skipped, reason
 	}
 	reg = &taskRegistration{task: task, loopCtx: reg.loopCtx}
-	task, runCtx, skipped, reason = reg.beginRun(task, s.taskExecutionTimeout())
+	task, runCtx, skipped, reason = reg.beginRun(task, s.taskExecutionTimeoutForTask(task))
 	return task, runCtx, reg, skipped, reason
 }

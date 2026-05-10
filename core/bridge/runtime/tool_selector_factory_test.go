@@ -144,7 +144,7 @@ func TestBuildSystemPromptForCatalogFailsWhenPromptConfigMissing(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected prompt load error, got nil")
 	}
-	if !strings.Contains(err.Error(), "load prompt manager") {
+	if !strings.Contains(err.Error(), "load system prompts") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

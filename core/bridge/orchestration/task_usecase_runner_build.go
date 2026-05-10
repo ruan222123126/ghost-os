@@ -3,6 +3,8 @@ package orchestration
 import (
 	"strings"
 	"time"
+
+	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 func (r taskMutationRunner) newScheduledTask(params taskCreateParams) (ScheduledTask, error) {
@@ -53,6 +55,8 @@ func buildTaskFromCreateParams(params taskCreateParams, now time.Time) (Schedule
 		Message:          strings.TrimSpace(params.Message),
 		SessionID:        strings.TrimSpace(params.SessionID),
 		RuntimeOverrides: cloneTaskRuntimeOverrides(params.RuntimeOverrides),
+		AgentMode:        strings.TrimSpace(params.AgentMode),
+		Relay:            bridgeTasks.CloneTaskRelayConfig(params.Relay),
 		TaskKind:         strings.TrimSpace(params.TaskKind),
 		Action:           strings.TrimSpace(params.Action),
 		ActionParams:     cloneTaskActionParams(params.ActionParams),

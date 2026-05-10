@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
+	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 func loadTaskRuntimeConfig(store bridgeconfig.Store) (bridgeconfig.TaskConfig, error) {
@@ -57,7 +58,58 @@ func validateAgentTaskRuntime(task *ScheduledTask, store bridgeconfig.Store) err
 		return invalidTaskConfig(err.Error())
 	}
 	task.RuntimeOverrides = overrides
-	return nil
+	return normalizeAgentTaskRelay(task, store)
+}
+
+func normalizeAgentTaskRelay(task *ScheduledTask, store bridgeconfig.Store) error {
+	if task == nil || task.AgentMode != taskAgentModeRelay {
+		return nil
+	}
+	defaults, err := taskRelayDefaults(store)
+	if err != nil {
+		return err
+	}
+	relay := bridgeTasks.CloneTaskRelayConfig(task.Relay)
+	if relay == nil {
+		relay = &bridgeTasks.TaskRelayConfig{}
+	}
+	if strings.TrimSpace(relay.StopPolicy) == "" {
+		relay.StopPolicy = defaults.stopPolicy
+	}
+	if relay.StopPolicy == taskRelayStopPolicyMaxRounds && relay.MaxRounds <= 0 {
+		relay.MaxRounds = defaults.maxRounds
+	}
+	if relay.ExecutionTimeoutMS == nil {
+		timeout := defaults.executionTimeoutMS
+		relay.ExecutionTimeoutMS = &timeout
+	}
+	task.Relay = relay
+	return validateTaskRelayConfig(task.Relay)
+}
+
+type taskRelayDefaultValues struct {
+	stopPolicy         string
+	maxRounds          int
+	executionTimeoutMS int
+}
+
+func taskRelayDefaults(store bridgeconfig.Store) (taskRelayDefaultValues, error) {
+	if store == nil {
+		return taskRelayDefaultValues{
+			stopPolicy:         bridgeconfig.DefaultRelayStopPolicy,
+			maxRounds:          bridgeconfig.DefaultRelayMaxRounds,
+			executionTimeoutMS: bridgeconfig.DefaultRelayExecutionTimeoutMS,
+		}, nil
+	}
+	cfg, err := store.Config()
+	if err != nil {
+		return taskRelayDefaultValues{}, err
+	}
+	return taskRelayDefaultValues{
+		stopPolicy:         strings.TrimSpace(cfg.RelayDefaultStopPolicy),
+		maxRounds:          cfg.RelayDefaultMaxRounds,
+		executionTimeoutMS: cfg.RelayDefaultExecutionTimeoutMS,
+	}, nil
 }
 
 func validateWorkflowTaskRuntime(definition *WorkflowDefinition, cfg bridgeconfig.TaskConfig) error {

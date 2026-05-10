@@ -12,6 +12,7 @@ import (
 // 注意：Session 非并发安全（包含 slice/map），同一个会话必须由上层保证串行访问。
 type Session struct {
 	ID                string                          `json:"id"`
+	Title             string                          `json:"title,omitempty"`
 	Messages          []llm.Message                   `json:"messages"`
 	CreatedAt         time.Time                       `json:"created_at"`
 	UpdatedAt         time.Time                       `json:"updated_at"`
@@ -23,6 +24,7 @@ type Session struct {
 	WindowTokenCount  int                             `json:"window_token_count,omitempty"`
 	ConversationState llm.ConversationState           `json:"conversation_state,omitempty"`
 	IterationRuntime  *IterationRuntime               `json:"iteration_runtime,omitempty"`
+	RelayRuntime      *RelayRuntime                   `json:"relay_runtime,omitempty"`
 	PendingQuestions  map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
 	HumanAnswers      map[string]string               `json:"human_answers,omitempty"`
 	DynamicToolLoads  map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`

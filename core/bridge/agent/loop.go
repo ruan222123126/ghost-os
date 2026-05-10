@@ -56,6 +56,8 @@ func (e *ErrAwaitingHuman) Error() string {
 type ErrIterationHandoff struct {
 	Did            string
 	Remaining      string
+	FailedAttempts []string
+	NextStep       string
 	Completed      bool
 	FinalMessage   string
 	FinalChangeLog string

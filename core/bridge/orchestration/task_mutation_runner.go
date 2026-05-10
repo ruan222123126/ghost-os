@@ -3,6 +3,8 @@ package orchestration
 import (
 	"errors"
 	"fmt"
+
+	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 func (r taskMutationRunner) Create(params taskCreateParams) (taskPayload, error) {
@@ -57,6 +59,7 @@ func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error)
 func cloneScheduledTask(task ScheduledTask) ScheduledTask {
 	cloned := task
 	cloned.RuntimeOverrides = cloneTaskRuntimeOverrides(task.RuntimeOverrides)
+	cloned.Relay = bridgeTasks.CloneTaskRelayConfig(task.Relay)
 	cloned.ActionParams = cloneTaskActionParams(task.ActionParams)
 	cloned.Workflow = cloneTaskWorkflow(task.Workflow)
 	cloned.Orchestration = cloneTaskOrchestration(task.Orchestration)

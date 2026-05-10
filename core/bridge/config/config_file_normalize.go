@@ -51,6 +51,7 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.ToolCallCompactOutputEnabled = cloneBoolPointer(cfg.ToolCallCompactOutputEnabled)
 	cfg.MemoryModeEnabled = cloneBoolPointer(cfg.MemoryModeEnabled)
 	cfg.MicrocompactEnabled = cloneBoolPointer(cfg.MicrocompactEnabled)
+	cfg.SessionTitleMode = cloneOptionalStringPointer(cfg.SessionTitleMode)
 	cfg.RSSFeedsPath = cloneOptionalStringPointer(cfg.RSSFeedsPath)
 	cfg.RSSInboxPath = cloneOptionalStringPointer(cfg.RSSInboxPath)
 	cfg.RSSBriefingsPath = cloneOptionalStringPointer(cfg.RSSBriefingsPath)

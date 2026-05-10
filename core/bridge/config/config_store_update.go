@@ -97,6 +97,15 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.TaskExecutionTimeoutMS != nil {
 		fileCfg.TaskExecutionTimeoutMS = cloneIntPointer(req.TaskExecutionTimeoutMS)
 	}
+	if req.RelayDefaultStopPolicy != nil {
+		fileCfg.RelayDefaultStopPolicy = cloneOptionalStringPointer(req.RelayDefaultStopPolicy)
+	}
+	if req.RelayDefaultMaxRounds != nil {
+		fileCfg.RelayDefaultMaxRounds = cloneIntPointer(req.RelayDefaultMaxRounds)
+	}
+	if req.RelayDefaultExecutionTimeoutMS != nil {
+		fileCfg.RelayDefaultExecutionTimeoutMS = cloneIntPointer(req.RelayDefaultExecutionTimeoutMS)
+	}
 	if req.LLMCompletionRetryCount != nil {
 		fileCfg.LLMCompletionRetryCount = cloneIntPointer(req.LLMCompletionRetryCount)
 	}
@@ -132,6 +141,9 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	}
 	if req.MicrocompactEnabled != nil {
 		fileCfg.MicrocompactEnabled = cloneBoolPointer(req.MicrocompactEnabled)
+	}
+	if req.SessionTitleMode != nil {
+		fileCfg.SessionTitleMode = cloneOptionalStringPointer(req.SessionTitleMode)
 	}
 	return nil
 }

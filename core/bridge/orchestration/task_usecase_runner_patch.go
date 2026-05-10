@@ -3,6 +3,8 @@ package orchestration
 import (
 	"strings"
 	"time"
+
+	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 func (r taskMutationRunner) applyUpdate(task *ScheduledTask, params taskUpdateParams) error {
@@ -29,6 +31,7 @@ func (r taskMutationRunner) applyUpdate(task *ScheduledTask, params taskUpdatePa
 func applyTaskPatch(task *ScheduledTask, params taskUpdateParams) (bool, error) {
 	applyTaskCoreTextFields(task, params)
 	applyTaskRuntimePatch(task, params.RuntimeOverrides)
+	applyTaskRelayPatch(task, params)
 	taskKind := applyTaskKindActionPatch(task, params)
 	applyTaskActionParamsPatch(task, params.ActionParams)
 	if err := applyTaskWorkflowPatch(task, taskKind, params.Workflow); err != nil {
@@ -39,6 +42,15 @@ func applyTaskPatch(task *ScheduledTask, params taskUpdateParams) (bool, error) 
 	}
 	applyTaskEnabledPatch(task, params.Enabled)
 	return applyTaskSchedulePatch(task, params.IntervalSeconds, params.CronExpr)
+}
+
+func applyTaskRelayPatch(task *ScheduledTask, params taskUpdateParams) {
+	if params.AgentMode != nil {
+		task.AgentMode = strings.TrimSpace(*params.AgentMode)
+	}
+	if params.Relay != nil {
+		task.Relay = bridgeTasks.CloneTaskRelayConfig(params.Relay)
+	}
 }
 
 func applyTaskCoreTextFields(task *ScheduledTask, params taskUpdateParams) {

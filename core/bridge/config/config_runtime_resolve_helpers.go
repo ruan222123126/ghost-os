@@ -172,10 +172,25 @@ func normalizeRuntimeConfig(runtime runtimeConfig) runtimeConfig {
 	if out.TaskExecutionTimeoutMS <= 0 {
 		out.TaskExecutionTimeoutMS = defaultTaskExecutionTimeoutMS
 	}
+	if strings.TrimSpace(out.RelayDefaultStopPolicy) == "" {
+		out.RelayDefaultStopPolicy = defaultRelayStopPolicy
+	} else {
+		out.RelayDefaultStopPolicy = strings.TrimSpace(out.RelayDefaultStopPolicy)
+	}
+	if out.RelayDefaultMaxRounds <= 0 {
+		out.RelayDefaultMaxRounds = defaultRelayMaxRounds
+	}
+	if out.RelayDefaultExecutionTimeoutMS < 0 {
+		out.RelayDefaultExecutionTimeoutMS = defaultRelayExecutionTimeoutMS
+	}
 	out.WebSearchTavilyURL = strings.TrimSpace(out.WebSearchTavilyURL)
 	out.WebSearchExaURL = strings.TrimSpace(out.WebSearchExaURL)
 	out.WebSearchTavilyAPIKey = strings.TrimSpace(out.WebSearchTavilyAPIKey)
 	out.WebSearchExaAPIKey = strings.TrimSpace(out.WebSearchExaAPIKey)
+	sessionTitleMode, err := normalizeSessionTitleMode(out.SessionTitleMode)
+	if err == nil {
+		out.SessionTitleMode = sessionTitleMode
+	}
 	return out
 }
 

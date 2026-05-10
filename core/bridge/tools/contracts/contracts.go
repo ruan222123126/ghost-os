@@ -59,6 +59,8 @@ type AwaitingHumanSignal struct {
 type IterationHandoffSignal struct {
 	Did            string
 	Remaining      string
+	FailedAttempts []string
+	NextStep       string
 	Completed      bool
 	FinalMessage   string
 	FinalChangeLog string

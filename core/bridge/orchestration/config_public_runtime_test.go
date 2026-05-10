@@ -18,6 +18,7 @@ func TestConfigResponseFromSnapshotIncludesRuntimeFlags(t *testing.T) {
 		ToolCallCompactOutputEnabled: true,
 		MemoryModeEnabled:            true,
 		MicrocompactEnabled:          true,
+		SessionTitleMode:             bridgeconfig.SessionTitleModeFirstMessage,
 		WebSearchTavilyURL:           "https://proxy.example/tavily",
 		WebSearchExaURL:              "https://proxy.example/exa",
 		WebSearchTavilyAPIKeySet:     true,
@@ -58,6 +59,9 @@ func TestConfigResponseFromSnapshotIncludesRuntimeFlags(t *testing.T) {
 	}
 	if !response.MicrocompactEnabled {
 		t.Fatal("expected microcompact_enabled to be true")
+	}
+	if response.SessionTitleMode != bridgeconfig.SessionTitleModeFirstMessage {
+		t.Fatalf("unexpected session_title_mode: got %q", response.SessionTitleMode)
 	}
 	if response.WebSearchTavilyURL != "https://proxy.example/tavily" {
 		t.Fatalf("unexpected web_search_tavily_url: got %q want %q", response.WebSearchTavilyURL, "https://proxy.example/tavily")

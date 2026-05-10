@@ -20,7 +20,8 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 		"assistant_markdown_enabled": false,
 		"tool_call_compact_output_enabled": true,
 		"memory_mode_enabled": true,
-		"microcompact_enabled": true
+		"microcompact_enabled": true,
+		"session_title_mode": "first_message"
 	}`)
 
 	result, err := service.dispatchAction(
@@ -79,6 +80,9 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 	if !snapshot.MicrocompactEnabled {
 		t.Fatal("expected microcompact_enabled to be true in snapshot")
 	}
+	if snapshot.SessionTitleMode != "first_message" {
+		t.Fatalf("expected session_title_mode in snapshot, got %q", snapshot.SessionTitleMode)
+	}
 
 	cfg, err := service.configStore.Config()
 	if err != nil {
@@ -122,6 +126,9 @@ func TestConfigUpdatePropagatesRuntimeFlagsThroughOrchestration(t *testing.T) {
 	}
 	if !cfg.MicrocompactEnabled {
 		t.Fatal("expected microcompact_enabled to be true in runtime config")
+	}
+	if cfg.SessionTitleMode != "first_message" {
+		t.Fatalf("expected session_title_mode in runtime config, got %q", cfg.SessionTitleMode)
 	}
 	scheduler := service.taskScheduler()
 	if scheduler == nil {

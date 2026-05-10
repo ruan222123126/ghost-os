@@ -24,49 +24,57 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 		return runtimeConfig{}, err
 	}
 	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:                 env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
-		APIKey:                       env.defaultValue("GHOST_API_KEY", ""),
-		BaseURL:                      env.defaultValue("GHOST_BASE_URL", ""),
-		Model:                        env.defaultValue("GHOST_MODEL", ""),
-		ChatPath:                     env.defaultValue("GHOST_CHAT_PATH", ""),
-		ResponseOptions:              settings.ResponseOptions,
-		CodexStatelessRetryEnabled:   settings.CodexStatelessRetryEnabled,
-		NativePersistent:             settings.NativePersistent,
-		ProjectRoot:                  env.defaultValue("GHOST_PROJECT_ROOT", ""),
-		MaxTurns:                     settings.MaxTurns,
-		TaskExecutionTimeoutMS:       settings.TaskExecutionTimeoutMS,
-		LLMCompletionRetryCount:      settings.LLMCompletionRetryCount,
-		LLMCompletionRetryIntervalMS: settings.LLMCompletionRetryIntervalMS,
-		ModelSelectionEnabled:        !settings.AllowlistOnly,
-		WebSearchTavilyURL:           settings.WebSearch.TavilyURL,
-		WebSearchExaURL:              settings.WebSearch.ExaURL,
-		WebSearchTavilyAPIKey:        settings.WebSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:           settings.WebSearch.ExaAPIKey,
-		SessionHumanLogFullEnabled:   settings.SessionHumanLogFullEnabled,
-		SessionSystemPromptVisible:   settings.SessionSystemPromptVisible,
-		AssistantMarkdownEnabled:     settings.AssistantMarkdownEnabled,
-		ToolCallCompactOutputEnabled: settings.ToolCallCompactOutputEnabled,
-		MemoryModeEnabled:            settings.MemoryModeEnabled,
-		MicrocompactEnabled:          settings.MicrocompactEnabled,
+		ProviderName:                   env.defaultValue("GHOST_PROVIDER", string(defaultProvider)),
+		APIKey:                         env.defaultValue("GHOST_API_KEY", ""),
+		BaseURL:                        env.defaultValue("GHOST_BASE_URL", ""),
+		Model:                          env.defaultValue("GHOST_MODEL", ""),
+		ChatPath:                       env.defaultValue("GHOST_CHAT_PATH", ""),
+		ResponseOptions:                settings.ResponseOptions,
+		CodexStatelessRetryEnabled:     settings.CodexStatelessRetryEnabled,
+		NativePersistent:               settings.NativePersistent,
+		ProjectRoot:                    env.defaultValue("GHOST_PROJECT_ROOT", ""),
+		MaxTurns:                       settings.MaxTurns,
+		TaskExecutionTimeoutMS:         settings.TaskExecutionTimeoutMS,
+		RelayDefaultStopPolicy:         settings.RelayDefaultStopPolicy,
+		RelayDefaultMaxRounds:          settings.RelayDefaultMaxRounds,
+		RelayDefaultExecutionTimeoutMS: settings.RelayDefaultExecutionTimeoutMS,
+		LLMCompletionRetryCount:        settings.LLMCompletionRetryCount,
+		LLMCompletionRetryIntervalMS:   settings.LLMCompletionRetryIntervalMS,
+		ModelSelectionEnabled:          !settings.AllowlistOnly,
+		WebSearchTavilyURL:             settings.WebSearch.TavilyURL,
+		WebSearchExaURL:                settings.WebSearch.ExaURL,
+		WebSearchTavilyAPIKey:          settings.WebSearch.TavilyAPIKey,
+		WebSearchExaAPIKey:             settings.WebSearch.ExaAPIKey,
+		SessionHumanLogFullEnabled:     settings.SessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:     settings.SessionSystemPromptVisible,
+		AssistantMarkdownEnabled:       settings.AssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled:   settings.ToolCallCompactOutputEnabled,
+		MemoryModeEnabled:              settings.MemoryModeEnabled,
+		MicrocompactEnabled:            settings.MicrocompactEnabled,
+		SessionTitleMode:               settings.SessionTitleMode,
 	}), nil
 }
 
 type runtimeFallbackSettings struct {
-	WebSearch                    webSearchSettings
-	ResponseOptions              llm.ResponseOptions
-	CodexStatelessRetryEnabled   bool
-	AllowlistOnly                bool
-	NativePersistent             bool
-	MaxTurns                     int
-	TaskExecutionTimeoutMS       int
-	LLMCompletionRetryCount      int
-	LLMCompletionRetryIntervalMS int
-	SessionHumanLogFullEnabled   bool
-	SessionSystemPromptVisible   bool
-	AssistantMarkdownEnabled     bool
-	ToolCallCompactOutputEnabled bool
-	MemoryModeEnabled            bool
-	MicrocompactEnabled          bool
+	WebSearch                      webSearchSettings
+	ResponseOptions                llm.ResponseOptions
+	CodexStatelessRetryEnabled     bool
+	AllowlistOnly                  bool
+	NativePersistent               bool
+	MaxTurns                       int
+	TaskExecutionTimeoutMS         int
+	RelayDefaultStopPolicy         string
+	RelayDefaultMaxRounds          int
+	RelayDefaultExecutionTimeoutMS int
+	LLMCompletionRetryCount        int
+	LLMCompletionRetryIntervalMS   int
+	SessionHumanLogFullEnabled     bool
+	SessionSystemPromptVisible     bool
+	AssistantMarkdownEnabled       bool
+	ToolCallCompactOutputEnabled   bool
+	MemoryModeEnabled              bool
+	MicrocompactEnabled            bool
+	SessionTitleMode               string
 }
 
 func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, error) {
@@ -93,6 +101,10 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 	if err != nil {
 		return runtimeFallbackSettings{}, err
 	}
+	relayDefaults, err := defaultRelaySettings()
+	if err != nil {
+		return runtimeFallbackSettings{}, err
+	}
 	retryCount, err := parseNonNegativeIntValue(
 		env.value("GHOST_LLM_COMPLETION_RETRY_COUNT"),
 		"GHOST_LLM_COMPLETION_RETRY_COUNT",
@@ -110,21 +122,25 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 		return runtimeFallbackSettings{}, err
 	}
 	return runtimeFallbackSettings{
-		WebSearch:                    webSearchSettingsFromEnv(env),
-		ResponseOptions:              responseOptions,
-		CodexStatelessRetryEnabled:   codexRetryEnabled,
-		AllowlistOnly:                allowlistOnly,
-		NativePersistent:             nativePersistent,
-		MaxTurns:                     maxTurns,
-		TaskExecutionTimeoutMS:       taskExecutionTimeoutMS,
-		LLMCompletionRetryCount:      retryCount,
-		LLMCompletionRetryIntervalMS: retryIntervalMS,
-		SessionHumanLogFullEnabled:   sessionHumanLogFullEnabled,
-		SessionSystemPromptVisible:   defaultSessionSystemPromptVisible,
-		AssistantMarkdownEnabled:     defaultAssistantMarkdownEnabled,
-		ToolCallCompactOutputEnabled: defaultToolCallCompactOutputEnabled,
-		MemoryModeEnabled:            defaultMemoryModeEnabled,
-		MicrocompactEnabled:          defaultMicrocompactEnabled,
+		WebSearch:                      webSearchSettingsFromEnv(env),
+		ResponseOptions:                responseOptions,
+		CodexStatelessRetryEnabled:     codexRetryEnabled,
+		AllowlistOnly:                  allowlistOnly,
+		NativePersistent:               nativePersistent,
+		MaxTurns:                       maxTurns,
+		TaskExecutionTimeoutMS:         taskExecutionTimeoutMS,
+		RelayDefaultStopPolicy:         relayDefaults.stopPolicy,
+		RelayDefaultMaxRounds:          relayDefaults.maxRounds,
+		RelayDefaultExecutionTimeoutMS: relayDefaults.executionTimeoutMS,
+		LLMCompletionRetryCount:        retryCount,
+		LLMCompletionRetryIntervalMS:   retryIntervalMS,
+		SessionHumanLogFullEnabled:     sessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:     defaultSessionSystemPromptVisible,
+		AssistantMarkdownEnabled:       defaultAssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled:   defaultToolCallCompactOutputEnabled,
+		MemoryModeEnabled:              defaultMemoryModeEnabled,
+		MicrocompactEnabled:            defaultMicrocompactEnabled,
+		SessionTitleMode:               defaultSessionTitleMode,
 	}, nil
 }
 
@@ -180,21 +196,25 @@ func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtime
 }
 
 type runtimeFileSettings struct {
-	WebSearch                    webSearchSettings
-	ResponseOptions              llm.ResponseOptions
-	Providers                    []providerConfig
-	CodexStatelessRetryEnabled   bool
-	AllowlistOnly                bool
-	MaxTurns                     int
-	TaskExecutionTimeoutMS       int
-	LLMCompletionRetryCount      int
-	LLMCompletionRetryIntervalMS int
-	SessionHumanLogFullEnabled   bool
-	SessionSystemPromptVisible   bool
-	AssistantMarkdownEnabled     bool
-	ToolCallCompactOutputEnabled bool
-	MemoryModeEnabled            bool
-	MicrocompactEnabled          bool
+	WebSearch                      webSearchSettings
+	ResponseOptions                llm.ResponseOptions
+	Providers                      []providerConfig
+	CodexStatelessRetryEnabled     bool
+	AllowlistOnly                  bool
+	MaxTurns                       int
+	TaskExecutionTimeoutMS         int
+	RelayDefaultStopPolicy         string
+	RelayDefaultMaxRounds          int
+	RelayDefaultExecutionTimeoutMS int
+	LLMCompletionRetryCount        int
+	LLMCompletionRetryIntervalMS   int
+	SessionHumanLogFullEnabled     bool
+	SessionSystemPromptVisible     bool
+	AssistantMarkdownEnabled       bool
+	ToolCallCompactOutputEnabled   bool
+	MemoryModeEnabled              bool
+	MicrocompactEnabled            bool
+	SessionTitleMode               string
 }
 
 type runtimeConfigBuildInput struct {
@@ -216,11 +236,19 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 	if err != nil {
 		return runtimeFileSettings{}, err
 	}
+	relayDefaults, err := resolveRuntimeRelayDefaults(fileCfg, fallback)
+	if err != nil {
+		return runtimeFileSettings{}, err
+	}
 	retryCount, err := resolveRuntimeLLMCompletionRetryCount(fileCfg, fallback)
 	if err != nil {
 		return runtimeFileSettings{}, err
 	}
 	retryIntervalMS, err := resolveRuntimeLLMCompletionRetryIntervalMS(fileCfg, fallback)
+	if err != nil {
+		return runtimeFileSettings{}, err
+	}
+	sessionTitleMode, err := resolveRuntimeSessionTitleMode(fileCfg, fallback)
 	if err != nil {
 		return runtimeFileSettings{}, err
 	}
@@ -231,89 +259,23 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 			TavilyAPIKey: fallback.WebSearchTavilyAPIKey,
 			ExaAPIKey:    fallback.WebSearchExaAPIKey,
 		}),
-		ResponseOptions:              responseOptions,
-		Providers:                    normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)),
-		CodexStatelessRetryEnabled:   resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
-		AllowlistOnly:                resolveRuntimeAllowlistOnly(fileCfg, fallback),
-		MaxTurns:                     maxTurns,
-		TaskExecutionTimeoutMS:       taskExecutionTimeoutMS,
-		LLMCompletionRetryCount:      retryCount,
-		LLMCompletionRetryIntervalMS: retryIntervalMS,
-		SessionHumanLogFullEnabled:   resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
-		SessionSystemPromptVisible:   resolveRuntimeSessionSystemPromptVisible(fileCfg, fallback),
-		AssistantMarkdownEnabled:     resolveRuntimeAssistantMarkdownEnabled(fileCfg, fallback),
-		ToolCallCompactOutputEnabled: resolveRuntimeToolCallCompactOutputEnabled(fileCfg, fallback),
-		MemoryModeEnabled:            resolveRuntimeMemoryModeEnabled(fileCfg, fallback),
-		MicrocompactEnabled:          resolveRuntimeMicrocompactEnabled(fileCfg, fallback),
+		ResponseOptions:                responseOptions,
+		Providers:                      normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)),
+		CodexStatelessRetryEnabled:     resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
+		AllowlistOnly:                  resolveRuntimeAllowlistOnly(fileCfg, fallback),
+		MaxTurns:                       maxTurns,
+		TaskExecutionTimeoutMS:         taskExecutionTimeoutMS,
+		RelayDefaultStopPolicy:         relayDefaults.stopPolicy,
+		RelayDefaultMaxRounds:          relayDefaults.maxRounds,
+		RelayDefaultExecutionTimeoutMS: relayDefaults.executionTimeoutMS,
+		LLMCompletionRetryCount:        retryCount,
+		LLMCompletionRetryIntervalMS:   retryIntervalMS,
+		SessionHumanLogFullEnabled:     resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
+		SessionSystemPromptVisible:     resolveRuntimeSessionSystemPromptVisible(fileCfg, fallback),
+		AssistantMarkdownEnabled:       resolveRuntimeAssistantMarkdownEnabled(fileCfg, fallback),
+		ToolCallCompactOutputEnabled:   resolveRuntimeToolCallCompactOutputEnabled(fileCfg, fallback),
+		MemoryModeEnabled:              resolveRuntimeMemoryModeEnabled(fileCfg, fallback),
+		MicrocompactEnabled:            resolveRuntimeMicrocompactEnabled(fileCfg, fallback),
+		SessionTitleMode:               sessionTitleMode,
 	}, nil
-}
-
-func runtimeConfigWithProviders(input runtimeConfigBuildInput, providers []providerConfig) runtimeConfig {
-	active := resolveActiveProvider(providers, stringValue(input.FileCfg.ActiveProvider), input.Fallback)
-	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:                 active.Name,
-		Provider:                     active.Type.Normalized(),
-		APIKey:                       resolveRuntimeAPIKey(active, input.Fallback.APIKey),
-		BaseURL:                      resolveRuntimeBaseURL(active.BaseURL, input.Fallback.BaseURL),
-		Model:                        resolveRuntimeModel(input.FileCfg, input.Fallback),
-		ChatPath:                     resolveRuntimeChatPath(input.FileCfg, input.Fallback),
-		ResponseOptions:              input.Settings.ResponseOptions,
-		CodexStatelessRetryEnabled:   input.Settings.CodexStatelessRetryEnabled,
-		NativePersistent:             resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
-		ProjectRoot:                  resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
-		MaxTurns:                     input.Settings.MaxTurns,
-		TaskExecutionTimeoutMS:       input.Settings.TaskExecutionTimeoutMS,
-		LLMCompletionRetryCount:      input.Settings.LLMCompletionRetryCount,
-		LLMCompletionRetryIntervalMS: input.Settings.LLMCompletionRetryIntervalMS,
-		ModelSelectionEnabled:        !input.Settings.AllowlistOnly,
-		ContextWindowTokens:          active.ContextWindowTokens,
-		ResponseReserveTokens:        active.ResponseReserveTokens,
-		ModelContextWindowTokens:     cloneModelTokenOverrides(active.ModelContextWindowTokens),
-		ModelResponseReserveTokens:   cloneModelTokenOverrides(active.ModelResponseReserveTokens),
-		WebSearchTavilyURL:           input.Settings.WebSearch.TavilyURL,
-		WebSearchExaURL:              input.Settings.WebSearch.ExaURL,
-		WebSearchTavilyAPIKey:        input.Settings.WebSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:           input.Settings.WebSearch.ExaAPIKey,
-		SessionHumanLogFullEnabled:   input.Settings.SessionHumanLogFullEnabled,
-		SessionSystemPromptVisible:   input.Settings.SessionSystemPromptVisible,
-		AssistantMarkdownEnabled:     input.Settings.AssistantMarkdownEnabled,
-		ToolCallCompactOutputEnabled: input.Settings.ToolCallCompactOutputEnabled,
-		MemoryModeEnabled:            input.Settings.MemoryModeEnabled,
-		MicrocompactEnabled:          input.Settings.MicrocompactEnabled,
-	})
-}
-
-func runtimeConfigWithoutProviders(input runtimeConfigBuildInput) runtimeConfig {
-	providerName := resolveRuntimeProviderName(input.Fallback)
-	return normalizeRuntimeConfig(runtimeConfig{
-		ProviderName:                 providerName,
-		Provider:                     inferProviderType(providerName, input.Fallback.BaseURL, resolveRuntimeModel(input.FileCfg, input.Fallback)),
-		APIKey:                       input.Fallback.APIKey,
-		BaseURL:                      input.Fallback.BaseURL,
-		Model:                        resolveRuntimeModel(input.FileCfg, input.Fallback),
-		ChatPath:                     resolveRuntimeChatPath(input.FileCfg, input.Fallback),
-		ResponseOptions:              input.Settings.ResponseOptions,
-		CodexStatelessRetryEnabled:   input.Settings.CodexStatelessRetryEnabled,
-		NativePersistent:             resolveRuntimeNativePersistent(input.FileCfg, input.Fallback),
-		ProjectRoot:                  resolveRuntimeProjectRoot(input.FileCfg, input.Fallback),
-		MaxTurns:                     input.Settings.MaxTurns,
-		TaskExecutionTimeoutMS:       input.Settings.TaskExecutionTimeoutMS,
-		LLMCompletionRetryCount:      input.Settings.LLMCompletionRetryCount,
-		LLMCompletionRetryIntervalMS: input.Settings.LLMCompletionRetryIntervalMS,
-		ModelSelectionEnabled:        !input.Settings.AllowlistOnly,
-		ContextWindowTokens:          input.Fallback.ContextWindowTokens,
-		ResponseReserveTokens:        input.Fallback.ResponseReserveTokens,
-		ModelContextWindowTokens:     cloneModelTokenOverrides(input.Fallback.ModelContextWindowTokens),
-		ModelResponseReserveTokens:   cloneModelTokenOverrides(input.Fallback.ModelResponseReserveTokens),
-		WebSearchTavilyURL:           input.Settings.WebSearch.TavilyURL,
-		WebSearchExaURL:              input.Settings.WebSearch.ExaURL,
-		WebSearchTavilyAPIKey:        input.Settings.WebSearch.TavilyAPIKey,
-		WebSearchExaAPIKey:           input.Settings.WebSearch.ExaAPIKey,
-		SessionHumanLogFullEnabled:   input.Settings.SessionHumanLogFullEnabled,
-		SessionSystemPromptVisible:   input.Settings.SessionSystemPromptVisible,
-		AssistantMarkdownEnabled:     input.Settings.AssistantMarkdownEnabled,
-		ToolCallCompactOutputEnabled: input.Settings.ToolCallCompactOutputEnabled,
-		MemoryModeEnabled:            input.Settings.MemoryModeEnabled,
-		MicrocompactEnabled:          input.Settings.MicrocompactEnabled,
-	})
 }

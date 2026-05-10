@@ -109,6 +109,13 @@ func (s *TaskScheduler) taskExecutionTimeout() time.Duration {
 	return normalizeExecutionTimeout(timeout)
 }
 
+func (s *TaskScheduler) taskExecutionTimeoutForTask(task ScheduledTask) time.Duration {
+	if IsRelayAgentTask(task) && task.Relay != nil && task.Relay.ExecutionTimeoutMS != nil {
+		return time.Duration(*task.Relay.ExecutionTimeoutMS) * time.Millisecond
+	}
+	return s.taskExecutionTimeout()
+}
+
 func (s *TaskScheduler) ExecutionTimeout() time.Duration {
 	return s.taskExecutionTimeout()
 }

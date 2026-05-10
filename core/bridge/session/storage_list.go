@@ -29,7 +29,7 @@ func (s *Store) ListMetadata() ([]SessionMetadata, error) {
 
 	s.importLegacySessionsForListingLocked()
 	rows, err := s.db.Query(`
-SELECT id, created_at, updated_at, message_count, token_count
+SELECT id, created_at, updated_at, message_count, token_count, state_json
 FROM sessions
 ORDER BY id ASC`)
 	if err != nil {

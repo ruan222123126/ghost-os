@@ -3,6 +3,7 @@ package session
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"ghost-os/bridge/llm"
@@ -11,8 +12,10 @@ import (
 const sessionTimeLayout = time.RFC3339Nano
 
 type sessionStoredState struct {
+	Title             string                          `json:"title,omitempty"`
 	ConversationState llm.ConversationState           `json:"conversation_state,omitempty"`
 	IterationRuntime  *IterationRuntime               `json:"iteration_runtime,omitempty"`
+	RelayRuntime      *RelayRuntime                   `json:"relay_runtime,omitempty"`
 	PendingQuestions  map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
 	HumanAnswers      map[string]string               `json:"human_answers,omitempty"`
 	DynamicToolLoads  map[string]DynamicToolLoad      `json:"dynamic_tool_loads,omitempty"`
@@ -36,8 +39,10 @@ type sessionRecord struct {
 
 func encodeSessionState(sess *Session) (string, error) {
 	state := sessionStoredState{
+		Title:             strings.TrimSpace(sess.Title),
 		ConversationState: sess.ConversationState,
 		IterationRuntime:  cloneIterationRuntime(sess.IterationRuntime),
+		RelayRuntime:      cloneRelayRuntime(sess.RelayRuntime),
 		PendingQuestions:  clonePendingQuestions(sess.PendingQuestions),
 		HumanAnswers:      cloneHumanAnswers(sess.HumanAnswers),
 		DynamicToolLoads:  cloneDynamicToolLoads(sess.DynamicToolLoads),
@@ -45,6 +50,10 @@ func encodeSessionState(sess *Session) (string, error) {
 		AssistantDraft:    cloneAssistantDraft(sess.AssistantDraft),
 		TurnDraft:         cloneTurnDraft(sess.TurnDraft),
 	}
+	return encodeSessionRecordState(state)
+}
+
+func encodeSessionRecordState(state sessionStoredState) (string, error) {
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		return "", fmt.Errorf("encode session state: %w", err)
@@ -67,6 +76,7 @@ func decodeSessionState(raw string) (sessionStoredState, error) {
 func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 	sess := &Session{
 		ID:                record.ID,
+		Title:             strings.TrimSpace(record.State.Title),
 		Messages:          llm.CloneMessages(messages),
 		CreatedAt:         record.CreatedAt,
 		UpdatedAt:         record.UpdatedAt,
@@ -78,6 +88,7 @@ func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 		WindowTokenCount:  record.WindowTokenCount,
 		ConversationState: record.State.ConversationState,
 		IterationRuntime:  cloneIterationRuntime(record.State.IterationRuntime),
+		RelayRuntime:      cloneRelayRuntime(record.State.RelayRuntime),
 		PendingQuestions:  clonePendingQuestions(record.State.PendingQuestions),
 		HumanAnswers:      cloneHumanAnswers(record.State.HumanAnswers),
 		DynamicToolLoads:  cloneDynamicToolLoads(record.State.DynamicToolLoads),
@@ -87,6 +98,17 @@ func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 	}
 	sess.setPersistedSnapshot()
 	return sess
+}
+
+func mergeExistingTitle(sess *Session, existing *sessionRecord) {
+	if sess == nil || existing == nil {
+		return
+	}
+	if strings.TrimSpace(sess.Title) != "" {
+		sess.Title = strings.TrimSpace(sess.Title)
+		return
+	}
+	sess.Title = strings.TrimSpace(existing.State.Title)
 }
 
 func formatSessionTime(value time.Time) string {

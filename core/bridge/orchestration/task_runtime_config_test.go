@@ -70,3 +70,38 @@ func TestWorkflowTaskCreateRejectsInvalidAgentRuntimeOverrides(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestRelayTaskCreateAppliesConfiguredDefaults(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+	_, err := service.executeConfigUpdateAction(configUpdateRequest{
+		RelayDefaultStopPolicy:         stringPointer(taskRelayStopPolicyMaxRounds),
+		RelayDefaultMaxRounds:          intPointer(7),
+		RelayDefaultExecutionTimeoutMs: intPointer(0),
+	}, "trace-relay-defaults-config")
+	if err != nil {
+		t.Fatalf("config update failed: %v", err)
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindAgentMessage,
+		Message:         "run relay task",
+		AgentMode:       taskAgentModeRelay,
+		IntervalSeconds: 60,
+	}, "trace-relay-defaults-task")
+	if err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+	if code != http.StatusCreated {
+		t.Fatalf("unexpected status code: got %d want %d", code, http.StatusCreated)
+	}
+	created := createdRaw.(taskPayload)
+	if created.Relay == nil {
+		t.Fatal("expected relay defaults")
+	}
+	if created.Relay.StopPolicy != taskRelayStopPolicyMaxRounds || created.Relay.MaxRounds != 7 {
+		t.Fatalf("unexpected relay defaults: %+v", created.Relay)
+	}
+	if created.Relay.ExecutionTimeoutMS == nil || *created.Relay.ExecutionTimeoutMS != 0 {
+		t.Fatalf("unexpected relay execution timeout: %+v", created.Relay.ExecutionTimeoutMS)
+	}
+}

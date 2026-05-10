@@ -243,7 +243,8 @@ func (s *TaskScheduler) runTaskLoop(
 
 func (s *TaskScheduler) fireTask(reg *taskRegistration, scheduledAt time.Time) {
 	runTraceID := s.traceID()
-	task, runCtx, skipped, reason := reg.beginRun(reg.snapshot(), s.taskExecutionTimeout())
+	taskSnapshot := reg.snapshot()
+	task, runCtx, skipped, reason := reg.beginRun(taskSnapshot, s.taskExecutionTimeoutForTask(taskSnapshot))
 	if skipped {
 		if reason == skipRunReasonRegistrationRetired {
 			return

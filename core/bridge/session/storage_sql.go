@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"ghost-os/bridge/llm"
@@ -229,8 +230,9 @@ func scanSessionMetadata(scanner interface{ Scan(...any) error }) (SessionMetada
 		item      SessionMetadata
 		createdAt string
 		updatedAt string
+		stateJSON string
 	)
-	if err := scanner.Scan(&item.ID, &createdAt, &updatedAt, &item.MessageCount, &item.TokenCount); err != nil {
+	if err := scanner.Scan(&item.ID, &createdAt, &updatedAt, &item.MessageCount, &item.TokenCount, &stateJSON); err != nil {
 		return SessionMetadata{}, fmt.Errorf("scan session metadata: %w", err)
 	}
 
@@ -243,5 +245,10 @@ func scanSessionMetadata(scanner interface{ Scan(...any) error }) (SessionMetada
 	if err != nil {
 		return SessionMetadata{}, err
 	}
+	state, err := decodeSessionState(stateJSON)
+	if err != nil {
+		return SessionMetadata{}, err
+	}
+	item.Title = strings.TrimSpace(state.Title)
 	return item, nil
 }

@@ -33,6 +33,7 @@ func normalizeLoadedSession(session *Session, expectedID string, now time.Time) 
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = now
 	}
+	session.Title = strings.TrimSpace(session.Title)
 	if session.UpdatedAt.IsZero() {
 		session.UpdatedAt = session.CreatedAt
 	}

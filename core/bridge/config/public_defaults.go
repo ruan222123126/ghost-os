@@ -21,6 +21,9 @@ const (
 	DefaultAnthropicVersion             = defaultAnthropicVersion
 	DefaultAnthropicMaxTokens           = defaultAnthropicMaxTokens
 	DefaultProMaxIterations             = defaultProMaxIterations
+	DefaultRelayStopPolicy              = defaultRelayStopPolicy
+	DefaultRelayMaxRounds               = defaultRelayMaxRounds
+	DefaultRelayExecutionTimeoutMS      = defaultRelayExecutionTimeoutMS
 	DefaultMaxTurns                     = defaultMaxTurns
 	DefaultLLMCompletionRetryCount      = defaultLLMCompletionRetryCount
 	DefaultLLMCompletionRetryIntervalMS = defaultLLMCompletionRetryIntervalMS
@@ -37,6 +40,7 @@ const (
 	DefaultToolCallCompactOutputEnabled = defaultToolCallCompactOutputEnabled
 	DefaultMemoryModeEnabled            = defaultMemoryModeEnabled
 	DefaultMicrocompactEnabled          = defaultMicrocompactEnabled
+	DefaultSessionTitleMode             = defaultSessionTitleMode
 )
 
 var (

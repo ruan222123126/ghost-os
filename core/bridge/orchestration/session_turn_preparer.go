@@ -187,9 +187,11 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 		return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sessionID), err: err}
 	}
 	if created {
+		titleTask := p.prepareCreatedSessionTitleTask(sess, deps, input)
 		if err := p.persistCreatedSession(sess); err != nil {
 			return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
 		}
+		startSessionTitleTask(titleTask)
 	}
 	if isResumeLikeInput(llm.Message{Role: llm.RoleUser, Text: input.rawUserMessage}) && !hasAnsweredHumanResponse(sess) {
 		return nil, &sessionTurnSetupError{

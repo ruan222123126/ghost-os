@@ -14,6 +14,7 @@ const (
 	taskScheduleTypeCron         = bridgeTasks.ScheduleTypeCron
 	defaultTaskRunLogRetention   = bridgeTasks.DefaultRunLogRetention
 	taskRunStatusSuccess         = bridgeTasks.RunStatusSuccess
+	taskRunStatusIncomplete      = bridgeTasks.RunStatusIncomplete
 	taskRunStatusCancelled       = bridgeTasks.RunStatusCancelled
 	taskRunStatusError           = bridgeTasks.RunStatusError
 	taskRunStatusSkipped         = bridgeTasks.RunStatusSkipped
@@ -23,6 +24,10 @@ const (
 	taskKindSystemAction         = bridgeTasks.KindSystemAction
 	taskKindWorkflow             = bridgeTasks.KindWorkflow
 	taskKindOrchestration        = bridgeTasks.KindOrchestration
+	taskAgentModeSingle          = bridgeTasks.AgentModeSingle
+	taskAgentModeRelay           = bridgeTasks.AgentModeRelay
+	taskRelayStopPolicyAIDecides = bridgeTasks.RelayStopPolicyAIDecides
+	taskRelayStopPolicyMaxRounds = bridgeTasks.RelayStopPolicyMaxRounds
 	orchestrationNodeTypeStart   = bridgeTasks.OrchestrationNodeTypeStart
 	orchestrationNodeTypeGroup   = bridgeTasks.OrchestrationNodeTypeGroup
 	orchestrationNodeTypeAgent   = bridgeTasks.OrchestrationNodeTypeAgent
@@ -50,6 +55,7 @@ var (
 
 type ScheduledTask = bridgeTasks.ScheduledTask
 type TaskRuntimeOverrides = bridgeTasks.TaskRuntimeOverrides
+type TaskRelayConfig = bridgeTasks.TaskRelayConfig
 type WorkflowDefinition = bridgeTasks.WorkflowDefinition
 type WorkflowNode = bridgeTasks.WorkflowNode
 type WorkflowStartNode = bridgeTasks.WorkflowStartNode
@@ -147,6 +153,9 @@ func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, tr
 
 func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
 	startedAt := time.Now().UTC()
+	if task.AgentMode == taskAgentModeRelay {
+		return a.executeRelayAgentTask(ctx, task, traceID, startedAt)
+	}
 	result := a.runAgentAction(ctx, agentParams{
 		Message:   task.Message,
 		SessionID: task.SessionID,
@@ -155,6 +164,41 @@ func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task Schedule
 		buildAgentMessageNodeResult(task, result, startedAt, time.Now().UTC()),
 	}
 	return result
+}
+
+func (a taskExecutorAdapter) executeRelayAgentTask(
+	ctx context.Context,
+	task ScheduledTask,
+	traceID string,
+	startedAt time.Time,
+) bridgeTasks.ExecutionResult {
+	if a.service == nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "task executor service is not configured"}
+	}
+	if task.Relay == nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: "relay config is required"}
+	}
+	result, err := newRelayModeRunner(a.service).ExecuteTask(ctx, task, traceID)
+	execution := relayTaskExecutionResult(result, err)
+	execution.NodeResults = []bridgeTasks.RunNodeResult{
+		buildRelayAgentNodeResult(task, execution, result, startedAt, time.Now().UTC()),
+	}
+	return execution
+}
+
+func relayTaskExecutionResult(result relayModeResult, err error) bridgeTasks.ExecutionResult {
+	if err != nil {
+		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
+	}
+	status := taskRunStatusSuccess
+	if result.StoppedBy == relayModeStopMaxRounds {
+		status = taskRunStatusIncomplete
+	}
+	return bridgeTasks.ExecutionResult{
+		Status:          status,
+		SessionIDOutput: strings.TrimSpace(result.SessionID),
+		ResponsePreview: truncateRunes(strings.TrimSpace(result.Message), maxTaskResponsePreviewRunes),
+	}
 }
 
 func (a taskExecutorAdapter) runAgentAction(
@@ -205,6 +249,10 @@ func buildAgentMessageNodeResult(
 	input := map[string]any{
 		"message":    task.Message,
 		"session_id": strings.TrimSpace(task.SessionID),
+		"agent_mode": strings.TrimSpace(task.AgentMode),
+	}
+	if task.Relay != nil {
+		input["relay"] = bridgeTasks.CloneTaskRelayConfig(task.Relay)
 	}
 	runtimePayload := map[string]any{}
 	if runtimeOverrides := cloneTaskRuntimeOverrides(task.RuntimeOverrides); runtimeOverrides != nil {

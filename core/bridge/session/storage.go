@@ -39,6 +39,7 @@ type Store struct {
 // SessionMetadata 表示列表场景需要的轻量会话信息。
 type SessionMetadata struct {
 	ID           string
+	Title        string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	MessageCount int
@@ -188,6 +189,7 @@ func saveSessionTx(tx *sql.Tx, sessionID string, sess *Session) error {
 	if err != nil {
 		return err
 	}
+	mergeExistingTitle(sess, record)
 
 	now := time.Now().UTC()
 	if sess.CreatedAt.IsZero() {

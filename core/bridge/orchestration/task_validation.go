@@ -3,6 +3,8 @@ package orchestration
 import (
 	"fmt"
 	"strings"
+
+	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 func validateTaskDefinition(task *ScheduledTask) error {
@@ -30,6 +32,8 @@ func normalizeTaskDefinition(task *ScheduledTask) {
 	task.Message = strings.TrimSpace(task.Message)
 	task.SessionID = strings.TrimSpace(task.SessionID)
 	task.RuntimeOverrides = cloneTaskRuntimeOverrides(task.RuntimeOverrides)
+	task.AgentMode = bridgeTasks.NormalizeAgentMode(task.AgentMode)
+	task.Relay = bridgeTasks.CloneTaskRelayConfig(task.Relay)
 	task.TaskKind = normalizeTaskKind(task.TaskKind)
 	task.Action = strings.TrimSpace(task.Action)
 	task.ActionParams = cloneTaskActionParams(task.ActionParams)
@@ -43,11 +47,49 @@ func validateAgentTaskDefinition(task *ScheduledTask) error {
 	}
 	task.Name = ""
 	task.Orchestration = nil
+	if err := validateAgentTaskMode(task); err != nil {
+		return err
+	}
 	if task.Workflow != nil {
 		return fmt.Errorf("%w: agent_message does not allow workflow", ErrInvalidTaskConfig)
 	}
 	task.Action = ""
 	task.ActionParams = nil
+	return nil
+}
+
+func validateAgentTaskMode(task *ScheduledTask) error {
+	switch task.AgentMode {
+	case "", taskAgentModeSingle:
+		task.AgentMode = taskAgentModeSingle
+		task.Relay = nil
+		return nil
+	case taskAgentModeRelay:
+		return validateTaskRelayConfig(task.Relay)
+	default:
+		return fmt.Errorf("%w: unsupported agent_mode %q", ErrInvalidTaskConfig, task.AgentMode)
+	}
+}
+
+func validateTaskRelayConfig(relay *TaskRelayConfig) error {
+	if relay == nil {
+		return nil
+	}
+	switch strings.TrimSpace(relay.StopPolicy) {
+	case taskRelayStopPolicyAIDecides:
+		if relay.MaxRounds != 0 {
+			relay.MaxRounds = 0
+		}
+	case taskRelayStopPolicyMaxRounds:
+		if relay.MaxRounds <= 0 {
+			return fmt.Errorf("%w: relay max_rounds must be > 0", ErrInvalidTaskConfig)
+		}
+	default:
+		return fmt.Errorf("%w: unsupported relay stop_policy %q", ErrInvalidTaskConfig, relay.StopPolicy)
+	}
+	if relay.ExecutionTimeoutMS != nil && *relay.ExecutionTimeoutMS < 0 {
+		return fmt.Errorf("%w: relay execution_timeout_ms must be >= 0", ErrInvalidTaskConfig)
+	}
 	return nil
 }
 
