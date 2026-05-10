@@ -26,5 +26,5 @@
 ## 当前约束
 - Native 与 GUI executor 仍在快速演进，不按生产级承诺；memory mode 当前仅保留配置开关与日记忆文件自动建档，不再向 system prompt 注入 Memory 段，后续以稳定性验证为主。
 - RSS `system_action`（`RSS_INBOX_POLL`、`RSS_BRIEFING_BUILD`）已从任务契约与启动编排移除，运行时仅保留用户任务类型。
-- 当前优先级：稳定性、可观测性、契约一致性；不做无边界扩功能。
+- 当前优先级：稳定性、可观测性、契约一致性；新增 `docs/audit-sandbox-in-driver.md` 完成 native sandbox 越层审计；不做无边界扩功能。
 - 详细历史请查 `git log`；本文件仅保留阶段摘要。
