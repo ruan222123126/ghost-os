@@ -1,10 +1,11 @@
-package orchestration
+package trace
 
 import (
 	"context"
 	"strings"
 	"time"
 
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
@@ -20,7 +21,7 @@ type sessionDraftCheckpointSink struct {
 	dirty           bool
 }
 
-func newSessionDraftCheckpointSink(
+func NewSessionDraftCheckpointSink(
 	sink streaming.Sink,
 	sessionStore *session.Store,
 	sess *session.Session,
@@ -29,7 +30,7 @@ func newSessionDraftCheckpointSink(
 		return sink
 	}
 	return &sessionDraftCheckpointSink{
-		sink:         ensureEventSink(sink),
+		sink:         EnsureEventSink(sink),
 		sessionStore: sessionStore,
 		sess:         sess,
 		currentTime:  time.Now,
@@ -58,7 +59,7 @@ func (s *sessionDraftCheckpointSink) persistDraftBeforeEvent(ctx context.Context
 }
 
 func (s *sessionDraftCheckpointSink) persistTurnDraftEvent(ctx context.Context, event streaming.Event) error {
-	draftChanged := projectSessionTurnDraft(s.sess, event, s.nowUTC())
+	draftChanged := sessionturn.ProjectTurnDraft(s.sess, event, s.nowUTC())
 	if draftChanged {
 		s.dirty = true
 	}
@@ -71,7 +72,7 @@ func (s *sessionDraftCheckpointSink) persistTurnDraftEvent(ctx context.Context, 
 }
 
 func (s *sessionDraftCheckpointSink) persistTerminalTurnDraftEvent(ctx context.Context, event streaming.Event) error {
-	if projectSessionTurnDraft(s.sess, event, s.nowUTC()) {
+	if sessionturn.ProjectTurnDraft(s.sess, event, s.nowUTC()) {
 		s.dirty = true
 	}
 	return s.saveDraftIfNeeded(ctx, true)

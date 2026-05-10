@@ -1,4 +1,4 @@
-package orchestration
+package trace
 
 import (
 	"context"
@@ -6,16 +6,16 @@ import (
 	"ghost-os/bridge/streaming"
 )
 
-type streamTerminalBuffer struct {
+type StreamTerminalBuffer struct {
 	sink   streaming.Sink
 	events []streaming.Event
 }
 
-func newStreamTerminalBuffer(sink streaming.Sink) *streamTerminalBuffer {
-	return &streamTerminalBuffer{sink: ensureEventSink(sink)}
+func NewStreamTerminalBuffer(sink streaming.Sink) *StreamTerminalBuffer {
+	return &StreamTerminalBuffer{sink: EnsureEventSink(sink)}
 }
 
-func (b *streamTerminalBuffer) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
+func (b *StreamTerminalBuffer) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
 	if b == nil {
 		return event, nil
 	}
@@ -26,7 +26,7 @@ func (b *streamTerminalBuffer) Emit(ctx context.Context, event streaming.Event) 
 	return b.sink.Emit(ctx, event)
 }
 
-func (b *streamTerminalBuffer) Flush(ctx context.Context) error {
+func (b *StreamTerminalBuffer) Flush(ctx context.Context) error {
 	if b == nil {
 		return nil
 	}
@@ -39,7 +39,7 @@ func (b *streamTerminalBuffer) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (b *streamTerminalBuffer) Discard() {
+func (b *StreamTerminalBuffer) Discard() {
 	if b == nil {
 		return
 	}

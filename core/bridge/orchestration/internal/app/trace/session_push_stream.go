@@ -1,4 +1,4 @@
-package orchestration
+package trace
 
 import (
 	"context"
@@ -8,23 +8,23 @@ import (
 	"ghost-os/bridge/streaming"
 )
 
-type sessionStreamBroadcastSink struct {
+type SessionStreamBroadcastSink struct {
 	sink streaming.Sink
-	hub  *sessionPushHub
+	hub  *SessionPushHub
 	mu   sync.Mutex
 }
 
-func newSessionStreamBroadcastSink(sink streaming.Sink, hub *sessionPushHub) streaming.Sink {
+func NewSessionStreamBroadcastSink(sink streaming.Sink, hub *SessionPushHub) streaming.Sink {
 	if hub == nil {
-		return ensureEventSink(sink)
+		return EnsureEventSink(sink)
 	}
-	return &sessionStreamBroadcastSink{
-		sink: ensureEventSink(sink),
+	return &SessionStreamBroadcastSink{
+		sink: EnsureEventSink(sink),
 		hub:  hub,
 	}
 }
 
-func (s *sessionStreamBroadcastSink) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
+func (s *SessionStreamBroadcastSink) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
 	event, err := s.sink.Emit(ctx, event)
 	if err != nil {
 		return event, err
@@ -33,7 +33,7 @@ func (s *sessionStreamBroadcastSink) Emit(ctx context.Context, event streaming.E
 	return event, nil
 }
 
-func (s *sessionStreamBroadcastSink) publish(event streaming.Event) {
+func (s *SessionStreamBroadcastSink) publish(event streaming.Event) {
 	if s == nil || s.hub == nil {
 		return
 	}
@@ -48,18 +48,18 @@ func (s *sessionStreamBroadcastSink) publish(event streaming.Event) {
 	s.hub.Publish(pushEvent)
 }
 
-func newSessionPushEventFromAgentEvent(event streaming.Event) (sessionPushEvent, bool) {
+func newSessionPushEventFromAgentEvent(event streaming.Event) (SessionPushEvent, bool) {
 	trimmedSessionID := strings.TrimSpace(event.SessionID)
 	if trimmedSessionID == "" {
-		return sessionPushEvent{}, false
+		return SessionPushEvent{}, false
 	}
 
 	eventType, ok := mapSessionPushEventType(event.Type)
 	if !ok {
-		return sessionPushEvent{}, false
+		return SessionPushEvent{}, false
 	}
 
-	return sessionPushEvent{
+	return SessionPushEvent{
 		ID:        strings.TrimSpace(event.ID),
 		Type:      eventType,
 		TraceID:   strings.TrimSpace(event.TraceID),
@@ -69,20 +69,20 @@ func newSessionPushEventFromAgentEvent(event streaming.Event) (sessionPushEvent,
 	}, true
 }
 
-func mapSessionPushEventType(eventType streaming.EventType) (sessionPushEventType, bool) {
+func mapSessionPushEventType(eventType streaming.EventType) (SessionPushEventType, bool) {
 	switch eventType {
 	case streaming.EventRunStarted:
-		return sessionPushRunStarted, true
+		return SessionPushRunStarted, true
 	case streaming.EventCompletionDelta:
-		return sessionPushCompletionDelta, true
+		return SessionPushCompletionDelta, true
 	case streaming.EventToolCallStarted:
-		return sessionPushToolCallStarted, true
+		return SessionPushToolCallStarted, true
 	case streaming.EventToolCallFinished:
-		return sessionPushToolCallFinished, true
+		return SessionPushToolCallFinished, true
 	case streaming.EventError:
-		return sessionPushError, true
+		return SessionPushError, true
 	case streaming.EventDone:
-		return sessionPushDone, true
+		return SessionPushDone, true
 	default:
 		return "", false
 	}

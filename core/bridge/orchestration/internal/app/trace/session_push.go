@@ -1,4 +1,4 @@
-package orchestration
+package trace
 
 import (
 	"fmt"
@@ -10,40 +10,40 @@ import (
 	"ghost-os/bridge/streaming"
 )
 
-type sessionPushEventType string
+type SessionPushEventType string
 
 const (
-	sessionPushAssistantMessage sessionPushEventType = "assistant_message"
-	sessionPushAwaitingHuman    sessionPushEventType = "awaiting_human"
-	sessionPushRunStarted       sessionPushEventType = sessionPushEventType(streaming.EventRunStarted)
-	sessionPushCompletionDelta  sessionPushEventType = sessionPushEventType(streaming.EventCompletionDelta)
-	sessionPushToolCallStarted  sessionPushEventType = sessionPushEventType(streaming.EventToolCallStarted)
-	sessionPushToolCallFinished sessionPushEventType = sessionPushEventType(streaming.EventToolCallFinished)
-	sessionPushError            sessionPushEventType = sessionPushEventType(streaming.EventError)
-	sessionPushDone             sessionPushEventType = sessionPushEventType(streaming.EventDone)
+	SessionPushAssistantMessage SessionPushEventType = "assistant_message"
+	SessionPushAwaitingHuman    SessionPushEventType = "awaiting_human"
+	SessionPushRunStarted       SessionPushEventType = SessionPushEventType(streaming.EventRunStarted)
+	SessionPushCompletionDelta  SessionPushEventType = SessionPushEventType(streaming.EventCompletionDelta)
+	SessionPushToolCallStarted  SessionPushEventType = SessionPushEventType(streaming.EventToolCallStarted)
+	SessionPushToolCallFinished SessionPushEventType = SessionPushEventType(streaming.EventToolCallFinished)
+	SessionPushError            SessionPushEventType = SessionPushEventType(streaming.EventError)
+	SessionPushDone             SessionPushEventType = SessionPushEventType(streaming.EventDone)
 )
 
-type sessionPushEvent struct {
+type SessionPushEvent struct {
 	ID        string               `json:"id"`
-	Type      sessionPushEventType `json:"type"`
+	Type      SessionPushEventType `json:"type"`
 	TraceID   string               `json:"trace_id,omitempty"`
 	SessionID string               `json:"session_id"`
 	Payload   any                  `json:"payload"`
 	At        time.Time            `json:"at"`
 }
 
-// sessionPushHub 把同一 session 的完成消息和 ask_human 事件广播给长连接订阅者。
-type sessionPushHub struct {
+// SessionPushHub 把同一 session 的完成消息和 ask_human 事件广播给长连接订阅者。
+type SessionPushHub struct {
 	mu          sync.RWMutex
-	subscribers map[string]map[chan sessionPushEvent]struct{}
+	subscribers map[string]map[chan SessionPushEvent]struct{}
 	sequence    uint64
 }
 
-func newSessionPushHub() *sessionPushHub {
-	return &sessionPushHub{subscribers: make(map[string]map[chan sessionPushEvent]struct{})}
+func NewSessionPushHub() *SessionPushHub {
+	return &SessionPushHub{subscribers: make(map[string]map[chan SessionPushEvent]struct{})}
 }
 
-func (h *sessionPushHub) Close() {
+func (h *SessionPushHub) Close() {
 	if h == nil {
 		return
 	}
@@ -59,19 +59,19 @@ func (h *sessionPushHub) Close() {
 	}
 }
 
-func (h *sessionPushHub) Subscribe(sessionID string) (<-chan sessionPushEvent, func()) {
+func (h *SessionPushHub) Subscribe(sessionID string) (<-chan SessionPushEvent, func()) {
 	if h == nil {
-		closed := make(chan sessionPushEvent)
+		closed := make(chan SessionPushEvent)
 		close(closed)
 		return closed, func() {}
 	}
 
 	sessionID = strings.TrimSpace(sessionID)
-	ch := make(chan sessionPushEvent, 16)
+	ch := make(chan SessionPushEvent, 16)
 
 	h.mu.Lock()
 	if h.subscribers[sessionID] == nil {
-		h.subscribers[sessionID] = make(map[chan sessionPushEvent]struct{})
+		h.subscribers[sessionID] = make(map[chan SessionPushEvent]struct{})
 	}
 	h.subscribers[sessionID][ch] = struct{}{}
 	h.mu.Unlock()
@@ -98,7 +98,7 @@ func (h *sessionPushHub) Subscribe(sessionID string) (<-chan sessionPushEvent, f
 	}
 }
 
-func (h *sessionPushHub) Publish(event sessionPushEvent) {
+func (h *SessionPushHub) Publish(event SessionPushEvent) {
 	if h == nil {
 		return
 	}
@@ -116,7 +116,7 @@ func (h *sessionPushHub) Publish(event sessionPushEvent) {
 
 	h.mu.RLock()
 	subscribers := h.subscribers[sessionID]
-	chans := make([]chan sessionPushEvent, 0, len(subscribers))
+	chans := make([]chan SessionPushEvent, 0, len(subscribers))
 	for ch := range subscribers {
 		chans = append(chans, ch)
 	}
@@ -130,7 +130,7 @@ func (h *sessionPushHub) Publish(event sessionPushEvent) {
 	}
 }
 
-func (h *sessionPushHub) nextEventID(sessionID string) string {
+func (h *SessionPushHub) nextEventID(sessionID string) string {
 	seq := atomic.AddUint64(&h.sequence, 1)
 	return fmt.Sprintf("%s:%06d", strings.TrimSpace(sessionID), seq)
 }

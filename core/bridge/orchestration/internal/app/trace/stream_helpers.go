@@ -1,4 +1,4 @@
-package orchestration
+package trace
 
 import (
 	"context"
@@ -7,33 +7,33 @@ import (
 	"ghost-os/bridge/streaming"
 )
 
-func ensureEventSink(sink streaming.Sink) streaming.Sink {
+func EnsureEventSink(sink streaming.Sink) streaming.Sink {
 	if sink == nil {
 		return streaming.NopSink{}
 	}
 	return sink
 }
 
-type eventTurnTracker struct {
+type EventTurnTracker struct {
 	sink        streaming.Sink
 	maxToolTurn int
 }
 
-func newEventTurnTracker(sink streaming.Sink) *eventTurnTracker {
-	return &eventTurnTracker{
-		sink:        ensureEventSink(sink),
+func NewEventTurnTracker(sink streaming.Sink) *EventTurnTracker {
+	return &EventTurnTracker{
+		sink:        EnsureEventSink(sink),
 		maxToolTurn: -1,
 	}
 }
 
-func (t *eventTurnTracker) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
+func (t *EventTurnTracker) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
 	if isToolProgressEvent(event.Type) && event.Turn > t.maxToolTurn {
 		t.maxToolTurn = event.Turn
 	}
 	return t.sink.Emit(ctx, event)
 }
 
-func (t *eventTurnTracker) finalAssistantTurn() int {
+func (t *EventTurnTracker) FinalAssistantTurn() int {
 	if t == nil || t.maxToolTurn < 0 {
 		return 0
 	}
@@ -49,12 +49,12 @@ func isToolProgressEvent(eventType streaming.EventType) bool {
 	}
 }
 
-func emitStreamEvent(ctx context.Context, sink streaming.Sink, event streaming.Event) error {
-	_, err := ensureEventSink(sink).Emit(ctx, event)
+func EmitStreamEvent(ctx context.Context, sink streaming.Sink, event streaming.Event) error {
+	_, err := EnsureEventSink(sink).Emit(ctx, event)
 	return err
 }
 
-func emitStreamErrorEvent(
+func EmitStreamErrorEvent(
 	ctx context.Context,
 	sink streaming.Sink,
 	traceID string,
@@ -82,5 +82,5 @@ func emitStreamErrorEvent(
 	if newEventErr != nil {
 		return newEventErr
 	}
-	return emitStreamEvent(ctx, sink, event)
+	return EmitStreamEvent(ctx, sink, event)
 }

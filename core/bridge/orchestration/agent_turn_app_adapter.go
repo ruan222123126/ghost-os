@@ -85,14 +85,6 @@ func (r agentTurnSpecialAdapter) RunPlan(
 	return r.service.executePlanModeAction(ctx, req, traceID)
 }
 
-func (r agentTurnSpecialAdapter) RunPro(
-	ctx context.Context,
-	req agentturn.PreparedRequest,
-	traceID string,
-) (api.AgentResponse, int, error) {
-	return r.service.executeProModeAction(ctx, req, traceID)
-}
-
 type agentTurnFinalizer struct {
 	service *bridgeService
 }

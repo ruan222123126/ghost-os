@@ -68,22 +68,6 @@ func (s Service) executePlan(
 	return s.executeSpecialTurn(ctx, prepared, traceID, s.Special.RunPlan)
 }
 
-func (s Service) executePro(
-	ctx context.Context,
-	prepared PreparedRequest,
-	traceID string,
-) (bus.ServiceResult, error) {
-	if s.Special == nil {
-		return specialRunnerMissing()
-	}
-	if prepared.RuntimeOverrides != nil {
-		err := errors.New("runtime_overrides are not supported in pro mode")
-		s.log(traceID, bus.ActionAgentSend, "error", err)
-		return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInvalidInput, err)
-	}
-	return s.executeSpecialTurn(ctx, prepared, traceID, s.Special.RunPro)
-}
-
 func specialRunnerMissing() (bus.ServiceResult, error) {
 	err := errors.New("special mode runner is not configured")
 	return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInternal, err)

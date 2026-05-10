@@ -55,7 +55,6 @@ type Runner interface {
 
 type SpecialModeRunner interface {
 	RunPlan(ctx context.Context, req PreparedRequest, traceID string) (api.AgentResponse, int, error)
-	RunPro(ctx context.Context, req PreparedRequest, traceID string) (api.AgentResponse, int, error)
 }
 
 type Finalizer interface {

@@ -1,8 +1,8 @@
-package orchestration
+package trace
 
 import "strings"
 
-func (h *sessionPushHub) SubscriberCount(sessionID string) int {
+func (h *SessionPushHub) SubscriberCount(sessionID string) int {
 	if h == nil {
 		return 0
 	}

@@ -60,19 +60,7 @@ func (s Service) executePlanStream(
 	if s.Special == nil {
 		return "", prepared.SessionID, bus.WrapError(bus.ServiceErrorInternal, errors.New("special mode runner is not configured"))
 	}
-	return s.executeSpecialStream(ctx, prepared, traceID, sink, s.Special.RunPlan, false)
-}
-
-func (s Service) executeProStream(
-	ctx context.Context,
-	prepared PreparedRequest,
-	traceID string,
-	sink *eventTurnTracker,
-) (string, string, error) {
-	if s.Special == nil {
-		return "", prepared.SessionID, bus.WrapError(bus.ServiceErrorInternal, errors.New("special mode runner is not configured"))
-	}
-	return s.executeSpecialStream(ctx, prepared, traceID, sink, s.Special.RunPro, true)
+	return s.executeSpecialStream(ctx, prepared, traceID, sink, s.Special.RunPlan)
 }
 
 func (s Service) executeSpecialStream(
@@ -81,12 +69,11 @@ func (s Service) executeSpecialStream(
 	traceID string,
 	sink *eventTurnTracker,
 	run func(context.Context, PreparedRequest, string) (api.AgentResponse, int, error),
-	pro bool,
 ) (string, string, error) {
 	s.log(traceID, bus.ActionAgentSend, "running", nil)
 	payload, code, err := run(ctx, prepared, traceID)
 	if err != nil {
-		return s.handleSpecialStreamError(ctx, prepared, traceID, sink, code, err, pro)
+		return s.handleSpecialStreamError(ctx, prepared, traceID, sink, code, err)
 	}
 	turn := FinalizedTurn{Message: payload.Message, SessionID: payload.SessionID, SessionEnd: payload.SessionEnd}
 	if emitErr := emitDirectResult(ctx, sink, traceID, 0, turn); emitErr != nil {
@@ -104,7 +91,6 @@ func (s Service) handleSpecialStreamError(
 	sink *eventTurnTracker,
 	code int,
 	err error,
-	pro bool,
 ) (string, string, error) {
 	kind, cancelled, normalizedErr := normalizeSpecialStreamError(s, err)
 	statusCode := code
@@ -114,9 +100,6 @@ func (s Service) handleSpecialStreamError(
 	if cancelled {
 		s.log(traceID, bus.ActionAgentSend, "cancelled", normalizedErr)
 		return "", prepared.SessionID, normalizedErr
-	}
-	if pro && kind != bus.ServiceErrorInternal {
-		err = normalizedErr
 	}
 	s.log(traceID, bus.ActionAgentSend, "error", err)
 	if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", prepared.SessionID, statusCode, err); emitErr != nil {
