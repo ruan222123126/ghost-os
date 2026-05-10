@@ -93,6 +93,7 @@ data class SessionMessage(
 @Serializable
 data class SessionMetadata(
     val id: String,
+    val title: String,
     @SerialName("created_at")
     val createdAt: String,
     @SerialName("updated_at")
@@ -178,6 +179,7 @@ data class SessionTurnDraft(
 @Serializable
 data class SessionDetail(
     val id: String,
+    val title: String,
     val messages: List<SessionMessage>,
     @SerialName("created_at")
     val createdAt: String,

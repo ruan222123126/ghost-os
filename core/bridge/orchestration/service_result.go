@@ -1,93 +1,43 @@
 package orchestration
 
-import (
-	"errors"
-	"fmt"
-)
+import "ghost-os/bridge/orchestration/internal/contracts/bus"
 
-type ServiceOutcome string
+type ServiceOutcome = bus.ServiceOutcome
 
 const (
-	ServiceOutcomeSuccess  ServiceOutcome = "success"
-	ServiceOutcomeCreated  ServiceOutcome = "created"
-	ServiceOutcomeAccepted ServiceOutcome = "accepted"
+	ServiceOutcomeSuccess  = bus.ServiceOutcomeSuccess
+	ServiceOutcomeCreated  = bus.ServiceOutcomeCreated
+	ServiceOutcomeAccepted = bus.ServiceOutcomeAccepted
 )
 
-type ServiceErrorKind string
+type ServiceErrorKind = bus.ServiceErrorKind
 
 const (
-	ServiceErrorInvalidInput ServiceErrorKind = "invalid_input"
-	ServiceErrorNotFound     ServiceErrorKind = "not_found"
-	ServiceErrorConflict     ServiceErrorKind = "conflict"
-	ServiceErrorUnavailable  ServiceErrorKind = "unavailable"
-	ServiceErrorInternal     ServiceErrorKind = "internal"
+	ServiceErrorInvalidInput = bus.ServiceErrorInvalidInput
+	ServiceErrorNotFound     = bus.ServiceErrorNotFound
+	ServiceErrorConflict     = bus.ServiceErrorConflict
+	ServiceErrorUnavailable  = bus.ServiceErrorUnavailable
+	ServiceErrorInternal     = bus.ServiceErrorInternal
 )
 
-type ServiceResult struct {
-	Payload any
-	Outcome ServiceOutcome
-}
-
-type serviceError struct {
-	kind  ServiceErrorKind
-	cause error
-}
-
-func (e *serviceError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if e.cause == nil {
-		return fmt.Sprintf("service error kind=%s", e.kind)
-	}
-	return e.cause.Error()
-}
-
-func (e *serviceError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.cause
-}
+type ServiceResult = bus.ServiceResult
 
 func wrapServiceError(kind ServiceErrorKind, err error) error {
-	if err == nil {
-		return nil
-	}
-	return &serviceError{
-		kind:  kind,
-		cause: err,
-	}
+	return bus.WrapError(kind, err)
 }
 
 func ServiceErrorKindOf(err error) ServiceErrorKind {
-	if err == nil {
-		return ""
-	}
-	var typed *serviceError
-	if errors.As(err, &typed) && typed != nil {
-		return typed.kind
-	}
-	return ServiceErrorInternal
+	return bus.ErrorKindOf(err)
 }
 
 func serviceResultSuccess(payload any) ServiceResult {
-	return ServiceResult{
-		Payload: payload,
-		Outcome: ServiceOutcomeSuccess,
-	}
+	return bus.ResultSuccess(payload)
 }
 
 func serviceResultCreated(payload any) ServiceResult {
-	return ServiceResult{
-		Payload: payload,
-		Outcome: ServiceOutcomeCreated,
-	}
+	return bus.ResultCreated(payload)
 }
 
 func serviceResultAccepted(payload any) ServiceResult {
-	return ServiceResult{
-		Payload: payload,
-		Outcome: ServiceOutcomeAccepted,
-	}
+	return bus.ResultAccepted(payload)
 }

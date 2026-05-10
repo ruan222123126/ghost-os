@@ -135,7 +135,6 @@
         "mode": {
           "type": "string",
           "enum": [
-            "pro",
             "plan"
           ]
         },

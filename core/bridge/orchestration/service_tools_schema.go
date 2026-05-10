@@ -3,9 +3,9 @@ package orchestration
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/contracts/toolschema"
 )
 
 func (s *bridgeService) listToolInputSchemas() (map[string]map[string]any, error) {
@@ -24,41 +24,13 @@ func (s *bridgeService) listToolInputSchemas() (map[string]map[string]any, error
 }
 
 func collectToolSchemas(defs []llm.ToolDef) (map[string]map[string]any, error) {
-	schemas := make(map[string]map[string]any, len(defs))
-	for _, def := range defs {
-		decoded, err := decodeToolSchema(def.Parameters, def.Name)
-		if err != nil {
-			return nil, err
-		}
-		if decoded != nil {
-			schemas[def.Name] = decoded
-		}
-	}
-	return schemas, nil
+	return toolschema.Collect(defs)
 }
 
 func decodeToolSchema(raw json.RawMessage, toolName string) (map[string]any, error) {
-	if len(strings.TrimSpace(string(raw))) == 0 {
-		return nil, nil
-	}
-	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil, fmt.Errorf("decode tool schema for %q: %w", toolName, err)
-	}
-	schema, ok := payload.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("tool %q schema must be a JSON object", toolName)
-	}
-	return schema, nil
+	return toolschema.Decode(raw, toolName)
 }
 
 func schemaByToolName(schemasByName map[string]map[string]any, toolName string) (map[string]any, bool) {
-	if schemasByName == nil {
-		return nil, false
-	}
-	schema, ok := schemasByName[strings.TrimSpace(toolName)]
-	if !ok || schema == nil {
-		return nil, false
-	}
-	return schema, true
+	return toolschema.ByToolName(schemasByName, toolName)
 }

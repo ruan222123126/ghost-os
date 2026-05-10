@@ -30,12 +30,25 @@ data class TaskRuntimeOverrides(
 )
 
 @Serializable
+data class TaskRelayConfig(
+    @SerialName("stop_policy")
+    val stopPolicy: String,
+    @SerialName("max_rounds")
+    val maxRounds: Int? = null,
+    @SerialName("execution_timeout_ms")
+    val executionTimeoutMs: Int? = null
+)
+
+@Serializable
 data class AgentMessageTaskCreateRequest(
     val message: String,
     @SerialName("session_id")
     val sessionId: String? = null,
     @SerialName("runtime_overrides")
     val runtimeOverrides: TaskRuntimeOverrides? = null,
+    @SerialName("agent_mode")
+    val agentMode: String? = null,
+    val relay: TaskRelayConfig? = null,
     @SerialName("task_kind")
     val taskKind: String? = null,
     @SerialName("interval_seconds")
@@ -54,6 +67,9 @@ data class AgentMessageTaskPayload(
     val sessionId: String? = null,
     @SerialName("runtime_overrides")
     val runtimeOverrides: TaskRuntimeOverrides? = null,
+    @SerialName("agent_mode")
+    val agentMode: String? = null,
+    val relay: TaskRelayConfig? = null,
     @SerialName("task_kind")
     val taskKind: String,
     @SerialName("schedule_type")
@@ -84,6 +100,9 @@ data class TaskUpdateRequest(
     val sessionId: String? = null,
     @SerialName("runtime_overrides")
     val runtimeOverrides: TaskRuntimeOverrides? = null,
+    @SerialName("agent_mode")
+    val agentMode: String? = null,
+    val relay: TaskRelayConfig? = null,
     @SerialName("task_kind")
     val taskKind: String? = null,
     val workflow: WorkflowDefinition? = null,

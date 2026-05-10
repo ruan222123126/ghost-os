@@ -647,6 +647,45 @@
                 }
             }
         },
+        "taskRelayConfig": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "stop_policy"
+            ],
+            "properties": {
+                "stop_policy": {
+                    "type": "string",
+                    "enum": [
+                        "ai_decides",
+                        "max_rounds"
+                    ]
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "execution_timeout_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                }
+            },
+            "x-codegen": {
+                "order": 246,
+                "go": {
+                    "name": "taskRelayConfigContract"
+                },
+                "ts": {
+                    "name": "TaskRelayConfig"
+                },
+                "rust": {
+                    "name": "TaskRelayConfig"
+                },
+                "kotlin": {
+                    "name": "TaskRelayConfig"
+                }
+            }
+        },
         "agentMessageTaskCreateRequest": {
             "type": "object",
             "additionalProperties": false,
@@ -663,6 +702,16 @@
                 },
                 "runtime_overrides": {
                     "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
                 },
                 "task_kind": {
                     "type": "string",
@@ -889,6 +938,16 @@
                 "runtime_overrides": {
                     "$ref": "#/$defs/taskRuntimeOverrides"
                 },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
+                },
                 "task_kind": {
                     "type": "string",
                     "enum": [
@@ -1016,6 +1075,16 @@
                 },
                 "runtime_overrides": {
                     "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
                 },
                 "task_kind": {
                     "type": "string",

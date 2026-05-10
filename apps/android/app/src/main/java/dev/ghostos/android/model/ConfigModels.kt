@@ -22,6 +22,12 @@ data class BridgeConfig(
     val maxTurns: Int,
     @SerialName("task_execution_timeout_ms")
     val taskExecutionTimeoutMs: Int,
+    @SerialName("relay_default_stop_policy")
+    val relayDefaultStopPolicy: String,
+    @SerialName("relay_default_max_rounds")
+    val relayDefaultMaxRounds: Int,
+    @SerialName("relay_default_execution_timeout_ms")
+    val relayDefaultExecutionTimeoutMs: Int,
     @SerialName("llm_completion_retry_count")
     val llmCompletionRetryCount: Int,
     @SerialName("llm_completion_retry_interval_ms")
@@ -42,6 +48,8 @@ data class BridgeConfig(
     val memoryModeEnabled: Boolean,
     @SerialName("microcompact_enabled")
     val microcompactEnabled: Boolean,
+    @SerialName("session_title_mode")
+    val sessionTitleMode: String,
     @SerialName("web_search_tavily_url")
     val webSearchTavilyUrl: String,
     @SerialName("web_search_exa_url")
@@ -68,6 +76,12 @@ data class ConfigUpdate(
     val maxTurns: Int? = null,
     @SerialName("task_execution_timeout_ms")
     val taskExecutionTimeoutMs: Int? = null,
+    @SerialName("relay_default_stop_policy")
+    val relayDefaultStopPolicy: String? = null,
+    @SerialName("relay_default_max_rounds")
+    val relayDefaultMaxRounds: Int? = null,
+    @SerialName("relay_default_execution_timeout_ms")
+    val relayDefaultExecutionTimeoutMs: Int? = null,
     @SerialName("llm_completion_retry_count")
     val llmCompletionRetryCount: Int? = null,
     @SerialName("llm_completion_retry_interval_ms")
@@ -84,6 +98,8 @@ data class ConfigUpdate(
     val memoryModeEnabled: Boolean? = null,
     @SerialName("microcompact_enabled")
     val microcompactEnabled: Boolean? = null,
+    @SerialName("session_title_mode")
+    val sessionTitleMode: String? = null,
     @SerialName("web_search_tavily_url")
     val webSearchTavilyUrl: String? = null,
     @SerialName("web_search_exa_url")

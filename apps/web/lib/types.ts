@@ -15,6 +15,7 @@ import type {
   SessionFileContent as SharedSessionFileContent,
   SessionImageContent as SharedSessionImageContent,
   SessionMessage as SharedSessionMessage,
+  TaskRelayConfig as SharedTaskRelayConfig,
   TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
   WorkflowDefinition as SharedWorkflowDefinition,
   WorkflowEdge as SharedWorkflowEdge,
@@ -339,6 +340,7 @@ export type AgentMessageTaskPayload = SharedAgentMessageTaskPayload;
 export type WorkflowTaskPayload = SharedWorkflowTaskPayload;
 export type OrchestrationTaskPayload = SharedOrchestrationTaskPayload;
 export type TaskRuntimeOverrides = SharedTaskRuntimeOverrides;
+export type TaskRelayConfig = SharedTaskRelayConfig;
 export type WorkflowDefinition = SharedWorkflowDefinition;
 export type WorkflowNode = SharedWorkflowNode;
 export type WorkflowEdge = SharedWorkflowEdge;
@@ -372,7 +374,7 @@ export interface TaskRunLog {
   scheduled_at: string;
   started_at?: string;
   finished_at?: string;
-  status: 'success' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
+  status: 'success' | 'incomplete' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
   session_id_input?: string;
   session_id_output?: string;
   response_preview?: string;
@@ -408,6 +410,8 @@ export interface TaskUpdateRequest extends Pick<
   | 'message'
   | 'session_id'
   | 'runtime_overrides'
+  | 'agent_mode'
+  | 'relay'
   | 'interval_seconds'
   | 'cron_expr'
   | 'enabled'

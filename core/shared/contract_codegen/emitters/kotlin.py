@@ -97,6 +97,7 @@ OUTPUT_GROUPS = (
         "TaskModels.kt",
         (
             "taskRuntimeOverrides",
+            "taskRelayConfig",
             "agentMessageTaskCreateRequest",
             "taskCreateRequest",
             "agentMessageTaskPayload",

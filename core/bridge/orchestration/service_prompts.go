@@ -1,12 +1,12 @@
 package orchestration
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/contracts/toolschema"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/tools"
 )
@@ -23,11 +23,7 @@ type systemPromptResponse struct {
 	ToolDefinitions []systemPromptToolDefinition           `json:"tool_definitions"`
 }
 
-type systemPromptToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters,omitempty"`
-}
+type systemPromptToolDefinition = toolschema.Definition
 
 type systemPromptPreview struct {
 	renderedPrompt  string
@@ -136,18 +132,7 @@ func systemPromptResponseFrom(
 }
 
 func systemPromptToolDefinitionsFrom(defs []llm.ToolDef) []systemPromptToolDefinition {
-	if len(defs) == 0 {
-		return nil
-	}
-	items := make([]systemPromptToolDefinition, 0, len(defs))
-	for _, def := range defs {
-		items = append(items, systemPromptToolDefinition{
-			Name:        def.Name,
-			Description: def.Description,
-			Parameters:  def.Parameters,
-		})
-	}
-	return items
+	return toolschema.DefinitionsFrom(defs)
 }
 
 func reqHasSystemPromptUpdate(req bridgeconfig.SystemPromptUpdateRequest) bool {

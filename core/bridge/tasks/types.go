@@ -16,6 +16,7 @@ const (
 
 	DefaultRunLogRetention   = 100
 	RunStatusSuccess         = "success"
+	RunStatusIncomplete      = "incomplete"
 	RunStatusCancelled       = "cancelled"
 	RunStatusError           = "error"
 	RunStatusSkipped         = "skipped"
@@ -49,6 +50,8 @@ type ScheduledTask struct {
 	Message          string                   `json:"message,omitempty"`
 	SessionID        string                   `json:"session_id,omitempty"`
 	RuntimeOverrides *TaskRuntimeOverrides    `json:"runtime_overrides,omitempty"`
+	AgentMode        string                   `json:"agent_mode,omitempty"`
+	Relay            *TaskRelayConfig         `json:"relay,omitempty"`
 	TaskKind         string                   `json:"task_kind,omitempty"`
 	Action           string                   `json:"action,omitempty"`
 	ActionParams     map[string]any           `json:"action_params,omitempty"`
@@ -220,6 +223,8 @@ func normalizeScheduledTaskScalarFields(task *ScheduledTask) {
 	task.Message = strings.TrimSpace(task.Message)
 	task.SessionID = strings.TrimSpace(task.SessionID)
 	task.RuntimeOverrides = CloneTaskRuntimeOverrides(task.RuntimeOverrides)
+	task.AgentMode = NormalizeAgentMode(task.AgentMode)
+	task.Relay = CloneTaskRelayConfig(task.Relay)
 	task.TaskKind = NormalizeKind(task.TaskKind)
 	task.Action = strings.TrimSpace(task.Action)
 	task.ActionParams = CloneActionParams(task.ActionParams)

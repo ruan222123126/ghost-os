@@ -330,6 +330,7 @@ pub struct AgentDonePayload {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionMetadata {
     pub id: String,
+    pub title: String,
     pub created_at: String,
     pub updated_at: String,
     pub message_count: i64,
@@ -416,6 +417,7 @@ pub struct AgentErrorPayload {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionDetail {
     pub id: String,
+    pub title: String,
     pub messages: Vec<SessionMessage>,
     pub created_at: String,
     pub updated_at: String,
@@ -436,6 +438,9 @@ pub struct BridgeConfig {
     pub project_root: String,
     pub max_turns: i64,
     pub task_execution_timeout_ms: i64,
+    pub relay_default_stop_policy: String,
+    pub relay_default_max_rounds: i64,
+    pub relay_default_execution_timeout_ms: i64,
     pub llm_completion_retry_count: i64,
     pub llm_completion_retry_interval_ms: i64,
     pub api_key_set: bool,
@@ -446,6 +451,7 @@ pub struct BridgeConfig {
     pub tool_call_compact_output_enabled: bool,
     pub memory_mode_enabled: bool,
     pub microcompact_enabled: bool,
+    pub session_title_mode: String,
     pub web_search_tavily_url: String,
     pub web_search_exa_url: String,
     pub web_search_tavily_api_key_set: bool,
@@ -479,6 +485,12 @@ pub struct ConfigUpdate {
     #[serde(default)]
     pub task_execution_timeout_ms: Option<i64>,
     #[serde(default)]
+    pub relay_default_stop_policy: Option<String>,
+    #[serde(default)]
+    pub relay_default_max_rounds: Option<i64>,
+    #[serde(default)]
+    pub relay_default_execution_timeout_ms: Option<i64>,
+    #[serde(default)]
     pub llm_completion_retry_count: Option<i64>,
     #[serde(default)]
     pub llm_completion_retry_interval_ms: Option<i64>,
@@ -494,6 +506,8 @@ pub struct ConfigUpdate {
     pub memory_mode_enabled: Option<bool>,
     #[serde(default)]
     pub microcompact_enabled: Option<bool>,
+    #[serde(default)]
+    pub session_title_mode: Option<String>,
     #[serde(default)]
     pub web_search_tavily_url: Option<String>,
     #[serde(default)]
@@ -633,6 +647,10 @@ pub struct AgentMessageTaskCreateRequest {
     #[serde(default)]
     pub runtime_overrides: Option<TaskRuntimeOverrides>,
     #[serde(default)]
+    pub agent_mode: Option<String>,
+    #[serde(default)]
+    pub relay: Option<TaskRelayConfig>,
+    #[serde(default)]
     pub task_kind: Option<String>,
     #[serde(default)]
     pub interval_seconds: Option<i64>,
@@ -680,6 +698,15 @@ pub struct OrchestrationEdge {
     pub from_node_id: String,
     pub to_node_id: String,
     pub kind: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRelayConfig {
+    pub stop_policy: String,
+    #[serde(default)]
+    pub max_rounds: Option<i64>,
+    #[serde(default)]
+    pub execution_timeout_ms: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -753,6 +780,10 @@ pub struct AgentMessageTaskPayload {
     pub session_id: Option<String>,
     #[serde(default)]
     pub runtime_overrides: Option<TaskRuntimeOverrides>,
+    #[serde(default)]
+    pub agent_mode: Option<String>,
+    #[serde(default)]
+    pub relay: Option<TaskRelayConfig>,
     pub task_kind: String,
     pub schedule_type: String,
     #[serde(default)]
@@ -781,6 +812,10 @@ pub struct TaskUpdateRequest {
     pub session_id: Option<String>,
     #[serde(default)]
     pub runtime_overrides: Option<TaskRuntimeOverrides>,
+    #[serde(default)]
+    pub agent_mode: Option<String>,
+    #[serde(default)]
+    pub relay: Option<TaskRelayConfig>,
     #[serde(default)]
     pub task_kind: Option<String>,
     #[serde(default)]

@@ -64,6 +64,7 @@
       "additionalProperties": false,
       "required": [
         "id",
+        "title",
         "created_at",
         "updated_at",
         "message_count",
@@ -71,6 +72,7 @@
       ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
         "created_at": { "type": "string", "minLength": 1 },
         "updated_at": { "type": "string", "minLength": 1 },
         "message_count": { "type": "integer", "minimum": 0 },
@@ -311,6 +313,7 @@
       "additionalProperties": false,
       "required": [
         "id",
+        "title",
         "messages",
         "created_at",
         "updated_at",
@@ -320,6 +323,7 @@
       ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
         "messages": {
           "type": "array",
           "items": {

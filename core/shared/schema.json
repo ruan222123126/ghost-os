@@ -183,6 +183,9 @@
         "taskRuntimeOverrides": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskRuntimeOverrides"
         },
+        "taskRelayConfig": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRelayConfig"
+        },
         "agentMessageTaskCreateRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/agentMessageTaskCreateRequest"
         },

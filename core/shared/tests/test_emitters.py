@@ -22,15 +22,17 @@ class EmittersTest(unittest.TestCase):
     def test_go_renderer_uses_schema_metadata(self) -> None:
         rendered = render_go(self.schema, "orchestration")
 
-        self.assertIn('const busAssistantSessionEndSignal = "END_SESSION"', rendered)
-        self.assertIn("type askHumanOption struct {", rendered)
-        self.assertLess(rendered.index("type askHumanOption struct {"), rendered.index("type agentResponse struct {"))
-        self.assertIn("type agentIterationSummaryItem struct {", rendered)
-        self.assertIn("type agentStreamEventContract struct {", rendered)
-        self.assertIn("type assistantMessagePushPayload struct {", rendered)
-        self.assertIn("IterationSummary []agentIterationSummaryItem", rendered)
-        self.assertIn("Assignments map[string]string", rendered)
-        self.assertIn("ModelContextWindowTokens map[string]int", rendered)
+        self.assertIn("const busAssistantSessionEndSignal = bus.AssistantSessionEndSignal", rendered)
+        self.assertIn("type askHumanOption = api.AskHumanOption", rendered)
+        self.assertLess(
+            rendered.index("type askHumanOption = api.AskHumanOption"),
+            rendered.index("type agentResponse = api.AgentResponse"),
+        )
+        self.assertIn("type agentIterationSummaryItem = api.AgentIterationSummaryItem", rendered)
+        self.assertIn("type agentStreamEventContract = api.AgentStreamEventContract", rendered)
+        self.assertIn("type assistantMessagePushPayload = api.AssistantMessagePushPayload", rendered)
+        self.assertIn("type apiRequest = bus.RequestEnvelope", rendered)
+        self.assertIn("type apiResponse = bus.ResponseEnvelope", rendered)
 
     def test_ts_renderer_emits_union_and_cross_file_refs(self) -> None:
         rendered = render_ts(self.schema)

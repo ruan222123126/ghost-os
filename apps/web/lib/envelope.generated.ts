@@ -60,7 +60,7 @@ export interface AgentSendSuccessResponse {
   message: string;
   session_id: string;
   session_ended: boolean;
-  mode?: 'pro' | 'plan';
+  mode?: 'plan';
   iteration_count?: number;
   stopped_by?: string;
   final_change_log?: string;
@@ -219,6 +219,7 @@ export interface AgentDonePayload {
 
 export interface SessionMetadata {
   id: string;
+  title: string;
   created_at: string;
   updated_at: string;
   message_count: number;
@@ -284,6 +285,7 @@ export interface AgentErrorPayload {
 
 export interface SessionDetail {
   id: string;
+  title: string;
   messages: SessionMessage[];
   created_at: string;
   updated_at: string;
@@ -302,6 +304,9 @@ export interface BridgeConfig {
   project_root: string;
   max_turns: number;
   task_execution_timeout_ms: number;
+  relay_default_stop_policy: 'ai_decides' | 'max_rounds';
+  relay_default_max_rounds: number;
+  relay_default_execution_timeout_ms: number;
   llm_completion_retry_count: number;
   llm_completion_retry_interval_ms: number;
   api_key_set: boolean;
@@ -312,6 +317,7 @@ export interface BridgeConfig {
   tool_call_compact_output_enabled: boolean;
   memory_mode_enabled: boolean;
   microcompact_enabled: boolean;
+  session_title_mode: 'session_id' | 'first_message' | 'ai_generated';
   web_search_tavily_url: string;
   web_search_exa_url: string;
   web_search_tavily_api_key_set: boolean;
@@ -333,6 +339,9 @@ export interface ConfigUpdate {
   project_root?: string;
   max_turns?: number;
   task_execution_timeout_ms?: number;
+  relay_default_stop_policy?: 'ai_decides' | 'max_rounds';
+  relay_default_max_rounds?: number;
+  relay_default_execution_timeout_ms?: number;
   llm_completion_retry_count?: number;
   llm_completion_retry_interval_ms?: number;
   session_human_log_full_enabled?: boolean;
@@ -341,6 +350,7 @@ export interface ConfigUpdate {
   tool_call_compact_output_enabled?: boolean;
   memory_mode_enabled?: boolean;
   microcompact_enabled?: boolean;
+  session_title_mode?: 'session_id' | 'first_message' | 'ai_generated';
   web_search_tavily_url?: string;
   web_search_exa_url?: string;
   web_search_tavily_api_key?: string;
@@ -430,6 +440,8 @@ export interface AgentMessageTaskCreateRequest {
   message: string;
   session_id?: string;
   runtime_overrides?: TaskRuntimeOverrides;
+  agent_mode?: 'single' | 'relay';
+  relay?: TaskRelayConfig;
   task_kind?: 'agent_message';
   interval_seconds?: number;
   cron_expr?: string;
@@ -461,6 +473,12 @@ export interface OrchestrationEdge {
   from_node_id: string;
   to_node_id: string;
   kind: 'control' | 'member';
+}
+
+export interface TaskRelayConfig {
+  stop_policy: 'ai_decides' | 'max_rounds';
+  max_rounds?: number;
+  execution_timeout_ms?: number;
 }
 
 export interface WorkflowLLMNode {
@@ -514,6 +532,8 @@ export interface AgentMessageTaskPayload {
   message: string;
   session_id?: string;
   runtime_overrides?: TaskRuntimeOverrides;
+  agent_mode?: 'single' | 'relay';
+  relay?: TaskRelayConfig;
   task_kind: 'agent_message';
   schedule_type: 'interval' | 'cron';
   interval_seconds?: number;
@@ -532,6 +552,8 @@ export interface TaskUpdateRequest {
   name?: string;
   session_id?: string;
   runtime_overrides?: TaskRuntimeOverrides;
+  agent_mode?: 'single' | 'relay';
+  relay?: TaskRelayConfig;
   task_kind?: 'agent_message' | 'workflow' | 'orchestration';
   workflow?: WorkflowDefinition;
   orchestration?: OrchestrationDefinition;
