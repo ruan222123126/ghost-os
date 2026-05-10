@@ -4,11 +4,11 @@
 
 ## 范围
 
-本盘点只覆盖 `core/bridge/orchestration` 第一层 Go 文件，共 169 个文件：118 个生产文件，51 个测试文件。
+本盘点只覆盖 `core/bridge/orchestration` 第一层 Go 文件，共 159 个文件：108 个生产文件，51 个测试文件。
 
 不纳入主清单的相邻范围：
 
-- `core/bridge/orchestration/internal/**`：已有初步 internal 分层，共 103 个文件，新增 `internal/app/trace`、`internal/domain/sessionturn` 与 `internal/domain/task` 承接本轮下沉。
+- `core/bridge/orchestration/internal/**`：已有 internal 分层，共 166 个 Go 文件；本轮继续由 `internal/domain/sessionturn`、`internal/app/service`、`internal/app/tasks`、`internal/app/tools`、`internal/app/skills`、`internal/app/prompts` 承接阶段 4-5 下沉。
 - `apps/web/**/orchestration*`：Web 编辑器与 API facade，不属于本轮 Central orchestration 顶层拆分范围。
 - `.next*` 产物、构建缓存、非 Go 文件不计入。
 
@@ -24,12 +24,12 @@
 
 | Subdomain | Files |
 | --- | ---: |
-| `loop/` | 67 |
+| `loop/` | 57 |
 | `workflow/` | 17 |
 | `policy/` | 21 |
 | `dispatch/` | 52 |
 | `trace/` | 12 |
-| Total | 169 |
+| Total | 159 |
 
 ## 已清理
 
@@ -38,6 +38,7 @@
 | `pro_mode.go` / `pro_mode_prompt.go` / `pro_mode_runner.go` | 已删除不可达 pro runner/parser；`agentturn` special mode 仅保留 plan。 |
 | `pro_mode_test.go` | 已删除 pro parser/runner 死测；`pro ...` 前缀按普通消息处理的兼容测试移至 `agent_standard_mode_test.go`。 |
 | `session_microcompact_summary_tfind.go` | 已重命名为 `session_microcompact_summary_sfind.go`，行为与摘要输出不变。 |
+| `session_contract_thinking.go` / `session_microcompact*.go` / `session_human_tool_results.go` | 纯 session 投影、thinking、microcompact 与 ask_human tool result helper 已迁入 `internal/domain/sessionturn`，顶层保留兼容 wrapper。 |
 
 非死代码但需标注：
 

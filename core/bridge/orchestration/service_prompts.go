@@ -6,81 +6,56 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
-	"ghost-os/bridge/orchestration/internal/contracts/toolschema"
+	appprompts "ghost-os/bridge/orchestration/internal/app/prompts"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/tools"
 )
 
 const (
-	systemPromptActionGet    = "PROMPT_SYSTEM_GET"
-	systemPromptActionUpdate = "PROMPT_SYSTEM_UPDATE"
+	systemPromptActionGet    = appprompts.SystemPromptActionGet
+	systemPromptActionUpdate = appprompts.SystemPromptActionUpdate
 )
 
-type systemPromptResponse struct {
-	CorePrompt      string                                 `json:"core_prompt"`
-	RenderedPrompt  string                                 `json:"rendered_prompt"`
-	PromptLibrary   []bridgeconfig.SystemPromptLibraryItem `json:"prompt_library"`
-	ToolDefinitions []systemPromptToolDefinition           `json:"tool_definitions"`
+type systemPromptResponse = appprompts.SystemResponse
+
+type systemPromptToolDefinition = appprompts.ToolDefinition
+
+type systemPromptPreview = appprompts.Preview
+
+func (s *bridgeService) promptService() appprompts.Service {
+	return appprompts.Service{
+		Store:         s.configStore,
+		PreviewLoader: systemPromptPreviewLoader{service: s},
+		Logger:        serviceActionLogger{},
+	}
 }
 
-type systemPromptToolDefinition = toolschema.Definition
+type serviceActionLogger struct{}
 
-type systemPromptPreview struct {
-	renderedPrompt  string
-	toolDefinitions []systemPromptToolDefinition
+func (serviceActionLogger) Log(traceID string, action string, status string, err error) {
+	logAction(traceID, action, status, err)
+}
+
+type systemPromptPreviewLoader struct {
+	service *bridgeService
+}
+
+func (l systemPromptPreviewLoader) Load(cfg bridgeconfig.Config) (appprompts.Preview, error) {
+	if l.service == nil {
+		return appprompts.Preview{}, errors.New("service is not configured")
+	}
+	return l.service.loadSystemPromptPreview(cfg)
 }
 
 func (s *bridgeService) executeSystemPromptGetAction(traceID string) (ServiceResult, error) {
-	cfg, err := s.configStore.Config()
-	if err != nil {
-		logAction(traceID, systemPromptActionGet, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
-	}
-
-	files, err := bridgeconfig.LoadSystemPromptFiles(cfg.PromptsDir)
-	if err != nil {
-		logAction(traceID, systemPromptActionGet, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
-	}
-
-	preview, err := s.loadSystemPromptPreview(cfg)
-	if err != nil {
-		logAction(traceID, systemPromptActionGet, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
-	}
-	logAction(traceID, systemPromptActionGet, "success", nil)
-	return serviceResultSuccess(systemPromptResponseFrom(files, preview)), nil
+	return s.promptService().GetSystemPrompt(traceID)
 }
 
 func (s *bridgeService) executeSystemPromptUpdateAction(
 	req bridgeconfig.SystemPromptUpdateRequest,
 	traceID string,
 ) (ServiceResult, error) {
-	if !reqHasSystemPromptUpdate(req) {
-		err := bridgeconfig.ErrSystemPromptUpdateEmpty
-		logAction(traceID, systemPromptActionUpdate, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-
-	cfg, err := s.configStore.Config()
-	if err != nil {
-		logAction(traceID, systemPromptActionUpdate, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
-	}
-
-	files, err := bridgeconfig.UpdateSystemPromptFiles(cfg.PromptsDir, req)
-	if err != nil {
-		logAction(traceID, systemPromptActionUpdate, "error", err)
-		return ServiceResult{}, mapSystemPromptError(err)
-	}
-
-	preview, err := s.loadSystemPromptPreview(cfg)
-	if err != nil {
-		logAction(traceID, systemPromptActionUpdate, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
-	}
-	logAction(traceID, systemPromptActionUpdate, "success", nil)
-	return serviceResultSuccess(systemPromptResponseFrom(files, preview)), nil
+	return s.promptService().UpdateSystemPrompt(req, traceID)
 }
 
 func (s *bridgeService) loadSystemPromptPreview(cfg bridgeconfig.Config) (systemPromptPreview, error) {
@@ -95,8 +70,8 @@ func (s *bridgeService) loadSystemPromptPreview(cfg bridgeconfig.Config) (system
 		return systemPromptPreview{}, fmt.Errorf("build system prompt preview: %w", err)
 	}
 	return systemPromptPreview{
-		renderedPrompt:  rendered,
-		toolDefinitions: systemPromptToolDefinitionsFrom(catalog.ToolDefs()),
+		RenderedPrompt:  rendered,
+		ToolDefinitions: systemPromptToolDefinitionsFrom(catalog.ToolDefs()),
 	}, nil
 }
 
@@ -125,14 +100,14 @@ func systemPromptResponseFrom(
 ) systemPromptResponse {
 	return systemPromptResponse{
 		CorePrompt:      files.CorePrompt,
-		RenderedPrompt:  preview.renderedPrompt,
+		RenderedPrompt:  preview.RenderedPrompt,
 		PromptLibrary:   files.PromptLibrary,
-		ToolDefinitions: preview.toolDefinitions,
+		ToolDefinitions: preview.ToolDefinitions,
 	}
 }
 
 func systemPromptToolDefinitionsFrom(defs []llm.ToolDef) []systemPromptToolDefinition {
-	return toolschema.DefinitionsFrom(defs)
+	return appprompts.ToolDefinitionsFrom(defs)
 }
 
 func reqHasSystemPromptUpdate(req bridgeconfig.SystemPromptUpdateRequest) bool {

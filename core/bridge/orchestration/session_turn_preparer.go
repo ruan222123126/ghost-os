@@ -279,7 +279,7 @@ func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	askHumanContinuation := hasAnsweredHumanResponse(sess)
 	sess.AdvanceToolTurn(deps.cfg.ToolSearch.IdleTurns)
 	pruneInvisibleSessionSkills(deps.cfg, sess)
-	historyBuilder.traceID = strings.TrimSpace(traceID)
+	historyBuilder.SetTraceID(traceID)
 	history := historyBuilder.BuildHistory(sess)
 
 	catalog, systemPrompt, err := p.selectToolsForTurn(ctx, deps, sess, history, rawUserMessage, askHumanContinuation, traceID)

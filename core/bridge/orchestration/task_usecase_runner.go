@@ -2,23 +2,22 @@ package orchestration
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	"ghost-os/bridge/session"
 )
 
 const (
-	taskListScopeUser          = "user"
-	taskListScopeSystem        = "system"
-	taskListScopeOrchestration = "orchestration"
+	taskListScopeUser          = apptasks.ScopeUser
+	taskListScopeSystem        = apptasks.ScopeSystem
+	taskListScopeOrchestration = apptasks.ScopeOrchestration
 )
 
 type taskQueryRunner struct {
-	store *TaskStore
+	inner apptasks.QueryRunner
 }
 
 type taskMutationStore interface {
@@ -60,53 +59,54 @@ func (s *bridgeService) requireTaskMutationRunner() (taskMutationRunner, int, er
 }
 
 func normalizeTaskID(id string) (string, error) {
-	trimmed := strings.TrimSpace(id)
-	if trimmed == "" {
-		return "", fmt.Errorf("%w: task id is required", ErrInvalidTaskID)
-	}
-	return trimmed, nil
+	return apptasks.NormalizeID(id)
 }
 
 func invalidTaskConfig(message string) error {
-	return fmt.Errorf("%w: %s", ErrInvalidTaskConfig, message)
+	return apptasks.InvalidConfig(message)
 }
 
 func wrapTaskConfigError(err error) error {
-	if err == nil || errors.Is(err, ErrInvalidTaskConfig) {
-		return err
-	}
-	return fmt.Errorf("%w: %v", ErrInvalidTaskConfig, err)
+	return apptasks.WrapConfigError(err)
 }
 
 func ensureTaskMatchesScope(task ScheduledTask, scope string) error {
-	if includeTaskInScope(task, scope) {
-		return nil
-	}
-	return ErrTaskNotFound
+	return apptasks.EnsureMatchesScope(task, scope)
 }
 
 func (r taskMutationRunner) RunNow(params taskIDParams, traceID string) (taskRunPayload, error) {
-	id, err := normalizeTaskID(params.ID)
-	if err != nil {
-		return taskRunPayload{}, err
+	return r.inner().RunNow(params, traceID)
+}
+
+func (r taskMutationRunner) inner() apptasks.MutationRunner {
+	return apptasks.MutationRunner{
+		Store:       taskMutationStoreAdapter{inner: r.store},
+		Scheduler:   r.scheduler,
+		BuildTask:   r.newScheduledTask,
+		ApplyUpdate: r.applyUpdate,
 	}
-	task, err := r.store.LoadTask(id)
-	if err != nil {
-		return taskRunPayload{}, err
-	}
-	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
-		return taskRunPayload{}, err
-	}
-	run, err := r.scheduler.RunNow(*task, traceID)
-	if err != nil {
-		return taskRunPayload{}, err
-	}
-	updatedTask, err := r.store.LoadTask(id)
-	if err != nil {
-		return taskRunPayload{}, err
-	}
-	return taskRunPayload{
-		Task: buildTaskPayload(*updatedTask),
-		Run:  buildTaskRunLogPayload(run),
-	}, nil
+}
+
+type taskMutationStoreAdapter struct {
+	inner taskMutationStore
+}
+
+func (s taskMutationStoreAdapter) ListTasks() ([]ScheduledTask, error) {
+	return nil, errors.New("list tasks is unavailable for mutation runner")
+}
+
+func (s taskMutationStoreAdapter) LoadTask(taskID string) (*ScheduledTask, error) {
+	return s.inner.LoadTask(taskID)
+}
+
+func (s taskMutationStoreAdapter) SaveTask(task *ScheduledTask) error {
+	return s.inner.SaveTask(task)
+}
+
+func (s taskMutationStoreAdapter) DeleteTask(taskID string) error {
+	return s.inner.DeleteTask(taskID)
+}
+
+func (s taskMutationStoreAdapter) ListRunLogs(taskID string, limit int) ([]TaskRunLog, error) {
+	return nil, errors.New("list run logs is unavailable for mutation runner")
 }

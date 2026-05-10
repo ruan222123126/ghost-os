@@ -1,4 +1,4 @@
-package orchestration
+package sessionturn
 
 import (
 	"fmt"
@@ -44,7 +44,7 @@ func (s microcompactSkip) Error() string {
 	return s.reason
 }
 
-func newMicrocompactProjector(options messageProjectionOptions) microcompactProjector {
+func newMicrocompactProjector(options ProjectionOptions) microcompactProjector {
 	return microcompactProjector{traceID: strings.TrimSpace(options.TraceID)}
 }
 
@@ -277,12 +277,12 @@ func (p microcompactProjector) logProjection(
 		"trace_id=%s microcompact spans_compacted=%d estimated_tokens_before=%d estimated_tokens_after=%d",
 		p.traceID,
 		compacted,
-		estimateMessagesTokens(original),
-		estimateMessagesTokens(projected),
+		EstimateMessagesTokens(original),
+		EstimateMessagesTokens(projected),
 	)
 }
 
-func estimateMessagesTokens(messages []llm.Message) int {
+func EstimateMessagesTokens(messages []llm.Message) int {
 	total := 0
 	for _, message := range messages {
 		total += session.EstimateTokens(message)

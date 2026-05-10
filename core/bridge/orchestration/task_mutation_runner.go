@@ -1,94 +1,17 @@
 package orchestration
 
 import (
-	"errors"
-	"fmt"
-
-	bridgeTasks "ghost-os/bridge/tasks"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 )
 
 func (r taskMutationRunner) Create(params taskCreateParams) (taskPayload, error) {
-	task, err := r.newScheduledTask(params)
-	if err != nil {
-		return taskPayload{}, err
-	}
-	if err := ensureTaskMatchesScope(task, params.Scope); err != nil {
-		return taskPayload{}, err
-	}
-	if err := r.store.SaveTask(&task); err != nil {
-		return taskPayload{}, err
-	}
-	if err := r.scheduler.Upsert(task); err != nil {
-		_ = r.store.DeleteTask(task.ID)
-		return taskPayload{}, err
-	}
-	return buildTaskPayload(task), nil
+	return r.inner().Create(params)
 }
 
 func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error) {
-	id, err := normalizeTaskID(params.ID)
-	if err != nil {
-		return taskPayload{}, err
-	}
-	task, err := r.store.LoadTask(id)
-	if err != nil {
-		return taskPayload{}, err
-	}
-	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
-		return taskPayload{}, err
-	}
-	previous := cloneScheduledTask(*task)
-	if err := r.applyUpdate(task, params); err != nil {
-		return taskPayload{}, err
-	}
-	if err := ensureTaskMatchesScope(*task, params.Scope); err != nil {
-		return taskPayload{}, err
-	}
-	if err := r.scheduler.Unregister(id); err != nil {
-		return taskPayload{}, err
-	}
-	if err := r.store.SaveTask(task); err != nil {
-		return taskPayload{}, wrapTaskMutationRollbackError(err, r.restoreTaskRegistration(previous))
-	}
-	if err := r.scheduler.Upsert(*task); err != nil {
-		return taskPayload{}, wrapTaskMutationRollbackError(err, r.rollbackPersistedTaskUpdate(previous))
-	}
-	return buildTaskPayload(*task), nil
+	return r.inner().Update(params)
 }
 
 func cloneScheduledTask(task ScheduledTask) ScheduledTask {
-	cloned := task
-	cloned.RuntimeOverrides = cloneTaskRuntimeOverrides(task.RuntimeOverrides)
-	cloned.Relay = bridgeTasks.CloneTaskRelayConfig(task.Relay)
-	cloned.ActionParams = cloneTaskActionParams(task.ActionParams)
-	cloned.Workflow = cloneTaskWorkflow(task.Workflow)
-	cloned.Orchestration = cloneTaskOrchestration(task.Orchestration)
-	return cloned
-}
-
-func (r taskMutationRunner) restoreTaskRegistration(task ScheduledTask) error {
-	return r.scheduler.Upsert(task)
-}
-
-func (r taskMutationRunner) rollbackPersistedTaskUpdate(task ScheduledTask) error {
-	rollbackTask := cloneScheduledTask(task)
-	return errors.Join(
-		r.store.SaveTask(&rollbackTask),
-		r.scheduler.Upsert(task),
-	)
-}
-
-func (r taskMutationRunner) rollbackTaskDeletion(task ScheduledTask) error {
-	rollbackTask := cloneScheduledTask(task)
-	return errors.Join(
-		r.store.SaveTask(&rollbackTask),
-		r.scheduler.Upsert(task),
-	)
-}
-
-func wrapTaskMutationRollbackError(updateErr error, rollbackErr error) error {
-	if rollbackErr == nil {
-		return updateErr
-	}
-	return fmt.Errorf("%w; rollback failed: %v", updateErr, rollbackErr)
+	return apptasks.CloneScheduledTask(task)
 }

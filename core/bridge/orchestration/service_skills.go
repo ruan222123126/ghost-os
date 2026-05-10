@@ -1,12 +1,15 @@
 package orchestration
 
-import bridgeskills "ghost-os/bridge/skills"
+import (
+	appskills "ghost-os/bridge/orchestration/internal/app/skills"
+	bridgeskills "ghost-os/bridge/skills"
+)
 
 // Skill action methods on bridgeService delegate to skillHandler.
 // All business logic lives in bridge/skills.ActionHandler.
 
 func (s *bridgeService) executeSkillListAction(traceID string) (any, int, error) {
-	return s.skillHandler.ExecuteListAction(traceID)
+	return s.skillService().List(traceID)
 }
 
 func (s *bridgeService) executeSkillUpdateAction(
@@ -14,9 +17,13 @@ func (s *bridgeService) executeSkillUpdateAction(
 	req bridgeskills.SkillUpdateRequest,
 	traceID string,
 ) (any, int, error) {
-	return s.skillHandler.ExecuteUpdateAction(params, req, traceID)
+	return s.skillService().Update(params, req, traceID)
 }
 
 func (s *bridgeService) executeSkillDeleteAction(params bridgeskills.SkillIDParams, traceID string) (any, int, error) {
-	return s.skillHandler.ExecuteDeleteAction(params, traceID)
+	return s.skillService().Delete(params, traceID)
+}
+
+func (s *bridgeService) skillService() appskills.Service {
+	return appskills.Service{Handler: s.skillHandler}
 }

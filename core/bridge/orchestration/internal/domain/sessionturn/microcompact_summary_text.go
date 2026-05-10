@@ -1,4 +1,4 @@
-package orchestration
+package sessionturn
 
 import (
 	"fmt"
@@ -48,12 +48,13 @@ type microcompactCodexCLIArgs struct {
 }
 
 type microcompactCodexCLIResult struct {
-	Status     string `json:"status"`
-	CommandID  string `json:"command_id,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
-	ExitCode   *int   `json:"exit_code,omitempty"`
-	OutputTail string `json:"output_tail,omitempty"`
-	Message    string `json:"message,omitempty"`
+	Status       string `json:"status"`
+	CommandID    string `json:"command_id,omitempty"`
+	SessionID    string `json:"session_id,omitempty"`
+	ExitCode     *int   `json:"exit_code,omitempty"`
+	OutputTail   string `json:"output_tail,omitempty"`
+	FinalMessage string `json:"final_message,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
 
 func summarizeReadFileResult(pair microcompactToolPair) string {
@@ -185,7 +186,7 @@ func summarizeCodexCLIResult(pair microcompactToolPair) (string, error) {
 	if result.ExitCode != nil {
 		parts = append(parts, fmt.Sprintf("exit_code=%d", *result.ExitCode))
 	}
-	if detail := firstNonEmpty(result.Message, result.OutputTail); detail != "" {
+	if detail := firstNonEmpty(result.FinalMessage, result.Message, result.OutputTail); detail != "" {
 		parts = append(parts, fmt.Sprintf("result=%q", truncateMicrocompactText(detail, microcompactMaxTextPreview)))
 	}
 	return strings.Join(parts, " "), nil

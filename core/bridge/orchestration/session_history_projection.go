@@ -1,19 +1,12 @@
 package orchestration
 
-import "ghost-os/bridge/llm"
+import (
+	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
+)
 
-type messageProjectionOptions struct {
-	IdleTurns           int
-	MicrocompactEnabled bool
-	TraceID             string
-}
+type messageProjectionOptions = sessionturn.ProjectionOptions
 
 func projectMessagesForModel(messages []llm.Message, options messageProjectionOptions) []llm.Message {
-	if len(messages) == 0 {
-		return nil
-	}
-	if !options.MicrocompactEnabled {
-		return llm.CloneMessages(messages)
-	}
-	return newMicrocompactProjector(options).Project(messages)
+	return sessionturn.ProjectMessagesForModel(messages, options)
 }

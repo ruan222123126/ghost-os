@@ -3,8 +3,8 @@ package orchestration
 import (
 	"errors"
 	"net/http"
-	"strings"
 
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	"ghost-os/bridge/session"
 )
 
@@ -44,27 +44,15 @@ func mapTaskError(err error) int {
 }
 
 func buildTaskPayload(task ScheduledTask) taskPayload {
-	payload := cloneScheduledTask(task)
-	payload.TaskKind = normalizeTaskKind(task.TaskKind)
-	return payload
+	return apptasks.BuildPayload(task)
 }
 
 func buildTaskRunLogPayload(run TaskRunLog) taskRunLogPayload {
-	return run
+	return apptasks.BuildRunLogPayload(run)
 }
 
 func includeTaskInScope(task ScheduledTask, scope string) bool {
-	kind := normalizeTaskKind(task.TaskKind)
-	switch strings.TrimSpace(scope) {
-	case "", taskListScopeUser:
-		return kind == taskKindAgentMessage || kind == taskKindWorkflow
-	case taskListScopeSystem:
-		return kind == taskKindSystemAction
-	case taskListScopeOrchestration:
-		return kind == taskKindOrchestration
-	default:
-		return false
-	}
+	return apptasks.IncludeInScope(task, scope)
 }
 
 func (s *bridgeService) executeTaskCreateAction(params taskCreateParams, traceID string) (any, int, error) {
