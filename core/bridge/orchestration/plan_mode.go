@@ -75,14 +75,14 @@ func (r planModeRunner) Execute(
 		return agentResponse{}, errPlanModeRuntimeFactoryRequired
 	}
 	deps, err := r.runtimeFactory.Build(
-		applyRequestRuntimeOptionsToStore(r.configStore, prepared.requestRuntime),
+		applyRequestRuntimeOptionsToStore(r.configStore, prepared.RequestRuntime),
 	)
 	if err != nil {
 		return agentResponse{}, err
 	}
 	defer deps.Close()
 
-	sess, history, err := r.loadHistory(prepared.sessionID, deps)
+	sess, history, err := r.loadHistory(prepared.SessionID, deps)
 	if err != nil {
 		return agentResponse{}, err
 	}
@@ -92,11 +92,11 @@ func (r planModeRunner) Execute(
 	}
 	defer cleanup()
 
-	assistantMessage, conversationState, err := r.completePlan(execCtx, deps, history, prepared.userInput)
+	assistantMessage, conversationState, err := r.completePlan(execCtx, deps, history, prepared.UserInput)
 	if err != nil {
 		return agentResponse{}, err
 	}
-	if err := r.persistPlanTurn(sess, prepared.userInput, assistantMessage, conversationState); err != nil {
+	if err := r.persistPlanTurn(sess, prepared.UserInput, assistantMessage, conversationState); err != nil {
 		return agentResponse{}, err
 	}
 	return newAgentResponsePayload(assistantMessage.Text, sess.ID, nil, agentResponseMeta{Mode: agentModePlan})

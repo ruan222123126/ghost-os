@@ -12,8 +12,8 @@ func TestPrepareAgentTurnRequestAcceptsImageOnlyInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareAgentTurnRequest returned error: %v", err)
 	}
-	if prepared.userInput.Text != "" || len(prepared.userInput.Content) != 1 || prepared.userInput.Content[0].Image == nil {
-		t.Fatalf("unexpected prepared input: %+v", prepared.userInput)
+	if prepared.UserInput.Text != "" || len(prepared.UserInput.Content) != 1 || prepared.UserInput.Content[0].Image == nil {
+		t.Fatalf("unexpected prepared input: %+v", prepared.UserInput)
 	}
 }
 
@@ -37,8 +37,8 @@ func TestPrepareAgentTurnRequestNormalizesPlanMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareAgentTurnRequest returned error: %v", err)
 	}
-	if prepared.mode != agentModePlan {
-		t.Fatalf("unexpected mode: got %q want %q", prepared.mode, agentModePlan)
+	if prepared.Mode != agentModePlan {
+		t.Fatalf("unexpected mode: got %q want %q", prepared.Mode, agentModePlan)
 	}
 }
 

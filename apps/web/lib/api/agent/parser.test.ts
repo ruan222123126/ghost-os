@@ -25,7 +25,14 @@ describe('lib/api/agent/parser', () => {
     });
   });
 
-  it('rejects removed prox success mode', () => {
+  it('rejects removed pro/prox success modes', () => {
+    expect(() => parseAgentSendResponse({
+      message: 'legacy pro response',
+      session_id: 'session-legacy-pro',
+      session_ended: false,
+      mode: 'pro',
+    })).toThrow('agent response.mode');
+
     expect(() => parseAgentSendResponse({
       message: 'legacy response',
       session_id: 'session-legacy',

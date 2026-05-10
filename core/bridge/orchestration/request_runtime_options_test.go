@@ -66,20 +66,13 @@ func TestRequestProjectRootOverrideAppliesToPlanMode(t *testing.T) {
 	assertCapturedProjectRoot(t, factory, projectRoot)
 }
 
-func TestRequestProjectRootOverrideAppliesToProMode(t *testing.T) {
+func TestRequestProjectRootOverrideAppliesToProPrefixedStandardTurn(t *testing.T) {
 	projectRoot := t.TempDir()
 	factory := &projectRootCaptureFactory{
 		client: &proTestCompleter{
 			responses: []*llm.CompletionResponse{{
-				Message: llm.Message{
-					Role: llm.RoleAssistant,
-					ToolCalls: []llm.ToolCall{{
-						ID:        "call-1",
-						Name:      "pro_complete",
-						Arguments: []byte(`{"did":"done","remaining":"none","final_message":"done","final_change_log":"updated project root routing"}`),
-					}},
-				},
-				FinishReason: llm.FinishToolCalls,
+				Message:      llm.Message{Role: llm.RoleAssistant, Text: "ok"},
+				FinishReason: llm.FinishStop,
 			}},
 		},
 	}

@@ -21,7 +21,7 @@ func (i orchestrationMemberActionInvoker) ExecuteAgentAction(
 	if i.service == nil {
 		return ports.AgentActionPayload{}, fmt.Errorf("task executor service is not configured")
 	}
-	result, err := i.service.executeAgentActionWithRuntimeOverrides(
+	result, err := i.service.agentTurnService().Execute(
 		ctx,
 		agentParams{Message: req.Message, SessionID: req.SessionID},
 		bridgeTasks.CloneTaskRuntimeOverrides(req.RuntimeOverrides),

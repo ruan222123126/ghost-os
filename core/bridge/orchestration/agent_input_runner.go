@@ -17,12 +17,12 @@ func (s *bridgeService) runPreparedAgentTurn(
 	prepared preparedAgentTurnRequest,
 	traceID string,
 ) (string, string, error) {
-	runner, err := requestScopedAgentRunner(s.agentRunner, prepared.requestRuntime)
+	runner, err := requestScopedAgentRunner(s.agentRunner, prepared.RequestRuntime)
 	if err != nil {
 		return "", "", err
 	}
-	if prepared.runtimeOverrides != nil {
-		if hasAgentInputImages(prepared.userInput) {
+	if prepared.RuntimeOverrides != nil {
+		if hasAgentInputImages(prepared.UserInput) {
 			return "", "", errRuntimeOverrideWithImages
 		}
 		runner, ok := runner.(SessionTurnRunnerWithOverrides)
@@ -31,20 +31,20 @@ func (s *bridgeService) runPreparedAgentTurn(
 		}
 		return runner.RunTurnWithOverrides(
 			ctx,
-			prepared.message,
-			prepared.sessionID,
+			prepared.Message,
+			prepared.SessionID,
 			traceID,
-			prepared.runtimeOverrides,
+			prepared.RuntimeOverrides,
 		)
 	}
-	if hasAgentInputImages(prepared.userInput) {
+	if hasAgentInputImages(prepared.UserInput) {
 		runner, ok := runner.(StructuredSessionTurnRunner)
 		if !ok {
 			return "", "", errStructuredAgentRunnerRequired
 		}
-		return runner.RunTurnInput(ctx, prepared.userInput, prepared.sessionID, traceID)
+		return runner.RunTurnInput(ctx, prepared.UserInput, prepared.SessionID, traceID)
 	}
-	return runner.RunTurn(ctx, prepared.message, prepared.sessionID, traceID)
+	return runner.RunTurn(ctx, prepared.Message, prepared.SessionID, traceID)
 }
 
 func (s *bridgeService) runPreparedAgentTurnStream(
@@ -53,18 +53,18 @@ func (s *bridgeService) runPreparedAgentTurnStream(
 	traceID string,
 	sink streaming.Sink,
 ) (string, string, error) {
-	runner, err := requestScopedAgentRunner(s.agentRunner, prepared.requestRuntime)
+	runner, err := requestScopedAgentRunner(s.agentRunner, prepared.RequestRuntime)
 	if err != nil {
 		return "", "", err
 	}
-	if hasAgentInputImages(prepared.userInput) {
+	if hasAgentInputImages(prepared.UserInput) {
 		runner, ok := runner.(StructuredSessionTurnRunner)
 		if !ok {
 			return "", "", errStructuredAgentRunnerRequired
 		}
-		return runner.RunTurnStreamInput(ctx, prepared.userInput, prepared.sessionID, traceID, sink)
+		return runner.RunTurnStreamInput(ctx, prepared.UserInput, prepared.SessionID, traceID, sink)
 	}
-	return runner.RunTurnStream(ctx, prepared.message, prepared.sessionID, traceID, sink)
+	return runner.RunTurnStream(ctx, prepared.Message, prepared.SessionID, traceID, sink)
 }
 
 func requestScopedAgentRunner(

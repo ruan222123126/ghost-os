@@ -3,30 +3,22 @@ package orchestration
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"ghost-os/bridge/agent"
-	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
-var errAgentMessageRequired = errors.New("message or images is required")
+var errAgentMessageRequired = agentturn.ErrMessageRequired
 
 const (
-	agentModeDefault = ""
-	agentModePlan    = "plan"
+	agentModeDefault = agentturn.ModeDefault
+	agentModePlan    = agentturn.ModePlan
 )
 
-type preparedAgentTurnRequest struct {
-	userInput        llm.Message
-	message          string
-	mode             string
-	sessionID        string
-	requestRuntime   *requestRuntimeOptions
-	runtimeOverrides *TaskRuntimeOverrides
-}
+type preparedAgentTurnRequest = agentturn.PreparedRequest
 
 type finalizedAgentTurn struct {
 	message    string
@@ -35,50 +27,15 @@ type finalizedAgentTurn struct {
 }
 
 func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {
-	userInput, message, err := buildAgentUserInput(params.Message, params.Images)
-	if err != nil {
-		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-	mode, err := normalizeAgentMode(params.Mode)
-	if err != nil {
-		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-	requestRuntime, err := normalizeRequestRuntimeOptions(params.ProjectRoot)
-	if err != nil {
-		return preparedAgentTurnRequest{}, wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-	return preparedAgentTurnRequest{
-		userInput:      userInput,
-		message:        message,
-		mode:           mode,
-		sessionID:      strings.TrimSpace(params.SessionID),
-		requestRuntime: requestRuntime,
-	}, nil
+	return agentturn.PrepareRequest(params)
 }
 
 func normalizeAgentMode(raw string) (string, error) {
-	mode := strings.ToLower(strings.TrimSpace(raw))
-	if mode == "" {
-		return agentModeDefault, nil
-	}
-	if mode == agentModePlan {
-		return mode, nil
-	}
-	return "", fmt.Errorf("unsupported agent mode: %q", mode)
+	return agentturn.NormalizeMode(raw)
 }
 
 func (s *bridgeService) validateAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {
-	prepared, err := prepareAgentTurnRequest(params)
-	if err != nil {
-		return preparedAgentTurnRequest{}, err
-	}
-	if inflightErr := s.ensureSessionNotInflight(prepared.sessionID); inflightErr != nil {
-		return preparedAgentTurnRequest{}, inflightErr
-	}
-	if activeErr := s.ensureSessionActive(prepared.sessionID); activeErr != nil {
-		return preparedAgentTurnRequest{}, activeErr
-	}
-	return prepared, nil
+	return agentturn.PrepareWithRuntimeOverrides(s.agentTurnGuards(), params, nil)
 }
 
 func classifyAgentTurnError(err error) (*agent.ErrAwaitingHuman, ServiceErrorKind, bool, error) {

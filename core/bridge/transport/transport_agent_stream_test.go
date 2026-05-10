@@ -134,38 +134,37 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 	}
 }
 
-func TestHandleAgentStreamSupportsProMode(t *testing.T) {
-	handler, service, _ := newTestHandlerWithService(t, nil, nil)
-	completer := &proTestCompleter{
-		responses: []*llm.CompletionResponse{
-			{
-				Message: llm.Message{
-					Role: llm.RoleAssistant,
-					ToolCalls: []llm.ToolCall{{
-						ID:        "call-1",
-						Name:      "pro_complete",
-						Arguments: []byte(`{"did":"done","remaining":"none","final_message":"streamed done","final_change_log":"finished the requested change"}`),
-					}},
-				},
-				FinishReason: llm.FinishToolCalls,
-			},
-		},
+func TestHandleAgentStreamTreatsProPrefixAsStandardMessage(t *testing.T) {
+	streamExecutor := func(
+		ctx context.Context,
+		message string,
+		sessionID string,
+		traceID string,
+		_ bridgeconfig.Store,
+		_ *session.Store,
+		sink streaming.Sink,
+	) (string, string, error) {
+		if message != "pro fix config" {
+			t.Fatalf("unexpected message: got %q want %q", message, "pro fix config")
+		}
+		if sessionID != "" {
+			t.Fatalf("unexpected session_id: got %q want empty", sessionID)
+		}
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 1, mustAppAssistantStepID(t, 1), streaming.EventMessage, map[string]any{
+			"text":       "standard streamed done",
+			"session_id": "session-stream",
+		})); err != nil {
+			return "", "", err
+		}
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, "session-stream", 1, "", streaming.EventDone, map[string]any{
+			"session_id":    "session-stream",
+			"session_ended": false,
+		})); err != nil {
+			return "", "", err
+		}
+		return "standard streamed done", "session-stream", nil
 	}
-	service.SetRuntimeFactory(proTestRuntimeFactory{
-		deps: bridgeorchestration.NewRuntimeDependencies(
-			bridgeconfig.Config{
-				MaxTurns:         4,
-				ProMaxIterations: 2,
-				PromptsPath:      "",
-				PromptsDir:       os.Getenv("GHOST_PROMPTS_DIR"),
-				Provider:         bridgeconfig.ProviderConfig{Model: "gpt-4o"},
-			},
-			completer,
-			tools.NewRegistry(),
-			"system prompt",
-			nil,
-		),
-	})
+	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)
 
 	recorder := serveRequest(
 		handler,
@@ -189,7 +188,7 @@ func TestHandleAgentStreamSupportsProMode(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected message payload type: %T", events[0].Payload)
 	}
-	if payload["text"] != "streamed done" {
+	if payload["text"] != "standard streamed done" {
 		t.Fatalf("unexpected text: %v", payload["text"])
 	}
 }

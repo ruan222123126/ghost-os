@@ -43,19 +43,19 @@ func (r proModeRunner) Execute(ctx context.Context, prepared preparedAgentTurnRe
 		return agentResponse{}, errors.New("agent runtime factory is not configured")
 	}
 	deps, err := r.runtimeFactory.Build(
-		applyRequestRuntimeOptionsToStore(r.configStore, prepared.requestRuntime),
+		applyRequestRuntimeOptionsToStore(r.configStore, prepared.RequestRuntime),
 	)
 	if err != nil {
 		return agentResponse{}, err
 	}
 	defer deps.Close()
 
-	request, _, err := parseProModeRequest(prepared.message, deps.cfg.ProMaxIterations)
+	request, _, err := parseProModeRequest(prepared.Message, deps.cfg.ProMaxIterations)
 	if err != nil {
 		return agentResponse{}, err
 	}
 
-	sess, err := loadOrCreateIterationSession(r.sessionStore, prepared.sessionID, deps.systemPrompt)
+	sess, err := loadOrCreateIterationSession(r.sessionStore, prepared.SessionID, deps.systemPrompt)
 	if err != nil {
 		return agentResponse{}, err
 	}
@@ -67,7 +67,7 @@ func (r proModeRunner) Execute(ctx context.Context, prepared preparedAgentTurnRe
 
 	execCtx = tools.WithSession(execCtx, sess)
 	execCtx = tools.WithSessionCheckpoint(execCtx, r.sessionStore)
-	return r.run(execCtx, deps, sess, request, prepared.message, traceID)
+	return r.run(execCtx, deps, sess, request, prepared.Message, traceID)
 }
 
 func loadOrCreateIterationSession(store *session.Store, sessionID string, systemPrompt string) (*session.Session, error) {
