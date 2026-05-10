@@ -54,9 +54,13 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 	if run.Run.ResponsePreview != "workflow completed at agent-node: agent done" {
 		t.Fatalf("unexpected run preview: %#v", run.Run)
 	}
-	if run.Run.SessionIDOutput != "workflow-session" {
-		t.Fatalf("unexpected session output: %#v", run.Run)
-	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, []string{"workflow-session"}, []string{
+		taskRunTranscriptEventMarker,
+		"节点 tool-node 使用工具：script_exec",
+		"节点 llm-node（LLM）",
+		"节点 agent-node（agent）",
+		"agent done",
+	})
 	assertWorkflowNodeResultsSequence(
 		t,
 		run.Run.NodeResults,
@@ -174,9 +178,11 @@ func TestTaskWorkflowRunNowRoutesIfNodeByToolOutput(t *testing.T) {
 	if run.Run.Status != taskRunStatusSuccess {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
-	if run.Run.SessionIDOutput != "if-session" {
-		t.Fatalf("unexpected session output: %#v", run.Run)
-	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, []string{"if-session"}, []string{
+		"工作流 if 判断：if-node branch=true",
+		"节点 agent-true（agent）",
+		"if branch done",
+	})
 	if len(agentRunner.calls) != 1 || agentRunner.calls[0].message != "true branch message" {
 		t.Fatalf("unexpected agent branch: %#v", agentRunner.calls)
 	}
@@ -219,9 +225,11 @@ func TestTaskWorkflowRunNowKeepsIfValueLiteral(t *testing.T) {
 	if run.Run.Status != taskRunStatusSuccess {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
-	if run.Run.SessionIDOutput != "if-template-session" {
-		t.Fatalf("unexpected session output: %#v", run.Run)
-	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, []string{"if-template-session"}, []string{
+		"工作流 if 判断：if-node branch=false",
+		"value=${inputs.token}",
+		"节点 agent-false（agent）",
+	})
 	if len(agentRunner.calls) != 1 || agentRunner.calls[0].message != "false branch message" {
 		t.Fatalf("unexpected agent branch: %#v", agentRunner.calls)
 	}
@@ -259,6 +267,10 @@ func TestTaskWorkflowRunNowExecutesLoopBodyByMaxIterations(t *testing.T) {
 	if len(tool.calls) != 3 {
 		t.Fatalf("unexpected loop execution count: got %d want 3", len(tool.calls))
 	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{
+		"工作流进入循环：loop-node 第 1/3 轮",
+		"工作流退出循环：loop-node",
+	})
 }
 
 func TestTaskWorkflowRunNowExecutesStartBranchesInParallel(t *testing.T) {
@@ -357,9 +369,12 @@ func TestTaskWorkflowRunNowStopsOnAgentAwaitingHuman(t *testing.T) {
 	if run.Run.Status != taskRunStatusAwaitingHuman {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
-	if run.Run.SessionIDOutput != "await-session" {
-		t.Fatalf("unexpected session output: %#v", run.Run)
-	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, []string{"await-session"}, []string{
+		taskRunTranscriptEventMarker,
+		"任务运行结束：awaiting_human",
+		"节点 agent-node（agent）",
+		"Need approval",
+	})
 	if !strings.Contains(run.Run.ResponsePreview, "Need approval") {
 		t.Fatalf("unexpected awaiting preview: %#v", run.Run)
 	}
@@ -781,6 +796,48 @@ func assertWorkflowNodeResultsMonotonic(t *testing.T, nodeResults []RunNodeResul
 		}
 		lastSeq = node.CompletedSeq
 	}
+}
+
+func assertRunTranscriptSession(
+	t *testing.T,
+	service *bridgeService,
+	sessionID string,
+	disallowed []string,
+	required []string,
+) {
+	t.Helper()
+	if strings.TrimSpace(sessionID) == "" {
+		t.Fatal("expected run transcript session id")
+	}
+	for _, blocked := range disallowed {
+		if sessionID == blocked {
+			t.Fatalf("expected display transcript session, got execution session %q", sessionID)
+		}
+	}
+	if service == nil || service.sessionStore == nil {
+		t.Fatal("session store is not configured")
+	}
+	loaded, err := service.sessionStore.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load run transcript session %q: %v", sessionID, err)
+	}
+	transcript := sessionMessagesText(loaded.Messages)
+	for _, expected := range required {
+		if !strings.Contains(transcript, expected) {
+			t.Fatalf("run transcript missing %q in:\n%s", expected, transcript)
+		}
+	}
+}
+
+func sessionMessagesText(messages []llm.Message) string {
+	parts := make([]string, 0, len(messages)*2)
+	for _, message := range messages {
+		parts = append(parts, string(message.Role)+": "+message.Text)
+		for _, call := range message.ToolCalls {
+			parts = append(parts, "tool_call: "+call.Name+" "+string(call.Arguments))
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 func workflowWithParallelStartToolBranches(toolName string) *WorkflowDefinition {

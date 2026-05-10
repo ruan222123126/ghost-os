@@ -134,6 +134,11 @@ type taskExecutorAdapter struct {
 }
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
+	result := a.executeTask(ctx, task, traceID)
+	return a.attachTaskRunTranscript(task, traceID, result)
+}
+
+func (a taskExecutorAdapter) executeTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
 	switch kind := normalizeTaskKind(task.TaskKind); kind {
 	case taskKindWorkflow:
 		return a.executeWorkflowTask(ctx, task, traceID)
