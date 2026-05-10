@@ -3,6 +3,8 @@ import type {
 } from '@/lib/envelope.generated';
 import type {
   AgentMessageTaskPayload,
+  BridgeConfig,
+  TaskRelayConfig,
   TaskRuntimeOverrides,
   TextTaskCreateRequest,
   TextTaskUpdateRequest,
@@ -11,14 +13,26 @@ import type {
 const MIN_INTERVAL_SECONDS = 1;
 const DECIMAL_RADIX = 10;
 const TOOL_ALLOWLIST_SEPARATOR_PATTERN = /[\n,]/;
+const DEFAULT_RELAY_MAX_ROUNDS = 20;
+const DEFAULT_RELAY_EXECUTION_TIMEOUT_MS = 0;
+const DEFAULT_RELAY_STOP_POLICY: TaskRelayStopPolicy = 'ai_decides';
 
 type TaskUpdateRequest = Pick<
   SharedTaskUpdateRequest,
-  'message' | 'session_id' | 'runtime_overrides' | 'interval_seconds' | 'cron_expr' | 'task_kind'
+  | 'message'
+  | 'session_id'
+  | 'runtime_overrides'
+  | 'agent_mode'
+  | 'relay'
+  | 'interval_seconds'
+  | 'cron_expr'
+  | 'task_kind'
 > | TextTaskUpdateRequest;
 
 export type TaskEditorMode = 'create' | 'edit';
 export type TaskScheduleMode = 'interval' | 'cron';
+export type TaskAgentMode = 'single' | 'relay';
+export type TaskRelayStopPolicy = TaskRelayConfig['stop_policy'];
 
 export interface TaskEditorState {
   message: string;
@@ -26,24 +40,39 @@ export interface TaskEditorState {
   intervalSeconds: string;
   cronExpr: string;
   sessionId: string;
+  agentMode: TaskAgentMode;
+  relayStopPolicy: TaskRelayStopPolicy;
+  relayMaxRounds: string;
+  relayExecutionTimeoutMS: string;
   runtimeOverridesEnabled: boolean;
   runtimeModel: string;
   runtimeToolAllowlist: string;
 }
 
-export const emptyTaskEditorState: TaskEditorState = {
-  message: '',
-  scheduleMode: 'interval',
-  intervalSeconds: '300',
-  cronExpr: '',
-  sessionId: '',
-  runtimeOverridesEnabled: false,
-  runtimeModel: '',
-  runtimeToolAllowlist: '',
-};
+export const emptyTaskEditorState = createTaskEditorState(null);
+
+export function createTaskEditorState(config: BridgeConfig | null): TaskEditorState {
+  return {
+    message: '',
+    scheduleMode: 'interval',
+    intervalSeconds: '300',
+    cronExpr: '',
+    sessionId: '',
+    agentMode: 'single',
+    relayStopPolicy: config?.relay_default_stop_policy ?? DEFAULT_RELAY_STOP_POLICY,
+    relayMaxRounds: String(config?.relay_default_max_rounds ?? DEFAULT_RELAY_MAX_ROUNDS),
+    relayExecutionTimeoutMS: String(
+      config?.relay_default_execution_timeout_ms ?? DEFAULT_RELAY_EXECUTION_TIMEOUT_MS,
+    ),
+    runtimeOverridesEnabled: false,
+    runtimeModel: '',
+    runtimeToolAllowlist: '',
+  };
+}
 
 export function editorStateFromTask(task: AgentMessageTaskPayload): TaskEditorState {
   const runtimeOverrides = task.runtime_overrides;
+  const relay = task.relay;
 
   return {
     message: task.message,
@@ -51,6 +80,12 @@ export function editorStateFromTask(task: AgentMessageTaskPayload): TaskEditorSt
     intervalSeconds: task.interval_seconds === undefined ? '' : String(task.interval_seconds),
     cronExpr: task.cron_expr ?? '',
     sessionId: task.session_id ?? '',
+    agentMode: task.agent_mode ?? 'single',
+    relayStopPolicy: relay?.stop_policy ?? DEFAULT_RELAY_STOP_POLICY,
+    relayMaxRounds: String(relay?.max_rounds ?? DEFAULT_RELAY_MAX_ROUNDS),
+    relayExecutionTimeoutMS: String(
+      relay?.execution_timeout_ms ?? DEFAULT_RELAY_EXECUTION_TIMEOUT_MS,
+    ),
     runtimeOverridesEnabled: runtimeOverrides !== undefined,
     runtimeModel: runtimeOverrides?.model ?? '',
     runtimeToolAllowlist: (runtimeOverrides?.tool_allowlist ?? []).join(', '),
@@ -63,6 +98,7 @@ export function taskCreateRequestFromEditor(editor: TaskEditorState): TextTaskCr
   return {
     task_kind: 'agent_message',
     ...taskMutationFieldsFromEditor(editor),
+    ...relayFieldsFromEditor(editor),
     runtime_overrides: runtimeOverrides,
   };
 }
@@ -73,6 +109,7 @@ export function taskUpdateRequestFromEditor(editor: TaskEditorState): TaskUpdate
   return {
     task_kind: 'agent_message',
     ...taskMutationFieldsFromEditor(editor),
+    ...relayFieldsFromEditor(editor),
     runtime_overrides: runtimeOverrides,
   };
 }
@@ -113,6 +150,34 @@ function scheduleFieldsFromEditor(editor: TaskEditorState): {
   return {
     cron_expr: cronExpr,
   };
+}
+
+function relayFieldsFromEditor(editor: TaskEditorState): {
+  agent_mode: TaskAgentMode;
+  relay?: TaskRelayConfig;
+} {
+  if (editor.agentMode === 'single') {
+    return { agent_mode: 'single' };
+  }
+
+  return {
+    agent_mode: 'relay',
+    relay: relayConfigFromEditor(editor),
+  };
+}
+
+function relayConfigFromEditor(editor: TaskEditorState): TaskRelayConfig {
+  const config: TaskRelayConfig = {
+    stop_policy: editor.relayStopPolicy,
+    execution_timeout_ms: parseNonNegativeInteger(
+      editor.relayExecutionTimeoutMS,
+      'relay execution_timeout_ms',
+    ),
+  };
+  if (editor.relayStopPolicy === 'max_rounds') {
+    config.max_rounds = parsePositiveInteger(editor.relayMaxRounds, 'relay max_rounds');
+  }
+  return config;
 }
 
 function runtimeOverridesForUpdate(
@@ -163,4 +228,20 @@ function parseIntervalSeconds(value: string): number {
   }
 
   return parsed;
+}
+
+function parsePositiveInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  return Number(trimmed);
+}
+
+function parseNonNegativeInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a non-negative integer`);
+  }
+  return Number(trimmed);
 }

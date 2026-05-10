@@ -4,6 +4,7 @@ import { PresetSettingsSection } from '@/components/config/PresetSettingsSection
 import { PromptsLibrarySettingsSection } from '@/components/config/PromptsLibrarySettingsSection';
 import { PromptsPreviewSettingsSection } from '@/components/config/PromptsPreviewSettingsSection';
 import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
+import { RelaySettingsSection } from '@/components/config/RelaySettingsSection';
 import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSection';
 import { SkillSettingsSection } from '@/components/config/SkillSettingsSection';
 import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
@@ -103,6 +104,17 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         onRunNow={tasksState.runTaskNowByID}
         onDelete={tasksState.deleteTaskByID}
         onCancelEditing={tasksState.cancelEditing}
+      />
+    );
+  }
+
+  if (activeTab === 'relay') {
+    return (
+      <RelaySettingsSection
+        loading={loading}
+        saving={saving}
+        config={config}
+        onSave={onSave}
       />
     );
   }

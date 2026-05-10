@@ -11,6 +11,12 @@ describe('lib/api/tasks/parser', () => {
         model: 'gpt-5.4',
         tool_allowlist: ['script_exec', 'web_search'],
       },
+      agent_mode: 'relay',
+      relay: {
+        stop_policy: 'max_rounds',
+        max_rounds: 4,
+        execution_timeout_ms: 0,
+      },
       task_kind: 'agent_message',
       schedule_type: 'interval',
       interval_seconds: 300,
@@ -356,6 +362,20 @@ describe('lib/api/tasks/parser', () => {
       node_id: 'start-node',
       completed_seq: 1,
     });
+  });
+
+  it('accepts incomplete task run status', () => {
+    const logs = parseTaskRunLogList([
+      {
+        task_id: 'task-log-incomplete',
+        run_id: 'run-incomplete',
+        trace_id: 'trace-incomplete',
+        scheduled_at: '2026-04-05T07:00:00Z',
+        status: 'incomplete',
+      },
+    ]);
+
+    expect(logs[0].status).toBe('incomplete');
   });
 
   it('accepts task run log when node_results is missing', () => {

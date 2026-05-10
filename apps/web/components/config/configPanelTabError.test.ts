@@ -37,4 +37,17 @@ describe('components/config/configPanelTabError', () => {
       toolError: 'tool',
     })).toBe('preset');
   });
+
+  it('returns the general config error for relay tab', () => {
+    expect(resolveConfigPanelTabError({
+      activeTab: 'relay',
+      generalError: 'general',
+      providerError: 'provider',
+      presetError: 'preset',
+      promptError: 'prompt',
+      taskError: 'task',
+      skillError: 'skill',
+      toolError: 'tool',
+    })).toBe('general');
+  });
 });

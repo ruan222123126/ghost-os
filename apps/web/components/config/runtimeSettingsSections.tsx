@@ -2,6 +2,7 @@ import type { BridgeConfig } from '@/lib/types';
 import { buildSecretPlaceholder, type RuntimeFormState } from '@/components/config/runtimeSettingsForm';
 import {
   Card,
+  SelectField,
   TextField,
   ToggleField,
 } from '@/components/config/runtimeSettingsFieldComponents';
@@ -127,9 +128,24 @@ export function SessionSection(props: SectionProps) {
   const { locale, copy } = useWebLocale();
   const { formState, controlsDisabled, onChange } = props;
   const isZh = locale === 'zh-CN';
+  const titleModeOptions = [
+    { value: 'session_id', label: isZh ? '会话 ID' : 'Session ID' },
+    { value: 'first_message', label: isZh ? '首条消息' : 'First Message' },
+    { value: 'ai_generated', label: isZh ? 'AI 生成' : 'AI Generated' },
+  ] as const;
 
   return (
     <Card title={copy.settings.runtimeSessionTitle} copy={copy.settings.runtimeSessionCopy}>
+      <SelectField
+        label={isZh ? '会话标题策略' : 'Session Title Strategy'}
+        description={isZh
+          ? '只影响新建会话。AI 生成会在后台运行，聊天不会等待标题。'
+          : 'Only affects new sessions. AI-generated titles run in the background without blocking chat.'}
+        value={formState.sessionTitleMode}
+        disabled={controlsDisabled}
+        options={titleModeOptions}
+        onChange={(value) => onChange({ sessionTitleMode: value as RuntimeFormState['sessionTitleMode'] })}
+      />
       <ToggleField
         label={isZh ? 'Assistant Markdown 渲染' : 'Assistant Markdown Rendering'}
         description={isZh

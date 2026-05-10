@@ -8,6 +8,7 @@ const DEFAULT_MAX_TURNS = 20;
 const DEFAULT_TASK_EXECUTION_TIMEOUT_MS = 300000;
 const DEFAULT_LLM_COMPLETION_RETRY_COUNT = 1;
 const DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS = 200;
+const DEFAULT_SESSION_TITLE_MODE = 'session_id';
 
 export interface RuntimeFormState {
   provider: string;
@@ -24,6 +25,7 @@ export interface RuntimeFormState {
   toolCallCompactOutputEnabled: boolean;
   memoryModeEnabled: boolean;
   microcompactEnabled: boolean;
+  sessionTitleMode: BridgeConfig['session_title_mode'];
   webSearchTavilyURL: string;
   webSearchExaURL: string;
   webSearchTavilyAPIKey: string;
@@ -48,6 +50,7 @@ export function createRuntimeFormState(config: BridgeConfig | null): RuntimeForm
     toolCallCompactOutputEnabled: config?.tool_call_compact_output_enabled ?? false,
     memoryModeEnabled: config?.memory_mode_enabled ?? false,
     microcompactEnabled: config?.microcompact_enabled ?? false,
+    sessionTitleMode: config?.session_title_mode ?? DEFAULT_SESSION_TITLE_MODE,
     webSearchTavilyURL: config?.web_search_tavily_url ?? '',
     webSearchExaURL: config?.web_search_exa_url ?? '',
     webSearchTavilyAPIKey: '',
@@ -105,6 +108,7 @@ function buildRuntimeScalarUpdate(
     tool_call_compact_output_enabled: formState.toolCallCompactOutputEnabled,
     memory_mode_enabled: formState.memoryModeEnabled,
     microcompact_enabled: formState.microcompactEnabled,
+    session_title_mode: formState.sessionTitleMode,
     web_search_tavily_url: formState.webSearchTavilyURL,
     web_search_exa_url: formState.webSearchExaURL,
   };

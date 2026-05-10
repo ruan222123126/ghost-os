@@ -12,6 +12,9 @@ describe('lib/api/config/parser', () => {
       project_root: '',
       max_turns: 20,
       task_execution_timeout_ms: 300000,
+      relay_default_stop_policy: 'ai_decides',
+      relay_default_max_rounds: 20,
+      relay_default_execution_timeout_ms: 0,
       llm_completion_retry_count: 1,
       llm_completion_retry_interval_ms: 200,
       api_key_set: true,
@@ -22,6 +25,7 @@ describe('lib/api/config/parser', () => {
       tool_call_compact_output_enabled: false,
       memory_mode_enabled: false,
       microcompact_enabled: false,
+      session_title_mode: 'session_id',
       web_search_tavily_url: 'https://proxy.example/tavily',
       web_search_exa_url: '',
       web_search_tavily_api_key_set: true,
@@ -46,6 +50,9 @@ describe('lib/api/config/parser', () => {
       project_root: '/tmp/ghost-os',
       max_turns: 7,
       task_execution_timeout_ms: 600000,
+      relay_default_stop_policy: 'max_rounds',
+      relay_default_max_rounds: 12,
+      relay_default_execution_timeout_ms: 0,
       llm_completion_retry_count: 0,
       llm_completion_retry_interval_ms: 150,
       api_key_set: true,
@@ -56,6 +63,7 @@ describe('lib/api/config/parser', () => {
       tool_call_compact_output_enabled: true,
       memory_mode_enabled: true,
       microcompact_enabled: true,
+      session_title_mode: 'ai_generated',
       web_search_tavily_url: '',
       web_search_exa_url: '',
       web_search_tavily_api_key_set: false,
@@ -66,10 +74,14 @@ describe('lib/api/config/parser', () => {
     expect(parsed.assistant_markdown_enabled).toBe(false);
     expect(parsed.max_turns).toBe(7);
     expect(parsed.task_execution_timeout_ms).toBe(600000);
+    expect(parsed.relay_default_stop_policy).toBe('max_rounds');
+    expect(parsed.relay_default_max_rounds).toBe(12);
+    expect(parsed.relay_default_execution_timeout_ms).toBe(0);
     expect(parsed.llm_completion_retry_count).toBe(0);
     expect(parsed.llm_completion_retry_interval_ms).toBe(150);
     expect(parsed.tool_call_compact_output_enabled).toBe(true);
     expect(parsed.microcompact_enabled).toBe(true);
+    expect(parsed.session_title_mode).toBe('ai_generated');
   });
 
   it('rejects unknown fields in provider lists', () => {

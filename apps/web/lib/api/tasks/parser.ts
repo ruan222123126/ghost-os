@@ -16,12 +16,16 @@ import { parseWorkflowDefinition } from '@/lib/api/tasks/workflowParser';
 
 const TASK_KINDS = ['agent_message', 'workflow', 'orchestration'] as const;
 const SCHEDULE_TYPES = ['interval', 'cron'] as const;
+const TASK_AGENT_MODES = ['single', 'relay'] as const;
+const TASK_RELAY_STOP_POLICIES = ['ai_decides', 'max_rounds'] as const;
 const TASK_PAYLOAD_KEYS = [
   'id',
   'name',
   'message',
   'session_id',
   'runtime_overrides',
+  'agent_mode',
+  'relay',
   'task_kind',
   'workflow',
   'orchestration',
@@ -44,7 +48,12 @@ const TASK_RUNTIME_OVERRIDE_KEYS = [
   'tool_allowlist_only',
   'max_turns',
 ] as const;
-const TASK_RUN_STATUS = ['success', 'cancelled', 'error', 'skipped', 'awaiting_human'] as const;
+const TASK_RELAY_CONFIG_KEYS = [
+  'stop_policy',
+  'max_rounds',
+  'execution_timeout_ms',
+] as const;
+const TASK_RUN_STATUS = ['success', 'incomplete', 'cancelled', 'error', 'skipped', 'awaiting_human'] as const;
 const TASK_RUN_LOG_KEYS = [
   'task_id',
   'run_id',
@@ -99,6 +108,12 @@ interface ParsedTaskRuntimeOverrides {
   max_turns?: number;
 }
 
+interface ParsedTaskRelayConfig {
+  stop_policy: 'ai_decides' | 'max_rounds';
+  max_rounds?: number;
+  execution_timeout_ms?: number;
+}
+
 function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRuntimeOverrides | undefined {
   const record = parseOptionalRecord(value, label);
   if (record === undefined) {
@@ -126,6 +141,23 @@ function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRun
     return undefined;
   }
   return parsed;
+}
+
+function parseTaskRelayConfig(value: unknown, label: string): ParsedTaskRelayConfig | undefined {
+  const record = parseOptionalRecord(value, label);
+  if (record === undefined) {
+    return undefined;
+  }
+  const picked = pickKnownKeys(record, TASK_RELAY_CONFIG_KEYS);
+
+  return {
+    stop_policy: expectStringEnum(picked.stop_policy, TASK_RELAY_STOP_POLICIES, `${label}.stop_policy`),
+    max_rounds: parseOptionalNumber(picked.max_rounds, `${label}.max_rounds`),
+    execution_timeout_ms: parseOptionalNumber(
+      picked.execution_timeout_ms,
+      `${label}.execution_timeout_ms`,
+    ),
+  };
 }
 
 function parseTaskBase(record: Record<string, unknown>, label: string): ParsedTaskBase {
@@ -161,6 +193,8 @@ function parseTaskPayloadWithLabel(value: unknown, label: string): TaskPayload {
       message: expectString(record.message, `${label}.message`),
       session_id: parseOptionalString(record.session_id, `${label}.session_id`),
       runtime_overrides: parseTaskRuntimeOverrides(record.runtime_overrides, `${label}.runtime_overrides`),
+      agent_mode: parseOptionalAgentMode(record.agent_mode, `${label}.agent_mode`),
+      relay: parseTaskRelayConfig(record.relay, `${label}.relay`),
     } as TaskPayload;
   }
   if (base.task_kind === 'orchestration') {
@@ -174,6 +208,13 @@ function parseTaskPayloadWithLabel(value: unknown, label: string): TaskPayload {
     ...base,
     workflow: parseWorkflowDefinition(record.workflow, `${label}.workflow`),
   } as TaskPayload;
+}
+
+function parseOptionalAgentMode(value: unknown, label: string): 'single' | 'relay' | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return expectStringEnum(value, TASK_AGENT_MODES, label);
 }
 
 export function parseTaskPayload(payload: unknown): TaskPayload {

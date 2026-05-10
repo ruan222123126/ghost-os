@@ -4,6 +4,7 @@ import { useWebLocale } from '@/lib/i18n/provider';
 export type SettingsTab =
   | 'general'
   | 'provider'
+  | 'relay'
   | 'tasks'
   | 'orchestration'
   | 'skills'
@@ -58,6 +59,15 @@ const TaskIcon: FC<IconProps> = ({ size = 16 }) => (
   </svg>
 );
 
+const RelayIcon: FC<IconProps> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M5 8.2a5 5 0 0 1 8.4-2.8L15 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M15 4.2V7h-2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M15 11.8a5 5 0 0 1-8.4 2.8L5 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M5 15.8V13h2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
 const OrchestrationIcon: FC<IconProps> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <rect x="3" y="4" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
@@ -91,6 +101,7 @@ const PromptIcon: FC<IconProps> = ({ size = 16 }) => (
 const tabs: TabDefinition[] = [
   { id: 'general', group: 'system', icon: SettingsIcon },
   { id: 'provider', group: 'system', icon: ServerIcon },
+  { id: 'relay', group: 'system', icon: RelayIcon },
   { id: 'tasks', group: 'system', icon: TaskIcon },
   { id: 'orchestration', group: 'system', icon: OrchestrationIcon },
   { id: 'skills', group: 'system', icon: SkillIcon },
@@ -216,6 +227,9 @@ function labelForTab(copy: ReturnType<typeof useWebLocale>['copy'], tab: Setting
   }
   if (tab === 'provider') {
     return copy.settings.tabProvider;
+  }
+  if (tab === 'relay') {
+    return copy.settings.tabRelay;
   }
   if (tab === 'tasks') {
     return copy.settings.tabTasks;

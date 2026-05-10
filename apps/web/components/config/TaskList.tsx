@@ -138,7 +138,10 @@ function TaskCard(props: TaskCardProps) {
         <p className="text-[12px] text-[#737373]">{formatSchedule(task, copy)}</p>
         <p className="truncate font-mono text-[12px] text-[#737373]">{formatSecondaryLine(task, copy)}</p>
         {task.task_kind === 'agent_message' ? (
-          <p className="truncate text-[12px] text-[#737373]">{formatRuntimeOverrides(task, copy)}</p>
+          <>
+            <p className="truncate text-[12px] text-[#737373]">{formatAgentMode(task, copy)}</p>
+            <p className="truncate text-[12px] text-[#737373]">{formatRuntimeOverrides(task, copy)}</p>
+          </>
         ) : null}
       </div>
 
@@ -225,6 +228,13 @@ function formatRuntimeOverrides(task: AgentMessageTaskPayload, copy: ReturnType<
   }
 
   return copy.settings.tasksRuntimeLabel(parts.join(' | '));
+}
+
+function formatAgentMode(task: AgentMessageTaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
+  if (task.agent_mode !== 'relay') {
+    return copy.settings.tasksAgentModeSingle;
+  }
+  return copy.settings.tasksAgentModeRelay(task.relay?.stop_policy ?? 'ai_decides');
 }
 
 function workflowStepCount(task: WorkflowTaskPayload): number {

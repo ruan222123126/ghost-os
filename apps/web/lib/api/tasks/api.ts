@@ -10,7 +10,7 @@ type WorkflowTaskCreateRequest = Extract<SharedTaskCreateRequest, { task_kind: '
 type TaskCreateRequest = WorkflowTaskCreateRequest | TextTaskCreateRequest;
 type TaskUpdateRequest = Pick<
   SharedTaskUpdateRequest,
-  'message' | 'session_id' | 'runtime_overrides' | 'interval_seconds' | 'cron_expr' | 'enabled' | 'task_kind' | 'workflow'
+  'message' | 'session_id' | 'runtime_overrides' | 'agent_mode' | 'relay' | 'interval_seconds' | 'cron_expr' | 'enabled' | 'task_kind' | 'workflow'
 >;
 
 export async function listTasks(): Promise<TaskPayload[]> {

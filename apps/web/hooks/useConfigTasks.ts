@@ -6,6 +6,7 @@ import type { TaskUpdateRequest } from '@/lib/envelope.generated';
 import {
   type TaskEditorMode,
   type TaskEditorState,
+  createTaskEditorState,
   editorStateFromTask,
   emptyTaskEditorState,
   taskCreateRequestFromEditor,
@@ -13,10 +14,11 @@ import {
 } from '@/lib/configTasks';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { AgentMessageTaskPayload, TaskPayload } from '@/lib/types';
+import type { AgentMessageTaskPayload, BridgeConfig, TaskPayload } from '@/lib/types';
 
 interface UseConfigTasksOptions {
   open: boolean;
+  config: BridgeConfig | null;
 }
 
 interface UseConfigTasksResult {
@@ -43,7 +45,7 @@ function isAgentMessageTask(task: TaskPayload): task is AgentMessageTaskPayload 
 
 export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksResult {
   const { copy } = useWebLocale();
-  const { open } = options;
+  const { open, config } = options;
   const [tasks, setTasks] = useState<TaskPayload[]>([]);
   const [tasksLoading, setTasksLoading] = useState(false);
   const [taskSaving, setTaskSaving] = useState(false);
@@ -59,8 +61,8 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
   const resetEditor = useCallback((mode: TaskEditorMode = 'create') => {
     setEditorMode(mode);
     setEditingTaskID('');
-    setEditor(emptyTaskEditorState);
-  }, []);
+    setEditor(createTaskEditorState(config));
+  }, [config]);
 
   const refreshTasks = useCallback(async () => {
     setTasksLoading(true);
@@ -191,6 +193,12 @@ function localizeTaskEditorError(
 ): string {
   if (message === 'interval seconds must be a positive integer') {
     return copy.system.intervalSecondsPositiveInteger;
+  }
+  if (message === 'relay max_rounds must be a positive integer') {
+    return copy.system.relayMaxRoundsPositiveInteger;
+  }
+  if (message === 'relay execution_timeout_ms must be a non-negative integer') {
+    return copy.system.relayTimeoutNonNegativeInteger;
   }
   if (message === 'message is required') {
     return copy.system.messageRequired;

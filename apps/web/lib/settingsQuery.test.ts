@@ -3,6 +3,7 @@ import { buildHomeSettingsURL, parseSettingsQuery, stripSettingsQuery } from '@/
 describe('lib/settingsQuery', () => {
   it('parses supported settings tabs from query string', () => {
     expect(parseSettingsQuery('?settings=tasks')).toBe('tasks');
+    expect(parseSettingsQuery('?settings=relay')).toBe('relay');
     expect(parseSettingsQuery('?settings=orchestration')).toBe('orchestration');
     expect(parseSettingsQuery('?settings=skills')).toBe('skills');
     expect(parseSettingsQuery('?settings=tools')).toBe('tools');
@@ -19,6 +20,7 @@ describe('lib/settingsQuery', () => {
 
   it('builds and strips settings query', () => {
     expect(buildHomeSettingsURL('tasks')).toBe('/?settings=tasks');
+    expect(buildHomeSettingsURL('relay')).toBe('/?settings=relay');
     expect(buildHomeSettingsURL('orchestration')).toBe('/?settings=orchestration');
     expect(buildHomeSettingsURL('skills')).toBe('/?settings=skills');
     expect(buildHomeSettingsURL('tools')).toBe('/?settings=tools');

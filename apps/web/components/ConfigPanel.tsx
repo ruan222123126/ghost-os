@@ -56,7 +56,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
   const presetsState = useConfigPresets({ open });
   const promptsState = useConfigPrompts({ open });
   const skillsState = useConfigSkills({ open });
-  const tasksState = useConfigTasks({ open });
+  const tasksState = useConfigTasks({ open, config });
   const toolsState = useConfigTools({ open });
 
   useEffect(() => {

@@ -21,6 +21,7 @@ describe('lib/configTasks', () => {
       message: 'Daily summary',
       session_id: 'session-1',
       interval_seconds: 120,
+      agent_mode: 'single',
       runtime_overrides: undefined,
     });
   });
@@ -41,7 +42,28 @@ describe('lib/configTasks', () => {
       message: 'Weekly report',
       session_id: '',
       cron_expr: '0 9 * * 1',
+      agent_mode: 'single',
       runtime_overrides: {},
+    });
+  });
+
+  it('builds relay task payload with max-round stop policy', () => {
+    const editor = {
+      ...emptyTaskEditorState,
+      message: 'Long running task',
+      agentMode: 'relay' as const,
+      relayStopPolicy: 'max_rounds' as const,
+      relayMaxRounds: '3',
+      relayExecutionTimeoutMS: '0',
+    };
+
+    expect(taskCreateRequestFromEditor(editor)).toMatchObject({
+      agent_mode: 'relay',
+      relay: {
+        stop_policy: 'max_rounds',
+        max_rounds: 3,
+        execution_timeout_ms: 0,
+      },
     });
   });
 

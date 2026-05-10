@@ -18,6 +18,8 @@ import {
 
 const PROVIDER_TYPES = ['openai', 'anthropic', 'custom', 'codex'] as const;
 const PROMPT_INSERT_POINTS = ['rule', 'core_job', 'memory', 'context'] as const;
+const RELAY_STOP_POLICIES = ['ai_decides', 'max_rounds'] as const;
+const SESSION_TITLE_MODES = ['session_id', 'first_message', 'ai_generated'] as const;
 const BRIDGE_CONFIG_KEYS = [
   'provider',
   'provider_type',
@@ -27,6 +29,9 @@ const BRIDGE_CONFIG_KEYS = [
   'project_root',
   'max_turns',
   'task_execution_timeout_ms',
+  'relay_default_stop_policy',
+  'relay_default_max_rounds',
+  'relay_default_execution_timeout_ms',
   'llm_completion_retry_count',
   'llm_completion_retry_interval_ms',
   'api_key_set',
@@ -37,6 +42,7 @@ const BRIDGE_CONFIG_KEYS = [
   'tool_call_compact_output_enabled',
   'memory_mode_enabled',
   'microcompact_enabled',
+  'session_title_mode',
   'web_search_tavily_url',
   'web_search_exa_url',
   'web_search_tavily_api_key_set',
@@ -149,6 +155,19 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
       record.task_execution_timeout_ms,
       'bridge config.task_execution_timeout_ms',
     ),
+    relay_default_stop_policy: expectStringEnum(
+      record.relay_default_stop_policy,
+      RELAY_STOP_POLICIES,
+      'bridge config.relay_default_stop_policy',
+    ),
+    relay_default_max_rounds: expectNumber(
+      record.relay_default_max_rounds,
+      'bridge config.relay_default_max_rounds',
+    ),
+    relay_default_execution_timeout_ms: expectNumber(
+      record.relay_default_execution_timeout_ms,
+      'bridge config.relay_default_execution_timeout_ms',
+    ),
     llm_completion_retry_count: expectNumber(
       record.llm_completion_retry_count,
       'bridge config.llm_completion_retry_count',
@@ -185,6 +204,11 @@ export function parseBridgeConfig(payload: unknown): BridgeConfig {
     microcompact_enabled: expectBoolean(
       record.microcompact_enabled,
       'bridge config.microcompact_enabled',
+    ),
+    session_title_mode: expectStringEnum(
+      record.session_title_mode,
+      SESSION_TITLE_MODES,
+      'bridge config.session_title_mode',
     ),
     web_search_tavily_url: expectString(
       record.web_search_tavily_url,

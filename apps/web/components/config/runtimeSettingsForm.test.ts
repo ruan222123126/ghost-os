@@ -11,6 +11,9 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     project_root: '',
     max_turns: 20,
     task_execution_timeout_ms: 300000,
+    relay_default_stop_policy: 'ai_decides',
+    relay_default_max_rounds: 20,
+    relay_default_execution_timeout_ms: 0,
     llm_completion_retry_count: 1,
     llm_completion_retry_interval_ms: 200,
     api_key_set: true,
@@ -21,6 +24,7 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
     tool_call_compact_output_enabled: false,
     memory_mode_enabled: false,
     microcompact_enabled: false,
+    session_title_mode: 'session_id',
     web_search_tavily_url: '',
     web_search_exa_url: '',
     web_search_tavily_api_key_set: false,
@@ -41,6 +45,7 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(form.toolCallCompactOutputEnabled).toBe(false);
     expect(form.memoryModeEnabled).toBe(false);
     expect(form.microcompactEnabled).toBe(false);
+    expect(form.sessionTitleMode).toBe('session_id');
   });
 
   it('reads assistant markdown toggle from bridge config', () => {
@@ -50,6 +55,7 @@ describe('components/config/runtimeSettingsForm', () => {
       tool_call_compact_output_enabled: true,
       memory_mode_enabled: true,
       microcompact_enabled: true,
+      session_title_mode: 'ai_generated',
       llm_completion_retry_count: 0,
       llm_completion_retry_interval_ms: 0,
     }));
@@ -60,6 +66,7 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(form.toolCallCompactOutputEnabled).toBe(true);
     expect(form.memoryModeEnabled).toBe(true);
     expect(form.microcompactEnabled).toBe(true);
+    expect(form.sessionTitleMode).toBe('ai_generated');
   });
 
   it('includes assistant markdown toggle in config update payload', () => {
@@ -78,6 +85,7 @@ describe('components/config/runtimeSettingsForm', () => {
       toolCallCompactOutputEnabled: true,
       memoryModeEnabled: true,
       microcompactEnabled: true,
+      sessionTitleMode: 'first_message',
       webSearchTavilyURL: '',
       webSearchExaURL: '',
       webSearchTavilyAPIKey: '',
@@ -94,6 +102,7 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(update.tool_call_compact_output_enabled).toBe(true);
     expect(update.memory_mode_enabled).toBe(true);
     expect(update.microcompact_enabled).toBe(true);
+    expect(update.session_title_mode).toBe('first_message');
     expect(update).not.toHaveProperty('api_key');
     expect(update).not.toHaveProperty('base_url');
   });
