@@ -122,11 +122,11 @@ describe('components/config/PresetSettingsSection', () => {
 
     await act(async () => {
       findByTestID(renderer.root, 'preset-name-input').props.onChange({ target: { value: 'Research' } });
-      findByTestID(renderer.root, 'preset-tool-script_exec').props.onChange({ target: { checked: true } });
+      findByTestID(renderer.root, 'preset-tool-script_exec').props.onClick();
     });
 
     await act(async () => {
-      findByTestID(renderer.root, 'preset-tool-web_search').props.onChange({ target: { checked: true } });
+      findByTestID(renderer.root, 'preset-tool-web_search').props.onClick();
     });
 
     await act(async () => {
@@ -189,11 +189,11 @@ describe('components/config/PresetSettingsSection', () => {
 
     await act(async () => {
       findByTestID(renderer.root, 'preset-name-input').props.onChange({ target: { value: 'Updated' } });
-      findByTestID(renderer.root, 'preset-tool-script_exec').props.onChange({ target: { checked: false } });
+      findByTestID(renderer.root, 'preset-tool-script_exec').props.onClick();
     });
 
     await act(async () => {
-      findByTestID(renderer.root, 'preset-tool-sfind').props.onChange({ target: { checked: true } });
+      findByTestID(renderer.root, 'preset-tool-sfind').props.onClick();
     });
 
     await act(async () => {

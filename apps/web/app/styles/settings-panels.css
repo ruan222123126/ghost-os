@@ -191,6 +191,27 @@
   opacity: 1;
 }
 
+.preset-editor-scrollbar {
+  overscroll-behavior: contain;
+}
+
+.preset-editor-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.preset-editor-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.preset-editor-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 20px;
+  background: rgb(229 231 235);
+}
+
+.preset-editor-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: rgb(209 213 219);
+}
+
 .provider-inline-action,
 .settings-panel .button,
 .settings-panel .button-secondary,

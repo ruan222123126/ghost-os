@@ -60,7 +60,7 @@ export function PresetSettingsSection(props: PresetSettingsSectionProps) {
   } = props;
   const controlsDisabled = loading || saving;
   const editorDisabled = controlsDisabled || toolsLoading || promptsLoading;
-  const promptLibrary = prompts?.prompt_library ?? [];
+  const promptLibrary = useMemo(() => prompts?.prompt_library ?? [], [prompts?.prompt_library]);
   const promptNameByID = useMemo(() => {
     return Object.fromEntries(promptLibrary.map((item) => [item.id, item.name]));
   }, [promptLibrary]);
@@ -180,18 +180,6 @@ export function PresetSettingsSection(props: PresetSettingsSectionProps) {
           promptLibrary={promptLibrary}
           controlsDisabled={editorDisabled}
           onClose={() => setEditor(null)}
-          onDelete={() => {
-            if (editor.mode === 'create' || !editor.presetID) {
-              setEditor(null);
-              return;
-            }
-            const preset = presets.find((item) => item.id === editor.presetID);
-            if (!preset) {
-              setEditor(null);
-              return;
-            }
-            ignorePromise(deletePreset(preset));
-          }}
           onSave={() => {
             ignorePromise(saveEditor());
           }}

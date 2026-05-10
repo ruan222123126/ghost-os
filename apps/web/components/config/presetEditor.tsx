@@ -18,12 +18,11 @@ export function PresetEditor(props: {
   promptLibrary: PromptLibraryItem[];
   controlsDisabled: boolean;
   onClose: () => void;
-  onDelete: () => void;
   onSave: () => void;
   onChange: (patch: Partial<PresetEditorDraft>) => void;
 }) {
   const { copy } = useWebLocale();
-  const { editor, tools, promptLibrary, controlsDisabled, onClose, onDelete, onSave, onChange } = props;
+  const { editor, tools, promptLibrary, controlsDisabled, onClose, onSave, onChange } = props;
   const createMode = editor.mode === 'create';
   const title = createMode ? copy.settings.presetsCreateTitle : copy.settings.presetsEditTitle;
   const saveLabel = createMode ? copy.settings.create : copy.settings.save;
@@ -31,11 +30,14 @@ export function PresetEditor(props: {
   const nameInvalid = editor.draft.name.trim() === '';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
-      <div
-        className="w-full max-w-3xl rounded-[20px] border border-[#E5E5E5] bg-white p-6 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <button
+        type="button"
+        aria-label={copy.settings.cancel}
+        className="absolute inset-0 cursor-default bg-gray-900/20 backdrop-blur-[2px] transition-opacity"
+        onClick={onClose}
+      />
+      <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-[24px] bg-white shadow-2xl shadow-gray-900/10">
         <PresetEditorHeader title={title} onClose={onClose} />
         <PresetEditorFields
           draft={editor.draft}
@@ -45,12 +47,11 @@ export function PresetEditor(props: {
           onChange={onChange}
         />
         <PresetEditorActions
-          createMode={createMode}
           controlsDisabled={controlsDisabled}
           saveDisabled={nameInvalid || (!createMode && !dirty)}
           saveLabel={saveLabel}
+          onClose={onClose}
           onSave={onSave}
-          onDelete={onDelete}
         />
       </div>
     </div>
@@ -62,14 +63,17 @@ function PresetEditorHeader(props: { title: string; onClose: () => void }) {
   const { title, onClose } = props;
 
   return (
-    <div className="mb-4 flex items-center justify-between gap-3">
-      <h3 data-testid="preset-editor-title" className="text-[18px] font-semibold text-[#111111]">{title}</h3>
+    <div className="flex items-center justify-between border-b border-gray-100/80 px-8 py-5">
+      <h2 data-testid="preset-editor-title" className="text-lg font-semibold tracking-tight text-gray-900">
+        {title}
+      </h2>
       <button
         type="button"
+        aria-label={copy.settings.cancel}
         onClick={onClose}
-        className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5]"
+        className="-mr-2 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-900"
       >
-        {copy.settings.cancel}
+        <span aria-hidden="true" className="block h-5 w-5 text-center text-[20px] leading-5">X</span>
       </button>
     </div>
   );
@@ -83,11 +87,13 @@ function PresetEditorFields(props: {
   onChange: (patch: Partial<PresetEditorDraft>) => void;
 }) {
   return (
-    <>
-      <PresetNameField {...props} />
-      <PresetToolField {...props} />
-      <PresetPromptRefsField {...props} />
-    </>
+    <div className="preset-editor-scrollbar flex-1 overflow-y-auto px-8 py-6">
+      <div className="space-y-9">
+        <PresetNameField {...props} />
+        <PresetToolField {...props} />
+        <PresetPromptRefsField {...props} />
+      </div>
+    </div>
   );
 }
 
@@ -100,17 +106,20 @@ function PresetNameField(props: {
   const { draft, controlsDisabled, onChange } = props;
 
   return (
-    <div className="mb-3">
-      <label className="mb-1 block text-[12px] font-medium text-[#525252]">{copy.settings.presetsNameLabel}</label>
+    <div className="space-y-2">
+      <label htmlFor="preset-name-input" className="block text-sm font-medium text-gray-700">
+        {copy.settings.presetsNameLabel}
+      </label>
       <input
         type="text"
+        id="preset-name-input"
         data-testid="preset-name-input"
         value={draft.name}
         disabled={controlsDisabled}
         onChange={(event) => {
           onChange({ name: event.target.value });
         }}
-        className="w-full rounded-[10px] border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none disabled:opacity-60"
+        className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-gray-900 outline-none transition-all placeholder:text-gray-400 focus:border-gray-400 focus:bg-white focus:ring-2 focus:ring-gray-900/5 disabled:cursor-not-allowed disabled:opacity-60"
       />
     </div>
   );
@@ -126,71 +135,76 @@ function PresetToolField(props: {
   const { draft, tools, controlsDisabled, onChange } = props;
 
   return (
-    <div className="mb-4">
-      <div className="mb-1 text-[12px] font-medium text-[#525252]">{copy.settings.presetsToolAllowlistLabel}</div>
-      <p className="mb-2 text-[12px] text-[#737373]">{copy.settings.presetsToolAllowlistDescription}</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {tools.map((tool) => (
-          <label
-            key={tool.name}
-            className="flex items-center gap-2 rounded-[10px] border border-[#E5E5E5] bg-[#FAFAFA] px-3 py-2 text-[13px] text-[#111111]"
-          >
-            <input
-              type="checkbox"
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-sm font-medium text-gray-700">{copy.settings.presetsToolAllowlistLabel}</h3>
+        <p className="mt-1 text-[13px] text-gray-400">{copy.settings.presetsToolAllowlistDescription}</p>
+      </div>
+      <div className="flex flex-wrap gap-2.5">
+        {tools.map((tool) => {
+          const selected = draft.tool_allowlist.includes(tool.name);
+          return (
+            <button
+              key={tool.name}
+              type="button"
               data-testid={`preset-tool-${tool.name}`}
-              checked={draft.tool_allowlist.includes(tool.name)}
+              aria-pressed={selected}
               disabled={controlsDisabled}
-              onChange={(event) => {
+              onClick={() => {
                 onChange({
-                  tool_allowlist: togglePresetToolSelection(
-                    draft.tool_allowlist,
-                    tool.name,
-                    event.target.checked,
-                  ),
+                  tool_allowlist: togglePresetToolSelection(draft.tool_allowlist, tool.name, !selected),
                 });
               }}
-            />
-            <span className="truncate">{tool.name}</span>
-          </label>
-        ))}
+              className={toolButtonClassName(selected)}
+            >
+              {tool.name}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+function toolButtonClassName(selected: boolean): string {
+  const base = 'select-none rounded-full px-4 py-2 text-[13px] font-medium transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50';
+  if (selected) {
+    return `${base} bg-gray-900 text-white shadow-md shadow-gray-900/10`;
+  }
+  return `${base} border border-gray-200 bg-white text-gray-600 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900`;
+}
+
 function PresetEditorActions(props: {
-  createMode: boolean;
   controlsDisabled: boolean;
   saveDisabled: boolean;
   saveLabel: string;
+  onClose: () => void;
   onSave: () => void;
-  onDelete: () => void;
 }) {
   const { copy } = useWebLocale();
-  const { createMode, controlsDisabled, saveDisabled, saveLabel, onSave, onDelete } = props;
+  const { controlsDisabled, saveDisabled, saveLabel, onClose, onSave } = props;
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        data-testid="preset-save"
-        disabled={controlsDisabled || saveDisabled}
-        onClick={onSave}
-        className="rounded-full bg-[#111111] px-4 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saveLabel}
-      </button>
-      {createMode ? null : (
+    <div className="flex items-center justify-end border-t border-gray-100/80 bg-white px-8 py-5">
+      <div className="flex items-center gap-3">
         <button
           type="button"
-          data-testid="preset-delete"
           disabled={controlsDisabled}
-          onClick={onDelete}
-          className="rounded-full border border-[#E5E5E5] px-4 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={onClose}
+          className="px-5 py-2.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {copy.settings.presetsDelete}
+          {copy.settings.cancel}
         </button>
-      )}
+        <button
+          type="button"
+          data-testid="preset-save"
+          disabled={controlsDisabled || saveDisabled}
+          onClick={onSave}
+          className="rounded-full bg-gray-900 px-8 py-2.5 text-sm font-medium text-white shadow-md shadow-gray-900/10 transition-all hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saveLabel}
+        </button>
+      </div>
     </div>
   );
 }
