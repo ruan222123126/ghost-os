@@ -1,7 +1,8 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import TestRenderer, { act } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import type { AssistantChatMessage, ToolChatMessage } from '@/lib/types';
+import type { AssistantChatMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
 import type { MessageRowProps } from './types';
 import { MessageRow } from './MessageRow';
 
@@ -103,6 +104,78 @@ describe('components/message/MessageRow', () => {
     expect(html).not.toContain('message-channel-icon');
   });
 
+  it('renders user content with a neutral backplate instead of the black bubble shell', () => {
+    const message: UserChatMessage = {
+      id: 'user-1',
+      kind: 'user',
+      content: 'plain prompt',
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      toolCallCompactOutputEnabled: false,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+    });
+
+    expect(html).toContain('message-user-backplate');
+    expect(html).toContain('message-content');
+    expect(html).toContain('plain prompt');
+    expect(html).not.toContain('message-bubble');
+    expect(html).not.toContain('message-user-corner');
+    expect(html).not.toContain('// USER_INPUT');
+  });
+
+  it('keeps the first three lines visible before expanding long user content', () => {
+    const message: UserChatMessage = {
+      id: 'user-long',
+      kind: 'user',
+      content: 'line one\nline two\nline three\nline four',
+    };
+
+    withMockWindow(buildMessageMeasurementWindow('20px'), () => {
+      const renderer = renderMessageRowClient({
+        message,
+        assistantMarkdownEnabled: true,
+        toolCallCompactOutputEnabled: false,
+        loading: false,
+        onAnswerQuestion: async () => undefined,
+        onCancelQuestion: async () => undefined,
+      }, { userContentScrollHeight: 96 });
+
+      expect(renderer.root.findByProps({
+        className: 'message-content message-user-content is-collapsed',
+      }).children).toContain(message.content);
+      const toggle = renderer.root.findByProps({ className: 'message-user-expand-toggle' });
+      expect(toggle.children).toHaveLength(1);
+      expect(toggle.findByProps({ className: 'message-user-expand-icon' })).toBeTruthy();
+
+      act(() => {
+        toggle.props.onClick();
+      });
+
+      expect(renderer.root.findByProps({
+        className: 'message-content message-user-content',
+      }).children).toContain(message.content);
+      const collapseToggle = renderer.root.findByProps({ className: 'message-user-expand-toggle' });
+      expect(collapseToggle.props['aria-expanded']).toBe(true);
+      expect(collapseToggle.findByProps({
+        className: 'message-user-expand-icon is-expanded',
+      })).toBeTruthy();
+
+      act(() => {
+        collapseToggle.props.onClick();
+      });
+
+      expect(renderer.root.findByProps({
+        className: 'message-content message-user-content is-collapsed',
+      }).children).toContain(message.content);
+      expect(renderer.root.findByProps({ className: 'message-user-expand-toggle' }).props['aria-expanded']).toBe(false);
+    });
+  });
+
   it('moves the assistant copy action inline when tools follow', () => {
     const message: AssistantChatMessage = {
       id: 'assistant-3',
@@ -137,4 +210,60 @@ function renderMessageRow(props: MessageRowProps): string {
       React.createElement(MessageRow, props),
     ),
   );
+}
+
+function renderMessageRowClient(
+  props: MessageRowProps,
+  options: {
+    userContentScrollHeight: number;
+  },
+): TestRenderer.ReactTestRenderer {
+  let renderer!: TestRenderer.ReactTestRenderer;
+
+  act(() => {
+    renderer = TestRenderer.create(
+      React.createElement(MessageRow, props),
+      {
+        createNodeMock: (element) => createMessageRowNodeMock(element, options),
+      },
+    );
+  });
+
+  return renderer;
+}
+
+function createMessageRowNodeMock(
+  element: React.ReactElement,
+  options: {
+    userContentScrollHeight: number;
+  },
+): Record<string, unknown> {
+  if (classNameForElement(element).includes('message-user-content')) {
+    return { scrollHeight: options.userContentScrollHeight };
+  }
+  return {};
+}
+
+function classNameForElement(element: React.ReactElement): string {
+  const props = element.props as { className?: unknown };
+  return typeof props.className === 'string' ? props.className : '';
+}
+
+function buildMessageMeasurementWindow(lineHeight: string) {
+  return {
+    addEventListener: jest.fn(),
+    removeEventListener: jest.fn(),
+    getComputedStyle: () => ({ lineHeight }),
+  };
+}
+
+function withMockWindow<T>(windowValue: ReturnType<typeof buildMessageMeasurementWindow>, run: () => T): T {
+  const globalObject = globalThis as { window?: unknown };
+  const originalWindow = globalObject.window;
+  globalObject.window = windowValue;
+  try {
+    return run();
+  } finally {
+    globalObject.window = originalWindow;
+  }
 }

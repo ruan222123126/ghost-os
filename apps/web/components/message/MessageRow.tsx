@@ -1,4 +1,5 @@
-import type { FC } from 'react';
+import type { FC, RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { QuestionInput } from '@/components/QuestionInput';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type {
@@ -16,22 +17,85 @@ import { AssistantMarkdownContent } from './AssistantMarkdownContent';
 import { ThinkingPanel } from './ThinkingPanel';
 import type { MessageRowProps } from './types';
 
-const USER_CHANNEL_LABEL = '// USER_INPUT';
+const USER_MESSAGE_COLLAPSED_LINES = 3;
+const USER_MESSAGE_HEIGHT_EPSILON = 1;
+const USER_MESSAGE_EXPAND_LABEL = '展开用户消息';
+const USER_MESSAGE_COLLAPSE_LABEL = '收起用户消息';
 
-const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => (
-  <div className="message-row is-user">
-    <div className="message-stack">
-      <span className="message-channel-label is-user">{USER_CHANNEL_LABEL}</span>
-      {message.images?.length ? <MessageImageGallery images={message.images} /> : null}
-      {message.content ? (
-        <div className="message-bubble is-user">
-          <p className="message-bubble-text">{message.content}</p>
-          <span className="message-user-corner" aria-hidden="true" />
-        </div>
-      ) : null}
+const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => {
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const { collapsed, expanded, overflowing, setExpanded } = useUserMessageOverflow(message, contentRef);
+  const contentClassName = [
+    'message-content',
+    'message-user-content',
+    collapsed ? 'is-collapsed' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const backplateClassName = [
+    'message-user-backplate',
+    overflowing ? 'has-toggle' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const iconClassName = [
+    'message-user-expand-icon',
+    expanded ? 'is-expanded' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <div className="message-row is-user">
+      <div className="message-stack">
+        {message.images?.length ? <MessageImageGallery images={message.images} /> : null}
+        {message.content ? (
+          <div className={backplateClassName}>
+            <div ref={contentRef} className={contentClassName}>{message.content}</div>
+            {overflowing ? (
+              <button
+                type="button"
+                className="message-user-expand-toggle"
+                aria-expanded={expanded}
+                aria-label={expanded ? USER_MESSAGE_COLLAPSE_LABEL : USER_MESSAGE_EXPAND_LABEL}
+                onClick={() => setExpanded((value) => !value)}
+              >
+                <span className={iconClassName} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
     </div>
-  </div>
-);
+  );
+};
+
+function useUserMessageOverflow(
+  message: UserChatMessage,
+  contentRef: RefObject<HTMLDivElement>,
+) {
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const collapsed = overflowing && !expanded;
+  const measureOverflow = useCallback(() => {
+    const content = contentRef.current;
+    if (!content) {
+      return;
+    }
+    const lineHeight = Number.parseFloat(window.getComputedStyle(content).lineHeight);
+    const collapsedHeight = lineHeight * USER_MESSAGE_COLLAPSED_LINES;
+    setOverflowing(content.scrollHeight > collapsedHeight + USER_MESSAGE_HEIGHT_EPSILON);
+  }, [contentRef]);
+
+  useEffect(() => {
+    setExpanded(false);
+    measureOverflow();
+    window.addEventListener('resize', measureOverflow);
+    return () => window.removeEventListener('resize', measureOverflow);
+  }, [measureOverflow, message.content, message.id]);
+
+  return { collapsed, expanded, overflowing, setExpanded };
+}
 
 const AssistantMessageRow: FC<{
   message: AssistantChatMessage;

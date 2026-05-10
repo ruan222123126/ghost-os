@@ -78,53 +78,62 @@
   width: 100%;
 }
 
-.message-channel-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-
-.message-channel-label.is-user {
-  margin-bottom: 2px;
-  color: rgb(163 163 163);
-}
-
-.message-bubble {
-  position: relative;
-  max-width: min(90%, 760px);
-  padding: 18px 20px;
-  border: 1px solid rgb(10 10 10);
-  border-radius: 0;
-  background: rgb(10 10 10);
-  color: rgb(255 255 255);
-}
-
-.message-bubble-text {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.7;
-  white-space: break-spaces;
-  overflow-wrap: anywhere;
-  word-break: normal;
-}
-
-.message-user-corner {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 8px;
-  height: 8px;
-  background: rgb(255 255 255 / 0.2);
-}
-
 .message-assistant-body {
   max-width: min(90%, 820px);
   padding: 0;
+}
+
+.message-user-backplate {
+  position: relative;
+  max-width: min(90%, 820px);
+  padding: 12px 14px;
+  background: rgb(245 245 245);
+  --message-user-collapsed-lines: 3;
+}
+
+.message-user-backplate.has-toggle {
+  padding-right: 38px;
+}
+
+.message-user-content.is-collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--message-user-collapsed-lines);
+}
+
+.message-user-expand-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: rgb(82 82 82);
+  cursor: pointer;
+}
+
+.message-user-expand-toggle:hover {
+  color: rgb(23 23 23);
+}
+
+.message-user-expand-icon {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid currentColor;
+  transition: transform 140ms ease;
+}
+
+.message-user-expand-icon.is-expanded {
+  transform: rotate(180deg);
 }
 
 .message-assistant-frame {
@@ -156,6 +165,11 @@
 }
 
 .message-row.is-assistant .message-content {
+  color: rgb(23 23 23);
+  font-size: 16px;
+}
+
+.message-row.is-user .message-content {
   color: rgb(23 23 23);
   font-size: 16px;
 }
