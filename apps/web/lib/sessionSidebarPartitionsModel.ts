@@ -16,7 +16,9 @@ export type SessionPartitionStoreV1 = Omit<SharedSessionSidebarPartitionState, '
 export interface SessionPartitionView {
   id: string;
   name: string;
+  readOnly?: boolean;
   sessions: SessionMetadata[];
+  childPartitions?: SessionPartitionView[];
 }
 
 export interface BuildSessionPartitionViewsInput {

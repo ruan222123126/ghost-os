@@ -30,6 +30,7 @@ describe('lib/api/sessions/api', () => {
     const expected: SessionMetadata[] = [
       {
         id: 'session-1',
+        title: 'Planning',
         created_at: '2026-02-28T10:00:00Z',
         updated_at: '2026-02-28T10:05:00Z',
         message_count: 2,
@@ -52,6 +53,7 @@ describe('lib/api/sessions/api', () => {
   it('getSession reads session detail by id', async () => {
     const expected: SessionDetail = {
       id: 'session-1',
+      title: 'Planning',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 2,
@@ -78,6 +80,7 @@ describe('lib/api/sessions/api', () => {
   it('getSession accepts structured tool projections from the bridge contract', async () => {
     const expected: SessionDetail = {
       id: 'session-1',
+      title: 'Tools',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 1,
@@ -127,6 +130,7 @@ describe('lib/api/sessions/api', () => {
       status: 'success',
       payload: {
         id: 'session-1',
+        title: 'Planning',
         created_at: '2026-02-28T10:00:00Z',
         updated_at: '2026-02-28T10:05:00Z',
         message_count: 1,
@@ -143,6 +147,7 @@ describe('lib/api/sessions/api', () => {
 
     await expect(getSession('session-1')).resolves.toEqual({
       id: 'session-1',
+      title: 'Planning',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 1,
@@ -160,6 +165,7 @@ describe('lib/api/sessions/api', () => {
       status: 'success',
       payload: {
         id: 'session-1',
+        title: 'Planning',
         created_at: '2026-02-28T10:00:00Z',
         updated_at: '2026-02-28T10:05:00Z',
         message_count: 1,

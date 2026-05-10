@@ -229,6 +229,7 @@ function parseSessionMetadata(value: unknown, label: string): SessionMetadata {
 
   return {
     id: expectString(record.id, `${label}.id`),
+    title: expectString(record.title, `${label}.title`),
     created_at: expectString(record.created_at, `${label}.created_at`),
     updated_at: expectString(record.updated_at, `${label}.updated_at`),
     message_count: expectNumber(record.message_count, `${label}.message_count`),
@@ -283,6 +284,7 @@ export function parseSessionDetail(payload: unknown): SessionDetail {
 
   return {
     id: expectString(record.id, 'session detail.id'),
+    title: expectString(record.title, 'session detail.title'),
     messages: record.messages.map((message, index) => parseSessionMessage(message, `session detail.messages[${index}]`)),
     created_at: expectString(record.created_at, 'session detail.created_at'),
     updated_at: expectString(record.updated_at, 'session detail.updated_at'),

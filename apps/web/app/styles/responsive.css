@@ -95,4 +95,24 @@
     width: max(220px, 100%);
     max-width: min(280px, calc(100vw - 36px));
   }
+
+  .chat-session-notch {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 0;
+    gap: 10px;
+    height: 44px;
+    flex-basis: 44px;
+    padding: 0 14px;
+  }
+
+  .chat-session-notch-id {
+    font-size: 10px;
+  }
+
+  .chat-session-notch-title {
+    font-size: 13px;
+  }
+
+  .chat-session-notch-spacer {
+    display: none;
+  }
 }

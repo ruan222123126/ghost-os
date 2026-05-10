@@ -12,19 +12,19 @@ import {
 } from '@/lib/sessionSidebarAliases';
 import type { SessionMetadata } from '@/lib/types';
 
-type RenameSessionError = 'empty' | 'unknown';
+export type RenameSessionError = 'empty' | 'unknown';
 
 interface UseSessionSidebarAliasesOptions {
   sessions: SessionMetadata[];
   resolveDefaultTitle: (session: SessionMetadata) => string;
 }
 
-interface RenameSessionResult {
+export interface RenameSessionResult {
   ok: boolean;
   error?: RenameSessionError;
 }
 
-interface UseSessionSidebarAliasesResult {
+export interface UseSessionSidebarAliasesResult {
   resolveSessionTitle: (session: SessionMetadata) => string;
   resolveSessionTitleByID: (sessionID: string) => string;
   renameSession: (sessionID: string, title: string) => RenameSessionResult;
@@ -113,7 +113,7 @@ function useSessionTitleResolver(
   resolveDefaultTitle: UseSessionSidebarAliasesOptions['resolveDefaultTitle'],
 ) {
   return useCallback((session: SessionMetadata): string => {
-    return aliases[session.id] ?? resolveDefaultTitle(session);
+    return resolveSessionTitleValue(aliases[session.id], session.title, resolveDefaultTitle(session));
   }, [aliases, resolveDefaultTitle]);
 }
 
@@ -127,8 +127,24 @@ function useSessionTitleByIDResolver(
     if (!session) {
       return '';
     }
-    return aliases[session.id] ?? resolveDefaultTitle(session);
+    return resolveSessionTitleValue(aliases[session.id], session.title, resolveDefaultTitle(session));
   }, [aliases, resolveDefaultTitle, sessionsByID]);
+}
+
+export function resolveSessionTitleValue(
+  alias: string | undefined,
+  backendTitle: string,
+  fallbackTitle: string,
+): string {
+  const normalizedAlias = alias?.trim();
+  if (normalizedAlias) {
+    return normalizedAlias;
+  }
+  const normalizedBackendTitle = backendTitle.trim();
+  if (normalizedBackendTitle) {
+    return normalizedBackendTitle;
+  }
+  return fallbackTitle;
 }
 
 function useRenameSessionAlias(

@@ -188,6 +188,7 @@ function createSession(
 ): SessionMetadata {
   return {
     id,
+    title: '',
     created_at: createdAt,
     updated_at: updatedAt,
     message_count: 0,

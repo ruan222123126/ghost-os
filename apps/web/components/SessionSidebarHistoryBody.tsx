@@ -2,7 +2,10 @@
 
 import { type DragEvent, type FC } from 'react';
 import { SessionSidebarFlatList } from '@/components/SessionSidebarFlatList';
-import { PartitionSection, type DropTargetState } from '@/components/SessionSidebarHistoryParts';
+import {
+  PartitionSection,
+  type DropTargetState,
+} from '@/components/SessionSidebarHistoryPartitionSection';
 import type { ChatCopy } from '@/lib/i18n/messages/chat';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 import type { SessionMetadata } from '@/lib/types';
@@ -82,7 +85,9 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
           copy={copy}
           partitionID={partition.id}
           partitionName={partition.name}
+          readOnly={partition.readOnly}
           sessions={partition.sessions}
+          childPartitions={partition.childPartitions}
           resolveSessionTitle={resolveSessionTitle}
           currentSessionId={currentSessionId}
           draggingSessionID={dragState.draggingSessionID}

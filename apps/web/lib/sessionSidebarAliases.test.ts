@@ -49,6 +49,7 @@ describe('lib/sessionSidebarAliases', () => {
 function createSession(id: string): SessionMetadata {
   return {
     id,
+    title: '',
     created_at: '2026-04-12T00:00:00Z',
     updated_at: '2026-04-12T00:00:00Z',
     message_count: 0,

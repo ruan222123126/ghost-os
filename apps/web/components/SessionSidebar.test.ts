@@ -68,6 +68,8 @@ function renderSidebar(
           onDelete: () => {},
           onNewChat: () => {},
           onOpenSettings: () => {},
+          resolveSessionTitle: (session: SessionMetadata) => `Session ${session.id.slice(0, 8)}`,
+          renameSession: () => ({ ok: true }),
         }),
       ),
     );
@@ -79,6 +81,7 @@ function renderSidebar(
 function createSession(id: string, updatedAt = '2026-04-12T00:00:00Z'): SessionMetadata {
   return {
     id,
+    title: '',
     created_at: '2026-04-12T00:00:00Z',
     updated_at: updatedAt,
     message_count: 0,

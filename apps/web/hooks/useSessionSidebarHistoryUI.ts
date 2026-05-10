@@ -1,12 +1,11 @@
 'use client';
 
 import { type DragEvent, type MouseEvent, useEffect, useState } from 'react';
-import {
-  type ContextMenuState,
-  type DropTargetState,
-} from '@/components/SessionSidebarHistoryParts';
+import { type ContextMenuState } from '@/components/SessionSidebarHistoryParts';
+import { type DropTargetState } from '@/components/SessionSidebarHistoryPartitionSection';
 import { resolveContextMenuStyle } from '@/components/sessionSidebarHistoryMenuUtils';
 import { UNCLASSIFIED_PARTITION_ID } from '@/lib/sessionSidebarPartitions';
+import { isSystemSessionPartitionID } from '@/lib/sessionSidebarSessionSources';
 
 const SESSION_DRAG_MIME = 'application/x-ghost-session-id';
 const STATUS_TIMEOUT_MS = 1800;
@@ -165,7 +164,9 @@ function resolvePartitionMenuHeight(menu?: ContextMenuState): number {
 }
 
 function canManagePartition(partitionID: string): boolean {
-  return Boolean(partitionID) && partitionID !== UNCLASSIFIED_PARTITION_ID;
+  return Boolean(partitionID)
+    && partitionID !== UNCLASSIFIED_PARTITION_ID
+    && !isSystemSessionPartitionID(partitionID);
 }
 
 function useAutoClearStatus(

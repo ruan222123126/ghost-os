@@ -2,20 +2,37 @@
 
 'use client';
 
-import type { FC } from 'react';
+import { useCallback, type FC } from 'react';
+import { ChatSessionNotch } from '@/components/ChatSessionNotch';
 import { ChatInput } from '@/components/ChatInput';
 import { ConfigPanel } from '@/components/ConfigPanel';
 import { MessageList } from '@/components/message/MessageList';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { useHomePageController } from '@/hooks/useHomePageController';
+import { useSessionSidebarAliases } from '@/hooks/useSessionSidebarAliases';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { ignorePromise } from '@/lib/errors';
+import type { SessionMetadata } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
 const HomePage: FC = () => {
   const { copy } = useWebLocale();
   const controller = useHomePageController();
+  const resolveDefaultSessionTitleByID = useCallback((sessionID: string) => {
+    return copy.chat.sidebarSessionTitle(sessionID.trim().slice(0, 8));
+  }, [copy.chat]);
+  const resolveDefaultSessionTitle = useCallback((session: SessionMetadata) => {
+    return resolveDefaultSessionTitleByID(session.id);
+  }, [resolveDefaultSessionTitleByID]);
+  const sessionAliases = useSessionSidebarAliases({
+    sessions: controller.sessions,
+    resolveDefaultTitle: resolveDefaultSessionTitle,
+  });
+  const currentSessionTitle = controller.currentSessionId
+    ? sessionAliases.resolveSessionTitleByID(controller.currentSessionId)
+      || resolveDefaultSessionTitleByID(controller.currentSessionId)
+    : '';
 
   return (
     <>
@@ -44,9 +61,12 @@ const HomePage: FC = () => {
             }}
             onNewChat={controller.newChat}
             onOpenSettings={controller.openConfig}
+            resolveSessionTitle={sessionAliases.resolveSessionTitle}
+            renameSession={sessionAliases.renameSession}
           />
 
           <section className="chat panel">
+            <ChatSessionNotch sessionId={controller.currentSessionId} title={currentSessionTitle} />
             {controller.historyLoading ? <div className="status-line info">{copy.chat.historyLoading}</div> : null}
             {controller.historySyncing && !controller.historyLoading ? <div className="status-line info">{copy.chat.historySyncing}</div> : null}
             {controller.configError && !controller.showConfig ? <div className="status-line error">{controller.configError}</div> : null}

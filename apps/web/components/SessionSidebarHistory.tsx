@@ -7,6 +7,7 @@ import {
   SidebarHistoryContextMenu,
 } from '@/components/SessionSidebarHistoryParts';
 import {
+  findContextSessionID,
   resolveContextMenuStyle,
   resolvePartitionNameErrorText,
   useCloseOnEscape,
@@ -16,12 +17,17 @@ import {
   SessionRenameDialog,
   type SessionContextMenuState,
 } from '@/components/SessionSidebarHistorySessionRename';
-import { useSessionSidebarAliases } from '@/hooks/useSessionSidebarAliases';
+import type { UseSessionSidebarAliasesResult } from '@/hooks/useSessionSidebarAliases';
 import { useSessionSidebarGroupingPreference } from '@/hooks/useSessionSidebarGroupingPreference';
 import { useSessionSidebarHistoryUI } from '@/hooks/useSessionSidebarHistoryUI';
 import { useSessionSidebarPartitions } from '@/hooks/useSessionSidebarPartitions';
+import { useSessionSidebarSessionSources } from '@/hooks/useSessionSidebarSessionSources';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { UNCLASSIFIED_PARTITION_ID } from '@/lib/sessionSidebarPartitions';
+import {
+  isSystemSessionPartitionID,
+  mergeSessionSourcePartitionViews,
+} from '@/lib/sessionSidebarSessionSources';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionSidebarHistoryProps {
@@ -33,23 +39,16 @@ interface SessionSidebarHistoryProps {
   error: string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  resolveSessionTitle: UseSessionSidebarAliasesResult['resolveSessionTitle'];
+  renameSession: UseSessionSidebarAliasesResult['renameSession'];
 }
-interface RenameDialogState {
-  sessionID: string;
-  value: string;
-  error: string;
-}
-
-const EMPTY_RENAME_DIALOG_STATE: RenameDialogState = {
-  sessionID: '',
-  value: '',
-  error: '',
-};
+const EMPTY_RENAME_DIALOG_STATE = { sessionID: '', value: '', error: '' };
 export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => {
   const { copy } = useWebLocale();
+  const { renameSession, resolveSessionTitle } = props;
   const { enabled: groupingEnabled } = useSessionSidebarGroupingPreference();
   const [sessionContextMenu, setSessionContextMenu] = useState<SessionContextMenuState>();
-  const [renameDialog, setRenameDialog] = useState<RenameDialogState>(EMPTY_RENAME_DIALOG_STATE);
+  const [renameDialog, setRenameDialog] = useState(EMPTY_RENAME_DIALOG_STATE);
   const {
     partitionViews,
     partitionError,
@@ -64,18 +63,26 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     unclassifiedName: copy.chat.sidebarPartitionUnclassified,
     requestFailedText: copy.system.genericRequestFailed,
   });
+  const sessionSources = useSessionSidebarSessionSources({
+    enabled: groupingEnabled,
+    sessions: props.sessions,
+    requestFailedText: copy.system.genericRequestFailed,
+  });
+  const visiblePartitionViews = useMemo(() => {
+    return mergeSessionSourcePartitionViews({
+      manualViews: partitionViews,
+      sessions: props.sessions,
+      sourceAssignments: sessionSources.assignments,
+      searchQuery: props.searchQuery,
+      copy: copy.chat,
+    });
+  }, [copy.chat, partitionViews, props.searchQuery, props.sessions, sessionSources.assignments]);
   const ui = useSessionSidebarHistoryUI({
     isOpen: props.isOpen,
     addPartition,
     moveSession,
     createSuccessText: copy.chat.sidebarPartitionCreateSuccess,
     createErrorText: (error) => resolvePartitionNameErrorText(copy.chat, error),
-  });
-  const sessionAliases = useSessionSidebarAliases({
-    sessions: props.sessions,
-    resolveDefaultTitle: useCallback((session: SessionMetadata) => {
-      return copy.chat.sidebarSessionTitle(session.id.slice(0, 8));
-    }, [copy.chat]),
   });
   const renameDialogOpen = renameDialog.sessionID.length > 0;
   const flatSessions = useMemo(() => {
@@ -112,19 +119,20 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     if (!sessionContextMenu?.sessionID) {
       return;
     }
-    const currentTitle = sessionAliases.resolveSessionTitleByID(sessionContextMenu.sessionID);
+    const currentSession = props.sessions.find((session) => session.id === sessionContextMenu.sessionID);
+    const currentTitle = currentSession ? resolveSessionTitle(currentSession) : '';
     setRenameDialog({
       sessionID: sessionContextMenu.sessionID,
       value: currentTitle,
       error: '',
     });
     closeSessionContextMenu();
-  }, [closeSessionContextMenu, sessionAliases, sessionContextMenu]);
+  }, [closeSessionContextMenu, props.sessions, resolveSessionTitle, sessionContextMenu]);
   const onConfirmRename = useCallback(() => {
     if (!renameDialog.sessionID) {
       return;
     }
-    const result = sessionAliases.renameSession(renameDialog.sessionID, renameDialog.value);
+    const result = renameSession(renameDialog.sessionID, renameDialog.value);
     if (!result.ok) {
       setRenameDialog((previous) => ({
         ...previous,
@@ -135,7 +143,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       return;
     }
     closeRenameDialog();
-  }, [closeRenameDialog, copy.chat.sidebarSessionRenameRequired, copy.system.genericRequestFailed, renameDialog, sessionAliases]);
+  }, [closeRenameDialog, copy.chat.sidebarSessionRenameRequired, copy.system.genericRequestFailed, renameDialog, renameSession]);
   const onChangeRenameValue = useCallback((value: string) => {
     setRenameDialog((previous) => ({
       ...previous,
@@ -145,7 +153,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   }, []);
   const onRenamePartition = useCallback(() => {
     const partitionID = ui.contextMenu?.partitionID?.trim() ?? '';
-    if (!partitionID || partitionID === UNCLASSIFIED_PARTITION_ID) {
+    if (!partitionID || partitionID === UNCLASSIFIED_PARTITION_ID || isSystemSessionPartitionID(partitionID)) {
       ui.closeContextMenu();
       return;
     }
@@ -169,7 +177,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   }, [copy.chat, copy.system.genericRequestFailed, renamePartition, ui]);
   const onDeletePartition = useCallback(() => {
     const partitionID = ui.contextMenu?.partitionID?.trim() ?? '';
-    if (!partitionID || partitionID === UNCLASSIFIED_PARTITION_ID) {
+    if (!partitionID || partitionID === UNCLASSIFIED_PARTITION_ID || isSystemSessionPartitionID(partitionID)) {
       ui.closeContextMenu();
       return;
     }
@@ -189,7 +197,9 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
 
   }, [copy.chat, copy.system.genericRequestFailed, deletePartition, ui]);
   const contextPartitionID = ui.contextMenu?.partitionID ?? '';
-  const canManageContextPartition = Boolean(contextPartitionID) && contextPartitionID !== UNCLASSIFIED_PARTITION_ID;
+  const canManageContextPartition = Boolean(contextPartitionID)
+    && contextPartitionID !== UNCLASSIFIED_PARTITION_ID
+    && !isSystemSessionPartitionID(contextPartitionID);
   useEffect(() => {
     if (groupingEnabled) {
       return;
@@ -216,17 +226,18 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       </div>
       {ui.statusMessage ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{ui.statusMessage}</div> : null}
       {partitionError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{partitionError}</div> : null}
+      {sessionSources.error ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{sessionSources.error}</div> : null}
       {props.error && !props.loading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}
       <SessionSidebarHistoryBody
         copy={copy.chat}
         loading={props.loading}
         groupingEnabled={groupingEnabled}
-        empty={groupingEnabled ? partitionViews.length === 0 : flatSessions.length === 0}
+        empty={groupingEnabled ? visiblePartitionViews.length === 0 : flatSessions.length === 0}
         flatSessions={flatSessions}
-        partitionViews={partitionViews}
+        partitionViews={visiblePartitionViews}
         currentSessionId={props.currentSessionId}
         dragState={ui.dragState}
-        resolveSessionTitle={sessionAliases.resolveSessionTitle}
+        resolveSessionTitle={resolveSessionTitle}
         onSelect={props.onSelect}
         onDelete={props.onDelete}
         onDragStartSession={ui.onDragStartSession}
@@ -282,9 +293,3 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     </div>
   );
 };
-function findContextSessionID(target: EventTarget | null): string {
-  const element = target as HTMLElement | null;
-  const sessionNode = element?.closest<HTMLElement>('[data-session-item="true"]');
-  const sessionID = sessionNode?.dataset.sessionId?.trim();
-  return sessionID ?? '';
-}

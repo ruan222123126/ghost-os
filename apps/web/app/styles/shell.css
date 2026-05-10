@@ -92,6 +92,46 @@
   background: rgb(255 251 243 / 0.52);
 }
 
+.chat-session-notch {
+  flex: 0 0 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  height: 48px;
+  padding: 0 22px;
+  border-bottom: 1px solid rgb(0 0 0 / 0.08);
+  background: rgb(255 255 255);
+}
+
+.chat-session-notch-id,
+.chat-session-notch-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-session-notch-id {
+  color: rgb(115 115 115);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.chat-session-notch-title {
+  justify-self: center;
+  max-width: 100%;
+  color: rgb(0 0 0);
+  font-size: 14px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.chat-session-notch-spacer {
+  min-width: 0;
+}
+
 .chat-head {
   gap: 14px;
 }

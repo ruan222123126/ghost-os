@@ -54,6 +54,12 @@ export function resolvePartitionNameErrorText(copy: ChatCopy, error?: 'empty' | 
   return copy.sidebarPartitionNameRequired;
 }
 
+export function findContextSessionID(target: EventTarget | null): string {
+  const element = target as HTMLElement | null;
+  const sessionNode = element?.closest<HTMLElement>('[data-session-item="true"]');
+  return sessionNode?.dataset.sessionId?.trim() ?? '';
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (max < min) {
     return min;

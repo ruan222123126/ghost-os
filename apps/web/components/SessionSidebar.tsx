@@ -12,6 +12,7 @@ import {
   IconSearch,
   IconX,
 } from '@/components/sessionSidebarIcons';
+import type { UseSessionSidebarAliasesResult } from '@/hooks/useSessionSidebarAliases';
 import { useSessionSidebarState } from '@/hooks/useSessionSidebarState';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
@@ -25,6 +26,8 @@ interface SessionSidebarProps {
   onDelete: (id: string) => void;
   onNewChat: () => void;
   onOpenSettings: () => void;
+  resolveSessionTitle: UseSessionSidebarAliasesResult['resolveSessionTitle'];
+  renameSession: UseSessionSidebarAliasesResult['renameSession'];
 }
 
 export const SessionSidebar: FC<SessionSidebarProps> = ({
@@ -36,6 +39,8 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
   onDelete,
   onNewChat,
   onOpenSettings,
+  resolveSessionTitle,
+  renameSession,
 }) => {
   const { copy } = useWebLocale();
   const sidebarState = useSessionSidebarState();
@@ -122,6 +127,8 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         error={error}
         onSelect={onSelect}
         onDelete={onDelete}
+        resolveSessionTitle={resolveSessionTitle}
+        renameSession={renameSession}
       />
 
       <SidebarSettingsButton collapsed={!sidebarState.isOpen} onClick={onOpenSettings} />

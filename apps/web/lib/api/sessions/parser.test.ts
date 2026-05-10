@@ -23,6 +23,7 @@ describe('lib/api/sessions/parser', () => {
     const payload: SessionMetadata[] = [
       {
         id: 'session-1',
+        title: 'Planning',
         created_at: '2026-02-28T10:00:00Z',
         updated_at: '2026-02-28T10:05:00Z',
         message_count: 2,
@@ -36,6 +37,7 @@ describe('lib/api/sessions/parser', () => {
   it('parses session detail with tool and human interaction projections', () => {
     const payload: SessionDetail = {
       id: 'session-1',
+      title: 'Planning',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 1,
@@ -71,6 +73,7 @@ describe('lib/api/sessions/parser', () => {
   it('parses internal session messages', () => {
     const payload: SessionDetail = {
       id: 'session-2',
+      title: '',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 1,
@@ -91,6 +94,7 @@ describe('lib/api/sessions/parser', () => {
   it('parses assistant draft messages with in_progress flag', () => {
     const payload: SessionDetail = {
       id: 'session-draft',
+      title: 'Draft',
       created_at: '2026-04-04T10:00:00Z',
       updated_at: '2026-04-04T10:05:00Z',
       message_count: 2,
@@ -124,6 +128,7 @@ describe('lib/api/sessions/parser', () => {
   it('ignores unknown fields in session detail payloads', () => {
     const payload = {
       id: 'session-1',
+      title: 'Hello',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 1,
@@ -143,6 +148,7 @@ describe('lib/api/sessions/parser', () => {
 
     expect(parseSessionDetail(payload)).toEqual({
       id: 'session-1',
+      title: 'Hello',
       created_at: '2026-02-28T10:00:00Z',
       updated_at: '2026-02-28T10:05:00Z',
       message_count: 1,

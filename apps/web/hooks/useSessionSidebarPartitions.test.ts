@@ -226,6 +226,7 @@ function sampleSessions(): SessionMetadata[] {
 function createSession(id: string, updatedAt: string): SessionMetadata {
   return {
     id,
+    title: '',
     created_at: updatedAt,
     updated_at: updatedAt,
     message_count: 0,
