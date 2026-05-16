@@ -1,5 +1,6 @@
 'use client';
 import { type ChangeEvent, type ReactNode, type RefObject } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 export type FindIconTestResult = 'idle' | 'success' | 'failure';
 export interface FindIconEditorPanelState {
   templatePath: string;
@@ -129,14 +130,11 @@ function FindIconEditorHeader(props: {
         </h4>
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-gray-400">{stepTag}</p>
       </div>
-      <button
-        type="button"
+      <CloseButton
         onClick={onClose}
-        className="p-1 text-gray-400 transition-colors hover:text-black"
+        className="shrink-0"
         aria-label={closeAria}
-      >
-        <CloseIcon />
-      </button>
+      />
     </header>
   );
 }
@@ -292,7 +290,4 @@ function testResultClassName(result: FindIconTestResult): string {
     return 'text-rose-600';
   }
   return 'text-transparent';
-}
-function CloseIcon() {
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }

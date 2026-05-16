@@ -15,14 +15,22 @@ jest.mock('react-markdown', () => ({
       const languageClassName = codeFenceMatch[1] ? `language-${codeFenceMatch[1]}` : undefined;
       return React.createElement(
         'div',
-        { className: 'mock-markdown' },
+        {
+          className: 'mock-markdown',
+        },
         components.pre({
           children: React.createElement('code', { className: languageClassName }, codeFenceMatch[2]),
         }),
       );
     }
 
-    return React.createElement('div', { className: 'mock-markdown' }, children);
+    return React.createElement(
+      'div',
+      {
+        className: 'mock-markdown',
+      },
+      children,
+    );
   },
 }));
 
@@ -67,6 +75,19 @@ describe('components/message/AssistantMarkdownContent', () => {
 
     expect(html).toContain('assistant-markdown');
     expect(html).toContain('mock-markdown');
+  });
+
+  it('keeps raw HTML content on the plain text path', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantMarkdownContent, {
+        content: '<strong>Safe</strong>',
+        enabled: true,
+      }),
+    );
+
+    expect(html).not.toContain('assistant-markdown');
+    expect(html).not.toContain('mock-markdown');
+    expect(html).toContain('&lt;strong&gt;Safe&lt;/strong&gt;');
   });
 
   it('renders copy button for fenced code blocks', () => {

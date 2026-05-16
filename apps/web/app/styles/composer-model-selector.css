@@ -1,0 +1,207 @@
+/* Chat composer model selector styling. */
+
+.composer-model-selector {
+  --composer-model-panel-width: 360px;
+  --composer-model-panel-viewport-gutter: 36px;
+
+  position: relative;
+  min-width: 0;
+}
+
+.composer-model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: min(280px, calc(100vw - 180px));
+  padding: 6px 10px;
+  border: none;
+  outline: none;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(115 115 115);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    opacity 160ms ease;
+}
+
+.composer-model-trigger:hover:not(:disabled),
+.composer-model-trigger.is-open {
+  background: rgb(250 250 250);
+  color: rgb(23 23 23);
+}
+
+.composer-model-trigger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.composer-model-trigger-copy {
+  min-width: 0;
+}
+
+.composer-model-trigger-model {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-trigger-chevron {
+  width: 7px;
+  height: 7px;
+  margin-top: -2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 180ms ease;
+  flex-shrink: 0;
+}
+
+.composer-model-trigger.is-open .composer-model-trigger-chevron {
+  margin-top: 2px;
+  transform: rotate(-135deg);
+}
+
+.composer-model-panel {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 12px);
+  width: min(
+    var(--composer-model-panel-width),
+    calc(100vw - var(--composer-model-panel-viewport-gutter))
+  );
+  border: 1px solid rgb(245 245 245);
+  border-radius: 20px;
+  background: rgb(255 255 255 / 0.98);
+  box-shadow: 0 24px 60px rgb(23 23 23 / 0.14);
+  overflow: hidden;
+  transform-origin: bottom left;
+  transform: translateY(16px) scale(0.9);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    transform 300ms ease,
+    opacity 300ms ease;
+}
+
+.composer-model-panel.is-open {
+  transform: translateY(0) scale(1);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.composer-model-panel-body {
+  display: grid;
+  gap: 12px;
+  max-height: min(340px, 48vh);
+  min-width: 0;
+  padding: 6px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.composer-model-group {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.composer-model-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 4px;
+  color: rgb(163 163 163);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.composer-model-group-head > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-model-group-options {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.composer-model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  padding: 8px 16px;
+  border: none;
+  outline: none;
+  border-radius: 12px;
+  background: transparent;
+  color: rgb(115 115 115);
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.composer-model-option:hover:not(:disabled),
+.composer-model-option.is-active {
+  background: rgb(245 245 245);
+  color: rgb(23 23 23);
+}
+
+.composer-model-option.is-active {
+  font-weight: 700;
+}
+
+.composer-model-option:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+
+.composer-model-option-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.composer-model-option-model {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.composer-model-option-meta,
+.composer-model-empty {
+  color: rgb(163 163 163);
+  font-size: 12px;
+}
+
+.composer-model-option-check {
+  min-width: 10px;
+  color: rgb(23 23 23);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.composer-model-empty {
+  padding: 6px 4px;
+  line-height: 1.6;
+}

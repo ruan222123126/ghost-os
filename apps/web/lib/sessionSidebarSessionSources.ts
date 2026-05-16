@@ -3,10 +3,11 @@ import {
   UNCLASSIFIED_PARTITION_ID,
   type SessionPartitionView,
 } from '@/lib/sessionSidebarPartitions';
+import { collectHiddenSessionIDsFromRun } from '@/lib/sessionSidebarSourceHiddenSessions';
 import { compareSessionsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
 import type { SessionMetadata, TaskRunLog } from '@/lib/types';
 
-export type SessionSourceKind = 'workflow' | 'orchestration' | 'task';
+export type SessionSourceKind = 'workflow' | 'orchestration' | 'loop' | 'task';
 export interface SessionSourceAssignment {
   kind: SessionSourceKind;
   ownerID: string;
@@ -15,21 +16,29 @@ export interface SessionSourceAssignment {
 
 export type SessionSourceAssignments = Record<string, SessionSourceAssignment>;
 
+export interface SessionSourceResolution {
+  assignments: SessionSourceAssignments;
+  hiddenSessionIDs: string[];
+}
+
 export interface CollectSessionSourceAssignmentsOptions {
   sourceNamesByID?: Record<string, string>;
+  loopTaskIDs?: string[];
 }
 
 export const SOURCE_PARTITION_IDS: Record<SessionSourceKind, string> = {
   workflow: '__source_workflow__',
   orchestration: '__source_orchestration__',
+  loop: '__source_loop__',
   task: '__source_task__',
 };
 
 const SOURCE_CHILD_PARTITION_SEPARATOR = '::';
-const SOURCE_ORDER: readonly SessionSourceKind[] = ['workflow', 'orchestration', 'task'];
+const SOURCE_ORDER: readonly SessionSourceKind[] = ['workflow', 'orchestration', 'loop', 'task'];
 const SOURCE_PRIORITY: Record<SessionSourceKind, number> = {
-  workflow: 3,
-  orchestration: 2,
+  workflow: 4,
+  orchestration: 3,
+  loop: 2,
   task: 1,
 };
 
@@ -45,9 +54,18 @@ export function collectSessionSourceAssignments(
   runs: TaskRunLog[],
   options: CollectSessionSourceAssignmentsOptions = {},
 ): SessionSourceAssignments {
+  return collectSessionSourceResolution(runs, options).assignments;
+}
+
+export function collectSessionSourceResolution(
+  runs: TaskRunLog[],
+  options: CollectSessionSourceAssignmentsOptions = {},
+): SessionSourceResolution {
   const assignments: SessionSourceAssignments = {};
+  const hiddenSessionIDs = new Set<string>();
+  const loopTaskIDs = new Set(options.loopTaskIDs ?? []);
   for (const run of runs) {
-    const source = sourceKindFromRun(run);
+    const source = sourceKindFromRun(run, loopTaskIDs);
     if (!source) {
       continue;
     }
@@ -55,23 +73,33 @@ export function collectSessionSourceAssignments(
     for (const sessionID of sessionIDsFromRun(run)) {
       assignSessionSource(assignments, sessionID, source, owner);
     }
+    for (const sessionID of collectHiddenSessionIDsFromRun(run, source)) {
+      addSessionID(hiddenSessionIDs, sessionID);
+    }
   }
-  return assignments;
+  return {
+    assignments,
+    hiddenSessionIDs: [...hiddenSessionIDs].filter((sessionID) => !assignments[sessionID]),
+  };
 }
 
 export function mergeSessionSourcePartitionViews(input: {
   manualViews: SessionPartitionView[];
   sessions: SessionMetadata[];
   sourceAssignments: SessionSourceAssignments;
+  hiddenSessionIDs?: string[];
   searchQuery: string;
   copy: ChatCopy;
 }): SessionPartitionView[] {
   const sourceSessionIDs = new Set(Object.keys(input.sourceAssignments));
+  const hiddenSessionIDs = new Set(input.hiddenSessionIDs ?? []);
   const hideEmptyManual = input.searchQuery.trim().length > 0;
   const manualViews = input.manualViews
     .map((view) => ({
       ...view,
-      sessions: view.sessions.filter((session) => !sourceSessionIDs.has(session.id)),
+      sessions: view.sessions.filter((session) => {
+        return !sourceSessionIDs.has(session.id) && !hiddenSessionIDs.has(session.id);
+      }),
     }))
     .filter((view) => !hideEmptyManual || view.sessions.length > 0);
   const unclassifiedView = manualViews.find((view) => view.id === UNCLASSIFIED_PARTITION_ID);
@@ -158,15 +186,21 @@ function systemPartitionName(kind: SessionSourceKind, copy: ChatCopy): string {
   if (kind === 'orchestration') {
     return copy.sidebarPartitionOrchestration;
   }
+  if (kind === 'loop') {
+    return copy.sidebarPartitionLoop;
+  }
   return copy.sidebarPartitionTask;
 }
 
-function sourceKindFromRun(run: TaskRunLog): SessionSourceKind | undefined {
+function sourceKindFromRun(
+  run: TaskRunLog,
+  loopTaskIDs: ReadonlySet<string>,
+): SessionSourceKind | undefined {
   if (run.task_kind === 'workflow' || run.task_kind === 'orchestration') {
     return run.task_kind;
   }
   if (run.task_kind === 'agent_message' && !run.session_id_input?.trim()) {
-    return 'task';
+    return loopTaskIDs.has(run.task_id.trim()) ? 'loop' : 'task';
   }
   return undefined;
 }
@@ -186,39 +220,7 @@ function sourceOwnerFromRun(
 function sessionIDsFromRun(run: TaskRunLog): string[] {
   const ids = new Set<string>();
   addSessionID(ids, run.session_id_output);
-  for (const node of run.node_results ?? []) {
-    collectSessionIDsFromValue(node.output, ids);
-  }
   return [...ids];
-}
-
-function collectSessionIDsFromValue(value: unknown, ids: Set<string>): void {
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectSessionIDsFromValue(item, ids));
-    return;
-  }
-  if (!value || typeof value !== 'object') {
-    return;
-  }
-  collectSessionIDsFromRecord(value as Record<string, unknown>, ids);
-}
-
-function collectSessionIDsFromRecord(record: Record<string, unknown>, ids: Set<string>): void {
-  addSessionID(ids, record.session_id);
-  addSessionID(ids, record.session_id_output);
-  addSessionID(ids, record.owner_session_id);
-  collectStringRecordValues(record.member_session_ids, ids);
-  collectSessionIDsFromValue(record.member_results, ids);
-  collectSessionIDsFromValue(record.dispatch_results, ids);
-}
-
-function collectStringRecordValues(value: unknown, ids: Set<string>): void {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return;
-  }
-  for (const item of Object.values(value)) {
-    addSessionID(ids, item);
-  }
 }
 
 function assignSessionSource(

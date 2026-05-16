@@ -21,6 +21,8 @@ import { buildToolChatMessage, resolveSessionToolCall } from './chatToolMessages
 import { filterToolTagResultToLoadedTools } from '@/lib/toolTagResultText';
 import { stripToolTagCalls } from '@/lib/toolTagText';
 
+const TASK_RUN_EVENT_MARKER = '[TASK_RUN_EVENT]';
+
 interface NormalizedSessionMessage {
   index: number;
   role: SessionMessageRole | '';
@@ -132,6 +134,14 @@ export function buildThinkingMessage(content: string, id?: string): ChatMessage 
   };
 }
 
+export function buildEventMessage(content: string, id?: string): ChatMessage {
+  return {
+    id: id ?? nextChatMessageID(),
+    kind: 'event',
+    content,
+  };
+}
+
 export function buildSystemMessage(
   content: string,
   id?: string,
@@ -210,6 +220,29 @@ function buildSessionAssistantMessages(
   return mapped;
 }
 
+function buildSessionInternalMessages(sessionId: string, message: NormalizedSessionMessage): ChatMessage[] {
+  const eventText = extractTaskRunEventText(message.text);
+  if (eventText !== null) {
+    return [buildEventMessage(eventText || '任务运行事件', buildSessionMessageID(sessionId, message.index, 'event'))];
+  }
+
+  return [
+    buildSystemMessage(
+      filterToolTagResultToLoadedTools(message.text) || '[internal]',
+      buildSessionMessageID(sessionId, message.index, 'internal'),
+      'internal',
+    ),
+  ];
+}
+
+function extractTaskRunEventText(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith(TASK_RUN_EVENT_MARKER)) {
+    return null;
+  }
+  return trimmed.slice(TASK_RUN_EVENT_MARKER.length).trim();
+}
+
 export function mapSessionMessageToChatMessages(
   sessionId: string,
   message: SessionMessage,
@@ -224,7 +257,7 @@ export function mapSessionMessageToChatMessages(
     case 'system':
       return [buildSystemMessage(normalized.text || '[system]', buildSessionMessageID(sessionId, normalized.index, 'system'), 'system')];
     case 'internal':
-      return [buildSystemMessage(filterToolTagResultToLoadedTools(normalized.text) || '[internal]', buildSessionMessageID(sessionId, normalized.index, 'internal'), 'internal')];
+      return buildSessionInternalMessages(sessionId, normalized);
     case 'tool':
       return mapToolSessionMessage(sessionId, normalized, toolCallLookup);
     default:

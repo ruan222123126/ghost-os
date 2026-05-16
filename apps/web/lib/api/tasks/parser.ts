@@ -1,6 +1,7 @@
 import type { TaskPayload, TaskRunLog, TaskRunNodeResult } from '@/lib/types';
 import {
   expectBoolean,
+  expectNumber,
   expectRecord,
   expectString,
   expectStringEnum,
@@ -110,7 +111,7 @@ interface ParsedTaskRuntimeOverrides {
 
 interface ParsedTaskRelayConfig {
   stop_policy: 'ai_decides' | 'max_rounds';
-  max_rounds?: number;
+  max_rounds: number;
   execution_timeout_ms?: number;
 }
 
@@ -149,10 +150,11 @@ function parseTaskRelayConfig(value: unknown, label: string): ParsedTaskRelayCon
     return undefined;
   }
   const picked = pickKnownKeys(record, TASK_RELAY_CONFIG_KEYS);
+  const stopPolicy = expectStringEnum(picked.stop_policy, TASK_RELAY_STOP_POLICIES, `${label}.stop_policy`);
 
   return {
-    stop_policy: expectStringEnum(picked.stop_policy, TASK_RELAY_STOP_POLICIES, `${label}.stop_policy`),
-    max_rounds: parseOptionalNumber(picked.max_rounds, `${label}.max_rounds`),
+    stop_policy: stopPolicy,
+    max_rounds: expectNumber(picked.max_rounds, `${label}.max_rounds`),
     execution_timeout_ms: parseOptionalNumber(
       picked.execution_timeout_ms,
       `${label}.execution_timeout_ms`,

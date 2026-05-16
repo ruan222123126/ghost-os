@@ -5,6 +5,7 @@ import {
   mapSessionMessagesToChat,
   replacePendingQuestionWithUserAnswer,
 } from './chatMessages';
+import { formatToolDetails } from './chat-view/tool-details/format';
 import type { AgentSendAwaitingHumanResponse, SessionMessage } from './types';
 
 const SESSION_ID = 'session-test';
@@ -61,6 +62,23 @@ describe('chatMessages', () => {
     expect(mapped[0].content).toBe(
       '[TOOL_TAG_RESULT]\n{"tool":"sfind","output":{"action":"list","items":[{"name":"release_flow","status":"active","available_now":true},{"name":"ship_checklist","status":"pending","available_next_turn":true}]}}',
     );
+  });
+
+  it('maps task run event internal notes to divider events', () => {
+    const messages = withSessionIndices([
+      {
+        role: 'internal',
+        text: '[TASK_RUN_EVENT]\n工作流 if 判断：if-node branch=true -> agent-true',
+      },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'event',
+      content: '工作流 if 判断：if-node branch=true -> agent-true',
+    });
   });
 
   it('reconstructs answered ask_human tool results into question and user timeline', () => {
@@ -233,6 +251,34 @@ describe('chatMessages', () => {
       toolName: undefined,
       traceId: undefined,
     });
+  });
+
+  it('still formats legacy orchestration_dispatch tool envelopes in compact mode', () => {
+    const rawEnvelope = JSON.stringify({
+      status: 'success',
+      tool: 'orchestration_dispatch',
+      trace_id: 'trace-owner-legacy',
+      output: JSON.stringify({
+        action: 'private_send',
+        private_deliveries: [
+          { participant_id: 'agent-2', content: 'legacy secret' },
+          { participant_id: 'agent-3', content: 'legacy follow-up' },
+        ],
+      }),
+      error: '',
+    });
+    const messages = withSessionIndices([{ role: 'tool', text: rawEnvelope }]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'tool',
+      toolName: undefined,
+      content: rawEnvelope,
+    });
+    expect(formatToolDetails(mapped[0] as Extract<typeof mapped[number], { kind: 'tool' }>, { compactOutputEnabled: true }))
+      .toBe('向agent-2发了私信：legacy secret\n向agent-3发了私信：legacy follow-up');
   });
 
   it('hides assistant tool-tag text when the turn already has a tool card', () => {

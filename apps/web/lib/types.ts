@@ -97,6 +97,12 @@ export interface ThinkingChatMessage {
   content: string;
 }
 
+export interface EventChatMessage {
+  id: string;
+  kind: 'event';
+  content: string;
+}
+
 export type SystemChatMessageSourceRole = 'system' | 'internal';
 
 export interface SystemChatMessage {
@@ -205,6 +211,7 @@ export type ChatMessage =
   | UserChatMessage
   | AssistantChatMessage
   | ThinkingChatMessage
+  | EventChatMessage
   | SystemChatMessage
   | ToolChatMessage
   | ErrorChatMessage

@@ -220,7 +220,7 @@ describe('components/workflow/WorkflowCanvasNodeEditorContent', () => {
     expect(textContent(renderer.root)).toContain('Group Owner Initial Prompt');
     expect(textContent(renderer.root)).toContain('This text is injected to every member as the group owner opening prompt and shared context.');
     expect(textContent(renderer.root)).toContain('Owner Member');
-    expect(textContent(renderer.root)).toContain('The owner gets a runtime-only orchestration_dispatch tool');
+    expect(textContent(renderer.root)).toContain('The owner keeps its visible runtime tools');
     expect(renderer.root.findByType('textarea').props.placeholder).toBe(defaultOrchestrationGroupSharedContext('en-US'));
   });
 });

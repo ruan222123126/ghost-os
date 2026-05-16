@@ -1,5 +1,6 @@
 'use client';
 
+import { CloseButton } from '@/components/CloseButton';
 import { WorkflowCanvasNodeEditorContent } from '@/components/workflow/WorkflowCanvasNodeEditorContent';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PresetPayload } from '@/lib/types';
@@ -53,9 +54,7 @@ export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPan
               <h2>{copy.workflow.propertiesTitle}</h2>
               <p>{copy.workflow.propertiesUUID}: {selectedNode.id}</p>
             </div>
-            <button type="button" className="workflow-arch-icon-button" onClick={onClose} aria-label={copy.workflow.closePropertiesAria}>
-              <span aria-hidden>✕</span>
-            </button>
+            <CloseButton className="shrink-0" onClick={onClose} aria-label={copy.workflow.closePropertiesAria} />
           </section>
           <section className="workflow-arch-properties-pill">
             <span />

@@ -54,7 +54,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     return (
       <div className="space-y-2">
         {Array.from({ length: 6 }).map((_, index) => (
-          <div key={`session-skeleton-${index}`} className="h-10 w-full bg-white" />
+          <div key={`session-skeleton-${index}`} className="h-10 w-full animate-pulse rounded bg-neutral-100" />
         ))}
       </div>
     );

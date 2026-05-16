@@ -49,6 +49,7 @@
 .message-row.is-assistant,
 .message-row.is-tool,
 .message-row.is-thinking,
+.message-row.is-event,
 .message-row.is-system,
 .message-row.is-error,
 .message-row.is-question,
@@ -76,6 +77,37 @@
 .message-row.is-question .message-stack {
   align-items: flex-start;
   width: 100%;
+}
+
+.message-row.is-event {
+  align-items: center;
+}
+
+.message-event-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  color: rgb(115 115 115);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.message-event-divider::before,
+.message-event-divider::after {
+  content: "";
+  flex: 1 1 0;
+  min-width: 28px;
+  height: 1px;
+  background: rgb(229 229 229);
+}
+
+.message-event-divider span {
+  max-width: min(76%, 640px);
+  text-align: center;
 }
 
 .message-assistant-body {

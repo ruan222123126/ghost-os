@@ -4,6 +4,7 @@ import { QuestionInput } from '@/components/QuestionInput';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type {
   AssistantChatMessage,
+  EventChatMessage,
   PendingQuestionMessage,
   ThinkingChatMessage,
   ToolChatMessage,
@@ -122,7 +123,10 @@ const AssistantMessageRow: FC<{
         {message.inProgress ? <div className="message-draft-flag">{copy.chat.assistantDraftFlag}</div> : null}
         <div className={assistantFrameClassName}>
           <div className="message-assistant-body">
-            <AssistantMarkdownContent content={message.content} enabled={assistantMarkdownEnabled} />
+            <AssistantMarkdownContent
+              content={message.content}
+              enabled={assistantMarkdownEnabled}
+            />
           </div>
           {message.content ? (
             <div className={actionClassName}>
@@ -163,6 +167,14 @@ const ThinkingMessageRow: FC<{
   <div className="message-row is-thinking">
     <div className="message-stack">
       <ThinkingPanel expanded={isOpen} text={message.content} onToggleExpanded={onToggle} />
+    </div>
+  </div>
+);
+
+const EventMessageRow: FC<{ message: EventChatMessage }> = ({ message }) => (
+  <div className="message-row is-event">
+    <div className="message-event-divider">
+      <span>{message.content}</span>
     </div>
   </div>
 );
@@ -234,6 +246,8 @@ export const MessageRow: FC<MessageRowProps> = ({
           onToggle={() => onToggleThinkingPanel?.(message.id)}
         />
       );
+    case 'event':
+      return <EventMessageRow message={message} />;
     case 'system':
       return <NoteMessageRow content={message.content} tone="system" />;
     case 'error':

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { CloseButton } from '@/components/CloseButton';
 import { WorkflowClickStepEditorModal } from '@/components/workflow/WorkflowClickStepEditorModal';
 import { WorkflowFindIconStepEditorModal } from '@/components/workflow/WorkflowFindIconStepEditorModal';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -53,7 +54,7 @@ function WorkflowScreenControlComposerModalContent(props: WorkflowScreenControlC
             <h3 id="workflow-screen-composer-title">{copy.workflow.screenComposerTitle}</h3>
             <p>{copy.workflow.screenComposerDescription}</p>
           </div>
-          <button type="button" className="workflow-arch-screen-composer-close" onClick={onClose} aria-label={copy.workflow.closeScreenComposerAria}>✕</button>
+          <CloseButton className="shrink-0" onClick={onClose} aria-label={copy.workflow.closeScreenComposerAria} />
         </header>
         <div className="workflow-arch-screen-composer-body">
           <ComposerActionsPanel onAppend={onAppend} />

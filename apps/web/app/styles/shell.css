@@ -92,6 +92,48 @@
   background: rgb(255 251 243 / 0.52);
 }
 
+.chat.is-empty-home {
+  background: rgb(255 255 255);
+}
+
+.chat-empty-home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.chat-empty-home .status-line {
+  width: min(100%, 780px);
+}
+
+.chat-empty-hero {
+  display: grid;
+  gap: 12px;
+  width: min(100%, 720px);
+  text-align: center;
+}
+
+.chat-empty-hero-title {
+  margin: 0;
+  color: rgb(38 38 38);
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+}
+
+.chat-empty-hero-subtitle {
+  margin: 0;
+  color: rgb(115 115 115);
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.7;
+}
+
 .chat-session-notch {
   flex: 0 0 48px;
   display: grid;

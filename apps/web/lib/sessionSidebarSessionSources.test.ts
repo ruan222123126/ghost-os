@@ -1,5 +1,6 @@
 import {
   collectSessionSourceAssignments,
+  collectSessionSourceResolution,
   isSystemSessionPartitionID,
   mergeSessionSourcePartitionViews,
   type SessionSourceAssignment,
@@ -10,11 +11,11 @@ import type { ChatCopy } from '@/lib/i18n/messages/chat';
 import type { SessionMetadata, TaskRunLog } from '@/lib/types';
 
 describe('lib/sessionSidebarSessionSources', () => {
-  it('extracts workflow and orchestration sessions from task run logs', () => {
-    const assignments = collectSessionSourceAssignments([
+  it('extracts only run-level workflow and orchestration transcript sessions from task run logs', () => {
+    const runs = [
       runLog({
         task_kind: 'workflow',
-        session_id_output: 'workflow-final',
+        session_id_output: 'workflow-display',
         node_results: [{
           node_id: 'agent',
           node_type: 'agent',
@@ -24,6 +25,7 @@ describe('lib/sessionSidebarSessionSources', () => {
       }),
       runLog({
         task_kind: 'orchestration',
+        session_id_output: 'orchestration-display',
         node_results: [{
           node_id: 'group',
           node_type: 'group',
@@ -35,19 +37,24 @@ describe('lib/sessionSidebarSessionSources', () => {
           },
         }],
       }),
-    ]);
+    ];
+    const assignments = collectSessionSourceAssignments(runs);
+    const resolution = collectSessionSourceResolution(runs);
 
-    expect(assignmentKinds(assignments)).toMatchObject({
-      'workflow-final': 'workflow',
-      'workflow-agent': 'workflow',
-      'owner-session': 'orchestration',
-      'member-session': 'orchestration',
-      'dispatch-member': 'orchestration',
+    expect(assignmentKinds(assignments)).toEqual({
+      'workflow-display': 'workflow',
+      'orchestration-display': 'orchestration',
     });
-    expect(assignments['owner-session']).toMatchObject({
+    expect(assignments['orchestration-display']).toMatchObject({
       ownerID: 'task-1',
       ownerName: 'task-1',
     });
+    expect(resolution.hiddenSessionIDs.sort()).toEqual([
+      'dispatch-member',
+      'member-session',
+      'owner-session',
+      'workflow-agent',
+    ]);
   });
 
   it('keeps resumed agent task sessions in manual groups', () => {
@@ -66,13 +73,36 @@ describe('lib/sessionSidebarSessionSources', () => {
     expect(assignmentKinds(assignments)).toEqual({ 'task-session': 'task' });
   });
 
-  it('keeps unclassified first and removes sourced sessions from manual views', () => {
+  it('assigns relay task sessions to the loop partition', () => {
+    const assignments = collectSessionSourceAssignments([
+      runLog({
+        task_id: 'loop-task',
+        task_kind: 'agent_message',
+        session_id_output: 'loop-session',
+      }),
+      runLog({
+        task_id: 'standard-task',
+        task_kind: 'agent_message',
+        session_id_output: 'task-session',
+      }),
+    ], {
+      loopTaskIDs: ['loop-task'],
+    });
+
+    expect(assignmentKinds(assignments)).toEqual({
+      'loop-session': 'loop',
+      'task-session': 'task',
+    });
+  });
+
+  it('keeps unclassified first and removes sourced or hidden execution sessions from manual views', () => {
     const sourceAndChatSessions = sessions();
+    const hiddenExecutionSession = session('orchestration-member-session', '2026-05-09T00:45:00Z');
     const customSession = session('custom-session', '2026-05-09T00:30:00Z');
-    const allSessions = [...sourceAndChatSessions, customSession];
+    const allSessions = [...sourceAndChatSessions, hiddenExecutionSession, customSession];
     const views = mergeSessionSourcePartitionViews({
       manualViews: [
-        { id: UNCLASSIFIED_PARTITION_ID, name: 'Unclassified', sessions: sourceAndChatSessions },
+        { id: UNCLASSIFIED_PARTITION_ID, name: 'Unclassified', sessions: [...sourceAndChatSessions, hiddenExecutionSession] },
         { id: 'custom', name: 'Custom', sessions: [customSession] },
       ],
       sessions: allSessions,
@@ -80,6 +110,7 @@ describe('lib/sessionSidebarSessionSources', () => {
         'workflow-session': sourceAssignment('workflow', 'workflow-1', 'Workflow 1'),
         'orchestration-session': sourceAssignment('orchestration', 'orchestration-1', 'Orchestration 1'),
       },
+      hiddenSessionIDs: [hiddenExecutionSession.id],
       searchQuery: '',
       copy: copy(),
     });
@@ -102,12 +133,14 @@ describe('lib/sessionSidebarSessionSources', () => {
     const views = mergeSessionSourcePartitionViews({
       manualViews: [{ id: UNCLASSIFIED_PARTITION_ID, name: 'Unclassified', sessions: [] }],
       sessions: [
+        session('loop-session', '2026-05-09T05:30:00Z'),
         session('task-session-a', '2026-05-09T05:00:00Z'),
         session('task-session-b', '2026-05-09T04:00:00Z'),
         session('orchestration-session-a', '2026-05-09T03:00:00Z'),
         session('orchestration-session-b', '2026-05-09T02:00:00Z'),
       ],
       sourceAssignments: {
+        'loop-session': sourceAssignment('loop', 'loop-a', 'Daily loop'),
         'task-session-a': sourceAssignment('task', 'task-a', 'Daily task'),
         'task-session-b': sourceAssignment('task', 'task-b', 'Audit task'),
         'orchestration-session-a': sourceAssignment('orchestration', 'orch-a', 'Morning orchestration'),
@@ -117,8 +150,10 @@ describe('lib/sessionSidebarSessionSources', () => {
       copy: copy(),
     });
 
+    const loops = findPartition(views, 'Loops');
     const orchestration = findPartition(views, 'Orchestration');
     const tasks = findPartition(views, 'Tasks');
+    expect(loops?.childPartitions?.map((partition) => partition.name)).toEqual(['Daily loop']);
     expect(orchestration?.childPartitions?.map((partition) => partition.name)).toEqual([
       'Morning orchestration',
       'Evening orchestration',
@@ -184,6 +219,7 @@ function copy(): ChatCopy {
   return {
     sidebarPartitionWorkflow: 'Workflows',
     sidebarPartitionOrchestration: 'Orchestration',
+    sidebarPartitionLoop: 'Loops',
     sidebarPartitionTask: 'Tasks',
   } as ChatCopy;
 }

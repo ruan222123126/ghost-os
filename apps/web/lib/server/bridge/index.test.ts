@@ -128,6 +128,26 @@ describe('lib/server/bridge', () => {
     expect(headers.get('X-API-Token')).toBe('request-secret');
   });
 
+  it('forwards incoming abort signals to bridge fetches', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    const controller = new AbortController();
+    const request = new Request('http://localhost/api/sessions', {
+      method: 'GET',
+      signal: controller.signal,
+    });
+
+    await forwardBridge({ path: '/api/sessions', method: 'GET', request });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(request.signal);
+  });
+
   it('parses JSON request bodies before forwarding them', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {

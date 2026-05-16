@@ -2,14 +2,19 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import TestRenderer, { act } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import type { AssistantChatMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
+import type { AssistantChatMessage, EventChatMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
 import type { MessageRowProps } from './types';
 import { MessageRow } from './MessageRow';
 
-const assistantMarkdownMock = jest.fn((_props: { content: string; enabled?: boolean }) => null);
+type AssistantMarkdownMockProps = {
+  content: string;
+  enabled?: boolean;
+};
+
+const assistantMarkdownMock = jest.fn((_props: AssistantMarkdownMockProps) => null);
 
 jest.mock('./AssistantMarkdownContent', () => ({
-  AssistantMarkdownContent: (props: { content: string; enabled?: boolean }) => assistantMarkdownMock(props),
+  AssistantMarkdownContent: (props: AssistantMarkdownMockProps) => assistantMarkdownMock(props),
 }));
 
 describe('components/message/MessageRow', () => {
@@ -196,9 +201,32 @@ describe('components/message/MessageRow', () => {
     expect(html).toContain('message-assistant-frame has-trailing-tool');
     expect(html).toContain('message-actions is-inline-with-body');
   });
+
+  it('renders task run events as a divider row', () => {
+    const message: EventChatMessage = {
+      id: 'event-1',
+      kind: 'event',
+      content: '工作流进入循环：loop-node 第 1/3 轮',
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      toolCallCompactOutputEnabled: false,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+    });
+
+    expect(html).toContain('message-row is-event');
+    expect(html).toContain('message-event-divider');
+    expect(html).toContain('工作流进入循环');
+  });
 });
 
-function renderMessageRow(props: MessageRowProps): string {
+type MessageRowTestProps = MessageRowProps;
+
+function renderMessageRow(props: MessageRowTestProps): string {
   const providerProps = {
     initialLocale: 'en-US',
   } as React.ComponentProps<typeof WebLocaleProvider>;
@@ -207,13 +235,13 @@ function renderMessageRow(props: MessageRowProps): string {
     React.createElement(
       WebLocaleProvider,
       providerProps,
-      React.createElement(MessageRow, props),
+      React.createElement(MessageRow, withMessageRowDefaults(props)),
     ),
   );
 }
 
 function renderMessageRowClient(
-  props: MessageRowProps,
+  props: MessageRowTestProps,
   options: {
     userContentScrollHeight: number;
   },
@@ -222,7 +250,7 @@ function renderMessageRowClient(
 
   act(() => {
     renderer = TestRenderer.create(
-      React.createElement(MessageRow, props),
+      React.createElement(MessageRow, withMessageRowDefaults(props)),
       {
         createNodeMock: (element) => createMessageRowNodeMock(element, options),
       },
@@ -230,6 +258,10 @@ function renderMessageRowClient(
   });
 
   return renderer;
+}
+
+function withMessageRowDefaults(props: MessageRowTestProps): MessageRowProps {
+  return props;
 }
 
 function createMessageRowNodeMock(

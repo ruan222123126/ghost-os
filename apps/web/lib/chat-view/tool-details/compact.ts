@@ -12,11 +12,16 @@ import {
   readString,
   truncateError,
 } from './common';
+import { buildOrchestrationDispatchCompact } from './orchestrationDispatch';
 import { buildToolSearchAction } from './sfind';
 import { resolveToolCallArgs } from './toolCalls';
 import { buildToolDetailError } from './summary';
 
 export function buildToolDetailCompact(tool: ToolChatMessage): string {
+  const dispatchDetails = buildOrchestrationDispatchCompact(tool);
+  if (dispatchDetails) {
+    return dispatchDetails;
+  }
   if (normalizeToolName(tool.toolName) === 'bash_exec') {
     return buildBashExecCompact(tool);
   }

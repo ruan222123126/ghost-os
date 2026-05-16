@@ -73,6 +73,34 @@ describe('lib/api/tasks/parser', () => {
     }).toThrow('Invalid payload: unexpected field "future_field"');
   });
 
+  it('parses AI-decides relay payload with hard max rounds', () => {
+    const parsed = parseTaskPayload({
+      id: 'loop-ai',
+      message: 'Watch inbox',
+      agent_mode: 'relay',
+      relay: {
+        stop_policy: 'ai_decides',
+        max_rounds: 4,
+        execution_timeout_ms: 0,
+      },
+      task_kind: 'agent_message',
+      schedule_type: 'interval',
+      interval_seconds: 300,
+      enabled: true,
+      created_at: '2026-04-05T07:00:00Z',
+      updated_at: '2026-04-05T07:00:00Z',
+    });
+
+    expect(parsed).toMatchObject({
+      agent_mode: 'relay',
+      relay: {
+        stop_policy: 'ai_decides',
+        max_rounds: 4,
+        execution_timeout_ms: 0,
+      },
+    });
+  });
+
   it('parses workflow start inputs with typed defaults', () => {
     const parsed = parseTaskPayload({
       id: 'workflow-with-inputs',

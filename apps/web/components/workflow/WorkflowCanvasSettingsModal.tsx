@@ -1,5 +1,6 @@
 'use client';
 
+import { CloseButton } from '@/components/CloseButton';
 import type { WorkflowCanvasDraft } from '@/lib/workflow-editor';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 
@@ -37,9 +38,7 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
     <div className="workflow-arch-settings-popover" role="dialog" aria-modal="true" aria-labelledby="workflow-settings-title">
       <button type="button" className="workflow-arch-settings-backdrop" onClick={onClose} aria-label={workflowCopy.closeWorkflowSettingsAria} />
       <section className="workflow-arch-settings-panel">
-        <button type="button" className="workflow-arch-settings-close" onClick={onClose} aria-label={workflowCopy.closeWorkflowSettingsAria}>
-          <IconClose />
-        </button>
+        <CloseButton className="absolute right-5 top-5 z-10" onClick={onClose} aria-label={workflowCopy.closeWorkflowSettingsAria} />
         <header className="workflow-arch-settings-head">
           <h2 id="workflow-settings-title">{workflowCopy.modalTitle}</h2>
           <p>{workflowCopy.modalDescription}</p>
@@ -98,15 +97,5 @@ export function WorkflowCanvasSettingsModal(props: WorkflowCanvasSettingsModalPr
         </div>
       </section>
     </div>
-  );
-}
-
-function IconClose(props: { size?: number }) {
-  const { size = 18 } = props;
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M5 5 15 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M15 5 5 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
   );
 }

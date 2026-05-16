@@ -75,12 +75,29 @@ async function parseEnvelope(
   }
 }
 
+const DEFAULT_TIMEOUT_MS = 10_000;
+
+async function fetchWithTimeout(path: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(path, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function requestJSON<TPayload>(
   path: string,
   init: RequestInit = {},
   parser?: PayloadParser<TPayload>,
 ): Promise<TPayload> {
-  const response = await fetch(path, {
+  const response = await fetchWithTimeout(path, {
     ...init,
     headers: buildHeaders(init.headers),
     cache: 'no-store',
@@ -99,7 +116,7 @@ export async function requestOptionalJSON<TPayload>(
   init: RequestInit = {},
   parser?: PayloadParser<TPayload>,
 ): Promise<TPayload | null> {
-  const response = await fetch(path, {
+  const response = await fetchWithTimeout(path, {
     ...init,
     headers: buildHeaders(init.headers),
     cache: 'no-store',

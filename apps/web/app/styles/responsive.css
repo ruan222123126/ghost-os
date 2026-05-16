@@ -92,8 +92,7 @@
   }
 
   .composer-model-panel {
-    width: max(220px, 100%);
-    max-width: min(280px, calc(100vw - 36px));
+    --composer-model-panel-width: 320px;
   }
 
   .chat-session-notch {
@@ -114,5 +113,24 @@
 
   .chat-session-notch-spacer {
     display: none;
+  }
+
+  .chat-empty-home {
+    gap: 24px;
+    padding: 24px 16px;
+  }
+
+  .chat-empty-hero {
+    gap: 10px;
+    width: min(100%, 560px);
+  }
+
+  .chat-empty-hero-title {
+    font-size: 28px;
+  }
+
+  .chat-empty-hero-subtitle {
+    font-size: 14px;
+    line-height: 1.6;
   }
 }

@@ -1,5 +1,6 @@
 'use client';
 import type { ReactNode } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 import type { WebLocale } from '@/lib/i18n/locale';
 import {
   type ClickEditorState,
@@ -146,14 +147,11 @@ function ClickEditorHeader(props: {
         </h4>
         <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-gray-400">{stepTag}</p>
       </div>
-      <button
-        type="button"
+      <CloseButton
         onClick={onClose}
-        className="p-1 text-gray-400 transition-colors hover:text-black"
+        className="shrink-0"
         aria-label={closeAria}
-      >
-        <CloseIcon />
-      </button>
+      />
     </header>
   );
 }
@@ -212,12 +210,4 @@ function viewText(locale: WebLocale): ClickEditorText {
     captureHint: 'Tracking the cursor. Press Enter to confirm or Esc to cancel.',
     coordinateHint: 'Required · number · pixels (px). Relative mode offsets from the live cursor position at runtime. Picking the cursor switches to absolute coordinates.',
   };
-}
-
-function CloseIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path d="M18 6 6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
 }

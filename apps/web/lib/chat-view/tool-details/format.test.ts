@@ -373,6 +373,65 @@ describe('lib/chat-view/tool-details/format', () => {
 
     expect(details).toBe('step1: run');
   });
+
+  it('renders orchestration_dispatch private_send compact output as ordered private messages only', () => {
+    const details = formatToolDetails(buildToolMessage({
+      toolName: 'orchestration_dispatch',
+      toolStatus: 'success',
+      content: JSON.stringify({
+        action: 'private_send',
+        private_deliveries: [
+          { participant_id: 'agent-2', content: 'secret-role' },
+          { participant_id: 'agent-3', content: 'follow-up' },
+        ],
+      }),
+      rawOutput: JSON.stringify({
+        action: 'private_send',
+        private_deliveries: [
+          { participant_id: 'agent-2', content: 'secret-role' },
+          { participant_id: 'agent-3', content: 'follow-up' },
+        ],
+      }),
+    }), { compactOutputEnabled: true });
+
+    expect(details).toBe('向agent-2发了私信：secret-role\n向agent-3发了私信：follow-up');
+  });
+
+  it('uses orchestration_dispatch private_messages args in compact mode before result hydration', () => {
+    const details = formatToolDetails(buildToolMessage({
+      toolName: 'orchestration_dispatch',
+      toolStatus: 'running',
+      content: JSON.stringify({
+        action: 'private_send',
+        private_messages: [
+          { participant_id: 'agent-2', content: 'first role' },
+          { participant_id: 'agent-4', content: 'second role' },
+        ],
+      }),
+    }), { compactOutputEnabled: true });
+
+    expect(details).toBe('向agent-2发了私信：first role\n向agent-4发了私信：second role');
+  });
+
+  it('detects legacy orchestration_dispatch envelopes even when toolName is missing', () => {
+    const details = formatToolDetails(buildToolMessage({
+      content: JSON.stringify({
+        status: 'success',
+        tool: 'orchestration_dispatch',
+        trace_id: 'trace-owner-1',
+        output: JSON.stringify({
+          action: 'private_send',
+          private_deliveries: [
+            { participant_id: 'agent-2', content: 'legacy secret' },
+            { participant_id: 'agent-5', content: 'legacy follow-up' },
+          ],
+        }),
+        error: '',
+      }),
+    }), { compactOutputEnabled: true });
+
+    expect(details).toBe('向agent-2发了私信：legacy secret\n向agent-5发了私信：legacy follow-up');
+  });
 });
 
 function buildToolMessage(overrides: Partial<ToolChatMessage>): ToolChatMessage {

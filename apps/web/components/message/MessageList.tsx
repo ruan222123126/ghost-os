@@ -3,7 +3,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
-import { EmptyState } from './EmptyState';
 import { MessageRow } from './MessageRow';
 import {
   estimateMessageRowSize,
@@ -162,7 +161,7 @@ export const MessageList: FC<MessageListProps> = ({
   }, [hasAssistantText, hasThinkingText, latestStreamingThinkingId]);
 
   if (rowCount === 0) {
-    return <EmptyState />;
+    return <div ref={scrollElementRef} className="messages is-empty" aria-live="polite" />;
   }
   return (
     <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">

@@ -66,20 +66,23 @@ const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({
   content,
   enabled = true,
 }) => {
-  const shouldRenderMarkdown = useMemo(() => {
+  const renderMode = useMemo(() => {
     if (!enabled) {
       return false;
     }
     return shouldRenderAssistantMarkdown(content);
   }, [content, enabled]);
 
-  if (!shouldRenderMarkdown) {
+  if (!renderMode) {
     return <div className="message-content">{content}</div>;
   }
 
   return (
     <div className="message-content assistant-markdown">
-      <ReactMarkdown remarkPlugins={MARKDOWN_PLUGINS} components={MARKDOWN_COMPONENTS}>
+      <ReactMarkdown
+        remarkPlugins={MARKDOWN_PLUGINS}
+        components={MARKDOWN_COMPONENTS}
+      >
         {content}
       </ReactMarkdown>
     </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
 import { useSessions } from '@/hooks/useSessions';
+import { shouldShowHomeEmptyState } from '@/lib/chat-view/homeEmptyState';
 import { ignorePromise } from '@/lib/errors';
 import { parseSettingsQuery, stripSettingsQuery, type SettingsQueryTab } from '@/lib/settingsQuery';
 import type { ChatSendInput, ProviderModelOption, WorkflowTaskPayload } from '@/lib/types';
@@ -35,6 +36,7 @@ interface HomePageController {
   modelOptionsLoading: boolean;
   activeModelOption: ProviderModelOption | null;
   modelOptions: ProviderModelOption[];
+  showEmptyHomeState: boolean;
   inputDisabled: boolean;
   topStatusVisible: boolean;
   showConfig: boolean;
@@ -107,7 +109,7 @@ export function useHomePageController(): HomePageController {
     }
   }, [settingsTabFromQuery]);
 
-  const sessions = useSessions();
+  const sessions = useSessions({ autoRefresh: true });
   const chat = useBridgeChat({
     currentSessionId: sessions.currentSessionId,
     onSessionResolved: sessions.setCurrentSessionId,
@@ -116,7 +118,7 @@ export function useHomePageController(): HomePageController {
 
   const handleSendMessage = useCallback(async (input: ChatSendInput) => {
     await chat.sendChatMessage(input);
-    await sessions.loadSessions();
+    await sessions.loadSessions({ silent: true });
   }, [chat, sessions]);
 
   const handleSelectSession = useCallback((id: string) => {
@@ -144,6 +146,11 @@ export function useHomePageController(): HomePageController {
 
   const inputDisabled = config.configLoading || chat.historyLoading || !config.config || chat.hasPendingQuestion;
   const topStatusVisible = config.configLoading || (Boolean(config.configError) && !showConfig);
+  const showEmptyHomeState = shouldShowHomeEmptyState({
+    currentSessionId: sessions.currentSessionId,
+    chat,
+    showSystemPromptMessages: config.config?.session_system_prompt_visible_enabled ?? true,
+  });
 
   return {
     sessions: sessions.sessions,
@@ -171,6 +178,7 @@ export function useHomePageController(): HomePageController {
     modelOptionsLoading: config.modelOptionsLoading,
     activeModelOption: config.activeModelOption,
     modelOptions: config.modelOptions,
+    showEmptyHomeState,
     inputDisabled,
     topStatusVisible,
     showConfig,

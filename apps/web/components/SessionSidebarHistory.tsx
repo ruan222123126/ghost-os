@@ -47,6 +47,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   const { copy } = useWebLocale();
   const { renameSession, resolveSessionTitle } = props;
   const { enabled: groupingEnabled } = useSessionSidebarGroupingPreference();
+  const showBlockingLoading = props.loading && props.sessions.length === 0;
   const [sessionContextMenu, setSessionContextMenu] = useState<SessionContextMenuState>();
   const [renameDialog, setRenameDialog] = useState(EMPTY_RENAME_DIALOG_STATE);
   const {
@@ -58,7 +59,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     moveSession,
   } = useSessionSidebarPartitions({
     sessions: props.sessions,
-    sessionsLoaded: !props.loading,
+    sessionsLoaded: !showBlockingLoading,
     searchQuery: props.searchQuery,
     unclassifiedName: copy.chat.sidebarPartitionUnclassified,
     requestFailedText: copy.system.genericRequestFailed,
@@ -73,10 +74,11 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       manualViews: partitionViews,
       sessions: props.sessions,
       sourceAssignments: sessionSources.assignments,
+      hiddenSessionIDs: sessionSources.hiddenSessionIDs,
       searchQuery: props.searchQuery,
       copy: copy.chat,
     });
-  }, [copy.chat, partitionViews, props.searchQuery, props.sessions, sessionSources.assignments]);
+  }, [copy.chat, partitionViews, props.searchQuery, props.sessions, sessionSources.assignments, sessionSources.hiddenSessionIDs]);
   const ui = useSessionSidebarHistoryUI({
     isOpen: props.isOpen,
     addPartition,
@@ -226,11 +228,11 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       </div>
       {ui.statusMessage ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{ui.statusMessage}</div> : null}
       {partitionError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{partitionError}</div> : null}
-      {sessionSources.error ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{sessionSources.error}</div> : null}
-      {props.error && !props.loading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}
+      {groupingEnabled && sessionSources.error ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{sessionSources.error}</div> : null}
+      {props.error && !showBlockingLoading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}
       <SessionSidebarHistoryBody
         copy={copy.chat}
-        loading={props.loading}
+        loading={showBlockingLoading}
         groupingEnabled={groupingEnabled}
         empty={groupingEnabled ? visiblePartitionViews.length === 0 : flatSessions.length === 0}
         flatSessions={flatSessions}
