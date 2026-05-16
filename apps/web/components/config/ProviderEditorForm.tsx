@@ -1,6 +1,7 @@
 'use client';
 
 import type { FormEvent, ReactNode } from 'react';
+import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import {
@@ -63,18 +64,12 @@ export function ProviderEditorForm(props: ProviderEditorFormProps) {
           </FormField>
 
           <FormField label={copy.settings.providerTypeLabel} description={copy.settings.providerTypeDescription}>
-            <select
+            <SoftDropdownSelect
               value={editor.providerType}
               disabled={controlsDisabled}
-              onChange={(event) => onSelectProviderType(event.target.value as ProviderConfig['type'])}
-              className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
-            >
-              {providerTypeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+              options={providerTypeOptions}
+              onChange={(value) => onSelectProviderType(value as ProviderConfig['type'])}
+            />
           </FormField>
 
           <FormField label={copy.settings.providerEndpointLabel} description={copy.settings.providerEndpointDescription}>

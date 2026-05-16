@@ -1,16 +1,18 @@
 'use client';
 
 import type { FormEvent } from 'react';
+import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { TaskFormField } from '@/components/config/TaskFormField';
-import { TaskRelaySection } from '@/components/config/TaskRelaySection';
 import { TaskRuntimeSection } from '@/components/config/TaskRuntimeSection';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { TaskEditorMode, TaskEditorState, TaskScheduleMode } from '@/lib/configTasks';
+import type { PresetPayload } from '@/lib/types';
 
 interface TaskEditorFormProps {
   editorMode: TaskEditorMode;
   editor: TaskEditorState;
+  presets: PresetPayload[];
   sessionOptions: string[];
   controlsDisabled: boolean;
   saving: boolean;
@@ -24,6 +26,7 @@ export function TaskEditorForm(props: TaskEditorFormProps) {
   const {
     editorMode,
     editor,
+    presets,
     sessionOptions,
     controlsDisabled,
     saving,
@@ -37,6 +40,7 @@ export function TaskEditorForm(props: TaskEditorFormProps) {
       <TaskEditorHeader editorMode={editorMode} />
       <TaskEditorFields
         editor={editor}
+        presets={presets}
         sessionOptions={sessionOptions}
         controlsDisabled={controlsDisabled}
         onChangeEditor={onChangeEditor}
@@ -68,11 +72,12 @@ function TaskEditorHeader(props: { editorMode: TaskEditorMode }) {
 
 function TaskEditorFields(props: {
   editor: TaskEditorState;
+  presets: PresetPayload[];
   sessionOptions: string[];
   controlsDisabled: boolean;
   onChangeEditor: (patch: Partial<TaskEditorState>) => void;
 }) {
-  const { editor, sessionOptions, controlsDisabled, onChangeEditor } = props;
+  const { editor, presets, sessionOptions, controlsDisabled, onChangeEditor } = props;
 
   return (
     <div className="rounded-[16px] border border-[#E5E5E5] bg-white p-6">
@@ -80,8 +85,12 @@ function TaskEditorFields(props: {
         <TaskMessageField editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
         <TaskScheduleFields editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
         <TaskSessionField editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
-        <TaskRelaySection editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
-        <TaskRuntimeSection editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
+        <TaskRuntimeSection
+          editor={editor}
+          presets={presets}
+          controlsDisabled={controlsDisabled}
+          onChangeEditor={onChangeEditor}
+        />
         <TaskSessionOptions sessionOptions={sessionOptions} />
       </div>
     </div>
@@ -124,16 +133,12 @@ function TaskScheduleFields(props: {
   return (
     <>
       <TaskFormField label={copy.settings.taskEditorScheduleModeLabel} description={copy.settings.taskEditorScheduleModeDescription}>
-        <select
+        <SoftDropdownSelect
           value={editor.scheduleMode}
           disabled={controlsDisabled}
-          onChange={(event) => onChangeEditor({ scheduleMode: event.target.value as TaskScheduleMode })}
-          className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
+          options={options}
+          onChange={(value) => onChangeEditor({ scheduleMode: value as TaskScheduleMode })}
+        />
       </TaskFormField>
       <TaskScheduleValueField editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
     </>

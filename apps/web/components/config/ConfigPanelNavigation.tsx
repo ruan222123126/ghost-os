@@ -23,13 +23,6 @@ interface TabDefinition {
   icon: FC<IconProps>;
 }
 
-export const CloseIcon: FC<IconProps> = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M5 5 15 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    <path d="M15 5 5 15" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-  </svg>
-);
-
 const SettingsIcon: FC<IconProps> = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path

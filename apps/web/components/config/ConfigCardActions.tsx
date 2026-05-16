@@ -23,14 +23,14 @@ interface ConfigCardActionsProps {
 
 export function ConfigCardActions(props: ConfigCardActionsProps) {
   return (
-    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
       {props.pillActions.map((action) => (
         <button
           key={action.key}
           type="button"
           disabled={action.disabled}
           onClick={(event) => stopCardAction(event, action.onClick)}
-          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+          className="shrink-0 whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {action.label}
         </button>

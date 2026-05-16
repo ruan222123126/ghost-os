@@ -1,5 +1,6 @@
 'use client';
 
+import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PromptLibraryItem } from '@/lib/types';
 import {
@@ -177,26 +178,23 @@ function PromptLibraryInsertPointField(props: {
 }) {
   const { copy } = useWebLocale();
   const { draft, controlsDisabled, onChange } = props;
-  const options = promptInsertPointOptionsForEditor(draft.insert_point);
+  const options = promptInsertPointOptionsForEditor(draft.insert_point).map((option) => ({
+    value: option.value,
+    label: copy.settings[option.labelKey],
+  }));
 
   return (
     <div className="mb-3">
       <label className="mb-1 block text-[12px] font-medium text-[#525252]">{copy.settings.promptsLibraryInsertPointLabel}</label>
-      <select
-        data-testid="prompt-card-insert-point-select"
+      <SoftDropdownSelect
+        testId="prompt-card-insert-point-select"
         value={draft.insert_point}
         disabled={controlsDisabled}
-        onChange={(event) => {
-          onChange({ insert_point: event.target.value as PromptLibraryItem['insert_point'] });
+        options={options}
+        onChange={(value) => {
+          onChange({ insert_point: value as PromptLibraryItem['insert_point'] });
         }}
-        className="w-full rounded-[10px] border border-[#E5E5E5] bg-white px-3 py-2 text-[13px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none disabled:opacity-60"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {copy.settings[option.labelKey]}
-          </option>
-        ))}
-      </select>
+      />
     </div>
   );
 }

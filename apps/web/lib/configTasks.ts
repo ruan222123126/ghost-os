@@ -4,10 +4,12 @@ import type {
 import type {
   AgentMessageTaskPayload,
   BridgeConfig,
+  TaskPayload,
   TaskRelayConfig,
   TaskRuntimeOverrides,
   TextTaskCreateRequest,
   TextTaskUpdateRequest,
+  WorkflowTaskPayload,
 } from '@/lib/types';
 
 const MIN_INTERVAL_SECONDS = 1;
@@ -23,7 +25,6 @@ type TaskUpdateRequest = Pick<
   | 'session_id'
   | 'runtime_overrides'
   | 'agent_mode'
-  | 'relay'
   | 'interval_seconds'
   | 'cron_expr'
   | 'task_kind'
@@ -33,6 +34,7 @@ export type TaskEditorMode = 'create' | 'edit';
 export type TaskScheduleMode = 'interval' | 'cron';
 export type TaskAgentMode = 'single' | 'relay';
 export type TaskRelayStopPolicy = TaskRelayConfig['stop_policy'];
+export type TaskSettingsListItem = AgentMessageTaskPayload | WorkflowTaskPayload;
 
 export interface TaskEditorState {
   message: string;
@@ -45,6 +47,7 @@ export interface TaskEditorState {
   relayMaxRounds: string;
   relayExecutionTimeoutMS: string;
   runtimeOverridesEnabled: boolean;
+  runtimePresetId: string;
   runtimeModel: string;
   runtimeToolAllowlist: string;
 }
@@ -65,6 +68,7 @@ export function createTaskEditorState(config: BridgeConfig | null): TaskEditorSt
       config?.relay_default_execution_timeout_ms ?? DEFAULT_RELAY_EXECUTION_TIMEOUT_MS,
     ),
     runtimeOverridesEnabled: false,
+    runtimePresetId: '',
     runtimeModel: '',
     runtimeToolAllowlist: '',
   };
@@ -80,13 +84,14 @@ export function editorStateFromTask(task: AgentMessageTaskPayload): TaskEditorSt
     intervalSeconds: task.interval_seconds === undefined ? '' : String(task.interval_seconds),
     cronExpr: task.cron_expr ?? '',
     sessionId: task.session_id ?? '',
-    agentMode: task.agent_mode ?? 'single',
+    agentMode: 'single',
     relayStopPolicy: relay?.stop_policy ?? DEFAULT_RELAY_STOP_POLICY,
     relayMaxRounds: String(relay?.max_rounds ?? DEFAULT_RELAY_MAX_ROUNDS),
     relayExecutionTimeoutMS: String(
       relay?.execution_timeout_ms ?? DEFAULT_RELAY_EXECUTION_TIMEOUT_MS,
     ),
     runtimeOverridesEnabled: runtimeOverrides !== undefined,
+    runtimePresetId: runtimeOverrides?.preset_id ?? '',
     runtimeModel: runtimeOverrides?.model ?? '',
     runtimeToolAllowlist: (runtimeOverrides?.tool_allowlist ?? []).join(', '),
   };
@@ -98,7 +103,7 @@ export function taskCreateRequestFromEditor(editor: TaskEditorState): TextTaskCr
   return {
     task_kind: 'agent_message',
     ...taskMutationFieldsFromEditor(editor),
-    ...relayFieldsFromEditor(editor),
+    ...textTaskAgentFields(),
     runtime_overrides: runtimeOverrides,
   };
 }
@@ -109,9 +114,21 @@ export function taskUpdateRequestFromEditor(editor: TaskEditorState): TaskUpdate
   return {
     task_kind: 'agent_message',
     ...taskMutationFieldsFromEditor(editor),
-    ...relayFieldsFromEditor(editor),
+    ...textTaskAgentFields(),
     runtime_overrides: runtimeOverrides,
   };
+}
+
+export function isTaskSettingsTextTask(task: TaskPayload): task is AgentMessageTaskPayload {
+  return task.task_kind === 'agent_message' && task.agent_mode !== 'relay';
+}
+
+export function isTaskSettingsListItem(task: TaskPayload): task is TaskSettingsListItem {
+  return isTaskSettingsTextTask(task) || task.task_kind === 'workflow';
+}
+
+export function filterTaskSettingsTasks(tasks: TaskPayload[]): TaskSettingsListItem[] {
+  return tasks.filter(isTaskSettingsListItem);
 }
 
 function taskMutationFieldsFromEditor(editor: TaskEditorState): {
@@ -152,32 +169,8 @@ function scheduleFieldsFromEditor(editor: TaskEditorState): {
   };
 }
 
-function relayFieldsFromEditor(editor: TaskEditorState): {
-  agent_mode: TaskAgentMode;
-  relay?: TaskRelayConfig;
-} {
-  if (editor.agentMode === 'single') {
-    return { agent_mode: 'single' };
-  }
-
-  return {
-    agent_mode: 'relay',
-    relay: relayConfigFromEditor(editor),
-  };
-}
-
-function relayConfigFromEditor(editor: TaskEditorState): TaskRelayConfig {
-  const config: TaskRelayConfig = {
-    stop_policy: editor.relayStopPolicy,
-    execution_timeout_ms: parseNonNegativeInteger(
-      editor.relayExecutionTimeoutMS,
-      'relay execution_timeout_ms',
-    ),
-  };
-  if (editor.relayStopPolicy === 'max_rounds') {
-    config.max_rounds = parsePositiveInteger(editor.relayMaxRounds, 'relay max_rounds');
-  }
-  return config;
+function textTaskAgentFields(): { agent_mode: 'single' } {
+  return { agent_mode: 'single' };
 }
 
 function runtimeOverridesForUpdate(
@@ -195,15 +188,32 @@ function runtimeOverridesFromEditor(editor: TaskEditorState): TaskRuntimeOverrid
     return undefined;
   }
   const model = editor.runtimeModel.trim();
+  const presetId = editor.runtimePresetId.trim();
   const toolAllowlist = parseToolAllowlist(editor.runtimeToolAllowlist);
-  if (model === '' && toolAllowlist.length === 0) {
+  if (model === '' && presetId === '' && toolAllowlist.length === 0) {
     return undefined;
   }
 
+  const presetSelected = presetId !== '';
   return {
     model: model === '' ? undefined : model,
-    tool_allowlist: toolAllowlist.length === 0 ? undefined : toolAllowlist,
+    preset_id: presetSelected ? presetId : undefined,
+    tool_allowlist_only: presetSelected ? true : undefined,
+    tool_allowlist: runtimeToolAllowlistValue(toolAllowlist, presetSelected),
   };
+}
+
+function runtimeToolAllowlistValue(
+  toolAllowlist: string[],
+  presetSelected: boolean,
+): string[] | undefined {
+  if (toolAllowlist.length > 0) {
+    return toolAllowlist;
+  }
+  if (presetSelected) {
+    return [];
+  }
+  return undefined;
 }
 
 function parseToolAllowlist(raw: string): string[] {
@@ -228,20 +238,4 @@ function parseIntervalSeconds(value: string): number {
   }
 
   return parsed;
-}
-
-function parsePositiveInteger(raw: string, fieldName: string): number {
-  const trimmed = raw.trim();
-  if (!/^[1-9]\d*$/.test(trimmed)) {
-    throw new Error(`${fieldName} must be a positive integer`);
-  }
-  return Number(trimmed);
-}
-
-function parseNonNegativeInteger(raw: string, fieldName: string): number {
-  const trimmed = raw.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error(`${fieldName} must be a non-negative integer`);
-  }
-  return Number(trimmed);
 }

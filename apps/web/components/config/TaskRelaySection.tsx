@@ -1,5 +1,6 @@
 'use client';
 
+import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { TaskFormField } from '@/components/config/TaskFormField';
 import type { TaskAgentMode, TaskEditorState, TaskRelayStopPolicy } from '@/lib/configTasks';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -50,16 +51,12 @@ function TaskAgentModeField(props: {
 
   return (
     <TaskFormField label={copy.settings.taskEditorAgentModeLabel} description={copy.settings.taskEditorAgentModeDescription}>
-      <select
+      <SoftDropdownSelect
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value as TaskAgentMode)}
-        className="w-full rounded-[12px] border border-[#E5E5E5] bg-white px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+        options={options}
+        onChange={(nextValue) => onChange(nextValue as TaskAgentMode)}
+      />
     </TaskFormField>
   );
 }
@@ -89,7 +86,7 @@ function TaskRelayControls(props: {
         description={copy.settings.taskEditorRelayMaxRoundsDescription}
         value={editor.relayMaxRounds}
         min={1}
-        disabled={controlsDisabled || editor.relayStopPolicy !== 'max_rounds'}
+        disabled={controlsDisabled}
         onChange={(relayMaxRounds) => onChangeEditor({ relayMaxRounds })}
       />
       <TaskRelayNumberField
@@ -115,16 +112,12 @@ function TaskRelayStopPolicyField(props: {
 
   return (
     <TaskFormField label={copy.settings.taskEditorRelayStopPolicyLabel} description={copy.settings.taskEditorRelayStopPolicyDescription}>
-      <select
+      <SoftDropdownSelect
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value as TaskRelayStopPolicy)}
-        className="w-full rounded-[12px] border border-[#E5E5E5] bg-white px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+        options={options}
+        onChange={(nextValue) => onChange(nextValue as TaskRelayStopPolicy)}
+      />
     </TaskFormField>
   );
 }

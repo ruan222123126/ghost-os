@@ -1,11 +1,14 @@
 'use client';
 
+import { SoftDropdownSelect, type DropdownSelectOption } from '@/components/SoftDropdownSelect';
 import { TaskFormField } from '@/components/config/TaskFormField';
 import type { TaskEditorState } from '@/lib/configTasks';
 import { useWebLocale } from '@/lib/i18n/provider';
+import type { PresetPayload } from '@/lib/types';
 
 interface TaskRuntimeSectionProps {
   editor: TaskEditorState;
+  presets: PresetPayload[];
   controlsDisabled: boolean;
   onChangeEditor: (patch: Partial<TaskEditorState>) => void;
 }
@@ -23,6 +26,12 @@ export function TaskRuntimeSection(props: TaskRuntimeSectionProps) {
       </summary>
       <div className="mt-4 space-y-5">
         <TaskRuntimeToggle editor={editor} controlsDisabled={controlsDisabled} onChangeEditor={onChangeEditor} />
+        <TaskRuntimePresetField
+          editor={editor}
+          presets={props.presets}
+          disabled={disabled}
+          onChangeEditor={onChangeEditor}
+        />
         <TaskRuntimeModelField editor={editor} disabled={disabled} onChangeEditor={onChangeEditor} />
         <TaskRuntimeToolsField editor={editor} disabled={disabled} onChangeEditor={onChangeEditor} />
       </div>
@@ -30,7 +39,7 @@ export function TaskRuntimeSection(props: TaskRuntimeSectionProps) {
   );
 }
 
-function TaskRuntimeToggle(props: TaskRuntimeSectionProps) {
+function TaskRuntimeToggle(props: Omit<TaskRuntimeSectionProps, 'presets'>) {
   const { copy } = useWebLocale();
   const { editor, controlsDisabled, onChangeEditor } = props;
 
@@ -45,6 +54,32 @@ function TaskRuntimeToggle(props: TaskRuntimeSectionProps) {
       />
       {copy.settings.taskEditorRuntimeEnable}
     </label>
+  );
+}
+
+function TaskRuntimePresetField(props: {
+  editor: TaskEditorState;
+  presets: PresetPayload[];
+  disabled: boolean;
+  onChangeEditor: (patch: Partial<TaskEditorState>) => void;
+}) {
+  const { copy } = useWebLocale();
+  const { editor, presets, disabled, onChangeEditor } = props;
+  const options = buildPresetOptions(editor.runtimePresetId, presets, copy);
+
+  return (
+    <TaskFormField
+      label={copy.settings.taskEditorRuntimePresetLabel}
+      description={copy.settings.taskEditorRuntimePresetDescription}
+    >
+      <SoftDropdownSelect
+        value={editor.runtimePresetId}
+        disabled={disabled}
+        options={options}
+        testId="task-runtime-preset-select"
+        onChange={(presetId) => onChangeEditor(taskRuntimePresetPatch(presetId, presets))}
+      />
+    </TaskFormField>
   );
 }
 
@@ -67,6 +102,46 @@ function TaskRuntimeModelField(props: {
       />
     </TaskFormField>
   );
+}
+
+function buildPresetOptions(
+  currentValue: string,
+  presets: PresetPayload[],
+  copy: ReturnType<typeof useWebLocale>['copy'],
+): DropdownSelectOption[] {
+  const options = [
+    { value: '', label: copy.settings.taskEditorRuntimePresetNone },
+    ...presets
+      .slice()
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((preset) => ({ value: preset.id, label: preset.name })),
+  ];
+  if (currentValue === '' || options.some((option) => option.value === currentValue)) {
+    return options;
+  }
+  return [
+    {
+      value: currentValue,
+      label: copy.settings.taskEditorRuntimePresetUnavailable(currentValue),
+      disabled: true,
+    },
+    ...options,
+  ];
+}
+
+function taskRuntimePresetPatch(
+  presetId: string,
+  presets: PresetPayload[],
+): Partial<TaskEditorState> {
+  const id = presetId.trim();
+  if (id === '') {
+    return { runtimePresetId: '' };
+  }
+  const preset = presets.find((item) => item.id === id);
+  return {
+    runtimePresetId: id,
+    runtimeToolAllowlist: preset ? preset.tool_allowlist.join(', ') : '',
+  };
 }
 
 function TaskRuntimeToolsField(props: {

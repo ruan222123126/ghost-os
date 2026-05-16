@@ -1,5 +1,6 @@
 'use client';
 
+import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PresetPromptRefs, PromptLibraryItem } from '@/lib/types';
 import type { PresetEditorDraft, PresetPromptRefSlot } from './presetHelpers';
@@ -57,7 +58,12 @@ function PresetPromptRefSelect(props: {
 }) {
   const { copy } = useWebLocale();
   const { slot, draft, promptLibrary, controlsDisabled, onChange } = props;
-  const options = promptLibrary.filter((item) => item.insert_point === slot);
+  const options = [
+    { value: '', label: copy.settings.presetsPromptRefEmpty },
+    ...promptLibrary
+      .filter((item) => item.insert_point === slot)
+      .map((item) => ({ value: item.id, label: item.name })),
+  ];
   const currentValue = draft.prompt_refs[slot] ?? '';
 
   return (
@@ -65,29 +71,17 @@ function PresetPromptRefSelect(props: {
       <label className="block text-[13px] font-medium text-gray-500">
         {presetPromptSlotLabel(copy.settings, slot)}
       </label>
-      <div className="relative">
-        <select
-          data-testid={`preset-prompt-ref-${slot}-select`}
-          value={currentValue}
-          disabled={controlsDisabled}
-          onChange={(event) => {
-            onChange({
-              prompt_refs: updateSinglePromptRef(draft.prompt_refs, slot, event.target.value),
-            });
-          }}
-          className="w-full appearance-none rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 pr-10 text-sm text-gray-900 outline-none transition-all focus:border-gray-400 focus:bg-white focus:ring-2 focus:ring-gray-900/5 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <option value="">{copy.settings.presetsPromptRefEmpty}</option>
-          {options.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-4 text-gray-400" aria-hidden="true">
-          v
-        </span>
-      </div>
+      <SoftDropdownSelect
+        testId={`preset-prompt-ref-${slot}-select`}
+        value={currentValue}
+        disabled={controlsDisabled}
+        options={options}
+        onChange={(nextValue) => {
+          onChange({
+            prompt_refs: updateSinglePromptRef(draft.prompt_refs, slot, nextValue),
+          });
+        }}
+      />
     </div>
   );
 }

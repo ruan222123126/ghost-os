@@ -41,7 +41,7 @@ export function resolveConfigPanelTabError(options: ResolveTabErrorOptions): str
   if (activeTab === 'prompts_library' || activeTab === 'prompts_preview') {
     return promptError;
   }
-  if (activeTab === 'general' || activeTab === 'relay') {
+  if (activeTab === 'general') {
     return generalError;
   }
   return '';

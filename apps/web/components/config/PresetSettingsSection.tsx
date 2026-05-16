@@ -71,9 +71,8 @@ export function PresetSettingsSection(props: PresetSettingsSectionProps) {
       presets,
       tools,
       promptLibrary,
-      props.config?.model_selection_enabled ?? null,
     );
-  }, [props.config?.model_selection_enabled, presets, promptLibrary, tools]);
+  }, [presets, promptLibrary, tools]);
 
   const saveEditor = async () => {
     if (editor === null) {

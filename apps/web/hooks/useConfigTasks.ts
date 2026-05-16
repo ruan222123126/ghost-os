@@ -194,7 +194,7 @@ function localizeTaskEditorError(
   if (message === 'interval seconds must be a positive integer') {
     return copy.system.intervalSecondsPositiveInteger;
   }
-  if (message === 'relay max_rounds must be a positive integer') {
+  if (message === 'relay max_rounds must be a positive integer' || message === 'relay max_rounds must be > 0') {
     return copy.system.relayMaxRoundsPositiveInteger;
   }
   if (message === 'relay execution_timeout_ms must be a non-negative integer') {

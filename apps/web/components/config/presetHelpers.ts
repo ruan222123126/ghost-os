@@ -105,12 +105,7 @@ export function findActivePresetID(
   presets: PresetPayload[],
   tools: ToolPayload[],
   promptLibrary: PromptLibraryItem[],
-  modelSelectionEnabled: boolean | null,
 ): string | null {
-  if (modelSelectionEnabled !== false) {
-    return null;
-  }
-
   const currentToolAllowlist = normalizePresetToolAllowlist(
     tools.filter((tool) => tool.enabled).map((tool) => tool.name),
   );

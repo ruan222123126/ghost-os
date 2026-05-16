@@ -1,5 +1,6 @@
 'use client';
 
+import { CloseButton } from '@/components/CloseButton';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PromptLibraryItem, ToolPayload } from '@/lib/types';
 import type {
@@ -67,14 +68,11 @@ function PresetEditorHeader(props: { title: string; onClose: () => void }) {
       <h2 data-testid="preset-editor-title" className="text-lg font-semibold tracking-tight text-gray-900">
         {title}
       </h2>
-      <button
-        type="button"
+      <CloseButton
         aria-label={copy.settings.cancel}
         onClick={onClose}
-        className="-mr-2 rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-900"
-      >
-        <span aria-hidden="true" className="block h-5 w-5 text-center text-[20px] leading-5">X</span>
-      </button>
+        className="-mr-2"
+      />
     </div>
   );
 }

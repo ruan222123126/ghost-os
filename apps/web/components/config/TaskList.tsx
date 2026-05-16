@@ -3,6 +3,7 @@
 import { useMemo, type KeyboardEvent } from 'react';
 import { ConfigCardActions } from '@/components/config/ConfigCardActions';
 import { TaskLogsModal } from '@/components/config/TaskLogsModal';
+import { filterTaskSettingsTasks, type TaskSettingsListItem } from '@/lib/configTasks';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentMessageTaskPayload, TaskPayload, TaskRunLog, WorkflowTaskPayload } from '@/lib/types';
@@ -27,7 +28,7 @@ interface TaskListProps {
 }
 
 interface TaskCardProps {
-  task: TaskPayload;
+  task: TaskSettingsListItem;
   controlsDisabled: boolean;
   onEditTextTask: (task: AgentMessageTaskPayload) => void;
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
@@ -55,7 +56,8 @@ export function TaskList(props: TaskListProps) {
     onOpenLogs,
     onCloseLogs,
   } = props;
-  const orderedTasks = useMemo(() => prioritizeEnabledTasks(tasks), [tasks]);
+  const visibleTasks = useMemo(() => filterTaskSettingsTasks(tasks), [tasks]);
+  const orderedTasks = useMemo(() => prioritizeEnabledTasks(visibleTasks), [visibleTasks]);
 
   if (loading) {
     return (
@@ -70,7 +72,7 @@ export function TaskList(props: TaskListProps) {
     );
   }
 
-  if (tasks.length === 0) {
+  if (visibleTasks.length === 0) {
     return (
       <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
         {copy.settings.tasksNoItems}
@@ -139,7 +141,7 @@ function TaskCard(props: TaskCardProps) {
         <p className="truncate font-mono text-[12px] text-[#737373]">{formatSecondaryLine(task, copy)}</p>
         {task.task_kind === 'agent_message' ? (
           <>
-            <p className="truncate text-[12px] text-[#737373]">{formatAgentMode(task, copy)}</p>
+            <p className="truncate text-[12px] text-[#737373]">{formatAgentMode(copy)}</p>
             <p className="truncate text-[12px] text-[#737373]">{formatRuntimeOverrides(task, copy)}</p>
           </>
         ) : null}
@@ -182,20 +184,19 @@ function TaskCard(props: TaskCardProps) {
   );
 }
 
-function formatTaskKind(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
+function formatTaskKind(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
   return task.task_kind === 'workflow' ? copy.settings.tasksWorkflowKind : copy.settings.tasksTextKind;
 }
 
-function formatPrimaryText(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
+function formatPrimaryText(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.task_kind === 'agent_message') {
     return task.message;
   }
 
-  const workflowTask = task as WorkflowTaskPayload;
-  return copy.settings.tasksWorkflowWithSteps(workflowStepCount(workflowTask));
+  return copy.settings.tasksWorkflowWithSteps(workflowStepCount(task));
 }
 
-function formatSchedule(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
+function formatSchedule(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.schedule_type === 'interval') {
     return copy.settings.tasksEverySeconds(task.interval_seconds ?? 0);
   }
@@ -203,7 +204,7 @@ function formatSchedule(task: TaskPayload, copy: ReturnType<typeof useWebLocale>
   return copy.settings.tasksCron(task.cron_expr ?? '');
 }
 
-function formatSecondaryLine(task: TaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
+function formatSecondaryLine(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.task_kind === 'agent_message') {
     return copy.settings.tasksSessionLabel(task.session_id?.trim() ? task.session_id : copy.settings.tasksSessionNewEachRun);
   }
@@ -217,6 +218,9 @@ function formatRuntimeOverrides(task: AgentMessageTaskPayload, copy: ReturnType<
     return copy.settings.tasksRuntimeGlobalDefaults;
   }
   const parts: string[] = [];
+  if (overrides.preset_id) {
+    parts.push(`preset=${overrides.preset_id}`);
+  }
   if (overrides.model) {
     parts.push(`model=${overrides.model}`);
   }
@@ -230,11 +234,8 @@ function formatRuntimeOverrides(task: AgentMessageTaskPayload, copy: ReturnType<
   return copy.settings.tasksRuntimeLabel(parts.join(' | '));
 }
 
-function formatAgentMode(task: AgentMessageTaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
-  if (task.agent_mode !== 'relay') {
-    return copy.settings.tasksAgentModeSingle;
-  }
-  return copy.settings.tasksAgentModeRelay(task.relay?.stop_policy ?? 'ai_decides');
+function formatAgentMode(copy: ReturnType<typeof useWebLocale>['copy']): string {
+  return copy.settings.tasksAgentModeSingle;
 }
 
 function workflowStepCount(task: WorkflowTaskPayload): number {
@@ -243,7 +244,7 @@ function workflowStepCount(task: WorkflowTaskPayload): number {
 
 function handleCardKeyDown(
   event: KeyboardEvent<HTMLElement>,
-  task: TaskPayload,
+  task: TaskSettingsListItem,
   editable: boolean,
   onEditTextTask: (task: AgentMessageTaskPayload) => void,
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void,
@@ -260,7 +261,7 @@ function handleCardKeyDown(
 }
 
 function handleTaskEdit(
-  task: TaskPayload,
+  task: TaskSettingsListItem,
   onEditTextTask: (task: AgentMessageTaskPayload) => void,
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void,
 ) {
@@ -281,9 +282,9 @@ function handleTaskDelete(id: string, onDelete: (id: string) => Promise<void>, m
   ignorePromise(onDelete(id));
 }
 
-function prioritizeEnabledTasks(tasks: TaskPayload[]): TaskPayload[] {
-  const enabledTasks: TaskPayload[] = [];
-  const disabledTasks: TaskPayload[] = [];
+function prioritizeEnabledTasks(tasks: TaskSettingsListItem[]): TaskSettingsListItem[] {
+  const enabledTasks: TaskSettingsListItem[] = [];
+  const disabledTasks: TaskSettingsListItem[] = [];
 
   for (const task of tasks) {
     if (task.enabled) {

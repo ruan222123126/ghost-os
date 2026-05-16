@@ -5,7 +5,6 @@ import {
   createProvider,
   deleteProvider,
   getProviders,
-  setActiveProvider,
   updateProvider,
 } from '@/lib/api/config/api';
 import {
@@ -19,11 +18,13 @@ import {
 } from '@/lib/configProviders';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ProviderConfig, ProviderListResponse } from '@/lib/types';
+import type { ConfigUpdate, ProviderConfig, ProviderListResponse } from '@/lib/types';
 
 interface UseConfigProvidersOptions {
   open: boolean;
   onReloadConfig: () => Promise<void>;
+  onActivateRuntimeConfig: (update: ConfigUpdate) => Promise<boolean>;
+  modelSelectionEnabled: boolean;
 }
 
 interface UseConfigProvidersResult {
@@ -47,7 +48,7 @@ interface UseConfigProvidersResult {
 
 export function useConfigProviders(options: UseConfigProvidersOptions): UseConfigProvidersResult {
   const { copy } = useWebLocale();
-  const { open, onReloadConfig } = options;
+  const { open, onReloadConfig, onActivateRuntimeConfig, modelSelectionEnabled } = options;
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [activeProvider, setActiveProviderName] = useState('');
   const [providersLoading, setProvidersLoading] = useState(false);
@@ -125,8 +126,37 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
   }, [copy.system.failedToSaveProvider, editor, editorMode, editingName, resetEditor, runProviderMutation]);
 
   const activateProvider = useCallback(async (name: string) => {
-    await runProviderMutation(() => setActiveProvider(name), copy.system.failedToSwitchProvider);
-  }, [copy.system.failedToSwitchProvider, runProviderMutation]);
+    setProviderSaving(true);
+    setProviderError('');
+
+    try {
+      const nextProvider = providers.find((provider) => stringsEqualIgnoreCase(provider.name, name));
+      const firstModel = nextProvider ? firstAvailableProviderModel(nextProvider) : null;
+      const update: ConfigUpdate = { provider: name };
+      if (modelSelectionEnabled && firstModel) {
+        update.model = firstModel;
+      }
+
+      const saved = await onActivateRuntimeConfig(update);
+      if (!saved) {
+        return;
+      }
+
+      await onReloadConfig();
+      applyProviderList(await getProviders());
+    } catch (error) {
+      setProviderError(toErrorMessage(error, copy.system.failedToSwitchProvider));
+    } finally {
+      setProviderSaving(false);
+    }
+  }, [
+    applyProviderList,
+    copy.system.failedToSwitchProvider,
+    modelSelectionEnabled,
+    onActivateRuntimeConfig,
+    onReloadConfig,
+    providers,
+  ]);
 
   const deleteProviderByName = useCallback(async (name: string) => {
     await runProviderMutation(() => deleteProvider(name), copy.system.failedToDeleteProvider, () => {
@@ -161,4 +191,15 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
     deleteProviderByName,
     cancelEditing: resetEditor,
   };
+}
+
+function firstAvailableProviderModel(provider: ProviderConfig): string | null {
+  for (const model of provider.models ?? []) {
+    const trimmed = model.trim();
+    if (trimmed.length > 0) {
+      return trimmed;
+    }
+  }
+
+  return null;
 }

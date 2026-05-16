@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { SoftDropdownSelect, type DropdownSelectOption } from '@/components/SoftDropdownSelect';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 export function Card(props: { title: string; copy: string; children: ReactNode }) {
@@ -97,22 +98,20 @@ export function SelectField(props: {
   value: string;
   disabled?: boolean;
   onChange: (value: string) => void;
-  options: readonly { value: string; label: string }[];
+  options: readonly DropdownSelectOption[];
+  testId?: string;
 }) {
-  const { label, description, value, disabled = false, onChange, options } = props;
+  const { label, description, value, disabled = false, onChange, options, testId } = props;
 
   return (
     <Field label={label} description={description}>
-      <select
+      <SoftDropdownSelect
+        testId={testId}
         value={value}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 text-[14px] text-[#111111] transition-colors focus:border-[#111111] focus:outline-none"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>{option.label}</option>
-        ))}
-      </select>
+        onChange={onChange}
+        options={options}
+      />
     </Field>
   );
 }

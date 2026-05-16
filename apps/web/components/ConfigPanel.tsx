@@ -3,10 +3,10 @@
 import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  CloseIcon,
   SettingsNavigation,
   type SettingsTab,
 } from '@/components/config/ConfigPanelNavigation';
+import { CloseButton } from '@/components/CloseButton';
 import { ConfigPanelSectionContent } from '@/components/config/ConfigPanelSectionContent';
 import { resolveConfigPanelTabError } from '@/components/config/configPanelTabError';
 import { useConfigProviders } from '@/hooks/useConfigProviders';
@@ -52,6 +52,8 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
   const providersState = useConfigProviders({
     open,
     onReloadConfig: onReload,
+    onActivateRuntimeConfig: onSave,
+    modelSelectionEnabled: config?.model_selection_enabled ?? true,
   });
   const presetsState = useConfigPresets({ open });
   const promptsState = useConfigPrompts({ open });
@@ -105,14 +107,11 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
         data-testid="config-panel-shell"
         className="relative z-10 flex h-[85vh] max-h-[800px] w-full max-w-[1000px] overflow-hidden rounded-[24px] border border-[#E5E5E5] bg-white shadow-2xl"
       >
-        <button
-          type="button"
+        <CloseButton
           onClick={onClose}
-          className="absolute right-6 top-6 z-20 rounded-full bg-[#F5F5F5] p-2 text-[#737373] transition-colors hover:text-[#111111]"
+          className="absolute right-6 top-6 z-20"
           aria-label={copy.settings.closeSettingsAria}
-        >
-          <CloseIcon />
-        </button>
+        />
 
         <SettingsNavigation activeTab={activeTab} onSelectTab={handleSelectTab} />
 

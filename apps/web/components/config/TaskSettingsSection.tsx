@@ -4,15 +4,16 @@ import { useMemo, useState } from 'react';
 import { TaskEditorForm } from '@/components/config/TaskEditorForm';
 import { TaskList } from '@/components/config/TaskList';
 import { useTaskLogs } from '@/hooks/config/useTaskLogs';
+import { filterTaskSettingsTasks, type TaskEditorMode, type TaskEditorState } from '@/lib/configTasks';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { TaskEditorMode, TaskEditorState } from '@/lib/configTasks';
-import type { AgentMessageTaskPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
+import type { AgentMessageTaskPayload, PresetPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
 
 interface TaskSettingsSectionProps {
   tasks: TaskPayload[];
   loading: boolean;
   saving: boolean;
+  presets: PresetPayload[];
   editorMode: TaskEditorMode;
   editor: TaskEditorState;
   onRefresh: () => Promise<void>;
@@ -34,6 +35,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
     tasks,
     loading,
     saving,
+    presets,
     editorMode,
     editor,
     onRefresh,
@@ -50,7 +52,8 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
   } = props;
   const [editorOpen, setEditorOpen] = useState(false);
   const controlsDisabled = loading || saving;
-  const sessionOptions = useMemo(() => buildSessionOptions(tasks), [tasks]);
+  const visibleTasks = useMemo(() => filterTaskSettingsTasks(tasks), [tasks]);
+  const sessionOptions = useMemo(() => buildSessionOptions(visibleTasks), [visibleTasks]);
   const logs = useTaskLogs(copy.settings.tasksLogsEmpty);
 
   const handleBeginCreateTextTask = () => {
@@ -83,6 +86,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
       <TaskEditorForm
         editorMode={editorMode}
         editor={editor}
+        presets={presets}
         sessionOptions={sessionOptions}
         controlsDisabled={controlsDisabled}
         saving={saving}
@@ -132,7 +136,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
       </header>
 
       <TaskList
-        tasks={tasks}
+        tasks={visibleTasks}
         loading={loading}
         controlsDisabled={controlsDisabled}
         onEditTextTask={handleEditTextTask}

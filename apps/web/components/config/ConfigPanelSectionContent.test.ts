@@ -10,8 +10,8 @@ jest.mock('@/components/config/RuntimeSettingsSection', () => ({
   RuntimeSettingsSection: () => React.createElement('div', { 'data-testid': 'runtime-settings-section' }),
 }));
 
-jest.mock('@/components/config/RelaySettingsSection', () => ({
-  RelaySettingsSection: () => React.createElement('div', { 'data-testid': 'relay-settings-section' }),
+jest.mock('@/components/config/LoopSettingsSection', () => ({
+  LoopSettingsSection: () => React.createElement('div', { 'data-testid': 'loop-settings-section' }),
 }));
 
 jest.mock('@/components/config/TaskSettingsSection', () => ({
@@ -53,7 +53,7 @@ describe('components/config/ConfigPanelSectionContent', () => {
     expect(tasksRenderer.root.findAll((node) => node.props['data-testid'] === 'orchestration-settings-section')).toHaveLength(0);
 
     const relayRenderer = renderSection('relay');
-    expect(findByTestID(relayRenderer.root, 'relay-settings-section')).toBeDefined();
+    expect(findByTestID(relayRenderer.root, 'loop-settings-section')).toBeDefined();
     expect(relayRenderer.root.findAll((node) => node.props['data-testid'] === 'task-settings-section')).toHaveLength(0);
   });
 });
@@ -86,7 +86,12 @@ function buildProps(
     presetsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['presetsState'],
     promptsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['promptsState'],
     skillsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['skillsState'],
-    tasksState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['tasksState'],
+    tasksState: {
+      tasks: [],
+      tasksLoading: false,
+      taskSaving: false,
+      taskError: '',
+    } as unknown as React.ComponentProps<typeof ConfigPanelSectionContent>['tasksState'],
     toolsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['toolsState'],
   };
 }

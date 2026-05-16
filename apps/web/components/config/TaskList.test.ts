@@ -52,6 +52,45 @@ describe('components/config/TaskList', () => {
     expect(html).toContain('Workflow with 3 steps');
   });
 
+  it('keeps loop tasks out of the normal task list', () => {
+    const html = renderTaskList({
+      tasks: [
+        createAgentTask({ id: 'loop-task', enabled: true, message: 'loop-message', agent_mode: 'relay' }),
+        createAgentTask({ id: 'text-task', enabled: true, message: 'text-message', agent_mode: 'single' }),
+        createWorkflowTask(),
+      ],
+      loading: false,
+      controlsDisabled: false,
+      onEditTextTask: () => {},
+      onEditWorkflowTask: () => {},
+      onSetEnabled: async () => {},
+      onRunNow: async () => {},
+      onDelete: async () => {},
+    });
+
+    expect(html).not.toContain('loop-task');
+    expect(html).not.toContain('loop-message');
+    expect(html).toContain('text-task');
+    expect(html).toContain('text-message');
+    expect(html).toContain('workflow-task-1');
+  });
+
+  it('shows the empty state when only loop tasks are provided', () => {
+    const html = renderTaskList({
+      tasks: [createAgentTask({ id: 'loop-task', enabled: true, message: 'loop-message', agent_mode: 'relay' })],
+      loading: false,
+      controlsDisabled: false,
+      onEditTextTask: () => {},
+      onEditWorkflowTask: () => {},
+      onSetEnabled: async () => {},
+      onRunNow: async () => {},
+      onDelete: async () => {},
+    });
+
+    expect(html).toContain('No tasks configured yet.');
+    expect(html).not.toContain('loop-task');
+  });
+
   it('renders logs button to the left of run button', () => {
     const html = renderTaskList({
       tasks: [createAgentTask({ id: 'task-one', enabled: true, message: 'task-one-message' })],
@@ -69,6 +108,32 @@ describe('components/config/TaskList', () => {
     expect(logsIndex).toBeGreaterThan(-1);
     expect(runIndex).toBeGreaterThan(-1);
     expect(logsIndex).toBeLessThan(runIndex);
+  });
+
+  it('renders mounted preset in text task runtime summary', () => {
+    const html = renderTaskList({
+      tasks: [
+        createAgentTask({
+          id: 'preset-task',
+          enabled: true,
+          message: 'preset-message',
+          runtime_overrides: {
+            preset_id: 'preset-1',
+            tool_allowlist_only: true,
+            tool_allowlist: ['script_exec'],
+          },
+        }),
+      ],
+      loading: false,
+      controlsDisabled: false,
+      onEditTextTask: () => {},
+      onEditWorkflowTask: () => {},
+      onSetEnabled: async () => {},
+      onRunNow: async () => {},
+      onDelete: async () => {},
+    });
+
+    expect(html).toContain('Runtime: preset=preset-1 | tools=script_exec');
   });
 });
 
@@ -130,10 +195,18 @@ function buildLocalStorageMock(locale: WebLocale): Storage {
   };
 }
 
-function createAgentTask(input: { id: string; enabled: boolean; message: string }): AgentMessageTaskPayload {
+function createAgentTask(input: {
+  id: string;
+  enabled: boolean;
+  message: string;
+  agent_mode?: AgentMessageTaskPayload['agent_mode'];
+  runtime_overrides?: AgentMessageTaskPayload['runtime_overrides'];
+}): AgentMessageTaskPayload {
   return {
     id: input.id,
     message: input.message,
+    agent_mode: input.agent_mode,
+    runtime_overrides: input.runtime_overrides,
     task_kind: 'agent_message',
     schedule_type: 'interval',
     interval_seconds: 300,

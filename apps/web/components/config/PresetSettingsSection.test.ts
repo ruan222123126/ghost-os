@@ -20,7 +20,7 @@ describe('components/config/PresetSettingsSection', () => {
     llm_completion_retry_count: 1,
     llm_completion_retry_interval_ms: 200,
     api_key_set: true,
-    model_selection_enabled: false,
+    model_selection_enabled: true,
     session_human_log_full_enabled: false,
     session_system_prompt_visible_enabled: false,
     assistant_markdown_enabled: true,
@@ -286,7 +286,7 @@ describe('components/config/PresetSettingsSection', () => {
     const onActivatePreset = jest.fn<Promise<void>, [string]>(async () => undefined);
     const renderer = renderSection({
       presets,
-      config: { ...config, model_selection_enabled: true },
+      config,
       loading: false,
       saving: false,
       tools,

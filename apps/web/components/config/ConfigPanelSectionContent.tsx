@@ -1,10 +1,10 @@
 import { ComingSoonPanel, type SettingsTab } from '@/components/config/ConfigPanelNavigation';
+import { LoopSettingsSection } from '@/components/config/LoopSettingsSection';
 import { OrchestrationSettingsSection } from '@/components/config/OrchestrationSettingsSection';
 import { PresetSettingsSection } from '@/components/config/PresetSettingsSection';
 import { PromptsLibrarySettingsSection } from '@/components/config/PromptsLibrarySettingsSection';
 import { PromptsPreviewSettingsSection } from '@/components/config/PromptsPreviewSettingsSection';
 import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
-import { RelaySettingsSection } from '@/components/config/RelaySettingsSection';
 import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSection';
 import { SkillSettingsSection } from '@/components/config/SkillSettingsSection';
 import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
@@ -91,6 +91,7 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         tasks={tasksState.tasks}
         loading={tasksState.tasksLoading}
         saving={tasksState.taskSaving}
+        presets={presetsState.presets ?? []}
         editorMode={tasksState.editorMode}
         editor={tasksState.editor}
         onRefresh={tasksState.refreshTasks}
@@ -110,11 +111,10 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
 
   if (activeTab === 'relay') {
     return (
-      <RelaySettingsSection
-        loading={loading}
-        saving={saving}
+      <LoopSettingsSection
         config={config}
-        onSave={onSave}
+        tasksState={tasksState}
+        presetsState={presetsState}
       />
     );
   }
