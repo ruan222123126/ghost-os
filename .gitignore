@@ -41,3 +41,7 @@ core/bridge/bridge
 
 # Runtime logs.
 data/logs/*
+
+# Temporary dev scripts.
+weather_now.py
+open-dev-bashes.sh
