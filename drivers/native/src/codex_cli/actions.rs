@@ -38,6 +38,8 @@ fn handle_start(params: &Value) -> Response {
         working_dir: request.working_dir.clone(),
         output_path: output_path.clone(),
         exit_code_path: exit_code_path.clone(),
+        codex_executable_path: request.codex_executable_path.clone(),
+        node_executable_path: request.node_executable_path.clone(),
     }) {
         return Response::error(err);
     }
@@ -45,12 +47,15 @@ fn handle_start(params: &Value) -> Response {
     let output_tail =
         worker::read_output_tail(&output_path, request.output_character_count).unwrap_or_default();
     match worker::read_exit_code(&exit_code_path) {
-        Ok(Some(exit_code)) => Response::success(json!({
-            "output_path": output_path,
-            "exit_code_path": exit_code_path,
-            "output_tail": output_tail,
-            "exit_code": exit_code
-        })),
+        Ok(Some(exit_code)) => finished_response(
+            json!({
+                "output_path": output_path,
+                "exit_code_path": exit_code_path,
+                "output_tail": output_tail,
+                "exit_code": exit_code
+            }),
+            &output_path,
+        ),
         Ok(None) => Response::success(json!({
             "output_path": output_path,
             "exit_code_path": exit_code_path,
@@ -77,7 +82,10 @@ fn handle_status(params: &Value) -> Response {
             Err(err) => return Response::error(err),
         };
         if let Some(exit_code) = exit_code {
-            return Response::success(json!({"output_tail": output_tail, "exit_code": exit_code}));
+            return finished_response(
+                json!({"output_tail": output_tail, "exit_code": exit_code}),
+                &request.output_path,
+            );
         }
         if Instant::now() >= deadline {
             return Response::success(json!({"output_tail": output_tail}));
@@ -86,12 +94,27 @@ fn handle_status(params: &Value) -> Response {
     }
 }
 
+fn finished_response(payload: Value, output_path: &str) -> Response {
+    match with_final_agent_message(payload, output_path) {
+        Ok(enriched) => Response::success(enriched),
+        Err(err) => Response::error(err),
+    }
+}
+
+fn with_final_agent_message(payload: Value, output_path: &str) -> Result<Value, String> {
+    let mut enriched = payload;
+    if let Some(message) = worker::read_final_agent_message(output_path)? {
+        enriched["final_message"] = json!(message);
+    }
+    Ok(enriched)
+}
+
 fn parse_start_request(params: &Value) -> Result<StartRequest, String> {
     let wait_ms_before_async =
         optional_usize(params, "wait_ms_before_async")?.unwrap_or(DEFAULT_WAIT_MS_BEFORE_ASYNC);
     let output_character_count =
         optional_usize(params, "output_character_count")?.unwrap_or(DEFAULT_OUTPUT_CHARACTER_COUNT);
-    Ok(StartRequest {
+    let request = StartRequest {
         op: required_string(params, "op")?,
         prompt: required_string(params, "prompt")?,
         session_id: optional_string(params, "session_id")?,
@@ -99,12 +122,42 @@ fn parse_start_request(params: &Value) -> Result<StartRequest, String> {
         use_cwd_flag: optional_bool(params, "use_cwd_flag")?.unwrap_or(false),
         output_path: optional_string(params, "output_path")?,
         model: optional_string(params, "model")?,
-        full_auto: optional_bool(params, "full_auto")?.unwrap_or(true),
+        codex_executable_path: optional_string(params, "codex_executable_path")?,
+        node_executable_path: optional_string(params, "node_executable_path")?,
+        sandbox: parse_sandbox(params)?,
+        full_auto: optional_bool(params, "full_auto")?,
         skip_git_repo_check: optional_bool(params, "skip_git_repo_check")?.unwrap_or(true),
         json_flag: optional_bool(params, "json")?.unwrap_or(true),
         wait_ms_before_async,
         output_character_count,
-    })
+    };
+    validate_start_request(&request)?;
+    Ok(request)
+}
+
+fn validate_start_request(request: &StartRequest) -> Result<(), String> {
+    if request.sandbox.is_some() && request.full_auto.is_some() {
+        return Err("sandbox and full_auto cannot be used together".to_string());
+    }
+    Ok(())
+}
+
+fn parse_sandbox(params: &Value) -> Result<Option<String>, String> {
+    let sandbox = optional_string(params, "sandbox")?;
+    let Some(value) = sandbox else {
+        return Ok(None);
+    };
+    if is_supported_sandbox(&value) {
+        return Ok(Some(value));
+    }
+    Err(format!("unsupported sandbox: {value}"))
+}
+
+fn is_supported_sandbox(value: &str) -> bool {
+    matches!(
+        value,
+        "read-only" | "workspace-write" | "danger-full-access"
+    )
 }
 
 fn parse_status_request(params: &Value) -> Result<StatusRequest, String> {
@@ -120,9 +173,7 @@ fn parse_status_request(params: &Value) -> Result<StatusRequest, String> {
 
 fn build_codex_cli_args(request: &StartRequest, output_path: &str) -> Result<Vec<String>, String> {
     let mut args = operation_args(request)?;
-    if request.full_auto {
-        args.push("--full-auto".to_string());
-    }
+    append_sandbox_args(&mut args, request);
     if request.skip_git_repo_check {
         args.push("--skip-git-repo-check".to_string());
     }
@@ -144,6 +195,24 @@ fn build_codex_cli_args(request: &StartRequest, output_path: &str) -> Result<Vec
     Ok(args)
 }
 
+fn append_sandbox_args(args: &mut Vec<String>, request: &StartRequest) {
+    let sandbox = request
+        .sandbox
+        .as_deref()
+        .or_else(|| legacy_full_auto_sandbox(request.full_auto));
+    if let Some(value) = sandbox {
+        args.push("--sandbox".to_string());
+        args.push(value.to_string());
+    }
+}
+
+fn legacy_full_auto_sandbox(full_auto: Option<bool>) -> Option<&'static str> {
+    match full_auto {
+        Some(true) => Some("workspace-write"),
+        _ => None,
+    }
+}
+
 fn operation_args(request: &StartRequest) -> Result<Vec<String>, String> {
     match request.op.as_str() {
         "start" => Ok(vec!["exec".to_string(), request.prompt.clone()]),
@@ -155,23 +224,11 @@ fn operation_args(request: &StartRequest) -> Result<Vec<String>, String> {
             Ok(vec![
                 "exec".to_string(),
                 "resume".to_string(),
-                "--session-id".to_string(),
                 session_id,
                 request.prompt.clone(),
             ])
         }
-        "fork" => {
-            let session_id = request
-                .session_id
-                .clone()
-                .ok_or_else(|| "session_id is required for fork".to_string())?;
-            Ok(vec![
-                "fork".to_string(),
-                "--session-id".to_string(),
-                session_id,
-                request.prompt.clone(),
-            ])
-        }
+        "fork" => Err("fork is interactive-only in Codex CLI 0.130.0".to_string()),
         _ => Err(format!("unsupported op: {}", request.op)),
     }
 }
