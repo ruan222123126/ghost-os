@@ -651,7 +651,8 @@
             "type": "object",
             "additionalProperties": false,
             "required": [
-                "stop_policy"
+                "stop_policy",
+                "max_rounds"
             ],
             "properties": {
                 "stop_policy": {
