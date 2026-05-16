@@ -6,13 +6,12 @@ WEB_ROOT="$ROOT/apps/web"
 NEXT_ENTRY="$WEB_ROOT/node_modules/next/dist/bin/next"
 BUILD_ID_FILE="$WEB_ROOT/.next/BUILD_ID"
 WEB_START_MODE="${GHOST_WEB_START_MODE:-dev}"
-
-HOSTNAME="${HOSTNAME:-127.0.0.1}"
-PORT="${PORT:-3000}"
+WEB_HOST="${GHOST_WEB_HOST:-127.0.0.1}"
+WEB_PORT="${GHOST_WEB_PORT:-3000}"
 GHOST_BRIDGE_URL="${GHOST_BRIDGE_URL:-http://127.0.0.1:8080}"
 GHOST_CONFIG_PATH="${GHOST_CONFIG_PATH:-$HOME/.ghost-os/config.toml}"
 
-export HOSTNAME PORT GHOST_BRIDGE_URL GHOST_CONFIG_PATH
+export GHOST_BRIDGE_URL GHOST_CONFIG_PATH
 
 resolve_node_bin() {
   if [[ -n "${NODE_BIN_PATH:-}" && -x "${NODE_BIN_PATH:-}" ]]; then
@@ -47,9 +46,12 @@ if [[ -z "$NODE_BIN" ]]; then
   exit 1
 fi
 
+cd "$WEB_ROOT"
+
 if [[ "$WEB_START_MODE" == "dev" ]]; then
+  rm -rf .next-dev
   export NODE_ENV=development
-  exec "$NODE_BIN" "$NEXT_ENTRY" dev --hostname "$HOSTNAME" --port "$PORT"
+  exec "$NODE_BIN" "$NEXT_ENTRY" dev --hostname "$WEB_HOST" --port "$WEB_PORT"
 fi
 
 if [[ "$WEB_START_MODE" != "prod" ]]; then
@@ -63,4 +65,4 @@ if [[ ! -f "$BUILD_ID_FILE" ]]; then
 fi
 
 export NODE_ENV=production
-exec "$NODE_BIN" "$NEXT_ENTRY" start --hostname "$HOSTNAME" --port "$PORT"
+exec "$NODE_BIN" "$NEXT_ENTRY" start --hostname "$WEB_HOST" --port "$WEB_PORT"

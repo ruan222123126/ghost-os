@@ -62,6 +62,8 @@ pro_max_iterations = 20
 # native_binary_path = "/abs/path/to/native"
 # native_binary_roots = ["./drivers/native/target/release", "./drivers/native/target/debug"]
 # native_binary_candidates = ["native", "native.exe"]
+# codex_cli_path = "/abs/path/to/codex"
+# node_bin_path = "/abs/path/to/node"
 
 worker_model = ""
 worker_max_concurrency = 4
@@ -80,7 +82,7 @@ tool_selector_shadow = false
 tool_selector_recent_messages = 6
 # Resident tools are opt-in: only tools listed in tool_allowlist are exposed at turn start.
 # Session skills loaded later still depend on `sfind` itself being enabled and allowlisted.
-# tool_allowlist_only additionally disables runtime model switching from Web/CLI.
+# tool_allowlist_only does not affect Web/CLI model switching.
 # tool_allowlist_only = true
 # Highest priority hard constraints for tools:
 # - if tool_allowlist is empty, no tools are resident by default

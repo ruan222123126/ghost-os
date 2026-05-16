@@ -37,8 +37,8 @@ bash scripts/autostart/install-systemd-user.sh --skip-build
 GHOST_CONFIG_PATH=/home/your-user/.ghost-os/config.toml
 GHOST_BRIDGE_URL=http://127.0.0.1:8080
 GHOST_WEB_START_MODE=dev
-HOSTNAME=127.0.0.1
-PORT=3000
+GHOST_WEB_HOST=127.0.0.1
+GHOST_WEB_PORT=3000
 ```
 
 其中：
@@ -46,9 +46,11 @@ PORT=3000
 - `GHOST_CONFIG_PATH` 指向 bridge 主配置文件
 - `GHOST_BRIDGE_URL` 是 web 代理 bridge 的地址
 - `GHOST_WEB_START_MODE` 控制 web 用 `dev` 还是 `prod` 模式启动
-- `HOSTNAME` / `PORT` 控制 web 服务监听地址
+- `GHOST_WEB_HOST` / `GHOST_WEB_PORT` 控制 web 服务监听地址
 
 Web 现在支持在未设置 `GHOST_API_TOKEN` 时，自动从 `GHOST_CONFIG_PATH` 指向的 `config.toml` 读取 `api_token`，不需要再在 web 和 bridge 各配一份 token。
+
+如果 `ghost-os-bridge.service` 的服务环境没有继承你交互式 shell 里的 Node/nvm `PATH`，可以在 `config.toml` 里显式设置 `codex_cli_path=/abs/path/to/codex`、`node_bin_path=/abs/path/to/node`，或通过 `GHOST_CODEX_CLI_PATH`、`GHOST_NODE_BIN_PATH` 覆盖，避免 `codex_cli` 报 `spawn codex failed` 或 `/usr/bin/env: 'node': No such file or directory`。
 
 如果要切到 production：
 

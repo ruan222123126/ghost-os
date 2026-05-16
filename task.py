@@ -10,6 +10,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 NATIVE_BINARY_NAME = "native.exe" if os.name == "nt" else "native"
 NATIVE_REQUIRED_FEATURE = "python-sandbox"
+CONTRACT_PATHS = (
+    "core/shared/schema.json",
+    "core/bridge/orchestration/envelope_generated.go",
+    "apps/web/lib/envelope.generated.ts",
+    "apps/cli/src/envelope_generated.rs",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/AgentModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/ConfigModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/OrchestrationModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/SessionModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/StreamingModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/TaskModels.kt",
+    "apps/android/app/src/main/java/dev/ghostos/android/model/WorkflowModels.kt",
+)
 
 
 # resolve_go_bin 在常见安装位置中定位 go 可执行文件。
@@ -34,6 +48,28 @@ def resolve_go_bin() -> str:
             return str(candidate)
 
     return "go"
+
+
+def resolve_node_bin() -> str:
+    configured = Path(os.environ["NODE_BIN_PATH"]) if "NODE_BIN_PATH" in os.environ else None
+    if configured and configured.is_file():
+        return str(configured)
+
+    found = shutil.which("node")
+    if found:
+        return found
+
+    candidates = sorted((Path.home() / ".nvm/versions/node").glob("*/bin/node"), reverse=True)
+    candidates.extend([Path("/usr/local/bin/node"), Path("/usr/bin/node")])
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+
+    return "node"
+
+
+def clear_web_dev_dist() -> None:
+    shutil.rmtree(ROOT / "apps/web/.next-dev", ignore_errors=True)
 
 
 # run 统一执行子命令，并在找不到 go 时回退到 bash -lc。
@@ -146,7 +182,23 @@ def serve() -> int:
 # web_dev 启动 Next.js Web 开发服务。
 def web_dev() -> int:
     print("run web dev server...")
-    return run(["pnpm", "--dir", "apps/web", "dev"], ROOT)
+    next_entry = ROOT / "apps/web/node_modules/next/dist/bin/next"
+    if not next_entry.is_file():
+        print(f"missing web runtime: {next_entry}; run pnpm --dir apps/web install --frozen-lockfile", file=sys.stderr)
+        return 1
+    clear_web_dev_dist()
+    host = os.environ.get("GHOST_WEB_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    port = os.environ.get("GHOST_WEB_PORT", "3000").strip() or "3000"
+    node_bin = resolve_node_bin()
+    if node_bin == "node":
+        print("node binary not found; set NODE_BIN_PATH or install node in PATH/system-wide", file=sys.stderr)
+        return 1
+    env = {"NODE_ENV": "development"}
+    return run(
+        [node_bin, str(next_entry), "dev", "--hostname", host, "--port", port],
+        ROOT / "apps/web",
+        env=env,
+    )
 
 
 # web_build 构建 Next.js Web 应用（production）。
@@ -173,10 +225,22 @@ def repo_hygiene() -> int:
     return run(["bash", "scripts/check_repo_hygiene.sh"], ROOT)
 
 
+def check_layers() -> int:
+    print("check layer boundaries...", flush=True)
+    return run(["bash", "scripts/check-layers.sh"], ROOT)
+
+
 # gen_contracts 从 core/shared/schema.json 生成 Go/TS/Rust/Kotlin 契约类型。
 def gen_contracts() -> int:
-    print("generate shared contract types...")
+    print("generate shared contract types...", flush=True)
     return run(["python3", "core/shared/generate_envelope_types.py"], ROOT)
+
+
+def verify_contracts() -> int:
+    rc = gen_contracts()
+    if rc != 0:
+        return rc
+    return run(["git", "diff", "--exit-code", "--", *CONTRACT_PATHS], ROOT)
 
 
 # build_cli 编译 Rust CLI 二进制（release）。
@@ -239,8 +303,12 @@ def main() -> int:
         return web_lint()
     if action == "repo-hygiene":
         return repo_hygiene()
+    if action == "check-layers":
+        return check_layers()
     if action == "gen-contracts":
         return gen_contracts()
+    if action == "verify-contracts":
+        return verify_contracts()
     if action == "build-cli":
         return build_cli()
     if action == "run-cli":
@@ -253,7 +321,7 @@ def main() -> int:
         return init_web()
 
     print(
-        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | repo-hygiene | gen-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
+        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | repo-hygiene | check-layers | gen-contracts | verify-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
     )
     return 0
 
