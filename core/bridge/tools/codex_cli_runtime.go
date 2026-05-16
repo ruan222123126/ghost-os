@@ -7,17 +7,20 @@ import (
 )
 
 type codexCLIStartRequest struct {
-	op                string
-	prompt            string
-	sessionID         string
-	cwd               string
-	outputPath        string
-	model             string
-	fullAuto          bool
-	skipGitRepoCheck  bool
-	jsonFlag          bool
-	waitMSBeforeAsync int
-	outputCharCount   int
+	op                  string
+	prompt              string
+	sessionID           string
+	cwd                 string
+	outputPath          string
+	model               string
+	codexExecutablePath string
+	nodeExecutablePath  string
+	sandbox             string
+	fullAuto            *bool
+	skipGitRepoCheck    bool
+	jsonFlag            bool
+	waitMSBeforeAsync   int
+	outputCharCount     int
 }
 
 type codexCLIStatusRequest struct {
@@ -31,12 +34,14 @@ type codexCLIStartExecutionPayload struct {
 	outputPath   string
 	exitCodePath string
 	outputTail   string
+	finalMessage string
 	exitCode     *int
 }
 
 type codexCLIStatusExecutionPayload struct {
-	outputTail string
-	exitCode   *int
+	outputTail   string
+	finalMessage string
+	exitCode     *int
 }
 
 type codexCLIStartExecutionInput struct {
@@ -54,6 +59,12 @@ func (t *CodexCLITool) executeStart(ctx context.Context, request codexCLIRequest
 	startReq, err := decodeCodexCLIStartRequest(request.Params)
 	if err != nil {
 		return codexCLIErrorResult(err, request.OutputPath)
+	}
+	if startReq.codexExecutablePath == "" {
+		startReq.codexExecutablePath = strings.TrimSpace(t.codexExecutablePath)
+	}
+	if startReq.nodeExecutablePath == "" {
+		startReq.nodeExecutablePath = strings.TrimSpace(t.nodeExecutablePath)
 	}
 	workingDir, outputPath, err := t.resolveStartPaths(startReq.cwd, startReq.outputPath)
 	if err != nil {
@@ -73,12 +84,13 @@ func (t *CodexCLITool) executeStart(ctx context.Context, request codexCLIRequest
 	t.manager.insert(command)
 	status, snapshot := codexCLIStatusFromSnapshot(command)
 	return codexCLIResult{
-		Status:     status,
-		CommandID:  command.id,
-		SessionID:  snapshot.sessionID,
-		ExitCode:   snapshot.exitCode,
-		OutputTail: strings.TrimSpace(payload.outputTail),
-		OutputPath: snapshot.outputPath,
+		Status:       status,
+		CommandID:    command.id,
+		SessionID:    snapshot.sessionID,
+		ExitCode:     snapshot.exitCode,
+		OutputTail:   strings.TrimSpace(payload.outputTail),
+		FinalMessage: strings.TrimSpace(payload.finalMessage),
+		OutputPath:   snapshot.outputPath,
 	}
 }
 
@@ -101,12 +113,13 @@ func (t *CodexCLITool) executeStatus(ctx context.Context, request codexCLIReques
 	command.applyStatus(payload.outputTail, payload.exitCode)
 	status, snapshot := codexCLIStatusFromSnapshot(command)
 	return codexCLIResult{
-		Status:     status,
-		CommandID:  command.id,
-		SessionID:  snapshot.sessionID,
-		ExitCode:   snapshot.exitCode,
-		OutputTail: strings.TrimSpace(payload.outputTail),
-		OutputPath: snapshot.outputPath,
+		Status:       status,
+		CommandID:    command.id,
+		SessionID:    snapshot.sessionID,
+		ExitCode:     snapshot.exitCode,
+		OutputTail:   strings.TrimSpace(payload.outputTail),
+		FinalMessage: strings.TrimSpace(payload.finalMessage),
+		OutputPath:   snapshot.outputPath,
 	}
 }
 
@@ -155,12 +168,25 @@ func buildCodexCLIStartExecutionParams(
 		"prompt":                 request.prompt,
 		"working_dir":            workingDir,
 		"use_cwd_flag":           request.cwd != "",
-		"model":                  request.model,
-		"full_auto":              request.fullAuto,
 		"skip_git_repo_check":    request.skipGitRepoCheck,
 		"json":                   request.jsonFlag,
 		"wait_ms_before_async":   request.waitMSBeforeAsync,
 		"output_character_count": request.outputCharCount,
+	}
+	if request.model != "" {
+		params["model"] = request.model
+	}
+	if request.codexExecutablePath != "" {
+		params["codex_executable_path"] = request.codexExecutablePath
+	}
+	if request.nodeExecutablePath != "" {
+		params["node_executable_path"] = request.nodeExecutablePath
+	}
+	if request.sandbox != "" {
+		params["sandbox"] = request.sandbox
+	}
+	if request.fullAuto != nil {
+		params["full_auto"] = *request.fullAuto
 	}
 	if request.sessionID != "" {
 		params["session_id"] = request.sessionID
@@ -210,10 +236,15 @@ func decodeCodexCLIStartExecutionPayload(payload map[string]any) (codexCLIStartE
 	if err != nil {
 		return codexCLIStartExecutionPayload{}, err
 	}
+	finalMessage, err := optionalPayloadString(payload, "final_message")
+	if err != nil {
+		return codexCLIStartExecutionPayload{}, err
+	}
 	return codexCLIStartExecutionPayload{
 		outputPath:   outputPath,
 		exitCodePath: exitCodePath,
 		outputTail:   outputTail,
+		finalMessage: finalMessage,
 		exitCode:     exitCode,
 	}, nil
 }
@@ -227,59 +258,15 @@ func decodeCodexCLIStatusExecutionPayload(payload map[string]any) (codexCLIStatu
 	if err != nil {
 		return codexCLIStatusExecutionPayload{}, err
 	}
-	return codexCLIStatusExecutionPayload{
-		outputTail: outputTail,
-		exitCode:   exitCode,
-	}, nil
-}
-
-func requiredPayloadString(payload map[string]any, field string) (string, error) {
-	value, err := optionalPayloadString(payload, field)
+	finalMessage, err := optionalPayloadString(payload, "final_message")
 	if err != nil {
-		return "", err
+		return codexCLIStatusExecutionPayload{}, err
 	}
-	if strings.TrimSpace(value) == "" {
-		return "", fmt.Errorf("invalid payload: missing %s", field)
-	}
-	return value, nil
-}
-
-func optionalPayloadString(payload map[string]any, field string) (string, error) {
-	raw, ok := payload[field]
-	if !ok || raw == nil {
-		return "", nil
-	}
-	value, ok := raw.(string)
-	if !ok {
-		return "", fmt.Errorf("invalid payload: %s must be a string", field)
-	}
-	return strings.TrimSpace(value), nil
-}
-
-func optionalPayloadInt(payload map[string]any, field string) (*int, error) {
-	raw, ok := payload[field]
-	if !ok || raw == nil {
-		return nil, nil
-	}
-	switch value := raw.(type) {
-	case int:
-		result := value
-		return &result, nil
-	case int32:
-		result := int(value)
-		return &result, nil
-	case int64:
-		result := int(value)
-		return &result, nil
-	case float64:
-		result := int(value)
-		if float64(result) != value {
-			return nil, fmt.Errorf("invalid payload: %s must be an integer", field)
-		}
-		return &result, nil
-	default:
-		return nil, fmt.Errorf("invalid payload: %s must be an integer", field)
-	}
+	return codexCLIStatusExecutionPayload{
+		outputTail:   outputTail,
+		finalMessage: finalMessage,
+		exitCode:     exitCode,
+	}, nil
 }
 
 func codexCLIStatusFromSnapshot(command *codexCLICommand) (string, codexCLICommandSnapshot) {

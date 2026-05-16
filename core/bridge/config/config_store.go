@@ -11,7 +11,7 @@ var (
 	errProviderBaseURLRequired = errors.New("provider base_url is required")
 	errProviderNotFound        = errors.New("provider not found")
 	errProviderExists          = errors.New("provider already exists")
-	errModelSelectionDisabled  = errors.New("model selection is disabled by tool_allowlist_only")
+	errModelSelectionDisabled  = errors.New("model selection is disabled")
 	errToolNameRequired        = errors.New("tool name is required")
 	errToolNotFound            = errors.New("tool not found")
 	errToolUpdateEmpty         = errors.New("at least one of enabled, prompt_override, or sandbox_memory_mb is required")

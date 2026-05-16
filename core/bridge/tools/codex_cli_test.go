@@ -75,8 +75,9 @@ func TestCodexCLIToolStartDefaults(t *testing.T) {
 	assertCodexCLIParamValue(t, call.params, "prompt", "hello")
 	assertCodexCLIParamValue(t, call.params, "working_dir", cwd)
 	assertCodexCLIParamValue(t, call.params, "use_cwd_flag", false)
-	assertCodexCLIParamValue(t, call.params, "model", defaultCodexCLIModel)
-	assertCodexCLIParamValue(t, call.params, "full_auto", true)
+	assertCodexCLIParamMissing(t, call.params, "model")
+	assertCodexCLIParamMissing(t, call.params, "sandbox")
+	assertCodexCLIParamMissing(t, call.params, "full_auto")
 	assertCodexCLIParamValue(t, call.params, "skip_git_repo_check", true)
 	assertCodexCLIParamValue(t, call.params, "json", true)
 	assertCodexCLIParamValue(t, call.params, "wait_ms_before_async", 1)
@@ -105,7 +106,7 @@ func TestCodexCLIToolStartAndStatusFlow(t *testing.T) {
 				return map[string]any{
 					"output_path":    "/tmp/codex-cli-start.log",
 					"exit_code_path": "/tmp/codex-cli-start.log.exit",
-					"output_tail":    `{"session_id":"sess-run-1"}`,
+					"output_tail":    `{"type":"thread.started","thread_id":"thread-run-1"}`,
 				}, nil
 			case "CODEX_CLI_STATUS":
 				if params["output_path"] != "/tmp/codex-cli-start.log" {
@@ -115,8 +116,9 @@ func TestCodexCLIToolStartAndStatusFlow(t *testing.T) {
 					return nil, fmt.Errorf("unexpected exit_code_path: %v", params["exit_code_path"])
 				}
 				return map[string]any{
-					"output_tail": "done",
-					"exit_code":   float64(0),
+					"output_tail":   "done",
+					"final_message": "created weather script and ran checks",
+					"exit_code":     float64(0),
 				}, nil
 			default:
 				return nil, fmt.Errorf("unexpected action: %s", action)
@@ -137,6 +139,9 @@ func TestCodexCLIToolStartAndStatusFlow(t *testing.T) {
 	if startResult.CommandID == "" {
 		t.Fatalf("missing command_id: %+v", startResult)
 	}
+	if startResult.SessionID != "thread-run-1" {
+		t.Fatalf("unexpected parsed thread id: %+v", startResult)
+	}
 	statusOutput, err := tool.Execute(
 		context.Background(),
 		json.RawMessage(fmt.Sprintf(`{"op":"status","session_id":"%s","wait_duration_seconds":1}`, startResult.CommandID)),
@@ -155,6 +160,36 @@ func TestCodexCLIToolStartAndStatusFlow(t *testing.T) {
 	if statusResult.ExitCode == nil || *statusResult.ExitCode != 0 {
 		t.Fatalf("expected exit_code=0, got %+v", statusResult)
 	}
+	if statusResult.FinalMessage != "created weather script and ran checks" {
+		t.Fatalf("unexpected final_message: %+v", statusResult)
+	}
+}
+
+func TestCodexCLIToolStartPassesExplicitCodexOptions(t *testing.T) {
+	client := &mockCodexCLIExecutionClient{
+		callFunc: func(context.Context, string, map[string]any, string) (map[string]any, error) {
+			return map[string]any{
+				"output_path":    "/tmp/codex-cli.log",
+				"exit_code_path": "/tmp/codex-cli.log.exit",
+			}, nil
+		},
+	}
+	tool := newTestCodexCLITool(t, client)
+
+	_, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"op":"start","prompt":"hello","model":"gpt-test","sandbox":"workspace-write","wait_ms_before_async":1}`),
+		"trace-start",
+	)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if len(client.calls) != 1 {
+		t.Fatalf("expected one execution call, got %d", len(client.calls))
+	}
+	assertCodexCLIParamValue(t, client.calls[0].params, "model", "gpt-test")
+	assertCodexCLIParamValue(t, client.calls[0].params, "sandbox", "workspace-write")
+	assertCodexCLIParamMissing(t, client.calls[0].params, "full_auto")
 }
 
 func TestCodexCLIToolStatusUnknownCommand(t *testing.T) {
@@ -179,7 +214,7 @@ func TestCodexCLIToolStatusUnknownCommand(t *testing.T) {
 
 func TestCodexCLIToolValidatesArgs(t *testing.T) {
 	client := &mockCodexCLIExecutionClient{}
-	tool := NewCodexCLITool(client, false)
+	tool := NewCodexCLITool(client, "", "")
 	cases := []string{
 		`{"op":"start"}`,
 		`{"op":"resume","prompt":"hi"}`,
@@ -187,6 +222,8 @@ func TestCodexCLIToolValidatesArgs(t *testing.T) {
 		`{"op":"status"}`,
 		`{"op":"unknown"}`,
 		`{"op":"start","prompt":"hi","cwd":"/abs/path"}`,
+		`{"op":"start","prompt":"hi","sandbox":"bad"}`,
+		`{"op":"start","prompt":"hi","sandbox":"workspace-write","full_auto":true}`,
 	}
 	for _, raw := range cases {
 		if _, err := tool.Execute(context.Background(), json.RawMessage(raw), "trace-args"); err == nil {
@@ -196,7 +233,7 @@ func TestCodexCLIToolValidatesArgs(t *testing.T) {
 }
 
 func TestCodexCLIToolRequiresExecutionClient(t *testing.T) {
-	tool := NewCodexCLITool(nil, false)
+	tool := NewCodexCLITool(nil, "", "")
 	output, err := tool.Execute(
 		context.Background(),
 		json.RawMessage(`{"op":"start","prompt":"hello"}`),
@@ -216,7 +253,7 @@ func TestCodexCLIToolRequiresExecutionClient(t *testing.T) {
 
 func newTestCodexCLITool(t *testing.T, client ExecutionClient) *CodexCLITool {
 	t.Helper()
-	tool, ok := NewCodexCLITool(client, false).(*CodexCLITool)
+	tool, ok := NewCodexCLITool(client, "", "").(*CodexCLITool)
 	if !ok {
 		t.Fatal("expected *CodexCLITool")
 	}
@@ -240,5 +277,12 @@ func assertCodexCLIParamValue(t *testing.T, params map[string]any, key string, e
 	}
 	if actual != expected {
 		t.Fatalf("unexpected param %q: got=%v want=%v", key, actual, expected)
+	}
+}
+
+func assertCodexCLIParamMissing(t *testing.T, params map[string]any, key string) {
+	t.Helper()
+	if _, ok := params[key]; ok {
+		t.Fatalf("unexpected param %q in %+v", key, params)
 	}
 }

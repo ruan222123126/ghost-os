@@ -167,6 +167,8 @@ func composeConfig(
 		NativeBinaryPath:           resolveNativeBinaryPath(fileCfg, env),
 		NativeBinaryRoots:          resolveNativeBinaryRoots(fileCfg, env),
 		NativeBinaryCandidates:     resolveNativeBinaryCandidates(fileCfg, env),
+		CodexCLIPath:               resolveCodexCLIPath(fileCfg, env),
+		NodeBinPath:                resolveNodeBinPath(fileCfg, env),
 		NativeAllowedReadPaths:     resolveNativeAllowedReadPaths(fileCfg, env),
 		NativeAllowedWritePaths:    resolveNativeAllowedWritePaths(fileCfg, env),
 		ProjectRoot:                runtime.ProjectRoot,
@@ -229,9 +231,6 @@ func finalizeLoadedConfig(cfg Config) (Config, error) {
 	}
 	cfg.ToolSelector.Allowlist = allowlist
 	cfg.ToolSelector.Blocklist = blocklist
-	if cfg.ToolSelector.AllowlistOnly && len(cfg.ToolSelector.Allowlist) == 0 {
-		return Config{}, errors.New("tool_allowlist_only requires a non-empty tool_allowlist")
-	}
 	if cfg.ToolSearch.IdleTurns <= 0 {
 		return Config{}, errors.New("tool_search_idle_turns must be > 0")
 	}

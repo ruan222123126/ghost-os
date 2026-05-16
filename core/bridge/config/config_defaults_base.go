@@ -21,6 +21,7 @@ const (
 	defaultMaxTurns                     = 20
 	defaultLLMCompletionRetryCount      = 1
 	defaultLLMCompletionRetryIntervalMS = 200
+	defaultModelSelectionEnabled        = true
 	defaultWorkerMaxConcurrency         = 4
 	defaultWorkerMaxFiles               = 20
 	defaultWorkerMaxFileChunks          = 4

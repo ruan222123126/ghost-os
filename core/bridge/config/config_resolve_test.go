@@ -61,22 +61,71 @@ func TestResolveNativeBinaryOverrideBeatsFileConfig(t *testing.T) {
 	}
 }
 
-func TestResolveRuntimeConfigWithFallbackKeepsSnapshotModelSelection(t *testing.T) {
-	t.Setenv("GHOST_TOOL_ALLOWLIST_ONLY", "false")
-
+func TestResolveRuntimeConfigAllowsModelSelectionInStrictToolAllowlistMode(t *testing.T) {
 	runtime, err := resolveRuntimeConfigWithFallback(bridgeFileConfig{}, runtimeConfig{
 		ProviderName:          "openai",
 		Provider:              llm.ProviderOpenAI,
 		APIKey:                "snapshot-key",
 		BaseURL:               defaultBaseURL,
 		Model:                 defaultModel,
-		ModelSelectionEnabled: false,
+		ModelSelectionEnabled: true,
+	})
+	if err != nil {
+		t.Fatalf("resolveRuntimeConfigWithFallback: %v", err)
+	}
+	if !runtime.ModelSelectionEnabled {
+		t.Fatalf("expected model selection to stay enabled, got %+v", runtime)
+	}
+
+	runtime, err = resolveRuntimeConfigWithFallback(bridgeFileConfig{
+		ToolAllowlistOnly: boolPtr(true),
+	}, runtime)
+	if err != nil {
+		t.Fatalf("resolveRuntimeConfigWithFallback strict allowlist: %v", err)
+	}
+	if !runtime.ModelSelectionEnabled {
+		t.Fatalf("expected strict tool allowlist to keep model selection enabled, got %+v", runtime)
+	}
+}
+
+func TestResolveRuntimeConfigReadsModelSelectionFlag(t *testing.T) {
+	disabled := false
+
+	runtime, err := resolveRuntimeConfigWithFallback(bridgeFileConfig{
+		ModelSelectionEnabled: &disabled,
+		ToolAllowlistOnly:     boolPtr(true),
+	}, runtimeConfig{
+		ProviderName:          "openai",
+		Provider:              llm.ProviderOpenAI,
+		APIKey:                "snapshot-key",
+		BaseURL:               defaultBaseURL,
+		Model:                 defaultModel,
+		ModelSelectionEnabled: true,
 	})
 	if err != nil {
 		t.Fatalf("resolveRuntimeConfigWithFallback: %v", err)
 	}
 	if runtime.ModelSelectionEnabled {
-		t.Fatalf("expected model selection to stay disabled, got %+v", runtime)
+		t.Fatalf("expected explicit model_selection_enabled=false to disable model selection, got %+v", runtime)
+	}
+}
+
+func TestResolveConfigAllowsStrictEmptyToolAllowlist(t *testing.T) {
+	cfg, err := resolveConfig(
+		bridgeFileConfig{
+			ToolAllowlistOnly: boolPtr(true),
+			ToolAllowlist:     []string{},
+		},
+		envSnapshot{"GHOST_PROVIDER": "custom"},
+	)
+	if err != nil {
+		t.Fatalf("resolveConfig: %v", err)
+	}
+	if !cfg.ToolSelector.AllowlistOnly {
+		t.Fatalf("expected strict allowlist mode, got %+v", cfg.ToolSelector)
+	}
+	if len(cfg.ToolSelector.Allowlist) != 0 {
+		t.Fatalf("expected empty allowlist, got %v", cfg.ToolSelector.Allowlist)
 	}
 }
 

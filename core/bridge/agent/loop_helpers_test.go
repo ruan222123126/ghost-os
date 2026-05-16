@@ -84,6 +84,7 @@ func cloneCompletionRequest(request llm.CompletionRequest) llm.CompletionRequest
 	return llm.CompletionRequest{
 		Messages:          llm.CloneMessages(request.Messages),
 		Tools:             clonedTools,
+		ToolChoice:        request.ToolChoice,
 		ConversationState: request.ConversationState,
 		ResponseOptions:   llm.CloneResponseOptions(request.ResponseOptions),
 	}

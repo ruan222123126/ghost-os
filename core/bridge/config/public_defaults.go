@@ -27,6 +27,7 @@ const (
 	DefaultMaxTurns                     = defaultMaxTurns
 	DefaultLLMCompletionRetryCount      = defaultLLMCompletionRetryCount
 	DefaultLLMCompletionRetryIntervalMS = defaultLLMCompletionRetryIntervalMS
+	DefaultModelSelectionEnabled        = defaultModelSelectionEnabled
 	DefaultWorkerMaxConcurrency         = defaultWorkerMaxConcurrency
 	DefaultWorkerMaxFiles               = defaultWorkerMaxFiles
 	DefaultWorkerMaxFileChunks          = defaultWorkerMaxFileChunks

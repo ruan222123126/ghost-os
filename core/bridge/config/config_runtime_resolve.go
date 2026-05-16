@@ -40,7 +40,7 @@ func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
 		RelayDefaultExecutionTimeoutMS: settings.RelayDefaultExecutionTimeoutMS,
 		LLMCompletionRetryCount:        settings.LLMCompletionRetryCount,
 		LLMCompletionRetryIntervalMS:   settings.LLMCompletionRetryIntervalMS,
-		ModelSelectionEnabled:          !settings.AllowlistOnly,
+		ModelSelectionEnabled:          settings.ModelSelectionEnabled,
 		WebSearchTavilyURL:             settings.WebSearch.TavilyURL,
 		WebSearchExaURL:                settings.WebSearch.ExaURL,
 		WebSearchTavilyAPIKey:          settings.WebSearch.TavilyAPIKey,
@@ -59,7 +59,6 @@ type runtimeFallbackSettings struct {
 	WebSearch                      webSearchSettings
 	ResponseOptions                llm.ResponseOptions
 	CodexStatelessRetryEnabled     bool
-	AllowlistOnly                  bool
 	NativePersistent               bool
 	MaxTurns                       int
 	TaskExecutionTimeoutMS         int
@@ -68,6 +67,7 @@ type runtimeFallbackSettings struct {
 	RelayDefaultExecutionTimeoutMS int
 	LLMCompletionRetryCount        int
 	LLMCompletionRetryIntervalMS   int
+	ModelSelectionEnabled          bool
 	SessionHumanLogFullEnabled     bool
 	SessionSystemPromptVisible     bool
 	AssistantMarkdownEnabled       bool
@@ -85,7 +85,7 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 	if err != nil {
 		return runtimeFallbackSettings{}, err
 	}
-	codexRetryEnabled, allowlistOnly, nativePersistent, sessionHumanLogFullEnabled, err := resolveRuntimeFallbackFlags(env)
+	codexRetryEnabled, nativePersistent, sessionHumanLogFullEnabled, err := resolveRuntimeFallbackFlags(env)
 	if err != nil {
 		return runtimeFallbackSettings{}, err
 	}
@@ -125,7 +125,6 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 		WebSearch:                      webSearchSettingsFromEnv(env),
 		ResponseOptions:                responseOptions,
 		CodexStatelessRetryEnabled:     codexRetryEnabled,
-		AllowlistOnly:                  allowlistOnly,
 		NativePersistent:               nativePersistent,
 		MaxTurns:                       maxTurns,
 		TaskExecutionTimeoutMS:         taskExecutionTimeoutMS,
@@ -134,6 +133,7 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 		RelayDefaultExecutionTimeoutMS: relayDefaults.executionTimeoutMS,
 		LLMCompletionRetryCount:        retryCount,
 		LLMCompletionRetryIntervalMS:   retryIntervalMS,
+		ModelSelectionEnabled:          defaultModelSelectionEnabled,
 		SessionHumanLogFullEnabled:     sessionHumanLogFullEnabled,
 		SessionSystemPromptVisible:     defaultSessionSystemPromptVisible,
 		AssistantMarkdownEnabled:       defaultAssistantMarkdownEnabled,
@@ -144,22 +144,21 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 	}, nil
 }
 
-func resolveRuntimeFallbackFlags(env envSnapshot) (bool, bool, bool, bool, error) {
+func resolveRuntimeFallbackFlags(env envSnapshot) (bool, bool, bool, error) {
 	codexRetryEnabled, err := parseBoolValue(
 		env.value("GHOST_CODEX_STATELESS_RETRY_ENABLED"),
 		"GHOST_CODEX_STATELESS_RETRY_ENABLED",
 		false,
 	)
 	if err != nil {
-		return false, false, false, false, err
+		return false, false, false, err
 	}
-	allowlistOnly, err := parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), "GHOST_TOOL_ALLOWLIST_ONLY", false)
-	if err != nil {
-		return false, false, false, false, err
+	if err := validateRuntimeToolAllowlistOnlyEnv(env); err != nil {
+		return false, false, false, err
 	}
 	nativePersistent, err := resolveNativePersistent(nil, env)
 	if err != nil {
-		return false, false, false, false, err
+		return false, false, false, err
 	}
 	sessionHumanLogFullEnabled, err := parseBoolValue(
 		env.value("GHOST_SESSION_HUMAN_LOG_FULL_ENABLED"),
@@ -167,9 +166,14 @@ func resolveRuntimeFallbackFlags(env envSnapshot) (bool, bool, bool, bool, error
 		false,
 	)
 	if err != nil {
-		return false, false, false, false, err
+		return false, false, false, err
 	}
-	return codexRetryEnabled, allowlistOnly, nativePersistent, sessionHumanLogFullEnabled, nil
+	return codexRetryEnabled, nativePersistent, sessionHumanLogFullEnabled, nil
+}
+
+func validateRuntimeToolAllowlistOnlyEnv(env envSnapshot) error {
+	_, err := parseBoolValue(env.value("GHOST_TOOL_ALLOWLIST_ONLY"), "GHOST_TOOL_ALLOWLIST_ONLY", false)
+	return err
 }
 
 // resolveRuntimeConfigWithFallback folds file overrides onto an existing
@@ -200,7 +204,6 @@ type runtimeFileSettings struct {
 	ResponseOptions                llm.ResponseOptions
 	Providers                      []providerConfig
 	CodexStatelessRetryEnabled     bool
-	AllowlistOnly                  bool
 	MaxTurns                       int
 	TaskExecutionTimeoutMS         int
 	RelayDefaultStopPolicy         string
@@ -208,6 +211,7 @@ type runtimeFileSettings struct {
 	RelayDefaultExecutionTimeoutMS int
 	LLMCompletionRetryCount        int
 	LLMCompletionRetryIntervalMS   int
+	ModelSelectionEnabled          bool
 	SessionHumanLogFullEnabled     bool
 	SessionSystemPromptVisible     bool
 	AssistantMarkdownEnabled       bool
@@ -262,7 +266,6 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 		ResponseOptions:                responseOptions,
 		Providers:                      normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model)),
 		CodexStatelessRetryEnabled:     resolveRuntimeCodexRetryEnabled(fileCfg, fallback),
-		AllowlistOnly:                  resolveRuntimeAllowlistOnly(fileCfg, fallback),
 		MaxTurns:                       maxTurns,
 		TaskExecutionTimeoutMS:         taskExecutionTimeoutMS,
 		RelayDefaultStopPolicy:         relayDefaults.stopPolicy,
@@ -270,6 +273,7 @@ func resolveRuntimeFileSettings(fileCfg bridgeFileConfig, fallback runtimeConfig
 		RelayDefaultExecutionTimeoutMS: relayDefaults.executionTimeoutMS,
 		LLMCompletionRetryCount:        retryCount,
 		LLMCompletionRetryIntervalMS:   retryIntervalMS,
+		ModelSelectionEnabled:          resolveRuntimeModelSelectionEnabled(fileCfg, fallback),
 		SessionHumanLogFullEnabled:     resolveRuntimeSessionHumanLogFullEnabled(fileCfg, fallback),
 		SessionSystemPromptVisible:     resolveRuntimeSessionSystemPromptVisible(fileCfg, fallback),
 		AssistantMarkdownEnabled:       resolveRuntimeAssistantMarkdownEnabled(fileCfg, fallback),

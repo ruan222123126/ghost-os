@@ -19,7 +19,7 @@ type executionClientConfig struct {
 	WorkingDir             string
 }
 
-func newExecutionClient(cfg executionClientConfig) execution.Client {
+func newExecutionClient(cfg executionClientConfig) Client {
 	log.Printf(
 		"runtime checkpoint component=execution persistent=%t native_binary_path=%s session_type=%s wayland_display=%s display=%s",
 		cfg.Persistent,
@@ -81,6 +81,6 @@ func executionClientConfigFromEnv() (executionClientConfig, error) {
 	}, nil
 }
 
-func closeExecutionClient(client execution.Client) error {
+func closeExecutionClient(client Client) error {
 	return execution.CloseClient(client)
 }

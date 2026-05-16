@@ -13,7 +13,6 @@ const (
 	codexCLIOpFork   = "fork"
 	codexCLIOpStatus = "status"
 
-	defaultCodexCLIModel               = "gpt-5.4"
 	defaultCodexCLIWaitMSBeforeAsync   = 3000
 	defaultCodexCLIWaitDurationSeconds = 300
 	defaultCodexCLIOutputChars         = 200
@@ -22,11 +21,13 @@ const (
 type CodexProjectRootResolver func() (string, error)
 
 type CodexCLITool struct {
-	execution          ExecutionClient
-	manager            *codexCLICommandManager
-	allowedReadPaths   []string
-	allowedWritePaths  []string
-	resolveProjectRoot CodexProjectRootResolver
+	execution           ExecutionClient
+	manager             *codexCLICommandManager
+	allowedReadPaths    []string
+	allowedWritePaths   []string
+	codexExecutablePath string
+	nodeExecutablePath  string
+	resolveProjectRoot  CodexProjectRootResolver
 }
 
 type codexCLIArgs struct {
@@ -36,6 +37,7 @@ type codexCLIArgs struct {
 	Cwd                  string `json:"cwd,omitempty"`
 	OutputPath           string `json:"output_path,omitempty"`
 	Model                string `json:"model,omitempty"`
+	Sandbox              string `json:"sandbox,omitempty"`
 	FullAuto             *bool  `json:"full_auto,omitempty"`
 	SkipGitRepoCheck     *bool  `json:"skip_git_repo_check,omitempty"`
 	JSON                 *bool  `json:"json,omitempty"`
@@ -45,19 +47,22 @@ type codexCLIArgs struct {
 }
 
 type codexCLIResult struct {
-	Status     string `json:"status"`
-	CommandID  string `json:"command_id,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
-	ExitCode   *int   `json:"exit_code,omitempty"`
-	OutputTail string `json:"output_tail,omitempty"`
-	OutputPath string `json:"output_path,omitempty"`
-	Message    string `json:"message,omitempty"`
+	Status       string `json:"status"`
+	CommandID    string `json:"command_id,omitempty"`
+	SessionID    string `json:"session_id,omitempty"`
+	ExitCode     *int   `json:"exit_code,omitempty"`
+	OutputTail   string `json:"output_tail,omitempty"`
+	FinalMessage string `json:"final_message,omitempty"`
+	OutputPath   string `json:"output_path,omitempty"`
+	Message      string `json:"message,omitempty"`
 }
 
-func NewCodexCLITool(client ExecutionClient, _ bool) Tool {
+func NewCodexCLITool(client ExecutionClient, codexExecutablePath string, nodeExecutablePath string) Tool {
 	return &CodexCLITool{
-		execution: client,
-		manager:   newCodexCLICommandManager(),
+		execution:           client,
+		manager:             newCodexCLICommandManager(),
+		codexExecutablePath: strings.TrimSpace(codexExecutablePath),
+		nodeExecutablePath:  strings.TrimSpace(nodeExecutablePath),
 	}
 }
 
@@ -66,20 +71,21 @@ func (CodexCLITool) Name() string {
 }
 
 func (CodexCLITool) Description() string {
-	return "Async codex runner. Rules: 'prompt' required for start/resume/fork. 'session_id' required for resume/fork/status (pass command_id here for status). DO NOT use 'exec'."
+	return "Async codex runner. Rules: 'prompt' required for start/resume. 'session_id' required for resume/status (pass command_id here for status). Omit model/sandbox to use local Codex config. Fork is interactive-only in Codex CLI 0.130.0. DO NOT use 'exec'."
 }
 
 func (CodexCLITool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"op":{"type":"string","enum":["start","resume","fork","status"]},
+			"op":{"type":"string","enum":["start","resume","status"]},
 			"prompt":{"type":"string"},
 			"session_id":{"type":"string"},
 			"cwd":{"type":"string"},
 			"output_path":{"type":"string"},
-			"model":{"type":"string","description":"Default: gpt-5.4"},
-			"full_auto":{"type":"boolean","description":"Default: true"},
+			"model":{"type":"string","description":"Optional. If omitted, Codex uses local config."},
+			"sandbox":{"type":"string","enum":["read-only","workspace-write","danger-full-access"],"description":"Optional. If omitted, Codex uses local config."},
+			"full_auto":{"type":"boolean","description":"Deprecated compatibility flag. If true and sandbox is omitted, uses sandbox=workspace-write."},
 			"skip_git_repo_check":{"type":"boolean","description":"Default: true"},
 			"json":{"type":"boolean","description":"Default: true"},
 			"wait_ms_before_async":{"type":"integer"},

@@ -34,7 +34,7 @@ func TestCompletionRunnerCompleteDoesNotMutateHistory(t *testing.T) {
 		PreviousResponseID: "resp_prev",
 	})
 
-	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, "", llm.ResponseOptions{})
 	resp, err := runner.complete(context.Background(), nil, "trace-runner", "", 0)
 	if err != nil {
 		t.Fatalf("complete returned error: %v", err)
@@ -73,7 +73,7 @@ func TestCompletionRunnerPassesResponseOptionsToRequest(t *testing.T) {
 		{Role: llm.RoleUser, Text: "hello"},
 	})
 
-	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, options)
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, "", options)
 	if _, err := runner.complete(context.Background(), nil, "trace-runner", "", 0); err != nil {
 		t.Fatalf("complete returned error: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestCompletionRunnerProjectsInternalMessagesForProvider(t *testing.T) {
 		{Role: llm.RoleInternal, Text: "[TOOL_TAG_RESULT]\n{\"tool\":\"web_search\",\"output\":{\"items\":[{\"title\":\"OpenAI\"}]}}"},
 	})
 
-	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, "", llm.ResponseOptions{})
 	if _, err := runner.complete(context.Background(), nil, "trace-runner", "", 0); err != nil {
 		t.Fatalf("complete returned error: %v", err)
 	}
@@ -132,6 +132,7 @@ func TestCompletionRunnerCompleteReturnsErrorOnNilResponse(t *testing.T) {
 		newFakeCompleter(nil),
 		newFakeToolCatalog(),
 		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		"",
 		llm.ResponseOptions{},
 	)
 
@@ -155,6 +156,7 @@ func TestCompletionRunnerRetriesNonStreamingOnTransientError(t *testing.T) {
 		completer,
 		newFakeToolCatalog(),
 		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		"",
 		llm.ResponseOptions{},
 	)
 
@@ -181,6 +183,7 @@ func TestCompletionRunnerDoesNotRetryNonStreamingOnNonTransientError(t *testing.
 		completer,
 		newFakeToolCatalog(),
 		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		"",
 		llm.ResponseOptions{},
 	)
 
@@ -206,7 +209,7 @@ func TestCompletionRunnerRetriesStreamingWhenNoDeltaEmitted(t *testing.T) {
 		},
 	}
 	history := NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}})
-	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, "", llm.ResponseOptions{})
 	sink := newRecordingEventSink()
 
 	resp, err := runner.complete(context.Background(), sink, "trace-retry-stream", "session-1", 0)
@@ -237,7 +240,7 @@ func TestCompletionRunnerDoesNotRetryStreamingAfterDeltaEmitted(t *testing.T) {
 		},
 	}
 	history := NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}})
-	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, llm.ResponseOptions{})
+	runner := newCompletionRunner(completer, newFakeToolCatalog(), history, "", llm.ResponseOptions{})
 	sink := newRecordingEventSink()
 
 	_, err := runner.complete(context.Background(), sink, "trace-retry-stream", "session-1", 0)

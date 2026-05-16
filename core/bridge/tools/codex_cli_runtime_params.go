@@ -41,13 +41,28 @@ func decodeCodexCLIStartIdentity(params map[string]any) (codexCLIStartRequest, e
 	if err != nil {
 		return codexCLIStartRequest{}, err
 	}
+	codexExecutablePath, err := optionalStringParam(params, "codex_executable_path")
+	if err != nil {
+		return codexCLIStartRequest{}, err
+	}
+	nodeExecutablePath, err := optionalStringParam(params, "node_executable_path")
+	if err != nil {
+		return codexCLIStartRequest{}, err
+	}
+	sandbox, err := optionalStringParam(params, "sandbox")
+	if err != nil {
+		return codexCLIStartRequest{}, err
+	}
 	return codexCLIStartRequest{
-		op:         op,
-		prompt:     prompt,
-		sessionID:  sessionID,
-		cwd:        cwd,
-		outputPath: outputPath,
-		model:      model,
+		op:                  op,
+		prompt:              prompt,
+		sessionID:           sessionID,
+		cwd:                 cwd,
+		outputPath:          outputPath,
+		model:               model,
+		codexExecutablePath: codexExecutablePath,
+		nodeExecutablePath:  nodeExecutablePath,
+		sandbox:             sandbox,
 	}, nil
 }
 
@@ -55,7 +70,7 @@ func decodeCodexCLIStartFlags(params map[string]any, request *codexCLIStartReque
 	if request == nil {
 		return fmt.Errorf("start request is nil")
 	}
-	fullAuto, err := boolWithDefault(params, "full_auto", true)
+	fullAuto, err := optionalBoolParam(params, "full_auto")
 	if err != nil {
 		return err
 	}
@@ -132,6 +147,18 @@ func optionalStringParam(params map[string]any, field string) (string, error) {
 		return "", fmt.Errorf("%s must be a string", field)
 	}
 	return strings.TrimSpace(value), nil
+}
+
+func optionalBoolParam(params map[string]any, field string) (*bool, error) {
+	raw, ok := params[field]
+	if !ok || raw == nil {
+		return nil, nil
+	}
+	value, ok := raw.(bool)
+	if !ok {
+		return nil, fmt.Errorf("%s must be a boolean", field)
+	}
+	return &value, nil
 }
 
 func boolWithDefault(params map[string]any, field string, fallback bool) (bool, error) {

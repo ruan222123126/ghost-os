@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -190,6 +189,9 @@ func (a *Agent) handleToolCallExecutionError(
 	state *agentRunState,
 ) error {
 	if isEventEmitError(err) {
+		if shouldCommitEventEmitToolTurn(state.history) {
+			a.commitTurn(state.history)
+		}
 		return err
 	}
 	if commitsPartialToolCallTurn(err) {
@@ -259,16 +261,6 @@ func sanitizedToolCallResponse(
 		cloned.ConversationState = llm.ConversationState{}
 	}
 	return &cloned
-}
-
-func commitsPartialToolCallTurn(err error) bool {
-	var awaitingErr *ErrAwaitingHuman
-	if errors.As(err, &awaitingErr) {
-		return true
-	}
-
-	var handoffErr *ErrIterationHandoff
-	return errors.As(err, &handoffErr)
 }
 
 func completionTurnError(traceID string, turn int, err error) error {

@@ -120,6 +120,7 @@ func (s ConversationState) Matches(provider Provider, baseURL, model string) boo
 type CompletionRequest struct {
 	Messages          []Message
 	Tools             []ToolDef
+	ToolChoice        string
 	ConversationState ConversationState
 	ResponseOptions   ResponseOptions
 }

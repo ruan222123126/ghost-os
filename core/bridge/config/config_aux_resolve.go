@@ -45,6 +45,8 @@ func resolveExecutionConfig(fileCfg bridgeFileConfig, env envSnapshot) (Executio
 		NativeBinaryPath:       resolveNativeBinaryPath(fileCfg, env),
 		NativeBinaryRoots:      resolveNativeBinaryRoots(fileCfg, env),
 		NativeBinaryCandidates: resolveNativeBinaryCandidates(fileCfg, env),
+		CodexCLIPath:           resolveCodexCLIPath(fileCfg, env),
+		NodeBinPath:            resolveNodeBinPath(fileCfg, env),
 		AllowedReadPaths:       resolveNativeAllowedReadPaths(fileCfg, env),
 		AllowedWritePaths:      resolveNativeAllowedWritePaths(fileCfg, env),
 		ProjectRoot:            resolveProjectRoot(fileCfg, env),

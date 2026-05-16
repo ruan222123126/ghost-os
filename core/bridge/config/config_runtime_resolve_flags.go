@@ -7,11 +7,11 @@ func resolveRuntimeCodexRetryEnabled(fileCfg bridgeFileConfig, fallback runtimeC
 	return fallback.CodexStatelessRetryEnabled
 }
 
-func resolveRuntimeAllowlistOnly(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
-	if fileCfg.ToolAllowlistOnly != nil {
-		return *fileCfg.ToolAllowlistOnly
+func resolveRuntimeModelSelectionEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {
+	if fileCfg.ModelSelectionEnabled != nil {
+		return *fileCfg.ModelSelectionEnabled
 	}
-	return !fallback.ModelSelectionEnabled
+	return fallback.ModelSelectionEnabled
 }
 
 func resolveRuntimeSessionHumanLogFullEnabled(fileCfg bridgeFileConfig, fallback runtimeConfig) bool {

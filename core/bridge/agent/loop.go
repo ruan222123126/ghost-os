@@ -29,6 +29,7 @@ type Agent struct {
 	history                *History
 	maxTurns               int
 	completionRetryPolicy  *CompletionRetryPolicy
+	toolChoice             string
 
 	initialHistoryLen int
 	lastTurn          int
@@ -131,6 +132,13 @@ func (a *Agent) SetResponseOptions(options llm.ResponseOptions) {
 		return
 	}
 	a.responseOptions = llm.CloneResponseOptions(options)
+}
+
+func (a *Agent) SetToolChoice(choice string) {
+	if a == nil {
+		return
+	}
+	a.toolChoice = strings.TrimSpace(choice)
 }
 
 func (a *Agent) SetCompletionRetryPolicy(policy CompletionRetryPolicy) {

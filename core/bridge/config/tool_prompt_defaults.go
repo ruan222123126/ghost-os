@@ -29,7 +29,7 @@ var toolPromptDefaults = map[string]string{
 		"Blocked builtins remain unavailable: `eval`, `exec`, `compile`, `input`.",
 		"Print concise structured output such as JSON when possible.",
 	),
-	"codex_cli":      "Async codex runner. Rules: 'prompt' required for start/resume/fork. 'session_id' required for resume/fork/status (pass command_id here for status). DO NOT use 'exec'.",
+	"codex_cli":      "Async codex runner. Rules: 'prompt' required for start/resume. 'session_id' required for resume/status (pass command_id here for status). Omit model/sandbox to use local Codex config. Fork is interactive-only in Codex CLI 0.130.0. DO NOT use 'exec'.",
 	"web_search":     "Search the web for current information.",
 	"screen_control": "Screen control. Mode 'atomic' (screenshot/OCR/click) or 'agent' (goal-driven execution).",
 	"sfind":          "Manage dynamic skills from SKILL.md. 'search' finds them, 'load' applies them immediately for this session, 'unload' removes them, 'list' shows current state. Use ONLY when visible tools are insufficient.",
@@ -62,13 +62,14 @@ var toolLegacyPromptDefaults = map[string][]string{
 	},
 	"codex_cli": {
 		joinToolPromptLines(
-			"Run codex start/resume/fork asynchronously and poll status. For status, pass the command_id (or session_id) via session_id.",
+			"Run codex start/resume asynchronously and poll status. For status, pass the command_id (or session_id) via session_id.",
 			"",
-			"`op` must be one of: start, resume, fork, status. Do not use `exec`.",
-			"`prompt` is required for start, resume, and fork.",
-			"`session_id` is required for resume, fork, and status.",
+			"`op` must be one of: start, resume, status. Do not use `exec`.",
+			"`prompt` is required for start and resume.",
+			"`session_id` is required for resume and status.",
+			"`fork` is interactive-only in Codex CLI 0.130.0 and is not available through this async tool.",
 		),
-		"Run codex start/resume/fork asynchronously and poll status. For status, pass the command_id (or session_id) via session_id.",
+		"Run codex start/resume asynchronously and poll status. For status, pass the command_id (or session_id) via session_id.",
 	},
 	"screen_control": {
 		"Screen control entrypoint. Mode 'atomic' (direct screenshot/OCR/click) or 'agent' (goal-driven desktop execution).",

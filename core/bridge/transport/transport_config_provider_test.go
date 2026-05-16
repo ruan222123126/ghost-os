@@ -30,7 +30,7 @@ func TestProviderCRUDRoutes(t *testing.T) {
 		t.Fatalf("unexpected providers payload: %#v", listPayload["providers"])
 	}
 
-	second := serveRequest(handler, http.MethodPost, "/api/config/providers", `{"name":"openai","type":"openai","api_key":"sk-yyy"}`, nil)
+	second := serveRequest(handler, http.MethodPost, "/api/config/providers", `{"name":"openai","type":"openai","api_key":"sk-yyy","models":["gpt-5.4"]}`, nil)
 	if second.Code != http.StatusOK {
 		t.Fatalf("unexpected second create status: got %d want %d", second.Code, http.StatusOK)
 	}
@@ -62,6 +62,9 @@ func TestProviderCRUDRoutes(t *testing.T) {
 	}
 	if configPayload["base_url"] != "https://api.openai.com/v1" {
 		t.Fatalf("unexpected config base_url: got %v", configPayload["base_url"])
+	}
+	if configPayload["model"] != "gpt-5.4" {
+		t.Fatalf("unexpected config model: got %v want %q", configPayload["model"], "gpt-5.4")
 	}
 
 	deleteResp := serveRequest(handler, http.MethodDelete, "/api/config/providers/crs", "", nil)

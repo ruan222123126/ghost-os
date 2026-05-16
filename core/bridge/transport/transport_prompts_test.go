@@ -285,13 +285,13 @@ func expectedSystemPromptToolDefinitions() map[string]struct {
 			parameters:  mustToolSchema(bridgetools.NewBashExecTool(nil)),
 		},
 		"codex_cli": {
-			description: "Async codex runner. Rules: 'prompt' required for start/resume/fork. 'session_id' required for resume/fork/status (pass command_id here for status). DO NOT use 'exec'.",
+			description: "Async codex runner. Rules: 'prompt' required for start/resume. 'session_id' required for resume/status (pass command_id here for status). Omit model/sandbox to use local Codex config. Fork is interactive-only in Codex CLI 0.130.0. DO NOT use 'exec'.",
 			parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"op": map[string]any{
 						"type": "string",
-						"enum": []any{"start", "resume", "fork", "status"},
+						"enum": []any{"start", "resume", "status"},
 					},
 					"prompt": map[string]any{
 						"type": "string",
@@ -307,11 +307,16 @@ func expectedSystemPromptToolDefinitions() map[string]struct {
 					},
 					"model": map[string]any{
 						"type":        "string",
-						"description": "Default: gpt-5.4",
+						"description": "Optional. If omitted, Codex uses local config.",
+					},
+					"sandbox": map[string]any{
+						"type":        "string",
+						"enum":        []any{"read-only", "workspace-write", "danger-full-access"},
+						"description": "Optional. If omitted, Codex uses local config.",
 					},
 					"full_auto": map[string]any{
 						"type":        "boolean",
-						"description": "Default: true",
+						"description": "Deprecated compatibility flag. If true and sandbox is omitted, uses sandbox=workspace-write.",
 					},
 					"skip_git_repo_check": map[string]any{
 						"type":        "boolean",

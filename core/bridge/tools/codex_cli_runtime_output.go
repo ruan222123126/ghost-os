@@ -45,7 +45,7 @@ func parseCodexCLIJSONSessionID(trimmed string) string {
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
 		return ""
 	}
-	for _, field := range []string{"session_id", "sessionId"} {
+	for _, field := range []string{"session_id", "sessionId", "thread_id", "threadId"} {
 		raw, ok := payload[field]
 		if !ok || raw == nil {
 			continue

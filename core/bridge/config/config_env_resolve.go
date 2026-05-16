@@ -85,6 +85,26 @@ func resolveNativeBinaryCandidates(fileCfg bridgeFileConfig, env envSnapshot) []
 	return normalizeConfiguredPathList(parseStringCSV(env.defaultValue("GHOST_NATIVE_BINARY_CANDIDATES", "")))
 }
 
+func resolveCodexCLIPath(fileCfg bridgeFileConfig, env envSnapshot) string {
+	if override := env.value("GHOST_CODEX_CLI_PATH"); override != "" {
+		return strings.TrimSpace(override)
+	}
+	if fileCfg.CodexCLIPath != nil {
+		return strings.TrimSpace(*fileCfg.CodexCLIPath)
+	}
+	return ""
+}
+
+func resolveNodeBinPath(fileCfg bridgeFileConfig, env envSnapshot) string {
+	if override := env.value("GHOST_NODE_BIN_PATH"); override != "" {
+		return strings.TrimSpace(override)
+	}
+	if fileCfg.NodeBinPath != nil {
+		return strings.TrimSpace(*fileCfg.NodeBinPath)
+	}
+	return ""
+}
+
 func resolveNativeAllowedReadPaths(fileCfg bridgeFileConfig, env envSnapshot) []string {
 	if fileCfg.NativeAllowedReadPaths != nil {
 		return normalizeConfiguredPathList(fileCfg.NativeAllowedReadPaths)

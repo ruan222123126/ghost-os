@@ -30,6 +30,7 @@ func normalizedActiveProviderName(providers []providerConfig, preferred ...*stri
 func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.ActiveProvider = cloneOptionalStringPointer(cfg.ActiveProvider)
 	cfg.Model = cloneOptionalStringPointer(cfg.Model)
+	cfg.ModelSelectionEnabled = cloneBoolPointer(cfg.ModelSelectionEnabled)
 	cfg.ChatPath = cloneOptionalStringPointer(cfg.ChatPath)
 	cfg.ResponsePromptCacheKey = cloneOptionalStringPointer(cfg.ResponsePromptCacheKey)
 	cfg.ResponsePromptCacheRetention = cloneOptionalStringPointer(cfg.ResponsePromptCacheRetention)
@@ -70,6 +71,8 @@ func normalizeBridgeScalarFields(cfg *bridgeFileConfig) {
 	cfg.BindAddr = cloneOptionalStringPointer(cfg.BindAddr)
 	cfg.APIToken = cloneOptionalStringPointer(cfg.APIToken)
 	cfg.NativeBinaryPath = cloneOptionalStringPointer(cfg.NativeBinaryPath)
+	cfg.CodexCLIPath = cloneOptionalStringPointer(cfg.CodexCLIPath)
+	cfg.NodeBinPath = cloneOptionalStringPointer(cfg.NodeBinPath)
 }
 
 func normalizeBridgeCollectionFields(cfg *bridgeFileConfig) error {

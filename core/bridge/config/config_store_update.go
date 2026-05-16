@@ -82,6 +82,18 @@ func applyConfigUpdatePatch(
 }
 
 func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) error {
+	if err := applyConfigCoreScalarUpdatePatch(fileCfg, req); err != nil {
+		return err
+	}
+	applyConfigWebSearchUpdatePatch(fileCfg, req)
+	applyConfigDisplayUpdatePatch(fileCfg, req)
+	if req.SessionTitleMode != nil {
+		fileCfg.SessionTitleMode = cloneOptionalStringPointer(req.SessionTitleMode)
+	}
+	return nil
+}
+
+func applyConfigCoreScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) error {
 	if req.Model != nil {
 		fileCfg.Model = cloneOptionalStringPointer(req.Model)
 	}
@@ -112,6 +124,10 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.LLMCompletionRetryIntervalMS != nil {
 		fileCfg.LLMCompletionRetryIntervalMS = cloneIntPointer(req.LLMCompletionRetryIntervalMS)
 	}
+	return nil
+}
+
+func applyConfigWebSearchUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) {
 	if req.WebSearchTavilyURL != nil {
 		fileCfg.WebSearchTavilyURL = cloneOptionalStringPointer(req.WebSearchTavilyURL)
 	}
@@ -124,6 +140,9 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.WebSearchExaAPIKey != nil {
 		fileCfg.WebSearchExaAPIKey = cloneOptionalStringPointer(req.WebSearchExaAPIKey)
 	}
+}
+
+func applyConfigDisplayUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) {
 	if req.SessionHumanLogFullEnabled != nil {
 		fileCfg.SessionHumanLogFullEnabled = cloneBoolPointer(req.SessionHumanLogFullEnabled)
 	}
@@ -142,10 +161,6 @@ func applyConfigScalarUpdatePatch(fileCfg *bridgeFileConfig, req UpdateRequest) 
 	if req.MicrocompactEnabled != nil {
 		fileCfg.MicrocompactEnabled = cloneBoolPointer(req.MicrocompactEnabled)
 	}
-	if req.SessionTitleMode != nil {
-		fileCfg.SessionTitleMode = cloneOptionalStringPointer(req.SessionTitleMode)
-	}
-	return nil
 }
 
 // SetProjectRoot 更新并持久化 project_root，并刷新运行态快照。

@@ -31,6 +31,7 @@ type bridgeFileConfig struct {
 	ActiveProvider                 *string                       `toml:"active_provider,omitempty"`
 	Providers                      map[string]providerFileConfig `toml:"providers,omitempty"`
 	Model                          *string                       `toml:"model,omitempty"`
+	ModelSelectionEnabled          *bool                         `toml:"model_selection_enabled,omitempty"`
 	ChatPath                       *string                       `toml:"chat_path,omitempty"`
 	ResponsePromptCacheKey         *string                       `toml:"response_prompt_cache_key,omitempty"`
 	ResponsePromptCacheRetention   *string                       `toml:"response_prompt_cache_retention,omitempty"`
@@ -44,6 +45,8 @@ type bridgeFileConfig struct {
 	NativeBinaryPath               *string                       `toml:"native_binary_path,omitempty"`
 	NativeBinaryRoots              []string                      `toml:"native_binary_roots,omitempty"`
 	NativeBinaryCandidates         []string                      `toml:"native_binary_candidates,omitempty"`
+	CodexCLIPath                   *string                       `toml:"codex_cli_path,omitempty"`
+	NodeBinPath                    *string                       `toml:"node_bin_path,omitempty"`
 	NativeAllowedReadPaths         []string                      `toml:"native_allowed_read_paths,omitempty"`
 	NativeAllowedWritePaths        []string                      `toml:"native_allowed_write_paths,omitempty"`
 	WorkerModel                    *string                       `toml:"worker_model,omitempty"`

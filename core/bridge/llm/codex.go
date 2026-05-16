@@ -191,7 +191,7 @@ func toCodexRequestWithOptions(model string, request CompletionRequest, options 
 		Instructions:         instructions,
 		Input:                input,
 		Tools:                tools,
-		ToolChoice:           "auto",
+		ToolChoice:           codexToolChoice(request.ToolChoice),
 		ParallelToolCalls:    false,
 		PromptCacheKey:       responseOptions.PromptCacheKey,
 		PromptCacheRetention: responseOptions.PromptCacheRetention,
@@ -200,6 +200,14 @@ func toCodexRequestWithOptions(model string, request CompletionRequest, options 
 		Store:                responseOptions.Store,
 		PreviousResponseID:   previousResponseID,
 	}, nil
+}
+
+func codexToolChoice(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return "auto"
+	}
+	return trimmed
 }
 
 func codexRequestInput(

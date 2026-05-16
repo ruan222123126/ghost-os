@@ -30,6 +30,7 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 		Type:    llm.ProviderOpenAI,
 		BaseURL: defaultBaseURL,
 		APIKey:  optionalStringPointer("sk-yyy"),
+		Models:  []string{"gpt-5.4"},
 	}); err != nil {
 		t.Fatalf("AddProvider second provider: %v", err)
 	}
@@ -55,6 +56,9 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	if fileCfg.ActiveProvider == nil || *fileCfg.ActiveProvider != "openai" {
 		t.Fatalf("unexpected active provider: %#v", fileCfg.ActiveProvider)
 	}
+	if fileCfg.Model == nil || *fileCfg.Model != "gpt-5.4" {
+		t.Fatalf("unexpected persisted model: %#v", fileCfg.Model)
+	}
 	providers := normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))
 	if len(providers) != 1 {
 		t.Fatalf("unexpected provider count: got %d want 1", len(providers))
@@ -67,6 +71,9 @@ func TestConfigStoreProviderCRUDPersistsToml(t *testing.T) {
 	}
 	if runtime := store.RuntimeConfig(); runtime.ProviderName != "openai" {
 		t.Fatalf("unexpected runtime provider: got %q want %q", runtime.ProviderName, "openai")
+	}
+	if runtime := store.RuntimeConfig(); runtime.Model != "gpt-5.4" {
+		t.Fatalf("unexpected runtime model: got %q want %q", runtime.Model, "gpt-5.4")
 	}
 }
 

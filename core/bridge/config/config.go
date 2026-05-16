@@ -14,6 +14,8 @@ type ExecutionConfig struct {
 	NativeBinaryPath       string
 	NativeBinaryRoots      []string
 	NativeBinaryCandidates []string
+	CodexCLIPath           string
+	NodeBinPath            string
 	AllowedReadPaths       []string
 	AllowedWritePaths      []string
 	ProjectRoot            string
@@ -38,6 +40,8 @@ type Config struct {
 	NativeBinaryPath               string
 	NativeBinaryRoots              []string
 	NativeBinaryCandidates         []string
+	CodexCLIPath                   string
+	NodeBinPath                    string
 	NativeAllowedReadPaths         []string
 	NativeAllowedWritePaths        []string
 	ProjectRoot                    string

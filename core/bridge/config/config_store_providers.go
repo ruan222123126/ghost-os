@@ -120,6 +120,15 @@ func (s *store) SetActiveProvider(name string) error {
 	if index < 0 {
 		return fmt.Errorf("%w: %s", errProviderNotFound, target)
 	}
-	fileCfg.ActiveProvider = stringPointer(providers[index].Name)
+	activeProvider := providers[index]
+	fileCfg.ActiveProvider = stringPointer(activeProvider.Name)
+	assignFirstProviderModel(&fileCfg, activeProvider)
 	return s.persistLocked(configPath, fileCfg)
+}
+
+func assignFirstProviderModel(fileCfg *bridgeFileConfig, provider providerConfig) {
+	if fileCfg == nil || len(provider.Models) == 0 {
+		return
+	}
+	fileCfg.Model = stringPointer(provider.Models[0])
 }

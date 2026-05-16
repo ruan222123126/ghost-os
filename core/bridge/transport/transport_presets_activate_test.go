@@ -1,7 +1,9 @@
 package transport
 
 import (
+	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
@@ -70,8 +72,63 @@ func TestHandlePresetActivateAppliesToolAndPromptConfig(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected config payload type: %T", configBody.Payload)
 	}
-	if configPayload["model_selection_enabled"] != false {
-		t.Fatalf("expected model_selection_enabled=false after strict preset activation, got %v", configPayload["model_selection_enabled"])
+	if configPayload["model_selection_enabled"] != true {
+		t.Fatalf("expected model_selection_enabled=true after strict preset activation, got %v", configPayload["model_selection_enabled"])
+	}
+}
+
+func TestHandlePresetActivateAllowsNoToolsPreset(t *testing.T) {
+	handler := newTestHandler(t, nil)
+	seedTransportPresetPromptLibrary(t, os.Getenv("GHOST_PROMPTS_DIR"))
+
+	createResp := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/presets",
+		`{"name":"No Tools","tool_allowlist":[],"prompt_refs":{"core_job":"core-card"}}`,
+		nil,
+	)
+	if createResp.Code != http.StatusCreated {
+		t.Fatalf("unexpected POST status: got %d body=%s", createResp.Code, createResp.Body.String())
+	}
+	created := decodePresetPayload(t, createResp)
+
+	activateResp := serveRequest(handler, http.MethodPut, "/api/presets/"+created.ID+"/activate", "", nil)
+	if activateResp.Code != http.StatusOK {
+		t.Fatalf("unexpected activate status: got %d body=%s", activateResp.Code, activateResp.Body.String())
+	}
+
+	tools := listToolsFromResponse(t, serveRequest(handler, http.MethodGet, "/api/tools", "", nil))
+	for _, tool := range tools {
+		if tool.Enabled {
+			t.Fatalf("expected all tools disabled after no-tools preset, got enabled %s", tool.Name)
+		}
+	}
+
+	promptsResp := serveRequest(handler, http.MethodGet, "/api/prompts/system", "", nil)
+	if promptsResp.Code != http.StatusOK {
+		t.Fatalf("unexpected prompts GET status: got %d body=%s", promptsResp.Code, promptsResp.Body.String())
+	}
+	assertSystemPromptToolDefinitionsArray(t, promptsResp)
+}
+
+func assertSystemPromptToolDefinitionsArray(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+
+	var body map[string]json.RawMessage
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode prompts response: %v, body=%s", err, recorder.Body.String())
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body["payload"], &payload); err != nil {
+		t.Fatalf("decode prompts payload: %v", err)
+	}
+	var toolDefinitions []systemPromptToolDefinitionPayload
+	if err := json.Unmarshal(payload["tool_definitions"], &toolDefinitions); err != nil {
+		t.Fatalf("tool_definitions must be a JSON array: %v", err)
+	}
+	if toolDefinitions == nil {
+		t.Fatal("expected tool_definitions to be [], got null")
 	}
 }
 

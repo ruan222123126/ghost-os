@@ -20,6 +20,7 @@ func TestCompletionRunnerUsesConfiguredRetryCount(t *testing.T) {
 		completer,
 		newFakeToolCatalog(),
 		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		"",
 		llm.ResponseOptions{},
 		NewCompletionRetryPolicy(2, 0),
 	)
@@ -47,6 +48,7 @@ func TestCompletionRunnerDisablesRetryWhenRetryCountZero(t *testing.T) {
 		completer,
 		newFakeToolCatalog(),
 		NewHistoryFromMessages([]llm.Message{{Role: llm.RoleUser, Text: "hello"}}),
+		"",
 		llm.ResponseOptions{},
 		NewCompletionRetryPolicy(0, 0),
 	)

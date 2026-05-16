@@ -21,6 +21,7 @@ type completionRunner struct {
 	completer       Completer
 	tools           ToolCatalog
 	history         *History
+	toolChoice      string
 	responseOptions llm.ResponseOptions
 	retryPolicy     CompletionRetryPolicy
 	attemptState    *completionAttemptState
@@ -30,12 +31,14 @@ func newCompletionRunner(
 	completer Completer,
 	toolCatalog ToolCatalog,
 	history *History,
+	toolChoice string,
 	responseOptions llm.ResponseOptions,
 ) completionRunner {
 	return newCompletionRunnerWithPolicy(
 		completer,
 		toolCatalog,
 		history,
+		toolChoice,
 		responseOptions,
 		DefaultCompletionRetryPolicy(),
 	)
@@ -45,6 +48,7 @@ func newCompletionRunnerWithPolicy(
 	completer Completer,
 	toolCatalog ToolCatalog,
 	history *History,
+	toolChoice string,
 	responseOptions llm.ResponseOptions,
 	retryPolicy CompletionRetryPolicy,
 ) completionRunner {
@@ -52,6 +56,7 @@ func newCompletionRunnerWithPolicy(
 		completer:       completer,
 		tools:           toolCatalog,
 		history:         history,
+		toolChoice:      toolChoice,
 		responseOptions: llm.CloneResponseOptions(responseOptions),
 		retryPolicy:     retryPolicy,
 	}
@@ -191,6 +196,7 @@ func (r completionRunner) request() (llm.CompletionRequest, error) {
 	return llm.CompletionRequest{
 		Messages:          projectMessagesForProvider(r.history.Messages(), r.tools),
 		Tools:             r.tools.ToolDefs(),
+		ToolChoice:        r.toolChoice,
 		ConversationState: r.history.ConversationState(),
 		ResponseOptions:   llm.CloneResponseOptions(r.responseOptions),
 	}, nil

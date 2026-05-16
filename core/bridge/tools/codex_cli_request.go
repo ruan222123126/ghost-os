@@ -20,7 +20,8 @@ type normalizedCodexCLIArgs struct {
 	Cwd                 string
 	OutputPath          string
 	Model               string
-	FullAuto            bool
+	Sandbox             string
+	FullAuto            *bool
 	SkipGitRepoCheck    bool
 	JSON                bool
 	WaitMSBeforeAsync   int
@@ -48,6 +49,9 @@ func normalizeCodexCLIArgs(args codexCLIArgs) (normalizedCodexCLIArgs, error) {
 	if !isCodexCLIOperation(op) {
 		return normalizedCodexCLIArgs{}, fmt.Errorf("unsupported op %q", op)
 	}
+	if op == codexCLIOpFork {
+		return normalizedCodexCLIArgs{}, fmt.Errorf("fork is interactive-only in Codex CLI 0.130.0")
+	}
 
 	normalized := normalizedCodexCLIArgs{
 		Op:                  op,
@@ -56,7 +60,8 @@ func normalizeCodexCLIArgs(args codexCLIArgs) (normalizedCodexCLIArgs, error) {
 		Cwd:                 strings.TrimSpace(args.Cwd),
 		OutputPath:          strings.TrimSpace(args.OutputPath),
 		Model:               strings.TrimSpace(args.Model),
-		FullAuto:            boolOrDefault(args.FullAuto, true),
+		Sandbox:             strings.TrimSpace(args.Sandbox),
+		FullAuto:            args.FullAuto,
 		SkipGitRepoCheck:    boolOrDefault(args.SkipGitRepoCheck, true),
 		JSON:                boolOrDefault(args.JSON, true),
 		WaitMSBeforeAsync:   args.WaitMSBeforeAsync,
@@ -70,8 +75,11 @@ func normalizeCodexCLIArgs(args codexCLIArgs) (normalizedCodexCLIArgs, error) {
 	if normalized.Cwd != "" && filepath.IsAbs(normalized.Cwd) {
 		return normalizedCodexCLIArgs{}, fmt.Errorf("cwd must be a relative path")
 	}
-	if normalized.Model == "" {
-		normalized.Model = defaultCodexCLIModel
+	if normalized.Sandbox != "" && !isCodexCLISandboxMode(normalized.Sandbox) {
+		return normalizedCodexCLIArgs{}, fmt.Errorf("unsupported sandbox %q", normalized.Sandbox)
+	}
+	if normalized.Sandbox != "" && normalized.FullAuto != nil {
+		return normalizedCodexCLIArgs{}, fmt.Errorf("sandbox and full_auto cannot be used together")
 	}
 	waitMSBeforeAsync, err := normalizedNonNegativeInt(
 		normalized.WaitMSBeforeAsync,
@@ -109,7 +117,7 @@ func validateCodexCLIOpRequirements(args normalizedCodexCLIArgs) error {
 		if args.Prompt == "" {
 			return fmt.Errorf("prompt is required for start")
 		}
-	case codexCLIOpResume, codexCLIOpFork:
+	case codexCLIOpResume:
 		if args.SessionID == "" {
 			return fmt.Errorf("session_id is required for %s", args.Op)
 		}
@@ -146,8 +154,15 @@ func buildCodexCLIRequest(args normalizedCodexCLIArgs) codexCLIRequest {
 	if args.OutputPath != "" {
 		params["output_path"] = args.OutputPath
 	}
-	params["model"] = args.Model
-	params["full_auto"] = args.FullAuto
+	if args.Model != "" {
+		params["model"] = args.Model
+	}
+	if args.Sandbox != "" {
+		params["sandbox"] = args.Sandbox
+	}
+	if args.FullAuto != nil {
+		params["full_auto"] = *args.FullAuto
+	}
 	params["skip_git_repo_check"] = args.SkipGitRepoCheck
 	params["json"] = args.JSON
 	params["wait_ms_before_async"] = args.WaitMSBeforeAsync
@@ -155,5 +170,14 @@ func buildCodexCLIRequest(args normalizedCodexCLIArgs) codexCLIRequest {
 		Action:     "CODEX_CLI_START",
 		Params:     params,
 		OutputPath: args.OutputPath,
+	}
+}
+
+func isCodexCLISandboxMode(value string) bool {
+	switch value {
+	case "read-only", "workspace-write", "danger-full-access":
+		return true
+	default:
+		return false
 	}
 }

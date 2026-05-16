@@ -7,15 +7,44 @@ import (
 )
 
 func relayRecordSchema(includeFinal bool) string {
-	finalFields := ""
-	finalRequired := ""
-	if includeFinal {
-		finalFields = `,"final_message":{"type":"string","description":"Final assistant reply to show the user."},"final_change_log":{"type":"string","description":"Concise final modification record."}`
-		finalRequired = `,"final_message","final_change_log"`
+	properties := map[string]any{
+		"did": map[string]any{
+			"type": "string",
+		},
+		"remaining": map[string]any{
+			"type": "string",
+		},
+		"failed_attempts": map[string]any{
+			"type":  "array",
+			"items": map[string]any{"type": "string"},
+		},
+		"next_step": map[string]any{
+			"type": "string",
+		},
 	}
-	return `{"type":"object","properties":{"did":{"type":"string"},"remaining":{"type":"string"},"failed_attempts":{"type":"array","items":{"type":"string"}},"next_step":{"type":"string"}` +
-		`}` + finalFields + `},"required":["did","remaining","failed_attempts","next_step"` + finalRequired +
-		`],"additionalProperties":false}`
+	required := []string{"did", "remaining", "failed_attempts", "next_step"}
+	if includeFinal {
+		properties["final_message"] = map[string]any{
+			"type":        "string",
+			"description": "Final assistant reply to show the user.",
+		}
+		properties["final_change_log"] = map[string]any{
+			"type":        "string",
+			"description": "Concise final modification record.",
+		}
+		required = append(required, "final_message", "final_change_log")
+	}
+	schema := map[string]any{
+		"type":                 "object",
+		"properties":           properties,
+		"required":             required,
+		"additionalProperties": false,
+	}
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		panic(fmt.Sprintf("encode relay tool schema: %v", err))
+	}
+	return string(encoded)
 }
 
 func decodeRelayRecordArgs(raw json.RawMessage) (relayRecordArgs, error) {

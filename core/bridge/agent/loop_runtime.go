@@ -59,7 +59,7 @@ func newAgentRunState(a *Agent, sink streaming.Sink, traceID string) (agentRunSt
 		traceID:                normalizeTraceID(traceID),
 		sink:                   sink,
 		history:                history,
-		completion:             newCompletionRunnerWithPolicy(a.completer, a.tools, history, a.responseOptions, retryPolicy).withAttemptState(attemptState),
+		completion:             newCompletionRunnerWithPolicy(a.completer, a.tools, history, a.toolChoice, a.responseOptions, retryPolicy).withAttemptState(attemptState),
 		toolCalls:              newToolCallExecutor(a.tools, history, nil, events),
 		assistantTextHandlers:  append([]AssistantTextHandler(nil), a.assistantTextHandlers...),
 		beforeCompletion:       a.beforeCompletion,

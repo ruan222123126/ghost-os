@@ -149,6 +149,25 @@ func TestToCodexRequestBuildsFunctionCallAndToolOutputItems(t *testing.T) {
 	}
 }
 
+func TestToCodexRequestUsesExplicitToolChoice(t *testing.T) {
+	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "use a tool"},
+		},
+		Tools: []ToolDef{
+			{Name: "relay_update_record", Description: "record relay", Parameters: json.RawMessage(`{"type":"object"}`)},
+		},
+		ToolChoice: "required",
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if req.ToolChoice != "required" {
+		t.Fatalf("unexpected tool_choice: got %q want %q", req.ToolChoice, "required")
+	}
+}
+
 func TestToCodexRequestMapsAssistantTextAsOutputText(t *testing.T) {
 	req, err := toCodexRequest("gpt-5.3-codex", CompletionRequest{
 		Messages: []Message{

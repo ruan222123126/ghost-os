@@ -3,7 +3,6 @@ package runtime
 import (
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/artifacts"
-	"ghost-os/bridge/execution"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/skills"
 	"ghost-os/bridge/tools"
@@ -15,8 +14,8 @@ type runtimeClients struct {
 
 type runtimeToolResources struct {
 	artifactStore              *artifacts.SessionArtifactStore
-	workspaceExecutionClient   execution.Client
-	interactionExecutionClient execution.Client
+	workspaceExecutionClient   Client
+	interactionExecutionClient Client
 }
 
 type coreToolOptions struct {
@@ -66,7 +65,8 @@ func registerRuntimeExecutionTools(opts coreToolOptions) {
 	opts.registry.Register(
 		tools.NewCodexCLITool(
 			opts.resources.workspaceExecutionClient,
-			opts.cfg.NativePersistent,
+			opts.cfg.CodexCLIPath,
+			opts.cfg.NodeBinPath,
 		),
 	)
 }
