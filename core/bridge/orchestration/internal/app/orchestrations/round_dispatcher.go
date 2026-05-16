@@ -20,6 +20,7 @@ type RoundDispatchCommand struct {
 	ParticipantIDs   []string
 	Transcript       group.Transcript
 	MemberSessionIDs map[string]string
+	PrivateInboxes   map[string][]group.PrivateMessage
 	Round            int
 	Order            string
 	Instruction      string
@@ -131,14 +132,15 @@ func memberRunRequest(
 	transcriptText string,
 ) ports.MemberRunRequest {
 	return ports.MemberRunRequest{
-		GroupNode:      cmd.GroupNode,
-		MemberNode:     cmd.MemberNodes[agentID],
-		TranscriptText: transcriptText,
-		Round:          cmd.Round,
-		SessionID:      cmd.MemberSessionIDs[agentID],
-		Instruction:    cmd.Instruction,
-		Private:        cmd.Private,
-		TraceID:        cmd.TraceID,
+		GroupNode:       cmd.GroupNode,
+		MemberNode:      cmd.MemberNodes[agentID],
+		TranscriptText:  transcriptText,
+		Round:           cmd.Round,
+		SessionID:       cmd.MemberSessionIDs[agentID],
+		Instruction:     cmd.Instruction,
+		PrivateMessages: append([]group.PrivateMessage(nil), cmd.PrivateInboxes[agentID]...),
+		Private:         cmd.Private,
+		TraceID:         cmd.TraceID,
 	}
 }
 

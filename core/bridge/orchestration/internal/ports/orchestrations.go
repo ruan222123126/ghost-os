@@ -14,14 +14,15 @@ type MemberAgentRunner interface {
 }
 
 type MemberRunRequest struct {
-	GroupNode      bridgeTasks.OrchestrationNode
-	MemberNode     bridgeTasks.OrchestrationNode
-	TranscriptText string
-	Round          int
-	SessionID      string
-	Instruction    string
-	Private        bool
-	TraceID        string
+	GroupNode       bridgeTasks.OrchestrationNode
+	MemberNode      bridgeTasks.OrchestrationNode
+	TranscriptText  string
+	Round           int
+	SessionID       string
+	Instruction     string
+	PrivateMessages []group.PrivateMessage
+	Private         bool
+	TraceID         string
 }
 
 type MemberResult struct {

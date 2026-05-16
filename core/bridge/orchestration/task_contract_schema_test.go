@@ -58,6 +58,7 @@ func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
 	assertSchemaRequired(t, defs, "workflowLoopNode", "max_iterations")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "body_node_id")
 	assertSchemaRequired(t, defs, "workflowLoopNode", "exit_node_id")
+	assertSchemaRequired(t, defs, "taskRelayConfig", "max_rounds")
 	assertSchemaRequired(t, defs, "orchestrationGroupNode", "title")
 	assertSchemaRequired(t, defs, "orchestrationGroupNode", "shared_context")
 	assertSchemaRequired(t, defs, "orchestrationGroupNode", "speaking_mode")

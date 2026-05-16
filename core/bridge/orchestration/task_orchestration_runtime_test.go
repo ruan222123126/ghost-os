@@ -3,9 +3,11 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 
+	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
@@ -34,6 +36,13 @@ func TestOrchestrationSequentialRoundSeesPreviousMemberOutput(t *testing.T) {
 	if lastResult["content"] != "saw-alpha" {
 		t.Fatalf("expected sequential member to see previous transcript, got %#v", lastResult)
 	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{
+		taskRunTranscriptEventMarker,
+		"编排进入群组：Group 1（group-1）",
+		"编排进入第 1 轮",
+		"A（agent-1） · 第 1 轮",
+		"B（agent-2） · 第 1 轮",
+	})
 }
 
 func TestOrchestrationParallelRoundUsesSharedSnapshot(t *testing.T) {
@@ -84,6 +93,29 @@ func TestOrchestrationReusesMemberSessionWithinRun(t *testing.T) {
 	if sessions["agent-1"] != sessionInputs[1] {
 		t.Fatalf("unexpected member sessions: %#v", sessions)
 	}
+}
+
+func TestOrchestrationMemberFailureRunTranscriptReplaysPersistedToolMessages(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+	seedFailedMemberToolSession(t, service.sessionStore, "failed-member-session")
+	service.agentRunner = &workflowTestRunner{
+		sessionID: "failed-member-session",
+		err:       errors.New("trace_id=trace-member turn=0 complete_once: read response body: context deadline exceeded"),
+	}
+
+	run := runOrchestrationTaskNow(t, service, buildSingleMemberDefinition(1))
+	groupOutput := findNodeOutput(t, run.Run.NodeResults, "group-1")
+	memberResults := groupOutput["member_results"].([]any)
+	member := memberResults[0].(map[string]any)
+	if member["session_id"] != "failed-member-session" {
+		t.Fatalf("expected failed member session id to be preserved, got %#v", member)
+	}
+
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{
+		"成员状态：Looper（agent-1） · 第 1 轮 -> error",
+		"tool_call: read_file {\"path\":\"README.md\"}",
+		"tool: {\"status\":\"success\",\"tool\":\"read_file\"",
+	})
 }
 
 func TestOrchestrationLegacyBoundaryNodesStillRun(t *testing.T) {
@@ -188,6 +220,14 @@ func TestOrchestrationOwnerPublicOnceReturnsToOwnerAndLogsDispatch(t *testing.T)
 	if lastDispatch["action"] != "end_group" {
 		t.Fatalf("expected end_group to be logged, got %#v", lastDispatch)
 	}
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{
+		"编排第 1 轮调度：public_once",
+		"参与者: agent-2",
+		"指令: speak now",
+		"tool_call: orchestration_dispatch {\"action\":\"public_once\",\"instruction\":\"speak now\",\"participant_ids\":[\"agent-2\"]}",
+		"tool: {\"status\":\"success\",\"tool\":\"orchestration_dispatch\"",
+		"Member（agent-2） · 第 1 轮",
+	})
 }
 
 func TestOrchestrationOwnerPrivateDispatchStaysOutOfSharedTranscript(t *testing.T) {
@@ -255,7 +295,7 @@ func TestOrchestrationOwnerPrivateDispatchStaysOutOfSharedTranscript(t *testing.
 	}
 }
 
-func TestOrchestrationOwnerPrivateDispatchHidesTranscriptWhenOwnerNotIncluded(t *testing.T) {
+func TestOrchestrationOwnerPrivateDispatchRetainsTranscriptWhenOwnerNotIncluded(t *testing.T) {
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 	completer := &proTestCompleter{
 		responses: []*llm.CompletionResponse{
@@ -284,8 +324,9 @@ func TestOrchestrationOwnerPrivateDispatchHidesTranscriptWhenOwnerNotIncluded(t 
 	groupOutput := findNodeOutput(t, run.Run.NodeResults, "group-1")
 	dispatchResults := groupOutput["dispatch_results"].([]any)
 	dispatch := dispatchResults[0].(map[string]any)
-	if _, exists := dispatch["private_transcript"]; exists {
-		t.Fatalf("expected private_transcript to stay hidden from owner when owner is absent: %#v", dispatch)
+	privateTranscript, ok := dispatch["private_transcript"].([]any)
+	if !ok || len(privateTranscript) == 0 {
+		t.Fatalf("expected private_transcript to stay available for user-visible logs: %#v", dispatch)
 	}
 	if dispatch["owner_visible"] != false {
 		t.Fatalf("expected owner_visible=false when owner is absent: %#v", dispatch)
@@ -316,6 +357,7 @@ func TestOrchestrationOwnerDispatchAppliesRuntimeOverrides(t *testing.T) {
 		completer: completer,
 		registry:  tools.NewRegistry(),
 	}
+	factory.registry.Register(&workflowTestTool{name: "script_exec", output: `{"status":"ok"}`})
 	service.runtimeFactory = factory
 
 	ownerDefinition := buildOwnerDefinition("agent-1", 1)
@@ -351,8 +393,8 @@ func TestOrchestrationOwnerDispatchAppliesRuntimeOverrides(t *testing.T) {
 		t.Fatalf("expected one owner completion request, got %#v", completer.requests)
 	}
 	request := completer.requests[0]
-	if len(request.Tools) != 1 || request.Tools[0].Name != orchestrationDispatchToolName {
-		t.Fatalf("expected owner to only see orchestration_dispatch, got %#v", request.Tools)
+	if strings.Join(completionToolNames(request.Tools), ",") != "orchestration_dispatch,script_exec" {
+		t.Fatalf("expected owner to see dispatch plus allowlisted tools, got %#v", request.Tools)
 	}
 	if len(request.Messages) == 0 || request.Messages[0].Role != llm.RoleSystem {
 		t.Fatalf("expected system prompt in owner request, got %#v", request.Messages)
@@ -361,7 +403,8 @@ func TestOrchestrationOwnerDispatchAppliesRuntimeOverrides(t *testing.T) {
 	if !strings.Contains(systemPrompt, "judge override") {
 		t.Fatalf("expected owner override prompt prefix, got %q", systemPrompt)
 	}
-	if !strings.Contains(systemPrompt, "你是当前群组的群主") {
+	if !strings.Contains(systemPrompt, "你是当前群组的群主") ||
+		!strings.Contains(systemPrompt, "你可以像普通 agent 一样自由分析") {
 		t.Fatalf("expected owner control prompt, got %q", systemPrompt)
 	}
 }
@@ -452,4 +495,26 @@ func buildOwnerDefinitionWithThirdMember(ownerAgentID string, maxRounds int) *Or
 		OrchestrationEdge{FromNodeID: "agent-3", ToNodeID: "group-1", Kind: orchestrationEdgeKindMember},
 	)
 	return definition
+}
+
+func seedFailedMemberToolSession(t *testing.T, store *session.Store, sessionID string) {
+	t.Helper()
+	sess := session.NewSession("")
+	sess.ID = sessionID
+	sess.AddMessage(llm.Message{
+		Role: llm.RoleAssistant,
+		ToolCalls: []llm.ToolCall{{
+			ID:        "call-1",
+			Name:      "read_file",
+			Arguments: json.RawMessage(`{"path":"README.md"}`),
+		}},
+	})
+	sess.AddMessage(llm.Message{
+		Role:       llm.RoleTool,
+		ToolCallID: "call-1",
+		Text:       agent.FormatToolResult("read_file", "trace-member", "file body", nil),
+	})
+	if err := store.Save(sess); err != nil {
+		t.Fatalf("save failed member tool session: %v", err)
+	}
 }

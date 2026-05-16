@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	appagentturn "ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -65,6 +67,31 @@ func TestMemberAgentRunnerMapsUnsupportedPayload(t *testing.T) {
 	if result.Status != bridgeTasks.RunStatusError ||
 		result.Error != "unsupported orchestration member response customPayload" {
 		t.Fatalf("unexpected unsupported result: %#v", result)
+	}
+}
+
+func TestMemberAgentRunnerKeepsSessionIDOnError(t *testing.T) {
+	runner := MemberAgentRunner{
+		Invoker: fakeActionInvoker{
+			err: appagentturn.WrapErrorWithSessionID(errors.New("boom"), "session-2"),
+		},
+	}
+
+	result, err := runner.RunMemberTurn(context.Background(), ports.MemberTurnRequest{
+		Round:   1,
+		AgentID: "agent-1",
+		Title:   "A",
+		Message: "speak",
+	})
+
+	if err != nil {
+		t.Fatalf("run member turn: %v", err)
+	}
+	if result.Status != bridgeTasks.RunStatusError || result.Error != "boom" {
+		t.Fatalf("unexpected error result: %#v", result)
+	}
+	if result.SessionID != "session-2" {
+		t.Fatalf("expected session id on failed member result, got %#v", result)
 	}
 }
 

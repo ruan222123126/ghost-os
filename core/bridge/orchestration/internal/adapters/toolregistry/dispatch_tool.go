@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/tools"
@@ -21,17 +22,29 @@ func (t DispatchTool) Name() string {
 }
 
 func (t DispatchTool) Description() string {
-	return "Dispatch exactly one orchestration sub-round for the current owner-led group."
+	return "Dispatch exactly one orchestration action for the current owner-led group, including public rounds, private sub-rounds, private direct messages, or ending the group."
 }
 
 func (t DispatchTool) Parameters() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"action":{"type":"string","enum":["public_once","private_once","end_group"]},
+			"action":{"type":"string","enum":["public_once","private_once","private_send","end_group"]},
 			"participant_ids":{"type":"array","items":{"type":"string"}},
 			"order":{"type":"string","enum":["sequential","parallel"]},
-			"instruction":{"type":"string"}
+			"instruction":{"type":"string"},
+			"private_messages":{
+				"type":"array",
+				"items":{
+					"type":"object",
+					"properties":{
+						"participant_id":{"type":"string"},
+						"content":{"type":"string"}
+					},
+					"required":["participant_id","content"],
+					"additionalProperties":false
+				}
+			}
 		},
 		"required":["action"],
 		"additionalProperties":false
@@ -55,11 +68,28 @@ func (t DispatchTool) Execute(
 	if err != nil {
 		return "", err
 	}
+	if err := t.rejectOwnerOnlyPrivateSend(normalized); err != nil {
+		return "", err
+	}
 	payload, err := json.Marshal(normalized)
 	if err != nil {
 		return "", err
 	}
 	return string(payload), nil
+}
+
+func (t DispatchTool) rejectOwnerOnlyPrivateSend(cmd group.DispatchCommand) error {
+	if cmd.Action != group.DispatchActionPrivateSend || len(cmd.ParticipantIDs) != 1 {
+		return nil
+	}
+	if t.GroupNode.Group == nil {
+		return nil
+	}
+	ownerID := strings.TrimSpace(t.GroupNode.Group.OwnerAgentID)
+	if ownerID == "" || cmd.ParticipantIDs[0] != ownerID {
+		return nil
+	}
+	return fmt.Errorf("private_send cannot target only owner %q", ownerID)
 }
 
 func (t DispatchTool) InterpretResult(output string) tools.ExecuteMeta {

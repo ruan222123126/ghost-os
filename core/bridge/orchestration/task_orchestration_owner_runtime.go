@@ -36,20 +36,36 @@ func (e orchestrationOwnerDecisionTurnExecutor) RunOwnerDecisionTurn(
 	if e.service == nil || e.service.runtimeFactory == nil {
 		return group.DispatchCommand{}, req.SessionID, errors.New("owner dispatch runtime is not configured")
 	}
+	preparer := e.newOwnerDispatchPreparer()
 	deps, err := e.buildOwnerDispatchDeps(req.RuntimeOverrides)
 	if err != nil {
 		return group.DispatchCommand{}, req.SessionID, err
 	}
 	defer deps.Close()
-	systemPrompt := ownerDecisionSystemPrompt(deps.systemPrompt, req)
+	systemPrompt, err := buildOwnerRuntimeSystemPrompt(
+		preparer,
+		deps,
+		nil,
+		buildOwnerRuntimeCatalog(deps, nil, req),
+		req,
+	)
+	if err != nil {
+		return group.DispatchCommand{}, req.SessionID, err
+	}
 	sess, err := e.loadOwnerDispatchSession(req.SessionID, deps, systemPrompt)
 	if err != nil {
 		return group.DispatchCommand{}, req.SessionID, err
+	}
+	catalog := buildOwnerRuntimeCatalog(deps, sess, req)
+	systemPrompt, err = buildOwnerRuntimeSystemPrompt(preparer, deps, sess, catalog, req)
+	if err != nil {
+		return group.DispatchCommand{}, sess.ID, err
 	}
 	response, runErr := e.runOwnerDispatchAgent(ctx, ownerDispatchRunRequest{
 		request:      req,
 		deps:         deps,
 		sess:         sess,
+		catalog:      catalog,
 		systemPrompt: systemPrompt,
 	})
 	if err := e.saveOwnerDispatchSession(sess); err != nil {
@@ -105,7 +121,7 @@ func (e orchestrationOwnerDecisionTurnExecutor) runOwnerDispatchAgent(
 		return "", err
 	}
 	defer cleanup()
-	response, runErr := runAgent.RunMessageWithTraceID(execCtx, ownerUserMessage(req.request), req.request.TraceID)
+	response, runErr := runOwnerDispatchWithRepair(execCtx, req, runAgent)
 	persistOwnerAgentMessages(req.sess, runAgent)
 	return response, runErr
 }
@@ -133,6 +149,7 @@ type ownerDispatchRunRequest struct {
 	request      ports.OwnerDecisionTurnRequest
 	deps         agentRuntimeDependencies
 	sess         *session.Session
+	catalog      tools.ToolCatalog
 	systemPrompt string
 }
 
@@ -163,7 +180,7 @@ func newOwnerDispatchAgentConfig(req ownerDispatchRunRequest) ownerDispatchAgent
 	return ownerDispatchAgentConfig{
 		deps:         req.deps,
 		sess:         req.sess,
-		catalog:      req.request.Catalog,
+		catalog:      req.catalog,
 		systemPrompt: req.systemPrompt,
 	}
 }
@@ -202,9 +219,9 @@ func decodeOwnerDecisionResponse(
 		return decodeOwnerDecisionRunError(runErr, sessionID)
 	}
 	if strings.TrimSpace(response) == "" {
-		return group.DispatchCommand{}, sessionID, errors.New("owner must call orchestration_dispatch")
+		return group.DispatchCommand{}, sessionID, errors.New("owner turn ended without orchestration_dispatch; orchestration cannot advance yet")
 	}
-	return group.DispatchCommand{}, sessionID, errors.New("owner must call orchestration_dispatch")
+	return group.DispatchCommand{}, sessionID, errors.New("owner turn ended without orchestration_dispatch; orchestration cannot advance yet")
 }
 
 func decodeOwnerDecisionRunError(
@@ -220,4 +237,22 @@ func decodeOwnerDecisionRunError(
 		return group.DispatchCommand{}, sessionID, fmt.Errorf("decode owner dispatch handoff: %w", err)
 	}
 	return request, sessionID, nil
+}
+
+func buildOwnerRuntimeSystemPrompt(
+	preparer *sessionTurnPreparer,
+	deps agentRuntimeDependencies,
+	sess *session.Session,
+	catalog tools.ToolCatalog,
+	req ports.OwnerDecisionTurnRequest,
+) (string, error) {
+	basePrompt := strings.TrimSpace(deps.systemPrompt)
+	if preparer != nil {
+		prompt, err := preparer.buildCompletionSystemPrompt(deps, sess, catalog, deps.systemPrompt)
+		if err != nil {
+			return "", err
+		}
+		basePrompt = prompt
+	}
+	return ownerDecisionSystemPrompt(basePrompt, req), nil
 }

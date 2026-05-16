@@ -101,7 +101,7 @@ func (s Service) executeStandard(
 	s.log(traceID, bus.ActionAgentSend, "running", nil)
 	response, sessionID, err := s.Runner.RunTurn(ctx, prepared, traceID)
 	if err != nil {
-		return s.handleStandardError(traceID, sessionID, err)
+		return s.handleStandardError(traceID, sessionID, WrapErrorWithSessionID(err, sessionID))
 	}
 	return s.completeStandardTurn(traceID, response, sessionID)
 }

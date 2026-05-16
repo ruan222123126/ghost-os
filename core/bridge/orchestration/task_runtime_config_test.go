@@ -105,3 +105,35 @@ func TestRelayTaskCreateAppliesConfiguredDefaults(t *testing.T) {
 		t.Fatalf("unexpected relay execution timeout: %+v", created.Relay.ExecutionTimeoutMS)
 	}
 }
+
+func TestRelayTaskCreateAppliesAIDecidesMaxRoundDefault(t *testing.T) {
+	_, service, _ := newTestHandlerWithService(t, nil, nil)
+	_, err := service.executeConfigUpdateAction(configUpdateRequest{
+		RelayDefaultStopPolicy:         stringPointer(taskRelayStopPolicyAIDecides),
+		RelayDefaultMaxRounds:          intPointer(6),
+		RelayDefaultExecutionTimeoutMs: intPointer(0),
+	}, "trace-relay-ai-defaults-config")
+	if err != nil {
+		t.Fatalf("config update failed: %v", err)
+	}
+
+	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
+		TaskKind:        taskKindAgentMessage,
+		Message:         "run relay task",
+		AgentMode:       taskAgentModeRelay,
+		IntervalSeconds: 60,
+	}, "trace-relay-ai-defaults-task")
+	if err != nil {
+		t.Fatalf("task create failed: %v", err)
+	}
+	if code != http.StatusCreated {
+		t.Fatalf("unexpected status code: got %d want %d", code, http.StatusCreated)
+	}
+	created := createdRaw.(taskPayload)
+	if created.Relay == nil {
+		t.Fatal("expected relay defaults")
+	}
+	if created.Relay.StopPolicy != taskRelayStopPolicyAIDecides || created.Relay.MaxRounds != 6 {
+		t.Fatalf("unexpected relay defaults: %+v", created.Relay)
+	}
+}

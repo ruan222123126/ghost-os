@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	appagentturn "ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -28,7 +29,9 @@ func (r MemberAgentRunner) RunMemberTurn(
 		RuntimeOverrides: bridgeTasks.CloneTaskRuntimeOverrides(req.RuntimeOverrides),
 	})
 	if err != nil {
-		return memberError(result, err.Error()), nil
+		result = memberError(result, err.Error())
+		result.SessionID = appagentturn.SessionIDFromError(err)
+		return result, nil
 	}
 	return memberResultFromPayload(result, payload), nil
 }

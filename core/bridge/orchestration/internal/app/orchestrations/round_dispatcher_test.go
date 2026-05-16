@@ -39,6 +39,25 @@ func TestRoundDispatcherParallelUsesSharedSnapshotAndStableOrder(t *testing.T) {
 	}
 }
 
+func TestRoundDispatcherPassesOnlyRecipientPrivateMessages(t *testing.T) {
+	runner := newRecordingMemberRunner()
+	dispatcher := RoundDispatcher{Members: runner}
+	cmd := roundCommand(group.SpeakingModeSequential)
+	cmd.PrivateInboxes = map[string][]group.PrivateMessage{
+		"agent-2": {{ParticipantID: "agent-2", Content: "secret"}},
+	}
+
+	dispatcher.Dispatch(context.Background(), cmd)
+
+	if messages := runner.privateMessagesFor("agent-1"); len(messages) != 0 {
+		t.Fatalf("expected agent-1 to see no private messages, got %#v", messages)
+	}
+	messages := runner.privateMessagesFor("agent-2")
+	if len(messages) != 1 || messages[0].Content != "secret" {
+		t.Fatalf("expected agent-2 private message, got %#v", messages)
+	}
+}
+
 func TestRoundDispatcherParallelSelectsBusinessFailureBeforeCanceled(t *testing.T) {
 	dispatcher := RoundDispatcher{Members: cancelRecordingMemberRunner{}}
 	result := dispatcher.Dispatch(context.Background(), roundCommand(group.SpeakingModeParallel))
@@ -50,12 +69,12 @@ func TestRoundDispatcherParallelSelectsBusinessFailureBeforeCanceled(t *testing.
 }
 
 type recordingMemberRunner struct {
-	mu          sync.Mutex
-	transcripts map[string]string
+	mu       sync.Mutex
+	requests map[string]ports.MemberRunRequest
 }
 
 func newRecordingMemberRunner() *recordingMemberRunner {
-	return &recordingMemberRunner{transcripts: map[string]string{}}
+	return &recordingMemberRunner{requests: map[string]ports.MemberRunRequest{}}
 }
 
 func (r *recordingMemberRunner) RunMember(
@@ -63,7 +82,7 @@ func (r *recordingMemberRunner) RunMember(
 	req ports.MemberRunRequest,
 ) (ports.MemberResult, error) {
 	r.mu.Lock()
-	r.transcripts[req.MemberNode.ID] = req.TranscriptText
+	r.requests[req.MemberNode.ID] = req
 	r.mu.Unlock()
 	content := "alpha"
 	if req.MemberNode.ID == "agent-2" {
@@ -83,7 +102,19 @@ func (r *recordingMemberRunner) RunMember(
 func (r *recordingMemberRunner) transcriptFor(agentID string) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.transcripts[agentID]
+	return r.requests[agentID].TranscriptText
+}
+
+func (r *recordingMemberRunner) privateMessagesFor(agentID string) []group.PrivateMessage {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]group.PrivateMessage(nil), r.requests[agentID].PrivateMessages...)
+}
+
+func (r *recordingMemberRunner) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.requests)
 }
 
 type cancelRecordingMemberRunner struct{}

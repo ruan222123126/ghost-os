@@ -71,9 +71,10 @@ func cloneNodeMap(
 
 func cloneDispatchCommand(input group.DispatchCommand) group.DispatchCommand {
 	return group.DispatchCommand{
-		Action:         input.Action,
-		ParticipantIDs: append([]string(nil), input.ParticipantIDs...),
-		Order:          input.Order,
-		Instruction:    input.Instruction,
+		Action:          input.Action,
+		ParticipantIDs:  append([]string(nil), input.ParticipantIDs...),
+		Order:           input.Order,
+		Instruction:     input.Instruction,
+		PrivateMessages: append([]group.PrivateMessage(nil), input.PrivateMessages...),
 	}
 }

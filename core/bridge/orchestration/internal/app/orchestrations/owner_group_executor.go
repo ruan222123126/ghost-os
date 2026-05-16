@@ -61,6 +61,7 @@ func (e OwnerGroupExecutor) Execute(
 type ownerExecutionState struct {
 	transcript      group.Transcript
 	sessions        map[string]string
+	privateInboxes  map[string][]group.PrivateMessage
 	memberResults   []ports.MemberResult
 	dispatchResults []DispatchResult
 	ownerSessionID  string
@@ -72,6 +73,7 @@ func newOwnerExecutionState(cmd OwnerGroupCommand) ownerExecutionState {
 	return ownerExecutionState{
 		transcript:      group.Initial(cmd.GroupNode, cmd.PreviousGroupID, cmd.PreviousTranscript),
 		sessions:        CloneSessionIDs(cmd.MemberSessions),
+		privateInboxes:  map[string][]group.PrivateMessage{},
 		memberResults:   make([]ports.MemberResult, 0, ownerResultCapacity(cmd)),
 		dispatchResults: make([]DispatchResult, 0, cmd.GroupNode.Group.MaxRounds),
 		ownerSessionID:  strings.TrimSpace(cmd.OwnerSessionID),
@@ -90,8 +92,9 @@ func (e OwnerGroupExecutor) advanceRound(
 ) (ownerExecutionState, OwnerGroupResult, bool) {
 	roundResult := e.executeRound(ctx, cmd.state.roundCommand(cmd.parent, cmd.round))
 	if roundResult.decisionErr != nil {
-		result := failedOwnerDecision(cmd.state.decisionFailure(cmd.parent, roundResult.decisionErr))
-		return cmd.state, result, true
+		next := cmd.state.withOwnerSession(roundResult.ownerSessionID)
+		result := failedOwnerDecision(next.decisionFailure(cmd.parent, roundResult.decisionErr))
+		return next, result, true
 	}
 	if roundResult.ended {
 		next := cmd.state.withOwnerSession(roundResult.ownerSessionID)
@@ -115,6 +118,7 @@ func (s ownerExecutionState) roundCommand(cmd OwnerGroupCommand, round int) owne
 		lastDispatch:   s.lastDispatch,
 		transcript:     s.transcript,
 		sessions:       s.sessions,
+		privateInboxes: s.privateInboxes,
 		round:          round,
 	}
 }
@@ -123,6 +127,7 @@ func (s ownerExecutionState) withDispatchResult(result ownerRoundResult) ownerEx
 	return ownerExecutionState{
 		transcript:      result.transcript,
 		sessions:        result.memberSessions,
+		privateInboxes:  result.privateInboxes,
 		memberResults:   appendMemberResults(s.memberResults, result.dispatch.MemberResults),
 		dispatchResults: s.dispatchResults,
 		ownerSessionID:  result.ownerSessionID,
@@ -135,6 +140,7 @@ func (s ownerExecutionState) withOwnerSession(ownerSessionID string) ownerExecut
 	return ownerExecutionState{
 		transcript:      s.transcript,
 		sessions:        s.sessions,
+		privateInboxes:  s.privateInboxes,
 		memberResults:   s.memberResults,
 		dispatchResults: s.dispatchResults,
 		ownerSessionID:  ownerSessionID,
@@ -147,6 +153,7 @@ type ownerRoundResult struct {
 	dispatch       DispatchResult
 	transcript     group.Transcript
 	memberSessions map[string]string
+	privateInboxes map[string][]group.PrivateMessage
 	ownerSessionID string
 	decisionErr    error
 	ended          bool
@@ -158,6 +165,7 @@ type ownerRoundCommand struct {
 	lastDispatch   group.DispatchCommand
 	transcript     group.Transcript
 	sessions       map[string]string
+	privateInboxes map[string][]group.PrivateMessage
 	round          int
 }
 
@@ -173,7 +181,7 @@ func (e OwnerGroupExecutor) executeRound(
 		round:          cmd.round,
 	})
 	if err != nil {
-		return ownerRoundResult{decisionErr: err}
+		return ownerRoundResult{decisionErr: err, ownerSessionID: nextSessionID}
 	}
 	dispatch := NewDispatchResult(decision, cmd.round, cmd.parent.GroupNode.Group.OwnerAgentID)
 	if dispatch.Action == group.DispatchActionEndGroup {
@@ -184,6 +192,7 @@ func (e OwnerGroupExecutor) executeRound(
 		MemberNodes:      cmd.parent.MemberNodes,
 		PublicTranscript: cmd.transcript,
 		MemberSessions:   cmd.sessions,
+		PrivateInboxes:   cmd.privateInboxes,
 		Dispatch:         decision,
 		Round:            cmd.round,
 		TraceID:          cmd.parent.TraceID,
@@ -192,6 +201,7 @@ func (e OwnerGroupExecutor) executeRound(
 		dispatch:       executed.Dispatch,
 		transcript:     executed.PublicTranscript,
 		memberSessions: executed.MemberSessions,
+		privateInboxes: executed.PrivateInboxes,
 		ownerSessionID: nextSessionID,
 	}
 }

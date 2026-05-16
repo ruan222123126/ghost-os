@@ -16,6 +16,7 @@ func (s Service) handleStandardError(
 		s.publishAwaiting(traceID, sessionID, awaitingErr)
 		return bus.ResultAccepted(newAwaitingHumanResponse(sessionID, awaitingErr)), nil
 	}
+	normalizedErr = WrapErrorWithSessionID(normalizedErr, sessionID)
 	s.log(traceID, bus.ActionAgentSend, "error", normalizedErr)
 	return bus.ServiceResult{}, bus.WrapError(kind, normalizedErr)
 }

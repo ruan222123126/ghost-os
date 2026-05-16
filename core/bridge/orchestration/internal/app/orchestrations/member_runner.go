@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -38,21 +39,37 @@ func (r MemberRunner) RunMember(
 
 func BuildGroupMemberMessage(req ports.MemberRunRequest) string {
 	privacyText := "公开"
+	responseInstruction := "请继续群聊发言，直接输出你这一轮要说的话。"
 	if req.Private {
 		privacyText = "私密"
+		responseInstruction = "请继续私密回合发言，直接输出你这一轮要说的话。"
 	}
 	instructionBlock := buildInstructionBlock(req.Instruction)
+	privateBlock := formatPrivateMessages(req.PrivateMessages)
 	return strings.TrimSpace(fmt.Sprintf(
-		"成员角色提示：\n%s\n\n群共享上下文：\n%s\n\n当前可见 group transcript：\n%s\n\n轮次信息：\n当前轮次：%d\n总轮次上限：%d\n发言模式：%s\n回合可见性：%s%s\n\n请继续群聊发言，直接输出你这一轮要说的话。",
+		"成员角色提示：\n%s\n\n群共享上下文：\n%s\n\n当前可见 group transcript：\n%s\n\n当前可见私聊消息：\n%s\n\n轮次信息：\n当前轮次：%d\n总轮次上限：%d\n发言模式：%s\n回合可见性：%s%s\n\n%s",
 		req.MemberNode.Agent.Message,
 		req.GroupNode.Group.SharedContext,
 		req.TranscriptText,
+		privateBlock,
 		req.Round,
 		req.GroupNode.Group.MaxRounds,
 		req.GroupNode.Group.SpeakingMode,
 		privacyText,
 		instructionBlock,
+		responseInstruction,
 	))
+}
+
+func formatPrivateMessages(messages []group.PrivateMessage) string {
+	if len(messages) == 0 {
+		return "(none)"
+	}
+	lines := make([]string, 0, len(messages))
+	for _, message := range messages {
+		lines = append(lines, strings.TrimSpace(message.Content))
+	}
+	return strings.Join(lines, "\n")
 }
 
 func buildInstructionBlock(instruction string) string {

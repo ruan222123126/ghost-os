@@ -29,19 +29,24 @@ func (b *runTranscriptBuilder) appendOrchestrationGroupNode(node bridgeTasks.Run
 	b.addEvent(fmt.Sprintf("编排进入群组：%s（%s）", title, node.NodeID))
 	output := transcriptRecord(node.Output)
 	if dispatches := transcriptSlice(output, "dispatch_results"); len(dispatches) > 0 {
-		b.appendOrchestrationDispatches(dispatches)
+		b.appendOrchestrationDispatches(title, node.NodeID, dispatches)
 		return
 	}
 	b.appendOrchestrationMembers(transcriptSlice(output, "member_results"))
 }
 
-func (b *runTranscriptBuilder) appendOrchestrationDispatches(dispatches []any) {
+func (b *runTranscriptBuilder) appendOrchestrationDispatches(
+	groupTitle string,
+	groupID string,
+	dispatches []any,
+) {
 	for _, item := range dispatches {
 		dispatch := transcriptRecord(item)
 		if dispatch == nil {
 			continue
 		}
 		b.addEvent(orchestrationDispatchEvent(dispatch))
+		b.addOrchestrationDispatchToolMessage(groupTitle, groupID, dispatch)
 		b.appendOrchestrationMembers(transcriptSlice(dispatch, "member_results"))
 	}
 }
@@ -51,13 +56,22 @@ func orchestrationDispatchEvent(dispatch map[string]any) string {
 	action := transcriptString(dispatch, "action")
 	participants := strings.Join(transcriptStringSlice(dispatch["participant_ids"]), ", ")
 	instruction := transcriptString(dispatch, "instruction")
-	privateDeliveries := len(transcriptSlice(dispatch, "private_deliveries"))
 	lines := []string{fmt.Sprintf("编排第 %d 轮调度：%s", round, action)}
 	if participants != "" {
 		lines = append(lines, "参与者: "+participants)
 	}
-	if privateDeliveries > 0 {
-		lines = append(lines, fmt.Sprintf("私聊投递: %d 条", privateDeliveries))
+	for _, delivery := range transcriptSlice(dispatch, "private_deliveries") {
+		record := transcriptRecord(delivery)
+		participantID := transcriptString(record, "participant_id")
+		content := transcriptString(record, "content")
+		if participantID == "" {
+			continue
+		}
+		if content == "" {
+			lines = append(lines, "私聊投递: "+participantID)
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("私聊投递: %s <- %s", participantID, content))
 	}
 	if instruction != "" {
 		lines = append(lines, "指令: "+instruction)

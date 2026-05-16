@@ -13,9 +13,6 @@ type Definition struct {
 }
 
 func DefinitionsFrom(defs []llm.ToolDef) []Definition {
-	if len(defs) == 0 {
-		return nil
-	}
 	items := make([]Definition, 0, len(defs))
 	for _, def := range defs {
 		items = append(items, Definition{

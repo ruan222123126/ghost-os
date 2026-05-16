@@ -10,7 +10,16 @@ import (
 func buildRelayModeSystemPrompt(basePrompt string, relay TaskRelayConfig) string {
 	modeRule := "End every round by calling `relay_update_record`; do not end with plain text."
 	if relay.StopPolicy == taskRelayStopPolicyAIDecides {
-		modeRule = "End every round by calling `relay_update_record`, or call `relay_complete` only when the task is truly complete."
+		modeRule = fmt.Sprintf(
+			"End every round by calling `relay_update_record`, or call `relay_complete` only when the task is truly complete; this run force-stops at max_rounds=%d.",
+			relay.MaxRounds,
+		)
+	}
+	if relay.StopPolicy == taskRelayStopPolicyMaxRounds {
+		modeRule = fmt.Sprintf(
+			"End every round by calling `relay_update_record`; this run stops at max_rounds=%d unless the user stops it.",
+			relay.MaxRounds,
+		)
 	}
 	return strings.TrimSpace(basePrompt + "\n\n" + strings.Join([]string{
 		"You are a fresh-memory Ghost-OS relay worker.",
@@ -32,6 +41,22 @@ func buildRelayModeUserPrompt(task string, records []session.RelayRecord, round 
 	))
 }
 
+func buildRelayModeRepairPrompt(previousOutput string, relay TaskRelayConfig) string {
+	requiredTool := "`relay_update_record`"
+	if relay.StopPolicy == taskRelayStopPolicyAIDecides {
+		requiredTool = "`relay_update_record` or `relay_complete`"
+	}
+	output := strings.TrimSpace(previousOutput)
+	if output == "" {
+		output = "(empty response)"
+	}
+	return strings.TrimSpace(fmt.Sprintf(
+		"Your previous reply was invalid for relay mode because it ended as plain text instead of using the required relay handoff tool.\n\nPrevious reply:\n%s\n\nRe-emit this round now by calling %s.\nRules:\n- Reuse the actual progress from this round; do not invent work.\n- Do not answer in plain text.",
+		output,
+		requiredTool,
+	))
+}
+
 func buildRelayMaxRoundsMessage(task string, records []session.RelayRecord, maxRounds int) string {
 	if len(records) == 0 {
 		return fmt.Sprintf("Reached relay max_rounds=%d before any valid relay record was produced.", maxRounds)
@@ -48,10 +73,7 @@ func buildRelayMaxRoundsMessage(task string, records []session.RelayRecord, maxR
 }
 
 func relayMaxRoundsLine(relay TaskRelayConfig) string {
-	if relay.StopPolicy == taskRelayStopPolicyMaxRounds {
-		return fmt.Sprintf("%d", relay.MaxRounds)
-	}
-	return "none; only `relay_complete` or user stop ends this run"
+	return fmt.Sprintf("%d", relay.MaxRounds)
 }
 
 func formatRelayHistory(records []session.RelayRecord) string {

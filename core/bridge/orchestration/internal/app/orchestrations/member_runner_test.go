@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -23,13 +24,18 @@ func TestBuildGroupMemberMessageIncludesDispatchContext(t *testing.T) {
 		TranscriptText: "A: alpha",
 		Round:          2,
 		Instruction:    "focus",
-		Private:        true,
+		PrivateMessages: []group.PrivateMessage{{
+			ParticipantID: "agent-1",
+			Content:       "你的身份是预言家",
+		}},
+		Private: true,
 	})
 
 	for _, want := range []string{
 		"成员角色提示：\nrole prompt",
 		"群共享上下文：\nshared",
 		"当前可见 group transcript：\nA: alpha",
+		"当前可见私聊消息：\n你的身份是预言家",
 		"当前轮次：2",
 		"总轮次上限：3",
 		"发言模式：owner",

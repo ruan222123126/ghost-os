@@ -75,12 +75,9 @@ func validateTaskRelayConfig(relay *TaskRelayConfig) error {
 	if relay == nil {
 		return nil
 	}
-	switch strings.TrimSpace(relay.StopPolicy) {
-	case taskRelayStopPolicyAIDecides:
-		if relay.MaxRounds != 0 {
-			relay.MaxRounds = 0
-		}
-	case taskRelayStopPolicyMaxRounds:
+	policy := strings.TrimSpace(relay.StopPolicy)
+	switch policy {
+	case taskRelayStopPolicyAIDecides, taskRelayStopPolicyMaxRounds:
 		if relay.MaxRounds <= 0 {
 			return fmt.Errorf("%w: relay max_rounds must be > 0", ErrInvalidTaskConfig)
 		}

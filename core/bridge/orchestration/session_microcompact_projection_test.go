@@ -88,6 +88,22 @@ func TestProjectMessagesForModelUsesStructuredScriptExecSummary(t *testing.T) {
 	}
 }
 
+func TestProjectMessagesForModelUsesCodexCLIFinalMessage(t *testing.T) {
+	messages := []llm.Message{{Role: llm.RoleSystem, Text: "system"}}
+	messages = append(messages, toolSpan("codex-1", "codex_cli", `{"op":"status"}`, codexCLIDoneJSON())...)
+	messages = append(messages, toolSpan("keep-1", "read_file", `{"path":"one.txt"}`, readFileOutput())...)
+	messages = append(messages, toolSpan("keep-2", "read_file", `{"path":"two.txt"}`, readFileOutput())...)
+
+	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-codex"})
+
+	if !strings.Contains(projected[1].Text, `result="child completed cleanly"`) {
+		t.Fatalf("expected codex final message in summary, got %q", projected[1].Text)
+	}
+	if strings.Contains(projected[1].Text, "usage tail only") {
+		t.Fatalf("expected final_message to win over output_tail, got %q", projected[1].Text)
+	}
+}
+
 func TestProjectMessagesForModelPreservesErrorDetails(t *testing.T) {
 	messages := []llm.Message{{Role: llm.RoleSystem, Text: "system"}}
 	messages = append(messages, toolSpanWithError("err-1", "web_search", `{"query":"boom"}`, "search backend unavailable")...)
@@ -238,6 +254,10 @@ func longWebSearchJSON() string {
 
 func scriptExecJSON() string {
 	return `{"script_output":"very long raw script output ` + strings.Repeat("tail ", 30) + `","steps":[{"tool":"read_file","status":"success","result_summary":"returned 20 lines"},{"tool":"apply_diff","status":"success","write_change":{"operation":"apply_diff","path":"main.go","added_lines":3,"removed_lines":1}}],"summary":{"step_count":2,"failed_steps":0,"write_steps":1}}`
+}
+
+func codexCLIDoneJSON() string {
+	return `{"status":"done","command_id":"codex-cli-1","exit_code":0,"final_message":"child completed cleanly","output_tail":"usage tail only"}`
 }
 
 func assertNoOrphanToolResults(t *testing.T, messages []llm.Message) {

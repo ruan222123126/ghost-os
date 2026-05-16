@@ -76,7 +76,10 @@ func normalizeAgentTaskRelay(task *ScheduledTask, store bridgeconfig.Store) erro
 	if strings.TrimSpace(relay.StopPolicy) == "" {
 		relay.StopPolicy = defaults.stopPolicy
 	}
-	if relay.StopPolicy == taskRelayStopPolicyMaxRounds && relay.MaxRounds <= 0 {
+	if relay.MaxRounds < 0 {
+		return invalidTaskConfig("relay max_rounds must be >= 0")
+	}
+	if relay.MaxRounds == 0 {
 		relay.MaxRounds = defaults.maxRounds
 	}
 	if relay.ExecutionTimeoutMS == nil {
