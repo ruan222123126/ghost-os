@@ -40,6 +40,10 @@ func NewPersistentNativeClient() *PersistentNativeClient {
 	return newPersistentNativeClientWithLocator(nativeBinaryLocator{})
 }
 
+func (c *PersistentNativeClient) SupportsPersistentSessions() bool {
+	return true
+}
+
 func newPersistentNativeClientWithLocator(locator nativeBinaryLocator) *PersistentNativeClient {
 	return &PersistentNativeClient{
 		handshakeTimeout: persistentHandshakeTimeoutFromEnv(),

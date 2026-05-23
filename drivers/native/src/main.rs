@@ -11,6 +11,7 @@ mod sandbox;
 mod screen;
 mod script_exec;
 mod shell_actions;
+mod shell_sessions;
 mod types;
 
 use std::io::{self, BufReader, BufWriter, Read, Write};

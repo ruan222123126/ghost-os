@@ -15,7 +15,18 @@ type BashExecTool struct {
 
 type bashExecArgs struct {
 	Command        string `json:"command"`
+	Login          *bool  `json:"login,omitempty"`
+	Interactive    *bool  `json:"interactive,omitempty"`
+	SessionID      string `json:"session_id,omitempty"`
+	TTY            *bool  `json:"tty,omitempty"`
+	YieldTimeMs    *int   `json:"yield_time_ms,omitempty"`
+	TimeoutMs      *int   `json:"timeout_ms,omitempty"`
 	MaxOutputChars *int   `json:"max_output_chars,omitempty"`
+}
+
+type bashExecRequest struct {
+	Params      map[string]any
+	Interactive bool
 }
 
 func NewBashExecTool(client ExecutionClient) Tool {
@@ -27,7 +38,7 @@ func (BashExecTool) Name() string {
 }
 
 func (BashExecTool) Description() string {
-	return "Run a shell command in the sandbox bash shell. Returns stdout only; non-zero exit fails."
+	return "Run a shell command in the sandbox bash shell. Default is one-shot stdout output; set interactive=true for persistent session mode with session_id reuse. Non-zero exit fails."
 }
 
 func (BashExecTool) Parameters() json.RawMessage {
@@ -35,6 +46,12 @@ func (BashExecTool) Parameters() json.RawMessage {
 		"type":"object",
 		"properties":{
 			"command":{"type":"string","description":"Shell command to run."},
+			"login":{"type":"boolean","description":"One-shot only. true uses bash -lc (default), false uses bash -c."},
+			"interactive":{"type":"boolean","description":"Enable persistent shell session mode."},
+			"session_id":{"type":"string","description":"Interactive only. Reuse an existing shell session."},
+			"tty":{"type":"boolean","description":"Interactive only. Request TTY-style session."},
+			"yield_time_ms":{"type":"integer","minimum":1,"description":"Interactive only. Wait window before collecting incremental output."},
+			"timeout_ms":{"type":"integer","minimum":1,"description":"One-shot only. Per-call timeout in milliseconds."},
 			"max_output_chars":{"type":"integer","minimum":1,"description":"Optional stdout preview limit override."}
 		},
 		"required":["command"],
@@ -47,14 +64,22 @@ func (t BashExecTool) Execute(ctx context.Context, argsJSON json.RawMessage, tra
 		return "", fmt.Errorf("execution client is not configured")
 	}
 
-	params, err := decodeBashExecParams(argsJSON)
+	request, err := decodeBashExecParams(argsJSON)
 	if err != nil {
 		return "", err
 	}
-	payload, err := t.execution.Call(ctx, "BASH_EXEC", params, traceID)
+	if request.Interactive && !supportsPersistentBashSessions(t.execution) {
+		return "", fmt.Errorf("interactive bash_exec requires native_persistent=true")
+	}
+
+	payload, err := t.execution.Call(ctx, "BASH_EXEC", request.Params, traceID)
 	if err != nil {
 		return "", fmt.Errorf("execution BASH_EXEC failed: %w", err)
 	}
+	if request.Interactive {
+		return encodeInteractiveBashExecPayload(payload)
+	}
+
 	stdout, err := payloadutil.String(payload, "stdout")
 	if err != nil {
 		return "", fmt.Errorf("invalid BASH_EXEC payload: %w", err)
@@ -62,22 +87,153 @@ func (t BashExecTool) Execute(ctx context.Context, argsJSON json.RawMessage, tra
 	return stdout, nil
 }
 
-func decodeBashExecParams(argsJSON json.RawMessage) (map[string]any, error) {
+func decodeBashExecParams(argsJSON json.RawMessage) (bashExecRequest, error) {
 	var args bashExecArgs
 	if err := json.Unmarshal(argsJSON, &args); err != nil {
-		return nil, fmt.Errorf("decode args: %w", err)
-	}
-	command := strings.TrimSpace(args.Command)
-	if command == "" {
-		return nil, fmt.Errorf("command is required")
-	}
-	if args.MaxOutputChars != nil && *args.MaxOutputChars < 1 {
-		return nil, fmt.Errorf("max_output_chars must be >= 1")
+		return bashExecRequest{}, fmt.Errorf("decode args: %w", err)
 	}
 
+	command := strings.TrimSpace(args.Command)
+	if command == "" {
+		return bashExecRequest{}, fmt.Errorf("command is required")
+	}
+
+	interactive := args.Interactive != nil && *args.Interactive
+	if err := validateBashExecArgs(args, interactive); err != nil {
+		return bashExecRequest{}, err
+	}
+
+	return bashExecRequest{
+		Params:      buildBashExecParams(command, args, interactive),
+		Interactive: interactive,
+	}, nil
+}
+
+func validateBashExecArgs(args bashExecArgs, interactive bool) error {
+	if args.MaxOutputChars != nil && *args.MaxOutputChars < 1 {
+		return fmt.Errorf("max_output_chars must be >= 1")
+	}
+	if args.YieldTimeMs != nil && *args.YieldTimeMs < 1 {
+		return fmt.Errorf("yield_time_ms must be >= 1")
+	}
+	if args.TimeoutMs != nil && *args.TimeoutMs < 1 {
+		return fmt.Errorf("timeout_ms must be >= 1")
+	}
+
+	sessionID := strings.TrimSpace(args.SessionID)
+	if !interactive && sessionID != "" {
+		return fmt.Errorf("session_id is only allowed when interactive=true")
+	}
+	if interactive {
+		if args.Login != nil {
+			return fmt.Errorf("login is only allowed when interactive=false")
+		}
+		if args.TimeoutMs != nil {
+			return fmt.Errorf("timeout_ms is only allowed when interactive=false")
+		}
+		return nil
+	}
+	if args.YieldTimeMs != nil || args.TTY != nil {
+		return fmt.Errorf("yield_time_ms and tty are only allowed when interactive=true")
+	}
+	return nil
+}
+
+func buildBashExecParams(command string, args bashExecArgs, interactive bool) map[string]any {
 	params := map[string]any{"command": command}
+	sessionID := strings.TrimSpace(args.SessionID)
+
+	if args.Login != nil {
+		params["login"] = *args.Login
+	}
+	if interactive {
+		params["interactive"] = true
+	}
+	if sessionID != "" {
+		params["session_id"] = sessionID
+	}
+	if args.TTY != nil {
+		params["tty"] = *args.TTY
+	}
+	if args.YieldTimeMs != nil {
+		params["yield_time_ms"] = *args.YieldTimeMs
+	}
+	if args.TimeoutMs != nil {
+		params["timeout_ms"] = *args.TimeoutMs
+	}
 	if args.MaxOutputChars != nil {
 		params["max_output_chars"] = *args.MaxOutputChars
 	}
-	return params, nil
+	return params
+}
+
+func supportsPersistentBashSessions(client ExecutionClient) bool {
+	type persistentSessionSupport interface {
+		SupportsPersistentSessions() bool
+	}
+	support, ok := client.(persistentSessionSupport)
+	return ok && support.SupportsPersistentSessions()
+}
+
+func encodeInteractiveBashExecPayload(payload map[string]any) (string, error) {
+	sessionID, err := payloadutil.String(payload, "session_id")
+	if err != nil {
+		return "", fmt.Errorf("invalid BASH_EXEC payload: %w", err)
+	}
+	stdout, err := payloadutil.String(payload, "stdout")
+	if err != nil {
+		return "", fmt.Errorf("invalid BASH_EXEC payload: %w", err)
+	}
+	stderr, err := payloadutil.String(payload, "stderr")
+	if err != nil {
+		return "", fmt.Errorf("invalid BASH_EXEC payload: %w", err)
+	}
+	running, err := readInteractiveRunning(payload)
+	if err != nil {
+		return "", err
+	}
+
+	result := map[string]any{
+		"session_id": sessionID,
+		"stdout":     stdout,
+		"stderr":     stderr,
+		"running":    running,
+	}
+	if err := attachExitCodeIfExited(payload, running, result); err != nil {
+		return "", err
+	}
+
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		return "", fmt.Errorf("encode interactive BASH_EXEC payload: %w", err)
+	}
+	return string(encoded), nil
+}
+
+func readInteractiveRunning(payload map[string]any) (bool, error) {
+	value, ok := payload["running"]
+	if !ok {
+		return false, fmt.Errorf("invalid BASH_EXEC payload: missing running")
+	}
+	running, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("invalid BASH_EXEC payload: running must be a boolean")
+	}
+	return running, nil
+}
+
+func attachExitCodeIfExited(payload map[string]any, running bool, result map[string]any) error {
+	if running {
+		return nil
+	}
+	value, exists := payload["exit_code"]
+	if !exists {
+		return fmt.Errorf("invalid BASH_EXEC payload: missing exit_code for exited session")
+	}
+	exitCode, ok := payloadutil.NumericToInt(value)
+	if !ok {
+		return fmt.Errorf("invalid BASH_EXEC payload: exit_code must be an integer")
+	}
+	result["exit_code"] = exitCode
+	return nil
 }

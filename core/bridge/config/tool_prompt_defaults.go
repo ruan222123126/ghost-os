@@ -12,7 +12,7 @@ var toolPromptDefaults = map[string]string{
 	"search_files": "Search exact text under a directory inside the sandbox. Returns stable path:line:text matches.",
 	"write_file":   "Create, overwrite, or append a UTF-8 text file inside allowed paths. Missing parent directories are created automatically. `content` may be empty; `mode` is `write` or `append`.",
 	"apply_diff":   "Apply a unified diff to one file inside allowed write paths.",
-	"bash_exec":    "Run a shell command in the sandbox bash shell. Returns stdout only; for larger output, set `max_output_chars` explicitly.",
+	"bash_exec":    "Run a shell command in the sandbox bash shell. Default is one-shot stdout output; set `interactive=true` for persistent session mode with `session_id` reuse.",
 	"script_exec": joinToolPromptLines(
 		"Run a Python script in the sandbox as a fresh one-shot execution.",
 		"",

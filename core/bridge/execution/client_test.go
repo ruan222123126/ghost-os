@@ -107,6 +107,25 @@ func TestLocateNativeBinaryUsesRepositoryCandidateWhenExplicitlyConfigured(t *te
 	}
 }
 
+func TestNewClientWithOptionsExposesPersistentSessionCapability(t *testing.T) {
+	oneShot := NewClientWithOptions(ClientOptions{Persistent: false})
+	persistent := NewClientWithOptions(ClientOptions{Persistent: true})
+
+	type persistentSupport interface {
+		SupportsPersistentSessions() bool
+	}
+
+	oneShotSupport, ok := oneShot.(persistentSupport)
+	if !ok || oneShotSupport.SupportsPersistentSessions() {
+		t.Fatalf("unexpected one-shot persistent support: %T", oneShot)
+	}
+
+	persistentSupportClient, ok := persistent.(persistentSupport)
+	if !ok || !persistentSupportClient.SupportsPersistentSessions() {
+		t.Fatalf("unexpected persistent support: %T", persistent)
+	}
+}
+
 func writeFile(path string, content []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {

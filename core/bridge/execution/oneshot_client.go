@@ -23,6 +23,10 @@ func NewNativeClient() Client {
 	return newNativeClientWithLocator(nativeBinaryLocator{})
 }
 
+func (c *NativeClient) SupportsPersistentSessions() bool {
+	return false
+}
+
 func newNativeClientWithLocator(locator nativeBinaryLocator) *NativeClient {
 	return &NativeClient{locator: locator}
 }

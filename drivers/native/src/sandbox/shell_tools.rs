@@ -31,7 +31,9 @@ pub(crate) fn bash_exec_py(
         return Err(runtime.log_error("bash_exec", args, "command is required"));
     }
 
-    match py.allow_threads(|| bash_exec_impl(runtime.config(), &command, None, max_output_chars)) {
+    match py
+        .allow_threads(|| bash_exec_impl(runtime.config(), &command, true, None, max_output_chars))
+    {
         Ok(result) if result.success => {
             runtime.log_success("bash_exec", args, result.stdout.clone());
             Ok(result.stdout)
@@ -58,9 +60,15 @@ pub(crate) fn bash_exec_result_py(
         return Err(runtime.log_error("bash_exec", args, "command is required"));
     }
 
-    match py
-        .allow_threads(|| bash_exec_impl(runtime.config(), &command, timeout_ms, max_output_chars))
-    {
+    match py.allow_threads(|| {
+        bash_exec_impl(
+            runtime.config(),
+            &command,
+            true,
+            timeout_ms,
+            max_output_chars,
+        )
+    }) {
         Ok(result) => {
             let error = (!result.success).then(|| format_bash_exec_failure(&result));
             runtime.record_tool_call("bash_exec", args, result.stdout.clone(), error);
@@ -73,6 +81,7 @@ pub(crate) fn bash_exec_result_py(
 pub(crate) fn bash_exec_impl(
     config: &SandboxConfig,
     command: &str,
+    login: bool,
     timeout_ms: Option<u64>,
     max_output_chars: Option<usize>,
 ) -> Result<BashExecOutput, String> {
@@ -82,8 +91,8 @@ pub(crate) fn bash_exec_impl(
     }
     let output_limit = resolve_shell_output_chars(config, max_output_chars)?;
 
-    let output =
-        run_shell_command(command, resolve_shell_timeout(config, timeout_ms)).map_err(|err| {
+    let output = run_shell_command(command, login, resolve_shell_timeout(config, timeout_ms))
+        .map_err(|err| {
             if err.kind() == io::ErrorKind::TimedOut {
                 err.to_string()
             } else {
@@ -164,14 +173,19 @@ pub(crate) fn resolve_shell_output_chars(
     }
 }
 
-fn run_shell_command(command: &str, timeout_ms: u64) -> io::Result<Output> {
+fn run_shell_command(command: &str, login: bool, timeout_ms: u64) -> io::Result<Output> {
     let mut process = if cfg!(target_os = "windows") {
         let mut process = Command::new("cmd");
         process.arg("/C").arg(command);
         process
     } else {
         let mut process = Command::new("bash");
-        process.arg("-lc").arg(command);
+        if login {
+            process.arg("-lc");
+        } else {
+            process.arg("-c");
+        }
+        process.arg(command);
         process
     };
 
@@ -239,7 +253,7 @@ where
     })
 }
 
-fn truncate_shell_output(text: &str, max_output_chars: usize) -> String {
+pub(crate) fn truncate_shell_output(text: &str, max_output_chars: usize) -> String {
     let char_count = text.chars().count();
     if char_count <= max_output_chars {
         return text.to_string();
