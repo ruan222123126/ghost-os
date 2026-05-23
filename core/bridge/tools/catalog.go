@@ -116,7 +116,7 @@ func GetToolMetadata() []ToolMetadata {
 		{Name: "search_files", Domain: "sandbox", Tags: []string{"file", "search", "text"}, ShortDesc: "Search exact text across files."},
 		{Name: "write_file", Domain: "sandbox", Tags: []string{"file", "write", "edit"}, ShortDesc: "Create, overwrite, or append a UTF-8 text file."},
 		{Name: "apply_diff", Domain: "sandbox", Tags: []string{"file", "patch", "edit"}, ShortDesc: "Apply a unified diff to one file."},
-		{Name: "bash_exec", Domain: "sandbox", Tags: []string{"shell", "command", "execute"}, ShortDesc: "Run a shell command in sandbox."},
+		{Name: "bash_exec", Domain: "sandbox", Tags: []string{"shell", "command", "execute"}, ShortDesc: "Run a bash command (one-shot by default; interactive for stateful multi-step sessions)."},
 		{Name: "script_exec", Domain: "sandbox", Tags: []string{"execute", "script", "complex"}, ShortDesc: "Run a Python script in sandbox."},
 		{Name: "codex_cli", Domain: "sandbox", Tags: []string{"execute", "codex", "async"}, ShortDesc: "Run Codex CLI asynchronously."},
 		{Name: "web_search", Domain: "web", Tags: []string{"search", "internet", "research"}, ShortDesc: "Search the web."},

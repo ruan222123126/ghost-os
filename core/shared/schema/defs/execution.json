@@ -42,7 +42,67 @@
           "type": "integer",
           "minimum": 1
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "interactive"
+            ],
+            "properties": {
+              "interactive": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "login"
+                  ]
+                },
+                {
+                  "required": [
+                    "timeout_ms"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "interactive": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "session_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "tty"
+                  ]
+                },
+                {
+                  "required": [
+                    "yield_time_ms"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "bashExecPayload": {
       "type": "object",

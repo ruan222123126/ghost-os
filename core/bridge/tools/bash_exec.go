@@ -38,7 +38,7 @@ func (BashExecTool) Name() string {
 }
 
 func (BashExecTool) Description() string {
-	return "Run a shell command in the sandbox bash shell. Default is one-shot stdout output; set interactive=true for persistent session mode with session_id reuse. Non-zero exit fails."
+	return "Run a bash shell command in the sandbox. Use one-shot mode by default; use interactive=true only when you need a persistent shell session (reuse session_id across calls) such as setting env vars, changing directories, or running multi-step scripts. interactive=true does not support tty=true. Non-zero exit fails."
 }
 
 func (BashExecTool) Parameters() json.RawMessage {
@@ -47,15 +47,25 @@ func (BashExecTool) Parameters() json.RawMessage {
 		"properties":{
 			"command":{"type":"string","description":"Shell command to run."},
 			"login":{"type":"boolean","description":"One-shot only. true uses bash -lc (default), false uses bash -c."},
-			"interactive":{"type":"boolean","description":"Enable persistent shell session mode."},
-			"session_id":{"type":"string","description":"Interactive only. Reuse an existing shell session."},
-			"tty":{"type":"boolean","description":"Interactive only. Request TTY-style session."},
-			"yield_time_ms":{"type":"integer","minimum":1,"description":"Interactive only. Wait window before collecting incremental output."},
-			"timeout_ms":{"type":"integer","minimum":1,"description":"One-shot only. Per-call timeout in milliseconds."},
-			"max_output_chars":{"type":"integer","minimum":1,"description":"Optional stdout preview limit override."}
+			"interactive":{"type":"boolean","description":"Enable persistent shell session mode. Use this only when state must persist across calls (cd/export/temporary files). Do not pass timeout_ms or login in interactive mode."},
+			"session_id":{"type":"string","description":"Interactive only. Reuse an existing shell session_id from a previous interactive call. Omit to create a new session_id."},
+			"tty":{"type":"boolean","description":"Interactive only. Not supported yet: do not set tty=true."},
+			"yield_time_ms":{"type":"integer","minimum":1,"description":"Interactive only. Wait window before collecting incremental output (default ~100ms, max 60000ms)."},
+			"timeout_ms":{"type":"integer","minimum":1,"description":"One-shot only. Per-call timeout in milliseconds. Do not pass this when interactive=true."},
+			"max_output_chars":{"type":"integer","minimum":1,"description":"Optional stdout/stderr preview limit override."}
 		},
 		"required":["command"],
-		"additionalProperties":false
+		"additionalProperties":false,
+		"allOf":[
+			{
+				"if":{"required":["interactive"],"properties":{"interactive":{"const":true}}},
+				"then":{"not":{"anyOf":[{"required":["login"]},{"required":["timeout_ms"]}]}}
+			},
+			{
+				"if":{"properties":{"interactive":{"const":false}}},
+				"then":{"not":{"anyOf":[{"required":["session_id"]},{"required":["tty"]},{"required":["yield_time_ms"]}]}}
+			}
+		]
 	}`)
 }
 

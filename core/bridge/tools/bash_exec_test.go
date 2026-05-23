@@ -167,3 +167,17 @@ func TestBashExecToolExecuteRejectsInvalidParamCombination(t *testing.T) {
 		}
 	}
 }
+
+func TestBashExecToolSchemaBlocksCommonInteractiveMisuse(t *testing.T) {
+	tool := NewBashExecTool(nil)
+	raw := tool.Parameters()
+	var schema map[string]any
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("decode schema: %v", err)
+	}
+
+	allOf, ok := schema["allOf"].([]any)
+	if !ok || len(allOf) < 2 {
+		t.Fatalf("expected schema allOf constraints, got: %+v", schema["allOf"])
+	}
+}
