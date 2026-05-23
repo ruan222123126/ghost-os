@@ -101,9 +101,13 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
 }
 
 function useMountedRef(): MutableRefObject<boolean> {
-  const mountedRef = useRef(true);
+  // Strict Mode runs effects twice (mount → cleanup → mount). Initialise to
+  // `false` so the mount handler must set it back to `true` on every mount —
+  // that way the assignment is not "dead code" and won't be auto-removed.
+  const mountedRef = useRef(false);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
