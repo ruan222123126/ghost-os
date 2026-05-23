@@ -1,9 +1,6 @@
 package orchestration
 
 import (
-	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	bridgeTasks "ghost-os/bridge/tasks"
@@ -127,10 +124,6 @@ func decodeActionParamsMap[T any](input map[string]any) (T, error) {
 
 func nextTaskRunAt(task ScheduledTask, now time.Time) (time.Time, error) {
 	return bridgeTasks.NextTaskRunAt(task, now)
-}
-
-type taskExecutorAdapter struct {
-	service *bridgeService
 }
 
 // Implementation moved to task_executor_adapter.go.
