@@ -1,4 +1,5 @@
 import type { ChatCopy } from '@/lib/i18n/messages/chat';
+import type { SessionSourceAssignment as SharedSessionSourceAssignment } from '@/lib/types';
 import {
   UNCLASSIFIED_PARTITION_ID,
   type SessionPartitionView,
@@ -32,6 +33,20 @@ export const SOURCE_PARTITION_IDS: Record<SessionSourceKind, string> = {
   loop: '__source_loop__',
   task: '__source_task__',
 };
+
+export function sessionSourceAssignmentsFromPayload(
+  assignments: Record<string, SharedSessionSourceAssignment>,
+): SessionSourceAssignments {
+  const normalized: SessionSourceAssignments = {};
+  for (const [sessionID, assignment] of Object.entries(assignments)) {
+    normalized[sessionID] = {
+      kind: assignment.kind,
+      ownerID: assignment.owner_id,
+      ownerName: assignment.owner_name,
+    };
+  }
+  return normalized;
+}
 
 const SOURCE_CHILD_PARTITION_SEPARATOR = '::';
 const SOURCE_ORDER: readonly SessionSourceKind[] = ['workflow', 'orchestration', 'loop', 'task'];

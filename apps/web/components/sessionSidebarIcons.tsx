@@ -32,6 +32,14 @@ export const IconPlus: FC<{ size?: number }> = ({ size = 20 }) => (
   </svg>
 );
 
+export const IconTrash: FC<{ size?: number }> = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
+    <path d="M4.6 5.5h10.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <path d="M7.3 5.5V4.2h5.4v1.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    <path d="m6.3 5.5.8 10h5.8l.8-10" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+  </svg>
+);
+
 export const IconX: FC<{ size?: number }> = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path d="M5 5l10 10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />

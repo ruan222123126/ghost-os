@@ -1,5 +1,5 @@
 'use client';
-import { type FC, type MouseEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { type FC, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { buildFlatSessionList } from '@/components/SessionSidebarFlatList';
 import { SessionSidebarHistoryBody } from '@/components/SessionSidebarHistoryBody';
 import {
@@ -47,6 +47,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   const { copy } = useWebLocale();
   const { renameSession, resolveSessionTitle } = props;
   const { enabled: groupingEnabled } = useSessionSidebarGroupingPreference();
+  const scrollElementRef = useRef<HTMLDivElement | null>(null);
   const showBlockingLoading = props.loading && props.sessions.length === 0;
   const [sessionContextMenu, setSessionContextMenu] = useState<SessionContextMenuState>();
   const [renameDialog, setRenameDialog] = useState(EMPTY_RENAME_DIALOG_STATE);
@@ -222,7 +223,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     return null;
   }
   return (
-    <div className="mt-6 flex-1 overflow-y-auto px-3" onContextMenu={onHistoryContextMenu}>
+    <div ref={scrollElementRef} className="mt-6 flex-1 overflow-y-auto px-3" onContextMenu={onHistoryContextMenu}>
       <div className="mb-4 flex items-center gap-2 border-b border-black/5 px-1 pb-1" onContextMenu={onHistoryContextMenu}>
         <span className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.chat.sidebarHistory}</span>
       </div>
@@ -232,6 +233,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       {props.error && !showBlockingLoading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}
       <SessionSidebarHistoryBody
         copy={copy.chat}
+        scrollElementRef={scrollElementRef}
         loading={showBlockingLoading}
         groupingEnabled={groupingEnabled}
         empty={groupingEnabled ? visiblePartitionViews.length === 0 : flatSessions.length === 0}

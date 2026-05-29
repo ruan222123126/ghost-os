@@ -16,7 +16,6 @@ import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
 
-const defaultRefreshIntervalMs = 3000;
 const SESSION_LOAD_COMMIT_ALWAYS = 'always';
 const SESSION_LOAD_COMMIT_NEW_ONLY = 'when-new-session';
 
@@ -27,7 +26,6 @@ interface LoadSessionsOptions {
 
 interface UseSessionsOptions {
   autoRefresh?: boolean;
-  refreshIntervalMs?: number;
 }
 
 interface UseSessionsResult {
@@ -49,7 +47,7 @@ interface ResolvedLoadSessionsOptions {
 }
 
 export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult {
-  const { autoRefresh = false, refreshIntervalMs = defaultRefreshIntervalMs } = options;
+  const { autoRefresh = false } = options;
   const { copy } = useWebLocale();
   const mountedRef = useMountedRef();
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
@@ -74,7 +72,7 @@ export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult
     setError,
   });
 
-  useSessionAutoRefresh({ autoRefresh, refreshIntervalMs, loadSessions });
+  useSessionAutoRefresh({ autoRefresh, loadSessions });
 
   const setCurrentSessionId = useCallback((id: string) => {
     setCurrentSessionIdState(id.trim());
@@ -233,10 +231,9 @@ function useDeleteSession(options: {
 
 function useSessionAutoRefresh(options: {
   autoRefresh: boolean;
-  refreshIntervalMs: number;
   loadSessions: (options?: LoadSessionsOptions) => Promise<void>;
 }) {
-  const { autoRefresh, refreshIntervalMs, loadSessions } = options;
+  const { autoRefresh, loadSessions } = options;
 
   useEffect(() => {
     if (!autoRefresh || typeof window === 'undefined' || typeof document === 'undefined') {
@@ -255,15 +252,13 @@ function useSessionAutoRefresh(options: {
       }
     };
 
-    const intervalID = window.setInterval(refresh, refreshIntervalMs);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
-      window.clearInterval(intervalID);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [autoRefresh, loadSessions, refreshIntervalMs]);
+  }, [autoRefresh, loadSessions]);
 }
 
 function sessionListsEqual(left: SessionMetadata[], right: SessionMetadata[]): boolean {

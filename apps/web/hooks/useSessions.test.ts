@@ -1,11 +1,24 @@
-import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import { act } from 'react-test-renderer';
 import {
   deleteSession as deleteSessionRequest,
   listSessions,
 } from '@/lib/api/sessions/api';
 import type { SessionMetadata } from '@/lib/types';
-import { useSessions } from './useSessions';
+import {
+  advanceBy,
+  createDeferred,
+  createSession,
+  dispatchDocumentEvent,
+  dispatchWindowEvent,
+  flushAsync,
+  installBrowserMocks,
+  renderHook,
+  requireState,
+  setDocumentVisibilityState,
+  snapshotState,
+  unmountRenderer,
+  type HookState,
+} from './useSessions.testHelpers';
 
 jest.mock('@/lib/api/sessions/api', () => ({
   deleteSession: jest.fn(),
@@ -60,7 +73,7 @@ describe('hooks/useSessions', () => {
     await unmountRenderer(renderer);
   });
 
-  it('silently refreshes on interval without toggling loading', async () => {
+  it('does not silently refresh on elapsed time', async () => {
     mockedListSessions
       .mockResolvedValueOnce([createSession('session-1')])
       .mockResolvedValueOnce([createSession('session-2'), createSession('session-1', '2026-05-16T00:01:00Z')]);
@@ -69,7 +82,6 @@ describe('hooks/useSessions', () => {
     const renders: HookState[] = [];
     const renderer = await renderHook({
       autoRefresh: true,
-      refreshIntervalMs: 1000,
       onRender: (state) => {
         latestState = state;
         renders.push(snapshotState(state));
@@ -80,10 +92,9 @@ describe('hooks/useSessions', () => {
     await advanceBy(1000);
     const state = requireState(latestState);
 
-    expect(mockedListSessions).toHaveBeenCalledTimes(2);
-    expect(state.sessions.map((session) => session.id)).toEqual(['session-2', 'session-1']);
-    expect(renders).toHaveLength(1);
-    expect(renders[0]?.loading).toBe(false);
+    expect(mockedListSessions).toHaveBeenCalledTimes(1);
+    expect(state.sessions.map((session) => session.id)).toEqual(['session-1']);
+    expect(renders).toHaveLength(0);
 
     await unmountRenderer(renderer);
   });
@@ -97,7 +108,6 @@ describe('hooks/useSessions', () => {
     let latestState: HookState | null = null;
     const renderer = await renderHook({
       autoRefresh: true,
-      refreshIntervalMs: 1000,
       onRender: (state) => {
         latestState = state;
       },
@@ -132,13 +142,13 @@ describe('hooks/useSessions', () => {
     let latestState: HookState | null = null;
     const renderer = await renderHook({
       autoRefresh: true,
-      refreshIntervalMs: 1000,
       onRender: (state) => {
         latestState = state;
       },
     });
 
-    await advanceBy(1000);
+    dispatchWindowEvent('focus');
+    await flushAsync();
     const state = requireState(latestState);
 
     expect(state.sessions.map((session) => session.id)).toEqual(['session-1']);
@@ -157,14 +167,14 @@ describe('hooks/useSessions', () => {
     let renderCount = 0;
     const renderer = await renderHook({
       autoRefresh: true,
-      refreshIntervalMs: 1000,
       onRender: () => {
         renderCount += 1;
       },
     });
 
     renderCount = 0;
-    await advanceBy(1000);
+    dispatchWindowEvent('focus');
+    await flushAsync();
 
     expect(mockedListSessions).toHaveBeenCalledTimes(2);
     expect(renderCount).toBe(0);
@@ -180,13 +190,13 @@ describe('hooks/useSessions', () => {
     let latestState: HookState | null = null;
     const renderer = await renderHook({
       autoRefresh: true,
-      refreshIntervalMs: 1000,
       onRender: (state) => {
         latestState = state;
       },
     });
 
-    await advanceBy(1000);
+    dispatchWindowEvent('focus');
+    await flushAsync();
 
     expect(mockedListSessions).toHaveBeenCalledTimes(2);
     expect(requireState(latestState).sessions.map((session) => session.id)).toEqual([
@@ -207,13 +217,13 @@ describe('hooks/useSessions', () => {
     let latestState: HookState | null = null;
     const renderer = await renderHook({
       autoRefresh: true,
-      refreshIntervalMs: 1000,
       onRender: (state) => {
         latestState = state;
       },
     });
 
-    await advanceBy(1000);
+    dispatchWindowEvent('focus');
+    await flushAsync();
     dispatchWindowEvent('focus');
     setDocumentVisibilityState('visible');
     dispatchDocumentEvent('visibilitychange');
@@ -254,161 +264,3 @@ describe('hooks/useSessions', () => {
     await unmountRenderer(renderer);
   });
 });
-
-function HookProbe(props: HookProbeProps) {
-  const state = useSessions({
-    autoRefresh: props.autoRefresh,
-    refreshIntervalMs: props.refreshIntervalMs,
-  });
-  props.onRender(state);
-  return null;
-}
-
-interface HookProbeProps {
-  autoRefresh?: boolean;
-  refreshIntervalMs?: number;
-  onRender: (state: HookState) => void;
-}
-
-interface HookState {
-  sessions: SessionMetadata[];
-  currentSessionId: string;
-  loading: boolean;
-  error: string;
-  loadSessions: (options?: {
-    silent?: boolean;
-    commitMode?: 'always' | 'when-new-session';
-  }) => Promise<void>;
-  deleteSession: (id: string) => Promise<void>;
-  createNewSession: () => void;
-  setCurrentSessionId: (id: string) => void;
-}
-
-async function renderHook(props: HookProbeProps) {
-  let renderer: TestRenderer.ReactTestRenderer;
-  await act(async () => {
-    renderer = TestRenderer.create(React.createElement(HookProbe, props));
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-  return renderer!;
-}
-
-async function unmountRenderer(renderer: TestRenderer.ReactTestRenderer) {
-  await act(async () => {
-    renderer.unmount();
-    await Promise.resolve();
-  });
-}
-
-function snapshotState(state: HookState): HookState {
-  return {
-    ...state,
-    sessions: [...state.sessions],
-  };
-}
-
-function createSession(id: string, updatedAt = '2026-05-16T00:00:00Z'): SessionMetadata {
-  return {
-    id,
-    title: '',
-    created_at: '2026-05-16T00:00:00Z',
-    updated_at: updatedAt,
-    message_count: 1,
-    token_count: 1,
-  };
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((nextResolve) => {
-    resolve = nextResolve;
-  });
-  return { promise, resolve };
-}
-
-function requireState(state: HookState | null): HookState {
-  if (!state) {
-    throw new Error('hook state missing');
-  }
-  return state;
-}
-
-async function advanceBy(milliseconds: number) {
-  await act(async () => {
-    jest.advanceTimersByTime(milliseconds);
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
-
-async function flushAsync() {
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-  });
-}
-
-function installBrowserMocks() {
-  const windowTarget = createEventTargetMock();
-  const documentTarget = createEventTargetMock();
-  const documentMock = {
-    ...documentTarget,
-    documentElement: { lang: 'en' },
-    visibilityState: 'visible' as 'visible' | 'hidden',
-  };
-  const windowMock = {
-    ...windowTarget,
-    clearInterval,
-    setInterval,
-  };
-
-  (globalThis as { window?: unknown }).window = windowMock;
-  (globalThis as { document?: unknown }).document = documentMock;
-}
-
-function setDocumentVisibilityState(value: 'visible' | 'hidden') {
-  const documentMock = globalThis.document as unknown as BrowserDocumentMock;
-  documentMock.visibilityState = value;
-}
-
-function dispatchWindowEvent(type: string) {
-  const windowMock = globalThis.window as unknown as BrowserEventTargetMock;
-  windowMock.dispatchEvent({ type } as Event);
-}
-
-function dispatchDocumentEvent(type: string) {
-  const documentMock = globalThis.document as unknown as BrowserEventTargetMock;
-  documentMock.dispatchEvent({ type } as Event);
-}
-
-function createEventTargetMock(): BrowserEventTargetMock {
-  const listeners = new Map<string, Set<EventListener>>();
-  return {
-    addEventListener: jest.fn((type: string, listener: EventListener) => {
-      const current = listeners.get(type) ?? new Set<EventListener>();
-      current.add(listener);
-      listeners.set(type, current);
-    }),
-    removeEventListener: jest.fn((type: string, listener: EventListener) => {
-      listeners.get(type)?.delete(listener);
-    }),
-    dispatchEvent: jest.fn((event: Event) => {
-      for (const listener of listeners.get(event.type) ?? []) {
-        listener(event);
-      }
-      return true;
-    }),
-  };
-}
-
-interface BrowserEventTargetMock {
-  addEventListener: jest.Mock<void, [string, EventListener]>;
-  removeEventListener: jest.Mock<void, [string, EventListener]>;
-  dispatchEvent: jest.Mock<boolean, [Event]>;
-}
-
-interface BrowserDocumentMock extends BrowserEventTargetMock {
-  documentElement: { lang: string };
-  visibilityState: 'visible' | 'hidden';
-}

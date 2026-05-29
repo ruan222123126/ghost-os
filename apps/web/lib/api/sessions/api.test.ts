@@ -1,6 +1,7 @@
 import {
   deleteSession,
   getSession,
+  getSessionSources,
   getSessionSidebarPartitions,
   listSessions,
   putSessionSidebarPartitions,
@@ -9,6 +10,7 @@ import { fetchMock, installFetchMock, mockFetchJSON } from '@/lib/api.test.helpe
 import type {
   SessionDetail,
   SessionMetadata,
+  SessionSourceResolution,
   SessionSidebarPartitionState,
 } from '@/lib/types';
 
@@ -216,6 +218,28 @@ describe('lib/api/sessions/api', () => {
 
     await expect(getSessionSidebarPartitions()).resolves.toEqual(expected);
     expect(fetchMock).toHaveBeenCalledWith('/api/sessions/partitions', expect.any(Object));
+  });
+
+  it('getSessionSources reads /api/sessions/sources with GET', async () => {
+    const expected: SessionSourceResolution = {
+      assignments: {
+        'session-1': {
+          kind: 'workflow',
+          owner_id: 'workflow-1',
+          owner_name: 'Workflow 1',
+        },
+      },
+      hidden_session_ids: ['member-session-1'],
+    };
+
+    mockFetchJSON({
+      status: 'success',
+      payload: expected,
+      error: '',
+    });
+
+    await expect(getSessionSources()).resolves.toEqual(expected);
+    expect(fetchMock).toHaveBeenCalledWith('/api/sessions/sources', expect.any(Object));
   });
 
   it('putSessionSidebarPartitions sends the full state payload', async () => {

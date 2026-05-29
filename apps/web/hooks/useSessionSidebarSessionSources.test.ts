@@ -1,33 +1,29 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { listOrchestrations, listOrchestrationLogs } from '@/lib/api/orchestrations/api';
-import { listTaskLogs, listTasks } from '@/lib/api/tasks/api';
-import type { SessionMetadata, TaskPayload, TaskRunLog } from '@/lib/types';
+import { getSessionSources } from '@/lib/api/sessions/api';
+import type { SessionMetadata, SessionSourceResolution } from '@/lib/types';
 import { useSessionSidebarSessionSources } from './useSessionSidebarSessionSources';
 
-jest.mock('@/lib/api/tasks/api', () => ({
-  listTaskLogs: jest.fn(),
-  listTasks: jest.fn(),
+jest.mock('@/lib/api/sessions/api', () => ({
+  getSessionSources: jest.fn(),
 }));
 
-jest.mock('@/lib/api/orchestrations/api', () => ({
-  listOrchestrationLogs: jest.fn(),
-  listOrchestrations: jest.fn(),
-}));
-
-const mockedListTaskLogs = listTaskLogs as jest.MockedFunction<typeof listTaskLogs>;
-const mockedListTasks = listTasks as jest.MockedFunction<typeof listTasks>;
-const mockedListOrchestrationLogs = listOrchestrationLogs as jest.MockedFunction<typeof listOrchestrationLogs>;
-const mockedListOrchestrations = listOrchestrations as jest.MockedFunction<typeof listOrchestrations>;
+const mockedGetSessionSources = getSessionSources as jest.MockedFunction<typeof getSessionSources>;
 
 describe('hooks/useSessionSidebarSessionSources', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.resetAllMocks();
-    installBrowserMocks();
-    mockedListOrchestrations.mockResolvedValue([]);
-    mockedListTaskLogs.mockResolvedValue([runLog({ session_id_output: 'loop-session' })]);
-    mockedListTasks.mockResolvedValue([loopTask('loop-task')]);
+    mockedGetSessionSources.mockResolvedValue(sessionSources({
+      assignments: {
+        'loop-session': {
+          kind: 'loop',
+          owner_id: 'loop-task',
+          owner_name: 'Loop task',
+        },
+      },
+      hidden_session_ids: [],
+    }));
   });
 
   afterEach(async () => {
@@ -36,16 +32,13 @@ describe('hooks/useSessionSidebarSessionSources', () => {
       await Promise.resolve();
     });
     jest.useRealTimers();
-    delete (globalThis as { window?: unknown }).window;
-    delete (globalThis as { document?: unknown }).document;
   });
 
-  it('keeps polling and resolves known source assignments for visible sessions', async () => {
+  it('loads source assignments through the aggregated session sources endpoint', async () => {
     let latestState: HookState | null = null;
 
     const renderer = await renderHook({
       enabled: true,
-      refreshIntervalMs: 1000,
       sessions: [session('loop-session')],
       requestFailedText: 'request failed',
       onRender: (state) => {
@@ -64,24 +57,36 @@ describe('hooks/useSessionSidebarSessionSources', () => {
       hiddenSessionIDs: [],
       error: '',
     });
-    expect(mockedListTasks).toHaveBeenCalledTimes(1);
-    expect(mockedListTaskLogs).toHaveBeenCalledTimes(1);
+    expect(mockedGetSessionSources).toHaveBeenCalledTimes(1);
 
     await advanceBy(1000);
 
-    expect(mockedListTasks).toHaveBeenCalledTimes(2);
-    expect(mockedListTaskLogs).toHaveBeenCalledTimes(2);
+    expect(mockedGetSessionSources).toHaveBeenCalledTimes(1);
 
     await unmountRenderer(renderer);
   });
 
-  it('filters out run sessions that are not present in the loaded sidebar list', async () => {
+  it('filters source assignments and hidden ids to the loaded sidebar list', async () => {
+    mockedGetSessionSources.mockResolvedValue(sessionSources({
+      assignments: {
+        'visible-session': {
+          kind: 'workflow',
+          owner_id: 'workflow-task',
+          owner_name: 'Workflow task',
+        },
+        'missing-session': {
+          kind: 'task',
+          owner_id: 'task-1',
+          owner_name: 'Task 1',
+        },
+      },
+      hidden_session_ids: ['visible-session', 'missing-session'],
+    }));
     let latestState: HookState | null = null;
 
     const renderer = await renderHook({
       enabled: true,
-      refreshIntervalMs: 1000,
-      sessions: [],
+      sessions: [session('visible-session')],
       requestFailedText: 'request failed',
       onRender: (state) => {
         latestState = state;
@@ -89,8 +94,14 @@ describe('hooks/useSessionSidebarSessionSources', () => {
     });
 
     expect(requireState(latestState)).toMatchObject({
-      assignments: {},
-      hiddenSessionIDs: [],
+      assignments: {
+        'visible-session': {
+          kind: 'workflow',
+          ownerID: 'workflow-task',
+          ownerName: 'Workflow task',
+        },
+      },
+      hiddenSessionIDs: ['visible-session'],
       error: '',
     });
 
@@ -108,7 +119,6 @@ interface HookProbeProps {
   enabled: boolean;
   sessions: SessionMetadata[];
   requestFailedText: string;
-  refreshIntervalMs?: number;
   onRender: (state: HookState) => void;
 }
 
@@ -161,77 +171,6 @@ function session(id: string): SessionMetadata {
   };
 }
 
-function loopTask(id: string): TaskPayload {
-  return {
-    id,
-    task_kind: 'agent_message',
-    message: 'Loop task',
-    agent_mode: 'relay',
-    relay: {
-      stop_policy: 'ai_decides',
-      max_rounds: 3,
-      execution_timeout_ms: 0,
-    },
-    schedule_type: 'interval',
-    interval_seconds: 300,
-    enabled: true,
-    created_at: '2026-05-16T00:00:00Z',
-    updated_at: '2026-05-16T00:00:00Z',
-  };
-}
-
-function runLog(patch: Partial<TaskRunLog>): TaskRunLog {
-  return {
-    task_id: 'loop-task',
-    run_id: 'run-1',
-    trace_id: 'trace-1',
-    task_kind: 'agent_message',
-    scheduled_at: '2026-05-16T00:00:00Z',
-    status: 'success',
-    ...patch,
-  };
-}
-
-function installBrowserMocks() {
-  const windowTarget = createEventTargetMock();
-  const documentTarget = createEventTargetMock();
-  const documentMock = {
-    ...documentTarget,
-    documentElement: { lang: 'zh-CN' },
-    visibilityState: 'visible' as 'visible' | 'hidden',
-  };
-  const windowMock = {
-    ...windowTarget,
-    clearInterval,
-    setInterval,
-  };
-
-  (globalThis as { window?: unknown }).window = windowMock;
-  (globalThis as { document?: unknown }).document = documentMock;
-}
-
-function createEventTargetMock(): BrowserEventTargetMock {
-  const listeners = new Map<string, Set<EventListener>>();
-  return {
-    addEventListener: jest.fn((type: string, listener: EventListener) => {
-      const current = listeners.get(type) ?? new Set<EventListener>();
-      current.add(listener);
-      listeners.set(type, current);
-    }),
-    removeEventListener: jest.fn((type: string, listener: EventListener) => {
-      listeners.get(type)?.delete(listener);
-    }),
-    dispatchEvent: jest.fn((event: Event) => {
-      for (const listener of listeners.get(event.type) ?? []) {
-        listener(event);
-      }
-      return true;
-    }),
-  };
-}
-
-interface BrowserEventTargetMock {
-  addEventListener: jest.Mock<void, [string, EventListener]>;
-  removeEventListener: jest.Mock<void, [string, EventListener]>;
-  dispatchEvent: jest.Mock<boolean, [Event]>;
+function sessionSources(resolution: SessionSourceResolution): SessionSourceResolution {
+  return resolution;
 }

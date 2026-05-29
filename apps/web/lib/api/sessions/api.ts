@@ -1,6 +1,7 @@
 import type {
   SessionDetail,
   SessionMetadata,
+  SessionSourceResolution,
   SessionSidebarPartitionState,
 } from '@/lib/types';
 import { requestJSON } from '@/lib/api/client';
@@ -8,6 +9,7 @@ import { createClientTraceId } from '@/lib/api/trace';
 import {
   parseSessionDetail,
   parseSessionMetadataList,
+  parseSessionSourceResolution,
   parseSessionSidebarPartitionState,
 } from '@/lib/api/sessions/parser';
 
@@ -18,6 +20,10 @@ export interface GetSessionOptions {
 
 export async function listSessions(): Promise<SessionMetadata[]> {
   return requestJSON('/api/sessions', {}, parseSessionMetadataList);
+}
+
+export async function getSessionSources(): Promise<SessionSourceResolution> {
+  return requestJSON('/api/sessions/sources', {}, parseSessionSourceResolution);
 }
 
 export async function getSession(id: string, options: GetSessionOptions = {}): Promise<SessionDetail> {

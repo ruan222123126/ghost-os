@@ -1,11 +1,13 @@
 import {
   parseSessionDetail,
   parseSessionMetadataList,
+  parseSessionSourceResolution,
   parseSessionSidebarPartitionState,
 } from './parser';
 import type {
   SessionDetail,
   SessionMetadata,
+  SessionSourceResolution,
   SessionSidebarPartitionState,
 } from '@/lib/types';
 
@@ -177,6 +179,34 @@ describe('lib/api/sessions/parser', () => {
       partitions: [{ id: 'work', name: 'Work' }],
       assignments: { 'session-1': 'work' },
     });
+  });
+
+  it('parses session source resolution', () => {
+    const payload: SessionSourceResolution = {
+      assignments: {
+        'session-1': {
+          kind: 'orchestration',
+          owner_id: 'orch-1',
+          owner_name: 'Orchestration 1',
+        },
+      },
+      hidden_session_ids: ['member-session-1'],
+    };
+
+    expect(parseSessionSourceResolution(payload)).toEqual(payload);
+  });
+
+  it('rejects invalid session source assignment kinds', () => {
+    expect(() => parseSessionSourceResolution({
+      assignments: {
+        'session-1': {
+          kind: 'unknown',
+          owner_id: 'task-1',
+          owner_name: 'Task 1',
+        },
+      },
+      hidden_session_ids: [],
+    })).toThrow('Invalid session source resolution.assignments.session-1.kind: unexpected value "unknown"');
   });
 
   it('rejects invalid session sidebar partition field types', () => {

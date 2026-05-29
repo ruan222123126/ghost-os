@@ -1,6 +1,7 @@
 'use client';
 
 import { type CSSProperties, type FC } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 import type { ChatCopy } from '@/lib/i18n/messages/chat';
 
 export interface ContextMenuState {
@@ -86,7 +87,10 @@ export const PartitionCreateDialog: FC<PartitionCreateDialogProps> = ({ copy, op
     <>
       <div className="fixed inset-0 z-40 bg-black/35" onMouseDown={onClose} />
       <div className="fixed left-1/2 top-1/2 z-50 w-[320px] -translate-x-1/2 -translate-y-1/2 border border-black/10 bg-white p-4 shadow-xl">
-        <p className="mb-2 text-sm font-bold text-black">{copy.sidebarPartitionCreateTitle}</p>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm font-bold text-black">{copy.sidebarPartitionCreateTitle}</p>
+          <CloseButton className="shrink-0" onClick={onClose} aria-label={copy.sidebarPartitionCancel} />
+        </div>
         <input
           value={value}
           onChange={(event) => onChange(event.target.value)}
@@ -102,7 +106,6 @@ export const PartitionCreateDialog: FC<PartitionCreateDialogProps> = ({ copy, op
         />
         {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className="px-3 py-1.5 text-xs font-semibold text-neutral-600 hover:bg-neutral-100" onClick={onClose}>{copy.sidebarPartitionCancel}</button>
           <button type="button" className="bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800" onClick={onCreate}>{copy.sidebarPartitionCreateConfirm}</button>
         </div>
       </div>

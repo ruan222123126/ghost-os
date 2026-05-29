@@ -65,6 +65,8 @@ export type {
   SessionPushAssistantMessagePayload,
   SessionPushAwaitingHumanPayload,
   SessionPushEvent,
+  SessionSourceAssignment,
+  SessionSourceResolution,
   SessionSidebarPartition,
   SessionSidebarPartitionPutRequest,
   SessionSidebarPartitionState,
@@ -381,7 +383,7 @@ export interface TaskRunLog {
   scheduled_at: string;
   started_at?: string;
   finished_at?: string;
-  status: 'success' | 'incomplete' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
+  status: 'running' | 'success' | 'incomplete' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
   session_id_input?: string;
   session_id_output?: string;
   response_preview?: string;

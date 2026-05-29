@@ -7,6 +7,8 @@ import type {
   SessionMessage,
   SessionMessagePage,
   SessionMetadata,
+  SessionSourceAssignment,
+  SessionSourceResolution,
   SessionSidebarPartition,
   SessionSidebarPartitionState,
   SessionToolCall,
@@ -37,6 +39,12 @@ const SESSION_ROLES = defineStringEnumValues<SessionMessage['role']>({
 const TOOL_RESULT_STATUSES = defineStringEnumValues<SessionToolResult['status']>({
   success: true,
   error: true,
+});
+const SESSION_SOURCE_KINDS = defineStringEnumValues<SessionSourceAssignment['kind']>({
+  workflow: true,
+  orchestration: true,
+  loop: true,
+  task: true,
 });
 
 function parseSessionImageContent(
@@ -245,6 +253,15 @@ function parseSessionSidebarPartition(
   return { id: expectString(record.id, `${label}.id`), name: expectString(record.name, `${label}.name`) };
 }
 
+function parseSessionSourceAssignment(value: unknown, label: string): SessionSourceAssignment {
+  const record = expectRecord(value, label);
+  return {
+    kind: expectStringEnum(record.kind, SESSION_SOURCE_KINDS, `${label}.kind`),
+    owner_id: expectString(record.owner_id, `${label}.owner_id`),
+    owner_name: expectString(record.owner_name, `${label}.owner_name`),
+  };
+}
+
 export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
   if (!Array.isArray(payload)) {
     throw new Error('Invalid sessions list: expected array');
@@ -273,6 +290,27 @@ export function parseSessionSidebarPartitionState(payload: unknown): SessionSide
     version: 1,
     partitions: record.partitions.map((partition, index) => parseSessionSidebarPartition(partition, `session sidebar partition state.partitions[${index}]`)),
     assignments,
+  };
+}
+
+export function parseSessionSourceResolution(payload: unknown): SessionSourceResolution {
+  const record = expectRecord(payload, 'session source resolution');
+  const assignmentsRecord = expectRecord(record.assignments, 'session source resolution.assignments');
+  const assignments: Record<string, SessionSourceAssignment> = {};
+  for (const [sessionID, assignment] of Object.entries(assignmentsRecord)) {
+    assignments[sessionID] = parseSessionSourceAssignment(
+      assignment,
+      `session source resolution.assignments.${sessionID}`,
+    );
+  }
+  if (!Array.isArray(record.hidden_session_ids)) {
+    throw new Error('Invalid session source resolution.hidden_session_ids: expected array');
+  }
+  return {
+    assignments,
+    hidden_session_ids: record.hidden_session_ids.map((sessionID, index) => {
+      return expectString(sessionID, `session source resolution.hidden_session_ids[${index}]`);
+    }),
   };
 }
 
