@@ -40,3 +40,10 @@ func fromAppScreenControlSteps(steps []appworkflows.ScreenControlStep) []workflo
 	}
 	return out
 }
+
+func resolveWorkflowScreenControlStepParams(
+	step workflowScreenControlStep,
+	lastFindIconOutput any,
+) (map[string]any, error) {
+	return appworkflows.ResolveScreenControlStepParams(toAppScreenControlStep(step), lastFindIconOutput)
+}

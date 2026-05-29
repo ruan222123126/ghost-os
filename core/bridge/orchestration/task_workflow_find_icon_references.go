@@ -14,6 +14,22 @@ func resolveWorkflowFindIconString(input string, findIconOutput any) (string, er
 	return workflowdomain.ResolveFindIconString(input, findIconOutput)
 }
 
+func resolveWorkflowFindIconTemplateValue(value any, findIcon any) (any, error) {
+	return workflowdomain.ResolveFindIconTemplateValue(value, findIcon)
+}
+
+func resolveWorkflowFindIconTemplateString(input string, findIcon any) (any, error) {
+	return workflowdomain.ResolveFindIconTemplateString(input, findIcon)
+}
+
+func resolveWorkflowFindIconPath(path string, findIcon any) (any, bool, error) {
+	return workflowdomain.ResolveFindIconPath(path, findIcon)
+}
+
+func stringifyWorkflowFindIconTemplateValue(value any) string {
+	return workflowdomain.StringifyFindIconTemplateValue(value)
+}
+
 func extractWorkflowFindIconOutput(node WorkflowNode, outputValue any) (any, bool) {
 	return workflowdomain.ExtractFindIconOutput(node, screenControlToolID, outputValue)
 }

@@ -71,6 +71,9 @@ func (r relayModeRunner) ExecuteTask(
 	if err != nil {
 		return relayModeResult{}, err
 	}
+	if err := r.saveRelaySessionShell(sess, task.SessionID); err != nil {
+		return relayModeResult{}, err
+	}
 	execCtx, cleanup, err := r.register(ctx, sess.ID, traceID)
 	if err != nil {
 		return relayModeResult{}, err
@@ -99,7 +102,11 @@ func (r relayModeRunner) buildDependencies(runtimeOverrides *TaskRuntimeOverride
 	return deps, err
 }
 
-func loadOrCreateRelaySession(store *session.Store, sessionID string, systemPrompt string) (*session.Session, error) {
+func loadOrCreateRelaySession(
+	store *session.Store,
+	sessionID string,
+	systemPrompt string,
+) (*session.Session, error) {
 	if store == nil {
 		return nil, errors.New("session store is not configured")
 	}
@@ -107,6 +114,13 @@ func loadOrCreateRelaySession(store *session.Store, sessionID string, systemProm
 		return session.NewSession(systemPrompt), nil
 	}
 	return store.Load(strings.TrimSpace(sessionID))
+}
+
+func (r relayModeRunner) saveRelaySessionShell(sess *session.Session, taskSessionID string) error {
+	if sess == nil || strings.TrimSpace(taskSessionID) != "" {
+		return nil
+	}
+	return r.sessionStore.Save(sess)
 }
 
 func (r relayModeRunner) register(ctx context.Context, sessionID string, traceID string) (context.Context, func(), error) {
@@ -144,4 +158,37 @@ func (r relayModeRunner) run(ctx context.Context, req relayRunDeps) (relayModeRe
 	}
 	result.SessionID = req.session.ID
 	return result, nil
+}
+
+func (r relayModeRunner) finishErroredRun(sess *session.Session, runErr error) error {
+	status := relayModeStatusError
+	stoppedBy := relayModeStopError
+	if errors.Is(runErr, context.Canceled) {
+		status = relayModeStatusCancelled
+		stoppedBy = relayModeStopCancelled
+	}
+	sess.FinishRelayRuntime(status, stoppedBy, "", "")
+	return r.sessionStore.Save(sess)
+}
+
+func relayResultStatus(stoppedBy string) string {
+	switch stoppedBy {
+	case relayModeStopCompleted:
+		return relayModeStatusCompleted
+	case relayModeStopMaxRounds:
+		return relayModeStatusIncomplete
+	case relayModeStopCancelled:
+		return relayModeStatusCancelled
+	default:
+		return relayModeStatusError
+	}
+}
+
+func cloneRelayRecords(runtime *session.RelayRuntime) []session.RelayRecord {
+	if runtime == nil || len(runtime.Records) == 0 {
+		return nil
+	}
+	out := make([]session.RelayRecord, len(runtime.Records))
+	copy(out, runtime.Records)
+	return out
 }

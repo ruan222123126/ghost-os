@@ -197,13 +197,6 @@ func (s *bridgeService) unsupportedActionError(action string) error {
 	return s.actionRouter.unsupportedActionError(action)
 }
 
-func (s *bridgeService) registerAction(action string, handler actionHandler) {
-	if s == nil || s.actionRouter == nil {
-		return
-	}
-	s.actionRouter.register(action, handler)
-}
-
 func (s *bridgeService) actionHandler(action string) (actionHandler, bool) {
 	if s == nil || s.actionRouter == nil {
 		return nil, false

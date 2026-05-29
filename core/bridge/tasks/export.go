@@ -12,6 +12,7 @@ const (
 	taskScheduleTypeInterval     = ScheduleTypeInterval
 	taskScheduleTypeCron         = ScheduleTypeCron
 	defaultTaskRunLogRetention   = DefaultRunLogRetention
+	taskRunStatusRunning         = RunStatusRunning
 	taskRunStatusSuccess         = RunStatusSuccess
 	taskRunStatusCancelled       = RunStatusCancelled
 	taskRunStatusError           = RunStatusError

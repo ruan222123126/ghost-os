@@ -37,6 +37,23 @@ func (r orchestrationTaskRunner) groupExecutor() apporchestrations.ModeGroupExec
 	}
 }
 
+func (r orchestrationTaskRunner) standardGroupExecutor() apporchestrations.StandardGroupExecutor {
+	return apporchestrations.StandardGroupExecutor{Dispatcher: r.roundDispatcher()}
+}
+
+func (r orchestrationTaskRunner) ownerGroupExecutor() apporchestrations.OwnerGroupExecutor {
+	return apporchestrations.OwnerGroupExecutor{
+		Decisions: r.ownerDecisionRunner(),
+		Dispatches: apporchestrations.DispatchExecutor{
+			Dispatcher: r.roundDispatcher(),
+		},
+	}
+}
+
+func (r orchestrationTaskRunner) roundDispatcher() apporchestrations.RoundDispatcher {
+	return apporchestrations.RoundDispatcher{Members: r.memberRunner()}
+}
+
 func (r orchestrationTaskRunner) execute(
 	ctx context.Context,
 	definition *OrchestrationDefinition,

@@ -98,13 +98,16 @@ func BuildPayloads(
 }
 
 func PayloadFromRecord(item bridgeconfig.ToolRecord, inputSchema map[string]any) api.ToolPayload {
-	return api.ToolPayload{
+	payload := api.ToolPayload{
 		Name:            item.Name,
 		Enabled:         item.Enabled,
 		PromptOverride:  strings.TrimSpace(item.PromptOverride),
 		SandboxMemoryMB: CloneOptionalInt(item.SandboxMemoryMB),
-		InputSchema:     inputSchema,
 	}
+	if inputSchema != nil {
+		payload.InputSchema = inputSchema
+	}
+	return payload
 }
 
 func UpdateRequestToStore(name string, req api.ToolUpdateRequest) bridgeconfig.ToolUpdateRequest {

@@ -6,47 +6,46 @@ import (
 	"time"
 
 	"ghost-os/bridge/agent"
-	traceapp "ghost-os/bridge/orchestration/internal/app/trace"
-	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
 
 var (
-	ErrSessionInflight = traceapp.ErrSessionInflight
-	ErrRunNotFound     = traceapp.ErrRunNotFound
-	ErrRunCancelled    = traceapp.ErrRunCancelled
-	ErrRunRegistryNil  = traceapp.ErrRunRegistryNil
+	ErrSessionInflight = internaltrace.ErrSessionInflight
+	ErrRunNotFound     = internaltrace.ErrRunNotFound
+	ErrRunCancelled    = internaltrace.ErrRunCancelled
+	ErrRunRegistryNil  = internaltrace.ErrRunRegistryNil
 )
 
 const (
-	sessionPushAssistantMessage = traceapp.SessionPushAssistantMessage
-	sessionPushAwaitingHuman    = traceapp.SessionPushAwaitingHuman
-	sessionPushRunStarted       = traceapp.SessionPushRunStarted
-	sessionPushCompletionDelta  = traceapp.SessionPushCompletionDelta
-	sessionPushToolCallStarted  = traceapp.SessionPushToolCallStarted
-	sessionPushToolCallFinished = traceapp.SessionPushToolCallFinished
-	sessionPushError            = traceapp.SessionPushError
-	sessionPushDone             = traceapp.SessionPushDone
+	sessionPushAssistantMessage = internaltrace.SessionPushAssistantMessage
+	sessionPushAwaitingHuman    = internaltrace.SessionPushAwaitingHuman
+	sessionPushRunStarted       = internaltrace.SessionPushRunStarted
+	sessionPushCompletionDelta  = internaltrace.SessionPushCompletionDelta
+	sessionPushToolCallStarted  = internaltrace.SessionPushToolCallStarted
+	sessionPushToolCallFinished = internaltrace.SessionPushToolCallFinished
+	sessionPushError            = internaltrace.SessionPushError
+	sessionPushDone             = internaltrace.SessionPushDone
 )
 
-type RunHandle = traceapp.RunHandle
-type RunRegistry = traceapp.RunRegistry
-type sessionPushEventType = traceapp.SessionPushEventType
-type sessionPushEvent = traceapp.SessionPushEvent
-type sessionPushHub = traceapp.SessionPushHub
-type streamTerminalBuffer = traceapp.StreamTerminalBuffer
+type RunHandle = internaltrace.RunHandle
+type RunRegistry = internaltrace.RunRegistry
+type sessionPushEventType = internaltrace.SessionPushEventType
+type sessionPushEvent = internaltrace.SessionPushEvent
+type sessionPushHub = internaltrace.SessionPushHub
+type streamTerminalBuffer = internaltrace.StreamTerminalBuffer
 
 func NewRunRegistry() *RunRegistry {
-	return traceapp.NewRunRegistry()
+	return internaltrace.NewRunRegistry()
 }
 
 func newSessionPushHub() *sessionPushHub {
-	return traceapp.NewSessionPushHub()
+	return internaltrace.NewSessionPushHub()
 }
 
 func newSessionStreamBroadcastSink(sink streaming.Sink, hub *sessionPushHub) streaming.Sink {
-	return traceapp.NewSessionStreamBroadcastSink(sink, hub)
+	return internaltrace.NewSessionStreamBroadcastSink(sink, hub)
 }
 
 func newSessionDraftCheckpointSink(
@@ -54,15 +53,15 @@ func newSessionDraftCheckpointSink(
 	sessionStore *session.Store,
 	sess *session.Session,
 ) streaming.Sink {
-	return traceapp.NewSessionDraftCheckpointSink(sink, sessionStore, sess)
+	return internaltrace.NewSessionDraftCheckpointSink(sink, sessionStore, sess)
 }
 
 func ensureEventSink(sink streaming.Sink) streaming.Sink {
-	return traceapp.EnsureEventSink(sink)
+	return internaltrace.EnsureEventSink(sink)
 }
 
 func emitStreamEvent(ctx context.Context, sink streaming.Sink, event streaming.Event) error {
-	return traceapp.EmitStreamEvent(ctx, sink, event)
+	return internaltrace.EmitStreamEvent(ctx, sink, event)
 }
 
 func emitStreamErrorEvent(
@@ -75,15 +74,15 @@ func emitStreamErrorEvent(
 	statusCode int,
 	err error,
 ) error {
-	return traceapp.EmitStreamErrorEvent(ctx, sink, traceID, turn, stepID, sessionID, statusCode, err)
+	return internaltrace.EmitStreamErrorEvent(ctx, sink, traceID, turn, stepID, sessionID, statusCode, err)
 }
 
 type eventTurnTracker struct {
-	inner *traceapp.EventTurnTracker
+	inner *internaltrace.EventTurnTracker
 }
 
 func newEventTurnTracker(sink streaming.Sink) *eventTurnTracker {
-	return &eventTurnTracker{inner: traceapp.NewEventTurnTracker(sink)}
+	return &eventTurnTracker{inner: internaltrace.NewEventTurnTracker(sink)}
 }
 
 func (t *eventTurnTracker) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
@@ -101,11 +100,11 @@ func (t *eventTurnTracker) finalAssistantTurn() int {
 }
 
 func newStreamTerminalBuffer(sink streaming.Sink) *streamTerminalBuffer {
-	return traceapp.NewStreamTerminalBuffer(sink)
+	return internaltrace.NewStreamTerminalBuffer(sink)
 }
 
 func newSessionStreamLifecyclePayloadBuilder(turn *sessionTurnState) agent.StreamLifecyclePayloadBuilder {
-	return traceapp.NewSessionStreamLifecyclePayloadBuilder(turn.currentSessionID, parseSessionEndForStream)
+	return internaltrace.NewSessionStreamLifecyclePayloadBuilder(turn.currentSessionID, parseSessionEndForStream)
 }
 
 func parseSessionEndForStream(response string) (string, bool, error) {
@@ -114,5 +113,5 @@ func parseSessionEndForStream(response string) (string, bool, error) {
 }
 
 func projectSessionTurnDraft(sess *session.Session, event streaming.Event, at time.Time) bool {
-	return sessionturn.ProjectTurnDraft(sess, event, at)
+	return internaltrace.ProjectTurnDraft(sess, event, at)
 }

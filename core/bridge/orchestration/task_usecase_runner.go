@@ -3,6 +3,7 @@ package orchestration
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
@@ -76,6 +77,60 @@ func ensureTaskMatchesScope(task ScheduledTask, scope string) error {
 
 func (r taskMutationRunner) RunNow(params taskIDParams, traceID string) (taskRunPayload, error) {
 	return r.inner().RunNow(params, traceID)
+}
+
+func (r taskMutationRunner) Delete(params taskIDParams) (taskDeleteResponse, error) {
+	return r.inner().Delete(params)
+}
+
+func (r taskMutationRunner) Create(params taskCreateParams) (taskPayload, error) {
+	return r.inner().Create(params)
+}
+
+func (r taskMutationRunner) Update(params taskUpdateParams) (taskPayload, error) {
+	return r.inner().Update(params)
+}
+
+func cloneScheduledTask(task ScheduledTask) ScheduledTask {
+	return apptasks.CloneScheduledTask(task)
+}
+
+func (r taskQueryRunner) List(scope string) ([]taskPayload, error) {
+	return r.inner.List(scope)
+}
+
+func (r taskQueryRunner) Get(params taskIDParams) (taskPayload, error) {
+	return r.inner.Get(params)
+}
+
+func (r taskQueryRunner) Logs(params taskLogsParams) ([]taskRunLogPayload, error) {
+	return r.inner.Logs(params)
+}
+
+func (s *bridgeService) requireTaskQueryRunner() (taskQueryRunner, int, error) {
+	store, code, err := s.requireTaskStore()
+	if err != nil {
+		return taskQueryRunner{}, code, err
+	}
+	return taskQueryRunner{inner: apptasks.QueryRunner{Store: store}}, http.StatusOK, nil
+}
+
+func (r taskMutationRunner) ensureTaskSessionExists(taskKind string, sessionID string) error {
+	if normalizeTaskKind(taskKind) != taskKindAgentMessage {
+		return nil
+	}
+	id := strings.TrimSpace(sessionID)
+	if id == "" || r.sessionStore == nil {
+		return nil
+	}
+	sess, err := r.sessionStore.Load(id)
+	if err != nil {
+		return err
+	}
+	if sess.IsEnded() {
+		return errSessionEnded
+	}
+	return nil
 }
 
 func (r taskMutationRunner) inner() apptasks.MutationRunner {

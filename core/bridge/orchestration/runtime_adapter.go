@@ -27,6 +27,26 @@ type AgentRuntimeFactory interface {
 	Build(store bridgeconfig.Store) (agentRuntimeDependencies, error)
 }
 
+type RuntimeDependencies = agentRuntimeDependencies
+type RuntimeCompleter = agent.Completer
+type RuntimeToolRegistry = tools.Registry
+
+func NewRuntimeDependencies(
+	cfg bridgeconfig.Config,
+	client RuntimeCompleter,
+	registry *RuntimeToolRegistry,
+	systemPrompt string,
+	cleanup func(),
+) RuntimeDependencies {
+	return agentRuntimeDependencies{
+		cfg:          cfg,
+		client:       client,
+		registry:     registry,
+		systemPrompt: systemPrompt,
+		cleanup:      cleanup,
+	}
+}
+
 // runtimeFactoryAdapter 将 runtime 包导出的工厂转换为 orchestration 内部依赖结构，
 // 以便保持编排层测试替身和字段级装配不变。
 type runtimeFactoryAdapter struct {

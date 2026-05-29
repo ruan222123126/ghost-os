@@ -1,6 +1,13 @@
 package orchestration
 
-import apptools "ghost-os/bridge/orchestration/internal/app/tools"
+import (
+	"context"
+	"encoding/json"
+
+	"ghost-os/bridge/llm"
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
+	"ghost-os/bridge/tools"
+)
 
 const (
 	busActionToolList   = apptools.ActionList
@@ -41,4 +48,121 @@ func mapToolConfigError(err error) int {
 
 func cloneOptionalInt(raw *int) *int {
 	return apptools.CloneOptionalInt(raw)
+}
+
+func (s *bridgeService) listToolInputSchemas() (map[string]map[string]any, error) {
+	if s == nil || s.runtimeFactory == nil {
+		return nil, nil
+	}
+	deps, err := s.runtimeFactory.Build(s.configStore)
+	if err != nil {
+		return nil, err
+	}
+	defer deps.Close()
+	if deps.registry == nil {
+		return map[string]map[string]any{}, nil
+	}
+	return collectToolSchemas(deps.registry.ToolDefs())
+}
+
+func collectToolSchemas(defs []llm.ToolDef) (map[string]map[string]any, error) {
+	return apptools.CollectSchemas(defs)
+}
+
+func decodeToolSchema(raw json.RawMessage, toolName string) (map[string]any, error) {
+	return apptools.DecodeSchema(raw, toolName)
+}
+
+func schemaByToolName(schemasByName map[string]map[string]any, toolName string) (map[string]any, bool) {
+	schema := apptools.SchemaByToolName(schemasByName, toolName)
+	return schema, schema != nil
+}
+
+func buildFindIconPreviewToolArgs(req findIconPreviewRequest) map[string]any {
+	return apptools.BuildFindIconPreviewToolArgs(req)
+}
+
+func executeFindIconPreviewHover(
+	ctx context.Context,
+	tool tools.Tool,
+	payload findIconPreviewPayload,
+	traceID string,
+) error {
+	return apptools.ExecuteFindIconPreviewHover(ctx, tool, payload, traceID)
+}
+
+func buildFindIconPreviewHoverToolArgs(x int, y int, displayID *int) map[string]any {
+	return apptools.BuildFindIconPreviewHoverToolArgs(x, y, displayID)
+}
+
+func firstFindIconMatchCenter(matches []map[string]any) (int, int, error) {
+	return apptools.FirstFindIconMatchCenter(matches)
+}
+
+func decodeFindIconPreviewPayload(raw string) (findIconPreviewPayload, error) {
+	return apptools.DecodeFindIconPreviewPayload(raw)
+}
+
+func parseFindIconMatchList(raw any) ([]map[string]any, error) {
+	return apptools.ParseFindIconMatchList(raw)
+}
+
+func parseOptionalFindIconInt(raw any) (int, bool) {
+	return apptools.ParseOptionalFindIconInt(raw)
+}
+
+func parseOptionalFindIconRegion(raw any) (findIconPreviewRegion, bool, error) {
+	return apptools.ParseOptionalFindIconRegion(raw)
+}
+
+const mousePositionAction = apptools.MousePositionAction
+
+func (s *bridgeService) executeMousePositionActionResult(
+	ctx context.Context,
+	_ mousePositionRequest,
+	traceID string,
+) (ServiceResult, error) {
+	payload, err := s.runMousePosition(ctx, traceID)
+	if err != nil {
+		logAction(traceID, mousePositionAction, "error", err)
+		return ServiceResult{}, err
+	}
+	logAction(traceID, mousePositionAction, "success", nil)
+	return serviceResultSuccess(payload), nil
+}
+
+func (s *bridgeService) runMousePosition(
+	ctx context.Context,
+	traceID string,
+) (mousePositionPayload, error) {
+	tool, cleanup, err := s.screenControlTool()
+	if err != nil {
+		return mousePositionPayload{}, err
+	}
+	defer cleanup()
+	return executeMousePositionToolCall(ctx, tool, traceID)
+}
+
+func executeMousePositionToolCall(
+	ctx context.Context,
+	tool tools.Tool,
+	traceID string,
+) (mousePositionPayload, error) {
+	return apptools.ExecuteMousePositionToolCall(ctx, tool, traceID)
+}
+
+func buildMousePositionToolArgs() map[string]any {
+	return apptools.BuildMousePositionToolArgs()
+}
+
+func decodeMousePositionPayload(raw string) (mousePositionPayload, error) {
+	return apptools.DecodeMousePositionPayload(raw)
+}
+
+func parseOptionalMousePositionInt(raw any) (int, bool) {
+	return apptools.ParseOptionalMousePositionInt(raw)
+}
+
+func parseOptionalMousePositionFloat(raw any) (float64, bool) {
+	return apptools.ParseOptionalMousePositionFloat(raw)
 }

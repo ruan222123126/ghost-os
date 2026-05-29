@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 
-	appservice "ghost-os/bridge/orchestration/internal/app/service"
+	"ghost-os/bridge/orchestration/internal/dispatch"
 )
 
 type serviceActionRouter struct {
-	inner *appservice.ActionRouter
+	inner *dispatch.Router
 }
 
 func newServiceActionRouter(initialCapacity int) *serviceActionRouter {
 	return &serviceActionRouter{
-		inner: appservice.NewActionRouter(initialCapacity),
+		inner: dispatch.NewRouter(initialCapacity),
 	}
 }
 
@@ -21,7 +21,7 @@ func (r *serviceActionRouter) register(action string, handler actionHandler) {
 	if r == nil || r.inner == nil {
 		return
 	}
-	r.inner.Register(action, appservice.ActionHandler(handler))
+	r.inner.Register(action, dispatch.Handler(handler))
 }
 
 func (r *serviceActionRouter) handler(action string) (actionHandler, bool) {
@@ -45,4 +45,20 @@ func (r *serviceActionRouter) actionNames() []string {
 		return nil
 	}
 	return r.inner.ActionNames()
+}
+
+func decodeActionParams[T any](raw json.RawMessage) (T, error) {
+	return dispatch.DecodeActionParams[T](raw)
+}
+
+func validateBusRequest(req apiRequest) error {
+	return dispatch.ValidateBusRequest(req)
+}
+
+func decodeParams(raw json.RawMessage, target any) error {
+	return dispatch.DecodeParams(raw, target)
+}
+
+func logAction(traceID string, action string, status string, err error) {
+	dispatch.LogAction(traceID, action, status, err)
 }

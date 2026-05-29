@@ -15,6 +15,7 @@ const (
 	ScheduleTypeCron     = "cron"
 
 	DefaultRunLogRetention   = 100
+	RunStatusRunning         = "running"
 	RunStatusSuccess         = "success"
 	RunStatusIncomplete      = "incomplete"
 	RunStatusCancelled       = "cancelled"

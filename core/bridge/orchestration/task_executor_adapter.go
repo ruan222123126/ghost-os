@@ -2,10 +2,12 @@ package orchestration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"ghost-os/bridge/session"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
@@ -20,7 +22,60 @@ type taskNodeResultTimestamps struct {
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
 	result := a.executeTask(ctx, task, traceID)
-	return a.attachTaskRunTranscript(task, traceID, result)
+	return a.attachTaskRunTranscript(ctx, task, traceID, result)
+}
+
+func (a taskExecutorAdapter) PrepareRunSession(
+	ctx context.Context,
+	task ScheduledTask,
+	_ string,
+) (bridgeTasks.RunSession, error) {
+	if id := strings.TrimSpace(task.SessionID); id != "" {
+		return bridgeTasks.RunSession{SessionID: id}, nil
+	}
+	if !shouldPrecreateTaskRunSession(task.TaskKind) {
+		return bridgeTasks.RunSession{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return bridgeTasks.RunSession{}, err
+	}
+	return a.saveTaskRunSession(task, "")
+}
+
+func (a taskExecutorAdapter) saveTaskRunSession(
+	task ScheduledTask,
+	systemPrompt string,
+) (bridgeTasks.RunSession, error) {
+	if a.service == nil || a.service.sessionStore == nil {
+		return bridgeTasks.RunSession{}, errors.New("task run session store is not configured")
+	}
+	sess := session.NewSession(systemPrompt)
+	sess.Title = taskRunSessionTitle(task)
+	if err := a.service.sessionStore.Save(sess); err != nil {
+		return bridgeTasks.RunSession{}, err
+	}
+	return bridgeTasks.RunSession{SessionID: sess.ID}, nil
+}
+
+func shouldPrecreateTaskRunSession(taskKind string) bool {
+	switch normalizeTaskKind(taskKind) {
+	case taskKindAgentMessage, taskKindWorkflow, taskKindOrchestration:
+		return true
+	default:
+		return false
+	}
+}
+
+func taskRunSessionTitle(task ScheduledTask) string {
+	kind := normalizeTaskKind(task.TaskKind)
+	name := strings.TrimSpace(task.Name)
+	if name == "" {
+		name = strings.TrimSpace(task.ID)
+	}
+	if name == "" {
+		return kind + " run"
+	}
+	return kind + ": " + name
 }
 
 func (a taskExecutorAdapter) executeTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {

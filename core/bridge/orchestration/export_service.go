@@ -158,6 +158,10 @@ func (s *Service) ExecuteSessionsListAction(traceID string) (ServiceResult, erro
 	return s.inner.executeSessionsListAction(traceID)
 }
 
+func (s *Service) ExecuteSessionSourcesAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeSessionSourcesAction(traceID)
+}
+
 func (s *Service) ExecuteSessionGetAction(params SessionGetParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionGetAction(params, traceID)
 }

@@ -3,42 +3,45 @@ package orchestration
 import (
 	"time"
 
+	"ghost-os/bridge/orchestration/internal/adapters/toolregistry"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 const (
-	taskScheduleTypeInterval     = bridgeTasks.ScheduleTypeInterval
-	taskScheduleTypeCron         = bridgeTasks.ScheduleTypeCron
-	defaultTaskRunLogRetention   = bridgeTasks.DefaultRunLogRetention
-	taskRunStatusSuccess         = bridgeTasks.RunStatusSuccess
-	taskRunStatusIncomplete      = bridgeTasks.RunStatusIncomplete
-	taskRunStatusCancelled       = bridgeTasks.RunStatusCancelled
-	taskRunStatusError           = bridgeTasks.RunStatusError
-	taskRunStatusSkipped         = bridgeTasks.RunStatusSkipped
-	taskRunStatusAwaitingHuman   = bridgeTasks.RunStatusAwaitingHuman
-	maxTaskResponsePreviewRunes  = bridgeTasks.MaxResponsePreviewRunes
-	taskKindAgentMessage         = bridgeTasks.KindAgentMessage
-	taskKindSystemAction         = bridgeTasks.KindSystemAction
-	taskKindWorkflow             = bridgeTasks.KindWorkflow
-	taskKindOrchestration        = bridgeTasks.KindOrchestration
-	taskAgentModeSingle          = bridgeTasks.AgentModeSingle
-	taskAgentModeRelay           = bridgeTasks.AgentModeRelay
-	taskRelayStopPolicyAIDecides = bridgeTasks.RelayStopPolicyAIDecides
-	taskRelayStopPolicyMaxRounds = bridgeTasks.RelayStopPolicyMaxRounds
-	orchestrationNodeTypeStart   = bridgeTasks.OrchestrationNodeTypeStart
-	orchestrationNodeTypeGroup   = bridgeTasks.OrchestrationNodeTypeGroup
-	orchestrationNodeTypeAgent   = bridgeTasks.OrchestrationNodeTypeAgent
-	orchestrationNodeTypeEnd     = bridgeTasks.OrchestrationNodeTypeEnd
-	orchestrationEdgeKindControl = bridgeTasks.OrchestrationEdgeKindControl
-	orchestrationEdgeKindMember  = bridgeTasks.OrchestrationEdgeKindMember
-	orchestrationModeSequential  = bridgeTasks.OrchestrationSpeakingModeSequential
-	orchestrationModeParallel    = bridgeTasks.OrchestrationSpeakingModeParallel
-	orchestrationModeOwner       = bridgeTasks.OrchestrationSpeakingModeOwner
-	taskLoadIssueInvalidFilename = bridgeTasks.LoadIssueInvalidFilename
-	taskLoadIssueReadError       = bridgeTasks.LoadIssueReadError
-	taskLoadIssueDecodeError     = bridgeTasks.LoadIssueDecodeError
-	taskLoadIssueInvalidConfig   = bridgeTasks.LoadIssueInvalidConfig
-	taskLoadIssueIDMismatch      = bridgeTasks.LoadIssueIDMismatch
+	taskScheduleTypeInterval      = bridgeTasks.ScheduleTypeInterval
+	taskScheduleTypeCron          = bridgeTasks.ScheduleTypeCron
+	defaultTaskRunLogRetention    = bridgeTasks.DefaultRunLogRetention
+	taskRunStatusRunning          = bridgeTasks.RunStatusRunning
+	taskRunStatusSuccess          = bridgeTasks.RunStatusSuccess
+	taskRunStatusIncomplete       = bridgeTasks.RunStatusIncomplete
+	taskRunStatusCancelled        = bridgeTasks.RunStatusCancelled
+	taskRunStatusError            = bridgeTasks.RunStatusError
+	taskRunStatusSkipped          = bridgeTasks.RunStatusSkipped
+	taskRunStatusAwaitingHuman    = bridgeTasks.RunStatusAwaitingHuman
+	maxTaskResponsePreviewRunes   = bridgeTasks.MaxResponsePreviewRunes
+	taskKindAgentMessage          = bridgeTasks.KindAgentMessage
+	taskKindSystemAction          = bridgeTasks.KindSystemAction
+	taskKindWorkflow              = bridgeTasks.KindWorkflow
+	taskKindOrchestration         = bridgeTasks.KindOrchestration
+	taskAgentModeSingle           = bridgeTasks.AgentModeSingle
+	taskAgentModeRelay            = bridgeTasks.AgentModeRelay
+	taskRelayStopPolicyAIDecides  = bridgeTasks.RelayStopPolicyAIDecides
+	taskRelayStopPolicyMaxRounds  = bridgeTasks.RelayStopPolicyMaxRounds
+	orchestrationNodeTypeStart    = bridgeTasks.OrchestrationNodeTypeStart
+	orchestrationNodeTypeGroup    = bridgeTasks.OrchestrationNodeTypeGroup
+	orchestrationNodeTypeAgent    = bridgeTasks.OrchestrationNodeTypeAgent
+	orchestrationNodeTypeEnd      = bridgeTasks.OrchestrationNodeTypeEnd
+	orchestrationEdgeKindControl  = bridgeTasks.OrchestrationEdgeKindControl
+	orchestrationEdgeKindMember   = bridgeTasks.OrchestrationEdgeKindMember
+	orchestrationModeSequential   = bridgeTasks.OrchestrationSpeakingModeSequential
+	orchestrationModeParallel     = bridgeTasks.OrchestrationSpeakingModeParallel
+	orchestrationModeOwner        = bridgeTasks.OrchestrationSpeakingModeOwner
+	taskLoadIssueInvalidFilename  = bridgeTasks.LoadIssueInvalidFilename
+	taskLoadIssueReadError        = bridgeTasks.LoadIssueReadError
+	taskLoadIssueDecodeError      = bridgeTasks.LoadIssueDecodeError
+	taskLoadIssueInvalidConfig    = bridgeTasks.LoadIssueInvalidConfig
+	taskLoadIssueIDMismatch       = bridgeTasks.LoadIssueIDMismatch
+	orchestrationDispatchToolName = toolregistry.DispatchToolName
 )
 
 var (

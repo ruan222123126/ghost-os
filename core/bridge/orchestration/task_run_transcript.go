@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,6 +14,7 @@ import (
 const taskRunTranscriptEventMarker = taskdomain.RunTranscriptEventMarker
 
 func (a taskExecutorAdapter) attachTaskRunTranscript(
+	ctx context.Context,
 	task ScheduledTask,
 	traceID string,
 	result bridgeTasks.ExecutionResult,
@@ -30,12 +32,20 @@ func (a taskExecutorAdapter) attachTaskRunTranscript(
 		Result:   result,
 		Sessions: sessionSources,
 	})
-	sessionID, err := saveTaskRunTranscript(a.service.sessionStore, transcript)
+	sessionID, err := saveTaskRunTranscript(a.service.sessionStore, transcript, runTranscriptSessionID(ctx))
 	if err != nil {
 		return taskRunTranscriptFailure(result, fmt.Errorf("save task run transcript: %w", err))
 	}
 	result.SessionIDOutput = sessionID
 	return result
+}
+
+func runTranscriptSessionID(ctx context.Context) string {
+	session, ok := bridgeTasks.RunSessionFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(session.SessionID)
 }
 
 func taskRunTranscriptFailure(result bridgeTasks.ExecutionResult, err error) bridgeTasks.ExecutionResult {
@@ -66,8 +76,15 @@ func loadTaskRunTranscriptSessions(
 	return sources
 }
 
-func saveTaskRunTranscript(store *session.Store, transcript taskdomain.RunTranscript) (string, error) {
-	sess := session.NewSession("")
+func saveTaskRunTranscript(
+	store *session.Store,
+	transcript taskdomain.RunTranscript,
+	sessionID string,
+) (string, error) {
+	sess, err := loadOrNewTranscriptSession(store, sessionID)
+	if err != nil {
+		return "", err
+	}
 	sess.Title = transcript.Title
 	for _, message := range transcript.Messages {
 		sess.AddMessage(message)
@@ -76,4 +93,16 @@ func saveTaskRunTranscript(store *session.Store, transcript taskdomain.RunTransc
 		return "", err
 	}
 	return sess.ID, nil
+}
+
+func loadOrNewTranscriptSession(store *session.Store, sessionID string) (*session.Session, error) {
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return session.NewSession(""), nil
+	}
+	sess, err := store.Load(id)
+	if err != nil {
+		return nil, err
+	}
+	return sess, nil
 }

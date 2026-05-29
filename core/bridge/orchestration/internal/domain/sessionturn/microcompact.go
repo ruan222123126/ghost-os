@@ -1,13 +1,10 @@
 package sessionturn
 
 import (
-	"fmt"
-	"log"
 	"strings"
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
-	"ghost-os/bridge/session"
 )
 
 const (
@@ -273,62 +270,5 @@ func (p microcompactProjector) logProjection(
 	projected []llm.Message,
 	compacted int,
 ) {
-	log.Printf(
-		"trace_id=%s microcompact spans_compacted=%d estimated_tokens_before=%d estimated_tokens_after=%d",
-		p.traceID,
-		compacted,
-		EstimateMessagesTokens(original),
-		EstimateMessagesTokens(projected),
-	)
-}
-
-func EstimateMessagesTokens(messages []llm.Message) int {
-	total := 0
-	for _, message := range messages {
-		total += session.EstimateTokens(message)
-	}
-	return total
-}
-
-func (p microcompactProjector) logSkip(err error) {
-	var skip microcompactSkip
-	if !asMicrocompactSkip(err, &skip) {
-		return
-	}
-	log.Printf(
-		"trace_id=%s microcompact skipped: %s tool=%s tool_call_id=%s",
-		p.traceID,
-		skip.reason,
-		skip.tool,
-		skip.callID,
-	)
-}
-
-func microcompactParseFailed(toolName string, callID string) error {
-	return microcompactSkip{
-		reason: "parse failed",
-		tool:   strings.TrimSpace(toolName),
-		callID: strings.TrimSpace(callID),
-	}
-}
-
-func microcompactUnsupported(toolName string, callID string, detail string) error {
-	reason := "unsupported payload"
-	if trimmed := strings.TrimSpace(detail); trimmed != "" {
-		reason = fmt.Sprintf("%s (%s)", reason, trimmed)
-	}
-	return microcompactSkip{
-		reason: reason,
-		tool:   strings.TrimSpace(toolName),
-		callID: strings.TrimSpace(callID),
-	}
-}
-
-func asMicrocompactSkip(err error, target *microcompactSkip) bool {
-	skip, ok := err.(microcompactSkip)
-	if !ok || target == nil {
-		return false
-	}
-	*target = skip
-	return true
+	logMicrocompactProjection(p.traceID, original, projected, compacted)
 }

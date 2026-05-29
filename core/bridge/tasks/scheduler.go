@@ -20,8 +20,27 @@ type ExecutionResult struct {
 	Error           string
 }
 
+type RunSession struct {
+	SessionID string
+}
+
+type RunSessionBinder interface {
+	PrepareRunSession(ctx context.Context, task ScheduledTask, traceID string) (RunSession, error)
+}
+
+type runSessionContextKey struct{}
+
 type Executor interface {
 	Execute(ctx context.Context, task ScheduledTask, traceID string) ExecutionResult
+}
+
+func WithRunSession(ctx context.Context, session RunSession) context.Context {
+	return context.WithValue(ctx, runSessionContextKey{}, session)
+}
+
+func RunSessionFromContext(ctx context.Context) (RunSession, bool) {
+	session, ok := ctx.Value(runSessionContextKey{}).(RunSession)
+	return session, ok
 }
 
 type TaskScheduler struct {

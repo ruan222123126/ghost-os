@@ -5,6 +5,7 @@ package orchestration
 import (
 	"context"
 
+	"ghost-os/bridge/streaming"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
@@ -33,4 +34,14 @@ func (s *bridgeService) executeAgentStopAction(
 	traceID string,
 ) (ServiceResult, error) {
 	return s.agentTurnService().Stop(ctx, params, traceID)
+}
+
+func (s *bridgeService) executeAgentStreamAction(
+	ctx context.Context,
+	params agentParams,
+	traceID string,
+	sink streaming.Sink,
+) (string, string, error) {
+	broadcastSink := newSessionStreamBroadcastSink(sink, s.sessionPushHub())
+	return s.agentTurnService().ExecuteStream(ctx, params, traceID, broadcastSink)
 }

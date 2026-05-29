@@ -54,6 +54,16 @@ func (t *transport) handleSessionsList(w http.ResponseWriter, r *http.Request) {
 	respondServiceContractResult(w, traceID, result, err)
 }
 
+func (t *transport) handleSessionSources(w http.ResponseWriter, r *http.Request) {
+	if !requireMethod(w, r, http.MethodGet) {
+		return
+	}
+
+	traceID := resolveTraceID("", r)
+	result, err := t.service.ExecuteSessionSourcesAction(traceID)
+	respondServiceContractResult(w, traceID, result, err)
+}
+
 // handleSessionByID 处理单会话查询与删除，并在路径层面做 session id 基本校验。
 func (t *transport) handleSessionByID(w http.ResponseWriter, r *http.Request) {
 	rawPath := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/api/sessions/"))

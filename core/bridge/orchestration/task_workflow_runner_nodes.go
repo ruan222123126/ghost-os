@@ -13,17 +13,19 @@ import (
 )
 
 const (
-	workflowScreenControlAtomicMode      = appworkflows.ScreenControlAtomicMode
-	workflowScreenControlStepsKey        = appworkflows.ScreenControlWorkflowStepsKey
-	workflowScreenControlActionKey       = appworkflows.ScreenControlActionKey
-	workflowScreenControlParamsKey       = appworkflows.ScreenControlParamsKey
-	workflowScreenControlStepDelayMinMS  = appworkflows.ScreenControlStepDelayMinMS
-	workflowScreenControlStepDelayMaxMS  = appworkflows.ScreenControlStepDelayMaxMS
-	workflowFindIconDataURLParam         = appworkflows.FindIconDataURLParam
-	workflowLegacyFindIconDataURLParam   = appworkflows.LegacyFindIconDataURLParam
-	workflowLegacyFindIconDataURLAlias   = appworkflows.LegacyFindIconDataURLAlias
-	workflowFindIconDefaultTemplateName  = appworkflows.FindIconDefaultTemplateName
-	workflowFindIconLegacyDataURLMessage = appworkflows.LegacyFindIconDataURLMessage
+	workflowScreenControlAtomicMode            = appworkflows.ScreenControlAtomicMode
+	workflowScreenControlStepsKey              = appworkflows.ScreenControlWorkflowStepsKey
+	workflowScreenControlActionKey             = appworkflows.ScreenControlActionKey
+	workflowScreenControlParamsKey             = appworkflows.ScreenControlParamsKey
+	workflowScreenControlCoordinateRefKey      = appworkflows.ScreenControlCoordinateRefKey
+	workflowScreenControlFindIconCoordinateRef = appworkflows.ScreenControlFindIconRef
+	workflowScreenControlStepDelayMinMS        = appworkflows.ScreenControlStepDelayMinMS
+	workflowScreenControlStepDelayMaxMS        = appworkflows.ScreenControlStepDelayMaxMS
+	workflowFindIconDataURLParam               = appworkflows.FindIconDataURLParam
+	workflowLegacyFindIconDataURLParam         = appworkflows.LegacyFindIconDataURLParam
+	workflowLegacyFindIconDataURLAlias         = appworkflows.LegacyFindIconDataURLAlias
+	workflowFindIconDefaultTemplateName        = appworkflows.FindIconDefaultTemplateName
+	workflowFindIconLegacyDataURLMessage       = appworkflows.LegacyFindIconDataURLMessage
 )
 
 type workflowScreenControlStep struct {

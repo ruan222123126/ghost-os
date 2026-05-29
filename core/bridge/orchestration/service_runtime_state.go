@@ -136,6 +136,15 @@ func (s *serviceRuntimeState) reloadRSSInbox(configStore bridgeconfig.Store, log
 	return nil
 }
 
+func newRSSInboxServiceFromConfig(store bridgeconfig.Store) (*bridgerss.RSSInboxService, error) {
+	service, err := bridgerss.NewRSSInboxServiceFromConfig(store)
+	if err != nil {
+		return nil, err
+	}
+	service.SetReportBuilder(newRuntimeRSSReportBuilder(store))
+	return service, nil
+}
+
 func (s *serviceRuntimeState) setRSSHandler(service *bridgerss.RSSInboxService, initErr error, logFunc bridgerss.LogFunc) {
 	if s == nil {
 		return
@@ -176,6 +185,37 @@ func (s *serviceRuntimeState) rssInitErr() error {
 		return nil
 	}
 	return s.rss.initErr()
+}
+
+type serviceLifecycle struct {
+	runtimes    *serviceRuntimeState
+	sessionPush *sessionPushHub
+}
+
+func newServiceLifecycle(runtimes *serviceRuntimeState, sessionPush *sessionPushHub) *serviceLifecycle {
+	return &serviceLifecycle{
+		runtimes:    runtimes,
+		sessionPush: sessionPush,
+	}
+}
+
+func (l *serviceLifecycle) close() {
+	if l == nil {
+		return
+	}
+	if l.runtimes != nil {
+		l.runtimes.close()
+	}
+	if l.sessionPush != nil {
+		l.sessionPush.Close()
+	}
+}
+
+func (l *serviceLifecycle) sessionPushHub() *sessionPushHub {
+	if l == nil {
+		return nil
+	}
+	return l.sessionPush
 }
 
 func (r *serviceTaskRuntime) start(configStore bridgeconfig.Store, schedulerService *bridgeService) error {

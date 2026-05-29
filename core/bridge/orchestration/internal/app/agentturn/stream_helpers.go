@@ -3,16 +3,16 @@ package agentturn
 import (
 	"context"
 
-	traceapp "ghost-os/bridge/orchestration/internal/app/trace"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/streaming"
 )
 
 type eventTurnTracker struct {
-	inner *traceapp.EventTurnTracker
+	inner *internaltrace.EventTurnTracker
 }
 
 func newEventTurnTracker(sink streaming.Sink) *eventTurnTracker {
-	return &eventTurnTracker{inner: traceapp.NewEventTurnTracker(sink)}
+	return &eventTurnTracker{inner: internaltrace.NewEventTurnTracker(sink)}
 }
 
 func (t *eventTurnTracker) Emit(ctx context.Context, event streaming.Event) (streaming.Event, error) {
@@ -27,7 +27,7 @@ func (t *eventTurnTracker) finalAssistantTurn() int {
 }
 
 func emitStreamEvent(ctx context.Context, sink streaming.Sink, event streaming.Event) error {
-	return traceapp.EmitStreamEvent(ctx, sink, event)
+	return internaltrace.EmitStreamEvent(ctx, sink, event)
 }
 
 func emitStreamErrorEvent(
@@ -40,5 +40,5 @@ func emitStreamErrorEvent(
 	statusCode int,
 	err error,
 ) error {
-	return traceapp.EmitStreamErrorEvent(ctx, sink, traceID, turn, stepID, sessionID, statusCode, err)
+	return internaltrace.EmitStreamErrorEvent(ctx, sink, traceID, turn, stepID, sessionID, statusCode, err)
 }

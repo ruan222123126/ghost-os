@@ -112,3 +112,14 @@ func cloneSessionSidebarAssignments(source map[string]string) map[string]string 
 	}
 	return cloned
 }
+
+func (s *Service) ExecuteSessionSidebarPartitionsGetAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeSessionSidebarPartitionsGetAction(traceID)
+}
+
+func (s *Service) ExecuteSessionSidebarPartitionsPutAction(
+	req SessionSidebarPartitionPutRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.inner.executeSessionSidebarPartitionsPutAction(req, traceID)
+}
