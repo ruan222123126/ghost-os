@@ -59,6 +59,7 @@ Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital tw
 1. Write only necessary code.
 2. Explicit over implicit; avoid over-abstraction.
 3. Keep a minimal, functional style.
+4. There are other modifications that are not yours—I made them. Please do not revert them. Just focus on your own task.
 
 
 ## Commenting Guidelines
