@@ -185,14 +185,12 @@ function PresetEditorActions(props: {
   return (
     <div className="flex items-center justify-end border-t border-gray-100/80 bg-white px-8 py-5">
       <div className="flex items-center gap-3">
-        <button
-          type="button"
+        <CloseButton
           disabled={controlsDisabled}
           onClick={onClose}
-          className="px-5 py-2.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {copy.settings.cancel}
-        </button>
+          className="disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={copy.settings.cancel}
+        />
         <button
           type="button"
           data-testid="preset-save"

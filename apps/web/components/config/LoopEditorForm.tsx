@@ -1,6 +1,7 @@
 'use client';
 
 import type { FormEvent } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { TaskFormField } from '@/components/config/TaskFormField';
 import { ignorePromise } from '@/lib/errors';
@@ -214,9 +215,7 @@ function LoopEditorActions(props: {
 
   return (
     <div className="flex items-center justify-end gap-3">
-      <button type="button" onClick={props.onCancel} className="rounded-full border border-[#E5E5E5] px-6 py-2.5 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5]">
-        {copy.settings.cancel}
-      </button>
+      <CloseButton onClick={props.onCancel} aria-label={copy.settings.cancel} />
       <button type="submit" disabled={props.controlsDisabled} className="rounded-full bg-[#111111] px-8 py-2.5 text-[13px] font-semibold text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50">
         {props.submitLabel}
       </button>

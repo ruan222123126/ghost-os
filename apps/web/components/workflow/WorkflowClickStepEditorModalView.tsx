@@ -166,9 +166,10 @@ function ClickEditorFooter(props: {
   const { text, saving, captureActive, onClose, onSave } = props;
   return (
     <footer className="flex justify-end gap-3 bg-white px-6 pb-6 pt-2">
-      <button type="button" onClick={onClose} className="px-5 py-2.5 text-sm text-gray-600 transition-colors hover:bg-gray-100">
-        {text.cancel}
-      </button>
+      <CloseButton
+        onClick={onClose}
+        aria-label={text.cancel}
+      />
       <button
         type="button"
         onClick={onSave}

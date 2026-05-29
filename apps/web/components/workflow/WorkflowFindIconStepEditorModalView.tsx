@@ -146,13 +146,10 @@ function FindIconEditorFooter(props: {
   const { saving, onClose, onSave } = props;
   return (
     <footer className="flex justify-end gap-3 bg-white px-6 pb-6 pt-2">
-      <button
-        type="button"
+      <CloseButton
         onClick={onClose}
-        className="px-5 py-2.5 text-xs font-bold text-gray-400 transition-colors hover:text-black"
-      >
-        取消
-      </button>
+        aria-label="取消"
+      />
       <button
         type="button"
         onClick={onSave}

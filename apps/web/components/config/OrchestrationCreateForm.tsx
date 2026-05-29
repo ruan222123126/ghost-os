@@ -1,6 +1,7 @@
 'use client';
 
 import type { FormEvent, ReactNode } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 
@@ -57,13 +58,10 @@ export function OrchestrationCreateForm(props: OrchestrationCreateFormProps) {
       </div>
 
       <div className="flex items-center justify-end gap-3">
-        <button
-          type="button"
+        <CloseButton
           onClick={onCancel}
-          className="rounded-full border border-[#E5E5E5] px-6 py-2.5 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5]"
-        >
-          {copy.settings.cancel}
-        </button>
+          aria-label={copy.settings.cancel}
+        />
         <button
           type="submit"
           disabled={controlsDisabled}
