@@ -1,8 +1,15 @@
 import type { ChatMessage, ToolChatMessage } from '@/lib/types';
 import {
+  buildVisibleMessageTailSnapshot,
   buildMessageListLayoutSignature,
+  computePostSendAnchorLayout,
+  getPostSendAnchorIndexFromVisibleMessages,
+  hasPostSendRealContentOverflow,
+  hasVisibleAssistantTextAfterIndex,
   isMessageListNearBottom,
+  isPostSendCommittedUserMessageId,
   MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX,
+  resolvePostSendOverflowDecision,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
 import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
@@ -23,6 +30,21 @@ function buildToolMessage(overrides?: Partial<ToolChatMessage>): ToolChatMessage
     toolStatus: 'running',
     ...overrides,
   };
+}
+
+function resolveOverflow(overrides?: {
+  autoFollow?: boolean;
+  hasVisibleAssistantText?: boolean;
+  realContentHeightPx?: number;
+}) {
+  return resolvePostSendOverflowDecision({
+    anchorStartPx: 300,
+    autoFollow: overrides?.autoFollow ?? true,
+    baselineContentHeightPx: 520,
+    containerHeightPx: 200,
+    hasVisibleAssistantText: overrides?.hasVisibleAssistantText ?? true,
+    realContentHeightPx: overrides?.realContentHeightPx ?? 560,
+  });
 }
 
 describe('components/message/messageListScroll', () => {
@@ -163,5 +185,115 @@ describe('components/message/messageListScroll', () => {
   it('disables virtualizer scroll adjustment when auto-follow is off', () => {
     expect(shouldAdjustScrollPositionOnItemSizeChange(false)).toBe(false);
     expect(shouldAdjustScrollPositionOnItemSizeChange(true)).toBe(true);
+  });
+
+  it('detects only appended local user messages as post-send anchors', () => {
+    const previousMessages: ChatMessage[] = [
+      { id: 'assistant-1', kind: 'assistant', content: 'previous' },
+    ];
+    const previousTail = buildVisibleMessageTailSnapshot(previousMessages);
+
+    expect(getPostSendAnchorIndexFromVisibleMessages({
+      messages: [
+        ...previousMessages,
+        { id: 'local:user:trace-1', kind: 'user', content: 'next' },
+      ],
+      previousTail,
+    })).toBe(1);
+    expect(getPostSendAnchorIndexFromVisibleMessages({
+      messages: [
+        ...previousMessages,
+        { id: 'local:answer:trace-1:q-1', kind: 'user', content: 'answer' },
+      ],
+      previousTail,
+    })).toBeNull();
+    expect(getPostSendAnchorIndexFromVisibleMessages({
+      messages: previousMessages,
+      previousTail,
+    })).toBeNull();
+  });
+
+  it('does not trigger post-send focus on initial visible history', () => {
+    expect(getPostSendAnchorIndexFromVisibleMessages({
+      messages: [{ id: 'local:user:trace-1', kind: 'user', content: 'already there' }],
+      previousTail: null,
+    })).toBeNull();
+  });
+
+  it('keeps enough temporary spacer to align the sent user message at the top', () => {
+    expect(computePostSendAnchorLayout({
+      anchorStartPx: 540,
+      containerHeightPx: 400,
+      realContentHeightPx: 700,
+    })).toEqual({
+      anchorScrollTopPx: 540,
+      trailingSpacerPx: 240,
+      viewportBottomPx: 940,
+    });
+  });
+
+  it('does not add post-send spacer when the real content already covers the anchor viewport', () => {
+    expect(computePostSendAnchorLayout({
+      anchorStartPx: 240,
+      containerHeightPx: 400,
+      realContentHeightPx: 900,
+    }).trailingSpacerPx).toBe(0);
+  });
+
+  it('waits for visible assistant text before treating real content growth as overflow', () => {
+    expect(resolveOverflow({ hasVisibleAssistantText: false })).toEqual({
+      overflowed: false,
+      shouldScrollToBottom: false,
+      trailingSpacerPx: null,
+    });
+    expect(resolveOverflow()).toEqual({
+      overflowed: true,
+      shouldScrollToBottom: true,
+      trailingSpacerPx: 0,
+    });
+  });
+
+  it('removes spacer without forcing bottom follow after manual upward scroll', () => {
+    expect(resolveOverflow({ autoFollow: false })).toEqual({
+      overflowed: true,
+      shouldScrollToBottom: false,
+      trailingSpacerPx: 0,
+    });
+  });
+
+  it('keeps spacer when the failed turn has no visible assistant text', () => {
+    expect(resolveOverflow({
+      hasVisibleAssistantText: false,
+      realContentHeightPx: 520,
+    }).trailingSpacerPx).toBeNull();
+  });
+
+  it('finds visible assistant text after the post-send anchor', () => {
+    const messages: ChatMessage[] = [
+      { id: 'local:user:trace-1', kind: 'user', content: 'question' },
+      { id: 'thinking-1', kind: 'thinking', content: 'thinking' },
+      { id: 'assistant-1', kind: 'assistant', content: 'answer' },
+    ];
+
+    expect(hasVisibleAssistantTextAfterIndex(messages, 0)).toBe(true);
+    expect(hasVisibleAssistantTextAfterIndex(messages, 2)).toBe(false);
+  });
+
+  it('uses anchor-relative real content overflow instead of total page overflow', () => {
+    expect(hasPostSendRealContentOverflow({
+      anchorStartPx: 700,
+      containerHeightPx: 400,
+      realContentHeightPx: 1000,
+    })).toBe(false);
+    expect(hasPostSendRealContentOverflow({
+      anchorStartPx: 700,
+      containerHeightPx: 400,
+      realContentHeightPx: 1101,
+    })).toBe(true);
+  });
+
+  it('classifies only local user ids as normal send ids', () => {
+    expect(isPostSendCommittedUserMessageId('local:user:trace-1')).toBe(true);
+    expect(isPostSendCommittedUserMessageId('local:answer:trace-1:q-1')).toBe(false);
   });
 });

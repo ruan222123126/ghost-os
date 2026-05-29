@@ -13,11 +13,9 @@ import {
 import { useBridgeConfigLoaders } from '@/hooks/useBridgeConfigLoaders';
 
 const defaultModel = 'gpt-4o';
-const defaultRefreshIntervalMs = 3000;
 
 interface UseBridgeConfigOptions {
   autoRefresh?: boolean;
-  refreshIntervalMs?: number;
 }
 
 interface UseBridgeConfigResult {
@@ -37,7 +35,7 @@ interface UseBridgeConfigResult {
 
 export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridgeConfigResult {
   const { copy } = useWebLocale();
-  const { autoRefresh = false, refreshIntervalMs = defaultRefreshIntervalMs } = options;
+  const { autoRefresh = false } = options;
   const [config, setConfig] = useState<BridgeConfig | null>(null);
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
@@ -49,7 +47,6 @@ export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridge
   const mountedRef = useRef(true);
   const loaders = useBridgeConfigLoaders({
     autoRefresh,
-    refreshIntervalMs,
     mountedRef,
     loadConfigFallbackMessage: copy.system.failedToLoadConfig,
     loadProvidersFallbackMessage: copy.system.failedToLoadProviders,

@@ -2,11 +2,12 @@
 
 'use client';
 
+import nextDynamic from 'next/dynamic';
 import { useCallback, type FC } from 'react';
 import { ChatEmptyHero } from '@/components/ChatEmptyHero';
 import { ChatSessionNotch } from '@/components/ChatSessionNotch';
 import { ChatInput } from '@/components/ChatInput';
-import { ConfigPanel } from '@/components/ConfigPanel';
+import type { ConfigPanelProps } from '@/components/ConfigPanel';
 import { MessageList } from '@/components/message/MessageList';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { useHomePageController } from '@/hooks/useHomePageController';
@@ -16,6 +17,11 @@ import { ignorePromise } from '@/lib/errors';
 import type { SessionMetadata } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+const ConfigPanel = nextDynamic<ConfigPanelProps>(
+  () => import('@/components/ConfigPanel').then((mod) => mod.ConfigPanel),
+  { ssr: false },
+);
 
 const HomePage: FC = () => {
   const { copy } = useWebLocale();
@@ -49,19 +55,21 @@ const HomePage: FC = () => {
         </div>
       </main>
 
-      <ConfigPanel
-        open={controller.showConfig}
-        initialTab={controller.settingsTabFromQuery ?? 'provider'}
-        loading={controller.configLoading}
-        saving={controller.savingConfig}
-        config={controller.config}
-        error={controller.configError}
-        onClose={controller.closeConfig}
-        onOpenWorkflowCreate={controller.openWorkflowCreate}
-        onOpenWorkflowEdit={controller.openWorkflowEdit}
-        onSave={controller.saveConfig}
-        onReload={controller.refreshConfig}
-      />
+      {controller.showConfig ? (
+        <ConfigPanel
+          open={controller.showConfig}
+          initialTab={controller.settingsTabFromQuery ?? 'provider'}
+          loading={controller.configLoading}
+          saving={controller.savingConfig}
+          config={controller.config}
+          error={controller.configError}
+          onClose={controller.closeConfig}
+          onOpenWorkflowCreate={controller.openWorkflowCreate}
+          onOpenWorkflowEdit={controller.openWorkflowEdit}
+          onSave={controller.saveConfig}
+          onReload={controller.refreshConfig}
+        />
+      ) : null}
     </>
   );
 };

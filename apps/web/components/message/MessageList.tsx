@@ -1,7 +1,7 @@
 'use client';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { MessageRow } from './MessageRow';
 import {
@@ -10,7 +10,12 @@ import {
   getMessageListRowCount,
 } from './messageListRows';
 import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
-import { buildMessageListLayoutSignature } from './messageListScroll';
+import {
+  buildMessageListLayoutSignature,
+  buildVisibleMessageTailSnapshot,
+  getPostSendAnchorIndexFromVisibleMessages,
+  hasVisibleAssistantTextAfterIndex,
+} from './messageListScroll';
 import { filterCommittedMessagesForDisplay } from './messageVisibility';
 import { getOrderedStreamingRows, type StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 import { ThinkingIndicator } from './ThinkingIndicator';
@@ -54,6 +59,11 @@ export const MessageList: FC<MessageListProps> = ({
     pendingQuestions,
     showSystemPromptMessages,
   );
+  const visibleMessageTailRef = useRef<ReturnType<typeof buildVisibleMessageTailSnapshot> | null>(
+    visibleCommittedMessages.length === 0 ? buildVisibleMessageTailSnapshot(visibleCommittedMessages) : null,
+  );
+  const [postSendAnchorIndex, setPostSendAnchorIndex] = useState<number | null>(null);
+  const [postSendToken, setPostSendToken] = useState(0);
   const streamingRows = getOrderedStreamingRows({
     pendingQuestions,
     streamingAssistantSegments,
@@ -103,13 +113,24 @@ export const MessageList: FC<MessageListProps> = ({
     showThinkingIndicator,
     streamingRows,
   });
-  const { scrollElementRef } = useMessageListScroll({
+  const visibleRowsForPostSendOverflow = [
+    ...visibleCommittedMessages,
+    ...streamingRows.map((row) => row.message),
+  ];
+  const postSendHasVisibleAssistantText = hasVisibleAssistantTextAfterIndex(
+    visibleRowsForPostSendOverflow,
+    postSendAnchorIndex,
+  );
+  const { scrollElementRef, trailingSpacerPx } = useMessageListScroll({
     rowVirtualizer,
     firstVirtualItemIndex: virtualItems[0]?.index ?? null,
     hasOlderHistory,
     layoutSignature,
     loadOlderHistory,
     loadingOlderHistory,
+    postSendAnchorIndex,
+    postSendHasVisibleAssistantText,
+    postSendToken,
     visibleCommittedMessageCount: visibleCommittedMessages.length,
   });
 
@@ -126,6 +147,21 @@ export const MessageList: FC<MessageListProps> = ({
       [messageId]: !previous[messageId],
     }));
   }, []);
+
+  useLayoutEffect(() => {
+    const previousTail = visibleMessageTailRef.current;
+    const anchorIndex = getPostSendAnchorIndexFromVisibleMessages({
+      messages: visibleCommittedMessages,
+      previousTail,
+    });
+    visibleMessageTailRef.current = buildVisibleMessageTailSnapshot(visibleCommittedMessages);
+    if (anchorIndex === null) {
+      return;
+    }
+
+    setPostSendAnchorIndex(anchorIndex);
+    setPostSendToken((token) => token + 1);
+  }, [visibleCommittedMessages]);
 
   useEffect(() => {
     if (!latestStreamingThinkingId) {
@@ -165,7 +201,10 @@ export const MessageList: FC<MessageListProps> = ({
   }
   return (
     <div ref={scrollElementRef} className="messages ui-scroll" aria-live="polite">
-      <div className="messages-viewport" style={{ height: rowVirtualizer.getTotalSize() }}>
+      <div
+        className="messages-viewport"
+        style={{ height: rowVirtualizer.getTotalSize() + trailingSpacerPx }}
+      >
         {virtualItems.map((virtualItem) => {
           const row = getMessageListRowAtIndex(virtualItem.index, messageRowSource);
           const hasTrailingTool = shouldPlaceAssistantCopyInline(

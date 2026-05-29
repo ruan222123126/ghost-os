@@ -7,7 +7,6 @@ import type { BridgeConfig, ProviderConfig } from '@/lib/types';
 
 interface UseBridgeConfigLoadersOptions {
   autoRefresh: boolean;
-  refreshIntervalMs: number;
   mountedRef: MutableRefObject<boolean>;
   loadConfigFallbackMessage: string;
   loadProvidersFallbackMessage: string;
@@ -29,7 +28,6 @@ export function useBridgeConfigLoaders(
 ): UseBridgeConfigLoadersResult {
   const {
     autoRefresh,
-    refreshIntervalMs,
     mountedRef,
     loadConfigFallbackMessage,
     loadProvidersFallbackMessage,
@@ -123,17 +121,14 @@ export function useBridgeConfigLoaders(
       }
     };
 
-    refresh();
-    const intervalId = window.setInterval(refresh, refreshIntervalMs);
     window.addEventListener('focus', refresh);
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      window.clearInterval(intervalId);
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [autoRefresh, loadConfig, loadProviders, refreshIntervalMs]);
+  }, [autoRefresh, loadConfig, loadProviders]);
 
   return {
     loadConfig,

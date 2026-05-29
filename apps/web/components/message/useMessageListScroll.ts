@@ -5,6 +5,7 @@ import {
   isMessageListNearBottom,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
+import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 
 const LOAD_OLDER_TRIGGER_ROWS = 5;
 
@@ -13,7 +14,7 @@ interface PrependAnchor {
   scrollTop: number;
 }
 
-interface UseMessageListScrollOptions {
+export interface UseMessageListScrollOptions {
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   firstVirtualItemIndex: number | null;
   hasOlderHistory: boolean;
@@ -21,6 +22,9 @@ interface UseMessageListScrollOptions {
   loadOlderHistory: () => Promise<void>;
   visibleCommittedMessageCount: number;
   layoutSignature: string;
+  postSendAnchorIndex?: number | null;
+  postSendHasVisibleAssistantText?: boolean;
+  postSendToken?: number;
 }
 
 export function useMessageListScroll(options: UseMessageListScrollOptions) {
@@ -29,92 +33,161 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   const olderLoadPendingRef = useRef(false);
   const prependAnchorRef = useRef<PrependAnchor | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
-
-  const syncAutoFollow = useCallback(() => {
-    const container = scrollElementRef.current;
-    if (!container) {
-      return;
-    }
-
-    autoFollowRef.current = isMessageListNearBottom(container);
-  }, []);
-
-  const handleLoadOlderHistory = useCallback(async () => {
-    if (!options.hasOlderHistory || options.loadingOlderHistory || olderLoadPendingRef.current) {
-      return;
-    }
-
-    capturePrependAnchor(scrollElementRef.current, prependAnchorRef);
-    olderLoadPendingRef.current = true;
-    try {
-      await options.loadOlderHistory();
-    } finally {
-      olderLoadPendingRef.current = false;
-    }
-  }, [options.hasOlderHistory, options.loadOlderHistory, options.loadingOlderHistory]);
-
-  useLayoutEffect(() => {
-    options.rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () =>
-      shouldAdjustScrollPositionOnItemSizeChange(autoFollowRef.current);
-
-    return () => {
-      options.rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
-    };
-  }, [options.rowVirtualizer]);
-
-  useEffect(() => {
-    const container = scrollElementRef.current;
-    if (!container) {
-      return;
-    }
-
-    const handleScroll = () => {
-      syncAutoFollow();
-    };
-
-    handleScroll();
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-    };
-  }, [syncAutoFollow]);
-
-  useEffect(() => {
-    if (!options.hasOlderHistory || options.loadingOlderHistory) {
-      return;
-    }
-    if (options.firstVirtualItemIndex === null || options.firstVirtualItemIndex > LOAD_OLDER_TRIGGER_ROWS) {
-      return;
-    }
-
-    void handleLoadOlderHistory();
-  }, [
-    handleLoadOlderHistory,
-    options.firstVirtualItemIndex,
-    options.hasOlderHistory,
-    options.loadingOlderHistory,
-  ]);
-
-  useLayoutEffect(() => {
-    restorePrependAnchor(scrollElementRef.current, prependAnchorRef);
-  }, [options.loadingOlderHistory, options.visibleCommittedMessageCount]);
-
-  useLayoutEffect(() => {
+  const scheduleNormalFollow = useCallback(() => {
     scheduleScrollToBottom({
       autoFollowRef,
       prependAnchorRef,
       scrollElementRef,
       scrollFrameRef,
     });
-  }, [options.layoutSignature]);
+  }, []);
+  const cancelScheduledScroll = useCallback(() => {
+    cancelScrollFrame(scrollFrameRef);
+  }, []);
 
+  useVirtualizerSizeAdjustment(options.rowVirtualizer, autoFollowRef);
+  useAutoFollowTracking(scrollElementRef, autoFollowRef);
+  useOlderHistoryLoading({ ...options, olderLoadPendingRef, prependAnchorRef, scrollElementRef });
+  usePrependAnchorRestore({ ...options, prependAnchorRef, scrollElementRef });
+  const { trailingSpacerPx } = useMessageListPostSendFocus({
+    autoFollowRef,
+    cancelScheduledScroll,
+    layoutSignature: options.layoutSignature,
+    loadingOlderHistory: options.loadingOlderHistory,
+    onNormalLayoutChange: scheduleNormalFollow,
+    postSendAnchorIndex: options.postSendAnchorIndex,
+    postSendHasVisibleAssistantText: options.postSendHasVisibleAssistantText,
+    postSendToken: options.postSendToken,
+    rowVirtualizer: options.rowVirtualizer,
+    scrollElementRef,
+  });
+  useScrollFrameCleanup(scrollFrameRef);
+
+  return { scrollElementRef, trailingSpacerPx };
+}
+
+function useVirtualizerSizeAdjustment(
+  rowVirtualizer: Virtualizer<HTMLDivElement, Element>,
+  autoFollowRef: MutableRefObject<boolean>,
+) {
+  useLayoutEffect(() => {
+    rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () =>
+      shouldAdjustScrollPositionOnItemSizeChange(autoFollowRef.current);
+
+    return () => {
+      rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
+    };
+  }, [autoFollowRef, rowVirtualizer]);
+}
+
+function useAutoFollowTracking(
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>,
+  autoFollowRef: MutableRefObject<boolean>,
+) {
+  const syncAutoFollow = useCallback(() => {
+    const container = scrollElementRef.current;
+    if (container) {
+      autoFollowRef.current = isMessageListNearBottom(container);
+    }
+  }, [autoFollowRef, scrollElementRef]);
+
+  useEffect(() => {
+    const container = scrollElementRef.current;
+    if (!container) {
+      return;
+    }
+
+    syncAutoFollow();
+    container.addEventListener('scroll', syncAutoFollow, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', syncAutoFollow);
+    };
+  }, [scrollElementRef, syncAutoFollow]);
+}
+
+function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
+  const {
+    firstVirtualItemIndex,
+    hasOlderHistory,
+    loadOlderHistory,
+    loadingOlderHistory,
+    olderLoadPendingRef,
+    prependAnchorRef,
+    scrollElementRef,
+  } = options;
+  const handleLoadOlderHistory = useCallback(async () => {
+    if (loadingOlderHistory || olderLoadPendingRef.current) {
+      return;
+    }
+    if (!hasOlderHistory) {
+      return;
+    }
+
+    capturePrependAnchor(scrollElementRef.current, prependAnchorRef);
+    olderLoadPendingRef.current = true;
+    try {
+      await loadOlderHistory();
+    } finally {
+      olderLoadPendingRef.current = false;
+    }
+  }, [
+    hasOlderHistory,
+    loadOlderHistory,
+    loadingOlderHistory,
+    olderLoadPendingRef,
+    prependAnchorRef,
+    scrollElementRef,
+  ]);
+
+  useEffect(() => {
+    if (!shouldLoadOlderHistory({ firstVirtualItemIndex, hasOlderHistory, loadingOlderHistory })) {
+      return;
+    }
+
+    void handleLoadOlderHistory();
+  }, [firstVirtualItemIndex, handleLoadOlderHistory, hasOlderHistory, loadingOlderHistory]);
+}
+
+function usePrependAnchorRestore(options: PrependAnchorRestoreOptions) {
+  useLayoutEffect(() => {
+    restorePrependAnchor(options.scrollElementRef.current, options.prependAnchorRef);
+  }, [
+    options.loadingOlderHistory,
+    options.prependAnchorRef,
+    options.scrollElementRef,
+    options.visibleCommittedMessageCount,
+  ]);
+}
+
+function useScrollFrameCleanup(scrollFrameRef: MutableRefObject<number | null>) {
   useEffect(() => {
     return () => {
       cancelScrollFrame(scrollFrameRef);
     };
-  }, []);
+  }, [scrollFrameRef]);
+}
 
-  return { scrollElementRef };
+interface UseOlderHistoryLoadingOptions extends UseMessageListScrollOptions {
+  olderLoadPendingRef: MutableRefObject<boolean>;
+  prependAnchorRef: MutableRefObject<PrependAnchor | null>;
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+}
+
+interface PrependAnchorRestoreOptions extends UseMessageListScrollOptions {
+  prependAnchorRef: MutableRefObject<PrependAnchor | null>;
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+}
+
+function shouldLoadOlderHistory(options: {
+  firstVirtualItemIndex: number | null;
+  hasOlderHistory: boolean;
+  loadingOlderHistory: boolean;
+}): boolean {
+  if (!options.hasOlderHistory || options.loadingOlderHistory) {
+    return false;
+  }
+  return options.firstVirtualItemIndex !== null
+    && options.firstVirtualItemIndex <= LOAD_OLDER_TRIGGER_ROWS;
 }
 
 function capturePrependAnchor(
@@ -158,13 +231,21 @@ function scheduleScrollToBottom(options: {
   cancelScrollFrame(options.scrollFrameRef);
   options.scrollFrameRef.current = window.requestAnimationFrame(() => {
     options.scrollFrameRef.current = null;
-    const nextContainer = options.scrollElementRef.current;
-    if (!nextContainer || options.prependAnchorRef.current || !options.autoFollowRef.current) {
-      return;
-    }
-
-    nextContainer.scrollTop = nextContainer.scrollHeight;
+    scrollToBottomIfStillFollowing(options);
   });
+}
+
+function scrollToBottomIfStillFollowing(options: {
+  autoFollowRef: MutableRefObject<boolean>;
+  prependAnchorRef: MutableRefObject<PrependAnchor | null>;
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+}) {
+  const container = options.scrollElementRef.current;
+  if (!container || options.prependAnchorRef.current || !options.autoFollowRef.current) {
+    return;
+  }
+
+  container.scrollTop = container.scrollHeight;
 }
 
 function cancelScrollFrame(scrollFrameRef: MutableRefObject<number | null>) {

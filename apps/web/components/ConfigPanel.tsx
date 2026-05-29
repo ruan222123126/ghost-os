@@ -18,7 +18,7 @@ import { useConfigTools } from '@/hooks/useConfigTools';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
 
-interface ConfigPanelProps {
+export interface ConfigPanelProps {
   open: boolean;
   initialTab?: SettingsTab;
   loading: boolean;

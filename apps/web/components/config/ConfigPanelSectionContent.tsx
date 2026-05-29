@@ -1,14 +1,5 @@
+import nextDynamic from 'next/dynamic';
 import { ComingSoonPanel, type SettingsTab } from '@/components/config/ConfigPanelNavigation';
-import { LoopSettingsSection } from '@/components/config/LoopSettingsSection';
-import { OrchestrationSettingsSection } from '@/components/config/OrchestrationSettingsSection';
-import { PresetSettingsSection } from '@/components/config/PresetSettingsSection';
-import { PromptsLibrarySettingsSection } from '@/components/config/PromptsLibrarySettingsSection';
-import { PromptsPreviewSettingsSection } from '@/components/config/PromptsPreviewSettingsSection';
-import { ProviderSettingsSection } from '@/components/config/ProviderSettingsSection';
-import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSection';
-import { SkillSettingsSection } from '@/components/config/SkillSettingsSection';
-import { TaskSettingsSection } from '@/components/config/TaskSettingsSection';
-import { ToolSettingsSection } from '@/components/config/ToolSettingsSection';
 import type { useConfigProviders } from '@/hooks/useConfigProviders';
 import type { useConfigPresets } from '@/hooks/useConfigPresets';
 import type { useConfigPrompts } from '@/hooks/useConfigPrompts';
@@ -16,6 +7,47 @@ import type { useConfigSkills } from '@/hooks/useConfigSkills';
 import type { useConfigTasks } from '@/hooks/useConfigTasks';
 import type { useConfigTools } from '@/hooks/useConfigTools';
 import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
+
+const LoopSettingsSection = nextDynamic(
+  () => import('@/components/config/LoopSettingsSection').then((mod) => mod.LoopSettingsSection),
+  { ssr: false },
+);
+const OrchestrationSettingsSection = nextDynamic(
+  () => import('@/components/config/OrchestrationSettingsSection').then((mod) => mod.OrchestrationSettingsSection),
+  { ssr: false },
+);
+const PresetSettingsSection = nextDynamic(
+  () => import('@/components/config/PresetSettingsSection').then((mod) => mod.PresetSettingsSection),
+  { ssr: false },
+);
+const PromptsLibrarySettingsSection = nextDynamic(
+  () => import('@/components/config/PromptsLibrarySettingsSection').then((mod) => mod.PromptsLibrarySettingsSection),
+  { ssr: false },
+);
+const PromptsPreviewSettingsSection = nextDynamic(
+  () => import('@/components/config/PromptsPreviewSettingsSection').then((mod) => mod.PromptsPreviewSettingsSection),
+  { ssr: false },
+);
+const ProviderSettingsSection = nextDynamic(
+  () => import('@/components/config/ProviderSettingsSection').then((mod) => mod.ProviderSettingsSection),
+  { ssr: false },
+);
+const RuntimeSettingsSection = nextDynamic(
+  () => import('@/components/config/RuntimeSettingsSection').then((mod) => mod.RuntimeSettingsSection),
+  { ssr: false },
+);
+const SkillSettingsSection = nextDynamic(
+  () => import('@/components/config/SkillSettingsSection').then((mod) => mod.SkillSettingsSection),
+  { ssr: false },
+);
+const TaskSettingsSection = nextDynamic(
+  () => import('@/components/config/TaskSettingsSection').then((mod) => mod.TaskSettingsSection),
+  { ssr: false },
+);
+const ToolSettingsSection = nextDynamic(
+  () => import('@/components/config/ToolSettingsSection').then((mod) => mod.ToolSettingsSection),
+  { ssr: false },
+);
 
 interface ConfigPanelSectionContentProps {
   activeTab: SettingsTab;
