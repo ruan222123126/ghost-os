@@ -131,6 +131,115 @@ def _render_contract_aliases(schema: dict) -> str:
     )
 
 
+BRIDGE_EXPORT_BLOCK = '''const defaultMaxRequestBodyBytes int64 = 1 << 20
+
+type agentParams = api.AgentParams
+type agentStopParams = api.AgentStopParams
+type sessionIDParams = api.SessionIDParams
+type sessionGetParams = api.SessionGetParams
+type sessionDeleteResponse = api.SessionDeleteResponse
+type taskCreateParams = api.TaskCreateParams
+type taskUpdateParams = api.TaskUpdateParams
+type taskIDParams = api.TaskIDParams
+type taskLogsParams = api.TaskLogsParams
+type taskPayload = api.TaskPayload
+type taskDeleteResponse = api.TaskDeleteResponse
+type taskRunPayload = api.TaskRunPayload
+type taskRunLogPayload = api.TaskRunLogPayload
+type toolNameParams = api.ToolNameParams
+type toolUpdateRequest = api.ToolUpdateRequest
+type toolPayload = api.ToolPayload
+type findIconTemplateUploadRequest = api.FindIconTemplateUploadRequest
+type findIconTemplateUploadPayload = api.FindIconTemplateUploadPayload
+type findIconPreviewRegion = api.FindIconPreviewRegion
+type findIconPreviewRequest = api.FindIconPreviewRequest
+type findIconPreviewPayload = api.FindIconPreviewPayload
+type mousePositionRequest = api.MousePositionRequest
+type mousePositionPayload = api.MousePositionPayload
+
+type providerCreateRequest = providerConfigInput
+
+type providerUpdateRequest = providerConfigInput
+
+const (
+\tBusActionAgentSend           = busActionAgentSend
+\tBusStatusSuccess             = busStatusSuccess
+\tBusStatusError               = busStatusError
+\tBusAssistantSessionEndSignal = busAssistantSessionEndSignal
+
+\tDefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
+\tTaskListScopeUser          = taskListScopeUser
+\tTaskListScopeSystem        = taskListScopeSystem
+\tTaskListScopeOrchestration = taskListScopeOrchestration
+
+\tSessionPushAssistantMessage = sessionPushAssistantMessage
+\tSessionPushAwaitingHuman    = sessionPushAwaitingHuman
+\tSessionPushRunStarted       = sessionPushRunStarted
+\tSessionPushCompletionDelta  = sessionPushCompletionDelta
+\tSessionPushToolCallStarted  = sessionPushToolCallStarted
+\tSessionPushToolCallFinished = sessionPushToolCallFinished
+\tSessionPushError            = sessionPushError
+\tSessionPushDone             = sessionPushDone
+)
+
+type APIRequest = apiRequest
+type APIResponse = apiResponse
+type AgentRequest = agentRequest
+type AgentParams = agentParams
+type HumanResponseParams = humanResponseParams
+type SessionIDParams = sessionIDParams
+type SessionGetParams = sessionGetParams
+type SessionSidebarPartition = sessionSidebarPartition
+type SessionSidebarPartitionState = sessionSidebarPartitionState
+type SessionSidebarPartitionPutRequest = sessionSidebarPartitionPutRequest
+type SessionSourceAssignment = sessionSourceAssignment
+type SessionSourceResolution = sessionSourceResolution
+type SessionDeleteResponse = sessionDeleteResponse
+type ConfigResponse = configResponse
+type ConfigUpdateRequest = configUpdateRequest
+type ProviderCreateRequest = providerCreateRequest
+type ProviderUpdateRequest = providerUpdateRequest
+type ProviderConfigResponse = providerConfigResponse
+type ProviderListResponse = providerListResponse
+type SetActiveProviderRequest = setActiveProviderRequest
+type TaskCreateParams = taskCreateParams
+type TaskUpdateParams = taskUpdateParams
+type TaskIDParams = taskIDParams
+type TaskLogsParams = taskLogsParams
+type TaskPayload = taskPayload
+type TaskDeleteResponse = taskDeleteResponse
+type TaskRunPayload = taskRunPayload
+type TaskRunLogPayload = taskRunLogPayload
+type ToolNameParams = toolNameParams
+type ToolUpdateRequest = toolUpdateRequest
+type ToolPayload = toolPayload
+type FindIconTemplateUploadRequest = findIconTemplateUploadRequest
+type FindIconTemplateUploadPayload = findIconTemplateUploadPayload
+type FindIconPreviewRequest = findIconPreviewRequest
+type FindIconPreviewPayload = findIconPreviewPayload
+type MousePositionRequest = mousePositionRequest
+type MousePositionPayload = mousePositionPayload
+type SessionPushEventType = sessionPushEventType
+type SessionPushEvent = sessionPushEvent
+type SessionPushHub = sessionPushHub
+
+func ValidateBusRequest(req APIRequest) error {
+\treturn validateBusRequest(req)
+}
+
+func NewSessionPushHub() *SessionPushHub {
+\treturn newSessionPushHub()
+}
+
+func ResolveFindIconTemplateRootPath() (string, error) {
+\treturn resolveFindIconTemplateRoot()
+}'''
+
+
+def _render_bridge_export_block() -> str:
+    return BRIDGE_EXPORT_BLOCK
+
+
 def render(schema: dict, package_name: str) -> str:
     actions = schema["$defs"]["action"]["enum"]
     statuses = schema["$defs"]["status"]["enum"]
@@ -159,4 +268,6 @@ const busAssistantSessionEndSignal = bus.AssistantSessionEndSignal
 
 type apiRequest = bus.RequestEnvelope
 type apiResponse = bus.ResponseEnvelope
+
+{_render_bridge_export_block()}
 '''

@@ -59,6 +59,8 @@ OUTPUT_GROUPS = (
             "sessionSidebarPartition",
             "sessionSidebarPartitionState",
             "sessionSidebarPartitionPutRequest",
+            "sessionSourceAssignment",
+            "sessionSourceResolution",
             "sessionMessagePage",
             "sessionTurnDraftSegment",
             "sessionTurnDraftTool",

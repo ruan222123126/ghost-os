@@ -147,6 +147,12 @@
         "sessionSidebarPartitionPutRequest": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionSidebarPartitionPutRequest"
         },
+        "sessionSourceAssignment": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSourceAssignment"
+        },
+        "sessionSourceResolution": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionSourceResolution"
+        },
         "sessionMessagePage": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionMessagePage"
         },

@@ -64,11 +64,13 @@ type sessionMetadata = api.SessionMetadata
 type sessionSidebarPartition = api.SessionSidebarPartition
 type sessionSidebarPartitionState = api.SessionSidebarPartitionState
 type sessionSidebarPartitionPutRequest = api.SessionSidebarPartitionPutRequest
+type sessionSourceAssignment = api.SessionSourceAssignment
+type sessionSourceResolution = api.SessionSourceResolution
 type sessionMessagePage = api.SessionMessagePage
 type sessionTurnDraftSegment = api.SessionTurnDraftSegment
 type sessionTurnDraftTool = api.SessionTurnDraftTool
-type sessionTurnDraft = api.SessionTurnDraft
 type agentErrorPayload = api.AgentErrorPayload
+type sessionTurnDraft = api.SessionTurnDraft
 type sessionDetail = api.SessionDetail
 type configResponse = api.ConfigResponse
 type assistantMessagePushPayload = api.AssistantMessagePushPayload
@@ -98,3 +100,107 @@ type workflowInputVariableContract = api.WorkflowInputVariableContract
 
 type apiRequest = bus.RequestEnvelope
 type apiResponse = bus.ResponseEnvelope
+
+const defaultMaxRequestBodyBytes int64 = 1 << 20
+
+type agentParams = api.AgentParams
+type agentStopParams = api.AgentStopParams
+type sessionIDParams = api.SessionIDParams
+type sessionGetParams = api.SessionGetParams
+type sessionDeleteResponse = api.SessionDeleteResponse
+type taskCreateParams = api.TaskCreateParams
+type taskUpdateParams = api.TaskUpdateParams
+type taskIDParams = api.TaskIDParams
+type taskLogsParams = api.TaskLogsParams
+type taskPayload = api.TaskPayload
+type taskDeleteResponse = api.TaskDeleteResponse
+type taskRunPayload = api.TaskRunPayload
+type taskRunLogPayload = api.TaskRunLogPayload
+type toolNameParams = api.ToolNameParams
+type toolUpdateRequest = api.ToolUpdateRequest
+type toolPayload = api.ToolPayload
+type findIconTemplateUploadRequest = api.FindIconTemplateUploadRequest
+type findIconTemplateUploadPayload = api.FindIconTemplateUploadPayload
+type findIconPreviewRegion = api.FindIconPreviewRegion
+type findIconPreviewRequest = api.FindIconPreviewRequest
+type findIconPreviewPayload = api.FindIconPreviewPayload
+type mousePositionRequest = api.MousePositionRequest
+type mousePositionPayload = api.MousePositionPayload
+
+type providerCreateRequest = providerConfigInput
+
+type providerUpdateRequest = providerConfigInput
+
+const (
+	BusActionAgentSend           = busActionAgentSend
+	BusStatusSuccess             = busStatusSuccess
+	BusStatusError               = busStatusError
+	BusAssistantSessionEndSignal = busAssistantSessionEndSignal
+
+	DefaultMaxRequestBodyBytes = defaultMaxRequestBodyBytes
+	TaskListScopeUser          = taskListScopeUser
+	TaskListScopeSystem        = taskListScopeSystem
+	TaskListScopeOrchestration = taskListScopeOrchestration
+
+	SessionPushAssistantMessage = sessionPushAssistantMessage
+	SessionPushAwaitingHuman    = sessionPushAwaitingHuman
+	SessionPushRunStarted       = sessionPushRunStarted
+	SessionPushCompletionDelta  = sessionPushCompletionDelta
+	SessionPushToolCallStarted  = sessionPushToolCallStarted
+	SessionPushToolCallFinished = sessionPushToolCallFinished
+	SessionPushError            = sessionPushError
+	SessionPushDone             = sessionPushDone
+)
+
+type APIRequest = apiRequest
+type APIResponse = apiResponse
+type AgentRequest = agentRequest
+type AgentParams = agentParams
+type HumanResponseParams = humanResponseParams
+type SessionIDParams = sessionIDParams
+type SessionGetParams = sessionGetParams
+type SessionSidebarPartition = sessionSidebarPartition
+type SessionSidebarPartitionState = sessionSidebarPartitionState
+type SessionSidebarPartitionPutRequest = sessionSidebarPartitionPutRequest
+type SessionSourceAssignment = sessionSourceAssignment
+type SessionSourceResolution = sessionSourceResolution
+type SessionDeleteResponse = sessionDeleteResponse
+type ConfigResponse = configResponse
+type ConfigUpdateRequest = configUpdateRequest
+type ProviderCreateRequest = providerCreateRequest
+type ProviderUpdateRequest = providerUpdateRequest
+type ProviderConfigResponse = providerConfigResponse
+type ProviderListResponse = providerListResponse
+type SetActiveProviderRequest = setActiveProviderRequest
+type TaskCreateParams = taskCreateParams
+type TaskUpdateParams = taskUpdateParams
+type TaskIDParams = taskIDParams
+type TaskLogsParams = taskLogsParams
+type TaskPayload = taskPayload
+type TaskDeleteResponse = taskDeleteResponse
+type TaskRunPayload = taskRunPayload
+type TaskRunLogPayload = taskRunLogPayload
+type ToolNameParams = toolNameParams
+type ToolUpdateRequest = toolUpdateRequest
+type ToolPayload = toolPayload
+type FindIconTemplateUploadRequest = findIconTemplateUploadRequest
+type FindIconTemplateUploadPayload = findIconTemplateUploadPayload
+type FindIconPreviewRequest = findIconPreviewRequest
+type FindIconPreviewPayload = findIconPreviewPayload
+type MousePositionRequest = mousePositionRequest
+type MousePositionPayload = mousePositionPayload
+type SessionPushEventType = sessionPushEventType
+type SessionPushEvent = sessionPushEvent
+type SessionPushHub = sessionPushHub
+
+func ValidateBusRequest(req APIRequest) error {
+	return validateBusRequest(req)
+}
+
+func NewSessionPushHub() *SessionPushHub {
+	return newSessionPushHub()
+}
+
+func ResolveFindIconTemplateRootPath() (string, error) {
+	return resolveFindIconTemplateRoot()
+}

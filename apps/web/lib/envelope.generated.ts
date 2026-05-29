@@ -244,6 +244,17 @@ export interface SessionSidebarPartitionPutRequest {
   trace_id?: string;
 }
 
+export interface SessionSourceAssignment {
+  kind: 'workflow' | 'orchestration' | 'loop' | 'task';
+  owner_id: string;
+  owner_name: string;
+}
+
+export interface SessionSourceResolution {
+  assignments: Record<string, SessionSourceAssignment>;
+  hidden_session_ids: string[];
+}
+
 export interface SessionMessagePage {
   limit: number;
   before?: number | null;
@@ -268,6 +279,12 @@ export interface SessionTurnDraftTool {
   trace_id?: string;
 }
 
+export interface AgentErrorPayload {
+  message: string;
+  session_id?: string;
+  code?: number;
+}
+
 export interface SessionTurnDraft {
   trace_id: string;
   turn: number;
@@ -275,12 +292,6 @@ export interface SessionTurnDraft {
   thinking_segments: SessionTurnDraftSegment[];
   tools: SessionTurnDraftTool[];
   item_order: string[];
-}
-
-export interface AgentErrorPayload {
-  message: string;
-  session_id?: string;
-  code?: number;
 }
 
 export interface SessionDetail {

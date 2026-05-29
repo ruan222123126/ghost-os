@@ -360,6 +360,19 @@ pub struct SessionSidebarPartitionPutRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionSourceAssignment {
+    pub kind: String,
+    pub owner_id: String,
+    pub owner_name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionSourceResolution {
+    pub assignments: BTreeMap<String, SessionSourceAssignment>,
+    pub hidden_session_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionMessagePage {
     pub limit: i64,
     #[serde(default)]
@@ -396,6 +409,15 @@ pub struct SessionTurnDraftTool {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentErrorPayload {
+    pub message: String,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub code: Option<i64>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionTurnDraft {
     pub trace_id: String,
     pub turn: i64,
@@ -403,15 +425,6 @@ pub struct SessionTurnDraft {
     pub thinking_segments: Vec<SessionTurnDraftSegment>,
     pub tools: Vec<SessionTurnDraftTool>,
     pub item_order: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct AgentErrorPayload {
-    pub message: String,
-    #[serde(default)]
-    pub session_id: Option<String>,
-    #[serde(default)]
-    pub code: Option<i64>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

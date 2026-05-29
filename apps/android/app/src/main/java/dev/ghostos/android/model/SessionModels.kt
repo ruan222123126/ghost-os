@@ -127,6 +127,22 @@ data class SessionSidebarPartitionPutRequest(
 )
 
 @Serializable
+data class SessionSourceAssignment(
+    val kind: String,
+    @SerialName("owner_id")
+    val ownerId: String,
+    @SerialName("owner_name")
+    val ownerName: String
+)
+
+@Serializable
+data class SessionSourceResolution(
+    val assignments: Map<String, SessionSourceAssignment>,
+    @SerialName("hidden_session_ids")
+    val hiddenSessionIds: List<String>
+)
+
+@Serializable
 data class SessionMessagePage(
     val limit: Int,
     val before: Int? = null,
