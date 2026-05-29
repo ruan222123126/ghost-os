@@ -406,6 +406,21 @@ describe('lib/api/tasks/parser', () => {
     expect(logs[0].status).toBe('incomplete');
   });
 
+  it('accepts running task run status', () => {
+    const logs = parseTaskRunLogList([
+      {
+        task_id: 'task-log-running',
+        run_id: 'run-running',
+        trace_id: 'trace-running',
+        scheduled_at: '2026-04-05T07:00:00Z',
+        started_at: '2026-04-05T07:00:01Z',
+        status: 'running',
+      },
+    ]);
+
+    expect(logs[0].status).toBe('running');
+  });
+
   it('accepts task run log when node_results is missing', () => {
     const logs = parseTaskRunLogList([
       {

@@ -54,7 +54,7 @@ const TASK_RELAY_CONFIG_KEYS = [
   'max_rounds',
   'execution_timeout_ms',
 ] as const;
-const TASK_RUN_STATUS = ['success', 'incomplete', 'cancelled', 'error', 'skipped', 'awaiting_human'] as const;
+const TASK_RUN_STATUS = ['running', 'success', 'incomplete', 'cancelled', 'error', 'skipped', 'awaiting_human'] as const;
 const TASK_RUN_LOG_KEYS = [
   'task_id',
   'run_id',

@@ -1,8 +1,16 @@
 'use client';
 
+import { useState, type MouseEvent } from 'react';
+import { CloseButton } from '@/components/CloseButton';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { TaskRunLog, TaskRunNodeResult } from '@/lib/types';
+import { LiveRunViewerModal, type LiveRunViewerTarget } from './LiveRunViewerModal';
 import { OrchestrationRoundsBlock, parseOrchestrationGroupOutput } from './TaskLogsOrchestration';
+
+const LIVE_VIEW_STATUSES: ReadonlySet<TaskRunLog['status']> = new Set([
+  'running',
+  'awaiting_human',
+]);
 
 interface TaskLogsModalProps {
   taskID: string;
@@ -15,15 +23,26 @@ interface TaskLogsModalProps {
 export function TaskLogsModal(props: TaskLogsModalProps) {
   const { copy } = useWebLocale();
   const { taskID, logs, loading, error, onClose } = props;
+  const [viewerTarget, setViewerTarget] = useState<LiveRunViewerTarget | null>(null);
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
-      <button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onClick={onClose} aria-label={copy.settings.tasksLogsClose} />
-      <section className="relative z-[81] flex h-[78vh] w-full max-w-[900px] flex-col overflow-hidden rounded-[18px] border border-[#E5E5E5] bg-white shadow-2xl">
-        <TaskLogsModalHeader taskID={taskID} onClose={onClose} />
-        <TaskLogsModalBody logs={logs} loading={loading} error={error} />
-      </section>
-    </div>
+    <>
+      <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+        <button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onClick={onClose} aria-label={copy.settings.tasksLogsClose} />
+        <section className="relative z-[81] flex h-[78vh] w-full max-w-[900px] flex-col overflow-hidden rounded-[18px] border border-[#E5E5E5] bg-white shadow-2xl">
+          <TaskLogsModalHeader taskID={taskID} onClose={onClose} />
+          <TaskLogsModalBody logs={logs} loading={loading} error={error} onOpenLiveViewer={setViewerTarget} />
+        </section>
+      </div>
+      {viewerTarget ? (
+        <LiveRunViewerModal
+          sessionId={viewerTarget.sessionId}
+          traceId={viewerTarget.traceId}
+          runId={viewerTarget.runId}
+          onClose={() => setViewerTarget(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -33,20 +52,23 @@ function TaskLogsModalHeader(props: { taskID: string; onClose: () => void }) {
   return (
     <header className="flex items-center justify-between border-b border-[#E5E5E5] px-5 py-4">
       <h2 className="text-[15px] font-semibold text-[#111111]">{copy.settings.tasksLogsTitle(taskID)}</h2>
-      <button
-        type="button"
+      <CloseButton
         onClick={onClose}
-        className="rounded-full border border-[#E5E5E5] px-3 py-1 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5]"
-      >
-        {copy.settings.tasksLogsClose}
-      </button>
+        className="shrink-0"
+        aria-label={copy.settings.tasksLogsClose}
+      />
     </header>
   );
 }
 
-function TaskLogsModalBody(props: { logs: TaskRunLog[]; loading: boolean; error: string }) {
+function TaskLogsModalBody(props: {
+  logs: TaskRunLog[];
+  loading: boolean;
+  error: string;
+  onOpenLiveViewer: (target: LiveRunViewerTarget) => void;
+}) {
   const { copy } = useWebLocale();
-  const { logs, loading, error } = props;
+  const { logs, loading, error, onOpenLiveViewer } = props;
 
   if (loading) {
     return <div className="p-5 text-[13px] text-[#737373]">{copy.settings.tasksLogsLoading}</div>;
@@ -59,21 +81,29 @@ function TaskLogsModalBody(props: { logs: TaskRunLog[]; loading: boolean; error:
   }
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      {logs.map((log) => <TaskRunLogCard key={log.run_id} log={log} />)}
+      {logs.map((log) => (
+        <TaskRunLogCard key={log.run_id} log={log} onOpenLiveViewer={onOpenLiveViewer} />
+      ))}
     </div>
   );
 }
 
-function TaskRunLogCard(props: { log: TaskRunLog }) {
+function TaskRunLogCard(props: {
+  log: TaskRunLog;
+  onOpenLiveViewer: (target: LiveRunViewerTarget) => void;
+}) {
   const { copy } = useWebLocale();
-  const { log } = props;
+  const { log, onOpenLiveViewer } = props;
 
   return (
     <details className="mb-3 rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] p-3 last:mb-0" open>
-      <summary className="cursor-pointer list-none text-[12px] text-[#111111]">
-        <span className="font-semibold">{log.run_id}</span>
-        <span className="mx-2 text-[#737373]">{log.status}</span>
-        <span className="text-[#737373]">{formatLogTime(log.started_at ?? log.scheduled_at)}</span>
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[12px] text-[#111111]">
+        <span className="min-w-0">
+          <span className="font-semibold">{log.run_id}</span>
+          <span className="mx-2 text-[#737373]">{log.status}</span>
+          <span className="text-[#737373]">{formatLogTime(log.started_at ?? log.scheduled_at)}</span>
+        </span>
+        <TaskRunLiveViewButton log={log} onOpenLiveViewer={onOpenLiveViewer} />
       </summary>
       <div className="mt-3 space-y-2 text-[12px] text-[#111111]">
         <p className="font-mono text-[#525252]">trace_id: {log.trace_id}</p>
@@ -83,6 +113,57 @@ function TaskRunLogCard(props: { log: TaskRunLog }) {
         <TaskRunNodeResults nodeResults={log.node_results} />
       </div>
     </details>
+  );
+}
+
+function TaskRunLiveViewButton(props: {
+  log: TaskRunLog;
+  onOpenLiveViewer: (target: LiveRunViewerTarget) => void;
+}) {
+  const { copy } = useWebLocale();
+  const { log, onOpenLiveViewer } = props;
+  const sessionID = log.session_id_output?.trim() ?? '';
+  const unavailable = sessionID.length === 0;
+
+  if (!LIVE_VIEW_STATUSES.has(log.status)) {
+    return null;
+  }
+
+  const openViewer = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (unavailable) {
+      return;
+    }
+    onOpenLiveViewer({
+      sessionId: sessionID,
+      traceId: log.trace_id,
+      runId: log.run_id,
+    });
+  };
+
+  return (
+    <span
+      title={unavailable ? copy.settings.tasksLogsLiveViewUnavailable : copy.settings.tasksLogsLiveView}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
+      <button
+        type="button"
+        disabled={unavailable}
+        onClick={openViewer}
+        className={[
+          'shrink-0 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors',
+          unavailable
+            ? 'cursor-not-allowed border-[#E5E5E5] bg-[#F5F5F5] text-[#A3A3A3]'
+            : 'border-[#111111] bg-[#111111] text-white hover:bg-[#404040]',
+        ].join(' ')}
+      >
+        {copy.settings.tasksLogsLiveView}
+      </button>
+    </span>
   );
 }
 
