@@ -26,5 +26,5 @@
 - Web 配置：空工具 Preset 激活现允许 `tool_allowlist_only=true` + 空 `tool_allowlist`，表示严格禁止工具调用，工具列表 schema 构建不再因此失败；system prompt 预览无工具时仍返回 `tool_definitions: []`，避免前端严格解析报 expected array；主页设置弹层表单下拉现统一为圆润灰阶 Dropdown 样式，聊天模型选择器仍保持独立样式，模型选择弹窗已加宽并禁止横向滚动；首页空态现改为页面级 hero 布局：仅未进入会话且无可见消息时隐藏会话刘海、显示标题/副标题并将输入框上移；空态聊天区现与会话内统一白底，标题与输入框在聊天面板内上下左右居中；进入会话后的消息区不再渲染旧的“先配置模型”空提示覆盖正文区域；`orchestration_dispatch` compact 现已补 `public_once/private_once`，会直接显示公开发言与私密子回合对话，不再退回通用 `run`；设置区、任务日志、实时查看、侧栏小弹窗与工作流步骤编辑器的弹窗退出按钮已统一复用首页设置弹层 `CloseButton` X 图标。
 ## 当前约束
 - Native 与 GUI executor 仍在快速演进，不按生产级承诺；memory mode 当前仅保留配置开关与日记忆文件自动建档，不再向 system prompt 注入 Memory 段，后续以稳定性验证为主。
-- RSS `system_action`（`RSS_INBOX_POLL`、`RSS_BRIEFING_BUILD`）已从任务契约与启动编排移除，运行时仅保留用户任务类型。
-- 当前优先级：稳定性、可观测性、契约一致性；契约生成校验与层级守卫已接入 `task.py`；新增 `docs/audit-sandbox-in-driver.md` 完成 native sandbox 越层审计；`docs/orchestration-map.md` 已更新为 orchestration M1 结构盘点与守卫指标，pro dead-candidate 已清理且 `tfind` 摘要文件已更名为 `sfind`；不做无边界扩功能。详细历史请查 `git log`；本文件仅保留阶段摘要。
+- 产品级 RSS 已从 bridge/web 主链路、config、orchestration、transport 与共享 bus action 移除；仅保留工具侧通用 RSS 抓取/解析能力。
+- 当前优先级：稳定性、可观测性、契约一致性；契约生成校验与层级守卫已接入 `task.py`；新增 `docs/audit-sandbox-in-driver.md` 完成 native sandbox 越层审计；`docs/orchestration-map.md` 已更新为 orchestration M1 结构盘点与守卫指标，`orchestration_contract_test.go` 已按行为拆分为 `orchestration_contract_*_test.go`、保留薄入口并抽出共享 fixture/RSS env helper，pro dead-candidate 已清理且 `tfind` 摘要文件已更名为 `sfind`；不做无边界扩功能。详细历史请查 `git log`；本文件仅保留阶段摘要。
