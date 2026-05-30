@@ -6,6 +6,8 @@ import type { TaskPayload, TaskRunLog, TextTaskCreateRequest } from '@/lib/types
 import { requestJSON } from '@/lib/api/client';
 import { parseTaskPayload, parseTaskPayloadList, parseTaskRunLogList } from '@/lib/api/tasks/parser';
 
+const START_ONLY_QUERY = '?start_only=1';
+
 type WorkflowTaskCreateRequest = Extract<SharedTaskCreateRequest, { task_kind: 'workflow' }>;
 type TaskCreateRequest = WorkflowTaskCreateRequest | TextTaskCreateRequest;
 type TaskUpdateRequest = Pick<
@@ -42,7 +44,7 @@ export async function deleteTask(id: string): Promise<void> {
 }
 
 export async function runTaskNow(id: string): Promise<void> {
-  await requestJSON(`/api/tasks/${encodeURIComponent(id)}/run`, {
+  await requestJSON(`/api/tasks/${encodeURIComponent(id)}/run${START_ONLY_QUERY}`, {
     method: 'POST',
   });
 }

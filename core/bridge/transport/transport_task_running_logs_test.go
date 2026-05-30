@@ -63,6 +63,59 @@ func TestHandleTaskRunMakesRunningLogVisibleImmediately(t *testing.T) {
 	}
 }
 
+func TestHandleTaskRunStartOnlyReturnsAfterLaunch(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	handler := newTestHandler(t, func(
+		ctx context.Context,
+		_ string,
+		sessionID string,
+		_ string,
+		_ bridgeconfig.Store,
+		_ *session.Store,
+	) (string, string, error) {
+		close(started)
+		select {
+		case <-release:
+			return "ok", sessionID, nil
+		case <-ctx.Done():
+			return "", sessionID, ctx.Err()
+		}
+	})
+
+	taskID := createRunnableAgentTask(t, handler)
+	done := make(chan int, 1)
+	go func() {
+		recorder := serveRequest(handler, http.MethodPost, "/api/tasks/"+taskID+"/run?start_only=1", "", nil)
+		done <- recorder.Code
+	}()
+
+	select {
+	case <-started:
+	case <-ctxTimeout():
+		t.Fatal("timed out waiting for task run to start")
+	}
+	select {
+	case code := <-done:
+		if code != http.StatusOK {
+			t.Fatalf("unexpected run response status: %d", code)
+		}
+	case <-ctxTimeout():
+		t.Fatal("timed out waiting for start-only response")
+	}
+
+	logs := listTaskRunLogs(t, handler, taskID)
+	if len(logs) != 1 {
+		t.Fatalf("expected one running log, got %#v", logs)
+	}
+	if logs[0].Status != "running" || logs[0].SessionIDOutput == "" {
+		t.Fatalf("unexpected running log: %#v", logs[0])
+	}
+
+	close(release)
+	waitForTaskRunStatus(t, handler, taskID, "success")
+}
+
 func createRunnableAgentTask(t *testing.T, handler http.Handler) string {
 	t.Helper()
 
@@ -102,4 +155,23 @@ func listTaskRunLogs(
 
 func ctxTimeout() <-chan time.Time {
 	return time.After(2 * time.Second)
+}
+
+func waitForTaskRunStatus(
+	t *testing.T,
+	handler http.Handler,
+	taskID string,
+	status string,
+) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		logs := listTaskRunLogs(t, handler, taskID)
+		if len(logs) > 0 && logs[0].Status == status {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for task %q status %q", taskID, status)
 }

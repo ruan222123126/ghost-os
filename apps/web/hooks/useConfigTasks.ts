@@ -150,8 +150,7 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
     if (result === null) {
       return;
     }
-    await refreshTasks();
-  }, [copy.system.failedToRunTask, refreshTasks, runMutation]);
+  }, [copy.system.failedToRunTask, runMutation]);
 
   const updateEditor = useCallback((patch: Partial<TaskEditorState>) => {
     setEditor((state) => ({ ...state, ...patch }));

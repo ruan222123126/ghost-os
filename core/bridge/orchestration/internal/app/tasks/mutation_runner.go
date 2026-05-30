@@ -70,6 +70,9 @@ func (r MutationRunner) RunNow(params api.TaskIDParams, traceID string) (api.Tas
 	if err != nil {
 		return api.TaskRunPayload{}, err
 	}
+	if params.StartOnly {
+		return r.startNow(*task, traceID)
+	}
 	run, err := r.Scheduler.RunNow(*task, traceID)
 	if err != nil {
 		return api.TaskRunPayload{}, err
@@ -79,6 +82,14 @@ func (r MutationRunner) RunNow(params api.TaskIDParams, traceID string) (api.Tas
 		return api.TaskRunPayload{}, err
 	}
 	return api.TaskRunPayload{Task: BuildPayload(*updatedTask), Run: BuildRunLogPayload(run)}, nil
+}
+
+func (r MutationRunner) startNow(task bridgeTasks.ScheduledTask, traceID string) (api.TaskRunPayload, error) {
+	run, err := r.Scheduler.StartNow(task, traceID)
+	if err != nil {
+		return api.TaskRunPayload{}, err
+	}
+	return api.TaskRunPayload{Task: BuildPayload(task), Run: BuildRunLogPayload(run)}, nil
 }
 
 func (r MutationRunner) loadForMutation(id string, scope string) (string, *bridgeTasks.ScheduledTask, error) {

@@ -14,4 +14,5 @@ type Scheduler interface {
 	Upsert(task bridgeTasks.ScheduledTask) error
 	Unregister(taskID string) error
 	RunNow(task bridgeTasks.ScheduledTask, traceID string) (bridgeTasks.RunLog, error)
+	StartNow(task bridgeTasks.ScheduledTask, traceID string) (bridgeTasks.RunLog, error)
 }

@@ -157,7 +157,7 @@ describe('lib/api/tasks/api', () => {
     await runTaskNow('task-5');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/tasks/task-5/run',
+      '/api/tasks/task-5/run?start_only=1',
       expect.objectContaining({
         method: 'POST',
       }),

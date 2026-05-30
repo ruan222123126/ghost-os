@@ -7,6 +7,8 @@ import type {
   TaskUpdateRequest,
 } from '@/lib/types';
 
+const START_ONLY_QUERY = '?start_only=1';
+
 function parseOrchestrationTaskPayload(value: unknown): OrchestrationTaskPayload {
   const payload = parseTaskPayload(value);
   if (payload.task_kind !== 'orchestration') {
@@ -54,7 +56,7 @@ export async function deleteOrchestration(id: string): Promise<void> {
 }
 
 export async function runOrchestrationNow(id: string): Promise<void> {
-  await requestJSON(`/api/orchestrations/${encodeURIComponent(id)}/run`, { method: 'POST' });
+  await requestJSON(`/api/orchestrations/${encodeURIComponent(id)}/run${START_ONLY_QUERY}`, { method: 'POST' });
 }
 
 export async function listOrchestrationLogs(id: string, limit = 20): Promise<TaskRunLog[]> {

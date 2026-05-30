@@ -41,8 +41,9 @@ type TaskUpdateParams struct {
 }
 
 type TaskIDParams struct {
-	ID    string `json:"id"`
-	Scope string `json:"scope,omitempty"`
+	ID        string `json:"id"`
+	Scope     string `json:"scope,omitempty"`
+	StartOnly bool   `json:"start_only,omitempty"`
 }
 
 type TaskLogsParams struct {

@@ -90,6 +90,52 @@ func TestTaskSchedulerRunNowWritesRunningLogThenOverwritesFinal(t *testing.T) {
 	}
 }
 
+func TestTaskSchedulerStartNowReturnsRunningLogBeforeExecutionFinishes(t *testing.T) {
+	store, err := NewStore(t.TempDir(), nil)
+	if err != nil {
+		t.Fatalf("new task store: %v", err)
+	}
+
+	executor := newBlockingRunSessionExecutor()
+	scheduler := NewTaskScheduler(store, executor)
+	if err := scheduler.Start(); err != nil {
+		t.Fatalf("start scheduler: %v", err)
+	}
+	defer scheduler.Stop()
+
+	task := ScheduledTask{
+		ID:              "start-now-task",
+		Message:         "run without waiting",
+		ScheduleType:    ScheduleTypeInterval,
+		IntervalSeconds: 60,
+		Enabled:         true,
+	}
+
+	run, err := scheduler.StartNow(task, "trace-start-now")
+	if err != nil {
+		t.Fatalf("start now: %v", err)
+	}
+	if run.Status != RunStatusRunning || run.SessionIDOutput != "session-running" {
+		t.Fatalf("unexpected running payload: %#v", run)
+	}
+
+	select {
+	case <-executor.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for running task")
+	}
+	running := requireSingleRunLog(t, store, task.ID)
+	if running.RunID != run.RunID {
+		t.Fatalf("run id was not reused: returned=%q stored=%q", run.RunID, running.RunID)
+	}
+	if running.Status != RunStatusRunning {
+		t.Fatalf("unexpected stored running log: %#v", running)
+	}
+
+	close(executor.release)
+	requireRunStatus(t, store, task.ID, RunStatusSuccess)
+}
+
 func requireSingleRunLog(t *testing.T, store *Store, taskID string) RunLog {
 	t.Helper()
 
@@ -101,4 +147,18 @@ func requireSingleRunLog(t *testing.T, store *Store, taskID string) RunLog {
 		t.Fatalf("expected one run log, got %d", len(runs))
 	}
 	return runs[0]
+}
+
+func requireRunStatus(t *testing.T, store *Store, taskID string, status string) {
+	t.Helper()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		run := requireSingleRunLog(t, store, taskID)
+		if run.Status == status {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for task %q status %q", taskID, status)
 }

@@ -352,6 +352,10 @@ func (s *taskMutationSchedulerStub) RunNow(task ScheduledTask, _ string) (TaskRu
 	return TaskRunLog{TaskID: task.ID}, nil
 }
 
+func (s *taskMutationSchedulerStub) StartNow(task ScheduledTask, _ string) (TaskRunLog, error) {
+	return TaskRunLog{TaskID: task.ID, Status: taskRunStatusRunning}, nil
+}
+
 func mutationTestTask() ScheduledTask {
 	return ScheduledTask{
 		ID:              "task-update-test",

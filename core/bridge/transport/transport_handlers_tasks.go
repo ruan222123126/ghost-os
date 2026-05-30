@@ -113,7 +113,11 @@ func (t *transport) handleTaskRun(
 		w,
 		r,
 		actionTaskRunNow,
-		bridgeorchestration.TaskIDParams{ID: id, Scope: scope},
+		bridgeorchestration.TaskIDParams{
+			ID:        id,
+			Scope:     scope,
+			StartOnly: taskRunStartOnly(r),
+		},
 		scope,
 		traceID,
 	)
@@ -185,4 +189,9 @@ func parseTaskLogsLimit(r *http.Request) (int, error) {
 		return 0, errors.New("limit must be a non-negative integer")
 	}
 	return limit, nil
+}
+
+func taskRunStartOnly(r *http.Request) bool {
+	value := strings.TrimSpace(r.URL.Query().Get("start_only"))
+	return value == "1" || strings.EqualFold(value, "true")
 }

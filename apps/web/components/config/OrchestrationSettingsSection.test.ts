@@ -75,12 +75,19 @@ describe('components/config/OrchestrationSettingsSection', () => {
     expect(content).toContain('Enable');
   });
 
-  it('shows running label for the in-flight orchestration', () => {
+  it('keeps the run label stable while a launch request is in flight', () => {
     useOrchestrationSectionState.mockReturnValue(buildState({ runningOrchestrationID: 'orch_1' }));
     const renderer = renderSection();
 
-    expect(findButtonByText(renderer.root, 'Running...')).toBeTruthy();
-    expect(findOptionalButtonByText(renderer.root, 'Run')).toBeUndefined();
+    expect(findButtonByText(renderer.root, 'Run')).toBeTruthy();
+    expect(findOptionalButtonByText(renderer.root, 'Running...')).toBeUndefined();
+  });
+
+  it('shows a success banner in the shared feedback slot', () => {
+    useOrchestrationSectionState.mockReturnValue(buildState({ success: 'Run started successfully' }));
+    const renderer = renderSection();
+
+    expect(textContent(renderer.root)).toContain('Run started successfully');
   });
 
   it('delegates delete to section state after confirmation', async () => {
@@ -150,6 +157,7 @@ function buildState(overrides?: Record<string, unknown>) {
     orchestrations: [buildTask()],
     loading: false,
     error: '',
+    success: '',
     creating: false,
     name: '',
     submitting: false,

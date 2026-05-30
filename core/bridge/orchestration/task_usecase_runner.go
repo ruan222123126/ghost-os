@@ -31,6 +31,7 @@ type taskMutationScheduler interface {
 	Upsert(task ScheduledTask) error
 	Unregister(taskID string) error
 	RunNow(task ScheduledTask, traceID string) (TaskRunLog, error)
+	StartNow(task ScheduledTask, traceID string) (TaskRunLog, error)
 }
 
 type taskMutationRunner struct {
