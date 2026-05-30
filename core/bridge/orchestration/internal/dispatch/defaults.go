@@ -5,7 +5,6 @@ import (
 
 	"ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
-	bridgerss "ghost-os/bridge/rss"
 )
 
 type TraceHandler func(context.Context, string) (bus.ServiceResult, error)
@@ -15,24 +14,18 @@ type TaskListParams struct {
 }
 
 type DefaultHandlers struct {
-	AgentSend        TypedHandler[api.AgentParams]
-	AgentStop        TypedHandler[api.AgentStopParams]
-	ConfigGet        TraceHandler
-	ConfigUpdate     TypedHandler[api.ConfigUpdateRequest]
-	HumanResponse    TypedHandler[api.HumanResponseParams]
-	TaskCreate       TypedHandler[api.TaskCreateParams]
-	TaskList         TypedHandler[TaskListParams]
-	TaskGet          TypedHandler[api.TaskIDParams]
-	TaskUpdate       TypedHandler[api.TaskUpdateParams]
-	TaskRunNow       TypedHandler[api.TaskIDParams]
-	TaskLogs         TypedHandler[api.TaskLogsParams]
-	TaskDelete       TypedHandler[api.TaskIDParams]
-	RSSInboxPoll     TypedHandler[bridgerss.InboxPollParams]
-	RSSInboxList     TypedHandler[bridgerss.InboxListParams]
-	RSSInboxGet      TypedHandler[bridgerss.InboxGetParams]
-	RSSInboxGroups   TypedHandler[bridgerss.InboxGroupsParams]
-	RSSBriefingBuild TypedHandler[bridgerss.BriefingParams]
-	RSSBriefingGet   TraceHandler
+	AgentSend     TypedHandler[api.AgentParams]
+	AgentStop     TypedHandler[api.AgentStopParams]
+	ConfigGet     TraceHandler
+	ConfigUpdate  TypedHandler[api.ConfigUpdateRequest]
+	HumanResponse TypedHandler[api.HumanResponseParams]
+	TaskCreate    TypedHandler[api.TaskCreateParams]
+	TaskList      TypedHandler[TaskListParams]
+	TaskGet       TypedHandler[api.TaskIDParams]
+	TaskUpdate    TypedHandler[api.TaskUpdateParams]
+	TaskRunNow    TypedHandler[api.TaskIDParams]
+	TaskLogs      TypedHandler[api.TaskLogsParams]
+	TaskDelete    TypedHandler[api.TaskIDParams]
 }
 
 func RegisterDefaultActions(router *Router, handlers DefaultHandlers) {
@@ -40,7 +33,6 @@ func RegisterDefaultActions(router *Router, handlers DefaultHandlers) {
 	registerConfigActions(router, handlers)
 	registerHumanActions(router, handlers)
 	registerTaskActions(router, handlers)
-	registerRSSActions(router, handlers)
 }
 
 func registerAgentActions(router *Router, handlers DefaultHandlers) {
@@ -65,13 +57,4 @@ func registerTaskActions(router *Router, handlers DefaultHandlers) {
 	RegisterTyped(router, bus.ActionTaskRunNow, handlers.TaskRunNow)
 	RegisterTyped(router, bus.ActionTaskLogs, handlers.TaskLogs)
 	RegisterTyped(router, bus.ActionTaskDelete, handlers.TaskDelete)
-}
-
-func registerRSSActions(router *Router, handlers DefaultHandlers) {
-	RegisterTyped(router, bridgerss.ActionInboxPoll, handlers.RSSInboxPoll)
-	RegisterTyped(router, bridgerss.ActionInboxList, handlers.RSSInboxList)
-	RegisterTyped(router, bridgerss.ActionInboxGet, handlers.RSSInboxGet)
-	RegisterTyped(router, bridgerss.ActionInboxGroups, handlers.RSSInboxGroups)
-	RegisterTyped(router, bridgerss.ActionBriefingBuild, handlers.RSSBriefingBuild)
-	RegisterTrace(router, bridgerss.ActionBriefingGet, handlers.RSSBriefingGet)
 }

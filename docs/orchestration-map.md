@@ -18,7 +18,7 @@
 
 | Target | Responsibility |
 | --- | --- |
-| `dispatch` | HTTP/bus/service facade、任务入口、工具/RSS action 分派。 |
+| `dispatch` | HTTP/bus/service facade、任务入口、工具 action 分派。 |
 | `loop` | Agent 回合、session turn、plan/relay、group orchestration runner。 |
 | `workflow` | workflow 图校验、节点执行、screen step/find_icon 协调。 |
 | `policy` | runtime config、runtime overrides、validation、tool policy、session guards。 |
@@ -54,7 +54,7 @@
 - 顶层 `orchestration` 保留 facade：`Service`/router/trace compat 仍存在，只委托 internal 包。
 - 将 trace draft projection 测试下沉到 `internal/trace/sessiondraft`，结构守卫升级为 M2 预算。
 - 清理了迁移后未使用的顶层 `taskListParams` 和旧注册 helper。
-- action 路由、service action handlers、tasks/rss/presets/prompts/skills/tools/sessions 分发逻辑迁入 `internal/dispatch/*`。
+- action 路由、service action handlers、tasks/presets/prompts/skills/tools/sessions 分发逻辑迁入 `internal/dispatch/*`。
 - run registry、session push、stream checkpoint、terminal buffer 等迁入 `internal/trace/*`。
 
 ## M3 计划

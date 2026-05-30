@@ -1,7 +1,7 @@
 // CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
 // Source: core/shared/schema.json (https://ghost-os.dev/schemas/bus-envelope.schema.json)
 
-export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_LOGS' | 'TASK_DELETE' | 'RSS_INBOX_POLL' | 'RSS_INBOX_LIST' | 'RSS_INBOX_GET' | 'RSS_INBOX_GROUPS' | 'RSS_BRIEFING_BUILD' | 'RSS_BRIEFING_GET';
+export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_LOGS' | 'TASK_DELETE';
 export type BusStatus = 'success' | 'error';
 
 export interface ApiRequest<TParams extends Record<string, unknown>> {

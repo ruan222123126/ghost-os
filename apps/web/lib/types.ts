@@ -229,33 +229,6 @@ export interface ProviderModelOption {
 export type SessionMessageRole = NonNullable<SharedSessionMessage['role']>;
 export type SessionFileAttachment = SharedSessionFileContent;
 
-export interface RSSBriefingHighlight {
-  rank: number;
-  group_id: string;
-  topic_label?: string;
-  headline: string;
-  summary?: string;
-  why_it_matters?: string;
-  importance: 'low' | 'normal' | 'high';
-  source_item_count: number;
-  source_feed_count: number;
-  tags?: string[];
-}
-
-export interface RSSBriefing {
-  id?: string;
-  title: string;
-  summary?: string;
-  generated_at: string;
-  saved_at?: string;
-  window_hours: number;
-  scanned_groups: number;
-  highlight_count: number;
-  trace_id?: string;
-  task_id?: string;
-  highlights: RSSBriefingHighlight[];
-}
-
 export type SkillSource = 'repo' | 'user';
 
 export interface SkillPayload {

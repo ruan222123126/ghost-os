@@ -9,29 +9,23 @@ import (
 )
 
 const (
-	busActionAgentSend = bus.ActionAgentSend
-	busActionAgentStop = bus.ActionAgentStop
+	busActionAgentSend     = bus.ActionAgentSend
+	busActionAgentStop     = bus.ActionAgentStop
 	busActionHumanResponse = bus.ActionHumanResponse
-	busActionConfigGet = bus.ActionConfigGet
-	busActionConfigUpdate = bus.ActionConfigUpdate
-	busActionTaskCreate = bus.ActionTaskCreate
-	busActionTaskList = bus.ActionTaskList
-	busActionTaskGet = bus.ActionTaskGet
-	busActionTaskUpdate = bus.ActionTaskUpdate
-	busActionTaskRunNow = bus.ActionTaskRunNow
-	busActionTaskLogs = bus.ActionTaskLogs
-	busActionTaskDelete = bus.ActionTaskDelete
-	busActionRssInboxPoll = bus.ActionRssInboxPoll
-	busActionRssInboxList = bus.ActionRssInboxList
-	busActionRssInboxGet = bus.ActionRssInboxGet
-	busActionRssInboxGroups = bus.ActionRssInboxGroups
-	busActionRssBriefingBuild = bus.ActionRssBriefingBuild
-	busActionRssBriefingGet = bus.ActionRssBriefingGet
+	busActionConfigGet     = bus.ActionConfigGet
+	busActionConfigUpdate  = bus.ActionConfigUpdate
+	busActionTaskCreate    = bus.ActionTaskCreate
+	busActionTaskList      = bus.ActionTaskList
+	busActionTaskGet       = bus.ActionTaskGet
+	busActionTaskUpdate    = bus.ActionTaskUpdate
+	busActionTaskRunNow    = bus.ActionTaskRunNow
+	busActionTaskLogs      = bus.ActionTaskLogs
+	busActionTaskDelete    = bus.ActionTaskDelete
 )
 
 const (
 	busStatusSuccess = bus.StatusSuccess
-	busStatusError = bus.StatusError
+	busStatusError   = bus.StatusError
 )
 
 const busAssistantSessionEndSignal = bus.AssistantSessionEndSignal

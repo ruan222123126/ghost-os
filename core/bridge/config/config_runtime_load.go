@@ -52,7 +52,6 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 
 type configSections struct {
 	Provider         ProviderConfig
-	RSS              RSSConfig
 	Worker           WorkerConfig
 	Task             TaskConfig
 	ToolSelector     ToolSelectorConfig
@@ -81,7 +80,6 @@ func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime ru
 	}
 	return configSections{
 		Provider:         provider,
-		RSS:              features.RSS,
 		Worker:           features.Worker,
 		Task:             features.Task,
 		ToolSelector:     features.ToolSelector,
@@ -93,7 +91,6 @@ func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime ru
 }
 
 type runtimeFeatureSections struct {
-	RSS          RSSConfig
 	Worker       WorkerConfig
 	Task         TaskConfig
 	ToolSelector ToolSelectorConfig
@@ -101,10 +98,6 @@ type runtimeFeatureSections struct {
 }
 
 func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (runtimeFeatureSections, error) {
-	rss, err := buildRSSConfig(fileCfg, env)
-	if err != nil {
-		return runtimeFeatureSections{}, err
-	}
 	worker, err := buildWorkerConfig(fileCfg, env)
 	if err != nil {
 		return runtimeFeatureSections{}, err
@@ -122,7 +115,6 @@ func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (r
 		return runtimeFeatureSections{}, err
 	}
 	return runtimeFeatureSections{
-		RSS:          rss,
 		Worker:       worker,
 		Task:         task,
 		ToolSelector: toolSelector,
@@ -157,7 +149,6 @@ func composeConfig(
 ) Config {
 	return Config{
 		Provider:                   sections.Provider,
-		RSS:                        sections.RSS,
 		Worker:                     sections.Worker,
 		ToolSelector:               sections.ToolSelector,
 		ToolSearch:                 sections.ToolSearch,

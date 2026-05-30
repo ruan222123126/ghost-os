@@ -4,7 +4,6 @@ package config
 // individual runtime fields outside the main Config load path.
 type auxConfig struct {
 	SessionsPath          string
-	RSS                   RSSConfig
 	WebSearchTavilyAPIKey string
 	Execution             ExecutionConfig
 }
@@ -19,17 +18,12 @@ func loadAuxConfigFromEnv() (auxConfig, error) {
 }
 
 func resolveAuxConfig(fileCfg bridgeFileConfig, env envSnapshot) (auxConfig, error) {
-	rss, err := buildRSSConfig(fileCfg, env)
-	if err != nil {
-		return auxConfig{}, err
-	}
 	execution, err := resolveExecutionConfig(fileCfg, env)
 	if err != nil {
 		return auxConfig{}, err
 	}
 	return auxConfig{
 		SessionsPath:          resolveSessionsPath(fileCfg, env),
-		RSS:                   rss,
 		WebSearchTavilyAPIKey: resolveWebSearchTavilyAPIKey(fileCfg, env),
 		Execution:             execution,
 	}, nil

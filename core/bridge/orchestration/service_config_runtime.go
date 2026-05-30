@@ -23,9 +23,6 @@ func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, trace
 		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
 	}
 	s.syncTaskSchedulerExecutionTimeout()
-	if s.rssActionHandler() != nil {
-		_ = s.reloadRSSInboxRuntime()
-	}
 	if err := s.BootstrapSystemTasks(); err != nil {
 		logAction(traceID, busActionConfigUpdate, "error", err)
 		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)

@@ -141,11 +141,6 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			want: "invalid GHOST_TOOL_ALLOWLIST_ONLY",
 		},
 		{
-			name: "rss bool",
-			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RSS_POLL_ENABLED": "maybe"},
-			want: "invalid GHOST_RSS_POLL_ENABLED",
-		},
-		{
 			name: "positive int",
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_MAX_TURNS": "0"},
 			want: "invalid GHOST_MAX_TURNS",
@@ -159,11 +154,6 @@ func TestResolveConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			name: "float range",
 			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_TOOL_SELECTOR_CONFIDENCE": "1.5"},
 			want: "invalid GHOST_TOOL_SELECTOR_CONFIDENCE",
-		},
-		{
-			name: "duration",
-			env:  envSnapshot{"GHOST_PROVIDER": "custom", "GHOST_RSS_POLL_INTERVAL": "later"},
-			want: "invalid GHOST_RSS_POLL_INTERVAL",
 		},
 		{
 			name: "response store bool",
@@ -310,11 +300,6 @@ func TestResolveConfigFailsFastOnInvalidFileValues(t *testing.T) {
 			name:    "selector confidence",
 			fileCfg: bridgeFileConfig{ToolSelectorConfidence: floatPtr(1.1)},
 			want:    "invalid tool_selector_confidence",
-		},
-		{
-			name:    "rss poll interval",
-			fileCfg: bridgeFileConfig{RSSPollInterval: stringPointer("later")},
-			want:    "invalid rss_poll_interval",
 		},
 	}
 

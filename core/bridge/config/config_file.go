@@ -66,16 +66,6 @@ type bridgeFileConfig struct {
 	MemoryModeEnabled              *bool                         `toml:"memory_mode_enabled,omitempty"`
 	MicrocompactEnabled            *bool                         `toml:"microcompact_enabled,omitempty"`
 	SessionTitleMode               *string                       `toml:"session_title_mode,omitempty"`
-	RSSFeedsPath                   *string                       `toml:"rss_feeds_path,omitempty"`
-	RSSInboxPath                   *string                       `toml:"rss_inbox_path,omitempty"`
-	RSSBriefingsPath               *string                       `toml:"rss_briefings_path,omitempty"`
-	RSSReportsPath                 *string                       `toml:"rss_reports_path,omitempty"`
-	RSSPollEnabled                 *bool                         `toml:"rss_poll_enabled,omitempty"`
-	RSSPollInterval                *string                       `toml:"rss_poll_interval,omitempty"`
-	RSSPollMaxItemsPerFeed         *int                          `toml:"rss_poll_max_items_per_feed,omitempty"`
-	RSSAIBatchSize                 *int                          `toml:"rss_ai_batch_size,omitempty"`
-	RSSBriefingEnabled             *bool                         `toml:"rss_briefing_enabled,omitempty"`
-	RSSBriefingInterval            *string                       `toml:"rss_briefing_interval,omitempty"`
 	WebSearchTavilyURL             *string                       `toml:"web_search_tavily_url,omitempty"`
 	WebSearchExaURL                *string                       `toml:"web_search_exa_url,omitempty"`
 	WebSearchTavilyAPIKey          *string                       `toml:"web_search_tavily_api_key,omitempty"`

@@ -4,20 +4,15 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestResolveAuxConfigUsesProvidedEnvSnapshot(t *testing.T) {
 	t.Setenv("GHOST_SESSIONS_PATH", "/process/sessions")
-	t.Setenv("GHOST_RSS_FEEDS_PATH", "/process/feeds")
 	t.Setenv("GHOST_WEB_SEARCH_TAVILY_API_KEY", "process-tavily")
 	t.Setenv("GHOST_NATIVE_BINARY_PATH", "/process/native")
 
 	env := envSnapshot{
 		"GHOST_SESSIONS_PATH":              "/snapshot/sessions",
-		"GHOST_RSS_FEEDS_PATH":             "/snapshot/feeds",
-		"GHOST_RSS_POLL_ENABLED":           "false",
-		"GHOST_RSS_POLL_INTERVAL":          "15m",
 		"GHOST_WEB_SEARCH_TAVILY_API_KEY":  "snapshot-tavily",
 		"GHOST_NATIVE_PERSISTENT":          "true",
 		"GHOST_NATIVE_BINARY_PATH":         "/snapshot/native",
@@ -32,15 +27,6 @@ func TestResolveAuxConfigUsesProvidedEnvSnapshot(t *testing.T) {
 	}
 	if aux.SessionsPath != "/snapshot/sessions" {
 		t.Fatalf("unexpected sessions path: got %q want %q", aux.SessionsPath, "/snapshot/sessions")
-	}
-	if aux.RSS.FeedsPath != "/snapshot/feeds" {
-		t.Fatalf("unexpected rss feeds path: got %q want %q", aux.RSS.FeedsPath, "/snapshot/feeds")
-	}
-	if aux.RSS.PollEnabled {
-		t.Fatalf("expected rss poll to use snapshot env value, got enabled")
-	}
-	if aux.RSS.PollInterval != 15*time.Minute {
-		t.Fatalf("unexpected rss poll interval: got %s want %s", aux.RSS.PollInterval, 15*time.Minute)
 	}
 	if aux.WebSearchTavilyAPIKey != "snapshot-tavily" {
 		t.Fatalf("unexpected tavily api key: got %q want %q", aux.WebSearchTavilyAPIKey, "snapshot-tavily")
@@ -94,11 +80,6 @@ func TestResolveAuxConfigFailsFastOnInvalidEnvValues(t *testing.T) {
 			name: "native persistent",
 			env:  envSnapshot{"GHOST_NATIVE_PERSISTENT": "maybe"},
 			want: "invalid GHOST_NATIVE_PERSISTENT",
-		},
-		{
-			name: "rss poll interval",
-			env:  envSnapshot{"GHOST_RSS_POLL_INTERVAL": "later"},
-			want: "invalid GHOST_RSS_POLL_INTERVAL",
 		},
 	}
 

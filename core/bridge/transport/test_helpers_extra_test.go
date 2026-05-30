@@ -8,10 +8,7 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	bridgeorchestration "ghost-os/bridge/orchestration"
-	bridgerss "ghost-os/bridge/rss"
-	rsssubscriptions "ghost-os/bridge/rss/subscriptions"
 	"ghost-os/bridge/streaming"
-	"ghost-os/bridge/tools"
 )
 
 const cancelledHumanDialogueMessage = "Conversation cancelled by user."
@@ -52,60 +49,6 @@ func mustAppToolStepID(t *testing.T, turn int, toolIndex int) string {
 		t.Fatalf("ToolStepID returned error: %v", err)
 	}
 	return stepID
-}
-
-type fakeSelectorCompleter struct {
-	response       *llm.CompletionResponse
-	err            error
-	waitForContext bool
-	requests       []llm.CompletionRequest
-}
-
-func (f *fakeSelectorCompleter) Complete(ctx context.Context, request llm.CompletionRequest) (*llm.CompletionResponse, error) {
-	f.requests = append(f.requests, request)
-	if f.waitForContext {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	}
-	return f.response, f.err
-}
-
-type testRSSInboxFetcher struct {
-	byURL map[string]tools.RSSResult
-	err   error
-}
-
-func (f testRSSInboxFetcher) Fetch(_ context.Context, feedURL string, _ int) (tools.RSSResult, error) {
-	if f.err != nil {
-		return tools.RSSResult{}, f.err
-	}
-	if result, ok := f.byURL[feedURL]; ok {
-		return result, nil
-	}
-	return tools.RSSResult{}, nil
-}
-
-type testRSSInboxClassifier struct {
-	decisions []bridgerss.RSSInboxClassification
-	perFeed   map[string][]bridgerss.RSSInboxClassification
-	err       error
-}
-
-func (c testRSSInboxClassifier) Classify(
-	_ context.Context,
-	feed rsssubscriptions.FeedSubscription,
-	_ []bridgerss.RSSInboxCandidate,
-	_ string,
-) ([]bridgerss.RSSInboxClassification, error) {
-	if c.err != nil {
-		return nil, c.err
-	}
-	if len(c.perFeed) > 0 {
-		if decisions, ok := c.perFeed[feed.URL]; ok {
-			return decisions, nil
-		}
-	}
-	return c.decisions, nil
 }
 
 type proTestRuntimeFactory struct {

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"ghost-os/bridge/orchestration/internal/dispatch"
-	bridgerss "ghost-os/bridge/rss"
 )
 
 func registerDefaultActions(service *bridgeService) {
@@ -43,20 +42,6 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		},
 		TaskDelete: func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
 			return service.executeTaskDeleteActionResult(params, traceID)
-		},
-		RSSInboxPoll: service.executeRSSInboxPollActionResult,
-		RSSInboxList: func(_ context.Context, params bridgerss.InboxListParams, traceID string) (ServiceResult, error) {
-			return service.executeRSSInboxListActionResult(params, traceID)
-		},
-		RSSInboxGet: func(_ context.Context, params bridgerss.InboxGetParams, traceID string) (ServiceResult, error) {
-			return service.executeRSSInboxGetActionResult(params, traceID)
-		},
-		RSSInboxGroups: func(_ context.Context, params bridgerss.InboxGroupsParams, traceID string) (ServiceResult, error) {
-			return service.executeRSSInboxGroupsActionResult(params, traceID)
-		},
-		RSSBriefingBuild: service.executeRSSBriefingBuildActionResult,
-		RSSBriefingGet: func(_ context.Context, traceID string) (ServiceResult, error) {
-			return service.executeRSSBriefingGetActionResult(traceID)
 		},
 	}
 }

@@ -30,7 +30,6 @@ type TaskConfig struct {
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
 	Provider                       ProviderConfig
-	RSS                            RSSConfig
 	Worker                         WorkerConfig
 	ToolSelector                   ToolSelectorConfig
 	ToolSearch                     ToolSearchConfig

@@ -14,13 +14,7 @@
         "TASK_UPDATE",
         "TASK_RUN_NOW",
         "TASK_LOGS",
-        "TASK_DELETE",
-        "RSS_INBOX_POLL",
-        "RSS_INBOX_LIST",
-        "RSS_INBOX_GET",
-        "RSS_INBOX_GROUPS",
-        "RSS_BRIEFING_BUILD",
-        "RSS_BRIEFING_GET"
+        "TASK_DELETE"
       ]
     },
     "status": {

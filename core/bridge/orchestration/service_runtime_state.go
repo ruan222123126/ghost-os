@@ -9,12 +9,10 @@ import (
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
-	bridgerss "ghost-os/bridge/rss"
 )
 
 type serviceRuntimeState struct {
 	tasks serviceTaskRuntime
-	rss   serviceRSSRuntime
 }
 
 type serviceTaskRuntime struct {
@@ -23,20 +21,13 @@ type serviceTaskRuntime struct {
 	initErr   error
 }
 
-type serviceRSSRuntime struct {
-	handler *bridgerss.ActionHandler
-}
-
 func newServiceRuntimeState() *serviceRuntimeState {
 	return &serviceRuntimeState{}
 }
 
-func (s *serviceRuntimeState) start(configStore bridgeconfig.Store, schedulerService *bridgeService, rssLog bridgerss.LogFunc) error {
+func (s *serviceRuntimeState) start(configStore bridgeconfig.Store, schedulerService *bridgeService) error {
 	if s == nil {
 		return nil
-	}
-	if err := s.initRSSInbox(configStore, rssLog); err != nil {
-		return err
 	}
 	return s.initTaskRuntime(configStore, schedulerService)
 }
@@ -116,42 +107,6 @@ func (s *serviceRuntimeState) initTaskRuntime(configStore bridgeconfig.Store, sc
 	return s.tasks.start(configStore, schedulerService)
 }
 
-func (s *serviceRuntimeState) initRSSInbox(configStore bridgeconfig.Store, logFunc bridgerss.LogFunc) error {
-	if s == nil {
-		return nil
-	}
-	return s.reloadRSSInbox(configStore, logFunc)
-}
-
-func (s *serviceRuntimeState) reloadRSSInbox(configStore bridgeconfig.Store, logFunc bridgerss.LogFunc) error {
-	if s == nil {
-		return nil
-	}
-	service, err := newRSSInboxServiceFromConfig(configStore)
-	if err != nil {
-		s.rss.setHandler(nil, err, logFunc)
-		return err
-	}
-	s.rss.setHandler(service, nil, logFunc)
-	return nil
-}
-
-func newRSSInboxServiceFromConfig(store bridgeconfig.Store) (*bridgerss.RSSInboxService, error) {
-	service, err := bridgerss.NewRSSInboxServiceFromConfig(store)
-	if err != nil {
-		return nil, err
-	}
-	service.SetReportBuilder(newRuntimeRSSReportBuilder(store))
-	return service, nil
-}
-
-func (s *serviceRuntimeState) setRSSHandler(service *bridgerss.RSSInboxService, initErr error, logFunc bridgerss.LogFunc) {
-	if s == nil {
-		return
-	}
-	s.rss.setHandler(service, initErr, logFunc)
-}
-
 func (s *serviceRuntimeState) taskStore() *TaskStore {
 	if s == nil {
 		return nil
@@ -171,20 +126,6 @@ func (s *serviceRuntimeState) taskInitErr() error {
 		return nil
 	}
 	return s.tasks.initErr
-}
-
-func (s *serviceRuntimeState) rssHandler() *bridgerss.ActionHandler {
-	if s == nil {
-		return nil
-	}
-	return s.rss.handler
-}
-
-func (s *serviceRuntimeState) rssInitErr() error {
-	if s == nil {
-		return nil
-	}
-	return s.rss.initErr()
 }
 
 type serviceLifecycle struct {
@@ -256,22 +197,4 @@ func (r *serviceTaskRuntime) stop() {
 		return
 	}
 	r.scheduler.Stop()
-}
-
-func (r *serviceRSSRuntime) setHandler(service *bridgerss.RSSInboxService, initErr error, logFunc bridgerss.LogFunc) {
-	if r == nil {
-		return
-	}
-	if initErr != nil {
-		r.handler = bridgerss.NewActionHandler(nil, initErr, logFunc)
-		return
-	}
-	r.handler = bridgerss.NewActionHandler(service, nil, logFunc)
-}
-
-func (r *serviceRSSRuntime) initErr() error {
-	if r == nil || r.handler == nil {
-		return nil
-	}
-	return r.handler.InitErr()
 }

@@ -3,11 +3,9 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	bridgeconfig "ghost-os/bridge/config"
-	bridgerss "ghost-os/bridge/rss"
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
@@ -89,17 +87,6 @@ func (s *Service) SetRuntimeFactory(factory AgentRuntimeFactory) {
 			runner.runtimeFactory = factory
 		}
 	}
-}
-
-func (s *Service) SetRSSInbox(service *bridgerss.RSSInboxService) {
-	s.SetRSSInboxService(service, nil)
-}
-
-func (s *Service) SetRSSInboxService(service *bridgerss.RSSInboxService, initErr error) {
-	if s == nil || s.inner == nil {
-		return
-	}
-	s.inner.setRSSHandler(service, initErr)
 }
 
 func (s *Service) StartBackgroundRuntimes() error {
@@ -188,18 +175,6 @@ func (s *Service) EnsureSessionNotInflight(sessionID string) error {
 
 func (s *Service) EnsureSessionActive(sessionID string) error {
 	return s.inner.ensureSessionActive(sessionID)
-}
-
-func (s *Service) ExecuteRSSInboxPollUsecase(
-	ctx context.Context,
-	params bridgerss.InboxPollParams,
-	taskID string,
-	traceID string,
-) (bridgerss.RSSInboxPollResult, int, error) {
-	if s == nil || s.inner == nil || s.inner.rssActionHandler() == nil {
-		return bridgerss.RSSInboxPollResult{}, http.StatusInternalServerError, fmt.Errorf("rss inbox service is not configured")
-	}
-	return s.inner.rssActionHandler().ExecuteInboxPollUsecase(ctx, params, taskID, traceID)
 }
 
 func (s *Service) ExecuteSkillListAction(traceID string) (ServiceResult, error) {

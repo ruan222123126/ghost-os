@@ -1,12 +1,10 @@
 package orchestration
 
 import (
-	"context"
 	"net/http"
 
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	sharedtext "ghost-os/bridge/orchestration/internal/shared/text"
-	bridgerss "ghost-os/bridge/rss"
 	bridgeskills "ghost-os/bridge/skills"
 )
 
@@ -158,41 +156,6 @@ func (s *bridgeService) executeTaskLogsActionResult(params taskLogsParams, trace
 
 func (s *bridgeService) executeTaskDeleteActionResult(params taskIDParams, traceID string) (ServiceResult, error) {
 	return adaptLegacyResult(s.executeTaskDeleteAction(params, traceID))
-}
-
-func (s *bridgeService) executeRSSInboxPollActionResult(
-	ctx context.Context,
-	params bridgerss.InboxPollParams,
-	traceID string,
-) (ServiceResult, error) {
-	return adaptLegacyResult(s.executeRSSInboxPollAction(ctx, params, traceID))
-}
-
-func (s *bridgeService) executeRSSInboxListActionResult(params bridgerss.InboxListParams, traceID string) (ServiceResult, error) {
-	return adaptLegacyResult(s.executeRSSInboxListAction(params, traceID))
-}
-
-func (s *bridgeService) executeRSSInboxGetActionResult(params bridgerss.InboxGetParams, traceID string) (ServiceResult, error) {
-	return adaptLegacyResult(s.executeRSSInboxGetAction(params, traceID))
-}
-
-func (s *bridgeService) executeRSSInboxGroupsActionResult(
-	params bridgerss.InboxGroupsParams,
-	traceID string,
-) (ServiceResult, error) {
-	return adaptLegacyResult(s.executeRSSInboxGroupsAction(params, traceID))
-}
-
-func (s *bridgeService) executeRSSBriefingBuildActionResult(
-	ctx context.Context,
-	params bridgerss.BriefingParams,
-	traceID string,
-) (ServiceResult, error) {
-	return adaptLegacyResult(s.executeRSSBriefingBuildAction(ctx, params, traceID))
-}
-
-func (s *bridgeService) executeRSSBriefingGetActionResult(traceID string) (ServiceResult, error) {
-	return adaptLegacyResult(s.executeRSSBriefingGetAction(traceID))
 }
 
 func (s *bridgeService) executeSkillListActionResult(traceID string) (ServiceResult, error) {

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	bridgeconfig "ghost-os/bridge/config"
-	bridgerss "ghost-os/bridge/rss"
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
@@ -116,19 +115,12 @@ func (s *bridgeService) taskInitErr() error {
 	return s.runtimeState.taskInitErr()
 }
 
-func (s *bridgeService) rssActionHandler() *bridgerss.ActionHandler {
-	if s == nil || s.runtimeState == nil {
-		return nil
-	}
-	return s.runtimeState.rssHandler()
-}
-
 // StartBackgroundRuntimes 显式初始化 service 依赖的后台 runtime。
 func (s *bridgeService) StartBackgroundRuntimes() error {
 	if s == nil {
 		return nil
 	}
-	return s.runtimeState.start(s.configStore, s, s.rssLogFunc())
+	return s.runtimeState.start(s.configStore, s)
 }
 
 // BootstrapSystemTasks 将系统调度任务同步到 task runtime。
@@ -144,33 +136,6 @@ func (s *bridgeService) initTaskRuntime() error {
 		return nil
 	}
 	return s.runtimeState.initTaskRuntime(s.configStore, s)
-}
-
-func (s *bridgeService) initRSSInboxRuntime() error {
-	if s == nil {
-		return nil
-	}
-	return s.reloadRSSInboxRuntime()
-}
-
-func (s *bridgeService) reloadRSSInboxRuntime() error {
-	if s == nil {
-		return nil
-	}
-	return s.runtimeState.reloadRSSInbox(s.configStore, s.rssLogFunc())
-}
-
-func (s *bridgeService) rssHandlerInitErr() error {
-	if s == nil || s.runtimeState == nil {
-		return nil
-	}
-	return s.runtimeState.rssInitErr()
-}
-
-func (s *bridgeService) rssLogFunc() bridgerss.LogFunc {
-	return func(traceID, action, status string, err error) {
-		logAction(traceID, action, status, err)
-	}
 }
 
 func (s *bridgeService) skillLogFunc() bridgeskills.LogFunc {
@@ -209,11 +174,4 @@ func (s *bridgeService) registeredActionNames() []string {
 		return nil
 	}
 	return s.actionRouter.actionNames()
-}
-
-func (s *bridgeService) setRSSHandler(service *bridgerss.RSSInboxService, initErr error) {
-	if s == nil || s.runtimeState == nil {
-		return
-	}
-	s.runtimeState.setRSSHandler(service, initErr, s.rssLogFunc())
 }

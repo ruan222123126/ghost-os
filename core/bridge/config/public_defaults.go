@@ -8,14 +8,6 @@ const (
 	DefaultPromptsPath                  = defaultPromptsPath
 	DefaultPromptsDir                   = defaultPromptsDir
 	DefaultSessionsPath                 = defaultSessionsPath
-	DefaultRSSFeedsPath                 = defaultRSSFeedsPath
-	DefaultRSSInboxPath                 = defaultRSSInboxPath
-	DefaultRSSBriefingsPath             = defaultRSSBriefingsPath
-	DefaultRSSReportsPath               = defaultRSSReportsPath
-	DefaultRSSPollInterval              = defaultRSSPollInterval
-	DefaultRSSPollMaxItemsPerFeed       = defaultRSSPollMaxItemsPerFeed
-	DefaultRSSAIBatchSize               = defaultRSSAIBatchSize
-	DefaultRSSBriefingInterval          = defaultRSSBriefingInterval
 	DefaultTasksPath                    = defaultTasksPath
 	DefaultTaskExecutionTimeoutMS       = defaultTaskExecutionTimeoutMS
 	DefaultAnthropicVersion             = defaultAnthropicVersion

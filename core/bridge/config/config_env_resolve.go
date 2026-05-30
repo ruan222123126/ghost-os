@@ -9,22 +9,6 @@ func resolveSessionsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
 	return valueOrEnvWithEnv(fileCfg.SessionsPath, env, "GHOST_SESSIONS_PATH", defaultSessionsPath)
 }
 
-func resolveRSSFeedsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
-	return valueOrEnvWithEnv(fileCfg.RSSFeedsPath, env, "GHOST_RSS_FEEDS_PATH", defaultRSSFeedsPath)
-}
-
-func resolveRSSInboxPath(fileCfg bridgeFileConfig, env envSnapshot) string {
-	return valueOrEnvWithEnv(fileCfg.RSSInboxPath, env, "GHOST_RSS_INBOX_PATH", defaultRSSInboxPath)
-}
-
-func resolveRSSBriefingsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
-	return valueOrEnvWithEnv(fileCfg.RSSBriefingsPath, env, "GHOST_RSS_BRIEFINGS_PATH", defaultRSSBriefingsPath)
-}
-
-func resolveRSSReportsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
-	return valueOrEnvWithEnv(fileCfg.RSSReportsPath, env, "GHOST_RSS_REPORTS_PATH", defaultRSSReportsPath)
-}
-
 func resolveWebSearchTavilyAPIKey(fileCfg bridgeFileConfig, env envSnapshot) string {
 	if fileCfg.WebSearchTavilyAPIKey != nil {
 		return strings.TrimSpace(*fileCfg.WebSearchTavilyAPIKey)

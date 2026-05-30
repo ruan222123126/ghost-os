@@ -155,7 +155,6 @@ func TestPromptTemplatesKeepCompactToolStrategy(t *testing.T) {
 			"## Runtime Constraints",
 			"## Response Rules",
 			"END_SESSION",
-			"RSS inbox polling and AI filtering",
 			"Available tools:",
 			"Tool list:",
 			"screen_action.click_text",
