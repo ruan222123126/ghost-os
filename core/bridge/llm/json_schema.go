@@ -2,6 +2,7 @@ package llm
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -56,6 +57,59 @@ func sanitizeCodexToolSchema(schema map[string]any) {
 			schema["items"] = map[string]any{"type": "string"}
 		}
 	}
+}
+
+func sanitizeOpenAIToolParameters(raw json.RawMessage, toolName string) (json.RawMessage, error) {
+	schema, err := decodeJSONObject(raw)
+	if err != nil {
+		return nil, fmt.Errorf("decode schema for tool %q: %w", toolName, err)
+	}
+	if err := sanitizeOpenAIToolSchema(schema); err != nil {
+		return nil, fmt.Errorf("sanitize schema for tool %q: %w", toolName, err)
+	}
+	encoded, err := json.Marshal(schema)
+	if err != nil {
+		return nil, fmt.Errorf("encode schema for tool %q: %w", toolName, err)
+	}
+	return encoded, nil
+}
+
+// OpenAI 兼容 chat completions 的 function tools 要求顶层必须是 object，
+// 且不接受 oneOf/anyOf/allOf/enum/not 这类顶层组合关键字。
+func sanitizeOpenAIToolSchema(schema map[string]any) error {
+	for key, value := range schema {
+		switch key {
+		case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas":
+			schema[key] = sanitizeCodexSchemaMapEntries(value)
+		default:
+			schema[key] = sanitizeCodexToolSchemaValue(value)
+		}
+	}
+
+	topLevelType := codexSchemaType(schema)
+	if topLevelType == "" {
+		topLevelType = inferCodexSchemaType(schema)
+	}
+	if topLevelType != "" && topLevelType != "object" {
+		return fmt.Errorf("top-level tool schema type %q is not supported by openai chat completions", topLevelType)
+	}
+
+	delete(schema, "oneOf")
+	delete(schema, "anyOf")
+	delete(schema, "allOf")
+	delete(schema, "enum")
+	delete(schema, "not")
+	schema["type"] = "object"
+
+	if _, ok := schema["properties"].(map[string]any); !ok {
+		schema["properties"] = map[string]any{}
+	}
+	if additionalProperties, ok := schema["additionalProperties"]; ok {
+		if _, isBool := additionalProperties.(bool); !isBool {
+			schema["additionalProperties"] = sanitizeCodexToolSchemaValue(additionalProperties)
+		}
+	}
+	return nil
 }
 
 func sanitizeCodexSchemaMapEntries(value any) any {

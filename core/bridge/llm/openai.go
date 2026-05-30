@@ -161,12 +161,16 @@ func toOpenAIRequest(model string, request CompletionRequest) (openAIRequest, er
 
 	tools := make([]openAITool, 0, len(request.Tools))
 	for _, tool := range request.Tools {
+		parameters, err := sanitizeOpenAIToolParameters(tool.Parameters, tool.Name)
+		if err != nil {
+			return openAIRequest{}, err
+		}
 		tools = append(tools, openAITool{
 			Type: "function",
 			Function: openAIFunction{
 				Name:        tool.Name,
 				Description: tool.Description,
-				Parameters:  normalizeJSONObject(tool.Parameters),
+				Parameters:  parameters,
 			},
 		})
 	}
