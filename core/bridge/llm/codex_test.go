@@ -500,6 +500,47 @@ func TestToCodexRequestSanitizesToolSchemaForStrictGateways(t *testing.T) {
 	}
 }
 
+func TestToCodexRequestStripsTopLevelToolSchemaCombinators(t *testing.T) {
+	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Text: "system prompt"},
+			{Role: RoleUser, Text: "hello"},
+		},
+		Tools: []ToolDef{
+			{
+				Name:        "bash_exec",
+				Description: "Run bash",
+				Parameters: json.RawMessage(`{
+					"type":"object",
+					"properties":{"command":{"type":"string"}},
+					"required":["command"],
+					"additionalProperties":false,
+					"allOf":[{"if":{"properties":{"interactive":{"const":true}}},"then":{"not":{"required":["login"]}}}]
+				}`),
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toCodexRequest returned error: %v", err)
+	}
+	if len(req.Tools) != 1 {
+		t.Fatalf("unexpected tools count: got %d want 1", len(req.Tools))
+	}
+	if got := req.Tools[0].Parameters["type"]; got != "object" {
+		t.Fatalf("unexpected sanitized top-level type: got %#v want %q", got, "object")
+	}
+	if _, exists := req.Tools[0].Parameters["allOf"]; exists {
+		t.Fatalf("unexpected top-level allOf: %+v", req.Tools[0].Parameters)
+	}
+	properties, ok := req.Tools[0].Parameters["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected properties payload: %#v", req.Tools[0].Parameters["properties"])
+	}
+	if _, ok := properties["command"]; !ok {
+		t.Fatalf("sanitized schema lost command property: %+v", properties)
+	}
+}
+
 func TestToCodexRequestDoesNotInjectTypeIntoPropertiesContainer(t *testing.T) {
 	req, err := toCodexRequest("codex-mini-latest", CompletionRequest{
 		Messages: []Message{

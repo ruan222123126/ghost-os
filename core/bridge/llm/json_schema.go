@@ -20,7 +20,11 @@ func decodeJSONObjectString(raw string) (map[string]any, error) {
 	return decodeJSONObject(json.RawMessage(strings.TrimSpace(raw)))
 }
 
-func sanitizeCodexToolSchema(schema map[string]any) {
+func sanitizeCodexToolSchema(schema map[string]any) error {
+	return sanitizeStrictGatewayToolSchema(schema, "codex responses function tools")
+}
+
+func sanitizeToolSchemaNode(schema map[string]any) {
 	for key, value := range schema {
 		switch key {
 		case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas":
@@ -77,21 +81,18 @@ func sanitizeOpenAIToolParameters(raw json.RawMessage, toolName string) (json.Ra
 // OpenAI 兼容 chat completions 的 function tools 要求顶层必须是 object，
 // 且不接受 oneOf/anyOf/allOf/enum/not 这类顶层组合关键字。
 func sanitizeOpenAIToolSchema(schema map[string]any) error {
-	for key, value := range schema {
-		switch key {
-		case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas":
-			schema[key] = sanitizeCodexSchemaMapEntries(value)
-		default:
-			schema[key] = sanitizeCodexToolSchemaValue(value)
-		}
-	}
+	return sanitizeStrictGatewayToolSchema(schema, "openai chat completions")
+}
+
+func sanitizeStrictGatewayToolSchema(schema map[string]any, gatewayName string) error {
+	sanitizeToolSchemaNode(schema)
 
 	topLevelType := codexSchemaType(schema)
 	if topLevelType == "" {
 		topLevelType = inferCodexSchemaType(schema)
 	}
 	if topLevelType != "" && topLevelType != "object" {
-		return fmt.Errorf("top-level tool schema type %q is not supported by openai chat completions", topLevelType)
+		return fmt.Errorf("top-level tool schema type %q is not supported by %s", topLevelType, gatewayName)
 	}
 
 	delete(schema, "oneOf")
@@ -126,7 +127,7 @@ func sanitizeCodexSchemaMapEntries(value any) any {
 func sanitizeCodexToolSchemaValue(value any) any {
 	switch typed := value.(type) {
 	case map[string]any:
-		sanitizeCodexToolSchema(typed)
+		sanitizeToolSchemaNode(typed)
 		return typed
 	case []any:
 		for index, item := range typed {

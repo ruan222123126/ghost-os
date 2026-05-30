@@ -176,7 +176,9 @@ func toCodexRequestWithOptions(model string, request CompletionRequest, options 
 		if err != nil {
 			return codexRequest{}, fmt.Errorf("decode schema for tool %q: %w", tool.Name, err)
 		}
-		sanitizeCodexToolSchema(parameters)
+		if err := sanitizeCodexToolSchema(parameters); err != nil {
+			return codexRequest{}, fmt.Errorf("sanitize schema for tool %q: %w", tool.Name, err)
+		}
 		tools = append(tools, codexTool{
 			Type:        "function",
 			Name:        tool.Name,
