@@ -1,7 +1,9 @@
 import {
+  clearPendingQuestionState,
   clearStreamingAssistantState,
   clearStreamingThinkingState,
   clearStreamingToolState,
+  type PendingQuestionState,
   STREAMING_ASSISTANT_ORDER_PREFIX,
   STREAMING_THINKING_ORDER_PREFIX,
   type StreamingAssistantState,
@@ -11,15 +13,20 @@ import {
 import type { SessionTurnDraft, StreamingToolState } from '@/lib/types';
 
 interface DraftHydratedState {
+  pendingQuestionState: PendingQuestionState;
   streamingAssistantState: StreamingAssistantState;
   streamingThinkingState: StreamingThinkingState;
   streamingItemOrder: string[];
   streamingToolState: StreamingToolTableState;
 }
 
-export function buildDraftHydratedState(draft: SessionTurnDraft | null | undefined): DraftHydratedState {
+export function buildDraftHydratedState(
+  draft: SessionTurnDraft | null | undefined,
+  sessionId: string,
+): DraftHydratedState {
   if (!draft) {
     return {
+      pendingQuestionState: clearPendingQuestionState(),
       streamingAssistantState: clearStreamingAssistantState(),
       streamingThinkingState: clearStreamingThinkingState(),
       streamingItemOrder: [],
@@ -28,6 +35,7 @@ export function buildDraftHydratedState(draft: SessionTurnDraft | null | undefin
   }
 
   return {
+    pendingQuestionState: buildPendingQuestionState(draft, sessionId),
     streamingAssistantState: buildSegmentState(
       draft.assistant_segments,
       draft.item_order,
@@ -101,5 +109,22 @@ function buildToolState(draft: SessionTurnDraft): StreamingToolTableState {
   return {
     order: tools.map((tool) => tool.id),
     toolsById: Object.fromEntries(tools.map((tool) => [tool.id, tool])),
+  };
+}
+
+function buildPendingQuestionState(draft: SessionTurnDraft, sessionId: string): PendingQuestionState {
+  const questions = draft.pending_questions.map((question) => ({
+    id: `stream-question:${draft.trace_id}:${question.question_id}`,
+    kind: 'pending_question' as const,
+    content: question.prompt,
+    options: question.options,
+    questionId: question.question_id,
+    selectionMode: question.selection_mode,
+    sessionId,
+  }));
+
+  return {
+    order: questions.map((question) => question.questionId),
+    questionsById: Object.fromEntries(questions.map((question) => [question.questionId, question])),
   };
 }

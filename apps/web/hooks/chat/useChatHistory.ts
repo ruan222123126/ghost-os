@@ -56,8 +56,6 @@ export function useChatHistory(options: UseChatHistoryOptions) {
   const { recoverTurnDraft, stopRecoveredRun } = useChatHistoryRecovery({
     applyRuntimeActions,
     beginHistorySync,
-    clearPendingQuestions,
-    clearStreamingState,
     endHistorySync,
     hydrateTurnDraft,
     setActiveRun,
@@ -80,7 +78,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     }
     stopRecoveredRun();
     clearStreamingState();
-    hydrateTurnDraft(null);
+    hydrateTurnDraft(detail.id, null);
     setActiveRun(null);
     setLoading(false);
     setStopPending(false);
@@ -112,7 +110,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     if (!id) {
       stopRecoveredRun();
       clearStreamingState();
-      hydrateTurnDraft(null);
+      hydrateTurnDraft('', null);
       clearPendingQuestions();
       setCommittedMessages([]);
       setHasOlderHistory(false);

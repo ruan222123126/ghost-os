@@ -1,0 +1,102 @@
+{
+  "events": [
+    {
+      "id": "trace-structured-merge:000001",
+      "step_id": "turn-0003-assistant",
+      "trace_id": "trace-structured-merge",
+      "session_id": "session-fixture-2",
+      "turn": 3,
+      "type": "run_started",
+      "payload": {
+        "session_id": "session-fixture-2"
+      }
+    },
+    {
+      "id": "trace-structured-merge:000002",
+      "step_id": "turn-0003-assistant",
+      "trace_id": "trace-structured-merge",
+      "session_id": "session-fixture-2",
+      "turn": 3,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "tool_call_start",
+        "tool_call_index": 0,
+        "tool_name": "bash_exec"
+      }
+    },
+    {
+      "id": "trace-structured-merge:000003",
+      "step_id": "turn-0003-assistant",
+      "trace_id": "trace-structured-merge",
+      "session_id": "session-fixture-2",
+      "turn": 3,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "tool_call_delta",
+        "tool_call_index": 0,
+        "arguments_fragment": "{\"command\":\"pwd\"}"
+      }
+    },
+    {
+      "id": "trace-structured-merge:000004",
+      "step_id": "turn-0003-assistant",
+      "trace_id": "trace-structured-merge",
+      "session_id": "session-fixture-2",
+      "turn": 3,
+      "type": "completion_delta",
+      "payload": {
+        "kind": "tool_call_end",
+        "tool_call_index": 0
+      }
+    },
+    {
+      "id": "trace-structured-merge:000005",
+      "step_id": "turn-0003-tool-0001",
+      "trace_id": "trace-structured-merge",
+      "session_id": "session-fixture-2",
+      "turn": 3,
+      "type": "tool_call_started",
+      "payload": {
+        "tool": "bash_exec",
+        "tool_call_id": "call-9",
+        "arguments_json": "{\"command\":\"pwd\"}"
+      }
+    },
+    {
+      "id": "trace-structured-merge:000006",
+      "step_id": "turn-0003-tool-0001",
+      "trace_id": "trace-structured-merge",
+      "session_id": "session-fixture-2",
+      "turn": 3,
+      "type": "tool_call_finished",
+      "payload": {
+        "tool": "bash_exec",
+        "tool_call_id": "call-9",
+        "status": "success",
+        "output": "/workspace"
+      }
+    }
+  ],
+  "expected_turn_draft": {
+    "trace_id": "trace-structured-merge",
+    "turn": 3,
+    "status": "streaming",
+    "pending_questions": [],
+    "assistant_segments": [],
+    "thinking_segments": [],
+    "tools": [
+      {
+        "id": "stream-tool:trace-structured-merge:preview:1:index:0",
+        "content": "/workspace",
+        "tool_input": "{\"command\":\"pwd\"}",
+        "tool_name": "bash_exec",
+        "tool_status": "success",
+        "tool_call_id": "call-9",
+        "trace_id": "trace-structured-merge"
+      }
+    ],
+    "item_order": [
+      "tool:stream-tool:trace-structured-merge:preview:1:index:0"
+    ]
+  }
+}

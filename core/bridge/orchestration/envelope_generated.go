@@ -64,6 +64,7 @@ type sessionMessagePage = api.SessionMessagePage
 type sessionTurnDraftSegment = api.SessionTurnDraftSegment
 type sessionTurnDraftTool = api.SessionTurnDraftTool
 type agentErrorPayload = api.AgentErrorPayload
+type sessionTurnDraftPendingQuestion = api.SessionTurnDraftPendingQuestion
 type sessionTurnDraft = api.SessionTurnDraft
 type sessionDetail = api.SessionDetail
 type configResponse = api.ConfigResponse

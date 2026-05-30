@@ -418,9 +418,23 @@ pub struct AgentErrorPayload {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionTurnDraftPendingQuestion {
+    pub question_id: String,
+    pub prompt: String,
+    #[serde(default)]
+    pub selection_mode: Option<String>,
+    #[serde(default)]
+    pub options: Option<Vec<AskHumanOption>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionTurnDraft {
     pub trace_id: String,
     pub turn: i64,
+    pub status: String,
+    #[serde(default)]
+    pub error: Option<String>,
+    pub pending_questions: Vec<SessionTurnDraftPendingQuestion>,
     pub assistant_segments: Vec<SessionTurnDraftSegment>,
     pub thinking_segments: Vec<SessionTurnDraftSegment>,
     pub tools: Vec<SessionTurnDraftTool>,

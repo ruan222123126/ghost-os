@@ -64,6 +64,7 @@ OUTPUT_GROUPS = (
             "sessionMessagePage",
             "sessionTurnDraftSegment",
             "sessionTurnDraftTool",
+            "sessionTurnDraftPendingQuestion",
             "sessionTurnDraft",
             "sessionDetail",
         ),
@@ -82,6 +83,9 @@ OUTPUT_GROUPS = (
             "agentErrorPayload",
             "sessionPushAssistantMessagePayload",
             "sessionPushAwaitingHumanPayload",
+            "taskRunCardStartedPayload",
+            "taskRunCardEventPayload",
+            "taskRunCardFinishedPayload",
         ),
     ),
     KotlinOutputGroup(

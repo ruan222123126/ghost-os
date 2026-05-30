@@ -163,3 +163,7 @@ func cloneHumanQuestionOptions(options []HumanQuestionOption) []HumanQuestionOpt
 	}
 	return cloned
 }
+
+func CloneHumanQuestionOptionsForDraft(options []HumanQuestionOption) []HumanQuestionOption {
+	return cloneHumanQuestionOptions(options)
+}

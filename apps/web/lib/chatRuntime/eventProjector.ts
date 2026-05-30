@@ -41,9 +41,10 @@ export function projectAgentEvent(options: ProjectAgentEventOptions): ChatRuntim
     case 'message':
       return projectMessage(options);
     case 'done':
-    case 'error':
       clearRuntimeThinking(options.runtime);
       return [{ type: 'clear_streaming_thinking_text' }];
+    case 'error':
+      return [];
     default:
       return [];
   }

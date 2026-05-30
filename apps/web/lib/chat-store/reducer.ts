@@ -76,6 +76,7 @@ interface ClearMessagesAction {
 
 interface HydrateTurnDraftAction {
   type: 'hydrate_turn_draft';
+  sessionId: string;
   draft: SessionTurnDraft | null | undefined;
 }
 
@@ -125,7 +126,7 @@ export function chatStateReducer(state: ChatStateStore, action: ChatStateAction)
     case 'clear_messages':
       return clearMessagesState(state);
     case 'hydrate_turn_draft':
-      return hydrateTurnDraftState(state, action.draft);
+      return hydrateTurnDraftState(state, action.sessionId, action.draft);
     default:
       return state;
   }
@@ -180,11 +181,13 @@ function clearMessagesState(state: ChatStateStore): ChatStateStore {
 
 function hydrateTurnDraftState(
   state: ChatStateStore,
+  sessionId: string,
   draft: SessionTurnDraft | null | undefined,
 ): ChatStateStore {
-  const hydrated = buildDraftHydratedState(draft);
+  const hydrated = buildDraftHydratedState(draft, sessionId.trim());
   return {
     ...state,
+    pendingQuestionState: hydrated.pendingQuestionState,
     streamingAssistantState: hydrated.streamingAssistantState,
     streamingThinkingState: hydrated.streamingThinkingState,
     streamingItemOrder: hydrated.streamingItemOrder,

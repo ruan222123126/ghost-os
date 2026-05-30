@@ -179,10 +179,24 @@ data class SessionTurnDraftTool(
 )
 
 @Serializable
+data class SessionTurnDraftPendingQuestion(
+    @SerialName("question_id")
+    val questionId: String,
+    val prompt: String,
+    @SerialName("selection_mode")
+    val selectionMode: String? = null,
+    val options: List<AskHumanOption>? = null
+)
+
+@Serializable
 data class SessionTurnDraft(
     @SerialName("trace_id")
     val traceId: String,
     val turn: Int,
+    val status: String,
+    val error: String? = null,
+    @SerialName("pending_questions")
+    val pendingQuestions: List<SessionTurnDraftPendingQuestion>,
     @SerialName("assistant_segments")
     val assistantSegments: List<SessionTurnDraftSegment>,
     @SerialName("thinking_segments")

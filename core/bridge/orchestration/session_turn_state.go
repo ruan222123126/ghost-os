@@ -186,10 +186,11 @@ func (s *sessionTurnState) clearAssistantDraftBeforeCommit(
 }
 
 func (s *sessionTurnState) clearTurnDraftBeforeCommit(runErr error, awaitingHuman bool) {
+	_ = awaitingHuman
 	if s == nil || s.sess == nil || s.sess.TurnDraft == nil {
 		return
 	}
-	if runErr != nil && !awaitingHuman {
+	if runErr != nil {
 		return
 	}
 	s.sess.ClearTurnDraft(time.Now().UTC())

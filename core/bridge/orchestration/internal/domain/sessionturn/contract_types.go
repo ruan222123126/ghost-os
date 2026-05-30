@@ -13,5 +13,6 @@ type sessionMetadata = api.SessionMetadata
 type sessionToolCall = api.SessionToolCall
 type sessionToolResult = api.SessionToolResult
 type sessionTurnDraft = api.SessionTurnDraft
+type sessionTurnDraftPendingQuestion = api.SessionTurnDraftPendingQuestion
 type sessionTurnDraftSegment = api.SessionTurnDraftSegment
 type sessionTurnDraftTool = api.SessionTurnDraftTool

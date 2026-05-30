@@ -30,14 +30,18 @@ func ProjectTurnDraft(
 ) bool {
 	switch event.Type {
 	case streaming.EventRunStarted:
-		return ensureSessionTurnDraft(sess, event, at) != nil
+		return projectSessionTurnDraftRunStarted(sess, event, at)
 	case streaming.EventCompletionDelta:
 		return projectSessionTurnDraftCompletionDelta(sess, event, at)
 	case streaming.EventToolCallStarted:
 		return projectSessionTurnDraftToolStarted(sess, event, at)
 	case streaming.EventToolCallFinished:
 		return projectSessionTurnDraftToolFinished(sess, event, at)
-	case streaming.EventAwaitingHuman, streaming.EventDone, streaming.EventError:
+	case streaming.EventAwaitingHuman:
+		return projectSessionTurnDraftAwaitingHuman(sess, event, at)
+	case streaming.EventError:
+		return projectSessionTurnDraftError(sess, event, at)
+	case streaming.EventDone:
 		return clearSessionTurnDraft(sess, event, at)
 	default:
 		return false
@@ -48,27 +52,28 @@ func ensureSessionTurnDraft(
 	sess *bridgesession.Session,
 	event streaming.Event,
 	at time.Time,
-) *bridgesession.TurnDraft {
+) (*bridgesession.TurnDraft, bool) {
 	if sess == nil || strings.TrimSpace(event.TraceID) == "" {
-		return nil
+		return nil, false
 	}
 
 	if sess.TurnDraft != nil &&
 		strings.TrimSpace(sess.TurnDraft.TraceID) == strings.TrimSpace(event.TraceID) &&
 		sess.TurnDraft.Turn == event.Turn {
-		return sess.TurnDraft
+		return sess.TurnDraft, false
 	}
 
 	sess.TurnDraft = &bridgesession.TurnDraft{
 		TraceID: strings.TrimSpace(event.TraceID),
 		Turn:    event.Turn,
+		Status:  bridgesession.TurnDraftStatusStreaming,
 		ToolTagState: &bridgesession.TurnDraftToolTagState{
 			Mode:        "normal",
 			NextCallSeq: 1,
 		},
 	}
 	sess.UpdatedAt = at.UTC()
-	return sess.TurnDraft
+	return sess.TurnDraft, true
 }
 
 func clearSessionTurnDraft(sess *bridgesession.Session, event streaming.Event, at time.Time) bool {
@@ -89,7 +94,7 @@ func projectSessionTurnDraftCompletionDelta(
 	event streaming.Event,
 	at time.Time,
 ) bool {
-	draft := ensureSessionTurnDraft(sess, event, at)
+	draft, _ := ensureSessionTurnDraft(sess, event, at)
 	if draft == nil {
 		return false
 	}
@@ -116,7 +121,7 @@ func projectSessionTurnDraftToolStarted(
 	event streaming.Event,
 	at time.Time,
 ) bool {
-	draft := ensureSessionTurnDraft(sess, event, at)
+	draft, _ := ensureSessionTurnDraft(sess, event, at)
 	if draft == nil {
 		return false
 	}
@@ -149,7 +154,7 @@ func projectSessionTurnDraftToolFinished(
 	event streaming.Event,
 	at time.Time,
 ) bool {
-	draft := ensureSessionTurnDraft(sess, event, at)
+	draft, _ := ensureSessionTurnDraft(sess, event, at)
 	if draft == nil {
 		return false
 	}
@@ -189,4 +194,129 @@ func updateTurnDraftTimestamp(sess *bridgesession.Session, at time.Time, changed
 	}
 	sess.UpdatedAt = at.UTC()
 	return true
+}
+
+func projectSessionTurnDraftRunStarted(
+	sess *bridgesession.Session,
+	event streaming.Event,
+	at time.Time,
+) bool {
+	draft, created := ensureSessionTurnDraft(sess, event, at)
+	if draft == nil {
+		return false
+	}
+	return updateTurnDraftTimestamp(sess, at, created || resetTurnDraftStreamingState(draft))
+}
+
+func projectSessionTurnDraftAwaitingHuman(
+	sess *bridgesession.Session,
+	event streaming.Event,
+	at time.Time,
+) bool {
+	draft, created := ensureSessionTurnDraft(sess, event, at)
+	if draft == nil {
+		return false
+	}
+
+	changed := created || setTurnDraftStatus(draft, bridgesession.TurnDraftStatusAwaitingHuman)
+	if question, ok := pendingQuestionFromPayload(event.Payload); ok {
+		changed = upsertTurnDraftPendingQuestion(draft, question) || changed
+	}
+	if draft.Error != "" {
+		draft.Error = ""
+		changed = true
+	}
+	return updateTurnDraftTimestamp(sess, at, changed)
+}
+
+func projectSessionTurnDraftError(
+	sess *bridgesession.Session,
+	event streaming.Event,
+	at time.Time,
+) bool {
+	draft, created := ensureSessionTurnDraft(sess, event, at)
+	if draft == nil {
+		return false
+	}
+
+	changed := created || setTurnDraftStatus(draft, bridgesession.TurnDraftStatusError)
+	message := payloadString(event.Payload, "message")
+	if draft.Error != message {
+		draft.Error = message
+		changed = true
+	}
+	return updateTurnDraftTimestamp(sess, at, changed)
+}
+
+func resetTurnDraftStreamingState(draft *bridgesession.TurnDraft) bool {
+	if draft == nil {
+		return false
+	}
+
+	changed := setTurnDraftStatus(draft, bridgesession.TurnDraftStatusStreaming)
+	if draft.Error != "" {
+		draft.Error = ""
+		changed = true
+	}
+	if len(draft.PendingQuestions) > 0 {
+		draft.PendingQuestions = nil
+		changed = true
+	}
+	return changed
+}
+
+func setTurnDraftStatus(draft *bridgesession.TurnDraft, status string) bool {
+	if draft == nil {
+		return false
+	}
+	status = strings.TrimSpace(status)
+	if draft.Status == status {
+		return false
+	}
+	draft.Status = status
+	return true
+}
+
+func pendingQuestionFromPayload(payload any) (bridgesession.TurnDraftPendingQuestion, bool) {
+	record, ok := payload.(map[string]any)
+	if !ok {
+		return bridgesession.TurnDraftPendingQuestion{}, false
+	}
+
+	question := bridgesession.TurnDraftPendingQuestion{
+		QuestionID:    payloadString(payload, "question_id"),
+		Prompt:        payloadString(payload, "prompt"),
+		SelectionMode: payloadString(payload, "selection_mode"),
+		Options:       pendingQuestionOptions(record["options"]),
+	}
+	if question.QuestionID == "" || question.Prompt == "" {
+		return bridgesession.TurnDraftPendingQuestion{}, false
+	}
+	return question, true
+}
+
+func pendingQuestionOptions(raw any) []bridgesession.HumanQuestionOption {
+	items, ok := raw.([]any)
+	if !ok {
+		return nil
+	}
+
+	options := make([]bridgesession.HumanQuestionOption, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		label, _ := record["label"].(string)
+		label = strings.TrimSpace(label)
+		if label == "" {
+			continue
+		}
+		allowCustom, _ := record["allow_custom"].(bool)
+		options = append(options, bridgesession.HumanQuestionOption{
+			Label:       label,
+			AllowCustom: allowCustom,
+		})
+	}
+	return options
 }

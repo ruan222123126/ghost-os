@@ -94,6 +94,6 @@ export interface ChatStateControls {
   upsertPendingQuestion: (question: PendingQuestionMessage) => void;
   removePendingQuestion: (questionId: string) => void;
   clearPendingQuestions: () => void;
-  hydrateTurnDraft: (draft: SessionTurnDraft | null | undefined) => void;
+  hydrateTurnDraft: (sessionId: string, draft: SessionTurnDraft | null | undefined) => void;
   clearMessages: () => void;
 }

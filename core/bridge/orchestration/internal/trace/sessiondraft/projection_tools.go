@@ -147,8 +147,8 @@ func resolveDraftToolMessageID(
 		if existing := draftToolMessageIDByCallID(draft, trimmedCallID); existing != "" {
 			return existing
 		}
-		if previewID := oldestPendingDraftPreviewID(draft); previewID != "" {
-			return previewID
+		if pendingID := oldestPendingDraftToolID(draft); pendingID != "" {
+			return pendingID
 		}
 		return fmt.Sprintf("stream-tool:%s:%s", strings.TrimSpace(traceID), trimmedCallID)
 	}
@@ -178,7 +178,7 @@ func draftPreviewToolMessageID(draft *bridgesession.TurnDraft, toolCallIndex int
 	return ""
 }
 
-func oldestPendingDraftPreviewID(draft *bridgesession.TurnDraft) string {
+func oldestPendingDraftToolID(draft *bridgesession.TurnDraft) string {
 	for _, orderKey := range draft.ItemOrder {
 		if !strings.HasPrefix(orderKey, draftToolOrderPrefix) {
 			continue
@@ -188,9 +188,7 @@ func oldestPendingDraftPreviewID(draft *bridgesession.TurnDraft) string {
 		if tool == nil || strings.TrimSpace(tool.ToolCallID) != "" {
 			continue
 		}
-		if _, ok := parseTurnDraftPreviewIndex(tool.ID); ok {
-			return tool.ID
-		}
+		return tool.ID
 	}
 	return ""
 }

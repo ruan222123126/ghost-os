@@ -114,6 +114,8 @@ describe('lib/api/sessions/parser', () => {
       turn_draft: {
         trace_id: 'trace-draft',
         turn: 2,
+        status: 'streaming',
+        pending_questions: [],
         assistant_segments: [{ id: 'stream-segment:assistant:1', content: 'partial answer' }],
         thinking_segments: [{ id: 'stream-segment:thinking:1', content: 'step 1' }],
         tools: [],
@@ -125,6 +127,30 @@ describe('lib/api/sessions/parser', () => {
     };
 
     expect(parseSessionDetail(payload)).toEqual(payload);
+  });
+
+  it('rejects turn_draft payloads missing status', () => {
+    expect(() => {
+      parseSessionDetail({
+        id: 'session-draft',
+        title: 'Draft',
+        created_at: '2026-04-04T10:00:00Z',
+        updated_at: '2026-04-04T10:05:00Z',
+        message_count: 2,
+        page: SESSION_PAGE,
+        token_count: 256,
+        messages: [],
+        turn_draft: {
+          trace_id: 'trace-draft',
+          turn: 2,
+          pending_questions: [],
+          assistant_segments: [],
+          thinking_segments: [],
+          tools: [],
+          item_order: [],
+        },
+      });
+    }).toThrow('Invalid session detail.turn_draft.status: expected string');
   });
 
   it('ignores unknown fields in session detail payloads', () => {

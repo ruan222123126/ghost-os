@@ -144,8 +144,8 @@ export function useChatState(): ChatStateControls {
     dispatch({ type: 'clear_messages' });
   }, []);
 
-  const hydrateTurnDraft = useCallback((draft: SessionTurnDraft | null | undefined) => {
-    dispatch({ type: 'hydrate_turn_draft', draft });
+  const hydrateTurnDraft = useCallback((sessionId: string, draft: SessionTurnDraft | null | undefined) => {
+    dispatch({ type: 'hydrate_turn_draft', draft, sessionId });
   }, []);
 
   return {

@@ -224,3 +224,39 @@ func draftToolByID(draft *bridgesession.TurnDraft, id string) *bridgesession.Tur
 	}
 	return &draft.Tools[index]
 }
+
+func upsertTurnDraftPendingQuestion(
+	draft *bridgesession.TurnDraft,
+	next bridgesession.TurnDraftPendingQuestion,
+) bool {
+	if draft == nil {
+		return false
+	}
+
+	questionID := strings.TrimSpace(next.QuestionID)
+	prompt := strings.TrimSpace(next.Prompt)
+	if questionID == "" || prompt == "" {
+		return false
+	}
+
+	next.QuestionID = questionID
+	next.Prompt = prompt
+	next.SelectionMode = strings.TrimSpace(next.SelectionMode)
+	next.Options = bridgesession.CloneHumanQuestionOptionsForDraft(next.Options)
+
+	for index, current := range draft.PendingQuestions {
+		if strings.TrimSpace(current.QuestionID) != questionID {
+			continue
+		}
+		draft.PendingQuestions[index] = next
+		return true
+	}
+
+	draft.PendingQuestions = append(draft.PendingQuestions, next)
+	draft.ItemOrder = appendUniqueTurnDraftOrder(draft.ItemOrder, draftQuestionOrderKey(questionID))
+	return true
+}
+
+func draftQuestionOrderKey(questionID string) string {
+	return "question:" + strings.TrimSpace(questionID)
+}

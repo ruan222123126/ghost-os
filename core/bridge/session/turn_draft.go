@@ -20,14 +20,30 @@ type TurnDraftTool struct {
 	TraceID    string `json:"trace_id,omitempty"`
 }
 
+const (
+	TurnDraftStatusStreaming     = "streaming"
+	TurnDraftStatusAwaitingHuman = "awaiting_human"
+	TurnDraftStatusError         = "error"
+)
+
+type TurnDraftPendingQuestion struct {
+	QuestionID    string                `json:"question_id"`
+	Prompt        string                `json:"prompt"`
+	SelectionMode string                `json:"selection_mode,omitempty"`
+	Options       []HumanQuestionOption `json:"options,omitempty"`
+}
+
 type TurnDraft struct {
-	TraceID           string                 `json:"trace_id"`
-	Turn              int                    `json:"turn"`
-	AssistantSegments []TurnDraftSegment     `json:"assistant_segments,omitempty"`
-	ThinkingSegments  []TurnDraftSegment     `json:"thinking_segments,omitempty"`
-	Tools             []TurnDraftTool        `json:"tools,omitempty"`
-	ItemOrder         []string               `json:"item_order,omitempty"`
-	ToolTagState      *TurnDraftToolTagState `json:"tool_tag_state,omitempty"`
+	TraceID           string                     `json:"trace_id"`
+	Turn              int                        `json:"turn"`
+	Status            string                     `json:"status"`
+	Error             string                     `json:"error,omitempty"`
+	PendingQuestions  []TurnDraftPendingQuestion `json:"pending_questions,omitempty"`
+	AssistantSegments []TurnDraftSegment         `json:"assistant_segments,omitempty"`
+	ThinkingSegments  []TurnDraftSegment         `json:"thinking_segments,omitempty"`
+	Tools             []TurnDraftTool            `json:"tools,omitempty"`
+	ItemOrder         []string                   `json:"item_order,omitempty"`
+	ToolTagState      *TurnDraftToolTagState     `json:"tool_tag_state,omitempty"`
 }
 
 type TurnDraftToolTagState struct {
@@ -64,6 +80,9 @@ func cloneTurnDraft(raw *TurnDraft) *TurnDraft {
 	return &TurnDraft{
 		TraceID:           strings.TrimSpace(raw.TraceID),
 		Turn:              raw.Turn,
+		Status:            strings.TrimSpace(raw.Status),
+		Error:             strings.TrimSpace(raw.Error),
+		PendingQuestions:  cloneTurnDraftPendingQuestions(raw.PendingQuestions),
 		AssistantSegments: cloneTurnDraftSegments(raw.AssistantSegments),
 		ThinkingSegments:  cloneTurnDraftSegments(raw.ThinkingSegments),
 		Tools:             cloneTurnDraftTools(raw.Tools),
@@ -121,4 +140,26 @@ func cloneTurnDraftToolTagState(raw *TurnDraftToolTagState) *TurnDraftToolTagSta
 	cloned.Mode = strings.TrimSpace(raw.Mode)
 	cloned.CurrentToolID = strings.TrimSpace(raw.CurrentToolID)
 	return &cloned
+}
+
+func cloneTurnDraftPendingQuestions(raw []TurnDraftPendingQuestion) []TurnDraftPendingQuestion {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]TurnDraftPendingQuestion, 0, len(raw))
+	for _, item := range raw {
+		questionID := strings.TrimSpace(item.QuestionID)
+		prompt := strings.TrimSpace(item.Prompt)
+		if questionID == "" || prompt == "" {
+			continue
+		}
+		out = append(out, TurnDraftPendingQuestion{
+			QuestionID:    questionID,
+			Prompt:        prompt,
+			SelectionMode: strings.TrimSpace(item.SelectionMode),
+			Options:       cloneHumanQuestionOptions(item.Options),
+		})
+	}
+	return out
 }

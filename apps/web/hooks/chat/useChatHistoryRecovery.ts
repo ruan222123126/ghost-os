@@ -19,8 +19,6 @@ const RECOVERY_HISTORY_LIMIT = 100;
 interface UseChatHistoryRecoveryOptions {
   applyRuntimeActions: ChatStateControls['applyRuntimeActions'];
   beginHistorySync: ChatStateControls['beginHistorySync'];
-  clearPendingQuestions: ChatStateControls['clearPendingQuestions'];
-  clearStreamingState: ChatStateControls['clearStreamingState'];
   endHistorySync: ChatStateControls['endHistorySync'];
   hydrateTurnDraft: ChatStateControls['hydrateTurnDraft'];
   setActiveRun: ChatStateControls['setActiveRun'];
@@ -40,24 +38,16 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
     recoveryRunRef.current = null;
   }, []);
 
-  const syncRecoveredTurn = useCallback(async (
-    sessionId: string,
-    messageText?: string,
-    preservePendingQuestion = false,
-  ) => {
+  const syncRecoveredTurn = useCallback(async (sessionId: string, messageText?: string) => {
     stopRecoveredRun();
     options.beginHistorySync();
     try {
-      if (messageText) {
-        options.setChatError(messageText);
-      }
       const detail = await getSession(sessionId, { limit: RECOVERY_HISTORY_LIMIT });
       applyHistoryPage(detail, options.setHasOlderHistory, options.setNextHistoryBefore);
-      if (!preservePendingQuestion) {
-        options.clearPendingQuestions();
-      }
-      options.clearStreamingState();
-      options.hydrateTurnDraft(null);
+      options.hydrateTurnDraft(sessionId, detail.turn_draft ?? null);
+      options.setChatError(
+        messageText ?? (detail.turn_draft?.status === 'error' ? (detail.turn_draft.error ?? '') : ''),
+      );
       options.setCommittedMessages((previous) => {
         return mergeLatestCommittedMessages(previous, mapSessionMessagesToChat(detail.id, detail.messages));
       });
@@ -80,10 +70,26 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
 
   const recoverTurnDraft = useCallback((sessionId: string, draft: SessionTurnDraft | null | undefined) => {
     stopRecoveredRun();
-    options.hydrateTurnDraft(draft);
+    options.hydrateTurnDraft(sessionId, draft);
     if (!draft) {
       options.setActiveRun(null);
       options.setLoading(false);
+      options.setStopPending(false);
+      return;
+    }
+
+    options.setStopPending(false);
+    if (draft.status === 'awaiting_human') {
+      options.setActiveRun(null);
+      options.setLoading(false);
+      options.setChatError('');
+      return;
+    }
+
+    if (draft.status === 'error') {
+      options.setActiveRun(null);
+      options.setLoading(false);
+      options.setChatError(draft.error ?? '');
       return;
     }
 
@@ -93,7 +99,7 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
     recoveryRunRef.current = recoveredRun;
     options.setActiveRun(recoveredRun);
     options.setLoading(true);
-    options.setStopPending(false);
+    options.setChatError('');
 
     void streamSessionEvents({
       onEvent: async (event) => {
@@ -103,7 +109,7 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
             return;
           case 'awaiting_human':
             applyRecoveredEvent(runtime, event);
-            await syncRecoveredTurn(sessionId, undefined, true);
+            await syncRecoveredTurn(sessionId);
             return;
           case 'completion_delta':
           case 'tool_call_started':

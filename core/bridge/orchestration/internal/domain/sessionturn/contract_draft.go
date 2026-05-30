@@ -20,6 +20,9 @@ func BuildSessionTurnDraftPayload(
 		return nil
 	}
 	return &sessionTurnDraft{
+		Status:            normalizeTurnDraftStatus(draft),
+		Error:             strings.TrimSpace(draft.Error),
+		PendingQuestions:  buildSessionTurnDraftPendingQuestions(draft.PendingQuestions),
 		TraceID:           strings.TrimSpace(draft.TraceID),
 		Turn:              draft.Turn,
 		AssistantSegments: buildSessionTurnDraftSegments(draft.AssistantSegments),
@@ -79,6 +82,69 @@ func buildSessionTurnDraftTools(raw []bridgesession.TurnDraftTool) []sessionTurn
 			ToolStatus: strings.TrimSpace(item.ToolStatus),
 			ToolCallID: strings.TrimSpace(item.ToolCallID),
 			TraceID:    strings.TrimSpace(item.TraceID),
+		})
+	}
+	return out
+}
+
+func normalizeTurnDraftStatus(draft *bridgesession.TurnDraft) string {
+	if draft == nil {
+		return bridgesession.TurnDraftStatusStreaming
+	}
+
+	switch strings.TrimSpace(draft.Status) {
+	case bridgesession.TurnDraftStatusStreaming,
+		bridgesession.TurnDraftStatusAwaitingHuman,
+		bridgesession.TurnDraftStatusError:
+		return strings.TrimSpace(draft.Status)
+	}
+	if strings.TrimSpace(draft.Error) != "" {
+		return bridgesession.TurnDraftStatusError
+	}
+	if len(draft.PendingQuestions) > 0 {
+		return bridgesession.TurnDraftStatusAwaitingHuman
+	}
+	return bridgesession.TurnDraftStatusStreaming
+}
+
+func buildSessionTurnDraftPendingQuestions(
+	raw []bridgesession.TurnDraftPendingQuestion,
+) []sessionTurnDraftPendingQuestion {
+	if len(raw) == 0 {
+		return []sessionTurnDraftPendingQuestion{}
+	}
+
+	out := make([]sessionTurnDraftPendingQuestion, 0, len(raw))
+	for _, item := range raw {
+		questionID := strings.TrimSpace(item.QuestionID)
+		prompt := strings.TrimSpace(item.Prompt)
+		if questionID == "" || prompt == "" {
+			continue
+		}
+		out = append(out, sessionTurnDraftPendingQuestion{
+			QuestionID:    questionID,
+			Prompt:        prompt,
+			SelectionMode: strings.TrimSpace(item.SelectionMode),
+			Options:       buildTurnDraftQuestionOptions(item.Options),
+		})
+	}
+	return out
+}
+
+func buildTurnDraftQuestionOptions(raw []bridgesession.HumanQuestionOption) []askHumanOption {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]askHumanOption, 0, len(raw))
+	for _, item := range raw {
+		label := strings.TrimSpace(item.Label)
+		if label == "" {
+			continue
+		}
+		out = append(out, askHumanOption{
+			Label:       label,
+			AllowCustom: item.AllowCustom,
 		})
 	}
 	return out

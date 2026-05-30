@@ -34,6 +34,9 @@ func TestProjectTurnDraftThinkingToolAssistantOrder(t *testing.T) {
 	if sess.TurnDraft == nil {
 		t.Fatal("expected turn draft")
 	}
+	if sess.TurnDraft.Status != session.TurnDraftStatusStreaming {
+		t.Fatalf("unexpected draft status: %q", sess.TurnDraft.Status)
+	}
 	if got := sess.TurnDraft.ItemOrder; len(got) != 4 {
 		t.Fatalf("unexpected item order length: %+v", got)
 	}
@@ -79,6 +82,9 @@ func TestProjectTurnDraftMergesStructuredPreviewWithToolLifecycle(t *testing.T) 
 	if sess.TurnDraft == nil || len(sess.TurnDraft.Tools) != 1 {
 		t.Fatalf("expected single merged tool, got %+v", sess.TurnDraft)
 	}
+	if sess.TurnDraft.Status != session.TurnDraftStatusStreaming {
+		t.Fatalf("unexpected draft status: %q", sess.TurnDraft.Status)
+	}
 	tool := sess.TurnDraft.Tools[0]
 	if tool.ID != "stream-tool:trace-2:preview:1:index:0" {
 		t.Fatalf("unexpected merged tool id: %q", tool.ID)
@@ -94,28 +100,20 @@ func TestProjectTurnDraftMergesStructuredPreviewWithToolLifecycle(t *testing.T) 
 	}
 }
 
-func TestProjectTurnDraftClearsOnTerminalEvents(t *testing.T) {
-	events := []streaming.EventType{
-		streaming.EventAwaitingHuman,
-		streaming.EventDone,
-		streaming.EventError,
+func TestProjectTurnDraftClearsOnDone(t *testing.T) {
+	sess := &session.Session{}
+	when := time.Now().UTC()
+	ProjectTurnDraft(sess, draftEvent(streaming.EventRunStarted, "trace-3", 1, nil), when)
+	ProjectTurnDraft(sess, draftEvent(streaming.EventCompletionDelta, "trace-3", 1, map[string]any{
+		"kind": "text",
+		"text": "partial",
+	}), when)
+
+	if !ProjectTurnDraft(sess, draftEvent(streaming.EventDone, "trace-3", 1, map[string]any{}), when) {
+		t.Fatal("expected done to clear draft")
 	}
-
-	for _, eventType := range events {
-		sess := &session.Session{}
-		when := time.Now().UTC()
-		ProjectTurnDraft(sess, draftEvent(streaming.EventRunStarted, "trace-3", 1, nil), when)
-		ProjectTurnDraft(sess, draftEvent(streaming.EventCompletionDelta, "trace-3", 1, map[string]any{
-			"kind": "text",
-			"text": "partial",
-		}), when)
-
-		if !ProjectTurnDraft(sess, draftEvent(eventType, "trace-3", 1, map[string]any{}), when) {
-			t.Fatalf("expected terminal %s to clear draft", eventType)
-		}
-		if sess.TurnDraft != nil {
-			t.Fatalf("expected draft to be cleared on %s, got %+v", eventType, sess.TurnDraft)
-		}
+	if sess.TurnDraft != nil {
+		t.Fatalf("expected draft to be cleared on done, got %+v", sess.TurnDraft)
 	}
 }
 

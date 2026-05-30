@@ -213,6 +213,17 @@ func TestBuildSessionDetailPayloadIncludesTurnDraftForLatestWindow(t *testing.T)
 	sess.TurnDraft = &session.TurnDraft{
 		TraceID: "trace-draft",
 		Turn:    1,
+		Status:  session.TurnDraftStatusAwaitingHuman,
+		PendingQuestions: []session.TurnDraftPendingQuestion{
+			{
+				QuestionID:    "q-1",
+				Prompt:        "Ship it?",
+				SelectionMode: session.HumanQuestionSelectionSingle,
+				Options: []session.HumanQuestionOption{
+					{Label: "Yes"},
+				},
+			},
+		},
 		AssistantSegments: []session.TurnDraftSegment{
 			{ID: "stream-segment:assistant:1", Content: "partial answer"},
 		},
@@ -226,6 +237,7 @@ func TestBuildSessionDetailPayloadIncludesTurnDraftForLatestWindow(t *testing.T)
 			"thinking:stream-segment:thinking:1",
 			"tool:stream-tool:trace-draft:call-1",
 			"assistant:stream-segment:assistant:1",
+			"question:q-1",
 		},
 	}
 
@@ -248,6 +260,12 @@ func TestBuildSessionDetailPayloadIncludesTurnDraftForLatestWindow(t *testing.T)
 	if payload.TurnDraft.TraceID != "trace-draft" || payload.TurnDraft.Turn != 1 {
 		t.Fatalf("unexpected turn_draft header: %+v", payload.TurnDraft)
 	}
+	if payload.TurnDraft.Status != session.TurnDraftStatusAwaitingHuman {
+		t.Fatalf("unexpected turn_draft status: %+v", payload.TurnDraft)
+	}
+	if len(payload.TurnDraft.PendingQuestions) != 1 || payload.TurnDraft.PendingQuestions[0].QuestionID != "q-1" {
+		t.Fatalf("unexpected pending questions: %+v", payload.TurnDraft.PendingQuestions)
+	}
 	if len(payload.TurnDraft.AssistantSegments) != 1 || payload.TurnDraft.AssistantSegments[0].Content != "partial answer" {
 		t.Fatalf("unexpected assistant segments: %+v", payload.TurnDraft.AssistantSegments)
 	}
@@ -262,6 +280,7 @@ func TestBuildSessionDetailPayloadSkipsTurnDraftForOlderWindow(t *testing.T) {
 	sess.TurnDraft = &session.TurnDraft{
 		TraceID: "trace-draft",
 		Turn:    1,
+		Status:  session.TurnDraftStatusStreaming,
 	}
 	page := session.MessagePage{
 		Limit: 100,

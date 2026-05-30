@@ -5,6 +5,8 @@ describe('chatRuntime/runtimeState', () => {
     const runtime = createChatRuntimeStateFromDraft({
       trace_id: 'trace-1',
       turn: 2,
+      status: 'streaming',
+      pending_questions: [],
       assistant_segments: [
         { id: 'stream-segment:assistant:1', content: 'part 1' },
         { id: 'stream-segment:assistant:2', content: 'part 2' },

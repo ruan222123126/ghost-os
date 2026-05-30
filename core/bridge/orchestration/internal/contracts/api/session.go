@@ -96,13 +96,23 @@ type SessionTurnDraftTool struct {
 	TraceID    string `json:"trace_id,omitempty"`
 }
 
+type SessionTurnDraftPendingQuestion struct {
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []AskHumanOption `json:"options,omitempty"`
+}
+
 type SessionTurnDraft struct {
-	TraceID           string                    `json:"trace_id"`
-	Turn              int                       `json:"turn"`
-	AssistantSegments []SessionTurnDraftSegment `json:"assistant_segments"`
-	ThinkingSegments  []SessionTurnDraftSegment `json:"thinking_segments"`
-	Tools             []SessionTurnDraftTool    `json:"tools"`
-	ItemOrder         []string                  `json:"item_order"`
+	TraceID           string                            `json:"trace_id"`
+	Turn              int                               `json:"turn"`
+	Status            string                            `json:"status"`
+	Error             string                            `json:"error,omitempty"`
+	PendingQuestions  []SessionTurnDraftPendingQuestion `json:"pending_questions"`
+	AssistantSegments []SessionTurnDraftSegment         `json:"assistant_segments"`
+	ThinkingSegments  []SessionTurnDraftSegment         `json:"thinking_segments"`
+	Tools             []SessionTurnDraftTool            `json:"tools"`
+	ItemOrder         []string                          `json:"item_order"`
 }
 
 type SessionDetail struct {

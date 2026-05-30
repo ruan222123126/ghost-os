@@ -285,9 +285,19 @@ export interface AgentErrorPayload {
   code?: number;
 }
 
+export interface SessionTurnDraftPendingQuestion {
+  question_id: string;
+  prompt: string;
+  selection_mode?: 'single' | 'multiple';
+  options?: AskHumanOption[];
+}
+
 export interface SessionTurnDraft {
   trace_id: string;
   turn: number;
+  status: 'streaming' | 'awaiting_human' | 'error';
+  error?: string;
+  pending_questions: SessionTurnDraftPendingQuestion[];
   assistant_segments: SessionTurnDraftSegment[];
   thinking_segments: SessionTurnDraftSegment[];
   tools: SessionTurnDraftTool[];

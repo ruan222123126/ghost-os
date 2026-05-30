@@ -199,9 +199,16 @@ describe('lib/chat-store/reducer', () => {
   it('hydrates streaming draft state from server turn_draft', () => {
     const state = chatStateReducer(createInitialState(), {
       type: 'hydrate_turn_draft',
+      sessionId: 'session-9',
       draft: {
         trace_id: 'trace-draft',
         turn: 3,
+        status: 'awaiting_human',
+        pending_questions: [{
+          question_id: 'q-1',
+          prompt: 'Ship it?',
+          selection_mode: 'single',
+        }],
         assistant_segments: [{ id: 'stream-segment:assistant:1', content: 'partial answer' }],
         thinking_segments: [{ id: 'stream-segment:thinking:1', content: 'analysis' }],
         tools: [{
@@ -216,6 +223,7 @@ describe('lib/chat-store/reducer', () => {
           'thinking:stream-segment:thinking:1',
           'tool:stream-tool:trace-draft:call-1',
           'assistant:stream-segment:assistant:1',
+          'question:q-1',
         ],
       },
     });
@@ -241,6 +249,17 @@ describe('lib/chat-store/reducer', () => {
       'thinking:stream-segment:thinking:1',
       'tool:stream-tool:trace-draft:call-1',
       'assistant:stream-segment:assistant:1',
+      'question:q-1',
+    ]);
+    expect(view.pendingQuestions).toEqual([
+      {
+        id: 'stream-question:trace-draft:q-1',
+        kind: 'pending_question',
+        content: 'Ship it?',
+        questionId: 'q-1',
+        selectionMode: 'single',
+        sessionId: 'session-9',
+      },
     ]);
   });
 });

@@ -672,8 +672,20 @@ describe('lib/chatRuntime/eventProjector', () => {
     ]);
   });
 
-  it('clears streaming thinking on terminal error events', () => {
+  it('keeps streaming thinking on terminal error events', () => {
     const runtime = createChatRuntimeState('trace-3', 'session-3');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'thinking',
+          thinking: 'still visible',
+        },
+        { traceId: 'trace-3' },
+      ),
+    });
+
     const actions = projectAgentEvent({
       runtime,
       event: buildEvent(
@@ -685,11 +697,8 @@ describe('lib/chatRuntime/eventProjector', () => {
       ),
     });
 
-    expect(actions).toEqual([
-      {
-        type: 'clear_streaming_thinking_text',
-      },
-    ]);
+    expect(actions).toEqual([]);
+    expect(runtime.thinkingBuffers).toEqual(['still visible']);
   });
 
   it('throws when awaiting_human arrives before session id is known', () => {

@@ -114,6 +114,15 @@
         "sessionPushAwaitingHumanPayload": {
             "$ref": "./schema/defs/streaming_events.json#/$defs/sessionPushAwaitingHumanPayload"
         },
+        "taskRunCardStartedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/taskRunCardStartedPayload"
+        },
+        "taskRunCardEventPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/taskRunCardEventPayload"
+        },
+        "taskRunCardFinishedPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/taskRunCardFinishedPayload"
+        },
         "sessionImageContent": {
             "$ref": "./schema/defs/session_content.json#/$defs/sessionImageContent"
         },
@@ -161,6 +170,9 @@
         },
         "sessionTurnDraftTool": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftTool"
+        },
+        "sessionTurnDraftPendingQuestion": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraftPendingQuestion"
         },
         "sessionTurnDraft": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionTurnDraft"

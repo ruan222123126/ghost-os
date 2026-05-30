@@ -316,12 +316,46 @@
         "kotlin": { "name": "SessionTurnDraftTool" }
       }
     },
+    "sessionTurnDraftPendingQuestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question_id",
+        "prompt"
+      ],
+      "properties": {
+        "question_id": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "selection_mode": {
+          "type": "string",
+          "enum": [
+            "single",
+            "multiple"
+          ]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "./agent_human.json#/$defs/askHumanOption"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 180,
+        "go": { "name": "sessionTurnDraftPendingQuestion" },
+        "ts": { "name": "SessionTurnDraftPendingQuestion" },
+        "rust": { "name": "SessionTurnDraftPendingQuestion" },
+        "kotlin": { "name": "SessionTurnDraftPendingQuestion" }
+      }
+    },
     "sessionTurnDraft": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "trace_id",
         "turn",
+        "status",
+        "pending_questions",
         "assistant_segments",
         "thinking_segments",
         "tools",
@@ -330,6 +364,21 @@
       "properties": {
         "trace_id": { "type": "string", "minLength": 1 },
         "turn": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": [
+            "streaming",
+            "awaiting_human",
+            "error"
+          ]
+        },
+        "error": { "type": "string" },
+        "pending_questions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sessionTurnDraftPendingQuestion"
+          }
+        },
         "assistant_segments": {
           "type": "array",
           "items": {
@@ -357,7 +406,7 @@
         }
       },
       "x-codegen": {
-        "order": 180,
+        "order": 181,
         "go": { "name": "sessionTurnDraft" },
         "ts": { "name": "SessionTurnDraft" },
         "rust": { "name": "SessionTurnDraft" },
