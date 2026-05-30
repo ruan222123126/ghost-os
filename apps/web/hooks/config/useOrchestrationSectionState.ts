@@ -9,7 +9,10 @@ import {
   updateOrchestration,
 } from '@/lib/api/orchestrations/api';
 import { createEmptyOrchestrationDraft, draftToOrchestrationCreatePayload } from '@/lib/orchestration-editor/draft';
-import { migrateLegacyOrchestrations } from '@/lib/orchestration-editor/legacyMigration';
+import {
+  countLegacyOrchestrations,
+  migrateLegacyOrchestrations,
+} from '@/lib/orchestration-editor/legacyMigration';
 import { toErrorMessage } from '@/lib/errors';
 import type { WebCopy } from '@/lib/i18n/messages';
 import type { OrchestrationTaskPayload } from '@/lib/types';
@@ -18,12 +21,16 @@ export interface OrchestrationSectionState {
   orchestrations: OrchestrationTaskPayload[];
   loading: boolean;
   error: string;
+  success: string;
   creating: boolean;
   name: string;
   submitting: boolean;
   runningOrchestrationID: string;
   controlsDisabled: boolean;
+  legacyMigrationCount: number;
+  legacyMigrationRunning: boolean;
   refresh: () => Promise<void>;
+  runLegacyMigration: () => Promise<void>;
   startCreate: () => void;
   setName: (name: string) => void;
   submitCreate: () => Promise<void>;
@@ -35,18 +42,22 @@ export interface OrchestrationSectionState {
 
 export function useOrchestrationSectionState(copy: WebCopy): OrchestrationSectionState {
   const data = useOrchestrationData(copy);
-  const createState = useOrchestrationCreateState(copy, data.refresh, data.setError);
-  const runByID = useRunOrchestration(copy, data.refresh, data.setError);
-  const setEnabledByID = useSetOrchestrationEnabled(copy, data.replaceOrchestration, data.setError);
-  const deleteByID = useDeleteOrchestration(copy, data.removeOrchestration, data.setError);
+  const createState = useOrchestrationCreateState(copy, data.refresh, data.showError, data.clearFeedback);
+  const runByID = useRunOrchestration(copy, data.showError, data.showSuccess, data.clearFeedback);
+  const setEnabledByID = useSetOrchestrationEnabled(copy, data.replaceOrchestration, data.showError, data.clearFeedback);
+  const deleteByID = useDeleteOrchestration(copy, data.removeOrchestration, data.showError, data.clearFeedback);
 
   return {
     orchestrations: data.orchestrations,
     loading: data.loading,
     error: data.error,
+    success: data.success,
     runningOrchestrationID: runByID.runningOrchestrationID,
-    controlsDisabled: data.loading || createState.submitting,
+    controlsDisabled: data.loading || createState.submitting || data.legacyMigrationRunning,
+    legacyMigrationCount: data.legacyMigrationCount,
+    legacyMigrationRunning: data.legacyMigrationRunning,
     refresh: data.refresh,
+    runLegacyMigration: data.runLegacyMigration,
     runByID: runByID.runByID,
     setEnabledByID,
     deleteByID,
@@ -58,19 +69,34 @@ function useOrchestrationData(copy: WebCopy) {
   const [orchestrations, setOrchestrations] = useState<OrchestrationTaskPayload[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [legacyMigrationCount, setLegacyMigrationCount] = useState(() => countLegacyOrchestrations());
+  const [legacyMigrationRunning, setLegacyMigrationRunning] = useState(false);
+  const clearFeedback = useCallback(() => {
+    setError('');
+    setSuccess('');
+  }, []);
+  const showError = useCallback((message: string) => {
+    setSuccess('');
+    setError(message);
+  }, []);
+  const showSuccess = useCallback((message: string) => {
+    setError('');
+    setSuccess(message);
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      await migrateLegacyOrchestrations();
       setOrchestrations(await listOrchestrations());
+      setLegacyMigrationCount(countLegacyOrchestrations());
       setError('');
     } catch (nextError) {
-      setError(toErrorMessage(nextError, copy.system.failedToLoadOrchestration));
+      showError(toErrorMessage(nextError, copy.system.failedToLoadOrchestration));
     } finally {
       setLoading(false);
     }
-  }, [copy.system.failedToLoadOrchestration]);
+  }, [copy.system.failedToLoadOrchestration, showError]);
 
   const replaceOrchestration = useCallback((nextTask: OrchestrationTaskPayload) => {
     setOrchestrations((state) => state.map((task) => task.id === nextTask.id ? nextTask : task));
@@ -84,13 +110,42 @@ function useOrchestrationData(copy: WebCopy) {
     void refresh();
   }, [refresh]);
 
-  return { orchestrations, loading, error, setError, refresh, replaceOrchestration, removeOrchestration };
+  const runLegacyMigration = useCallback(async () => {
+    setLegacyMigrationRunning(true);
+    clearFeedback();
+    try {
+      await migrateLegacyOrchestrations();
+      setLegacyMigrationCount(countLegacyOrchestrations());
+      await refresh();
+    } catch (nextError) {
+      showError(toErrorMessage(nextError, copy.system.failedToCreateOrchestration));
+    } finally {
+      setLegacyMigrationRunning(false);
+    }
+  }, [clearFeedback, copy.system.failedToCreateOrchestration, refresh, showError]);
+
+  return {
+    orchestrations,
+    loading,
+    error,
+    success,
+    legacyMigrationCount,
+    legacyMigrationRunning,
+    showError,
+    showSuccess,
+    clearFeedback,
+    refresh,
+    runLegacyMigration,
+    replaceOrchestration,
+    removeOrchestration,
+  };
 }
 
 function useOrchestrationCreateState(
   copy: WebCopy,
   refresh: () => Promise<void>,
-  setError: (message: string) => void,
+  showError: (message: string) => void,
+  clearFeedback: () => void,
 ) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -98,41 +153,42 @@ function useOrchestrationCreateState(
 
   const startCreate = useCallback(() => {
     setCreating(true);
-    setError('');
-  }, [setError]);
+    clearFeedback();
+  }, [clearFeedback]);
 
   const cancelCreate = useCallback(() => {
     setCreating(false);
     setName('');
-    setError('');
-  }, [setError]);
+    clearFeedback();
+  }, [clearFeedback]);
 
   const submitCreate = useCallback(async () => {
     if (!name.trim()) {
-      setError(copy.settings.orchestrationNameRequired);
+      showError(copy.settings.orchestrationNameRequired);
       return;
     }
     setSubmitting(true);
-    setError('');
+    clearFeedback();
     try {
       await createOrchestration(draftToOrchestrationCreatePayload(createEmptyOrchestrationDraft('edit'), name));
       await refresh();
       setCreating(false);
       setName('');
     } catch (nextError) {
-      setError(toErrorMessage(nextError, copy.system.failedToCreateOrchestration));
+      showError(toErrorMessage(nextError, copy.system.failedToCreateOrchestration));
     } finally {
       setSubmitting(false);
     }
-  }, [copy.settings.orchestrationNameRequired, copy.system.failedToCreateOrchestration, name, refresh, setError]);
+  }, [clearFeedback, copy.settings.orchestrationNameRequired, copy.system.failedToCreateOrchestration, name, refresh, showError]);
 
   return { creating, name, setName, submitting, startCreate, cancelCreate, submitCreate };
 }
 
 function useRunOrchestration(
   copy: WebCopy,
-  refresh: () => Promise<void>,
-  setError: (message: string) => void,
+  showError: (message: string) => void,
+  showSuccess: (message: string) => void,
+  clearFeedback: () => void,
 ) {
   const [runningOrchestrationID, setRunningOrchestrationID] = useState('');
 
@@ -140,16 +196,17 @@ function useRunOrchestration(
     if (runningOrchestrationID) {
       return;
     }
+    clearFeedback();
     setRunningOrchestrationID(id);
     try {
       await runOrchestrationNow(id);
-      await refresh();
+      showSuccess(copy.settings.tasksRunStarted);
     } catch (nextError) {
-      setError(toErrorMessage(nextError, copy.system.failedToRunTask));
+      showError(toErrorMessage(nextError, copy.system.failedToRunTask));
     } finally {
       setRunningOrchestrationID('');
     }
-  }, [copy.system.failedToRunTask, refresh, runningOrchestrationID, setError]);
+  }, [clearFeedback, copy.settings.tasksRunStarted, copy.system.failedToRunTask, runningOrchestrationID, showError, showSuccess]);
 
   return { runByID, runningOrchestrationID };
 }
@@ -157,31 +214,33 @@ function useRunOrchestration(
 function useSetOrchestrationEnabled(
   copy: WebCopy,
   replaceOrchestration: (task: OrchestrationTaskPayload) => void,
-  setError: (message: string) => void,
+  showError: (message: string) => void,
+  clearFeedback: () => void,
 ) {
   return useCallback(async (id: string, enabled: boolean) => {
+    clearFeedback();
     try {
       const task = await updateOrchestration(id, { enabled });
       replaceOrchestration(task);
-      setError('');
     } catch (nextError) {
-      setError(toErrorMessage(nextError, copy.system.failedToUpdateTask));
+      showError(toErrorMessage(nextError, copy.system.failedToUpdateTask));
     }
-  }, [copy.system.failedToUpdateTask, replaceOrchestration, setError]);
+  }, [clearFeedback, copy.system.failedToUpdateTask, replaceOrchestration, showError]);
 }
 
 function useDeleteOrchestration(
   copy: WebCopy,
   removeOrchestration: (id: string) => void,
-  setError: (message: string) => void,
+  showError: (message: string) => void,
+  clearFeedback: () => void,
 ) {
   return useCallback(async (id: string) => {
+    clearFeedback();
     try {
       await deleteOrchestration(id);
       removeOrchestration(id);
-      setError('');
     } catch (nextError) {
-      setError(toErrorMessage(nextError, copy.system.failedToDeleteTask));
+      showError(toErrorMessage(nextError, copy.system.failedToDeleteTask));
     }
-  }, [copy.system.failedToDeleteTask, removeOrchestration, setError]);
+  }, [clearFeedback, copy.system.failedToDeleteTask, removeOrchestration, showError]);
 }

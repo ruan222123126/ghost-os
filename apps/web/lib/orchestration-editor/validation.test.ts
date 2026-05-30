@@ -41,7 +41,7 @@ describe('lib/orchestration-editor/validation', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('accepts legacy start/end nodes while validating group flow', () => {
+  it('rejects legacy start/end nodes and points to the migration command', () => {
     const draft: WorkflowCanvasDraft = {
       mode: 'edit',
       schedule: { mode: 'interval', intervalSeconds: '60', cronExpr: '' },
@@ -72,8 +72,13 @@ describe('lib/orchestration-editor/validation', () => {
 
     const result = validateOrchestrationDraft(draft);
 
-    expect(result.valid).toBe(true);
-    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([
+      'orchestration node type "start" is removed; run `bin/ghost-bridge migrate orchestrations`',
+      'orchestration node type "end" is removed; run `bin/ghost-bridge migrate orchestrations`',
+      'orchestration control edge "start-node" -> "group-a" is invalid',
+      'orchestration control edge "group-a" -> "end-node" is invalid',
+    ]));
   });
 
   it('rejects multiple entry and exit groups', () => {

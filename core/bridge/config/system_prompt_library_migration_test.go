@@ -163,9 +163,17 @@ func TestUpdateSystemPromptFilesWithCorePromptRebuildsPromptLibrary(t *testing.T
 	assertSingleCoreJobCard(t, updated.PromptLibrary, "patched core")
 }
 
-func TestLoadSystemPromptFilesMigratesLegacyCorePromptToPromptLibrary(t *testing.T) {
+func TestMigrateLegacySystemPromptsBuildsPromptLibraryFromCorePrompt(t *testing.T) {
 	promptsDir := filepath.Join(t.TempDir(), "prompts")
 	root := filepath.Join(promptsDir, systemPromptDirName)
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROMPTS_DIR", promptsDir)
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		PromptsDir: stringPointer(promptsDir),
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
 	if err := os.MkdirAll(root, systemPromptDirPerm); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", root, err)
 	}
@@ -191,9 +199,17 @@ func TestLoadSystemPromptFilesMigratesLegacyCorePromptToPromptLibrary(t *testing
 		t.Fatalf("WriteFile(init marker): %v", err)
 	}
 
+	report, err := MigrateLegacySystemPrompts()
+	if err != nil {
+		t.Fatalf("MigrateLegacySystemPrompts: %v", err)
+	}
+	if !report.GeneratedPromptLib {
+		t.Fatal("expected prompt library generation report")
+	}
+
 	files, err := LoadSystemPromptFiles(promptsDir)
 	if err != nil {
-		t.Fatalf("LoadSystemPromptFiles: %v", err)
+		t.Fatalf("LoadSystemPromptFiles after migration: %v", err)
 	}
 	if files.CorePrompt != "legacy core" {
 		t.Fatalf("expected migrated core prompt, got %+v", files)

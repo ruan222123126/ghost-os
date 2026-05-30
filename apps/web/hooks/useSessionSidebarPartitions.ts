@@ -30,7 +30,6 @@ import {
   buildPartitionID,
   coercePartitionStore,
   hasLegacyPartitionData,
-  isEmptyPartitionStore,
   readLegacyPartitionStore,
   removeLegacyPartitionStore,
 } from './sessionSidebarPartitionPersistence';
@@ -66,10 +65,14 @@ interface DeletePartitionResult {
 interface UseSessionSidebarPartitionsResult {
   partitionViews: SessionPartitionView[];
   partitionError: string;
+  legacyMigrationAvailable: boolean;
+  legacyMigrationRunning: boolean;
   addPartition: (name: string) => AddPartitionResult;
   renamePartition: (partitionID: string, name: string) => RenamePartitionResult;
   deletePartition: (partitionID: string) => DeletePartitionResult;
   moveSession: (sessionID: string, partitionID: string, index: number) => void;
+  runLegacyMigration: () => Promise<void>;
+  discardLegacyMigration: () => void;
 }
 
 export function useSessionSidebarPartitions(
@@ -83,6 +86,10 @@ export function useSessionSidebarPartitions(
   const pendingRef = useRef<SessionPartitionStoreV1 | null>(null);
   const persistingRef = useRef(false);
   const mountedRef = useRef(true);
+  const [legacyMigrationAvailable, setLegacyMigrationAvailable] = useState(() => {
+    return hasLegacyPartitionData(readLegacyPartitionStore());
+  });
+  const [legacyMigrationRunning, setLegacyMigrationRunning] = useState(false);
 
   const replaceStore = useCallback((next: SessionPartitionStoreV1) => {
     storeRef.current = next;
@@ -150,24 +157,7 @@ export function useSessionSidebarPartitions(
 
       confirmedRef.current = remote;
       replaceStore(remote);
-      setPartitionError('');
-
-      const legacy = readLegacyPartitionStore();
-      if (!isEmptyPartitionStore(remote) || !hasLegacyPartitionData(legacy)) {
-        return;
-      }
-
-      const migrated = coercePartitionStore(await putSessionSidebarPartitions(
-        legacy,
-        createClientTraceId('session-partitions-migrate'),
-      ));
-      if (!mountedRef.current) {
-        return;
-      }
-
-      confirmedRef.current = migrated;
-      replaceStore(migrated);
-      removeLegacyPartitionStore();
+      setLegacyMigrationAvailable(hasLegacyPartitionData(readLegacyPartitionStore()));
       setPartitionError('');
     } catch (error) {
       if (!mountedRef.current) {
@@ -286,12 +276,55 @@ export function useSessionSidebarPartitions(
     }
   }, [applyOptimisticStore, requestFailedText, sessions]);
 
+  const runLegacyMigration = useCallback(async () => {
+    const legacy = readLegacyPartitionStore();
+    if (!hasLegacyPartitionData(legacy)) {
+      setLegacyMigrationAvailable(false);
+      return;
+    }
+
+    setLegacyMigrationRunning(true);
+    try {
+      const migrated = coercePartitionStore(await putSessionSidebarPartitions(
+        legacy,
+        createClientTraceId('session-partitions-migrate'),
+      ));
+      if (!mountedRef.current) {
+        return;
+      }
+
+      confirmedRef.current = migrated;
+      replaceStore(migrated);
+      removeLegacyPartitionStore();
+      setLegacyMigrationAvailable(false);
+      setPartitionError('');
+    } catch (error) {
+      if (!mountedRef.current) {
+        return;
+      }
+      setPartitionError(toErrorMessage(error, requestFailedText));
+    } finally {
+      if (mountedRef.current) {
+        setLegacyMigrationRunning(false);
+      }
+    }
+  }, [replaceStore, requestFailedText]);
+
+  const discardLegacyMigration = useCallback(() => {
+    removeLegacyPartitionStore();
+    setLegacyMigrationAvailable(false);
+  }, []);
+
   return {
     partitionViews,
     partitionError,
+    legacyMigrationAvailable,
+    legacyMigrationRunning,
     addPartition,
     renamePartition,
     deletePartition,
     moveSession,
+    runLegacyMigration,
+    discardLegacyMigration,
   };
 }

@@ -57,7 +57,6 @@ function useOrchestrationEditorCore(options: UseOrchestrationEditorControllerOpt
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({ phase: 'idle', message: 'Autosave idle', updatedAt: Date.now() });
   const [actionError, setActionError] = useState('');
   const draftRef = useRef(draft);
-  const migrationAttemptedRef = useRef(false);
   const agentRuntimeState = useWorkflowAgentRuntimeCatalog();
   const presetState = useOrchestrationPresetCatalog(copy.system.failedToLoadPresets);
   const toolNames = useMemo(
@@ -77,7 +76,6 @@ function useOrchestrationEditorCore(options: UseOrchestrationEditorControllerOpt
     loadErrorMessage: copy.system.failedToLoadOrchestration,
     autosaveController,
     draftRef,
-    migrationAttemptedRef,
     draft,
     phase,
     currentSnapshot: snapshotBuild.snapshot,

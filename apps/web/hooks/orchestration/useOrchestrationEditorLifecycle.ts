@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
-import { migrateLegacyOrchestrations } from '@/lib/orchestration-editor/legacyMigration';
 import type {
   AutosaveController,
   AutosaveSnapshot,
@@ -20,7 +19,6 @@ interface OrchestrationEditorLifecycleOptions {
   loadErrorMessage: string;
   autosaveController: AutosaveController<WorkflowUpdatePayload>;
   draftRef: MutableRefObject<WorkflowCanvasDraft>;
-  migrationAttemptedRef: MutableRefObject<boolean>;
   draft: WorkflowCanvasDraft;
   phase: OrchestrationEditorPhase;
   currentSnapshot?: AutosaveSnapshot<WorkflowUpdatePayload>;
@@ -37,7 +35,6 @@ export function useOrchestrationEditorLifecycle(options: OrchestrationEditorLife
     loadErrorMessage,
     autosaveController,
     draftRef,
-    migrationAttemptedRef,
     draft,
     phase,
     currentSnapshot,
@@ -51,7 +48,6 @@ export function useOrchestrationEditorLifecycle(options: OrchestrationEditorLife
   useEffect(() => {
     draftRef.current = draft;
   }, [draft, draftRef]);
-  useLegacyOrchestrationMigration(migrationAttemptedRef);
   useOrchestrationBootstrap({
     orchestrationID,
     loadErrorMessage,
@@ -73,16 +69,4 @@ export function useOrchestrationEditorLifecycle(options: OrchestrationEditorLife
     snapshotErrorMessage,
     validationErrors,
   });
-}
-
-function useLegacyOrchestrationMigration(migrationAttemptedRef: MutableRefObject<boolean>): void {
-  useEffect(() => {
-    if (migrationAttemptedRef.current) {
-      return;
-    }
-    migrationAttemptedRef.current = true;
-    void migrateLegacyOrchestrations().catch((error) => {
-      console.error('failed to migrate legacy orchestrations', error);
-    });
-  }, [migrationAttemptedRef]);
 }

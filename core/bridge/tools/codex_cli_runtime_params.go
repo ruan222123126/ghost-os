@@ -74,6 +74,9 @@ func decodeCodexCLIStartFlags(params map[string]any, request *codexCLIStartReque
 	if err != nil {
 		return err
 	}
+	if fullAuto != nil {
+		return fmt.Errorf("full_auto is removed; use sandbox=workspace-write")
+	}
 	skipRepo, err := boolWithDefault(params, "skip_git_repo_check", true)
 	if err != nil {
 		return err
@@ -90,7 +93,6 @@ func decodeCodexCLIStartFlags(params map[string]any, request *codexCLIStartReque
 	if err != nil {
 		return err
 	}
-	request.fullAuto = fullAuto
 	request.skipGitRepoCheck = skipRepo
 	request.jsonFlag = jsonFlag
 	request.waitMSBeforeAsync = waitMS

@@ -22,6 +22,7 @@ func TestDispatchRejectsInvalidCLIInput(t *testing.T) {
 		{name: "serve extra args", args: []string{"serve", "8080", "extra"}, wantDetail: "serve accepts at most one port argument", wantUsage: cliUsage},
 		{name: "agent missing message", args: []string{"agent"}, wantDetail: "agent requires a non-empty message", wantUsage: cliUsage},
 		{name: "agent blank message", args: []string{"agent", "   "}, wantDetail: "agent requires a non-empty message", wantUsage: cliUsage},
+		{name: "migrate missing subcommand", args: []string{"migrate"}, wantDetail: "migrate requires exactly one subcommand", wantUsage: cliUsage},
 	}
 
 	for _, tt := range tests {
@@ -61,7 +62,8 @@ func TestDispatchRoutesServeDefaultPort(t *testing.T) {
 			}
 			return "serving", nil
 		},
-		runAgent: failAgent(t),
+		runAgent:   failAgent(t),
+		runMigrate: failMigrate(t),
 	}
 
 	output, err := dispatcher.dispatch(context.Background(), []string{"serve"})
@@ -89,8 +91,9 @@ func TestDispatchRoutesPingWithCallerContext(t *testing.T) {
 			}
 			return "pong", nil
 		},
-		runServe: failServe(t),
-		runAgent: failAgent(t),
+		runServe:   failServe(t),
+		runAgent:   failAgent(t),
+		runMigrate: failMigrate(t),
 	}
 
 	output, err := dispatcher.dispatch(ctx, []string{"ping"})
@@ -114,6 +117,7 @@ func TestDispatchRoutesAgentMessage(t *testing.T) {
 			}
 			return "ok", nil
 		},
+		runMigrate: failMigrate(t),
 	}
 
 	output, err := dispatcher.dispatch(context.Background(), []string{"agent", "hello", "ghost"})
@@ -129,9 +133,10 @@ func newFailOnCallDispatcher(t *testing.T) commandDispatcher {
 	t.Helper()
 
 	return commandDispatcher{
-		runPing:  failPing(t),
-		runServe: failServe(t),
-		runAgent: failAgent(t),
+		runPing:    failPing(t),
+		runServe:   failServe(t),
+		runAgent:   failAgent(t),
+		runMigrate: failMigrate(t),
 	}
 }
 
@@ -159,6 +164,14 @@ func failAgent(t *testing.T) func(context.Context, string) (string, error) {
 	}
 }
 
+func failMigrate(t *testing.T) func(context.Context, []string) (string, error) {
+	t.Helper()
+	return func(context.Context, []string) (string, error) {
+		t.Fatal("runMigrate should not be called")
+		return "", nil
+	}
+}
+
 func assertUsageError(t *testing.T, err error, wantDetail string, wantUsage string) {
 	t.Helper()
 
@@ -182,9 +195,10 @@ func TestDispatchServeWrapsRunError(t *testing.T) {
 	t.Parallel()
 
 	dispatcher := commandDispatcher{
-		runPing:  failPing(t),
-		runServe: func(context.Context, int) (string, error) { return "", errors.New("listen failed") },
-		runAgent: failAgent(t),
+		runPing:    failPing(t),
+		runServe:   func(context.Context, int) (string, error) { return "", errors.New("listen failed") },
+		runAgent:   failAgent(t),
+		runMigrate: failMigrate(t),
 	}
 
 	_, err := dispatcher.dispatch(context.Background(), []string{"serve"})
@@ -196,5 +210,29 @@ func TestDispatchServeWrapsRunError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "listen failed") {
 		t.Fatalf("expected wrapped serve error detail, got %v", err)
+	}
+}
+
+func TestDispatchRoutesMigrateSubcommand(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := commandDispatcher{
+		runPing:  failPing(t),
+		runServe: failServe(t),
+		runAgent: failAgent(t),
+		runMigrate: func(_ context.Context, args []string) (string, error) {
+			if len(args) != 1 || args[0] != "sessions" {
+				t.Fatalf("unexpected migrate args: %v", args)
+			}
+			return "migrated", nil
+		},
+	}
+
+	output, err := dispatcher.dispatch(context.Background(), []string{"migrate", "sessions"})
+	if err != nil {
+		t.Fatalf("dispatch returned error: %v", err)
+	}
+	if output != "migrated" {
+		t.Fatalf("unexpected output %q", output)
 	}
 }

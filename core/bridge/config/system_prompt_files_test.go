@@ -7,7 +7,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestLoadSystemPromptFilesCreatesDefaultFiles(t *testing.T) {
@@ -62,71 +61,80 @@ func TestUpdateSystemPromptFilesRoundTripAndAllowsEmptyStrings(t *testing.T) {
 	}
 }
 
-func TestSystemPromptFilesSyncBetweenGhostAndGhostOS(t *testing.T) {
+func TestMigrateLegacyPromptsDirMovesGhostRootIntoCanonicalDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	configPath := filepath.Join(home, ghostOSDirName, "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	ghostPromptsDir := filepath.Join(home, ghostDirName, promptsDirName)
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		PromptsDir: stringPointer(ghostPromptsDir),
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
+	ghostRoot := filepath.Join(ghostPromptsDir, systemPromptDirName)
+	if err := os.MkdirAll(ghostRoot, systemPromptDirPerm); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", ghostRoot, err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(ghostRoot, systemPromptCorePromptKey+systemPromptFileExt),
+		[]byte("from ghost"),
+		systemPromptFilePerm,
+	); err != nil {
+		t.Fatalf("WriteFile(core_prompt): %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(ghostRoot, systemPromptPromptLibraryKey+systemPromptJSONExt),
+		[]byte(`[{"id":"core-job","name":"Core Job","insert_point":"core_job","content":"from ghost","active":true}]`),
+		systemPromptFilePerm,
+	); err != nil {
+		t.Fatalf("WriteFile(prompt_library): %v", err)
+	}
+
+	report, err := MigrateLegacyPromptsDir()
+	if err != nil {
+		t.Fatalf("MigrateLegacyPromptsDir: %v", err)
+	}
+	if report.BackupDir == "" {
+		t.Fatal("expected legacy prompts backup dir")
+	}
+	if !report.ConfigUpdated {
+		t.Fatal("expected config prompts_dir rewrite")
+	}
 
 	primaryPromptsDir := filepath.Join(home, ghostOSDirName, promptsDirName)
-	if _, err := UpdateSystemPromptFiles(primaryPromptsDir, SystemPromptUpdateRequest{
-		CorePrompt: stringPointer("from primary"),
-	}); err != nil {
-		t.Fatalf("UpdateSystemPromptFiles: %v", err)
-	}
-
 	primaryRoot := filepath.Join(primaryPromptsDir, systemPromptDirName)
-	ghostPromptsDir := filepath.Join(home, ghostDirName, promptsDirName)
-	ghostRoot := filepath.Join(ghostPromptsDir, systemPromptDirName)
-	assertSystemPromptFile(t, primaryRoot, systemPromptCorePromptKey, "from primary")
-	assertSystemPromptFile(t, ghostRoot, systemPromptCorePromptKey, "from primary")
-
-	ghostPath := filepath.Join(ghostRoot, systemPromptCorePromptKey+systemPromptFileExt)
-	if err := os.WriteFile(ghostPath, []byte("from ghost"), systemPromptFilePerm); err != nil {
-		t.Fatalf("WriteFile(%s): %v", ghostPath, err)
-	}
-	newer := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(ghostPath, newer, newer); err != nil {
-		t.Fatalf("Chtimes(%s): %v", ghostPath, err)
-	}
-	ghostPromptLibrary := []SystemPromptLibraryItem{
-		{
-			ID:          "core-job",
-			Name:        "Core Job",
-			InsertPoint: SystemPromptInsertPointCoreJob,
-			Content:     "from ghost",
-			Active:      true,
-		},
-	}
-	ghostLibraryRaw, err := marshalPromptLibrary(ghostPromptLibrary)
-	if err != nil {
-		t.Fatalf("marshalPromptLibrary: %v", err)
-	}
-	ghostLibraryPath := filepath.Join(ghostRoot, systemPromptPromptLibraryKey+systemPromptJSONExt)
-	if err := os.WriteFile(ghostLibraryPath, []byte(ghostLibraryRaw), systemPromptFilePerm); err != nil {
-		t.Fatalf("WriteFile(%s): %v", ghostLibraryPath, err)
-	}
-	if err := os.Chtimes(ghostLibraryPath, newer, newer); err != nil {
-		t.Fatalf("Chtimes(%s): %v", ghostLibraryPath, err)
-	}
-
-	reloaded, err := LoadSystemPromptFiles(primaryPromptsDir)
-	if err != nil {
-		t.Fatalf("LoadSystemPromptFiles: %v", err)
-	}
-	if reloaded.CorePrompt != "from ghost" {
-		t.Fatalf("expected mirrored prompt to win, got %+v", reloaded)
-	}
-
 	assertSystemPromptFile(t, primaryRoot, systemPromptCorePromptKey, "from ghost")
-	assertSystemPromptFile(t, ghostRoot, systemPromptCorePromptKey, "from ghost")
+	if _, err := os.Stat(report.BackupDir); err != nil {
+		t.Fatalf("expected backup dir %s: %v", report.BackupDir, err)
+	}
 }
 
-func TestLoadSystemPromptFilesRemovesLegacyPromptFiles(t *testing.T) {
+func TestMigrateLegacySystemPromptsArchivesLegacyPromptFiles(t *testing.T) {
 	promptsDir := filepath.Join(t.TempDir(), "prompts")
 	root := filepath.Join(promptsDir, systemPromptDirName)
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PROMPTS_DIR", promptsDir)
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		PromptsDir: stringPointer(promptsDir),
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
 	if err := os.MkdirAll(root, systemPromptDirPerm); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", root, err)
 	}
-	for _, key := range append(systemPromptFileKeys(), legacySystemPromptFileKeys()...) {
+	for _, key := range systemPromptFileKeys() {
+		fileName, ok := systemPromptFileName(key)
+		if !ok {
+			t.Fatalf("systemPromptFileName(%s): missing", key)
+		}
+		if err := os.WriteFile(filepath.Join(root, fileName), nil, systemPromptFilePerm); err != nil {
+			t.Fatalf("WriteFile(%s): %v", key, err)
+		}
+	}
+	for _, key := range legacySystemPromptFileKeys() {
 		if err := os.WriteFile(filepath.Join(root, key+systemPromptFileExt), nil, systemPromptFilePerm); err != nil {
 			t.Fatalf("WriteFile(%s): %v", key, err)
 		}
@@ -134,21 +142,21 @@ func TestLoadSystemPromptFilesRemovesLegacyPromptFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, systemPromptInitFile), []byte("initialized"), systemPromptFilePerm); err != nil {
 		t.Fatalf("WriteFile(init marker): %v", err)
 	}
+	if _, err := ensurePresetRoot(promptsDir); err != nil {
+		t.Fatalf("ensurePresetRoot: %v", err)
+	}
 
-	files, err := LoadSystemPromptFiles(promptsDir)
+	report, err := MigrateLegacySystemPrompts()
 	if err != nil {
-		t.Fatalf("LoadSystemPromptFiles: %v", err)
+		t.Fatalf("MigrateLegacySystemPrompts: %v", err)
 	}
-	if files.CorePrompt != "" {
-		t.Fatalf("expected empty core prompt after migration, got %+v", files)
-	}
-	if len(files.PromptLibrary) != 0 {
-		t.Fatalf("expected empty prompt library after migration, got %+v", files.PromptLibrary)
+	if len(report.ArchivedFiles) != len(legacySystemPromptFileKeys()) {
+		t.Fatalf("unexpected archived files: %+v", report.ArchivedFiles)
 	}
 	for _, key := range legacySystemPromptFileKeys() {
 		path := filepath.Join(root, key+systemPromptFileExt)
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("expected legacy prompt file removed: %s", path)
+			t.Fatalf("expected legacy prompt file archived: %s", path)
 		}
 	}
 }

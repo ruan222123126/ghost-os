@@ -18,9 +18,6 @@ func loadToolPromptOverridesFromFiles(promptsDir string) (map[string]string, err
 	if err != nil {
 		return nil, err
 	}
-	if err := syncToolPromptRoots(roots); err != nil {
-		return nil, err
-	}
 	return readToolPromptOverridesFromRoot(roots[0])
 }
 
@@ -49,10 +46,11 @@ func writeToolPromptOverrideToFile(promptsDir string, name string, prompt string
 	}
 
 	trimmedPrompt := strings.TrimSpace(prompt)
-	for _, root := range roots {
-		if err := writeToolPromptFile(root, name, trimmedPrompt); err != nil {
-			return err
-		}
+	if len(roots) == 0 {
+		return nil
+	}
+	if err := writeToolPromptFile(roots[0], name, trimmedPrompt); err != nil {
+		return err
 	}
 	return nil
 }

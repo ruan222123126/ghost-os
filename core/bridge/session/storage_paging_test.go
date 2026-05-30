@@ -159,7 +159,7 @@ func TestStoreSaveRejectsNonAppendOnlyMutation(t *testing.T) {
 	}
 }
 
-func TestStoreLoadImportsLegacySessionFile(t *testing.T) {
+func TestStoreMigrateLegacySessions(t *testing.T) {
 	dir := t.TempDir()
 	legacy := NewSession("")
 	legacy.ID = "legacy-session"
@@ -179,9 +179,20 @@ func TestStoreLoadImportsLegacySessionFile(t *testing.T) {
 		t.Fatalf("new store: %v", err)
 	}
 
+	if _, err := store.Load(legacy.ID); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("expected legacy session to stay invisible before migration, got %v", err)
+	}
+	migrated, err := store.MigrateLegacySessions()
+	if err != nil {
+		t.Fatalf("MigrateLegacySessions: %v", err)
+	}
+	if len(migrated) != 1 || migrated[0] != legacy.ID {
+		t.Fatalf("unexpected migrated ids: %v", migrated)
+	}
+
 	loaded, err := store.Load(legacy.ID)
 	if err != nil {
-		t.Fatalf("load imported legacy session: %v", err)
+		t.Fatalf("load migrated legacy session: %v", err)
 	}
 	if loaded.ID != legacy.ID {
 		t.Fatalf("unexpected loaded id: got=%q want=%q", loaded.ID, legacy.ID)

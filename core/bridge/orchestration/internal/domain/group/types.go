@@ -3,10 +3,10 @@ package group
 import bridgeTasks "ghost-os/bridge/tasks"
 
 const (
-	NodeTypeStart = bridgeTasks.OrchestrationNodeTypeStart
+	NodeTypeStart = "start"
 	NodeTypeGroup = bridgeTasks.OrchestrationNodeTypeGroup
 	NodeTypeAgent = bridgeTasks.OrchestrationNodeTypeAgent
-	NodeTypeEnd   = bridgeTasks.OrchestrationNodeTypeEnd
+	NodeTypeEnd   = "end"
 
 	EdgeKindControl = bridgeTasks.OrchestrationEdgeKindControl
 	EdgeKindMember  = bridgeTasks.OrchestrationEdgeKindMember

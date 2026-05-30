@@ -68,15 +68,9 @@ func (s *Store) withStoreLock(fn func() error) error {
 }
 
 func (s *Store) withSessionLock(sessionID string, allowMissingLegacy bool, fn func() error) error {
-	return s.withStoreLock(func() error {
-		if err := s.importLegacySessionLocked(sessionID); err != nil {
-			if allowMissingLegacy && errors.Is(err, ErrSessionNotFound) {
-				return fn()
-			}
-			return err
-		}
-		return fn()
-	})
+	_ = sessionID
+	_ = allowMissingLegacy
+	return s.withStoreLock(fn)
 }
 
 func (s *Store) withTx(action string, fn func(tx *sql.Tx) error) error {

@@ -54,7 +54,7 @@ describe('hooks/useSessionSidebarPartitions', () => {
     expect(findPartitionSessions(latestState!, 'Unclassified')).toEqual(['session-1']);
   });
 
-  it('migrates legacy localStorage only when the backend state is empty', async () => {
+  it('keeps legacy localStorage pending until the user explicitly migrates it', async () => {
     const legacyState = {
       ...createInitialSessionPartitionStore(),
       partitions: [{ id: 'work', name: 'Work' }],
@@ -73,6 +73,13 @@ describe('hooks/useSessionSidebarPartitions', () => {
       latestState = state;
     });
 
+    expect(mockedPutSessionSidebarPartitions).not.toHaveBeenCalled();
+    expect(latestState!.legacyMigrationAvailable).toBe(true);
+
+    await act(async () => {
+      await latestState!.runLegacyMigration();
+    });
+
     expect(mockedPutSessionSidebarPartitions).toHaveBeenCalledTimes(1);
     expect(mockedPutSessionSidebarPartitions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,16 +90,33 @@ describe('hooks/useSessionSidebarPartitions', () => {
     );
     expect(localStorageMock.removeItem).toHaveBeenCalledWith('ghost.web.session.partitions.v1');
     expect(findPartitionSessions(latestState!, 'Work')).toEqual(['session-1']);
+    expect(latestState!.legacyMigrationAvailable).toBe(false);
+  });
 
-    jest.resetAllMocks();
-    installWindow(buildLocalStorageMock({
+  it('allows discarding legacy localStorage explicitly', async () => {
+    const legacyState = {
+      ...createInitialSessionPartitionStore(),
+      partitions: [{ id: 'work', name: 'Work' }],
+      assignments: { 'session-1': 'work' },
+    };
+    const localStorageMock = buildLocalStorageMock({
       'ghost.web.session.partitions.v1': stringifySessionPartitionStore(legacyState),
-    }));
-    mockedGetSessionSidebarPartitions.mockResolvedValue(legacyState);
+    });
+    installWindow(localStorageMock);
 
-    await renderHook(() => undefined);
+    mockedGetSessionSidebarPartitions.mockResolvedValue(createInitialSessionPartitionStore());
 
-    expect(mockedPutSessionSidebarPartitions).not.toHaveBeenCalled();
+    let latestState: HookState | null = null;
+    await renderHook((state) => {
+      latestState = state;
+    });
+
+    act(() => {
+      latestState!.discardLegacyMigration();
+    });
+
+    expect(localStorageMock.removeItem).toHaveBeenCalledWith('ghost.web.session.partitions.v1');
+    expect(latestState!.legacyMigrationAvailable).toBe(false);
   });
 
   it('keeps only the last queued drag state when earlier save responses finish later', async () => {
@@ -210,10 +234,14 @@ interface HookState {
     sessions: SessionMetadata[];
   }>;
   partitionError: string;
+  legacyMigrationAvailable: boolean;
+  legacyMigrationRunning: boolean;
   addPartition: (name: string) => { ok: boolean };
   renamePartition: (partitionID: string, name: string) => { ok: boolean };
   deletePartition: (partitionID: string) => { ok: boolean };
   moveSession: (sessionID: string, partitionID: string, index: number) => void;
+  runLegacyMigration: () => Promise<void>;
+  discardLegacyMigration: () => void;
 }
 
 function sampleSessions(): SessionMetadata[] {

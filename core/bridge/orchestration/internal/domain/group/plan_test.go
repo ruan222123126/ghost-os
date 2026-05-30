@@ -19,16 +19,10 @@ func TestPlanBuilderAcceptsEmptyDraft(t *testing.T) {
 	}
 }
 
-func TestPlanBuilderAcceptsLegacyBoundariesWithoutResultNodes(t *testing.T) {
-	plan, err := PlanBuilder{}.Build(legacyBoundaryDefinition())
-	if err != nil {
-		t.Fatalf("build legacy boundary plan: %v", err)
-	}
-	if plan.EntryGroupID != "group-1" {
-		t.Fatalf("unexpected entry group: %#v", plan)
-	}
-	if len(plan.ControlNext) != 0 {
-		t.Fatalf("legacy start/end should not become group control next: %#v", plan.ControlNext)
+func TestPlanBuilderRejectsLegacyBoundaries(t *testing.T) {
+	_, err := PlanBuilder{}.Build(legacyBoundaryDefinition())
+	if err == nil || !strings.Contains(err.Error(), "migrate orchestrations") {
+		t.Fatalf("expected legacy-boundary migration error, got %v", err)
 	}
 }
 

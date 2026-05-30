@@ -72,12 +72,5 @@ func addMemberEdge(graph graphData, edge Edge, fromNode Node, toNode Node) error
 }
 
 func isValidControlEdge(fromType string, toType string) bool {
-	switch fromType {
-	case NodeTypeStart:
-		return toType == NodeTypeGroup || toType == NodeTypeEnd
-	case NodeTypeGroup:
-		return toType == NodeTypeGroup || toType == NodeTypeEnd
-	default:
-		return false
-	}
+	return fromType == NodeTypeGroup && toType == NodeTypeGroup
 }

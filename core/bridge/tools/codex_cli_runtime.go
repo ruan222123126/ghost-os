@@ -185,9 +185,6 @@ func buildCodexCLIStartExecutionParams(
 	if request.sandbox != "" {
 		params["sandbox"] = request.sandbox
 	}
-	if request.fullAuto != nil {
-		params["full_auto"] = *request.fullAuto
-	}
 	if request.sessionID != "" {
 		params["session_id"] = request.sessionID
 	}

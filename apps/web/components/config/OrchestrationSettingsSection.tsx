@@ -3,6 +3,11 @@
 import { type KeyboardEvent, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ConfigCardActions } from '@/components/config/ConfigCardActions';
+import {
+  LegacyMigrationBanner,
+  OrchestrationLoadingList,
+  OrchestrationStatusBanner,
+} from '@/components/config/OrchestrationSettingsSectionParts';
 import { TaskLogsModal } from '@/components/config/TaskLogsModal';
 import { OrchestrationCreateForm } from '@/components/config/OrchestrationCreateForm';
 import { useOrchestrationLogs } from '@/hooks/config/useOrchestrationLogs';
@@ -46,7 +51,17 @@ export function OrchestrationSettingsSection() {
         actionLabel={copy.settings.orchestrationNew}
         onAction={state.startCreate}
       />
-      {state.error ? <div className="mb-4 rounded-[16px] border border-red-200 bg-red-50 px-6 py-4 text-[13px] text-red-700">{state.error}</div> : null}
+      {state.legacyMigrationCount > 0 ? (
+        <LegacyMigrationBanner
+          count={state.legacyMigrationCount}
+          running={state.legacyMigrationRunning}
+          onMigrate={() => ignorePromise(state.runLegacyMigration())}
+        />
+      ) : null}
+      <OrchestrationStatusBanner
+        message={state.error || state.success}
+        tone={state.error ? 'error' : 'success'}
+      />
       <OrchestrationList
         orchestrations={state.orchestrations}
         loading={state.loading}
@@ -114,7 +129,7 @@ function OrchestrationList(props: {
   );
 
   if (props.loading) {
-    return <LoadingList />;
+    return <OrchestrationLoadingList />;
   }
   if (orderedOrchestrations.length === 0) {
     return (
@@ -192,7 +207,7 @@ function OrchestrationCard(props: {
           },
           {
             key: 'run',
-            label: props.running ? copy.settings.tasksRunning : copy.settings.tasksRun,
+            label: copy.settings.tasksRun,
             disabled: props.controlsDisabled || props.running,
             onClick: () => ignorePromise(props.onRun(props.task.id)),
           },
@@ -249,19 +264,6 @@ function handleDelete(
   }
 
   ignorePromise(onDelete(id));
-}
-
-function LoadingList() {
-  return (
-    <div className="grid grid-cols-1 gap-3">
-      {Array.from({ length: 3 }).map((_, index) => (
-        <div
-          key={`orchestration-skeleton-${index}`}
-          className="h-[130px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
-        />
-      ))}
-    </div>
-  );
 }
 
 function prioritizeEnabledOrchestrations(tasks: OrchestrationTaskPayload[]): OrchestrationTaskPayload[] {

@@ -1,11 +1,7 @@
 package session
 
 import (
-	"errors"
 	"fmt"
-	"log"
-	"os"
-	"strings"
 )
 
 // List 返回当前存储目录下的全部会话 ID。
@@ -27,7 +23,6 @@ func (s *Store) ListMetadata() ([]SessionMetadata, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.importLegacySessionsForListingLocked()
 	rows, err := s.db.Query(`
 SELECT id, created_at, updated_at, message_count, token_count, state_json
 FROM sessions
@@ -49,28 +44,4 @@ ORDER BY id ASC`)
 		return nil, fmt.Errorf("list session metadata: %w", err)
 	}
 	return metadata, nil
-}
-
-func (s *Store) importLegacySessionsForListingLocked() {
-	entries, err := os.ReadDir(s.baseDir)
-	if err != nil {
-		log.Printf("[SESSION] ListMetadata failed to scan legacy files: err=%v", err)
-		return
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".json") {
-			continue
-		}
-		id := strings.TrimSuffix(name, ".json")
-		if !isValidSessionID(id) {
-			continue
-		}
-		if err := s.importLegacySessionLocked(id); err != nil && !errors.Is(err, ErrSessionNotFound) {
-			log.Printf("[SESSION] ListMetadata skipped legacy session import: id=%s err=%v", id, err)
-		}
-	}
 }

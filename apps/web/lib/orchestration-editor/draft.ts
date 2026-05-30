@@ -22,7 +22,6 @@ import type {
 
 const GROUP_MEMBER_Y_GAP = 150;
 const GROUP_LANE_Y = NODE_Y_BASE + 140;
-const ORCHESTRATION_GROUP_TYPES = ['group', 'agent'] as const;
 
 export function createEmptyOrchestrationDraft(mode: 'create' | 'edit' = 'create'): WorkflowCanvasDraft {
   return {
@@ -64,9 +63,7 @@ export function orchestrationDefinitionToDraft(input: OrchestrationDefinitionImp
 export function draftToOrchestrationDefinition(draft: WorkflowCanvasDraft): OrchestrationDefinition {
   const nodeMap = new Map(draft.nodes.map((node) => [node.id, node] as const));
   return {
-    nodes: draft.nodes
-      .filter((node) => node.type === 'group' || node.type === 'agent')
-      .map((node) => buildOrchestrationNode(node)),
+    nodes: draft.nodes.map((node) => buildOrchestrationNode(node)),
     edges: draft.edges
       .map((edge) => buildOrchestrationEdge(edge, nodeMap))
       .filter((edge): edge is NonNullable<typeof edge> => edge !== undefined),
@@ -125,7 +122,7 @@ function buildDraftNode(node: OrchestrationDefinition['nodes'][number], position
 function buildOrchestrationNode(node: WorkflowCanvasNodeDraft): OrchestrationDefinition['nodes'][number] {
   return {
     id: node.id,
-    type: node.type as 'group' | 'agent',
+    type: node.type as OrchestrationDefinition['nodes'][number]['type'],
     group: node.type === 'group'
       ? {
         title: node.group?.title ?? '',
@@ -152,17 +149,20 @@ function buildOrchestrationEdge(
   const sourceNode = nodeMap.get(edge.from_node_id);
   const targetNode = nodeMap.get(edge.to_node_id);
   const resolvedKind = resolveEdgeKind(sourceNode, targetNode);
-  const kind = edge.kind ?? resolvedKind;
-  if (edge.kind && edge.kind !== resolvedKind) {
-    return undefined;
+  if (edge.kind) {
+    return {
+      from_node_id: edge.from_node_id,
+      to_node_id: edge.to_node_id,
+      kind: edge.kind,
+    };
   }
-  if (!kind) {
+  if (!resolvedKind) {
     return undefined;
   }
   return {
     from_node_id: edge.from_node_id,
     to_node_id: edge.to_node_id,
-    kind,
+    kind: resolvedKind,
   };
 }
 
@@ -252,22 +252,9 @@ function fallbackPosition(nodeID: string): { x: number; y: number } {
 }
 
 function normalizeOrchestrationDefinition(definition: OrchestrationDefinition): OrchestrationDefinition {
-  const nodes = definition.nodes.filter((node) =>
-    ORCHESTRATION_GROUP_TYPES.includes(node.type as (typeof ORCHESTRATION_GROUP_TYPES)[number]));
-  const nodeMap = new Map(nodes.map((node) => [node.id, node] as const));
   return {
-    nodes,
-    edges: definition.edges.filter((edge) => {
-      const source = nodeMap.get(edge.from_node_id);
-      const target = nodeMap.get(edge.to_node_id);
-      if (!source || !target) {
-        return false;
-      }
-      if (edge.kind === 'member') {
-        return source.type === 'agent' && target.type === 'group';
-      }
-      return source.type === 'group' && target.type === 'group';
-    }),
+    nodes: definition.nodes.map((node) => ({ ...node })),
+    edges: definition.edges.map((edge) => ({ ...edge })),
   };
 }
 

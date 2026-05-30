@@ -5,16 +5,15 @@ import (
 	"testing"
 )
 
-func TestOrchestrationLegacyBoundaryNodesStillRun(t *testing.T) {
-	_, service, _ := newTestHandlerWithService(t, nil, nil)
-	run := runOrchestrationTaskNow(t, service, buildLegacyBoundaryDefinition(orchestrationModeSequential, 1))
-	if run.Run.Status != taskRunStatusSuccess {
-		t.Fatalf("unexpected legacy run status: %#v", run.Run)
+func TestOrchestrationLegacyBoundaryNodesRequireMigration(t *testing.T) {
+	task := ScheduledTask{
+		TaskKind:      taskKindOrchestration,
+		Name:          "legacy-orchestration",
+		Orchestration: buildLegacyBoundaryDefinition(orchestrationModeSequential, 1),
 	}
-	for _, result := range run.Run.NodeResults {
-		if result.NodeType == orchestrationNodeTypeStart || result.NodeType == orchestrationNodeTypeEnd {
-			t.Fatalf("legacy boundary nodes should not appear in run results: %#v", run.Run.NodeResults)
-		}
+	err := validateTaskDefinition(&task)
+	if err == nil || !strings.Contains(err.Error(), "migrate orchestrations") {
+		t.Fatalf("expected migrate-orchestrations validation error, got %v", err)
 	}
 }
 
@@ -31,17 +30,6 @@ func buildLegacyBoundaryDefinition(mode string, maxRounds int) *OrchestrationDef
 			{FromNodeID: "group-1", ToNodeID: "end-node", Kind: orchestrationEdgeKindControl},
 			{FromNodeID: "agent-1", ToNodeID: "group-1", Kind: orchestrationEdgeKindMember},
 		},
-	}
-}
-
-func TestValidateTaskDefinitionOrchestrationAcceptsLegacyBoundaries(t *testing.T) {
-	task := ScheduledTask{
-		TaskKind:      taskKindOrchestration,
-		Name:          "legacy-orchestration",
-		Orchestration: buildLegacyBoundaryDefinition(orchestrationModeSequential, 1),
-	}
-	if err := validateTaskDefinition(&task); err != nil {
-		t.Fatalf("validate legacy orchestration: %v", err)
 	}
 }
 

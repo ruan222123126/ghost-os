@@ -85,7 +85,6 @@ func (CodexCLITool) Parameters() json.RawMessage {
 			"output_path":{"type":"string"},
 			"model":{"type":"string","description":"Optional. If omitted, Codex uses local config."},
 			"sandbox":{"type":"string","enum":["read-only","workspace-write","danger-full-access"],"description":"Optional. If omitted, Codex uses local config."},
-			"full_auto":{"type":"boolean","description":"Deprecated compatibility flag. If true and sandbox is omitted, uses sandbox=workspace-write."},
 			"skip_git_repo_check":{"type":"boolean","description":"Default: true"},
 			"json":{"type":"boolean","description":"Default: true"},
 			"wait_ms_before_async":{"type":"integer"},

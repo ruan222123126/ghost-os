@@ -16,6 +16,7 @@ import (
 	"ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/orchestration/internal/ports"
 	"ghost-os/bridge/session"
+	bridgeTasks "ghost-os/bridge/tasks"
 	"ghost-os/bridge/tools"
 )
 
@@ -56,6 +57,10 @@ func (e orchestrationOwnerDecisionTurnExecutor) RunOwnerDecisionTurn(
 	if err != nil {
 		return group.DispatchCommand{}, req.SessionID, err
 	}
+	handle, err := e.startOwnerRunCard(ctx, req, sess)
+	if err != nil {
+		return group.DispatchCommand{}, sess.ID, err
+	}
 	catalog := buildOwnerRuntimeCatalog(deps, sess, req)
 	systemPrompt, err = buildOwnerRuntimeSystemPrompt(preparer, deps, sess, catalog, req)
 	if err != nil {
@@ -67,8 +72,12 @@ func (e orchestrationOwnerDecisionTurnExecutor) RunOwnerDecisionTurn(
 		sess:         sess,
 		catalog:      catalog,
 		systemPrompt: systemPrompt,
-	})
+	}, handle)
 	if err := e.saveOwnerDispatchSession(sess); err != nil {
+		_ = e.finishOwnerRunCard(ctx, handle, sess.ID, "", err)
+		return group.DispatchCommand{}, sess.ID, err
+	}
+	if err := e.finishOwnerRunCard(ctx, handle, sess.ID, response, runErr); err != nil {
 		return group.DispatchCommand{}, sess.ID, err
 	}
 	return decodeOwnerDecisionResponse(response, runErr, sess.ID)
@@ -110,9 +119,11 @@ func (e orchestrationOwnerDecisionTurnExecutor) loadOwnerDispatchSession(
 func (e orchestrationOwnerDecisionTurnExecutor) runOwnerDispatchAgent(
 	ctx context.Context,
 	req ownerDispatchRunRequest,
+	handle *taskRunCardHandle,
 ) (string, error) {
 	preparer := e.newOwnerDispatchPreparer()
 	runAgent := buildOwnerDispatchAgent(newOwnerDispatchAgentConfig(req))
+	runAgent.SetStreamLifecyclePayloadBuilder(newSessionStreamLifecyclePayloadBuilderForSessionID(req.sess.ID))
 	preparer.attachDynamicPromptRefresh(runAgent, req.deps, req.sess, req.request.Catalog, func() (string, error) {
 		return req.systemPrompt, nil
 	})
@@ -121,7 +132,8 @@ func (e orchestrationOwnerDecisionTurnExecutor) runOwnerDispatchAgent(
 		return "", err
 	}
 	defer cleanup()
-	response, runErr := runOwnerDispatchWithRepair(execCtx, req, runAgent)
+	runSink := newSessionDraftCheckpointSink(newTaskRunCardStreamSink(handle), e.service.sessionStore, req.sess)
+	response, runErr := runOwnerDispatchWithRepair(execCtx, req, runAgent, runSink)
 	persistOwnerAgentMessages(req.sess, runAgent)
 	return response, runErr
 }
@@ -201,6 +213,47 @@ func ownerDecisionSystemPrompt(basePrompt string, req ports.OwnerDecisionTurnReq
 
 func ownerUserMessage(req ports.OwnerDecisionTurnRequest) llm.Message {
 	return llm.Message{Role: llm.RoleUser, Text: req.UserPrompt}
+}
+
+func (e orchestrationOwnerDecisionTurnExecutor) startOwnerRunCard(
+	ctx context.Context,
+	req ports.OwnerDecisionTurnRequest,
+	sess *session.Session,
+) (*taskRunCardHandle, error) {
+	recorder := taskRunCardRecorderFromContext(ctx)
+	if recorder == nil {
+		return nil, errors.New("orchestration owner task run card recorder is not configured")
+	}
+	title := req.OwnerNode.ID
+	if req.OwnerNode.Agent != nil && strings.TrimSpace(req.OwnerNode.Agent.Title) != "" {
+		title = strings.TrimSpace(req.OwnerNode.Agent.Title)
+	}
+	return recorder.StartCard(ctx, taskRunCardStartInput{
+		kind:            bridgeTasks.RunCardKindOrchestrationOwner,
+		title:           title,
+		nodeID:          strings.TrimSpace(req.OwnerNode.ID),
+		nodeType:        "agent",
+		round:           req.Round,
+		sourceSessionID: strings.TrimSpace(sess.ID),
+		startedAt:       time.Now().UTC(),
+	})
+}
+
+func (e orchestrationOwnerDecisionTurnExecutor) finishOwnerRunCard(
+	ctx context.Context,
+	handle *taskRunCardHandle,
+	sessionID string,
+	response string,
+	runErr error,
+) error {
+	status, preview, errorText := ownerRunCardStatus(response, runErr)
+	return handle.Finish(ctx, taskRunCardFinishInput{
+		status:          status,
+		preview:         preview,
+		errorText:       errorText,
+		sourceSessionID: strings.TrimSpace(sessionID),
+		finishedAt:      time.Now().UTC(),
+	})
 }
 
 func persistOwnerAgentMessages(sess *session.Session, runAgent *agent.Agent) {

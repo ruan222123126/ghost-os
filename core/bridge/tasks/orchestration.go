@@ -3,10 +3,8 @@ package tasks
 import "strings"
 
 const (
-	OrchestrationNodeTypeStart = "start"
 	OrchestrationNodeTypeGroup = "group"
 	OrchestrationNodeTypeAgent = "agent"
-	OrchestrationNodeTypeEnd   = "end"
 
 	OrchestrationEdgeKindControl = "control"
 	OrchestrationEdgeKindMember  = "member"

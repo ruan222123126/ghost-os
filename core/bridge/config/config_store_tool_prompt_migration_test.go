@@ -7,14 +7,12 @@ import (
 	"testing"
 )
 
-func TestNewStoreFromEnvMigratesLegacyToolPromptOverrides(t *testing.T) {
+func TestMigrateLegacyToolPromptsMovesLegacyOverridesIntoPromptFiles(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.toml")
 	promptsDir := filepath.Join(tempDir, "prompts")
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_PROMPTS_DIR", promptsDir)
-	t.Setenv("GHOST_PROVIDER", "custom")
-	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
 		ToolPromptOverrides: map[string]string{
 			"script_exec": "  legacy script prompt  ",
@@ -23,8 +21,12 @@ func TestNewStoreFromEnvMigratesLegacyToolPromptOverrides(t *testing.T) {
 		t.Fatalf("writeBridgeFileConfig: %v", err)
 	}
 
-	if _, err := newStoreFromEnv(); err != nil {
-		t.Fatalf("newStoreFromEnv: %v", err)
+	report, err := MigrateLegacyToolPrompts()
+	if err != nil {
+		t.Fatalf("MigrateLegacyToolPrompts: %v", err)
+	}
+	if !report.ConfigUpdated {
+		t.Fatal("expected config to be updated")
 	}
 
 	fileCfg, _, err := loadBridgeFileConfig()
@@ -45,15 +47,13 @@ func TestNewStoreFromEnvMigratesLegacyToolPromptOverrides(t *testing.T) {
 	}
 }
 
-func TestNewStoreFromEnvMigrationKeepsExistingToolPromptFile(t *testing.T) {
+func TestMigrateLegacyToolPromptsKeepsExistingCustomPromptFile(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.toml")
 	promptsDir := filepath.Join(tempDir, "prompts")
 	root := filepath.Join(promptsDir, toolPromptDirName)
 	t.Setenv("GHOST_CONFIG_PATH", configPath)
 	t.Setenv("GHOST_PROMPTS_DIR", promptsDir)
-	t.Setenv("GHOST_PROVIDER", "custom")
-	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
 	if err := os.MkdirAll(root, toolPromptDirPerm); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", root, err)
 	}
@@ -69,8 +69,12 @@ func TestNewStoreFromEnvMigrationKeepsExistingToolPromptFile(t *testing.T) {
 		t.Fatalf("writeBridgeFileConfig: %v", err)
 	}
 
-	if _, err := newStoreFromEnv(); err != nil {
-		t.Fatalf("newStoreFromEnv: %v", err)
+	report, err := MigrateLegacyToolPrompts()
+	if err != nil {
+		t.Fatalf("MigrateLegacyToolPrompts: %v", err)
+	}
+	if len(report.SkippedTools) != 1 || report.SkippedTools[0] != "script_exec" {
+		t.Fatalf("unexpected skipped tools: %+v", report.SkippedTools)
 	}
 
 	raw, err := os.ReadFile(path)

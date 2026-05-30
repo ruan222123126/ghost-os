@@ -27,10 +27,10 @@ const (
 	taskAgentModeRelay            = bridgeTasks.AgentModeRelay
 	taskRelayStopPolicyAIDecides  = bridgeTasks.RelayStopPolicyAIDecides
 	taskRelayStopPolicyMaxRounds  = bridgeTasks.RelayStopPolicyMaxRounds
-	orchestrationNodeTypeStart    = bridgeTasks.OrchestrationNodeTypeStart
+	orchestrationNodeTypeStart    = "start"
 	orchestrationNodeTypeGroup    = bridgeTasks.OrchestrationNodeTypeGroup
 	orchestrationNodeTypeAgent    = bridgeTasks.OrchestrationNodeTypeAgent
-	orchestrationNodeTypeEnd      = bridgeTasks.OrchestrationNodeTypeEnd
+	orchestrationNodeTypeEnd      = "end"
 	orchestrationEdgeKindControl  = bridgeTasks.OrchestrationEdgeKindControl
 	orchestrationEdgeKindMember   = bridgeTasks.OrchestrationEdgeKindMember
 	orchestrationModeSequential   = bridgeTasks.OrchestrationSpeakingModeSequential

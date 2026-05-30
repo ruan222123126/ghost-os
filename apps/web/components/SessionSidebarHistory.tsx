@@ -54,10 +54,14 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   const {
     partitionViews,
     partitionError,
+    legacyMigrationAvailable,
+    legacyMigrationRunning,
     addPartition,
     renamePartition,
     deletePartition,
     moveSession,
+    runLegacyMigration,
+    discardLegacyMigration,
   } = useSessionSidebarPartitions({
     sessions: props.sessions,
     sessionsLoaded: !showBlockingLoading,
@@ -228,6 +232,36 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
         <span className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.chat.sidebarHistory}</span>
       </div>
       {ui.statusMessage ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{ui.statusMessage}</div> : null}
+      {legacyMigrationAvailable ? (
+        <div className="mb-3 border border-black/10 bg-white px-3 py-3 text-xs text-neutral-700">
+          <p className="font-semibold text-black">{copy.chat.sidebarPartitionLegacyMigrationTitle}</p>
+          <p className="mt-1">{copy.chat.sidebarPartitionLegacyMigrationDescription}</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              className="bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:bg-neutral-400"
+              disabled={legacyMigrationRunning}
+              onClick={() => { void runLegacyMigration(); }}
+            >
+              {legacyMigrationRunning
+                ? copy.chat.sidebarPartitionLegacyMigrationRunning
+                : copy.chat.sidebarPartitionLegacyMigrationAction}
+            </button>
+            <button
+              type="button"
+              className="border border-black/10 px-3 py-1.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-100"
+              onClick={() => {
+                if (!window.confirm(copy.chat.sidebarPartitionLegacyDiscardConfirm)) {
+                  return;
+                }
+                discardLegacyMigration();
+              }}
+            >
+              {copy.chat.sidebarPartitionLegacyDiscard}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {partitionError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{partitionError}</div> : null}
       {groupingEnabled && sessionSources.error ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{sessionSources.error}</div> : null}
       {props.error && !showBlockingLoading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}

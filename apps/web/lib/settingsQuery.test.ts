@@ -14,8 +14,8 @@ describe('lib/settingsQuery', () => {
     expect(parseSettingsQuery('?settings=provider')).toBeNull();
   });
 
-  it('maps legacy prompts query to prompts_library', () => {
-    expect(parseSettingsQuery('?settings=prompts')).toBe('prompts_library');
+  it('ignores legacy prompts query tab', () => {
+    expect(parseSettingsQuery('?settings=prompts')).toBeNull();
   });
 
   it('builds and strips settings query', () => {

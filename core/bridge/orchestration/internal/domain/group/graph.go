@@ -14,8 +14,6 @@ type graphData struct {
 	controlOut    map[string]int
 	controlNext   map[string]string
 	groupMembers  map[string][]string
-	startCount    int
-	endCount      int
 	groupCount    int
 	edgeCount     int
 }
@@ -29,9 +27,6 @@ func buildGraphData(definition *Definition) (graphData, error) {
 		if err := addNode(&graph, node); err != nil {
 			return graphData{}, err
 		}
-	}
-	if err := validateLegacyBoundaryPair(graph); err != nil {
-		return graphData{}, err
 	}
 	for _, edge := range definition.Edges {
 		if err := addEdge(graph, edge); err != nil {
@@ -67,26 +62,9 @@ func addNode(graph *graphData, node Node) error {
 
 func countNodeType(graph *graphData, nodeType string) {
 	switch nodeType {
-	case NodeTypeStart:
-		graph.startCount++
-	case NodeTypeEnd:
-		graph.endCount++
 	case NodeTypeGroup:
 		graph.groupCount++
 	}
-}
-
-func validateLegacyBoundaryPair(graph graphData) error {
-	if graph.startCount > 1 {
-		return fmt.Errorf("%w: orchestration requires exactly 1 start node", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	if graph.endCount > 1 {
-		return fmt.Errorf("%w: orchestration requires exactly 1 end node", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	if graph.startCount != graph.endCount {
-		return fmt.Errorf("%w: orchestration start/end nodes must both be present or both be absent", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	return nil
 }
 
 func (g graphData) plan() Plan {

@@ -136,8 +136,8 @@ fn parse_start_request(params: &Value) -> Result<StartRequest, String> {
 }
 
 fn validate_start_request(request: &StartRequest) -> Result<(), String> {
-    if request.sandbox.is_some() && request.full_auto.is_some() {
-        return Err("sandbox and full_auto cannot be used together".to_string());
+    if request.full_auto.is_some() {
+        return Err("full_auto is removed; use sandbox=workspace-write".to_string());
     }
     Ok(())
 }
@@ -196,20 +196,9 @@ fn build_codex_cli_args(request: &StartRequest, output_path: &str) -> Result<Vec
 }
 
 fn append_sandbox_args(args: &mut Vec<String>, request: &StartRequest) {
-    let sandbox = request
-        .sandbox
-        .as_deref()
-        .or_else(|| legacy_full_auto_sandbox(request.full_auto));
-    if let Some(value) = sandbox {
+    if let Some(value) = request.sandbox.as_deref() {
         args.push("--sandbox".to_string());
         args.push(value.to_string());
-    }
-}
-
-fn legacy_full_auto_sandbox(full_auto: Option<bool>) -> Option<&'static str> {
-    match full_auto {
-        Some(true) => Some("workspace-write"),
-        _ => None,
     }
 }
 

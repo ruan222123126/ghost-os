@@ -3,8 +3,8 @@ import { availableWorkflowAgentToolNames, type WorkflowAgentRuntimeCatalog } fro
 import type { WorkflowCanvasDraft, WorkflowValidationResult } from '@/lib/workflow-editor/types';
 
 const SPEAKING_MODES = ['sequential', 'parallel', 'owner'] as const;
-const START_END_NODE_COUNT_ERROR = 'orchestration start/end nodes must both be present or both be absent';
 const GROUP_REQUIRED_ERROR = 'orchestration requires at least 1 group node';
+const LEGACY_BOUNDARY_ERROR = 'orchestration node type "%s" is removed; run `bin/ghost-bridge migrate orchestrations`';
 
 export function validateOrchestrationDraft(
   draft: WorkflowCanvasDraft,
@@ -18,8 +18,6 @@ export function validateOrchestrationDraft(
   const groupMembers = new Map<string, string[]>();
   const rawControlIn = new Map<string, number>();
   const rawControlOut = new Map<string, number>();
-  let startCount = 0;
-  let endCount = 0;
   for (const node of draft.nodes) {
     if (!node.id.trim()) {
       errors.push('orchestration node id is required');
@@ -27,22 +25,7 @@ export function validateOrchestrationDraft(
       errors.push(`duplicate orchestration node id "${node.id}"`);
     }
     nodeMap.set(node.id, node);
-    if (node.type === 'start') {
-      startCount += 1;
-    }
-    if (node.type === 'end') {
-      endCount += 1;
-    }
     validateOrchestrationNode(node, errors);
-  }
-  if (startCount > 1) {
-    errors.push('orchestration requires exactly 1 start node');
-  }
-  if (endCount > 1) {
-    errors.push('orchestration requires exactly 1 end node');
-  }
-  if (startCount !== endCount) {
-    errors.push(START_END_NODE_COUNT_ERROR);
   }
   for (const edge of draft.edges) {
     validateOrchestrationEdge(edge, nodeMap, rawControlIn, rawControlOut, controlIn, controlOut, controlNext, groupMembers, errors);
@@ -73,6 +56,9 @@ function validateOrchestrationNode(node: WorkflowCanvasDraft['nodes'][number], e
     if (!node.agent?.title?.trim() || !node.agent.message.trim()) {
       errors.push(`orchestration agent node "${node.id}" requires title and message`);
     }
+  }
+  if (node.type === 'start' || node.type === 'end') {
+    errors.push(LEGACY_BOUNDARY_ERROR.replace('%s', node.type));
   }
   if (node.type !== 'start' && node.type !== 'end' && node.type !== 'group' && node.type !== 'agent') {
     errors.push(`unsupported orchestration node type "${String(node.type)}"`);
@@ -108,9 +94,7 @@ function validateOrchestrationEdge(
     errors.push(`unsupported orchestration edge kind "${String(edge.kind)}"`);
     return;
   }
-  if (
-    !((source.type === 'start' || source.type === 'group') && (target.type === 'group' || target.type === 'end'))
-  ) {
+  if (!(source.type === 'group' && target.type === 'group')) {
     errors.push(`orchestration control edge "${edge.from_node_id}" -> "${edge.to_node_id}" is invalid`);
     return;
   }
@@ -147,12 +131,6 @@ function validateOrchestrationDegrees(
     const outDegree = controlOut.get(node.id) ?? 0;
     const rawInDegree = rawControlIn.get(node.id) ?? 0;
     const rawOutDegree = rawControlOut.get(node.id) ?? 0;
-    if (node.type === 'start' && (rawInDegree !== 0 || rawOutDegree !== 1)) {
-      errors.push('orchestration start node must have in=0 and out=1');
-    }
-    if (node.type === 'end' && (rawInDegree !== 1 || rawOutDegree !== 0)) {
-      errors.push('orchestration end node must have in=1 and out=0');
-    }
     if (node.type === 'group' && (inDegree > 1 || outDegree > 1)) {
       errors.push(`orchestration group node "${node.id}" must have in<=1 and out<=1`);
     }

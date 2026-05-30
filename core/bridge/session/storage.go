@@ -106,6 +106,13 @@ func NewStore(baseDir string, options ...StoreOptions) (*Store, error) {
 	}, nil
 }
 
+func (s *Store) Close() error {
+	if s == nil || s.db == nil {
+		return nil
+	}
+	return s.db.Close()
+}
+
 // Load 从磁盘读取会话轻量状态与热窗口消息。
 func (s *Store) Load(sessionID string) (*Session, error) {
 	id, err := normalizeSessionID(sessionID)

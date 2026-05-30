@@ -204,7 +204,6 @@ func changedAssignment(assignments map[string]string, sessionID string) bool {
 }
 
 func (s *Store) listKnownSessionIDsLocked() (map[string]struct{}, error) {
-	s.importLegacySessionsForListingLocked()
 	rows, err := s.db.Query(`SELECT id FROM sessions ORDER BY id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("list session ids: %w", err)

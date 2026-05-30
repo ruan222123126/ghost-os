@@ -28,19 +28,7 @@ func resolveToolPromptDirs(promptsDir string) ([]string, error) {
 	if trimmed == "" {
 		return nil, errors.New("prompts_dir is empty")
 	}
-	primary := filepath.Clean(trimmed)
-	dirs := []string{primary}
-
-	compat := mirrorPromptsDir(primary)
-	if compat == "" {
-		return dirs, nil
-	}
-
-	compat = filepath.Clean(compat)
-	if compat != primary {
-		dirs = append(dirs, compat)
-	}
-	return dirs, nil
+	return []string{filepath.Clean(trimmed)}, nil
 }
 
 func mirrorPromptsDir(primary string) string {

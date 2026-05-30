@@ -10,6 +10,10 @@ const MIGRATION_GROUP_Y = 220;
 const MIGRATION_GROUP_X_GAP = 320;
 const MIGRATION_MEMBER_Y = 60;
 
+export function countLegacyOrchestrations(): number {
+  return listLegacyOrchestrationRecords().length;
+}
+
 export async function migrateLegacyOrchestrations(): Promise<boolean> {
   const records = listLegacyOrchestrationRecords();
   if (records.length === 0) {

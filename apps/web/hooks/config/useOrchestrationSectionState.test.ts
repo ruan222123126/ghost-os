@@ -8,7 +8,10 @@ import {
   updateOrchestration,
 } from '@/lib/api/orchestrations/api';
 import { WebLocaleProvider, useWebLocale } from '@/lib/i18n/provider';
-import { migrateLegacyOrchestrations } from '@/lib/orchestration-editor/legacyMigration';
+import {
+  countLegacyOrchestrations,
+  migrateLegacyOrchestrations,
+} from '@/lib/orchestration-editor/legacyMigration';
 import type { OrchestrationTaskPayload } from '@/lib/types';
 import { useOrchestrationSectionState } from './useOrchestrationSectionState';
 
@@ -21,9 +24,11 @@ jest.mock('@/lib/api/orchestrations/api', () => ({
 }));
 
 jest.mock('@/lib/orchestration-editor/legacyMigration', () => ({
+  countLegacyOrchestrations: jest.fn(),
   migrateLegacyOrchestrations: jest.fn(),
 }));
 
+const mockedCountLegacyOrchestrations = countLegacyOrchestrations as jest.MockedFunction<typeof countLegacyOrchestrations>;
 const mockedCreateOrchestration = createOrchestration as jest.MockedFunction<typeof createOrchestration>;
 const mockedDeleteOrchestration = deleteOrchestration as jest.MockedFunction<typeof deleteOrchestration>;
 const mockedListOrchestrations = listOrchestrations as jest.MockedFunction<typeof listOrchestrations>;
@@ -52,6 +57,7 @@ describe('hooks/config/useOrchestrationSectionState', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    mockedCountLegacyOrchestrations.mockReturnValue(0);
     mockedMigrateLegacyOrchestrations.mockResolvedValue(false);
     mockedCreateOrchestration.mockResolvedValue(sampleTask);
     mockedDeleteOrchestration.mockResolvedValue(undefined);
@@ -82,7 +88,7 @@ describe('hooks/config/useOrchestrationSectionState', () => {
       await Promise.resolve();
     });
 
-    expect(mockedMigrateLegacyOrchestrations).toHaveBeenCalledTimes(1);
+    expect(mockedMigrateLegacyOrchestrations).not.toHaveBeenCalled();
     expect(mockedListOrchestrations).toHaveBeenCalledTimes(1);
     expect(latestState).not.toBeNull();
     expect(latestState!.loading).toBe(false);
@@ -171,6 +177,74 @@ describe('hooks/config/useOrchestrationSectionState', () => {
     });
 
     expect(latestState!.runningOrchestrationID).toBe('');
+  });
+
+  it('surfaces a success message once the launch request succeeds', async () => {
+    mockedListOrchestrations.mockResolvedValue([sampleTask]);
+
+    let latestState: HookState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          {
+            initialLocale: 'en-US',
+            children: React.createElement(HookProbe, {
+              onRender: (state) => {
+                latestState = state;
+              },
+            }),
+          },
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await latestState!.runByID('orch_1');
+    });
+
+    expect(mockedRunOrchestrationNow).toHaveBeenCalledWith('orch_1');
+    expect(latestState!.success).toBe('Run started successfully');
+    expect(latestState!.error).toBe('');
+    expect(mockedListOrchestrations).toHaveBeenCalledTimes(1);
+  });
+
+  it('exposes explicit legacy migration action', async () => {
+    mockedCountLegacyOrchestrations.mockReturnValue(2);
+    mockedListOrchestrations.mockResolvedValue([]);
+    mockedMigrateLegacyOrchestrations.mockResolvedValue(true);
+
+    let latestState: HookState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          {
+            initialLocale: 'en-US',
+            children: React.createElement(HookProbe, {
+              onRender: (state) => {
+                latestState = state;
+              },
+            }),
+          },
+        ),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(latestState!.legacyMigrationCount).toBe(2);
+    await act(async () => {
+      mockedCountLegacyOrchestrations.mockReturnValue(0);
+      await latestState!.runLegacyMigration();
+    });
+
+    expect(mockedMigrateLegacyOrchestrations).toHaveBeenCalledTimes(1);
+    expect(latestState!.legacyMigrationCount).toBe(0);
   });
 });
 

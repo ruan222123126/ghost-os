@@ -61,6 +61,18 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 	s.TurnDraft = &TurnDraft{
 		TraceID: "trace-draft",
 		Turn:    4,
+		Status:  TurnDraftStatusAwaitingHuman,
+		PendingQuestions: []TurnDraftPendingQuestion{
+			{
+				QuestionID:    "q-1",
+				Prompt:        "Ship it?",
+				SelectionMode: HumanQuestionSelectionSingle,
+				Options: []HumanQuestionOption{
+					{Label: "Yes"},
+					{Label: "No"},
+				},
+			},
+		},
 		AssistantSegments: []TurnDraftSegment{
 			{ID: "stream-segment:assistant:1", Content: "partial answer"},
 		},
@@ -74,6 +86,7 @@ func TestStoreSaveAndLoadSession(t *testing.T) {
 			"thinking:stream-segment:thinking:1",
 			"tool:stream-tool:trace-draft:call-1",
 			"assistant:stream-segment:assistant:1",
+			"question:q-1",
 		},
 	}
 	s.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
@@ -144,8 +157,8 @@ func TestStoreLoadCorruptedSession(t *testing.T) {
 	}
 
 	_, err = store.Load("broken-session")
-	if !errors.Is(err, ErrSessionCorrupted) {
-		t.Fatalf("expected ErrSessionCorrupted, got: %v", err)
+	if !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("expected ErrSessionNotFound without explicit migration, got: %v", err)
 	}
 }
 
@@ -225,6 +238,32 @@ func TestStoreListMetadata(t *testing.T) {
 	}
 	if got[0].CreatedAt.IsZero() || got[0].UpdatedAt.IsZero() || got[1].CreatedAt.IsZero() || got[1].UpdatedAt.IsZero() {
 		t.Fatalf("timestamps should not be zero: got=%+v", got)
+	}
+}
+
+func TestStoreLegacySessionIDs(t *testing.T) {
+	dir := t.TempDir()
+	store, err := NewStore(dir)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "legacy-a.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write legacy-a: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "legacy-b.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write legacy-b: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bad id.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatalf("write invalid id file: %v", err)
+	}
+
+	ids, err := store.LegacySessionIDs()
+	if err != nil {
+		t.Fatalf("LegacySessionIDs: %v", err)
+	}
+	if !reflect.DeepEqual(ids, []string{"legacy-a", "legacy-b"}) {
+		t.Fatalf("unexpected legacy ids: got=%v", ids)
 	}
 }
 

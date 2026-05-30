@@ -314,10 +314,6 @@ func expectedSystemPromptToolDefinitions() map[string]struct {
 						"enum":        []any{"read-only", "workspace-write", "danger-full-access"},
 						"description": "Optional. If omitted, Codex uses local config.",
 					},
-					"full_auto": map[string]any{
-						"type":        "boolean",
-						"description": "Deprecated compatibility flag. If true and sandbox is omitted, uses sandbox=workspace-write.",
-					},
 					"skip_git_repo_check": map[string]any{
 						"type":        "boolean",
 						"description": "Default: true",

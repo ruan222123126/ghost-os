@@ -55,16 +55,10 @@ type SystemPromptUpdateRequest struct {
 	TraceID       string                     `json:"trace_id,omitempty"`
 }
 
-// LoadSystemPromptFiles initializes, synchronizes, and reads the system prompt files.
+// LoadSystemPromptFiles initializes并读取 system prompt 文件；legacy 迁移需显式执行。
 func LoadSystemPromptFiles(promptsDir string) (SystemPromptFiles, error) {
 	roots, err := ensureSystemPromptRoots(promptsDir, defaultSystemPromptFiles())
 	if err != nil {
-		return SystemPromptFiles{}, err
-	}
-	if err := syncSystemPromptRoots(roots); err != nil {
-		return SystemPromptFiles{}, err
-	}
-	if err := removeLegacySystemPromptFiles(roots); err != nil {
 		return SystemPromptFiles{}, err
 	}
 	if cached, ok, err := loadCachedSystemPromptFiles(roots[0]); err != nil {
@@ -73,10 +67,6 @@ func LoadSystemPromptFiles(promptsDir string) (SystemPromptFiles, error) {
 		return cached, nil
 	}
 	files, err := readSystemPromptFilesFromRoot(roots[0])
-	if err != nil {
-		return SystemPromptFiles{}, err
-	}
-	files, err = migrateSystemPromptFiles(roots, files)
 	if err != nil {
 		return SystemPromptFiles{}, err
 	}
@@ -96,15 +86,8 @@ func UpdateSystemPromptFiles(promptsDir string, req SystemPromptUpdateRequest) (
 	if err != nil {
 		return SystemPromptFiles{}, err
 	}
-	if err := syncSystemPromptRoots(roots); err != nil {
-		return SystemPromptFiles{}, err
-	}
 
 	files, err := readSystemPromptFilesFromRoot(roots[0])
-	if err != nil {
-		return SystemPromptFiles{}, err
-	}
-	files, err = migrateSystemPromptFiles(roots, files)
 	if err != nil {
 		return SystemPromptFiles{}, err
 	}

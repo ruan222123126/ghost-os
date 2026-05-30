@@ -28,11 +28,7 @@ type store struct {
 // newStoreFromEnv 用配置文件 + 环境变量回退初始化可热更新配置存储。
 func newStoreFromEnv() (*store, error) {
 	env := currentEnv()
-	fileCfg, configPath, err := loadBridgeFileConfig()
-	if err != nil {
-		return nil, err
-	}
-	fileCfg, err = migrateLegacyToolPromptOverrides(fileCfg, configPath, env)
+	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		return nil, err
 	}

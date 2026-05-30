@@ -13,23 +13,24 @@ func validateNode(node Node) error {
 	}
 	switch node.Type {
 	case NodeTypeStart:
-		return validateBoundaryNode(node)
+		return legacyBoundaryNodeError(node.Type)
 	case NodeTypeGroup:
 		return validateGroupNode(node)
 	case NodeTypeAgent:
 		return validateAgentNode(node)
 	case NodeTypeEnd:
-		return validateBoundaryNode(node)
+		return legacyBoundaryNodeError(node.Type)
 	default:
 		return fmt.Errorf("%w: unsupported orchestration node type %q", bridgeTasks.ErrInvalidTaskConfig, node.Type)
 	}
 }
 
-func validateBoundaryNode(node Node) error {
-	if node.Group != nil || node.Agent != nil {
-		return fmt.Errorf("%w: orchestration node %q payload does not match type %q", bridgeTasks.ErrInvalidTaskConfig, node.ID, node.Type)
-	}
-	return nil
+func legacyBoundaryNodeError(nodeType string) error {
+	return fmt.Errorf(
+		"%w: orchestration node type %q is removed; run `bin/ghost-bridge migrate orchestrations`",
+		bridgeTasks.ErrInvalidTaskConfig,
+		nodeType,
+	)
 }
 
 func validateGroupNode(node Node) error {
@@ -115,10 +116,6 @@ func validateNodeDegrees(graph graphData, node Node, inDegree int, outDegree int
 	rawInDegree := graph.rawControlIn[node.ID]
 	rawOutDegree := graph.rawControlOut[node.ID]
 	switch node.Type {
-	case NodeTypeStart:
-		return validateStartDegrees(rawInDegree, rawOutDegree)
-	case NodeTypeEnd:
-		return validateEndDegrees(rawInDegree, rawOutDegree)
 	case NodeTypeGroup:
 		return validateGroupDegrees(node.ID, inDegree, outDegree)
 	case NodeTypeAgent:
@@ -126,20 +123,6 @@ func validateNodeDegrees(graph graphData, node Node, inDegree int, outDegree int
 	default:
 		return nil
 	}
-}
-
-func validateStartDegrees(rawInDegree int, rawOutDegree int) error {
-	if rawInDegree != 0 || rawOutDegree != 1 {
-		return fmt.Errorf("%w: orchestration start node must have in=0 and out=1", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	return nil
-}
-
-func validateEndDegrees(rawInDegree int, rawOutDegree int) error {
-	if rawInDegree != 1 || rawOutDegree != 0 {
-		return fmt.Errorf("%w: orchestration end node must have in=1 and out=0", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	return nil
 }
 
 func validateGroupDegrees(nodeID string, inDegree int, outDegree int) error {

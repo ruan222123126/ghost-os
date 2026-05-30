@@ -78,8 +78,8 @@ func normalizeCodexCLIArgs(args codexCLIArgs) (normalizedCodexCLIArgs, error) {
 	if normalized.Sandbox != "" && !isCodexCLISandboxMode(normalized.Sandbox) {
 		return normalizedCodexCLIArgs{}, fmt.Errorf("unsupported sandbox %q", normalized.Sandbox)
 	}
-	if normalized.Sandbox != "" && normalized.FullAuto != nil {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("sandbox and full_auto cannot be used together")
+	if normalized.FullAuto != nil {
+		return normalizedCodexCLIArgs{}, fmt.Errorf("full_auto is removed; use sandbox=workspace-write")
 	}
 	waitMSBeforeAsync, err := normalizedNonNegativeInt(
 		normalized.WaitMSBeforeAsync,
@@ -159,9 +159,6 @@ func buildCodexCLIRequest(args normalizedCodexCLIArgs) codexCLIRequest {
 	}
 	if args.Sandbox != "" {
 		params["sandbox"] = args.Sandbox
-	}
-	if args.FullAuto != nil {
-		params["full_auto"] = *args.FullAuto
 	}
 	params["skip_git_repo_check"] = args.SkipGitRepoCheck
 	params["json"] = args.JSON

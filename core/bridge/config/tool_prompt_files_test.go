@@ -101,7 +101,7 @@ func TestLoadToolPromptOverridesFromFilesBackfillsLegacyEmptyFilesBeforeInit(t *
 	}
 }
 
-func TestLoadToolPromptOverridesFromFilesMigratesLegacyBasePrompt(t *testing.T) {
+func TestLoadToolPromptOverridesFromFilesKeepsLegacyPromptUntouched(t *testing.T) {
 	promptsDir := filepath.Join(t.TempDir(), "prompts")
 	root := filepath.Join(promptsDir, toolPromptDirName)
 	if err := os.MkdirAll(root, toolPromptDirPerm); err != nil {
@@ -120,55 +120,56 @@ func TestLoadToolPromptOverridesFromFilesMigratesLegacyBasePrompt(t *testing.T) 
 	if err != nil {
 		t.Fatalf("loadToolPromptOverridesFromFiles: %v", err)
 	}
-	basePrompt, ok := ToolBasePrompt("script_exec")
-	if !ok {
-		t.Fatal("missing base prompt for script_exec")
+	if got := overrides["script_exec"]; got != legacyPrompts[0] {
+		t.Fatalf("expected script_exec legacy prompt to stay unchanged until explicit migration, got %q", got)
 	}
-	if got := overrides["script_exec"]; got != basePrompt {
-		t.Fatalf("expected script_exec legacy prompt to migrate to base prompt, got %q", got)
-	}
-	assertToolPromptFile(t, promptsDir, "script_exec", basePrompt)
+	assertToolPromptFile(t, promptsDir, "script_exec", legacyPrompts[0])
 }
 
-func TestToolPromptFilesSyncBetweenGhostAndGhostOS(t *testing.T) {
+func TestMigrateLegacyPromptsDirMovesGhostToolPromptsIntoCanonicalDir(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	configPath := filepath.Join(home, ghostOSDirName, "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
 
-	primaryPromptsDir := filepath.Join(home, ghostOSDirName, promptsDirName)
-	if err := writeToolPromptOverrideToFile(primaryPromptsDir, "script_exec", "from web update"); err != nil {
-		t.Fatalf("writeToolPromptOverrideToFile: %v", err)
-	}
-
-	assertToolPromptFile(t, primaryPromptsDir, "script_exec", "from web update")
 	ghostPromptsDir := filepath.Join(home, ghostDirName, promptsDirName)
-	assertToolPromptFile(t, ghostPromptsDir, "script_exec", "from web update")
-
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		PromptsDir: stringPointer(ghostPromptsDir),
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
 	ghostPath := filepath.Join(ghostPromptsDir, toolPromptDirName, "script_exec"+toolPromptFileExt)
+	if err := os.MkdirAll(filepath.Dir(ghostPath), toolPromptDirPerm); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(ghostPath), err)
+	}
 	if err := os.WriteFile(ghostPath, []byte("from ghost file"), toolPromptFilePerm); err != nil {
 		t.Fatalf("WriteFile(%s): %v", ghostPath, err)
 	}
-	newer := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(ghostPath, newer, newer); err != nil {
-		t.Fatalf("Chtimes(%s): %v", ghostPath, err)
-	}
 
-	overrides, err := loadToolPromptOverridesFromFiles(primaryPromptsDir)
+	report, err := MigrateLegacyPromptsDir()
 	if err != nil {
-		t.Fatalf("loadToolPromptOverridesFromFiles: %v", err)
+		t.Fatalf("MigrateLegacyPromptsDir: %v", err)
 	}
-	if got := overrides["script_exec"]; got != "from ghost file" {
-		t.Fatalf("expected mirrored prompt from .ghost file, got %q", got)
+	if report.BackupDir == "" {
+		t.Fatal("expected backup dir")
 	}
-
-	assertToolPromptFile(t, primaryPromptsDir, "script_exec", "from ghost file")
-	assertToolPromptFile(t, ghostPromptsDir, "script_exec", "from ghost file")
-}
-
-func TestToolPromptFilesPreferNonDefaultPromptOverNewDefaultMirror(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
 
 	primaryPromptsDir := filepath.Join(home, ghostOSDirName, promptsDirName)
+	assertToolPromptFile(t, primaryPromptsDir, "script_exec", "from ghost file")
+}
+
+func TestMigrateLegacyPromptsDirUsesNewerFileWhenBothRootsExist(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	configPath := filepath.Join(home, ghostOSDirName, "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	primaryPromptsDir := filepath.Join(home, ghostOSDirName, promptsDirName)
+	if err := writeBridgeFileConfig(configPath, bridgeFileConfig{
+		PromptsDir: stringPointer(primaryPromptsDir),
+	}); err != nil {
+		t.Fatalf("writeBridgeFileConfig: %v", err)
+	}
 	primaryRoot := filepath.Join(primaryPromptsDir, toolPromptDirName)
 	if err := os.MkdirAll(primaryRoot, toolPromptDirPerm); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", primaryRoot, err)
@@ -182,17 +183,25 @@ func TestToolPromptFilesPreferNonDefaultPromptOverNewDefaultMirror(t *testing.T)
 		t.Fatalf("Chtimes(%s): %v", primaryScriptPath, err)
 	}
 
-	overrides, err := loadToolPromptOverridesFromFiles(primaryPromptsDir)
-	if err != nil {
-		t.Fatalf("loadToolPromptOverridesFromFiles: %v", err)
+	ghostPromptsDir := filepath.Join(home, ghostDirName, promptsDirName)
+	ghostRoot := filepath.Join(ghostPromptsDir, toolPromptDirName)
+	if err := os.MkdirAll(ghostRoot, toolPromptDirPerm); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", ghostRoot, err)
 	}
-	if got := overrides["script_exec"]; got != "persisted custom prompt" {
-		t.Fatalf("expected custom prompt to survive mirror initialization, got %q", got)
+	ghostPath := filepath.Join(ghostRoot, "script_exec"+toolPromptFileExt)
+	if err := os.WriteFile(ghostPath, []byte("newer ghost prompt"), toolPromptFilePerm); err != nil {
+		t.Fatalf("WriteFile(%s): %v", ghostPath, err)
+	}
+	newer := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(ghostPath, newer, newer); err != nil {
+		t.Fatalf("Chtimes(%s): %v", ghostPath, err)
 	}
 
-	assertToolPromptFile(t, primaryPromptsDir, "script_exec", "persisted custom prompt")
-	ghostPromptsDir := filepath.Join(home, ghostDirName, promptsDirName)
-	assertToolPromptFile(t, ghostPromptsDir, "script_exec", "persisted custom prompt")
+	if _, err := MigrateLegacyPromptsDir(); err != nil {
+		t.Fatalf("MigrateLegacyPromptsDir: %v", err)
+	}
+
+	assertToolPromptFile(t, primaryPromptsDir, "script_exec", "newer ghost prompt")
 }
 
 func assertToolPromptFile(t *testing.T, promptsDir string, name string, want string) {

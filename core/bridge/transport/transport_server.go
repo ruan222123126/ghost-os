@@ -27,6 +27,7 @@ const (
 	serverReadHeaderTimeout = 5 * time.Second
 	serverShutdownTimeout   = 5 * time.Second
 
+	startupStageLegacy       = "legacy_preflight"
 	startupStageConfig       = "config"
 	startupStageOptions      = "options"
 	startupStageSessionStore = "session_store"
@@ -105,6 +106,12 @@ func runServer(ctx context.Context, port int) (string, error) {
 
 // runServePreflight 按固定顺序执行启动预检，确保失败阶段可观测。
 func runServePreflight(port int) (servePreflightState, error) {
+	logStartupCheckpoint(startupStageLegacy, "begin", "")
+	if err := runServeLegacyPreflight(); err != nil {
+		return servePreflightState{}, newServeStartupError(startupStageLegacy, err)
+	}
+	logStartupCheckpoint(startupStageLegacy, "ready", "")
+
 	logStartupCheckpoint(startupStageConfig, "begin", "")
 	store, err := bridgeconfig.NewStoreFromEnv()
 	if err != nil {

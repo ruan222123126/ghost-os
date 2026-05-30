@@ -19,7 +19,7 @@ describe('lib/orchestration-editor/draft', () => {
     });
   });
 
-  it('normalizes legacy boundary nodes when loading a definition', () => {
+  it('preserves legacy boundary nodes when loading a definition', () => {
     const draft = orchestrationDefinitionToDraft({
       scheduleType: 'interval',
       intervalSeconds: 60,
@@ -59,17 +59,19 @@ describe('lib/orchestration-editor/draft', () => {
       },
     });
 
-    expect(draft.nodes.map((node) => node.id)).toEqual(['group-a', 'group-b', 'agent-1']);
+    expect(draft.nodes.map((node) => node.id)).toEqual(['start-node', 'group-a', 'group-b', 'agent-1', 'end-node']);
     expect(draft.nodes.find((node) => node.id === 'agent-1')?.agent?.runtime_overrides).toEqual({
       preset_id: 'preset-a',
     });
     expect(draft.edges).toEqual([
+      expect.objectContaining({ from_node_id: 'start-node', to_node_id: 'group-a', kind: 'control' }),
       expect.objectContaining({ from_node_id: 'group-a', to_node_id: 'group-b', kind: 'control' }),
+      expect.objectContaining({ from_node_id: 'group-b', to_node_id: 'end-node', kind: 'control' }),
       expect.objectContaining({ from_node_id: 'agent-1', to_node_id: 'group-a', kind: 'member' }),
     ]);
   });
 
-  it('omits boundary nodes when compiling orchestration payloads', () => {
+  it('preserves boundary nodes when compiling orchestration payloads', () => {
     const draft: WorkflowCanvasDraft = {
       mode: 'edit',
       schedule: { mode: 'interval', intervalSeconds: '60', cronExpr: '' },
@@ -108,6 +110,12 @@ describe('lib/orchestration-editor/draft', () => {
     expect(draftToOrchestrationDefinition(draft)).toEqual({
       nodes: [
         {
+          id: 'start-node',
+          type: 'start',
+          group: undefined,
+          agent: undefined,
+        },
+        {
           id: 'group-a',
           type: 'group',
           group: { title: 'Group A', shared_context: '', speaking_mode: 'sequential', owner_agent_id: '', max_rounds: 1 },
@@ -125,8 +133,16 @@ describe('lib/orchestration-editor/draft', () => {
             },
           },
         },
+        {
+          id: 'end-node',
+          type: 'end',
+          group: undefined,
+          agent: undefined,
+        },
       ],
       edges: [
+        { from_node_id: 'start-node', to_node_id: 'group-a', kind: 'control' },
+        { from_node_id: 'group-a', to_node_id: 'end-node', kind: 'control' },
         { from_node_id: 'agent-1', to_node_id: 'group-a', kind: 'member' },
       ],
     });
