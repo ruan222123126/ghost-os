@@ -371,6 +371,23 @@ describe('lib/api/tasks/parser', () => {
         started_at: '2026-04-05T07:00:01Z',
         finished_at: '2026-04-05T07:00:02Z',
         status: 'success',
+        run_cards: [
+          {
+            card_id: 'card-1',
+            run_id: 'run-1',
+            kind: 'workflow_agent',
+            title: 'agent-node',
+            node_id: 'agent-node',
+            node_type: 'agent',
+            iteration: 2,
+            source_session_id: 'session-agent',
+            started_at: '2026-04-05T07:00:01Z',
+            status: 'success',
+            finished_at: '2026-04-05T07:00:02Z',
+            preview: 'done',
+            final_text: 'done',
+          },
+        ],
         node_results: [
           {
             node_id: 'start-node',
@@ -389,6 +406,11 @@ describe('lib/api/tasks/parser', () => {
     expect(logs[0].node_results?.[0]).toMatchObject({
       node_id: 'start-node',
       completed_seq: 1,
+    });
+    expect(logs[0].run_cards?.[0]).toMatchObject({
+      card_id: 'card-1',
+      iteration: 2,
+      final_text: 'done',
     });
   });
 

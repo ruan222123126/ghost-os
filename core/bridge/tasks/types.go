@@ -107,6 +107,7 @@ type RunLog struct {
 	SessionIDOutput string          `json:"session_id_output,omitempty"`
 	ResponsePreview string          `json:"response_preview,omitempty"`
 	NodeResults     []RunNodeResult `json:"node_results,omitempty"`
+	RunCards        []RunCard       `json:"run_cards,omitempty"`
 	Error           string          `json:"error,omitempty"`
 }
 
@@ -290,6 +291,7 @@ func NormalizeRunLog(run *RunLog) {
 	run.SessionIDOutput = strings.TrimSpace(run.SessionIDOutput)
 	run.ResponsePreview = truncateRunes(strings.TrimSpace(run.ResponsePreview), MaxResponsePreviewRunes)
 	run.NodeResults = CloneRunNodeResults(run.NodeResults)
+	run.RunCards = CloneRunCards(run.RunCards)
 	run.Error = strings.TrimSpace(run.Error)
 	if !run.ScheduledAt.IsZero() {
 		run.ScheduledAt = run.ScheduledAt.UTC()

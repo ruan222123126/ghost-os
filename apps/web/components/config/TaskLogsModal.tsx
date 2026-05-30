@@ -7,11 +7,6 @@ import type { TaskRunLog, TaskRunNodeResult } from '@/lib/types';
 import { LiveRunViewerModal, type LiveRunViewerTarget } from './LiveRunViewerModal';
 import { OrchestrationRoundsBlock, parseOrchestrationGroupOutput } from './TaskLogsOrchestration';
 
-const LIVE_VIEW_STATUSES: ReadonlySet<TaskRunLog['status']> = new Set([
-  'running',
-  'awaiting_human',
-]);
-
 interface TaskLogsModalProps {
   taskID: string;
   logs: TaskRunLog[];
@@ -36,9 +31,7 @@ export function TaskLogsModal(props: TaskLogsModalProps) {
       </div>
       {viewerTarget ? (
         <LiveRunViewerModal
-          sessionId={viewerTarget.sessionId}
-          traceId={viewerTarget.traceId}
-          runId={viewerTarget.runId}
+          run={viewerTarget.run}
           onClose={() => setViewerTarget(null)}
         />
       ) : null}
@@ -125,10 +118,6 @@ function TaskRunLiveViewButton(props: {
   const sessionID = log.session_id_output?.trim() ?? '';
   const unavailable = sessionID.length === 0;
 
-  if (!LIVE_VIEW_STATUSES.has(log.status)) {
-    return null;
-  }
-
   const openViewer = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
@@ -136,9 +125,7 @@ function TaskRunLiveViewButton(props: {
       return;
     }
     onOpenLiveViewer({
-      sessionId: sessionID,
-      traceId: log.trace_id,
-      runId: log.run_id,
+      run: log,
     });
   };
 

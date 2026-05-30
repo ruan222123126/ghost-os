@@ -130,7 +130,7 @@ export interface SessionFileContent {
 
 export interface SessionPushEvent {
   id: string;
-  type: 'assistant_message' | 'awaiting_human' | 'run_started' | 'completion_delta' | 'tool_call_started' | 'tool_call_finished' | 'error' | 'done';
+  type: 'assistant_message' | 'awaiting_human' | 'run_started' | 'completion_delta' | 'tool_call_started' | 'tool_call_finished' | 'error' | 'done' | 'task_run_card_started' | 'task_run_card_event' | 'task_run_card_finished';
   trace_id?: string;
   session_id: string;
   payload: Record<string, unknown>;
@@ -292,18 +292,6 @@ export interface SessionTurnDraftPendingQuestion {
   options?: AskHumanOption[];
 }
 
-export interface SessionTurnDraft {
-  trace_id: string;
-  turn: number;
-  status: 'streaming' | 'awaiting_human' | 'error';
-  error?: string;
-  pending_questions: SessionTurnDraftPendingQuestion[];
-  assistant_segments: SessionTurnDraftSegment[];
-  thinking_segments: SessionTurnDraftSegment[];
-  tools: SessionTurnDraftTool[];
-  item_order: string[];
-}
-
 export interface SessionDetail {
   id: string;
   title: string;
@@ -314,6 +302,18 @@ export interface SessionDetail {
   page: SessionMessagePage;
   token_count: number;
   turn_draft?: SessionTurnDraft | null;
+}
+
+export interface SessionTurnDraft {
+  trace_id: string;
+  turn: number;
+  status: 'streaming' | 'awaiting_human' | 'error';
+  error?: string;
+  pending_questions: SessionTurnDraftPendingQuestion[];
+  assistant_segments: SessionTurnDraftSegment[];
+  thinking_segments: SessionTurnDraftSegment[];
+  tools: SessionTurnDraftTool[];
+  item_order: string[];
 }
 
 export interface BridgeConfig {
@@ -398,6 +398,20 @@ export interface ProviderConfig {
   api_key_set: boolean;
 }
 
+export interface TaskRunCardStartedPayload {
+  card_id: string;
+  run_id: string;
+  kind: string;
+  title?: string;
+  node_id?: string;
+  node_type?: string;
+  round?: number;
+  iteration?: number;
+  branch_id?: string;
+  source_session_id?: string;
+  started_at: string;
+}
+
 export interface ProviderConfigInput {
   name: string;
   type: 'openai' | 'anthropic' | 'custom' | 'codex';
@@ -411,9 +425,24 @@ export interface ProviderConfigInput {
   trace_id?: string;
 }
 
+export interface TaskRunCardEventPayload {
+  card_id: string;
+  source_session_id?: string;
+  source_event: AgentStreamEvent;
+}
+
 export interface ProviderListResponse {
   providers: ProviderConfig[];
   active_provider: string;
+}
+
+export interface TaskRunCardFinishedPayload {
+  card_id: string;
+  status: string;
+  finished_at: string;
+  preview?: string;
+  error?: string;
+  source_session_id?: string;
 }
 
 export interface SetActiveProviderRequest {
@@ -444,7 +473,7 @@ export interface WorkflowDefinition {
 
 export interface OrchestrationNode {
   id: string;
-  type: 'start' | 'group' | 'agent' | 'end';
+  type: 'group' | 'agent';
   group?: OrchestrationGroupNode;
   agent?: OrchestrationAgentNode;
 }

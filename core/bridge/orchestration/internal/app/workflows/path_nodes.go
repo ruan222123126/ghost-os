@@ -24,7 +24,7 @@ func executePathNode(
 		recordEndNode(node, branchID, startedAt, recorder)
 		return pathNodeResult{done: true, result: pathResult{status: bridgeTasks.RunStatusSuccess}}
 	}
-	step := executeStep(ctx, cmd, node, state)
+	step := executeStep(ctx, cmd, node, state, branchID)
 	recordStep(node, step, branchID, startedAt, recorder)
 	return stepToPathNodeResult(node, step)
 }

@@ -26,6 +26,9 @@ func (r MemberAgentRunner) RunMemberTurn(
 		Message:          req.Message,
 		SessionID:        strings.TrimSpace(req.SessionID),
 		TraceID:          strings.TrimSpace(req.TraceID),
+		AgentID:          strings.TrimSpace(req.AgentID),
+		Title:            strings.TrimSpace(req.Title),
+		Round:            req.Round,
 		RuntimeOverrides: bridgeTasks.CloneTaskRuntimeOverrides(req.RuntimeOverrides),
 	})
 	if err != nil {

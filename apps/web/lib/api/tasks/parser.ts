@@ -12,6 +12,7 @@ import {
   parseOptionalStringArray,
   parseOptionalString,
 } from '@/lib/api/shared';
+import { parseTaskRunCardList } from '@/lib/api/tasks/runCards';
 import { parseOrchestrationDefinition } from '@/lib/api/tasks/orchestrationParser';
 import { parseWorkflowDefinition } from '@/lib/api/tasks/workflowParser';
 
@@ -69,6 +70,7 @@ const TASK_RUN_LOG_KEYS = [
   'session_id_output',
   'response_preview',
   'node_results',
+  'run_cards',
   'error',
 ] as const;
 const TASK_RUN_NODE_RESULT_KEYS = [
@@ -282,6 +284,7 @@ function parseTaskRunLogWithLabel(value: unknown, label: string): TaskRunLog {
     session_id_output: parseOptionalString(record.session_id_output, `${label}.session_id_output`),
     response_preview: parseOptionalString(record.response_preview, `${label}.response_preview`),
     node_results: parseTaskRunNodeResultList(record.node_results, `${label}.node_results`),
+    run_cards: parseTaskRunCardList(record.run_cards, `${label}.run_cards`),
     error: parseOptionalString(record.error, `${label}.error`),
   };
 }

@@ -21,6 +21,9 @@ const SESSION_EVENT_TYPES = defineStringEnumValues<SessionPushEvent['type']>({
   tool_call_finished: true,
   error: true,
   done: true,
+  task_run_card_started: true,
+  task_run_card_event: true,
+  task_run_card_finished: true,
 });
 
 const SSE_CONTENT_TYPE = 'text/event-stream';

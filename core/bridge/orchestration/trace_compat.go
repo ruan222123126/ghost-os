@@ -19,14 +19,17 @@ var (
 )
 
 const (
-	sessionPushAssistantMessage = internaltrace.SessionPushAssistantMessage
-	sessionPushAwaitingHuman    = internaltrace.SessionPushAwaitingHuman
-	sessionPushRunStarted       = internaltrace.SessionPushRunStarted
-	sessionPushCompletionDelta  = internaltrace.SessionPushCompletionDelta
-	sessionPushToolCallStarted  = internaltrace.SessionPushToolCallStarted
-	sessionPushToolCallFinished = internaltrace.SessionPushToolCallFinished
-	sessionPushError            = internaltrace.SessionPushError
-	sessionPushDone             = internaltrace.SessionPushDone
+	sessionPushAssistantMessage    = internaltrace.SessionPushAssistantMessage
+	sessionPushAwaitingHuman       = internaltrace.SessionPushAwaitingHuman
+	sessionPushRunStarted          = internaltrace.SessionPushRunStarted
+	sessionPushCompletionDelta     = internaltrace.SessionPushCompletionDelta
+	sessionPushToolCallStarted     = internaltrace.SessionPushToolCallStarted
+	sessionPushToolCallFinished    = internaltrace.SessionPushToolCallFinished
+	sessionPushError               = internaltrace.SessionPushError
+	sessionPushDone                = internaltrace.SessionPushDone
+	sessionPushTaskRunCardStarted  = internaltrace.SessionPushTaskRunCardStarted
+	sessionPushTaskRunCardEvent    = internaltrace.SessionPushTaskRunCardEvent
+	sessionPushTaskRunCardFinished = internaltrace.SessionPushTaskRunCardFinished
 )
 
 type RunHandle = internaltrace.RunHandle
@@ -105,6 +108,17 @@ func newStreamTerminalBuffer(sink streaming.Sink) *streamTerminalBuffer {
 
 func newSessionStreamLifecyclePayloadBuilder(turn *sessionTurnState) agent.StreamLifecyclePayloadBuilder {
 	return internaltrace.NewSessionStreamLifecyclePayloadBuilder(turn.currentSessionID, parseSessionEndForStream)
+}
+
+func newSessionStreamLifecyclePayloadBuilderForSessionID(
+	sessionID string,
+) agent.StreamLifecyclePayloadBuilder {
+	return internaltrace.NewSessionStreamLifecyclePayloadBuilder(
+		func() string {
+			return sessionID
+		},
+		parseSessionEndForStream,
+	)
 }
 
 func parseSessionEndForStream(response string) (string, bool, error) {

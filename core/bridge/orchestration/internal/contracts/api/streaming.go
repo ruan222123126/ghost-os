@@ -76,3 +76,32 @@ type AwaitingHumanPushPayload struct {
 	SelectionMode string           `json:"selection_mode,omitempty"`
 	Options       []AskHumanOption `json:"options,omitempty"`
 }
+
+type TaskRunCardStartedPayload struct {
+	CardID          string `json:"card_id"`
+	RunID           string `json:"run_id"`
+	Kind            string `json:"kind"`
+	Title           string `json:"title,omitempty"`
+	NodeID          string `json:"node_id,omitempty"`
+	NodeType        string `json:"node_type,omitempty"`
+	Round           int    `json:"round,omitempty"`
+	Iteration       int    `json:"iteration,omitempty"`
+	BranchID        string `json:"branch_id,omitempty"`
+	SourceSessionID string `json:"source_session_id,omitempty"`
+	StartedAt       string `json:"started_at"`
+}
+
+type TaskRunCardEventPayload struct {
+	CardID          string                   `json:"card_id"`
+	SourceSessionID string                   `json:"source_session_id,omitempty"`
+	SourceEvent     AgentStreamEventContract `json:"source_event"`
+}
+
+type TaskRunCardFinishedPayload struct {
+	CardID          string `json:"card_id"`
+	Status          string `json:"status"`
+	FinishedAt      string `json:"finished_at"`
+	Preview         string `json:"preview,omitempty"`
+	Error           string `json:"error,omitempty"`
+	SourceSessionID string `json:"source_session_id,omitempty"`
+}

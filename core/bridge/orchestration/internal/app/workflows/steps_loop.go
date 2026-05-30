@@ -16,11 +16,13 @@ func selectLoopDecision(node workflowdomain.Node, state *runState) (loopDecision
 	decision := loopDecision{maxIterations: node.Loop.MaxIterations}
 	if count < node.Loop.MaxIterations {
 		state.loopIterations[node.ID] = count + 1
+		state.iteration = count + 1
 		decision.nextNodeID = strings.TrimSpace(node.Loop.BodyNodeID)
 		decision.iteration = count + 1
 		decision.enteringLoop = true
 		return decision, nil
 	}
+	state.iteration = 0
 	decision.nextNodeID = strings.TrimSpace(node.Loop.ExitNodeID)
 	return decision, nil
 }

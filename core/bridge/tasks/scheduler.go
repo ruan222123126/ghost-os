@@ -17,11 +17,14 @@ type ExecutionResult struct {
 	SessionIDOutput string
 	ResponsePreview string
 	NodeResults     []RunNodeResult
+	RunCards        []RunCard
 	Error           string
 }
 
 type RunSession struct {
-	SessionID string
+	SessionID      string
+	RunID          string
+	ProgressWriter RunProgressWriter
 }
 
 type RunSessionBinder interface {

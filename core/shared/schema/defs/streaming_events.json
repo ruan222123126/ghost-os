@@ -33,7 +33,19 @@
         "id": { "type": "string", "minLength": 1 },
         "type": {
           "type": "string",
-          "enum": ["assistant_message", "awaiting_human", "run_started", "completion_delta", "tool_call_started", "tool_call_finished", "error", "done"]
+          "enum": [
+            "assistant_message",
+            "awaiting_human",
+            "run_started",
+            "completion_delta",
+            "tool_call_started",
+            "tool_call_finished",
+            "error",
+            "done",
+            "task_run_card_started",
+            "task_run_card_event",
+            "task_run_card_finished"
+          ]
         },
         "trace_id": { "type": "string" },
         "session_id": { "type": "string", "minLength": 1 },
@@ -214,6 +226,68 @@
         "ts": { "name": "SessionPushAwaitingHumanPayload" },
         "rust": { "name": "SessionPushAwaitingHumanPayload" },
         "kotlin": { "name": "SessionPushAwaitingHumanPayload" }
+      }
+    },
+    "taskRunCardStartedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_id", "run_id", "kind", "started_at"],
+      "properties": {
+        "card_id": { "type": "string", "minLength": 1 },
+        "run_id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" },
+        "node_id": { "type": "string" },
+        "node_type": { "type": "string" },
+        "round": { "type": "integer", "minimum": 1 },
+        "iteration": { "type": "integer", "minimum": 1 },
+        "branch_id": { "type": "string" },
+        "source_session_id": { "type": "string" },
+        "started_at": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 210,
+        "go": { "name": "taskRunCardStartedPayload" },
+        "ts": { "name": "TaskRunCardStartedPayload" },
+        "rust": { "name": "TaskRunCardStartedPayload" },
+        "kotlin": { "name": "TaskRunCardStartedPayload" }
+      }
+    },
+    "taskRunCardEventPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_id", "source_event"],
+      "properties": {
+        "card_id": { "type": "string", "minLength": 1 },
+        "source_session_id": { "type": "string" },
+        "source_event": { "$ref": "#/$defs/agentStreamEvent" }
+      },
+      "x-codegen": {
+        "order": 220,
+        "go": { "name": "taskRunCardEventPayload" },
+        "ts": { "name": "TaskRunCardEventPayload" },
+        "rust": { "name": "TaskRunCardEventPayload" },
+        "kotlin": { "name": "TaskRunCardEventPayload" }
+      }
+    },
+    "taskRunCardFinishedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["card_id", "status", "finished_at"],
+      "properties": {
+        "card_id": { "type": "string", "minLength": 1 },
+        "status": { "type": "string", "minLength": 1 },
+        "finished_at": { "type": "string", "minLength": 1 },
+        "preview": { "type": "string" },
+        "error": { "type": "string" },
+        "source_session_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 230,
+        "go": { "name": "taskRunCardFinishedPayload" },
+        "ts": { "name": "TaskRunCardFinishedPayload" },
+        "rust": { "name": "TaskRunCardFinishedPayload" },
+        "kotlin": { "name": "TaskRunCardFinishedPayload" }
       }
     }
   }

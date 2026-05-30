@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"ghost-os/bridge/llm"
 	sharedtext "ghost-os/bridge/orchestration/internal/shared/text"
@@ -12,19 +13,25 @@ import (
 
 func executeLLMNode(
 	ctx context.Context,
-	deps RuntimeDependencies,
+	cmd ExecuteCommand,
 	node bridgeTasks.WorkflowNode,
+	branchID string,
+	iteration int,
 ) NodeOutcome {
-	if deps.Client == nil {
-		return NodeOutcome{Err: fmt.Errorf("workflow llm runtime is not configured")}
-	}
-	response, err := deps.Client.Complete(ctx, llm.CompletionRequest{Messages: llmMessages(*node.LLM)})
+	handle, err := startLLMRunCard(ctx, cmd.Cards, node, branchID, iteration)
 	if err != nil {
 		return NodeOutcome{Err: err}
 	}
+	response, err := completeLLMNode(ctx, cmd.Runtime, node)
+	if err != nil {
+		return llmNodeError(ctx, handle, err)
+	}
 	text := responseText(response)
 	if text == "" {
-		return NodeOutcome{Err: fmt.Errorf("workflow llm node %q returned empty response", node.ID)}
+		return llmNodeError(ctx, handle, fmt.Errorf("workflow llm node %q returned empty response", node.ID))
+	}
+	if err := finishLLMRunCard(ctx, handle, text); err != nil {
+		return NodeOutcome{Err: err}
 	}
 	return NodeOutcome{
 		Status:      bridgeTasks.RunStatusSuccess,
@@ -32,6 +39,68 @@ func executeLLMNode(
 		OutputText:  text,
 		OutputValue: text,
 	}
+}
+
+func completeLLMNode(
+	ctx context.Context,
+	deps RuntimeDependencies,
+	node bridgeTasks.WorkflowNode,
+) (*llm.CompletionResponse, error) {
+	if deps.Client == nil {
+		return nil, fmt.Errorf("workflow llm runtime is not configured")
+	}
+	return deps.Client.Complete(ctx, llm.CompletionRequest{Messages: llmMessages(*node.LLM)})
+}
+
+func startLLMRunCard(
+	ctx context.Context,
+	observer CardObserver,
+	node bridgeTasks.WorkflowNode,
+	branchID string,
+	iteration int,
+) (CardHandle, error) {
+	if observer == nil {
+		return nil, nil
+	}
+	return observer.StartCard(ctx, CardStartRequest{
+		Kind:      bridgeTasks.RunCardKindWorkflowLLM,
+		Title:     node.ID,
+		NodeID:    node.ID,
+		NodeType:  node.Type,
+		BranchID:  branchID,
+		Iteration: iteration,
+		StartedAt: time.Now().UTC(),
+	})
+}
+
+func llmNodeError(ctx context.Context, handle CardHandle, err error) NodeOutcome {
+	if finishErr := finishLLMRunCardError(ctx, handle, err); finishErr != nil {
+		return NodeOutcome{Err: finishErr}
+	}
+	return NodeOutcome{Err: err}
+}
+
+func finishLLMRunCard(ctx context.Context, handle CardHandle, text string) error {
+	if handle == nil {
+		return nil
+	}
+	return handle.Finish(ctx, CardFinishRequest{
+		Status:     bridgeTasks.RunStatusSuccess,
+		Preview:    text,
+		FinalText:  text,
+		FinishedAt: time.Now().UTC(),
+	})
+}
+
+func finishLLMRunCardError(ctx context.Context, handle CardHandle, err error) error {
+	if handle == nil {
+		return nil
+	}
+	return handle.Finish(ctx, CardFinishRequest{
+		Status:     bridgeTasks.RunStatusError,
+		Error:      err.Error(),
+		FinishedAt: time.Now().UTC(),
+	})
 }
 
 func llmMessages(node bridgeTasks.WorkflowLLMNode) []llm.Message {

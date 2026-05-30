@@ -21,7 +21,21 @@ type taskNodeResultTimestamps struct {
 }
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
+	recorder, recordErr := a.prepareTaskRunCardRecorder(ctx, task)
+	if recordErr != nil {
+		result := bridgeTasks.ExecutionResult{
+			Status: taskRunStatusError,
+			Error:  recordErr.Error(),
+		}
+		return a.attachTaskRunTranscript(ctx, task, traceID, result)
+	}
+	if recorder != nil {
+		ctx = withTaskRunCardRecorder(ctx, recorder)
+	}
 	result := a.executeTask(ctx, task, traceID)
+	if recorder != nil {
+		result.RunCards = recorder.Snapshot()
+	}
 	return a.attachTaskRunTranscript(ctx, task, traceID, result)
 }
 
@@ -55,6 +69,21 @@ func (a taskExecutorAdapter) saveTaskRunSession(
 		return bridgeTasks.RunSession{}, err
 	}
 	return bridgeTasks.RunSession{SessionID: sess.ID}, nil
+}
+
+func (a taskExecutorAdapter) prepareTaskRunCardRecorder(
+	ctx context.Context,
+	task ScheduledTask,
+) (*taskRunCardRecorder, error) {
+	switch normalizeTaskKind(task.TaskKind) {
+	case taskKindAgentMessage, taskKindWorkflow, taskKindOrchestration:
+		if a.service == nil {
+			return nil, errors.New("task run card service is not configured")
+		}
+		return newTaskRunCardRecorder(ctx, a.service.sessionPushHub())
+	default:
+		return nil, nil
+	}
 }
 
 func shouldPrecreateTaskRunSession(taskKind string) bool {
@@ -97,17 +126,11 @@ func (a taskExecutorAdapter) executeTask(ctx context.Context, task ScheduledTask
 }
 
 func (a taskExecutorAdapter) executeAgentTask(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
-	timestamps := taskNodeResultTimestamps{
-		startedAt:  time.Now().UTC(),
-		finishedAt: time.Now().UTC(),
-	}
+	timestamps := taskNodeResultTimestamps{startedAt: time.Now().UTC()}
 	if task.AgentMode == taskAgentModeRelay {
 		return a.executeRelayAgentTask(ctx, task, traceID, timestamps.startedAt)
 	}
-	result := a.runAgentAction(ctx, agentParams{
-		Message:   task.Message,
-		SessionID: task.SessionID,
-	}, cloneTaskRuntimeOverrides(task.RuntimeOverrides), traceID)
+	result := a.executeTrackedAgentTask(ctx, task, traceID, timestamps.startedAt)
 	timestamps.finishedAt = time.Now().UTC()
 	result.NodeResults = []bridgeTasks.RunNodeResult{
 		buildAgentMessageNodeResult(task, result, timestamps),

@@ -58,6 +58,8 @@ func (s *TaskScheduler) appendRunningRunLog(
 		status:          RunStatusRunning,
 		sessionIDOutput: runSession.SessionID,
 	})
+	runSession.RunID = runID
+	runSession.ProgressWriter = newRunningRunLogWriter(s.store, running)
 	if err := s.store.AppendRunLog(running); err != nil {
 		return RunSession{}, fmt.Errorf("append running run log for %s: %w", task.ID, err)
 	}
@@ -119,6 +121,7 @@ func (s *TaskScheduler) persistFinishedRun(
 		sessionIDOutput: input.result.SessionIDOutput,
 		responsePreview: input.result.ResponsePreview,
 		nodeResults:     input.result.NodeResults,
+		runCards:        input.result.RunCards,
 		errorText:       input.result.Error,
 	})
 	if err := s.store.AppendRunLog(run); err != nil {
@@ -147,6 +150,7 @@ type runLogInput struct {
 	sessionIDOutput string
 	responsePreview string
 	nodeResults     []RunNodeResult
+	runCards        []RunCard
 	errorText       string
 }
 
@@ -165,6 +169,7 @@ func (s *TaskScheduler) newRunLog(input runLogInput) RunLog {
 		SessionIDOutput: input.sessionIDOutput,
 		ResponsePreview: input.responsePreview,
 		NodeResults:     CloneRunNodeResults(input.nodeResults),
+		RunCards:        CloneRunCards(input.runCards),
 		Error:           input.errorText,
 	}
 }

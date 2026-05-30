@@ -9,23 +9,23 @@ import (
 )
 
 const (
-	busActionAgentSend     = bus.ActionAgentSend
-	busActionAgentStop     = bus.ActionAgentStop
+	busActionAgentSend = bus.ActionAgentSend
+	busActionAgentStop = bus.ActionAgentStop
 	busActionHumanResponse = bus.ActionHumanResponse
-	busActionConfigGet     = bus.ActionConfigGet
-	busActionConfigUpdate  = bus.ActionConfigUpdate
-	busActionTaskCreate    = bus.ActionTaskCreate
-	busActionTaskList      = bus.ActionTaskList
-	busActionTaskGet       = bus.ActionTaskGet
-	busActionTaskUpdate    = bus.ActionTaskUpdate
-	busActionTaskRunNow    = bus.ActionTaskRunNow
-	busActionTaskLogs      = bus.ActionTaskLogs
-	busActionTaskDelete    = bus.ActionTaskDelete
+	busActionConfigGet = bus.ActionConfigGet
+	busActionConfigUpdate = bus.ActionConfigUpdate
+	busActionTaskCreate = bus.ActionTaskCreate
+	busActionTaskList = bus.ActionTaskList
+	busActionTaskGet = bus.ActionTaskGet
+	busActionTaskUpdate = bus.ActionTaskUpdate
+	busActionTaskRunNow = bus.ActionTaskRunNow
+	busActionTaskLogs = bus.ActionTaskLogs
+	busActionTaskDelete = bus.ActionTaskDelete
 )
 
 const (
 	busStatusSuccess = bus.StatusSuccess
-	busStatusError   = bus.StatusError
+	busStatusError = bus.StatusError
 )
 
 const busAssistantSessionEndSignal = bus.AssistantSessionEndSignal
@@ -65,15 +65,18 @@ type sessionTurnDraftSegment = api.SessionTurnDraftSegment
 type sessionTurnDraftTool = api.SessionTurnDraftTool
 type agentErrorPayload = api.AgentErrorPayload
 type sessionTurnDraftPendingQuestion = api.SessionTurnDraftPendingQuestion
-type sessionTurnDraft = api.SessionTurnDraft
 type sessionDetail = api.SessionDetail
+type sessionTurnDraft = api.SessionTurnDraft
 type configResponse = api.ConfigResponse
 type assistantMessagePushPayload = api.AssistantMessagePushPayload
 type configUpdateRequest = api.ConfigUpdateRequest
 type awaitingHumanPushPayload = api.AwaitingHumanPushPayload
 type providerConfigResponse = api.ProviderConfigResponse
+type taskRunCardStartedPayload = api.TaskRunCardStartedPayload
 type providerConfigInput = api.ProviderConfigInput
+type taskRunCardEventPayload = api.TaskRunCardEventPayload
 type providerListResponse = api.ProviderListResponse
+type taskRunCardFinishedPayload = api.TaskRunCardFinishedPayload
 type setActiveProviderRequest = api.SetActiveProviderRequest
 type workflowNodeContract = api.WorkflowNodeContract
 type workflowEdgeContract = api.WorkflowEdgeContract

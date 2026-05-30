@@ -115,3 +115,48 @@ data class SessionPushAwaitingHumanPayload(
     val selectionMode: String? = null,
     val options: List<AskHumanOption>? = null
 )
+
+@Serializable
+data class TaskRunCardStartedPayload(
+    @SerialName("card_id")
+    val cardId: String,
+    @SerialName("run_id")
+    val runId: String,
+    val kind: String,
+    val title: String? = null,
+    @SerialName("node_id")
+    val nodeId: String? = null,
+    @SerialName("node_type")
+    val nodeType: String? = null,
+    val round: Int? = null,
+    val iteration: Int? = null,
+    @SerialName("branch_id")
+    val branchId: String? = null,
+    @SerialName("source_session_id")
+    val sourceSessionId: String? = null,
+    @SerialName("started_at")
+    val startedAt: String
+)
+
+@Serializable
+data class TaskRunCardEventPayload(
+    @SerialName("card_id")
+    val cardId: String,
+    @SerialName("source_session_id")
+    val sourceSessionId: String? = null,
+    @SerialName("source_event")
+    val sourceEvent: AgentStreamEvent
+)
+
+@Serializable
+data class TaskRunCardFinishedPayload(
+    @SerialName("card_id")
+    val cardId: String,
+    val status: String,
+    @SerialName("finished_at")
+    val finishedAt: String,
+    val preview: String? = null,
+    val error: String? = null,
+    @SerialName("source_session_id")
+    val sourceSessionId: String? = null
+)

@@ -1,102 +1,234 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getSession } from '@/lib/api/sessions/api';
 import { streamSessionEvents } from '@/lib/api/sessions/events';
-import type { SessionDetail, SessionPushEvent } from '@/lib/types';
+import {
+  parseTaskRunCardEventPayload,
+  parseTaskRunCardFinishedPayload,
+  parseTaskRunCardStartedPayload,
+} from '@/lib/api/sessions/taskRunCards';
+import { buildTaskRunCardOutput, type TaskRunCardOutput } from '@/lib/taskRunViewerOutput';
+import {
+  applyCardEvent,
+  applyFinishedCard,
+  applyStartedCard,
+  hydrateLiveTaskRunCards,
+  isStickyTerminalCard,
+  latestActiveCard,
+  latestCreatedCard,
+  type LiveTaskRunCard,
+} from '@/lib/taskRunViewerCards';
+import type { SessionDetail, TaskRunLog } from '@/lib/types';
 
-const MAX_LIVE_EVENTS = 500;
-const SESSION_POLL_INTERVAL_MS = 800;
-const SESSION_MESSAGE_LIMIT = 50;
+const SESSION_PAGE_LIMIT = 200;
 
 interface UseLiveRunViewerOptions {
-  sessionId: string;
+  run: TaskRunLog;
 }
 
 interface UseLiveRunViewerResult {
-  events: SessionPushEvent[];
-  session: SessionDetail | null;
+  cards: LiveTaskRunCard[];
+  followLatest: boolean;
+  output: TaskRunCardOutput;
+  selectedCard: LiveTaskRunCard | null;
+  selectCard: (cardId: string) => void;
+  sourceSessionError: string;
   streamError: string;
-  snapshotError: string;
 }
 
 export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunViewerResult {
-  const { sessionId } = options;
-  const [events, setEvents] = useState<SessionPushEvent[]>([]);
-  const [session, setSession] = useState<SessionDetail | null>(null);
+  const { run } = options;
+  const [cards, setCards] = useState<LiveTaskRunCard[]>(() => hydrateLiveTaskRunCards(run.run_cards));
+  const [followLatest, setFollowLatest] = useState(true);
+  const [selectedCardId, setSelectedCardId] = useState('');
   const [streamError, setStreamError] = useState('');
-  const [snapshotError, setSnapshotError] = useState('');
+  const [sourceSessionError, setSourceSessionError] = useState('');
+  const [sourceSessions, setSourceSessions] = useState<Record<string, SessionDetail>>({});
 
-  useEffect(() => subscribeSessionEvents(sessionId, setEvents, setStreamError), [sessionId]);
-  useEffect(() => pollSessionSnapshot(sessionId, setSession, setSnapshotError), [sessionId]);
+  useEffect(() => {
+    setCards(hydrateLiveTaskRunCards(run.run_cards));
+    setFollowLatest(true);
+    setSelectedCardId('');
+    setStreamError('');
+    setSourceSessionError('');
+    setSourceSessions({});
+  }, [run.run_id, run.run_cards]);
 
-  return {
-    events,
-    session,
-    streamError,
-    snapshotError,
-  };
-}
-
-function subscribeSessionEvents(
-  sessionId: string,
-  setEvents: (updater: (events: SessionPushEvent[]) => SessionPushEvent[]) => void,
-  setError: (message: string) => void,
-) {
-  const controller = new AbortController();
-  void streamSessionEvents({
-    sessionId,
-    signal: controller.signal,
-    onEvent: (event) => {
-      setError('');
-      setEvents((events) => appendLiveEvent(events, event));
-    },
-  }).catch((error: unknown) => {
-    if (!controller.signal.aborted) {
-      setError(errorMessage(error));
+  useEffect(() => {
+    const sessionId = run.session_id_output?.trim();
+    if (!sessionId) {
+      return undefined;
     }
-  });
-  return () => controller.abort();
-}
+    const controller = new AbortController();
+    void streamSessionEvents({
+      sessionId,
+      signal: controller.signal,
+      onEvent: (event) => {
+        setStreamError('');
+        setCards((current) => applyViewerEvent(current, event));
+      },
+    }).catch((error: unknown) => {
+      if (!controller.signal.aborted) {
+        setStreamError(errorMessage(error));
+      }
+    });
+    return () => controller.abort();
+  }, [run.session_id_output]);
 
-function pollSessionSnapshot(
-  sessionId: string,
-  setSession: (session: SessionDetail) => void,
-  setError: (message: string) => void,
-) {
-  let active = true;
-  let inFlight = false;
-  const load = async () => {
-    if (inFlight) {
+  const selectedCard = useMemo(() => {
+    if (!cards.length) {
+      return null;
+    }
+    if (selectedCardId) {
+      const matched = cards.find((card) => card.card_id === selectedCardId);
+      if (matched) {
+        return matched;
+      }
+    }
+    return latestActiveCard(cards) ?? latestCreatedCard(cards);
+  }, [cards, selectedCardId]);
+
+  useEffect(() => {
+    if (!cards.length) {
+      if (selectedCardId) {
+        setSelectedCardId('');
+      }
       return;
     }
-    inFlight = true;
-    try {
-      const detail = await getSession(sessionId, { limit: SESSION_MESSAGE_LIMIT });
-      if (active) {
-        setSession(detail);
-        setError('');
-      }
-    } catch (error) {
-      if (active) {
-        setError(errorMessage(error));
-      }
-    } finally {
-      inFlight = false;
+    if (!followLatest || isStickyTerminalCard(selectedCard)) {
+      return;
     }
-  };
-  void load();
-  const timer = setInterval(() => void load(), SESSION_POLL_INTERVAL_MS);
-  return () => {
-    active = false;
-    clearInterval(timer);
+    const next = latestActiveCard(cards) ?? latestCreatedCard(cards);
+    if (next && next.card_id !== selectedCardId) {
+      setSelectedCardId(next.card_id);
+    }
+  }, [cards, followLatest, selectedCard, selectedCardId]);
+
+  const selectedSessionId = useMemo(() => resolveSelectedSessionId(selectedCard), [selectedCard]);
+  const refreshToken = `${selectedSessionId}:${selectedCard?.status ?? ''}:${selectedCard?.finished_at ?? ''}`;
+
+  useEffect(() => {
+    if (!selectedSessionId) {
+      setSourceSessionError('');
+      return;
+    }
+    let active = true;
+    void loadFullSession(selectedSessionId)
+      .then((detail) => {
+        if (!active) {
+          return;
+        }
+        setSourceSessions((current) => ({
+          ...current,
+          [selectedSessionId]: detail,
+        }));
+        setSourceSessionError('');
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setSourceSessionError(errorMessage(error));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [refreshToken, selectedSessionId]);
+
+  const selectCard = useCallback((cardId: string) => {
+    setSelectedCardId(cardId);
+    const latest = latestCreatedCard(cards);
+    setFollowLatest(Boolean(latest && latest.card_id === cardId));
+  }, [cards]);
+
+  const output = useMemo(
+    () => buildTaskRunCardOutput(selectedCard, selectedSessionId ? sourceSessions[selectedSessionId] ?? null : null),
+    [selectedCard, selectedSessionId, sourceSessions],
+  );
+
+  return {
+    cards,
+    followLatest,
+    output,
+    selectedCard,
+    selectCard,
+    sourceSessionError,
+    streamError,
   };
 }
 
-function appendLiveEvent(events: SessionPushEvent[], event: SessionPushEvent): SessionPushEvent[] {
-  const next = [...events, event];
-  if (next.length <= MAX_LIVE_EVENTS) {
-    return next;
+function applyViewerEvent(cards: LiveTaskRunCard[], event: { type: string; payload: unknown }): LiveTaskRunCard[] {
+  switch (event.type) {
+    case 'task_run_card_started': {
+      const payload = parseTaskRunCardStartedPayload(event.payload);
+      return applyStartedCard(cards, {
+        card_id: payload.card_id,
+        run_id: payload.run_id,
+        kind: payload.kind,
+        title: payload.title,
+        node_id: payload.node_id,
+        node_type: payload.node_type,
+        round: payload.round,
+        iteration: payload.iteration,
+        branch_id: payload.branch_id,
+        source_session_id: payload.source_session_id,
+        started_at: payload.started_at,
+        status: 'running',
+      });
+    }
+    case 'task_run_card_event': {
+      const payload = parseTaskRunCardEventPayload(event.payload);
+      return applyCardEvent(cards, payload.card_id, payload.source_event, payload.source_session_id);
+    }
+    case 'task_run_card_finished': {
+      const payload = parseTaskRunCardFinishedPayload(event.payload);
+      return applyFinishedCard(cards, {
+        card_id: payload.card_id,
+        status: payload.status,
+        finished_at: payload.finished_at,
+        preview: payload.preview,
+        error: payload.error,
+        live_source_session_id: payload.source_session_id,
+      });
+    }
+    default:
+      return cards;
   }
-  return next.slice(next.length - MAX_LIVE_EVENTS);
+}
+
+function resolveSelectedSessionId(card: LiveTaskRunCard | null): string {
+  if (!card) {
+    return '';
+  }
+  if (card.kind === 'relay_round' && card.status !== 'running' && card.source_events.length === 0) {
+    return '';
+  }
+  return card.live_source_session_id?.trim() || card.source_session_id?.trim() || '';
+}
+
+async function loadFullSession(sessionId: string): Promise<SessionDetail> {
+  const latest = await getSession(sessionId, { limit: SESSION_PAGE_LIMIT });
+  let messages = [...latest.messages];
+  let nextBefore = latest.page.next_before ?? null;
+
+  while (latest.page.has_more_before && nextBefore !== null) {
+    const page = await getSession(sessionId, { before: nextBefore, limit: SESSION_PAGE_LIMIT });
+    messages = [...page.messages, ...messages];
+    if (!page.page.has_more_before || page.page.next_before === null) {
+      break;
+    }
+    nextBefore = page.page.next_before ?? null;
+  }
+
+  return {
+    ...latest,
+    messages,
+    page: {
+      ...latest.page,
+      has_more_before: false,
+      next_before: null,
+      start_index: messages[0]?.index ?? latest.page.start_index,
+      end_index: messages.at(-1)?.index ?? latest.page.end_index,
+    },
+  };
 }
 
 function errorMessage(error: unknown): string {

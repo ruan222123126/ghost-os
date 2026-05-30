@@ -215,6 +215,23 @@ func TestTaskStoreRunLogRoundTripNodeResults(t *testing.T) {
 		ScheduledAt: startedAt,
 		StartedAt:   startedAt,
 		Status:      RunStatusSuccess,
+		RunCards: []RunCard{
+			{
+				CardID:          " card-1 ",
+				RunID:           " run-node-results ",
+				Kind:            " workflow_agent ",
+				Title:           " agent-node ",
+				NodeID:          " agent-node ",
+				NodeType:        " agent ",
+				Iteration:       2,
+				SourceSessionID: " session-1 ",
+				StartedAt:       startedAt,
+				Status:          " success ",
+				FinishedAt:      finishedAt,
+				Preview:         " done ",
+				FinalText:       " final answer ",
+			},
+		},
 		NodeResults: []RunNodeResult{
 			{
 				NodeID:       " tool-node ",
@@ -248,9 +265,16 @@ func TestTaskStoreRunLogRoundTripNodeResults(t *testing.T) {
 	if len(logs[0].NodeResults) != 1 {
 		t.Fatalf("unexpected node result count: got %d want 1", len(logs[0].NodeResults))
 	}
+	if len(logs[0].RunCards) != 1 {
+		t.Fatalf("unexpected run card count: got %d want 1", len(logs[0].RunCards))
+	}
 	node := logs[0].NodeResults[0]
+	card := logs[0].RunCards[0]
 	if node.NodeID != "tool-node" || node.NodeType != "tool" || node.Status != RunStatusSuccess {
 		t.Fatalf("unexpected node identity: %#v", node)
+	}
+	if card.CardID != "card-1" || card.NodeType != "agent" || card.FinalText != "final answer" {
+		t.Fatalf("unexpected run card payload: %#v", card)
 	}
 	if node.CompletedSeq != 2 || node.BranchID != "branch-a" {
 		t.Fatalf("unexpected node ordering fields: %#v", node)

@@ -13,14 +13,17 @@ import (
 type SessionPushEventType string
 
 const (
-	SessionPushAssistantMessage SessionPushEventType = "assistant_message"
-	SessionPushAwaitingHuman    SessionPushEventType = "awaiting_human"
-	SessionPushRunStarted       SessionPushEventType = SessionPushEventType(streaming.EventRunStarted)
-	SessionPushCompletionDelta  SessionPushEventType = SessionPushEventType(streaming.EventCompletionDelta)
-	SessionPushToolCallStarted  SessionPushEventType = SessionPushEventType(streaming.EventToolCallStarted)
-	SessionPushToolCallFinished SessionPushEventType = SessionPushEventType(streaming.EventToolCallFinished)
-	SessionPushError            SessionPushEventType = SessionPushEventType(streaming.EventError)
-	SessionPushDone             SessionPushEventType = SessionPushEventType(streaming.EventDone)
+	SessionPushAssistantMessage    SessionPushEventType = "assistant_message"
+	SessionPushAwaitingHuman       SessionPushEventType = "awaiting_human"
+	SessionPushRunStarted          SessionPushEventType = SessionPushEventType(streaming.EventRunStarted)
+	SessionPushCompletionDelta     SessionPushEventType = SessionPushEventType(streaming.EventCompletionDelta)
+	SessionPushToolCallStarted     SessionPushEventType = SessionPushEventType(streaming.EventToolCallStarted)
+	SessionPushToolCallFinished    SessionPushEventType = SessionPushEventType(streaming.EventToolCallFinished)
+	SessionPushError               SessionPushEventType = SessionPushEventType(streaming.EventError)
+	SessionPushDone                SessionPushEventType = SessionPushEventType(streaming.EventDone)
+	SessionPushTaskRunCardStarted  SessionPushEventType = "task_run_card_started"
+	SessionPushTaskRunCardEvent    SessionPushEventType = "task_run_card_event"
+	SessionPushTaskRunCardFinished SessionPushEventType = "task_run_card_finished"
 )
 
 type SessionPushEvent struct {

@@ -2,6 +2,7 @@ package workflows
 
 import (
 	"context"
+	"time"
 
 	"ghost-os/bridge/llm"
 	workflowdomain "ghost-os/bridge/orchestration/internal/domain/workflow"
@@ -42,6 +43,10 @@ type AgentRequest struct {
 	Message          string
 	RuntimeOverrides *bridgeTasks.TaskRuntimeOverrides
 	TraceID          string
+	NodeID           string
+	NodeType         string
+	BranchID         string
+	Iteration        int
 }
 
 type AgentExecutor func(context.Context, AgentRequest) bridgeTasks.ExecutionResult
@@ -66,6 +71,7 @@ type ExecuteCommand struct {
 	Runtime          RuntimeDependencies
 	TraceID          string
 	Agent            AgentExecutor
+	Cards            CardObserver
 	TemplateUploader TemplateUploader
 }
 
@@ -86,6 +92,33 @@ type runState struct {
 	nodeOutputs    map[string]string
 	findIconOutput any
 	loopIterations map[string]int
+	iteration      int
+}
+
+type CardStartRequest struct {
+	Kind      string
+	Title     string
+	NodeID    string
+	NodeType  string
+	BranchID  string
+	Iteration int
+	StartedAt time.Time
+}
+
+type CardFinishRequest struct {
+	Status     string
+	Preview    string
+	Error      string
+	FinalText  string
+	FinishedAt time.Time
+}
+
+type CardHandle interface {
+	Finish(ctx context.Context, req CardFinishRequest) error
+}
+
+type CardObserver interface {
+	StartCard(ctx context.Context, req CardStartRequest) (CardHandle, error)
 }
 
 type stepResult struct {

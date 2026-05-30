@@ -428,20 +428,6 @@ pub struct SessionTurnDraftPendingQuestion {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct SessionTurnDraft {
-    pub trace_id: String,
-    pub turn: i64,
-    pub status: String,
-    #[serde(default)]
-    pub error: Option<String>,
-    pub pending_questions: Vec<SessionTurnDraftPendingQuestion>,
-    pub assistant_segments: Vec<SessionTurnDraftSegment>,
-    pub thinking_segments: Vec<SessionTurnDraftSegment>,
-    pub tools: Vec<SessionTurnDraftTool>,
-    pub item_order: Vec<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SessionDetail {
     pub id: String,
     pub title: String,
@@ -453,6 +439,20 @@ pub struct SessionDetail {
     pub token_count: i64,
     #[serde(default)]
     pub turn_draft: Option<SessionTurnDraft>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionTurnDraft {
+    pub trace_id: String,
+    pub turn: i64,
+    pub status: String,
+    #[serde(default)]
+    pub error: Option<String>,
+    pub pending_questions: Vec<SessionTurnDraftPendingQuestion>,
+    pub assistant_segments: Vec<SessionTurnDraftSegment>,
+    pub thinking_segments: Vec<SessionTurnDraftSegment>,
+    pub tools: Vec<SessionTurnDraftTool>,
+    pub item_order: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -577,6 +577,28 @@ pub struct ProviderConfig {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunCardStartedPayload {
+    pub card_id: String,
+    pub run_id: String,
+    pub kind: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub node_id: Option<String>,
+    #[serde(default)]
+    pub node_type: Option<String>,
+    #[serde(default)]
+    pub round: Option<i64>,
+    #[serde(default)]
+    pub iteration: Option<i64>,
+    #[serde(default)]
+    pub branch_id: Option<String>,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
+    pub started_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct ProviderConfigInput {
     pub name: String,
     #[serde(rename = "type")]
@@ -600,9 +622,30 @@ pub struct ProviderConfigInput {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunCardEventPayload {
+    pub card_id: String,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
+    pub source_event: AgentStreamEvent,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct ProviderListResponse {
     pub providers: Vec<ProviderConfig>,
     pub active_provider: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunCardFinishedPayload {
+    pub card_id: String,
+    pub status: String,
+    pub finished_at: String,
+    #[serde(default)]
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

@@ -59,6 +59,9 @@ type AgentActionRequest struct {
 	Message          string
 	SessionID        string
 	TraceID          string
+	AgentID          string
+	Title            string
+	Round            int
 	RuntimeOverrides *bridgeTasks.TaskRuntimeOverrides
 }
 

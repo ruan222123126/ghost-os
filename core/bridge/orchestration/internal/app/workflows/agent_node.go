@@ -13,6 +13,8 @@ func executeAgentNode(
 	executor AgentExecutor,
 	node bridgeTasks.WorkflowNode,
 	traceID string,
+	branchID string,
+	iteration int,
 ) NodeOutcome {
 	if executor == nil {
 		return NodeOutcome{Err: fmt.Errorf("workflow agent executor is not configured")}
@@ -21,6 +23,10 @@ func executeAgentNode(
 		Message:          node.Agent.Message,
 		RuntimeOverrides: bridgeTasks.CloneTaskRuntimeOverrides(node.Agent.RuntimeOverrides),
 		TraceID:          traceID,
+		NodeID:           node.ID,
+		NodeType:         node.Type,
+		BranchID:         branchID,
+		Iteration:        iteration,
 	})
 	if strings.TrimSpace(result.Error) != "" {
 		return NodeOutcome{Err: fmt.Errorf("%s", result.Error)}

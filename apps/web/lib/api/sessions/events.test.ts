@@ -23,6 +23,18 @@ describe('lib/api/sessions/events', () => {
         session_id: 'session-1',
         payload: { message: 'done', session_ended: false },
       }),
+      buildSSEEvent({
+        id: 'session-1:000003',
+        type: 'task_run_card_started',
+        trace_id: 'trace-1',
+        session_id: 'session-1',
+        payload: {
+          card_id: 'card-1',
+          run_id: 'run-1',
+          kind: 'workflow_agent',
+          started_at: '2026-05-30T00:00:00Z',
+        },
+      }),
     ]), {
       status: 200,
       headers: { 'Content-Type': 'text/event-stream' },
@@ -40,6 +52,7 @@ describe('lib/api/sessions/events', () => {
     expect(events.map((event) => event.type)).toEqual([
       'completion_delta',
       'assistant_message',
+      'task_run_card_started',
     ]);
   });
 });

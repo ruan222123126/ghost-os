@@ -1,5 +1,6 @@
 // Web UI types plus API contracts generated from core/shared/schema.json.
 
+import type { TaskRunCard } from '@/lib/taskRunCards';
 import type {
   AgentMessageTaskCreateRequest as SharedAgentMessageTaskCreateRequest,
   AgentMessageTaskPayload as SharedAgentMessageTaskPayload,
@@ -15,6 +16,10 @@ import type {
   SessionFileContent as SharedSessionFileContent,
   SessionImageContent as SharedSessionImageContent,
   SessionMessage as SharedSessionMessage,
+  SessionTurnDraft as SharedSessionTurnDraft,
+  SessionTurnDraftPendingQuestion as SharedSessionTurnDraftPendingQuestion,
+  SessionTurnDraftSegment as SharedSessionTurnDraftSegment,
+  SessionTurnDraftTool as SharedSessionTurnDraftTool,
   TaskRelayConfig as SharedTaskRelayConfig,
   TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
   WorkflowDefinition as SharedWorkflowDefinition,
@@ -64,6 +69,9 @@ export type {
   SessionMetadata,
   SessionPushAssistantMessagePayload,
   SessionPushAwaitingHumanPayload,
+  TaskRunCardEventPayload,
+  TaskRunCardFinishedPayload,
+  TaskRunCardStartedPayload,
   SessionPushEvent,
   SessionSourceAssignment,
   SessionSourceResolution,
@@ -71,13 +79,16 @@ export type {
   SessionSidebarPartitionPutRequest,
   SessionSidebarPartitionState,
   SessionMessagePage,
-  SessionTurnDraft,
-  SessionTurnDraftSegment,
-  SessionTurnDraftTool,
   SessionToolCall,
   SessionToolResult,
   SetActiveProviderRequest,
 } from '@/lib/envelope.generated';
+
+export type { TaskRunCard } from '@/lib/taskRunCards';
+export type SessionTurnDraft = SharedSessionTurnDraft;
+export type SessionTurnDraftPendingQuestion = SharedSessionTurnDraftPendingQuestion;
+export type SessionTurnDraftSegment = SharedSessionTurnDraftSegment;
+export type SessionTurnDraftTool = SharedSessionTurnDraftTool;
 
 export interface UserChatMessage {
   id: string;
@@ -361,6 +372,7 @@ export interface TaskRunLog {
   session_id_output?: string;
   response_preview?: string;
   node_results?: TaskRunNodeResult[];
+  run_cards?: TaskRunCard[];
   error?: string;
 }
 

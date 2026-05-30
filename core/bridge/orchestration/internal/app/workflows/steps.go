@@ -28,13 +28,14 @@ func executeStep(
 	cmd ExecuteCommand,
 	node workflowdomain.Node,
 	state *runState,
+	branchID string,
 ) stepResult {
 	switch node.Type {
 	case workflowdomain.NodeTypeStart:
 		nextID, err := cmd.Plan.SingleNextNodeID(node.ID)
 		return stepResult{nextNodeID: nextID, err: err}
 	case workflowdomain.NodeTypeTool, workflowdomain.NodeTypeLLM, workflowdomain.NodeTypeAgent:
-		return executeActionStep(ctx, cmd, node, state)
+		return executeActionStep(ctx, cmd, node, state, branchID)
 	case workflowdomain.NodeTypeIf:
 		decision, err := selectIfDecision(node, state)
 		return stepResult{nextNodeID: decision.nextNodeID, outcome: ifOutcome(node, decision), err: err}
@@ -51,8 +52,9 @@ func executeActionStep(
 	cmd ExecuteCommand,
 	node workflowdomain.Node,
 	state *runState,
+	branchID string,
 ) stepResult {
-	outcome := executeActionNode(ctx, cmd, node, state)
+	outcome := executeActionNode(ctx, cmd, node, state, branchID)
 	if outcome.Err != nil || outcome.Status == bridgeTasks.RunStatusAwaitingHuman {
 		return stepResult{outcome: outcome, executed: true, err: outcome.Err}
 	}
@@ -65,13 +67,14 @@ func executeActionNode(
 	cmd ExecuteCommand,
 	node workflowdomain.Node,
 	state *runState,
+	branchID string,
 ) NodeOutcome {
 	resolvedNode, err := workflowdomain.ResolveActionNode(node, state.findIconOutput)
 	if err != nil {
 		return NodeOutcome{Err: err, InputSnapshot: nodeInputSnapshot(node)}
 	}
 	inputSnapshot := nodeInputSnapshot(resolvedNode)
-	outcome := executeResolvedActionNode(ctx, cmd, node, resolvedNode)
+	outcome := executeResolvedActionNode(ctx, cmd, node, resolvedNode, branchID, state.iteration)
 	outcome.InputSnapshot = inputSnapshot
 	return outcome
 }
@@ -81,14 +84,16 @@ func executeResolvedActionNode(
 	cmd ExecuteCommand,
 	node workflowdomain.Node,
 	resolvedNode workflowdomain.Node,
+	branchID string,
+	iteration int,
 ) NodeOutcome {
 	switch node.Type {
 	case workflowdomain.NodeTypeTool:
 		return ExecuteToolNode(ctx, cmd.Runtime, resolvedNode, cmd.TraceID, cmd.TemplateUploader)
 	case workflowdomain.NodeTypeLLM:
-		return executeLLMNode(ctx, cmd.Runtime, resolvedNode)
+		return executeLLMNode(ctx, cmd, resolvedNode, branchID, iteration)
 	case workflowdomain.NodeTypeAgent:
-		return executeAgentNode(ctx, cmd.Agent, resolvedNode, cmd.TraceID)
+		return executeAgentNode(ctx, cmd.Agent, resolvedNode, cmd.TraceID, branchID, iteration)
 	default:
 		return NodeOutcome{Err: fmt.Errorf("unsupported workflow node type %q", node.Type)}
 	}

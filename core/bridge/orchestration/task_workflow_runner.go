@@ -69,7 +69,7 @@ func (r workflowTaskRunner) execute(ctx context.Context) bridgeTasks.ExecutionRe
 	if deps.cleanup != nil {
 		defer deps.Close()
 	}
-	return appworkflows.Runner{}.Execute(ctx, r.executeCommand(deps))
+	return appworkflows.Runner{}.Execute(ctx, r.executeCommand(ctx, deps))
 }
 
 func (r workflowTaskRunner) loadRuntimeDependencies() (agentRuntimeDependencies, error) {
@@ -82,18 +82,22 @@ func (r workflowTaskRunner) loadRuntimeDependencies() (agentRuntimeDependencies,
 	return r.adapter.service.runtimeFactory.Build(r.adapter.service.configStore)
 }
 
-func (r workflowTaskRunner) executeCommand(deps agentRuntimeDependencies) appworkflows.ExecuteCommand {
+func (r workflowTaskRunner) executeCommand(
+	ctx context.Context,
+	deps agentRuntimeDependencies,
+) appworkflows.ExecuteCommand {
 	return appworkflows.ExecuteCommand{
 		Plan:             r.plan,
 		Runtime:          toWorkflowRuntimeDependencies(deps),
 		TraceID:          r.traceID,
 		Agent:            r.executeAgent,
+		Cards:            newWorkflowTaskRunCardObserver(ctx),
 		TemplateUploader: workflowFindIconTemplateUploader{},
 	}
 }
 
 func (r workflowTaskRunner) executeAgent(ctx context.Context, req appworkflows.AgentRequest) bridgeTasks.ExecutionResult {
-	return r.adapter.runAgentAction(ctx, agentParams{Message: req.Message, SessionID: ""}, req.RuntimeOverrides, req.TraceID)
+	return r.adapter.executeWorkflowAgent(ctx, req)
 }
 
 func toWorkflowRuntimeDependencies(deps agentRuntimeDependencies) appworkflows.RuntimeDependencies {

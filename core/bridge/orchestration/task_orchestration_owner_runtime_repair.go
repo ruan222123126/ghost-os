@@ -8,6 +8,7 @@ import (
 
 	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/streaming"
 )
 
 const ownerDispatchRepairTraceSuffix = "-repair"
@@ -16,8 +17,9 @@ func runOwnerDispatchWithRepair(
 	ctx context.Context,
 	req ownerDispatchRunRequest,
 	runAgent *agent.Agent,
+	sink streaming.Sink,
 ) (string, error) {
-	output, runErr := runAgent.RunMessageWithTraceID(ctx, ownerUserMessage(req.request), req.request.TraceID)
+	output, runErr := runAgent.RunMessageStreamWithTraceID(ctx, ownerUserMessage(req.request), req.request.TraceID, sink)
 	handoffErr, err := ownerDispatchHandoffFromRunErr(runErr)
 	if err != nil {
 		return "", err
@@ -25,7 +27,7 @@ func runOwnerDispatchWithRepair(
 	if handoffErr != nil {
 		return output, runErr
 	}
-	return repairOwnerDispatchRound(ctx, runAgent, req.request.TraceID, output)
+	return repairOwnerDispatchRound(ctx, runAgent, req.request.TraceID, output, sink)
 }
 
 func repairOwnerDispatchRound(
@@ -33,12 +35,13 @@ func repairOwnerDispatchRound(
 	runAgent *agent.Agent,
 	traceID string,
 	previousOutput string,
+	sink streaming.Sink,
 ) (string, error) {
 	repairMessage := llm.Message{
 		Role: llm.RoleUser,
 		Text: buildOwnerDispatchRepairPrompt(previousOutput),
 	}
-	return runAgent.RunMessageWithTraceID(ctx, repairMessage, ownerDispatchRepairTraceID(traceID))
+	return runAgent.RunMessageStreamWithTraceID(ctx, repairMessage, ownerDispatchRepairTraceID(traceID), sink)
 }
 
 func buildOwnerDispatchRepairPrompt(previousOutput string) string {
