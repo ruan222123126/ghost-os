@@ -26,13 +26,12 @@ func (b *runTranscriptBuilder) appendOrchestrationGroupNode(node bridgeTasks.Run
 	if title == "" {
 		title = node.NodeID
 	}
-	b.addEvent(fmt.Sprintf("编排进入群组：%s（%s）", title, node.NodeID))
 	output := transcriptRecord(node.Output)
 	if dispatches := transcriptSlice(output, "dispatch_results"); len(dispatches) > 0 {
 		b.appendOrchestrationDispatches(title, node.NodeID, dispatches)
 		return
 	}
-	b.appendOrchestrationMembers(transcriptSlice(output, "member_results"))
+	b.appendOrchestrationMembers(transcriptSlice(output, "member_results"), 0)
 }
 
 func (b *runTranscriptBuilder) appendOrchestrationDispatches(
@@ -40,59 +39,36 @@ func (b *runTranscriptBuilder) appendOrchestrationDispatches(
 	groupID string,
 	dispatches []any,
 ) {
+	lastRound := 0
 	for _, item := range dispatches {
 		dispatch := transcriptRecord(item)
 		if dispatch == nil {
 			continue
 		}
-		b.addEvent(orchestrationDispatchEvent(dispatch))
+		lastRound = b.appendOrchestrationRoundEvent(lastRound, transcriptInt(dispatch, "round"))
 		b.addOrchestrationDispatchToolMessage(groupTitle, groupID, dispatch)
-		b.appendOrchestrationMembers(transcriptSlice(dispatch, "member_results"))
+		lastRound = b.appendOrchestrationMembers(transcriptSlice(dispatch, "member_results"), lastRound)
 	}
 }
 
-func orchestrationDispatchEvent(dispatch map[string]any) string {
-	round := transcriptInt(dispatch, "round")
-	action := transcriptString(dispatch, "action")
-	participants := strings.Join(transcriptStringSlice(dispatch["participant_ids"]), ", ")
-	instruction := transcriptString(dispatch, "instruction")
-	lines := []string{fmt.Sprintf("编排第 %d 轮调度：%s", round, action)}
-	if participants != "" {
-		lines = append(lines, "参与者: "+participants)
-	}
-	for _, delivery := range transcriptSlice(dispatch, "private_deliveries") {
-		record := transcriptRecord(delivery)
-		participantID := transcriptString(record, "participant_id")
-		content := transcriptString(record, "content")
-		if participantID == "" {
-			continue
-		}
-		if content == "" {
-			lines = append(lines, "私聊投递: "+participantID)
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("私聊投递: %s <- %s", participantID, content))
-	}
-	if instruction != "" {
-		lines = append(lines, "指令: "+instruction)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (b *runTranscriptBuilder) appendOrchestrationMembers(items []any) {
-	lastRound := 0
+func (b *runTranscriptBuilder) appendOrchestrationMembers(items []any, lastRound int) int {
 	for _, item := range items {
 		member := transcriptRecord(item)
 		if member == nil {
 			continue
 		}
-		round := transcriptInt(member, "round")
-		if round != 0 && round != lastRound {
-			b.addEvent(fmt.Sprintf("编排进入第 %d 轮", round))
-			lastRound = round
-		}
+		lastRound = b.appendOrchestrationRoundEvent(lastRound, transcriptInt(member, "round"))
 		b.appendOrchestrationMember(member)
 	}
+	return lastRound
+}
+
+func (b *runTranscriptBuilder) appendOrchestrationRoundEvent(lastRound int, round int) int {
+	if round == 0 || round == lastRound {
+		return lastRound
+	}
+	b.addEvent(fmt.Sprintf("编排进入第 %d 轮", round))
+	return round
 }
 
 func (b *runTranscriptBuilder) appendOrchestrationMember(member map[string]any) {

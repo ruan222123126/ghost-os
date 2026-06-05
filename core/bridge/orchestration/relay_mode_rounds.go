@@ -16,7 +16,16 @@ import (
 	"ghost-os/bridge/tools"
 )
 
-const relayRoundRepairTraceSuffix = "-repair"
+const (
+	relayRoundRepairTraceSuffix        = "-repair"
+	relayRoundProtocolErrorTraceSuffix = "-protocol-error"
+)
+
+type relayRoundRunOutput struct {
+	handoff   *agent.ErrIterationHandoff
+	traceID   string
+	finalText string
+}
 
 func (r relayModeRunner) runRounds(ctx context.Context, req relayRunDeps) (relayModeResult, error) {
 	baseCatalog := tools.NewPromptOverrideCatalog(req.deps.registry, req.deps.cfg.ToolSelector.PromptOverrides)
@@ -88,7 +97,7 @@ func (r relayModeRunner) runRound(
 	roundTraceID := fmt.Sprintf("%s-relay-%d", strings.TrimSpace(req.traceID), round)
 	userPrompt := buildRelayModeUserPrompt(req.task.Message, cloneRelayRecords(req.session.RelayRuntime), round, req.relay)
 	runSink := newSessionDraftCheckpointSink(newTaskRunCardStreamSink(handle), r.sessionStore, req.session)
-	handoffErr, handoffTraceID, err := runRelayRoundWithRepair(
+	roundOutput, err := runRelayRoundWithRepair(
 		ctx,
 		req.deps,
 		systemPrompt,
@@ -101,18 +110,11 @@ func (r relayModeRunner) runRound(
 		runSink,
 	)
 	if err != nil {
-		if handle != nil {
-			_ = handle.Finish(ctx, taskRunCardFinishInput{
-				status:          relayRoundStatusFromError(ctx, err),
-				errorText:       err.Error(),
-				sourceSessionID: req.session.ID,
-				finishedAt:      time.Now().UTC(),
-			})
-		}
+		finishRelayRoundCardError(ctx, handle, req.session.ID, roundOutput, err)
 		return relayModeResult{}, false, err
 	}
-	record := relayRecordFromHandoff(round, handoffTraceID, handoffErr)
-	result, done, recordErr := r.recordRound(req, record, handoffErr)
+	record := relayRecordFromHandoff(round, roundOutput.traceID, roundOutput.handoff)
+	result, done, recordErr := r.recordRound(req, record, roundOutput.handoff)
 	summary := relayRoundSummary(record)
 	status := taskRunStatusSuccess
 	errorText := ""
@@ -120,17 +122,8 @@ func (r relayModeRunner) runRound(
 		status = relayRoundStatusFromError(ctx, recordErr)
 		errorText = recordErr.Error()
 	}
-	if handle != nil {
-		if finishErr := handle.Finish(ctx, taskRunCardFinishInput{
-			status:          status,
-			preview:         summary,
-			errorText:       errorText,
-			finalText:       summary,
-			sourceSessionID: req.session.ID,
-			finishedAt:      time.Now().UTC(),
-		}); finishErr != nil {
-			return relayModeResult{}, false, finishErr
-		}
+	if finishErr := finishRelayRoundCard(ctx, handle, req.session.ID, status, summary, errorText); finishErr != nil {
+		return relayModeResult{}, false, finishErr
 	}
 	return result, done, recordErr
 }
@@ -156,35 +149,47 @@ func runRelayRoundWithRepair(
 	roundTraceID string,
 	relay TaskRelayConfig,
 	sink streaming.Sink,
-) (*agent.ErrIterationHandoff, string, error) {
+) (relayRoundRunOutput, error) {
 	output, runErr := turnAgent.RunMessageStreamWithTraceID(ctx, llm.Message{
 		Role: llm.RoleUser,
 		Text: userPrompt,
 	}, roundTraceID, sink)
 	handoffErr, err := relayHandoffFromRunErr(runErr)
 	if err != nil {
-		return nil, "", err
+		return relayRoundRunOutput{finalText: output}, err
 	}
 	if handoffErr != nil {
-		return handoffErr, roundTraceID, nil
+		return relayRoundRunOutput{handoff: handoffErr, traceID: roundTraceID}, nil
 	}
 	repairTraceID := roundTraceID + relayRoundRepairTraceSuffix
 	repairPrompt := buildRelayModeRepairPrompt(output, relay)
 	repairAgent := newRelayTurnAgent(deps, newRelayModeCatalog(nil, relay.StopPolicy == taskRelayStopPolicyAIDecides), systemPrompt)
 	repairAgent.SetStreamLifecyclePayloadBuilder(newSessionStreamLifecyclePayloadBuilderForSessionID(sessionID))
 	repairAgent.SetToolChoice("required")
-	_, repairErr := repairAgent.RunMessageStreamWithTraceID(ctx, llm.Message{
+	repairOutput, repairErr := repairAgent.RunMessageStreamWithTraceID(ctx, llm.Message{
 		Role: llm.RoleUser,
 		Text: repairPrompt,
 	}, repairTraceID, sink)
 	handoffErr, err = relayHandoffFromRunErr(repairErr)
 	if err != nil {
-		return nil, "", err
+		return relayRoundRunOutput{finalText: relayVisibleOutput(output, repairOutput)}, err
 	}
 	if handoffErr == nil {
-		return nil, "", fmt.Errorf("relay round %d ended without relay handoff tool", round)
+		return runRelayRoundProtocolErrorCorrection(
+			ctx,
+			repairAgent,
+			round,
+			roundTraceID+relayRoundProtocolErrorTraceSuffix,
+			relay,
+			[]string{output, repairOutput},
+			sink,
+		)
 	}
-	return handoffErr, repairTraceID, nil
+	return relayRoundRunOutput{handoff: handoffErr, traceID: repairTraceID}, nil
+}
+
+func relayMissingHandoffError(round int) error {
+	return fmt.Errorf("relay round %d ended without relay handoff tool", round)
 }
 
 func relayHandoffFromRunErr(runErr error) (*agent.ErrIterationHandoff, error) {

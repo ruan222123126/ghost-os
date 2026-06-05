@@ -155,11 +155,40 @@ func TestRelayRepairsPlainTextRoundIntoHandoff(t *testing.T) {
 	}
 }
 
-func TestRelayReturnsErrorWhenRepairStillDoesNotHandoff(t *testing.T) {
+func TestRelayReturnsProtocolErrorToAIWhenRepairStillDoesNotHandoff(t *testing.T) {
 	completer := &proTestCompleter{
 		responses: []*llm.CompletionResponse{
 			relayTextResponse("先给你一个普通答复。"),
 			relayTextResponse("我还是直接回答。"),
+			relayUpdateResponse("call-relay-1", "按错误提示补交接力记录", "继续下一轮"),
+		},
+	}
+	result, err := runRelayModeTest(t, completer, TaskRelayConfig{
+		StopPolicy: taskRelayStopPolicyMaxRounds,
+		MaxRounds:  1,
+	})
+	if err != nil {
+		t.Fatalf("relay run failed: %v", err)
+	}
+	if len(result.Records) != 1 || len(completer.requests) != 3 {
+		t.Fatalf("unexpected rounds: records=%d requests=%d", len(result.Records), len(completer.requests))
+	}
+	correctionRequest := completer.requests[2]
+	if correctionRequest.ToolChoice != "required" {
+		t.Fatalf("unexpected correction tool_choice: %+v", correctionRequest)
+	}
+	lastMessage := correctionRequest.Messages[len(correctionRequest.Messages)-1]
+	if !strings.Contains(lastMessage.Text, "relay round 1 ended without relay handoff tool") {
+		t.Fatalf("unexpected correction prompt: %q", lastMessage.Text)
+	}
+}
+
+func TestRelayReturnsErrorWhenProtocolCorrectionStillDoesNotHandoff(t *testing.T) {
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{
+			relayTextResponse("先给你一个普通答复。"),
+			relayTextResponse("我还是直接回答。"),
+			relayTextResponse("第三次仍然没有调用工具。"),
 		},
 	}
 	_, err := runRelayModeTest(t, completer, TaskRelayConfig{
@@ -171,6 +200,9 @@ func TestRelayReturnsErrorWhenRepairStillDoesNotHandoff(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "ended without relay handoff tool") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(completer.requests) != 3 {
+		t.Fatalf("unexpected request count: got %d want 3", len(completer.requests))
 	}
 }
 

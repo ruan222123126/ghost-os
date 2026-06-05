@@ -48,7 +48,7 @@ type RunTranscript struct {
 type runTranscriptBuilder struct {
 	options      RunTranscriptOptions
 	messages     []llm.Message
-	seenSessions map[string]struct{}
+	sessionOffsets map[string]int
 }
 
 type runToolMessage struct {
@@ -79,9 +79,9 @@ func BuildRunTranscriptMessages(options RunTranscriptOptions) RunTranscript {
 
 func newRunTranscriptBuilder(options RunTranscriptOptions) *runTranscriptBuilder {
 	return &runTranscriptBuilder{
-		options:      normalizeRunTranscriptOptions(options),
-		messages:     make([]llm.Message, 0, len(options.Result.NodeResults)+2),
-		seenSessions: make(map[string]struct{}),
+		options:        normalizeRunTranscriptOptions(options),
+		messages:       make([]llm.Message, 0, len(options.Result.NodeResults)+2),
+		sessionOffsets: make(map[string]int),
 	}
 }
 
@@ -117,11 +117,7 @@ func (b *runTranscriptBuilder) title() string {
 }
 
 func (b *runTranscriptBuilder) startEvent() string {
-	lines := []string{"任务运行开始：" + b.title()}
-	if b.options.TraceID != "" {
-		lines = append(lines, "trace_id: "+b.options.TraceID)
-	}
-	return strings.Join(lines, "\n")
+	return "任务运行开始：" + b.title()
 }
 
 func (b *runTranscriptBuilder) finishEvent() string {
@@ -173,73 +169,6 @@ func (b *runTranscriptBuilder) addToolMessage(message runToolMessage) {
 		ToolCallID: callID,
 		Text:       agent.FormatToolResult(message.toolName, b.options.TraceID, message.output, runToolError(message.status)),
 	})
-}
-
-func (b *runTranscriptBuilder) appendAgentSessionMessages(sessionID string, sender string) bool {
-	id := strings.TrimSpace(sessionID)
-	if id == "" {
-		return false
-	}
-	if _, exists := b.seenSessions[id]; exists {
-		return true
-	}
-	b.seenSessions[id] = struct{}{}
-	source, ok := b.options.Sessions[id]
-	if !ok || source.Err != nil {
-		return b.addSessionReadFailure(id, source.Err)
-	}
-	return b.appendSessionMessages(sender, source.Messages)
-}
-
-func (b *runTranscriptBuilder) addSessionReadFailure(sessionID string, cause error) bool {
-	if cause == nil {
-		cause = errors.New("session messages are not available")
-	}
-	b.addEvent(sessionReadFailPrefix + sessionID + "\nerror: " + cause.Error())
-	return false
-}
-
-func (b *runTranscriptBuilder) appendSessionMessages(sender string, messages []llm.Message) bool {
-	appended := false
-	for _, message := range messages {
-		if b.appendAgentSessionMessage(sender, message) {
-			appended = true
-		}
-	}
-	return appended
-}
-
-func (b *runTranscriptBuilder) appendAgentSessionMessage(sender string, message llm.Message) bool {
-	switch message.Role {
-	case llm.RoleAssistant:
-		return b.appendAssistantSessionMessage(sender, message)
-	case llm.RoleTool:
-		b.messages = append(b.messages, message)
-		return true
-	default:
-		return false
-	}
-}
-
-func (b *runTranscriptBuilder) appendAssistantSessionMessage(sender string, message llm.Message) bool {
-	clonedMessages := llm.CloneMessages([]llm.Message{message})
-	if len(clonedMessages) == 0 {
-		return false
-	}
-	cloned := prefixAssistantSessionMessage(sender, clonedMessages[0])
-	b.messages = append(b.messages, cloned)
-	return true
-}
-
-func prefixAssistantSessionMessage(sender string, message llm.Message) llm.Message {
-	prefix := strings.TrimSpace(sender)
-	if prefix != "" && strings.TrimSpace(message.Text) != "" {
-		message.Text = prefix + "\n\n" + strings.TrimSpace(message.Text)
-	}
-	if prefix != "" && strings.TrimSpace(message.Text) == "" && len(message.ToolCalls) > 0 {
-		message.Text = prefix + "\n\n使用工具"
-	}
-	return message
 }
 
 func transcriptJSON(value any) json.RawMessage {

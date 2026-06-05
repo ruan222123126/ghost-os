@@ -70,8 +70,17 @@ func (a taskExecutorAdapter) executeWorkflowAgent(
 		}
 	}
 	recorder := taskRunCardRecorderFromContext(ctx)
-	if overrideRunner, ok := a.workflowOverrideRunner(); ok && req.RuntimeOverrides != nil {
-		return executeWorkflowAgentWithOverrides(ctx, overrideRunner, recorder, req)
+	if req.RuntimeOverrides != nil {
+		overrideRunner, ok := a.workflowStreamOverrideRunner()
+		if !ok && a.service != nil && a.service.agentRunner != nil {
+			return bridgeTasks.ExecutionResult{
+				Status: taskRunStatusError,
+				Error:  "workflow agent runtime overrides require a streaming runner",
+			}
+		}
+		if ok {
+			return executeWorkflowAgentWithOverrides(ctx, overrideRunner, recorder, req)
+		}
 	}
 	if a.service != nil && a.service.agentRunner != nil && req.RuntimeOverrides == nil {
 		return a.executeWorkflowAgentWithServiceRunner(ctx, req, recorder)
@@ -98,7 +107,7 @@ func (a taskExecutorAdapter) executeWorkflowAgent(
 
 func executeWorkflowAgentWithOverrides(
 	ctx context.Context,
-	runner SessionTurnRunnerWithOverrides,
+	runner SessionTurnStreamRunnerWithOverrides,
 	recorder *taskRunCardRecorder,
 	req appworkflows.AgentRequest,
 ) bridgeTasks.ExecutionResult {
@@ -106,11 +115,12 @@ func executeWorkflowAgentWithOverrides(
 	if err != nil {
 		return bridgeTasks.ExecutionResult{Status: taskRunStatusError, Error: err.Error()}
 	}
-	response, sessionID, runErr := runner.RunTurnWithOverrides(
+	response, sessionID, runErr := runner.RunTurnStreamWithOverrides(
 		ctx,
 		req.Message,
 		"",
 		req.TraceID,
+		workflowAgentSink(handle),
 		req.RuntimeOverrides,
 	)
 	result := executionResultFromStreamOutcome(ctx, response, sessionID, runErr)
@@ -188,10 +198,10 @@ func workflowAgentSink(handle *taskRunCardHandle) streaming.Sink {
 	return newTaskRunCardStreamSink(handle)
 }
 
-func (a taskExecutorAdapter) workflowOverrideRunner() (SessionTurnRunnerWithOverrides, bool) {
+func (a taskExecutorAdapter) workflowStreamOverrideRunner() (SessionTurnStreamRunnerWithOverrides, bool) {
 	if a.service == nil || a.service.agentRunner == nil {
 		return nil, false
 	}
-	runner, ok := a.service.agentRunner.(SessionTurnRunnerWithOverrides)
+	runner, ok := a.service.agentRunner.(SessionTurnStreamRunnerWithOverrides)
 	return runner, ok
 }

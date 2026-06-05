@@ -81,8 +81,23 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 func TestTaskWorkflowRunNowPassesAgentRuntimeOverrides(t *testing.T) {
 	_, service, _ := newTestHandlerWithService(t, nil, nil)
 	configureRuntimeOverrideProviders(t, service)
-	agentRunner := &workflowTestRunner{message: "agent done", sessionID: "workflow-session"}
-	service.agentRunner = agentRunner
+	completer := &workflowTestCompleter{
+		response: &llm.CompletionResponse{
+			Message:      llm.Message{Role: llm.RoleAssistant, Text: "agent done"},
+			FinishReason: llm.FinishStop,
+		},
+	}
+	factory := &captureRuntimeOverrideFactory{
+		completer: completer,
+		registry:  tools.NewRegistry(),
+	}
+	service.runtimeFactory = factory
+	service.agentRunner = NewSessionAgentRunner(
+		factory,
+		service.configStore,
+		service.sessionStore,
+		service.runRegistry,
+	)
 
 	createdRaw, code, err := service.executeTaskCreateAction(taskCreateParams{
 		TaskKind: taskKindWorkflow,
@@ -126,18 +141,21 @@ func TestTaskWorkflowRunNowPassesAgentRuntimeOverrides(t *testing.T) {
 	if run.Run.Status != taskRunStatusSuccess {
 		t.Fatalf("unexpected run status: %#v", run.Run)
 	}
-	if len(agentRunner.calls) != 1 {
-		t.Fatalf("expected one agent runner call, got %#v", agentRunner.calls)
+	if len(completer.requests) != 1 {
+		t.Fatalf("expected one completion request, got %d", len(completer.requests))
 	}
-	if agentRunner.calls[0].runtimeOverrides == nil {
-		t.Fatalf("expected runtime overrides to be forwarded, got %#v", agentRunner.calls[0])
+	if len(factory.configs) != 1 {
+		t.Fatalf("expected one runtime config build, got %d", len(factory.configs))
 	}
-	if agentRunner.calls[0].runtimeOverrides.ProviderName != "openai-main" ||
-		agentRunner.calls[0].runtimeOverrides.Model != "gpt-5.4" {
-		t.Fatalf("unexpected provider/model overrides: %#v", agentRunner.calls[0].runtimeOverrides)
+	cfg := factory.configs[0]
+	if cfg.Provider.Type != llm.ProviderOpenAI || cfg.Provider.Model != "gpt-5.4" {
+		t.Fatalf("unexpected provider/model overrides: %#v", cfg.Provider)
 	}
-	if agentRunner.calls[0].runtimeOverrides.MaxTurns == nil || *agentRunner.calls[0].runtimeOverrides.MaxTurns != 2 {
-		t.Fatalf("unexpected max_turns override: %#v", agentRunner.calls[0].runtimeOverrides)
+	if cfg.MaxTurns != 2 {
+		t.Fatalf("unexpected max_turns override: %d", cfg.MaxTurns)
+	}
+	if len(run.Run.RunCards) != 1 || run.Run.RunCards[0].SourceSessionID == "" {
+		t.Fatalf("expected workflow agent run card with source session, got %#v", run.Run.RunCards)
 	}
 }
 

@@ -28,6 +28,17 @@ type SessionTurnRunnerWithOverrides interface {
 	) (string, string, error)
 }
 
+type SessionTurnStreamRunnerWithOverrides interface {
+	RunTurnStreamWithOverrides(
+		ctx context.Context,
+		message string,
+		sessionID string,
+		traceID string,
+		sink streaming.Sink,
+		runtimeOverrides *TaskRuntimeOverrides,
+	) (string, string, error)
+}
+
 type StructuredSessionTurnRunner interface {
 	RunTurnInput(ctx context.Context, input llm.Message, sessionID string, traceID string) (string, string, error)
 	RunTurnStreamInput(ctx context.Context, input llm.Message, sessionID string, traceID string, sink streaming.Sink) (string, string, error)
@@ -113,6 +124,20 @@ func (r *SessionAgentRunner) RunTurnWithOverrides(
 		Role: llm.RoleUser,
 		Text: userMessage,
 	}, sessionID, traceID, runtimeOverrides)
+}
+
+func (r *SessionAgentRunner) RunTurnStreamWithOverrides(
+	ctx context.Context,
+	userMessage string,
+	sessionID string,
+	traceID string,
+	sink streaming.Sink,
+	runtimeOverrides *TaskRuntimeOverrides,
+) (string, string, error) {
+	return r.RunTurnStreamInputWithOverrides(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: userMessage,
+	}, sessionID, traceID, sink, runtimeOverrides)
 }
 
 func (r *SessionAgentRunner) RunTurnInput(ctx context.Context, input llm.Message, sessionID string, traceID string) (string, string, error) {

@@ -28,7 +28,7 @@ func BuildSessionTurnDraftPayload(
 		AssistantSegments: buildSessionTurnDraftSegments(draft.AssistantSegments),
 		ThinkingSegments:  buildSessionTurnDraftSegments(draft.ThinkingSegments),
 		Tools:             buildSessionTurnDraftTools(draft.Tools),
-		ItemOrder:         append([]string(nil), draft.ItemOrder...),
+		ItemOrder:         buildSessionTurnDraftItemOrder(draft.ItemOrder),
 	}
 }
 
@@ -83,6 +83,23 @@ func buildSessionTurnDraftTools(raw []bridgesession.TurnDraftTool) []sessionTurn
 			ToolCallID: strings.TrimSpace(item.ToolCallID),
 			TraceID:    strings.TrimSpace(item.TraceID),
 		})
+	}
+	return out
+}
+
+func buildSessionTurnDraftItemOrder(raw []string) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+
+	out := make([]string, 0, len(raw))
+	for _, item := range raw {
+		if trimmed := strings.TrimSpace(item); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	if len(out) == 0 {
+		return []string{}
 	}
 	return out
 }

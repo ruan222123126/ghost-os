@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -136,6 +137,28 @@ func (s *bridgeService) executeTaskRunNowAction(params taskIDParams, traceID str
 		return nil, mapTaskError(err), err
 	}
 	logAction(traceID, busActionTaskRunNow, "success", nil)
+	return payload, http.StatusOK, nil
+}
+
+func (s *bridgeService) executeTaskStopAction(
+	ctx context.Context,
+	params taskStopParams,
+	traceID string,
+) (any, int, error) {
+	runner, code, err := s.requireTaskMutationRunner()
+	if err != nil {
+		return nil, code, err
+	}
+	payload, err := runner.Stop(ctx, params)
+	if err != nil {
+		logAction(traceID, busActionTaskStop, "error", err)
+		return nil, mapTaskError(err), err
+	}
+	logStatus := "success"
+	if payload.Status == "not_running" {
+		logStatus = "not_running"
+	}
+	logAction(traceID, busActionTaskStop, logStatus, nil)
 	return payload, http.StatusOK, nil
 }
 

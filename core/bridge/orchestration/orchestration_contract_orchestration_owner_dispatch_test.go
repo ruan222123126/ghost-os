@@ -329,7 +329,7 @@ func TestOrchestrationOwnerPrivateSendReachesOnlyRecipient(t *testing.T) {
 	if member["content"] != "saw-secret" {
 		t.Fatalf("expected recipient to see private content, got %#v", member)
 	}
-	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{"私聊投递: agent-2 <- secret-role"})
+	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{"编排进入第 1 轮"})
 	loaded, err := service.sessionStore.Load(run.Run.SessionIDOutput)
 	if err != nil {
 		t.Fatalf("load run transcript session %q: %v", run.Run.SessionIDOutput, err)
@@ -396,7 +396,6 @@ func TestOrchestrationSequentialRoundSeesPreviousMemberOutput(t *testing.T) {
 	}
 	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{
 		taskRunTranscriptEventMarker,
-		"编排进入群组：Group 1（group-1）",
 		"编排进入第 1 轮",
 		"A（agent-1） · 第 1 轮",
 		"B（agent-2） · 第 1 轮",
@@ -428,7 +427,7 @@ func TestOrchestrationParallelRoundUsesSharedSnapshot(t *testing.T) {
 }
 
 func TestOrchestrationReusesMemberSessionWithinRun(t *testing.T) {
-	sessionInputs := make([]string, 0, 2)
+	sessionInputs := make([]string, 0, 3)
 	executor := func(_ context.Context, _ string, sessionID string, _ string, _ bridgeconfig.Store, sessionStore *session.Store) (string, string, error) {
 		sessionInputs = append(sessionInputs, sessionID)
 		if sessionID == "" {
@@ -441,15 +440,35 @@ func TestOrchestrationReusesMemberSessionWithinRun(t *testing.T) {
 		return "loop", sessionID, nil
 	}
 	_, service, _ := newTestHandlerWithService(t, executor, nil)
-	definition := buildSingleMemberDefinition(2)
+	definition := buildSingleMemberDefinition(3)
 	run := runOrchestrationTaskNow(t, service, definition)
-	if len(sessionInputs) != 2 || sessionInputs[0] != "" || sessionInputs[1] == "" {
+	if len(sessionInputs) != 3 || sessionInputs[0] != "" || sessionInputs[1] == "" || sessionInputs[2] == "" {
 		t.Fatalf("unexpected session reuse inputs: %#v", sessionInputs)
 	}
 	groupOutput := findNodeOutput(t, run.Run.NodeResults, "group-1")
 	sessions := groupOutput["member_session_ids"].(map[string]any)
-	if sessions["agent-1"] != sessionInputs[1] {
+	if sessions["agent-1"] != sessionInputs[2] {
 		t.Fatalf("unexpected member sessions: %#v", sessions)
+	}
+	loaded, err := service.sessionStore.Load(run.Run.SessionIDOutput)
+	if err != nil {
+		t.Fatalf("load run transcript session %q: %v", run.Run.SessionIDOutput, err)
+	}
+	transcript := sessionMessagesText(loaded.Messages)
+	required := []string{"编排进入第 1 轮", "编排进入第 2 轮", "编排进入第 3 轮"}
+	for _, text := range required {
+		if !strings.Contains(transcript, text) {
+			t.Fatalf("run transcript missing %q in:\n%s", text, transcript)
+		}
+	}
+	if strings.Count(transcript, "Looper（agent-1） · 第 1 轮\n\nloop") != 1 {
+		t.Fatalf("expected round 1 sender exactly once, got transcript:\n%s", transcript)
+	}
+	if strings.Count(transcript, "Looper（agent-1） · 第 2 轮\n\nloop") != 1 {
+		t.Fatalf("expected round 2 sender exactly once, got transcript:\n%s", transcript)
+	}
+	if strings.Count(transcript, "Looper（agent-1） · 第 3 轮\n\nloop") != 1 {
+		t.Fatalf("expected round 3 sender exactly once, got transcript:\n%s", transcript)
 	}
 }
 

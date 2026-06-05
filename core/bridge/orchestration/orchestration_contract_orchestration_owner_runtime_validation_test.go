@@ -74,9 +74,7 @@ func TestOrchestrationOwnerPublicOnceReturnsToOwnerAndLogsDispatch(t *testing.T)
 		t.Fatalf("expected end_group to be logged, got %#v", lastDispatch)
 	}
 	assertRunTranscriptSession(t, service, run.Run.SessionIDOutput, nil, []string{
-		"编排第 1 轮调度：public_once",
-		"参与者: agent-2",
-		"指令: speak now",
+		"编排进入第 1 轮",
 		"tool_call: orchestration_dispatch {\"action\":\"public_once\",\"instruction\":\"speak now\",\"participant_ids\":[\"agent-2\"]}",
 		"tool: {\"status\":\"success\",\"tool\":\"orchestration_dispatch\"",
 		"Member（agent-2） · 第 1 轮",

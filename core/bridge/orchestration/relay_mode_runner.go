@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
+	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/session"
+	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
 
@@ -169,6 +172,91 @@ func (r relayModeRunner) finishErroredRun(sess *session.Session, runErr error) e
 	}
 	sess.FinishRelayRuntime(status, stoppedBy, "", "")
 	return r.sessionStore.Save(sess)
+}
+
+func finishRelayRoundCardError(
+	ctx context.Context,
+	handle *taskRunCardHandle,
+	sessionID string,
+	output relayRoundRunOutput,
+	err error,
+) {
+	if handle == nil {
+		return
+	}
+	finalText := strings.TrimSpace(output.finalText)
+	_ = handle.Finish(ctx, taskRunCardFinishInput{
+		status:          relayRoundStatusFromError(ctx, err),
+		preview:         truncateRunes(finalText, maxTaskResponsePreviewRunes),
+		errorText:       err.Error(),
+		finalText:       finalText,
+		sourceSessionID: sessionID,
+		finishedAt:      time.Now().UTC(),
+	})
+}
+
+func finishRelayRoundCard(
+	ctx context.Context,
+	handle *taskRunCardHandle,
+	sessionID string,
+	status string,
+	summary string,
+	errorText string,
+) error {
+	if handle == nil {
+		return nil
+	}
+	return handle.Finish(ctx, taskRunCardFinishInput{
+		status:          status,
+		preview:         summary,
+		errorText:       errorText,
+		finalText:       summary,
+		sourceSessionID: sessionID,
+		finishedAt:      time.Now().UTC(),
+	})
+}
+
+func runRelayRoundProtocolErrorCorrection(
+	ctx context.Context,
+	repairAgent *agent.Agent,
+	round int,
+	traceID string,
+	relay TaskRelayConfig,
+	previousOutputs []string,
+	sink streaming.Sink,
+) (relayRoundRunOutput, error) {
+	protocolErr := relayMissingHandoffError(round)
+	correctionPrompt := buildRelayModeProtocolErrorPrompt(
+		protocolErr.Error(),
+		relayVisibleOutputs(previousOutputs...),
+		relay,
+	)
+	correctionOutput, correctionErr := repairAgent.RunMessageStreamWithTraceID(ctx, llm.Message{
+		Role: llm.RoleUser,
+		Text: correctionPrompt,
+	}, traceID, sink)
+	visibleOutput := relayVisibleOutputs(append(previousOutputs, correctionOutput)...)
+	handoffErr, err := relayHandoffFromRunErr(correctionErr)
+	if err != nil {
+		return relayRoundRunOutput{finalText: visibleOutput}, err
+	}
+	if handoffErr == nil {
+		return relayRoundRunOutput{finalText: visibleOutput}, protocolErr
+	}
+	return relayRoundRunOutput{handoff: handoffErr, traceID: traceID}, nil
+}
+
+func relayVisibleOutput(output string, repairOutput string) string {
+	return relayVisibleOutputs(output, repairOutput)
+}
+
+func relayVisibleOutputs(outputs ...string) string {
+	for i := len(outputs) - 1; i >= 0; i-- {
+		if trimmed := strings.TrimSpace(outputs[i]); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func relayResultStatus(stoppedBy string) string {

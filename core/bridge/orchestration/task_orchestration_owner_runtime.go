@@ -16,7 +16,6 @@ import (
 	"ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/orchestration/internal/ports"
 	"ghost-os/bridge/session"
-	bridgeTasks "ghost-os/bridge/tasks"
 	"ghost-os/bridge/tools"
 )
 
@@ -213,47 +212,6 @@ func ownerDecisionSystemPrompt(basePrompt string, req ports.OwnerDecisionTurnReq
 
 func ownerUserMessage(req ports.OwnerDecisionTurnRequest) llm.Message {
 	return llm.Message{Role: llm.RoleUser, Text: req.UserPrompt}
-}
-
-func (e orchestrationOwnerDecisionTurnExecutor) startOwnerRunCard(
-	ctx context.Context,
-	req ports.OwnerDecisionTurnRequest,
-	sess *session.Session,
-) (*taskRunCardHandle, error) {
-	recorder := taskRunCardRecorderFromContext(ctx)
-	if recorder == nil {
-		return nil, errors.New("orchestration owner task run card recorder is not configured")
-	}
-	title := req.OwnerNode.ID
-	if req.OwnerNode.Agent != nil && strings.TrimSpace(req.OwnerNode.Agent.Title) != "" {
-		title = strings.TrimSpace(req.OwnerNode.Agent.Title)
-	}
-	return recorder.StartCard(ctx, taskRunCardStartInput{
-		kind:            bridgeTasks.RunCardKindOrchestrationOwner,
-		title:           title,
-		nodeID:          strings.TrimSpace(req.OwnerNode.ID),
-		nodeType:        "agent",
-		round:           req.Round,
-		sourceSessionID: strings.TrimSpace(sess.ID),
-		startedAt:       time.Now().UTC(),
-	})
-}
-
-func (e orchestrationOwnerDecisionTurnExecutor) finishOwnerRunCard(
-	ctx context.Context,
-	handle *taskRunCardHandle,
-	sessionID string,
-	response string,
-	runErr error,
-) error {
-	status, preview, errorText := ownerRunCardStatus(response, runErr)
-	return handle.Finish(ctx, taskRunCardFinishInput{
-		status:          status,
-		preview:         preview,
-		errorText:       errorText,
-		sourceSessionID: strings.TrimSpace(sessionID),
-		finishedAt:      time.Now().UTC(),
-	})
 }
 
 func persistOwnerAgentMessages(sess *session.Session, runAgent *agent.Agent) {

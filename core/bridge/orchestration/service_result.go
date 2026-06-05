@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"net/http"
 
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
@@ -148,6 +149,14 @@ func (s *bridgeService) executeTaskUpdateActionResult(params taskUpdateParams, t
 
 func (s *bridgeService) executeTaskRunNowActionResult(params taskIDParams, traceID string) (ServiceResult, error) {
 	return adaptLegacyResult(s.executeTaskRunNowAction(params, traceID))
+}
+
+func (s *bridgeService) executeTaskStopActionResult(
+	ctx context.Context,
+	params taskStopParams,
+	traceID string,
+) (ServiceResult, error) {
+	return adaptLegacyResult(s.executeTaskStopAction(ctx, params, traceID))
 }
 
 func (s *bridgeService) executeTaskLogsActionResult(params taskLogsParams, traceID string) (ServiceResult, error) {

@@ -1,8 +1,11 @@
 package internal_test
 
 import (
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -31,6 +34,50 @@ func TestOrchestrationM2StructureBudget(t *testing.T) {
 			maxM2OversizedGoDirectories,
 			strings.Join(offenders, ", "),
 		)
+	}
+}
+
+func TestOrchestrationTopLevelFileAllowlist(t *testing.T) {
+	root := orchestrationRoot(t)
+	files := collectGoFiles(t, root)
+	var offenders []string
+	for _, file := range files {
+		if filepath.Dir(file) != root {
+			continue
+		}
+		name := filepath.Base(file)
+		if !allowedTopLevelOrchestrationFiles[name] {
+			offenders = append(offenders, name)
+		}
+	}
+	if len(offenders) > 0 {
+		sort.Strings(offenders)
+		t.Fatalf("new top-level orchestration Go files are blocked; move new code under internal/app, internal/domain, ports, or adapters: %s",
+			strings.Join(offenders, ", "))
+	}
+}
+
+func TestDomainConcreteImportFreeze(t *testing.T) {
+	root := orchestrationRoot(t)
+	domainRoot := filepath.Join(root, "internal", "domain")
+	files := collectGoFiles(t, domainRoot)
+	var offenders []string
+	for _, file := range files {
+		rel := relativeToRoot(t, root, file)
+		for _, importPath := range importPaths(t, file) {
+			if !isForbiddenConcreteDomainImport(importPath) {
+				continue
+			}
+			if allowedDomainConcreteImports[rel][importPath] {
+				continue
+			}
+			offenders = append(offenders, rel+" imports "+importPath)
+		}
+	}
+	if len(offenders) > 0 {
+		sort.Strings(offenders)
+		t.Fatalf("new concrete imports in internal/domain are blocked; use domain contracts or ports instead:\n%s",
+			strings.Join(offenders, "\n"))
 	}
 }
 
@@ -74,6 +121,37 @@ func topLevelGoFileCount(root string, files []string) int {
 	return count
 }
 
+func relativeToRoot(t *testing.T, root string, file string) string {
+	t.Helper()
+	rel, err := filepath.Rel(root, file)
+	if err != nil {
+		t.Fatalf("rel %s to %s: %v", file, root, err)
+	}
+	return filepath.ToSlash(rel)
+}
+
+func importPaths(t *testing.T, file string) []string {
+	t.Helper()
+	parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatalf("parse imports in %s: %v", file, err)
+	}
+	paths := make([]string, 0, len(parsed.Imports))
+	for _, spec := range parsed.Imports {
+		paths = append(paths, strings.Trim(spec.Path.Value, `"`))
+	}
+	return paths
+}
+
+func isForbiddenConcreteDomainImport(importPath string) bool {
+	for _, forbidden := range forbiddenConcreteDomainImports {
+		if importPath == forbidden || strings.HasPrefix(importPath, forbidden+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func productionLineOffenders(t *testing.T, files []string) []string {
 	t.Helper()
 	var offenders []string
@@ -86,6 +164,172 @@ func productionLineOffenders(t *testing.T, files []string) []string {
 		}
 	}
 	return offenders
+}
+
+var allowedTopLevelOrchestrationFiles = map[string]bool{
+	"agent_contract.go":                                                     true,
+	"agent_turn_app_adapter.go":                                             true,
+	"agent_usecase_helpers.go":                                              true,
+	"envelope_generated.go":                                                 true,
+	"export_service.go":                                                     true,
+	"legacy_migration.go":                                                   true,
+	"orchestration_contract_agent_stream_misc_test.go":                      true,
+	"orchestration_contract_agent_stream_test.go":                           true,
+	"orchestration_contract_fixtures_test.go":                               true,
+	"orchestration_contract_legacy_migration_test.go":                       true,
+	"orchestration_contract_orchestration_owner_dispatch_test.go":           true,
+	"orchestration_contract_orchestration_owner_runtime_validation_test.go": true,
+	"orchestration_contract_relay_test.go":                                  true,
+	"orchestration_contract_schema_config_guards_test.go":                   true,
+	"orchestration_contract_session_history_test.go":                        true,
+	"orchestration_contract_session_payload_test.go":                        true,
+	"orchestration_contract_session_runner_test.go":                         true,
+	"orchestration_contract_task_runtime_overrides_test.go":                 true,
+	"orchestration_contract_tasks_basic_test.go":                            true,
+	"orchestration_contract_workflow_fixtures_test.go":                      true,
+	"orchestration_contract_workflow_runner_test.go":                        true,
+	"orchestration_contract_workflow_tools_test.go":                         true,
+	"orchestration_contract_workflow_validation_api_test.go":                true,
+	"plan_mode.go":                        true,
+	"relay_mode_catalog.go":               true,
+	"relay_mode_rounds.go":                true,
+	"relay_mode_runner.go":                true,
+	"runtime_adapter.go":                  true,
+	"service_action_router.go":            true,
+	"service_config_providers.go":         true,
+	"service_config_runtime.go":           true,
+	"service_prompts.go":                  true,
+	"service_result.go":                   true,
+	"service_router.go":                   true,
+	"service_runtime_state.go":            true,
+	"service_session_guards.go":           true,
+	"service_sessions.go":                 true,
+	"service_tasks.go":                    true,
+	"service_tools.go":                    true,
+	"service_usecase_human.go":            true,
+	"session_contract.go":                 true,
+	"session_end_signal.go":               true,
+	"session_push_adapter.go":             true,
+	"session_runner.go":                   true,
+	"session_runner_adapter.go":           true,
+	"session_title.go":                    true,
+	"session_turn_preparer.go":            true,
+	"session_turn_preparer_prompt.go":     true,
+	"session_turn_preparer_selector.go":   true,
+	"session_turn_runtime_overrides.go":   true,
+	"session_turn_state.go":               true,
+	"task_agent_run_cards.go":             true,
+	"task_bridge.go":                      true,
+	"task_executor_adapter.go":            true,
+	"task_orchestration_owner_catalog.go": true,
+	"task_orchestration_owner_runtime.go": true,
+	"task_orchestration_runner.go":        true,
+	"task_run_cards_bridge.go":            true,
+	"task_run_transcript.go":              true,
+	"task_runtime_config.go":              true,
+	"task_runtime_overrides.go":           true,
+	"task_usecase_runner.go":              true,
+	"task_usecase_runner_build.go":        true,
+	"task_validation.go":                  true,
+	"task_workflow_run_cards.go":          true,
+	"task_workflow_runner.go":             true,
+	"task_workflow_runner_nodes.go":       true,
+	"task_workflow_validation.go":         true,
+	"tool_lists_shim.go":                  true,
+	"trace_compat.go":                     true,
+}
+
+var forbiddenConcreteDomainImports = []string{
+	"ghost-os/bridge/agent",
+	"ghost-os/bridge/config",
+	"ghost-os/bridge/session",
+	"ghost-os/bridge/tasks",
+	"ghost-os/bridge/tools",
+}
+
+var allowedDomainConcreteImports = map[string]map[string]bool{
+	"internal/domain/group/edge.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/group/graph.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/group/plan_test.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/group/types.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/group/validation.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/sessionturn/contract.go": {
+		"ghost-os/bridge/agent":   true,
+		"ghost-os/bridge/session": true,
+	},
+	"internal/domain/sessionturn/contract_draft.go": {
+		"ghost-os/bridge/session": true,
+	},
+	"internal/domain/sessionturn/history_builder.go": {
+		"ghost-os/bridge/agent":   true,
+		"ghost-os/bridge/config":  true,
+		"ghost-os/bridge/session": true,
+	},
+	"internal/domain/sessionturn/human_tool_results.go": {
+		"ghost-os/bridge/session": true,
+	},
+	"internal/domain/sessionturn/microcompact.go": {
+		"ghost-os/bridge/agent": true,
+	},
+	"internal/domain/sessionturn/microcompact_summary_helpers.go": {
+		"ghost-os/bridge/session": true,
+	},
+	"internal/domain/task/run_transcript.go": {
+		"ghost-os/bridge/agent": true,
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/task/run_transcript_orchestration.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/task/run_transcript_sessions.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/task/run_transcript_workflow.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/find_icon_refs.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/graph.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/graph_connectivity.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/graph_cycles.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/graph_degrees.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/graph_targets.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/input_validation.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/plan.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/types.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/validation.go": {
+		"ghost-os/bridge/tasks": true,
+	},
+	"internal/domain/workflow/validation_control.go": {
+		"ghost-os/bridge/tasks": true,
+	},
 }
 
 func lineCount(t *testing.T, file string) int {

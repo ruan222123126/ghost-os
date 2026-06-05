@@ -301,6 +301,37 @@ func TestBuildSessionDetailPayloadSkipsTurnDraftForOlderWindow(t *testing.T) {
 	}
 }
 
+func TestBuildSessionDetailPayloadNormalizesEmptyTurnDraftItemOrder(t *testing.T) {
+	sess := session.NewSession("system prompt")
+	sess.ID = "session-draft-error"
+	sess.TurnDraft = &session.TurnDraft{
+		TraceID: "trace-draft-error",
+		Turn:    0,
+		Status:  session.TurnDraftStatusError,
+		Error:   "stream interrupted: context canceled",
+	}
+	page := session.MessagePage{
+		Limit: 100,
+		Messages: []session.IndexedMessage{
+			{
+				Index:   0,
+				Message: sess.Messages[0],
+			},
+		},
+	}
+
+	payload := buildSessionDetailPayload(sess, page, true)
+	if payload.TurnDraft == nil {
+		t.Fatal("expected latest window to include turn_draft")
+	}
+	if payload.TurnDraft.ItemOrder == nil {
+		t.Fatal("expected empty item_order slice, got nil")
+	}
+	if len(payload.TurnDraft.ItemOrder) != 0 {
+		t.Fatalf("expected empty item_order slice, got %+v", payload.TurnDraft.ItemOrder)
+	}
+}
+
 func TestParseSessionEndSignalPassThroughPlainText(t *testing.T) {
 	message, signal, err := parseSessionEndSignal("normal answer")
 	if err != nil {
