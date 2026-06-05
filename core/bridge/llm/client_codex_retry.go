@@ -31,47 +31,7 @@ func (c *Client) shouldPreferCodexStateless(request CompletionRequest) bool {
 	if strings.TrimSpace(request.ConversationState.PreviousResponseID) == "" {
 		return false
 	}
-	return codexRequestContainsToolRoundtrip(request.Messages)
-}
-
-func codexRequestContainsToolRoundtrip(messages []Message) bool {
-	if len(messages) == 0 {
-		return false
-	}
-	assistantCallIDs := codexAssistantCallIDs(messages)
-	return codexContainsMatchingToolResult(messages, assistantCallIDs)
-}
-
-func codexAssistantCallIDs(messages []Message) map[string]struct{} {
-	callIDs := make(map[string]struct{}, len(messages))
-	for _, msg := range messages {
-		if msg.Role != RoleAssistant {
-			continue
-		}
-		for _, call := range msg.ToolCalls {
-			callID := strings.TrimSpace(call.ID)
-			if callID != "" {
-				callIDs[callID] = struct{}{}
-			}
-		}
-	}
-	return callIDs
-}
-
-func codexContainsMatchingToolResult(messages []Message, assistantCallIDs map[string]struct{}) bool {
-	for _, msg := range messages {
-		if msg.Role != RoleTool {
-			continue
-		}
-		callID := strings.TrimSpace(msg.ToolCallID)
-		if callID == "" {
-			continue
-		}
-		if _, ok := assistantCallIDs[callID]; ok {
-			return true
-		}
-	}
-	return false
+	return true
 }
 
 func shouldRetryCodexStatelessByBody(raw []byte) bool {
