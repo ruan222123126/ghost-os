@@ -1,75 +1,70 @@
 # AGENTS.md
 
-This file defines repository-wide execution rules for coding agents.
+Repository-wide rules for coding agents in Ghost-OS.
 
-## Current Project Status
+## Start Here
 
-See `PROJECT_PROGRESS.md` before implementation. Current baseline is MVP stabilization:
-- Bridge main flow is usable and remains the primary development center (`core/bridge`).
-- Web Console and CLI are both usable; Web streaming and user image input are connected (`apps/web`, `apps/cli`).
-- Android has initial session/display integration but is still behind Web/CLI maturity (`apps/android`).
-- Native atomic capabilities cover screenshot/input/script/window-query, but are still not production-complete (`drivers/native`).
-- Assistant text tool-calling protocol baseline is `<t:ID>JSON</t>` with `[TOOL_TAG_RESULT]`; legacy plain `mutation/query` text calls are no longer active.
+- Read `PROJECT_PROGRESS.md` before implementation. Current phase: MVP stabilization; primary focus remains `core/bridge`.
+- Project rules override global defaults.
+- After meaningful changes, update `PROJECT_PROGRESS.md` with a concise note.
 
 ## Mission
 
-Ghost-OS is not a traditional remote desktop tool. It is an AI-driven digital twin execution layer. Users should be able to command AI via Web/CLI as if operating their own hands on a remote machine.
+- Ghost-OS is an AI-driven digital twin execution layer, not a traditional remote desktop.
+- Optimize for stability, observability, and contract consistency over feature sprawl.
 
+## Communication
 
-## Package Management
+- Default to Chinese in user-facing replies unless the user asks otherwise.
+- Understand intent with minimal prompting, state low-risk assumptions briefly, and finish the task end-to-end.
+- For multi-step work, send a short preamble before tool calls.
+- Do not add unrelated features or post-answer enhancement suggestions.
 
-1. Web app package manager is **pnpm** (`apps/web`).
-2. Use `pnpm install` and `pnpm run <script>` for Web dependency and script operations.
-3. Commit `pnpm-lock.yaml`; do not introduce `package-lock.json` or `yarn.lock`.
+## Debug First
 
-## The Trinity (Strict Boundaries)
+- Surface failures explicitly with errors, logs, and tests.
+- Do not add silent fallbacks, fake-success paths, hidden caps, or defensive branches just to keep code running.
+- If a safeguard is truly required, make it explicit, documented, easy to disable, and user-approved.
 
-1. **Execution Layer** (`drivers/native`, Rust)
-   - Stateless and atomic.
-   - Handles screenshot, input simulation, window tree/query.
-   - Must not contain business decisions.
+## Architecture Boundaries
 
-2. **Central Layer** (`core/bridge`, Go)
-   - Manages state, protocol routing, AI orchestration, safety checks.
-   - Must not implement concrete OS system calls.
+- `drivers/native`: stateless atomic execution only; no business decisions.
+- `core/bridge`: state, protocol routing, orchestration, and safety; no concrete OS syscalls.
+- `apps/web`, `apps/cli`, `apps/android`: perception and interaction only.
+- No cross-layer direct coupling.
 
-3. **Perception Layer** (`apps/web`, `apps/cli`, `apps/android`)
-   - Interaction and feedback.
-   - Web rendering, browser structure access, immersive CLI control.
+## Contracts
 
+- Components communicate through the standardized message bus.
+- Every operation must remain traceable with `trace_id`.
+- Cross-process payloads must follow `core/shared/schema.json`:
+  - Request: `{ "action": "string", "params": "object", "trace_id": "string" }`
+  - Response: `{ "status": "success|error", "payload": "object", "error": "string" }`
+- Assistant tool-calling baseline remains `<t:ID>JSON</t>` with `[TOOL_TAG_RESULT]`; do not reintroduce legacy plain `mutation/query` calls.
 
+## Change Strategy
 
-## Agent Collaboration Strategy
+- Prefer root-cause fixes over symptom patches.
+- Remove duplicate logic, dead code, and obsolete compatibility paths unless compatibility is explicitly required.
+- Keep changes explicit, minimal, and structural when contracts or shared invariants are involved.
+- Do not revert or overwrite user changes outside your task scope.
 
-1. If a task can be split into independent and bounded subtasks, prefer multi-agent parallel execution.
-2. Assign clear ownership per agent (module/file scope) and keep traceability for each subtask output.
+## Engineering Baseline
 
-## Communication and Contract Rules
+- Follow SOLID, DRY, separation of concerns, and YAGNI.
+- Prefer short functions, shallow nesting, clear names, and immutable data flow.
+- Inject dependencies instead of hard-wiring concrete implementations.
+- Add concise comments only for non-obvious logic boundaries or contracts.
+- Web uses `pnpm` only; keep `pnpm-lock.yaml`, never add `package-lock.json` or `yarn.lock`.
 
-1. Components communicate through a standardized message bus.
-2. No cross-layer direct coupling.
-3. Every operation must be traceable (trace log with `trace_id`).
-4. Cross-process payloads must strictly follow `core/shared/schema.json`:
-   - Request: `{ "action": "string", "params": "object", "trace_id": "string" }`
-   - Response: `{ "status": "success|error", "payload": "object", "error": "string" }`
+## Validation
 
+- Run targeted verification whenever feasible: changed tests, then type/lint, then build, then minimal smoke.
+- Backend unit tests must use a hard timeout of `60s`.
+- If validation cannot run, say why and state the next best check.
+- Before finalizing, scan the diff for hidden fallbacks, duplicated logic, dead code, contract drift, and security regressions.
 
-## Engineering Aesthetics
+## Collaboration
 
-1. Write only necessary code.
-2. Explicit over implicit; avoid over-abstraction.
-3. Keep a minimal, functional style.
-4. There are other modifications that are not yours—I made them. Please do not revert them. Just focus on your own task.
-
-
-## Commenting Guidelines
-
-1. Add concise comments at key logic boundaries, non-obvious decisions, and cross-module contracts.
-2. Do not write line-by-line comments for obvious code.
-3. Keep comments short and readable so they improve clarity without adding noise.
-
-## Progress Tracking
-
-1. `PROJECT_PROGRESS.md` at repository root is the canonical progress log for active work.
-2. Before starting implementation, read `PROJECT_PROGRESS.md` to align with the latest status and pending tasks.
-3. After completing meaningful changes, update `PROJECT_PROGRESS.md` with concise progress notes.
+- Prefer parallel agents only for independent, bounded subtasks with clear ownership.
+- Treat unrelated worktree changes as intentional; adapt around them instead of reverting them.
