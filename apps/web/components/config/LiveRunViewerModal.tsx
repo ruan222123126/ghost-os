@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { CloseButton } from '@/components/CloseButton';
 import { MessageRow } from '@/components/message/MessageRow';
 import { useLiveRunViewer } from '@/hooks/config/useLiveRunViewer';
+import type { WebLocale } from '@/lib/i18n/locale';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { buildLiveRunViewerOutputSignature } from '@/lib/liveRunViewerOutputSignature';
 import { formatTaskRunStatus, formatTaskRunTimestamp } from '@/lib/taskRunDisplay';
@@ -250,7 +251,7 @@ function cardTitle(card: LiveTaskRunCard): string {
   return card.title?.trim() || card.node_id?.trim() || card.card_id;
 }
 
-function formatCardSubline(card: LiveTaskRunCard, locale: ReturnType<typeof useWebLocale>['locale']): string {
+function formatCardSubline(card: LiveTaskRunCard, locale: WebLocale): string {
   const parts = [];
   if (card.round) {
     parts.push(`round ${card.round}`);
@@ -267,7 +268,7 @@ function formatCardSubline(card: LiveTaskRunCard, locale: ReturnType<typeof useW
   return parts.join(' · ') || formatTaskRunStatus(card.status, locale);
 }
 
-function formatCardMeta(card: LiveTaskRunCard, locale: ReturnType<typeof useWebLocale>['locale']): string {
+function formatCardMeta(card: LiveTaskRunCard, locale: WebLocale): string {
   const parts = [formatCardClock(card.started_at)];
   const subline = formatCardSubline(card, locale);
   if (subline) {
