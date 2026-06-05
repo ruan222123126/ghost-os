@@ -1,5 +1,6 @@
 'use client';
 
+import { GlobalLoadingOverlay } from '@/components/GlobalLoadingOverlay';
 import { WorkflowCanvasWorkbench } from '@/components/workflow/WorkflowCanvasWorkbench';
 import { useOrchestrationEditorController } from '@/hooks/orchestration/useOrchestrationEditorController';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -23,7 +24,7 @@ export function OrchestrationEditorClient(props: OrchestrationEditorClientProps)
   });
 
   if (controller.phase === 'loading') {
-    return <main className="workflow-loading">{controller.workflowCopy.loadingTask}</main>;
+    return <GlobalLoadingOverlay />;
   }
 
   if (controller.phase === 'missing') {

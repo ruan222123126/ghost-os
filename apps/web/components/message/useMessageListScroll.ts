@@ -2,7 +2,9 @@ import type { Virtualizer } from '@tanstack/react-virtual';
 import type { MutableRefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import {
-  isMessageListNearBottom,
+  getPostSendLockedScrollTop,
+  type PostSendFollowTrackingState,
+  resolveMessageListAutoFollow,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
 import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
@@ -23,7 +25,7 @@ export interface UseMessageListScrollOptions {
   visibleCommittedMessageCount: number;
   layoutSignature: string;
   postSendAnchorIndex?: number | null;
-  postSendHasVisibleAssistantText?: boolean;
+  postSendHasVisibleContent?: boolean;
   postSendToken?: number;
 }
 
@@ -33,6 +35,13 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
   const olderLoadPendingRef = useRef(false);
   const prependAnchorRef = useRef<PrependAnchor | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
+  const postSendFollowTrackingRef = useRef<PostSendFollowTrackingState>({
+    mode: 'idle',
+    controlledScrollTopPx: null,
+  });
+  const setPostSendFollowTracking = useCallback((value: PostSendFollowTrackingState) => {
+    postSendFollowTrackingRef.current = value;
+  }, []);
   const scheduleNormalFollow = useCallback(() => {
     scheduleScrollToBottom({
       autoFollowRef,
@@ -45,8 +54,13 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     cancelScrollFrame(scrollFrameRef);
   }, []);
 
-  useVirtualizerSizeAdjustment(options.rowVirtualizer, autoFollowRef);
-  useAutoFollowTracking(scrollElementRef, autoFollowRef);
+  useVirtualizerSizeAdjustment(options.rowVirtualizer, autoFollowRef, postSendFollowTrackingRef);
+  useAutoFollowTracking(
+    scrollElementRef,
+    autoFollowRef,
+    postSendFollowTrackingRef,
+    setPostSendFollowTracking,
+  );
   useOlderHistoryLoading({ ...options, olderLoadPendingRef, prependAnchorRef, scrollElementRef });
   usePrependAnchorRestore({ ...options, prependAnchorRef, scrollElementRef });
   const { trailingSpacerPx } = useMessageListPostSendFocus({
@@ -56,11 +70,13 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
     loadingOlderHistory: options.loadingOlderHistory,
     onNormalLayoutChange: scheduleNormalFollow,
     postSendAnchorIndex: options.postSendAnchorIndex,
-    postSendHasVisibleAssistantText: options.postSendHasVisibleAssistantText,
+    postSendHasVisibleContent: options.postSendHasVisibleContent,
     postSendToken: options.postSendToken,
     rowVirtualizer: options.rowVirtualizer,
+    setPostSendFollowTracking,
     scrollElementRef,
   });
+  usePostSendScrollLock(scrollElementRef, postSendFollowTrackingRef);
   useScrollFrameCleanup(scrollFrameRef);
 
   return { scrollElementRef, trailingSpacerPx };
@@ -69,27 +85,40 @@ export function useMessageListScroll(options: UseMessageListScrollOptions) {
 function useVirtualizerSizeAdjustment(
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>,
   autoFollowRef: MutableRefObject<boolean>,
+  postSendFollowTrackingRef: MutableRefObject<PostSendFollowTrackingState>,
 ) {
   useLayoutEffect(() => {
     rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = () =>
-      shouldAdjustScrollPositionOnItemSizeChange(autoFollowRef.current);
+      shouldAdjustScrollPositionOnItemSizeChange(
+        autoFollowRef.current,
+        postSendFollowTrackingRef.current.mode,
+      );
 
     return () => {
       rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined;
     };
-  }, [autoFollowRef, rowVirtualizer]);
+  }, [autoFollowRef, postSendFollowTrackingRef, rowVirtualizer]);
 }
 
 function useAutoFollowTracking(
   scrollElementRef: MutableRefObject<HTMLDivElement | null>,
   autoFollowRef: MutableRefObject<boolean>,
+  postSendFollowTrackingRef: MutableRefObject<PostSendFollowTrackingState>,
+  setPostSendFollowTracking: (value: PostSendFollowTrackingState) => void,
 ) {
   const syncAutoFollow = useCallback(() => {
     const container = scrollElementRef.current;
-    if (container) {
-      autoFollowRef.current = isMessageListNearBottom(container);
+    if (!container) {
+      return;
     }
-  }, [autoFollowRef, scrollElementRef]);
+
+    const tracking = postSendFollowTrackingRef.current;
+    const nextAutoFollow = resolveMessageListAutoFollow(container, tracking);
+    autoFollowRef.current = nextAutoFollow;
+    if (!nextAutoFollow && tracking.mode !== 'idle') {
+      setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
+    }
+  }, [autoFollowRef, postSendFollowTrackingRef, scrollElementRef, setPostSendFollowTracking]);
 
   useEffect(() => {
     const container = scrollElementRef.current;
@@ -165,6 +194,32 @@ function useScrollFrameCleanup(scrollFrameRef: MutableRefObject<number | null>) 
       cancelScrollFrame(scrollFrameRef);
     };
   }, [scrollFrameRef]);
+}
+
+function usePostSendScrollLock(
+  scrollElementRef: MutableRefObject<HTMLDivElement | null>,
+  postSendFollowTrackingRef: MutableRefObject<PostSendFollowTrackingState>,
+) {
+  useEffect(() => {
+    const container = scrollElementRef.current;
+    if (!container) {
+      return;
+    }
+
+    const clampScroll = () => {
+      const lockedScrollTop = getPostSendLockedScrollTop(container, postSendFollowTrackingRef.current);
+      if (lockedScrollTop === null) {
+        return;
+      }
+
+      container.scrollTop = lockedScrollTop;
+    };
+
+    container.addEventListener('scroll', clampScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', clampScroll);
+    };
+  }, [postSendFollowTrackingRef, scrollElementRef]);
 }
 
 interface UseOlderHistoryLoadingOptions extends UseMessageListScrollOptions {

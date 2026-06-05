@@ -14,7 +14,8 @@ import {
   buildMessageListLayoutSignature,
   buildVisibleMessageTailSnapshot,
   getPostSendAnchorIndexFromVisibleMessages,
-  hasVisibleAssistantTextAfterIndex,
+  hasVisibleContentAfterIndex,
+  shouldReleasePostSendAnchor,
 } from './messageListScroll';
 import { filterCommittedMessagesForDisplay } from './messageVisibility';
 import { getOrderedStreamingRows, type StreamingMessageRow } from '@/lib/chat-view/streamingRows';
@@ -117,7 +118,7 @@ export const MessageList: FC<MessageListProps> = ({
     ...visibleCommittedMessages,
     ...streamingRows.map((row) => row.message),
   ];
-  const postSendHasVisibleAssistantText = hasVisibleAssistantTextAfterIndex(
+  const postSendHasVisibleContent = hasVisibleContentAfterIndex(
     visibleRowsForPostSendOverflow,
     postSendAnchorIndex,
   );
@@ -129,7 +130,7 @@ export const MessageList: FC<MessageListProps> = ({
     loadOlderHistory,
     loadingOlderHistory,
     postSendAnchorIndex,
-    postSendHasVisibleAssistantText,
+    postSendHasVisibleContent,
     postSendToken,
     visibleCommittedMessageCount: visibleCommittedMessages.length,
   });
@@ -156,12 +157,19 @@ export const MessageList: FC<MessageListProps> = ({
     });
     visibleMessageTailRef.current = buildVisibleMessageTailSnapshot(visibleCommittedMessages);
     if (anchorIndex === null) {
+      if (shouldReleasePostSendAnchor({
+        anchorIndex: postSendAnchorIndex,
+        loading,
+        messages: visibleCommittedMessages,
+      })) {
+        setPostSendAnchorIndex(null);
+      }
       return;
     }
 
     setPostSendAnchorIndex(anchorIndex);
     setPostSendToken((token) => token + 1);
-  }, [visibleCommittedMessages]);
+  }, [loading, postSendAnchorIndex, visibleCommittedMessages]);
 
   useEffect(() => {
     if (!latestStreamingThinkingId) {

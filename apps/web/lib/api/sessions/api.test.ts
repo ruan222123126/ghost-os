@@ -1,5 +1,6 @@
 import {
   deleteSession,
+  getFullSession,
   getSession,
   getSessionSources,
   getSessionSidebarPartitions,
@@ -125,6 +126,73 @@ describe('lib/api/sessions/api', () => {
     const session = await getSession('session-1');
 
     expect(session).toEqual(expected);
+  });
+
+  it('getFullSession follows pagination until the complete history is loaded', async () => {
+    const latestPage: SessionDetail = {
+      id: 'session-1',
+      title: 'Planning',
+      created_at: '2026-02-28T10:00:00Z',
+      updated_at: '2026-02-28T10:05:00Z',
+      message_count: 3,
+      page: {
+        limit: 2,
+        before: null,
+        start_index: 1,
+        end_index: 2,
+        has_more_before: true,
+        next_before: 1,
+      },
+      token_count: 128,
+      messages: [
+        { index: 1, role: 'assistant', text: 'hi' },
+        { index: 2, role: 'user', text: 'next' },
+      ],
+    };
+    const olderPage: SessionDetail = {
+      ...latestPage,
+      page: {
+        limit: 2,
+        before: 1,
+        start_index: 0,
+        end_index: 0,
+        has_more_before: false,
+        next_before: null,
+      },
+      messages: [
+        { index: 0, role: 'user', text: 'hello' },
+      ],
+    };
+
+    fetchMock
+      .mockResolvedValueOnce(mockJSONResponse({
+        status: 'success',
+        payload: latestPage,
+        error: '',
+      }))
+      .mockResolvedValueOnce(mockJSONResponse({
+        status: 'success',
+        payload: olderPage,
+        error: '',
+      }));
+
+    await expect(getFullSession('session-1', 2)).resolves.toEqual({
+      ...latestPage,
+      page: {
+        ...latestPage.page,
+        has_more_before: false,
+        next_before: null,
+        start_index: 0,
+        end_index: 2,
+      },
+      messages: [
+        { index: 0, role: 'user', text: 'hello' },
+        { index: 1, role: 'assistant', text: 'hi' },
+        { index: 2, role: 'user', text: 'next' },
+      ],
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/sessions/session-1?limit=2', expect.any(Object));
+    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/sessions/session-1?limit=2&before=1', expect.any(Object));
   });
 
   it('getSession ignores unknown fields added by newer bridge payloads', async () => {
@@ -265,3 +333,14 @@ describe('lib/api/sessions/api', () => {
     }));
   });
 });
+
+function mockJSONResponse(body: unknown) {
+  const raw = JSON.stringify(body);
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: async () => body,
+    text: async () => raw,
+  };
+}

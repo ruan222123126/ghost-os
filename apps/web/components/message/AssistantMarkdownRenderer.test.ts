@@ -67,4 +67,16 @@ describe('components/message/AssistantMarkdownRenderer', () => {
     expect(html).toContain('data-copy-text=\"console.log(1)\"');
     expect(html).toContain('data-variant=\"code\"');
   });
+
+  it('hides fenced code copy button while the reply is still streaming', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantMarkdownRenderer, {
+        content: '```ts\nconsole.log(1)\n```',
+        showCopyButton: false,
+      }),
+    );
+
+    expect(html).toContain('assistant-code-block');
+    expect(html).not.toContain('mock-copy-button');
+  });
 });

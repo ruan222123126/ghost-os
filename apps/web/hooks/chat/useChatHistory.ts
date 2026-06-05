@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { getSession } from '@/lib/api/sessions/api';
+import { getFullSession, getSession } from '@/lib/api/sessions/api';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -68,7 +68,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
   });
 
   const hydrateSessionHistory = useCallback(async (sessionId: string) => {
-    const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
+    const detail = await getFullSession(sessionId, HISTORY_PAGE_LIMIT);
     applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
     clearPendingQuestions();
     setCommittedMessages(mapSessionMessagesToChat(detail.id, detail.messages));
@@ -97,7 +97,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
   ]);
 
   const syncRecentHistory = useCallback(async (sessionId: string) => {
-    const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
+    const detail = await getFullSession(sessionId, HISTORY_PAGE_LIMIT);
     applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
     const latest = mapSessionMessagesToChat(detail.id, detail.messages);
     setCommittedMessages((previous) => {
@@ -148,6 +148,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     setHistoryLoading,
     setLoading,
     setNextHistoryBefore,
+    setStopPending,
     stopRecoveredRun,
   ]);
 

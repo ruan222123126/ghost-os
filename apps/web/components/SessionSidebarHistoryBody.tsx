@@ -5,12 +5,15 @@ import { type DragEvent, type FC, type RefObject, useMemo } from 'react';
 import {
   buildFlatSessionRows,
   buildPartitionSessionRows,
+  countSessionsInPartitionViews,
+  limitPartitionViewsBySessionCount,
 } from '@/components/SessionSidebarFlatList';
 import {
   SessionSidebarHistoryRowView,
   type DropTargetState,
   type SessionSidebarHistoryRow,
 } from '@/components/SessionSidebarHistoryPartitionSection';
+import { useSessionSidebarVisibleCount } from '@/hooks/useSessionSidebarVisibleCount';
 import type { ChatCopy } from '@/lib/i18n/messages/chat';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 import type { SessionMetadata } from '@/lib/types';
@@ -18,6 +21,7 @@ import type { SessionMetadata } from '@/lib/types';
 interface SessionSidebarHistoryBodyProps {
   copy: ChatCopy;
   scrollElementRef: RefObject<HTMLDivElement>;
+  resetKey: string;
   loading: boolean;
   groupingEnabled: boolean;
   empty: boolean;
@@ -43,6 +47,7 @@ const SESSION_ROW_OVERSCAN = 10;
 export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   copy,
   scrollElementRef,
+  resetKey,
   loading,
   groupingEnabled,
   empty,
@@ -59,6 +64,24 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   onDropPartition,
   onDragEndSession,
 }) => {
+  const totalSessions = useMemo(() => {
+    if (!groupingEnabled) {
+      return flatSessions.length;
+    }
+    return countSessionsInPartitionViews(partitionViews);
+  }, [flatSessions.length, groupingEnabled, partitionViews]);
+  const visibleSessionCount = useSessionSidebarVisibleCount({
+    scrollElementRef,
+    totalSessions,
+    resetKey,
+  });
+  const visibleFlatSessions = useMemo(() => {
+    return flatSessions.slice(0, visibleSessionCount);
+  }, [flatSessions, visibleSessionCount]);
+  const visiblePartitionViews = useMemo(() => {
+    return limitPartitionViewsBySessionCount(partitionViews, visibleSessionCount);
+  }, [partitionViews, visibleSessionCount]);
+
   if (loading) {
     return (
       <div className="space-y-2">
@@ -77,7 +100,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     return (
       <SessionSidebarVirtualRows
         copy={copy}
-        rows={buildFlatSessionRows(flatSessions)}
+        rows={buildFlatSessionRows(visibleFlatSessions)}
         scrollElementRef={scrollElementRef}
         currentSessionId={currentSessionId}
         resolveSessionTitle={resolveSessionTitle}
@@ -93,7 +116,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   }
 
   const rows = buildPartitionSessionRows({
-    partitionViews,
+    partitionViews: visiblePartitionViews,
     draggingSessionID: dragState.draggingSessionID,
     dropTarget: dragState.dropTarget,
   });

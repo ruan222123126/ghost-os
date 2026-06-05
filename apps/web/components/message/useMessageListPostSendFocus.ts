@@ -3,12 +3,13 @@ import type { MutableRefObject } from 'react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import {
   computePostSendAnchorLayout,
+  type PostSendFollowTrackingState,
   resolvePostSendOverflowDecision,
 } from './messageListScroll';
 
 const POST_SEND_TOKEN_NONE = 0;
 
-type PostSendMode = 'idle' | 'anchoring' | 'waiting_overflow' | 'normal_follow';
+type PostSendMode = 'idle' | 'anchoring' | 'waiting_overflow';
 
 type PostSendState =
   | { mode: 'idle'; token: number }
@@ -32,10 +33,11 @@ interface UseMessageListPostSendFocusOptions {
   loadingOlderHistory: boolean;
   onNormalLayoutChange: () => void;
   postSendAnchorIndex?: number | null;
-  postSendHasVisibleAssistantText?: boolean;
+  postSendHasVisibleContent?: boolean;
   postSendToken?: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
+  setPostSendFollowTracking: (value: PostSendFollowTrackingState) => void;
 }
 
 export function useMessageListPostSendFocus(options: UseMessageListPostSendFocusOptions) {
@@ -45,13 +47,13 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     layoutSignature,
     loadingOlderHistory,
     onNormalLayoutChange,
-    postSendHasVisibleAssistantText,
+    postSendHasVisibleContent,
     rowVirtualizer,
+    setPostSendFollowTracking,
     scrollElementRef,
   } = options;
   const postSendRef = useRef<PostSendState>({ mode: 'idle', token: POST_SEND_TOKEN_NONE });
   const pendingAnchorRef = useRef<PendingPostSendAnchor | null>(null);
-  const pendingBottomScrollRef = useRef(false);
   const [trailingSpacerPx, setTrailingSpacerPx] = useState(0);
   const token = options.postSendToken ?? POST_SEND_TOKEN_NONE;
   const anchorIndex = options.postSendAnchorIndex ?? null;
@@ -63,13 +65,13 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       autoFollowRef,
       cancelScheduledScroll,
       pendingAnchorRef,
-      pendingBottomScrollRef,
       postSendRef,
       layoutSignature,
       loadingOlderHistory,
       onNormalLayoutChange,
-      postSendHasVisibleAssistantText,
+      postSendHasVisibleContent,
       rowVirtualizer,
+      setPostSendFollowTracking,
       scrollElementRef,
       setTrailingSpacerPx,
       token,
@@ -81,8 +83,9 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
     layoutSignature,
     loadingOlderHistory,
     onNormalLayoutChange,
-    postSendHasVisibleAssistantText,
+    postSendHasVisibleContent,
     rowVirtualizer,
+    setPostSendFollowTracking,
     scrollElementRef,
     token,
     trailingSpacerPx,
@@ -91,7 +94,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
   useLayoutEffect(() => {
     applyPendingPostSendScroll({
       pendingAnchorRef,
-      pendingBottomScrollRef,
       postSendRef,
       scrollElementRef,
       trailingSpacerPx,
@@ -104,7 +106,6 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
 interface PostSendStateMachineOptions extends UseMessageListPostSendFocusOptions {
   anchorIndex: number | null;
   pendingAnchorRef: MutableRefObject<PendingPostSendAnchor | null>;
-  pendingBottomScrollRef: MutableRefObject<boolean>;
   postSendRef: MutableRefObject<PostSendState>;
   setTrailingSpacerPx: (value: number) => void;
   token: number;
@@ -124,11 +125,14 @@ function runPostSendStateMachine(options: PostSendStateMachineOptions) {
 }
 
 function resetPostSendFocus(options: PostSendStateMachineOptions) {
+  const shouldResumeNormalFollow = options.postSendRef.current.mode === 'idle';
   options.postSendRef.current = { mode: 'idle', token: POST_SEND_TOKEN_NONE };
   options.pendingAnchorRef.current = null;
-  options.pendingBottomScrollRef.current = false;
+  options.setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
   options.setTrailingSpacerPx(0);
-  options.onNormalLayoutChange();
+  if (shouldResumeNormalFollow) {
+    options.onNormalLayoutChange();
+  }
 }
 
 function startPostSendAnchoring(options: PostSendStateMachineOptions) {
@@ -150,6 +154,10 @@ function startPostSendAnchoring(options: PostSendStateMachineOptions) {
     realContentHeightPx,
   });
   options.setTrailingSpacerPx(layout.trailingSpacerPx);
+  options.setPostSendFollowTracking({
+    mode: 'anchoring',
+    controlledScrollTopPx: layout.anchorScrollTopPx,
+  });
   options.pendingAnchorRef.current = {
     requiredSpacerPx: layout.trailingSpacerPx,
     scrollTopPx: layout.anchorScrollTopPx,
@@ -175,23 +183,39 @@ function continuePostSendFocus(options: PostSendStateMachineOptions) {
     autoFollow: options.autoFollowRef.current,
     baselineContentHeightPx: state.baselineContentHeightPx,
     containerHeightPx: container.clientHeight,
-    hasVisibleAssistantText: Boolean(options.postSendHasVisibleAssistantText),
+    hasVisibleContent: Boolean(options.postSendHasVisibleContent),
     realContentHeightPx: options.rowVirtualizer.getTotalSize(),
   });
   if (!decision.overflowed) {
+    options.setPostSendFollowTracking({
+      mode: 'waiting_overflow',
+      controlledScrollTopPx: state.anchorStartPx,
+    });
+    options.pendingAnchorRef.current = {
+      requiredSpacerPx: decision.trailingSpacerPx,
+      scrollTopPx: state.anchorStartPx,
+      token: options.token,
+    };
+    options.setTrailingSpacerPx(decision.trailingSpacerPx);
     options.postSendRef.current = { ...state, mode: 'waiting_overflow' };
     return;
   }
 
-  options.pendingAnchorRef.current = null;
-  options.pendingBottomScrollRef.current = decision.shouldScrollToBottom;
-  options.setTrailingSpacerPx(decision.trailingSpacerPx ?? 0);
-  options.postSendRef.current = { ...state, mode: 'normal_follow' };
+  options.setPostSendFollowTracking({
+    mode: 'waiting_overflow',
+    controlledScrollTopPx: state.anchorStartPx,
+  });
+  options.pendingAnchorRef.current = {
+    requiredSpacerPx: 0,
+    scrollTopPx: state.anchorStartPx,
+    token: options.token,
+  };
+  options.setTrailingSpacerPx(0);
+  options.postSendRef.current = { ...state, mode: 'waiting_overflow' };
 }
 
 function applyPendingPostSendScroll(options: {
   pendingAnchorRef: MutableRefObject<PendingPostSendAnchor | null>;
-  pendingBottomScrollRef: MutableRefObject<boolean>;
   postSendRef: MutableRefObject<PostSendState>;
   scrollElementRef: MutableRefObject<HTMLDivElement | null>;
   trailingSpacerPx: number;
@@ -202,7 +226,6 @@ function applyPendingPostSendScroll(options: {
   }
 
   applyPendingAnchorScroll(options, container);
-  applyPendingBottomScroll(options, container);
 }
 
 function applyPendingAnchorScroll(
@@ -223,21 +246,6 @@ function applyPendingAnchorScroll(
 
   container.scrollTop = pending.scrollTopPx;
   options.pendingAnchorRef.current = null;
-}
-
-function applyPendingBottomScroll(
-  options: {
-    pendingBottomScrollRef: MutableRefObject<boolean>;
-    trailingSpacerPx: number;
-  },
-  container: HTMLDivElement,
-) {
-  if (!options.pendingBottomScrollRef.current || options.trailingSpacerPx !== 0) {
-    return;
-  }
-
-  container.scrollTop = container.scrollHeight;
-  options.pendingBottomScrollRef.current = false;
 }
 
 function getPostSendAnchor(options: PostSendStateMachineOptions) {

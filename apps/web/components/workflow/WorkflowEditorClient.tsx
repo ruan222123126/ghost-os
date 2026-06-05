@@ -1,5 +1,6 @@
 'use client';
 
+import { GlobalLoadingOverlay } from '@/components/GlobalLoadingOverlay';
 import { WorkflowCanvasWorkbench } from '@/components/workflow/WorkflowCanvasWorkbench';
 import { useWorkflowEditorController } from '@/hooks/workflow/useWorkflowEditorController';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -18,7 +19,7 @@ export function WorkflowEditorClient(props: WorkflowEditorClientProps) {
   });
 
   if (controller.phase === 'loading') {
-    return <main className="workflow-loading">{copy.workflow.loadingTask}</main>;
+    return <GlobalLoadingOverlay />;
   }
 
   return (

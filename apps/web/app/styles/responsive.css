@@ -87,8 +87,22 @@
     min-width: 0;
   }
 
+  .composer {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+
+  .composer-shell {
+    padding: 10px 12px;
+    border-radius: 28px;
+  }
+
+  .composer-row {
+    gap: 6px;
+  }
+
   .composer-model-trigger {
-    max-width: min(100%, calc(100vw - 132px));
+    max-width: min(42vw, 180px);
   }
 
   .composer-model-panel {

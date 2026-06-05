@@ -9,6 +9,7 @@ import { MessageRow } from './MessageRow';
 type AssistantMarkdownMockProps = {
   content: string;
   enabled?: boolean;
+  showCopyButton?: boolean;
 };
 
 const assistantMarkdownMock = jest.fn((_props: AssistantMarkdownMockProps) => null);
@@ -86,6 +87,31 @@ describe('components/message/MessageRow', () => {
     expect(assistantMarkdownMock).toHaveBeenCalledWith(expect.objectContaining({
       content: '# title',
       enabled: false,
+      showCopyButton: true,
+    }));
+  });
+
+  it('hides assistant copy actions while the reply is still streaming', () => {
+    const message: AssistantChatMessage = {
+      id: 'assistant-streaming',
+      kind: 'assistant',
+      content: 'partial answer',
+      inProgress: true,
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      toolCallCompactOutputEnabled: false,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+    });
+
+    expect(html).not.toContain('copy-button');
+    expect(assistantMarkdownMock).toHaveBeenCalledWith(expect.objectContaining({
+      content: 'partial answer',
+      showCopyButton: false,
     }));
   });
 

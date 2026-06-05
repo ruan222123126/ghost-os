@@ -2,6 +2,8 @@ import {
   buildFlatSessionList,
   buildFlatSessionRows,
   buildPartitionSessionRows,
+  countSessionsInPartitionViews,
+  limitPartitionViewsBySessionCount,
 } from './SessionSidebarFlatList';
 import type { SessionMetadata } from '@/lib/types';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
@@ -44,6 +46,38 @@ describe('components/SessionSidebar', () => {
       'partition:work',
       'partition:work:session:latest-1111',
       'partition:work:session:middle-2222',
+    ]);
+  });
+
+  it('limits grouped history to the requested number of sessions', () => {
+    const partitions: SessionPartitionView[] = [
+      {
+        id: 'workflow',
+        name: 'Workflow',
+        sessions: [
+          createSession('workflow-1', '2026-04-12T12:00:00Z'),
+          createSession('workflow-2', '2026-04-11T08:00:00Z'),
+        ],
+      },
+      {
+        id: 'task',
+        name: 'Task',
+        sessions: [
+          createSession('task-1', '2026-04-10T08:00:00Z'),
+        ],
+      },
+    ];
+
+    expect(countSessionsInPartitionViews(partitions)).toBe(3);
+    expect(limitPartitionViewsBySessionCount(partitions, 2)).toEqual([
+      {
+        id: 'workflow',
+        name: 'Workflow',
+        sessions: [
+          createSession('workflow-1', '2026-04-12T12:00:00Z'),
+          createSession('workflow-2', '2026-04-11T08:00:00Z'),
+        ],
+      },
     ]);
   });
 });

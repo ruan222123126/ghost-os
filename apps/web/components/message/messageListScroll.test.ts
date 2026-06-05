@@ -3,12 +3,14 @@ import {
   buildVisibleMessageTailSnapshot,
   buildMessageListLayoutSignature,
   computePostSendAnchorLayout,
+  getPostSendLockedScrollTop,
   getPostSendAnchorIndexFromVisibleMessages,
+  hasVisibleContentAfterIndex,
   hasPostSendRealContentOverflow,
-  hasVisibleAssistantTextAfterIndex,
   isMessageListNearBottom,
   isPostSendCommittedUserMessageId,
   MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX,
+  resolveMessageListAutoFollow,
   resolvePostSendOverflowDecision,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
@@ -34,7 +36,7 @@ function buildToolMessage(overrides?: Partial<ToolChatMessage>): ToolChatMessage
 
 function resolveOverflow(overrides?: {
   autoFollow?: boolean;
-  hasVisibleAssistantText?: boolean;
+  hasVisibleContent?: boolean;
   realContentHeightPx?: number;
 }) {
   return resolvePostSendOverflowDecision({
@@ -42,7 +44,7 @@ function resolveOverflow(overrides?: {
     autoFollow: overrides?.autoFollow ?? true,
     baselineContentHeightPx: 520,
     containerHeightPx: 200,
-    hasVisibleAssistantText: overrides?.hasVisibleAssistantText ?? true,
+    hasVisibleContent: overrides?.hasVisibleContent ?? true,
     realContentHeightPx: overrides?.realContentHeightPx ?? 560,
   });
 }
@@ -62,6 +64,48 @@ describe('components/message/messageListScroll', () => {
       clientHeight: 400,
       scrollTop: 1000 - 400 - MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX,
     })).toBe(true);
+  });
+
+  it('keeps auto-follow while the post-send anchor lock is still controlling scroll', () => {
+    expect(resolveMessageListAutoFollow(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 540,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+      },
+    )).toBe(true);
+  });
+
+  it('releases auto-follow once the user drags away from the post-send anchor lock', () => {
+    expect(resolveMessageListAutoFollow(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 500,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+      },
+    )).toBe(false);
+  });
+
+  it('stops clamping once the post-send lock is cleared', () => {
+    expect(getPostSendLockedScrollTop(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 560,
+      },
+      {
+        mode: 'idle',
+        controlledScrollTopPx: null,
+      },
+    )).toBeNull();
   });
 
   it('changes the layout signature when streaming text or tool state changes', () => {
@@ -185,6 +229,8 @@ describe('components/message/messageListScroll', () => {
   it('disables virtualizer scroll adjustment when auto-follow is off', () => {
     expect(shouldAdjustScrollPositionOnItemSizeChange(false)).toBe(false);
     expect(shouldAdjustScrollPositionOnItemSizeChange(true)).toBe(true);
+    expect(shouldAdjustScrollPositionOnItemSizeChange(true, 'anchoring')).toBe(false);
+    expect(shouldAdjustScrollPositionOnItemSizeChange(true, 'waiting_overflow')).toBe(false);
   });
 
   it('detects only appended local user messages as post-send anchors', () => {
@@ -241,10 +287,10 @@ describe('components/message/messageListScroll', () => {
   });
 
   it('waits for visible assistant text before treating real content growth as overflow', () => {
-    expect(resolveOverflow({ hasVisibleAssistantText: false })).toEqual({
+    expect(resolveOverflow({ hasVisibleContent: false })).toEqual({
       overflowed: false,
       shouldScrollToBottom: false,
-      trailingSpacerPx: null,
+      trailingSpacerPx: 0,
     });
     expect(resolveOverflow()).toEqual({
       overflowed: true,
@@ -253,7 +299,7 @@ describe('components/message/messageListScroll', () => {
     });
   });
 
-  it('removes spacer without forcing bottom follow after manual upward scroll', () => {
+  it('reports overflow without forcing bottom follow after manual upward scroll', () => {
     expect(resolveOverflow({ autoFollow: false })).toEqual({
       overflowed: true,
       shouldScrollToBottom: false,
@@ -261,22 +307,98 @@ describe('components/message/messageListScroll', () => {
     });
   });
 
-  it('keeps spacer when the failed turn has no visible assistant text', () => {
-    expect(resolveOverflow({
-      hasVisibleAssistantText: false,
-      realContentHeightPx: 520,
-    }).trailingSpacerPx).toBeNull();
+  it('can disable bottom follow entirely even when the content overflows', () => {
+    expect(resolveOverflow({ autoFollow: false })).toMatchObject({
+      overflowed: true,
+      shouldScrollToBottom: false,
+    });
   });
 
-  it('finds visible assistant text after the post-send anchor', () => {
+  it('keeps spacer when the failed turn has no visible assistant text', () => {
+    expect(resolveOverflow({
+      hasVisibleContent: false,
+      realContentHeightPx: 520,
+    }).trailingSpacerPx).toBe(0);
+  });
+
+  it('finds visible content after the post-send anchor', () => {
     const messages: ChatMessage[] = [
       { id: 'local:user:trace-1', kind: 'user', content: 'question' },
       { id: 'thinking-1', kind: 'thinking', content: 'thinking' },
       { id: 'assistant-1', kind: 'assistant', content: 'answer' },
     ];
 
-    expect(hasVisibleAssistantTextAfterIndex(messages, 0)).toBe(true);
-    expect(hasVisibleAssistantTextAfterIndex(messages, 2)).toBe(false);
+    expect(hasVisibleContentAfterIndex(messages, 0)).toBe(true);
+    expect(hasVisibleContentAfterIndex(messages, 2)).toBe(false);
+  });
+
+  it('treats streamed tool cards as visible post-send content', () => {
+    const messages: ChatMessage[] = [
+      { id: 'local:user:trace-1', kind: 'user', content: 'question' },
+      {
+        id: 'tool-1',
+        kind: 'tool',
+        content: '',
+        toolName: 'bash_exec',
+        toolInput: 'ls',
+      },
+    ];
+
+    expect(hasVisibleContentAfterIndex(messages, 0)).toBe(true);
+  });
+
+  it('shrinks the temporary spacer as real content fills the anchored viewport', () => {
+    expect(resolvePostSendOverflowDecision({
+      anchorStartPx: 300,
+      autoFollow: true,
+      baselineContentHeightPx: 500,
+      containerHeightPx: 260,
+      hasVisibleContent: true,
+      realContentHeightPx: 540,
+    })).toEqual({
+      overflowed: false,
+      shouldScrollToBottom: false,
+      trailingSpacerPx: 20,
+    });
+
+    expect(resolvePostSendOverflowDecision({
+      anchorStartPx: 300,
+      autoFollow: true,
+      baselineContentHeightPx: 520,
+      containerHeightPx: 240,
+      hasVisibleContent: true,
+      realContentHeightPx: 541,
+    })).toEqual({
+      overflowed: true,
+      shouldScrollToBottom: true,
+      trailingSpacerPx: 0,
+    });
+  });
+
+  it('only clamps downward scroll into the temporary post-send spacer', () => {
+    expect(getPostSendLockedScrollTop(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 560,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+      },
+    )).toBe(540);
+
+    expect(getPostSendLockedScrollTop(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 500,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+      },
+    )).toBeNull();
   });
 
   it('uses anchor-relative real content overflow instead of total page overflow', () => {

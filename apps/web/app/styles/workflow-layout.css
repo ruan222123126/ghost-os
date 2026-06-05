@@ -156,13 +156,6 @@
   }
 }
 
-.workflow-loading {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background: #fafafa;
-}
-
 @media (max-width: 1080px) {
   .workflow-arch-root {
     height: auto;

@@ -1,6 +1,7 @@
 import type {
   SessionDetail,
   SessionMetadata,
+  SessionMessage,
   SessionSourceResolution,
   SessionSidebarPartitionState,
 } from '@/lib/types';
@@ -28,6 +29,26 @@ export async function getSessionSources(): Promise<SessionSourceResolution> {
 
 export async function getSession(id: string, options: GetSessionOptions = {}): Promise<SessionDetail> {
   return requestJSON(buildSessionPath(id, options), {}, parseSessionDetail);
+}
+
+export async function getFullSession(id: string, pageLimit = 100): Promise<SessionDetail> {
+  const latest = await getSession(id, { limit: pageLimit });
+  if (!latest.page.has_more_before || latest.page.next_before === null) {
+    return latest;
+  }
+
+  const messages = await collectFullSessionMessages(id, latest, pageLimit);
+  return {
+    ...latest,
+    messages,
+    page: {
+      ...latest.page,
+      has_more_before: false,
+      next_before: null,
+      start_index: messages[0]?.index ?? latest.page.start_index,
+      end_index: messages.at(-1)?.index ?? latest.page.end_index,
+    },
+  };
 }
 
 export async function deleteSession(id: string): Promise<void> {
@@ -64,4 +85,23 @@ function buildSessionPath(id: string, options: GetSessionOptions): string {
 
   const suffix = query.size > 0 ? `?${query.toString()}` : '';
   return `/api/sessions/${encodeURIComponent(id)}${suffix}`;
+}
+
+async function collectFullSessionMessages(
+  id: string,
+  latest: SessionDetail,
+  pageLimit: number,
+): Promise<SessionMessage[]> {
+  let messages = [...latest.messages];
+  let hasMoreBefore = latest.page.has_more_before;
+  let nextBefore = latest.page.next_before ?? null;
+
+  while (hasMoreBefore && nextBefore !== null) {
+    const page = await getSession(id, { before: nextBefore, limit: pageLimit });
+    messages = [...page.messages, ...messages];
+    hasMoreBefore = page.page.has_more_before;
+    nextBefore = page.page.next_before ?? null;
+  }
+
+  return messages;
 }

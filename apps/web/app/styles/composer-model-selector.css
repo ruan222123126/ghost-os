@@ -6,22 +6,23 @@
 
   position: relative;
   min-width: 0;
+  max-width: min(280px, calc(100vw - 180px));
 }
 
 .composer-model-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
-  max-width: min(280px, calc(100vw - 180px));
-  padding: 6px 10px;
+  max-width: 100%;
+  padding: 8px 12px;
   border: none;
   outline: none;
-  border-radius: 999px;
+  border-radius: 18px;
   background: transparent;
-  color: rgb(115 115 115);
-  font-size: 12px;
-  font-weight: 600;
+  color: rgb(55 65 81);
+  font-size: 14px;
+  font-weight: 500;
   text-align: left;
   transition:
     color 160ms ease,
@@ -31,17 +32,20 @@
 
 .composer-model-trigger:hover:not(:disabled),
 .composer-model-trigger.is-open {
-  background: rgb(250 250 250);
-  color: rgb(23 23 23);
+  background: rgb(243 244 246 / 0.84);
+  color: rgb(17 24 39);
 }
 
 .composer-model-trigger:disabled {
-  opacity: 0.4;
+  opacity: 0.46;
   cursor: not-allowed;
 }
 
 .composer-model-trigger-copy {
+  display: flex;
+  align-items: center;
   min-width: 0;
+  min-height: 22px;
 }
 
 .composer-model-trigger-model {
@@ -49,17 +53,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: inherit;
+  font-size: 15px;
+  line-height: 1.35;
+  padding-bottom: 1px;
 }
 
 .composer-model-trigger-chevron {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   margin-top: -2px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
+  border-right: 1.8px solid currentColor;
+  border-bottom: 1.8px solid currentColor;
   transform: rotate(45deg);
   transition: transform 180ms ease;
   flex-shrink: 0;
+  opacity: 0.72;
 }
 
 .composer-model-trigger.is-open .composer-model-trigger-chevron {
@@ -69,19 +78,19 @@
 
 .composer-model-panel {
   position: absolute;
-  left: 0;
+  right: 0;
   bottom: calc(100% + 12px);
   width: min(
     var(--composer-model-panel-width),
     calc(100vw - var(--composer-model-panel-viewport-gutter))
   );
-  border: 1px solid rgb(245 245 245);
-  border-radius: 20px;
+  border: 1px solid rgb(243 244 246);
+  border-radius: 18px;
   background: rgb(255 255 255 / 0.98);
-  box-shadow: 0 24px 60px rgb(23 23 23 / 0.14);
+  box-shadow: 0 20px 48px rgb(15 23 42 / 0.14);
   overflow: hidden;
-  transform-origin: bottom left;
-  transform: translateY(16px) scale(0.9);
+  transform-origin: bottom right;
+  transform: translateY(12px) scale(0.96);
   opacity: 0;
   pointer-events: none;
   transition:
@@ -100,7 +109,7 @@
   gap: 12px;
   max-height: min(340px, 48vh);
   min-width: 0;
-  padding: 6px;
+  padding: 8px;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -120,10 +129,10 @@
   gap: 8px;
   min-width: 0;
   padding: 0 4px;
-  color: rgb(163 163 163);
+  color: rgb(148 163 184);
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -147,12 +156,12 @@
   gap: 12px;
   width: 100%;
   min-width: 0;
-  padding: 8px 16px;
+  padding: 10px 14px;
   border: none;
   outline: none;
   border-radius: 12px;
   background: transparent;
-  color: rgb(115 115 115);
+  color: rgb(75 85 99);
   text-align: left;
   transition:
     background-color 160ms ease,
@@ -162,8 +171,8 @@
 
 .composer-model-option:hover:not(:disabled),
 .composer-model-option.is-active {
-  background: rgb(245 245 245);
-  color: rgb(23 23 23);
+  background: rgb(243 244 246);
+  color: rgb(17 24 39);
 }
 
 .composer-model-option.is-active {

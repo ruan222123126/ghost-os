@@ -118,4 +118,24 @@ describe('lib/chat-view/streamingRows', () => {
       toolName: 'bash_exec',
     });
   });
+
+  it('marks streaming assistant rows as in progress', () => {
+    const rows = getOrderedStreamingRows({
+      pendingQuestions: [],
+      streamingAssistantSegments: [buildAssistantSegment('assistant-segment-1', 'partial answer')],
+      streamingThinkingSegments: [],
+      streamingItemOrder: ['assistant:assistant-segment-1'],
+      streamingTools: [],
+    });
+
+    expect(rows).toMatchObject([
+      {
+        message: {
+          kind: 'assistant',
+          content: 'partial answer',
+          inProgress: true,
+        },
+      },
+    ]);
+  });
 });

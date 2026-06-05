@@ -145,7 +145,7 @@ function mapStreamingOrderToRow(
 function buildStreamingAssistantRow(segment: StreamingAssistantSegment): StreamingMessageRow {
   return {
     key: segment.id,
-    message: buildAssistantMessage(segment.content, segment.id),
+    message: buildAssistantMessage(segment.content, segment.id, true),
   };
 }
 

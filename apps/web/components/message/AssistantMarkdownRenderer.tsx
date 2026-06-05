@@ -11,6 +11,7 @@ import { MessageCopyButton } from './MessageCopyButton';
 
 interface AssistantMarkdownRendererProps {
   content: string;
+  showCopyButton?: boolean;
 }
 
 interface CodeBlockData {
@@ -37,36 +38,41 @@ const MARKDOWN_COMPONENTS: Components = {
       {children}
     </code>
   ),
-  pre: ({ children, ...props }) => {
-    const block = extractCodeBlockData(children);
-    if (!block) {
-      return <pre {...props}>{children}</pre>;
-    }
-
-    const language = extractCodeLanguage(block.className);
-    const languageLabel = formatCodeLanguageLabel(language);
-    const codeContent = trimSingleTrailingLineBreak(block.content);
-    return (
-      <div className="assistant-code-block">
-        <div className="assistant-code-header">
-          <span className="assistant-code-language">{languageLabel}</span>
-          <MessageCopyButton text={codeContent} variant="code" />
-        </div>
-        <pre>
-          <code className={block.className}>{codeContent}</code>
-        </pre>
-      </div>
-    );
-  },
 };
 
 export const AssistantMarkdownRenderer: FC<AssistantMarkdownRendererProps> = ({
   content,
+  showCopyButton = true,
 }) => {
+  const components: Components = {
+    ...MARKDOWN_COMPONENTS,
+    pre: ({ children, ...props }) => {
+      const block = extractCodeBlockData(children);
+      if (!block) {
+        return <pre {...props}>{children}</pre>;
+      }
+
+      const language = extractCodeLanguage(block.className);
+      const languageLabel = formatCodeLanguageLabel(language);
+      const codeContent = trimSingleTrailingLineBreak(block.content);
+      return (
+        <div className="assistant-code-block">
+          <div className="assistant-code-header">
+            <span className="assistant-code-language">{languageLabel}</span>
+            {showCopyButton ? <MessageCopyButton text={codeContent} variant="code" /> : null}
+          </div>
+          <pre>
+            <code className={block.className}>{codeContent}</code>
+          </pre>
+        </div>
+      );
+    },
+  };
+
   return (
     <ReactMarkdown
       remarkPlugins={MARKDOWN_PLUGINS}
-      components={MARKDOWN_COMPONENTS}
+      components={components}
     >
       {content}
     </ReactMarkdown>

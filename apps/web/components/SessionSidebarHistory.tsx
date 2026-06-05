@@ -268,6 +268,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       <SessionSidebarHistoryBody
         copy={copy.chat}
         scrollElementRef={scrollElementRef}
+        resetKey={`${groupingEnabled ? 'grouped' : 'flat'}:${props.searchQuery}`}
         loading={showBlockingLoading}
         groupingEnabled={groupingEnabled}
         empty={groupingEnabled ? visiblePartitionViews.length === 0 : flatSessions.length === 0}

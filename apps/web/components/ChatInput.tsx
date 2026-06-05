@@ -92,7 +92,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       disabled={disabled}
       ariaLabel={copy.chat.composerMessageInputAria}
       placeholder={loading ? copy.chat.composerThinkingPlaceholder : copy.chat.composerInputPlaceholder}
-      rows={3}
+      rows={1}
       preview={<ComposerImageStrip images={pendingImages} onRemove={handleRemoveImage} />}
       hint={buildHint(copy, imageError, pendingImages)}
       toolbar={onSelectModel ? (

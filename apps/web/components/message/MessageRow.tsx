@@ -98,12 +98,17 @@ function useUserMessageOverflow(
   return { collapsed, expanded, overflowing, setExpanded };
 }
 
+function shouldShowAssistantCopyButton(message: AssistantChatMessage): boolean {
+  return Boolean(message.content) && !message.inProgress;
+}
+
 const AssistantMessageRow: FC<{
   message: AssistantChatMessage;
   assistantMarkdownEnabled: boolean;
   hasTrailingTool?: boolean;
 }> = ({ message, assistantMarkdownEnabled, hasTrailingTool = false }) => {
   const { copy } = useWebLocale();
+  const showCopyButton = shouldShowAssistantCopyButton(message);
   const assistantFrameClassName = [
     'message-assistant-frame',
     hasTrailingTool ? 'has-trailing-tool' : '',
@@ -126,9 +131,10 @@ const AssistantMessageRow: FC<{
             <AssistantMarkdownContent
               content={message.content}
               enabled={assistantMarkdownEnabled}
+              showCopyButton={showCopyButton}
             />
           </div>
-          {message.content ? (
+          {showCopyButton ? (
             <div className={actionClassName}>
               <MessageCopyButton text={message.content} />
             </div>

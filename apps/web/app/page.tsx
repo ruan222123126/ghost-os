@@ -8,9 +8,11 @@ import { ChatEmptyHero } from '@/components/ChatEmptyHero';
 import { ChatSessionNotch } from '@/components/ChatSessionNotch';
 import { ChatInput } from '@/components/ChatInput';
 import type { ConfigPanelProps } from '@/components/ConfigPanel';
+import { GlobalLoadingOverlay } from '@/components/GlobalLoadingOverlay';
 import { MessageList } from '@/components/message/MessageList';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { useHomePageController } from '@/hooks/useHomePageController';
+import { useInitialLoadingOverlay } from '@/hooks/useInitialLoadingOverlay';
 import { useSessionSidebarAliases } from '@/hooks/useSessionSidebarAliases';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { ignorePromise } from '@/lib/errors';
@@ -26,6 +28,9 @@ const ConfigPanel = nextDynamic<ConfigPanelProps>(
 const HomePage: FC = () => {
   const { copy } = useWebLocale();
   const controller = useHomePageController();
+  const showBootLoading = useInitialLoadingOverlay({
+    ready: !controller.configLoading && !controller.modelOptionsLoading && !controller.sessionsLoading,
+  });
   const resolveDefaultSessionTitleByID = useCallback((sessionID: string) => {
     return copy.chat.sidebarSessionTitle(sessionID.trim().slice(0, 8));
   }, [copy.chat]);
@@ -70,6 +75,8 @@ const HomePage: FC = () => {
           onReload={controller.refreshConfig}
         />
       ) : null}
+
+      {showBootLoading ? <GlobalLoadingOverlay /> : null}
     </>
   );
 };

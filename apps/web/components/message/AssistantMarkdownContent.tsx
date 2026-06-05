@@ -6,6 +6,7 @@ import { shouldRenderAssistantMarkdown } from './assistantMarkdown';
 interface AssistantMarkdownContentProps {
   content: string;
   enabled?: boolean;
+  showCopyButton?: boolean;
 }
 
 const AssistantMarkdownRenderer = nextDynamic(
@@ -16,6 +17,7 @@ const AssistantMarkdownRenderer = nextDynamic(
 const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({
   content,
   enabled = true,
+  showCopyButton = true,
 }) => {
   const renderMode = useMemo(() => {
     if (!enabled) {
@@ -30,7 +32,7 @@ const AssistantMarkdownContentBase: FC<AssistantMarkdownContentProps> = ({
 
   return (
     <div className="message-content assistant-markdown">
-      <AssistantMarkdownRenderer content={content} />
+      <AssistantMarkdownRenderer content={content} showCopyButton={showCopyButton} />
     </div>
   );
 };

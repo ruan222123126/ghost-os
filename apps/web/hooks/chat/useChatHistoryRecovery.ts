@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { parseAgentErrorPayload } from '@/lib/api/agent/parser';
+import { getFullSession } from '@/lib/api/sessions/api';
 import { streamSessionEvents, toAgentStreamEvent } from '@/lib/api/sessions/events';
-import { getSession } from '@/lib/api/sessions/api';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
 import {
   createChatRuntimeStateFromDraft,
@@ -42,7 +42,7 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
     stopRecoveredRun();
     options.beginHistorySync();
     try {
-      const detail = await getSession(sessionId, { limit: RECOVERY_HISTORY_LIMIT });
+      const detail = await getFullSession(sessionId, RECOVERY_HISTORY_LIMIT);
       applyHistoryPage(detail, options.setHasOlderHistory, options.setNextHistoryBefore);
       options.hydrateTurnDraft(sessionId, detail.turn_draft ?? null);
       options.setChatError(

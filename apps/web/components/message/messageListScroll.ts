@@ -2,11 +2,17 @@ import type { ChatMessage } from '@/lib/types';
 import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 
 export const MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX = 120;
+const POST_SEND_SCROLL_LOCK_EPSILON_PX = 1;
 
 interface ScrollMetrics {
   scrollHeight: number;
   clientHeight: number;
   scrollTop: number;
+}
+
+export interface PostSendFollowTrackingState {
+  mode: 'idle' | 'anchoring' | 'waiting_overflow';
+  controlledScrollTopPx: number | null;
 }
 
 interface MessageListLayoutSignatureOptions {
@@ -32,13 +38,13 @@ interface PostSendAnchorLayoutOptions {
 interface PostSendOverflowDecisionOptions extends PostSendAnchorLayoutOptions {
   autoFollow: boolean;
   baselineContentHeightPx: number;
-  hasVisibleAssistantText: boolean;
+  hasVisibleContent: boolean;
 }
 
 export interface PostSendOverflowDecision {
   overflowed: boolean;
   shouldScrollToBottom: boolean;
-  trailingSpacerPx: number | null;
+  trailingSpacerPx: number;
 }
 
 const POST_SEND_USER_ID_PREFIX = 'local:user:';
@@ -48,8 +54,25 @@ export function isMessageListNearBottom(metrics: ScrollMetrics): boolean {
   return distance <= MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX;
 }
 
-export function shouldAdjustScrollPositionOnItemSizeChange(autoFollow: boolean): boolean {
-  return autoFollow;
+export function resolveMessageListAutoFollow(
+  metrics: ScrollMetrics,
+  tracking: PostSendFollowTrackingState,
+): boolean {
+  if (isPostSendFocusLocked(tracking)) {
+    if (tracking.controlledScrollTopPx === null) {
+      return false;
+    }
+    return Math.abs(metrics.scrollTop - tracking.controlledScrollTopPx) <= POST_SEND_SCROLL_LOCK_EPSILON_PX;
+  }
+
+  return isMessageListNearBottom(metrics);
+}
+
+export function shouldAdjustScrollPositionOnItemSizeChange(
+  autoFollow: boolean,
+  trackingMode: PostSendFollowTrackingState['mode'] = 'idle',
+): boolean {
+  return autoFollow && trackingMode === 'idle';
 }
 
 export function buildMessageListLayoutSignature(
@@ -102,6 +125,29 @@ export function isPostSendCommittedUserMessageId(messageId: string): boolean {
   return messageId.startsWith(POST_SEND_USER_ID_PREFIX);
 }
 
+export function shouldReleasePostSendAnchor(options: {
+  anchorIndex: number | null;
+  loading: boolean;
+  messages: ChatMessage[];
+}): boolean {
+  if (options.anchorIndex === null) {
+    return false;
+  }
+
+  const anchoredMessage = options.messages[options.anchorIndex];
+  if (!anchoredMessage || anchoredMessage.kind !== 'user') {
+    return true;
+  }
+  if (!isPostSendCommittedUserMessageId(anchoredMessage.id)) {
+    return true;
+  }
+  if (!options.loading) {
+    return true;
+  }
+
+  return options.messages[options.messages.length - 1]?.id !== anchoredMessage.id;
+}
+
 export function computePostSendAnchorLayout(
   options: PostSendAnchorLayoutOptions,
 ) {
@@ -115,6 +161,23 @@ export function computePostSendAnchorLayout(
   };
 }
 
+export function getPostSendLockedScrollTop(
+  metrics: ScrollMetrics,
+  tracking: PostSendFollowTrackingState,
+): number | null {
+  if (!isPostSendFocusLocked(tracking)) {
+    return null;
+  }
+  if (tracking.controlledScrollTopPx === null) {
+    return null;
+  }
+  if (metrics.scrollTop <= tracking.controlledScrollTopPx + POST_SEND_SCROLL_LOCK_EPSILON_PX) {
+    return null;
+  }
+
+  return tracking.controlledScrollTopPx;
+}
+
 export function hasPostSendRealContentOverflow(
   options: PostSendAnchorLayoutOptions,
 ): boolean {
@@ -124,14 +187,15 @@ export function hasPostSendRealContentOverflow(
 export function resolvePostSendOverflowDecision(
   options: PostSendOverflowDecisionOptions,
 ): PostSendOverflowDecision {
-  const overflowed = options.hasVisibleAssistantText
+  const overflowLayout = computePostSendAnchorLayout(options);
+  const overflowed = options.hasVisibleContent
     && options.realContentHeightPx > options.baselineContentHeightPx
     && hasPostSendRealContentOverflow(options);
   if (!overflowed) {
     return {
       overflowed,
       shouldScrollToBottom: false,
-      trailingSpacerPx: null,
+      trailingSpacerPx: overflowLayout.trailingSpacerPx,
     };
   }
 
@@ -142,7 +206,7 @@ export function resolvePostSendOverflowDecision(
   };
 }
 
-export function hasVisibleAssistantTextAfterIndex(
+export function hasVisibleContentAfterIndex(
   messages: ChatMessage[],
   anchorIndex: number | null,
 ): boolean {
@@ -152,7 +216,30 @@ export function hasVisibleAssistantTextAfterIndex(
 
   return messages
     .slice(anchorIndex + 1)
-    .some((message) => message.kind === 'assistant' && message.content.trim().length > 0);
+    .some(hasVisibleMessageContent);
+}
+
+function hasVisibleMessageContent(message: ChatMessage): boolean {
+  switch (message.kind) {
+    case 'user':
+      return false;
+    case 'tool':
+      return hasNonBlankText(message.content)
+        || hasNonBlankText(message.toolInput)
+        || hasNonBlankText(message.toolName)
+        || (message.images?.length ?? 0) > 0
+        || (message.attachments?.length ?? 0) > 0;
+    default:
+      return hasNonBlankText(message.content);
+  }
+}
+
+function hasNonBlankText(value: string | undefined): boolean {
+  return (value?.trim().length ?? 0) > 0;
+}
+
+function isPostSendFocusLocked(tracking: PostSendFollowTrackingState): boolean {
+  return tracking.mode === 'anchoring' || tracking.mode === 'waiting_overflow';
 }
 
 function buildThinkingPanelSignature(

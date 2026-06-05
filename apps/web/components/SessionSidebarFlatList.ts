@@ -40,6 +40,38 @@ export function buildPartitionSessionRows(input: {
   });
 }
 
+export function countSessionsInPartitionViews(
+  partitionViews: SessionPartitionView[],
+): number {
+  return partitionViews.reduce((count, partition) => {
+    return count + countSessionsInPartition(partition);
+  }, 0);
+}
+
+export function limitPartitionViewsBySessionCount(
+  partitionViews: SessionPartitionView[],
+  sessionLimit: number,
+): SessionPartitionView[] {
+  let remaining = Math.max(sessionLimit, 0);
+  const limited: SessionPartitionView[] = [];
+
+  for (const partition of partitionViews) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    const next = limitPartitionViewBySessionCount(partition, remaining);
+    if (!next.partition) {
+      continue;
+    }
+
+    limited.push(next.partition);
+    remaining = next.remaining;
+  }
+
+  return limited;
+}
+
 function rowsForPartition(
   partition: SessionPartitionView,
   options: {
@@ -117,5 +149,67 @@ function dropLineRow(partitionID: string, insertIndex: number): SessionSidebarHi
     kind: 'drop-line',
     key: `drop:${partitionID}:${insertIndex}`,
     partitionID,
+  };
+}
+
+function countSessionsInPartition(partition: SessionPartitionView): number {
+  if (partition.childPartitions?.length) {
+    return partition.childPartitions.reduce((count, child) => {
+      return count + countSessionsInPartition(child);
+    }, 0);
+  }
+  return partition.sessions.length;
+}
+
+function limitPartitionViewBySessionCount(
+  partition: SessionPartitionView,
+  remaining: number,
+): { partition: SessionPartitionView | null; remaining: number } {
+  if (remaining <= 0) {
+    return { partition: null, remaining: 0 };
+  }
+
+  if (partition.childPartitions?.length) {
+    const childPartitions: SessionPartitionView[] = [];
+    let nextRemaining = remaining;
+
+    for (const child of partition.childPartitions) {
+      if (nextRemaining <= 0) {
+        break;
+      }
+
+      const nextChild = limitPartitionViewBySessionCount(child, nextRemaining);
+      if (!nextChild.partition) {
+        continue;
+      }
+
+      childPartitions.push(nextChild.partition);
+      nextRemaining = nextChild.remaining;
+    }
+
+    if (childPartitions.length === 0) {
+      return { partition: null, remaining };
+    }
+
+    return {
+      partition: {
+        ...partition,
+        childPartitions,
+      },
+      remaining: nextRemaining,
+    };
+  }
+
+  const sessions = partition.sessions.slice(0, remaining);
+  if (sessions.length === 0) {
+    return { partition: null, remaining };
+  }
+
+  return {
+    partition: {
+      ...partition,
+      sessions,
+    },
+    remaining: remaining - sessions.length,
   };
 }
