@@ -20,6 +20,7 @@ type startedManualRun struct {
 	startedAt  time.Time
 	runSession RunSession
 	runningLog RunLog
+	activeRun  *activeRunHandle
 }
 
 func (s *TaskScheduler) StartNow(task ScheduledTask, traceID string) (RunLog, error) {
@@ -77,6 +78,11 @@ func (s *TaskScheduler) prepareManualRun(
 func (s *TaskScheduler) startPreparedManualRun(input preparedManualRun) (startedManualRun, error) {
 	startedAt := s.now().UTC()
 	runID := NewRunID()
+	activeRun, err := s.startActiveRun(input.task.ID, runID, input.reg)
+	if err != nil {
+		input.reg.finishRun()
+		return startedManualRun{}, err
+	}
 	runSession, err := s.appendRunningRunLog(
 		input.ctx,
 		input.task,
@@ -86,6 +92,7 @@ func (s *TaskScheduler) startPreparedManualRun(input preparedManualRun) (started
 		startedAt,
 	)
 	if err != nil {
+		s.discardActiveRun(activeRun)
 		input.reg.finishRun()
 		return startedManualRun{}, err
 	}
@@ -93,6 +100,7 @@ func (s *TaskScheduler) startPreparedManualRun(input preparedManualRun) (started
 		runID:      runID,
 		startedAt:  startedAt,
 		runSession: runSession,
+		activeRun:  activeRun,
 		runningLog: s.newRunLog(runLogInput{
 			task:            input.task,
 			runID:           runID,
@@ -130,7 +138,7 @@ func (s *TaskScheduler) executeStartedManualRun(
 		input.traceID,
 		started.runSession,
 	)
-	return s.persistFinishedRun(input.reg, finishRunInput{
+	run, err := s.persistFinishedRun(input.reg, finishRunInput{
 		task:        input.task,
 		runID:       started.runID,
 		traceID:     input.traceID,
@@ -140,4 +148,6 @@ func (s *TaskScheduler) executeStartedManualRun(
 		runSession:  started.runSession,
 		result:      result,
 	})
+	s.finishActiveRun(started.activeRun, run)
+	return run, err
 }

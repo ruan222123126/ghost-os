@@ -81,6 +81,15 @@ func (r *taskRegistration) executionTimeout() time.Duration {
 	return r.runTimeout
 }
 
+func (r *taskRegistration) currentRunCancel() context.CancelFunc {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.runCancel
+}
+
 func (r *taskRegistration) retire() (context.CancelFunc, context.CancelFunc) {
 	if r == nil {
 		return nil, nil

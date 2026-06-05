@@ -9,23 +9,24 @@ import (
 )
 
 const (
-	busActionAgentSend = bus.ActionAgentSend
-	busActionAgentStop = bus.ActionAgentStop
+	busActionAgentSend     = bus.ActionAgentSend
+	busActionAgentStop     = bus.ActionAgentStop
 	busActionHumanResponse = bus.ActionHumanResponse
-	busActionConfigGet = bus.ActionConfigGet
-	busActionConfigUpdate = bus.ActionConfigUpdate
-	busActionTaskCreate = bus.ActionTaskCreate
-	busActionTaskList = bus.ActionTaskList
-	busActionTaskGet = bus.ActionTaskGet
-	busActionTaskUpdate = bus.ActionTaskUpdate
-	busActionTaskRunNow = bus.ActionTaskRunNow
-	busActionTaskLogs = bus.ActionTaskLogs
-	busActionTaskDelete = bus.ActionTaskDelete
+	busActionConfigGet     = bus.ActionConfigGet
+	busActionConfigUpdate  = bus.ActionConfigUpdate
+	busActionTaskCreate    = bus.ActionTaskCreate
+	busActionTaskList      = bus.ActionTaskList
+	busActionTaskGet       = bus.ActionTaskGet
+	busActionTaskUpdate    = bus.ActionTaskUpdate
+	busActionTaskRunNow    = bus.ActionTaskRunNow
+	busActionTaskStop      = bus.ActionTaskStop
+	busActionTaskLogs      = bus.ActionTaskLogs
+	busActionTaskDelete    = bus.ActionTaskDelete
 )
 
 const (
 	busStatusSuccess = bus.StatusSuccess
-	busStatusError = bus.StatusError
+	busStatusError   = bus.StatusError
 )
 
 const busAssistantSessionEndSignal = bus.AssistantSessionEndSignal
@@ -109,10 +110,12 @@ type sessionDeleteResponse = api.SessionDeleteResponse
 type taskCreateParams = api.TaskCreateParams
 type taskUpdateParams = api.TaskUpdateParams
 type taskIDParams = api.TaskIDParams
+type taskStopParams = api.TaskStopParams
 type taskLogsParams = api.TaskLogsParams
 type taskPayload = api.TaskPayload
 type taskDeleteResponse = api.TaskDeleteResponse
 type taskRunPayload = api.TaskRunPayload
+type taskStopResponse = api.TaskStopResponse
 type taskRunLogPayload = api.TaskRunLogPayload
 type toolNameParams = api.ToolNameParams
 type toolUpdateRequest = api.ToolUpdateRequest
@@ -173,10 +176,12 @@ type SetActiveProviderRequest = setActiveProviderRequest
 type TaskCreateParams = taskCreateParams
 type TaskUpdateParams = taskUpdateParams
 type TaskIDParams = taskIDParams
+type TaskStopParams = taskStopParams
 type TaskLogsParams = taskLogsParams
 type TaskPayload = taskPayload
 type TaskDeleteResponse = taskDeleteResponse
 type TaskRunPayload = taskRunPayload
+type TaskStopResponse = taskStopResponse
 type TaskRunLogPayload = taskRunLogPayload
 type ToolNameParams = toolNameParams
 type ToolUpdateRequest = toolUpdateRequest

@@ -230,6 +230,21 @@ func TestTaskStoreRunLogRoundTripNodeResults(t *testing.T) {
 				FinishedAt:      finishedAt,
 				Preview:         " done ",
 				FinalText:       " final answer ",
+				SourceEvents: []RunCardSourceEvent{
+					{
+						ID:        " evt-1 ",
+						StepID:    " turn-0001-assistant ",
+						TraceID:   " trace-1 ",
+						SessionID: " session-1 ",
+						Turn:      1,
+						Type:      " completion_delta ",
+						Payload: map[string]any{
+							"kind": "text",
+							"text": "done",
+						},
+						At: startedAt,
+					},
+				},
 			},
 		},
 		NodeResults: []RunNodeResult{
@@ -275,6 +290,12 @@ func TestTaskStoreRunLogRoundTripNodeResults(t *testing.T) {
 	}
 	if card.CardID != "card-1" || card.NodeType != "agent" || card.FinalText != "final answer" {
 		t.Fatalf("unexpected run card payload: %#v", card)
+	}
+	if len(card.SourceEvents) != 1 {
+		t.Fatalf("unexpected run card source events: %#v", card.SourceEvents)
+	}
+	if card.SourceEvents[0].ID != "evt-1" || card.SourceEvents[0].Payload["text"] != "done" {
+		t.Fatalf("unexpected normalized source event payload: %#v", card.SourceEvents[0])
 	}
 	if node.CompletedSeq != 2 || node.BranchID != "branch-a" {
 		t.Fatalf("unexpected node ordering fields: %#v", node)

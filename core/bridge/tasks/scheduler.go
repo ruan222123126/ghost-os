@@ -60,6 +60,7 @@ type TaskScheduler struct {
 	lifecycleCtx    context.Context
 	lifecycleCancel context.CancelFunc
 	tasks           map[string]*taskRegistration
+	activeRuns      *activeRunRegistry
 }
 
 const defaultTaskExecutionTimeout = time.Duration(bridgeconfig.DefaultTaskExecutionTimeoutMS) * time.Millisecond
@@ -84,6 +85,7 @@ func NewTaskSchedulerWithTimeout(
 		traceID:          nextTraceID,
 		executionTimeout: normalizeExecutionTimeout(executionTimeout),
 		tasks:            make(map[string]*taskRegistration),
+		activeRuns:       newActiveRunRegistry(),
 	}
 	scheduler.execute = scheduler.executeWithExecutor
 	return scheduler

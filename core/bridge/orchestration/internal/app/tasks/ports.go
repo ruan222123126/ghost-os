@@ -1,6 +1,10 @@
 package tasks
 
-import bridgeTasks "ghost-os/bridge/tasks"
+import (
+	"context"
+
+	bridgeTasks "ghost-os/bridge/tasks"
+)
 
 type Store interface {
 	ListTasks() ([]bridgeTasks.ScheduledTask, error)
@@ -15,4 +19,5 @@ type Scheduler interface {
 	Unregister(taskID string) error
 	RunNow(task bridgeTasks.ScheduledTask, traceID string) (bridgeTasks.RunLog, error)
 	StartNow(task bridgeTasks.ScheduledTask, traceID string) (bridgeTasks.RunLog, error)
+	StopRun(ctx context.Context, taskID string, runID string) (bridgeTasks.RunLog, error)
 }

@@ -46,6 +46,12 @@ type TaskIDParams struct {
 	StartOnly bool   `json:"start_only,omitempty"`
 }
 
+type TaskStopParams struct {
+	ID    string `json:"id"`
+	RunID string `json:"run_id"`
+	Scope string `json:"scope,omitempty"`
+}
+
 type TaskLogsParams struct {
 	ID    string `json:"id"`
 	Limit int    `json:"limit,omitempty"`
@@ -62,6 +68,14 @@ type TaskDeleteResponse struct {
 type TaskRunPayload struct {
 	Task TaskPayload       `json:"task"`
 	Run  TaskRunLogPayload `json:"run"`
+}
+
+type TaskStopResponse struct {
+	Status  string             `json:"status"`
+	Message string             `json:"message"`
+	TaskID  string             `json:"task_id"`
+	RunID   string             `json:"run_id,omitempty"`
+	Run     *TaskRunLogPayload `json:"run,omitempty"`
 }
 
 type TaskRunLogPayload = bridgeTasks.RunLog

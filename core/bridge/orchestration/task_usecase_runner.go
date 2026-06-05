@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -32,6 +33,7 @@ type taskMutationScheduler interface {
 	Unregister(taskID string) error
 	RunNow(task ScheduledTask, traceID string) (TaskRunLog, error)
 	StartNow(task ScheduledTask, traceID string) (TaskRunLog, error)
+	StopRun(ctx context.Context, taskID string, runID string) (TaskRunLog, error)
 }
 
 type taskMutationRunner struct {
@@ -78,6 +80,10 @@ func ensureTaskMatchesScope(task ScheduledTask, scope string) error {
 
 func (r taskMutationRunner) RunNow(params taskIDParams, traceID string) (taskRunPayload, error) {
 	return r.inner().RunNow(params, traceID)
+}
+
+func (r taskMutationRunner) Stop(ctx context.Context, params taskStopParams) (taskStopResponse, error) {
+	return r.inner().Stop(ctx, params)
 }
 
 func (r taskMutationRunner) Delete(params taskIDParams) (taskDeleteResponse, error) {

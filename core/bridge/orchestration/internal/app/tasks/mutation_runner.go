@@ -1,8 +1,10 @@
 package tasks
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"ghost-os/bridge/orchestration/internal/contracts/api"
 	bridgeTasks "ghost-os/bridge/tasks"
@@ -90,6 +92,37 @@ func (r MutationRunner) startNow(task bridgeTasks.ScheduledTask, traceID string)
 		return api.TaskRunPayload{}, err
 	}
 	return api.TaskRunPayload{Task: BuildPayload(task), Run: BuildRunLogPayload(run)}, nil
+}
+
+func (r MutationRunner) Stop(ctx context.Context, params api.TaskStopParams) (api.TaskStopResponse, error) {
+	id, task, err := r.loadForMutation(params.ID, params.Scope)
+	if err != nil {
+		return api.TaskStopResponse{}, err
+	}
+	runID := strings.TrimSpace(params.RunID)
+	if runID == "" {
+		return api.TaskStopResponse{}, InvalidConfig("run_id is required")
+	}
+	run, err := r.Scheduler.StopRun(ctx, id, runID)
+	if errors.Is(err, bridgeTasks.ErrTaskRunNotRunning) {
+		return api.TaskStopResponse{
+			Status:  "not_running",
+			Message: "task run is not running",
+			TaskID:  task.ID,
+			RunID:   runID,
+		}, nil
+	}
+	if err != nil {
+		return api.TaskStopResponse{}, err
+	}
+	payload := BuildRunLogPayload(run)
+	return api.TaskStopResponse{
+		Status:  "stopped",
+		Message: "task run cancelled successfully",
+		TaskID:  task.ID,
+		RunID:   run.RunID,
+		Run:     &payload,
+	}, nil
 }
 
 func (r MutationRunner) loadForMutation(id string, scope string) (string, *bridgeTasks.ScheduledTask, error) {

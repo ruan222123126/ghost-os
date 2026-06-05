@@ -19,13 +19,18 @@ func (s *TaskScheduler) executeRun(
 
 	startedAt := s.now().UTC()
 	runID := NewRunID()
+	activeRun, err := s.startActiveRun(task.ID, runID, reg)
+	if err != nil {
+		return RunLog{}, err
+	}
 	runSession, err := s.appendRunningRunLog(ctx, task, scheduledAt, traceID, runID, startedAt)
 	if err != nil {
+		s.discardActiveRun(activeRun)
 		return RunLog{}, err
 	}
 	result := s.executeTaskRun(ctx, reg.executionTimeout(), task, traceID, runSession)
 	finishedAt := s.now().UTC()
-	return s.persistFinishedRun(reg, finishRunInput{
+	run, err := s.persistFinishedRun(reg, finishRunInput{
 		task:        task,
 		runID:       runID,
 		traceID:     traceID,
@@ -35,6 +40,8 @@ func (s *TaskScheduler) executeRun(
 		runSession:  runSession,
 		result:      result,
 	})
+	s.finishActiveRun(activeRun, run)
+	return run, err
 }
 
 func (s *TaskScheduler) appendRunningRunLog(
@@ -205,7 +212,7 @@ func (s *TaskScheduler) finalizeExecutionResult(
 	switch {
 	case errors.Is(ctx.Err(), context.Canceled):
 		result.Status = RunStatusCancelled
-		result.Error = "task execution cancelled"
+		result.Error = ""
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		result.Status = RunStatusError
 		result.Error = fmt.Sprintf(

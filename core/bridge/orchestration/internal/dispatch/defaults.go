@@ -24,6 +24,7 @@ type DefaultHandlers struct {
 	TaskGet       TypedHandler[api.TaskIDParams]
 	TaskUpdate    TypedHandler[api.TaskUpdateParams]
 	TaskRunNow    TypedHandler[api.TaskIDParams]
+	TaskStop      TypedHandler[api.TaskStopParams]
 	TaskLogs      TypedHandler[api.TaskLogsParams]
 	TaskDelete    TypedHandler[api.TaskIDParams]
 }
@@ -55,6 +56,7 @@ func registerTaskActions(router *Router, handlers DefaultHandlers) {
 	RegisterTyped(router, bus.ActionTaskGet, handlers.TaskGet)
 	RegisterTyped(router, bus.ActionTaskUpdate, handlers.TaskUpdate)
 	RegisterTyped(router, bus.ActionTaskRunNow, handlers.TaskRunNow)
+	RegisterTyped(router, bus.ActionTaskStop, handlers.TaskStop)
 	RegisterTyped(router, bus.ActionTaskLogs, handlers.TaskLogs)
 	RegisterTyped(router, bus.ActionTaskDelete, handlers.TaskDelete)
 }

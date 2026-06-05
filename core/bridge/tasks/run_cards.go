@@ -15,22 +15,23 @@ const (
 )
 
 type RunCard struct {
-	CardID          string    `json:"card_id"`
-	RunID           string    `json:"run_id,omitempty"`
-	Kind            string    `json:"kind"`
-	Title           string    `json:"title,omitempty"`
-	NodeID          string    `json:"node_id,omitempty"`
-	NodeType        string    `json:"node_type,omitempty"`
-	Round           int       `json:"round,omitempty"`
-	Iteration       int       `json:"iteration,omitempty"`
-	BranchID        string    `json:"branch_id,omitempty"`
-	SourceSessionID string    `json:"source_session_id,omitempty"`
-	StartedAt       time.Time `json:"started_at,omitempty"`
-	Status          string    `json:"status,omitempty"`
-	FinishedAt      time.Time `json:"finished_at,omitempty"`
-	Preview         string    `json:"preview,omitempty"`
-	Error           string    `json:"error,omitempty"`
-	FinalText       string    `json:"final_text,omitempty"`
+	CardID          string               `json:"card_id"`
+	RunID           string               `json:"run_id,omitempty"`
+	Kind            string               `json:"kind"`
+	Title           string               `json:"title,omitempty"`
+	NodeID          string               `json:"node_id,omitempty"`
+	NodeType        string               `json:"node_type,omitempty"`
+	Round           int                  `json:"round,omitempty"`
+	Iteration       int                  `json:"iteration,omitempty"`
+	BranchID        string               `json:"branch_id,omitempty"`
+	SourceSessionID string               `json:"source_session_id,omitempty"`
+	StartedAt       time.Time            `json:"started_at,omitempty"`
+	Status          string               `json:"status,omitempty"`
+	FinishedAt      time.Time            `json:"finished_at,omitempty"`
+	Preview         string               `json:"preview,omitempty"`
+	Error           string               `json:"error,omitempty"`
+	FinalText       string               `json:"final_text,omitempty"`
+	SourceEvents    []RunCardSourceEvent `json:"source_events,omitempty"`
 }
 
 func CloneRunCards(input []RunCard) []RunCard {
@@ -62,6 +63,10 @@ func normalizeRunCard(input RunCard) RunCard {
 		Preview:         strings.TrimSpace(input.Preview),
 		Error:           strings.TrimSpace(input.Error),
 		FinalText:       strings.TrimSpace(input.FinalText),
+		SourceEvents:    CloneRunCardSourceEvents(input.SourceEvents),
+	}
+	if out.Status == RunStatusCancelled {
+		out.Error = ""
 	}
 	if !out.StartedAt.IsZero() {
 		out.StartedAt = out.StartedAt.UTC()

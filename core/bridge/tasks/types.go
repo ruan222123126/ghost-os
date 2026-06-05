@@ -293,6 +293,9 @@ func NormalizeRunLog(run *RunLog) {
 	run.NodeResults = CloneRunNodeResults(run.NodeResults)
 	run.RunCards = CloneRunCards(run.RunCards)
 	run.Error = strings.TrimSpace(run.Error)
+	if run.Status == RunStatusCancelled {
+		run.Error = ""
+	}
 	if !run.ScheduledAt.IsZero() {
 		run.ScheduledAt = run.ScheduledAt.UTC()
 	}

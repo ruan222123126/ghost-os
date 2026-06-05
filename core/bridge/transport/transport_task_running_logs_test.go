@@ -15,6 +15,7 @@ type taskRunLogResponsePayload struct {
 	RunID           string `json:"run_id"`
 	Status          string `json:"status"`
 	SessionIDOutput string `json:"session_id_output"`
+	Error           string `json:"error,omitempty"`
 }
 
 func TestHandleTaskRunMakesRunningLogVisibleImmediately(t *testing.T) {

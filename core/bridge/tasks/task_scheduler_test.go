@@ -83,16 +83,16 @@ func TestTaskSchedulerStopCancelsRunningTaskUnit(t *testing.T) {
 	if runs[0].Status != RunStatusCancelled {
 		t.Fatalf("unexpected run status: got %q want %q", runs[0].Status, RunStatusCancelled)
 	}
-	if runs[0].Error != "task execution cancelled" {
-		t.Fatalf("unexpected cancellation error: got %q", runs[0].Error)
+	if runs[0].Error != "" {
+		t.Fatalf("cancelled run should not report error, got %q", runs[0].Error)
 	}
 
 	stored, err := store.LoadTask(task.ID)
 	if err != nil {
 		t.Fatalf("load task: %v", err)
 	}
-	if stored.LastError != "task execution cancelled" {
-		t.Fatalf("unexpected last_error: got %q", stored.LastError)
+	if stored.LastError != "" {
+		t.Fatalf("cancelled task should not update last_error, got %q", stored.LastError)
 	}
 }
 

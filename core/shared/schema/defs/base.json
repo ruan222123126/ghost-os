@@ -13,6 +13,7 @@
         "TASK_GET",
         "TASK_UPDATE",
         "TASK_RUN_NOW",
+        "TASK_STOP",
         "TASK_LOGS",
         "TASK_DELETE"
       ]

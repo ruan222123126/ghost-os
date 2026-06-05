@@ -8,6 +8,7 @@ const (
 	actionTaskGet      = "TASK_GET"
 	actionTaskUpdate   = "TASK_UPDATE"
 	actionTaskRunNow   = "TASK_RUN_NOW"
+	actionTaskStop     = "TASK_STOP"
 	actionTaskLogs     = "TASK_LOGS"
 	actionTaskDelete   = "TASK_DELETE"
 )

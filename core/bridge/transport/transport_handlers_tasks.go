@@ -67,6 +67,8 @@ func (t *transport) handleTaskSubresource(
 		t.handleTaskLogs(w, r, traceID, id, scope)
 	case "run":
 		t.handleTaskRun(w, r, traceID, id, scope)
+	case "stop":
+		t.handleTaskStop(w, r, traceID, id, scope)
 	default:
 		writeError(w, http.StatusBadRequest, "invalid task path", traceID)
 	}
@@ -121,6 +123,26 @@ func (t *transport) handleTaskRun(
 		scope,
 		traceID,
 	)
+}
+
+func (t *transport) handleTaskStop(
+	w http.ResponseWriter,
+	r *http.Request,
+	traceID string,
+	id string,
+	scope string,
+) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	var params bridgeorchestration.TaskStopParams
+	if !decodeBodyOrWriteError(w, r, t.maxBodyBytes, &params) {
+		return
+	}
+	params.ID = id
+	params.Scope = scope
+	t.dispatchScopedTaskAction(w, r, actionTaskStop, params, scope, traceID)
 }
 
 func (t *transport) handleTaskResource(

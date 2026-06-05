@@ -39,7 +39,16 @@ func (e *blockingRunSessionExecutor) Execute(
 	case <-e.release:
 		return ExecutionResult{Status: RunStatusSuccess, ResponsePreview: "done"}
 	case <-ctx.Done():
-		return ExecutionResult{Status: RunStatusError, Error: ctx.Err().Error()}
+		return ExecutionResult{
+			Status: RunStatusError,
+			Error:  ctx.Err().Error(),
+			RunCards: []RunCard{{
+				CardID: "cancel-card",
+				Kind:   RunCardKindAgentTask,
+				Status: RunStatusCancelled,
+				Error:  ctx.Err().Error(),
+			}},
+		}
 	}
 }
 

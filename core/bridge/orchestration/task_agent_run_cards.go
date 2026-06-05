@@ -115,7 +115,6 @@ func executionResultFromStreamOutcome(
 		return bridgeTasks.ExecutionResult{
 			Status:          taskRunStatusCancelled,
 			SessionIDOutput: outputSessionID,
-			Error:           context.Canceled.Error(),
 		}
 	default:
 		var awaitingErr *agent.ErrAwaitingHuman
