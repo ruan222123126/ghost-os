@@ -386,6 +386,18 @@ describe('lib/api/tasks/parser', () => {
             finished_at: '2026-04-05T07:00:02Z',
             preview: 'done',
             final_text: 'done',
+            source_events: [
+              {
+                id: 'evt-1',
+                step_id: 'turn-0001-assistant',
+                trace_id: 'trace-1',
+                session_id: 'session-agent',
+                turn: 1,
+                type: 'completion_delta',
+                payload: { kind: 'text', text: 'done' },
+                at: '2026-04-05T07:00:01Z',
+              },
+            ],
           },
         ],
         node_results: [
@@ -411,6 +423,12 @@ describe('lib/api/tasks/parser', () => {
       card_id: 'card-1',
       iteration: 2,
       final_text: 'done',
+      source_events: [
+        expect.objectContaining({
+          id: 'evt-1',
+          type: 'completion_delta',
+        }),
+      ],
     });
   });
 

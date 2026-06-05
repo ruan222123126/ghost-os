@@ -54,6 +54,9 @@ function renderLoopTaskList(input: {
     logsData: [],
     logsLoading: false,
     logsError: '',
+    onRefreshLogs: async () => [],
+    onStopRun: async () => undefined,
+    stoppingRunId: '',
     onCloseLogs: () => undefined,
   };
 

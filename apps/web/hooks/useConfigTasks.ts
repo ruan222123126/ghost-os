@@ -1,19 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { createTask, deleteTask, listTasks, runTaskNow, updateTask } from '@/lib/api/tasks/api';
-import type { TaskUpdateRequest } from '@/lib/envelope.generated';
+import { useCallback, useEffect, useMemo, useReducer, type Dispatch } from 'react';
+import { useTasksApi } from '@/hooks/config-panel/useTasksApi';
 import {
-  type TaskEditorMode,
-  type TaskEditorState,
+  createInitialTasksState,
+  localizeTaskEditorError,
+  tasksReducer,
+  type TasksAction,
+  type TasksState,
+} from '@/lib/config-panel/tasksMachine';
+import {
   createTaskEditorState,
-  editorStateFromTask,
-  emptyTaskEditorState,
   taskCreateRequestFromEditor,
   taskUpdateRequestFromEditor,
 } from '@/lib/configTasks';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
+import type { TaskUpdateRequest } from '@/lib/types';
 import type { AgentMessageTaskPayload, BridgeConfig, TaskPayload } from '@/lib/types';
 
 interface UseConfigTasksOptions {
@@ -21,23 +24,28 @@ interface UseConfigTasksOptions {
   config: BridgeConfig | null;
 }
 
-interface UseConfigTasksResult {
-  tasks: TaskPayload[];
-  tasksLoading: boolean;
-  taskSaving: boolean;
-  taskError: string;
-  editorMode: TaskEditorMode;
-  editor: TaskEditorState;
-  refreshTasks: () => Promise<void>;
-  beginCreateTextTask: () => void;
-  editTask: (task: TaskPayload) => void;
-  updateEditor: (patch: Partial<TaskEditorState>) => void;
-  submitTask: () => Promise<boolean>;
-  setTaskEnabled: (id: string, enabled: boolean) => Promise<void>;
-  runTaskNowByID: (id: string) => Promise<void>;
-  deleteTaskByID: (id: string) => Promise<void>;
-  cancelEditing: () => void;
+interface RunTaskOptions {
+  reportSuccess?: boolean;
 }
+
+interface UseConfigTasksActions {
+  refresh: () => Promise<boolean>;
+  startCreateTextTask: () => void;
+  startEditTextTask: (task: TaskPayload) => void;
+  cancelEditing: () => void;
+  updateEditor: (patch: Partial<TasksState['editor']>) => void;
+  submit: () => Promise<boolean>;
+  setEnabled: (id: string, enabled: boolean) => Promise<void>;
+  runNow: (id: string, options?: RunTaskOptions) => Promise<boolean>;
+  delete: (id: string) => Promise<void>;
+}
+
+interface UseConfigTasksResult {
+  state: TasksState;
+  actions: UseConfigTasksActions;
+}
+
+type TasksApi = ReturnType<typeof useTasksApi>;
 
 function isAgentMessageTask(task: TaskPayload): task is AgentMessageTaskPayload {
   return task.task_kind === 'agent_message';
@@ -45,165 +53,190 @@ function isAgentMessageTask(task: TaskPayload): task is AgentMessageTaskPayload 
 
 export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksResult {
   const { copy } = useWebLocale();
-  const { open, config } = options;
-  const [tasks, setTasks] = useState<TaskPayload[]>([]);
-  const [tasksLoading, setTasksLoading] = useState(false);
-  const [taskSaving, setTaskSaving] = useState(false);
-  const [taskError, setTaskError] = useState('');
-  const [editorMode, setEditorMode] = useState<TaskEditorMode>('create');
-  const [editingTaskID, setEditingTaskID] = useState('');
-  const [editor, setEditor] = useState<TaskEditorState>(emptyTaskEditorState);
-
-  const applyTaskList = useCallback((payload: TaskPayload[]) => {
-    setTasks(payload);
-  }, []);
-
-  const resetEditor = useCallback((mode: TaskEditorMode = 'create') => {
-    setEditorMode(mode);
-    setEditingTaskID('');
-    setEditor(createTaskEditorState(config));
-  }, [config]);
-
-  const refreshTasks = useCallback(async () => {
-    setTasksLoading(true);
-    try {
-      applyTaskList(await listTasks());
-      setTaskError('');
-    } catch (error) {
-      setTaskError(toErrorMessage(error, copy.system.failedToLoadTasks));
-    } finally {
-      setTasksLoading(false);
-    }
-  }, [applyTaskList, copy.system.failedToLoadTasks]);
+  const api = useTasksApi();
+  const [state, dispatch] = useReducer(tasksReducer, options.config, createInitialTasksState);
+  const createEditor = useCallback(() => createTaskEditorState(options.config), [options.config]);
+  const refresh = useRefreshTasks(api, copy, dispatch);
+  const submit = useSubmitTask(api, copy, state, createEditor, dispatch);
+  const setEnabled = useSetTaskEnabled(api, copy, dispatch);
+  const runNow = useRunTaskNow(api, copy, state, refresh, dispatch);
+  const deleteByID = useDeleteTask(api, copy, state, createEditor, dispatch);
+  const actions = useTaskActionBundle(dispatch, createEditor, copy, refresh, submit, setEnabled, runNow, deleteByID);
 
   useEffect(() => {
-    if (open) {
-      ignorePromise(refreshTasks());
+    if (options.open) {
+      ignorePromise(refresh());
     }
-  }, [open, refreshTasks]);
+  }, [options.open, refresh]);
 
-  const runMutation = useCallback(async <T,>(
-    action: () => Promise<T>,
-    fallbackMessage: string,
-  ): Promise<T | null> => {
-    setTaskSaving(true);
-    setTaskError('');
-    try {
-      return await action();
-    } catch (error) {
-      const message = toErrorMessage(error, fallbackMessage);
-      setTaskError(localizeTaskEditorError(message, copy));
-      return null;
-    } finally {
-      setTaskSaving(false);
-    }
-  }, [copy]);
-
-  const upsertTask = useCallback((task: TaskPayload) => {
-    setTasks((state) => {
-      const index = state.findIndex((item) => item.id === task.id);
-      if (index === -1) {
-        return [task, ...state];
-      }
-      const next = [...state];
-      next[index] = task;
-      return next;
-    });
-  }, []);
-
-  const submitTask = useCallback(async (): Promise<boolean> => {
-    const action = editorMode === 'edit'
-      ? () => updateTask(editingTaskID, taskUpdateRequestFromEditor(editor))
-      : () => createTask(taskCreateRequestFromEditor(editor));
-    const task = await runMutation(action, copy.system.failedToSaveTask);
-    if (!task) {
-      return false;
-    }
-
-    upsertTask(task);
-    resetEditor();
-    return true;
-  }, [copy.system.failedToSaveTask, editor, editorMode, editingTaskID, resetEditor, runMutation, upsertTask]);
-
-  const setTaskEnabled = useCallback(async (id: string, enabled: boolean) => {
-    const payload: Pick<TaskUpdateRequest, 'enabled'> = { enabled };
-    const task = await runMutation(() => updateTask(id, payload), copy.system.failedToUpdateTask);
-    if (task) {
-      upsertTask(task);
-    }
-  }, [copy.system.failedToUpdateTask, runMutation, upsertTask]);
-
-  const deleteTaskByID = useCallback(async (id: string) => {
-    const result = await runMutation(() => deleteTask(id), copy.system.failedToDeleteTask);
-    if (result === null) {
-      return;
-    }
-
-    setTasks((state) => state.filter((task) => task.id !== id));
-    if (editingTaskID === id) {
-      resetEditor();
-    }
-  }, [copy.system.failedToDeleteTask, editingTaskID, resetEditor, runMutation]);
-
-  const runTaskNowByID = useCallback(async (id: string) => {
-    const result = await runMutation(() => runTaskNow(id), copy.system.failedToRunTask);
-    if (result === null) {
-      return;
-    }
-  }, [copy.system.failedToRunTask, runMutation]);
-
-  const updateEditor = useCallback((patch: Partial<TaskEditorState>) => {
-    setEditor((state) => ({ ...state, ...patch }));
-  }, []);
-
-  const editTask = useCallback((task: TaskPayload) => {
-    if (!isAgentMessageTask(task)) {
-      setTaskError(copy.system.textTaskEditorOnlySupportsAgentMessage);
-      return;
-    }
-    setEditorMode('edit');
-    setEditingTaskID(task.id);
-    setEditor(editorStateFromTask(task));
-    setTaskError('');
-  }, [copy.system.textTaskEditorOnlySupportsAgentMessage]);
-
-  return {
-    tasks,
-    tasksLoading,
-    taskSaving,
-    taskError,
-    editorMode,
-    editor,
-    refreshTasks,
-    beginCreateTextTask: resetEditor,
-    editTask,
-    updateEditor,
-    submitTask,
-    setTaskEnabled,
-    runTaskNowByID,
-    deleteTaskByID,
-    cancelEditing: resetEditor,
-  };
+  return { state, actions };
 }
 
-function localizeTaskEditorError(
-  message: string,
+function useRefreshTasks(
+  api: TasksApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  dispatch: Dispatch<TasksAction>,
+) {
+  return useCallback(async (): Promise<boolean> => {
+    dispatch({ type: 'load_start' });
+    try {
+      dispatch({ type: 'load_success', tasks: await api.listTasks() });
+      return true;
+    } catch (error) {
+      dispatch({
+        type: 'load_error',
+        error: taskErrorMessage(error, copy.system.failedToLoadTasks, copy),
+      });
+      return false;
+    }
+  }, [api, copy, dispatch]);
+}
+
+function useSubmitTask(
+  api: TasksApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  state: TasksState,
+  createEditor: () => TasksState['editor'],
+  dispatch: Dispatch<TasksAction>,
+) {
+  return useCallback(async (): Promise<boolean> => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      const task = state.editorMode === 'edit'
+        ? await api.updateTask(state.editingTaskID, taskUpdateRequestFromEditor(state.editor))
+        : await api.createTask(taskCreateRequestFromEditor(state.editor));
+      dispatch({ type: 'upsert_task', task });
+      dispatch({ type: 'set_saving', saving: false });
+      dispatch({ type: 'exit_editor', editor: createEditor() });
+      return true;
+    } catch (error) {
+      dispatchTaskError(dispatch, error, copy.system.failedToSaveTask, copy);
+      return false;
+    }
+  }, [api, copy, createEditor, dispatch, state.editingTaskID, state.editor, state.editorMode]);
+}
+
+function useSetTaskEnabled(
+  api: TasksApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  dispatch: Dispatch<TasksAction>,
+) {
+  return useCallback(async (id: string, enabled: boolean): Promise<void> => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      const payload: Pick<TaskUpdateRequest, 'enabled'> = { enabled };
+      dispatch({ type: 'upsert_task', task: await api.updateTask(id, payload) });
+      dispatch({ type: 'set_saving', saving: false });
+    } catch (error) {
+      dispatchTaskError(dispatch, error, copy.system.failedToUpdateTask, copy);
+    }
+  }, [api, copy, dispatch]);
+}
+
+function useRunTaskNow(
+  api: TasksApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  state: TasksState,
+  refresh: () => Promise<boolean>,
+  dispatch: Dispatch<TasksAction>,
+) {
+  return useCallback(async (id: string, options?: RunTaskOptions): Promise<boolean> => {
+    if (state.runningTaskID) {
+      return false;
+    }
+    dispatch({ type: 'run_start', id });
+    try {
+      await api.runTaskNow(id);
+      dispatch({ type: 'run_api_done', success: options?.reportSuccess ? copy.settings.tasksRunStarted : '' });
+      await refresh();
+      return true;
+    } catch (error) {
+      dispatchTaskError(dispatch, error, copy.system.failedToRunTask, copy, 'run_error');
+      return false;
+    } finally {
+      dispatch({ type: 'run_finish' });
+    }
+  }, [api, copy, dispatch, refresh, state.runningTaskID]);
+}
+
+function useDeleteTask(
+  api: TasksApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  state: TasksState,
+  createEditor: () => TasksState['editor'],
+  dispatch: Dispatch<TasksAction>,
+) {
+  return useCallback(async (id: string): Promise<void> => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      await api.deleteTask(id);
+      dispatch({ type: 'remove_task', id });
+      if (state.editingTaskID === id) {
+        dispatch({ type: 'exit_editor', editor: createEditor() });
+      }
+      dispatch({ type: 'set_saving', saving: false });
+    } catch (error) {
+      dispatchTaskError(dispatch, error, copy.system.failedToDeleteTask, copy);
+    }
+  }, [api, copy, createEditor, dispatch, state.editingTaskID]);
+}
+
+function useTaskActionBundle(
+  dispatch: Dispatch<TasksAction>,
+  createEditor: () => TasksState['editor'],
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  refresh: UseConfigTasksActions['refresh'],
+  submit: UseConfigTasksActions['submit'],
+  setEnabled: UseConfigTasksActions['setEnabled'],
+  runNow: UseConfigTasksActions['runNow'],
+  deleteByID: UseConfigTasksActions['delete'],
+): UseConfigTasksActions {
+  return useMemo(() => ({
+    refresh,
+    submit,
+    setEnabled,
+    runNow,
+    delete: deleteByID,
+    startCreateTextTask: () => dispatch({ type: 'enter_create', editor: createEditor() }),
+    startEditTextTask: (task) => startEditTextTask(
+      task,
+      dispatch,
+      copy.system.textTaskEditorOnlySupportsAgentMessage,
+    ),
+    cancelEditing: () => dispatch({ type: 'exit_editor', editor: createEditor() }),
+    updateEditor: (patch) => dispatch({ type: 'patch_editor', patch }),
+  }), [copy.system.textTaskEditorOnlySupportsAgentMessage, createEditor, deleteByID, dispatch, refresh, runNow, setEnabled, submit]);
+}
+
+function startEditTextTask(
+  task: TaskPayload,
+  dispatch: Dispatch<TasksAction>,
+  unsupportedMessage: string,
+) {
+  if (!isAgentMessageTask(task)) {
+    dispatch({
+      type: 'set_error',
+      error: unsupportedMessage,
+    });
+    return;
+  }
+  dispatch({ type: 'enter_edit', task });
+}
+
+function dispatchTaskError(
+  dispatch: Dispatch<TasksAction>,
+  error: unknown,
+  fallback: string,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  actionType: 'mutate_error' | 'run_error' = 'mutate_error',
+) {
+  dispatch({ type: actionType, error: taskErrorMessage(error, fallback, copy) });
+}
+
+function taskErrorMessage(
+  error: unknown,
+  fallback: string,
   copy: ReturnType<typeof useWebLocale>['copy'],
 ): string {
-  if (message === 'interval seconds must be a positive integer') {
-    return copy.system.intervalSecondsPositiveInteger;
-  }
-  if (message === 'relay max_rounds must be a positive integer' || message === 'relay max_rounds must be > 0') {
-    return copy.system.relayMaxRoundsPositiveInteger;
-  }
-  if (message === 'relay execution_timeout_ms must be a non-negative integer') {
-    return copy.system.relayTimeoutNonNegativeInteger;
-  }
-  if (message === 'message is required') {
-    return copy.system.messageRequired;
-  }
-  if (message === 'cron expression is required') {
-    return copy.system.cronExpressionRequired;
-  }
-  return message;
+  return localizeTaskEditorError(toErrorMessage(error, fallback), copy);
 }

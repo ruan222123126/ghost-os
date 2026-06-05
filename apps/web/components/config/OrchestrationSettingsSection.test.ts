@@ -26,7 +26,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
     listOrchestrationLogs.mockReset();
     listOrchestrationLogs.mockResolvedValue([]);
     useOrchestrationSectionState.mockReset();
-    useOrchestrationSectionState.mockReturnValue(buildState());
+    useOrchestrationSectionState.mockReturnValue(buildMachine());
   });
 
   it('renders orchestration cards with run and logs actions', () => {
@@ -43,7 +43,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
   });
 
   it('renders inline create form when creating', () => {
-    useOrchestrationSectionState.mockReturnValue(buildState({ creating: true }));
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ state: { view: 'create' } }));
     const renderer = renderSection();
 
     expect(renderer.root.findByType('form')).toBeTruthy();
@@ -51,7 +51,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
 
   it('delegates enable toggle to section state', async () => {
     const setEnabledByID = jest.fn(async () => undefined);
-    useOrchestrationSectionState.mockReturnValue(buildState({ setEnabledByID }));
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ actions: { setEnabledByID } }));
     const renderer = renderSection();
 
     await act(async () => {
@@ -65,9 +65,9 @@ describe('components/config/OrchestrationSettingsSection', () => {
   });
 
   it('renders disabled orchestrations with enable action', () => {
-    useOrchestrationSectionState.mockReturnValue(buildState({
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ state: {
       orchestrations: [buildTask({ enabled: false })],
-    }));
+    } }));
     const renderer = renderSection();
     const content = textContent(renderer.root);
 
@@ -76,7 +76,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
   });
 
   it('keeps the run label stable while a launch request is in flight', () => {
-    useOrchestrationSectionState.mockReturnValue(buildState({ runningOrchestrationID: 'orch_1' }));
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ state: { runningOrchestrationID: 'orch_1' } }));
     const renderer = renderSection();
 
     expect(findButtonByText(renderer.root, 'Run')).toBeTruthy();
@@ -84,7 +84,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
   });
 
   it('shows a success banner in the shared feedback slot', () => {
-    useOrchestrationSectionState.mockReturnValue(buildState({ success: 'Run started successfully' }));
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ state: { success: 'Run started successfully' } }));
     const renderer = renderSection();
 
     expect(textContent(renderer.root)).toContain('Run started successfully');
@@ -95,7 +95,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
     const originalConfirm = globalThis.confirm;
     const confirmSpy = jest.fn(() => true);
     Object.assign(globalThis, { confirm: confirmSpy });
-    useOrchestrationSectionState.mockReturnValue(buildState({ deleteByID }));
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ actions: { deleteByID } }));
     const renderer = renderSection();
 
     await act(async () => {
@@ -113,7 +113,7 @@ describe('components/config/OrchestrationSettingsSection', () => {
   it('refreshes visible logs after run completes', async () => {
     const runByID = jest.fn(async () => undefined);
     listOrchestrationLogs.mockResolvedValue([]);
-    useOrchestrationSectionState.mockReturnValue(buildState({ runByID }));
+    useOrchestrationSectionState.mockReturnValue(buildMachine({ actions: { runByID } }));
     const renderer = renderSection();
 
     await act(async () => {
@@ -152,26 +152,33 @@ function renderSection(): TestRenderer.ReactTestRenderer {
   return renderer;
 }
 
-function buildState(overrides?: Record<string, unknown>) {
+function buildMachine(overrides?: {
+  state?: Record<string, unknown>;
+  actions?: Record<string, unknown>;
+}) {
   return {
-    orchestrations: [buildTask()],
-    loading: false,
-    error: '',
-    success: '',
-    creating: false,
-    name: '',
-    submitting: false,
-    runningOrchestrationID: '',
-    controlsDisabled: false,
-    refresh: jest.fn(),
-    startCreate: jest.fn(),
-    setName: jest.fn(),
-    submitCreate: jest.fn(async () => undefined),
-    cancelCreate: jest.fn(),
-    runByID: jest.fn(async () => undefined),
-    setEnabledByID: jest.fn(async () => undefined),
-    deleteByID: jest.fn(async () => undefined),
-    ...overrides,
+    state: {
+      view: 'list',
+      orchestrations: [buildTask()],
+      loading: false,
+      error: '',
+      success: '',
+      name: '',
+      submitting: false,
+      runningOrchestrationID: '',
+      ...overrides?.state,
+    },
+    actions: {
+      refresh: jest.fn(async () => true),
+      startCreate: jest.fn(),
+      setName: jest.fn(),
+      submitCreate: jest.fn(async () => undefined),
+      cancelCreate: jest.fn(),
+      runByID: jest.fn(async () => undefined),
+      setEnabledByID: jest.fn(async () => undefined),
+      deleteByID: jest.fn(async () => undefined),
+      ...overrides?.actions,
+    },
   };
 }
 

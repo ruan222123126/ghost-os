@@ -49,7 +49,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 }) => {
   const { copy } = useWebLocale();
   const [activeTab, setActiveTab] = useState<SettingsTab>('provider');
-  const providersState = useConfigProviders({
+  const providersMachine = useConfigProviders({
     open,
     onReloadConfig: onReload,
     onActivateRuntimeConfig: onSave,
@@ -58,7 +58,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
   const presetsState = useConfigPresets({ open });
   const promptsState = useConfigPrompts({ open });
   const skillsState = useConfigSkills({ open });
-  const tasksState = useConfigTasks({ open, config });
+  const tasksMachine = useConfigTasks({ open, config });
   const toolsState = useConfigTools({ open });
 
   useEffect(() => {
@@ -71,29 +71,33 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
     return resolveConfigPanelTabError({
       activeTab,
       generalError: error,
-      providerError: providersState.providerError,
+      providerError: providersMachine.state.error,
       presetError: presetsState.presetError,
       promptError: promptsState.promptError,
-      taskError: tasksState.taskError,
+      taskError: tasksMachine.state.error,
       skillError: skillsState.skillError,
       toolError: toolsState.toolError,
     });
   }, [
     activeTab,
     error,
-    providersState.providerError,
+    providersMachine.state.error,
     presetsState.presetError,
     promptsState.promptError,
-    tasksState.taskError,
+    tasksMachine.state.error,
     skillsState.skillError,
     toolsState.toolError,
   ]);
 
   const handleSelectTab = useCallback((tab: SettingsTab) => {
     setActiveTab(tab);
-    providersState.cancelEditing();
-    tasksState.cancelEditing();
-  }, [providersState, tasksState]);
+    providersMachine.actions.cancelEditing();
+    tasksMachine.actions.cancelEditing();
+  }, [providersMachine.actions, tasksMachine.actions]);
+
+  const tabSuccess = (activeTab === 'tasks' || activeTab === 'relay')
+    ? tasksMachine.state.success
+    : '';
 
   if (!open) {
     return null;
@@ -124,6 +128,10 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
               <div className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {tabError}
               </div>
+            ) : tabSuccess ? (
+              <div className="mb-4 rounded-[12px] border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+                {tabSuccess}
+              </div>
             ) : null}
 
             <ConfigPanelSectionContent
@@ -135,11 +143,11 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
               onRefreshConfig={onReload}
               onOpenWorkflowCreate={onOpenWorkflowCreate}
               onOpenWorkflowEdit={onOpenWorkflowEdit}
-              providersState={providersState}
+              providersState={providersMachine}
               presetsState={presetsState}
               promptsState={promptsState}
               skillsState={skillsState}
-              tasksState={tasksState}
+              tasksState={tasksMachine}
               toolsState={toolsState}
             />
           </div>

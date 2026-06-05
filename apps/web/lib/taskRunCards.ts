@@ -1,3 +1,5 @@
+import type { AgentStreamEvent } from '@/lib/envelope.generated';
+
 export interface TaskRunCard {
   card_id: string;
   run_id?: string;
@@ -15,4 +17,5 @@ export interface TaskRunCard {
   preview?: string;
   error?: string;
   final_text?: string;
+  source_events?: AgentStreamEvent[];
 }

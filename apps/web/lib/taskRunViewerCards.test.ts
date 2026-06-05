@@ -5,6 +5,7 @@ import {
   hydrateLiveTaskRunCards,
   isStickyTerminalCard,
   latestActiveCard,
+  mergeLiveTaskRunCards,
 } from './taskRunViewerCards';
 
 describe('taskRunViewerCards', () => {
@@ -65,5 +66,70 @@ describe('taskRunViewerCards', () => {
       status: 'running',
       source_events: [],
     })).toBe(false);
+  });
+
+  it('preserves live events when refreshed run cards arrive', () => {
+    const current = applyCardEvent(hydrateLiveTaskRunCards([{
+      card_id: 'card-1',
+      kind: 'workflow_agent',
+      started_at: '2026-05-30T00:00:01Z',
+    }]), 'card-1', {
+      id: 'evt-1',
+      step_id: 'turn-1-assistant',
+      trace_id: 'trace-1',
+      session_id: 'session-live',
+      turn: 1,
+      type: 'completion_delta',
+      payload: { kind: 'text', text: 'hello' },
+      at: '2026-05-30T00:00:02Z',
+    }, 'session-live');
+
+    const next = mergeLiveTaskRunCards(current, [{
+      card_id: 'card-1',
+      kind: 'workflow_agent',
+      source_session_id: 'session-persisted',
+      started_at: '2026-05-30T00:00:01Z',
+      status: 'running',
+      source_events: [
+        {
+          id: 'evt-1',
+          step_id: 'turn-1-assistant',
+          trace_id: 'trace-1',
+          session_id: 'session-live',
+          turn: 1,
+          type: 'completion_delta',
+          payload: { kind: 'text', text: 'hello' },
+          at: '2026-05-30T00:00:02Z',
+        },
+      ],
+    }]);
+
+    expect(next[0].source_events).toHaveLength(1);
+    expect(next[0].source_session_id).toBe('session-persisted');
+    expect(next[0].live_source_session_id).toBe('session-persisted');
+  });
+
+  it('derives source session id from persisted events when card field is empty', () => {
+    const cards = hydrateLiveTaskRunCards([
+      {
+        card_id: 'card-1',
+        kind: 'workflow_agent',
+        started_at: '2026-05-30T00:00:01Z',
+        source_events: [
+          {
+            id: 'evt-1',
+            step_id: 'turn-1-assistant',
+            trace_id: 'trace-1',
+            session_id: 'session-from-events',
+            turn: 1,
+            type: 'run_started',
+            payload: { session_id: 'session-from-events' },
+            at: '2026-05-30T00:00:01Z',
+          },
+        ],
+      },
+    ]);
+
+    expect(cards[0].live_source_session_id).toBe('session-from-events');
   });
 });

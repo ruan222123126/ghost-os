@@ -1,3 +1,4 @@
+import { parseAgentStreamEvent } from '@/lib/api/agent/parser';
 import type { TaskRunCard } from '@/lib/taskRunCards';
 import {
   expectRecord,
@@ -25,6 +26,7 @@ export function parseTaskRunCard(value: unknown, label: string): TaskRunCard {
     preview: parseOptionalString(record.preview, `${label}.preview`),
     error: parseOptionalString(record.error, `${label}.error`),
     final_text: parseOptionalString(record.final_text, `${label}.final_text`),
+    source_events: parseTaskRunCardSourceEvents(record.source_events, `${label}.source_events`),
   };
 }
 
@@ -39,4 +41,17 @@ export function parseTaskRunCardList(
     throw new Error(`Invalid ${label}: expected array`);
   }
   return value.map((item, index) => parseTaskRunCard(item, `${label}[${index}]`));
+}
+
+function parseTaskRunCardSourceEvents(
+  value: unknown,
+  label: string,
+) {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    throw new Error(`Invalid ${label}: expected array`);
+  }
+  return value.map((item) => parseAgentStreamEvent(item));
 }

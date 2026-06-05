@@ -145,8 +145,10 @@ const settingsCatalog = {
     tasksLogsNodeResults: 'Node Results',
     tasksLogsNoNodeResults: 'No node results.',
     tasksLogsClose: 'Close',
-    tasksLogsLiveView: 'Live View',
-    tasksLogsLiveViewUnavailable: 'No session is available for live view yet.',
+    tasksLogsStopRun: 'Stop',
+    tasksLogsStoppingRun: 'Stopping...',
+    tasksLogsLiveView: 'Details',
+    tasksLogsLiveViewUnavailable: 'No details are available yet.',
     tasksLogsLiveViewTitle: (runId: string, sessionId: string) => runId
       ? `Live Run: ${runId}`
       : `Live Session: ${sessionId}`,
@@ -380,7 +382,7 @@ const settingsCatalog = {
     providerAdd: '新增',
     providerNoItems: '暂无供应商配置。新增后会写入 ~/.ghost-os/config.toml。',
     providerDefaultEndpoint: '默认端点',
-    providerActivate: '设为激活',
+    providerActivate: '激活',
     providerActive: '激活中',
     providerDeleteConfirm: (name: string) => `确定删除供应商“${name}”？`,
     providerEditAria: (name: string) => `编辑 ${name}`,
@@ -481,8 +483,10 @@ const settingsCatalog = {
     tasksLogsNodeResults: '节点结果',
     tasksLogsNoNodeResults: '暂无节点结果。',
     tasksLogsClose: '关闭',
-    tasksLogsLiveView: '实时查看',
-    tasksLogsLiveViewUnavailable: '暂无会话可实时查看',
+    tasksLogsStopRun: '停止',
+    tasksLogsStoppingRun: '正在停止',
+    tasksLogsLiveView: '详情',
+    tasksLogsLiveViewUnavailable: '暂无详情可查看',
     tasksLogsLiveViewTitle: (runId: string, sessionId: string) => runId
       ? `实时运行：${runId}`
       : `实时会话：${sessionId}`,

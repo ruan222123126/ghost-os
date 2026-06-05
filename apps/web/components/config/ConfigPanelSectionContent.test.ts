@@ -117,15 +117,22 @@ function buildProps(
     onRefreshConfig: async () => undefined,
     onOpenWorkflowCreate: () => undefined,
     onOpenWorkflowEdit: () => undefined,
-    providersState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['providersState'],
+    providersState: {
+      state: { error: '' },
+      actions: {},
+    } as unknown as React.ComponentProps<typeof ConfigPanelSectionContent>['providersState'],
     presetsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['presetsState'],
     promptsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['promptsState'],
     skillsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['skillsState'],
     tasksState: {
-      tasks: [],
-      tasksLoading: false,
-      taskSaving: false,
-      taskError: '',
+      state: {
+        tasks: [],
+        loading: false,
+        saving: false,
+        error: '',
+        success: '',
+      },
+      actions: {},
     } as unknown as React.ComponentProps<typeof ConfigPanelSectionContent>['tasksState'],
     toolsState: {} as React.ComponentProps<typeof ConfigPanelSectionContent>['toolsState'],
   };

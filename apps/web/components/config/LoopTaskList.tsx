@@ -24,6 +24,9 @@ interface LoopTaskListProps {
   logsData: TaskRunLog[];
   logsLoading: boolean;
   logsError: string;
+  onRefreshLogs: (id: string) => Promise<TaskRunLog[]>;
+  onStopRun: (run: TaskRunLog) => Promise<void>;
+  stoppingRunId: string;
   onCloseLogs: () => void;
 }
 
@@ -64,6 +67,9 @@ export function LoopTaskList(props: LoopTaskListProps) {
           logs={props.logsData}
           loading={props.logsLoading}
           error={props.logsError}
+          onRefreshLogs={props.onRefreshLogs}
+          onStopRun={props.onStopRun}
+          stoppingRunId={props.stoppingRunId}
           onClose={props.onCloseLogs}
         />
       ) : null}

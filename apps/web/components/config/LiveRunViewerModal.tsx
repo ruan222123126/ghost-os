@@ -5,6 +5,8 @@ import { CloseButton } from '@/components/CloseButton';
 import { MessageRow } from '@/components/message/MessageRow';
 import { useLiveRunViewer } from '@/hooks/config/useLiveRunViewer';
 import { useWebLocale } from '@/lib/i18n/provider';
+import { buildLiveRunViewerOutputSignature } from '@/lib/liveRunViewerOutputSignature';
+import { formatTaskRunStatus, formatTaskRunTimestamp } from '@/lib/taskRunDisplay';
 import type { TaskRunLog } from '@/lib/types';
 import type { LiveTaskRunCard } from '@/lib/taskRunViewerCards';
 
@@ -22,11 +24,10 @@ export function LiveRunViewerModal(props: LiveRunViewerModalProps) {
   const { cards, followLatest, output, selectedCard, selectCard, sourceSessionError, streamError } = useLiveRunViewer({ run });
   const outputRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
-  const outputSignature = useMemo(() => [
-    selectedCard?.card_id ?? '',
-    output.committedMessages.map((message) => message.id).join(','),
-    output.streamingRows.map((row) => row.key).join(','),
-  ].join('|'), [output.committedMessages, output.streamingRows, selectedCard?.card_id]);
+  const outputSignature = useMemo(
+    () => buildLiveRunViewerOutputSignature(selectedCard?.card_id ?? '', output),
+    [output, selectedCard?.card_id],
+  );
 
   useEffect(() => {
     if (!autoScroll) {
@@ -106,7 +107,7 @@ function RunCardTimeline(props: {
   const { copy } = useWebLocale();
   const { cards, followLatest, selectedCard, streamError, onSelectCard } = props;
   return (
-    <aside className="min-h-0 border-b border-[#F0F0F0] bg-[#FCFCFC] lg:border-b-0 lg:border-r lg:border-[#F0F0F0]">
+    <aside className="flex min-h-0 flex-col border-b border-[#F0F0F0] bg-[#FCFCFC] lg:border-b-0 lg:border-r lg:border-[#F0F0F0]">
       <div className="border-b border-[#F0F0F0] bg-[#FAFAFA] px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#737373]">{copy.settings.tasksLogsTimeline}</h3>
@@ -119,7 +120,7 @@ function RunCardTimeline(props: {
       {cards.length === 0 ? (
         <p className="p-4 text-[12px] text-[#737373]">{copy.settings.tasksLogsRunCardsEmpty}</p>
       ) : (
-        <ol className="h-full max-h-full overflow-y-auto px-0 py-2">
+        <ol className="min-h-0 flex-1 overflow-y-auto px-0 py-2">
           {cards.map((card) => (
             <TimelineCard key={card.card_id} card={card} selected={selectedCard?.card_id === card.card_id} onSelect={() => onSelectCard(card.card_id)} />
           ))}
@@ -130,7 +131,7 @@ function RunCardTimeline(props: {
 }
 
 function TimelineCard(props: { card: LiveTaskRunCard; onSelect: () => void; selected: boolean }) {
-  const { copy } = useWebLocale();
+  const { copy, locale } = useWebLocale();
   const { card, onSelect, selected } = props;
   return (
     <li>
@@ -150,7 +151,7 @@ function TimelineCard(props: { card: LiveTaskRunCard; onSelect: () => void; sele
             <span className={selected ? 'truncate text-xs font-medium text-[#111111]' : 'truncate text-xs font-medium text-[#525252] group-hover:text-[#111111]'}>{cardTitle(card)}</span>
             <span className={selected ? 'font-mono text-[10px] text-sky-600' : 'font-mono text-[10px] text-[#A3A3A3]'}>{formatCardClock(card.started_at)}</span>
           </div>
-          <div className={selected ? 'text-[11px] font-mono text-[#525252]' : 'text-[11px] font-mono text-[#A3A3A3]'}>{formatCardSubline(card)}</div>
+          <div className={selected ? 'text-[11px] font-mono text-[#525252]' : 'text-[11px] font-mono text-[#A3A3A3]'}>{formatCardSubline(card, locale)}</div>
           <p className={selected ? 'mt-2 line-clamp-2 text-[11px] text-sky-700' : 'mt-2 line-clamp-2 text-[11px] text-[#737373]'}>{card.preview?.trim() || card.error?.trim() || copy.settings.tasksLogsRunCardWaiting}</p>
         </div>
       </button>
@@ -166,11 +167,11 @@ function RunCardOutput(props: {
   sourceSessionError: string;
   onToggleAutoScroll: () => void;
 }) {
-  const { copy } = useWebLocale();
+  const { copy, locale } = useWebLocale();
   const { autoScroll, output, outputRef, selectedCard, sourceSessionError, onToggleAutoScroll } = props;
   const rows = [...output.committedMessages.map((message) => ({ key: message.id, message })), ...output.streamingRows];
   return (
-    <section className="min-h-0 bg-white">
+    <section className="flex min-h-0 flex-col overflow-hidden bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-[#F0F0F0] px-6 py-3">
         <div className="min-w-0 font-mono text-xs text-[#737373]">
           <span>{copy.settings.tasksLogsAIOutput}</span>
@@ -186,9 +187,9 @@ function RunCardOutput(props: {
         </button>
       </div>
       {sourceSessionError ? <ViewerErrorBanner message={copy.settings.tasksLogsLiveSourceError(sourceSessionError)} /> : null}
-      <div ref={outputRef} className="h-full max-h-full overflow-y-auto px-6 py-5">
+      <div ref={outputRef} className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-10">
         {rows.length === 0 ? (
-          <WaitingOutput message={copy.settings.tasksLogsRunCardWaiting} meta={selectedCard ? formatCardMeta(selectedCard) : ''} />
+          <WaitingOutput message={copy.settings.tasksLogsRunCardWaiting} meta={selectedCard ? formatCardMeta(selectedCard, locale) : ''} />
         ) : (
           <div className={OUTPUT_THEME_CLASS_NAME}>
             {rows.map((row, index) => (
@@ -249,7 +250,7 @@ function cardTitle(card: LiveTaskRunCard): string {
   return card.title?.trim() || card.node_id?.trim() || card.card_id;
 }
 
-function formatCardSubline(card: LiveTaskRunCard): string {
+function formatCardSubline(card: LiveTaskRunCard, locale: ReturnType<typeof useWebLocale>['locale']): string {
   const parts = [];
   if (card.round) {
     parts.push(`round ${card.round}`);
@@ -263,12 +264,12 @@ function formatCardSubline(card: LiveTaskRunCard): string {
   if (card.branch_id?.trim()) {
     parts.push(card.branch_id.trim());
   }
-  return parts.join(' · ') || card.status?.trim() || 'running';
+  return parts.join(' · ') || formatTaskRunStatus(card.status, locale);
 }
 
-function formatCardMeta(card: LiveTaskRunCard): string {
+function formatCardMeta(card: LiveTaskRunCard, locale: ReturnType<typeof useWebLocale>['locale']): string {
   const parts = [formatCardClock(card.started_at)];
-  const subline = formatCardSubline(card);
+  const subline = formatCardSubline(card, locale);
   if (subline) {
     parts.push(subline);
   }
@@ -283,10 +284,5 @@ function formatCardClock(value?: string): string {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleTimeString('en-GB', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-  });
+  return formatTaskRunTimestamp(value).slice(11);
 }

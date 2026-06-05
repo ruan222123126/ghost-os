@@ -1,4 +1,3 @@
-import type { FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 export type SettingsTab =
@@ -13,17 +12,12 @@ export type SettingsTab =
   | 'prompts_library'
   | 'prompts_preview';
 
-interface IconProps {
-  size?: number;
-}
-
 interface TabDefinition {
   id: SettingsTab;
   group: 'system' | 'prompts';
-  icon: FC<IconProps>;
 }
 
-const SettingsIcon: FC<IconProps> = ({ size = 16 }) => (
+const SettingsIcon = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
     <path
       d="M10 3.25 11.35 2.5l1.1 1.9 1.6.4 1.55-1.15 1.4 1.4-1.15 1.55.4 1.6 1.9 1.1-.75 1.35.75 1.35-1.9 1.1-.4 1.6 1.15 1.55-1.4 1.4-1.55-1.15-1.6.4-1.1 1.9L10 16.75l-1.35.75-1.1-1.9-1.6-.4-1.55 1.15-1.4-1.4 1.15-1.55-.4-1.6-1.9-1.1.75-1.35-.75-1.35 1.9-1.1.4-1.6L3 5.05l1.4-1.4 1.55 1.15 1.6-.4 1.1-1.9L10 3.25Z"
@@ -35,73 +29,17 @@ const SettingsIcon: FC<IconProps> = ({ size = 16 }) => (
   </svg>
 );
 
-const ServerIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <rect x="3" y="4" width="14" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-    <rect x="3" y="12" width="14" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
-    <circle cx="6" cy="6" r="0.9" fill="currentColor" />
-    <circle cx="6" cy="14" r="0.9" fill="currentColor" />
-  </svg>
-);
-
-const TaskIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <rect x="3" y="4" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M7 8h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-    <path d="M7 11h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
-
-const RelayIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M5 8.2a5 5 0 0 1 8.4-2.8L15 7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M15 4.2V7h-2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M15 11.8a5 5 0 0 1-8.4 2.8L5 13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M5 15.8V13h2.8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-const OrchestrationIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <rect x="3" y="4" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-    <rect x="12" y="4" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-    <rect x="7.5" y="12" width="5" height="4" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M10 9v3M8 12h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
-
-const SkillIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M10 3.2 11.5 7l3.8 1.5-3.8 1.5-1.5 3.8-1.5-3.8L4.7 8.5 8.5 7 10 3.2Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="M14.8 12.8 15.5 14.5l1.7.7-1.7.7-.7 1.7-.7-1.7-1.7-.7 1.7-.7.7-1.7Z" fill="currentColor" />
-  </svg>
-);
-
-const ToolIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="m12.4 3.7 3.9 3.9-3 3-3.9-3.9 3-3Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="m9.8 8.3-5.3 5.3a1.8 1.8 0 1 0 2.6 2.6l5.3-5.3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
-
-const PromptIcon: FC<IconProps> = ({ size = 16 }) => (
-  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-    <path d="M4 4.5h12v8H8.4L4 16v-3.5H4z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-    <path d="M7 7.2h6M7 9.8h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-  </svg>
-);
-
 const tabs: TabDefinition[] = [
-  { id: 'general', group: 'system', icon: SettingsIcon },
-  { id: 'provider', group: 'system', icon: ServerIcon },
-  { id: 'relay', group: 'system', icon: RelayIcon },
-  { id: 'tasks', group: 'system', icon: TaskIcon },
-  { id: 'orchestration', group: 'system', icon: OrchestrationIcon },
-  { id: 'skills', group: 'system', icon: SkillIcon },
-  { id: 'tools', group: 'system', icon: ToolIcon },
-  { id: 'presets', group: 'system', icon: PromptIcon },
-  { id: 'prompts_library', group: 'prompts', icon: PromptIcon },
-  { id: 'prompts_preview', group: 'prompts', icon: PromptIcon },
+  { id: 'general', group: 'system' },
+  { id: 'provider', group: 'system' },
+  { id: 'relay', group: 'system' },
+  { id: 'tasks', group: 'system' },
+  { id: 'orchestration', group: 'system' },
+  { id: 'skills', group: 'system' },
+  { id: 'tools', group: 'system' },
+  { id: 'presets', group: 'system' },
+  { id: 'prompts_library', group: 'prompts' },
+  { id: 'prompts_preview', group: 'prompts' },
 ];
 
 function Kicker(props: { children: string }) {
@@ -182,7 +120,6 @@ function SettingsNavItem(props: {
 }) {
   const { copy } = useWebLocale();
   const { tab, active, onSelectTab } = props;
-  const Icon = tab.icon;
 
   return (
     <button
@@ -194,7 +131,6 @@ function SettingsNavItem(props: {
           : 'border-transparent text-[#737373] hover:bg-[#E5E5E5]/50 hover:text-[#111111]'
       }`}
     >
-      <Icon size={16} />
       <span>{labelForTab(copy, tab.id)}</span>
     </button>
   );

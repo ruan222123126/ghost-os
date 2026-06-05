@@ -1,98 +1,48 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { TaskEditorForm } from '@/components/config/TaskEditorForm';
 import { TaskList } from '@/components/config/TaskList';
 import { useTaskLogs } from '@/hooks/config/useTaskLogs';
-import { filterTaskSettingsTasks, type TaskEditorMode, type TaskEditorState } from '@/lib/configTasks';
+import { filterTaskSettingsTasks } from '@/lib/configTasks';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { AgentMessageTaskPayload, PresetPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
+import type { useConfigTasks } from '@/hooks/useConfigTasks';
+import type { PresetPayload, TaskPayload, WorkflowTaskPayload } from '@/lib/types';
 
 interface TaskSettingsSectionProps {
-  tasks: TaskPayload[];
-  loading: boolean;
-  saving: boolean;
+  machine: ReturnType<typeof useConfigTasks>;
   presets: PresetPayload[];
-  editorMode: TaskEditorMode;
-  editor: TaskEditorState;
-  onRefresh: () => Promise<void>;
-  onBeginCreateTextTask: () => void;
-  onEditTextTask: (task: AgentMessageTaskPayload) => void;
   onOpenWorkflowCreate: () => void;
   onOpenWorkflowEdit: (task: WorkflowTaskPayload) => void;
-  onChangeEditor: (patch: Partial<TaskEditorState>) => void;
-  onSubmit: () => Promise<boolean>;
-  onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
-  onRunNow: (id: string) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-  onCancelEditing: () => void;
 }
 
 export function TaskSettingsSection(props: TaskSettingsSectionProps) {
   const { copy } = useWebLocale();
-  const {
-    tasks,
-    loading,
-    saving,
-    presets,
-    editorMode,
-    editor,
-    onRefresh,
-    onBeginCreateTextTask,
-    onEditTextTask,
-    onOpenWorkflowCreate,
-    onOpenWorkflowEdit,
-    onChangeEditor,
-    onSubmit,
-    onSetEnabled,
-    onRunNow,
-    onDelete,
-    onCancelEditing,
-  } = props;
-  const [editorOpen, setEditorOpen] = useState(false);
-  const controlsDisabled = loading || saving;
-  const visibleTasks = useMemo(() => filterTaskSettingsTasks(tasks), [tasks]);
+  const { machine, presets, onOpenWorkflowCreate, onOpenWorkflowEdit } = props;
+  const { state, actions } = machine;
+  const controlsDisabled = state.loading || state.saving;
+  const visibleTasks = useMemo(() => filterTaskSettingsTasks(state.tasks), [state.tasks]);
   const sessionOptions = useMemo(() => buildSessionOptions(visibleTasks), [visibleTasks]);
-  const logs = useTaskLogs(copy.settings.tasksLogsEmpty);
+  const logs = useTaskLogs({
+    empty: copy.settings.tasksLogsEmpty,
+    stopFailed: copy.system.failedToStopTask,
+  });
 
-  const handleBeginCreateTextTask = () => {
-    onBeginCreateTextTask();
-    setEditorOpen(true);
-  };
-
-  const handleEditTextTask = (task: AgentMessageTaskPayload) => {
-    onEditTextTask(task);
-    setEditorOpen(true);
-  };
-
-  const handleEditWorkflowTask = (task: WorkflowTaskPayload) => {
-    onOpenWorkflowEdit(task);
-  };
-
-  const handleCancel = () => {
-    onCancelEditing();
-    setEditorOpen(false);
-  };
-
-  const handleSubmit = async () => {
-    if (await onSubmit()) {
-      setEditorOpen(false);
-    }
-  };
-
-  if (editorOpen) {
+  if (state.view === 'editor') {
     return (
       <TaskEditorForm
-        editorMode={editorMode}
-        editor={editor}
+        editorMode={state.editorMode}
+        editor={state.editor}
         presets={presets}
         sessionOptions={sessionOptions}
         controlsDisabled={controlsDisabled}
-        saving={saving}
-        onChangeEditor={onChangeEditor}
-        onSubmit={handleSubmit}
-        onCancelEditing={handleCancel}
+        saving={state.saving}
+        onChangeEditor={actions.updateEditor}
+        onSubmit={async () => {
+          await actions.submit();
+        }}
+        onCancelEditing={actions.cancelEditing}
       />
     );
   }
@@ -110,7 +60,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
             type="button"
             disabled={controlsDisabled}
             onClick={() => {
-              ignorePromise(onRefresh());
+              ignorePromise(actions.refresh());
             }}
             className="rounded-full border border-[#E5E5E5] px-4 py-2 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -119,7 +69,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
           <button
             type="button"
             disabled={controlsDisabled}
-            onClick={handleBeginCreateTextTask}
+            onClick={actions.startCreateTextTask}
             className="rounded-full bg-[#111111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copy.settings.tasksNewText}
@@ -137,18 +87,23 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
 
       <TaskList
         tasks={visibleTasks}
-        loading={loading}
+        loading={state.loading}
         controlsDisabled={controlsDisabled}
-        onEditTextTask={handleEditTextTask}
-        onEditWorkflowTask={handleEditWorkflowTask}
-        onSetEnabled={onSetEnabled}
-        onRunNow={onRunNow}
-        onDelete={onDelete}
+        onEditTextTask={actions.startEditTextTask}
+        onEditWorkflowTask={onOpenWorkflowEdit}
+        onSetEnabled={actions.setEnabled}
+        onRunNow={async (id) => {
+          await actions.runNow(id, { reportSuccess: true });
+        }}
+        onDelete={actions.delete}
         logsTaskID={logs.taskID}
         logsData={logs.entries}
         logsLoading={logs.loading}
         logsError={logs.error}
         onOpenLogs={logs.open}
+        onRefreshLogs={logs.refresh}
+        onStopRun={logs.stopRun}
+        stoppingRunId={logs.stoppingRunId}
         onCloseLogs={logs.close}
       />
     </section>

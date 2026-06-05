@@ -17,13 +17,16 @@ interface TaskListProps {
   onEditTextTask: (task: AgentMessageTaskPayload) => void;
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
-  onRunNow: (id: string) => Promise<void>;
+  onRunNow: (id: string) => Promise<unknown>;
   onDelete: (id: string) => Promise<void>;
   logsTaskID: string;
   logsData: TaskRunLog[];
   logsLoading: boolean;
   logsError: string;
   onOpenLogs: (id: string) => Promise<void>;
+  onRefreshLogs: (id: string) => Promise<TaskRunLog[]>;
+  onStopRun: (run: TaskRunLog) => Promise<void>;
+  stoppingRunId: string;
   onCloseLogs: () => void;
 }
 
@@ -34,7 +37,7 @@ interface TaskCardProps {
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
   onOpenLogs: (id: string) => Promise<void>;
   onSetEnabled: (id: string, enabled: boolean) => Promise<void>;
-  onRunNow: (id: string) => Promise<void>;
+  onRunNow: (id: string) => Promise<unknown>;
   onDelete: (id: string) => Promise<void>;
 }
 
@@ -54,6 +57,9 @@ export function TaskList(props: TaskListProps) {
     logsLoading,
     logsError,
     onOpenLogs,
+    onRefreshLogs,
+    onStopRun,
+    stoppingRunId,
     onCloseLogs,
   } = props;
   const visibleTasks = useMemo(() => filterTaskSettingsTasks(tasks), [tasks]);
@@ -101,6 +107,9 @@ export function TaskList(props: TaskListProps) {
           logs={logsData}
           loading={logsLoading}
           error={logsError}
+          onRefreshLogs={onRefreshLogs}
+          onStopRun={onStopRun}
+          stoppingRunId={stoppingRunId}
           onClose={onCloseLogs}
         />
       ) : null}

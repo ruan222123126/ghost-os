@@ -1,11 +1,13 @@
 import { requestJSON } from '@/lib/api/client';
 import { parseTaskPayload, parseTaskPayloadList, parseTaskRunLogList } from '@/lib/api/tasks/parser';
+import { parseTaskRunStopResponse } from '@/lib/api/tasks/stopParser';
 import type {
   OrchestrationTaskCreateRequest,
   OrchestrationTaskPayload,
   TaskRunLog,
   TaskUpdateRequest,
 } from '@/lib/types';
+import type { TaskRunStopRequest, TaskRunStopResponse } from '@/lib/taskRunStop';
 
 const START_ONLY_QUERY = '?start_only=1';
 
@@ -57,6 +59,16 @@ export async function deleteOrchestration(id: string): Promise<void> {
 
 export async function runOrchestrationNow(id: string): Promise<void> {
   await requestJSON(`/api/orchestrations/${encodeURIComponent(id)}/run${START_ONLY_QUERY}`, { method: 'POST' });
+}
+
+export async function stopOrchestrationRun(id: string, runId: string): Promise<TaskRunStopResponse> {
+  const body: TaskRunStopRequest = {
+    run_id: runId.trim(),
+  };
+  return requestJSON(`/api/orchestrations/${encodeURIComponent(id)}/stop`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, parseTaskRunStopResponse);
 }
 
 export async function listOrchestrationLogs(id: string, limit = 20): Promise<TaskRunLog[]> {

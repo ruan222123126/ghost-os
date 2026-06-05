@@ -8,8 +8,10 @@ import {
   createChatRuntimeStateFromDraft,
 } from '@/lib/chatRuntime/runtimeState';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
-import type { ChatMessage, SessionDetail } from '@/lib/types';
-import type { LiveTaskRunCard } from '@/lib/taskRunViewerCards';
+import type { AgentStreamEvent, ChatMessage, SessionDetail } from '@/lib/types';
+import { resolveCardSourceSessionId, type LiveTaskRunCard } from '@/lib/taskRunViewerCards';
+
+const ACTIVE_VIEWER_TOOL_STATUSES = new Set(['pending', 'running', 'in_progress']);
 
 export interface TaskRunCardOutput {
   committedMessages: ChatMessage[];
@@ -42,6 +44,7 @@ export function buildTaskRunCardOutput(
 
   return {
     committedMessages: filterCommittedMessagesForDisplay(state.committedMessages, [], false)
+      .filter(shouldIncludeViewerMessage)
       .map(normalizeViewerMessage),
     streamingRows: getOrderedStreamingRows({
       pendingQuestions: [],
@@ -54,7 +57,7 @@ export function buildTaskRunCardOutput(
       streamingItemOrder: state.streamingItemOrder,
       streamingTools: state.streamingToolState.order
         .map((toolId) => state.streamingToolState.toolsById[toolId])
-        .filter(Boolean),
+        .filter((tool) => Boolean(tool) && isCompletedViewerToolStatus(tool.toolStatus)),
     }).map((row) => ({
       ...row,
       message: normalizeViewerMessage(row.message),
@@ -87,7 +90,7 @@ function buildSessionOutputState(
   const runtime = session?.turn_draft
     ? createChatRuntimeStateFromDraft(session.turn_draft, resolveSessionID(card, session))
     : createChatRuntimeState(resolveTraceID(card), resolveSessionID(card, session));
-  for (const event of card.source_events) {
+  for (const event of resolveReplayEvents(card, session)) {
     state = chatStateReducer(state, {
       type: 'apply_runtime_actions',
       actions: projectAgentEvent({
@@ -97,6 +100,33 @@ function buildSessionOutputState(
     });
   }
   return state;
+}
+
+function resolveReplayEvents(
+  card: LiveTaskRunCard,
+  session: SessionDetail | null,
+): AgentStreamEvent[] {
+  if (!session) {
+    return card.source_events;
+  }
+
+  const snapshotTime = parseTimestamp(session.updated_at);
+  if (snapshotTime === null) {
+    return card.source_events;
+  }
+
+  return card.source_events.filter((event) => {
+    const eventTime = parseTimestamp(event.at);
+    return eventTime === null || eventTime > snapshotTime;
+  });
+}
+
+function parseTimestamp(value?: string): number | null {
+  if (!value?.trim()) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : timestamp;
 }
 
 function summaryOutput(card: LiveTaskRunCard): TaskRunCardOutput {
@@ -135,8 +165,17 @@ function normalizeViewerMessage(message: ChatMessage): ChatMessage {
   };
 }
 
+function shouldIncludeViewerMessage(message: ChatMessage): boolean {
+  return message.kind !== 'tool' || isCompletedViewerToolStatus(message.toolStatus);
+}
+
+function isCompletedViewerToolStatus(status?: string): boolean {
+  const normalized = status?.trim().toLowerCase();
+  return !normalized || !ACTIVE_VIEWER_TOOL_STATUSES.has(normalized);
+}
+
 function resolveSessionID(card: LiveTaskRunCard, session: SessionDetail | null): string {
-  return session?.id || card.live_source_session_id?.trim() || card.source_session_id?.trim() || '';
+  return session?.id || resolveCardSourceSessionId(card);
 }
 
 function resolveTraceID(card: LiveTaskRunCard): string {

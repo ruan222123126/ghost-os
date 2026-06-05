@@ -4,7 +4,6 @@ import { type KeyboardEvent, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { ConfigCardActions } from '@/components/config/ConfigCardActions';
 import {
-  LegacyMigrationBanner,
   OrchestrationLoadingList,
   OrchestrationStatusBanner,
 } from '@/components/config/OrchestrationSettingsSectionParts';
@@ -19,26 +18,29 @@ import type { OrchestrationTaskPayload } from '@/lib/types';
 export function OrchestrationSettingsSection() {
   const { copy } = useWebLocale();
   const router = useRouter();
-  const state = useOrchestrationSectionState(copy);
-  const logs = useOrchestrationLogs(copy.settings.tasksLogsEmpty);
-  const { runByID } = state;
+  const machine = useOrchestrationSectionState();
+  const logs = useOrchestrationLogs({
+    empty: copy.settings.tasksLogsEmpty,
+    stopFailed: copy.system.failedToStopTask,
+  });
+  const { state, actions } = machine;
   const { open: openLogs, taskID: logsTaskID } = logs;
   const handleRun = useCallback(async (taskID: string) => {
-    await runByID(taskID);
+    await actions.runByID(taskID);
     if (logsTaskID === taskID) {
       await openLogs(taskID);
     }
-  }, [logsTaskID, openLogs, runByID]);
+  }, [actions, logsTaskID, openLogs]);
 
-  if (state.creating) {
+  if (state.view === 'create') {
     return (
       <OrchestrationCreateForm
         name={state.name}
-        controlsDisabled={state.controlsDisabled}
+        controlsDisabled={state.loading || state.submitting}
         saving={state.submitting}
-        onChangeName={state.setName}
-        onSubmit={state.submitCreate}
-        onCancel={state.cancelCreate}
+        onChangeName={actions.setName}
+        onSubmit={actions.submitCreate}
+        onCancel={actions.cancelCreate}
       />
     );
   }
@@ -49,15 +51,8 @@ export function OrchestrationSettingsSection() {
         title={copy.settings.orchestrationTitle}
         description={copy.settings.orchestrationDescription}
         actionLabel={copy.settings.orchestrationNew}
-        onAction={state.startCreate}
+        onAction={actions.startCreate}
       />
-      {state.legacyMigrationCount > 0 ? (
-        <LegacyMigrationBanner
-          count={state.legacyMigrationCount}
-          running={state.legacyMigrationRunning}
-          onMigrate={() => ignorePromise(state.runLegacyMigration())}
-        />
-      ) : null}
       <OrchestrationStatusBanner
         message={state.error || state.success}
         tone={state.error ? 'error' : 'success'}
@@ -70,9 +65,9 @@ export function OrchestrationSettingsSection() {
         onRun={handleRun}
         runningOrchestrationID={state.runningOrchestrationID}
         onOpenLogs={openLogs}
-        onToggleEnabled={state.setEnabledByID}
-        onDelete={state.deleteByID}
-        controlsDisabled={state.controlsDisabled}
+        onToggleEnabled={actions.setEnabledByID}
+        onDelete={actions.deleteByID}
+        controlsDisabled={state.loading || state.submitting}
       />
       {logs.taskID ? (
         <TaskLogsModal
@@ -80,6 +75,9 @@ export function OrchestrationSettingsSection() {
           logs={logs.entries}
           loading={logs.loading}
           error={logs.error}
+          onRefreshLogs={logs.refresh}
+          onStopRun={logs.stopRun}
+          stoppingRunId={logs.stoppingRunId}
           onClose={logs.close}
         />
       ) : null}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getSession } from '@/lib/api/sessions/api';
+import { getFullSession } from '@/lib/api/sessions/api';
 import { streamSessionEvents } from '@/lib/api/sessions/events';
 import {
   parseTaskRunCardEventPayload,
@@ -15,6 +15,8 @@ import {
   isStickyTerminalCard,
   latestActiveCard,
   latestCreatedCard,
+  mergeLiveTaskRunCards,
+  resolveCardSourceSessionId,
   type LiveTaskRunCard,
 } from '@/lib/taskRunViewerCards';
 import type { SessionDetail, TaskRunLog } from '@/lib/types';
@@ -45,13 +47,17 @@ export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunVi
   const [sourceSessions, setSourceSessions] = useState<Record<string, SessionDetail>>({});
 
   useEffect(() => {
-    setCards(hydrateLiveTaskRunCards(run.run_cards));
+    setCards([]);
     setFollowLatest(true);
     setSelectedCardId('');
     setStreamError('');
     setSourceSessionError('');
     setSourceSessions({});
-  }, [run.run_id, run.run_cards]);
+  }, [run.run_id]);
+
+  useEffect(() => {
+    setCards((current) => mergeLiveTaskRunCards(current, run.run_cards));
+  }, [run.run_cards]);
 
   useEffect(() => {
     const sessionId = run.session_id_output?.trim();
@@ -112,7 +118,7 @@ export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunVi
       return;
     }
     let active = true;
-    void loadFullSession(selectedSessionId)
+    void getFullSession(selectedSessionId, SESSION_PAGE_LIMIT)
       .then((detail) => {
         if (!active) {
           return;
@@ -201,34 +207,7 @@ function resolveSelectedSessionId(card: LiveTaskRunCard | null): string {
   if (card.kind === 'relay_round' && card.status !== 'running' && card.source_events.length === 0) {
     return '';
   }
-  return card.live_source_session_id?.trim() || card.source_session_id?.trim() || '';
-}
-
-async function loadFullSession(sessionId: string): Promise<SessionDetail> {
-  const latest = await getSession(sessionId, { limit: SESSION_PAGE_LIMIT });
-  let messages = [...latest.messages];
-  let nextBefore = latest.page.next_before ?? null;
-
-  while (latest.page.has_more_before && nextBefore !== null) {
-    const page = await getSession(sessionId, { before: nextBefore, limit: SESSION_PAGE_LIMIT });
-    messages = [...page.messages, ...messages];
-    if (!page.page.has_more_before || page.page.next_before === null) {
-      break;
-    }
-    nextBefore = page.page.next_before ?? null;
-  }
-
-  return {
-    ...latest,
-    messages,
-    page: {
-      ...latest.page,
-      has_more_before: false,
-      next_before: null,
-      start_index: messages[0]?.index ?? latest.page.start_index,
-      end_index: messages.at(-1)?.index ?? latest.page.end_index,
-    },
-  };
+  return resolveCardSourceSessionId(card);
 }
 
 function errorMessage(error: unknown): string {

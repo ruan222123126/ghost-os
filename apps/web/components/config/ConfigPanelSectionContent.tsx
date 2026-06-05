@@ -87,21 +87,7 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
   if (activeTab === 'provider') {
     return (
       <ProviderSettingsSection
-        providers={providersState.providers}
-        activeProvider={providersState.activeProvider}
-        loading={providersState.providersLoading}
-        saving={providersState.providerSaving}
-        editorMode={providersState.editorMode}
-        editor={providersState.editor}
-        onRefresh={providersState.refreshProviders}
-        onBeginCreate={providersState.beginCreateProvider}
-        onEdit={providersState.editProvider}
-        onChangeEditor={providersState.updateEditor}
-        onSelectProviderType={providersState.selectProviderType}
-        onSubmit={providersState.submitProvider}
-        onActivate={providersState.activateProvider}
-        onDelete={providersState.deleteProviderByName}
-        onCancelEditing={providersState.cancelEditing}
+        machine={providersState}
       />
     );
   }
@@ -120,23 +106,10 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
   if (activeTab === 'tasks') {
     return (
       <TaskSettingsSection
-        tasks={tasksState.tasks}
-        loading={tasksState.tasksLoading}
-        saving={tasksState.taskSaving}
+        machine={tasksState}
         presets={presetsState.presets ?? []}
-        editorMode={tasksState.editorMode}
-        editor={tasksState.editor}
-        onRefresh={tasksState.refreshTasks}
-        onBeginCreateTextTask={tasksState.beginCreateTextTask}
-        onEditTextTask={tasksState.editTask}
         onOpenWorkflowCreate={onOpenWorkflowCreate}
         onOpenWorkflowEdit={onOpenWorkflowEdit}
-        onChangeEditor={tasksState.updateEditor}
-        onSubmit={tasksState.submitTask}
-        onSetEnabled={tasksState.setTaskEnabled}
-        onRunNow={tasksState.runTaskNowByID}
-        onDelete={tasksState.deleteTaskByID}
-        onCancelEditing={tasksState.cancelEditing}
       />
     );
   }

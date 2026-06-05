@@ -18,7 +18,10 @@ interface LoopSettingsSectionProps {
 
 export function LoopSettingsSection(props: LoopSettingsSectionProps) {
   const { copy } = useWebLocale();
-  const logs = useTaskLogs(copy.settings.tasksLogsEmpty);
+  const logs = useTaskLogs({
+    empty: copy.settings.tasksLogsEmpty,
+    stopFailed: copy.system.failedToStopTask,
+  });
   const state = useLoopSettingsState(toLoopStateOptions(props, copy));
 
   const handleRun = async (id: string) => {
@@ -62,6 +65,9 @@ export function LoopSettingsSection(props: LoopSettingsSectionProps) {
         logsData={logs.entries}
         logsLoading={logs.loading}
         logsError={logs.error}
+        onRefreshLogs={logs.refresh}
+        onStopRun={logs.stopRun}
+        stoppingRunId={logs.stoppingRunId}
         onCloseLogs={logs.close}
       />
     </section>
@@ -73,19 +79,23 @@ function toLoopStateOptions(
   copy: ReturnType<typeof useWebLocale>['copy'],
 ) {
   return {
-    tasks: props.tasksState.tasks,
-    tasksLoading: props.tasksState.tasksLoading,
-    taskSaving: props.tasksState.taskSaving,
-    taskError: props.tasksState.taskError,
+    tasks: props.tasksState.state.tasks,
+    tasksLoading: props.tasksState.state.loading,
+    taskSaving: props.tasksState.state.saving,
+    taskError: props.tasksState.state.error,
     presets: props.presetsState.presets,
     presetsLoading: props.presetsState.presetsLoading,
     presetError: props.presetsState.presetError,
     config: props.config,
     copy,
-    refreshTasks: props.tasksState.refreshTasks,
-    setTaskEnabled: props.tasksState.setTaskEnabled,
-    runTaskNowByID: props.tasksState.runTaskNowByID,
-    deleteTaskByID: props.tasksState.deleteTaskByID,
+    refreshTasks: async () => {
+      await props.tasksState.actions.refresh();
+    },
+    setTaskEnabled: props.tasksState.actions.setEnabled,
+    runTaskNowByID: async (id: string) => {
+      await props.tasksState.actions.runNow(id, { reportSuccess: true });
+    },
+    deleteTaskByID: props.tasksState.actions.delete,
   };
 }
 

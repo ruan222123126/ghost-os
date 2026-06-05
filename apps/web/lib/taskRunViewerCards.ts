@@ -15,9 +15,32 @@ export function hydrateLiveTaskRunCards(
   return cards
     .map((card) => ({
       ...card,
-      live_source_session_id: card.source_session_id,
-      source_events: [],
+      live_source_session_id: card.source_session_id || resolveSourceSessionIDFromEvents(card.source_events),
+      source_events: mergeCardSourceEvents(card.source_events),
     }))
+    .sort(compareCardsByStartTime);
+}
+
+export function mergeLiveTaskRunCards(
+  current: LiveTaskRunCard[],
+  cards: TaskRunCard[] | undefined,
+): LiveTaskRunCard[] {
+  if (!cards?.length) {
+    return [];
+  }
+  const currentByID = new Map(current.map((card) => [card.card_id, card]));
+  return cards
+    .map((card) => {
+      const existing = currentByID.get(card.card_id);
+      const sourceEvents = mergeCardSourceEvents(card.source_events, existing?.source_events);
+      return {
+        ...card,
+        live_source_session_id: card.source_session_id
+          || resolveSourceSessionIDFromEvents(sourceEvents)
+          || existing?.live_source_session_id,
+        source_events: sourceEvents,
+      };
+    })
     .sort(compareCardsByStartTime);
 }
 
@@ -28,8 +51,8 @@ export function applyStartedCard(
   const next = cards.filter((current) => current.card_id !== card.card_id);
   next.push({
     ...card,
-    live_source_session_id: card.source_session_id,
-    source_events: [],
+    live_source_session_id: card.source_session_id || resolveSourceSessionIDFromEvents(card.source_events),
+    source_events: mergeCardSourceEvents(card.source_events),
   });
   next.sort(compareCardsByStartTime);
   return next;
@@ -48,7 +71,7 @@ export function applyCardEvent(
     return {
       ...card,
       live_source_session_id: sourceSessionId?.trim() || card.live_source_session_id,
-      source_events: [...card.source_events, event],
+      source_events: mergeCardSourceEvents(card.source_events, [event]),
     };
   });
 }
@@ -95,9 +118,56 @@ export function isSummaryOnlyCard(card: LiveTaskRunCard): boolean {
   return card.kind === 'relay_round' && card.status !== 'running' && Boolean(card.final_text?.trim());
 }
 
+export function resolveCardSourceSessionId(card: LiveTaskRunCard | null | undefined): string {
+  if (!card) {
+    return '';
+  }
+  return card.live_source_session_id?.trim()
+    || card.source_session_id?.trim()
+    || resolveSourceSessionIDFromEvents(card.source_events)
+    || '';
+}
+
 function isActiveCard(card: LiveTaskRunCard): boolean {
   const status = card.status?.trim() || 'running';
   return status === 'running';
+}
+
+function mergeCardSourceEvents(...lists: (AgentStreamEvent[] | undefined)[]): AgentStreamEvent[] {
+  const merged: AgentStreamEvent[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    for (const event of list ?? []) {
+      const eventId = event.id.trim();
+      const dedupeKey = eventId || eventKey(event);
+      if (seen.has(dedupeKey)) {
+        continue;
+      }
+      seen.add(dedupeKey);
+      merged.push(event);
+    }
+  }
+  return merged;
+}
+
+function resolveSourceSessionIDFromEvents(events: AgentStreamEvent[] | undefined): string {
+  for (let index = (events?.length ?? 0) - 1; index >= 0; index -= 1) {
+    const sessionId = events?.[index]?.session_id?.trim();
+    if (sessionId) {
+      return sessionId;
+    }
+  }
+  return '';
+}
+
+function eventKey(event: AgentStreamEvent): string {
+  return [
+    event.trace_id,
+    event.step_id,
+    event.turn,
+    event.type,
+    event.at ?? '',
+  ].join(':');
 }
 
 function compareCardsByStartTime(left: LiveTaskRunCard, right: LiveTaskRunCard): number {

@@ -40,4 +40,44 @@ describe('components/config/TaskLogsOrchestration', () => {
     expect(html).toContain('round 1 Owner: keep all details');
     expect(html).toContain('Member [success]: done');
   });
+
+  it('filters private transcript entries to the dispatch round shown on each card', () => {
+    const output = parseOrchestrationGroupOutput({
+      completed_rounds: 2,
+      member_results: [
+        { round: 1, title: 'Member', status: 'success', content: 'first' },
+        { round: 2, title: 'Member', status: 'success', content: 'second' },
+      ],
+      dispatch_results: [
+        {
+          round: 1,
+          action: 'private_once',
+          private_transcript: [
+            { round: 1, speaker: 'Owner', content: 'first round' },
+          ],
+        },
+        {
+          round: 2,
+          action: 'private_once',
+          private_transcript: [
+            { round: 1, speaker: 'Owner', content: 'first round' },
+            { round: 2, speaker: 'Owner', content: 'second round' },
+          ],
+        },
+      ],
+    });
+
+    const html = renderToStaticMarkup(
+      React.createElement(OrchestrationRoundsBlock, {
+        output: output as NonNullable<typeof output>,
+      }),
+    );
+
+    expect(countOccurrences(html, 'round 1 Owner: first round')).toBe(1);
+    expect(countOccurrences(html, 'round 2 Owner: second round')).toBe(1);
+  });
 });
+
+function countOccurrences(text: string, fragment: string): number {
+  return text.split(fragment).length - 1;
+}

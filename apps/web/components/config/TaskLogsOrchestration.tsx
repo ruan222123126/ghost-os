@@ -66,6 +66,7 @@ function OrchestrationDispatchList(props: { dispatchResults: OrchestrationDispat
 
 function OrchestrationDispatchCard(props: { dispatch: OrchestrationDispatchResult; index: number }) {
   const { dispatch, index } = props;
+  const transcriptEntries = transcriptEntriesForRound(dispatch.private_transcript, dispatch.round);
   return (
     <details className="rounded-[8px] border border-[#E5E5E5] bg-white p-2" open>
       <summary className="cursor-pointer list-none text-[12px] text-[#111111]">
@@ -81,7 +82,7 @@ function OrchestrationDispatchCard(props: { dispatch: OrchestrationDispatchResul
             private_send: {delivery.participant_id ?? 'unknown'} &lt;- {delivery.content ?? ''}
           </p>
         ))}
-        {dispatch.private_transcript?.length ? <OrchestrationTranscriptBlock entries={dispatch.private_transcript} /> : null}
+        {transcriptEntries.length ? <OrchestrationTranscriptBlock entries={transcriptEntries} /> : null}
       </div>
     </details>
   );
@@ -117,6 +118,19 @@ function formatTranscriptEntry(entry: OrchestrationTranscriptEntry): string {
   const speaker = entry.speaker || entry.agent_id || 'member';
   const round = entry.round ? `round ${entry.round} ` : '';
   return `${round}${speaker}: ${entry.content ?? ''}`.trim();
+}
+
+function transcriptEntriesForRound(
+  entries: OrchestrationTranscriptEntry[] | undefined,
+  round: number | undefined,
+): OrchestrationTranscriptEntry[] {
+  if (!entries?.length) {
+    return [];
+  }
+  if (typeof round !== 'number' || round <= 0) {
+    return entries;
+  }
+  return entries.filter((entry) => entry.round === round);
 }
 
 export function parseOrchestrationGroupOutput(value: unknown): OrchestrationGroupOutput | undefined {

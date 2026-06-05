@@ -157,6 +157,9 @@ function renderTaskList(
       logsLoading: false,
       logsError: '',
       onOpenLogs: async () => {},
+      onRefreshLogs: async () => [],
+      onStopRun: async () => {},
+      stoppingRunId: '',
       onCloseLogs: () => {},
       ...props,
     };
@@ -176,10 +179,10 @@ function renderTaskList(
 
 type TaskListTestProps = Omit<
   React.ComponentProps<typeof TaskList>,
-  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onCloseLogs'
+  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onRefreshLogs' | 'onStopRun' | 'stoppingRunId' | 'onCloseLogs'
 > & Partial<Pick<
   React.ComponentProps<typeof TaskList>,
-  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onCloseLogs'
+  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onRefreshLogs' | 'onStopRun' | 'stoppingRunId' | 'onCloseLogs'
 >>;
 
 function buildLocalStorageMock(locale: WebLocale): Storage {

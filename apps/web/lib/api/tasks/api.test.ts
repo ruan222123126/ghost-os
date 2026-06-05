@@ -1,4 +1,4 @@
-import { createTask, deleteTask, getTask, listTaskLogs, listTasks, runTaskNow, updateTask } from './api';
+import { createTask, deleteTask, getTask, listTaskLogs, listTasks, runTaskNow, stopTaskRun, updateTask } from './api';
 import { fetchMock, installFetchMock, mockFetchJSON } from '@/lib/api.test.helpers';
 import type { AgentMessageTaskPayload, TextTaskCreateRequest, TextTaskUpdateRequest } from '@/lib/types';
 
@@ -160,6 +160,38 @@ describe('lib/api/tasks/api', () => {
       '/api/tasks/task-5/run?start_only=1',
       expect.objectContaining({
         method: 'POST',
+      }),
+    );
+  });
+
+  it('stopTaskRun calls POST /api/tasks/:id/stop with run id', async () => {
+    mockFetchJSON({
+      status: 'success',
+      payload: {
+        status: 'stopped',
+        message: 'task run cancelled successfully',
+        task_id: 'task-5',
+        run_id: 'run-1',
+        run: {
+          task_id: 'task-5',
+          run_id: 'run-1',
+          trace_id: 'trace-stop-1',
+          scheduled_at: '2026-04-05T07:00:00Z',
+          started_at: '2026-04-05T07:00:01Z',
+          finished_at: '2026-04-05T07:00:02Z',
+          status: 'cancelled',
+        },
+      },
+      error: '',
+    });
+
+    await stopTaskRun('task-5', 'run-1');
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/tasks/task-5/stop',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ run_id: 'run-1' }),
       }),
     );
   });

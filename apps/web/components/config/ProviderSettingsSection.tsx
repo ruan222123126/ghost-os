@@ -1,85 +1,34 @@
 'use client';
 
-import { useState } from 'react';
 import { ProviderEditorForm } from '@/components/config/ProviderEditorForm';
 import { ProviderList } from '@/components/config/ProviderList';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ProviderEditorState } from '@/lib/configProviders';
-import type { ProviderConfig } from '@/lib/types';
+import type { useConfigProviders } from '@/hooks/useConfigProviders';
 
 interface ProviderSettingsSectionProps {
-  providers: ProviderConfig[];
-  activeProvider: string;
-  loading: boolean;
-  saving: boolean;
-  editorMode: 'create' | 'edit';
-  editor: ProviderEditorState;
-  onRefresh: () => Promise<void>;
-  onBeginCreate: () => void;
-  onEdit: (provider: ProviderConfig) => void;
-  onChangeEditor: (patch: Partial<ProviderEditorState>) => void;
-  onSelectProviderType: (providerType: ProviderConfig['type']) => void;
-  onSubmit: () => Promise<boolean>;
-  onActivate: (name: string) => Promise<void>;
-  onDelete: (name: string) => Promise<void>;
-  onCancelEditing: () => void;
+  machine: ReturnType<typeof useConfigProviders>;
 }
 
 export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
   const { copy } = useWebLocale();
-  const {
-    providers,
-    activeProvider,
-    loading,
-    saving,
-    editorMode,
-    editor,
-    onRefresh,
-    onBeginCreate,
-    onEdit,
-    onChangeEditor,
-    onSelectProviderType,
-    onSubmit,
-    onActivate,
-    onDelete,
-    onCancelEditing,
-  } = props;
-  const [editorOpen, setEditorOpen] = useState(false);
-  const controlsDisabled = loading || saving;
+  const { machine } = props;
+  const { state, actions } = machine;
+  const controlsDisabled = state.loading || state.saving;
 
-  const handleBeginCreate = () => {
-    onBeginCreate();
-    setEditorOpen(true);
-  };
-
-  const handleEdit = (provider: ProviderConfig) => {
-    onEdit(provider);
-    setEditorOpen(true);
-  };
-
-  const handleCancel = () => {
-    onCancelEditing();
-    setEditorOpen(false);
-  };
-
-  const handleSubmit = async () => {
-    if (await onSubmit()) {
-      setEditorOpen(false);
-    }
-  };
-
-  if (editorOpen) {
+  if (state.view === 'editor') {
     return (
       <ProviderEditorForm
-        editorMode={editorMode}
-        editor={editor}
+        editorMode={state.editorMode}
+        editor={state.editor}
         controlsDisabled={controlsDisabled}
-        saving={saving}
-        onChangeEditor={onChangeEditor}
-        onSelectProviderType={onSelectProviderType}
-        onSubmit={handleSubmit}
-        onCancelEditing={handleCancel}
+        saving={state.saving}
+        onChangeEditor={actions.updateEditor}
+        onSelectProviderType={actions.selectProviderType}
+        onSubmit={async () => {
+          await actions.submit();
+        }}
+        onCancelEditing={actions.cancelEditing}
       />
     );
   }
@@ -97,7 +46,7 @@ export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
             type="button"
             disabled={controlsDisabled}
             onClick={() => {
-              ignorePromise(onRefresh());
+              ignorePromise(actions.refresh());
             }}
             className="rounded-full border border-[#E5E5E5] px-4 py-2 text-[13px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -106,7 +55,7 @@ export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
           <button
             type="button"
             disabled={controlsDisabled}
-            onClick={handleBeginCreate}
+            onClick={actions.startCreate}
             className="rounded-full bg-[#111111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copy.settings.providerAdd}
@@ -115,13 +64,13 @@ export function ProviderSettingsSection(props: ProviderSettingsSectionProps) {
       </header>
 
       <ProviderList
-        providers={providers}
-        activeProvider={activeProvider}
-        loading={loading}
+        providers={state.providers}
+        activeProvider={state.activeProvider}
+        loading={state.loading}
         controlsDisabled={controlsDisabled}
-        onActivate={onActivate}
-        onDelete={onDelete}
-        onEdit={handleEdit}
+        onActivate={actions.activate}
+        onDelete={actions.delete}
+        onEdit={actions.startEdit}
       />
     </section>
   );

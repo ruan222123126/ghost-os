@@ -1,24 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, type Dispatch } from 'react';
+import { useProvidersApi } from '@/hooks/config-panel/useProvidersApi';
 import {
-  createProvider,
-  deleteProvider,
-  getProviders,
-  updateProvider,
-} from '@/lib/api/config/api';
-import {
-  EditorMode,
-  ProviderEditorState,
-  editorStateFromProvider,
-  emptyProviderEditorState,
-  nextEditorStateForProviderType,
-  providerInputFromEditor,
-  stringsEqualIgnoreCase,
-} from '@/lib/configProviders';
+  createInitialProvidersState,
+  firstAvailableProviderModel,
+  providersReducer,
+  type ProvidersAction,
+  type ProvidersState,
+} from '@/lib/config-panel/providersMachine';
+import { providerInputFromEditor, stringsEqualIgnoreCase } from '@/lib/configProviders';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ConfigUpdate, ProviderConfig, ProviderListResponse } from '@/lib/types';
+import type { ConfigUpdate, ProviderConfig } from '@/lib/types';
 
 interface UseConfigProvidersOptions {
   open: boolean;
@@ -27,179 +21,171 @@ interface UseConfigProvidersOptions {
   modelSelectionEnabled: boolean;
 }
 
-interface UseConfigProvidersResult {
-  providers: ProviderConfig[];
-  activeProvider: string;
-  providersLoading: boolean;
-  providerSaving: boolean;
-  providerError: string;
-  editorMode: EditorMode;
-  editor: ProviderEditorState;
-  refreshProviders: () => Promise<void>;
-  beginCreateProvider: () => void;
-  editProvider: (provider: ProviderConfig) => void;
-  updateEditor: (patch: Partial<ProviderEditorState>) => void;
-  selectProviderType: (providerType: ProviderConfig['type']) => void;
-  submitProvider: () => Promise<boolean>;
-  activateProvider: (name: string) => Promise<void>;
-  deleteProviderByName: (name: string) => Promise<void>;
+interface UseConfigProvidersActions {
+  refresh: () => Promise<boolean>;
+  startCreate: () => void;
+  startEdit: (provider: ProviderConfig) => void;
   cancelEditing: () => void;
+  updateEditor: (patch: Partial<ProvidersState['editor']>) => void;
+  selectProviderType: (providerType: ProviderConfig['type']) => void;
+  submit: () => Promise<boolean>;
+  activate: (name: string) => Promise<void>;
+  delete: (name: string) => Promise<void>;
 }
+
+interface UseConfigProvidersResult {
+  state: ProvidersState;
+  actions: UseConfigProvidersActions;
+}
+
+type ProvidersApi = ReturnType<typeof useProvidersApi>;
 
 export function useConfigProviders(options: UseConfigProvidersOptions): UseConfigProvidersResult {
   const { copy } = useWebLocale();
-  const { open, onReloadConfig, onActivateRuntimeConfig, modelSelectionEnabled } = options;
-  const [providers, setProviders] = useState<ProviderConfig[]>([]);
-  const [activeProvider, setActiveProviderName] = useState('');
-  const [providersLoading, setProvidersLoading] = useState(false);
-  const [providerSaving, setProviderSaving] = useState(false);
-  const [providerError, setProviderError] = useState('');
-  const [editorMode, setEditorMode] = useState<EditorMode>('create');
-  const [editingName, setEditingName] = useState('');
-  const [editor, setEditor] = useState<ProviderEditorState>(emptyProviderEditorState);
-
-  const applyProviderList = useCallback((payload: ProviderListResponse) => {
-    setProviders(payload.providers);
-    setActiveProviderName(payload.active_provider);
-  }, []);
-
-  const resetEditor = useCallback((mode: EditorMode = 'create') => {
-    setEditorMode(mode);
-    setEditingName('');
-    setEditor(emptyProviderEditorState);
-  }, []);
-
-  const refreshProviders = useCallback(async () => {
-    setProvidersLoading(true);
-    try {
-      applyProviderList(await getProviders());
-      setProviderError('');
-    } catch (error) {
-      setProviderError(toErrorMessage(error, copy.system.failedToLoadProviders));
-    } finally {
-      setProvidersLoading(false);
-    }
-  }, [applyProviderList, copy.system.failedToLoadProviders]);
+  const api = useProvidersApi(options);
+  const [state, dispatch] = useReducer(providersReducer, undefined, createInitialProvidersState);
+  const refresh = useRefreshProviders(api, copy, dispatch);
+  const submit = useSubmitProvider(api, copy, state, dispatch);
+  const activate = useActivateProvider(api, copy, state, dispatch);
+  const deleteByName = useDeleteProvider(api, copy, state, dispatch);
+  const actions = useProviderActionBundle(dispatch, refresh, submit, activate, deleteByName);
 
   useEffect(() => {
-    if (open) {
-      ignorePromise(refreshProviders());
+    if (options.open) {
+      ignorePromise(refresh());
     }
-  }, [open, refreshProviders]);
+  }, [options.open, refresh]);
 
-  const runProviderMutation = useCallback(async (
-    action: () => Promise<ProviderListResponse>,
-    errorMessage: string,
-    onSuccess?: () => void | Promise<void>,
-  ): Promise<boolean> => {
-    setProviderSaving(true);
-    setProviderError('');
-    try {
-      applyProviderList(await action());
-      await onReloadConfig();
-      await onSuccess?.();
-      return true;
-    } catch (error) {
-      setProviderError(toErrorMessage(error, errorMessage));
-      return false;
-    } finally {
-      setProviderSaving(false);
-    }
-  }, [applyProviderList, onReloadConfig]);
-
-  const updateEditor = useCallback((patch: Partial<ProviderEditorState>) => {
-    setEditor((state) => ({ ...state, ...patch }));
-  }, []);
-
-  const selectProviderType = useCallback((providerType: ProviderConfig['type']) => {
-    setEditor((state) => nextEditorStateForProviderType(state, providerType));
-  }, []);
-
-  const submitProvider = useCallback(async (): Promise<boolean> => {
-    const action = editorMode === 'edit'
-      ? () => updateProvider(editingName, providerInputFromEditor(editor))
-      : () => createProvider(providerInputFromEditor(editor));
-
-    return runProviderMutation(action, copy.system.failedToSaveProvider, () => {
-      resetEditor();
-    });
-  }, [copy.system.failedToSaveProvider, editor, editorMode, editingName, resetEditor, runProviderMutation]);
-
-  const activateProvider = useCallback(async (name: string) => {
-    setProviderSaving(true);
-    setProviderError('');
-
-    try {
-      const nextProvider = providers.find((provider) => stringsEqualIgnoreCase(provider.name, name));
-      const firstModel = nextProvider ? firstAvailableProviderModel(nextProvider) : null;
-      const update: ConfigUpdate = { provider: name };
-      if (modelSelectionEnabled && firstModel) {
-        update.model = firstModel;
-      }
-
-      const saved = await onActivateRuntimeConfig(update);
-      if (!saved) {
-        return;
-      }
-
-      await onReloadConfig();
-      applyProviderList(await getProviders());
-    } catch (error) {
-      setProviderError(toErrorMessage(error, copy.system.failedToSwitchProvider));
-    } finally {
-      setProviderSaving(false);
-    }
-  }, [
-    applyProviderList,
-    copy.system.failedToSwitchProvider,
-    modelSelectionEnabled,
-    onActivateRuntimeConfig,
-    onReloadConfig,
-    providers,
-  ]);
-
-  const deleteProviderByName = useCallback(async (name: string) => {
-    await runProviderMutation(() => deleteProvider(name), copy.system.failedToDeleteProvider, () => {
-      if (stringsEqualIgnoreCase(editingName, name)) {
-        resetEditor();
-      }
-    });
-  }, [copy.system.failedToDeleteProvider, editingName, resetEditor, runProviderMutation]);
-
-  const editProvider = useCallback((provider: ProviderConfig) => {
-    setEditorMode('edit');
-    setEditingName(provider.name);
-    setEditor(editorStateFromProvider(provider));
-    setProviderError('');
-  }, []);
-
-  return {
-    providers,
-    activeProvider,
-    providersLoading,
-    providerSaving,
-    providerError,
-    editorMode,
-    editor,
-    refreshProviders,
-    beginCreateProvider: resetEditor,
-    editProvider,
-    updateEditor,
-    selectProviderType,
-    submitProvider,
-    activateProvider,
-    deleteProviderByName,
-    cancelEditing: resetEditor,
-  };
+  return { state, actions };
 }
 
-function firstAvailableProviderModel(provider: ProviderConfig): string | null {
-  for (const model of provider.models ?? []) {
-    const trimmed = model.trim();
-    if (trimmed.length > 0) {
-      return trimmed;
+function useRefreshProviders(
+  api: ProvidersApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  dispatch: Dispatch<ProvidersAction>,
+) {
+  return useCallback(async (): Promise<boolean> => {
+    dispatch({ type: 'load_start' });
+    try {
+      dispatch({ type: 'load_success', payload: await api.getProviders() });
+      return true;
+    } catch (error) {
+      dispatch({
+        type: 'load_error',
+        error: toErrorMessage(error, copy.system.failedToLoadProviders),
+      });
+      return false;
     }
-  }
+  }, [api, copy.system.failedToLoadProviders, dispatch]);
+}
 
-  return null;
+function useSubmitProvider(
+  api: ProvidersApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  state: ProvidersState,
+  dispatch: Dispatch<ProvidersAction>,
+) {
+  return useCallback(async (): Promise<boolean> => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      const input = providerInputFromEditor(state.editor);
+      const payload = state.editorMode === 'edit'
+        ? await api.updateProvider(state.editingName, input)
+        : await api.createProvider(input);
+      dispatch({ type: 'load_success', payload });
+      await api.reloadConfig();
+      dispatch({ type: 'set_saving', saving: false });
+      dispatch({ type: 'exit_editor' });
+      return true;
+    } catch (error) {
+      dispatchMutationError(dispatch, error, copy.system.failedToSaveProvider);
+      return false;
+    }
+  }, [api, copy.system.failedToSaveProvider, dispatch, state.editor, state.editorMode, state.editingName]);
+}
+
+function useActivateProvider(
+  api: ProvidersApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  state: ProvidersState,
+  dispatch: Dispatch<ProvidersAction>,
+) {
+  return useCallback(async (name: string): Promise<void> => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      const saved = await api.activateRuntimeConfig(buildProviderUpdate(api, state.providers, name));
+      if (!saved) {
+        dispatch({ type: 'set_saving', saving: false });
+        return;
+      }
+      await api.reloadConfig();
+      dispatch({ type: 'load_success', payload: await api.getProviders() });
+      dispatch({ type: 'set_saving', saving: false });
+    } catch (error) {
+      dispatchMutationError(dispatch, error, copy.system.failedToSwitchProvider);
+    }
+  }, [api, copy.system.failedToSwitchProvider, dispatch, state.providers]);
+}
+
+function useDeleteProvider(
+  api: ProvidersApi,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+  state: ProvidersState,
+  dispatch: Dispatch<ProvidersAction>,
+) {
+  return useCallback(async (name: string): Promise<void> => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      dispatch({ type: 'load_success', payload: await api.deleteProvider(name) });
+      await api.reloadConfig();
+      if (stringsEqualIgnoreCase(state.editingName, name)) {
+        dispatch({ type: 'exit_editor' });
+      }
+      dispatch({ type: 'set_saving', saving: false });
+    } catch (error) {
+      dispatchMutationError(dispatch, error, copy.system.failedToDeleteProvider);
+    }
+  }, [api, copy.system.failedToDeleteProvider, dispatch, state.editingName]);
+}
+
+function useProviderActionBundle(
+  dispatch: Dispatch<ProvidersAction>,
+  refresh: UseConfigProvidersActions['refresh'],
+  submit: UseConfigProvidersActions['submit'],
+  activate: UseConfigProvidersActions['activate'],
+  deleteByName: UseConfigProvidersActions['delete'],
+): UseConfigProvidersActions {
+  return useMemo(() => ({
+    refresh,
+    submit,
+    activate,
+    delete: deleteByName,
+    startCreate: () => dispatch({ type: 'enter_create' }),
+    startEdit: (provider) => dispatch({ type: 'enter_edit', provider }),
+    cancelEditing: () => dispatch({ type: 'exit_editor' }),
+    updateEditor: (patch) => dispatch({ type: 'patch_editor', patch }),
+    selectProviderType: (providerType) => dispatch({ type: 'select_provider_type', providerType }),
+  }), [activate, deleteByName, dispatch, refresh, submit]);
+}
+
+function buildProviderUpdate(
+  api: ProvidersApi,
+  providers: ProviderConfig[],
+  name: string,
+): ConfigUpdate {
+  const update: ConfigUpdate = { provider: name };
+  const provider = providers.find((item) => stringsEqualIgnoreCase(item.name, name));
+  const firstModel = provider ? firstAvailableProviderModel(provider) : null;
+  if (api.modelSelectionEnabled && firstModel) {
+    update.model = firstModel;
+  }
+  return update;
+}
+
+function dispatchMutationError(
+  dispatch: Dispatch<ProvidersAction>,
+  error: unknown,
+  fallback: string,
+) {
+  dispatch({ type: 'mutate_error', error: toErrorMessage(error, fallback) });
 }
