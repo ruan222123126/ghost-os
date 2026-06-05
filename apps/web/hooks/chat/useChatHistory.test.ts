@@ -113,4 +113,55 @@ describe('hooks/chat/useChatHistory mergeLatestCommittedMessages', () => {
       'session:assistant:3',
     ]);
   });
+
+  it('keeps the current assistant reply visible when synced history has only caught up to the user message', () => {
+    const previous = [
+      buildUserMessage('session:user:old', 'old question'),
+      buildAssistantMessage('session:assistant:old', 'old answer'),
+      buildUserMessage('local:user:trace-4', 'new question'),
+      buildThinkingMessage('stream-thinking:trace-4', 'thinking'),
+      buildAssistantMessage('stream-assistant:trace-4', 'new answer'),
+    ];
+
+    const latest = [
+      buildUserMessage('session:user:old', 'old question'),
+      buildAssistantMessage('session:assistant:old', 'old answer'),
+      buildUserMessage('session:user:4', 'new question'),
+    ];
+
+    const merged = mergeLatestCommittedMessages(previous, latest);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:old',
+      'session:assistant:old',
+      'session:user:4',
+      'stream-assistant:trace-4',
+    ]);
+  });
+
+  it('keeps the unfinished current turn visible when synced history has not caught up yet', () => {
+    const previous = [
+      buildUserMessage('session:user:old', 'old question'),
+      buildAssistantMessage('session:assistant:old', 'old answer'),
+      buildUserMessage('local:user:trace-5', 'new question'),
+      buildThinkingMessage('stream-thinking:trace-5', 'thinking'),
+      buildToolMessage('stream-tool:trace-5:call-5', 'ls -la', 'call-5'),
+      buildAssistantMessage('stream-assistant:trace-5', 'new answer'),
+    ];
+
+    const latest = [
+      buildUserMessage('session:user:old', 'old question'),
+      buildAssistantMessage('session:assistant:old', 'old answer'),
+    ];
+
+    const merged = mergeLatestCommittedMessages(previous, latest);
+
+    expect(merged.map((message) => message.id)).toEqual([
+      'session:user:old',
+      'session:assistant:old',
+      'local:user:trace-5',
+      'stream-tool:trace-5:call-5',
+      'stream-assistant:trace-5',
+    ]);
+  });
 });
