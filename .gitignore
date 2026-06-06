@@ -42,6 +42,20 @@ core/bridge/bridge
 # Runtime logs.
 data/logs/*
 
+# Agent scratch artifacts.
+core/bridge/.codex*/
+core/bridge/.codex*
+core/bridge/.relay/
+core/bridge/**/*.exit
+core/bridge/codex*/
+core/bridge/codex-*
+core/bridge/codex_*
+core/bridge/core/
+core/bridge/phase0_*.txt*
+core/bridge/round*_codex.txt*
+core/bridge/stage1-deletion-report.md
+core/bridge/tmp/
+
 # Temporary dev scripts.
 weather_now.py
 open-dev-bashes.sh
