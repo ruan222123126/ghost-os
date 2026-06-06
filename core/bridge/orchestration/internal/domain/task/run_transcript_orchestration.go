@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	"ghost-os/bridge/taskdefs"
 )
 
 func (b *runTranscriptBuilder) appendOrchestrationResults() {
@@ -17,7 +17,7 @@ func (b *runTranscriptBuilder) appendOrchestrationResults() {
 	}
 }
 
-func (b *runTranscriptBuilder) appendOrchestrationGroupNode(node bridgeTasks.RunNodeResult) {
+func (b *runTranscriptBuilder) appendOrchestrationGroupNode(node taskdefs.RunNodeResult) {
 	if strings.TrimSpace(node.Error) != "" {
 		b.addEvent(fmt.Sprintf("编排群组失败：%s\nerror: %s", node.NodeID, strings.TrimSpace(node.Error)))
 	}

@@ -10,6 +10,26 @@ type SessionError struct {
 	Err       error
 }
 
+type SessionSetupError struct {
+	SessionID  string
+	StatusCode int
+	Err        error
+}
+
+func (e *SessionSetupError) Error() string {
+	if e == nil || e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
+}
+
+func (e *SessionSetupError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
+}
+
 func (e *SessionError) Error() string {
 	if e == nil || e.Err == nil {
 		return ""

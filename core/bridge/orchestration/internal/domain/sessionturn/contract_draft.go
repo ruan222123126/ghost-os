@@ -4,18 +4,16 @@ import (
 	"strings"
 
 	"ghost-os/bridge/llm"
-	bridgesession "ghost-os/bridge/session"
 )
 
 func BuildSessionTurnDraftPayload(
-	sess *bridgesession.Session,
+	draft *SessionTurnDraftInput,
 	includeDraft bool,
 ) *sessionTurnDraft {
-	if !includeDraft || sess == nil || sess.TurnDraft == nil {
+	if !includeDraft || draft == nil {
 		return nil
 	}
 
-	draft := sess.TurnDraft
 	if strings.TrimSpace(draft.TraceID) == "" {
 		return nil
 	}
@@ -32,22 +30,22 @@ func BuildSessionTurnDraftPayload(
 	}
 }
 
-func BuildAssistantDraftSessionMessage(sess *bridgesession.Session) (sessionMessage, bool) {
-	if sess == nil || sess.AssistantDraft == nil {
+func BuildAssistantDraftSessionMessage(draft *AssistantDraftInput, messageCount int) (sessionMessage, bool) {
+	if draft == nil {
 		return sessionMessage{}, false
 	}
-	if strings.TrimSpace(sess.AssistantDraft.Text) == "" {
+	if strings.TrimSpace(draft.Text) == "" {
 		return sessionMessage{}, false
 	}
 	return sessionMessage{
-		Index:      sess.MessageCount,
+		Index:      messageCount,
 		Role:       string(llm.RoleAssistant),
-		Text:       sess.AssistantDraft.Text,
+		Text:       draft.Text,
 		InProgress: true,
 	}, true
 }
 
-func buildSessionTurnDraftSegments(raw []bridgesession.TurnDraftSegment) []sessionTurnDraftSegment {
+func buildSessionTurnDraftSegments(raw []TurnDraftSegmentInput) []sessionTurnDraftSegment {
 	if len(raw) == 0 {
 		return []sessionTurnDraftSegment{}
 	}
@@ -63,7 +61,7 @@ func buildSessionTurnDraftSegments(raw []bridgesession.TurnDraftSegment) []sessi
 	return out
 }
 
-func buildSessionTurnDraftTools(raw []bridgesession.TurnDraftTool) []sessionTurnDraftTool {
+func buildSessionTurnDraftTools(raw []TurnDraftToolInput) []sessionTurnDraftTool {
 	if len(raw) == 0 {
 		return []sessionTurnDraftTool{}
 	}
@@ -104,28 +102,28 @@ func buildSessionTurnDraftItemOrder(raw []string) []string {
 	return out
 }
 
-func normalizeTurnDraftStatus(draft *bridgesession.TurnDraft) string {
+func normalizeTurnDraftStatus(draft *SessionTurnDraftInput) string {
 	if draft == nil {
-		return bridgesession.TurnDraftStatusStreaming
+		return TurnDraftStatusStreaming
 	}
 
 	switch strings.TrimSpace(draft.Status) {
-	case bridgesession.TurnDraftStatusStreaming,
-		bridgesession.TurnDraftStatusAwaitingHuman,
-		bridgesession.TurnDraftStatusError:
+	case TurnDraftStatusStreaming,
+		TurnDraftStatusAwaitingHuman,
+		TurnDraftStatusError:
 		return strings.TrimSpace(draft.Status)
 	}
 	if strings.TrimSpace(draft.Error) != "" {
-		return bridgesession.TurnDraftStatusError
+		return TurnDraftStatusError
 	}
 	if len(draft.PendingQuestions) > 0 {
-		return bridgesession.TurnDraftStatusAwaitingHuman
+		return TurnDraftStatusAwaitingHuman
 	}
-	return bridgesession.TurnDraftStatusStreaming
+	return TurnDraftStatusStreaming
 }
 
 func buildSessionTurnDraftPendingQuestions(
-	raw []bridgesession.TurnDraftPendingQuestion,
+	raw []TurnDraftPendingQuestionInput,
 ) []sessionTurnDraftPendingQuestion {
 	if len(raw) == 0 {
 		return []sessionTurnDraftPendingQuestion{}
@@ -148,7 +146,7 @@ func buildSessionTurnDraftPendingQuestions(
 	return out
 }
 
-func buildTurnDraftQuestionOptions(raw []bridgesession.HumanQuestionOption) []askHumanOption {
+func buildTurnDraftQuestionOptions(raw []HumanQuestionOptionInput) []askHumanOption {
 	if len(raw) == 0 {
 		return nil
 	}

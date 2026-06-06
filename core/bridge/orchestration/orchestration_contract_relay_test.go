@@ -3,8 +3,10 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
 	"net/http"
@@ -93,7 +95,7 @@ func TestRelayAIDecidesStopsAtMaxRounds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("relay run failed: %v", err)
 	}
-	if result.StoppedBy != relayModeStopMaxRounds {
+	if result.StoppedBy != apprelay.StopMaxRounds {
 		t.Fatalf("unexpected stop reason: %s", result.StoppedBy)
 	}
 	if len(result.Records) != 2 || len(completer.requests) != 2 {
@@ -117,7 +119,7 @@ func TestRelayAIDecidesCanComplete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("relay run failed: %v", err)
 	}
-	if result.StoppedBy != relayModeStopCompleted || result.Message != "done" {
+	if result.StoppedBy != apprelay.StopCompleted || result.Message != "done" {
 		t.Fatalf("unexpected result: %+v", result)
 	}
 	if len(result.Records) != 1 || len(completer.requests) != 1 {
@@ -139,7 +141,7 @@ func TestRelayRepairsPlainTextRoundIntoHandoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("relay run failed: %v", err)
 	}
-	if result.StoppedBy != relayModeStopMaxRounds {
+	if result.StoppedBy != apprelay.StopMaxRounds {
 		t.Fatalf("unexpected stop reason: %s", result.StoppedBy)
 	}
 	if len(result.Records) != 1 || len(completer.requests) != 2 {
@@ -210,27 +212,27 @@ func runRelayModeTest(
 	t *testing.T,
 	completer *proTestCompleter,
 	relay TaskRelayConfig,
-) (relayModeResult, error) {
+) (apprelay.Result, error) {
 	t.Helper()
 
 	store := newTempSessionStore(t)
 	sess := session.NewSession("system")
-	runner := relayModeRunner{sessionStore: store}
-	deps := agentRuntimeDependencies{
-		cfg: bridgeconfig.Config{
+	runner := apprelay.Runner{SessionStore: store}
+	deps := apprelay.RuntimeDependencies{
+		Config: bridgeconfig.Config{
 			MaxTurns: 4,
 		},
-		client:               completer,
-		registry:             tools.NewRegistry(),
-		systemPrompt:         "system",
-		systemPromptOverride: true,
+		Client:               completer,
+		Registry:             tools.NewRegistry(),
+		SystemPrompt:         "system",
+		SystemPromptOverride: true,
 	}
-	return runner.run(context.Background(), relayRunDeps{
-		deps:    deps,
-		relay:   relay,
-		task:    ScheduledTask{Message: "finish task"},
-		session: sess,
-		traceID: "trace-relay-test",
+	return runner.Run(context.Background(), apprelay.RunRequest{
+		Deps:    deps,
+		Relay:   relay,
+		Task:    ScheduledTask{Message: "finish task"},
+		Session: sess,
+		TraceID: "trace-relay-test",
 	})
 }
 

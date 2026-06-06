@@ -12,14 +12,12 @@ type ContextLimitConfig struct {
 }
 
 var (
-	defaultTokenEstimator      = tokenEstimator{}
 	defaultContextLimitPolicy  = newContextLimitResolver()
-	defaultSessionMessagePrune = newMessagePruner(defaultRecentMessagesToKeep, defaultTokenEstimator.Estimate)
+	defaultSessionMessagePrune = newMessagePruner(defaultRecentMessagesToKeep, EstimateTokens)
 )
 
-// EstimateTokens 基于文本长度做近似估算，避免引入 provider 专属依赖。
 func EstimateTokens(msg llm.Message) int {
-	return defaultTokenEstimator.Estimate(msg)
+	return llm.EstimateMessageTokens(msg)
 }
 
 // PruneMessages 在超限时按“系统消息 + 最近消息优先”的策略裁剪。

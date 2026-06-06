@@ -5,6 +5,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/session"
 	"strings"
@@ -251,7 +252,7 @@ func TestBuildSessionDetailPayloadIncludesTurnDraftForLatestWindow(t *testing.T)
 			},
 		},
 	}
-	payload := sessionturn.BuildSessionDetailPayload(sess, page, true)
+	payload := sessionturn.BuildSessionDetailPayload(appsessions.BuildDetailInput(sess, page), true)
 	if len(payload.Messages) != 1 {
 		t.Fatalf("expected messages to stay committed-only, got %d messages", len(payload.Messages))
 	}
@@ -293,7 +294,7 @@ func TestBuildSessionDetailPayloadSkipsTurnDraftForOlderWindow(t *testing.T) {
 		},
 	}
 
-	payload := sessionturn.BuildSessionDetailPayload(sess, page, false)
+	payload := sessionturn.BuildSessionDetailPayload(appsessions.BuildDetailInput(sess, page), false)
 	if len(payload.Messages) != 1 {
 		t.Fatalf("expected old page to skip draft, got %d messages", len(payload.Messages))
 	}
@@ -321,7 +322,7 @@ func TestBuildSessionDetailPayloadNormalizesEmptyTurnDraftItemOrder(t *testing.T
 		},
 	}
 
-	payload := sessionturn.BuildSessionDetailPayload(sess, page, true)
+	payload := sessionturn.BuildSessionDetailPayload(appsessions.BuildDetailInput(sess, page), true)
 	if payload.TurnDraft == nil {
 		t.Fatal("expected latest window to include turn_draft")
 	}

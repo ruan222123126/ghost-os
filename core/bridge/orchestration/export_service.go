@@ -6,6 +6,9 @@ import (
 	"net/http"
 
 	bridgeconfig "ghost-os/bridge/config"
+	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
@@ -15,6 +18,23 @@ type AgentExecutorFunc = agentExecutorFunc
 type AgentStreamExecutorFunc = agentStreamExecutorFunc
 type SessionStore = session.Store
 type StreamSink = streaming.Sink
+type ServiceOutcome = bus.ServiceOutcome
+type ServiceErrorKind = bus.ServiceErrorKind
+type ServiceResult = bus.ServiceResult
+
+const (
+	ServiceOutcomeSuccess  = bus.ServiceOutcomeSuccess
+	ServiceOutcomeCreated  = bus.ServiceOutcomeCreated
+	ServiceOutcomeAccepted = bus.ServiceOutcomeAccepted
+)
+
+const (
+	ServiceErrorInvalidInput = bus.ServiceErrorInvalidInput
+	ServiceErrorNotFound     = bus.ServiceErrorNotFound
+	ServiceErrorConflict     = bus.ServiceErrorConflict
+	ServiceErrorUnavailable  = bus.ServiceErrorUnavailable
+	ServiceErrorInternal     = bus.ServiceErrorInternal
+)
 
 type Service struct {
 	inner *bridgeService
@@ -34,7 +54,7 @@ func NewServiceWithStreamExecutor(
 }
 
 func NewSessionStreamBroadcastSink(sink StreamSink, hub *SessionPushHub) StreamSink {
-	return newSessionStreamBroadcastSink(sink, hub)
+	return internaltrace.NewSessionStreamBroadcastSink(sink, hub)
 }
 
 func NewSessionTurnRunnerAdapter(
@@ -43,7 +63,12 @@ func NewSessionTurnRunnerAdapter(
 	executor AgentExecutorFunc,
 	streamExecutor AgentStreamExecutorFunc,
 ) SessionTurnRunner {
-	return newSessionTurnRunnerAdapter(store, sessionStore, executor, streamExecutor)
+	return agentadapter.NewExecutorRunner(
+		store,
+		sessionStore,
+		agentadapter.ExecutorFunc(executor),
+		agentadapter.StreamExecutorFunc(streamExecutor),
+	)
 }
 
 func (s *Service) SessionPushHub() *SessionPushHub {
@@ -115,6 +140,10 @@ func (s *Service) DispatchAction(ctx context.Context, action string, params json
 
 func (s *Service) ExecuteAgentAction(ctx context.Context, params AgentParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeAgentAction(ctx, params, traceID)
+}
+
+func ServiceErrorKindOf(err error) ServiceErrorKind {
+	return bus.ErrorKindOf(err)
 }
 
 func ServiceErrorKindFromError(err error) ServiceErrorKind {
@@ -256,7 +285,7 @@ func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, b
 func RequireSessionID(id string) (string, int, error) {
 	sessionID, err := requireSessionID(id)
 	if err != nil {
-		return "", legacyStatusFromServiceError(err), err
+		return "", bus.StatusFromError(err), err
 	}
 	return sessionID, http.StatusOK, nil
 }

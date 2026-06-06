@@ -81,6 +81,24 @@ func ResultAccepted(payload any) ServiceResult {
 	return ServiceResult{Payload: payload, Outcome: ServiceOutcomeAccepted}
 }
 
+func ResultFromStatus(payload any, statusCode int, err error) (ServiceResult, error) {
+	if err != nil {
+		return ServiceResult{}, WrapError(ErrorKindFromStatus(statusCode), err)
+	}
+	return ResultFromStatusSuccess(payload, statusCode), nil
+}
+
+func ResultFromStatusSuccess(payload any, statusCode int) ServiceResult {
+	switch OutcomeFromStatus(statusCode) {
+	case ServiceOutcomeCreated:
+		return ResultCreated(payload)
+	case ServiceOutcomeAccepted:
+		return ResultAccepted(payload)
+	default:
+		return ResultSuccess(payload)
+	}
+}
+
 func OutcomeFromStatus(statusCode int) ServiceOutcome {
 	switch statusCode {
 	case http.StatusCreated:
@@ -90,6 +108,13 @@ func OutcomeFromStatus(statusCode int) ServiceOutcome {
 	default:
 		return ServiceOutcomeSuccess
 	}
+}
+
+func StatusFromError(err error) int {
+	if err == nil {
+		return http.StatusOK
+	}
+	return StatusFromErrorKind(ErrorKindOf(err))
 }
 
 func ErrorKindFromStatus(statusCode int) ServiceErrorKind {

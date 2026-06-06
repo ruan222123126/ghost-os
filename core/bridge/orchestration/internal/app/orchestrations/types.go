@@ -3,6 +3,9 @@ package orchestrations
 import (
 	"context"
 
+	"ghost-os/bridge/orchestration/internal/app/orchestrations/dispatch"
+	"ghost-os/bridge/orchestration/internal/app/orchestrations/member"
+	"ghost-os/bridge/orchestration/internal/app/orchestrations/owner"
 	"ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
@@ -38,4 +41,26 @@ type GroupResult struct {
 	OwnerAgentID    string
 	OwnerSessionID  string
 	DispatchResults []DispatchResult
+}
+
+type RoundDispatcher = dispatch.RoundDispatcher
+type RoundDispatchCommand = dispatch.RoundDispatchCommand
+type RoundDispatchResult = dispatch.RoundDispatchResult
+type MemberRunner = member.Runner
+type OwnerControlPromptRequest = owner.ControlPromptRequest
+
+func BuildGroupMemberMessage(req ports.MemberRunRequest) string {
+	return member.BuildGroupMemberMessage(req)
+}
+
+func memberSetupError(req ports.MemberRunRequest, err error) ports.MemberResult {
+	return member.SetupError(req, err)
+}
+
+func BuildOwnerControlPrompt(req OwnerControlPromptRequest) string {
+	return owner.BuildControlPrompt(req)
+}
+
+func BuildOwnerControlUserPrompt(round int, dispatchToolName string) string {
+	return owner.BuildControlUserPrompt(round, dispatchToolName)
 }

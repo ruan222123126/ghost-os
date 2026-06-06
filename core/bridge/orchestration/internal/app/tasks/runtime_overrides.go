@@ -4,9 +4,16 @@ import (
 	"fmt"
 	"strings"
 
-	apptools "ghost-os/bridge/orchestration/internal/app/tools"
+	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/orchestration/internal/domain/runtimeopts"
 	bridgeTasks "ghost-os/bridge/tasks"
+	bridgetools "ghost-os/bridge/tools"
 )
+
+type RuntimeProviderCatalog struct {
+	ActiveProvider string
+	Providers      []bridgeconfig.ProviderRecord
+}
 
 type runtimeOverrideNormalizationOptions struct {
 	requireProviderModelPair bool
@@ -45,107 +52,144 @@ func NormalizeTaskRuntimeOverridesForCatalogValidation(
 	})
 }
 
+func LoadRuntimeProviderCatalog(store bridgeconfig.Store) (RuntimeProviderCatalog, error) {
+	if store == nil {
+		return RuntimeProviderCatalog{}, nil
+	}
+	providers, err := store.ListProviders()
+	if err != nil {
+		return RuntimeProviderCatalog{}, err
+	}
+	return RuntimeProviderCatalog{
+		ActiveProvider: strings.TrimSpace(store.Snapshot().Provider),
+		Providers:      append([]bridgeconfig.ProviderRecord(nil), providers...),
+	}, nil
+}
+
+func ValidateRuntimeOverridesAgainstCatalog(
+	overrides *bridgeTasks.TaskRuntimeOverrides,
+	catalog RuntimeProviderCatalog,
+	requireProviderModelPair bool,
+) error {
+	normalized, err := NormalizeTaskRuntimeOverridesForCatalogValidation(overrides, requireProviderModelPair)
+	if err != nil || normalized == nil {
+		return err
+	}
+	return runtimeopts.ValidateOverridesAgainstCatalog(
+		normalized,
+		runtimeProviderCatalogForDomain(catalog),
+		requireProviderModelPair,
+	)
+}
+
+func ApplyRuntimeOverridesToConfig(
+	cfg bridgeconfig.Config,
+	overrides *bridgeTasks.TaskRuntimeOverrides,
+	catalog RuntimeProviderCatalog,
+) (bridgeconfig.Config, error) {
+	targetName := strings.TrimSpace(overrides.ProviderName)
+	if targetName != "" {
+		record, ok := findRuntimeProviderRecord(catalog.Providers, targetName)
+		if !ok {
+			return bridgeconfig.Config{}, fmt.Errorf("provider_name %q is not configured", targetName)
+		}
+		cfg = applyRuntimeProvider(cfg, record)
+	}
+	if model := strings.TrimSpace(overrides.Model); model != "" {
+		cfg.Provider.Model = model
+	}
+	if RuntimeOverrideUsesToolScope(overrides) {
+		cfg.ToolSelector.AllowlistOnly = true
+		cfg.ToolSelector.Allowlist = append([]string(nil), overrides.ToolAllowlist...)
+		cfg.ToolSelector.Blocklist = nil
+	}
+	if overrides.MaxTurns != nil {
+		cfg.MaxTurns = *overrides.MaxTurns
+	}
+	return cfg, nil
+}
+
+func applyRuntimeProvider(
+	cfg bridgeconfig.Config,
+	record bridgeconfig.ProviderRecord,
+) bridgeconfig.Config {
+	cfg.Provider.Type = record.Type
+	cfg.Provider.APIKey = providerRecordAPIKey(record)
+	cfg.Provider.BaseURL = strings.TrimSpace(record.BaseURL)
+	cfg.Provider.ContextWindowTokens = record.ContextWindowTokens
+	cfg.Provider.ResponseReserveTokens = record.ResponseReserveTokens
+	cfg.Provider.ModelContextWindowTokens = cloneModelTokenOverrides(record.ModelContextWindowTokens)
+	cfg.Provider.ModelResponseReserveTokens = cloneModelTokenOverrides(record.ModelResponseReserveTokens)
+	return cfg
+}
+
+func providerRecordAPIKey(record bridgeconfig.ProviderRecord) string {
+	if record.APIKey == nil {
+		return ""
+	}
+	return strings.TrimSpace(*record.APIKey)
+}
+
+func findRuntimeProviderRecord(
+	providers []bridgeconfig.ProviderRecord,
+	name string,
+) (bridgeconfig.ProviderRecord, bool) {
+	target := strings.TrimSpace(name)
+	for _, provider := range providers {
+		if strings.EqualFold(strings.TrimSpace(provider.Name), target) {
+			return provider, true
+		}
+	}
+	return bridgeconfig.ProviderRecord{}, false
+}
+
+func RuntimeOverrideUsesToolScope(overrides *bridgeTasks.TaskRuntimeOverrides) bool {
+	return runtimeopts.UsesToolScope(overrides)
+}
+
+func cloneModelTokenOverrides(raw map[string]int) map[string]int {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(raw))
+	for key, value := range raw {
+		out[strings.TrimSpace(key)] = value
+	}
+	return out
+}
+
 func normalizeTaskRuntimeOverridesWithOptions(
 	input *bridgeTasks.TaskRuntimeOverrides,
 	options runtimeOverrideNormalizationOptions,
 ) (*bridgeTasks.TaskRuntimeOverrides, error) {
-	if input == nil {
-		return nil, nil
-	}
-	allowlist, _, err := apptools.NormalizeConfiguredToolLists(input.ToolAllowlist, nil)
-	if err != nil {
-		return nil, err
-	}
-	providerName := strings.TrimSpace(input.ProviderName)
-	model := strings.TrimSpace(input.Model)
-	systemPrompt := strings.TrimSpace(input.SystemPrompt)
-	toolAllowlistOnly := normalizeTaskRuntimeBoolPointer(input.ToolAllowlistOnly)
-	maxTurns, err := normalizeTaskRuntimeMaxTurns(input.MaxTurns, options.dropMaxTurns)
-	if err != nil {
-		return nil, err
-	}
-	presetID := strings.TrimSpace(input.PresetID)
-	if err := validateTaskRuntimeProviderModelPair(providerName, model, options); err != nil {
-		return nil, err
-	}
-	if taskRuntimeOverridesEmpty(
-		providerName,
-		model,
-		systemPrompt,
-		presetID,
-		allowlist,
-		toolAllowlistOnly,
-		maxTurns,
-	) {
-		return nil, nil
-	}
-	return &bridgeTasks.TaskRuntimeOverrides{
-		ProviderName:      providerName,
-		Model:             model,
-		SystemPrompt:      systemPrompt,
-		PresetID:          presetID,
-		ToolAllowlist:     allowlist,
-		ToolAllowlistOnly: toolAllowlistOnly,
-		MaxTurns:          maxTurns,
-	}, nil
+	return runtimeopts.NormalizeTaskOverrides(input, runtimeopts.OverrideNormalizationOptions{
+		RequireProviderModelPair: options.requireProviderModelPair,
+		DropMaxTurns:             options.dropMaxTurns,
+		ValidToolNames:           runtimeToolNames(),
+	})
 }
 
-func validateTaskRuntimeProviderModelPair(
-	providerName string,
-	model string,
-	options runtimeOverrideNormalizationOptions,
-) error {
-	if providerName != "" && model == "" {
-		return fmt.Errorf("provider_name requires model")
+func runtimeProviderCatalogForDomain(catalog RuntimeProviderCatalog) runtimeopts.ProviderCatalog {
+	providers := make([]runtimeopts.ProviderRecord, 0, len(catalog.Providers))
+	for _, provider := range catalog.Providers {
+		providers = append(providers, runtimeopts.ProviderRecord{
+			Name:   strings.TrimSpace(provider.Name),
+			Models: append([]string(nil), provider.Models...),
+		})
 	}
-	if !options.requireProviderModelPair {
-		return nil
+	return runtimeopts.ProviderCatalog{
+		ActiveProvider: strings.TrimSpace(catalog.ActiveProvider),
+		Providers:      providers,
 	}
-	if providerName == "" && model == "" {
-		return nil
-	}
-	if providerName == "" || model == "" {
-		return fmt.Errorf("provider_name and model must be set together")
-	}
-	return nil
 }
 
-func normalizeTaskRuntimeBoolPointer(input *bool) *bool {
-	if input == nil || !*input {
-		return nil
+func runtimeToolNames() []string {
+	metadata := bridgetools.GetToolMetadata()
+	names := make([]string, 0, len(metadata))
+	for _, item := range metadata {
+		if name := strings.TrimSpace(item.Name); name != "" {
+			names = append(names, name)
+		}
 	}
-	value := true
-	return &value
-}
-
-func normalizeTaskRuntimeMaxTurns(input *int, drop bool) (*int, error) {
-	if input == nil {
-		return nil, nil
-	}
-	if drop {
-		return nil, nil
-	}
-	if *input <= 0 {
-		return nil, fmt.Errorf("max_turns must be > 0")
-	}
-	value := *input
-	return &value, nil
-}
-
-func taskRuntimeOverridesEmpty(
-	providerName string,
-	model string,
-	systemPrompt string,
-	presetID string,
-	allowlist []string,
-	toolAllowlistOnly *bool,
-	maxTurns *int,
-) bool {
-	return providerName == "" &&
-		model == "" &&
-		systemPrompt == "" &&
-		presetID == "" &&
-		len(allowlist) == 0 &&
-		toolAllowlistOnly == nil &&
-		maxTurns == nil
+	return names
 }

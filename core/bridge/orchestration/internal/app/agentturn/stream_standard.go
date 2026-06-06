@@ -99,6 +99,16 @@ func emitDirectResult(
 	return emitDirectDone(ctx, sink, traceID, turn, result)
 }
 
+func EmitDirectResult(
+	ctx context.Context,
+	sink streaming.Sink,
+	traceID string,
+	turn int,
+	result FinalizedTurn,
+) error {
+	return emitDirectResult(ctx, sink, traceID, turn, result)
+}
+
 func emitDirectDone(
 	ctx context.Context,
 	sink streaming.Sink,

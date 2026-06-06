@@ -3,188 +3,100 @@
 package orchestration
 
 import (
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
-	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
+	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/session"
 )
 
-const supportedSessionSidebarPartitionVersion = 1
+var errSessionEnded = errors.New("session has already ended")
 
 // executeSessionsListAction 汇总全部会话元数据，并映射为 API 返回结构。
 func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult, error) {
-	store, err := s.requireSessionStore()
+	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
 	}
 
-	summaries, err := store.ListMetadata()
+	metadata, err := usecase.List(traceID)
 	if err != nil {
-		logAction(traceID, "SESSIONS_LIST", "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
 	}
-
-	metadata := make([]sessionMetadata, 0, len(summaries))
-	for _, summary := range summaries {
-		metadata = append(metadata, sessionturn.BuildSessionMetadataPayload(summary))
-	}
-
-	logAction(traceID, "SESSIONS_LIST", "success", nil)
-	return serviceResultSuccess(metadata), nil
+	return bus.ResultSuccess(metadata), nil
 }
 
 // executeSessionGetAction 读取并返回单会话详情页。
 func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID string) (ServiceResult, error) {
-	store, err := s.requireSessionStore()
+	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
 	}
 
-	id, err := requireSessionID(params.ID)
+	detail, err := usecase.Get(params, traceID)
+	if err != nil {
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
+	}
+	return bus.ResultSuccess(detail), nil
+}
+
+func (s *bridgeService) executeSessionSourcesAction(traceID string) (ServiceResult, error) {
+	usecase, err := s.sessionSourcesUsecase(traceID)
 	if err != nil {
 		return ServiceResult{}, err
 	}
 
-	sess, page, err := store.LoadPage(id, session.PageParams{
-		Limit:  params.Limit,
-		Before: params.Before,
-	})
+	resolution, err := usecase.Sources(traceID)
 	if err != nil {
-		logAction(traceID, "SESSION_GET", "error", err)
-		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
 	}
-
-	logAction(traceID, "SESSION_GET", "success", nil)
-	return serviceResultSuccess(sessionturn.BuildSessionDetailPayload(sess, page, params.Before == nil)), nil
+	return bus.ResultSuccess(resolution), nil
 }
 
 // executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。
 func (s *bridgeService) executeSessionDeleteAction(params sessionIDParams, traceID string) (ServiceResult, error) {
-	store, err := s.requireSessionStore()
+	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
 	}
 
-	id, err := requireSessionID(params.ID)
+	payload, err := usecase.Delete(params, traceID)
 	if err != nil {
-		return ServiceResult{}, err
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
 	}
-
-	if err := store.Delete(id); err != nil {
-		logAction(traceID, "SESSION_DELETE", "error", err)
-		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
-	}
-
-	logAction(traceID, "SESSION_DELETE", "success", nil)
-	return serviceResultSuccess(sessionDeleteResponse{
-		ID:      id,
-		Deleted: true,
-	}), nil
+	return bus.ResultSuccess(payload), nil
 }
 
 func (s *bridgeService) executeSessionSidebarPartitionsGetAction(traceID string) (ServiceResult, error) {
-	store, err := s.requireSessionStore()
+	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
 	}
 
-	state, err := store.LoadSidebarPartitionState()
+	payload, err := usecase.SidebarPartitions(traceID)
 	if err != nil {
-		logAction(traceID, "SESSION_PARTITIONS_GET", "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
 	}
-
-	logAction(traceID, "SESSION_PARTITIONS_GET", "success", nil)
-	return serviceResultSuccess(buildSessionSidebarPartitionStatePayload(state)), nil
+	return bus.ResultSuccess(payload), nil
 }
 
 func (s *bridgeService) executeSessionSidebarPartitionsPutAction(
 	req sessionSidebarPartitionPutRequest,
 	traceID string,
 ) (ServiceResult, error) {
-	store, err := s.requireSessionStore()
+	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
 	}
-	if err := requireSessionSidebarPartitionVersion(req.Version); err != nil {
-		return ServiceResult{}, err
-	}
 
-	state, err := store.SaveSidebarPartitionState(buildSessionSidebarPartitionStateInput(req))
+	payload, err := usecase.SaveSidebarPartitions(req, traceID)
 	if err != nil {
-		logAction(traceID, "SESSION_PARTITIONS_PUT", "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
 	}
-
-	logAction(traceID, "SESSION_PARTITIONS_PUT", "success", nil)
-	return serviceResultSuccess(buildSessionSidebarPartitionStatePayload(state)), nil
-}
-
-func requireSessionSidebarPartitionVersion(version int) error {
-	if version == supportedSessionSidebarPartitionVersion {
-		return nil
-	}
-	return wrapServiceError(
-		ServiceErrorInvalidInput,
-		fmt.Errorf("session sidebar partition version must be %d", supportedSessionSidebarPartitionVersion),
-	)
-}
-
-func buildSessionSidebarPartitionStatePayload(
-	state session.SessionSidebarPartitionState,
-) sessionSidebarPartitionState {
-	return sessionSidebarPartitionState{
-		Version:     supportedSessionSidebarPartitionVersion,
-		Partitions:  buildSessionSidebarPartitionPayloads(state.Partitions),
-		Assignments: cloneSessionSidebarAssignments(state.Assignments),
-	}
-}
-
-func buildSessionSidebarPartitionPayloads(
-	partitions []session.SessionSidebarPartition,
-) []sessionSidebarPartition {
-	payloads := make([]sessionSidebarPartition, 0, len(partitions))
-	for _, partition := range partitions {
-		payloads = append(payloads, sessionSidebarPartition{
-			ID:   partition.ID,
-			Name: partition.Name,
-		})
-	}
-	return payloads
-}
-
-func buildSessionSidebarPartitionStateInput(
-	req sessionSidebarPartitionPutRequest,
-) session.SessionSidebarPartitionState {
-	return session.SessionSidebarPartitionState{
-		Version:     supportedSessionSidebarPartitionVersion,
-		Partitions:  buildSessionSidebarPartitionInputs(req.Partitions),
-		Assignments: cloneSessionSidebarAssignments(req.Assignments),
-	}
-}
-
-func buildSessionSidebarPartitionInputs(
-	partitions []sessionSidebarPartition,
-) []session.SessionSidebarPartition {
-	inputs := make([]session.SessionSidebarPartition, 0, len(partitions))
-	for _, partition := range partitions {
-		inputs = append(inputs, session.SessionSidebarPartition{
-			ID:   partition.ID,
-			Name: partition.Name,
-		})
-	}
-	return inputs
-}
-
-func cloneSessionSidebarAssignments(source map[string]string) map[string]string {
-	if len(source) == 0 {
-		return map[string]string{}
-	}
-	cloned := make(map[string]string, len(source))
-	for sessionID, partitionID := range source {
-		cloned[sessionID] = partitionID
-	}
-	return cloned
+	return bus.ResultSuccess(payload), nil
 }
 
 func (s *Service) ExecuteSessionSidebarPartitionsGetAction(traceID string) (ServiceResult, error) {
@@ -196,4 +108,135 @@ func (s *Service) ExecuteSessionSidebarPartitionsPutAction(
 	traceID string,
 ) (ServiceResult, error) {
 	return s.inner.executeSessionSidebarPartitionsPutAction(req, traceID)
+}
+
+func (s *bridgeService) sessionUsecase() (appsessions.Service, error) {
+	store, err := s.requireSessionStore()
+	if err != nil {
+		return appsessions.Service{}, err
+	}
+	return appsessions.Service{
+		Store:  store,
+		Logger: serviceActionLogger{},
+	}, nil
+}
+
+func (s *bridgeService) sessionSourcesUsecase(traceID string) (appsessions.Service, error) {
+	store, code, err := s.requireTaskStore()
+	if err != nil {
+		logAction(traceID, appsessions.ActionSources, "error", err)
+		return appsessions.Service{}, bus.WrapError(bus.ErrorKindFromStatus(code), err)
+	}
+	return appsessions.Service{
+		TaskStore: store,
+		Logger:    serviceActionLogger{},
+	}, nil
+}
+
+func mapSessionAppErrorKind(err error) ServiceErrorKind {
+	switch {
+	case errors.Is(err, appsessions.ErrSessionIDRequired),
+		errors.Is(err, appsessions.ErrUnsupportedSidebarPartitionVersion):
+		return ServiceErrorInvalidInput
+	case errors.Is(err, appsessions.ErrSessionStoreRequired), errors.Is(err, appsessions.ErrTaskStoreRequired):
+		return ServiceErrorInternal
+	default:
+		return mapSessionStorageErrorKind(err)
+	}
+}
+
+// requireSessionStore 确保当前 service 已配置持久化会话存储。
+func (s *bridgeService) requireSessionStore() (*session.Store, error) {
+	if s.sessionStore == nil {
+		return nil, bus.WrapError(ServiceErrorInternal, errors.New("session store is not configured"))
+	}
+	return s.sessionStore, nil
+}
+
+// requireSessionID 对输入 id 做最小合法性校验并返回 trim 后值。
+func requireSessionID(id string) (string, error) {
+	trimmed := strings.TrimSpace(id)
+	if trimmed == "" {
+		return "", bus.WrapError(ServiceErrorInvalidInput, errors.New("session id is required"))
+	}
+	return trimmed, nil
+}
+
+func mapSessionStorageErrorKind(err error) ServiceErrorKind {
+	switch {
+	case errors.Is(err, session.ErrInvalidSessionID):
+		return ServiceErrorInvalidInput
+	case errors.Is(err, session.ErrSessionNotFound):
+		return ServiceErrorNotFound
+	case errors.Is(err, errSessionEnded):
+		return ServiceErrorConflict
+	default:
+		return ServiceErrorInternal
+	}
+}
+
+// ensureSessionActive 在继续已有会话前校验其可续跑状态。
+func (s *bridgeService) ensureSessionActive(sessionID string) error {
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return nil
+	}
+	if s == nil || s.sessionStore == nil {
+		return bus.WrapError(ServiceErrorInternal, errors.New("session store is not configured"))
+	}
+
+	sess, err := s.sessionStore.Load(id)
+	if err != nil {
+		if errors.Is(err, session.ErrSessionNotFound) {
+			return bus.WrapError(
+				ServiceErrorNotFound,
+				fmt.Errorf("%w: session_id=%s (omit session_id to start a new session)", session.ErrSessionNotFound, id),
+			)
+		}
+		return bus.WrapError(mapSessionStorageErrorKind(err), err)
+	}
+	if !sess.IsEnded() {
+		return nil
+	}
+	return bus.WrapError(ServiceErrorConflict, fmt.Errorf("%w: session_id=%s", errSessionEnded, id))
+}
+
+func (s *bridgeService) ensureSessionNotInflight(sessionID string) error {
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return nil
+	}
+	if s == nil || s.runRegistry == nil {
+		return bus.WrapError(ServiceErrorInternal, errors.New("run registry is not configured"))
+	}
+	if !s.runRegistry.IsInflight(id) {
+		return nil
+	}
+	return bus.WrapError(ServiceErrorConflict, fmt.Errorf("%w: session_id=%s", ErrSessionInflight, id))
+}
+
+// markSessionEnded 在收到结构化结束信号后把会话状态持久化为 ended。
+func (s *bridgeService) markSessionEnded(sessionID string) error {
+	store := s.sessionStore
+	if store == nil {
+		return bus.WrapError(ServiceErrorInternal, errors.New("session store is not configured"))
+	}
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return bus.WrapError(ServiceErrorInternal, errors.New("session id is empty"))
+	}
+
+	sess, err := store.Load(id)
+	if err != nil {
+		return bus.WrapError(mapSessionStorageErrorKind(err), err)
+	}
+	if sess.IsEnded() {
+		return nil
+	}
+
+	sess.MarkEnded(time.Now().UTC())
+	if err := store.Save(sess); err != nil {
+		return bus.WrapError(mapSessionStorageErrorKind(err), err)
+	}
+	return nil
 }

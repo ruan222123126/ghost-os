@@ -1,79 +1,23 @@
 package tools
 
 import (
-	"fmt"
-	"sort"
 	"strings"
 
+	"ghost-os/bridge/orchestration/internal/domain/runtimeopts"
 	bridgetools "ghost-os/bridge/tools"
 )
 
 func NormalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]string, []string, error) {
-	normalizedAllowlist := normalizeConfiguredToolNames(allowlist)
-	normalizedBlocklist := normalizeConfiguredToolNames(blocklist)
-	valid := validConfiguredToolNames()
-
-	for _, name := range normalizedAllowlist {
-		if !valid[name] {
-			return nil, nil, fmt.Errorf("unknown tool in tool_allowlist: %s", name)
-		}
-	}
-
-	filteredBlocklist := make([]string, 0, len(normalizedBlocklist))
-	for _, name := range normalizedBlocklist {
-		if !valid[name] {
-			return nil, nil, fmt.Errorf("unknown tool in tool_blocklist: %s", name)
-		}
-		filteredBlocklist = append(filteredBlocklist, name)
-	}
-
-	allowSet := make(map[string]bool, len(normalizedAllowlist))
-	for _, name := range normalizedAllowlist {
-		allowSet[name] = true
-	}
-	for _, name := range filteredBlocklist {
-		if allowSet[name] {
-			return nil, nil, fmt.Errorf("tool %q cannot appear in both tool_allowlist and tool_blocklist", name)
-		}
-	}
-
-	return normalizedAllowlist, filteredBlocklist, nil
+	return runtimeopts.NormalizeToolLists(allowlist, blocklist, validConfiguredToolNames())
 }
 
-func normalizeConfiguredToolNames(names []string) []string {
-	normalized := normalizeToolNames(names)
-	if len(normalized) == 0 {
-		return nil
-	}
-	sort.Strings(normalized)
-	return normalized
-}
-
-func validConfiguredToolNames() map[string]bool {
-	valid := make(map[string]bool, len(bridgetools.GetToolMetadata()))
+func validConfiguredToolNames() []string {
+	valid := make([]string, 0, len(bridgetools.GetToolMetadata()))
 	for _, item := range bridgetools.GetToolMetadata() {
 		name := strings.TrimSpace(item.Name)
 		if name != "" {
-			valid[name] = true
+			valid = append(valid, name)
 		}
 	}
 	return valid
-}
-
-func normalizeToolNames(names []string) []string {
-	if len(names) == 0 {
-		return nil
-	}
-
-	result := make([]string, 0, len(names))
-	seen := make(map[string]bool, len(names))
-	for _, raw := range names {
-		name := strings.TrimSpace(raw)
-		if name == "" || seen[name] {
-			continue
-		}
-		seen[name] = true
-		result = append(result, name)
-	}
-	return result
 }

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	taskusecase "ghost-os/bridge/orchestration/internal/adapters/taskusecase"
 )
 
 func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
@@ -202,7 +204,7 @@ func TestTaskMutationRunnerUpdateRollsBackRegistrationWhenSaveFails(t *testing.T
 		saveErrs:   []error{errors.New("save failed")},
 	}
 	scheduler := newTaskMutationSchedulerStub(original)
-	runner := taskMutationRunner{store: store, scheduler: scheduler}
+	runner := taskusecase.NewMutationRunner(taskusecase.MutationOptions{Store: store, Scheduler: scheduler})
 
 	message := "updated message"
 	_, err := runner.Update(taskUpdateParams{ID: original.ID, Message: &message})
@@ -226,7 +228,7 @@ func TestTaskMutationRunnerUpdateRollsBackPersistedTaskWhenUpsertFails(t *testin
 	store := &taskMutationStoreStub{loadedTask: original}
 	scheduler := newTaskMutationSchedulerStub(original)
 	scheduler.upsertErrs = []error{errors.New("upsert failed")}
-	runner := taskMutationRunner{store: store, scheduler: scheduler}
+	runner := taskusecase.NewMutationRunner(taskusecase.MutationOptions{Store: store, Scheduler: scheduler})
 
 	message := "updated message"
 	_, err := runner.Update(taskUpdateParams{ID: original.ID, Message: &message})
@@ -258,7 +260,7 @@ func TestTaskMutationRunnerDeleteRollsBackRegistrationWhenDeleteFails(t *testing
 		deleteErrs: []error{errors.New("delete failed")},
 	}
 	scheduler := newTaskMutationSchedulerStub(original)
-	runner := taskMutationRunner{store: store, scheduler: scheduler}
+	runner := taskusecase.NewMutationRunner(taskusecase.MutationOptions{Store: store, Scheduler: scheduler})
 
 	_, err := runner.Delete(taskIDParams{ID: original.ID})
 	if err == nil || !strings.Contains(err.Error(), "delete failed") {

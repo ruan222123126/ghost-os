@@ -5,12 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
-	bridgesession "ghost-os/bridge/session"
 )
 
-func BuildSessionMetadataPayload(summary bridgesession.SessionMetadata) sessionMetadata {
+func BuildSessionMetadataPayload(summary SessionMetadataInput) sessionMetadata {
 	return sessionMetadata{
 		ID:           summary.ID,
 		Title:        strings.TrimSpace(summary.Title),
@@ -22,35 +20,34 @@ func BuildSessionMetadataPayload(summary bridgesession.SessionMetadata) sessionM
 }
 
 func BuildSessionDetailPayload(
-	sess *bridgesession.Session,
-	page bridgesession.MessagePage,
+	detail SessionDetailInput,
 	includeDraft bool,
 ) sessionDetail {
-	turnDraft := BuildSessionTurnDraftPayload(sess, includeDraft)
-	messages := make([]sessionMessage, 0, len(page.Messages))
-	for _, item := range page.Messages {
+	turnDraft := BuildSessionTurnDraftPayload(detail.TurnDraft, includeDraft)
+	messages := make([]sessionMessage, 0, len(detail.Messages))
+	for _, item := range detail.Messages {
 		messages = append(messages, BuildSessionMessagePayload(item.Index, item.Message))
 	}
 	if includeDraft && turnDraft == nil {
-		if draft, ok := BuildAssistantDraftSessionMessage(sess); ok {
+		if draft, ok := BuildAssistantDraftSessionMessage(detail.AssistantDraft, detail.MessageCount); ok {
 			messages = append(messages, draft)
 		}
 	}
 
 	return sessionDetail{
-		ID:           sess.ID,
-		Title:        strings.TrimSpace(sess.Title),
+		ID:           detail.ID,
+		Title:        strings.TrimSpace(detail.Title),
 		Messages:     messages,
-		CreatedAt:    sess.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:    sess.UpdatedAt.UTC().Format(time.RFC3339),
-		MessageCount: sess.MessageCount,
-		Page:         BuildSessionMessagePagePayload(page),
-		TokenCount:   sess.TokenCount,
+		CreatedAt:    detail.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:    detail.UpdatedAt.UTC().Format(time.RFC3339),
+		MessageCount: detail.MessageCount,
+		Page:         BuildSessionMessagePagePayload(detail.Page),
+		TokenCount:   detail.TokenCount,
 		TurnDraft:    turnDraft,
 	}
 }
 
-func BuildSessionMessagePagePayload(page bridgesession.MessagePage) sessionMessagePage {
+func BuildSessionMessagePagePayload(page SessionMessagePageInput) sessionMessagePage {
 	return sessionMessagePage{
 		Limit:         page.Limit,
 		Before:        cloneIntPointer(page.Before),
@@ -110,7 +107,7 @@ func projectToolSessionMessage(payload *sessionMessage, rawText string) {
 		return
 	}
 
-	result, ok := agent.ParseToolResultEnvelope(trimmed)
+	result, ok := llm.ParseToolResultEnvelope(trimmed)
 	if !ok {
 		payload.Text = rawText
 		return
@@ -122,7 +119,7 @@ func projectToolSessionMessage(payload *sessionMessage, rawText string) {
 	payload.Text = formatSessionToolText(result, humanInteraction)
 }
 
-func buildSessionToolResultPayload(result agent.ToolResultEnvelope, humanInteraction *sessionHumanInteraction) *sessionToolResult {
+func buildSessionToolResultPayload(result llm.ToolResultEnvelope, humanInteraction *sessionHumanInteraction) *sessionToolResult {
 	payload := &sessionToolResult{
 		Status: result.Status,
 		Tool:   result.Tool,
@@ -139,7 +136,7 @@ func buildSessionToolResultPayload(result agent.ToolResultEnvelope, humanInterac
 	return payload
 }
 
-func decodeSessionHumanInteraction(result agent.ToolResultEnvelope) *sessionHumanInteraction {
+func decodeSessionHumanInteraction(result llm.ToolResultEnvelope) *sessionHumanInteraction {
 	if strings.TrimSpace(result.Tool) != "ask_human" || strings.TrimSpace(result.Output) == "" {
 		return nil
 	}
@@ -171,7 +168,7 @@ func decodeSessionHumanInteraction(result agent.ToolResultEnvelope) *sessionHuma
 	return humanInteraction
 }
 
-func formatSessionToolText(result agent.ToolResultEnvelope, humanInteraction *sessionHumanInteraction) string {
+func formatSessionToolText(result llm.ToolResultEnvelope, humanInteraction *sessionHumanInteraction) string {
 	if humanInteraction != nil {
 		if strings.TrimSpace(humanInteraction.Answer) != "" {
 			return humanInteraction.Prompt + "\n" + humanInteraction.Answer

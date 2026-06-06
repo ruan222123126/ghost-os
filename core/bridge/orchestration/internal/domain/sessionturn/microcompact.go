@@ -3,7 +3,6 @@ package sessionturn
 import (
 	"strings"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
 )
 
@@ -26,7 +25,7 @@ type microcompactSpan struct {
 type microcompactToolPair struct {
 	call       llm.ToolCall
 	tool       llm.Message
-	envelope   agent.ToolResultEnvelope
+	envelope   llm.ToolResultEnvelope
 	toolName   string
 	toolCallID string
 }
@@ -196,7 +195,7 @@ func newMicrocompactToolPair(
 	if !ok {
 		return microcompactToolPair{}, microcompactUnsupported("", callID, "unknown tool_call_id")
 	}
-	envelope, ok := agent.ParseToolResultEnvelope(toolMessage.Text)
+	envelope, ok := llm.ParseToolResultEnvelope(toolMessage.Text)
 	if !ok {
 		return microcompactToolPair{}, microcompactParseFailed(call.Name, callID)
 	}

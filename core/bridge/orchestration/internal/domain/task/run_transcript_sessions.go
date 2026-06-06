@@ -5,10 +5,10 @@ import (
 	"strings"
 
 	"ghost-os/bridge/llm"
-	bridgeTasks "ghost-os/bridge/tasks"
+	"ghost-os/bridge/taskdefs"
 )
 
-func CollectRunTranscriptSessionIDs(result bridgeTasks.ExecutionResult) []string {
+func CollectRunTranscriptSessionIDs(result taskdefs.ExecutionResult) []string {
 	collector := sessionIDCollector{seen: map[string]struct{}{}}
 	for _, node := range result.NodeResults {
 		collector.collectNode(node)
@@ -21,7 +21,7 @@ type sessionIDCollector struct {
 	seen map[string]struct{}
 }
 
-func (c *sessionIDCollector) collectNode(node bridgeTasks.RunNodeResult) {
+func (c *sessionIDCollector) collectNode(node taskdefs.RunNodeResult) {
 	if node.NodeType == workflowNodeAgent {
 		c.add(transcriptString(transcriptRecord(node.Output), "session_id_output"))
 		return

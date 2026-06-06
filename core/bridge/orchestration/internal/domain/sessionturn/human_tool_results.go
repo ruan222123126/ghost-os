@@ -3,34 +3,42 @@ package sessionturn
 import (
 	"encoding/json"
 	"strings"
-
-	"ghost-os/bridge/session"
 )
 
-func resolvedHumanQuestionToolResult(
-	_ *session.Session,
-	item session.AnsweredHumanQuestion,
-) (string, string, string) {
+type AnsweredHumanQuestionInput struct {
+	QuestionID    string
+	Prompt        string
+	SelectionMode string
+	Options       []HumanQuestionOptionInput
+	Answer        string
+}
+
+type HumanQuestionOptionInput struct {
+	Label       string
+	AllowCustom bool
+}
+
+func BuildResolvedHumanQuestionToolResult(item AnsweredHumanQuestionInput) (string, string, string) {
 	return askHumanResolvedQuestionToolResult(item)
 }
 
-func askHumanResolvedQuestionToolResult(item session.AnsweredHumanQuestion) (string, string, string) {
+func askHumanResolvedQuestionToolResult(item AnsweredHumanQuestionInput) (string, string, string) {
 	payload := map[string]any{
 		"question_id": item.QuestionID,
-		"prompt":      item.Question.Prompt,
+		"prompt":      item.Prompt,
 		"answer":      item.Answer,
 	}
-	if selectionMode := strings.TrimSpace(item.Question.SelectionMode); selectionMode != "" {
+	if selectionMode := strings.TrimSpace(item.SelectionMode); selectionMode != "" {
 		payload["selection_mode"] = selectionMode
 	}
-	if options := askHumanResolvedQuestionOptions(item.Question.Options); len(options) > 0 {
+	if options := askHumanResolvedQuestionOptions(item.Options); len(options) > 0 {
 		payload["options"] = options
 	}
 	return "ask_human", mustEncodeResolvedQuestionPayload(payload), ""
 }
 
 func askHumanResolvedQuestionOptions(
-	raw []session.HumanQuestionOption,
+	raw []HumanQuestionOptionInput,
 ) []map[string]any {
 	if len(raw) == 0 {
 		return nil

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"ghost-os/bridge/agent"
-	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/session"
 	"log"
@@ -24,8 +24,8 @@ func TestSessionHistoryBuilderKeepsLongHistoryWhenProviderContextWindowIsConfigu
 	}
 
 	before := sess.Messages
-	builder := sessionturn.NewSessionHistoryBuilder(
-		bridgeconfig.ProviderConfig{
+	builder := appsessions.NewHistoryBuilder(
+		sessionturn.ProviderContext{
 			Type:                llm.ProviderCustom,
 			Model:               "deepseek-v4-pro",
 			ContextWindowTokens: 1000000,
@@ -68,8 +68,8 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 		t.Fatalf("expected human answer to be accepted")
 	}
 
-	builder := sessionturn.NewSessionHistoryBuilder(
-		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+	builder := appsessions.NewHistoryBuilder(
+		sessionturn.ProviderContext{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,
@@ -160,8 +160,8 @@ func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) 
 		Text:       agent.FormatToolResult("read_file", "trace-keep-2", "File: two.txt", nil),
 	})
 
-	builder := sessionturn.NewSessionHistoryBuilder(
-		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+	builder := appsessions.NewHistoryBuilder(
+		sessionturn.ProviderContext{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,
@@ -205,8 +205,8 @@ func TestSessionHistoryBuilder_KeepsToolSearchSearchSpanUnchanged(t *testing.T) 
 		),
 	})
 
-	builder := sessionturn.NewSessionHistoryBuilder(
-		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+	builder := appsessions.NewHistoryBuilder(
+		sessionturn.ProviderContext{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,
@@ -252,8 +252,8 @@ func TestSessionHistoryBuilder_DropsOrphanToolMessageAfterCompletedAnswer(t *tes
 		Text:       agent.FormatToolResult("bash_exec", "trace-orphan-1", "orphan", nil),
 	})
 
-	builder := sessionturn.NewSessionHistoryBuilder(
-		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
+	builder := appsessions.NewHistoryBuilder(
+		sessionturn.ProviderContext{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
 		3,

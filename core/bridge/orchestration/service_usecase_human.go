@@ -5,92 +5,133 @@ package orchestration
 import (
 	"context"
 	"errors"
-	"strings"
 
-	"ghost-os/bridge/session"
+	taskservice "ghost-os/bridge/orchestration/internal/adapters/taskservice"
+	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/streaming"
 )
 
 const cancelledHumanDialogueMessage = "Conversation cancelled by user."
 
-type validatedHumanResponse struct {
-	sessionID  string
-	questionID string
-	answer     string
-	cancelled  bool
+func (s *bridgeService) requireTaskStore() (*TaskStore, int, error) {
+	return s.taskActions().RequireStore()
+}
+
+func (s *bridgeService) requireTaskScheduler() (*TaskScheduler, int, error) {
+	return s.taskActions().RequireScheduler()
+}
+
+func (s *bridgeService) requireTaskQueryRunner() (apptasks.Query, int, error) {
+	return s.taskActions().RequireQueryRunner()
+}
+
+func (s *bridgeService) requireTaskMutationRunner() (apptasks.Mutation, int, error) {
+	return s.taskActions().RequireMutationRunner()
+}
+
+func legacyStatusFromServiceError(err error) int {
+	return bus.StatusFromError(err)
+}
+
+func (s *bridgeService) taskActions() taskservice.Actions {
+	return taskservice.New(taskservice.Config{
+		Store:             s.taskStore(),
+		Scheduler:         s.taskScheduler(),
+		InitErr:           s.taskInitErr(),
+		ConfigStore:       s.configStore,
+		SessionStore:      s.sessionStore,
+		SessionEndedError: errSessionEnded,
+		Logger:            serviceActionLogger{},
+	})
+}
+
+func (s *bridgeService) executeTaskCreateAction(params taskCreateParams, traceID string) (any, int, error) {
+	return s.taskActions().Create(params, traceID)
+}
+
+func (s *bridgeService) executeTaskUpdateAction(params taskUpdateParams, traceID string) (any, int, error) {
+	return s.taskActions().Update(params, traceID)
+}
+
+func (s *bridgeService) executeTaskListAction(scope string, traceID string) (any, int, error) {
+	return s.taskActions().List(scope, traceID)
+}
+
+func (s *bridgeService) executeTaskGetAction(params taskIDParams, traceID string) (any, int, error) {
+	return s.taskActions().Get(params, traceID)
+}
+
+func (s *bridgeService) executeTaskLogsAction(params taskLogsParams, traceID string) (any, int, error) {
+	return s.taskActions().Logs(params, traceID)
+}
+
+func (s *bridgeService) executeTaskRunNowAction(params taskIDParams, traceID string) (any, int, error) {
+	return s.taskActions().RunNow(params, traceID)
+}
+
+func (s *bridgeService) executeTaskStopAction(
+	ctx context.Context,
+	params taskStopParams,
+	traceID string,
+) (any, int, error) {
+	return s.taskActions().Stop(ctx, params, traceID)
+}
+
+func (s *bridgeService) executeTaskDeleteAction(params taskIDParams, traceID string) (any, int, error) {
+	return s.taskActions().Delete(params, traceID)
+}
+
+func (s *bridgeService) executeTaskCreateActionResult(params taskCreateParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskCreateAction(params, traceID))
+}
+
+func (s *bridgeService) executeTaskListActionResult(scope string, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskListAction(scope, traceID))
+}
+
+func (s *bridgeService) executeTaskGetActionResult(params taskIDParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskGetAction(params, traceID))
+}
+
+func (s *bridgeService) executeTaskUpdateActionResult(params taskUpdateParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskUpdateAction(params, traceID))
+}
+
+func (s *bridgeService) executeTaskRunNowActionResult(params taskIDParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskRunNowAction(params, traceID))
+}
+
+func (s *bridgeService) executeTaskStopActionResult(
+	ctx context.Context,
+	params taskStopParams,
+	traceID string,
+) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskStopAction(ctx, params, traceID))
+}
+
+func (s *bridgeService) executeTaskLogsActionResult(params taskLogsParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskLogsAction(params, traceID))
+}
+
+func (s *bridgeService) executeTaskDeleteActionResult(params taskIDParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeTaskDeleteAction(params, traceID))
 }
 
 // executeHumanResponseAction 接收 HUMAN_RESPONSE，将答案写回会话并解除 pending 状态。
 func (s *bridgeService) executeHumanResponseAction(_ context.Context, params humanResponseParams, traceID string) (ServiceResult, error) {
-	store, err := s.requireSessionStore()
+	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
 	}
 
-	validated, err := validateHumanResponseParams(params)
+	ack, err := usecase.AnswerHuman(params, traceID)
 	if err != nil {
-		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
+		return ServiceResult{}, bus.WrapError(mapHumanResponseErrorKind(err), err)
 	}
-
-	logAction(traceID, busActionHumanResponse, "running", nil)
-	sess, err := store.Load(validated.sessionID)
-	if err != nil {
-		logAction(traceID, busActionHumanResponse, "error", err)
-		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
-	}
-
-	accepted, err := applyHumanResponse(sess, validated)
-	if err != nil {
-		logAction(traceID, busActionHumanResponse, "error", err)
-		return ServiceResult{}, wrapServiceError(ServiceErrorNotFound, err)
-	}
-
-	if err := store.Save(sess); err != nil {
-		logAction(traceID, busActionHumanResponse, "error", err)
-		return ServiceResult{}, wrapServiceError(mapSessionStorageErrorKind(err), err)
-	}
-
-	logAction(traceID, busActionHumanResponse, "success", nil)
-	return serviceResultSuccess(humanResponseAck{
-		SessionID:  validated.sessionID,
-		QuestionID: validated.questionID,
-		Accepted:   accepted,
-	}), nil
-}
-
-func validateHumanResponseParams(params humanResponseParams) (validatedHumanResponse, error) {
-	sessionID, err := requireSessionID(params.SessionID)
-	if err != nil {
-		return validatedHumanResponse{}, err
-	}
-	questionID := strings.TrimSpace(params.QuestionID)
-	if questionID == "" {
-		return validatedHumanResponse{}, errors.New("question_id is required")
-	}
-	answer := strings.TrimSpace(params.Answer)
-	if !params.Cancelled && answer == "" {
-		return validatedHumanResponse{}, errors.New("answer is required")
-	}
-	return validatedHumanResponse{
-		sessionID:  sessionID,
-		questionID: questionID,
-		answer:     answer,
-		cancelled:  params.Cancelled,
-	}, nil
-}
-
-func applyHumanResponse(sess *session.Session, request validatedHumanResponse) (bool, error) {
-	if request.cancelled {
-		if _, ok := sess.RemovePendingQuestion(request.questionID); !ok {
-			return false, errors.New("question not found in pending questions")
-		}
-		sess.MarkEnded(sess.UpdatedAt)
-		return false, nil
-	}
-	if !sess.SetHumanAnswer(request.questionID, request.answer) {
-		return false, errors.New("question not found in pending questions")
-	}
-	return true, nil
+	return bus.ResultSuccess(ack), nil
 }
 
 // executeHumanAnswerAndResumeAction 先写入人类答案，再继续执行被 ask_human 暂停的回合。
@@ -115,13 +156,13 @@ func (s *bridgeService) executeHumanAnswerAndResumeAction(ctx context.Context, p
 		result := cancelledHumanTurn(sessionID)
 		payload, err := newAgentResponsePayload(result.message, result.sessionID, result.sessionEnd, agentResponseMeta{})
 		if err != nil {
-			return ServiceResult{}, wrapServiceError(ServiceErrorInternal, err)
+			return ServiceResult{}, bus.WrapError(ServiceErrorInternal, err)
 		}
 		s.publishAssistantSessionPush(traceID, result)
-		return serviceResultSuccess(payload), nil
+		return bus.ResultSuccess(payload), nil
 	}
 
-	return s.sessionResumeRunner().Resume(ctx, sessionID, traceID)
+	return s.agentTurnService().Resume(ctx, sessionID, traceID)
 }
 
 // executeHumanAnswerAndResumeStreamAction 先写入人类答案，再以 SSE 方式续跑被 ask_human 暂停的回合。
@@ -144,7 +185,8 @@ func (s *bridgeService) executeHumanAnswerAndResumeStreamAction(ctx context.Cont
 		return result.message, result.sessionID, nil
 	}
 
-	return s.sessionResumeRunner().ResumeStream(ctx, sessionID, traceID, sink)
+	broadcastSink := internaltrace.NewSessionStreamBroadcastSink(sink, s.sessionPushHub())
+	return s.agentTurnService().ResumeStream(ctx, sessionID, traceID, broadcastSink)
 }
 
 func cancelledHumanTurn(sessionID string) finalizedAgentTurn {
@@ -166,7 +208,7 @@ func emitHumanResumeStreamError(
 	statusCode int,
 	cause error,
 ) error {
-	if emitErr := emitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, statusCode, cause); emitErr != nil {
+	if emitErr := internaltrace.EmitStreamErrorEvent(ctx, sink, traceID, 0, "", sessionID, statusCode, cause); emitErr != nil {
 		return emitErr
 	}
 	return cause
@@ -185,7 +227,7 @@ func (s *bridgeService) resolveHumanResumeStreamSession(
 			sink,
 			traceID,
 			rawSessionID,
-			legacyStatusFromServiceError(err),
+			bus.StatusFromError(err),
 			err,
 		)
 	}
@@ -195,7 +237,7 @@ func (s *bridgeService) resolveHumanResumeStreamSession(
 			sink,
 			traceID,
 			sessionID,
-			legacyStatusFromServiceError(inflightErr),
+			bus.StatusFromError(inflightErr),
 			inflightErr,
 		)
 	}
@@ -205,7 +247,7 @@ func (s *bridgeService) resolveHumanResumeStreamSession(
 			sink,
 			traceID,
 			sessionID,
-			legacyStatusFromServiceError(activeErr),
+			bus.StatusFromError(activeErr),
 			activeErr,
 		)
 	}
@@ -227,7 +269,20 @@ func (s *bridgeService) applyHumanResponseForResumeStream(
 		sink,
 		traceID,
 		params.SessionID,
-		legacyStatusFromServiceError(err),
+		bus.StatusFromError(err),
 		err,
 	)
+}
+
+func mapHumanResponseErrorKind(err error) ServiceErrorKind {
+	switch {
+	case errors.Is(err, appsessions.ErrSessionIDRequired),
+		errors.Is(err, appsessions.ErrHumanQuestionIDRequired),
+		errors.Is(err, appsessions.ErrHumanAnswerRequired):
+		return ServiceErrorInvalidInput
+	case errors.Is(err, appsessions.ErrHumanQuestionNotFound):
+		return ServiceErrorNotFound
+	default:
+		return mapSessionAppErrorKind(err)
+	}
 }

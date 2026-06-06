@@ -1,38 +1,20 @@
 package tasks
 
 import (
+	"ghost-os/bridge/taskdefs"
 	"strings"
-	"time"
 )
 
 const (
-	RunCardKindAgentTask           = "agent_task"
-	RunCardKindWorkflowAgent       = "workflow_agent"
-	RunCardKindWorkflowLLM         = "workflow_llm"
-	RunCardKindOrchestrationOwner  = "orchestration_owner"
-	RunCardKindOrchestrationMember = "orchestration_member"
-	RunCardKindRelayRound          = "relay_round"
+	RunCardKindAgentTask           = taskdefs.RunCardKindAgentTask
+	RunCardKindWorkflowAgent       = taskdefs.RunCardKindWorkflowAgent
+	RunCardKindWorkflowLLM         = taskdefs.RunCardKindWorkflowLLM
+	RunCardKindOrchestrationOwner  = taskdefs.RunCardKindOrchestrationOwner
+	RunCardKindOrchestrationMember = taskdefs.RunCardKindOrchestrationMember
+	RunCardKindRelayRound          = taskdefs.RunCardKindRelayRound
 )
 
-type RunCard struct {
-	CardID          string               `json:"card_id"`
-	RunID           string               `json:"run_id,omitempty"`
-	Kind            string               `json:"kind"`
-	Title           string               `json:"title,omitempty"`
-	NodeID          string               `json:"node_id,omitempty"`
-	NodeType        string               `json:"node_type,omitempty"`
-	Round           int                  `json:"round,omitempty"`
-	Iteration       int                  `json:"iteration,omitempty"`
-	BranchID        string               `json:"branch_id,omitempty"`
-	SourceSessionID string               `json:"source_session_id,omitempty"`
-	StartedAt       time.Time            `json:"started_at,omitempty"`
-	Status          string               `json:"status,omitempty"`
-	FinishedAt      time.Time            `json:"finished_at,omitempty"`
-	Preview         string               `json:"preview,omitempty"`
-	Error           string               `json:"error,omitempty"`
-	FinalText       string               `json:"final_text,omitempty"`
-	SourceEvents    []RunCardSourceEvent `json:"source_events,omitempty"`
-}
+type RunCard = taskdefs.RunCard
 
 func CloneRunCards(input []RunCard) []RunCard {
 	if len(input) == 0 {

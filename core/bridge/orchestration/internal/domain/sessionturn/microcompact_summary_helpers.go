@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"ghost-os/bridge/llm"
-	"ghost-os/bridge/session"
 )
 
 const (
@@ -138,7 +137,7 @@ func logMicrocompactProjection(
 func EstimateMessagesTokens(messages []llm.Message) int {
 	total := 0
 	for _, message := range messages {
-		total += session.EstimateTokens(message)
+		total += llm.EstimateMessageTokens(message)
 	}
 	return total
 }

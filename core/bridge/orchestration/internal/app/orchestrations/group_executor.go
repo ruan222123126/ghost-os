@@ -4,11 +4,42 @@ import (
 	"context"
 
 	"ghost-os/bridge/orchestration/internal/domain/group"
+	"ghost-os/bridge/orchestration/internal/ports"
 )
+
+type RunnerConfig struct {
+	Planner Planner
+	Members ports.MemberAgentRunner
+	Owners  ports.OwnerDecisionRunner
+}
+
+func NewRunner(cfg RunnerConfig) Runner {
+	dispatcher := RoundDispatcher{Members: cfg.Members}
+	return Runner{
+		Planner: cfg.Planner,
+		Groups:  NewModeGroupExecutor(dispatcher, cfg.Owners),
+		Mapper:  ResultMapper{},
+	}
+}
 
 type ModeGroupExecutor struct {
 	Standard StandardGroupExecutor
 	Owner    OwnerGroupExecutor
+}
+
+func NewModeGroupExecutor(
+	dispatcher RoundDispatcher,
+	owners ports.OwnerDecisionRunner,
+) ModeGroupExecutor {
+	return ModeGroupExecutor{
+		Standard: StandardGroupExecutor{Dispatcher: dispatcher},
+		Owner: OwnerGroupExecutor{
+			Decisions: owners,
+			Dispatches: DispatchExecutor{
+				Dispatcher: dispatcher,
+			},
+		},
+	}
 }
 
 func (e ModeGroupExecutor) ExecuteGroup(

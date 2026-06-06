@@ -1,14 +1,24 @@
 package orchestration
 
 import (
+	"errors"
 	"time"
 
+	bridgeconfig "ghost-os/bridge/config"
+	runtimeadapter "ghost-os/bridge/orchestration/internal/adapters/runtime"
 	"ghost-os/bridge/orchestration/internal/adapters/toolregistry"
+	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
+	orchestrationmigration "ghost-os/bridge/orchestration/internal/app/orchestrations/migration"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
+	workflowdomain "ghost-os/bridge/orchestration/internal/domain/workflow"
 	"ghost-os/bridge/taskdefs"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
 const (
+	taskListScopeUser             = apptasks.ScopeUser
+	taskListScopeSystem           = apptasks.ScopeSystem
+	taskListScopeOrchestration    = apptasks.ScopeOrchestration
 	taskScheduleTypeInterval      = bridgeTasks.ScheduleTypeInterval
 	taskScheduleTypeCron          = bridgeTasks.ScheduleTypeCron
 	defaultTaskRunLogRetention    = bridgeTasks.DefaultRunLogRetention
@@ -37,6 +47,24 @@ const (
 	orchestrationModeSequential   = taskdefs.OrchestrationSpeakingModeSequential
 	orchestrationModeParallel     = taskdefs.OrchestrationSpeakingModeParallel
 	orchestrationModeOwner        = taskdefs.OrchestrationSpeakingModeOwner
+	workflowNodeTypeStart         = workflowdomain.NodeTypeStart
+	workflowNodeTypeTool          = workflowdomain.NodeTypeTool
+	workflowNodeTypeLLM           = workflowdomain.NodeTypeLLM
+	workflowNodeTypeAgent         = workflowdomain.NodeTypeAgent
+	workflowNodeTypeIf            = workflowdomain.NodeTypeIf
+	workflowNodeTypeLoop          = workflowdomain.NodeTypeLoop
+	workflowNodeTypeEnd           = workflowdomain.NodeTypeEnd
+	workflowInputTypeString       = workflowdomain.InputTypeString
+	workflowInputTypeNumber       = workflowdomain.InputTypeNumber
+	workflowInputTypeBoolean      = workflowdomain.InputTypeBoolean
+	workflowInputTypeObject       = workflowdomain.InputTypeObject
+	workflowInputTypeArray        = workflowdomain.InputTypeArray
+	workflowIfOperatorEquals      = workflowdomain.IfOperatorEquals
+	workflowIfOperatorNotEquals   = workflowdomain.IfOperatorNotEquals
+	workflowIfOperatorContains    = workflowdomain.IfOperatorContains
+	workflowIfOperatorNotContains = workflowdomain.IfOperatorNotContains
+	workflowIfOperatorIsEmpty     = workflowdomain.IfOperatorIsEmpty
+	workflowIfOperatorNotEmpty    = workflowdomain.IfOperatorNotEmpty
 	taskLoadIssueInvalidFilename  = bridgeTasks.LoadIssueInvalidFilename
 	taskLoadIssueReadError        = bridgeTasks.LoadIssueReadError
 	taskLoadIssueDecodeError      = bridgeTasks.LoadIssueDecodeError
@@ -77,9 +105,92 @@ type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
 type TaskStore = bridgeTasks.Store
 type TaskScheduler = bridgeTasks.TaskScheduler
+type LegacyOrchestrationMigrationReport = orchestrationmigration.Report
+type workflowExecutionPlan = workflowdomain.Plan
+
+type relayRuntimeBuilder struct {
+	service *bridgeService
+}
 
 func NewTaskStore(baseDir string) (*TaskStore, error) {
 	return bridgeTasks.NewStore(baseDir, validateTaskDefinition)
+}
+
+// DetectLegacyOrchestrationTasks 返回仍包含 legacy start/end 节点的 orchestration 任务 ID。
+func DetectLegacyOrchestrationTasks(baseDir string) ([]string, error) {
+	return orchestrationmigration.Detect(baseDir)
+}
+
+// MigrateLegacyOrchestrations 显式移除 orchestration 任务中的 legacy start/end 边界节点并写回。
+func MigrateLegacyOrchestrations(baseDir string) (LegacyOrchestrationMigrationReport, error) {
+	return orchestrationmigration.Migrate(baseDir, validateTaskDefinition)
+}
+
+func validateTaskDefinition(task *ScheduledTask) error {
+	return apptasks.ValidateDefinition(task)
+}
+
+func normalizeTaskDefinition(task *ScheduledTask) {
+	apptasks.NormalizeDefinition(task)
+}
+
+func validateTaskRelayConfig(relay *TaskRelayConfig) error {
+	return apptasks.ValidateRelayConfig(relay)
+}
+
+func ensureWorkflowAllowedForTaskKind(taskKind string, workflow *WorkflowDefinition) error {
+	return apptasks.EnsureWorkflowAllowedForKind(taskKind, workflow)
+}
+
+func ensureOrchestrationAllowedForTaskKind(taskKind string, definition *OrchestrationDefinition) error {
+	return apptasks.EnsureOrchestrationAllowedForKind(taskKind, definition)
+}
+
+func loadTaskRuntimeConfig(store bridgeconfig.Store) (bridgeconfig.TaskConfig, error) {
+	return apptasks.LoadRuntimeConfig(store)
+}
+
+func validateWorkflowTaskRuntime(definition *WorkflowDefinition, cfg bridgeconfig.TaskConfig) error {
+	return apptasks.ValidateWorkflowRuntime(definition, cfg)
+}
+
+func validateWorkflowAgentRuntime(definition *WorkflowDefinition, store bridgeconfig.Store) error {
+	return apptasks.ValidateWorkflowAgentRuntime(definition, store)
+}
+
+func validateOrchestrationAgentRuntime(definition *OrchestrationDefinition, store bridgeconfig.Store) error {
+	return apptasks.ValidateOrchestrationAgentRuntime(definition, store)
+}
+
+func newRelayTaskRunner(service *bridgeService) apprelay.Runner {
+	if service == nil {
+		return apprelay.Runner{}
+	}
+	return apprelay.Runner{
+		RuntimeBuilder: relayRuntimeBuilder{service: service},
+		SessionStore:   service.sessionStore,
+		RunRegistry:    service.runRegistry,
+	}
+}
+
+func (b relayRuntimeBuilder) Build(
+	runtimeOverrides *TaskRuntimeOverrides,
+) (apprelay.RuntimeDependencies, error) {
+	if b.service == nil {
+		return apprelay.RuntimeDependencies{}, errors.New("relay runtime service is not configured")
+	}
+	preparer := newSessionTurnPreparer(
+		b.service.runtimeFactory,
+		b.service.configStore,
+		b.service.sessionStore,
+		b.service.runRegistry,
+		nil,
+	)
+	deps, _, _, err := preparer.BuildPrepareDependencies(runtimeOverrides)
+	if err != nil {
+		return apprelay.RuntimeDependencies{}, err
+	}
+	return runtimeadapter.ToRelayDependencies(deps), nil
 }
 
 func NewTaskScheduler(store *TaskStore, service *bridgeService) *TaskScheduler {
@@ -110,6 +221,10 @@ func cloneTaskActionParams(input map[string]any) map[string]any {
 	return taskdefs.CloneActionParams(input)
 }
 
+func cloneScheduledTask(task ScheduledTask) ScheduledTask {
+	return apptasks.CloneScheduledTask(task)
+}
+
 func cloneTaskWorkflow(input *WorkflowDefinition) *WorkflowDefinition {
 	return taskdefs.CloneWorkflowDefinition(input)
 }
@@ -128,6 +243,10 @@ func decodeActionParamsMap[T any](input map[string]any) (T, error) {
 
 func nextTaskRunAt(task ScheduledTask, now time.Time) (time.Time, error) {
 	return bridgeTasks.NextTaskRunAt(task, now)
+}
+
+func buildWorkflowExecutionPlan(definition *WorkflowDefinition) (workflowExecutionPlan, error) {
+	return workflowdomain.PlanBuilder{}.Build(definition)
 }
 
 // Implementation moved to task_executor_adapter.go.

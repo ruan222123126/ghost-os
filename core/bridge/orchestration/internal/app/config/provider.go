@@ -19,6 +19,8 @@ const (
 )
 
 type Store interface {
+	PublicSnapshot() (bridgeconfig.Snapshot, error)
+	Update(bridgeconfig.UpdateRequest) error
 	ListProviders() ([]bridgeconfig.ProviderRecord, error)
 	AddProvider(bridgeconfig.ProviderRecord) error
 	UpdateProvider(string, bridgeconfig.ProviderRecord) error

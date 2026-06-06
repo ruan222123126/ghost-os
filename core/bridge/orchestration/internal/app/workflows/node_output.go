@@ -6,6 +6,17 @@ import (
 	"strings"
 )
 
+func EncodeToolArguments(arguments map[string]any) (json.RawMessage, error) {
+	if len(arguments) == 0 {
+		return json.RawMessage(`{}`), nil
+	}
+	encoded, err := json.Marshal(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("encode workflow tool arguments: %w", err)
+	}
+	return encoded, nil
+}
+
 func EncodeNodeOutputText(value any) string {
 	encoded, err := json.Marshal(value)
 	if err != nil {

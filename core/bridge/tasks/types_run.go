@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"fmt"
+	"ghost-os/bridge/taskdefs"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -9,31 +10,19 @@ import (
 
 const (
 	DefaultRunLogRetention  = 100
-	RunStatusRunning        = "running"
-	RunStatusSuccess        = "success"
-	RunStatusIncomplete     = "incomplete"
-	RunStatusCancelled      = "cancelled"
-	RunStatusError          = "error"
-	RunStatusSkipped        = "skipped"
-	RunStatusAwaitingHuman  = "awaiting_human"
-	MaxResponsePreviewRunes = 240
+	RunStatusRunning        = taskdefs.RunStatusRunning
+	RunStatusSuccess        = taskdefs.RunStatusSuccess
+	RunStatusIncomplete     = taskdefs.RunStatusIncomplete
+	RunStatusCancelled      = taskdefs.RunStatusCancelled
+	RunStatusError          = taskdefs.RunStatusError
+	RunStatusSkipped        = taskdefs.RunStatusSkipped
+	RunStatusAwaitingHuman  = taskdefs.RunStatusAwaitingHuman
+	MaxResponsePreviewRunes = taskdefs.MaxResponsePreviewRunes
 )
 
 var runIDCounter uint64
 
-type RunNodeResult struct {
-	NodeID       string    `json:"node_id"`
-	NodeType     string    `json:"node_type"`
-	Status       string    `json:"status"`
-	StartedAt    time.Time `json:"started_at,omitempty"`
-	FinishedAt   time.Time `json:"finished_at,omitempty"`
-	CompletedSeq int       `json:"completed_seq,omitempty"`
-	BranchID     string    `json:"branch_id,omitempty"`
-	Input        any       `json:"input,omitempty"`
-	Output       any       `json:"output,omitempty"`
-	Preview      string    `json:"preview,omitempty"`
-	Error        string    `json:"error,omitempty"`
-}
+type RunNodeResult = taskdefs.RunNodeResult
 
 type RunLog struct {
 	TaskID          string          `json:"task_id"`

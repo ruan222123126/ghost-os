@@ -6,18 +6,17 @@ import (
 	"fmt"
 	"strings"
 
-	"ghost-os/bridge/agent"
 	"ghost-os/bridge/llm"
-	bridgeTasks "ghost-os/bridge/tasks"
+	"ghost-os/bridge/taskdefs"
 )
 
 const (
 	RunTranscriptEventMarker = "[TASK_RUN_EVENT]"
 
-	runStatusError        = bridgeTasks.RunStatusError
-	runStatusSuccess      = bridgeTasks.RunStatusSuccess
-	kindWorkflow          = bridgeTasks.KindWorkflow
-	kindOrchestration     = bridgeTasks.KindOrchestration
+	runStatusError        = taskdefs.RunStatusError
+	runStatusSuccess      = taskdefs.RunStatusSuccess
+	kindWorkflow          = taskdefs.KindWorkflow
+	kindOrchestration     = taskdefs.KindOrchestration
 	workflowNodeStart     = "start"
 	workflowNodeTool      = "tool"
 	workflowNodeLLM       = "llm"
@@ -34,9 +33,9 @@ type SessionSource struct {
 }
 
 type RunTranscriptOptions struct {
-	Task     bridgeTasks.ScheduledTask
+	Task     taskdefs.ScheduledTask
 	TraceID  string
-	Result   bridgeTasks.ExecutionResult
+	Result   taskdefs.ExecutionResult
 	Sessions map[string]SessionSource
 }
 
@@ -46,8 +45,8 @@ type RunTranscript struct {
 }
 
 type runTranscriptBuilder struct {
-	options      RunTranscriptOptions
-	messages     []llm.Message
+	options        RunTranscriptOptions
+	messages       []llm.Message
 	sessionOffsets map[string]int
 }
 
@@ -60,7 +59,7 @@ type runToolMessage struct {
 }
 
 func ShouldCreateRunTranscript(taskKind string) bool {
-	switch bridgeTasks.NormalizeKind(taskKind) {
+	switch taskdefs.NormalizeTaskKind(taskKind) {
 	case kindWorkflow, kindOrchestration:
 		return true
 	default:
@@ -95,7 +94,7 @@ func normalizeRunTranscriptOptions(options RunTranscriptOptions) RunTranscriptOp
 
 func (b *runTranscriptBuilder) build() {
 	b.addEvent(b.startEvent())
-	switch bridgeTasks.NormalizeKind(b.options.Task.TaskKind) {
+	switch taskdefs.NormalizeTaskKind(b.options.Task.TaskKind) {
 	case kindWorkflow:
 		b.appendWorkflowResults()
 	case kindOrchestration:
@@ -109,7 +108,7 @@ func (b *runTranscriptBuilder) title() string {
 	if name == "" {
 		name = strings.TrimSpace(b.options.Task.ID)
 	}
-	kind := bridgeTasks.NormalizeKind(b.options.Task.TaskKind)
+	kind := taskdefs.NormalizeTaskKind(b.options.Task.TaskKind)
 	if name == "" {
 		return kind + " run"
 	}
@@ -167,7 +166,7 @@ func (b *runTranscriptBuilder) addToolMessage(message runToolMessage) {
 	b.messages = append(b.messages, llm.Message{
 		Role:       llm.RoleTool,
 		ToolCallID: callID,
-		Text:       agent.FormatToolResult(message.toolName, b.options.TraceID, message.output, runToolError(message.status)),
+		Text:       llm.FormatToolResult(message.toolName, b.options.TraceID, message.output, runToolError(message.status)),
 	})
 }
 

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	maxM2TopLevelGoFiles         = 61
+	maxM2TopLevelGoFiles         = 29
 	maxM2ProductionFileLines     = 300
 	maxM2OversizedGoDirectories  = 3
 	maxGoFilesPerTargetDirectory = 15
@@ -232,11 +232,9 @@ func productionLineOffenders(t *testing.T, files []string) []string {
 // files; ordinary implementation belongs under internal/*.
 var allowedTopLevelOrchestrationFiles = map[string]bool{
 	"agent_contract.go":                                                     true,
-	"agent_turn_app_adapter.go":                                             true,
 	"agent_usecase_helpers.go":                                              true,
 	"envelope_generated.go":                                                 true,
 	"export_service.go":                                                     true,
-	"legacy_migration.go":                                                   true,
 	"orchestration_contract_agent_stream_misc_test.go":                      true,
 	"orchestration_contract_agent_stream_test.go":                           true,
 	"orchestration_contract_fixtures_test.go":                               true,
@@ -251,47 +249,17 @@ var allowedTopLevelOrchestrationFiles = map[string]bool{
 	"orchestration_contract_task_runtime_overrides_test.go":                 true,
 	"orchestration_contract_tasks_basic_test.go":                            true,
 	"orchestration_contract_workflow_fixtures_test.go":                      true,
+	"orchestration_contract_workflow_helpers_test.go":                       true,
 	"orchestration_contract_workflow_runner_test.go":                        true,
 	"orchestration_contract_workflow_tools_test.go":                         true,
 	"orchestration_contract_workflow_validation_api_test.go":                true,
-	"relay_mode_catalog.go":                                                 true,
-	"relay_mode_rounds.go":                                                  true,
-	"relay_mode_runner.go":                                                  true,
-	"runtime_adapter.go":                                                    true,
-	"service_config_runtime.go":                                             true,
 	"service_prompts.go":                                                    true,
-	"service_result.go":                                                     true,
 	"service_router.go":                                                     true,
-	"service_runtime_state.go":                                              true,
-	"service_session_guards.go":                                             true,
 	"service_sessions.go":                                                   true,
-	"service_tasks.go":                                                      true,
 	"service_usecase_human.go":                                              true,
-	"session_end_signal.go":                                                 true,
-	"session_push_adapter.go":                                               true,
 	"session_runner.go":                                                     true,
-	"session_runner_adapter.go":                                             true,
-	"session_turn_preparer.go":                                              true,
-	"session_turn_preparer_prompt.go":                                       true,
-	"session_turn_preparer_selector.go":                                     true,
-	"session_turn_runtime_overrides.go":                                     true,
-	"session_turn_state.go":                                                 true,
-	"task_agent_run_cards.go":                                               true,
 	"task_bridge.go":                                                        true,
 	"task_executor_adapter.go":                                              true,
-	"task_orchestration_owner_catalog.go":                                   true,
-	"task_orchestration_owner_runtime.go":                                   true,
-	"task_orchestration_runner.go":                                          true,
-	"task_run_cards_bridge.go":                                              true,
-	"task_runtime_config.go":                                                true,
-	"task_usecase_runner.go":                                                true,
-	"task_usecase_runner_build.go":                                          true,
-	"task_validation.go":                                                    true,
-	"task_workflow_run_cards.go":                                            true,
-	"task_workflow_runner.go":                                               true,
-	"task_workflow_runner_nodes.go":                                         true,
-	"task_workflow_validation.go":                                           true,
-	"trace_compat.go":                                                       true,
 }
 
 var forbiddenConcreteDomainImports = []string{
@@ -309,42 +277,7 @@ var forbiddenConcreteDomainImports = []string{
 // the lightweight layer check. Remove entries as imports move behind
 // contracts/ports; adding an entry means consciously accepting new
 // domain-to-concrete coupling.
-var allowedDomainConcreteImports = map[string]map[string]bool{
-	"internal/domain/sessionturn/contract.go": {
-		"ghost-os/bridge/agent":   true,
-		"ghost-os/bridge/session": true,
-	},
-	"internal/domain/sessionturn/contract_draft.go": {
-		"ghost-os/bridge/session": true,
-	},
-	"internal/domain/sessionturn/history_builder.go": {
-		"ghost-os/bridge/agent":   true,
-		"ghost-os/bridge/config":  true,
-		"ghost-os/bridge/session": true,
-	},
-	"internal/domain/sessionturn/human_tool_results.go": {
-		"ghost-os/bridge/session": true,
-	},
-	"internal/domain/sessionturn/microcompact.go": {
-		"ghost-os/bridge/agent": true,
-	},
-	"internal/domain/sessionturn/microcompact_summary_helpers.go": {
-		"ghost-os/bridge/session": true,
-	},
-	"internal/domain/task/run_transcript.go": {
-		"ghost-os/bridge/agent": true,
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/task/run_transcript_orchestration.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/task/run_transcript_sessions.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/task/run_transcript_workflow.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-}
+var allowedDomainConcreteImports = map[string]map[string]bool{}
 
 func lineCount(t *testing.T, file string) int {
 	t.Helper()

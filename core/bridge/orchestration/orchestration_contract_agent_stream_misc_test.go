@@ -6,6 +6,8 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	appagentturn "ghost-os/bridge/orchestration/internal/app/agentturn"
+	"ghost-os/bridge/orchestration/internal/app/agentturn/toolselect"
 	apptools "ghost-os/bridge/orchestration/internal/app/tools"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
@@ -51,12 +53,15 @@ func TestCompletionPromptRefreshLoadsSkillContextSameRun(t *testing.T) {
 		},
 	}
 	deps := agentRuntimeDependencies{cfg: cfg, client: completer, registry: registry}
-	runAgent := newSessionTurnPreparer(nil, nil, nil, nil, nil).buildTurnAgent(
+	runAgent, err := newSessionTurnPreparer(nil, nil, nil, nil, nil).BuildTurnAgent(
 		deps,
 		catalog,
 		sess,
 		agent.NewHistory(prompt),
 	)
+	if err != nil {
+		t.Fatalf("buildTurnAgent: %v", err)
+	}
 
 	ctx := tools.WithSession(context.Background(), sess)
 	if _, err := runAgent.RunMessageWithTraceID(ctx, llm.Message{Role: llm.RoleUser, Text: "load it"}, "trace"); err != nil {
@@ -181,20 +186,20 @@ func TestSessionTurnStatePersistsCommittedToolTurnOnLaterError(t *testing.T) {
 	runAgent := agent.NewAgentWithHistory(completer, registry, agent.NewHistory("base system prompt"), 3)
 
 	turn := &sessionTurnState{
-		sessionStore: sessionStore,
-		persistence:  newSessionTurnCommitter(sessionStore),
-		sess:         sess,
-		agent:        runAgent,
-		execCtx:      execCtx,
-		traceID:      "trace-tool-turn-transaction",
+		SessionStore: sessionStore,
+		Persistence:  newSessionTurnCommitter(sessionStore),
+		Session:      sess,
+		Agent:        runAgent,
+		ExecCtx:      execCtx,
+		TraceID:      "trace-tool-turn-transaction",
 	}
 
-	response, runErr := runAgent.RunWithTraceID(execCtx, "hello", turn.traceID)
+	response, runErr := runAgent.RunWithTraceID(execCtx, "hello", turn.TraceID)
 	if runErr == nil {
 		t.Fatal("expected completion failure after tool turn")
 	}
 
-	_, persistedSessionID, err := turn.complete(response, runErr, nil)
+	_, persistedSessionID, err := turn.Complete(response, runErr, nil)
 	if err == nil {
 		t.Fatal("expected turn completion to return the run error")
 	}
@@ -393,11 +398,28 @@ func TestToolSelectionPolicy_ApplyAddsAllowlistAndHonorsBlocklist(t *testing.T) 
 	}
 }
 
+func selectToolsForTest(
+	ctx context.Context,
+	deps agentRuntimeDependencies,
+	history *agent.History,
+	userMessage string,
+	traceID string,
+	selectorFactory toolselect.SelectorFactory,
+) (tools.ToolCatalog, string, error) {
+	return toolselect.SelectForTurn(ctx, toolselect.Request{
+		Config:          deps.cfg,
+		Registry:        deps.registry,
+		History:         history,
+		UserMessage:     userMessage,
+		TraceID:         traceID,
+		SelectorFactory: selectorFactory,
+	})
+}
+
 func TestSessionTurnPreparer_SelectToolsForTurn_HasNoResidentToolsWithoutAllowlist(t *testing.T) {
-	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(bridgeconfig.Config{ToolSelector: bridgeconfig.ToolSelectorConfig{Blocklist: []string{"script_exec"}}, MaxTurns: 6})
 
-	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-disabled")
+	catalog, prompt, err := selectToolsForTest(context.Background(), deps, agent.NewHistory("system prompt"), "read config", "trace-policy-disabled", nil)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -412,7 +434,6 @@ func TestSessionTurnPreparer_SelectToolsForTurn_HasNoResidentToolsWithoutAllowli
 }
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWithoutAllowlistOnly(t *testing.T) {
-	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Allowlist: []string{"script_exec"},
@@ -420,7 +441,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWit
 		MaxTurns: 6,
 	})
 
-	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-allowlist")
+	catalog, _, err := selectToolsForTest(context.Background(), deps, agent.NewHistory("system prompt"), "read config", "trace-policy-allowlist", nil)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -434,7 +455,6 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistDefinesResidentToolsWit
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *testing.T) {
 	selector := &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "subset", Tools: []string{"codex_cli"}, Confidence: 0.9}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine { return selector }}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Enabled:   true,
@@ -445,7 +465,14 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 		PromptsDir: filepath.Join(t.TempDir(), "prompts"),
 	})
 
-	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-subset")
+	catalog, prompt, err := selectToolsForTest(
+		context.Background(),
+		deps,
+		agent.NewHistory("system prompt"),
+		"read config",
+		"trace-policy-subset",
+		func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine { return selector },
+	)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -464,11 +491,9 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AppliesAllowlistToSubset(t *test
 
 func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOutsideStrictMode(t *testing.T) {
 	var available []string
-	preparer := &sessionTurnPreparer{
-		selectorFactory: func(_ bridgeconfig.Config, catalog tools.ToolCatalog) bridgeruntime.SelectorEngine {
-			available = toolCatalogNames(catalog)
-			return &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "all"}}
-		},
+	selectorFactory := func(_ bridgeconfig.Config, catalog tools.ToolCatalog) bridgeruntime.SelectorEngine {
+		available = appagentturn.ToolCatalogNames(catalog)
+		return &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "all"}}
 	}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
@@ -480,7 +505,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOuts
 		MaxTurns: 6,
 	})
 
-	_, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-visible")
+	_, _, err := selectToolsForTest(context.Background(), deps, agent.NewHistory("system prompt"), "read config", "trace-policy-visible", selectorFactory)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -496,11 +521,9 @@ func TestSessionTurnPreparer_SelectToolsForTurn_PassesSelectorVisibleCatalogOuts
 
 func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(t *testing.T) {
 	var available []string
-	preparer := &sessionTurnPreparer{
-		selectorFactory: func(_ bridgeconfig.Config, catalog tools.ToolCatalog) bridgeruntime.SelectorEngine {
-			available = toolCatalogNames(catalog)
-			return &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "all"}}
-		},
+	selectorFactory := func(_ bridgeconfig.Config, catalog tools.ToolCatalog) bridgeruntime.SelectorEngine {
+		available = appagentturn.ToolCatalogNames(catalog)
+		return &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "all"}}
 	}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
@@ -512,7 +535,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 		MaxTurns: 6,
 	})
 
-	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-allowlist-only")
+	catalog, _, err := selectToolsForTest(context.Background(), deps, agent.NewHistory("system prompt"), "read config", "trace-policy-allowlist-only", selectorFactory)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -531,7 +554,6 @@ func TestSessionTurnPreparer_SelectToolsForTurn_AllowlistOnlyScopesVisibleTools(
 }
 
 func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *testing.T) {
-	preparer := &sessionTurnPreparer{}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Allowlist: []string{"codex_cli", "sfind"},
@@ -543,7 +565,7 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 		MaxTurns: 6,
 	})
 
-	catalog, _, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "find tools", false, "trace-policy-tool-search")
+	catalog, _, err := selectToolsForTest(context.Background(), deps, agent.NewHistory("system prompt"), "find tools", "trace-policy-tool-search", nil)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}
@@ -561,7 +583,6 @@ func TestSessionTurnPreparer_SelectToolsForTurn_ToolSearchScopesVisibleTools(t *
 
 func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithoutAllowlist(t *testing.T) {
 	selector := &fakeSelectorEngine{result: bridgeruntime.ToolSelectorResult{Mode: "subset", Tools: []string{"script_exec"}, Confidence: 0.9}}
-	preparer := &sessionTurnPreparer{selectorFactory: func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine { return selector }}
 	deps := newRunnerTestDeps(bridgeconfig.Config{
 		ToolSelector: bridgeconfig.ToolSelectorConfig{
 			Enabled: true,
@@ -571,7 +592,14 @@ func TestSessionTurnPreparer_SelectToolsForTurn_CanSelectNonResidentToolsWithout
 		PromptsDir: filepath.Join(t.TempDir(), "prompts"),
 	})
 
-	catalog, prompt, err := preparer.selectToolsForTurn(context.Background(), deps, nil, agent.NewHistory("system prompt"), "read config", false, "trace-policy-empty-resident-subset")
+	catalog, prompt, err := selectToolsForTest(
+		context.Background(),
+		deps,
+		agent.NewHistory("system prompt"),
+		"read config",
+		"trace-policy-empty-resident-subset",
+		func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine { return selector },
+	)
 	if err != nil {
 		t.Fatalf("selectToolsForTurn returned error: %v", err)
 	}

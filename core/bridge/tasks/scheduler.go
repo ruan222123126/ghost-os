@@ -10,16 +10,10 @@ import (
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/taskdefs"
 )
 
-type ExecutionResult struct {
-	Status          string
-	SessionIDOutput string
-	ResponsePreview string
-	NodeResults     []RunNodeResult
-	RunCards        []RunCard
-	Error           string
-}
+type ExecutionResult = taskdefs.ExecutionResult
 
 type RunSession struct {
 	SessionID      string

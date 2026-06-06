@@ -1,20 +1,11 @@
 package tasks
 
 import (
+	"ghost-os/bridge/taskdefs"
 	"strings"
-	"time"
 )
 
-type RunCardSourceEvent struct {
-	ID        string         `json:"id"`
-	StepID    string         `json:"step_id"`
-	TraceID   string         `json:"trace_id"`
-	SessionID string         `json:"session_id,omitempty"`
-	Turn      int            `json:"turn"`
-	Type      string         `json:"type"`
-	Payload   map[string]any `json:"payload"`
-	At        time.Time      `json:"at,omitempty"`
-}
+type RunCardSourceEvent = taskdefs.RunCardSourceEvent
 
 func CloneRunCardSourceEvents(input []RunCardSourceEvent) []RunCardSourceEvent {
 	if len(input) == 0 {

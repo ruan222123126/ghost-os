@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"ghost-os/bridge/orchestration/internal/app/workflows/screen"
 	sharedtext "ghost-os/bridge/orchestration/internal/shared/text"
 	bridgeTasks "ghost-os/bridge/tasks"
 	"ghost-os/bridge/tools"
@@ -43,14 +44,14 @@ type toolCommand struct {
 }
 
 func executeAvailableTool(ctx context.Context, cmd toolCommand) NodeOutcome {
-	preparedArgs, err := PrepareToolArguments(cmd.toolName, cmd.node.Tool.Arguments, cmd.uploader)
+	preparedArgs, err := screen.PrepareToolArguments(cmd.toolName, cmd.node.Tool.Arguments, cmd.uploader)
 	if err != nil {
 		return NodeOutcome{Err: err}
 	}
 	if cmd.toolName != ScreenControlToolID {
 		return executePreparedToolCall(ctx, cmd.tool, cmd.node.ID, cmd.traceID, cmd.toolName, preparedArgs)
 	}
-	steps, baseArgs, err := ParseScreenControlSteps(preparedArgs)
+	steps, baseArgs, err := screen.ParseSteps(preparedArgs)
 	if err != nil {
 		return NodeOutcome{Err: err}
 	}
@@ -58,6 +59,42 @@ func executeAvailableTool(ctx context.Context, cmd toolCommand) NodeOutcome {
 		return executePreparedToolCall(ctx, cmd.tool, cmd.node.ID, cmd.traceID, cmd.toolName, preparedArgs)
 	}
 	return executeScreenControlStepSequence(ctx, cmd.tool, cmd.node.ID, cmd.traceID, baseArgs, steps, cmd.uploader)
+}
+
+func PrepareToolArguments(
+	toolName string,
+	arguments map[string]any,
+	uploader TemplateUploader,
+) (map[string]any, error) {
+	return screen.PrepareToolArguments(toolName, arguments, uploader)
+}
+
+func ParseScreenControlSteps(arguments map[string]any) ([]ScreenControlStep, map[string]any, error) {
+	return screen.ParseSteps(arguments)
+}
+
+func DecodeScreenControlStep(rawStep map[string]any, index int) (ScreenControlStep, error) {
+	return screen.DecodeStep(rawStep, index)
+}
+
+func MapScreenControlStepAction(action string) (string, error) {
+	return screen.MapStepAction(action)
+}
+
+func ResolveScreenControlStepParams(
+	step ScreenControlStep,
+	lastFindIconOutput any,
+) (map[string]any, error) {
+	return screen.ResolveStepParams(step, lastFindIconOutput)
+}
+
+func PrepareScreenControlStepArguments(
+	baseArgs map[string]any,
+	step ScreenControlStep,
+	lastFindIconOutput any,
+	uploader TemplateUploader,
+) (map[string]any, error) {
+	return screen.PrepareStepArguments(baseArgs, step, lastFindIconOutput, uploader)
 }
 
 func executePreparedToolCall(

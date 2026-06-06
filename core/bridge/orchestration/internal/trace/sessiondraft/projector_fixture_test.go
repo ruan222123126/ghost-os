@@ -1,4 +1,4 @@
-package sessiondraft
+package sessiondraft_test
 
 import (
 	"encoding/json"
@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	contracts "ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
+	"ghost-os/bridge/orchestration/internal/trace/sessiondraft"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 )
@@ -30,10 +32,10 @@ func TestProjectTurnDraftFixtures(t *testing.T) {
 		t.Run(fixture.name, func(t *testing.T) {
 			sess := &session.Session{}
 			for _, event := range fixture.data.Events {
-				ProjectTurnDraft(sess, event, when)
+				sessiondraft.ProjectTurnDraft(sess, event, when)
 			}
 
-			actual := sessionturn.BuildSessionTurnDraftPayload(sess, true)
+			actual := sessionturn.BuildSessionTurnDraftPayload(appsessions.BuildTurnDraftInput(sess.TurnDraft), true)
 			if actual == nil {
 				t.Fatal("expected turn_draft payload")
 			}

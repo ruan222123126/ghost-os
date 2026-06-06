@@ -5,11 +5,51 @@ import (
 	"encoding/json"
 
 	bridgeconfig "ghost-os/bridge/config"
+	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
+	serviceruntime "ghost-os/bridge/orchestration/internal/adapters/serviceruntime"
+	appskills "ghost-os/bridge/orchestration/internal/app/skills"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/orchestration/internal/dispatch"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
 )
+
+var (
+	ErrSessionInflight = internaltrace.ErrSessionInflight
+	ErrRunNotFound     = internaltrace.ErrRunNotFound
+	ErrRunCancelled    = internaltrace.ErrRunCancelled
+	ErrRunRegistryNil  = internaltrace.ErrRunRegistryNil
+)
+
+const (
+	sessionPushAssistantMessage    = internaltrace.SessionPushAssistantMessage
+	sessionPushAwaitingHuman       = internaltrace.SessionPushAwaitingHuman
+	sessionPushRunStarted          = internaltrace.SessionPushRunStarted
+	sessionPushCompletionDelta     = internaltrace.SessionPushCompletionDelta
+	sessionPushToolCallStarted     = internaltrace.SessionPushToolCallStarted
+	sessionPushToolCallFinished    = internaltrace.SessionPushToolCallFinished
+	sessionPushError               = internaltrace.SessionPushError
+	sessionPushDone                = internaltrace.SessionPushDone
+	sessionPushTaskRunCardStarted  = internaltrace.SessionPushTaskRunCardStarted
+	sessionPushTaskRunCardEvent    = internaltrace.SessionPushTaskRunCardEvent
+	sessionPushTaskRunCardFinished = internaltrace.SessionPushTaskRunCardFinished
+)
+
+type RunHandle = internaltrace.RunHandle
+type RunRegistry = internaltrace.RunRegistry
+type sessionPushEventType = internaltrace.SessionPushEventType
+type sessionPushEvent = internaltrace.SessionPushEvent
+type sessionPushHub = internaltrace.SessionPushHub
+
+func NewRunRegistry() *RunRegistry {
+	return internaltrace.NewRunRegistry()
+}
+
+func newSessionPushHub() *sessionPushHub {
+	return internaltrace.NewSessionPushHub()
+}
 
 type actionHandler = dispatch.Handler
 
@@ -35,8 +75,8 @@ type agentStreamExecutorFunc func(
 type bridgeService struct {
 	configStore    bridgeconfig.Store
 	sessionStore   *session.Store
-	lifecycle      *serviceLifecycle
-	runtimeState   *serviceRuntimeState
+	lifecycle      *serviceruntime.Lifecycle
+	runtimeState   *serviceruntime.State
 	actionRouter   *dispatch.Router
 	skillHandler   *bridgeskills.ActionHandler
 	agentRunner    SessionTurnRunner
@@ -56,7 +96,7 @@ func newBridgeServiceWithStreamExecutor(
 	streamExecutor agentStreamExecutorFunc,
 ) *bridgeService {
 	service := newBridgeServiceState(store, sessionStore)
-	service.skillHandler = NewSkillActionHandler(store, service.skillLogFunc())
+	service.skillHandler = appskills.NewActionHandler(store, service.skillLogFunc())
 	service.runtimeFactory = newAgentRuntimeFactory()
 	service.agentRunner = newServiceAgentRunner(service, executor, streamExecutor)
 	registerDefaultActions(service)
@@ -64,20 +104,25 @@ func newBridgeServiceWithStreamExecutor(
 }
 
 func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store) *bridgeService {
-	runtimeState := newServiceRuntimeState()
-	sessionPush := newSessionPushHub()
+	runtimeState := serviceruntime.NewState()
+	sessionPush := internaltrace.NewSessionPushHub()
 	return &bridgeService{
 		configStore:  store,
 		sessionStore: sessionStore,
-		lifecycle:    newServiceLifecycle(runtimeState, sessionPush),
+		lifecycle:    serviceruntime.NewLifecycle(runtimeState, sessionPush),
 		runtimeState: runtimeState,
 		actionRouter: dispatch.NewRouter(21),
-		runRegistry:  NewRunRegistry(),
+		runRegistry:  internaltrace.NewRunRegistry(),
 	}
 }
 
 func newServiceAgentRunner(service *bridgeService, executor agentExecutorFunc, streamExecutor agentStreamExecutorFunc) SessionTurnRunner {
-	runner := newSessionTurnRunnerAdapter(service.configStore, service.sessionStore, executor, streamExecutor)
+	runner := agentadapter.NewExecutorRunner(
+		service.configStore,
+		service.sessionStore,
+		agentadapter.ExecutorFunc(executor),
+		agentadapter.StreamExecutorFunc(streamExecutor),
+	)
 	if runner != nil {
 		return runner
 	}
@@ -89,32 +134,32 @@ func newServiceAgentRunner(service *bridgeService, executor agentExecutorFunc, s
 	)
 }
 
-func (s *bridgeService) sessionPushHub() *sessionPushHub {
+func (s *bridgeService) sessionPushHub() *internaltrace.SessionPushHub {
 	if s == nil || s.lifecycle == nil {
 		return nil
 	}
-	return s.lifecycle.sessionPushHub()
+	return s.lifecycle.SessionPushHub()
 }
 
 func (s *bridgeService) taskStore() *TaskStore {
 	if s == nil || s.runtimeState == nil {
 		return nil
 	}
-	return s.runtimeState.taskStore()
+	return s.runtimeState.TaskStore()
 }
 
 func (s *bridgeService) taskScheduler() *TaskScheduler {
 	if s == nil || s.runtimeState == nil {
 		return nil
 	}
-	return s.runtimeState.taskScheduler()
+	return s.runtimeState.TaskScheduler()
 }
 
 func (s *bridgeService) taskInitErr() error {
 	if s == nil || s.runtimeState == nil {
 		return nil
 	}
-	return s.runtimeState.taskInitErr()
+	return s.runtimeState.TaskInitErr()
 }
 
 // StartBackgroundRuntimes 显式初始化 service 依赖的后台 runtime。
@@ -122,7 +167,7 @@ func (s *bridgeService) StartBackgroundRuntimes() error {
 	if s == nil {
 		return nil
 	}
-	return s.runtimeState.start(s.configStore, s)
+	return s.runtimeState.Start(s.configStore, taskExecutorAdapter{service: s})
 }
 
 // BootstrapSystemTasks 将系统调度任务同步到 task runtime。
@@ -130,14 +175,14 @@ func (s *bridgeService) BootstrapSystemTasks() error {
 	if s == nil {
 		return nil
 	}
-	return s.runtimeState.bootstrapSystemTasks(s.configStore)
+	return s.runtimeState.BootstrapSystemTasks()
 }
 
 func (s *bridgeService) initTaskRuntime() error {
 	if s == nil {
 		return nil
 	}
-	return s.runtimeState.initTaskRuntime(s.configStore, s)
+	return s.runtimeState.InitTaskRuntime(s.configStore, taskExecutorAdapter{service: s})
 }
 
 func (s *bridgeService) skillLogFunc() bridgeskills.LogFunc {
@@ -151,7 +196,7 @@ func (s *bridgeService) Close() {
 	if s == nil {
 		return
 	}
-	s.lifecycle.close()
+	s.lifecycle.Close()
 }
 
 // dispatchAction 根据 action 查找处理器；未知 action 返回显式可选列表。
@@ -234,7 +279,7 @@ func (s *bridgeService) executeTaskListDispatchAction(
 ) (ServiceResult, error) {
 	scope, err := dispatch.NormalizeTaskListScope(params.Scope)
 	if err != nil {
-		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
+		return ServiceResult{}, bus.WrapError(ServiceErrorInvalidInput, err)
 	}
 	return s.executeTaskListActionResult(scope, traceID)
 }

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	"ghost-os/bridge/taskdefs"
 )
 
 func (b *runTranscriptBuilder) appendWorkflowResults() {
@@ -17,7 +17,7 @@ func (b *runTranscriptBuilder) appendWorkflowResults() {
 	}
 }
 
-func (b *runTranscriptBuilder) appendWorkflowNode(node bridgeTasks.RunNodeResult) {
+func (b *runTranscriptBuilder) appendWorkflowNode(node taskdefs.RunNodeResult) {
 	if strings.TrimSpace(node.Error) != "" {
 		b.addEvent(workflowNodeErrorEvent(node))
 	}
@@ -39,11 +39,11 @@ func (b *runTranscriptBuilder) appendWorkflowNode(node bridgeTasks.RunNodeResult
 	}
 }
 
-func workflowNodeErrorEvent(node bridgeTasks.RunNodeResult) string {
+func workflowNodeErrorEvent(node taskdefs.RunNodeResult) string {
 	return fmt.Sprintf("节点执行失败：%s (%s)\nerror: %s", node.NodeID, node.NodeType, strings.TrimSpace(node.Error))
 }
 
-func workflowStartEvent(node bridgeTasks.RunNodeResult) string {
+func workflowStartEvent(node taskdefs.RunNodeResult) string {
 	output := transcriptRecord(node.Output)
 	nextIDs := transcriptStringSlice(output["next_node_ids"])
 	if len(nextIDs) > 0 {
@@ -53,7 +53,7 @@ func workflowStartEvent(node bridgeTasks.RunNodeResult) string {
 	return fmt.Sprintf("工作流开始：%s -> %s", node.NodeID, nextID)
 }
 
-func workflowIfEvent(node bridgeTasks.RunNodeResult) string {
+func workflowIfEvent(node taskdefs.RunNodeResult) string {
 	output := transcriptNestedRecord(node.Output, "output")
 	branch := transcriptString(output, "branch")
 	nextID := transcriptString(output, "next_node_id")
@@ -62,7 +62,7 @@ func workflowIfEvent(node bridgeTasks.RunNodeResult) string {
 	return fmt.Sprintf("工作流 if 判断：%s branch=%s operator=%s value=%s -> %s", node.NodeID, branch, operator, value, nextID)
 }
 
-func workflowLoopEvent(node bridgeTasks.RunNodeResult) string {
+func workflowLoopEvent(node taskdefs.RunNodeResult) string {
 	output := transcriptNestedRecord(node.Output, "output")
 	nextID := transcriptString(output, "next_node_id")
 	if !transcriptBool(output, "entering_loop") {
@@ -73,7 +73,7 @@ func workflowLoopEvent(node bridgeTasks.RunNodeResult) string {
 	return fmt.Sprintf("工作流进入循环：%s 第 %d/%d 轮 -> %s", node.NodeID, iteration, maxIterations, nextID)
 }
 
-func (b *runTranscriptBuilder) appendWorkflowToolNode(node bridgeTasks.RunNodeResult) {
+func (b *runTranscriptBuilder) appendWorkflowToolNode(node taskdefs.RunNodeResult) {
 	toolInput := transcriptNestedRecord(node.Input, "tool")
 	toolName := transcriptString(toolInput, "tool_name")
 	arguments := toolInput["arguments"]
@@ -89,7 +89,7 @@ func (b *runTranscriptBuilder) appendWorkflowToolNode(node bridgeTasks.RunNodeRe
 	})
 }
 
-func (b *runTranscriptBuilder) appendWorkflowTextNode(node bridgeTasks.RunNodeResult, label string) {
+func (b *runTranscriptBuilder) appendWorkflowTextNode(node taskdefs.RunNodeResult, label string) {
 	output := transcriptRecord(node.Output)
 	content := transcriptString(output, "response_preview")
 	if content == "" {
@@ -98,7 +98,7 @@ func (b *runTranscriptBuilder) appendWorkflowTextNode(node bridgeTasks.RunNodeRe
 	b.addSpeakerMessage(fmt.Sprintf("节点 %s（%s）", node.NodeID, label), content)
 }
 
-func (b *runTranscriptBuilder) appendWorkflowAgentNode(node bridgeTasks.RunNodeResult) {
+func (b *runTranscriptBuilder) appendWorkflowAgentNode(node taskdefs.RunNodeResult) {
 	output := transcriptRecord(node.Output)
 	sessionID := transcriptString(output, "session_id_output")
 	sender := fmt.Sprintf("节点 %s（agent）", node.NodeID)

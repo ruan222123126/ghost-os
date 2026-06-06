@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
+	"ghost-os/bridge/orchestration/internal/domain/runtimeopts"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
@@ -60,22 +60,11 @@ func NormalizeMode(raw string) (string, error) {
 }
 
 func NormalizeRequestRuntimeOptions(rawProjectRoot string) (*RequestRuntimeOptions, error) {
-	trimmed := strings.TrimSpace(rawProjectRoot)
-	if trimmed == "" {
-		return nil, nil
-	}
-	projectRoot, err := bridgeconfig.NormalizeProjectRoot(trimmed)
-	if err != nil {
-		return nil, err
-	}
-	return &RequestRuntimeOptions{ProjectRoot: projectRoot}, nil
+	return runtimeopts.NormalizeRequestOptions(rawProjectRoot)
 }
 
 func CloneRequestRuntimeOptions(input *RequestRuntimeOptions) *RequestRuntimeOptions {
-	if input == nil {
-		return nil
-	}
-	return &RequestRuntimeOptions{ProjectRoot: input.ProjectRoot}
+	return runtimeopts.CloneRequestOptions(input)
 }
 
 func PrepareWithRuntimeOverrides(

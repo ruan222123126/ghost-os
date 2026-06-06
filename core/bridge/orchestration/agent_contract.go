@@ -3,92 +3,128 @@ package orchestration
 import (
 	"context"
 	"errors"
-	"fmt"
-	"strings"
 
+	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
+	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/streaming"
+	"ghost-os/bridge/tools"
 )
 
 type agentResponseMeta struct {
 	Mode string
 }
 
+type agentRuntimeDependencies struct {
+	cfg                  bridgeconfig.Config
+	client               agent.Completer
+	registry             *tools.Registry
+	systemPrompt         string
+	systemPromptOverride bool
+	systemPromptFiles    *bridgeconfig.SystemPromptFiles
+	cleanup              func()
+}
+
+func (d agentRuntimeDependencies) Close() {
+	if d.cleanup != nil {
+		d.cleanup()
+	}
+}
+
+func (d agentRuntimeDependencies) Config() bridgeconfig.Config {
+	return d.cfg
+}
+
+func (d agentRuntimeDependencies) Client() agent.Completer {
+	return d.client
+}
+
+func (d agentRuntimeDependencies) Registry() *tools.Registry {
+	return d.registry
+}
+
+func (d agentRuntimeDependencies) SystemPrompt() string {
+	return d.systemPrompt
+}
+
+func (d agentRuntimeDependencies) SystemPromptOverride() bool {
+	return d.systemPromptOverride
+}
+
+func (d agentRuntimeDependencies) SystemPromptFiles() *bridgeconfig.SystemPromptFiles {
+	return d.systemPromptFiles
+}
+
+type AgentRuntimeFactory interface {
+	Build(store bridgeconfig.Store) (agentRuntimeDependencies, error)
+}
+
+type RuntimeDependencies = agentRuntimeDependencies
+type RuntimeCompleter = agent.Completer
+type RuntimeToolRegistry = tools.Registry
+
+func NewRuntimeDependencies(
+	cfg bridgeconfig.Config,
+	client RuntimeCompleter,
+	registry *RuntimeToolRegistry,
+	systemPrompt string,
+	cleanup func(),
+) RuntimeDependencies {
+	return agentRuntimeDependencies{
+		cfg:          cfg,
+		client:       client,
+		registry:     registry,
+		systemPrompt: systemPrompt,
+		cleanup:      cleanup,
+	}
+}
+
+type runtimeFactoryAdapter struct {
+	inner bridgeruntime.AgentRuntimeFactory
+}
+
+func (f runtimeFactoryAdapter) Build(store bridgeconfig.Store) (agentRuntimeDependencies, error) {
+	var innerStore *bridgeruntime.ConfigStore
+	if store != nil {
+		innerStore = bridgeruntime.WrapConfigStore(store)
+	}
+	deps, err := f.inner.Build(innerStore)
+	if err != nil {
+		return agentRuntimeDependencies{}, err
+	}
+	return agentRuntimeDependencies{
+		cfg:          deps.Config(),
+		client:       deps.Client(),
+		registry:     deps.Registry(),
+		systemPrompt: deps.SystemPrompt(),
+		cleanup:      deps.Close,
+	}, nil
+}
+
+func newAgentRuntimeFactory() AgentRuntimeFactory {
+	return runtimeFactoryAdapter{inner: bridgeruntime.NewAgentRuntimeFactory()}
+}
+
+// parseSessionEndSignal 只识别完整会话结束信号；普通文本/普通 JSON 均按普通回复返回。
+func parseSessionEndSignal(raw string) (message string, signal *assistantSessionEndSignalPayload, err error) {
+	return agentturn.ParseSessionEndSignal(raw)
+}
+
+func parseSessionEndForStream(response string) (string, bool, error) {
+	normalized, sessionEnd, err := parseSessionEndSignal(response)
+	return normalized, sessionEnd != nil, err
+}
+
 // newAgentResponsePayload 构造并校验 AGENT_SEND 成功响应，确保会话结束契约稳定。
 func newAgentResponsePayload(message string, sessionID string, sessionEnd *assistantSessionEndSignalPayload, meta agentResponseMeta) (agentResponse, error) {
-	trimmedMessage := strings.TrimSpace(message)
-	trimmedSessionID := strings.TrimSpace(sessionID)
-	ended := sessionEnd != nil
-	payload := agentResponse{
-		Message:      trimmedMessage,
-		SessionID:    trimmedSessionID,
-		SessionEnded: ended,
-		SessionEnd:   sessionEnd,
-		Mode:         strings.TrimSpace(meta.Mode),
-	}
-	if err := validateAgentResponsePayload(payload); err != nil {
-		return agentResponse{}, err
-	}
-	return payload, nil
+	return agentturn.NewResponsePayload(message, sessionID, sessionEnd, agentturn.ResponseMeta{Mode: meta.Mode})
 }
 
 // validateAgentResponsePayload 在跨进程返回前执行最小契约校验。
 func validateAgentResponsePayload(payload agentResponse) error {
-	if err := validateAgentResponseRequiredFields(payload); err != nil {
-		return err
-	}
-	if err := validateAgentResponseSessionEnd(payload); err != nil {
-		return err
-	}
-	if payload.Mode == "" {
-		return nil
-	}
-	if err := validateAgentResponseMode(payload); err != nil {
-		return err
-	}
-	return nil
-}
-
-func validateAgentResponseRequiredFields(payload agentResponse) error {
-	if strings.TrimSpace(payload.Message) == "" {
-		return errors.New("agent response message is empty")
-	}
-	if strings.TrimSpace(payload.SessionID) == "" {
-		return errors.New("agent response session_id is empty")
-	}
-	return nil
-}
-
-func validateAgentResponseSessionEnd(payload agentResponse) error {
-	if payload.SessionEnded && payload.SessionEnd == nil {
-		return errors.New("agent response session_end is required when session_ended=true")
-	}
-	if !payload.SessionEnded && payload.SessionEnd != nil {
-		return errors.New("agent response session_end must be empty when session_ended=false")
-	}
-	if payload.SessionEnd == nil {
-		return nil
-	}
-	if strings.TrimSpace(payload.SessionEnd.Signal) != busAssistantSessionEndSignal {
-		return fmt.Errorf("agent response session_end.signal must be %q", busAssistantSessionEndSignal)
-	}
-	if strings.TrimSpace(payload.SessionEnd.Message) == "" {
-		return errors.New("agent response session_end.message is empty")
-	}
-	if strings.TrimSpace(payload.SessionEnd.Message) != strings.TrimSpace(payload.Message) {
-		return errors.New("agent response session_end.message must equal message")
-	}
-	return nil
-}
-
-func validateAgentResponseMode(payload agentResponse) error {
-	switch payload.Mode {
-	case agentModePlan:
-		return nil
-	default:
-		return errors.New("agent response mode is invalid")
-	}
+	return agentturn.ValidateResponsePayload(payload)
 }
 
 var errStructuredAgentRunnerRequired = errors.New("configured agent runner does not support image input")
@@ -189,5 +225,9 @@ func requestScopedAgentRunner(
 	if !ok {
 		return nil, errRequestRuntimeRunnerRequired
 	}
-	return aware.withRequestRuntimeOptions(options), nil
+	scoped, ok := aware.WithRequestRuntimeOptions(options).(SessionTurnRunner)
+	if !ok {
+		return nil, errRequestRuntimeRunnerRequired
+	}
+	return scoped, nil
 }

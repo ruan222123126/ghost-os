@@ -1,16 +1,18 @@
 package orchestration
 
 import (
-	"errors"
-	"fmt"
+	"context"
+	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/adapters/promptpreview"
+	"ghost-os/bridge/orchestration/internal/adapters/toolruntime"
+	appconfig "ghost-os/bridge/orchestration/internal/app/config"
 	appprompts "ghost-os/bridge/orchestration/internal/app/prompts"
 	appskills "ghost-os/bridge/orchestration/internal/app/skills"
-	bridgeruntime "ghost-os/bridge/runtime"
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	bridgeskills "ghost-os/bridge/skills"
-	"ghost-os/bridge/tools"
 )
 
 const (
@@ -29,11 +31,16 @@ type systemPromptToolDefinition = appprompts.ToolDefinition
 
 type systemPromptPreview = appprompts.Preview
 
+const screenControlToolID = apptools.ScreenControlToolID
+
 func (s *bridgeService) promptService() appprompts.Service {
 	return appprompts.Service{
-		Store:         s.configStore,
-		PreviewLoader: systemPromptPreviewLoader{service: s},
-		Logger:        serviceActionLogger{},
+		Store: s.configStore,
+		PreviewLoader: promptpreview.Loader{
+			Store:          s.configStore,
+			RuntimeFactory: s.promptPreviewRuntimeFactory(),
+		},
+		Logger: serviceActionLogger{},
 	}
 }
 
@@ -43,15 +50,35 @@ func (serviceActionLogger) Log(traceID string, action string, status string, err
 	logAction(traceID, action, status, err)
 }
 
-type systemPromptPreviewLoader struct {
-	service *bridgeService
+func (s *bridgeService) promptPreviewRuntimeFactory() promptpreview.RuntimeFactory {
+	if s == nil || s.runtimeFactory == nil {
+		return nil
+	}
+	return promptpreview.RuntimeFactoryFunc(func(store bridgeconfig.Store) (promptpreview.RuntimeDependencies, error) {
+		return s.runtimeFactory.Build(store)
+	})
 }
 
-func (l systemPromptPreviewLoader) Load(cfg bridgeconfig.Config) (appprompts.Preview, error) {
-	if l.service == nil {
-		return appprompts.Preview{}, errors.New("service is not configured")
+func (s *bridgeService) toolService() apptools.Service {
+	adapter := toolruntime.Provider{
+		Store:          s.configStore,
+		RuntimeFactory: s.toolRuntimeFactory(),
 	}
-	return l.service.loadSystemPromptPreview(cfg)
+	return apptools.Service{
+		Store:          s.configStore,
+		SchemaProvider: adapter,
+		ToolProvider:   adapter,
+		Logger:         serviceActionLogger{},
+	}
+}
+
+func (s *bridgeService) toolRuntimeFactory() toolruntime.RuntimeFactory {
+	if s == nil || s.runtimeFactory == nil {
+		return nil
+	}
+	return toolruntime.RuntimeFactoryFunc(func(store bridgeconfig.Store) (toolruntime.RuntimeDependencies, error) {
+		return s.runtimeFactory.Build(store)
+	})
 }
 
 func (s *bridgeService) executeSystemPromptGetAction(traceID string) (ServiceResult, error) {
@@ -98,91 +125,6 @@ func (s *bridgeService) executePresetApplyAction(
 	return s.promptService().ApplyPreset(presetID, traceID)
 }
 
-func (s *bridgeService) loadSystemPromptPreview(cfg bridgeconfig.Config) (systemPromptPreview, error) {
-	catalog, cleanup, err := s.loadSystemPromptPreviewCatalog(cfg)
-	if err != nil {
-		return systemPromptPreview{}, err
-	}
-	defer cleanup()
-
-	rendered, err := bridgeruntime.BuildSystemPromptForCatalog(cfg, catalog)
-	if err != nil {
-		return systemPromptPreview{}, fmt.Errorf("build system prompt preview: %w", err)
-	}
-	return systemPromptPreview{
-		RenderedPrompt:  rendered,
-		ToolDefinitions: systemPromptToolDefinitionsFrom(catalog.ToolDefs()),
-	}, nil
-}
-
-func (s *bridgeService) loadSystemPromptPreviewCatalog(
-	cfg bridgeconfig.Config,
-) (tools.ToolCatalog, func(), error) {
-	if s == nil || s.runtimeFactory == nil {
-		return nil, func() {}, errors.New("runtime factory unavailable for system prompt preview")
-	}
-
-	deps, err := s.runtimeFactory.Build(s.configStore)
-	if err != nil {
-		return nil, func() {}, fmt.Errorf("build runtime dependencies for system prompt preview: %w", err)
-	}
-	if deps.registry == nil {
-		deps.Close()
-		return nil, func() {}, errors.New("tool registry unavailable for system prompt preview")
-	}
-	baseCatalog := tools.NewPromptOverrideCatalog(deps.registry, deps.cfg.ToolSelector.PromptOverrides)
-	return bridgeruntime.NewToolSelectionPolicy(cfg).ResidentCatalog(baseCatalog), deps.Close, nil
-}
-
-func systemPromptResponseFrom(
-	files bridgeconfig.SystemPromptFiles,
-	preview systemPromptPreview,
-) systemPromptResponse {
-	return systemPromptResponse{
-		CorePrompt:      files.CorePrompt,
-		RenderedPrompt:  preview.RenderedPrompt,
-		PromptLibrary:   files.PromptLibrary,
-		ToolDefinitions: preview.ToolDefinitions,
-	}
-}
-
-func systemPromptToolDefinitionsFrom(defs []llm.ToolDef) []systemPromptToolDefinition {
-	return appprompts.ToolDefinitionsFrom(defs)
-}
-
-func reqHasSystemPromptUpdate(req bridgeconfig.SystemPromptUpdateRequest) bool {
-	return req.CorePrompt != nil || req.PromptLibrary != nil
-}
-
-func mapSystemPromptError(err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, bridgeconfig.ErrSystemPromptUpdateEmpty) {
-		return wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-	if errors.Is(err, bridgeconfig.ErrSystemPromptUpdateConflict) {
-		return wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-	if errors.Is(err, bridgeconfig.ErrSystemPromptLibraryInvalid) {
-		return wrapServiceError(ServiceErrorInvalidInput, err)
-	}
-	return wrapServiceError(ServiceErrorInternal, err)
-}
-
-func mapPresetError(err error) error {
-	switch {
-	case errors.Is(err, bridgeconfig.ErrPresetNotFound):
-		return wrapServiceError(ServiceErrorNotFound, err)
-	case errors.Is(err, bridgeconfig.ErrPresetInvalid),
-		errors.Is(err, bridgeconfig.ErrPresetIDRequired),
-		errors.Is(err, bridgeconfig.ErrPresetUpdateEmpty):
-		return wrapServiceError(ServiceErrorInvalidInput, err)
-	default:
-		return wrapServiceError(ServiceErrorInternal, err)
-	}
-}
-
 func (s *bridgeService) executeSkillListAction(traceID string) (any, int, error) {
 	return s.skillService().List(traceID)
 }
@@ -199,30 +141,141 @@ func (s *bridgeService) executeSkillDeleteAction(params bridgeskills.SkillIDPara
 	return s.skillService().Delete(params, traceID)
 }
 
+func (s *bridgeService) executeSkillListActionResult(traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeSkillListAction(traceID))
+}
+
+func (s *bridgeService) executeSkillUpdateActionResult(
+	params bridgeskills.SkillIDParams,
+	req bridgeskills.SkillUpdateRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeSkillUpdateAction(params, req, traceID))
+}
+
+func (s *bridgeService) executeSkillDeleteActionResult(params bridgeskills.SkillIDParams, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeSkillDeleteAction(params, traceID))
+}
+
 func (s *bridgeService) skillService() appskills.Service {
 	return appskills.Service{Handler: s.skillHandler}
 }
 
-// configStoreAdapter adapts bridgeconfig.Store to skills.Store.
-type configStoreAdapter struct {
-	inner bridgeconfig.Store
+func (s *bridgeService) executeToolListAction(traceID string) (any, int, error) {
+	return s.toolService().List(traceID)
 }
 
-func (a configStoreAdapter) Config() (bridgeskills.Config, error) {
-	cfg, err := a.inner.Config()
-	if err != nil {
-		return bridgeskills.Config{}, err
+func (s *bridgeService) executeToolUpdateAction(
+	params toolNameParams,
+	req toolUpdateRequest,
+	traceID string,
+) (any, int, error) {
+	return s.toolService().Update(params, req, traceID)
+}
+
+func (s *bridgeService) executeFindIconTemplateUploadActionResult(
+	req findIconTemplateUploadRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.toolService().FindIconTemplateUpload(req, traceID)
+}
+
+func (s *bridgeService) executeFindIconPreviewActionResult(
+	ctx context.Context,
+	req findIconPreviewRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.toolService().FindIconPreview(ctx, req, traceID)
+}
+
+func (s *bridgeService) executeMousePositionActionResult(
+	ctx context.Context,
+	req mousePositionRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.toolService().MousePosition(ctx, req, traceID)
+}
+
+func resolveFindIconTemplateRoot() (string, error) {
+	return apptools.ResolveFindIconTemplateRoot()
+}
+
+func (s *bridgeService) executeToolListActionResult(traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeToolListAction(traceID))
+}
+
+func (s *bridgeService) executeToolUpdateActionResult(
+	params toolNameParams,
+	req toolUpdateRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.executeToolUpdateAction(params, req, traceID))
+}
+
+// executeConfigGetAction 返回当前可编辑配置快照，不暴露敏感明文字段。
+func (s *bridgeService) executeConfigGetAction(traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().GetRuntime(traceID))
+}
+
+// executeConfigUpdateAction 按请求局部更新运行态配置，并返回更新后可编辑快照。
+func (s *bridgeService) executeConfigUpdateAction(req configUpdateRequest, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().UpdateRuntime(req, traceID, s.afterRuntimeConfigUpdate))
+}
+
+func (s *bridgeService) syncTaskSchedulerExecutionTimeout() {
+	if s == nil {
+		return
 	}
-	return bridgeskills.Config{
-		ProjectRoot:    cfg.ProjectRoot,
-		SkillBlocklist: append([]string(nil), cfg.SkillBlocklist...),
-	}, nil
+	scheduler := s.taskScheduler()
+	if scheduler == nil {
+		return
+	}
+	cfg, err := s.configStore.Config()
+	if err != nil {
+		return
+	}
+	scheduler.SetExecutionTimeout(time.Duration(cfg.Task.ExecutionTimeoutMS) * time.Millisecond)
 }
 
-func (a configStoreAdapter) SetSkillEnabled(skillID string, enabled bool) error {
-	return a.inner.SetSkillEnabled(skillID, enabled)
+func (s *bridgeService) configService() appconfig.Service {
+	return appconfig.Service{
+		Store:  s.configStore,
+		Logger: serviceActionLogger{},
+	}
 }
 
-func NewSkillActionHandler(store bridgeconfig.Store, log bridgeskills.LogFunc) *bridgeskills.ActionHandler {
-	return bridgeskills.NewActionHandler(configStoreAdapter{inner: store}, log)
+func (s *bridgeService) afterRuntimeConfigUpdate() error {
+	s.syncTaskSchedulerExecutionTimeout()
+	return s.BootstrapSystemTasks()
+}
+
+func (s *bridgeService) executeProvidersGetAction(traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().List(traceID))
+}
+
+func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().Create(req, traceID))
+}
+
+func (s *bridgeService) executeProviderUpdateAction(
+	name string,
+	req providerUpdateRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().Update(name, req, traceID))
+}
+
+func (s *bridgeService) executeProviderDeleteAction(name string, traceID string) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().Delete(name, traceID))
+}
+
+func (s *bridgeService) executeSetActiveProviderAction(
+	req setActiveProviderRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return bus.ResultFromStatus(s.configService().SetActive(req, traceID))
+}
+
+func configResponseFromSnapshot(snapshot bridgeconfig.Snapshot) configResponse {
+	return appconfig.ResponseFromSnapshot(snapshot)
 }

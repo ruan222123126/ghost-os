@@ -6,6 +6,10 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
+	"ghost-os/bridge/orchestration/internal/app/agentturn"
+	"ghost-os/bridge/orchestration/internal/app/agentturn/turnstate"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
@@ -44,6 +48,77 @@ type StructuredSessionTurnRunner interface {
 	RunTurnStreamInput(ctx context.Context, input llm.Message, sessionID string, traceID string, sink streaming.Sink) (string, string, error)
 }
 
+type requestRuntimeOptions = agentturn.RequestRuntimeOptions
+
+type requestRuntimeAwareRunner interface {
+	WithRequestRuntimeOptions(*requestRuntimeOptions) any
+}
+
+func normalizeRequestRuntimeOptions(rawProjectRoot string) (*requestRuntimeOptions, error) {
+	return agentturn.NormalizeRequestRuntimeOptions(rawProjectRoot)
+}
+
+func applyRequestRuntimeOptionsToStore(
+	store bridgeconfig.Store,
+	options *requestRuntimeOptions,
+) bridgeconfig.Store {
+	if options == nil {
+		return store
+	}
+	return bridgeconfig.WithProjectRootOverride(store, options.ProjectRoot)
+}
+
+func cloneRequestRuntimeOptions(input *requestRuntimeOptions) *requestRuntimeOptions {
+	return agentturn.CloneRequestRuntimeOptions(input)
+}
+
+type sessionTurnSetupError = agentturn.SessionSetupError
+type sessionTurnState = turnstate.State
+type SessionTurnCommitter = turnstate.Committer
+
+func newSessionTurnCommitter(sessionStore *session.Store) *SessionTurnCommitter {
+	return turnstate.NewCommitter(sessionStore)
+}
+
+type sessionTurnRuntimeFactory struct {
+	inner AgentRuntimeFactory
+}
+
+func (f sessionTurnRuntimeFactory) Build(store bridgeconfig.Store) (agentadapter.RuntimeDependencies, error) {
+	inner := f.inner
+	if inner == nil {
+		inner = newAgentRuntimeFactory()
+	}
+	deps, err := inner.Build(store)
+	if err != nil {
+		return nil, err
+	}
+	return deps, nil
+}
+
+func newSessionTurnPreparer(
+	runtimeFactory AgentRuntimeFactory,
+	configStore bridgeconfig.Store,
+	sessionStore *session.Store,
+	runRegistry *RunRegistry,
+	selectorFactory func(bridgeconfig.Config, tools.ToolCatalog) bridgeruntime.SelectorEngine,
+) agentadapter.SessionTurnPreparer {
+	if runtimeFactory == nil {
+		runtimeFactory = newAgentRuntimeFactory()
+	}
+	config := agentadapter.SessionTurnPreparerConfig{
+		RuntimeFactory:  sessionTurnRuntimeFactory{inner: runtimeFactory},
+		ConfigStore:     configStore,
+		SessionStore:    sessionStore,
+		SelectorFactory: selectorFactory,
+		Logger:          serviceActionLogger{},
+	}
+	if runRegistry != nil {
+		config.RunRegistry = runRegistry
+	}
+	return agentadapter.NewSessionTurnPreparer(config)
+}
+
 // SessionAgentRunner 负责执行单轮 agent；运行时装配下沉到 sessionTurnPreparer。
 type SessionAgentRunner struct {
 	runtimeFactory  AgentRuntimeFactory
@@ -70,7 +145,7 @@ func NewSessionAgentRunner(
 	}
 }
 
-func (r *SessionAgentRunner) withRequestRuntimeOptions(options *requestRuntimeOptions) SessionTurnRunner {
+func (r *SessionAgentRunner) WithRequestRuntimeOptions(options *requestRuntimeOptions) any {
 	if r == nil || options == nil {
 		return r
 	}
@@ -90,10 +165,10 @@ func (r *SessionAgentRunner) prepareTurnWithRuntimeOverrides(
 	traceID string,
 	runtimeOverrides *TaskRuntimeOverrides,
 ) (*sessionTurnState, error) {
-	return r.turnPreparer().prepareWithRuntimeOverrides(ctx, userInput, sessionID, traceID, runtimeOverrides)
+	return r.turnPreparer().PrepareWithRuntimeOverrides(ctx, userInput, sessionID, traceID, runtimeOverrides)
 }
 
-func (r *SessionAgentRunner) turnPreparer() *sessionTurnPreparer {
+func (r *SessionAgentRunner) turnPreparer() agentadapter.SessionTurnPreparer {
 	if r == nil {
 		return newSessionTurnPreparer(nil, nil, nil, nil, nil)
 	}
@@ -155,10 +230,10 @@ func (r *SessionAgentRunner) RunTurnInputWithOverrides(
 	if err != nil {
 		return "", "", err
 	}
-	defer turn.close()
+	defer turn.Close()
 
-	response, runErr := turn.agent.RunMessageWithTraceID(turn.execCtx, input, turn.traceID)
-	return turn.complete(response, runErr, nil)
+	response, runErr := turn.Agent.RunMessageWithTraceID(turn.ExecCtx, input, turn.TraceID)
+	return turn.Complete(response, runErr, nil)
 }
 
 func (r *SessionAgentRunner) RunTurnStream(ctx context.Context, userMessage string, sessionID string, traceID string, sink streaming.Sink) (string, string, error) {
@@ -184,12 +259,12 @@ func (r *SessionAgentRunner) RunTurnStreamInputWithOverrides(
 	if err != nil {
 		var setupErr *sessionTurnSetupError
 		if errors.As(err, &setupErr) {
-			if emitErr := emitStreamErrorEvent(ctx, ensureEventSink(sink), traceID, 0, "", setupErr.sessionID, setupErr.statusCode, setupErr); emitErr != nil {
+			if emitErr := internaltrace.EmitStreamErrorEvent(ctx, internaltrace.EnsureEventSink(sink), traceID, 0, "", setupErr.SessionID, setupErr.StatusCode, setupErr); emitErr != nil {
 				return "", "", emitErr
 			}
 		}
 		return "", "", err
 	}
-	defer turn.close()
-	return runPreparedTurnStream(ctx, turn, input, sink)
+	defer turn.Close()
+	return turnstate.RunPreparedTurnStream(ctx, turn, input, sink, parseSessionEndForStream)
 }

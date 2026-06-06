@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	minimumMessageBudget = 4
-	minimumTruncateRatio = 0.05
+	minimumEstimatedMessageTokens = 1
+	minimumMessageBudget          = 4
+	minimumTruncateRatio          = 0.05
 )
 
 func (p messagePruner) clampMessagesToTokenLimit(messages []llm.Message, maxTokens int) []llm.Message {
@@ -77,8 +78,8 @@ func (p messagePruner) messageWeights(messages []llm.Message) ([]int, int) {
 	total := 0
 	for index, msg := range messages {
 		weight := p.safeEstimate(msg)
-		if weight < minimumEstimatedTokens {
-			weight = minimumEstimatedTokens
+		if weight < minimumEstimatedMessageTokens {
+			weight = minimumEstimatedMessageTokens
 		}
 		weights[index] = weight
 		total += weight
