@@ -33,7 +33,6 @@ const busAssistantSessionEndSignal = bus.AssistantSessionEndSignal
 
 type assistantSessionEndSignalPayload = api.AssistantSessionEndSignalPayload
 type agentRequest = api.AgentRequest
-type agentIterationSummaryItem = api.AgentIterationSummaryItem
 type askHumanOption = api.AskHumanOption
 type agentResponse = api.AgentResponse
 type askHumanAwaitingResponse = api.AskHumanAwaitingResponse

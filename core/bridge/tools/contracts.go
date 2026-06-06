@@ -43,8 +43,8 @@ func (a sessionCheckpointAdapter) Save(state toolcontracts.SessionState) error {
 // AwaitingHumanSignal 表示工具要求 Agent 暂停并等待用户输入。
 type AwaitingHumanSignal = toolcontracts.AwaitingHumanSignal
 
-// IterationHandoffSignal tells the orchestrator to end the current fresh-memory agent
-// iteration and either hand off to the next agent or finish the pro run.
+// IterationHandoffSignal tells the orchestrator to end the current worker turn
+// and either hand off to the next agent or finish the structured handoff loop.
 type IterationHandoffSignal = toolcontracts.IterationHandoffSignal
 
 // ExecuteMeta 描述工具执行后的附加语义，不影响原始 output envelope。

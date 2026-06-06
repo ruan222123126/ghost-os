@@ -33,7 +33,7 @@ func (s Service) classify(err error) (*agent.ErrAwaitingHuman, bus.ServiceErrorK
 	return s.Classifier.Classify(err)
 }
 
-func newAwaitingHumanResponse(
+func NewAwaitingHumanResponse(
 	sessionID string,
 	awaitingErr *agent.ErrAwaitingHuman,
 ) api.AskHumanAwaitingResponse {

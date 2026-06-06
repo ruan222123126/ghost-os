@@ -1,6 +1,6 @@
 package workflow
 
-import bridgeTasks "ghost-os/bridge/tasks"
+import taskdefs "ghost-os/bridge/taskdefs"
 
 const (
 	NodeTypeStart = "start"
@@ -25,17 +25,17 @@ const (
 	IfOperatorNotEmpty    = "not_empty"
 )
 
-type Definition = bridgeTasks.WorkflowDefinition
-type Node = bridgeTasks.WorkflowNode
-type StartNode = bridgeTasks.WorkflowStartNode
-type InputVariable = bridgeTasks.WorkflowInputVariable
-type ToolNode = bridgeTasks.WorkflowToolNode
-type LLMNode = bridgeTasks.WorkflowLLMNode
-type AgentNode = bridgeTasks.WorkflowAgentNode
-type IfNode = bridgeTasks.WorkflowIfNode
-type LoopNode = bridgeTasks.WorkflowLoopNode
-type Edge = bridgeTasks.WorkflowEdge
-type RuntimeOverrides = bridgeTasks.TaskRuntimeOverrides
+type Definition = taskdefs.WorkflowDefinition
+type Node = taskdefs.WorkflowNode
+type StartNode = taskdefs.WorkflowStartNode
+type InputVariable = taskdefs.WorkflowInputVariable
+type ToolNode = taskdefs.WorkflowToolNode
+type LLMNode = taskdefs.WorkflowLLMNode
+type AgentNode = taskdefs.WorkflowAgentNode
+type IfNode = taskdefs.WorkflowIfNode
+type LoopNode = taskdefs.WorkflowLoopNode
+type Edge = taskdefs.WorkflowEdge
+type RuntimeOverrides = taskdefs.TaskRuntimeOverrides
 
 type NodeIndex struct {
 	nodes   map[string]Node

@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 const testMaxRounds = 1
 
 func TestPlanBuilderAcceptsEmptyDraft(t *testing.T) {
-	plan, err := PlanBuilder{}.Build(&bridgeTasks.OrchestrationDefinition{})
+	plan, err := PlanBuilder{}.Build(&taskdefs.OrchestrationDefinition{})
 	if err != nil {
 		t.Fatalf("build empty draft: %v", err)
 	}
@@ -44,8 +44,8 @@ func TestPlanBuilderOwnerModeRequiresOwnerToBeMember(t *testing.T) {
 }
 
 func TestPlanBuilderRejectsAgentOnlyGraph(t *testing.T) {
-	definition := &bridgeTasks.OrchestrationDefinition{
-		Nodes: []bridgeTasks.OrchestrationNode{agentNode("agent-1", "Solo")},
+	definition := &taskdefs.OrchestrationDefinition{
+		Nodes: []taskdefs.OrchestrationNode{agentNode("agent-1", "Solo")},
 	}
 	_, err := PlanBuilder{}.Build(definition)
 	if err == nil || !strings.Contains(err.Error(), "requires at least 1 group node") {
@@ -53,15 +53,15 @@ func TestPlanBuilderRejectsAgentOnlyGraph(t *testing.T) {
 	}
 }
 
-func legacyBoundaryDefinition() *bridgeTasks.OrchestrationDefinition {
-	return &bridgeTasks.OrchestrationDefinition{
-		Nodes: []bridgeTasks.OrchestrationNode{
+func legacyBoundaryDefinition() *taskdefs.OrchestrationDefinition {
+	return &taskdefs.OrchestrationDefinition{
+		Nodes: []taskdefs.OrchestrationNode{
 			{ID: "start-node", Type: NodeTypeStart},
 			groupNode("group-1", SpeakingModeSequential),
 			agentNode("agent-1", "Member"),
 			{ID: "end-node", Type: NodeTypeEnd},
 		},
-		Edges: []bridgeTasks.OrchestrationEdge{
+		Edges: []taskdefs.OrchestrationEdge{
 			controlEdge("start-node", "group-1"),
 			controlEdge("group-1", "end-node"),
 			memberEdge("agent-1", "group-1"),
@@ -69,15 +69,15 @@ func legacyBoundaryDefinition() *bridgeTasks.OrchestrationDefinition {
 	}
 }
 
-func twoGroupDefinition() *bridgeTasks.OrchestrationDefinition {
-	return &bridgeTasks.OrchestrationDefinition{
-		Nodes: []bridgeTasks.OrchestrationNode{
+func twoGroupDefinition() *taskdefs.OrchestrationDefinition {
+	return &taskdefs.OrchestrationDefinition{
+		Nodes: []taskdefs.OrchestrationNode{
 			groupNode("group-1", SpeakingModeSequential),
 			groupNode("group-2", SpeakingModeParallel),
 			agentNode("agent-1", "One"),
 			agentNode("agent-2", "Two"),
 		},
-		Edges: []bridgeTasks.OrchestrationEdge{
+		Edges: []taskdefs.OrchestrationEdge{
 			controlEdge("group-1", "group-2"),
 			memberEdge("agent-1", "group-1"),
 			memberEdge("agent-2", "group-2"),
@@ -85,25 +85,25 @@ func twoGroupDefinition() *bridgeTasks.OrchestrationDefinition {
 	}
 }
 
-func ownerDefinition(ownerID string) *bridgeTasks.OrchestrationDefinition {
+func ownerDefinition(ownerID string) *taskdefs.OrchestrationDefinition {
 	definition := twoGroupDefinition()
-	definition.Nodes = []bridgeTasks.OrchestrationNode{
+	definition.Nodes = []taskdefs.OrchestrationNode{
 		ownerGroupNode(ownerID),
 		agentNode("agent-1", "Owner"),
 		agentNode("agent-2", "Member"),
 	}
-	definition.Edges = []bridgeTasks.OrchestrationEdge{
+	definition.Edges = []taskdefs.OrchestrationEdge{
 		memberEdge("agent-1", "group-1"),
 		memberEdge("agent-2", "group-1"),
 	}
 	return definition
 }
 
-func groupNode(id string, mode string) bridgeTasks.OrchestrationNode {
-	return bridgeTasks.OrchestrationNode{
+func groupNode(id string, mode string) taskdefs.OrchestrationNode {
+	return taskdefs.OrchestrationNode{
 		ID:   id,
 		Type: NodeTypeGroup,
-		Group: &bridgeTasks.OrchestrationGroupNode{
+		Group: &taskdefs.OrchestrationGroupNode{
 			Title:        id,
 			SpeakingMode: mode,
 			MaxRounds:    testMaxRounds,
@@ -111,24 +111,24 @@ func groupNode(id string, mode string) bridgeTasks.OrchestrationNode {
 	}
 }
 
-func ownerGroupNode(ownerID string) bridgeTasks.OrchestrationNode {
+func ownerGroupNode(ownerID string) taskdefs.OrchestrationNode {
 	node := groupNode("group-1", SpeakingModeOwner)
 	node.Group.OwnerAgentID = ownerID
 	return node
 }
 
-func agentNode(id string, title string) bridgeTasks.OrchestrationNode {
-	return bridgeTasks.OrchestrationNode{
+func agentNode(id string, title string) taskdefs.OrchestrationNode {
+	return taskdefs.OrchestrationNode{
 		ID:    id,
 		Type:  NodeTypeAgent,
-		Agent: &bridgeTasks.OrchestrationAgentNode{Title: title, Message: title},
+		Agent: &taskdefs.OrchestrationAgentNode{Title: title, Message: title},
 	}
 }
 
-func controlEdge(fromID string, toID string) bridgeTasks.OrchestrationEdge {
-	return bridgeTasks.OrchestrationEdge{FromNodeID: fromID, ToNodeID: toID, Kind: EdgeKindControl}
+func controlEdge(fromID string, toID string) taskdefs.OrchestrationEdge {
+	return taskdefs.OrchestrationEdge{FromNodeID: fromID, ToNodeID: toID, Kind: EdgeKindControl}
 }
 
-func memberEdge(agentID string, groupID string) bridgeTasks.OrchestrationEdge {
-	return bridgeTasks.OrchestrationEdge{FromNodeID: agentID, ToNodeID: groupID, Kind: EdgeKindMember}
+func memberEdge(agentID string, groupID string) taskdefs.OrchestrationEdge {
+	return taskdefs.OrchestrationEdge{FromNodeID: agentID, ToNodeID: groupID, Kind: EdgeKindMember}
 }

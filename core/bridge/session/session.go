@@ -23,7 +23,6 @@ type Session struct {
 	WindowStart       int                             `json:"window_start,omitempty"`
 	WindowTokenCount  int                             `json:"window_token_count,omitempty"`
 	ConversationState llm.ConversationState           `json:"conversation_state,omitempty"`
-	IterationRuntime  *IterationRuntime               `json:"iteration_runtime,omitempty"`
 	RelayRuntime      *RelayRuntime                   `json:"relay_runtime,omitempty"`
 	PendingQuestions  map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
 	HumanAnswers      map[string]string               `json:"human_answers,omitempty"`

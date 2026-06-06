@@ -34,3 +34,10 @@ func configuredRemovedGraphQLEnv(env envSnapshot) []string {
 	}
 	return out
 }
+
+func validateNoRemovedProEnv(env envSnapshot) error {
+	if env.value("GHOST_PRO_MAX_ITERATIONS") == "" {
+		return nil
+	}
+	return fmt.Errorf("unsupported pro env vars: %s", "GHOST_PRO_MAX_ITERATIONS")
+}

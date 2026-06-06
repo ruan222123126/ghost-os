@@ -14,6 +14,7 @@ import (
 	tooladapter "ghost-os/bridge/orchestration/internal/adapters/toolregistry"
 	apporchestrations "ghost-os/bridge/orchestration/internal/app/orchestrations"
 	"ghost-os/bridge/orchestration/internal/domain/group"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/orchestration/internal/ports"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -98,7 +99,7 @@ func (e orchestrationOwnerDecisionTurnExecutor) loadOwnerDispatchSession(
 	deps agentRuntimeDependencies,
 	systemPrompt string,
 ) (*session.Session, error) {
-	sess, created, err := newSessionHistoryBuilder(
+	sess, created, err := sessionturn.NewSessionHistoryBuilder(
 		deps.cfg.Provider,
 		systemPrompt,
 		e.service.sessionStore,

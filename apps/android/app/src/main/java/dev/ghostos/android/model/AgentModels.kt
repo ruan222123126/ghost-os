@@ -29,20 +29,6 @@ data class AgentRequest(
 )
 
 @Serializable
-data class AgentIterationSummaryItem(
-    val iteration: Int,
-    val did: String,
-    val remaining: String,
-    val completed: Boolean? = null,
-    @SerialName("trace_id")
-    val traceId: String? = null,
-    @SerialName("recorded_at")
-    val recordedAt: String? = null,
-    @SerialName("final_change_log")
-    val finalChangeLog: String? = null
-)
-
-@Serializable
 data class AskHumanOption(
     val label: String,
     @SerialName("allow_custom")
@@ -57,14 +43,6 @@ data class AgentSendSuccessResponse(
     @SerialName("session_ended")
     val sessionEnded: Boolean,
     val mode: String? = null,
-    @SerialName("iteration_count")
-    val iterationCount: Int? = null,
-    @SerialName("stopped_by")
-    val stoppedBy: String? = null,
-    @SerialName("final_change_log")
-    val finalChangeLog: String? = null,
-    @SerialName("iteration_summary")
-    val iterationSummary: List<AgentIterationSummaryItem>? = null,
     @SerialName("session_end")
     val sessionEnd: AssistantSessionEndSignal? = null
 ) : AgentSendResponse

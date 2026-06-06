@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	bridgeruntime "ghost-os/bridge/runtime"
 )
 
@@ -35,8 +37,8 @@ func newTaskRuntimeOverrideStore(
 
 func (p *sessionTurnPreparer) buildPrepareDependencies(
 	runtimeOverrides *TaskRuntimeOverrides,
-) (agentRuntimeDependencies, *SessionHistoryBuilder, *SessionTurnCommitter, error) {
-	normalized, err := normalizeTaskRuntimeOverrides(runtimeOverrides)
+) (agentRuntimeDependencies, *sessionturn.SessionHistoryBuilder, *SessionTurnCommitter, error) {
+	normalized, err := apptasks.NormalizeTaskRuntimeOverrides(runtimeOverrides)
 	if err != nil {
 		return agentRuntimeDependencies{}, nil, nil, err
 	}
@@ -50,7 +52,7 @@ func (p *sessionTurnPreparer) buildPrepareDependencies(
 		return agentRuntimeDependencies{}, nil, nil, err
 	}
 	deps = applyTaskRuntimePromptOverride(deps, normalized)
-	historyBuilder := newSessionHistoryBuilder(
+	historyBuilder := sessionturn.NewSessionHistoryBuilder(
 		deps.cfg.Provider,
 		deps.systemPrompt,
 		p.sessionStore,
@@ -120,7 +122,7 @@ func (s taskRuntimeOverrideStore) Config() (bridgeconfig.Config, error) {
 	if err != nil {
 		return bridgeconfig.Config{}, err
 	}
-	normalized, err := normalizeTaskRuntimeOverrides(s.overrides)
+	normalized, err := apptasks.NormalizeTaskRuntimeOverrides(s.overrides)
 	if err != nil || normalized == nil {
 		return cfg, err
 	}
@@ -178,8 +180,7 @@ func normalizeRuntimeOverridesForCatalogValidation(
 	overrides *TaskRuntimeOverrides,
 	requireProviderModelPair bool,
 ) (*TaskRuntimeOverrides, error) {
-	options := taskRuntimeOverrideNormalizationOptions{requireProviderModelPair: requireProviderModelPair}
-	return normalizeTaskRuntimeOverridesWithOptions(overrides, options)
+	return apptasks.NormalizeTaskRuntimeOverridesForCatalogValidation(overrides, requireProviderModelPair)
 }
 
 func applyTaskRuntimeOverridesToConfig(

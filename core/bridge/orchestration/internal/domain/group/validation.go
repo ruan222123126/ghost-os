@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 func validateNode(node Node) error {
 	if node.ID == "" {
-		return fmt.Errorf("%w: orchestration node id is required", bridgeTasks.ErrInvalidTaskConfig)
+		return fmt.Errorf("%w: orchestration node id is required", taskdefs.ErrInvalidTaskConfig)
 	}
 	switch node.Type {
 	case NodeTypeStart:
@@ -21,34 +21,34 @@ func validateNode(node Node) error {
 	case NodeTypeEnd:
 		return legacyBoundaryNodeError(node.Type)
 	default:
-		return fmt.Errorf("%w: unsupported orchestration node type %q", bridgeTasks.ErrInvalidTaskConfig, node.Type)
+		return fmt.Errorf("%w: unsupported orchestration node type %q", taskdefs.ErrInvalidTaskConfig, node.Type)
 	}
 }
 
 func legacyBoundaryNodeError(nodeType string) error {
 	return fmt.Errorf(
 		"%w: orchestration node type %q is removed; run `bin/ghost-bridge migrate orchestrations`",
-		bridgeTasks.ErrInvalidTaskConfig,
+		taskdefs.ErrInvalidTaskConfig,
 		nodeType,
 	)
 }
 
 func validateGroupNode(node Node) error {
 	if node.Group == nil || node.Agent != nil || node.Group.Title == "" {
-		return fmt.Errorf("%w: orchestration group node %q requires title", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration group node %q requires title", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	if node.Group.MaxRounds <= 0 {
-		return fmt.Errorf("%w: orchestration group node %q requires max_rounds > 0", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration group node %q requires max_rounds > 0", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	return validateGroupSpeakingMode(node)
 }
 
 func validateGroupSpeakingMode(node Node) error {
 	if !isSupportedSpeakingMode(node.Group.SpeakingMode) {
-		return fmt.Errorf("%w: orchestration group node %q requires speaking_mode sequential|parallel|owner", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration group node %q requires speaking_mode sequential|parallel|owner", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	if node.Group.SpeakingMode == SpeakingModeOwner && node.Group.OwnerAgentID == "" {
-		return fmt.Errorf("%w: orchestration group node %q requires owner_agent_id in owner mode", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration group node %q requires owner_agent_id in owner mode", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	if node.Group.SpeakingMode != SpeakingModeOwner && node.Group.OwnerAgentID != "" {
 		node.Group.OwnerAgentID = ""
@@ -64,7 +64,7 @@ func isSupportedSpeakingMode(mode string) bool {
 
 func validateAgentNode(node Node) error {
 	if node.Agent == nil || node.Group != nil || node.Agent.Title == "" || node.Agent.Message == "" {
-		return fmt.Errorf("%w: orchestration agent node %q requires title and message", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration agent node %q requires title and message", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	return nil
 }
@@ -78,10 +78,10 @@ func validateControlDegrees(graph graphData) error {
 		return err
 	}
 	if entries != 1 {
-		return fmt.Errorf("%w: orchestration requires exactly 1 entry group", bridgeTasks.ErrInvalidTaskConfig)
+		return fmt.Errorf("%w: orchestration requires exactly 1 entry group", taskdefs.ErrInvalidTaskConfig)
 	}
 	if exits != 1 {
-		return fmt.Errorf("%w: orchestration requires exactly 1 exit group", bridgeTasks.ErrInvalidTaskConfig)
+		return fmt.Errorf("%w: orchestration requires exactly 1 exit group", taskdefs.ErrInvalidTaskConfig)
 	}
 	return nil
 }
@@ -90,7 +90,7 @@ func validateMissingGroups(graph graphData) error {
 	if len(graph.nodes) == 0 && graph.edgeCount == 0 {
 		return nil
 	}
-	return fmt.Errorf("%w: orchestration requires at least 1 group node", bridgeTasks.ErrInvalidTaskConfig)
+	return fmt.Errorf("%w: orchestration requires at least 1 group node", taskdefs.ErrInvalidTaskConfig)
 }
 
 func countGroupEndpoints(graph graphData) (int, int, error) {
@@ -127,14 +127,14 @@ func validateNodeDegrees(graph graphData, node Node, inDegree int, outDegree int
 
 func validateGroupDegrees(nodeID string, inDegree int, outDegree int) error {
 	if inDegree > 1 || outDegree > 1 {
-		return fmt.Errorf("%w: orchestration group node %q must have in<=1 and out<=1", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+		return fmt.Errorf("%w: orchestration group node %q must have in<=1 and out<=1", taskdefs.ErrInvalidTaskConfig, nodeID)
 	}
 	return nil
 }
 
 func validateAgentDegrees(nodeID string, rawInDegree int, rawOutDegree int) error {
 	if rawInDegree != 0 || rawOutDegree != 0 {
-		return fmt.Errorf("%w: orchestration agent node %q cannot participate in control flow", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+		return fmt.Errorf("%w: orchestration agent node %q cannot participate in control flow", taskdefs.ErrInvalidTaskConfig, nodeID)
 	}
 	return nil
 }
@@ -155,7 +155,7 @@ func collectReachableGroups(graph graphData) (map[string]bool, error) {
 	controlSeen := make(map[string]bool, graph.groupCount)
 	for currentID != "" {
 		if controlSeen[currentID] {
-			return nil, fmt.Errorf("%w: orchestration control flow contains a cycle", bridgeTasks.ErrInvalidTaskConfig)
+			return nil, fmt.Errorf("%w: orchestration control flow contains a cycle", taskdefs.ErrInvalidTaskConfig)
 		}
 		controlSeen[currentID] = true
 		currentID = graph.controlNext[currentID]
@@ -169,7 +169,7 @@ func validateAllGroupsReachable(graph graphData, controlSeen map[string]bool) er
 			continue
 		}
 		if !controlSeen[node.ID] {
-			return fmt.Errorf("%w: orchestration node %q is disconnected from control flow", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+			return fmt.Errorf("%w: orchestration node %q is disconnected from control flow", taskdefs.ErrInvalidTaskConfig, node.ID)
 		}
 	}
 	return nil
@@ -189,7 +189,7 @@ func validateMembers(graph graphData) error {
 
 func validateGroupMembers(members []string, node Node) error {
 	if len(members) == 0 {
-		return fmt.Errorf("%w: orchestration group node %q requires at least one member", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration group node %q requires at least one member", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	if node.Group.SpeakingMode != SpeakingModeOwner {
 		return nil
@@ -200,10 +200,10 @@ func validateGroupMembers(members []string, node Node) error {
 func validateOwnerMember(members []string, node Node) error {
 	ownerID := strings.TrimSpace(node.Group.OwnerAgentID)
 	if ownerID == "" {
-		return fmt.Errorf("%w: orchestration group node %q requires owner_agent_id in owner mode", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: orchestration group node %q requires owner_agent_id in owner mode", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	if !containsMemberID(members, ownerID) {
-		return fmt.Errorf("%w: orchestration group node %q owner_agent_id %q must be an existing member", bridgeTasks.ErrInvalidTaskConfig, node.ID, ownerID)
+		return fmt.Errorf("%w: orchestration group node %q owner_agent_id %q must be an existing member", taskdefs.ErrInvalidTaskConfig, node.ID, ownerID)
 	}
 	return nil
 }

@@ -3,7 +3,7 @@ package group
 import (
 	"fmt"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 func addEdge(graph graphData, edge Edge) error {
@@ -12,7 +12,7 @@ func addEdge(graph graphData, edge Edge) error {
 		return err
 	}
 	if edge.FromNodeID == edge.ToNodeID {
-		return fmt.Errorf("%w: orchestration does not allow self-loop edge %q", bridgeTasks.ErrInvalidTaskConfig, edge.FromNodeID)
+		return fmt.Errorf("%w: orchestration does not allow self-loop edge %q", taskdefs.ErrInvalidTaskConfig, edge.FromNodeID)
 	}
 	graph.edgeCount++
 	return addTypedEdge(graph, edge, fromNode, toNode)
@@ -21,11 +21,11 @@ func addEdge(graph graphData, edge Edge) error {
 func edgeNodes(graph graphData, edge Edge) (Node, Node, error) {
 	fromNode, ok := graph.nodes[edge.FromNodeID]
 	if !ok {
-		return Node{}, Node{}, fmt.Errorf("%w: orchestration edge references unknown from_node_id %q", bridgeTasks.ErrInvalidTaskConfig, edge.FromNodeID)
+		return Node{}, Node{}, fmt.Errorf("%w: orchestration edge references unknown from_node_id %q", taskdefs.ErrInvalidTaskConfig, edge.FromNodeID)
 	}
 	toNode, ok := graph.nodes[edge.ToNodeID]
 	if !ok {
-		return Node{}, Node{}, fmt.Errorf("%w: orchestration edge references unknown to_node_id %q", bridgeTasks.ErrInvalidTaskConfig, edge.ToNodeID)
+		return Node{}, Node{}, fmt.Errorf("%w: orchestration edge references unknown to_node_id %q", taskdefs.ErrInvalidTaskConfig, edge.ToNodeID)
 	}
 	return fromNode, toNode, nil
 }
@@ -37,13 +37,13 @@ func addTypedEdge(graph graphData, edge Edge, fromNode Node, toNode Node) error 
 	case EdgeKindMember:
 		return addMemberEdge(graph, edge, fromNode, toNode)
 	default:
-		return fmt.Errorf("%w: unsupported orchestration edge kind %q", bridgeTasks.ErrInvalidTaskConfig, edge.Kind)
+		return fmt.Errorf("%w: unsupported orchestration edge kind %q", taskdefs.ErrInvalidTaskConfig, edge.Kind)
 	}
 }
 
 func addControlEdge(graph graphData, edge Edge, fromNode Node, toNode Node) error {
 	if !isValidControlEdge(fromNode.Type, toNode.Type) {
-		return fmt.Errorf("%w: orchestration control edge %q -> %q is invalid", bridgeTasks.ErrInvalidTaskConfig, edge.FromNodeID, edge.ToNodeID)
+		return fmt.Errorf("%w: orchestration control edge %q -> %q is invalid", taskdefs.ErrInvalidTaskConfig, edge.FromNodeID, edge.ToNodeID)
 	}
 	graph.rawControlOut[edge.FromNodeID]++
 	graph.rawControlIn[edge.ToNodeID]++
@@ -55,7 +55,7 @@ func addControlEdge(graph graphData, edge Edge, fromNode Node, toNode Node) erro
 
 func addGroupControlEdge(graph graphData, edge Edge) error {
 	if _, exists := graph.controlNext[edge.FromNodeID]; exists {
-		return fmt.Errorf("%w: orchestration node %q allows only one control outgoing edge", bridgeTasks.ErrInvalidTaskConfig, edge.FromNodeID)
+		return fmt.Errorf("%w: orchestration node %q allows only one control outgoing edge", taskdefs.ErrInvalidTaskConfig, edge.FromNodeID)
 	}
 	graph.controlNext[edge.FromNodeID] = edge.ToNodeID
 	graph.controlOut[edge.FromNodeID]++
@@ -65,7 +65,7 @@ func addGroupControlEdge(graph graphData, edge Edge) error {
 
 func addMemberEdge(graph graphData, edge Edge, fromNode Node, toNode Node) error {
 	if fromNode.Type != NodeTypeAgent || toNode.Type != NodeTypeGroup {
-		return fmt.Errorf("%w: orchestration member edge must be agent -> group", bridgeTasks.ErrInvalidTaskConfig)
+		return fmt.Errorf("%w: orchestration member edge must be agent -> group", taskdefs.ErrInvalidTaskConfig)
 	}
 	graph.groupMembers[edge.ToNodeID] = append(graph.groupMembers[edge.ToNodeID], edge.FromNodeID)
 	return nil

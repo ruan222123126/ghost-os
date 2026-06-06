@@ -54,8 +54,8 @@ type AwaitingHumanSignal struct {
 	Options       []AskHumanOption
 }
 
-// IterationHandoffSignal tells the orchestrator to end the current fresh-memory agent
-// iteration and either hand off to the next agent or finish the pro run.
+// IterationHandoffSignal tells the orchestrator to end the current worker turn
+// and either hand off to the next agent or finish the structured handoff loop.
 type IterationHandoffSignal struct {
 	Did            string
 	Remaining      string

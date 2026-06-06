@@ -1,4 +1,4 @@
-package orchestration
+package tasks
 
 import (
 	"context"
@@ -11,45 +11,46 @@ import (
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
-const taskRunTranscriptEventMarker = taskdomain.RunTranscriptEventMarker
+const RunTranscriptEventMarker = taskdomain.RunTranscriptEventMarker
 
-func (a taskExecutorAdapter) attachTaskRunTranscript(
+func AttachRunTranscript(
 	ctx context.Context,
-	task ScheduledTask,
+	store *session.Store,
+	task bridgeTasks.ScheduledTask,
 	traceID string,
 	result bridgeTasks.ExecutionResult,
 ) bridgeTasks.ExecutionResult {
 	if !taskdomain.ShouldCreateRunTranscript(task.TaskKind) {
 		return result
 	}
-	if a.service == nil || a.service.sessionStore == nil {
-		return taskRunTranscriptFailure(result, errors.New("task run transcript session store is not configured"))
+	if store == nil {
+		return runTranscriptFailure(result, errors.New("task run transcript session store is not configured"))
 	}
-	sessionSources := loadTaskRunTranscriptSessions(a.service.sessionStore, result)
+	sessionSources := loadRunTranscriptSessions(store, result)
 	transcript := taskdomain.BuildRunTranscriptMessages(taskdomain.RunTranscriptOptions{
 		Task:     task,
 		TraceID:  traceID,
 		Result:   result,
 		Sessions: sessionSources,
 	})
-	sessionID, err := saveTaskRunTranscript(a.service.sessionStore, transcript, runTranscriptSessionID(ctx))
+	sessionID, err := saveRunTranscript(store, transcript, runTranscriptSessionID(ctx))
 	if err != nil {
-		return taskRunTranscriptFailure(result, fmt.Errorf("save task run transcript: %w", err))
+		return runTranscriptFailure(result, fmt.Errorf("save task run transcript: %w", err))
 	}
 	result.SessionIDOutput = sessionID
 	return result
 }
 
 func runTranscriptSessionID(ctx context.Context) string {
-	session, ok := bridgeTasks.RunSessionFromContext(ctx)
+	runSession, ok := bridgeTasks.RunSessionFromContext(ctx)
 	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(session.SessionID)
+	return strings.TrimSpace(runSession.SessionID)
 }
 
-func taskRunTranscriptFailure(result bridgeTasks.ExecutionResult, err error) bridgeTasks.ExecutionResult {
-	result.Status = taskRunStatusError
+func runTranscriptFailure(result bridgeTasks.ExecutionResult, err error) bridgeTasks.ExecutionResult {
+	result.Status = bridgeTasks.RunStatusError
 	errText := strings.TrimSpace(err.Error())
 	if strings.TrimSpace(result.Error) != "" {
 		result.Error = strings.TrimSpace(result.Error) + "; " + errText
@@ -59,7 +60,7 @@ func taskRunTranscriptFailure(result bridgeTasks.ExecutionResult, err error) bri
 	return result
 }
 
-func loadTaskRunTranscriptSessions(
+func loadRunTranscriptSessions(
 	store *session.Store,
 	result bridgeTasks.ExecutionResult,
 ) map[string]taskdomain.SessionSource {
@@ -76,12 +77,12 @@ func loadTaskRunTranscriptSessions(
 	return sources
 }
 
-func saveTaskRunTranscript(
+func saveRunTranscript(
 	store *session.Store,
 	transcript taskdomain.RunTranscript,
 	sessionID string,
 ) (string, error) {
-	sess, err := loadOrNewTranscriptSession(store, sessionID)
+	sess, err := loadOrNewRunTranscriptSession(store, sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -95,7 +96,7 @@ func saveTaskRunTranscript(
 	return sess.ID, nil
 }
 
-func loadOrNewTranscriptSession(store *session.Store, sessionID string) (*session.Session, error) {
+func loadOrNewRunTranscriptSession(store *session.Store, sessionID string) (*session.Session, error) {
 	id := strings.TrimSpace(sessionID)
 	if id == "" {
 		return session.NewSession(""), nil

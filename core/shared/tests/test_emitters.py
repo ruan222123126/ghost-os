@@ -28,9 +28,10 @@ class EmittersTest(unittest.TestCase):
             rendered.index("type askHumanOption = api.AskHumanOption"),
             rendered.index("type agentResponse = api.AgentResponse"),
         )
-        self.assertIn("type agentIterationSummaryItem = api.AgentIterationSummaryItem", rendered)
         self.assertIn("type agentStreamEventContract = api.AgentStreamEventContract", rendered)
         self.assertIn("type assistantMessagePushPayload = api.AssistantMessagePushPayload", rendered)
+        self.assertIn("type taskStopParams = api.TaskStopParams", rendered)
+        self.assertIn("type TaskStopResponse = taskStopResponse", rendered)
         self.assertIn("type apiRequest = bus.RequestEnvelope", rendered)
         self.assertIn("type apiResponse = bus.ResponseEnvelope", rendered)
 
@@ -40,8 +41,6 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("export interface SessionHumanInteraction {", rendered)
         self.assertIn("export interface AgentStreamEvent {", rendered)
         self.assertIn("options?: AskHumanOption[];", rendered)
-        self.assertIn("export interface AgentIterationSummaryItem {", rendered)
-        self.assertIn("iteration_summary?: AgentIterationSummaryItem[];", rendered)
         self.assertIn("assignments: Record<string, string>;", rendered)
         self.assertIn("model_context_window_tokens?: Record<string, number>;", rendered)
         self.assertIn(
@@ -60,15 +59,11 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("pub enum AgentPayload {", rust)
         self.assertIn("pub struct AgentStreamEvent {", rust)
         self.assertIn("AwaitingHuman(AgentSendAwaitingHumanResponse)", rust)
-        self.assertIn("pub struct AgentIterationSummaryItem {", rust)
-        self.assertIn("pub iteration_summary: Option<Vec<AgentIterationSummaryItem>>", rust)
         self.assertIn("pub assignments: BTreeMap<String, String>", rust)
         self.assertIn("pub model_context_window_tokens: Option<BTreeMap<String, i64>>", rust)
         self.assertIn("sealed interface AgentSendResponse", kotlin)
         self.assertIn("data class SessionPushEvent(", kotlin)
         self.assertIn(") : AgentSendResponse", kotlin)
-        self.assertIn("data class AgentIterationSummaryItem(", kotlin)
-        self.assertIn("val iterationSummary: List<AgentIterationSummaryItem>? = null", kotlin)
         self.assertIn("val assignments: Map<String, String>", kotlin)
         self.assertIn("val modelContextWindowTokens: Map<String, Int>? = null", kotlin)
 

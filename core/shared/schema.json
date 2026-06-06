@@ -57,9 +57,6 @@
         "agentRequest": {
             "$ref": "./schema/defs/agent_core.json#/$defs/agentRequest"
         },
-        "agentIterationSummaryItem": {
-            "$ref": "./schema/defs/agent_core.json#/$defs/agentIterationSummaryItem"
-        },
         "agentResponsePayload": {
             "$ref": "./schema/defs/agent_core.json#/$defs/agentResponsePayload"
         },

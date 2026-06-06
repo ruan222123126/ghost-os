@@ -1,39 +1,44 @@
 # Orchestration Map
 
-更新时间：2026-05-31
+更新时间：2026-06-06
 
 ## 范围
 
 本盘点覆盖 `core/bridge/orchestration` 当前工作区状态，并把原 M1-M4
-计划更新为从现状继续下沉的执行口径。当前工作区存在未提交改动，以下指标以
-本地文件扫描与 `go test ./orchestration/... -timeout 60s` 结果为准。
+计划更新为从现状继续下沉的执行口径。以下指标以本地文件扫描与
+`go test ./orchestration/... -timeout 60s` 结果为准。
 
-- 总 Go 文件：272。
-- 顶层 Go 文件：92（生产 74，测试 18）。
-- 非测试文件超过 300 行：3。
+- 总 Go 文件：257。
+- 顶层 Go 文件：61（生产 44，测试 17）。
+- 非测试文件超过 300 行：0。
 - 超过 15 个 Go 文件的目录：3。
 
 当前结构守卫位于 `core/bridge/orchestration/internal/structure_guard_test.go`。
-守卫仍按 M2 预算运行，并且当前失败点为：顶层 Go 文件 92，超过 M2 门槛 70。
-生产文件行数也已回退，需要在下一步一起修复。
+守卫按当前 M2 预算运行：顶层 Go 文件 <=61，生产文件 <=300 行，超 15 文件目录 <=3。
+结构收口门槛：顶层 `orchestration` 下一阶段先压到 <=30，终态压到 <=15；
+所有目录的目标上限均为 <=15 个 Go 文件，M3 过渡期只允许顶层在 <=30 预算内暂时超过 15。
 
-## 当前超限项
+Stage 0 基线：`internal/app/workflows` 21 个 Go 文件，`internal/app/orchestrations` 19 个，
+`internal/domain` 47 个，`core/bridge/tasks/types*.go` 5 个 / 345 行；`70 -> 61` 来自
+顶层 `plan_mode.go`、`service_action_router.go`、`service_config_providers.go`、`service_tools.go`、
+`session_contract.go`、`session_title.go`、`task_run_transcript.go`、`task_runtime_overrides.go`、
+`tool_lists_shim.go` 删除/下沉。
+
+## 当前守卫状态
 
 ### 生产文件超过 300 行
 
 | File | Lines | Target |
 | --- | ---: | --- |
-| `task_run_cards.go` | 311 | 下沉到 `internal/trace/runcards` 或同职责 trace 子包。 |
-| `task_orchestration_owner_runtime.go` | 311 | 下沉到 owner turn loop / orchestration owner 子域。 |
-| `internal/trace/sessiondraft/projector.go` | 322 | 同包拆为 lifecycle / completion / tool projector。 |
+| 无 | 0 | 已满足 M2.1。 |
 
 ### 超过 15 个 Go 文件的目录
 
 | Directory | Go Files | Target |
 | --- | ---: | --- |
-| `core/bridge/orchestration` | 92 | M2.1 回到 <=70，M3 压到 <=30，M4 压到 <=15。 |
-| `core/bridge/orchestration/internal/app/workflows` | 21 | M3 拆为 `runner` / `nodes` / `screen` / `path` 等子域。 |
-| `core/bridge/orchestration/internal/app/orchestrations` | 19 | M3 拆为 `runner` / `owner` / `member` / `dispatch` 等子域。 |
+| `core/bridge/orchestration` | 61 | M3 先压到 <=30，M4 终态压到 <=15。 |
+| `core/bridge/orchestration/internal/app/workflows` | 21 | M3 拆为 `runner` / `nodes` / `screen` / `path` 等子域，拆分后各目录 <=15。 |
+| `core/bridge/orchestration/internal/app/orchestrations` | 19 | M3 拆为 `runner` / `owner` / `member` / `dispatch` 等子域，拆分后各目录 <=15。 |
 
 ## 目标边界
 
@@ -61,11 +66,11 @@
 
 ### M2.1：现实重校准与 M2 守卫恢复
 
-目标是不改运行语义，先让当前工作区重新满足 M2 门槛。
+状态：已恢复 M2 守卫，当前工作区满足顶层 <=61、生产文件 <=300 行、
+超 15 文件目录 <=3 的 M2.1 门槛。
 
-- 顶层从 92 压回 <=70；优先迁走新近回流的 task/session/workflow/orchestration
-  辅助文件，而不是放宽守卫。
-- 拆分 3 个超过 300 行的生产文件，生产文件全部回到 <=300 行。
+- 顶层已从 92 压回 61；守卫继续阻断新增未登记顶层文件。
+- 生产文件已全部回到 <=300 行。
 - 保持 `internal/app/workflows` 与 `internal/app/orchestrations` 暂不扩容；若迁入新文件，
   必须同步拆子目录，避免把超限从顶层转移到 app 目录。
 - `service_router.go` 暂时只允许承担 service 装配与 façade 委托；RSS、skills、runner、
@@ -126,8 +131,8 @@
 
 | 里程碑 | 顶层 Go 文件数（含测试） | 非测试 >300 行文件数 | >15 文件目录数 |
 | --- | ---: | ---: | ---: |
-| 当前工作区 | 92 | 3 | 3 |
-| M2.1 | <=70 | 0 | <=3 |
+| 当前工作区 | 61 | 0 | 3 |
+| M2.1 | <=61 | 0 | <=3 |
 | M3 | <=30 | 0 | <=1 |
 | M4 | <=15 | 0 | 0 |
 

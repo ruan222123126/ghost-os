@@ -3,8 +3,10 @@ package orchestration
 import (
 	"context"
 	"errors"
+
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
@@ -424,13 +426,13 @@ const (
 )
 
 func TestTitleFromFirstMessageUsesFirstSentenceAndTruncates(t *testing.T) {
-	got := titleFromFirstMessage("   Build a session title. Then continue with details.\nnext paragraph")
+	got := agentturn.TitleFromFirstMessage("   Build a session title. Then continue with details.\nnext paragraph")
 	if got != "Build a session title." {
 		t.Fatalf("unexpected title: %q", got)
 	}
 
-	longTitle := titleFromFirstMessage("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz")
-	if len([]rune(longTitle)) != sessionTitleRuneLimit || !strings.HasSuffix(longTitle, "...") {
+	longTitle := agentturn.TitleFromFirstMessage("abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz")
+	if len([]rune(longTitle)) != agentturn.SessionTitleRuneLimit || !strings.HasSuffix(longTitle, "...") {
 		t.Fatalf("unexpected truncated title: %q", longTitle)
 	}
 }

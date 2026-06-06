@@ -22,31 +22,17 @@ type AgentParams struct {
 	ProjectRoot string                `json:"project_root,omitempty"`
 }
 
-type AgentIterationSummaryItem struct {
-	Iteration      int    `json:"iteration"`
-	Did            string `json:"did"`
-	Remaining      string `json:"remaining"`
-	Completed      bool   `json:"completed,omitempty"`
-	TraceID        string `json:"trace_id,omitempty"`
-	RecordedAt     string `json:"recorded_at,omitempty"`
-	FinalChangeLog string `json:"final_change_log,omitempty"`
-}
-
 type AskHumanOption struct {
 	Label       string `json:"label"`
 	AllowCustom bool   `json:"allow_custom,omitempty"`
 }
 
 type AgentResponse struct {
-	Message          string                            `json:"message"`
-	SessionID        string                            `json:"session_id"`
-	SessionEnded     bool                              `json:"session_ended"`
-	Mode             string                            `json:"mode,omitempty"`
-	IterationCount   int                               `json:"iteration_count,omitempty"`
-	StoppedBy        string                            `json:"stopped_by,omitempty"`
-	FinalChangeLog   string                            `json:"final_change_log,omitempty"`
-	IterationSummary []AgentIterationSummaryItem       `json:"iteration_summary,omitempty"`
-	SessionEnd       *AssistantSessionEndSignalPayload `json:"session_end,omitempty"`
+	Message      string                            `json:"message"`
+	SessionID    string                            `json:"session_id"`
+	SessionEnded bool                              `json:"session_ended"`
+	Mode         string                            `json:"mode,omitempty"`
+	SessionEnd   *AssistantSessionEndSignalPayload `json:"session_end,omitempty"`
 }
 
 type AskHumanAwaitingResponse struct {

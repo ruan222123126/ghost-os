@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
 	appworkflows "ghost-os/bridge/orchestration/internal/app/workflows"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -113,7 +114,7 @@ type workflowFindIconTemplateUploader struct{}
 func (workflowFindIconTemplateUploader) UploadFindIconTemplate(
 	req appworkflows.TemplateUploadRequest,
 ) (appworkflows.TemplateUploadResult, error) {
-	payload, err := executeFindIconTemplateUpload(findIconTemplateUploadRequest{
+	payload, err := apptools.ExecuteFindIconTemplateUpload(findIconTemplateUploadRequest{
 		Filename: req.Filename,
 		MimeType: req.MimeType,
 		DataURL:  req.DataURL,

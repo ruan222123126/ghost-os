@@ -12,7 +12,6 @@ const (
 	DefaultTaskExecutionTimeoutMS       = defaultTaskExecutionTimeoutMS
 	DefaultAnthropicVersion             = defaultAnthropicVersion
 	DefaultAnthropicMaxTokens           = defaultAnthropicMaxTokens
-	DefaultProMaxIterations             = defaultProMaxIterations
 	DefaultRelayStopPolicy              = defaultRelayStopPolicy
 	DefaultRelayMaxRounds               = defaultRelayMaxRounds
 	DefaultRelayExecutionTimeoutMS      = defaultRelayExecutionTimeoutMS

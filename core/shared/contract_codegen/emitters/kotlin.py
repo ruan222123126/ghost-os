@@ -35,7 +35,6 @@ OUTPUT_GROUPS = (
         (
             "assistantSessionEndSignal",
             "agentRequest",
-            "agentIterationSummaryItem",
             "askHumanOption",
             "agentResponsePayload",
             "agentAwaitingHumanPayload",

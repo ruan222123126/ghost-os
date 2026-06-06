@@ -68,7 +68,6 @@ type Config struct {
 	MemoryModeEnabled              bool
 	MicrocompactEnabled            bool
 	SessionTitleMode               string
-	ProMaxIterations               int
 	RelayDefaultStopPolicy         string
 	RelayDefaultMaxRounds          int
 	RelayDefaultExecutionTimeoutMS int

@@ -49,29 +49,7 @@ func classifyAgentTurnError(err error) (*agent.ErrAwaitingHuman, ServiceErrorKin
 }
 
 func newAwaitingHumanResponse(sessionID string, awaitingErr *agent.ErrAwaitingHuman) askHumanAwaitingResponse {
-	response := askHumanAwaitingResponse{
-		Status:        "awaiting_human",
-		SessionID:     strings.TrimSpace(sessionID),
-		QuestionID:    awaitingErr.QuestionID,
-		Prompt:        awaitingErr.Prompt,
-		SelectionMode: strings.TrimSpace(awaitingErr.SelectionMode),
-	}
-	if len(awaitingErr.Options) == 0 {
-		return response
-	}
-
-	response.Options = make([]askHumanOption, 0, len(awaitingErr.Options))
-	for _, option := range awaitingErr.Options {
-		label := strings.TrimSpace(option.Label)
-		if label == "" {
-			continue
-		}
-		response.Options = append(response.Options, askHumanOption{
-			Label:       label,
-			AllowCustom: option.AllowCustom,
-		})
-	}
-	return response
+	return agentturn.NewAwaitingHumanResponse(sessionID, awaitingErr)
 }
 
 func (s *bridgeService) finalizeAgentTurn(response string, sessionID string) (finalizedAgentTurn, error) {

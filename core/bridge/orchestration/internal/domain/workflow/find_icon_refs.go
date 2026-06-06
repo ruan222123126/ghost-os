@@ -3,7 +3,7 @@ package workflow
 import (
 	"fmt"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 func ResolveActionNode(node Node, findIconOutput any) (Node, error) {
@@ -107,13 +107,13 @@ func resolveAgentRuntimeOverrides(
 	findIconOutput any,
 ) (*RuntimeOverrides, error) {
 	if input == nil || input.SystemPrompt == "" {
-		return bridgeTasks.CloneTaskRuntimeOverrides(input), nil
+		return taskdefs.CloneTaskRuntimeOverrides(input), nil
 	}
 	systemPrompt, err := ResolveFindIconString(input.SystemPrompt, findIconOutput)
 	if err != nil {
 		return nil, fmt.Errorf("workflow agent node %q resolve runtime_overrides.system_prompt: %w", nodeID, err)
 	}
-	overrides := bridgeTasks.CloneTaskRuntimeOverrides(input)
+	overrides := taskdefs.CloneTaskRuntimeOverrides(input)
 	overrides.SystemPrompt = systemPrompt
 	return overrides, nil
 }

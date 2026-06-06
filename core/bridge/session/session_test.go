@@ -110,37 +110,6 @@ func TestSessionMarkEnded(t *testing.T) {
 	}
 }
 
-func TestIterationRuntimeLifecycle(t *testing.T) {
-	s := NewSession("")
-	s.StartIterationRuntime("pro", "fix config", 2)
-	if s.IterationRuntime == nil {
-		t.Fatal("expected iteration runtime")
-	}
-	if s.IterationRuntime.Mode != "pro" || s.IterationRuntime.OriginalTask != "fix config" {
-		t.Fatalf("unexpected iteration runtime: %+v", s.IterationRuntime)
-	}
-
-	s.AppendIterationRecord(IterationRecord{
-		Iteration: 1,
-		Did:       "inspected config",
-		Remaining: "apply patch",
-	})
-	if len(s.IterationRuntime.Records) != 1 {
-		t.Fatalf("unexpected record count: %d", len(s.IterationRuntime.Records))
-	}
-
-	s.FinishIterationRuntime("completed", "pro_complete", "done", "updated config")
-	if s.IterationRuntime.Status != "completed" {
-		t.Fatalf("unexpected status: %q", s.IterationRuntime.Status)
-	}
-	if s.IterationRuntime.StoppedBy != "pro_complete" {
-		t.Fatalf("unexpected stopped_by: %q", s.IterationRuntime.StoppedBy)
-	}
-	if s.IterationRuntime.FinalChangeLog != "updated config" {
-		t.Fatalf("unexpected final change log: %q", s.IterationRuntime.FinalChangeLog)
-	}
-}
-
 func TestDynamicToolLoadLifecycle(t *testing.T) {
 	s := NewSession("")
 	s.AdvanceToolTurn(3)

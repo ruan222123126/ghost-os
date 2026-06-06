@@ -36,11 +36,7 @@ type FinalizedTurn struct {
 }
 
 type ResponseMeta struct {
-	Mode             string
-	IterationCount   int
-	StoppedBy        string
-	FinalChangeLog   string
-	IterationSummary []api.AgentIterationSummaryItem
+	Mode string
 }
 
 type SessionGuards interface {

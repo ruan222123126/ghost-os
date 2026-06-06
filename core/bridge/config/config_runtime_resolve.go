@@ -81,6 +81,9 @@ func resolveRuntimeFallbackSettings(env envSnapshot) (runtimeFallbackSettings, e
 	if err := validateNoRemovedGraphQLEnv(env); err != nil {
 		return runtimeFallbackSettings{}, err
 	}
+	if err := validateNoRemovedProEnv(env); err != nil {
+		return runtimeFallbackSettings{}, err
+	}
 	responseOptions, err := responseOptionsFromEnv(env)
 	if err != nil {
 		return runtimeFallbackSettings{}, err

@@ -52,8 +52,8 @@ func (e *ErrAwaitingHuman) Error() string {
 	return fmt.Sprintf("awaiting human input: question_id=%s", strings.TrimSpace(e.QuestionID))
 }
 
-// ErrIterationHandoff tells the outer orchestrator to end this fresh-memory agent run
-// and continue with the next iteration or finish the pro run.
+// ErrIterationHandoff tells the outer orchestrator to end this worker turn
+// and continue or finish the structured handoff loop.
 type ErrIterationHandoff struct {
 	Did            string
 	Remaining      string

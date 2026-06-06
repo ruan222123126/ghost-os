@@ -4,6 +4,7 @@ import (
 	"context"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	"ghost-os/bridge/tools"
 	"net/http"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 func TestNormalizeTaskRuntimeOverrides(t *testing.T) {
-	normalized, err := normalizeTaskRuntimeOverrides(nil)
+	normalized, err := apptasks.NormalizeTaskRuntimeOverrides(nil)
 	if err != nil {
 		t.Fatalf("normalize nil overrides: %v", err)
 	}
@@ -19,7 +20,7 @@ func TestNormalizeTaskRuntimeOverrides(t *testing.T) {
 		t.Fatalf("expected nil overrides, got %#v", normalized)
 	}
 
-	normalized, err = normalizeTaskRuntimeOverrides(&TaskRuntimeOverrides{
+	normalized, err = apptasks.NormalizeTaskRuntimeOverrides(&TaskRuntimeOverrides{
 		Model:         " ",
 		ToolAllowlist: []string{"  ", "\n"},
 	})
@@ -30,7 +31,7 @@ func TestNormalizeTaskRuntimeOverrides(t *testing.T) {
 		t.Fatalf("expected empty overrides to collapse to nil, got %#v", normalized)
 	}
 
-	normalized, err = normalizeTaskRuntimeOverrides(&TaskRuntimeOverrides{
+	normalized, err = apptasks.NormalizeTaskRuntimeOverrides(&TaskRuntimeOverrides{
 		ProviderName:      " openai-main ",
 		Model:             " gpt-5.4 ",
 		SystemPrompt:      " be concise ",

@@ -7,6 +7,7 @@ import (
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
+	bridgetools "ghost-os/bridge/tools"
 )
 
 const (
@@ -23,6 +24,10 @@ type SchemaProvider interface {
 	ListToolInputSchemas() (map[string]map[string]any, error)
 }
 
+type ToolProvider interface {
+	Tool(name string) (bridgetools.Tool, func(), error)
+}
+
 type Logger interface {
 	Log(traceID string, action string, status string, err error)
 }
@@ -30,6 +35,7 @@ type Logger interface {
 type Service struct {
 	Store          Store
 	SchemaProvider SchemaProvider
+	ToolProvider   ToolProvider
 	Logger         Logger
 }
 

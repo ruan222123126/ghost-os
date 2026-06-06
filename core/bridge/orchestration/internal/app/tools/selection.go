@@ -1,14 +1,14 @@
-package orchestration
+package tools
 
 import (
 	"fmt"
 	"sort"
 	"strings"
 
-	"ghost-os/bridge/tools"
+	bridgetools "ghost-os/bridge/tools"
 )
 
-func normalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]string, []string, error) {
+func NormalizeConfiguredToolLists(allowlist []string, blocklist []string) ([]string, []string, error) {
 	normalizedAllowlist := normalizeConfiguredToolNames(allowlist)
 	normalizedBlocklist := normalizeConfiguredToolNames(blocklist)
 	valid := validConfiguredToolNames()
@@ -50,8 +50,8 @@ func normalizeConfiguredToolNames(names []string) []string {
 }
 
 func validConfiguredToolNames() map[string]bool {
-	valid := make(map[string]bool, len(tools.GetToolMetadata()))
-	for _, item := range tools.GetToolMetadata() {
+	valid := make(map[string]bool, len(bridgetools.GetToolMetadata()))
+	for _, item := range bridgetools.GetToolMetadata() {
 		name := strings.TrimSpace(item.Name)
 		if name != "" {
 			valid[name] = true

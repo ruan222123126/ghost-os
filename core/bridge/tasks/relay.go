@@ -1,41 +1,23 @@
 package tasks
 
-import "strings"
+import "ghost-os/bridge/taskdefs"
 
 const (
-	AgentModeSingle = "single"
-	AgentModeRelay  = "relay"
+	AgentModeSingle = taskdefs.AgentModeSingle
+	AgentModeRelay  = taskdefs.AgentModeRelay
 
-	RelayStopPolicyAIDecides = "ai_decides"
-	RelayStopPolicyMaxRounds = "max_rounds"
+	RelayStopPolicyAIDecides = taskdefs.RelayStopPolicyAIDecides
+	RelayStopPolicyMaxRounds = taskdefs.RelayStopPolicyMaxRounds
 )
 
-type TaskRelayConfig struct {
-	StopPolicy         string `json:"stop_policy"`
-	MaxRounds          int    `json:"max_rounds,omitempty"`
-	ExecutionTimeoutMS *int   `json:"execution_timeout_ms,omitempty"`
-}
+type TaskRelayConfig = taskdefs.TaskRelayConfig
 
 func NormalizeAgentMode(mode string) string {
-	switch strings.TrimSpace(mode) {
-	case "", AgentModeSingle:
-		return AgentModeSingle
-	case AgentModeRelay:
-		return AgentModeRelay
-	default:
-		return strings.TrimSpace(mode)
-	}
+	return taskdefs.NormalizeAgentMode(mode)
 }
 
 func CloneTaskRelayConfig(input *TaskRelayConfig) *TaskRelayConfig {
-	if input == nil {
-		return nil
-	}
-	return &TaskRelayConfig{
-		StopPolicy:         strings.TrimSpace(input.StopPolicy),
-		MaxRounds:          input.MaxRounds,
-		ExecutionTimeoutMS: cloneOptionalIntPointer(input.ExecutionTimeoutMS),
-	}
+	return taskdefs.CloneTaskRelayConfig(input)
 }
 
 func IsRelayAgentTask(task ScheduledTask) bool {

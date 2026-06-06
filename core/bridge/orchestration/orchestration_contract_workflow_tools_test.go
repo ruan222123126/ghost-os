@@ -4,32 +4,31 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"ghost-os/bridge/tools"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
+	"ghost-os/bridge/tools"
 )
 
 func TestSchemaByToolNameReturnsMissingWhenToolHasNoSchema(t *testing.T) {
-	schema, ok := schemaByToolName(map[string]map[string]any{
+	schema := apptools.SchemaByToolName(map[string]map[string]any{
 		"script_exec": {"type": "object"},
 	}, "web_search")
-	if ok {
-		t.Fatal("expected missing schema flag for tool without schema")
-	}
 	if schema != nil {
 		t.Fatalf("expected nil schema for tool without schema, got %#v", schema)
 	}
 }
 
 func TestSchemaByToolNameReturnsSchemaWhenPresent(t *testing.T) {
-	schema, ok := schemaByToolName(map[string]map[string]any{
+	schema := apptools.SchemaByToolName(map[string]map[string]any{
 		"script_exec": {"type": "object"},
 	}, "script_exec")
-	if !ok {
+	if schema == nil {
 		t.Fatal("expected schema to exist")
 	}
 	if got, ok := schema["type"].(string); !ok || got != "object" {
@@ -41,7 +40,7 @@ func TestExecuteFindIconTemplateUploadStoresTemplate(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	payload, err := executeFindIconTemplateUpload(findIconTemplateUploadRequest{
+	payload, err := apptools.ExecuteFindIconTemplateUpload(findIconTemplateUploadRequest{
 		Filename: "icon.png",
 		MimeType: "image/png",
 		DataURL:  "data:image/png;base64,R2hvc3Q=",
@@ -61,7 +60,7 @@ func TestExecuteFindIconTemplateUploadStoresTemplate(t *testing.T) {
 }
 
 func TestNormalizeFindIconPreviewRequestRejectsInvalidThreshold(t *testing.T) {
-	_, err := normalizeFindIconPreviewRequest(findIconPreviewRequest{
+	_, err := apptools.NormalizeFindIconPreviewRequest(findIconPreviewRequest{
 		TemplatePath: "/tmp/icon.png",
 		Threshold:    floatPtr(1.1),
 	})
@@ -71,7 +70,7 @@ func TestNormalizeFindIconPreviewRequestRejectsInvalidThreshold(t *testing.T) {
 }
 
 func TestDecodeFindIconPreviewPayloadParsesMatches(t *testing.T) {
-	payload, err := decodeFindIconPreviewPayload(`{"display_id":1,"matches":[{"score":0.95}]}`)
+	payload, err := apptools.DecodeFindIconPreviewPayload(`{"display_id":1,"matches":[{"score":0.95}]}`)
 	if err != nil {
 		t.Fatalf("decodeFindIconPreviewPayload returned error: %v", err)
 	}

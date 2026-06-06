@@ -61,21 +61,6 @@ pub struct AgentRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
-pub struct AgentIterationSummaryItem {
-    pub iteration: i64,
-    pub did: String,
-    pub remaining: String,
-    #[serde(default)]
-    pub completed: Option<bool>,
-    #[serde(default)]
-    pub trace_id: Option<String>,
-    #[serde(default)]
-    pub recorded_at: Option<String>,
-    #[serde(default)]
-    pub final_change_log: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AskHumanOption {
     pub label: String,
     #[serde(default)]
@@ -89,14 +74,6 @@ pub struct AgentSendSuccessResponse {
     pub session_ended: bool,
     #[serde(default)]
     pub mode: Option<String>,
-    #[serde(default)]
-    pub iteration_count: Option<i64>,
-    #[serde(default)]
-    pub stopped_by: Option<String>,
-    #[serde(default)]
-    pub final_change_log: Option<String>,
-    #[serde(default)]
-    pub iteration_summary: Option<Vec<AgentIterationSummaryItem>>,
     #[serde(default)]
     pub session_end: Option<AssistantSessionEndSignal>,
 }

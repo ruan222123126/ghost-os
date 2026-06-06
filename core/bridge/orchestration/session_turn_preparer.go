@@ -10,6 +10,8 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/app/agentturn"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -91,10 +93,33 @@ func (p *sessionTurnPreparer) prepareWithRuntimeOverrides(
 	return state, nil
 }
 
+func (p *sessionTurnPreparer) prepareCreatedSessionTitleTask(
+	sess *session.Session,
+	deps agentRuntimeDependencies,
+	input turnPreparationInput,
+) *agentturn.SessionTitleTask {
+	if sess == nil {
+		return nil
+	}
+	prepared := agentturn.PrepareCreatedSessionTitle(agentturn.SessionTitlePreparationInput{
+		Mode:        deps.cfg.SessionTitleMode,
+		Store:       p.sessionStore,
+		Completer:   deps.client,
+		Logger:      agentTurnLogger{},
+		SessionID:   sess.ID,
+		UserMessage: input.userMessage,
+		TraceID:     input.traceID,
+	})
+	if prepared.HasImmediateTitle {
+		sess.Title = prepared.ImmediateTitle
+	}
+	return prepared.Task
+}
+
 func (p *sessionTurnPreparer) prepareSessionTurnState(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
-	historyBuilder *SessionHistoryBuilder,
+	historyBuilder *sessionturn.SessionHistoryBuilder,
 	persistence *SessionTurnCommitter,
 	sessionID string,
 	input turnPreparationInput,
@@ -108,7 +133,7 @@ func (p *sessionTurnPreparer) prepareSessionTurnState(
 		if err := p.persistCreatedSession(sess); err != nil {
 			return nil, &sessionTurnSetupError{sessionID: strings.TrimSpace(sess.ID), err: err}
 		}
-		startSessionTitleTask(titleTask)
+		agentturn.StartSessionTitleTask(titleTask)
 	}
 	if isResumeLikeInput(llm.Message{Role: llm.RoleUser, Text: input.rawUserMessage}) && !hasAnsweredHumanResponse(sess) {
 		return nil, &sessionTurnSetupError{
@@ -187,7 +212,7 @@ func (p *sessionTurnPreparer) buildTurnAgent(
 func (p *sessionTurnPreparer) prepareHistoryAndEnvironment(
 	ctx context.Context,
 	deps agentRuntimeDependencies,
-	historyBuilder *SessionHistoryBuilder,
+	historyBuilder *sessionturn.SessionHistoryBuilder,
 	sess *session.Session,
 	rawUserMessage string,
 	traceID string,

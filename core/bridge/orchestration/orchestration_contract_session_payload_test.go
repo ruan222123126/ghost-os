@@ -5,6 +5,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/session"
 	"strings"
 	"testing"
@@ -91,7 +92,7 @@ func TestBuildSessionMessagePayloadProjectsToolResult(t *testing.T) {
 		Text:       agent.FormatToolResult("read_file", "trace-1", "README.md contents", nil),
 	}
 
-	payload := buildSessionMessagePayload(3, message)
+	payload := sessionturn.BuildSessionMessagePayload(3, message)
 	if payload.Index != 3 {
 		t.Fatalf("unexpected index: got %d want %d", payload.Index, 3)
 	}
@@ -134,7 +135,7 @@ func TestBuildSessionMessagePayloadProjectsAnsweredAskHuman(t *testing.T) {
 		Text: agent.FormatToolResult("ask_human", "trace-2", toolOutput, nil),
 	}
 
-	payload := buildSessionMessagePayload(5, message)
+	payload := sessionturn.BuildSessionMessagePayload(5, message)
 	if payload.Index != 5 {
 		t.Fatalf("unexpected index: got %d want %d", payload.Index, 5)
 	}
@@ -177,7 +178,7 @@ func TestBuildSessionMessagePayloadProjectsAnsweredAskHuman(t *testing.T) {
 }
 
 func TestBuildSessionMessagePayloadProjectsAssistantThinking(t *testing.T) {
-	payload := buildSessionMessagePayload(2, llm.Message{
+	payload := sessionturn.BuildSessionMessagePayload(2, llm.Message{
 		Role:             llm.RoleAssistant,
 		Text:             "done",
 		ReasoningContent: json.RawMessage(`["step 1", {"summary_text":"step 2"}]`),
@@ -189,7 +190,7 @@ func TestBuildSessionMessagePayloadProjectsAssistantThinking(t *testing.T) {
 }
 
 func TestBuildSessionMessagePayloadProjectsToolCallAssistantThinking(t *testing.T) {
-	payload := buildSessionMessagePayload(4, llm.Message{
+	payload := sessionturn.BuildSessionMessagePayload(4, llm.Message{
 		Role:             llm.RoleAssistant,
 		ReasoningContent: json.RawMessage(`{"summary_text":"before tool"}`),
 		ToolCalls: []llm.ToolCall{{
@@ -250,7 +251,7 @@ func TestBuildSessionDetailPayloadIncludesTurnDraftForLatestWindow(t *testing.T)
 			},
 		},
 	}
-	payload := buildSessionDetailPayload(sess, page, true)
+	payload := sessionturn.BuildSessionDetailPayload(sess, page, true)
 	if len(payload.Messages) != 1 {
 		t.Fatalf("expected messages to stay committed-only, got %d messages", len(payload.Messages))
 	}
@@ -292,7 +293,7 @@ func TestBuildSessionDetailPayloadSkipsTurnDraftForOlderWindow(t *testing.T) {
 		},
 	}
 
-	payload := buildSessionDetailPayload(sess, page, false)
+	payload := sessionturn.BuildSessionDetailPayload(sess, page, false)
 	if len(payload.Messages) != 1 {
 		t.Fatalf("expected old page to skip draft, got %d messages", len(payload.Messages))
 	}
@@ -320,7 +321,7 @@ func TestBuildSessionDetailPayloadNormalizesEmptyTurnDraftItemOrder(t *testing.T
 		},
 	}
 
-	payload := buildSessionDetailPayload(sess, page, true)
+	payload := sessionturn.BuildSessionDetailPayload(sess, page, true)
 	if payload.TurnDraft == nil {
 		t.Fatal("expected latest window to include turn_draft")
 	}

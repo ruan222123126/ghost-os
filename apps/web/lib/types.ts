@@ -33,7 +33,6 @@ import type {
 } from '@/lib/envelope.generated';
 
 export type {
-  AgentIterationSummaryItem,
   AgentCompletionDeltaPayload,
   AgentDonePayload,
   AgentErrorPayload,

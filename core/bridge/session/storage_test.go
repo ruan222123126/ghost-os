@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"ghost-os/bridge/llm"
@@ -141,6 +142,31 @@ func TestStoreLoadMissingSession(t *testing.T) {
 	_, err = store.Load("missing-session")
 	if !errors.Is(err, ErrSessionNotFound) {
 		t.Fatalf("expected ErrSessionNotFound, got: %v", err)
+	}
+}
+
+func TestDecodeSessionStateDropsLegacyIterationRuntime(t *testing.T) {
+	state, err := decodeSessionState(`{
+		"title": "kept",
+		"iteration_runtime": {
+			"status": "completed",
+			"stopped_by": "max_iterations",
+			"records": [{"iteration": 1, "did": "legacy"}]
+		}
+	}`)
+	if err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if state.Title != "kept" {
+		t.Fatalf("unexpected title: got=%q want=%q", state.Title, "kept")
+	}
+
+	encoded, err := encodeSessionRecordState(state)
+	if err != nil {
+		t.Fatalf("encode state: %v", err)
+	}
+	if strings.Contains(encoded, "iteration_runtime") {
+		t.Fatalf("legacy iteration_runtime should be dropped, got %s", encoded)
 	}
 }
 

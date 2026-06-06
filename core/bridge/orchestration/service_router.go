@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 
 	bridgeconfig "ghost-os/bridge/config"
+	"ghost-os/bridge/orchestration/internal/dispatch"
 	"ghost-os/bridge/session"
 	bridgeskills "ghost-os/bridge/skills"
 	"ghost-os/bridge/streaming"
 )
 
-type actionHandler func(ctx context.Context, params json.RawMessage, traceID string) (ServiceResult, error)
+type actionHandler = dispatch.Handler
+
 type agentExecutorFunc func(
 	ctx context.Context,
 	message string,
@@ -35,7 +37,7 @@ type bridgeService struct {
 	sessionStore   *session.Store
 	lifecycle      *serviceLifecycle
 	runtimeState   *serviceRuntimeState
-	actionRouter   *serviceActionRouter
+	actionRouter   *dispatch.Router
 	skillHandler   *bridgeskills.ActionHandler
 	agentRunner    SessionTurnRunner
 	runRegistry    *RunRegistry
@@ -69,7 +71,7 @@ func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store
 		sessionStore: sessionStore,
 		lifecycle:    newServiceLifecycle(runtimeState, sessionPush),
 		runtimeState: runtimeState,
-		actionRouter: newServiceActionRouter(21),
+		actionRouter: dispatch.NewRouter(21),
 		runRegistry:  NewRunRegistry(),
 	}
 }
@@ -154,24 +156,85 @@ func (s *bridgeService) Close() {
 
 // dispatchAction 根据 action 查找处理器；未知 action 返回显式可选列表。
 func (s *bridgeService) dispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (ServiceResult, error) {
-	return s.actionRouter.dispatch(ctx, action, params, traceID)
+	return s.actionRouter.Dispatch(ctx, action, params, traceID)
 }
 
 // unsupportedActionError 构造稳定错误消息，便于客户端快速定位拼写/版本问题。
 func (s *bridgeService) unsupportedActionError(action string) error {
-	return s.actionRouter.unsupportedActionError(action)
+	return s.actionRouter.UnsupportedActionError(action)
 }
 
 func (s *bridgeService) actionHandler(action string) (actionHandler, bool) {
 	if s == nil || s.actionRouter == nil {
 		return nil, false
 	}
-	return s.actionRouter.handler(action)
+	return s.actionRouter.Handler(action)
 }
 
 func (s *bridgeService) registeredActionNames() []string {
 	if s == nil || s.actionRouter == nil {
 		return nil
 	}
-	return s.actionRouter.actionNames()
+	return s.actionRouter.ActionNames()
+}
+
+func validateBusRequest(req apiRequest) error {
+	return dispatch.ValidateBusRequest(req)
+}
+
+func logAction(traceID string, action string, status string, err error) {
+	dispatch.LogAction(traceID, action, status, err)
+}
+
+func registerDefaultActions(service *bridgeService) {
+	if service == nil || service.actionRouter == nil {
+		return
+	}
+	dispatch.RegisterDefaultActions(service.actionRouter, defaultActionHandlers(service))
+}
+
+func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
+	return dispatch.DefaultHandlers{
+		AgentSend: service.executeAgentAction,
+		AgentStop: service.executeAgentStopAction,
+		ConfigGet: func(_ context.Context, traceID string) (ServiceResult, error) {
+			return service.executeConfigGetAction(traceID)
+		},
+		ConfigUpdate: func(_ context.Context, params configUpdateRequest, traceID string) (ServiceResult, error) {
+			return service.executeConfigUpdateAction(params, traceID)
+		},
+		HumanResponse: service.executeHumanResponseAction,
+		TaskCreate: func(_ context.Context, params taskCreateParams, traceID string) (ServiceResult, error) {
+			return service.executeTaskCreateActionResult(params, traceID)
+		},
+		TaskList: service.executeTaskListDispatchAction,
+		TaskGet: func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+			return service.executeTaskGetActionResult(params, traceID)
+		},
+		TaskUpdate: func(_ context.Context, params taskUpdateParams, traceID string) (ServiceResult, error) {
+			return service.executeTaskUpdateActionResult(params, traceID)
+		},
+		TaskRunNow: func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+			return service.executeTaskRunNowActionResult(params, traceID)
+		},
+		TaskStop: service.executeTaskStopActionResult,
+		TaskLogs: func(_ context.Context, params taskLogsParams, traceID string) (ServiceResult, error) {
+			return service.executeTaskLogsActionResult(params, traceID)
+		},
+		TaskDelete: func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+			return service.executeTaskDeleteActionResult(params, traceID)
+		},
+	}
+}
+
+func (s *bridgeService) executeTaskListDispatchAction(
+	_ context.Context,
+	params dispatch.TaskListParams,
+	traceID string,
+) (ServiceResult, error) {
+	scope, err := dispatch.NormalizeTaskListScope(params.Scope)
+	if err != nil {
+		return ServiceResult{}, wrapServiceError(ServiceErrorInvalidInput, err)
+	}
+	return s.executeTaskListActionResult(scope, traceID)
 }

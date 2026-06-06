@@ -3,7 +3,7 @@ package workflow
 import (
 	"fmt"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 func validateDegrees(index NodeIndex, graph Graph) error {
@@ -21,19 +21,19 @@ func validateNodeDegree(nodeID string, node Node, in int, out int) error {
 	switch node.Type {
 	case NodeTypeStart:
 		if in != 0 || out < 1 {
-			return fmt.Errorf("%w: start node must have in=0 and out>=1", bridgeTasks.ErrInvalidTaskConfig)
+			return fmt.Errorf("%w: start node must have in=0 and out>=1", taskdefs.ErrInvalidTaskConfig)
 		}
 	case NodeTypeEnd:
 		if in < 1 || out != 0 {
-			return fmt.Errorf("%w: end node must have in>=1 and out=0", bridgeTasks.ErrInvalidTaskConfig)
+			return fmt.Errorf("%w: end node must have in>=1 and out=0", taskdefs.ErrInvalidTaskConfig)
 		}
 	case NodeTypeIf, NodeTypeLoop:
 		if in < 1 || out != 2 {
-			return fmt.Errorf("%w: workflow node %q must have in>=1 and out=2", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+			return fmt.Errorf("%w: workflow node %q must have in>=1 and out=2", taskdefs.ErrInvalidTaskConfig, nodeID)
 		}
 	default:
 		if in < 1 || out != 1 {
-			return fmt.Errorf("%w: workflow node %q must have in>=1 and out=1", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+			return fmt.Errorf("%w: workflow node %q must have in>=1 and out=1", taskdefs.ErrInvalidTaskConfig, nodeID)
 		}
 	}
 	return nil

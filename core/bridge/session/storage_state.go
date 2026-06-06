@@ -14,7 +14,6 @@ const sessionTimeLayout = time.RFC3339Nano
 type sessionStoredState struct {
 	Title             string                          `json:"title,omitempty"`
 	ConversationState llm.ConversationState           `json:"conversation_state,omitempty"`
-	IterationRuntime  *IterationRuntime               `json:"iteration_runtime,omitempty"`
 	RelayRuntime      *RelayRuntime                   `json:"relay_runtime,omitempty"`
 	PendingQuestions  map[string]PendingHumanQuestion `json:"pending_questions,omitempty"`
 	HumanAnswers      map[string]string               `json:"human_answers,omitempty"`
@@ -41,7 +40,6 @@ func encodeSessionState(sess *Session) (string, error) {
 	state := sessionStoredState{
 		Title:             strings.TrimSpace(sess.Title),
 		ConversationState: sess.ConversationState,
-		IterationRuntime:  cloneIterationRuntime(sess.IterationRuntime),
 		RelayRuntime:      cloneRelayRuntime(sess.RelayRuntime),
 		PendingQuestions:  clonePendingQuestions(sess.PendingQuestions),
 		HumanAnswers:      cloneHumanAnswers(sess.HumanAnswers),
@@ -87,7 +85,6 @@ func sessionFromRecord(record sessionRecord, messages []llm.Message) *Session {
 		WindowStart:       record.WindowStart,
 		WindowTokenCount:  record.WindowTokenCount,
 		ConversationState: record.State.ConversationState,
-		IterationRuntime:  cloneIterationRuntime(record.State.IterationRuntime),
 		RelayRuntime:      cloneRelayRuntime(record.State.RelayRuntime),
 		PendingQuestions:  clonePendingQuestions(record.State.PendingQuestions),
 		HumanAnswers:      cloneHumanAnswers(record.State.HumanAnswers),

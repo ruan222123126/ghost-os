@@ -148,7 +148,8 @@ func removedConfigKeyName(key toml.Key) string {
 		"graphql_api_key",
 		"graphql_schema_path",
 		"graphql_timeout_ms",
-		"graphql_max_response_bytes":
+		"graphql_max_response_bytes",
+		"pro_max_iterations":
 		return key[0]
 	default:
 		return ""

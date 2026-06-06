@@ -2,7 +2,6 @@ import type {
   AgentCompletionDeltaPayload,
   AgentDonePayload,
   AgentErrorPayload,
-  AgentIterationSummaryItem,
   AgentRunStartedPayload,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
@@ -97,31 +96,6 @@ function parseAwaitingHumanResponse(payload: unknown): AgentSendResponse {
   };
 }
 
-function parseIterationSummaryItem(value: unknown, label: string): AgentIterationSummaryItem {
-  const record = expectRecord(value, label);
-
-  return {
-    iteration: expectNumber(record.iteration, `${label}.iteration`),
-    did: expectString(record.did, `${label}.did`),
-    remaining: expectString(record.remaining, `${label}.remaining`),
-    completed: record.completed === undefined ? undefined : expectBoolean(record.completed, `${label}.completed`),
-    trace_id: parseOptionalString(record.trace_id, `${label}.trace_id`),
-    recorded_at: parseOptionalString(record.recorded_at, `${label}.recorded_at`),
-    final_change_log: parseOptionalString(record.final_change_log, `${label}.final_change_log`),
-  };
-}
-
-function parseIterationSummary(value: unknown): AgentIterationSummaryItem[] | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (!Array.isArray(value)) {
-    throw new Error('Invalid agent response.iteration_summary: expected array');
-  }
-
-  return value.map((entry, index) => parseIterationSummaryItem(entry, `agent response.iteration_summary[${index}]`));
-}
-
 function parseSuccessResponse(payload: unknown): AgentSendResponse {
   const record = expectRecord(payload, 'agent response');
 
@@ -130,12 +104,6 @@ function parseSuccessResponse(payload: unknown): AgentSendResponse {
     session_id: expectString(record.session_id, 'agent response.session_id'),
     session_ended: expectBoolean(record.session_ended, 'agent response.session_ended'),
     mode: record.mode === undefined ? undefined : expectStringEnum(record.mode, AGENT_MODES, 'agent response.mode'),
-    iteration_count: record.iteration_count === undefined
-      ? undefined
-      : expectNumber(record.iteration_count, 'agent response.iteration_count'),
-    stopped_by: parseOptionalString(record.stopped_by, 'agent response.stopped_by'),
-    final_change_log: parseOptionalString(record.final_change_log, 'agent response.final_change_log'),
-    iteration_summary: parseIterationSummary(record.iteration_summary),
     session_end: parseSessionEndSignal(record.session_end),
   };
 }

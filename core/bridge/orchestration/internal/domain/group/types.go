@@ -1,24 +1,24 @@
 package group
 
-import bridgeTasks "ghost-os/bridge/tasks"
+import taskdefs "ghost-os/bridge/taskdefs"
 
 const (
 	NodeTypeStart = "start"
-	NodeTypeGroup = bridgeTasks.OrchestrationNodeTypeGroup
-	NodeTypeAgent = bridgeTasks.OrchestrationNodeTypeAgent
+	NodeTypeGroup = taskdefs.OrchestrationNodeTypeGroup
+	NodeTypeAgent = taskdefs.OrchestrationNodeTypeAgent
 	NodeTypeEnd   = "end"
 
-	EdgeKindControl = bridgeTasks.OrchestrationEdgeKindControl
-	EdgeKindMember  = bridgeTasks.OrchestrationEdgeKindMember
+	EdgeKindControl = taskdefs.OrchestrationEdgeKindControl
+	EdgeKindMember  = taskdefs.OrchestrationEdgeKindMember
 
-	SpeakingModeSequential = bridgeTasks.OrchestrationSpeakingModeSequential
-	SpeakingModeParallel   = bridgeTasks.OrchestrationSpeakingModeParallel
-	SpeakingModeOwner      = bridgeTasks.OrchestrationSpeakingModeOwner
+	SpeakingModeSequential = taskdefs.OrchestrationSpeakingModeSequential
+	SpeakingModeParallel   = taskdefs.OrchestrationSpeakingModeParallel
+	SpeakingModeOwner      = taskdefs.OrchestrationSpeakingModeOwner
 )
 
-type Definition = bridgeTasks.OrchestrationDefinition
-type Node = bridgeTasks.OrchestrationNode
-type GroupNode = bridgeTasks.OrchestrationGroupNode
-type AgentNode = bridgeTasks.OrchestrationAgentNode
-type Edge = bridgeTasks.OrchestrationEdge
-type RuntimeOverrides = bridgeTasks.TaskRuntimeOverrides
+type Definition = taskdefs.OrchestrationDefinition
+type Node = taskdefs.OrchestrationNode
+type GroupNode = taskdefs.OrchestrationGroupNode
+type AgentNode = taskdefs.OrchestrationAgentNode
+type Edge = taskdefs.OrchestrationEdge
+type RuntimeOverrides = taskdefs.TaskRuntimeOverrides

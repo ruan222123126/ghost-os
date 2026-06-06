@@ -10,14 +10,6 @@ func (CodexCLITool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }
 
-func (ProCompleteTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
-func (ProUpdateRecordTool) ToolSemantics() llm.ToolSemantics {
-	return llm.ToolSemantics{SideEffect: true}
-}
-
 func (ScriptExecTool) ToolSemantics() llm.ToolSemantics {
 	return llm.ToolSemantics{SideEffect: true}
 }

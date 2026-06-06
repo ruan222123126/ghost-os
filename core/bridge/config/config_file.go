@@ -75,7 +75,6 @@ type bridgeFileConfig struct {
 	ProviderHeaders                map[string]string             `toml:"provider_headers,omitempty"`
 	AnthropicVersion               *string                       `toml:"anthropic_version,omitempty"`
 	AnthropicMaxTokens             *int                          `toml:"anthropic_max_tokens,omitempty"`
-	ProMaxIterations               *int                          `toml:"pro_max_iterations,omitempty"`
 	RelayDefaultStopPolicy         *string                       `toml:"relay_default_stop_policy,omitempty"`
 	RelayDefaultMaxRounds          *int                          `toml:"relay_default_max_rounds,omitempty"`
 	RelayDefaultExecutionTimeoutMS *int                          `toml:"relay_default_execution_timeout_ms,omitempty"`

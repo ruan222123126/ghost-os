@@ -5,6 +5,7 @@ package orchestration
 import (
 	"fmt"
 
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/session"
 )
 
@@ -25,7 +26,7 @@ func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult
 
 	metadata := make([]sessionMetadata, 0, len(summaries))
 	for _, summary := range summaries {
-		metadata = append(metadata, buildSessionMetadataPayload(summary))
+		metadata = append(metadata, sessionturn.BuildSessionMetadataPayload(summary))
 	}
 
 	logAction(traceID, "SESSIONS_LIST", "success", nil)
@@ -54,7 +55,7 @@ func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID
 	}
 
 	logAction(traceID, "SESSION_GET", "success", nil)
-	return serviceResultSuccess(buildSessionDetailPayload(sess, page, params.Before == nil)), nil
+	return serviceResultSuccess(sessionturn.BuildSessionDetailPayload(sess, page, params.Before == nil)), nil
 }
 
 // executeSessionDeleteAction 删除指定会话，并返回幂等友好的删除结果结构。

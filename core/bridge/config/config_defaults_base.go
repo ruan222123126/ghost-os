@@ -14,7 +14,6 @@ const (
 	defaultTaskExecutionTimeoutMS       = 300000
 	defaultAnthropicVersion             = "2023-06-01"
 	defaultAnthropicMaxTokens           = 1024
-	defaultProMaxIterations             = 20
 	defaultRelayStopPolicy              = "ai_decides"
 	defaultRelayMaxRounds               = 20
 	defaultRelayExecutionTimeoutMS      = 0

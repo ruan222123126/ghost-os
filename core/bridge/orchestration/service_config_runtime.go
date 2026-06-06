@@ -7,6 +7,7 @@ import (
 	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
+	appconfig "ghost-os/bridge/orchestration/internal/app/config"
 )
 
 // executeConfigGetAction 返回当前可编辑配置快照，不暴露敏感明文字段。
@@ -63,6 +64,40 @@ func (s *bridgeService) publicConfigResponse() (configResponse, error) {
 		return configResponse{}, err
 	}
 	return configResponseFromSnapshot(snapshot), nil
+}
+
+func (s *bridgeService) configProviderService() appconfig.Service {
+	return appconfig.Service{
+		Store:  s.configStore,
+		Logger: serviceActionLogger{},
+	}
+}
+
+func (s *bridgeService) executeProvidersGetAction(traceID string) (ServiceResult, error) {
+	return adaptLegacyResult(s.configProviderService().List(traceID))
+}
+
+func (s *bridgeService) executeProviderCreateAction(req providerCreateRequest, traceID string) (ServiceResult, error) {
+	return adaptLegacyResult(s.configProviderService().Create(req, traceID))
+}
+
+func (s *bridgeService) executeProviderUpdateAction(
+	name string,
+	req providerUpdateRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return adaptLegacyResult(s.configProviderService().Update(name, req, traceID))
+}
+
+func (s *bridgeService) executeProviderDeleteAction(name string, traceID string) (ServiceResult, error) {
+	return adaptLegacyResult(s.configProviderService().Delete(name, traceID))
+}
+
+func (s *bridgeService) executeSetActiveProviderAction(
+	req setActiveProviderRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return adaptLegacyResult(s.configProviderService().SetActive(req, traceID))
 }
 
 func toolUpdateRequestToStoreRequest(name string, req toolUpdateRequest) bridgeconfig.ToolUpdateRequest {
@@ -136,41 +171,13 @@ func configResponseFromSnapshot(snapshot bridgeconfig.Snapshot) configResponse {
 }
 
 func cloneOptionalStringPointer(raw *string) *string {
-	if raw == nil {
-		return nil
-	}
-	value := strings.TrimSpace(*raw)
-	if value == "" {
-		return nil
-	}
-	return &value
+	return appconfig.CloneOptionalStringPointer(raw)
 }
 
 func stringValue(raw *string) string {
-	if raw == nil {
-		return ""
-	}
-	return strings.TrimSpace(*raw)
-}
-
-func cloneStringMap(raw map[string]string) map[string]string {
-	if len(raw) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(raw))
-	for key, value := range raw {
-		out[key] = value
-	}
-	return out
+	return appconfig.StringValue(raw)
 }
 
 func cloneModelTokenOverrides(raw map[string]int) map[string]int {
-	if len(raw) == 0 {
-		return nil
-	}
-	out := make(map[string]int, len(raw))
-	for key, value := range raw {
-		out[key] = value
-	}
-	return out
+	return appconfig.CloneModelTokenOverrides(raw)
 }

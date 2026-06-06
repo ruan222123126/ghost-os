@@ -41,16 +41,6 @@ export interface AgentRequest {
   trace_id?: string;
 }
 
-export interface AgentIterationSummaryItem {
-  iteration: number;
-  did: string;
-  remaining: string;
-  completed?: boolean;
-  trace_id?: string;
-  recorded_at?: string;
-  final_change_log?: string;
-}
-
 export interface AskHumanOption {
   label: string;
   allow_custom?: boolean;
@@ -61,10 +51,6 @@ export interface AgentSendSuccessResponse {
   session_id: string;
   session_ended: boolean;
   mode?: 'plan';
-  iteration_count?: number;
-  stopped_by?: string;
-  final_change_log?: string;
-  iteration_summary?: AgentIterationSummaryItem[];
   session_end?: AssistantSessionEndSignal | null;
 }
 

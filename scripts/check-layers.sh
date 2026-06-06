@@ -36,7 +36,7 @@ check_no_matches '"core/bridge/orchestration"' core/bridge/server core/bridge/tr
 
 (
   cd core/bridge
-  go test ./orchestration/internal -run 'TestOrchestrationTopLevelFileAllowlist|TestDomainConcreteImportFreeze' -timeout 60s
+  go test ./orchestration/internal -run 'TestOrchestrationTopLevelFileAllowlist|TestDomainConcreteImport' -timeout 60s
 )
 
 echo "layer check ok"

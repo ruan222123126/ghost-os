@@ -3,8 +3,10 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"ghost-os/bridge/agent"
+	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/streaming"
@@ -82,7 +84,51 @@ func (r agentTurnSpecialAdapter) RunPlan(
 	req agentturn.PreparedRequest,
 	traceID string,
 ) (api.AgentResponse, int, error) {
-	return r.service.executePlanModeAction(ctx, req, traceID)
+	result, err := r.service.planModeRunner().Execute(ctx, req, traceID)
+	if err != nil {
+		return api.AgentResponse{}, agentturn.PlanErrorStatus(err), err
+	}
+	payload, err := newAgentResponsePayload(result.Message, result.SessionID, nil, agentResponseMeta{
+		Mode: agentModePlan,
+	})
+	if err != nil {
+		return api.AgentResponse{}, http.StatusInternalServerError, err
+	}
+	return payload, http.StatusOK, nil
+}
+
+func (s *bridgeService) planModeRunner() agentturn.PlanRunner {
+	factory := s.runtimeFactory
+	if factory == nil {
+		factory = newAgentRuntimeFactory()
+	}
+	return agentturn.PlanRunner{
+		RuntimeFactory: agentTurnPlanRuntimeFactory{inner: factory},
+		ConfigStore:    s.configStore,
+		SessionStore:   s.sessionStore,
+		RunRegistry:    s.runRegistry,
+	}
+}
+
+type agentTurnPlanRuntimeFactory struct {
+	inner AgentRuntimeFactory
+}
+
+func (f agentTurnPlanRuntimeFactory) Build(store bridgeconfig.Store) (agentturn.PlanRuntimeDependencies, error) {
+	inner := f.inner
+	if inner == nil {
+		inner = newAgentRuntimeFactory()
+	}
+	deps, err := inner.Build(store)
+	if err != nil {
+		return agentturn.PlanRuntimeDependencies{}, err
+	}
+	return agentturn.PlanRuntimeDependencies{
+		Config:       deps.cfg,
+		Client:       deps.client,
+		SystemPrompt: deps.systemPrompt,
+		Cleanup:      deps.Close,
+	}, nil
 }
 
 type agentTurnFinalizer struct {
@@ -99,11 +145,7 @@ func (f agentTurnFinalizer) NewResponsePayload(
 	meta agentturn.ResponseMeta,
 ) (api.AgentResponse, error) {
 	return newAgentResponsePayload(turn.Message, turn.SessionID, turn.SessionEnd, agentResponseMeta{
-		Mode:             meta.Mode,
-		IterationCount:   meta.IterationCount,
-		StoppedBy:        meta.StoppedBy,
-		FinalChangeLog:   meta.FinalChangeLog,
-		IterationSummary: meta.IterationSummary,
+		Mode: meta.Mode,
 	})
 }
 

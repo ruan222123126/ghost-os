@@ -72,18 +72,6 @@ func cloneHumanAnswers(raw map[string]string) map[string]string {
 	return out
 }
 
-func cloneIterationRuntime(raw *IterationRuntime) *IterationRuntime {
-	if raw == nil {
-		return nil
-	}
-
-	cloned := *raw
-	if len(raw.Records) > 0 {
-		cloned.Records = append([]IterationRecord(nil), raw.Records...)
-	}
-	return &cloned
-}
-
 func cloneDynamicToolLoads(raw map[string]DynamicToolLoad) map[string]DynamicToolLoad {
 	if len(raw) == 0 {
 		return nil

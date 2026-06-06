@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 type cycleState struct {
@@ -54,7 +54,7 @@ func visitNextCycleNode(nextID string, index NodeIndex, graph Graph, state *cycl
 	if cycleContainsLoopNode(cycle, index) {
 		return nil
 	}
-	return fmt.Errorf("%w: workflow cycle must include a loop node: %s", bridgeTasks.ErrInvalidTaskConfig, strings.Join(cycle, " -> "))
+	return fmt.Errorf("%w: workflow cycle must include a loop node: %s", taskdefs.ErrInvalidTaskConfig, strings.Join(cycle, " -> "))
 }
 
 func (s *cycleState) enter(nodeID string) {

@@ -1,40 +1,58 @@
-package orchestration
+package tasks
 
 import (
 	"fmt"
 	"strings"
+
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
+	bridgeTasks "ghost-os/bridge/tasks"
 )
 
-type taskRuntimeOverrideNormalizationOptions struct {
+type runtimeOverrideNormalizationOptions struct {
 	requireProviderModelPair bool
 	dropMaxTurns             bool
 }
 
-func normalizeTaskRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOverrides, error) {
-	return normalizeTaskRuntimeOverridesWithOptions(input, taskRuntimeOverrideNormalizationOptions{})
+func NormalizeTaskRuntimeOverrides(
+	input *bridgeTasks.TaskRuntimeOverrides,
+) (*bridgeTasks.TaskRuntimeOverrides, error) {
+	return normalizeTaskRuntimeOverridesWithOptions(input, runtimeOverrideNormalizationOptions{})
 }
 
-func normalizeWorkflowAgentRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOverrides, error) {
-	return normalizeTaskRuntimeOverridesWithOptions(input, taskRuntimeOverrideNormalizationOptions{
+func NormalizeWorkflowAgentRuntimeOverrides(
+	input *bridgeTasks.TaskRuntimeOverrides,
+) (*bridgeTasks.TaskRuntimeOverrides, error) {
+	return normalizeTaskRuntimeOverridesWithOptions(input, runtimeOverrideNormalizationOptions{
 		requireProviderModelPair: true,
 	})
 }
 
-func normalizeOrchestrationAgentRuntimeOverrides(input *TaskRuntimeOverrides) (*TaskRuntimeOverrides, error) {
-	return normalizeTaskRuntimeOverridesWithOptions(input, taskRuntimeOverrideNormalizationOptions{
+func NormalizeOrchestrationAgentRuntimeOverrides(
+	input *bridgeTasks.TaskRuntimeOverrides,
+) (*bridgeTasks.TaskRuntimeOverrides, error) {
+	return normalizeTaskRuntimeOverridesWithOptions(input, runtimeOverrideNormalizationOptions{
 		requireProviderModelPair: true,
 		dropMaxTurns:             true,
 	})
 }
 
+func NormalizeTaskRuntimeOverridesForCatalogValidation(
+	input *bridgeTasks.TaskRuntimeOverrides,
+	requireProviderModelPair bool,
+) (*bridgeTasks.TaskRuntimeOverrides, error) {
+	return normalizeTaskRuntimeOverridesWithOptions(input, runtimeOverrideNormalizationOptions{
+		requireProviderModelPair: requireProviderModelPair,
+	})
+}
+
 func normalizeTaskRuntimeOverridesWithOptions(
-	input *TaskRuntimeOverrides,
-	options taskRuntimeOverrideNormalizationOptions,
-) (*TaskRuntimeOverrides, error) {
+	input *bridgeTasks.TaskRuntimeOverrides,
+	options runtimeOverrideNormalizationOptions,
+) (*bridgeTasks.TaskRuntimeOverrides, error) {
 	if input == nil {
 		return nil, nil
 	}
-	allowlist, _, err := normalizeConfiguredToolLists(input.ToolAllowlist, nil)
+	allowlist, _, err := apptools.NormalizeConfiguredToolLists(input.ToolAllowlist, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +79,7 @@ func normalizeTaskRuntimeOverridesWithOptions(
 	) {
 		return nil, nil
 	}
-	return &TaskRuntimeOverrides{
+	return &bridgeTasks.TaskRuntimeOverrides{
 		ProviderName:      providerName,
 		Model:             model,
 		SystemPrompt:      systemPrompt,
@@ -75,7 +93,7 @@ func normalizeTaskRuntimeOverridesWithOptions(
 func validateTaskRuntimeProviderModelPair(
 	providerName string,
 	model string,
-	options taskRuntimeOverrideNormalizationOptions,
+	options runtimeOverrideNormalizationOptions,
 ) error {
 	if providerName != "" && model == "" {
 		return fmt.Errorf("provider_name requires model")

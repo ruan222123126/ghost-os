@@ -3,7 +3,7 @@ package group
 import (
 	"fmt"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 type graphData struct {
@@ -20,7 +20,7 @@ type graphData struct {
 
 func buildGraphData(definition *Definition) (graphData, error) {
 	if definition == nil {
-		return graphData{}, fmt.Errorf("%w: orchestration is required", bridgeTasks.ErrInvalidTaskConfig)
+		return graphData{}, fmt.Errorf("%w: orchestration is required", taskdefs.ErrInvalidTaskConfig)
 	}
 	graph := newGraphData(len(definition.Nodes))
 	for _, node := range definition.Nodes {
@@ -53,7 +53,7 @@ func addNode(graph *graphData, node Node) error {
 		return err
 	}
 	if _, exists := graph.nodes[node.ID]; exists {
-		return fmt.Errorf("%w: duplicate orchestration node id %q", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: duplicate orchestration node id %q", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	graph.nodes[node.ID] = node
 	countNodeType(graph, node.Type)

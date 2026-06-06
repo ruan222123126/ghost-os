@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 func (p Plan) Node(nodeID string) (Node, bool) {
@@ -31,7 +31,7 @@ func (p Plan) NextNodeIDs(nodeID string) []string {
 func (p Plan) SingleNextNodeID(nodeID string) (string, error) {
 	nextIDs := p.NextNodeIDs(nodeID)
 	if len(nextIDs) != 1 {
-		return "", fmt.Errorf("%w: workflow node %q must have exactly one outgoing edge", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+		return "", fmt.Errorf("%w: workflow node %q must have exactly one outgoing edge", taskdefs.ErrInvalidTaskConfig, nodeID)
 	}
 	return nextIDs[0], nil
 }

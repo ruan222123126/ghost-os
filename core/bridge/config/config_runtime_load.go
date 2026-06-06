@@ -51,14 +51,13 @@ func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime
 }
 
 type configSections struct {
-	Provider         ProviderConfig
-	Worker           WorkerConfig
-	Task             TaskConfig
-	ToolSelector     ToolSelectorConfig
-	ToolSearch       ToolSearchConfig
-	PromptsDir       string
-	ProMaxIterations int
-	MaxTurns         int
+	Provider     ProviderConfig
+	Worker       WorkerConfig
+	Task         TaskConfig
+	ToolSelector ToolSelectorConfig
+	ToolSearch   ToolSearchConfig
+	PromptsDir   string
+	MaxTurns     int
 }
 
 func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig) (configSections, error) {
@@ -74,19 +73,18 @@ func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime ru
 	if err != nil {
 		return configSections{}, err
 	}
-	proMaxIterations, maxTurns, err := resolveIterationLimits(fileCfg, env)
+	maxTurns, err := resolveMaxTurns(fileCfg, env)
 	if err != nil {
 		return configSections{}, err
 	}
 	return configSections{
-		Provider:         provider,
-		Worker:           features.Worker,
-		Task:             features.Task,
-		ToolSelector:     features.ToolSelector,
-		ToolSearch:       features.ToolSearch,
-		PromptsDir:       promptsDir,
-		ProMaxIterations: proMaxIterations,
-		MaxTurns:         maxTurns,
+		Provider:     provider,
+		Worker:       features.Worker,
+		Task:         features.Task,
+		ToolSelector: features.ToolSelector,
+		ToolSearch:   features.ToolSearch,
+		PromptsDir:   promptsDir,
+		MaxTurns:     maxTurns,
 	}, nil
 }
 
@@ -122,22 +120,12 @@ func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (r
 	}, nil
 }
 
-func resolveIterationLimits(fileCfg bridgeFileConfig, env envSnapshot) (int, int, error) {
-	proMaxIterations, err := intOrEnvWithEnv(
-		fileCfg.ProMaxIterations,
-		"pro_max_iterations",
-		env,
-		"GHOST_PRO_MAX_ITERATIONS",
-		defaultProMaxIterations,
-	)
-	if err != nil {
-		return 0, 0, err
-	}
+func resolveMaxTurns(fileCfg bridgeFileConfig, env envSnapshot) (int, error) {
 	maxTurns, err := intOrEnvWithEnv(fileCfg.MaxTurns, "max_turns", env, "GHOST_MAX_TURNS", defaultMaxTurns)
 	if err != nil {
-		return 0, 0, err
+		return 0, err
 	}
-	return proMaxIterations, maxTurns, nil
+	return maxTurns, nil
 }
 
 func composeConfig(
@@ -198,7 +186,6 @@ func composeConfig(
 		MemoryModeEnabled:              runtime.MemoryModeEnabled,
 		MicrocompactEnabled:            runtime.MicrocompactEnabled,
 		SessionTitleMode:               runtime.SessionTitleMode,
-		ProMaxIterations:               sections.ProMaxIterations,
 		MaxTurns:                       sections.MaxTurns,
 	}
 }

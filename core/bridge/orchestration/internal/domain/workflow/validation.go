@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 var nodeValidationSpecs = map[string]NodeValidationSpec{
@@ -23,7 +23,7 @@ func (PlanBuilder) Build(definition *Definition) (Plan, error) {
 
 func BuildPlan(definition *Definition) (Plan, error) {
 	if definition == nil {
-		return Plan{}, fmt.Errorf("%w: workflow is required", bridgeTasks.ErrInvalidTaskConfig)
+		return Plan{}, fmt.Errorf("%w: workflow is required", taskdefs.ErrInvalidTaskConfig)
 	}
 	index, err := buildNodeIndex(definition)
 	if err != nil {
@@ -46,7 +46,7 @@ func buildNodeIndex(definition *Definition) (NodeIndex, error) {
 			return NodeIndex{}, err
 		}
 		if _, exists := index.nodes[node.ID]; exists {
-			return NodeIndex{}, fmt.Errorf("%w: duplicate workflow node id %q", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+			return NodeIndex{}, fmt.Errorf("%w: duplicate workflow node id %q", taskdefs.ErrInvalidTaskConfig, node.ID)
 		}
 		index.nodes[node.ID] = node
 		index.rememberBoundary(node)
@@ -65,21 +65,21 @@ func (i *NodeIndex) rememberBoundary(node Node) {
 
 func requireBoundaryNodes(index NodeIndex) (NodeIndex, error) {
 	if countNodes(index, NodeTypeStart) != 1 {
-		return NodeIndex{}, fmt.Errorf("%w: workflow requires exactly 1 start node", bridgeTasks.ErrInvalidTaskConfig)
+		return NodeIndex{}, fmt.Errorf("%w: workflow requires exactly 1 start node", taskdefs.ErrInvalidTaskConfig)
 	}
 	if countNodes(index, NodeTypeEnd) != 1 {
-		return NodeIndex{}, fmt.Errorf("%w: workflow requires exactly 1 end node", bridgeTasks.ErrInvalidTaskConfig)
+		return NodeIndex{}, fmt.Errorf("%w: workflow requires exactly 1 end node", taskdefs.ErrInvalidTaskConfig)
 	}
 	return index, nil
 }
 
 func validateNode(node Node) error {
 	if node.ID == "" {
-		return fmt.Errorf("%w: workflow node id is required", bridgeTasks.ErrInvalidTaskConfig)
+		return fmt.Errorf("%w: workflow node id is required", taskdefs.ErrInvalidTaskConfig)
 	}
 	spec, ok := nodeValidationSpecs[node.Type]
 	if !ok {
-		return fmt.Errorf("%w: unsupported workflow node type %q", bridgeTasks.ErrInvalidTaskConfig, node.Type)
+		return fmt.Errorf("%w: unsupported workflow node type %q", taskdefs.ErrInvalidTaskConfig, node.Type)
 	}
 	if err := validateNodePayload(node, spec.payload); err != nil {
 		return err
@@ -100,7 +100,7 @@ func validateNodePayload(node Node, spec NodePayloadSpec) error {
 	if matches {
 		return nil
 	}
-	return fmt.Errorf("%w: workflow node %q payload does not match type %q", bridgeTasks.ErrInvalidTaskConfig, node.ID, node.Type)
+	return fmt.Errorf("%w: workflow node %q payload does not match type %q", taskdefs.ErrInvalidTaskConfig, node.ID, node.Type)
 }
 
 func hasStartPayload(node Node) bool {
@@ -109,21 +109,21 @@ func hasStartPayload(node Node) bool {
 
 func validateToolNode(node Node) error {
 	if strings.TrimSpace(node.Tool.ToolName) == "" {
-		return fmt.Errorf("%w: workflow tool node %q requires tool_name", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: workflow tool node %q requires tool_name", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	return nil
 }
 
 func validateLLMNode(node Node) error {
 	if strings.TrimSpace(node.LLM.Prompt) == "" {
-		return fmt.Errorf("%w: workflow llm node %q requires prompt", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: workflow llm node %q requires prompt", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	return nil
 }
 
 func validateAgentNode(node Node) error {
 	if strings.TrimSpace(node.Agent.Message) == "" {
-		return fmt.Errorf("%w: workflow agent node %q requires message", bridgeTasks.ErrInvalidTaskConfig, node.ID)
+		return fmt.Errorf("%w: workflow agent node %q requires message", taskdefs.ErrInvalidTaskConfig, node.ID)
 	}
 	return nil
 }

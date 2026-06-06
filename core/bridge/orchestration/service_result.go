@@ -2,11 +2,14 @@ package orchestration
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	sharedtext "ghost-os/bridge/orchestration/internal/shared/text"
 	bridgeskills "ghost-os/bridge/skills"
+	bridgetools "ghost-os/bridge/tools"
 )
 
 type ServiceOutcome = bus.ServiceOutcome
@@ -129,6 +132,96 @@ func truncateRunes(value string, limit int) string {
 
 func adaptLegacyResult(payload any, statusCode int, err error) (ServiceResult, error) {
 	return serviceResultFromStatus(payload, statusCode, err)
+}
+
+const screenControlToolID = apptools.ScreenControlToolID
+
+func (s *bridgeService) toolService() apptools.Service {
+	adapter := runtimeToolsAdapter{service: s}
+	return apptools.Service{
+		Store:          s.configStore,
+		SchemaProvider: adapter,
+		ToolProvider:   adapter,
+		Logger:         serviceActionLogger{},
+	}
+}
+
+type runtimeToolsAdapter struct {
+	service *bridgeService
+}
+
+func (a runtimeToolsAdapter) ListToolInputSchemas() (map[string]map[string]any, error) {
+	if a.service == nil || a.service.runtimeFactory == nil {
+		return nil, nil
+	}
+	deps, err := a.service.runtimeFactory.Build(a.service.configStore)
+	if err != nil {
+		return nil, err
+	}
+	defer deps.Close()
+	if deps.registry == nil {
+		return map[string]map[string]any{}, nil
+	}
+	return apptools.CollectSchemas(deps.registry.ToolDefs())
+}
+
+func (a runtimeToolsAdapter) Tool(name string) (bridgetools.Tool, func(), error) {
+	if a.service == nil || a.service.runtimeFactory == nil {
+		return nil, func() {}, wrapServiceError(ServiceErrorUnavailable, fmt.Errorf("runtime factory is not configured"))
+	}
+	deps, err := a.service.runtimeFactory.Build(a.service.configStore)
+	if err != nil {
+		return nil, func() {}, wrapServiceError(ServiceErrorUnavailable, fmt.Errorf("build runtime dependencies: %w", err))
+	}
+	if deps.registry == nil {
+		deps.Close()
+		return nil, func() {}, wrapServiceError(ServiceErrorUnavailable, fmt.Errorf("tool registry is not configured"))
+	}
+	tool := deps.registry.Get(name)
+	if tool == nil {
+		deps.Close()
+		return nil, func() {}, wrapServiceError(ServiceErrorUnavailable, fmt.Errorf("tool %q is not available", name))
+	}
+	return tool, deps.Close, nil
+}
+
+func (s *bridgeService) executeToolListAction(traceID string) (any, int, error) {
+	return s.toolService().List(traceID)
+}
+
+func (s *bridgeService) executeToolUpdateAction(
+	params toolNameParams,
+	req toolUpdateRequest,
+	traceID string,
+) (any, int, error) {
+	return s.toolService().Update(params, req, traceID)
+}
+
+func (s *bridgeService) executeFindIconTemplateUploadActionResult(
+	req findIconTemplateUploadRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.toolService().FindIconTemplateUpload(req, traceID)
+}
+
+func (s *bridgeService) executeFindIconPreviewActionResult(
+	ctx context.Context,
+	req findIconPreviewRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.toolService().FindIconPreview(ctx, req, traceID)
+}
+
+func (s *bridgeService) executeMousePositionActionResult(
+	ctx context.Context,
+	req mousePositionRequest,
+	traceID string,
+) (ServiceResult, error) {
+	return s.toolService().MousePosition(ctx, req, traceID)
+}
+
+func resolveFindIconTemplateRoot() (string, error) {
+	return apptools.ResolveFindIconTemplateRoot()
 }
 
 func (s *bridgeService) executeTaskCreateActionResult(params taskCreateParams, traceID string) (ServiceResult, error) {

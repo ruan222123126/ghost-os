@@ -1,4 +1,4 @@
-package orchestration
+package agentturn
 
 import (
 	"context"
@@ -6,84 +6,107 @@ import (
 	"strings"
 	"unicode"
 
-	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
-	"ghost-os/bridge/session"
 )
 
 const (
-	sessionTitleAction    = "SESSION_TITLE_GENERATE"
-	sessionTitleRuneLimit = 48
+	SessionTitleAction    = "SESSION_TITLE_GENERATE"
+	SessionTitleRuneLimit = 48
 	titleEllipsis         = "..."
 	titleEllipsisRunes    = len(titleEllipsis)
 )
 
-type sessionTitleTask struct {
-	store     *session.Store
-	completer agent.Completer
+type SessionTitleStore interface {
+	UpdateTitle(sessionID string, title string) error
+}
+
+type SessionTitlePreparationInput struct {
+	Mode        string
+	Store       SessionTitleStore
+	Completer   llm.Completer
+	Logger      Logger
+	SessionID   string
+	UserMessage string
+	TraceID     string
+}
+
+type SessionTitlePreparation struct {
+	ImmediateTitle    string
+	HasImmediateTitle bool
+	Task              *SessionTitleTask
+}
+
+type SessionTitleTask struct {
+	store     SessionTitleStore
+	completer llm.Completer
+	logger    Logger
 	sessionID string
 	message   string
 	traceID   string
 }
 
-func (p *sessionTurnPreparer) prepareCreatedSessionTitleTask(
-	sess *session.Session,
-	deps agentRuntimeDependencies,
-	input turnPreparationInput,
-) *sessionTitleTask {
-	if sess == nil || strings.TrimSpace(input.userMessage) == "" {
-		return nil
+func PrepareCreatedSessionTitle(input SessionTitlePreparationInput) SessionTitlePreparation {
+	if strings.TrimSpace(input.UserMessage) == "" {
+		return SessionTitlePreparation{}
 	}
-	switch strings.TrimSpace(deps.cfg.SessionTitleMode) {
+	switch strings.TrimSpace(input.Mode) {
 	case bridgeconfig.SessionTitleModeFirstMessage:
-		sess.Title = titleFromFirstMessage(input.userMessage)
+		return SessionTitlePreparation{
+			ImmediateTitle:    TitleFromFirstMessage(input.UserMessage),
+			HasImmediateTitle: true,
+		}
 	case bridgeconfig.SessionTitleModeAIGenerated:
-		return p.newAITitleTask(sess.ID, deps.client, input)
+		return SessionTitlePreparation{Task: NewAITitleTask(input)}
+	default:
+		return SessionTitlePreparation{}
 	}
-	return nil
 }
 
-func (p *sessionTurnPreparer) newAITitleTask(
-	sessionID string,
-	completer agent.Completer,
-	input turnPreparationInput,
-) *sessionTitleTask {
-	if p == nil || p.sessionStore == nil {
+func NewAITitleTask(input SessionTitlePreparationInput) *SessionTitleTask {
+	if input.Store == nil {
 		return nil
 	}
-	return &sessionTitleTask{
-		store:     p.sessionStore,
-		completer: completer,
-		sessionID: strings.TrimSpace(sessionID),
-		message:   strings.TrimSpace(input.userMessage),
-		traceID:   strings.TrimSpace(input.traceID),
+	return &SessionTitleTask{
+		store:     input.Store,
+		completer: input.Completer,
+		logger:    input.Logger,
+		sessionID: strings.TrimSpace(input.SessionID),
+		message:   strings.TrimSpace(input.UserMessage),
+		traceID:   strings.TrimSpace(input.TraceID),
 	}
 }
 
-func startSessionTitleTask(task *sessionTitleTask) {
+func StartSessionTitleTask(task *SessionTitleTask) {
 	if task == nil {
 		return
 	}
 	go task.run()
 }
 
-func (t *sessionTitleTask) run() {
+func (t *SessionTitleTask) run() {
 	if t.store == nil || t.completer == nil {
-		logAction(t.traceID, sessionTitleAction, "error", errors.New("session title generator is not configured"))
+		t.log("error", errors.New("session title generator is not configured"))
 		return
 	}
 	title, err := generateAITitle(context.Background(), t.completer, t.message)
 	if err != nil {
-		logAction(t.traceID, sessionTitleAction, "error", err)
+		t.log("error", err)
 		return
 	}
 	if err := t.store.UpdateTitle(t.sessionID, title); err != nil {
-		logAction(t.traceID, sessionTitleAction, "error", err)
+		t.log("error", err)
 	}
 }
 
-func generateAITitle(ctx context.Context, completer agent.Completer, message string) (string, error) {
+func (t *SessionTitleTask) log(status string, err error) {
+	if t.logger == nil {
+		return
+	}
+	t.logger.Log(t.traceID, SessionTitleAction, status, err)
+}
+
+func generateAITitle(ctx context.Context, completer llm.Completer, message string) (string, error) {
 	response, err := completer.Complete(ctx, llm.CompletionRequest{
 		Messages: []llm.Message{
 			{Role: llm.RoleSystem, Text: sessionTitlePrompt()},
@@ -111,12 +134,12 @@ func sessionTitlePrompt() string {
 	}, "\n")
 }
 
-func titleFromFirstMessage(message string) string {
+func TitleFromFirstMessage(message string) string {
 	segment := firstNonEmptySegment(message)
 	if segment == "" {
 		return ""
 	}
-	return truncateTitle(compactWhitespace(segment), sessionTitleRuneLimit)
+	return truncateTitle(compactWhitespace(segment), SessionTitleRuneLimit)
 }
 
 func firstNonEmptySegment(message string) string {

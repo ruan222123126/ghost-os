@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	"ghost-os/bridge/session"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
@@ -19,6 +20,8 @@ type taskNodeResultTimestamps struct {
 	startedAt  time.Time
 	finishedAt time.Time
 }
+
+const taskRunTranscriptEventMarker = apptasks.RunTranscriptEventMarker
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
 	recorder, recordErr := a.prepareTaskRunCardRecorder(ctx, task)
@@ -37,6 +40,13 @@ func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, tr
 		result.RunCards = recorder.Snapshot()
 	}
 	return a.attachTaskRunTranscript(ctx, task, traceID, result)
+}
+
+func (a taskExecutorAdapter) attachTaskRunTranscript(ctx context.Context, task ScheduledTask, traceID string, result bridgeTasks.ExecutionResult) bridgeTasks.ExecutionResult {
+	if a.service == nil {
+		return apptasks.AttachRunTranscript(ctx, nil, task, traceID, result)
+	}
+	return apptasks.AttachRunTranscript(ctx, a.service.sessionStore, task, traceID, result)
 }
 
 func (a taskExecutorAdapter) PrepareRunSession(

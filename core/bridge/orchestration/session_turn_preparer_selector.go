@@ -9,6 +9,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/tools"
@@ -194,7 +195,7 @@ func resumeAnsweredHumanTool(
 	if meta.AwaitingHuman != nil {
 		return awaitingHumanError(meta.AwaitingHuman)
 	}
-	sess.AddMessage(agentMessageForResolvedHumanTool(
+	sess.AddMessage(sessionturn.AgentMessageForResolvedHumanTool(
 		item.Question.ToolCallID,
 		item.Question.ToolName,
 		item.Question.TraceID,

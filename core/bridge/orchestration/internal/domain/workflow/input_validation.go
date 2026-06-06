@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"regexp"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 var inputNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -17,7 +17,7 @@ func validateStartNode(node Node) error {
 	seen := make(map[string]bool, len(node.Start.Inputs))
 	for index, input := range node.Start.Inputs {
 		if err := validateInputVariable(input, seen); err != nil {
-			return fmt.Errorf("%w: workflow start node %q input[%d] %v", bridgeTasks.ErrInvalidTaskConfig, node.ID, index, err)
+			return fmt.Errorf("%w: workflow start node %q input[%d] %v", taskdefs.ErrInvalidTaskConfig, node.ID, index, err)
 		}
 	}
 	return nil

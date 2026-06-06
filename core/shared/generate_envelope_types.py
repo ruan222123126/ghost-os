@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 from contract_codegen.emitters.go import render as render_go
@@ -35,6 +36,10 @@ def _write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _format_go_output(path: Path) -> None:
+    subprocess.run(["gofmt", "-w", str(path)], check=True)
+
+
 def _remove_stale_kotlin_outputs(keep_names: set[str]) -> None:
     if not KOTLIN_OUTPUT_DIR.is_dir():
         return
@@ -56,6 +61,7 @@ def generate() -> None:
     _remove_stale_kotlin_outputs(set(kotlin_outputs))
     for path, content in outputs:
         _write_file(path, content)
+    _format_go_output(GO_OUTPUT)
     for filename, content in kotlin_outputs.items():
         _write_file(KOTLIN_OUTPUT_DIR / filename, content)
 

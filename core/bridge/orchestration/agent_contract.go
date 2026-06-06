@@ -12,11 +12,7 @@ import (
 )
 
 type agentResponseMeta struct {
-	Mode             string
-	IterationCount   int
-	StoppedBy        string
-	FinalChangeLog   string
-	IterationSummary []agentIterationSummaryItem
+	Mode string
 }
 
 // newAgentResponsePayload 构造并校验 AGENT_SEND 成功响应，确保会话结束契约稳定。
@@ -25,17 +21,11 @@ func newAgentResponsePayload(message string, sessionID string, sessionEnd *assis
 	trimmedSessionID := strings.TrimSpace(sessionID)
 	ended := sessionEnd != nil
 	payload := agentResponse{
-		Message:        trimmedMessage,
-		SessionID:      trimmedSessionID,
-		SessionEnded:   ended,
-		SessionEnd:     sessionEnd,
-		Mode:           strings.TrimSpace(meta.Mode),
-		IterationCount: meta.IterationCount,
-		StoppedBy:      strings.TrimSpace(meta.StoppedBy),
-		FinalChangeLog: strings.TrimSpace(meta.FinalChangeLog),
-	}
-	if len(meta.IterationSummary) > 0 {
-		payload.IterationSummary = cloneIterationSummary(meta.IterationSummary)
+		Message:      trimmedMessage,
+		SessionID:    trimmedSessionID,
+		SessionEnded: ended,
+		SessionEnd:   sessionEnd,
+		Mode:         strings.TrimSpace(meta.Mode),
 	}
 	if err := validateAgentResponsePayload(payload); err != nil {
 		return agentResponse{}, err
@@ -99,15 +89,6 @@ func validateAgentResponseMode(payload agentResponse) error {
 	default:
 		return errors.New("agent response mode is invalid")
 	}
-}
-
-func cloneIterationSummary(records []agentIterationSummaryItem) []agentIterationSummaryItem {
-	if len(records) == 0 {
-		return nil
-	}
-	out := make([]agentIterationSummaryItem, len(records))
-	copy(out, records)
-	return out
 }
 
 var errStructuredAgentRunnerRequired = errors.New("configured agent runner does not support image input")

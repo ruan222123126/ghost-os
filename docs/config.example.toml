@@ -58,7 +58,6 @@ prompts_path = "prompts.yaml"
 # prompts_runtime_constraint_files = ["runtime/base.md"]
 # prompts_response_rule_files = ["response/base.md"]
 native_persistent = false
-pro_max_iterations = 20
 # native_binary_path = "/abs/path/to/native"
 # native_binary_roots = ["./drivers/native/target/release", "./drivers/native/target/debug"]
 # native_binary_candidates = ["native", "native.exe"]

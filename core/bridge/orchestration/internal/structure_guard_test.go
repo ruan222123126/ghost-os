@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	maxM2TopLevelGoFiles         = 70
+	maxM2TopLevelGoFiles         = 61
 	maxM2ProductionFileLines     = 300
 	maxM2OversizedGoDirectories  = 3
 	maxGoFilesPerTargetDirectory = 15
@@ -52,22 +52,41 @@ func TestOrchestrationTopLevelFileAllowlist(t *testing.T) {
 	}
 	if len(offenders) > 0 {
 		sort.Strings(offenders)
-		t.Fatalf("new top-level orchestration Go files are blocked; move new code under internal/app, internal/domain, ports, or adapters: %s",
+		t.Fatalf("new top-level orchestration Go files are blocked; only facade, compat, contract, or generated entrypoint files may be allowlisted; otherwise move new code under internal/app, internal/domain, ports, or adapters: %s",
 			strings.Join(offenders, ", "))
 	}
 }
 
-func TestDomainConcreteImportFreeze(t *testing.T) {
+func TestOrchestrationTopLevelFileAllowlistBaselineIsExact(t *testing.T) {
 	root := orchestrationRoot(t)
-	domainRoot := filepath.Join(root, "internal", "domain")
-	files := collectGoFiles(t, domainRoot)
-	var offenders []string
+	files := collectGoFiles(t, root)
+	current := map[string]bool{}
 	for _, file := range files {
-		rel := relativeToRoot(t, root, file)
-		for _, importPath := range importPaths(t, file) {
-			if !isForbiddenConcreteDomainImport(importPath) {
-				continue
-			}
+		if filepath.Dir(file) != root {
+			continue
+		}
+		current[filepath.Base(file)] = true
+	}
+
+	var stale []string
+	for name := range allowedTopLevelOrchestrationFiles {
+		if current[name] {
+			continue
+		}
+		stale = append(stale, name)
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Fatalf("top-level orchestration allowlist has stale files; remove migrated entries: %s",
+			strings.Join(stale, ", "))
+	}
+}
+
+func TestDomainConcreteImportFreeze(t *testing.T) {
+	imports := domainConcreteImports(t)
+	var offenders []string
+	for rel, importPaths := range imports {
+		for importPath := range importPaths {
 			if allowedDomainConcreteImports[rel][importPath] {
 				continue
 			}
@@ -76,8 +95,27 @@ func TestDomainConcreteImportFreeze(t *testing.T) {
 	}
 	if len(offenders) > 0 {
 		sort.Strings(offenders)
-		t.Fatalf("new concrete imports in internal/domain are blocked; use domain contracts or ports instead:\n%s",
+		t.Fatalf("new concrete imports in internal/domain are blocked (%s and subpackages); use domain contracts or ports instead:\n%s",
+			strings.Join(forbiddenConcreteDomainImports, ", "),
 			strings.Join(offenders, "\n"))
+	}
+}
+
+func TestDomainConcreteImportFreezeBaselineIsExact(t *testing.T) {
+	imports := domainConcreteImports(t)
+	var stale []string
+	for rel, allowedImports := range allowedDomainConcreteImports {
+		for importPath := range allowedImports {
+			if imports[rel][importPath] {
+				continue
+			}
+			stale = append(stale, rel+" allows stale "+importPath)
+		}
+	}
+	if len(stale) > 0 {
+		sort.Strings(stale)
+		t.Fatalf("domain concrete import freeze baseline has stale allowances; remove migrated entries:\n%s",
+			strings.Join(stale, "\n"))
 	}
 }
 
@@ -88,6 +126,27 @@ func orchestrationRoot(t *testing.T) string {
 		t.Fatalf("get working directory: %v", err)
 	}
 	return filepath.Clean(filepath.Join(wd, ".."))
+}
+
+func domainConcreteImports(t *testing.T) map[string]map[string]bool {
+	t.Helper()
+	root := orchestrationRoot(t)
+	domainRoot := filepath.Join(root, "internal", "domain")
+	files := collectGoFiles(t, domainRoot)
+	imports := map[string]map[string]bool{}
+	for _, file := range files {
+		rel := relativeToRoot(t, root, file)
+		for _, importPath := range importPaths(t, file) {
+			if !isForbiddenConcreteDomainImport(importPath) {
+				continue
+			}
+			if imports[rel] == nil {
+				imports[rel] = map[string]bool{}
+			}
+			imports[rel][importPath] = true
+		}
+	}
+	return imports
 }
 
 func collectGoFiles(t *testing.T, root string) []string {
@@ -166,6 +225,11 @@ func productionLineOffenders(t *testing.T, files []string) []string {
 	return offenders
 }
 
+// allowedTopLevelOrchestrationFiles is the Phase 0 freeze baseline, not the
+// target shape. Existing top-level business files remain listed only to avoid
+// breaking the current tree. New entries should be limited to public facade,
+// compatibility shim, contract, generated contract, or top-level contract test
+// files; ordinary implementation belongs under internal/*.
 var allowedTopLevelOrchestrationFiles = map[string]bool{
 	"agent_contract.go":                                                     true,
 	"agent_turn_app_adapter.go":                                             true,
@@ -190,56 +254,49 @@ var allowedTopLevelOrchestrationFiles = map[string]bool{
 	"orchestration_contract_workflow_runner_test.go":                        true,
 	"orchestration_contract_workflow_tools_test.go":                         true,
 	"orchestration_contract_workflow_validation_api_test.go":                true,
-	"plan_mode.go":                        true,
-	"relay_mode_catalog.go":               true,
-	"relay_mode_rounds.go":                true,
-	"relay_mode_runner.go":                true,
-	"runtime_adapter.go":                  true,
-	"service_action_router.go":            true,
-	"service_config_providers.go":         true,
-	"service_config_runtime.go":           true,
-	"service_prompts.go":                  true,
-	"service_result.go":                   true,
-	"service_router.go":                   true,
-	"service_runtime_state.go":            true,
-	"service_session_guards.go":           true,
-	"service_sessions.go":                 true,
-	"service_tasks.go":                    true,
-	"service_tools.go":                    true,
-	"service_usecase_human.go":            true,
-	"session_contract.go":                 true,
-	"session_end_signal.go":               true,
-	"session_push_adapter.go":             true,
-	"session_runner.go":                   true,
-	"session_runner_adapter.go":           true,
-	"session_title.go":                    true,
-	"session_turn_preparer.go":            true,
-	"session_turn_preparer_prompt.go":     true,
-	"session_turn_preparer_selector.go":   true,
-	"session_turn_runtime_overrides.go":   true,
-	"session_turn_state.go":               true,
-	"task_agent_run_cards.go":             true,
-	"task_bridge.go":                      true,
-	"task_executor_adapter.go":            true,
-	"task_orchestration_owner_catalog.go": true,
-	"task_orchestration_owner_runtime.go": true,
-	"task_orchestration_runner.go":        true,
-	"task_run_cards_bridge.go":            true,
-	"task_run_transcript.go":              true,
-	"task_runtime_config.go":              true,
-	"task_runtime_overrides.go":           true,
-	"task_usecase_runner.go":              true,
-	"task_usecase_runner_build.go":        true,
-	"task_validation.go":                  true,
-	"task_workflow_run_cards.go":          true,
-	"task_workflow_runner.go":             true,
-	"task_workflow_runner_nodes.go":       true,
-	"task_workflow_validation.go":         true,
-	"tool_lists_shim.go":                  true,
-	"trace_compat.go":                     true,
+	"relay_mode_catalog.go":                                                 true,
+	"relay_mode_rounds.go":                                                  true,
+	"relay_mode_runner.go":                                                  true,
+	"runtime_adapter.go":                                                    true,
+	"service_config_runtime.go":                                             true,
+	"service_prompts.go":                                                    true,
+	"service_result.go":                                                     true,
+	"service_router.go":                                                     true,
+	"service_runtime_state.go":                                              true,
+	"service_session_guards.go":                                             true,
+	"service_sessions.go":                                                   true,
+	"service_tasks.go":                                                      true,
+	"service_usecase_human.go":                                              true,
+	"session_end_signal.go":                                                 true,
+	"session_push_adapter.go":                                               true,
+	"session_runner.go":                                                     true,
+	"session_runner_adapter.go":                                             true,
+	"session_turn_preparer.go":                                              true,
+	"session_turn_preparer_prompt.go":                                       true,
+	"session_turn_preparer_selector.go":                                     true,
+	"session_turn_runtime_overrides.go":                                     true,
+	"session_turn_state.go":                                                 true,
+	"task_agent_run_cards.go":                                               true,
+	"task_bridge.go":                                                        true,
+	"task_executor_adapter.go":                                              true,
+	"task_orchestration_owner_catalog.go":                                   true,
+	"task_orchestration_owner_runtime.go":                                   true,
+	"task_orchestration_runner.go":                                          true,
+	"task_run_cards_bridge.go":                                              true,
+	"task_runtime_config.go":                                                true,
+	"task_usecase_runner.go":                                                true,
+	"task_usecase_runner_build.go":                                          true,
+	"task_validation.go":                                                    true,
+	"task_workflow_run_cards.go":                                            true,
+	"task_workflow_runner.go":                                               true,
+	"task_workflow_runner_nodes.go":                                         true,
+	"task_workflow_validation.go":                                           true,
+	"trace_compat.go":                                                       true,
 }
 
 var forbiddenConcreteDomainImports = []string{
+	// Phase 0 freezes these concrete bridge packages out of domain code.
+	// Existing debt is tracked in allowedDomainConcreteImports below.
 	"ghost-os/bridge/agent",
 	"ghost-os/bridge/config",
 	"ghost-os/bridge/session",
@@ -247,22 +304,12 @@ var forbiddenConcreteDomainImports = []string{
 	"ghost-os/bridge/tools",
 }
 
+// allowedDomainConcreteImports is the exact Phase 0 debt baseline for domain
+// packages. check-layers.sh runs this guard so new concrete imports fail in
+// the lightweight layer check. Remove entries as imports move behind
+// contracts/ports; adding an entry means consciously accepting new
+// domain-to-concrete coupling.
 var allowedDomainConcreteImports = map[string]map[string]bool{
-	"internal/domain/group/edge.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/group/graph.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/group/plan_test.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/group/types.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/group/validation.go": {
-		"ghost-os/bridge/tasks": true,
-	},
 	"internal/domain/sessionturn/contract.go": {
 		"ghost-os/bridge/agent":   true,
 		"ghost-os/bridge/session": true,
@@ -295,39 +342,6 @@ var allowedDomainConcreteImports = map[string]map[string]bool{
 		"ghost-os/bridge/tasks": true,
 	},
 	"internal/domain/task/run_transcript_workflow.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/find_icon_refs.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/graph.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/graph_connectivity.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/graph_cycles.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/graph_degrees.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/graph_targets.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/input_validation.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/plan.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/types.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/validation.go": {
-		"ghost-os/bridge/tasks": true,
-	},
-	"internal/domain/workflow/validation_control.go": {
 		"ghost-os/bridge/tasks": true,
 	},
 }

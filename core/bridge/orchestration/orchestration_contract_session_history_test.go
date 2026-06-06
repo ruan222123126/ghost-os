@@ -6,6 +6,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/session"
 	"log"
 	"strings"
@@ -23,7 +24,7 @@ func TestSessionHistoryBuilderKeepsLongHistoryWhenProviderContextWindowIsConfigu
 	}
 
 	before := sess.Messages
-	builder := newSessionHistoryBuilder(
+	builder := sessionturn.NewSessionHistoryBuilder(
 		bridgeconfig.ProviderConfig{
 			Type:                llm.ProviderCustom,
 			Model:               "deepseek-v4-pro",
@@ -67,7 +68,7 @@ func TestSessionHistoryBuilder_BuildHistoryWithResolvedQuestionsReturnsAnsweredQ
 		t.Fatalf("expected human answer to be accepted")
 	}
 
-	builder := newSessionHistoryBuilder(
+	builder := sessionturn.NewSessionHistoryBuilder(
 		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
@@ -159,7 +160,7 @@ func TestSessionHistoryBuilder_ProjectsToolSearchLoadSpanForModel(t *testing.T) 
 		Text:       agent.FormatToolResult("read_file", "trace-keep-2", "File: two.txt", nil),
 	})
 
-	builder := newSessionHistoryBuilder(
+	builder := sessionturn.NewSessionHistoryBuilder(
 		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
@@ -204,7 +205,7 @@ func TestSessionHistoryBuilder_KeepsToolSearchSearchSpanUnchanged(t *testing.T) 
 		),
 	})
 
-	builder := newSessionHistoryBuilder(
+	builder := sessionturn.NewSessionHistoryBuilder(
 		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
@@ -251,7 +252,7 @@ func TestSessionHistoryBuilder_DropsOrphanToolMessageAfterCompletedAnswer(t *tes
 		Text:       agent.FormatToolResult("bash_exec", "trace-orphan-1", "orphan", nil),
 	})
 
-	builder := newSessionHistoryBuilder(
+	builder := sessionturn.NewSessionHistoryBuilder(
 		bridgeconfig.ProviderConfig{Type: llm.ProviderOpenAI, Model: "gpt-4o"},
 		"system",
 		nil,
@@ -283,7 +284,7 @@ func TestProjectMessagesForModelKeepsRecentTwoCompressibleSpansRaw(t *testing.T)
 	messages = append(messages, toolSpan("c2", "web_search", `{"query":"second"}`, webSearchJSON("Beta"))...)
 	messages = append(messages, toolSpan("c3", "web_search", `{"query":"third"}`, webSearchJSON("Gamma"))...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-recent"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-recent"})
 
 	assertNoOrphanToolResults(t, projected)
 	if len(projected) != 6 {
@@ -306,7 +307,7 @@ func TestProjectMessagesForModelPreservesReadFileBody(t *testing.T) {
 	messages = append(messages, toolSpan("keep-1", "web_search", `{"query":"latest one"}`, webSearchJSON("One"))...)
 	messages = append(messages, toolSpan("keep-2", "web_search", `{"query":"latest two"}`, webSearchJSON("Two"))...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-read"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-read"})
 
 	if !strings.Contains(projected[1].Text, "File: main.go") {
 		t.Fatalf("expected compressed read_file to keep path, got %q", projected[1].Text)
@@ -325,7 +326,7 @@ func TestProjectMessagesForModelRemovesScreenImageContentFromOldSpan(t *testing.
 	messages = append(messages, toolSpan("keep-1", "read_file", `{"path":"one.txt"}`, readFileOutput())...)
 	messages = append(messages, toolSpan("keep-2", "read_file", `{"path":"two.txt"}`, readFileOutput())...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-screen"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-screen"})
 
 	if len(projected[1].Content) != 0 {
 		t.Fatalf("expected compressed screen span to drop image content, got %+v", projected[1].Content)
@@ -344,7 +345,7 @@ func TestProjectMessagesForModelUsesStructuredScriptExecSummary(t *testing.T) {
 	messages = append(messages, toolSpan("keep-1", "read_file", `{"path":"one.txt"}`, readFileOutput())...)
 	messages = append(messages, toolSpan("keep-2", "read_file", `{"path":"two.txt"}`, readFileOutput())...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-script"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-script"})
 
 	if !strings.Contains(projected[1].Text, "script_exec steps=2 failed=0 writes=1") {
 		t.Fatalf("expected structured script_exec summary, got %q", projected[1].Text)
@@ -360,7 +361,7 @@ func TestProjectMessagesForModelUsesCodexCLIFinalMessage(t *testing.T) {
 	messages = append(messages, toolSpan("keep-1", "read_file", `{"path":"one.txt"}`, readFileOutput())...)
 	messages = append(messages, toolSpan("keep-2", "read_file", `{"path":"two.txt"}`, readFileOutput())...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-codex"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-codex"})
 
 	if !strings.Contains(projected[1].Text, `result="child completed cleanly"`) {
 		t.Fatalf("expected codex final message in summary, got %q", projected[1].Text)
@@ -376,7 +377,7 @@ func TestProjectMessagesForModelPreservesErrorDetails(t *testing.T) {
 	messages = append(messages, toolSpan("keep-1", "read_file", `{"path":"one.txt"}`, readFileOutput())...)
 	messages = append(messages, toolSpan("keep-2", "read_file", `{"path":"two.txt"}`, readFileOutput())...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-error"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-error"})
 
 	if !strings.Contains(projected[1].Text, "web_search error: search backend unavailable") {
 		t.Fatalf("expected compressed error text, got %q", projected[1].Text)
@@ -387,7 +388,7 @@ func TestProjectMessagesForModelLeavesNonTargetToolSpanUntouched(t *testing.T) {
 	messages := []llm.Message{{Role: llm.RoleSystem, Text: "system"}}
 	messages = append(messages, toolSpan("ask-1", "ask_human", `{"prompt":"Ship?"}`, `{"status":"awaiting_human"}`)...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-nontarget"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-nontarget"})
 
 	if len(projected) != len(messages) {
 		t.Fatalf("expected non-target span to stay unchanged, got %d messages", len(projected))
@@ -408,7 +409,7 @@ func TestProjectMessagesForModelLogsSkipOnUnsupportedPayload(t *testing.T) {
 	messages = append(messages, toolSpan("keep-1", "read_file", `{"path":"one.txt"}`, readFileOutput())...)
 	messages = append(messages, toolSpan("keep-2", "read_file", `{"path":"two.txt"}`, readFileOutput())...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-bad"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-bad"})
 
 	if len(projected) != len(messages) {
 		t.Fatalf("expected unsupported span to stay raw, got %d messages", len(projected))
@@ -424,10 +425,10 @@ func TestProjectMessagesForModelReducesTokenEstimate(t *testing.T) {
 	messages = append(messages, toolSpan("c2", "web_search", `{"query":"two"}`, longWebSearchJSON())...)
 	messages = append(messages, toolSpan("c3", "web_search", `{"query":"three"}`, longWebSearchJSON())...)
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-budget"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-budget"})
 
-	if estimateMessagesTokens(projected) >= estimateMessagesTokens(messages) {
-		t.Fatalf("expected token estimate to drop: before=%d after=%d", estimateMessagesTokens(messages), estimateMessagesTokens(projected))
+	if sessionturn.EstimateMessagesTokens(projected) >= sessionturn.EstimateMessagesTokens(messages) {
+		t.Fatalf("expected token estimate to drop: before=%d after=%d", sessionturn.EstimateMessagesTokens(messages), sessionturn.EstimateMessagesTokens(projected))
 	}
 }
 
@@ -466,7 +467,7 @@ func TestProjectMessagesForModelKeepsReasoningReplayTurnRaw(t *testing.T) {
 		{Role: llm.RoleAssistant, Text: "done"},
 	}
 
-	projected := projectMessagesForModel(messages, messageProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-replay"})
+	projected := sessionturn.ProjectMessagesForModel(messages, sessionturn.ProjectionOptions{MicrocompactEnabled: true, TraceID: "trace-replay"})
 
 	if len(projected) != len(messages) {
 		t.Fatalf("expected reasoning replay turn to remain raw, got %d want %d", len(projected), len(messages))

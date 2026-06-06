@@ -6,6 +6,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	apptools "ghost-os/bridge/orchestration/internal/app/tools"
 	bridgeruntime "ghost-os/bridge/runtime"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
@@ -327,21 +328,21 @@ func TestSessionPushEventMatchesSharedContract(t *testing.T) {
 }
 
 func TestNormalizeConfiguredToolLists_RejectsOverlap(t *testing.T) {
-	_, _, err := normalizeConfiguredToolLists([]string{"script_exec"}, []string{"script_exec"})
+	_, _, err := apptools.NormalizeConfiguredToolLists([]string{"script_exec"}, []string{"script_exec"})
 	if err == nil {
 		t.Fatal("expected overlap error")
 	}
 }
 
 func TestNormalizeConfiguredToolLists_RejectsUnknownTool(t *testing.T) {
-	_, _, err := normalizeConfiguredToolLists([]string{"ghost_tool"}, nil)
+	_, _, err := apptools.NormalizeConfiguredToolLists([]string{"ghost_tool"}, nil)
 	if err == nil {
 		t.Fatal("expected unknown tool error")
 	}
 }
 
 func TestNormalizeConfiguredToolLists_AllowsCodexCLI(t *testing.T) {
-	allowlist, blocklist, err := normalizeConfiguredToolLists([]string{"codex_cli"}, nil)
+	allowlist, blocklist, err := apptools.NormalizeConfiguredToolLists([]string{"codex_cli"}, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -354,7 +355,7 @@ func TestNormalizeConfiguredToolLists_AllowsCodexCLI(t *testing.T) {
 }
 
 func TestNormalizeConfiguredToolLists_AllowsBlockingAskHumanAndToolSearch(t *testing.T) {
-	allowlist, blocklist, err := normalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec", "sfind"})
+	allowlist, blocklist, err := apptools.NormalizeConfiguredToolLists(nil, []string{"ask_human", "script_exec", "sfind"})
 	if err != nil {
 		t.Fatalf("normalizeConfiguredToolLists: %v", err)
 	}

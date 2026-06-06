@@ -3,18 +3,18 @@ package workflow
 import (
 	"fmt"
 
-	bridgeTasks "ghost-os/bridge/tasks"
+	taskdefs "ghost-os/bridge/taskdefs"
 )
 
 func validateConnectivity(index NodeIndex, graph Graph) error {
 	fromStart := traverse(index.startID, graph.outgoing)
 	if len(fromStart) != len(index.nodes) {
-		return fmt.Errorf("%w: workflow must be fully connected from start node", bridgeTasks.ErrInvalidTaskConfig)
+		return fmt.Errorf("%w: workflow must be fully connected from start node", taskdefs.ErrInvalidTaskConfig)
 	}
 	toEnd := traverse(index.endID, graph.incoming)
 	for nodeID := range index.nodes {
 		if !toEnd[nodeID] {
-			return fmt.Errorf("%w: workflow node %q cannot reach end node", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+			return fmt.Errorf("%w: workflow node %q cannot reach end node", taskdefs.ErrInvalidTaskConfig, nodeID)
 		}
 	}
 	return validateLoopCycles(index, graph)
@@ -28,7 +28,7 @@ func validateLoopCycles(index NodeIndex, graph Graph) error {
 		if pathExists(graph.outgoing, node.Loop.BodyNodeID, nodeID) {
 			continue
 		}
-		return fmt.Errorf("%w: workflow loop node %q body path must return to the loop node", bridgeTasks.ErrInvalidTaskConfig, nodeID)
+		return fmt.Errorf("%w: workflow loop node %q body path must return to the loop node", taskdefs.ErrInvalidTaskConfig, nodeID)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/orchestration/internal/domain/sessionturn"
 	"ghost-os/bridge/tools"
 	"os"
 	"strings"
@@ -123,7 +124,7 @@ func TestMessagesWithSystemPromptReplacesFirstSystemMessage(t *testing.T) {
 		},
 	}
 
-	got := messagesWithSystemPrompt(input, "new prompt")
+	got := sessionturn.MessagesWithSystemPrompt(input, "new prompt")
 
 	if len(got) != 2 {
 		t.Fatalf("unexpected message count: got %d want %d", len(got), 2)
@@ -147,7 +148,7 @@ func TestMessagesWithSystemPromptPrependsWhenMissing(t *testing.T) {
 		},
 	}
 
-	got := messagesWithSystemPrompt(input, "system prompt")
+	got := sessionturn.MessagesWithSystemPrompt(input, "system prompt")
 
 	if len(got) != 2 {
 		t.Fatalf("unexpected message count: got %d want %d", len(got), 2)
@@ -211,9 +212,8 @@ func TestExecuteAgentActionTreatsProPrefixAsStandardMessage(t *testing.T) {
 	service.runtimeFactory = testRuntimeFactory{
 		deps: agentRuntimeDependencies{
 			cfg: bridgeconfig.Config{
-				MaxTurns:         4,
-				ProMaxIterations: 1,
-				Provider:         bridgeconfig.ProviderConfig{Model: "gpt-4o"},
+				MaxTurns: 4,
+				Provider: bridgeconfig.ProviderConfig{Model: "gpt-4o"},
 			},
 			client:       completer,
 			registry:     tools.NewRegistry(),
@@ -235,8 +235,8 @@ func TestExecuteAgentActionTreatsProPrefixAsStandardMessage(t *testing.T) {
 		t.Fatalf("unexpected outcome: %s", payloadResult.Outcome)
 	}
 	payload := payloadResult.Payload.(agentResponse)
-	if payload.Mode != "" || payload.StoppedBy != "" || payload.IterationCount != 0 {
-		t.Fatalf("expected standard response without pro fields, got %+v", payload)
+	if payload.Mode != "" {
+		t.Fatalf("expected standard response mode, got %+v", payload)
 	}
 	if payload.Message != "standard response" {
 		t.Fatalf("unexpected message: %q", payload.Message)
@@ -292,9 +292,6 @@ func TestExecuteAgentActionRunsPlanModeWithExplicitModePriority(t *testing.T) {
 	}
 	if payload.Mode != agentModePlan {
 		t.Fatalf("unexpected mode: got %q want %q", payload.Mode, agentModePlan)
-	}
-	if payload.IterationCount != 0 || payload.StoppedBy != "" {
-		t.Fatalf("plan mode should not carry pro fields: %+v", payload)
 	}
 	if len(completer.requests) != 1 {
 		t.Fatalf("unexpected complete request count: %d", len(completer.requests))
@@ -445,7 +442,6 @@ func (f *projectRootCaptureFactory) Build(store bridgeconfig.Store) (agentRuntim
 		return agentRuntimeDependencies{}, err
 	}
 	cfg.MaxTurns = 4
-	cfg.ProMaxIterations = 2
 	f.projectRoots = append(f.projectRoots, cfg.ProjectRoot)
 	return agentRuntimeDependencies{
 		cfg:          cfg,

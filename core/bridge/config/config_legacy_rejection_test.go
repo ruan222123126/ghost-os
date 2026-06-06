@@ -88,3 +88,32 @@ func TestRuntimeConfigFromEnvRejectsRemovedGraphQLEnvVars(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestLoadBridgeFileConfigRejectsRemovedProMaxIterations(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+
+	if err := os.WriteFile(configPath, []byte(`pro_max_iterations = 20`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, _, err := loadBridgeFileConfig()
+	if err == nil {
+		t.Fatal("expected removed pro config error")
+	}
+	if !strings.Contains(err.Error(), "pro_max_iterations") {
+		t.Fatalf("expected error to mention pro_max_iterations, got %v", err)
+	}
+}
+
+func TestRuntimeConfigFromEnvRejectsRemovedProMaxIterations(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	t.Setenv("GHOST_CONFIG_PATH", configPath)
+	t.Setenv("GHOST_PRO_MAX_ITERATIONS", "20")
+
+	if _, err := runtimeConfigFromEnv(); err == nil {
+		t.Fatal("expected removed pro env config error")
+	} else if !strings.Contains(err.Error(), "GHOST_PRO_MAX_ITERATIONS") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

@@ -87,31 +87,6 @@
         "kotlin": { "name": "AgentRequest" }
       }
     },
-    "agentIterationSummaryItem": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "iteration",
-        "did",
-        "remaining"
-      ],
-      "properties": {
-        "iteration": { "type": "integer", "minimum": 1 },
-        "did": { "type": "string", "minLength": 1 },
-        "remaining": { "type": "string", "minLength": 1 },
-        "completed": { "type": "boolean" },
-        "trace_id": { "type": "string" },
-        "recorded_at": { "type": "string" },
-        "final_change_log": { "type": "string" }
-      },
-      "x-codegen": {
-        "order": 30,
-        "go": { "name": "agentIterationSummaryItem" },
-        "ts": { "name": "AgentIterationSummaryItem" },
-        "rust": { "name": "AgentIterationSummaryItem" },
-        "kotlin": { "name": "AgentIterationSummaryItem" }
-      }
-    },
     "agentResponsePayload": {
       "type": "object",
       "additionalProperties": false,
@@ -137,22 +112,6 @@
           "enum": [
             "plan"
           ]
-        },
-        "iteration_count": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "stopped_by": {
-          "type": "string"
-        },
-        "final_change_log": {
-          "type": "string"
-        },
-        "iteration_summary": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/agentIterationSummaryItem"
-          }
         },
         "session_end": {
           "oneOf": [

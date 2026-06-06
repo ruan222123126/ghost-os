@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	bridgeconfig "ghost-os/bridge/config"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
@@ -50,7 +51,7 @@ func (r taskMutationRunner) validateTaskRuntime(task *ScheduledTask) error {
 }
 
 func validateAgentTaskRuntime(task *ScheduledTask, store bridgeconfig.Store) error {
-	overrides, err := normalizeTaskRuntimeOverrides(task.RuntimeOverrides)
+	overrides, err := apptasks.NormalizeTaskRuntimeOverrides(task.RuntimeOverrides)
 	if err != nil {
 		return invalidTaskConfig(err.Error())
 	}
@@ -159,7 +160,7 @@ func validateWorkflowAgentRuntime(definition *WorkflowDefinition, store bridgeco
 		if node.Type != workflowNodeTypeAgent || node.Agent == nil {
 			continue
 		}
-		overrides, err := normalizeWorkflowAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
+		overrides, err := apptasks.NormalizeWorkflowAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
 		if err != nil {
 			return invalidTaskConfig(fmt.Sprintf("workflow agent node %q %v", node.ID, err))
 		}
@@ -180,7 +181,7 @@ func validateOrchestrationAgentRuntime(definition *OrchestrationDefinition, stor
 		if node.Type != orchestrationNodeTypeAgent || node.Agent == nil {
 			continue
 		}
-		overrides, err := normalizeOrchestrationAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
+		overrides, err := apptasks.NormalizeOrchestrationAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
 		if err != nil {
 			return invalidTaskConfig(fmt.Sprintf("orchestration agent node %q %v", node.ID, err))
 		}

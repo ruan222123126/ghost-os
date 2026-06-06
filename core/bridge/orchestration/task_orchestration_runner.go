@@ -11,6 +11,7 @@ import (
 	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
 	appagentturn "ghost-os/bridge/orchestration/internal/app/agentturn"
 	apporchestrations "ghost-os/bridge/orchestration/internal/app/orchestrations"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	groupdomain "ghost-os/bridge/orchestration/internal/domain/group"
 	"ghost-os/bridge/orchestration/internal/ports"
 	bridgeTasks "ghost-os/bridge/tasks"
@@ -114,7 +115,7 @@ func normalizeOrchestrationDefinitionRuntimeOverrides(definition *OrchestrationD
 		if node.Type != orchestrationNodeTypeAgent || node.Agent == nil {
 			continue
 		}
-		overrides, err := normalizeOrchestrationAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
+		overrides, err := apptasks.NormalizeOrchestrationAgentRuntimeOverrides(node.Agent.RuntimeOverrides)
 		if err != nil {
 			return fmt.Errorf("%w: orchestration agent node %q %v", ErrInvalidTaskConfig, node.ID, err)
 		}
