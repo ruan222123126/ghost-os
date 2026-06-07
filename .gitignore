@@ -45,6 +45,7 @@ data/logs/*
 # Agent scratch artifacts.
 core/bridge/.codex*/
 core/bridge/.codex*
+core/bridge/.ghost/
 core/bridge/.relay/
 core/bridge/**/*.exit
 core/bridge/codex*/
@@ -55,6 +56,7 @@ core/bridge/phase0_*.txt*
 core/bridge/round*_codex.txt*
 core/bridge/stage1-deletion-report.md
 core/bridge/tmp/
+/tmp_apply_diff_test.txt
 
 # Temporary dev scripts.
 weather_now.py
