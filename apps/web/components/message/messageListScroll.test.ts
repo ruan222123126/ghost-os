@@ -14,7 +14,7 @@ import {
   resolvePostSendOverflowDecision,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
-import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
+import type { StreamingMessageRow } from '@/lib/chat-view/types';
 
 function buildStreamingRow(message: ChatMessage): StreamingMessageRow {
   return {
@@ -80,6 +80,20 @@ describe('components/message/messageListScroll', () => {
     )).toBe(true);
   });
 
+  it('keeps the post-send lock when the user scrolls down into temporary spacer', () => {
+    expect(resolveMessageListAutoFollow(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 560,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+      },
+    )).toBe(true);
+  });
+
   it('releases auto-follow once the user drags away from the post-send anchor lock', () => {
     expect(resolveMessageListAutoFollow(
       {
@@ -114,6 +128,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' }),
@@ -127,6 +142,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking more' }),
@@ -139,6 +155,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' }),
@@ -151,6 +168,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' }),
@@ -170,6 +188,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' })],
     });
@@ -178,6 +197,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' })],
     });
@@ -191,6 +211,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: null,
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [],
     });
@@ -199,6 +220,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: null,
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({
@@ -218,6 +240,7 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: null,
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
+      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [],
     });

@@ -2,7 +2,13 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import TestRenderer, { act } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import type { AssistantChatMessage, EventChatMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
+import type {
+  AssistantChatMessage,
+  EventChatMessage,
+  ThinkingChatMessage,
+  ToolChatMessage,
+  UserChatMessage,
+} from '@/lib/types';
 import type { MessageRowProps } from './types';
 import { MessageRow } from './MessageRow';
 
@@ -54,7 +60,6 @@ describe('components/message/MessageRow', () => {
     const html = renderMessageRow({
       message,
       assistantMarkdownEnabled: true,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       isToolCardOpen: false,
       onAnswerQuestion: async () => undefined,
@@ -68,6 +73,38 @@ describe('components/message/MessageRow', () => {
     expect(html).toContain('generated-image.png');
   });
 
+  it('renders file action tool cards without terminal icon or status-prefixed title', () => {
+    const message: ToolChatMessage = {
+      id: 'tool-read',
+      kind: 'tool',
+      content: 'package main',
+      toolName: 'read_file',
+      toolStatus: 'success',
+    };
+
+    const html = renderMessageRow({
+      message,
+      toolCard: {
+        title: '阅读文件 /tmp/main.go',
+        tone: 'success',
+        statusLabel: 'SUCCESS',
+        details: 'package main',
+        titleMode: 'plain',
+        showTerminalIcon: false,
+      },
+      assistantMarkdownEnabled: true,
+      loading: false,
+      isToolCardOpen: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+      onToggleToolCard: () => undefined,
+    });
+
+    expect(html).toContain('阅读文件 /tmp/main.go');
+    expect(html).not.toContain('Ran 阅读文件');
+    expect(html).not.toContain('tool-terminal-icon');
+  });
+
   it('passes assistant markdown toggle to markdown renderer', () => {
     const message: AssistantChatMessage = {
       id: 'assistant-1',
@@ -78,7 +115,6 @@ describe('components/message/MessageRow', () => {
     renderMessageRow({
       message,
       assistantMarkdownEnabled: false,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
@@ -102,13 +138,13 @@ describe('components/message/MessageRow', () => {
     const html = renderMessageRow({
       message,
       assistantMarkdownEnabled: true,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
     });
 
     expect(html).not.toContain('copy-button');
+    expect(html).not.toContain('message-draft-flag');
     expect(assistantMarkdownMock).toHaveBeenCalledWith(expect.objectContaining({
       content: 'partial answer',
       showCopyButton: false,
@@ -125,7 +161,6 @@ describe('components/message/MessageRow', () => {
     const html = renderMessageRow({
       message,
       assistantMarkdownEnabled: true,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
@@ -145,7 +180,6 @@ describe('components/message/MessageRow', () => {
     const html = renderMessageRow({
       message,
       assistantMarkdownEnabled: true,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
@@ -170,7 +204,6 @@ describe('components/message/MessageRow', () => {
       const renderer = renderMessageRowClient({
         message,
         assistantMarkdownEnabled: true,
-        toolCallCompactOutputEnabled: false,
         loading: false,
         onAnswerQuestion: async () => undefined,
         onCancelQuestion: async () => undefined,
@@ -218,7 +251,6 @@ describe('components/message/MessageRow', () => {
       message,
       assistantMarkdownEnabled: true,
       hasTrailingTool: true,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
@@ -226,6 +258,55 @@ describe('components/message/MessageRow', () => {
 
     expect(html).toContain('message-assistant-frame has-trailing-tool');
     expect(html).toContain('message-actions is-inline-with-body');
+  });
+
+  it('renders completed thinking content as a collapsible row with a stopped title', () => {
+    const message: ThinkingChatMessage = {
+      id: 'thinking-1',
+      kind: 'thinking',
+      content: 'reasoning detail',
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      isThinkingPanelOpen: false,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+      onToggleThinkingPanel: () => undefined,
+    });
+
+    expect(html).toContain('thinking-panel');
+    expect(html).toContain('is-complete');
+    expect(html).toContain('thinking-panel-chevron');
+    expect(html).toContain('Thought');
+    expect(html).not.toContain('thinking-sweep-text">Thought');
+    expect(html).not.toContain('thinking-dots');
+    expect(html).not.toContain('reasoning detail');
+  });
+
+  it('keeps active thinking content animated with the running title', () => {
+    const message: ThinkingChatMessage = {
+      id: 'thinking-active',
+      kind: 'thinking',
+      content: 'reasoning detail',
+      inProgress: true,
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      isThinkingPanelOpen: false,
+      loading: true,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+      onToggleThinkingPanel: () => undefined,
+    });
+
+    expect(html).toContain('is-active');
+    expect(html).toContain('Thinking');
+    expect(html).toContain('thinking-panel-title thinking-sweep-text');
   });
 
   it('renders task run events as a divider row', () => {
@@ -238,7 +319,6 @@ describe('components/message/MessageRow', () => {
     const html = renderMessageRow({
       message,
       assistantMarkdownEnabled: true,
-      toolCallCompactOutputEnabled: false,
       loading: false,
       onAnswerQuestion: async () => undefined,
       onCancelQuestion: async () => undefined,
@@ -287,6 +367,18 @@ function renderMessageRowClient(
 }
 
 function withMessageRowDefaults(props: MessageRowTestProps): MessageRowProps {
+  if (props.message.kind === 'tool' && !props.toolCard) {
+    return {
+      ...props,
+      toolCard: {
+        title: props.message.toolName ?? 'Tool',
+        tone: 'success',
+        statusLabel: 'SUCCESS',
+        details: props.message.content,
+      },
+    };
+  }
+
   return props;
 }
 

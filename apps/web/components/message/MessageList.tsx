@@ -2,13 +2,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { FC } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { MessageListRow } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { MessageRow } from './MessageRow';
-import {
-  estimateMessageRowSize,
-  getMessageListRowAtIndex,
-  getMessageListRowCount,
-} from './messageListRows';
 import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
 import {
   buildMessageListLayoutSignature,
@@ -17,89 +13,54 @@ import {
   hasVisibleContentAfterIndex,
   shouldReleasePostSendAnchor,
 } from './messageListScroll';
-import { filterCommittedMessagesForDisplay } from './messageVisibility';
-import { getOrderedStreamingRows, type StreamingMessageRow } from '@/lib/chat-view/streamingRows';
 import { ThinkingIndicator } from './ThinkingIndicator';
-import {
-  getLatestStreamingThinkingId,
-  hasAssistantStreamedVisibleText,
-  hasStreamingThinkingText,
-  shouldAutoCollapseThinkingPanel,
-  shouldShowThinkingIndicator,
-} from './thinkingState';
-import type { MessageListProps, MessageListRow } from './types';
+import type { MessageListProps } from './types';
 import { useMessageListScroll } from './useMessageListScroll';
 
 const MESSAGE_LIST_OVERSCAN = 8;
+const PROCESSING_TIMER_INTERVAL_MS = 1000;
 
 export const MessageList: FC<MessageListProps> = ({
-  committedMessages,
-  showSystemPromptMessages,
+  view,
   assistantMarkdownEnabled,
-  toolCallCompactOutputEnabled,
-  streamingAssistantSegments,
-  streamingThinkingSegments,
-  streamingItemOrder,
-  streamingTools,
-  pendingQuestions,
-  loading,
-  loadingOlderHistory,
   hasOlderHistory,
   loadOlderHistory,
   onAnswerQuestion,
   onCancelQuestion,
 }) => {
-  const { copy } = useWebLocale();
+  const { copy, locale } = useWebLocale();
   const [openToolCards, setOpenToolCards] = useState<Record<string, boolean>>({});
   const [openThinkingPanels, setOpenThinkingPanels] = useState<Record<string, boolean>>({});
   const latestStreamingThinkingIdRef = useRef('');
   const previousHasAssistantTextRef = useRef(false);
   const thinkingAutoCollapsedRef = useRef(false);
-  const visibleCommittedMessages = filterCommittedMessagesForDisplay(
-    committedMessages,
-    pendingQuestions,
-    showSystemPromptMessages,
-  );
+  const {
+    estimatedRowSize,
+    hasAssistantText,
+    latestStreamingThinkingId,
+    loading,
+    loadingOlderHistory,
+    rowCount,
+    rows,
+    showThinkingIndicator,
+    shouldAutoCollapseLatestThinkingPanel,
+    streamingRows,
+    visibleCommittedMessages,
+    visibleMessagesForPostSendOverflow,
+  } = view;
+  const processingElapsedSeconds = useProcessingElapsedSeconds(loading);
   const visibleMessageTailRef = useRef<ReturnType<typeof buildVisibleMessageTailSnapshot> | null>(
     visibleCommittedMessages.length === 0 ? buildVisibleMessageTailSnapshot(visibleCommittedMessages) : null,
   );
   const [postSendAnchorIndex, setPostSendAnchorIndex] = useState<number | null>(null);
   const [postSendToken, setPostSendToken] = useState(0);
-  const streamingRows = getOrderedStreamingRows({
-    pendingQuestions,
-    streamingAssistantSegments,
-    streamingThinkingSegments,
-    streamingItemOrder,
-    streamingTools,
-  });
-  const hasThinkingText = hasStreamingThinkingText(streamingThinkingSegments);
-  const hasAssistantText = hasAssistantStreamedVisibleText(streamingAssistantSegments);
-  const latestStreamingThinkingId = getLatestStreamingThinkingId(streamingThinkingSegments);
   const latestStreamingThinkingPanelOpen = latestStreamingThinkingId
     ? Boolean(openThinkingPanels[latestStreamingThinkingId])
     : false;
-  const showThinkingIndicator = shouldShowThinkingIndicator({
-    loading,
-    streamingThinkingSegments,
-    streamingAssistantSegments,
-    streamingTools,
-  });
-  const messageRowSource = {
-    committedMessages: visibleCommittedMessages,
-    showThinkingIndicator,
-    loadingOlderHistory,
-    streamingRows,
-  };
-  const rowCount = getMessageListRowCount(
-    visibleCommittedMessages,
-    streamingRows,
-    showThinkingIndicator,
-    loadingOlderHistory,
-  );
   const rowVirtualizer = useVirtualizer({
     count: rowCount,
-    estimateSize: estimateMessageRowSize,
-    getItemKey: (index) => getMessageListRowAtIndex(index, messageRowSource).key,
+    estimateSize: () => estimatedRowSize,
+    getItemKey: (index) => rows[index].key,
     getScrollElement: () => scrollElementRef.current,
     overscan: MESSAGE_LIST_OVERSCAN,
     useAnimationFrameWithResizeObserver: true,
@@ -111,15 +72,12 @@ export const MessageList: FC<MessageListProps> = ({
     latestStreamingThinkingId,
     latestStreamingThinkingPanelOpen,
     loadingOlderHistory,
+    showProcessingTimer: loading,
     showThinkingIndicator,
     streamingRows,
   });
-  const visibleRowsForPostSendOverflow = [
-    ...visibleCommittedMessages,
-    ...streamingRows.map((row) => row.message),
-  ];
   const postSendHasVisibleContent = hasVisibleContentAfterIndex(
-    visibleRowsForPostSendOverflow,
+    visibleMessagesForPostSendOverflow,
     postSendAnchorIndex,
   );
   const { scrollElementRef, trailingSpacerPx } = useMessageListScroll({
@@ -188,12 +146,11 @@ export const MessageList: FC<MessageListProps> = ({
       thinkingAutoCollapsedRef.current = false;
     }
 
-    if (shouldAutoCollapseThinkingPanel({
-      hasThinkingText,
-      hasAssistantText,
-      hadAssistantText: previousHasAssistantTextRef.current,
-      alreadyAutoCollapsed: thinkingAutoCollapsedRef.current,
-    })) {
+    if (
+      shouldAutoCollapseLatestThinkingPanel
+      && !previousHasAssistantTextRef.current
+      && !thinkingAutoCollapsedRef.current
+    ) {
       setOpenThinkingPanels((previous) => ({
         ...previous,
         [latestStreamingThinkingId]: false,
@@ -202,7 +159,7 @@ export const MessageList: FC<MessageListProps> = ({
     }
 
     previousHasAssistantTextRef.current = hasAssistantText;
-  }, [hasAssistantText, hasThinkingText, latestStreamingThinkingId]);
+  }, [hasAssistantText, latestStreamingThinkingId, shouldAutoCollapseLatestThinkingPanel]);
 
   if (rowCount === 0) {
     return <div ref={scrollElementRef} className="messages is-empty" aria-live="polite" />;
@@ -214,12 +171,12 @@ export const MessageList: FC<MessageListProps> = ({
         style={{ height: rowVirtualizer.getTotalSize() + trailingSpacerPx }}
       >
         {virtualItems.map((virtualItem) => {
-          const row = getMessageListRowAtIndex(virtualItem.index, messageRowSource);
+          const row = rows[virtualItem.index];
           const hasTrailingTool = shouldPlaceAssistantCopyInline(
             row,
             virtualItem.index,
             rowCount,
-            (index) => getMessageListRowAtIndex(index, messageRowSource),
+            (index) => rows[index],
           );
 
           return (
@@ -234,8 +191,10 @@ export const MessageList: FC<MessageListProps> = ({
                 copy,
                 assistantMarkdownEnabled,
                 hasTrailingTool,
-                toolCallCompactOutputEnabled,
                 loading,
+                processingElapsedText: copy.chat.processingElapsed(
+                  formatProcessingElapsedDuration(processingElapsedSeconds, locale),
+                ),
                 openToolCards,
                 onAnswerQuestion,
                 onCancelQuestion,
@@ -257,8 +216,8 @@ function renderRow(
     copy: ReturnType<typeof useWebLocale>['copy'];
     assistantMarkdownEnabled: boolean;
     hasTrailingTool: boolean;
-    toolCallCompactOutputEnabled: boolean;
     loading: boolean;
+    processingElapsedText: string;
     onAnswerQuestion: MessageListProps['onAnswerQuestion'];
     onCancelQuestion: MessageListProps['onCancelQuestion'];
     onToggleThinkingPanel: (messageId: string) => void;
@@ -274,15 +233,17 @@ function renderRow(
           <div className="message-note is-history-loading">{options.copy.chat.loadingOlderMessages}</div>
         </div>
       );
+    case 'processing_timer':
+      return <ProcessingTimeDivider text={options.processingElapsedText} />;
     case 'thinking_indicator':
       return <ThinkingIndicator />;
     case 'message':
       return (
         <MessageRow
           message={row.message}
+          toolCard={row.toolCard}
           assistantMarkdownEnabled={options.assistantMarkdownEnabled}
           hasTrailingTool={options.hasTrailingTool}
-          toolCallCompactOutputEnabled={options.toolCallCompactOutputEnabled}
           isToolCardOpen={Boolean(options.openToolCards[row.message.id])}
           isThinkingPanelOpen={Boolean(options.openThinkingPanels[row.message.id])}
           loading={options.loading}
@@ -295,4 +256,54 @@ function renderRow(
     default:
       return null;
   }
+}
+
+const ProcessingTimeDivider: FC<{ text: string }> = ({ text }) => (
+  <div className="message-row is-processing-time">
+    <div className="processing-time-divider">
+      <span>{text}</span>
+      <div aria-hidden="true" />
+    </div>
+  </div>
+);
+
+function useProcessingElapsedSeconds(loading: boolean): number {
+  const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!loading) {
+      setStartedAtMs(null);
+      return;
+    }
+
+    const startedAt = Date.now();
+    setStartedAtMs(startedAt);
+    setNowMs(startedAt);
+
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, PROCESSING_TIMER_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [loading]);
+
+  if (startedAtMs === null) {
+    return 0;
+  }
+  return Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
+}
+
+function formatProcessingElapsedDuration(seconds: number, locale: ReturnType<typeof useWebLocale>['locale']): string {
+  const safeSeconds = Math.max(0, seconds);
+  if (safeSeconds < 60) {
+    return `${safeSeconds}s`;
+  }
+
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+  if (locale === 'zh-CN') {
+    return remainingSeconds === 0 ? `${minutes}分` : `${minutes}分 ${remainingSeconds}s`;
+  }
+  return remainingSeconds === 0 ? `${minutes}m` : `${minutes}m ${remainingSeconds}s`;
 }

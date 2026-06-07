@@ -51,6 +51,7 @@ type agentToolCallStartedPayload = api.AgentToolCallStartedPayload
 type sessionToolResult = api.SessionToolResult
 type agentToolCallFinishedPayload = api.AgentToolCallFinishedPayload
 type sessionHumanInteraction = api.SessionHumanInteraction
+type agentAwaitingHumanStreamPayload = api.AgentAwaitingHumanStreamPayload
 type agentStreamMessagePayload = api.AgentStreamMessagePayload
 type sessionMessage = api.SessionMessage
 type agentDonePayload = api.AgentDonePayload

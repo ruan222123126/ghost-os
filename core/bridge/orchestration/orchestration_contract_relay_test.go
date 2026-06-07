@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
@@ -127,6 +128,50 @@ func TestRelayAIDecidesCanComplete(t *testing.T) {
 	}
 }
 
+func TestRelayClearsTurnDraftOnCompletionHandoff(t *testing.T) {
+	store := newTempSessionStore(t)
+	sess := session.NewSession("system")
+	completer := &proTestCompleter{
+		responses: []*llm.CompletionResponse{
+			relayCompleteResponse("call-relay-complete"),
+		},
+	}
+
+	_, err := runRelayModeTestWithSession(t, store, sess, completer, TaskRelayConfig{
+		StopPolicy: taskRelayStopPolicyAIDecides,
+		MaxRounds:  5,
+	})
+	if err != nil {
+		t.Fatalf("relay run failed: %v", err)
+	}
+
+	assertRelayTurnDraftCleared(t, store, sess.ID)
+}
+
+func TestRelayClearsTurnDraftOnCancellation(t *testing.T) {
+	store := newTempSessionStore(t)
+	sess := session.NewSession("system")
+	completer := &draftStreamingCompleter{
+		deltas: []llm.LLMDelta{
+			{Kind: llm.DeltaKindThinking, Thinking: "still planning"},
+		},
+		runErr: context.Canceled,
+	}
+
+	_, err := runRelayModeTestWithSession(t, store, sess, completer, TaskRelayConfig{
+		StopPolicy: taskRelayStopPolicyAIDecides,
+		MaxRounds:  5,
+	})
+	if err == nil {
+		t.Fatal("expected relay run to be cancelled")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected relay cancellation error: %v", err)
+	}
+
+	assertRelayTurnDraftCleared(t, store, sess.ID)
+}
+
 func TestRelayRepairsPlainTextRoundIntoHandoff(t *testing.T) {
 	completer := &proTestCompleter{
 		responses: []*llm.CompletionResponse{
@@ -217,6 +262,18 @@ func runRelayModeTest(
 
 	store := newTempSessionStore(t)
 	sess := session.NewSession("system")
+	return runRelayModeTestWithSession(t, store, sess, completer, relay)
+}
+
+func runRelayModeTestWithSession(
+	t *testing.T,
+	store *session.Store,
+	sess *session.Session,
+	completer llm.Completer,
+	relay TaskRelayConfig,
+) (apprelay.Result, error) {
+	t.Helper()
+
 	runner := apprelay.Runner{SessionStore: store}
 	deps := apprelay.RuntimeDependencies{
 		Config: bridgeconfig.Config{
@@ -234,6 +291,18 @@ func runRelayModeTest(
 		Session: sess,
 		TraceID: "trace-relay-test",
 	})
+}
+
+func assertRelayTurnDraftCleared(t *testing.T, store *session.Store, sessionID string) {
+	t.Helper()
+
+	loaded, err := store.Load(sessionID)
+	if err != nil {
+		t.Fatalf("load relay session: %v", err)
+	}
+	if loaded.TurnDraft != nil {
+		t.Fatalf("expected relay turn_draft to be cleared, got %+v", loaded.TurnDraft)
+	}
 }
 
 func relayUpdateResponse(callID string, did string, remaining string) *llm.CompletionResponse {

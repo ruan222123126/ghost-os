@@ -152,6 +152,7 @@ export function useChatState(): ChatStateControls {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: view.streamingAssistantSegments,
     streamingThinkingSegments: view.streamingThinkingSegments,
+    activeStreamingThinkingId: view.activeStreamingThinkingId,
     streamingItemOrder: state.streamingItemOrder,
     streamingTools: view.streamingTools,
     pendingQuestions: view.pendingQuestions,

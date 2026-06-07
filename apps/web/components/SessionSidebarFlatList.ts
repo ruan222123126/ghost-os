@@ -1,7 +1,7 @@
 import {
   type SessionSidebarHistoryRow,
 } from '@/components/SessionSidebarHistoryPartitionSection';
-import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
+import type { SessionPartitionView, SessionSearchMatcher } from '@/lib/sessionSidebarPartitions';
 import { compareSessionsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
 import type { SessionMetadata } from '@/lib/types';
 import type { DropTargetState } from './SessionSidebarHistoryPartitionSection';
@@ -9,10 +9,11 @@ import type { DropTargetState } from './SessionSidebarHistoryPartitionSection';
 export function buildFlatSessionList(
   sessions: SessionMetadata[],
   searchQuery: string,
+  matchesSearch: SessionSearchMatcher = defaultSessionSearchMatcher,
 ): SessionMetadata[] {
   const query = searchQuery.trim().toLowerCase();
   return sessions
-    .filter((session) => session.id.toLowerCase().includes(query))
+    .filter((session) => matchesSearch(session, query))
     .sort(compareSessionsByRecentActivity);
 }
 
@@ -212,4 +213,11 @@ function limitPartitionViewBySessionCount(
     },
     remaining: remaining - sessions.length,
   };
+}
+
+function defaultSessionSearchMatcher(
+  session: SessionMetadata,
+  normalizedQuery: string,
+): boolean {
+  return !normalizedQuery || session.id.toLowerCase().includes(normalizedQuery);
 }

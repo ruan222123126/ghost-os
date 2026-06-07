@@ -1,8 +1,10 @@
 import type {
-  TaskCreateRequest as SharedTaskCreateRequest,
-  TaskUpdateRequest as SharedTaskUpdateRequest,
-} from '@/lib/envelope.generated';
-import type { TaskPayload, TaskRunLog, TextTaskCreateRequest } from '@/lib/types';
+  TaskPatchRequest,
+  TaskPayload,
+  TaskRunLog,
+  TextTaskCreateRequest,
+  WorkflowTaskCreateRequest,
+} from '@/lib/types';
 import { requestJSON } from '@/lib/api/client';
 import { parseTaskPayload, parseTaskPayloadList, parseTaskRunLogList } from '@/lib/api/tasks/parser';
 import { parseTaskRunStopResponse } from '@/lib/api/tasks/stopParser';
@@ -10,12 +12,7 @@ import type { TaskRunStopRequest, TaskRunStopResponse } from '@/lib/taskRunStop'
 
 const START_ONLY_QUERY = '?start_only=1';
 
-type WorkflowTaskCreateRequest = Extract<SharedTaskCreateRequest, { task_kind: 'workflow' }>;
-type TaskCreateRequest = WorkflowTaskCreateRequest | TextTaskCreateRequest;
-type TaskUpdateRequest = Pick<
-  SharedTaskUpdateRequest,
-  'message' | 'session_id' | 'runtime_overrides' | 'agent_mode' | 'relay' | 'interval_seconds' | 'cron_expr' | 'enabled' | 'task_kind' | 'workflow'
->;
+type UserTaskCreateRequest = TextTaskCreateRequest | WorkflowTaskCreateRequest;
 
 export async function listTasks(): Promise<TaskPayload[]> {
   return requestJSON('/api/tasks', {}, parseTaskPayloadList);
@@ -25,14 +22,14 @@ export async function getTask(id: string): Promise<TaskPayload> {
   return requestJSON(`/api/tasks/${encodeURIComponent(id)}`, {}, parseTaskPayload);
 }
 
-export async function createTask(input: TaskCreateRequest): Promise<TaskPayload> {
+export async function createTask(input: UserTaskCreateRequest): Promise<TaskPayload> {
   return requestJSON('/api/tasks', {
     method: 'POST',
     body: JSON.stringify(input),
   }, parseTaskPayload);
 }
 
-export async function updateTask(id: string, input: TaskUpdateRequest): Promise<TaskPayload> {
+export async function updateTask(id: string, input: TaskPatchRequest): Promise<TaskPayload> {
   return requestJSON(`/api/tasks/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     body: JSON.stringify(input),

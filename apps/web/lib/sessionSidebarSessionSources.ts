@@ -2,6 +2,8 @@ import type { ChatCopy } from '@/lib/i18n/messages/chat';
 import type { SessionSourceAssignment as SharedSessionSourceAssignment } from '@/lib/types';
 import {
   UNCLASSIFIED_PARTITION_ID,
+  partitionNameMatches,
+  type SessionSearchMatcher,
   type SessionPartitionView,
 } from '@/lib/sessionSidebarPartitions';
 import { collectHiddenSessionIDsFromRun } from '@/lib/sessionSidebarSourceHiddenSessions';
@@ -105,6 +107,7 @@ export function mergeSessionSourcePartitionViews(input: {
   hiddenSessionIDs?: string[];
   searchQuery: string;
   copy: ChatCopy;
+  matchesSearch?: SessionSearchMatcher;
 }): SessionPartitionView[] {
   const sourceSessionIDs = new Set(Object.keys(input.sourceAssignments));
   const hiddenSessionIDs = new Set(input.hiddenSessionIDs ?? []);
@@ -132,10 +135,12 @@ function buildSystemViews(input: {
   sourceAssignments: SessionSourceAssignments;
   searchQuery: string;
   copy: ChatCopy;
+  matchesSearch?: SessionSearchMatcher;
 }): SessionPartitionView[] {
   const query = input.searchQuery.trim().toLowerCase();
+  const matchesSearch = input.matchesSearch ?? defaultSessionSearchMatcher;
   return SOURCE_ORDER
-    .map((kind) => buildSystemView(input, kind, query))
+    .map((kind) => buildSystemView(input, kind, query, matchesSearch))
     .filter((view) => view.sessions.length > 0);
 }
 
@@ -147,50 +152,66 @@ function buildSystemView(
   },
   kind: SessionSourceKind,
   query: string,
+  matchesSearch: SessionSearchMatcher,
 ): SessionPartitionView {
-  const sessions = systemSessionsForKind(input.sessions, input.sourceAssignments, kind, query);
+  const name = systemPartitionName(kind, input.copy);
+  const parentMatches = partitionNameMatches(name, query);
+  const childPartitions = buildSystemChildPartitions({
+    kind,
+    sessions: input.sessions,
+    assignments: input.sourceAssignments,
+    query,
+    parentMatches,
+    matchesSearch,
+  });
+  const sessions = sortSystemSessions(childPartitions.flatMap((partition) => partition.sessions));
   return {
     id: SOURCE_PARTITION_IDS[kind],
-    name: systemPartitionName(kind, input.copy),
+    name,
     readOnly: true,
     sessions,
-    childPartitions: buildSystemChildPartitions(kind, sessions, input.sourceAssignments),
+    childPartitions,
   };
 }
 
-function buildSystemChildPartitions(
-  kind: SessionSourceKind,
-  sessions: SessionMetadata[],
-  assignments: SessionSourceAssignments,
-): SessionPartitionView[] {
+function buildSystemChildPartitions(input: {
+  kind: SessionSourceKind;
+  sessions: SessionMetadata[];
+  assignments: SessionSourceAssignments;
+  query: string;
+  parentMatches: boolean;
+  matchesSearch: SessionSearchMatcher;
+}): SessionPartitionView[] {
   const groups = new Map<string, { name: string; sessions: SessionMetadata[] }>();
-  for (const session of sessions) {
-    const assignment = assignments[session.id];
-    if (!assignment || assignment.kind !== kind) {
+  for (const session of input.sessions) {
+    const assignment = input.assignments[session.id];
+    if (!assignment || assignment.kind !== input.kind) {
       continue;
     }
-    const ownerID = assignment.ownerID.trim() || kind;
+    const ownerID = assignment.ownerID.trim() || input.kind;
     const group = groups.get(ownerID) ?? { name: assignment.ownerName.trim() || ownerID, sessions: [] };
     group.sessions.push(session);
     groups.set(ownerID, group);
   }
-  return [...groups.entries()].map(([ownerID, group]) => ({
-    id: sourceChildPartitionID(kind, ownerID),
-    name: group.name,
-    readOnly: true,
-    sessions: group.sessions,
-  }));
+
+  return [...groups.entries()]
+    .map(([ownerID, group]) => {
+      const childMatches = partitionNameMatches(group.name, input.query);
+      const sessions = sortSystemSessions(group.sessions.filter((session) => {
+        return input.parentMatches || childMatches || input.matchesSearch(session, input.query);
+      }));
+      return {
+        id: sourceChildPartitionID(input.kind, ownerID),
+        name: group.name,
+        readOnly: true,
+        sessions,
+      };
+    })
+    .filter((partition) => partition.sessions.length > 0);
 }
 
-function systemSessionsForKind(
-  sessions: SessionMetadata[],
-  assignments: SessionSourceAssignments,
-  kind: SessionSourceKind,
-  query: string,
-): SessionMetadata[] {
+function sortSystemSessions(sessions: SessionMetadata[]): SessionMetadata[] {
   return sessions
-    .filter((session) => assignments[session.id]?.kind === kind)
-    .filter((session) => session.id.toLowerCase().includes(query))
     .sort(compareSessionsByRecentActivity);
 }
 
@@ -270,4 +291,11 @@ function addSessionID(ids: Set<string>, value: unknown): void {
   if (id) {
     ids.add(id);
   }
+}
+
+function defaultSessionSearchMatcher(
+  session: SessionMetadata,
+  normalizedQuery: string,
+): boolean {
+  return !normalizedQuery || session.id.toLowerCase().includes(normalizedQuery);
 }

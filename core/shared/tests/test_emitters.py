@@ -40,6 +40,7 @@ class EmittersTest(unittest.TestCase):
 
         self.assertIn("export interface SessionHumanInteraction {", rendered)
         self.assertIn("export interface AgentStreamEvent {", rendered)
+        self.assertIn("export interface AgentAwaitingHumanStreamPayload {", rendered)
         self.assertIn("options?: AskHumanOption[];", rendered)
         self.assertIn("assignments: Record<string, string>;", rendered)
         self.assertIn("model_context_window_tokens?: Record<string, number>;", rendered)
@@ -51,6 +52,10 @@ class EmittersTest(unittest.TestCase):
             "export type TaskCreateRequest = AgentMessageTaskCreateRequest | WorkflowTaskCreateRequest | OrchestrationTaskCreateRequest;",
             rendered,
         )
+        self.assertIn("export interface TaskRunLog {", rendered)
+        self.assertIn("run_cards?: TaskRunCard[];", rendered)
+        self.assertIn("export interface TaskPatchRequest {", rendered)
+        self.assertIn("export interface TaskRunStopResponse {", rendered)
 
     def test_rust_and_kotlin_render_union_variants(self) -> None:
         rust = render_rust(self.schema)
@@ -58,14 +63,24 @@ class EmittersTest(unittest.TestCase):
 
         self.assertIn("pub enum AgentPayload {", rust)
         self.assertIn("pub struct AgentStreamEvent {", rust)
+        self.assertIn("pub struct AgentAwaitingHumanStreamPayload {", rust)
         self.assertIn("AwaitingHuman(AgentSendAwaitingHumanResponse)", rust)
         self.assertIn("pub assignments: BTreeMap<String, String>", rust)
         self.assertIn("pub model_context_window_tokens: Option<BTreeMap<String, i64>>", rust)
         self.assertIn("sealed interface AgentSendResponse", kotlin)
+        self.assertIn('const val STATUS_AWAITING_HUMAN = "awaiting_human"', kotlin)
         self.assertIn("data class SessionPushEvent(", kotlin)
+        self.assertIn('const val TYPE_AWAITING_HUMAN = "awaiting_human"', kotlin)
+        self.assertIn('const val KIND_TEXT = "text"', kotlin)
         self.assertIn(") : AgentSendResponse", kotlin)
         self.assertIn("val assignments: Map<String, String>", kotlin)
         self.assertIn("val modelContextWindowTokens: Map<String, Int>? = null", kotlin)
+        self.assertIn("pub struct TaskRunLog {", rust)
+        self.assertIn("pub run_cards: Option<Vec<TaskRunCard>>", rust)
+        self.assertIn("pub struct TaskPatchRequest {", rust)
+        self.assertIn("data class TaskRunStopResponse(", kotlin)
+        self.assertIn("data class TaskPatchRequest(", kotlin)
+        self.assertIn("val run: TaskRunLog? = null", kotlin)
 
     def test_kotlin_renderer_splits_android_models(self) -> None:
         files = render_kotlin_files(self.schema)
@@ -76,9 +91,16 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("OrchestrationModels.kt", files)
         self.assertIn("data class ApiRequest<TParams>(", files["ApiModels.kt"])
         self.assertIn("@Serializable\nsealed interface AgentSendResponse", files["AgentModels.kt"])
+        self.assertIn('const val STATUS_AWAITING_HUMAN = "awaiting_human"', files["AgentModels.kt"])
         self.assertIn("data class SessionPushEvent(", files["StreamingModels.kt"])
+        self.assertIn('const val TYPE_RUN_STARTED = "run_started"', files["StreamingModels.kt"])
+        self.assertIn('const val TYPE_ASSISTANT_MESSAGE = "assistant_message"', files["StreamingModels.kt"])
+        self.assertIn('const val KIND_TEXT = "text"', files["StreamingModels.kt"])
+        self.assertIn("data class AgentAwaitingHumanStreamPayload(", files["StreamingModels.kt"])
         self.assertIn("data class WorkflowDefinition(", files["WorkflowModels.kt"])
         self.assertIn("data class OrchestrationDefinition(", files["OrchestrationModels.kt"])
+        self.assertIn("data class TaskPatchRequest(", files["TaskModels.kt"])
+        self.assertIn("data class TaskRunLog(", files["TaskModels.kt"])
 
         for filename, content in files.items():
             self.assertLessEqual(len(content.splitlines()), 300, filename)

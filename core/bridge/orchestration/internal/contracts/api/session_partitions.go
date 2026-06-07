@@ -24,7 +24,7 @@ type SessionIDParams struct {
 
 type SessionGetParams struct {
 	ID     string
-	Limit  int
+	Limit  *int
 	Before *int
 }
 

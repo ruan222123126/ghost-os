@@ -1,5 +1,5 @@
-import type { ActiveAgentRun } from '@/lib/chat-store/types';
-import { resolveEventSessionId } from '@/lib/chatRuntime/runtimeState';
+import type { ActiveAgentRun } from './types';
+import { resolveEventSessionId } from './sessionEvent';
 import type { AgentStreamEvent } from '@/lib/types';
 
 export interface RuntimeSessionResolution {
@@ -64,4 +64,3 @@ function buildSessionResolution(options: {
     sessionId: options.sessionId,
   };
 }
-

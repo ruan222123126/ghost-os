@@ -172,7 +172,7 @@ func (r *Recorder) EmitCardEvent(
 	cardID string,
 	event streaming.Event,
 ) error {
-	snapshot, err := r.recordCardEvent(cardID, event)
+	snapshot, sourceEvent, err := r.recordCardEvent(cardID, event)
 	if err != nil {
 		return err
 	}
@@ -181,40 +181,47 @@ func (r *Recorder) EmitCardEvent(
 			return err
 		}
 	}
-	return r.publish(ctx, internaltrace.SessionPushTaskRunCardEvent, eventPayload(cardID, event))
+	return r.publish(ctx, internaltrace.SessionPushTaskRunCardEvent, eventPayload(cardID, sourceEvent))
 }
 
 func (r *Recorder) recordCardEvent(
 	cardID string,
 	event streaming.Event,
-) ([]bridgeTasks.RunCard, error) {
+) ([]bridgeTasks.RunCard, bridgeTasks.RunCardSourceEvent, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	trimmedCardID := strings.TrimSpace(cardID)
 	index, ok := r.index[trimmedCardID]
 	if !ok {
-		return nil, fmt.Errorf("task run card %q is not registered", cardID)
+		return nil, bridgeTasks.RunCardSourceEvent{}, fmt.Errorf("task run card %q is not registered", cardID)
 	}
 
 	card := r.cards[index]
 	updated, err := assignSourceSessionID(card, event.SessionID, "event")
 	if err != nil {
-		return nil, err
+		return nil, bridgeTasks.RunCardSourceEvent{}, err
 	}
 	now := r.nowUTC()
+	state := r.cardStates[trimmedCardID]
+	state.eventSeq++
+	sourceEventID := strings.TrimSpace(event.ID)
+	if sourceEventID == "" {
+		sourceEventID = nextRunCardSourceEventID(trimmedCardID, state)
+	}
+	sourceEvent := newRunCardSourceEvent(event, now, sourceEventID)
 	updated.SourceEvents = appendRunCardSourceEvent(
 		updated.SourceEvents,
-		newRunCardSourceEvent(event, now),
+		sourceEvent,
 	)
 	r.cards[index] = updated
-	state := r.cardStates[trimmedCardID]
 	if !shouldPersistRunCardEvent(event.Type, state.lastPersistedAt, now) {
-		return nil, nil
+		r.cardStates[trimmedCardID] = state
+		return nil, sourceEvent, nil
 	}
 	state.lastPersistedAt = now
 	r.cardStates[trimmedCardID] = state
-	return bridgeTasks.CloneRunCards(r.cards), nil
+	return bridgeTasks.CloneRunCards(r.cards), sourceEvent, nil
 }
 
 func (r *Recorder) Snapshot() []bridgeTasks.RunCard {

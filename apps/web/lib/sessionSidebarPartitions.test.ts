@@ -131,6 +131,36 @@ describe('lib/sessionSidebarPartitions', () => {
     expect(views[0].sessions.map((session) => session.id)).toEqual(['session-2']);
   });
 
+  it('keeps a manual partition when the search query matches its name', () => {
+    const sessions = sampleSessions();
+    let store = createInitialSessionPartitionStore();
+    store = createSessionPartition(store, 'Client Work', 'partition-work');
+    store = moveSessionToPartition({
+      store,
+      sessions,
+      sessionID: 'session-1',
+      targetPartitionID: 'partition-work',
+      targetIndex: 0,
+    });
+    store = moveSessionToPartition({
+      store,
+      sessions,
+      sessionID: 'session-3',
+      targetPartitionID: 'partition-work',
+      targetIndex: 0,
+    });
+
+    const views = buildSessionPartitionViews({
+      sessions,
+      store,
+      searchQuery: 'client',
+      unclassifiedName: 'Unclassified',
+    });
+
+    expect(views.map((view) => view.name)).toEqual(['Client Work']);
+    expect(views[0].sessions.map((session) => session.id)).toEqual(['session-1', 'session-3']);
+  });
+
   it('prunes deleted sessions from assignments', () => {
     const sessions = sampleSessions();
     let store = createInitialSessionPartitionStore();

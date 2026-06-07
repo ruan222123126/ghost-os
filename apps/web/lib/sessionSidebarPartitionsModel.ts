@@ -21,9 +21,12 @@ export interface SessionPartitionView {
   childPartitions?: SessionPartitionView[];
 }
 
+export type SessionSearchMatcher = (session: SessionMetadata, normalizedQuery: string) => boolean;
+
 export interface BuildSessionPartitionViewsInput {
   sessions: SessionMetadata[];
   store: SessionPartitionStoreV1;
   searchQuery: string;
   unclassifiedName: string;
+  matchesSearch?: SessionSearchMatcher;
 }

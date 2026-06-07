@@ -8,12 +8,15 @@ import (
 	"strings"
 	"time"
 
+	appdownloads "ghost-os/bridge/orchestration/internal/app/downloads"
 	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/session"
 )
 
 var errSessionEnded = errors.New("session has already ended")
+
+type BinaryDownload = appdownloads.BinaryDownload
 
 // executeSessionsListAction 汇总全部会话元数据，并映射为 API 返回结构。
 func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult, error) {
@@ -23,6 +26,19 @@ func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult
 	}
 
 	metadata, err := usecase.List(traceID)
+	if err != nil {
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
+	}
+	return bus.ResultSuccess(metadata), nil
+}
+
+func (s *bridgeService) executeSessionsSearchAction(query string, limit int, traceID string) (ServiceResult, error) {
+	usecase, err := s.sessionUsecase()
+	if err != nil {
+		return ServiceResult{}, err
+	}
+
+	metadata, err := usecase.Search(query, limit, traceID)
 	if err != nil {
 		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
 	}
@@ -110,6 +126,24 @@ func (s *Service) ExecuteSessionSidebarPartitionsPutAction(
 	return s.inner.executeSessionSidebarPartitionsPutAction(req, traceID)
 }
 
+func (s *Service) OpenSessionArtifactDownload(sessionID string, artifactID string) (BinaryDownload, error) {
+	usecase, err := s.inner.sessionArtifactUsecase()
+	if err != nil {
+		return BinaryDownload{}, err
+	}
+	download, err := usecase.DownloadArtifact(sessionID, artifactID, "")
+	if err != nil {
+		return BinaryDownload{}, bus.WrapError(mapSessionAppErrorKind(err), err)
+	}
+	return BinaryDownload{
+		Reader:   download.Reader,
+		Name:     download.Name,
+		MimeType: download.MimeType,
+		Size:     download.Size,
+		SHA256:   download.SHA256,
+	}, nil
+}
+
 func (s *bridgeService) sessionUsecase() (appsessions.Service, error) {
 	store, err := s.requireSessionStore()
 	if err != nil {
@@ -133,12 +167,31 @@ func (s *bridgeService) sessionSourcesUsecase(traceID string) (appsessions.Servi
 	}, nil
 }
 
+func (s *bridgeService) sessionArtifactUsecase() (appsessions.Service, error) {
+	if s.artifactInitErr != nil {
+		return appsessions.Service{}, bus.WrapError(ServiceErrorInternal, s.artifactInitErr)
+	}
+	return appsessions.Service{
+		ArtifactStore: s.artifactStore,
+		Logger:        serviceActionLogger{},
+	}, nil
+}
+
 func mapSessionAppErrorKind(err error) ServiceErrorKind {
 	switch {
 	case errors.Is(err, appsessions.ErrSessionIDRequired),
-		errors.Is(err, appsessions.ErrUnsupportedSidebarPartitionVersion):
+		errors.Is(err, appsessions.ErrUnsupportedSidebarPartitionVersion),
+		errors.Is(err, appsessions.ErrInvalidSessionPageQuery),
+		errors.Is(err, appsessions.ErrArtifactIDRequired),
+		errors.Is(err, appsessions.ErrInvalidArtifactSessionID),
+		errors.Is(err, appsessions.ErrInvalidArtifactID):
 		return ServiceErrorInvalidInput
-	case errors.Is(err, appsessions.ErrSessionStoreRequired), errors.Is(err, appsessions.ErrTaskStoreRequired):
+	case errors.Is(err, appsessions.ErrArtifactNotFound):
+		return ServiceErrorNotFound
+	case errors.Is(err, appsessions.ErrSessionStoreRequired),
+		errors.Is(err, appsessions.ErrTaskStoreRequired),
+		errors.Is(err, appsessions.ErrArtifactStoreRequired),
+		errors.Is(err, appsessions.ErrInvalidArtifactPath):
 		return ServiceErrorInternal
 	default:
 		return mapSessionStorageErrorKind(err)

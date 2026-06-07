@@ -43,6 +43,7 @@ describe('lib/chat-store/reducer', () => {
     expect(view.streamingThinkingSegments).toEqual([
       { id: 'stream-segment:thinking:1', content: 'thinking...' },
     ]);
+    expect(view.activeStreamingThinkingId).toBeNull();
     expect(state.streamingItemOrder).toEqual([
       'thinking:stream-segment:thinking:1',
       'assistant:stream-segment:assistant:1',
@@ -232,6 +233,7 @@ describe('lib/chat-store/reducer', () => {
     expect(view.streamingThinkingSegments).toEqual([
       { id: 'stream-segment:thinking:1', content: 'analysis' },
     ]);
+    expect(view.activeStreamingThinkingId).toBeNull();
     expect(view.streamingAssistantSegments).toEqual([
       { id: 'stream-segment:assistant:1', content: 'partial answer' },
     ]);
@@ -260,6 +262,57 @@ describe('lib/chat-store/reducer', () => {
         selectionMode: 'single',
         sessionId: 'session-9',
       },
+    ]);
+  });
+
+  it('normalizes active tool statuses to error when hydrating an error turn draft', () => {
+    const state = chatStateReducer(createInitialState(), {
+      type: 'hydrate_turn_draft',
+      sessionId: 'session-9',
+      draft: {
+        trace_id: 'trace-draft',
+        turn: 3,
+        status: 'error',
+        error: 'context canceled',
+        pending_questions: [],
+        assistant_segments: [],
+        thinking_segments: [],
+        tools: [
+          {
+            id: 'tool-running',
+            content: 'running',
+            tool_status: 'running',
+          },
+          {
+            id: 'tool-pending',
+            content: 'pending',
+            tool_status: 'pending',
+          },
+          {
+            id: 'tool-in-progress',
+            content: 'in progress',
+            tool_status: 'in_progress',
+          },
+          {
+            id: 'tool-success',
+            content: 'done',
+            tool_status: 'success',
+          },
+        ],
+        item_order: [
+          'tool:tool-running',
+          'tool:tool-pending',
+          'tool:tool-in-progress',
+          'tool:tool-success',
+        ],
+      },
+    });
+
+    expect(buildChatStateView(state).streamingTools).toMatchObject([
+      { id: 'tool-running', toolStatus: 'error' },
+      { id: 'tool-pending', toolStatus: 'error' },
+      { id: 'tool-in-progress', toolStatus: 'error' },
+      { id: 'tool-success', toolStatus: 'success' },
     ]);
   });
 });

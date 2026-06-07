@@ -16,6 +16,7 @@ import { useInitialLoadingOverlay } from '@/hooks/useInitialLoadingOverlay';
 import { useSessionSidebarAliases } from '@/hooks/useSessionSidebarAliases';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { ignorePromise } from '@/lib/errors';
+import { buildMessageListProjection } from '@/lib/chat-view/messageRows';
 import type { SessionMetadata } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -134,6 +135,23 @@ const HomePageChatPanel: FC<{
   const modelSelectionHandler = controller.config?.model_selection_enabled
     ? controller.selectActiveModel
     : undefined;
+  const messageListView = buildMessageListProjection({
+    committedMessages: controller.committedMessages,
+    loading: controller.loading,
+    loadingOlderHistory: controller.loadingOlderHistory,
+    pendingQuestions: controller.pendingQuestions,
+    showSystemPromptMessages,
+    streamingAssistantSegments: controller.streamingAssistantSegments,
+    activeStreamingThinkingId: controller.activeStreamingThinkingId,
+    streamingItemOrder: controller.streamingItemOrder,
+    streamingThinkingSegments: controller.streamingThinkingSegments,
+    streamingTools: controller.streamingTools,
+    toolCard: {
+      compactOutputEnabled: toolCallCompactOutputEnabled,
+      fallbackTitle: copy.chat.toolFallbackName,
+      preparingDetails: copy.chat.toolPreparingOutput,
+    },
+  });
 
   return (
     <section className={`chat panel${controller.showEmptyHomeState ? ' is-empty-home' : ''}`}>
@@ -151,17 +169,8 @@ const HomePageChatPanel: FC<{
         <>
           <MessageList
             key={controller.currentSessionId || 'draft-session'}
-            committedMessages={controller.committedMessages}
-            showSystemPromptMessages={showSystemPromptMessages}
+            view={messageListView}
             assistantMarkdownEnabled={assistantMarkdownEnabled}
-            toolCallCompactOutputEnabled={toolCallCompactOutputEnabled}
-            streamingAssistantSegments={controller.streamingAssistantSegments}
-            streamingThinkingSegments={controller.streamingThinkingSegments}
-            streamingItemOrder={controller.streamingItemOrder}
-            streamingTools={controller.streamingTools}
-            pendingQuestions={controller.pendingQuestions}
-            loading={controller.loading}
-            loadingOlderHistory={controller.loadingOlderHistory}
             hasOlderHistory={controller.hasOlderHistory}
             loadOlderHistory={controller.loadOlderHistory}
             onAnswerQuestion={controller.answerQuestion}

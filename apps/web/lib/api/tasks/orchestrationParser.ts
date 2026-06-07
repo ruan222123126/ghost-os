@@ -10,13 +10,21 @@ import {
   parseOptionalBoolean,
   parseOptionalNumber,
 } from '@/lib/api/shared';
+import type {
+  OrchestrationAgentNode,
+  OrchestrationDefinition,
+  OrchestrationEdge,
+  OrchestrationGroupNode,
+  OrchestrationNode,
+  TaskRuntimeOverrides,
+} from '@/lib/types';
 
 const NODE_KEYS = ['id', 'type', 'group', 'agent'] as const;
 const GROUP_KEYS = ['title', 'shared_context', 'speaking_mode', 'owner_agent_id', 'max_rounds'] as const;
 const AGENT_KEYS = ['title', 'message', 'runtime_overrides'] as const;
 const EDGE_KEYS = ['from_node_id', 'to_node_id', 'kind'] as const;
 const DEFINITION_KEYS = ['nodes', 'edges'] as const;
-const NODE_TYPES = ['start', 'group', 'agent', 'end'] as const;
+const NODE_TYPES = ['group', 'agent'] as const;
 const EDGE_KINDS = ['control', 'member'] as const;
 const SPEAKING_MODES = ['sequential', 'parallel', 'owner'] as const;
 const TASK_RUNTIME_OVERRIDE_KEYS = [
@@ -29,41 +37,7 @@ const TASK_RUNTIME_OVERRIDE_KEYS = [
   'max_turns',
 ] as const;
 
-interface ParsedTaskRuntimeOverrides {
-  provider_name?: string;
-  model?: string;
-  system_prompt?: string;
-  preset_id?: string;
-  tool_allowlist?: string[];
-  tool_allowlist_only?: boolean;
-  max_turns?: number;
-}
-
-export interface ParsedOrchestrationDefinition {
-  nodes: Array<{
-    id: string;
-    type: 'start' | 'group' | 'agent' | 'end';
-    group?: {
-      title: string;
-      shared_context: string;
-      speaking_mode: 'sequential' | 'parallel' | 'owner';
-      owner_agent_id?: string;
-      max_rounds: number;
-    };
-    agent?: {
-      title: string;
-      message: string;
-      runtime_overrides?: ParsedTaskRuntimeOverrides;
-    };
-  }>;
-  edges: Array<{
-    from_node_id: string;
-    to_node_id: string;
-    kind: 'control' | 'member';
-  }>;
-}
-
-export function parseOrchestrationDefinition(value: unknown, label: string): ParsedOrchestrationDefinition {
+export function parseOrchestrationDefinition(value: unknown, label: string): OrchestrationDefinition {
   const record = pickKnownKeys(expectRecord(value, label), DEFINITION_KEYS);
   if (!Array.isArray(record.nodes) || !Array.isArray(record.edges)) {
     throw new Error(`Invalid ${label}: expected nodes and edges arrays`);
@@ -74,7 +48,7 @@ export function parseOrchestrationDefinition(value: unknown, label: string): Par
   };
 }
 
-function parseOrchestrationNode(value: unknown, label: string): ParsedOrchestrationDefinition['nodes'][number] {
+function parseOrchestrationNode(value: unknown, label: string): OrchestrationNode {
   const record = pickKnownKeys(expectRecord(value, label), NODE_KEYS);
   const type = expectStringEnum(record.type, NODE_TYPES, `${label}.type`);
   const group = parseOptionalRecord(record.group, `${label}.group`);
@@ -87,7 +61,7 @@ function parseOrchestrationNode(value: unknown, label: string): ParsedOrchestrat
   };
 }
 
-function parseGroupNode(value: Record<string, unknown>, label: string) {
+function parseGroupNode(value: Record<string, unknown>, label: string): OrchestrationGroupNode {
   const picked = pickKnownKeys(value, GROUP_KEYS);
   return {
     title: expectString(picked.title, `${label}.title`),
@@ -98,7 +72,7 @@ function parseGroupNode(value: Record<string, unknown>, label: string) {
   };
 }
 
-function parseAgentNode(value: Record<string, unknown>, label: string) {
+function parseAgentNode(value: Record<string, unknown>, label: string): OrchestrationAgentNode {
   const picked = pickKnownKeys(value, AGENT_KEYS);
   return {
     title: expectString(picked.title, `${label}.title`),
@@ -107,7 +81,7 @@ function parseAgentNode(value: Record<string, unknown>, label: string) {
   };
 }
 
-function parseOrchestrationEdge(value: unknown, label: string): ParsedOrchestrationDefinition['edges'][number] {
+function parseOrchestrationEdge(value: unknown, label: string): OrchestrationEdge {
   const record = pickKnownKeys(expectRecord(value, label), EDGE_KEYS);
   return {
     from_node_id: expectString(record.from_node_id, `${label}.from_node_id`),
@@ -116,7 +90,7 @@ function parseOrchestrationEdge(value: unknown, label: string): ParsedOrchestrat
   };
 }
 
-function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRuntimeOverrides | undefined {
+function parseTaskRuntimeOverrides(value: unknown, label: string): TaskRuntimeOverrides | undefined {
   const record = parseOptionalRecord(value, label);
   if (record === undefined) {
     return undefined;

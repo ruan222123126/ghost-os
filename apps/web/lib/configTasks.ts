@@ -1,7 +1,4 @@
 import type {
-  TaskUpdateRequest as SharedTaskUpdateRequest,
-} from '@/lib/envelope.generated';
-import type {
   AgentMessageTaskPayload,
   BridgeConfig,
   TaskPayload,
@@ -18,17 +15,6 @@ const TOOL_ALLOWLIST_SEPARATOR_PATTERN = /[\n,]/;
 const DEFAULT_RELAY_MAX_ROUNDS = 20;
 const DEFAULT_RELAY_EXECUTION_TIMEOUT_MS = 0;
 const DEFAULT_RELAY_STOP_POLICY: TaskRelayStopPolicy = 'ai_decides';
-
-type TaskUpdateRequest = Pick<
-  SharedTaskUpdateRequest,
-  | 'message'
-  | 'session_id'
-  | 'runtime_overrides'
-  | 'agent_mode'
-  | 'interval_seconds'
-  | 'cron_expr'
-  | 'task_kind'
-> | TextTaskUpdateRequest;
 
 export type TaskEditorMode = 'create' | 'edit';
 export type TaskScheduleMode = 'interval' | 'cron';
@@ -108,7 +94,7 @@ export function taskCreateRequestFromEditor(editor: TaskEditorState): TextTaskCr
   };
 }
 
-export function taskUpdateRequestFromEditor(editor: TaskEditorState): TaskUpdateRequest {
+export function taskUpdateRequestFromEditor(editor: TaskEditorState): TextTaskUpdateRequest {
   const runtimeOverrides = runtimeOverridesForUpdate(editor);
 
   return {

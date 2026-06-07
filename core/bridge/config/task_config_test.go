@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -30,29 +29,6 @@ workflow_tool_allowlist = ["script_exec", "web_search"]
 	}
 	if len(taskCfg.WorkflowToolAllowlist) != 2 || taskCfg.WorkflowToolAllowlist[0] != "script_exec" || taskCfg.WorkflowToolAllowlist[1] != "web_search" {
 		t.Fatalf("unexpected workflow tool allowlist: %#v", taskCfg)
-	}
-}
-
-func TestLoadTaskConfigRejectsBlockedWorkflowTools(t *testing.T) {
-	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.toml"))
-	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "ask_human")
-
-	_, err := LoadTaskConfig()
-	if err == nil || !strings.Contains(err.Error(), `cannot appear in workflow_tool_allowlist`) {
-		t.Fatalf("expected blocked workflow tool error, got %v", err)
-	}
-}
-
-func TestLoadTaskConfigAcceptsSplitSandboxAtomicTools(t *testing.T) {
-	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(t.TempDir(), "missing.toml"))
-	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "search_files,bash_exec,write_file")
-
-	taskCfg, err := LoadTaskConfig()
-	if err != nil {
-		t.Fatalf("load task config: %v", err)
-	}
-	if got := strings.Join(taskCfg.WorkflowToolAllowlist, ","); got != "bash_exec,search_files,write_file" {
-		t.Fatalf("unexpected workflow tool allowlist: %q", got)
 	}
 }
 

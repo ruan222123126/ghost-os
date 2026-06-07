@@ -11,14 +11,13 @@ import (
 
 const (
 	defaultServePort = 8080
-	cliUsage         = "usage:\n  ping\n  serve [port]\n  agent <message>\n  migrate <prompts-dir|tool-prompts|system-prompts|sessions|orchestrations>"
+	cliUsage         = "usage:\n  ping\n  serve [port]\n  agent <message>"
 )
 
 type commandDispatcher struct {
-	runPing    func(context.Context) (string, error)
-	runServe   func(context.Context, int) (string, error)
-	runAgent   func(context.Context, string) (string, error)
-	runMigrate func(context.Context, []string) (string, error)
+	runPing  func(context.Context) (string, error)
+	runServe func(context.Context, int) (string, error)
+	runAgent func(context.Context, string) (string, error)
 }
 
 type usageError struct {
@@ -39,10 +38,9 @@ func newUsageError(detail string) error {
 // newCommandDispatcher 装配 CLI 入口依赖，保持 Run 本身最小化。
 func newCommandDispatcher() commandDispatcher {
 	return commandDispatcher{
-		runPing:    runPing,
-		runServe:   bridgetransport.RunServer,
-		runAgent:   runAgent,
-		runMigrate: runMigrateCommand,
+		runPing:  runPing,
+		runServe: bridgetransport.RunServer,
+		runAgent: runAgent,
 	}
 }
 
@@ -66,8 +64,6 @@ func (d commandDispatcher) dispatch(ctx context.Context, args []string) (string,
 			return "", err
 		}
 		return d.runAgent(ctx, message)
-	case "migrate":
-		return d.dispatchMigrate(ctx, args[1:])
 	default:
 		return "", newUsageError(fmt.Sprintf("unknown subcommand %q", args[0]))
 	}
@@ -82,17 +78,6 @@ func (d commandDispatcher) dispatchServe(ctx context.Context, args []string) (st
 	output, err := d.runServe(ctx, port)
 	if err != nil {
 		return "", fmt.Errorf("serve command failed: %w", err)
-	}
-	return output, nil
-}
-
-func (d commandDispatcher) dispatchMigrate(ctx context.Context, args []string) (string, error) {
-	if len(args) != 1 {
-		return "", newUsageError("migrate requires exactly one subcommand")
-	}
-	output, err := d.runMigrate(ctx, args)
-	if err != nil {
-		return "", fmt.Errorf("migrate command failed: %w", err)
 	}
 	return output, nil
 }

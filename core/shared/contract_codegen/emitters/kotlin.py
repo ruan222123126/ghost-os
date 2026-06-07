@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from contract_codegen.catalog import (
     DefinitionSpec,
@@ -77,6 +78,7 @@ OUTPUT_GROUPS = (
             "agentCompletionDeltaPayload",
             "agentToolCallStartedPayload",
             "agentToolCallFinishedPayload",
+            "agentAwaitingHumanStreamPayload",
             "agentStreamMessagePayload",
             "agentDonePayload",
             "agentErrorPayload",
@@ -107,7 +109,14 @@ OUTPUT_GROUPS = (
             "taskCreateRequest",
             "agentMessageTaskPayload",
             "taskUpdateRequest",
+            "taskPatchRequest",
             "taskPayload",
+            "taskRunNodeResult",
+            "taskRunCard",
+            "taskRunLog",
+            "taskRunPayload",
+            "taskRunStopRequest",
+            "taskRunStopResponse",
         ),
     ),
     KotlinOutputGroup(
@@ -141,10 +150,44 @@ OUTPUT_GROUPS = (
     ),
 )
 
+KOTLIN_ENUM_CONSTANT_DEFINITIONS = {
+    "agentAwaitingHumanPayload",
+    "agentStopResponsePayload",
+    "agentStreamEvent",
+    "sessionPushEvent",
+    "agentCompletionDeltaPayload",
+}
+
 
 def _field_name(name: str) -> str:
     head, *tail = name.split("_")
     return head[:1].lower() + head[1:] + "".join(part[:1].upper() + part[1:] for part in tail)
+
+
+def _const_part(value: str) -> str:
+    rendered = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_").upper()
+    if not rendered:
+        return "VALUE"
+    if rendered[0].isdigit():
+        return f"VALUE_{rendered}"
+    return rendered
+
+
+def _enum_constants(properties: list[tuple[str, dict]]) -> list[tuple[str, str]]:
+    constants: list[tuple[str, str]] = []
+    for prop_name, prop_schema in properties:
+        if prop_schema.get("type") != "string":
+            continue
+        values = prop_schema.get("enum")
+        if values is None and "const" in prop_schema:
+            values = [prop_schema["const"]]
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            constants.append((f"{_const_part(prop_name)}_{_const_part(value)}", value))
+    return constants
 
 
 def _object_type(schema: dict, target_names: dict[str, str], prop_schema: dict) -> str:
@@ -201,6 +244,7 @@ def _type_for_schema(schema: dict, target_names: dict[str, str], prop_schema: di
 def _render_object(schema: dict, spec, target_names: dict[str, str], implementers: dict[str, list[str]]) -> str:
     required = set(spec.definition.get("required", []))
     properties = list(spec.definition.get("properties", {}).items())
+    constants = _enum_constants(properties) if spec.name in KOTLIN_ENUM_CONSTANT_DEFINITIONS else []
     lines = ["@Serializable", f"data class {spec.target_name}("]
     for index, (prop_name, prop_schema) in enumerate(properties):
         field_name = _field_name(prop_name)
@@ -213,6 +257,13 @@ def _render_object(schema: dict, spec, target_names: dict[str, str], implementer
     union_names = implementers.get(spec.name, [])
     impl_suffix = f" : {', '.join(union_names)}" if union_names else ""
     lines.append(f"){impl_suffix}")
+    if constants:
+        lines[-1] = f"{lines[-1]} {{"
+        lines.append("    companion object {")
+        for name, value in constants:
+            lines.append(f'        const val {name} = "{value}"')
+        lines.append("    }")
+        lines.append("}")
     return "\n".join(lines)
 
 

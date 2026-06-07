@@ -6,24 +6,18 @@ import {
   readString,
   type RecordValue,
 } from './records';
+import {
+  normalizeToolName,
+  SCRIPT_EXEC_TOOL,
+  supportsPromotedActionTitle,
+} from '@/lib/toolNames';
 
 const SUMMARY_LIMIT = 80;
 const SUMMARY_TRUNCATE_AT = 77;
 const ERROR_LIMIT = 160;
 const ERROR_TRUNCATE_AT = 157;
 const WINDOWS_DRIVE_ROOT_PATTERN = /^[A-Za-z]:\/$/;
-const TOOL_PREFIX = 'tools.';
-const SCRIPT_EXEC_TOOL = 'script_exec';
 const ERROR_STATUSES = new Set(['error', 'failed']);
-const PROMOTED_ACTION_TOOL_NAMES = new Set([
-  'apply_diff',
-  'bash_exec',
-  'list_files',
-  'read_file',
-  'search_files',
-  'sfind',
-  'write_file',
-]);
 const SCRIPT_EXEC_HELPERS = [
   'apply_diff',
   'bash_exec',
@@ -34,7 +28,7 @@ const SCRIPT_EXEC_HELPERS = [
   'write_file',
 ] as const;
 
-export const ACTION_ORDER = ['list', 'load', 'unload', 'read', 'write', 'edit', 'run', 'web', 'search'] as const;
+export const ACTION_ORDER = ['list', 'load', 'unload', 'read', 'write', 'edit', 'run', 'screen', 'web', 'search', 'codex'] as const;
 export type ActionKind = typeof ACTION_ORDER[number];
 export interface ActionItem { kind: ActionKind; text: string; }
 interface LineDelta { added?: number; removed?: number; }
@@ -46,50 +40,15 @@ export {
   readString,
   type RecordValue,
 } from './records';
-
-const TOOL_ALIASES: Record<string, string> = {
-  apply_diff: 'apply_diff',
-  bash: 'bash_exec',
-  bash_exec: 'bash_exec',
-  edit: 'apply_diff',
-  fetch_web: 'fetch_webpage',
-  fetch_webpage: 'fetch_webpage',
-  patch: 'apply_diff',
-  read: 'read_file',
-  read_file: 'read_file',
-  run: 'bash_exec',
-  script: SCRIPT_EXEC_TOOL,
-  script_exec: SCRIPT_EXEC_TOOL,
-  search: 'search_files',
-  search_files: 'search_files',
-  web: 'fetch_webpage',
-  write: 'write_file',
-  write_file: 'write_file',
-};
-
-export function normalizeToolName(rawName?: string): string {
-  const normalized = rawName?.trim().toLowerCase() || '';
-  if (!normalized) return '';
-  const withoutPrefix = normalized.startsWith(TOOL_PREFIX)
-    ? normalized.slice(TOOL_PREFIX.length)
-    : normalized;
-  if (TOOL_ALIASES[withoutPrefix]) return TOOL_ALIASES[withoutPrefix];
-  for (const suffix of ['_exec', '_file']) {
-    if (!withoutPrefix.endsWith(suffix)) continue;
-    const baseName = withoutPrefix.slice(0, withoutPrefix.length - suffix.length);
-    if (TOOL_ALIASES[baseName]) return TOOL_ALIASES[baseName];
-  }
-  return withoutPrefix;
-}
-
-export function supportsPromotedActionTitle(toolName?: string): boolean {
-  return PROMOTED_ACTION_TOOL_NAMES.has(normalizeToolName(toolName));
-}
+export { normalizeToolName, supportsPromotedActionTitle } from '@/lib/toolNames';
 
 export function buildDirectAction(toolName: string, args?: RecordValue): ActionItem | undefined {
   if (!toolName) return undefined;
   if (toolName === SCRIPT_EXEC_TOOL) {
     return { kind: 'run', text: truncateSummary(readString(args, 'script')) };
+  }
+  if (toolName === 'codex_cli') {
+    return { kind: 'codex', text: formatCodexTarget(args) };
   }
   if (toolName === 'read_file') {
     return { kind: 'read', text: formatPath(readString(args, 'path')) };
@@ -108,11 +67,25 @@ export function buildDirectAction(toolName: string, args?: RecordValue): ActionI
   if (toolName === 'bash_exec') {
     return { kind: 'run', text: truncateSummary(readString(args, 'command') || readString(args, 'cmd')) };
   }
+  if (toolName === 'screen_action' || toolName === 'screen_control') {
+    return buildScreenAction(args);
+  }
   if (toolName === 'fetch_webpage') {
     return { kind: 'web', text: truncateSummary(formatWebTarget(readString(args, 'url'))) };
   }
+  if (toolName === 'web_search') {
+    return { kind: 'web', text: truncateSummary(readString(args, 'query')) };
+  }
   if (toolName === 'search_files') {
     return { kind: 'search', text: truncateSummary(readString(args, 'query')) };
+  }
+  return undefined;
+}
+
+function buildScreenAction(args?: RecordValue): ActionItem | undefined {
+  const action = normalizeToolName(readString(args, 'action'));
+  if (action === 'screenshot') {
+    return { kind: 'screen', text: '' };
   }
   return undefined;
 }
@@ -149,9 +122,42 @@ function resolveWriteDelta(writeChange?: RecordValue, args?: RecordValue): LineD
 
 function resolveEditDelta(writeChange?: RecordValue, args?: RecordValue): LineDelta {
   const diffSummary = readRecord(args, 'diff_summary');
-  return {
+  const delta: LineDelta = {
     added: readPositiveInt(writeChange, 'added_lines') || readPositiveInt(diffSummary, 'added_lines'),
     removed: readPositiveInt(writeChange, 'removed_lines') || readPositiveInt(diffSummary, 'removed_lines'),
+  };
+  if (!delta.added || !delta.removed) {
+    const counted = countUnifiedDiffDelta(readString(args, 'diff_text'));
+    delta.added ||= counted.added;
+    delta.removed ||= counted.removed;
+  }
+  return delta;
+}
+
+function countUnifiedDiffDelta(diffText: string): LineDelta {
+  if (!diffText.trim()) return {};
+  let added = 0;
+  let removed = 0;
+  let inHunk = false;
+  for (const line of diffText.split(/\r?\n/)) {
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || line.startsWith('\\')) {
+      continue;
+    }
+    if (line.startsWith('+')) {
+      added += 1;
+      continue;
+    }
+    if (line.startsWith('-')) {
+      removed += 1;
+    }
+  }
+  return {
+    added: added || undefined,
+    removed: removed || undefined,
   };
 }
 
@@ -171,6 +177,9 @@ export function parseInlineArgs(toolName: string, argsText: string): RecordValue
   }
   if (toolName === 'fetch_webpage') {
     args.url = readNamedQuotedArg(argsText, 'url') || firstLiteral;
+  }
+  if (toolName === 'web_search') {
+    args.query = readNamedQuotedArg(argsText, 'query') || firstLiteral;
   }
   if (toolName === 'search_files') {
     args.query = readNamedQuotedArg(argsText, 'query') || firstLiteral;
@@ -225,6 +234,13 @@ function formatWebTarget(rawURL: string): string {
   } catch {
     return rawURL;
   }
+}
+
+function formatCodexTarget(args?: RecordValue): string {
+  const op = readString(args, 'op');
+  const prompt = truncateSummary(readString(args, 'prompt'));
+  const parts = [op, prompt].filter(Boolean);
+  return truncateSummary(parts.join(' '));
 }
 
 function formatPath(rawPath: string): string {

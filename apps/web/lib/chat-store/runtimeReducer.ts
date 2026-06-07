@@ -28,6 +28,7 @@ import { finalizeStreamingTurnState } from './finalizeTurn';
 export function buildChatStateView(state: ChatStateStore): {
   streamingAssistantSegments: StreamingAssistantSegment[];
   streamingThinkingSegments: StreamingThinkingSegment[];
+  activeStreamingThinkingId: string | null;
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
 } {
@@ -38,6 +39,7 @@ export function buildChatStateView(state: ChatStateStore): {
     streamingThinkingSegments: state.streamingThinkingState.order
       .map((segmentId) => state.streamingThinkingState.segmentsById[segmentId])
       .filter((segment): segment is StreamingThinkingSegment => segment !== undefined),
+    activeStreamingThinkingId: state.streamingThinkingState.activeSegmentId || null,
     streamingTools: state.streamingToolState.order
       .map((toolId) => state.streamingToolState.toolsById[toolId])
       .filter((tool): tool is StreamingToolState => tool !== undefined),
@@ -102,6 +104,7 @@ function appendStreamingAssistantTextState(state: ChatStateStore, text: string):
   return {
     ...state,
     streamingAssistantState: result.state,
+    streamingThinkingState: markStreamingThinkingBoundary(state.streamingThinkingState),
     streamingItemOrder: nextOrder,
   };
 }

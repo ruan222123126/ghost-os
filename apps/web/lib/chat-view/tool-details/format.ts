@@ -8,6 +8,7 @@ import {
   parseRecord,
   readString,
   supportsPromotedActionTitle,
+  type ActionKind,
   truncateError,
   type RecordValue,
 } from './common';
@@ -15,9 +16,6 @@ import { buildToolSearchAction } from './sfind';
 import { buildToolDetailError, buildToolDetailSummary } from './summary';
 import { resolveToolCallArgs } from './toolCalls';
 
-const BYTES_PER_KB = 1024;
-const BYTES_PER_MB = BYTES_PER_KB * 1024;
-const BYTES_PER_GB = BYTES_PER_MB * 1024;
 const TOOL_ACTION_LIMIT = 80;
 const TOOL_ACTION_TRUNCATE_AT = 77;
 
@@ -26,25 +24,13 @@ interface ToolDetailFormatOptions {
 }
 
 export interface FormattedToolAction {
+  actionKind?: ActionKind;
+  actionText?: string;
   text: string;
   variant: 'action' | 'command' | 'default';
 }
 
-export function formatBytes(bytes?: number): string {
-  if (!bytes || bytes <= 0) {
-    return '';
-  }
-  if (bytes < BYTES_PER_KB) {
-    return `${bytes} B`;
-  }
-  if (bytes < BYTES_PER_MB) {
-    return `${(bytes / BYTES_PER_KB).toFixed(1)} KB`;
-  }
-  if (bytes < BYTES_PER_GB) {
-    return `${(bytes / BYTES_PER_MB).toFixed(1)} MB`;
-  }
-  return `${(bytes / BYTES_PER_GB).toFixed(1)} GB`;
-}
+export { formatBytes } from '@/lib/formatBytes';
 
 export function formatToolAction(tool: ToolChatMessage): FormattedToolAction {
   const bashCommand = resolveBashExecCommand(tool);
@@ -53,7 +39,12 @@ export function formatToolAction(tool: ToolChatMessage): FormattedToolAction {
   }
   const promotedAction = resolvePromotedToolActionText(tool);
   if (promotedAction) {
-    return { text: promotedAction, variant: 'action' };
+    return {
+      actionKind: promotedAction.kind,
+      actionText: promotedAction.text,
+      text: formatActionTitle(promotedAction),
+      variant: 'action',
+    };
   }
   if (tool.toolName) {
     return { text: tool.toolName, variant: 'default' };
@@ -108,26 +99,11 @@ function buildExpandedToolDetails(tool: ToolChatMessage): string {
     details.push(`summary: ${summaryLine}`);
   }
 
-  details.push(...buildToolMetadata(tool));
   const outputText = buildOutputText(tool);
   if (outputText) {
     details.push(outputText);
   }
   return details.join('\n');
-}
-
-function buildToolMetadata(tool: ToolChatMessage): string[] {
-  const details: string[] = [];
-  if (tool.toolStatus) {
-    details.push(`status: ${tool.toolStatus}`);
-  }
-  if (tool.traceId) {
-    details.push(`trace_id: ${tool.traceId}`);
-  }
-  if (tool.toolCallId) {
-    details.push(`tool_call_id: ${tool.toolCallId}`);
-  }
-  return details;
 }
 
 function buildPromotedExpandedDetails(tool: ToolChatMessage): string {
@@ -136,7 +112,6 @@ function buildPromotedExpandedDetails(tool: ToolChatMessage): string {
   if (errorLine) {
     details.push(`error: ${errorLine}`);
   }
-  details.push(...buildToolMetadata(tool));
   const outputText = buildOutputText(tool);
   if (outputText) {
     details.push(outputText);
@@ -228,12 +203,12 @@ function readBashExecCommandArgs(args?: RecordValue): string {
   return normalizeInline(readString(args, 'command') || readString(args, 'cmd'));
 }
 
-function resolvePromotedToolActionText(tool: ToolChatMessage): string {
+function resolvePromotedToolActionText(tool: ToolChatMessage) {
   const action = resolvePromotedToolAction(tool);
   if (!action) {
-    return '';
+    return undefined;
   }
-  return action.text ? `${action.kind} ${action.text}` : action.kind;
+  return action;
 }
 
 function resolvePromotedToolAction(tool: ToolChatMessage) {
@@ -256,6 +231,10 @@ function resolvePromotedToolAction(tool: ToolChatMessage) {
 
 function shouldPromoteToolActionToTitle(tool: ToolChatMessage): boolean {
   return formatToolAction(tool).variant !== 'default';
+}
+
+function formatActionTitle(action: { kind: ActionKind; text: string }): string {
+  return action.text ? `${action.kind} ${action.text}` : action.kind;
 }
 
 function looksStructuredOutput(value: string): boolean {

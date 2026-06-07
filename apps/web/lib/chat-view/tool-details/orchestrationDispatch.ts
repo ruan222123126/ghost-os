@@ -113,9 +113,8 @@ function buildPrivateDispatchLines(payload: RecordValue): string[] {
 }
 
 function buildDispatchHeader(prefix: string, payload: RecordValue): string[] {
-  const participants = readParticipantIDs(payload);
   const instruction = normalizeInline(readString(payload, 'instruction'));
-  const lines = participants ? [`${prefix}：${participants}`] : [prefix];
+  const lines = [prefix];
   if (instruction) {
     lines.push(`指令：${truncateError(instruction)}`);
   }
@@ -157,18 +156,6 @@ function readTranscriptLines(payload: RecordValue): string[] {
   });
 }
 
-function readParticipantIDs(payload: RecordValue): string {
-  const value = payload.participant_ids;
-  if (!Array.isArray(value)) {
-    return '';
-  }
-  return value
-    .filter((item): item is string => typeof item === 'string')
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .join('、');
-}
-
 function readDispatchDeliveries(payload: RecordValue, key: string): string[] {
   const value = payload[key];
   if (!Array.isArray(value)) {
@@ -179,19 +166,26 @@ function readDispatchDeliveries(payload: RecordValue, key: string): string[] {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
       continue;
     }
-    const participantID = normalizeInline(readString(item as RecordValue, 'participant_id'));
-    if (!participantID) {
-      continue;
+    const record = item as RecordValue;
+    const content = normalizeInline(readString(record, 'content'));
+    if (content) {
+      const target = formatDeliveryTarget(record);
+      lines.push(target ? `向${target}发了私信：${content}` : `发了私信：${content}`);
     }
-    const content = normalizeInline(readString(item as RecordValue, 'content'));
-    lines.push(`向${participantID}发了私信：${content}`);
   }
   return lines;
 }
 
+function formatDeliveryTarget(record: RecordValue): string {
+  return normalizeInline(
+    readString(record, 'participant_id')
+      || readString(record, 'participant')
+      || readString(record, 'agent_id')
+      || readString(record, 'target_id')
+      || readString(record, 'id'),
+  );
+}
+
 function formatSpeaker(title: string, agentID: string): string {
-  if (title && agentID && title !== agentID) {
-    return `${title}（${agentID}）`;
-  }
-  return title || agentID;
+  return title || (agentID ? '成员' : '');
 }

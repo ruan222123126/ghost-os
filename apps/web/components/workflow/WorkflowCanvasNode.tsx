@@ -134,9 +134,6 @@ function renderNodeSummary(
         <p className="workflow-arch-summary-label">{copy.workflow.nodeGroupConfiguration}</p>
         <p>{node.group?.title?.trim() || copy.workflow.nodeGroupPending}</p>
         <p>{copy.workflow.nodeGroupRounds(node.group?.max_rounds ?? 0, node.group?.speaking_mode ?? 'sequential')}</p>
-        {node.group?.speaking_mode === 'owner' && node.group.owner_agent_id?.trim()
-          ? <p>{copy.workflow.groupOwnerAgent}: {node.group.owner_agent_id.trim()}</p>
-          : null}
       </div>
     );
   }

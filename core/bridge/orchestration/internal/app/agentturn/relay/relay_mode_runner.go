@@ -163,6 +163,7 @@ func (r Runner) Run(ctx context.Context, req RunRequest) (Result, error) {
 	}
 	req.Session.AddMessage(llm.Message{Role: llm.RoleAssistant, Text: result.Message})
 	req.Session.FinishRelayRuntime(relayResultStatus(result.StoppedBy), result.StoppedBy, result.Message, result.FinalChangeLog)
+	req.Session.ClearTurnDraft(time.Now().UTC())
 	if err := r.SessionStore.Save(req.Session); err != nil {
 		return Result{}, err
 	}
@@ -176,6 +177,7 @@ func (r Runner) finishErroredRun(sess *session.Session, runErr error) error {
 	if errors.Is(runErr, context.Canceled) {
 		status = StatusCancelled
 		stoppedBy = StopCancelled
+		sess.ClearTurnDraft(time.Now().UTC())
 	}
 	sess.FinishRelayRuntime(status, stoppedBy, "", "")
 	return r.SessionStore.Save(sess)

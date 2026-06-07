@@ -55,6 +55,20 @@ func IncludeInScope(task bridgeTasks.ScheduledTask, scope string) bool {
 	}
 }
 
+func ResolveRunLogLimit(limit *int) (int, error) {
+	if limit == nil {
+		return 0, nil
+	}
+	if *limit < 0 {
+		return 0, InvalidConfig("limit must be >= 0")
+	}
+	return *limit, nil
+}
+
+func StartOnlyEnabled(startOnly *bool) bool {
+	return startOnly != nil && *startOnly
+}
+
 func BuildPayload(task bridgeTasks.ScheduledTask) api.TaskPayload {
 	payload := CloneScheduledTask(task)
 	payload.TaskKind = bridgeTasks.NormalizeKind(task.TaskKind)

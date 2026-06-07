@@ -2,7 +2,8 @@
 
 'use client';
 
-import type { FC } from 'react';
+import { useCallback, useMemo, useRef, useState, type FC } from 'react';
+import { SessionSearchDialog } from '@/components/SessionSearchDialog';
 import { SessionSidebarHistory } from '@/components/SessionSidebarHistory';
 import { SidebarSettingsButton } from '@/components/SidebarSettingsButton';
 import {
@@ -10,11 +11,14 @@ import {
   IconPanelLeftOpen,
   IconPlus,
   IconSearch,
-  IconX,
 } from '@/components/sessionSidebarIcons';
 import type { UseSessionSidebarAliasesResult } from '@/hooks/useSessionSidebarAliases';
+import { useSessionSidebarGroupingPreference } from '@/hooks/useSessionSidebarGroupingPreference';
+import { useSessionSidebarPartitions } from '@/hooks/useSessionSidebarPartitions';
+import { useSessionSidebarSessionSources } from '@/hooks/useSessionSidebarSessionSources';
 import { useSessionSidebarState } from '@/hooks/useSessionSidebarState';
 import { useWebLocale } from '@/lib/i18n/provider';
+import { mergeSessionSourcePartitionViews } from '@/lib/sessionSidebarSessionSources';
 import type { SessionMetadata } from '@/lib/types';
 
 interface SessionSidebarProps {
@@ -44,6 +48,67 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
 }) => {
   const { copy } = useWebLocale();
   const sidebarState = useSessionSidebarState();
+  const { enabled: groupingEnabled } = useSessionSidebarGroupingPreference();
+  const searchButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [focusSessionId, setFocusSessionId] = useState('');
+  const activeSearchQuery = sidebarState.isSearchVisible ? sidebarState.searchQuery : '';
+  const showBlockingLoading = loading && sessions.length === 0;
+  const openSidebar = sidebarState.openSidebar;
+  const matchesSessionSearch = useCallback((session: SessionMetadata, normalizedQuery: string) => {
+    if (!normalizedQuery) {
+      return true;
+    }
+    return [
+      session.id,
+      session.title,
+      resolveSessionTitle(session),
+    ].some((value) => value.trim().toLowerCase().includes(normalizedQuery));
+  }, [resolveSessionTitle]);
+  const partitionModel = useSessionSidebarPartitions({
+    sessions,
+    sessionsLoaded: !showBlockingLoading,
+    searchQuery: activeSearchQuery,
+    unclassifiedName: copy.chat.sidebarPartitionUnclassified,
+    requestFailedText: copy.system.genericRequestFailed,
+    matchesSearch: matchesSessionSearch,
+  });
+  const sessionSources = useSessionSidebarSessionSources({
+    enabled: groupingEnabled,
+    sessions,
+    requestFailedText: copy.system.genericRequestFailed,
+  });
+  const visiblePartitionViews = useMemo(() => {
+    return mergeSessionSourcePartitionViews({
+      manualViews: partitionModel.partitionViews,
+      sessions,
+      sourceAssignments: sessionSources.assignments,
+      hiddenSessionIDs: sessionSources.hiddenSessionIDs,
+      searchQuery: activeSearchQuery,
+      copy: copy.chat,
+      matchesSearch: matchesSessionSearch,
+    });
+  }, [
+    activeSearchQuery,
+    copy.chat,
+    matchesSessionSearch,
+    partitionModel.partitionViews,
+    sessionSources.assignments,
+    sessionSources.hiddenSessionIDs,
+    sessions,
+  ]);
+  const createNewChat = useCallback(() => {
+    setFocusSessionId('');
+    onNewChat();
+    openSidebar();
+  }, [onNewChat, openSidebar]);
+  const selectSidebarSession = useCallback((id: string) => {
+    setFocusSessionId('');
+    onSelect(id);
+  }, [onSelect]);
+  const selectSearchResult = useCallback((id: string) => {
+    setFocusSessionId(id);
+    onSelect(id);
+  }, [onSelect]);
 
   return (
     <aside
@@ -64,49 +129,23 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
 
         {sidebarState.isOpen ? (
           <button
+            ref={searchButtonRef}
             type="button"
             onClick={sidebarState.toggleSearch}
-            className={`p-2 transition-colors ${sidebarState.isSearchVisible ? 'bg-black text-white' : 'hover:bg-white'}`}
+            className="p-2 text-black transition-colors hover:bg-white focus-visible:bg-white focus-visible:outline-none"
             title={copy.chat.sidebarSearchTitle}
             aria-label={copy.chat.sidebarSearchAria}
+            aria-expanded={sidebarState.isSearchVisible}
           >
             <IconSearch />
           </button>
         ) : null}
       </div>
 
-      <div
-        className={`px-3 overflow-hidden transition-all duration-300 ${
-          sidebarState.isSearchVisible && sidebarState.isOpen ? 'mb-2 h-12 opacity-100' : 'mb-0 h-0 opacity-0'
-        }`}
-      >
-        <div className="relative border-b border-black/10">
-          <input
-            ref={sidebarState.searchInputRef}
-            type="text"
-            placeholder={copy.chat.sidebarSearchPlaceholder}
-            value={sidebarState.searchQuery}
-            onChange={(event) => sidebarState.setSearchQuery(event.target.value)}
-            className="w-full bg-transparent py-2 pl-1 pr-8 text-xs font-medium uppercase tracking-widest outline-none placeholder:text-neutral-300"
-          />
-          <button
-            type="button"
-            onClick={sidebarState.clearSearch}
-            className="absolute right-0 top-1/2 -translate-y-1/2 text-black"
-            aria-label={copy.chat.sidebarClearSearchAria}
-          >
-            <IconX />
-          </button>
-        </div>
-      </div>
-
       <div className="mt-2 flex flex-col gap-2 px-3">
         <button
           type="button"
-          onClick={() => {
-            onNewChat();
-            sidebarState.openSidebar();
-          }}
+          onClick={createNewChat}
           className={`group flex items-center justify-center gap-2 bg-transparent text-black transition-colors hover:bg-white ${
             sidebarState.isOpen ? 'w-full px-4 py-3' : 'mx-auto h-10 w-10'
           }`}
@@ -121,17 +160,37 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
       <SessionSidebarHistory
         isOpen={sidebarState.isOpen}
         sessions={sessions}
-        searchQuery={sidebarState.searchQuery}
+        searchQuery={activeSearchQuery}
         currentSessionId={currentSessionId}
+        focusSessionId={focusSessionId}
         loading={loading}
         error={error}
-        onSelect={onSelect}
+        onSelect={selectSidebarSession}
         onDelete={onDelete}
         resolveSessionTitle={resolveSessionTitle}
         renameSession={renameSession}
+        groupingEnabled={groupingEnabled}
+        partitionModel={partitionModel}
+        visiblePartitionViews={visiblePartitionViews}
+        sessionSourcesError={sessionSources.error}
+        matchesSessionSearch={matchesSessionSearch}
       />
 
       <SidebarSettingsButton collapsed={!sidebarState.isOpen} onClick={onOpenSettings} />
+
+      <SessionSearchDialog
+        open={sidebarState.isSearchVisible}
+        query={sidebarState.searchQuery}
+        inputRef={sidebarState.searchInputRef}
+        triggerRef={searchButtonRef}
+        sessions={sessions}
+        partitionViews={groupingEnabled ? visiblePartitionViews : undefined}
+        currentSessionId={currentSessionId}
+        resolveSessionTitle={resolveSessionTitle}
+        onQueryChange={sidebarState.setSearchQuery}
+        onClose={sidebarState.closeSearch}
+        onSelect={selectSearchResult}
+      />
     </aside>
   );
 };

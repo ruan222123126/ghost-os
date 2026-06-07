@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	apicontracts "ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/streaming"
 	bridgeTasks "ghost-os/bridge/tasks"
@@ -68,7 +69,106 @@ func TestStreamSinkRejectsMismatchedSourceSessionID(t *testing.T) {
 	}
 }
 
-func TestStreamSinkMergesCompletionDeltaBeforePersist(t *testing.T) {
+func TestStreamSinkPublishesPersistedSourceEventID(t *testing.T) {
+	writer := &recordingProgressWriter{}
+	hub := trace.NewSessionPushHub()
+	ctx := bridgeTasks.WithRunSession(context.Background(), bridgeTasks.RunSession{
+		SessionID:      "display-session",
+		RunID:          "run-live",
+		ProgressWriter: writer,
+	})
+	recorder, err := NewRecorder(ctx, hub)
+	if err != nil {
+		t.Fatalf("new recorder: %v", err)
+	}
+	handle, err := recorder.StartCard(ctx, StartInput{
+		Kind:      bridgeTasks.RunCardKindWorkflowAgent,
+		Title:     "agent-node",
+		StartedAt: time.Unix(1_700_100_000, 0),
+	})
+	if err != nil {
+		t.Fatalf("start card: %v", err)
+	}
+	events, unsubscribe := hub.Subscribe("display-session")
+	defer unsubscribe()
+
+	event := mustStreamEvent(t, "trace-1", "source-session", streaming.EventCompletionDelta)
+	event.StepID = "turn-0001-assistant"
+	event.Payload = map[string]any{"kind": "text", "text": "hello"}
+	if _, err := NewStreamSink(handle).Emit(ctx, event); err != nil {
+		t.Fatalf("emit event: %v", err)
+	}
+
+	var pushed trace.SessionPushEvent
+	select {
+	case pushed = <-events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for task run card event")
+	}
+	payload, ok := pushed.Payload.(apicontracts.TaskRunCardEventPayload)
+	if !ok {
+		t.Fatalf("unexpected push payload type: %T", pushed.Payload)
+	}
+	snapshot := recorder.Snapshot()
+	if len(snapshot) != 1 || len(snapshot[0].SourceEvents) != 1 {
+		t.Fatalf("unexpected snapshot source events: %#v", snapshot)
+	}
+	if payload.SourceEvent.ID == "" || payload.SourceEvent.ID != snapshot[0].SourceEvents[0].ID {
+		t.Fatalf("push event id does not match persisted id: push=%q snapshot=%q", payload.SourceEvent.ID, snapshot[0].SourceEvents[0].ID)
+	}
+}
+
+func TestFinishCardPublishesFinalText(t *testing.T) {
+	writer := &recordingProgressWriter{}
+	hub := trace.NewSessionPushHub()
+	ctx := bridgeTasks.WithRunSession(context.Background(), bridgeTasks.RunSession{
+		SessionID:      "display-session",
+		RunID:          "run-live",
+		ProgressWriter: writer,
+	})
+	recorder, err := NewRecorder(ctx, hub)
+	if err != nil {
+		t.Fatalf("new recorder: %v", err)
+	}
+	handle, err := recorder.StartCard(ctx, StartInput{
+		Kind:      bridgeTasks.RunCardKindRelayRound,
+		Title:     "relay",
+		StartedAt: time.Unix(1_700_100_000, 0),
+	})
+	if err != nil {
+		t.Fatalf("start card: %v", err)
+	}
+	events, unsubscribe := hub.Subscribe("display-session")
+	defer unsubscribe()
+
+	if err := handle.Finish(ctx, FinishInput{
+		Status:     bridgeTasks.RunStatusSuccess,
+		Preview:    "did: finished",
+		FinalText:  "did: finished\nnext_step: none",
+		FinishedAt: time.Unix(1_700_100_001, 0),
+	}); err != nil {
+		t.Fatalf("finish card: %v", err)
+	}
+
+	var pushed trace.SessionPushEvent
+	select {
+	case pushed = <-events:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for task run card finish event")
+	}
+	payload, ok := pushed.Payload.(apicontracts.TaskRunCardFinishedPayload)
+	if !ok {
+		t.Fatalf("unexpected push payload type: %T", pushed.Payload)
+	}
+	if payload.FinalText != "did: finished\nnext_step: none" {
+		t.Fatalf("unexpected final_text payload: %q", payload.FinalText)
+	}
+	if latest := writer.latest(); len(latest) != 1 || latest[0].FinalText != payload.FinalText {
+		t.Fatalf("unexpected persisted final_text: %#v", latest)
+	}
+}
+
+func TestStreamSinkPreservesCompletionDeltasWithStableIDs(t *testing.T) {
 	ctx, recorder, writer := newRecorderForTest(t)
 	now := time.Unix(1_700_100_000, 0).UTC()
 	recorder.currentTime = func() time.Time { return now }
@@ -115,15 +215,23 @@ func TestStreamSinkMergesCompletionDeltaBeforePersist(t *testing.T) {
 	}
 
 	latest := writer.latest()
-	if len(latest) != 1 || len(latest[0].SourceEvents) != 3 {
+	if len(latest) != 1 || len(latest[0].SourceEvents) != 4 {
 		t.Fatalf("unexpected persisted source events: %#v", latest)
 	}
-	delta := latest[0].SourceEvents[1]
-	if got := delta.Type; got != string(streaming.EventCompletionDelta) {
-		t.Fatalf("unexpected merged event type: %q", got)
+	events := latest[0].SourceEvents
+	if got := []string{events[0].ID, events[1].ID, events[2].ID, events[3].ID}; got[0] == "" || got[1] == got[2] {
+		t.Fatalf("expected stable unique event ids, got %#v", got)
 	}
-	if got := delta.Payload["text"]; got != "hello" {
-		t.Fatalf("unexpected merged text payload: %#v", delta.Payload)
+	firstDelta := events[1]
+	secondDelta := events[2]
+	if got := firstDelta.Type; got != string(streaming.EventCompletionDelta) {
+		t.Fatalf("unexpected first delta event type: %q", got)
+	}
+	if got := firstDelta.Payload["text"]; got != "hel" {
+		t.Fatalf("unexpected first delta payload: %#v", firstDelta.Payload)
+	}
+	if got := secondDelta.Payload["text"]; got != "lo" {
+		t.Fatalf("unexpected second delta payload: %#v", secondDelta.Payload)
 	}
 }
 

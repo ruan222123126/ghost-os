@@ -31,12 +31,10 @@ check_no_matches() {
 # apps/* 不得 import drivers/*
 check_no_matches 'drivers/native|drivers/native/src' apps/cli/src apps/android/app/src apps/web/app apps/web/lib apps/web/components
 
-# bridge/server transport 不得 import orchestration
-check_no_matches '"core/bridge/orchestration"' core/bridge/server core/bridge/transport
-
 (
   cd core/bridge
-  go test ./orchestration/internal -run 'TestOrchestrationTopLevelFileAllowlist|TestDomainConcreteImport' -timeout 60s
+  go test ./transport -run 'TestTransportProduction(Import|Scope)Guard' -timeout 60s
+  go test ./orchestration/internal -run 'TestOrchestrationM2StructureBudget|TestOrchestrationTopLevelFileAllowlist|TestDomainConcreteImportFreeze' -timeout 60s
 )
 
 echo "layer check ok"

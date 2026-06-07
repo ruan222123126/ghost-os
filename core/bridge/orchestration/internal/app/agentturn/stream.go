@@ -20,10 +20,28 @@ func (s Service) ExecuteStream(
 	if err != nil {
 		return "", "", err
 	}
+	return s.executePreparedStream(ctx, prepared, traceID, trackedSink)
+}
+
+func (s Service) ExecutePreparedStream(
+	ctx context.Context,
+	prepared PreparedRequest,
+	traceID string,
+	sink streaming.Sink,
+) (string, string, error) {
+	return s.executePreparedStream(ctx, prepared, traceID, newEventTurnTracker(sink))
+}
+
+func (s Service) executePreparedStream(
+	ctx context.Context,
+	prepared PreparedRequest,
+	traceID string,
+	sink *eventTurnTracker,
+) (string, string, error) {
 	if prepared.Mode == ModePlan {
-		return s.executePlanStream(ctx, prepared, traceID, trackedSink)
+		return s.executePlanStream(ctx, prepared, traceID, sink)
 	}
-	return s.executeStandardStream(ctx, prepared, traceID, trackedSink)
+	return s.executeStandardStream(ctx, prepared, traceID, sink)
 }
 
 func (s Service) validateStreamRequest(

@@ -21,8 +21,8 @@ func TestPlanBuilderAcceptsEmptyDraft(t *testing.T) {
 
 func TestPlanBuilderRejectsLegacyBoundaries(t *testing.T) {
 	_, err := PlanBuilder{}.Build(legacyBoundaryDefinition())
-	if err == nil || !strings.Contains(err.Error(), "migrate orchestrations") {
-		t.Fatalf("expected legacy-boundary migration error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no longer supported") {
+		t.Fatalf("expected removed-boundary validation error, got %v", err)
 	}
 }
 

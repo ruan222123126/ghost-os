@@ -17,6 +17,7 @@ import {
   storesAreEqual,
   validatePartitionName,
   type PartitionNameValidationError,
+  type SessionSearchMatcher,
   type SessionPartitionStoreV1,
   type SessionPartitionView,
 } from '@/lib/sessionSidebarPartitions';
@@ -40,6 +41,7 @@ interface UseSessionSidebarPartitionsOptions {
   searchQuery: string;
   unclassifiedName: string;
   requestFailedText: string;
+  matchesSearch?: SessionSearchMatcher;
 }
 
 interface AddPartitionResult {
@@ -62,7 +64,7 @@ interface DeletePartitionResult {
   deletedName?: string;
 }
 
-interface UseSessionSidebarPartitionsResult {
+export interface UseSessionSidebarPartitionsResult {
   partitionViews: SessionPartitionView[];
   partitionError: string;
   legacyMigrationAvailable: boolean;
@@ -78,7 +80,7 @@ interface UseSessionSidebarPartitionsResult {
 export function useSessionSidebarPartitions(
   options: UseSessionSidebarPartitionsOptions,
 ): UseSessionSidebarPartitionsResult {
-  const { sessions, sessionsLoaded, searchQuery, unclassifiedName, requestFailedText } = options;
+  const { sessions, sessionsLoaded, searchQuery, unclassifiedName, requestFailedText, matchesSearch } = options;
   const [store, setStore] = useState(createInitialSessionPartitionStore);
   const [partitionError, setPartitionError] = useState('');
   const storeRef = useRef(store);
@@ -196,8 +198,9 @@ export function useSessionSidebarPartitions(
       store,
       searchQuery,
       unclassifiedName,
+      matchesSearch,
     });
-  }, [searchQuery, sessions, store, unclassifiedName]);
+  }, [matchesSearch, searchQuery, sessions, store, unclassifiedName]);
 
   const addPartition = useCallback((name: string): AddPartitionResult => {
     const current = storeRef.current;

@@ -16,7 +16,7 @@ import {
 } from '@/lib/configTasks';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { TaskUpdateRequest } from '@/lib/types';
+import type { TaskPatchRequest } from '@/lib/types';
 import type { AgentMessageTaskPayload, BridgeConfig, TaskPayload } from '@/lib/types';
 
 interface UseConfigTasksOptions {
@@ -124,7 +124,7 @@ function useSetTaskEnabled(
   return useCallback(async (id: string, enabled: boolean): Promise<void> => {
     dispatch({ type: 'mutate_start' });
     try {
-      const payload: Pick<TaskUpdateRequest, 'enabled'> = { enabled };
+      const payload: Pick<TaskPatchRequest, 'enabled'> = { enabled };
       dispatch({ type: 'upsert_task', task: await api.updateTask(id, payload) });
       dispatch({ type: 'set_saving', saving: false });
     } catch (error) {

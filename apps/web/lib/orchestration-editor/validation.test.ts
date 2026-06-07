@@ -41,7 +41,7 @@ describe('lib/orchestration-editor/validation', () => {
     expect(result.errors).toEqual([]);
   });
 
-  it('rejects legacy start/end nodes and points to the migration command', () => {
+  it('rejects removed start/end nodes', () => {
     const draft: WorkflowCanvasDraft = {
       mode: 'edit',
       schedule: { mode: 'interval', intervalSeconds: '60', cronExpr: '' },
@@ -74,8 +74,8 @@ describe('lib/orchestration-editor/validation', () => {
 
     expect(result.valid).toBe(false);
     expect(result.errors).toEqual(expect.arrayContaining([
-      'orchestration node type "start" is removed; run `bin/ghost-bridge migrate orchestrations`',
-      'orchestration node type "end" is removed; run `bin/ghost-bridge migrate orchestrations`',
+      'orchestration node type "start" is no longer supported',
+      'orchestration node type "end" is no longer supported',
       'orchestration control edge "start-node" -> "group-a" is invalid',
       'orchestration control edge "group-a" -> "end-node" is invalid',
     ]));

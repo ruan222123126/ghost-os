@@ -6,6 +6,7 @@ import {
   isStickyTerminalCard,
   latestActiveCard,
   mergeLiveTaskRunCards,
+  reconcileCardsWithRunStatus,
 } from './taskRunViewerCards';
 
 describe('taskRunViewerCards', () => {
@@ -44,12 +45,14 @@ describe('taskRunViewerCards', () => {
       finished_at: '2026-05-30T00:00:04Z',
       preview: 'hello',
       error: undefined,
+      final_text: 'hello',
       live_source_session_id: 'session-1',
     });
 
     expect(cards.map((card) => card.card_id)).toEqual(['card-1', 'card-2', 'card-3']);
     expect(cards[2].source_events).toHaveLength(1);
     expect(cards[2].live_source_session_id).toBe('session-1');
+    expect(cards[2].final_text).toBe('hello');
     expect(latestActiveCard(cards)?.card_id).toBe('card-2');
   });
 
@@ -109,6 +112,50 @@ describe('taskRunViewerCards', () => {
     expect(next[0].live_source_session_id).toBe('session-persisted');
   });
 
+  it('preserves live cards when refreshed snapshots omit run cards', () => {
+    const current = hydrateLiveTaskRunCards([{
+      card_id: 'card-1',
+      kind: 'workflow_agent',
+      started_at: '2026-05-30T00:00:01Z',
+      status: 'running',
+    }]);
+
+    const next = mergeLiveTaskRunCards(current, undefined);
+
+    expect(next).toEqual(current);
+  });
+
+  it('reconciles active cards with a terminal run snapshot', () => {
+    const cards = hydrateLiveTaskRunCards([
+      {
+        card_id: 'card-running',
+        kind: 'workflow_agent',
+        started_at: '2026-05-30T00:00:01Z',
+        status: 'running',
+      },
+      {
+        card_id: 'card-done',
+        kind: 'workflow_agent',
+        started_at: '2026-05-30T00:00:02Z',
+        status: 'success',
+      },
+    ]);
+
+    const next = reconcileCardsWithRunStatus(cards, 'cancelled', {
+      finished_at: '2026-05-30T00:00:03Z',
+      preview: 'cancelled by user',
+      error: undefined,
+    });
+
+    expect(next[0]).toMatchObject({
+      card_id: 'card-running',
+      status: 'cancelled',
+      finished_at: '2026-05-30T00:00:03Z',
+      preview: 'cancelled by user',
+    });
+    expect(next[1].status).toBe('success');
+  });
+
   it('derives source session id from persisted events when card field is empty', () => {
     const cards = hydrateLiveTaskRunCards([
       {
@@ -131,5 +178,49 @@ describe('taskRunViewerCards', () => {
     ]);
 
     expect(cards[0].live_source_session_id).toBe('session-from-events');
+  });
+
+  it('keeps distinct historical events when source event ids are empty', () => {
+    const cards = hydrateLiveTaskRunCards([
+      {
+        card_id: 'card-1',
+        kind: 'relay_round',
+        started_at: '2026-05-30T00:00:01Z',
+        source_events: [
+          {
+            id: '',
+            step_id: 'turn-0001-assistant',
+            trace_id: 'trace-1',
+            session_id: 'session-1',
+            turn: 1,
+            type: 'completion_delta',
+            payload: { kind: 'tool_call_start', tool_call_index: 0, tool_name: 'codex_cli' },
+            at: '2026-05-30T00:00:02Z',
+          },
+          {
+            id: '',
+            step_id: 'turn-0001-assistant',
+            trace_id: 'trace-1',
+            session_id: 'session-1',
+            turn: 1,
+            type: 'completion_delta',
+            payload: { kind: 'tool_call_delta', tool_call_index: 0, arguments_fragment: '{"op":"status"}' },
+            at: '2026-05-30T00:00:02Z',
+          },
+          {
+            id: '',
+            step_id: 'turn-0001-assistant',
+            trace_id: 'trace-1',
+            session_id: 'session-1',
+            turn: 1,
+            type: 'completion_delta',
+            payload: { kind: 'tool_call_end', tool_call_index: 0 },
+            at: '2026-05-30T00:00:02Z',
+          },
+        ],
+      },
+    ]);
+
+    expect(cards[0].source_events).toHaveLength(3);
   });
 });

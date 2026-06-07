@@ -20,6 +20,9 @@ interface DraftHydratedState {
   streamingToolState: StreamingToolTableState;
 }
 
+const ACTIVE_TOOL_STATUSES = new Set(['running', 'pending', 'in_progress']);
+const ERROR_TOOL_STATUS = 'error';
+
 export function buildDraftHydratedState(
   draft: SessionTurnDraft | null | undefined,
   sessionId: string,
@@ -101,7 +104,7 @@ function buildToolState(draft: SessionTurnDraft): StreamingToolTableState {
     content: tool.content,
     toolInput: tool.tool_input,
     toolName: tool.tool_name,
-    toolStatus: tool.tool_status,
+    toolStatus: normalizeDraftToolStatus(draft.status, tool.tool_status),
     toolCallId: tool.tool_call_id,
     traceId: tool.trace_id,
   }));
@@ -110,6 +113,17 @@ function buildToolState(draft: SessionTurnDraft): StreamingToolTableState {
     order: tools.map((tool) => tool.id),
     toolsById: Object.fromEntries(tools.map((tool) => [tool.id, tool])),
   };
+}
+
+function normalizeDraftToolStatus(
+  draftStatus: SessionTurnDraft['status'],
+  toolStatus?: string,
+): string | undefined {
+  const normalized = toolStatus?.trim().toLowerCase();
+  if (draftStatus === 'error' && normalized && ACTIVE_TOOL_STATUSES.has(normalized)) {
+    return ERROR_TOOL_STATUS;
+  }
+  return toolStatus;
 }
 
 function buildPendingQuestionState(draft: SessionTurnDraft, sessionId: string): PendingQuestionState {

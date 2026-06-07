@@ -1,21 +1,8 @@
 'use client';
 
-import type { CSSProperties, FC } from 'react';
+import type { FC } from 'react';
+import type { ToolCardTitleMode, ToolTone } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ToolChatMessage } from '@/lib/types';
-import { formatToolAction, formatToolCardDetails } from '@/lib/chat-view/tool-details/format';
-
-type ToolTone = 'running' | 'success' | 'error';
-
-const RUNNING_STATUSES = new Set(['running', 'pending', 'in_progress']);
-const ERROR_STATUSES = new Set(['error', 'failed']);
-const PROMOTED_TITLE_STYLE: CSSProperties = {
-  fontFamily: 'var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: '11px',
-  fontWeight: 600,
-  letterSpacing: '0',
-  textTransform: 'none',
-};
 
 const CheckIcon: FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -54,49 +41,30 @@ const TerminalIcon: FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-function normalizeStatus(status?: string): string {
-  return status?.trim().toLowerCase() || '';
-}
-
-function getToolTone(status?: string): ToolTone {
-  const normalized = normalizeStatus(status);
-  if (!normalized || RUNNING_STATUSES.has(normalized)) {
-    return 'running';
-  }
-  if (ERROR_STATUSES.has(normalized)) {
-    return 'error';
-  }
-  return 'success';
-}
-
-function getStatusLabel(tone: ToolTone, status?: string): string {
-  if (tone === 'running') {
-    return 'RUNNING';
-  }
-  if (tone === 'error') {
-    return 'FAILED';
-  }
-  const normalized = normalizeStatus(status);
-  if (!normalized || normalized === 'ok' || normalized === 'done' || normalized === 'completed') {
-    return 'SUCCESS';
-  }
-  return normalized.replaceAll('_', ' ').toUpperCase();
-}
-
 interface ToolCardProps {
+  details: string;
   isOpen: boolean;
   onToggle: () => void;
-  tool: ToolChatMessage;
-  toolCallCompactOutputEnabled: boolean;
+  showTerminalIcon?: boolean;
+  statusLabel: string;
+  title: string;
+  titleMode?: ToolCardTitleMode;
+  tone: ToolTone;
 }
 
-export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool, toolCallCompactOutputEnabled }) => {
+export const ToolCard: FC<ToolCardProps> = ({
+  details,
+  isOpen,
+  onToggle,
+  showTerminalIcon = true,
+  statusLabel,
+  title,
+  titleMode = 'status',
+  tone,
+}) => {
   const { copy } = useWebLocale();
-  const actionValue = formatToolAction(tool);
-  const action = actionValue.text === 'Tool' ? copy.chat.toolFallbackName : actionValue.text;
-  const details = formatToolCardDetails(tool, { compactOutputEnabled: toolCallCompactOutputEnabled });
-  const tone = getToolTone(tool.toolStatus);
-  const statusLabel = getStatusLabel(tone, tool.toolStatus);
+  const displayTitle = titleMode === 'plain' ? title : buildToolStatusTitle(tone, title, copy.chat);
+  const displayStatus = buildToolStatusLabel(tone, statusLabel, copy.chat);
 
   return (
     <div className={`tool-card is-${tone}`}>
@@ -106,31 +74,61 @@ export const ToolCard: FC<ToolCardProps> = ({ isOpen, onToggle, tool, toolCallCo
         className={`tool-card-button${isOpen ? ' is-open' : ''} is-${tone}`}
       >
         <span className="tool-card-heading">
+          {showTerminalIcon ? <TerminalIcon className="tool-terminal-icon" /> : null}
+          <span className="tool-card-title" title={displayTitle}>{displayTitle}</span>
           <ChevronIcon expanded={isOpen} className="tool-chevron" />
-          <TerminalIcon className="tool-terminal-icon" />
-          <span
-            className="tool-card-title"
-            style={actionValue.variant === 'default' ? undefined : PROMOTED_TITLE_STYLE}
-            title={action}
-          >
-            {action}
-          </span>
-        </span>
-        <span className={`tool-card-status is-${tone}`}>
-          {tone === 'running'
-            ? <span className="tool-spinner" />
-            : tone === 'error'
-              ? <XIcon className="tool-status-icon" />
-              : <CheckIcon className="tool-status-icon" />}
-          <span className="tool-card-status-label">{statusLabel}</span>
         </span>
       </button>
 
       {isOpen ? (
         <div className={`tool-details is-${tone}`}>
-          <pre>{details || copy.chat.toolPreparingOutput}</pre>
+          <span className="tool-details-kind">{copy.chat.toolDetailsKind}</span>
+          <div className="tool-details-command">{title}</div>
+          {details ? (
+            <div className="tool-details-output">
+              <pre>{details}</pre>
+            </div>
+          ) : null}
+          <div className={`tool-card-status is-${tone}`}>
+            {tone === 'running'
+              ? <span className="tool-spinner" />
+              : tone === 'error'
+                ? <XIcon className="tool-status-icon" />
+                : <CheckIcon className="tool-status-icon" />}
+            <span className="tool-card-status-label">{displayStatus}</span>
+          </div>
         </div>
       ) : null}
     </div>
   );
 };
+
+function buildToolStatusTitle(
+  tone: ToolTone,
+  title: string,
+  chat: ReturnType<typeof useWebLocale>['copy']['chat'],
+): string {
+  switch (tone) {
+    case 'running':
+      return chat.toolRunningTitle(title);
+    case 'error':
+      return chat.toolErrorTitle(title);
+    case 'success':
+      return chat.toolSuccessTitle(title);
+  }
+}
+
+function buildToolStatusLabel(
+  tone: ToolTone,
+  statusLabel: string,
+  chat: ReturnType<typeof useWebLocale>['copy']['chat'],
+): string {
+  switch (tone) {
+    case 'running':
+      return chat.toolStatusRunning;
+    case 'error':
+      return chat.toolStatusError;
+    case 'success':
+      return chat.toolStatusSuccess || statusLabel;
+  }
+}

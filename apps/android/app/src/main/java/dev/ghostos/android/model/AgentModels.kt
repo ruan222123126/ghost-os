@@ -58,7 +58,13 @@ data class AgentAwaitingHumanResponse(
     @SerialName("selection_mode")
     val selectionMode: String? = null,
     val options: List<AskHumanOption>? = null
-) : AgentSendResponse
+) : AgentSendResponse {
+    companion object {
+        const val STATUS_AWAITING_HUMAN = "awaiting_human"
+        const val SELECTION_MODE_SINGLE = "single"
+        const val SELECTION_MODE_MULTIPLE = "multiple"
+    }
+}
 
 @Serializable
 data class AgentStopResponsePayload(
@@ -66,7 +72,12 @@ data class AgentStopResponsePayload(
     val message: String,
     @SerialName("session_id")
     val sessionId: String? = null
-)
+) {
+    companion object {
+        const val STATUS_STOPPED = "stopped"
+        const val STATUS_NOT_RUNNING = "not_running"
+    }
+}
 
 @Serializable
 data class HumanResponseRequest(

@@ -138,4 +138,38 @@ describe('lib/chat-view/streamingRows', () => {
       },
     ]);
   });
+
+  it('marks only the active streaming thinking row as in progress', () => {
+    const rows = getOrderedStreamingRows({
+      activeStreamingThinkingId: 'thinking-segment-2',
+      pendingQuestions: [],
+      streamingAssistantSegments: [],
+      streamingThinkingSegments: [
+        buildThinkingSegment('thinking-segment-1', 'before tool'),
+        buildThinkingSegment('thinking-segment-2', 'after tool'),
+      ],
+      streamingItemOrder: [
+        'thinking:thinking-segment-1',
+        'thinking:thinking-segment-2',
+      ],
+      streamingTools: [],
+    });
+
+    expect(rows).toMatchObject([
+      {
+        message: {
+          kind: 'thinking',
+          content: 'before tool',
+        },
+      },
+      {
+        message: {
+          kind: 'thinking',
+          content: 'after tool',
+          inProgress: true,
+        },
+      },
+    ]);
+    expect(rows[0].message).not.toHaveProperty('inProgress');
+  });
 });

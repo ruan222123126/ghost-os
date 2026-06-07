@@ -1,12 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CloseButton } from '@/components/CloseButton';
+import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import { formatTaskRunStatus, formatTaskRunTimestamp } from '@/lib/taskRunDisplay';
 import type { TaskRunLog } from '@/lib/types';
 import { LiveRunViewerModal, type LiveRunViewerTarget } from './LiveRunViewerModal';
 import { TaskRunLogActions } from './TaskRunLogActions';
+
+const LIVE_VIEW_RUN_REFRESH_MS = 2000;
 
 interface TaskLogsModalProps {
   taskID: string;
@@ -34,17 +37,63 @@ export function TaskLogsModal(props: TaskLogsModalProps) {
   const [viewerTarget, setViewerTarget] = useState<LiveRunViewerTarget | null>(null);
   const [viewerError, setViewerError] = useState('');
 
+  useEffect(() => {
+    if (!viewerTarget) {
+      return;
+    }
+    const latest = findRunLog(logs, viewerTarget.run.run_id);
+    if (!latest || !shouldReplaceViewerRun(viewerTarget.run, latest)) {
+      return;
+    }
+    setViewerTarget({ run: latest });
+  }, [logs, viewerTarget]);
+
+  useEffect(() => {
+    if (!viewerTarget || !onRefreshLogs || !isRunningRun(viewerTarget.run)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refreshOpenRun = async () => {
+      try {
+        const refreshed = await onRefreshLogs(taskID);
+        if (cancelled) {
+          return;
+        }
+        const latest = findRunLog(refreshed, viewerTarget.run.run_id);
+        if (!latest) {
+          return;
+        }
+        setViewerError('');
+        setViewerTarget({ run: latest });
+        if (isRunningRun(latest)) {
+          timer = setTimeout(refreshOpenRun, LIVE_VIEW_RUN_REFRESH_MS);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setViewerError(toErrorMessage(nextError));
+          timer = setTimeout(refreshOpenRun, LIVE_VIEW_RUN_REFRESH_MS);
+        }
+      }
+    };
+
+    timer = setTimeout(refreshOpenRun, LIVE_VIEW_RUN_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      if (timer) {
+        clearTimeout(timer);
+      }
+    };
+  }, [onRefreshLogs, taskID, viewerTarget]);
+
   const openLiveViewer = async (run: TaskRunLog) => {
     setViewerError('');
     try {
       const latest = await resolveViewerRun(taskID, run, onRefreshLogs);
       setViewerTarget({ run: latest });
     } catch (nextError) {
-      if (nextError instanceof Error) {
-        setViewerError(nextError.message);
-        return;
-      }
-      setViewerError(String(nextError));
+      setViewerError(toErrorMessage(nextError));
     }
   };
 
@@ -72,6 +121,57 @@ export function TaskLogsModal(props: TaskLogsModalProps) {
       ) : null}
     </>
   );
+}
+
+function findRunLog(logs: TaskRunLog[], runID: string): TaskRunLog | undefined {
+  return logs.find((entry) => entry.run_id === runID);
+}
+
+function isRunningRun(run: TaskRunLog): boolean {
+  return run.status === 'running';
+}
+
+function shouldReplaceViewerRun(current: TaskRunLog, next: TaskRunLog): boolean {
+  if (current === next) {
+    return false;
+  }
+  const currentRank = runStatusRank(current);
+  const nextRank = runStatusRank(next);
+  if (nextRank < currentRank) {
+    return false;
+  }
+  if (nextRank > currentRank) {
+    return true;
+  }
+  if (newerTimestamp(next.finished_at, current.finished_at)) {
+    return true;
+  }
+  if (currentRank === 2 && nextRank === 2) {
+    return false;
+  }
+  return current.status !== next.status
+    || current.response_preview !== next.response_preview
+    || current.error !== next.error
+    || current.run_cards !== next.run_cards;
+}
+
+function runStatusRank(run: TaskRunLog): number {
+  if (run.status === 'running') {
+    return 0;
+  }
+  if (run.status === 'awaiting_human') {
+    return 1;
+  }
+  return 2;
+}
+
+function newerTimestamp(next?: string, current?: string): boolean {
+  const nextTime = Date.parse(next ?? '');
+  if (!Number.isFinite(nextTime)) {
+    return false;
+  }
+  const currentTime = Date.parse(current ?? '');
+  return !Number.isFinite(currentTime) || nextTime >= currentTime;
 }
 
 function TaskLogsModalHeader(props: { taskID: string; onClose: () => void }) {
@@ -149,7 +249,6 @@ function TaskRunLogCard(props: {
         />
       </summary>
       <div className="mt-3 space-y-2 text-[12px] text-[#111111]">
-        <p className="font-mono text-[#525252]">trace_id: {log.trace_id}</p>
         <PreviewBlock preview={log.response_preview} />
         {log.error ? <p className="text-[#B91C1C]">error: {log.error}</p> : null}
       </div>

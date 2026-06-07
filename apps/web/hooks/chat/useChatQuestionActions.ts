@@ -81,7 +81,7 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
         traceId,
       });
     } catch (error) {
-      if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current)) {
+      if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current, abortController.signal.aborted)) {
         appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
@@ -135,7 +135,7 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
         traceId,
       });
     } catch (error) {
-      if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current)) {
+      if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current, abortController.signal.aborted)) {
         appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
@@ -163,14 +163,17 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
   };
 }
 
-function shouldSuppressQuestionStreamError(error: unknown, stopPending: boolean): boolean {
-  if (!stopPending) {
-    return false;
+function shouldSuppressQuestionStreamError(error: unknown, stopPending: boolean, streamAborted: boolean): boolean {
+  if (isAbortError(error)) {
+    return true;
   }
 
   const message = toErrorMessage(error);
-  return isAbortError(error)
-    || message === 'agent stream closed before terminal event'
+  if (!stopPending && !streamAborted) {
+    return false;
+  }
+
+  return message === 'agent stream closed before terminal event'
     || message === 'agent run cancelled';
 }
 

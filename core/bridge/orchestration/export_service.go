@@ -21,6 +21,11 @@ type StreamSink = streaming.Sink
 type ServiceOutcome = bus.ServiceOutcome
 type ServiceErrorKind = bus.ServiceErrorKind
 type ServiceResult = bus.ServiceResult
+type SystemPromptUpdateRequest = bridgeconfig.SystemPromptUpdateRequest
+type PresetCreateRequest = bridgeconfig.PresetCreateRequest
+type PresetUpdateRequest = bridgeconfig.PresetUpdateRequest
+type SkillIDParams = bridgeskills.SkillIDParams
+type SkillUpdateRequest = bridgeskills.SkillUpdateRequest
 
 const (
 	ServiceOutcomeSuccess  = bus.ServiceOutcomeSuccess
@@ -174,6 +179,10 @@ func (s *Service) ExecuteSessionsListAction(traceID string) (ServiceResult, erro
 	return s.inner.executeSessionsListAction(traceID)
 }
 
+func (s *Service) ExecuteSessionsSearchAction(query string, limit int, traceID string) (ServiceResult, error) {
+	return s.inner.executeSessionsSearchAction(query, limit, traceID)
+}
+
 func (s *Service) ExecuteSessionSourcesAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionSourcesAction(traceID)
 }
@@ -198,12 +207,8 @@ func (s *Service) ExecuteAgentStreamAction(ctx context.Context, params AgentPara
 	return s.inner.executeAgentStreamAction(ctx, params, traceID, sink)
 }
 
-func (s *Service) EnsureSessionNotInflight(sessionID string) error {
-	return s.inner.ensureSessionNotInflight(sessionID)
-}
-
-func (s *Service) EnsureSessionActive(sessionID string) error {
-	return s.inner.ensureSessionActive(sessionID)
+func (s *Service) PrepareAgentStreamAction(ctx context.Context, params AgentParams, traceID string) (PreparedAgentStream, ServiceResult, error) {
+	return s.inner.prepareAgentStreamAction(ctx, params, traceID)
 }
 
 func (s *Service) ExecuteSkillListAction(traceID string) (ServiceResult, error) {

@@ -14,7 +14,6 @@ export interface StreamHumanRunOptions {
 export interface UseChatStreamControllerOptions {
   activeRunRef: ChatStateControls['activeRunRef'];
   applyRuntimeActions: (actions: ChatRuntimeAction[]) => void;
-  clearStreamingState: ChatStateControls['clearStreamingState'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
   endHistorySync: ChatStateControls['endHistorySync'];
   onSessionResolved: UseBridgeChatOptions['onSessionResolved'];

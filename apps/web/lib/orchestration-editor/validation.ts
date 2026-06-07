@@ -4,7 +4,7 @@ import type { WorkflowCanvasDraft, WorkflowValidationResult } from '@/lib/workfl
 
 const SPEAKING_MODES = ['sequential', 'parallel', 'owner'] as const;
 const GROUP_REQUIRED_ERROR = 'orchestration requires at least 1 group node';
-const LEGACY_BOUNDARY_ERROR = 'orchestration node type "%s" is removed; run `bin/ghost-bridge migrate orchestrations`';
+const LEGACY_BOUNDARY_ERROR = 'orchestration node type "%s" is no longer supported';
 
 export function validateOrchestrationDraft(
   draft: WorkflowCanvasDraft,

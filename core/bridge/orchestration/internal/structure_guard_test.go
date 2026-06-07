@@ -13,7 +13,7 @@ import (
 const (
 	maxM2TopLevelGoFiles         = 29
 	maxM2ProductionFileLines     = 300
-	maxM2OversizedGoDirectories  = 3
+	maxM2OversizedGoDirectories  = 1
 	maxGoFilesPerTargetDirectory = 15
 )
 
@@ -28,10 +28,15 @@ func TestOrchestrationM2StructureBudget(t *testing.T) {
 		t.Fatalf("production Go files over %d lines: %s", maxM2ProductionFileLines, strings.Join(offenders, ", "))
 	}
 	if offenders := oversizedDirectories(root, files); len(offenders) > maxM2OversizedGoDirectories {
-		t.Fatalf("directories over %d Go files = %d, want <= %d: %s",
+		t.Fatalf("directories over %d Go files = %d, want <= %d and only top-level orchestration may exceed the target: %s",
 			maxGoFilesPerTargetDirectory,
 			len(offenders),
 			maxM2OversizedGoDirectories,
+			strings.Join(offenders, ", "),
+		)
+	} else if len(offenders) > 0 && !onlyTopLevelOrchestrationOversized(offenders) {
+		t.Fatalf("only top-level orchestration may exceed %d Go files during Phase 0: %s",
+			maxGoFilesPerTargetDirectory,
 			strings.Join(offenders, ", "),
 		)
 	}
@@ -238,10 +243,10 @@ var allowedTopLevelOrchestrationFiles = map[string]bool{
 	"orchestration_contract_agent_stream_misc_test.go":                      true,
 	"orchestration_contract_agent_stream_test.go":                           true,
 	"orchestration_contract_fixtures_test.go":                               true,
-	"orchestration_contract_legacy_migration_test.go":                       true,
 	"orchestration_contract_orchestration_owner_dispatch_test.go":           true,
 	"orchestration_contract_orchestration_owner_runtime_validation_test.go": true,
 	"orchestration_contract_relay_test.go":                                  true,
+	"orchestration_contract_removed_inputs_test.go":                         true,
 	"orchestration_contract_schema_config_guards_test.go":                   true,
 	"orchestration_contract_session_history_test.go":                        true,
 	"orchestration_contract_session_payload_test.go":                        true,
@@ -304,5 +309,15 @@ func oversizedDirectories(root string, files []string) []string {
 		}
 		offenders = append(offenders, rel)
 	}
+	sort.Strings(offenders)
 	return offenders
+}
+
+func onlyTopLevelOrchestrationOversized(offenders []string) bool {
+	for _, offender := range offenders {
+		if offender != "." {
+			return false
+		}
+	}
+	return true
 }

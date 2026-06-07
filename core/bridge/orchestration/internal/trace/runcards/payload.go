@@ -6,7 +6,6 @@ import (
 	"time"
 
 	apicontracts "ghost-os/bridge/orchestration/internal/contracts/api"
-	"ghost-os/bridge/streaming"
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
@@ -26,7 +25,7 @@ func startedPayload(card bridgeTasks.RunCard) apicontracts.TaskRunCardStartedPay
 	}
 }
 
-func eventPayload(cardID string, event streaming.Event) apicontracts.TaskRunCardEventPayload {
+func eventPayload(cardID string, event bridgeTasks.RunCardSourceEvent) apicontracts.TaskRunCardEventPayload {
 	return apicontracts.TaskRunCardEventPayload{
 		CardID:          strings.TrimSpace(cardID),
 		SourceSessionID: strings.TrimSpace(event.SessionID),
@@ -36,7 +35,7 @@ func eventPayload(cardID string, event streaming.Event) apicontracts.TaskRunCard
 			TraceID:   strings.TrimSpace(event.TraceID),
 			SessionID: strings.TrimSpace(event.SessionID),
 			Turn:      event.Turn,
-			Type:      string(event.Type),
+			Type:      event.Type,
 			Payload:   payloadRecord(event.Payload),
 			At:        event.At.Format(time.RFC3339Nano),
 		},
@@ -50,6 +49,7 @@ func finishedPayload(card bridgeTasks.RunCard) apicontracts.TaskRunCardFinishedP
 		FinishedAt:      card.FinishedAt.Format(time.RFC3339Nano),
 		Preview:         card.Preview,
 		Error:           card.Error,
+		FinalText:       card.FinalText,
 		SourceSessionID: card.SourceSessionID,
 	}
 }

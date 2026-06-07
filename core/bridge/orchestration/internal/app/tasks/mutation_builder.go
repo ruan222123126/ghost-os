@@ -10,6 +10,8 @@ import (
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
+const defaultCreatedTaskEnabled = false
+
 type TaskSessionGuard interface {
 	EnsureTaskSessionActive(taskKind string, sessionID string) error
 }
@@ -29,7 +31,11 @@ func (b TaskMutationBuilder) NewScheduledTask(params api.TaskCreateParams) (brid
 	if err != nil {
 		return bridgeTasks.ScheduledTask{}, WrapConfigError(err)
 	}
-	task.NextRunAt = nextRunAt
+	if task.Enabled {
+		task.NextRunAt = nextRunAt
+	} else {
+		task.NextRunAt = time.Time{}
+	}
 	return task, nil
 }
 
@@ -136,7 +142,7 @@ func BuildTaskFromCreateParams(
 		ActionParams:     taskdefs.CloneActionParams(params.ActionParams),
 		Workflow:         taskdefs.CloneWorkflowDefinition(params.Workflow),
 		Orchestration:    taskdefs.CloneOrchestrationDefinition(params.Orchestration),
-		Enabled:          true,
+		Enabled:          defaultCreatedTaskEnabled,
 		CreatedAt:        now.UTC(),
 		ScheduleType:     bridgeTasks.ScheduleTypeInterval,
 		IntervalSeconds:  params.IntervalSeconds,

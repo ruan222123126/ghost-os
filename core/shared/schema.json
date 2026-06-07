@@ -96,6 +96,9 @@
         "agentToolCallFinishedPayload": {
             "$ref": "./schema/defs/streaming_events.json#/$defs/agentToolCallFinishedPayload"
         },
+        "agentAwaitingHumanStreamPayload": {
+            "$ref": "./schema/defs/streaming_events.json#/$defs/agentAwaitingHumanStreamPayload"
+        },
         "agentStreamMessagePayload": {
             "$ref": "./schema/defs/streaming_events.json#/$defs/agentStreamMessagePayload"
         },
@@ -216,6 +219,9 @@
         "taskUpdateRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskUpdateRequest"
         },
+        "taskPatchRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskPatchRequest"
+        },
         "taskIDRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskIDRequest"
         },
@@ -230,6 +236,24 @@
         },
         "orchestrationTaskPayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/orchestrationTaskPayload"
+        },
+        "taskRunNodeResult": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunNodeResult"
+        },
+        "taskRunCard": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunCard"
+        },
+        "taskRunLog": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunLog"
+        },
+        "taskRunPayload": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunPayload"
+        },
+        "taskRunStopRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunStopRequest"
+        },
+        "taskRunStopResponse": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunStopResponse"
         },
         "taskDeletePayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskDeletePayload"

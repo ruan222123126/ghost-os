@@ -20,7 +20,18 @@ data class AgentStreamEvent(
     val type: String,
     val payload: JsonObject,
     val at: String? = null
-)
+) {
+    companion object {
+        const val TYPE_RUN_STARTED = "run_started"
+        const val TYPE_COMPLETION_DELTA = "completion_delta"
+        const val TYPE_TOOL_CALL_STARTED = "tool_call_started"
+        const val TYPE_TOOL_CALL_FINISHED = "tool_call_finished"
+        const val TYPE_AWAITING_HUMAN = "awaiting_human"
+        const val TYPE_MESSAGE = "message"
+        const val TYPE_DONE = "done"
+        const val TYPE_ERROR = "error"
+    }
+}
 
 @Serializable
 data class SessionPushEvent(
@@ -32,7 +43,21 @@ data class SessionPushEvent(
     val sessionId: String,
     val payload: JsonObject,
     val at: String? = null
-)
+) {
+    companion object {
+        const val TYPE_ASSISTANT_MESSAGE = "assistant_message"
+        const val TYPE_AWAITING_HUMAN = "awaiting_human"
+        const val TYPE_RUN_STARTED = "run_started"
+        const val TYPE_COMPLETION_DELTA = "completion_delta"
+        const val TYPE_TOOL_CALL_STARTED = "tool_call_started"
+        const val TYPE_TOOL_CALL_FINISHED = "tool_call_finished"
+        const val TYPE_ERROR = "error"
+        const val TYPE_DONE = "done"
+        const val TYPE_TASK_RUN_CARD_STARTED = "task_run_card_started"
+        const val TYPE_TASK_RUN_CARD_EVENT = "task_run_card_event"
+        const val TYPE_TASK_RUN_CARD_FINISHED = "task_run_card_finished"
+    }
+}
 
 @Serializable
 data class AgentRunStartedPayload(
@@ -53,7 +78,15 @@ data class AgentCompletionDeltaPayload(
     val toolName: String? = null,
     @SerialName("arguments_fragment")
     val argumentsFragment: String? = null
-)
+) {
+    companion object {
+        const val KIND_TEXT = "text"
+        const val KIND_THINKING = "thinking"
+        const val KIND_TOOL_CALL_START = "tool_call_start"
+        const val KIND_TOOL_CALL_DELTA = "tool_call_delta"
+        const val KIND_TOOL_CALL_END = "tool_call_end"
+    }
+}
 
 @Serializable
 data class AgentToolCallStartedPayload(
@@ -72,6 +105,19 @@ data class AgentToolCallFinishedPayload(
     val status: String? = null,
     val error: String? = null,
     val output: String? = null
+)
+
+@Serializable
+data class AgentAwaitingHumanStreamPayload(
+    val tool: String? = null,
+    @SerialName("tool_call_id")
+    val toolCallId: String? = null,
+    @SerialName("question_id")
+    val questionId: String,
+    val prompt: String,
+    @SerialName("selection_mode")
+    val selectionMode: String? = null,
+    val options: List<AskHumanOption>? = null
 )
 
 @Serializable
@@ -157,6 +203,8 @@ data class TaskRunCardFinishedPayload(
     val finishedAt: String,
     val preview: String? = null,
     val error: String? = null,
+    @SerialName("final_text")
+    val finalText: String? = null,
     @SerialName("source_session_id")
     val sourceSessionId: String? = null
 )

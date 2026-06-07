@@ -27,7 +27,7 @@ func validateNode(node Node) error {
 
 func legacyBoundaryNodeError(nodeType string) error {
 	return fmt.Errorf(
-		"%w: orchestration node type %q is removed; run `bin/ghost-bridge migrate orchestrations`",
+		"%w: orchestration node type %q is no longer supported",
 		taskdefs.ErrInvalidTaskConfig,
 		nodeType,
 	)

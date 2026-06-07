@@ -35,14 +35,15 @@ func (r QueryRunner) Logs(params api.TaskLogsParams) ([]api.TaskRunLogPayload, e
 	if err != nil {
 		return nil, err
 	}
-	if params.Limit < 0 {
-		return nil, InvalidConfig("limit must be >= 0")
+	limit, err := ResolveRunLogLimit(params.Limit)
+	if err != nil {
+		return nil, err
 	}
 	task, err := r.loadScopedTask(id, params.Scope)
 	if err != nil {
 		return nil, err
 	}
-	runs, err := r.Store.ListRunLogs(task.ID, params.Limit)
+	runs, err := r.Store.ListRunLogs(task.ID, limit)
 	if err != nil {
 		return nil, err
 	}

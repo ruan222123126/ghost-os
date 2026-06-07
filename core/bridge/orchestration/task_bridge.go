@@ -8,7 +8,6 @@ import (
 	runtimeadapter "ghost-os/bridge/orchestration/internal/adapters/runtime"
 	"ghost-os/bridge/orchestration/internal/adapters/toolregistry"
 	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
-	orchestrationmigration "ghost-os/bridge/orchestration/internal/app/orchestrations/migration"
 	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	workflowdomain "ghost-os/bridge/orchestration/internal/domain/workflow"
 	"ghost-os/bridge/taskdefs"
@@ -105,8 +104,39 @@ type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
 type TaskStore = bridgeTasks.Store
 type TaskScheduler = bridgeTasks.TaskScheduler
-type LegacyOrchestrationMigrationReport = orchestrationmigration.Report
 type workflowExecutionPlan = workflowdomain.Plan
+
+type TaskScopeKind string
+
+const (
+	TaskScopeKindUser          TaskScopeKind = "user"
+	TaskScopeKindOrchestration TaskScopeKind = "orchestration"
+)
+
+func (s *Service) ExecuteUserTaskListAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskListActionResult(taskListScopeUser, traceID)
+}
+
+func (s *Service) ExecuteSystemTaskListAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskListActionResult(taskListScopeSystem, traceID)
+}
+
+func (s *Service) ExecuteOrchestrationListAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskListActionResult(taskListScopeOrchestration, traceID)
+}
+
+func (s *Service) ExecuteUserTaskCreateAction(req TaskCreateParams, traceID string) (ServiceResult, error) {
+	return s.executeTaskCreateInScope(req, taskListScopeUser, traceID)
+}
+
+func (s *Service) ExecuteOrchestrationCreateAction(req TaskCreateParams, traceID string) (ServiceResult, error) {
+	return s.executeTaskCreateInScope(req, taskListScopeOrchestration, traceID)
+}
+
+func (s *Service) executeTaskCreateInScope(req TaskCreateParams, scope string, traceID string) (ServiceResult, error) {
+	req.Scope = scope
+	return s.inner.executeTaskCreateActionResult(req, traceID)
+}
 
 type relayRuntimeBuilder struct {
 	service *bridgeService
@@ -114,16 +144,6 @@ type relayRuntimeBuilder struct {
 
 func NewTaskStore(baseDir string) (*TaskStore, error) {
 	return bridgeTasks.NewStore(baseDir, validateTaskDefinition)
-}
-
-// DetectLegacyOrchestrationTasks 返回仍包含 legacy start/end 节点的 orchestration 任务 ID。
-func DetectLegacyOrchestrationTasks(baseDir string) ([]string, error) {
-	return orchestrationmigration.Detect(baseDir)
-}
-
-// MigrateLegacyOrchestrations 显式移除 orchestration 任务中的 legacy start/end 边界节点并写回。
-func MigrateLegacyOrchestrations(baseDir string) (LegacyOrchestrationMigrationReport, error) {
-	return orchestrationmigration.Migrate(baseDir, validateTaskDefinition)
 }
 
 func validateTaskDefinition(task *ScheduledTask) error {

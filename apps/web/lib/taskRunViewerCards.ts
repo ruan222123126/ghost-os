@@ -25,7 +25,10 @@ export function mergeLiveTaskRunCards(
   current: LiveTaskRunCard[],
   cards: TaskRunCard[] | undefined,
 ): LiveTaskRunCard[] {
-  if (!cards?.length) {
+  if (!cards) {
+    return current;
+  }
+  if (!cards.length) {
     return [];
   }
   const currentByID = new Map(current.map((card) => [card.card_id, card]));
@@ -42,6 +45,29 @@ export function mergeLiveTaskRunCards(
       };
     })
     .sort(compareCardsByStartTime);
+}
+
+export function reconcileCardsWithRunStatus(
+  cards: LiveTaskRunCard[],
+  status: string | undefined,
+  patch: Pick<LiveTaskRunCard, 'finished_at' | 'preview' | 'error'>,
+): LiveTaskRunCard[] {
+  const normalizedStatus = status?.trim();
+  if (!normalizedStatus || normalizedStatus === 'running') {
+    return cards;
+  }
+  return cards.map((card) => {
+    if (!isActiveCard(card)) {
+      return card;
+    }
+    return {
+      ...card,
+      status: normalizedStatus,
+      finished_at: card.finished_at || patch.finished_at,
+      preview: card.preview || patch.preview,
+      error: card.error || patch.error,
+    };
+  });
 }
 
 export function applyStartedCard(
@@ -78,7 +104,10 @@ export function applyCardEvent(
 
 export function applyFinishedCard(
   cards: LiveTaskRunCard[],
-  patch: Pick<LiveTaskRunCard, 'card_id' | 'status' | 'finished_at' | 'preview' | 'error' | 'live_source_session_id'>,
+  patch: Pick<
+    LiveTaskRunCard,
+    'card_id' | 'status' | 'finished_at' | 'preview' | 'error' | 'final_text' | 'live_source_session_id'
+  >,
 ): LiveTaskRunCard[] {
   return cards.map((card) => {
     if (card.card_id !== patch.card_id) {
@@ -90,6 +119,7 @@ export function applyFinishedCard(
       finished_at: patch.finished_at,
       preview: patch.preview,
       error: patch.error,
+      final_text: patch.final_text || card.final_text,
       live_source_session_id: patch.live_source_session_id || card.live_source_session_id,
     };
   });
@@ -115,7 +145,10 @@ export function isStickyTerminalCard(card: LiveTaskRunCard | null | undefined): 
 }
 
 export function isSummaryOnlyCard(card: LiveTaskRunCard): boolean {
-  return card.kind === 'relay_round' && card.status !== 'running' && Boolean(card.final_text?.trim());
+  return card.kind === 'relay_round'
+    && card.status !== 'running'
+    && card.source_events.length === 0
+    && Boolean(card.final_text?.trim() || card.preview?.trim());
 }
 
 export function resolveCardSourceSessionId(card: LiveTaskRunCard | null | undefined): string {
@@ -167,7 +200,16 @@ function eventKey(event: AgentStreamEvent): string {
     event.turn,
     event.type,
     event.at ?? '',
+    eventPayloadKey(event),
   ].join(':');
+}
+
+function eventPayloadKey(event: AgentStreamEvent): string {
+  try {
+    return JSON.stringify(event.payload ?? {});
+  } catch {
+    return '';
+  }
 }
 
 function compareCardsByStartTime(left: LiveTaskRunCard, right: LiveTaskRunCard): number {

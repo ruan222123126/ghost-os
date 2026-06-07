@@ -1,21 +1,11 @@
-import { filterCommittedMessagesForDisplay } from '@/components/message/messageVisibility';
-import { shouldShowThinkingIndicator } from '@/components/message/thinkingState';
-import { getOrderedStreamingRows } from '@/lib/chat-view/streamingRows';
-import type { UseBridgeChatResult } from '@/hooks/chat/types';
+import { buildChatViewProjection } from './messageRows';
+import type { ChatViewInput } from './types';
 
 interface HomeEmptyStateOptions {
   currentSessionId: string;
-  chat: Pick<
-    UseBridgeChatResult,
-    | 'committedMessages'
-    | 'pendingQuestions'
-    | 'streamingAssistantSegments'
-    | 'streamingThinkingSegments'
-    | 'streamingItemOrder'
-    | 'streamingTools'
-    | 'loading'
-    | 'historyLoading'
-  >;
+  chat: Omit<ChatViewInput, 'showSystemPromptMessages'> & {
+    historyLoading: boolean;
+  };
   showSystemPromptMessages: boolean;
 }
 
@@ -28,19 +18,17 @@ export function shouldShowHomeEmptyState(options: HomeEmptyStateOptions): boolea
     return false;
   }
 
-  const visibleCommittedMessages = filterCommittedMessagesForDisplay(
-    options.chat.committedMessages,
-    options.chat.pendingQuestions,
-    options.showSystemPromptMessages,
-  );
-  if (visibleCommittedMessages.length > 0) {
+  const projection = buildChatViewProjection({
+    ...options.chat,
+    showSystemPromptMessages: options.showSystemPromptMessages,
+  });
+  if (projection.visibleCommittedMessages.length > 0) {
     return false;
   }
 
-  const streamingRows = getOrderedStreamingRows(options.chat);
-  if (streamingRows.length > 0) {
+  if (projection.streamingRows.length > 0) {
     return false;
   }
 
-  return !shouldShowThinkingIndicator(options.chat);
+  return !projection.showThinkingIndicator;
 }

@@ -15,7 +15,7 @@ describe('orchestration dispatch compact details', () => {
       }),
     }), { compactOutputEnabled: true });
 
-    expect(details).toBe('玩家1（agent-2）：我是好人，这轮先听法官安排。');
+    expect(details).toBe('玩家1：我是好人，这轮先听法官安排。');
   });
 
   it('renders private_once participants plus transcript in compact mode', () => {
@@ -33,7 +33,7 @@ describe('orchestration dispatch compact details', () => {
       }),
     }), { compactOutputEnabled: true });
 
-    expect(details).toBe('私密子回合：agent-1、agent-2\n法官（agent-1）：今晚你要查验谁？\n玩家1（agent-2）：我查验 3 号。');
+    expect(details).toBe('私密子回合\n法官：今晚你要查验谁？\n玩家1：我查验 3 号。');
   });
 
   it('renders public_once args before result hydration in compact mode', () => {
@@ -47,7 +47,7 @@ describe('orchestration dispatch compact details', () => {
       }),
     }), { compactOutputEnabled: true });
 
-    expect(details).toBe('公开轮：agent-2、agent-3\n指令：按顺序公开发言');
+    expect(details).toBe('公开轮\n指令：按顺序公开发言');
   });
 });
 

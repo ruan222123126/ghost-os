@@ -27,6 +27,74 @@ type TaskConfig struct {
 	WorkflowToolAllowlist []string
 }
 
+type WorkerConfig struct {
+	Model          string
+	MaxConcurrency int
+	MaxFiles       int
+	MaxFileChunks  int
+}
+
+type ProviderConfig struct {
+	Type                       llm.Provider
+	APIKey                     string
+	BaseURL                    string
+	Model                      string
+	Headers                    map[string]string
+	AnthropicVersion           string
+	AnthropicMaxTokens         int
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
+}
+
+type ProviderRecord struct {
+	Name                       string
+	Type                       llm.Provider
+	BaseURL                    string
+	APIKey                     *string
+	Models                     []string
+	ContextWindowTokens        int
+	ResponseReserveTokens      int
+	ModelContextWindowTokens   map[string]int
+	ModelResponseReserveTokens map[string]int
+}
+
+type ToolRecord struct {
+	Name            string
+	Enabled         bool
+	PromptOverride  string
+	SandboxMemoryMB *int
+}
+
+type ToolUpdateRequest struct {
+	Name            string
+	Enabled         *bool
+	PromptOverride  *string
+	SandboxMemoryMB *int
+}
+
+type ToolSelectorConfig struct {
+	Enabled    bool
+	Mode       string
+	Model      string
+	TimeoutMS  int
+	Confidence float64
+	Shadow     bool
+	RecentMsgs int
+	// AllowlistOnly switches tool_allowlist from resident-only mode to strict static visibility mode.
+	// When false, Allowlist defines resident tools and selector-visible static tools still include other non-blocked tools.
+	AllowlistOnly   bool
+	Allowlist       []string
+	Blocklist       []string
+	PromptOverrides map[string]string
+}
+
+type ToolSearchConfig struct {
+	Enabled   bool
+	IdleTurns int
+}
+
 // Config 描述 bridge 在运行时依赖的最小配置集合。
 type Config struct {
 	Provider                       ProviderConfig

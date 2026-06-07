@@ -132,6 +132,34 @@
         "kotlin": { "name": "AgentToolCallFinishedPayload" }
       }
     },
+    "agentAwaitingHumanStreamPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["question_id", "prompt"],
+      "properties": {
+        "tool": { "type": "string" },
+        "tool_call_id": { "type": "string" },
+        "question_id": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1 },
+        "selection_mode": {
+          "type": "string",
+          "enum": ["single", "multiple"]
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "./agent_human.json#/$defs/askHumanOption"
+          }
+        }
+      },
+      "x-codegen": {
+        "order": 155,
+        "go": { "name": "agentAwaitingHumanStreamPayload" },
+        "ts": { "name": "AgentAwaitingHumanStreamPayload" },
+        "rust": { "name": "AgentAwaitingHumanStreamPayload" },
+        "kotlin": { "name": "AgentAwaitingHumanStreamPayload" }
+      }
+    },
     "agentStreamMessagePayload": {
       "type": "object",
       "additionalProperties": false,
@@ -280,6 +308,7 @@
         "finished_at": { "type": "string", "minLength": 1 },
         "preview": { "type": "string" },
         "error": { "type": "string" },
+        "final_text": { "type": "string" },
         "source_session_id": { "type": "string" }
       },
       "x-codegen": {

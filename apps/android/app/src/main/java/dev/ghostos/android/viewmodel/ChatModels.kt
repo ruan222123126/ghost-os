@@ -65,16 +65,6 @@ internal data class ActiveRun(
     val sessionId: String,
 )
 
-internal const val EVENT_RUN_STARTED = "run_started"
-internal const val EVENT_COMPLETION_DELTA = "completion_delta"
-internal const val EVENT_TOOL_CALL_STARTED = "tool_call_started"
-internal const val EVENT_TOOL_CALL_FINISHED = "tool_call_finished"
-internal const val EVENT_AWAITING_HUMAN = "awaiting_human"
-internal const val EVENT_MESSAGE = "message"
-internal const val EVENT_DONE = "done"
-internal const val EVENT_ERROR = "error"
-internal const val EVENT_ASSISTANT_MESSAGE = "assistant_message"
-internal const val COMPLETION_DELTA_TEXT = "text"
 internal const val TOOL_STATUS_RUNNING = "running"
 internal const val TOOL_STATUS_SUCCESS = "success"
 internal const val TOOL_STATUS_ERROR = "error"

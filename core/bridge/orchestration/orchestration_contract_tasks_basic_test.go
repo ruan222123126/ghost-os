@@ -13,6 +13,7 @@ import (
 	"time"
 
 	taskusecase "ghost-os/bridge/orchestration/internal/adapters/taskusecase"
+	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 )
 
 func TestTaskSchemaDefinesKindSpecificContracts(t *testing.T) {
@@ -181,6 +182,59 @@ func TestTaskCreateRejectsUnsupportedTaskKind(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `unsupported task_kind "unexpected_kind"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestTaskCreateDefaultsNewTasksDisabled(t *testing.T) {
+	now := time.Unix(100, 0).UTC()
+	builder := apptasks.TaskMutationBuilder{
+		Now: func() time.Time {
+			return now
+		},
+	}
+
+	for _, tc := range []struct {
+		name   string
+		params TaskCreateParams
+	}{
+		{
+			name: "agent message",
+			params: TaskCreateParams{
+				TaskKind:        taskKindAgentMessage,
+				Message:         "check status",
+				IntervalSeconds: 60,
+			},
+		},
+		{
+			name: "workflow",
+			params: TaskCreateParams{
+				TaskKind:        taskKindWorkflow,
+				Workflow:        minimalTaskCreateWorkflowDefinition(),
+				IntervalSeconds: 60,
+			},
+		},
+		{
+			name: "orchestration",
+			params: TaskCreateParams{
+				Name:            "daily group",
+				TaskKind:        taskKindOrchestration,
+				Orchestration:   minimalTaskCreateOrchestrationDefinition(),
+				IntervalSeconds: 60,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			task, err := builder.NewScheduledTask(tc.params)
+			if err != nil {
+				t.Fatalf("create task: %v", err)
+			}
+			if task.Enabled {
+				t.Fatalf("expected created task to be disabled by default: %#v", task)
+			}
+			if !task.NextRunAt.IsZero() {
+				t.Fatalf("expected disabled created task to have no next run, got %s", task.NextRunAt)
+			}
+		})
 	}
 }
 
@@ -373,6 +427,50 @@ func mutationTestTask() ScheduledTask {
 		CreatedAt:       time.Unix(100, 0).UTC(),
 		UpdatedAt:       time.Unix(200, 0).UTC(),
 		NextRunAt:       time.Unix(300, 0).UTC(),
+	}
+}
+
+func minimalTaskCreateWorkflowDefinition() *WorkflowDefinition {
+	return &WorkflowDefinition{
+		Nodes: []WorkflowNode{
+			{ID: "start-node", Type: workflowNodeTypeStart},
+			{ID: "end-node", Type: workflowNodeTypeEnd},
+		},
+		Edges: []WorkflowEdge{
+			{FromNodeID: "start-node", ToNodeID: "end-node"},
+		},
+	}
+}
+
+func minimalTaskCreateOrchestrationDefinition() *OrchestrationDefinition {
+	return &OrchestrationDefinition{
+		Nodes: []OrchestrationNode{
+			{
+				ID:   "agent-node",
+				Type: orchestrationNodeTypeAgent,
+				Agent: &OrchestrationAgentNode{
+					Title:   "Agent",
+					Message: "Handle the task",
+				},
+			},
+			{
+				ID:   "group-node",
+				Type: orchestrationNodeTypeGroup,
+				Group: &OrchestrationGroupNode{
+					Title:         "Group",
+					SharedContext: "Work together",
+					SpeakingMode:  orchestrationModeSequential,
+					MaxRounds:     1,
+				},
+			},
+		},
+		Edges: []OrchestrationEdge{
+			{
+				FromNodeID: "agent-node",
+				ToNodeID:   "group-node",
+				Kind:       orchestrationEdgeKindMember,
+			},
+		},
 	}
 }
 

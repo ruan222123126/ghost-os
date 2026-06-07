@@ -16,10 +16,10 @@
   --ui-field-border: 176 154 128;
   --ui-field-border-hover: 132 110 84;
   --ui-field-ring: 197 79 38;
-  --ui-scroll-track: 233 221 204;
-  --ui-scroll-thumb: 210 119 83;
-  --ui-scroll-thumb-hover: 197 96 53;
-  --ui-scroll-thumb-active: 181 78 36;
+  --ui-scroll-track: 255 255 255;
+  --ui-scroll-thumb: 255 255 255;
+  --ui-scroll-thumb-hover: 255 255 255;
+  --ui-scroll-thumb-active: 255 255 255;
   --ui-muted-2: 126 112 93;
   --font-heading: 'Space Grotesk', 'Avenir Next', 'PingFang SC', 'Segoe UI Variable', sans-serif;
   --font-mono: 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', monospace;
@@ -37,7 +37,7 @@ body {
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--ui-scroll-thumb)) rgb(var(--ui-scroll-track));
+  scrollbar-color: rgb(var(--ui-scroll-thumb) / 0.56) rgb(var(--ui-scroll-track) / 0.16);
 }
 
 body {
@@ -67,21 +67,24 @@ textarea {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgb(var(--ui-scroll-track) / 0.4);
+  background: rgb(var(--ui-scroll-track) / 0.16);
 }
 
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  border: 2px solid rgb(var(--panel));
-  background: rgb(var(--ui-scroll-thumb));
+  border: 2px solid transparent;
+  background: rgb(var(--ui-scroll-thumb) / 0.48);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--ui-scroll-thumb-hover));
+  background: rgb(var(--ui-scroll-thumb-hover) / 0.64);
+  background-clip: padding-box;
 }
 
 ::-webkit-scrollbar-thumb:active {
-  background: rgb(var(--ui-scroll-thumb-active));
+  background: rgb(var(--ui-scroll-thumb-active) / 0.78);
+  background-clip: padding-box;
 }
 
 @keyframes rise-in {

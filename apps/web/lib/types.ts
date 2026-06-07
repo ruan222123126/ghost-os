@@ -1,6 +1,5 @@
 // Web UI types plus API contracts generated from core/shared/schema.json.
 
-import type { TaskRunCard } from '@/lib/taskRunCards';
 import type {
   AgentMessageTaskCreateRequest as SharedAgentMessageTaskCreateRequest,
   AgentMessageTaskPayload as SharedAgentMessageTaskPayload,
@@ -22,18 +21,26 @@ import type {
   SessionTurnDraftTool as SharedSessionTurnDraftTool,
   TaskRelayConfig as SharedTaskRelayConfig,
   TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
+  WorkflowAgentNode as SharedWorkflowAgentNode,
   WorkflowDefinition as SharedWorkflowDefinition,
   WorkflowEdge as SharedWorkflowEdge,
+  WorkflowIfNode as SharedWorkflowIfNode,
   WorkflowInputVariable as SharedWorkflowInputVariable,
+  WorkflowLLMNode as SharedWorkflowLLMNode,
+  WorkflowLoopNode as SharedWorkflowLoopNode,
   WorkflowNode as SharedWorkflowNode,
+  WorkflowStartNode as SharedWorkflowStartNode,
+  TaskCreateRequest as SharedTaskCreateRequest,
+  TaskPatchRequest as SharedTaskPatchRequest,
   WorkflowTaskCreateRequest as SharedWorkflowTaskCreateRequest,
   WorkflowTaskPayload as SharedWorkflowTaskPayload,
+  WorkflowToolNode as SharedWorkflowToolNode,
   TaskPayload as SharedTaskPayload,
-  TaskUpdateRequest as SharedTaskUpdateRequest,
 } from '@/lib/envelope.generated';
 
 export type {
   AgentCompletionDeltaPayload,
+  AgentAwaitingHumanStreamPayload,
   AgentDonePayload,
   AgentErrorPayload,
   AgentRequest,
@@ -71,6 +78,11 @@ export type {
   TaskRunCardEventPayload,
   TaskRunCardFinishedPayload,
   TaskRunCardStartedPayload,
+  TaskRunLog,
+  TaskRunNodeResult,
+  TaskRunPayload,
+  TaskRunStopRequest,
+  TaskRunStopResponse,
   SessionPushEvent,
   SessionSourceAssignment,
   SessionSourceResolution,
@@ -107,6 +119,7 @@ export interface ThinkingChatMessage {
   id: string;
   kind: 'thinking';
   content: string;
+  inProgress?: boolean;
 }
 
 export interface EventChatMessage {
@@ -336,83 +349,25 @@ export type TaskRelayConfig = SharedTaskRelayConfig;
 export type WorkflowDefinition = SharedWorkflowDefinition;
 export type WorkflowNode = SharedWorkflowNode;
 export type WorkflowEdge = SharedWorkflowEdge;
+export type WorkflowStartNode = SharedWorkflowStartNode;
 export type WorkflowInputVariable = SharedWorkflowInputVariable;
+export type WorkflowToolNode = SharedWorkflowToolNode;
+export type WorkflowLLMNode = SharedWorkflowLLMNode;
+export type WorkflowAgentNode = SharedWorkflowAgentNode;
+export type WorkflowIfNode = SharedWorkflowIfNode;
+export type WorkflowLoopNode = SharedWorkflowLoopNode;
 export type OrchestrationDefinition = SharedOrchestrationDefinition;
 export type OrchestrationNode = SharedOrchestrationNode;
 export type OrchestrationEdge = SharedOrchestrationEdge;
 export type OrchestrationGroupNode = SharedOrchestrationGroupNode;
 export type OrchestrationAgentNode = SharedOrchestrationAgentNode;
 
-export interface TaskRunNodeResult {
-  node_id: string;
-  node_type: string;
-  status: string;
-  started_at?: string;
-  finished_at?: string;
-  completed_seq?: number;
-  branch_id?: string;
-  input?: unknown;
-  output?: unknown;
-  preview?: string;
-  error?: string;
-}
+export type TextTaskCreateRequest = SharedAgentMessageTaskCreateRequest & { task_kind: 'agent_message' };
+export type WorkflowTaskCreateRequest = SharedWorkflowTaskCreateRequest;
+export type OrchestrationTaskCreateRequest = SharedOrchestrationTaskCreateRequest;
+export type TaskCreateRequest = SharedTaskCreateRequest;
 
-export interface TaskRunLog {
-  task_id: string;
-  run_id: string;
-  trace_id: string;
-  task_kind?: 'agent_message' | 'workflow' | 'orchestration';
-  action?: string;
-  scheduled_at: string;
-  started_at?: string;
-  finished_at?: string;
-  status: 'running' | 'success' | 'incomplete' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
-  session_id_input?: string;
-  session_id_output?: string;
-  response_preview?: string;
-  node_results?: TaskRunNodeResult[];
-  run_cards?: TaskRunCard[];
-  error?: string;
-}
-
-export interface TextTaskCreateRequest extends Omit<SharedAgentMessageTaskCreateRequest, 'task_kind' | 'trace_id'> {
-  task_kind: 'agent_message';
-}
-
-export interface WorkflowTaskCreateRequest extends Omit<
-  SharedWorkflowTaskCreateRequest,
-  'trace_id'
-> {
-  task_kind: 'workflow';
-}
-
-export interface OrchestrationTaskCreateRequest extends Omit<
-  SharedOrchestrationTaskCreateRequest,
-  'trace_id'
-> {
-  task_kind: 'orchestration';
-}
-
-export type TaskCreateRequest =
-  | TextTaskCreateRequest
-  | WorkflowTaskCreateRequest
-  | OrchestrationTaskCreateRequest;
-
-export interface TaskUpdateRequest extends Pick<
-  SharedTaskUpdateRequest,
-  | 'message'
-  | 'session_id'
-  | 'runtime_overrides'
-  | 'agent_mode'
-  | 'relay'
-  | 'interval_seconds'
-  | 'cron_expr'
-  | 'enabled'
-  | 'task_kind'
-  | 'workflow'
-  | 'name'
-  | 'orchestration'
-> {
-}
+export type TaskPatchRequest = SharedTaskPatchRequest;
+export type TaskUpdateRequest = TaskPatchRequest;
 
 export type TextTaskUpdateRequest = TaskUpdateRequest;

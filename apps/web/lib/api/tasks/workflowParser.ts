@@ -11,6 +11,19 @@ import {
   parseOptionalString,
   parseOptionalStringArray,
 } from '@/lib/api/shared';
+import type {
+  TaskRuntimeOverrides,
+  WorkflowAgentNode,
+  WorkflowDefinition,
+  WorkflowEdge,
+  WorkflowIfNode,
+  WorkflowInputVariable,
+  WorkflowLLMNode,
+  WorkflowLoopNode,
+  WorkflowNode,
+  WorkflowStartNode,
+  WorkflowToolNode,
+} from '@/lib/types';
 
 const WORKFLOW_KEYS = ['nodes', 'edges'] as const;
 const WORKFLOW_NODE_KEYS = ['id', 'type', 'start', 'tool', 'llm', 'agent', 'if', 'loop'] as const;
@@ -24,6 +37,7 @@ const TASK_RUNTIME_OVERRIDE_KEYS = [
   'provider_name',
   'model',
   'system_prompt',
+  'preset_id',
   'tool_allowlist',
   'tool_allowlist_only',
   'max_turns',
@@ -34,53 +48,7 @@ const WORKFLOW_IF_OPERATORS = ['equals', 'not_equals', 'contains', 'not_contains
 const WORKFLOW_EDGE_KEYS = ['from_node_id', 'to_node_id'] as const;
 const WORKFLOW_NODE_TYPES = ['start', 'tool', 'llm', 'agent', 'if', 'loop', 'end'] as const;
 
-interface ParsedWorkflowInputVariable {
-  name: string;
-  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  required?: boolean;
-  default?: unknown;
-  description?: string;
-}
-
-interface ParsedWorkflowStartNode {
-  inputs?: ParsedWorkflowInputVariable[];
-}
-
-interface ParsedTaskRuntimeOverrides {
-  provider_name?: string;
-  model?: string;
-  system_prompt?: string;
-  tool_allowlist?: string[];
-  tool_allowlist_only?: boolean;
-  max_turns?: number;
-}
-
-interface ParsedWorkflowNode {
-  id: string;
-  type: 'start' | 'tool' | 'llm' | 'agent' | 'if' | 'loop' | 'end';
-  start?: ParsedWorkflowStartNode;
-  tool?: { tool_name: string; arguments?: Record<string, unknown> };
-  llm?: { prompt: string; system_prompt?: string };
-  agent?: {
-    message: string;
-    runtime_overrides?: ParsedTaskRuntimeOverrides;
-  };
-  if?: {
-    source_node_id?: string;
-    operator: (typeof WORKFLOW_IF_OPERATORS)[number];
-    value?: string;
-    true_node_id: string;
-    false_node_id: string;
-  };
-  loop?: { max_iterations: number; body_node_id: string; exit_node_id: string };
-}
-
-interface ParsedWorkflowDefinition {
-  nodes: ParsedWorkflowNode[];
-  edges: Array<{ from_node_id: string; to_node_id: string }>;
-}
-
-export function parseWorkflowDefinition(value: unknown, label: string): ParsedWorkflowDefinition {
+export function parseWorkflowDefinition(value: unknown, label: string): WorkflowDefinition {
   const record = pickKnownKeys(expectRecord(value, label), WORKFLOW_KEYS);
   if (!Array.isArray(record.nodes)) {
     throw new Error(`Invalid ${label}.nodes: expected array`);
@@ -94,7 +62,7 @@ export function parseWorkflowDefinition(value: unknown, label: string): ParsedWo
   };
 }
 
-function parseWorkflowNode(value: unknown, label: string): ParsedWorkflowNode {
+function parseWorkflowNode(value: unknown, label: string): WorkflowNode {
   const record = pickKnownKeys(expectRecord(value, label), WORKFLOW_NODE_KEYS);
   const start = parseOptionalRecord(record.start, `${label}.start`);
   const tool = parseOptionalRecord(record.tool, `${label}.tool`);
@@ -114,7 +82,7 @@ function parseWorkflowNode(value: unknown, label: string): ParsedWorkflowNode {
   };
 }
 
-function parseWorkflowStartNode(value: unknown, label: string): ParsedWorkflowStartNode {
+function parseWorkflowStartNode(value: unknown, label: string): WorkflowStartNode {
   const record = pickKnownKeys(expectRecord(value, label), WORKFLOW_START_KEYS);
   if (record.inputs === undefined) {
     return {};
@@ -127,10 +95,10 @@ function parseWorkflowStartNode(value: unknown, label: string): ParsedWorkflowSt
   };
 }
 
-function parseWorkflowInputVariable(value: unknown, label: string): ParsedWorkflowInputVariable {
+function parseWorkflowInputVariable(value: unknown, label: string): WorkflowInputVariable {
   const record = pickKnownKeys(expectRecord(value, label), WORKFLOW_INPUT_VARIABLE_KEYS);
   const inputType = expectStringEnum(record.type, WORKFLOW_INPUT_VARIABLE_TYPES, `${label}.type`);
-  const parsed: ParsedWorkflowInputVariable = {
+  const parsed: WorkflowInputVariable = {
     name: expectString(record.name, `${label}.name`),
     type: inputType,
     required: parseOptionalBoolean(record.required, `${label}.required`),
@@ -142,7 +110,7 @@ function parseWorkflowInputVariable(value: unknown, label: string): ParsedWorkfl
   return parsed;
 }
 
-function parseWorkflowInputDefault(value: unknown, inputType: ParsedWorkflowInputVariable['type'], label: string): unknown {
+function parseWorkflowInputDefault(value: unknown, inputType: WorkflowInputVariable['type'], label: string): unknown {
   switch (inputType) {
     case 'string':
       return expectString(value, label);
@@ -162,7 +130,7 @@ function parseWorkflowInputDefault(value: unknown, inputType: ParsedWorkflowInpu
   }
 }
 
-function parseWorkflowToolNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['tool'] {
+function parseWorkflowToolNode(value: Record<string, unknown>, label: string): WorkflowToolNode {
   const picked = pickKnownKeys(value, WORKFLOW_TOOL_KEYS);
   return {
     tool_name: expectString(picked.tool_name, `${label}.tool_name`),
@@ -170,7 +138,7 @@ function parseWorkflowToolNode(value: Record<string, unknown>, label: string): P
   };
 }
 
-function parseWorkflowLLMNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['llm'] {
+function parseWorkflowLLMNode(value: Record<string, unknown>, label: string): WorkflowLLMNode {
   const picked = pickKnownKeys(value, WORKFLOW_LLM_KEYS);
   return {
     prompt: expectString(picked.prompt, `${label}.prompt`),
@@ -178,7 +146,7 @@ function parseWorkflowLLMNode(value: Record<string, unknown>, label: string): Pa
   };
 }
 
-function parseWorkflowAgentNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['agent'] {
+function parseWorkflowAgentNode(value: Record<string, unknown>, label: string): WorkflowAgentNode {
   const picked = pickKnownKeys(value, WORKFLOW_AGENT_KEYS);
   return {
     message: expectString(picked.message, `${label}.message`),
@@ -189,7 +157,7 @@ function parseWorkflowAgentNode(value: Record<string, unknown>, label: string): 
 function parseTaskRuntimeOverrides(
   value: unknown,
   label: string,
-): ParsedTaskRuntimeOverrides | undefined {
+): TaskRuntimeOverrides | undefined {
   const record = parseOptionalRecord(value, label);
   if (record === undefined) {
     return undefined;
@@ -199,6 +167,7 @@ function parseTaskRuntimeOverrides(
     provider_name: parseOptionalString(picked.provider_name, `${label}.provider_name`),
     model: parseOptionalString(picked.model, `${label}.model`),
     system_prompt: parseOptionalString(picked.system_prompt, `${label}.system_prompt`),
+    preset_id: parseOptionalString(picked.preset_id, `${label}.preset_id`),
     tool_allowlist: parseOptionalStringArray(picked.tool_allowlist, `${label}.tool_allowlist`),
     tool_allowlist_only: parseOptionalBoolean(picked.tool_allowlist_only, `${label}.tool_allowlist_only`),
     max_turns: parseOptionalNumber(picked.max_turns, `${label}.max_turns`),
@@ -207,6 +176,7 @@ function parseTaskRuntimeOverrides(
     !parsed.provider_name
     && !parsed.model
     && !parsed.system_prompt
+    && !parsed.preset_id
     && !parsed.tool_allowlist?.length
     && parsed.tool_allowlist_only === undefined
     && parsed.max_turns === undefined
@@ -216,7 +186,7 @@ function parseTaskRuntimeOverrides(
   return parsed;
 }
 
-function parseWorkflowIfNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['if'] {
+function parseWorkflowIfNode(value: Record<string, unknown>, label: string): WorkflowIfNode {
   const picked = pickKnownKeys(value, WORKFLOW_IF_KEYS);
   return {
     source_node_id: parseOptionalString(picked.source_node_id, `${label}.source_node_id`),
@@ -227,7 +197,7 @@ function parseWorkflowIfNode(value: Record<string, unknown>, label: string): Par
   };
 }
 
-function parseWorkflowLoopNode(value: Record<string, unknown>, label: string): ParsedWorkflowNode['loop'] {
+function parseWorkflowLoopNode(value: Record<string, unknown>, label: string): WorkflowLoopNode {
   const picked = pickKnownKeys(value, WORKFLOW_LOOP_KEYS);
   return {
     max_iterations: expectNumber(picked.max_iterations, `${label}.max_iterations`),
@@ -236,7 +206,7 @@ function parseWorkflowLoopNode(value: Record<string, unknown>, label: string): P
   };
 }
 
-function parseWorkflowEdge(value: unknown, label: string): { from_node_id: string; to_node_id: string } {
+function parseWorkflowEdge(value: unknown, label: string): WorkflowEdge {
   const record = pickKnownKeys(expectRecord(value, label), WORKFLOW_EDGE_KEYS);
   return {
     from_node_id: expectString(record.from_node_id, `${label}.from_node_id`),

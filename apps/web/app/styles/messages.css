@@ -49,6 +49,7 @@
 .message-row.is-assistant,
 .message-row.is-tool,
 .message-row.is-thinking,
+.message-row.is-processing-time,
 .message-row.is-event,
 .message-row.is-system,
 .message-row.is-error,
@@ -198,28 +199,13 @@
 
 .message-row.is-assistant .message-content {
   color: rgb(23 23 23);
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 1.75;
 }
 
 .message-row.is-user .message-content {
   color: rgb(23 23 23);
   font-size: 16px;
-}
-
-.message-draft-flag {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  padding: 2px 7px;
-  border: 1px solid rgb(0 0 0 / 0.16);
-  border-radius: 0;
-  background: rgb(250 250 250);
-  color: rgb(115 115 115);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  line-height: 1.2;
-  text-transform: uppercase;
 }
 
 .message-note {
@@ -257,6 +243,27 @@
   background: rgb(245 247 250);
   border-color: rgb(148 163 184 / 0.2);
   color: rgb(100 116 139);
+}
+
+.processing-time-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: rgb(115 115 115);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.processing-time-divider span {
+  flex-shrink: 0;
+}
+
+.processing-time-divider div {
+  flex: 1 1 0;
+  min-width: 40px;
+  height: 1px;
+  background: rgb(229 229 229);
 }
 
 .message-actions {
@@ -320,34 +327,36 @@
 
 .tool-card {
   width: min(100%, 720px);
-  border: 1px solid rgb(0 0 0 / 0.1);
-  background: rgb(250 250 250);
-  transition: border-color 180ms ease;
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+  background: transparent;
 }
 
 .tool-card-button {
-  width: 100%;
+  width: fit-content;
+  max-width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 12px;
+  justify-content: flex-start;
+  padding: 0;
   border: none;
   background: transparent;
-  color: rgb(10 10 10);
+  color: rgb(115 115 115);
   cursor: pointer;
-  transition: background-color 180ms ease;
+  transition: color 140ms ease;
 }
 
 .tool-card-button:hover {
-  background: rgb(255 255 255 / 0.95);
+  color: rgb(23 23 23);
 }
 
 .tool-card-heading {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   min-width: 0;
+  max-width: 100%;
 }
 
 .tool-terminal-icon,
@@ -357,45 +366,43 @@
   flex-shrink: 0;
 }
 
-.tool-chevron {
-  color: rgb(115 115 115);
-}
-
-.tool-terminal-icon {
-  color: rgb(10 10 10);
-}
-
 .tool-card-title {
-  max-width: 460px;
+  max-width: min(620px, calc(100vw - 160px));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tool-card-button.is-running .tool-card-title {
+  background: linear-gradient(120deg, rgb(115 115 115) 30%, rgb(23 23 23) 50%, rgb(115 115 115) 70%);
+  background-size: 200% auto;
+  background-clip: text;
+  color: transparent;
+  animation: message-shimmer 2s linear infinite;
 }
 
 .tool-card-status {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex-shrink: 0;
-  color: rgb(10 10 10);
+  justify-content: flex-end;
+  color: rgb(115 115 115);
+  font-size: 12px;
 }
 
 .tool-card-status.is-error {
-  color: rgb(10 10 10);
-  text-decoration: line-through;
-  text-decoration-color: rgb(10 10 10);
-  text-decoration-thickness: 1px;
+  color: rgb(153 27 27);
 }
 
 .tool-card-status-label {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .tool-spinner {
@@ -412,56 +419,48 @@
   height: 12px;
 }
 
-.tool-card.is-success {
-  border-color: rgb(0 0 0 / 0.14);
-}
-
-.tool-card.is-error {
-  border-color: rgb(0 0 0 / 0.2);
-}
-
-.tool-card.is-running {
-  border-color: rgb(0 0 0 / 0.12);
-}
-
 .tool-details {
-  border-top: 1px solid rgb(0 0 0 / 0.1);
-  padding: 12px;
+  margin-top: 10px;
+  margin-left: 6px;
+  padding: 0 0 0 16px;
+  border-left: 1px solid rgb(212 212 212);
+  color: rgb(64 64 64);
   animation: tool-slide 200ms ease-out;
 }
 
-.tool-details pre {
-  margin: 0;
-  font-size: 10px;
-  color: rgb(229 229 229);
+.tool-details-kind {
+  display: block;
+  margin-bottom: 6px;
+  color: rgb(115 115 115);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tool-details-command {
+  margin-bottom: 8px;
+  color: rgb(38 38 38);
+  font-size: 13px;
   line-height: 1.6;
   font-family: var(--font-mono), monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.tool-details.is-success {
-  background: rgb(245 245 245);
+.tool-details-output {
+  max-height: 220px;
+  margin-bottom: 8px;
+  overflow-y: auto;
+  padding-right: 8px;
 }
 
-.tool-details.is-success pre {
-  color: rgb(23 23 23);
-}
-
-.tool-details.is-running {
-  background: rgb(245 245 245);
-}
-
-.tool-details.is-running pre {
+.tool-details pre {
+  margin: 0;
   color: rgb(64 64 64);
-}
-
-.tool-details.is-error {
-  background: rgb(245 245 245);
-}
-
-.tool-details.is-error pre {
-  color: rgb(23 23 23);
+  font-size: 12px;
+  line-height: 1.65;
+  font-family: var(--font-mono), monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .attachment-list {
@@ -531,13 +530,12 @@
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   align-self: flex-start;
-  color: rgb(163 163 163);
+  color: rgb(115 115 115);
 }
 
-.thinking-indicator-cpu,
-.thinking-panel-cpu,
+.thinking-panel-terminal,
 .thinking-panel-chevron {
   width: 14px;
   height: 14px;
@@ -545,18 +543,26 @@
 }
 
 .thinking-text {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
-.thinking-indicator-status {
-  font-size: 10px;
-  color: rgb(82 82 82);
-  font-family: var(--font-mono), monospace;
-  text-transform: lowercase;
-  animation: thinking-pulse 1.2s ease-in-out infinite;
+.thinking-sweep-text {
+  background: linear-gradient(
+    120deg,
+    rgb(115 115 115) 0%,
+    rgb(115 115 115) 35%,
+    rgb(255 255 255) 50%,
+    rgb(115 115 115) 65%,
+    rgb(115 115 115) 100%
+  );
+  background-size: 220% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: message-shimmer 2s linear infinite;
 }
 
 .thinking-panel {
@@ -570,10 +576,9 @@
   align-items: center;
   justify-content: flex-start;
   width: fit-content;
-  gap: 7px;
   border: none;
   background: transparent;
-  color: rgb(163 163 163);
+  color: rgb(115 115 115);
   cursor: pointer;
   padding: 0;
   transition: color 140ms ease;
@@ -590,20 +595,24 @@
 }
 
 .thinking-panel-title {
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.thinking-panel.is-complete .thinking-panel-title {
+  color: rgb(115 115 115);
 }
 
 .thinking-panel-content {
   margin: 0;
   margin-top: 10px;
-  margin-left: 3px;
-  padding: 0 0 0 14px;
-  border-left: 2px solid rgb(0 0 0 / 0.1);
+  margin-left: 6px;
+  padding: 0 0 0 16px;
+  border-left: 1px solid rgb(212 212 212);
   color: rgb(115 115 115);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.65;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -649,14 +658,13 @@
   accent-color: rgb(var(--accent));
 }
 
-@keyframes thinking-pulse {
-  0%,
-  100% {
-    opacity: 0.35;
+@keyframes message-shimmer {
+  0% {
+    background-position: 200% center;
   }
 
-  50% {
-    opacity: 1;
+  100% {
+    background-position: -200% center;
   }
 }
 

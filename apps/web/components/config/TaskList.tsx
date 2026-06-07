@@ -215,7 +215,7 @@ function formatSchedule(task: TaskSettingsListItem, copy: ReturnType<typeof useW
 
 function formatSecondaryLine(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
   if (task.task_kind === 'agent_message') {
-    return copy.settings.tasksSessionLabel(task.session_id?.trim() ? task.session_id : copy.settings.tasksSessionNewEachRun);
+    return copy.settings.tasksSessionLabel(task.session_id?.trim() ? copy.settings.tasksSessionConfigured : copy.settings.tasksSessionNewEachRun);
   }
 
   return copy.settings.tasksSessionWorkflowManaged;

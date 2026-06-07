@@ -30,24 +30,21 @@ describe('hooks/chat/useChatStreamController', () => {
       TestRenderer.create(
         React.createElement(
           WebLocaleProvider,
-          {
-            initialLocale: 'en-US',
-            children: React.createElement(HookProbe, {
-              activeRunRef: { current: null },
-              beginHistorySync: () => events.push('beginHistorySync'),
-              clearStreamingState: () => events.push('clearStreamingState'),
-              currentSessionId: 'session-error',
-              endHistorySync: () => events.push('endHistorySync'),
-              onRender: (state) => {
-                latestState = state;
-              },
-              setActiveRun: () => undefined,
-              setChatError: () => undefined,
-              syncRecentHistory: async (sessionId) => {
-                events.push(`syncRecentHistory:${sessionId}`);
-              },
-            }),
-          },
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef: { current: null },
+            beginHistorySync: () => events.push('beginHistorySync'),
+            currentSessionId: 'session-error',
+            endHistorySync: () => events.push('endHistorySync'),
+            onRender: (state) => {
+              latestState = state;
+            },
+            setActiveRun: () => undefined,
+            setChatError: () => undefined,
+            syncRecentHistory: async (sessionId) => {
+              events.push(`syncRecentHistory:${sessionId}`);
+            },
+          }),
         ),
       );
       await Promise.resolve();
@@ -63,18 +60,58 @@ describe('hooks/chat/useChatStreamController', () => {
     });
 
     expect(events).toEqual([
-      'clearStreamingState',
       'beginHistorySync',
       'syncRecentHistory:session-error',
       'endHistorySync',
     ]);
+  });
+
+  it('does not start a second history sync for an aborted stopped stream', async () => {
+    const events: string[] = [];
+    const abortController = new AbortController();
+    abortController.abort();
+    mockedStreamMessage.mockRejectedValue(new DOMException('aborted', 'AbortError'));
+
+    let latestState: HookRenderState | null = null;
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef: { current: null },
+            beginHistorySync: () => events.push('beginHistorySync'),
+            currentSessionId: 'session-stop',
+            endHistorySync: () => events.push('endHistorySync'),
+            onRender: (state) => {
+              latestState = state;
+            },
+            setActiveRun: () => undefined,
+            setChatError: () => undefined,
+            syncRecentHistory: async (sessionId) => {
+              events.push(`syncRecentHistory:${sessionId}`);
+            },
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await expect(latestState!.runAgentStream({
+        message: 'hello',
+        signal: abortController.signal,
+        traceId: 'trace-stop',
+      })).rejects.toThrow('aborted');
+    });
+
+    expect(events).toEqual([]);
   });
 });
 
 function HookProbe(props: {
   activeRunRef: HookProps['activeRunRef'];
   beginHistorySync: HookProps['beginHistorySync'];
-  clearStreamingState: HookProps['clearStreamingState'];
   currentSessionId: string;
   endHistorySync: HookProps['endHistorySync'];
   onRender: (state: HookRenderState) => void;
@@ -86,7 +123,6 @@ function HookProbe(props: {
     activeRunRef: props.activeRunRef,
     applyRuntimeActions: () => undefined,
     beginHistorySync: props.beginHistorySync,
-    clearStreamingState: props.clearStreamingState,
     currentSessionId: props.currentSessionId,
     endHistorySync: props.endHistorySync,
     onSessionResolved: () => undefined,

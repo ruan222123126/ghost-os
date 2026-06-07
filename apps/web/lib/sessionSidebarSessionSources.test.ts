@@ -164,6 +164,47 @@ describe('lib/sessionSidebarSessionSources', () => {
     ]);
     expect(isSystemSessionPartitionID(orchestration?.childPartitions?.[0]?.id ?? '')).toBe(true);
   });
+
+  it('keeps a system parent partition when the search query matches its name', () => {
+    const views = mergeSessionSourcePartitionViews({
+      manualViews: [{ id: UNCLASSIFIED_PARTITION_ID, name: 'Unclassified', sessions: [] }],
+      sessions: [
+        session('task-session-a', '2026-05-09T05:00:00Z'),
+        session('task-session-b', '2026-05-09T04:00:00Z'),
+        session('workflow-session', '2026-05-09T03:00:00Z'),
+      ],
+      sourceAssignments: {
+        'task-session-a': sourceAssignment('task', 'task-a', 'Daily task'),
+        'task-session-b': sourceAssignment('task', 'task-b', 'Audit task'),
+        'workflow-session': sourceAssignment('workflow', 'workflow-a', 'Daily workflow'),
+      },
+      searchQuery: 'tasks',
+      copy: copy(),
+    });
+
+    expect(views.map((view) => view.name)).toEqual(['Tasks']);
+    expect(views[0].sessions.map((item) => item.id)).toEqual(['task-session-a', 'task-session-b']);
+  });
+
+  it('keeps only the matching system child partition sessions for a child name hit', () => {
+    const views = mergeSessionSourcePartitionViews({
+      manualViews: [{ id: UNCLASSIFIED_PARTITION_ID, name: 'Unclassified', sessions: [] }],
+      sessions: [
+        session('task-session-a', '2026-05-09T05:00:00Z'),
+        session('task-session-b', '2026-05-09T04:00:00Z'),
+      ],
+      sourceAssignments: {
+        'task-session-a': sourceAssignment('task', 'task-a', 'Daily task'),
+        'task-session-b': sourceAssignment('task', 'task-b', 'Audit task'),
+      },
+      searchQuery: 'daily task',
+      copy: copy(),
+    });
+
+    const tasks = findPartition(views, 'Tasks');
+    expect(tasks?.sessions.map((item) => item.id)).toEqual(['task-session-a']);
+    expect(tasks?.childPartitions?.map((partition) => partition.name)).toEqual(['Daily task']);
+  });
 });
 
 function runLog(patch: Partial<TaskRunLog>): TaskRunLog {

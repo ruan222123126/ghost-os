@@ -62,7 +62,8 @@ describe('components/config/TaskLogsModal', () => {
     });
 
     expect(textContent(renderer.root)).toContain('Live Run: run-live');
-    expect(textContent(renderer.root)).toContain('session_id: session-live');
+    expect(textContent(renderer.root)).not.toContain('session_id: session-live');
+    expect(textContent(renderer.root)).not.toContain('trace_id: trace-live');
     expect(textContent(renderer.root)).toContain('AI Output');
     expect(textContent(renderer.root)).toContain('working');
 
@@ -103,6 +104,136 @@ describe('components/config/TaskLogsModal', () => {
     expect(textContent(renderer.root)).toContain('fresh-from-refresh');
 
     act(() => renderer.unmount());
+  });
+
+  it('keeps an open live viewer synchronized with refreshed log props', async () => {
+    const running = buildRunLog({
+      run_id: 'run-live',
+      status: 'running',
+      session_id_output: 'session-live',
+      response_preview: 'still-running',
+    });
+    const completed = buildRunLog({
+      run_id: 'run-live',
+      status: 'success',
+      session_id_output: 'session-live',
+      response_preview: 'completed-from-refresh',
+    });
+    const renderer = renderModal({
+      logs: [running],
+    });
+
+    await act(async () => {
+      findButtonByText(renderer.root, 'Details').props.onClick(buildClickEvent());
+      await Promise.resolve();
+    });
+
+    expect(textContent(renderer.root)).toContain('still-running');
+
+    await act(async () => {
+      renderer.update(modalElement({
+        logs: [completed],
+      }));
+      await Promise.resolve();
+    });
+
+    expect(useLiveRunViewer).toHaveBeenLastCalledWith({
+      run: expect.objectContaining({
+        run_id: 'run-live',
+        status: 'success',
+        response_preview: 'completed-from-refresh',
+      }),
+    });
+    expect(textContent(renderer.root)).toContain('completed-from-refresh');
+
+    act(() => renderer.unmount());
+  });
+
+  it('does not replace a terminal live viewer snapshot with an older terminal log prop', async () => {
+    const stale = buildRunLog({
+      run_id: 'run-live',
+      status: 'success',
+      session_id_output: 'session-live',
+      response_preview: 'stale-success',
+    });
+    const fresh = buildRunLog({
+      run_id: 'run-live',
+      status: 'success',
+      session_id_output: 'session-live',
+      response_preview: 'fresh-success',
+    });
+    const refresh = jest.fn(async () => [fresh]);
+    const renderer = renderModal({
+      logs: [stale],
+      onRefreshLogs: refresh,
+    });
+
+    await act(async () => {
+      findButtonByText(renderer.root, 'Details').props.onClick(buildClickEvent());
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(useLiveRunViewer).toHaveBeenLastCalledWith({
+      run: expect.objectContaining({
+        run_id: 'run-live',
+        status: 'success',
+        response_preview: 'fresh-success',
+      }),
+    });
+
+    act(() => renderer.unmount());
+  });
+
+  it('refreshes an open running live viewer until the run reaches a terminal snapshot', async () => {
+    jest.useFakeTimers();
+    const running = buildRunLog({
+      run_id: 'run-live',
+      status: 'running',
+      session_id_output: 'session-live',
+      response_preview: 'still-running',
+    });
+    const completed = buildRunLog({
+      run_id: 'run-live',
+      status: 'success',
+      session_id_output: 'session-live',
+      response_preview: 'completed-from-poll',
+    });
+    const refresh = jest.fn()
+      .mockResolvedValueOnce([running])
+      .mockResolvedValueOnce([completed]);
+    const renderer = renderModal({
+      logs: [running],
+      onRefreshLogs: refresh,
+    });
+
+    try {
+      await act(async () => {
+        findButtonByText(renderer.root, 'Details').props.onClick(buildClickEvent());
+        await Promise.resolve();
+      });
+
+      expect(textContent(renderer.root)).toContain('still-running');
+
+      await act(async () => {
+        jest.advanceTimersByTime(2000);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(refresh).toHaveBeenCalledTimes(2);
+      expect(useLiveRunViewer).toHaveBeenLastCalledWith({
+        run: expect.objectContaining({
+          run_id: 'run-live',
+          status: 'success',
+          response_preview: 'completed-from-poll',
+        }),
+      });
+      expect(textContent(renderer.root)).toContain('completed-from-poll');
+    } finally {
+      act(() => renderer.unmount());
+      jest.useRealTimers();
+    }
   });
 
   it('disables live view when no session id is available', () => {
@@ -231,6 +362,20 @@ function renderModal(
   locale: WebLocale = 'en-US',
 ) {
   let renderer!: TestRenderer.ReactTestRenderer;
+
+  withWindowLocale(locale, () => {
+    act(() => {
+      renderer = TestRenderer.create(modalElement(props, locale));
+    });
+  });
+
+  return renderer;
+}
+
+function modalElement(
+  props: Partial<React.ComponentProps<typeof TaskLogsModal>>,
+  locale: WebLocale = 'en-US',
+) {
   const modalProps: React.ComponentProps<typeof TaskLogsModal> = {
     taskID: 'task-live',
     logs: [],
@@ -242,20 +387,11 @@ function renderModal(
     onClose: () => undefined,
     ...props,
   };
-
-  withWindowLocale(locale, () => {
-    act(() => {
-      renderer = TestRenderer.create(
-        React.createElement(
-          WebLocaleProvider,
-          { initialLocale: locale },
-          React.createElement(TaskLogsModal, modalProps),
-        ),
-      );
-    });
-  });
-
-  return renderer;
+  return React.createElement(
+    WebLocaleProvider,
+    { initialLocale: locale },
+    React.createElement(TaskLogsModal, modalProps),
+  );
 }
 
 function withWindowLocale(locale: WebLocale, run: () => void) {

@@ -193,6 +193,7 @@ describe('lib/chatRuntime/eventProjector', () => {
         tool: {
           id: 'stream-tool:trace-6:call-6',
           content: '{"query":"gol',
+          toolInput: '{"query":"gol',
           toolCallId: 'call-6',
           toolName: 'web_search',
           toolStatus: 'pending',
@@ -209,6 +210,7 @@ describe('lib/chatRuntime/eventProjector', () => {
         tool: {
           id: 'stream-tool:trace-6:call-6',
           content: '{"query":"gol',
+          toolInput: '{"query":"gol',
           toolCallId: 'call-6',
           toolName: 'web_search',
           toolStatus: 'running',
@@ -670,6 +672,45 @@ describe('lib/chatRuntime/eventProjector', () => {
         text: 'Analyzing...',
       },
     ]);
+  });
+
+  it('starts a new thinking buffer after visible assistant text', () => {
+    const runtime = createChatRuntimeState('trace-2', 'session-2');
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'thinking',
+          thinking: 'before answer',
+        },
+        { traceId: 'trace-2' },
+      ),
+    });
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'text',
+          text: 'visible answer',
+        },
+        { traceId: 'trace-2' },
+      ),
+    });
+    projectAgentEvent({
+      runtime,
+      event: buildEvent(
+        'completion_delta',
+        {
+          kind: 'thinking',
+          thinking: 'after answer',
+        },
+        { traceId: 'trace-2' },
+      ),
+    });
+
+    expect(runtime.thinkingBuffers).toEqual(['before answer', 'after answer']);
   });
 
   it('keeps streaming thinking on terminal error events', () => {

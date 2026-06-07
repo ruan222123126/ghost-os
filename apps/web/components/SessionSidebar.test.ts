@@ -5,6 +5,7 @@ import {
   countSessionsInPartitionViews,
   limitPartitionViewsBySessionCount,
 } from './SessionSidebarFlatList';
+import { buildSearchDialogOriginStyle, buildSessionSearchResults, mergeSessionSearchResults } from './SessionSearchDialog';
 import type { SessionMetadata } from '@/lib/types';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 
@@ -80,12 +81,96 @@ describe('components/SessionSidebar', () => {
       },
     ]);
   });
+
+  it('builds search dialog results from session title and id', () => {
+    const sessions: SessionMetadata[] = [
+      createSession('older-3333', '2026-04-10T00:00:00Z', 'Daily Notes'),
+      createSession('latest-1111', '2026-04-12T12:00:00Z', 'GPT 概览与核心能力介绍'),
+      createSession('middle-2222', '2026-04-11T08:00:00Z', 'Hello'),
+    ];
+
+    const byTitle = buildSessionSearchResults({
+      sessions,
+      query: '核心能力',
+      resolveSessionTitle: (session) => session.title,
+    });
+    expect(byTitle.map((session) => session.id)).toEqual(['latest-1111']);
+
+    const byID = buildSessionSearchResults({
+      sessions,
+      query: '2222',
+      resolveSessionTitle: (session) => session.title,
+    });
+    expect(byID.map((session) => session.id)).toEqual(['middle-2222']);
+  });
+
+  it('builds search dialog results from visible partition names', () => {
+    const sessions: SessionMetadata[] = [
+      createSession('older-3333', '2026-04-10T00:00:00Z', 'Daily Notes'),
+      createSession('latest-1111', '2026-04-12T12:00:00Z', 'Review'),
+      createSession('middle-2222', '2026-04-11T08:00:00Z', 'Hello'),
+    ];
+    const partitionViews: SessionPartitionView[] = [
+      {
+        id: 'client-work',
+        name: 'Client Work',
+        sessions: [sessions[1], sessions[2]],
+      },
+    ];
+
+    const results = buildSessionSearchResults({
+      sessions,
+      partitionViews,
+      query: 'client',
+      resolveSessionTitle: (session) => session.title,
+    });
+
+    expect(results.map((session) => session.id)).toEqual(['latest-1111', 'middle-2222']);
+  });
+
+  it('merges backend and local alias search results without duplicates', () => {
+    const remote = [
+      createSession('remote-1', '2026-04-12T12:00:00Z', 'Remote'),
+      createSession('shared-1', '2026-04-11T12:00:00Z', 'Shared'),
+    ];
+    const local = [
+      createSession('shared-1', '2026-04-11T12:00:00Z', 'Shared Alias'),
+      createSession('local-1', '2026-04-10T12:00:00Z', 'Local Alias'),
+    ];
+
+    expect(mergeSessionSearchResults(remote, local).map((session) => session.id)).toEqual([
+      'remote-1',
+      'shared-1',
+      'local-1',
+    ]);
+  });
+
+  it('can filter flat session rows through a title-aware matcher', () => {
+    const sessions: SessionMetadata[] = [
+      createSession('session-a', '2026-04-12T12:00:00Z', '绘画会话'),
+      createSession('session-b', '2026-04-11T08:00:00Z', 'Other'),
+    ];
+    const rows = buildFlatSessionRows(buildFlatSessionList(
+      sessions,
+      '绘画',
+      (session, normalizedQuery) => session.title.toLowerCase().includes(normalizedQuery),
+    ));
+
+    expect(rows.map((row) => row.kind === 'session' ? row.session.id : '')).toEqual(['session-a']);
+  });
+
+  it('places the search dialog animation origin at the trigger center', () => {
+    expect(buildSearchDialogOriginStyle({
+      dialogRect: { left: 180, top: 96, width: 640, height: 360 },
+      triggerRect: { left: 272, top: 20, width: 40, height: 40 },
+    })).toEqual({ transformOrigin: '112px -56px' });
+  });
 });
 
-function createSession(id: string, updatedAt = '2026-04-12T00:00:00Z'): SessionMetadata {
+function createSession(id: string, updatedAt = '2026-04-12T00:00:00Z', title = ''): SessionMetadata {
   return {
     id,
-    title: '',
+    title,
     created_at: '2026-04-12T00:00:00Z',
     updated_at: updatedAt,
     message_count: 0,

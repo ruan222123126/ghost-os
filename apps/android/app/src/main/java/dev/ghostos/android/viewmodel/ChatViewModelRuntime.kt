@@ -67,14 +67,14 @@ internal suspend fun ChatViewModel.handleSessionPushEvent(currentClient: BridgeG
         return
     }
     when (event.type) {
-        EVENT_ASSISTANT_MESSAGE -> handleAssistantPushEvent(currentClient, traceId, event)
-        EVENT_AWAITING_HUMAN,
-        EVENT_RUN_STARTED,
-        EVENT_COMPLETION_DELTA,
-        EVENT_TOOL_CALL_STARTED,
-        EVENT_TOOL_CALL_FINISHED,
-        EVENT_ERROR,
-        EVENT_DONE,
+        SessionPushEvent.TYPE_ASSISTANT_MESSAGE -> handleAssistantPushEvent(currentClient, traceId, event)
+        SessionPushEvent.TYPE_AWAITING_HUMAN,
+        SessionPushEvent.TYPE_RUN_STARTED,
+        SessionPushEvent.TYPE_COMPLETION_DELTA,
+        SessionPushEvent.TYPE_TOOL_CALL_STARTED,
+        SessionPushEvent.TYPE_TOOL_CALL_FINISHED,
+        SessionPushEvent.TYPE_ERROR,
+        SessionPushEvent.TYPE_DONE,
         -> handleRuntimeEvent(
             currentClient = currentClient,
             eventType = event.type,
@@ -82,7 +82,9 @@ internal suspend fun ChatViewModel.handleSessionPushEvent(currentClient: BridgeG
             sessionId = event.sessionId,
             payload = event.payload,
             stepId = "",
-            refreshSessionsOnTerminal = event.type == EVENT_AWAITING_HUMAN || event.type == EVENT_DONE || event.type == EVENT_ERROR,
+            refreshSessionsOnTerminal = event.type == SessionPushEvent.TYPE_AWAITING_HUMAN
+                || event.type == SessionPushEvent.TYPE_DONE
+                || event.type == SessionPushEvent.TYPE_ERROR,
         )
     }
 }
@@ -113,11 +115,11 @@ internal suspend fun ChatViewModel.handleRuntimeEvent(
     syncTraceSession(normalizedTraceId, normalizedSessionId)
 
     when (eventType) {
-        EVENT_RUN_STARTED -> onRunStarted(payload, normalizedSessionId, normalizedTraceId)
-        EVENT_COMPLETION_DELTA -> onCompletionDelta(payload, normalizedSessionId, normalizedTraceId)
-        EVENT_TOOL_CALL_STARTED -> onToolCallStarted(payload, normalizedSessionId, normalizedTraceId, stepId)
-        EVENT_TOOL_CALL_FINISHED -> onToolCallFinished(payload, normalizedSessionId, normalizedTraceId, stepId)
-        EVENT_AWAITING_HUMAN -> onAwaitingHuman(
+        AgentStreamEvent.TYPE_RUN_STARTED -> onRunStarted(payload, normalizedSessionId, normalizedTraceId)
+        AgentStreamEvent.TYPE_COMPLETION_DELTA -> onCompletionDelta(payload, normalizedSessionId, normalizedTraceId)
+        AgentStreamEvent.TYPE_TOOL_CALL_STARTED -> onToolCallStarted(payload, normalizedSessionId, normalizedTraceId, stepId)
+        AgentStreamEvent.TYPE_TOOL_CALL_FINISHED -> onToolCallFinished(payload, normalizedSessionId, normalizedTraceId, stepId)
+        AgentStreamEvent.TYPE_AWAITING_HUMAN -> onAwaitingHuman(
             currentClient,
             payload,
             normalizedSessionId,
@@ -125,8 +127,8 @@ internal suspend fun ChatViewModel.handleRuntimeEvent(
             refreshSessionsOnTerminal,
         )
 
-        EVENT_MESSAGE -> onMessage(payload, normalizedSessionId, normalizedTraceId)
-        EVENT_ERROR -> onRuntimeError(
+        AgentStreamEvent.TYPE_MESSAGE -> onMessage(payload, normalizedSessionId, normalizedTraceId)
+        AgentStreamEvent.TYPE_ERROR -> onRuntimeError(
             currentClient,
             payload,
             normalizedSessionId,
@@ -134,7 +136,7 @@ internal suspend fun ChatViewModel.handleRuntimeEvent(
             refreshSessionsOnTerminal,
         )
 
-        EVENT_DONE -> onRuntimeDone(
+        AgentStreamEvent.TYPE_DONE -> onRuntimeDone(
             currentClient,
             payload,
             normalizedSessionId,
@@ -163,7 +165,7 @@ private suspend fun ChatViewModel.onRunStarted(payload: JsonObject, sessionId: S
 
 private fun ChatViewModel.onCompletionDelta(payload: JsonObject, sessionId: String, traceId: String) {
     val decoded = json.decodeFromJsonElement<AgentCompletionDeltaPayload>(payload)
-    if (decoded.kind == COMPLETION_DELTA_TEXT && !decoded.text.isNullOrEmpty()) {
+    if (decoded.kind == AgentCompletionDeltaPayload.KIND_TEXT && !decoded.text.isNullOrEmpty()) {
         appendStreamingText(traceId, sessionId, decoded.text)
     }
     _state.value = ChatState.Loading

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 
 	"ghost-os/bridge/llm"
@@ -145,31 +144,6 @@ func TestStoreLoadMissingSession(t *testing.T) {
 	}
 }
 
-func TestDecodeSessionStateDropsLegacyIterationRuntime(t *testing.T) {
-	state, err := decodeSessionState(`{
-		"title": "kept",
-		"iteration_runtime": {
-			"status": "completed",
-			"stopped_by": "max_iterations",
-			"records": [{"iteration": 1, "did": "legacy"}]
-		}
-	}`)
-	if err != nil {
-		t.Fatalf("decode state: %v", err)
-	}
-	if state.Title != "kept" {
-		t.Fatalf("unexpected title: got=%q want=%q", state.Title, "kept")
-	}
-
-	encoded, err := encodeSessionRecordState(state)
-	if err != nil {
-		t.Fatalf("encode state: %v", err)
-	}
-	if strings.Contains(encoded, "iteration_runtime") {
-		t.Fatalf("legacy iteration_runtime should be dropped, got %s", encoded)
-	}
-}
-
 func TestStoreLoadCorruptedSession(t *testing.T) {
 	dir := t.TempDir()
 	store, err := NewStore(dir)
@@ -184,7 +158,7 @@ func TestStoreLoadCorruptedSession(t *testing.T) {
 
 	_, err = store.Load("broken-session")
 	if !errors.Is(err, ErrSessionNotFound) {
-		t.Fatalf("expected ErrSessionNotFound without explicit migration, got: %v", err)
+		t.Fatalf("expected ErrSessionNotFound for non-database session file, got: %v", err)
 	}
 }
 
@@ -264,32 +238,6 @@ func TestStoreListMetadata(t *testing.T) {
 	}
 	if got[0].CreatedAt.IsZero() || got[0].UpdatedAt.IsZero() || got[1].CreatedAt.IsZero() || got[1].UpdatedAt.IsZero() {
 		t.Fatalf("timestamps should not be zero: got=%+v", got)
-	}
-}
-
-func TestStoreLegacySessionIDs(t *testing.T) {
-	dir := t.TempDir()
-	store, err := NewStore(dir)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-
-	if err := os.WriteFile(filepath.Join(dir, "legacy-a.json"), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write legacy-a: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "legacy-b.json"), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write legacy-b: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "bad id.json"), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write invalid id file: %v", err)
-	}
-
-	ids, err := store.LegacySessionIDs()
-	if err != nil {
-		t.Fatalf("LegacySessionIDs: %v", err)
-	}
-	if !reflect.DeepEqual(ids, []string{"legacy-a", "legacy-b"}) {
-		t.Fatalf("unexpected legacy ids: got=%v", ids)
 	}
 }
 

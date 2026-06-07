@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/lib/types';
-import type { StreamingMessageRow } from '@/lib/chat-view/streamingRows';
+import type { StreamingMessageRow } from '@/lib/chat-view/types';
 
 export const MESSAGE_LIST_BOTTOM_FOLLOW_THRESHOLD_PX = 120;
 const POST_SEND_SCROLL_LOCK_EPSILON_PX = 1;
@@ -18,6 +18,7 @@ export interface PostSendFollowTrackingState {
 interface MessageListLayoutSignatureOptions {
   committedMessages: ChatMessage[];
   streamingRows: StreamingMessageRow[];
+  showProcessingTimer: boolean;
   showThinkingIndicator: boolean;
   loadingOlderHistory: boolean;
   latestStreamingThinkingId: string | null;
@@ -62,7 +63,7 @@ export function resolveMessageListAutoFollow(
     if (tracking.controlledScrollTopPx === null) {
       return false;
     }
-    return Math.abs(metrics.scrollTop - tracking.controlledScrollTopPx) <= POST_SEND_SCROLL_LOCK_EPSILON_PX;
+    return metrics.scrollTop + POST_SEND_SCROLL_LOCK_EPSILON_PX >= tracking.controlledScrollTopPx;
   }
 
   return isMessageListNearBottom(metrics);
@@ -80,6 +81,7 @@ export function buildMessageListLayoutSignature(
 ): string {
   return [
     `history:${options.loadingOlderHistory ? 1 : 0}`,
+    `processing:${options.showProcessingTimer ? 1 : 0}`,
     `indicator:${options.showThinkingIndicator ? 1 : 0}`,
     `committed:${options.committedMessages.map(buildMessageSignature).join(',')}`,
     `streaming:${options.streamingRows.map((row) => buildMessageSignature(row.message)).join(',')}`,
@@ -273,6 +275,8 @@ function buildMessageSignature(message: ChatMessage): string {
         message.selectionMode ?? '',
         message.options?.length ?? 0,
       ].join(':');
+    case 'thinking':
+      return [message.id, message.kind, message.content.length, message.inProgress ? 1 : 0].join(':');
     default:
       return [message.id, message.kind, message.content.length].join(':');
   }

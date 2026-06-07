@@ -11,6 +11,7 @@ import (
 
 const (
 	ActionList                 = "SESSIONS_LIST"
+	ActionSearch               = "SESSIONS_SEARCH"
 	ActionGet                  = "SESSION_GET"
 	ActionDelete               = "SESSION_DELETE"
 	ActionSources              = "SESSION_SOURCES"
@@ -23,6 +24,7 @@ var (
 	ErrSessionStoreRequired               = errors.New("session store is not configured")
 	ErrTaskStoreRequired                  = errors.New("task store is not configured")
 	ErrUnsupportedSidebarPartitionVersion = errors.New("unsupported session sidebar partition version")
+	ErrInvalidSessionPageQuery            = errors.New("invalid session page query")
 )
 
 type Store interface {
@@ -40,9 +42,10 @@ type Logger interface {
 }
 
 type Service struct {
-	Store     Store
-	TaskStore TaskStore
-	Logger    Logger
+	Store         Store
+	TaskStore     TaskStore
+	ArtifactStore ArtifactStore
+	Logger        Logger
 }
 
 func (s Service) List(traceID string) ([]api.SessionMetadata, error) {
@@ -67,7 +70,44 @@ func (s Service) List(traceID string) ([]api.SessionMetadata, error) {
 	return metadata, nil
 }
 
+func (s Service) Search(query string, limit int, traceID string) ([]api.SessionMetadata, error) {
+	store, err := s.requireSessionStore()
+	if err != nil {
+		s.log(traceID, ActionSearch, "error", err)
+		return nil, err
+	}
+
+	summaries, err := store.ListMetadata()
+	if err != nil {
+		s.log(traceID, ActionSearch, "error", err)
+		return nil, err
+	}
+
+	partitionState := session.SessionSidebarPartitionState{}
+	if strings.TrimSpace(query) != "" {
+		partitionState, err = store.LoadSidebarPartitionState()
+		if err != nil {
+			s.log(traceID, ActionSearch, "error", err)
+			return nil, err
+		}
+	}
+
+	matches := searchSessionSummaries(summaries, query, limit, partitionState)
+	metadata := make([]api.SessionMetadata, 0, len(matches))
+	for _, summary := range matches {
+		metadata = append(metadata, sessionturn.BuildSessionMetadataPayload(BuildMetadataInput(summary)))
+	}
+
+	s.log(traceID, ActionSearch, "success", nil)
+	return metadata, nil
+}
+
 func (s Service) Get(params api.SessionGetParams, traceID string) (api.SessionDetail, error) {
+	if err := validateSessionGetPageParams(params); err != nil {
+		s.log(traceID, ActionGet, "error", err)
+		return api.SessionDetail{}, err
+	}
+
 	store, err := s.requireSessionStore()
 	if err != nil {
 		s.log(traceID, ActionGet, "error", err)
@@ -79,10 +119,7 @@ func (s Service) Get(params api.SessionGetParams, traceID string) (api.SessionDe
 		return api.SessionDetail{}, err
 	}
 
-	sess, page, err := store.LoadPage(id, session.PageParams{
-		Limit:  params.Limit,
-		Before: params.Before,
-	})
+	sess, page, err := store.LoadPage(id, buildSessionPageParams(params))
 	if err != nil {
 		s.log(traceID, ActionGet, "error", err)
 		return api.SessionDetail{}, err
@@ -91,6 +128,14 @@ func (s Service) Get(params api.SessionGetParams, traceID string) (api.SessionDe
 	payload := sessionturn.BuildSessionDetailPayload(BuildDetailInput(sess, page), params.Before == nil)
 	s.log(traceID, ActionGet, "success", nil)
 	return payload, nil
+}
+
+func buildSessionPageParams(params api.SessionGetParams) session.PageParams {
+	pageParams := session.PageParams{Before: params.Before}
+	if params.Limit != nil {
+		pageParams.Limit = *params.Limit
+	}
+	return pageParams
 }
 
 func (s Service) Delete(params api.SessionIDParams, traceID string) (api.SessionDeleteResponse, error) {

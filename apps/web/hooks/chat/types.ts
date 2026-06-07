@@ -1,5 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
-import type { ActiveAgentRun } from '@/lib/chat-store/types';
+import type { ActiveAgentRun } from '@/lib/chat-stream/types';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   ChatMessage,
@@ -12,12 +12,13 @@ import type {
   StreamingToolState,
 } from '@/lib/types';
 
-export type { ActiveAgentRun } from '@/lib/chat-store/types';
+export type { ActiveAgentRun } from '@/lib/chat-stream/types';
 
 export interface UseBridgeChatResult {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
   streamingThinkingSegments: StreamingThinkingSegment[];
+  activeStreamingThinkingId: string | null;
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];
@@ -55,6 +56,7 @@ export interface ChatStateControls {
   committedMessages: ChatMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
   streamingThinkingSegments: StreamingThinkingSegment[];
+  activeStreamingThinkingId: string | null;
   streamingItemOrder: string[];
   streamingTools: StreamingToolState[];
   pendingQuestions: PendingQuestionMessage[];

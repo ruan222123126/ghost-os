@@ -47,7 +47,7 @@ func TestValidateAgentResponsePayloadRejectsInconsistentSessionEnd(t *testing.T)
 	}
 }
 
-func TestValidateAgentResponsePayloadAcceptsPlanModeWithoutIterationFields(t *testing.T) {
+func TestValidateAgentResponsePayloadAcceptsPlanModeResponse(t *testing.T) {
 	err := validateAgentResponsePayload(agentResponse{
 		Message:      "plan output",
 		SessionID:    "session-1",

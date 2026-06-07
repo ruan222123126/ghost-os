@@ -103,7 +103,8 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     setCommittedMessages((previous) => {
       return mergeLatestCommittedMessages(previous, latest);
     });
-  }, [setCommittedMessages, setHasOlderHistory, setNextHistoryBefore]);
+    hydrateTurnDraft(detail.id, detail.turn_draft ?? null);
+  }, [hydrateTurnDraft, setCommittedMessages, setHasOlderHistory, setNextHistoryBefore]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();

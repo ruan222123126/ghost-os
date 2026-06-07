@@ -1,8 +1,8 @@
 import type { ChatRuntimeAction } from './actions';
 import { TOOL_PENDING_STATUS } from './constants';
-import type { ChatRuntimeState } from './runtimeState';
+import { markRuntimeThinkingBoundary, type ChatRuntimeState } from './runtimeState';
 import type { ToolTagStreamEvent, ToolTagStreamUnit } from '@/lib/toolTagText';
-import { normalizeToolName } from '@/lib/chat-view/tool-details/common';
+import { normalizeToolName } from '@/lib/toolNames';
 
 export function projectToolTagUnits(
   runtime: ChatRuntimeState,
@@ -15,6 +15,7 @@ export function projectToolTagUnits(
       if (!unit.text) {
         continue;
       }
+      markRuntimeThinkingBoundary(runtime);
       runtime.assistantBuffer = `${runtime.assistantBuffer}${unit.text}`;
       actions.push({
         type: 'append_streaming_assistant_text',
@@ -36,6 +37,7 @@ function projectToolTagEvent(
   traceId: string,
   event: ToolTagStreamEvent,
 ): ChatRuntimeAction | null {
+  markRuntimeThinkingBoundary(runtime);
   if (event.type === 'tool_open') {
     const messageId = ensurePreviewMessageID(runtime, event.callSeq, event.toolId);
     const args = runtime.previewToolArgs.get(messageId) || '';

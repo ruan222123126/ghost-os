@@ -1,4 +1,10 @@
-import type { TaskPayload, TaskRunLog, TaskRunNodeResult } from '@/lib/types';
+import type {
+  TaskPayload,
+  TaskRelayConfig,
+  TaskRunLog,
+  TaskRunNodeResult,
+  TaskRuntimeOverrides,
+} from '@/lib/types';
 import {
   expectBoolean,
   expectNumber,
@@ -101,29 +107,13 @@ interface ParsedTaskBase {
   last_error?: string;
 }
 
-interface ParsedTaskRuntimeOverrides {
-  provider_name?: string;
-  model?: string;
-  system_prompt?: string;
-  preset_id?: string;
-  tool_allowlist?: string[];
-  tool_allowlist_only?: boolean;
-  max_turns?: number;
-}
-
-interface ParsedTaskRelayConfig {
-  stop_policy: 'ai_decides' | 'max_rounds';
-  max_rounds: number;
-  execution_timeout_ms?: number;
-}
-
-function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRuntimeOverrides | undefined {
+function parseTaskRuntimeOverrides(value: unknown, label: string): TaskRuntimeOverrides | undefined {
   const record = parseOptionalRecord(value, label);
   if (record === undefined) {
     return undefined;
   }
   const picked = pickKnownKeys(record, TASK_RUNTIME_OVERRIDE_KEYS);
-  const parsed: ParsedTaskRuntimeOverrides = {
+  const parsed: TaskRuntimeOverrides = {
     provider_name: parseOptionalString(picked.provider_name, `${label}.provider_name`),
     model: parseOptionalString(picked.model, `${label}.model`),
     system_prompt: parseOptionalString(picked.system_prompt, `${label}.system_prompt`),
@@ -146,7 +136,7 @@ function parseTaskRuntimeOverrides(value: unknown, label: string): ParsedTaskRun
   return parsed;
 }
 
-function parseTaskRelayConfig(value: unknown, label: string): ParsedTaskRelayConfig | undefined {
+function parseTaskRelayConfig(value: unknown, label: string): TaskRelayConfig | undefined {
   const record = parseOptionalRecord(value, label);
   if (record === undefined) {
     return undefined;

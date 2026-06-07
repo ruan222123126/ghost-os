@@ -2,6 +2,7 @@ import type {
   AgentCompletionDeltaPayload,
   AgentDonePayload,
   AgentErrorPayload,
+  AgentAwaitingHumanStreamPayload,
   AgentRunStartedPayload,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
@@ -12,7 +13,6 @@ import type {
   AgentToolCallFinishedPayload,
   AgentToolCallStartedPayload,
   AssistantSessionEndSignal,
-  AskHumanOption,
 } from '@/lib/types';
 import {
   defineStringEnumValues,
@@ -57,15 +57,6 @@ const COMPLETION_DELTA_KINDS = defineStringEnumValues<AgentCompletionDeltaPayloa
   tool_call_delta: true,
   tool_call_end: true,
 });
-
-export interface AgentAwaitingHumanStreamPayload {
-  tool?: string;
-  tool_call_id?: string;
-  question_id: string;
-  prompt: string;
-  selection_mode?: 'single' | 'multiple';
-  options?: AskHumanOption[];
-}
 
 function parseSessionEndSignal(value: unknown): AssistantSessionEndSignal | null | undefined {
   if (value === undefined) {

@@ -51,6 +51,7 @@ export function parseTaskRunCardFinishedPayload(
     finished_at: expectString(record.finished_at, 'task run card finished payload.finished_at'),
     preview: parseOptionalString(record.preview, 'task run card finished payload.preview'),
     error: parseOptionalString(record.error, 'task run card finished payload.error'),
+    final_text: parseOptionalString(record.final_text, 'task run card finished payload.final_text'),
     source_session_id: parseOptionalString(record.source_session_id, 'task run card finished payload.source_session_id'),
   };
 }

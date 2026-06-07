@@ -60,7 +60,6 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     beginHistorySync();
     try {
       await syncRecentHistory(trimmedSessionId);
-      clearStreamingState();
     } catch (error) {
       setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
@@ -68,7 +67,6 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     }
   }, [
     beginHistorySync,
-    clearStreamingState,
     copy.system.genericRequestFailed,
     currentSessionId,
     endHistorySync,
@@ -104,7 +102,7 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
         traceId,
       });
     } catch (error) {
-      if (!shouldSuppressRunError(error, stopPendingRef.current)) {
+      if (!shouldSuppressRunError(error, stopPendingRef.current, abortController.signal.aborted)) {
         appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
@@ -134,12 +132,19 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
 
     clearChatError();
     setStopPending(true);
+    let stopAccepted = false;
     try {
       const response = await stopAgent(run.sessionId || undefined, run.traceId || undefined);
+      stopAccepted = true;
       run.abortController?.abort();
       await syncStoppedRunHistory(resolveStopSessionId(response.session_id, run.sessionId));
     } catch (error) {
       setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+    } finally {
+      if (stopAccepted) {
+        setLoading(false);
+        setActiveRun(null);
+      }
       setStopPending(false);
     }
   }, [
@@ -147,6 +152,8 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     clearChatError,
     copy.system.genericRequestFailed,
     setChatError,
+    setActiveRun,
+    setLoading,
     setStopPending,
     stopPendingRef,
     syncStoppedRunHistory,
@@ -162,14 +169,17 @@ function hasSendPayload(input: ChatSendInput): boolean {
   return input.message.trim().length > 0 || input.images.length > 0;
 }
 
-function shouldSuppressRunError(error: unknown, stopPending: boolean): boolean {
-  if (!stopPending) {
-    return false;
+function shouldSuppressRunError(error: unknown, stopPending: boolean, streamAborted: boolean): boolean {
+  if (isAbortError(error)) {
+    return true;
   }
 
   const message = toErrorMessage(error);
-  return isAbortError(error)
-    || message === 'agent stream closed before terminal event'
+  if (!stopPending && !streamAborted) {
+    return false;
+  }
+
+  return message === 'agent stream closed before terminal event'
     || message === 'agent run cancelled';
 }
 

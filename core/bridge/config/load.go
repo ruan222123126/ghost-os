@@ -1,0 +1,499 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	taskconfig "ghost-os/bridge/config/internal/taskconfig"
+	"ghost-os/bridge/llm"
+)
+
+func Load() (Config, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return Config{}, err
+	}
+	return resolveConfig(fileCfg, currentEnv())
+}
+
+func LoadServerConfig() (ServerConfig, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return ServerConfig{}, err
+	}
+	return ServerConfig{
+		BindAddr:     valueOrEnv(fileCfg.BindAddr, "GHOST_BIND_ADDR", ""),
+		APIToken:     valueOrEnv(fileCfg.APIToken, "GHOST_API_TOKEN", ""),
+		CORSOrigins:  corsOriginsOrEnv(fileCfg.CORSOrigins),
+		SessionsPath: resolveSessionsPath(fileCfg, currentEnv()),
+	}, nil
+}
+
+func LoadExecutionConfig() (ExecutionConfig, error) {
+	aux, err := loadAuxConfigFromEnv()
+	if err != nil {
+		return ExecutionConfig{}, err
+	}
+	return aux.Execution, nil
+}
+
+func LoadTaskConfig() (TaskConfig, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return TaskConfig{}, err
+	}
+	return buildTaskConfig(fileCfg, currentEnv())
+}
+
+func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return Config{}, err
+	}
+	return resolveConfigWithRuntime(fileCfg, currentEnv(), runtime)
+}
+
+func resolveConfig(fileCfg bridgeFileConfig, env envSnapshot) (Config, error) {
+	runtime, err := resolveRuntimeConfig(fileCfg, env)
+	if err != nil {
+		return Config{}, err
+	}
+	return resolveConfigWithRuntime(fileCfg, env, runtime)
+}
+
+func resolveConfigWithRuntime(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig) (Config, error) {
+	runtime = normalizeRuntimeConfig(runtime)
+	if err := validateRuntimeForExecution(runtime); err != nil {
+		return Config{}, err
+	}
+	scriptExecSandboxMemoryMB, err := resolveScriptExecSandboxMemoryMB(fileCfg, env)
+	if err != nil {
+		return Config{}, err
+	}
+	sections, err := resolveConfigSections(fileCfg, env, runtime)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg := composeConfig(fileCfg, env, runtime, sections, scriptExecSandboxMemoryMB)
+	return finalizeLoadedConfig(cfg)
+}
+
+type configSections struct {
+	Provider     ProviderConfig
+	Worker       WorkerConfig
+	Task         TaskConfig
+	ToolSelector ToolSelectorConfig
+	ToolSearch   ToolSearchConfig
+	PromptsDir   string
+	MaxTurns     int
+}
+
+func resolveConfigSections(fileCfg bridgeFileConfig, env envSnapshot, runtime runtimeConfig) (configSections, error) {
+	headers, promptsDir, err := loadConfigEnvDetails(fileCfg, env)
+	if err != nil {
+		return configSections{}, err
+	}
+	provider, err := buildProviderConfig(runtime, fileCfg, env, headers)
+	if err != nil {
+		return configSections{}, err
+	}
+	features, err := resolveRuntimeFeatureSections(fileCfg, env)
+	if err != nil {
+		return configSections{}, err
+	}
+	maxTurns, err := resolveMaxTurns(fileCfg, env)
+	if err != nil {
+		return configSections{}, err
+	}
+	return configSections{
+		Provider:     provider,
+		Worker:       features.Worker,
+		Task:         features.Task,
+		ToolSelector: features.ToolSelector,
+		ToolSearch:   features.ToolSearch,
+		PromptsDir:   promptsDir,
+		MaxTurns:     maxTurns,
+	}, nil
+}
+
+type runtimeFeatureSections struct {
+	Worker       WorkerConfig
+	Task         TaskConfig
+	ToolSelector ToolSelectorConfig
+	ToolSearch   ToolSearchConfig
+}
+
+func resolveRuntimeFeatureSections(fileCfg bridgeFileConfig, env envSnapshot) (runtimeFeatureSections, error) {
+	worker, err := buildWorkerConfig(fileCfg, env)
+	if err != nil {
+		return runtimeFeatureSections{}, err
+	}
+	task, err := buildTaskConfig(fileCfg, env)
+	if err != nil {
+		return runtimeFeatureSections{}, err
+	}
+	toolSelector, err := buildToolSelectorConfig(fileCfg, env)
+	if err != nil {
+		return runtimeFeatureSections{}, err
+	}
+	toolSearch, err := buildToolSearchConfig(fileCfg, env)
+	if err != nil {
+		return runtimeFeatureSections{}, err
+	}
+	return runtimeFeatureSections{
+		Worker:       worker,
+		Task:         task,
+		ToolSelector: toolSelector,
+		ToolSearch:   toolSearch,
+	}, nil
+}
+
+func resolveMaxTurns(fileCfg bridgeFileConfig, env envSnapshot) (int, error) {
+	maxTurns, err := intOrEnvWithEnv(fileCfg.MaxTurns, "max_turns", env, "GHOST_MAX_TURNS", defaultMaxTurns)
+	if err != nil {
+		return 0, err
+	}
+	return maxTurns, nil
+}
+
+func composeConfig(
+	fileCfg bridgeFileConfig,
+	env envSnapshot,
+	runtime runtimeConfig,
+	sections configSections,
+	scriptExecSandboxMemoryMB int,
+) Config {
+	return Config{
+		Provider:                   sections.Provider,
+		Worker:                     sections.Worker,
+		ToolSelector:               sections.ToolSelector,
+		ToolSearch:                 sections.ToolSearch,
+		SkillBlocklist:             normalizeStringList(fileCfg.SkillBlocklist),
+		ScriptExecSandboxMemoryMB:  scriptExecSandboxMemoryMB,
+		NativePersistent:           runtime.NativePersistent,
+		NativeBinaryPath:           resolveNativeBinaryPath(fileCfg, env),
+		NativeBinaryRoots:          resolveNativeBinaryRoots(fileCfg, env),
+		NativeBinaryCandidates:     resolveNativeBinaryCandidates(fileCfg, env),
+		CodexCLIPath:               resolveCodexCLIPath(fileCfg, env),
+		NodeBinPath:                resolveNodeBinPath(fileCfg, env),
+		NativeAllowedReadPaths:     resolveNativeAllowedReadPaths(fileCfg, env),
+		NativeAllowedWritePaths:    resolveNativeAllowedWritePaths(fileCfg, env),
+		ProjectRoot:                runtime.ProjectRoot,
+		Task:                       sections.Task,
+		ChatPath:                   runtime.ChatPath,
+		ResponseOptions:            llm.CloneResponseOptions(runtime.ResponseOptions),
+		CodexStatelessRetryEnabled: runtime.CodexStatelessRetryEnabled,
+		PromptsPath:                valueOrEnvWithEnv(fileCfg.PromptsPath, env, "GHOST_PROMPTS_PATH", defaultPromptsPath),
+		PromptsDir:                 sections.PromptsDir,
+		PromptsCoreFiles:           promptsCoreFiles(fileCfg, env),
+		PromptsRuntimeConstraintFiles: promptPathListWithEnv(
+			fileCfg.PromptsRuntimeConstraintFiles,
+			env,
+			"GHOST_PROMPTS_RUNTIME_CONSTRAINT_FILES",
+		),
+		PromptsResponseRuleFiles: promptPathListWithEnv(
+			fileCfg.PromptsResponseRuleFiles,
+			env,
+			"GHOST_PROMPTS_RESPONSE_RULE_FILES",
+		),
+		SessionsPath:                   resolveSessionsPath(fileCfg, env),
+		WebSearchTavilyURL:             runtime.WebSearchTavilyURL,
+		WebSearchExaURL:                runtime.WebSearchExaURL,
+		WebSearchTavilyAPIKey:          runtime.WebSearchTavilyAPIKey,
+		WebSearchExaAPIKey:             runtime.WebSearchExaAPIKey,
+		LLMCompletionRetryCount:        runtime.LLMCompletionRetryCount,
+		LLMCompletionRetryIntervalMS:   runtime.LLMCompletionRetryIntervalMS,
+		TaskExecutionTimeoutMS:         runtime.TaskExecutionTimeoutMS,
+		RelayDefaultStopPolicy:         runtime.RelayDefaultStopPolicy,
+		RelayDefaultMaxRounds:          runtime.RelayDefaultMaxRounds,
+		RelayDefaultExecutionTimeoutMS: runtime.RelayDefaultExecutionTimeoutMS,
+		SessionHumanLogFullEnabled:     runtime.SessionHumanLogFullEnabled,
+		SessionSystemPromptVisible:     runtime.SessionSystemPromptVisible,
+		AssistantMarkdownEnabled:       runtime.AssistantMarkdownEnabled,
+		ToolCallCompactOutputEnabled:   runtime.ToolCallCompactOutputEnabled,
+		MemoryModeEnabled:              runtime.MemoryModeEnabled,
+		MicrocompactEnabled:            runtime.MicrocompactEnabled,
+		SessionTitleMode:               runtime.SessionTitleMode,
+		MaxTurns:                       sections.MaxTurns,
+	}
+}
+
+func loadConfigEnvDetails(fileCfg bridgeFileConfig, env envSnapshot) (map[string]string, string, error) {
+	headers, err := headersOrEnvWithEnv(fileCfg.ProviderHeaders, env)
+	if err != nil {
+		return nil, "", err
+	}
+	promptsDir, err := resolvePromptsDir(fileCfg, env)
+	if err != nil {
+		return nil, "", err
+	}
+	return headers, promptsDir, nil
+}
+
+func finalizeLoadedConfig(cfg Config) (Config, error) {
+	allowlist, blocklist, err := normalizeConfiguredToolLists(cfg.ToolSelector.Allowlist, cfg.ToolSelector.Blocklist)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.ToolSelector.Allowlist = allowlist
+	cfg.ToolSelector.Blocklist = blocklist
+	if cfg.ToolSearch.IdleTurns <= 0 {
+		return Config{}, errors.New("tool_search_idle_turns must be > 0")
+	}
+	return cfg, nil
+}
+
+func resolvePromptsDir(fileCfg bridgeFileConfig, env envSnapshot) (string, error) {
+	raw := valueOrEnvWithEnv(fileCfg.PromptsDir, env, "GHOST_PROMPTS_DIR", defaultPromptsDir)
+	resolved, err := resolveUserPath(raw)
+	if err != nil {
+		return "", fmt.Errorf("resolve prompts_dir: %w", err)
+	}
+	return resolved, nil
+}
+
+func promptsCoreFiles(fileCfg bridgeFileConfig, env envSnapshot) []string {
+	return promptPathListWithEnv(fileCfg.PromptsCoreFiles, env, "GHOST_PROMPTS_CORE_FILES")
+}
+
+func promptPathListWithEnv(raw []string, env envSnapshot, envName string) []string {
+	if raw != nil {
+		return normalizeConfiguredPathList(raw)
+	}
+	return normalizeConfiguredPathList(parseStringCSV(env.DefaultValue(envName, "")))
+}
+
+func buildProviderConfig(runtime runtimeConfig, fileCfg bridgeFileConfig, env envSnapshot, headers map[string]string) (ProviderConfig, error) {
+	anthropicMaxTokens, err := intOrEnvWithEnv(
+		fileCfg.AnthropicMaxTokens,
+		"anthropic_max_tokens",
+		env,
+		"GHOST_ANTHROPIC_MAX_TOKENS",
+		defaultAnthropicMaxTokens,
+	)
+	if err != nil {
+		return ProviderConfig{}, err
+	}
+	return ProviderConfig{
+		Type:                       runtime.Provider,
+		APIKey:                     runtime.APIKey,
+		BaseURL:                    runtime.BaseURL,
+		Model:                      runtime.Model,
+		Headers:                    headers,
+		AnthropicVersion:           valueOrEnvWithEnv(fileCfg.AnthropicVersion, env, "GHOST_ANTHROPIC_VERSION", defaultAnthropicVersion),
+		AnthropicMaxTokens:         anthropicMaxTokens,
+		ContextWindowTokens:        runtime.ContextWindowTokens,
+		ResponseReserveTokens:      runtime.ResponseReserveTokens,
+		ModelContextWindowTokens:   cloneModelTokenOverrides(runtime.ModelContextWindowTokens),
+		ModelResponseReserveTokens: cloneModelTokenOverrides(runtime.ModelResponseReserveTokens),
+	}, nil
+}
+
+func buildWorkerConfig(fileCfg bridgeFileConfig, env envSnapshot) (WorkerConfig, error) {
+	maxConcurrency, err := intOrEnvWithEnv(
+		fileCfg.WorkerMaxConcurrency,
+		"worker_max_concurrency",
+		env,
+		"GHOST_WORKER_MAX_CONCURRENCY",
+		defaultWorkerMaxConcurrency,
+	)
+	if err != nil {
+		return WorkerConfig{}, err
+	}
+	maxFiles, err := intOrEnvWithEnv(fileCfg.WorkerMaxFiles, "worker_max_files", env, "GHOST_WORKER_MAX_FILES", defaultWorkerMaxFiles)
+	if err != nil {
+		return WorkerConfig{}, err
+	}
+	maxFileChunks, err := intOrEnvWithEnv(
+		fileCfg.WorkerMaxFileChunks,
+		"worker_max_file_chunks",
+		env,
+		"GHOST_WORKER_MAX_FILE_CHUNKS",
+		defaultWorkerMaxFileChunks,
+	)
+	if err != nil {
+		return WorkerConfig{}, err
+	}
+	return WorkerConfig{
+		Model:          valueOrEnvWithEnv(fileCfg.WorkerModel, env, "GHOST_WORKER_MODEL", ""),
+		MaxConcurrency: maxConcurrency,
+		MaxFiles:       maxFiles,
+		MaxFileChunks:  maxFileChunks,
+	}, nil
+}
+
+func buildToolSelectorConfig(fileCfg bridgeFileConfig, env envSnapshot) (ToolSelectorConfig, error) {
+	settings, err := resolveToolSelectorSettings(fileCfg, env)
+	if err != nil {
+		return ToolSelectorConfig{}, err
+	}
+	return ToolSelectorConfig{
+		Enabled:       settings.Enabled,
+		Mode:          strings.ToLower(valueOrEnvWithEnv(fileCfg.ToolSelectorMode, env, "GHOST_TOOL_SELECTOR_MODE", "llm")),
+		Model:         valueOrEnvWithEnv(fileCfg.ToolSelectorModel, env, "GHOST_TOOL_SELECTOR_MODEL", ""),
+		TimeoutMS:     settings.TimeoutMS,
+		Confidence:    settings.Confidence,
+		Shadow:        settings.Shadow,
+		RecentMsgs:    settings.RecentMsgs,
+		AllowlistOnly: settings.AllowlistOnly,
+		Allowlist:     toolNameListOrEnvWithEnv(fileCfg.ToolAllowlist, env, "GHOST_TOOL_ALLOWLIST"),
+		Blocklist:     toolNameListOrEnvWithEnv(fileCfg.ToolBlocklist, env, "GHOST_TOOL_BLOCKLIST"),
+	}, nil
+}
+
+type toolSelectorSettings struct {
+	Enabled       bool
+	TimeoutMS     int
+	Confidence    float64
+	Shadow        bool
+	RecentMsgs    int
+	AllowlistOnly bool
+}
+
+func resolveToolSelectorSettings(fileCfg bridgeFileConfig, env envSnapshot) (toolSelectorSettings, error) {
+	enabled, shadow, allowlistOnly, err := resolveToolSelectorFlags(fileCfg, env)
+	if err != nil {
+		return toolSelectorSettings{}, err
+	}
+	timeoutMS, recentMsgs, err := resolveToolSelectorIntSettings(fileCfg, env)
+	if err != nil {
+		return toolSelectorSettings{}, err
+	}
+	confidence, err := floatOrEnvWithEnv(
+		fileCfg.ToolSelectorConfidence,
+		"tool_selector_confidence",
+		env,
+		"GHOST_TOOL_SELECTOR_CONFIDENCE",
+		defaultToolSelectorConfidence,
+	)
+	if err != nil {
+		return toolSelectorSettings{}, err
+	}
+	return toolSelectorSettings{
+		Enabled:       enabled,
+		TimeoutMS:     timeoutMS,
+		Confidence:    confidence,
+		Shadow:        shadow,
+		RecentMsgs:    recentMsgs,
+		AllowlistOnly: allowlistOnly,
+	}, nil
+}
+
+func resolveToolSelectorFlags(fileCfg bridgeFileConfig, env envSnapshot) (bool, bool, bool, error) {
+	enabled, err := boolOrEnvWithEnv(fileCfg.ToolSelectorEnabled, env, "GHOST_TOOL_SELECTOR_ENABLED", false)
+	if err != nil {
+		return false, false, false, err
+	}
+	shadow, err := boolOrEnvWithEnv(fileCfg.ToolSelectorShadow, env, "GHOST_TOOL_SELECTOR_SHADOW", false)
+	if err != nil {
+		return false, false, false, err
+	}
+	allowlistOnly, err := boolOrEnvWithEnv(fileCfg.ToolAllowlistOnly, env, "GHOST_TOOL_ALLOWLIST_ONLY", false)
+	if err != nil {
+		return false, false, false, err
+	}
+	return enabled, shadow, allowlistOnly, nil
+}
+
+func resolveToolSelectorIntSettings(fileCfg bridgeFileConfig, env envSnapshot) (int, int, error) {
+	timeoutMS, err := intOrEnvWithEnv(
+		fileCfg.ToolSelectorTimeoutMS,
+		"tool_selector_timeout_ms",
+		env,
+		"GHOST_TOOL_SELECTOR_TIMEOUT_MS",
+		defaultToolSelectorTimeoutMS,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+	recentMsgs, err := intOrEnvWithEnv(
+		fileCfg.ToolSelectorRecentMsgs,
+		"tool_selector_recent_messages",
+		env,
+		"GHOST_TOOL_SELECTOR_RECENT_MESSAGES",
+		defaultToolSelectorRecentMsgs,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+	return timeoutMS, recentMsgs, nil
+}
+
+func buildToolSearchConfig(fileCfg bridgeFileConfig, env envSnapshot) (ToolSearchConfig, error) {
+	enabled, err := boolOrEnvWithEnv(fileCfg.ToolSearchEnabled, env, "GHOST_TOOL_SEARCH_ENABLED", false)
+	if err != nil {
+		return ToolSearchConfig{}, err
+	}
+	idleTurns, err := intOrEnvWithEnv(
+		fileCfg.ToolSearchIdleTurns,
+		"tool_search_idle_turns",
+		env,
+		"GHOST_TOOL_SEARCH_IDLE_TURNS",
+		defaultToolSearchIdleTurns,
+	)
+	if err != nil {
+		return ToolSearchConfig{}, err
+	}
+	return ToolSearchConfig{Enabled: enabled, IdleTurns: idleTurns}, nil
+}
+
+func buildTaskConfig(fileCfg bridgeFileConfig, env envSnapshot) (TaskConfig, error) {
+	resolved, err := taskconfig.Resolve(fileCfg, env, taskconfig.Defaults{
+		TasksPath:          defaultTasksPath,
+		ExecutionTimeoutMS: defaultTaskExecutionTimeoutMS,
+	})
+	if err != nil {
+		return TaskConfig{}, err
+	}
+	return TaskConfig{
+		TasksPath:             resolved.TasksPath,
+		ExecutionTimeoutMS:    resolved.ExecutionTimeoutMS,
+		WorkflowToolAllowlist: resolved.WorkflowToolAllowlist,
+	}, nil
+}
+
+type auxConfig struct {
+	SessionsPath          string
+	WebSearchTavilyAPIKey string
+	Execution             ExecutionConfig
+}
+
+func loadAuxConfigFromEnv() (auxConfig, error) {
+	env := currentEnv()
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return resolveAuxConfig(bridgeFileConfig{}, env)
+	}
+	return resolveAuxConfig(fileCfg, env)
+}
+
+func resolveAuxConfig(fileCfg bridgeFileConfig, env envSnapshot) (auxConfig, error) {
+	execution, err := resolveExecutionConfig(fileCfg, env)
+	if err != nil {
+		return auxConfig{}, err
+	}
+	return auxConfig{
+		SessionsPath:          resolveSessionsPath(fileCfg, env),
+		WebSearchTavilyAPIKey: resolveWebSearchTavilyAPIKey(fileCfg, env),
+		Execution:             execution,
+	}, nil
+}
+
+func resolveExecutionConfig(fileCfg bridgeFileConfig, env envSnapshot) (ExecutionConfig, error) {
+	persistent, err := resolveNativePersistent(fileCfg.NativePersistent, env)
+	if err != nil {
+		return ExecutionConfig{}, err
+	}
+	return ExecutionConfig{
+		Persistent:             persistent,
+		NativeBinaryPath:       resolveNativeBinaryPath(fileCfg, env),
+		NativeBinaryRoots:      resolveNativeBinaryRoots(fileCfg, env),
+		NativeBinaryCandidates: resolveNativeBinaryCandidates(fileCfg, env),
+		CodexCLIPath:           resolveCodexCLIPath(fileCfg, env),
+		NodeBinPath:            resolveNodeBinPath(fileCfg, env),
+		AllowedReadPaths:       resolveNativeAllowedReadPaths(fileCfg, env),
+		AllowedWritePaths:      resolveNativeAllowedWritePaths(fileCfg, env),
+		ProjectRoot:            resolveProjectRoot(fileCfg, env),
+	}, nil
+}

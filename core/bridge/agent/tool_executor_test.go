@@ -62,7 +62,7 @@ func TestToolCallExecutorExecuteReturnsAwaitingHumanAfterSuccessEvent(t *testing
 
 func TestToolCallExecutorExecuteReturnsIterationHandoffWithToolResult(t *testing.T) {
 	tool := &fakeTool{
-		name: "pro_update_record",
+		name: "relay_update_record",
 		execute: func(_ context.Context, _ json.RawMessage) (string, error) {
 			return `{"status":"iteration_recorded","did":"inspected config","remaining":"apply patch"}`, nil
 		},
@@ -79,8 +79,8 @@ func TestToolCallExecutorExecuteReturnsIterationHandoffWithToolResult(t *testing
 	history := NewHistory("")
 	executor := newToolCallExecutor(newFakeToolCatalog(tool), history, nil, newAgentEventEmitter(sink, nil))
 
-	stats, err := executor.execute(context.Background(), "trace-pro", 3, []indexedToolCall{
-		{index: 0, call: newToolCall("call-pro-1", "pro_update_record", `{"did":"inspected config","remaining":"apply patch"}`)},
+	stats, err := executor.execute(context.Background(), "trace-relay", 3, []indexedToolCall{
+		{index: 0, call: newToolCall("call-relay-1", "relay_update_record", `{"did":"inspected config","remaining":"apply patch"}`)},
 	})
 	if stats.totalCalls != 1 || stats.executed != 1 {
 		t.Fatalf("unexpected stats: %+v", stats)
@@ -101,7 +101,7 @@ func TestToolCallExecutorExecuteReturnsIterationHandoffWithToolResult(t *testing
 	if !ok {
 		t.Fatalf("expected tool result envelope, got %q", messages[0].Text)
 	}
-	if result.Status != "success" || result.Tool != "pro_update_record" {
+	if result.Status != "success" || result.Tool != "relay_update_record" {
 		t.Fatalf("unexpected tool result: %+v", result)
 	}
 	if len(sink.events) != 2 {

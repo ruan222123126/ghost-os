@@ -1,6 +1,10 @@
 package config
 
-import "slices"
+import (
+	"slices"
+
+	configtools "ghost-os/bridge/config/internal/tools"
+)
 
 func applyPresetToFileConfig(fileCfg bridgeFileConfig, preset Preset) bridgeFileConfig {
 	fileCfg.ToolAllowlistOnly = boolPointer(true)
@@ -9,17 +13,19 @@ func applyPresetToFileConfig(fileCfg bridgeFileConfig, preset Preset) bridgeFile
 	return fileCfg
 }
 
-func presetToolBlocklist(allowlist []string) []string {
-	allowset := toolNameSetFromSlice(allowlist)
-	blocklist := make([]string, 0, len(configuredToolCatalog))
-
-	for _, raw := range configuredToolCatalog {
-		if allowset[raw] {
-			continue
-		}
-		blocklist = append(blocklist, raw)
+func ApplyPresetToSystemPromptFiles(files SystemPromptFiles, preset Preset) (SystemPromptFiles, error) {
+	library, err := applyPresetToPromptLibrary(files.PromptLibrary, preset)
+	if err != nil {
+		return SystemPromptFiles{}, err
 	}
-	return normalizeConfiguredToolNames(blocklist)
+	next := files
+	next.PromptLibrary = library
+	next.CorePrompt = compileCorePromptFromLibrary(library)
+	return next, nil
+}
+
+func presetToolBlocklist(allowlist []string) []string {
+	return configtools.BlocklistForStrictAllowlist(allowlist)
 }
 
 func applyPresetToPromptLibrary(

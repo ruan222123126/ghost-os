@@ -80,9 +80,17 @@ describe('lib/chat-view/tool-details/format', () => {
         path: '/tmp/new.txt',
       }),
     }));
+    const editWithDiffDetails = formatToolDetails(buildToolMessage({
+      toolName: 'apply_diff',
+      content: JSON.stringify({
+        path: '/tmp/edit.txt',
+        diff_text: '@@ -1,3 +1,4 @@\n alpha\n-beta\n+beta2\n+delta\n gamma\n',
+      }),
+    }));
 
     expect(readSummaryLine(writeDetails)).toBe('summary: write /tmp/new.txt +5');
     expect(readSummaryLine(editDetails)).toBe('summary: edit /tmp/new.txt');
+    expect(readSummaryLine(editWithDiffDetails)).toBe('summary: edit /tmp/edit.txt +2 -1');
     expect(writeDetails).not.toContain('+0');
     expect(writeDetails).not.toContain('-0');
     expect(editDetails).not.toContain('+0');
@@ -134,7 +142,27 @@ describe('lib/chat-view/tool-details/format', () => {
       rawOutput: 'package main',
     });
 
-    expect(formatToolAction(tool)).toEqual({ text: 'read /tmp/main.go', variant: 'action' });
+    expect(formatToolAction(tool)).toEqual({
+      actionKind: 'read',
+      actionText: '/tmp/main.go',
+      text: 'read /tmp/main.go',
+      variant: 'action',
+    });
+  });
+
+  it('promotes screen_control screenshot actions into a readable title action', () => {
+    const tool = buildToolMessage({
+      toolName: 'screen_control',
+      toolInput: JSON.stringify({ action: 'screenshot', display_id: 67 }),
+      content: JSON.stringify({ action: 'screenshot', artifact: { type: 'image' } }),
+    });
+
+    expect(formatToolAction(tool)).toEqual({
+      actionKind: 'screen',
+      actionText: '',
+      text: 'screen',
+      variant: 'action',
+    });
   });
 
   it('truncates long run commands with a stable readable prefix', () => {
@@ -190,6 +218,30 @@ describe('lib/chat-view/tool-details/format', () => {
     expect(readSummaryLine(details)).toBe('summary: search bridge runtime selector');
   });
 
+  it('promotes web search and codex actions into the tool title', () => {
+    expect(formatToolAction(buildToolMessage({
+      toolName: 'web_search',
+      toolInput: JSON.stringify({ query: 'Ghost OS release notes' }),
+      content: JSON.stringify([{ title: 'Ghost OS' }]),
+    }))).toEqual({
+      actionKind: 'web',
+      actionText: 'Ghost OS release notes',
+      text: 'web Ghost OS release notes',
+      variant: 'action',
+    });
+
+    expect(formatToolAction(buildToolMessage({
+      toolName: 'codex_cli',
+      toolInput: JSON.stringify({ op: 'status', session_id: 'cmd-123' }),
+      content: JSON.stringify({ status: 'running' }),
+    }))).toEqual({
+      actionKind: 'codex',
+      actionText: 'status',
+      text: 'codex status',
+      variant: 'action',
+    });
+  });
+
   it('shows sfind load, unload, and list actions with skill names', () => {
     expect(readSummaryLine(formatToolDetails(buildToolMessage({
       toolName: 'sfind',
@@ -213,20 +265,49 @@ describe('lib/chat-view/tool-details/format', () => {
     expect(formatToolAction(buildToolMessage({
       toolName: 'read_file',
       content: JSON.stringify({ path: '/tmp/main.go' }),
-    }))).toEqual({ text: 'read /tmp/main.go', variant: 'action' });
+    }))).toEqual({
+      actionKind: 'read',
+      actionText: '/tmp/main.go',
+      text: 'read /tmp/main.go',
+      variant: 'action',
+    });
 
     expect(formatToolAction(buildToolMessage({
       toolName: 'write_file',
       content: JSON.stringify({ path: '/tmp/out.txt', content_summary: { lines: 4 } }),
-    }))).toEqual({ text: 'write /tmp/out.txt +4', variant: 'action' });
+    }))).toEqual({
+      actionKind: 'write',
+      actionText: '/tmp/out.txt +4',
+      text: 'write /tmp/out.txt +4',
+      variant: 'action',
+    });
+
+    expect(formatToolAction(buildToolMessage({
+      toolName: 'apply_diff',
+      toolInput: JSON.stringify({
+        path: '/tmp/edit.txt',
+        diff_text: '@@ -1,2 +1,3 @@\n-old\n+new\n+extra\n same\n',
+      }),
+      content: 'applied 1 hunks to /tmp/edit.txt',
+    }))).toEqual({
+      actionKind: 'edit',
+      actionText: '/tmp/edit.txt +2 -1',
+      text: 'edit /tmp/edit.txt +2 -1',
+      variant: 'action',
+    });
 
     expect(formatToolAction(buildToolMessage({
       toolName: 'sfind',
       rawOutput: JSON.stringify({ action: 'load', items: [{ name: 'release_flow' }] }),
-    }))).toEqual({ text: 'load release_flow', variant: 'action' });
+    }))).toEqual({
+      actionKind: 'load',
+      actionText: 'release_flow',
+      text: 'load release_flow',
+      variant: 'action',
+    });
   });
 
-  it('shows action-title tool details without repeating summary or steps', () => {
+  it('shows action-title tool details without repeating summary, steps, or transport metadata', () => {
     const readTool = buildToolMessage({
       toolName: 'read_file',
       toolStatus: 'success',
@@ -242,10 +323,11 @@ describe('lib/chat-view/tool-details/format', () => {
       toolCallId: 'call-read-1',
     });
 
-    expect(formatToolCardDetails(readTool)).toBe(
-      'status: success\ntrace_id: trace-read-1\ntool_call_id: call-read-1\npackage main\nfunc main() {}',
-    );
+    expect(formatToolCardDetails(readTool)).toBe('package main\nfunc main() {}');
     expect(formatToolCardDetails(readTool)).not.toContain('summary:');
+    expect(formatToolCardDetails(readTool)).not.toContain('status:');
+    expect(formatToolCardDetails(readTool)).not.toContain('trace_id:');
+    expect(formatToolCardDetails(readTool)).not.toContain('tool_call_id:');
     expect(formatToolCardDetails(readTool, { compactOutputEnabled: true })).toBe(
       'success\npackage main\nfunc main() {}',
     );
@@ -264,13 +346,11 @@ describe('lib/chat-view/tool-details/format', () => {
       toolCallId: 'call-sfind-1',
     });
 
-    expect(formatToolCardDetails(sfindTool)).toBe(
-      'status: success\ntool_call_id: call-sfind-1\n{"action":"load","items":[{"name":"release_flow"}]}',
-    );
+    expect(formatToolCardDetails(sfindTool)).toBe('{"action":"load","items":[{"name":"release_flow"}]}');
     expect(formatToolCardDetails(sfindTool, { compactOutputEnabled: true })).toBe('success');
   });
 
-  it('shows failure error line before summary and metadata', () => {
+  it('shows failure error line before summary without transport metadata', () => {
     const details = formatToolDetails(buildToolMessage({
       toolName: 'read_file',
       toolStatus: 'failed',
@@ -281,8 +361,8 @@ describe('lib/chat-view/tool-details/format', () => {
     const lines = details.split('\n');
     expect(lines[0]).toBe('error: permission denied');
     expect(lines[1]).toBe('summary: read');
-    expect(details).toContain('status: failed');
-    expect(details).toContain('trace_id: trace-err-1');
+    expect(details).not.toContain('status:');
+    expect(details).not.toContain('trace_id:');
   });
 
   it('keeps original detail text when summary parsing fails', () => {

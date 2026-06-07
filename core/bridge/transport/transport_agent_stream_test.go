@@ -250,7 +250,7 @@ func TestHandleAgentStreamSupportsPlanMode(t *testing.T) {
 	}
 }
 
-func TestHandleAgentStreamValidationErrorEmitsErrorEvent(t *testing.T) {
+func TestHandleAgentStreamValidationErrorReturnsEnvelope(t *testing.T) {
 	handler := newTestHandler(t, nil)
 	recorder := serveRequest(
 		handler,
@@ -260,26 +260,22 @@ func TestHandleAgentStreamValidationErrorEmitsErrorEvent(t *testing.T) {
 		map[string]string{"Content-Type": "application/json"},
 	)
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusOK)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusBadRequest)
 	}
-	events := decodeSSEEvents(t, recorder)
-	if len(events) != 1 {
-		t.Fatalf("unexpected event count: got %d want %d", len(events), 1)
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("unexpected content type: got %q want %q", got, "application/json")
 	}
-	if events[0].Type != streaming.EventError {
-		t.Fatalf("unexpected event type: got %q want %q", events[0].Type, streaming.EventError)
+	body := decodeResponseBody(t, recorder)
+	if body.Status != "error" {
+		t.Fatalf("unexpected response status: got %q want %q", body.Status, "error")
 	}
-	payload, ok := events[0].Payload.(map[string]any)
-	if !ok {
-		t.Fatalf("unexpected payload type: %T", events[0].Payload)
-	}
-	if payload["message"] != "message or images is required" {
-		t.Fatalf("unexpected error message: got %v want %q", payload["message"], "message or images is required")
+	if body.Error != "message or images is required" {
+		t.Fatalf("unexpected error message: got %q want %q", body.Error, "message or images is required")
 	}
 }
 
-func TestHandleAgentStreamRejectsInflightSessionBeforeSSE(t *testing.T) {
+func TestHandleAgentStreamInflightSessionReturnsEnvelope(t *testing.T) {
 	handler, service, _ := newTestHandlerWithService(t, nil, nil)
 	if err := service.RunRegistry().Register("session-busy", "trace-busy", func() {}); err != nil {
 		t.Fatalf("Register returned error: %v", err)
@@ -296,9 +292,15 @@ func TestHandleAgentStreamRejectsInflightSessionBeforeSSE(t *testing.T) {
 	if recorder.Code != http.StatusConflict {
 		t.Fatalf("unexpected status: got %d want %d", recorder.Code, http.StatusConflict)
 	}
+	if got := recorder.Header().Get("Content-Type"); got != "application/json" {
+		t.Fatalf("unexpected content type: got %q want %q", got, "application/json")
+	}
 	body := decodeResponseBody(t, recorder)
+	if body.Status != "error" {
+		t.Fatalf("unexpected response status: got %q want %q", body.Status, "error")
+	}
 	if !strings.Contains(body.Error, "session is already running") {
-		t.Fatalf("unexpected error: %q", body.Error)
+		t.Fatalf("unexpected error: %v", body.Error)
 	}
 }
 

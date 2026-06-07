@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"log"
@@ -10,9 +11,7 @@ import (
 	"strings"
 	"time"
 
-	bridgeconfig "ghost-os/bridge/config"
 	bridgeorchestration "ghost-os/bridge/orchestration"
-	"ghost-os/bridge/session"
 )
 
 type serverOptions struct {
@@ -27,7 +26,6 @@ const (
 	serverReadHeaderTimeout = 5 * time.Second
 	serverShutdownTimeout   = 5 * time.Second
 
-	startupStageLegacy       = "legacy_preflight"
 	startupStageConfig       = "config"
 	startupStageOptions      = "options"
 	startupStageSessionStore = "session_store"
@@ -62,7 +60,7 @@ func newServeStartupError(stage string, err error) error {
 
 // newServerOptionsFromEnv 收敛 server 相关配置，优先读配置文件并回退环境变量。
 func newServerOptionsFromEnv(port int) (serverOptions, error) {
-	cfg, err := bridgeconfig.LoadServerConfig()
+	cfg, err := bridgeorchestration.LoadServerConfig()
 	if err != nil {
 		return serverOptions{}, err
 	}
@@ -71,12 +69,12 @@ func newServerOptionsFromEnv(port int) (serverOptions, error) {
 		bindAddr:     resolveBindAddrFromConfig(cfg, port),
 		sessionsPath: cfg.SessionsPath,
 		maxBodyBytes: bridgeorchestration.DefaultMaxRequestBodyBytes,
-		cors:         newCORSPolicyFromConfig(cfg),
-		auth:         newAPITokenAuthFromConfig(cfg),
+		cors:         newCORSPolicy(cfg.CORSOrigins),
+		auth:         newAPITokenAuth(cfg.APIToken),
 	}, nil
 }
 
-func resolveBindAddrFromConfig(cfg bridgeconfig.ServerConfig, port int) string {
+func resolveBindAddrFromConfig(cfg bridgeorchestration.ServerConfig, port int) string {
 	if configured := strings.TrimSpace(cfg.BindAddr); configured != "" {
 		return configured
 	}
@@ -86,11 +84,27 @@ func resolveBindAddrFromConfig(cfg bridgeconfig.ServerConfig, port int) string {
 // resolveBindAddr 优先使用显式绑定地址，否则回退到本地回环端口。
 // 注意：当配置文件存在但读取/解析失败时，返回错误以避免 fail-open。
 func resolveBindAddr(port int) (string, error) {
-	cfg, err := bridgeconfig.LoadServerConfig()
+	cfg, err := bridgeorchestration.LoadServerConfig()
 	if err != nil {
 		return "", err
 	}
 	return resolveBindAddrFromConfig(cfg, port), nil
+}
+
+func newCORSPolicyFromEnv() (corsPolicy, error) {
+	cfg, err := bridgeorchestration.LoadServerConfig()
+	if err != nil {
+		return corsPolicy{}, err
+	}
+	return newCORSPolicy(cfg.CORSOrigins), nil
+}
+
+func newAPITokenAuthFromEnv() (apiTokenAuth, error) {
+	cfg, err := bridgeorchestration.LoadServerConfig()
+	if err != nil {
+		return apiTokenAuth{}, err
+	}
+	return newAPITokenAuth(cfg.APIToken), nil
 }
 
 // runServer 暴露 bridge HTTP API。
@@ -104,16 +118,14 @@ func runServer(ctx context.Context, port int) (string, error) {
 	return runServeListen(ctx, preflight)
 }
 
+func RunServer(ctx context.Context, port int) (string, error) {
+	return runServer(ctx, port)
+}
+
 // runServePreflight 按固定顺序执行启动预检，确保失败阶段可观测。
 func runServePreflight(port int) (servePreflightState, error) {
-	logStartupCheckpoint(startupStageLegacy, "begin", "")
-	if err := runServeLegacyPreflight(); err != nil {
-		return servePreflightState{}, newServeStartupError(startupStageLegacy, err)
-	}
-	logStartupCheckpoint(startupStageLegacy, "ready", "")
-
 	logStartupCheckpoint(startupStageConfig, "begin", "")
-	store, err := bridgeconfig.NewStoreFromEnv()
+	store, err := bridgeorchestration.NewConfigStoreFromEnv()
 	if err != nil {
 		return servePreflightState{}, newServeStartupError(startupStageConfig, err)
 	}
@@ -127,17 +139,12 @@ func runServePreflight(port int) (servePreflightState, error) {
 	logStartupCheckpoint(startupStageOptions, "ready", fmt.Sprintf("bind_addr=%s", options.bindAddr))
 
 	logStartupCheckpoint(startupStageSessionStore, "begin", fmt.Sprintf("path=%s", options.sessionsPath))
-	sessionStore, err := session.NewStore(options.sessionsPath, session.StoreOptions{
-		HumanLogFullEnabled: func() bool {
-			return store.Snapshot().SessionHumanLogFullEnabled
-		},
-	})
+	service, err := bridgeorchestration.NewServiceWithSessionStorePath(store, options.sessionsPath)
 	if err != nil {
 		return servePreflightState{}, newServeStartupError(startupStageSessionStore, err)
 	}
 	logStartupCheckpoint(startupStageSessionStore, "ready", "")
 
-	service := bridgeorchestration.NewService(store, sessionStore, nil)
 	logStartupCheckpoint(startupStageRuntimes, "begin", "")
 	if err := startServeRuntimes(service); err != nil {
 		service.Close()
@@ -203,46 +210,122 @@ func logStartupCheckpoint(stage string, status string, detail string) {
 }
 
 type transport struct {
-	service      *bridgeorchestration.Service
+	usecases     transportUsecases
 	maxBodyBytes int64
 }
 
 // newHTTPHandler 注册所有 HTTP 路由并挂载认证/CORS 中间件链。
 func newHTTPHandler(service *bridgeorchestration.Service, options serverOptions) http.Handler {
 	transport := &transport{
-		service:      service,
+		usecases:     newTransportUsecases(service),
 		maxBodyBytes: options.maxBodyBytes,
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/bus", transport.handleBus)
-	mux.HandleFunc("/api/agent", transport.handleAgent)
-	mux.HandleFunc("/api/agent/stream", transport.handleAgentStream)
-	mux.HandleFunc("/api/questions/answer", transport.handleQuestionAnswer)
-	mux.HandleFunc("/api/questions/answer/stream", transport.handleQuestionAnswerStream)
-	mux.HandleFunc("/api/config", transport.handleConfig)
-	mux.HandleFunc("/api/config/providers", transport.handleConfigProviders)
-	mux.HandleFunc("/api/config/providers/", transport.handleConfigProviderByName)
-	mux.HandleFunc("/api/config/active-provider", transport.handleActiveProvider)
-	mux.HandleFunc("/api/prompts/system", transport.handleSystemPrompts)
-	mux.HandleFunc("/api/presets", transport.handlePresets)
-	mux.HandleFunc("/api/presets/", transport.handlePresetByID)
-	mux.HandleFunc("/api/sessions", transport.handleSessionsList)
-	mux.HandleFunc("/api/sessions/sources", transport.handleSessionSources)
-	mux.HandleFunc("/api/sessions/partitions", transport.handleSessionPartitions)
-	mux.HandleFunc("/api/sessions/", transport.handleSessionByID)
-	mux.HandleFunc("/api/system/tasks", transport.handleSystemTasks)
-	mux.HandleFunc("/api/orchestrations", transport.handleOrchestrations)
-	mux.HandleFunc("/api/orchestrations/", transport.handleOrchestrationByID)
-	mux.HandleFunc("/api/tasks", transport.handleTasks)
-	mux.HandleFunc("/api/tasks/", transport.handleTaskByID)
-	mux.HandleFunc("/api/skills", transport.handleSkills)
-	mux.HandleFunc("/api/skills/", transport.handleSkillByID)
-	mux.HandleFunc("/api/tools/screen/find-icon/template", transport.handleFindIconTemplateUpload)
-	mux.HandleFunc("/api/tools/screen/find-icon/preview", transport.handleFindIconPreview)
-	mux.HandleFunc("/api/tools/screen/mouse-position", transport.handleMousePosition)
-	mux.HandleFunc("/api/tools", transport.handleTools)
-	mux.HandleFunc("/api/tools/", transport.handleToolByName)
+	mountTransportRoutes(mux, transport)
 
 	return withCORS(options.cors, withAuth(options.auth, mux))
+}
+
+type corsPolicy struct {
+	allowedOrigins map[string]struct{}
+}
+
+func newCORSPolicy(origins []string) corsPolicy {
+	allowed := make(map[string]struct{})
+	if len(origins) == 0 {
+		return corsPolicy{allowedOrigins: allowed}
+	}
+
+	for _, origin := range origins {
+		trimmed := strings.TrimSpace(origin)
+		if trimmed == "" {
+			continue
+		}
+		allowed[trimmed] = struct{}{}
+	}
+	return corsPolicy{allowedOrigins: allowed}
+}
+
+func (p corsPolicy) allows(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	_, ok := p.allowedOrigins[origin]
+	return ok
+}
+
+type apiTokenAuth struct {
+	token string
+}
+
+func newAPITokenAuth(token string) apiTokenAuth {
+	return apiTokenAuth{token: strings.TrimSpace(token)}
+}
+
+func (a apiTokenAuth) enabled() bool {
+	return a.token != ""
+}
+
+func (a apiTokenAuth) authorized(r *http.Request) bool {
+	if !a.enabled() {
+		return true
+	}
+
+	provided := strings.TrimSpace(r.Header.Get("X-API-Token"))
+	if provided == "" {
+		provided = parseBearerToken(r.Header.Get("Authorization"))
+	}
+	if provided == "" {
+		return false
+	}
+
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(a.token)) == 1
+}
+
+func parseBearerToken(header string) string {
+	parts := strings.Fields(strings.TrimSpace(header))
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
+}
+
+func withAuth(auth apiTokenAuth, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if auth.authorized(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeError(w, http.StatusUnauthorized, "unauthorized", "")
+	})
+}
+
+func withCORS(policy corsPolicy, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get("Origin"))
+		if origin != "" && !policy.allows(origin) {
+			writeError(w, http.StatusForbidden, "origin is not allowed", "")
+			return
+		}
+
+		if origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Trace-ID, X-API-Token, Authorization")
+			w.Header().Set("Access-Control-Expose-Headers", "X-Trace-ID")
+			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS")
+			w.Header().Add("Vary", "Origin")
+		}
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }

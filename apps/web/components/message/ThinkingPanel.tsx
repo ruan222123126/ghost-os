@@ -1,12 +1,12 @@
 import type { FC } from 'react';
+import { useWebLocale } from '@/lib/i18n/provider';
 
 interface ThinkingPanelProps {
+  active: boolean;
   expanded: boolean;
   text: string;
   onToggleExpanded: () => void;
 }
-
-const THINKING_PANEL_LABEL = 'Processing Logic';
 
 const ChevronIcon: FC<{ expanded: boolean; className?: string }> = ({ expanded, className }) => (
   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
@@ -18,30 +18,47 @@ const ChevronIcon: FC<{ expanded: boolean; className?: string }> = ({ expanded, 
   </svg>
 );
 
-const CpuIcon: FC<{ className?: string }> = ({ className }) => (
+const TerminalIcon: FC<{ className?: string }> = ({ className }) => (
   <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
-    <rect x="5.5" y="5.5" width="9" height="9" rx="2" stroke="currentColor" strokeWidth="1.4" />
-    <rect x="8" y="8" width="4" height="4" rx="1" fill="currentColor" />
+    <rect x="3.5" y="4.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
+    <path d="M7 8L9 10L7 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M10.5 12H13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
   </svg>
 );
 
 export const ThinkingPanel: FC<ThinkingPanelProps> = ({
+  active,
   expanded,
   text,
   onToggleExpanded,
 }) => {
+  const { copy } = useWebLocale();
+  const title = active ? copy.chat.thinkingPanelTitle : copy.chat.thinkingPanelDoneTitle;
+  const titleClassName = [
+    'thinking-panel-title',
+    active ? 'thinking-sweep-text' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const panelClassName = [
+    'thinking-panel',
+    expanded ? 'is-expanded' : 'is-collapsed',
+    active ? 'is-active' : 'is-complete',
+  ].join(' ');
+
   return (
-    <div className={`thinking-panel ${expanded ? 'is-expanded' : 'is-collapsed'}`}>
+    <div className={panelClassName}>
       <button
         type="button"
         className="thinking-panel-toggle"
         aria-expanded={expanded}
+        aria-busy={active}
         onClick={onToggleExpanded}
       >
         <span className="thinking-panel-heading">
+          <TerminalIcon className="thinking-panel-terminal" />
+          <span className={titleClassName}>{title}</span>
           <ChevronIcon expanded={expanded} className="thinking-panel-chevron" />
-          <CpuIcon className="thinking-panel-cpu" />
-          <span className="thinking-panel-title">{THINKING_PANEL_LABEL}</span>
         </span>
       </button>
       {expanded ? <pre className="thinking-panel-content">{text}</pre> : null}

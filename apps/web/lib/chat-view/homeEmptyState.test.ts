@@ -1,5 +1,5 @@
 import { buildAssistantMessage } from '@/lib/chatMessages';
-import type { UseBridgeChatResult } from '@/hooks/chat/types';
+import type { ChatViewInput } from './types';
 import { shouldShowHomeEmptyState } from './homeEmptyState';
 
 describe('lib/chat-view/homeEmptyState', () => {
@@ -63,28 +63,12 @@ describe('lib/chat-view/homeEmptyState', () => {
 });
 
 function buildChatState(
-  overrides: Partial<Pick<
-    UseBridgeChatResult,
-    | 'committedMessages'
-    | 'pendingQuestions'
-    | 'streamingAssistantSegments'
-    | 'streamingThinkingSegments'
-    | 'streamingItemOrder'
-    | 'streamingTools'
-    | 'loading'
-    | 'historyLoading'
-  >> = {},
-): Pick<
-  UseBridgeChatResult,
-  | 'committedMessages'
-  | 'pendingQuestions'
-  | 'streamingAssistantSegments'
-  | 'streamingThinkingSegments'
-  | 'streamingItemOrder'
-  | 'streamingTools'
-  | 'loading'
-  | 'historyLoading'
-> {
+  overrides: Partial<Omit<ChatViewInput, 'showSystemPromptMessages'> & {
+    historyLoading: boolean;
+  }> = {},
+): Omit<ChatViewInput, 'showSystemPromptMessages'> & {
+  historyLoading: boolean;
+} {
   return {
     committedMessages: [],
     pendingQuestions: [],

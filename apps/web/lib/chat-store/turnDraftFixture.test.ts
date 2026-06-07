@@ -3,7 +3,8 @@ import path from 'node:path';
 import { chatStateReducer, createInitialChatState, type ChatStateStore } from './reducer';
 import { buildChatStateView } from './runtimeReducer';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
-import { createChatRuntimeState, resolveEventSessionId } from '@/lib/chatRuntime/runtimeState';
+import { resolveEventSessionId } from '@/lib/chat-stream/sessionEvent';
+import { createChatRuntimeState } from '@/lib/chatRuntime/runtimeState';
 import type { AgentStreamEvent, SessionTurnDraft } from '@/lib/types';
 
 interface TurnDraftFixture {

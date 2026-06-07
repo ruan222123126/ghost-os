@@ -7,6 +7,8 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
 	serviceruntime "ghost-os/bridge/orchestration/internal/adapters/serviceruntime"
+	sessionartifacts "ghost-os/bridge/orchestration/internal/adapters/sessionartifacts"
+	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	appskills "ghost-os/bridge/orchestration/internal/app/skills"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/orchestration/internal/dispatch"
@@ -73,15 +75,17 @@ type agentStreamExecutorFunc func(
 
 // bridgeService 负责 action 分发，不承载 transport 细节。
 type bridgeService struct {
-	configStore    bridgeconfig.Store
-	sessionStore   *session.Store
-	lifecycle      *serviceruntime.Lifecycle
-	runtimeState   *serviceruntime.State
-	actionRouter   *dispatch.Router
-	skillHandler   *bridgeskills.ActionHandler
-	agentRunner    SessionTurnRunner
-	runRegistry    *RunRegistry
-	runtimeFactory AgentRuntimeFactory
+	configStore     bridgeconfig.Store
+	sessionStore    *session.Store
+	lifecycle       *serviceruntime.Lifecycle
+	runtimeState    *serviceruntime.State
+	actionRouter    *dispatch.Router
+	skillHandler    *bridgeskills.ActionHandler
+	agentRunner     SessionTurnRunner
+	runRegistry     *RunRegistry
+	runtimeFactory  AgentRuntimeFactory
+	artifactStore   appsessions.ArtifactStore
+	artifactInitErr error
 }
 
 // newBridgeService 组装 action -> handler 映射，并初始化会话与记忆依赖。
@@ -106,13 +110,16 @@ func newBridgeServiceWithStreamExecutor(
 func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store) *bridgeService {
 	runtimeState := serviceruntime.NewState()
 	sessionPush := internaltrace.NewSessionPushHub()
+	artifactStore, artifactInitErr := sessionartifacts.NewFromEnv()
 	return &bridgeService{
-		configStore:  store,
-		sessionStore: sessionStore,
-		lifecycle:    serviceruntime.NewLifecycle(runtimeState, sessionPush),
-		runtimeState: runtimeState,
-		actionRouter: dispatch.NewRouter(21),
-		runRegistry:  internaltrace.NewRunRegistry(),
+		configStore:     store,
+		sessionStore:    sessionStore,
+		lifecycle:       serviceruntime.NewLifecycle(runtimeState, sessionPush),
+		runtimeState:    runtimeState,
+		actionRouter:    dispatch.NewRouter(21),
+		runRegistry:     internaltrace.NewRunRegistry(),
+		artifactStore:   artifactStore,
+		artifactInitErr: artifactInitErr,
 	}
 }
 
@@ -225,6 +232,14 @@ func (s *bridgeService) registeredActionNames() []string {
 
 func validateBusRequest(req apiRequest) error {
 	return dispatch.ValidateBusRequest(req)
+}
+
+func (s *Service) ExecuteConfigGetAction(traceID string) (ServiceResult, error) {
+	return s.inner.executeConfigGetAction(traceID)
+}
+
+func (s *Service) ExecuteConfigUpdateAction(req ConfigUpdateRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executeConfigUpdateAction(req, traceID)
 }
 
 func logAction(traceID string, action string, status string, err error) {

@@ -17,11 +17,74 @@ import (
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
-type taskExecutorAdapter struct {
-	service *bridgeService
-}
+type taskExecutorAdapter struct{ service *bridgeService }
 
 const taskRunTranscriptEventMarker = apptasks.RunTranscriptEventMarker
+
+func (s *Service) ExecuteUserTaskGetAction(id string, traceID string) (ServiceResult, error) {
+	return s.executeTaskGetInScope(id, taskListScopeUser, traceID)
+}
+func (s *Service) ExecuteOrchestrationTaskGetAction(id string, traceID string) (ServiceResult, error) {
+	return s.executeTaskGetInScope(id, taskListScopeOrchestration, traceID)
+}
+func (s *Service) ExecuteUserTaskUpdateAction(id string, req TaskUpdateParams, traceID string) (ServiceResult, error) {
+	return s.executeTaskUpdateInScope(id, req, taskListScopeUser, traceID)
+}
+func (s *Service) ExecuteOrchestrationTaskUpdateAction(id string, req TaskUpdateParams, traceID string) (ServiceResult, error) {
+	return s.executeTaskUpdateInScope(id, req, taskListScopeOrchestration, traceID)
+}
+func (s *Service) ExecuteUserTaskDeleteAction(id string, traceID string) (ServiceResult, error) {
+	return s.executeTaskDeleteInScope(id, taskListScopeUser, traceID)
+}
+func (s *Service) ExecuteOrchestrationTaskDeleteAction(id string, traceID string) (ServiceResult, error) {
+	return s.executeTaskDeleteInScope(id, taskListScopeOrchestration, traceID)
+}
+func (s *Service) ExecuteUserTaskRunAction(id string, startOnly *bool, traceID string) (ServiceResult, error) {
+	return s.executeTaskRunInScope(id, startOnly, taskListScopeUser, traceID)
+}
+func (s *Service) ExecuteOrchestrationTaskRunAction(id string, startOnly *bool, traceID string) (ServiceResult, error) {
+	return s.executeTaskRunInScope(id, startOnly, taskListScopeOrchestration, traceID)
+}
+func (s *Service) ExecuteUserTaskStopAction(ctx context.Context, id string, req TaskStopParams, traceID string) (ServiceResult, error) {
+	return s.executeTaskStopInScope(ctx, id, req, taskListScopeUser, traceID)
+}
+func (s *Service) ExecuteOrchestrationTaskStopAction(ctx context.Context, id string, req TaskStopParams, traceID string) (ServiceResult, error) {
+	return s.executeTaskStopInScope(ctx, id, req, taskListScopeOrchestration, traceID)
+}
+func (s *Service) ExecuteUserTaskLogsAction(id string, limit *int, traceID string) (ServiceResult, error) {
+	return s.executeTaskLogsInScope(id, limit, taskListScopeUser, traceID)
+}
+func (s *Service) ExecuteOrchestrationTaskLogsAction(id string, limit *int, traceID string) (ServiceResult, error) {
+	return s.executeTaskLogsInScope(id, limit, taskListScopeOrchestration, traceID)
+}
+
+func (s *Service) executeTaskGetInScope(id string, scope string, traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskGetActionResult(TaskIDParams{ID: id, Scope: scope}, traceID)
+}
+
+func (s *Service) executeTaskUpdateInScope(id string, req TaskUpdateParams, scope string, traceID string) (ServiceResult, error) {
+	req.ID = id
+	req.Scope = scope
+	return s.inner.executeTaskUpdateActionResult(req, traceID)
+}
+
+func (s *Service) executeTaskDeleteInScope(id string, scope string, traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskDeleteActionResult(TaskIDParams{ID: id, Scope: scope}, traceID)
+}
+
+func (s *Service) executeTaskRunInScope(id string, startOnly *bool, scope string, traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskRunNowActionResult(TaskIDParams{ID: id, Scope: scope, StartOnly: startOnly}, traceID)
+}
+
+func (s *Service) executeTaskStopInScope(ctx context.Context, id string, req TaskStopParams, scope string, traceID string) (ServiceResult, error) {
+	req.ID = id
+	req.Scope = scope
+	return s.inner.executeTaskStopActionResult(ctx, req, traceID)
+}
+
+func (s *Service) executeTaskLogsInScope(id string, limit *int, scope string, traceID string) (ServiceResult, error) {
+	return s.inner.executeTaskLogsActionResult(TaskLogsParams{ID: id, Limit: limit, Scope: scope}, traceID)
+}
 
 func (a taskExecutorAdapter) Execute(ctx context.Context, task ScheduledTask, traceID string) bridgeTasks.ExecutionResult {
 	return a.executor().Execute(ctx, task, traceID)

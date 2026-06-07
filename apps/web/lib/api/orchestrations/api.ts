@@ -4,8 +4,8 @@ import { parseTaskRunStopResponse } from '@/lib/api/tasks/stopParser';
 import type {
   OrchestrationTaskCreateRequest,
   OrchestrationTaskPayload,
+  TaskPatchRequest,
   TaskRunLog,
-  TaskUpdateRequest,
 } from '@/lib/types';
 import type { TaskRunStopRequest, TaskRunStopResponse } from '@/lib/taskRunStop';
 
@@ -45,7 +45,7 @@ export async function createOrchestration(input: OrchestrationTaskCreateRequest)
 
 export async function updateOrchestration(
   id: string,
-  input: Pick<TaskUpdateRequest, 'name' | 'task_kind' | 'orchestration' | 'interval_seconds' | 'cron_expr' | 'enabled'>,
+  input: Pick<TaskPatchRequest, 'name' | 'task_kind' | 'orchestration' | 'interval_seconds' | 'cron_expr' | 'enabled'>,
 ): Promise<OrchestrationTaskPayload> {
   return requestJSON(`/api/orchestrations/${encodeURIComponent(id)}`, {
     method: 'PATCH',

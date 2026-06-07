@@ -1,4 +1,4 @@
-import type { MessageListRow } from './types';
+import type { MessageListRow } from '@/lib/chat-view/types';
 
 export function shouldPlaceAssistantCopyInline(
   currentRow: MessageListRow,

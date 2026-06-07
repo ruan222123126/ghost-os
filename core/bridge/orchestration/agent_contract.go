@@ -8,7 +8,10 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
+	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	bridgeruntime "ghost-os/bridge/runtime"
+	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
 	"ghost-os/bridge/tools"
 )
@@ -64,6 +67,44 @@ type AgentRuntimeFactory interface {
 type RuntimeDependencies = agentRuntimeDependencies
 type RuntimeCompleter = agent.Completer
 type RuntimeToolRegistry = tools.Registry
+type ServerConfig = bridgeconfig.ServerConfig
+type ConfigStore = bridgeconfig.Store
+
+var errPreparedAgentStreamRunnerRequired = errors.New("prepared agent stream runner is not configured")
+
+type PreparedAgentStream struct {
+	run func(context.Context, streaming.Sink) (string, string, error)
+}
+
+func (p PreparedAgentStream) Run(ctx context.Context, sink StreamSink) (string, string, error) {
+	if p.run == nil {
+		return "", "", bus.WrapError(ServiceErrorInternal, errPreparedAgentStreamRunnerRequired)
+	}
+	return p.run(ctx, sink)
+}
+
+func LoadServerConfig() (ServerConfig, error) {
+	return bridgeconfig.LoadServerConfig()
+}
+
+func NewConfigStoreFromEnv() (ConfigStore, error) {
+	return bridgeconfig.NewStoreFromEnv()
+}
+
+func NewServiceWithSessionStorePath(store ConfigStore, sessionsPath string) (*Service, error) {
+	sessionStore, err := session.NewStore(sessionsPath, session.StoreOptions{
+		HumanLogFullEnabled: func() bool {
+			if store == nil {
+				return false
+			}
+			return store.Snapshot().SessionHumanLogFullEnabled
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return NewService(store, sessionStore, nil), nil
+}
 
 func NewRuntimeDependencies(
 	cfg bridgeconfig.Config,
@@ -212,6 +253,26 @@ func (s *bridgeService) runPreparedAgentTurnStream(
 		return runner.RunTurnStreamInput(ctx, prepared.UserInput, prepared.SessionID, traceID, sink)
 	}
 	return runner.RunTurnStream(ctx, prepared.Message, prepared.SessionID, traceID, sink)
+}
+
+func (s *bridgeService) prepareAgentStreamAction(
+	ctx context.Context,
+	params agentParams,
+	traceID string,
+) (PreparedAgentStream, ServiceResult, error) {
+	if err := ctx.Err(); err != nil {
+		return PreparedAgentStream{}, ServiceResult{}, bus.WrapError(ServiceErrorConflict, err)
+	}
+	prepared, err := s.agentTurnService().Prepare(params, nil, traceID)
+	if err != nil {
+		return PreparedAgentStream{}, ServiceResult{}, err
+	}
+	return PreparedAgentStream{
+		run: func(ctx context.Context, sink streaming.Sink) (string, string, error) {
+			broadcastSink := internaltrace.NewSessionStreamBroadcastSink(sink, s.sessionPushHub())
+			return s.agentTurnService().ExecutePreparedStream(ctx, prepared, traceID, broadcastSink)
+		},
+	}, bus.ResultSuccess(map[string]any{}), nil
 }
 
 func requestScopedAgentRunner(

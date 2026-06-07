@@ -226,9 +226,6 @@ func assertPersistedToolConfig(t *testing.T, name string, allowed bool, blocked 
 	if hasToolName(fileCfg.ToolBlocklist, name) != blocked {
 		t.Fatalf("unexpected persisted blocked state for %s", name)
 	}
-	if len(fileCfg.ToolPromptOverrides) != 0 {
-		t.Fatalf("expected legacy tool_prompt_overrides to stay empty, got %+v", fileCfg.ToolPromptOverrides)
-	}
 
 	path := filepath.Join(strings.TrimSpace(os.Getenv("GHOST_PROMPTS_DIR")), toolPromptDirName, name+toolPromptFileExt)
 	raw, err := os.ReadFile(path)

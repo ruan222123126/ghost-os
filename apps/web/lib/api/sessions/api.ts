@@ -23,6 +23,16 @@ export async function listSessions(): Promise<SessionMetadata[]> {
   return requestJSON('/api/sessions', {}, parseSessionMetadataList);
 }
 
+export async function searchSessions(query: string): Promise<SessionMetadata[]> {
+  const params = new URLSearchParams();
+  const normalizedQuery = query.trim();
+  if (normalizedQuery) {
+    params.set('q', normalizedQuery);
+  }
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+  return requestJSON(`/api/sessions/search${suffix}`, {}, parseSessionMetadataList);
+}
+
 export async function getSessionSources(): Promise<SessionSourceResolution> {
   return requestJSON('/api/sessions/sources', {}, parseSessionSourceResolution);
 }

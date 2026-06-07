@@ -34,7 +34,9 @@ describe('components/config/TaskLogsOrchestration', () => {
       }),
     );
     expect(html).toContain('dispatch 1: private_send');
-    expect(html).toContain('private_send: agent-2 &lt;- secret-role');
+    expect(html).toContain('private_send: secret-role');
+    expect(html).not.toContain('agent-2');
+    expect(html).not.toContain('owner-session');
     expect(html).toContain('owner_visible: false');
     expect(html).toContain('private transcript');
     expect(html).toContain('round 1 Owner: keep all details');

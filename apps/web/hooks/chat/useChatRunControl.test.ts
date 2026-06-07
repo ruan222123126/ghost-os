@@ -31,35 +31,42 @@ describe('hooks/chat/useChatRunControl', () => {
       message: 'agent run cancelled successfully',
       session_id: 'session-stop',
     });
+    abortController.signal.addEventListener('abort', () => {
+      events.push('abort');
+    });
 
     let latestState: HookRenderState | null = null;
     await act(async () => {
       TestRenderer.create(
         React.createElement(
           WebLocaleProvider,
-          {
-            initialLocale: 'en-US',
-            children: React.createElement(HookProbe, {
-              activeRunRef,
-              beginHistorySync: () => events.push('beginHistorySync'),
-              clearChatError: () => events.push('clearChatError'),
-              clearStreamingState: () => events.push('clearStreamingState'),
-              currentSessionId: '',
-              endHistorySync: () => events.push('endHistorySync'),
-              onRender: (state) => {
-                latestState = state;
-              },
-              onSessionResolved: (sessionId) => events.push(`onSessionResolved:${sessionId}`),
-              setActiveRun: () => undefined,
-              setChatError: () => undefined,
-              setLoading: () => undefined,
-              setStopPending: () => undefined,
-              stopPendingRef,
-              syncRecentHistory: async (sessionId) => {
-                events.push(`syncRecentHistory:${sessionId}`);
-              },
-            }),
-          },
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef,
+            beginHistorySync: () => events.push('beginHistorySync'),
+            clearChatError: () => events.push('clearChatError'),
+            clearStreamingState: () => events.push('clearStreamingState'),
+            currentSessionId: '',
+            endHistorySync: () => events.push('endHistorySync'),
+            onRender: (state) => {
+              latestState = state;
+            },
+            onSessionResolved: (sessionId) => events.push(`onSessionResolved:${sessionId}`),
+            setActiveRun: (value) => {
+              activeRunRef.current = value;
+              events.push(value ? `setActiveRun:${value.sessionId}` : 'setActiveRun:null');
+            },
+            setChatError: () => undefined,
+            setLoading: (value) => events.push(`setLoading:${value}`),
+            setStopPending: (value) => {
+              stopPendingRef.current = value;
+              events.push(`setStopPending:${value}`);
+            },
+            stopPendingRef,
+            syncRecentHistory: async (sessionId) => {
+              events.push(`syncRecentHistory:${sessionId}`);
+            },
+          }),
         ),
       );
       await Promise.resolve();
@@ -73,11 +80,91 @@ describe('hooks/chat/useChatRunControl', () => {
     expect(abortController.signal.aborted).toBe(true);
     expect(events).toEqual([
       'clearChatError',
+      'setStopPending:true',
+      'abort',
       'onSessionResolved:session-stop',
       'beginHistorySync',
       'syncRecentHistory:session-stop',
-      'clearStreamingState',
       'endHistorySync',
+      'setLoading:false',
+      'setActiveRun:null',
+      'setStopPending:false',
+    ]);
+  });
+
+  it('keeps the optimistic turn visible and exits running state when stopped history sync fails', async () => {
+    const events: string[] = [];
+    const errors: string[] = [];
+    const abortController = new AbortController();
+    const activeRunRef: ActiveRunRef = {
+      current: {
+        abortController,
+        sessionId: 'session-stop',
+        traceId: 'trace-stop',
+      },
+    };
+    const stopPendingRef: StopPendingRef = { current: false };
+    mockedStopAgent.mockResolvedValue({
+      status: 'stopped',
+      message: 'agent run cancelled successfully',
+      session_id: 'session-stop',
+    });
+
+    let latestState: HookRenderState | null = null;
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef,
+            beginHistorySync: () => events.push('beginHistorySync'),
+            clearChatError: () => events.push('clearChatError'),
+            clearStreamingState: () => events.push('clearStreamingState'),
+            currentSessionId: 'session-stop',
+            endHistorySync: () => events.push('endHistorySync'),
+            onRender: (state) => {
+              latestState = state;
+            },
+            onSessionResolved: (sessionId) => events.push(`onSessionResolved:${sessionId}`),
+            setActiveRun: (value) => {
+              activeRunRef.current = value;
+              events.push(value ? `setActiveRun:${value.sessionId}` : 'setActiveRun:null');
+            },
+            setChatError: (value) => {
+              errors.push(value);
+              events.push(`setChatError:${value}`);
+            },
+            setLoading: (value) => events.push(`setLoading:${value}`),
+            setStopPending: (value) => {
+              stopPendingRef.current = value;
+              events.push(`setStopPending:${value}`);
+            },
+            stopPendingRef,
+            syncRecentHistory: async () => {
+              throw new Error('history unavailable');
+            },
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await latestState!.stopCurrentRun();
+    });
+
+    expect(errors).toEqual(['history unavailable']);
+    expect(events).not.toContain('clearStreamingState');
+    expect(events).toEqual([
+      'clearChatError',
+      'setStopPending:true',
+      'beginHistorySync',
+      'setChatError:history unavailable',
+      'endHistorySync',
+      'setLoading:false',
+      'setActiveRun:null',
+      'setStopPending:false',
     ]);
   });
 });

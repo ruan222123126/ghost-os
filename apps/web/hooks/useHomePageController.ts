@@ -18,6 +18,7 @@ interface HomePageController {
   committedMessages: ReturnType<typeof useBridgeChat>['committedMessages'];
   streamingAssistantSegments: ReturnType<typeof useBridgeChat>['streamingAssistantSegments'];
   streamingThinkingSegments: ReturnType<typeof useBridgeChat>['streamingThinkingSegments'];
+  activeStreamingThinkingId: ReturnType<typeof useBridgeChat>['activeStreamingThinkingId'];
   streamingItemOrder: ReturnType<typeof useBridgeChat>['streamingItemOrder'];
   streamingTools: ReturnType<typeof useBridgeChat>['streamingTools'];
   pendingQuestions: ReturnType<typeof useBridgeChat>['pendingQuestions'];
@@ -160,6 +161,7 @@ export function useHomePageController(): HomePageController {
     committedMessages: chat.committedMessages,
     streamingAssistantSegments: chat.streamingAssistantSegments,
     streamingThinkingSegments: chat.streamingThinkingSegments,
+    activeStreamingThinkingId: chat.activeStreamingThinkingId,
     streamingItemOrder: chat.streamingItemOrder,
     streamingTools: chat.streamingTools,
     pendingQuestions: chat.pendingQuestions,

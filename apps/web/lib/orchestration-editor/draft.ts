@@ -63,7 +63,9 @@ export function orchestrationDefinitionToDraft(input: OrchestrationDefinitionImp
 export function draftToOrchestrationDefinition(draft: WorkflowCanvasDraft): OrchestrationDefinition {
   const nodeMap = new Map(draft.nodes.map((node) => [node.id, node] as const));
   return {
-    nodes: draft.nodes.map((node) => buildOrchestrationNode(node)),
+    nodes: draft.nodes
+      .map((node) => buildOrchestrationNode(node))
+      .filter((node): node is NonNullable<typeof node> => node !== undefined),
     edges: draft.edges
       .map((edge) => buildOrchestrationEdge(edge, nodeMap))
       .filter((edge): edge is NonNullable<typeof edge> => edge !== undefined),
@@ -119,10 +121,13 @@ function buildDraftNode(node: OrchestrationDefinition['nodes'][number], position
   };
 }
 
-function buildOrchestrationNode(node: WorkflowCanvasNodeDraft): OrchestrationDefinition['nodes'][number] {
+function buildOrchestrationNode(node: WorkflowCanvasNodeDraft): OrchestrationDefinition['nodes'][number] | undefined {
+  if (!isOrchestrationDraftNode(node)) {
+    return undefined;
+  }
   return {
     id: node.id,
-    type: node.type as OrchestrationDefinition['nodes'][number]['type'],
+    type: node.type,
     group: node.type === 'group'
       ? {
         title: node.group?.title ?? '',
@@ -149,6 +154,9 @@ function buildOrchestrationEdge(
   const sourceNode = nodeMap.get(edge.from_node_id);
   const targetNode = nodeMap.get(edge.to_node_id);
   const resolvedKind = resolveEdgeKind(sourceNode, targetNode);
+  if (!isOrchestrationDraftNode(sourceNode) || !isOrchestrationDraftNode(targetNode)) {
+    return undefined;
+  }
   if (edge.kind) {
     return {
       from_node_id: edge.from_node_id,
@@ -164,6 +172,12 @@ function buildOrchestrationEdge(
     to_node_id: edge.to_node_id,
     kind: resolvedKind,
   };
+}
+
+function isOrchestrationDraftNode(
+  node?: WorkflowCanvasNodeDraft,
+): node is WorkflowCanvasNodeDraft & { type: OrchestrationDefinition['nodes'][number]['type'] } {
+  return node?.type === 'group' || node?.type === 'agent';
 }
 
 function buildDraftEdge(fromNodeID: string, toNodeID: string, kind: 'control' | 'member', index: number): WorkflowCanvasEdgeDraft {

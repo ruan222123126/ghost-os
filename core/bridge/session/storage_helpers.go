@@ -2,9 +2,7 @@ package session
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
-	"os"
 	"strings"
 )
 
@@ -28,37 +26,6 @@ func replaceLoadedSession(dst *Session, src *Session) {
 	}
 	*dst = *src
 	dst.setPersistedSnapshot()
-}
-
-func removeLegacySessionFile(store *Store, sessionID string) error {
-	if store == nil {
-		return nil
-	}
-	path, err := store.legacyPathForSession(sessionID)
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove legacy session %q: %w", sessionID, err)
-	}
-	return nil
-}
-
-func deleteLegacySessionFile(store *Store, sessionID string) (bool, error) {
-	if store == nil {
-		return false, nil
-	}
-	path, err := store.legacyPathForSession(sessionID)
-	if err != nil {
-		return false, err
-	}
-	if err := os.Remove(path); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return false, nil
-		}
-		return false, fmt.Errorf("delete legacy session %q: %w", sessionID, err)
-	}
-	return true, nil
 }
 
 func (s *Store) withStoreLock(fn func() error) error {

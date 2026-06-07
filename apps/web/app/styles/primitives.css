@@ -394,5 +394,5 @@
 
 .ui-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--ui-scroll-thumb)) rgb(var(--ui-scroll-track));
+  scrollbar-color: rgb(var(--ui-scroll-thumb) / 0.56) rgb(var(--ui-scroll-track) / 0.16);
 }

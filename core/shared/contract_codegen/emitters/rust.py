@@ -87,7 +87,11 @@ def _render_union(spec, target_names: dict[str, str]) -> str:
     variants = spec.target_config.get("variants", {})
     if not isinstance(variants, dict):
         raise ValueError(f"missing Rust union variants for {spec.name}")
-    lines = ["#[derive(Debug, Deserialize, Clone, PartialEq)]", "#[serde(untagged)]", f"pub enum {spec.target_name} {{"]
+    lines = [
+        "#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]",
+        "#[serde(untagged)]",
+        f"pub enum {spec.target_name} {{",
+    ]
     for candidate in spec.definition.get("oneOf", []):
         ref_name = schema_ref_name(candidate["$ref"])
         lines.append(f"    {variants[ref_name]}({target_names[ref_name]}),")

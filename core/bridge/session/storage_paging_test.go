@@ -1,11 +1,8 @@
 package session
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"ghost-os/bridge/llm"
@@ -156,51 +153,5 @@ func TestStoreSaveRejectsNonAppendOnlyMutation(t *testing.T) {
 	err = store.Save(sess)
 	if !errors.Is(err, ErrSessionNotAppendOnly) {
 		t.Fatalf("expected ErrSessionNotAppendOnly, got: %v", err)
-	}
-}
-
-func TestStoreMigrateLegacySessions(t *testing.T) {
-	dir := t.TempDir()
-	legacy := NewSession("")
-	legacy.ID = "legacy-session"
-	legacy.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello from legacy"})
-	encoded, err := json.MarshalIndent(legacy, "", "  ")
-	if err != nil {
-		t.Fatalf("encode legacy session: %v", err)
-	}
-	encoded = append(encoded, '\n')
-	legacyPath := filepath.Join(dir, legacy.ID+".json")
-	if err := os.WriteFile(legacyPath, encoded, 0o600); err != nil {
-		t.Fatalf("write legacy session: %v", err)
-	}
-
-	store, err := NewStore(dir)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-
-	if _, err := store.Load(legacy.ID); !errors.Is(err, ErrSessionNotFound) {
-		t.Fatalf("expected legacy session to stay invisible before migration, got %v", err)
-	}
-	migrated, err := store.MigrateLegacySessions()
-	if err != nil {
-		t.Fatalf("MigrateLegacySessions: %v", err)
-	}
-	if len(migrated) != 1 || migrated[0] != legacy.ID {
-		t.Fatalf("unexpected migrated ids: %v", migrated)
-	}
-
-	loaded, err := store.Load(legacy.ID)
-	if err != nil {
-		t.Fatalf("load migrated legacy session: %v", err)
-	}
-	if loaded.ID != legacy.ID {
-		t.Fatalf("unexpected loaded id: got=%q want=%q", loaded.ID, legacy.ID)
-	}
-	if loaded.MessageCount != len(legacy.Messages) {
-		t.Fatalf("unexpected loaded message count: got=%d want=%d", loaded.MessageCount, len(legacy.Messages))
-	}
-	if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("expected legacy file removal, got stat err=%v", err)
 	}
 }

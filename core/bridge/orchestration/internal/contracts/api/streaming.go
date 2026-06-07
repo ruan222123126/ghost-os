@@ -48,6 +48,15 @@ type AgentToolCallFinishedPayload struct {
 	Output     string `json:"output,omitempty"`
 }
 
+type AgentAwaitingHumanStreamPayload struct {
+	Tool          string           `json:"tool,omitempty"`
+	ToolCallID    string           `json:"tool_call_id,omitempty"`
+	QuestionID    string           `json:"question_id"`
+	Prompt        string           `json:"prompt"`
+	SelectionMode string           `json:"selection_mode,omitempty"`
+	Options       []AskHumanOption `json:"options,omitempty"`
+}
+
 type AgentStreamMessagePayload struct {
 	Text      string `json:"text"`
 	SessionID string `json:"session_id,omitempty"`
@@ -103,5 +112,6 @@ type TaskRunCardFinishedPayload struct {
 	FinishedAt      string `json:"finished_at"`
 	Preview         string `json:"preview,omitempty"`
 	Error           string `json:"error,omitempty"`
+	FinalText       string `json:"final_text,omitempty"`
 	SourceSessionID string `json:"source_session_id,omitempty"`
 }

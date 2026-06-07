@@ -10,28 +10,26 @@ import type {
   PendingQuestionMessage,
   StreamingAssistantSegment,
   StreamingThinkingSegment,
+  StreamingToolState,
   ToolChatMessage,
 } from '@/lib/types';
-import type { MessageListProps } from '@/components/message/types';
-
-export interface StreamingMessageRow {
-  key: string;
-  message: ChatMessage;
-}
+import type { StreamingMessageRow } from './types';
 
 interface StreamingRowOrderInput {
   pendingQuestions: PendingQuestionMessage[];
   streamingAssistantSegments: StreamingAssistantSegment[];
   streamingThinkingSegments: StreamingThinkingSegment[];
+  activeStreamingThinkingId?: string | null;
   streamingItemOrder: string[];
-  streamingTools: MessageListProps['streamingTools'];
+  streamingTools: StreamingToolState[];
 }
 
 interface StreamingOrderLookup {
   assistantSegmentsById: Map<string, StreamingAssistantSegment>;
   thinkingSegmentsById: Map<string, StreamingThinkingSegment>;
   questionsById: Map<string, PendingQuestionMessage>;
-  toolsById: Map<string, MessageListProps['streamingTools'][number]>;
+  toolsById: Map<string, StreamingToolState>;
+  activeThinkingId: string | null;
 }
 
 export function getOrderedStreamingRows(options: StreamingRowOrderInput): StreamingMessageRow[] {
@@ -56,6 +54,7 @@ export function getOrderedStreamingRows(options: StreamingRowOrderInput): Stream
       thinkingSegmentsById,
       questionsById,
       toolsById,
+      activeThinkingId: options.activeStreamingThinkingId ?? null,
     });
     if (!row || rowKeys.has(row.key)) {
       continue;
@@ -78,7 +77,10 @@ function appendMissingStreamingRows(
   }
 
   for (const segment of options.streamingThinkingSegments) {
-    appendStreamingRow(rows, rowKeys, buildStreamingThinkingRow(segment));
+    appendStreamingRow(rows, rowKeys, buildStreamingThinkingRow(
+      segment,
+      segment.id === (options.activeStreamingThinkingId ?? null),
+    ));
   }
 
   for (const tool of options.streamingTools) {
@@ -119,7 +121,7 @@ function mapStreamingOrderToRow(
   if (orderKey.startsWith(STREAMING_THINKING_ORDER_PREFIX)) {
     const thinkingSegmentId = orderKey.slice(STREAMING_THINKING_ORDER_PREFIX.length);
     const segment = options.thinkingSegmentsById.get(thinkingSegmentId);
-    return segment ? buildStreamingThinkingRow(segment) : null;
+    return segment ? buildStreamingThinkingRow(segment, segment.id === options.activeThinkingId) : null;
   }
 
   if (orderKey.startsWith(STREAMING_TOOL_ORDER_PREFIX)) {
@@ -149,15 +151,18 @@ function buildStreamingAssistantRow(segment: StreamingAssistantSegment): Streami
   };
 }
 
-function buildStreamingThinkingRow(segment: StreamingThinkingSegment): StreamingMessageRow {
+function buildStreamingThinkingRow(
+  segment: StreamingThinkingSegment,
+  inProgress: boolean,
+): StreamingMessageRow {
   return {
     key: segment.id,
-    message: buildThinkingMessage(segment.content, segment.id),
+    message: buildThinkingMessage(segment.content, segment.id, inProgress),
   };
 }
 
 function buildStreamingToolRow(
-  tool: MessageListProps['streamingTools'][number],
+  tool: StreamingToolState,
 ): StreamingMessageRow {
   return {
     key: tool.id,
@@ -165,7 +170,7 @@ function buildStreamingToolRow(
   };
 }
 
-function buildStreamingToolMessage(tool: MessageListProps['streamingTools'][number]): ToolChatMessage {
+function buildStreamingToolMessage(tool: StreamingToolState): ToolChatMessage {
   return {
     id: tool.id,
     kind: 'tool',

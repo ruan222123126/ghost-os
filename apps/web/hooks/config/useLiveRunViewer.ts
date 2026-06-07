@@ -16,6 +16,7 @@ import {
   latestActiveCard,
   latestCreatedCard,
   mergeLiveTaskRunCards,
+  reconcileCardsWithRunStatus,
   resolveCardSourceSessionId,
   type LiveTaskRunCard,
 } from '@/lib/taskRunViewerCards';
@@ -56,8 +57,16 @@ export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunVi
   }, [run.run_id]);
 
   useEffect(() => {
-    setCards((current) => mergeLiveTaskRunCards(current, run.run_cards));
-  }, [run.run_cards]);
+    setCards((current) => reconcileCardsWithRunStatus(
+      mergeLiveTaskRunCards(current, run.run_cards),
+      run.status,
+      {
+        finished_at: run.finished_at,
+        preview: run.response_preview,
+        error: run.error,
+      },
+    ));
+  }, [run.error, run.finished_at, run.response_preview, run.run_cards, run.status]);
 
   useEffect(() => {
     const sessionId = run.session_id_output?.trim();
@@ -192,6 +201,7 @@ function applyViewerEvent(cards: LiveTaskRunCard[], event: { type: string; paylo
         finished_at: payload.finished_at,
         preview: payload.preview,
         error: payload.error,
+        final_text: payload.final_text,
         live_source_session_id: payload.source_session_id,
       });
     }
@@ -202,6 +212,9 @@ function applyViewerEvent(cards: LiveTaskRunCard[], event: { type: string; paylo
 
 function resolveSelectedSessionId(card: LiveTaskRunCard | null): string {
   if (!card) {
+    return '';
+  }
+  if (card.source_events.length > 0) {
     return '';
   }
   if (card.kind === 'relay_round' && card.status !== 'running' && card.source_events.length === 0) {

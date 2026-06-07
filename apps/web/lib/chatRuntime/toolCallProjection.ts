@@ -4,7 +4,7 @@ import type {
   AgentToolCallFinishedPayload,
   AgentToolCallStartedPayload,
 } from '@/lib/types';
-import { supportsPromotedActionTitle } from '@/lib/chat-view/tool-details/common';
+import { supportsPromotedActionTitle } from '@/lib/toolNames';
 import type { ChatRuntimeAction } from './actions';
 import {
   TOOL_ERROR_STATUS,

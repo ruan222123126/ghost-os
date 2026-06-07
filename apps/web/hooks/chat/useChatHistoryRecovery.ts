@@ -2,6 +2,10 @@ import { useCallback, useRef } from 'react';
 import { parseAgentErrorPayload } from '@/lib/api/agent/parser';
 import { getFullSession } from '@/lib/api/sessions/api';
 import { streamSessionEvents, toAgentStreamEvent } from '@/lib/api/sessions/events';
+import {
+  projectRecoveredTurnEventRunState,
+  projectTurnDraftRunRecovery,
+} from '@/lib/chat-stream/historyRecovery';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
 import {
   createChatRuntimeStateFromDraft,
@@ -62,68 +66,46 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
   }, [copy.system.genericRequestFailed, options, stopRecoveredRun]);
 
   const applyRecoveredEvent = useCallback((runtime: ChatRuntimeState, event: SessionPushEvent) => {
-    options.applyRuntimeActions(projectAgentEvent({
-      event: toAgentStreamEvent(event),
-      runtime,
-    }));
+    const eventRunState = projectRecoveredTurnEventRunState(event.type);
+    if (eventRunState.projectRuntimeEvent) {
+      options.applyRuntimeActions(projectAgentEvent({
+        event: toAgentStreamEvent(event),
+        runtime,
+      }));
+    }
+    return eventRunState.historySync;
   }, [options]);
 
   const recoverTurnDraft = useCallback((sessionId: string, draft: SessionTurnDraft | null | undefined) => {
     stopRecoveredRun();
     options.hydrateTurnDraft(sessionId, draft);
-    if (!draft) {
-      options.setActiveRun(null);
-      options.setLoading(false);
-      options.setStopPending(false);
+    const recovery = projectTurnDraftRunRecovery(sessionId, draft);
+    options.setStopPending(recovery.stopPending);
+    options.setActiveRun(null);
+    options.setLoading(recovery.loading);
+    if (recovery.chatError !== undefined) {
+      options.setChatError(recovery.chatError);
+    }
+
+    if (recovery.phase !== 'streaming' || !draft || !recovery.activeRun) {
       return;
     }
 
-    options.setStopPending(false);
-    if (draft.status === 'awaiting_human') {
-      options.setActiveRun(null);
-      options.setLoading(false);
-      options.setChatError('');
-      return;
-    }
-
-    if (draft.status === 'error') {
-      options.setActiveRun(null);
-      options.setLoading(false);
-      options.setChatError(draft.error ?? '');
-      return;
-    }
-
-    const abortController = new AbortController();
     const runtime = createChatRuntimeStateFromDraft(draft, sessionId);
-    const recoveredRun = { abortController, sessionId, traceId: draft.trace_id };
+    const abortController = new AbortController();
+    const recoveredRun = { ...recovery.activeRun, abortController };
     recoveryRunRef.current = recoveredRun;
     options.setActiveRun(recoveredRun);
-    options.setLoading(true);
-    options.setChatError('');
 
     void streamSessionEvents({
       onEvent: async (event) => {
-        switch (event.type) {
-          case 'assistant_message':
-            await syncRecoveredTurn(sessionId);
-            return;
-          case 'awaiting_human':
-            applyRecoveredEvent(runtime, event);
-            await syncRecoveredTurn(sessionId);
-            return;
-          case 'completion_delta':
-          case 'tool_call_started':
-          case 'tool_call_finished':
-          case 'run_started':
-          case 'done':
-            applyRecoveredEvent(runtime, event);
-            return;
-          case 'error':
-            applyRecoveredEvent(runtime, event);
-            await syncRecoveredTurn(sessionId, parseAgentErrorPayload(event.payload).message);
-            return;
-          default:
-            return;
+        const historySync = applyRecoveredEvent(runtime, event);
+        if (historySync === 'sync_error') {
+          await syncRecoveredTurn(sessionId, parseAgentErrorPayload(event.payload).message);
+          return;
+        }
+        if (historySync === 'sync') {
+          await syncRecoveredTurn(sessionId);
         }
       },
       sessionId,

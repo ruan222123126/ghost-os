@@ -3,8 +3,8 @@ import type {
   OrchestrationEdge,
   OrchestrationGroupNode,
   OrchestrationNode,
+  TaskPatchRequest,
   TaskRuntimeOverrides,
-  TaskUpdateRequest,
   WorkflowDefinition,
   WorkflowInputVariable,
   WorkflowNode,
@@ -134,7 +134,7 @@ export interface SessionImportResult {
 }
 
 export type WorkflowUpdatePayload = Pick<
-  TaskUpdateRequest,
+  TaskPatchRequest,
   'task_kind' | 'name' | 'workflow' | 'orchestration' | 'interval_seconds' | 'cron_expr'
 >;
 

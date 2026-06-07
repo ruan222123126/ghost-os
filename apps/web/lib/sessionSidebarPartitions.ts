@@ -4,6 +4,7 @@ import {
   UNCLASSIFIED_PARTITION_ID,
   type BuildSessionPartitionViewsInput,
   type PartitionNameValidationError,
+  type SessionSearchMatcher,
   type SessionPartition,
   type SessionPartitionStoreV1,
   type SessionPartitionView,
@@ -17,6 +18,7 @@ export {
   type BuildSessionPartitionViewsInput,
   type PartitionNameValidationError,
   type SessionPartition,
+  type SessionSearchMatcher,
   type SessionPartitionStoreV1,
   type SessionPartitionView,
 } from '@/lib/sessionSidebarPartitionsModel';
@@ -98,17 +100,27 @@ export function buildSessionPartitionViews(input: BuildSessionPartitionViewsInpu
   const grouped = buildOrderedSessionIDsByPartition(input.sessions, sanitized, partitionMetas.map((meta) => meta.id));
   const query = input.searchQuery.trim().toLowerCase();
   const hideEmpty = query.length > 0;
+  const matchesSearch = input.matchesSearch ?? defaultSessionSearchMatcher;
 
   return partitionMetas
-    .map((meta) => ({
-      id: meta.id,
-      name: meta.name,
-      sessions: (grouped[meta.id] ?? [])
+    .map((meta) => {
+      const partitionMatches = partitionNameMatches(meta.name, query);
+      const sessions = (grouped[meta.id] ?? [])
         .map((sessionID) => byID.get(sessionID))
         .filter((session): session is SessionMetadata => Boolean(session))
-        .filter((session) => session.id.toLowerCase().includes(query)),
-    }))
+        .filter((session) => partitionMatches || matchesSearch(session, query));
+      return {
+        id: meta.id,
+        name: meta.name,
+        sessions,
+      };
+    })
     .filter((view) => !hideEmpty || view.sessions.length > 0);
+}
+
+export function partitionNameMatches(name: string, normalizedQuery: string): boolean {
+  return Boolean(normalizedQuery)
+    && name.trim().toLowerCase().includes(normalizedQuery);
 }
 
 export function moveSessionToPartition(input: {
@@ -209,4 +221,11 @@ function dedupePartitions(partitions: SessionPartition[]): SessionPartition[] {
 
 function normalizeName(value: string): string {
   return value.trim();
+}
+
+function defaultSessionSearchMatcher(
+  session: SessionMetadata,
+  normalizedQuery: string,
+): boolean {
+  return !normalizedQuery || session.id.toLowerCase().includes(normalizedQuery);
 }

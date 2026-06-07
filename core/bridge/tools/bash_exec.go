@@ -38,7 +38,7 @@ func (BashExecTool) Name() string {
 }
 
 func (BashExecTool) Description() string {
-	return "Run a bash shell command in the sandbox. Use one-shot mode by default; use interactive=true only when you need a persistent shell session (reuse session_id across calls) such as setting env vars, changing directories, or running multi-step scripts. interactive=true does not support tty=true. Non-zero exit fails."
+	return "Run a bash shell command in the sandbox. Use one-shot mode by default; for one-shot calls pass command plus optional login, timeout_ms, or max_output_chars only. Use interactive=true only when you need a persistent shell session (reuse session_id across calls) such as setting env vars, changing directories, or running multi-step scripts. Non-zero exit fails."
 }
 
 func (BashExecTool) Parameters() json.RawMessage {
@@ -49,8 +49,7 @@ func (BashExecTool) Parameters() json.RawMessage {
 			"login":{"type":"boolean","description":"One-shot only. true uses bash -lc (default), false uses bash -c."},
 			"interactive":{"type":"boolean","description":"Enable persistent shell session mode. Use this only when state must persist across calls (cd/export/temporary files). Do not pass timeout_ms or login in interactive mode."},
 			"session_id":{"type":"string","description":"Interactive only. Reuse an existing shell session_id from a previous interactive call. Omit to create a new session_id."},
-			"tty":{"type":"boolean","description":"Interactive only. Not supported yet: do not set tty=true."},
-			"yield_time_ms":{"type":"integer","minimum":1,"description":"Interactive only. Wait window before collecting incremental output (default ~100ms, max 60000ms)."},
+			"yield_time_ms":{"type":"integer","minimum":1,"description":"Interactive only. Wait window before collecting incremental output (default ~100ms, max 60000ms). Do not pass this for one-shot commands."},
 			"timeout_ms":{"type":"integer","minimum":1,"description":"One-shot only. Per-call timeout in milliseconds. Do not pass this when interactive=true."},
 			"max_output_chars":{"type":"integer","minimum":1,"description":"Optional stdout/stderr preview limit override."}
 		},
@@ -63,7 +62,7 @@ func (BashExecTool) Parameters() json.RawMessage {
 			},
 			{
 				"if":{"properties":{"interactive":{"const":false}}},
-				"then":{"not":{"anyOf":[{"required":["session_id"]},{"required":["tty"]},{"required":["yield_time_ms"]}]}}
+				"then":{"not":{"anyOf":[{"required":["session_id"]},{"required":["yield_time_ms"]}]}}
 			}
 		]
 	}`)
@@ -143,8 +142,8 @@ func validateBashExecArgs(args bashExecArgs, interactive bool) error {
 		}
 		return nil
 	}
-	if args.YieldTimeMs != nil || args.TTY != nil {
-		return fmt.Errorf("yield_time_ms and tty are only allowed when interactive=true")
+	if args.TTY != nil && *args.TTY {
+		return fmt.Errorf("tty=true is only allowed when interactive=true")
 	}
 	return nil
 }
@@ -162,11 +161,13 @@ func buildBashExecParams(command string, args bashExecArgs, interactive bool) ma
 	if sessionID != "" {
 		params["session_id"] = sessionID
 	}
-	if args.TTY != nil {
-		params["tty"] = *args.TTY
-	}
-	if args.YieldTimeMs != nil {
-		params["yield_time_ms"] = *args.YieldTimeMs
+	if interactive {
+		if args.TTY != nil {
+			params["tty"] = *args.TTY
+		}
+		if args.YieldTimeMs != nil {
+			params["yield_time_ms"] = *args.YieldTimeMs
+		}
 	}
 	if args.TimeoutMs != nil {
 		params["timeout_ms"] = *args.TimeoutMs

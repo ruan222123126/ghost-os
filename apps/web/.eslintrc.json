@@ -119,9 +119,13 @@
             "patterns": [
               {
                 "group": [
+                  "@/lib/chat-view/tool-details/**",
+                  "@/lib/chatRuntime/**",
+                  "@/lib/chat-store/**",
+                  "@/lib/chat-stream/**",
                   "@/lib/api/**"
                 ],
-                "message": "Components must not call API clients directly; use hooks/controllers."
+                "message": "Components must not import runtime/store/stream/API internals; use hooks or chat-view props."
               },
               {
                 "group": [
@@ -213,6 +217,165 @@
               {
                 "name": "@/components/orchestration/orchestrationEditorCopy",
                 "message": "Orchestration editor copy helpers live in @/hooks/orchestration."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "@/components/**",
+                  "@/hooks/**"
+                ],
+                "message": "Domain libraries must not depend on components or hooks; use pure lib models instead."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "components/message/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "@/lib/chat-view/homeEmptyState",
+                "message": "Message components receive rendered view props; home empty projection belongs in chat-view callers."
+              },
+              {
+                "name": "@/lib/chat-view/messageRows",
+                "message": "Message components receive rendered row props; row projection belongs in chat-view callers."
+              },
+              {
+                "name": "@/lib/chat-view/messageVisibility",
+                "message": "Message components receive filtered messages; visibility projection belongs in chat-view."
+              },
+              {
+                "name": "@/lib/chat-view/streamingRows",
+                "message": "Message components receive projected streaming rows; streaming row projection belongs in chat-view."
+              },
+              {
+                "name": "@/lib/chat-view/thinkingState",
+                "message": "Message components receive thinking display state; thinking projection belongs in chat-view."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "@/lib/chat-view/tool-details/**",
+                  "@/lib/chatRuntime/**",
+                  "@/lib/chat-store/**",
+                  "@/lib/chat-stream/**",
+                  "@/lib/api/**"
+                ],
+                "message": "Message components must render props only; use hooks or chat-view props instead of runtime/store/stream/API internals."
+              },
+              {
+                "group": [
+                  "@/lib/*/parser",
+                  "@/lib/**/parser",
+                  "@/lib/**/*.parser"
+                ],
+                "message": "Message components must not import protocol parsers directly."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "lib/chatRuntime/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/components/**",
+                  "@/hooks/**",
+                  "@/lib/chat-store/**",
+                  "@/lib/chat-stream/**",
+                  "@/lib/chat-view/**"
+                ],
+                "message": "chatRuntime only projects AgentStreamEvent plus runtime state into ChatRuntimeAction."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "lib/chat-stream/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/components/**",
+                  "@/hooks/**",
+                  "@/lib/api/**",
+                  "@/lib/chatRuntime/**",
+                  "@/lib/chat-store/**",
+                  "@/lib/chat-view/**"
+                ],
+                "message": "chat-stream is limited to pure stream session/run state utilities."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "lib/chat-store/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/components/**",
+                  "@/hooks/**",
+                  "@/lib/api/**",
+                  "@/lib/chat-view/**"
+                ],
+                "message": "chat-store is limited to runtime reducer, turn_draft hydration, and finalize logic."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "lib/chat-view/**/*.{ts,tsx}"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/components/**",
+                  "@/hooks/**",
+                  "@/lib/api/**",
+                  "@/lib/chatRuntime/**",
+                  "@/lib/chat-store/**"
+                ],
+                "message": "chat-view is limited to display projections and must not depend on API, runtime, store, hooks, or components."
               }
             ]
           }

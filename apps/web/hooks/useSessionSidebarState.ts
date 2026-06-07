@@ -10,6 +10,7 @@ interface UseSessionSidebarStateResult {
   toggleSidebar: () => void;
   toggleSearch: () => void;
   clearSearch: () => void;
+  closeSearch: () => void;
   setSearchQuery: (value: string) => void;
   openSidebar: () => void;
 }
@@ -26,9 +27,26 @@ export function useSessionSidebarState(): UseSessionSidebarStateResult {
     }
   }, [isOpen, isSearchVisible]);
 
+  const closeSearch = () => {
+    setIsSearchVisible(false);
+  };
+
   const clearSearch = () => {
     setSearchQuery('');
-    setIsSearchVisible(false);
+    closeSearch();
+  };
+
+  const openSearch = () => {
+    setIsOpen(true);
+    setIsSearchVisible(true);
+  };
+
+  const toggleSearch = () => {
+    if (isSearchVisible) {
+      closeSearch();
+      return;
+    }
+    openSearch();
   };
 
   const toggleSidebar = () => {
@@ -47,8 +65,9 @@ export function useSessionSidebarState(): UseSessionSidebarStateResult {
     searchQuery,
     searchInputRef,
     toggleSidebar,
-    toggleSearch: () => setIsSearchVisible((visible) => !visible),
+    toggleSearch,
     clearSearch,
+    closeSearch,
     setSearchQuery,
     openSidebar: () => setIsOpen(true),
   };

@@ -55,6 +55,46 @@ func TestBashExecToolExecuteSuccess(t *testing.T) {
 	}
 }
 
+func TestBashExecToolExecuteNormalizesOneShotHintParams(t *testing.T) {
+	tool := NewBashExecTool(mockExecutionClient{
+		callFunc: func(_ context.Context, action string, params map[string]any, traceID string) (map[string]any, error) {
+			if action != "BASH_EXEC" {
+				t.Fatalf("unexpected action: got %q want %q", action, "BASH_EXEC")
+			}
+			if traceID != "trace-bash-hints" {
+				t.Fatalf("unexpected trace id: got %q want %q", traceID, "trace-bash-hints")
+			}
+			if params["command"] != "python --version 2>/dev/null || python3 --version 2>/dev/null" {
+				t.Fatalf("unexpected command: %+v", params)
+			}
+			if params["login"] != true || params["timeout_ms"] != 10000 || params["max_output_chars"] != 2000 {
+				t.Fatalf("unexpected one-shot params: %+v", params)
+			}
+			for _, key := range []string{"interactive", "session_id", "tty", "yield_time_ms"} {
+				if _, exists := params[key]; exists {
+					t.Fatalf("unexpected forwarded hint %q in params: %+v", key, params)
+				}
+			}
+			return map[string]any{
+				"stdout": "Python 3.12.3\n",
+				"stderr": "",
+			}, nil
+		},
+	})
+
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"command":"python --version 2>/dev/null || python3 --version 2>/dev/null","interactive":false,"login":true,"max_output_chars":2000,"session_id":"","timeout_ms":10000,"tty":false,"yield_time_ms":1000}`),
+		"trace-bash-hints",
+	)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if output != "Python 3.12.3\n" {
+		t.Fatalf("unexpected output: %q", output)
+	}
+}
+
 func TestBashExecToolExecuteRequiresCommand(t *testing.T) {
 	tool := NewBashExecTool(mockExecutionClient{
 		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
@@ -179,5 +219,12 @@ func TestBashExecToolSchemaBlocksCommonInteractiveMisuse(t *testing.T) {
 	allOf, ok := schema["allOf"].([]any)
 	if !ok || len(allOf) < 2 {
 		t.Fatalf("expected schema allOf constraints, got: %+v", schema["allOf"])
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schema properties, got: %+v", schema["properties"])
+	}
+	if _, exists := properties["tty"]; exists {
+		t.Fatalf("tty is not supported and should not be exposed to the model: %+v", properties["tty"])
 	}
 }

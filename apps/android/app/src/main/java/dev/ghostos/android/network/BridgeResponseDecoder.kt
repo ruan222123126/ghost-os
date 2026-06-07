@@ -30,7 +30,7 @@ internal class BridgeResponseDecoder(private val json: Json) {
 
         val payload = envelope.payload ?: throw Exception("No payload")
         val payloadStatus = payload.jsonObject["status"]?.jsonPrimitive?.contentOrNull
-        return if (payloadStatus == "awaiting_human") {
+        return if (payloadStatus == AgentAwaitingHumanResponse.STATUS_AWAITING_HUMAN) {
             json.decodeFromJsonElement<AgentAwaitingHumanResponse>(payload)
         } else {
             json.decodeFromJsonElement<AgentSendSuccessResponse>(payload)

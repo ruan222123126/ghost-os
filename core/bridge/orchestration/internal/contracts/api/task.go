@@ -46,7 +46,7 @@ type TaskUpdateParams struct {
 type TaskIDParams struct {
 	ID        string `json:"id"`
 	Scope     string `json:"scope,omitempty"`
-	StartOnly bool   `json:"start_only,omitempty"`
+	StartOnly *bool  `json:"start_only,omitempty"`
 }
 
 type TaskStopParams struct {
@@ -57,7 +57,7 @@ type TaskStopParams struct {
 
 type TaskLogsParams struct {
 	ID    string `json:"id"`
-	Limit int    `json:"limit,omitempty"`
+	Limit *int   `json:"limit,omitempty"`
 	Scope string `json:"scope,omitempty"`
 }
 

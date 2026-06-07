@@ -1,7 +1,7 @@
 'use client';
 
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { type DragEvent, type FC, type RefObject, useMemo } from 'react';
+import { type DragEvent, type FC, type RefObject, useEffect, useMemo } from 'react';
 import {
   buildFlatSessionRows,
   buildPartitionSessionRows,
@@ -28,6 +28,7 @@ interface SessionSidebarHistoryBodyProps {
   flatSessions: SessionMetadata[];
   partitionViews: SessionPartitionView[];
   currentSessionId: string;
+  focusSessionId?: string;
   dragState: {
     draggingSessionID: string;
     dropTarget?: DropTargetState;
@@ -54,6 +55,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   flatSessions,
   partitionViews,
   currentSessionId,
+  focusSessionId,
   dragState,
   resolveSessionTitle,
   onSelect,
@@ -70,10 +72,21 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     }
     return countSessionsInPartitionViews(partitionViews);
   }, [flatSessions.length, groupingEnabled, partitionViews]);
+  const focusSessionIndex = useMemo(() => {
+    const id = focusSessionId?.trim();
+    if (!id) {
+      return undefined;
+    }
+    if (!groupingEnabled) {
+      return flatSessions.findIndex((session) => session.id === id);
+    }
+    return findSessionIndexInPartitionViews(partitionViews, id);
+  }, [flatSessions, focusSessionId, groupingEnabled, partitionViews]);
   const visibleSessionCount = useSessionSidebarVisibleCount({
     scrollElementRef,
     totalSessions,
     resetKey,
+    focusSessionIndex,
   });
   const visibleFlatSessions = useMemo(() => {
     return flatSessions.slice(0, visibleSessionCount);
@@ -103,6 +116,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
         rows={buildFlatSessionRows(visibleFlatSessions)}
         scrollElementRef={scrollElementRef}
         currentSessionId={currentSessionId}
+        focusSessionId={focusSessionId}
         resolveSessionTitle={resolveSessionTitle}
         onSelect={onSelect}
         onDelete={onDelete}
@@ -127,6 +141,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
       rows={rows}
       scrollElementRef={scrollElementRef}
       currentSessionId={currentSessionId}
+      focusSessionId={focusSessionId}
       resolveSessionTitle={resolveSessionTitle}
       onSelect={onSelect}
       onDelete={onDelete}
@@ -144,6 +159,7 @@ const SessionSidebarVirtualRows: FC<{
   rows: SessionSidebarHistoryRow[];
   scrollElementRef: RefObject<HTMLDivElement>;
   currentSessionId: string;
+  focusSessionId?: string;
   resolveSessionTitle: (session: SessionMetadata) => string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -161,10 +177,24 @@ const SessionSidebarVirtualRows: FC<{
     overscan: SESSION_ROW_OVERSCAN,
   });
   const virtualItems = rowVirtualizer.getVirtualItems();
+  const focusedRowIndex = useMemo(() => {
+    const id = props.focusSessionId?.trim();
+    if (!id) {
+      return -1;
+    }
+    return props.rows.findIndex((row) => row.kind === 'session' && row.session.id === id);
+  }, [props.focusSessionId, props.rows]);
 
   const partitionCounts = useMemo(() => {
     return buildPartitionRowCounts(props.rows);
   }, [props.rows]);
+
+  useEffect(() => {
+    if (focusedRowIndex < 0) {
+      return;
+    }
+    rowVirtualizer.scrollToIndex(focusedRowIndex, { align: 'center' });
+  }, [focusedRowIndex, rowVirtualizer]);
 
   return (
     <div className="relative pb-3" style={{ height: rowVirtualizer.getTotalSize() }}>
@@ -225,6 +255,45 @@ function buildPartitionRowCounts(rows: SessionSidebarHistoryRow[]): Record<strin
     }
   }
   return counts;
+}
+
+function findSessionIndexInPartitionViews(
+  partitionViews: SessionPartitionView[],
+  sessionID: string,
+): number {
+  let index = 0;
+  for (const partition of partitionViews) {
+    const found = findSessionIndexInPartition(partition, sessionID, index);
+    if (found.found) {
+      return found.index;
+    }
+    index = found.nextIndex;
+  }
+  return -1;
+}
+
+function findSessionIndexInPartition(
+  partition: SessionPartitionView,
+  sessionID: string,
+  startIndex: number,
+): { found: boolean; index: number; nextIndex: number } {
+  if (partition.childPartitions?.length) {
+    let nextIndex = startIndex;
+    for (const child of partition.childPartitions) {
+      const found = findSessionIndexInPartition(child, sessionID, nextIndex);
+      if (found.found) {
+        return found;
+      }
+      nextIndex = found.nextIndex;
+    }
+    return { found: false, index: -1, nextIndex };
+  }
+
+  const localIndex = partition.sessions.findIndex((session) => session.id === sessionID);
+  if (localIndex >= 0) {
+    return { found: true, index: startIndex + localIndex, nextIndex: startIndex + partition.sessions.length };
+  }
+  return { found: false, index: -1, nextIndex: startIndex + partition.sessions.length };
 }
 
 function dragOverHandler(

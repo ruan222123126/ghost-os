@@ -1,5 +1,5 @@
 import type { ChatMessage } from '@/lib/types';
-import type { MessageListRow } from './types';
+import type { MessageListRow } from '@/lib/chat-view/types';
 import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
 
 describe('components/message/messageCopyPlacement', () => {

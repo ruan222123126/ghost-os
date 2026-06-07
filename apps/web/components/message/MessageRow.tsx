@@ -1,7 +1,6 @@
 import type { FC, RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { QuestionInput } from '@/components/QuestionInput';
-import { useWebLocale } from '@/lib/i18n/provider';
 import type {
   AssistantChatMessage,
   EventChatMessage,
@@ -10,6 +9,7 @@ import type {
   ToolChatMessage,
   UserChatMessage,
 } from '@/lib/types';
+import type { ToolCardViewModel } from '@/lib/chat-view/types';
 import { MessageAttachments } from './MessageAttachments';
 import { MessageCopyButton } from './MessageCopyButton';
 import { MessageImageGallery } from './MessageImageGallery';
@@ -107,7 +107,6 @@ const AssistantMessageRow: FC<{
   assistantMarkdownEnabled: boolean;
   hasTrailingTool?: boolean;
 }> = ({ message, assistantMarkdownEnabled, hasTrailingTool = false }) => {
-  const { copy } = useWebLocale();
   const showCopyButton = shouldShowAssistantCopyButton(message);
   const assistantFrameClassName = [
     'message-assistant-frame',
@@ -125,7 +124,6 @@ const AssistantMessageRow: FC<{
   return (
     <div className="message-row is-assistant">
       <div className="message-stack">
-        {message.inProgress ? <div className="message-draft-flag">{copy.chat.assistantDraftFlag}</div> : null}
         <div className={assistantFrameClassName}>
           <div className="message-assistant-body">
             <AssistantMarkdownContent
@@ -148,16 +146,20 @@ const AssistantMessageRow: FC<{
 const ToolMessageRow: FC<{
   isOpen: boolean;
   message: ToolChatMessage;
-  toolCallCompactOutputEnabled: boolean;
+  toolCard: ToolCardViewModel;
   onToggle: () => void;
-}> = ({ isOpen, message, toolCallCompactOutputEnabled, onToggle }) => (
+}> = ({ isOpen, message, toolCard, onToggle }) => (
   <div className="message-row is-tool">
     <div className="message-stack">
       <ToolCard
+        details={toolCard.details}
         isOpen={isOpen}
         onToggle={onToggle}
-        tool={message}
-        toolCallCompactOutputEnabled={toolCallCompactOutputEnabled}
+        showTerminalIcon={toolCard.showTerminalIcon}
+        statusLabel={toolCard.statusLabel}
+        title={toolCard.title}
+        titleMode={toolCard.titleMode}
+        tone={toolCard.tone}
       />
       {message.images?.length ? <MessageImageGallery images={message.images} /> : null}
       {message.attachments?.length ? <MessageAttachments attachments={message.attachments} /> : null}
@@ -172,7 +174,12 @@ const ThinkingMessageRow: FC<{
 }> = ({ isOpen, message, onToggle }) => (
   <div className="message-row is-thinking">
     <div className="message-stack">
-      <ThinkingPanel expanded={isOpen} text={message.content} onToggleExpanded={onToggle} />
+      <ThinkingPanel
+        active={Boolean(message.inProgress)}
+        expanded={isOpen}
+        text={message.content}
+        onToggleExpanded={onToggle}
+      />
     </div>
   </div>
 );
@@ -213,8 +220,8 @@ const QuestionMessageRow: FC<{
 
 export const MessageRow: FC<MessageRowProps> = ({
   message,
+  toolCard,
   assistantMarkdownEnabled = true,
-  toolCallCompactOutputEnabled = false,
   hasTrailingTool = false,
   isToolCardOpen = false,
   isThinkingPanelOpen = false,
@@ -236,11 +243,14 @@ export const MessageRow: FC<MessageRowProps> = ({
         />
       );
     case 'tool':
+      if (!toolCard) {
+        throw new Error(`missing tool card view model for tool message ${message.id}`);
+      }
       return (
         <ToolMessageRow
           isOpen={isToolCardOpen}
           message={message}
-          toolCallCompactOutputEnabled={toolCallCompactOutputEnabled}
+          toolCard={toolCard}
           onToggle={() => onToggleToolCard?.(message.id)}
         />
       );

@@ -22,7 +22,6 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
   const {
     activeRunRef,
     applyRuntimeActions,
-    clearStreamingState,
     currentSessionId,
     endHistorySync,
     onSessionResolved,
@@ -75,14 +74,12 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
       }
 
       applySessionResolution(resolution);
-      clearStreamingState();
       runtime.assistantBuffer = '';
       syncRecentHistoryInBackground(resolution.sessionId);
     },
     [
       activeRunRef,
       applySessionResolution,
-      clearStreamingState,
       currentSessionId,
       syncRecentHistoryInBackground,
     ],
@@ -126,7 +123,9 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
         });
         syncSession(runtime, result.sessionId || runtime.sessionId);
       } catch (error) {
-        syncSession(runtime, runtime.sessionId);
+        if (!run.signal?.aborted) {
+          syncSession(runtime, runtime.sessionId);
+        }
         throw error;
       }
     },
@@ -150,7 +149,9 @@ export function useChatStreamController(options: UseChatStreamControllerOptions)
         });
         syncSession(runtime, result.sessionId || runtime.sessionId);
       } catch (error) {
-        syncSession(runtime, runtime.sessionId);
+        if (!run.signal?.aborted) {
+          syncSession(runtime, runtime.sessionId);
+        }
         throw error;
       }
     },

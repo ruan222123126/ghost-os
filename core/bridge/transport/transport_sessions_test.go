@@ -2,6 +2,8 @@ package transport
 
 import (
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -68,6 +70,129 @@ func TestHandleSessionsListReturnsMetadata(t *testing.T) {
 
 	if !seen[first.ID] || !seen[second.ID] {
 		t.Fatalf("missing sessions in list: seen=%v first=%q second=%q", seen, first.ID, second.ID)
+	}
+}
+
+func TestHandleSessionsSearchMatchesTitle(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	painting := session.NewSession("system")
+	painting.ID = "session-painting"
+	painting.Title = "水彩绘画目录"
+	painting.AddMessage(llm.Message{Role: llm.RoleUser, Text: "paint"})
+	if err := sessionStore.Save(painting); err != nil {
+		t.Fatalf("save painting session: %v", err)
+	}
+
+	other := session.NewSession("system")
+	other.ID = "session-notes"
+	other.Title = "会议记录"
+	other.AddMessage(llm.Message{Role: llm.RoleUser, Text: "notes"})
+	if err := sessionStore.Save(other); err != nil {
+		t.Fatalf("save other session: %v", err)
+	}
+
+	recorder := serveRequest(handler, http.MethodGet, "/api/sessions/search?q="+url.QueryEscape("绘画"), "", nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.([]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("unexpected search result count: got %d want 1 payload=%v", len(payload), payload)
+	}
+	result, ok := payload[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected result type: %T", payload[0])
+	}
+	if result["id"] != painting.ID || result["title"] != painting.Title {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestHandleSessionsSearchMatchesManualPartitionName(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	project := session.NewSession("system")
+	project.ID = "session-project"
+	project.Title = "Alpha discussion"
+	project.AddMessage(llm.Message{Role: llm.RoleUser, Text: "alpha"})
+	if err := sessionStore.Save(project); err != nil {
+		t.Fatalf("save project session: %v", err)
+	}
+
+	review := session.NewSession("system")
+	review.ID = "session-review"
+	review.Title = "Review notes"
+	review.AddMessage(llm.Message{Role: llm.RoleUser, Text: "review"})
+	if err := sessionStore.Save(review); err != nil {
+		t.Fatalf("save review session: %v", err)
+	}
+
+	other := session.NewSession("system")
+	other.ID = "session-other"
+	other.Title = "Unrelated"
+	other.AddMessage(llm.Message{Role: llm.RoleUser, Text: "other"})
+	if err := sessionStore.Save(other); err != nil {
+		t.Fatalf("save other session: %v", err)
+	}
+
+	if _, err := sessionStore.SaveSidebarPartitionState(session.SessionSidebarPartitionState{
+		Version: 1,
+		Partitions: []session.SessionSidebarPartition{
+			{ID: "partition-client", Name: "Client Projects"},
+		},
+		Assignments: map[string]string{
+			project.ID: "partition-client",
+			review.ID:  "partition-client",
+		},
+	}); err != nil {
+		t.Fatalf("save sidebar partition state: %v", err)
+	}
+
+	recorder := serveRequest(handler, http.MethodGet, "/api/sessions/search?q="+url.QueryEscape("client projects"), "", nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	ids := decodeSessionSearchResultIDs(t, recorder)
+	if len(ids) != 2 || !ids[project.ID] || !ids[review.ID] {
+		t.Fatalf("unexpected partition search ids: %v", ids)
+	}
+	if ids[other.ID] {
+		t.Fatalf("partition search should not include unassigned session: %v", ids)
+	}
+}
+
+func TestHandleSessionsSearchKeepsIDSearchLimit(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	first := session.NewSession("system")
+	first.ID = "session-first"
+	first.AddMessage(llm.Message{Role: llm.RoleUser, Text: "first"})
+	if err := sessionStore.Save(first); err != nil {
+		t.Fatalf("save first session: %v", err)
+	}
+
+	second := session.NewSession("system")
+	second.ID = "session-second"
+	second.AddMessage(llm.Message{Role: llm.RoleUser, Text: "second"})
+	if err := sessionStore.Save(second); err != nil {
+		t.Fatalf("save second session: %v", err)
+	}
+
+	recorder := serveRequest(handler, http.MethodGet, "/api/sessions/search?q=session&limit=1", "", nil)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	ids := decodeSessionSearchResultIDs(t, recorder)
+	if len(ids) != 1 {
+		t.Fatalf("unexpected limited search result count: got %d ids=%v", len(ids), ids)
 	}
 }
 
@@ -329,4 +454,26 @@ func TestHandleSessionArtifactDownloadReturnsBinaryFile(t *testing.T) {
 	if recorder.Body.String() != "hello attachment" {
 		t.Fatalf("unexpected body: %q", recorder.Body.String())
 	}
+}
+
+func decodeSessionSearchResultIDs(t *testing.T, recorder *httptest.ResponseRecorder) map[string]bool {
+	t.Helper()
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.([]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	ids := make(map[string]bool, len(payload))
+	for _, item := range payload {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			t.Fatalf("unexpected metadata entry type: %T", item)
+		}
+		id, _ := entry["id"].(string)
+		if strings.TrimSpace(id) == "" {
+			t.Fatalf("metadata id should not be empty: %v", entry)
+		}
+		ids[id] = true
+	}
+	return ids
 }

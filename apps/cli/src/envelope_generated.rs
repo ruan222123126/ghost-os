@@ -268,6 +268,20 @@ pub struct SessionHumanInteraction {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentAwaitingHumanStreamPayload {
+    #[serde(default)]
+    pub tool: Option<String>,
+    #[serde(default)]
+    pub tool_call_id: Option<String>,
+    pub question_id: String,
+    pub prompt: String,
+    #[serde(default)]
+    pub selection_mode: Option<String>,
+    #[serde(default)]
+    pub options: Option<Vec<AskHumanOption>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentStreamMessagePayload {
     pub text: String,
     #[serde(default)]
@@ -622,6 +636,8 @@ pub struct TaskRunCardFinishedPayload {
     #[serde(default)]
     pub error: Option<String>,
     #[serde(default)]
+    pub final_text: Option<String>,
+    #[serde(default)]
     pub source_session_id: Option<String>,
 }
 
@@ -879,6 +895,36 @@ pub struct TaskUpdateRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskPatchRequest {
+    #[serde(default)]
+    pub message: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub runtime_overrides: Option<TaskRuntimeOverrides>,
+    #[serde(default)]
+    pub agent_mode: Option<String>,
+    #[serde(default)]
+    pub relay: Option<TaskRelayConfig>,
+    #[serde(default)]
+    pub task_kind: Option<String>,
+    #[serde(default)]
+    pub workflow: Option<WorkflowDefinition>,
+    #[serde(default)]
+    pub orchestration: Option<OrchestrationDefinition>,
+    #[serde(default)]
+    pub interval_seconds: Option<i64>,
+    #[serde(default)]
+    pub cron_expr: Option<String>,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct WorkflowTaskPayload {
     pub id: String,
     pub task_kind: String,
@@ -922,9 +968,97 @@ pub struct OrchestrationTaskPayload {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunNodeResult {
+    pub node_id: String,
+    pub node_type: String,
+    pub status: String,
+    #[serde(default)]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    #[serde(default)]
+    pub completed_seq: Option<i64>,
+    #[serde(default)]
+    pub branch_id: Option<String>,
+    #[serde(default)]
+    pub input: Option<Value>,
+    #[serde(default)]
+    pub output: Option<Value>,
+    #[serde(default)]
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunCard {
+    pub card_id: String,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    pub kind: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub node_id: Option<String>,
+    #[serde(default)]
+    pub node_type: Option<String>,
+    #[serde(default)]
+    pub round: Option<i64>,
+    #[serde(default)]
+    pub iteration: Option<i64>,
+    #[serde(default)]
+    pub branch_id: Option<String>,
+    #[serde(default)]
+    pub source_session_id: Option<String>,
+    #[serde(default)]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    #[serde(default)]
+    pub preview: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub final_text: Option<String>,
+    #[serde(default)]
+    pub source_events: Option<Vec<AgentStreamEvent>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct WorkflowStartNode {
     #[serde(default)]
     pub inputs: Option<Vec<WorkflowInputVariable>>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunLog {
+    pub task_id: String,
+    pub run_id: String,
+    pub trace_id: String,
+    #[serde(default)]
+    pub task_kind: Option<String>,
+    #[serde(default)]
+    pub action: Option<String>,
+    pub scheduled_at: String,
+    #[serde(default)]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub finished_at: Option<String>,
+    pub status: String,
+    #[serde(default)]
+    pub session_id_input: Option<String>,
+    #[serde(default)]
+    pub session_id_output: Option<String>,
+    #[serde(default)]
+    pub response_preview: Option<String>,
+    #[serde(default)]
+    pub node_results: Option<Vec<TaskRunNodeResult>>,
+    #[serde(default)]
+    pub run_cards: Option<Vec<TaskRunCard>>,
+    #[serde(default)]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -940,14 +1074,36 @@ pub struct WorkflowInputVariable {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunPayload {
+    pub task: TaskPayload,
+    pub run: TaskRunLog,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunStopRequest {
+    pub run_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct TaskRunStopResponse {
+    pub status: String,
+    pub message: String,
+    pub task_id: String,
+    #[serde(default)]
+    pub run_id: Option<String>,
+    #[serde(default)]
+    pub run: Option<TaskRunLog>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum AgentPayload {
     Success(AgentSendSuccessResponse),
     AwaitingHuman(AgentSendAwaitingHumanResponse),
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum TaskCreateRequest {
     AgentMessage(AgentMessageTaskCreateRequest),
@@ -955,7 +1111,7 @@ pub enum TaskCreateRequest {
     Orchestration(OrchestrationTaskCreateRequest),
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum TaskPayload {
     AgentMessage(AgentMessageTaskPayload),

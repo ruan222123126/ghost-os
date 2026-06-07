@@ -180,6 +180,15 @@ export interface SessionHumanInteraction {
   answer?: string;
 }
 
+export interface AgentAwaitingHumanStreamPayload {
+  tool?: string;
+  tool_call_id?: string;
+  question_id: string;
+  prompt: string;
+  selection_mode?: 'single' | 'multiple';
+  options?: AskHumanOption[];
+}
+
 export interface AgentStreamMessagePayload {
   text: string;
   session_id?: string;
@@ -428,6 +437,7 @@ export interface TaskRunCardFinishedPayload {
   finished_at: string;
   preview?: string;
   error?: string;
+  final_text?: string;
   source_session_id?: string;
 }
 
@@ -599,6 +609,22 @@ export interface TaskUpdateRequest {
   trace_id?: string;
 }
 
+export interface TaskPatchRequest {
+  message?: string;
+  name?: string;
+  session_id?: string;
+  runtime_overrides?: TaskRuntimeOverrides;
+  agent_mode?: 'single' | 'relay';
+  relay?: TaskRelayConfig;
+  task_kind?: 'agent_message' | 'workflow' | 'orchestration';
+  workflow?: WorkflowDefinition;
+  orchestration?: OrchestrationDefinition;
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled?: boolean;
+  trace_id?: string;
+}
+
 export interface WorkflowTaskPayload {
   id: string;
   task_kind: 'workflow';
@@ -630,8 +656,60 @@ export interface OrchestrationTaskPayload {
   last_error?: string;
 }
 
+export interface TaskRunNodeResult {
+  node_id: string;
+  node_type: string;
+  status: string;
+  started_at?: string;
+  finished_at?: string;
+  completed_seq?: number;
+  branch_id?: string;
+  input?: unknown;
+  output?: unknown;
+  preview?: string;
+  error?: string;
+}
+
+export interface TaskRunCard {
+  card_id: string;
+  run_id?: string;
+  kind: string;
+  title?: string;
+  node_id?: string;
+  node_type?: string;
+  round?: number;
+  iteration?: number;
+  branch_id?: string;
+  source_session_id?: string;
+  started_at?: string;
+  status?: string;
+  finished_at?: string;
+  preview?: string;
+  error?: string;
+  final_text?: string;
+  source_events?: AgentStreamEvent[];
+}
+
 export interface WorkflowStartNode {
   inputs?: WorkflowInputVariable[];
+}
+
+export interface TaskRunLog {
+  task_id: string;
+  run_id: string;
+  trace_id: string;
+  task_kind?: 'agent_message' | 'workflow' | 'orchestration';
+  action?: string;
+  scheduled_at: string;
+  started_at?: string;
+  finished_at?: string;
+  status: 'running' | 'success' | 'incomplete' | 'cancelled' | 'error' | 'skipped' | 'awaiting_human';
+  session_id_input?: string;
+  session_id_output?: string;
+  response_preview?: string;
+  node_results?: TaskRunNodeResult[];
+  run_cards?: TaskRunCard[];
+  error?: string;
 }
 
 export interface WorkflowInputVariable {
@@ -640,6 +718,23 @@ export interface WorkflowInputVariable {
   required?: boolean;
   default?: unknown;
   description?: string;
+}
+
+export interface TaskRunPayload {
+  task: TaskPayload;
+  run: TaskRunLog;
+}
+
+export interface TaskRunStopRequest {
+  run_id: string;
+}
+
+export interface TaskRunStopResponse {
+  status: 'stopped' | 'not_running';
+  message: string;
+  task_id: string;
+  run_id?: string;
+  run?: TaskRunLog;
 }
 
 export type AgentSendResponse = AgentSendSuccessResponse | AgentSendAwaitingHumanResponse;

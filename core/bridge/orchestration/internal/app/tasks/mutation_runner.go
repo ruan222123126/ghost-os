@@ -72,7 +72,7 @@ func (r MutationRunner) RunNow(params api.TaskIDParams, traceID string) (api.Tas
 	if err != nil {
 		return api.TaskRunPayload{}, err
 	}
-	if params.StartOnly {
+	if StartOnlyEnabled(params.StartOnly) {
 		return r.startNow(*task, traceID)
 	}
 	run, err := r.Scheduler.RunNow(*task, traceID)

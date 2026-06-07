@@ -9,11 +9,11 @@ import {
   type StreamingThinkingState,
   type StreamingToolTableState,
 } from '@/lib/chat-stream/streamState';
+import type { ActiveAgentRun } from '@/lib/chat-stream/types';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type { ChatMessage, SessionTurnDraft } from '@/lib/types';
 import { buildDraftHydratedState } from './draftHydration';
 import { applyRuntimeActionsToState } from './runtimeReducer';
-import type { ActiveAgentRun } from './types';
 
 export interface ChatStateStore {
   committedMessages: ChatMessage[];

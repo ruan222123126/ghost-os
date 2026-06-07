@@ -1048,6 +1048,135 @@
                 }
             }
         },
+        "taskPatchRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "name": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "runtime_overrides": {
+                    "$ref": "#/$defs/taskRuntimeOverrides"
+                },
+                "agent_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single",
+                        "relay"
+                    ]
+                },
+                "relay": {
+                    "$ref": "#/$defs/taskRelayConfig"
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "workflow",
+                        "orchestration"
+                    ]
+                },
+                "workflow": {
+                    "$ref": "#/$defs/workflowDefinition"
+                },
+                "orchestration": {
+                    "$ref": "#/$defs/orchestrationDefinition"
+                },
+                "interval_seconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "cron_expr": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "trace_id": {
+                    "type": "string"
+                }
+            },
+            "not": {
+                "required": [
+                    "interval_seconds",
+                    "cron_expr"
+                ]
+            },
+            "allOf": [
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "agent_message"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "message"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "workflow"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "workflow"
+                        ]
+                    }
+                },
+                {
+                    "if": {
+                        "properties": {
+                            "task_kind": {
+                                "const": "orchestration"
+                            }
+                        },
+                        "required": [
+                            "task_kind"
+                        ]
+                    },
+                    "then": {
+                        "required": [
+                            "orchestration"
+                        ]
+                    }
+                }
+            ],
+            "x-codegen": {
+                "order": 252,
+                "ts": {
+                    "name": "TaskPatchRequest"
+                },
+                "rust": {
+                    "name": "TaskPatchRequest"
+                },
+                "kotlin": {
+                    "name": "TaskPatchRequest"
+                }
+            }
+        },
         "agentMessageTaskPayload": {
             "type": "object",
             "additionalProperties": false,
@@ -1395,6 +1524,332 @@
                 "kotlin": {
                     "name": "TaskPayload",
                     "kind": "sealed_interface"
+                }
+            }
+        },
+        "taskRunNodeResult": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "node_id",
+                "node_type",
+                "status"
+            ],
+            "properties": {
+                "node_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "node_type": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "status": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "completed_seq": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "branch_id": {
+                    "type": "string"
+                },
+                "input": {},
+                "output": {},
+                "preview": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                }
+            },
+            "x-codegen": {
+                "order": 257,
+                "ts": {
+                    "name": "TaskRunNodeResult"
+                },
+                "rust": {
+                    "name": "TaskRunNodeResult"
+                },
+                "kotlin": {
+                    "name": "TaskRunNodeResult"
+                }
+            }
+        },
+        "taskRunCard": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "card_id",
+                "kind"
+            ],
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "title": {
+                    "type": "string"
+                },
+                "node_id": {
+                    "type": "string"
+                },
+                "node_type": {
+                    "type": "string"
+                },
+                "round": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "iteration": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "branch_id": {
+                    "type": "string"
+                },
+                "source_session_id": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "preview": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "final_text": {
+                    "type": "string"
+                },
+                "source_events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "./streaming_events.json#/$defs/agentStreamEvent"
+                    }
+                }
+            },
+            "x-codegen": {
+                "order": 258,
+                "ts": {
+                    "name": "TaskRunCard"
+                },
+                "rust": {
+                    "name": "TaskRunCard"
+                },
+                "kotlin": {
+                    "name": "TaskRunCard"
+                }
+            }
+        },
+        "taskRunLog": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task_id",
+                "run_id",
+                "trace_id",
+                "scheduled_at",
+                "status"
+            ],
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "trace_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "task_kind": {
+                    "type": "string",
+                    "enum": [
+                        "agent_message",
+                        "workflow",
+                        "orchestration"
+                    ]
+                },
+                "action": {
+                    "type": "string"
+                },
+                "scheduled_at": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "running",
+                        "success",
+                        "incomplete",
+                        "cancelled",
+                        "error",
+                        "skipped",
+                        "awaiting_human"
+                    ]
+                },
+                "session_id_input": {
+                    "type": "string"
+                },
+                "session_id_output": {
+                    "type": "string"
+                },
+                "response_preview": {
+                    "type": "string"
+                },
+                "node_results": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/taskRunNodeResult"
+                    }
+                },
+                "run_cards": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/taskRunCard"
+                    }
+                },
+                "error": {
+                    "type": "string"
+                }
+            },
+            "x-codegen": {
+                "order": 259,
+                "ts": {
+                    "name": "TaskRunLog"
+                },
+                "rust": {
+                    "name": "TaskRunLog"
+                },
+                "kotlin": {
+                    "name": "TaskRunLog"
+                }
+            }
+        },
+        "taskRunPayload": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "task",
+                "run"
+            ],
+            "properties": {
+                "task": {
+                    "$ref": "#/$defs/taskPayload"
+                },
+                "run": {
+                    "$ref": "#/$defs/taskRunLog"
+                }
+            },
+            "x-codegen": {
+                "order": 260,
+                "ts": {
+                    "name": "TaskRunPayload"
+                },
+                "rust": {
+                    "name": "TaskRunPayload"
+                },
+                "kotlin": {
+                    "name": "TaskRunPayload"
+                }
+            }
+        },
+        "taskRunStopRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "run_id"
+            ],
+            "properties": {
+                "run_id": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "x-codegen": {
+                "order": 261,
+                "ts": {
+                    "name": "TaskRunStopRequest"
+                },
+                "rust": {
+                    "name": "TaskRunStopRequest"
+                },
+                "kotlin": {
+                    "name": "TaskRunStopRequest"
+                }
+            }
+        },
+        "taskRunStopResponse": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "status",
+                "message",
+                "task_id"
+            ],
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "stopped",
+                        "not_running"
+                    ]
+                },
+                "message": {
+                    "type": "string"
+                },
+                "task_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string"
+                },
+                "run": {
+                    "$ref": "#/$defs/taskRunLog"
+                }
+            },
+            "x-codegen": {
+                "order": 262,
+                "ts": {
+                    "name": "TaskRunStopResponse"
+                },
+                "rust": {
+                    "name": "TaskRunStopResponse"
+                },
+                "kotlin": {
+                    "name": "TaskRunStopResponse"
                 }
             }
         },

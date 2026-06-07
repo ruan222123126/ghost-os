@@ -13,14 +13,6 @@ var sessionIDPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$`)
 
 const sessionsDatabaseFilename = "sessions.db"
 
-func (s *Store) legacyPathForSession(sessionID string) (string, error) {
-	id := strings.TrimSpace(sessionID)
-	if !isValidSessionID(id) {
-		return "", fmt.Errorf("%w: %q", ErrInvalidSessionID, sessionID)
-	}
-	return filepath.Join(s.baseDir, id+".json"), nil
-}
-
 func resolveBaseDir(pathValue string) (string, error) {
 	trimmed := strings.TrimSpace(pathValue)
 	if trimmed == "" {

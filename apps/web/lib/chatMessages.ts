@@ -126,11 +126,12 @@ export function buildAssistantMessage(content: string, id?: string, inProgress?:
   };
 }
 
-export function buildThinkingMessage(content: string, id?: string): ChatMessage {
+export function buildThinkingMessage(content: string, id?: string, inProgress?: boolean): ChatMessage {
   return {
     id: id ?? nextChatMessageID(),
     kind: 'thinking',
     content,
+    ...(inProgress ? { inProgress } : {}),
   };
 }
 

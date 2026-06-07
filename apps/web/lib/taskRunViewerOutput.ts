@@ -1,6 +1,6 @@
-import { filterCommittedMessagesForDisplay } from '@/components/message/messageVisibility';
 import { buildAssistantMessage, buildErrorMessage } from '@/lib/chatMessages';
-import { getOrderedStreamingRows, type StreamingMessageRow } from '@/lib/chat-view/streamingRows';
+import { buildChatViewProjection } from '@/lib/chat-view/messageRows';
+import type { StreamingMessageRow } from '@/lib/chat-view/types';
 import { createInitialChatState, chatStateReducer } from '@/lib/chat-store/reducer';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
 import {
@@ -8,8 +8,8 @@ import {
   createChatRuntimeStateFromDraft,
 } from '@/lib/chatRuntime/runtimeState';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
-import type { AgentStreamEvent, ChatMessage, SessionDetail } from '@/lib/types';
-import { resolveCardSourceSessionId, type LiveTaskRunCard } from '@/lib/taskRunViewerCards';
+import type { ChatMessage, SessionDetail, SessionMessage } from '@/lib/types';
+import { isSummaryOnlyCard, resolveCardSourceSessionId, type LiveTaskRunCard } from '@/lib/taskRunViewerCards';
 
 const ACTIVE_VIEWER_TOOL_STATUSES = new Set(['pending', 'running', 'in_progress']);
 
@@ -29,36 +29,51 @@ export function buildTaskRunCardOutput(
     return summaryOutput(card);
   }
 
-  const state = buildSessionOutputState(card, session);
-  const pendingQuestions = state.pendingQuestionState.order
-    .map((questionId) => state.pendingQuestionState.questionsById[questionId])
-    .filter(Boolean)
-    .map((question) => ({
-      id: question.id,
-      kind: 'question' as const,
-      content: question.content,
-      questionId: question.questionId,
-      selectionMode: question.selectionMode,
-      options: question.options,
-    }));
+  const state = buildSessionOutputState(card, sessionForCardOutput(card, session));
+  const pendingQuestions = shouldShowPendingQuestions(card)
+    ? state.pendingQuestionState.order
+      .map((questionId) => state.pendingQuestionState.questionsById[questionId])
+      .filter(Boolean)
+      .map((question) => ({
+        id: question.id,
+        kind: 'question' as const,
+        content: question.content,
+        questionId: question.questionId,
+        selectionMode: question.selectionMode,
+        options: question.options,
+      }))
+    : [];
+  const includeActiveStreamingContent = !isTerminalCard(card);
+
+  const projection = buildChatViewProjection({
+    committedMessages: state.committedMessages,
+    loading: false,
+    pendingQuestions: [],
+    showSystemPromptMessages: false,
+    streamingAssistantSegments: includeActiveStreamingContent
+      ? state.streamingAssistantState.order
+        .map((segmentId) => state.streamingAssistantState.segmentsById[segmentId])
+        .filter(Boolean)
+      : [],
+    streamingThinkingSegments: includeActiveStreamingContent
+      ? state.streamingThinkingState.order
+        .map((segmentId) => state.streamingThinkingState.segmentsById[segmentId])
+        .filter(Boolean)
+      : [],
+    activeStreamingThinkingId: includeActiveStreamingContent
+      ? state.streamingThinkingState.activeSegmentId || null
+      : null,
+    streamingItemOrder: state.streamingItemOrder,
+    streamingTools: state.streamingToolState.order
+      .map((toolId) => state.streamingToolState.toolsById[toolId])
+      .filter((tool) => Boolean(tool) && isCompletedViewerToolStatus(tool.toolStatus)),
+  });
 
   return {
-    committedMessages: filterCommittedMessagesForDisplay(state.committedMessages, [], false)
+    committedMessages: projection.visibleCommittedMessages
       .filter(shouldIncludeViewerMessage)
       .map(normalizeViewerMessage),
-    streamingRows: getOrderedStreamingRows({
-      pendingQuestions: [],
-      streamingAssistantSegments: state.streamingAssistantState.order
-        .map((segmentId) => state.streamingAssistantState.segmentsById[segmentId])
-        .filter(Boolean),
-      streamingThinkingSegments: state.streamingThinkingState.order
-        .map((segmentId) => state.streamingThinkingState.segmentsById[segmentId])
-        .filter(Boolean),
-      streamingItemOrder: state.streamingItemOrder,
-      streamingTools: state.streamingToolState.order
-        .map((toolId) => state.streamingToolState.toolsById[toolId])
-        .filter((tool) => Boolean(tool) && isCompletedViewerToolStatus(tool.toolStatus)),
-    }).map((row) => ({
+    streamingRows: projection.streamingRows.map((row) => ({
       ...row,
       message: normalizeViewerMessage(row.message),
     })).concat(
@@ -67,6 +82,30 @@ export function buildTaskRunCardOutput(
         message,
       })),
     ),
+  };
+}
+
+function sessionForCardOutput(
+  card: LiveTaskRunCard,
+  session: SessionDetail | null,
+): SessionDetail | null {
+  if (card.source_events.length > 0) {
+    return null;
+  }
+  if (!session) {
+    return null;
+  }
+  const messages = sessionMessagesForCard(card, session.messages);
+  if (messages.length === 0) {
+    return null;
+  }
+  if (messages === session.messages) {
+    return session;
+  }
+  return {
+    ...session,
+    messages,
+    turn_draft: null,
   };
 }
 
@@ -90,7 +129,7 @@ function buildSessionOutputState(
   const runtime = session?.turn_draft
     ? createChatRuntimeStateFromDraft(session.turn_draft, resolveSessionID(card, session))
     : createChatRuntimeState(resolveTraceID(card), resolveSessionID(card, session));
-  for (const event of resolveReplayEvents(card, session)) {
+  for (const event of card.source_events) {
     state = chatStateReducer(state, {
       type: 'apply_runtime_actions',
       actions: projectAgentEvent({
@@ -100,33 +139,6 @@ function buildSessionOutputState(
     });
   }
   return state;
-}
-
-function resolveReplayEvents(
-  card: LiveTaskRunCard,
-  session: SessionDetail | null,
-): AgentStreamEvent[] {
-  if (!session) {
-    return card.source_events;
-  }
-
-  const snapshotTime = parseTimestamp(session.updated_at);
-  if (snapshotTime === null) {
-    return card.source_events;
-  }
-
-  return card.source_events.filter((event) => {
-    const eventTime = parseTimestamp(event.at);
-    return eventTime === null || eventTime > snapshotTime;
-  });
-}
-
-function parseTimestamp(value?: string): number | null {
-  if (!value?.trim()) {
-    return null;
-  }
-  const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp) ? null : timestamp;
 }
 
 function summaryOutput(card: LiveTaskRunCard): TaskRunCardOutput {
@@ -182,12 +194,86 @@ function resolveTraceID(card: LiveTaskRunCard): string {
   return card.source_events.at(-1)?.trace_id?.trim() || card.card_id;
 }
 
+function sessionMessagesForCard(
+  card: LiveTaskRunCard,
+  messages: SessionMessage[],
+): SessionMessage[] {
+  if (isPositiveInteger(card.round)) {
+    const roundMessages = sessionMessagesForUserTurn(messages, card.round);
+    if (roundMessages.length > 0) {
+      return roundMessages;
+    }
+  }
+  if (hasMultipleUserTurns(messages)) {
+    return [];
+  }
+  return messages;
+}
+
+function sessionMessagesForUserTurn(
+  messages: SessionMessage[],
+  targetTurn: number,
+): SessionMessage[] {
+  let currentTurn = 0;
+  const selected: SessionMessage[] = [];
+  for (const message of messages) {
+    if (message.role === 'user') {
+      currentTurn += 1;
+    }
+    if (currentTurn === targetTurn) {
+      selected.push(message);
+      continue;
+    }
+    if (currentTurn > targetTurn) {
+      break;
+    }
+  }
+  return selected;
+}
+
+function hasMultipleUserTurns(messages: SessionMessage[]): boolean {
+  let count = 0;
+  for (const message of messages) {
+    if (message.role !== 'user') {
+      continue;
+    }
+    count += 1;
+    if (count > 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return Number.isInteger(value) && Number(value) > 0;
+}
+
 function shouldUseSummaryFallback(
   card: LiveTaskRunCard,
   session: SessionDetail | null,
 ): boolean {
-  if (card.kind === 'relay_round' && !card.source_events.length && card.status !== 'running') {
-    return Boolean(card.final_text?.trim() || card.preview?.trim() || card.error?.trim());
+  if (isSummaryOnlyCard(card)) {
+    return true;
   }
-  return !session && card.source_events.length === 0 && Boolean(card.final_text?.trim() || card.preview?.trim() || card.error?.trim());
+  if (card.source_events.length > 0) {
+    return false;
+  }
+  const hasCardSummary = Boolean(card.final_text?.trim() || card.preview?.trim() || card.error?.trim());
+  if (!hasCardSummary) {
+    return false;
+  }
+  if (card.status !== 'running') {
+    return true;
+  }
+  return !session;
+}
+
+function isTerminalCard(card: LiveTaskRunCard): boolean {
+  const status = card.status?.trim();
+  return Boolean(status && status !== 'running');
+}
+
+function shouldShowPendingQuestions(card: LiveTaskRunCard): boolean {
+  return card.status?.trim() === 'awaiting_human';
 }

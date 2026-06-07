@@ -8,6 +8,7 @@ import (
 	"ghost-os/bridge/orchestration/internal/adapters/promptpreview"
 	"ghost-os/bridge/orchestration/internal/adapters/toolruntime"
 	appconfig "ghost-os/bridge/orchestration/internal/app/config"
+	appdownloads "ghost-os/bridge/orchestration/internal/app/downloads"
 	appprompts "ghost-os/bridge/orchestration/internal/app/prompts"
 	appskills "ghost-os/bridge/orchestration/internal/app/skills"
 	apptools "ghost-os/bridge/orchestration/internal/app/tools"
@@ -186,6 +187,10 @@ func (s *bridgeService) executeFindIconPreviewActionResult(
 	traceID string,
 ) (ServiceResult, error) {
 	return s.toolService().FindIconPreview(ctx, req, traceID)
+}
+
+func (s *Service) DownloadFindIconTemplate(templatePath string) (BinaryDownload, error) {
+	return appdownloads.OpenFindIconTemplate(templatePath)
 }
 
 func (s *bridgeService) executeMousePositionActionResult(

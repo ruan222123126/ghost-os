@@ -48,8 +48,6 @@ export function OrchestrationRoundsBlock(props: { output: OrchestrationGroupOutp
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#737373]">
         rounds: {props.output.completed_rounds ?? 0}
       </p>
-      {props.output.owner_agent_id ? <p className="mb-2 text-[12px] text-[#525252]">owner: {props.output.owner_agent_id}</p> : null}
-      {props.output.owner_session_id ? <p className="mb-2 text-[12px] text-[#525252]">owner_session: {props.output.owner_session_id}</p> : null}
       {props.output.dispatch_results?.length ? <OrchestrationDispatchList dispatchResults={props.output.dispatch_results} /> : null}
       {[...grouped.entries()].map(([round, items]) => <OrchestrationRound key={round} round={round} items={items} />)}
     </div>
@@ -72,14 +70,13 @@ function OrchestrationDispatchCard(props: { dispatch: OrchestrationDispatchResul
       <summary className="cursor-pointer list-none text-[12px] text-[#111111]">
         dispatch {dispatch.round ?? index + 1}: {dispatch.action ?? 'unknown'}
         {dispatch.order ? ` [${dispatch.order}]` : ''}
-        {dispatch.participant_ids?.length ? ` -> ${dispatch.participant_ids.join(', ')}` : ''}
       </summary>
       <div className="mt-2 space-y-1 text-[12px] text-[#111111]">
         {dispatch.instruction ? <p className="whitespace-pre-wrap">instruction: {dispatch.instruction}</p> : null}
         {dispatch.owner_visible !== undefined ? <p>owner_visible: {String(dispatch.owner_visible)}</p> : null}
         {dispatch.private_deliveries?.map((delivery, indexValue) => (
           <p key={`delivery-${indexValue}`} className="whitespace-pre-wrap">
-            private_send: {delivery.participant_id ?? 'unknown'} &lt;- {delivery.content ?? ''}
+            private_send: {delivery.content ?? ''}
           </p>
         ))}
         {transcriptEntries.length ? <OrchestrationTranscriptBlock entries={transcriptEntries} /> : null}
@@ -115,7 +112,7 @@ function OrchestrationRound(props: { round: number; items: OrchestrationMemberRe
 }
 
 function formatTranscriptEntry(entry: OrchestrationTranscriptEntry): string {
-  const speaker = entry.speaker || entry.agent_id || 'member';
+  const speaker = entry.speaker || 'member';
   const round = entry.round ? `round ${entry.round} ` : '';
   return `${round}${speaker}: ${entry.content ?? ''}`.trim();
 }
