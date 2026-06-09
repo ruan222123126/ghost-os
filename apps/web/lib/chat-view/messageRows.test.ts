@@ -27,7 +27,6 @@ describe('lib/chat-view/messageRows', () => {
     expect(projection.rows.map((row) => row.key)).toEqual([
       'history-loading',
       'assistant-1',
-      'processing-timer',
       'thinking-indicator',
     ]);
   });

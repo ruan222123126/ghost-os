@@ -2,11 +2,6 @@
 
 Repository-wide rules for coding agents in Ghost-OS.
 
-## Start Here
-
-- Read `PROJECT_PROGRESS.md` before implementation. Current phase: MVP stabilization; primary focus remains `core/bridge`.
-- Project rules override global defaults.
-- After meaningful changes, update `PROJECT_PROGRESS.md` with a concise note.
 
 ## Mission
 

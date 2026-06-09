@@ -43,6 +43,34 @@ func TestSearchFilesToolExecuteSuccess(t *testing.T) {
 	}
 }
 
+func TestSearchFilesToolExecuteTruncatesLongMatchText(t *testing.T) {
+	longLine := "needle " + strings.Repeat("x", 500)
+	tool := NewSearchFilesTool(mockExecutionClient{
+		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {
+			return map[string]any{
+				"matches": []any{
+					map[string]any{"path": "audit.log", "line": 1, "text": longLine},
+				},
+			}, nil
+		},
+	})
+
+	output, err := tool.Execute(
+		context.Background(),
+		json.RawMessage(`{"query":"needle"}`),
+		"trace-search-long",
+	)
+	if err != nil {
+		t.Fatalf("execute returned error: %v", err)
+	}
+	if strings.Contains(output, strings.Repeat("x", 400)) {
+		t.Fatalf("expected long match text to be truncated, got %q", output)
+	}
+	if !strings.Contains(output, "... [truncated]") {
+		t.Fatalf("expected truncation marker, got %q", output)
+	}
+}
+
 func TestSearchFilesToolExecuteRequiresQuery(t *testing.T) {
 	tool := NewSearchFilesTool(mockExecutionClient{
 		callFunc: func(_ context.Context, _ string, _ map[string]any, _ string) (map[string]any, error) {

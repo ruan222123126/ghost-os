@@ -49,7 +49,6 @@
 .message-row.is-assistant,
 .message-row.is-tool,
 .message-row.is-thinking,
-.message-row.is-processing-time,
 .message-row.is-event,
 .message-row.is-system,
 .message-row.is-error,
@@ -87,6 +86,7 @@
 .message-event-divider {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   width: 100%;
   color: rgb(115 115 115);
@@ -95,15 +95,6 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-.message-event-divider::before,
-.message-event-divider::after {
-  content: "";
-  flex: 1 1 0;
-  min-width: 28px;
-  height: 1px;
-  background: rgb(229 229 229);
 }
 
 .message-event-divider span {
@@ -245,27 +236,6 @@
   color: rgb(100 116 139);
 }
 
-.processing-time-divider {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  color: rgb(115 115 115);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.processing-time-divider span {
-  flex-shrink: 0;
-}
-
-.processing-time-divider div {
-  flex: 1 1 0;
-  min-width: 40px;
-  height: 1px;
-  background: rgb(229 229 229);
-}
-
 .message-actions {
   opacity: 0;
   transition: opacity 180ms ease;
@@ -379,10 +349,10 @@
 
 .tool-card-button.is-running .tool-card-title {
   background: linear-gradient(120deg, rgb(115 115 115) 30%, rgb(23 23 23) 50%, rgb(115 115 115) 70%);
-  background-size: 200% auto;
+  background-size: 360% auto;
   background-clip: text;
   color: transparent;
-  animation: message-shimmer 2s linear infinite;
+  animation: message-shimmer 2.8s linear infinite;
 }
 
 .tool-card-status {
@@ -535,7 +505,6 @@
   color: rgb(115 115 115);
 }
 
-.thinking-panel-terminal,
 .thinking-panel-chevron {
   width: 14px;
   height: 14px;
@@ -549,6 +518,19 @@
   text-transform: none;
 }
 
+.thinking-elapsed,
+.thinking-panel-elapsed {
+  display: inline-block;
+  min-width: 5ch;
+  color: rgb(115 115 115);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
 .thinking-sweep-text {
   background: linear-gradient(
     120deg,
@@ -558,11 +540,11 @@
     rgb(115 115 115) 65%,
     rgb(115 115 115) 100%
   );
-  background-size: 220% auto;
+  background-size: 360% auto;
   background-clip: text;
   -webkit-background-clip: text;
   color: transparent;
-  animation: message-shimmer 2s linear infinite;
+  animation: message-shimmer 2.8s linear infinite;
 }
 
 .thinking-panel {
@@ -660,11 +642,11 @@
 
 @keyframes message-shimmer {
   0% {
-    background-position: 200% center;
+    background-position: 100% center;
   }
 
   100% {
-    background-position: -200% center;
+    background-position: 0% center;
   }
 }
 

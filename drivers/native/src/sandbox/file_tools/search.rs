@@ -8,8 +8,11 @@ use crate::sandbox::SandboxConfig;
 use crate::sandbox::path_policy::resolve_read_path;
 
 pub(crate) const DEFAULT_SEARCH_MAX_RESULTS: usize = 50;
+const MAX_MATCH_TEXT_CHARS: usize = 300;
 const RG_EXIT_MATCH: i32 = 0;
 const RG_EXIT_NO_MATCH: i32 = 1;
+const TRUNCATED_MATCH_SUFFIX: &str = "... [truncated]";
+const DEFAULT_EXCLUDE_GLOBS: &[&str] = &["!**/tmp/**"];
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub(crate) struct SearchMatchOutput {
@@ -68,20 +71,28 @@ fn normalize_search_path(path: &str) -> String {
 }
 
 fn run_ripgrep_search(query: &str, root: &Path) -> Result<Vec<SearchMatchOutput>, String> {
-    let output = Command::new("rg")
+    let mut command = Command::new("rg");
+    command
         .arg("--json")
         .arg("--fixed-strings")
         .arg("--line-number")
-        .arg("--no-heading")
+        .arg("--no-heading");
+
+    for glob in DEFAULT_EXCLUDE_GLOBS {
+        command.arg("--glob").arg(glob);
+    }
+
+    let output = command
         .arg(query)
-        .arg(root)
+        .arg(".")
+        .current_dir(root)
         .output()
         .map_err(format_ripgrep_spawn_error)?;
 
     if !is_ripgrep_ok_status(output.status.code()) {
         return Err(format_ripgrep_failure(output.status.code(), &output.stderr));
     }
-    parse_ripgrep_matches(&output.stdout)
+    parse_ripgrep_matches(root, &output.stdout)
 }
 
 fn format_ripgrep_spawn_error(err: std::io::Error) -> String {
@@ -103,7 +114,7 @@ fn format_ripgrep_failure(code: Option<i32>, stderr: &[u8]) -> String {
     format!("ripgrep failed: {stderr_text}")
 }
 
-fn parse_ripgrep_matches(stdout: &[u8]) -> Result<Vec<SearchMatchOutput>, String> {
+fn parse_ripgrep_matches(root: &Path, stdout: &[u8]) -> Result<Vec<SearchMatchOutput>, String> {
     let mut matches = Vec::new();
     for raw in stdout.split(|byte| *byte == b'\n') {
         if raw.is_empty() {
@@ -111,14 +122,14 @@ fn parse_ripgrep_matches(stdout: &[u8]) -> Result<Vec<SearchMatchOutput>, String
         }
         let text = std::str::from_utf8(raw)
             .map_err(|err| format!("invalid ripgrep json output encoding: {err}"))?;
-        if let Some(entry) = parse_ripgrep_event(text)? {
+        if let Some(entry) = parse_ripgrep_event(root, text)? {
             matches.push(entry);
         }
     }
     Ok(matches)
 }
 
-fn parse_ripgrep_event(raw: &str) -> Result<Option<SearchMatchOutput>, String> {
+fn parse_ripgrep_event(root: &Path, raw: &str) -> Result<Option<SearchMatchOutput>, String> {
     let event: RipgrepEvent =
         serde_json::from_str(raw).map_err(|err| format!("invalid ripgrep json event: {err}"))?;
     if event.kind != "match" {
@@ -128,15 +139,28 @@ fn parse_ripgrep_event(raw: &str) -> Result<Option<SearchMatchOutput>, String> {
     let data = event
         .data
         .ok_or_else(|| "invalid ripgrep match event: missing data".to_string())?;
+    let text = decode_ripgrep_text(data.lines, "lines")?
+        .trim_end_matches('\n')
+        .to_string();
+
     Ok(Some(SearchMatchOutput {
-        path: decode_ripgrep_text(data.path, "path")?,
+        path: normalize_ripgrep_path(root, &decode_ripgrep_text(data.path, "path")?),
         line: data
             .line_number
             .ok_or_else(|| "invalid ripgrep match event: missing line_number".to_string())?,
-        text: decode_ripgrep_text(data.lines, "lines")?
-            .trim_end_matches('\n')
-            .to_string(),
+        text: truncate_match_text(&text),
     }))
+}
+
+fn normalize_ripgrep_path(root: &Path, path: &str) -> String {
+    let candidate = PathBuf::from(path);
+    let normalized = if candidate.is_absolute() {
+        candidate
+    } else {
+        root.join(candidate)
+    };
+    let normalized = std::fs::canonicalize(&normalized).unwrap_or(normalized);
+    normalized.to_string_lossy().to_string()
 }
 
 fn decode_ripgrep_text(field: Option<RipgrepTextField>, label: &str) -> Result<String, String> {
@@ -162,6 +186,17 @@ fn sort_matches(matches: &mut [SearchMatchOutput]) {
             .then(left.line.cmp(&right.line))
             .then(left.text.cmp(&right.text))
     });
+}
+
+fn truncate_match_text(text: &str) -> String {
+    if text.chars().count() <= MAX_MATCH_TEXT_CHARS {
+        return text.to_string();
+    }
+
+    let keep_chars = MAX_MATCH_TEXT_CHARS.saturating_sub(TRUNCATED_MATCH_SUFFIX.len());
+    let mut out: String = text.chars().take(keep_chars).collect();
+    out.push_str(TRUNCATED_MATCH_SUFFIX);
+    out
 }
 
 #[derive(Debug, Deserialize)]

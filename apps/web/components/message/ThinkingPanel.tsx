@@ -1,9 +1,11 @@
 import type { FC } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
+import { ThinkingElapsed } from './ThinkingElapsed';
 
 interface ThinkingPanelProps {
   active: boolean;
   expanded: boolean;
+  startedAtMs: number | null;
   text: string;
   onToggleExpanded: () => void;
 }
@@ -18,17 +20,10 @@ const ChevronIcon: FC<{ expanded: boolean; className?: string }> = ({ expanded, 
   </svg>
 );
 
-const TerminalIcon: FC<{ className?: string }> = ({ className }) => (
-  <svg viewBox="0 0 20 20" fill="none" aria-hidden="true" className={className}>
-    <rect x="3.5" y="4.5" width="13" height="11" rx="2" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M7 8L9 10L7 12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-    <path d="M10.5 12H13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-  </svg>
-);
-
 export const ThinkingPanel: FC<ThinkingPanelProps> = ({
   active,
   expanded,
+  startedAtMs,
   text,
   onToggleExpanded,
 }) => {
@@ -56,8 +51,8 @@ export const ThinkingPanel: FC<ThinkingPanelProps> = ({
         onClick={onToggleExpanded}
       >
         <span className="thinking-panel-heading">
-          <TerminalIcon className="thinking-panel-terminal" />
           <span className={titleClassName}>{title}</span>
+          {active ? <ThinkingElapsed className="thinking-panel-elapsed" startedAtMs={startedAtMs} /> : null}
           <ChevronIcon expanded={expanded} className="thinking-panel-chevron" />
         </span>
       </button>

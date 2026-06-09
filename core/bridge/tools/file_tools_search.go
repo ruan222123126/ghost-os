@@ -25,6 +25,11 @@ type searchFilesMatch struct {
 	Text string `json:"text"`
 }
 
+const (
+	maxSearchFilesMatchTextChars = 300
+	searchFilesTruncatedSuffix   = "... [truncated]"
+)
+
 func NewSearchFilesTool(client ExecutionClient) Tool {
 	return SearchFilesTool{execution: client}
 }
@@ -34,7 +39,7 @@ func (SearchFilesTool) Name() string {
 }
 
 func (SearchFilesTool) Description() string {
-	return "Search exact text under a directory and return stable path:line:text matches."
+	return "Search exact text under a directory and return stable path:line:text snippets."
 }
 
 func (SearchFilesTool) Parameters() json.RawMessage {
@@ -147,7 +152,23 @@ func formatSearchFilesResult(query string, path string, matches []searchFilesMat
 		return builder.String()
 	}
 	for _, item := range matches {
-		builder.WriteString(fmt.Sprintf("\n- %s:%d: %s", item.Path, item.Line, item.Text))
+		builder.WriteString(fmt.Sprintf(
+			"\n- %s:%d: %s",
+			item.Path,
+			item.Line,
+			truncateSearchFilesMatchText(item.Text),
+		))
 	}
 	return builder.String()
+}
+
+func truncateSearchFilesMatchText(text string) string {
+	if len([]rune(text)) <= maxSearchFilesMatchTextChars {
+		return text
+	}
+	keep := maxSearchFilesMatchTextChars - len([]rune(searchFilesTruncatedSuffix))
+	if keep < 0 {
+		keep = 0
+	}
+	return string([]rune(text)[:keep]) + searchFilesTruncatedSuffix
 }

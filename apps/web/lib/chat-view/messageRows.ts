@@ -55,7 +55,6 @@ export function buildMessageListProjection(input: MessageListProjectionInput): M
   const projection = buildChatViewProjection(input);
   const rows = buildMessageListRows({
     committedMessages: projection.visibleCommittedMessages,
-    loading: input.loading,
     loadingOlderHistory: input.loadingOlderHistory,
     showThinkingIndicator: projection.showThinkingIndicator,
     streamingRows: projection.streamingRows,
@@ -74,7 +73,6 @@ export function buildMessageListProjection(input: MessageListProjectionInput): M
 
 export function buildMessageListRows(options: {
   committedMessages: ChatMessage[];
-  loading: boolean;
   showThinkingIndicator: boolean;
   loadingOlderHistory: boolean;
   streamingRows: StreamingMessageRow[];
@@ -88,10 +86,6 @@ export function buildMessageListRows(options: {
 
   for (const message of options.committedMessages) {
     rows.push(buildMessageRow(message.id, message, options.toolCard));
-  }
-
-  if (options.loading) {
-    rows.push({ key: 'processing-timer', kind: 'processing_timer' });
   }
 
   for (const row of options.streamingRows) {

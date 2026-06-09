@@ -128,7 +128,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' }),
@@ -142,7 +141,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking more' }),
@@ -155,7 +153,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' }),
@@ -168,7 +165,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' }),
@@ -188,7 +184,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: true,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' })],
     });
@@ -197,7 +192,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: 'thinking-1',
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [buildStreamingRow({ id: 'thinking-1', kind: 'thinking', content: 'thinking' })],
     });
@@ -211,7 +205,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: null,
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [],
     });
@@ -220,7 +213,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: null,
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [
         buildStreamingRow({
@@ -240,7 +232,6 @@ describe('components/message/messageListScroll', () => {
       latestStreamingThinkingId: null,
       latestStreamingThinkingPanelOpen: false,
       loadingOlderHistory: false,
-      showProcessingTimer: false,
       showThinkingIndicator: false,
       streamingRows: [],
     });

@@ -113,7 +113,7 @@ func GetToolMetadata() []ToolMetadata {
 	return []ToolMetadata{
 		{Name: "list_files", Domain: "sandbox", Tags: []string{"file", "list", "directory"}, ShortDesc: "List directory entries inside sandbox."},
 		{Name: "read_file", Domain: "sandbox", Tags: []string{"file", "read", "text"}, ShortDesc: "Read file text by line range."},
-		{Name: "search_files", Domain: "sandbox", Tags: []string{"file", "search", "text"}, ShortDesc: "Search exact text across files."},
+		{Name: "search_files", Domain: "sandbox", Tags: []string{"file", "search", "text"}, ShortDesc: "Search exact text across files with snippets."},
 		{Name: "write_file", Domain: "sandbox", Tags: []string{"file", "write", "edit"}, ShortDesc: "Create, overwrite, or append a UTF-8 text file."},
 		{Name: "apply_diff", Domain: "sandbox", Tags: []string{"file", "patch", "edit"}, ShortDesc: "Apply a unified diff to one file."},
 		{Name: "bash_exec", Domain: "sandbox", Tags: []string{"shell", "command", "execute"}, ShortDesc: "Run a bash command (one-shot by default; interactive for stateful multi-step sessions)."},

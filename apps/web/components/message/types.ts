@@ -17,6 +17,7 @@ export interface MessageRowProps {
   hasTrailingTool?: boolean;
   isToolCardOpen?: boolean;
   isThinkingPanelOpen?: boolean;
+  thinkingStartedAtMs?: number | null;
   loading: boolean;
   onToggleToolCard?: (messageId: string) => void;
   onToggleThinkingPanel?: (messageId: string) => void;

@@ -125,14 +125,10 @@ function runPostSendStateMachine(options: PostSendStateMachineOptions) {
 }
 
 function resetPostSendFocus(options: PostSendStateMachineOptions) {
-  const shouldResumeNormalFollow = options.postSendRef.current.mode === 'idle';
-  options.postSendRef.current = { mode: 'idle', token: POST_SEND_TOKEN_NONE };
-  options.pendingAnchorRef.current = null;
-  options.setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
-  options.setTrailingSpacerPx(0);
-  if (shouldResumeNormalFollow) {
-    options.onNormalLayoutChange();
-  }
+  releasePostSendFocus(options, {
+    nextToken: POST_SEND_TOKEN_NONE,
+    shouldScrollToBottom: options.autoFollowRef.current,
+  });
 }
 
 function startPostSendAnchoring(options: PostSendStateMachineOptions) {
@@ -201,17 +197,26 @@ function continuePostSendFocus(options: PostSendStateMachineOptions) {
     return;
   }
 
-  options.setPostSendFollowTracking({
-    mode: 'waiting_overflow',
-    controlledScrollTopPx: state.anchorStartPx,
+  releasePostSendFocus(options, {
+    nextToken: options.token,
+    shouldScrollToBottom: decision.shouldScrollToBottom,
   });
-  options.pendingAnchorRef.current = {
-    requiredSpacerPx: 0,
-    scrollTopPx: state.anchorStartPx,
-    token: options.token,
-  };
+}
+
+function releasePostSendFocus(
+  options: PostSendStateMachineOptions,
+  release: {
+    nextToken: number;
+    shouldScrollToBottom: boolean;
+  },
+) {
+  options.postSendRef.current = { mode: 'idle', token: release.nextToken };
+  options.pendingAnchorRef.current = null;
+  options.setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
   options.setTrailingSpacerPx(0);
-  options.postSendRef.current = { ...state, mode: 'waiting_overflow' };
+  if (release.shouldScrollToBottom) {
+    options.onNormalLayoutChange();
+  }
 }
 
 function applyPendingPostSendScroll(options: {

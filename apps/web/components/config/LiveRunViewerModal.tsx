@@ -262,9 +262,9 @@ function RunCardOutput(props: {
 }) {
   const { copy, locale } = useWebLocale();
   const { output, outputRef, selectedCard, sourceSessionError } = props;
+  const [openMessageRows, setOpenMessageRows] = useState<Record<string, boolean>>({});
   const rows = buildMessageListRows({
     committedMessages: output.committedMessages,
-    loading: false,
     loadingOlderHistory: false,
     showThinkingIndicator: false,
     streamingRows: output.streamingRows,
@@ -273,6 +273,18 @@ function RunCardOutput(props: {
       preparingDetails: copy.chat.toolPreparingOutput,
     },
   });
+
+  useEffect(() => {
+    setOpenMessageRows({});
+  }, [selectedCard?.card_id]);
+
+  const toggleCollapsibleMessageRow = (messageId: string) => {
+    setOpenMessageRows((previous) => ({
+      ...previous,
+      [messageId]: !previous[messageId],
+    }));
+  };
+
   return (
     <section className="flex h-full min-h-0 flex-col bg-white">
       {sourceSessionError ? <ViewerErrorBanner message={copy.settings.tasksLogsLiveSourceError(sourceSessionError)} /> : null}
@@ -286,6 +298,7 @@ function RunCardOutput(props: {
                 return null;
               }
               const nextRow = rows[index + 1];
+              const open = Boolean(openMessageRows[row.message.id]);
               return (
                 <MessageRow
                   key={row.key}
@@ -293,11 +306,13 @@ function RunCardOutput(props: {
                   toolCard={row.toolCard}
                   assistantMarkdownEnabled
                   hasTrailingTool={isMessageListMessageRow(nextRow) && nextRow.message.kind === 'tool'}
-                  isThinkingPanelOpen
-                  isToolCardOpen
+                  isThinkingPanelOpen={open}
+                  isToolCardOpen={open}
                   loading={false}
                   onAnswerQuestion={async () => undefined}
                   onCancelQuestion={async () => undefined}
+                  onToggleThinkingPanel={toggleCollapsibleMessageRow}
+                  onToggleToolCard={toggleCollapsibleMessageRow}
                 />
               );
             })}

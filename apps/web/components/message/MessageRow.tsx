@@ -170,13 +170,15 @@ const ToolMessageRow: FC<{
 const ThinkingMessageRow: FC<{
   isOpen: boolean;
   message: ThinkingChatMessage;
+  thinkingStartedAtMs: number | null;
   onToggle: () => void;
-}> = ({ isOpen, message, onToggle }) => (
+}> = ({ isOpen, message, thinkingStartedAtMs, onToggle }) => (
   <div className="message-row is-thinking">
     <div className="message-stack">
       <ThinkingPanel
         active={Boolean(message.inProgress)}
         expanded={isOpen}
+        startedAtMs={message.inProgress ? thinkingStartedAtMs : null}
         text={message.content}
         onToggleExpanded={onToggle}
       />
@@ -225,6 +227,7 @@ export const MessageRow: FC<MessageRowProps> = ({
   hasTrailingTool = false,
   isToolCardOpen = false,
   isThinkingPanelOpen = false,
+  thinkingStartedAtMs = null,
   loading,
   onAnswerQuestion,
   onCancelQuestion,
@@ -259,6 +262,7 @@ export const MessageRow: FC<MessageRowProps> = ({
         <ThinkingMessageRow
           isOpen={isThinkingPanelOpen}
           message={message}
+          thinkingStartedAtMs={thinkingStartedAtMs}
           onToggle={() => onToggleThinkingPanel?.(message.id)}
         />
       );

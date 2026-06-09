@@ -78,6 +78,42 @@ fn test_search_files_honors_default_and_custom_max_results() {
 }
 
 #[test]
+fn test_search_files_excludes_tmp_directory() {
+    let root = make_temp_dir("exclude_tmp");
+    fs::create_dir_all(root.join("tmp")).expect("create tmp");
+    fs::create_dir_all(root.join("src")).expect("create src");
+    fs::write(root.join("tmp").join("audit.log"), "needle noisy").expect("write tmp");
+    fs::write(root.join("src").join("main.txt"), "needle useful").expect("write src");
+    let config = sandbox_config_for(&root);
+
+    let result =
+        search_files_impl(&config, "needle", &root.to_string_lossy(), 10).expect("search files");
+
+    assert_eq!(result.len(), 1);
+    assert!(result[0].path.ends_with("src/main.txt"));
+    assert_eq!(result[0].text, "needle useful");
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
+fn test_search_files_truncates_long_match_text() {
+    let root = make_temp_dir("long_match");
+    let long_line = format!("needle {}", "x".repeat(500));
+    fs::write(root.join("long.txt"), &long_line).expect("write fixture");
+    let config = sandbox_config_for(&root);
+
+    let result =
+        search_files_impl(&config, "needle", &root.to_string_lossy(), 10).expect("search files");
+
+    assert_eq!(result.len(), 1);
+    assert!(result[0].text.len() < long_line.len());
+    assert!(result[0].text.ends_with("... [truncated]"));
+
+    fs::remove_dir_all(root).ok();
+}
+
+#[test]
 fn test_search_files_rejects_invalid_path_inputs() {
     let root = make_temp_dir("invalid_path");
     let file_path = root.join("file.txt");

@@ -18,7 +18,6 @@ export interface PostSendFollowTrackingState {
 interface MessageListLayoutSignatureOptions {
   committedMessages: ChatMessage[];
   streamingRows: StreamingMessageRow[];
-  showProcessingTimer: boolean;
   showThinkingIndicator: boolean;
   loadingOlderHistory: boolean;
   latestStreamingThinkingId: string | null;
@@ -81,7 +80,6 @@ export function buildMessageListLayoutSignature(
 ): string {
   return [
     `history:${options.loadingOlderHistory ? 1 : 0}`,
-    `processing:${options.showProcessingTimer ? 1 : 0}`,
     `indicator:${options.showThinkingIndicator ? 1 : 0}`,
     `committed:${options.committedMessages.map(buildMessageSignature).join(',')}`,
     `streaming:${options.streamingRows.map((row) => buildMessageSignature(row.message)).join(',')}`,

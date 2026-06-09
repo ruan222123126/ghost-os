@@ -18,7 +18,6 @@ import type { MessageListProps } from './types';
 import { useMessageListScroll } from './useMessageListScroll';
 
 const MESSAGE_LIST_OVERSCAN = 8;
-const PROCESSING_TIMER_INTERVAL_MS = 1000;
 
 export const MessageList: FC<MessageListProps> = ({
   view,
@@ -28,7 +27,7 @@ export const MessageList: FC<MessageListProps> = ({
   onAnswerQuestion,
   onCancelQuestion,
 }) => {
-  const { copy, locale } = useWebLocale();
+  const { copy } = useWebLocale();
   const [openToolCards, setOpenToolCards] = useState<Record<string, boolean>>({});
   const [openThinkingPanels, setOpenThinkingPanels] = useState<Record<string, boolean>>({});
   const latestStreamingThinkingIdRef = useRef('');
@@ -48,7 +47,7 @@ export const MessageList: FC<MessageListProps> = ({
     visibleCommittedMessages,
     visibleMessagesForPostSendOverflow,
   } = view;
-  const processingElapsedSeconds = useProcessingElapsedSeconds(loading);
+  const thinkingStartedAtMs = useThinkingStartedAtMs(loading);
   const visibleMessageTailRef = useRef<ReturnType<typeof buildVisibleMessageTailSnapshot> | null>(
     visibleCommittedMessages.length === 0 ? buildVisibleMessageTailSnapshot(visibleCommittedMessages) : null,
   );
@@ -72,7 +71,6 @@ export const MessageList: FC<MessageListProps> = ({
     latestStreamingThinkingId,
     latestStreamingThinkingPanelOpen,
     loadingOlderHistory,
-    showProcessingTimer: loading,
     showThinkingIndicator,
     streamingRows,
   });
@@ -192,9 +190,7 @@ export const MessageList: FC<MessageListProps> = ({
                 assistantMarkdownEnabled,
                 hasTrailingTool,
                 loading,
-                processingElapsedText: copy.chat.processingElapsed(
-                  formatProcessingElapsedDuration(processingElapsedSeconds, locale),
-                ),
+                thinkingStartedAtMs,
                 openToolCards,
                 onAnswerQuestion,
                 onCancelQuestion,
@@ -217,7 +213,7 @@ function renderRow(
     assistantMarkdownEnabled: boolean;
     hasTrailingTool: boolean;
     loading: boolean;
-    processingElapsedText: string;
+    thinkingStartedAtMs: number | null;
     onAnswerQuestion: MessageListProps['onAnswerQuestion'];
     onCancelQuestion: MessageListProps['onCancelQuestion'];
     onToggleThinkingPanel: (messageId: string) => void;
@@ -233,10 +229,8 @@ function renderRow(
           <div className="message-note is-history-loading">{options.copy.chat.loadingOlderMessages}</div>
         </div>
       );
-    case 'processing_timer':
-      return <ProcessingTimeDivider text={options.processingElapsedText} />;
     case 'thinking_indicator':
-      return <ThinkingIndicator />;
+      return <ThinkingIndicator startedAtMs={options.thinkingStartedAtMs} />;
     case 'message':
       return (
         <MessageRow
@@ -246,6 +240,7 @@ function renderRow(
           hasTrailingTool={options.hasTrailingTool}
           isToolCardOpen={Boolean(options.openToolCards[row.message.id])}
           isThinkingPanelOpen={Boolean(options.openThinkingPanels[row.message.id])}
+          thinkingStartedAtMs={options.thinkingStartedAtMs}
           loading={options.loading}
           onAnswerQuestion={options.onAnswerQuestion}
           onCancelQuestion={options.onCancelQuestion}
@@ -258,52 +253,16 @@ function renderRow(
   }
 }
 
-const ProcessingTimeDivider: FC<{ text: string }> = ({ text }) => (
-  <div className="message-row is-processing-time">
-    <div className="processing-time-divider">
-      <span>{text}</span>
-      <div aria-hidden="true" />
-    </div>
-  </div>
-);
-
-function useProcessingElapsedSeconds(loading: boolean): number {
+function useThinkingStartedAtMs(loading: boolean): number | null {
   const [startedAtMs, setStartedAtMs] = useState<number | null>(null);
-  const [nowMs, setNowMs] = useState(() => Date.now());
-
   useEffect(() => {
     if (!loading) {
       setStartedAtMs(null);
       return;
     }
 
-    const startedAt = Date.now();
-    setStartedAtMs(startedAt);
-    setNowMs(startedAt);
-
-    const intervalId = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, PROCESSING_TIMER_INTERVAL_MS);
-
-    return () => window.clearInterval(intervalId);
+    setStartedAtMs(Date.now());
   }, [loading]);
 
-  if (startedAtMs === null) {
-    return 0;
-  }
-  return Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
-}
-
-function formatProcessingElapsedDuration(seconds: number, locale: ReturnType<typeof useWebLocale>['locale']): string {
-  const safeSeconds = Math.max(0, seconds);
-  if (safeSeconds < 60) {
-    return `${safeSeconds}s`;
-  }
-
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainingSeconds = safeSeconds % 60;
-  if (locale === 'zh-CN') {
-    return remainingSeconds === 0 ? `${minutes}分` : `${minutes}分 ${remainingSeconds}s`;
-  }
-  return remainingSeconds === 0 ? `${minutes}m` : `${minutes}m ${remainingSeconds}s`;
+  return startedAtMs;
 }

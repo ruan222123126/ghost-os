@@ -280,6 +280,7 @@ describe('components/message/MessageRow', () => {
     expect(html).toContain('thinking-panel');
     expect(html).toContain('is-complete');
     expect(html).toContain('thinking-panel-chevron');
+    expect(html).not.toContain('thinking-panel-terminal');
     expect(html).toContain('Thought');
     expect(html).not.toContain('thinking-sweep-text">Thought');
     expect(html).not.toContain('thinking-dots');
@@ -287,6 +288,7 @@ describe('components/message/MessageRow', () => {
   });
 
   it('keeps active thinking content animated with the running title', () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(10_000);
     const message: ThinkingChatMessage = {
       id: 'thinking-active',
       kind: 'thinking',
@@ -294,18 +296,26 @@ describe('components/message/MessageRow', () => {
       inProgress: true,
     };
 
-    const html = renderMessageRow({
-      message,
-      assistantMarkdownEnabled: true,
-      isThinkingPanelOpen: false,
-      loading: true,
-      onAnswerQuestion: async () => undefined,
-      onCancelQuestion: async () => undefined,
-      onToggleThinkingPanel: () => undefined,
-    });
+    let html = '';
+    try {
+      html = renderMessageRow({
+        message,
+        assistantMarkdownEnabled: true,
+        isThinkingPanelOpen: false,
+        thinkingStartedAtMs: 7_000,
+        loading: true,
+        onAnswerQuestion: async () => undefined,
+        onCancelQuestion: async () => undefined,
+        onToggleThinkingPanel: () => undefined,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
 
     expect(html).toContain('is-active');
     expect(html).toContain('Thinking');
+    expect(html).toContain('thinking-panel-elapsed');
+    expect(html).toContain('(3s)');
     expect(html).toContain('thinking-panel-title thinking-sweep-text');
   });
 

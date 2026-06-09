@@ -51,10 +51,6 @@ export interface MessageListMessageRow {
 export type MessageListRow =
   | MessageListMessageRow
   | {
-    key: 'processing-timer';
-    kind: 'processing_timer';
-  }
-  | {
     key: 'history-loading';
     kind: 'history_loading';
   }

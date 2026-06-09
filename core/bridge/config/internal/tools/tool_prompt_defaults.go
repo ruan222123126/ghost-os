@@ -11,7 +11,7 @@ func joinToolPromptLines(lines ...string) string {
 var toolPromptDefaults = map[string]string{
 	"list_files":   "List the direct children of a directory inside the sandbox. Directory entries end with '/'.",
 	"read_file":    "Read file text, optionally by 1-based line range. Returns line-numbered text and reads at most 200 lines per call.",
-	"search_files": "Search exact text under a directory inside the sandbox. Returns stable path:line:text matches.",
+	"search_files": "Search exact text under a directory inside the sandbox. Returns stable path:line:text snippets.",
 	"write_file":   "Create, overwrite, or append a UTF-8 text file inside allowed paths. Missing parent directories are created automatically. `content` may be empty; `mode` is `write` or `append`.",
 	"apply_diff":   "Apply a unified diff to one file inside allowed write paths.",
 	"bash_exec": joinToolPromptLines(
