@@ -23,7 +23,7 @@ type DefaultHandlers struct {
 	TaskList      TypedHandler[TaskListParams]
 	TaskGet       TypedHandler[api.TaskIDParams]
 	TaskUpdate    TypedHandler[api.TaskUpdateParams]
-	TaskRunNow    TypedHandler[api.TaskIDParams]
+	TaskRunNow    TypedHandler[api.TaskRunNowParams]
 	TaskStop      TypedHandler[api.TaskStopParams]
 	TaskLogs      TypedHandler[api.TaskLogsParams]
 	TaskDelete    TypedHandler[api.TaskIDParams]

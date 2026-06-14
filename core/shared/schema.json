@@ -219,6 +219,9 @@
         "taskIDRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskIDRequest"
         },
+        "taskRunNowRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskRunNowRequest"
+        },
         "taskPayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskPayload"
         },

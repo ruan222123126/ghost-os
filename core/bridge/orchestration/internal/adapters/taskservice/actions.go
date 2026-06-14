@@ -111,7 +111,7 @@ func (a Actions) Logs(params api.TaskLogsParams, traceID string) (any, int, erro
 	return payload, http.StatusOK, nil
 }
 
-func (a Actions) RunNow(params api.TaskIDParams, traceID string) (any, int, error) {
+func (a Actions) RunNow(params api.TaskRunNowParams, traceID string) (any, int, error) {
 	usecase, code, err := a.requireMutationService()
 	if err != nil {
 		return nil, code, err

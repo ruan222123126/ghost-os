@@ -428,7 +428,7 @@ func TestTaskWorkflowCreateUpdateListAndRunNow(t *testing.T) {
 		t.Fatalf("unexpected list payload: %#v", items)
 	}
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -540,7 +540,7 @@ func TestTaskWorkflowRunNowUsesExistingScheduler(t *testing.T) {
 	if err != nil || len(tasks) != 1 {
 		t.Fatalf("list tasks: tasks=%d err=%v", len(tasks), err)
 	}
-	run, err := runner.RunNow(taskIDParams{ID: tasks[0].ID}, "trace-workflow-runner")
+	run, err := runner.RunNow(taskRunNowParams{ID: tasks[0].ID}, "trace-workflow-runner")
 	if err != nil {
 		t.Fatalf("run now through runner: %v", err)
 	}

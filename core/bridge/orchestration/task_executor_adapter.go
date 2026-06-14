@@ -73,7 +73,7 @@ func (s *Service) executeTaskDeleteInScope(id string, scope string, traceID stri
 }
 
 func (s *Service) executeTaskRunInScope(id string, startOnly *bool, scope string, traceID string) (ServiceResult, error) {
-	return s.inner.executeTaskRunNowActionResult(TaskIDParams{ID: id, Scope: scope, StartOnly: startOnly}, traceID)
+	return s.inner.executeTaskRunNowActionResult(TaskRunNowParams{ID: id, Scope: scope, StartOnly: startOnly}, traceID)
 }
 
 func (s *Service) executeTaskStopInScope(ctx context.Context, id string, req TaskStopParams, scope string, traceID string) (ServiceResult, error) {

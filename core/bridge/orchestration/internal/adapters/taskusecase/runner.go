@@ -66,7 +66,7 @@ func NewMutationRunner(options MutationOptions) MutationRunner {
 	}
 }
 
-func (r MutationRunner) RunNow(params api.TaskIDParams, traceID string) (api.TaskRunPayload, error) {
+func (r MutationRunner) RunNow(params api.TaskRunNowParams, traceID string) (api.TaskRunPayload, error) {
 	return r.inner().RunNow(params, traceID)
 }
 

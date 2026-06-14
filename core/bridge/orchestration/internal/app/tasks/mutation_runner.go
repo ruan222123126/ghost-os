@@ -67,7 +67,7 @@ func (r MutationRunner) Delete(params api.TaskIDParams) (api.TaskDeleteResponse,
 	return api.TaskDeleteResponse{ID: id, Deleted: true}, nil
 }
 
-func (r MutationRunner) RunNow(params api.TaskIDParams, traceID string) (api.TaskRunPayload, error) {
+func (r MutationRunner) RunNow(params api.TaskRunNowParams, traceID string) (api.TaskRunPayload, error) {
 	id, task, err := r.loadForMutation(params.ID, params.Scope)
 	if err != nil {
 		return api.TaskRunPayload{}, err

@@ -60,7 +60,7 @@ func (s *bridgeService) executeTaskLogsAction(params taskLogsParams, traceID str
 	return s.taskActions().Logs(params, traceID)
 }
 
-func (s *bridgeService) executeTaskRunNowAction(params taskIDParams, traceID string) (any, int, error) {
+func (s *bridgeService) executeTaskRunNowAction(params taskRunNowParams, traceID string) (any, int, error) {
 	return s.taskActions().RunNow(params, traceID)
 }
 
@@ -92,7 +92,7 @@ func (s *bridgeService) executeTaskUpdateActionResult(params taskUpdateParams, t
 	return bus.ResultFromStatus(s.executeTaskUpdateAction(params, traceID))
 }
 
-func (s *bridgeService) executeTaskRunNowActionResult(params taskIDParams, traceID string) (ServiceResult, error) {
+func (s *bridgeService) executeTaskRunNowActionResult(params taskRunNowParams, traceID string) (ServiceResult, error) {
 	return bus.ResultFromStatus(s.executeTaskRunNowAction(params, traceID))
 }
 

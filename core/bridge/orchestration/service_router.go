@@ -253,7 +253,7 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		TaskUpdate: func(_ context.Context, params taskUpdateParams, traceID string) (ServiceResult, error) {
 			return service.executeTaskUpdateActionResult(params, traceID)
 		},
-		TaskRunNow: func(_ context.Context, params taskIDParams, traceID string) (ServiceResult, error) {
+		TaskRunNow: func(_ context.Context, params taskRunNowParams, traceID string) (ServiceResult, error) {
 			return service.executeTaskRunNowActionResult(params, traceID)
 		},
 		TaskStop: service.executeTaskStopActionResult,

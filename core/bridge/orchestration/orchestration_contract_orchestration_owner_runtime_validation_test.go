@@ -273,7 +273,7 @@ func runOrchestrationTaskNow(t *testing.T, service *bridgeService, definition *O
 		t.Fatalf("create orchestration task: %v", err)
 	}
 	created := createdRaw.(taskPayload)
-	runRaw, _, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID, Scope: taskListScopeOrchestration}, "trace-orchestration-run")
+	runRaw, _, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID, Scope: taskListScopeOrchestration}, "trace-orchestration-run")
 	if err != nil {
 		t.Fatalf("run orchestration task: %v", err)
 	}

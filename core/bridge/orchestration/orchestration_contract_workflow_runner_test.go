@@ -37,7 +37,7 @@ func TestTaskWorkflowRunNowExecutesToolLLMAndAgentNodes(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-node-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-node-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -133,7 +133,7 @@ func TestTaskWorkflowRunNowPassesAgentRuntimeOverrides(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-agent-override-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-agent-override-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -182,7 +182,7 @@ func TestTaskWorkflowRunNowRoutesIfNodeByToolOutput(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-if-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-if-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -229,7 +229,7 @@ func TestTaskWorkflowRunNowKeepsIfValueLiteral(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-if-template-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-if-template-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -268,7 +268,7 @@ func TestTaskWorkflowRunNowExecutesLoopBodyByMaxIterations(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-loop-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-loop-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -319,7 +319,7 @@ func TestTaskWorkflowRunNowExecutesStartBranchesInParallel(t *testing.T) {
 	}
 	outcomeCh := make(chan runNowOutcome, 1)
 	go func() {
-		raw, runCode, runErr := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-parallel-run")
+		raw, runCode, runErr := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-parallel-run")
 		outcomeCh <- runNowOutcome{raw: raw, code: runCode, err: runErr}
 	}()
 
@@ -373,7 +373,7 @@ func TestTaskWorkflowRunNowStopsOnAgentAwaitingHuman(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-await-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-await-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -414,7 +414,7 @@ func TestTaskWorkflowRunNowAllowsAllToolsWhenAllowlistCleared(t *testing.T) {
 	t.Setenv("GHOST_WORKFLOW_TOOL_ALLOWLIST", "")
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-config-shift-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-config-shift-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -458,7 +458,7 @@ func TestTaskWorkflowRunNowKeepsDeprecatedTemplateTokensLiteral(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-template-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-template-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -515,7 +515,7 @@ func TestTaskWorkflowRunNowResolvesFindIconVariableForDownstreamTool(t *testing.
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-find-icon-variable-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-find-icon-variable-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -565,7 +565,7 @@ func TestTaskWorkflowRunNowFailsWhenFindIconVariableUsedBeforeDefinition(t *test
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-find-icon-missing-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-find-icon-missing-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}
@@ -604,7 +604,7 @@ func TestTaskWorkflowRunNowKeepsUndefinedTemplateLiteral(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-workflow-template-missing-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-workflow-template-missing-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run workflow task: code=%d err=%v", code, err)
 	}

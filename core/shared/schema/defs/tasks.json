@@ -909,6 +909,38 @@
                 "id": {
                     "type": "string",
                     "minLength": 1
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
+        "taskRunNowRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                },
+                "start_only": {
+                    "type": "boolean"
                 }
             }
         },

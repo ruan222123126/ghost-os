@@ -22,7 +22,7 @@ type Query interface {
 type Mutation interface {
 	Create(params api.TaskCreateParams) (api.TaskPayload, error)
 	Update(params api.TaskUpdateParams) (api.TaskPayload, error)
-	RunNow(params api.TaskIDParams, traceID string) (api.TaskRunPayload, error)
+	RunNow(params api.TaskRunNowParams, traceID string) (api.TaskRunPayload, error)
 	Stop(ctx context.Context, params api.TaskStopParams) (api.TaskStopResponse, error)
 	Delete(params api.TaskIDParams) (api.TaskDeleteResponse, error)
 }
@@ -92,7 +92,7 @@ func (s Service) Logs(params api.TaskLogsParams, traceID string) ([]api.TaskRunL
 	return payload, err
 }
 
-func (s Service) RunNow(params api.TaskIDParams, traceID string) (api.TaskRunPayload, error) {
+func (s Service) RunNow(params api.TaskRunNowParams, traceID string) (api.TaskRunPayload, error) {
 	mutation, err := s.requireMutation()
 	if err != nil {
 		s.log(traceID, bus.ActionTaskRunNow, "error", err)

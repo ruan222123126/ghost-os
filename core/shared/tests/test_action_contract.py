@@ -6,6 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_SCHEMA_PATH = ROOT / "schema" / "defs" / "base.json"
+TASKS_SCHEMA_PATH = ROOT / "schema" / "defs" / "tasks.json"
 
 REQUIRED_RUNTIME_ACTIONS = {
     "AGENT_SEND",
@@ -18,6 +19,7 @@ REQUIRED_RUNTIME_ACTIONS = {
     "TASK_GET",
     "TASK_UPDATE",
     "TASK_RUN_NOW",
+    "TASK_STOP",
     "TASK_LOGS",
     "TASK_DELETE",
 }
@@ -44,6 +46,16 @@ class ActionContractTest(unittest.TestCase):
         actions = set(schema["$defs"]["action"]["enum"])
         stale = sorted(REMOVED_ACTIONS & actions)
         self.assertEqual([], stale, f"stale actions must stay removed: {stale}")
+
+    def test_task_run_now_has_dedicated_params(self) -> None:
+        schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
+        task_id_props = schema["$defs"]["taskIDRequest"]["properties"]
+        run_now = schema["$defs"]["taskRunNowRequest"]
+
+        self.assertNotIn("start_only", task_id_props)
+        self.assertEqual(["id"], run_now["required"])
+        self.assertEqual("boolean", run_now["properties"]["start_only"]["type"])
+        self.assertEqual(["user", "system", "orchestration"], run_now["properties"]["scope"]["enum"])
 
 
 if __name__ == "__main__":

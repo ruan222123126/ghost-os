@@ -138,7 +138,7 @@ func TestTaskRunNowAppliesRuntimeOverrideToolAllowlist(t *testing.T) {
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-task-runtime-override-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-task-runtime-override-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run task: code=%d err=%v", code, err)
 	}
@@ -217,7 +217,7 @@ func TestTaskRunNowAppliesRuntimeOverrideProviderPromptAndMaxTurns(t *testing.T)
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-task-runtime-override-full-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-task-runtime-override-full-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run task: code=%d err=%v", code, err)
 	}
@@ -364,7 +364,7 @@ func TestTaskRunNowBuildsSystemPromptFromPresetWithoutMutatingStoredPromptFiles(
 	}
 	created := createdRaw.(taskPayload)
 
-	runRaw, code, err := service.executeTaskRunNowAction(taskIDParams{ID: created.ID}, "trace-task-runtime-override-preset-run")
+	runRaw, code, err := service.executeTaskRunNowAction(taskRunNowParams{ID: created.ID}, "trace-task-runtime-override-preset-run")
 	if err != nil || code != http.StatusOK {
 		t.Fatalf("run task: code=%d err=%v", code, err)
 	}
