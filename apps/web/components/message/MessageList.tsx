@@ -4,6 +4,7 @@ import type { FC } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { MessageListRow } from '@/lib/chat-view/types';
 import { useWebLocale } from '@/lib/i18n/provider';
+import { TopLoadingBar } from '@/components/TopLoadingBar';
 import { MessageRow } from './MessageRow';
 import { shouldPlaceAssistantCopyInline } from './messageCopyPlacement';
 import {
@@ -224,7 +225,11 @@ function renderRow(
 ) {
   switch (row.kind) {
     case 'history_loading':
-      return <HistoryLoadingBar label={options.copy.chat.loadingOlderMessages} />;
+      return (
+        <div className="message-row is-history-loading">
+          <TopLoadingBar label={options.copy.chat.loadingOlderMessages} />
+        </div>
+      );
     case 'thinking_indicator':
       return <ThinkingIndicator startedAtMs={options.thinkingStartedAtMs} />;
     case 'message':
@@ -247,20 +252,6 @@ function renderRow(
     default:
       return null;
   }
-}
-
-interface HistoryLoadingBarProps {
-  label: string;
-}
-
-function HistoryLoadingBar({ label }: HistoryLoadingBarProps) {
-  return (
-    <div className="message-row is-history-loading" role="status" aria-label={label}>
-      <div className="message-history-loading-bar" aria-hidden="true">
-        <div className="message-history-loading-bar-fill" />
-      </div>
-    </div>
-  );
 }
 
 function useThinkingStartedAtMs(loading: boolean): number | null {

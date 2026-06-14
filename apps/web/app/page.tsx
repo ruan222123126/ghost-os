@@ -11,6 +11,7 @@ import type { ConfigPanelProps } from '@/components/ConfigPanel';
 import { GlobalLoadingOverlay } from '@/components/GlobalLoadingOverlay';
 import type { MessageListProps } from '@/components/message/types';
 import { SessionSidebar } from '@/components/SessionSidebar';
+import { TopLoadingBar } from '@/components/TopLoadingBar';
 import { useHomePageController } from '@/hooks/useHomePageController';
 import { useInitialLoadingOverlay } from '@/hooks/useInitialLoadingOverlay';
 import { useSessionSidebarAliases } from '@/hooks/useSessionSidebarAliases';
@@ -226,7 +227,7 @@ const ChatStatusLines: FC<{
 
   return (
     <>
-      {controller.historyLoading ? <div className="status-line info">{copy.chat.historyLoading}</div> : null}
+      {controller.historyLoading ? <TopLoadingBar className="chat-history-loading-bar" label={copy.chat.historyLoading} /> : null}
       {controller.historySyncing && !controller.historyLoading ? <div className="status-line info">{copy.chat.historySyncing}</div> : null}
       {controller.configError && !controller.showConfig ? <div className="status-line error">{controller.configError}</div> : null}
     </>
