@@ -1,16 +1,19 @@
 import { invoke } from "@tauri-apps/api/core";
+import { ArrowDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AssistantIntro,
   AssistantReply,
-  BridgeSettings,
   ChatBubble,
   ChatComposer,
   ChatHeader,
+  MobileSidebar,
+  MoreActionSheet,
 } from "./components/MobileChatHome";
 import type { AgentPayload, ConfigPayload, HostProfile, StatusMessage, StoredSettings } from "./mobileTypes";
 import "./App.css";
+import "./App.overlays.css";
 
 const DEFAULT_BRIDGE_URL = "http://127.0.0.1:8080";
 const SETTINGS_STORAGE_KEY = "ghost-os-mobile.settings";
@@ -85,9 +88,13 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function hasTauriRuntime(): boolean {
+  return "__TAURI_INTERNALS__" in window;
+}
+
 function App() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
-  const [apiToken, setApiToken] = useState("");
+  const [apiToken] = useState("");
   const [message, setMessage] = useState("");
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
@@ -95,18 +102,26 @@ function App() {
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastTraceId, setLastTraceId] = useState("");
   const [showScrollDown, setShowScrollDown] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
+  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
     tone: "idle",
     text: "未连接",
   });
 
   const scrollRef = useRef<HTMLElement>(null);
-  const settingsRef = useRef<HTMLElement>(null);
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
+  const sessionTitle = lastUserMessage || (settings.sessionId ? `Session ${settings.sessionId}` : "当前会话");
+  const isModalOpen = isSidebarOpen || isMoreMenuOpen;
 
   useEffect(() => {
+    if (!hasTauriRuntime()) {
+      return;
+    }
+
     try {
       void invoke<HostProfile>("host_profile")
         .then(setHost)
@@ -127,6 +142,13 @@ function App() {
       scrollToBottom("smooth");
     }
   }, [lastUserMessage, reply]);
+
+  useEffect(() => {
+    document.body.style.overflow = isModalOpen ? "hidden" : "auto";
+    return () => {
+      document.body.style.overflow = "auto";
+    };
+  }, [isModalOpen]);
 
   async function requestBridge<TPayload>(
     action: string,
@@ -203,8 +225,10 @@ function App() {
     }
   }
 
-  function scrollToSettings(): void {
-    settingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  function openSidebar(): void {
+    setIsRuntimeMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsSidebarOpen(true);
   }
 
   function startNewSession(): void {
@@ -212,55 +236,107 @@ function App() {
     setLastUserMessage("");
     setSettings((current) => ({ ...current, sessionId: "" }));
     setStatus({ tone: "idle", text: "新会话" });
+    setIsRuntimeMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsSidebarOpen(false);
+  }
+
+  function clearLocalConversation(): void {
+    setReply(undefined);
+    setLastUserMessage("");
+    setStatus({ tone: "idle", text: "本地消息已清空" });
+    setIsMoreMenuOpen(false);
+  }
+
+  async function copyTraceId(): Promise<void> {
+    if (!lastTraceId) {
+      return;
+    }
+
+    try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error("当前环境不支持剪贴板 API");
+      }
+      await navigator.clipboard.writeText(lastTraceId);
+      setStatus({ tone: "success", text: "trace_id 已复制" });
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    } finally {
+      setIsMoreMenuOpen(false);
+    }
   }
 
   return (
     <div className="mobile-chat-shell">
-      <ChatHeader
-        runtimeLabel={runtimeLabel}
-        status={status}
-        onOpenSettings={scrollToSettings}
+      <MobileSidebar
+        open={isSidebarOpen}
+        host={host}
+        config={config}
+        settings={settings}
+        loading={status.tone === "loading"}
+        sessionTitle={sessionTitle}
+        lastTraceId={lastTraceId}
+        onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
+        onConnect={connectBridge}
       />
 
-      <main ref={scrollRef} onScroll={handleScroll} className="chat-feed">
-        <ChatBubble>我想让 Ghost-OS 通过移动端连接 Bridge，把任务交给桌面侧执行。</ChatBubble>
-
-        <AssistantIntro
-          host={host}
+      <div className="mobile-chat-content" aria-hidden={isModalOpen} inert={isModalOpen ? true : undefined}>
+        <ChatHeader
+          runtimeLabel={runtimeLabel}
           config={config}
-          lastTraceId={lastTraceId}
-          settings={settings}
           status={status}
+          bridgeUrl={bridgeUrl}
+          runtimeMenuOpen={isRuntimeMenuOpen}
+          onOpenSidebar={openSidebar}
+          onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
+          onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
+          onOpenSettings={openSidebar}
+          onOpenMoreMenu={() => {
+            setIsRuntimeMenuOpen(false);
+            setIsMoreMenuOpen(true);
+          }}
+          onNewSession={startNewSession}
         />
 
-        <BridgeSettings
-          refTarget={settingsRef}
-          settings={settings}
-          apiToken={apiToken}
+        <main ref={scrollRef} onScroll={handleScroll} className="chat-feed">
+          <ChatBubble>我想用手机端连接 Ghost-OS Bridge，把任务交给桌面侧执行，但不确定应该先检查哪些地方。</ChatBubble>
+
+          <AssistantIntro
+            host={host}
+            config={config}
+            lastTraceId={lastTraceId}
+            settings={settings}
+            status={status}
+          />
+
+          {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
+          <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
+        </main>
+
+        {showScrollDown ? (
+          <button className="scroll-down-button" type="button" onClick={() => scrollToBottom()} aria-label="滚动到底部">
+            <ArrowDown className="ui-icon" aria-hidden="true" strokeWidth={1.75} />
+          </button>
+        ) : null}
+
+        <ChatComposer
+          value={message}
+          disabled={!canSend}
           loading={status.tone === "loading"}
-          onConnect={connectBridge}
-          onApiTokenChange={setApiToken}
-          onSettingsChange={setSettings}
+          onSubmit={sendMessage}
+          onChange={setMessage}
+          onOpenSettings={openSidebar}
         />
+      </div>
 
-        {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
-        <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
-      </main>
-
-      {showScrollDown ? (
-        <button className="scroll-down-button" type="button" onClick={() => scrollToBottom()} aria-label="滚动到底部">
-          <span className="ui-icon ui-icon-arrow-down" aria-hidden="true" />
-        </button>
-      ) : null}
-
-      <ChatComposer
-        value={message}
-        disabled={!canSend}
-        loading={status.tone === "loading"}
-        onSubmit={sendMessage}
-        onChange={setMessage}
-        onOpenSettings={scrollToSettings}
+      <MoreActionSheet
+        open={isMoreMenuOpen}
+        hasTraceId={Boolean(lastTraceId)}
+        hasLocalConversation={Boolean(lastUserMessage || reply)}
+        onClose={() => setIsMoreMenuOpen(false)}
+        onCopyTraceId={copyTraceId}
+        onClearConversation={clearLocalConversation}
       />
     </div>
   );
