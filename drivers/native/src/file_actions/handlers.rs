@@ -4,14 +4,12 @@ use serde_json::json;
 use crate::Response;
 use crate::sandbox::SandboxConfig;
 use crate::sandbox::file_tools::{
-    apply_diff_impl, export_file_impl, list_files_impl, read_file_impl, search_files_impl,
-    write_file_impl,
+    apply_diff_impl, list_files_impl, read_file_impl, search_files_impl, write_file_impl,
 };
 
 use super::format::format_numbered_content;
 use super::params::{
-    ApplyDiffRequest, ExportFileRequest, ListFilesRequest, ReadFileRequest, SearchFilesRequest,
-    WriteFileRequest,
+    ApplyDiffRequest, ListFilesRequest, ReadFileRequest, SearchFilesRequest, WriteFileRequest,
 };
 
 pub(super) fn handle_list_files(params: &Value) -> Response {
@@ -126,34 +124,6 @@ pub(super) fn handle_apply_diff(params: &Value) -> Response {
             })
         }).collect::<Vec<_>>(),
         "message": result.message,
-    }))
-}
-
-pub(super) fn handle_export_file(params: &Value) -> Response {
-    let request = match ExportFileRequest::parse(params) {
-        Ok(request) => request,
-        Err(err) => return Response::error(err),
-    };
-    let result = match export_file_impl(
-        &sandbox_config(),
-        &request.path,
-        &request.session_id,
-        &request.artifact_root,
-        &request.artifact_id,
-        request.max_bytes,
-    ) {
-        Ok(result) => result,
-        Err(err) => return Response::error(err),
-    };
-
-    Response::success(json!({
-        "artifact_id": result.artifact_id,
-        "filename": result.filename,
-        "mime_type": result.mime_type,
-        "bytes": result.bytes,
-        "sha256": result.sha256,
-        "stored_path": result.stored_path.display().to_string(),
-        "original_path": result.original_path.display().to_string(),
     }))
 }
 

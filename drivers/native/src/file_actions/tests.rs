@@ -7,8 +7,7 @@ use std::{
 
 use super::dispatch_action;
 use super::handlers::{
-    handle_apply_diff, handle_export_file, handle_list_files, handle_read_file,
-    handle_search_files, handle_write_file,
+    handle_apply_diff, handle_list_files, handle_read_file, handle_search_files, handle_write_file,
 };
 
 #[test]
@@ -160,33 +159,6 @@ fn handle_apply_diff_updates_file() {
     let updated = fs::read_to_string(&file).expect("read updated file");
     assert_eq!(updated, "alpha\nbeta2\ngamma\n");
     assert_eq!(response.payload["hunk_count"], 1);
-
-    fs::remove_dir_all(root).ok();
-}
-
-#[test]
-fn handle_export_file_copies_file_into_session_artifact_directory() {
-    let root = make_temp_dir();
-    let source = root.join("notes.txt");
-    let artifact_root = root.join("artifacts");
-    fs::write(&source, "hello export\n").expect("write source file");
-
-    let response = handle_export_file(&json!({
-        "path": source.to_string_lossy(),
-        "session_id": "session-1",
-        "artifact_root": artifact_root.to_string_lossy(),
-        "artifact_id": "artifact-1",
-        "max_bytes": 1024
-    }));
-
-    assert_eq!(response.status, "success");
-    assert_eq!(response.payload["artifact_id"], "artifact-1");
-    assert_eq!(response.payload["filename"], "notes.txt");
-    let stored_path = response.payload["stored_path"]
-        .as_str()
-        .expect("stored_path should be a string");
-    assert!(stored_path.contains("artifacts/sessions/session-1/artifact-1.txt"));
-    assert!(PathBuf::from(stored_path).exists());
 
     fs::remove_dir_all(root).ok();
 }

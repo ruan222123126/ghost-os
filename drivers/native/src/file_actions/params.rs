@@ -30,14 +30,6 @@ pub(super) struct ApplyDiffRequest {
     pub(super) diff_text: String,
 }
 
-pub(super) struct ExportFileRequest {
-    pub(super) path: String,
-    pub(super) session_id: String,
-    pub(super) artifact_root: String,
-    pub(super) artifact_id: String,
-    pub(super) max_bytes: Option<usize>,
-}
-
 impl ListFilesRequest {
     pub(super) fn parse(params: &Value) -> Result<Self, String> {
         Ok(Self {
@@ -85,18 +77,6 @@ impl ApplyDiffRequest {
         Ok(Self {
             path: required_string(params, "path")?,
             diff_text: required_string(params, "diff_text")?,
-        })
-    }
-}
-
-impl ExportFileRequest {
-    pub(super) fn parse(params: &Value) -> Result<Self, String> {
-        Ok(Self {
-            path: required_string(params, "path")?,
-            session_id: required_string(params, "session_id")?,
-            artifact_root: required_string(params, "artifact_root")?,
-            artifact_id: required_string(params, "artifact_id")?,
-            max_bytes: optional_usize(params, "max_bytes")?,
         })
     }
 }

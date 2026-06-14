@@ -45,12 +45,6 @@
         "scriptExecPayload": {
             "$ref": "./schema/defs/execution.json#/$defs/scriptExecPayload"
         },
-        "exportFileParams": {
-            "$ref": "./schema/defs/execution.json#/$defs/exportFileParams"
-        },
-        "exportFilePayload": {
-            "$ref": "./schema/defs/execution.json#/$defs/exportFilePayload"
-        },
         "assistantSessionEndSignal": {
             "$ref": "./schema/defs/agent_core.json#/$defs/assistantSessionEndSignal"
         },
