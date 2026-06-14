@@ -958,6 +958,57 @@
                 }
             }
         },
+        "taskLogsRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
+        "taskStopRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "id",
+                "run_id"
+            ],
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "run_id": {
+                    "type": "string",
+                    "minLength": 1
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
         "taskUpdateRequest": {
             "type": "object",
             "additionalProperties": false,

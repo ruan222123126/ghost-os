@@ -225,6 +225,12 @@
         "taskRunNowRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskRunNowRequest"
         },
+        "taskLogsRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskLogsRequest"
+        },
+        "taskStopRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskStopRequest"
+        },
         "taskPayload": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskPayload"
         },

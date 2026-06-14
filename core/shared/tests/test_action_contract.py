@@ -65,6 +65,21 @@ class ActionContractTest(unittest.TestCase):
         self.assertEqual([], task_list.get("required", []))
         self.assertEqual(TASK_SCOPES, task_list["properties"]["scope"]["enum"])
 
+    def test_task_logs_params_match_runtime_contract(self) -> None:
+        schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
+        task_logs = schema["$defs"]["taskLogsRequest"]
+
+        self.assertEqual(["id"], task_logs["required"])
+        self.assertEqual(0, task_logs["properties"]["limit"]["minimum"])
+        self.assertEqual(TASK_SCOPES, task_logs["properties"]["scope"]["enum"])
+
+    def test_task_stop_params_match_runtime_contract(self) -> None:
+        schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
+        task_stop = schema["$defs"]["taskStopRequest"]
+
+        self.assertEqual(["id", "run_id"], task_stop["required"])
+        self.assertEqual(TASK_SCOPES, task_stop["properties"]["scope"]["enum"])
+
 
 if __name__ == "__main__":
     unittest.main()
