@@ -39,6 +39,10 @@ type TaskUpdateParams struct {
 	Scope            string                            `json:"scope,omitempty"`
 }
 
+type TaskListParams struct {
+	Scope string `json:"scope,omitempty"`
+}
+
 type TaskIDParams struct {
 	ID    string `json:"id"`
 	Scope string `json:"scope,omitempty"`

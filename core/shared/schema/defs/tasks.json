@@ -899,6 +899,20 @@
                 }
             }
         },
+        "taskListRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
+                }
+            }
+        },
         "taskIDRequest": {
             "type": "object",
             "additionalProperties": false,

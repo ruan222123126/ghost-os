@@ -25,6 +25,7 @@ REQUIRED_RUNTIME_ACTIONS = {
 }
 
 REMOVED_ACTIONS = {"BROWSER_LAUNCH"}
+TASK_SCOPES = ["user", "system", "orchestration"]
 
 
 class ActionContractTest(unittest.TestCase):
@@ -55,7 +56,14 @@ class ActionContractTest(unittest.TestCase):
         self.assertNotIn("start_only", task_id_props)
         self.assertEqual(["id"], run_now["required"])
         self.assertEqual("boolean", run_now["properties"]["start_only"]["type"])
-        self.assertEqual(["user", "system", "orchestration"], run_now["properties"]["scope"]["enum"])
+        self.assertEqual(TASK_SCOPES, run_now["properties"]["scope"]["enum"])
+
+    def test_task_list_params_define_scope(self) -> None:
+        schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
+        task_list = schema["$defs"]["taskListRequest"]
+
+        self.assertEqual([], task_list.get("required", []))
+        self.assertEqual(TASK_SCOPES, task_list["properties"]["scope"]["enum"])
 
 
 if __name__ == "__main__":

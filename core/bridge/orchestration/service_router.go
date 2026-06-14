@@ -268,7 +268,7 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 
 func (s *bridgeService) executeTaskListDispatchAction(
 	_ context.Context,
-	params dispatch.TaskListParams,
+	params taskListParams,
 	traceID string,
 ) (ServiceResult, error) {
 	scope, err := dispatch.NormalizeTaskListScope(params.Scope)

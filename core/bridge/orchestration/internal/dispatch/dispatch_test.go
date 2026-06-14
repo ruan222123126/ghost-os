@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ghost-os/bridge/orchestration/internal/app/tasks"
+	"ghost-os/bridge/orchestration/internal/contracts/api"
 	"ghost-os/bridge/orchestration/internal/contracts/bus"
 )
 
@@ -47,7 +48,7 @@ func TestNormalizeTaskListScope(t *testing.T) {
 
 func TestRegisterTypedRejectsInvalidTaskScope(t *testing.T) {
 	router := NewRouter(1)
-	RegisterTyped[taskListParams](router, bus.ActionTaskList, func(_ context.Context, params taskListParams, _ string) (bus.ServiceResult, error) {
+	RegisterTyped[api.TaskListParams](router, bus.ActionTaskList, func(_ context.Context, params api.TaskListParams, _ string) (bus.ServiceResult, error) {
 		scope, err := NormalizeTaskListScope(params.Scope)
 		if err != nil {
 			return bus.ServiceResult{}, bus.WrapError(bus.ServiceErrorInvalidInput, err)
@@ -62,8 +63,4 @@ func TestRegisterTypedRejectsInvalidTaskScope(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "invalid task scope") {
 		t.Fatalf("unexpected error: %v", err)
 	}
-}
-
-type taskListParams struct {
-	Scope string `json:"scope,omitempty"`
 }

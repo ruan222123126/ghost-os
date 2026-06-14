@@ -9,10 +9,6 @@ import (
 
 type TraceHandler func(context.Context, string) (bus.ServiceResult, error)
 
-type TaskListParams struct {
-	Scope string `json:"scope,omitempty"`
-}
-
 type DefaultHandlers struct {
 	AgentSend     TypedHandler[api.AgentParams]
 	AgentStop     TypedHandler[api.AgentStopParams]
@@ -20,7 +16,7 @@ type DefaultHandlers struct {
 	ConfigUpdate  TypedHandler[api.ConfigUpdateRequest]
 	HumanResponse TypedHandler[api.HumanResponseParams]
 	TaskCreate    TypedHandler[api.TaskCreateParams]
-	TaskList      TypedHandler[TaskListParams]
+	TaskList      TypedHandler[api.TaskListParams]
 	TaskGet       TypedHandler[api.TaskIDParams]
 	TaskUpdate    TypedHandler[api.TaskUpdateParams]
 	TaskRunNow    TypedHandler[api.TaskRunNowParams]

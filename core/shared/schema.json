@@ -216,6 +216,9 @@
         "taskPatchRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskPatchRequest"
         },
+        "taskListRequest": {
+            "$ref": "./schema/defs/tasks.json#/$defs/taskListRequest"
+        },
         "taskIDRequest": {
             "$ref": "./schema/defs/tasks.json#/$defs/taskIDRequest"
         },
