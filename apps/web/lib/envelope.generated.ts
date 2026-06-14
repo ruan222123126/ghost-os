@@ -699,7 +699,6 @@ export interface TaskRunLog {
   run_id: string;
   trace_id: string;
   task_kind?: 'agent_message' | 'workflow' | 'orchestration';
-  action?: string;
   scheduled_at: string;
   started_at?: string;
   finished_at?: string;

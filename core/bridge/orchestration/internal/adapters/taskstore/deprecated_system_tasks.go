@@ -10,6 +10,8 @@ import (
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
+const deprecatedSystemActionKind = "system_action"
+
 type Store interface {
 	TasksDir() string
 	DeleteTask(string) error
@@ -70,5 +72,5 @@ func isDeprecatedSystemTaskDocument(data []byte) bool {
 	if err := json.Unmarshal(data, &task); err != nil {
 		return false
 	}
-	return bridgeTasks.NormalizeKind(task.TaskKind) == bridgeTasks.KindSystemAction
+	return strings.TrimSpace(task.TaskKind) == deprecatedSystemActionKind
 }

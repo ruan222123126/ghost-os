@@ -16,7 +16,8 @@ data class WorkflowNode(
     val tool: WorkflowToolNode? = null,
     val llm: WorkflowLLMNode? = null,
     val agent: WorkflowAgentNode? = null,
-    val if: WorkflowIfNode? = null,
+    @SerialName("if")
+    val ifValue: WorkflowIfNode? = null,
     val loop: WorkflowLoopNode? = null
 )
 

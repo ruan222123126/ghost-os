@@ -10,7 +10,6 @@ const (
 	ScheduleTypeCron     = "cron"
 
 	KindAgentMessage  = "agent_message"
-	KindSystemAction  = "system_action"
 	KindWorkflow      = "workflow"
 	KindOrchestration = "orchestration"
 )
@@ -24,8 +23,6 @@ type ScheduledTask struct {
 	AgentMode        string                   `json:"agent_mode,omitempty"`
 	Relay            *TaskRelayConfig         `json:"relay,omitempty"`
 	TaskKind         string                   `json:"task_kind,omitempty"`
-	Action           string                   `json:"action,omitempty"`
-	ActionParams     map[string]any           `json:"action_params,omitempty"`
 	Workflow         *WorkflowDefinition      `json:"workflow,omitempty"`
 	Orchestration    *OrchestrationDefinition `json:"orchestration,omitempty"`
 	ScheduleType     string                   `json:"schedule_type"`
@@ -44,8 +41,6 @@ func NormalizeTaskKind(kind string) string {
 	switch normalized {
 	case "", KindAgentMessage:
 		return KindAgentMessage
-	case KindSystemAction:
-		return KindSystemAction
 	case KindWorkflow:
 		return KindWorkflow
 	case KindOrchestration:
@@ -57,7 +52,7 @@ func NormalizeTaskKind(kind string) string {
 
 func IsSupportedTaskKind(kind string) bool {
 	switch NormalizeTaskKind(kind) {
-	case KindAgentMessage, KindSystemAction, KindWorkflow, KindOrchestration:
+	case KindAgentMessage, KindWorkflow, KindOrchestration:
 		return true
 	default:
 		return false

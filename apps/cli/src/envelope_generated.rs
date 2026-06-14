@@ -1039,8 +1039,6 @@ pub struct TaskRunLog {
     pub trace_id: String,
     #[serde(default)]
     pub task_kind: Option<String>,
-    #[serde(default)]
-    pub action: Option<String>,
     pub scheduled_at: String,
     #[serde(default)]
     pub started_at: Option<String>,

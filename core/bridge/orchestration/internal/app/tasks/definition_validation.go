@@ -18,8 +18,6 @@ func ValidateDefinition(task *bridgeTasks.ScheduledTask) error {
 	switch task.TaskKind {
 	case bridgeTasks.KindAgentMessage:
 		return validateAgentDefinition(task)
-	case bridgeTasks.KindSystemAction:
-		return validateSystemDefinition(task)
 	case bridgeTasks.KindWorkflow:
 		return appworkflows.ValidateTaskDefinition(task)
 	case bridgeTasks.KindOrchestration:
@@ -37,8 +35,6 @@ func NormalizeDefinition(task *bridgeTasks.ScheduledTask) {
 	task.AgentMode = bridgeTasks.NormalizeAgentMode(task.AgentMode)
 	task.Relay = bridgeTasks.CloneTaskRelayConfig(task.Relay)
 	task.TaskKind = bridgeTasks.NormalizeKind(task.TaskKind)
-	task.Action = strings.TrimSpace(task.Action)
-	task.ActionParams = bridgeTasks.CloneActionParams(task.ActionParams)
 	task.Workflow = bridgeTasks.CloneWorkflowDefinition(task.Workflow)
 	task.Orchestration = bridgeTasks.CloneOrchestrationDefinition(task.Orchestration)
 }
@@ -55,8 +51,6 @@ func validateAgentDefinition(task *bridgeTasks.ScheduledTask) error {
 	if task.Workflow != nil {
 		return fmt.Errorf("%w: agent_message does not allow workflow", bridgeTasks.ErrInvalidTaskConfig)
 	}
-	task.Action = ""
-	task.ActionParams = nil
 	return nil
 }
 
@@ -92,22 +86,6 @@ func ValidateRelayConfig(relay *bridgeTasks.TaskRelayConfig) error {
 	return nil
 }
 
-func validateSystemDefinition(task *bridgeTasks.ScheduledTask) error {
-	task.Name = ""
-	task.Message = ""
-	task.Orchestration = nil
-	if strings.TrimSpace(task.SessionID) != "" {
-		return fmt.Errorf("%w: system_action does not allow session_id", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	if task.Workflow != nil {
-		return fmt.Errorf("%w: system_action does not allow workflow", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	if task.Action == "" {
-		return fmt.Errorf("%w: action is required for system_action", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	return fmt.Errorf("%w: unsupported system action %q", bridgeTasks.ErrInvalidTaskConfig, task.Action)
-}
-
 func validateOrchestrationDefinition(task *bridgeTasks.ScheduledTask) error {
 	if task.Orchestration == nil {
 		return fmt.Errorf("%w: orchestration is required for orchestration task", bridgeTasks.ErrInvalidTaskConfig)
@@ -115,10 +93,10 @@ func validateOrchestrationDefinition(task *bridgeTasks.ScheduledTask) error {
 	if task.Name == "" {
 		return fmt.Errorf("%w: orchestration name is required", bridgeTasks.ErrInvalidTaskConfig)
 	}
-	if task.Message != "" || task.SessionID != "" || task.Action != "" {
-		return fmt.Errorf("%w: orchestration task does not allow message, session_id, or action", bridgeTasks.ErrInvalidTaskConfig)
+	if task.Message != "" || task.SessionID != "" {
+		return fmt.Errorf("%w: orchestration task does not allow message or session_id", bridgeTasks.ErrInvalidTaskConfig)
 	}
-	if task.RuntimeOverrides != nil || task.Workflow != nil || len(task.ActionParams) > 0 {
+	if task.RuntimeOverrides != nil || task.Workflow != nil {
 		return fmt.Errorf("%w: orchestration task only allows name, orchestration, and schedule fields", bridgeTasks.ErrInvalidTaskConfig)
 	}
 	if err := normalizeOrchestrationDefinitionRuntimeOverrides(task.Orchestration); err != nil {

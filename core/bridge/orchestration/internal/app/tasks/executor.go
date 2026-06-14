@@ -75,7 +75,6 @@ func (f KindExecutorFunc) ExecuteTask(
 type TaskExecutionRunner struct {
 	Workflow      KindExecutor
 	Orchestration KindExecutor
-	System        KindExecutor
 	Agent         KindExecutor
 }
 
@@ -94,8 +93,6 @@ func (r TaskExecutionRunner) Execute(
 		return executeWithKindRunner(ctx, r.Workflow, cmd, kind)
 	case taskdefs.KindOrchestration:
 		return executeWithKindRunner(ctx, r.Orchestration, cmd, kind)
-	case taskdefs.KindSystemAction:
-		return executeWithKindRunner(ctx, r.System, cmd, kind)
 	case taskdefs.KindAgentMessage:
 		return executeWithKindRunner(ctx, r.Agent, cmd, kind)
 	default:

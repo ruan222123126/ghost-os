@@ -13,8 +13,6 @@ type TaskCreateParams struct {
 	AgentMode        string                            `json:"agent_mode,omitempty"`
 	Relay            *taskdefs.TaskRelayConfig         `json:"relay,omitempty"`
 	TaskKind         string                            `json:"task_kind,omitempty"`
-	Action           string                            `json:"action,omitempty"`
-	ActionParams     map[string]any                    `json:"action_params,omitempty"`
 	Workflow         *taskdefs.WorkflowDefinition      `json:"workflow,omitempty"`
 	Orchestration    *taskdefs.OrchestrationDefinition `json:"orchestration,omitempty"`
 	IntervalSeconds  int                               `json:"interval_seconds,omitempty"`
@@ -32,8 +30,6 @@ type TaskUpdateParams struct {
 	AgentMode        *string                           `json:"agent_mode,omitempty"`
 	Relay            *taskdefs.TaskRelayConfig         `json:"relay,omitempty"`
 	TaskKind         *string                           `json:"task_kind,omitempty"`
-	Action           *string                           `json:"action,omitempty"`
-	ActionParams     *map[string]any                   `json:"action_params,omitempty"`
 	Workflow         *taskdefs.WorkflowDefinition      `json:"workflow,omitempty"`
 	Orchestration    *taskdefs.OrchestrationDefinition `json:"orchestration,omitempty"`
 	IntervalSeconds  *int                              `json:"interval_seconds,omitempty"`

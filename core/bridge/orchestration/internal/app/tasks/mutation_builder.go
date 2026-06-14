@@ -138,8 +138,6 @@ func BuildTaskFromCreateParams(
 		AgentMode:        strings.TrimSpace(params.AgentMode),
 		Relay:            taskdefs.CloneTaskRelayConfig(params.Relay),
 		TaskKind:         strings.TrimSpace(params.TaskKind),
-		Action:           strings.TrimSpace(params.Action),
-		ActionParams:     taskdefs.CloneActionParams(params.ActionParams),
 		Workflow:         taskdefs.CloneWorkflowDefinition(params.Workflow),
 		Orchestration:    taskdefs.CloneOrchestrationDefinition(params.Orchestration),
 		Enabled:          defaultCreatedTaskEnabled,
@@ -166,8 +164,7 @@ func ApplyTaskPatch(
 	applyTaskCoreTextFields(task, params)
 	applyTaskRuntimePatch(task, params.RuntimeOverrides)
 	applyTaskRelayPatch(task, params)
-	taskKind := applyTaskKindActionPatch(task, params)
-	applyTaskActionParamsPatch(task, params.ActionParams)
+	taskKind := applyTaskKindPatch(task, params)
 	if err := applyTaskWorkflowPatch(task, taskKind, params.Workflow); err != nil {
 		return false, err
 	}
@@ -205,20 +202,11 @@ func applyTaskRuntimePatch(task *bridgeTasks.ScheduledTask, runtimeOverrides *ta
 	}
 }
 
-func applyTaskKindActionPatch(task *bridgeTasks.ScheduledTask, params api.TaskUpdateParams) string {
+func applyTaskKindPatch(task *bridgeTasks.ScheduledTask, params api.TaskUpdateParams) string {
 	if params.TaskKind != nil {
 		task.TaskKind = strings.TrimSpace(*params.TaskKind)
 	}
-	if params.Action != nil {
-		task.Action = strings.TrimSpace(*params.Action)
-	}
 	return bridgeTasks.NormalizeKind(task.TaskKind)
-}
-
-func applyTaskActionParamsPatch(task *bridgeTasks.ScheduledTask, actionParams *map[string]any) {
-	if actionParams != nil {
-		task.ActionParams = taskdefs.CloneActionParams(*actionParams)
-	}
 }
 
 func applyTaskWorkflowPatch(

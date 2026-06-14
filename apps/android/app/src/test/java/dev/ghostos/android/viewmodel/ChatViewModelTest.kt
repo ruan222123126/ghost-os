@@ -8,6 +8,7 @@ import dev.ghostos.android.model.DownloadedArtifact
 import dev.ghostos.android.model.SessionDetail
 import dev.ghostos.android.model.SessionHumanInteraction
 import dev.ghostos.android.model.SessionMessage
+import dev.ghostos.android.model.SessionMessagePage
 import dev.ghostos.android.model.SessionMetadata
 import dev.ghostos.android.model.SessionPushEvent
 import dev.ghostos.android.model.SessionToolResult
@@ -43,6 +44,7 @@ class ChatViewModelTest {
         val sessions = listOf(
             SessionMetadata(
                 id = "session-1",
+                title = "session-1",
                 createdAt = "2026-03-07T10:00:00Z",
                 updatedAt = "2026-03-07T11:00:00Z",
                 messageCount = 2,
@@ -63,13 +65,16 @@ class ChatViewModelTest {
     fun `selectSession loads detail and replaces chat messages`() = runTest(mainDispatcherRule.dispatcher.scheduler) {
         val detail = SessionDetail(
             id = "session-1",
+            title = "session-1",
             messages = listOf(
-                SessionMessage(role = "user", text = "旧问题"),
-                SessionMessage(role = "internal", text = "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}"),
-                SessionMessage(role = "assistant", text = "旧回答"),
+                SessionMessage(index = 0, role = "user", text = "旧问题"),
+                SessionMessage(index = 1, role = "internal", text = "[GRAPHQL_EXECUTION_RESULT]\n{\"data\":{\"viewer\":{\"id\":\"1\"}}}"),
+                SessionMessage(index = 2, role = "assistant", text = "旧回答"),
             ),
             createdAt = "2026-03-07T10:00:00Z",
             updatedAt = "2026-03-07T11:00:00Z",
+            messageCount = 3,
+            page = messagePage(3),
             tokenCount = 99,
         )
         val bridge = FakeBridgeGateway(
@@ -99,9 +104,11 @@ class ChatViewModelTest {
     fun `selectSession restores pending question from history detail`() = runTest(mainDispatcherRule.dispatcher.scheduler) {
         val detail = SessionDetail(
             id = "session-pending",
+            title = "session-pending",
             messages = listOf(
-                SessionMessage(role = "user", text = "继续前需要确认"),
+                SessionMessage(index = 0, role = "user", text = "继续前需要确认"),
                 SessionMessage(
+                    index = 1,
                     role = "tool",
                     humanInteraction = SessionHumanInteraction(
                         questionId = "q-1",
@@ -114,6 +121,8 @@ class ChatViewModelTest {
             ),
             createdAt = "2026-03-07T10:00:00Z",
             updatedAt = "2026-03-07T11:00:00Z",
+            messageCount = 2,
+            page = messagePage(2),
             tokenCount = 100,
         )
         val bridge = FakeBridgeGateway(
@@ -139,6 +148,7 @@ class ChatViewModelTest {
         val sessions = listOf(
             SessionMetadata(
                 id = "session-1",
+                title = "session-1",
                 createdAt = "2026-03-07T10:00:00Z",
                 updatedAt = "2026-03-07T11:00:00Z",
                 messageCount = 2,
@@ -147,9 +157,12 @@ class ChatViewModelTest {
         )
         val detail = SessionDetail(
             id = "session-1",
-            messages = listOf(SessionMessage(role = "assistant", text = "hello")),
+            title = "session-1",
+            messages = listOf(SessionMessage(index = 0, role = "assistant", text = "hello")),
             createdAt = "2026-03-07T10:00:00Z",
             updatedAt = "2026-03-07T11:00:00Z",
+            messageCount = 1,
+            page = messagePage(1),
             tokenCount = 42,
         )
         val bridge = FakeBridgeGateway(
@@ -179,12 +192,15 @@ class ChatViewModelTest {
                 "session-stream" to Result.success(
                     SessionDetail(
                         id = "session-stream",
+                        title = "session-stream",
                         messages = listOf(
-                            SessionMessage(role = "user", text = "你好"),
-                            SessionMessage(role = "assistant", text = "正在回复"),
+                            SessionMessage(index = 0, role = "user", text = "你好"),
+                            SessionMessage(index = 1, role = "assistant", text = "正在回复"),
                         ),
                         createdAt = "2026-03-15T10:00:00Z",
                         updatedAt = "2026-03-15T10:01:00Z",
+                        messageCount = 2,
+                        page = messagePage(2),
                         tokenCount = 12,
                     ),
                 ),
@@ -217,9 +233,11 @@ class ChatViewModelTest {
                 "session-tools" to Result.success(
                     SessionDetail(
                         id = "session-tools",
+                        title = "session-tools",
                         messages = listOf(
-                            SessionMessage(role = "user", text = "列一下文件"),
+                            SessionMessage(index = 0, role = "user", text = "列一下文件"),
                             SessionMessage(
+                                index = 1,
                                 role = "tool",
                                 text = "工具完成：list_files",
                                 toolCallId = "call-1",
@@ -229,10 +247,12 @@ class ChatViewModelTest {
                                     output = "工具完成：list_files",
                                 ),
                             ),
-                            SessionMessage(role = "assistant", text = "已完成"),
+                            SessionMessage(index = 2, role = "assistant", text = "已完成"),
                         ),
                         createdAt = "2026-03-15T10:00:00Z",
                         updatedAt = "2026-03-15T10:01:00Z",
+                        messageCount = 3,
+                        page = messagePage(3),
                         tokenCount = 18,
                     ),
                 ),
@@ -383,6 +403,15 @@ private data class StopCall(
     val sessionId: String,
     val traceId: String,
 )
+
+private fun messagePage(size: Int): SessionMessagePage {
+    return SessionMessagePage(
+        limit = size,
+        startIndex = if (size == 0) null else 0,
+        endIndex = if (size == 0) null else size - 1,
+        hasMoreBefore = false,
+    )
+}
 
 private fun streamEvent(traceId: String, type: String, payload: JsonObject): AgentStreamEvent {
     return AgentStreamEvent(

@@ -75,7 +75,7 @@ func TestTaskStoreListTasksTolerantFlagsUnsupportedTaskKind(t *testing.T) {
 
 func strictTaskKindValidator(task *ScheduledTask) error {
 	switch task.TaskKind {
-	case KindAgentMessage, KindSystemAction, KindWorkflow, KindOrchestration:
+	case KindAgentMessage, KindWorkflow, KindOrchestration:
 		return nil
 	default:
 		return fmt.Errorf("%w: unsupported task_kind %q", ErrInvalidTaskConfig, task.TaskKind)

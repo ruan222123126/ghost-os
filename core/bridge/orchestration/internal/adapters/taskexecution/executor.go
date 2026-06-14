@@ -3,7 +3,6 @@ package taskexecution
 import (
 	"context"
 	"errors"
-	"strings"
 
 	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
 	internaltrace "ghost-os/bridge/orchestration/internal/trace"
@@ -18,33 +17,11 @@ type Config struct {
 	SessionPushHub *internaltrace.SessionPushHub
 	Workflow       apptasks.KindExecutor
 	Orchestration  apptasks.KindExecutor
-	System         apptasks.KindExecutor
 	Agent          apptasks.KindExecutor
 }
 
 type Executor struct {
 	Config Config
-}
-
-type SystemExecutor struct {
-	ServiceAvailable bool
-}
-
-func (e SystemExecutor) ExecuteTask(
-	_ context.Context,
-	task taskdefs.ScheduledTask,
-	_ string,
-) taskdefs.ExecutionResult {
-	if !e.ServiceAvailable {
-		return taskdefs.ExecutionResult{
-			Status: taskdefs.RunStatusError,
-			Error:  "task executor service is not configured",
-		}
-	}
-	return taskdefs.ExecutionResult{
-		Status: taskdefs.RunStatusError,
-		Error:  "unsupported system action: " + strings.TrimSpace(task.Action),
-	}
 }
 
 func (e Executor) Execute(
@@ -120,7 +97,6 @@ func (e Executor) executeTask(
 	return apptasks.TaskExecutionRunner{
 		Workflow:      e.Config.Workflow,
 		Orchestration: e.Config.Orchestration,
-		System:        e.Config.System,
 		Agent:         e.Config.Agent,
 	}.Execute(ctx, apptasks.TaskExecutionCommand{
 		Task:    task,

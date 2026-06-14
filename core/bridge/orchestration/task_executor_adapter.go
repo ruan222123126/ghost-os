@@ -102,7 +102,6 @@ func (a taskExecutorAdapter) executor() taskexecution.Executor {
 	cfg := taskexecution.Config{
 		Workflow:      apptasks.KindExecutorFunc(a.executeWorkflowTask),
 		Orchestration: apptasks.KindExecutorFunc(a.executeOrchestrationTask),
-		System:        taskexecution.SystemExecutor{ServiceAvailable: a.service != nil},
 		Agent: apptasks.AgentExecutor{
 			StreamRunner: a,
 			RelayRunner:  a,

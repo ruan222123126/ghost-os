@@ -1694,9 +1694,6 @@
                         "orchestration"
                     ]
                 },
-                "action": {
-                    "type": "string"
-                },
                 "scheduled_at": {
                     "type": "string",
                     "minLength": 1

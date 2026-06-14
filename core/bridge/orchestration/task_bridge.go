@@ -30,7 +30,6 @@ const (
 	taskRunStatusAwaitingHuman    = bridgeTasks.RunStatusAwaitingHuman
 	maxTaskResponsePreviewRunes   = bridgeTasks.MaxResponsePreviewRunes
 	taskKindAgentMessage          = bridgeTasks.KindAgentMessage
-	taskKindSystemAction          = bridgeTasks.KindSystemAction
 	taskKindWorkflow              = bridgeTasks.KindWorkflow
 	taskKindOrchestration         = bridgeTasks.KindOrchestration
 	taskAgentModeSingle           = taskdefs.AgentModeSingle

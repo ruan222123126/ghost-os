@@ -47,7 +47,7 @@ func IncludeInScope(task bridgeTasks.ScheduledTask, scope string) bool {
 	case "", ScopeUser:
 		return kind == bridgeTasks.KindAgentMessage || kind == bridgeTasks.KindWorkflow
 	case ScopeSystem:
-		return kind == bridgeTasks.KindSystemAction
+		return false
 	case ScopeOrchestration:
 		return kind == bridgeTasks.KindOrchestration
 	default:
@@ -83,7 +83,6 @@ func CloneScheduledTask(task bridgeTasks.ScheduledTask) bridgeTasks.ScheduledTas
 	cloned := task
 	cloned.RuntimeOverrides = bridgeTasks.CloneTaskRuntimeOverrides(task.RuntimeOverrides)
 	cloned.Relay = bridgeTasks.CloneTaskRelayConfig(task.Relay)
-	cloned.ActionParams = bridgeTasks.CloneActionParams(task.ActionParams)
 	cloned.Workflow = bridgeTasks.CloneWorkflowDefinition(task.Workflow)
 	cloned.Orchestration = bridgeTasks.CloneOrchestrationDefinition(task.Orchestration)
 	return cloned

@@ -176,12 +176,6 @@ func ValidateTaskDefinition(task *bridgeTasks.ScheduledTask) error {
 	if task.SessionID != "" {
 		return fmt.Errorf("%w: workflow task does not allow session_id", bridgeTasks.ErrInvalidTaskConfig)
 	}
-	if task.Action != "" {
-		return fmt.Errorf("%w: workflow task does not allow action", bridgeTasks.ErrInvalidTaskConfig)
-	}
-	if len(task.ActionParams) > 0 {
-		return fmt.Errorf("%w: workflow task does not allow action_params", bridgeTasks.ErrInvalidTaskConfig)
-	}
 	_, err := workflowdomain.PlanBuilder{}.Build(task.Workflow)
 	return err
 }

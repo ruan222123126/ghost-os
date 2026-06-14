@@ -29,7 +29,6 @@ type RunLog struct {
 	RunID           string          `json:"run_id"`
 	TraceID         string          `json:"trace_id"`
 	TaskKind        string          `json:"task_kind,omitempty"`
-	Action          string          `json:"action,omitempty"`
 	ScheduledAt     time.Time       `json:"scheduled_at"`
 	StartedAt       time.Time       `json:"started_at,omitempty"`
 	FinishedAt      time.Time       `json:"finished_at,omitempty"`
@@ -50,7 +49,6 @@ func NormalizeRunLog(run *RunLog) {
 	run.RunID = strings.TrimSpace(run.RunID)
 	run.TraceID = strings.TrimSpace(run.TraceID)
 	run.TaskKind = NormalizeKind(run.TaskKind)
-	run.Action = strings.TrimSpace(run.Action)
 	run.Status = strings.TrimSpace(run.Status)
 	run.SessionIDInput = strings.TrimSpace(run.SessionIDInput)
 	run.SessionIDOutput = strings.TrimSpace(run.SessionIDOutput)

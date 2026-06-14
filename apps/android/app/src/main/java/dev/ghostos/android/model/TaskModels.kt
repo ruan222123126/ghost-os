@@ -203,7 +203,6 @@ data class TaskRunLog(
     val traceId: String,
     @SerialName("task_kind")
     val taskKind: String? = null,
-    val action: String? = null,
     @SerialName("scheduled_at")
     val scheduledAt: String,
     @SerialName("started_at")

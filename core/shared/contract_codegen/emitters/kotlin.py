@@ -158,10 +158,44 @@ KOTLIN_ENUM_CONSTANT_DEFINITIONS = {
     "agentCompletionDeltaPayload",
 }
 
+KOTLIN_RESERVED_IDENTIFIERS = {
+    "as",
+    "break",
+    "class",
+    "continue",
+    "do",
+    "else",
+    "false",
+    "for",
+    "fun",
+    "if",
+    "in",
+    "interface",
+    "is",
+    "null",
+    "object",
+    "package",
+    "return",
+    "super",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typealias",
+    "typeof",
+    "val",
+    "var",
+    "when",
+    "while",
+}
+
 
 def _field_name(name: str) -> str:
     head, *tail = name.split("_")
-    return head[:1].lower() + head[1:] + "".join(part[:1].upper() + part[1:] for part in tail)
+    field_name = head[:1].lower() + head[1:] + "".join(part[:1].upper() + part[1:] for part in tail)
+    if field_name in KOTLIN_RESERVED_IDENTIFIERS:
+        return f"{field_name}Value"
+    return field_name
 
 
 def _const_part(value: str) -> str:

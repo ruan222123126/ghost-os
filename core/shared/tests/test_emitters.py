@@ -98,6 +98,7 @@ class EmittersTest(unittest.TestCase):
         self.assertIn('const val KIND_TEXT = "text"', files["StreamingModels.kt"])
         self.assertIn("data class AgentAwaitingHumanStreamPayload(", files["StreamingModels.kt"])
         self.assertIn("data class WorkflowDefinition(", files["WorkflowModels.kt"])
+        self.assertIn('@SerialName("if")\n    val ifValue: WorkflowIfNode? = null', files["WorkflowModels.kt"])
         self.assertIn("data class OrchestrationDefinition(", files["OrchestrationModels.kt"])
         self.assertIn("data class TaskPatchRequest(", files["TaskModels.kt"])
         self.assertIn("data class TaskRunLog(", files["TaskModels.kt"])

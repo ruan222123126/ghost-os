@@ -15,7 +15,6 @@ const (
 	ScheduleTypeCron     = taskdefs.ScheduleTypeCron
 
 	KindAgentMessage  = taskdefs.KindAgentMessage
-	KindSystemAction  = taskdefs.KindSystemAction
 	KindWorkflow      = taskdefs.KindWorkflow
 	KindOrchestration = taskdefs.KindOrchestration
 )
@@ -68,8 +67,6 @@ func normalizeScheduledTaskScalarFields(task *ScheduledTask) {
 	task.AgentMode = NormalizeAgentMode(task.AgentMode)
 	task.Relay = CloneTaskRelayConfig(task.Relay)
 	task.TaskKind = NormalizeKind(task.TaskKind)
-	task.Action = strings.TrimSpace(task.Action)
-	task.ActionParams = CloneActionParams(task.ActionParams)
 	task.Workflow = CloneWorkflowDefinition(task.Workflow)
 	task.Orchestration = CloneOrchestrationDefinition(task.Orchestration)
 	task.ScheduleType = strings.TrimSpace(task.ScheduleType)
