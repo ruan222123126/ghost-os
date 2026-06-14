@@ -116,6 +116,7 @@ function App() {
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
   const sessionTitle = lastUserMessage || (settings.sessionId ? `Session ${settings.sessionId}` : "当前会话");
   const isModalOpen = isSidebarOpen || isMoreMenuOpen;
+  const hasLocalConversation = Boolean(lastUserMessage || reply);
 
   useEffect(() => {
     if (!hasTauriRuntime()) {
@@ -234,6 +235,8 @@ function App() {
   function startNewSession(): void {
     setReply(undefined);
     setLastUserMessage("");
+    setLastTraceId("");
+    setMessage("");
     setSettings((current) => ({ ...current, sessionId: "" }));
     setStatus({ tone: "idle", text: "新会话" });
     setIsRuntimeMenuOpen(false);
@@ -299,16 +302,20 @@ function App() {
           onNewSession={startNewSession}
         />
 
-        <main ref={scrollRef} onScroll={handleScroll} className="chat-feed">
-          <ChatBubble>我想用手机端连接 Ghost-OS Bridge，把任务交给桌面侧执行，但不确定应该先检查哪些地方。</ChatBubble>
-
-          <AssistantIntro
-            host={host}
-            config={config}
-            lastTraceId={lastTraceId}
-            settings={settings}
-            status={status}
-          />
+        <main
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className={`chat-feed ${hasLocalConversation ? "" : "is-empty"}`}
+        >
+          {!hasLocalConversation ? (
+            <AssistantIntro
+              host={host}
+              config={config}
+              lastTraceId={lastTraceId}
+              settings={settings}
+              status={status}
+            />
+          ) : null}
 
           {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
           <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
@@ -333,7 +340,7 @@ function App() {
       <MoreActionSheet
         open={isMoreMenuOpen}
         hasTraceId={Boolean(lastTraceId)}
-        hasLocalConversation={Boolean(lastUserMessage || reply)}
+        hasLocalConversation={hasLocalConversation}
         onClose={() => setIsMoreMenuOpen(false)}
         onCopyTraceId={copyTraceId}
         onClearConversation={clearLocalConversation}

@@ -1,7 +1,8 @@
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { FormEvent, ReactNode, RefObject } from "react";
 import {
   ArrowDown,
-  AudioLines,
+  ArrowUp,
   Check,
   ChevronDown,
   Diamond,
@@ -25,7 +26,7 @@ import type { AgentPayload, ConfigPayload, HostProfile, StatusMessage, StoredSet
 
 type UiIconName =
   | "arrow-down"
-  | "audio-lines"
+  | "arrow-up"
   | "check"
   | "chevron-down"
   | "diamond"
@@ -46,7 +47,7 @@ type UiIconName =
 
 const ICONS: Record<UiIconName, LucideIcon> = {
   "arrow-down": ArrowDown,
-  "audio-lines": AudioLines,
+  "arrow-up": ArrowUp,
   check: Check,
   "chevron-down": ChevronDown,
   diamond: Diamond,
@@ -419,31 +420,69 @@ interface ChatComposerProps {
   onOpenSettings: () => void;
 }
 
+const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 180;
+const COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX = 48;
+
 export function ChatComposer(props: ChatComposerProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useAutosizeTextarea(textareaRef, props.value, setExpanded);
+
   return (
     <form className="composer-dock" onSubmit={props.onSubmit}>
       <div className="composer-shell">
-        <IconButton label="添加任务上下文" icon="plus" variant="composer" onClick={props.onOpenSettings} />
-        <input
-          value={props.value}
-          type="text"
-          placeholder="问问 Ghost-OS"
-          className="composer-input"
-          onChange={(event) => props.onChange(event.currentTarget.value)}
-        />
-        <IconButton label="语音输入" icon="mic" variant="composer" />
-        <button
-          className="send-button"
-          type="submit"
-          disabled={props.disabled}
-          aria-busy={props.loading}
-          aria-label="发送任务"
-        >
-          <UiIcon name="audio-lines" />
-        </button>
+        <div className={`composer-row ${expanded ? "is-expanded" : ""}`}>
+          <IconButton label="添加任务上下文" icon="plus" variant="composer" onClick={props.onOpenSettings} />
+          <textarea
+            ref={textareaRef}
+            value={props.value}
+            rows={1}
+            placeholder="问问 Ghost-OS"
+            className="composer-input"
+            onChange={(event) => props.onChange(event.currentTarget.value)}
+            onInput={() => syncTextareaHeight(textareaRef.current, setExpanded)}
+          />
+          <div className="composer-actions">
+            <IconButton label="语音输入" icon="mic" variant="composer" />
+            <button
+              className="send-button"
+              type="submit"
+              disabled={props.disabled}
+              aria-busy={props.loading}
+              aria-label="发送任务"
+            >
+              <UiIcon name="arrow-up" />
+            </button>
+          </div>
+        </div>
       </div>
     </form>
   );
+}
+
+function useAutosizeTextarea(
+  textareaRef: RefObject<HTMLTextAreaElement | null>,
+  value: string,
+  setExpanded: (expanded: boolean) => void,
+) {
+  useEffect(() => {
+    syncTextareaHeight(textareaRef.current, setExpanded);
+  }, [setExpanded, textareaRef, value]);
+}
+
+function syncTextareaHeight(
+  textarea: HTMLTextAreaElement | null,
+  setExpanded?: (expanded: boolean) => void,
+) {
+  if (!textarea) {
+    return;
+  }
+
+  textarea.style.height = "auto";
+  const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX);
+  textarea.style.height = `${nextHeight}px`;
+  setExpanded?.(nextHeight > COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX);
 }
 
 interface MoreActionSheetProps {
