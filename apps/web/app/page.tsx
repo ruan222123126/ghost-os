@@ -9,7 +9,7 @@ import { ChatSessionNotch } from '@/components/ChatSessionNotch';
 import { ChatInput } from '@/components/ChatInput';
 import type { ConfigPanelProps } from '@/components/ConfigPanel';
 import { GlobalLoadingOverlay } from '@/components/GlobalLoadingOverlay';
-import { MessageList } from '@/components/message/MessageList';
+import type { MessageListProps } from '@/components/message/types';
 import { SessionSidebar } from '@/components/SessionSidebar';
 import { useHomePageController } from '@/hooks/useHomePageController';
 import { useInitialLoadingOverlay } from '@/hooks/useInitialLoadingOverlay';
@@ -24,6 +24,18 @@ export const dynamic = 'force-dynamic';
 const ConfigPanel = nextDynamic<ConfigPanelProps>(
   () => import('@/components/ConfigPanel').then((mod) => mod.ConfigPanel),
   { ssr: false },
+);
+
+function MessageListLoading(): JSX.Element {
+  return <div className="messages is-empty" aria-live="polite" />;
+}
+
+const MessageList = nextDynamic<MessageListProps>(
+  () => import('@/components/message/MessageList').then((mod) => mod.MessageList),
+  {
+    loading: MessageListLoading,
+    ssr: false,
+  },
 );
 
 const HomePage: FC = () => {

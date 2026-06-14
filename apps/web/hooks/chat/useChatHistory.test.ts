@@ -1,6 +1,6 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { getFullSession } from '@/lib/api/sessions/api';
+import { getSession } from '@/lib/api/sessions/api';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { ChatMessage, SessionDetail, SessionTurnDraft } from '@/lib/types';
 import { mergeLatestCommittedMessages } from './chatHistoryMerge';
@@ -8,11 +8,10 @@ import { useChatHistory } from './useChatHistory';
 import { useChatState } from './useChatState';
 
 jest.mock('@/lib/api/sessions/api', () => ({
-  getFullSession: jest.fn(),
   getSession: jest.fn(),
 }));
 
-const mockedGetFullSession = getFullSession as jest.MockedFunction<typeof getFullSession>;
+const mockedGetSession = getSession as jest.MockedFunction<typeof getSession>;
 
 function buildUserMessage(id: string, content: string): ChatMessage {
   return {
@@ -188,6 +187,42 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
     jest.resetAllMocks();
   });
 
+  it('loads only the latest history page and keeps older pages paginated', async () => {
+    mockedGetSession.mockResolvedValue(buildSessionDetail({
+      id: 'session-paged',
+      messages: [{ index: 100, role: 'user', text: 'latest question' }],
+      page: {
+        limit: 100,
+        before: null,
+        start_index: 100,
+        end_index: 100,
+        has_more_before: true,
+        next_before: 99,
+      },
+    }));
+
+    let latest: HistoryProbeState | null = null;
+    await renderHistoryProbe((state) => {
+      latest = state;
+    });
+
+    await act(async () => {
+      await latest!.history.loadSessionHistory('session-paged');
+    });
+
+    expect(mockedGetSession).toHaveBeenCalledWith('session-paged', { limit: 100 });
+    expect(latest!.state.committedMessages).toEqual([
+      {
+        id: 'session:session-paged:message:100:user',
+        kind: 'user',
+        content: 'latest question',
+        images: undefined,
+      },
+    ]);
+    expect(latest!.state.hasOlderHistory).toBe(true);
+    expect(latest!.state.nextHistoryBefore).toBe(99);
+  });
+
   it('merges stopped user history and hydrates the persisted assistant turn draft', async () => {
     const draft: SessionTurnDraft = {
       trace_id: 'trace-stop',
@@ -200,7 +235,7 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
       tools: [],
       item_order: ['assistant:stream-segment:assistant:1'],
     };
-    mockedGetFullSession.mockResolvedValue(buildSessionDetail({
+    mockedGetSession.mockResolvedValue(buildSessionDetail({
       messages: [{ index: 0, role: 'user', text: 'hello' }],
       turn_draft: draft,
     }));
@@ -221,6 +256,7 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
       await latest!.history.syncRecentHistory('session-stop');
     });
 
+    expect(mockedGetSession).toHaveBeenCalledWith('session-stop', { limit: 100 });
     expect(latest!.state.committedMessages).toEqual([
       { id: 'session:session-stop:message:0:user', kind: 'user', content: 'hello', images: undefined },
     ]);
@@ -231,7 +267,7 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
   });
 
   it('keeps the stopped user message and clears streaming state when the assistant has no draft output', async () => {
-    mockedGetFullSession.mockResolvedValue(buildSessionDetail({
+    mockedGetSession.mockResolvedValue(buildSessionDetail({
       messages: [{ index: 0, role: 'user', text: 'hello' }],
       turn_draft: null,
     }));
@@ -303,16 +339,18 @@ async function renderHistoryProbe(onRender: (state: HistoryProbeState) => void):
 }
 
 function buildSessionDetail(options: {
+  id?: string;
   messages: SessionDetail['messages'];
+  page?: SessionDetail['page'];
   turn_draft?: SessionTurnDraft | null;
 }): SessionDetail {
   return {
-    id: 'session-stop',
+    id: options.id ?? 'session-stop',
     title: 'Stopped',
     created_at: '2026-06-06T00:00:00Z',
     updated_at: '2026-06-06T00:00:01Z',
     message_count: options.messages.length,
-    page: {
+    page: options.page ?? {
       limit: 100,
       before: null,
       start_index: options.messages[0]?.index ?? 0,
