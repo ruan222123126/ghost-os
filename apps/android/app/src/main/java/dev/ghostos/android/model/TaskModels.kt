@@ -57,7 +57,8 @@ data class AgentMessageTaskCreateRequest(
     @SerialName("cron_expr")
     val cronExpr: String? = null,
     @SerialName("trace_id")
-    val traceId: String? = null
+    val traceId: String? = null,
+    val scope: String? = null
 ) : TaskCreateRequest
 
 @Serializable
@@ -114,7 +115,8 @@ data class TaskUpdateRequest(
     val cronExpr: String? = null,
     val enabled: Boolean? = null,
     @SerialName("trace_id")
-    val traceId: String? = null
+    val traceId: String? = null,
+    val scope: String? = null
 )
 
 @Serializable

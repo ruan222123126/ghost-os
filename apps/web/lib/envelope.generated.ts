@@ -492,6 +492,7 @@ export interface AgentMessageTaskCreateRequest {
   interval_seconds?: number;
   cron_expr?: string;
   trace_id?: string;
+  scope?: 'user' | 'system' | 'orchestration';
 }
 
 export interface OrchestrationAgentNode {
@@ -556,6 +557,7 @@ export interface WorkflowTaskCreateRequest {
   interval_seconds?: number;
   cron_expr?: string;
   trace_id?: string;
+  scope?: 'user' | 'system' | 'orchestration';
 }
 
 export interface OrchestrationTaskCreateRequest {
@@ -565,6 +567,7 @@ export interface OrchestrationTaskCreateRequest {
   interval_seconds?: number;
   cron_expr?: string;
   trace_id?: string;
+  scope?: 'user' | 'system' | 'orchestration';
 }
 
 export interface WorkflowLoopNode {
@@ -607,6 +610,7 @@ export interface TaskUpdateRequest {
   cron_expr?: string;
   enabled?: boolean;
   trace_id?: string;
+  scope?: 'user' | 'system' | 'orchestration';
 }
 
 export interface TaskPatchRequest {

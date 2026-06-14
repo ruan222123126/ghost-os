@@ -78,7 +78,8 @@ data class WorkflowTaskCreateRequest(
     @SerialName("cron_expr")
     val cronExpr: String? = null,
     @SerialName("trace_id")
-    val traceId: String? = null
+    val traceId: String? = null,
+    val scope: String? = null
 ) : TaskCreateRequest
 
 @Serializable

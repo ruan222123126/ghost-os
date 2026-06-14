@@ -728,6 +728,14 @@
                 },
                 "trace_id": {
                     "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
                 }
             },
             "oneOf": [
@@ -782,6 +790,14 @@
                 },
                 "trace_id": {
                     "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
                 }
             },
             "oneOf": [
@@ -841,6 +857,14 @@
                 },
                 "trace_id": {
                     "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
                 }
             },
             "oneOf": [
@@ -1071,6 +1095,14 @@
                 },
                 "trace_id": {
                     "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "user",
+                        "system",
+                        "orchestration"
+                    ]
                 }
             },
             "not": {

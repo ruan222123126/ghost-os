@@ -65,6 +65,23 @@ class ActionContractTest(unittest.TestCase):
         self.assertEqual([], task_list.get("required", []))
         self.assertEqual(TASK_SCOPES, task_list["properties"]["scope"]["enum"])
 
+    def test_task_create_and_update_params_define_scope(self) -> None:
+        schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
+        create_defs = [
+            "agentMessageTaskCreateRequest",
+            "workflowTaskCreateRequest",
+            "orchestrationTaskCreateRequest",
+        ]
+
+        for def_name in create_defs:
+            with self.subTest(def_name=def_name):
+                props = schema["$defs"][def_name]["properties"]
+                self.assertEqual(TASK_SCOPES, props["scope"]["enum"])
+
+        update_props = schema["$defs"]["taskUpdateRequest"]["properties"]
+        self.assertEqual(TASK_SCOPES, update_props["scope"]["enum"])
+        self.assertNotIn("scope", schema["$defs"]["taskPatchRequest"]["properties"])
+
     def test_task_logs_params_match_runtime_contract(self) -> None:
         schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
         task_logs = schema["$defs"]["taskLogsRequest"]

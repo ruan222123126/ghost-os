@@ -721,6 +721,8 @@ pub struct AgentMessageTaskCreateRequest {
     pub cron_expr: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -812,6 +814,8 @@ pub struct WorkflowTaskCreateRequest {
     pub cron_expr: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -825,6 +829,8 @@ pub struct OrchestrationTaskCreateRequest {
     pub cron_expr: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -892,6 +898,8 @@ pub struct TaskUpdateRequest {
     pub enabled: Option<bool>,
     #[serde(default)]
     pub trace_id: Option<String>,
+    #[serde(default)]
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
