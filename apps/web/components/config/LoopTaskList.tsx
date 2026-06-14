@@ -1,13 +1,18 @@
 'use client';
 
+import nextDynamic from 'next/dynamic';
 import { useMemo, type KeyboardEvent } from 'react';
 import { ConfigCardActions } from '@/components/config/ConfigCardActions';
-import { TaskLogsModal } from '@/components/config/TaskLogsModal';
+import type { TaskLogsModalProps } from '@/components/config/TaskLogsModal';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { AgentMessageTaskPayload, PresetPayload, TaskRunLog } from '@/lib/types';
 
 const LOOP_SKELETON_COUNT = 3;
+const TaskLogsModal = nextDynamic<TaskLogsModalProps>(
+  () => import('@/components/config/TaskLogsModal').then((mod) => mod.TaskLogsModal),
+  { ssr: false },
+);
 
 interface LoopTaskListProps {
   loops: AgentMessageTaskPayload[];

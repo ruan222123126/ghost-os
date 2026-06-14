@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "next lint",
     "knip": "knip --exclude types",
@@ -20,6 +21,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "14.2.5",
     "@types/jest": "29.5.12",
     "@types/node": "20.14.12",
     "@types/react": "18.3.3",

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useEffect, useRef, useState } from 'react';
 import { CloseButton } from '@/components/CloseButton';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -10,8 +11,11 @@ import { LiveRunViewerModal, type LiveRunViewerTarget } from './LiveRunViewerMod
 import { TaskRunLogActions } from './TaskRunLogActions';
 
 const LIVE_VIEW_RUN_REFRESH_MS = 2000;
+const TASK_LOG_INITIAL_VIEWPORT_PX = 640;
+const TASK_LOG_ROW_ESTIMATE_PX = 120;
+const TASK_LOG_ROW_OVERSCAN = 6;
 
-interface TaskLogsModalProps {
+export interface TaskLogsModalProps {
   taskID: string;
   logs: TaskRunLog[];
   loading: boolean;
@@ -210,16 +214,60 @@ function TaskLogsModalBody(props: {
     return <div className="p-5 text-[13px] text-[#737373]">{copy.settings.tasksLogsEmpty}</div>;
   }
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      {logs.map((log) => (
-        <TaskRunLogCard
-          key={log.run_id}
-          log={log}
-          onOpenLiveViewer={onOpenLiveViewer}
-          onStopRun={onStopRun}
-          stopping={stoppingRunId === log.run_id}
-        />
-      ))}
+    <TaskRunLogVirtualList
+      logs={logs}
+      onOpenLiveViewer={onOpenLiveViewer}
+      onStopRun={onStopRun}
+      stoppingRunId={stoppingRunId}
+    />
+  );
+}
+
+function TaskRunLogVirtualList(props: {
+  logs: TaskRunLog[];
+  onOpenLiveViewer: (run: TaskRunLog) => Promise<void>;
+  onStopRun?: (run: TaskRunLog) => Promise<void>;
+  stoppingRunId?: string;
+}) {
+  const { logs, onOpenLiveViewer, onStopRun, stoppingRunId } = props;
+  const scrollElementRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: logs.length,
+    estimateSize: () => TASK_LOG_ROW_ESTIMATE_PX,
+    getItemKey: (index) => logs[index]?.run_id ?? index,
+    getScrollElement: () => scrollElementRef.current,
+    initialRect: { height: TASK_LOG_INITIAL_VIEWPORT_PX, width: 0 },
+    overscan: TASK_LOG_ROW_OVERSCAN,
+    useAnimationFrameWithResizeObserver: true,
+  });
+  const virtualItems = rowVirtualizer.getVirtualItems();
+
+  return (
+    <div ref={scrollElementRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+      <div className="relative w-full" style={{ height: rowVirtualizer.getTotalSize() }}>
+        {virtualItems.map((virtualItem) => {
+          const log = logs[virtualItem.index];
+          if (!log) {
+            return null;
+          }
+          return (
+            <div
+              key={virtualItem.key}
+              data-index={virtualItem.index}
+              ref={rowVirtualizer.measureElement}
+              className="absolute left-0 top-0 w-full pb-3"
+              style={{ transform: `translateY(${virtualItem.start}px)` }}
+            >
+              <TaskRunLogCard
+                log={log}
+                onOpenLiveViewer={onOpenLiveViewer}
+                onStopRun={onStopRun}
+                stopping={stoppingRunId === log.run_id}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -234,7 +282,7 @@ function TaskRunLogCard(props: {
   const { log, onOpenLiveViewer, onStopRun, stopping } = props;
 
   return (
-    <details className="mb-3 rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] p-3 last:mb-0">
+    <details className="rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] p-3">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[12px] text-[#111111]">
         <span className="min-w-0">
           <span className="font-semibold">{log.run_id}</span>
