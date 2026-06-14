@@ -10,44 +10,82 @@ import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/type
 
 const LoopSettingsSection = nextDynamic(
   () => import('@/components/config/LoopSettingsSection').then((mod) => mod.LoopSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const OrchestrationSettingsSection = nextDynamic(
   () => import('@/components/config/OrchestrationSettingsSection').then((mod) => mod.OrchestrationSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const PresetSettingsSection = nextDynamic(
   () => import('@/components/config/PresetSettingsSection').then((mod) => mod.PresetSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const PromptsLibrarySettingsSection = nextDynamic(
   () => import('@/components/config/PromptsLibrarySettingsSection').then((mod) => mod.PromptsLibrarySettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const PromptsPreviewSettingsSection = nextDynamic(
   () => import('@/components/config/PromptsPreviewSettingsSection').then((mod) => mod.PromptsPreviewSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const ProviderSettingsSection = nextDynamic(
   () => import('@/components/config/ProviderSettingsSection').then((mod) => mod.ProviderSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const RuntimeSettingsSection = nextDynamic(
   () => import('@/components/config/RuntimeSettingsSection').then((mod) => mod.RuntimeSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const SkillSettingsSection = nextDynamic(
   () => import('@/components/config/SkillSettingsSection').then((mod) => mod.SkillSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const TaskSettingsSection = nextDynamic(
   () => import('@/components/config/TaskSettingsSection').then((mod) => mod.TaskSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
 const ToolSettingsSection = nextDynamic(
   () => import('@/components/config/ToolSettingsSection').then((mod) => mod.ToolSettingsSection),
-  { ssr: false },
+  { loading: ConfigSectionLoadingBar, ssr: false },
 );
+
+function ConfigSectionLoadingBar() {
+  return <TopLoadingBar isVisible />;
+}
+
+function TopLoadingBar({ isVisible = false }: { isVisible?: boolean }) {
+  return (
+    <>
+      <style>{`
+        @keyframes high-perf-slide {
+          0% {
+            transform: translateX(-10%) scaleX(0.1);
+          }
+          50% {
+            transform: translateX(30%) scaleX(0.5);
+          }
+          100% {
+            transform: translateX(100%) scaleX(0.1);
+          }
+        }
+
+        .animate-top-loading-bar {
+          animation: high-perf-slide 1.2s linear infinite;
+          transform-origin: left center;
+        }
+      `}</style>
+
+      <div
+        data-testid="config-section-top-loading-bar"
+        className={`fixed top-0 left-0 z-[9999] h-[3px] w-full pointer-events-none transition-opacity duration-500 ease-in-out ${
+          isVisible ? 'opacity-100' : 'opacity-0'
+        }`}
+      >
+        <div className="h-full w-full animate-top-loading-bar bg-black shadow-[0_0_8px_rgba(0,0,0,0.3)]" />
+      </div>
+    </>
+  );
+}
 
 interface ConfigPanelSectionContentProps {
   activeTab: SettingsTab;
