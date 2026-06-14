@@ -2,7 +2,7 @@ use super::image_ops::load_image_from_path;
 use std::io;
 use std::os::fd::RawFd;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -23,11 +23,7 @@ pub(crate) fn capture_png_from_pipewire(
     Ok(image)
 }
 
-fn run_gstreamer_capture(
-    source_fd: RawFd,
-    node_id: u32,
-    output_path: &PathBuf,
-) -> Result<(), String> {
+fn run_gstreamer_capture(source_fd: RawFd, node_id: u32, output_path: &Path) -> Result<(), String> {
     let mut command = Command::new("gst-launch-1.0");
     command
         .arg("-q")

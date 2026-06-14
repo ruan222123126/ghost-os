@@ -53,8 +53,6 @@ func newSessionPushHub() *sessionPushHub {
 	return internaltrace.NewSessionPushHub()
 }
 
-type actionHandler = dispatch.Handler
-
 type agentExecutorFunc func(
 	ctx context.Context,
 	message string,
@@ -185,13 +183,6 @@ func (s *bridgeService) BootstrapSystemTasks() error {
 	return s.runtimeState.BootstrapSystemTasks()
 }
 
-func (s *bridgeService) initTaskRuntime() error {
-	if s == nil {
-		return nil
-	}
-	return s.runtimeState.InitTaskRuntime(s.configStore, taskExecutorAdapter{service: s})
-}
-
 func (s *bridgeService) skillLogFunc() bridgeskills.LogFunc {
 	return func(traceID, action, status string, err error) {
 		logAction(traceID, action, status, err)
@@ -209,18 +200,6 @@ func (s *bridgeService) Close() {
 // dispatchAction 根据 action 查找处理器；未知 action 返回显式可选列表。
 func (s *bridgeService) dispatchAction(ctx context.Context, action string, params json.RawMessage, traceID string) (ServiceResult, error) {
 	return s.actionRouter.Dispatch(ctx, action, params, traceID)
-}
-
-// unsupportedActionError 构造稳定错误消息，便于客户端快速定位拼写/版本问题。
-func (s *bridgeService) unsupportedActionError(action string) error {
-	return s.actionRouter.UnsupportedActionError(action)
-}
-
-func (s *bridgeService) actionHandler(action string) (actionHandler, bool) {
-	if s == nil || s.actionRouter == nil {
-		return nil, false
-	}
-	return s.actionRouter.Handler(action)
 }
 
 func (s *bridgeService) registeredActionNames() []string {

@@ -74,23 +74,6 @@ func ToolBasePrompt(name string) (string, bool) {
 	return toolBasePrompt(name)
 }
 
-func normalizeToolPromptDefault(name string, prompt string) (string, bool) {
-	trimmedName := strings.TrimSpace(name)
-	trimmedPrompt := strings.TrimSpace(prompt)
-	if trimmedPrompt == "" {
-		return "", false
-	}
-
-	current, ok := toolBasePrompt(trimmedName)
-	if !ok {
-		return trimmedPrompt, false
-	}
-	if trimmedPrompt == current {
-		return current, true
-	}
-	return trimmedPrompt, false
-}
-
 func toolBasePrompts() map[string]string {
 	out := make(map[string]string, len(configuredToolCatalog))
 	for _, name := range configuredToolNames() {

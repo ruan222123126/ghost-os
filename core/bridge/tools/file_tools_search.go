@@ -144,20 +144,21 @@ func decodeSearchFilesMatch(item any) (searchFilesMatch, error) {
 
 func formatSearchFilesResult(query string, path string, matches []searchFilesMatch) string {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("Query: %s\n", query))
-	builder.WriteString(fmt.Sprintf("Path: %s\n", path))
-	builder.WriteString(fmt.Sprintf("Matches (%d)", len(matches)))
+	fmt.Fprintf(&builder, "Query: %s\n", query)
+	fmt.Fprintf(&builder, "Path: %s\n", path)
+	fmt.Fprintf(&builder, "Matches (%d)", len(matches))
 	if len(matches) == 0 {
 		builder.WriteString("\n(no matches)")
 		return builder.String()
 	}
 	for _, item := range matches {
-		builder.WriteString(fmt.Sprintf(
+		fmt.Fprintf(
+			&builder,
 			"\n- %s:%d: %s",
 			item.Path,
 			item.Line,
 			truncateSearchFilesMatchText(item.Text),
-		))
+		)
 	}
 	return builder.String()
 }

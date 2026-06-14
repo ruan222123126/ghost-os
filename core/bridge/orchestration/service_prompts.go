@@ -16,22 +16,6 @@ import (
 	bridgeskills "ghost-os/bridge/skills"
 )
 
-const (
-	systemPromptActionGet    = appprompts.SystemPromptActionGet
-	systemPromptActionUpdate = appprompts.SystemPromptActionUpdate
-	presetActionList         = appprompts.PresetActionList
-	presetActionCreate       = appprompts.PresetActionCreate
-	presetActionUpdate       = appprompts.PresetActionUpdate
-	presetActionDelete       = appprompts.PresetActionDelete
-	presetActionApply        = appprompts.PresetActionApply
-)
-
-type systemPromptResponse = appprompts.SystemResponse
-
-type systemPromptToolDefinition = appprompts.ToolDefinition
-
-type systemPromptPreview = appprompts.Preview
-
 const screenControlToolID = apptools.ScreenControlToolID
 
 func (s *bridgeService) promptService() appprompts.Service {

@@ -104,8 +104,6 @@ type TaskRunLog = bridgeTasks.RunLog
 type TaskLoadIssue = bridgeTasks.LoadIssue
 type TaskStore = bridgeTasks.Store
 type TaskScheduler = bridgeTasks.TaskScheduler
-type workflowExecutionPlan = workflowdomain.Plan
-
 type TaskScopeKind string
 
 const (
@@ -150,36 +148,8 @@ func validateTaskDefinition(task *ScheduledTask) error {
 	return apptasks.ValidateDefinition(task)
 }
 
-func normalizeTaskDefinition(task *ScheduledTask) {
-	apptasks.NormalizeDefinition(task)
-}
-
-func validateTaskRelayConfig(relay *TaskRelayConfig) error {
-	return apptasks.ValidateRelayConfig(relay)
-}
-
-func ensureWorkflowAllowedForTaskKind(taskKind string, workflow *WorkflowDefinition) error {
-	return apptasks.EnsureWorkflowAllowedForKind(taskKind, workflow)
-}
-
-func ensureOrchestrationAllowedForTaskKind(taskKind string, definition *OrchestrationDefinition) error {
-	return apptasks.EnsureOrchestrationAllowedForKind(taskKind, definition)
-}
-
-func loadTaskRuntimeConfig(store bridgeconfig.Store) (bridgeconfig.TaskConfig, error) {
-	return apptasks.LoadRuntimeConfig(store)
-}
-
 func validateWorkflowTaskRuntime(definition *WorkflowDefinition, cfg bridgeconfig.TaskConfig) error {
 	return apptasks.ValidateWorkflowRuntime(definition, cfg)
-}
-
-func validateWorkflowAgentRuntime(definition *WorkflowDefinition, store bridgeconfig.Store) error {
-	return apptasks.ValidateWorkflowAgentRuntime(definition, store)
-}
-
-func validateOrchestrationAgentRuntime(definition *OrchestrationDefinition, store bridgeconfig.Store) error {
-	return apptasks.ValidateOrchestrationAgentRuntime(definition, store)
 }
 
 func newRelayTaskRunner(service *bridgeService) apprelay.Runner {
@@ -229,14 +199,6 @@ func NewTaskSchedulerWithTimeout(
 	)
 }
 
-func normalizeTaskKind(kind string) string {
-	return bridgeTasks.NormalizeKind(kind)
-}
-
-func isSupportedTaskKind(kind string) bool {
-	return bridgeTasks.IsSupportedKind(kind)
-}
-
 func cloneTaskActionParams(input map[string]any) map[string]any {
 	return taskdefs.CloneActionParams(input)
 }
@@ -245,28 +207,8 @@ func cloneScheduledTask(task ScheduledTask) ScheduledTask {
 	return apptasks.CloneScheduledTask(task)
 }
 
-func cloneTaskWorkflow(input *WorkflowDefinition) *WorkflowDefinition {
-	return taskdefs.CloneWorkflowDefinition(input)
-}
-
-func cloneTaskOrchestration(input *OrchestrationDefinition) *OrchestrationDefinition {
-	return taskdefs.CloneOrchestrationDefinition(input)
-}
-
 func cloneTaskRuntimeOverrides(input *TaskRuntimeOverrides) *TaskRuntimeOverrides {
 	return taskdefs.CloneTaskRuntimeOverrides(input)
-}
-
-func decodeActionParamsMap[T any](input map[string]any) (T, error) {
-	return taskdefs.DecodeParamsMap[T](input)
-}
-
-func nextTaskRunAt(task ScheduledTask, now time.Time) (time.Time, error) {
-	return bridgeTasks.NextTaskRunAt(task, now)
-}
-
-func buildWorkflowExecutionPlan(definition *WorkflowDefinition) (workflowExecutionPlan, error) {
-	return workflowdomain.PlanBuilder{}.Build(definition)
 }
 
 // Implementation moved to task_executor_adapter.go.

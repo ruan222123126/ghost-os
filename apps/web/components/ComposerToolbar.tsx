@@ -17,12 +17,3 @@ export const ComposerToolbar: FC<ComposerToolbarProps> = ({ children }) => {
 
   return <div className="composer-toolbar-slot">{items}</div>;
 };
-
-interface ComposerToolbarPillProps {
-  label: string;
-  tone?: 'default' | 'active' | 'muted' | 'warning';
-}
-
-export const ComposerToolbarPill: FC<ComposerToolbarPillProps> = ({ label, tone = 'default' }) => {
-  return <span className={`composer-pill composer-pill-${tone}`}>{label}</span>;
-};

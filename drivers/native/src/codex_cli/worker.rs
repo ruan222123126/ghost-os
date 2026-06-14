@@ -1,7 +1,7 @@
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -181,7 +181,7 @@ pub(crate) fn default_output_path() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let mut path = PathBuf::from(std::env::temp_dir());
+    let mut path = std::env::temp_dir();
     path.push(format!("ghost-codex-cli-{stamp}.log"));
     path.to_string_lossy().to_string()
 }

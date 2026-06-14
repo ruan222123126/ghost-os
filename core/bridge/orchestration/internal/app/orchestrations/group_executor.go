@@ -90,16 +90,5 @@ func standardGroupResult(result StandardGroupResult) GroupResult {
 }
 
 func ownerGroupResult(result OwnerGroupResult) GroupResult {
-	return GroupResult{
-		Status:          result.Status,
-		Preview:         result.Preview,
-		Error:           result.Error,
-		CompletedRounds: result.CompletedRounds,
-		Transcript:      result.Transcript,
-		MemberResults:   result.MemberResults,
-		MemberSessions:  result.MemberSessions,
-		OwnerAgentID:    result.OwnerAgentID,
-		OwnerSessionID:  result.OwnerSessionID,
-		DispatchResults: result.DispatchResults,
-	}
+	return GroupResult(result)
 }

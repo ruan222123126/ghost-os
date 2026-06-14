@@ -134,12 +134,6 @@ func (c *codexCLICommand) outputPathSnapshot() string {
 	return c.outputPath
 }
 
-func (c *codexCLICommand) exitCodePathSnapshot() string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.exitCodePath
-}
-
 func (c *codexCLICommand) setExitCode(exitCode int) {
 	if c == nil {
 		return

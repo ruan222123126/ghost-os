@@ -119,6 +119,16 @@ func decodeBashExecParams(argsJSON json.RawMessage) (bashExecRequest, error) {
 }
 
 func validateBashExecArgs(args bashExecArgs, interactive bool) error {
+	if err := validateBashExecPositiveLimits(args); err != nil {
+		return err
+	}
+	if err := validateBashExecSession(args, interactive); err != nil {
+		return err
+	}
+	return validateBashExecModeOptions(args, interactive)
+}
+
+func validateBashExecPositiveLimits(args bashExecArgs) error {
 	if args.MaxOutputChars != nil && *args.MaxOutputChars < 1 {
 		return fmt.Errorf("max_output_chars must be >= 1")
 	}
@@ -128,11 +138,18 @@ func validateBashExecArgs(args bashExecArgs, interactive bool) error {
 	if args.TimeoutMs != nil && *args.TimeoutMs < 1 {
 		return fmt.Errorf("timeout_ms must be >= 1")
 	}
+	return nil
+}
 
+func validateBashExecSession(args bashExecArgs, interactive bool) error {
 	sessionID := strings.TrimSpace(args.SessionID)
 	if !interactive && sessionID != "" {
 		return fmt.Errorf("session_id is only allowed when interactive=true")
 	}
+	return nil
+}
+
+func validateBashExecModeOptions(args bashExecArgs, interactive bool) error {
 	if interactive {
 		if args.Login != nil {
 			return fmt.Errorf("login is only allowed when interactive=false")

@@ -177,14 +177,17 @@ func normalizeIdentifier(value string, label string) (string, error) {
 		return "", fmt.Errorf("invalid %s", label)
 	}
 	for _, ch := range trimmed {
-		switch {
-		case ch >= 'a' && ch <= 'z':
-		case ch >= 'A' && ch <= 'Z':
-		case ch >= '0' && ch <= '9':
-		case ch == '-' || ch == '_':
-		default:
+		if !isIdentifierChar(ch) {
 			return "", fmt.Errorf("invalid %s", label)
 		}
 	}
 	return trimmed, nil
+}
+
+func isIdentifierChar(ch rune) bool {
+	return (ch >= 'a' && ch <= 'z') ||
+		(ch >= 'A' && ch <= 'Z') ||
+		(ch >= '0' && ch <= '9') ||
+		ch == '-' ||
+		ch == '_'
 }

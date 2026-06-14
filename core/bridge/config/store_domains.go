@@ -120,49 +120,78 @@ func (s *store) UpdateTool(req ToolUpdateRequest) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		return errToolNameRequired
-	}
-	if !validConfiguredToolNames()[name] {
-		return fmt.Errorf("%w: %s", errToolNotFound, name)
-	}
-	if req.Enabled == nil && req.PromptOverride == nil && req.SandboxMemoryMB == nil {
-		return errToolUpdateEmpty
+	name, err := validateToolUpdateRequest(req)
+	if err != nil {
+		return err
 	}
 
 	fileCfg, configPath, err := s.loadStoredFileConfigLocked()
 	if err != nil {
 		return err
 	}
+	if err := applyToolUpdateRequest(&fileCfg, name, req); err != nil {
+		return err
+	}
+	return s.persistLocked(configPath, fileCfg)
+}
+
+func validateToolUpdateRequest(req ToolUpdateRequest) (string, error) {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return "", errToolNameRequired
+	}
+	if !validConfiguredToolNames()[name] {
+		return "", fmt.Errorf("%w: %s", errToolNotFound, name)
+	}
+	if req.Enabled == nil && req.PromptOverride == nil && req.SandboxMemoryMB == nil {
+		return "", errToolUpdateEmpty
+	}
+	return name, nil
+}
+
+func applyToolUpdateRequest(fileCfg *bridgeFileConfig, name string, req ToolUpdateRequest) error {
 	if req.Enabled != nil {
-		fileCfg.ToolAllowlist = withUpdatedToolAllowlist(fileCfg.ToolAllowlist, name, *req.Enabled)
-		fileCfg.ToolBlocklist = withUpdatedToolBlocklist(fileCfg.ToolBlocklist, name, *req.Enabled)
+		applyToolEnabledUpdate(fileCfg, name, *req.Enabled)
 	}
 	if req.PromptOverride != nil {
-		promptsDir, resolveErr := resolvePromptsDir(fileCfg, currentEnv())
-		if resolveErr != nil {
-			return resolveErr
-		}
-		if writeErr := writeToolPromptOverrideToFile(promptsDir, name, *req.PromptOverride); writeErr != nil {
-			return writeErr
+		if err := applyToolPromptOverride(*fileCfg, name, *req.PromptOverride); err != nil {
+			return err
 		}
 	}
 	if req.SandboxMemoryMB != nil {
-		if name != scriptExecToolName {
-			return fmt.Errorf("%w: sandbox_memory_mb is only supported for %s", errToolConfigInvalid, scriptExecToolName)
+		if err := applyToolSandboxMemory(fileCfg, name, *req.SandboxMemoryMB); err != nil {
+			return err
 		}
-		value := *req.SandboxMemoryMB
-		if value <= 0 || value > maxScriptExecSandboxMemoryMB {
-			return fmt.Errorf(
-				"%w: sandbox_memory_mb must be between 1 and %d",
-				errToolConfigInvalid,
-				maxScriptExecSandboxMemoryMB,
-			)
-		}
-		fileCfg.ScriptExecSandboxMemoryMB = intPointer(value)
 	}
-	return s.persistLocked(configPath, fileCfg)
+	return nil
+}
+
+func applyToolEnabledUpdate(fileCfg *bridgeFileConfig, name string, enabled bool) {
+	fileCfg.ToolAllowlist = withUpdatedToolAllowlist(fileCfg.ToolAllowlist, name, enabled)
+	fileCfg.ToolBlocklist = withUpdatedToolBlocklist(fileCfg.ToolBlocklist, name, enabled)
+}
+
+func applyToolPromptOverride(fileCfg bridgeFileConfig, name string, prompt string) error {
+	promptsDir, err := resolvePromptsDir(fileCfg, currentEnv())
+	if err != nil {
+		return err
+	}
+	return writeToolPromptOverrideToFile(promptsDir, name, prompt)
+}
+
+func applyToolSandboxMemory(fileCfg *bridgeFileConfig, name string, value int) error {
+	if name != scriptExecToolName {
+		return fmt.Errorf("%w: sandbox_memory_mb is only supported for %s", errToolConfigInvalid, scriptExecToolName)
+	}
+	if value <= 0 || value > maxScriptExecSandboxMemoryMB {
+		return fmt.Errorf(
+			"%w: sandbox_memory_mb must be between 1 and %d",
+			errToolConfigInvalid,
+			maxScriptExecSandboxMemoryMB,
+		)
+	}
+	fileCfg.ScriptExecSandboxMemoryMB = intPointer(value)
+	return nil
 }
 
 func withUpdatedToolAllowlist(raw []string, name string, enabled bool) []string {
@@ -320,8 +349,4 @@ func (s *store) SetSkillEnabled(skillID string, enabled bool) error {
 	}
 	fileCfg.SkillBlocklist = skills.WithUpdatedBlocklist(fileCfg.SkillBlocklist, id, enabled)
 	return s.persistLocked(configPath, fileCfg)
-}
-
-func withUpdatedSkillBlocklist(raw []string, skillID string, enabled bool) []string {
-	return skills.WithUpdatedBlocklist(raw, skillID, enabled)
 }

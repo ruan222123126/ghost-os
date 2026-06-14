@@ -53,10 +53,6 @@ func BuildGroupMemberMessage(req ports.MemberRunRequest) string {
 	return member.BuildGroupMemberMessage(req)
 }
 
-func memberSetupError(req ports.MemberRunRequest, err error) ports.MemberResult {
-	return member.SetupError(req, err)
-}
-
 func BuildOwnerControlPrompt(req OwnerControlPromptRequest) string {
 	return owner.BuildControlPrompt(req)
 }

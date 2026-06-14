@@ -46,9 +46,9 @@ func writeSelectorHistory(sb *strings.Builder, history []llm.Message) {
 	for _, msg := range history {
 		switch msg.Role {
 		case llm.RoleUser:
-			sb.WriteString(fmt.Sprintf("User: %s\n", truncateSelectorText(msg.Text, 200)))
+			fmt.Fprintf(sb, "User: %s\n", truncateSelectorText(msg.Text, 200))
 		case llm.RoleAssistant:
-			sb.WriteString(fmt.Sprintf("Assistant: %s\n", truncateSelectorText(msg.Text, 200)))
+			fmt.Fprintf(sb, "Assistant: %s\n", truncateSelectorText(msg.Text, 200))
 		}
 	}
 }

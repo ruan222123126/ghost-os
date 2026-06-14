@@ -81,14 +81,14 @@ fn perform_mouse_move_wayland(x: i32, y: i32) -> Result<(), String> {
     let mut move_status = Command::new("ydotool")
         .args(["mousemove", "--absolute", &x.to_string(), &y.to_string()])
         .status();
-    if let Ok(status) = move_status {
-        if !status.success() {
-            move_status = Command::new("ydotool")
-                .args(["mousemove", &x.to_string(), &y.to_string()])
-                .status();
-        }
+    if let Ok(status) = move_status
+        && !status.success()
+    {
+        move_status = Command::new("ydotool")
+            .args(["mousemove", &x.to_string(), &y.to_string()])
+            .status();
     }
-    let status = move_status.map_err(|err| map_spawn_ydotool_error(err))?;
+    let status = move_status.map_err(map_spawn_ydotool_error)?;
     if status.success() {
         return Ok(());
     }

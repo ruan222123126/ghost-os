@@ -20,14 +20,6 @@ func (s *bridgeService) requireTaskStore() (*TaskStore, int, error) {
 	return s.taskActions().RequireStore()
 }
 
-func (s *bridgeService) requireTaskScheduler() (*TaskScheduler, int, error) {
-	return s.taskActions().RequireScheduler()
-}
-
-func (s *bridgeService) requireTaskQueryRunner() (apptasks.Query, int, error) {
-	return s.taskActions().RequireQueryRunner()
-}
-
 func (s *bridgeService) requireTaskMutationRunner() (apptasks.Mutation, int, error) {
 	return s.taskActions().RequireMutationRunner()
 }

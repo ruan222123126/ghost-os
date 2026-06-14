@@ -68,6 +68,31 @@ def resolve_node_bin() -> str:
     return "node"
 
 
+def resolve_tool_bin(env_name: str, names: list[str], candidates: list[Path]) -> str:
+    configured = Path(os.environ[env_name]) if env_name in os.environ else None
+    if configured and configured.is_file():
+        return str(configured)
+
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
+
+    return names[0]
+
+
+def resolve_golangci_lint_bin() -> str:
+    return resolve_tool_bin(
+        "GOLANGCI_LINT_BIN",
+        ["golangci-lint"],
+        [Path.home() / "go/bin/golangci-lint"],
+    )
+
+
 def clear_web_dev_dist() -> None:
     shutil.rmtree(ROOT / "apps/web/.next-dev", ignore_errors=True)
 
@@ -219,6 +244,76 @@ def web_lint() -> int:
     return run(["pnpm", "--dir", "apps/web", "lint"], ROOT)
 
 
+def web_knip() -> int:
+    print("scan unused web files and exports...")
+    return run(["pnpm", "--dir", "apps/web", "knip"], ROOT)
+
+
+def go_tidy() -> int:
+    print("tidy go bridge module...")
+    return run([resolve_go_bin(), "mod", "tidy"], ROOT / "core/bridge")
+
+
+def go_lint() -> int:
+    print("lint go bridge...")
+    return run([resolve_golangci_lint_bin(), "run"], ROOT / "core/bridge")
+
+
+def rust_native_clippy() -> int:
+    print("clippy rust native...")
+    return run(
+        [
+            "cargo",
+            "clippy",
+            "--all-targets",
+            "--features",
+            NATIVE_REQUIRED_FEATURE,
+            "--",
+            "-D",
+            "warnings",
+        ],
+        ROOT / "drivers/native",
+    )
+
+
+def rust_cli_clippy() -> int:
+    print("clippy rust cli...")
+    return run(["cargo", "clippy", "--all-targets", "--", "-D", "warnings"], ROOT / "apps/cli")
+
+
+def rust_clippy() -> int:
+    if rust_native_clippy() != 0:
+        return 1
+    return rust_cli_clippy()
+
+
+def rust_native_udeps() -> int:
+    print("scan unused native rust dependencies...")
+    return run(
+        ["cargo", "+nightly", "udeps", "--all-targets", "--features", NATIVE_REQUIRED_FEATURE],
+        ROOT / "drivers/native",
+    )
+
+
+def rust_cli_udeps() -> int:
+    print("scan unused cli rust dependencies...")
+    return run(["cargo", "+nightly", "udeps", "--all-targets"], ROOT / "apps/cli")
+
+
+def rust_udeps() -> int:
+    if rust_native_udeps() != 0:
+        return 1
+    return rust_cli_udeps()
+
+
+def scavenge() -> int:
+    for step in (go_tidy, go_lint, rust_clippy, rust_udeps, web_knip):
+        rc = step()
+        if rc != 0:
+            return rc
+    return 0
+
+
 # repo_hygiene 检查被追踪文件中是否混入本地产物或本地配置。
 def repo_hygiene() -> int:
     print("check repo hygiene...")
@@ -301,6 +396,18 @@ def main() -> int:
         return web_test()
     if action == "web-lint":
         return web_lint()
+    if action == "web-knip":
+        return web_knip()
+    if action == "go-tidy":
+        return go_tidy()
+    if action == "go-lint":
+        return go_lint()
+    if action == "rust-clippy":
+        return rust_clippy()
+    if action == "rust-udeps":
+        return rust_udeps()
+    if action == "scavenge":
+        return scavenge()
     if action == "repo-hygiene":
         return repo_hygiene()
     if action == "check-layers":
@@ -321,7 +428,7 @@ def main() -> int:
         return init_web()
 
     print(
-        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | repo-hygiene | check-layers | gen-contracts | verify-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
+        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | web-knip | go-tidy | go-lint | rust-clippy | rust-udeps | scavenge | repo-hygiene | check-layers | gen-contracts | verify-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
     )
     return 0
 

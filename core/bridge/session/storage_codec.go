@@ -1,52 +1,5 @@
 package session
 
-import (
-	"encoding/json"
-	"fmt"
-	"strings"
-	"time"
-)
-
-func decodeStoredSession(expectedID string, data []byte, now time.Time) (*Session, error) {
-	var loaded Session
-	if err := json.Unmarshal(data, &loaded); err != nil {
-		return nil, fmt.Errorf("%w: id=%s: %v", ErrSessionCorrupted, expectedID, err)
-	}
-
-	normalizeLoadedSession(&loaded, expectedID, now)
-	if loaded.ID != expectedID {
-		return nil, fmt.Errorf("%w: id mismatch file=%q payload=%q", ErrSessionCorrupted, expectedID, loaded.ID)
-	}
-	return &loaded, nil
-}
-
-func normalizeLoadedSession(session *Session, expectedID string, now time.Time) {
-	if session == nil {
-		return
-	}
-
-	if session.ID == "" {
-		session.ID = expectedID
-	} else {
-		session.ID = strings.TrimSpace(session.ID)
-	}
-	if session.CreatedAt.IsZero() {
-		session.CreatedAt = now
-	}
-	session.Title = strings.TrimSpace(session.Title)
-	if session.UpdatedAt.IsZero() {
-		session.UpdatedAt = session.CreatedAt
-	}
-	session.RecalculateTokenCount()
-	session.TokenCount = session.WindowTokenCount
-	session.MessageCount = len(session.Messages)
-	session.WindowStart = 0
-	session.AssistantDraft = cloneAssistantDraft(session.AssistantDraft)
-	session.TurnDraft = cloneTurnDraft(session.TurnDraft)
-	session.persistedMessageCount = 0
-	session.persistedMessages = nil
-}
-
 func clonePendingQuestions(raw map[string]PendingHumanQuestion) map[string]PendingHumanQuestion {
 	if len(raw) == 0 {
 		return nil

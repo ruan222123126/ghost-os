@@ -48,7 +48,7 @@ func renderSessionHumanLogDocument(meta sessionHumanLogMeta, body string) string
 	builder.WriteString(string(meta.ExportMode))
 	builder.WriteString("`\n")
 	builder.WriteString("- last_exported_index: `")
-	builder.WriteString(fmt.Sprintf("%d", meta.LastExportedIndex))
+	fmt.Fprintf(&builder, "%d", meta.LastExportedIndex)
 	builder.WriteString("`\n\n---\n\n")
 	builder.WriteString(sessionHumanLogBodyMarker)
 	builder.WriteString(body)
@@ -147,7 +147,7 @@ func renderSessionHumanLogToolMessage(item IndexedMessage, mode sessionHumanLogM
 
 func writeSessionHumanLogBlockHeader(builder *strings.Builder, index int, role llm.Role) {
 	builder.WriteString("## [")
-	builder.WriteString(fmt.Sprintf("%d", index))
+	fmt.Fprintf(builder, "%d", index)
 	builder.WriteString("] `")
 	builder.WriteString(string(role))
 	builder.WriteString("`\n\n")
@@ -172,7 +172,7 @@ func writeSessionHumanLogTextSection(builder *strings.Builder, title string, tex
 func renderSessionHumanLogCalls(calls []sessionHumanLogCallView) string {
 	var builder strings.Builder
 	for index, call := range calls {
-		builder.WriteString(fmt.Sprintf("%d. `%s`\n", index+1, call.Name))
+		fmt.Fprintf(&builder, "%d. `%s`\n", index+1, call.Name)
 		builder.WriteString("```json\n")
 		builder.WriteString(normalizeSessionHumanLogJSON(call.Arguments))
 		builder.WriteString("\n```\n")

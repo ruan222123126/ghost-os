@@ -229,10 +229,6 @@ func (t *WebSearchTool) providerTimeout(ctx context.Context, remainingProviders 
 	return perProvider
 }
 
-func (t WebSearchTool) requiresExplicitProvider() bool {
-	return strings.TrimSpace(t.config.TavilyAPIKey) != "" && strings.TrimSpace(t.config.ExaAPIKey) != ""
-}
-
 // pickUserAgent 从候选列表轮换 UA，降低被动限流概率。
 func (t *WebSearchTool) pickUserAgent() string {
 	if len(t.userAgents) == 0 {

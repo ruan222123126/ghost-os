@@ -10,14 +10,6 @@ import (
 
 const noDynamicSkillsLoaded = "- No dynamic skills loaded."
 
-func formatDynamicSkillContext(cfg Config, sess *session.Session, idleTurns int) string {
-	return formatDynamicSkillContextFromDiscovery(
-		sess,
-		idleTurns,
-		skills.DiscoverRuntimeVisibleSkills(skillRuntimeConfig(cfg)),
-	)
-}
-
 func formatDynamicSkillContextFromDiscovery(
 	sess *session.Session,
 	idleTurns int,

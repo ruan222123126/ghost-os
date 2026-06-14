@@ -88,10 +88,6 @@ export function stripToolTagCalls(text: string): string {
   return parseToolTagText(text).visibleText;
 }
 
-export function hasToolTagCalls(text: string): boolean {
-  return parseToolTagText(text).hasToolTags;
-}
-
 export function isPureToolTagDocument(text: string): boolean {
   const parsed = parseToolTagText(text);
   return parsed.hasToolTags && parsed.visibleText.trim().length === 0;

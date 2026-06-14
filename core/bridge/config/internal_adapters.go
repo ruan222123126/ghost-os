@@ -1,12 +1,9 @@
 package config
 
 import (
-	"time"
-
 	"ghost-os/bridge/config/internal/providers"
 	configruntime "ghost-os/bridge/config/internal/runtime"
 	"ghost-os/bridge/config/internal/storage"
-	"ghost-os/bridge/llm"
 )
 
 type providerConfig = providers.Record
@@ -19,14 +16,6 @@ func currentEnv() envSnapshot {
 	return storage.CurrentEnv()
 }
 
-func envFromEntries(entries []string) envSnapshot {
-	return storage.EnvFromEntries(entries)
-}
-
-func getenvDefault(name, fallback string) string {
-	return currentEnv().DefaultValue(name, fallback)
-}
-
 func loadBridgeFileConfig() (bridgeFileConfig, string, error) {
 	return storage.Load()
 }
@@ -37,10 +26,6 @@ func writeBridgeFileConfig(path string, cfg bridgeFileConfig) error {
 
 func normalizeBridgeFileConfigForWrite(cfg bridgeFileConfig) (bridgeFileConfig, error) {
 	return storage.NormalizeForWrite(cfg)
-}
-
-func normalizedActiveProviderName(providers []providerConfig, preferred ...*string) *string {
-	return storage.NormalizedActiveProviderName(providers, preferred...)
 }
 
 func normalizeStringList(raw []string) []string {
@@ -67,10 +52,6 @@ func cloneIntPointer(raw *int) *int {
 	return storage.CloneIntPointer(raw)
 }
 
-func cloneStringPointer(raw *string) *string {
-	return storage.CloneStringPointer(raw)
-}
-
 func optionalStringPointer(raw string) *string {
 	return storage.OptionalStringPointer(raw)
 }
@@ -83,36 +64,8 @@ func stringValue(raw *string) string {
 	return storage.StringValue(raw)
 }
 
-func parseProviderHeaders(raw string) (map[string]string, error) {
-	return storage.ParseProviderHeaders(raw)
-}
-
-func parseNamedHeaders(raw string, envName string) (map[string]string, error) {
-	return storage.ParseNamedHeaders(raw, envName)
-}
-
 func resolveNativePersistent(raw *bool, env envSnapshot) (bool, error) {
 	return storage.ResolveNativePersistent(raw, env)
-}
-
-func parseBoolValue(raw, fieldName string, fallback bool) (bool, error) {
-	return storage.ParseBoolValue(raw, fieldName, fallback)
-}
-
-func parsePositiveIntValue(raw, fieldName string, fallback int) (int, error) {
-	return storage.ParsePositiveIntValue(raw, fieldName, fallback)
-}
-
-func parseNonNegativeIntValue(raw, fieldName string, fallback int) (int, error) {
-	return storage.ParseNonNegativeIntValue(raw, fieldName, fallback)
-}
-
-func parseFloatValue(raw, fieldName string, fallback float64) (float64, error) {
-	return storage.ParseFloatValue(raw, fieldName, fallback)
-}
-
-func parseDurationValue(raw, fieldName string, fallback time.Duration) (time.Duration, error) {
-	return storage.ParseDurationValue(raw, fieldName, fallback)
 }
 
 func valueOrEnv(raw *string, envName, fallback string) string {
@@ -135,40 +88,12 @@ func floatOrEnvWithEnv(raw *float64, fieldName string, env envSnapshot, envName 
 	return storage.FloatOrEnvWithEnv(raw, fieldName, env, envName, fallback)
 }
 
-func durationOrEnvWithEnv(raw *string, fieldName string, env envSnapshot, envName string, fallback time.Duration) (time.Duration, error) {
-	return storage.DurationOrEnvWithEnv(raw, fieldName, env, envName, fallback)
-}
-
 func headersOrEnvWithEnv(raw map[string]string, env envSnapshot) (map[string]string, error) {
 	return storage.HeadersOrEnvWithEnv(raw, env)
 }
 
 func corsOriginsOrEnv(raw []string) []string {
 	return storage.CORSOriginsOrEnv(raw)
-}
-
-func corsOriginsOrEnvWithEnv(raw []string, env envSnapshot) []string {
-	return storage.CORSOriginsOrEnvWithEnv(raw, env)
-}
-
-func normalizeProviderHeaders(raw map[string]string) (map[string]string, error) {
-	return storage.NormalizeProviderHeaders(raw)
-}
-
-func normalizeResponseMetadata(raw map[string]string) (map[string]string, error) {
-	return storage.NormalizeResponseMetadata(raw)
-}
-
-func normalizeNamedHeaders(raw map[string]string, fieldName string) (map[string]string, error) {
-	return storage.NormalizeNamedHeaders(raw, fieldName)
-}
-
-func normalizeOrigins(origins []string) []string {
-	return storage.NormalizeOrigins(origins)
-}
-
-func parseOriginsCSV(raw string) []string {
-	return storage.ParseOriginsCSV(raw)
 }
 
 func parseStringCSV(raw string) []string {
@@ -181,10 +106,6 @@ func resolveSessionsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
 
 func resolveWebSearchTavilyAPIKey(fileCfg bridgeFileConfig, env envSnapshot) string {
 	return storage.ResolveWebSearchTavilyAPIKey(fileCfg, env)
-}
-
-func resolveTasksPath(fileCfg bridgeFileConfig, env envSnapshot) string {
-	return storage.ResolveTasksPath(fileCfg, env, defaultTasksPath)
 }
 
 func resolveScriptExecSandboxMemoryMB(fileCfg bridgeFileConfig, env envSnapshot) (int, error) {
@@ -228,20 +149,8 @@ func resolveProjectRoot(fileCfg bridgeFileConfig, env envSnapshot) string {
 	return storage.ResolveProjectRoot(fileCfg, env)
 }
 
-func runtimeConfigFromEnv() (runtimeConfig, error) {
-	fileCfg, _, err := loadBridgeFileConfig()
-	if err != nil {
-		return runtimeConfig{}, err
-	}
-	return resolveRuntimeConfig(fileCfg, currentEnv())
-}
-
 func resolveRuntimeConfig(fileCfg bridgeFileConfig, env envSnapshot) (runtimeConfig, error) {
 	return configruntime.Resolve(fileCfg, env)
-}
-
-func runtimeFallbackFromEnv(env envSnapshot) (runtimeConfig, error) {
-	return configruntime.FallbackFromEnv(env)
 }
 
 func resolveRuntimeConfigWithFallback(fileCfg bridgeFileConfig, fallback runtimeConfig) (runtimeConfig, error) {
@@ -262,18 +171,6 @@ func validateRuntimeForExecution(raw runtimeConfig) error {
 
 func activeProviderLabel(raw runtimeConfig) string {
 	return configruntime.ActiveProviderLabel(raw)
-}
-
-func inferProviderType(name, baseURL, model string) llm.Provider {
-	return configruntime.InferProviderType(name, baseURL, model)
-}
-
-func defaultBaseURLForProvider(provider llm.Provider) string {
-	return configruntime.DefaultBaseURLForProvider(provider)
-}
-
-func normalizeSessionTitleMode(raw string) (string, error) {
-	return configruntime.NormalizeSessionTitleMode(raw)
 }
 
 func snapshotFromRuntimeConfig(runtime runtimeConfig) Snapshot {
@@ -314,22 +211,6 @@ func normalizeProviderConfigs(raw map[string]providerFileConfig, model string) [
 
 func providerConfigsToFileMap(providers []providerConfig) map[string]providerFileConfig {
 	return storage.ProviderConfigsToFileMap(providers)
-}
-
-func normalizeProviderModels(models []string) []string {
-	return providers.NormalizeModels(models)
-}
-
-func providerIndexByName(records []providerConfig, name string) int {
-	return providers.IndexByName(records, name)
-}
-
-func normalizePositiveInt(value int) int {
-	return providers.NormalizePositiveInt(value)
-}
-
-func normalizeModelTokenOverrides(raw map[string]int) map[string]int {
-	return providers.NormalizeModelTokenOverrides(raw)
 }
 
 func cloneModelTokenOverrides(raw map[string]int) map[string]int {

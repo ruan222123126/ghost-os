@@ -161,5 +161,5 @@ func sortOCRItemsByPoint(items []screenOCRItem, point screenPoint) {
 func distanceSquared(a screenPoint, b screenPoint) float64 {
 	dx := float64(a.X - b.X)
 	dy := float64(a.Y - b.Y)
-	return math.Pow(dx, 2) + math.Pow(dy, 2)
+	return dx*dx + dy*dy
 }

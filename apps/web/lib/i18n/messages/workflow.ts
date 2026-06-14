@@ -1,5 +1,4 @@
 import type { WebLocale } from '@/lib/i18n/locale';
-import type { WorkflowCanvasNodeDraft, WorkflowNodeType } from '@/lib/workflow-editor';
 
 const workflowCatalog = {
   'en-US': {
@@ -422,37 +421,4 @@ export type WorkflowCopy = (typeof workflowCatalog)['en-US'];
 
 export function copyForWorkflow(locale: WebLocale): WorkflowCopy {
   return workflowCatalog[locale] as WorkflowCopy;
-}
-
-export function nodeLabelForType(copy: WorkflowCopy, type: WorkflowNodeType): string {
-  const map = copy.nodeLabels;
-  if (type === 'start') {
-    return map.start;
-  }
-  if (type === 'end') {
-    return map.end;
-  }
-  if (type === 'agent') {
-    return map.agent;
-  }
-  if (type === 'group') {
-    return map.group;
-  }
-  if (type === 'llm') {
-    return map.llm;
-  }
-  if (type === 'tool') {
-    return map.tool;
-  }
-  if (type === 'if') {
-    return map.if;
-  }
-  if (type === 'loop') {
-    return map.loop;
-  }
-  return map.group;
-}
-
-export function nodeTypeLabelForProperties(copy: WorkflowCopy, type: WorkflowCanvasNodeDraft['type']): string {
-  return nodeLabelForType(copy, type);
 }

@@ -8,18 +8,6 @@ import (
 	"strings"
 )
 
-func writeToolPromptFileIfChanged(root string, name string, prompt string) error {
-	current, err := readToolPromptOverrideFile(root, name)
-	if err != nil {
-		return err
-	}
-	trimmed := strings.TrimSpace(prompt)
-	if current == trimmed {
-		return nil
-	}
-	return writeToolPromptFile(root, name, trimmed)
-}
-
 func writeToolPromptFile(root string, name string, prompt string) error {
 	path, err := toolPromptFilePath(root, name)
 	if err != nil {

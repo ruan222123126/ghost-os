@@ -1,5 +1,4 @@
 export {
-  hasToolTagCalls,
   isPureToolTagDocument,
   parseToolTagText,
   stripToolTagCalls,

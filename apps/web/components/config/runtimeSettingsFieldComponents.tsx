@@ -43,30 +43,6 @@ export function TextField(props: {
   );
 }
 
-export function TextAreaField(props: {
-  label: string;
-  description?: string;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  const { label, description, value, disabled, onChange, placeholder } = props;
-
-  return (
-    <Field label={label} description={description}>
-      <textarea
-        value={value}
-        disabled={disabled}
-        placeholder={placeholder}
-        rows={8}
-        onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-3 font-mono text-[13px] text-[#111111] placeholder-[#A3A3A3] transition-colors focus:border-[#111111] focus:outline-none"
-      />
-    </Field>
-  );
-}
-
 export function ToggleField(props: {
   label: string;
   description?: string;

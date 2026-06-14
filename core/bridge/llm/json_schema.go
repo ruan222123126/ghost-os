@@ -164,17 +164,26 @@ func codexSchemaType(schema map[string]any) string {
 
 func inferCodexSchemaType(schema map[string]any) string {
 	switch {
-	case schema["properties"] != nil || schema["required"] != nil || schema["additionalProperties"] != nil:
+	case hasSchemaKey(schema, "properties", "required", "additionalProperties"):
 		return "object"
-	case schema["items"] != nil || schema["prefixItems"] != nil:
+	case hasSchemaKey(schema, "items", "prefixItems"):
 		return "array"
-	case schema["enum"] != nil || schema["const"] != nil || schema["format"] != nil:
+	case hasSchemaKey(schema, "enum", "const", "format"):
 		return "string"
-	case schema["minimum"] != nil || schema["maximum"] != nil || schema["exclusiveMinimum"] != nil || schema["exclusiveMaximum"] != nil || schema["multipleOf"] != nil:
+	case hasSchemaKey(schema, "minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum", "multipleOf"):
 		return "number"
 	default:
 		return ""
 	}
+}
+
+func hasSchemaKey(schema map[string]any, keys ...string) bool {
+	for _, key := range keys {
+		if schema[key] != nil {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCodexSchemaType(raw string) string {

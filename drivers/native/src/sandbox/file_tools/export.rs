@@ -79,10 +79,10 @@ fn resolve_export_source(
             original_path.display()
         )
     })?;
-    if let Some(limit) = max_bytes {
-        if bytes > limit {
-            return Err(format!("file exceeds max_bytes limit ({limit} bytes)"));
-        }
+    if let Some(limit) = max_bytes
+        && bytes > limit
+    {
+        return Err(format!("file exceeds max_bytes limit ({limit} bytes)"));
     }
 
     let filename = original_path

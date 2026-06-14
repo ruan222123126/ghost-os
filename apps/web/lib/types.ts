@@ -12,13 +12,9 @@ import type {
   OrchestrationTaskPayload as SharedOrchestrationTaskPayload,
   AskHumanOption,
   ProviderConfig,
-  SessionFileContent as SharedSessionFileContent,
   SessionImageContent as SharedSessionImageContent,
   SessionMessage as SharedSessionMessage,
   SessionTurnDraft as SharedSessionTurnDraft,
-  SessionTurnDraftPendingQuestion as SharedSessionTurnDraftPendingQuestion,
-  SessionTurnDraftSegment as SharedSessionTurnDraftSegment,
-  SessionTurnDraftTool as SharedSessionTurnDraftTool,
   TaskRelayConfig as SharedTaskRelayConfig,
   TaskRuntimeOverrides as SharedTaskRuntimeOverrides,
   WorkflowAgentNode as SharedWorkflowAgentNode,
@@ -30,7 +26,6 @@ import type {
   WorkflowLoopNode as SharedWorkflowLoopNode,
   WorkflowNode as SharedWorkflowNode,
   WorkflowStartNode as SharedWorkflowStartNode,
-  TaskCreateRequest as SharedTaskCreateRequest,
   TaskPatchRequest as SharedTaskPatchRequest,
   WorkflowTaskCreateRequest as SharedWorkflowTaskCreateRequest,
   WorkflowTaskPayload as SharedWorkflowTaskPayload,
@@ -97,9 +92,6 @@ export type {
 
 export type { TaskRunCard } from '@/lib/taskRunCards';
 export type SessionTurnDraft = SharedSessionTurnDraft;
-export type SessionTurnDraftPendingQuestion = SharedSessionTurnDraftPendingQuestion;
-export type SessionTurnDraftSegment = SharedSessionTurnDraftSegment;
-export type SessionTurnDraftTool = SharedSessionTurnDraftTool;
 
 export interface UserChatMessage {
   id: string;
@@ -250,7 +242,6 @@ export interface ProviderModelOption {
 }
 
 export type SessionMessageRole = NonNullable<SharedSessionMessage['role']>;
-export type SessionFileAttachment = SharedSessionFileContent;
 
 export type SkillSource = 'repo' | 'user';
 
@@ -365,7 +356,6 @@ export type OrchestrationAgentNode = SharedOrchestrationAgentNode;
 export type TextTaskCreateRequest = SharedAgentMessageTaskCreateRequest & { task_kind: 'agent_message' };
 export type WorkflowTaskCreateRequest = SharedWorkflowTaskCreateRequest;
 export type OrchestrationTaskCreateRequest = SharedOrchestrationTaskCreateRequest;
-export type TaskCreateRequest = SharedTaskCreateRequest;
 
 export type TaskPatchRequest = SharedTaskPatchRequest;
 export type TaskUpdateRequest = TaskPatchRequest;

@@ -3,18 +3,12 @@ import type { SessionTurnDraft } from '@/lib/types';
 
 const NO_ACTIVE_THINKING_SEGMENT_INDEX = -1;
 
-interface RuntimeThinkingSegment {
-  id: string;
-  content: string;
-}
-
 export interface ChatRuntimeState {
   assistantBuffer: string;
   assistantMessageId: string;
   nextStructuredToolPreviewSeq: number;
   thinkingActiveSegmentIndex: number;
   thinkingBuffers: string[];
-  thinkingMessageId: string;
   pendingPreviewQueue: string[];
   previewToolArgs: Map<string, string>;
   previewToolCallSeqToID: Map<number, string>;
@@ -36,7 +30,6 @@ export function createChatRuntimeState(traceId: string, sessionId?: string): Cha
     nextStructuredToolPreviewSeq: 1,
     thinkingActiveSegmentIndex: NO_ACTIVE_THINKING_SEGMENT_INDEX,
     thinkingBuffers: [],
-    thinkingMessageId: `stream-thinking:${trimmedTraceId}`,
     pendingPreviewQueue: [],
     previewToolArgs: new Map(),
     previewToolCallSeqToID: new Map(),
@@ -99,24 +92,6 @@ export function markRuntimeThinkingBoundary(runtime: ChatRuntimeState): void {
 export function clearRuntimeThinking(runtime: ChatRuntimeState): void {
   runtime.thinkingBuffers = [];
   runtime.thinkingActiveSegmentIndex = NO_ACTIVE_THINKING_SEGMENT_INDEX;
-}
-
-export function drainRuntimeThinkingSegments(runtime: ChatRuntimeState): RuntimeThinkingSegment[] {
-  const committed: RuntimeThinkingSegment[] = runtime.thinkingBuffers
-    .map((content, index) => ({
-      id: buildThinkingSegmentId(runtime.thinkingMessageId, index),
-      content: content.trim(),
-    }))
-    .filter((segment) => Boolean(segment.content));
-  clearRuntimeThinking(runtime);
-  return committed;
-}
-
-function buildThinkingSegmentId(baseId: string, index: number): string {
-  if (index === 0) {
-    return baseId;
-  }
-  return `${baseId}:${index + 1}`;
 }
 
 function resolveActiveThinkingSegmentIndex(draft: SessionTurnDraft): number {

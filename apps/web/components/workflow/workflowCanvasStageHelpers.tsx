@@ -153,25 +153,6 @@ export function queueNodeMove(options: {
   });
 }
 
-export function flushQueuedNodeMove(options: {
-  frameRequestRef: MutableRefObject<number | undefined>;
-  pendingMoveRef: MutableRefObject<PendingNodeMove | undefined>;
-  onMoveNode: (nodeID: string, position: WorkflowCanvasPosition) => void;
-}) {
-  const { frameRequestRef, pendingMoveRef, onMoveNode } = options;
-  const frameID = frameRequestRef.current;
-  if (frameID !== undefined) {
-    cancelAnimationFrame(frameID);
-    frameRequestRef.current = undefined;
-  }
-  const pending = pendingMoveRef.current;
-  if (!pending) {
-    return;
-  }
-  pendingMoveRef.current = undefined;
-  onMoveNode(pending.nodeID, pending.position);
-}
-
 export function renderEdge(
   edge: WorkflowCanvasEdgeDraft,
   nodeMap: Map<string, WorkflowCanvasNodeDraft>,

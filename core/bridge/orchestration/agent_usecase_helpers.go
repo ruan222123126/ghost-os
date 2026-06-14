@@ -17,8 +17,6 @@ import (
 	bridgeTasks "ghost-os/bridge/tasks"
 )
 
-var errAgentMessageRequired = agentturn.ErrMessageRequired
-
 const (
 	agentModeDefault = agentturn.ModeDefault
 	agentModePlan    = agentturn.ModePlan
@@ -68,14 +66,6 @@ func (s *bridgeService) pendingQuestionSnapshot(sessionID string) (sessionPushEv
 
 func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {
 	return agentturn.PrepareRequest(params)
-}
-
-func normalizeAgentMode(raw string) (string, error) {
-	return agentturn.NormalizeMode(raw)
-}
-
-func (s *bridgeService) validateAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {
-	return agentturn.PrepareWithRuntimeOverrides(s.agentTurnService().Guards, params, nil)
 }
 
 func classifyAgentTurnError(err error) (*agent.ErrAwaitingHuman, ServiceErrorKind, bool, error) {

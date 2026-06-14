@@ -67,7 +67,7 @@ pub(crate) fn active_window_info() -> Result<(String, String), String> {
         let active_id = command_stdout(Command::new("xdotool").arg("getactivewindow"))?;
         let active_id = parse_window_id(active_id.trim())
             .ok_or_else(|| "parse active window id failed".to_string())?;
-        return lookup_active_window(active_id);
+        lookup_active_window(active_id)
     }
 
     #[cfg(not(target_os = "linux"))]

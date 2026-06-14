@@ -7,7 +7,7 @@ import {
   parseOptionalString,
 } from '@/lib/api/shared';
 
-export function parseTaskRunCard(value: unknown, label: string): TaskRunCard {
+function parseTaskRunCard(value: unknown, label: string): TaskRunCard {
   const record = expectRecord(value, label);
   return {
     card_id: expectString(record.card_id, `${label}.card_id`),

@@ -87,17 +87,6 @@ func codexCLITextSessionPatterns() []*regexp.Regexp {
 	return codexSessionIDPatterns
 }
 
-func trimToLastChars(input string, maxChars int) string {
-	if maxChars <= 0 {
-		return ""
-	}
-	runes := []rune(input)
-	if len(runes) <= maxChars {
-		return input
-	}
-	return string(runes[len(runes)-maxChars:])
-}
-
 func formatUint(value uint64) string {
 	return strconv.FormatUint(value, 10)
 }

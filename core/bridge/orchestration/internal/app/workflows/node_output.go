@@ -40,15 +40,3 @@ func DecodeNodeOutput(output string) any {
 func nodeToolCallID(nodeID string) string {
 	return "workflow-" + strings.TrimSpace(nodeID)
 }
-
-func mapString(record map[string]any, key string) string {
-	raw, ok := record[key]
-	if !ok || raw == nil {
-		return ""
-	}
-	value, ok := raw.(string)
-	if !ok {
-		return ""
-	}
-	return value
-}

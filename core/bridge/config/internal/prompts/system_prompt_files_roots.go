@@ -6,14 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 )
-
-type systemPromptCandidate struct {
-	content string
-	modTime time.Time
-	index   int
-}
 
 func ensureSystemPromptRoots(promptsDir string, defaults SystemPromptFiles) ([]string, error) {
 	dirs, err := resolveSystemPromptDirs(promptsDir)
@@ -129,68 +122,4 @@ func ensureSystemPromptFile(root string, key string, defaults SystemPromptFiles,
 		return fmt.Errorf("write system prompt file %s: %w", path, writeErr)
 	}
 	return nil
-}
-
-func syncSystemPromptRoots(roots []string) error {
-	if len(roots) < 2 {
-		return nil
-	}
-
-	for _, key := range systemPromptFileKeys() {
-		content, err := newestSystemPromptContent(roots, key)
-		if err != nil {
-			return err
-		}
-		for _, root := range roots {
-			if writeErr := writeSystemPromptFileIfChanged(root, key, content); writeErr != nil {
-				return writeErr
-			}
-		}
-	}
-	return nil
-}
-
-func newestSystemPromptContent(roots []string, key string) (string, error) {
-	candidates, err := loadSystemPromptCandidates(roots, key)
-	if err != nil {
-		return "", err
-	}
-	if len(candidates) == 0 {
-		return "", nil
-	}
-
-	selected := candidates[0]
-	for _, candidate := range candidates[1:] {
-		switch {
-		case candidate.modTime.After(selected.modTime):
-			selected = candidate
-		case candidate.modTime.Equal(selected.modTime) && candidate.index < selected.index:
-			selected = candidate
-		}
-	}
-	return selected.content, nil
-}
-
-func loadSystemPromptCandidates(roots []string, key string) ([]systemPromptCandidate, error) {
-	candidates := make([]systemPromptCandidate, 0, len(roots))
-	for index, root := range roots {
-		path, err := systemPromptFilePath(root, key)
-		if err != nil {
-			return nil, err
-		}
-		info, err := os.Stat(path)
-		if err != nil {
-			return nil, fmt.Errorf("stat system prompt file %s: %w", path, err)
-		}
-		content, err := readSystemPromptFile(root, key)
-		if err != nil {
-			return nil, err
-		}
-		candidates = append(candidates, systemPromptCandidate{
-			content: content,
-			modTime: info.ModTime(),
-			index:   index,
-		})
-	}
-	return candidates, nil
 }

@@ -54,10 +54,6 @@ type requestRuntimeAwareRunner interface {
 	WithRequestRuntimeOptions(*requestRuntimeOptions) any
 }
 
-func normalizeRequestRuntimeOptions(rawProjectRoot string) (*requestRuntimeOptions, error) {
-	return agentturn.NormalizeRequestRuntimeOptions(rawProjectRoot)
-}
-
 func applyRequestRuntimeOptionsToStore(
 	store bridgeconfig.Store,
 	options *requestRuntimeOptions,
@@ -66,10 +62,6 @@ func applyRequestRuntimeOptionsToStore(
 		return store
 	}
 	return bridgeconfig.WithProjectRootOverride(store, options.ProjectRoot)
-}
-
-func cloneRequestRuntimeOptions(input *requestRuntimeOptions) *requestRuntimeOptions {
-	return agentturn.CloneRequestRuntimeOptions(input)
 }
 
 type sessionTurnSetupError = agentturn.SessionSetupError
@@ -152,10 +144,6 @@ func (r *SessionAgentRunner) WithRequestRuntimeOptions(options *requestRuntimeOp
 	cloned := *r
 	cloned.configStore = applyRequestRuntimeOptionsToStore(r.configStore, options)
 	return &cloned
-}
-
-func (r *SessionAgentRunner) prepareTurn(ctx context.Context, userInput llm.Message, sessionID string, traceID string) (*sessionTurnState, error) {
-	return r.prepareTurnWithRuntimeOverrides(ctx, userInput, sessionID, traceID, nil)
 }
 
 func (r *SessionAgentRunner) prepareTurnWithRuntimeOverrides(

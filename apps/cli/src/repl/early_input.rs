@@ -12,10 +12,10 @@ pub(super) fn capture_first_line_prefill() -> Result<Option<String>> {
 
     #[cfg(unix)]
     {
-        return capture_tty_prefill(
+        capture_tty_prefill(
             Duration::from_millis(CAPTURE_WINDOW_MS),
             Duration::from_millis(POLL_INTERVAL_MS),
-        );
+        )
     }
 
     #[cfg(not(unix))]

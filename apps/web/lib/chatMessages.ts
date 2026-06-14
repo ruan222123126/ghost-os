@@ -156,14 +156,6 @@ export function buildSystemMessage(
   };
 }
 
-export function buildToolMessage(message: Omit<ToolChatMessage, 'id' | 'kind'>): ToolChatMessage {
-  return {
-    id: nextChatMessageID(),
-    kind: 'tool',
-    ...message,
-  };
-}
-
 export function buildErrorMessage(messageText: string): ChatMessage {
   return {
     id: nextChatMessageID(),
@@ -284,18 +276,10 @@ export function mapAgentReplyToChatMessages(reply: AgentSendResponse): ChatMessa
   return [buildAssistantMessage(reply.message)];
 }
 
-export function findPendingQuestion(messages: ChatMessage[], questionId: string): PendingQuestionMessage | undefined {
-  return messages.find((message): message is PendingQuestionMessage => message.kind === 'pending_question' && message.questionId === questionId);
-}
-
 export function hasPendingQuestion(messages: ChatMessage[]): boolean {
   return messages.some((message) => message.kind === 'pending_question');
 }
 
 export function replacePendingQuestionWithUserAnswer(messages: ChatMessage[], questionId: string, answer: string): ChatMessage[] {
   return messages.flatMap((message) => message.kind === 'pending_question' && message.questionId === questionId ? [buildUserMessage(answer)] : [message]);
-}
-
-export function removePendingQuestion(messages: ChatMessage[], questionId: string): ChatMessage[] {
-  return messages.filter((message) => !(message.kind === 'pending_question' && message.questionId === questionId));
 }

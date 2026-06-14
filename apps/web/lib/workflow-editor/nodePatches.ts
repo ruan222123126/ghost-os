@@ -7,7 +7,6 @@ import type {
 } from '@/lib/workflow-editor/types';
 
 const EMPTY_SYSTEM_PROMPT = '';
-const DEFAULT_TOOL_ARGUMENTS_MODE = 'kv' as const;
 const EMPTY_TOOL_NAME = '';
 const DEFAULT_GROUP_SPEAKING_MODE = 'sequential' as const;
 const DEFAULT_GROUP_MAX_ROUNDS = DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS;
@@ -91,19 +90,6 @@ export function withToolArguments(
     tool: {
       tool_name: node.tool?.tool_name ?? EMPTY_TOOL_NAME,
       arguments: argumentsValue,
-    },
-  };
-}
-
-export function withToolArgumentsMode(
-  node: WorkflowCanvasNodeDraft,
-  mode: WorkflowCanvasNodeDraft['ui']['toolArgumentsMode'],
-): WorkflowCanvasNodeDraft {
-  return {
-    ...node,
-    ui: {
-      ...node.ui,
-      toolArgumentsMode: mode ?? DEFAULT_TOOL_ARGUMENTS_MODE,
     },
   };
 }

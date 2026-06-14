@@ -16,7 +16,6 @@ type codexCLIStartRequest struct {
 	codexExecutablePath string
 	nodeExecutablePath  string
 	sandbox             string
-	fullAuto            *bool
 	skipGitRepoCheck    bool
 	jsonFlag            bool
 	waitMSBeforeAsync   int

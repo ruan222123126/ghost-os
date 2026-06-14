@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func NormalizeFindIconTemplateUpload(req api.FindIconTemplateUploadRequest) (str
 
 func DecodeFindIconTemplateDataURL(raw string) ([]byte, string, error) {
 	if !strings.HasPrefix(raw, "data:") {
-		return nil, "", fmt.Errorf("data_url must start with data:")
+		return nil, "", errors.New("data_url must start with data: URI scheme")
 	}
 	parts := strings.SplitN(raw, ",", 2)
 	if len(parts) != 2 {

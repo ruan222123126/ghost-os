@@ -3,7 +3,7 @@ import type { AskHumanOption } from '@/lib/types';
 const ASK_HUMAN_OPTION_KEYS = ['label', 'allow_custom'] as const;
 const ASK_HUMAN_SELECTION_MODES = ['single', 'multiple'] as const;
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
@@ -124,22 +124,6 @@ export function parseOptionalRecord(
   return expectRecord(value, label);
 }
 
-export function parseOptionalStringRecord(
-  value: unknown,
-  label: string,
-): Record<string, string> | undefined {
-  const record = parseOptionalRecord(value, label);
-  if (record === undefined) {
-    return undefined;
-  }
-
-  const out: Record<string, string> = {};
-  for (const [key, entry] of Object.entries(record)) {
-    out[key] = expectString(entry, `${label}.${key}`);
-  }
-  return out;
-}
-
 export function parseOptionalNumberRecord(
   value: unknown,
   label: string,
@@ -175,7 +159,7 @@ export function parseOptionalSelectionMode(
   return expectStringEnum(value, ASK_HUMAN_SELECTION_MODES, label);
 }
 
-export function parseAskHumanOption(value: unknown, label: string): AskHumanOption {
+function parseAskHumanOption(value: unknown, label: string): AskHumanOption {
   const record = pickKnownKeys(expectRecord(value, label), ASK_HUMAN_OPTION_KEYS);
 
   return {

@@ -110,25 +110,3 @@ export async function requestJSON<TPayload>(
 
   return parser ? parser(envelope.payload) : (envelope.payload as TPayload);
 }
-
-export async function requestOptionalJSON<TPayload>(
-  path: string,
-  init: RequestInit = {},
-  parser?: PayloadParser<TPayload>,
-): Promise<TPayload | null> {
-  const response = await fetchWithTimeout(path, {
-    ...init,
-    headers: buildHeaders(init.headers),
-    cache: 'no-store',
-  });
-  const envelope = await parseEnvelope(response);
-
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok || envelope.status === 'error') {
-    throw extractEnvelopeError(envelope, response.status);
-  }
-
-  return parser ? parser(envelope.payload) : (envelope.payload as TPayload);
-}

@@ -194,11 +194,11 @@ fn wait_request_response(
     while Instant::now() < deadline {
         conn.process(Duration::from_millis(500))
             .map_err(|err| format!("wait request response failed: {err}"))?;
-        if let Ok(mut slot) = response_slot.lock() {
-            if let Some(response) = slot.take() {
-                let _ = conn.remove_match(token);
-                return Ok(response);
-            }
+        if let Ok(mut slot) = response_slot.lock()
+            && let Some(response) = slot.take()
+        {
+            let _ = conn.remove_match(token);
+            return Ok(response);
         }
     }
 

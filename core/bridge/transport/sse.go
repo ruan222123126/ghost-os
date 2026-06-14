@@ -155,23 +155,12 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	flusher, ok := w.(http.Flusher)
+	flusher, traceID, ok := prepareSessionEventsResponse(w, r)
 	if !ok {
-		writeError(w, http.StatusInternalServerError, "streaming not supported", "")
 		return
 	}
-
-	traceID := resolveTraceID("", r)
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.Header().Set("X-Trace-ID", traceID)
-
-	if event, ok := t.usecases.streams.PendingQuestionSnapshot(sessionID); ok {
-		if err := writeSessionPushEvent(w, flusher, event); err != nil {
-			return
-		}
+	if err := t.writePendingSessionPushEvent(w, flusher, sessionID); err != nil {
+		return
 	}
 
 	hub := t.usecases.streams.SessionPushHub()
@@ -182,12 +171,48 @@ func (t *transport) handleSessionEvents(w http.ResponseWriter, r *http.Request, 
 	ch, unsubscribe := hub.Subscribe(sessionID)
 	defer unsubscribe()
 
+	streamSessionPushEvents(r.Context(), w, flusher, ch)
+}
+
+func prepareSessionEventsResponse(w http.ResponseWriter, r *http.Request) (http.Flusher, string, bool) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "streaming not supported", "")
+		return nil, "", false
+	}
+
+	traceID := resolveTraceID("", r)
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.Header().Set("X-Trace-ID", traceID)
+	return flusher, traceID, true
+}
+
+func (t *transport) writePendingSessionPushEvent(
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	sessionID string,
+) error {
+	if event, ok := t.usecases.streams.PendingQuestionSnapshot(sessionID); ok {
+		return writeSessionPushEvent(w, flusher, event)
+	}
+	return nil
+}
+
+func streamSessionPushEvents(
+	ctx context.Context,
+	w http.ResponseWriter,
+	flusher http.Flusher,
+	ch <-chan bridgeorchestration.SessionPushEvent,
+) {
 	heartbeat := time.NewTicker(25 * time.Second)
 	defer heartbeat.Stop()
 
 	for {
 		select {
-		case <-r.Context().Done():
+		case <-ctx.Done():
 			return
 		case event, ok := <-ch:
 			if !ok {

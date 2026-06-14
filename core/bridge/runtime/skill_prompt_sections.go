@@ -13,12 +13,6 @@ const (
 	loadSkillUsageHint       = `- Load a skill with sfind(action="load", skill_names=["skill_name"]).`
 )
 
-func formatVisibleSkillsCatalog(cfg Config) string {
-	return formatVisibleSkillsCatalogFromDiscovery(
-		skills.DiscoverRuntimeVisibleSkills(skillRuntimeConfig(cfg)),
-	)
-}
-
 func formatVisibleSkillsCatalogFromDiscovery(
 	discovery skills.DiscoveryResult,
 ) string {

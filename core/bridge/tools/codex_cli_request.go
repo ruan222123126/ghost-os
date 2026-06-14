@@ -42,18 +42,41 @@ func parseCodexCLIRequest(argsJSON json.RawMessage) (codexCLIRequest, error) {
 }
 
 func normalizeCodexCLIArgs(args codexCLIArgs) (normalizedCodexCLIArgs, error) {
-	op := strings.ToLower(strings.TrimSpace(args.Op))
-	if op == "" {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("op is required")
-	}
-	if !isCodexCLIOperation(op) {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("unsupported op %q", op)
-	}
-	if op == codexCLIOpFork {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("fork is interactive-only in Codex CLI 0.130.0")
+	op, err := normalizeCodexCLIOp(args.Op)
+	if err != nil {
+		return normalizedCodexCLIArgs{}, err
 	}
 
-	normalized := normalizedCodexCLIArgs{
+	normalized := normalizedCodexCLIArgsFromDecoded(op, args)
+
+	if err := validateCodexCLIOpRequirements(normalized); err != nil {
+		return normalizedCodexCLIArgs{}, err
+	}
+	if err := validateCodexCLICommonArgs(normalized); err != nil {
+		return normalizedCodexCLIArgs{}, err
+	}
+	if err := normalizeCodexCLITimingArgs(&normalized); err != nil {
+		return normalizedCodexCLIArgs{}, err
+	}
+	return normalized, nil
+}
+
+func normalizeCodexCLIOp(raw string) (string, error) {
+	op := strings.ToLower(strings.TrimSpace(raw))
+	if op == "" {
+		return "", fmt.Errorf("op is required")
+	}
+	if !isCodexCLIOperation(op) {
+		return "", fmt.Errorf("unsupported op %q", op)
+	}
+	if op == codexCLIOpFork {
+		return "", fmt.Errorf("fork is interactive-only in Codex CLI 0.130.0")
+	}
+	return op, nil
+}
+
+func normalizedCodexCLIArgsFromDecoded(op string, args codexCLIArgs) normalizedCodexCLIArgs {
+	return normalizedCodexCLIArgs{
 		Op:                  op,
 		Prompt:              strings.TrimSpace(args.Prompt),
 		SessionID:           strings.TrimSpace(args.SessionID),
@@ -68,47 +91,52 @@ func normalizeCodexCLIArgs(args codexCLIArgs) (normalizedCodexCLIArgs, error) {
 		WaitDurationSeconds: args.WaitDurationSeconds,
 		OutputCharCount:     args.OutputCharacterCount,
 	}
+}
 
-	if err := validateCodexCLIOpRequirements(normalized); err != nil {
-		return normalizedCodexCLIArgs{}, err
+func validateCodexCLICommonArgs(args normalizedCodexCLIArgs) error {
+	if args.Cwd != "" && filepath.IsAbs(args.Cwd) {
+		return fmt.Errorf("cwd must be a relative path")
 	}
-	if normalized.Cwd != "" && filepath.IsAbs(normalized.Cwd) {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("cwd must be a relative path")
+	if args.Sandbox != "" && !isCodexCLISandboxMode(args.Sandbox) {
+		return fmt.Errorf("unsupported sandbox %q", args.Sandbox)
 	}
-	if normalized.Sandbox != "" && !isCodexCLISandboxMode(normalized.Sandbox) {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("unsupported sandbox %q", normalized.Sandbox)
+	if args.FullAuto != nil {
+		return fmt.Errorf("full_auto is removed; use sandbox=workspace-write")
 	}
-	if normalized.FullAuto != nil {
-		return normalizedCodexCLIArgs{}, fmt.Errorf("full_auto is removed; use sandbox=workspace-write")
-	}
+	return nil
+}
+
+func normalizeCodexCLITimingArgs(args *normalizedCodexCLIArgs) error {
 	waitMSBeforeAsync, err := normalizedNonNegativeInt(
-		normalized.WaitMSBeforeAsync,
+		args.WaitMSBeforeAsync,
 		defaultCodexCLIWaitMSBeforeAsync,
 		"wait_ms_before_async",
 	)
 	if err != nil {
-		return normalizedCodexCLIArgs{}, err
+		return err
 	}
-	normalized.WaitMSBeforeAsync = waitMSBeforeAsync
+	args.WaitMSBeforeAsync = waitMSBeforeAsync
+
 	waitDurationSeconds, err := normalizedNonNegativeInt(
-		normalized.WaitDurationSeconds,
+		args.WaitDurationSeconds,
 		defaultCodexCLIWaitDurationSeconds,
 		"wait_duration_seconds",
 	)
 	if err != nil {
-		return normalizedCodexCLIArgs{}, err
+		return err
 	}
-	normalized.WaitDurationSeconds = waitDurationSeconds
+	args.WaitDurationSeconds = waitDurationSeconds
+
 	outputCharCount, err := normalizedNonNegativeInt(
-		normalized.OutputCharCount,
+		args.OutputCharCount,
 		defaultCodexCLIOutputChars,
 		"output_character_count",
 	)
 	if err != nil {
-		return normalizedCodexCLIArgs{}, err
+		return err
 	}
-	normalized.OutputCharCount = outputCharCount
-	return normalized, nil
+	args.OutputCharCount = outputCharCount
+	return nil
 }
 
 func validateCodexCLIOpRequirements(args normalizedCodexCLIArgs) error {

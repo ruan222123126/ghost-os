@@ -1,10 +1,5 @@
 import type { AgentStreamEvent, SessionPushEvent } from '@/lib/types';
 import {
-  parseAgentDonePayload,
-  parseAgentErrorPayload,
-  parseAgentRunStartedPayload,
-} from '@/lib/api/agent/parser';
-import {
   defineStringEnumValues,
   expectRecord,
   expectString,
@@ -56,28 +51,6 @@ export function toAgentStreamEvent(event: SessionPushEvent): AgentStreamEvent {
     payload: expectRecord(event.payload, `session push ${event.type} payload`),
     at: event.at,
   };
-}
-
-export function resolveSessionPushSessionId(event: SessionPushEvent): string {
-  if (event.session_id.trim()) {
-    return event.session_id.trim();
-  }
-
-  switch (event.type) {
-    case 'run_started':
-      return parseAgentRunStartedPayload(event.payload).session_id?.trim() || '';
-    case 'done':
-      return parseAgentDonePayload(event.payload).session_id?.trim() || '';
-    case 'error':
-      return parseAgentErrorPayload(event.payload).session_id?.trim() || '';
-    case 'assistant_message':
-      return parseOptionalString(
-        expectRecord(event.payload, 'session push assistant_message payload').session_id,
-        'session push assistant_message payload.session_id',
-      ) ?? '';
-    default:
-      return '';
-  }
 }
 
 async function ensureStreamResponse(response: Response): Promise<void> {

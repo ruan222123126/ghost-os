@@ -71,19 +71,19 @@ func NewToolSelectionPolicy(cfg Config) SelectionPolicy {
 }
 
 func (p SelectionPolicy) ResidentCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.toolSelectionPolicy.residentCatalog(catalog)
+	return p.residentCatalog(catalog)
 }
 
 func (p SelectionPolicy) SelectorCatalog(catalog tools.ToolCatalog) tools.ToolCatalog {
-	return p.toolSelectionPolicy.selectorCatalog(catalog)
+	return p.selectorCatalog(catalog)
 }
 
 func (p SelectionPolicy) ResidentScope(available []string) []string {
-	return p.toolSelectionPolicy.residentScope(available)
+	return p.residentScope(available)
 }
 
 func (p SelectionPolicy) Apply(available []string, selected []string) []string {
-	return p.toolSelectionPolicy.apply(available, selected)
+	return p.apply(available, selected)
 }
 
 func NewSelectorFromConfig(cfg Config, catalog tools.ToolCatalog) SelectorEngine {

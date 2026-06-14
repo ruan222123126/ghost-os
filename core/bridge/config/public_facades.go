@@ -41,7 +41,6 @@ var (
 	errPresetNotFound             = presetstore.ErrPresetNotFound
 	errPresetUpdateEmpty          = presetstore.ErrPresetUpdateEmpty
 	configuredToolCatalog         = configtools.ConfiguredToolCatalog()
-	toolPromptDefaults            = configtools.ToolPromptDefaults()
 )
 
 type SystemPromptInsertPoint = promptstore.SystemPromptInsertPoint
@@ -97,28 +96,12 @@ func ToolBasePrompts() map[string]string {
 	return configtools.ToolBasePrompts()
 }
 
-func defaultSystemPromptFileValues() map[string]string {
-	return promptstore.DefaultSystemPromptFileValues()
-}
-
-func systemPromptFileKeys() []string {
-	return promptstore.SystemPromptFileKeys()
-}
-
-func systemPromptFilePath(root string, key string) (string, error) {
-	return promptstore.SystemPromptFilePath(root, key)
-}
-
 func normalizePromptLibrary(library []SystemPromptLibraryItem) ([]SystemPromptLibraryItem, error) {
 	return promptstore.NormalizePromptLibrary(library)
 }
 
 func compileCorePromptFromLibrary(library []SystemPromptLibraryItem) string {
 	return promptstore.CompileCorePromptFromLibrary(library)
-}
-
-func resetSystemPromptFilesCacheForTests() {
-	promptstore.ResetSystemPromptFilesCacheForTests()
 }
 
 func toolNameListOrEnvWithEnv(raw []string, env envSnapshot, envName string) []string {
@@ -137,14 +120,6 @@ func validConfiguredToolNames() map[string]bool {
 	return configtools.ValidConfiguredToolNames()
 }
 
-func normalizeToolNames(names []string) []string {
-	return configtools.NormalizeToolNames(names)
-}
-
-func configuredToolNames() []string {
-	return configtools.ConfiguredToolNames()
-}
-
 func toolNameSetFromSlice(raw []string) map[string]bool {
 	return configtools.NameSetFromSlice(raw)
 }
@@ -155,12 +130,4 @@ func loadToolPromptOverridesFromFiles(promptsDir string) (map[string]string, err
 
 func writeToolPromptOverrideToFile(promptsDir string, name string, prompt string) error {
 	return configtools.WriteToolPromptOverride(promptsDir, name, prompt)
-}
-
-func toolBasePrompt(name string) (string, bool) {
-	return configtools.ToolBasePrompt(name)
-}
-
-func toolBasePrompts() map[string]string {
-	return configtools.ToolBasePrompts()
 }

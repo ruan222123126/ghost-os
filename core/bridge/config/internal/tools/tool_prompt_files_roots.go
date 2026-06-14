@@ -30,21 +30,3 @@ func resolveToolPromptDirs(promptsDir string) ([]string, error) {
 	}
 	return []string{filepath.Clean(trimmed)}, nil
 }
-
-func mirrorPromptsDir(primary string) string {
-	cleaned := filepath.Clean(strings.TrimSpace(primary))
-	if filepath.Base(cleaned) != promptsDirName {
-		return ""
-	}
-
-	storeRoot := filepath.Base(filepath.Dir(cleaned))
-	homeDir := filepath.Dir(filepath.Dir(cleaned))
-	switch storeRoot {
-	case ghostOSDirName:
-		return filepath.Join(homeDir, ghostDirName, promptsDirName)
-	case ghostDirName:
-		return filepath.Join(homeDir, ghostOSDirName, promptsDirName)
-	default:
-		return ""
-	}
-}

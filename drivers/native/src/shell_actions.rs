@@ -145,10 +145,10 @@ fn handle_interactive_bash_exec(request: BashExecRequest) -> Response {
         response.session_id, response.reused, response.running
     );
 
-    if let Some(code) = response.command_exit_code {
-        if code != 0 {
-            return Response::error(format!("command failed: exit status {code}"));
-        }
+    if let Some(code) = response.command_exit_code
+        && code != 0
+    {
+        return Response::error(format!("command failed: exit status {code}"));
     }
 
     Response::success(json!({

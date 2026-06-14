@@ -149,20 +149,19 @@ func wrapReadFilePayloadError(err error) error {
 
 func formatReadFileResult(result readFileResult) string {
 	var builder strings.Builder
-	builder.WriteString(fmt.Sprintf("File: %s\n", result.Path))
-	builder.WriteString(fmt.Sprintf("Requested lines: %d-%d\n", result.RequestedStartLine, result.RequestedEndLine))
+	fmt.Fprintf(&builder, "File: %s\n", result.Path)
+	fmt.Fprintf(&builder, "Requested lines: %d-%d\n", result.RequestedStartLine, result.RequestedEndLine)
 	if result.ReturnedStartLine == 0 || result.ReturnedEndLine == 0 {
 		builder.WriteString(formatReadFileEmptyResult(result.TotalLines))
 		return builder.String()
 	}
-	builder.WriteString(
-		fmt.Sprintf(
-			"Returned lines: %d-%d of %d total\n%s",
-			result.ReturnedStartLine,
-			result.ReturnedEndLine,
-			result.TotalLines,
-			result.Content,
-		),
+	fmt.Fprintf(
+		&builder,
+		"Returned lines: %d-%d of %d total\n%s",
+		result.ReturnedStartLine,
+		result.ReturnedEndLine,
+		result.TotalLines,
+		result.Content,
 	)
 	return builder.String()
 }

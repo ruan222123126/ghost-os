@@ -172,10 +172,7 @@ fn capture_payload(captured: CapturedImage) -> Result<CapturePayload, String> {
     })
 }
 
-fn select_monitor<'a>(
-    monitors: &'a [Monitor],
-    display_id: Option<u32>,
-) -> Result<&'a Monitor, String> {
+fn select_monitor(monitors: &[Monitor], display_id: Option<u32>) -> Result<&Monitor, String> {
     let primary = monitors
         .iter()
         .find(|monitor| monitor.is_primary())

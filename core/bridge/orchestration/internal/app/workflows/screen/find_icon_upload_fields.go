@@ -1,7 +1,7 @@
 package screen
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 )
 
@@ -15,10 +15,10 @@ func applyFindIconUploadResult(params map[string]any, uploaded TemplateUploadRes
 
 func rejectLegacyFindIconDataURL(params map[string]any) error {
 	if strings.TrimSpace(mapString(params, LegacyDataURLParam)) != "" {
-		return fmt.Errorf(LegacyDataURLMessage)
+		return errors.New(LegacyDataURLMessage)
 	}
 	if strings.TrimSpace(mapString(params, LegacyDataURLAlias)) != "" {
-		return fmt.Errorf(LegacyDataURLMessage)
+		return errors.New(LegacyDataURLMessage)
 	}
 	return nil
 }
@@ -32,9 +32,7 @@ func findIconDataURLMimeType(dataURL string) string {
 		return ""
 	}
 	raw := strings.TrimPrefix(prefix, "data:")
-	if strings.HasSuffix(raw, ";base64") {
-		raw = strings.TrimSuffix(raw, ";base64")
-	}
+	raw = strings.TrimSuffix(raw, ";base64")
 	return strings.ToLower(strings.TrimSpace(raw))
 }
 

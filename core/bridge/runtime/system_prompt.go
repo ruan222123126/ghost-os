@@ -71,20 +71,6 @@ func buildSystemPromptForSessionWithFiles(
 	return renderSystemPrompt(promptManager, cfg, catalog, sess, idleTurns, overrides), nil
 }
 
-func buildBaseSystemPrompt(
-	cfg Config,
-	catalog tools.ToolCatalog,
-	sess *session.Session,
-	idleTurns int,
-	overrides systemPromptOverrides,
-) (string, error) {
-	promptManager, err := loadPromptManager(cfg)
-	if err != nil {
-		return "", err
-	}
-	return renderSystemPrompt(promptManager, cfg, catalog, sess, idleTurns, overrides), nil
-}
-
 func renderSystemPrompt(
 	promptManager *ctxmgr.PromptManager,
 	cfg Config,
