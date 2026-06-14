@@ -224,11 +224,7 @@ function renderRow(
 ) {
   switch (row.kind) {
     case 'history_loading':
-      return (
-        <div className="message-row is-history-loading">
-          <div className="message-note is-history-loading">{options.copy.chat.loadingOlderMessages}</div>
-        </div>
-      );
+      return <HistoryLoadingBar label={options.copy.chat.loadingOlderMessages} />;
     case 'thinking_indicator':
       return <ThinkingIndicator startedAtMs={options.thinkingStartedAtMs} />;
     case 'message':
@@ -251,6 +247,20 @@ function renderRow(
     default:
       return null;
   }
+}
+
+interface HistoryLoadingBarProps {
+  label: string;
+}
+
+function HistoryLoadingBar({ label }: HistoryLoadingBarProps) {
+  return (
+    <div className="message-row is-history-loading" role="status" aria-label={label}>
+      <div className="message-history-loading-bar" aria-hidden="true">
+        <div className="message-history-loading-bar-fill" />
+      </div>
+    </div>
+  );
 }
 
 function useThinkingStartedAtMs(loading: boolean): number | null {

@@ -1,5 +1,19 @@
 /* Message list, tool cards, and question card presentation. */
 
+@keyframes history-loading-slide {
+  0% {
+    transform: translateX(-10%) scaleX(0.1);
+  }
+
+  50% {
+    transform: translateX(30%) scaleX(0.5);
+  }
+
+  100% {
+    transform: translateX(100%) scaleX(0.1);
+  }
+}
+
 .messages {
   flex: 1;
   min-height: 0;
@@ -81,6 +95,27 @@
 
 .message-row.is-event {
   align-items: center;
+}
+
+.message-row.is-history-loading {
+  align-items: stretch;
+}
+
+.message-history-loading-bar {
+  width: 100%;
+  height: 3px;
+  overflow: hidden;
+  pointer-events: none;
+  background: transparent;
+}
+
+.message-history-loading-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: rgb(0 0 0);
+  box-shadow: 0 0 8px rgb(0 0 0 / 0.3);
+  transform-origin: left center;
+  animation: history-loading-slide 1.2s linear infinite;
 }
 
 .message-event-divider {
@@ -228,12 +263,6 @@
   background: rgb(255 251 235);
   border-color: rgb(180 83 9 / 0.24);
   color: rgb(146 64 14);
-}
-
-.message-note.is-history-loading {
-  background: rgb(245 247 250);
-  border-color: rgb(148 163 184 / 0.2);
-  color: rgb(100 116 139);
 }
 
 .message-actions {
