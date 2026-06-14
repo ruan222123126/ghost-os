@@ -1,22 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import {
+  AssistantIntro,
+  AssistantReply,
+  BridgeSettings,
+  ChatBubble,
+  ChatComposer,
+  ChatHeader,
+} from "./components/MobileChatHome";
+import type { AgentPayload, ConfigPayload, HostProfile, StatusMessage, StoredSettings } from "./mobileTypes";
 import "./App.css";
 
 const DEFAULT_BRIDGE_URL = "http://127.0.0.1:8080";
 const SETTINGS_STORAGE_KEY = "ghost-os-mobile.settings";
-
-interface HostProfile {
-  productName: string;
-  version: string;
-  target: string;
-  mobile: boolean;
-}
-
-interface StoredSettings {
-  bridgeUrl: string;
-  sessionId: string;
-}
+const SCROLL_DOWN_THRESHOLD_PX = 50;
 
 interface BridgeBusCommand {
   baseUrl: string;
@@ -30,26 +28,6 @@ interface BridgeEnvelope<TPayload> {
   status: "success" | "error";
   payload: TPayload;
   error: string;
-}
-
-interface ConfigPayload {
-  provider?: string;
-  provider_type?: string;
-  model?: string;
-  project_root?: string;
-  api_key_set?: boolean;
-}
-
-interface AgentPayload {
-  message: string;
-  session_id: string;
-  session_ended: boolean;
-  mode?: string;
-}
-
-interface StatusMessage {
-  tone: "idle" | "loading" | "success" | "error";
-  text: string;
 }
 
 const defaultSettings: StoredSettings = {
@@ -92,6 +70,21 @@ function isNonEmptyMessage(value: string): boolean {
   return value.trim().length > 0;
 }
 
+function shouldShowScrollDown(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight > SCROLL_DOWN_THRESHOLD_PX;
+}
+
+function displayRuntime(config: ConfigPayload | undefined): string {
+  if (config?.provider && config.model) {
+    return `${config.provider} / ${config.model}`;
+  }
+  return config?.provider || config?.model || "Bridge Runtime";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function App() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [apiToken, setApiToken] = useState("");
@@ -99,29 +92,41 @@ function App() {
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [reply, setReply] = useState<AgentPayload>();
+  const [lastUserMessage, setLastUserMessage] = useState("");
   const [lastTraceId, setLastTraceId] = useState("");
+  const [showScrollDown, setShowScrollDown] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
     tone: "idle",
     text: "未连接",
   });
 
+  const scrollRef = useRef<HTMLElement>(null);
+  const settingsRef = useRef<HTMLElement>(null);
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
+  const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
 
   useEffect(() => {
-    invoke<HostProfile>("host_profile")
-      .then(setHost)
-      .catch((error: unknown) => {
-        setStatus({
-          tone: "error",
-          text: error instanceof Error ? error.message : String(error),
+    try {
+      void invoke<HostProfile>("host_profile")
+        .then(setHost)
+        .catch((error: unknown) => {
+          setStatus({ tone: "error", text: errorMessage(error) });
         });
-      });
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
   }, []);
 
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    if (lastUserMessage || reply) {
+      scrollToBottom("smooth");
+    }
+  }, [lastUserMessage, reply]);
 
   async function requestBridge<TPayload>(
     action: string,
@@ -152,10 +157,7 @@ function App() {
       setStatus({ tone: "success", text: "Bridge 已连接" });
     } catch (error) {
       setConfig(undefined);
-      setStatus({
-        tone: "error",
-        text: error instanceof Error ? error.message : String(error),
-      });
+      setStatus({ tone: "error", text: errorMessage(error) });
     }
   }
 
@@ -166,6 +168,7 @@ function App() {
       return;
     }
 
+    setLastUserMessage(trimmed);
     setStatus({ tone: "loading", text: "发送中" });
     try {
       const payload = await requestBridge<AgentPayload>("AGENT_SEND", {
@@ -180,106 +183,86 @@ function App() {
       setMessage("");
       setStatus({ tone: "success", text: "回复已返回" });
     } catch (error) {
-      setStatus({
-        tone: "error",
-        text: error instanceof Error ? error.message : String(error),
+      setReply(undefined);
+      setStatus({ tone: "error", text: errorMessage(error) });
+    }
+  }
+
+  function handleScroll(): void {
+    if (scrollRef.current) {
+      setShowScrollDown(shouldShowScrollDown(scrollRef.current));
+    }
+  }
+
+  function scrollToBottom(behavior: ScrollBehavior = "smooth"): void {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior,
       });
     }
   }
 
+  function scrollToSettings(): void {
+    settingsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function startNewSession(): void {
+    setReply(undefined);
+    setLastUserMessage("");
+    setSettings((current) => ({ ...current, sessionId: "" }));
+    setStatus({ tone: "idle", text: "新会话" });
+  }
+
   return (
-    <main className="app-shell">
-      <header className="top-bar">
-        <div>
-          <p className="eyebrow">Ghost-OS</p>
-          <h1>Mobile Console</h1>
-        </div>
-        <span className={`status-pill status-${status.tone}`}>{status.text}</span>
-      </header>
+    <div className="mobile-chat-shell">
+      <ChatHeader
+        runtimeLabel={runtimeLabel}
+        status={status}
+        onOpenSettings={scrollToSettings}
+        onNewSession={startNewSession}
+      />
 
-      <section className="panel connection-panel" aria-label="Bridge connection">
-        <label className="field">
-          <span>Bridge URL</span>
-          <input
-            value={settings.bridgeUrl}
-            inputMode="url"
-            spellCheck={false}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                bridgeUrl: event.currentTarget.value,
-              }))
-            }
-          />
-        </label>
-        <label className="field">
-          <span>API Token</span>
-          <input
-            value={apiToken}
-            type="password"
-            autoComplete="off"
-            onChange={(event) => setApiToken(event.currentTarget.value)}
-          />
-        </label>
-        <label className="field">
-          <span>Session ID</span>
-          <input
-            value={settings.sessionId}
-            spellCheck={false}
-            onChange={(event) =>
-              setSettings((current) => ({
-                ...current,
-                sessionId: event.currentTarget.value,
-              }))
-            }
-          />
-        </label>
-        <button className="primary-button" type="button" onClick={connectBridge} disabled={status.tone === "loading"}>
-          连接
+      <main ref={scrollRef} onScroll={handleScroll} className="chat-feed">
+        <ChatBubble>我想让 Ghost-OS 通过移动端连接 Bridge，把任务交给桌面侧执行。</ChatBubble>
+
+        <AssistantIntro
+          host={host}
+          config={config}
+          lastTraceId={lastTraceId}
+          settings={settings}
+          status={status}
+        />
+
+        <BridgeSettings
+          refTarget={settingsRef}
+          settings={settings}
+          apiToken={apiToken}
+          loading={status.tone === "loading"}
+          onConnect={connectBridge}
+          onApiTokenChange={setApiToken}
+          onSettingsChange={setSettings}
+        />
+
+        {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
+        <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
+      </main>
+
+      {showScrollDown ? (
+        <button className="scroll-down-button" type="button" onClick={() => scrollToBottom()} aria-label="滚动到底部">
+          <span className="ui-icon ui-icon-arrow-down" aria-hidden="true" />
         </button>
-      </section>
+      ) : null}
 
-      <section className="runtime-grid" aria-label="Runtime state">
-        <div className="metric">
-          <span>Host</span>
-          <strong>{host ? `${host.target}${host.mobile ? " mobile" : ""}` : "Tauri"}</strong>
-        </div>
-        <div className="metric">
-          <span>Provider</span>
-          <strong>{config?.provider || "-"}</strong>
-        </div>
-        <div className="metric">
-          <span>Model</span>
-          <strong>{config?.model || "-"}</strong>
-        </div>
-        <div className="metric">
-          <span>Trace</span>
-          <strong>{lastTraceId || "-"}</strong>
-        </div>
-      </section>
-
-      <form className="panel composer-panel" onSubmit={sendMessage}>
-        <label className="field message-field">
-          <span>Message</span>
-          <textarea
-            value={message}
-            rows={5}
-            onChange={(event) => setMessage(event.currentTarget.value)}
-          />
-        </label>
-        <button className="primary-button" type="submit" disabled={!canSend}>
-          发送
-        </button>
-      </form>
-
-      <section className="response-panel" aria-live="polite">
-        <div className="response-header">
-          <span>Assistant</span>
-          <span>{reply?.session_id || settings.sessionId || "-"}</span>
-        </div>
-        <p>{reply?.message || "等待 Bridge 响应"}</p>
-      </section>
-    </main>
+      <ChatComposer
+        value={message}
+        disabled={!canSend}
+        loading={status.tone === "loading"}
+        onSubmit={sendMessage}
+        onChange={setMessage}
+        onOpenSettings={scrollToSettings}
+      />
+    </div>
   );
 }
 

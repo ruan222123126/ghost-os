@@ -1,0 +1,180 @@
+.ui-icon {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  display: block;
+  color: currentColor;
+}
+
+.ui-icon-menu::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 3px;
+  width: 16px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  box-shadow:
+    0 5px 0 currentColor,
+    0 10px 0 currentColor;
+}
+
+.ui-icon-chevron-down::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.ui-icon-edit::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 11px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+}
+
+.ui-icon-edit::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+  transform: rotate(-35deg);
+  transform-origin: right center;
+}
+
+.ui-icon-more::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 9px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow:
+    0 7px 0 currentColor,
+    0 14px 0 currentColor;
+}
+
+.ui-icon-plus::before,
+.ui-icon-plus::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 4px;
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.ui-icon-plus::after {
+  transform: rotate(90deg);
+}
+
+.ui-icon-mic::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 7px;
+  width: 8px;
+  height: 12px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+}
+
+.ui-icon-mic::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  bottom: 2px;
+  width: 12px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  border-radius: 0 0 999px 999px;
+}
+
+.ui-icon-send::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  width: 11px;
+  height: 11px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.ui-icon-send::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 10px;
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.ui-icon-arrow-down::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 10px;
+  width: 2px;
+  height: 14px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.ui-icon-arrow-down::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 5px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.ui-icon-audio-lines::before,
+.ui-icon-audio-lines::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  width: 3px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.ui-icon-audio-lines::before {
+  left: 5px;
+  height: 12px;
+  box-shadow:
+    6px -3px 0 currentColor,
+    12px 2px 0 currentColor;
+}
+
+.ui-icon-audio-lines::after {
+  right: 2px;
+  height: 8px;
+}
