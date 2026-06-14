@@ -59,6 +59,7 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("export interface TaskRunLog {", rendered)
         self.assertIn("run_cards?: TaskRunCard[];", rendered)
         self.assertIn("export interface TaskPatchRequest {", rendered)
+        self.assertIn("export interface AgentStopRequest {", rendered)
         self.assertIn("export interface TaskRunStopResponse {", rendered)
 
     def test_rust_and_kotlin_render_union_variants(self) -> None:
@@ -82,6 +83,8 @@ class EmittersTest(unittest.TestCase):
         self.assertIn("pub struct TaskRunLog {", rust)
         self.assertIn("pub run_cards: Option<Vec<TaskRunCard>>", rust)
         self.assertIn("pub struct TaskPatchRequest {", rust)
+        self.assertIn("pub struct AgentStopRequest {", rust)
+        self.assertIn("data class AgentStopRequest(", kotlin)
         self.assertIn("data class TaskRunStopResponse(", kotlin)
         self.assertIn("data class TaskPatchRequest(", kotlin)
         self.assertIn("val run: TaskRunLog? = null", kotlin)

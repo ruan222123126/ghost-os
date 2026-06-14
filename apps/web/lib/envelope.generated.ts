@@ -4,7 +4,7 @@
 export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
 export type BusStatus = 'success' | 'error';
 
-export interface ApiRequest<TParams extends Record<string, unknown>> {
+export interface ApiRequest<TParams extends object> {
   action: BusAction;
   params: TParams;
   trace_id: string;
@@ -61,6 +61,11 @@ export interface AgentSendAwaitingHumanResponse {
   prompt: string;
   selection_mode?: 'single' | 'multiple';
   options?: AskHumanOption[];
+}
+
+export interface AgentStopRequest {
+  session_id?: string;
+  trace_id?: string;
 }
 
 export interface AgentStopResponsePayload {

@@ -91,6 +91,14 @@ pub struct AgentSendAwaitingHumanResponse {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct AgentStopRequest {
+    #[serde(default)]
+    pub session_id: Option<String>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct AgentStopResponsePayload {
     pub status: String,
     pub message: String,

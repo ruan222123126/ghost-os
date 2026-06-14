@@ -82,6 +82,16 @@ class ActionContractTest(unittest.TestCase):
         self.assertEqual(TASK_SCOPES, update_props["scope"]["enum"])
         self.assertNotIn("scope", schema["$defs"]["taskPatchRequest"]["properties"])
 
+    def test_agent_stop_params_require_session_or_trace(self) -> None:
+        schema = json.loads((ROOT / "schema" / "defs" / "agent_human.json").read_text(encoding="utf-8"))
+        agent_stop = schema["$defs"]["agentStopRequest"]
+
+        self.assertEqual(["session_id", "trace_id"], sorted(agent_stop["properties"].keys()))
+        self.assertEqual(
+            [{"required": ["session_id"]}, {"required": ["trace_id"]}],
+            agent_stop["anyOf"],
+        )
+
     def test_task_logs_params_match_runtime_contract(self) -> None:
         schema = json.loads(TASKS_SCHEMA_PATH.read_text(encoding="utf-8"))
         task_logs = schema["$defs"]["taskLogsRequest"]

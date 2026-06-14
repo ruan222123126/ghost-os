@@ -71,6 +71,39 @@
         "kotlin": { "name": "AgentAwaitingHumanResponse" }
       }
     },
+    "agentStopRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trace_id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "session_id"
+          ]
+        },
+        {
+          "required": [
+            "trace_id"
+          ]
+        }
+      ],
+      "x-codegen": {
+        "order": 55,
+        "go": { "name": "agentStopParams" },
+        "ts": { "name": "AgentStopRequest" },
+        "rust": { "name": "AgentStopRequest" },
+        "kotlin": { "name": "AgentStopRequest" }
+      }
+    },
     "agentStopResponsePayload": {
       "type": "object",
       "additionalProperties": false,

@@ -36,6 +36,7 @@ type agentRequest = api.AgentRequest
 type askHumanOption = api.AskHumanOption
 type agentResponse = api.AgentResponse
 type askHumanAwaitingResponse = api.AskHumanAwaitingResponse
+type agentStopParams = api.AgentStopParams
 type agentStopResponse = api.AgentStopResponse
 type humanResponseParams = api.HumanResponseParams
 type humanResponseAck = api.HumanResponseAck
@@ -103,7 +104,6 @@ type apiResponse = bus.ResponseEnvelope
 const defaultMaxRequestBodyBytes int64 = 1 << 20
 
 type agentParams = api.AgentParams
-type agentStopParams = api.AgentStopParams
 type sessionIDParams = api.SessionIDParams
 type sessionGetParams = api.SessionGetParams
 type sessionDeleteResponse = api.SessionDeleteResponse

@@ -2,6 +2,7 @@ package dev.ghostos.android.network
 
 import dev.ghostos.android.model.AgentRequest
 import dev.ghostos.android.model.AgentSendResponse
+import dev.ghostos.android.model.AgentStopRequest
 import dev.ghostos.android.model.AgentStopResponsePayload
 import dev.ghostos.android.model.AgentStreamEvent
 import dev.ghostos.android.model.ApiRequest
@@ -84,9 +85,9 @@ class BridgeClient internal constructor(
 
             val payload = ApiRequest(
                 action = "AGENT_STOP",
-                params = mapOf(
-                    "session_id" to normalizedSessionId.ifBlank { null },
-                    "trace_id" to normalizedTraceId.ifBlank { null },
+                params = AgentStopRequest(
+                    sessionId = normalizedSessionId.ifBlank { null },
+                    traceId = normalizedTraceId.ifBlank { null },
                 ),
                 traceId = traceIdFactory.create("android-stop"),
             )

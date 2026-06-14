@@ -39,6 +39,7 @@ OUTPUT_GROUPS = (
             "askHumanOption",
             "agentResponsePayload",
             "agentAwaitingHumanPayload",
+            "agentStopRequest",
             "agentStopResponsePayload",
             "humanResponseRequest",
             "humanResponseAck",

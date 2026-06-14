@@ -1,6 +1,7 @@
 import type {
   AgentRequest,
   AgentSendResponse,
+  AgentStopRequest,
   AgentStopResponsePayload,
   ApiRequest,
   HumanResponseRequest,
@@ -8,11 +9,6 @@ import type {
 import { requestJSON } from '@/lib/api/client';
 import { parseAgentSendResponse, parseAgentStopResponse } from '@/lib/api/agent/parser';
 import { createClientTraceId } from '@/lib/api/trace';
-
-type AgentStopParams = Record<string, unknown> & {
-  session_id?: string;
-  trace_id?: string;
-};
 
 export async function sendMessage(
   message: string,
@@ -42,7 +38,7 @@ export async function stopAgent(
   traceId?: string,
 ): Promise<AgentStopResponsePayload> {
   const params = buildAgentStopParams(sessionId, traceId);
-  const body: ApiRequest<AgentStopParams> = {
+  const body: ApiRequest<AgentStopRequest> = {
     action: 'AGENT_STOP',
     params,
     trace_id: createClientTraceId('agent-stop'),
@@ -78,7 +74,7 @@ export async function sendHumanResponse(
 function buildAgentStopParams(
   sessionId?: string,
   traceId?: string,
-): AgentStopParams {
+): AgentStopRequest {
   const normalizedSessionId = sessionId?.trim() ?? '';
   const normalizedTraceId = traceId?.trim() ?? '';
   if (!normalizedSessionId && !normalizedTraceId) {

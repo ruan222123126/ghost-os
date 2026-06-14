@@ -67,6 +67,14 @@ data class AgentAwaitingHumanResponse(
 }
 
 @Serializable
+data class AgentStopRequest(
+    @SerialName("session_id")
+    val sessionId: String? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+)
+
+@Serializable
 data class AgentStopResponsePayload(
     val status: String,
     val message: String,

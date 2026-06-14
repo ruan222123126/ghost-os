@@ -90,7 +90,7 @@ def render(schema: dict) -> str:
 export type BusAction = {action_union};
 export type BusStatus = {status_union};
 
-export interface ApiRequest<TParams extends Record<string, unknown>> {{
+export interface ApiRequest<TParams extends object> {{
   action: BusAction;
   params: TParams;
   trace_id: string;

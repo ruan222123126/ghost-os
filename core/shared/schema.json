@@ -60,6 +60,9 @@
         "agentAwaitingHumanPayload": {
             "$ref": "./schema/defs/agent_human.json#/$defs/agentAwaitingHumanPayload"
         },
+        "agentStopRequest": {
+            "$ref": "./schema/defs/agent_human.json#/$defs/agentStopRequest"
+        },
         "agentStopResponsePayload": {
             "$ref": "./schema/defs/agent_human.json#/$defs/agentStopResponsePayload"
         },

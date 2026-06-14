@@ -39,6 +39,7 @@ export type {
   AgentDonePayload,
   AgentErrorPayload,
   AgentRequest,
+  AgentStopRequest,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
   AgentStopResponsePayload,
