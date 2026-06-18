@@ -1,4 +1,4 @@
-import type { ConversationPlaceholderSection, SidebarHistoryItem, UiIconName } from "./types";
+import type { SidebarHistoryItem, ToolCardViewModel, UiIconName } from "./types";
 
 export const INITIAL_HISTORY_LIST: SidebarHistoryItem[] = [
   { id: 1, title: "Bridge 连接与移动端任务", pinned: true },
@@ -20,28 +20,26 @@ export const DRAWING_PLACEHOLDERS = [
   { id: 8, title: "空状态插画", desc: "轻量占位、低对比背景" },
 ];
 
-export const CONVERSATION_PLACEHOLDER_SECTIONS: ConversationPlaceholderSection[] = [
+export const MOCK_TOOL_CARDS = [
   {
-    title: "1. 运行环境与首屏表现",
-    body: "先确认当前是在开发模式还是生产构建中观察卡顿。开发模式会保留更多校验和热更新逻辑，滚动、输入和组件重渲染都可能更重。",
-    bullets: ["记录首屏加载时间", "检查资源体积与请求数量", "确认是否存在重复初始化"],
+    title: "pnpm build --filter ghost-os-mobile",
+    details: "vite v7.3.5 building for production...\ntransforming modules...\nrendering chunks...",
+    statusLabel: "运行中",
+    tone: "running",
   },
   {
-    title: "2. 交互卡顿排查",
-    body: "会话页最容易暴露输入框、滚动容器和长文本渲染的问题。这里用较长内容撑开页面，便于观察顶部栏、底部输入框和向下滚动按钮的层级关系。",
-    bullets: ["滚动区域应独立于底部输入框", "长文本不能挤压按钮", "弹出菜单遮罩需要阻止底层滚动"],
+    title: "cat apps/android/src/components/mobileChat/Messages.tsx",
+    details: "AssistantReply now renders Markdown content and keeps session metadata secondary.",
+    statusLabel: "完成",
+    tone: "success",
   },
   {
-    title: "3. 状态与协议边界",
-    body: "移动端只负责感知和交互，不直接做核心编排。发送消息后保留 trace_id，便于把 UI 操作和 Bridge 响应串起来。",
-    bullets: ["请求保持 trace_id", "错误直接展示", "新会话只清空本地会话状态"],
+    title: "adb shell am start -n ghost.os/.MainActivity",
+    details: "Error: device offline\nCheck the USB debugging session before retrying.",
+    statusLabel: "失败",
+    tone: "error",
   },
-  {
-    title: "4. 后续内容占位",
-    body: "这段内容用于验证上下滑动效果。真实接入后可以替换为流式回复、工具执行状态、引用卡片或任务步骤。",
-    bullets: ["占位段落一", "占位段落二", "占位段落三"],
-  },
-];
+] as const satisfies ReadonlyArray<ToolCardViewModel>;
 
 export const EMPTY_STATE_SUGGESTIONS = [
   { icon: "sparkles", text: "启动 Agent", tone: "blue" },

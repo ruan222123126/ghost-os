@@ -6,7 +6,7 @@ import {
   ChatBubble,
   ChatComposer,
   ChatHeader,
-  ConversationPlaceholder,
+  ConversationToolPreview,
   INITIAL_HISTORY_LIST,
   MobileSidebar,
   MoreActionSheet,
@@ -18,6 +18,7 @@ import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
 import "./App.css";
+import "./components/mobileChat/Messages.css";
 import "./App.overlays.css";
 
 function isNonEmptyMessage(value: string): boolean {
@@ -188,7 +189,7 @@ function App() {
 
           {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
           <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
-          {hasLocalConversation ? <ConversationPlaceholder /> : null}
+          {hasLocalConversation && status.tone !== "error" ? <ConversationToolPreview /> : null}
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}

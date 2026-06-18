@@ -1,0 +1,452 @@
+.assistant-reply {
+  position: relative;
+}
+
+.assistant-reply-actions {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 24px;
+}
+
+.assistant-markdown {
+  max-width: 100%;
+  color: #3c4043;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.assistant-markdown > :first-child {
+  margin-top: 0;
+}
+
+.assistant-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.assistant-markdown h1,
+.assistant-markdown h2,
+.assistant-markdown h3,
+.assistant-markdown h4,
+.assistant-markdown h5,
+.assistant-markdown h6 {
+  margin: 18px 0 10px;
+  color: #202124;
+  font-weight: 750;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.assistant-markdown h1 {
+  font-size: 1.24rem;
+}
+
+.assistant-markdown h2 {
+  font-size: 1.15rem;
+}
+
+.assistant-markdown h3 {
+  font-size: 1.06rem;
+}
+
+.assistant-markdown p {
+  margin: 12px 0;
+}
+
+.assistant-markdown ul,
+.assistant-markdown ol {
+  margin: 10px 0;
+  padding-left: 22px;
+}
+
+.assistant-markdown li {
+  margin: 4px 0;
+}
+
+.assistant-markdown blockquote {
+  margin: 14px 0;
+  border-left: 3px solid #dadce0;
+  padding: 4px 0 4px 14px;
+  color: #5f6368;
+}
+
+.assistant-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  margin: 12px 0;
+  overflow-x: auto;
+  border: 1px solid #e5e7eb;
+  border-collapse: collapse;
+  border-radius: 8px;
+}
+
+.assistant-markdown th,
+.assistant-markdown td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.assistant-markdown thead th {
+  color: #374151;
+  background: #f9fafb;
+  font-weight: 650;
+}
+
+.assistant-markdown-link {
+  color: #1a73e8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.assistant-markdown :not(pre) > code {
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+  background: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  white-space: break-spaces;
+}
+
+.assistant-code-block {
+  margin: 12px 0;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.assistant-code-header {
+  min-height: 34px;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #f1f3f4;
+}
+
+.assistant-code-language {
+  color: #6b7280;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.assistant-code-block pre {
+  margin: 0;
+  padding: 12px;
+  overflow-x: auto;
+  background: #f8fafc;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.assistant-code-block code {
+  display: block;
+  min-width: max-content;
+  padding: 0;
+  color: #1f2937;
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.copy-button {
+  min-height: 28px;
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  color: #5f6368;
+  background: transparent;
+  font-size: 0.76rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease;
+}
+
+.copy-button:hover,
+.copy-button:focus-visible {
+  color: #202124;
+  background: #f1f3f4;
+}
+
+.copy-button.is-copied {
+  color: #188038;
+}
+
+.copy-button.is-code-block {
+  min-width: 28px;
+  padding: 4px;
+  justify-content: center;
+}
+
+.copy-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.assistant-tool-preview {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+
+.tool-card {
+  width: min(100%, 720px);
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
+
+.tool-card-button {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: #5f6368;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.tool-card-button:hover,
+.tool-card-button:focus-visible {
+  color: #202124;
+}
+
+.tool-card-heading {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-terminal-icon,
+.tool-chevron,
+.tool-status-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.tool-card-title {
+  max-width: min(620px, calc(100vw - 160px));
+  overflow: hidden;
+  color: inherit;
+  font-size: 0.84rem;
+  font-weight: 520;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-card-button.is-running .tool-card-title {
+  background: linear-gradient(120deg, #5f6368 30%, #202124 50%, #5f6368 70%);
+  background-size: 360% auto;
+  background-clip: text;
+  color: transparent;
+  animation: message-shimmer 2.8s linear infinite;
+}
+
+.tool-details {
+  margin-top: 10px;
+  margin-left: 6px;
+  border-left: 1px solid #dadce0;
+  padding-left: 16px;
+  color: #3c4043;
+  animation: tool-slide 180ms ease-out;
+}
+
+.tool-details-kind {
+  display: block;
+  margin-bottom: 6px;
+  color: #6b7280;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.tool-details-command {
+  margin-bottom: 8px;
+  color: #202124;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-details-output {
+  max-height: 220px;
+  margin-bottom: 8px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.tool-details pre {
+  margin: 0;
+  color: #3c4043;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.tool-card-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #5f6368;
+  font-size: 0.78rem;
+}
+
+.tool-card-status.is-success {
+  color: #188038;
+}
+
+.tool-card-status.is-error {
+  color: #b3261e;
+}
+
+.tool-card-status-label {
+  font-weight: 520;
+}
+
+.tool-status-spinner {
+  animation: tool-spin 1s linear infinite;
+}
+
+@media (prefers-color-scheme: dark) {
+  .assistant-markdown,
+  .assistant-markdown h1,
+  .assistant-markdown h2,
+  .assistant-markdown h3,
+  .assistant-markdown h4,
+  .assistant-markdown h5,
+  .assistant-markdown h6 {
+    color: #e8eaed;
+  }
+
+  .assistant-markdown blockquote {
+    border-left-color: #3f4247;
+    color: #bdc1c6;
+  }
+
+  .assistant-markdown table,
+  .assistant-markdown th,
+  .assistant-markdown td,
+  .assistant-markdown :not(pre) > code,
+  .assistant-code-block {
+    border-color: #303236;
+  }
+
+  .assistant-markdown thead th,
+  .assistant-code-header {
+    color: #e8eaed;
+    background: #25282b;
+  }
+
+  .assistant-markdown :not(pre) > code,
+  .assistant-code-block,
+  .assistant-code-block pre {
+    color: #d8e2f0;
+    background: #1e1f20;
+  }
+
+  .assistant-code-block code {
+    color: #d8e2f0;
+    background: transparent;
+  }
+
+  .assistant-code-language,
+  .tool-details-kind {
+    color: #a3a7ad;
+  }
+
+  .assistant-markdown-link {
+    color: #8ab4f8;
+  }
+
+  .copy-button,
+  .tool-card-button,
+  .tool-card-status {
+    color: #a3a7ad;
+  }
+
+  .copy-button:hover,
+  .copy-button:focus-visible {
+    color: #f1f3f4;
+    background: #282a2c;
+  }
+
+  .copy-button.is-copied,
+  .tool-card-status.is-success {
+    color: #81c995;
+  }
+
+  .tool-card-button:hover,
+  .tool-card-button:focus-visible,
+  .tool-details-command {
+    color: #f1f3f4;
+  }
+
+  .tool-card-button.is-running .tool-card-title {
+    background: linear-gradient(120deg, #a3a7ad 30%, #f1f3f4 50%, #a3a7ad 70%);
+    background-size: 360% auto;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .tool-details {
+    border-left-color: #3f4247;
+    color: #e8eaed;
+  }
+
+  .tool-details pre {
+    color: #bdc1c6;
+  }
+
+  .tool-card-status.is-error {
+    color: #f2a299;
+  }
+}
+
+@keyframes message-shimmer {
+  to {
+    background-position: -360% center;
+  }
+}
+
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tool-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

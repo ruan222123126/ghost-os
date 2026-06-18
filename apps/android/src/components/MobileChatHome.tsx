@@ -4,7 +4,7 @@ export {
   ChatBubble,
   ChatComposer,
   ChatHeader,
-  ConversationPlaceholder,
+  ConversationToolPreview,
   INITIAL_HISTORY_LIST,
   MobileSidebar,
   MoreActionSheet,

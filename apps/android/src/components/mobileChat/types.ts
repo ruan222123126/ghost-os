@@ -35,8 +35,15 @@ export interface SidebarHistoryItem {
   pinned: boolean;
 }
 
-export interface ConversationPlaceholderSection {
+export type ToolTone = "running" | "success" | "error";
+
+export type ToolCardTitleMode = "status" | "plain";
+
+export interface ToolCardViewModel {
   title: string;
-  body: string;
-  bullets: string[];
+  details: string;
+  statusLabel: string;
+  tone: ToolTone;
+  titleMode?: ToolCardTitleMode;
+  showTerminalIcon?: boolean;
 }

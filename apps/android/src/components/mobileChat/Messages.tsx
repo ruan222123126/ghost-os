@@ -1,7 +1,10 @@
 import type { ReactNode } from "react";
 import type { AgentPayload, StatusMessage } from "../../mobileTypes";
-import { CONVERSATION_PLACEHOLDER_SECTIONS, EMPTY_STATE_SUGGESTIONS } from "./data";
+import { EMPTY_STATE_SUGGESTIONS, MOCK_TOOL_CARDS } from "./data";
+import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
 import { UiIcon } from "./icons";
+import { MessageCopyButton } from "./MessageCopyButton";
+import { ToolCard } from "./ToolCard";
 import type { UiIconName } from "./types";
 
 interface AssistantIntroProps {
@@ -54,37 +57,36 @@ export function AssistantReply(props: AssistantReplyProps) {
     return null;
   }
 
+  const replyMessage = props.reply?.message.trim() ?? "";
+  const displaySessionId = props.reply?.session_id || props.sessionId;
+
   return (
     <AssistantPanel ariaLive="polite">
-      <div className="assistant-copy">
-        <p className={props.status.tone === "error" ? "error-text" : undefined}>
-          {props.reply?.message || props.status.text}
-        </p>
-        {props.reply?.session_id || props.sessionId ? (
-          <p className="assistant-meta">Session：{props.reply?.session_id || props.sessionId}</p>
-        ) : null}
+      <div className="assistant-copy assistant-reply">
+        {props.status.tone === "error" ? (
+          <p className="error-text">{replyMessage || props.status.text}</p>
+        ) : (
+          <>
+            {replyMessage ? (
+              <div className="assistant-reply-actions">
+                <MessageCopyButton text={replyMessage} />
+              </div>
+            ) : null}
+            {replyMessage ? <AssistantMarkdownContent content={replyMessage} /> : <p>{props.status.text}</p>}
+          </>
+        )}
+        {displaySessionId ? <p className="assistant-meta">Session：{displaySessionId}</p> : null}
       </div>
     </AssistantPanel>
   );
 }
 
-export function ConversationPlaceholder() {
+export function ConversationToolPreview() {
   return (
     <AssistantPanel>
-      <div className="assistant-copy conversation-placeholder">
-        <p>
-          下面是会话中页面的占位内容，用来检查顶部栏、三点菜单、左侧抽屉和首页输入框在长内容下的滚动表现。
-        </p>
-        {CONVERSATION_PLACEHOLDER_SECTIONS.map((section) => (
-          <section key={section.title} className="conversation-placeholder-section">
-            <h3>{section.title}</h3>
-            <p>{section.body}</p>
-            <ul>
-              {section.bullets.map((bullet) => (
-                <li key={bullet}>{bullet}</li>
-              ))}
-            </ul>
-          </section>
+      <div className="assistant-tool-preview">
+        {MOCK_TOOL_CARDS.map((card, index) => (
+          <ToolCard key={card.title} card={card} defaultOpen={index === 0} />
         ))}
       </div>
     </AssistantPanel>
