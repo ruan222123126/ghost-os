@@ -83,10 +83,15 @@ code {
   min-height: 64px;
   padding: 12px 16px;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;
   gap: 10px;
   background: #ffffff;
+}
+
+.chat-header-spacer {
+  width: 40px;
+  height: 40px;
 }
 
 .chat-header-title {
@@ -182,42 +187,6 @@ code {
 
 .runtime-selector.is-open .ui-icon-chevron-down {
   transform: rotate(180deg);
-}
-
-.header-runtime-wrap {
-  position: relative;
-  justify-self: end;
-}
-
-.header-runtime-wrap .runtime-menu {
-  right: 0;
-  left: auto;
-}
-
-.header-runtime-button {
-  min-width: 72px;
-  min-height: 40px;
-  border-radius: 999px;
-  padding: 0 18px;
-  color: #ffffff;
-  background: #111111;
-  font-size: 0.9rem;
-  font-weight: 650;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    transform 140ms ease;
-}
-
-.header-runtime-button:hover,
-.header-runtime-button:focus-visible,
-.header-runtime-button.is-open {
-  background: #2b2b2b;
-}
-
-.header-runtime-button:active {
-  transform: scale(0.98);
 }
 
 .chat-feed {
@@ -814,17 +783,6 @@ code {
   .send-button {
     color: #131314;
     background: #e8eaed;
-  }
-
-  .header-runtime-button {
-    color: #131314;
-    background: #e8eaed;
-  }
-
-  .header-runtime-button:hover,
-  .header-runtime-button:focus-visible,
-  .header-runtime-button.is-open {
-    background: #d8dadd;
   }
 
   .scroll-down-button {

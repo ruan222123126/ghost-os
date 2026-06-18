@@ -191,8 +191,6 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader(props: ChatHeaderProps) {
-  const connectLabel = props.status.tone === "success" ? "已连接" : props.status.tone === "loading" ? "连接中" : "连接";
-
   if (props.hasConversation) {
     return (
       <header className="chat-header chat-session-header">
@@ -234,28 +232,7 @@ export function ChatHeader(props: ChatHeaderProps) {
     <header className="chat-header">
       <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
       <h1 className="chat-header-title">Ghost-OS</h1>
-      <div className="header-runtime-wrap">
-        <button
-          className={`header-runtime-button ${props.runtimeMenuOpen ? "is-open" : ""}`}
-          type="button"
-          title={props.runtimeLabel}
-          aria-expanded={props.runtimeMenuOpen}
-          onClick={props.onToggleRuntimeMenu}
-        >
-          {connectLabel}
-        </button>
-
-        {props.runtimeMenuOpen ? (
-          <RuntimeMenu
-            config={props.config}
-            status={props.status}
-            bridgeUrl={props.bridgeUrl}
-            runtimeLabel={props.runtimeLabel}
-            onClose={props.onCloseRuntimeMenu}
-            onOpenSettings={props.onOpenSettings}
-          />
-        ) : null}
-      </div>
+      <span className="chat-header-spacer" aria-hidden="true" />
     </header>
   );
 }
