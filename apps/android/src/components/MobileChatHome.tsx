@@ -1,23 +1,31 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent, ReactNode, RefObject } from "react";
 import {
   ArrowDown,
   ArrowUp,
+  Camera,
   Check,
   ChevronDown,
   Diamond,
+  Eye,
+  FileText,
   HelpCircle,
+  Image as ImageIcon,
   LayoutGrid,
+  Lightbulb,
   Menu,
   MessageSquareWarning,
   Mic,
   MoreVertical,
   Pencil,
+  Paperclip,
   Pin,
   Plus,
+  Puzzle,
   Search,
   Settings,
   Share2,
+  Sparkles,
   SquarePen,
   Trash2,
 } from "lucide-react";
@@ -27,42 +35,58 @@ import type { AgentPayload, ConfigPayload, HostProfile, StatusMessage, StoredSet
 type UiIconName =
   | "arrow-down"
   | "arrow-up"
+  | "camera"
   | "check"
   | "chevron-down"
   | "diamond"
   | "edit"
+  | "eye"
+  | "file-text"
   | "grid"
   | "help"
+  | "image"
+  | "lightbulb"
   | "menu"
   | "mic"
   | "more"
+  | "paperclip"
   | "pencil"
   | "pin"
   | "plus"
+  | "puzzle"
   | "search"
   | "settings"
   | "share"
+  | "sparkles"
   | "trash"
   | "warning";
 
 const ICONS: Record<UiIconName, LucideIcon> = {
   "arrow-down": ArrowDown,
   "arrow-up": ArrowUp,
+  camera: Camera,
   check: Check,
   "chevron-down": ChevronDown,
   diamond: Diamond,
   edit: SquarePen,
+  eye: Eye,
+  "file-text": FileText,
   grid: LayoutGrid,
   help: HelpCircle,
+  image: ImageIcon,
+  lightbulb: Lightbulb,
   menu: Menu,
   mic: Mic,
   more: MoreVertical,
+  paperclip: Paperclip,
   pencil: Pencil,
   pin: Pin,
   plus: Plus,
+  puzzle: Puzzle,
   search: Search,
   settings: Settings,
   share: Share2,
+  sparkles: Sparkles,
   trash: Trash2,
   warning: MessageSquareWarning,
 };
@@ -81,6 +105,20 @@ const HISTORY_LIST = [
   { id: 5, title: "AI Agent 手机端连接方案", pinned: false, active: false },
   { id: 6, title: "Bridge Runtime 参数说明", pinned: false, active: false },
 ];
+
+const EMPTY_STATE_SUGGESTIONS = [
+  { icon: "sparkles", text: "启动 Agent", tone: "blue" },
+  { icon: "eye", text: "分析屏幕", tone: "purple" },
+  { icon: "lightbulb", text: "制定执行计划", tone: "yellow" },
+  { icon: "file-text", text: "总结会话", tone: "orange" },
+] as const satisfies ReadonlyArray<{ icon: UiIconName; text: string; tone: "blue" | "orange" | "purple" | "yellow" }>;
+
+const COMPOSER_MENU_OPTIONS = [
+  { icon: "camera", label: "相机", unavailable: true },
+  { icon: "image", label: "照片", unavailable: true },
+  { icon: "paperclip", label: "文件", unavailable: true },
+  { icon: "puzzle", label: "技能", unavailable: false },
+] as const satisfies ReadonlyArray<{ icon: UiIconName; label: string; unavailable: boolean }>;
 
 function runtimeOptions(props: {
   runtimeLabel: string;
@@ -124,37 +162,33 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader(props: ChatHeaderProps) {
+  const connectLabel = props.status.tone === "success" ? "已连接" : props.status.tone === "loading" ? "连接中" : "连接";
+
   return (
     <header className="chat-header">
-      <div className="header-left">
-        <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
-        <div className="runtime-selector-wrap">
-          <button
-            className={`runtime-selector ${props.runtimeMenuOpen ? "is-open" : ""}`}
-            type="button"
-            title={props.runtimeLabel}
-            aria-expanded={props.runtimeMenuOpen}
-            onClick={props.onToggleRuntimeMenu}
-          >
-            <span>{props.runtimeLabel}</span>
-            <UiIcon name="chevron-down" />
-          </button>
+      <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
+      <h1 className="chat-header-title">Ghost-OS</h1>
+      <div className="header-runtime-wrap">
+        <button
+          className={`header-runtime-button ${props.runtimeMenuOpen ? "is-open" : ""}`}
+          type="button"
+          title={props.runtimeLabel}
+          aria-expanded={props.runtimeMenuOpen}
+          onClick={props.onToggleRuntimeMenu}
+        >
+          {connectLabel}
+        </button>
 
-          {props.runtimeMenuOpen ? (
-            <RuntimeMenu
-              config={props.config}
-              status={props.status}
-              bridgeUrl={props.bridgeUrl}
-              runtimeLabel={props.runtimeLabel}
-              onClose={props.onCloseRuntimeMenu}
-              onOpenSettings={props.onOpenSettings}
-            />
-          ) : null}
-        </div>
-      </div>
-      <div className="header-right">
-        <IconButton label="新任务" icon="edit" onClick={props.onNewSession} />
-        <IconButton label="更多操作" icon="more" onClick={props.onOpenMoreMenu} />
+        {props.runtimeMenuOpen ? (
+          <RuntimeMenu
+            config={props.config}
+            status={props.status}
+            bridgeUrl={props.bridgeUrl}
+            runtimeLabel={props.runtimeLabel}
+            onClose={props.onCloseRuntimeMenu}
+            onOpenSettings={props.onOpenSettings}
+          />
+        ) : null}
       </div>
     </header>
   );
@@ -323,48 +357,41 @@ function SidebarNavButton(props: { icon: UiIconName; label: string; onClick: () 
 }
 
 interface AssistantIntroProps {
-  host: HostProfile | undefined;
-  config: ConfigPayload | undefined;
-  lastTraceId: string;
-  settings: StoredSettings;
-  status: StatusMessage;
+  onSelectSuggestion: (value: string) => void;
 }
 
 export function AssistantIntro(props: AssistantIntroProps) {
-  const runtimeLabel =
-    props.config?.provider && props.config.model
-      ? `${props.config.provider} / ${props.config.model}`
-      : props.config?.provider || props.config?.model || props.host?.target || "Bridge Runtime";
-  const sessionLabel = props.settings.sessionId || props.lastTraceId || "当前任务";
-
   return (
-    <AssistantPanel>
-      <div className="assistant-copy">
-        <p>
-          Ghost-OS 移动端负责感知和交互，Bridge 负责状态、协议路由、编排和安全。手机端不直接执行桌面动作，而是把任务投递给桌面侧运行时。
-        </p>
-        <p>
-          当前链路可以分为两类：<strong>连接状态</strong>（Bridge 是否可达、Runtime 是否读取成功）和{" "}
-          <strong>任务状态</strong>（消息是否进入会话、trace_id 是否可追踪）。
-        </p>
-        <p>以下是移动端接入 Ghost-OS 时最关键的检查点：</p>
-
-        <div className="assistant-section">
-          <h3>1. 运行环境：Mobile UI vs Bridge Runtime</h3>
-          <p>先确认手机端只承担入口职责，桌面 Bridge 才负责实际编排。</p>
-          <ul>
-            <li>
-              <strong>当前 Runtime：</strong>
-              {runtimeLabel}。
-            </li>
-            <li>
-              <strong>当前会话：</strong>
-              {sessionLabel}。
-            </li>
-          </ul>
-        </div>
+    <div className="empty-state">
+      <h2>有什么可以帮忙的？</h2>
+      <div className="suggestion-grid">
+        {EMPTY_STATE_SUGGESTIONS.map((suggestion) => (
+          <SuggestionButton
+            key={suggestion.text}
+            icon={suggestion.icon}
+            text={suggestion.text}
+            tone={suggestion.tone}
+            onClick={() => props.onSelectSuggestion(suggestion.text)}
+          />
+        ))}
       </div>
-    </AssistantPanel>
+    </div>
+  );
+}
+
+function SuggestionButton(props: {
+  icon: UiIconName;
+  text: string;
+  tone: "blue" | "orange" | "purple" | "yellow";
+  onClick: () => void;
+}) {
+  return (
+    <button className="suggestion-button" type="button" onClick={props.onClick}>
+      <span className={`suggestion-icon suggestion-icon-${props.tone}`}>
+        <UiIcon name={props.icon} />
+      </span>
+      <span>{props.text}</span>
+    </button>
   );
 }
 
@@ -420,20 +447,72 @@ interface ChatComposerProps {
   onOpenSettings: () => void;
 }
 
-const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 180;
-const COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX = 48;
+const COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX = 52;
+const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
+const MULTILINE_TEXT_THRESHOLD = 30;
 
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [expanded, setExpanded] = useState(false);
+  const composerRef = useRef<HTMLFormElement>(null);
+  const [focused, setFocused] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const hasValue = props.value.trim().length > 0;
+  const isMultiLine = props.value.includes("\n") || props.value.length > MULTILINE_TEXT_THRESHOLD;
 
-  useAutosizeTextarea(textareaRef, props.value, setExpanded);
+  useAutosizeTextarea(textareaRef, props.value, isMultiLine);
+  useCloseComposerMenu(composerRef, menuOpen, setMenuOpen);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    setMenuOpen(false);
+    await props.onSubmit(event);
+  }
+
+  function handleMenuOption(label: string, unavailable: boolean): void {
+    if (unavailable) {
+      return;
+    }
+
+    setMenuOpen(false);
+    if (label === "技能") {
+      props.onOpenSettings();
+    }
+  }
 
   return (
-    <form className="composer-dock" onSubmit={props.onSubmit}>
-      <div className="composer-shell">
-        <div className={`composer-row ${expanded ? "is-expanded" : ""}`}>
-          <IconButton label="添加任务上下文" icon="plus" variant="composer" onClick={props.onOpenSettings} />
+    <form ref={composerRef} className="composer-dock" onSubmit={(event) => void handleSubmit(event)}>
+      {menuOpen ? (
+        <div className="composer-attachment-menu" role="menu" aria-label="添加内容">
+          {COMPOSER_MENU_OPTIONS.map((option) => (
+            <button
+              key={option.label}
+              className="composer-menu-option"
+              type="button"
+              role="menuitem"
+              disabled={option.unavailable}
+              title={option.unavailable ? "暂未接入" : option.label}
+              onClick={() => handleMenuOption(option.label, option.unavailable)}
+            >
+              <span className="composer-menu-icon">
+                <UiIcon name={option.icon} />
+              </span>
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      <div className={`composer-shell ${focused ? "is-focused" : ""} ${isMultiLine ? "is-multiline" : ""}`}>
+        <div className="composer-textarea-wrap">
+          <button
+            className={`icon-button icon-button-composer composer-menu-trigger ${menuOpen ? "is-open" : ""}`}
+            type="button"
+            aria-label="添加内容"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            onClick={() => setMenuOpen((current) => !current)}
+          >
+            <UiIcon name="plus" />
+          </button>
           <textarea
             ref={textareaRef}
             value={props.value}
@@ -441,48 +520,78 @@ export function ChatComposer(props: ChatComposerProps) {
             placeholder="问问 Ghost-OS"
             className="composer-input"
             onChange={(event) => props.onChange(event.currentTarget.value)}
-            onInput={() => syncTextareaHeight(textareaRef.current, setExpanded)}
+            onBlur={() => setFocused(false)}
+            onFocus={() => setFocused(true)}
+            onInput={() => syncTextareaHeight(textareaRef.current, isMultiLine)}
           />
           <div className="composer-actions">
             <IconButton label="语音输入" icon="mic" variant="composer" />
-            <button
-              className="send-button"
-              type="submit"
-              disabled={props.disabled}
-              aria-busy={props.loading}
-              aria-label="发送任务"
-            >
-              <UiIcon name="arrow-up" />
-            </button>
+            <span className={`send-button-slot ${hasValue ? "is-visible" : ""}`} aria-hidden={!hasValue}>
+              <button
+                className="send-button"
+                type="submit"
+                disabled={props.disabled}
+                aria-busy={props.loading}
+                aria-label="发送任务"
+                tabIndex={hasValue ? 0 : -1}
+              >
+                <UiIcon name="arrow-up" />
+              </button>
+            </span>
           </div>
         </div>
+        <div className="composer-bottom-spacer" aria-hidden="true" />
       </div>
     </form>
   );
 }
 
+function useCloseComposerMenu(
+  composerRef: RefObject<HTMLFormElement | null>,
+  menuOpen: boolean,
+  setMenuOpen: (open: boolean) => void,
+) {
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent): void {
+      if (!(event.target instanceof Node) || composerRef.current?.contains(event.target)) {
+        return;
+      }
+
+      setMenuOpen(false);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [composerRef, menuOpen, setMenuOpen]);
+}
+
 function useAutosizeTextarea(
   textareaRef: RefObject<HTMLTextAreaElement | null>,
   value: string,
-  setExpanded: (expanded: boolean) => void,
+  isMultiLine: boolean,
 ) {
-  useEffect(() => {
-    syncTextareaHeight(textareaRef.current, setExpanded);
-  }, [setExpanded, textareaRef, value]);
+  useLayoutEffect(() => {
+    syncTextareaHeight(textareaRef.current, isMultiLine);
+  }, [isMultiLine, textareaRef, value]);
 }
 
-function syncTextareaHeight(
-  textarea: HTMLTextAreaElement | null,
-  setExpanded?: (expanded: boolean) => void,
-) {
+function syncTextareaHeight(textarea: HTMLTextAreaElement | null, isMultiLine: boolean) {
   if (!textarea) {
     return;
   }
 
+  textarea.style.transition = "none";
   textarea.style.height = "auto";
-  const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX);
-  textarea.style.height = `${nextHeight}px`;
-  setExpanded?.(nextHeight > COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX);
+  const scrollHeight = textarea.scrollHeight;
+  void textarea.offsetHeight;
+  textarea.style.transition = "";
+  textarea.style.height = isMultiLine
+    ? `${Math.min(scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX)}px`
+    : `${COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX}px`;
 }
 
 interface MoreActionSheetProps {

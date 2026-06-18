@@ -308,13 +308,7 @@ function App() {
           className={`chat-feed ${hasLocalConversation ? "" : "is-empty"}`}
         >
           {!hasLocalConversation ? (
-            <AssistantIntro
-              host={host}
-              config={config}
-              lastTraceId={lastTraceId}
-              settings={settings}
-              status={status}
-            />
+            <AssistantIntro onSelectSuggestion={setMessage} />
           ) : null}
 
           {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
