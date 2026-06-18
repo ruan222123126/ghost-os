@@ -300,7 +300,8 @@ interface MobileSidebarProps {
 
 export function MobileSidebar(props: MobileSidebarProps) {
   const accountName = props.host?.productName || "Ghost-OS Mobile";
-  const runtimeLabel = props.config?.model || props.config?.provider || props.config?.provider_type || "BRIDGE";
+  const isBridgeConnected = Boolean(props.config);
+  const bridgeStatusLabel = isBridgeConnected ? "CONNECTED" : "DISCONNECTED";
   const [activeMode, setActiveMode] = useState<"chat" | "drawing">("chat");
   const [activeHistoryId, setActiveHistoryId] = useState(3);
 
@@ -390,10 +391,9 @@ export function MobileSidebar(props: MobileSidebarProps) {
 
         <footer className="sidebar-footer">
           <div className="sidebar-account">
-            <div className="sidebar-avatar">G</div>
             <div className="sidebar-account-copy">
               <span>{accountName}</span>
-              <strong>{runtimeLabel}</strong>
+              <strong className={isBridgeConnected ? "is-connected" : undefined}>{bridgeStatusLabel}</strong>
             </div>
           </div>
           <button
