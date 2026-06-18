@@ -96,6 +96,7 @@ export const SessionSidebarHistoryRowView: FC<SessionSidebarHistoryRowViewProps>
           ? 'mb-2 px-1 pt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-500'
           : 'mb-1 border-l border-black/10 px-2 pt-1 text-[10px] font-semibold text-neutral-500'}`}
       >
+        <span className="min-w-0 truncate">{row.partitionName}</span>
         <button
           type="button"
           className={`session-partition-toggle${row.isCollapsed ? ' is-collapsed' : ''}`}
@@ -113,7 +114,6 @@ export const SessionSidebarHistoryRowView: FC<SessionSidebarHistoryRowViewProps>
         >
           <span className="session-partition-toggle-icon" aria-hidden="true" />
         </button>
-        <span className="min-w-0 truncate">{row.partitionName}</span>
       </div>
     );
   }
