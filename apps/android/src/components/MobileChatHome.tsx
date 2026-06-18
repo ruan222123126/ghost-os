@@ -6,12 +6,10 @@ import {
   Camera,
   Check,
   ChevronDown,
-  Diamond,
   Eye,
   FileText,
   HelpCircle,
   Image as ImageIcon,
-  LayoutGrid,
   Lightbulb,
   Menu,
   MessageSquareWarning,
@@ -38,11 +36,9 @@ type UiIconName =
   | "camera"
   | "check"
   | "chevron-down"
-  | "diamond"
   | "edit"
   | "eye"
   | "file-text"
-  | "grid"
   | "help"
   | "image"
   | "lightbulb"
@@ -67,11 +63,9 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   camera: Camera,
   check: Check,
   "chevron-down": ChevronDown,
-  diamond: Diamond,
   edit: SquarePen,
   eye: Eye,
   "file-text": FileText,
-  grid: LayoutGrid,
   help: HelpCircle,
   image: ImageIcon,
   lightbulb: Lightbulb,
@@ -249,7 +243,6 @@ interface MobileSidebarProps {
   host: HostProfile | undefined;
   config: ConfigPayload | undefined;
   settings: StoredSettings;
-  loading: boolean;
   sessionTitle: string;
   lastTraceId: string;
   onClose: () => void;
@@ -285,17 +278,7 @@ export function MobileSidebar(props: MobileSidebarProps) {
           <nav className="sidebar-nav" aria-label="主要操作">
             <SidebarNavButton icon="edit" label="发起新任务" onClick={props.onNewSession} />
             <SidebarNavButton icon="search" label="搜索任务内容" onClick={props.onClose} />
-            <SidebarNavButton
-              icon="grid"
-              label={props.loading ? "连接中" : "连接 Bridge"}
-              onClick={() => void props.onConnect()}
-            />
-            <SidebarNavButton icon="diamond" label="Agent" onClick={props.onClose} />
           </nav>
-
-          <SidebarSection title="工作区">
-            <SidebarNavButton icon="plus" label="新建工作区" onClick={props.onClose} />
-          </SidebarSection>
 
           <SidebarSection title="最近">
             <div className="history-list">

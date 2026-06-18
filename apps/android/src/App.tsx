@@ -276,7 +276,6 @@ function App() {
         host={host}
         config={config}
         settings={settings}
-        loading={status.tone === "loading"}
         sessionTitle={sessionTitle}
         lastTraceId={lastTraceId}
         onClose={() => setIsSidebarOpen(false)}
