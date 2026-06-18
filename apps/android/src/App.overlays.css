@@ -641,15 +641,6 @@
   background: #f4f4f5;
 }
 
-.mobile-settings-model-row {
-  padding: 20px 20px 8px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.mobile-settings-item-title,
 .mobile-settings-item-button {
   min-width: 0;
   display: flex;
@@ -658,7 +649,6 @@
   color: #18181b;
 }
 
-.mobile-settings-item-title span,
 .mobile-settings-item-copy > span {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -673,66 +663,6 @@
   height: 24px;
   flex: 0 0 auto;
   color: #27272a;
-}
-
-.mobile-settings-switch {
-  width: 50px;
-  height: 28px;
-  border: 2px solid transparent;
-  border-radius: 999px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  flex: 0 0 auto;
-  background: #d4d4d8;
-  cursor: pointer;
-  transition: background 180ms ease;
-}
-
-.mobile-settings-switch.is-on {
-  background: #000000;
-}
-
-.mobile-settings-switch:focus-visible {
-  outline: 2px solid #18181b;
-  outline-offset: 2px;
-}
-
-.mobile-settings-switch span {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  display: block;
-  background: #ffffff;
-  box-shadow: 0 1px 3px rgba(24, 24, 27, 0.24);
-  transform: translateX(0);
-  transition: transform 180ms ease;
-}
-
-.mobile-settings-switch.is-on span {
-  transform: translateX(22px);
-}
-
-.mobile-settings-description {
-  margin: 0;
-  padding: 0 22px 20px 60px;
-  color: #71717a;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  letter-spacing: 0;
-}
-
-.mobile-settings-description a {
-  margin-left: 4px;
-  color: #52525b;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  transition: color 140ms ease;
-}
-
-.mobile-settings-description a:hover,
-.mobile-settings-description a:focus-visible {
-  color: #18181b;
 }
 
 .mobile-settings-divider {

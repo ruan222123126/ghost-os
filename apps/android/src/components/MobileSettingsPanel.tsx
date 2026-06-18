@@ -1,6 +1,5 @@
-import { useState } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { Archive, ArrowLeft, Globe, Info, Megaphone } from "lucide-react";
+import { ArrowLeft, Globe, Info, Link2 } from "lucide-react";
 
 interface MobileSettingsPanelProps {
   open: boolean;
@@ -8,8 +7,6 @@ interface MobileSettingsPanelProps {
 }
 
 export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
-  const [improveModelEnabled, setImproveModelEnabled] = useState(true);
-
   return (
     <section
       className={`mobile-settings-panel ${props.open ? "is-open" : ""}`}
@@ -29,32 +26,9 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
         </header>
 
         <div className="mobile-settings-body">
-          <SettingsSection title="数据控制">
+          <SettingsSection title="连接">
             <div className="mobile-settings-card">
-              <div className="mobile-settings-model-row">
-                <div className="mobile-settings-item-title">
-                  <Archive className="mobile-settings-icon" aria-hidden="true" strokeWidth={1.5} />
-                  <span>为所有用户改进模型</span>
-                </div>
-                <button
-                  className={`mobile-settings-switch ${improveModelEnabled ? "is-on" : ""}`}
-                  type="button"
-                  role="switch"
-                  aria-checked={improveModelEnabled}
-                  aria-label="为所有用户改进模型"
-                  onClick={() => setImproveModelEnabled((current) => !current)}
-                >
-                  <span />
-                </button>
-              </div>
-              <p className="mobile-settings-description">
-                允许我们将你的内容用于改善你和其他用户的模型使用体验。我们将采取措施保护你的隐私。
-                <a href="#learn-more">了解更多。</a>
-              </p>
-
-              <CardDivider />
-
-              <SettingsButton icon={Megaphone} label="广告控制" />
+              <SettingsButton icon={Link2} label="连接" />
             </div>
           </SettingsSection>
 
