@@ -92,12 +92,46 @@ interface RuntimeOption {
 }
 
 const HISTORY_LIST = [
-  { id: 1, title: "Bridge 连接与移动端任务", pinned: true, active: false },
-  { id: 2, title: "Agent 执行链路设计", pinned: false, active: false },
-  { id: 3, title: "Tauri App UI Development wi...", pinned: false, active: true },
-  { id: 4, title: "移动端卡顿原因与优化建议", pinned: false, active: false },
-  { id: 5, title: "AI Agent 手机端连接方案", pinned: false, active: false },
-  { id: 6, title: "Bridge Runtime 参数说明", pinned: false, active: false },
+  { id: 1, title: "Bridge 连接与移动端任务", pinned: true },
+  { id: 2, title: "Agent 执行链路设计", pinned: false },
+  { id: 3, title: "Tauri App UI Development wi...", pinned: false },
+  { id: 4, title: "移动端卡顿原因与优化建议", pinned: false },
+  { id: 5, title: "AI Agent 手机端连接方案", pinned: false },
+  { id: 6, title: "Bridge Runtime 参数说明", pinned: false },
+];
+
+const DRAWING_PLACEHOLDERS = [
+  { id: 1, title: "绘画草稿 01", desc: "角色设定、姿态参考、画面比例" },
+  { id: 2, title: "场景氛围板", desc: "光线、色彩、空间层次" },
+  { id: 3, title: "移动端图标方案", desc: "线稿、填色、导出规格" },
+  { id: 4, title: "产品概念图", desc: "三视图、材质、局部细节" },
+  { id: 5, title: "启动页插画", desc: "主视觉、背景、留白区域" },
+  { id: 6, title: "头像变体", desc: "表情、服饰、风格统一" },
+  { id: 7, title: "工作流缩略图", desc: "节点、连线、状态标识" },
+  { id: 8, title: "空状态插画", desc: "轻量占位、低对比背景" },
+];
+
+const CONVERSATION_PLACEHOLDER_SECTIONS = [
+  {
+    title: "1. 运行环境与首屏表现",
+    body: "先确认当前是在开发模式还是生产构建中观察卡顿。开发模式会保留更多校验和热更新逻辑，滚动、输入和组件重渲染都可能更重。",
+    bullets: ["记录首屏加载时间", "检查资源体积与请求数量", "确认是否存在重复初始化"],
+  },
+  {
+    title: "2. 交互卡顿排查",
+    body: "会话页最容易暴露输入框、滚动容器和长文本渲染的问题。这里用较长内容撑开页面，便于观察顶部栏、底部输入框和向下滚动按钮的层级关系。",
+    bullets: ["滚动区域应独立于底部输入框", "长文本不能挤压按钮", "弹出菜单遮罩需要阻止底层滚动"],
+  },
+  {
+    title: "3. 状态与协议边界",
+    body: "移动端只负责感知和交互，不直接做核心编排。发送消息后保留 trace_id，便于把 UI 操作和 Bridge 响应串起来。",
+    bullets: ["请求保持 trace_id", "错误直接展示", "新会话只清空本地会话状态"],
+  },
+  {
+    title: "4. 后续内容占位",
+    body: "这段内容用于验证上下滑动效果。真实接入后可以替换为流式回复、工具执行状态、引用卡片或任务步骤。",
+    bullets: ["占位段落一", "占位段落二", "占位段落三"],
+  },
 ];
 
 const EMPTY_STATE_SUGGESTIONS = [
@@ -146,6 +180,7 @@ interface ChatHeaderProps {
   config: ConfigPayload | undefined;
   status: StatusMessage;
   bridgeUrl: string;
+  hasConversation: boolean;
   runtimeMenuOpen: boolean;
   onOpenSidebar: () => void;
   onToggleRuntimeMenu: () => void;
@@ -157,6 +192,43 @@ interface ChatHeaderProps {
 
 export function ChatHeader(props: ChatHeaderProps) {
   const connectLabel = props.status.tone === "success" ? "已连接" : props.status.tone === "loading" ? "连接中" : "连接";
+
+  if (props.hasConversation) {
+    return (
+      <header className="chat-header chat-session-header">
+        <div className="header-left">
+          <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
+          <div className="runtime-selector-wrap">
+            <button
+              className={`runtime-selector ${props.runtimeMenuOpen ? "is-open" : ""}`}
+              type="button"
+              title={props.runtimeLabel}
+              aria-expanded={props.runtimeMenuOpen}
+              onClick={props.onToggleRuntimeMenu}
+            >
+              <span>{props.runtimeLabel}</span>
+              <UiIcon name="chevron-down" />
+            </button>
+
+            {props.runtimeMenuOpen ? (
+              <RuntimeMenu
+                config={props.config}
+                status={props.status}
+                bridgeUrl={props.bridgeUrl}
+                runtimeLabel={props.runtimeLabel}
+                onClose={props.onCloseRuntimeMenu}
+                onOpenSettings={props.onOpenSettings}
+              />
+            ) : null}
+          </div>
+        </div>
+        <div className="header-right">
+          <IconButton label="新会话" icon="edit" onClick={props.onNewSession} />
+          <IconButton label="更多操作" icon="more" onClick={props.onOpenMoreMenu} />
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="chat-header">
@@ -243,17 +315,17 @@ interface MobileSidebarProps {
   host: HostProfile | undefined;
   config: ConfigPayload | undefined;
   settings: StoredSettings;
-  sessionTitle: string;
-  lastTraceId: string;
   onClose: () => void;
   onNewSession: () => void;
+  onSelectSession: (title: string) => void;
   onConnect: () => Promise<void>;
 }
 
 export function MobileSidebar(props: MobileSidebarProps) {
   const accountName = props.host?.productName || "Ghost-OS Mobile";
   const runtimeLabel = props.config?.model || props.config?.provider || props.config?.provider_type || "BRIDGE";
-  const hasSession = Boolean(props.settings.sessionId || props.lastTraceId);
+  const [activeMode, setActiveMode] = useState<"chat" | "drawing">("chat");
+  const [activeHistoryId, setActiveHistoryId] = useState(3);
 
   return (
     <>
@@ -280,22 +352,63 @@ export function MobileSidebar(props: MobileSidebarProps) {
             <SidebarNavButton icon="search" label="搜索任务内容" onClick={props.onClose} />
           </nav>
 
-          <SidebarSection title="最近">
-            <div className="history-list">
-              {HISTORY_LIST.map((item) => (
-                <button
-                  key={item.id}
-                  className={`history-item ${item.active ? "is-active" : ""}`}
-                  type="button"
-                  title={item.id === 3 && hasSession ? props.sessionTitle : item.title}
-                  onClick={props.onClose}
-                >
-                  <span>{item.id === 3 && hasSession ? props.sessionTitle : item.title}</span>
-                  {item.pinned ? <UiIcon name="pin" /> : null}
-                </button>
-              ))}
-            </div>
-          </SidebarSection>
+          <div className="sidebar-mode-toggle" role="tablist" aria-label="侧边栏内容切换">
+            <button
+              className={activeMode === "chat" ? "is-active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === "chat"}
+              onClick={() => setActiveMode("chat")}
+            >
+              对话
+            </button>
+            <button
+              className={activeMode === "drawing" ? "is-active" : ""}
+              type="button"
+              role="tab"
+              aria-selected={activeMode === "drawing"}
+              onClick={() => setActiveMode("drawing")}
+            >
+              绘画
+            </button>
+          </div>
+
+          {activeMode === "chat" ? (
+            <SidebarSection title="最近">
+              <div className="history-list">
+                {HISTORY_LIST.map((item) => {
+                  const isActive = activeHistoryId === item.id;
+
+                  return (
+                    <button
+                      key={item.id}
+                      className={`history-item ${isActive ? "is-active" : ""}`}
+                      type="button"
+                      title={item.title}
+                      onClick={() => {
+                        setActiveHistoryId(item.id);
+                        props.onSelectSession(item.title);
+                      }}
+                    >
+                      <span>{item.title}</span>
+                      {item.pinned ? <UiIcon name="pin" /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </SidebarSection>
+          ) : (
+            <SidebarSection title="绘画">
+              <div className="drawing-placeholder-list">
+                {DRAWING_PLACEHOLDERS.map((item) => (
+                  <button key={item.id} className="drawing-placeholder-card" type="button" onClick={props.onClose}>
+                    <span>{item.title}</span>
+                    <small>{item.desc}</small>
+                  </button>
+                ))}
+              </div>
+            </SidebarSection>
+          )}
         </div>
 
         <footer className="sidebar-footer">
@@ -398,6 +511,29 @@ export function AssistantReply(props: AssistantReplyProps) {
         {props.reply?.session_id || props.sessionId ? (
           <p className="assistant-meta">Session：{props.reply?.session_id || props.sessionId}</p>
         ) : null}
+      </div>
+    </AssistantPanel>
+  );
+}
+
+export function ConversationPlaceholder() {
+  return (
+    <AssistantPanel>
+      <div className="assistant-copy conversation-placeholder">
+        <p>
+          下面是会话中页面的占位内容，用来检查顶部栏、三点菜单、左侧抽屉和首页输入框在长内容下的滚动表现。
+        </p>
+        {CONVERSATION_PLACEHOLDER_SECTIONS.map((section) => (
+          <section key={section.title} className="conversation-placeholder-section">
+            <h3>{section.title}</h3>
+            <p>{section.body}</p>
+            <ul>
+              {section.bullets.map((bullet) => (
+                <li key={bullet}>{bullet}</li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </AssistantPanel>
   );
@@ -606,7 +742,7 @@ export function MoreActionSheet(props: MoreActionSheetProps) {
         <div className="action-sheet-list">
           <ActionSheetButton
             icon="share"
-            label="分享任务内容"
+            label="分享对话内容"
             onClick={() => {
               if (props.hasTraceId) {
                 void props.onCopyTraceId();

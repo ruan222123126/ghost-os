@@ -194,6 +194,37 @@
   gap: 4px;
 }
 
+.sidebar-mode-toggle {
+  margin: 18px 0 0;
+  border-radius: 999px;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  background: #eef2f7;
+}
+
+.sidebar-mode-toggle button {
+  min-width: 0;
+  min-height: 36px;
+  border-radius: 999px;
+  color: #5f6368;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.sidebar-mode-toggle button.is-active {
+  color: #202124;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
 .sidebar-nav-button {
   width: 100%;
   min-height: 52px;
@@ -270,6 +301,58 @@
   height: 16px;
   flex: 0 0 auto;
   color: #6b7280;
+}
+
+.drawing-placeholder-list {
+  display: grid;
+  gap: 8px;
+}
+
+.drawing-placeholder-card {
+  width: 100%;
+  min-height: 78px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 18px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 6px;
+  color: #202124;
+  background: rgba(255, 255, 255, 0.72);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    transform 140ms ease;
+}
+
+.drawing-placeholder-card:hover,
+.drawing-placeholder-card:focus-visible {
+  border-color: #d7dce3;
+  background: #ffffff;
+}
+
+.drawing-placeholder-card:active {
+  transform: scale(0.99);
+}
+
+.drawing-placeholder-card span,
+.drawing-placeholder-card small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawing-placeholder-card span {
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.drawing-placeholder-card small {
+  color: #6b7280;
+  font-size: 0.78rem;
+  line-height: 1.25;
 }
 
 .sidebar-footer {
@@ -482,7 +565,8 @@
   }
 
   .sidebar-nav-button,
-  .history-item {
+  .history-item,
+  .drawing-placeholder-card {
     color: #e8eaed;
   }
 
@@ -498,6 +582,35 @@
   .history-item.is-active {
     color: #c2e7ff;
     background: #282a2c;
+  }
+
+  .sidebar-mode-toggle {
+    background: #282a2c;
+  }
+
+  .sidebar-mode-toggle button {
+    color: #a3a7ad;
+  }
+
+  .sidebar-mode-toggle button.is-active {
+    color: #e8eaed;
+    background: #1e1f20;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.28);
+  }
+
+  .drawing-placeholder-card {
+    border-color: rgba(63, 63, 70, 0.6);
+    background: rgba(39, 39, 42, 0.5);
+  }
+
+  .drawing-placeholder-card:hover,
+  .drawing-placeholder-card:focus-visible {
+    border-color: #52525b;
+    background: #282a2c;
+  }
+
+  .drawing-placeholder-card small {
+    color: #a3a7ad;
   }
 
   .sheet-handle {

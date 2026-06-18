@@ -8,6 +8,7 @@ import {
   ChatBubble,
   ChatComposer,
   ChatHeader,
+  ConversationPlaceholder,
   MobileSidebar,
   MoreActionSheet,
 } from "./components/MobileChatHome";
@@ -114,7 +115,6 @@ function App() {
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
-  const sessionTitle = lastUserMessage || (settings.sessionId ? `Session ${settings.sessionId}` : "当前会话");
   const isModalOpen = isSidebarOpen || isMoreMenuOpen;
   const hasLocalConversation = Boolean(lastUserMessage || reply);
 
@@ -218,6 +218,7 @@ function App() {
   }
 
   function scrollToBottom(behavior: ScrollBehavior = "smooth"): void {
+    setShowScrollDown(false);
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
@@ -232,6 +233,18 @@ function App() {
     setIsSidebarOpen(true);
   }
 
+  function openPlaceholderSession(title: string): void {
+    setReply(undefined);
+    setLastUserMessage(title);
+    setLastTraceId("");
+    setMessage("");
+    setStatus({ tone: "idle", text: "占位会话" });
+    setIsRuntimeMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsSidebarOpen(false);
+    setShowScrollDown(false);
+  }
+
   function startNewSession(): void {
     setReply(undefined);
     setLastUserMessage("");
@@ -242,6 +255,7 @@ function App() {
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSidebarOpen(false);
+    setShowScrollDown(false);
   }
 
   function clearLocalConversation(): void {
@@ -249,6 +263,7 @@ function App() {
     setLastUserMessage("");
     setStatus({ tone: "idle", text: "本地消息已清空" });
     setIsMoreMenuOpen(false);
+    setShowScrollDown(false);
   }
 
   async function copyTraceId(): Promise<void> {
@@ -276,10 +291,9 @@ function App() {
         host={host}
         config={config}
         settings={settings}
-        sessionTitle={sessionTitle}
-        lastTraceId={lastTraceId}
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
+        onSelectSession={openPlaceholderSession}
         onConnect={connectBridge}
       />
 
@@ -289,6 +303,7 @@ function App() {
           config={config}
           status={status}
           bridgeUrl={bridgeUrl}
+          hasConversation={hasLocalConversation}
           runtimeMenuOpen={isRuntimeMenuOpen}
           onOpenSidebar={openSidebar}
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
@@ -312,6 +327,7 @@ function App() {
 
           {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
           <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
+          {hasLocalConversation ? <ConversationPlaceholder /> : null}
         </main>
 
         {showScrollDown ? (
