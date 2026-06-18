@@ -1,10 +1,11 @@
-import type { ConfigPayload, StatusMessage } from "../../mobileTypes";
+import type { ConfigPayload, ProviderListPayload, StatusMessage } from "../../mobileTypes";
 import { IconButton, UiIcon } from "./icons";
 import { RuntimeMenu } from "./RuntimeMenu";
 
 interface ChatHeaderProps {
   runtimeLabel: string;
   config: ConfigPayload | undefined;
+  providerList: ProviderListPayload | undefined;
   status: StatusMessage;
   bridgeUrl: string;
   hasConversation: boolean;
@@ -12,6 +13,7 @@ interface ChatHeaderProps {
   onOpenSidebar: () => void;
   onToggleRuntimeMenu: () => void;
   onCloseRuntimeMenu: () => void;
+  onSwitchModel: (model: string) => Promise<boolean>;
   onOpenSettings: () => void;
   onOpenMoreMenu: () => void;
   onNewSession: () => void;
@@ -38,10 +40,11 @@ export function ChatHeader(props: ChatHeaderProps) {
             {props.runtimeMenuOpen ? (
               <RuntimeMenu
                 config={props.config}
+                providerList={props.providerList}
                 status={props.status}
                 bridgeUrl={props.bridgeUrl}
-                runtimeLabel={props.runtimeLabel}
                 onClose={props.onCloseRuntimeMenu}
+                onSwitchModel={props.onSwitchModel}
                 onOpenSettings={props.onOpenSettings}
               />
             ) : null}

@@ -28,6 +28,20 @@ export interface ConfigPayload {
   model?: string;
   project_root?: string;
   api_key_set?: boolean;
+  model_selection_enabled?: boolean;
+}
+
+export interface ProviderConfigPayload {
+  name: string;
+  type: string;
+  base_url: string;
+  models?: string[];
+  api_key_set: boolean;
+}
+
+export interface ProviderListPayload {
+  providers: ProviderConfigPayload[];
+  active_provider: string;
 }
 
 export interface AgentPayload {

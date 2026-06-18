@@ -9,19 +9,20 @@ import (
 )
 
 const (
-	busActionAgentSend     = bus.ActionAgentSend
-	busActionAgentStop     = bus.ActionAgentStop
-	busActionHumanResponse = bus.ActionHumanResponse
-	busActionConfigGet     = bus.ActionConfigGet
-	busActionConfigUpdate  = bus.ActionConfigUpdate
-	busActionTaskCreate    = bus.ActionTaskCreate
-	busActionTaskList      = bus.ActionTaskList
-	busActionTaskGet       = bus.ActionTaskGet
-	busActionTaskUpdate    = bus.ActionTaskUpdate
-	busActionTaskRunNow    = bus.ActionTaskRunNow
-	busActionTaskStop      = bus.ActionTaskStop
-	busActionTaskLogs      = bus.ActionTaskLogs
-	busActionTaskDelete    = bus.ActionTaskDelete
+	busActionAgentSend          = bus.ActionAgentSend
+	busActionAgentStop          = bus.ActionAgentStop
+	busActionHumanResponse      = bus.ActionHumanResponse
+	busActionConfigGet          = bus.ActionConfigGet
+	busActionConfigUpdate       = bus.ActionConfigUpdate
+	busActionConfigProvidersGet = bus.ActionConfigProvidersGet
+	busActionTaskCreate         = bus.ActionTaskCreate
+	busActionTaskList           = bus.ActionTaskList
+	busActionTaskGet            = bus.ActionTaskGet
+	busActionTaskUpdate         = bus.ActionTaskUpdate
+	busActionTaskRunNow         = bus.ActionTaskRunNow
+	busActionTaskStop           = bus.ActionTaskStop
+	busActionTaskLogs           = bus.ActionTaskLogs
+	busActionTaskDelete         = bus.ActionTaskDelete
 )
 
 const (

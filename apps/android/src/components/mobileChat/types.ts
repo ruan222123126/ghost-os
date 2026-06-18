@@ -23,12 +23,6 @@ export type UiIconName =
   | "sparkles"
   | "trash";
 
-export interface RuntimeOption {
-  id: string;
-  name: string;
-  desc: string;
-}
-
 export interface SidebarHistoryItem {
   id: number;
   title: string;

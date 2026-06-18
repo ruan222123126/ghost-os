@@ -64,6 +64,22 @@ func TestBusConfigGetAndUpdateRegression(t *testing.T) {
 		t.Fatalf("unexpected microcompact_enabled: got %v want false", payload["microcompact_enabled"])
 	}
 
+	providersResp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"CONFIG_PROVIDERS_GET","params":{},"trace_id":"trace-config-providers"}`, nil)
+	if providersResp.Code != http.StatusOK {
+		t.Fatalf("unexpected status for config providers get: got %d want %d", providersResp.Code, http.StatusOK)
+	}
+	providersBody := decodeResponseBody(t, providersResp)
+	providersPayload, ok := providersBody.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected providers payload type: %T", providersBody.Payload)
+	}
+	if providersPayload["active_provider"] != "custom" {
+		t.Fatalf("unexpected active_provider: got %v want %q", providersPayload["active_provider"], "custom")
+	}
+	if _, ok := providersPayload["providers"].([]any); !ok {
+		t.Fatalf("unexpected providers list: %#v", providersPayload["providers"])
+	}
+
 	updateResp := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"CONFIG_UPDATE","params":{"provider":"custom","model":"local","max_turns":9,"task_execution_timeout_ms":600000,"session_system_prompt_visible_enabled":false,"assistant_markdown_enabled":false,"tool_call_compact_output_enabled":true,"memory_mode_enabled":true,"microcompact_enabled":true},"trace_id":"trace-config-update"}`, nil)
 	if updateResp.Code != http.StatusOK {
 		t.Fatalf("unexpected status for config update: got %d want %d", updateResp.Code, http.StatusOK)

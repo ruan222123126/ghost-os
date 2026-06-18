@@ -8,10 +8,11 @@ import (
 	bridgeconfig "ghost-os/bridge/config"
 	"ghost-os/bridge/llm"
 	"ghost-os/bridge/orchestration/internal/contracts/api"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
 )
 
 const (
-	ActionProvidersGet      = "CONFIG_PROVIDERS_GET"
+	ActionProvidersGet      = bus.ActionConfigProvidersGet
 	ActionProviderCreate    = "CONFIG_PROVIDER_CREATE"
 	ActionProviderUpdate    = "CONFIG_PROVIDER_UPDATE"
 	ActionProviderDelete    = "CONFIG_PROVIDER_DELETE"

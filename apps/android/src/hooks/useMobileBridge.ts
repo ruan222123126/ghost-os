@@ -5,7 +5,14 @@ import type { BridgeBusCommand, BridgeEnvelope } from "../lib/bridgeBus";
 import { loadMobileCredential } from "../lib/mobileCredentials";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
-import type { AgentPayload, ConfigPayload, HostProfile, StatusMessage, StoredSettings } from "../mobileTypes";
+import type {
+  AgentPayload,
+  ConfigPayload,
+  HostProfile,
+  ProviderListPayload,
+  StatusMessage,
+  StoredSettings,
+} from "../mobileTypes";
 
 interface SendAgentMessageOptions {
   message: string;
@@ -16,6 +23,7 @@ export function useMobileBridge() {
   const [apiToken] = useState("");
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
+  const [providerList, setProviderList] = useState<ProviderListPayload>();
   const [reply, setReply] = useState<AgentPayload>();
   const [status, setStatus] = useState<StatusMessage>({
     tone: "idle",
@@ -93,6 +101,16 @@ export function useMobileBridge() {
     [requestBridgeHTTP, requestBridgeWebRTC, settings.connectionMode],
   );
 
+  const refreshRuntimeConfig = useCallback(async (): Promise<ConfigPayload> => {
+    const [configPayload, providersPayload] = await Promise.all([
+      requestBridge<ConfigPayload>("CONFIG_GET", {}),
+      requestBridge<ProviderListPayload>("CONFIG_PROVIDERS_GET", {}),
+    ]);
+    setConfig(configPayload);
+    setProviderList(providersPayload);
+    return configPayload;
+  }, [requestBridge]);
+
   const connectBridge = useCallback(async (): Promise<void> => {
     setStatus({ tone: "loading", text: "连接中" });
     try {
@@ -106,8 +124,7 @@ export function useMobileBridge() {
         await client.connect();
         webRTCClientRef.current = client;
       }
-      const payload = await requestBridge<ConfigPayload>("CONFIG_GET", {});
-      setConfig(payload);
+      await refreshRuntimeConfig();
       setStatus({
         tone: "success",
         text: settings.connectionMode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接",
@@ -116,9 +133,36 @@ export function useMobileBridge() {
       webRTCClientRef.current?.close();
       webRTCClientRef.current = undefined;
       setConfig(undefined);
+      setProviderList(undefined);
       setStatus({ tone: "error", text: errorMessage(error) });
     }
-  }, [requestBridge, settings.connectionMode, settings.pairing]);
+  }, [refreshRuntimeConfig, settings.connectionMode, settings.pairing]);
+
+  const switchModel = useCallback(
+    async (model: string): Promise<boolean> => {
+      const trimmed = model.trim();
+      if (!trimmed) {
+        return false;
+      }
+      if (config?.model === trimmed) {
+        return true;
+      }
+
+      setStatus({ tone: "loading", text: "模型切换中" });
+      try {
+        const payload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", { model: trimmed });
+        setConfig(payload);
+        const providersPayload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDERS_GET", {});
+        setProviderList(providersPayload);
+        setStatus({ tone: "success", text: "模型已切换" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [config?.model, requestBridge],
+  );
 
   const sendAgentMessage = useCallback(
     async (options: SendAgentMessageOptions): Promise<boolean> => {
@@ -149,12 +193,14 @@ export function useMobileBridge() {
     config,
     connectBridge,
     host,
+    providerList,
     reply,
     sendAgentMessage,
     setReply,
     setSettings,
     setStatus,
     settings,
+    switchModel,
     status,
   };
 }

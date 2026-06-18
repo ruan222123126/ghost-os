@@ -38,12 +38,14 @@ function App() {
     config,
     connectBridge,
     host,
+    providerList,
     reply,
     sendAgentMessage,
     setReply,
     setSettings,
     setStatus,
     settings,
+    switchModel,
     status,
   } = useMobileBridge();
   const [message, setMessage] = useState("");
@@ -163,6 +165,7 @@ function App() {
         <ChatHeader
           runtimeLabel={runtimeLabel}
           config={config}
+          providerList={providerList}
           status={status}
           bridgeUrl={bridgeUrl}
           hasConversation={hasLocalConversation}
@@ -170,6 +173,7 @@ function App() {
           onOpenSidebar={openSidebar}
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
+          onSwitchModel={switchModel}
           onOpenSettings={openSettings}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);

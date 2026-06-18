@@ -238,6 +238,9 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		ConfigUpdate: func(_ context.Context, params configUpdateRequest, traceID string) (ServiceResult, error) {
 			return service.executeConfigUpdateAction(params, traceID)
 		},
+		ConfigProvidersGet: func(_ context.Context, traceID string) (ServiceResult, error) {
+			return service.executeProvidersGetAction(traceID)
+		},
 		HumanResponse: service.executeHumanResponseAction,
 		TaskCreate: func(_ context.Context, params taskCreateParams, traceID string) (ServiceResult, error) {
 			return service.executeTaskCreateActionResult(params, traceID)

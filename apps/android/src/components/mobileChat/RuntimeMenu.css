@@ -47,6 +47,11 @@
   background: #f8fafc;
 }
 
+.runtime-menu-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
 .runtime-check {
   width: 20px;
   min-width: 20px;

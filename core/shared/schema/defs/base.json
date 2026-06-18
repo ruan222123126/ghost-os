@@ -8,6 +8,7 @@
         "HUMAN_RESPONSE",
         "CONFIG_GET",
         "CONFIG_UPDATE",
+        "CONFIG_PROVIDERS_GET",
         "TASK_CREATE",
         "TASK_LIST",
         "TASK_GET",
