@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from "react";
-import { ArrowLeft, Globe, Info, Link2 } from "lucide-react";
+import { ArrowLeft, Globe, Link2 } from "lucide-react";
 import "./MobileSettingsPanel.css";
 
 interface MobileSettingsPanelProps {
@@ -36,8 +36,6 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
           <SettingsSection title="应用">
             <div className="mobile-settings-card">
               <SettingsButton icon={Globe} label="语言" sublabel="中文" />
-              <CardDivider />
-              <SettingsButton icon={Info} label="关于" />
             </div>
           </SettingsSection>
         </div>
@@ -71,8 +69,4 @@ function SettingsButton(props: {
       </span>
     </button>
   );
-}
-
-function CardDivider() {
-  return <div className="mobile-settings-divider" aria-hidden="true" />;
 }
