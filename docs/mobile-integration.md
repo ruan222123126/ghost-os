@@ -1,8 +1,47 @@
-# 手机内网穿透接入指南（第一阶段）
+# 手机公网接入指南
 
-本阶段目标是让手机端通过 Tailscale 直接访问 `core/bridge`，复用现有 `token` 鉴权、`/api/agent`、`/api/questions/answer` 与 `ask_human` 交互链路，不改动任何业务逻辑。
+手机端首选 WebRTC DataChannel 连接 `core/bridge`，通过独立 signaling 服务交换 SDP/ICE。Tailscale/LAN HTTP URL 仍保留为手动调试 fallback，不会自动降级。
 
-## 1. 适用范围
+## 0. WebRTC 主路径
+
+1. 部署 signaling 服务：
+
+```bash
+GHOST_SIGNALING_TOKEN=<deployment-token> \
+go -C core/signaling run .
+```
+
+2. 配置并启动 Bridge：
+
+```toml
+[mobile_webrtc]
+enabled = true
+signaling_url = "wss://signaling.example.com/ws"
+signaling_token = "<deployment-token>"
+pc_id = "ghost-pc-main"
+credential_store_path = "~/.ghost-os/mobile-devices.json"
+ice_servers = [
+  { urls = ["turn:turn.example.com:3478"], username = "turn-user", credential = "turn-password" },
+]
+```
+
+也可用环境变量覆盖关键字段：`GHOST_MOBILE_WEBRTC_ENABLED`、`GHOST_SIGNALING_URL`、`GHOST_SIGNALING_TOKEN`、`GHOST_MOBILE_PC_ID`、`GHOST_ICE_SERVERS_JSON`。
+
+3. 生成手机配对 URI：
+
+```bash
+go -C core/bridge run . mobile pair phone
+```
+
+4. 在 Android 设置页选择 `WebRTC`，导入 `ghost-os://mobile-pair?...` URI 后连接。
+
+公网部署应配置 TURN。只配置 STUN 时，Android 侧会保留配置但提示可能 ICE 失败；失败不会自动切到 HTTP。
+
+## 1. HTTP/Tailscale fallback
+
+以下内容保留旧 HTTP/Tailscale 接入方式，仅用于手动调试或 WebRTC 不适用的环境。
+
+### 1.1 适用范围
 
 - iOS 快捷指令
 - iOS 原生 App（Swift / SwiftUI）

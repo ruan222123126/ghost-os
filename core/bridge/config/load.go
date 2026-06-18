@@ -22,11 +22,17 @@ func LoadServerConfig() (ServerConfig, error) {
 	if err != nil {
 		return ServerConfig{}, err
 	}
+	env := currentEnv()
+	mobileWebRTC, err := resolveMobileWebRTCConfig(fileCfg, env)
+	if err != nil {
+		return ServerConfig{}, err
+	}
 	return ServerConfig{
-		BindAddr:     valueOrEnv(fileCfg.BindAddr, "GHOST_BIND_ADDR", ""),
-		APIToken:     valueOrEnv(fileCfg.APIToken, "GHOST_API_TOKEN", ""),
-		CORSOrigins:  corsOriginsOrEnv(fileCfg.CORSOrigins),
-		SessionsPath: resolveSessionsPath(fileCfg, currentEnv()),
+		BindAddr:     valueOrEnvWithEnv(fileCfg.BindAddr, env, "GHOST_BIND_ADDR", ""),
+		APIToken:     valueOrEnvWithEnv(fileCfg.APIToken, env, "GHOST_API_TOKEN", ""),
+		CORSOrigins:  corsOriginsOrEnvWithEnv(fileCfg.CORSOrigins, env),
+		SessionsPath: resolveSessionsPath(fileCfg, env),
+		MobileWebRTC: mobileWebRTC,
 	}, nil
 }
 
@@ -46,12 +52,30 @@ func LoadTaskConfig() (TaskConfig, error) {
 	return buildTaskConfig(fileCfg, currentEnv())
 }
 
+func LoadMobileWebRTCConfig() (MobileWebRTCConfig, error) {
+	fileCfg, _, err := loadBridgeFileConfig()
+	if err != nil {
+		return MobileWebRTCConfig{}, err
+	}
+	return resolveMobileWebRTCConfig(fileCfg, currentEnv())
+}
+
 func loadConfigWithRuntime(runtime runtimeConfig) (Config, error) {
 	fileCfg, _, err := loadBridgeFileConfig()
 	if err != nil {
 		return Config{}, err
 	}
 	return resolveConfigWithRuntime(fileCfg, currentEnv(), runtime)
+}
+
+const defaultMobileCredentialStorePath = "~/.ghost-os/mobile-devices.json"
+
+func resolveMobileWebRTCConfig(fileCfg bridgeFileConfig, env envSnapshot) (MobileWebRTCConfig, error) {
+	resolved, err := resolveStorageMobileWebRTCConfig(fileCfg, env, defaultMobileCredentialStorePath)
+	if err != nil {
+		return MobileWebRTCConfig{}, err
+	}
+	return mobileWebRTCConfigFromResolved(resolved), nil
 }
 
 func resolveConfig(fileCfg bridgeFileConfig, env envSnapshot) (Config, error) {

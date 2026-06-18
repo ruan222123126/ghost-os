@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
+use tauri::Manager;
 
 const BRIDGE_BUS_PATH: &str = "api/bus";
 const REQUEST_TIMEOUT_SECS: u64 = 60;
@@ -81,9 +85,45 @@ async fn bridge_bus_request(request: BridgeBusCommand) -> Result<BridgeBusRespon
 
     let decoded = decode_bridge_response(&body)?;
     if !status.is_success() && decoded.status == "success" {
-        return Err(format!("bridge returned HTTP {status} with success envelope"));
+        return Err(format!(
+            "bridge returned HTTP {status} with success envelope"
+        ));
     }
     Ok(decoded)
+}
+
+#[tauri::command]
+fn mobile_credential_save(
+    app: tauri::AppHandle,
+    device_id: String,
+    secret: String,
+) -> Result<(), String> {
+    let device_id = normalize_device_id(&device_id)?;
+    let secret = normalize_secret(&secret)?;
+    let path = mobile_credential_path(&app)?;
+    let mut credentials = read_mobile_credentials(&path)?;
+    credentials.insert(device_id, secret);
+    write_mobile_credentials(&path, &credentials)
+}
+
+#[tauri::command]
+fn mobile_credential_load(app: tauri::AppHandle, device_id: String) -> Result<String, String> {
+    let device_id = normalize_device_id(&device_id)?;
+    let path = mobile_credential_path(&app)?;
+    let credentials = read_mobile_credentials(&path)?;
+    credentials
+        .get(&device_id)
+        .cloned()
+        .ok_or_else(|| format!("mobile credential not found: {device_id}"))
+}
+
+#[tauri::command]
+fn mobile_credential_delete(app: tauri::AppHandle, device_id: String) -> Result<(), String> {
+    let device_id = normalize_device_id(&device_id)?;
+    let path = mobile_credential_path(&app)?;
+    let mut credentials = read_mobile_credentials(&path)?;
+    credentials.remove(&device_id);
+    write_mobile_credentials(&path, &credentials)
 }
 
 fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
@@ -97,8 +137,8 @@ fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
     } else {
         format!("{trimmed}/")
     };
-    let parsed = reqwest::Url::parse(&normalized)
-        .map_err(|err| format!("invalid bridge URL: {err}"))?;
+    let parsed =
+        reqwest::Url::parse(&normalized).map_err(|err| format!("invalid bridge URL: {err}"))?;
     parsed
         .join(BRIDGE_BUS_PATH)
         .map_err(|err| format!("build bridge bus URL failed: {err}"))
@@ -136,12 +176,85 @@ fn decode_bridge_response(body: &str) -> Result<BridgeBusResponse, String> {
     }
 }
 
+fn mobile_credential_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("resolve mobile credential directory failed: {err}"))?;
+    Ok(dir.join("mobile-credentials.json"))
+}
+
+fn read_mobile_credentials(path: &PathBuf) -> Result<BTreeMap<String, String>, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) => {
+            if raw.trim().is_empty() {
+                Ok(BTreeMap::new())
+            } else {
+                serde_json::from_str(&raw)
+                    .map_err(|err| format!("decode mobile credentials failed: {err}"))
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(err) => Err(format!("read mobile credentials failed: {err}")),
+    }
+}
+
+fn write_mobile_credentials(
+    path: &PathBuf,
+    credentials: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create mobile credential directory failed: {err}"))?;
+    }
+    let encoded = serde_json::to_vec_pretty(credentials)
+        .map_err(|err| format!("encode mobile credentials failed: {err}"))?;
+    fs::write(path, encoded).map_err(|err| format!("write mobile credentials failed: {err}"))?;
+    set_private_file_permissions(path)
+}
+
+fn set_private_file_permissions(path: &PathBuf) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .map_err(|err| format!("set mobile credential permissions failed: {err}"))?;
+    }
+    Ok(())
+}
+
+fn normalize_device_id(raw: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err("device_id is required".to_string());
+    }
+    if !value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return Err("device_id contains unsupported characters".to_string());
+    }
+    Ok(value.to_string())
+}
+
+fn normalize_secret(raw: &str) -> Result<String, String> {
+    let value = raw.trim();
+    if value.is_empty() {
+        return Err("mobile credential secret is required".to_string());
+    }
+    Ok(value.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             host_profile,
-            bridge_bus_request
+            bridge_bus_request,
+            mobile_credential_save,
+            mobile_credential_load,
+            mobile_credential_delete
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

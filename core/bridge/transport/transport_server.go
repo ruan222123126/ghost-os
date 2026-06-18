@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	mobilewebrtc "ghost-os/bridge/mobile/webrtc"
 	bridgeorchestration "ghost-os/bridge/orchestration"
 )
 
@@ -20,6 +21,7 @@ type serverOptions struct {
 	maxBodyBytes int64
 	cors         corsPolicy
 	auth         apiTokenAuth
+	mobileWebRTC bridgeorchestration.MobileWebRTCConfig
 }
 
 const (
@@ -30,6 +32,7 @@ const (
 	startupStageOptions      = "options"
 	startupStageSessionStore = "session_store"
 	startupStageRuntimes     = "runtimes"
+	startupStageMobileWebRTC = "mobile_webrtc"
 	startupStageListen       = "listen"
 )
 
@@ -71,6 +74,7 @@ func newServerOptionsFromEnv(port int) (serverOptions, error) {
 		maxBodyBytes: bridgeorchestration.DefaultMaxRequestBodyBytes,
 		cors:         newCORSPolicy(cfg.CORSOrigins),
 		auth:         newAPITokenAuth(cfg.APIToken),
+		mobileWebRTC: cfg.MobileWebRTC,
 	}, nil
 }
 
@@ -169,6 +173,18 @@ func startServeRuntimes(service *bridgeorchestration.Service) error {
 }
 
 func runServeListen(ctx context.Context, preflight servePreflightState) (string, error) {
+	logStartupCheckpoint(startupStageMobileWebRTC, "begin", "")
+	mobileTransport, err := mobilewebrtc.Start(ctx, preflight.options.mobileWebRTC, preflight.service)
+	if err != nil {
+		return "", newServeStartupError(startupStageMobileWebRTC, err)
+	}
+	if mobileTransport != nil {
+		defer mobileTransport.Close()
+		logStartupCheckpoint(startupStageMobileWebRTC, "ready", "enabled=true")
+	} else {
+		logStartupCheckpoint(startupStageMobileWebRTC, "ready", "enabled=false")
+	}
+
 	server := &http.Server{
 		Addr:              preflight.options.bindAddr,
 		Handler:           newHTTPHandler(preflight.service, preflight.options),
@@ -186,7 +202,7 @@ func runServeListen(ctx context.Context, preflight servePreflightState) (string,
 	listenAddr := normalizeListenAddr(preflight.options.bindAddr)
 	logStartupCheckpoint(startupStageListen, "begin", fmt.Sprintf("addr=http://%s", listenAddr))
 
-	err := server.ListenAndServe()
+	err = server.ListenAndServe()
 	if err == nil || errors.Is(err, http.ErrServerClosed) {
 		logStartupCheckpoint(startupStageListen, "stopped", "")
 		return "", nil

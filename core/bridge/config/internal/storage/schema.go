@@ -20,6 +20,21 @@ type ProviderFileConfig struct {
 	ModelResponseReserveTokens map[string]int `toml:"model_response_reserve_tokens,omitempty"`
 }
 
+type MobileICEFileConfig struct {
+	URLs       []string `toml:"urls,omitempty"`
+	Username   *string  `toml:"username,omitempty"`
+	Credential *string  `toml:"credential,omitempty"`
+}
+
+type MobileWebRTCFileConfig struct {
+	Enabled             *bool                 `toml:"enabled,omitempty"`
+	SignalingURL        *string               `toml:"signaling_url,omitempty"`
+	SignalingToken      *string               `toml:"signaling_token,omitempty"`
+	PCID                *string               `toml:"pc_id,omitempty"`
+	ICEServers          []MobileICEFileConfig `toml:"ice_servers,omitempty"`
+	CredentialStorePath *string               `toml:"credential_store_path,omitempty"`
+}
+
 type FileConfig struct {
 	ActiveProvider                 *string                       `toml:"active_provider,omitempty"`
 	Providers                      map[string]ProviderFileConfig `toml:"providers,omitempty"`
@@ -91,4 +106,5 @@ type FileConfig struct {
 	BindAddr                       *string                       `toml:"bind_addr,omitempty"`
 	APIToken                       *string                       `toml:"api_token,omitempty"`
 	CORSOrigins                    []string                      `toml:"cors_origins,omitempty"`
+	MobileWebRTC                   MobileWebRTCFileConfig        `toml:"mobile_webrtc,omitempty"`
 }

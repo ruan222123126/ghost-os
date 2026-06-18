@@ -68,6 +68,7 @@ type RuntimeDependencies = agentRuntimeDependencies
 type RuntimeCompleter = agent.Completer
 type RuntimeToolRegistry = tools.Registry
 type ServerConfig = bridgeconfig.ServerConfig
+type MobileWebRTCConfig = bridgeconfig.MobileWebRTCConfig
 type ConfigStore = bridgeconfig.Store
 
 var errPreparedAgentStreamRunnerRequired = errors.New("prepared agent stream runner is not configured")

@@ -204,7 +204,14 @@ function App() {
         />
       </div>
 
-      <MobileSettingsPanel open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <MobileSettingsPanel
+        open={isSettingsOpen}
+        settings={settings}
+        status={status}
+        onClose={() => setIsSettingsOpen(false)}
+        onConnect={connectBridge}
+        onSettingsChange={setSettings}
+      />
 
       <MoreActionSheet
         open={isMoreMenuOpen}

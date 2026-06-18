@@ -52,6 +52,11 @@ func normalizeScalarFields(cfg *FileConfig) {
 	cfg.NativeBinaryPath = CloneOptionalStringPointer(cfg.NativeBinaryPath)
 	cfg.CodexCLIPath = CloneOptionalStringPointer(cfg.CodexCLIPath)
 	cfg.NodeBinPath = CloneOptionalStringPointer(cfg.NodeBinPath)
+	cfg.MobileWebRTC.Enabled = CloneBoolPointer(cfg.MobileWebRTC.Enabled)
+	cfg.MobileWebRTC.SignalingURL = CloneOptionalStringPointer(cfg.MobileWebRTC.SignalingURL)
+	cfg.MobileWebRTC.SignalingToken = CloneOptionalStringPointer(cfg.MobileWebRTC.SignalingToken)
+	cfg.MobileWebRTC.PCID = CloneOptionalStringPointer(cfg.MobileWebRTC.PCID)
+	cfg.MobileWebRTC.CredentialStorePath = CloneOptionalStringPointer(cfg.MobileWebRTC.CredentialStorePath)
 }
 
 func normalizeCollectionFields(cfg *FileConfig) error {
@@ -77,5 +82,28 @@ func normalizeCollectionFields(cfg *FileConfig) error {
 	cfg.ToolBlocklist = NormalizeConfiguredNames(cfg.ToolBlocklist)
 	cfg.SkillBlocklist = NormalizeStringList(cfg.SkillBlocklist)
 	cfg.WorkflowToolAllowlist = NormalizeConfiguredNames(cfg.WorkflowToolAllowlist)
+	cfg.MobileWebRTC.ICEServers = NormalizeMobileICEServers(cfg.MobileWebRTC.ICEServers)
 	return nil
+}
+
+func NormalizeMobileICEServers(raw []MobileICEFileConfig) []MobileICEFileConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make([]MobileICEFileConfig, 0, len(raw))
+	for _, server := range raw {
+		urls := NormalizeStringList(server.URLs)
+		if len(urls) == 0 {
+			continue
+		}
+		out = append(out, MobileICEFileConfig{
+			URLs:       urls,
+			Username:   CloneOptionalStringPointer(server.Username),
+			Credential: CloneOptionalStringPointer(server.Credential),
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

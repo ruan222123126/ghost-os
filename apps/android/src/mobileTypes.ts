@@ -5,8 +5,20 @@ export interface HostProfile {
   mobile: boolean;
 }
 
+export type ConnectionMode = "webrtc" | "http";
+
+export interface MobilePairingInfo {
+  deviceId: string;
+  pcId: string;
+  signalingUrl: string;
+  signalingToken: string;
+  iceServers: RTCIceServer[];
+}
+
 export interface StoredSettings {
   bridgeUrl: string;
+  connectionMode: ConnectionMode;
+  pairing?: MobilePairingInfo;
   sessionId: string;
 }
 

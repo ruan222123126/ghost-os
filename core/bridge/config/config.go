@@ -7,6 +7,22 @@ type ServerConfig struct {
 	APIToken     string
 	CORSOrigins  []string
 	SessionsPath string
+	MobileWebRTC MobileWebRTCConfig
+}
+
+type MobileICEServerConfig struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username,omitempty"`
+	Credential string   `json:"credential,omitempty"`
+}
+
+type MobileWebRTCConfig struct {
+	Enabled             bool
+	SignalingURL        string
+	SignalingToken      string
+	PCID                string
+	ICEServers          []MobileICEServerConfig
+	CredentialStorePath string
 }
 
 type ExecutionConfig struct {

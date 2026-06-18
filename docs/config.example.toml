@@ -42,6 +42,18 @@ bind_addr = "127.0.0.1:8080"
 api_token = "change-me"
 cors_origins = ["http://localhost:3000", "http://localhost:5173"]
 
+[mobile_webrtc]
+# WebRTC mobile control path is opt-in; HTTP/Tailscale remains available as manual fallback.
+enabled = false
+signaling_url = "wss://signaling.example.com/ws"
+signaling_token = "change-me"
+pc_id = "ghost-pc-main"
+credential_store_path = "~/.ghost-os/mobile-devices.json"
+# Public-network deployments should include TURN. STUN-only configs may fail ICE traversal.
+ice_servers = [
+  { urls = ["turn:turn.example.com:3478"], username = "turn-user", credential = "turn-password" },
+]
+
 sessions_path = "~/.ghost-os/sessions"
 # Whether assistant messages are rendered as Markdown in Web chat (default: true).
 # assistant_markdown_enabled = true

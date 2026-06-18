@@ -8,6 +8,7 @@ import (
 
 type providerConfig = providers.Record
 type providerFileConfig = storage.ProviderFileConfig
+type mobileWebRTCResolvedConfig = storage.MobileWebRTCResolvedConfig
 type bridgeFileConfig = storage.FileConfig
 type envSnapshot = storage.EnvSnapshot
 type runtimeConfig = configruntime.Snapshot
@@ -96,8 +97,42 @@ func corsOriginsOrEnv(raw []string) []string {
 	return storage.CORSOriginsOrEnv(raw)
 }
 
+func corsOriginsOrEnvWithEnv(raw []string, env envSnapshot) []string {
+	return storage.CORSOriginsOrEnvWithEnv(raw, env)
+}
+
 func parseStringCSV(raw string) []string {
 	return storage.ParseStringCSV(raw)
+}
+
+func resolveStorageMobileWebRTCConfig(
+	fileCfg bridgeFileConfig,
+	env envSnapshot,
+	defaultCredentialStorePath string,
+) (mobileWebRTCResolvedConfig, error) {
+	return storage.ResolveMobileWebRTCConfig(fileCfg, env, defaultCredentialStorePath)
+}
+
+func mobileWebRTCConfigFromResolved(raw mobileWebRTCResolvedConfig) MobileWebRTCConfig {
+	iceServers := make([]MobileICEServerConfig, 0, len(raw.ICEServers))
+	for _, server := range raw.ICEServers {
+		iceServers = append(iceServers, MobileICEServerConfig{
+			URLs:       append([]string(nil), server.URLs...),
+			Username:   server.Username,
+			Credential: server.Credential,
+		})
+	}
+	if len(iceServers) == 0 {
+		iceServers = nil
+	}
+	return MobileWebRTCConfig{
+		Enabled:             raw.Enabled,
+		SignalingURL:        raw.SignalingURL,
+		SignalingToken:      raw.SignalingToken,
+		PCID:                raw.PCID,
+		ICEServers:          iceServers,
+		CredentialStorePath: raw.CredentialStorePath,
+	}
 }
 
 func resolveSessionsPath(fileCfg bridgeFileConfig, env envSnapshot) string {
