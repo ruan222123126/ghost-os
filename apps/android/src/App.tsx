@@ -101,7 +101,6 @@ function App() {
   const [config, setConfig] = useState<ConfigPayload>();
   const [reply, setReply] = useState<AgentPayload>();
   const [lastUserMessage, setLastUserMessage] = useState("");
-  const [lastTraceId, setLastTraceId] = useState("");
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
@@ -156,7 +155,6 @@ function App() {
     params: Record<string, unknown>,
   ): Promise<TPayload> {
     const traceId = createTraceId(`android-${action.toLowerCase()}`);
-    setLastTraceId(traceId);
 
     const request: BridgeBusCommand = {
       baseUrl: bridgeUrl,
@@ -236,7 +234,6 @@ function App() {
   function openPlaceholderSession(title: string): void {
     setReply(undefined);
     setLastUserMessage(title);
-    setLastTraceId("");
     setMessage("");
     setStatus({ tone: "idle", text: "占位会话" });
     setIsRuntimeMenuOpen(false);
@@ -248,7 +245,6 @@ function App() {
   function startNewSession(): void {
     setReply(undefined);
     setLastUserMessage("");
-    setLastTraceId("");
     setMessage("");
     setSettings((current) => ({ ...current, sessionId: "" }));
     setStatus({ tone: "idle", text: "新会话" });
@@ -264,24 +260,6 @@ function App() {
     setStatus({ tone: "idle", text: "本地消息已清空" });
     setIsMoreMenuOpen(false);
     setShowScrollDown(false);
-  }
-
-  async function copyTraceId(): Promise<void> {
-    if (!lastTraceId) {
-      return;
-    }
-
-    try {
-      if (!navigator.clipboard?.writeText) {
-        throw new Error("当前环境不支持剪贴板 API");
-      }
-      await navigator.clipboard.writeText(lastTraceId);
-      setStatus({ tone: "success", text: "trace_id 已复制" });
-    } catch (error) {
-      setStatus({ tone: "error", text: errorMessage(error) });
-    } finally {
-      setIsMoreMenuOpen(false);
-    }
   }
 
   return (
@@ -348,10 +326,8 @@ function App() {
 
       <MoreActionSheet
         open={isMoreMenuOpen}
-        hasTraceId={Boolean(lastTraceId)}
         hasLocalConversation={hasLocalConversation}
         onClose={() => setIsMoreMenuOpen(false)}
-        onCopyTraceId={copyTraceId}
         onClearConversation={clearLocalConversation}
       />
     </div>

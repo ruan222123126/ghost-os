@@ -8,11 +8,9 @@ import {
   ChevronDown,
   Eye,
   FileText,
-  HelpCircle,
   Image as ImageIcon,
   Lightbulb,
   Menu,
-  MessageSquareWarning,
   Mic,
   MoreVertical,
   Pencil,
@@ -22,7 +20,6 @@ import {
   Puzzle,
   Search,
   Settings,
-  Share2,
   Sparkles,
   SquarePen,
   Trash2,
@@ -39,7 +36,6 @@ type UiIconName =
   | "edit"
   | "eye"
   | "file-text"
-  | "help"
   | "image"
   | "lightbulb"
   | "menu"
@@ -52,10 +48,8 @@ type UiIconName =
   | "puzzle"
   | "search"
   | "settings"
-  | "share"
   | "sparkles"
-  | "trash"
-  | "warning";
+  | "trash";
 
 const ICONS: Record<UiIconName, LucideIcon> = {
   "arrow-down": ArrowDown,
@@ -66,7 +60,6 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   edit: SquarePen,
   eye: Eye,
   "file-text": FileText,
-  help: HelpCircle,
   image: ImageIcon,
   lightbulb: Lightbulb,
   menu: Menu,
@@ -79,10 +72,8 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   puzzle: Puzzle,
   search: Search,
   settings: Settings,
-  share: Share2,
   sparkles: Sparkles,
   trash: Trash2,
-  warning: MessageSquareWarning,
 };
 
 interface RuntimeOption {
@@ -692,10 +683,8 @@ function syncTextareaHeight(textarea: HTMLTextAreaElement | null, isMultiLine: b
 
 interface MoreActionSheetProps {
   open: boolean;
-  hasTraceId: boolean;
   hasLocalConversation: boolean;
   onClose: () => void;
-  onCopyTraceId: () => Promise<void>;
   onClearConversation: () => void;
 }
 
@@ -717,21 +706,8 @@ export function MoreActionSheet(props: MoreActionSheetProps) {
       >
         <div className="sheet-handle" aria-hidden="true" />
         <div className="action-sheet-list">
-          <ActionSheetButton
-            icon="share"
-            label="分享对话内容"
-            onClick={() => {
-              if (props.hasTraceId) {
-                void props.onCopyTraceId();
-                return;
-              }
-              props.onClose();
-            }}
-          />
           <ActionSheetButton icon="pin" label="固定" onClick={props.onClose} />
           <ActionSheetButton icon="pencil" label="重命名" onClick={props.onClose} />
-          <ActionSheetButton icon="help" label="帮助" onClick={props.onClose} />
-          <ActionSheetButton icon="warning" label="反馈" onClick={props.onClose} />
           <ActionSheetButton
             icon="trash"
             label="删除"
