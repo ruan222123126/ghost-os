@@ -9,9 +9,12 @@ import {
   ChatComposer,
   ChatHeader,
   ConversationPlaceholder,
+  INITIAL_HISTORY_LIST,
   MobileSidebar,
   MoreActionSheet,
 } from "./components/MobileChatHome";
+import { MobileSettingsPanel } from "./components/MobileSettingsPanel";
+import type { SidebarHistoryItem } from "./components/MobileChatHome";
 import type { AgentPayload, ConfigPayload, HostProfile, StatusMessage, StoredSettings } from "./mobileTypes";
 import "./App.css";
 import "./App.overlays.css";
@@ -103,8 +106,11 @@ function App() {
   const [lastUserMessage, setLastUserMessage] = useState("");
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState<SidebarHistoryItem[]>(() => INITIAL_HISTORY_LIST);
+  const [activeHistoryId, setActiveHistoryId] = useState<number | undefined>(3);
   const [status, setStatus] = useState<StatusMessage>({
     tone: "idle",
     text: "未连接",
@@ -114,8 +120,12 @@ function App() {
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
-  const isModalOpen = isSidebarOpen || isMoreMenuOpen;
+  const isModalOpen = isSidebarOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = Boolean(lastUserMessage || reply);
+  const activeHistoryItem = useMemo(
+    () => historyItems.find((item) => item.id === activeHistoryId),
+    [activeHistoryId, historyItems],
+  );
 
   useEffect(() => {
     if (!hasTauriRuntime()) {
@@ -228,13 +238,22 @@ function App() {
   function openSidebar(): void {
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
+    setIsSettingsOpen(false);
     setIsSidebarOpen(true);
   }
 
-  function openPlaceholderSession(title: string): void {
+  function openSettings(): void {
+    setIsRuntimeMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsSidebarOpen(false);
+    setIsSettingsOpen(true);
+  }
+
+  function openPlaceholderSession(id: number, title: string): void {
     setReply(undefined);
     setLastUserMessage(title);
     setMessage("");
+    setActiveHistoryId(id);
     setStatus({ tone: "idle", text: "占位会话" });
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
@@ -246,6 +265,7 @@ function App() {
     setReply(undefined);
     setLastUserMessage("");
     setMessage("");
+    setActiveHistoryId(undefined);
     setSettings((current) => ({ ...current, sessionId: "" }));
     setStatus({ tone: "idle", text: "新会话" });
     setIsRuntimeMenuOpen(false);
@@ -257,9 +277,21 @@ function App() {
   function clearLocalConversation(): void {
     setReply(undefined);
     setLastUserMessage("");
+    setActiveHistoryId(undefined);
     setStatus({ tone: "idle", text: "本地消息已清空" });
     setIsMoreMenuOpen(false);
     setShowScrollDown(false);
+  }
+
+  function toggleActiveHistoryPin(): void {
+    if (!activeHistoryItem) {
+      return;
+    }
+
+    setHistoryItems((current) =>
+      current.map((item) => (item.id === activeHistoryItem.id ? { ...item, pinned: !item.pinned } : item)),
+    );
+    setIsMoreMenuOpen(false);
   }
 
   return (
@@ -269,10 +301,13 @@ function App() {
         host={host}
         config={config}
         settings={settings}
+        historyItems={historyItems}
+        activeHistoryId={activeHistoryId}
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
         onSelectSession={openPlaceholderSession}
         onConnect={connectBridge}
+        onOpenSettings={openSettings}
       />
 
       <div className="mobile-chat-content" aria-hidden={isModalOpen} inert={isModalOpen ? true : undefined}>
@@ -286,7 +321,7 @@ function App() {
           onOpenSidebar={openSidebar}
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
-          onOpenSettings={openSidebar}
+          onOpenSettings={openSettings}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);
             setIsMoreMenuOpen(true);
@@ -320,14 +355,19 @@ function App() {
           loading={status.tone === "loading"}
           onSubmit={sendMessage}
           onChange={setMessage}
-          onOpenSettings={openSidebar}
+          onOpenSettings={openSettings}
         />
       </div>
+
+      <MobileSettingsPanel open={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       <MoreActionSheet
         open={isMoreMenuOpen}
         hasLocalConversation={hasLocalConversation}
+        canTogglePin={Boolean(activeHistoryItem)}
+        isPinned={activeHistoryItem?.pinned ?? false}
         onClose={() => setIsMoreMenuOpen(false)}
+        onTogglePin={toggleActiveHistoryPin}
         onClearConversation={clearLocalConversation}
       />
     </div>

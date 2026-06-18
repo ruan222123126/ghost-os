@@ -16,6 +16,7 @@ import {
   Pencil,
   Paperclip,
   Pin,
+  PinOff,
   Plus,
   Puzzle,
   Search,
@@ -44,6 +45,7 @@ type UiIconName =
   | "paperclip"
   | "pencil"
   | "pin"
+  | "pin-off"
   | "plus"
   | "puzzle"
   | "search"
@@ -68,6 +70,7 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   paperclip: Paperclip,
   pencil: Pencil,
   pin: Pin,
+  "pin-off": PinOff,
   plus: Plus,
   puzzle: Puzzle,
   search: Search,
@@ -82,7 +85,13 @@ interface RuntimeOption {
   desc: string;
 }
 
-const HISTORY_LIST = [
+export interface SidebarHistoryItem {
+  id: number;
+  title: string;
+  pinned: boolean;
+}
+
+export const INITIAL_HISTORY_LIST: SidebarHistoryItem[] = [
   { id: 1, title: "Bridge 连接与移动端任务", pinned: true },
   { id: 2, title: "Agent 执行链路设计", pinned: false },
   { id: 3, title: "Tauri App UI Development wi...", pinned: false },
@@ -283,10 +292,13 @@ interface MobileSidebarProps {
   host: HostProfile | undefined;
   config: ConfigPayload | undefined;
   settings: StoredSettings;
+  historyItems: SidebarHistoryItem[];
+  activeHistoryId: number | undefined;
   onClose: () => void;
   onNewSession: () => void;
-  onSelectSession: (title: string) => void;
+  onSelectSession: (id: number, title: string) => void;
   onConnect: () => Promise<void>;
+  onOpenSettings: () => void;
 }
 
 export function MobileSidebar(props: MobileSidebarProps) {
@@ -294,7 +306,7 @@ export function MobileSidebar(props: MobileSidebarProps) {
   const isBridgeConnected = Boolean(props.config);
   const bridgeStatusLabel = isBridgeConnected ? "CONNECTED" : "DISCONNECTED";
   const [activeMode, setActiveMode] = useState<"chat" | "drawing">("chat");
-  const [activeHistoryId, setActiveHistoryId] = useState(3);
+  const sortedHistoryItems = [...props.historyItems].sort(compareHistoryItems);
 
   return (
     <>
@@ -345,22 +357,25 @@ export function MobileSidebar(props: MobileSidebarProps) {
           {activeMode === "chat" ? (
             <SidebarSection title="最近">
               <div className="history-list">
-                {HISTORY_LIST.map((item) => {
-                  const isActive = activeHistoryId === item.id;
+                {sortedHistoryItems.map((item) => {
+                  const isActive = props.activeHistoryId === item.id;
 
                   return (
                     <button
                       key={item.id}
-                      className={`history-item ${isActive ? "is-active" : ""}`}
+                      className={`history-item ${isActive ? "is-active" : ""} ${item.pinned ? "is-pinned" : ""}`}
                       type="button"
                       title={item.title}
                       onClick={() => {
-                        setActiveHistoryId(item.id);
-                        props.onSelectSession(item.title);
+                        props.onSelectSession(item.id, item.title);
                       }}
                     >
                       <span>{item.title}</span>
-                      {item.pinned ? <UiIcon name="pin" /> : null}
+                      {item.pinned ? (
+                        <span className="history-pin-indicator" aria-label="已固定" title="已固定">
+                          <UiIcon name="pin" />
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -390,9 +405,9 @@ export function MobileSidebar(props: MobileSidebarProps) {
           <button
             className="sidebar-settings-button"
             type="button"
-            aria-label="连接设置"
+            aria-label="打开设置"
             title={props.settings.bridgeUrl}
-            onClick={() => void props.onConnect()}
+            onClick={props.onOpenSettings}
           >
             <UiIcon name="settings" />
           </button>
@@ -400,6 +415,13 @@ export function MobileSidebar(props: MobileSidebarProps) {
       </aside>
     </>
   );
+}
+
+function compareHistoryItems(a: SidebarHistoryItem, b: SidebarHistoryItem): number {
+  if (a.pinned !== b.pinned) {
+    return a.pinned ? -1 : 1;
+  }
+  return a.id - b.id;
 }
 
 function SidebarSection(props: { title: string; children: ReactNode }) {
@@ -684,7 +706,10 @@ function syncTextareaHeight(textarea: HTMLTextAreaElement | null, isMultiLine: b
 interface MoreActionSheetProps {
   open: boolean;
   hasLocalConversation: boolean;
+  canTogglePin: boolean;
+  isPinned: boolean;
   onClose: () => void;
+  onTogglePin: () => void;
   onClearConversation: () => void;
 }
 
@@ -706,7 +731,12 @@ export function MoreActionSheet(props: MoreActionSheetProps) {
       >
         <div className="sheet-handle" aria-hidden="true" />
         <div className="action-sheet-list">
-          <ActionSheetButton icon="pin" label="固定" onClick={props.onClose} />
+          <ActionSheetButton
+            icon={props.isPinned ? "pin-off" : "pin"}
+            label={props.isPinned ? "取消固定" : "固定"}
+            disabled={!props.canTogglePin}
+            onClick={props.onTogglePin}
+          />
           <ActionSheetButton icon="pencil" label="重命名" onClick={props.onClose} />
           <ActionSheetButton
             icon="trash"
