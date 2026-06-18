@@ -1,0 +1,145 @@
+.runtime-menu-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.runtime-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 50;
+  width: min(280px, calc(100vw - 28px));
+  border: 1px solid #edf0f4;
+  border-radius: 28px;
+  padding: 12px 0;
+  color: #202124;
+  background: #ffffff;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+}
+
+.runtime-menu-options {
+  display: flex;
+  flex-direction: column;
+}
+
+.runtime-menu-option {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: #202124;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.runtime-menu-option:hover,
+.runtime-menu-option:focus-visible,
+.runtime-menu-option.is-selected {
+  background: #f8fafc;
+}
+
+.runtime-check {
+  width: 20px;
+  min-width: 20px;
+  padding-top: 2px;
+  display: inline-flex;
+  justify-content: center;
+  color: #202124;
+}
+
+.runtime-option-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.runtime-option-copy strong,
+.runtime-option-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtime-option-copy strong {
+  color: #202124;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.runtime-option-copy span {
+  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.runtime-menu-separator {
+  height: 1px;
+  margin: 8px 20px;
+  background: #e5e7eb;
+}
+
+.runtime-menu-action {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #202124;
+  background: transparent;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.runtime-menu-action:hover,
+.runtime-menu-action:focus-visible {
+  background: #f8fafc;
+}
+
+.runtime-menu-action span {
+  padding-left: 32px;
+  font-size: 0.94rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  .runtime-menu {
+    border-color: rgba(63, 63, 70, 0.5);
+    color: #e8eaed;
+    background: #1e1f20;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .runtime-menu-option,
+  .runtime-menu-action,
+  .runtime-option-copy strong,
+  .runtime-check {
+    color: #e8eaed;
+  }
+
+  .runtime-menu-option:hover,
+  .runtime-menu-option:focus-visible,
+  .runtime-menu-option.is-selected,
+  .runtime-menu-action:hover,
+  .runtime-menu-action:focus-visible {
+    background: rgba(39, 39, 42, 0.5);
+  }
+
+  .runtime-option-copy span {
+    color: #a3a7ad;
+  }
+
+  .runtime-menu-separator {
+    background: #3f3f46;
+  }
+}

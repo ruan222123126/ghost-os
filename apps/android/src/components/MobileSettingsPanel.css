@@ -1,0 +1,186 @@
+.mobile-settings-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: center;
+  color: #18181b;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(16px);
+  visibility: hidden;
+  transition:
+    opacity 180ms ease,
+    transform 220ms ease,
+    visibility 0s linear 220ms;
+}
+
+.mobile-settings-panel.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    opacity 180ms ease,
+    transform 220ms ease;
+}
+
+.mobile-settings-frame {
+  width: 100%;
+  max-width: 448px;
+  min-height: 100%;
+  border-inline: 1px solid rgba(244, 244, 245, 0.9);
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  box-shadow: 0 2px 14px rgba(15, 23, 42, 0.04);
+}
+
+.mobile-settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: 64px;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+}
+
+.mobile-settings-header h1 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #18181b;
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.mobile-settings-back,
+.mobile-settings-header-spacer {
+  width: 40px;
+  height: 40px;
+}
+
+.mobile-settings-back {
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #27272a;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    transform 140ms ease;
+}
+
+.mobile-settings-back:hover,
+.mobile-settings-back:focus-visible {
+  background: #f4f4f5;
+}
+
+.mobile-settings-back:active {
+  background: #e4e4e7;
+  transform: scale(0.97);
+}
+
+.mobile-settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 20px max(48px, calc(24px + env(safe-area-inset-bottom)));
+}
+
+.mobile-settings-section {
+  margin-top: 16px;
+}
+
+.mobile-settings-section + .mobile-settings-section {
+  margin-top: 32px;
+}
+
+.mobile-settings-section h2 {
+  margin: 0 0 12px;
+  padding-inline: 4px;
+  color: #71717a;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.mobile-settings-card {
+  border-radius: 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: #f4f4f5;
+}
+
+.mobile-settings-item-button {
+  min-width: 0;
+  width: 100%;
+  min-height: 64px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #18181b;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+.mobile-settings-item-button:hover,
+.mobile-settings-item-button:focus-visible {
+  background: #ebebeb;
+}
+
+.mobile-settings-item-button:active {
+  background: #e0e0e0;
+}
+
+.mobile-settings-item-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-settings-item-copy > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.mobile-settings-item-copy small {
+  margin-top: 2px;
+  color: #71717a;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.mobile-settings-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  color: #27272a;
+}
+
+.mobile-settings-divider {
+  height: 2px;
+  flex: 0 0 auto;
+  background: #ffffff;
+}

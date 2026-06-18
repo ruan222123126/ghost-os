@@ -1,5 +1,6 @@
 import type { ComponentType, ReactNode } from "react";
 import { ArrowLeft, Globe, Info, Link2 } from "lucide-react";
+import "./MobileSettingsPanel.css";
 
 interface MobileSettingsPanelProps {
   open: boolean;
