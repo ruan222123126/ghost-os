@@ -426,7 +426,7 @@ code {
 }
 
 .composer-textarea-wrap {
-  position: relative;
+  position: static;
   min-width: 0;
   width: 100%;
 }
