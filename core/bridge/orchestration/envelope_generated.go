@@ -207,7 +207,3 @@ func ValidateBusRequest(req APIRequest) error {
 func NewSessionPushHub() *SessionPushHub {
 	return newSessionPushHub()
 }
-
-func ResolveFindIconTemplateRootPath() (string, error) {
-	return resolveFindIconTemplateRoot()
-}

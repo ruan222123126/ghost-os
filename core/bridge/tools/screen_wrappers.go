@@ -14,10 +14,6 @@ type ScreenActionTool = toolscreen.ScreenActionTool
 
 type ScreenControlTool = toolscreen.ScreenControlTool
 
-func NewScreenActionTool(client ExecutionClient) Tool {
-	return toolscreen.NewScreenActionTool(client)
-}
-
 func NewScreenControlTool(
 	client ExecutionClient,
 	model llm.Completer,

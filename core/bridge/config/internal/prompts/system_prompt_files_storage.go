@@ -92,10 +92,6 @@ func systemPromptFilePath(root string, key string) (string, error) {
 	return filepath.Join(trimmedRoot, fileName), nil
 }
 
-func SystemPromptFilePath(root string, key string) (string, error) {
-	return systemPromptFilePath(root, key)
-}
-
 func systemPromptFileName(key string) (string, bool) {
 	switch key {
 	case systemPromptCorePromptKey:

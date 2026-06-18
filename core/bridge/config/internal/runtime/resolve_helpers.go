@@ -89,14 +89,6 @@ func ActiveProviderLabel(runtime Snapshot) string {
 	return providers.ActiveLabel(providerRuntimeSnapshot(runtime))
 }
 
-func InferProviderType(name, baseURL, model string) llm.Provider {
-	return providers.InferType(name, baseURL, model)
-}
-
-func DefaultBaseURLForProvider(provider llm.Provider) string {
-	return providers.DefaultBaseURL(provider)
-}
-
 func Normalize(raw Snapshot) Snapshot {
 	out := raw
 	out.ProviderName = strings.TrimSpace(out.ProviderName)

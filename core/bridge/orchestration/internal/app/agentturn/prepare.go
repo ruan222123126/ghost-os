@@ -63,10 +63,6 @@ func NormalizeRequestRuntimeOptions(rawProjectRoot string) (*RequestRuntimeOptio
 	return runtimeopts.NormalizeRequestOptions(rawProjectRoot)
 }
 
-func CloneRequestRuntimeOptions(input *RequestRuntimeOptions) *RequestRuntimeOptions {
-	return runtimeopts.CloneRequestOptions(input)
-}
-
 func PrepareWithRuntimeOverrides(
 	guards SessionGuards,
 	params api.AgentParams,

@@ -3,7 +3,6 @@ package storage
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 func ValueOrEnv(raw *string, envName, fallback string) string {
@@ -46,35 +45,6 @@ func FloatOrEnvWithEnv(raw *float64, fieldName string, env EnvSnapshot, envName 
 		return *raw, nil
 	}
 	return ParseFloatValue(env.Value(envName), envName, fallback)
-}
-
-func DurationOrEnvWithEnv(
-	raw *string,
-	fieldName string,
-	env EnvSnapshot,
-	envName string,
-	fallback time.Duration,
-) (time.Duration, error) {
-	if raw != nil {
-		trimmed := strings.TrimSpace(*raw)
-		if trimmed == "" {
-			return 0, fmt.Errorf("invalid %s: expected duration, got empty string", resolutionFieldName(fieldName, envName))
-		}
-		value, err := time.ParseDuration(trimmed)
-		if err != nil {
-			return 0, fmt.Errorf(
-				"invalid %s: expected duration, got %q: %w",
-				resolutionFieldName(fieldName, envName),
-				trimmed,
-				err,
-			)
-		}
-		if value <= 0 {
-			return 0, fmt.Errorf("invalid %s: must be > 0, got %q", resolutionFieldName(fieldName, envName), trimmed)
-		}
-		return value, nil
-	}
-	return ParseDurationValue(env.Value(envName), envName, fallback)
 }
 
 func HeadersOrEnvWithEnv(raw map[string]string, env EnvSnapshot) (map[string]string, error) {

@@ -62,21 +62,6 @@ func newDefaultRSSFetchTool() *RSSFetchTool {
 	return tool
 }
 
-func FetchRSS(ctx context.Context, rawURL string, opts RSSFetchOptions) (RSSResult, error) {
-	tool := newDefaultRSSFetchTool()
-	feedURL, err := parseRSSRequestURL(ctx, rawURL, tool.validateRequestURL)
-	if err != nil {
-		return RSSResult{}, err
-	}
-	maxItems := normalizeRSSMaxItems(opts.MaxItems)
-	result, err := tool.fetch(ctx, feedURL)
-	if err != nil {
-		return RSSResult{}, err
-	}
-	applyRSSResultOptions(&result, maxItems, opts.IncludeSummary)
-	return result, nil
-}
-
 func (t *RSSFetchTool) Execute(ctx context.Context, argsJSON json.RawMessage, _ string) (string, error) {
 	if t == nil || t.httpClient == nil {
 		return "", fmt.Errorf("http client is not configured")

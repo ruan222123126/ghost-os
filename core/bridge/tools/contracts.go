@@ -101,11 +101,6 @@ func ToolCallIDFromContext(ctx context.Context) string {
 	return toolcontracts.ToolCallIDFromContext(ctx)
 }
 
-// InterpretExecuteResult 统一读取工具执行元信息，不支持时返回零值。
-func InterpretExecuteResult(tool Tool, output string) ExecuteMeta {
-	return toolcontracts.InterpretExecuteResult(tool, output)
-}
-
 // PostProcessExecuteResult 先执行可选输出后处理，再解释 tool meta。
 func PostProcessExecuteResult(tool Tool, output string, traceID string) (string, ExecuteMeta, error) {
 	return toolcontracts.PostProcessExecuteResult(tool, output, traceID)

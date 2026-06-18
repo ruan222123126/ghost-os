@@ -95,10 +95,6 @@ func normalizeToolNames(names []string) []string {
 	return result
 }
 
-func NormalizeToolNames(names []string) []string {
-	return normalizeToolNames(names)
-}
-
 func parseStringCSV(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
 		return nil

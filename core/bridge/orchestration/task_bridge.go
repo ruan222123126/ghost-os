@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"errors"
-	"time"
 
 	bridgeconfig "ghost-os/bridge/config"
 	runtimeadapter "ghost-os/bridge/orchestration/internal/adapters/runtime"
@@ -180,22 +179,6 @@ func (b relayRuntimeBuilder) Build(
 		return apprelay.RuntimeDependencies{}, err
 	}
 	return runtimeadapter.ToRelayDependencies(deps), nil
-}
-
-func NewTaskScheduler(store *TaskStore, service *bridgeService) *TaskScheduler {
-	return bridgeTasks.NewTaskScheduler(store, taskExecutorAdapter{service: service})
-}
-
-func NewTaskSchedulerWithTimeout(
-	store *TaskStore,
-	service *bridgeService,
-	executionTimeout time.Duration,
-) *TaskScheduler {
-	return bridgeTasks.NewTaskSchedulerWithTimeout(
-		store,
-		taskExecutorAdapter{service: service},
-		executionTimeout,
-	)
 }
 
 func cloneTaskActionParams(input map[string]any) map[string]any {

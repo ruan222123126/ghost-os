@@ -15,10 +15,6 @@ func NewState(records []Record, activeProvider string, model string) State {
 	}
 }
 
-func List(records []Record) []Record {
-	return cloneRecords(records)
-}
-
 func Add(state State, record Record) (Patch, error) {
 	state = normalizeState(state)
 	normalized, err := ValidateRecord(record)

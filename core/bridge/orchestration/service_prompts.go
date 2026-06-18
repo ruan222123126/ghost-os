@@ -185,10 +185,6 @@ func (s *bridgeService) executeMousePositionActionResult(
 	return s.toolService().MousePosition(ctx, req, traceID)
 }
 
-func resolveFindIconTemplateRoot() (string, error) {
-	return apptools.ResolveFindIconTemplateRoot()
-}
-
 func (s *bridgeService) executeToolListActionResult(traceID string) (ServiceResult, error) {
 	return bus.ResultFromStatus(s.executeToolListAction(traceID))
 }

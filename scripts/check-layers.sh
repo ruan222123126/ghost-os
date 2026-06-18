@@ -29,7 +29,7 @@ check_no_matches() {
 }
 
 # apps/* 不得 import drivers/*
-check_no_matches 'drivers/native|drivers/native/src' apps/cli/src apps/android/app/src apps/web/app apps/web/lib apps/web/components
+check_no_matches 'drivers/native|drivers/native/src' apps/cli/src apps/android/src apps/web/app apps/web/lib apps/web/components
 
 (
   cd core/bridge

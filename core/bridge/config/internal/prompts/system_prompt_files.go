@@ -175,19 +175,11 @@ func defaultSystemPromptFileValues() map[string]string {
 	return values
 }
 
-func DefaultSystemPromptFileValues() map[string]string {
-	return defaultSystemPromptFileValues()
-}
-
 func systemPromptFileKeys() []string {
 	return []string{
 		systemPromptCorePromptKey,
 		systemPromptPromptLibraryKey,
 	}
-}
-
-func SystemPromptFileKeys() []string {
-	return systemPromptFileKeys()
 }
 
 func systemPromptFileValue(files SystemPromptFiles, key string) (string, error) {

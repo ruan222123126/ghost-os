@@ -49,14 +49,6 @@ type RoundDispatchResult = dispatch.RoundDispatchResult
 type MemberRunner = member.Runner
 type OwnerControlPromptRequest = owner.ControlPromptRequest
 
-func BuildGroupMemberMessage(req ports.MemberRunRequest) string {
-	return member.BuildGroupMemberMessage(req)
-}
-
-func BuildOwnerControlPrompt(req OwnerControlPromptRequest) string {
-	return owner.BuildControlPrompt(req)
-}
-
 func BuildOwnerControlUserPrompt(round int, dispatchToolName string) string {
 	return owner.BuildControlUserPrompt(round, dispatchToolName)
 }

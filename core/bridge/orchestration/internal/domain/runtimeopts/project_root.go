@@ -31,13 +31,6 @@ func NormalizeRequestOptions(rawProjectRoot string) (*RequestOptions, error) {
 	return &RequestOptions{ProjectRoot: projectRoot}, nil
 }
 
-func CloneRequestOptions(input *RequestOptions) *RequestOptions {
-	if input == nil {
-		return nil
-	}
-	return &RequestOptions{ProjectRoot: input.ProjectRoot}
-}
-
 func NormalizeProjectRoot(raw string) (string, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {

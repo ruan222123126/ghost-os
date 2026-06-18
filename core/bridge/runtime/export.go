@@ -78,10 +78,6 @@ func (p SelectionPolicy) SelectorCatalog(catalog tools.ToolCatalog) tools.ToolCa
 	return p.selectorCatalog(catalog)
 }
 
-func (p SelectionPolicy) ResidentScope(available []string) []string {
-	return p.residentScope(available)
-}
-
 func (p SelectionPolicy) Apply(available []string, selected []string) []string {
 	return p.apply(available, selected)
 }

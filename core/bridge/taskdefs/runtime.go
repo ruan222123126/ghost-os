@@ -1,7 +1,6 @@
 package taskdefs
 
 import (
-	"encoding/json"
 	"strings"
 )
 
@@ -44,19 +43,4 @@ func cloneOptionalIntPointer(input *int) *int {
 	}
 	value := *input
 	return &value
-}
-
-func DecodeParamsMap[T any](input map[string]any) (T, error) {
-	var out T
-	if len(input) == 0 {
-		return out, nil
-	}
-	data, err := json.Marshal(input)
-	if err != nil {
-		return out, err
-	}
-	if err := json.Unmarshal(data, &out); err != nil {
-		return out, err
-	}
-	return out, nil
 }

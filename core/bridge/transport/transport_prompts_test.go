@@ -201,24 +201,6 @@ func enableToolForPromptPreviewTest(t *testing.T, handler http.Handler, toolName
 	}
 }
 
-func hasPromptToolDefinition(items []systemPromptToolDefinitionPayload, toolName string) bool {
-	for _, item := range items {
-		if item.Name == toolName {
-			return true
-		}
-	}
-	return false
-}
-
-func promptToolDefinitionDescription(items []systemPromptToolDefinitionPayload, toolName string) (string, bool) {
-	for _, item := range items {
-		if item.Name == toolName {
-			return item.Description, true
-		}
-	}
-	return "", false
-}
-
 func assertExpectedSystemPromptToolDefinitions(t *testing.T, items []systemPromptToolDefinitionPayload) {
 	t.Helper()
 

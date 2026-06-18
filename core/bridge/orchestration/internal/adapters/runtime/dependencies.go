@@ -3,7 +3,6 @@ package runtime
 import (
 	"ghost-os/bridge/agent"
 	bridgeconfig "ghost-os/bridge/config"
-	"ghost-os/bridge/orchestration/internal/adapters/toolruntime"
 	agentturnplan "ghost-os/bridge/orchestration/internal/app/agentturn/plan"
 	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
 	ownerapp "ghost-os/bridge/orchestration/internal/app/orchestrations/owner"
@@ -70,29 +69,5 @@ func ToWorkflowDependencies(deps Dependencies) appworkflows.RuntimeDependencies 
 		Client:   deps.Client(),
 		Registry: deps.Registry(),
 		Cleanup:  deps.Close,
-	}
-}
-
-func ToToolRuntimeDependencies(deps Dependencies) toolruntime.RuntimeDependencies {
-	if deps == nil {
-		return nil
-	}
-	return toolRuntimeDependencies{deps: deps}
-}
-
-type toolRuntimeDependencies struct {
-	deps Dependencies
-}
-
-func (d toolRuntimeDependencies) Registry() *tools.Registry {
-	if d.deps == nil {
-		return nil
-	}
-	return d.deps.Registry()
-}
-
-func (d toolRuntimeDependencies) Close() {
-	if d.deps != nil {
-		d.deps.Close()
 	}
 }

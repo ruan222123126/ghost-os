@@ -85,15 +85,3 @@ func cloneSystemPromptFiles(files SystemPromptFiles) SystemPromptFiles {
 	}
 	return cloned
 }
-
-func CloneSystemPromptFiles(files SystemPromptFiles) SystemPromptFiles {
-	return cloneSystemPromptFiles(files)
-}
-
-func resetSystemPromptFilesCacheForTests() {
-	systemPromptFilesCache = sync.Map{}
-}
-
-func ResetSystemPromptFilesCacheForTests() {
-	resetSystemPromptFilesCacheForTests()
-}

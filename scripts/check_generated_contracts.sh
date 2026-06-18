@@ -7,14 +7,6 @@ GENERATED_FILES=(
   "core/bridge/orchestration/envelope_generated.go"
   "apps/web/lib/envelope.generated.ts"
   "apps/cli/src/envelope_generated.rs"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/AgentModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/ConfigModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/OrchestrationModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/SessionModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/StreamingModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/TaskModels.kt"
-  "apps/android/app/src/main/java/dev/ghostos/android/model/WorkflowModels.kt"
 )
 
 main() {

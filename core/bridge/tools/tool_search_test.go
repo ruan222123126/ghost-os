@@ -205,29 +205,6 @@ func decodeToolSearchResponse(t *testing.T, tool Tool, ctx context.Context, raw 
 	return payload
 }
 
-func containsToolSearchItem(items []struct {
-	Kind               string `json:"kind"`
-	Name               string `json:"name"`
-	Summary            string `json:"summary"`
-	Path               string `json:"path"`
-	Status             string `json:"status"`
-	AvailableNow       bool   `json:"available_now"`
-	AvailableNextTurn  bool   `json:"available_next_turn"`
-	RemainingIdleTurns int    `json:"remaining_idle_turns"`
-	Dependencies       []struct {
-		Kind   string `json:"kind"`
-		Name   string `json:"name"`
-		Status string `json:"status"`
-	} `json:"dependencies"`
-}, want string) bool {
-	for _, item := range items {
-		if item.Name == want {
-			return true
-		}
-	}
-	return false
-}
-
 func writeSkillFile(
 	t *testing.T,
 	dir string,

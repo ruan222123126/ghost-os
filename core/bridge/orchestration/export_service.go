@@ -3,7 +3,6 @@ package orchestration
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 
 	bridgeconfig "ghost-os/bridge/config"
 	agentadapter "ghost-os/bridge/orchestration/internal/adapters/agent"
@@ -285,12 +284,4 @@ func (s *Service) ExecuteMousePositionAction(
 
 func (s *Service) PendingQuestionSnapshot(sessionID string) (SessionPushEvent, bool) {
 	return s.inner.pendingQuestionSnapshot(sessionID)
-}
-
-func RequireSessionID(id string) (string, int, error) {
-	sessionID, err := requireSessionID(id)
-	if err != nil {
-		return "", bus.StatusFromError(err), err
-	}
-	return sessionID, http.StatusOK, nil
 }

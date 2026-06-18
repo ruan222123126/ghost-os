@@ -1,11 +1,7 @@
 package toolartifacts
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"fmt"
-	"image"
-	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,14 +25,6 @@ func ResolveScreenshotsRoot() (string, error) {
 		return "", fmt.Errorf("resolve screenshots directory: %w", err)
 	}
 	return filepath.Clean(absolute), nil
-}
-
-func ResolveScreenshotsSubdir(name string) (string, error) {
-	root, err := ResolveScreenshotsRoot()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, strings.TrimSpace(name)), nil
 }
 
 func SanitizePathComponent(value string, fallback string) string {
@@ -69,19 +57,6 @@ func SanitizePathComponent(value string, fallback string) string {
 
 func FormatUTCTimestamp(now time.Time) string {
 	return fmt.Sprintf("%s%09dZ", now.Format("20060102T150405"), now.Nanosecond())
-}
-
-func SHA256Hex(buf []byte) string {
-	sum := sha256.Sum256(buf)
-	return fmt.Sprintf("%x", sum[:])
-}
-
-func DecodePNGConfig(buf []byte) (image.Config, error) {
-	config, err := png.DecodeConfig(bytes.NewReader(buf))
-	if err != nil {
-		return image.Config{}, fmt.Errorf("decode png config: %w", err)
-	}
-	return config, nil
 }
 
 func expandHome(path string) (string, error) {

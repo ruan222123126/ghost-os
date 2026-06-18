@@ -20,7 +20,10 @@ is_forbidden_tracked_path() {
     .DS_Store|*/.DS_Store|Thumbs.db|*/Thumbs.db|*.iml|*/local.properties)
       return 0
       ;;
-    *.swp|*.swo|*.tmp.*|*.tsbuildinfo)
+    *.swp|*.swo|*.tmp.*|.tmp_*|*/.tmp_*|*.tsbuildinfo)
+      return 0
+      ;;
+    .codex|*/.codex|.codex/*|*/.codex/*)
       return 0
       ;;
     data/logs/*|.pnpm-store/*|*/.pnpm-store/*|target/*|*/target/*|dist/*|*/dist/*|build/*|*/build/*|coverage/*|*/coverage/*)
@@ -44,6 +47,9 @@ main() {
 
   cd "$ROOT_DIR"
   while IFS= read -r path; do
+    if [ ! -e "$path" ]; then
+      continue
+    fi
     if is_forbidden_tracked_path "$path"; then
       offenders+=("$path")
     fi

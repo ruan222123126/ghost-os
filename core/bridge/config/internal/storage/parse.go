@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 )
 
 func ParseProviderHeaders(raw string) (map[string]string, error) {
@@ -102,21 +101,6 @@ func ParseFloatValue(raw, fieldName string, fallback float64) (float64, error) {
 	}
 	if value < 0 || value > 1 {
 		return 0, fmt.Errorf("invalid %s: must be between 0 and 1, got %q", strings.TrimSpace(fieldName), trimmed)
-	}
-	return value, nil
-}
-
-func ParseDurationValue(raw, fieldName string, fallback time.Duration) (time.Duration, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return fallback, nil
-	}
-	value, err := time.ParseDuration(trimmed)
-	if err != nil {
-		return 0, fmt.Errorf("invalid %s: expected duration, got %q: %w", strings.TrimSpace(fieldName), trimmed, err)
-	}
-	if value <= 0 {
-		return 0, fmt.Errorf("invalid %s: must be > 0, got %q", strings.TrimSpace(fieldName), trimmed)
 	}
 	return value, nil
 }

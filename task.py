@@ -15,14 +15,6 @@ CONTRACT_PATHS = (
     "core/bridge/orchestration/envelope_generated.go",
     "apps/web/lib/envelope.generated.ts",
     "apps/cli/src/envelope_generated.rs",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/AgentModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/ApiModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/ConfigModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/OrchestrationModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/SessionModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/StreamingModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/TaskModels.kt",
-    "apps/android/app/src/main/java/dev/ghostos/android/model/WorkflowModels.kt",
 )
 
 
@@ -325,7 +317,7 @@ def check_layers() -> int:
     return run(["bash", "scripts/check-layers.sh"], ROOT)
 
 
-# gen_contracts 从 core/shared/schema.json 生成 Go/TS/Rust/Kotlin 契约类型。
+# gen_contracts 从 core/shared/schema.json 生成 Go/TS/Rust 契约类型。
 def gen_contracts() -> int:
     print("generate shared contract types...", flush=True)
     return run(["python3", "core/shared/generate_envelope_types.py"], ROOT)

@@ -50,14 +50,6 @@ var toolPromptDefaults = map[string]string{
 	"ask_human":      "Block and ask user for input. If 'options' are provided, the final option MUST set allow_custom=true.",
 }
 
-func ToolPromptDefaults() map[string]string {
-	out := make(map[string]string, len(toolPromptDefaults))
-	for name, prompt := range toolPromptDefaults {
-		out[name] = prompt
-	}
-	return out
-}
-
 func toolBasePrompt(name string) (string, bool) {
 	prompt, ok := toolPromptDefaults[strings.TrimSpace(name)]
 	if !ok {
@@ -87,8 +79,4 @@ func toolBasePrompts() map[string]string {
 		return nil
 	}
 	return out
-}
-
-func ToolBasePrompts() map[string]string {
-	return toolBasePrompts()
 }

@@ -233,43 +233,6 @@ func TestSessionTurnStatePersistsCommittedToolTurnOnLaterError(t *testing.T) {
 	}
 }
 
-type recordingAppEventSink struct {
-	events []streaming.Event
-}
-
-func (s *recordingAppEventSink) Emit(_ context.Context, event streaming.Event) (streaming.Event, error) {
-	s.events = append(s.events, event)
-	return event, nil
-}
-
-func mustAppEvent(
-	t *testing.T,
-	traceID string,
-	sessionID string,
-	turn int,
-	stepID string,
-	eventType streaming.EventType,
-	payload any,
-) streaming.Event {
-	t.Helper()
-
-	event, err := streaming.NewEvent(traceID, sessionID, turn, stepID, eventType, payload)
-	if err != nil {
-		t.Fatalf("NewEvent returned error: %v", err)
-	}
-	return event
-}
-
-func mustAppAssistantStepID(t *testing.T, turn int) string {
-	t.Helper()
-
-	stepID, err := streaming.AssistantStepID(turn)
-	if err != nil {
-		t.Fatalf("AssistantStepID returned error: %v", err)
-	}
-	return stepID
-}
-
 func TestStreamingEventMatchesSharedContract(t *testing.T) {
 	event := streaming.Event{
 		ID:        "trace-123:000001",

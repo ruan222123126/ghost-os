@@ -92,10 +92,6 @@ func ToolBasePrompt(name string) (string, bool) {
 	return configtools.ToolBasePrompt(name)
 }
 
-func ToolBasePrompts() map[string]string {
-	return configtools.ToolBasePrompts()
-}
-
 func normalizePromptLibrary(library []SystemPromptLibraryItem) ([]SystemPromptLibraryItem, error) {
 	return promptstore.NormalizePromptLibrary(library)
 }

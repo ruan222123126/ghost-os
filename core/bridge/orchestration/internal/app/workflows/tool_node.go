@@ -69,25 +69,6 @@ func PrepareToolArguments(
 	return screen.PrepareToolArguments(toolName, arguments, uploader)
 }
 
-func ParseScreenControlSteps(arguments map[string]any) ([]ScreenControlStep, map[string]any, error) {
-	return screen.ParseSteps(arguments)
-}
-
-func DecodeScreenControlStep(rawStep map[string]any, index int) (ScreenControlStep, error) {
-	return screen.DecodeStep(rawStep, index)
-}
-
-func MapScreenControlStepAction(action string) (string, error) {
-	return screen.MapStepAction(action)
-}
-
-func ResolveScreenControlStepParams(
-	step ScreenControlStep,
-	lastFindIconOutput any,
-) (map[string]any, error) {
-	return screen.ResolveStepParams(step, lastFindIconOutput)
-}
-
 func PrepareScreenControlStepArguments(
 	baseArgs map[string]any,
 	step ScreenControlStep,

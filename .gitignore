@@ -1,6 +1,8 @@
 # Runtime and temporary files.
 *.tmp.*
 **/*.tmp.*
+.tmp_*
+**/.tmp_*
 *.swp
 *.swo
 __pycache__/
@@ -43,6 +45,8 @@ core/bridge/bridge
 data/logs/*
 
 # Agent scratch artifacts.
+.codex
+.codex/
 core/bridge/.codex*/
 core/bridge/.codex*
 core/bridge/.ghost/

@@ -134,10 +134,6 @@ func buildCoreJobPromptLibrary(rawCorePrompt *string) []SystemPromptLibraryItem 
 	}
 }
 
-func BuildCoreJobPromptLibrary(rawCorePrompt *string) []SystemPromptLibraryItem {
-	return buildCoreJobPromptLibrary(rawCorePrompt)
-}
-
 func compileCorePromptFromLibrary(library []SystemPromptLibraryItem) string {
 	for _, item := range library {
 		if item.InsertPoint == SystemPromptInsertPointCoreJob && item.Active {

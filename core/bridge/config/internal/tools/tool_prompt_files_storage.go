@@ -119,10 +119,6 @@ func configuredToolNames() []string {
 	return normalizeConfiguredToolNames(names)
 }
 
-func ConfiguredToolNames() []string {
-	return configuredToolNames()
-}
-
 func toolPromptFilesInitialized(root string) bool {
 	path := filepath.Join(strings.TrimSpace(root), toolPromptInitFile)
 	_, err := os.Stat(path)

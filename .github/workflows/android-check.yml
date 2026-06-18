@@ -20,28 +20,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
         with:
-          distribution: temurin
-          java-version: "17"
-          cache: gradle
+          version: 10.30.3
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/android/pnpm-lock.yaml
 
-      - name: Make gradlew executable
-        working-directory: apps/android
-        run: chmod +x gradlew
+      - name: Install dependencies
+        run: pnpm --dir apps/android install --frozen-lockfile
 
-      - name: Android lint (debug)
-        working-directory: apps/android
-        run: ./gradlew --no-daemon :app:lintDebug
-
-      - name: Android unit tests (debug)
-        working-directory: apps/android
-        run: ./gradlew --no-daemon :app:testDebugUnitTest
-
-      - name: Android debug build
-        working-directory: apps/android
-        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Build mobile shell
+        run: pnpm --dir apps/android build

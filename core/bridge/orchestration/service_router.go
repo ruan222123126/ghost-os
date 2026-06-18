@@ -45,10 +45,6 @@ type sessionPushEventType = internaltrace.SessionPushEventType
 type sessionPushEvent = internaltrace.SessionPushEvent
 type sessionPushHub = internaltrace.SessionPushHub
 
-func NewRunRegistry() *RunRegistry {
-	return internaltrace.NewRunRegistry()
-}
-
 func newSessionPushHub() *sessionPushHub {
 	return internaltrace.NewSessionPushHub()
 }

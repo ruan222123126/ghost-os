@@ -11,11 +11,6 @@ type Catalog struct {
 	roots []string
 }
 
-func NewCatalog(projectRoot string) *Catalog {
-	homeDir, _ := os.UserHomeDir()
-	return NewCatalogWithRoots(defaultRoots(projectRoot, homeDir))
-}
-
 func NewCatalogWithRoots(roots []string) *Catalog {
 	return &Catalog{roots: normalizeRoots(roots)}
 }
@@ -71,15 +66,6 @@ func (c *Catalog) SkillByName(name string) (Skill, bool) {
 		}
 	}
 	return Skill{}, false
-}
-
-func defaultRoots(projectRoot string, homeDir string) []string {
-	repoRoot := resolveRepoRoot(projectRoot)
-	roots := []string{filepath.Join(repoRoot, ".agents", "skills")}
-	if trimmedHome := strings.TrimSpace(homeDir); trimmedHome != "" {
-		roots = append(roots, filepath.Join(trimmedHome, ".ghost-os", "skills"))
-	}
-	return normalizeRoots(roots)
 }
 
 func resolveRepoRoot(projectRoot string) string {

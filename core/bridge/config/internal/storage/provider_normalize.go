@@ -10,22 +10,6 @@ func ProviderConfigsToFileMap(records []ProviderConfig) map[string]ProviderFileC
 	return providerFileMapFromDomain(providers.ToFileMap(records))
 }
 
-func NormalizeProviderModels(models []string) []string {
-	return providers.NormalizeModels(models)
-}
-
-func ProviderIndexByName(records []ProviderConfig, name string) int {
-	return providers.IndexByName(records, name)
-}
-
-func NormalizePositiveInt(value int) int {
-	return providers.NormalizePositiveInt(value)
-}
-
-func NormalizeModelTokenOverrides(raw map[string]int) map[string]int {
-	return providers.NormalizeModelTokenOverrides(raw)
-}
-
 func CloneModelTokenOverrides(raw map[string]int) map[string]int {
 	return providers.CloneModelTokenOverrides(raw)
 }

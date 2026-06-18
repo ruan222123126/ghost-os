@@ -74,14 +74,6 @@ func CloneIntPointer(raw *int) *int {
 	return &value
 }
 
-func CloneStringPointer(raw *string) *string {
-	if raw == nil {
-		return nil
-	}
-	value := strings.TrimSpace(*raw)
-	return &value
-}
-
 func OptionalStringPointer(raw string) *string {
 	value := strings.TrimSpace(raw)
 	if value == "" {
