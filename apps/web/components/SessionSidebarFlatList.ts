@@ -6,6 +6,8 @@ import { compareSessionsByRecentActivity } from '@/lib/sessionSidebarSessionSort
 import type { SessionMetadata } from '@/lib/types';
 import type { DropTargetState } from './SessionSidebarHistoryPartitionSection';
 
+const EMPTY_COLLAPSED_PARTITION_IDS: ReadonlySet<string> = new Set<string>();
+
 export function buildFlatSessionList(
   sessions: SessionMetadata[],
   searchQuery: string,
@@ -31,11 +33,13 @@ export function buildPartitionSessionRows(input: {
   partitionViews: SessionPartitionView[];
   draggingSessionID: string;
   dropTarget?: DropTargetState;
+  collapsedPartitionIDs?: ReadonlySet<string>;
 }): SessionSidebarHistoryRow[] {
   return input.partitionViews.flatMap((partition) => {
     return rowsForPartition(partition, {
       draggingSessionID: input.draggingSessionID,
       dropTarget: input.dropTarget,
+      collapsedPartitionIDs: input.collapsedPartitionIDs ?? EMPTY_COLLAPSED_PARTITION_IDS,
       level: 0,
     });
   });
@@ -43,25 +47,23 @@ export function buildPartitionSessionRows(input: {
 
 export function countSessionsInPartitionViews(
   partitionViews: SessionPartitionView[],
+  collapsedPartitionIDs: ReadonlySet<string> = EMPTY_COLLAPSED_PARTITION_IDS,
 ): number {
   return partitionViews.reduce((count, partition) => {
-    return count + countSessionsInPartition(partition);
+    return count + countSessionsInPartition(partition, collapsedPartitionIDs);
   }, 0);
 }
 
 export function limitPartitionViewsBySessionCount(
   partitionViews: SessionPartitionView[],
   sessionLimit: number,
+  collapsedPartitionIDs: ReadonlySet<string> = EMPTY_COLLAPSED_PARTITION_IDS,
 ): SessionPartitionView[] {
   let remaining = Math.max(sessionLimit, 0);
   const limited: SessionPartitionView[] = [];
 
   for (const partition of partitionViews) {
-    if (remaining <= 0) {
-      break;
-    }
-
-    const next = limitPartitionViewBySessionCount(partition, remaining);
+    const next = limitPartitionViewBySessionCount(partition, remaining, collapsedPartitionIDs);
     if (!next.partition) {
       continue;
     }
@@ -78,16 +80,23 @@ function rowsForPartition(
   options: {
     draggingSessionID: string;
     dropTarget?: DropTargetState;
+    collapsedPartitionIDs: ReadonlySet<string>;
     level: number;
   },
 ): SessionSidebarHistoryRow[] {
+  const isCollapsed = options.collapsedPartitionIDs.has(partition.id);
   const rows: SessionSidebarHistoryRow[] = [{
     kind: 'partition-header',
     key: `partition:${partition.id}`,
     partitionID: partition.id,
     partitionName: partition.name,
     level: options.level,
+    isCollapsed,
   }];
+
+  if (isCollapsed) {
+    return rows;
+  }
 
   if (partition.childPartitions?.length) {
     return rows.concat(partition.childPartitions.flatMap((child) => {
@@ -153,10 +162,16 @@ function dropLineRow(partitionID: string, insertIndex: number): SessionSidebarHi
   };
 }
 
-function countSessionsInPartition(partition: SessionPartitionView): number {
+function countSessionsInPartition(
+  partition: SessionPartitionView,
+  collapsedPartitionIDs: ReadonlySet<string>,
+): number {
+  if (collapsedPartitionIDs.has(partition.id)) {
+    return 0;
+  }
   if (partition.childPartitions?.length) {
     return partition.childPartitions.reduce((count, child) => {
-      return count + countSessionsInPartition(child);
+      return count + countSessionsInPartition(child, collapsedPartitionIDs);
     }, 0);
   }
   return partition.sessions.length;
@@ -165,9 +180,17 @@ function countSessionsInPartition(partition: SessionPartitionView): number {
 function limitPartitionViewBySessionCount(
   partition: SessionPartitionView,
   remaining: number,
+  collapsedPartitionIDs: ReadonlySet<string>,
 ): { partition: SessionPartitionView | null; remaining: number } {
-  if (remaining <= 0) {
-    return { partition: null, remaining: 0 };
+  if (collapsedPartitionIDs.has(partition.id)) {
+    return {
+      partition: {
+        ...partition,
+        childPartitions: partition.childPartitions ? [] : undefined,
+        sessions: [],
+      },
+      remaining,
+    };
   }
 
   if (partition.childPartitions?.length) {
@@ -175,11 +198,7 @@ function limitPartitionViewBySessionCount(
     let nextRemaining = remaining;
 
     for (const child of partition.childPartitions) {
-      if (nextRemaining <= 0) {
-        break;
-      }
-
-      const nextChild = limitPartitionViewBySessionCount(child, nextRemaining);
+      const nextChild = limitPartitionViewBySessionCount(child, nextRemaining, collapsedPartitionIDs);
       if (!nextChild.partition) {
         continue;
       }
@@ -201,9 +220,25 @@ function limitPartitionViewBySessionCount(
     };
   }
 
+  if (remaining <= 0) {
+    if (partition.sessions.length === 0 && !partition.readOnly) {
+      return {
+        partition: { ...partition, sessions: [] },
+        remaining,
+      };
+    }
+    return { partition: null, remaining };
+  }
+
   const sessions = partition.sessions.slice(0, remaining);
   if (sessions.length === 0) {
-    return { partition: null, remaining };
+    if (partition.readOnly) {
+      return { partition: null, remaining };
+    }
+    return {
+      partition: { ...partition, sessions },
+      remaining,
+    };
   }
 
   return {

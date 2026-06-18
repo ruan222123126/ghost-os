@@ -27,6 +27,7 @@ interface SessionSidebarHistoryBodyProps {
   empty: boolean;
   flatSessions: SessionMetadata[];
   partitionViews: SessionPartitionView[];
+  collapsedPartitionIDs: ReadonlySet<string>;
   currentSessionId: string;
   focusSessionId?: string;
   dragState: {
@@ -36,6 +37,7 @@ interface SessionSidebarHistoryBodyProps {
   resolveSessionTitle: (session: SessionMetadata) => string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onTogglePartitionCollapsed: (partitionID: string) => void;
   onDragStartSession: (event: DragEvent<HTMLDivElement>, sessionID: string) => void;
   onDragOverSession: (event: DragEvent<HTMLDivElement>, partitionID: string, itemIndex: number) => void;
   onDragOverPartition: (event: DragEvent<HTMLDivElement>, partitionID: string, itemCount: number) => void;
@@ -54,12 +56,14 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   empty,
   flatSessions,
   partitionViews,
+  collapsedPartitionIDs,
   currentSessionId,
   focusSessionId,
   dragState,
   resolveSessionTitle,
   onSelect,
   onDelete,
+  onTogglePartitionCollapsed,
   onDragStartSession,
   onDragOverSession,
   onDragOverPartition,
@@ -70,8 +74,8 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     if (!groupingEnabled) {
       return flatSessions.length;
     }
-    return countSessionsInPartitionViews(partitionViews);
-  }, [flatSessions.length, groupingEnabled, partitionViews]);
+    return countSessionsInPartitionViews(partitionViews, collapsedPartitionIDs);
+  }, [collapsedPartitionIDs, flatSessions.length, groupingEnabled, partitionViews]);
   const focusSessionIndex = useMemo(() => {
     const id = focusSessionId?.trim();
     if (!id) {
@@ -80,8 +84,8 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     if (!groupingEnabled) {
       return flatSessions.findIndex((session) => session.id === id);
     }
-    return findSessionIndexInPartitionViews(partitionViews, id);
-  }, [flatSessions, focusSessionId, groupingEnabled, partitionViews]);
+    return findSessionIndexInPartitionViews(partitionViews, id, collapsedPartitionIDs);
+  }, [collapsedPartitionIDs, flatSessions, focusSessionId, groupingEnabled, partitionViews]);
   const visibleSessionCount = useSessionSidebarVisibleCount({
     scrollElementRef,
     totalSessions,
@@ -92,8 +96,8 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     return flatSessions.slice(0, visibleSessionCount);
   }, [flatSessions, visibleSessionCount]);
   const visiblePartitionViews = useMemo(() => {
-    return limitPartitionViewsBySessionCount(partitionViews, visibleSessionCount);
-  }, [partitionViews, visibleSessionCount]);
+    return limitPartitionViewsBySessionCount(partitionViews, visibleSessionCount, collapsedPartitionIDs);
+  }, [collapsedPartitionIDs, partitionViews, visibleSessionCount]);
 
   if (loading) {
     return (
@@ -120,6 +124,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
         resolveSessionTitle={resolveSessionTitle}
         onSelect={onSelect}
         onDelete={onDelete}
+        onTogglePartitionCollapsed={onTogglePartitionCollapsed}
         onDragStartSession={onDragStartSession}
         onDragOverSession={onDragOverSession}
         onDropPartition={onDropPartition}
@@ -133,6 +138,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
     partitionViews: visiblePartitionViews,
     draggingSessionID: dragState.draggingSessionID,
     dropTarget: dragState.dropTarget,
+    collapsedPartitionIDs,
   });
 
   return (
@@ -145,6 +151,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
       resolveSessionTitle={resolveSessionTitle}
       onSelect={onSelect}
       onDelete={onDelete}
+      onTogglePartitionCollapsed={onTogglePartitionCollapsed}
       onDragStartSession={onDragStartSession}
       onDragOverSession={onDragOverSession}
       onDragOverPartition={onDragOverPartition}
@@ -163,6 +170,7 @@ const SessionSidebarVirtualRows: FC<{
   resolveSessionTitle: (session: SessionMetadata) => string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onTogglePartitionCollapsed: (partitionID: string) => void;
   onDragStartSession: (event: DragEvent<HTMLDivElement>, sessionID: string) => void;
   onDragOverSession: (event: DragEvent<HTMLDivElement>, partitionID: string, itemIndex: number) => void;
   onDragOverPartition: (event: DragEvent<HTMLDivElement>, partitionID: string, itemCount: number) => void;
@@ -220,6 +228,7 @@ const SessionSidebarVirtualRows: FC<{
               resolveSessionTitle={props.resolveSessionTitle}
               onSelect={props.onSelect}
               onDelete={props.onDelete}
+              onTogglePartitionCollapsed={props.onTogglePartitionCollapsed}
               onDragStartSession={props.onDragStartSession}
               onDragOverSession={props.onDragOverSession}
               onDragEndSession={props.onDragEndSession}
@@ -260,10 +269,11 @@ function buildPartitionRowCounts(rows: SessionSidebarHistoryRow[]): Record<strin
 function findSessionIndexInPartitionViews(
   partitionViews: SessionPartitionView[],
   sessionID: string,
+  collapsedPartitionIDs: ReadonlySet<string>,
 ): number {
   let index = 0;
   for (const partition of partitionViews) {
-    const found = findSessionIndexInPartition(partition, sessionID, index);
+    const found = findSessionIndexInPartition(partition, sessionID, index, collapsedPartitionIDs);
     if (found.found) {
       return found.index;
     }
@@ -276,11 +286,16 @@ function findSessionIndexInPartition(
   partition: SessionPartitionView,
   sessionID: string,
   startIndex: number,
+  collapsedPartitionIDs: ReadonlySet<string>,
 ): { found: boolean; index: number; nextIndex: number } {
+  if (collapsedPartitionIDs.has(partition.id)) {
+    return { found: false, index: -1, nextIndex: startIndex };
+  }
+
   if (partition.childPartitions?.length) {
     let nextIndex = startIndex;
     for (const child of partition.childPartitions) {
-      const found = findSessionIndexInPartition(child, sessionID, nextIndex);
+      const found = findSessionIndexInPartition(child, sessionID, nextIndex, collapsedPartitionIDs);
       if (found.found) {
         return found;
       }

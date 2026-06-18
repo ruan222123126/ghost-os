@@ -50,6 +50,55 @@ describe('components/SessionSidebar', () => {
     ]);
   });
 
+  it('builds collapsed grouped rows with partition headers only', () => {
+    const partitions: SessionPartitionView[] = [
+      {
+        id: 'recent',
+        name: 'Recent',
+        sessions: [
+          createSession('latest-1111', '2026-04-12T12:00:00Z'),
+          createSession('middle-2222', '2026-04-11T08:00:00Z'),
+        ],
+      },
+      {
+        id: 'workflow',
+        name: 'Workflow',
+        readOnly: true,
+        sessions: [
+          createSession('workflow-1', '2026-04-10T08:00:00Z'),
+        ],
+        childPartitions: [
+          {
+            id: 'workflow::daily',
+            name: 'Daily',
+            readOnly: true,
+            sessions: [
+              createSession('workflow-1', '2026-04-10T08:00:00Z'),
+            ],
+          },
+        ],
+      },
+    ];
+    const collapsedPartitionIDs = new Set(['recent', 'workflow']);
+
+    const rows = buildPartitionSessionRows({
+      partitionViews: partitions,
+      draggingSessionID: '',
+      collapsedPartitionIDs,
+    });
+
+    expect(rows.map((row) => row.key)).toEqual([
+      'partition:recent',
+      'partition:workflow',
+    ]);
+    expect(rows.every((row) => row.kind === 'partition-header' && row.isCollapsed)).toBe(true);
+    expect(countSessionsInPartitionViews(partitions, collapsedPartitionIDs)).toBe(0);
+    expect(limitPartitionViewsBySessionCount(partitions, 0, collapsedPartitionIDs).map((view) => view.id)).toEqual([
+      'recent',
+      'workflow',
+    ]);
+  });
+
   it('limits grouped history to the requested number of sessions', () => {
     const partitions: SessionPartitionView[] = [
       {

@@ -55,6 +55,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   const showBlockingLoading = props.loading && props.sessions.length === 0;
   const [sessionContextMenu, setSessionContextMenu] = useState<SessionContextMenuState>();
   const [renameDialog, setRenameDialog] = useState(EMPTY_RENAME_DIALOG_STATE);
+  const [collapsedPartitionIDs, setCollapsedPartitionIDs] = useState<ReadonlySet<string>>(() => new Set());
   const {
     partitionError,
     legacyMigrationAvailable,
@@ -139,6 +140,17 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       value,
       error: '',
     }));
+  }, []);
+  const onTogglePartitionCollapsed = useCallback((partitionID: string) => {
+    setCollapsedPartitionIDs((previous) => {
+      const next = new Set(previous);
+      if (next.has(partitionID)) {
+        next.delete(partitionID);
+        return next;
+      }
+      next.add(partitionID);
+      return next;
+    });
   }, []);
   const onRenamePartition = useCallback(() => {
     const partitionID = ui.contextMenu?.partitionID?.trim() ?? '';
@@ -250,18 +262,20 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       <SessionSidebarHistoryBody
         copy={copy.chat}
         scrollElementRef={scrollElementRef}
-        resetKey={`${props.groupingEnabled ? 'grouped' : 'flat'}:${props.searchQuery}`}
+        resetKey={`${props.groupingEnabled ? 'grouped' : 'flat'}:${props.searchQuery}:${partitionCollapseResetKey(collapsedPartitionIDs)}`}
         loading={showBlockingLoading}
         groupingEnabled={props.groupingEnabled}
         empty={props.groupingEnabled ? props.visiblePartitionViews.length === 0 : flatSessions.length === 0}
         flatSessions={flatSessions}
         partitionViews={props.visiblePartitionViews}
+        collapsedPartitionIDs={collapsedPartitionIDs}
         currentSessionId={props.currentSessionId}
         focusSessionId={props.focusSessionId}
         dragState={ui.dragState}
         resolveSessionTitle={resolveSessionTitle}
         onSelect={props.onSelect}
         onDelete={props.onDelete}
+        onTogglePartitionCollapsed={onTogglePartitionCollapsed}
         onDragStartSession={ui.onDragStartSession}
         onDragOverSession={ui.onDragOverSession}
         onDragOverPartition={ui.onDragOverPartition}
@@ -315,3 +329,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     </div>
   );
 };
+
+function partitionCollapseResetKey(collapsedPartitionIDs: ReadonlySet<string>): string {
+  return [...collapsedPartitionIDs].sort().join(',');
+}

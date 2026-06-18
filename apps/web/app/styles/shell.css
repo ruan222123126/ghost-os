@@ -198,6 +198,55 @@
   margin: 0 16px 12px;
 }
 
+.session-partition-header {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-partition-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  color: currentcolor;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease;
+}
+
+.session-partition-header:hover .session-partition-toggle,
+.session-partition-header:focus-within .session-partition-toggle,
+.session-partition-toggle.is-collapsed {
+  opacity: 1;
+}
+
+.session-partition-toggle:hover {
+  color: rgb(0 0 0);
+}
+
+.session-partition-toggle-icon {
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid currentcolor;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.session-partition-toggle[aria-expanded='false'] .session-partition-toggle-icon {
+  transform: rotate(0deg);
+}
+
 .session-list {
   display: grid;
   gap: 10px;

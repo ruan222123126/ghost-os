@@ -16,6 +16,7 @@ export interface SessionSidebarPartitionHeaderRow {
   partitionID: string;
   partitionName: string;
   level: number;
+  isCollapsed: boolean;
 }
 
 export interface SessionSidebarPartitionHintRow {
@@ -67,6 +68,7 @@ interface SessionSidebarHistoryRowViewProps {
   resolveSessionTitle: (session: SessionMetadata) => string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
+  onTogglePartitionCollapsed: (partitionID: string) => void;
   onDragStartSession: (event: DragEvent<HTMLDivElement>, sessionID: string) => void;
   onDragOverSession: (event: DragEvent<HTMLDivElement>, partitionID: string, itemIndex: number) => void;
   onDragEndSession: () => void;
@@ -79,6 +81,7 @@ export const SessionSidebarHistoryRowView: FC<SessionSidebarHistoryRowViewProps>
   resolveSessionTitle,
   onSelect,
   onDelete,
+  onTogglePartitionCollapsed,
   onDragStartSession,
   onDragOverSession,
   onDragEndSession,
@@ -89,11 +92,28 @@ export const SessionSidebarHistoryRowView: FC<SessionSidebarHistoryRowViewProps>
         data-partition-item="true"
         data-partition-id={row.partitionID}
         data-partition-name={row.partitionName}
-        className={row.level === 0
+        className={`session-partition-header ${row.level === 0
           ? 'mb-2 px-1 pt-1 text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-500'
-          : 'mb-1 border-l border-black/10 px-2 pt-1 text-[10px] font-semibold text-neutral-500'}
+          : 'mb-1 border-l border-black/10 px-2 pt-1 text-[10px] font-semibold text-neutral-500'}`}
       >
-        {row.partitionName}
+        <button
+          type="button"
+          className={`session-partition-toggle${row.isCollapsed ? ' is-collapsed' : ''}`}
+          aria-expanded={!row.isCollapsed}
+          aria-label={row.isCollapsed
+            ? copy.sidebarPartitionExpandAria(row.partitionName)
+            : copy.sidebarPartitionCollapseAria(row.partitionName)}
+          title={row.isCollapsed
+            ? copy.sidebarPartitionExpandAria(row.partitionName)
+            : copy.sidebarPartitionCollapseAria(row.partitionName)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onTogglePartitionCollapsed(row.partitionID);
+          }}
+        >
+          <span className="session-partition-toggle-icon" aria-hidden="true" />
+        </button>
+        <span className="min-w-0 truncate">{row.partitionName}</span>
       </div>
     );
   }
