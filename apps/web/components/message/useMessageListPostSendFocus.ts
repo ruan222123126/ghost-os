@@ -74,6 +74,7 @@ export function useMessageListPostSendFocus(options: UseMessageListPostSendFocus
       setPostSendFollowTracking,
       scrollElementRef,
       setTrailingSpacerPx,
+      trailingSpacerPx,
       token,
     });
   }, [
@@ -108,6 +109,7 @@ interface PostSendStateMachineOptions extends UseMessageListPostSendFocusOptions
   pendingAnchorRef: MutableRefObject<PendingPostSendAnchor | null>;
   postSendRef: MutableRefObject<PostSendState>;
   setTrailingSpacerPx: (value: number) => void;
+  trailingSpacerPx: number;
   token: number;
 }
 
@@ -125,9 +127,16 @@ function runPostSendStateMachine(options: PostSendStateMachineOptions) {
 }
 
 function resetPostSendFocus(options: PostSendStateMachineOptions) {
+  const state = options.postSendRef.current;
+  if (state.mode === 'idle') {
+    return;
+  }
+
+  const retainedSpacerPx = options.trailingSpacerPx;
   releasePostSendFocus(options, {
     nextToken: POST_SEND_TOKEN_NONE,
-    shouldScrollToBottom: options.autoFollowRef.current,
+    shouldScrollToBottom: options.autoFollowRef.current && retainedSpacerPx === 0,
+    trailingSpacerPx: retainedSpacerPx,
   });
 }
 
@@ -208,12 +217,13 @@ function releasePostSendFocus(
   release: {
     nextToken: number;
     shouldScrollToBottom: boolean;
+    trailingSpacerPx?: number;
   },
 ) {
   options.postSendRef.current = { mode: 'idle', token: release.nextToken };
   options.pendingAnchorRef.current = null;
   options.setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
-  options.setTrailingSpacerPx(0);
+  options.setTrailingSpacerPx(release.trailingSpacerPx ?? 0);
   if (release.shouldScrollToBottom) {
     options.onNormalLayoutChange();
   }

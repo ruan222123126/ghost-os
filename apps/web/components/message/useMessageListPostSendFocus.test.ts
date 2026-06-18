@@ -97,6 +97,71 @@ describe('components/message/useMessageListPostSendFocus', () => {
     expect(trailingSpacerPx).toBe(0);
     expect(onNormalLayoutChange).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the remaining spacer when the turn ends before overflowing the anchored viewport', async () => {
+    const autoFollowRef = { current: true };
+    const scrollElementRef = createScrollRef({ clientHeight: 400, scrollTop: 0 });
+    const onNormalLayoutChange = jest.fn();
+    const trackingStates: PostSendFollowTrackingState[] = [];
+    let trailingSpacerPx = 0;
+    const totalSize = 500;
+    let renderer!: TestRenderer.ReactTestRenderer;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(HookProbe, {
+          autoFollowRef,
+          cancelScheduledScroll: jest.fn(),
+          layoutSignature: 'start',
+          onNormalLayoutChange,
+          onRender: (value) => {
+            trailingSpacerPx = value;
+          },
+          postSendAnchorIndex: 0,
+          postSendHasVisibleContent: false,
+          postSendToken: 1,
+          rowVirtualizer: createRowVirtualizer(() => totalSize),
+          scrollElementRef,
+          setPostSendFollowTracking: (value) => {
+            trackingStates.push(value);
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(trailingSpacerPx).toBe(200);
+
+    await act(async () => {
+      renderer.update(
+        React.createElement(HookProbe, {
+          autoFollowRef,
+          cancelScheduledScroll: jest.fn(),
+          layoutSignature: 'turn-ended',
+          onNormalLayoutChange,
+          onRender: (value) => {
+            trailingSpacerPx = value;
+          },
+          postSendAnchorIndex: null,
+          postSendHasVisibleContent: true,
+          postSendToken: 1,
+          rowVirtualizer: createRowVirtualizer(() => totalSize),
+          scrollElementRef,
+          setPostSendFollowTracking: (value) => {
+            trackingStates.push(value);
+          },
+        }),
+      );
+      await Promise.resolve();
+    });
+
+    expect(trailingSpacerPx).toBe(200);
+    expect(trackingStates.at(-1)).toEqual({
+      mode: 'idle',
+      controlledScrollTopPx: null,
+    });
+    expect(onNormalLayoutChange).not.toHaveBeenCalled();
+  });
 });
 
 function HookProbe(props: {
@@ -105,7 +170,9 @@ function HookProbe(props: {
   layoutSignature: string;
   onNormalLayoutChange: () => void;
   onRender: (trailingSpacerPx: number) => void;
+  postSendAnchorIndex?: number | null;
   postSendHasVisibleContent: boolean;
+  postSendToken?: number;
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   scrollElementRef: React.MutableRefObject<HTMLDivElement | null>;
   setPostSendFollowTracking: (value: PostSendFollowTrackingState) => void;
@@ -116,9 +183,9 @@ function HookProbe(props: {
     layoutSignature: props.layoutSignature,
     loadingOlderHistory: false,
     onNormalLayoutChange: props.onNormalLayoutChange,
-    postSendAnchorIndex: 0,
+    postSendAnchorIndex: props.postSendAnchorIndex === undefined ? 0 : props.postSendAnchorIndex,
     postSendHasVisibleContent: props.postSendHasVisibleContent,
-    postSendToken: 1,
+    postSendToken: props.postSendToken ?? 1,
     rowVirtualizer: props.rowVirtualizer,
     scrollElementRef: props.scrollElementRef,
     setPostSendFollowTracking: props.setPostSendFollowTracking,
