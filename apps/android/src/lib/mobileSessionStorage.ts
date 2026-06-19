@@ -7,6 +7,7 @@ interface ConversationUpsert {
   title: string;
   messages: MobileConversationMessage[];
   createdAt?: string;
+  preserveExistingTitle?: boolean;
   updatedAt?: string;
 }
 
@@ -43,11 +44,13 @@ export function upsertStoredMobileConversation(
 
   const now = new Date().toISOString();
   const existing = conversations.find((conversation) => conversation.id === id);
+  const incomingTitle = upsert.title.trim();
+  const existingTitle = existing?.title.trim();
   const next: StoredMobileConversation = {
     created_at: upsert.createdAt?.trim() || existing?.created_at || now,
     id,
     messages: upsert.messages,
-    title: existing?.title.trim() || upsert.title.trim() || id,
+    title: upsert.preserveExistingTitle ? existingTitle || incomingTitle || id : incomingTitle || existingTitle || id,
     updated_at: upsert.updatedAt?.trim() || now,
   };
 

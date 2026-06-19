@@ -7,7 +7,6 @@ const SETTINGS_STORAGE_KEY = "ghost-os-mobile.settings";
 const defaultSettings: StoredSettings = {
   bridgeUrl: DEFAULT_BRIDGE_URL,
   connectionMode: "webrtc",
-  sessionId: "",
 };
 
 export function loadSettings(): StoredSettings {
@@ -22,7 +21,6 @@ export function loadSettings(): StoredSettings {
       bridgeUrl: parsed.bridgeUrl?.trim() || DEFAULT_BRIDGE_URL,
       connectionMode: parsed.connectionMode === "http" ? "http" : "webrtc",
       pairing: normalizePairing(parsed.pairing),
-      sessionId: parsed.sessionId?.trim() || "",
     };
   } catch {
     return defaultSettings;
@@ -30,7 +28,14 @@ export function loadSettings(): StoredSettings {
 }
 
 export function saveSettings(settings: StoredSettings): void {
-  window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  window.localStorage.setItem(
+    SETTINGS_STORAGE_KEY,
+    JSON.stringify({
+      bridgeUrl: settings.bridgeUrl,
+      connectionMode: settings.connectionMode,
+      pairing: settings.pairing,
+    }),
+  );
 }
 
 export function normalizeBridgeUrl(value: string): string {

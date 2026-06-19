@@ -19,7 +19,6 @@ export interface StoredSettings {
   bridgeUrl: string;
   connectionMode: ConnectionMode;
   pairing?: MobilePairingInfo;
-  sessionId: string;
 }
 
 export interface ConfigPayload {
@@ -110,4 +109,25 @@ export interface StoredMobileConversation {
 export interface StatusMessage {
   tone: "idle" | "loading" | "success" | "error";
   text: string;
+}
+
+export type MobileSessionRunStatus = "idle" | "running" | "success" | "error";
+
+export interface MobileSessionRunState {
+  requestId?: string;
+  sessionEnded: boolean;
+  status: MobileSessionRunStatus;
+  statusText: string;
+  traceId?: string;
+}
+
+export interface MobileSessionView {
+  bridgeOwned: boolean;
+  id: string;
+  messages: MobileConversationMessage[];
+  reply?: AgentPayload;
+  run: MobileSessionRunState;
+  title: string;
+  unread: boolean;
+  updatedAt: string;
 }

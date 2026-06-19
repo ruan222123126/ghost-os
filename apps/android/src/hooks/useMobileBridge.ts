@@ -27,6 +27,10 @@ import type {
 
 interface SendAgentMessageOptions {
   message: string;
+  onReply: (reply: AgentPayload) => void;
+  onSessionId: (sessionId: string) => void;
+  onStatus: (status: StatusMessage) => void;
+  sessionId?: string;
 }
 
 interface SendAgentMessageResult {
@@ -65,8 +69,8 @@ export function useMobileBridge() {
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
-  const [reply, setReply] = useState<AgentPayload>();
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
     tone: "idle",
     text: "未连接",
@@ -118,6 +122,7 @@ export function useMobileBridge() {
     setConfig(undefined);
     setProviderList(undefined);
     setSessions([]);
+    setSessionsLoaded(false);
     setConnectionStatus({ tone: "idle", text: "未连接" });
   }, [connectionStatus.tone, currentConnectionTarget]);
 
@@ -176,6 +181,7 @@ export function useMobileBridge() {
   const refreshSessions = useCallback(async (): Promise<SessionMetadata[]> => {
     const payload = await requestBridge<SessionMetadata[]>("SESSIONS_LIST", {});
     setSessions(payload);
+    setSessionsLoaded(true);
     return payload;
   }, [requestBridge]);
 
@@ -224,6 +230,7 @@ export function useMobileBridge() {
       setConfig(undefined);
       setProviderList(undefined);
       setSessions([]);
+      setSessionsLoaded(false);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
     }
   }, [
@@ -264,7 +271,7 @@ export function useMobileBridge() {
     async (options: SendAgentMessageOptions): Promise<SendAgentMessageResult> => {
       const traceId = createTraceId("android-agent-stream");
       const requestId = createTraceId("android-agent-stream-request");
-      const initialSessionId = settings.sessionId.trim();
+      const initialSessionId = options.sessionId?.trim() || "";
       const runtime = createMobileAgentStreamRuntime(initialSessionId);
       const params = {
         message: options.message,
@@ -272,24 +279,21 @@ export function useMobileBridge() {
       };
       const projector: MobileAgentStreamProjector = {
         commitReply: (nextRuntime) => {
-          setReply(createAgentPayloadFromRuntime(nextRuntime));
+          options.onReply(createAgentPayloadFromRuntime(nextRuntime));
         },
         commitSessionId: (sessionId) => {
           const trimmedSessionId = sessionId.trim();
           if (!trimmedSessionId) {
             return;
           }
-          setSettings((current) => ({
-            ...current,
-            sessionId: trimmedSessionId,
-          }));
+          options.onSessionId(trimmedSessionId);
           refreshSessionsInBackground();
         },
-        setStatus,
+        setStatus: options.onStatus,
       };
 
-      setReply(createAgentPayloadFromRuntime(runtime));
-      setStatus({ tone: "loading", text: "发送中" });
+      options.onReply(createAgentPayloadFromRuntime(runtime));
+      options.onStatus({ tone: "loading", text: "发送中" });
       try {
         const applyEvent = (event: AgentStreamEvent) => {
           projectMobileAgentStreamEvent(event, runtime, projector);
@@ -312,7 +316,7 @@ export function useMobileBridge() {
           projector.commitReply(runtime);
         }
         if (!result.awaitingHuman) {
-          setStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
+          options.onStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
         }
         return {
           ok: true,
@@ -320,11 +324,11 @@ export function useMobileBridge() {
           sessionId: runtime.sessionId || resolvedSessionId,
         };
       } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
+        options.onStatus({ tone: "error", text: errorMessage(error) });
         return { ok: false };
       }
     },
-    [apiToken, bridgeUrl, refreshSessionsInBackground, settings.connectionMode, settings.sessionId],
+    [apiToken, bridgeUrl, refreshSessionsInBackground, settings.connectionMode],
   );
 
   return {
@@ -335,10 +339,9 @@ export function useMobileBridge() {
     getSession,
     host,
     providerList,
-    reply,
     sendAgentMessage,
     sessions,
-    setReply,
+    sessionsLoaded,
     setSettings,
     setStatus,
     settings,

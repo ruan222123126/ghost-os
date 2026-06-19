@@ -28,4 +28,6 @@ export interface SidebarHistoryItem {
   title: string;
   updatedAt: string;
   pinned: boolean;
+  status?: "running" | "success" | "error";
+  unread?: boolean;
 }

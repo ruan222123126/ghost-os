@@ -87,6 +87,16 @@ export function MobileSidebar(props: MobileSidebarProps) {
                       onClick={() => props.onSelectHistory(item.id)}
                     >
                       <span>{item.title}</span>
+                      <span className="history-item-indicators">
+                        {item.status ? (
+                          <span className={`history-status is-${item.status}`} title={historyStatusLabel(item.status)}>
+                            {historyStatusLabel(item.status)}
+                          </span>
+                        ) : null}
+                        {item.unread ? (
+                          <span className="history-unread-indicator" aria-label="有新回复" title="有新回复" />
+                        ) : null}
+                      </span>
                       {item.pinned ? (
                         <span className="history-pin-indicator" aria-label="已固定" title="已固定">
                           <UiIcon name="pin" />
@@ -131,6 +141,19 @@ export function MobileSidebar(props: MobileSidebarProps) {
       </aside>
     </>
   );
+}
+
+function historyStatusLabel(status: NonNullable<SidebarHistoryItem["status"]>): string {
+  switch (status) {
+    case "running":
+      return "运行中";
+    case "error":
+      return "失败";
+    case "success":
+      return "完成";
+    default:
+      return "";
+  }
 }
 
 function compareHistoryItems(a: SidebarHistoryItem, b: SidebarHistoryItem): number {
