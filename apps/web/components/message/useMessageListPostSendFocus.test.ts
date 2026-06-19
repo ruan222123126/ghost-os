@@ -38,9 +38,14 @@ describe('components/message/useMessageListPostSendFocus', () => {
 
     expect(trailingSpacerPx).toBe(200);
     expect(scrollElementRef.current?.scrollTop).toBe(300);
+    expect(getScrollToMock(scrollElementRef)).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      top: 300,
+    });
     expect(trackingStates.at(-1)).toEqual({
       mode: 'waiting_overflow',
       controlledScrollTopPx: 300,
+      programmaticScrollTargetPx: 300,
     });
 
     totalSize = 701;
@@ -69,6 +74,7 @@ describe('components/message/useMessageListPostSendFocus', () => {
     expect(trackingStates.at(-1)).toEqual({
       mode: 'idle',
       controlledScrollTopPx: null,
+      programmaticScrollTargetPx: null,
     });
     expect(onNormalLayoutChange).toHaveBeenCalledTimes(1);
 
@@ -159,6 +165,7 @@ describe('components/message/useMessageListPostSendFocus', () => {
     expect(trackingStates.at(-1)).toEqual({
       mode: 'idle',
       controlledScrollTopPx: null,
+      programmaticScrollTargetPx: null,
     });
     expect(onNormalLayoutChange).not.toHaveBeenCalled();
   });
@@ -205,7 +212,20 @@ function createScrollRef(layout: {
   clientHeight: number;
   scrollTop: number;
 }): React.MutableRefObject<HTMLDivElement | null> {
-  return {
-    current: layout as unknown as HTMLDivElement,
+  const element = {
+    ...layout,
+    scrollTo: jest.fn((options: ScrollToOptions) => {
+      element.scrollTop = Number(options.top ?? element.scrollTop);
+    }),
   };
+
+  return {
+    current: element as unknown as HTMLDivElement,
+  };
+}
+
+function getScrollToMock(
+  scrollElementRef: React.MutableRefObject<HTMLDivElement | null>,
+): jest.Mock {
+  return scrollElementRef.current?.scrollTo as unknown as jest.Mock;
 }

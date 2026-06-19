@@ -13,6 +13,7 @@ interface ScrollMetrics {
 export interface PostSendFollowTrackingState {
   mode: 'idle' | 'anchoring' | 'waiting_overflow';
   controlledScrollTopPx: number | null;
+  programmaticScrollTargetPx?: number | null;
 }
 
 interface MessageListLayoutSignatureOptions {
@@ -62,10 +63,25 @@ export function resolveMessageListAutoFollow(
     if (tracking.controlledScrollTopPx === null) {
       return false;
     }
+    if (isPostSendProgrammaticScrollInProgress(metrics, tracking)) {
+      return true;
+    }
     return metrics.scrollTop + POST_SEND_SCROLL_LOCK_EPSILON_PX >= tracking.controlledScrollTopPx;
   }
 
   return isMessageListNearBottom(metrics);
+}
+
+export function shouldClearPostSendProgrammaticScrollTarget(
+  metrics: ScrollMetrics,
+  tracking: PostSendFollowTrackingState,
+): boolean {
+  const targetPx = tracking.programmaticScrollTargetPx;
+  if (!isPostSendFocusLocked(tracking) || targetPx === null || targetPx === undefined) {
+    return false;
+  }
+
+  return metrics.scrollTop + POST_SEND_SCROLL_LOCK_EPSILON_PX >= targetPx;
 }
 
 export function shouldAdjustScrollPositionOnItemSizeChange(
@@ -240,6 +256,18 @@ function hasNonBlankText(value: string | undefined): boolean {
 
 function isPostSendFocusLocked(tracking: PostSendFollowTrackingState): boolean {
   return tracking.mode === 'anchoring' || tracking.mode === 'waiting_overflow';
+}
+
+function isPostSendProgrammaticScrollInProgress(
+  metrics: ScrollMetrics,
+  tracking: PostSendFollowTrackingState,
+): boolean {
+  const targetPx = tracking.programmaticScrollTargetPx;
+  if (targetPx === null || targetPx === undefined) {
+    return false;
+  }
+
+  return metrics.scrollTop + POST_SEND_SCROLL_LOCK_EPSILON_PX < targetPx;
 }
 
 function buildThinkingPanelSignature(

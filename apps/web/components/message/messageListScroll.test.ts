@@ -13,6 +13,7 @@ import {
   resolveMessageListAutoFollow,
   resolvePostSendOverflowDecision,
   shouldAdjustScrollPositionOnItemSizeChange,
+  shouldClearPostSendProgrammaticScrollTarget,
 } from './messageListScroll';
 import type { StreamingMessageRow } from '@/lib/chat-view/types';
 
@@ -76,6 +77,36 @@ describe('components/message/messageListScroll', () => {
       {
         mode: 'waiting_overflow',
         controlledScrollTopPx: 540,
+      },
+    )).toBe(true);
+  });
+
+  it('keeps auto-follow while an animated post-send scroll is still moving toward the anchor', () => {
+    expect(resolveMessageListAutoFollow(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 240,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+        programmaticScrollTargetPx: 540,
+      },
+    )).toBe(true);
+  });
+
+  it('clears the animated post-send target once the scroll reaches the anchor', () => {
+    expect(shouldClearPostSendProgrammaticScrollTarget(
+      {
+        scrollHeight: 1200,
+        clientHeight: 400,
+        scrollTop: 540,
+      },
+      {
+        mode: 'waiting_overflow',
+        controlledScrollTopPx: 540,
+        programmaticScrollTargetPx: 540,
       },
     )).toBe(true);
   });

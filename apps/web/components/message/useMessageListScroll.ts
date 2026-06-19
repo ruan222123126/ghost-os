@@ -5,6 +5,7 @@ import {
   getPostSendLockedScrollTop,
   type PostSendFollowTrackingState,
   resolveMessageListAutoFollow,
+  shouldClearPostSendProgrammaticScrollTarget,
   shouldAdjustScrollPositionOnItemSizeChange,
 } from './messageListScroll';
 import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
@@ -115,10 +116,37 @@ function useAutoFollowTracking(
     const tracking = postSendFollowTrackingRef.current;
     const nextAutoFollow = resolveMessageListAutoFollow(container, tracking);
     autoFollowRef.current = nextAutoFollow;
+    if (shouldClearPostSendProgrammaticScrollTarget(container, tracking)) {
+      setPostSendFollowTracking({
+        ...tracking,
+        programmaticScrollTargetPx: null,
+      });
+      return;
+    }
     if (!nextAutoFollow && tracking.mode !== 'idle') {
-      setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
+      setPostSendFollowTracking({
+        mode: 'idle',
+        controlledScrollTopPx: null,
+        programmaticScrollTargetPx: null,
+      });
     }
   }, [autoFollowRef, postSendFollowTrackingRef, scrollElementRef, setPostSendFollowTracking]);
+
+  const clearProgrammaticScrollTarget = useCallback(() => {
+    const tracking = postSendFollowTrackingRef.current;
+    if (
+      tracking.mode === 'idle'
+      || tracking.programmaticScrollTargetPx === null
+      || tracking.programmaticScrollTargetPx === undefined
+    ) {
+      return;
+    }
+
+    setPostSendFollowTracking({
+      ...tracking,
+      programmaticScrollTargetPx: null,
+    });
+  }, [postSendFollowTrackingRef, setPostSendFollowTracking]);
 
   useEffect(() => {
     const container = scrollElementRef.current;
@@ -128,10 +156,14 @@ function useAutoFollowTracking(
 
     syncAutoFollow();
     container.addEventListener('scroll', syncAutoFollow, { passive: true });
+    container.addEventListener('touchstart', clearProgrammaticScrollTarget, { passive: true });
+    container.addEventListener('wheel', clearProgrammaticScrollTarget, { passive: true });
     return () => {
       container.removeEventListener('scroll', syncAutoFollow);
+      container.removeEventListener('touchstart', clearProgrammaticScrollTarget);
+      container.removeEventListener('wheel', clearProgrammaticScrollTarget);
     };
-  }, [scrollElementRef, syncAutoFollow]);
+  }, [clearProgrammaticScrollTarget, scrollElementRef, syncAutoFollow]);
 }
 
 function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {

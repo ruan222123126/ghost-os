@@ -162,6 +162,7 @@ function startPostSendAnchoring(options: PostSendStateMachineOptions) {
   options.setPostSendFollowTracking({
     mode: 'anchoring',
     controlledScrollTopPx: layout.anchorScrollTopPx,
+    programmaticScrollTargetPx: layout.anchorScrollTopPx,
   });
   options.pendingAnchorRef.current = {
     requiredSpacerPx: layout.trailingSpacerPx,
@@ -195,6 +196,7 @@ function continuePostSendFocus(options: PostSendStateMachineOptions) {
     options.setPostSendFollowTracking({
       mode: 'waiting_overflow',
       controlledScrollTopPx: state.anchorStartPx,
+      programmaticScrollTargetPx: state.anchorStartPx,
     });
     options.pendingAnchorRef.current = {
       requiredSpacerPx: decision.trailingSpacerPx,
@@ -222,7 +224,11 @@ function releasePostSendFocus(
 ) {
   options.postSendRef.current = { mode: 'idle', token: release.nextToken };
   options.pendingAnchorRef.current = null;
-  options.setPostSendFollowTracking({ mode: 'idle', controlledScrollTopPx: null });
+  options.setPostSendFollowTracking({
+    mode: 'idle',
+    controlledScrollTopPx: null,
+    programmaticScrollTargetPx: null,
+  });
   options.setTrailingSpacerPx(release.trailingSpacerPx ?? 0);
   if (release.shouldScrollToBottom) {
     options.onNormalLayoutChange();
@@ -259,7 +265,10 @@ function applyPendingAnchorScroll(
     return;
   }
 
-  container.scrollTop = pending.scrollTopPx;
+  container.scrollTo({
+    behavior: 'smooth',
+    top: pending.scrollTopPx,
+  });
   options.pendingAnchorRef.current = null;
 }
 
