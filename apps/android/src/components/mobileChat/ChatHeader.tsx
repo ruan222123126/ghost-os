@@ -53,6 +53,10 @@ function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
   );
 }
 
+function hasRuntimeModel(config: ConfigPayload | undefined): boolean {
+  return Boolean(config?.model?.trim());
+}
+
 export function ChatHeader(props: ChatHeaderProps) {
   if (props.hasConversation) {
     return (
@@ -69,11 +73,13 @@ export function ChatHeader(props: ChatHeaderProps) {
     );
   }
 
+  const showHomeRuntimeSelector = hasRuntimeModel(props.config);
+
   return (
     <header className="chat-header chat-home-header">
       <div className="header-left">
         <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
-        <HeaderRuntimeSelector {...props} />
+        {showHomeRuntimeSelector ? <HeaderRuntimeSelector {...props} /> : null}
       </div>
       <div className="header-right">
         <IconButton label="新会话" icon="edit" onClick={props.onNewSession} />
