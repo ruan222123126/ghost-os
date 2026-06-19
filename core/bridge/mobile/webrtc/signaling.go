@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -24,6 +25,7 @@ const (
 	signalRegistered    = "registered"
 
 	signalingRegisterTimeout = 5 * time.Second
+	signalingHeartbeatEvery  = 15 * time.Second
 )
 
 type signalMessage struct {
@@ -37,6 +39,7 @@ type signalMessage struct {
 }
 
 type signalingConn struct {
+	mu   sync.Mutex
 	conn *websocket.Conn
 }
 
@@ -115,7 +118,27 @@ func (c *signalingConn) readLoop(ctx context.Context, handle func(signalMessage)
 	}
 }
 
+func (c *signalingConn) heartbeatLoop(ctx context.Context, interval time.Duration, onError func(error)) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := c.write(signalMessage{Type: signalHeartbeat}); err != nil {
+				if onError != nil {
+					onError(err)
+				}
+				return
+			}
+		}
+	}
+}
+
 func (c *signalingConn) write(msg signalMessage) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.conn.WriteJSON(msg)
 }
 

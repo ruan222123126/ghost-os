@@ -28,7 +28,6 @@ type Transport struct {
 	ctx       context.Context
 	cancel    context.CancelFunc
 	signaling *signalingConn
-	signalMu  sync.Mutex
 
 	peersMu sync.Mutex
 	peers   map[string]*peerSession
@@ -61,6 +60,9 @@ func Start(
 		peers:     make(map[string]*peerSession),
 	}
 	go signaling.readLoop(runCtx, t.handleSignal)
+	go signaling.heartbeatLoop(runCtx, signalingHeartbeatEvery, func(err error) {
+		log.Printf("mobile_webrtc signaling heartbeat failed: %v", err)
+	})
 	return t, nil
 }
 
@@ -208,8 +210,6 @@ func (t *Transport) addRemoteICE(msg signalMessage) error {
 }
 
 func (t *Transport) sendSignal(msg signalMessage) error {
-	t.signalMu.Lock()
-	defer t.signalMu.Unlock()
 	return t.signaling.write(msg)
 }
 
