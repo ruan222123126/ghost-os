@@ -201,14 +201,12 @@ function App() {
                 key={item.id}
                 reply={conversationMessageToAgentPayload(item)}
                 status={assistantMessageStatus()}
-                sessionId={item.sessionId || mobileSessions.activeSessionId || ""}
               />
             ),
           )}
           <AssistantReply
             reply={mobileSessions.activeReply}
             status={displayStatus}
-            sessionId={mobileSessions.activeSessionId || ""}
           />
         </main>
 

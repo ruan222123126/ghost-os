@@ -339,11 +339,6 @@ code {
   font-weight: 700;
 }
 
-.assistant-meta {
-  color: #6b7280;
-  font-size: 0.82rem;
-}
-
 .error-text {
   color: #9a3412;
 }
@@ -444,10 +439,6 @@ code {
   .user-bubble {
     color: #f1f3f4;
     background: #1e1f20;
-  }
-
-  .assistant-meta {
-    color: #a3a7ad;
   }
 
   .suggestion-button {

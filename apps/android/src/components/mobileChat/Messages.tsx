@@ -51,7 +51,6 @@ function SuggestionButton(props: {
 interface AssistantReplyProps {
   reply: AgentPayload | undefined;
   status: StatusMessage;
-  sessionId: string;
 }
 
 export function AssistantReply(props: AssistantReplyProps) {
@@ -65,8 +64,6 @@ export function AssistantReply(props: AssistantReplyProps) {
   if (!props.reply && props.status.tone !== "error") {
     return null;
   }
-
-  const displaySessionId = props.reply?.session_id || props.sessionId;
 
   return (
     <AssistantPanel ariaLive="polite">
@@ -104,7 +101,6 @@ export function AssistantReply(props: AssistantReplyProps) {
             ) : null}
           </>
         )}
-        {displaySessionId ? <p className="assistant-meta">Session：{displaySessionId}</p> : null}
       </div>
     </AssistantPanel>
   );
