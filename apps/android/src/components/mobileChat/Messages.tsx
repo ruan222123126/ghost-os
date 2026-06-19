@@ -82,26 +82,26 @@ export function AssistantReply(props: AssistantReplyProps) {
         ) : null}
         {props.status.tone === "error" ? (
           <>
+            {replyMessage ? <AssistantMarkdownContent content={replyMessage} /> : null}
+            <p className="error-text">{props.status.text}</p>
             {replyMessage ? (
               <div className="assistant-reply-actions">
                 <MessageCopyButton text={replyMessage} />
               </div>
             ) : null}
-            {replyMessage ? <AssistantMarkdownContent content={replyMessage} /> : null}
-            <p className="error-text">{props.status.text}</p>
           </>
         ) : (
           <>
-            {replyMessage ? (
-              <div className="assistant-reply-actions">
-                <MessageCopyButton text={replyMessage} />
-              </div>
-            ) : null}
             {replyMessage ? (
               <AssistantMarkdownContent content={replyMessage} />
             ) : hasThinkingText ? null : (
               <p>{props.status.text}</p>
             )}
+            {replyMessage ? (
+              <div className="assistant-reply-actions">
+                <MessageCopyButton text={replyMessage} />
+              </div>
+            ) : null}
           </>
         )}
         {displaySessionId ? <p className="assistant-meta">Session：{displaySessionId}</p> : null}

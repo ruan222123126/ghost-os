@@ -180,6 +180,7 @@ code {
 .chat-feed {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 0 16px 124px;
   display: flex;
   flex-direction: column;
@@ -281,6 +282,8 @@ code {
 
 .message-row {
   width: min(100%, var(--mobile-home-content-width));
+  min-width: 0;
+  max-width: 100%;
   margin: 0 auto;
   display: flex;
 }
@@ -310,11 +313,15 @@ code {
 
 .assistant-panel {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 0 16px 0 8px;
   color: #202124;
 }
 
 .assistant-copy {
+  min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 16px;
   color: #3c4043;

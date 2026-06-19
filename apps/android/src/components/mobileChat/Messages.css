@@ -1,15 +1,19 @@
 .assistant-reply {
+  min-width: 0;
+  max-width: 100%;
   position: relative;
 }
 
 .assistant-reply-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-height: 24px;
 }
 
 .thinking-panel {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   color: #5f6368;
 }
 
@@ -100,6 +104,7 @@
 }
 
 .thinking-panel-content {
+  min-width: 0;
   max-width: 100%;
   margin: 10px 0 0 6px;
   border-left: 1px solid #dadce0;
@@ -114,10 +119,17 @@
 }
 
 .assistant-markdown {
+  width: 100%;
+  min-width: 0;
   max-width: 100%;
   color: #3c4043;
   white-space: normal;
   overflow-wrap: anywhere;
+}
+
+.assistant-markdown > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .assistant-markdown > :first-child {
@@ -176,7 +188,7 @@
 
 .assistant-markdown table {
   display: block;
-  width: max-content;
+  width: 100%;
   max-width: 100%;
   margin: 12px 0;
   overflow-x: auto;
@@ -215,6 +227,9 @@
 }
 
 .assistant-code-block {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   margin: 12px 0;
   border: 1px solid #dadce0;
   border-radius: 8px;
@@ -223,6 +238,7 @@
 }
 
 .assistant-code-header {
+  min-width: 0;
   min-height: 34px;
   border-bottom: 1px solid #e5e7eb;
   padding: 6px 10px;
@@ -234,6 +250,10 @@
 }
 
 .assistant-code-language {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: #6b7280;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
   font-size: 0.72rem;
@@ -242,6 +262,8 @@
 }
 
 .assistant-code-block pre {
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
   padding: 12px;
   overflow-x: auto;
