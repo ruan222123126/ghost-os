@@ -1,6 +1,6 @@
 import type { ComponentType, Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Globe, KeyRound, Link2, Radio, Server, Trash2, Wifi } from "lucide-react";
+import { ArrowLeft, Globe, Key, Link2, Server, Trash2, Wifi } from "lucide-react";
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type { StatusMessage, StoredSettings } from "../mobileTypes";
@@ -191,69 +191,112 @@ interface ConnectionSettingsProps {
 }
 
 function ConnectionSettings(props: ConnectionSettingsProps) {
+  const isWebRTC = props.settings.connectionMode === "webrtc";
+
   return (
-    <SettingsSection title="连接">
-      <div className="mobile-settings-card">
+    <section className="mobile-settings-connection-shell" aria-labelledby="mobile-settings-connection-title">
+      <div className="mobile-settings-connection-title" id="mobile-settings-connection-title">
+        连接
+      </div>
+
+      <div className="mobile-settings-connection-card">
         <div className="mobile-settings-mode-switch" role="group" aria-label="连接模式">
           <button
-            className={props.settings.connectionMode === "webrtc" ? "is-active" : ""}
+            className={isWebRTC ? "is-active" : ""}
             type="button"
             onClick={() => props.onSetConnectionMode("webrtc")}
+            aria-pressed={isWebRTC}
           >
-            <Radio className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
+            <WebRTCSignalIcon />
             WebRTC
           </button>
           <button
-            className={props.settings.connectionMode === "http" ? "is-active" : ""}
+            className={!isWebRTC ? "is-active" : ""}
             type="button"
             onClick={() => props.onSetConnectionMode("http")}
+            aria-pressed={!isWebRTC}
           >
             <Server className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
             HTTP
           </button>
         </div>
 
-        {props.settings.connectionMode === "webrtc" ? (
-          <div className="mobile-settings-connection-panel">
-            <SettingsStaticRow
-              icon={Wifi}
-              label="WebRTC"
-              sublabel={props.settings.pairing ? props.settings.pairing.pcId : "未配对"}
-            />
-            <form className="mobile-settings-pair-form" onSubmit={(event) => void props.onImportPairing(event)}>
-              <textarea
-                value={props.pairingUri}
-                rows={3}
-                placeholder="ghost-os://mobile-pair?..."
-                onChange={(event) => props.onPairingUriChange(event.target.value)}
+        <div className="mobile-settings-connection-content">
+          {isWebRTC ? (
+            <div className="mobile-settings-connection-panel">
+              <SettingsStaticRow
+                icon={Wifi}
+                label="WebRTC"
+                sublabel={props.settings.pairing ? props.settings.pairing.pcId : "未配对"}
               />
-              <button type="submit" disabled={!props.pairingUri.trim()}>
-                <KeyRound className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
-                导入配对
-              </button>
-            </form>
-            {props.pairingWarning ? <p className="mobile-settings-warning">{props.pairingWarning}</p> : null}
-            {props.pairingError ? <p className="mobile-settings-error">{props.pairingError}</p> : null}
-            {props.settings.pairing ? (
-              <button className="mobile-settings-danger-button" type="button" onClick={() => void props.onRemovePairing()}>
-                <Trash2 className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
-                删除配对
-              </button>
-            ) : null}
-          </div>
-        ) : (
-          <label className="mobile-settings-url-field">
-            <span>Bridge URL</span>
-            <input value={props.bridgeUrlDraft} onChange={(event) => props.onSaveBridgeURL(event.target.value)} />
-          </label>
-        )}
+              <form className="mobile-settings-pair-form" onSubmit={(event) => void props.onImportPairing(event)}>
+                <div className="mobile-settings-textarea-wrap">
+                  <textarea
+                    value={props.pairingUri}
+                    rows={3}
+                    aria-label="WebRTC 配对 URI"
+                    placeholder="ghost-os://mobile-pair?..."
+                    onChange={(event) => props.onPairingUriChange(event.target.value)}
+                  />
+                  <span className="mobile-settings-resize-mark" aria-hidden={true}>
+                    <span />
+                    <span />
+                  </span>
+                </div>
+                <button type="submit" disabled={!props.pairingUri.trim()}>
+                  <Key className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
+                  导入配对
+                </button>
+              </form>
+              {props.pairingWarning ? <p className="mobile-settings-warning">{props.pairingWarning}</p> : null}
+              {props.pairingError ? <p className="mobile-settings-error">{props.pairingError}</p> : null}
+              {props.settings.pairing ? (
+                <button
+                  className="mobile-settings-danger-button"
+                  type="button"
+                  onClick={() => void props.onRemovePairing()}
+                >
+                  <Trash2 className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
+                  删除配对
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mobile-settings-connection-panel">
+              <SettingsStaticRow icon={Server} label="HTTP" sublabel={props.bridgeUrlDraft || "未配置"} />
+              <label className="mobile-settings-url-field">
+                <span>Bridge URL</span>
+                <input value={props.bridgeUrlDraft} onChange={(event) => props.onSaveBridgeURL(event.target.value)} />
+              </label>
+            </div>
+          )}
 
-        <button className="mobile-settings-connect-button" type="button" onClick={() => void props.onConnect()}>
-          <Link2 className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
-          {props.status.tone === "loading" ? "连接中" : "连接 Bridge"}
-        </button>
+          <button className="mobile-settings-connect-button" type="button" onClick={() => void props.onConnect()}>
+            <Link2 className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
+            {props.status.tone === "loading" ? "连接中" : "连接 Bridge"}
+          </button>
+        </div>
       </div>
-    </SettingsSection>
+    </section>
+  );
+}
+
+function WebRTCSignalIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="mobile-settings-icon"
+      aria-hidden={true}
+    >
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16 8.5a5 5 0 0 1 0 7" />
+      <path d="M8 8.5a5 5 0 0 0 0 7" />
+    </svg>
   );
 }
 
