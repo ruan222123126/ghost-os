@@ -1,0 +1,185 @@
+.tool-card-list {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.tool-card {
+  min-width: 0;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.tool-card-toggle {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: #3c4043;
+  background: transparent;
+  cursor: pointer;
+}
+
+.tool-card-toggle:disabled {
+  cursor: default;
+}
+
+.tool-card-heading {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-card-status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #9aa0a6;
+}
+
+.tool-card-pending .tool-card-status-dot {
+  background: #fbbc04;
+}
+
+.tool-card-running .tool-card-status-dot {
+  background: #1a73e8;
+  animation: tool-card-pulse 1.2s ease-in-out infinite;
+}
+
+.tool-card-success .tool-card-status-dot {
+  background: #188038;
+}
+
+.tool-card-error .tool-card-status-dot {
+  background: #d93025;
+}
+
+.tool-card-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #202124;
+  font-size: 0.84rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.tool-card-status {
+  flex: 0 0 auto;
+  color: #5f6368;
+  font-size: 0.76rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tool-card-chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #5f6368;
+  transition: transform 140ms ease;
+}
+
+.tool-card.is-collapsed .tool-card-chevron {
+  transform: rotate(-90deg);
+}
+
+.tool-card-chevron .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.tool-card-details {
+  min-width: 0;
+  border-top: 1px solid #e5e7eb;
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+  background: #f8fafc;
+}
+
+.tool-card-detail {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.tool-card-detail-label {
+  color: #5f6368;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.tool-card-detail-content {
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+  color: #1f2937;
+  background: #ffffff;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.76rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tool-card {
+    border-color: #303236;
+    background: #1e1f20;
+  }
+
+  .tool-card-toggle {
+    color: #e8eaed;
+  }
+
+  .tool-card-title {
+    color: #f1f3f4;
+  }
+
+  .tool-card-status,
+  .tool-card-chevron,
+  .tool-card-detail-label {
+    color: #a3a7ad;
+  }
+
+  .tool-card-details {
+    border-top-color: #303236;
+    background: #171819;
+  }
+
+  .tool-card-detail-content {
+    border-color: #303236;
+    color: #d8e2f0;
+    background: #1e1f20;
+  }
+}
+
+@keyframes tool-card-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}

@@ -1,4 +1,4 @@
-import type { MobileConversationMessage, StoredMobileConversation } from "../mobileTypes";
+import type { MobileConversationMessage, MobileToolCard, MobileToolCardStatus, StoredMobileConversation } from "../mobileTypes";
 
 const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
 
@@ -119,6 +119,40 @@ function normalizeMessage(value: unknown, sessionId: string): MobileConversation
     sessionId,
     text,
     thinking: asString(record.thinking),
+    tools: normalizeTools(record.tools),
+  };
+}
+
+function normalizeTools(value: unknown): MobileToolCard[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const tools = value.map(normalizeTool).filter(isMobileToolCard);
+  return tools.length > 0 ? tools : undefined;
+}
+
+function normalizeTool(value: unknown): MobileToolCard | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const id = asTrimmedString(record.id);
+  const status = asToolStatus(record.status);
+  if (!id || !status) {
+    return null;
+  }
+
+  return {
+    id,
+    error: asString(record.error),
+    input: asString(record.input),
+    output: asString(record.output),
+    status,
+    toolCallId: asString(record.toolCallId),
+    toolName: asString(record.toolName),
+    traceId: asString(record.traceId),
   };
 }
 
@@ -138,10 +172,21 @@ function isMobileConversationMessage(value: MobileConversationMessage | null): v
   return value !== null;
 }
 
+function isMobileToolCard(value: MobileToolCard | null): value is MobileToolCard {
+  return value !== null;
+}
+
 function asTrimmedString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asToolStatus(value: unknown): MobileToolCardStatus | undefined {
+  if (value === "pending" || value === "running" || value === "success" || value === "error") {
+    return value;
+  }
+  return undefined;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { AgentPayload, StatusMessage } from "../../mobileTypes";
+import type { AgentPayload, MobileToolCard, MobileToolCardStatus, StatusMessage } from "../../mobileTypes";
 import { EMPTY_STATE_SUGGESTIONS } from "./data";
 import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
 import { UiIcon } from "./icons";
@@ -77,6 +77,7 @@ export function AssistantReply(props: AssistantReplyProps) {
             onToggleExpanded={toggleThinkingPanel}
           />
         ) : null}
+        {props.reply?.tools?.length ? <ToolCardList tools={props.reply.tools} /> : null}
         {props.status.tone === "error" ? (
           <>
             {replyMessage ? <AssistantMarkdownContent content={replyMessage} /> : null}
@@ -103,6 +104,62 @@ export function AssistantReply(props: AssistantReplyProps) {
         )}
       </div>
     </AssistantPanel>
+  );
+}
+
+function ToolCardList(props: { tools: MobileToolCard[] }) {
+  return (
+    <div className="tool-card-list">
+      {props.tools.map((tool) => (
+        <ToolCard key={tool.id} tool={tool} />
+      ))}
+    </div>
+  );
+}
+
+function ToolCard(props: { tool: MobileToolCard }) {
+  const [expanded, setExpanded] = useState(false);
+  const detailSections = toolDetailSections(props.tool);
+  const canExpand = detailSections.length > 0;
+  const title = props.tool.toolName?.trim() || props.tool.toolCallId?.trim() || "工具调用";
+  const className = [
+    "tool-card",
+    `tool-card-${props.tool.status}`,
+    expanded ? "is-expanded" : "is-collapsed",
+  ].join(" ");
+
+  return (
+    <section className={className}>
+      <button
+        type="button"
+        className="tool-card-toggle"
+        aria-expanded={expanded}
+        aria-busy={props.tool.status === "running"}
+        disabled={!canExpand}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="tool-card-heading">
+          <span className="tool-card-status-dot" aria-hidden="true" />
+          <span className="tool-card-title">{title}</span>
+          <span className="tool-card-status">{toolStatusText(props.tool.status)}</span>
+        </span>
+        {canExpand ? (
+          <span className="tool-card-chevron">
+            <UiIcon name="chevron-down" />
+          </span>
+        ) : null}
+      </button>
+      {expanded ? (
+        <div className="tool-card-details">
+          {detailSections.map((section) => (
+            <div className="tool-card-detail" key={section.label}>
+              <div className="tool-card-detail-label">{section.label}</div>
+              <pre className="tool-card-detail-content">{section.value}</pre>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -174,6 +231,38 @@ function ThinkingElapsed(props: { className: string; startedAtMs: number | null 
   }
 
   return <span className={props.className} aria-hidden="true">（{elapsedSeconds}s）</span>;
+}
+
+function toolDetailSections(tool: MobileToolCard): Array<{ label: string; value: string }> {
+  const sections: Array<{ label: string; value: string }> = [];
+  if (tool.input?.trim()) {
+    sections.push({ label: "输入", value: tool.input });
+  }
+  if (tool.output?.trim()) {
+    sections.push({ label: "输出", value: tool.output });
+  }
+  if (tool.error?.trim()) {
+    sections.push({ label: "错误", value: tool.error });
+  }
+  if (tool.traceId?.trim()) {
+    sections.push({ label: "Trace ID", value: tool.traceId });
+  }
+  return sections;
+}
+
+function toolStatusText(status: MobileToolCardStatus): string {
+  switch (status) {
+    case "pending":
+      return "待提交";
+    case "running":
+      return "运行中";
+    case "success":
+      return "成功";
+    case "error":
+      return "失败";
+    default:
+      return "未知";
+  }
 }
 
 function useThinkingPanelOpen(thinkingText: string, replyMessage: string): [boolean, () => void] {

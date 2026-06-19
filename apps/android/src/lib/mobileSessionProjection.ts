@@ -1,6 +1,7 @@
 import type { SidebarHistoryItem } from "../components/MobileChatHome";
 import type {
   AgentPayload,
+  MobileToolCard,
   MobileConversationMessage,
   MobileSessionRunState,
   MobileSessionRunStatus,
@@ -8,9 +9,12 @@ import type {
   SessionDetail,
   SessionMessage,
   SessionMetadata,
+  SessionToolCall,
+  SessionToolResult,
   StatusMessage,
   StoredMobileConversation,
 } from "../mobileTypes";
+import { parseToolTagText } from "./mobileToolTags";
 
 export function mergeHistoryItems(input: {
   bridgeConnected: boolean;
@@ -198,6 +202,7 @@ export function createAssistantConversationMessage(reply: AgentPayload, sessionI
     sessionId,
     text: reply.message,
     thinking: reply.thinking,
+    tools: reply.tools,
   };
 }
 
@@ -212,10 +217,42 @@ export function normalizeConversationSessionIds(
 }
 
 export function sessionDetailToConversationMessages(detail: SessionDetail): MobileConversationMessage[] {
-  return detail.messages
-    .filter((message) => message.role === "user" || message.role === "assistant")
-    .map((message) => sessionMessageToConversationMessage(message, detail.id))
-    .filter(isConversationMessage);
+  const messages: MobileConversationMessage[] = [];
+  const assistantByToolCallId = new Map<string, MobileConversationMessage>();
+  let lastAssistant: MobileConversationMessage | undefined;
+
+  for (const message of detail.messages) {
+    if (message.role === "tool") {
+      mergeToolMessageIntoAssistant(message, detail.id, assistantByToolCallId, lastAssistant);
+      continue;
+    }
+
+    if (message.role !== "user" && message.role !== "assistant") {
+      lastAssistant = undefined;
+      continue;
+    }
+
+    const conversationMessage = sessionMessageToConversationMessage(message, detail.id);
+    if (!conversationMessage) {
+      lastAssistant = undefined;
+      continue;
+    }
+
+    messages.push(conversationMessage);
+    if (conversationMessage.role !== "assistant") {
+      lastAssistant = undefined;
+      continue;
+    }
+
+    lastAssistant = conversationMessage;
+    for (const tool of conversationMessage.tools ?? []) {
+      if (tool.toolCallId?.trim()) {
+        assistantByToolCallId.set(tool.toolCallId.trim(), conversationMessage);
+      }
+    }
+  }
+
+  return messages;
 }
 
 export function sessionFallbackTitle(sessionId: string): string {
@@ -295,8 +332,11 @@ function sessionMessageToConversationMessage(
   message: SessionMessage,
   sessionId: string,
 ): MobileConversationMessage | null {
-  const text = sessionMessageText(message);
-  if (!text.trim() && !message.thinking?.trim()) {
+  const rawText = sessionMessageText(message);
+  const parsedToolTags = message.role === "assistant" ? parseToolTagText(rawText) : undefined;
+  const tools = message.role === "assistant" ? buildAssistantToolCards(message, sessionId, parsedToolTags?.calls ?? []) : [];
+  const text = parsedToolTags?.visibleText ?? rawText;
+  if (!text.trim() && !message.thinking?.trim() && tools.length === 0) {
     return null;
   }
   return {
@@ -305,6 +345,7 @@ function sessionMessageToConversationMessage(
     sessionId,
     text,
     thinking: message.thinking,
+    tools: tools.length > 0 ? tools : undefined,
   };
 }
 
@@ -322,8 +363,113 @@ function hasOwnProperty<T extends object>(value: T, key: PropertyKey): boolean {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function isConversationMessage(
-  message: MobileConversationMessage | null,
-): message is MobileConversationMessage {
-  return message !== null;
+function buildAssistantToolCards(
+  message: SessionMessage,
+  sessionId: string,
+  tagCalls: Array<{ toolId: string; argsText: string }>,
+): MobileToolCard[] {
+  const structuredTools = (message.tool_calls ?? []).map((toolCall) =>
+    buildToolCardFromSessionToolCall(toolCall, sessionId, message.index),
+  );
+  const tagTools = tagCalls.map((call, index) => ({
+    id: `${sessionId}:${message.index}:tag-tool:${index}`,
+    input: call.argsText,
+    status: "pending" as const,
+    toolName: `tool#${call.toolId}`,
+  }));
+  return [...structuredTools, ...tagTools];
+}
+
+function buildToolCardFromSessionToolCall(
+  toolCall: SessionToolCall,
+  sessionId: string,
+  messageIndex: number,
+): MobileToolCard {
+  return {
+    id: `${sessionId}:${messageIndex}:tool-call:${toolCall.id}`,
+    input: formatToolInput(toolCall.arguments),
+    status: "pending",
+    toolCallId: toolCall.id,
+    toolName: toolCall.name,
+  };
+}
+
+function mergeToolMessageIntoAssistant(
+  message: SessionMessage,
+  sessionId: string,
+  assistantByToolCallId: Map<string, MobileConversationMessage>,
+  lastAssistant: MobileConversationMessage | undefined,
+): void {
+  if (!message.tool_result) {
+    return;
+  }
+
+  const toolCallId = message.tool_call_id?.trim();
+  const target = toolCallId ? assistantByToolCallId.get(toolCallId) : undefined;
+  const assistant = target ?? lastAssistant;
+  if (!assistant) {
+    return;
+  }
+
+  const resultCard = buildToolCardFromResult(message, sessionId);
+  const tools = [...(assistant.tools ?? [])];
+  const index = resolveToolResultMergeIndex(tools, toolCallId, Boolean(target));
+  if (index >= 0) {
+    tools[index] = {
+      ...tools[index],
+      ...resultCard,
+      id: tools[index].id,
+      input: tools[index].input ?? resultCard.input,
+      toolCallId: tools[index].toolCallId ?? resultCard.toolCallId,
+      toolName: resultCard.toolName ?? tools[index].toolName,
+    };
+  } else {
+    tools.push(resultCard);
+  }
+
+  assistant.tools = tools;
+  if (toolCallId) {
+    assistantByToolCallId.set(toolCallId, assistant);
+  }
+}
+
+function buildToolCardFromResult(message: SessionMessage, sessionId: string): MobileToolCard {
+  const result = message.tool_result as SessionToolResult;
+  const text = sessionMessageText(message);
+  return {
+    id: `${sessionId}:${message.index}:tool-result`,
+    error: result.error,
+    output: result.output ?? (result.status === "success" ? text || undefined : undefined),
+    status: result.status,
+    toolCallId: message.tool_call_id,
+    toolName: result.tool,
+    traceId: result.trace_id,
+  };
+}
+
+function resolveToolResultMergeIndex(
+  tools: MobileToolCard[],
+  toolCallId: string | undefined,
+  hasMatchedAssistant: boolean,
+): number {
+  if (toolCallId) {
+    const matchedIndex = tools.findIndex((tool) => tool.toolCallId === toolCallId);
+    if (matchedIndex >= 0) {
+      return matchedIndex;
+    }
+  }
+
+  if (!hasMatchedAssistant) {
+    for (let index = tools.length - 1; index >= 0; index -= 1) {
+      const tool = tools[index];
+      if (tool.status === "pending" || tool.status === "running") {
+        return index;
+      }
+    }
+  }
+  return -1;
+}
+
+function formatToolInput(input: Record<string, unknown>): string {
+  return JSON.stringify(input, null, 2);
 }

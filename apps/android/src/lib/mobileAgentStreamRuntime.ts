@@ -1,4 +1,4 @@
-import type { AgentPayload, StatusMessage } from "../mobileTypes";
+import type { AgentPayload, MobileToolCard, StatusMessage } from "../mobileTypes";
 import {
   assertAgentStreamTerminal,
   createAgentStreamSummary,
@@ -7,12 +7,20 @@ import {
   parseAgentDonePayload,
   parseAgentErrorPayload,
   parseAgentStreamMessagePayload,
-  parseAgentToolCallPayload,
   resolveSessionId,
   updateAgentStreamSummary,
 } from "./agentStream";
 import type { AgentStreamEvent, AgentStreamResult } from "./agentStream";
 import { MobileWebRTCBridge } from "./mobileWebRTC";
+import {
+  cloneToolCard,
+  projectToolCallDelta,
+  projectToolCallEndDelta,
+  projectToolCallStartDelta,
+  projectToolFinished,
+  projectToolStarted,
+  projectToolTagEvents,
+} from "./mobileToolCardProjection";
 import {
   consumeToolTagStreamChunk,
   createToolTagStreamState,
@@ -26,6 +34,16 @@ export interface MobileAgentStreamRuntime {
   sessionId: string;
   thinking: string;
   terminal: boolean;
+  nextStructuredToolPreviewSeq: number;
+  pendingPreviewQueue: string[];
+  previewStructuredToolCallIdsByIndex: Map<number, string>;
+  previewStructuredToolCardIdsByIndex: Map<number, string>;
+  previewToolArgs: Map<string, string>;
+  previewToolCallSeqToId: Map<number, string>;
+  previewToolIdsByCardId: Map<string, string>;
+  previewToolNamesByCardId: Map<string, string>;
+  toolCardIds: Map<string, string>;
+  tools: MobileToolCard[];
   toolTags: ToolTagStreamState;
 }
 
@@ -38,10 +56,20 @@ export interface MobileAgentStreamProjector {
 export function createMobileAgentStreamRuntime(sessionId: string): MobileAgentStreamRuntime {
   return {
     message: "",
+    nextStructuredToolPreviewSeq: 1,
+    pendingPreviewQueue: [],
+    previewStructuredToolCallIdsByIndex: new Map(),
+    previewStructuredToolCardIdsByIndex: new Map(),
+    previewToolArgs: new Map(),
+    previewToolCallSeqToId: new Map(),
+    previewToolIdsByCardId: new Map(),
+    previewToolNamesByCardId: new Map(),
     sessionEnded: false,
     sessionId: sessionId.trim(),
     thinking: "",
     terminal: false,
+    toolCardIds: new Map(),
+    tools: [],
     toolTags: createToolTagStreamState(),
   };
 }
@@ -52,6 +80,7 @@ export function createAgentPayloadFromRuntime(runtime: MobileAgentStreamRuntime)
     session_ended: runtime.sessionEnded,
     session_id: runtime.sessionId,
     thinking: runtime.thinking,
+    tools: runtime.tools.length > 0 ? runtime.tools.map(cloneToolCard) : undefined,
   };
 }
 
@@ -71,10 +100,10 @@ export function projectMobileAgentStreamEvent(
       projectCompletionDelta(event, runtime, projector);
       break;
     case "tool_call_started":
-      projectToolStatus(event.payload, "正在调用工具", projector);
+      projectStartedTool(event, runtime, projector);
       break;
     case "tool_call_finished":
-      projectToolStatus(event.payload, "工具已返回", projector);
+      projectFinishedTool(event, runtime, projector);
       break;
     case "awaiting_human":
       projectAwaitingHuman(event, runtime, projector);
@@ -133,7 +162,7 @@ function projectCompletionDelta(
   const payload = parseAgentCompletionDeltaPayload(event.payload);
   switch (payload.kind) {
     case "text":
-      appendVisibleText(runtime, consumeToolTagStreamChunk(runtime.toolTags, payload.text ?? ""));
+      projectTextDelta(runtime, event.trace_id, payload.text ?? "");
       projector.setStatus({ tone: "loading", text: "生成中" });
       projector.commitReply(runtime);
       break;
@@ -143,30 +172,52 @@ function projectCompletionDelta(
       projector.commitReply(runtime);
       break;
     case "tool_call_start":
-    case "tool_call_delta":
+      projectToolCallStartDelta(runtime, event.trace_id, payload);
       projector.setStatus({
         tone: "loading",
         text: toolStatusText("正在准备工具", payload.tool_name, payload.tool_call_id),
       });
+      projector.commitReply(runtime);
+      break;
+    case "tool_call_delta":
+      projectToolCallDelta(runtime, event.trace_id, payload);
+      projector.setStatus({
+        tone: "loading",
+        text: toolStatusText("正在准备工具", payload.tool_name, payload.tool_call_id),
+      });
+      projector.commitReply(runtime);
       break;
     case "tool_call_end":
+      projectToolCallEndDelta(runtime, event.trace_id, payload);
       projector.setStatus({
         tone: "loading",
         text: toolStatusText("工具调用已提交", payload.tool_name, payload.tool_call_id),
       });
+      projector.commitReply(runtime);
       break;
     default:
       break;
   }
 }
 
-function projectToolStatus(
-  payload: Record<string, unknown>,
-  fallback: string,
+function projectStartedTool(
+  event: AgentStreamEvent,
+  runtime: MobileAgentStreamRuntime,
   projector: MobileAgentStreamProjector,
 ): void {
-  const tool = parseAgentToolCallPayload(payload);
-  projector.setStatus({ tone: "loading", text: toolStatusText(fallback, tool.tool, tool.tool_call_id) });
+  const tool = projectToolStarted(runtime, event);
+  projector.setStatus({ tone: "loading", text: toolStatusText("正在调用工具", tool.toolName, tool.toolCallId) });
+  projector.commitReply(runtime);
+}
+
+function projectFinishedTool(
+  event: AgentStreamEvent,
+  runtime: MobileAgentStreamRuntime,
+  projector: MobileAgentStreamProjector,
+): void {
+  const tool = projectToolFinished(runtime, event);
+  projector.setStatus({ tone: "loading", text: toolStatusText("工具已返回", tool.toolName, tool.toolCallId) });
+  projector.commitReply(runtime);
 }
 
 function projectAwaitingHuman(
@@ -187,10 +238,18 @@ function projectFinalMessage(
   projector: MobileAgentStreamProjector,
 ): void {
   const payload = parseAgentStreamMessagePayload(event.payload);
-  appendVisibleText(runtime, consumeToolTagStreamChunk(runtime.toolTags, "", true));
+  const finalized = consumeToolTagStreamChunk(runtime.toolTags, "", true);
+  appendVisibleText(runtime, finalized.visibleText);
+  projectToolTagEvents(runtime, event.trace_id, finalized.events);
   const finalText = stripToolTagCalls(payload.text);
   runtime.message = finalText.trim() ? finalText : runtime.message;
   projector.commitReply(runtime);
+}
+
+function projectTextDelta(runtime: MobileAgentStreamRuntime, traceId: string, text: string): void {
+  const consumed = consumeToolTagStreamChunk(runtime.toolTags, text);
+  appendVisibleText(runtime, consumed.visibleText);
+  projectToolTagEvents(runtime, traceId, consumed.events);
 }
 
 function projectDone(
@@ -230,9 +289,9 @@ function appendThinkingText(runtime: MobileAgentStreamRuntime, text: string): vo
   runtime.thinking = `${runtime.thinking}${text}`;
 }
 
-function toolStatusText(fallback: string, toolName?: string, toolCallId?: string): string {
+function toolStatusText(prefix: string, toolName?: string, toolCallId?: string): string {
   const label = toolName?.trim() || toolCallId?.trim();
-  return label ? `${fallback}：${label}` : fallback;
+  return label ? `${prefix}：${label}` : prefix;
 }
 
 function parseStreamEndSessionId(payload: Record<string, unknown>): string | undefined {

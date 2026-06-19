@@ -22,6 +22,25 @@ describe("session payload parser", () => {
           index: 1,
           role: "assistant",
           thinking: "checking",
+          tool_calls: [
+            {
+              arguments: { cmd: "pwd" },
+              id: "call-1",
+              name: "bash_exec",
+            },
+          ],
+        },
+        {
+          index: 2,
+          role: "tool",
+          text: "/repo",
+          tool_call_id: "call-1",
+          tool_result: {
+            output: "/repo",
+            status: "success",
+            tool: "bash_exec",
+            trace_id: "trace-1",
+          },
         },
       ],
       page: {
@@ -33,7 +52,17 @@ describe("session payload parser", () => {
     });
 
     expect(detail.id).toBe("session-1");
-    expect(detail.messages).toHaveLength(2);
+    expect(detail.messages).toHaveLength(3);
+    expect(detail.messages[1]?.tool_calls).toEqual([
+      { arguments: { cmd: "pwd" }, id: "call-1", name: "bash_exec" },
+    ]);
+    expect(detail.messages[2]?.tool_call_id).toBe("call-1");
+    expect(detail.messages[2]?.tool_result).toEqual({
+      output: "/repo",
+      status: "success",
+      tool: "bash_exec",
+      trace_id: "trace-1",
+    });
     expect(detail.page.limit).toBe(100);
   });
 
@@ -61,6 +90,38 @@ describe("session payload parser", () => {
         page: { limit: 100 },
       }),
     ).toThrow("SESSION_GET payload.page.has_more_before must be a boolean");
+  });
+
+  it("rejects invalid session tool call fields", () => {
+    expect(() =>
+      parseSessionDetail({
+        ...sessionMetadata("session-1"),
+        messages: [
+          {
+            index: 0,
+            role: "assistant",
+            tool_calls: [{ arguments: "bad", id: "call-1", name: "bash_exec" }],
+          },
+        ],
+        page: { has_more_before: false, limit: 100 },
+      }),
+    ).toThrow("SESSION_GET payload.messages[0].tool_calls[0].arguments must be an object");
+  });
+
+  it("rejects invalid session tool result fields", () => {
+    expect(() =>
+      parseSessionDetail({
+        ...sessionMetadata("session-1"),
+        messages: [
+          {
+            index: 0,
+            role: "tool",
+            tool_result: { status: "done", tool: "bash_exec" },
+          },
+        ],
+        page: { has_more_before: false, limit: 100 },
+      }),
+    ).toThrow("SESSION_GET payload.messages[0].tool_result.status must be one of success, error");
   });
 });
 

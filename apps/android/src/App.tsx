@@ -18,6 +18,7 @@ import { useMobileSessions } from "./hooks/useMobileSessions";
 import type { AgentPayload, MobileConversationMessage, StatusMessage } from "./mobileTypes";
 import "./App.css";
 import "./components/mobileChat/Messages.css";
+import "./components/mobileChat/ToolCards.css";
 import "./App.overlays.css";
 
 function isNonEmptyMessage(value: string): boolean {
@@ -250,6 +251,7 @@ function conversationMessageToAgentPayload(message: MobileConversationMessage): 
     session_ended: false,
     session_id: message.sessionId ?? "",
     thinking: message.thinking,
+    tools: message.tools,
   };
 }
 

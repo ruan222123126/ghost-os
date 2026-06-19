@@ -49,6 +49,7 @@ export interface AgentPayload {
   session_ended: boolean;
   thinking?: string;
   mode?: string;
+  tools?: MobileToolCard[];
 }
 
 export type SessionMessageRole = "system" | "internal" | "user" | "assistant" | "tool";
@@ -58,11 +59,30 @@ export interface SessionContentPart {
   text?: string;
 }
 
+export interface SessionToolCall {
+  id: string;
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export type SessionToolResultStatus = "success" | "error";
+
+export interface SessionToolResult {
+  status: SessionToolResultStatus;
+  tool: string;
+  trace_id?: string;
+  output?: string;
+  error?: string;
+}
+
 export interface SessionMessage {
   index: number;
   role: SessionMessageRole;
   text?: string;
   content?: SessionContentPart[];
+  tool_calls?: SessionToolCall[];
+  tool_result?: SessionToolResult | null;
+  tool_call_id?: string;
   in_progress?: boolean;
   thinking?: string;
 }
@@ -96,6 +116,20 @@ export interface MobileConversationMessage {
   text: string;
   thinking?: string;
   sessionId?: string;
+  tools?: MobileToolCard[];
+}
+
+export type MobileToolCardStatus = "pending" | "running" | "success" | "error";
+
+export interface MobileToolCard {
+  id: string;
+  toolName?: string;
+  toolCallId?: string;
+  status: MobileToolCardStatus;
+  input?: string;
+  output?: string;
+  error?: string;
+  traceId?: string;
 }
 
 export interface StoredMobileConversation {

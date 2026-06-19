@@ -5,9 +5,13 @@ import type {
   SessionMessagePage,
   SessionMessageRole,
   SessionMetadata,
+  SessionToolCall,
+  SessionToolResult,
+  SessionToolResultStatus,
 } from "../mobileTypes";
 
 const SESSION_MESSAGE_ROLES = new Set<SessionMessageRole>(["system", "internal", "user", "assistant", "tool"]);
+const SESSION_TOOL_RESULT_STATUSES = new Set<SessionToolResultStatus>(["success", "error"]);
 
 export function parseSessionMetadataList(payload: unknown): SessionMetadata[] {
   if (!Array.isArray(payload)) {
@@ -55,6 +59,17 @@ function parseSessionMessage(payload: unknown, path: string): SessionMessage {
       parseSessionContentPart(item, `${path}.content[${index}]`),
     );
   }
+  if (object.tool_calls !== undefined) {
+    message.tool_calls = requireArray(object.tool_calls, `${path}.tool_calls`).map((item, index) =>
+      parseSessionToolCall(item, `${path}.tool_calls[${index}]`),
+    );
+  }
+  if (object.tool_result !== undefined) {
+    message.tool_result = parseNullableSessionToolResult(object.tool_result, `${path}.tool_result`);
+  }
+  if (object.tool_call_id !== undefined) {
+    message.tool_call_id = requireString(object.tool_call_id, `${path}.tool_call_id`);
+  }
   if (object.in_progress !== undefined) {
     message.in_progress = requireBoolean(object.in_progress, `${path}.in_progress`);
   }
@@ -73,6 +88,36 @@ function parseSessionContentPart(payload: unknown, path: string): SessionContent
     part.text = requireString(object.text, `${path}.text`);
   }
   return part;
+}
+
+function parseSessionToolCall(payload: unknown, path: string): SessionToolCall {
+  const object = requireRecord(payload, path);
+  return {
+    arguments: requireRecord(object.arguments, `${path}.arguments`),
+    id: requireString(object.id, `${path}.id`),
+    name: requireString(object.name, `${path}.name`),
+  };
+}
+
+function parseNullableSessionToolResult(payload: unknown, path: string): SessionToolResult | null {
+  if (payload === null) {
+    return null;
+  }
+  const object = requireRecord(payload, path);
+  const result: SessionToolResult = {
+    status: requireSessionToolResultStatus(object.status, `${path}.status`),
+    tool: requireString(object.tool, `${path}.tool`),
+  };
+  if (object.trace_id !== undefined) {
+    result.trace_id = requireString(object.trace_id, `${path}.trace_id`);
+  }
+  if (object.output !== undefined) {
+    result.output = requireString(object.output, `${path}.output`);
+  }
+  if (object.error !== undefined) {
+    result.error = requireString(object.error, `${path}.error`);
+  }
+  return result;
 }
 
 function parseSessionMessagePage(payload: unknown, path: string): SessionMessagePage {
@@ -144,4 +189,11 @@ function requireSessionMessageRole(value: unknown, path: string): SessionMessage
     throw new Error(`${path} must be one of ${Array.from(SESSION_MESSAGE_ROLES).join(", ")}`);
   }
   return value as SessionMessageRole;
+}
+
+function requireSessionToolResultStatus(value: unknown, path: string): SessionToolResultStatus {
+  if (typeof value !== "string" || !SESSION_TOOL_RESULT_STATUSES.has(value as SessionToolResultStatus)) {
+    throw new Error(`${path} must be one of ${Array.from(SESSION_TOOL_RESULT_STATUSES).join(", ")}`);
+  }
+  return value as SessionToolResultStatus;
 }

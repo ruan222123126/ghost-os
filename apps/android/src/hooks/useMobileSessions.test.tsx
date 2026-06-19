@@ -92,6 +92,76 @@ describe("useMobileSessions", () => {
     });
   });
 
+  it("restores assistant tool calls and tool results from Bridge session detail", async () => {
+    const getSession = vi.fn(async (sessionId: string) => toolSessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getSession,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(result.current.activeMessages).toEqual([
+      expect.objectContaining({ role: "user", text: "run pwd" }),
+      expect.objectContaining({
+        role: "assistant",
+        text: "我来查看。",
+        tools: [
+          {
+            id: "session-1:1:tool-call:call-1",
+            input: "{\n  \"cmd\": \"pwd\"\n}",
+            output: "/repo",
+            status: "success",
+            toolCallId: "call-1",
+            toolName: "bash_exec",
+            traceId: "trace-1",
+          },
+        ],
+      }),
+    ]);
+    expect(loadStored()[0]?.messages[1]).toMatchObject({
+      role: "assistant",
+      tools: [expect.objectContaining({ output: "/repo", status: "success", toolCallId: "call-1" })],
+    });
+  });
+
+  it("persists final reply tools into local cache", async () => {
+    const sendAgentMessage = vi.fn(async (options: SendOptions) => {
+      const reply = agentReply("session-1", "done", [
+        {
+          id: "stream-tool:trace-1:call-1",
+          input: "{\"cmd\":\"pwd\"}",
+          output: "/repo",
+          status: "success",
+          toolCallId: "call-1",
+          toolName: "bash_exec",
+          traceId: "trace-1",
+        },
+      ]);
+      options.onSessionId("session-1");
+      options.onReply(reply);
+      return { ok: true, reply, sessionId: "session-1" };
+    });
+    const { result } = renderMobileSessions({ sendAgentMessage });
+
+    await act(async () => {
+      await result.current.sendMessage("pwd");
+    });
+
+    expect(result.current.activeMessages[result.current.activeMessages.length - 1]).toMatchObject({
+      role: "assistant",
+      tools: [expect.objectContaining({ output: "/repo", status: "success", toolCallId: "call-1" })],
+    });
+    const storedMessages = loadStored()[0]?.messages ?? [];
+    expect(storedMessages[storedMessages.length - 1]).toMatchObject({
+      role: "assistant",
+      tools: [expect.objectContaining({ output: "/repo", status: "success", toolCallId: "call-1" })],
+    });
+  });
+
   it("clears active session when starting a new session", async () => {
     const { result } = renderMobileSessions({
       sendAgentMessage: vi.fn(async (options: SendOptions) => {
@@ -306,11 +376,12 @@ function renderMobileSessions(overrides: Partial<Parameters<typeof useMobileSess
   });
 }
 
-function agentReply(sessionId: string, text: string): AgentPayload {
+function agentReply(sessionId: string, text: string, tools?: AgentPayload["tools"]): AgentPayload {
   return {
     message: text,
     session_ended: false,
     session_id: sessionId,
+    tools,
   };
 }
 
@@ -356,6 +427,47 @@ function sessionDetail(id: string): SessionDetail {
         index: 0,
         role: "user",
         text: "loaded",
+      },
+    ],
+    page: {
+      has_more_before: false,
+      limit: 100,
+    },
+  };
+}
+
+function toolSessionDetail(id: string): SessionDetail {
+  return {
+    ...session(id, `Bridge ${id}`),
+    messages: [
+      {
+        index: 0,
+        role: "user",
+        text: "run pwd",
+      },
+      {
+        index: 1,
+        role: "assistant",
+        text: "我来查看。",
+        tool_calls: [
+          {
+            arguments: { cmd: "pwd" },
+            id: "call-1",
+            name: "bash_exec",
+          },
+        ],
+      },
+      {
+        index: 2,
+        role: "tool",
+        text: "/repo",
+        tool_call_id: "call-1",
+        tool_result: {
+          output: "/repo",
+          status: "success",
+          tool: "bash_exec",
+          trace_id: "trace-1",
+        },
       },
     ],
     page: {
