@@ -6,7 +6,12 @@ import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ChatSendInput } from '@/lib/types';
-import type { ChatStateControls, StreamAgentRunInput, UseBridgeChatOptions } from './types';
+import type {
+  ChatStateControls,
+  ChatStreamRunResult,
+  StreamAgentRunInput,
+  UseBridgeChatOptions,
+} from './types';
 
 interface UseChatRunControlOptions {
   appendErrorMessage: ChatStateControls['appendErrorMessage'];
@@ -16,14 +21,19 @@ interface UseChatRunControlOptions {
   clearStreamingState: ChatStateControls['clearStreamingState'];
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
   endHistorySync: ChatStateControls['endHistorySync'];
+  getCurrentSessionId: () => string;
+  getActiveRun: ChatStateControls['getActiveRun'];
+  getStopPending: ChatStateControls['getStopPending'];
+  hasPendingQuestionInSession: ChatStateControls['hasPendingQuestionInSession'];
+  markBackgroundCompleted: ChatStateControls['markBackgroundCompleted'];
+  migrateSessionState: ChatStateControls['migrateSessionState'];
   onSessionResolved: UseBridgeChatOptions['onSessionResolved'];
-  runAgentStream: (run: StreamAgentRunInput) => Promise<void>;
-  activeRunRef: ChatStateControls['activeRunRef'];
+  runAgentStream: (run: StreamAgentRunInput) => Promise<ChatStreamRunResult>;
+  resolveActiveRunSessionId: ChatStateControls['resolveActiveRunSessionId'];
   setActiveRun: ChatStateControls['setActiveRun'];
   setLoading: ChatStateControls['setLoading'];
   setStopPending: ChatStateControls['setStopPending'];
   setChatError: ChatStateControls['setChatError'];
-  stopPendingRef: ChatStateControls['stopPendingRef'];
   syncRecentHistory: (sessionId: string) => Promise<void>;
 }
 
@@ -37,14 +47,19 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     clearStreamingState,
     currentSessionId,
     endHistorySync,
+    getCurrentSessionId,
+    getActiveRun,
+    getStopPending,
+    hasPendingQuestionInSession,
+    markBackgroundCompleted,
+    migrateSessionState,
     onSessionResolved,
     runAgentStream,
-    activeRunRef,
+    resolveActiveRunSessionId,
     setActiveRun,
     setLoading,
     setStopPending,
     setChatError,
-    stopPendingRef,
     syncRecentHistory,
   } = options;
 
@@ -53,23 +68,23 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     if (!trimmedSessionId) {
       return;
     }
-    if (trimmedSessionId !== currentSessionId) {
+    if (trimmedSessionId !== getCurrentSessionId().trim()) {
       onSessionResolved?.(trimmedSessionId);
     }
 
-    beginHistorySync();
+    beginHistorySync(trimmedSessionId);
     try {
       await syncRecentHistory(trimmedSessionId);
     } catch (error) {
-      setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+      setChatError(trimmedSessionId, toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
-      endHistorySync();
+      endHistorySync(trimmedSessionId);
     }
   }, [
     beginHistorySync,
     copy.system.genericRequestFailed,
-    currentSessionId,
     endHistorySync,
+    getCurrentSessionId,
     onSessionResolved,
     setChatError,
     syncRecentHistory,
@@ -83,32 +98,42 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     const sessionId = currentSessionId.trim();
     const traceId = createClientTraceId('agent-run');
     const abortController = new AbortController();
-    clearChatError();
-    clearStreamingState();
-    setStopPending(false);
-    setActiveRun({ abortController, sessionId, traceId });
-    appendCommittedMessages([buildUserMessage(input.message, {
+    clearChatError(sessionId);
+    clearStreamingState(sessionId);
+    setStopPending(sessionId, false);
+    setActiveRun(sessionId, { abortController, sessionId, traceId });
+    appendCommittedMessages(sessionId, [buildUserMessage(input.message, {
       id: `local:user:${traceId}`,
       images: draftImagesToChatImages(input.images),
     })]);
-    setLoading(true);
+    setLoading(sessionId, true);
 
     try {
-      await runAgentStream({
+      const result = await runAgentStream({
         images: draftImagesToSessionImages(input.images),
         message: input.message,
         sessionId: sessionId || undefined,
         signal: abortController.signal,
         traceId,
       });
+      if (shouldMarkBackgroundCompleted({
+        currentSessionId: getCurrentSessionId(),
+        hasPendingQuestion: hasPendingQuestionInSession(result.sessionId),
+        initialSessionId: sessionId,
+        result,
+      })) {
+        markBackgroundCompleted(result.sessionId);
+      }
     } catch (error) {
-      if (!shouldSuppressRunError(error, stopPendingRef.current, abortController.signal.aborted)) {
-        appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
+      const targetSessionId = resolveActiveRunSessionId(traceId, sessionId);
+      if (!shouldSuppressRunError(error, getStopPending(targetSessionId), abortController.signal.aborted)) {
+        appendErrorMessage(targetSessionId, toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
-      setLoading(false);
-      setActiveRun(null);
-      setStopPending(false);
+      const targetSessionId = resolveActiveRunSessionId(traceId, sessionId);
+      setLoading(targetSessionId, false);
+      setActiveRun(targetSessionId, null);
+      setStopPending(targetSessionId, false);
     }
   }, [
     copy.system.genericRequestFailed,
@@ -117,45 +142,57 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     clearChatError,
     clearStreamingState,
     currentSessionId,
+    getCurrentSessionId,
+    getStopPending,
+    hasPendingQuestionInSession,
+    markBackgroundCompleted,
+    resolveActiveRunSessionId,
     runAgentStream,
     setActiveRun,
     setLoading,
     setStopPending,
-    stopPendingRef,
   ]);
 
   const stopCurrentRun = useCallback(async () => {
-    const run = activeRunRef.current;
-    if (!run || stopPendingRef.current) {
+    const sessionId = currentSessionId.trim();
+    const run = getActiveRun(sessionId);
+    if (!run || getStopPending(sessionId)) {
       return;
     }
 
-    clearChatError();
-    setStopPending(true);
+    clearChatError(sessionId);
+    setStopPending(sessionId, true);
     let stopAccepted = false;
+    let targetSessionId = sessionId;
     try {
       const response = await stopAgent(run.sessionId || undefined, run.traceId || undefined);
       stopAccepted = true;
       run.abortController?.abort();
-      await syncStoppedRunHistory(resolveStopSessionId(response.session_id, run.sessionId));
+      targetSessionId = resolveStopSessionId(response.session_id, run.sessionId);
+      if (targetSessionId && targetSessionId !== run.sessionId) {
+        migrateSessionState(run.sessionId, targetSessionId);
+      }
+      await syncStoppedRunHistory(targetSessionId);
     } catch (error) {
-      setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+      setChatError(targetSessionId, toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
       if (stopAccepted) {
-        setLoading(false);
-        setActiveRun(null);
+        setLoading(targetSessionId, false);
+        setActiveRun(targetSessionId, null);
       }
-      setStopPending(false);
+      setStopPending(targetSessionId, false);
     }
   }, [
-    activeRunRef,
     clearChatError,
     copy.system.genericRequestFailed,
+    currentSessionId,
+    getActiveRun,
+    getStopPending,
+    migrateSessionState,
     setChatError,
     setActiveRun,
     setLoading,
     setStopPending,
-    stopPendingRef,
     syncStoppedRunHistory,
   ]);
 
@@ -181,6 +218,24 @@ function shouldSuppressRunError(error: unknown, stopPending: boolean, streamAbor
 
   return message === 'agent stream closed before terminal event'
     || message === 'agent run cancelled';
+}
+
+function shouldMarkBackgroundCompleted(input: {
+  currentSessionId: string;
+  hasPendingQuestion: boolean;
+  initialSessionId: string;
+  result: ChatStreamRunResult;
+}): boolean {
+  const completedSessionId = input.result.sessionId.trim();
+  if (!completedSessionId || input.result.terminalType !== 'done' || input.hasPendingQuestion) {
+    return false;
+  }
+
+  const currentSessionId = input.currentSessionId.trim();
+  if (currentSessionId === completedSessionId) {
+    return false;
+  }
+  return input.initialSessionId.trim().length > 0 || currentSessionId.length > 0;
 }
 
 function resolveStopSessionId(stoppedSessionId?: string, activeSessionId?: string): string {

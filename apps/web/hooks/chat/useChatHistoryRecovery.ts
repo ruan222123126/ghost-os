@@ -36,39 +36,40 @@ interface UseChatHistoryRecoveryOptions {
 
 export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
   const { copy } = useWebLocale();
-  const recoveryRunRef = useRef<ActiveAgentRun | null>(null);
-  const stopRecoveredRun = useCallback(() => {
-    recoveryRunRef.current?.abortController?.abort();
-    recoveryRunRef.current = null;
+  const recoveryRunRef = useRef<Record<string, ActiveAgentRun>>({});
+  const stopRecoveredRun = useCallback((sessionId: string) => {
+    const key = sessionId.trim();
+    recoveryRunRef.current[key]?.abortController?.abort();
+    delete recoveryRunRef.current[key];
   }, []);
 
   const syncRecoveredTurn = useCallback(async (sessionId: string, messageText?: string) => {
-    stopRecoveredRun();
-    options.beginHistorySync();
+    stopRecoveredRun(sessionId);
+    options.beginHistorySync(sessionId);
     try {
       const detail = await getSession(sessionId, { limit: RECOVERY_HISTORY_LIMIT });
-      applyHistoryPage(detail, options.setHasOlderHistory, options.setNextHistoryBefore);
+      applyHistoryPage(detail, sessionId, options.setHasOlderHistory, options.setNextHistoryBefore);
       options.hydrateTurnDraft(sessionId, detail.turn_draft ?? null);
-      options.setChatError(
+      options.setChatError(sessionId,
         messageText ?? (detail.turn_draft?.status === 'error' ? (detail.turn_draft.error ?? '') : ''),
       );
-      options.setCommittedMessages((previous) => {
+      options.setCommittedMessages(sessionId, (previous) => {
         return mergeLatestCommittedMessages(previous, mapSessionMessagesToChat(detail.id, detail.messages));
       });
     } catch (error) {
-      options.setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+      options.setChatError(sessionId, toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
-      options.setActiveRun(null);
-      options.setLoading(false);
-      options.setStopPending(false);
-      options.endHistorySync();
+      options.setActiveRun(sessionId, null);
+      options.setLoading(sessionId, false);
+      options.setStopPending(sessionId, false);
+      options.endHistorySync(sessionId);
     }
   }, [copy.system.genericRequestFailed, options, stopRecoveredRun]);
 
   const applyRecoveredEvent = useCallback((runtime: ChatRuntimeState, event: SessionPushEvent) => {
     const eventRunState = projectRecoveredTurnEventRunState(event.type);
     if (eventRunState.projectRuntimeEvent) {
-      options.applyRuntimeActions(projectAgentEvent({
+      options.applyRuntimeActions(runtime.sessionId, projectAgentEvent({
         event: toAgentStreamEvent(event),
         runtime,
       }));
@@ -77,14 +78,14 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
   }, [options]);
 
   const recoverTurnDraft = useCallback((sessionId: string, draft: SessionTurnDraft | null | undefined) => {
-    stopRecoveredRun();
+    stopRecoveredRun(sessionId);
     options.hydrateTurnDraft(sessionId, draft);
     const recovery = projectTurnDraftRunRecovery(sessionId, draft);
-    options.setStopPending(recovery.stopPending);
-    options.setActiveRun(null);
-    options.setLoading(recovery.loading);
+    options.setStopPending(sessionId, recovery.stopPending);
+    options.setActiveRun(sessionId, null);
+    options.setLoading(sessionId, recovery.loading);
     if (recovery.chatError !== undefined) {
-      options.setChatError(recovery.chatError);
+      options.setChatError(sessionId, recovery.chatError);
     }
 
     if (recovery.phase !== 'streaming' || !draft || !recovery.activeRun) {
@@ -94,8 +95,8 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
     const runtime = createChatRuntimeStateFromDraft(draft, sessionId);
     const abortController = new AbortController();
     const recoveredRun = { ...recovery.activeRun, abortController };
-    recoveryRunRef.current = recoveredRun;
-    options.setActiveRun(recoveredRun);
+    recoveryRunRef.current[sessionId.trim()] = recoveredRun;
+    options.setActiveRun(sessionId, recoveredRun);
 
     void streamSessionEvents({
       onEvent: async (event) => {
@@ -114,9 +115,9 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
       if (abortController.signal.aborted) {
         return;
       }
-      options.setActiveRun(null);
-      options.setLoading(false);
-      options.setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+      options.setActiveRun(sessionId, null);
+      options.setLoading(sessionId, false);
+      options.setChatError(sessionId, toErrorMessage(error, copy.system.genericRequestFailed));
     });
   }, [applyRecoveredEvent, copy.system.genericRequestFailed, options, stopRecoveredRun, syncRecoveredTurn]);
 
@@ -128,9 +129,10 @@ export function useChatHistoryRecovery(options: UseChatHistoryRecoveryOptions) {
 
 function applyHistoryPage(
   detail: SessionDetail,
+  sessionId: string,
   setHasOlderHistory: ChatStateControls['setHasOlderHistory'],
   setNextHistoryBefore: ChatStateControls['setNextHistoryBefore'],
 ): void {
-  setHasOlderHistory(detail.page.has_more_before);
-  setNextHistoryBefore(detail.page.next_before ?? null);
+  setHasOlderHistory(sessionId, detail.page.has_more_before);
+  setNextHistoryBefore(sessionId, detail.page.next_before ?? null);
 }

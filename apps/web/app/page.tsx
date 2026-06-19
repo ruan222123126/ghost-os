@@ -123,6 +123,7 @@ const HomePageSidebar: FC<{
     <SessionSidebar
       sessions={controller.sessions}
       currentSessionId={controller.currentSessionId}
+      backgroundCompletedSessionIds={controller.backgroundCompletedSessionIds}
       loading={controller.sessionsLoading}
       error={controller.sessionsError}
       onSelect={controller.selectSession}

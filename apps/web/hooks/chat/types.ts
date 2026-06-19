@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
+import type { SetStateAction } from 'react';
 import type { ActiveAgentRun } from '@/lib/chat-stream/types';
 import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
@@ -36,7 +36,11 @@ export interface UseBridgeChatResult {
   cancelQuestion: (questionId: string) => Promise<void>;
   loadSessionHistory: (sessionId: string) => Promise<void>;
   loadOlderHistory: () => Promise<void>;
-  clearMessages: () => void;
+  clearMessages: (sessionId?: string) => void;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
+  clearBackgroundCompletion: (sessionId: string) => void;
+  dropSessionState: (sessionId: string) => void;
+  shouldLoadSessionHistory: (sessionId: string) => boolean;
 }
 
 export interface UseBridgeChatOptions {
@@ -50,6 +54,11 @@ export interface StreamAgentRunInput {
   sessionId?: string;
   signal?: AbortSignal;
   traceId: string;
+}
+
+export interface ChatStreamRunResult {
+  sessionId: string;
+  terminalType: 'awaiting_human' | 'done' | '';
 }
 
 export interface ChatStateControls {
@@ -69,33 +78,42 @@ export interface ChatStateControls {
   stopPending: boolean;
   hasOlderHistory: boolean;
   nextHistoryBefore: number | null;
-  activeRunRef: MutableRefObject<ActiveAgentRun | null>;
-  stopPendingRef: MutableRefObject<boolean>;
-  setCommittedMessages: Dispatch<SetStateAction<ChatMessage[]>>;
-  setLoading: (value: boolean) => void;
-  beginHistorySync: () => void;
-  endHistorySync: () => void;
-  setHistoryLoading: (value: boolean) => void;
-  setLoadingOlderHistory: (value: boolean) => void;
-  setChatError: (value: string) => void;
-  setActiveRun: (value: ActiveAgentRun | null) => void;
-  setStopPending: (value: boolean) => void;
-  setHasOlderHistory: (value: boolean) => void;
-  setNextHistoryBefore: (value: number | null) => void;
-  applyRuntimeActions: (actions: ChatRuntimeAction[]) => void;
-  appendCommittedMessages: (nextMessages: ChatMessage[]) => void;
-  clearChatError: () => void;
-  replaceWithErrorMessage: (messageText: string) => void;
-  appendErrorMessage: (messageText: string) => void;
-  appendStreamingAssistantText: (text: string) => void;
-  clearStreamingAssistantText: () => void;
-  clearStreamingThinkingText: () => void;
-  clearStreamingState: () => void;
-  upsertStreamingTool: (tool: StreamingToolState) => void;
-  clearStreamingTools: () => void;
-  upsertPendingQuestion: (question: PendingQuestionMessage) => void;
-  removePendingQuestion: (questionId: string) => void;
-  clearPendingQuestions: () => void;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
+  getActiveRun: (sessionId: string) => ActiveAgentRun | null;
+  getStopPending: (sessionId: string) => boolean;
+  resolveActiveRunSessionId: (traceId: string, fallbackSessionId: string) => string;
+  getNextHistoryBefore: (sessionId: string) => number | null;
+  hasPendingQuestionInSession: (sessionId: string) => boolean;
+  shouldLoadSessionHistory: (sessionId: string) => boolean;
+  setCommittedMessages: (sessionId: string, updater: SetStateAction<ChatMessage[]>) => void;
+  setLoading: (sessionId: string, value: boolean) => void;
+  beginHistorySync: (sessionId: string) => void;
+  endHistorySync: (sessionId: string) => void;
+  setHistoryLoading: (sessionId: string, value: boolean) => void;
+  setLoadingOlderHistory: (sessionId: string, value: boolean) => void;
+  setChatError: (sessionId: string, value: string) => void;
+  setActiveRun: (sessionId: string, value: ActiveAgentRun | null) => void;
+  setStopPending: (sessionId: string, value: boolean) => void;
+  setHasOlderHistory: (sessionId: string, value: boolean) => void;
+  setNextHistoryBefore: (sessionId: string, value: number | null) => void;
+  applyRuntimeActions: (sessionId: string, actions: ChatRuntimeAction[]) => void;
+  appendCommittedMessages: (sessionId: string, nextMessages: ChatMessage[]) => void;
+  clearChatError: (sessionId: string) => void;
+  replaceWithErrorMessage: (sessionId: string, messageText: string) => void;
+  appendErrorMessage: (sessionId: string, messageText: string) => void;
+  appendStreamingAssistantText: (sessionId: string, text: string) => void;
+  clearStreamingAssistantText: (sessionId: string) => void;
+  clearStreamingThinkingText: (sessionId: string) => void;
+  clearStreamingState: (sessionId: string) => void;
+  upsertStreamingTool: (sessionId: string, tool: StreamingToolState) => void;
+  clearStreamingTools: (sessionId: string) => void;
+  upsertPendingQuestion: (sessionId: string, question: PendingQuestionMessage) => void;
+  removePendingQuestion: (sessionId: string, questionId: string) => void;
+  clearPendingQuestions: (sessionId: string) => void;
   hydrateTurnDraft: (sessionId: string, draft: SessionTurnDraft | null | undefined) => void;
-  clearMessages: () => void;
+  clearMessages: (sessionId: string) => void;
+  migrateSessionState: (fromSessionId: string, toSessionId: string) => void;
+  markBackgroundCompleted: (sessionId: string) => void;
+  clearBackgroundCompletion: (sessionId: string) => void;
+  dropSessionState: (sessionId: string) => void;
 }

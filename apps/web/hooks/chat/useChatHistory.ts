@@ -28,7 +28,7 @@ interface UseChatHistoryOptions {
   setStopPending: ChatStateControls['setStopPending'];
   beginHistorySync: ChatStateControls['beginHistorySync'];
   endHistorySync: ChatStateControls['endHistorySync'];
-  nextHistoryBefore: ChatStateControls['nextHistoryBefore'];
+  getNextHistoryBefore: ChatStateControls['getNextHistoryBefore'];
 }
 
 export function useChatHistory(options: UseChatHistoryOptions) {
@@ -51,7 +51,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     setStopPending,
     beginHistorySync,
     endHistorySync,
-    nextHistoryBefore,
+    getNextHistoryBefore,
   } = options;
   const { recoverTurnDraft, stopRecoveredRun } = useChatHistoryRecovery({
     applyRuntimeActions,
@@ -69,19 +69,19 @@ export function useChatHistory(options: UseChatHistoryOptions) {
 
   const hydrateSessionHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
-    applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
-    clearPendingQuestions();
-    setCommittedMessages(mapSessionMessagesToChat(detail.id, detail.messages));
+    applyHistoryPage(detail, detail.id, setHasOlderHistory, setNextHistoryBefore);
+    clearPendingQuestions(detail.id);
+    setCommittedMessages(detail.id, mapSessionMessagesToChat(detail.id, detail.messages));
     if (detail.turn_draft) {
       recoverTurnDraft(detail.id, detail.turn_draft);
       return;
     }
-    stopRecoveredRun();
-    clearStreamingState();
+    stopRecoveredRun(detail.id);
+    clearStreamingState(detail.id);
     hydrateTurnDraft(detail.id, null);
-    setActiveRun(null);
-    setLoading(false);
-    setStopPending(false);
+    setActiveRun(detail.id, null);
+    setLoading(detail.id, false);
+    setStopPending(detail.id, false);
   }, [
     clearPendingQuestions,
     clearStreamingState,
@@ -98,9 +98,9 @@ export function useChatHistory(options: UseChatHistoryOptions) {
 
   const syncRecentHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
-    applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
+    applyHistoryPage(detail, detail.id, setHasOlderHistory, setNextHistoryBefore);
     const latest = mapSessionMessagesToChat(detail.id, detail.messages);
-    setCommittedMessages((previous) => {
+    setCommittedMessages(detail.id, (previous) => {
       return mergeLatestCommittedMessages(previous, latest);
     });
     hydrateTurnDraft(detail.id, detail.turn_draft ?? null);
@@ -109,30 +109,30 @@ export function useChatHistory(options: UseChatHistoryOptions) {
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();
     if (!id) {
-      stopRecoveredRun();
-      clearStreamingState();
+      stopRecoveredRun('');
+      clearStreamingState('');
       hydrateTurnDraft('', null);
-      clearPendingQuestions();
-      setCommittedMessages([]);
-      setHasOlderHistory(false);
-      setNextHistoryBefore(null);
-      setActiveRun(null);
-      setLoading(false);
-      setStopPending(false);
+      clearPendingQuestions('');
+      setCommittedMessages('', []);
+      setHasOlderHistory('', false);
+      setNextHistoryBefore('', null);
+      setActiveRun('', null);
+      setLoading('', false);
+      setStopPending('', false);
       return;
     }
 
-    clearChatError();
-    stopRecoveredRun();
-    setHistoryLoading(true);
+    clearChatError(id);
+    stopRecoveredRun(id);
+    setHistoryLoading(id, true);
     try {
       await hydrateSessionHistory(id);
     } catch (error) {
       const messageText = toErrorMessage(error, copy.system.genericRequestFailed);
-      setChatError(messageText);
-      replaceWithErrorMessage(messageText);
+      setChatError(id, messageText);
+      replaceWithErrorMessage(id, messageText);
     } finally {
-      setHistoryLoading(false);
+      setHistoryLoading(id, false);
     }
   }, [
     copy.system.genericRequestFailed,
@@ -155,31 +155,32 @@ export function useChatHistory(options: UseChatHistoryOptions) {
 
   const loadOlderHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();
+    const nextHistoryBefore = getNextHistoryBefore(id);
     if (!id || nextHistoryBefore === null) {
       return;
     }
 
-    clearChatError();
-    setLoadingOlderHistory(true);
+    clearChatError(id);
+    setLoadingOlderHistory(id, true);
     try {
       const detail = await getSession(id, {
         before: nextHistoryBefore,
         limit: HISTORY_PAGE_LIMIT,
       });
-      applyHistoryPage(detail, setHasOlderHistory, setNextHistoryBefore);
+      applyHistoryPage(detail, detail.id, setHasOlderHistory, setNextHistoryBefore);
       const older = mapSessionMessagesToChat(detail.id, detail.messages);
-      setCommittedMessages((previous) => {
+      setCommittedMessages(detail.id, (previous) => {
         return prependUniqueCommittedMessages(previous, older);
       });
     } catch (error) {
-      setChatError(toErrorMessage(error, copy.system.genericRequestFailed));
+      setChatError(id, toErrorMessage(error, copy.system.genericRequestFailed));
     } finally {
-      setLoadingOlderHistory(false);
+      setLoadingOlderHistory(id, false);
     }
   }, [
     copy.system.genericRequestFailed,
     clearChatError,
-    nextHistoryBefore,
+    getNextHistoryBefore,
     setChatError,
     setCommittedMessages,
     setHasOlderHistory,
@@ -197,11 +198,12 @@ export function useChatHistory(options: UseChatHistoryOptions) {
 
 function applyHistoryPage(
   detail: SessionDetail,
+  sessionId: string,
   setHasOlderHistory: ChatStateControls['setHasOlderHistory'],
   setNextHistoryBefore: ChatStateControls['setNextHistoryBefore'],
 ): void {
-  setHasOlderHistory(detail.page.has_more_before);
-  setNextHistoryBefore(detail.page.next_before ?? null);
+  setHasOlderHistory(sessionId, detail.page.has_more_before);
+  setNextHistoryBefore(sessionId, detail.page.next_before ?? null);
 }
 
 function prependUniqueCommittedMessages(previous: ChatMessage[], older: ChatMessage[]): ChatMessage[] {

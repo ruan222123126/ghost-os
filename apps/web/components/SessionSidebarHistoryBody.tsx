@@ -29,6 +29,7 @@ interface SessionSidebarHistoryBodyProps {
   partitionViews: SessionPartitionView[];
   collapsedPartitionIDs: ReadonlySet<string>;
   currentSessionId: string;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
   focusSessionId?: string;
   dragState: {
     draggingSessionID: string;
@@ -58,6 +59,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   partitionViews,
   collapsedPartitionIDs,
   currentSessionId,
+  backgroundCompletedSessionIds,
   focusSessionId,
   dragState,
   resolveSessionTitle,
@@ -120,6 +122,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
         rows={buildFlatSessionRows(visibleFlatSessions)}
         scrollElementRef={scrollElementRef}
         currentSessionId={currentSessionId}
+        backgroundCompletedSessionIds={backgroundCompletedSessionIds}
         focusSessionId={focusSessionId}
         resolveSessionTitle={resolveSessionTitle}
         onSelect={onSelect}
@@ -147,6 +150,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
       rows={rows}
       scrollElementRef={scrollElementRef}
       currentSessionId={currentSessionId}
+      backgroundCompletedSessionIds={backgroundCompletedSessionIds}
       focusSessionId={focusSessionId}
       resolveSessionTitle={resolveSessionTitle}
       onSelect={onSelect}
@@ -166,6 +170,7 @@ const SessionSidebarVirtualRows: FC<{
   rows: SessionSidebarHistoryRow[];
   scrollElementRef: RefObject<HTMLDivElement>;
   currentSessionId: string;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
   focusSessionId?: string;
   resolveSessionTitle: (session: SessionMetadata) => string;
   onSelect: (id: string) => void;
@@ -225,6 +230,7 @@ const SessionSidebarVirtualRows: FC<{
               copy={props.copy}
               row={row}
               currentSessionId={props.currentSessionId}
+              backgroundCompletedSessionIds={props.backgroundCompletedSessionIds}
               resolveSessionTitle={props.resolveSessionTitle}
               onSelect={props.onSelect}
               onDelete={props.onDelete}

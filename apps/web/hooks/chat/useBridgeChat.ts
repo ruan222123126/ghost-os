@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useChatHistory } from './useChatHistory';
 import { useChatQuestionActions } from './useChatQuestionActions';
 import { useChatRunControl } from './useChatRunControl';
@@ -7,7 +7,12 @@ import { useChatStreamController } from './useChatStreamController';
 import type { UseBridgeChatOptions, UseBridgeChatResult } from './types';
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
-  const state = useChatState();
+  const state = useChatState(options.currentSessionId);
+  const currentSessionIdRef = useRef(options.currentSessionId);
+
+  useEffect(() => {
+    currentSessionIdRef.current = options.currentSessionId;
+  }, [options.currentSessionId]);
 
   const {
     loadOlderHistory,
@@ -31,16 +36,15 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     setStopPending: state.setStopPending,
     beginHistorySync: state.beginHistorySync,
     endHistorySync: state.endHistorySync,
-    nextHistoryBefore: state.nextHistoryBefore,
+    getNextHistoryBefore: state.getNextHistoryBefore,
   });
   const { runAgentStream, runHumanStream } = useChatStreamController({
-    currentSessionId: options.currentSessionId,
-    activeRunRef: state.activeRunRef,
     applyRuntimeActions: state.applyRuntimeActions,
     endHistorySync: state.endHistorySync,
+    getCurrentSessionId: () => currentSessionIdRef.current,
+    migrateSessionState: state.migrateSessionState,
     onSessionResolved: options.onSessionResolved,
     setChatError: state.setChatError,
-    setActiveRun: state.setActiveRun,
     beginHistorySync: state.beginHistorySync,
     syncRecentHistory,
   });
@@ -52,14 +56,19 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     clearStreamingState: state.clearStreamingState,
     currentSessionId: options.currentSessionId,
     endHistorySync: state.endHistorySync,
+    getCurrentSessionId: () => currentSessionIdRef.current,
+    getActiveRun: state.getActiveRun,
+    getStopPending: state.getStopPending,
+    hasPendingQuestionInSession: state.hasPendingQuestionInSession,
+    markBackgroundCompleted: state.markBackgroundCompleted,
+    migrateSessionState: state.migrateSessionState,
     onSessionResolved: options.onSessionResolved,
     runAgentStream,
-    activeRunRef: state.activeRunRef,
+    resolveActiveRunSessionId: state.resolveActiveRunSessionId,
     setActiveRun: state.setActiveRun,
     setLoading: state.setLoading,
     setStopPending: state.setStopPending,
     setChatError: state.setChatError,
-    stopPendingRef: state.stopPendingRef,
     syncRecentHistory,
   });
   const { answerQuestion, cancelQuestion } = useChatQuestionActions({
@@ -69,12 +78,16 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     clearStreamingState: state.clearStreamingState,
     pendingQuestions: state.pendingQuestions,
     runHumanStream,
+    getCurrentSessionId: () => currentSessionIdRef.current,
+    getStopPending: state.getStopPending,
+    hasPendingQuestionInSession: state.hasPendingQuestionInSession,
+    markBackgroundCompleted: state.markBackgroundCompleted,
     removePendingQuestion: state.removePendingQuestion,
+    resolveActiveRunSessionId: state.resolveActiveRunSessionId,
     setActiveRun: state.setActiveRun,
     setChatError: state.setChatError,
     setLoading: state.setLoading,
     setStopPending: state.setStopPending,
-    stopPendingRef: state.stopPendingRef,
   });
   const loadOlderCurrentSessionHistory = useCallback(async () => {
     await loadOlderHistory(options.currentSessionId);
@@ -102,6 +115,10 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     cancelQuestion,
     loadSessionHistory,
     loadOlderHistory: loadOlderCurrentSessionHistory,
-    clearMessages: state.clearMessages,
+    clearMessages: (sessionId = options.currentSessionId) => state.clearMessages(sessionId),
+    backgroundCompletedSessionIds: state.backgroundCompletedSessionIds,
+    clearBackgroundCompletion: state.clearBackgroundCompletion,
+    dropSessionState: state.dropSessionState,
+    shouldLoadSessionHistory: state.shouldLoadSessionHistory,
   };
 }

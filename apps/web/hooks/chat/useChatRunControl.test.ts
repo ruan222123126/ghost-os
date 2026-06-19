@@ -43,24 +43,24 @@ describe('hooks/chat/useChatRunControl', () => {
           { initialLocale: 'en-US' },
           React.createElement(HookProbe, {
             activeRunRef,
-            beginHistorySync: () => events.push('beginHistorySync'),
-            clearChatError: () => events.push('clearChatError'),
+            beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
+            clearChatError: (sessionId) => events.push(`clearChatError:${sessionId}`),
             clearStreamingState: () => events.push('clearStreamingState'),
             currentSessionId: '',
-            endHistorySync: () => events.push('endHistorySync'),
+            endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
             onRender: (state) => {
               latestState = state;
             },
             onSessionResolved: (sessionId) => events.push(`onSessionResolved:${sessionId}`),
-            setActiveRun: (value) => {
+            setActiveRun: (sessionId, value) => {
               activeRunRef.current = value;
-              events.push(value ? `setActiveRun:${value.sessionId}` : 'setActiveRun:null');
+              events.push(value ? `setActiveRun:${sessionId}:${value.sessionId}` : `setActiveRun:${sessionId}:null`);
             },
             setChatError: () => undefined,
-            setLoading: (value) => events.push(`setLoading:${value}`),
-            setStopPending: (value) => {
+            setLoading: (sessionId, value) => events.push(`setLoading:${sessionId}:${value}`),
+            setStopPending: (sessionId, value) => {
               stopPendingRef.current = value;
-              events.push(`setStopPending:${value}`);
+              events.push(`setStopPending:${sessionId}:${value}`);
             },
             stopPendingRef,
             syncRecentHistory: async (sessionId) => {
@@ -79,16 +79,16 @@ describe('hooks/chat/useChatRunControl', () => {
     expect(mockedStopAgent).toHaveBeenCalledWith(undefined, 'trace-stop');
     expect(abortController.signal.aborted).toBe(true);
     expect(events).toEqual([
-      'clearChatError',
-      'setStopPending:true',
+      'clearChatError:',
+      'setStopPending::true',
       'abort',
       'onSessionResolved:session-stop',
-      'beginHistorySync',
+      'beginHistorySync:session-stop',
       'syncRecentHistory:session-stop',
-      'endHistorySync',
-      'setLoading:false',
-      'setActiveRun:null',
-      'setStopPending:false',
+      'endHistorySync:session-stop',
+      'setLoading:session-stop:false',
+      'setActiveRun:session-stop:null',
+      'setStopPending:session-stop:false',
     ]);
   });
 
@@ -118,27 +118,27 @@ describe('hooks/chat/useChatRunControl', () => {
           { initialLocale: 'en-US' },
           React.createElement(HookProbe, {
             activeRunRef,
-            beginHistorySync: () => events.push('beginHistorySync'),
-            clearChatError: () => events.push('clearChatError'),
+            beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
+            clearChatError: (sessionId) => events.push(`clearChatError:${sessionId}`),
             clearStreamingState: () => events.push('clearStreamingState'),
             currentSessionId: 'session-stop',
-            endHistorySync: () => events.push('endHistorySync'),
+            endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
             onRender: (state) => {
               latestState = state;
             },
             onSessionResolved: (sessionId) => events.push(`onSessionResolved:${sessionId}`),
-            setActiveRun: (value) => {
+            setActiveRun: (sessionId, value) => {
               activeRunRef.current = value;
-              events.push(value ? `setActiveRun:${value.sessionId}` : 'setActiveRun:null');
+              events.push(value ? `setActiveRun:${sessionId}:${value.sessionId}` : `setActiveRun:${sessionId}:null`);
             },
-            setChatError: (value) => {
+            setChatError: (sessionId, value) => {
               errors.push(value);
-              events.push(`setChatError:${value}`);
+              events.push(`setChatError:${sessionId}:${value}`);
             },
-            setLoading: (value) => events.push(`setLoading:${value}`),
-            setStopPending: (value) => {
+            setLoading: (sessionId, value) => events.push(`setLoading:${sessionId}:${value}`),
+            setStopPending: (sessionId, value) => {
               stopPendingRef.current = value;
-              events.push(`setStopPending:${value}`);
+              events.push(`setStopPending:${sessionId}:${value}`);
             },
             stopPendingRef,
             syncRecentHistory: async () => {
@@ -157,31 +157,31 @@ describe('hooks/chat/useChatRunControl', () => {
     expect(errors).toEqual(['history unavailable']);
     expect(events).not.toContain('clearStreamingState');
     expect(events).toEqual([
-      'clearChatError',
-      'setStopPending:true',
-      'beginHistorySync',
-      'setChatError:history unavailable',
-      'endHistorySync',
-      'setLoading:false',
-      'setActiveRun:null',
-      'setStopPending:false',
+      'clearChatError:session-stop',
+      'setStopPending:session-stop:true',
+      'beginHistorySync:session-stop',
+      'setChatError:session-stop:history unavailable',
+      'endHistorySync:session-stop',
+      'setLoading:session-stop:false',
+      'setActiveRun:session-stop:null',
+      'setStopPending:session-stop:false',
     ]);
   });
 });
 
 function HookProbe(props: {
   activeRunRef: ActiveRunRef;
-  beginHistorySync: () => void;
-  clearChatError: () => void;
+  beginHistorySync: (sessionId: string) => void;
+  clearChatError: (sessionId: string) => void;
   clearStreamingState: () => void;
   currentSessionId: string;
-  endHistorySync: () => void;
+  endHistorySync: (sessionId: string) => void;
   onRender: (state: HookRenderState) => void;
   onSessionResolved: (sessionId: string) => void;
-  setActiveRun: (value: ActiveRunRef['current']) => void;
-  setChatError: (value: string) => void;
-  setLoading: (value: boolean) => void;
-  setStopPending: (value: boolean) => void;
+  setActiveRun: (sessionId: string, value: ActiveRunRef['current']) => void;
+  setChatError: (sessionId: string, value: string) => void;
+  setLoading: (sessionId: string, value: boolean) => void;
+  setStopPending: (sessionId: string, value: boolean) => void;
   stopPendingRef: StopPendingRef;
   syncRecentHistory: (sessionId: string) => Promise<void>;
 }) {
@@ -190,17 +190,26 @@ function HookProbe(props: {
     appendCommittedMessages: () => undefined,
     beginHistorySync: props.beginHistorySync,
     clearChatError: props.clearChatError,
-    clearStreamingState: props.clearStreamingState,
+    clearStreamingState: () => props.clearStreamingState(),
     currentSessionId: props.currentSessionId,
     endHistorySync: props.endHistorySync,
+    getCurrentSessionId: () => props.currentSessionId,
+    getActiveRun: () => props.activeRunRef.current,
+    getStopPending: () => props.stopPendingRef.current,
+    hasPendingQuestionInSession: () => false,
+    markBackgroundCompleted: () => undefined,
+    migrateSessionState: (_fromSessionId, toSessionId) => {
+      if (props.activeRunRef.current) {
+        props.activeRunRef.current = { ...props.activeRunRef.current, sessionId: toSessionId };
+      }
+    },
     onSessionResolved: props.onSessionResolved,
-    runAgentStream: async () => undefined,
-    activeRunRef: props.activeRunRef,
+    runAgentStream: async () => ({ sessionId: props.currentSessionId, terminalType: 'done' }),
+    resolveActiveRunSessionId: () => props.activeRunRef.current?.sessionId ?? props.currentSessionId,
     setActiveRun: props.setActiveRun,
     setLoading: props.setLoading,
     setStopPending: props.setStopPending,
     setChatError: props.setChatError,
-    stopPendingRef: props.stopPendingRef,
     syncRecentHistory: props.syncRecentHistory,
   });
   props.onRender(state);

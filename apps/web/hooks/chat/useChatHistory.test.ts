@@ -204,7 +204,7 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
     let latest: HistoryProbeState | null = null;
     await renderHistoryProbe((state) => {
       latest = state;
-    });
+    }, 'session-paged');
 
     await act(async () => {
       await latest!.history.loadSessionHistory('session-paged');
@@ -246,8 +246,8 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
     });
 
     await act(async () => {
-      latest!.state.appendCommittedMessages([buildUserMessage('local:user:trace-stop', 'hello')]);
-      latest!.state.applyRuntimeActions([
+      latest!.state.appendCommittedMessages('session-stop', [buildUserMessage('local:user:trace-stop', 'hello')]);
+      latest!.state.applyRuntimeActions('session-stop', [
         { type: 'append_streaming_assistant_text', text: 'local partial' },
       ]);
     });
@@ -278,8 +278,8 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
     });
 
     await act(async () => {
-      latest!.state.appendCommittedMessages([buildUserMessage('local:user:trace-stop', 'hello')]);
-      latest!.state.applyRuntimeActions([
+      latest!.state.appendCommittedMessages('session-stop', [buildUserMessage('local:user:trace-stop', 'hello')]);
+      latest!.state.applyRuntimeActions('session-stop', [
         { type: 'append_streaming_assistant_text', text: 'local partial' },
       ]);
     });
@@ -298,9 +298,10 @@ describe('hooks/chat/useChatHistory syncRecentHistory', () => {
 });
 
 function HistoryProbe(props: {
+  currentSessionId: string;
   onRender: (state: HistoryProbeState) => void;
 }) {
-  const state = useChatState();
+  const state = useChatState(props.currentSessionId);
   const history = useChatHistory({
     clearChatError: state.clearChatError,
     clearPendingQuestions: state.clearPendingQuestions,
@@ -319,19 +320,22 @@ function HistoryProbe(props: {
     setStopPending: state.setStopPending,
     beginHistorySync: state.beginHistorySync,
     endHistorySync: state.endHistorySync,
-    nextHistoryBefore: state.nextHistoryBefore,
+    getNextHistoryBefore: state.getNextHistoryBefore,
   });
   props.onRender({ history, state });
   return null;
 }
 
-async function renderHistoryProbe(onRender: (state: HistoryProbeState) => void): Promise<void> {
+async function renderHistoryProbe(
+  onRender: (state: HistoryProbeState) => void,
+  currentSessionId = 'session-stop',
+): Promise<void> {
   await act(async () => {
     TestRenderer.create(
       React.createElement(
         WebLocaleProvider,
         { initialLocale: 'en-US' },
-        React.createElement(HistoryProbe, { onRender }),
+        React.createElement(HistoryProbe, { currentSessionId, onRender }),
       ),
     );
     await Promise.resolve();

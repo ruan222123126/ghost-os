@@ -4,7 +4,7 @@ import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PendingQuestionMessage } from '@/lib/types';
-import type { ChatStateControls } from './types';
+import type { ChatStateControls, ChatStreamRunResult } from './types';
 
 interface UseChatQuestionActionsOptions {
   appendCommittedMessages: ChatStateControls['appendCommittedMessages'];
@@ -12,6 +12,10 @@ interface UseChatQuestionActionsOptions {
   clearChatError: ChatStateControls['clearChatError'];
   clearStreamingState: ChatStateControls['clearStreamingState'];
   pendingQuestions: PendingQuestionMessage[];
+  getCurrentSessionId: () => string;
+  getStopPending: ChatStateControls['getStopPending'];
+  hasPendingQuestionInSession: ChatStateControls['hasPendingQuestionInSession'];
+  markBackgroundCompleted: ChatStateControls['markBackgroundCompleted'];
   runHumanStream: (run: {
     answer: string;
     cancelled?: boolean;
@@ -19,13 +23,13 @@ interface UseChatQuestionActionsOptions {
     sessionId: string;
     signal?: AbortSignal;
     traceId: string;
-  }) => Promise<void>;
+  }) => Promise<ChatStreamRunResult>;
   removePendingQuestion: ChatStateControls['removePendingQuestion'];
+  resolveActiveRunSessionId: ChatStateControls['resolveActiveRunSessionId'];
   setActiveRun: ChatStateControls['setActiveRun'];
   setChatError: ChatStateControls['setChatError'];
   setLoading: ChatStateControls['setLoading'];
   setStopPending: ChatStateControls['setStopPending'];
-  stopPendingRef: ChatStateControls['stopPendingRef'];
 }
 
 export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
@@ -36,13 +40,17 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
     clearChatError,
     clearStreamingState,
     pendingQuestions,
+    getCurrentSessionId,
+    getStopPending,
+    hasPendingQuestionInSession,
+    markBackgroundCompleted,
     runHumanStream,
     removePendingQuestion,
+    resolveActiveRunSessionId,
     setActiveRun,
     setChatError,
     setLoading,
     setStopPending,
-    stopPendingRef,
   } = options;
 
   const answerQuestion = useCallback(async (questionId: string, answer: string) => {
@@ -51,43 +59,52 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
     if (!trimmedQuestionId) {
       return;
     }
+    const pending = findPendingQuestion(pendingQuestions, trimmedQuestionId);
     if (!trimmedAnswer) {
-      setChatError(copy.chat.answerCannotBeEmpty);
+      setChatError(pending?.sessionId ?? '', copy.chat.answerCannotBeEmpty);
       return;
     }
 
-    const pending = findPendingQuestion(pendingQuestions, trimmedQuestionId);
     if (!pending) {
       return;
     }
 
-    clearChatError();
-    clearStreamingState();
-    setStopPending(false);
-    setLoading(true);
+    clearChatError(pending.sessionId);
+    clearStreamingState(pending.sessionId);
+    setStopPending(pending.sessionId, false);
+    setLoading(pending.sessionId, true);
     const traceId = createClientTraceId('human-response');
     const abortController = new AbortController();
-    setActiveRun({ abortController, sessionId: pending.sessionId, traceId });
+    setActiveRun(pending.sessionId, { abortController, sessionId: pending.sessionId, traceId });
     try {
-      removePendingQuestion(trimmedQuestionId);
-      appendCommittedMessages([buildUserMessage(trimmedAnswer, {
+      removePendingQuestion(pending.sessionId, trimmedQuestionId);
+      appendCommittedMessages(pending.sessionId, [buildUserMessage(trimmedAnswer, {
         id: `local:answer:${traceId}:${trimmedQuestionId}`,
       })]);
-      await runHumanStream({
+      const result = await runHumanStream({
         answer: trimmedAnswer,
         questionId: pending.questionId,
         sessionId: pending.sessionId,
         signal: abortController.signal,
         traceId,
       });
+      markBackgroundCompletionIfNeeded({
+        currentSessionId: getCurrentSessionId(),
+        hasPendingQuestion: hasPendingQuestionInSession(result.sessionId),
+        initialSessionId: pending.sessionId,
+        markBackgroundCompleted,
+        result,
+      });
     } catch (error) {
-      if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current, abortController.signal.aborted)) {
-        appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
+      const targetSessionId = resolveActiveRunSessionId(traceId, pending.sessionId);
+      if (!shouldSuppressQuestionStreamError(error, getStopPending(targetSessionId), abortController.signal.aborted)) {
+        appendErrorMessage(targetSessionId, toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
-      setLoading(false);
-      setActiveRun(null);
-      setStopPending(false);
+      const targetSessionId = resolveActiveRunSessionId(traceId, pending.sessionId);
+      setLoading(targetSessionId, false);
+      setActiveRun(targetSessionId, null);
+      setStopPending(targetSessionId, false);
     }
   }, [
     copy.chat.answerCannotBeEmpty,
@@ -96,14 +113,18 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
     appendErrorMessage,
     clearChatError,
     clearStreamingState,
+    getCurrentSessionId,
+    getStopPending,
+    hasPendingQuestionInSession,
+    markBackgroundCompleted,
     pendingQuestions,
     removePendingQuestion,
+    resolveActiveRunSessionId,
     runHumanStream,
     setActiveRun,
     setChatError,
     setLoading,
     setStopPending,
-    stopPendingRef,
   ]);
 
   const cancelQuestion = useCallback(async (questionId: string) => {
@@ -117,16 +138,16 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
       return;
     }
 
-    clearChatError();
-    clearStreamingState();
-    setStopPending(false);
-    setLoading(true);
+    clearChatError(pending.sessionId);
+    clearStreamingState(pending.sessionId);
+    setStopPending(pending.sessionId, false);
+    setLoading(pending.sessionId, true);
     const traceId = createClientTraceId('human-response');
     const abortController = new AbortController();
-    setActiveRun({ abortController, sessionId: pending.sessionId, traceId });
+    setActiveRun(pending.sessionId, { abortController, sessionId: pending.sessionId, traceId });
     try {
-      removePendingQuestion(trimmedQuestionId);
-      await runHumanStream({
+      removePendingQuestion(pending.sessionId, trimmedQuestionId);
+      const result = await runHumanStream({
         answer: '',
         cancelled: true,
         questionId: pending.questionId,
@@ -134,33 +155,66 @@ export function useChatQuestionActions(options: UseChatQuestionActionsOptions) {
         signal: abortController.signal,
         traceId,
       });
+      markBackgroundCompletionIfNeeded({
+        currentSessionId: getCurrentSessionId(),
+        hasPendingQuestion: hasPendingQuestionInSession(result.sessionId),
+        initialSessionId: pending.sessionId,
+        markBackgroundCompleted,
+        result,
+      });
     } catch (error) {
-      if (!shouldSuppressQuestionStreamError(error, stopPendingRef.current, abortController.signal.aborted)) {
-        appendErrorMessage(toErrorMessage(error, copy.system.genericRequestFailed));
+      const targetSessionId = resolveActiveRunSessionId(traceId, pending.sessionId);
+      if (!shouldSuppressQuestionStreamError(error, getStopPending(targetSessionId), abortController.signal.aborted)) {
+        appendErrorMessage(targetSessionId, toErrorMessage(error, copy.system.genericRequestFailed));
       }
     } finally {
-      setLoading(false);
-      setActiveRun(null);
-      setStopPending(false);
+      const targetSessionId = resolveActiveRunSessionId(traceId, pending.sessionId);
+      setLoading(targetSessionId, false);
+      setActiveRun(targetSessionId, null);
+      setStopPending(targetSessionId, false);
     }
   }, [
     copy.system.genericRequestFailed,
     appendErrorMessage,
     clearChatError,
     clearStreamingState,
+    getCurrentSessionId,
+    getStopPending,
+    hasPendingQuestionInSession,
+    markBackgroundCompleted,
     pendingQuestions,
     removePendingQuestion,
+    resolveActiveRunSessionId,
     runHumanStream,
     setActiveRun,
     setLoading,
     setStopPending,
-    stopPendingRef,
   ]);
 
   return {
     answerQuestion,
     cancelQuestion,
   };
+}
+
+function markBackgroundCompletionIfNeeded(input: {
+  currentSessionId: string;
+  hasPendingQuestion: boolean;
+  initialSessionId: string;
+  markBackgroundCompleted: ChatStateControls['markBackgroundCompleted'];
+  result: ChatStreamRunResult;
+}): void {
+  const completedSessionId = input.result.sessionId.trim();
+  if (
+    !completedSessionId
+    || input.result.terminalType !== 'done'
+    || input.hasPendingQuestion
+    || input.currentSessionId.trim() === completedSessionId
+    || input.initialSessionId.trim() === ''
+  ) {
+    return;
+  }
+  input.markBackgroundCompleted(completedSessionId);
 }
 
 function shouldSuppressQuestionStreamError(error: unknown, stopPending: boolean, streamAborted: boolean): boolean {

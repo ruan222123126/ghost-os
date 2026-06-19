@@ -1,4 +1,3 @@
-import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type { ChatRuntimeState } from '@/lib/chatRuntime/runtimeState';
 import type { ChatStateControls, UseBridgeChatOptions } from './types';
 
@@ -12,13 +11,12 @@ export interface StreamHumanRunOptions {
 }
 
 export interface UseChatStreamControllerOptions {
-  activeRunRef: ChatStateControls['activeRunRef'];
-  applyRuntimeActions: (actions: ChatRuntimeAction[]) => void;
-  currentSessionId: UseBridgeChatOptions['currentSessionId'];
+  applyRuntimeActions: ChatStateControls['applyRuntimeActions'];
   endHistorySync: ChatStateControls['endHistorySync'];
+  getCurrentSessionId: () => UseBridgeChatOptions['currentSessionId'];
+  migrateSessionState: ChatStateControls['migrateSessionState'];
   onSessionResolved: UseBridgeChatOptions['onSessionResolved'];
   setChatError: ChatStateControls['setChatError'];
-  setActiveRun: ChatStateControls['setActiveRun'];
   beginHistorySync: ChatStateControls['beginHistorySync'];
   syncRecentHistory: (sessionId: string) => Promise<void>;
 }

@@ -15,6 +15,7 @@ interface HomePageController {
   currentSessionId: string;
   sessionsLoading: boolean;
   sessionsError: string;
+  backgroundCompletedSessionIds: ReturnType<typeof useBridgeChat>['backgroundCompletedSessionIds'];
   committedMessages: ReturnType<typeof useBridgeChat>['committedMessages'];
   streamingAssistantSegments: ReturnType<typeof useBridgeChat>['streamingAssistantSegments'];
   streamingThinkingSegments: ReturnType<typeof useBridgeChat>['streamingThinkingSegments'];
@@ -124,13 +125,17 @@ export function useHomePageController(): HomePageController {
 
   const handleSelectSession = useCallback((id: string) => {
     sessions.setCurrentSessionId(id);
-    ignorePromise(chat.loadSessionHistory(id));
+    chat.clearBackgroundCompletion(id);
+    if (chat.shouldLoadSessionHistory(id)) {
+      ignorePromise(chat.loadSessionHistory(id));
+    }
   }, [chat, sessions]);
 
   const handleDeleteSession = useCallback(async (id: string) => {
     await sessions.deleteSession(id);
+    chat.dropSessionState(id);
     if (sessions.currentSessionId === id) {
-      chat.clearMessages();
+      chat.clearMessages('');
     }
   }, [chat, sessions]);
 
@@ -158,6 +163,7 @@ export function useHomePageController(): HomePageController {
     currentSessionId: sessions.currentSessionId,
     sessionsLoading: sessions.loading,
     sessionsError: sessions.error,
+    backgroundCompletedSessionIds: chat.backgroundCompletedSessionIds,
     committedMessages: chat.committedMessages,
     streamingAssistantSegments: chat.streamingAssistantSegments,
     streamingThinkingSegments: chat.streamingThinkingSegments,
@@ -199,7 +205,7 @@ export function useHomePageController(): HomePageController {
     deleteSession: handleDeleteSession,
     newChat: () => {
       sessions.createNewSession();
-      chat.clearMessages();
+      chat.clearMessages('');
     },
     openWorkflowCreate: () => {
       setShowConfig(false);

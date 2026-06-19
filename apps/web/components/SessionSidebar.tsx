@@ -24,6 +24,7 @@ import type { SessionMetadata } from '@/lib/types';
 interface SessionSidebarProps {
   sessions: SessionMetadata[];
   currentSessionId: string;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
   loading: boolean;
   error: string;
   onSelect: (id: string) => void;
@@ -37,6 +38,7 @@ interface SessionSidebarProps {
 export const SessionSidebar: FC<SessionSidebarProps> = ({
   sessions,
   currentSessionId,
+  backgroundCompletedSessionIds,
   loading,
   error,
   onSelect,
@@ -162,6 +164,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         sessions={sessions}
         searchQuery={activeSearchQuery}
         currentSessionId={currentSessionId}
+        backgroundCompletedSessionIds={backgroundCompletedSessionIds}
         focusSessionId={focusSessionId}
         loading={loading}
         error={error}

@@ -51,6 +51,7 @@ interface SessionRowProps {
   session: SessionMetadata;
   resolveSessionTitle: (session: SessionMetadata) => string;
   isActive: boolean;
+  hasBackgroundCompletion: boolean;
   partitionID?: string;
   itemIndex?: number;
   readOnly?: boolean;
@@ -65,6 +66,7 @@ interface SessionSidebarHistoryRowViewProps {
   copy: ChatCopy;
   row: SessionSidebarHistoryRow;
   currentSessionId: string;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
   resolveSessionTitle: (session: SessionMetadata) => string;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -78,6 +80,7 @@ export const SessionSidebarHistoryRowView: FC<SessionSidebarHistoryRowViewProps>
   copy,
   row,
   currentSessionId,
+  backgroundCompletedSessionIds,
   resolveSessionTitle,
   onSelect,
   onDelete,
@@ -140,6 +143,7 @@ export const SessionSidebarHistoryRowView: FC<SessionSidebarHistoryRowViewProps>
       session={row.session}
       resolveSessionTitle={resolveSessionTitle}
       isActive={row.session.id === currentSessionId}
+      hasBackgroundCompletion={backgroundCompletedSessionIds.has(row.session.id) && row.session.id !== currentSessionId}
       onSelect={onSelect}
       onDelete={onDelete}
       onDragStart={onDragStartSession}
@@ -157,6 +161,7 @@ const SessionRow: FC<SessionRowProps> = ({
   session,
   resolveSessionTitle,
   isActive,
+  hasBackgroundCompletion,
   partitionID,
   itemIndex,
   readOnly,
@@ -188,6 +193,9 @@ const SessionRow: FC<SessionRowProps> = ({
       className={`group relative flex w-full items-center gap-3 px-3 py-3 text-left text-xs transition-colors ${rowClassName(isActive)}`}
     >
       <span className="flex-1 truncate">{sessionTitle}</span>
+      {hasBackgroundCompletion ? (
+        <span className="h-2 w-2 shrink-0 rounded-full bg-black" aria-hidden="true" />
+      ) : null}
       <button
         type="button"
         onClick={(event) => {

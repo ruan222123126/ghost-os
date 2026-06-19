@@ -32,14 +32,12 @@ describe('hooks/chat/useChatStreamController', () => {
           WebLocaleProvider,
           { initialLocale: 'en-US' },
           React.createElement(HookProbe, {
-            activeRunRef: { current: null },
-            beginHistorySync: () => events.push('beginHistorySync'),
+            beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
             currentSessionId: 'session-error',
-            endHistorySync: () => events.push('endHistorySync'),
+            endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
             onRender: (state) => {
               latestState = state;
             },
-            setActiveRun: () => undefined,
             setChatError: () => undefined,
             syncRecentHistory: async (sessionId) => {
               events.push(`syncRecentHistory:${sessionId}`);
@@ -60,9 +58,9 @@ describe('hooks/chat/useChatStreamController', () => {
     });
 
     expect(events).toEqual([
-      'beginHistorySync',
+      'beginHistorySync:session-error',
       'syncRecentHistory:session-error',
-      'endHistorySync',
+      'endHistorySync:session-error',
     ]);
   });
 
@@ -79,14 +77,12 @@ describe('hooks/chat/useChatStreamController', () => {
           WebLocaleProvider,
           { initialLocale: 'en-US' },
           React.createElement(HookProbe, {
-            activeRunRef: { current: null },
-            beginHistorySync: () => events.push('beginHistorySync'),
+            beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
             currentSessionId: 'session-stop',
-            endHistorySync: () => events.push('endHistorySync'),
+            endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
             onRender: (state) => {
               latestState = state;
             },
-            setActiveRun: () => undefined,
             setChatError: () => undefined,
             syncRecentHistory: async (sessionId) => {
               events.push(`syncRecentHistory:${sessionId}`);
@@ -107,31 +103,125 @@ describe('hooks/chat/useChatStreamController', () => {
 
     expect(events).toEqual([]);
   });
+
+  it('migrates draft runs to the resolved session and routes deltas there', async () => {
+    const events: string[] = [];
+    mockedStreamMessage.mockImplementation(async (options) => {
+      await options.onEvent(buildRunStartedEvent('session-resolved'));
+      await options.onEvent(buildTextDeltaEvent('session-resolved', 'hello'));
+      return {
+        sessionEnded: false,
+        sessionId: 'session-resolved',
+      };
+    });
+
+    let latestState: HookRenderState | null = null;
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            applyRuntimeActions: (sessionId, actions) => {
+              if (actions.length > 0) {
+                events.push(`runtime:${sessionId}:${actions[0].type}`);
+              }
+            },
+            beginHistorySync: (sessionId) => events.push(`beginHistorySync:${sessionId}`),
+            currentSessionId: '',
+            endHistorySync: (sessionId) => events.push(`endHistorySync:${sessionId}`),
+            migrateSessionState: (fromSessionId, toSessionId) => {
+              events.push(`migrate:${fromSessionId}->${toSessionId}`);
+            },
+            onRender: (state) => {
+              latestState = state;
+            },
+            onSessionResolved: (sessionId) => events.push(`onSessionResolved:${sessionId}`),
+            setChatError: () => undefined,
+            syncRecentHistory: async (sessionId) => {
+              events.push(`syncRecentHistory:${sessionId}`);
+            },
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await expect(latestState!.runAgentStream({
+        message: 'hello',
+        traceId: 'trace-resolved',
+      })).resolves.toEqual({
+        sessionId: 'session-resolved',
+        terminalType: '',
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(events).toEqual([
+      'migrate:->session-resolved',
+      'onSessionResolved:session-resolved',
+      'runtime:session-resolved:append_streaming_assistant_text',
+      'beginHistorySync:session-resolved',
+      'syncRecentHistory:session-resolved',
+      'endHistorySync:session-resolved',
+    ]);
+  });
 });
 
 function HookProbe(props: {
-  activeRunRef: HookProps['activeRunRef'];
+  applyRuntimeActions?: HookProps['applyRuntimeActions'];
   beginHistorySync: HookProps['beginHistorySync'];
   currentSessionId: string;
   endHistorySync: HookProps['endHistorySync'];
+  migrateSessionState?: HookProps['migrateSessionState'];
   onRender: (state: HookRenderState) => void;
-  setActiveRun: HookProps['setActiveRun'];
+  onSessionResolved?: HookProps['onSessionResolved'];
   setChatError: HookProps['setChatError'];
   syncRecentHistory: HookProps['syncRecentHistory'];
 }) {
   const state = useChatStreamController({
-    activeRunRef: props.activeRunRef,
-    applyRuntimeActions: () => undefined,
+    applyRuntimeActions: props.applyRuntimeActions ?? (() => undefined),
     beginHistorySync: props.beginHistorySync,
-    currentSessionId: props.currentSessionId,
     endHistorySync: props.endHistorySync,
-    onSessionResolved: () => undefined,
-    setActiveRun: props.setActiveRun,
+    getCurrentSessionId: () => props.currentSessionId,
+    migrateSessionState: props.migrateSessionState ?? (() => undefined),
+    onSessionResolved: props.onSessionResolved ?? (() => undefined),
     setChatError: props.setChatError,
     syncRecentHistory: props.syncRecentHistory,
   });
   props.onRender(state);
   return null;
+}
+
+function buildRunStartedEvent(sessionId: string): AgentStreamEvent {
+  return {
+    id: 'trace-resolved:000001',
+    step_id: 'turn-0000-start',
+    trace_id: 'trace-resolved',
+    session_id: sessionId,
+    turn: 0,
+    type: 'run_started',
+    payload: {
+      session_id: sessionId,
+    },
+  };
+}
+
+function buildTextDeltaEvent(sessionId: string, text: string): AgentStreamEvent {
+  return {
+    id: 'trace-resolved:000002',
+    step_id: 'turn-0000-assistant',
+    trace_id: 'trace-resolved',
+    session_id: sessionId,
+    turn: 0,
+    type: 'completion_delta',
+    payload: {
+      kind: 'text',
+      text,
+    },
+  };
 }
 
 function buildErrorEvent(sessionId: string): AgentStreamEvent {

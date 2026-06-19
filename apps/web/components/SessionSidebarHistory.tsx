@@ -34,6 +34,7 @@ interface SessionSidebarHistoryProps {
   sessions: SessionMetadata[];
   searchQuery: string;
   currentSessionId: string;
+  backgroundCompletedSessionIds: ReadonlySet<string>;
   focusSessionId?: string;
   loading: boolean;
   error: string;
@@ -270,6 +271,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
         partitionViews={props.visiblePartitionViews}
         collapsedPartitionIDs={collapsedPartitionIDs}
         currentSessionId={props.currentSessionId}
+        backgroundCompletedSessionIds={props.backgroundCompletedSessionIds}
         focusSessionId={props.focusSessionId}
         dragState={ui.dragState}
         resolveSessionTitle={resolveSessionTitle}
