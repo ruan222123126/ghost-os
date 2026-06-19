@@ -55,6 +55,10 @@ function resolveConnectedWebRTCClient(client: MobileWebRTCBridge | undefined): M
   return client;
 }
 
+function connectedStatusText(mode: StoredSettings["connectionMode"]): string {
+  return mode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接";
+}
+
 export function useMobileBridge() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [apiToken] = useState("");
@@ -181,6 +185,14 @@ export function useMobileBridge() {
     });
   }, [refreshSessions]);
 
+  const refreshSessionsAfterConnect = useCallback((): void => {
+    void refreshSessions().catch((error: unknown) => {
+      const text = `会话列表加载失败：${errorMessage(error)}`;
+      console.error("[useMobileBridge] refresh sessions after connect failed", error);
+      setStatus({ tone: "error", text });
+    });
+  }, [refreshSessions]);
+
   const getSession = useCallback(
     async (sessionId: string): Promise<SessionDetail> => {
       return requestBridge<SessionDetail>("SESSION_GET", { id: sessionId.trim() });
@@ -200,16 +212,11 @@ export function useMobileBridge() {
         const client = new MobileWebRTCBridge(settings.pairing, secret);
         await client.connect();
         webRTCClientRef.current = client;
-        connectedTargetRef.current = currentConnectionTarget;
-        setConnectionStatus({ tone: "success", text: "WebRTC 已连接" });
       }
       await refreshRuntimeConfig();
-      await refreshSessions();
       connectedTargetRef.current = currentConnectionTarget;
-      setConnectionStatus({
-        tone: "success",
-        text: settings.connectionMode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接",
-      });
+      setConnectionStatus({ tone: "success", text: connectedStatusText(settings.connectionMode) });
+      refreshSessionsAfterConnect();
     } catch (error) {
       connectedTargetRef.current = undefined;
       webRTCClientRef.current?.close();
@@ -219,7 +226,13 @@ export function useMobileBridge() {
       setSessions([]);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
     }
-  }, [currentConnectionTarget, refreshRuntimeConfig, refreshSessions, settings.connectionMode, settings.pairing]);
+  }, [
+    currentConnectionTarget,
+    refreshRuntimeConfig,
+    refreshSessionsAfterConnect,
+    settings.connectionMode,
+    settings.pairing,
+  ]);
 
   const switchModel = useCallback(
     async (model: string): Promise<boolean> => {
