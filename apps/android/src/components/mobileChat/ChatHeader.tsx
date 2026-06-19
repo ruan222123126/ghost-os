@@ -19,36 +19,47 @@ interface ChatHeaderProps {
   onNewSession: () => void;
 }
 
+type HeaderRuntimeSelectorProps = Omit<
+  ChatHeaderProps,
+  "hasConversation" | "onOpenSidebar" | "onOpenMoreMenu" | "onNewSession"
+>;
+
+function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
+  return (
+    <div className="runtime-selector-wrap">
+      <button
+        className={`runtime-selector ${props.runtimeMenuOpen ? "is-open" : ""}`}
+        type="button"
+        title={props.runtimeLabel}
+        aria-expanded={props.runtimeMenuOpen}
+        onClick={props.onToggleRuntimeMenu}
+      >
+        <span>{props.runtimeLabel}</span>
+        <UiIcon name="chevron-down" />
+      </button>
+
+      {props.runtimeMenuOpen ? (
+        <RuntimeMenu
+          config={props.config}
+          providerList={props.providerList}
+          status={props.status}
+          bridgeUrl={props.bridgeUrl}
+          onClose={props.onCloseRuntimeMenu}
+          onSwitchModel={props.onSwitchModel}
+          onOpenSettings={props.onOpenSettings}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function ChatHeader(props: ChatHeaderProps) {
   if (props.hasConversation) {
     return (
       <header className="chat-header chat-session-header">
         <div className="header-left">
           <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
-          <div className="runtime-selector-wrap">
-            <button
-              className={`runtime-selector ${props.runtimeMenuOpen ? "is-open" : ""}`}
-              type="button"
-              title={props.runtimeLabel}
-              aria-expanded={props.runtimeMenuOpen}
-              onClick={props.onToggleRuntimeMenu}
-            >
-              <span>{props.runtimeLabel}</span>
-              <UiIcon name="chevron-down" />
-            </button>
-
-            {props.runtimeMenuOpen ? (
-              <RuntimeMenu
-                config={props.config}
-                providerList={props.providerList}
-                status={props.status}
-                bridgeUrl={props.bridgeUrl}
-                onClose={props.onCloseRuntimeMenu}
-                onSwitchModel={props.onSwitchModel}
-                onOpenSettings={props.onOpenSettings}
-              />
-            ) : null}
-          </div>
+          <HeaderRuntimeSelector {...props} />
         </div>
         <div className="header-right">
           <IconButton label="新会话" icon="edit" onClick={props.onNewSession} />
@@ -59,10 +70,14 @@ export function ChatHeader(props: ChatHeaderProps) {
   }
 
   return (
-    <header className="chat-header">
-      <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
-      <h1 className="chat-header-title">Ghost-OS</h1>
-      <span className="chat-header-spacer" aria-hidden="true" />
+    <header className="chat-header chat-home-header">
+      <div className="header-left">
+        <IconButton label="打开侧边栏" icon="menu" onClick={props.onOpenSidebar} />
+        <HeaderRuntimeSelector {...props} />
+      </div>
+      <div className="header-right">
+        <IconButton label="新会话" icon="edit" onClick={props.onNewSession} />
+      </div>
     </header>
   );
 }
