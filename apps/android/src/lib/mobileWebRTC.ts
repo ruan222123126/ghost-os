@@ -18,6 +18,7 @@ const SIGNAL_ANSWER = "answer";
 const SIGNAL_ICE = "ice";
 const SIGNAL_BUSY = "busy";
 const SIGNAL_ERROR = "error";
+const TURN_URL_PREFIXES = ["turn:", "turns:"] as const;
 
 interface SignalMessage {
   type: string;
@@ -83,7 +84,7 @@ export function hasTurnServer(pairing: MobilePairingInfo | undefined): boolean {
   return Boolean(
     pairing?.iceServers.some((server) => {
       const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-      return urls.some((url) => url.trim().toLowerCase().startsWith("turn:"));
+      return urls.some(isTurnServerUrl);
     }),
   );
 }
@@ -462,6 +463,11 @@ function normalizeURLs(raw: RTCIceServer["urls"] | undefined): string | string[]
     return raw.map((value) => value.trim()).filter(Boolean);
   }
   return raw?.trim() ?? "";
+}
+
+function isTurnServerUrl(raw: string): boolean {
+  const normalized = raw.trim().toLowerCase();
+  return TURN_URL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
 }
 
 function requiredParam(url: URL, name: string): string {
