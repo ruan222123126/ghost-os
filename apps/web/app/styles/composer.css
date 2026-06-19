@@ -58,12 +58,24 @@
 .composer-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "plus input actions";
   align-items: center;
   gap: 8px;
   min-width: 0;
 }
 
+.composer-row.is-expanded {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "input input"
+    "plus actions";
+  align-items: end;
+  row-gap: 6px;
+}
+
 .composer-textarea {
+  grid-area: input;
+  width: 100%;
   min-height: 24px;
   max-height: 200px;
   padding: 8px 4px;
@@ -78,6 +90,10 @@
   line-height: 1.5;
   overflow-y: auto;
   resize: none;
+}
+
+.composer-row.is-expanded .composer-textarea {
+  padding-left: 0;
 }
 
 .composer-textarea:focus-visible,
@@ -105,8 +121,15 @@
 }
 
 .composer-actions {
+  grid-area: actions;
+  justify-self: end;
+  justify-content: flex-end;
   gap: 4px;
   padding-right: 2px;
+}
+
+.composer-row.is-expanded .composer-actions {
+  padding-right: 0;
 }
 
 .composer-toolbar-slot {
@@ -115,6 +138,13 @@
   gap: 4px;
   min-width: 0;
   flex-wrap: nowrap;
+}
+
+.composer-attachment-anchor {
+  position: relative;
+  grid-area: plus;
+  justify-self: start;
+  display: inline-flex;
 }
 
 .composer-plus-btn,
@@ -156,6 +186,54 @@
 .composer-plus-btn:disabled {
   opacity: 0.32;
   cursor: not-allowed;
+}
+
+.composer-attachment-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 136px;
+  padding: 6px;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 12px;
+  background: rgb(255 255 255);
+  box-shadow: 0 16px 36px rgb(15 23 42 / 0.14);
+}
+
+.composer-attachment-menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgb(31 41 55);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.composer-attachment-menu-item:hover:not(:disabled),
+.composer-attachment-menu-item:focus-visible:not(:disabled) {
+  background: rgb(243 244 246 / 0.9);
+  color: rgb(17 24 39);
+  outline: none;
+}
+
+.composer-attachment-menu-item:disabled {
+  color: rgb(156 163 175);
+  cursor: not-allowed;
+  opacity: 0.66;
 }
 
 .composer-send-btn {

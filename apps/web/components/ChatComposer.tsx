@@ -2,8 +2,8 @@
 
 'use client';
 
-import type { FC, FormEvent, KeyboardEvent, ReactNode, RefObject } from 'react';
-import { useEffect, useRef } from 'react';
+import type { Dispatch, FC, FormEvent, KeyboardEvent, ReactNode, RefObject, SetStateAction } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ComposerMetaRow } from '@/components/ComposerMetaRow';
 import { ComposerToolbar } from '@/components/ComposerToolbar';
 import { ignorePromise } from '@/lib/errors';
@@ -37,10 +37,13 @@ interface ComposerActionState {
 
 interface ComposerInputRowProps {
   action: ComposerActionState;
+  attachmentMenuOpen: boolean;
   ariaLabel: string;
   disabled: boolean;
+  expanded: boolean;
   onActionClick: () => void;
   onAttachmentClick: () => void;
+  onPhotoClick: () => void;
   onChange: (value: string) => void;
   onCompositionEnd: () => void;
   onCompositionStart: () => void;
@@ -51,11 +54,18 @@ interface ComposerInputRowProps {
   textareaRef: RefObject<HTMLTextAreaElement>;
   toolbar?: ReactNode;
   toolbarAriaLabel: string;
-  uploadAriaLabel: string;
+  attachmentAriaLabel: string;
   uploadDisabled: boolean;
-  uploadTitle: string;
+  attachmentTitle: string;
+  menuPhotoLabel: string;
+  menuFileLabel: string;
+  menuSkillLabel: string;
+  menuUnavailableLabel: string;
   value: string;
 }
+
+const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
+const COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX = 48;
 
 function PlusIcon() {
   return (
@@ -94,9 +104,12 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   onSelectFiles,
 }) => {
   const { copy } = useWebLocale();
+  const composerShellRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composingRef = useRef(false);
+  const [inputExpanded, setInputExpanded] = useState(false);
+  const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
   const effectiveAriaLabel = ariaLabel ?? copy.chat.composerMessageInputAria;
   const effectivePlaceholder = placeholder ?? copy.chat.composerInputPlaceholder;
   const canSend = canSubmit ?? value.trim().length > 0;
@@ -113,13 +126,25 @@ export const ChatComposer: FC<ChatComposerProps> = ({
     stoppingLabel: copy.chat.composerStoppingRun,
   });
 
-  useAutosizeTextarea(textareaRef, value);
+  useAutosizeTextarea(textareaRef, value, setInputExpanded);
+  useCloseAttachmentMenuOnOutsideClick({
+    enabled: attachmentMenuOpen,
+    onClose: () => setAttachmentMenuOpen(false),
+    rootRef: composerShellRef,
+  });
+
+  useEffect(() => {
+    if (uploadDisabled) {
+      setAttachmentMenuOpen(false);
+    }
+  }, [uploadDisabled]);
 
   async function submit() {
     if (!canSend || sending || disabled) {
       return;
     }
 
+    setAttachmentMenuOpen(false);
     await onSubmit();
   }
 
@@ -137,6 +162,15 @@ export const ChatComposer: FC<ChatComposerProps> = ({
       return;
     }
 
+    setAttachmentMenuOpen((current) => !current);
+  }
+
+  function handlePhotoClick() {
+    if (uploadDisabled) {
+      return;
+    }
+
+    setAttachmentMenuOpen(false);
     fileInputRef.current?.click();
   }
 
@@ -163,15 +197,18 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
   return (
     <form className="composer" onSubmit={handleFormSubmit}>
-      <div className={buildComposerShellClassName(sending, disabled)}>
+      <div ref={composerShellRef} className={buildComposerShellClassName(sending, disabled)}>
         {preview}
 
         <ComposerInputRow
           action={action}
+          attachmentMenuOpen={attachmentMenuOpen}
           ariaLabel={effectiveAriaLabel}
           disabled={disabled}
+          expanded={inputExpanded}
           onActionClick={handleActionClick}
           onAttachmentClick={handleAttachmentClick}
+          onPhotoClick={handlePhotoClick}
           onChange={onChange}
           onCompositionEnd={() => {
             composingRef.current = false;
@@ -181,16 +218,20 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           }}
           onKeyDown={handleKeyDown}
           onTextareaInput={() => {
-            syncTextareaHeight(textareaRef.current);
+            syncTextareaHeight(textareaRef.current, setInputExpanded);
           }}
           placeholder={effectivePlaceholder}
           rows={rows}
           textareaRef={textareaRef}
           toolbar={toolbar}
           toolbarAriaLabel={copy.chat.composerToolsAria}
-          uploadAriaLabel={copy.chat.composerUploadImagesAria}
+          attachmentAriaLabel={copy.chat.composerAddContent}
           uploadDisabled={uploadDisabled}
-          uploadTitle={copy.chat.composerUploadImagesTitle}
+          attachmentTitle={copy.chat.composerAddContent}
+          menuPhotoLabel={copy.chat.composerAttachmentPhoto}
+          menuFileLabel={copy.chat.composerAttachmentFile}
+          menuSkillLabel={copy.chat.composerAttachmentSkill}
+          menuUnavailableLabel={copy.chat.composerAttachmentUnavailable}
           value={value}
         />
 
@@ -214,10 +255,13 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
 function ComposerInputRow({
   action,
+  attachmentMenuOpen,
   ariaLabel,
   disabled,
+  expanded,
   onActionClick,
   onAttachmentClick,
+  onPhotoClick,
   onChange,
   onCompositionEnd,
   onCompositionStart,
@@ -228,25 +272,43 @@ function ComposerInputRow({
   textareaRef,
   toolbar,
   toolbarAriaLabel,
-  uploadAriaLabel,
+  attachmentAriaLabel,
   uploadDisabled,
-  uploadTitle,
+  attachmentTitle,
+  menuPhotoLabel,
+  menuFileLabel,
+  menuSkillLabel,
+  menuUnavailableLabel,
   value,
 }: ComposerInputRowProps) {
   const hasToolbar = toolbar !== undefined && toolbar !== null;
 
   return (
-    <div className="composer-row">
-      <button
-        type="button"
-        className="composer-plus-btn"
-        aria-label={uploadAriaLabel}
-        title={uploadTitle}
-        disabled={uploadDisabled}
-        onClick={onAttachmentClick}
-      >
-        <PlusIcon />
-      </button>
+    <div className={`composer-row${expanded ? ' is-expanded' : ''}`}>
+      <div className="composer-attachment-anchor">
+        <button
+          type="button"
+          className="composer-plus-btn"
+          aria-expanded={attachmentMenuOpen}
+          aria-haspopup="menu"
+          aria-label={attachmentAriaLabel}
+          title={attachmentTitle}
+          disabled={uploadDisabled}
+          onClick={onAttachmentClick}
+        >
+          <PlusIcon />
+        </button>
+
+        {attachmentMenuOpen ? (
+          <AttachmentMenu
+            fileLabel={menuFileLabel}
+            onPhotoClick={onPhotoClick}
+            photoLabel={menuPhotoLabel}
+            skillLabel={menuSkillLabel}
+            unavailableLabel={menuUnavailableLabel}
+          />
+        ) : null}
+      </div>
 
       <textarea
         ref={textareaRef}
@@ -277,6 +339,51 @@ function ComposerInputRow({
   );
 }
 
+function AttachmentMenu({
+  fileLabel,
+  onPhotoClick,
+  photoLabel,
+  skillLabel,
+  unavailableLabel,
+}: {
+  fileLabel: string;
+  onPhotoClick: () => void;
+  photoLabel: string;
+  skillLabel: string;
+  unavailableLabel: string;
+}) {
+  return (
+    <div className="composer-attachment-menu" role="menu">
+      <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onPhotoClick}>
+        {photoLabel}
+      </button>
+      <DisabledAttachmentMenuItem label={fileLabel} unavailableLabel={unavailableLabel} />
+      <DisabledAttachmentMenuItem label={skillLabel} unavailableLabel={unavailableLabel} />
+    </div>
+  );
+}
+
+function DisabledAttachmentMenuItem({
+  label,
+  unavailableLabel,
+}: {
+  label: string;
+  unavailableLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="composer-attachment-menu-item"
+      role="menuitem"
+      disabled
+      title={unavailableLabel}
+      aria-label={`${label}: ${unavailableLabel}`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function ComposerActionButton({
   action,
   onClick,
@@ -302,19 +409,59 @@ function ComposerActionButton({
   );
 }
 
-function useAutosizeTextarea(textareaRef: RefObject<HTMLTextAreaElement>, value: string) {
+function useAutosizeTextarea(
+  textareaRef: RefObject<HTMLTextAreaElement>,
+  value: string,
+  setExpanded: Dispatch<SetStateAction<boolean>>,
+) {
   useEffect(() => {
-    syncTextareaHeight(textareaRef.current);
-  }, [textareaRef, value]);
+    syncTextareaHeight(textareaRef.current, setExpanded);
+  }, [setExpanded, textareaRef, value]);
 }
 
-function syncTextareaHeight(textarea: HTMLTextAreaElement | null) {
+function useCloseAttachmentMenuOnOutsideClick({
+  enabled,
+  onClose,
+  rootRef,
+}: {
+  enabled: boolean;
+  onClose: () => void;
+  rootRef: RefObject<HTMLElement>;
+}) {
+  useEffect(() => {
+    if (!enabled || typeof document === 'undefined') {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const root = rootRef.current;
+      if (!root || !(event.target instanceof Node) || root.contains(event.target)) {
+        return;
+      }
+
+      onClose();
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [enabled, onClose, rootRef]);
+}
+
+function syncTextareaHeight(
+  textarea: HTMLTextAreaElement | null,
+  setExpanded?: Dispatch<SetStateAction<boolean>>,
+) {
   if (!textarea) {
     return;
   }
 
   textarea.style.height = 'auto';
-  textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+  const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_TEXTAREA_MAX_HEIGHT_PX);
+  textarea.style.height = `${nextHeight}px`;
+  const nextExpanded = nextHeight > COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX;
+  setExpanded?.((current) => current === nextExpanded ? current : nextExpanded);
 }
 
 function buildComposerShellClassName(sending: boolean, disabled: boolean): string {

@@ -1,5 +1,5 @@
 import React from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import TestRenderer, { act, type ReactTestInstance } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import { ChatComposer } from './ChatComposer';
 
@@ -47,14 +47,87 @@ describe('components/ChatComposer', () => {
 
     expect(harness.submissions).toEqual([]);
   });
+
+  it('opens attachment menu from the plus button', () => {
+    const harness = renderComposerHarness({ onSelectFiles: jest.fn() });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+
+    expect(harness.menuItem('Photo')).toBeTruthy();
+    expect(harness.menuItem('File')).toBeTruthy();
+    expect(harness.menuItem('Skill')).toBeTruthy();
+  });
+
+  it('opens image picker from the photo menu item', () => {
+    const fileInputClick = jest.fn();
+    const harness = renderComposerHarness({
+      fileInputClick,
+      onSelectFiles: jest.fn(),
+    });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+
+    act(() => {
+      harness.menuItem('Photo').props.onClick();
+    });
+
+    expect(fileInputClick).toHaveBeenCalledTimes(1);
+    expect(harness.menuItems()).toEqual([]);
+  });
+
+  it('renders file and skill menu items as disabled placeholders', () => {
+    const fileInputClick = jest.fn();
+    const harness = renderComposerHarness({
+      fileInputClick,
+      onSelectFiles: jest.fn(),
+    });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+
+    expect(harness.menuItem('File').props.disabled).toBe(true);
+    expect(harness.menuItem('Skill').props.disabled).toBe(true);
+    expect(harness.menuItem('File').props.onClick).toBeUndefined();
+    expect(harness.menuItem('Skill').props.onClick).toBeUndefined();
+    expect(fileInputClick).not.toHaveBeenCalled();
+  });
+
+  it('closes the attachment menu after submitting', async () => {
+    const harness = renderComposerHarness({ initialValue: 'send me', onSelectFiles: jest.fn() });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+
+    expect(harness.menuItem('Photo')).toBeTruthy();
+
+    await act(async () => {
+      harness.form().props.onSubmit({
+        preventDefault: jest.fn(),
+      });
+    });
+
+    expect(harness.submissions).toEqual(['send me']);
+    expect(harness.menuItems()).toEqual([]);
+  });
 });
 
-function renderComposerHarness() {
+function renderComposerHarness(options: {
+  fileInputClick?: () => void;
+  initialValue?: string;
+  onSelectFiles?: (files: FileList) => Promise<void> | void;
+} = {}) {
   const submissions: string[] = [];
   let renderer!: TestRenderer.ReactTestRenderer;
+  const { fileInputClick, initialValue = '', onSelectFiles } = options;
 
   function Harness() {
-    const [value, setValue] = React.useState('');
+    const [value, setValue] = React.useState(initialValue);
     return React.createElement(
       WebLocaleProvider,
       { initialLocale: 'en-US' },
@@ -65,18 +138,42 @@ function renderComposerHarness() {
           submissions.push(value);
         },
         sending: false,
+        onSelectFiles,
       }),
     );
   }
 
   act(() => {
-    renderer = TestRenderer.create(React.createElement(Harness));
+    renderer = TestRenderer.create(React.createElement(Harness), {
+      createNodeMock: (element) => {
+        if (element.type !== 'input') {
+          return null;
+        }
+
+        return {
+          click: fileInputClick ?? jest.fn(),
+        };
+      },
+    });
   });
 
   return {
+    form: () => renderer.root.findByType('form'),
+    menuItem: (label: string) => findButtonByText(renderer, label),
+    menuItems: () => renderer.root.findAllByProps({ role: 'menuitem' }),
+    plusButton: () => renderer.root.findByProps({ className: 'composer-plus-btn' }),
     submissions,
     textarea: () => renderer.root.findByType('textarea'),
   };
+}
+
+function findButtonByText(renderer: TestRenderer.ReactTestRenderer, text: string): ReactTestInstance {
+  const button = renderer.root.findAllByType('button').find((node) => node.props.children === text);
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+
+  return button;
 }
 
 function buildEnterEvent(overrides: Partial<{
