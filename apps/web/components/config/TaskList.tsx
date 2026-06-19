@@ -72,11 +72,11 @@ export function TaskList(props: TaskListProps) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3">
+      <div className="settings-card-list">
         {Array.from({ length: TASK_SKELETON_COUNT }).map((_, index) => (
           <div
             key={`task-skeleton-${index}`}
-            className="h-[130px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
+            className="settings-card-skeleton animate-pulse"
           />
         ))}
       </div>
@@ -85,14 +85,14 @@ export function TaskList(props: TaskListProps) {
 
   if (visibleTasks.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
+      <div className="settings-list-empty">
         {copy.settings.tasksNoItems}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {orderedTasks.map((task) => (
         <TaskCard
           key={task.id}
@@ -130,7 +130,7 @@ function TaskCard(props: TaskCardProps) {
 
   return (
     <article
-      className="group relative flex items-center justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]"
+      className={`settings-config-card${editable ? ' is-clickable' : ''}`}
       onClick={() => {
         if (editable) {
           handleTaskEdit(task, onEditTextTask, onEditWorkflowTask);
@@ -140,25 +140,19 @@ function TaskCard(props: TaskCardProps) {
       role={editable ? 'button' : undefined}
       tabIndex={editable ? 0 : -1}
     >
-      <div className="min-w-0">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+      <div className="settings-config-card-main">
+        <div className="settings-card-badges">
+          <span className="settings-card-badge">
             {task.enabled ? copy.settings.enabled : copy.settings.disabled}
           </span>
-          <span className="inline-flex whitespace-nowrap rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+          <span className="settings-card-badge">
             {formatTaskKind(task, copy)}
           </span>
-          <span className="font-mono text-[11px] text-[#737373]">{task.id}</span>
+          <span className="settings-card-id">{task.id}</span>
         </div>
-        <p className="mb-1 line-clamp-2 text-[14px] text-[#111111]">{formatPrimaryText(task, copy)}</p>
-        <p className="text-[12px] text-[#737373]">{formatSchedule(task, copy)}</p>
-        <p className="truncate font-mono text-[12px] text-[#737373]">{formatSecondaryLine(task, copy)}</p>
-        {task.task_kind === 'agent_message' ? (
-          <>
-            <p className="truncate text-[12px] text-[#737373]">{formatAgentMode(copy)}</p>
-            <p className="truncate text-[12px] text-[#737373]">{formatRuntimeOverrides(task, copy)}</p>
-          </>
-        ) : null}
+        <p className="settings-card-title line-clamp-2">{formatPrimaryText(task, copy)}</p>
+        <p className="settings-card-meta">{formatSchedule(task, copy)}</p>
+        <p className="settings-card-meta is-mono truncate">{formatSecondaryLine(task, copy)}</p>
       </div>
 
       <ConfigCardActions
@@ -224,32 +218,6 @@ function formatSecondaryLine(task: TaskSettingsListItem, copy: ReturnType<typeof
   }
 
   return copy.settings.tasksSessionWorkflowManaged;
-}
-
-function formatRuntimeOverrides(task: AgentMessageTaskPayload, copy: ReturnType<typeof useWebLocale>['copy']): string {
-  const overrides = task.runtime_overrides;
-  if (!overrides) {
-    return copy.settings.tasksRuntimeGlobalDefaults;
-  }
-  const parts: string[] = [];
-  if (overrides.preset_id) {
-    parts.push(`preset=${overrides.preset_id}`);
-  }
-  if (overrides.model) {
-    parts.push(`model=${overrides.model}`);
-  }
-  if (overrides.tool_allowlist?.length) {
-    parts.push(`tools=${overrides.tool_allowlist.join(',')}`);
-  }
-  if (parts.length === 0) {
-    return copy.settings.tasksRuntimeGlobalDefaults;
-  }
-
-  return copy.settings.tasksRuntimeLabel(parts.join(' | '));
-}
-
-function formatAgentMode(copy: ReturnType<typeof useWebLocale>['copy']): string {
-  return copy.settings.tasksAgentModeSingle;
 }
 
 function workflowStepCount(task: WorkflowTaskPayload): number {

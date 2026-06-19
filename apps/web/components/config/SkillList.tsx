@@ -27,11 +27,11 @@ export function SkillList(props: SkillListProps) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3">
+      <div className="settings-card-list">
         {Array.from({ length: SKILL_SKELETON_COUNT }).map((_, index) => (
           <div
             key={`skill-skeleton-${index}`}
-            className="h-[130px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
+            className="settings-card-skeleton animate-pulse"
           />
         ))}
       </div>
@@ -40,39 +40,39 @@ export function SkillList(props: SkillListProps) {
 
   if (skills.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
+      <div className="settings-list-empty">
         {copy.settings.skillsNoItems}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {sortSkillsForDisplay(skills).map((skill) => (
-        <article key={skill.id} className="group flex items-start justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]">
-          <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2">
-              <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+        <article key={skill.id} className="settings-config-card">
+          <div className="settings-config-card-main">
+            <div className="settings-card-badges">
+              <span className="settings-card-badge">
                 {formatSource(skill.source, copy)}
               </span>
-              <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${skill.enabled ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-[#F5F5F5] text-[#737373]'}`}>
+              <span className="settings-card-badge">
                 {skill.enabled ? copy.settings.enabled : copy.settings.disabled}
               </span>
-              <span className="font-mono text-[11px] text-[#737373]">{skill.id}</span>
+              <span className="settings-card-id">{skill.id}</span>
             </div>
-            <p className="mb-1 line-clamp-1 text-[14px] font-medium text-[#111111]">{skill.name}</p>
-            <p className="mb-1 line-clamp-2 text-[13px] text-[#737373]">{skill.description}</p>
-            <p className="truncate font-mono text-[12px] text-[#737373]">{skill.path}</p>
+            <p className="settings-card-title is-strong line-clamp-1">{skill.name}</p>
+            <p className="settings-card-meta line-clamp-2">{skill.description}</p>
+            <p className="settings-card-meta is-mono truncate">{skill.path}</p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          <div className="settings-config-card-actions">
             <button
               type="button"
               disabled={controlsDisabled}
               onClick={() => {
                 ignorePromise(onUpdate(skill.id, !skill.enabled));
               }}
-              className="shrink-0 whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+              className="settings-card-action whitespace-nowrap"
             >
               {skill.enabled ? copy.settings.skillsDisable : copy.settings.skillsEnable}
             </button>
@@ -80,7 +80,7 @@ export function SkillList(props: SkillListProps) {
               type="button"
               disabled={controlsDisabled}
               onClick={() => requestSkillDelete({ id: skill.id, onDelete, message: copy.settings.skillsDeleteConfirm(skill.name) })}
-              className="shrink-0 whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
+              className="settings-card-action is-danger whitespace-nowrap"
             >
               {copy.settings.skillsDelete}
             </button>

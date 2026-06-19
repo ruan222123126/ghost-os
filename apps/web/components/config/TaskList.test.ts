@@ -110,7 +110,7 @@ describe('components/config/TaskList', () => {
     expect(logsIndex).toBeLessThan(runIndex);
   });
 
-  it('renders mounted preset in text task runtime summary', () => {
+  it('keeps text task runtime details out of the card summary', () => {
     const html = renderTaskList({
       tasks: [
         createAgentTask({
@@ -133,7 +133,10 @@ describe('components/config/TaskList', () => {
       onDelete: async () => {},
     });
 
-    expect(html).toContain('Runtime: preset=preset-1 | tools=script_exec');
+    expect(html).toContain('preset-task');
+    expect(html).toContain('preset-message');
+    expect(html).not.toContain('Runtime: preset=preset-1 | tools=script_exec');
+    expect(html).not.toContain('Mode: single');
   });
 });
 

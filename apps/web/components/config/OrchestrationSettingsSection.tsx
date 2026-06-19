@@ -137,14 +137,14 @@ function OrchestrationList(props: {
   }
   if (orderedOrchestrations.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
+      <div className="settings-list-empty">
         {props.emptyText}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {orderedOrchestrations.map((task) => (
         <OrchestrationCard
           key={task.id}
@@ -181,25 +181,25 @@ function OrchestrationCard(props: {
 
   return (
     <article
-      className="group relative flex items-center justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]"
+      className="settings-config-card is-clickable"
       onClick={() => props.onOpenEditor(props.task.id)}
       onKeyDown={(event) => handleCardKeyDown(event, props.task.id, props.onOpenEditor)}
       role="button"
       tabIndex={0}
     >
-      <div className="min-w-0">
-        <div className="mb-2 flex items-center gap-2">
-          <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+      <div className="settings-config-card-main">
+        <div className="settings-card-badges">
+          <span className="settings-card-badge">
             {props.statusLabel}
           </span>
-          <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+          <span className="settings-card-badge">
             {copy.settings.tabOrchestration}
           </span>
-          <span className="font-mono text-[11px] text-[#737373]">{props.task.id}</span>
+          <span className="settings-card-id">{props.task.id}</span>
         </div>
-        <p className="mb-1 line-clamp-2 text-[14px] text-[#111111]">{props.task.name}</p>
-        <p className="text-[12px] text-[#737373]">{copy.settings.orchestrationSteps(groupCount)}</p>
-        <p className="truncate text-[12px] text-[#737373]">{formatSchedule(props.task, copy)}</p>
+        <p className="settings-card-title line-clamp-2">{props.task.name}</p>
+        <p className="settings-card-meta">{copy.settings.orchestrationSteps(groupCount)}</p>
+        <p className="settings-card-meta truncate">{formatSchedule(props.task, copy)}</p>
       </div>
       <ConfigCardActions
         pillActions={[

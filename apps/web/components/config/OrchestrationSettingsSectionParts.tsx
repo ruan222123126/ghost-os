@@ -17,11 +17,11 @@ export function OrchestrationStatusBanner(props: {
 
 export function OrchestrationLoadingList() {
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {Array.from({ length: 3 }).map((_, index) => (
         <div
           key={`orchestration-skeleton-${index}`}
-          className="h-[130px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
+          className="settings-card-skeleton animate-pulse"
         />
       ))}
     </div>

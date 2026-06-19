@@ -31,11 +31,11 @@ export function ProviderList(props: ProviderListProps) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3">
+      <div className="settings-card-list">
         {Array.from({ length: 3 }).map((_, index) => (
           <div
             key={`provider-skeleton-${index}`}
-            className="h-[106px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
+            className="settings-card-skeleton animate-pulse"
           />
         ))}
       </div>
@@ -44,14 +44,14 @@ export function ProviderList(props: ProviderListProps) {
 
   if (providers.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
+      <div className="settings-list-empty">
         {copy.settings.providerNoItems}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {providers.map((provider) => (
         <ProviderListItem
           key={provider.name}
@@ -74,22 +74,22 @@ function ProviderListItem(props: ProviderListItemProps) {
 
   return (
     <article
-      className="group relative flex cursor-pointer items-center justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]"
+      className="settings-config-card is-clickable"
       onClick={() => onEdit(provider)}
       onKeyDown={(event) => handleCardKeyDown(event, provider, onEdit)}
       role="button"
       tabIndex={0}
     >
-      <div className="min-w-0">
-        <div className="mb-1 flex items-center gap-3">
-          <span className="text-[15px] font-medium text-[#111111]">{provider.name}</span>
+      <div className="settings-config-card-main">
+        <div className="settings-card-badges">
+          <span className="settings-card-title is-strong">{provider.name}</span>
           {isActive ? <ActiveChip /> : null}
         </div>
-        <p className="mb-1 text-[12px] text-[#737373]">{labelForProviderType(provider.type)}</p>
-        <p className="max-w-[360px] truncate font-mono text-[12px] text-[#737373]">{endpoint}</p>
+        <p className="settings-card-meta">{labelForProviderType(provider.type)}</p>
+        <p className="settings-card-meta is-mono truncate">{endpoint}</p>
       </div>
 
-      <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <div className="settings-config-card-actions">
         {isActive ? null : (
           <button
             type="button"
@@ -98,7 +98,7 @@ function ProviderListItem(props: ProviderListItemProps) {
               event.stopPropagation();
               ignorePromise(onActivate(provider.name));
             }}
-            className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+            className="settings-card-action whitespace-nowrap"
           >
             {copy.settings.providerActivate}
           </button>
@@ -111,7 +111,7 @@ function ProviderListItem(props: ProviderListItemProps) {
             event.stopPropagation();
             onEdit(provider);
           }}
-          className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
+          className="settings-card-icon-action"
           aria-label={copy.settings.providerEditAria(provider.name)}
         >
           <EditIcon />
@@ -124,7 +124,7 @@ function ProviderListItem(props: ProviderListItemProps) {
             event.stopPropagation();
             handleProviderDelete(provider.name, onDelete, copy.settings.providerDeleteConfirm(provider.name));
           }}
-          className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
+          className="settings-card-icon-action is-danger"
           aria-label={copy.settings.providerDeleteAria(provider.name)}
         >
           <TrashIcon />
@@ -138,8 +138,7 @@ function ActiveChip() {
   const { copy } = useWebLocale();
 
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#111111]" />
+    <span className="settings-card-badge">
       {copy.settings.providerActive}
     </span>
   );

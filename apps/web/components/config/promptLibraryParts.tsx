@@ -25,50 +25,48 @@ export function PromptLibraryCard(props: {
   return (
     <article
       data-testid={`prompt-library-card-${index}`}
-      className="rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] p-4"
+      className="settings-config-card"
     >
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
-              {item.active ? copy.settings.promptsLibraryActive : copy.settings.promptsLibraryInactive}
-            </span>
-            <span className="inline-flex rounded-full bg-white px-2 py-0.5 font-mono text-[10px] text-[#525252]">
-              {labelForInsertPoint(item.insert_point, copy.settings)}
-            </span>
-          </div>
-          <h3 className="truncate text-[15px] font-semibold text-[#111111]">{item.name}</h3>
-          <p className="mt-1 line-clamp-2 text-[12px] text-[#737373]">{item.content || copy.settings.promptsLibraryEmptyContent}</p>
+      <div className="settings-config-card-main">
+        <div className="settings-card-badges">
+          <span className="settings-card-badge">
+            {item.active ? copy.settings.promptsLibraryActive : copy.settings.promptsLibraryInactive}
+          </span>
+          <span className="settings-card-badge">
+            {labelForInsertPoint(item.insert_point, copy.settings)}
+          </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-          <button
-            type="button"
-            data-testid={`prompt-library-toggle-${index}`}
-            disabled={controlsDisabled}
-            onClick={onToggle}
-            className="whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {item.active ? copy.settings.promptsLibraryDeactivate : copy.settings.promptsLibraryActivate}
-          </button>
-          <button
-            type="button"
-            data-testid={`prompt-library-edit-${index}`}
-            disabled={controlsDisabled}
-            onClick={onEdit}
-            className="whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {copy.settings.edit}
-          </button>
-          <button
-            type="button"
-            data-testid={`prompt-library-delete-${index}`}
-            disabled={controlsDisabled}
-            onClick={onDelete}
-            className="whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {copy.settings.promptsLibraryDelete}
-          </button>
-        </div>
+        <h3 className="settings-card-title is-strong truncate">{item.name}</h3>
+        <p className="settings-card-meta line-clamp-2">{item.content || copy.settings.promptsLibraryEmptyContent}</p>
+      </div>
+      <div className="settings-config-card-actions">
+        <button
+          type="button"
+          data-testid={`prompt-library-toggle-${index}`}
+          disabled={controlsDisabled}
+          onClick={onToggle}
+          className="settings-card-action whitespace-nowrap"
+        >
+          {item.active ? copy.settings.promptsLibraryDeactivate : copy.settings.promptsLibraryActivate}
+        </button>
+        <button
+          type="button"
+          data-testid={`prompt-library-edit-${index}`}
+          disabled={controlsDisabled}
+          onClick={onEdit}
+          className="settings-card-action whitespace-nowrap"
+        >
+          {copy.settings.edit}
+        </button>
+        <button
+          type="button"
+          data-testid={`prompt-library-delete-${index}`}
+          disabled={controlsDisabled}
+          onClick={onDelete}
+          className="settings-card-action is-danger whitespace-nowrap"
+        >
+          {copy.settings.promptsLibraryDelete}
+        </button>
       </div>
     </article>
   );

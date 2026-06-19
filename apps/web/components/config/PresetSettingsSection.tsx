@@ -148,7 +148,7 @@ export function PresetSettingsSection(props: PresetSettingsSectionProps) {
       {toolsLoading || promptsLoading ? <LoadingPresetsNotice text={copy.settings.presetsDependenciesLoading} /> : null}
 
       {presets.length === 0 ? <PresetEmptyNotice /> : null}
-      <div className="space-y-3">
+      <div className="settings-card-list">
         {presets.map((preset, index) => (
           <PresetCard
             key={preset.id}

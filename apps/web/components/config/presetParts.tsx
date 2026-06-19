@@ -36,58 +36,56 @@ export function PresetCard(props: {
   return (
     <article
       data-testid={`preset-card-${index}`}
-      className="rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] p-4"
+      className="settings-config-card"
     >
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="inline-flex rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
-              {copy.settings.presetsToolCount(preset.tool_allowlist.length)}
+      <div className="settings-config-card-main">
+        <div className="settings-card-badges">
+          <span className="settings-card-badge">
+            {copy.settings.presetsToolCount(preset.tool_allowlist.length)}
+          </span>
+          {active ? (
+            <span className="settings-card-badge">
+              {copy.settings.presetsActive}
             </span>
-            {active ? (
-              <span className="inline-flex rounded-full bg-[#111111] px-2 py-0.5 text-[10px] font-bold tracking-wider text-white">
-                {copy.settings.presetsActive}
-              </span>
-            ) : null}
-          </div>
-          <h3 className="truncate text-[15px] font-semibold text-[#111111]">{preset.name}</h3>
-          <p className="mt-1 text-[12px] text-[#737373]">
-            {renderPromptSummary(
-              preset.prompt_refs,
-              promptNameByID,
-              copy.settings.presetsPromptUnbound,
-            )}
-          </p>
+          ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
-          <button
-            type="button"
-            data-testid={`preset-card-activate-${index}`}
-            disabled={controlsDisabled || active}
-            onClick={onActivate}
-            className="whitespace-nowrap rounded-full bg-[#111111] px-3 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:bg-[#D4D4D4]"
-          >
-            {active ? copy.settings.presetsActive : (activating ? copy.settings.presetsActivating : copy.settings.presetsActivate)}
-          </button>
-          <button
-            type="button"
-            data-testid={`preset-card-edit-${index}`}
-            disabled={controlsDisabled}
-            onClick={onEdit}
-            className="whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {copy.settings.edit}
-          </button>
-          <button
-            type="button"
-            data-testid={`preset-card-delete-${index}`}
-            disabled={controlsDisabled}
-            onClick={onDelete}
-            className="whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {copy.settings.presetsDelete}
-          </button>
-        </div>
+        <h3 className="settings-card-title is-strong truncate">{preset.name}</h3>
+        <p className="settings-card-meta line-clamp-2">
+          {renderPromptSummary(
+            preset.prompt_refs,
+            promptNameByID,
+            copy.settings.presetsPromptUnbound,
+          )}
+        </p>
+      </div>
+      <div className="settings-config-card-actions">
+        <button
+          type="button"
+          data-testid={`preset-card-activate-${index}`}
+          disabled={controlsDisabled || active}
+          onClick={onActivate}
+          className="settings-card-action whitespace-nowrap"
+        >
+          {active ? copy.settings.presetsActive : (activating ? copy.settings.presetsActivating : copy.settings.presetsActivate)}
+        </button>
+        <button
+          type="button"
+          data-testid={`preset-card-edit-${index}`}
+          disabled={controlsDisabled}
+          onClick={onEdit}
+          className="settings-card-action whitespace-nowrap"
+        >
+          {copy.settings.edit}
+        </button>
+        <button
+          type="button"
+          data-testid={`preset-card-delete-${index}`}
+          disabled={controlsDisabled}
+          onClick={onDelete}
+          className="settings-card-action is-danger whitespace-nowrap"
+        >
+          {copy.settings.presetsDelete}
+        </button>
       </div>
     </article>
   );

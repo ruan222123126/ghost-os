@@ -123,7 +123,7 @@ export function PromptsLibrarySettingsSection(props: PromptsLibrarySettingsSecti
       {loading && prompts === null ? <LoadingPromptsNotice text={copy.settings.promptsLoading} /> : null}
 
       {promptLibrary.length === 0 ? <PromptLibraryEmptyNotice /> : null}
-      <div className="space-y-3">
+      <div className="settings-card-list">
         {promptLibrary.map((item, index) => (
           <PromptLibraryCard
             key={item.id}

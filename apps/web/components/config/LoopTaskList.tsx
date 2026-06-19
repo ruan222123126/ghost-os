@@ -44,14 +44,14 @@ export function LoopTaskList(props: LoopTaskListProps) {
   }
   if (orderedLoops.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
+      <div className="settings-list-empty">
         {copy.settings.loopEmpty}
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {orderedLoops.map((loop) => (
         <LoopTaskCard
           key={loop.id}
@@ -99,7 +99,7 @@ function LoopTaskCard(props: {
 
   return (
     <article
-      className="group relative flex items-center justify-between gap-3 rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111]"
+      className="settings-config-card is-clickable"
       onClick={() => props.onEdit(loop)}
       onKeyDown={(event) => handleCardKeyDown(event, loop, props.onEdit)}
       role="button"
@@ -129,12 +129,12 @@ function LoopCardContent(props: {
   const { loop, presets } = props;
 
   return (
-    <div className="min-w-0">
+    <div className="settings-config-card-main">
       <LoopCardBadges loop={loop} />
-      <p className="mb-1 line-clamp-2 text-[14px] text-[#111111]">{loop.message}</p>
-      <p className="text-[12px] text-[#737373]">{formatSchedule(loop, copy)}</p>
-      <p className="truncate text-[12px] text-[#737373]">{formatStopPolicy(loop, copy)}</p>
-      <p className="truncate text-[12px] text-[#737373]">{formatPreset(loop, presets, copy)}</p>
+      <p className="settings-card-title line-clamp-2">{loop.message}</p>
+      <p className="settings-card-meta">{formatSchedule(loop, copy)}</p>
+      <p className="settings-card-meta truncate">{formatStopPolicy(loop, copy)}</p>
+      <p className="settings-card-meta truncate">{formatPreset(loop, presets, copy)}</p>
     </div>
   );
 }
@@ -144,14 +144,14 @@ function LoopCardBadges(props: { loop: AgentMessageTaskPayload }) {
   const { loop } = props;
 
   return (
-    <div className="mb-2 flex items-center gap-2">
-      <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+    <div className="settings-card-badges">
+      <span className="settings-card-badge">
         {loop.enabled ? copy.settings.enabled : copy.settings.disabled}
       </span>
-      <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
+      <span className="settings-card-badge">
         {copy.settings.loopKind}
       </span>
-      <span className="font-mono text-[11px] text-[#737373]">{loop.id}</span>
+      <span className="settings-card-id">{loop.id}</span>
     </div>
   );
 }
@@ -279,11 +279,11 @@ function handleDelete(
 
 function LoadingList() {
   return (
-    <div className="grid grid-cols-1 gap-3">
+    <div className="settings-card-list">
       {Array.from({ length: LOOP_SKELETON_COUNT }).map((_, index) => (
         <div
           key={`loop-skeleton-${index}`}
-          className="h-[130px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
+          className="settings-card-skeleton animate-pulse"
         />
       ))}
     </div>

@@ -23,14 +23,14 @@ interface ConfigCardActionsProps {
 
 export function ConfigCardActions(props: ConfigCardActionsProps) {
   return (
-    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+    <div className="settings-config-card-actions">
       {props.pillActions.map((action) => (
         <button
           key={action.key}
           type="button"
           disabled={action.disabled}
           onClick={(event) => stopCardAction(event, action.onClick)}
-          className="shrink-0 whitespace-nowrap rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+          className="settings-card-action whitespace-nowrap"
         >
           {action.label}
         </button>
@@ -39,7 +39,7 @@ export function ConfigCardActions(props: ConfigCardActionsProps) {
         type="button"
         disabled={props.editDisabled}
         onClick={(event) => stopCardAction(event, props.onEdit)}
-        className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#F5F5F5] hover:text-[#111111] disabled:cursor-not-allowed disabled:opacity-50"
+        className="settings-card-icon-action"
         aria-label={props.editLabel}
         title={props.editTitle}
       >
@@ -49,7 +49,7 @@ export function ConfigCardActions(props: ConfigCardActionsProps) {
         type="button"
         disabled={props.deleteDisabled}
         onClick={(event) => stopCardAction(event, props.onDelete)}
-        className="rounded-full p-2 text-[#737373] transition-colors hover:bg-[#FEF2F2] hover:text-[#DC2626] disabled:cursor-not-allowed disabled:opacity-50"
+        className="settings-card-icon-action is-danger"
         aria-label={props.deleteLabel}
       >
         <TrashIcon />

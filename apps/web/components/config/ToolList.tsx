@@ -30,11 +30,11 @@ export function ToolList(props: ToolListProps) {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 gap-3">
+      <div className="settings-card-list">
         {Array.from({ length: TOOL_SKELETON_COUNT }).map((_, index) => (
           <div
             key={`tool-skeleton-${index}`}
-            className="h-[128px] animate-pulse rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA]"
+            className="settings-card-skeleton animate-pulse"
           />
         ))}
       </div>
@@ -43,7 +43,7 @@ export function ToolList(props: ToolListProps) {
 
   if (tools.length === 0) {
     return (
-      <div className="rounded-[16px] border border-[#E5E5E5] bg-white px-6 py-8 text-center text-[13px] text-[#737373]">
+      <div className="settings-list-empty">
         {copy.settings.toolsNoItems}
       </div>
     );
@@ -51,7 +51,7 @@ export function ToolList(props: ToolListProps) {
 
   return (
     <>
-      <div className="grid grid-cols-1 gap-3">
+      <div className="settings-card-list">
         {orderedTools.map((tool) => (
           <ToolCard
             key={tool.name}
@@ -116,53 +116,30 @@ function ToolCard(props: ToolCardProps) {
           onOpenDetails();
         }
       }}
-      className="rounded-[16px] border border-[#E5E5E5] bg-white p-5 transition-all hover:border-[#111111] focus:outline-none focus:ring-2 focus:ring-[#111111]/20"
+      className="settings-config-card is-clickable"
     >
-      <ToolCardHeader
-        name={tool.name}
-        enabled={tool.enabled}
-        controlsDisabled={controlsDisabled}
-        onToggle={onToggle}
-        onEdit={onOpenDetails}
-      />
-      <p className="text-[12px] text-[#737373]">
-        <span className="font-medium text-[#111111]">{copy.settings.toolsPromptModeLabel}</span>
-        : {hasPromptOverride(tool) ? copy.settings.toolsPromptModeCustom : copy.settings.toolsPromptModeDefault}
-      </p>
-    </article>
-  );
-}
-
-function ToolCardHeader(props: {
-  name: string;
-  enabled: boolean;
-  controlsDisabled: boolean;
-  onToggle: () => void;
-  onEdit: () => void;
-}) {
-  const { copy } = useWebLocale();
-  const { name, enabled, controlsDisabled, onToggle, onEdit } = props;
-
-  return (
-    <div className="mb-3 flex items-center justify-between gap-4">
-      <div className="min-w-0">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="inline-flex rounded-full bg-[#F5F5F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#111111]">
-            {enabled ? copy.settings.enabled : copy.settings.disabled}
+      <div className="settings-config-card-main">
+        <div className="settings-card-badges">
+          <span className="settings-card-badge">
+            {tool.enabled ? copy.settings.enabled : copy.settings.disabled}
           </span>
         </div>
-        <p className="truncate font-mono text-[13px] text-[#111111]">{name}</p>
+        <p className="settings-card-title is-strong is-mono truncate">{tool.name}</p>
+        <p className="settings-card-meta">
+          <span className="font-medium text-[#111111]">{copy.settings.toolsPromptModeLabel}</span>
+          : {hasPromptOverride(tool) ? copy.settings.toolsPromptModeCustom : copy.settings.toolsPromptModeDefault}
+        </p>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="settings-config-card-actions">
         <button
           type="button"
           disabled={controlsDisabled}
           onClick={(event) => {
             event.stopPropagation();
-            onEdit();
+            onOpenDetails();
           }}
-          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+          className="settings-card-action whitespace-nowrap"
         >
           {copy.settings.toolsEditPrompt}
         </button>
@@ -173,12 +150,12 @@ function ToolCardHeader(props: {
             event.stopPropagation();
             onToggle();
           }}
-          className="rounded-full border border-[#E5E5E5] px-3 py-1.5 text-[12px] font-medium text-[#111111] transition-colors hover:bg-[#F5F5F5] disabled:cursor-not-allowed disabled:opacity-50"
+          className="settings-card-action whitespace-nowrap"
         >
-          {enabled ? copy.settings.tasksDisable : copy.settings.tasksEnable}
+          {tool.enabled ? copy.settings.tasksDisable : copy.settings.tasksEnable}
         </button>
       </div>
-    </div>
+    </article>
   );
 }
 
