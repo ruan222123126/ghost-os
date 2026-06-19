@@ -288,20 +288,34 @@
 
 .copy-button.is-code-block {
   gap: 0;
-  padding: 2px;
+  padding: 6px;
   border: none;
+  border-radius: 8px;
   background: transparent;
-  color: rgb(125 125 125);
+  color: rgb(107 114 128);
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    transform 80ms ease;
 }
 
 .copy-button.is-code-block:hover {
-  color: rgb(23 23 23);
-  background: transparent;
+  color: rgb(31 41 55);
+  background: rgb(243 244 246);
+}
+
+.copy-button.is-code-block:active {
+  transform: scale(0.95);
 }
 
 .copy-icon {
   width: 12px;
   height: 12px;
+}
+
+.copy-button.is-code-block .copy-icon {
+  width: 16px;
+  height: 16px;
 }
 
 .tool-card {

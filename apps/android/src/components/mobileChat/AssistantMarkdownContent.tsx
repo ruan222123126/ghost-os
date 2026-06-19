@@ -3,6 +3,7 @@ import { Children, isValidElement, memo, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { extractCodeLanguage, formatCodeLanguageLabel, highlightCodeBlockHTML } from "./assistantMarkdown";
 import { MessageCopyButton } from "./MessageCopyButton";
 
 interface AssistantMarkdownContentProps {
@@ -50,7 +51,10 @@ function AssistantMarkdownContentBase({ content, showCopyButton = true }: Assist
               {showCopyButton ? <MessageCopyButton text={codeContent} variant="code" /> : null}
             </div>
             <pre>
-              <code className={block.className}>{codeContent}</code>
+              <code
+                className={block.className}
+                dangerouslySetInnerHTML={{ __html: highlightCodeBlockHTML(codeContent) }}
+              />
             </pre>
           </div>
         );
@@ -88,15 +92,6 @@ function flattenNodeText(node: ReactNode): string {
     return node.map((item) => flattenNodeText(item)).join("");
   }
   return "";
-}
-
-function extractCodeLanguage(className: string | undefined): string {
-  const match = className?.match(/language-([\w-]+)/);
-  return match?.[1] ?? "text";
-}
-
-function formatCodeLanguageLabel(language: string): string {
-  return language.toUpperCase();
 }
 
 function trimSingleTrailingLineBreak(content: string): string {

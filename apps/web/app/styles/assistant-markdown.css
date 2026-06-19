@@ -116,34 +116,42 @@
 
 .assistant-code-block {
   margin: 12px 0;
-  border: 1px solid rgb(221 221 221 / 0.95);
-  border-radius: 12px;
+  border: 1px solid rgb(243 244 246);
+  border-radius: 8px;
   overflow: hidden;
-  background: rgb(250 249 247);
+  background: rgb(255 255 255);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
 }
 
 .assistant-code-header {
+  min-height: 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
-  border-bottom: 1px solid rgb(226 226 226 / 0.95);
-  background: rgb(245 244 241);
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgb(243 244 246);
+  background: rgb(255 255 255);
 }
 
 .assistant-code-language {
-  color: rgb(109 109 109);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  min-width: 0;
+  overflow: hidden;
+  color: rgb(107 114 128);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
   font-family: var(--font-mono), monospace;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .assistant-code-block pre {
   margin: 0;
-  padding: 11px 12px;
+  padding: 18px;
   overflow-x: auto;
-  background: rgb(250 249 247);
+  background: rgb(249 250 251 / 0.72);
   word-break: normal;
   overflow-wrap: normal;
 }
@@ -151,13 +159,47 @@
 .assistant-code-block code {
   display: block;
   min-width: max-content;
-  color: rgb(38 38 38);
+  color: rgb(31 41 55);
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.7;
   font-family: var(--font-mono), monospace;
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.assistant-syntax-control {
+  color: rgb(126 34 206);
+}
+
+.assistant-syntax-declaration,
+.assistant-syntax-tag {
+  color: rgb(29 78 216);
+}
+
+.assistant-syntax-type {
+  color: rgb(14 116 144);
+}
+
+.assistant-syntax-function {
+  color: rgb(234 88 12);
+}
+
+.assistant-syntax-attribute {
+  color: rgb(37 99 235);
+}
+
+.assistant-syntax-number {
+  color: rgb(220 38 38);
+}
+
+.assistant-syntax-comment {
+  color: rgb(107 114 128);
+  font-style: italic;
+}
+
+.assistant-syntax-string {
+  color: rgb(21 128 61);
 }
 
 @media (max-width: 768px) {
@@ -166,6 +208,6 @@
   }
 
   .assistant-code-block pre {
-    padding: 10px;
+    padding: 16px;
   }
 }

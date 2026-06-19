@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import {
   extractCodeLanguage,
   formatCodeLanguageLabel,
+  highlightCodeBlockHTML,
 } from './assistantMarkdown';
 import { MessageCopyButton } from './MessageCopyButton';
 
@@ -62,7 +63,10 @@ export const AssistantMarkdownRenderer: FC<AssistantMarkdownRendererProps> = ({
             {showCopyButton ? <MessageCopyButton text={codeContent} variant="code" /> : null}
           </div>
           <pre>
-            <code className={block.className}>{codeContent}</code>
+            <code
+              className={block.className}
+              dangerouslySetInnerHTML={{ __html: highlightCodeBlockHTML(codeContent) }}
+            />
           </pre>
         </div>
       );

@@ -1,6 +1,7 @@
 import {
   extractCodeLanguage,
   formatCodeLanguageLabel,
+  highlightCodeBlockHTML,
   shouldRenderAssistantMarkdown,
 } from './assistantMarkdown';
 
@@ -45,5 +46,20 @@ describe('formatCodeLanguageLabel', () => {
   it('renders uppercase labels', () => {
     expect(formatCodeLanguageLabel('typescript')).toBe('TYPESCRIPT');
     expect(formatCodeLanguageLabel('')).toBe('TEXT');
+  });
+});
+
+describe('highlightCodeBlockHTML', () => {
+  it('escapes raw HTML and highlights syntax tokens', () => {
+    const html = highlightCodeBlockHTML('const el = <Link href="/x">1</Link>; // ok');
+
+    expect(html).toContain('&lt;');
+    expect(html).not.toContain('<Link');
+    expect(html).toContain('assistant-syntax-declaration');
+    expect(html).toContain('assistant-syntax-tag');
+    expect(html).toContain('assistant-syntax-attribute');
+    expect(html).toContain('assistant-syntax-number');
+    expect(html).toContain('assistant-syntax-comment');
+    expect(html).toContain('assistant-syntax-string');
   });
 });

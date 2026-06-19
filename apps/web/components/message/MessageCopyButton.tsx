@@ -102,10 +102,10 @@ export const MessageCopyButton: FC<MessageCopyButtonProps> = ({
       className={buttonClassName}
       aria-label={buttonLabel}
     >
-      {isCodeVariant || !copied ? (
-        <CopyIcon className="copy-icon" />
-      ) : (
+      {copied ? (
         <CheckIcon className="copy-icon" />
+      ) : (
+        <CopyIcon className="copy-icon" />
       )}
       {!isCodeVariant ? <span className="copy-label">{buttonLabel}</span> : null}
     </button>
