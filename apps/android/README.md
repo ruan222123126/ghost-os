@@ -12,20 +12,25 @@ src-tauri/gen/android # Tauri 生成的 Android 工程
 
 ## 开发
 
-默认使用电脑端 Tauri 桌面壳调试移动端界面和连接能力，不需要把 App 安装到手机上：
+首次准备 Android 工程时：
 
 ```bash
 pnpm install
-pnpm tauri dev
+pnpm tauri android init
 ```
 
-这个模式会在电脑上启动一个 Tauri 桌面壳，并注入 `window.__TAURI_INTERNALS__`。因此当前的“导入配对”、`invoke`、凭据保存、HTTP fallback 都能跑；把窗口尺寸调成手机大小后，可以覆盖 UI、导入配置、连接 Bridge、WebRTC 通道等主要调试路径。
-
-需要验证 Android WebView、手机网络、权限或真机交互时，再使用 Android 真机开发模式：
+之后默认启动 Android 真机开发模式：
 
 ```bash
-pnpm tauri android init
-pnpm tauri android dev
+pnpm dev
+```
+
+`pnpm dev` 会调用 `tauri android dev`，并由 Tauri 自动启动 Vite 前端服务。
+
+如果只需要启动前端 Vite 服务用于页面调试：
+
+```bash
+pnpm frontend:dev
 ```
 
 ## 构建

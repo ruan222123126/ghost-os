@@ -241,6 +241,11 @@ def web_knip() -> int:
     return run(["pnpm", "--dir", "apps/web", "knip"], ROOT)
 
 
+def android_dev() -> int:
+    print("run android tauri dev...")
+    return run(["pnpm", "--dir", "apps/android", "dev"], ROOT)
+
+
 def go_tidy() -> int:
     print("tidy go bridge module...")
     return run([resolve_go_bin(), "mod", "tidy"], ROOT / "core/bridge")
@@ -390,6 +395,8 @@ def main() -> int:
         return web_lint()
     if action == "web-knip":
         return web_knip()
+    if action == "android-dev":
+        return android_dev()
     if action == "go-tidy":
         return go_tidy()
     if action == "go-lint":
@@ -420,7 +427,7 @@ def main() -> int:
         return init_web()
 
     print(
-        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | web-knip | go-tidy | go-lint | rust-clippy | rust-udeps | scavenge | repo-hygiene | check-layers | gen-contracts | verify-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
+        "usage: python task.py [build | ping | agent | serve | web-dev | web-build | web-test | web-lint | web-knip | android-dev | go-tidy | go-lint | rust-clippy | rust-udeps | scavenge | repo-hygiene | check-layers | gen-contracts | verify-contracts | build-cli | run-cli | check-cli | install-cli | init-web]"
     )
     return 0
 
