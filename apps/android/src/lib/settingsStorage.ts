@@ -5,6 +5,7 @@ export const DEFAULT_BRIDGE_URL = "http://127.0.0.1:8080";
 const SETTINGS_STORAGE_KEY = "ghost-os-mobile.settings";
 
 const defaultSettings: StoredSettings = {
+  apiToken: "",
   bridgeUrl: DEFAULT_BRIDGE_URL,
   connectionMode: "webrtc",
 };
@@ -18,6 +19,7 @@ export function loadSettings(): StoredSettings {
   try {
     const parsed = JSON.parse(raw) as Partial<StoredSettings>;
     return {
+      apiToken: parsed.apiToken?.trim() || "",
       bridgeUrl: parsed.bridgeUrl?.trim() || DEFAULT_BRIDGE_URL,
       connectionMode: parsed.connectionMode === "http" ? "http" : "webrtc",
       pairing: normalizePairing(parsed.pairing),
@@ -31,6 +33,7 @@ export function saveSettings(settings: StoredSettings): void {
   window.localStorage.setItem(
     SETTINGS_STORAGE_KEY,
     JSON.stringify({
+      apiToken: settings.apiToken?.trim() || "",
       bridgeUrl: settings.bridgeUrl,
       connectionMode: settings.connectionMode,
       pairing: settings.pairing,

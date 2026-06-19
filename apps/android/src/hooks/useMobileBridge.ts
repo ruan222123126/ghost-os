@@ -46,7 +46,7 @@ interface SendAgentMessageResult {
 
 function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): string {
   if (settings.connectionMode === "http") {
-    return `http:${bridgeUrl}`;
+    return `http:${bridgeUrl}:${settings.apiToken?.trim() ?? ""}`;
   }
 
   const pairing = settings.pairing;
@@ -79,7 +79,6 @@ function firstProviderModel(providerList: ProviderListPayload | undefined, provi
 
 export function useMobileBridge() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
-  const [apiToken] = useState("");
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
@@ -98,6 +97,7 @@ export function useMobileBridge() {
   const connectedTargetRef = useRef<string | undefined>(undefined);
 
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
+  const apiToken = useMemo(() => settings.apiToken?.trim() || "", [settings.apiToken]);
   const currentConnectionTarget = useMemo(() => connectionTargetKey(settings, bridgeUrl), [bridgeUrl, settings]);
 
   useEffect(() => {

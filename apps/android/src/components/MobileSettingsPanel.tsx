@@ -41,6 +41,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
   const [view, setView] = useState<SettingsView>("root");
   const [pairingUri, setPairingUri] = useState("");
   const [bridgeUrlDraft, setBridgeUrlDraft] = useState(props.settings.bridgeUrl);
+  const [apiTokenDraft, setAPITokenDraft] = useState(props.settings.apiToken ?? "");
   const [pairingError, setPairingError] = useState("");
   const [pairingWarning, setPairingWarning] = useState("");
 
@@ -48,6 +49,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
     if (props.open) {
       setView("root");
       setBridgeUrlDraft(props.settings.bridgeUrl);
+      setAPITokenDraft(props.settings.apiToken ?? "");
       setPairingError("");
       setPairingWarning("");
     }
@@ -95,6 +97,11 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
     props.onSettingsChange((current) => ({ ...current, bridgeUrl: value }));
   }
 
+  function saveAPIToken(value: string): void {
+    setAPITokenDraft(value);
+    props.onSettingsChange((current) => ({ ...current, apiToken: value }));
+  }
+
   function handleBack(): void {
     if (view !== "root") {
       setView("root");
@@ -124,6 +131,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
         <div className="mobile-settings-body">
           {view === "connection" ? (
             <ConnectionSettings
+              apiTokenDraft={apiTokenDraft}
               bridgeUrlDraft={bridgeUrlDraft}
               pairingError={pairingError}
               pairingUri={pairingUri}
@@ -134,6 +142,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onImportPairing={importPairing}
               onPairingUriChange={setPairingUri}
               onRemovePairing={removePairing}
+              onSaveAPIToken={saveAPIToken}
               onSaveBridgeURL={saveBridgeURL}
               onSetConnectionMode={setConnectionMode}
             />
@@ -256,6 +265,7 @@ function titleForView(view: SettingsView): string {
 }
 
 interface ConnectionSettingsProps {
+  apiTokenDraft: string;
   bridgeUrlDraft: string;
   connectionStatus: StatusMessage;
   pairingError: string;
@@ -266,6 +276,7 @@ interface ConnectionSettingsProps {
   onImportPairing: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onPairingUriChange: (value: string) => void;
   onRemovePairing: () => Promise<void>;
+  onSaveAPIToken: (value: string) => void;
   onSaveBridgeURL: (value: string) => void;
   onSetConnectionMode: (mode: StoredSettings["connectionMode"]) => void;
 }
@@ -350,6 +361,17 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
               <label className="mobile-settings-url-field">
                 <span>Bridge URL</span>
                 <input value={props.bridgeUrlDraft} onChange={(event) => props.onSaveBridgeURL(event.target.value)} />
+              </label>
+              <label className="mobile-settings-url-field">
+                <span>API Token</span>
+                <input
+                  value={props.apiTokenDraft}
+                  type="password"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => props.onSaveAPIToken(event.target.value)}
+                />
               </label>
             </div>
           )}

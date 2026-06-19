@@ -16,6 +16,7 @@ export interface MobilePairingInfo {
 }
 
 export interface StoredSettings {
+  apiToken?: string;
   bridgeUrl: string;
   connectionMode: ConnectionMode;
   pairing?: MobilePairingInfo;
