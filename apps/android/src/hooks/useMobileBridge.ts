@@ -186,6 +186,8 @@ export function useMobileBridge() {
         const client = new MobileWebRTCBridge(settings.pairing, secret);
         await client.connect();
         webRTCClientRef.current = client;
+        connectedTargetRef.current = currentConnectionTarget;
+        setConnectionStatus({ tone: "success", text: "WebRTC 已连接" });
       }
       await refreshRuntimeConfig();
       await refreshSessions();
