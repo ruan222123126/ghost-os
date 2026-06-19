@@ -21,7 +21,7 @@ export function buildAgentMessageWithSelectedSkill(input: ChatSendInput): string
       id: selectedSkill.id,
       name: selectedSkill.name,
     }),
-    'Before answering, call sfind with action "load" and skill_names containing exactly the selected skill name from the JSON metadata. Then use the loaded skill for the user request. If the user request is empty, ask what task should be done with this skill.',
+    'The selected skill has already been loaded through sfind by the UI. Treat it as the active skill for this turn, do not call sfind just to load or verify it, and use the loaded skill for the user request. If the runtime does not provide this skill context, say that explicitly instead of pretending the skill is available. If the user request is empty, ask what task should be done with this skill.',
     '',
     USER_REQUEST_HEADER,
     message,

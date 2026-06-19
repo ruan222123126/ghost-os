@@ -15,7 +15,8 @@ describe('lib/selectedSkillMessage', () => {
     });
 
     expect(wrapped).toContain('[Ghost-OS selected skill]');
-    expect(wrapped).toContain('sfind');
+    expect(wrapped).toContain('already been loaded through sfind');
+    expect(wrapped).toContain('do not call sfind just to load or verify it');
 
     expect(parseAgentMessageWithSelectedSkill(wrapped)).toEqual({
       message: 'ship the release',

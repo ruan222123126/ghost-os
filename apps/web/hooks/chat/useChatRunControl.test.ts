@@ -17,7 +17,7 @@ describe('hooks/chat/useChatRunControl', () => {
     jest.resetAllMocks();
   });
 
-  it('keeps selected skill visible locally and sends a load-skill instruction to the agent', async () => {
+  it('keeps selected skill visible locally and sends it as already loaded to the agent', async () => {
     const activeRunRef: ActiveRunRef = { current: null };
     const stopPendingRef: StopPendingRef = { current: false };
     const committed: ChatMessage[] = [];
@@ -86,7 +86,8 @@ describe('hooks/chat/useChatRunControl', () => {
     ]);
     expect(streamedRuns).toHaveLength(1);
     expect(streamedRuns[0].message).toContain('[Ghost-OS selected skill]');
-    expect(streamedRuns[0].message).toContain('sfind');
+    expect(streamedRuns[0].message).toContain('already been loaded through sfind');
+    expect(streamedRuns[0].message).toContain('do not call sfind just to load or verify it');
     expect(streamedRuns[0].message).toContain('release_flow');
     expect(streamedRuns[0].message).toContain('ship release');
   });
