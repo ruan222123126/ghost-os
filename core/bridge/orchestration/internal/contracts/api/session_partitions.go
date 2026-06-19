@@ -23,9 +23,9 @@ type SessionIDParams struct {
 }
 
 type SessionGetParams struct {
-	ID     string
-	Limit  *int
-	Before *int
+	ID     string `json:"id"`
+	Limit  *int   `json:"limit,omitempty"`
+	Before *int   `json:"before,omitempty"`
 }
 
 type SessionDeleteResponse struct {

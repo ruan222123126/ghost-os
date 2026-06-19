@@ -69,6 +69,29 @@ describe("useMobileSessions", () => {
     expect(sendAgentMessage).toHaveBeenCalledTimes(1);
   });
 
+  it("loads Bridge session detail and persists projected messages", async () => {
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getSession,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await act(async () => {
+      await result.current.selectSession("session-1");
+    });
+
+    expect(getSession).toHaveBeenCalledWith("session-1");
+    expect(result.current.activeMessages).toEqual([
+      expect.objectContaining({ role: "user", sessionId: "session-1", text: "loaded" }),
+    ]);
+    expect(loadStored()[0]).toMatchObject({
+      id: "session-1",
+      messages: [expect.objectContaining({ role: "user", sessionId: "session-1", text: "loaded" })],
+      title: "Bridge title",
+    });
+  });
+
   it("clears active session when starting a new session", async () => {
     const { result } = renderMobileSessions({
       sendAgentMessage: vi.fn(async (options: SendOptions) => {

@@ -13,6 +13,7 @@ const (
 	busActionAgentStop          = bus.ActionAgentStop
 	busActionHumanResponse      = bus.ActionHumanResponse
 	busActionSessionsList       = bus.ActionSessionsList
+	busActionSessionGet         = bus.ActionSessionGet
 	busActionConfigGet          = bus.ActionConfigGet
 	busActionConfigUpdate       = bus.ActionConfigUpdate
 	busActionConfigProvidersGet = bus.ActionConfigProvidersGet

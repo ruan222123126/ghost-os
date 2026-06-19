@@ -110,6 +110,87 @@ func TestBusSessionsListReturnsMetadata(t *testing.T) {
 	}
 }
 
+func TestBusSessionGetReturnsDetail(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	sess := session.NewSession("system")
+	sess.ID = "session-bus-get"
+	for i := 0; i < 3; i++ {
+		sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: strings.Repeat("x", i+1)})
+	}
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSION_GET","params":{"id":"session-bus-get","limit":2},"trace_id":"trace-session-get"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["id"] != sess.ID {
+		t.Fatalf("unexpected session id: got %v want %q", payload["id"], sess.ID)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok {
+		t.Fatalf("unexpected messages type: %T", payload["messages"])
+	}
+	if len(messages) != 2 {
+		t.Fatalf("unexpected message page size: got %d want 2", len(messages))
+	}
+	page, ok := payload["page"].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected page type: %T", payload["page"])
+	}
+	if page["limit"] != float64(2) {
+		t.Fatalf("unexpected page limit: got %v want 2", page["limit"])
+	}
+}
+
+func TestBusSessionGetRejectsInvalidParams(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	emptyID := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSION_GET","params":{"id":"","limit":100},"trace_id":"trace-session-empty"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if emptyID.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected empty id status: got %d want %d body=%s", emptyID.Code, http.StatusBadRequest, emptyID.Body.String())
+	}
+
+	unknownField := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSION_GET","params":{"id":"session-1","limit":100,"extra":true},"trace_id":"trace-session-extra"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if unknownField.Code != http.StatusBadRequest {
+		t.Fatalf(
+			"unexpected unknown field status: got %d want %d body=%s",
+			unknownField.Code,
+			http.StatusBadRequest,
+			unknownField.Body.String(),
+		)
+	}
+	if !strings.Contains(unknownField.Body.String(), `unknown field \"extra\"`) {
+		t.Fatalf("unexpected unknown field error: %s", unknownField.Body.String())
+	}
+}
+
 func TestHandleSessionsSearchMatchesTitle(t *testing.T) {
 	handler, sessionStore := newTestHandlerWithStore(t, nil)
 

@@ -245,6 +245,9 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		SessionsList: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeSessionsListAction(traceID)
 		},
+		SessionGet: func(_ context.Context, params sessionGetParams, traceID string) (ServiceResult, error) {
+			return service.executeSessionGetAction(params, traceID)
+		},
 		TaskCreate: func(_ context.Context, params taskCreateParams, traceID string) (ServiceResult, error) {
 			return service.executeTaskCreateActionResult(params, traceID)
 		},

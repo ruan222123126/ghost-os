@@ -12,6 +12,7 @@ import {
 } from "../lib/mobileAgentStreamRuntime";
 import type { MobileAgentStreamProjector } from "../lib/mobileAgentStreamRuntime";
 import { loadMobileCredential } from "../lib/mobileCredentials";
+import { parseSessionDetail, parseSessionMetadataList } from "../lib/sessionPayloadParser";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
 import type {
@@ -24,6 +25,8 @@ import type {
   StatusMessage,
   StoredSettings,
 } from "../mobileTypes";
+
+const SESSION_DETAIL_PAGE_LIMIT = 100;
 
 interface SendAgentMessageOptions {
   message: string;
@@ -179,7 +182,7 @@ export function useMobileBridge() {
   }, [requestBridge]);
 
   const refreshSessions = useCallback(async (): Promise<SessionMetadata[]> => {
-    const payload = await requestBridge<SessionMetadata[]>("SESSIONS_LIST", {});
+    const payload = parseSessionMetadataList(await requestBridge<unknown>("SESSIONS_LIST", {}));
     setSessions(payload);
     setSessionsLoaded(true);
     return payload;
@@ -201,7 +204,9 @@ export function useMobileBridge() {
 
   const getSession = useCallback(
     async (sessionId: string): Promise<SessionDetail> => {
-      return requestBridge<SessionDetail>("SESSION_GET", { id: sessionId.trim() });
+      return parseSessionDetail(
+        await requestBridge<unknown>("SESSION_GET", { id: sessionId.trim(), limit: SESSION_DETAIL_PAGE_LIMIT }),
+      );
     },
     [requestBridge],
   );
