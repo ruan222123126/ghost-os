@@ -380,6 +380,20 @@
   background: #d1d5db;
 }
 
+.mobile-settings-connect-button:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.mobile-settings-connect-button.is-connected {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.mobile-settings-connect-button.is-connected:hover {
+  background: #bbf7d0;
+}
+
 .mobile-settings-connect-button .mobile-settings-icon,
 .mobile-settings-pair-form button .mobile-settings-icon,
 .mobile-settings-danger-button .mobile-settings-icon {
@@ -410,6 +424,42 @@
   min-height: 48px;
   padding: 12px 14px;
   font-size: 14px;
+}
+
+.mobile-settings-connection-status {
+  margin: 14px 0 0;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  overflow-wrap: anywhere;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.mobile-settings-connection-status.is-loading {
+  color: #374151;
+  background: #ffffff;
+}
+
+.mobile-settings-connection-status.is-success {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.mobile-settings-connection-status.is-error {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.mobile-settings-status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  margin-top: 5px;
+  background: currentColor;
 }
 
 .mobile-settings-warning,

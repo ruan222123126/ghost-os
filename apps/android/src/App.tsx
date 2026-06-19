@@ -35,6 +35,7 @@ function App() {
     bridgeUrl,
     config,
     connectBridge,
+    connectionStatus,
     host,
     providerList,
     reply,
@@ -195,7 +196,7 @@ function App() {
       <MobileSettingsPanel
         open={isSettingsOpen}
         settings={settings}
-        status={status}
+        connectionStatus={connectionStatus}
         onClose={() => setIsSettingsOpen(false)}
         onConnect={connectBridge}
         onSettingsChange={setSettings}

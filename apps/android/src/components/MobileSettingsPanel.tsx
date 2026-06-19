@@ -7,12 +7,12 @@ import type { StatusMessage, StoredSettings } from "../mobileTypes";
 import "./MobileSettingsPanel.css";
 
 interface MobileSettingsPanelProps {
+  connectionStatus: StatusMessage;
   open: boolean;
   onClose: () => void;
   onConnect: () => Promise<void>;
   onSettingsChange: Dispatch<SetStateAction<StoredSettings>>;
   settings: StoredSettings;
-  status: StatusMessage;
 }
 
 type SettingsView = "root" | "connection";
@@ -108,8 +108,8 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               pairingError={pairingError}
               pairingUri={pairingUri}
               pairingWarning={pairingWarning}
+              connectionStatus={props.connectionStatus}
               settings={props.settings}
-              status={props.status}
               onConnect={props.onConnect}
               onImportPairing={importPairing}
               onPairingUriChange={setPairingUri}
@@ -177,11 +177,11 @@ function SettingsRoot(props: { connectionSublabel: string; onOpenConnection: () 
 
 interface ConnectionSettingsProps {
   bridgeUrlDraft: string;
+  connectionStatus: StatusMessage;
   pairingError: string;
   pairingUri: string;
   pairingWarning: string;
   settings: StoredSettings;
-  status: StatusMessage;
   onConnect: () => Promise<void>;
   onImportPairing: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onPairingUriChange: (value: string) => void;
@@ -192,6 +192,9 @@ interface ConnectionSettingsProps {
 
 function ConnectionSettings(props: ConnectionSettingsProps) {
   const isWebRTC = props.settings.connectionMode === "webrtc";
+  const isConnecting = props.connectionStatus.tone === "loading";
+  const isConnected = props.connectionStatus.tone === "success";
+  const connectButtonText = isConnecting ? "连接中" : isConnected ? "已连接" : "连接 Bridge";
 
   return (
     <section className="mobile-settings-connection-shell" aria-labelledby="mobile-settings-connection-title">
@@ -271,13 +274,35 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
             </div>
           )}
 
-          <button className="mobile-settings-connect-button" type="button" onClick={() => void props.onConnect()}>
+          <ConnectionStatusMessage status={props.connectionStatus} />
+
+          <button
+            className={`mobile-settings-connect-button ${isConnected ? "is-connected" : ""}`}
+            type="button"
+            disabled={isConnecting}
+            onClick={() => void props.onConnect()}
+          >
             <Link2 className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
-            {props.status.tone === "loading" ? "连接中" : "连接 Bridge"}
+            {connectButtonText}
           </button>
         </div>
       </div>
     </section>
+  );
+}
+
+function ConnectionStatusMessage(props: { status: StatusMessage }) {
+  if (props.status.tone === "idle") {
+    return null;
+  }
+
+  const role = props.status.tone === "error" ? "alert" : "status";
+
+  return (
+    <p className={`mobile-settings-connection-status is-${props.status.tone}`} role={role}>
+      <span className="mobile-settings-status-dot" aria-hidden={true} />
+      <span>{props.status.text}</span>
+    </p>
   );
 }
 

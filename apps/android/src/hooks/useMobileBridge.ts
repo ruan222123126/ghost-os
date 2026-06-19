@@ -18,6 +18,19 @@ interface SendAgentMessageOptions {
   message: string;
 }
 
+function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): string {
+  if (settings.connectionMode === "http") {
+    return `http:${bridgeUrl}`;
+  }
+
+  const pairing = settings.pairing;
+  if (!pairing) {
+    return "webrtc:";
+  }
+
+  return `webrtc:${pairing.deviceId}:${pairing.pcId}:${pairing.signalingUrl}`;
+}
+
 export function useMobileBridge() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [apiToken] = useState("");
@@ -29,9 +42,15 @@ export function useMobileBridge() {
     tone: "idle",
     text: "未连接",
   });
+  const [connectionStatus, setConnectionStatus] = useState<StatusMessage>({
+    tone: "idle",
+    text: "未连接",
+  });
   const webRTCClientRef = useRef<MobileWebRTCBridge | undefined>(undefined);
+  const connectedTargetRef = useRef<string | undefined>(undefined);
 
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
+  const currentConnectionTarget = useMemo(() => connectionTargetKey(settings, bridgeUrl), [bridgeUrl, settings]);
 
   useEffect(() => {
     if (!hasTauriRuntime()) {
@@ -58,6 +77,19 @@ export function useMobileBridge() {
       webRTCClientRef.current?.close();
     };
   }, []);
+
+  useEffect(() => {
+    if (connectionStatus.tone !== "success" || connectedTargetRef.current === currentConnectionTarget) {
+      return;
+    }
+
+    connectedTargetRef.current = undefined;
+    webRTCClientRef.current?.close();
+    webRTCClientRef.current = undefined;
+    setConfig(undefined);
+    setProviderList(undefined);
+    setConnectionStatus({ tone: "idle", text: "未连接" });
+  }, [connectionStatus.tone, currentConnectionTarget]);
 
   const requestBridgeHTTP = useCallback(
     async <TPayload,>(action: string, params: Record<string, unknown>): Promise<TPayload> => {
@@ -112,7 +144,7 @@ export function useMobileBridge() {
   }, [requestBridge]);
 
   const connectBridge = useCallback(async (): Promise<void> => {
-    setStatus({ tone: "loading", text: "连接中" });
+    setConnectionStatus({ tone: "loading", text: "连接中" });
     try {
       if (settings.connectionMode === "webrtc") {
         if (!settings.pairing) {
@@ -125,18 +157,20 @@ export function useMobileBridge() {
         webRTCClientRef.current = client;
       }
       await refreshRuntimeConfig();
-      setStatus({
+      connectedTargetRef.current = currentConnectionTarget;
+      setConnectionStatus({
         tone: "success",
         text: settings.connectionMode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接",
       });
     } catch (error) {
+      connectedTargetRef.current = undefined;
       webRTCClientRef.current?.close();
       webRTCClientRef.current = undefined;
       setConfig(undefined);
       setProviderList(undefined);
-      setStatus({ tone: "error", text: errorMessage(error) });
+      setConnectionStatus({ tone: "error", text: errorMessage(error) });
     }
-  }, [refreshRuntimeConfig, settings.connectionMode, settings.pairing]);
+  }, [currentConnectionTarget, refreshRuntimeConfig, settings.connectionMode, settings.pairing]);
 
   const switchModel = useCallback(
     async (model: string): Promise<boolean> => {
@@ -192,6 +226,7 @@ export function useMobileBridge() {
     bridgeUrl,
     config,
     connectBridge,
+    connectionStatus,
     host,
     providerList,
     reply,
