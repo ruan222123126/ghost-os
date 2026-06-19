@@ -218,22 +218,24 @@
   left: 0;
   z-index: 20;
   display: grid;
-  min-width: 148px;
-  padding: 7px;
-  border: 1px solid rgb(229 231 235);
-  border-radius: 12px;
+  gap: 2px;
+  width: 224px;
+  padding: 8px;
+  border: 1px solid rgb(229 231 235 / 0.8);
+  border-radius: 24px;
   background: rgb(255 255 255);
-  box-shadow: 0 16px 36px rgb(15 23 42 / 0.14);
+  box-shadow: 0 4px 24px rgb(15 23 42 / 0.12);
 }
 
 .composer-attachment-menu-item {
   display: flex;
   align-items: center;
+  gap: 14px;
   width: 100%;
-  min-height: 40px;
+  min-height: 52px;
   padding: 0 12px;
   border: none;
-  border-radius: 9px;
+  border-radius: 18px;
   background: transparent;
   color: rgb(31 41 55);
   cursor: pointer;
@@ -249,7 +251,7 @@
 
 .composer-attachment-menu-item:hover:not(:disabled),
 .composer-attachment-menu-item:focus-visible:not(:disabled) {
-  background: rgb(243 244 246 / 0.9);
+  background: rgb(243 244 246);
   color: rgb(17 24 39);
   outline: none;
 }
@@ -257,7 +259,36 @@
 .composer-attachment-menu-item:disabled {
   color: rgb(156 163 175);
   cursor: not-allowed;
-  opacity: 0.66;
+  opacity: 0.46;
+}
+
+.composer-attachment-menu-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgb(241 243 245);
+  border-radius: 999px;
+  background: rgb(255 255 255);
+  color: rgb(55 65 81);
+  box-shadow: 0 1px 3px rgb(15 23 42 / 0.06);
+}
+
+.composer-attachment-menu-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.composer-attachment-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composer-skill-menu {

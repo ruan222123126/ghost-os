@@ -56,11 +56,11 @@ describe('components/ChatComposer', () => {
       harness.plusButton().props.onClick();
     });
 
-    expect(harness.menuItem('Photo')).toBeTruthy();
+    expect(harness.menuItem('File')).toBeTruthy();
     expect(harness.menuItem('Skill')).toBeTruthy();
   });
 
-  it('opens image picker from the photo menu item', () => {
+  it('opens file picker from the file menu item', () => {
     const fileInputClick = jest.fn();
     const harness = renderComposerHarness({
       fileInputClick,
@@ -72,7 +72,7 @@ describe('components/ChatComposer', () => {
     });
 
     act(() => {
-      harness.menuItem('Photo').props.onClick();
+      harness.menuItem('File').props.onClick();
     });
 
     expect(fileInputClick).toHaveBeenCalledTimes(1);
@@ -147,7 +147,7 @@ describe('components/ChatComposer', () => {
       harness.plusButton().props.onClick();
     });
 
-    expect(harness.menuItem('Photo')).toBeTruthy();
+    expect(harness.menuItem('File')).toBeTruthy();
 
     await act(async () => {
       harness.form().props.onSubmit({
@@ -223,7 +223,7 @@ function renderComposerHarness(options: {
 
   return {
     form: () => renderer.root.findByType('form'),
-    menuItem: (label: string) => findButtonByText(renderer, label),
+    menuItem: (label: string) => findButtonContainingText(renderer, label),
     menuItems: () => renderer.root.findAllByProps({ role: 'menuitem' }),
     plusButton: () => renderer.root.findByProps({ className: 'composer-plus-btn' }),
     selectedSkillButton: () => renderer.root.findByProps({ className: 'composer-selected-skill' }),
@@ -244,15 +244,6 @@ function buildSkill(overrides: Partial<SkillPayload> = {}): SkillPayload {
     enabled: true,
     ...overrides,
   };
-}
-
-function findButtonByText(renderer: TestRenderer.ReactTestRenderer, text: string): ReactTestInstance {
-  const button = renderer.root.findAllByType('button').find((node) => node.props.children === text);
-  if (!button) {
-    throw new Error(`Button not found: ${text}`);
-  }
-
-  return button;
 }
 
 function findButtonContainingText(renderer: TestRenderer.ReactTestRenderer, text: string): ReactTestInstance {

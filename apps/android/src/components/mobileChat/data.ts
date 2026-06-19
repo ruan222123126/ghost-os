@@ -19,8 +19,6 @@ export const EMPTY_STATE_SUGGESTIONS = [
 ] as const satisfies ReadonlyArray<{ icon: UiIconName; text: string; tone: "blue" | "orange" | "purple" | "yellow" }>;
 
 export const COMPOSER_MENU_OPTIONS = [
-  { icon: "camera", label: "相机", unavailable: true },
-  { icon: "image", label: "照片", unavailable: true },
   { icon: "paperclip", label: "文件", unavailable: true },
   { icon: "puzzle", label: "技能", unavailable: false },
 ] as const satisfies ReadonlyArray<{ icon: UiIconName; label: string; unavailable: boolean }>;

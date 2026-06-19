@@ -75,7 +75,7 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   const effectiveAriaLabel = ariaLabel ?? copy.chat.composerMessageInputAria;
   const effectivePlaceholder = placeholder ?? copy.chat.composerInputPlaceholder;
   const canSend = canSubmit ?? value.trim().length > 0;
-  const uploadDisabled = disabled || sending || onSelectFiles === undefined;
+  const fileDisabled = disabled || sending || onSelectFiles === undefined;
   const attachmentDisabled = disabled || sending || (onSelectFiles === undefined && onSelectSkill === undefined);
   const action = buildComposerActionState({
     canSend,
@@ -146,8 +146,8 @@ export const ChatComposer: FC<ChatComposerProps> = ({
     });
   }
 
-  function handlePhotoClick() {
-    if (uploadDisabled) {
+  function handleFileClick() {
+    if (fileDisabled) {
       return;
     }
 
@@ -208,7 +208,7 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           onClearSelectedSkill={onClearSelectedSkill}
           onActionClick={handleActionClick}
           onAttachmentClick={handleAttachmentClick}
-          onPhotoClick={handlePhotoClick}
+          onFileClick={handleFileClick}
           onRefreshSkills={onRefreshSkills}
           onSelectSkill={onSelectSkill ? handleSelectSkill : undefined}
           onSkillClick={handleSkillClick}
@@ -239,9 +239,9 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           toolbarAriaLabel={copy.chat.composerToolsAria}
           attachmentAriaLabel={copy.chat.composerAddContent}
           attachmentDisabled={attachmentDisabled}
-          photoDisabled={uploadDisabled}
+          fileDisabled={fileDisabled}
           attachmentTitle={copy.chat.composerAddContent}
-          menuPhotoLabel={copy.chat.composerAttachmentPhoto}
+          menuFileLabel={copy.chat.composerAttachmentFile}
           menuSkillLabel={copy.chat.composerAttachmentSkill}
           selectedSkillClearLabel={selectedSkill ? copy.chat.composerClearSelectedSkill(selectedSkill.name) : undefined}
           menuUnavailableLabel={copy.chat.composerAttachmentUnavailable}

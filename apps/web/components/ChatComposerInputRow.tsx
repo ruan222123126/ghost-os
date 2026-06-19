@@ -22,7 +22,7 @@ export interface ComposerInputRowProps {
   onClearSelectedSkill?: () => void;
   onActionClick: () => void;
   onAttachmentClick: () => void;
-  onPhotoClick: () => void;
+  onFileClick: () => void;
   onRefreshSkills?: () => Promise<void> | void;
   onSelectSkill?: (skill: SkillPayload) => void;
   onSkillClick: () => void;
@@ -47,9 +47,9 @@ export interface ComposerInputRowProps {
   toolbarAriaLabel: string;
   attachmentAriaLabel: string;
   attachmentDisabled: boolean;
-  photoDisabled: boolean;
+  fileDisabled: boolean;
   attachmentTitle: string;
-  menuPhotoLabel: string;
+  menuFileLabel: string;
   menuSkillLabel: string;
   selectedSkillClearLabel?: string;
   menuUnavailableLabel: string;
@@ -65,7 +65,7 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   onClearSelectedSkill,
   onActionClick,
   onAttachmentClick,
-  onPhotoClick,
+  onFileClick,
   onRefreshSkills,
   onSelectSkill,
   onSkillClick,
@@ -91,9 +91,9 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   toolbarAriaLabel,
   attachmentAriaLabel,
   attachmentDisabled,
-  photoDisabled,
+  fileDisabled,
   attachmentTitle,
-  menuPhotoLabel,
+  menuFileLabel,
   menuSkillLabel,
   menuUnavailableLabel,
   value,
@@ -130,9 +130,9 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
 
         {attachmentMenuOpen ? (
           <AttachmentMenu
-            onPhotoClick={photoDisabled ? undefined : onPhotoClick}
+            onFileClick={fileDisabled ? undefined : onFileClick}
             onSkillClick={onSelectSkill ? onSkillClick : undefined}
-            photoLabel={menuPhotoLabel}
+            fileLabel={menuFileLabel}
             skillLabel={menuSkillLabel}
             unavailableLabel={menuUnavailableLabel}
           />
@@ -185,42 +185,46 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
 };
 
 function AttachmentMenu({
-  onPhotoClick,
+  onFileClick,
   onSkillClick,
-  photoLabel,
+  fileLabel,
   skillLabel,
   unavailableLabel,
 }: {
-  onPhotoClick?: () => void;
+  onFileClick?: () => void;
   onSkillClick?: () => void;
-  photoLabel: string;
+  fileLabel: string;
   skillLabel: string;
   unavailableLabel: string;
 }) {
   return (
     <div className="composer-attachment-menu" role="menu">
-      {onPhotoClick ? (
-        <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onPhotoClick}>
-          {photoLabel}
+      {onFileClick ? (
+        <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onFileClick}>
+          <AttachmentMenuIcon kind="file" />
+          <span className="composer-attachment-menu-label">{fileLabel}</span>
         </button>
       ) : (
-        <DisabledAttachmentMenuItem label={photoLabel} unavailableLabel={unavailableLabel} />
+        <DisabledAttachmentMenuItem icon="file" label={fileLabel} unavailableLabel={unavailableLabel} />
       )}
       {onSkillClick ? (
         <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onSkillClick}>
-          {skillLabel}
+          <AttachmentMenuIcon kind="skill" />
+          <span className="composer-attachment-menu-label">{skillLabel}</span>
         </button>
       ) : (
-        <DisabledAttachmentMenuItem label={skillLabel} unavailableLabel={unavailableLabel} />
+        <DisabledAttachmentMenuItem icon="skill" label={skillLabel} unavailableLabel={unavailableLabel} />
       )}
     </div>
   );
 }
 
 function DisabledAttachmentMenuItem({
+  icon,
   label,
   unavailableLabel,
 }: {
+  icon: 'file' | 'skill';
   label: string;
   unavailableLabel: string;
 }) {
@@ -233,8 +237,17 @@ function DisabledAttachmentMenuItem({
       title={unavailableLabel}
       aria-label={`${label}: ${unavailableLabel}`}
     >
-      {label}
+      <AttachmentMenuIcon kind={icon} />
+      <span className="composer-attachment-menu-label">{label}</span>
     </button>
+  );
+}
+
+function AttachmentMenuIcon({ kind }: { kind: 'file' | 'skill' }) {
+  return (
+    <span className="composer-attachment-menu-icon" aria-hidden="true">
+      {kind === 'file' ? <FileIcon /> : <SkillIcon />}
+    </span>
   );
 }
 
@@ -260,6 +273,51 @@ function ComposerActionButton({
       <span className="sr-only">{action.label}</span>
       {action.showStop ? <span className="composer-stop-glyph" aria-hidden="true" /> : <SendIcon />}
     </button>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M7.4 10.8L10.95 7.25C11.8 6.4 13.15 6.4 14 7.25C14.85 8.1 14.85 9.45 14 10.3L9.25 15.05C7.95 16.35 5.85 16.35 4.55 15.05C3.25 13.75 3.25 11.65 4.55 10.35L9.4 5.5C11.15 3.75 14 3.75 15.75 5.5C17.5 7.25 17.5 10.1 15.75 11.85L11.1 16.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+    </svg>
+  );
+}
+
+function SkillIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M8 3.75H5.25C4.42 3.75 3.75 4.42 3.75 5.25V8H8V3.75Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+      <path
+        d="M16.25 8V5.25C16.25 4.42 15.58 3.75 14.75 3.75H12V8H16.25Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+      <path
+        d="M8 16.25V12H3.75V14.75C3.75 15.58 4.42 16.25 5.25 16.25H8Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+      <path
+        d="M12 12H16.25V14.75C16.25 15.58 15.58 16.25 14.75 16.25H12V12Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+    </svg>
   );
 }
 
