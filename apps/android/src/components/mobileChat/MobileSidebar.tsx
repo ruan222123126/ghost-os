@@ -74,38 +74,45 @@ export function MobileSidebar(props: MobileSidebarProps) {
 
           {activeMode === "chat" ? (
             <SidebarSection title="最近">
-              <div className="history-list">
-                {sortedHistoryItems.map((item) => {
-                  const isActive = props.activeHistoryId === item.id;
+              {sortedHistoryItems.length === 0 ? (
+                <p className="history-empty">暂无会话</p>
+              ) : (
+                <div className="history-list">
+                  {sortedHistoryItems.map((item) => {
+                    const isActive = props.activeHistoryId === item.id;
 
-                  return (
-                    <button
-                      key={item.id}
-                      className={`history-item ${isActive ? "is-active" : ""} ${item.pinned ? "is-pinned" : ""}`}
-                      type="button"
-                      title={item.title}
-                      onClick={() => props.onSelectHistory(item.id)}
-                    >
-                      <span>{item.title}</span>
-                      <span className="history-item-indicators">
-                        {item.status ? (
-                          <span className={`history-status is-${item.status}`} title={historyStatusLabel(item.status)}>
-                            {historyStatusLabel(item.status)}
+                    return (
+                      <button
+                        key={item.id}
+                        className={`history-item ${isActive ? "is-active" : ""} ${item.pinned ? "is-pinned" : ""}`}
+                        type="button"
+                        title={item.title}
+                        onClick={() => props.onSelectHistory(item.id)}
+                      >
+                        <span>{item.title}</span>
+                        <span className="history-item-indicators">
+                          {item.status ? (
+                            <span
+                              className={`history-status is-${item.status}`}
+                              title={historyStatusLabel(item.status)}
+                            >
+                              {historyStatusLabel(item.status)}
+                            </span>
+                          ) : null}
+                          {item.unread ? (
+                            <span className="history-unread-indicator" aria-label="有新回复" title="有新回复" />
+                          ) : null}
+                        </span>
+                        {item.pinned ? (
+                          <span className="history-pin-indicator" aria-label="已固定" title="已固定">
+                            <UiIcon name="pin" />
                           </span>
                         ) : null}
-                        {item.unread ? (
-                          <span className="history-unread-indicator" aria-label="有新回复" title="有新回复" />
-                        ) : null}
-                      </span>
-                      {item.pinned ? (
-                        <span className="history-pin-indicator" aria-label="已固定" title="已固定">
-                          <UiIcon name="pin" />
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </SidebarSection>
           ) : (
             <SidebarSection title="绘画">
