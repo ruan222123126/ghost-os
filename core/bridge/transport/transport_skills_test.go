@@ -130,6 +130,49 @@ func TestHandleSkillDeleteRejectsPathTraversalID(t *testing.T) {
 	}
 }
 
+func TestBusSkillActionsRegression(t *testing.T) {
+	projectRoot := t.TempDir()
+	homeRoot := t.TempDir()
+	t.Setenv("GHOST_PROJECT_ROOT", projectRoot)
+	t.Setenv("HOME", homeRoot)
+
+	writeSkillFixture(t, filepath.Join(projectRoot, ".agents", "skills", "release"), "release", "release skill")
+	handler := newTestHandler(t, nil)
+
+	list := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"SKILL_LIST","params":{},"trace_id":"trace-skill-list"}`, nil)
+	if list.Code != http.StatusOK {
+		t.Fatalf("unexpected skill list status: got %d want %d body=%s", list.Code, http.StatusOK, list.Body.String())
+	}
+	items := decodeSkillPayloadList(t, list)
+	if len(items) != 1 {
+		t.Fatalf("expected one skill, got %#v", items)
+	}
+
+	updateBody := `{"action":"SKILL_UPDATE","params":{"id":"` + items[0].ID + `","enabled":false},"trace_id":"trace-skill-update"}`
+	update := serveRequest(handler, http.MethodPost, "/api/bus", updateBody, nil)
+	if update.Code != http.StatusOK {
+		t.Fatalf("unexpected skill update status: got %d want %d body=%s", update.Code, http.StatusOK, update.Body.String())
+	}
+	updated := decodeSingleSkillPayload(t, update)
+	if updated.Enabled {
+		t.Fatalf("expected disabled skill after bus update, got %#v", updated)
+	}
+
+	deleteBody := `{"action":"SKILL_DELETE","params":{"id":"` + items[0].ID + `"},"trace_id":"trace-skill-delete"}`
+	deleted := serveRequest(handler, http.MethodPost, "/api/bus", deleteBody, nil)
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("unexpected skill delete status: got %d want %d body=%s", deleted.Code, http.StatusOK, deleted.Body.String())
+	}
+
+	refresh := serveRequest(handler, http.MethodPost, "/api/bus", `{"action":"SKILL_LIST","params":{},"trace_id":"trace-skill-refresh"}`, nil)
+	if refresh.Code != http.StatusOK {
+		t.Fatalf("unexpected skill refresh status: got %d want %d body=%s", refresh.Code, http.StatusOK, refresh.Body.String())
+	}
+	if items := decodeSkillPayloadList(t, refresh); len(items) != 0 {
+		t.Fatalf("expected deleted skill to disappear, got %#v", items)
+	}
+}
+
 func decodeSkillPayloadList(t *testing.T, recorder *httptest.ResponseRecorder) []skillResponsePayload {
 	t.Helper()
 	body := decodeResponseBody(t, recorder)

@@ -10,6 +10,15 @@ import (
 
 type TraceHandler func(context.Context, string) (bus.ServiceResult, error)
 
+type SkillIDParams struct {
+	ID string `json:"id"`
+}
+
+type SkillUpdateParams struct {
+	ID      string `json:"id"`
+	Enabled *bool  `json:"enabled"`
+}
+
 type DefaultHandlers struct {
 	AgentSend            TypedHandler[api.AgentParams]
 	AgentStop            TypedHandler[api.AgentStopParams]
@@ -22,6 +31,9 @@ type DefaultHandlers struct {
 	HumanResponse        TypedHandler[api.HumanResponseParams]
 	SessionsList         TraceHandler
 	SessionGet           TypedHandler[api.SessionGetParams]
+	SkillList            TraceHandler
+	SkillUpdate          TypedHandler[SkillUpdateParams]
+	SkillDelete          TypedHandler[SkillIDParams]
 	TaskCreate           TypedHandler[api.TaskCreateParams]
 	TaskList             TypedHandler[api.TaskListParams]
 	TaskGet              TypedHandler[api.TaskIDParams]
@@ -37,6 +49,7 @@ func RegisterDefaultActions(router *Router, handlers DefaultHandlers) {
 	registerConfigActions(router, handlers)
 	registerHumanActions(router, handlers)
 	registerSessionActions(router, handlers)
+	registerSkillActions(router, handlers)
 	registerTaskActions(router, handlers)
 }
 
@@ -61,6 +74,12 @@ func registerHumanActions(router *Router, handlers DefaultHandlers) {
 func registerSessionActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionSessionsList, handlers.SessionsList)
 	RegisterTyped(router, bus.ActionSessionGet, handlers.SessionGet)
+}
+
+func registerSkillActions(router *Router, handlers DefaultHandlers) {
+	RegisterTrace(router, bus.ActionSkillList, handlers.SkillList)
+	RegisterTyped(router, bus.ActionSkillUpdate, handlers.SkillUpdate)
+	RegisterTyped(router, bus.ActionSkillDelete, handlers.SkillDelete)
 }
 
 func registerTaskActions(router *Router, handlers DefaultHandlers) {

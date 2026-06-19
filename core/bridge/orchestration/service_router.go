@@ -110,7 +110,7 @@ func newBridgeServiceState(store bridgeconfig.Store, sessionStore *session.Store
 		sessionStore:    sessionStore,
 		lifecycle:       serviceruntime.NewLifecycle(runtimeState, sessionPush),
 		runtimeState:    runtimeState,
-		actionRouter:    dispatch.NewRouter(21),
+		actionRouter:    dispatch.NewRouter(24),
 		runRegistry:     internaltrace.NewRunRegistry(),
 		artifactStore:   artifactStore,
 		artifactInitErr: artifactInitErr,
@@ -256,6 +256,19 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		},
 		SessionGet: func(_ context.Context, params sessionGetParams, traceID string) (ServiceResult, error) {
 			return service.executeSessionGetAction(params, traceID)
+		},
+		SkillList: func(_ context.Context, traceID string) (ServiceResult, error) {
+			return service.executeSkillListActionResult(traceID)
+		},
+		SkillUpdate: func(_ context.Context, params dispatch.SkillUpdateParams, traceID string) (ServiceResult, error) {
+			return service.executeSkillUpdateActionResult(
+				bridgeskills.SkillIDParams{ID: params.ID},
+				bridgeskills.SkillUpdateRequest{Enabled: params.Enabled},
+				traceID,
+			)
+		},
+		SkillDelete: func(_ context.Context, params dispatch.SkillIDParams, traceID string) (ServiceResult, error) {
+			return service.executeSkillDeleteActionResult(bridgeskills.SkillIDParams{ID: params.ID}, traceID)
 		},
 		TaskCreate: func(_ context.Context, params taskCreateParams, traceID string) (ServiceResult, error) {
 			return service.executeTaskCreateActionResult(params, traceID)

@@ -1,16 +1,18 @@
 import type { ComponentType, Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Globe, Key, Link2, Server, Trash2, Wifi } from "lucide-react";
+import { ArrowLeft, Globe, Key, Link2, Server, Sparkles, Trash2, Wifi } from "lucide-react";
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type {
   ConfigPayload,
   ProviderConfigInputPayload,
   ProviderListPayload,
+  SkillPayload,
   StatusMessage,
   StoredSettings,
 } from "../mobileTypes";
 import { MobileProviderSettings } from "./MobileProviderSettings";
+import { MobileSkillSettings } from "./MobileSkillSettings";
 import "./MobileSettingsPanel.css";
 
 interface MobileSettingsPanelProps {
@@ -23,13 +25,17 @@ interface MobileSettingsPanelProps {
   onConnect: () => Promise<void>;
   onCreateProvider: (provider: ProviderConfigInputPayload) => Promise<boolean>;
   onDeleteProvider: (name: string) => Promise<boolean>;
+  onDeleteSkill: (id: string) => Promise<boolean>;
   onRefreshProviders: () => Promise<boolean>;
+  onRefreshSkills: () => Promise<boolean>;
   onSettingsChange: Dispatch<SetStateAction<StoredSettings>>;
+  onUpdateSkill: (id: string, enabled: boolean) => Promise<boolean>;
   onUpdateProvider: (name: string, provider: ProviderConfigInputPayload) => Promise<boolean>;
   settings: StoredSettings;
+  skillList: SkillPayload[] | undefined;
 }
 
-type SettingsView = "root" | "connection" | "providers";
+type SettingsView = "root" | "connection" | "providers" | "skills";
 
 export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
   const [view, setView] = useState<SettingsView>("root");
@@ -141,13 +147,23 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onRefreshProviders={props.onRefreshProviders}
               onUpdateProvider={props.onUpdateProvider}
             />
+          ) : view === "skills" ? (
+            <MobileSkillSettings
+              skills={props.skillList}
+              onDeleteSkill={props.onDeleteSkill}
+              onRefreshSkills={props.onRefreshSkills}
+              onUpdateSkill={props.onUpdateSkill}
+            />
           ) : (
             <SettingsRoot
               connectionSublabel={connectionSublabel(props.settings)}
               providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
               providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
+              skillDisabled={skillEntryDisabled(props.connectionStatus, props.skillList)}
+              skillSublabel={skillSublabel(props.connectionStatus, props.skillList)}
               onOpenConnection={() => setView("connection")}
               onOpenProviders={() => setView("providers")}
+              onOpenSkills={() => setView("skills")}
             />
           )}
         </div>
@@ -189,8 +205,11 @@ function SettingsRoot(props: {
   connectionSublabel: string;
   providerDisabled: boolean;
   providerSublabel: string;
+  skillDisabled: boolean;
+  skillSublabel: string;
   onOpenConnection: () => void;
   onOpenProviders: () => void;
+  onOpenSkills: () => void;
 }) {
   return (
     <>
@@ -203,6 +222,13 @@ function SettingsRoot(props: {
             sublabel={props.providerSublabel}
             disabled={props.providerDisabled}
             onClick={props.onOpenProviders}
+          />
+          <SettingsButton
+            icon={Sparkles}
+            label="技能"
+            sublabel={props.skillSublabel}
+            disabled={props.skillDisabled}
+            onClick={props.onOpenSkills}
           />
         </div>
       </SettingsSection>
@@ -222,6 +248,8 @@ function titleForView(view: SettingsView): string {
       return "连接";
     case "providers":
       return "供应商";
+    case "skills":
+      return "技能";
     case "root":
       return "设置";
   }
@@ -391,6 +419,10 @@ function providerEntryDisabled(
   return connectionStatus.tone !== "success" || !providerList;
 }
 
+function skillEntryDisabled(connectionStatus: StatusMessage, skillList: SkillPayload[] | undefined): boolean {
+  return connectionStatus.tone !== "success" || !skillList;
+}
+
 function providerSublabel(
   config: ConfigPayload | undefined,
   connectionStatus: StatusMessage,
@@ -407,6 +439,17 @@ function providerSublabel(
     return `${provider} / ${config.model}`;
   }
   return provider || "未激活";
+}
+
+function skillSublabel(connectionStatus: StatusMessage, skillList: SkillPayload[] | undefined): string {
+  if (connectionStatus.tone !== "success") {
+    return "未连接";
+  }
+  if (!skillList) {
+    return "加载中";
+  }
+  const enabledCount = skillList.filter((skill) => skill.enabled).length;
+  return `${enabledCount}/${skillList.length} 已启用`;
 }
 
 function SettingsStaticRow(props: {

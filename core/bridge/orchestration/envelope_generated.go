@@ -20,6 +20,9 @@ const (
 	busActionConfigProviderCreate = bus.ActionConfigProviderCreate
 	busActionConfigProviderUpdate = bus.ActionConfigProviderUpdate
 	busActionConfigProviderDelete = bus.ActionConfigProviderDelete
+	busActionSkillList            = bus.ActionSkillList
+	busActionSkillUpdate          = bus.ActionSkillUpdate
+	busActionSkillDelete          = bus.ActionSkillDelete
 	busActionTaskCreate           = bus.ActionTaskCreate
 	busActionTaskList             = bus.ActionTaskList
 	busActionTaskGet              = bus.ActionTaskGet

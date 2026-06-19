@@ -61,6 +61,17 @@ export interface ProviderListPayload {
   active_provider: string;
 }
 
+export type SkillSource = "repo" | "user";
+
+export interface SkillPayload {
+  id: string;
+  name: string;
+  description: string;
+  path: string;
+  source: SkillSource;
+  enabled: boolean;
+}
+
 export interface AgentPayload {
   message: string;
   session_id: string;

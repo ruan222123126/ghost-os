@@ -45,17 +45,21 @@ function App() {
     connectionStatus,
     createProvider,
     deleteProvider,
+    deleteSkill,
     getSession,
     host,
     providerList,
     refreshProviders,
+    refreshSkills,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
     setSettings,
     settings,
+    skillList,
     switchModel,
     status,
+    updateSkill,
     updateProvider,
   } = useMobileBridge();
   const [message, setMessage] = useState("");
@@ -239,9 +243,13 @@ function App() {
         onActivateProvider={activateProvider}
         onCreateProvider={createProvider}
         onDeleteProvider={deleteProvider}
+        onDeleteSkill={deleteSkill}
         onRefreshProviders={refreshProviders}
+        onRefreshSkills={refreshSkills}
         onSettingsChange={setSettings}
+        onUpdateSkill={updateSkill}
         onUpdateProvider={updateProvider}
+        skillList={skillList}
       />
 
       <MoreActionSheet

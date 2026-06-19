@@ -23,6 +23,7 @@ import type {
   ProviderListPayload,
   SessionDetail,
   SessionMetadata,
+  SkillPayload,
   StatusMessage,
   StoredSettings,
 } from "../mobileTypes";
@@ -82,6 +83,7 @@ export function useMobileBridge() {
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
+  const [skillList, setSkillList] = useState<SkillPayload[]>();
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
@@ -134,6 +136,7 @@ export function useMobileBridge() {
     webRTCClientRef.current = undefined;
     setConfig(undefined);
     setProviderList(undefined);
+    setSkillList(undefined);
     setSessions([]);
     setSessionsLoaded(false);
     setConnectionStatus({ tone: "idle", text: "未连接" });
@@ -187,15 +190,22 @@ export function useMobileBridge() {
     return payload;
   }, [requestBridge]);
 
+  const loadSkills = useCallback(async (): Promise<SkillPayload[]> => {
+    const payload = await requestBridge<SkillPayload[]>("SKILL_LIST", {});
+    setSkillList(payload);
+    return payload;
+  }, [requestBridge]);
+
   const refreshRuntimeConfig = useCallback(async (): Promise<ConfigPayload> => {
     const [configPayload, providersPayload] = await Promise.all([
       requestBridge<ConfigPayload>("CONFIG_GET", {}),
       loadProviders(),
+      loadSkills(),
     ]);
     setConfig(configPayload);
     setProviderList(providersPayload);
     return configPayload;
-  }, [loadProviders, requestBridge]);
+  }, [loadProviders, loadSkills, requestBridge]);
 
   const refreshProviders = useCallback(async (): Promise<boolean> => {
     setStatus({ tone: "loading", text: "供应商刷新中" });
@@ -213,6 +223,50 @@ export function useMobileBridge() {
     const payload = await requestBridge<ConfigPayload>("CONFIG_GET", {});
     setConfig(payload);
   }, [requestBridge]);
+
+  const refreshSkills = useCallback(async (): Promise<boolean> => {
+    setStatus({ tone: "loading", text: "技能刷新中" });
+    try {
+      await loadSkills();
+      setStatus({ tone: "success", text: "技能已刷新" });
+      return true;
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+      return false;
+    }
+  }, [loadSkills]);
+
+  const updateSkill = useCallback(
+    async (id: string, enabled: boolean): Promise<boolean> => {
+      setStatus({ tone: "loading", text: enabled ? "技能启用中" : "技能停用中" });
+      try {
+        const payload = await requestBridge<SkillPayload>("SKILL_UPDATE", { id, enabled });
+        setSkillList((current) => current?.map((item) => (item.id === payload.id ? payload : item)) ?? [payload]);
+        setStatus({ tone: "success", text: enabled ? "技能已启用" : "技能已停用" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const deleteSkill = useCallback(
+    async (id: string): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "技能删除中" });
+      try {
+        await requestBridge<unknown>("SKILL_DELETE", { id });
+        setSkillList((current) => current?.filter((item) => item.id !== id));
+        setStatus({ tone: "success", text: "技能已删除" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
 
   const createProvider = useCallback(
     async (provider: ProviderConfigInputPayload): Promise<boolean> => {
@@ -344,6 +398,7 @@ export function useMobileBridge() {
       webRTCClientRef.current = undefined;
       setConfig(undefined);
       setProviderList(undefined);
+      setSkillList(undefined);
       setSessions([]);
       setSessionsLoaded(false);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
@@ -457,14 +512,18 @@ export function useMobileBridge() {
     host,
     providerList,
     refreshProviders,
+    refreshSkills,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
     setSettings,
     setStatus,
     settings,
+    skillList,
     switchModel,
     status,
+    updateSkill,
     updateProvider,
+    deleteSkill,
   };
 }
