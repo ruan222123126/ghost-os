@@ -20,6 +20,13 @@
   box-sizing: border-box;
 }
 
+button,
+a,
+[role="button"],
+[role="tab"] {
+  -webkit-tap-highlight-color: transparent;
+}
+
 html,
 body,
 #root {
