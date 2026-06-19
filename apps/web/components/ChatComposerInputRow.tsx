@@ -50,7 +50,6 @@ export interface ComposerInputRowProps {
   photoDisabled: boolean;
   attachmentTitle: string;
   menuPhotoLabel: string;
-  menuFileLabel: string;
   menuSkillLabel: string;
   selectedSkillClearLabel?: string;
   menuUnavailableLabel: string;
@@ -95,7 +94,6 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   photoDisabled,
   attachmentTitle,
   menuPhotoLabel,
-  menuFileLabel,
   menuSkillLabel,
   menuUnavailableLabel,
   value,
@@ -132,7 +130,6 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
 
         {attachmentMenuOpen ? (
           <AttachmentMenu
-            fileLabel={menuFileLabel}
             onPhotoClick={photoDisabled ? undefined : onPhotoClick}
             onSkillClick={onSelectSkill ? onSkillClick : undefined}
             photoLabel={menuPhotoLabel}
@@ -188,14 +185,12 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
 };
 
 function AttachmentMenu({
-  fileLabel,
   onPhotoClick,
   onSkillClick,
   photoLabel,
   skillLabel,
   unavailableLabel,
 }: {
-  fileLabel: string;
   onPhotoClick?: () => void;
   onSkillClick?: () => void;
   photoLabel: string;
@@ -211,7 +206,6 @@ function AttachmentMenu({
       ) : (
         <DisabledAttachmentMenuItem label={photoLabel} unavailableLabel={unavailableLabel} />
       )}
-      <DisabledAttachmentMenuItem label={fileLabel} unavailableLabel={unavailableLabel} />
       {onSkillClick ? (
         <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onSkillClick}>
           {skillLabel}

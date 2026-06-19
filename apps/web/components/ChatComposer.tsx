@@ -242,7 +242,6 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           photoDisabled={uploadDisabled}
           attachmentTitle={copy.chat.composerAddContent}
           menuPhotoLabel={copy.chat.composerAttachmentPhoto}
-          menuFileLabel={copy.chat.composerAttachmentFile}
           menuSkillLabel={copy.chat.composerAttachmentSkill}
           selectedSkillClearLabel={selectedSkill ? copy.chat.composerClearSelectedSkill(selectedSkill.name) : undefined}
           menuUnavailableLabel={copy.chat.composerAttachmentUnavailable}

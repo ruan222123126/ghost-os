@@ -57,7 +57,6 @@ describe('components/ChatComposer', () => {
     });
 
     expect(harness.menuItem('Photo')).toBeTruthy();
-    expect(harness.menuItem('File')).toBeTruthy();
     expect(harness.menuItem('Skill')).toBeTruthy();
   });
 
@@ -80,7 +79,7 @@ describe('components/ChatComposer', () => {
     expect(harness.menuItems()).toEqual([]);
   });
 
-  it('renders file and skill menu items as disabled placeholders', () => {
+  it('renders skill as disabled placeholder when no skill handler is wired', () => {
     const fileInputClick = jest.fn();
     const harness = renderComposerHarness({
       fileInputClick,
@@ -91,9 +90,7 @@ describe('components/ChatComposer', () => {
       harness.plusButton().props.onClick();
     });
 
-    expect(harness.menuItem('File').props.disabled).toBe(true);
     expect(harness.menuItem('Skill').props.disabled).toBe(true);
-    expect(harness.menuItem('File').props.onClick).toBeUndefined();
     expect(harness.menuItem('Skill').props.onClick).toBeUndefined();
     expect(fileInputClick).not.toHaveBeenCalled();
   });
