@@ -82,6 +82,7 @@ export class MobileWebRTCBridge {
   private readonly pending = new Map<string, PendingRequest>();
   private channel?: RTCDataChannel;
   private peer?: RTCPeerConnection;
+  private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
   private socket?: WebSocket;
   private readyPromise?: Promise<void>;
   private resolveReady?: () => void;
@@ -115,7 +116,7 @@ export class MobileWebRTCBridge {
     };
     this.peer.onconnectionstatechange = () => {
       if (this.peer?.connectionState === "failed") {
-        this.failAll(new Error("WebRTC ICE 连接失败"));
+        this.failAll(this.iceFailureError());
       }
     };
 
@@ -129,7 +130,9 @@ export class MobileWebRTCBridge {
       });
     };
     this.socket.onmessage = (event) => {
-      void this.handleSignalMessage(event.data);
+      void this.handleSignalMessage(event.data).catch((error: unknown) => {
+        this.failAll(errorFromUnknown(error));
+      });
     };
     this.socket.onerror = () => {
       this.rejectReady?.(new Error("信令 WebSocket 连接失败"));
@@ -178,7 +181,7 @@ export class MobileWebRTCBridge {
         break;
       case SIGNAL_ICE:
         if (message.candidate) {
-          await this.peer?.addIceCandidate(message.candidate);
+          await this.addRemoteCandidate(message.candidate);
         }
         break;
       case SIGNAL_BUSY:
@@ -197,6 +200,7 @@ export class MobileWebRTCBridge {
       throw new Error("WebRTC offer 缺少 SDP");
     }
     await this.peer.setRemoteDescription({ type: "offer", sdp: message.sdp });
+    await this.flushPendingRemoteCandidates();
     const answer = await this.peer.createAnswer();
     await this.peer.setLocalDescription(answer);
     this.sendSignal({
@@ -288,6 +292,34 @@ export class MobileWebRTCBridge {
       this.pending.delete(requestId);
     }
   }
+
+  private async addRemoteCandidate(candidate: RTCIceCandidateInit): Promise<void> {
+    if (!this.peer) {
+      throw new Error("WebRTC PeerConnection 未初始化");
+    }
+    if (!this.peer.remoteDescription) {
+      this.pendingRemoteCandidates.push(candidate);
+      return;
+    }
+    await this.peer.addIceCandidate(candidate);
+  }
+
+  private async flushPendingRemoteCandidates(): Promise<void> {
+    if (!this.peer?.remoteDescription) {
+      return;
+    }
+    const candidates = this.pendingRemoteCandidates.splice(0);
+    for (const candidate of candidates) {
+      await this.peer.addIceCandidate(candidate);
+    }
+  }
+
+  private iceFailureError(): Error {
+    if (hasTurnServer(this.pairing)) {
+      return new Error("WebRTC ICE 连接失败");
+    }
+    return new Error("WebRTC ICE 连接失败：当前配对未包含 TURN，移动网络或公网 NAT 通常无法直连");
+  }
 }
 
 async function signChallenge(secret: string, challenge: string): Promise<string> {
@@ -358,6 +390,13 @@ function requiredParam(url: URL, name: string): string {
     throw new Error(`配对 URI 缺少 ${name}`);
   }
   return value;
+}
+
+function errorFromUnknown(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+  return new Error(String(error));
 }
 
 function base64UrlDecode(raw: string): Uint8Array {

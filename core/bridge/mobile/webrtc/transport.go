@@ -188,10 +188,7 @@ func (t *Transport) applyAnswer(msg signalMessage) error {
 	if strings.TrimSpace(msg.SDP) == "" {
 		return fmt.Errorf("answer sdp is required")
 	}
-	return peer.pc.SetRemoteDescription(webrtc.SessionDescription{
-		Type: webrtc.SDPTypeAnswer,
-		SDP:  msg.SDP,
-	})
+	return peer.applyAnswer(msg.SDP)
 }
 
 func (t *Transport) addRemoteICE(msg signalMessage) error {
@@ -206,7 +203,7 @@ func (t *Transport) addRemoteICE(msg signalMessage) error {
 	if strings.TrimSpace(candidate.Candidate) == "" {
 		return nil
 	}
-	return peer.pc.AddICECandidate(candidate)
+	return peer.addRemoteICE(candidate)
 }
 
 func (t *Transport) sendSignal(msg signalMessage) error {
@@ -279,6 +276,8 @@ type peerSession struct {
 	authenticated bool
 	challenge     string
 	requests      map[string]context.CancelFunc
+	answerSet     bool
+	remoteICE     []webrtc.ICECandidateInit
 	closed        bool
 }
 
@@ -313,6 +312,42 @@ func (p *peerSession) sendICE(candidate *webrtc.ICECandidate) {
 	}); err != nil {
 		log.Printf("mobile_webrtc send ice failed mobile_id=%s error=%v", p.mobileID, err)
 	}
+}
+
+func (p *peerSession) applyAnswer(sdp string) error {
+	if err := p.pc.SetRemoteDescription(webrtc.SessionDescription{
+		Type: webrtc.SDPTypeAnswer,
+		SDP:  sdp,
+	}); err != nil {
+		return err
+	}
+	return p.flushRemoteICE()
+}
+
+func (p *peerSession) addRemoteICE(candidate webrtc.ICECandidateInit) error {
+	p.mu.Lock()
+	if !p.answerSet {
+		p.remoteICE = append(p.remoteICE, candidate)
+		p.mu.Unlock()
+		return nil
+	}
+	p.mu.Unlock()
+	return p.pc.AddICECandidate(candidate)
+}
+
+func (p *peerSession) flushRemoteICE() error {
+	p.mu.Lock()
+	p.answerSet = true
+	candidates := p.remoteICE
+	p.remoteICE = nil
+	p.mu.Unlock()
+
+	for _, candidate := range candidates {
+		if err := p.pc.AddICECandidate(candidate); err != nil {
+			return fmt.Errorf("add queued ice candidate: %w", err)
+		}
+	}
+	return nil
 }
 
 func (p *peerSession) sendAuthChallenge() {
