@@ -4,10 +4,11 @@
 
 import type { Dispatch, FC, FormEvent, KeyboardEvent, ReactNode, RefObject, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { ComposerInputRow, type ComposerActionState } from '@/components/ChatComposerInputRow';
 import { ComposerMetaRow } from '@/components/ComposerMetaRow';
-import { ComposerToolbar } from '@/components/ComposerToolbar';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
+import type { ChatSelectedSkill, SkillPayload } from '@/lib/types';
 
 interface ChatComposerProps {
   value: string;
@@ -23,67 +24,20 @@ interface ChatComposerProps {
   rows?: number;
   hint?: ReactNode;
   preview?: ReactNode;
+  selectedSkill?: ChatSelectedSkill | null;
   status?: ReactNode;
+  skillError?: string;
+  skills?: SkillPayload[];
+  skillsLoading?: boolean;
   toolbar?: ReactNode;
+  onClearSelectedSkill?: () => void;
   onSelectFiles?: (files: FileList) => Promise<void> | void;
-}
-
-interface ComposerActionState {
-  disabled: boolean;
-  label: string;
-  showStop: boolean;
-  visible: boolean;
-}
-
-interface ComposerInputRowProps {
-  action: ComposerActionState;
-  attachmentMenuOpen: boolean;
-  ariaLabel: string;
-  disabled: boolean;
-  expanded: boolean;
-  onActionClick: () => void;
-  onAttachmentClick: () => void;
-  onPhotoClick: () => void;
-  onChange: (value: string) => void;
-  onCompositionEnd: () => void;
-  onCompositionStart: () => void;
-  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onTextareaInput: () => void;
-  placeholder: string;
-  rows: number;
-  textareaRef: RefObject<HTMLTextAreaElement>;
-  toolbar?: ReactNode;
-  toolbarAriaLabel: string;
-  attachmentAriaLabel: string;
-  uploadDisabled: boolean;
-  attachmentTitle: string;
-  menuPhotoLabel: string;
-  menuFileLabel: string;
-  menuSkillLabel: string;
-  menuUnavailableLabel: string;
-  value: string;
+  onRefreshSkills?: () => Promise<void> | void;
+  onSelectSkill?: (skill: SkillPayload) => void;
 }
 
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
 const COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX = 48;
-
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M10 4.5V15.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M4.5 10H15.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function SendIcon() {
-  return (
-    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M10 4.25V15.75" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <path d="M5.75 8.5L10 4.25L14.25 8.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
 
 export const ChatComposer: FC<ChatComposerProps> = ({
   value,
@@ -99,9 +53,16 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   rows = 1,
   hint,
   preview,
+  selectedSkill = null,
   status,
+  skillError = '',
+  skills = [],
+  skillsLoading = false,
   toolbar,
+  onClearSelectedSkill,
   onSelectFiles,
+  onRefreshSkills,
+  onSelectSkill,
 }) => {
   const { copy } = useWebLocale();
   const composerShellRef = useRef<HTMLDivElement | null>(null);
@@ -110,10 +71,12 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   const composingRef = useRef(false);
   const [inputExpanded, setInputExpanded] = useState(false);
   const [attachmentMenuOpen, setAttachmentMenuOpen] = useState(false);
+  const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const effectiveAriaLabel = ariaLabel ?? copy.chat.composerMessageInputAria;
   const effectivePlaceholder = placeholder ?? copy.chat.composerInputPlaceholder;
   const canSend = canSubmit ?? value.trim().length > 0;
   const uploadDisabled = disabled || sending || onSelectFiles === undefined;
+  const attachmentDisabled = disabled || sending || (onSelectFiles === undefined && onSelectSkill === undefined);
   const action = buildComposerActionState({
     canSend,
     canStop,
@@ -128,16 +91,20 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
   useAutosizeTextarea(textareaRef, value, setInputExpanded);
   useCloseAttachmentMenuOnOutsideClick({
-    enabled: attachmentMenuOpen,
-    onClose: () => setAttachmentMenuOpen(false),
+    enabled: attachmentMenuOpen || skillMenuOpen,
+    onClose: () => {
+      setAttachmentMenuOpen(false);
+      setSkillMenuOpen(false);
+    },
     rootRef: composerShellRef,
   });
 
   useEffect(() => {
-    if (uploadDisabled) {
+    if (attachmentDisabled) {
       setAttachmentMenuOpen(false);
+      setSkillMenuOpen(false);
     }
-  }, [uploadDisabled]);
+  }, [attachmentDisabled]);
 
   async function submit() {
     if (!canSend || sending || disabled) {
@@ -145,10 +112,18 @@ export const ChatComposer: FC<ChatComposerProps> = ({
     }
 
     setAttachmentMenuOpen(false);
+    setSkillMenuOpen(false);
     await onSubmit();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === 'Backspace' && value === '' && selectedSkill && onClearSelectedSkill) {
+      event.preventDefault();
+      setSkillMenuOpen(false);
+      onClearSelectedSkill();
+      return;
+    }
+
     if (!shouldSubmitOnEnter(event, composingRef.current)) {
       return;
     }
@@ -158,11 +133,17 @@ export const ChatComposer: FC<ChatComposerProps> = ({
   }
 
   function handleAttachmentClick() {
-    if (uploadDisabled) {
+    if (attachmentDisabled) {
       return;
     }
 
-    setAttachmentMenuOpen((current) => !current);
+    setAttachmentMenuOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        setSkillMenuOpen(false);
+      }
+      return nextOpen;
+    });
   }
 
   function handlePhotoClick() {
@@ -172,6 +153,24 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
     setAttachmentMenuOpen(false);
     fileInputRef.current?.click();
+  }
+
+  function handleSkillClick() {
+    if (disabled || sending || onSelectSkill === undefined) {
+      return;
+    }
+
+    setAttachmentMenuOpen(false);
+    setSkillMenuOpen(true);
+    ignorePromise(Promise.resolve(onRefreshSkills?.()));
+    textareaRef.current?.focus();
+  }
+
+  function handleSelectSkill(skill: SkillPayload) {
+    onSelectSkill?.(skill);
+    setSkillMenuOpen(false);
+    setAttachmentMenuOpen(false);
+    textareaRef.current?.focus();
   }
 
   function handleActionClick() {
@@ -206,9 +205,13 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           ariaLabel={effectiveAriaLabel}
           disabled={disabled}
           expanded={inputExpanded}
+          onClearSelectedSkill={onClearSelectedSkill}
           onActionClick={handleActionClick}
           onAttachmentClick={handleAttachmentClick}
           onPhotoClick={handlePhotoClick}
+          onRefreshSkills={onRefreshSkills}
+          onSelectSkill={onSelectSkill ? handleSelectSkill : undefined}
+          onSkillClick={handleSkillClick}
           onChange={onChange}
           onCompositionEnd={() => {
             composingRef.current = false;
@@ -220,17 +223,28 @@ export const ChatComposer: FC<ChatComposerProps> = ({
           onTextareaInput={() => {
             syncTextareaHeight(textareaRef.current, setInputExpanded);
           }}
-          placeholder={effectivePlaceholder}
+          placeholder={selectedSkill ? '' : effectivePlaceholder}
           rows={rows}
+          selectedSkill={selectedSkill}
+          skillError={skillError}
+          skillMenuEmptyLabel={copy.chat.composerSkillMenuEmpty}
+          skillMenuLoadingLabel={copy.chat.composerSkillMenuLoading}
+          skillMenuOpen={skillMenuOpen}
+          skillMenuRefreshLabel={copy.chat.composerSkillMenuRefresh}
+          skillMenuTitle={copy.chat.composerSkillMenuTitle}
+          skills={skills}
+          skillsLoading={skillsLoading}
           textareaRef={textareaRef}
           toolbar={toolbar}
           toolbarAriaLabel={copy.chat.composerToolsAria}
           attachmentAriaLabel={copy.chat.composerAddContent}
-          uploadDisabled={uploadDisabled}
+          attachmentDisabled={attachmentDisabled}
+          photoDisabled={uploadDisabled}
           attachmentTitle={copy.chat.composerAddContent}
           menuPhotoLabel={copy.chat.composerAttachmentPhoto}
           menuFileLabel={copy.chat.composerAttachmentFile}
           menuSkillLabel={copy.chat.composerAttachmentSkill}
+          selectedSkillClearLabel={selectedSkill ? copy.chat.composerClearSelectedSkill(selectedSkill.name) : undefined}
           menuUnavailableLabel={copy.chat.composerAttachmentUnavailable}
           value={value}
         />
@@ -252,162 +266,6 @@ export const ChatComposer: FC<ChatComposerProps> = ({
     </form>
   );
 };
-
-function ComposerInputRow({
-  action,
-  attachmentMenuOpen,
-  ariaLabel,
-  disabled,
-  expanded,
-  onActionClick,
-  onAttachmentClick,
-  onPhotoClick,
-  onChange,
-  onCompositionEnd,
-  onCompositionStart,
-  onKeyDown,
-  onTextareaInput,
-  placeholder,
-  rows,
-  textareaRef,
-  toolbar,
-  toolbarAriaLabel,
-  attachmentAriaLabel,
-  uploadDisabled,
-  attachmentTitle,
-  menuPhotoLabel,
-  menuFileLabel,
-  menuSkillLabel,
-  menuUnavailableLabel,
-  value,
-}: ComposerInputRowProps) {
-  const hasToolbar = toolbar !== undefined && toolbar !== null;
-
-  return (
-    <div className={`composer-row${expanded ? ' is-expanded' : ''}`}>
-      <div className="composer-attachment-anchor">
-        <button
-          type="button"
-          className="composer-plus-btn"
-          aria-expanded={attachmentMenuOpen}
-          aria-haspopup="menu"
-          aria-label={attachmentAriaLabel}
-          title={attachmentTitle}
-          disabled={uploadDisabled}
-          onClick={onAttachmentClick}
-        >
-          <PlusIcon />
-        </button>
-
-        {attachmentMenuOpen ? (
-          <AttachmentMenu
-            fileLabel={menuFileLabel}
-            onPhotoClick={onPhotoClick}
-            photoLabel={menuPhotoLabel}
-            skillLabel={menuSkillLabel}
-            unavailableLabel={menuUnavailableLabel}
-          />
-        ) : null}
-      </div>
-
-      <textarea
-        ref={textareaRef}
-        value={value}
-        disabled={disabled}
-        aria-label={ariaLabel}
-        onChange={(event) => onChange(event.target.value)}
-        onInput={onTextareaInput}
-        onKeyDown={onKeyDown}
-        onCompositionStart={onCompositionStart}
-        onCompositionEnd={onCompositionEnd}
-        placeholder={placeholder}
-        rows={rows}
-        className="composer-textarea"
-      />
-
-      <div className="composer-actions">
-        <div
-          className="composer-toolbar"
-          role={hasToolbar ? 'toolbar' : undefined}
-          aria-label={hasToolbar ? toolbarAriaLabel : undefined}
-        >
-          <ComposerToolbar>{toolbar}</ComposerToolbar>
-        </div>
-        <ComposerActionButton action={action} onClick={onActionClick} />
-      </div>
-    </div>
-  );
-}
-
-function AttachmentMenu({
-  fileLabel,
-  onPhotoClick,
-  photoLabel,
-  skillLabel,
-  unavailableLabel,
-}: {
-  fileLabel: string;
-  onPhotoClick: () => void;
-  photoLabel: string;
-  skillLabel: string;
-  unavailableLabel: string;
-}) {
-  return (
-    <div className="composer-attachment-menu" role="menu">
-      <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onPhotoClick}>
-        {photoLabel}
-      </button>
-      <DisabledAttachmentMenuItem label={fileLabel} unavailableLabel={unavailableLabel} />
-      <DisabledAttachmentMenuItem label={skillLabel} unavailableLabel={unavailableLabel} />
-    </div>
-  );
-}
-
-function DisabledAttachmentMenuItem({
-  label,
-  unavailableLabel,
-}: {
-  label: string;
-  unavailableLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="composer-attachment-menu-item"
-      role="menuitem"
-      disabled
-      title={unavailableLabel}
-      aria-label={`${label}: ${unavailableLabel}`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function ComposerActionButton({
-  action,
-  onClick,
-}: {
-  action: ComposerActionState;
-  onClick: () => void;
-}) {
-  if (!action.visible) {
-    return null;
-  }
-
-  return (
-    <button
-      type={action.showStop ? 'button' : 'submit'}
-      disabled={action.disabled}
-      onClick={action.showStop ? onClick : undefined}
-      className={`composer-send-btn${action.showStop ? ' is-stop' : ''}`}
-      aria-label={action.label}
-    >
-      <span className="sr-only">{action.label}</span>
-      {action.showStop ? <span className="composer-stop-glyph" aria-hidden="true" /> : <SendIcon />}
-    </button>
-  );
-}
 
 function useAutosizeTextarea(
   textareaRef: RefObject<HTMLTextAreaElement>,

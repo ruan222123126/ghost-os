@@ -99,6 +99,7 @@ export interface UserChatMessage {
   kind: 'user';
   content: string;
   images?: ChatImage[];
+  selectedSkill?: ChatSelectedSkill;
 }
 
 export interface AssistantChatMessage {
@@ -197,6 +198,7 @@ export interface ChatImageDraft {
 export interface ChatSendInput {
   message: string;
   images: ChatImageDraft[];
+  selectedSkill?: ChatSelectedSkill;
 }
 
 export interface ErrorChatMessage {
@@ -245,6 +247,11 @@ export interface ProviderModelOption {
 export type SessionMessageRole = NonNullable<SharedSessionMessage['role']>;
 
 export type SkillSource = 'repo' | 'user';
+
+export interface ChatSelectedSkill {
+  id: string;
+  name: string;
+}
 
 export interface SkillPayload {
   id: string;

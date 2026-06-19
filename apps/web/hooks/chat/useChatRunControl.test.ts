@@ -2,6 +2,8 @@ import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import { stopAgent } from '@/lib/api/agent/api';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
+import type { ChatMessage } from '@/lib/types';
+import type { StreamAgentRunInput } from './types';
 import { useChatRunControl } from './useChatRunControl';
 
 jest.mock('@/lib/api/agent/api', () => ({
@@ -13,6 +15,80 @@ const mockedStopAgent = stopAgent as jest.MockedFunction<typeof stopAgent>;
 describe('hooks/chat/useChatRunControl', () => {
   beforeEach(() => {
     jest.resetAllMocks();
+  });
+
+  it('keeps selected skill visible locally and sends a load-skill instruction to the agent', async () => {
+    const activeRunRef: ActiveRunRef = { current: null };
+    const stopPendingRef: StopPendingRef = { current: false };
+    const committed: ChatMessage[] = [];
+    const streamedRuns: StreamAgentRunInput[] = [];
+    let latestState: HookRenderState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef,
+            appendCommittedMessages: (_sessionId, messages) => {
+              committed.push(...messages);
+            },
+            beginHistorySync: () => undefined,
+            clearChatError: () => undefined,
+            clearStreamingState: () => undefined,
+            currentSessionId: '',
+            endHistorySync: () => undefined,
+            onRender: (state) => {
+              latestState = state;
+            },
+            onSessionResolved: () => undefined,
+            runAgentStream: async (run) => {
+              streamedRuns.push(run);
+              return { sessionId: '', terminalType: 'done' };
+            },
+            setActiveRun: (_sessionId, value) => {
+              activeRunRef.current = value;
+            },
+            setChatError: () => undefined,
+            setLoading: () => undefined,
+            setStopPending: (_sessionId, value) => {
+              stopPendingRef.current = value;
+            },
+            stopPendingRef,
+            syncRecentHistory: async () => undefined,
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await latestState!.sendChatMessage({
+        images: [],
+        message: 'ship release',
+        selectedSkill: {
+          id: 'skill_release',
+          name: 'release_flow',
+        },
+      });
+    });
+
+    expect(committed).toEqual([
+      expect.objectContaining({
+        content: 'ship release',
+        kind: 'user',
+        selectedSkill: {
+          id: 'skill_release',
+          name: 'release_flow',
+        },
+      }),
+    ]);
+    expect(streamedRuns).toHaveLength(1);
+    expect(streamedRuns[0].message).toContain('[Ghost-OS selected skill]');
+    expect(streamedRuns[0].message).toContain('sfind');
+    expect(streamedRuns[0].message).toContain('release_flow');
+    expect(streamedRuns[0].message).toContain('ship release');
   });
 
   it('syncs persisted history for the stopped session before clearing streaming state', async () => {
@@ -171,6 +247,7 @@ describe('hooks/chat/useChatRunControl', () => {
 
 function HookProbe(props: {
   activeRunRef: ActiveRunRef;
+  appendCommittedMessages?: (sessionId: string, messages: ChatMessage[]) => void;
   beginHistorySync: (sessionId: string) => void;
   clearChatError: (sessionId: string) => void;
   clearStreamingState: () => void;
@@ -178,6 +255,7 @@ function HookProbe(props: {
   endHistorySync: (sessionId: string) => void;
   onRender: (state: HookRenderState) => void;
   onSessionResolved: (sessionId: string) => void;
+  runAgentStream?: (run: StreamAgentRunInput) => Promise<{ sessionId: string; terminalType: 'awaiting_human' | 'done' | '' }>;
   setActiveRun: (sessionId: string, value: ActiveRunRef['current']) => void;
   setChatError: (sessionId: string, value: string) => void;
   setLoading: (sessionId: string, value: boolean) => void;
@@ -187,7 +265,7 @@ function HookProbe(props: {
 }) {
   const state = useChatRunControl({
     appendErrorMessage: () => undefined,
-    appendCommittedMessages: () => undefined,
+    appendCommittedMessages: props.appendCommittedMessages ?? (() => undefined),
     beginHistorySync: props.beginHistorySync,
     clearChatError: props.clearChatError,
     clearStreamingState: () => props.clearStreamingState(),
@@ -204,7 +282,7 @@ function HookProbe(props: {
       }
     },
     onSessionResolved: props.onSessionResolved,
-    runAgentStream: async () => ({ sessionId: props.currentSessionId, terminalType: 'done' }),
+    runAgentStream: props.runAgentStream ?? (async () => ({ sessionId: props.currentSessionId, terminalType: 'done' })),
     resolveActiveRunSessionId: () => props.activeRunRef.current?.sessionId ?? props.currentSessionId,
     setActiveRun: props.setActiveRun,
     setLoading: props.setLoading,

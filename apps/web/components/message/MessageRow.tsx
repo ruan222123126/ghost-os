@@ -50,9 +50,14 @@ const UserMessageRow: FC<{ message: UserChatMessage }> = ({ message }) => {
     <div className="message-row is-user">
       <div className="message-stack">
         {message.images?.length ? <MessageImageGallery images={message.images} /> : null}
-        {message.content ? (
+        {message.content || message.selectedSkill ? (
           <div className={backplateClassName}>
-            <div ref={contentRef} className={contentClassName}>{message.content}</div>
+            {message.selectedSkill ? (
+              <div className="message-user-selected-skill">{message.selectedSkill.name}</div>
+            ) : null}
+            {message.content ? (
+              <div ref={contentRef} className={contentClassName}>{message.content}</div>
+            ) : null}
             {overflowing ? (
               <button
                 type="button"
@@ -81,6 +86,7 @@ function useUserMessageOverflow(
   const measureOverflow = useCallback(() => {
     const content = contentRef.current;
     if (!content) {
+      setOverflowing(false);
       return;
     }
     const lineHeight = Number.parseFloat(window.getComputedStyle(content).lineHeight);

@@ -7,10 +7,11 @@ import { useCallback, useState } from 'react';
 import { ChatComposer } from '@/components/ChatComposer';
 import { ComposerImageStrip } from '@/components/ComposerImageStrip';
 import { ModelSelector } from '@/components/ModelSelector';
+import { useComposerSkills } from '@/hooks/useComposerSkills';
 import { createChatImageDrafts } from '@/lib/chatImageDrafts';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ChatImageDraft, ChatSendInput, ProviderModelOption } from '@/lib/types';
+import type { ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
 
 interface ChatInputProps {
   loading: boolean;
@@ -41,18 +42,22 @@ export const ChatInput: FC<ChatInputProps> = ({
   const [draft, setDraft] = useState('');
   const [pendingImages, setPendingImages] = useState<ChatImageDraft[]>([]);
   const [imageError, setImageError] = useState('');
-  const canSubmit = draft.trim().length > 0 || pendingImages.length > 0;
+  const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
+  const { skillError, skills, skillsLoading, refreshSkills } = useComposerSkills();
+  const canSubmit = draft.trim().length > 0 || pendingImages.length > 0 || selectedSkill !== null;
 
   const handleSubmit = useCallback(async () => {
-    const input = buildChatSendInput(draft, pendingImages);
+    const input = buildChatSendInput(draft, pendingImages, selectedSkill);
     if (!canSubmitChatInput(input)) {
       return;
     }
 
     const previousDraft = draft;
     const previousImages = pendingImages;
+    const previousSkill = selectedSkill;
     setDraft('');
     setPendingImages([]);
+    setSelectedSkill(null);
     setImageError('');
 
     try {
@@ -60,9 +65,10 @@ export const ChatInput: FC<ChatInputProps> = ({
     } catch (error) {
       setDraft(previousDraft);
       setPendingImages(previousImages);
+      setSelectedSkill(previousSkill);
       throw error;
     }
-  }, [draft, onSend, pendingImages]);
+  }, [draft, onSend, pendingImages, selectedSkill]);
 
   const handleSelectFiles = useCallback(async (files: FileList) => {
     try {
@@ -94,6 +100,13 @@ export const ChatInput: FC<ChatInputProps> = ({
       placeholder={loading ? copy.chat.composerThinkingPlaceholder : copy.chat.composerInputPlaceholder}
       rows={1}
       preview={<ComposerImageStrip images={pendingImages} onRemove={handleRemoveImage} />}
+      selectedSkill={selectedSkill}
+      skillError={skillError}
+      skills={skills}
+      skillsLoading={skillsLoading}
+      onClearSelectedSkill={() => setSelectedSkill(null)}
+      onRefreshSkills={refreshSkills}
+      onSelectSkill={(skill) => setSelectedSkill({ id: skill.id, name: skill.name })}
       hint={buildHint(copy, imageError, pendingImages)}
       toolbar={onSelectModel ? (
         <ModelSelector
@@ -109,15 +122,20 @@ export const ChatInput: FC<ChatInputProps> = ({
   );
 };
 
-function buildChatSendInput(message: string, images: ChatImageDraft[]): ChatSendInput {
-  return {
+function buildChatSendInput(
+  message: string,
+  images: ChatImageDraft[],
+  selectedSkill: ChatSelectedSkill | null,
+): ChatSendInput {
+  const input: ChatSendInput = {
     message: message.trim(),
     images,
   };
+  return selectedSkill ? { ...input, selectedSkill } : input;
 }
 
 function canSubmitChatInput(input: ChatSendInput): boolean {
-  return input.message.length > 0 || input.images.length > 0;
+  return input.message.length > 0 || input.images.length > 0 || input.selectedSkill !== undefined;
 }
 
 function buildHint(

@@ -6,6 +6,7 @@ import {
   replacePendingQuestionWithUserAnswer,
 } from './chatMessages';
 import { formatToolDetails } from './chat-view/tool-details/format';
+import { buildAgentMessageWithSelectedSkill } from './selectedSkillMessage';
 import type { AgentSendAwaitingHumanResponse, SessionMessage } from './types';
 
 const SESSION_ID = 'session-test';
@@ -62,6 +63,34 @@ describe('chatMessages', () => {
     expect(mapped[0].content).toBe(
       '[TOOL_TAG_RESULT]\n{"tool":"sfind","output":{"action":"list","items":[{"name":"release_flow","status":"active","available_now":true},{"name":"ship_checklist","status":"pending","available_next_turn":true}]}}',
     );
+  });
+
+  it('restores selected skill metadata from wrapped user history messages', () => {
+    const messages = withSessionIndices([
+      {
+        role: 'user',
+        text: buildAgentMessageWithSelectedSkill({
+          images: [],
+          message: 'ship release',
+          selectedSkill: {
+            id: 'skill_release',
+            name: 'release_flow',
+          },
+        }),
+      },
+    ]);
+
+    const mapped = mapSessionMessagesToChat(SESSION_ID, messages);
+
+    expect(mapped).toHaveLength(1);
+    expect(mapped[0]).toMatchObject({
+      kind: 'user',
+      content: 'ship release',
+      selectedSkill: {
+        id: 'skill_release',
+        name: 'release_flow',
+      },
+    });
   });
 
   it('maps task run event internal notes to divider events', () => {

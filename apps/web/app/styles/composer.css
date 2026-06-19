@@ -145,6 +145,8 @@
   grid-area: plus;
   justify-self: start;
   display: inline-flex;
+  align-items: center;
+  min-width: 0;
 }
 
 .composer-plus-btn,
@@ -186,6 +188,28 @@
 .composer-plus-btn:disabled {
   opacity: 0.32;
   cursor: not-allowed;
+}
+
+.composer-selected-skill {
+  max-width: 220px;
+  min-height: 32px;
+  padding: 0 8px 0 2px;
+  border: none;
+  background: transparent;
+  color: rgb(0 122 255);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-selected-skill:hover,
+.composer-selected-skill:focus-visible {
+  color: rgb(0 96 208);
+  outline: none;
 }
 
 .composer-attachment-menu {
@@ -234,6 +258,110 @@
   color: rgb(156 163 175);
   cursor: not-allowed;
   opacity: 0.66;
+}
+
+.composer-skill-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 22;
+  display: grid;
+  width: min(320px, calc(100vw - 44px));
+  max-height: min(360px, 52vh);
+  padding: 10px;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 18px;
+  background: rgb(255 255 255);
+  box-shadow: 0 16px 36px rgb(15 23 42 / 0.14);
+  overflow: hidden;
+}
+
+.composer-skill-menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 4px 8px;
+  color: rgb(107 114 128);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.composer-skill-refresh {
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgb(75 85 99);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.composer-skill-refresh:hover,
+.composer-skill-refresh:focus-visible {
+  background: rgb(243 244 246);
+  color: rgb(17 24 39);
+  outline: none;
+}
+
+.composer-skill-list {
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.composer-skill-item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: rgb(31 41 55);
+  cursor: pointer;
+  text-align: left;
+}
+
+.composer-skill-item:hover,
+.composer-skill-item:focus-visible {
+  background: rgb(243 244 246 / 0.9);
+  outline: none;
+}
+
+.composer-skill-item-name {
+  overflow: hidden;
+  color: rgb(17 24 39);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-skill-item-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgb(107 114 128);
+  font-size: 12px;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.composer-skill-status {
+  padding: 12px;
+  color: rgb(107 114 128);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.composer-skill-status.is-error {
+  color: rgb(153 27 27);
 }
 
 .composer-send-btn {

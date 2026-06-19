@@ -138,7 +138,8 @@ function messagesEquivalent(previous: ChatMessage, latest: ChatMessage): boolean
 
 function userMessagesEquivalent(previous: UserChatMessage, latest: UserChatMessage): boolean {
   return normalizeText(previous.content) === normalizeText(latest.content)
-    && countImages(previous) === countImages(latest);
+    && countImages(previous) === countImages(latest)
+    && normalizeText(previous.selectedSkill?.id) === normalizeText(latest.selectedSkill?.id);
 }
 
 function toolMessagesEquivalent(previous: ToolChatMessage, latest: ToolChatMessage): boolean {

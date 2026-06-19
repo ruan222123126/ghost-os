@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestInstance } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
+import type { ChatSelectedSkill, SkillPayload } from '@/lib/types';
 import { ChatComposer } from './ChatComposer';
 
 describe('components/ChatComposer', () => {
@@ -97,6 +98,51 @@ describe('components/ChatComposer', () => {
     expect(fileInputClick).not.toHaveBeenCalled();
   });
 
+  it('opens the skill panel from the plus menu and pins the selected skill', () => {
+    const refreshSkills = jest.fn();
+    const harness = renderComposerHarness({
+      onRefreshSkills: refreshSkills,
+      onSelectSkill: true,
+      skills: [buildSkill({ id: 'skill_release', name: 'release_flow' })],
+    });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+    act(() => {
+      harness.menuItem('Skill').props.onClick();
+    });
+
+    expect(refreshSkills).toHaveBeenCalledTimes(1);
+    expect(harness.skillMenuItem('release_flow')).toBeTruthy();
+
+    act(() => {
+      harness.skillMenuItem('release_flow').props.onClick();
+    });
+
+    expect(harness.selectedSkillButton().props.children).toBe('release_flow');
+    expect(harness.textarea().props.placeholder).toBe('');
+    expect(harness.menuItems()).toEqual([]);
+  });
+
+  it('clears the selected skill when backspace is pressed on an empty draft', () => {
+    const harness = renderComposerHarness({
+      initialSelectedSkill: { id: 'skill_release', name: 'release_flow' },
+      onSelectSkill: true,
+    });
+
+    expect(harness.selectedSkillButton().props.children).toBe('release_flow');
+
+    act(() => {
+      harness.textarea().props.onKeyDown({
+        key: 'Backspace',
+        preventDefault: jest.fn(),
+      });
+    });
+
+    expect(harness.selectedSkillButtons()).toEqual([]);
+  });
+
   it('closes the attachment menu after submitting', async () => {
     const harness = renderComposerHarness({ initialValue: 'send me', onSelectFiles: jest.fn() });
 
@@ -120,14 +166,27 @@ describe('components/ChatComposer', () => {
 function renderComposerHarness(options: {
   fileInputClick?: () => void;
   initialValue?: string;
+  initialSelectedSkill?: ChatSelectedSkill;
+  onRefreshSkills?: () => Promise<void> | void;
   onSelectFiles?: (files: FileList) => Promise<void> | void;
+  onSelectSkill?: boolean;
+  skills?: SkillPayload[];
 } = {}) {
   const submissions: string[] = [];
   let renderer!: TestRenderer.ReactTestRenderer;
-  const { fileInputClick, initialValue = '', onSelectFiles } = options;
+  const {
+    fileInputClick,
+    initialSelectedSkill = null,
+    initialValue = '',
+    onRefreshSkills,
+    onSelectFiles,
+    onSelectSkill = false,
+    skills = [],
+  } = options;
 
   function Harness() {
     const [value, setValue] = React.useState(initialValue);
+    const [selectedSkill, setSelectedSkill] = React.useState<ChatSelectedSkill | null>(initialSelectedSkill);
     return React.createElement(
       WebLocaleProvider,
       { initialLocale: 'en-US' },
@@ -138,7 +197,15 @@ function renderComposerHarness(options: {
           submissions.push(value);
         },
         sending: false,
+        canSubmit: value.trim().length > 0 || selectedSkill !== null,
+        selectedSkill,
+        skills,
+        onClearSelectedSkill: () => setSelectedSkill(null),
+        onRefreshSkills,
         onSelectFiles,
+        onSelectSkill: onSelectSkill
+          ? (skill: SkillPayload) => setSelectedSkill({ id: skill.id, name: skill.name })
+          : undefined,
       }),
     );
   }
@@ -162,8 +229,23 @@ function renderComposerHarness(options: {
     menuItem: (label: string) => findButtonByText(renderer, label),
     menuItems: () => renderer.root.findAllByProps({ role: 'menuitem' }),
     plusButton: () => renderer.root.findByProps({ className: 'composer-plus-btn' }),
+    selectedSkillButton: () => renderer.root.findByProps({ className: 'composer-selected-skill' }),
+    selectedSkillButtons: () => renderer.root.findAllByProps({ className: 'composer-selected-skill' }),
+    skillMenuItem: (label: string) => findButtonContainingText(renderer, label),
     submissions,
     textarea: () => renderer.root.findByType('textarea'),
+  };
+}
+
+function buildSkill(overrides: Partial<SkillPayload> = {}): SkillPayload {
+  return {
+    id: 'skill_default',
+    name: 'default_skill',
+    description: 'Default skill',
+    path: '/tmp/skill',
+    source: 'repo',
+    enabled: true,
+    ...overrides,
   };
 }
 
@@ -174,6 +256,29 @@ function findButtonByText(renderer: TestRenderer.ReactTestRenderer, text: string
   }
 
   return button;
+}
+
+function findButtonContainingText(renderer: TestRenderer.ReactTestRenderer, text: string): ReactTestInstance {
+  const button = renderer.root.findAllByType('button').find((node) => flattenChildrenText(node.props.children).includes(text));
+  if (!button) {
+    throw new Error(`Button not found: ${text}`);
+  }
+
+  return button;
+}
+
+function flattenChildrenText(children: unknown): string {
+  if (typeof children === 'string') {
+    return children;
+  }
+  if (Array.isArray(children)) {
+    return children.map(flattenChildrenText).join('');
+  }
+  if (React.isValidElement(children)) {
+    const element = children as React.ReactElement<{ children?: unknown }>;
+    return flattenChildrenText(element.props.children);
+  }
+  return '';
 }
 
 function buildEnterEvent(overrides: Partial<{

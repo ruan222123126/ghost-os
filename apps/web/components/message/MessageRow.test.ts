@@ -193,6 +193,30 @@ describe('components/message/MessageRow', () => {
     expect(html).not.toContain('// USER_INPUT');
   });
 
+  it('renders selected skill on user messages without replacing user text', () => {
+    const message: UserChatMessage = {
+      id: 'user-skill',
+      kind: 'user',
+      content: 'ship release',
+      selectedSkill: {
+        id: 'skill_release',
+        name: 'release_flow',
+      },
+    };
+
+    const html = renderMessageRow({
+      message,
+      assistantMarkdownEnabled: true,
+      loading: false,
+      onAnswerQuestion: async () => undefined,
+      onCancelQuestion: async () => undefined,
+    });
+
+    expect(html).toContain('message-user-selected-skill');
+    expect(html).toContain('release_flow');
+    expect(html).toContain('ship release');
+  });
+
   it('keeps the first three lines visible before expanding long user content', () => {
     const message: UserChatMessage = {
       id: 'user-long',

@@ -5,6 +5,7 @@ import { draftImagesToChatImages, draftImagesToSessionImages } from '@/lib/chatI
 import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
+import { buildAgentMessageWithSelectedSkill } from '@/lib/selectedSkillMessage';
 import type { ChatSendInput } from '@/lib/types';
 import type {
   ChatStateControls,
@@ -102,16 +103,18 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
     clearStreamingState(sessionId);
     setStopPending(sessionId, false);
     setActiveRun(sessionId, { abortController, sessionId, traceId });
+    const agentMessage = buildAgentMessageWithSelectedSkill(input);
     appendCommittedMessages(sessionId, [buildUserMessage(input.message, {
       id: `local:user:${traceId}`,
       images: draftImagesToChatImages(input.images),
+      selectedSkill: input.selectedSkill,
     })]);
     setLoading(sessionId, true);
 
     try {
       const result = await runAgentStream({
         images: draftImagesToSessionImages(input.images),
-        message: input.message,
+        message: agentMessage,
         sessionId: sessionId || undefined,
         signal: abortController.signal,
         traceId,
@@ -203,7 +206,7 @@ export function useChatRunControl(options: UseChatRunControlOptions) {
 }
 
 function hasSendPayload(input: ChatSendInput): boolean {
-  return input.message.trim().length > 0 || input.images.length > 0;
+  return input.message.trim().length > 0 || input.images.length > 0 || input.selectedSkill !== undefined;
 }
 
 function shouldSuppressRunError(error: unknown, stopPending: boolean, streamAborted: boolean): boolean {

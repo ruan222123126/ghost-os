@@ -4,6 +4,7 @@ import type {
   AgentSendResponse,
   ChatMessage,
   ChatImage,
+  ChatSelectedSkill,
   PendingQuestionMessage,
   QuestionChatMessage,
   SessionContentPart,
@@ -20,6 +21,7 @@ import { buildSessionToolCallLookup } from './chatToolCalls';
 import { buildToolChatMessage, resolveSessionToolCall } from './chatToolMessages';
 import { filterToolTagResultToLoadedTools } from '@/lib/toolTagResultText';
 import { stripToolTagCalls } from '@/lib/toolTagText';
+import { parseAgentMessageWithSelectedSkill } from '@/lib/selectedSkillMessage';
 
 const TASK_RUN_EVENT_MARKER = '[TASK_RUN_EVENT]';
 
@@ -39,6 +41,7 @@ interface NormalizedSessionMessage {
 interface BuildUserMessageOptions {
   id?: string;
   images?: ChatImage[];
+  selectedSkill?: ChatSelectedSkill;
 }
 
 function nextChatMessageID() {
@@ -109,12 +112,13 @@ function buildSessionQuestionMessages(sessionId: string, message: NormalizedSess
 }
 
 export function buildUserMessage(content: string, options?: BuildUserMessageOptions): ChatMessage {
-  return {
+  const message: ChatMessage = {
     id: options?.id ?? nextChatMessageID(),
     kind: 'user',
     content,
     images: options?.images,
   };
+  return options?.selectedSkill ? { ...message, selectedSkill: options.selectedSkill } : message;
 }
 
 export function buildAssistantMessage(content: string, id?: string, inProgress?: boolean): ChatMessage {
@@ -244,7 +248,7 @@ export function mapSessionMessageToChatMessages(
   const normalized = normalizeSessionMessage(message);
   switch (normalized.role) {
     case 'user':
-      return [buildUserMessage(normalized.text, { id: buildSessionMessageID(sessionId, normalized.index, 'user'), images: imagesFromContent(normalized.content) })];
+      return [buildParsedUserSessionMessage(sessionId, normalized)];
     case 'assistant':
       return buildSessionAssistantMessages(sessionId, normalized);
     case 'system':
@@ -256,6 +260,18 @@ export function mapSessionMessageToChatMessages(
     default:
       return [];
   }
+}
+
+function buildParsedUserSessionMessage(
+  sessionId: string,
+  message: NormalizedSessionMessage,
+): ChatMessage {
+  const parsed = parseAgentMessageWithSelectedSkill(message.text);
+  return buildUserMessage(parsed.message, {
+    id: buildSessionMessageID(sessionId, message.index, 'user'),
+    images: imagesFromContent(message.content),
+    selectedSkill: parsed.selectedSkill,
+  });
 }
 
 export function mapSessionMessagesToChat(sessionId: string, messages: SessionMessage[]): ChatMessage[] {
