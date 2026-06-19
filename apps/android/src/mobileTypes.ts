@@ -52,6 +52,31 @@ export interface AgentPayload {
   mode?: string;
 }
 
+export type SessionMessageRole = "system" | "internal" | "user" | "assistant" | "tool";
+
+export interface SessionContentPart {
+  type: string;
+  text?: string;
+}
+
+export interface SessionMessage {
+  index: number;
+  role: SessionMessageRole;
+  text?: string;
+  content?: SessionContentPart[];
+  in_progress?: boolean;
+  thinking?: string;
+}
+
+export interface SessionMessagePage {
+  limit: number;
+  before?: number | null;
+  start_index?: number | null;
+  end_index?: number | null;
+  has_more_before: boolean;
+  next_before?: number | null;
+}
+
 export interface SessionMetadata {
   id: string;
   title: string;
@@ -59,6 +84,27 @@ export interface SessionMetadata {
   updated_at: string;
   message_count: number;
   token_count: number;
+}
+
+export interface SessionDetail extends SessionMetadata {
+  messages: SessionMessage[];
+  page: SessionMessagePage;
+}
+
+export interface MobileConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  thinking?: string;
+  sessionId?: string;
+}
+
+export interface StoredMobileConversation {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: MobileConversationMessage[];
 }
 
 export interface StatusMessage {

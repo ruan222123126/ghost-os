@@ -15,6 +15,21 @@ import type { SidebarHistoryItem } from "./components/MobileChatHome";
 import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
+import {
+  appendStoredMobileMessages,
+  loadStoredMobileConversations,
+  saveStoredMobileConversations,
+  upsertStoredMobileConversation,
+} from "./lib/mobileSessionStorage";
+import type {
+  AgentPayload,
+  MobileConversationMessage,
+  SessionDetail,
+  SessionMessage,
+  SessionMetadata,
+  StatusMessage,
+  StoredMobileConversation,
+} from "./mobileTypes";
 import "./App.css";
 import "./components/mobileChat/Messages.css";
 import "./App.overlays.css";
@@ -35,12 +50,17 @@ function sessionFallbackTitle(sessionId: string): string {
   return shortId ? `会话 ${shortId}` : "新会话";
 }
 
+function assistantMessageStatus(): StatusMessage {
+  return { tone: "success", text: "回复已返回" };
+}
+
 function App() {
   const {
     bridgeUrl,
     config,
     connectBridge,
     connectionStatus,
+    getSession,
     host,
     providerList,
     reply,
@@ -54,7 +74,10 @@ function App() {
     status,
   } = useMobileBridge();
   const [message, setMessage] = useState("");
-  const [lastUserMessage, setLastUserMessage] = useState("");
+  const [conversationMessages, setConversationMessages] = useState<MobileConversationMessage[]>([]);
+  const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() =>
+    loadStoredMobileConversations(),
+  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
@@ -65,20 +88,19 @@ function App() {
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
   const isModalOpen = isSidebarOpen || isSettingsOpen || isMoreMenuOpen;
-  const hasLocalConversation = Boolean(lastUserMessage || reply);
+  const hasLocalConversation = conversationMessages.length > 0 || Boolean(reply);
+  const conversationScrollKey = useMemo(
+    () => conversationMessages.map((item) => `${item.id}:${item.text.length}`).join("|"),
+    [conversationMessages],
+  );
   const { handleScroll, resetScrollDown, scrollRef, scrollToBottom, showScrollDown } = useChatFeedScroll(
-    lastUserMessage,
+    conversationScrollKey,
     reply,
   );
   const historyItems = useMemo<SidebarHistoryItem[]>(() => {
     const pinned = new Set(pinnedHistoryIds);
-    return sessions.map((session) => ({
-      id: session.id,
-      pinned: pinned.has(session.id),
-      title: session.title.trim() || sessionFallbackTitle(session.id),
-      updatedAt: session.updated_at,
-    }));
-  }, [pinnedHistoryIds, sessions]);
+    return mergeHistoryItems(storedConversations, sessions, pinned);
+  }, [pinnedHistoryIds, sessions, storedConversations]);
   const activeHistoryItem = useMemo(
     () => historyItems.find((item) => item.id === activeHistoryId),
     [activeHistoryId, historyItems],
@@ -90,8 +112,12 @@ function App() {
     const sessionId = settings.sessionId.trim();
     if (sessionId) {
       setActiveHistoryId(sessionId);
+      const stored = storedConversations.find((conversation) => conversation.id === sessionId);
+      if (stored && conversationMessages.length === 0 && !reply) {
+        setConversationMessages(stored.messages);
+      }
     }
-  }, [settings.sessionId]);
+  }, [conversationMessages.length, reply, settings.sessionId, storedConversations]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -100,10 +126,81 @@ function App() {
       return;
     }
 
-    setLastUserMessage(trimmed);
-    const didSend = await sendAgentMessage({ message: trimmed });
-    if (didSend) {
+    const initialSessionId = settings.sessionId.trim();
+    const activeStoredConversation = initialSessionId
+      ? storedConversations.find((conversation) => conversation.id === initialSessionId)
+      : undefined;
+    const userMessage = createUserConversationMessage(trimmed, initialSessionId);
+    const optimisticMessages = [...conversationMessages, userMessage];
+    setConversationMessages(optimisticMessages);
+    setReply(undefined);
+
+    const result = await sendAgentMessage({ message: trimmed });
+    if (result.ok) {
       setMessage("");
+    }
+    const resolvedSessionId = result.sessionId?.trim();
+    if (!result.ok || !resolvedSessionId) {
+      return;
+    }
+
+    const assistantMessage = result.reply
+      ? createAssistantConversationMessage(result.reply, resolvedSessionId)
+      : undefined;
+    const nextMessages = normalizeConversationSessionIds(
+      assistantMessage ? [...optimisticMessages, assistantMessage] : optimisticMessages,
+      resolvedSessionId,
+    );
+    setConversationMessages(nextMessages);
+    setReply(undefined);
+    setActiveHistoryId(resolvedSessionId);
+    persistConversation({
+      id: resolvedSessionId,
+      messages: appendStoredMobileMessages(activeStoredConversation, nextMessages),
+      title: activeStoredConversation?.title || trimmed,
+    });
+  }
+
+  async function selectHistory(sessionId: string): Promise<void> {
+    const trimmedSessionId = sessionId.trim();
+    if (!trimmedSessionId) {
+      return;
+    }
+
+    const stored = storedConversations.find((conversation) => conversation.id === trimmedSessionId);
+    setActiveHistoryId(trimmedSessionId);
+    setSettings((current) => ({ ...current, sessionId: trimmedSessionId }));
+    setReply(undefined);
+    setMessage("");
+    setConversationMessages(stored?.messages ?? []);
+    setIsSidebarOpen(false);
+    setStatus({
+      tone: stored ? "success" : "loading",
+      text: stored ? "历史会话已加载" : "正在加载历史会话",
+    });
+
+    if (!config) {
+      if (!stored) {
+        setStatus({ tone: "error", text: "需要先连接电脑端才能加载该历史会话" });
+      }
+      return;
+    }
+
+    try {
+      const detail = await getSession(trimmedSessionId);
+      const messages = sessionDetailToConversationMessages(detail);
+      setConversationMessages(messages);
+      persistConversation({
+        createdAt: detail.created_at,
+        id: detail.id,
+        messages,
+        title: detail.title.trim() || stored?.title || sessionFallbackTitle(detail.id),
+        updatedAt: detail.updated_at,
+      });
+      setStatus({ tone: "success", text: "历史会话已加载" });
+    } catch (error) {
+      const text = error instanceof Error ? error.message : String(error);
+      setStatus({ tone: "error", text });
     }
   }
 
@@ -123,7 +220,7 @@ function App() {
 
   function startNewSession(): void {
     setReply(undefined);
-    setLastUserMessage("");
+    setConversationMessages([]);
     setMessage("");
     setActiveHistoryId(undefined);
     setSettings((current) => ({ ...current, sessionId: "" }));
@@ -136,7 +233,7 @@ function App() {
 
   function clearLocalConversation(): void {
     setReply(undefined);
-    setLastUserMessage("");
+    setConversationMessages([]);
     setActiveHistoryId(undefined);
     setStatus({ tone: "idle", text: "本地消息已清空" });
     setIsMoreMenuOpen(false);
@@ -156,6 +253,26 @@ function App() {
     setIsMoreMenuOpen(false);
   }
 
+  function persistConversation(input: {
+    createdAt?: string;
+    id: string;
+    messages: MobileConversationMessage[];
+    title: string;
+    updatedAt?: string;
+  }): void {
+    setStoredConversations((current) => {
+      const next = upsertStoredMobileConversation(current, {
+        createdAt: input.createdAt,
+        id: input.id,
+        messages: input.messages,
+        title: input.title,
+        updatedAt: input.updatedAt,
+      });
+      saveStoredMobileConversations(next);
+      return next;
+    });
+  }
+
   return (
     <div className="mobile-chat-shell">
       <MobileSidebar
@@ -167,6 +284,7 @@ function App() {
         activeHistoryId={activeHistoryId}
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
+        onSelectHistory={(sessionId) => void selectHistory(sessionId)}
         onConnect={connectBridge}
         onOpenSettings={openSettings}
       />
@@ -201,7 +319,18 @@ function App() {
             <AssistantIntro onSelectSuggestion={setMessage} />
           ) : null}
 
-          {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
+          {conversationMessages.map((item) =>
+            item.role === "user" ? (
+              <ChatBubble key={item.id}>{item.text}</ChatBubble>
+            ) : (
+              <AssistantReply
+                key={item.id}
+                reply={conversationMessageToAgentPayload(item)}
+                status={assistantMessageStatus()}
+                sessionId={item.sessionId || settings.sessionId}
+              />
+            ),
+          )}
           <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
         </main>
 
@@ -237,6 +366,115 @@ function App() {
       />
     </div>
   );
+}
+
+function mergeHistoryItems(
+  storedConversations: StoredMobileConversation[],
+  sessions: SessionMetadata[],
+  pinned: Set<string>,
+): SidebarHistoryItem[] {
+  const items = new Map<string, SidebarHistoryItem>();
+  for (const conversation of storedConversations) {
+    items.set(conversation.id, {
+      id: conversation.id,
+      pinned: pinned.has(conversation.id),
+      title: conversation.title.trim() || sessionFallbackTitle(conversation.id),
+      updatedAt: conversation.updated_at,
+    });
+  }
+  for (const session of sessions) {
+    if (items.has(session.id)) {
+      continue;
+    }
+    items.set(session.id, {
+      id: session.id,
+      pinned: pinned.has(session.id),
+      title: session.title.trim() || sessionFallbackTitle(session.id),
+      updatedAt: session.updated_at,
+    });
+  }
+  return [...items.values()];
+}
+
+function createUserConversationMessage(text: string, sessionId: string): MobileConversationMessage {
+  return {
+    id: `${sessionId || "pending"}:user:${Date.now()}`,
+    role: "user",
+    sessionId: sessionId || undefined,
+    text,
+  };
+}
+
+function createAssistantConversationMessage(reply: AgentPayload, sessionId: string): MobileConversationMessage {
+  return {
+    id: `${sessionId}:assistant:${Date.now()}`,
+    role: "assistant",
+    sessionId,
+    text: reply.message,
+    thinking: reply.thinking,
+  };
+}
+
+function normalizeConversationSessionIds(
+  messages: MobileConversationMessage[],
+  sessionId: string,
+): MobileConversationMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    sessionId,
+  }));
+}
+
+function sessionDetailToConversationMessages(detail: SessionDetail): MobileConversationMessage[] {
+  return detail.messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => sessionMessageToConversationMessage(message, detail.id))
+    .filter(isConversationMessage);
+}
+
+function sessionMessageToConversationMessage(
+  message: SessionMessage,
+  sessionId: string,
+): MobileConversationMessage | null {
+  if (message.role !== "user" && message.role !== "assistant") {
+    return null;
+  }
+  const text = sessionMessageText(message);
+  if (!text.trim() && !message.thinking?.trim()) {
+    return null;
+  }
+  return {
+    id: `${sessionId}:${message.index}:${message.role}`,
+    role: message.role,
+    sessionId,
+    text,
+    thinking: message.thinking,
+  };
+}
+
+function sessionMessageText(message: SessionMessage): string {
+  if (message.text !== undefined) {
+    return message.text;
+  }
+  return (message.content ?? [])
+    .map((part) => part.text ?? "")
+    .filter(Boolean)
+    .join("\n");
+}
+
+function conversationMessageToAgentPayload(message: MobileConversationMessage): AgentPayload {
+  return {
+    message: message.text,
+    session_ended: false,
+    session_id: message.sessionId ?? "",
+    thinking: message.thinking,
+  };
+}
+
+function isConversationMessage(
+  message: MobileConversationMessage | null,
+): message is MobileConversationMessage {
+  return message !== null;
 }
 
 export default App;

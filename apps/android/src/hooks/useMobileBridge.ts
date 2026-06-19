@@ -19,6 +19,7 @@ import type {
   ConfigPayload,
   HostProfile,
   ProviderListPayload,
+  SessionDetail,
   SessionMetadata,
   StatusMessage,
   StoredSettings,
@@ -26,6 +27,12 @@ import type {
 
 interface SendAgentMessageOptions {
   message: string;
+}
+
+interface SendAgentMessageResult {
+  ok: boolean;
+  reply?: AgentPayload;
+  sessionId?: string;
 }
 
 function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): string {
@@ -174,6 +181,13 @@ export function useMobileBridge() {
     });
   }, [refreshSessions]);
 
+  const getSession = useCallback(
+    async (sessionId: string): Promise<SessionDetail> => {
+      return requestBridge<SessionDetail>("SESSION_GET", { id: sessionId.trim() });
+    },
+    [requestBridge],
+  );
+
   const connectBridge = useCallback(async (): Promise<void> => {
     setConnectionStatus({ tone: "loading", text: "连接中" });
     try {
@@ -234,7 +248,7 @@ export function useMobileBridge() {
   );
 
   const sendAgentMessage = useCallback(
-    async (options: SendAgentMessageOptions): Promise<boolean> => {
+    async (options: SendAgentMessageOptions): Promise<SendAgentMessageResult> => {
       const traceId = createTraceId("android-agent-stream");
       const requestId = createTraceId("android-agent-stream-request");
       const initialSessionId = settings.sessionId.trim();
@@ -287,10 +301,14 @@ export function useMobileBridge() {
         if (!result.awaitingHuman) {
           setStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
         }
-        return true;
+        return {
+          ok: true,
+          reply: createAgentPayloadFromRuntime(runtime),
+          sessionId: runtime.sessionId || resolvedSessionId,
+        };
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
-        return false;
+        return { ok: false };
       }
     },
     [apiToken, bridgeUrl, refreshSessionsInBackground, settings.connectionMode, settings.sessionId],
@@ -301,6 +319,7 @@ export function useMobileBridge() {
     config,
     connectBridge,
     connectionStatus,
+    getSession,
     host,
     providerList,
     reply,
