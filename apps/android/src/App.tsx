@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   AssistantIntro,
@@ -30,6 +30,11 @@ function displayRuntime(config: ReturnType<typeof useMobileBridge>["config"]): s
   return config?.provider || config?.model || "Bridge Runtime";
 }
 
+function sessionFallbackTitle(sessionId: string): string {
+  const shortId = sessionId.trim().slice(0, 8);
+  return shortId ? `会话 ${shortId}` : "新会话";
+}
+
 function App() {
   const {
     bridgeUrl,
@@ -40,6 +45,7 @@ function App() {
     providerList,
     reply,
     sendAgentMessage,
+    sessions,
     setReply,
     setSettings,
     setStatus,
@@ -53,8 +59,8 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [historyItems, setHistoryItems] = useState<SidebarHistoryItem[]>([]);
-  const [activeHistoryId, setActiveHistoryId] = useState<number | undefined>();
+  const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
+  const [activeHistoryId, setActiveHistoryId] = useState<string | undefined>();
 
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
@@ -64,12 +70,28 @@ function App() {
     lastUserMessage,
     reply,
   );
+  const historyItems = useMemo<SidebarHistoryItem[]>(() => {
+    const pinned = new Set(pinnedHistoryIds);
+    return sessions.map((session) => ({
+      id: session.id,
+      pinned: pinned.has(session.id),
+      title: session.title.trim() || sessionFallbackTitle(session.id),
+      updatedAt: session.updated_at,
+    }));
+  }, [pinnedHistoryIds, sessions]);
   const activeHistoryItem = useMemo(
     () => historyItems.find((item) => item.id === activeHistoryId),
     [activeHistoryId, historyItems],
   );
 
   useBodyScrollLock(isModalOpen);
+
+  useEffect(() => {
+    const sessionId = settings.sessionId.trim();
+    if (sessionId) {
+      setActiveHistoryId(sessionId);
+    }
+  }, [settings.sessionId]);
 
   async function sendMessage(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -126,8 +148,10 @@ function App() {
       return;
     }
 
-    setHistoryItems((current) =>
-      current.map((item) => (item.id === activeHistoryItem.id ? { ...item, pinned: !item.pinned } : item)),
+    setPinnedHistoryIds((current) =>
+      current.includes(activeHistoryItem.id)
+        ? current.filter((id) => id !== activeHistoryItem.id)
+        : [...current, activeHistoryItem.id],
     );
     setIsMoreMenuOpen(false);
   }

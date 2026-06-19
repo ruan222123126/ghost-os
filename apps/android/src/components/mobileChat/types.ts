@@ -24,7 +24,8 @@ export type UiIconName =
   | "trash";
 
 export interface SidebarHistoryItem {
-  id: number;
+  id: string;
   title: string;
+  updatedAt: string;
   pinned: boolean;
 }

@@ -11,7 +11,7 @@ interface MobileSidebarProps {
   config: ConfigPayload | undefined;
   settings: StoredSettings;
   historyItems: SidebarHistoryItem[];
-  activeHistoryId: number | undefined;
+  activeHistoryId: string | undefined;
   onClose: () => void;
   onNewSession: () => void;
   onConnect: () => Promise<void>;
@@ -136,7 +136,11 @@ function compareHistoryItems(a: SidebarHistoryItem, b: SidebarHistoryItem): numb
   if (a.pinned !== b.pinned) {
     return a.pinned ? -1 : 1;
   }
-  return a.id - b.id;
+  const updatedOrder = b.updatedAt.localeCompare(a.updatedAt);
+  if (updatedOrder !== 0) {
+    return updatedOrder;
+  }
+  return a.title.localeCompare(b.title, "zh-Hans");
 }
 
 function SidebarSection(props: { title: string; children: ReactNode }) {

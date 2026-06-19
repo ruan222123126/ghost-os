@@ -6,6 +6,7 @@
         "AGENT_SEND",
         "AGENT_STOP",
         "HUMAN_RESPONSE",
+        "SESSIONS_LIST",
         "CONFIG_GET",
         "CONFIG_UPDATE",
         "CONFIG_PROVIDERS_GET",

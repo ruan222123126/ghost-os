@@ -52,6 +52,15 @@ export interface AgentPayload {
   mode?: string;
 }
 
+export interface SessionMetadata {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  token_count: number;
+}
+
 export interface StatusMessage {
   tone: "idle" | "loading" | "success" | "error";
   text: string;

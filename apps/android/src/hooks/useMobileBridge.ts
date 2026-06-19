@@ -19,6 +19,7 @@ import type {
   ConfigPayload,
   HostProfile,
   ProviderListPayload,
+  SessionMetadata,
   StatusMessage,
   StoredSettings,
 } from "../mobileTypes";
@@ -54,6 +55,7 @@ export function useMobileBridge() {
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
   const [reply, setReply] = useState<AgentPayload>();
+  const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [status, setStatus] = useState<StatusMessage>({
     tone: "idle",
     text: "未连接",
@@ -104,6 +106,7 @@ export function useMobileBridge() {
     webRTCClientRef.current = undefined;
     setConfig(undefined);
     setProviderList(undefined);
+    setSessions([]);
     setConnectionStatus({ tone: "idle", text: "未连接" });
   }, [connectionStatus.tone, currentConnectionTarget]);
 
@@ -159,6 +162,18 @@ export function useMobileBridge() {
     return configPayload;
   }, [requestBridge]);
 
+  const refreshSessions = useCallback(async (): Promise<SessionMetadata[]> => {
+    const payload = await requestBridge<SessionMetadata[]>("SESSIONS_LIST", {});
+    setSessions(payload);
+    return payload;
+  }, [requestBridge]);
+
+  const refreshSessionsInBackground = useCallback((): void => {
+    void refreshSessions().catch((error: unknown) => {
+      console.error("[useMobileBridge] refresh sessions failed", error);
+    });
+  }, [refreshSessions]);
+
   const connectBridge = useCallback(async (): Promise<void> => {
     setConnectionStatus({ tone: "loading", text: "连接中" });
     try {
@@ -173,6 +188,7 @@ export function useMobileBridge() {
         webRTCClientRef.current = client;
       }
       await refreshRuntimeConfig();
+      await refreshSessions();
       connectedTargetRef.current = currentConnectionTarget;
       setConnectionStatus({
         tone: "success",
@@ -184,9 +200,10 @@ export function useMobileBridge() {
       webRTCClientRef.current = undefined;
       setConfig(undefined);
       setProviderList(undefined);
+      setSessions([]);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
     }
-  }, [currentConnectionTarget, refreshRuntimeConfig, settings.connectionMode, settings.pairing]);
+  }, [currentConnectionTarget, refreshRuntimeConfig, refreshSessions, settings.connectionMode, settings.pairing]);
 
   const switchModel = useCallback(
     async (model: string): Promise<boolean> => {
@@ -229,10 +246,15 @@ export function useMobileBridge() {
           setReply(createAgentPayloadFromRuntime(nextRuntime));
         },
         commitSessionId: (sessionId) => {
+          const trimmedSessionId = sessionId.trim();
+          if (!trimmedSessionId) {
+            return;
+          }
           setSettings((current) => ({
             ...current,
-            sessionId,
+            sessionId: trimmedSessionId,
           }));
+          refreshSessionsInBackground();
         },
         setStatus,
       };
@@ -269,7 +291,7 @@ export function useMobileBridge() {
         return false;
       }
     },
-    [apiToken, bridgeUrl, settings.connectionMode, settings.sessionId],
+    [apiToken, bridgeUrl, refreshSessionsInBackground, settings.connectionMode, settings.sessionId],
   );
 
   return {
@@ -281,6 +303,7 @@ export function useMobileBridge() {
     providerList,
     reply,
     sendAgentMessage,
+    sessions,
     setReply,
     setSettings,
     setStatus,

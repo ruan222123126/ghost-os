@@ -17,6 +17,7 @@ type DefaultHandlers struct {
 	ConfigUpdate       TypedHandler[api.ConfigUpdateRequest]
 	ConfigProvidersGet TraceHandler
 	HumanResponse      TypedHandler[api.HumanResponseParams]
+	SessionsList       TraceHandler
 	TaskCreate         TypedHandler[api.TaskCreateParams]
 	TaskList           TypedHandler[api.TaskListParams]
 	TaskGet            TypedHandler[api.TaskIDParams]
@@ -31,6 +32,7 @@ func RegisterDefaultActions(router *Router, handlers DefaultHandlers) {
 	registerAgentActions(router, handlers)
 	registerConfigActions(router, handlers)
 	registerHumanActions(router, handlers)
+	registerSessionActions(router, handlers)
 	registerTaskActions(router, handlers)
 }
 
@@ -47,6 +49,10 @@ func registerConfigActions(router *Router, handlers DefaultHandlers) {
 
 func registerHumanActions(router *Router, handlers DefaultHandlers) {
 	RegisterTyped(router, bus.ActionHumanResponse, handlers.HumanResponse)
+}
+
+func registerSessionActions(router *Router, handlers DefaultHandlers) {
+	RegisterTrace(router, bus.ActionSessionsList, handlers.SessionsList)
 }
 
 func registerTaskActions(router *Router, handlers DefaultHandlers) {

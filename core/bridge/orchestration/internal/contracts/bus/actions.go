@@ -4,6 +4,7 @@ const (
 	ActionAgentSend          = "AGENT_SEND"
 	ActionAgentStop          = "AGENT_STOP"
 	ActionHumanResponse      = "HUMAN_RESPONSE"
+	ActionSessionsList       = "SESSIONS_LIST"
 	ActionConfigGet          = "CONFIG_GET"
 	ActionConfigUpdate       = "CONFIG_UPDATE"
 	ActionConfigProvidersGet = "CONFIG_PROVIDERS_GET"

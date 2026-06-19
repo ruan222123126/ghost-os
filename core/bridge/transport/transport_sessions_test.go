@@ -73,6 +73,43 @@ func TestHandleSessionsListReturnsMetadata(t *testing.T) {
 	}
 }
 
+func TestBusSessionsListReturnsMetadata(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	sess := session.NewSession("system")
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello from bus"})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSIONS_LIST","params":{},"trace_id":"trace-sessions-list"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.([]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("unexpected session count: got %d want 1", len(payload))
+	}
+	entry, ok := payload[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected metadata entry type: %T", payload[0])
+	}
+	if entry["id"] != sess.ID {
+		t.Fatalf("unexpected session id: got %v want %q", entry["id"], sess.ID)
+	}
+}
+
 func TestHandleSessionsSearchMatchesTitle(t *testing.T) {
 	handler, sessionStore := newTestHandlerWithStore(t, nil)
 
