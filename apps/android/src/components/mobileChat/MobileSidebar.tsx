@@ -14,7 +14,6 @@ interface MobileSidebarProps {
   activeHistoryId: number | undefined;
   onClose: () => void;
   onNewSession: () => void;
-  onSelectSession: (id: number, title: string) => void;
   onConnect: () => Promise<void>;
   onOpenSettings: () => void;
 }
@@ -84,9 +83,7 @@ export function MobileSidebar(props: MobileSidebarProps) {
                       className={`history-item ${isActive ? "is-active" : ""} ${item.pinned ? "is-pinned" : ""}`}
                       type="button"
                       title={item.title}
-                      onClick={() => {
-                        props.onSelectSession(item.id, item.title);
-                      }}
+                      onClick={props.onClose}
                     >
                       <span>{item.title}</span>
                       {item.pinned ? (

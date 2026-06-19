@@ -6,8 +6,6 @@ import {
   ChatBubble,
   ChatComposer,
   ChatHeader,
-  ConversationToolPreview,
-  INITIAL_HISTORY_LIST,
   MobileSidebar,
   MoreActionSheet,
   ScrollDownButton,
@@ -54,8 +52,8 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [historyItems, setHistoryItems] = useState<SidebarHistoryItem[]>(() => INITIAL_HISTORY_LIST);
-  const [activeHistoryId, setActiveHistoryId] = useState<number | undefined>(3);
+  const [historyItems, setHistoryItems] = useState<SidebarHistoryItem[]>([]);
+  const [activeHistoryId, setActiveHistoryId] = useState<number | undefined>();
 
   const canSend = isNonEmptyMessage(message) && status.tone !== "loading";
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
@@ -98,18 +96,6 @@ function App() {
     setIsMoreMenuOpen(false);
     setIsSidebarOpen(false);
     setIsSettingsOpen(true);
-  }
-
-  function openPlaceholderSession(id: number, title: string): void {
-    setReply(undefined);
-    setLastUserMessage(title);
-    setMessage("");
-    setActiveHistoryId(id);
-    setStatus({ tone: "idle", text: "占位会话" });
-    setIsRuntimeMenuOpen(false);
-    setIsMoreMenuOpen(false);
-    setIsSidebarOpen(false);
-    resetScrollDown();
   }
 
   function startNewSession(): void {
@@ -156,7 +142,6 @@ function App() {
         activeHistoryId={activeHistoryId}
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
-        onSelectSession={openPlaceholderSession}
         onConnect={connectBridge}
         onOpenSettings={openSettings}
       />
@@ -193,7 +178,6 @@ function App() {
 
           {lastUserMessage ? <ChatBubble>{lastUserMessage}</ChatBubble> : null}
           <AssistantReply reply={reply} status={status} sessionId={settings.sessionId} />
-          {hasLocalConversation && status.tone !== "error" ? <ConversationToolPreview /> : null}
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}

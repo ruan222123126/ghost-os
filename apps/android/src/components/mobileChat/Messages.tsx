@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 import type { AgentPayload, StatusMessage } from "../../mobileTypes";
-import { EMPTY_STATE_SUGGESTIONS, MOCK_TOOL_CARDS } from "./data";
+import { EMPTY_STATE_SUGGESTIONS } from "./data";
 import { AssistantMarkdownContent } from "./AssistantMarkdownContent";
 import { UiIcon } from "./icons";
 import { MessageCopyButton } from "./MessageCopyButton";
-import { ToolCard } from "./ToolCard";
 import type { UiIconName } from "./types";
 
 interface AssistantIntroProps {
@@ -76,18 +75,6 @@ export function AssistantReply(props: AssistantReplyProps) {
           </>
         )}
         {displaySessionId ? <p className="assistant-meta">Session：{displaySessionId}</p> : null}
-      </div>
-    </AssistantPanel>
-  );
-}
-
-export function ConversationToolPreview() {
-  return (
-    <AssistantPanel>
-      <div className="assistant-tool-preview">
-        {MOCK_TOOL_CARDS.map((card, index) => (
-          <ToolCard key={card.title} card={card} defaultOpen={index === 0} />
-        ))}
       </div>
     </AssistantPanel>
   );
