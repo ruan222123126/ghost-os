@@ -8,6 +8,111 @@
   min-height: 24px;
 }
 
+.thinking-panel {
+  width: 100%;
+  color: #5f6368;
+}
+
+.thinking-panel-toggle {
+  width: fit-content;
+  max-width: 100%;
+  border: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  color: #5f6368;
+  background: transparent;
+  cursor: pointer;
+  transition: color 140ms ease;
+}
+
+.thinking-panel-toggle:hover,
+.thinking-panel-toggle:focus-visible {
+  color: #202124;
+}
+
+.thinking-panel-heading {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thinking-panel-title {
+  min-width: 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.thinking-panel.is-complete .thinking-panel-title {
+  color: #5f6368;
+}
+
+.thinking-panel-elapsed {
+  display: inline-block;
+  min-width: 5ch;
+  color: #5f6368;
+  font-size: 0.82rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.thinking-panel-chevron {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 140ms ease;
+}
+
+.thinking-panel.is-collapsed .thinking-panel-chevron {
+  transform: rotate(-90deg);
+}
+
+.thinking-panel-chevron .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.thinking-sweep-text {
+  background: linear-gradient(
+    120deg,
+    #5f6368 0%,
+    #5f6368 35%,
+    #ffffff 50%,
+    #5f6368 65%,
+    #5f6368 100%
+  );
+  background-size: 360% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: thinking-message-shimmer 2.8s linear infinite;
+}
+
+.thinking-panel-content {
+  max-width: 100%;
+  margin: 10px 0 0 6px;
+  border-left: 1px solid #dadce0;
+  padding: 0 0 0 16px;
+  color: #5f6368;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .assistant-markdown {
   max-width: 100%;
   color: #3c4043;
@@ -262,4 +367,45 @@
     color: #81c995;
   }
 
+  .thinking-panel,
+  .thinking-panel-toggle,
+  .thinking-panel.is-complete .thinking-panel-title,
+  .thinking-panel-elapsed,
+  .thinking-panel-content {
+    color: #a3a7ad;
+  }
+
+  .thinking-panel-toggle:hover,
+  .thinking-panel-toggle:focus-visible {
+    color: #f1f3f4;
+  }
+
+  .thinking-panel-content {
+    border-left-color: #3f4247;
+  }
+
+  .thinking-sweep-text {
+    background: linear-gradient(
+      120deg,
+      #a3a7ad 0%,
+      #a3a7ad 35%,
+      #f1f3f4 50%,
+      #a3a7ad 65%,
+      #a3a7ad 100%
+    );
+    background-size: 360% auto;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+  }
+}
+
+@keyframes thinking-message-shimmer {
+  0% {
+    background-position: 100% center;
+  }
+
+  100% {
+    background-position: 0% center;
+  }
 }

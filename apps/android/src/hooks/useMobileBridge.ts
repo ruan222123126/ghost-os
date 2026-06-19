@@ -2,6 +2,15 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createTraceId, errorMessage, hasTauriRuntime } from "../lib/bridgeBus";
 import type { BridgeBusCommand, BridgeEnvelope } from "../lib/bridgeBus";
+import { streamAgentMessageHTTP } from "../lib/agentStream";
+import type { AgentStreamEvent } from "../lib/agentStream";
+import {
+  createAgentPayloadFromRuntime,
+  createMobileAgentStreamRuntime,
+  projectMobileAgentStreamEvent,
+  streamAgentMessageWebRTC,
+} from "../lib/mobileAgentStreamRuntime";
+import type { MobileAgentStreamProjector } from "../lib/mobileAgentStreamRuntime";
 import { loadMobileCredential } from "../lib/mobileCredentials";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
@@ -29,6 +38,13 @@ function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): strin
   }
 
   return `webrtc:${pairing.deviceId}:${pairing.pcId}:${pairing.signalingUrl}`;
+}
+
+function resolveConnectedWebRTCClient(client: MobileWebRTCBridge | undefined): MobileWebRTCBridge {
+  if (!client) {
+    throw new Error("WebRTC 尚未连接");
+  }
+  return client;
 }
 
 export function useMobileBridge() {
@@ -200,26 +216,60 @@ export function useMobileBridge() {
 
   const sendAgentMessage = useCallback(
     async (options: SendAgentMessageOptions): Promise<boolean> => {
+      const traceId = createTraceId("android-agent-stream");
+      const requestId = createTraceId("android-agent-stream-request");
+      const initialSessionId = settings.sessionId.trim();
+      const runtime = createMobileAgentStreamRuntime(initialSessionId);
+      const params = {
+        message: options.message,
+        ...(initialSessionId ? { session_id: initialSessionId } : {}),
+      };
+      const projector: MobileAgentStreamProjector = {
+        commitReply: (nextRuntime) => {
+          setReply(createAgentPayloadFromRuntime(nextRuntime));
+        },
+        commitSessionId: (sessionId) => {
+          setSettings((current) => ({
+            ...current,
+            sessionId,
+          }));
+        },
+        setStatus,
+      };
+
+      setReply(createAgentPayloadFromRuntime(runtime));
       setStatus({ tone: "loading", text: "发送中" });
       try {
-        const payload = await requestBridge<AgentPayload>("AGENT_SEND", {
-          message: options.message,
-          ...(settings.sessionId.trim() ? { session_id: settings.sessionId.trim() } : {}),
-        });
-        setReply(payload);
-        setSettings((current) => ({
-          ...current,
-          sessionId: payload.session_id || current.sessionId,
-        }));
-        setStatus({ tone: "success", text: "回复已返回" });
+        const applyEvent = (event: AgentStreamEvent) => {
+          projectMobileAgentStreamEvent(event, runtime, projector);
+        };
+        const result = settings.connectionMode === "http"
+          ? await streamAgentMessageHTTP({
+            apiToken: apiToken.trim() || undefined,
+            baseUrl: bridgeUrl,
+            message: options.message,
+            onEvent: applyEvent,
+            requestId,
+            sessionId: initialSessionId,
+            traceId,
+          })
+          : await streamAgentMessageWebRTC(resolveConnectedWebRTCClient(webRTCClientRef.current), params, traceId, applyEvent);
+        const resolvedSessionId = result.sessionId?.trim();
+        if (resolvedSessionId) {
+          runtime.sessionId = resolvedSessionId;
+          projector.commitSessionId(resolvedSessionId);
+          projector.commitReply(runtime);
+        }
+        if (!result.awaitingHuman) {
+          setStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
+        }
         return true;
       } catch (error) {
-        setReply(undefined);
         setStatus({ tone: "error", text: errorMessage(error) });
         return false;
       }
     },
-    [requestBridge, settings.sessionId],
+    [apiToken, bridgeUrl, settings.connectionMode, settings.sessionId],
   );
 
   return {

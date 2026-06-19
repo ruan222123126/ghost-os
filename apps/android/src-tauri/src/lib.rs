@@ -1,13 +1,17 @@
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
+const BRIDGE_AGENT_STREAM_PATH: &str = "api/agent/stream";
+const BRIDGE_AGENT_STREAM_CHUNK_EVENT: &str = "bridge-agent-stream-chunk";
 const BRIDGE_BUS_PATH: &str = "api/bus";
 const REQUEST_TIMEOUT_SECS: u64 = 60;
+const SSE_CONTENT_TYPE: &str = "text/event-stream";
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,10 +32,29 @@ struct BridgeBusCommand {
     trace_id: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BridgeAgentStreamCommand {
+    base_url: String,
+    api_token: Option<String>,
+    message: String,
+    request_id: String,
+    session_id: Option<String>,
+    trace_id: String,
+}
+
 #[derive(Serialize)]
 struct BridgeBusEnvelope<'a> {
     action: &'a str,
     params: &'a Value,
+    trace_id: &'a str,
+}
+
+#[derive(Serialize)]
+struct BridgeAgentStreamBody<'a> {
+    message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    session_id: Option<&'a str>,
     trace_id: &'a str,
 }
 
@@ -40,6 +63,13 @@ struct BridgeBusResponse {
     status: String,
     payload: Value,
     error: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct BridgeAgentStreamChunk {
+    request_id: String,
+    chunk: Vec<u8>,
 }
 
 #[tauri::command]
@@ -93,6 +123,44 @@ async fn bridge_bus_request(request: BridgeBusCommand) -> Result<BridgeBusRespon
 }
 
 #[tauri::command]
+async fn bridge_agent_stream(
+    app: tauri::AppHandle,
+    request: BridgeAgentStreamCommand,
+) -> Result<(), String> {
+    validate_agent_stream_request(&request)?;
+    let url = bridge_agent_stream_url(&request.base_url)?;
+    let message = request.message.trim();
+    let trace_id = request.trace_id.trim();
+    let session_id = request
+        .session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let body = BridgeAgentStreamBody {
+        message,
+        session_id,
+        trace_id,
+    };
+
+    let client = reqwest::Client::builder()
+        .build()
+        .map_err(|err| format!("create bridge stream HTTP client failed: {err}"))?;
+    let mut builder = client
+        .post(url)
+        .header(reqwest::header::ACCEPT, SSE_CONTENT_TYPE)
+        .json(&body);
+    if let Some(token) = normalized_token(request.api_token.clone()) {
+        builder = builder.header("X-API-Token", token);
+    }
+
+    let response = builder
+        .send()
+        .await
+        .map_err(|err| format!("bridge stream request failed: {err}"))?;
+    ensure_stream_response(response, app, request.request_id).await
+}
+
+#[tauri::command]
 fn mobile_credential_save(
     app: tauri::AppHandle,
     device_id: String,
@@ -127,6 +195,14 @@ fn mobile_credential_delete(app: tauri::AppHandle, device_id: String) -> Result<
 }
 
 fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
+    bridge_api_url(base_url, BRIDGE_BUS_PATH)
+}
+
+fn bridge_agent_stream_url(base_url: &str) -> Result<reqwest::Url, String> {
+    bridge_api_url(base_url, BRIDGE_AGENT_STREAM_PATH)
+}
+
+fn bridge_api_url(base_url: &str, path: &str) -> Result<reqwest::Url, String> {
     let trimmed = base_url.trim();
     if trimmed.is_empty() {
         return Err("bridge URL is required".to_string());
@@ -140,8 +216,8 @@ fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
     let parsed =
         reqwest::Url::parse(&normalized).map_err(|err| format!("invalid bridge URL: {err}"))?;
     parsed
-        .join(BRIDGE_BUS_PATH)
-        .map_err(|err| format!("build bridge bus URL failed: {err}"))
+        .join(path)
+        .map_err(|err| format!("build bridge URL failed: {err}"))
 }
 
 fn validate_envelope(envelope: &BridgeBusEnvelope<'_>) -> Result<(), String> {
@@ -149,6 +225,19 @@ fn validate_envelope(envelope: &BridgeBusEnvelope<'_>) -> Result<(), String> {
         return Err("bridge action is required".to_string());
     }
     if envelope.trace_id.is_empty() {
+        return Err("trace_id is required".to_string());
+    }
+    Ok(())
+}
+
+fn validate_agent_stream_request(request: &BridgeAgentStreamCommand) -> Result<(), String> {
+    if request.request_id.trim().is_empty() {
+        return Err("stream request_id is required".to_string());
+    }
+    if request.message.trim().is_empty() {
+        return Err("agent message is required".to_string());
+    }
+    if request.trace_id.trim().is_empty() {
         return Err("trace_id is required".to_string());
     }
     Ok(())
@@ -174,6 +263,88 @@ fn decode_bridge_response(body: &str) -> Result<BridgeBusResponse, String> {
         "success" | "error" => Ok(decoded),
         other => Err(format!("bridge returned invalid envelope status: {other}")),
     }
+}
+
+async fn ensure_stream_response(
+    response: reqwest::Response,
+    app: tauri::AppHandle,
+    request_id: String,
+) -> Result<(), String> {
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    if status.is_success() && is_sse_content_type(&content_type) {
+        return forward_stream_chunks(response, app, request_id).await;
+    }
+
+    let body = response
+        .text()
+        .await
+        .map_err(|err| format!("read bridge stream error response failed: {err}"))?;
+    Err(parse_unexpected_stream_response_body(
+        status,
+        &content_type,
+        &body,
+    ))
+}
+
+async fn forward_stream_chunks(
+    response: reqwest::Response,
+    app: tauri::AppHandle,
+    request_id: String,
+) -> Result<(), String> {
+    let mut stream = response.bytes_stream();
+    while let Some(item) = stream.next().await {
+        let bytes = item.map_err(|err| format!("read bridge stream failed: {err}"))?;
+        app.emit(
+            BRIDGE_AGENT_STREAM_CHUNK_EVENT,
+            BridgeAgentStreamChunk {
+                request_id: request_id.clone(),
+                chunk: bytes.to_vec(),
+            },
+        )
+        .map_err(|err| format!("emit bridge stream chunk failed: {err}"))?;
+    }
+    Ok(())
+}
+
+fn is_sse_content_type(content_type: &str) -> bool {
+    content_type.to_ascii_lowercase().contains(SSE_CONTENT_TYPE)
+}
+
+fn parse_unexpected_stream_response_body(
+    status: reqwest::StatusCode,
+    content_type: &str,
+    body: &str,
+) -> String {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        if status.is_success() && !is_sse_content_type(content_type) {
+            return format!(
+                "expected {SSE_CONTENT_TYPE} response but received {}",
+                if content_type.trim().is_empty() {
+                    "empty content-type"
+                } else {
+                    content_type
+                }
+            );
+        }
+        return format!("bridge stream request failed with status {status}");
+    }
+
+    if let Ok(payload) = serde_json::from_str::<Value>(trimmed) {
+        if let Some(error) = payload.get("error").and_then(Value::as_str) {
+            if !error.trim().is_empty() {
+                return error.trim().to_string();
+            }
+        }
+    }
+
+    trimmed.to_string()
 }
 
 fn mobile_credential_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -246,11 +417,46 @@ fn normalize_secret(raw: &str) -> Result<String, String> {
     Ok(value.to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bridge_agent_stream_url_joins_base_url() {
+        let url = bridge_agent_stream_url("http://127.0.0.1:8711").expect("stream URL");
+
+        assert_eq!(url.as_str(), "http://127.0.0.1:8711/api/agent/stream");
+    }
+
+    #[test]
+    fn parse_unexpected_stream_response_prefers_error_field() {
+        let message = parse_unexpected_stream_response_body(
+            reqwest::StatusCode::BAD_REQUEST,
+            "application/json",
+            r#"{"status":"error","payload":{},"error":"missing model"}"#,
+        );
+
+        assert_eq!(message, "missing model");
+    }
+
+    #[test]
+    fn parse_unexpected_stream_response_reports_wrong_content_type() {
+        let message =
+            parse_unexpected_stream_response_body(reqwest::StatusCode::OK, "application/json", "");
+
+        assert_eq!(
+            message,
+            "expected text/event-stream response but received application/json"
+        );
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             host_profile,
+            bridge_agent_stream,
             bridge_bus_request,
             mobile_credential_save,
             mobile_credential_load,

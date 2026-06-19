@@ -48,6 +48,7 @@ export interface AgentPayload {
   message: string;
   session_id: string;
   session_ended: boolean;
+  thinking?: string;
   mode?: string;
 }
 

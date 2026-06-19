@@ -1,4 +1,6 @@
 import type { MobilePairingInfo } from "../mobileTypes";
+import { parseAgentStreamEvent } from "./agentStream";
+import type { AgentStreamEvent } from "./agentStream";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 const FRAME_AUTH_CHALLENGE = "auth_challenge";
@@ -7,6 +9,9 @@ const FRAME_AUTH_OK = "auth_ok";
 const FRAME_AUTH_ERROR = "auth_error";
 const FRAME_REQUEST = "request";
 const FRAME_RESPONSE = "response";
+const FRAME_STREAM_START = "stream_start";
+const FRAME_STREAM_EVENT = "stream_event";
+const FRAME_STREAM_END = "stream_end";
 const SIGNAL_MOBILE_CONNECT = "mobile.connect";
 const SIGNAL_OFFER = "offer";
 const SIGNAL_ANSWER = "answer";
@@ -36,12 +41,19 @@ interface DataChannelFrame {
   status?: "success" | "error";
   payload?: unknown;
   error?: string;
+  event?: string;
 }
 
 interface PendingRequest {
   resolve: (payload: unknown) => void;
   reject: (error: Error) => void;
   timeout: number;
+}
+
+interface PendingStream {
+  resolve: (payload: unknown) => void;
+  reject: (error: Error) => void;
+  onEvent: (event: AgentStreamEvent) => void;
 }
 
 export function parsePairingUri(raw: string): { pairing: MobilePairingInfo; secret: string } {
@@ -80,6 +92,7 @@ export class MobileWebRTCBridge {
   private readonly pairing: MobilePairingInfo;
   private readonly secret: string;
   private readonly pending = new Map<string, PendingRequest>();
+  private readonly streams = new Map<string, PendingStream>();
   private channel?: RTCDataChannel;
   private peer?: RTCPeerConnection;
   private pendingRemoteCandidates: RTCIceCandidateInit[] = [];
@@ -166,6 +179,29 @@ export class MobileWebRTCBridge {
     return payload as TPayload;
   }
 
+  async streamAgent<TPayload>(
+    params: Record<string, unknown>,
+    traceId: string,
+    onEvent: (event: AgentStreamEvent) => void,
+  ): Promise<TPayload> {
+    if (!this.channel || this.channel.readyState !== "open") {
+      throw new Error("WebRTC DataChannel 未连接");
+    }
+    await this.readyPromise;
+    const requestId = crypto.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    const payload = await new Promise<unknown>((resolve, reject) => {
+      this.streams.set(requestId, { resolve, reject, onEvent });
+      this.sendFrame({
+        type: FRAME_STREAM_START,
+        request_id: requestId,
+        action: "AGENT_SEND",
+        params,
+        trace_id: traceId,
+      });
+    });
+    return payload as TPayload;
+  }
+
   close(): void {
     this.failAll(new Error("WebRTC connection closed"));
     this.channel?.close();
@@ -236,6 +272,12 @@ export class MobileWebRTCBridge {
       case FRAME_RESPONSE:
         this.resolveResponse(frame);
         break;
+      case FRAME_STREAM_EVENT:
+        this.resolveStreamEvent(frame);
+        break;
+      case FRAME_STREAM_END:
+        this.resolveStreamEnd(frame);
+        break;
       default:
         break;
     }
@@ -270,6 +312,40 @@ export class MobileWebRTCBridge {
     pending.resolve(frame.payload);
   }
 
+  private resolveStreamEvent(frame: DataChannelFrame): void {
+    if (!frame.request_id) {
+      return;
+    }
+    const pending = this.streams.get(frame.request_id);
+    if (!pending) {
+      return;
+    }
+
+    try {
+      pending.onEvent(parseAgentStreamEvent(frame.payload));
+    } catch (error) {
+      this.streams.delete(frame.request_id);
+      pending.reject(errorFromUnknown(error));
+    }
+  }
+
+  private resolveStreamEnd(frame: DataChannelFrame): void {
+    if (!frame.request_id) {
+      return;
+    }
+    const pending = this.streams.get(frame.request_id);
+    if (!pending) {
+      return;
+    }
+
+    this.streams.delete(frame.request_id);
+    if (frame.status === "error") {
+      pending.reject(new Error(frame.error || "Bridge stream returned an error"));
+      return;
+    }
+    pending.resolve(frame.payload);
+  }
+
   private sendSignal(message: SignalMessage): void {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       return;
@@ -290,6 +366,10 @@ export class MobileWebRTCBridge {
       window.clearTimeout(pending.timeout);
       pending.reject(error);
       this.pending.delete(requestId);
+    }
+    for (const [requestId, pending] of this.streams) {
+      pending.reject(error);
+      this.streams.delete(requestId);
     }
   }
 
