@@ -112,6 +112,46 @@
         "rust": { "name": "ProviderListResponse" },
         "kotlin": { "name": "ProviderListResponse" }
       }
+    },
+    "providerBusUpdateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "provider"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "provider": {
+          "$ref": "#/$defs/providerConfigInput"
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 240,
+        "go": { "name": "providerBusUpdateRequest" },
+        "ts": { "name": "ProviderBusUpdateRequest" },
+        "rust": { "name": "ProviderBusUpdateRequest" },
+        "kotlin": { "name": "ProviderBusUpdateRequest" }
+      }
+    },
+    "providerBusDeleteRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 250,
+        "go": { "name": "providerBusDeleteRequest" },
+        "ts": { "name": "ProviderBusDeleteRequest" },
+        "rust": { "name": "ProviderBusDeleteRequest" },
+        "kotlin": { "name": "ProviderBusDeleteRequest" }
+      }
     }
   }
 }

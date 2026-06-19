@@ -9,22 +9,25 @@ import (
 )
 
 const (
-	busActionAgentSend          = bus.ActionAgentSend
-	busActionAgentStop          = bus.ActionAgentStop
-	busActionHumanResponse      = bus.ActionHumanResponse
-	busActionSessionsList       = bus.ActionSessionsList
-	busActionSessionGet         = bus.ActionSessionGet
-	busActionConfigGet          = bus.ActionConfigGet
-	busActionConfigUpdate       = bus.ActionConfigUpdate
-	busActionConfigProvidersGet = bus.ActionConfigProvidersGet
-	busActionTaskCreate         = bus.ActionTaskCreate
-	busActionTaskList           = bus.ActionTaskList
-	busActionTaskGet            = bus.ActionTaskGet
-	busActionTaskUpdate         = bus.ActionTaskUpdate
-	busActionTaskRunNow         = bus.ActionTaskRunNow
-	busActionTaskStop           = bus.ActionTaskStop
-	busActionTaskLogs           = bus.ActionTaskLogs
-	busActionTaskDelete         = bus.ActionTaskDelete
+	busActionAgentSend            = bus.ActionAgentSend
+	busActionAgentStop            = bus.ActionAgentStop
+	busActionHumanResponse        = bus.ActionHumanResponse
+	busActionSessionsList         = bus.ActionSessionsList
+	busActionSessionGet           = bus.ActionSessionGet
+	busActionConfigGet            = bus.ActionConfigGet
+	busActionConfigUpdate         = bus.ActionConfigUpdate
+	busActionConfigProvidersGet   = bus.ActionConfigProvidersGet
+	busActionConfigProviderCreate = bus.ActionConfigProviderCreate
+	busActionConfigProviderUpdate = bus.ActionConfigProviderUpdate
+	busActionConfigProviderDelete = bus.ActionConfigProviderDelete
+	busActionTaskCreate           = bus.ActionTaskCreate
+	busActionTaskList             = bus.ActionTaskList
+	busActionTaskGet              = bus.ActionTaskGet
+	busActionTaskUpdate           = bus.ActionTaskUpdate
+	busActionTaskRunNow           = bus.ActionTaskRunNow
+	busActionTaskStop             = bus.ActionTaskStop
+	busActionTaskLogs             = bus.ActionTaskLogs
+	busActionTaskDelete           = bus.ActionTaskDelete
 )
 
 const (
@@ -82,6 +85,7 @@ type providerConfigInput = api.ProviderConfigInput
 type taskRunCardEventPayload = api.TaskRunCardEventPayload
 type providerListResponse = api.ProviderListResponse
 type taskRunCardFinishedPayload = api.TaskRunCardFinishedPayload
+type providerBusUpdateRequest = api.ProviderBusUpdateRequest
 type setActiveProviderRequest = api.SetActiveProviderRequest
 type workflowNodeContract = api.WorkflowNodeContract
 type workflowEdgeContract = api.WorkflowEdgeContract
@@ -98,6 +102,7 @@ type orchestrationDefinitionContract = api.OrchestrationDefinitionContract
 type workflowAgentNodeContract = api.WorkflowAgentNodeContract
 type workflowIfNodeContract = api.WorkflowIfNodeContract
 type workflowLoopNodeContract = api.WorkflowLoopNodeContract
+type providerBusDeleteRequest = api.ProviderBusDeleteRequest
 type workflowStartNodeContract = api.WorkflowStartNodeContract
 type workflowInputVariableContract = api.WorkflowInputVariableContract
 

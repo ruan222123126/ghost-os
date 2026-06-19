@@ -98,6 +98,8 @@ OUTPUT_GROUPS = (
             "providerConfig",
             "providerConfigInput",
             "providerListResponse",
+            "providerBusUpdateRequest",
+            "providerBusDeleteRequest",
             "setActiveProviderRequest",
         ),
     ),

@@ -32,10 +32,28 @@ export interface ConfigPayload {
 
 export interface ProviderConfigPayload {
   name: string;
-  type: string;
+  type: ProviderType;
   base_url: string;
   models?: string[];
+  context_window_tokens?: number;
+  response_reserve_tokens?: number;
+  model_context_window_tokens?: Record<string, number>;
+  model_response_reserve_tokens?: Record<string, number>;
   api_key_set: boolean;
+}
+
+export type ProviderType = "openai" | "anthropic" | "custom" | "codex";
+
+export interface ProviderConfigInputPayload {
+  name: string;
+  type: ProviderType;
+  base_url?: string;
+  api_key?: string;
+  models?: string[];
+  context_window_tokens?: number;
+  response_reserve_tokens?: number;
+  model_context_window_tokens?: Record<string, number>;
+  model_response_reserve_tokens?: Record<string, number>;
 }
 
 export interface ProviderListPayload {

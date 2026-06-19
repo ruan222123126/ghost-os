@@ -192,6 +192,12 @@
         "providerListResponse": {
             "$ref": "./schema/defs/config_provider.json#/$defs/providerListResponse"
         },
+        "providerBusUpdateRequest": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerBusUpdateRequest"
+        },
+        "providerBusDeleteRequest": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerBusDeleteRequest"
+        },
         "setActiveProviderRequest": {
             "$ref": "./schema/defs/config_runtime.json#/$defs/setActiveProviderRequest"
         },

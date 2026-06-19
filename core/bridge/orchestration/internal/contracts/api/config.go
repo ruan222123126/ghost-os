@@ -87,6 +87,17 @@ type ProviderListResponse struct {
 	ActiveProvider string                   `json:"active_provider"`
 }
 
+type ProviderBusUpdateRequest struct {
+	Name     string              `json:"name"`
+	Provider ProviderConfigInput `json:"provider"`
+	TraceID  string              `json:"trace_id,omitempty"`
+}
+
+type ProviderBusDeleteRequest struct {
+	Name    string `json:"name"`
+	TraceID string `json:"trace_id,omitempty"`
+}
+
 type SetActiveProviderRequest struct {
 	Name    string `json:"name"`
 	TraceID string `json:"trace_id,omitempty"`

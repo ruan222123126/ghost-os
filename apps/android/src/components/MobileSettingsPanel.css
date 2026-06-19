@@ -488,6 +488,21 @@
   background: #e0e0e0;
 }
 
+.mobile-settings-item-button:disabled {
+  color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.mobile-settings-item-button:disabled:hover,
+.mobile-settings-item-button:disabled:focus-visible {
+  background: transparent;
+}
+
+.mobile-settings-item-button:disabled .mobile-settings-icon {
+  color: #9ca3af;
+}
+
 .mobile-settings-item-copy {
   min-width: 0;
   display: flex;

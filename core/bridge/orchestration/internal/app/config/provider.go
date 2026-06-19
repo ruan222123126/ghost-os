@@ -13,9 +13,9 @@ import (
 
 const (
 	ActionProvidersGet      = bus.ActionConfigProvidersGet
-	ActionProviderCreate    = "CONFIG_PROVIDER_CREATE"
-	ActionProviderUpdate    = "CONFIG_PROVIDER_UPDATE"
-	ActionProviderDelete    = "CONFIG_PROVIDER_DELETE"
+	ActionProviderCreate    = bus.ActionConfigProviderCreate
+	ActionProviderUpdate    = bus.ActionConfigProviderUpdate
+	ActionProviderDelete    = bus.ActionConfigProviderDelete
 	ActionProviderSetActive = "CONFIG_PROVIDER_SET_ACTIVE"
 )
 

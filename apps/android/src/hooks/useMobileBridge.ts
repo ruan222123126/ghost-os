@@ -19,6 +19,7 @@ import type {
   AgentPayload,
   ConfigPayload,
   HostProfile,
+  ProviderConfigInputPayload,
   ProviderListPayload,
   SessionDetail,
   SessionMetadata,
@@ -64,6 +65,15 @@ function resolveConnectedWebRTCClient(client: MobileWebRTCBridge | undefined): M
 
 function connectedStatusText(mode: StoredSettings["connectionMode"]): string {
   return mode === "webrtc" ? "WebRTC 已连接" : "HTTP fallback 已连接";
+}
+
+function stringsEqualIgnoreCase(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
+function firstProviderModel(providerList: ProviderListPayload | undefined, providerName: string): string | undefined {
+  const provider = providerList?.providers.find((item) => stringsEqualIgnoreCase(item.name, providerName));
+  return provider?.models?.map((item) => item.trim()).find(Boolean);
 }
 
 export function useMobileBridge() {
@@ -171,15 +181,115 @@ export function useMobileBridge() {
     [requestBridgeHTTP, requestBridgeWebRTC, settings.connectionMode],
   );
 
+  const loadProviders = useCallback(async (): Promise<ProviderListPayload> => {
+    const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDERS_GET", {});
+    setProviderList(payload);
+    return payload;
+  }, [requestBridge]);
+
   const refreshRuntimeConfig = useCallback(async (): Promise<ConfigPayload> => {
     const [configPayload, providersPayload] = await Promise.all([
       requestBridge<ConfigPayload>("CONFIG_GET", {}),
-      requestBridge<ProviderListPayload>("CONFIG_PROVIDERS_GET", {}),
+      loadProviders(),
     ]);
     setConfig(configPayload);
     setProviderList(providersPayload);
     return configPayload;
+  }, [loadProviders, requestBridge]);
+
+  const refreshProviders = useCallback(async (): Promise<boolean> => {
+    setStatus({ tone: "loading", text: "供应商刷新中" });
+    try {
+      await loadProviders();
+      setStatus({ tone: "success", text: "供应商已刷新" });
+      return true;
+    } catch (error) {
+      setStatus({ tone: "error", text: errorMessage(error) });
+      return false;
+    }
+  }, [loadProviders]);
+
+  const syncConfigAfterProviderWrite = useCallback(async (): Promise<void> => {
+    const payload = await requestBridge<ConfigPayload>("CONFIG_GET", {});
+    setConfig(payload);
   }, [requestBridge]);
+
+  const createProvider = useCallback(
+    async (provider: ProviderConfigInputPayload): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "供应商保存中" });
+      try {
+        const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_CREATE", { ...provider });
+        setProviderList(payload);
+        await syncConfigAfterProviderWrite();
+        setStatus({ tone: "success", text: "供应商已新增" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge, syncConfigAfterProviderWrite],
+  );
+
+  const updateProvider = useCallback(
+    async (name: string, provider: ProviderConfigInputPayload): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "供应商保存中" });
+      try {
+        const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_UPDATE", { name, provider });
+        setProviderList(payload);
+        await syncConfigAfterProviderWrite();
+        setStatus({ tone: "success", text: "供应商已保存" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge, syncConfigAfterProviderWrite],
+  );
+
+  const deleteProvider = useCallback(
+    async (name: string): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "供应商删除中" });
+      try {
+        const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_DELETE", { name });
+        setProviderList(payload);
+        await syncConfigAfterProviderWrite();
+        setStatus({ tone: "success", text: "供应商已删除" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge, syncConfigAfterProviderWrite],
+  );
+
+  const activateProvider = useCallback(
+    async (name: string): Promise<boolean> => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return false;
+      }
+      setStatus({ tone: "loading", text: "供应商切换中" });
+      try {
+        const params: Record<string, unknown> = { provider: trimmed };
+        const firstModel = firstProviderModel(providerList, trimmed);
+        if (config?.model_selection_enabled !== false && firstModel) {
+          params.model = firstModel;
+        }
+        const configPayload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", params);
+        setConfig(configPayload);
+        await loadProviders();
+        setStatus({ tone: "success", text: "供应商已激活" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [config?.model_selection_enabled, loadProviders, providerList, requestBridge],
+  );
 
   const refreshSessions = useCallback(async (): Promise<SessionMetadata[]> => {
     const payload = parseSessionMetadataList(await requestBridge<unknown>("SESSIONS_LIST", {}));
@@ -260,8 +370,7 @@ export function useMobileBridge() {
       try {
         const payload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", { model: trimmed });
         setConfig(payload);
-        const providersPayload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDERS_GET", {});
-        setProviderList(providersPayload);
+        await loadProviders();
         setStatus({ tone: "success", text: "模型已切换" });
         return true;
       } catch (error) {
@@ -269,7 +378,7 @@ export function useMobileBridge() {
         return false;
       }
     },
-    [config?.model, requestBridge],
+    [config?.model, loadProviders, requestBridge],
   );
 
   const sendAgentMessage = useCallback(
@@ -337,13 +446,17 @@ export function useMobileBridge() {
   );
 
   return {
+    activateProvider,
     bridgeUrl,
     config,
     connectBridge,
     connectionStatus,
+    createProvider,
+    deleteProvider,
     getSession,
     host,
     providerList,
+    refreshProviders,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
@@ -352,5 +465,6 @@ export function useMobileBridge() {
     settings,
     switchModel,
     status,
+    updateProvider,
   };
 }

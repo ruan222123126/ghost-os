@@ -650,6 +650,14 @@ pub struct TaskRunCardFinishedPayload {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderBusUpdateRequest {
+    pub name: String,
+    pub provider: ProviderConfigInput,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct SetActiveProviderRequest {
     pub name: String,
     #[serde(default)]
@@ -846,6 +854,13 @@ pub struct WorkflowLoopNode {
     pub max_iterations: i64,
     pub body_node_id: String,
     pub exit_node_id: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderBusDeleteRequest {
+    pub name: String,
+    #[serde(default)]
+    pub trace_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]

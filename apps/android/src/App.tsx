@@ -38,13 +38,17 @@ function assistantMessageStatus(): StatusMessage {
 
 function App() {
   const {
+    activateProvider,
     bridgeUrl,
     config,
     connectBridge,
     connectionStatus,
+    createProvider,
+    deleteProvider,
     getSession,
     host,
     providerList,
+    refreshProviders,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
@@ -52,6 +56,7 @@ function App() {
     settings,
     switchModel,
     status,
+    updateProvider,
   } = useMobileBridge();
   const [message, setMessage] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -226,10 +231,17 @@ function App() {
       <MobileSettingsPanel
         open={isSettingsOpen}
         settings={settings}
+        config={config}
         connectionStatus={connectionStatus}
+        providerList={providerList}
         onClose={() => setIsSettingsOpen(false)}
         onConnect={connectBridge}
+        onActivateProvider={activateProvider}
+        onCreateProvider={createProvider}
+        onDeleteProvider={deleteProvider}
+        onRefreshProviders={refreshProviders}
         onSettingsChange={setSettings}
+        onUpdateProvider={updateProvider}
       />
 
       <MoreActionSheet

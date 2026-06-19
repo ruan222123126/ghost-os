@@ -241,6 +241,15 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		ConfigProvidersGet: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeProvidersGetAction(traceID)
 		},
+		ConfigProviderCreate: func(_ context.Context, params providerCreateRequest, traceID string) (ServiceResult, error) {
+			return service.executeProviderCreateAction(params, traceID)
+		},
+		ConfigProviderUpdate: func(_ context.Context, params providerBusUpdateRequest, traceID string) (ServiceResult, error) {
+			return service.executeProviderUpdateAction(params.Name, params.Provider, traceID)
+		},
+		ConfigProviderDelete: func(_ context.Context, params providerBusDeleteRequest, traceID string) (ServiceResult, error) {
+			return service.executeProviderDeleteAction(params.Name, traceID)
+		},
 		HumanResponse: service.executeHumanResponseAction,
 		SessionsList: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeSessionsListAction(traceID)

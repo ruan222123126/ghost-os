@@ -3,19 +3,33 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Globe, Key, Link2, Server, Trash2, Wifi } from "lucide-react";
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
-import type { StatusMessage, StoredSettings } from "../mobileTypes";
+import type {
+  ConfigPayload,
+  ProviderConfigInputPayload,
+  ProviderListPayload,
+  StatusMessage,
+  StoredSettings,
+} from "../mobileTypes";
+import { MobileProviderSettings } from "./MobileProviderSettings";
 import "./MobileSettingsPanel.css";
 
 interface MobileSettingsPanelProps {
+  config: ConfigPayload | undefined;
   connectionStatus: StatusMessage;
   open: boolean;
+  providerList: ProviderListPayload | undefined;
+  onActivateProvider: (name: string) => Promise<boolean>;
   onClose: () => void;
   onConnect: () => Promise<void>;
+  onCreateProvider: (provider: ProviderConfigInputPayload) => Promise<boolean>;
+  onDeleteProvider: (name: string) => Promise<boolean>;
+  onRefreshProviders: () => Promise<boolean>;
   onSettingsChange: Dispatch<SetStateAction<StoredSettings>>;
+  onUpdateProvider: (name: string, provider: ProviderConfigInputPayload) => Promise<boolean>;
   settings: StoredSettings;
 }
 
-type SettingsView = "root" | "connection";
+type SettingsView = "root" | "connection" | "providers";
 
 export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
   const [view, setView] = useState<SettingsView>("root");
@@ -76,7 +90,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
   }
 
   function handleBack(): void {
-    if (view === "connection") {
+    if (view !== "root") {
       setView("root");
       return;
     }
@@ -97,7 +111,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
           <button className="mobile-settings-back" type="button" aria-label="返回" onClick={handleBack}>
             <ArrowLeft className="mobile-settings-icon" aria-hidden="true" strokeWidth={2} />
           </button>
-          <h1 id="mobile-settings-title">{view === "connection" ? "连接" : "设置"}</h1>
+          <h1 id="mobile-settings-title">{titleForView(view)}</h1>
           <span className="mobile-settings-header-spacer" aria-hidden="true" />
         </header>
 
@@ -117,10 +131,23 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onSaveBridgeURL={saveBridgeURL}
               onSetConnectionMode={setConnectionMode}
             />
+          ) : view === "providers" ? (
+            <MobileProviderSettings
+              config={props.config}
+              providerList={props.providerList}
+              onActivateProvider={props.onActivateProvider}
+              onCreateProvider={props.onCreateProvider}
+              onDeleteProvider={props.onDeleteProvider}
+              onRefreshProviders={props.onRefreshProviders}
+              onUpdateProvider={props.onUpdateProvider}
+            />
           ) : (
             <SettingsRoot
               connectionSublabel={connectionSublabel(props.settings)}
+              providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
+              providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
               onOpenConnection={() => setView("connection")}
+              onOpenProviders={() => setView("providers")}
             />
           )}
         </div>
@@ -140,6 +167,7 @@ function SettingsSection(props: { title: string; children: ReactNode }) {
 
 function SettingsButton(props: {
   icon: ComponentType<{ className?: string; "aria-hidden"?: true; strokeWidth?: number }>;
+  disabled?: boolean;
   label: string;
   onClick?: () => void;
   sublabel?: string;
@@ -147,7 +175,7 @@ function SettingsButton(props: {
   const Icon = props.icon;
 
   return (
-    <button className="mobile-settings-item-button" type="button" onClick={props.onClick}>
+    <button className="mobile-settings-item-button" type="button" disabled={props.disabled} onClick={props.onClick}>
       <Icon className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
       <span className="mobile-settings-item-copy">
         <span>{props.label}</span>
@@ -157,12 +185,25 @@ function SettingsButton(props: {
   );
 }
 
-function SettingsRoot(props: { connectionSublabel: string; onOpenConnection: () => void }) {
+function SettingsRoot(props: {
+  connectionSublabel: string;
+  providerDisabled: boolean;
+  providerSublabel: string;
+  onOpenConnection: () => void;
+  onOpenProviders: () => void;
+}) {
   return (
     <>
       <SettingsSection title="连接">
         <div className="mobile-settings-card">
           <SettingsButton icon={Link2} label="连接" sublabel={props.connectionSublabel} onClick={props.onOpenConnection} />
+          <SettingsButton
+            icon={Server}
+            label="供应商"
+            sublabel={props.providerSublabel}
+            disabled={props.providerDisabled}
+            onClick={props.onOpenProviders}
+          />
         </div>
       </SettingsSection>
 
@@ -173,6 +214,17 @@ function SettingsRoot(props: { connectionSublabel: string; onOpenConnection: () 
       </SettingsSection>
     </>
   );
+}
+
+function titleForView(view: SettingsView): string {
+  switch (view) {
+    case "connection":
+      return "连接";
+    case "providers":
+      return "供应商";
+    case "root":
+      return "设置";
+  }
 }
 
 interface ConnectionSettingsProps {
@@ -330,6 +382,31 @@ function connectionSublabel(settings: StoredSettings): string {
     return "HTTP fallback";
   }
   return settings.pairing ? `WebRTC / ${settings.pairing.pcId}` : "WebRTC / 未配对";
+}
+
+function providerEntryDisabled(
+  connectionStatus: StatusMessage,
+  providerList: ProviderListPayload | undefined,
+): boolean {
+  return connectionStatus.tone !== "success" || !providerList;
+}
+
+function providerSublabel(
+  config: ConfigPayload | undefined,
+  connectionStatus: StatusMessage,
+  providerList: ProviderListPayload | undefined,
+): string {
+  if (connectionStatus.tone !== "success") {
+    return "未连接";
+  }
+  if (!providerList) {
+    return "加载中";
+  }
+  const provider = providerList.active_provider || config?.provider || "";
+  if (provider && config?.model) {
+    return `${provider} / ${config.model}`;
+  }
+  return provider || "未激活";
 }
 
 function SettingsStaticRow(props: {
