@@ -47,6 +47,53 @@ describe("useMobileBridge", () => {
     });
     expect(bridgeBusRequests().every((request) => request.apiToken === "080906")).toBe(true);
   });
+
+  it("does not fail bridge connection when skill management is unsupported", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "SKILL_LIST") {
+        return {
+          error: 'unsupported action "SKILL_LIST", expected one of: AGENT_SEND|CONFIG_GET',
+          payload: {},
+          status: "error",
+        };
+      }
+      return {
+        error: "",
+        payload: payloadForAction(request.action),
+        status: "success",
+      };
+    });
+
+    try {
+      const { result } = renderHook(() => useMobileBridge());
+
+      await result.current.connectBridge();
+
+      await waitFor(() => {
+        expect(result.current.connectionStatus.tone).toBe("success");
+      });
+      await waitFor(() => {
+        expect(result.current.skillListError).toBe("电脑端不支持技能管理");
+      });
+      expect(result.current.config).toEqual({});
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 interface BridgeBusRequest {

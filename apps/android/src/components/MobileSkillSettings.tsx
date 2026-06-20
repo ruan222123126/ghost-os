@@ -4,6 +4,7 @@ import type { SkillPayload, SkillSource } from "../mobileTypes";
 import "./MobileSkillSettings.css";
 
 interface MobileSkillSettingsProps {
+  loadError: string;
   skills: SkillPayload[] | undefined;
   onDeleteSkill: (id: string) => Promise<boolean>;
   onRefreshSkills: () => Promise<boolean>;
@@ -20,6 +21,7 @@ interface SkillCardProps {
 export function MobileSkillSettings(props: MobileSkillSettingsProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const displayError = error || props.loadError;
   const skills = sortSkillsForDisplay(props.skills ?? []);
   const enabledCount = skills.filter((skill) => skill.enabled).length;
 
@@ -65,10 +67,10 @@ export function MobileSkillSettings(props: MobileSkillSettingsProps) {
         </button>
       </div>
 
-      {error ? <p className="mobile-settings-error is-card" role="alert">{error}</p> : null}
+      {displayError ? <p className="mobile-settings-error is-card" role="alert">{displayError}</p> : null}
 
       {props.skills === undefined ? (
-        <div className="mobile-settings-skill-empty-card">技能加载中</div>
+        <div className="mobile-settings-skill-empty-card">{props.loadError ? "技能未加载" : "技能加载中"}</div>
       ) : skills.length === 0 ? (
         <div className="mobile-settings-skill-empty-card">暂无技能</div>
       ) : (

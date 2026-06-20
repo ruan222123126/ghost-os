@@ -33,6 +33,7 @@ interface MobileSettingsPanelProps {
   onUpdateProvider: (name: string, provider: ProviderConfigInputPayload) => Promise<boolean>;
   settings: StoredSettings;
   skillList: SkillPayload[] | undefined;
+  skillListError: string;
 }
 
 type SettingsView = "root" | "connection" | "providers" | "skills";
@@ -159,6 +160,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
           ) : view === "skills" ? (
             <MobileSkillSettings
               skills={props.skillList}
+              loadError={props.skillListError}
               onDeleteSkill={props.onDeleteSkill}
               onRefreshSkills={props.onRefreshSkills}
               onUpdateSkill={props.onUpdateSkill}
@@ -168,8 +170,8 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               connectionSublabel={connectionSublabel(props.settings)}
               providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
               providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
-              skillDisabled={skillEntryDisabled(props.connectionStatus, props.skillList)}
-              skillSublabel={skillSublabel(props.connectionStatus, props.skillList)}
+              skillDisabled={skillEntryDisabled(props.connectionStatus)}
+              skillSublabel={skillSublabel(props.connectionStatus, props.skillList, props.skillListError)}
               onOpenConnection={() => setView("connection")}
               onOpenProviders={() => setView("providers")}
               onOpenSkills={() => setView("skills")}
@@ -441,8 +443,8 @@ function providerEntryDisabled(
   return connectionStatus.tone !== "success" || !providerList;
 }
 
-function skillEntryDisabled(connectionStatus: StatusMessage, skillList: SkillPayload[] | undefined): boolean {
-  return connectionStatus.tone !== "success" || !skillList;
+function skillEntryDisabled(connectionStatus: StatusMessage): boolean {
+  return connectionStatus.tone !== "success";
 }
 
 function providerSublabel(
@@ -463,9 +465,12 @@ function providerSublabel(
   return provider || "未激活";
 }
 
-function skillSublabel(connectionStatus: StatusMessage, skillList: SkillPayload[] | undefined): string {
+function skillSublabel(connectionStatus: StatusMessage, skillList: SkillPayload[] | undefined, error: string): string {
   if (connectionStatus.tone !== "success") {
     return "未连接";
+  }
+  if (error) {
+    return error;
   }
   if (!skillList) {
     return "加载中";

@@ -29,6 +29,7 @@ import type {
 } from "../mobileTypes";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
+const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
 interface SendAgentMessageOptions {
   message: string;
@@ -77,12 +78,29 @@ function firstProviderModel(providerList: ProviderListPayload | undefined, provi
   return provider?.models?.map((item) => item.trim()).find(Boolean);
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function isUnsupportedActionError(error: unknown, action: string): boolean {
+  const pattern = new RegExp(`unsupported action\\s*:?[\\s"']+${escapeRegExp(action)}(?:\\b|["'])`, "iu");
+  return pattern.test(errorMessage(error));
+}
+
+function skillListErrorText(error: unknown): string {
+  if (isUnsupportedActionError(error, "SKILL_LIST")) {
+    return UNSUPPORTED_SKILL_MANAGEMENT_TEXT;
+  }
+  return `技能列表加载失败：${errorMessage(error)}`;
+}
+
 export function useMobileBridge() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
   const [skillList, setSkillList] = useState<SkillPayload[]>();
+  const [skillListError, setSkillListError] = useState("");
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
@@ -137,6 +155,7 @@ export function useMobileBridge() {
     setConfig(undefined);
     setProviderList(undefined);
     setSkillList(undefined);
+    setSkillListError("");
     setSessions([]);
     setSessionsLoaded(false);
     setConnectionStatus({ tone: "idle", text: "未连接" });
@@ -191,6 +210,7 @@ export function useMobileBridge() {
   }, [requestBridge]);
 
   const loadSkills = useCallback(async (): Promise<SkillPayload[]> => {
+    setSkillListError("");
     const payload = await requestBridge<SkillPayload[]>("SKILL_LIST", {});
     setSkillList(payload);
     return payload;
@@ -200,12 +220,11 @@ export function useMobileBridge() {
     const [configPayload, providersPayload] = await Promise.all([
       requestBridge<ConfigPayload>("CONFIG_GET", {}),
       loadProviders(),
-      loadSkills(),
     ]);
     setConfig(configPayload);
     setProviderList(providersPayload);
     return configPayload;
-  }, [loadProviders, loadSkills, requestBridge]);
+  }, [loadProviders, requestBridge]);
 
   const refreshProviders = useCallback(async (): Promise<boolean> => {
     setStatus({ tone: "loading", text: "供应商刷新中" });
@@ -231,9 +250,25 @@ export function useMobileBridge() {
       setStatus({ tone: "success", text: "技能已刷新" });
       return true;
     } catch (error) {
-      setStatus({ tone: "error", text: errorMessage(error) });
+      const text = skillListErrorText(error);
+      setSkillListError(text);
+      if (isUnsupportedActionError(error, "SKILL_LIST")) {
+        setSkillList(undefined);
+      }
+      setStatus({ tone: "error", text });
       return false;
     }
+  }, [loadSkills]);
+
+  const refreshSkillsAfterConnect = useCallback((): void => {
+    void loadSkills().catch((error: unknown) => {
+      const text = skillListErrorText(error);
+      console.error("[useMobileBridge] load skills after connect failed", error);
+      setSkillListError(text);
+      if (isUnsupportedActionError(error, "SKILL_LIST")) {
+        setSkillList(undefined);
+      }
+    });
   }, [loadSkills]);
 
   const updateSkill = useCallback(
@@ -391,6 +426,7 @@ export function useMobileBridge() {
       await refreshRuntimeConfig();
       connectedTargetRef.current = currentConnectionTarget;
       setConnectionStatus({ tone: "success", text: connectedStatusText(settings.connectionMode) });
+      refreshSkillsAfterConnect();
       refreshSessionsAfterConnect();
     } catch (error) {
       connectedTargetRef.current = undefined;
@@ -399,12 +435,14 @@ export function useMobileBridge() {
       setConfig(undefined);
       setProviderList(undefined);
       setSkillList(undefined);
+      setSkillListError("");
       setSessions([]);
       setSessionsLoaded(false);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
     }
   }, [
     currentConnectionTarget,
+    refreshSkillsAfterConnect,
     refreshRuntimeConfig,
     refreshSessionsAfterConnect,
     settings.connectionMode,
@@ -520,6 +558,7 @@ export function useMobileBridge() {
     setStatus,
     settings,
     skillList,
+    skillListError,
     switchModel,
     status,
     updateSkill,

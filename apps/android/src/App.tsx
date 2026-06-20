@@ -57,6 +57,7 @@ function App() {
     setSettings,
     settings,
     skillList,
+    skillListError,
     switchModel,
     status,
     updateSkill,
@@ -249,6 +250,7 @@ function App() {
         onSettingsChange={setSettings}
         onUpdateSkill={updateSkill}
         onUpdateProvider={updateProvider}
+        skillListError={skillListError}
         skillList={skillList}
       />
 
