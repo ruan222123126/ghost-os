@@ -14,6 +14,7 @@ interface MobileSidebarProps {
   activeHistoryId: string | undefined;
   onClose: () => void;
   onNewSession: () => void;
+  onOpenSearch: () => void;
   onSelectHistory: (sessionId: string) => void;
   onConnect: () => Promise<void>;
   onOpenSettings: () => void;
@@ -48,7 +49,7 @@ export function MobileSidebar(props: MobileSidebarProps) {
 
           <nav className="sidebar-nav" aria-label="主要操作">
             <SidebarNavButton icon="edit" label="发起新任务" onClick={props.onNewSession} />
-            <SidebarNavButton icon="search" label="搜索任务内容" onClick={props.onClose} />
+            <SidebarNavButton icon="search" label="搜索任务内容" onClick={props.onOpenSearch} />
           </nav>
 
           <div className="sidebar-mode-toggle" role="tablist" aria-label="侧边栏内容切换">

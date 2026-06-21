@@ -10,6 +10,7 @@ import {
   MoreActionSheet,
   ScrollDownButton,
 } from "./components/MobileChatHome";
+import { MobileSearchPage } from "./components/MobileSearchPage";
 import { MobileSettingsPanel } from "./components/MobileSettingsPanel";
 import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
@@ -65,6 +66,7 @@ function App() {
   } = useMobileBridge();
   const [message, setMessage] = useState("");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -80,7 +82,7 @@ function App() {
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const canSend = isNonEmptyMessage(message) && mobileSessions.canSend;
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
-  const isModalOpen = isSidebarOpen || isSettingsOpen || isMoreMenuOpen;
+  const isModalOpen = isSidebarOpen || isSearchOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
   const {
     handleScroll,
@@ -122,13 +124,23 @@ function App() {
   }
 
   function openSidebar(): void {
+    setIsSearchOpen(false);
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSettingsOpen(false);
     setIsSidebarOpen(true);
   }
 
+  function openSearch(): void {
+    setIsRuntimeMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsSettingsOpen(false);
+    setIsSidebarOpen(false);
+    setIsSearchOpen(true);
+  }
+
   function openSettings(): void {
+    setIsSearchOpen(false);
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSidebarOpen(false);
@@ -174,9 +186,17 @@ function App() {
         activeHistoryId={mobileSessions.activeSessionId}
         onClose={() => setIsSidebarOpen(false)}
         onNewSession={startNewSession}
+        onOpenSearch={openSearch}
         onSelectHistory={(sessionId) => void selectHistory(sessionId)}
         onConnect={connectBridge}
         onOpenSettings={openSettings}
+      />
+
+      <MobileSearchPage
+        open={isSearchOpen}
+        historyItems={mobileSessions.historyItems}
+        onClose={() => setIsSearchOpen(false)}
+        onSelectHistory={(sessionId) => void selectHistory(sessionId)}
       />
 
       <div className="mobile-chat-content" aria-hidden={isModalOpen} inert={isModalOpen ? true : undefined}>
