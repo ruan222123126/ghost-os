@@ -2,7 +2,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentMessageTaskPayload, LoopWritePayload } from "../mobileTypes";
+import type { AgentMessageTaskPayload, WorkflowTaskPayload } from "../mobileTypes";
 import { useMobileBridge } from "./useMobileBridge";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -323,7 +323,7 @@ describe("useMobileBridge", () => {
     expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params).toEqual({ scope: "user" });
   });
 
-  it("refreshLoops requests user tasks and keeps only relay agent message loops", async () => {
+  it("refreshTasks requests user tasks and keeps agent message and workflow tasks", async () => {
     useHTTPSettings();
     vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
       if (command !== "bridge_bus_request") {
@@ -336,8 +336,10 @@ describe("useMobileBridge", () => {
         payload: request.action === "TASK_LIST"
           ? [
             loopTask({ id: "loop-1", enabled: true }),
-            loopTask({ id: "not-loop", agent_mode: "single" }),
-            { id: "workflow-1", task_kind: "workflow" },
+            loopTask({ id: "text-1", agent_mode: "single" }),
+            workflowTask({ id: "workflow-1" }),
+            { id: "orchestration-1", task_kind: "orchestration" },
+            { id: "unknown-1", task_kind: "unknown" },
           ]
           : payloadForAction(request.action, request.params),
         status: "success",
@@ -345,66 +347,21 @@ describe("useMobileBridge", () => {
     });
     const { result } = renderHook(() => useMobileBridge());
 
-    await result.current.refreshLoops();
+    await result.current.refreshTasks();
 
     expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params).toEqual({ scope: "user" });
     await waitFor(() => {
-      expect(result.current.taskList?.map((task) => task.id)).toEqual(["loop-1"]);
+      expect(result.current.taskList?.map((task) => task.id)).toEqual(["loop-1", "text-1", "workflow-1"]);
     });
   });
 
-  it("createLoop sends a relay agent task create payload", async () => {
-    useHTTPSettings();
-    const { result } = renderHook(() => useMobileBridge());
-    const input = loopWritePayload({ interval_seconds: 300 });
-
-    await result.current.createLoop(input);
-
-    expect(lastBridgeBusRequest("TASK_CREATE")?.params).toEqual({
-      scope: "user",
-      task_kind: "agent_message",
-      agent_mode: "relay",
-      message: "检查状态",
-      relay: {
-        stop_policy: "max_rounds",
-        max_rounds: 4,
-        execution_timeout_ms: 0,
-      },
-      interval_seconds: 300,
-    });
-  });
-
-  it("updateLoop sends only cron_expr when switching to cron mode", async () => {
-    useHTTPSettings();
-    const { result } = renderHook(() => useMobileBridge());
-    const input = loopWritePayload({ cron_expr: "*/5 * * * *" });
-
-    await result.current.updateLoop("loop-1", input);
-
-    const params = lastBridgeBusRequest("TASK_UPDATE")?.params;
-    expect(params).toMatchObject({
-      id: "loop-1",
-      scope: "user",
-      task_kind: "agent_message",
-      agent_mode: "relay",
-      message: "检查状态",
-      relay: {
-        stop_policy: "max_rounds",
-        max_rounds: 4,
-        execution_timeout_ms: 0,
-      },
-      cron_expr: "*/5 * * * *",
-    });
-    expect(params).not.toHaveProperty("interval_seconds");
-  });
-
-  it("setLoopEnabled, runLoopNow, and deleteLoop send the expected task actions", async () => {
+  it("setTaskEnabled, runTaskNow, and deleteTask send the expected task actions", async () => {
     useHTTPSettings();
     const { result } = renderHook(() => useMobileBridge());
 
-    await result.current.setLoopEnabled("loop-1", false);
-    await result.current.runLoopNow("loop-1");
-    await result.current.deleteLoop("loop-1");
+    await result.current.setTaskEnabled("loop-1", false);
+    await result.current.runTaskNow("loop-1");
+    await result.current.deleteTask("loop-1");
 
     expect(lastBridgeBusRequest("TASK_UPDATE")?.params).toEqual({
       id: "loop-1",
@@ -465,7 +422,6 @@ function payloadForAction(action: string, params: Record<string, unknown> = {}):
     case "SKILL_LIST":
     case "TASK_LIST":
       return [];
-    case "TASK_CREATE":
     case "TASK_UPDATE":
       return loopTaskFromParams(params);
     case "TASK_RUN_NOW":
@@ -504,18 +460,6 @@ function useHTTPSettings(): void {
   );
 }
 
-function loopWritePayload(schedule: Pick<LoopWritePayload, "cron_expr" | "interval_seconds">): LoopWritePayload {
-  return {
-    message: "检查状态",
-    relay: {
-      stop_policy: "max_rounds",
-      max_rounds: 4,
-      execution_timeout_ms: 0,
-    },
-    ...schedule,
-  };
-}
-
 function loopTask(overrides: Partial<AgentMessageTaskPayload> = {}): AgentMessageTaskPayload {
   return {
     id: "loop-1",
@@ -527,6 +471,26 @@ function loopTask(overrides: Partial<AgentMessageTaskPayload> = {}): AgentMessag
       execution_timeout_ms: 0,
     },
     task_kind: "agent_message",
+    schedule_type: "interval",
+    interval_seconds: 300,
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function workflowTask(overrides: Partial<WorkflowTaskPayload> = {}): WorkflowTaskPayload {
+  return {
+    id: "workflow-1",
+    task_kind: "workflow",
+    workflow: {
+      nodes: [
+        { id: "start", type: "start" },
+        { id: "agent", type: "agent" },
+      ],
+      edges: [],
+    },
     schedule_type: "interval",
     interval_seconds: 300,
     enabled: true,

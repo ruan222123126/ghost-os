@@ -17,10 +17,8 @@ import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
 import type {
   AgentPayload,
-  AgentMessageTaskPayload,
   ConfigPayload,
   HostProfile,
-  LoopWritePayload,
   ProviderConfigInputPayload,
   ProviderListPayload,
   SessionDetail,
@@ -30,6 +28,7 @@ import type {
   StoredConnectionSnapshot,
   StoredSettings,
   TaskPayload,
+  UnknownTaskPayload,
 } from "../mobileTypes";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
@@ -156,18 +155,18 @@ function skillListErrorText(error: unknown): string {
   return `技能列表加载失败：${errorMessage(error)}`;
 }
 
-function isLoopTask(task: TaskPayload): task is AgentMessageTaskPayload {
-  return task.task_kind === "agent_message" && task.agent_mode === "relay";
+function isUserTask(task: TaskPayload | UnknownTaskPayload): task is TaskPayload {
+  return task.task_kind === "agent_message" || task.task_kind === "workflow";
 }
 
-function filterLoopTasks(tasks: TaskPayload[]): AgentMessageTaskPayload[] {
-  return tasks.filter(isLoopTask);
+function filterUserTasks(tasks: Array<TaskPayload | UnknownTaskPayload>): TaskPayload[] {
+  return tasks.filter(isUserTask);
 }
 
-function upsertLoopTask(
-  current: AgentMessageTaskPayload[] | undefined,
-  task: AgentMessageTaskPayload,
-): AgentMessageTaskPayload[] {
+function upsertTask(
+  current: TaskPayload[] | undefined,
+  task: TaskPayload,
+): TaskPayload[] {
   const existing = current ?? [];
   if (existing.some((item) => item.id === task.id)) {
     return existing.map((item) => (item.id === task.id ? task : item));
@@ -182,9 +181,9 @@ export function useMobileBridge() {
   const [providerList, setProviderList] = useState<ProviderListPayload>();
   const [skillList, setSkillList] = useState<SkillPayload[]>();
   const [skillListError, setSkillListError] = useState("");
-  const [taskList, setTaskList] = useState<AgentMessageTaskPayload[]>();
+  const [taskList, setTaskList] = useState<TaskPayload[]>();
   const [taskListError, setTaskListError] = useState("");
-  const [runningLoopId, setRunningLoopId] = useState("");
+  const [runningTaskId, setRunningTaskId] = useState("");
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
@@ -244,7 +243,7 @@ export function useMobileBridge() {
     setSkillListError("");
     setTaskList(undefined);
     setTaskListError("");
-    setRunningLoopId("");
+    setRunningTaskId("");
     setSessions([]);
     setSessionsLoaded(false);
     setConnectionStatus({ tone: "idle", text: "未连接" });
@@ -305,9 +304,9 @@ export function useMobileBridge() {
     return payload;
   }, [requestBridge]);
 
-  const loadTasks = useCallback(async (): Promise<AgentMessageTaskPayload[]> => {
+  const loadTasks = useCallback(async (): Promise<TaskPayload[]> => {
     setTaskListError("");
-    const payload = filterLoopTasks(await requestBridge<TaskPayload[]>("TASK_LIST", { scope: "user" }));
+    const payload = filterUserTasks(await requestBridge<Array<TaskPayload | UnknownTaskPayload>>("TASK_LIST", { scope: "user" }));
     setTaskList(payload);
     return payload;
   }, [requestBridge]);
@@ -356,14 +355,14 @@ export function useMobileBridge() {
     }
   }, [loadSkills]);
 
-  const refreshLoops = useCallback(async (): Promise<boolean> => {
-    setStatus({ tone: "loading", text: "循环刷新中" });
+  const refreshTasks = useCallback(async (): Promise<boolean> => {
+    setStatus({ tone: "loading", text: "任务刷新中" });
     try {
       await loadTasks();
-      setStatus({ tone: "success", text: "循环已刷新" });
+      setStatus({ tone: "success", text: "任务已刷新" });
       return true;
     } catch (error) {
-      const text = `循环列表加载失败：${errorMessage(error)}`;
+      const text = `任务列表加载失败：${errorMessage(error)}`;
       setTaskListError(text);
       setStatus({ tone: "error", text });
       return false;
@@ -383,7 +382,7 @@ export function useMobileBridge() {
 
   const refreshTasksAfterConnect = useCallback((): void => {
     void loadTasks().catch((error: unknown) => {
-      const text = `循环列表加载失败：${errorMessage(error)}`;
+      const text = `任务列表加载失败：${errorMessage(error)}`;
       console.error("[useMobileBridge] load tasks after connect failed", error);
       setTaskListError(text);
     });
@@ -421,70 +420,17 @@ export function useMobileBridge() {
     [requestBridge],
   );
 
-  const createLoop = useCallback(
-    async (input: LoopWritePayload): Promise<boolean> => {
-      setStatus({ tone: "loading", text: "循环创建中" });
-      try {
-        const payload = await requestBridge<TaskPayload>("TASK_CREATE", {
-          scope: "user",
-          task_kind: "agent_message",
-          agent_mode: "relay",
-          message: input.message,
-          relay: input.relay,
-          ...(input.interval_seconds === undefined ? {} : { interval_seconds: input.interval_seconds }),
-          ...(input.cron_expr === undefined ? {} : { cron_expr: input.cron_expr }),
-        });
-        if (isLoopTask(payload)) {
-          setTaskList((current) => upsertLoopTask(current, payload));
-        }
-        setStatus({ tone: "success", text: "循环已创建" });
-        return true;
-      } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
-        return false;
-      }
-    },
-    [requestBridge],
-  );
-
-  const updateLoop = useCallback(
-    async (id: string, input: LoopWritePayload): Promise<boolean> => {
-      setStatus({ tone: "loading", text: "循环保存中" });
-      try {
-        const payload = await requestBridge<TaskPayload>("TASK_UPDATE", {
-          id,
-          scope: "user",
-          task_kind: "agent_message",
-          agent_mode: "relay",
-          message: input.message,
-          relay: input.relay,
-          ...(input.interval_seconds === undefined ? {} : { interval_seconds: input.interval_seconds }),
-          ...(input.cron_expr === undefined ? {} : { cron_expr: input.cron_expr }),
-        });
-        if (isLoopTask(payload)) {
-          setTaskList((current) => upsertLoopTask(current, payload));
-        }
-        setStatus({ tone: "success", text: "循环已保存" });
-        return true;
-      } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
-        return false;
-      }
-    },
-    [requestBridge],
-  );
-
-  const setLoopEnabled = useCallback(
+  const setTaskEnabled = useCallback(
     async (id: string, enabled: boolean): Promise<boolean> => {
-      setStatus({ tone: "loading", text: enabled ? "循环启用中" : "循环停用中" });
+      setStatus({ tone: "loading", text: enabled ? "任务启用中" : "任务停用中" });
       try {
         const payload = await requestBridge<TaskPayload>("TASK_UPDATE", { id, scope: "user", enabled });
-        if (isLoopTask(payload)) {
-          setTaskList((current) => upsertLoopTask(current, payload));
+        if (isUserTask(payload)) {
+          setTaskList((current) => upsertTask(current, payload));
         } else {
           setTaskList((current) => current?.map((item) => (item.id === id ? { ...item, enabled } : item)));
         }
-        setStatus({ tone: "success", text: enabled ? "循环已启用" : "循环已停用" });
+        setStatus({ tone: "success", text: enabled ? "任务已启用" : "任务已停用" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
@@ -494,34 +440,34 @@ export function useMobileBridge() {
     [requestBridge],
   );
 
-  const runLoopNow = useCallback(
+  const runTaskNow = useCallback(
     async (id: string): Promise<boolean> => {
-      if (runningLoopId) {
+      if (runningTaskId) {
         return false;
       }
-      setRunningLoopId(id);
-      setStatus({ tone: "loading", text: "循环启动中" });
+      setRunningTaskId(id);
+      setStatus({ tone: "loading", text: "任务启动中" });
       try {
         await requestBridge<unknown>("TASK_RUN_NOW", { id, scope: "user", start_only: true });
-        setStatus({ tone: "success", text: "循环已启动" });
+        setStatus({ tone: "success", text: "任务已启动" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
         return false;
       } finally {
-        setRunningLoopId("");
+        setRunningTaskId("");
       }
     },
-    [requestBridge, runningLoopId],
+    [requestBridge, runningTaskId],
   );
 
-  const deleteLoop = useCallback(
+  const deleteTask = useCallback(
     async (id: string): Promise<boolean> => {
-      setStatus({ tone: "loading", text: "循环删除中" });
+      setStatus({ tone: "loading", text: "任务删除中" });
       try {
         await requestBridge<unknown>("TASK_DELETE", { id, scope: "user" });
         setTaskList((current) => current?.filter((item) => item.id !== id));
-        setStatus({ tone: "success", text: "循环已删除" });
+        setStatus({ tone: "success", text: "任务已删除" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
@@ -731,7 +677,7 @@ export function useMobileBridge() {
       setSkillListError("");
       setTaskList(undefined);
       setTaskListError("");
-      setRunningLoopId("");
+      setRunningTaskId("");
       setSessions([]);
       setSessionsLoaded(false);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
@@ -871,26 +817,25 @@ export function useMobileBridge() {
     config,
     connectBridge,
     connectionStatus,
-    createLoop,
     createProvider,
-    deleteLoop,
     deleteProvider,
+    deleteTask,
     getFullSession,
     getSession,
     host,
     providerList,
-    refreshLoops,
     refreshProviders,
     refreshSkills,
-    runLoopNow,
-    runningLoopId,
+    refreshTasks,
+    runTaskNow,
+    runningTaskId,
     searchSessions,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
-    setLoopEnabled,
     setSettings,
     setStatus,
+    setTaskEnabled,
     settings,
     skillList,
     skillListError,
@@ -898,7 +843,6 @@ export function useMobileBridge() {
     taskList,
     taskListError,
     status,
-    updateLoop,
     updateSkill,
     updateProvider,
     deleteSkill,

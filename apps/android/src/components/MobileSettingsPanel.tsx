@@ -4,16 +4,15 @@ import { ArrowLeft, Database, Globe, Key, Link2, RefreshCw, Server, Sparkles, Tr
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type {
-  AgentMessageTaskPayload,
   ConfigPayload,
-  LoopWritePayload,
   ProviderConfigInputPayload,
   ProviderListPayload,
   SkillPayload,
   StatusMessage,
   StoredSettings,
+  TaskPayload,
 } from "../mobileTypes";
-import { MobileLoopSettings } from "./MobileLoopSettings";
+import { MobileTaskSettings } from "./MobileTaskSettings";
 import { MobileProviderSettings } from "./MobileProviderSettings";
 import { MobileSkillSettings } from "./MobileSkillSettings";
 import "./MobileSettingsPanel.css";
@@ -27,29 +26,27 @@ interface MobileSettingsPanelProps {
   onActivateProvider: (name: string) => Promise<boolean>;
   onClose: () => void;
   onConnect: () => Promise<void>;
-  onCreateLoop: (input: LoopWritePayload) => Promise<boolean>;
   onCreateProvider: (provider: ProviderConfigInputPayload) => Promise<boolean>;
-  onDeleteLoop: (id: string) => Promise<boolean>;
   onDeleteProvider: (name: string) => Promise<boolean>;
   onDeleteSkill: (id: string) => Promise<boolean>;
-  onRefreshLoops: () => Promise<boolean>;
+  onDeleteTask: (id: string) => Promise<boolean>;
   onRefreshProviders: () => Promise<boolean>;
   onRefreshSkills: () => Promise<boolean>;
-  onRunLoopNow: (id: string) => Promise<boolean>;
+  onRefreshTasks: () => Promise<boolean>;
+  onRunTaskNow: (id: string) => Promise<boolean>;
   onSettingsChange: Dispatch<SetStateAction<StoredSettings>>;
-  onSetLoopEnabled: (id: string, enabled: boolean) => Promise<boolean>;
-  onUpdateLoop: (id: string, input: LoopWritePayload) => Promise<boolean>;
+  onSetTaskEnabled: (id: string, enabled: boolean) => Promise<boolean>;
   onUpdateSkill: (id: string, enabled: boolean) => Promise<boolean>;
   onUpdateProvider: (name: string, provider: ProviderConfigInputPayload) => Promise<boolean>;
-  runningLoopId: string;
+  runningTaskId: string;
   settings: StoredSettings;
   skillList: SkillPayload[] | undefined;
   skillListError: string;
-  taskList: AgentMessageTaskPayload[] | undefined;
+  taskList: TaskPayload[] | undefined;
   taskListError: string;
 }
 
-type SettingsView = "root" | "connection" | "providers" | "skills" | "loops";
+type SettingsView = "root" | "connection" | "providers" | "skills" | "tasks";
 
 export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
   const [view, setView] = useState<SettingsView>("root");
@@ -194,18 +191,15 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onRefreshSkills={props.onRefreshSkills}
               onUpdateSkill={props.onUpdateSkill}
             />
-          ) : view === "loops" ? (
-            <MobileLoopSettings
-              config={props.config}
+          ) : view === "tasks" ? (
+            <MobileTaskSettings
               loadError={props.taskListError}
-              loops={props.taskList}
-              runningLoopId={props.runningLoopId}
-              onCreateLoop={props.onCreateLoop}
-              onDeleteLoop={props.onDeleteLoop}
-              onRefreshLoops={props.onRefreshLoops}
-              onRunLoopNow={props.onRunLoopNow}
-              onSetLoopEnabled={props.onSetLoopEnabled}
-              onUpdateLoop={props.onUpdateLoop}
+              runningTaskId={props.runningTaskId}
+              tasks={props.taskList}
+              onDeleteTask={props.onDeleteTask}
+              onRefreshTasks={props.onRefreshTasks}
+              onRunTaskNow={props.onRunTaskNow}
+              onSetTaskEnabled={props.onSetTaskEnabled}
             />
           ) : (
             <SettingsRoot
@@ -213,8 +207,8 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               connectionSublabel={connectionSublabel(props.settings)}
               persistComputerSessionsEnabled={props.settings.persistComputerSessionsEnabled}
               persistComputerSessionsStatus={props.computerSessionPersistStatus}
-              loopDisabled={loopEntryDisabled(props.connectionStatus)}
-              loopSublabel={loopSublabel(props.connectionStatus, props.taskList, props.taskListError)}
+              taskDisabled={taskEntryDisabled(props.connectionStatus)}
+              taskSublabel={taskSublabel(props.connectionStatus, props.taskList, props.taskListError)}
               providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
               providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
               skillDisabled={skillEntryDisabled(props.connectionStatus)}
@@ -222,7 +216,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onSetAutoConnectEnabled={setAutoConnectEnabled}
               onSetPersistComputerSessionsEnabled={setPersistComputerSessionsEnabled}
               onOpenConnection={() => setView("connection")}
-              onOpenLoops={() => setView("loops")}
+              onOpenTasks={() => setView("tasks")}
               onOpenProviders={() => setView("providers")}
               onOpenSkills={() => setView("skills")}
             />
@@ -265,18 +259,18 @@ function SettingsButton(props: {
 function SettingsRoot(props: {
   autoConnectEnabled: boolean;
   connectionSublabel: string;
-  loopDisabled: boolean;
-  loopSublabel: string;
   providerDisabled: boolean;
   providerSublabel: string;
   persistComputerSessionsEnabled: boolean;
   persistComputerSessionsStatus: StatusMessage;
   skillDisabled: boolean;
   skillSublabel: string;
+  taskDisabled: boolean;
+  taskSublabel: string;
   onOpenConnection: () => void;
-  onOpenLoops: () => void;
   onOpenProviders: () => void;
   onOpenSkills: () => void;
+  onOpenTasks: () => void;
   onSetAutoConnectEnabled: (enabled: boolean) => void;
   onSetPersistComputerSessionsEnabled: (enabled: boolean) => void;
 }) {
@@ -314,10 +308,10 @@ function SettingsRoot(props: {
           />
           <SettingsButton
             icon={RefreshCw}
-            label="循环"
-            sublabel={props.loopSublabel}
-            disabled={props.loopDisabled}
-            onClick={props.onOpenLoops}
+            label="任务"
+            sublabel={props.taskSublabel}
+            disabled={props.taskDisabled}
+            onClick={props.onOpenTasks}
           />
         </div>
       </SettingsSection>
@@ -370,8 +364,8 @@ function titleForView(view: SettingsView): string {
       return "供应商";
     case "skills":
       return "技能";
-    case "loops":
-      return "循环";
+    case "tasks":
+      return "任务";
     case "root":
       return "设置";
   }
@@ -558,7 +552,7 @@ function skillEntryDisabled(connectionStatus: StatusMessage): boolean {
   return connectionStatus.tone !== "success";
 }
 
-function loopEntryDisabled(connectionStatus: StatusMessage): boolean {
+function taskEntryDisabled(connectionStatus: StatusMessage): boolean {
   return connectionStatus.tone !== "success";
 }
 
@@ -594,9 +588,9 @@ function skillSublabel(connectionStatus: StatusMessage, skillList: SkillPayload[
   return `${enabledCount}/${skillList.length} 已启用`;
 }
 
-function loopSublabel(
+function taskSublabel(
   connectionStatus: StatusMessage,
-  taskList: AgentMessageTaskPayload[] | undefined,
+  taskList: TaskPayload[] | undefined,
   error: string,
 ): string {
   if (connectionStatus.tone !== "success") {
@@ -608,7 +602,7 @@ function loopSublabel(
   if (!taskList) {
     return "加载中";
   }
-  const enabledCount = taskList.filter((loop) => loop.enabled).length;
+  const enabledCount = taskList.filter((task) => task.enabled).length;
   return `${enabledCount}/${taskList.length} 已启用`;
 }
 

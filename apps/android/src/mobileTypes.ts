@@ -126,19 +126,40 @@ export interface AgentMessageTaskPayload {
   last_error?: string;
 }
 
-export type TaskPayload = AgentMessageTaskPayload | {
+export interface WorkflowNode {
+  id: string;
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface WorkflowDefinition {
+  nodes: WorkflowNode[];
+  edges?: Array<Record<string, unknown>>;
+}
+
+export interface WorkflowTaskPayload {
+  id: string;
+  task_kind: "workflow";
+  workflow: WorkflowDefinition;
+  schedule_type: TaskScheduleType;
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
+export type TaskPayload = AgentMessageTaskPayload | WorkflowTaskPayload;
+
+export type UnknownTaskPayload = {
   id?: string;
   task_kind?: string;
   agent_mode?: string;
   [key: string]: unknown;
 };
-
-export interface LoopWritePayload {
-  message: string;
-  relay: TaskRelayConfigPayload;
-  interval_seconds?: number;
-  cron_expr?: string;
-}
 
 export interface AgentPayload {
   message: string;
