@@ -82,14 +82,19 @@ function App() {
   const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
   const isModalOpen = isSidebarOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
-  const conversationScrollKey = useMemo(
-    () => mobileSessions.activeMessages.map((item) => `${item.id}:${item.text.length}`).join("|"),
-    [mobileSessions.activeMessages],
-  );
-  const { handleScroll, resetScrollDown, scrollRef, scrollToBottom, showScrollDown } = useChatFeedScroll(
-    conversationScrollKey,
-    mobileSessions.activeReply,
-  );
+  const {
+    handleScroll,
+    registerUserMessageRow,
+    resetScrollDown,
+    scrollRef,
+    scrollToBottom,
+    showScrollDown,
+    trailingSpacerPx,
+  } = useChatFeedScroll({
+    messages: mobileSessions.activeMessages,
+    reply: mobileSessions.activeReply,
+    statusTone: mobileSessions.activeStatus.tone,
+  });
   const activeHistoryItem = useMemo(
     () => mobileSessions.historyItems.find((item) => item.id === mobileSessions.activeSessionId),
     [mobileSessions.activeSessionId, mobileSessions.historyItems],
@@ -206,7 +211,7 @@ function App() {
 
           {mobileSessions.activeMessages.map((item) =>
             item.role === "user" ? (
-              <ChatBubble key={item.id}>{item.text}</ChatBubble>
+              <ChatBubble key={item.id} ref={registerUserMessageRow(item.id)}>{item.text}</ChatBubble>
             ) : (
               <AssistantReply
                 key={item.id}
@@ -219,6 +224,7 @@ function App() {
             reply={mobileSessions.activeReply}
             status={displayStatus}
           />
+          <div aria-hidden="true" style={{ height: trailingSpacerPx }} />
         </main>
 
         {showScrollDown ? <ScrollDownButton onClick={() => scrollToBottom()} /> : null}

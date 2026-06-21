@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { forwardRef, useEffect, useRef, useState, type ReactNode } from "react";
 import type { AgentPayload, MobileToolCard, StatusMessage } from "../../mobileTypes";
 import { buildMobileToolCardViewModel, type MobileToolTone } from "../../lib/mobileToolCardViewModel";
 import { EMPTY_STATE_SUGGESTIONS } from "./data";
@@ -166,13 +166,17 @@ function ToolCard(props: { tool: MobileToolCard }) {
   );
 }
 
-export function ChatBubble(props: { children: ReactNode }) {
+interface ChatBubbleProps {
+  children: ReactNode;
+}
+
+export const ChatBubble = forwardRef<HTMLDivElement, ChatBubbleProps>(function ChatBubble(props, ref) {
   return (
-    <div className="message-row user-row">
+    <div ref={ref} className="message-row user-row">
       <div className="user-bubble">{props.children}</div>
     </div>
   );
-}
+});
 
 function AssistantPanel(props: { children: ReactNode; ariaLive?: "polite" }) {
   return (
