@@ -6,9 +6,11 @@ import "./ChatComposer.css";
 
 interface ChatComposerProps {
   value: string;
+  canStop?: boolean;
   disabled: boolean;
   loading: boolean;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onStop?: () => Promise<void>;
   onChange: (value: string) => void;
   onOpenSettings: () => void;
 }
@@ -24,6 +26,8 @@ export function ChatComposer(props: ChatComposerProps) {
   const [focused, setFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const hasValue = props.value.trim().length > 0;
+  const showStop = props.loading && props.onStop !== undefined;
+  const showAction = hasValue || showStop;
   const wrapsPastSingleLine = useSingleLineOverflow(lineMeasureRef, props.value);
   const isMultiLine = props.value.includes("\n") || wrapsPastSingleLine;
 
@@ -33,6 +37,15 @@ export function ChatComposer(props: ChatComposerProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     setMenuOpen(false);
     await props.onSubmit(event);
+  }
+
+  function handleStop(): void {
+    if (!props.canStop || props.onStop === undefined) {
+      return;
+    }
+
+    setMenuOpen(false);
+    void props.onStop();
   }
 
   function handleMenuOption(label: string, unavailable: boolean): void {
@@ -103,16 +116,17 @@ export function ChatComposer(props: ChatComposerProps) {
           />
           <div className="composer-actions">
             <IconButton label="语音输入" icon="mic" variant="composer" />
-            <span className={`send-button-slot ${hasValue ? "is-visible" : ""}`} aria-hidden={!hasValue}>
+            <span className={`send-button-slot ${showAction ? "is-visible" : ""}`} aria-hidden={!showAction}>
               <button
-                className="send-button"
-                type="submit"
-                disabled={props.disabled}
+                className={`send-button ${showStop ? "is-stop" : ""}`}
+                type={showStop ? "button" : "submit"}
+                disabled={showStop ? !props.canStop : props.disabled}
+                onClick={showStop ? handleStop : undefined}
                 aria-busy={props.loading}
-                aria-label="发送任务"
-                tabIndex={hasValue ? 0 : -1}
+                aria-label={showStop ? (props.canStop ? "停止生成" : "停止中") : "发送任务"}
+                tabIndex={showAction ? 0 : -1}
               >
-                <UiIcon name="arrow-up" />
+                <UiIcon name={showStop ? "stop" : "arrow-up"} />
               </button>
             </span>
           </div>

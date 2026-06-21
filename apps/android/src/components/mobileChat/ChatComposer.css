@@ -250,6 +250,16 @@
   transform: scale(0.95);
 }
 
+.send-button.is-stop .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.send-button.is-stop .ui-icon * {
+  fill: currentColor;
+  stroke-width: 0;
+}
+
 .send-button:disabled {
   opacity: 0.38;
   box-shadow: none;

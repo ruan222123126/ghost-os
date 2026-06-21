@@ -63,6 +63,7 @@ describe("useMobileSessions", () => {
       sendAgentMessage,
       sessions: [],
       sessionsLoaded: false,
+      stopAgentRun: vi.fn(async () => ({ ok: true, status: "stopped" as const })),
     });
     await act(async () => {
       await result.current.sendMessage("follow up");
@@ -221,6 +222,42 @@ describe("useMobileSessions", () => {
 
     await act(async () => {
       pendingRuns.forEach((finish) => finish());
+    });
+  });
+
+  it("stops the active run with the run trace id and syncs the stopped session", async () => {
+    let finishRun: (() => void) | undefined;
+    let runTraceId = "";
+    const sendAgentMessage = vi.fn((options: SendOptions) => {
+      runTraceId = options.traceId ?? "";
+      options.onStatus({ tone: "loading", text: "运行中" });
+      return new Promise<SendResult>((resolve) => {
+        finishRun = () => {
+          options.onStatus({ tone: "error", text: "agent run cancelled" });
+          resolve({ ok: false });
+        };
+      });
+    });
+    const stopAgentRun = vi.fn(async () => ({ ok: true, sessionId: "session-1", status: "stopped" as const }));
+    const getSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result } = renderMobileSessions({ getSession, sendAgentMessage, stopAgentRun });
+
+    act(() => {
+      void result.current.sendMessage("run one");
+    });
+    await waitFor(() => expect(result.current.canStop).toBe(true));
+
+    await act(async () => {
+      await result.current.stopCurrentRun();
+    });
+
+    expect(stopAgentRun).toHaveBeenCalledWith({ sessionId: undefined, traceId: runTraceId });
+    expect(getSession).toHaveBeenCalledWith("session-1");
+    expect(result.current.canStop).toBe(false);
+    expect(result.current.activeStatus).toEqual({ tone: "success", text: "已停止" });
+
+    await act(async () => {
+      finishRun?.();
     });
   });
 
@@ -421,7 +458,9 @@ interface SendOptions {
   onReply: (reply: AgentPayload) => void;
   onSessionId: (sessionId: string) => void;
   onStatus: (status: { tone: "idle" | "loading" | "success" | "error"; text: string }) => void;
+  requestId?: string;
   sessionId?: string;
+  traceId?: string;
 }
 
 interface SendResult {
@@ -438,6 +477,7 @@ function renderMobileSessions(overrides: Partial<UseMobileSessionsOptionsForTest
     options.onReply(agentReply(options.sessionId || "session-1", "reply"));
     return { ok: true, reply: agentReply(options.sessionId || "session-1", "reply"), sessionId: options.sessionId || "session-1" };
   });
+  const defaultStopAgentRun = vi.fn(async () => ({ ok: true, status: "stopped" as const }));
   const initialProps: UseMobileSessionsOptionsForTest = {
     bridgeConnected: overrides.bridgeConnected ?? true,
     computerSessionSyncScope: overrides.computerSessionSyncScope,
@@ -448,6 +488,7 @@ function renderMobileSessions(overrides: Partial<UseMobileSessionsOptionsForTest
     sendAgentMessage: overrides.sendAgentMessage ?? defaultSendAgentMessage,
     sessions: overrides.sessions ?? [],
     sessionsLoaded: overrides.sessionsLoaded ?? false,
+    stopAgentRun: overrides.stopAgentRun ?? defaultStopAgentRun,
   };
   return renderHook((props: UseMobileSessionsOptionsForTest) => useMobileSessions(props), {
     initialProps,

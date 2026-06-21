@@ -66,6 +66,7 @@ function App() {
     settings,
     skillList,
     skillListError,
+    stopAgentRun,
     switchModel,
     taskList,
     taskListError,
@@ -90,6 +91,7 @@ function App() {
     sendAgentMessage,
     sessions,
     sessionsLoaded,
+    stopAgentRun,
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const canSend = isNonEmptyMessage(message) && mobileSessions.canSend;
@@ -123,10 +125,8 @@ function App() {
       return;
     }
 
-    const sent = await mobileSessions.sendMessage(trimmed);
-    if (sent) {
-      setMessage("");
-    }
+    setMessage("");
+    await mobileSessions.sendMessage(trimmed);
   }
 
   async function selectHistory(sessionId: string): Promise<void> {
@@ -264,8 +264,12 @@ function App() {
         <ChatComposer
           value={message}
           disabled={!canSend}
+          canStop={mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
           onSubmit={sendMessage}
+          onStop={async () => {
+            await mobileSessions.stopCurrentRun();
+          }}
           onChange={setMessage}
           onOpenSettings={openSettings}
         />

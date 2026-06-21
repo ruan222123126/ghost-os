@@ -46,13 +46,26 @@ interface SendAgentMessageOptions {
   onReply: (reply: AgentPayload) => void;
   onSessionId: (sessionId: string) => void;
   onStatus: (status: StatusMessage) => void;
+  requestId?: string;
   sessionId?: string;
+  traceId?: string;
 }
 
 interface SendAgentMessageResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+}
+
+interface StopAgentRunInput {
+  sessionId?: string;
+  traceId?: string;
+}
+
+interface StopAgentRunResult {
+  ok: boolean;
+  sessionId?: string;
+  status?: "stopped" | "not_running";
 }
 
 interface UseMobileSessionsOptions {
@@ -65,6 +78,7 @@ interface UseMobileSessionsOptions {
   sendAgentMessage: (options: SendAgentMessageOptions) => Promise<SendAgentMessageResult>;
   sessions: SessionMetadata[];
   sessionsLoaded: boolean;
+  stopAgentRun: (input: StopAgentRunInput) => Promise<StopAgentRunResult>;
 }
 
 interface PersistConversationInput {
@@ -91,6 +105,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [computerSessionPersistStatus, setComputerSessionPersistStatus] =
     useState<StatusMessage>(PERSIST_DISABLED_STATUS);
   const activeSessionIdRef = useRef<string | undefined>(undefined);
+  const stoppingRunKeysRef = useRef<Set<string>>(new Set());
   const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
   const syncRunIdRef = useRef(0);
 
@@ -246,24 +261,34 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       setHomeRun(createRunningRunState(requestId, traceId, "发送中"));
     }
 
-    const result = await options.sendAgentMessage({
-      message: trimmed,
-      onReply: (reply) => {
-        applyReply(targetSessionId, reply);
-      },
-      onSessionId: (sessionId) => {
-        const resolvedSessionId = sessionId.trim();
-        if (!resolvedSessionId || targetSessionId === resolvedSessionId) {
-          return;
-        }
-        targetSessionId = resolvedSessionId;
-        activateCreatedSession(resolvedSessionId, trimmed, optimisticMessages);
-      },
-      onStatus: (status) => {
-        applyRunStatus(targetSessionId, status, requestId, traceId);
-      },
-      sessionId: initialSessionId || undefined,
-    });
+    let result: SendAgentMessageResult = { ok: false };
+    try {
+      result = await options.sendAgentMessage({
+        message: trimmed,
+        onReply: (reply) => {
+          applyReply(targetSessionId, reply);
+        },
+        onSessionId: (sessionId) => {
+          const resolvedSessionId = sessionId.trim();
+          if (!resolvedSessionId || targetSessionId === resolvedSessionId) {
+            return;
+          }
+          targetSessionId = resolvedSessionId;
+          activateCreatedSession(resolvedSessionId, trimmed, optimisticMessages);
+        },
+        onStatus: (status) => {
+          applyRunStatus(targetSessionId, normalizeRunStatus(status, targetSessionId, requestId, traceId), requestId, traceId);
+        },
+        requestId,
+        sessionId: initialSessionId || undefined,
+        traceId,
+      });
+    } finally {
+      clearStoppingRun(initialSessionId, requestId, traceId);
+      if (targetSessionId !== initialSessionId) {
+        clearStoppingRun(targetSessionId, requestId, traceId);
+      }
+    }
 
     if (!result.ok) {
       return false;
@@ -279,6 +304,34 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
       activateCreatedSession(resolvedSessionId, trimmed, optimisticMessages);
     }
     commitFinalReply(resolvedSessionId, result.reply, trimmed);
+    return true;
+  }
+
+  async function stopCurrentRun(): Promise<boolean> {
+    const sessionId = activeSessionId?.trim() || "";
+    const run = activeRun;
+    if (run.status !== "running" || run.stopPending || isRunStopping(sessionId, run.requestId, run.traceId)) {
+      return false;
+    }
+
+    rememberStoppingRun(sessionId, run.requestId, run.traceId);
+    setRunStopPending(sessionId, true);
+    const result = await options.stopAgentRun({
+      sessionId: sessionId || undefined,
+      traceId: run.traceId || undefined,
+    });
+    if (!result.ok) {
+      clearStoppingRun(sessionId, run.requestId, run.traceId);
+      setRunStopPending(sessionId, false);
+      return false;
+    }
+
+    const resolvedSessionId = result.sessionId?.trim() || sessionId;
+    const statusText = result.status === "not_running" ? "没有运行中的任务" : "已停止";
+    applyStoppedRun(sessionId, resolvedSessionId, statusText);
+    if (resolvedSessionId && result.status === "stopped") {
+      await syncStoppedSession(resolvedSessionId, statusText);
+    }
     return true;
   }
 
@@ -376,6 +429,9 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
   function applyRunStatus(sessionId: string, status: StatusMessage, requestId?: string, traceId?: string): void {
     const run = statusToRunState(status, requestId, traceId);
+    if (run.status === "running" && isRunStopping(sessionId, requestId, traceId)) {
+      run.stopPending = true;
+    }
     if (!sessionId) {
       setHomeRun(run);
       return;
@@ -388,6 +444,62 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         updatedAt: new Date().toISOString(),
       }),
     );
+  }
+
+  function setRunStopPending(sessionId: string, stopPending: boolean): void {
+    if (!sessionId) {
+      setHomeRun((current) => ({ ...current, stopPending }));
+      return;
+    }
+
+    setSessionViews((current) => {
+      const existing = current[sessionId];
+      if (!existing) {
+        return current;
+      }
+      return upsertSessionView(current, sessionId, {
+        run: {
+          ...existing.run,
+          stopPending,
+        },
+      });
+    });
+  }
+
+  function applyStoppedRun(fromSessionId: string, resolvedSessionId: string, statusText: string): void {
+    if (resolvedSessionId && !fromSessionId) {
+      activateCreatedSession(resolvedSessionId, activeMessages[0]?.text ?? sessionFallbackTitle(resolvedSessionId), activeMessages);
+    }
+    applyRunStatus(resolvedSessionId || fromSessionId, { tone: "success", text: statusText });
+  }
+
+  async function syncStoppedSession(sessionId: string, statusText: string): Promise<void> {
+    try {
+      const detail = await options.getSession(sessionId);
+      const messages = sessionDetailToConversationMessages(detail);
+      const title = detail.title.trim() || findStoredTitle(storedConversationsRef.current, detail.id) || sessionFallbackTitle(detail.id);
+      setSessionViews((current) =>
+        upsertSessionView(current, detail.id, {
+          bridgeOwned: true,
+          messages,
+          reply: undefined,
+          run: createSuccessRunState(statusText),
+          title,
+          unread: activeSessionIdRef.current !== detail.id,
+          updatedAt: detail.updated_at,
+        }),
+      );
+      persistConversation({
+        createdAt: detail.created_at,
+        id: detail.id,
+        messages,
+        sourceMessageCount: detail.message_count,
+        title,
+        updatedAt: detail.updated_at,
+      });
+    } catch (error) {
+      applyRunStatus(sessionId, { tone: "error", text: `停止后同步失败：${errorMessage(error)}` });
+    }
   }
 
   function activateCreatedSession(
@@ -507,6 +619,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     activeReply,
     activeSessionId,
     activeStatus,
+    canStop: activeRun.status === "running" && !activeRun.stopPending,
     canSend: options.bridgeConnected && activeRun.status !== "running",
     clearCurrentConversation,
     computerSessionPersistStatus,
@@ -515,7 +628,54 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     selectSession,
     sendMessage,
     startNewSession,
+    stopCurrentRun,
   };
+
+  function normalizeRunStatus(
+    status: StatusMessage,
+    sessionId: string,
+    requestId: string,
+    traceId: string,
+  ): StatusMessage {
+    if (isCancellationStatus(status) && isRunStopping(sessionId, requestId, traceId)) {
+      return { tone: "success", text: "已停止" };
+    }
+    return status;
+  }
+
+  function rememberStoppingRun(sessionId: string, requestId?: string, traceId?: string): void {
+    for (const key of runKeys(sessionId, requestId, traceId)) {
+      stoppingRunKeysRef.current.add(key);
+    }
+  }
+
+  function clearStoppingRun(sessionId: string, requestId?: string, traceId?: string): void {
+    for (const key of runKeys(sessionId, requestId, traceId)) {
+      stoppingRunKeysRef.current.delete(key);
+    }
+  }
+
+  function isRunStopping(sessionId: string, requestId?: string, traceId?: string): boolean {
+    return runKeys(sessionId, requestId, traceId).some((key) => stoppingRunKeysRef.current.has(key));
+  }
+}
+
+function runKeys(sessionId: string, requestId?: string, traceId?: string): string[] {
+  return [
+    sessionId.trim() ? `session:${sessionId.trim()}` : "",
+    requestId?.trim() ? `request:${requestId.trim()}` : "",
+    traceId?.trim() ? `trace:${traceId.trim()}` : "",
+  ].filter(Boolean);
+}
+
+function isCancellationStatus(status: StatusMessage): boolean {
+  if (status.tone !== "error") {
+    return false;
+  }
+  const normalized = status.text.trim().toLowerCase();
+  return normalized === "agent run cancelled"
+    || normalized === "context canceled"
+    || normalized.includes("cancelled");
 }
 
 function isStoredConversationCurrent(conversation: StoredMobileConversation, session: SessionMetadata): boolean {

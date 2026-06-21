@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatComposer } from "./ChatComposer";
 
@@ -29,6 +29,22 @@ describe("ChatComposer", () => {
 
     expect(composerShell().classList.contains("is-multiline")).toBe(false);
   });
+
+  it("shows a stop button while loading without input text", () => {
+    const onStop = vi.fn(async () => undefined);
+
+    renderComposer("", { canStop: true, disabled: true, loading: true, onStop });
+
+    fireEvent.click(screen.getByRole("button", { name: "停止生成" }));
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the stop button visible but disabled while stopping", () => {
+    renderComposer("", { canStop: false, disabled: true, loading: true, onStop: vi.fn(async () => undefined) });
+
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "停止中" }).disabled).toBe(true);
+  });
 });
 
 function mockTextareaScrollHeight(): void {
@@ -39,7 +55,7 @@ function mockTextareaScrollHeight(): void {
   });
 }
 
-function renderComposer(value: string) {
+function renderComposer(value: string, overrides: Partial<Parameters<typeof ChatComposer>[0]> = {}) {
   return render(
     <ChatComposer
       disabled={false}
@@ -48,6 +64,7 @@ function renderComposer(value: string) {
       onChange={vi.fn()}
       onOpenSettings={vi.fn()}
       onSubmit={vi.fn(async () => undefined)}
+      {...overrides}
     />,
   );
 }

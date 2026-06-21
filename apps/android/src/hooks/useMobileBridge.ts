@@ -40,13 +40,32 @@ interface SendAgentMessageOptions {
   onReply: (reply: AgentPayload) => void;
   onSessionId: (sessionId: string) => void;
   onStatus: (status: StatusMessage) => void;
+  requestId?: string;
   sessionId?: string;
+  traceId?: string;
 }
 
 interface SendAgentMessageResult {
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
+}
+
+interface StopAgentRunInput {
+  sessionId?: string;
+  traceId?: string;
+}
+
+interface StopAgentRunResult {
+  ok: boolean;
+  sessionId?: string;
+  status?: "stopped" | "not_running";
+}
+
+interface AgentStopPayload {
+  message: string;
+  session_id?: string;
+  status: "stopped" | "not_running";
 }
 
 function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): string {
@@ -749,8 +768,8 @@ export function useMobileBridge() {
 
   const sendAgentMessage = useCallback(
     async (options: SendAgentMessageOptions): Promise<SendAgentMessageResult> => {
-      const traceId = createTraceId("android-agent-stream");
-      const requestId = createTraceId("android-agent-stream-request");
+      const traceId = options.traceId?.trim() || createTraceId("android-agent-stream");
+      const requestId = options.requestId?.trim() || createTraceId("android-agent-stream-request");
       const initialSessionId = options.sessionId?.trim() || "";
       const runtime = createMobileAgentStreamRuntime(initialSessionId);
       const params = {
@@ -811,6 +830,38 @@ export function useMobileBridge() {
     [apiToken, bridgeUrl, refreshSessionsInBackground, settings.connectionMode],
   );
 
+  const stopAgentRun = useCallback(
+    async (input: StopAgentRunInput): Promise<StopAgentRunResult> => {
+      const sessionId = input.sessionId?.trim() || "";
+      const traceId = input.traceId?.trim() || "";
+      if (!sessionId && !traceId) {
+        return { ok: false };
+      }
+
+      setStatus({ tone: "loading", text: "停止中" });
+      try {
+        const payload = await requestBridge<AgentStopPayload>("AGENT_STOP", {
+          ...(sessionId ? { session_id: sessionId } : {}),
+          ...(traceId ? { trace_id: traceId } : {}),
+        });
+        refreshSessionsInBackground();
+        setStatus({
+          tone: "success",
+          text: payload.status === "not_running" ? "没有运行中的任务" : "已停止",
+        });
+        return {
+          ok: true,
+          sessionId: payload.session_id?.trim() || sessionId,
+          status: payload.status,
+        };
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return { ok: false };
+      }
+    },
+    [refreshSessionsInBackground, requestBridge],
+  );
+
   return {
     activateProvider,
     bridgeUrl,
@@ -839,6 +890,7 @@ export function useMobileBridge() {
     settings,
     skillList,
     skillListError,
+    stopAgentRun,
     switchModel,
     taskList,
     taskListError,

@@ -21,6 +21,7 @@ export type UiIconName =
   | "search"
   | "settings"
   | "sparkles"
+  | "stop"
   | "terminal"
   | "trash"
   | "x";

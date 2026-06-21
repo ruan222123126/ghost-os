@@ -271,6 +271,7 @@ export interface MobileSessionRunState {
   sessionEnded: boolean;
   status: MobileSessionRunStatus;
   statusText: string;
+  stopPending?: boolean;
   traceId?: string;
 }
 
