@@ -21,7 +21,9 @@ import {
   Settings,
   Sparkles,
   SquarePen,
+  Terminal,
   Trash2,
+  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { UiIconName } from "./types";
@@ -49,7 +51,9 @@ const ICONS: Record<UiIconName, LucideIcon> = {
   search: Search,
   settings: Settings,
   sparkles: Sparkles,
+  terminal: Terminal,
   trash: Trash2,
+  x: X,
 };
 
 interface IconButtonProps {

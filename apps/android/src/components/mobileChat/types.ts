@@ -21,7 +21,9 @@ export type UiIconName =
   | "search"
   | "settings"
   | "sparkles"
-  | "trash";
+  | "terminal"
+  | "trash"
+  | "x";
 
 export interface SidebarHistoryItem {
   id: string;

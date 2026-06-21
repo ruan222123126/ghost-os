@@ -2,184 +2,237 @@
   width: 100%;
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 4px;
 }
 
 .tool-card {
+  width: min(100%, 720px);
   min-width: 0;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  background: #ffffff;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin: 4px 0;
+  background: transparent;
 }
 
-.tool-card-toggle {
-  width: 100%;
+.tool-card-button {
+  width: fit-content;
+  max-width: 100%;
   min-width: 0;
-  min-height: 42px;
-  padding: 9px 10px;
+  border: 0;
+  padding: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  color: #3c4043;
+  justify-content: flex-start;
+  color: #5f6368;
   background: transparent;
   cursor: pointer;
+  transition: color 140ms ease;
 }
 
-.tool-card-toggle:disabled {
-  cursor: default;
+.tool-card-button:hover,
+.tool-card-button:focus-visible {
+  color: #202124;
 }
 
 .tool-card-heading {
   min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
-.tool-card-status-dot {
-  width: 8px;
-  height: 8px;
+.tool-card-heading > .ui-icon-terminal,
+.tool-chevron {
+  width: 14px;
+  height: 14px;
   flex: 0 0 auto;
-  border-radius: 999px;
-  background: #9aa0a6;
 }
 
-.tool-card-pending .tool-card-status-dot {
-  background: #fbbc04;
-}
-
-.tool-card-running .tool-card-status-dot {
-  background: #1a73e8;
-  animation: tool-card-pulse 1.2s ease-in-out infinite;
-}
-
-.tool-card-success .tool-card-status-dot {
-  background: #188038;
-}
-
-.tool-card-error .tool-card-status-dot {
-  background: #d93025;
-}
-
-.tool-card-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #202124;
-  font-size: 0.84rem;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.tool-card-status {
-  flex: 0 0 auto;
-  color: #5f6368;
-  font-size: 0.76rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.tool-card-chevron {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
+.tool-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #5f6368;
   transition: transform 140ms ease;
 }
 
-.tool-card.is-collapsed .tool-card-chevron {
+.tool-card-button:not(.is-open) .tool-chevron {
   transform: rotate(-90deg);
 }
 
-.tool-card-chevron .ui-icon {
-  width: 16px;
-  height: 16px;
+.tool-chevron .ui-icon {
+  width: 14px;
+  height: 14px;
 }
 
-.tool-card-details {
+.tool-card-title {
+  max-width: min(620px, calc(100vw - 160px));
   min-width: 0;
-  border-top: 1px solid #e5e7eb;
-  padding: 10px;
-  display: grid;
-  gap: 10px;
-  background: #f8fafc;
-}
-
-.tool-card-detail {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-
-.tool-card-detail-label {
-  color: #5f6368;
-  font-size: 0.72rem;
-  font-weight: 700;
+  overflow: hidden;
+  color: currentColor;
+  font-size: 0.82rem;
+  font-weight: 500;
   letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
 }
 
-.tool-card-detail-content {
+.tool-card-button.is-running .tool-card-title {
+  background: linear-gradient(120deg, #5f6368 30%, #202124 50%, #5f6368 70%);
+  background-size: 360% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  animation: tool-message-shimmer 2.8s linear infinite;
+}
+
+.tool-details {
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 10px;
+  margin-left: 6px;
+  border-left: 1px solid #dadce0;
+  padding: 0 0 0 16px;
+  color: #3c4043;
+  animation: tool-slide 200ms ease-out;
+}
+
+.tool-details-kind {
+  display: block;
+  margin-bottom: 6px;
+  color: #5f6368;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.tool-details-command {
+  margin-bottom: 8px;
+  color: #202124;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.tool-details-output {
+  max-height: 220px;
+  margin-bottom: 8px;
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.tool-details pre {
   min-width: 0;
   max-width: 100%;
   margin: 0;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 8px;
-  overflow-x: auto;
-  color: #1f2937;
-  background: #ffffff;
+  color: #3c4043;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
   font-size: 0.76rem;
-  line-height: 1.55;
-  white-space: pre-wrap;
+  line-height: 1.65;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.tool-card-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: #5f6368;
+  font-size: 0.76rem;
+}
+
+.tool-card-status.is-error {
+  color: #991b1b;
+}
+
+.tool-card-status .ui-icon,
+.tool-status-icon {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+}
+
+.tool-card-status-label {
+  font-size: 0.76rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tool-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #dadce0;
+  border-radius: 999px;
+  border-top-color: #3c4043;
+  animation: tool-spin 1s linear infinite;
 }
 
 @media (prefers-color-scheme: dark) {
-  .tool-card {
-    border-color: #303236;
-    background: #1e1f20;
-  }
-
-  .tool-card-toggle {
-    color: #e8eaed;
-  }
-
-  .tool-card-title {
-    color: #f1f3f4;
-  }
-
-  .tool-card-status,
-  .tool-card-chevron,
-  .tool-card-detail-label {
+  .tool-card-button {
     color: #a3a7ad;
   }
 
-  .tool-card-details {
-    border-top-color: #303236;
-    background: #171819;
+  .tool-card-button:hover,
+  .tool-card-button:focus-visible {
+    color: #f1f3f4;
   }
 
-  .tool-card-detail-content {
-    border-color: #303236;
+  .tool-card-button.is-running .tool-card-title {
+    background-image: linear-gradient(120deg, #a3a7ad 30%, #f1f3f4 50%, #a3a7ad 70%);
+  }
+
+  .tool-details {
+    border-left-color: #303236;
     color: #d8e2f0;
-    background: #1e1f20;
+  }
+
+  .tool-details-kind,
+  .tool-card-status {
+    color: #a3a7ad;
+  }
+
+  .tool-details-command {
+    color: #f1f3f4;
+  }
+
+  .tool-details pre {
+    color: #d8e2f0;
+  }
+
+  .tool-card-status.is-error {
+    color: #fca5a5;
+  }
+
+  .tool-spinner {
+    border-color: #303236;
+    border-top-color: #d8e2f0;
   }
 }
 
-@keyframes tool-card-pulse {
-  0%,
-  100% {
-    opacity: 0.45;
+@keyframes tool-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes tool-message-shimmer {
+  to {
+    background-position: -360% center;
+  }
+}
+
+@keyframes tool-slide {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
   }
 
-  50% {
+  to {
     opacity: 1;
+    transform: translateY(0);
   }
 }
