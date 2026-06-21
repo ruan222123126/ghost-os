@@ -58,7 +58,6 @@ export function SkillList(props: SkillListProps) {
               <span className="settings-card-badge">
                 {skill.enabled ? copy.settings.enabled : copy.settings.disabled}
               </span>
-              <span className="settings-card-id">{skill.id}</span>
             </div>
             <p className="settings-card-title is-strong line-clamp-1">{skill.name}</p>
             <p className="settings-card-meta line-clamp-2">{skill.description}</p>

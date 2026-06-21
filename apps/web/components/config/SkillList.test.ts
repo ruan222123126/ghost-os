@@ -34,6 +34,7 @@ describe('components/config/SkillList', () => {
     expect(html).toContain('Disable');
     expect(html).toContain('Delete');
     expect(html).toContain('whitespace-nowrap');
+    expect(html).not.toContain('skill_repo_release');
   });
 
   it('renders empty state and loading skeleton', () => {
