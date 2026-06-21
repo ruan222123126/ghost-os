@@ -10,7 +10,6 @@ import (
 	sessionartifacts "ghost-os/bridge/orchestration/internal/adapters/sessionartifacts"
 	appsessions "ghost-os/bridge/orchestration/internal/app/sessions"
 	appskills "ghost-os/bridge/orchestration/internal/app/skills"
-	"ghost-os/bridge/orchestration/internal/contracts/bus"
 	"ghost-os/bridge/orchestration/internal/dispatch"
 	internaltrace "ghost-os/bridge/orchestration/internal/trace"
 	"ghost-os/bridge/session"
@@ -254,6 +253,9 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 		SessionsList: func(_ context.Context, traceID string) (ServiceResult, error) {
 			return service.executeSessionsListAction(traceID)
 		},
+		SessionsSearch: func(_ context.Context, params sessionSearchParams, traceID string) (ServiceResult, error) {
+			return service.executeSessionsSearchAction(params, traceID)
+		},
 		SessionGet: func(_ context.Context, params sessionGetParams, traceID string) (ServiceResult, error) {
 			return service.executeSessionGetAction(params, traceID)
 		},
@@ -291,16 +293,4 @@ func defaultActionHandlers(service *bridgeService) dispatch.DefaultHandlers {
 			return service.executeTaskDeleteActionResult(params, traceID)
 		},
 	}
-}
-
-func (s *bridgeService) executeTaskListDispatchAction(
-	_ context.Context,
-	params taskListParams,
-	traceID string,
-) (ServiceResult, error) {
-	scope, err := dispatch.NormalizeTaskListScope(params.Scope)
-	if err != nil {
-		return ServiceResult{}, bus.WrapError(ServiceErrorInvalidInput, err)
-	}
-	return s.executeTaskListActionResult(scope, traceID)
 }

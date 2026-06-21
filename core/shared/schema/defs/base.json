@@ -7,6 +7,7 @@
         "AGENT_STOP",
         "HUMAN_RESPONSE",
         "SESSIONS_LIST",
+        "SESSIONS_SEARCH",
         "SESSION_GET",
         "CONFIG_GET",
         "CONFIG_UPDATE",

@@ -1,6 +1,7 @@
 package orchestration
 
 import (
+	"context"
 	"errors"
 
 	bridgeconfig "ghost-os/bridge/config"
@@ -8,6 +9,8 @@ import (
 	"ghost-os/bridge/orchestration/internal/adapters/toolregistry"
 	apprelay "ghost-os/bridge/orchestration/internal/app/agentturn/relay"
 	apptasks "ghost-os/bridge/orchestration/internal/app/tasks"
+	"ghost-os/bridge/orchestration/internal/contracts/bus"
+	"ghost-os/bridge/orchestration/internal/dispatch"
 	workflowdomain "ghost-os/bridge/orchestration/internal/domain/workflow"
 	"ghost-os/bridge/taskdefs"
 	bridgeTasks "ghost-os/bridge/tasks"
@@ -119,6 +122,18 @@ func (s *Service) ExecuteSystemTaskListAction(traceID string) (ServiceResult, er
 
 func (s *Service) ExecuteOrchestrationListAction(traceID string) (ServiceResult, error) {
 	return s.inner.executeTaskListActionResult(taskListScopeOrchestration, traceID)
+}
+
+func (s *bridgeService) executeTaskListDispatchAction(
+	_ context.Context,
+	params taskListParams,
+	traceID string,
+) (ServiceResult, error) {
+	scope, err := dispatch.NormalizeTaskListScope(params.Scope)
+	if err != nil {
+		return ServiceResult{}, bus.WrapError(ServiceErrorInvalidInput, err)
+	}
+	return s.executeTaskListActionResult(scope, traceID)
 }
 
 func (s *Service) ExecuteUserTaskCreateAction(req TaskCreateParams, traceID string) (ServiceResult, error) {

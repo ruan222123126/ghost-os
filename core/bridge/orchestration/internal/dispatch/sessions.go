@@ -2,6 +2,7 @@ package dispatch
 
 const (
 	ActionSessionsList         = "SESSIONS_LIST"
+	ActionSessionsSearch       = "SESSIONS_SEARCH"
 	ActionSessionGet           = "SESSION_GET"
 	ActionSessionDelete        = "SESSION_DELETE"
 	ActionSessionSources       = "SESSION_SOURCES"

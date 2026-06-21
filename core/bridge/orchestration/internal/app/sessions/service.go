@@ -25,10 +25,12 @@ var (
 	ErrTaskStoreRequired                  = errors.New("task store is not configured")
 	ErrUnsupportedSidebarPartitionVersion = errors.New("unsupported session sidebar partition version")
 	ErrInvalidSessionPageQuery            = errors.New("invalid session page query")
+	ErrInvalidSessionSearchQuery          = errors.New("invalid session search query")
 )
 
 type Store interface {
 	ListMetadata() ([]session.SessionMetadata, error)
+	SearchMetadata(string, int) ([]session.SessionMetadata, error)
 	Load(string) (*session.Session, error)
 	LoadPage(string, session.PageParams) (*session.Session, session.MessagePage, error)
 	Save(*session.Session) error
@@ -77,22 +79,11 @@ func (s Service) Search(query string, limit int, traceID string) ([]api.SessionM
 		return nil, err
 	}
 
-	summaries, err := store.ListMetadata()
+	matches, err := store.SearchMetadata(query, limit)
 	if err != nil {
 		s.log(traceID, ActionSearch, "error", err)
 		return nil, err
 	}
-
-	partitionState := session.SessionSidebarPartitionState{}
-	if strings.TrimSpace(query) != "" {
-		partitionState, err = store.LoadSidebarPartitionState()
-		if err != nil {
-			s.log(traceID, ActionSearch, "error", err)
-			return nil, err
-		}
-	}
-
-	matches := searchSessionSummaries(summaries, query, limit, partitionState)
 	metadata := make([]api.SessionMetadata, 0, len(matches))
 	for _, summary := range matches {
 		metadata = append(metadata, sessionturn.BuildSessionMetadataPayload(BuildMetadataInput(summary)))
@@ -100,6 +91,15 @@ func (s Service) Search(query string, limit int, traceID string) ([]api.SessionM
 
 	s.log(traceID, ActionSearch, "success", nil)
 	return metadata, nil
+}
+
+func (s Service) SearchParams(params api.SessionSearchParams, traceID string) ([]api.SessionMetadata, error) {
+	query, limit, err := ResolveSessionSearchParams(params)
+	if err != nil {
+		s.log(traceID, ActionSearch, "error", err)
+		return nil, err
+	}
+	return s.Search(query, limit, traceID)
 }
 
 func (s Service) Get(params api.SessionGetParams, traceID string) (api.SessionDetail, error) {

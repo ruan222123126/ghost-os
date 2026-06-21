@@ -1,7 +1,7 @@
 // CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
 // Source: core/shared/schema.json (https://ghost-os.dev/schemas/bus-envelope.schema.json)
 
-export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSION_GET' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
+export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_GET' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
 export type BusStatus = 'success' | 'error';
 
 export interface ApiRequest<TParams extends object> {

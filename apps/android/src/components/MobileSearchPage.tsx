@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { SidebarHistoryItem } from "./MobileChatHome";
+import type { SessionMetadata } from "../mobileTypes";
+import { errorMessage } from "../lib/bridgeBus";
 import { UiIcon } from "./mobileChat/icons";
 import "./MobileSearchPage.css";
 
@@ -8,49 +10,89 @@ const SEARCH_DELAY_MS = 500;
 
 interface MobileSearchPageProps {
   open: boolean;
+  bridgeConnected: boolean;
   historyItems: SidebarHistoryItem[];
   onClose: () => void;
+  onSearchSessions: (query: string) => Promise<SessionMetadata[]>;
   onSelectHistory: (sessionId: string) => void;
 }
 
 export function MobileSearchPage(props: MobileSearchPageProps) {
+  const { bridgeConnected, historyItems, onClose, onSearchSessions, onSelectHistory, open } = props;
   const [searchText, setSearchText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const searchRunIdRef = useRef(0);
   const normalizedSearchText = searchText.trim().toLocaleLowerCase("zh-CN");
   const sortedHistoryItems = useMemo(
-    () => [...props.historyItems].sort(compareHistoryItems),
-    [props.historyItems],
+    () => [...historyItems].sort(compareHistoryItems),
+    [historyItems],
+  );
+  const historyById = useMemo(
+    () => new Map(historyItems.map((item) => [item.id, item])),
+    [historyItems],
   );
   const [results, setResults] = useState(sortedHistoryItems);
 
   useEffect(() => {
-    if (!props.open) {
+    if (!open) {
+      searchRunIdRef.current += 1;
       setSearchText("");
       setIsLoading(false);
+      setSearchError("");
       setResults(sortedHistoryItems);
       return undefined;
     }
 
     if (!normalizedSearchText) {
+      searchRunIdRef.current += 1;
       setResults(sortedHistoryItems);
       setIsLoading(false);
+      setSearchError("");
       return undefined;
     }
 
-    setIsLoading(true);
-    const timeout = window.setTimeout(() => {
-      setResults(
-        sortedHistoryItems.filter((item) =>
-          item.title.toLocaleLowerCase("zh-CN").includes(normalizedSearchText),
-        ),
-      );
+    if (!bridgeConnected) {
+      searchRunIdRef.current += 1;
+      setResults([]);
       setIsLoading(false);
+      setSearchError("需要先连接电脑端");
+      return undefined;
+    }
+
+    const query = searchText.trim();
+    const searchRunId = searchRunIdRef.current + 1;
+    searchRunIdRef.current = searchRunId;
+    setIsLoading(true);
+    setSearchError("");
+    const timeout = window.setTimeout(() => {
+      void onSearchSessions(query)
+        .then((metadata) => {
+          if (searchRunIdRef.current !== searchRunId) {
+            return;
+          }
+          setResults(metadata.map((item) => sessionMetadataToHistoryItem(item, historyById)));
+          setIsLoading(false);
+        })
+        .catch((error: unknown) => {
+          if (searchRunIdRef.current !== searchRunId) {
+            return;
+          }
+          setResults([]);
+          setSearchError(`搜索失败：${errorMessage(error)}`);
+          setIsLoading(false);
+        });
     }, SEARCH_DELAY_MS);
 
-    return () => window.clearTimeout(timeout);
-  }, [normalizedSearchText, props.open, sortedHistoryItems]);
+    return () => {
+      window.clearTimeout(timeout);
+      if (searchRunIdRef.current === searchRunId) {
+        searchRunIdRef.current += 1;
+      }
+    };
+  }, [bridgeConnected, historyById, normalizedSearchText, onSearchSessions, open, searchText, sortedHistoryItems]);
 
-  if (!props.open) {
+  if (!open) {
     return null;
   }
 
@@ -59,12 +101,12 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
       setSearchText("");
       return;
     }
-    props.onClose();
+    onClose();
   }
 
   function selectHistory(sessionId: string): void {
-    props.onSelectHistory(sessionId);
-    props.onClose();
+    onSelectHistory(sessionId);
+    onClose();
   }
 
   return (
@@ -110,7 +152,7 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
               </ul>
             ) : (
               <p className="mobile-search-empty">
-                {normalizedSearchText ? "没有找到相关对话" : "暂无可搜索对话"}
+                {searchError || (normalizedSearchText ? "没有找到相关对话" : "暂无可搜索对话")}
               </p>
             )}
           </div>
@@ -118,6 +160,26 @@ export function MobileSearchPage(props: MobileSearchPageProps) {
       </div>
     </section>
   );
+}
+
+function sessionMetadataToHistoryItem(
+  metadata: SessionMetadata,
+  historyById: Map<string, SidebarHistoryItem>,
+): SidebarHistoryItem {
+  const existing = historyById.get(metadata.id);
+  return {
+    id: metadata.id,
+    title: metadata.title.trim() || existing?.title || fallbackSessionTitle(metadata.id),
+    updatedAt: metadata.updated_at,
+    pinned: existing?.pinned ?? false,
+    status: existing?.status,
+    unread: existing?.unread,
+  };
+}
+
+function fallbackSessionTitle(sessionId: string): string {
+  const shortId = sessionId.trim().slice(0, 8);
+  return shortId ? `会话 ${shortId}` : "新会话";
 }
 
 function compareHistoryItems(a: SidebarHistoryItem, b: SidebarHistoryItem): number {

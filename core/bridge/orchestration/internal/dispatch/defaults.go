@@ -30,6 +30,7 @@ type DefaultHandlers struct {
 	ConfigProviderDelete TypedHandler[api.ProviderBusDeleteRequest]
 	HumanResponse        TypedHandler[api.HumanResponseParams]
 	SessionsList         TraceHandler
+	SessionsSearch       TypedHandler[api.SessionSearchParams]
 	SessionGet           TypedHandler[api.SessionGetParams]
 	SkillList            TraceHandler
 	SkillUpdate          TypedHandler[SkillUpdateParams]
@@ -73,6 +74,7 @@ func registerHumanActions(router *Router, handlers DefaultHandlers) {
 
 func registerSessionActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionSessionsList, handlers.SessionsList)
+	RegisterTyped(router, bus.ActionSessionsSearch, handlers.SessionsSearch)
 	RegisterTyped(router, bus.ActionSessionGet, handlers.SessionGet)
 }
 

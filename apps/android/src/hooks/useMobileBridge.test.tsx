@@ -95,6 +95,45 @@ describe("useMobileBridge", () => {
     expect(detail.page.has_more_before).toBe(false);
   });
 
+  it("searches sessions through SESSIONS_SEARCH", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action !== "SESSIONS_SEARCH") {
+        return {
+          error: "",
+          payload: payloadForAction(request.action, request.params),
+          status: "success",
+        };
+      }
+
+      return {
+        error: "",
+        payload: [{
+          created_at: "2026-01-01T00:00:00.000Z",
+          id: "session-search",
+          message_count: 2,
+          title: "Search result",
+          token_count: 12,
+          updated_at: "2026-01-02T00:00:00.000Z",
+        }],
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    const sessions = await result.current.searchSessions(" fulltext ");
+
+    expect(lastBridgeBusRequest("SESSIONS_SEARCH")?.params).toEqual({ query: "fulltext" });
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.id).toBe("session-search");
+  });
+
   it("records the last successful HTTP connection after bridge connect succeeds", async () => {
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
@@ -422,6 +461,7 @@ function payloadForAction(action: string, params: Record<string, unknown> = {}):
     case "CONFIG_PROVIDERS_GET":
       return { active_provider: "", providers: [] };
     case "SESSIONS_LIST":
+    case "SESSIONS_SEARCH":
     case "SKILL_LIST":
     case "TASK_LIST":
       return [];

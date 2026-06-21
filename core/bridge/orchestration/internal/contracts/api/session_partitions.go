@@ -22,6 +22,11 @@ type SessionIDParams struct {
 	ID string `json:"id"`
 }
 
+type SessionSearchParams struct {
+	Query string `json:"query,omitempty"`
+	Limit *int   `json:"limit,omitempty"`
+}
+
 type SessionGetParams struct {
 	ID     string `json:"id"`
 	Limit  *int   `json:"limit,omitempty"`

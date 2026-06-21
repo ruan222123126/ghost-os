@@ -135,6 +135,7 @@ BRIDGE_EXPORT_BLOCK = '''const defaultMaxRequestBodyBytes int64 = 1 << 20
 
 type agentParams = api.AgentParams
 type sessionIDParams = api.SessionIDParams
+type sessionSearchParams = api.SessionSearchParams
 type sessionGetParams = api.SessionGetParams
 type sessionDeleteResponse = api.SessionDeleteResponse
 type taskCreateParams = api.TaskCreateParams
@@ -191,6 +192,7 @@ type AgentRequest = agentRequest
 type AgentParams = agentParams
 type HumanResponseParams = humanResponseParams
 type SessionIDParams = sessionIDParams
+type SessionSearchParams = sessionSearchParams
 type SessionGetParams = sessionGetParams
 type SessionSidebarPartition = sessionSidebarPartition
 type SessionSidebarPartitionState = sessionSidebarPartitionState

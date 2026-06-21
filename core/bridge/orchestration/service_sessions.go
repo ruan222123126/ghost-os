@@ -32,7 +32,20 @@ func (s *bridgeService) executeSessionsListAction(traceID string) (ServiceResult
 	return bus.ResultSuccess(metadata), nil
 }
 
-func (s *bridgeService) executeSessionsSearchAction(query string, limit int, traceID string) (ServiceResult, error) {
+func (s *bridgeService) executeSessionsSearchAction(params sessionSearchParams, traceID string) (ServiceResult, error) {
+	usecase, err := s.sessionUsecase()
+	if err != nil {
+		return ServiceResult{}, err
+	}
+
+	metadata, err := usecase.SearchParams(params, traceID)
+	if err != nil {
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
+	}
+	return bus.ResultSuccess(metadata), nil
+}
+
+func (s *bridgeService) executeSessionsSearchQueryAction(query string, limit int, traceID string) (ServiceResult, error) {
 	usecase, err := s.sessionUsecase()
 	if err != nil {
 		return ServiceResult{}, err
@@ -180,6 +193,7 @@ func (s *bridgeService) sessionArtifactUsecase() (appsessions.Service, error) {
 func mapSessionAppErrorKind(err error) ServiceErrorKind {
 	switch {
 	case errors.Is(err, appsessions.ErrSessionIDRequired),
+		errors.Is(err, appsessions.ErrInvalidSessionSearchQuery),
 		errors.Is(err, appsessions.ErrUnsupportedSidebarPartitionVersion),
 		errors.Is(err, appsessions.ErrInvalidSessionPageQuery),
 		errors.Is(err, appsessions.ErrArtifactIDRequired),
@@ -252,20 +266,6 @@ func (s *bridgeService) ensureSessionActive(sessionID string) error {
 		return nil
 	}
 	return bus.WrapError(ServiceErrorConflict, fmt.Errorf("%w: session_id=%s", errSessionEnded, id))
-}
-
-func (s *bridgeService) ensureSessionNotInflight(sessionID string) error {
-	id := strings.TrimSpace(sessionID)
-	if id == "" {
-		return nil
-	}
-	if s == nil || s.runRegistry == nil {
-		return bus.WrapError(ServiceErrorInternal, errors.New("run registry is not configured"))
-	}
-	if !s.runRegistry.IsInflight(id) {
-		return nil
-	}
-	return bus.WrapError(ServiceErrorConflict, fmt.Errorf("%w: session_id=%s", ErrSessionInflight, id))
 }
 
 // markSessionEnded 在收到结构化结束信号后把会话状态持久化为 ended。

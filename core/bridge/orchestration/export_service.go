@@ -179,7 +179,7 @@ func (s *Service) ExecuteSessionsListAction(traceID string) (ServiceResult, erro
 }
 
 func (s *Service) ExecuteSessionsSearchAction(query string, limit int, traceID string) (ServiceResult, error) {
-	return s.inner.executeSessionsSearchAction(query, limit, traceID)
+	return s.inner.executeSessionsSearchQueryAction(query, limit, traceID)
 }
 
 func (s *Service) ExecuteSessionSourcesAction(traceID string) (ServiceResult, error) {

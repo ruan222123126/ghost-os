@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"ghost-os/bridge/agent"
@@ -62,6 +63,20 @@ func (s *bridgeService) pendingQuestionSnapshot(sessionID string) (sessionPushEv
 		return sessionPushEvent{}, false
 	}
 	return internaltrace.PendingQuestionSnapshot(s.sessionStore, sessionID)
+}
+
+func (s *bridgeService) ensureSessionNotInflight(sessionID string) error {
+	id := strings.TrimSpace(sessionID)
+	if id == "" {
+		return nil
+	}
+	if s == nil || s.runRegistry == nil {
+		return bus.WrapError(ServiceErrorInternal, errors.New("run registry is not configured"))
+	}
+	if !s.runRegistry.IsInflight(id) {
+		return nil
+	}
+	return bus.WrapError(ServiceErrorConflict, fmt.Errorf("%w: session_id=%s", ErrSessionInflight, id))
 }
 
 func prepareAgentTurnRequest(params agentParams) (preparedAgentTurnRequest, error) {

@@ -5,6 +5,7 @@ const (
 	ActionAgentStop            = "AGENT_STOP"
 	ActionHumanResponse        = "HUMAN_RESPONSE"
 	ActionSessionsList         = "SESSIONS_LIST"
+	ActionSessionsSearch       = "SESSIONS_SEARCH"
 	ActionSessionGet           = "SESSION_GET"
 	ActionConfigGet            = "CONFIG_GET"
 	ActionConfigUpdate         = "CONFIG_UPDATE"

@@ -58,6 +58,7 @@ function App() {
     refreshSkills,
     runLoopNow,
     runningLoopId,
+    searchSessions,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
@@ -207,9 +208,11 @@ function App() {
 
       <MobileSearchPage
         open={isSearchOpen}
+        bridgeConnected={Boolean(config)}
         historyItems={mobileSessions.historyItems}
         onClose={() => setIsSearchOpen(false)}
         onSelectHistory={(sessionId) => void selectHistory(sessionId)}
+        onSearchSessions={searchSessions}
       />
 
       <div className="mobile-chat-content" aria-hidden={isModalOpen} inert={isModalOpen ? true : undefined}>

@@ -110,6 +110,71 @@ func TestBusSessionsListReturnsMetadata(t *testing.T) {
 	}
 }
 
+func TestBusSessionsSearchReturnsMetadata(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	match := session.NewSession("system")
+	match.ID = "session-bus-search-match"
+	match.Title = "Bus search"
+	match.AddMessage(llm.Message{Role: llm.RoleUser, Text: "backend fulltext needle"})
+	if err := sessionStore.Save(match); err != nil {
+		t.Fatalf("save matching session: %v", err)
+	}
+
+	other := session.NewSession("system")
+	other.ID = "session-bus-search-other"
+	other.Title = "Other"
+	other.AddMessage(llm.Message{Role: llm.RoleUser, Text: "unrelated"})
+	if err := sessionStore.Save(other); err != nil {
+		t.Fatalf("save other session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSIONS_SEARCH","params":{"query":"fulltext needle"},"trace_id":"trace-sessions-search"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.([]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if len(payload) != 1 {
+		t.Fatalf("unexpected session count: got %d want 1 payload=%v", len(payload), payload)
+	}
+	entry, ok := payload[0].(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected metadata entry type: %T", payload[0])
+	}
+	if entry["id"] != match.ID {
+		t.Fatalf("unexpected session id: got %v want %q", entry["id"], match.ID)
+	}
+}
+
+func TestBusSessionsSearchRejectsInvalidLimit(t *testing.T) {
+	handler := newTestHandler(t, nil)
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSIONS_SEARCH","params":{"query":"needle","limit":0},"trace_id":"trace-sessions-search-limit"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusBadRequest, recorder.Body.String())
+	}
+	if !strings.Contains(recorder.Body.String(), "limit must be a positive integer") {
+		t.Fatalf("unexpected error body: %s", recorder.Body.String())
+	}
+}
+
 func TestBusSessionGetReturnsDetail(t *testing.T) {
 	handler, sessionStore := newTestHandlerWithStore(t, nil)
 

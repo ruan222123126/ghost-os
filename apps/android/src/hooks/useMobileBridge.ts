@@ -615,6 +615,16 @@ export function useMobileBridge() {
     return payload;
   }, [requestBridge]);
 
+  const searchSessions = useCallback(
+    async (query: string): Promise<SessionMetadata[]> => {
+      const payload = parseSessionMetadataList(
+        await requestBridge<unknown>("SESSIONS_SEARCH", { query: query.trim() }),
+      );
+      return payload;
+    },
+    [requestBridge],
+  );
+
   const refreshSessionsInBackground = useCallback((): void => {
     void refreshSessions().catch((error: unknown) => {
       console.error("[useMobileBridge] refresh sessions failed", error);
@@ -874,6 +884,7 @@ export function useMobileBridge() {
     refreshSkills,
     runLoopNow,
     runningLoopId,
+    searchSessions,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
