@@ -87,8 +87,21 @@
   display: none;
 }
 
+.composer-single-line-measure {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  height: 52px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .composer-shell.is-multiline .composer-input {
   padding: 14px;
+}
+
+.composer-shell.is-multiline .composer-single-line-measure {
+  padding: 14px 94px 14px 46px;
 }
 
 .composer-bottom-spacer {

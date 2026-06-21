@@ -15,15 +15,17 @@ interface ChatComposerProps {
 
 const COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX = 52;
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
-const MULTILINE_TEXT_THRESHOLD = 30;
+const TEXTAREA_SCROLL_HEIGHT_EPSILON_PX = 1;
 
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineMeasureRef = useRef<HTMLTextAreaElement>(null);
   const composerRef = useRef<HTMLFormElement>(null);
   const [focused, setFocused] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const hasValue = props.value.trim().length > 0;
-  const isMultiLine = props.value.includes("\n") || props.value.length > MULTILINE_TEXT_THRESHOLD;
+  const wrapsPastSingleLine = useSingleLineOverflow(lineMeasureRef, props.value);
+  const isMultiLine = props.value.includes("\n") || wrapsPastSingleLine;
 
   useAutosizeTextarea(textareaRef, props.value, isMultiLine);
   useCloseComposerMenu(composerRef, menuOpen, setMenuOpen);
@@ -90,6 +92,15 @@ export function ChatComposer(props: ChatComposerProps) {
             onFocus={() => setFocused(true)}
             onInput={() => syncTextareaHeight(textareaRef.current, isMultiLine)}
           />
+          <textarea
+            ref={lineMeasureRef}
+            aria-hidden="true"
+            className="composer-input composer-single-line-measure"
+            readOnly
+            rows={1}
+            tabIndex={-1}
+            value={props.value}
+          />
           <div className="composer-actions">
             <IconButton label="语音输入" icon="mic" variant="composer" />
             <span className={`send-button-slot ${hasValue ? "is-visible" : ""}`} aria-hidden={!hasValue}>
@@ -133,6 +144,39 @@ function useCloseComposerMenu(
     document.addEventListener("pointerdown", handlePointerDown);
     return () => document.removeEventListener("pointerdown", handlePointerDown);
   }, [composerRef, menuOpen, setMenuOpen]);
+}
+
+function useSingleLineOverflow(textareaRef: RefObject<HTMLTextAreaElement | null>, value: string) {
+  const [overflows, setOverflows] = useState(false);
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+
+    function updateOverflow(): void {
+      if (!textarea) {
+        return;
+      }
+
+      const nextOverflows =
+        textarea.scrollHeight > COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX + TEXTAREA_SCROLL_HEIGHT_EPSILON_PX;
+      setOverflows((current) => (current === nextOverflows ? current : nextOverflows));
+    }
+
+    updateOverflow();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(updateOverflow);
+    resizeObserver.observe(textarea);
+    return () => resizeObserver.disconnect();
+  }, [textareaRef, value]);
+
+  return overflows;
 }
 
 function useAutosizeTextarea(
