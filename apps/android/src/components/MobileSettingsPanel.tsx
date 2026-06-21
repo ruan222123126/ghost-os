@@ -157,7 +157,6 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onRemovePairing={removePairing}
               onSaveAPIToken={saveAPIToken}
               onSaveBridgeURL={saveBridgeURL}
-              onSetAutoConnectEnabled={setAutoConnectEnabled}
               onSetConnectionMode={setConnectionMode}
             />
           ) : view === "providers" ? (
@@ -180,11 +179,13 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
             />
           ) : (
             <SettingsRoot
+              autoConnectEnabled={props.settings.autoConnectEnabled}
               connectionSublabel={connectionSublabel(props.settings)}
               providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
               providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
               skillDisabled={skillEntryDisabled(props.connectionStatus)}
               skillSublabel={skillSublabel(props.connectionStatus, props.skillList, props.skillListError)}
+              onSetAutoConnectEnabled={setAutoConnectEnabled}
               onOpenConnection={() => setView("connection")}
               onOpenProviders={() => setView("providers")}
               onOpenSkills={() => setView("skills")}
@@ -226,6 +227,7 @@ function SettingsButton(props: {
 }
 
 function SettingsRoot(props: {
+  autoConnectEnabled: boolean;
   connectionSublabel: string;
   providerDisabled: boolean;
   providerSublabel: string;
@@ -234,11 +236,24 @@ function SettingsRoot(props: {
   onOpenConnection: () => void;
   onOpenProviders: () => void;
   onOpenSkills: () => void;
+  onSetAutoConnectEnabled: (enabled: boolean) => void;
 }) {
   return (
     <>
       <SettingsSection title="连接">
         <div className="mobile-settings-card">
+          <button
+            className="mobile-settings-auto-connect-row"
+            type="button"
+            role="switch"
+            aria-checked={props.autoConnectEnabled}
+            onClick={() => props.onSetAutoConnectEnabled(!props.autoConnectEnabled)}
+          >
+            <span>是否自动连接</span>
+            <span className="mobile-settings-toggle-track" aria-hidden={true}>
+              <span className="mobile-settings-toggle-thumb" />
+            </span>
+          </button>
           <SettingsButton icon={Link2} label="连接" sublabel={props.connectionSublabel} onClick={props.onOpenConnection} />
           <SettingsButton
             icon={Server}
@@ -293,7 +308,6 @@ interface ConnectionSettingsProps {
   onRemovePairing: () => Promise<void>;
   onSaveAPIToken: (value: string) => void;
   onSaveBridgeURL: (value: string) => void;
-  onSetAutoConnectEnabled: (enabled: boolean) => void;
   onSetConnectionMode: (mode: StoredSettings["connectionMode"]) => void;
 }
 
@@ -310,19 +324,6 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
       </div>
 
       <div className="mobile-settings-connection-card">
-        <button
-          className="mobile-settings-auto-connect-row"
-          type="button"
-          role="switch"
-          aria-checked={props.settings.autoConnectEnabled}
-          onClick={() => props.onSetAutoConnectEnabled(!props.settings.autoConnectEnabled)}
-        >
-          <span>是否自动连接</span>
-          <span className="mobile-settings-toggle-track" aria-hidden={true}>
-            <span className="mobile-settings-toggle-thumb" />
-          </span>
-        </button>
-
         <div className="mobile-settings-mode-switch" role="group" aria-label="连接模式">
           <button
             className={isWebRTC ? "is-active" : ""}
