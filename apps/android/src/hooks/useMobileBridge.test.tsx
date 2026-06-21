@@ -51,6 +51,56 @@ describe("useMobileBridge", () => {
     });
   });
 
+  it("loads a full session through paginated SESSION_GET pages", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action !== "SESSION_GET") {
+        return {
+          error: "",
+          payload: payloadForAction(request.action),
+          status: "success",
+        };
+      }
+
+      return {
+        error: "",
+        payload: request.params.before === 3
+          ? sessionDetailPayload([
+            { index: 0, role: "user", text: "first" },
+            { index: 1, role: "assistant", text: "second" },
+          ], false)
+          : sessionDetailPayload([
+            { index: 3, role: "assistant", text: "fourth" },
+            { index: 2, role: "user", text: "third" },
+          ], true),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    const detail = await result.current.getFullSession("session-1");
+
+    expect(bridgeBusRequests().filter((request) => request.action === "SESSION_GET").map((request) => request.params)).toEqual([
+      { id: "session-1", limit: 200 },
+      { before: 3, id: "session-1", limit: 200 },
+    ]);
+    expect(detail.messages.map((message) => message.index)).toEqual([0, 1, 2, 3]);
+    expect(detail.page.has_more_before).toBe(false);
+  });
+
   it("records the last successful HTTP connection after bridge connect succeeds", async () => {
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
@@ -225,6 +275,7 @@ interface BridgeBusRequest {
   action: string;
   apiToken?: string;
   baseUrl: string;
+  params: Record<string, unknown>;
 }
 
 function storedSettings(): Record<string, unknown> {
@@ -258,4 +309,21 @@ function payloadForAction(action: string): unknown {
     default:
       return {};
   }
+}
+
+function sessionDetailPayload(messages: Array<Record<string, unknown>>, hasMoreBefore: boolean): Record<string, unknown> {
+  return {
+    created_at: "2026-01-01T00:00:00.000Z",
+    id: "session-1",
+    message_count: 4,
+    messages,
+    page: {
+      has_more_before: hasMoreBefore,
+      limit: 200,
+      next_before: hasMoreBefore ? 3 : null,
+    },
+    title: "Session 1",
+    token_count: 10,
+    updated_at: "2026-01-02T00:00:00.000Z",
+  };
 }

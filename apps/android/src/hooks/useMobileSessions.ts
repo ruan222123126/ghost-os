@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   appendStoredMobileMessages,
+  loadPersistedMobileConversations,
   loadStoredMobileConversations,
+  savePersistedMobileConversations,
   saveStoredMobileConversations,
   upsertStoredMobileConversation,
 } from "../lib/mobileSessionStorage";
+import { hasTauriRuntime } from "../lib/bridgeBus";
 import {
   createAssistantConversationMessage,
   createClientRunId,
@@ -54,8 +57,11 @@ interface SendAgentMessageResult {
 
 interface UseMobileSessionsOptions {
   bridgeConnected: boolean;
+  computerSessionSyncScope?: string;
+  getFullSession: (sessionId: string) => Promise<SessionDetail>;
   getSession: (sessionId: string) => Promise<SessionDetail>;
   pinnedHistoryIds: string[];
+  persistComputerSessionsEnabled: boolean;
   sendAgentMessage: (options: SendAgentMessageOptions) => Promise<SendAgentMessageResult>;
   sessions: SessionMetadata[];
   sessionsLoaded: boolean;
@@ -66,11 +72,13 @@ interface PersistConversationInput {
   id: string;
   messages: MobileConversationMessage[];
   preserveExistingTitle?: boolean;
+  sourceMessageCount?: number;
   title: string;
   updatedAt?: string;
 }
 
 const HOME_IDLE_STATUS: StatusMessage = { tone: "idle", text: "首页" };
+const PERSIST_DISABLED_STATUS: StatusMessage = { tone: "idle", text: "未开启" };
 
 export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [activeSessionId, setActiveSessionId] = useState<string>();
@@ -78,17 +86,48 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   const [homeReply, setHomeReply] = useState<AgentPayload>();
   const [homeRun, setHomeRun] = useState<MobileSessionRunState>(() => createIdleRunState());
   const [sessionViews, setSessionViews] = useState<Record<string, MobileSessionView>>({});
-  const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() =>
-    loadStoredMobileConversations(),
-  );
+  const [storedConversations, setStoredConversations] = useState<StoredMobileConversation[]>(() => initialStoredConversations());
+  const [storageLoaded, setStorageLoaded] = useState(() => !hasTauriRuntime());
+  const [computerSessionPersistStatus, setComputerSessionPersistStatus] =
+    useState<StatusMessage>(PERSIST_DISABLED_STATUS);
   const activeSessionIdRef = useRef<string | undefined>(undefined);
+  const storedConversationsRef = useRef<StoredMobileConversation[]>(storedConversations);
+  const syncRunIdRef = useRef(0);
 
   useEffect(() => {
     activeSessionIdRef.current = activeSessionId;
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (!options.bridgeConnected || !options.sessionsLoaded) {
+    storedConversationsRef.current = storedConversations;
+  }, [storedConversations]);
+
+  useEffect(() => {
+    if (!hasTauriRuntime()) {
+      return;
+    }
+
+    let cancelled = false;
+    void loadPersistedMobileConversations()
+      .then((conversations) => {
+        if (cancelled) {
+          return;
+        }
+        setStoredConversations(conversations);
+        setStorageLoaded(true);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setComputerSessionPersistStatus({ tone: "error", text: `同步失败：${errorMessage(error)}` });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!options.bridgeConnected || !options.sessionsLoaded || !storageLoaded) {
       return;
     }
 
@@ -103,11 +142,54 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
 
     setStoredConversations((current) => {
       const next = reconcileStoredConversationsWithBridge(current, options.sessions, keepIds);
-      saveStoredMobileConversations(next);
+      saveConversationsInBackground(next);
       return next;
     });
     setSessionViews((current) => syncSessionViewTitles(current, options.sessions));
-  }, [activeSessionId, options.bridgeConnected, options.sessions, options.sessionsLoaded, sessionViews]);
+  }, [activeSessionId, options.bridgeConnected, options.sessions, options.sessionsLoaded, sessionViews, storageLoaded]);
+
+  useEffect(() => {
+    if (!options.persistComputerSessionsEnabled) {
+      syncRunIdRef.current += 1;
+      setComputerSessionPersistStatus(PERSIST_DISABLED_STATUS);
+      return;
+    }
+    if (!options.bridgeConnected || !options.sessionsLoaded || !storageLoaded) {
+      syncRunIdRef.current += 1;
+      setComputerSessionPersistStatus({ tone: "idle", text: "等待连接" });
+      return;
+    }
+
+    const runId = syncRunIdRef.current + 1;
+    syncRunIdRef.current = runId;
+    let cancelled = false;
+    setComputerSessionPersistStatus({ tone: "loading", text: "同步中" });
+
+    void syncComputerSessions(runId)
+      .then((syncedCount) => {
+        if (!cancelled && syncRunIdRef.current === runId) {
+          setComputerSessionPersistStatus({ tone: "success", text: `已同步 ${syncedCount} 个` });
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled && syncRunIdRef.current === runId) {
+          setComputerSessionPersistStatus({ tone: "error", text: `同步失败：${errorMessage(error)}` });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      syncRunIdRef.current += 1;
+    };
+  }, [
+    options.bridgeConnected,
+    options.computerSessionSyncScope,
+    options.getFullSession,
+    options.persistComputerSessionsEnabled,
+    options.sessions,
+    options.sessionsLoaded,
+    storageLoaded,
+  ]);
 
   const activeView = activeSessionId ? sessionViews[activeSessionId] : undefined;
   const activeMessages = activeView?.messages ?? homeMessages;
@@ -251,6 +333,7 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
         createdAt: detail.created_at,
         id: detail.id,
         messages,
+        sourceMessageCount: detail.message_count,
         title,
         updatedAt: detail.updated_at,
       });
@@ -368,9 +451,55 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
   function persistConversation(input: PersistConversationInput): void {
     setStoredConversations((current) => {
       const next = upsertStoredMobileConversation(current, input);
-      saveStoredMobileConversations(next);
+      saveConversationsInBackground(next);
       return next;
     });
+  }
+
+  function saveConversationsInBackground(conversations: StoredMobileConversation[]): void {
+    if (!hasTauriRuntime()) {
+      saveStoredMobileConversations(conversations);
+      return;
+    }
+    void savePersistedMobileConversations(conversations).catch((error: unknown) => {
+      console.error("[useMobileSessions] save conversations failed", error);
+    });
+  }
+
+  async function syncComputerSessions(runId: number): Promise<number> {
+    const changed: StoredMobileConversation[] = [];
+    const currentById = new Map(storedConversationsRef.current.map((conversation) => [conversation.id, conversation]));
+
+    for (const session of options.sessions) {
+      if (syncRunIdRef.current !== runId) {
+        return 0;
+      }
+      const cached = currentById.get(session.id);
+      if (cached && isStoredConversationCurrent(cached, session)) {
+        continue;
+      }
+
+      const detail = await options.getFullSession(session.id);
+      changed.push({
+        created_at: detail.created_at,
+        id: detail.id,
+        messages: sessionDetailToConversationMessages(detail),
+        source_message_count: detail.message_count,
+        title: detail.title.trim() || sessionFallbackTitle(detail.id),
+        updated_at: detail.updated_at,
+      });
+    }
+
+    if (syncRunIdRef.current !== runId) {
+      return 0;
+    }
+
+    const next = mergeSyncedConversations(storedConversationsRef.current, changed);
+    await savePersistedMobileConversations(next);
+    if (syncRunIdRef.current === runId) {
+      setStoredConversations(next);
+    }
+    return options.sessions.length;
   }
 
   return {
@@ -380,10 +509,42 @@ export function useMobileSessions(options: UseMobileSessionsOptions) {
     activeStatus,
     canSend: options.bridgeConnected && activeRun.status !== "running",
     clearCurrentConversation,
+    computerSessionPersistStatus,
     hasConversation: activeMessages.length > 0 || Boolean(activeReply),
     historyItems,
     selectSession,
     sendMessage,
     startNewSession,
   };
+}
+
+function isStoredConversationCurrent(conversation: StoredMobileConversation, session: SessionMetadata): boolean {
+  return conversation.updated_at === session.updated_at && conversation.source_message_count === session.message_count;
+}
+
+function mergeSyncedConversations(
+  current: StoredMobileConversation[],
+  synced: StoredMobileConversation[],
+): StoredMobileConversation[] {
+  if (synced.length === 0) {
+    return current;
+  }
+
+  const nextById = new Map(current.map((conversation) => [conversation.id, conversation]));
+  for (const conversation of synced) {
+    nextById.set(conversation.id, conversation);
+  }
+  return [...nextById.values()].sort(compareStoredConversations);
+}
+
+function compareStoredConversations(left: StoredMobileConversation, right: StoredMobileConversation): number {
+  const updatedOrder = right.updated_at.localeCompare(left.updated_at);
+  if (updatedOrder !== 0) {
+    return updatedOrder;
+  }
+  return left.title.localeCompare(right.title, "zh-Hans");
+}
+
+function initialStoredConversations(): StoredMobileConversation[] {
+  return hasTauriRuntime() ? [] : loadStoredMobileConversations();
 }

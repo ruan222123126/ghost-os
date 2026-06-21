@@ -23,10 +23,11 @@ describe("settingsStorage", () => {
       autoConnectEnabled: false,
       bridgeUrl: "http://localhost:9000",
       connectionMode: "http",
+      persistComputerSessionsEnabled: false,
     });
   });
 
-  it("persists auto connect and last successful HTTP connection", () => {
+  it("persists auto connect, computer session persistence, and last successful HTTP connection", () => {
     const settings: StoredSettings = {
       apiToken: " token ",
       autoConnectEnabled: true,
@@ -37,6 +38,7 @@ describe("settingsStorage", () => {
         bridgeUrl: "http://localhost:8000",
         connectionMode: "http",
       },
+      persistComputerSessionsEnabled: true,
     };
 
     saveSettings(settings);
@@ -46,6 +48,7 @@ describe("settingsStorage", () => {
       autoConnectEnabled: true,
       bridgeUrl: "http://localhost:9000",
       connectionMode: "http",
+      persistComputerSessionsEnabled: true,
       lastSuccessfulConnection: {
         apiToken: "old-token",
         bridgeUrl: "http://localhost:8000",

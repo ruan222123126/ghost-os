@@ -3,13 +3,14 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 const BRIDGE_AGENT_STREAM_PATH: &str = "api/agent/stream";
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT: &str = "bridge-agent-stream-chunk";
 const BRIDGE_BUS_PATH: &str = "api/bus";
+const MOBILE_CONVERSATIONS_FILE: &str = "mobile-conversations.v1.json";
 const REQUEST_TIMEOUT_SECS: u64 = 60;
 const SSE_CONTENT_TYPE: &str = "text/event-stream";
 
@@ -194,6 +195,21 @@ fn mobile_credential_delete(app: tauri::AppHandle, device_id: String) -> Result<
     write_mobile_credentials(&path, &credentials)
 }
 
+#[tauri::command]
+fn mobile_conversations_load(app: tauri::AppHandle) -> Result<Vec<Value>, String> {
+    let path = mobile_conversations_path(&app)?;
+    read_mobile_conversations(&path)
+}
+
+#[tauri::command]
+fn mobile_conversations_save(
+    app: tauri::AppHandle,
+    conversations: Vec<Value>,
+) -> Result<(), String> {
+    let path = mobile_conversations_path(&app)?;
+    write_mobile_conversations(&path, &conversations)
+}
+
 fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
     bridge_api_url(base_url, BRIDGE_BUS_PATH)
 }
@@ -355,6 +371,43 @@ fn mobile_credential_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("mobile-credentials.json"))
 }
 
+fn mobile_conversations_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("resolve mobile conversations directory failed: {err}"))?;
+    Ok(dir.join(MOBILE_CONVERSATIONS_FILE))
+}
+
+fn read_mobile_conversations(path: &Path) -> Result<Vec<Value>, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) => {
+            if raw.trim().is_empty() {
+                return Ok(Vec::new());
+            }
+            match serde_json::from_str::<Value>(&raw)
+                .map_err(|err| format!("decode mobile conversations failed: {err}"))?
+            {
+                Value::Array(items) => Ok(items),
+                _ => Err("mobile conversations storage must be a JSON array".to_string()),
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
+        Err(err) => Err(format!("read mobile conversations failed: {err}")),
+    }
+}
+
+fn write_mobile_conversations(path: &Path, conversations: &[Value]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create mobile conversations directory failed: {err}"))?;
+    }
+    let encoded = serde_json::to_vec_pretty(conversations)
+        .map_err(|err| format!("encode mobile conversations failed: {err}"))?;
+    fs::write(path, encoded).map_err(|err| format!("write mobile conversations failed: {err}"))?;
+    set_private_file_permissions(path, "mobile conversations")
+}
+
 fn read_mobile_credentials(path: &PathBuf) -> Result<BTreeMap<String, String>, String> {
     match fs::read_to_string(path) {
         Ok(raw) => {
@@ -381,16 +434,16 @@ fn write_mobile_credentials(
     let encoded = serde_json::to_vec_pretty(credentials)
         .map_err(|err| format!("encode mobile credentials failed: {err}"))?;
     fs::write(path, encoded).map_err(|err| format!("write mobile credentials failed: {err}"))?;
-    set_private_file_permissions(path)
+    set_private_file_permissions(path, "mobile credential")
 }
 
-fn set_private_file_permissions(path: &PathBuf) -> Result<(), String> {
+fn set_private_file_permissions(path: &Path, label: &str) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
 
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-            .map_err(|err| format!("set mobile credential permissions failed: {err}"))?;
+            .map_err(|err| format!("set {label} permissions failed: {err}"))?;
     }
     Ok(())
 }
@@ -449,6 +502,64 @@ mod tests {
             "expected text/event-stream response but received application/json"
         );
     }
+
+    #[test]
+    fn read_mobile_conversations_returns_empty_when_file_is_missing() {
+        let dir = unique_test_dir("missing-conversations");
+        let path = dir.join(MOBILE_CONVERSATIONS_FILE);
+
+        let conversations = read_mobile_conversations(&path).expect("missing file loads");
+
+        assert!(conversations.is_empty());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn write_mobile_conversations_creates_directory_and_writes_array() {
+        let dir = unique_test_dir("write-conversations");
+        let path = dir.join("nested").join(MOBILE_CONVERSATIONS_FILE);
+        let payload = vec![serde_json::json!({ "id": "session-1" })];
+
+        write_mobile_conversations(&path, &payload).expect("write conversations");
+
+        let conversations = read_mobile_conversations(&path).expect("read conversations");
+        assert_eq!(conversations, payload);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_mobile_conversations_rejects_non_array_json() {
+        let dir = unique_test_dir("non-array-conversations");
+        fs::create_dir_all(&dir).expect("create test dir");
+        let path = dir.join(MOBILE_CONVERSATIONS_FILE);
+        fs::write(&path, r#"{"id":"session-1"}"#).expect("write test file");
+
+        let error = read_mobile_conversations(&path).expect_err("non-array JSON fails");
+
+        assert_eq!(error, "mobile conversations storage must be a JSON array");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn read_mobile_conversations_rejects_damaged_json() {
+        let dir = unique_test_dir("damaged-conversations");
+        fs::create_dir_all(&dir).expect("create test dir");
+        let path = dir.join(MOBILE_CONVERSATIONS_FILE);
+        fs::write(&path, "[").expect("write test file");
+
+        let error = read_mobile_conversations(&path).expect_err("damaged JSON fails");
+
+        assert!(error.starts_with("decode mobile conversations failed:"));
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    fn unique_test_dir(label: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        std::env::temp_dir().join(format!("ghost-os-mobile-{label}-{nanos}"))
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -460,7 +571,9 @@ pub fn run() {
             bridge_bus_request,
             mobile_credential_save,
             mobile_credential_load,
-            mobile_credential_delete
+            mobile_credential_delete,
+            mobile_conversations_load,
+            mobile_conversations_save
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -56,8 +56,10 @@ describe("useMobileSessions", () => {
 
     rerender({
       bridgeConnected: true,
+      getFullSession: vi.fn(),
       getSession: vi.fn(),
       pinnedHistoryIds: [],
+      persistComputerSessionsEnabled: false,
       sendAgentMessage,
       sessions: [],
       sessionsLoaded: false,
@@ -253,6 +255,76 @@ describe("useMobileSessions", () => {
     await waitFor(() => expect(result.current.historyItems.find((item) => item.id === "session-1")?.unread).toBe(true));
     expect(result.current.historyItems.find((item) => item.id === "session-2")?.unread).toBe(false);
   });
+
+  it("does not sync all Bridge sessions when computer session persistence is disabled", async () => {
+    const getFullSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getFullSession,
+      persistComputerSessionsEnabled: false,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("未开启"));
+
+    expect(getFullSession).not.toHaveBeenCalled();
+  });
+
+  it("syncs all Bridge sessions when computer session persistence is enabled", async () => {
+    const getFullSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getFullSession,
+      persistComputerSessionsEnabled: true,
+      sessions: [session("session-1", "One"), session("session-2", "Two")],
+      sessionsLoaded: true,
+    });
+
+    await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 2 个"));
+
+    expect(getFullSession).toHaveBeenCalledTimes(2);
+    expect(loadStored().map((conversation) => conversation.id).sort()).toEqual(["session-1", "session-2"]);
+    expect(loadStored()[0]).toMatchObject({ source_message_count: 1 });
+  });
+
+  it("skips fully synced Bridge sessions by updated_at and source_message_count", async () => {
+    saveStored([
+      {
+        ...storedConversation("session-1", "Cached", [message("session-1", "user", "loaded")]),
+        source_message_count: 1,
+        updated_at: "2026-01-02T00:00:00.000Z",
+      },
+    ]);
+    const getFullSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+    const { result } = renderMobileSessions({
+      getFullSession,
+      persistComputerSessionsEnabled: true,
+      sessions: [session("session-1", "Bridge title")],
+      sessionsLoaded: true,
+    });
+
+    await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("已同步 1 个"));
+
+    expect(getFullSession).not.toHaveBeenCalled();
+  });
+
+  it("reports sync failures without saving partial success", async () => {
+    const getFullSession = vi.fn(async (sessionId: string) => {
+      if (sessionId === "session-2") {
+        throw new Error("SESSION_GET failed");
+      }
+      return sessionDetail(sessionId);
+    });
+    const { result } = renderMobileSessions({
+      getFullSession,
+      persistComputerSessionsEnabled: true,
+      sessions: [session("session-1", "One"), session("session-2", "Two")],
+      sessionsLoaded: true,
+    });
+
+    await waitFor(() => expect(result.current.computerSessionPersistStatus.text).toBe("同步失败：SESSION_GET failed"));
+
+    expect(loadStored()).toEqual([]);
+  });
 });
 
 describe("mobile session history projection", () => {
@@ -358,20 +430,26 @@ interface SendResult {
   sessionId?: string;
 }
 
-function renderMobileSessions(overrides: Partial<Parameters<typeof useMobileSessions>[0]> = {}) {
-  const initialProps = {
-    bridgeConnected: true,
-    getSession: vi.fn(async (sessionId: string) => sessionDetail(sessionId)),
-    pinnedHistoryIds: [],
-    sendAgentMessage: vi.fn(async (options: SendOptions) => {
-      options.onReply(agentReply(options.sessionId || "session-1", "reply"));
-      return { ok: true, reply: agentReply(options.sessionId || "session-1", "reply"), sessionId: options.sessionId || "session-1" };
-    }),
-    sessions: [],
-    sessionsLoaded: false,
-    ...overrides,
+type UseMobileSessionsOptionsForTest = Parameters<typeof useMobileSessions>[0];
+
+function renderMobileSessions(overrides: Partial<UseMobileSessionsOptionsForTest> = {}) {
+  const defaultGetSession = vi.fn(async (sessionId: string) => sessionDetail(sessionId));
+  const defaultSendAgentMessage = vi.fn(async (options: SendOptions) => {
+    options.onReply(agentReply(options.sessionId || "session-1", "reply"));
+    return { ok: true, reply: agentReply(options.sessionId || "session-1", "reply"), sessionId: options.sessionId || "session-1" };
+  });
+  const initialProps: UseMobileSessionsOptionsForTest = {
+    bridgeConnected: overrides.bridgeConnected ?? true,
+    computerSessionSyncScope: overrides.computerSessionSyncScope,
+    getFullSession: overrides.getFullSession ?? defaultGetSession,
+    getSession: overrides.getSession ?? defaultGetSession,
+    pinnedHistoryIds: overrides.pinnedHistoryIds ?? [],
+    persistComputerSessionsEnabled: overrides.persistComputerSessionsEnabled ?? false,
+    sendAgentMessage: overrides.sendAgentMessage ?? defaultSendAgentMessage,
+    sessions: overrides.sessions ?? [],
+    sessionsLoaded: overrides.sessionsLoaded ?? false,
   };
-  return renderHook((props: Parameters<typeof useMobileSessions>[0]) => useMobileSessions(props), {
+  return renderHook((props: UseMobileSessionsOptionsForTest) => useMobileSessions(props), {
     initialProps,
   });
 }

@@ -72,7 +72,6 @@ export function reconcileStoredConversationsWithBridge(
       return {
         ...conversation,
         title: session.title.trim() || conversation.title,
-        updated_at: session.updated_at,
       };
     });
 }

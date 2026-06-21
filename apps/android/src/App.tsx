@@ -47,6 +47,7 @@ function App() {
     createProvider,
     deleteProvider,
     deleteSkill,
+    getFullSession,
     getSession,
     host,
     providerList,
@@ -73,8 +74,11 @@ function App() {
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
+    computerSessionSyncScope: `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`,
+    getFullSession,
     getSession,
     pinnedHistoryIds,
+    persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
@@ -261,6 +265,7 @@ function App() {
         open={isSettingsOpen}
         settings={settings}
         config={config}
+        computerSessionPersistStatus={mobileSessions.computerSessionPersistStatus}
         connectionStatus={connectionStatus}
         providerList={providerList}
         onClose={() => setIsSettingsOpen(false)}

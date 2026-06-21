@@ -1,6 +1,6 @@
 import type { ComponentType, Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Globe, Key, Link2, Server, Sparkles, Trash2, Wifi } from "lucide-react";
+import { ArrowLeft, Database, Globe, Key, Link2, Server, Sparkles, Trash2, Wifi } from "lucide-react";
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type {
@@ -17,6 +17,7 @@ import "./MobileSettingsPanel.css";
 
 interface MobileSettingsPanelProps {
   config: ConfigPayload | undefined;
+  computerSessionPersistStatus: StatusMessage;
   connectionStatus: StatusMessage;
   open: boolean;
   providerList: ProviderListPayload | undefined;
@@ -101,6 +102,10 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
     props.onSettingsChange((current) => ({ ...current, autoConnectEnabled: enabled }));
   }
 
+  function setPersistComputerSessionsEnabled(enabled: boolean): void {
+    props.onSettingsChange((current) => ({ ...current, persistComputerSessionsEnabled: enabled }));
+  }
+
   function setConnectionMode(mode: StoredSettings["connectionMode"]): void {
     props.onSettingsChange((current) => ({ ...current, connectionMode: mode }));
   }
@@ -181,11 +186,14 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
             <SettingsRoot
               autoConnectEnabled={props.settings.autoConnectEnabled}
               connectionSublabel={connectionSublabel(props.settings)}
+              persistComputerSessionsEnabled={props.settings.persistComputerSessionsEnabled}
+              persistComputerSessionsStatus={props.computerSessionPersistStatus}
               providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
               providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
               skillDisabled={skillEntryDisabled(props.connectionStatus)}
               skillSublabel={skillSublabel(props.connectionStatus, props.skillList, props.skillListError)}
               onSetAutoConnectEnabled={setAutoConnectEnabled}
+              onSetPersistComputerSessionsEnabled={setPersistComputerSessionsEnabled}
               onOpenConnection={() => setView("connection")}
               onOpenProviders={() => setView("providers")}
               onOpenSkills={() => setView("skills")}
@@ -229,6 +237,8 @@ function SettingsButton(props: {
 function SettingsRoot(props: {
   autoConnectEnabled: boolean;
   connectionSublabel: string;
+  persistComputerSessionsEnabled: boolean;
+  persistComputerSessionsStatus: StatusMessage;
   providerDisabled: boolean;
   providerSublabel: string;
   skillDisabled: boolean;
@@ -237,26 +247,25 @@ function SettingsRoot(props: {
   onOpenProviders: () => void;
   onOpenSkills: () => void;
   onSetAutoConnectEnabled: (enabled: boolean) => void;
+  onSetPersistComputerSessionsEnabled: (enabled: boolean) => void;
 }) {
   return (
     <>
       <SettingsSection title="连接">
         <div className="mobile-settings-card">
-          <button
-            className="mobile-settings-auto-connect-row"
-            type="button"
-            role="switch"
-            aria-checked={props.autoConnectEnabled}
-            onClick={() => props.onSetAutoConnectEnabled(!props.autoConnectEnabled)}
-          >
-            <span className="mobile-settings-auto-connect-copy">
-              <Wifi className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
-              <span>是否自动连接</span>
-            </span>
-            <span className="mobile-settings-toggle-track" aria-hidden={true}>
-              <span className="mobile-settings-toggle-thumb" />
-            </span>
-          </button>
+          <SettingsSwitchRow
+            checked={props.autoConnectEnabled}
+            icon={Wifi}
+            label="是否自动连接"
+            onChange={props.onSetAutoConnectEnabled}
+          />
+          <SettingsSwitchRow
+            checked={props.persistComputerSessionsEnabled}
+            icon={Database}
+            label="是否持久化电脑会话内容"
+            sublabel={props.persistComputerSessionsStatus.text}
+            onChange={props.onSetPersistComputerSessionsEnabled}
+          />
           <SettingsButton icon={Link2} label="连接" sublabel={props.connectionSublabel} onClick={props.onOpenConnection} />
           <SettingsButton
             icon={Server}
@@ -281,6 +290,37 @@ function SettingsRoot(props: {
         </div>
       </SettingsSection>
     </>
+  );
+}
+
+function SettingsSwitchRow(props: {
+  checked: boolean;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: true; strokeWidth?: number }>;
+  label: string;
+  onChange: (checked: boolean) => void;
+  sublabel?: string;
+}) {
+  const Icon = props.icon;
+
+  return (
+    <button
+      className="mobile-settings-auto-connect-row"
+      type="button"
+      role="switch"
+      aria-checked={props.checked}
+      onClick={() => props.onChange(!props.checked)}
+    >
+      <span className="mobile-settings-auto-connect-copy">
+        <Icon className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
+        <span>
+          <span>{props.label}</span>
+          {props.sublabel ? <small>{props.sublabel}</small> : null}
+        </span>
+      </span>
+      <span className="mobile-settings-toggle-track" aria-hidden={true}>
+        <span className="mobile-settings-toggle-thumb" />
+      </span>
+    </button>
   );
 }
 

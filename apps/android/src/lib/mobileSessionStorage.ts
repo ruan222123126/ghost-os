@@ -1,6 +1,8 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { MobileConversationMessage, MobileToolCard, MobileToolCardStatus, StoredMobileConversation } from "../mobileTypes";
+import { hasTauriRuntime } from "./bridgeBus";
 
-const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
+export const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
 
 interface ConversationUpsert {
   id: string;
@@ -8,10 +10,44 @@ interface ConversationUpsert {
   messages: MobileConversationMessage[];
   createdAt?: string;
   preserveExistingTitle?: boolean;
+  sourceMessageCount?: number;
   updatedAt?: string;
 }
 
 export function loadStoredMobileConversations(): StoredMobileConversation[] {
+  return loadLocalStoredMobileConversations();
+}
+
+export async function loadPersistedMobileConversations(): Promise<StoredMobileConversation[]> {
+  if (!hasTauriRuntime()) {
+    return loadLocalStoredMobileConversations();
+  }
+
+  const persisted = normalizeConversationArray(await invoke<unknown>("mobile_conversations_load"));
+  if (persisted.length > 0) {
+    return persisted;
+  }
+
+  const legacy = loadLocalStoredMobileConversations();
+  if (legacy.length > 0) {
+    await saveTauriMobileConversations(legacy);
+  }
+  return legacy;
+}
+
+export function saveStoredMobileConversations(conversations: StoredMobileConversation[]): void {
+  window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
+}
+
+export async function savePersistedMobileConversations(conversations: StoredMobileConversation[]): Promise<void> {
+  if (hasTauriRuntime()) {
+    await saveTauriMobileConversations(conversations);
+    return;
+  }
+  saveStoredMobileConversations(conversations);
+}
+
+function loadLocalStoredMobileConversations(): StoredMobileConversation[] {
   const raw = window.localStorage.getItem(MOBILE_CONVERSATIONS_STORAGE_KEY);
   if (!raw) {
     return [];
@@ -29,8 +65,15 @@ export function loadStoredMobileConversations(): StoredMobileConversation[] {
   }
 }
 
-export function saveStoredMobileConversations(conversations: StoredMobileConversation[]): void {
-  window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations));
+async function saveTauriMobileConversations(conversations: StoredMobileConversation[]): Promise<void> {
+  await invoke("mobile_conversations_save", { conversations });
+}
+
+function normalizeConversationArray(value: unknown): StoredMobileConversation[] {
+  if (!Array.isArray(value)) {
+    throw new Error("mobile conversation storage must be an array");
+  }
+  return value.map(normalizeConversation).filter(isStoredConversation);
 }
 
 export function upsertStoredMobileConversation(
@@ -50,6 +93,7 @@ export function upsertStoredMobileConversation(
     created_at: upsert.createdAt?.trim() || existing?.created_at || now,
     id,
     messages: upsert.messages,
+    source_message_count: upsert.sourceMessageCount,
     title: upsert.preserveExistingTitle ? existingTitle || incomingTitle || id : incomingTitle || existingTitle || id,
     updated_at: upsert.updatedAt?.trim() || now,
   };
@@ -78,6 +122,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
   const title = asTrimmedString(record.title);
   const createdAt = asTrimmedString(record.created_at);
   const updatedAt = asTrimmedString(record.updated_at);
+  const sourceMessageCount = asOptionalInteger(record.source_message_count);
   if (!id || !createdAt || !updatedAt) {
     return null;
   }
@@ -86,6 +131,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
     created_at: createdAt,
     id,
     messages: normalizeMessages(record.messages, id),
+    ...(sourceMessageCount === undefined ? {} : { source_message_count: sourceMessageCount }),
     title: title || id,
     updated_at: updatedAt,
   };
@@ -182,6 +228,10 @@ function asTrimmedString(value: unknown): string {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function asOptionalInteger(value: unknown): number | undefined {
+  return Number.isInteger(value) && typeof value === "number" && value >= 0 ? value : undefined;
 }
 
 function asToolStatus(value: unknown): MobileToolCardStatus | undefined {

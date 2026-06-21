@@ -30,6 +30,7 @@ import type {
 } from "../mobileTypes";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
+const SESSION_FULL_PAGE_LIMIT = 200;
 const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
 interface SendAgentMessageOptions {
@@ -470,6 +471,56 @@ export function useMobileBridge() {
     [requestBridge],
   );
 
+  const getFullSession = useCallback(
+    async (sessionId: string): Promise<SessionDetail> => {
+      const id = sessionId.trim();
+      const messagesByIndex = new Map<number, SessionDetail["messages"][number]>();
+      let before: number | null | undefined;
+      let merged: SessionDetail | undefined;
+
+      for (;;) {
+        const detail = parseSessionDetail(
+          await requestBridge<unknown>("SESSION_GET", {
+            id,
+            limit: SESSION_FULL_PAGE_LIMIT,
+            ...(before === undefined || before === null ? {} : { before }),
+          }),
+        );
+        merged = detail;
+        for (const message of detail.messages) {
+          messagesByIndex.set(message.index, message);
+        }
+
+        if (!detail.page.has_more_before) {
+          break;
+        }
+        before = detail.page.next_before;
+        if (before === undefined || before === null) {
+          throw new Error("SESSION_GET page.next_before is required when has_more_before is true");
+        }
+      }
+
+      if (!merged) {
+        throw new Error("SESSION_GET returned no pages");
+      }
+
+      return {
+        ...merged,
+        messages: [...messagesByIndex.values()].sort((left, right) => left.index - right.index),
+        page: {
+          ...merged.page,
+          before: undefined,
+          end_index: messagesByIndex.size > 0 ? Math.max(...messagesByIndex.keys()) : null,
+          has_more_before: false,
+          limit: SESSION_FULL_PAGE_LIMIT,
+          next_before: null,
+          start_index: messagesByIndex.size > 0 ? Math.min(...messagesByIndex.keys()) : null,
+        },
+      };
+    },
+    [requestBridge],
+  );
+
   const connectBridge = useCallback(async (): Promise<void> => {
     setConnectionStatus({ tone: "loading", text: "连接中" });
     try {
@@ -640,6 +691,7 @@ export function useMobileBridge() {
     connectionStatus,
     createProvider,
     deleteProvider,
+    getFullSession,
     getSession,
     host,
     providerList,

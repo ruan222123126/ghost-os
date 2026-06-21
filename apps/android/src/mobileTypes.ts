@@ -29,6 +29,7 @@ export interface StoredSettings {
   connectionMode: ConnectionMode;
   lastSuccessfulConnection?: StoredConnectionSnapshot;
   pairing?: MobilePairingInfo;
+  persistComputerSessionsEnabled: boolean;
 }
 
 export interface ConfigPayload {
@@ -177,6 +178,7 @@ export interface StoredMobileConversation {
   created_at: string;
   updated_at: string;
   messages: MobileConversationMessage[];
+  source_message_count?: number;
 }
 
 export interface StatusMessage {

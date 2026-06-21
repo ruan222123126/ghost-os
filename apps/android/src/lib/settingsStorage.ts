@@ -9,6 +9,7 @@ const defaultSettings: StoredSettings = {
   autoConnectEnabled: false,
   bridgeUrl: DEFAULT_BRIDGE_URL,
   connectionMode: "webrtc",
+  persistComputerSessionsEnabled: false,
 };
 
 export function loadSettings(): StoredSettings {
@@ -27,6 +28,7 @@ export function loadSettings(): StoredSettings {
       connectionMode,
       lastSuccessfulConnection: normalizeLastSuccessfulConnection(parsed.lastSuccessfulConnection),
       pairing: normalizePairing(parsed.pairing),
+      persistComputerSessionsEnabled: parsed.persistComputerSessionsEnabled === true,
     };
   } catch {
     return { ...defaultSettings };
@@ -43,6 +45,7 @@ export function saveSettings(settings: StoredSettings): void {
       connectionMode: settings.connectionMode,
       lastSuccessfulConnection: normalizeLastSuccessfulConnection(settings.lastSuccessfulConnection),
       pairing: settings.pairing,
+      persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
     }),
   );
 }
