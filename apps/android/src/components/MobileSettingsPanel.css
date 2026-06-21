@@ -150,58 +150,71 @@
 
 .mobile-settings-auto-connect-row {
   width: 100%;
-  min-height: 52px;
-  border-radius: 18px;
-  margin-bottom: 12px;
-  padding: 12px 14px;
+  min-height: 64px;
+  border-bottom: 2px solid #ffffff;
+  padding: 14px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  color: #111827;
-  background: #ffffff;
-  font-size: 15px;
+  gap: 16px;
+  color: #18181b;
+  background: transparent;
+  font-size: 1rem;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.35;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
-  transition:
-    background 140ms ease,
-    box-shadow 140ms ease;
+  transition: background 140ms ease;
 }
 
 .mobile-settings-auto-connect-row:hover,
 .mobile-settings-auto-connect-row:focus-visible {
-  background: #fafafa;
+  background: #ebebeb;
+}
+
+.mobile-settings-auto-connect-row:active {
+  background: #e0e0e0;
+}
+
+.mobile-settings-auto-connect-copy {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mobile-settings-auto-connect-copy > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
 }
 
 .mobile-settings-toggle-track {
-  width: 44px;
-  height: 26px;
+  width: 50px;
+  height: 28px;
+  border: 2px solid transparent;
   border-radius: 999px;
-  padding: 3px;
   flex: 0 0 auto;
   display: flex;
   background: #d1d5db;
-  transition: background 160ms ease;
+  transition: background 200ms ease;
 }
 
 .mobile-settings-toggle-thumb {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.22);
-  transition: transform 160ms ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.24);
+  transition: transform 200ms ease;
 }
 
 .mobile-settings-auto-connect-row[aria-checked="true"] .mobile-settings-toggle-track {
-  background: #166534;
+  background: #111827;
 }
 
 .mobile-settings-auto-connect-row[aria-checked="true"] .mobile-settings-toggle-thumb {
-  transform: translateX(18px);
+  transform: translateX(22px);
 }
 
 .mobile-settings-item-button {

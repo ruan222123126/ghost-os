@@ -249,7 +249,10 @@ function SettingsRoot(props: {
             aria-checked={props.autoConnectEnabled}
             onClick={() => props.onSetAutoConnectEnabled(!props.autoConnectEnabled)}
           >
-            <span>是否自动连接</span>
+            <span className="mobile-settings-auto-connect-copy">
+              <Wifi className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.5} />
+              <span>是否自动连接</span>
+            </span>
             <span className="mobile-settings-toggle-track" aria-hidden={true}>
               <span className="mobile-settings-toggle-thumb" />
             </span>
