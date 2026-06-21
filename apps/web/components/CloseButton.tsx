@@ -1,7 +1,7 @@
 import type { ButtonHTMLAttributes } from 'react';
 
-const CLOSE_BUTTON_CLASS_NAME = 'inline-grid place-items-center rounded-full bg-[#F5F5F5] p-2 text-[#737373] transition-colors hover:text-[#111111]';
-const CLOSE_ICON_SIZE = 18;
+const CLOSE_BUTTON_CLASS_NAME = 'inline-grid place-items-center rounded-full p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600';
+const CLOSE_ICON_SIZE = 20;
 
 interface CloseButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
   'aria-label': string;

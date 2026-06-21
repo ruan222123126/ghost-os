@@ -52,8 +52,8 @@ describe('components/ConfigPanel', () => {
     const providerPanel = renderPanel('provider');
     const promptsPanel = renderPanel('prompts_library');
 
-    expect(findByTestID(providerPanel.root, 'config-panel-shell').props.className).toContain('max-w-[1000px]');
-    expect(findByTestID(promptsPanel.root, 'config-panel-shell').props.className).toContain('max-w-[1000px]');
+    expect(findByTestID(providerPanel.root, 'config-panel-shell').props.className).toContain('max-w-4xl');
+    expect(findByTestID(promptsPanel.root, 'config-panel-shell').props.className).toContain('max-w-4xl');
     expect(findByTestID(providerPanel.root, 'config-panel-content').props.className).toContain('max-w-2xl');
     expect(findByTestID(promptsPanel.root, 'config-panel-content').props.className).toContain('max-w-2xl');
     expect(findByTestID(promptsPanel.root, 'config-panel-shell').props.className).not.toContain('max-w-[1320px]');

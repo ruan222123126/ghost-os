@@ -653,7 +653,7 @@ const settingsCatalog = {
     runtimeWebSearchTitle: 'Web Search',
     runtimeWebSearchCopy: '配置 Tavily 与 Exa 提供方。',
     runtimeToggleEnabled: '已启用',
-    runtimeToggleDisabled: '已禁用',
+    runtimeToggleDisabled: '已停用',
     runtimeSecretKeepPlaceholder: (name: string) => `留空以保留已保存的 ${name}`,
     runtimeSecretEnterPlaceholder: (name: string) => `输入 ${name}`,
   },

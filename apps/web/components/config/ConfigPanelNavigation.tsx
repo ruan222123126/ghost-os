@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 export type SettingsTab =
@@ -13,7 +14,6 @@ export type SettingsTab =
 
 interface TabDefinition {
   id: SettingsTab;
-  group: 'system' | 'prompts';
 }
 
 const SettingsIcon = ({ size = 16 }: { size?: number }) => (
@@ -29,20 +29,20 @@ const SettingsIcon = ({ size = 16 }: { size?: number }) => (
 );
 
 const tabs: TabDefinition[] = [
-  { id: 'general', group: 'system' },
-  { id: 'provider', group: 'system' },
-  { id: 'tasks', group: 'system' },
-  { id: 'orchestration', group: 'system' },
-  { id: 'skills', group: 'system' },
-  { id: 'tools', group: 'system' },
-  { id: 'presets', group: 'system' },
-  { id: 'prompts_library', group: 'prompts' },
-  { id: 'prompts_preview', group: 'prompts' },
+  { id: 'general' },
+  { id: 'provider' },
+  { id: 'tasks' },
+  { id: 'orchestration' },
+  { id: 'skills' },
+  { id: 'tools' },
+  { id: 'presets' },
+  { id: 'prompts_library' },
+  { id: 'prompts_preview' },
 ];
 
 function Kicker(props: { children: string }) {
   return (
-    <h3 className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-[#737373]">
+    <h3 className="mb-3 px-2 text-xs font-semibold text-gray-400">
       {props.children}
     </h3>
   );
@@ -54,59 +54,34 @@ export function SettingsNavigation(props: {
 }) {
   const { copy } = useWebLocale();
   const { activeTab, onSelectTab } = props;
-  const systemTabs = tabs.filter((tab) => tab.group === 'system');
-  const promptsTabs = tabs.filter((tab) => tab.group === 'prompts');
 
   return (
-    <aside className="w-[240px] shrink-0 border-r border-[#E5E5E5] bg-[#FAFAFA]">
-      <div className="px-8 pb-4 pt-8">
-        <h2 id="settings-title" className="text-[18px] font-semibold tracking-tight text-[#111111]">
-          {copy.settings.panelTitle}
-        </h2>
-      </div>
+    <aside className="flex w-64 shrink-0 flex-col overflow-y-auto border-r border-gray-100 bg-gray-50 p-6">
+      <h2 id="settings-title" className="mb-6 text-xl font-bold text-gray-900">
+        {copy.settings.panelTitle}
+      </h2>
 
-      <nav className="max-h-full space-y-6 overflow-y-auto overscroll-contain touch-pan-y px-4 pb-8">
-        <SettingsNavGroup
-          groupID="system"
-          title={copy.settings.groupSystem}
-          tabs={systemTabs}
-          activeTab={activeTab}
-          onSelectTab={onSelectTab}
-        />
-        <SettingsNavGroup
-          groupID="prompts"
-          title={copy.settings.groupPrompts}
-          tabs={promptsTabs}
-          activeTab={activeTab}
-          onSelectTab={onSelectTab}
-        />
+      <Kicker>{copy.settings.groupSystem}</Kicker>
+      <nav className="flex-1 space-y-1" data-testid="settings-nav-group-system">
+        {tabs.map((tab) => (
+          <Fragment key={tab.id}>
+            {tab.id === 'prompts_library' ? <PromptNavLabel label={copy.settings.groupPrompts} /> : null}
+            <SettingsNavItem
+              tab={tab}
+              active={activeTab === tab.id}
+              onSelectTab={onSelectTab}
+            />
+          </Fragment>
+        ))}
       </nav>
     </aside>
   );
 }
 
-function SettingsNavGroup(props: {
-  groupID: TabDefinition['group'];
-  title: string;
-  tabs: TabDefinition[];
-  activeTab: SettingsTab;
-  onSelectTab: (tab: SettingsTab) => void;
-}) {
-  const { groupID, title, tabs: groupTabs, activeTab, onSelectTab } = props;
-
+function PromptNavLabel(props: { label: string }) {
   return (
-    <div data-testid={`settings-nav-group-${groupID}`}>
-      <Kicker>{title}</Kicker>
-      <div className="space-y-1">
-        {groupTabs.map((tab) => (
-          <SettingsNavItem
-            key={tab.id}
-            tab={tab}
-            active={activeTab === tab.id}
-            onSelectTab={onSelectTab}
-          />
-        ))}
-      </div>
+    <div className="block rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600">
+      {props.label}
     </div>
   );
 }
@@ -123,10 +98,10 @@ function SettingsNavItem(props: {
     <button
       type="button"
       onClick={() => onSelectTab(tab.id)}
-      className={`flex w-full items-center gap-3 rounded-[12px] border px-4 py-2.5 text-left text-[13px] font-medium transition-all ${
+      className={`block w-full rounded-lg border px-4 py-2.5 text-left text-sm font-medium transition-colors ${
         active
-          ? 'border-[#E5E5E5] bg-white text-[#111111] shadow-sm'
-          : 'border-transparent text-[#737373] hover:bg-[#E5E5E5]/50 hover:text-[#111111]'
+          ? 'border-gray-200 bg-white text-gray-900 shadow-sm'
+          : 'border-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-900'
       }`}
     >
       <span>{labelForTab(copy, tab.id)}</span>

@@ -6,12 +6,12 @@ export function Card(props: { title: string; copy: string; children: ReactNode }
   const { title, copy, children } = props;
 
   return (
-    <section className="border-b border-[#E5E5E5] py-8">
-      <div className="mb-6">
-        <h3 className="text-[18px] font-semibold tracking-tight text-[#111111]">{title}</h3>
-        <p className="mt-1 text-[13px] text-[#737373]">{copy}</p>
+    <section className="mb-10 border-b border-gray-100 pb-10 last:mb-0 last:border-b-0 last:pb-0">
+      <div className="mb-5">
+        <h3 className="mb-1 text-lg font-bold text-gray-900">{title}</h3>
+        <p className="text-sm text-gray-500">{copy}</p>
       </div>
-      <div className="space-y-5 border-l-2 border-[#E5E5E5]/80 pl-5">{children}</div>
+      <div className="space-y-5 border-l-2 border-gray-200 pl-4">{children}</div>
     </section>
   );
 }
@@ -27,7 +27,7 @@ export function TextField(props: {
   mono?: boolean;
 }) {
   const { label, description, value, disabled, onChange, placeholder, type = 'text', mono = false } = props;
-  const className = 'w-full rounded-[12px] border border-[#E5E5E5] bg-[#FAFAFA] px-4 py-2.5 text-[14px] text-[#111111] placeholder-[#A3A3A3] transition-colors focus:border-[#111111] focus:outline-none' + (mono ? ' font-mono' : '');
+  const className = 'block w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 transition-colors focus:bg-white focus:outline-none focus:ring-2 focus:ring-gray-900 disabled:cursor-not-allowed disabled:opacity-60' + (mono ? ' font-mono' : '');
 
   return (
     <Field label={label} description={description}>
@@ -55,15 +55,25 @@ export function ToggleField(props: {
 
   return (
     <Field label={label} description={description}>
-      <label className="inline-flex items-center gap-2 text-[13px] text-[#111111]">
-        <input
-          type="checkbox"
-          checked={checked}
+      <div className="flex items-center space-x-3">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-label={label}
           disabled={disabled}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <span>{checked ? copy.settings.runtimeToggleEnabled : copy.settings.runtimeToggleDisabled}</span>
-      </label>
+          className={`${checked ? 'bg-gray-900' : 'bg-gray-200'} relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60`}
+          onClick={() => onChange(!checked)}
+        >
+          <span
+            aria-hidden="true"
+            className={`${checked ? 'translate-x-4' : 'translate-x-0'} pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+          />
+        </button>
+        <span className={`text-sm font-medium ${checked ? 'text-gray-900' : 'text-gray-500'}`}>
+          {checked ? copy.settings.runtimeToggleEnabled : copy.settings.runtimeToggleDisabled}
+        </span>
+      </div>
     </Field>
   );
 }
@@ -97,10 +107,10 @@ function Field(props: { label: string; description?: string; children: ReactNode
   const showDescription = description !== undefined && description.trim() !== '';
 
   return (
-    <label className="block">
-      <span className="mb-1 block text-[13px] font-medium text-[#111111]">{label}</span>
-      {showDescription ? <span className="mb-2 block text-[12px] text-[#737373]">{description}</span> : null}
+    <div className="block">
+      <span className="mb-1 block text-sm text-gray-700">{label}</span>
+      {showDescription ? <span className="mb-2 block text-xs text-gray-400">{description}</span> : null}
       {children}
-    </label>
+    </div>
   );
 }

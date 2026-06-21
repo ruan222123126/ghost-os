@@ -36,7 +36,7 @@ export type { SettingsTab };
 
 export const ConfigPanel: FC<ConfigPanelProps> = ({
   open,
-  initialTab = 'provider',
+  initialTab = 'general',
   loading,
   saving,
   config,
@@ -48,7 +48,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
   onReload,
 }) => {
   const { copy } = useWebLocale();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('provider');
+  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const providersMachine = useConfigProviders({
     open,
     onReloadConfig: onReload,
@@ -102,12 +102,12 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4 sm:p-6 md:p-12" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <button type="button" className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" onClick={onClose} aria-label={copy.settings.closeSettingsAria} />
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-300 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <button type="button" className="absolute inset-0 bg-gray-300" onClick={onClose} aria-label={copy.settings.closeSettingsAria} />
 
       <section
         data-testid="config-panel-shell"
-        className="relative z-10 flex h-[85vh] max-h-[800px] w-full max-w-[1000px] overflow-hidden rounded-[24px] border border-[#E5E5E5] bg-white shadow-2xl"
+        className="relative z-10 flex h-[80vh] min-h-[600px] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl"
       >
         <CloseButton
           onClick={onClose}
@@ -120,7 +120,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
         <div className="relative flex-1 overflow-y-auto overscroll-contain touch-pan-y bg-white">
           <div
             data-testid="config-panel-content"
-            className="mx-auto w-full max-w-2xl px-8 pb-24 pt-12 md:px-12"
+            className="w-full max-w-2xl p-10"
           >
             {tabError ? (
               <div className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

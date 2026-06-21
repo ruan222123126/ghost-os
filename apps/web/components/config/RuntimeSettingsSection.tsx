@@ -54,7 +54,6 @@ export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
 
   return (
     <section>
-      <RuntimeHeader title={copy.settings.generalTitle} description={copy.settings.generalDescription} />
       <LanguageCard locale={locale} setLocale={setLocale} />
       <SidebarGroupingPreferenceCard
         title={copy.settings.sidebarGroupingTitle}
@@ -153,17 +152,6 @@ function useRuntimeAutoSave(options: {
     }, AUTO_SAVE_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [baselineSignature, config, formSignature, formState, invalidRuntimeMessage, loading, modelSelectionEnabled, onSave, saving, setSubmitError]);
-}
-
-function RuntimeHeader(props: { title: string; description: string }) {
-  const { title, description } = props;
-
-  return (
-    <header className="mb-10">
-      <h1 className="mb-2 text-[28px] font-semibold tracking-tight text-[#111111]">{title}</h1>
-      <p className="text-[14px] text-[#737373]">{description}</p>
-    </header>
-  );
 }
 
 function LanguageCard(props: {

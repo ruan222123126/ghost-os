@@ -77,7 +77,7 @@ const HomePage: FC = () => {
       {controller.showConfig ? (
         <ConfigPanel
           open={controller.showConfig}
-          initialTab={controller.settingsTabFromQuery ?? 'provider'}
+          initialTab={controller.settingsTabFromQuery ?? 'general'}
           loading={controller.configLoading}
           saving={controller.savingConfig}
           config={controller.config}
