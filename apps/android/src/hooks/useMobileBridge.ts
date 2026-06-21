@@ -17,8 +17,10 @@ import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
 import type {
   AgentPayload,
+  AgentMessageTaskPayload,
   ConfigPayload,
   HostProfile,
+  LoopWritePayload,
   ProviderConfigInputPayload,
   ProviderListPayload,
   SessionDetail,
@@ -27,6 +29,7 @@ import type {
   StatusMessage,
   StoredConnectionSnapshot,
   StoredSettings,
+  TaskPayload,
 } from "../mobileTypes";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
@@ -153,6 +156,25 @@ function skillListErrorText(error: unknown): string {
   return `技能列表加载失败：${errorMessage(error)}`;
 }
 
+function isLoopTask(task: TaskPayload): task is AgentMessageTaskPayload {
+  return task.task_kind === "agent_message" && task.agent_mode === "relay";
+}
+
+function filterLoopTasks(tasks: TaskPayload[]): AgentMessageTaskPayload[] {
+  return tasks.filter(isLoopTask);
+}
+
+function upsertLoopTask(
+  current: AgentMessageTaskPayload[] | undefined,
+  task: AgentMessageTaskPayload,
+): AgentMessageTaskPayload[] {
+  const existing = current ?? [];
+  if (existing.some((item) => item.id === task.id)) {
+    return existing.map((item) => (item.id === task.id ? task : item));
+  }
+  return [task, ...existing];
+}
+
 export function useMobileBridge() {
   const [settings, setSettings] = useState<StoredSettings>(() => loadSettings());
   const [host, setHost] = useState<HostProfile>();
@@ -160,6 +182,9 @@ export function useMobileBridge() {
   const [providerList, setProviderList] = useState<ProviderListPayload>();
   const [skillList, setSkillList] = useState<SkillPayload[]>();
   const [skillListError, setSkillListError] = useState("");
+  const [taskList, setTaskList] = useState<AgentMessageTaskPayload[]>();
+  const [taskListError, setTaskListError] = useState("");
+  const [runningLoopId, setRunningLoopId] = useState("");
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   const [status, setStatus] = useState<StatusMessage>({
@@ -217,6 +242,9 @@ export function useMobileBridge() {
     setProviderList(undefined);
     setSkillList(undefined);
     setSkillListError("");
+    setTaskList(undefined);
+    setTaskListError("");
+    setRunningLoopId("");
     setSessions([]);
     setSessionsLoaded(false);
     setConnectionStatus({ tone: "idle", text: "未连接" });
@@ -277,6 +305,13 @@ export function useMobileBridge() {
     return payload;
   }, [requestBridge]);
 
+  const loadTasks = useCallback(async (): Promise<AgentMessageTaskPayload[]> => {
+    setTaskListError("");
+    const payload = filterLoopTasks(await requestBridge<TaskPayload[]>("TASK_LIST", { scope: "user" }));
+    setTaskList(payload);
+    return payload;
+  }, [requestBridge]);
+
   const refreshRuntimeConfig = useCallback(async (): Promise<ConfigPayload> => {
     const [configPayload, providersPayload] = await Promise.all([
       requestBridge<ConfigPayload>("CONFIG_GET", {}),
@@ -321,6 +356,20 @@ export function useMobileBridge() {
     }
   }, [loadSkills]);
 
+  const refreshLoops = useCallback(async (): Promise<boolean> => {
+    setStatus({ tone: "loading", text: "循环刷新中" });
+    try {
+      await loadTasks();
+      setStatus({ tone: "success", text: "循环已刷新" });
+      return true;
+    } catch (error) {
+      const text = `循环列表加载失败：${errorMessage(error)}`;
+      setTaskListError(text);
+      setStatus({ tone: "error", text });
+      return false;
+    }
+  }, [loadTasks]);
+
   const refreshSkillsAfterConnect = useCallback((): void => {
     void loadSkills().catch((error: unknown) => {
       const text = skillListErrorText(error);
@@ -331,6 +380,14 @@ export function useMobileBridge() {
       }
     });
   }, [loadSkills]);
+
+  const refreshTasksAfterConnect = useCallback((): void => {
+    void loadTasks().catch((error: unknown) => {
+      const text = `循环列表加载失败：${errorMessage(error)}`;
+      console.error("[useMobileBridge] load tasks after connect failed", error);
+      setTaskListError(text);
+    });
+  }, [loadTasks]);
 
   const updateSkill = useCallback(
     async (id: string, enabled: boolean): Promise<boolean> => {
@@ -355,6 +412,116 @@ export function useMobileBridge() {
         await requestBridge<unknown>("SKILL_DELETE", { id });
         setSkillList((current) => current?.filter((item) => item.id !== id));
         setStatus({ tone: "success", text: "技能已删除" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const createLoop = useCallback(
+    async (input: LoopWritePayload): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "循环创建中" });
+      try {
+        const payload = await requestBridge<TaskPayload>("TASK_CREATE", {
+          scope: "user",
+          task_kind: "agent_message",
+          agent_mode: "relay",
+          message: input.message,
+          relay: input.relay,
+          ...(input.interval_seconds === undefined ? {} : { interval_seconds: input.interval_seconds }),
+          ...(input.cron_expr === undefined ? {} : { cron_expr: input.cron_expr }),
+        });
+        if (isLoopTask(payload)) {
+          setTaskList((current) => upsertLoopTask(current, payload));
+        }
+        setStatus({ tone: "success", text: "循环已创建" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const updateLoop = useCallback(
+    async (id: string, input: LoopWritePayload): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "循环保存中" });
+      try {
+        const payload = await requestBridge<TaskPayload>("TASK_UPDATE", {
+          id,
+          scope: "user",
+          task_kind: "agent_message",
+          agent_mode: "relay",
+          message: input.message,
+          relay: input.relay,
+          ...(input.interval_seconds === undefined ? {} : { interval_seconds: input.interval_seconds }),
+          ...(input.cron_expr === undefined ? {} : { cron_expr: input.cron_expr }),
+        });
+        if (isLoopTask(payload)) {
+          setTaskList((current) => upsertLoopTask(current, payload));
+        }
+        setStatus({ tone: "success", text: "循环已保存" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const setLoopEnabled = useCallback(
+    async (id: string, enabled: boolean): Promise<boolean> => {
+      setStatus({ tone: "loading", text: enabled ? "循环启用中" : "循环停用中" });
+      try {
+        const payload = await requestBridge<TaskPayload>("TASK_UPDATE", { id, scope: "user", enabled });
+        if (isLoopTask(payload)) {
+          setTaskList((current) => upsertLoopTask(current, payload));
+        } else {
+          setTaskList((current) => current?.map((item) => (item.id === id ? { ...item, enabled } : item)));
+        }
+        setStatus({ tone: "success", text: enabled ? "循环已启用" : "循环已停用" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const runLoopNow = useCallback(
+    async (id: string): Promise<boolean> => {
+      if (runningLoopId) {
+        return false;
+      }
+      setRunningLoopId(id);
+      setStatus({ tone: "loading", text: "循环启动中" });
+      try {
+        await requestBridge<unknown>("TASK_RUN_NOW", { id, scope: "user", start_only: true });
+        setStatus({ tone: "success", text: "循环已启动" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      } finally {
+        setRunningLoopId("");
+      }
+    },
+    [requestBridge, runningLoopId],
+  );
+
+  const deleteLoop = useCallback(
+    async (id: string): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "循环删除中" });
+      try {
+        await requestBridge<unknown>("TASK_DELETE", { id, scope: "user" });
+        setTaskList((current) => current?.filter((item) => item.id !== id));
+        setStatus({ tone: "success", text: "循环已删除" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
@@ -542,6 +709,7 @@ export function useMobileBridge() {
       }));
       setConnectionStatus({ tone: "success", text: connectedStatusText(settings.connectionMode) });
       refreshSkillsAfterConnect();
+      refreshTasksAfterConnect();
       refreshSessionsAfterConnect();
     } catch (error) {
       connectedTargetRef.current = undefined;
@@ -551,6 +719,9 @@ export function useMobileBridge() {
       setProviderList(undefined);
       setSkillList(undefined);
       setSkillListError("");
+      setTaskList(undefined);
+      setTaskListError("");
+      setRunningLoopId("");
       setSessions([]);
       setSessionsLoaded(false);
       setConnectionStatus({ tone: "error", text: errorMessage(error) });
@@ -559,6 +730,7 @@ export function useMobileBridge() {
     currentConnectionTarget,
     bridgeUrl,
     refreshSkillsAfterConnect,
+    refreshTasksAfterConnect,
     refreshRuntimeConfig,
     refreshSessionsAfterConnect,
     settings,
@@ -689,24 +861,33 @@ export function useMobileBridge() {
     config,
     connectBridge,
     connectionStatus,
+    createLoop,
     createProvider,
+    deleteLoop,
     deleteProvider,
     getFullSession,
     getSession,
     host,
     providerList,
+    refreshLoops,
     refreshProviders,
     refreshSkills,
+    runLoopNow,
+    runningLoopId,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
+    setLoopEnabled,
     setSettings,
     setStatus,
     settings,
     skillList,
     skillListError,
     switchModel,
+    taskList,
+    taskListError,
     status,
+    updateLoop,
     updateSkill,
     updateProvider,
     deleteSkill,

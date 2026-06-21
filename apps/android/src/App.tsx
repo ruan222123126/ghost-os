@@ -44,23 +44,32 @@ function App() {
     config,
     connectBridge,
     connectionStatus,
+    createLoop,
     createProvider,
+    deleteLoop,
     deleteProvider,
     deleteSkill,
     getFullSession,
     getSession,
     host,
     providerList,
+    refreshLoops,
     refreshProviders,
     refreshSkills,
+    runLoopNow,
+    runningLoopId,
     sendAgentMessage,
     sessions,
     sessionsLoaded,
+    setLoopEnabled,
     setSettings,
     settings,
     skillList,
     skillListError,
     switchModel,
+    taskList,
+    taskListError,
+    updateLoop,
     status,
     updateSkill,
     updateProvider,
@@ -271,16 +280,25 @@ function App() {
         onClose={() => setIsSettingsOpen(false)}
         onConnect={connectBridge}
         onActivateProvider={activateProvider}
+        onCreateLoop={createLoop}
         onCreateProvider={createProvider}
+        onDeleteLoop={deleteLoop}
         onDeleteProvider={deleteProvider}
         onDeleteSkill={deleteSkill}
+        onRefreshLoops={refreshLoops}
         onRefreshProviders={refreshProviders}
         onRefreshSkills={refreshSkills}
+        onRunLoopNow={runLoopNow}
         onSettingsChange={setSettings}
+        onSetLoopEnabled={setLoopEnabled}
+        onUpdateLoop={updateLoop}
         onUpdateSkill={updateSkill}
         onUpdateProvider={updateProvider}
+        runningLoopId={runningLoopId}
         skillListError={skillListError}
         skillList={skillList}
+        taskListError={taskListError}
+        taskList={taskList}
       />
 
       <MoreActionSheet

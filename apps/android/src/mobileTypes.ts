@@ -39,6 +39,10 @@ export interface ConfigPayload {
   project_root?: string;
   api_key_set?: boolean;
   model_selection_enabled?: boolean;
+  task_execution_timeout_ms?: number;
+  relay_default_stop_policy?: TaskRelayStopPolicy;
+  relay_default_max_rounds?: number;
+  relay_default_execution_timeout_ms?: number;
 }
 
 export interface ProviderConfigPayload {
@@ -81,6 +85,59 @@ export interface SkillPayload {
   path: string;
   source: SkillSource;
   enabled: boolean;
+}
+
+export type TaskScheduleType = "interval" | "cron";
+export type TaskAgentMode = "single" | "relay";
+export type TaskRelayStopPolicy = "ai_decides" | "max_rounds";
+
+export interface TaskRelayConfigPayload {
+  stop_policy: TaskRelayStopPolicy;
+  max_rounds: number;
+  execution_timeout_ms?: number;
+}
+
+export interface TaskRuntimeOverridesPayload {
+  provider_name?: string;
+  model?: string;
+  system_prompt?: string;
+  preset_id?: string;
+  tool_allowlist?: string[];
+  tool_allowlist_only?: boolean;
+  max_turns?: number;
+}
+
+export interface AgentMessageTaskPayload {
+  id: string;
+  message: string;
+  session_id?: string;
+  runtime_overrides?: TaskRuntimeOverridesPayload;
+  agent_mode?: TaskAgentMode;
+  relay?: TaskRelayConfigPayload;
+  task_kind: "agent_message";
+  schedule_type: TaskScheduleType;
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
+export type TaskPayload = AgentMessageTaskPayload | {
+  id?: string;
+  task_kind?: string;
+  agent_mode?: string;
+  [key: string]: unknown;
+};
+
+export interface LoopWritePayload {
+  message: string;
+  relay: TaskRelayConfigPayload;
+  interval_seconds?: number;
+  cron_expr?: string;
 }
 
 export interface AgentPayload {

@@ -2,6 +2,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentMessageTaskPayload, LoopWritePayload } from "../mobileTypes";
 import { useMobileBridge } from "./useMobileBridge";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -22,7 +23,7 @@ describe("useMobileBridge", () => {
       const request = bridgeBusRequestFromArgs(args);
       return {
         error: "",
-        payload: payloadForAction(request.action),
+        payload: payloadForAction(request.action, request.params),
         status: "success",
       };
     });
@@ -52,14 +53,7 @@ describe("useMobileBridge", () => {
   });
 
   it("loads a full session through paginated SESSION_GET pages", async () => {
-    window.localStorage.setItem(
-      SETTINGS_STORAGE_KEY,
-      JSON.stringify({
-        apiToken: "token",
-        bridgeUrl: "http://100.80.12.34:8080",
-        connectionMode: "http",
-      }),
-    );
+    useHTTPSettings();
     vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
       if (command !== "bridge_bus_request") {
         return {};
@@ -69,7 +63,7 @@ describe("useMobileBridge", () => {
       if (request.action !== "SESSION_GET") {
         return {
           error: "",
-          payload: payloadForAction(request.action),
+          payload: payloadForAction(request.action, request.params),
           status: "success",
         };
       }
@@ -155,7 +149,7 @@ describe("useMobileBridge", () => {
       }
       return {
         error: "",
-        payload: payloadForAction(request.action),
+        payload: payloadForAction(request.action, request.params),
         status: "success",
       };
     });
@@ -248,7 +242,7 @@ describe("useMobileBridge", () => {
       }
       return {
         error: "",
-        payload: payloadForAction(request.action),
+        payload: payloadForAction(request.action, request.params),
         status: "success",
       };
     });
@@ -268,6 +262,125 @@ describe("useMobileBridge", () => {
     } finally {
       consoleError.mockRestore();
     }
+  });
+
+  it("requests the user task list after bridge connection succeeds", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(bridgeBusRequests().some((request) => request.action === "TASK_LIST")).toBe(true);
+    });
+    expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params).toEqual({ scope: "user" });
+  });
+
+  it("refreshLoops requests user tasks and keeps only relay agent message loops", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "TASK_LIST"
+          ? [
+            loopTask({ id: "loop-1", enabled: true }),
+            loopTask({ id: "not-loop", agent_mode: "single" }),
+            { id: "workflow-1", task_kind: "workflow" },
+          ]
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.refreshLoops();
+
+    expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params).toEqual({ scope: "user" });
+    await waitFor(() => {
+      expect(result.current.taskList?.map((task) => task.id)).toEqual(["loop-1"]);
+    });
+  });
+
+  it("createLoop sends a relay agent task create payload", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+    const input = loopWritePayload({ interval_seconds: 300 });
+
+    await result.current.createLoop(input);
+
+    expect(lastBridgeBusRequest("TASK_CREATE")?.params).toEqual({
+      scope: "user",
+      task_kind: "agent_message",
+      agent_mode: "relay",
+      message: "检查状态",
+      relay: {
+        stop_policy: "max_rounds",
+        max_rounds: 4,
+        execution_timeout_ms: 0,
+      },
+      interval_seconds: 300,
+    });
+  });
+
+  it("updateLoop sends only cron_expr when switching to cron mode", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+    const input = loopWritePayload({ cron_expr: "*/5 * * * *" });
+
+    await result.current.updateLoop("loop-1", input);
+
+    const params = lastBridgeBusRequest("TASK_UPDATE")?.params;
+    expect(params).toMatchObject({
+      id: "loop-1",
+      scope: "user",
+      task_kind: "agent_message",
+      agent_mode: "relay",
+      message: "检查状态",
+      relay: {
+        stop_policy: "max_rounds",
+        max_rounds: 4,
+        execution_timeout_ms: 0,
+      },
+      cron_expr: "*/5 * * * *",
+    });
+    expect(params).not.toHaveProperty("interval_seconds");
+  });
+
+  it("setLoopEnabled, runLoopNow, and deleteLoop send the expected task actions", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.setLoopEnabled("loop-1", false);
+    await result.current.runLoopNow("loop-1");
+    await result.current.deleteLoop("loop-1");
+
+    expect(lastBridgeBusRequest("TASK_UPDATE")?.params).toEqual({
+      id: "loop-1",
+      scope: "user",
+      enabled: false,
+    });
+    expect(lastBridgeBusRequest("TASK_RUN_NOW")?.params).toEqual({
+      id: "loop-1",
+      scope: "user",
+      start_only: true,
+    });
+    expect(lastBridgeBusRequest("TASK_DELETE")?.params).toEqual({
+      id: "loop-1",
+      scope: "user",
+    });
   });
 });
 
@@ -289,6 +402,11 @@ function bridgeBusRequests(): BridgeBusRequest[] {
     .map(([, args]) => bridgeBusRequestFromArgs(args));
 }
 
+function lastBridgeBusRequest(action: string): BridgeBusRequest | undefined {
+  const requests = bridgeBusRequests().filter((request) => request.action === action);
+  return requests[requests.length - 1];
+}
+
 function bridgeBusRequestFromArgs(args: unknown): BridgeBusRequest {
   const record = args as { request?: BridgeBusRequest };
   if (!record.request) {
@@ -297,7 +415,7 @@ function bridgeBusRequestFromArgs(args: unknown): BridgeBusRequest {
   return record.request;
 }
 
-function payloadForAction(action: string): unknown {
+function payloadForAction(action: string, params: Record<string, unknown> = {}): unknown {
   switch (action) {
     case "CONFIG_GET":
       return {};
@@ -305,7 +423,14 @@ function payloadForAction(action: string): unknown {
       return { active_provider: "", providers: [] };
     case "SESSIONS_LIST":
     case "SKILL_LIST":
+    case "TASK_LIST":
       return [];
+    case "TASK_CREATE":
+    case "TASK_UPDATE":
+      return loopTaskFromParams(params);
+    case "TASK_RUN_NOW":
+    case "TASK_DELETE":
+      return {};
     default:
       return {};
   }
@@ -326,4 +451,61 @@ function sessionDetailPayload(messages: Array<Record<string, unknown>>, hasMoreB
     token_count: 10,
     updated_at: "2026-01-02T00:00:00.000Z",
   };
+}
+
+function useHTTPSettings(): void {
+  window.localStorage.setItem(
+    SETTINGS_STORAGE_KEY,
+    JSON.stringify({
+      apiToken: "token",
+      bridgeUrl: "http://100.80.12.34:8080",
+      connectionMode: "http",
+    }),
+  );
+}
+
+function loopWritePayload(schedule: Pick<LoopWritePayload, "cron_expr" | "interval_seconds">): LoopWritePayload {
+  return {
+    message: "检查状态",
+    relay: {
+      stop_policy: "max_rounds",
+      max_rounds: 4,
+      execution_timeout_ms: 0,
+    },
+    ...schedule,
+  };
+}
+
+function loopTask(overrides: Partial<AgentMessageTaskPayload> = {}): AgentMessageTaskPayload {
+  return {
+    id: "loop-1",
+    message: "检查状态",
+    agent_mode: "relay",
+    relay: {
+      stop_policy: "max_rounds",
+      max_rounds: 4,
+      execution_timeout_ms: 0,
+    },
+    task_kind: "agent_message",
+    schedule_type: "interval",
+    interval_seconds: 300,
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function loopTaskFromParams(params: Record<string, unknown>): AgentMessageTaskPayload {
+  const cronExpr = typeof params.cron_expr === "string" ? params.cron_expr : undefined;
+  const intervalSeconds = typeof params.interval_seconds === "number" ? params.interval_seconds : undefined;
+  return loopTask({
+    id: typeof params.id === "string" ? params.id : "loop-created",
+    message: typeof params.message === "string" ? params.message : "检查状态",
+    relay: params.relay as AgentMessageTaskPayload["relay"],
+    schedule_type: cronExpr ? "cron" : "interval",
+    cron_expr: cronExpr,
+    interval_seconds: cronExpr ? undefined : intervalSeconds ?? 300,
+    enabled: typeof params.enabled === "boolean" ? params.enabled : true,
+  });
 }
