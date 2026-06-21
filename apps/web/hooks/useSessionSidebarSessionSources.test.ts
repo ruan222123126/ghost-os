@@ -38,7 +38,6 @@ describe('hooks/useSessionSidebarSessionSources', () => {
     let latestState: HookState | null = null;
 
     const renderer = await renderHook({
-      enabled: true,
       sessions: [session('loop-session')],
       requestFailedText: 'request failed',
       onRender: (state) => {
@@ -85,7 +84,6 @@ describe('hooks/useSessionSidebarSessionSources', () => {
     let latestState: HookState | null = null;
 
     const renderer = await renderHook({
-      enabled: true,
       sessions: [session('visible-session')],
       requestFailedText: 'request failed',
       onRender: (state) => {
@@ -116,7 +114,6 @@ function HookProbe(props: HookProbeProps) {
 }
 
 interface HookProbeProps {
-  enabled: boolean;
   sessions: SessionMetadata[];
   requestFailedText: string;
   onRender: (state: HookState) => void;

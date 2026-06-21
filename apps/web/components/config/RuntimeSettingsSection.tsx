@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
-import { useSessionSidebarGroupingPreference } from '@/hooks/useSessionSidebarGroupingPreference';
 import { isWebLocale } from '@/lib/i18n/locale';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { BridgeConfig, ConfigUpdate } from '@/lib/types';
@@ -14,7 +13,6 @@ import {
 import {
   Card,
   SelectField,
-  ToggleField,
 } from '@/components/config/runtimeSettingsFieldComponents';
 import {
   RuntimeCoreSection,
@@ -43,7 +41,6 @@ interface RuntimeSettingsState {
 
 export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
   const { locale, setLocale, copy } = useWebLocale();
-  const groupingPreference = useSessionSidebarGroupingPreference();
   const runtimeState = useRuntimeSettingsState({
     loading: props.loading,
     saving: props.saving,
@@ -55,13 +52,6 @@ export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
   return (
     <section>
       <LanguageCard locale={locale} setLocale={setLocale} />
-      <SidebarGroupingPreferenceCard
-        title={copy.settings.sidebarGroupingTitle}
-        description={copy.settings.sidebarGroupingDescription}
-        label={copy.settings.sidebarGroupingLabel}
-        enabled={groupingPreference.enabled}
-        onChange={groupingPreference.setEnabled}
-      />
       <RuntimePanels config={props.config} state={runtimeState} loading={props.loading} />
     </section>
   );
@@ -213,26 +203,6 @@ function runtimeFormSignature(formState: RuntimeFormState): string {
   return JSON.stringify(formState);
 }
 
-function SidebarGroupingPreferenceCard(props: {
-  title: string;
-  description: string;
-  label: string;
-  enabled: boolean;
-  onChange: (enabled: boolean) => void;
-}) {
-  const { title, description, label, enabled, onChange } = props;
-
-  return (
-    <Card title={title} copy={description}>
-      <ToggleField
-        label={label}
-        checked={enabled}
-        disabled={false}
-        onChange={onChange}
-      />
-    </Card>
-  );
-}
 
 function InlineNotice(props: { text: string }) {
   return (

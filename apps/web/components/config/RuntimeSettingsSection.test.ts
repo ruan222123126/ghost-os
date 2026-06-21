@@ -4,13 +4,6 @@ import { RuntimeSettingsSection } from '@/components/config/RuntimeSettingsSecti
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { BridgeConfig } from '@/lib/types';
 
-jest.mock('@/hooks/useSessionSidebarGroupingPreference', () => ({
-  useSessionSidebarGroupingPreference: () => ({
-    enabled: true,
-    setEnabled: () => undefined,
-  }),
-}));
-
 function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   return {
     provider: 'custom',
@@ -44,15 +37,12 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
 }
 
 describe('components/config/RuntimeSettingsSection', () => {
-  it('renders language and sidebar grouping with the shared lined section layout', () => {
+  it('renders language with the shared lined section layout', () => {
     const renderer = renderSection(buildBridgeConfig());
     const languageSection = findSectionByTitle(renderer.root, 'Interface Language');
-    const groupingSection = findSectionByTitle(renderer.root, 'Session History Grouping');
 
     expect(languageSection.props.className).toContain('border-b');
-    expect(groupingSection.props.className).toContain('border-b');
     expect(findBorderLine(languageSection).props.className).toContain('border-l-2');
-    expect(findBorderLine(groupingSection).props.className).toContain('border-l-2');
   });
 });
 

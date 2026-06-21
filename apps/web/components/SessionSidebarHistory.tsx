@@ -1,6 +1,5 @@
 'use client';
-import { type FC, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { buildFlatSessionList } from '@/components/SessionSidebarFlatList';
+import { type FC, type MouseEvent, useCallback, useMemo, useRef, useState } from 'react';
 import { SessionSidebarHistoryBody } from '@/components/SessionSidebarHistoryBody';
 import {
   PartitionCreateDialog,
@@ -24,7 +23,6 @@ import { useWebLocale } from '@/lib/i18n/provider';
 import {
   UNCLASSIFIED_PARTITION_ID,
   type SessionPartitionView,
-  type SessionSearchMatcher,
 } from '@/lib/sessionSidebarPartitions';
 import { isSystemSessionPartitionID } from '@/lib/sessionSidebarSessionSources';
 import type { SessionMetadata } from '@/lib/types';
@@ -42,11 +40,9 @@ interface SessionSidebarHistoryProps {
   onDelete: (id: string) => void;
   resolveSessionTitle: UseSessionSidebarAliasesResult['resolveSessionTitle'];
   renameSession: UseSessionSidebarAliasesResult['renameSession'];
-  groupingEnabled: boolean;
   partitionModel: UseSessionSidebarPartitionsResult;
   visiblePartitionViews: SessionPartitionView[];
   sessionSourcesError: string;
-  matchesSessionSearch: SessionSearchMatcher;
 }
 const EMPTY_RENAME_DIALOG_STATE = { sessionID: '', value: '', error: '' };
 export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => {
@@ -76,9 +72,6 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     createErrorText: (error) => resolvePartitionNameErrorText(copy.chat, error),
   });
   const renameDialogOpen = renameDialog.sessionID.length > 0;
-  const flatSessions = useMemo(() => {
-    return buildFlatSessionList(props.sessions, props.searchQuery, props.matchesSessionSearch);
-  }, [props.matchesSessionSearch, props.searchQuery, props.sessions]);
   const sessionMenuStyle = useMemo(() => {
     return resolveContextMenuStyle(sessionContextMenu);
   }, [sessionContextMenu]);
@@ -93,9 +86,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     const sessionID = findContextSessionID(event.target);
     if (!sessionID) {
       closeSessionContextMenu();
-      if (props.groupingEnabled) {
-        ui.onOpenContextMenu(event);
-      }
+      ui.onOpenContextMenu(event);
       return;
     }
     event.preventDefault();
@@ -105,7 +96,7 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
       y: event.clientY,
       sessionID,
     });
-  }, [closeSessionContextMenu, props.groupingEnabled, ui]);
+  }, [closeSessionContextMenu, ui]);
   const onOpenRenameDialog = useCallback(() => {
     if (!sessionContextMenu?.sessionID) {
       return;
@@ -202,13 +193,6 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
   const canManageContextPartition = Boolean(contextPartitionID)
     && contextPartitionID !== UNCLASSIFIED_PARTITION_ID
     && !isSystemSessionPartitionID(contextPartitionID);
-  useEffect(() => {
-    if (props.groupingEnabled) {
-      return;
-    }
-    ui.closeContextMenu();
-    ui.closeCreateDialog();
-  }, [props.groupingEnabled, ui]);
   useCloseOnEscape(
     Boolean(ui.contextMenu) || ui.createDialogOpen || Boolean(sessionContextMenu) || renameDialogOpen,
     () => {
@@ -262,16 +246,14 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
         </div>
       ) : null}
       {partitionError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{partitionError}</div> : null}
-      {props.groupingEnabled && props.sessionSourcesError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.sessionSourcesError}</div> : null}
+      {props.sessionSourcesError ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.sessionSourcesError}</div> : null}
       {props.error && !showBlockingLoading ? <div className="mb-3 border border-black/10 bg-white px-3 py-2 text-xs text-neutral-700">{props.error}</div> : null}
       <SessionSidebarHistoryBody
         copy={copy.chat}
         scrollElementRef={scrollElementRef}
-        resetKey={`${props.groupingEnabled ? 'grouped' : 'flat'}:${props.searchQuery}:${partitionCollapseResetKey(collapsedPartitionIDs)}`}
+        resetKey={`${props.searchQuery}:${partitionCollapseResetKey(collapsedPartitionIDs)}`}
         loading={showBlockingLoading}
-        groupingEnabled={props.groupingEnabled}
-        empty={props.groupingEnabled ? props.visiblePartitionViews.length === 0 : flatSessions.length === 0}
-        flatSessions={flatSessions}
+        empty={props.visiblePartitionViews.length === 0}
         partitionViews={props.visiblePartitionViews}
         collapsedPartitionIDs={collapsedPartitionIDs}
         currentSessionId={props.currentSessionId}
@@ -288,23 +270,21 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
         onDropPartition={ui.onDropPartition}
         onDragEndSession={ui.onDragEndSession}
       />
-      {props.groupingEnabled ? (
-        <SidebarHistoryContextMenu
-          menu={ui.contextMenu}
-          menuStyle={ui.menuStyle}
-          createLabel={copy.chat.sidebarPartitionAdd}
-          renameLabel={copy.chat.sidebarPartitionRename}
-          deleteLabel={copy.chat.sidebarPartitionDelete}
-          showPartitionActions={canManageContextPartition}
-          onClose={ui.closeContextMenu}
-          onCreate={() => {
-            closeSessionContextMenu();
-            ui.openCreateDialog();
-          }}
-          onRename={onRenamePartition}
-          onDelete={onDeletePartition}
-        />
-      ) : null}
+      <SidebarHistoryContextMenu
+        menu={ui.contextMenu}
+        menuStyle={ui.menuStyle}
+        createLabel={copy.chat.sidebarPartitionAdd}
+        renameLabel={copy.chat.sidebarPartitionRename}
+        deleteLabel={copy.chat.sidebarPartitionDelete}
+        showPartitionActions={canManageContextPartition}
+        onClose={ui.closeContextMenu}
+        onCreate={() => {
+          closeSessionContextMenu();
+          ui.openCreateDialog();
+        }}
+        onRename={onRenamePartition}
+        onDelete={onDeletePartition}
+      />
       <SessionContextMenu
         menu={sessionContextMenu}
         menuStyle={sessionMenuStyle}
@@ -312,17 +292,15 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
         onClose={closeSessionContextMenu}
         onRename={onOpenRenameDialog}
       />
-      {props.groupingEnabled ? (
-        <PartitionCreateDialog
-          copy={copy.chat}
-          open={ui.createDialogOpen}
-          value={ui.partitionNameInput}
-          error={ui.createError}
-          onChange={ui.onChangePartitionName}
-          onClose={ui.closeCreateDialog}
-          onCreate={ui.onCreatePartition}
-        />
-      ) : null}
+      <PartitionCreateDialog
+        copy={copy.chat}
+        open={ui.createDialogOpen}
+        value={ui.partitionNameInput}
+        error={ui.createError}
+        onChange={ui.onChangePartitionName}
+        onClose={ui.closeCreateDialog}
+        onCreate={ui.onCreatePartition}
+      />
       <SessionRenameDialog
         copy={copy.chat}
         open={renameDialogOpen}

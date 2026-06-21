@@ -3,7 +3,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { type DragEvent, type FC, type RefObject, useEffect, useMemo } from 'react';
 import {
-  buildFlatSessionRows,
   buildPartitionSessionRows,
   countSessionsInPartitionViews,
   limitPartitionViewsBySessionCount,
@@ -23,9 +22,7 @@ interface SessionSidebarHistoryBodyProps {
   scrollElementRef: RefObject<HTMLDivElement>;
   resetKey: string;
   loading: boolean;
-  groupingEnabled: boolean;
   empty: boolean;
-  flatSessions: SessionMetadata[];
   partitionViews: SessionPartitionView[];
   collapsedPartitionIDs: ReadonlySet<string>;
   currentSessionId: string;
@@ -53,9 +50,7 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   scrollElementRef,
   resetKey,
   loading,
-  groupingEnabled,
   empty,
-  flatSessions,
   partitionViews,
   collapsedPartitionIDs,
   currentSessionId,
@@ -73,30 +68,21 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   onDragEndSession,
 }) => {
   const totalSessions = useMemo(() => {
-    if (!groupingEnabled) {
-      return flatSessions.length;
-    }
     return countSessionsInPartitionViews(partitionViews, collapsedPartitionIDs);
-  }, [collapsedPartitionIDs, flatSessions.length, groupingEnabled, partitionViews]);
+  }, [collapsedPartitionIDs, partitionViews]);
   const focusSessionIndex = useMemo(() => {
     const id = focusSessionId?.trim();
     if (!id) {
       return undefined;
     }
-    if (!groupingEnabled) {
-      return flatSessions.findIndex((session) => session.id === id);
-    }
     return findSessionIndexInPartitionViews(partitionViews, id, collapsedPartitionIDs);
-  }, [collapsedPartitionIDs, flatSessions, focusSessionId, groupingEnabled, partitionViews]);
+  }, [collapsedPartitionIDs, focusSessionId, partitionViews]);
   const visibleSessionCount = useSessionSidebarVisibleCount({
     scrollElementRef,
     totalSessions,
     resetKey,
     focusSessionIndex,
   });
-  const visibleFlatSessions = useMemo(() => {
-    return flatSessions.slice(0, visibleSessionCount);
-  }, [flatSessions, visibleSessionCount]);
   const visiblePartitionViews = useMemo(() => {
     return limitPartitionViewsBySessionCount(partitionViews, visibleSessionCount, collapsedPartitionIDs);
   }, [collapsedPartitionIDs, partitionViews, visibleSessionCount]);
@@ -113,28 +99,6 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
 
   if (empty) {
     return <div className="border border-black/10 bg-white px-3 py-3 text-xs text-neutral-600">{copy.sidebarNoSessions}</div>;
-  }
-
-  if (!groupingEnabled) {
-    return (
-      <SessionSidebarVirtualRows
-        copy={copy}
-        rows={buildFlatSessionRows(visibleFlatSessions)}
-        scrollElementRef={scrollElementRef}
-        currentSessionId={currentSessionId}
-        backgroundCompletedSessionIds={backgroundCompletedSessionIds}
-        focusSessionId={focusSessionId}
-        resolveSessionTitle={resolveSessionTitle}
-        onSelect={onSelect}
-        onDelete={onDelete}
-        onTogglePartitionCollapsed={onTogglePartitionCollapsed}
-        onDragStartSession={onDragStartSession}
-        onDragOverSession={onDragOverSession}
-        onDropPartition={onDropPartition}
-        onDragOverPartition={onDragOverPartition}
-        onDragEndSession={onDragEndSession}
-      />
-    );
   }
 
   const rows = buildPartitionSessionRows({

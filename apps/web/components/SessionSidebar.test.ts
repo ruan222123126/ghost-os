@@ -1,6 +1,4 @@
 import {
-  buildFlatSessionList,
-  buildFlatSessionRows,
   buildPartitionSessionRows,
   countSessionsInPartitionViews,
   limitPartitionViewsBySessionCount,
@@ -10,22 +8,6 @@ import type { SessionMetadata } from '@/lib/types';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 
 describe('components/SessionSidebar', () => {
-  it('builds flat session rows by recent activity', () => {
-    const sessions: SessionMetadata[] = [
-      createSession('older-3333', '2026-04-10T00:00:00Z'),
-      createSession('latest-1111', '2026-04-12T12:00:00Z'),
-      createSession('middle-2222', '2026-04-11T08:00:00Z'),
-    ];
-
-    const rows = buildFlatSessionRows(buildFlatSessionList(sessions, ''));
-
-    expect(rows.map((row) => row.kind === 'session' ? row.session.id : '')).toEqual([
-      'latest-1111',
-      'middle-2222',
-      'older-3333',
-    ]);
-  });
-
   it('builds grouped session rows without rendering the full sidebar DOM', () => {
     const partitions: SessionPartitionView[] = [
       {
@@ -192,20 +174,6 @@ describe('components/SessionSidebar', () => {
       'shared-1',
       'local-1',
     ]);
-  });
-
-  it('can filter flat session rows through a title-aware matcher', () => {
-    const sessions: SessionMetadata[] = [
-      createSession('session-a', '2026-04-12T12:00:00Z', '绘画会话'),
-      createSession('session-b', '2026-04-11T08:00:00Z', 'Other'),
-    ];
-    const rows = buildFlatSessionRows(buildFlatSessionList(
-      sessions,
-      '绘画',
-      (session, normalizedQuery) => session.title.toLowerCase().includes(normalizedQuery),
-    ));
-
-    expect(rows.map((row) => row.kind === 'session' ? row.session.id : '')).toEqual(['session-a']);
   });
 
   it('places the search dialog animation origin at the trigger center', () => {

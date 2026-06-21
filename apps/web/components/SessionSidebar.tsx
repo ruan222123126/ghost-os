@@ -13,7 +13,6 @@ import {
   IconSearch,
 } from '@/components/sessionSidebarIcons';
 import type { UseSessionSidebarAliasesResult } from '@/hooks/useSessionSidebarAliases';
-import { useSessionSidebarGroupingPreference } from '@/hooks/useSessionSidebarGroupingPreference';
 import { useSessionSidebarPartitions } from '@/hooks/useSessionSidebarPartitions';
 import { useSessionSidebarSessionSources } from '@/hooks/useSessionSidebarSessionSources';
 import { useSessionSidebarState } from '@/hooks/useSessionSidebarState';
@@ -50,7 +49,6 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
 }) => {
   const { copy } = useWebLocale();
   const sidebarState = useSessionSidebarState();
-  const { enabled: groupingEnabled } = useSessionSidebarGroupingPreference();
   const searchButtonRef = useRef<HTMLButtonElement | null>(null);
   const [focusSessionId, setFocusSessionId] = useState('');
   const activeSearchQuery = sidebarState.isSearchVisible ? sidebarState.searchQuery : '';
@@ -75,7 +73,6 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
     matchesSearch: matchesSessionSearch,
   });
   const sessionSources = useSessionSidebarSessionSources({
-    enabled: groupingEnabled,
     sessions,
     requestFailedText: copy.system.genericRequestFailed,
   });
@@ -172,11 +169,9 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         onDelete={onDelete}
         resolveSessionTitle={resolveSessionTitle}
         renameSession={renameSession}
-        groupingEnabled={groupingEnabled}
         partitionModel={partitionModel}
         visiblePartitionViews={visiblePartitionViews}
         sessionSourcesError={sessionSources.error}
-        matchesSessionSearch={matchesSessionSearch}
       />
 
       <SidebarSettingsButton collapsed={!sidebarState.isOpen} onClick={onOpenSettings} />
@@ -187,7 +182,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         inputRef={sidebarState.searchInputRef}
         triggerRef={searchButtonRef}
         sessions={sessions}
-        partitionViews={groupingEnabled ? visiblePartitionViews : undefined}
+        partitionViews={visiblePartitionViews}
         currentSessionId={currentSessionId}
         resolveSessionTitle={resolveSessionTitle}
         onQueryChange={sidebarState.setSearchQuery}

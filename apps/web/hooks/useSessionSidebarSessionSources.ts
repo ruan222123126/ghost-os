@@ -10,7 +10,6 @@ import {
 import type { SessionMetadata } from '@/lib/types';
 
 interface UseSessionSidebarSessionSourcesOptions {
-  enabled: boolean;
   sessions: SessionMetadata[];
   requestFailedText: string;
 }
@@ -25,7 +24,6 @@ export function useSessionSidebarSessionSources(
   options: UseSessionSidebarSessionSourcesOptions,
 ): UseSessionSidebarSessionSourcesResult {
   const {
-    enabled,
     sessions,
     requestFailedText,
   } = options;
@@ -40,13 +38,6 @@ export function useSessionSidebarSessionSources(
   }, [sessionIDKey]);
 
   const reload = useCallback(async () => {
-    if (!enabled) {
-      setAssignments({});
-      setHiddenSessionIDs([]);
-      setError('');
-      return;
-    }
-
     try {
       const resolution = await getSessionSources();
       setAssignments(filterKnownAssignments(
@@ -60,7 +51,7 @@ export function useSessionSidebarSessionSources(
       setHiddenSessionIDs([]);
       setError(toErrorMessage(error, requestFailedText));
     }
-  }, [enabled, knownSessionIDs, requestFailedText]);
+  }, [knownSessionIDs, requestFailedText]);
 
   useEffect(() => {
     ignorePromise(reload());
