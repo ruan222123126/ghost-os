@@ -12,7 +12,7 @@ import {
 } from '@/components/config/runtimeSettingsForm';
 import {
   CommonSettingsSection,
-  RuntimeCoreSection,
+  ConversationSettingsSection,
   SessionSection,
   WebSearchSection,
 } from '@/components/config/runtimeSettingsSections';
@@ -169,12 +169,11 @@ function RuntimePanels(props: {
         onChange={state.updateForm}
         onLocaleChange={onLocaleChange}
       />
-      <RuntimeCoreSection
+      <ConversationSettingsSection
         formState={state.formState}
         controlsDisabled={state.controlsDisabled}
         modelSelectionEnabled={state.modelSelectionEnabled}
         onChange={state.updateForm}
-        config={config}
       />
       <SessionSection formState={state.formState} controlsDisabled={state.controlsDisabled} onChange={state.updateForm} />
       <WebSearchSection

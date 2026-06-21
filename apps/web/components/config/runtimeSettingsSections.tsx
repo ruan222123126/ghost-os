@@ -76,13 +76,12 @@ export function CommonSettingsSection(props: SectionProps & {
   );
 }
 
-export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionEnabled: boolean }) {
-  const { copy, locale } = useWebLocale();
-  const { formState, controlsDisabled, modelSelectionEnabled, onChange, config } = props;
-  const chatPathPlaceholder = runtimeChatPathPlaceholder(config, locale);
+export function ConversationSettingsSection(props: SectionProps & { modelSelectionEnabled: boolean }) {
+  const { copy } = useWebLocale();
+  const { formState, controlsDisabled, modelSelectionEnabled, onChange } = props;
 
   return (
-    <Card title={copy.settings.runtimeCoreTitle} copy={copy.settings.runtimeCoreCopy}>
+    <Card title={copy.settings.conversationConfigTitle} copy={copy.settings.conversationConfigCopy}>
       <TextField
         label={copy.settings.runtimeProviderNameLabel}
         description={copy.settings.runtimeProviderNameDescription}
@@ -102,15 +101,6 @@ export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionE
         onChange={(value) => onChange({ model: value })}
       />
       <TextField
-        label={copy.settings.runtimeChatPathLabel}
-        description={copy.settings.runtimeChatPathDescription}
-        value={formState.chatPath}
-        disabled={controlsDisabled}
-        mono
-        placeholder={chatPathPlaceholder}
-        onChange={(value) => onChange({ chatPath: value })}
-      />
-      <TextField
         label={copy.settings.runtimeProjectRootLabel}
         description={copy.settings.runtimeProjectRootDescription}
         value={formState.projectRoot}
@@ -121,31 +111,6 @@ export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionE
       />
     </Card>
   );
-}
-
-function runtimeChatPathPlaceholder(config: BridgeConfig | null, locale: string): string {
-  const defaultPath = defaultChatPath(config?.provider_type);
-  if (defaultPath === '') {
-    return '';
-  }
-  if (locale === 'zh-CN') {
-    return `留空使用默认: ${defaultPath}`;
-  }
-  return `Leave blank to use default: ${defaultPath}`;
-}
-
-function defaultChatPath(providerType: BridgeConfig['provider_type'] | undefined): string {
-  switch (providerType) {
-    case 'anthropic':
-      return '/v1/messages';
-    case 'codex':
-      return '/responses';
-    case 'openai':
-    case 'custom':
-      return '/chat/completions';
-    default:
-      return '';
-  }
 }
 
 export function SessionSection(props: SectionProps) {

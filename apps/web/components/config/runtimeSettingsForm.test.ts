@@ -73,7 +73,6 @@ describe('components/config/runtimeSettingsForm', () => {
     const update = buildRuntimeUpdate(true, {
       provider: 'custom',
       model: 'gpt-5.4',
-      chatPath: '/v1/chat',
       projectRoot: '/tmp/runtime-root',
       maxTurns: '9',
       taskExecutionTimeoutMS: '600000',
@@ -105,5 +104,6 @@ describe('components/config/runtimeSettingsForm', () => {
     expect(update.session_title_mode).toBe('first_message');
     expect(update).not.toHaveProperty('api_key');
     expect(update).not.toHaveProperty('base_url');
+    expect(update).not.toHaveProperty('chat_path');
   });
 });

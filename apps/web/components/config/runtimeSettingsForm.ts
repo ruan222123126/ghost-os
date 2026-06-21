@@ -13,7 +13,6 @@ const DEFAULT_SESSION_TITLE_MODE = 'session_id';
 export interface RuntimeFormState {
   provider: string;
   model: string;
-  chatPath: string;
   projectRoot: string;
   maxTurns: string;
   taskExecutionTimeoutMS: string;
@@ -36,7 +35,6 @@ export function createRuntimeFormState(config: BridgeConfig | null): RuntimeForm
   return {
     provider: config?.provider ?? '',
     model: config?.model ?? '',
-    chatPath: config?.chat_path ?? '',
     projectRoot: config?.project_root ?? '',
     maxTurns: String(config?.max_turns ?? DEFAULT_MAX_TURNS),
     taskExecutionTimeoutMS: String(
@@ -87,7 +85,6 @@ function buildRuntimeScalarUpdate(
 ): ConfigUpdate {
   const update: ConfigUpdate = {
     provider: formState.provider,
-    chat_path: formState.chatPath,
     project_root: formState.projectRoot,
     max_turns: parsePositiveInteger(formState.maxTurns, 'max_turns'),
     task_execution_timeout_ms: parsePositiveInteger(

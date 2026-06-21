@@ -3,7 +3,7 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { createRuntimeFormState } from '@/components/config/runtimeSettingsForm';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { BridgeConfig } from '@/lib/types';
-import { CommonSettingsSection, RuntimeCoreSection } from './runtimeSettingsSections';
+import { CommonSettingsSection, ConversationSettingsSection } from './runtimeSettingsSections';
 
 function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   return {
@@ -40,11 +40,13 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
 describe('components/config/runtimeSettingsSections', () => {
   it('keeps provider api key and base url out of general runtime settings', () => {
     const config = buildBridgeConfig();
-    const renderer = renderRuntimeCore(config);
+    const renderer = renderConversationSettings(config);
     const content = textContent(renderer.root);
 
+    expect(content).toContain('Conversation Settings');
     expect(content).toContain('Provider Name');
     expect(content).toContain('Model');
+    expect(content).not.toContain('Chat Path');
     expect(content).not.toContain('Provider API Key');
     expect(content).not.toContain('Base URL');
   });
@@ -85,7 +87,7 @@ function renderCommonSettings(config: BridgeConfig): TestRenderer.ReactTestRende
   return renderer;
 }
 
-function renderRuntimeCore(config: BridgeConfig): TestRenderer.ReactTestRenderer {
+function renderConversationSettings(config: BridgeConfig): TestRenderer.ReactTestRenderer {
   let renderer!: TestRenderer.ReactTestRenderer;
 
   act(() => {
@@ -93,12 +95,11 @@ function renderRuntimeCore(config: BridgeConfig): TestRenderer.ReactTestRenderer
       // eslint-disable-next-line react/no-children-prop
       React.createElement(WebLocaleProvider, {
         initialLocale: 'en-US',
-        children: React.createElement(RuntimeCoreSection, {
+        children: React.createElement(ConversationSettingsSection, {
           formState: createRuntimeFormState(config),
           controlsDisabled: false,
           modelSelectionEnabled: true,
           onChange: () => undefined,
-          config,
         }),
       }),
     );
