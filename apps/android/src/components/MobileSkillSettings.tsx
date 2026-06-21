@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Power, RefreshCw, Trash2 } from "lucide-react";
-import type { SkillPayload, SkillSource } from "../mobileTypes";
+import type { SkillPayload } from "../mobileTypes";
 import "./MobileSkillSettings.css";
 
 interface MobileSkillSettingsProps {
@@ -99,12 +99,7 @@ function SkillCard(props: SkillCardProps) {
           <span>{skill.name}</span>
           <small>{skill.enabled ? "已启用" : "已停用"}</small>
         </div>
-        <p>{skill.description || "无描述"}</p>
-        <code>{skill.path}</code>
-        <div className="mobile-settings-skill-meta">
-          <span>{sourceLabel(skill.source)}</span>
-          <span>{skill.id}</span>
-        </div>
+        <p className="mobile-settings-skill-description">{skill.description || "无描述"}</p>
       </div>
       <div className="mobile-settings-skill-actions">
         <button type="button" disabled={busy} onClick={() => props.onToggle(skill)}>
@@ -124,10 +119,6 @@ function skillSummary(enabledCount: number, totalCount: number): string {
     return "未发现已安装技能";
   }
   return `${enabledCount}/${totalCount} 已启用`;
-}
-
-function sourceLabel(source: SkillSource): string {
-  return source === "repo" ? "仓库" : "用户";
 }
 
 function sortSkillsForDisplay(skills: SkillPayload[]): SkillPayload[] {

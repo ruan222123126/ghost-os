@@ -75,8 +75,11 @@
 }
 
 .mobile-settings-skill-card {
+  box-sizing: border-box;
+  height: 202px;
   padding: 16px;
   display: grid;
+  grid-template-rows: 1fr auto;
   gap: 14px;
 }
 
@@ -101,7 +104,9 @@
   font-size: 16px;
   font-weight: 600;
   line-height: 1.25;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mobile-settings-skill-heading small {
@@ -119,37 +124,18 @@
   background: #e4e4e7;
 }
 
-.mobile-settings-skill-card p,
-.mobile-settings-skill-card code {
+.mobile-settings-skill-description {
   margin: 6px 0 0;
-  display: block;
   color: #52525b;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 18px;
+  min-height: 90px;
+  max-height: 90px;
+  display: -webkit-box;
+  overflow: hidden;
   overflow-wrap: anywhere;
-}
-
-.mobile-settings-skill-card code {
-  color: #3f3f46;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-}
-
-.mobile-settings-skill-meta {
-  margin-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.mobile-settings-skill-meta span {
-  max-width: 100%;
-  border-radius: 999px;
-  padding: 5px 8px;
-  color: #52525b;
-  background: #ffffff;
-  font-size: 12px;
-  line-height: 1;
-  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
 }
 
 .mobile-settings-skill-actions {
