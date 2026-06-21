@@ -277,8 +277,6 @@ function useThinkingPanelOpen(thinkingText: string, replyMessage: string): [bool
 
     if (!hasThinkingText) {
       setOpen(false);
-    } else if (!hadThinkingTextRef.current) {
-      setOpen(true);
     } else if (hasReplyMessage && !hadReplyMessageRef.current) {
       setOpen(false);
     }
