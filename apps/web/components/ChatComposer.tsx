@@ -113,7 +113,9 @@ export const ChatComposer: FC<ChatComposerProps> = ({
 
     setAttachmentMenuOpen(false);
     setSkillMenuOpen(false);
-    await onSubmit();
+    const submitPromise = onSubmit();
+    focusTextareaAfterSubmit(textareaRef.current);
+    await submitPromise;
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -319,6 +321,10 @@ function syncTextareaHeight(
   textarea.style.height = `${nextHeight}px`;
   const nextExpanded = nextHeight > COMPOSER_TEXTAREA_EXPANDED_HEIGHT_PX;
   setExpanded?.((current) => current === nextExpanded ? current : nextExpanded);
+}
+
+function focusTextareaAfterSubmit(textarea: HTMLTextAreaElement | null) {
+  textarea?.focus({ preventScroll: true });
 }
 
 function buildComposerShellClassName(sending: boolean, disabled: boolean): string {

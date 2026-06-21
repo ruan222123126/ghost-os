@@ -158,16 +158,47 @@ describe('components/ChatComposer', () => {
     expect(harness.submissions).toEqual(['send me']);
     expect(harness.menuItems()).toEqual([]);
   });
+
+  it('focuses the textarea without scrolling as soon as submit is accepted', async () => {
+    const pendingSubmit = createDeferred<void>();
+    const textareaFocus = jest.fn();
+    const onSubmit = jest.fn(async () => {
+      await pendingSubmit.promise;
+    });
+    const harness = renderComposerHarness({
+      initialValue: 'send me',
+      onSubmit,
+      textareaFocus,
+    });
+
+    await act(async () => {
+      harness.form().props.onSubmit({
+        preventDefault: jest.fn(),
+      });
+      await Promise.resolve();
+    });
+
+    expect(harness.submissions).toEqual(['send me']);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(textareaFocus).toHaveBeenCalledWith({ preventScroll: true });
+
+    pendingSubmit.resolve();
+    await act(async () => {
+      await pendingSubmit.promise;
+    });
+  });
 });
 
 function renderComposerHarness(options: {
   fileInputClick?: () => void;
   initialValue?: string;
   initialSelectedSkill?: ChatSelectedSkill;
+  onSubmit?: (value: string) => Promise<void> | void;
   onRefreshSkills?: () => Promise<void> | void;
   onSelectFiles?: (files: FileList) => Promise<void> | void;
   onSelectSkill?: boolean;
   skills?: SkillPayload[];
+  textareaFocus?: (options?: FocusOptions) => void;
 } = {}) {
   const submissions: string[] = [];
   let renderer!: TestRenderer.ReactTestRenderer;
@@ -192,6 +223,7 @@ function renderComposerHarness(options: {
         onChange: setValue,
         onSubmit: async () => {
           submissions.push(value);
+          await options.onSubmit?.(value);
         },
         sending: false,
         canSubmit: value.trim().length > 0 || selectedSkill !== null,
@@ -210,13 +242,21 @@ function renderComposerHarness(options: {
   act(() => {
     renderer = TestRenderer.create(React.createElement(Harness), {
       createNodeMock: (element) => {
-        if (element.type !== 'input') {
-          return null;
+        if (element.type === 'textarea') {
+          return {
+            focus: options.textareaFocus ?? jest.fn(),
+            scrollHeight: 0,
+            style: {},
+          };
         }
 
-        return {
-          click: fileInputClick ?? jest.fn(),
-        };
+        if (element.type === 'input') {
+          return {
+            click: fileInputClick ?? jest.fn(),
+          };
+        }
+
+        return null;
       },
     });
   });
@@ -287,4 +327,12 @@ function buildEnterEvent(overrides: Partial<{
       which: overrides.which ?? overrides.keyCode ?? 13,
     },
   };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
 }

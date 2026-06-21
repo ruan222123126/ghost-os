@@ -81,7 +81,7 @@ describe('components/message/messageListScroll', () => {
     )).toBe(true);
   });
 
-  it('keeps auto-follow while an animated post-send scroll is still moving toward the anchor', () => {
+  it('keeps auto-follow while a post-send scroll is still moving toward the anchor', () => {
     expect(resolveMessageListAutoFollow(
       {
         scrollHeight: 1200,
@@ -96,7 +96,7 @@ describe('components/message/messageListScroll', () => {
     )).toBe(true);
   });
 
-  it('clears the animated post-send target once the scroll reaches the anchor', () => {
+  it('clears the post-send target once the scroll reaches the anchor', () => {
     expect(shouldClearPostSendProgrammaticScrollTarget(
       {
         scrollHeight: 1200,
