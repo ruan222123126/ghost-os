@@ -24,7 +24,6 @@ interface HomePageController {
   streamingTools: ReturnType<typeof useBridgeChat>['streamingTools'];
   pendingQuestions: ReturnType<typeof useBridgeChat>['pendingQuestions'];
   loading: boolean;
-  historySyncing: boolean;
   historyLoading: boolean;
   loadingOlderHistory: boolean;
   chatError: string;
@@ -172,7 +171,6 @@ export function useHomePageController(): HomePageController {
     streamingTools: chat.streamingTools,
     pendingQuestions: chat.pendingQuestions,
     loading: chat.loading,
-    historySyncing: chat.historySyncing,
     historyLoading: chat.historyLoading,
     loadingOlderHistory: chat.loadingOlderHistory,
     chatError: chat.chatError,

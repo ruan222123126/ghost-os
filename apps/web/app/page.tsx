@@ -222,14 +222,13 @@ const ChatStatusLines: FC<{
   controller: ReturnType<typeof useHomePageController>;
   copy: ReturnType<typeof useWebLocale>['copy'];
 }> = ({ controller, copy }) => {
-  if (!controller.historyLoading && !controller.historySyncing && (!controller.configError || controller.showConfig)) {
+  if (!controller.historyLoading && (!controller.configError || controller.showConfig)) {
     return null;
   }
 
   return (
     <>
       {controller.historyLoading ? <TopLoadingBar className="chat-history-loading-bar" label={copy.chat.historyLoading} /> : null}
-      {controller.historySyncing && !controller.historyLoading ? <div className="status-line info">{copy.chat.historySyncing}</div> : null}
       {controller.configError && !controller.showConfig ? <div className="status-line error">{controller.configError}</div> : null}
     </>
   );
