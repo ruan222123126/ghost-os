@@ -266,6 +266,7 @@ function applyPendingAnchorScroll(
   }
 
   container.scrollTo({
+    behavior: 'smooth',
     top: pending.scrollTopPx,
   });
   options.pendingAnchorRef.current = null;

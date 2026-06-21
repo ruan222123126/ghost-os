@@ -39,6 +39,7 @@ describe('components/message/useMessageListPostSendFocus', () => {
     expect(trailingSpacerPx).toBe(200);
     expect(scrollElementRef.current?.scrollTop).toBe(300);
     expect(getScrollToMock(scrollElementRef)).toHaveBeenCalledWith({
+      behavior: 'smooth',
       top: 300,
     });
     expect(trackingStates.at(-1)).toEqual({
