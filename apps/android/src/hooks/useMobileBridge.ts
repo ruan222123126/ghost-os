@@ -25,6 +25,7 @@ import type {
   SessionMetadata,
   SkillPayload,
   StatusMessage,
+  StoredConnectionSnapshot,
   StoredSettings,
 } from "../mobileTypes";
 
@@ -56,6 +57,63 @@ function connectionTargetKey(settings: StoredSettings, bridgeUrl: string): strin
   }
 
   return `webrtc:${pairing.deviceId}:${pairing.pcId}:${pairing.signalingUrl}`;
+}
+
+function connectionSnapshotFromSettings(
+  settings: StoredSettings,
+  bridgeUrl: string,
+): StoredConnectionSnapshot {
+  const snapshot: StoredConnectionSnapshot = {
+    apiToken: settings.apiToken?.trim() || "",
+    bridgeUrl,
+    connectionMode: settings.connectionMode,
+  };
+  if (settings.connectionMode === "webrtc") {
+    snapshot.pairing = settings.pairing;
+  }
+  return snapshot;
+}
+
+function settingsWithConnectionSnapshot(
+  settings: StoredSettings,
+  snapshot: StoredConnectionSnapshot,
+): StoredSettings {
+  return {
+    ...settings,
+    apiToken: snapshot.apiToken?.trim() || "",
+    bridgeUrl: snapshot.bridgeUrl,
+    connectionMode: snapshot.connectionMode,
+    pairing: snapshot.connectionMode === "webrtc" ? snapshot.pairing : settings.pairing,
+  };
+}
+
+function connectionSettingsMatchSnapshot(
+  settings: StoredSettings,
+  snapshot: StoredConnectionSnapshot,
+): boolean {
+  if (
+    settings.connectionMode !== snapshot.connectionMode
+    || normalizeBridgeUrl(settings.bridgeUrl) !== normalizeBridgeUrl(snapshot.bridgeUrl)
+    || (settings.apiToken?.trim() || "") !== (snapshot.apiToken?.trim() || "")
+  ) {
+    return false;
+  }
+
+  if (snapshot.connectionMode === "http") {
+    return true;
+  }
+  return Boolean(
+    settings.pairing
+    && snapshot.pairing
+    && connectionPairingKey(settings.pairing) === connectionPairingKey(snapshot.pairing),
+  );
+}
+
+function connectionPairingKey(pairing: StoredSettings["pairing"]): string {
+  if (!pairing) {
+    return "";
+  }
+  return `${pairing.deviceId}:${pairing.pcId}:${pairing.signalingUrl}:${pairing.signalingToken}`;
 }
 
 function resolveConnectedWebRTCClient(client: MobileWebRTCBridge | undefined): MobileWebRTCBridge {
@@ -113,6 +171,8 @@ export function useMobileBridge() {
   });
   const webRTCClientRef = useRef<MobileWebRTCBridge | undefined>(undefined);
   const connectedTargetRef = useRef<string | undefined>(undefined);
+  const autoConnectAttemptedRef = useRef(false);
+  const pendingAutoConnectTargetRef = useRef<string | undefined>(undefined);
 
   const bridgeUrl = useMemo(() => normalizeBridgeUrl(settings.bridgeUrl), [settings.bridgeUrl]);
   const apiToken = useMemo(() => settings.apiToken?.trim() || "", [settings.apiToken]);
@@ -425,6 +485,10 @@ export function useMobileBridge() {
       }
       await refreshRuntimeConfig();
       connectedTargetRef.current = currentConnectionTarget;
+      setSettings((current) => ({
+        ...current,
+        lastSuccessfulConnection: connectionSnapshotFromSettings(settings, bridgeUrl),
+      }));
       setConnectionStatus({ tone: "success", text: connectedStatusText(settings.connectionMode) });
       refreshSkillsAfterConnect();
       refreshSessionsAfterConnect();
@@ -442,12 +506,42 @@ export function useMobileBridge() {
     }
   }, [
     currentConnectionTarget,
+    bridgeUrl,
     refreshSkillsAfterConnect,
     refreshRuntimeConfig,
     refreshSessionsAfterConnect,
-    settings.connectionMode,
-    settings.pairing,
+    settings,
   ]);
+
+  useEffect(() => {
+    const pendingTarget = pendingAutoConnectTargetRef.current;
+    if (pendingTarget) {
+      if (currentConnectionTarget !== pendingTarget) {
+        return;
+      }
+      pendingAutoConnectTargetRef.current = undefined;
+      void connectBridge();
+      return;
+    }
+
+    const snapshot = settings.lastSuccessfulConnection;
+    if (autoConnectAttemptedRef.current || !settings.autoConnectEnabled || !snapshot) {
+      return;
+    }
+
+    autoConnectAttemptedRef.current = true;
+    if (connectionSettingsMatchSnapshot(settings, snapshot)) {
+      void connectBridge();
+      return;
+    }
+
+    const restoredSettings = settingsWithConnectionSnapshot(settings, snapshot);
+    pendingAutoConnectTargetRef.current = connectionTargetKey(
+      restoredSettings,
+      normalizeBridgeUrl(restoredSettings.bridgeUrl),
+    );
+    setSettings(restoredSettings);
+  }, [connectBridge, currentConnectionTarget, settings]);
 
   const switchModel = useCallback(
     async (model: string): Promise<boolean> => {

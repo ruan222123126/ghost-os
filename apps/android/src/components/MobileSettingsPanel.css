@@ -148,6 +148,62 @@
   background: #f5f5f7;
 }
 
+.mobile-settings-auto-connect-row {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 18px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #111827;
+  background: #ffffff;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  transition:
+    background 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.mobile-settings-auto-connect-row:hover,
+.mobile-settings-auto-connect-row:focus-visible {
+  background: #fafafa;
+}
+
+.mobile-settings-toggle-track {
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  padding: 3px;
+  flex: 0 0 auto;
+  display: flex;
+  background: #d1d5db;
+  transition: background 160ms ease;
+}
+
+.mobile-settings-toggle-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.22);
+  transition: transform 160ms ease;
+}
+
+.mobile-settings-auto-connect-row[aria-checked="true"] .mobile-settings-toggle-track {
+  background: #166534;
+}
+
+.mobile-settings-auto-connect-row[aria-checked="true"] .mobile-settings-toggle-thumb {
+  transform: translateX(18px);
+}
+
 .mobile-settings-item-button {
   min-width: 0;
   width: 100%;

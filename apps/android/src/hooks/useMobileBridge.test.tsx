@@ -46,6 +46,131 @@ describe("useMobileBridge", () => {
       expect(bridgeBusRequests().some((request) => request.action === "SESSIONS_LIST")).toBe(true);
     });
     expect(bridgeBusRequests().every((request) => request.apiToken === "080906")).toBe(true);
+    await waitFor(() => {
+      expect(storedSettings().lastSuccessfulConnection).toMatchObject({ apiToken: "080906" });
+    });
+  });
+
+  it("records the last successful HTTP connection after bridge connect succeeds", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: " token ",
+        autoConnectEnabled: false,
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(storedSettings().lastSuccessfulConnection).toMatchObject({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+      });
+    });
+  });
+
+  it("keeps the previous successful connection when bridge connect fails", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "new-token",
+        autoConnectEnabled: false,
+        bridgeUrl: "http://new.example:8080",
+        connectionMode: "http",
+        lastSuccessfulConnection: {
+          apiToken: "old-token",
+          bridgeUrl: "http://old.example:8080",
+          connectionMode: "http",
+        },
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      if (request.action === "CONFIG_GET") {
+        return {
+          error: "connect failed",
+          payload: {},
+          status: "error",
+        };
+      }
+      return {
+        error: "",
+        payload: payloadForAction(request.action),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(result.current.connectionStatus.tone).toBe("error");
+    });
+    expect(storedSettings().lastSuccessfulConnection).toMatchObject({
+      apiToken: "old-token",
+      bridgeUrl: "http://old.example:8080",
+      connectionMode: "http",
+    });
+  });
+
+  it("auto connects with the last successful HTTP connection on startup", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "draft-token",
+        autoConnectEnabled: true,
+        bridgeUrl: "http://draft.example:8080",
+        connectionMode: "http",
+        lastSuccessfulConnection: {
+          apiToken: "last-token",
+          bridgeUrl: "http://last.example:8080",
+          connectionMode: "http",
+        },
+      }),
+    );
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await waitFor(() => {
+      expect(result.current.connectionStatus.tone).toBe("success");
+    });
+    const requests = bridgeBusRequests();
+    expect(requests.some((request) => request.action === "CONFIG_GET")).toBe(true);
+    expect(requests.every((request) => request.baseUrl === "http://last.example:8080")).toBe(true);
+    expect(requests.every((request) => request.apiToken === "last-token")).toBe(true);
+    expect(result.current.settings.bridgeUrl).toBe("http://last.example:8080");
+  });
+
+  it("does not auto connect when auto connect is off", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        autoConnectEnabled: false,
+        bridgeUrl: "http://last.example:8080",
+        connectionMode: "http",
+        lastSuccessfulConnection: {
+          bridgeUrl: "http://last.example:8080",
+          connectionMode: "http",
+        },
+      }),
+    );
+
+    renderHook(() => useMobileBridge());
+
+    await waitFor(() => {
+      expect(bridgeBusRequests()).toEqual([]);
+    });
   });
 
   it("does not fail bridge connection when skill management is unsupported", async () => {
@@ -99,6 +224,11 @@ describe("useMobileBridge", () => {
 interface BridgeBusRequest {
   action: string;
   apiToken?: string;
+  baseUrl: string;
+}
+
+function storedSettings(): Record<string, unknown> {
+  return JSON.parse(window.localStorage.getItem(SETTINGS_STORAGE_KEY) || "{}") as Record<string, unknown>;
 }
 
 function bridgeBusRequests(): BridgeBusRequest[] {

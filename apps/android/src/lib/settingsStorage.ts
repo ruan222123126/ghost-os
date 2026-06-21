@@ -1,4 +1,4 @@
-import type { StoredSettings } from "../mobileTypes";
+import type { ConnectionMode, StoredConnectionSnapshot, StoredSettings } from "../mobileTypes";
 
 export const DEFAULT_BRIDGE_URL = "http://127.0.0.1:8080";
 
@@ -6,6 +6,7 @@ const SETTINGS_STORAGE_KEY = "ghost-os-mobile.settings";
 
 const defaultSettings: StoredSettings = {
   apiToken: "",
+  autoConnectEnabled: false,
   bridgeUrl: DEFAULT_BRIDGE_URL,
   connectionMode: "webrtc",
 };
@@ -13,19 +14,22 @@ const defaultSettings: StoredSettings = {
 export function loadSettings(): StoredSettings {
   const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
   if (!raw) {
-    return defaultSettings;
+    return { ...defaultSettings };
   }
 
   try {
     const parsed = JSON.parse(raw) as Partial<StoredSettings>;
+    const connectionMode = normalizeConnectionMode(parsed.connectionMode);
     return {
       apiToken: parsed.apiToken?.trim() || "",
+      autoConnectEnabled: parsed.autoConnectEnabled === true,
       bridgeUrl: parsed.bridgeUrl?.trim() || DEFAULT_BRIDGE_URL,
-      connectionMode: parsed.connectionMode === "http" ? "http" : "webrtc",
+      connectionMode,
+      lastSuccessfulConnection: normalizeLastSuccessfulConnection(parsed.lastSuccessfulConnection),
       pairing: normalizePairing(parsed.pairing),
     };
   } catch {
-    return defaultSettings;
+    return { ...defaultSettings };
   }
 }
 
@@ -34,8 +38,10 @@ export function saveSettings(settings: StoredSettings): void {
     SETTINGS_STORAGE_KEY,
     JSON.stringify({
       apiToken: settings.apiToken?.trim() || "",
+      autoConnectEnabled: settings.autoConnectEnabled,
       bridgeUrl: settings.bridgeUrl,
       connectionMode: settings.connectionMode,
+      lastSuccessfulConnection: normalizeLastSuccessfulConnection(settings.lastSuccessfulConnection),
       pairing: settings.pairing,
     }),
   );
@@ -43,6 +49,40 @@ export function saveSettings(settings: StoredSettings): void {
 
 export function normalizeBridgeUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
+}
+
+function normalizeConnectionMode(value: ConnectionMode | undefined): ConnectionMode {
+  return value === "http" ? "http" : "webrtc";
+}
+
+function normalizeLastSuccessfulConnection(
+  raw: StoredConnectionSnapshot | undefined,
+): StoredConnectionSnapshot | undefined {
+  if (!raw) {
+    return undefined;
+  }
+
+  const connectionMode = normalizeConnectionMode(raw.connectionMode);
+  const bridgeUrl = raw.bridgeUrl?.trim() || DEFAULT_BRIDGE_URL;
+  const apiToken = raw.apiToken?.trim() || "";
+  if (connectionMode === "http") {
+    return {
+      apiToken,
+      bridgeUrl,
+      connectionMode,
+    };
+  }
+
+  const pairing = normalizePairing(raw.pairing);
+  if (!pairing) {
+    return undefined;
+  }
+  return {
+    apiToken,
+    bridgeUrl,
+    connectionMode,
+    pairing,
+  };
 }
 
 function normalizePairing(raw: StoredSettings["pairing"]): StoredSettings["pairing"] {

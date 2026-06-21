@@ -15,10 +15,19 @@ export interface MobilePairingInfo {
   iceServers: RTCIceServer[];
 }
 
-export interface StoredSettings {
+export interface StoredConnectionSnapshot {
   apiToken?: string;
   bridgeUrl: string;
   connectionMode: ConnectionMode;
+  pairing?: MobilePairingInfo;
+}
+
+export interface StoredSettings {
+  apiToken?: string;
+  autoConnectEnabled: boolean;
+  bridgeUrl: string;
+  connectionMode: ConnectionMode;
+  lastSuccessfulConnection?: StoredConnectionSnapshot;
   pairing?: MobilePairingInfo;
 }
 

@@ -83,10 +83,22 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
       if (deviceId) {
         await deleteMobileCredential(deviceId);
       }
-      props.onSettingsChange((current) => ({ ...current, pairing: undefined }));
+      props.onSettingsChange((current) => ({
+        ...current,
+        lastSuccessfulConnection:
+          current.lastSuccessfulConnection?.connectionMode === "webrtc"
+          && current.lastSuccessfulConnection.pairing?.deviceId === deviceId
+            ? undefined
+            : current.lastSuccessfulConnection,
+        pairing: undefined,
+      }));
     } catch (error) {
       setPairingError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  function setAutoConnectEnabled(enabled: boolean): void {
+    props.onSettingsChange((current) => ({ ...current, autoConnectEnabled: enabled }));
   }
 
   function setConnectionMode(mode: StoredSettings["connectionMode"]): void {
@@ -145,6 +157,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onRemovePairing={removePairing}
               onSaveAPIToken={saveAPIToken}
               onSaveBridgeURL={saveBridgeURL}
+              onSetAutoConnectEnabled={setAutoConnectEnabled}
               onSetConnectionMode={setConnectionMode}
             />
           ) : view === "providers" ? (
@@ -280,6 +293,7 @@ interface ConnectionSettingsProps {
   onRemovePairing: () => Promise<void>;
   onSaveAPIToken: (value: string) => void;
   onSaveBridgeURL: (value: string) => void;
+  onSetAutoConnectEnabled: (enabled: boolean) => void;
   onSetConnectionMode: (mode: StoredSettings["connectionMode"]) => void;
 }
 
@@ -296,6 +310,19 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
       </div>
 
       <div className="mobile-settings-connection-card">
+        <button
+          className="mobile-settings-auto-connect-row"
+          type="button"
+          role="switch"
+          aria-checked={props.settings.autoConnectEnabled}
+          onClick={() => props.onSetAutoConnectEnabled(!props.settings.autoConnectEnabled)}
+        >
+          <span>是否自动连接</span>
+          <span className="mobile-settings-toggle-track" aria-hidden={true}>
+            <span className="mobile-settings-toggle-thumb" />
+          </span>
+        </button>
+
         <div className="mobile-settings-mode-switch" role="group" aria-label="连接模式">
           <button
             className={isWebRTC ? "is-active" : ""}
