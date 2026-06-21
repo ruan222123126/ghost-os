@@ -395,7 +395,7 @@ function ConnectionSettings(props: ConnectionSettingsProps) {
                 <span>Bridge URL</span>
                 <input value={props.bridgeUrlDraft} onChange={(event) => props.onSaveBridgeURL(event.target.value)} />
               </label>
-              <label className="mobile-settings-url-field">
+              <label className="mobile-settings-url-field mobile-settings-api-token-field">
                 <span>API Token</span>
                 <input
                   value={props.apiTokenDraft}

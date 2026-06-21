@@ -483,6 +483,10 @@
   gap: 8px;
 }
 
+.mobile-settings-api-token-field {
+  margin-top: 12px;
+}
+
 .mobile-settings-url-field span {
   color: #6b7280;
   font-size: 13px;
