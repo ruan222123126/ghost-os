@@ -85,6 +85,32 @@
   background: rgb(250 250 250);
 }
 
+.session-sidebar-history-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(115 115 115 / 0.34) transparent;
+}
+
+.session-sidebar-history-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.session-sidebar-history-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.session-sidebar-history-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgb(115 115 115 / 0.36);
+  background-clip: padding-box;
+}
+
+.session-sidebar-history-scroll:hover::-webkit-scrollbar-thumb,
+.session-sidebar-history-scroll::-webkit-scrollbar-thumb:active {
+  background: rgb(82 82 82 / 0.58);
+  background-clip: padding-box;
+}
+
 .chat {
   display: flex;
   flex-direction: column;

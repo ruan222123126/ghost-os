@@ -222,7 +222,11 @@ export const SessionSidebarHistory: FC<SessionSidebarHistoryProps> = (props) => 
     return null;
   }
   return (
-    <div ref={scrollElementRef} className="mt-6 flex-1 overflow-y-auto px-3" onContextMenu={onHistoryContextMenu}>
+    <div
+      ref={scrollElementRef}
+      className="session-sidebar-history-scroll mt-6 flex-1 overflow-y-auto px-3"
+      onContextMenu={onHistoryContextMenu}
+    >
       <div className="mb-4 flex items-center gap-2 border-b border-black/5 px-1 pb-1" onContextMenu={onHistoryContextMenu}>
         <span className="text-[10px] font-black uppercase tracking-[0.2em]">{copy.chat.sidebarHistory}</span>
       </div>
