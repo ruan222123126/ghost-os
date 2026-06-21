@@ -7,10 +7,27 @@ jest.mock('react-markdown', () => ({
   default: ({
     children,
     components,
+    rehypePlugins,
+    remarkPlugins,
   }: {
     children: string;
     components?: Record<string, (props: Record<string, unknown>) => React.ReactElement>;
+    rehypePlugins?: unknown[];
+    remarkPlugins?: unknown[];
   }) => {
+    const mathMatch = children.match(/\$\$([\s\S]*?)\$\$/);
+    if (mathMatch) {
+      return React.createElement(
+        'div',
+        {
+          className: 'mock-markdown',
+          'data-math-plugin-count': String(remarkPlugins?.length ?? 0),
+          'data-rehype-plugin-count': String(rehypePlugins?.length ?? 0),
+        },
+        React.createElement('span', { className: 'katex' }, mathMatch[1]),
+      );
+    }
+
     const codeFenceMatch = children.match(/```([\w-]*)\n([\s\S]*?)```/);
     if (codeFenceMatch && components?.pre) {
       const languageClassName = codeFenceMatch[1] ? `language-${codeFenceMatch[1]}` : undefined;
@@ -28,6 +45,16 @@ jest.mock('react-markdown', () => ({
 }));
 
 jest.mock('remark-gfm', () => ({
+  __esModule: true,
+  default: () => undefined,
+}));
+
+jest.mock('remark-math', () => ({
+  __esModule: true,
+  default: () => undefined,
+}));
+
+jest.mock('rehype-katex', () => ({
   __esModule: true,
   default: () => undefined,
 }));
@@ -51,6 +78,19 @@ describe('components/message/AssistantMarkdownRenderer', () => {
     );
 
     expect(html).toContain('mock-markdown');
+  });
+
+  it('enables math plugins for double-dollar formulas', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AssistantMarkdownRenderer, {
+        content: '如果意思是 9：$$\\frac{6}{2}(1+2)$$',
+      }),
+    );
+
+    expect(html).toContain('katex');
+    expect(html).toContain('\\frac{6}{2}(1+2)');
+    expect(html).toContain('data-math-plugin-count="2"');
+    expect(html).toContain('data-rehype-plugin-count="1"');
   });
 
   it('renders copy button for fenced code blocks', () => {

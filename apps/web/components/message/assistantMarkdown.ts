@@ -7,6 +7,7 @@ const BLOCK_MARKDOWN_PATTERNS = [
   /(^|\n)\s*```/,
   /(^|\n)\s*\|.+\|/,
   /(^|\n)\s{0,3}(?:---|\*\*\*|___)\s*($|\n)/,
+  /(^|\n)\s{0,3}\$\$[\s\S]+?\$\$/,
 ] as const;
 
 const INLINE_MARKDOWN_PATTERNS = [
@@ -14,9 +15,10 @@ const INLINE_MARKDOWN_PATTERNS = [
   /\[[^\]]+\]\([^)]+\)/,
   /\*\*[^*\n]+\*\*/,
   /~~[^~\n]+~~/,
+  /\$\$[^$\n]+\$\$/,
 ] as const;
 
-const MARKDOWN_TOKENS = ['`', '[', '#', '*', '-', '+', '>', '|', '~', '\n1.'] as const;
+const MARKDOWN_TOKENS = ['`', '[', '#', '*', '-', '+', '>', '|', '~', '$', '\n1.'] as const;
 const LANGUAGE_NAME_PATTERN = /language-([^\s]+)/i;
 const LANGUAGE_SANITIZE_PATTERN = /[^a-z0-9#+.-]/g;
 

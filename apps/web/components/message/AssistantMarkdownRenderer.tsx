@@ -1,8 +1,10 @@
-import type { ComponentPropsWithoutRef, FC, ReactNode } from 'react';
+import type { ComponentProps, ComponentPropsWithoutRef, FC, ReactNode } from 'react';
 import { Children, isValidElement } from 'react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
+import rehypeKatex from 'rehype-katex';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
 import {
   extractCodeLanguage,
   formatCodeLanguageLabel,
@@ -20,7 +22,13 @@ interface CodeBlockData {
   content: string;
 }
 
-const MARKDOWN_PLUGINS = [remarkGfm];
+type MarkdownPluginList = NonNullable<ComponentProps<typeof ReactMarkdown>['remarkPlugins']>;
+
+const MARKDOWN_REMARK_PLUGINS: MarkdownPluginList = [
+  remarkGfm,
+  [remarkMath, { singleDollarTextMath: false }],
+];
+const MARKDOWN_REHYPE_PLUGINS: MarkdownPluginList = [rehypeKatex];
 
 const MARKDOWN_COMPONENTS: Components = {
   a: ({ href, children, ...props }) => (
@@ -75,7 +83,8 @@ export const AssistantMarkdownRenderer: FC<AssistantMarkdownRendererProps> = ({
 
   return (
     <ReactMarkdown
-      remarkPlugins={MARKDOWN_PLUGINS}
+      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+      rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
       components={components}
     >
       {content}
