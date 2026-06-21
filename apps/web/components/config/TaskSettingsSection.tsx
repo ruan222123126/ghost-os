@@ -39,6 +39,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
         controlsDisabled={controlsDisabled}
         saving={state.saving}
         onChangeEditor={actions.updateEditor}
+        onSelectTaskType={actions.selectTaskType}
         onSubmit={async () => {
           await actions.submit();
         }}
@@ -69,7 +70,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
           <button
             type="button"
             disabled={controlsDisabled}
-            onClick={actions.startCreateTextTask}
+            onClick={actions.startCreateTask}
             className="rounded-full bg-[#111111] px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
           >
             {copy.settings.tasksNewText}
@@ -87,6 +88,7 @@ export function TaskSettingsSection(props: TaskSettingsSectionProps) {
 
       <TaskList
         tasks={visibleTasks}
+        presets={presets}
         loading={state.loading}
         controlsDisabled={controlsDisabled}
         onEditTextTask={actions.startEditTextTask}

@@ -8,10 +8,6 @@ import type { useConfigTasks } from '@/hooks/useConfigTasks';
 import type { useConfigTools } from '@/hooks/useConfigTools';
 import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
 
-const LoopSettingsSection = nextDynamic(
-  () => import('@/components/config/LoopSettingsSection').then((mod) => mod.LoopSettingsSection),
-  { loading: ConfigSectionLoadingBar, ssr: false },
-);
 const OrchestrationSettingsSection = nextDynamic(
   () => import('@/components/config/OrchestrationSettingsSection').then((mod) => mod.OrchestrationSettingsSection),
   { loading: ConfigSectionLoadingBar, ssr: false },
@@ -148,16 +144,6 @@ export function ConfigPanelSectionContent(props: ConfigPanelSectionContentProps)
         presets={presetsState.presets ?? []}
         onOpenWorkflowCreate={onOpenWorkflowCreate}
         onOpenWorkflowEdit={onOpenWorkflowEdit}
-      />
-    );
-  }
-
-  if (activeTab === 'relay') {
-    return (
-      <LoopSettingsSection
-        config={config}
-        tasksState={tasksState}
-        presetsState={presetsState}
       />
     );
   }

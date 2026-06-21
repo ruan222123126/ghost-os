@@ -12,23 +12,24 @@ import type {
 const MIN_INTERVAL_SECONDS = 1;
 const DECIMAL_RADIX = 10;
 const TOOL_ALLOWLIST_SEPARATOR_PATTERN = /[\n,]/;
+const DEFAULT_INTERVAL_SECONDS = '300';
 const DEFAULT_RELAY_MAX_ROUNDS = 20;
 const DEFAULT_RELAY_EXECUTION_TIMEOUT_MS = 0;
 const DEFAULT_RELAY_STOP_POLICY: TaskRelayStopPolicy = 'ai_decides';
 
 export type TaskEditorMode = 'create' | 'edit';
+export type TaskEditorType = 'text' | 'loop';
 export type TaskScheduleMode = 'interval' | 'cron';
-export type TaskAgentMode = 'single' | 'relay';
 export type TaskRelayStopPolicy = TaskRelayConfig['stop_policy'];
 export type TaskSettingsListItem = AgentMessageTaskPayload | WorkflowTaskPayload;
 
 export interface TaskEditorState {
+  taskType: TaskEditorType;
   message: string;
   scheduleMode: TaskScheduleMode;
   intervalSeconds: string;
   cronExpr: string;
   sessionId: string;
-  agentMode: TaskAgentMode;
   relayStopPolicy: TaskRelayStopPolicy;
   relayMaxRounds: string;
   relayExecutionTimeoutMS: string;
@@ -42,12 +43,12 @@ export const emptyTaskEditorState = createTaskEditorState(null);
 
 export function createTaskEditorState(config: BridgeConfig | null): TaskEditorState {
   return {
+    taskType: 'text',
     message: '',
     scheduleMode: 'interval',
-    intervalSeconds: '300',
+    intervalSeconds: DEFAULT_INTERVAL_SECONDS,
     cronExpr: '',
     sessionId: '',
-    agentMode: 'single',
     relayStopPolicy: config?.relay_default_stop_policy ?? DEFAULT_RELAY_STOP_POLICY,
     relayMaxRounds: String(config?.relay_default_max_rounds ?? DEFAULT_RELAY_MAX_ROUNDS),
     relayExecutionTimeoutMS: String(
@@ -63,63 +64,111 @@ export function createTaskEditorState(config: BridgeConfig | null): TaskEditorSt
 export function editorStateFromTask(task: AgentMessageTaskPayload): TaskEditorState {
   const runtimeOverrides = task.runtime_overrides;
   const relay = task.relay;
+  const taskType = task.agent_mode === 'relay' ? 'loop' : 'text';
 
   return {
+    taskType,
     message: task.message,
     scheduleMode: task.schedule_type,
-    intervalSeconds: task.interval_seconds === undefined ? '' : String(task.interval_seconds),
+    intervalSeconds: task.interval_seconds === undefined ? DEFAULT_INTERVAL_SECONDS : String(task.interval_seconds),
     cronExpr: task.cron_expr ?? '',
-    sessionId: task.session_id ?? '',
-    agentMode: 'single',
+    sessionId: taskType === 'text' ? task.session_id ?? '' : '',
     relayStopPolicy: relay?.stop_policy ?? DEFAULT_RELAY_STOP_POLICY,
     relayMaxRounds: String(relay?.max_rounds ?? DEFAULT_RELAY_MAX_ROUNDS),
     relayExecutionTimeoutMS: String(
       relay?.execution_timeout_ms ?? DEFAULT_RELAY_EXECUTION_TIMEOUT_MS,
     ),
-    runtimeOverridesEnabled: runtimeOverrides !== undefined,
+    runtimeOverridesEnabled: taskType === 'text' && runtimeOverrides !== undefined,
     runtimePresetId: runtimeOverrides?.preset_id ?? '',
-    runtimeModel: runtimeOverrides?.model ?? '',
-    runtimeToolAllowlist: (runtimeOverrides?.tool_allowlist ?? []).join(', '),
+    runtimeModel: taskType === 'text' ? runtimeOverrides?.model ?? '' : '',
+    runtimeToolAllowlist: taskType === 'text'
+      ? (runtimeOverrides?.tool_allowlist ?? []).join(', ')
+      : '',
+  };
+}
+
+export function editorStateWithTaskType(
+  editor: TaskEditorState,
+  taskType: TaskEditorType,
+  config: BridgeConfig | null,
+): TaskEditorState {
+  const defaults = createTaskEditorState(config);
+  return {
+    ...defaults,
+    taskType,
+    message: editor.message,
+    scheduleMode: editor.scheduleMode,
+    intervalSeconds: editor.intervalSeconds,
+    cronExpr: editor.cronExpr,
   };
 }
 
 export function taskCreateRequestFromEditor(editor: TaskEditorState): TextTaskCreateRequest {
-  const runtimeOverrides = runtimeOverridesFromEditor(editor);
+  if (editor.taskType === 'loop') {
+    return loopCreateRequestFromEditor(editor);
+  }
 
   return {
     task_kind: 'agent_message',
-    ...taskMutationFieldsFromEditor(editor),
+    ...textTaskMutationFieldsFromEditor(editor),
     ...textTaskAgentFields(),
-    runtime_overrides: runtimeOverrides,
+    runtime_overrides: runtimeOverridesFromEditor(editor),
   };
 }
 
 export function taskUpdateRequestFromEditor(editor: TaskEditorState): TextTaskUpdateRequest {
-  const runtimeOverrides = runtimeOverridesForUpdate(editor);
+  if (editor.taskType === 'loop') {
+    return loopUpdateRequestFromEditor(editor);
+  }
 
   return {
     task_kind: 'agent_message',
-    ...taskMutationFieldsFromEditor(editor),
+    ...textTaskMutationFieldsFromEditor(editor),
     ...textTaskAgentFields(),
-    runtime_overrides: runtimeOverrides,
+    runtime_overrides: runtimeOverridesForUpdate(editor),
   };
 }
 
-export function isTaskSettingsTextTask(task: TaskPayload): task is AgentMessageTaskPayload {
-  return task.task_kind === 'agent_message' && task.agent_mode !== 'relay';
-}
-
 export function isTaskSettingsListItem(task: TaskPayload): task is TaskSettingsListItem {
-  return isTaskSettingsTextTask(task) || task.task_kind === 'workflow';
+  return task.task_kind === 'agent_message' || task.task_kind === 'workflow';
 }
 
 export function filterTaskSettingsTasks(tasks: TaskPayload[]): TaskSettingsListItem[] {
   return tasks.filter(isTaskSettingsListItem);
 }
 
-function taskMutationFieldsFromEditor(editor: TaskEditorState): {
+function textTaskMutationFieldsFromEditor(editor: TaskEditorState): {
   message: string;
   session_id: string;
+  interval_seconds?: number;
+  cron_expr?: string;
+} {
+  return {
+    ...commonTaskMutationFieldsFromEditor(editor),
+    session_id: editor.sessionId.trim(),
+  };
+}
+
+function loopCreateRequestFromEditor(editor: TaskEditorState): TextTaskCreateRequest {
+  return {
+    task_kind: 'agent_message',
+    ...commonTaskMutationFieldsFromEditor(editor),
+    ...loopTaskAgentFields(editor),
+    runtime_overrides: runtimeOverridesFromLoopPreset(editor.runtimePresetId),
+  };
+}
+
+function loopUpdateRequestFromEditor(editor: TaskEditorState): TextTaskUpdateRequest {
+  return {
+    task_kind: 'agent_message',
+    ...commonTaskMutationFieldsFromEditor(editor),
+    ...loopTaskAgentFields(editor),
+    runtime_overrides: runtimeOverridesFromLoopPreset(editor.runtimePresetId) ?? {},
+  };
+}
+
+function commonTaskMutationFieldsFromEditor(editor: TaskEditorState): {
+  message: string;
   interval_seconds?: number;
   cron_expr?: string;
 } {
@@ -130,7 +179,6 @@ function taskMutationFieldsFromEditor(editor: TaskEditorState): {
 
   return {
     message,
-    session_id: editor.sessionId.trim(),
     ...scheduleFieldsFromEditor(editor),
   };
 }
@@ -157,6 +205,23 @@ function scheduleFieldsFromEditor(editor: TaskEditorState): {
 
 function textTaskAgentFields(): { agent_mode: 'single' } {
   return { agent_mode: 'single' };
+}
+
+function loopTaskAgentFields(editor: TaskEditorState): {
+  agent_mode: 'relay';
+  relay: TaskRelayConfig;
+} {
+  return {
+    agent_mode: 'relay',
+    relay: {
+      stop_policy: editor.relayStopPolicy,
+      max_rounds: parsePositiveInteger(editor.relayMaxRounds, 'relay max_rounds'),
+      execution_timeout_ms: parseNonNegativeInteger(
+        editor.relayExecutionTimeoutMS,
+        'relay execution_timeout_ms',
+      ),
+    },
+  };
 }
 
 function runtimeOverridesForUpdate(
@@ -202,6 +267,14 @@ function runtimeToolAllowlistValue(
   return undefined;
 }
 
+function runtimeOverridesFromLoopPreset(presetId: string): TaskRuntimeOverrides | undefined {
+  const id = presetId.trim();
+  if (id.length === 0) {
+    return undefined;
+  }
+  return { preset_id: id };
+}
+
 function parseToolAllowlist(raw: string): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -224,4 +297,20 @@ function parseIntervalSeconds(value: string): number {
   }
 
   return parsed;
+}
+
+function parsePositiveInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^[1-9]\d*$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a positive integer`);
+  }
+  return Number(trimmed);
+}
+
+function parseNonNegativeInteger(raw: string, fieldName: string): number {
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) {
+    throw new Error(`${fieldName} must be a non-negative integer`);
+  }
+  return Number(trimmed);
 }

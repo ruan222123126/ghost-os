@@ -1,6 +1,5 @@
 export type SettingsQueryTab =
   | 'tasks'
-  | 'relay'
   | 'orchestration'
   | 'skills'
   | 'tools'
@@ -17,7 +16,6 @@ export function parseSettingsQuery(rawSearch: string): SettingsQueryTab | null {
 
   if (
     tab === 'tasks'
-    || tab === 'relay'
     || tab === 'orchestration'
     || tab === 'skills'
     || tab === 'tools'

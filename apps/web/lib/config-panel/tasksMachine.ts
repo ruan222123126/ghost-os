@@ -30,6 +30,7 @@ export type TasksAction =
   | { type: 'enter_edit'; task: AgentMessageTaskPayload }
   | { type: 'exit_editor'; editor: TaskEditorState }
   | { type: 'patch_editor'; patch: Partial<TaskEditorState> }
+  | { type: 'replace_editor'; editor: TaskEditorState }
   | { type: 'mutate_start' }
   | { type: 'mutate_error'; error: string }
   | { type: 'set_saving'; saving: boolean }
@@ -73,6 +74,8 @@ export function tasksReducer(state: TasksState, action: TasksAction): TasksState
       return resetTaskEditor(state, action.editor);
     case 'patch_editor':
       return { ...state, editor: { ...state.editor, ...action.patch } };
+    case 'replace_editor':
+      return { ...state, editor: action.editor };
     case 'mutate_start':
       return { ...state, saving: true, error: '', success: '' };
     case 'mutate_error':

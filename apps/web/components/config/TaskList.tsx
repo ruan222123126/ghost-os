@@ -7,7 +7,13 @@ import type { TaskLogsModalProps } from '@/components/config/TaskLogsModal';
 import { filterTaskSettingsTasks, type TaskSettingsListItem } from '@/lib/configTasks';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { AgentMessageTaskPayload, TaskPayload, TaskRunLog, WorkflowTaskPayload } from '@/lib/types';
+import type {
+  AgentMessageTaskPayload,
+  PresetPayload,
+  TaskPayload,
+  TaskRunLog,
+  WorkflowTaskPayload,
+} from '@/lib/types';
 
 const TASK_SKELETON_COUNT = 3;
 const TaskLogsModal = nextDynamic<TaskLogsModalProps>(
@@ -17,6 +23,7 @@ const TaskLogsModal = nextDynamic<TaskLogsModalProps>(
 
 interface TaskListProps {
   tasks: TaskPayload[];
+  presets: PresetPayload[];
   loading: boolean;
   controlsDisabled: boolean;
   onEditTextTask: (task: AgentMessageTaskPayload) => void;
@@ -37,6 +44,7 @@ interface TaskListProps {
 
 interface TaskCardProps {
   task: TaskSettingsListItem;
+  presets: PresetPayload[];
   controlsDisabled: boolean;
   onEditTextTask: (task: AgentMessageTaskPayload) => void;
   onEditWorkflowTask: (task: WorkflowTaskPayload) => void;
@@ -50,6 +58,7 @@ export function TaskList(props: TaskListProps) {
   const { copy } = useWebLocale();
   const {
     tasks,
+    presets,
     loading,
     controlsDisabled,
     onEditTextTask,
@@ -97,6 +106,7 @@ export function TaskList(props: TaskListProps) {
         <TaskCard
           key={task.id}
           task={task}
+          presets={presets}
           controlsDisabled={controlsDisabled}
           onEditTextTask={onEditTextTask}
           onEditWorkflowTask={onEditWorkflowTask}
@@ -124,9 +134,10 @@ export function TaskList(props: TaskListProps) {
 
 function TaskCard(props: TaskCardProps) {
   const { copy } = useWebLocale();
-  const { task, controlsDisabled, onEditTextTask, onEditWorkflowTask, onOpenLogs, onSetEnabled, onRunNow, onDelete } = props;
+  const { task, presets, controlsDisabled, onEditTextTask, onEditWorkflowTask, onOpenLogs, onSetEnabled, onRunNow, onDelete } = props;
   const toggleLabel = task.enabled ? copy.settings.tasksDisable : copy.settings.tasksEnable;
   const editable = task.task_kind === 'agent_message' || task.task_kind === 'workflow';
+  const metaLines = formatMetaLines(task, presets, copy);
 
   return (
     <article
@@ -151,8 +162,14 @@ function TaskCard(props: TaskCardProps) {
           <span className="settings-card-id">{task.id}</span>
         </div>
         <p className="settings-card-title line-clamp-2">{formatPrimaryText(task, copy)}</p>
-        <p className="settings-card-meta">{formatSchedule(task, copy)}</p>
-        <p className="settings-card-meta is-mono truncate">{formatSecondaryLine(task, copy)}</p>
+        {metaLines.map((line) => (
+          <p
+            key={line.text}
+            className={`settings-card-meta truncate${line.mono ? ' is-mono' : ''}`}
+          >
+            {line.text}
+          </p>
+        ))}
       </div>
 
       <ConfigCardActions
@@ -193,7 +210,13 @@ function TaskCard(props: TaskCardProps) {
 }
 
 function formatTaskKind(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
-  return task.task_kind === 'workflow' ? copy.settings.tasksWorkflowKind : copy.settings.tasksTextKind;
+  if (task.task_kind === 'workflow') {
+    return copy.settings.tasksWorkflowKind;
+  }
+  if (task.agent_mode === 'relay') {
+    return copy.settings.loopKind;
+  }
+  return copy.settings.tasksTextKind;
 }
 
 function formatPrimaryText(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
@@ -212,12 +235,61 @@ function formatSchedule(task: TaskSettingsListItem, copy: ReturnType<typeof useW
   return copy.settings.tasksCron(task.cron_expr ?? '');
 }
 
-function formatSecondaryLine(task: TaskSettingsListItem, copy: ReturnType<typeof useWebLocale>['copy']): string {
-  if (task.task_kind === 'agent_message') {
-    return copy.settings.tasksSessionLabel(task.session_id?.trim() ? copy.settings.tasksSessionConfigured : copy.settings.tasksSessionNewEachRun);
+function formatMetaLines(
+  task: TaskSettingsListItem,
+  presets: PresetPayload[],
+  copy: ReturnType<typeof useWebLocale>['copy'],
+): Array<{ text: string; mono?: boolean }> {
+  const lines: Array<{ text: string; mono?: boolean }> = [
+    { text: formatSchedule(task, copy) },
+  ];
+
+  if (task.task_kind === 'workflow') {
+    lines.push({ text: copy.settings.tasksSessionWorkflowManaged });
+    return lines;
   }
 
-  return copy.settings.tasksSessionWorkflowManaged;
+  if (task.agent_mode === 'relay') {
+    lines.push(
+      { text: formatLoopStopPolicy(task, copy) },
+      { text: formatLoopPreset(task, presets, copy) },
+    );
+    return lines;
+  }
+
+  lines.push({
+    text: copy.settings.tasksSessionLabel(
+      task.session_id?.trim()
+        ? copy.settings.tasksSessionConfigured
+        : copy.settings.tasksSessionNewEachRun,
+    ),
+    mono: true,
+  });
+  return lines;
+}
+
+function formatLoopStopPolicy(
+  task: AgentMessageTaskPayload,
+  copy: ReturnType<typeof useWebLocale>['copy'],
+): string {
+  const rounds = task.relay?.max_rounds ?? 0;
+  if (task.relay?.stop_policy === 'max_rounds') {
+    return copy.settings.loopCardMaxRounds(rounds);
+  }
+  return copy.settings.loopCardAIDecides(rounds);
+}
+
+function formatLoopPreset(
+  task: AgentMessageTaskPayload,
+  presets: PresetPayload[],
+  copy: ReturnType<typeof useWebLocale>['copy'],
+): string {
+  const presetID = task.runtime_overrides?.preset_id?.trim();
+  if (!presetID) {
+    return copy.settings.loopCardPresetNone;
+  }
+  const preset = presets.find((item) => item.id === presetID);
+  return copy.settings.loopCardPreset(preset?.name ?? presetID);
 }
 
 function workflowStepCount(task: WorkflowTaskPayload): number {

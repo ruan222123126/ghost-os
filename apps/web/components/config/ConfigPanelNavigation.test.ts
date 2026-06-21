@@ -15,7 +15,6 @@ describe('components/config/ConfigPanelNavigation', () => {
 
     expect(systemText).toContain('General');
     expect(systemText).toContain('Provider');
-    expect(systemText).toContain('Loops');
     expect(systemText).toContain('Tasks');
     expect(systemText).toContain('Orchestration');
     expect(systemText).toContain('Skills');

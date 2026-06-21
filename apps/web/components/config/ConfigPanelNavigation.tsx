@@ -3,7 +3,6 @@ import { useWebLocale } from '@/lib/i18n/provider';
 export type SettingsTab =
   | 'general'
   | 'provider'
-  | 'relay'
   | 'tasks'
   | 'orchestration'
   | 'skills'
@@ -32,7 +31,6 @@ const SettingsIcon = ({ size = 16 }: { size?: number }) => (
 const tabs: TabDefinition[] = [
   { id: 'general', group: 'system' },
   { id: 'provider', group: 'system' },
-  { id: 'relay', group: 'system' },
   { id: 'tasks', group: 'system' },
   { id: 'orchestration', group: 'system' },
   { id: 'skills', group: 'system' },
@@ -156,9 +154,6 @@ function labelForTab(copy: ReturnType<typeof useWebLocale>['copy'], tab: Setting
   }
   if (tab === 'provider') {
     return copy.settings.tabProvider;
-  }
-  if (tab === 'relay') {
-    return copy.settings.tabRelay;
   }
   if (tab === 'tasks') {
     return copy.settings.tabTasks;

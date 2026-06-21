@@ -16,6 +16,7 @@ describe('lib/config-panel/tasksMachine', () => {
 
     expect(state.view).toBe('editor');
     expect(state.editorMode).toBe('create');
+    expect(state.editor.taskType).toBe('text');
     expect(state.editor.message).toBe('say hello');
     expect(state.success).toBe('');
   });
@@ -30,7 +31,36 @@ describe('lib/config-panel/tasksMachine', () => {
     expect(state.view).toBe('editor');
     expect(state.editorMode).toBe('edit');
     expect(state.editingTaskID).toBe('task-1');
+    expect(state.editor.taskType).toBe('text');
     expect(state.editor.message).toBe('daily summary');
+  });
+
+  it('enters edit mode from a relay loop task', () => {
+    const task = buildTask({ id: 'loop-1', agent_mode: 'relay', message: 'loop goal' });
+    const state = tasksReducer(createInitialTasksState(null), {
+      type: 'enter_edit',
+      task,
+    });
+
+    expect(state.editorMode).toBe('edit');
+    expect(state.editingTaskID).toBe('loop-1');
+    expect(state.editor.taskType).toBe('loop');
+    expect(state.editor.message).toBe('loop goal');
+  });
+
+  it('replaces editor state immutably', () => {
+    const initial = tasksReducer(createInitialTasksState(null), {
+      type: 'enter_create',
+      editor: createTaskEditorState(null),
+    });
+    const replacement = { ...initial.editor, taskType: 'loop' as const, message: 'loop' };
+    const state = tasksReducer(initial, {
+      type: 'replace_editor',
+      editor: replacement,
+    });
+
+    expect(state.editor).toEqual(replacement);
+    expect(state.editor).not.toBe(initial.editor);
   });
 
   it('upserts and removes tasks immutably', () => {

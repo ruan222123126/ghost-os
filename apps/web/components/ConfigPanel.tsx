@@ -95,9 +95,7 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
     tasksMachine.actions.cancelEditing();
   }, [providersMachine.actions, tasksMachine.actions]);
 
-  const tabSuccess = (activeTab === 'tasks' || activeTab === 'relay')
-    ? tasksMachine.state.success
-    : '';
+  const tabSuccess = activeTab === 'tasks' ? tasksMachine.state.success : '';
 
   if (!open) {
     return null;

@@ -11,8 +11,10 @@ import {
 } from '@/lib/config-panel/tasksMachine';
 import {
   createTaskEditorState,
+  editorStateWithTaskType,
   taskCreateRequestFromEditor,
   taskUpdateRequestFromEditor,
+  type TaskEditorType,
 } from '@/lib/configTasks';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -30,10 +32,11 @@ interface RunTaskOptions {
 
 interface UseConfigTasksActions {
   refresh: () => Promise<boolean>;
-  startCreateTextTask: () => void;
+  startCreateTask: () => void;
   startEditTextTask: (task: TaskPayload) => void;
   cancelEditing: () => void;
   updateEditor: (patch: Partial<TasksState['editor']>) => void;
+  selectTaskType: (taskType: TaskEditorType) => void;
   submit: () => Promise<boolean>;
   setEnabled: (id: string, enabled: boolean) => Promise<void>;
   runNow: (id: string, options?: RunTaskOptions) => Promise<boolean>;
@@ -61,7 +64,18 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
   const setEnabled = useSetTaskEnabled(api, copy, dispatch);
   const runNow = useRunTaskNow(api, copy, state, refresh, dispatch);
   const deleteByID = useDeleteTask(api, copy, state, createEditor, dispatch);
-  const actions = useTaskActionBundle(dispatch, createEditor, copy, refresh, submit, setEnabled, runNow, deleteByID);
+  const selectTaskType = useSelectTaskType(options.config, state, dispatch);
+  const actions = useTaskActionBundle(
+    dispatch,
+    createEditor,
+    copy,
+    refresh,
+    submit,
+    setEnabled,
+    runNow,
+    deleteByID,
+    selectTaskType,
+  );
 
   useEffect(() => {
     if (options.open) {
@@ -181,6 +195,22 @@ function useDeleteTask(
   }, [api, copy, createEditor, dispatch, state.editingTaskID]);
 }
 
+function useSelectTaskType(
+  config: BridgeConfig | null,
+  state: TasksState,
+  dispatch: Dispatch<TasksAction>,
+) {
+  return useCallback((taskType: TaskEditorType): void => {
+    if (state.editorMode !== 'create' || state.editor.taskType === taskType) {
+      return;
+    }
+    dispatch({
+      type: 'replace_editor',
+      editor: editorStateWithTaskType(state.editor, taskType, config),
+    });
+  }, [config, dispatch, state.editor, state.editorMode]);
+}
+
 function useTaskActionBundle(
   dispatch: Dispatch<TasksAction>,
   createEditor: () => TasksState['editor'],
@@ -190,6 +220,7 @@ function useTaskActionBundle(
   setEnabled: UseConfigTasksActions['setEnabled'],
   runNow: UseConfigTasksActions['runNow'],
   deleteByID: UseConfigTasksActions['delete'],
+  selectTaskType: UseConfigTasksActions['selectTaskType'],
 ): UseConfigTasksActions {
   return useMemo(() => ({
     refresh,
@@ -197,7 +228,8 @@ function useTaskActionBundle(
     setEnabled,
     runNow,
     delete: deleteByID,
-    startCreateTextTask: () => dispatch({ type: 'enter_create', editor: createEditor() }),
+    selectTaskType,
+    startCreateTask: () => dispatch({ type: 'enter_create', editor: createEditor() }),
     startEditTextTask: (task) => startEditTextTask(
       task,
       dispatch,
@@ -205,7 +237,17 @@ function useTaskActionBundle(
     ),
     cancelEditing: () => dispatch({ type: 'exit_editor', editor: createEditor() }),
     updateEditor: (patch) => dispatch({ type: 'patch_editor', patch }),
-  }), [copy.system.textTaskEditorOnlySupportsAgentMessage, createEditor, deleteByID, dispatch, refresh, runNow, setEnabled, submit]);
+  }), [
+    copy.system.textTaskEditorOnlySupportsAgentMessage,
+    createEditor,
+    deleteByID,
+    dispatch,
+    refresh,
+    runNow,
+    selectTaskType,
+    setEnabled,
+    submit,
+  ]);
 }
 
 function startEditTextTask(

@@ -52,13 +52,21 @@ describe('components/config/TaskList', () => {
     expect(html).toContain('Workflow with 3 steps');
   });
 
-  it('keeps loop tasks out of the normal task list', () => {
+  it('renders loop tasks in the unified task list', () => {
     const html = renderTaskList({
       tasks: [
-        createAgentTask({ id: 'loop-task', enabled: true, message: 'loop-message', agent_mode: 'relay' }),
+        createAgentTask({
+          id: 'loop-task',
+          enabled: true,
+          message: 'loop-message',
+          agent_mode: 'relay',
+          relay: { stop_policy: 'ai_decides', max_rounds: 5, execution_timeout_ms: 0 },
+          runtime_overrides: { preset_id: 'preset-1' },
+        }),
         createAgentTask({ id: 'text-task', enabled: true, message: 'text-message', agent_mode: 'single' }),
         createWorkflowTask(),
       ],
+      presets: [{ id: 'preset-1', name: 'Research', prompt_refs: {}, tool_allowlist: [] }],
       loading: false,
       controlsDisabled: false,
       onEditTextTask: () => {},
@@ -68,16 +76,25 @@ describe('components/config/TaskList', () => {
       onDelete: async () => {},
     });
 
-    expect(html).not.toContain('loop-task');
-    expect(html).not.toContain('loop-message');
+    expect(html).toContain('loop-task');
+    expect(html).toContain('loop-message');
+    expect(html).toContain('Loop');
+    expect(html).toContain('Stop: AI may finish early; force stop at 5 rounds');
+    expect(html).toContain('Preset: Research');
     expect(html).toContain('text-task');
     expect(html).toContain('text-message');
     expect(html).toContain('workflow-task-1');
   });
 
-  it('shows the empty state when only loop tasks are provided', () => {
+  it('does not show the empty state when only loop tasks are provided', () => {
     const html = renderTaskList({
-      tasks: [createAgentTask({ id: 'loop-task', enabled: true, message: 'loop-message', agent_mode: 'relay' })],
+      tasks: [createAgentTask({
+        id: 'loop-task',
+        enabled: true,
+        message: 'loop-message',
+        agent_mode: 'relay',
+        relay: { stop_policy: 'max_rounds', max_rounds: 3, execution_timeout_ms: 0 },
+      })],
       loading: false,
       controlsDisabled: false,
       onEditTextTask: () => {},
@@ -87,8 +104,9 @@ describe('components/config/TaskList', () => {
       onDelete: async () => {},
     });
 
-    expect(html).toContain('No tasks configured yet.');
-    expect(html).not.toContain('loop-task');
+    expect(html).not.toContain('No tasks configured yet.');
+    expect(html).toContain('loop-task');
+    expect(html).toContain('Stop: max 3 rounds');
   });
 
   it('renders logs button to the left of run button', () => {
@@ -155,6 +173,7 @@ function renderTaskList(
 
   try {
     const taskListProps: React.ComponentProps<typeof TaskList> = {
+      presets: [],
       logsTaskID: '',
       logsData: [],
       logsLoading: false,
@@ -182,10 +201,10 @@ function renderTaskList(
 
 type TaskListTestProps = Omit<
   React.ComponentProps<typeof TaskList>,
-  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onRefreshLogs' | 'onStopRun' | 'stoppingRunId' | 'onCloseLogs'
+  'presets' | 'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onRefreshLogs' | 'onStopRun' | 'stoppingRunId' | 'onCloseLogs'
 > & Partial<Pick<
   React.ComponentProps<typeof TaskList>,
-  'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onRefreshLogs' | 'onStopRun' | 'stoppingRunId' | 'onCloseLogs'
+  'presets' | 'logsTaskID' | 'logsData' | 'logsLoading' | 'logsError' | 'onOpenLogs' | 'onRefreshLogs' | 'onStopRun' | 'stoppingRunId' | 'onCloseLogs'
 >>;
 
 function buildLocalStorageMock(locale: WebLocale): Storage {
@@ -206,12 +225,14 @@ function createAgentTask(input: {
   enabled: boolean;
   message: string;
   agent_mode?: AgentMessageTaskPayload['agent_mode'];
+  relay?: AgentMessageTaskPayload['relay'];
   runtime_overrides?: AgentMessageTaskPayload['runtime_overrides'];
 }): AgentMessageTaskPayload {
   return {
     id: input.id,
     message: input.message,
     agent_mode: input.agent_mode,
+    relay: input.relay,
     runtime_overrides: input.runtime_overrides,
     task_kind: 'agent_message',
     schedule_type: 'interval',

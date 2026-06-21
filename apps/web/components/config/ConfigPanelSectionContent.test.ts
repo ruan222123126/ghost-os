@@ -41,10 +41,6 @@ jest.mock('@/components/config/RuntimeSettingsSection', () => ({
   RuntimeSettingsSection: () => React.createElement('div', { 'data-testid': 'runtime-settings-section' }),
 }));
 
-jest.mock('@/components/config/LoopSettingsSection', () => ({
-  LoopSettingsSection: () => React.createElement('div', { 'data-testid': 'loop-settings-section' }),
-}));
-
 jest.mock('@/components/config/TaskSettingsSection', () => ({
   TaskSettingsSection: () => React.createElement('div', { 'data-testid': 'task-settings-section' }),
 }));
@@ -82,10 +78,6 @@ describe('components/config/ConfigPanelSectionContent', () => {
     const tasksRenderer = await renderSection('tasks');
     expect(findByTestID(tasksRenderer.root, 'task-settings-section')).toBeDefined();
     expect(tasksRenderer.root.findAll((node) => node.props['data-testid'] === 'orchestration-settings-section')).toHaveLength(0);
-
-    const relayRenderer = await renderSection('relay');
-    expect(findByTestID(relayRenderer.root, 'loop-settings-section')).toBeDefined();
-    expect(relayRenderer.root.findAll((node) => node.props['data-testid'] === 'task-settings-section')).toHaveLength(0);
   });
 });
 

@@ -1,5 +1,6 @@
 import {
   editorStateFromTask,
+  editorStateWithTaskType,
   emptyTaskEditorState,
   filterTaskSettingsTasks,
   taskCreateRequestFromEditor,
@@ -50,23 +51,43 @@ describe('lib/configTasks', () => {
     });
   });
 
-  it('keeps text task payload in single-agent mode even if stale editor state says relay', () => {
+  it('builds loop task create payload with relay config and preset', () => {
     const editor = {
       ...emptyTaskEditorState,
+      taskType: 'loop' as const,
       message: 'Long running task',
-      agentMode: 'relay' as const,
       relayStopPolicy: 'max_rounds' as const,
       relayMaxRounds: '3',
       relayExecutionTimeoutMS: '0',
+      runtimePresetId: 'preset-1',
     };
 
     expect(taskCreateRequestFromEditor(editor)).toEqual({
       task_kind: 'agent_message',
       message: 'Long running task',
-      session_id: '',
       interval_seconds: 300,
-      agent_mode: 'single',
-      runtime_overrides: undefined,
+      agent_mode: 'relay',
+      relay: {
+        stop_policy: 'max_rounds',
+        max_rounds: 3,
+        execution_timeout_ms: 0,
+      },
+      runtime_overrides: {
+        preset_id: 'preset-1',
+      },
+    });
+  });
+
+  it('clears loop runtime overrides on update when preset is empty', () => {
+    const editor = {
+      ...emptyTaskEditorState,
+      taskType: 'loop' as const,
+      message: 'Loop update',
+    };
+
+    expect(taskUpdateRequestFromEditor(editor)).toMatchObject({
+      agent_mode: 'relay',
+      runtime_overrides: {},
     });
   });
 
@@ -121,7 +142,48 @@ describe('lib/configTasks', () => {
     expect(editor.runtimeToolAllowlist).toBe('script_exec');
   });
 
-  it('filters relay tasks out of the normal task settings list', () => {
+  it('hydrates loop task editor state from an existing relay task', () => {
+    const editor = editorStateFromTask(createAgentTask({
+      id: 'loop-task',
+      agent_mode: 'relay',
+      runtime_overrides: { preset_id: 'preset-1' },
+      relay: {
+        stop_policy: 'ai_decides',
+        max_rounds: 8,
+        execution_timeout_ms: 1000,
+      },
+    }));
+
+    expect(editor.taskType).toBe('loop');
+    expect(editor.runtimeOverridesEnabled).toBe(false);
+    expect(editor.runtimePresetId).toBe('preset-1');
+    expect(editor.relayMaxRounds).toBe('8');
+    expect(editor.relayExecutionTimeoutMS).toBe('1000');
+  });
+
+  it('switches create editor type while preserving common task fields', () => {
+    const editor = {
+      ...emptyTaskEditorState,
+      message: 'Keep me',
+      scheduleMode: 'cron' as const,
+      cronExpr: '0 9 * * 1',
+      sessionId: 'session-1',
+      runtimeOverridesEnabled: true,
+      runtimePresetId: 'text-preset',
+    };
+
+    const switched = editorStateWithTaskType(editor, 'loop', null);
+
+    expect(switched.taskType).toBe('loop');
+    expect(switched.message).toBe('Keep me');
+    expect(switched.scheduleMode).toBe('cron');
+    expect(switched.cronExpr).toBe('0 9 * * 1');
+    expect(switched.sessionId).toBe('');
+    expect(switched.runtimeOverridesEnabled).toBe(false);
+    expect(switched.runtimePresetId).toBe('');
+  });
+
+  it('keeps relay tasks in the unified task settings list', () => {
     const textTask = createAgentTask({ id: 'text-1', agent_mode: 'single' });
     const legacyTextTask = createAgentTask({ id: 'text-legacy' });
     const loopTask = createAgentTask({ id: 'loop-1', agent_mode: 'relay' });
@@ -130,6 +192,7 @@ describe('lib/configTasks', () => {
     const tasks: TaskPayload[] = [loopTask, textTask, workflowTask, legacyTextTask];
 
     expect(filterTaskSettingsTasks(tasks).map((task) => task.id)).toEqual([
+      'loop-1',
       'text-1',
       'workflow-1',
       'text-legacy',
@@ -152,12 +215,14 @@ describe('lib/configTasks', () => {
 function createAgentTask(input: {
   id: string;
   agent_mode?: AgentMessageTaskPayload['agent_mode'];
+  relay?: AgentMessageTaskPayload['relay'];
   runtime_overrides?: AgentMessageTaskPayload['runtime_overrides'];
 }): AgentMessageTaskPayload {
   return {
     id: input.id,
     message: input.id,
     agent_mode: input.agent_mode,
+    relay: input.relay,
     runtime_overrides: input.runtime_overrides,
     task_kind: 'agent_message',
     schedule_type: 'interval',
