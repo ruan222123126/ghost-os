@@ -185,14 +185,12 @@ function App() {
           config={config}
           providerList={providerList}
           status={displayStatus}
-          bridgeUrl={bridgeUrl}
           hasConversation={hasLocalConversation}
           runtimeMenuOpen={isRuntimeMenuOpen}
           onOpenSidebar={openSidebar}
           onToggleRuntimeMenu={() => setIsRuntimeMenuOpen((current) => !current)}
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
           onSwitchModel={switchModel}
-          onOpenSettings={openSettings}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);
             setIsMoreMenuOpen(true);

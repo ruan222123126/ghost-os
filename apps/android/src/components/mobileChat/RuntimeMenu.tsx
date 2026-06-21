@@ -6,10 +6,9 @@ interface RuntimeMenuProps {
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
   status: StatusMessage;
-  bridgeUrl: string;
+  open: boolean;
   onClose: () => void;
   onSwitchModel: (model: string) => Promise<boolean>;
-  onOpenSettings: () => void;
 }
 
 interface ModelOption {
@@ -86,8 +85,13 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
 
   return (
     <>
-      <button className="runtime-menu-scrim" type="button" aria-label="关闭 Runtime 菜单" onClick={props.onClose} />
-      <div className="runtime-menu" role="dialog" aria-label="模型选择">
+      <button
+        className={`runtime-menu-scrim ${props.open ? "is-open" : "is-closing"}`}
+        type="button"
+        aria-label="关闭 Runtime 菜单"
+        onClick={props.onClose}
+      />
+      <div className={`runtime-menu ${props.open ? "is-open" : "is-closing"}`} role="dialog" aria-label="模型选择">
         <div className="runtime-menu-options">
           {options.map((option) => (
             <button
@@ -106,19 +110,6 @@ export function RuntimeMenu(props: RuntimeMenuProps) {
             </button>
           ))}
         </div>
-        <div className="runtime-menu-separator" />
-        <button
-          className="runtime-menu-action"
-          type="button"
-          title={props.bridgeUrl}
-          onClick={() => {
-            props.onClose();
-            props.onOpenSettings();
-          }}
-        >
-          <span>连接设置</span>
-          <UiIcon name="chevron-down" />
-        </button>
       </div>
     </>
   );

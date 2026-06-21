@@ -1,20 +1,21 @@
+import { useEffect, useState } from "react";
 import type { ConfigPayload, ProviderListPayload, StatusMessage } from "../../mobileTypes";
 import { IconButton, UiIcon } from "./icons";
 import { RuntimeMenu } from "./RuntimeMenu";
+
+const RUNTIME_MENU_ANIMATION_MS = 180;
 
 interface ChatHeaderProps {
   runtimeLabel: string;
   config: ConfigPayload | undefined;
   providerList: ProviderListPayload | undefined;
   status: StatusMessage;
-  bridgeUrl: string;
   hasConversation: boolean;
   runtimeMenuOpen: boolean;
   onOpenSidebar: () => void;
   onToggleRuntimeMenu: () => void;
   onCloseRuntimeMenu: () => void;
   onSwitchModel: (model: string) => Promise<boolean>;
-  onOpenSettings: () => void;
   onOpenMoreMenu: () => void;
   onNewSession: () => void;
 }
@@ -25,6 +26,23 @@ type HeaderRuntimeSelectorProps = Omit<
 >;
 
 function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
+  const [renderMenu, setRenderMenu] = useState(props.runtimeMenuOpen);
+
+  useEffect(() => {
+    if (props.runtimeMenuOpen) {
+      setRenderMenu(true);
+      return undefined;
+    }
+    if (!renderMenu) {
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setRenderMenu(false), RUNTIME_MENU_ANIMATION_MS);
+    return () => window.clearTimeout(timeout);
+  }, [props.runtimeMenuOpen, renderMenu]);
+
+  const shouldRenderMenu = props.runtimeMenuOpen || renderMenu;
+
   return (
     <div className="runtime-selector-wrap">
       <button
@@ -38,15 +56,14 @@ function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
         <UiIcon name="chevron-down" />
       </button>
 
-      {props.runtimeMenuOpen ? (
+      {shouldRenderMenu ? (
         <RuntimeMenu
           config={props.config}
           providerList={props.providerList}
           status={props.status}
-          bridgeUrl={props.bridgeUrl}
+          open={props.runtimeMenuOpen}
           onClose={props.onCloseRuntimeMenu}
           onSwitchModel={props.onSwitchModel}
-          onOpenSettings={props.onOpenSettings}
         />
       ) : null}
     </div>
