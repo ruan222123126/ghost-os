@@ -18,6 +18,64 @@ interface ConfigSectionProps extends SectionProps {
   config: BridgeConfig | null;
 }
 
+type RuntimeSettingsLocale = ReturnType<typeof useWebLocale>['locale'];
+
+export function CommonSettingsSection(props: SectionProps & {
+  locale: RuntimeSettingsLocale;
+  onLocaleChange: (value: string) => void;
+}) {
+  const { copy } = useWebLocale();
+  const { formState, controlsDisabled, locale, onChange, onLocaleChange } = props;
+  const languageOptions = [
+    { value: 'zh-CN', label: copy.settings.languageOptionZh },
+    { value: 'en-US', label: copy.settings.languageOptionEn },
+  ] as const;
+
+  return (
+    <Card title={copy.settings.runtimeCommonTitle} copy={copy.settings.runtimeCommonCopy}>
+      <SelectField
+        label={copy.settings.languageLabel}
+        description={copy.settings.languageDescription}
+        value={locale}
+        onChange={onLocaleChange}
+        options={languageOptions}
+      />
+      <TextField
+        label={copy.settings.runtimeMaxTurnsLabel}
+        description={copy.settings.runtimeMaxTurnsDescription}
+        value={formState.maxTurns}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ maxTurns: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeTaskExecutionTimeoutMSLabel}
+        description={copy.settings.runtimeTaskExecutionTimeoutMSDescription}
+        value={formState.taskExecutionTimeoutMS}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ taskExecutionTimeoutMS: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeLLMCompletionRetryCountLabel}
+        description={copy.settings.runtimeLLMCompletionRetryCountDescription}
+        value={formState.llmCompletionRetryCount}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ llmCompletionRetryCount: value })}
+      />
+      <TextField
+        label={copy.settings.runtimeLLMCompletionRetryIntervalMSLabel}
+        description={copy.settings.runtimeLLMCompletionRetryIntervalMSDescription}
+        value={formState.llmCompletionRetryIntervalMS}
+        disabled={controlsDisabled}
+        type="number"
+        onChange={(value) => onChange({ llmCompletionRetryIntervalMS: value })}
+      />
+    </Card>
+  );
+}
+
 export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionEnabled: boolean }) {
   const { copy, locale } = useWebLocale();
   const { formState, controlsDisabled, modelSelectionEnabled, onChange, config } = props;
@@ -60,40 +118,6 @@ export function RuntimeCoreSection(props: ConfigSectionProps & { modelSelectionE
         mono
         placeholder={copy.settings.runtimeProjectRootPlaceholder}
         onChange={(value) => onChange({ projectRoot: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeMaxTurnsLabel}
-        description={copy.settings.runtimeMaxTurnsDescription}
-        value={formState.maxTurns}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ maxTurns: value })}
-      />
-      <TextField
-        label={locale === 'zh-CN' ? '任务总超时 (ms)' : 'Task Execution Timeout (ms)'}
-        description={locale === 'zh-CN'
-          ? '所有任务类型共享的总执行超时，单位固定为毫秒。更新后仅影响后续新任务。'
-          : 'Shared total execution timeout for all task types in milliseconds. Updates only affect new runs.'}
-        value={formState.taskExecutionTimeoutMS}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ taskExecutionTimeoutMS: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeLLMCompletionRetryCountLabel}
-        description={copy.settings.runtimeLLMCompletionRetryCountDescription}
-        value={formState.llmCompletionRetryCount}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ llmCompletionRetryCount: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeLLMCompletionRetryIntervalMSLabel}
-        description={copy.settings.runtimeLLMCompletionRetryIntervalMSDescription}
-        value={formState.llmCompletionRetryIntervalMS}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ llmCompletionRetryIntervalMS: value })}
       />
     </Card>
   );

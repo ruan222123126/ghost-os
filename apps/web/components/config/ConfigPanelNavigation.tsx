@@ -79,11 +79,7 @@ export function SettingsNavigation(props: {
 }
 
 function PromptNavLabel(props: { label: string }) {
-  return (
-    <div className="block rounded-lg px-4 py-2.5 text-sm font-medium text-gray-600">
-      {props.label}
-    </div>
-  );
+  return <Kicker>{props.label}</Kicker>;
 }
 
 function SettingsNavItem(props: {

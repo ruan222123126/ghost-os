@@ -11,7 +11,7 @@ export function Card(props: { title: string; copy: string; children: ReactNode }
         <h3 className="mb-1 text-lg font-bold text-gray-900">{title}</h3>
         <p className="text-sm text-gray-500">{copy}</p>
       </div>
-      <div className="space-y-5 border-l-2 border-gray-200 pl-4">{children}</div>
+      <div className="space-y-5">{children}</div>
     </section>
   );
 }

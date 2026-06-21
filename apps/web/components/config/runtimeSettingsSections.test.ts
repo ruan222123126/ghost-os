@@ -3,7 +3,7 @@ import TestRenderer, { act } from 'react-test-renderer';
 import { createRuntimeFormState } from '@/components/config/runtimeSettingsForm';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { BridgeConfig } from '@/lib/types';
-import { RuntimeCoreSection } from './runtimeSettingsSections';
+import { CommonSettingsSection, RuntimeCoreSection } from './runtimeSettingsSections';
 
 function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   return {
@@ -45,14 +45,45 @@ describe('components/config/runtimeSettingsSections', () => {
 
     expect(content).toContain('Provider Name');
     expect(content).toContain('Model');
-    expect(content).toContain('Max Turns');
-    expect(content).toContain('Task Execution Timeout (ms)');
-    expect(content).toContain('LLM Retry Count');
-    expect(content).toContain('LLM Retry Interval (ms)');
     expect(content).not.toContain('Provider API Key');
     expect(content).not.toContain('Base URL');
   });
+
+  it('groups the frequent runtime controls in common settings', () => {
+    const config = buildBridgeConfig();
+    const renderer = renderCommonSettings(config);
+    const content = textContent(renderer.root);
+
+    expect(content).toContain('Common Settings');
+    expect(content).toContain('Language');
+    expect(content).toContain('Max Turns');
+    expect(content).toContain('Task Total Timeout (ms)');
+    expect(content).toContain('Retry Count');
+    expect(content).toContain('Retry Interval (ms)');
+  });
 });
+
+function renderCommonSettings(config: BridgeConfig): TestRenderer.ReactTestRenderer {
+  let renderer!: TestRenderer.ReactTestRenderer;
+
+  act(() => {
+    renderer = TestRenderer.create(
+      // eslint-disable-next-line react/no-children-prop
+      React.createElement(WebLocaleProvider, {
+        initialLocale: 'en-US',
+        children: React.createElement(CommonSettingsSection, {
+          formState: createRuntimeFormState(config),
+          controlsDisabled: false,
+          locale: 'en-US',
+          onChange: () => undefined,
+          onLocaleChange: () => undefined,
+        }),
+      }),
+    );
+  });
+
+  return renderer;
+}
 
 function renderRuntimeCore(config: BridgeConfig): TestRenderer.ReactTestRenderer {
   let renderer!: TestRenderer.ReactTestRenderer;

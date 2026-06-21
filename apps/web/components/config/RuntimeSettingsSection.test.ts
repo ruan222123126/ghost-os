@@ -37,12 +37,22 @@ function buildBridgeConfig(overrides: Partial<BridgeConfig> = {}): BridgeConfig 
 }
 
 describe('components/config/RuntimeSettingsSection', () => {
-  it('renders language with the shared lined section layout', () => {
+  it('renders common settings first without lined section gutters', () => {
     const renderer = renderSection(buildBridgeConfig());
-    const languageSection = findSectionByTitle(renderer.root, 'Interface Language');
+    const sections = renderer.root.findAll((node) => (
+      node.type === 'section'
+      && typeof node.props.className === 'string'
+      && node.props.className.includes('border-b')
+    ));
 
-    expect(languageSection.props.className).toContain('border-b');
-    expect(findBorderLine(languageSection).props.className).toContain('border-l-2');
+    expect(textContent(sections[0])).toContain('Common Settings');
+    expect(textContent(sections[0])).toContain('Language');
+    expect(textContent(sections[0])).toContain('Max Turns');
+    expect(textContent(sections[0])).toContain('Task Total Timeout (ms)');
+    expect(renderer.root.findAll((node) => (
+      typeof node.props.className === 'string'
+      && node.props.className.includes('border-l-2')
+    ))).toHaveLength(0);
   });
 });
 
@@ -67,21 +77,6 @@ function renderSection(config: BridgeConfig): TestRenderer.ReactTestRenderer {
   return renderer;
 }
 
-function findSectionByTitle(root: TestRenderer.ReactTestInstance, title: string): TestRenderer.ReactTestInstance {
-  return root.find((node) => (
-    node.type === 'section'
-    && typeof node.props.className === 'string'
-    && node.props.className.includes('border-b')
-    && textContent(node).includes(title)
-  ));
-}
-
-function findBorderLine(section: TestRenderer.ReactTestInstance): TestRenderer.ReactTestInstance {
-  return section.find((node) => (
-    typeof node.props.className === 'string'
-    && node.props.className.includes('border-l-2')
-  ));
-}
 
 function textContent(node: TestRenderer.ReactTestInstance): string {
   return node.children.map((child: string | number | TestRenderer.ReactTestInstance) => {

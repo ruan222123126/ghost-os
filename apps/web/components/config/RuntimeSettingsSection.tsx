@@ -11,18 +11,13 @@ import {
   type RuntimeFormState,
 } from '@/components/config/runtimeSettingsForm';
 import {
-  Card,
-  SelectField,
-} from '@/components/config/runtimeSettingsFieldComponents';
-import {
+  CommonSettingsSection,
   RuntimeCoreSection,
   SessionSection,
   WebSearchSection,
 } from '@/components/config/runtimeSettingsSections';
 
 const AUTO_SAVE_DEBOUNCE_MS = 500;
-
-type LocaleValue = ReturnType<typeof useWebLocale>['locale'];
 
 interface RuntimeSettingsSectionProps {
   loading: boolean;
@@ -50,10 +45,13 @@ export function RuntimeSettingsSection(props: RuntimeSettingsSectionProps) {
   });
 
   return (
-    <section>
-      <LanguageCard locale={locale} setLocale={setLocale} />
-      <RuntimePanels config={props.config} state={runtimeState} loading={props.loading} />
-    </section>
+    <RuntimePanels
+      config={props.config}
+      state={runtimeState}
+      loading={props.loading}
+      locale={locale}
+      onLocaleChange={(value) => handleLocaleChange(value, setLocale)}
+    />
   );
 }
 
@@ -144,43 +142,33 @@ function useRuntimeAutoSave(options: {
   }, [baselineSignature, config, formSignature, formState, invalidRuntimeMessage, loading, modelSelectionEnabled, onSave, saving, setSubmitError]);
 }
 
-function LanguageCard(props: {
-  locale: LocaleValue;
-  setLocale: ReturnType<typeof useWebLocale>['setLocale'];
-}) {
-  const { copy } = useWebLocale();
-  const { locale, setLocale } = props;
-  const options = [
-    { value: 'zh-CN', label: copy.settings.languageOptionZh },
-    { value: 'en-US', label: copy.settings.languageOptionEn },
-  ] as const;
-
-  return (
-    <Card title={copy.settings.languageTitle} copy={copy.settings.languageDescription}>
-      <SelectField
-        label={copy.settings.languageLabel}
-        value={locale}
-        onChange={(value) => handleLocaleChange(value, setLocale)}
-        options={options}
-      />
-    </Card>
-  );
-}
-
 function handleLocaleChange(value: string, setLocale: ReturnType<typeof useWebLocale>['setLocale']) {
   if (isWebLocale(value)) {
     setLocale(value);
   }
 }
 
-function RuntimePanels(props: { config: BridgeConfig | null; state: RuntimeSettingsState; loading: boolean }) {
+function RuntimePanels(props: {
+  config: BridgeConfig | null;
+  state: RuntimeSettingsState;
+  loading: boolean;
+  locale: ReturnType<typeof useWebLocale>['locale'];
+  onLocaleChange: (value: string) => void;
+}) {
   const { copy } = useWebLocale();
-  const { config, state, loading } = props;
+  const { config, state, loading, locale, onLocaleChange } = props;
 
   return (
     <div className="space-y-0">
       {loading ? <InlineNotice text={copy.settings.loadingRuntimeConfig} /> : null}
       {state.submitError ? <InlineError text={state.submitError} /> : null}
+      <CommonSettingsSection
+        formState={state.formState}
+        controlsDisabled={state.controlsDisabled}
+        locale={locale}
+        onChange={state.updateForm}
+        onLocaleChange={onLocaleChange}
+      />
       <RuntimeCoreSection
         formState={state.formState}
         controlsDisabled={state.controlsDisabled}
@@ -202,7 +190,6 @@ function RuntimePanels(props: { config: BridgeConfig | null; state: RuntimeSetti
 function runtimeFormSignature(formState: RuntimeFormState): string {
   return JSON.stringify(formState);
 }
-
 
 function InlineNotice(props: { text: string }) {
   return (
