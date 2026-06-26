@@ -18,7 +18,7 @@ import type { ChatCopy } from '@/lib/i18n/messages/chat';
 import type { SessionMetadata } from '@/lib/types';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 
-const SEARCH_DIALOG_ANIMATION_MS = 500;
+const SEARCH_DIALOG_ANIMATION_MS = 300;
 const SEARCH_DIALOG_CLOSED_SCALE = 0.18;
 const SEARCH_DIALOG_OPEN_TRANSFORM = 'translate3d(0, 0, 0) scale(1)';
 const SEARCH_DIALOG_DEFAULT_MOTION_TARGET: SearchDialogMotionTarget = {
@@ -131,8 +131,8 @@ export const SessionSearchDialog: FC<SessionSearchDialogProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-start justify-center bg-[#7a7a7a]/90 px-4 pt-24 transition-opacity duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-        expanded ? 'opacity-100' : 'opacity-0'
+      className={`fixed inset-0 z-50 flex items-start justify-center bg-gray-300/45 px-4 pt-24 transition-opacity duration-300 ease-in-out ${
+        expanded ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
       }`}
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
@@ -145,7 +145,7 @@ export const SessionSearchDialog: FC<SessionSearchDialogProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label={copy.chat.sidebarSearchAria}
-        className={`w-full max-w-[640px] overflow-hidden rounded-[24px] bg-white shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
+        className={`w-full max-w-[640px] overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-300 ease-in-out ${
           expanded
             ? 'opacity-100'
             : 'pointer-events-none opacity-0'
@@ -170,43 +170,36 @@ export const SessionSearchDialog: FC<SessionSearchDialogProps> = ({
 
         <div className="h-px w-full bg-[#f3f4f6]" />
 
-        <div
-          className="grid transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-          style={{ gridTemplateRows: expanded ? '1fr' : '0fr' }}
-        >
-          <div className="overflow-hidden">
-            <div className="max-h-[min(60vh,520px)] space-y-1 overflow-y-auto p-2 pb-3 pt-2">
-              {sessionSearch.error ? (
-                <div className="mx-1 px-5 py-[10px] text-[13px] text-red-600">
-                  {copy.chat.sidebarSearchFailed}: {sessionSearch.error}
-                </div>
-              ) : null}
-              {results.length > 0 ? (
-                results.map((session) => (
-                  <SearchResultRow
-                    key={session.id}
-                    copy={copy.chat}
-                    locale={locale}
-                    session={session}
-                    title={resolveSessionTitle(session)}
-                    active={session.id === currentSessionId}
-                    onSelect={() => {
-                      onSelect(session.id);
-                      onClose();
-                    }}
-                  />
-                ))
-              ) : sessionSearch.loading ? (
-                <div className="mx-1 px-5 py-[12px] text-[14px] text-[#9ca3af]">
-                  {copy.chat.sidebarSearchLoading}
-                </div>
-              ) : (
-                <div className="mx-1 px-5 py-[12px] text-[14px] text-[#9ca3af]">
-                  {copy.chat.sidebarNoSessions}
-                </div>
-              )}
+        <div className="max-h-[min(60vh,520px)] space-y-1 overflow-y-auto p-2 pb-3 pt-2">
+          {sessionSearch.error ? (
+            <div className="mx-1 px-5 py-[10px] text-[13px] text-red-600">
+              {copy.chat.sidebarSearchFailed}: {sessionSearch.error}
             </div>
-          </div>
+          ) : null}
+          {results.length > 0 ? (
+            results.map((session) => (
+              <SearchResultRow
+                key={session.id}
+                copy={copy.chat}
+                locale={locale}
+                session={session}
+                title={resolveSessionTitle(session)}
+                active={session.id === currentSessionId}
+                onSelect={() => {
+                  onSelect(session.id);
+                  onClose();
+                }}
+              />
+            ))
+          ) : sessionSearch.loading ? (
+            <div className="mx-1 px-5 py-[12px] text-[14px] text-[#9ca3af]">
+              {copy.chat.sidebarSearchLoading}
+            </div>
+          ) : (
+            <div className="mx-1 px-5 py-[12px] text-[14px] text-[#9ca3af]">
+              {copy.chat.sidebarNoSessions}
+            </div>
+          )}
         </div>
       </div>
     </div>
