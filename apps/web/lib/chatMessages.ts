@@ -1,12 +1,9 @@
 import type {
-  AskHumanOption,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
   ChatMessage,
   ChatImage,
   ChatSelectedSkill,
-  PendingQuestionMessage,
-  QuestionChatMessage,
   SessionContentPart,
   SessionHumanInteraction,
   SessionMessage,
@@ -22,6 +19,10 @@ import { buildToolChatMessage, resolveSessionToolCall } from './chatToolMessages
 import { filterToolTagResultToLoadedTools } from '@/lib/toolTagResultText';
 import { stripToolTagCalls } from '@/lib/toolTagText';
 import { parseAgentMessageWithSelectedSkill } from '@/lib/selectedSkillMessage';
+import { nextChatMessageID } from './chatMessageIDs';
+import { buildPendingQuestionMessage, buildQuestionMessage } from './chatQuestionMessages';
+
+export { buildPendingQuestionMessage } from './chatQuestionMessages';
 
 const TASK_RUN_EVENT_MARKER = '[TASK_RUN_EVENT]';
 
@@ -44,59 +45,40 @@ interface BuildUserMessageOptions {
   selectedSkill?: ChatSelectedSkill;
 }
 
-function nextChatMessageID() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMessage {
+  const {
+    index,
+    role,
+    text = '',
+    thinking = '',
+    in_progress: inProgress,
+    content,
+    tool_calls: toolCalls,
+    tool_call_id: toolCallId,
+    tool_result: toolResult,
+    human_interaction: humanInteraction,
+  } = message;
+
+  return {
+    index,
+    role,
+    text,
+    thinking,
+    inProgress,
+    content,
+    toolCalls,
+    toolCallId,
+    toolResult: nullToUndefined(toolResult),
+    humanInteraction: nullToUndefined(humanInteraction),
+  };
 }
 
-function normalizeSessionMessage(message: SessionMessage): NormalizedSessionMessage {
-  return {
-    index: message.index,
-    role: message.role,
-    text: message.text ?? '',
-    thinking: message.thinking ?? '',
-    inProgress: message.in_progress,
-    content: message.content ?? undefined,
-    toolCalls: message.tool_calls,
-    toolCallId: message.tool_call_id,
-    toolResult: message.tool_result ?? undefined,
-    humanInteraction: message.human_interaction ?? undefined,
-  };
+function nullToUndefined<T>(value: T | null | undefined): T | undefined {
+  return value === null ? undefined : value;
 }
 
 function buildSessionMessageID(sessionId: string, messageIndex: number, suffix: string): string {
   return `session:${sessionId}:message:${messageIndex}:${suffix}`;
-}
-
-function cloneAskHumanOptions(options?: AskHumanOption[]): AskHumanOption[] | undefined {
-  if (!options || options.length === 0) {
-    return undefined;
-  }
-
-  const normalized = options
-    .map((option) => ({
-      label: option.label.trim(),
-      allow_custom: option.allow_custom,
-    }))
-    .filter((option) => option.label.length > 0);
-
-  return normalized.length > 0 ? normalized : undefined;
-}
-
-function buildQuestionMessage(
-  content: string,
-  questionId?: string,
-  selectionMode?: 'single' | 'multiple',
-  options?: AskHumanOption[],
-  id?: string,
-): QuestionChatMessage {
-  return {
-    id: id ?? nextChatMessageID(),
-    kind: 'question',
-    content,
-    questionId,
-    selectionMode,
-    options: cloneAskHumanOptions(options),
-  };
 }
 
 function buildSessionQuestionMessages(sessionId: string, message: NormalizedSessionMessage): ChatMessage[] {
@@ -104,7 +86,13 @@ function buildSessionQuestionMessages(sessionId: string, message: NormalizedSess
     return [];
   }
 
-  const mapped: ChatMessage[] = [buildQuestionMessage(message.humanInteraction.prompt, message.humanInteraction.question_id, message.humanInteraction.selection_mode, message.humanInteraction.options, buildSessionMessageID(sessionId, message.index, 'question'))];
+  const mapped: ChatMessage[] = [buildQuestionMessage({
+    content: message.humanInteraction.prompt,
+    id: buildSessionMessageID(sessionId, message.index, 'question'),
+    questionId: message.humanInteraction.question_id,
+    selectionMode: message.humanInteraction.selection_mode,
+    options: message.humanInteraction.options,
+  })];
   if (message.humanInteraction.answer) {
     mapped.push(buildUserMessage(message.humanInteraction.answer, { id: buildSessionMessageID(sessionId, message.index, 'answer') }));
   }
@@ -171,18 +159,6 @@ export function buildErrorMessage(messageText: string): ChatMessage {
 
 export function isAwaitingHumanResponse(response: AgentSendResponse): response is AgentSendAwaitingHumanResponse {
   return 'status' in response && response.status === 'awaiting_human';
-}
-
-export function buildPendingQuestionMessage(response: AgentSendAwaitingHumanResponse): PendingQuestionMessage {
-  return {
-    id: nextChatMessageID(),
-    kind: 'pending_question',
-    content: response.prompt,
-    questionId: response.question_id,
-    sessionId: response.session_id,
-    selectionMode: response.selection_mode,
-    options: cloneAskHumanOptions(response.options),
-  };
 }
 
 function mapToolSessionMessage(
