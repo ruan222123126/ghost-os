@@ -61,6 +61,28 @@ export function applyRuntimeActionsToState(
 }
 
 function applyRuntimeAction(state: ChatStateStore, action: ChatRuntimeAction): ChatStateStore {
+  const streamingState = applyStreamingRuntimeAction(state, action);
+  if (streamingState) {
+    return streamingState;
+  }
+
+  const commitState = applyCommitRuntimeAction(state, action);
+  if (commitState) {
+    return commitState;
+  }
+
+  const toolState = applyToolRuntimeAction(state, action);
+  if (toolState) {
+    return toolState;
+  }
+
+  return applyQuestionRuntimeAction(state, action) ?? state;
+}
+
+function applyStreamingRuntimeAction(
+  state: ChatStateStore,
+  action: ChatRuntimeAction,
+): ChatStateStore | null {
   switch (action.type) {
     case 'append_streaming_assistant_text':
       return appendStreamingAssistantTextState(state, action.text);
@@ -72,14 +94,44 @@ function applyRuntimeAction(state: ChatStateStore, action: ChatRuntimeAction): C
       return clearStreamingThinkingTextState(state);
     case 'mark_streaming_thinking_boundary':
       return markStreamingThinkingBoundaryState(state);
+    default:
+      return null;
+  }
+}
+
+function applyCommitRuntimeAction(
+  state: ChatStateStore,
+  action: ChatRuntimeAction,
+): ChatStateStore | null {
+  switch (action.type) {
     case 'append_committed_messages':
       return appendCommittedMessagesState(state, action.messages);
     case 'finalize_streaming_turn':
       return finalizeStreamingTurnState(state, action.assistantMessageId, action.assistantText);
+    default:
+      return null;
+  }
+}
+
+function applyToolRuntimeAction(
+  state: ChatStateStore,
+  action: ChatRuntimeAction,
+): ChatStateStore | null {
+  switch (action.type) {
     case 'upsert_streaming_tool':
       return upsertStreamingToolRuntimeState(state, action.tool);
     case 'clear_streaming_tools':
       return clearStreamingToolsState(state);
+    default:
+      return null;
+  }
+}
+
+function applyQuestionRuntimeAction(
+  state: ChatStateStore,
+  action: ChatRuntimeAction,
+): ChatStateStore | null {
+  switch (action.type) {
     case 'upsert_pending_question':
       return upsertPendingQuestionRuntimeState(state, action.question);
     case 'remove_pending_question':
@@ -87,7 +139,7 @@ function applyRuntimeAction(state: ChatStateStore, action: ChatRuntimeAction): C
     case 'clear_pending_questions':
       return clearPendingQuestionsState(state);
     default:
-      return state;
+      return null;
   }
 }
 
