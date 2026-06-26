@@ -2,7 +2,9 @@
 
 import type { MouseEvent } from 'react';
 import { WorkflowCanvasNodeSummary } from '@/components/workflow/WorkflowCanvasNodeSummary';
+import type { WebLocale } from '@/lib/i18n/locale';
 import { useWebLocale } from '@/lib/i18n/provider';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import type { WorkflowCanvasNodeDraft, WorkflowEditorKind, WorkflowNodeType } from '@/lib/workflow-editor';
 
 export interface WorkflowNodeMeta {
@@ -39,6 +41,27 @@ interface WorkflowCanvasNodeOutputPortProps {
   onClickSourcePort: (event: MouseEvent<HTMLDivElement>, nodeID: string) => void;
 }
 
+interface WorkflowCanvasNodeHeaderProps {
+  metadata: WorkflowNodeMeta;
+  node: WorkflowCanvasNodeDraft;
+  selected: boolean;
+}
+
+interface WorkflowCanvasNodeBodyProps {
+  locale: WebLocale;
+  node: WorkflowCanvasNodeDraft;
+  workflowCopy: WorkflowCopy;
+}
+
+interface WorkflowCanvasNodePortsProps {
+  connectingSourceNodeID?: string;
+  editorKind: WorkflowEditorKind;
+  node: WorkflowCanvasNodeDraft;
+  targetable: boolean;
+  onClickSourcePort: (event: MouseEvent<HTMLDivElement>, nodeID: string) => void;
+  onClickTargetPort: (event: MouseEvent<HTMLDivElement>, nodeID: string) => void;
+}
+
 interface WorkflowCanvasNodeMouseDownOptions {
   event: MouseEvent<HTMLElement>;
   nodeID: string;
@@ -55,51 +78,64 @@ const PRIMARY_MOUSE_BUTTON = 0;
 
 export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
   const { locale, copy } = useWebLocale();
-  const {
-    editorKind,
-    node,
-    metadata,
-    selected,
-    targetable,
-    connectingSourceNodeID,
-    onSelectNode,
-    onOpenContextMenu,
-    onStartDrag,
-    onClickSourcePort,
-    onClickTargetPort,
-  } = props;
-  const nodeID = node.id;
-  const headerTitle = resolveNodeHeader(node, metadata.label);
+  const nodeID = props.node.id;
 
   return (
     <article
-      className={`workflow-arch-node ${nodeSelectionClass(selected)}`}
-      style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)` }}
-      onMouseDown={(event) => handleNodeMouseDown({ event, nodeID, onStartDrag })}
-      onClick={(event) => handleNodeClick({ event, nodeID, onSelectNode })}
-      onContextMenu={(event) => onOpenContextMenu(event, nodeID)}
+      className={`workflow-arch-node ${nodeSelectionClass(props.selected)}`}
+      style={{ transform: `translate(${props.node.position.x}px, ${props.node.position.y}px)` }}
+      onMouseDown={(event) => handleNodeMouseDown({ event, nodeID, onStartDrag: props.onStartDrag })}
+      onClick={(event) => handleNodeClick({ event, nodeID, onSelectNode: props.onSelectNode })}
+      onContextMenu={(event) => props.onOpenContextMenu(event, nodeID)}
     >
+      <WorkflowCanvasNodeHeader node={props.node} metadata={props.metadata} selected={props.selected} />
+      <WorkflowCanvasNodeBody node={props.node} workflowCopy={copy.workflow} locale={locale} />
+      <WorkflowCanvasNodePorts {...props} />
+    </article>
+  );
+}
+
+function WorkflowCanvasNodeHeader(props: WorkflowCanvasNodeHeaderProps) {
+  const { metadata, node, selected } = props;
+
+  return (
+    <>
       <div className={nodeToplineClass(selected)} />
       <header className="workflow-arch-node-header">
-        <span>{headerTitle}</span>
+        <span>{resolveNodeHeader(node, metadata.label)}</span>
       </header>
-      <div className="workflow-arch-node-body">
-        <WorkflowCanvasNodeSummary node={node} workflowCopy={copy.workflow} locale={locale} />
-      </div>
+    </>
+  );
+}
 
+function WorkflowCanvasNodeBody(props: WorkflowCanvasNodeBodyProps) {
+  const { locale, node, workflowCopy } = props;
+
+  return (
+    <div className="workflow-arch-node-body">
+      <WorkflowCanvasNodeSummary node={node} workflowCopy={workflowCopy} locale={locale} />
+    </div>
+  );
+}
+
+function WorkflowCanvasNodePorts(props: WorkflowCanvasNodePortsProps) {
+  const { connectingSourceNodeID, editorKind, node, targetable, onClickSourcePort, onClickTargetPort } = props;
+
+  return (
+    <>
       <WorkflowCanvasNodeInputPort
-        nodeID={nodeID}
+        nodeID={node.id}
         targetable={targetable}
         visible={canShowInputPort(editorKind, node)}
         onClickTargetPort={onClickTargetPort}
       />
       <WorkflowCanvasNodeOutputPort
-        active={connectingSourceNodeID === nodeID}
-        nodeID={nodeID}
+        active={connectingSourceNodeID === node.id}
+        nodeID={node.id}
         visible={canShowOutputPort(editorKind, node)}
         onClickSourcePort={onClickSourcePort}
       />
-    </article>
+    </>
   );
 }
 
@@ -191,13 +227,22 @@ function outputPortDotClass(active: boolean): string {
 }
 
 function resolveNodeHeader(node: WorkflowCanvasNodeDraft, fallback: string): string {
-  if (node.type === 'agent' && node.agent?.title?.trim()) {
-    return node.agent.title.trim();
+  return resolveNodeTitle(node) ?? fallback;
+}
+
+function resolveNodeTitle(node: WorkflowCanvasNodeDraft): string | undefined {
+  if (node.type === 'agent') {
+    return trimmedValue(node.agent?.title);
   }
-  if (node.type === 'group' && node.group?.title?.trim()) {
-    return node.group.title.trim();
+  if (node.type === 'group') {
+    return trimmedValue(node.group?.title);
   }
-  return fallback;
+  return undefined;
+}
+
+function trimmedValue(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
 }
 
 function canShowInputPort(editorKind: WorkflowEditorKind, node: WorkflowCanvasNodeDraft): boolean {
