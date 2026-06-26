@@ -23,6 +23,13 @@ interface GridDrawArea {
   height: number;
 }
 
+interface GridLineSetDrawOptions {
+  area: GridDrawArea;
+  color: string;
+  step: number;
+  viewport: CanvasViewport;
+}
+
 export function drawWorkflowCanvasBackground(
   background: HTMLCanvasElement,
   canvas: HTMLDivElement,
@@ -59,44 +66,28 @@ function drawGridLines(
   area: GridDrawArea,
   viewport: CanvasViewport,
 ) {
-  const { context, width, height } = area;
   const minorStep = GRID_BASE_SIZE * viewport.scale;
   const majorStep = minorStep * GRID_MAJOR_FACTOR;
+  drawGridLineSet({ area, color: GRID_MINOR_COLOR, step: minorStep, viewport });
+  drawGridLineSet({ area, color: GRID_MAJOR_COLOR, step: majorStep, viewport });
+}
+
+function drawGridLineSet(options: GridLineSetDrawOptions) {
+  const { area, color, step, viewport } = options;
+
   drawGridAxis({
-    context,
-    width,
-    height,
-    start: normalizeGridOffset(viewport.offsetX, minorStep),
-    step: minorStep,
+    ...area,
+    color,
+    start: normalizeGridOffset(viewport.offsetX, step),
+    step,
     vertical: true,
-    color: GRID_MINOR_COLOR,
   });
   drawGridAxis({
-    context,
-    width,
-    height,
-    start: normalizeGridOffset(viewport.offsetY, minorStep),
-    step: minorStep,
+    ...area,
+    color,
+    start: normalizeGridOffset(viewport.offsetY, step),
+    step,
     vertical: false,
-    color: GRID_MINOR_COLOR,
-  });
-  drawGridAxis({
-    context,
-    width,
-    height,
-    start: normalizeGridOffset(viewport.offsetX, majorStep),
-    step: majorStep,
-    vertical: true,
-    color: GRID_MAJOR_COLOR,
-  });
-  drawGridAxis({
-    context,
-    width,
-    height,
-    start: normalizeGridOffset(viewport.offsetY, majorStep),
-    step: majorStep,
-    vertical: false,
-    color: GRID_MAJOR_COLOR,
   });
 }
 
