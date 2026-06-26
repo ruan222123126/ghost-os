@@ -16,7 +16,21 @@ export interface VariableAutocompleteApplyResult {
   caretPosition: number;
 }
 
+export type VariableAutocompleteKeyAction =
+  | 'clear-dismissed'
+  | 'commit'
+  | 'dismiss'
+  | 'move-next'
+  | 'move-previous';
+
 const VARIABLE_QUERY_PATTERN = /^[A-Za-z0-9._-]*$/;
+const OPEN_DROPDOWN_KEY_ACTIONS: Partial<Record<string, VariableAutocompleteKeyAction>> = {
+  ArrowDown: 'move-next',
+  ArrowUp: 'move-previous',
+  Enter: 'commit',
+  Escape: 'dismiss',
+  Tab: 'commit',
+};
 
 export const WORKFLOW_FIND_ICON_VARIABLE = '${find_icon}';
 
@@ -78,6 +92,17 @@ export function applyVariableOption(
     value: nextValue,
     caretPosition: range.start + option.token.length,
   };
+}
+
+export function resolveVariableAutocompleteKeyAction(options: {
+  dropdownOpen: boolean;
+  key: string;
+  optionCount: number;
+}): VariableAutocompleteKeyAction | undefined {
+  if (options.dropdownOpen && options.optionCount > 0) {
+    return OPEN_DROPDOWN_KEY_ACTIONS[options.key];
+  }
+  return options.key === 'Escape' ? 'clear-dismissed' : undefined;
 }
 
 function clampCaretPosition(value: string, caretPosition: number): number {

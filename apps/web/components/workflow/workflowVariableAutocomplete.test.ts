@@ -3,6 +3,7 @@ import {
   WORKFLOW_FIND_ICON_VARIABLE,
   applyVariableOption,
   filterWorkflowVariableOptions,
+  resolveVariableAutocompleteKeyAction,
   resolveVariableTriggerRange,
 } from '@/components/workflow/workflowVariableAutocomplete';
 
@@ -27,5 +28,28 @@ describe('components/workflow/workflowVariableAutocomplete', () => {
       value: `prefix ${WORKFLOW_FIND_ICON_VARIABLE} suffix`,
       caretPosition: 7 + WORKFLOW_FIND_ICON_VARIABLE.length,
     });
+  });
+
+  it('resolves keyboard actions from dropdown state', () => {
+    expect(resolveVariableAutocompleteKeyAction({
+      dropdownOpen: true,
+      key: 'ArrowDown',
+      optionCount: 1,
+    })).toBe('move-next');
+    expect(resolveVariableAutocompleteKeyAction({
+      dropdownOpen: true,
+      key: 'Enter',
+      optionCount: 1,
+    })).toBe('commit');
+    expect(resolveVariableAutocompleteKeyAction({
+      dropdownOpen: false,
+      key: 'Escape',
+      optionCount: 0,
+    })).toBe('clear-dismissed');
+    expect(resolveVariableAutocompleteKeyAction({
+      dropdownOpen: true,
+      key: 'ArrowDown',
+      optionCount: 0,
+    })).toBeUndefined();
   });
 });
