@@ -9,6 +9,28 @@ export interface RelayCardSummary {
   log: string;
 }
 
+type RelaySummaryField = keyof RelayCardSummary;
+
+const RELAY_SUMMARY_FIELDS_BY_LABEL = new Map<string, RelaySummaryField>([
+  ['did', 'did'],
+  ['已完成', 'did'],
+  ['nextstep', 'nextStep'],
+  ['next', 'nextStep'],
+  ['下阶段', 'nextStep'],
+  ['下一阶段', 'nextStep'],
+  ['finalchangelog', 'log'],
+  ['changelog', 'log'],
+  ['log', 'log'],
+  ['交付', 'log'],
+]);
+
+const IGNORED_RELAY_LABELS = new Set([
+  'remaining',
+  'failedattempts',
+  'finalmessage',
+  'status',
+]);
+
 export function buildRelayCardSummary(card: LiveTaskRunCard): RelayCardSummary | null {
   if (card.kind !== 'relay_round') {
     return null;
@@ -127,26 +149,16 @@ function parseSummaryLine(line: string): { content: string; field: keyof RelayCa
   };
 }
 
-function relayFieldFromLabel(label: string): keyof RelayCardSummary | null {
-  const normalized = label.trim().toLowerCase().replace(/[\s_-]+/g, '');
-  if (normalized === 'did' || normalized === '已完成') {
-    return 'did';
-  }
-  if (normalized === 'nextstep' || normalized === 'next' || normalized === '下阶段' || normalized === '下一阶段') {
-    return 'nextStep';
-  }
-  if (normalized === 'finalchangelog' || normalized === 'changelog' || normalized === 'log' || normalized === '交付') {
-    return 'log';
-  }
-  return null;
+function relayFieldFromLabel(label: string): RelaySummaryField | null {
+  return RELAY_SUMMARY_FIELDS_BY_LABEL.get(normalizeRelayLabel(label)) ?? null;
 }
 
 function isIgnoredRelayLabel(label: string): boolean {
-  const normalized = label.trim().toLowerCase().replace(/[\s_-]+/g, '');
-  return normalized === 'remaining'
-    || normalized === 'failedattempts'
-    || normalized === 'finalmessage'
-    || normalized === 'status';
+  return IGNORED_RELAY_LABELS.has(normalizeRelayLabel(label));
+}
+
+function normalizeRelayLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[\s_-]+/g, '');
 }
 
 function parseRecord(value: unknown): Record<string, unknown> | null {
