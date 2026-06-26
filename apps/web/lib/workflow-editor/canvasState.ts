@@ -1,9 +1,5 @@
 import { isProtectedBoundaryNodeType } from '@/lib/workflow-editor/boundaryNodes';
-import {
-  DEFAULT_LOOP_MAX_ITERATIONS,
-  LOOP_ROLE_END,
-  LOOP_ROLE_START,
-} from '@/lib/workflow-editor/constants';
+import { DEFAULT_LOOP_MAX_ITERATIONS, LOOP_ROLE_END, LOOP_ROLE_START } from '@/lib/workflow-editor/constants';
 import {
   createDefaultNodePosition,
   createDraftNode,
@@ -109,16 +105,7 @@ export function updateNode(draft: WorkflowCanvasDraft, node: WorkflowCanvasNodeD
     return { ...draft, nodes };
   }
 
-  return {
-    ...draft,
-    nodes,
-    edges: draft.edges.map((edge) => ({
-      ...edge,
-      from_node_id: edge.from_node_id === currentID ? nextNode.id : edge.from_node_id,
-      to_node_id: edge.to_node_id === currentID ? nextNode.id : edge.to_node_id,
-    })),
-    selectedNodeId: nextNode.id,
-  };
+  return applyNodeIDChange({ draft, nodes, currentID, nextID: nextNode.id });
 }
 
 export function moveNode(
@@ -169,6 +156,25 @@ export function removeEdge(draft: WorkflowCanvasDraft, edgeID: string): Workflow
 
 function buildEdgeID(sourceNodeID: string, targetNodeID: string, index: number): string {
   return `${EDGE_ID_PREFIX}-${index}-${sourceNodeID}-${targetNodeID}`;
+}
+
+function applyNodeIDChange(input: {
+  draft: WorkflowCanvasDraft;
+  nodes: WorkflowCanvasNodeDraft[];
+  currentID: string;
+  nextID: string;
+}): WorkflowCanvasDraft {
+  const { currentID, draft, nextID, nodes } = input;
+  return {
+    ...draft,
+    nodes,
+    edges: draft.edges.map((edge) => ({
+      ...edge,
+      from_node_id: edge.from_node_id === currentID ? nextID : edge.from_node_id,
+      to_node_id: edge.to_node_id === currentID ? nextID : edge.to_node_id,
+    })),
+    selectedNodeId: nextID,
+  };
 }
 
 function addLoopNodePair(
@@ -231,39 +237,61 @@ function assertLoopNodeIDsAvailable(draft: WorkflowCanvasDraft, options: AddLoop
 
 function findRemovableNodeIDs(nodes: WorkflowCanvasNodeDraft[], nodeID: string): Set<string> {
   const removable = new Set<string>([nodeID]);
-  const target = nodes.find((node) => node.id === nodeID);
-  const loopID = target?.type === 'loop' ? target.loop?.loop_id?.trim() : '';
+  const loopID = removableLoopID(nodes, nodeID);
   if (!loopID) {
     return removable;
   }
 
   for (const node of nodes) {
-    if (node.type !== 'loop' || node.loop?.loop_id !== loopID) {
-      continue;
+    if (isLoopNodeInLoop(node, loopID)) {
+      removable.add(node.id);
     }
-    removable.add(node.id);
   }
   return removable;
 }
 
 function sanitizeNodeUpdate(currentNode: WorkflowCanvasNodeDraft, nextNode: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft {
-  if (currentNode.type !== 'loop' || !currentNode.loop?.loop_id?.trim()) {
+  if (!shouldLockLoopIdentity(currentNode)) {
     return nextNode;
   }
   const nextLoop: Partial<NonNullable<WorkflowCanvasNodeDraft['loop']>> = nextNode.loop ?? {};
-  const role = currentNode.loop.role;
-  const maxIterations = role === LOOP_ROLE_START
-    ? nextLoop.max_iterations ?? currentNode.loop.max_iterations ?? DEFAULT_LOOP_MAX_ITERATIONS
-    : undefined;
   return {
     ...nextNode,
     id: currentNode.id,
     type: 'loop',
     loop: {
       ...nextLoop,
-      role,
+      role: currentNode.loop.role,
       loop_id: currentNode.loop.loop_id,
-      max_iterations: maxIterations,
+      max_iterations: loopMaxIterationsForUpdate(currentNode, nextLoop),
     },
   };
+}
+
+function removableLoopID(nodes: WorkflowCanvasNodeDraft[], nodeID: string): string {
+  const target = nodes.find((node) => node.id === nodeID);
+  if (target?.type !== 'loop') {
+    return '';
+  }
+  return target.loop?.loop_id?.trim() ?? '';
+}
+
+function isLoopNodeInLoop(node: WorkflowCanvasNodeDraft, loopID: string): boolean {
+  return node.type === 'loop' && node.loop?.loop_id === loopID;
+}
+
+function shouldLockLoopIdentity(node: WorkflowCanvasNodeDraft): node is WorkflowCanvasNodeDraft & {
+  loop: NonNullable<WorkflowCanvasNodeDraft['loop']>;
+} {
+  return node.type === 'loop' && Boolean(node.loop?.loop_id?.trim());
+}
+
+function loopMaxIterationsForUpdate(
+  currentNode: WorkflowCanvasNodeDraft & { loop: NonNullable<WorkflowCanvasNodeDraft['loop']> },
+  nextLoop: Partial<NonNullable<WorkflowCanvasNodeDraft['loop']>>,
+): number | undefined {
+  if (currentNode.loop.role !== LOOP_ROLE_START) {
+    return undefined;
+  }
+  return nextLoop.max_iterations ?? currentNode.loop.max_iterations ?? DEFAULT_LOOP_MAX_ITERATIONS;
 }
