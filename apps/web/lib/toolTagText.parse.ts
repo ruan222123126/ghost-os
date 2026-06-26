@@ -5,82 +5,24 @@ import type {
   ToolTagParseState,
 } from './toolTagText.types';
 
+interface ToolTagParseContext {
+  calls: ParsedToolTagCall[];
+  cursor: number;
+  state: ToolTagParseState;
+  text: string;
+  visibleParts: string[];
+}
+
 export function parseToolTagText(text: string): ToolTagParseResult {
-  const state: ToolTagParseState = {
-    mode: 'normal',
-    rawTagStart: -1,
-    toolIdBuffer: '',
-    argsStart: -1,
-    inString: false,
-    escaped: false,
-  };
-
-  const visibleParts: string[] = [];
-  const calls: ParsedToolTagCall[] = [];
-  let cursor = 0;
-
-  while (cursor < text.length) {
-    if (state.mode === 'normal') {
-      const openIndex = text.indexOf('<t:', cursor);
-      if (openIndex < 0) {
-        visibleParts.push(text.slice(cursor));
-        cursor = text.length;
-        break;
-      }
-      visibleParts.push(text.slice(cursor, openIndex));
-      state.mode = 'capture_id';
-      state.rawTagStart = openIndex;
-      state.toolIdBuffer = '';
-      cursor = openIndex + 3;
-      continue;
-    }
-
-    if (state.mode === 'capture_id') {
-      const closeOfID = text.indexOf('>', cursor);
-      if (closeOfID < 0) {
-        visibleParts.push(text.slice(state.rawTagStart));
-        cursor = text.length;
-        break;
-      }
-      const rawID = text.slice(cursor, closeOfID).trim();
-      if (!isValidToolTagID(rawID)) {
-        visibleParts.push(text.slice(state.rawTagStart, closeOfID + 1));
-        state.mode = 'normal';
-        cursor = closeOfID + 1;
-        continue;
-      }
-
-      state.mode = 'capture_args';
-      state.toolIdBuffer = rawID;
-      state.argsStart = closeOfID + 1;
-      state.inString = false;
-      state.escaped = false;
-      cursor = closeOfID + 1;
-      continue;
-    }
-
-    const closeIndex = findToolTagCloseIndex(text, cursor, state);
-    if (closeIndex < 0) {
-      calls.push({
-        toolId: state.toolIdBuffer,
-        argsText: text.slice(state.argsStart),
-      });
-      cursor = text.length;
-      break;
-    }
-
-    calls.push({
-      toolId: state.toolIdBuffer,
-      argsText: text.slice(state.argsStart, closeIndex),
-    });
-    state.mode = 'normal';
-    cursor = closeIndex + 4;
+  const context = createToolTagParseContext(text);
+  while (context.cursor < text.length) {
+    parseNextToolTagSpan(context);
   }
 
   return {
-    visibleText: visibleParts.join(''),
-    hasToolTags: calls.length > 0,
-    calls,
+    visibleText: context.visibleParts.join(''),
+    hasToolTags: context.calls.length > 0,
+    calls: context.calls,
   };
 }
 
@@ -127,4 +69,90 @@ function findToolTagCloseIndex(text: string, cursor: number, state: ToolTagParse
     index += 1;
   }
   return -1;
+}
+
+function createToolTagParseContext(text: string): ToolTagParseContext {
+  return {
+    calls: [],
+    cursor: 0,
+    state: {
+      mode: 'normal',
+      rawTagStart: -1,
+      toolIdBuffer: '',
+      argsStart: -1,
+      inString: false,
+      escaped: false,
+    },
+    text,
+    visibleParts: [],
+  };
+}
+
+function parseNextToolTagSpan(context: ToolTagParseContext): void {
+  if (context.state.mode === 'normal') {
+    parseNormalSpan(context);
+    return;
+  }
+  if (context.state.mode === 'capture_id') {
+    parseToolIdSpan(context);
+    return;
+  }
+  parseArgsSpan(context);
+}
+
+function parseNormalSpan(context: ToolTagParseContext): void {
+  const openIndex = context.text.indexOf('<t:', context.cursor);
+  if (openIndex < 0) {
+    context.visibleParts.push(context.text.slice(context.cursor));
+    context.cursor = context.text.length;
+    return;
+  }
+  context.visibleParts.push(context.text.slice(context.cursor, openIndex));
+  context.state.mode = 'capture_id';
+  context.state.rawTagStart = openIndex;
+  context.state.toolIdBuffer = '';
+  context.cursor = openIndex + 3;
+}
+
+function parseToolIdSpan(context: ToolTagParseContext): void {
+  const closeOfID = context.text.indexOf('>', context.cursor);
+  if (closeOfID < 0) {
+    context.visibleParts.push(context.text.slice(context.state.rawTagStart));
+    context.cursor = context.text.length;
+    return;
+  }
+
+  const rawID = context.text.slice(context.cursor, closeOfID).trim();
+  if (!isValidToolTagID(rawID)) {
+    context.visibleParts.push(context.text.slice(context.state.rawTagStart, closeOfID + 1));
+    context.state.mode = 'normal';
+    context.cursor = closeOfID + 1;
+    return;
+  }
+
+  context.state.mode = 'capture_args';
+  context.state.toolIdBuffer = rawID;
+  context.state.argsStart = closeOfID + 1;
+  context.state.inString = false;
+  context.state.escaped = false;
+  context.cursor = closeOfID + 1;
+}
+
+function parseArgsSpan(context: ToolTagParseContext): void {
+  const closeIndex = findToolTagCloseIndex(context.text, context.cursor, context.state);
+  if (closeIndex < 0) {
+    context.calls.push({
+      toolId: context.state.toolIdBuffer,
+      argsText: context.text.slice(context.state.argsStart),
+    });
+    context.cursor = context.text.length;
+    return;
+  }
+
+  context.calls.push({
+    toolId: context.state.toolIdBuffer,
+    argsText: context.text.slice(context.state.argsStart, closeIndex),
+  });
+  context.state.mode = 'normal';
+  context.cursor = closeIndex + 4;
 }
