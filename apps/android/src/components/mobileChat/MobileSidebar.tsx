@@ -1,7 +1,5 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
 import type { ConfigPayload, HostProfile, StoredSettings } from "../../mobileTypes";
-import { DRAWING_PLACEHOLDERS } from "./data";
 import { UiIcon } from "./icons";
 import type { SidebarHistoryItem, UiIconName } from "./types";
 
@@ -24,7 +22,6 @@ export function MobileSidebar(props: MobileSidebarProps) {
   const accountName = props.host?.productName || "Ghost-OS Mobile";
   const isBridgeConnected = Boolean(props.config);
   const bridgeStatusLabel = isBridgeConnected ? "CONNECTED" : "DISCONNECTED";
-  const [activeMode, setActiveMode] = useState<"chat" | "drawing">("chat");
   const sortedHistoryItems = [...props.historyItems].sort(compareHistoryItems);
 
   return (
@@ -52,81 +49,47 @@ export function MobileSidebar(props: MobileSidebarProps) {
             <SidebarNavButton icon="search" label="搜索任务内容" onClick={props.onOpenSearch} />
           </nav>
 
-          <div className="sidebar-mode-toggle" role="tablist" aria-label="侧边栏内容切换">
-            <button
-              className={activeMode === "chat" ? "is-active" : ""}
-              type="button"
-              role="tab"
-              aria-selected={activeMode === "chat"}
-              onClick={() => setActiveMode("chat")}
-            >
-              对话
-            </button>
-            <button
-              className={activeMode === "drawing" ? "is-active" : ""}
-              type="button"
-              role="tab"
-              aria-selected={activeMode === "drawing"}
-              onClick={() => setActiveMode("drawing")}
-            >
-              绘画
-            </button>
-          </div>
+          <SidebarSection title="最近">
+            {sortedHistoryItems.length === 0 ? (
+              <p className="history-empty">暂无会话</p>
+            ) : (
+              <div className="history-list">
+                {sortedHistoryItems.map((item) => {
+                  const isActive = props.activeHistoryId === item.id;
 
-          {activeMode === "chat" ? (
-            <SidebarSection title="最近">
-              {sortedHistoryItems.length === 0 ? (
-                <p className="history-empty">暂无会话</p>
-              ) : (
-                <div className="history-list">
-                  {sortedHistoryItems.map((item) => {
-                    const isActive = props.activeHistoryId === item.id;
-
-                    return (
-                      <button
-                        key={item.id}
-                        className={`history-item ${isActive ? "is-active" : ""} ${item.pinned ? "is-pinned" : ""}`}
-                        type="button"
-                        title={item.title}
-                        onClick={() => props.onSelectHistory(item.id)}
-                      >
-                        <span>{item.title}</span>
-                        <span className="history-item-indicators">
-                          {item.status ? (
-                            <span
-                              className={`history-status is-${item.status}`}
-                              title={historyStatusLabel(item.status)}
-                            >
-                              {historyStatusLabel(item.status)}
-                            </span>
-                          ) : null}
-                          {item.unread ? (
-                            <span className="history-unread-indicator" aria-label="有新回复" title="有新回复" />
-                          ) : null}
-                        </span>
-                        {item.pinned ? (
-                          <span className="history-pin-indicator" aria-label="已固定" title="已固定">
-                            <UiIcon name="pin" />
+                  return (
+                    <button
+                      key={item.id}
+                      className={`history-item ${isActive ? "is-active" : ""} ${item.pinned ? "is-pinned" : ""}`}
+                      type="button"
+                      title={item.title}
+                      onClick={() => props.onSelectHistory(item.id)}
+                    >
+                      <span>{item.title}</span>
+                      <span className="history-item-indicators">
+                        {item.status ? (
+                          <span
+                            className={`history-status is-${item.status}`}
+                            title={historyStatusLabel(item.status)}
+                          >
+                            {historyStatusLabel(item.status)}
                           </span>
                         ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </SidebarSection>
-          ) : (
-            <SidebarSection title="绘画">
-              <div className="drawing-placeholder-list">
-                {DRAWING_PLACEHOLDERS.map((item) => (
-                  <button key={item.id} className="drawing-placeholder-card" type="button" onClick={props.onClose}>
-                    <span>{item.title}</span>
-                    <small>{item.desc}</small>
-                  </button>
-                ))}
+                        {item.unread ? (
+                          <span className="history-unread-indicator" aria-label="有新回复" title="有新回复" />
+                        ) : null}
+                      </span>
+                      {item.pinned ? (
+                        <span className="history-pin-indicator" aria-label="已固定" title="已固定">
+                          <UiIcon name="pin" />
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
               </div>
-            </SidebarSection>
-          )}
+            )}
+          </SidebarSection>
         </div>
 
         <footer className="sidebar-footer">
