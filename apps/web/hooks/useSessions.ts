@@ -11,18 +11,11 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from 'react';
-import { deleteSession as deleteSessionRequest, listSessions } from '@/lib/api/sessions/api';
+import { deleteSession as deleteSessionRequest } from '@/lib/api/sessions/api';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { SessionMetadata } from '@/lib/types';
-
-const SESSION_LOAD_COMMIT_ALWAYS = 'always';
-const SESSION_LOAD_COMMIT_NEW_ONLY = 'when-new-session';
-
-interface LoadSessionsOptions {
-  silent?: boolean;
-  commitMode?: SessionLoadCommitMode;
-}
+import { SESSION_LOAD_COMMIT_NEW_ONLY, useLoadSessions, type LoadSessionsOptions } from './useSessionLoader';
 
 interface UseSessionsOptions {
   autoRefresh?: boolean;
@@ -37,13 +30,6 @@ interface UseSessionsResult {
   deleteSession: (id: string) => Promise<void>;
   createNewSession: () => void;
   setCurrentSessionId: (id: string) => void;
-}
-
-type SessionLoadCommitMode = typeof SESSION_LOAD_COMMIT_ALWAYS | typeof SESSION_LOAD_COMMIT_NEW_ONLY;
-
-interface ResolvedLoadSessionsOptions {
-  silent: boolean;
-  commitMode: SessionLoadCommitMode;
 }
 
 export function useSessions(options: UseSessionsOptions = {}): UseSessionsResult {
@@ -120,90 +106,6 @@ function useLatestRef<T>(value: T): MutableRefObject<T> {
   return ref;
 }
 
-function useLoadSessions(options: {
-  mountedRef: MutableRefObject<boolean>;
-  sessionsRef: MutableRefObject<SessionMetadata[]>;
-  errorRef: MutableRefObject<string>;
-  fallbackMessage: string;
-  setLoading: (loading: boolean) => void;
-  setError: Dispatch<SetStateAction<string>>;
-  setSessions: Dispatch<SetStateAction<SessionMetadata[]>>;
-}) {
-  const {
-    mountedRef,
-    sessionsRef,
-    errorRef,
-    fallbackMessage,
-    setLoading,
-    setError,
-    setSessions,
-  } = options;
-  const activeLoadRef = useRef<Promise<void> | null>(null);
-  const queuedLoadOptionsRef = useRef<ResolvedLoadSessionsOptions | null>(null);
-
-  const runLoad = useCallback(async (loadOptions: ResolvedLoadSessionsOptions) => {
-    const { silent, commitMode } = loadOptions;
-    if (!silent) {
-      setLoading(true);
-      setError('');
-    }
-
-    try {
-      const loaded = await listSessions();
-      if (!mountedRef.current) {
-        return;
-      }
-      if (shouldCommitSessionList(sessionsRef.current, loaded, commitMode)) {
-        setSessions(loaded);
-      }
-      if (errorRef.current !== '') {
-        setError('');
-      }
-    } catch (error) {
-      if (!mountedRef.current) {
-        return;
-      }
-      if (silent) {
-        console.error('[useSessions] silent refresh failed', error);
-        return;
-      }
-      setError(toErrorMessage(error, fallbackMessage));
-    } finally {
-      if (mountedRef.current && !silent) {
-        setLoading(false);
-      }
-    }
-  }, [errorRef, fallbackMessage, mountedRef, sessionsRef, setError, setLoading, setSessions]);
-
-  return useCallback((loadOptions: LoadSessionsOptions = {}) => {
-    queuedLoadOptionsRef.current = mergeQueuedLoadOptions(
-      queuedLoadOptionsRef.current,
-      resolveLoadSessionsOptions(loadOptions),
-    );
-
-    if (activeLoadRef.current) {
-      return activeLoadRef.current;
-    }
-
-    const executeQueuedLoads = async () => {
-      while (queuedLoadOptionsRef.current !== null) {
-        const nextLoadOptions = queuedLoadOptionsRef.current;
-        queuedLoadOptionsRef.current = null;
-        await runLoad(nextLoadOptions);
-      }
-    };
-
-    let activeLoad: Promise<void>;
-    activeLoad = executeQueuedLoads().finally(() => {
-      if (activeLoadRef.current === activeLoad) {
-        activeLoadRef.current = null;
-      }
-    });
-    activeLoadRef.current = activeLoad;
-    return activeLoad;
-  }, [runLoad]);
-}
-
 function useDeleteSession(options: {
   fallbackMessage: string;
   setSessions: Dispatch<SetStateAction<SessionMetadata[]>>;
@@ -259,73 +161,4 @@ function useSessionAutoRefresh(options: {
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [autoRefresh, loadSessions]);
-}
-
-function sessionListsEqual(left: SessionMetadata[], right: SessionMetadata[]): boolean {
-  if (left.length !== right.length) {
-    return false;
-  }
-
-  for (let index = 0; index < left.length; index += 1) {
-    if (!sessionMetadataEqual(left[index], right[index])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-function shouldCommitSessionList(
-  current: SessionMetadata[],
-  next: SessionMetadata[],
-  commitMode: SessionLoadCommitMode,
-): boolean {
-  if (commitMode === SESSION_LOAD_COMMIT_NEW_ONLY) {
-    return hasNewSessionID(current, next);
-  }
-  return !sessionListsEqual(current, next);
-}
-
-function sessionMetadataEqual(left: SessionMetadata, right: SessionMetadata): boolean {
-  return left.id === right.id
-    && left.title === right.title
-    && left.created_at === right.created_at
-    && left.updated_at === right.updated_at
-    && left.message_count === right.message_count
-    && left.token_count === right.token_count;
-}
-
-function hasNewSessionID(current: SessionMetadata[], next: SessionMetadata[]): boolean {
-  if (next.length === 0) {
-    return false;
-  }
-
-  const currentIDs = new Set(current.map((session) => session.id));
-  for (const session of next) {
-    if (!currentIDs.has(session.id)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function resolveLoadSessionsOptions(loadOptions: LoadSessionsOptions): ResolvedLoadSessionsOptions {
-  return {
-    silent: loadOptions.silent ?? false,
-    commitMode: loadOptions.commitMode ?? SESSION_LOAD_COMMIT_ALWAYS,
-  };
-}
-
-function mergeQueuedLoadOptions(
-  current: ResolvedLoadSessionsOptions | null,
-  next: ResolvedLoadSessionsOptions,
-): ResolvedLoadSessionsOptions {
-  if (!current) {
-    return next;
-  }
-  return {
-    silent: current.silent && next.silent,
-    commitMode: current.commitMode === SESSION_LOAD_COMMIT_ALWAYS || next.commitMode === SESSION_LOAD_COMMIT_ALWAYS
-      ? SESSION_LOAD_COMMIT_ALWAYS
-      : SESSION_LOAD_COMMIT_NEW_ONLY,
-  };
 }
