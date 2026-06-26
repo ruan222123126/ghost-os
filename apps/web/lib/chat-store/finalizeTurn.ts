@@ -6,8 +6,14 @@ import {
   STREAMING_TOOL_ORDER_PREFIX,
 } from '@/lib/chat-stream/streamState';
 import { buildThinkingMessage } from '@/lib/chatMessages';
-import type { ChatMessage } from '@/lib/types';
+import type { ChatMessage, StreamingToolState } from '@/lib/types';
 import type { ChatStateStore } from './reducer';
+
+interface StreamingCommitContext {
+  messages: ChatMessage[];
+  seenMessageIDs: Set<string>;
+  state: ChatStateStore;
+}
 
 export function finalizeStreamingTurnState(
   state: ChatStateStore,
@@ -47,58 +53,86 @@ function buildFinalizedTurnMessages(
 }
 
 function buildOrderedStreamingCommitMessages(state: ChatStateStore): ChatMessage[] {
-  const messages: ChatMessage[] = [];
-  const seenMessageIDs = new Set<string>();
+  const context: StreamingCommitContext = {
+    messages: [],
+    seenMessageIDs: new Set<string>(),
+    state,
+  };
   for (const orderKey of state.streamingItemOrder) {
-    appendStreamingCommitMessage(messages, seenMessageIDs, state, orderKey);
+    appendStreamingCommitMessage(context, orderKey);
   }
-  appendMissingThinkingMessages(messages, seenMessageIDs, state);
-  appendMissingToolMessages(messages, seenMessageIDs, state);
-  return messages;
+  appendMissingThinkingMessages(context);
+  appendMissingToolMessages(context);
+  return context.messages;
 }
 
 function appendStreamingCommitMessage(
-  messages: ChatMessage[],
-  seenMessageIDs: Set<string>,
-  state: ChatStateStore,
+  context: StreamingCommitContext,
   orderKey: string,
 ): void {
   if (orderKey.startsWith(STREAMING_THINKING_ORDER_PREFIX)) {
-    appendThinkingCommitMessage(messages, seenMessageIDs, state, orderKey);
+    appendThinkingCommitMessage(context, orderKey);
     return;
   }
   if (orderKey.startsWith(STREAMING_TOOL_ORDER_PREFIX)) {
-    appendToolCommitMessage(messages, seenMessageIDs, state, orderKey);
+    appendToolCommitMessage(context, orderKey);
   }
 }
 
 function appendThinkingCommitMessage(
-  messages: ChatMessage[],
-  seenMessageIDs: Set<string>,
-  state: ChatStateStore,
+  context: StreamingCommitContext,
   orderKey: string,
 ): void {
   const segmentId = orderKey.slice(STREAMING_THINKING_ORDER_PREFIX.length);
-  const segment = state.streamingThinkingState.segmentsById[segmentId];
-  if (!segment || seenMessageIDs.has(segmentId)) {
-    return;
-  }
-  messages.push(buildThinkingMessage(segment.content, segment.id));
-  seenMessageIDs.add(segmentId);
+  appendThinkingSegment(context, segmentId);
 }
 
 function appendToolCommitMessage(
-  messages: ChatMessage[],
-  seenMessageIDs: Set<string>,
-  state: ChatStateStore,
+  context: StreamingCommitContext,
   orderKey: string,
 ): void {
   const toolId = orderKey.slice(STREAMING_TOOL_ORDER_PREFIX.length);
-  const tool = state.streamingToolState.toolsById[toolId];
-  if (!tool || seenMessageIDs.has(toolId)) {
+  appendToolMessage(context, toolId);
+}
+
+function appendMissingThinkingMessages(context: StreamingCommitContext): void {
+  for (const segmentId of context.state.streamingThinkingState.order) {
+    appendThinkingSegment(context, segmentId);
+  }
+}
+
+function appendMissingToolMessages(context: StreamingCommitContext): void {
+  for (const toolId of context.state.streamingToolState.order) {
+    appendToolMessage(context, toolId);
+  }
+}
+
+function appendThinkingSegment(context: StreamingCommitContext, segmentId: string): void {
+  if (context.seenMessageIDs.has(segmentId)) {
     return;
   }
-  messages.push({
+  const segment = context.state.streamingThinkingState.segmentsById[segmentId];
+  if (!segment) {
+    return;
+  }
+  context.messages.push(buildThinkingMessage(segment.content, segment.id));
+  context.seenMessageIDs.add(segmentId);
+}
+
+function appendToolMessage(context: StreamingCommitContext, toolId: string): void {
+  if (context.seenMessageIDs.has(toolId)) {
+    return;
+  }
+  const tool = context.state.streamingToolState.toolsById[toolId];
+  if (!tool) {
+    return;
+  }
+  context.messages.push(buildToolCommitMessage(tool));
+  context.seenMessageIDs.add(toolId);
+}
+
+function buildToolCommitMessage(tool: StreamingToolState): ChatMessage {
+  return {
     id: tool.id,
     kind: 'tool',
     content: tool.content,
@@ -107,51 +141,5 @@ function appendToolCommitMessage(
     toolName: tool.toolName,
     toolStatus: tool.toolStatus,
     traceId: tool.traceId,
-  });
-  seenMessageIDs.add(toolId);
-}
-
-function appendMissingThinkingMessages(
-  messages: ChatMessage[],
-  seenMessageIDs: Set<string>,
-  state: ChatStateStore,
-): void {
-  for (const segmentId of state.streamingThinkingState.order) {
-    if (seenMessageIDs.has(segmentId)) {
-      continue;
-    }
-    const segment = state.streamingThinkingState.segmentsById[segmentId];
-    if (!segment) {
-      continue;
-    }
-    messages.push(buildThinkingMessage(segment.content, segment.id));
-    seenMessageIDs.add(segmentId);
-  }
-}
-
-function appendMissingToolMessages(
-  messages: ChatMessage[],
-  seenMessageIDs: Set<string>,
-  state: ChatStateStore,
-): void {
-  for (const toolId of state.streamingToolState.order) {
-    if (seenMessageIDs.has(toolId)) {
-      continue;
-    }
-    const tool = state.streamingToolState.toolsById[toolId];
-    if (!tool) {
-      continue;
-    }
-    messages.push({
-      id: tool.id,
-      kind: 'tool',
-      content: tool.content,
-      ...(tool.toolInput ? { toolInput: tool.toolInput } : {}),
-      toolCallId: tool.toolCallId,
-      toolName: tool.toolName,
-      toolStatus: tool.toolStatus,
-      traceId: tool.traceId,
-    });
-    seenMessageIDs.add(toolId);
-  }
+  };
 }
