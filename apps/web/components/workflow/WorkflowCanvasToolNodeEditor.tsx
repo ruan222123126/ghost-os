@@ -1,29 +1,22 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
 import { WorkflowScreenControlComposerModal } from '@/components/workflow/WorkflowScreenControlComposerModal';
 import { WorkflowVariableAutocompleteField } from '@/components/workflow/WorkflowVariableAutocompleteField';
 import { useWebLocale } from '@/lib/i18n/provider';
 import {
-  appendScreenControlComposerStep,
-  moveScreenControlComposerStep,
-  removeScreenControlComposerStep,
-  syncScreenControlComposerStepsToToolArguments,
-  updateScreenControlComposerStep,
   type WorkflowEditorKind,
-  type ScreenControlAtomicAction,
-  type ScreenControlComposerStep,
   type WorkflowCanvasNodeDraft,
   type WorkflowToolArgumentRow,
-  withScreenControlComposerSteps,
   withToolName,
 } from '@/lib/workflow-editor';
+import { useWorkflowScreenComposerState } from '@/hooks/workflow/useWorkflowScreenComposerState';
 import { useWorkflowToolOptions } from '@/hooks/workflow/useWorkflowToolOptions';
 import {
   extractSchemaFields,
   type ToolSchemaField,
   useToolSchemaRowsState,
 } from '@/components/workflow/workflowToolSchemaEditorState';
+import type { WorkflowToolOption } from '@/hooks/workflow/useWorkflowToolOptions';
 
 interface WorkflowCanvasToolNodeEditorProps {
   editorKind: WorkflowEditorKind;
@@ -31,107 +24,139 @@ interface WorkflowCanvasToolNodeEditorProps {
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
 
-interface ScreenComposerState {
-  open: boolean;
-  steps: ScreenControlComposerStep[];
-  isScreenControlTool: boolean;
-  onOpen: () => void;
-  onClose: () => void;
-  onAppend: (action: ScreenControlAtomicAction) => void;
-  onMove: (index: number, direction: 'up' | 'down') => void;
-  onRemove: (index: number) => void;
-  onUpdateStep: (index: number, step: ScreenControlComposerStep) => void;
+interface ToolNodeEditorState {
+  composer: ReturnType<typeof useWorkflowScreenComposerState>;
+  errorText: string;
+  onRowValueChange: (index: number, value: string) => void;
+  onSelectToolName: (toolName: string) => void;
+  rows: WorkflowToolArgumentRow[];
+  schemaFields: ToolSchemaField[];
+  selectedToolName: string;
+  toolOptions: WorkflowToolOption[];
+  toolOptionsError: string;
+  toolOptionsLoading: boolean;
 }
 
 export function WorkflowCanvasToolNodeEditor(props: WorkflowCanvasToolNodeEditorProps) {
-  const { copy } = useWebLocale();
-  const { editorKind, selectedNode, onUpdateNode } = props;
+  const editor = useToolNodeEditorState(props);
+  return <ToolNodeEditorView editor={editor} editorKind={props.editorKind} />;
+}
+
+function useToolNodeEditorState(props: WorkflowCanvasToolNodeEditorProps): ToolNodeEditorState {
+  const { selectedNode, onUpdateNode } = props;
   const selectedToolName = selectedNode.tool?.tool_name ?? '';
-  const { options: toolOptions, loading: toolOptionsLoading, error: toolOptionsError } = useWorkflowToolOptions(selectedToolName);
-  const selectedTool = useMemo(
-    () => toolOptions.find((option) => option.name === selectedToolName),
-    [selectedToolName, toolOptions],
-  );
-  const schemaFields = useMemo(
-    () => extractSchemaFields(selectedTool?.inputSchema, { toolName: selectedToolName }),
-    [selectedTool?.inputSchema, selectedToolName],
-  );
-  const { rows, errorText, onRowValueChange } = useToolSchemaRowsState({ selectedNode, schemaFields, onUpdateNode });
-  const composer = useScreenComposerState({ selectedNode, selectedToolName, onUpdateNode });
+  const toolOptionsState = useWorkflowToolOptions(selectedToolName);
+  const selectedTool = findToolOption(toolOptionsState.options, selectedToolName);
+  const schemaFields = extractSchemaFields(selectedTool?.inputSchema, { toolName: selectedToolName });
+  const schemaRows = useToolSchemaRowsState({ selectedNode, schemaFields, onUpdateNode });
+  const composer = useWorkflowScreenComposerState({ selectedNode, selectedToolName, onUpdateNode });
+
+  return {
+    composer,
+    errorText: schemaRows.errorText,
+    onRowValueChange: schemaRows.onRowValueChange,
+    onSelectToolName: createToolNameSelectHandler(selectedNode, onUpdateNode),
+    rows: schemaRows.rows,
+    schemaFields,
+    selectedToolName,
+    toolOptions: toolOptionsState.options,
+    toolOptionsError: toolOptionsState.error,
+    toolOptionsLoading: toolOptionsState.loading,
+  };
+}
+
+function findToolOption(options: WorkflowToolOption[], selectedToolName: string): WorkflowToolOption | undefined {
+  return options.find((option) => option.name === selectedToolName);
+}
+
+function createToolNameSelectHandler(
+  selectedNode: WorkflowCanvasNodeDraft,
+  onUpdateNode: (node: WorkflowCanvasNodeDraft) => void,
+): (toolName: string) => void {
+  return function selectToolName(toolName) {
+    onUpdateNode(withToolName(selectedNode, toolName));
+  };
+}
+
+function ToolNodeEditorView(props: {
+  editor: ToolNodeEditorState;
+  editorKind: WorkflowEditorKind;
+}) {
+  const { copy } = useWebLocale();
+  const { editor, editorKind } = props;
 
   return (
     <div className="workflow-arch-prop-group">
       <ToolNameSelect
-        selectedToolName={selectedToolName}
-        loading={toolOptionsLoading}
-        options={toolOptions}
-        onSelect={(toolName) => onUpdateNode(withToolName(selectedNode, toolName))}
+        selectedToolName={editor.selectedToolName}
+        loading={editor.toolOptionsLoading}
+        options={editor.toolOptions}
+        onSelect={editor.onSelectToolName}
       />
       <ToolSchemaRows
         editorKind={editorKind}
-        selectedToolName={selectedToolName}
-        schemaFields={schemaFields}
-        rows={rows}
-        onRowValueChange={onRowValueChange}
+        selectedToolName={editor.selectedToolName}
+        schemaFields={editor.schemaFields}
+        rows={editor.rows}
+        onRowValueChange={editor.onRowValueChange}
       />
-      {composer.isScreenControlTool ? (
-        <button type="button" className="workflow-arch-inline-button workflow-arch-screen-compose-entry" onClick={composer.onOpen}>
-          {copy.workflow.screenComposerOpenButton}
-        </button>
-      ) : null}
-      {toolOptionsError ? <p className="workflow-arch-field-note workflow-arch-field-note--error">{toolOptionsError}</p> : null}
-      {errorText ? <p className="workflow-arch-field-note workflow-arch-field-note--error">{errorText}</p> : null}
-      {editorKind === 'workflow' ? <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p> : null}
-      <WorkflowScreenControlComposerModal
-        open={composer.open}
-        steps={composer.steps}
-        onClose={composer.onClose}
-        onAppend={composer.onAppend}
-        onMove={composer.onMove}
-        onRemove={composer.onRemove}
-        onUpdateStep={composer.onUpdateStep}
+      <ScreenComposerOpenButton
+        isScreenControlTool={editor.composer.isScreenControlTool}
+        label={copy.workflow.screenComposerOpenButton}
+        onOpen={editor.composer.onOpen}
       />
+      <ToolEditorErrorNotes errors={[editor.toolOptionsError, editor.errorText]} />
+      <ToolRuntimeVariableHint editorKind={editorKind} text={copy.workflow.runtimeVariableHint} />
+      <ScreenComposerModal composer={editor.composer} />
     </div>
   );
 }
 
-function useScreenComposerState(options: {
-  selectedNode: WorkflowCanvasNodeDraft;
-  selectedToolName: string;
-  onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
-}): ScreenComposerState {
-  const { selectedNode, selectedToolName, onUpdateNode } = options;
-  const [open, setOpen] = useState(false);
-  const isScreenControlTool = selectedToolName.trim() === 'screen_control';
-  const steps = selectedNode.ui.screenControlComposer?.steps ?? [];
+function ScreenComposerOpenButton(props: {
+  isScreenControlTool: boolean;
+  label: string;
+  onOpen: () => void;
+}) {
+  if (!props.isScreenControlTool) {
+    return null;
+  }
+  return (
+    <button type="button" className="workflow-arch-inline-button workflow-arch-screen-compose-entry" onClick={props.onOpen}>
+      {props.label}
+    </button>
+  );
+}
 
-  useEffect(() => {
-    if (isScreenControlTool) {
-      return;
-    }
-    setOpen(false);
-  }, [isScreenControlTool]);
+function ToolEditorErrorNotes(props: { errors: string[] }) {
+  return (
+    <>
+      {props.errors.filter(Boolean).map((error, index) => (
+        <p key={`${index}:${error}`} className="workflow-arch-field-note workflow-arch-field-note--error">{error}</p>
+      ))}
+    </>
+  );
+}
 
-  const updateSteps = (nextSteps: ScreenControlComposerStep[]) => {
-    const nodeWithSteps = withScreenControlComposerSteps(selectedNode, nextSteps);
-    onUpdateNode(syncScreenControlComposerStepsToToolArguments(nodeWithSteps, nextSteps));
-  };
+function ToolRuntimeVariableHint(props: { editorKind: WorkflowEditorKind; text: string }) {
+  if (props.editorKind !== 'workflow') {
+    return null;
+  }
+  return <p className="workflow-arch-field-note">{props.text}</p>;
+}
 
-  const updateStepAt = (index: number, step: ScreenControlComposerStep) => {
-    updateSteps(updateScreenControlComposerStep(steps, index, step));
-  };
-
-  return {
-    open: isScreenControlTool && open,
-    steps,
-    isScreenControlTool,
-    onOpen: () => setOpen(true),
-    onClose: () => setOpen(false),
-    onAppend: (action) => updateSteps(appendScreenControlComposerStep(steps, action)),
-    onMove: (index, direction) => updateSteps(moveScreenControlComposerStep(steps, index, direction)),
-    onRemove: (index) => updateSteps(removeScreenControlComposerStep(steps, index)),
-    onUpdateStep: updateStepAt,
-  };
+function ScreenComposerModal(props: { composer: ToolNodeEditorState['composer'] }) {
+  const { composer } = props;
+  return (
+    <WorkflowScreenControlComposerModal
+      open={composer.open}
+      steps={composer.steps}
+      onClose={composer.onClose}
+      onAppend={composer.onAppend}
+      onMove={composer.onMove}
+      onRemove={composer.onRemove}
+      onUpdateStep={composer.onUpdateStep}
+    />
+  );
 }
 
 function ToolNameSelect(props: {
@@ -201,29 +226,59 @@ function ToolSchemaRow(props: {
   return (
     <div className="workflow-arch-tool-row workflow-arch-tool-row--schema">
       <input type="text" readOnly value={field.key} className="workflow-arch-tool-key" />
-      {editorKind === 'workflow' ? (
-        <WorkflowVariableAutocompleteField
-          mode="input"
-          value={value}
-          disabled={field.valueType === 'null'}
-          placeholder={toolFieldPlaceholder(field, copy)}
-          onChange={onValueChange}
-        />
-      ) : (
-        <input
-          type="text"
-          value={value}
-          disabled={field.valueType === 'null'}
-          placeholder={toolFieldPlaceholder(field, copy)}
-          onChange={(event) => onValueChange(event.target.value)}
-        />
-      )}
-      <p className="workflow-arch-field-note">
-        {field.required ? `${copy.workflow.inputRequired} · ` : ''}
-        {field.schemaType}
-        {field.description ? ` · ${field.description}` : ''}
-      </p>
+      <ToolSchemaValueInput
+        editorKind={editorKind}
+        field={field}
+        value={value}
+        onValueChange={onValueChange}
+      />
+      <ToolSchemaRowNote field={field} inputRequired={copy.workflow.inputRequired} />
     </div>
+  );
+}
+
+function ToolSchemaValueInput(props: {
+  editorKind: WorkflowEditorKind;
+  field: ToolSchemaField;
+  value: string;
+  onValueChange: (value: string) => void;
+}) {
+  const { copy } = useWebLocale();
+  const { editorKind, field, value, onValueChange } = props;
+  const disabled = field.valueType === 'null';
+  const placeholder = toolFieldPlaceholder(field, copy);
+
+  if (editorKind === 'workflow') {
+    return (
+      <WorkflowVariableAutocompleteField
+        mode="input"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        onChange={onValueChange}
+      />
+    );
+  }
+
+  return (
+    <input
+      type="text"
+      value={value}
+      disabled={disabled}
+      placeholder={placeholder}
+      onChange={(event) => onValueChange(event.target.value)}
+    />
+  );
+}
+
+function ToolSchemaRowNote(props: { field: ToolSchemaField; inputRequired: string }) {
+  const { field, inputRequired } = props;
+  return (
+    <p className="workflow-arch-field-note">
+      {field.required ? `${inputRequired} · ` : ''}
+      {field.schemaType}
+      {field.description ? ` · ${field.description}` : ''}
+    </p>
   );
 }
 
