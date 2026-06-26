@@ -10,7 +10,6 @@ export type UiIconName =
   | "image"
   | "lightbulb"
   | "menu"
-  | "mic"
   | "more"
   | "paperclip"
   | "pencil"

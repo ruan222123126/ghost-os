@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, RefObject } from "react";
 import { COMPOSER_MENU_OPTIONS } from "./data";
-import { IconButton, UiIcon } from "./icons";
+import { UiIcon } from "./icons";
 import "./ChatComposer.css";
 
 interface ChatComposerProps {
@@ -123,7 +123,6 @@ export function ChatComposer(props: ChatComposerProps) {
             value={props.value}
           />
           <div className="composer-actions">
-            <IconButton label="语音输入" icon="mic" variant="composer" />
             <span className={`send-button-slot ${showAction ? "is-visible" : ""}`} aria-hidden={!showAction}>
               <button
                 className={`send-button ${showStop ? "is-stop" : ""}`}
