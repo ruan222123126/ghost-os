@@ -108,6 +108,7 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
     setFocusSessionId(id);
     onSelect(id);
   }, [onSelect]);
+  const iconButtonClassName = 'h-10 w-10 shrink-0 p-0';
 
   return (
     <aside
@@ -115,11 +116,13 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         sidebarState.isOpen ? 'w-[19rem]' : 'w-16'
       }`}
     >
-      <div className={`flex h-16 items-center p-4 ${sidebarState.isOpen ? 'justify-between' : 'justify-center'}`}>
+      <div className={`flex h-16 items-center ${sidebarState.isOpen ? 'justify-between p-4' : 'justify-center p-3'}`}>
         <button
           type="button"
           onClick={sidebarState.toggleSidebar}
-          className="flex items-center justify-center p-2 transition-colors hover:bg-white"
+          className={`flex items-center justify-center transition-colors hover:bg-white ${
+            sidebarState.isOpen ? 'p-2' : iconButtonClassName
+          }`}
           title={sidebarState.isOpen ? copy.chat.sidebarCollapseTitle : copy.chat.sidebarExpandTitle}
           aria-label={sidebarState.isOpen ? copy.chat.sidebarCollapseAria : copy.chat.sidebarExpandAria}
         >
@@ -146,10 +149,10 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
           type="button"
           onClick={createNewChat}
           className={`group flex items-center justify-center gap-2 overflow-hidden bg-transparent text-black transition-colors hover:bg-white ${
-            sidebarState.isOpen ? 'w-full px-4 py-3' : 'mx-auto h-10 w-10'
+            sidebarState.isOpen ? 'w-full px-4 py-3' : `mx-auto ${iconButtonClassName}`
           }`}
         >
-          <span className="flex-shrink-0">
+          <span className="grid flex-shrink-0 place-items-center">
             <IconPlus />
           </span>
           <span

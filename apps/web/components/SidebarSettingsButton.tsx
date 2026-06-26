@@ -44,7 +44,7 @@ function ButtonContent(props: SidebarSettingsButtonProps) {
         aria-haspopup="dialog"
         title={copy.chat.sidebarSettingsTitle}
       >
-        <span className="flex-shrink-0">
+        <span className="grid flex-shrink-0 place-items-center">
           <IconSettings />
         </span>
         <span
