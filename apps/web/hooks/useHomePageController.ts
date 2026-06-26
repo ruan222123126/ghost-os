@@ -5,12 +5,17 @@ import { useRouter } from 'next/navigation';
 import { useBridgeChat } from '@/hooks/chat/useBridgeChat';
 import { useBridgeConfig } from '@/hooks/useBridgeConfig';
 import { useSessions } from '@/hooks/useSessions';
-import { shouldShowHomeEmptyState } from '@/lib/chat-view/homeEmptyState';
+import {
+  buildDerivedHomeState,
+  chatControllerState,
+  configControllerState,
+  sessionControllerState,
+} from '@/hooks/homePageControllerState';
 import { ignorePromise } from '@/lib/errors';
 import { parseSettingsQuery, stripSettingsQuery, type SettingsQueryTab } from '@/lib/settingsQuery';
 import type { ChatSendInput, ProviderModelOption, WorkflowTaskPayload } from '@/lib/types';
 
-interface HomePageController {
+export interface HomePageController {
   sessions: ReturnType<typeof useSessions>['sessions'];
   currentSessionId: string;
   sessionsLoading: boolean;
@@ -65,6 +70,26 @@ interface SettingsQueryState {
   setQueryString: (value: string) => void;
 }
 
+type SessionsController = ReturnType<typeof useSessions>;
+type ChatController = ReturnType<typeof useBridgeChat>;
+type RouterController = ReturnType<typeof useRouter>;
+
+interface SettingsPanelState {
+  closeConfig: () => void;
+  openConfig: () => void;
+  openWorkflowCreate: () => void;
+  openWorkflowEdit: (task: WorkflowTaskPayload) => void;
+  settingsTabFromQuery: SettingsQueryTab | null;
+  showConfig: boolean;
+}
+
+interface HomePageActions {
+  deleteSession: HomePageController['deleteSession'];
+  newChat: HomePageController['newChat'];
+  selectSession: HomePageController['selectSession'];
+  sendMessage: HomePageController['sendMessage'];
+}
+
 function useSettingsQueryState(): SettingsQueryState {
   const [queryString, setQueryString] = useState('');
 
@@ -101,6 +126,47 @@ function shouldForceOpenSettings(tab: SettingsQueryTab | null): boolean {
 
 export function useHomePageController(): HomePageController {
   const router = useRouter();
+  const settings = useSettingsPanelState(router);
+  const sessions = useSessions({ autoRefresh: true });
+  const chat = useBridgeChat({
+    currentSessionId: sessions.currentSessionId,
+    onSessionResolved: sessions.setCurrentSessionId,
+  });
+  const config = useBridgeConfig({ autoRefresh: !settings.showConfig });
+  const actions = useHomePageActions(sessions, chat);
+  const derived = buildDerivedHomeState({
+    chat,
+    config,
+    sessions,
+    showConfig: settings.showConfig,
+  });
+
+  return {
+    ...sessionControllerState(sessions, chat),
+    ...chatControllerState(chat),
+    ...configControllerState(config),
+    ...derived,
+    showConfig: settings.showConfig,
+    settingsTabFromQuery: settings.settingsTabFromQuery,
+    answerQuestion: chat.answerQuestion,
+    cancelQuestion: chat.cancelQuestion,
+    loadOlderHistory: chat.loadOlderHistory,
+    stopCurrentRun: chat.stopCurrentRun,
+    saveConfig: config.saveConfig,
+    selectActiveModel: config.selectActiveModel,
+    refreshConfig: config.refreshConfig,
+    openConfig: settings.openConfig,
+    closeConfig: settings.closeConfig,
+    sendMessage: actions.sendMessage,
+    selectSession: actions.selectSession,
+    deleteSession: actions.deleteSession,
+    newChat: actions.newChat,
+    openWorkflowCreate: settings.openWorkflowCreate,
+    openWorkflowEdit: settings.openWorkflowEdit,
+  };
+}
+
+function useSettingsPanelState(router: RouterController): SettingsPanelState {
   const { queryString, settingsTabFromQuery, setQueryString } = useSettingsQueryState();
   const [showConfig, setShowConfig] = useState(false);
 
@@ -110,35 +176,7 @@ export function useHomePageController(): HomePageController {
     }
   }, [settingsTabFromQuery]);
 
-  const sessions = useSessions({ autoRefresh: true });
-  const chat = useBridgeChat({
-    currentSessionId: sessions.currentSessionId,
-    onSessionResolved: sessions.setCurrentSessionId,
-  });
-  const config = useBridgeConfig({ autoRefresh: !showConfig });
-
-  const handleSendMessage = useCallback(async (input: ChatSendInput) => {
-    await chat.sendChatMessage(input);
-    await sessions.loadSessions({ silent: true });
-  }, [chat, sessions]);
-
-  const handleSelectSession = useCallback((id: string) => {
-    sessions.setCurrentSessionId(id);
-    chat.clearBackgroundCompletion(id);
-    if (chat.shouldLoadSessionHistory(id)) {
-      ignorePromise(chat.loadSessionHistory(id));
-    }
-  }, [chat, sessions]);
-
-  const handleDeleteSession = useCallback(async (id: string) => {
-    await sessions.deleteSession(id);
-    chat.dropSessionState(id);
-    if (sessions.currentSessionId === id) {
-      chat.clearMessages('');
-    }
-  }, [chat, sessions]);
-
-  const handleCloseConfig = useCallback(() => {
+  const closeConfig = useCallback(() => {
     setShowConfig(false);
     if (!settingsTabFromQuery) {
       return;
@@ -149,69 +187,55 @@ export function useHomePageController(): HomePageController {
     router.replace(nextQuery.length > 0 ? `/${nextQuery}` : '/');
   }, [queryString, router, settingsTabFromQuery, setQueryString]);
 
-  const inputDisabled = config.configLoading || chat.historyLoading || !config.config || chat.hasPendingQuestion;
-  const topStatusVisible = config.configLoading || (Boolean(config.configError) && !showConfig);
-  const showEmptyHomeState = shouldShowHomeEmptyState({
-    currentSessionId: sessions.currentSessionId,
-    chat,
-    showSystemPromptMessages: config.config?.session_system_prompt_visible_enabled ?? true,
-  });
+  const openWorkflowCreate = useCallback(() => {
+    setShowConfig(false);
+    router.push('/workflow/new');
+  }, [router]);
+
+  const openWorkflowEdit = useCallback((task: WorkflowTaskPayload) => {
+    setShowConfig(false);
+    router.push(`/workflow/${encodeURIComponent(task.id)}`);
+  }, [router]);
 
   return {
-    sessions: sessions.sessions,
-    currentSessionId: sessions.currentSessionId,
-    sessionsLoading: sessions.loading,
-    sessionsError: sessions.error,
-    backgroundCompletedSessionIds: chat.backgroundCompletedSessionIds,
-    committedMessages: chat.committedMessages,
-    streamingAssistantSegments: chat.streamingAssistantSegments,
-    streamingThinkingSegments: chat.streamingThinkingSegments,
-    activeStreamingThinkingId: chat.activeStreamingThinkingId,
-    streamingItemOrder: chat.streamingItemOrder,
-    streamingTools: chat.streamingTools,
-    pendingQuestions: chat.pendingQuestions,
-    loading: chat.loading,
-    historyLoading: chat.historyLoading,
-    loadingOlderHistory: chat.loadingOlderHistory,
-    chatError: chat.chatError,
-    hasPendingQuestion: chat.hasPendingQuestion,
-    hasOlderHistory: chat.hasOlderHistory,
-    canStop: chat.canStop,
-    config: config.config,
-    configLoading: config.configLoading,
-    savingConfig: config.savingConfig,
-    configError: config.configError,
-    modelOptionsLoading: config.modelOptionsLoading,
-    activeModelOption: config.activeModelOption,
-    modelOptions: config.modelOptions,
-    showEmptyHomeState,
-    inputDisabled,
-    topStatusVisible,
-    showConfig,
-    settingsTabFromQuery,
-    answerQuestion: chat.answerQuestion,
-    cancelQuestion: chat.cancelQuestion,
-    loadOlderHistory: chat.loadOlderHistory,
-    stopCurrentRun: chat.stopCurrentRun,
-    saveConfig: config.saveConfig,
-    selectActiveModel: config.selectActiveModel,
-    refreshConfig: config.refreshConfig,
+    closeConfig,
     openConfig: () => setShowConfig(true),
-    closeConfig: handleCloseConfig,
-    sendMessage: handleSendMessage,
-    selectSession: handleSelectSession,
-    deleteSession: handleDeleteSession,
-    newChat: () => {
-      sessions.createNewSession();
-      chat.clearMessages('');
-    },
-    openWorkflowCreate: () => {
-      setShowConfig(false);
-      router.push('/workflow/new');
-    },
-    openWorkflowEdit: (task) => {
-      setShowConfig(false);
-      router.push(`/workflow/${encodeURIComponent(task.id)}`);
-    },
+    openWorkflowCreate,
+    openWorkflowEdit,
+    settingsTabFromQuery,
+    showConfig,
   };
+}
+
+function useHomePageActions(
+  sessions: SessionsController,
+  chat: ChatController,
+): HomePageActions {
+  const sendMessage = useCallback(async (input: ChatSendInput) => {
+    await chat.sendChatMessage(input);
+    await sessions.loadSessions({ silent: true });
+  }, [chat, sessions]);
+
+  const selectSession = useCallback((id: string) => {
+    sessions.setCurrentSessionId(id);
+    chat.clearBackgroundCompletion(id);
+    if (chat.shouldLoadSessionHistory(id)) {
+      ignorePromise(chat.loadSessionHistory(id));
+    }
+  }, [chat, sessions]);
+
+  const deleteSession = useCallback(async (id: string) => {
+    await sessions.deleteSession(id);
+    chat.dropSessionState(id);
+    if (sessions.currentSessionId === id) {
+      chat.clearMessages('');
+    }
+  }, [chat, sessions]);
+
+  const newChat = useCallback(() => {
+    sessions.createNewSession();
+    chat.clearMessages('');
+  }, [chat, sessions]);
+
+  return { deleteSession, newChat, selectSession, sendMessage };
 }
