@@ -3,6 +3,14 @@ import { TOOL_PENDING_STATUS } from './constants';
 import { markRuntimeThinkingBoundary, type ChatRuntimeState } from './runtimeState';
 import type { ToolTagStreamEvent, ToolTagStreamUnit } from '@/lib/toolTagText';
 import { normalizeToolName } from '@/lib/toolNames';
+import { formatToolIDName } from './toolPreviewState';
+
+interface PendingToolActionInput {
+  content: string;
+  id: string;
+  toolName?: string;
+  traceId: string;
+}
 
 export function projectToolTagUnits(
   runtime: ChatRuntimeState,
@@ -41,7 +49,12 @@ function projectToolTagEvent(
   if (event.type === 'tool_open') {
     const messageId = ensurePreviewMessageID(runtime, event.callSeq, event.toolId);
     const args = runtime.previewToolArgs.get(messageId) || '';
-    return buildPendingToolAction(messageId, args, formatToolIDName(event.toolId), traceId);
+    return buildPendingToolAction({
+      id: messageId,
+      content: args,
+      toolName: formatToolIDName(event.toolId),
+      traceId,
+    });
   }
 
   if (event.type === 'tool_args') {
@@ -53,12 +66,12 @@ function projectToolTagEvent(
     const current = runtime.previewToolArgs.get(messageId) || '';
     const next = `${current}${event.argsDelta}`;
     runtime.previewToolArgs.set(messageId, next);
-    return buildPendingToolAction(
-      messageId,
-      next,
-      formatToolIDName(runtime.previewToolIDByMessageId.get(messageId)),
+    return buildPendingToolAction({
+      id: messageId,
+      content: next,
+      toolName: formatToolIDName(runtime.previewToolIDByMessageId.get(messageId)),
       traceId,
-    );
+    });
   }
 
   const messageId = ensurePreviewMessageID(runtime, event.callSeq, event.toolId);
@@ -66,15 +79,16 @@ function projectToolTagEvent(
   if (!runtime.pendingPreviewQueue.includes(messageId)) {
     runtime.pendingPreviewQueue.push(messageId);
   }
-  return buildPendingToolAction(messageId, event.argsText, formatToolIDName(event.toolId), traceId);
+  return buildPendingToolAction({
+    id: messageId,
+    content: event.argsText,
+    toolName: formatToolIDName(event.toolId),
+    traceId,
+  });
 }
 
-function buildPendingToolAction(
-  id: string,
-  content: string,
-  toolName: string | undefined,
-  traceId: string,
-): ChatRuntimeAction {
+function buildPendingToolAction(input: PendingToolActionInput): ChatRuntimeAction {
+  const { content, id, toolName, traceId } = input;
   const toolInput = normalizeToolName(toolName) === 'bash_exec' ? content : '';
   return {
     type: 'upsert_streaming_tool',
@@ -102,12 +116,4 @@ function ensurePreviewMessageID(runtime: ChatRuntimeState, callSeq: number, tool
     runtime.previewToolArgs.set(messageId, '');
   }
   return messageId;
-}
-
-function formatToolIDName(toolId?: string): string | undefined {
-  const trimmed = toolId?.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  return `tool#${trimmed}`;
 }
