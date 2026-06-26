@@ -33,56 +33,87 @@ interface WorkflowCanvasDragCommitControls {
   releaseDrag: () => void;
 }
 
+interface WorkflowCanvasDragRefs {
+  committedMoveRef: MutableRefObject<PendingNodeMove | undefined>;
+  frameRequestRef: MutableRefObject<number | undefined>;
+  pendingMoveRef: MutableRefObject<PendingNodeMove | undefined>;
+}
+
 export function useWorkflowCanvasDragCommit(
   options: WorkflowCanvasDragCommitOptions,
 ): WorkflowCanvasDragCommitControls {
-  const {
-    canvasRef,
-    dragState,
-    onMoveNode,
-    setDragPreview,
-    setDragState,
-    viewport,
-  } = options;
-  const frameRequestRef = useRef<number>();
-  const pendingMoveRef = useRef<PendingNodeMove>();
-  const committedMoveRef = useRef<PendingNodeMove>();
+  const dragRefs = useWorkflowCanvasDragRefs();
+  const releaseDrag = useReleaseCanvasDrag({ ...options, dragRefs });
+  const onDragMouseMove = useCanvasDragMouseMove({ ...options, dragRefs });
 
-  useCancelQueuedMoveOnUnmount(frameRequestRef);
+  return { onDragMouseMove, releaseDrag };
+}
 
-  const releaseDrag = useCallback(() => {
+function useWorkflowCanvasDragRefs(): WorkflowCanvasDragRefs {
+  const dragRefs = {
+    committedMoveRef: useRef<PendingNodeMove>(),
+    frameRequestRef: useRef<number>(),
+    pendingMoveRef: useRef<PendingNodeMove>(),
+  };
+
+  useCancelQueuedMoveOnUnmount(dragRefs.frameRequestRef);
+
+  return dragRefs;
+}
+
+function useReleaseCanvasDrag(options: WorkflowCanvasDragCommitOptions & {
+  dragRefs: WorkflowCanvasDragRefs;
+}): () => void {
+  const { dragRefs, onMoveNode, setDragPreview, setDragState } = options;
+  const { committedMoveRef, frameRequestRef, pendingMoveRef } = dragRefs;
+
+  return useCallback(() => {
     cancelQueuedFrame(frameRequestRef);
     stagePendingMoveForCommit(pendingMoveRef, committedMoveRef);
     commitStagedMove(committedMoveRef, onMoveNode);
     setDragPreview(undefined);
     setDragState(undefined);
-  }, [onMoveNode, setDragPreview, setDragState]);
+  }, [committedMoveRef, frameRequestRef, onMoveNode, pendingMoveRef, setDragPreview, setDragState]);
+}
 
-  const onDragMouseMove = useCallback((event: ReactMouseEvent<HTMLElement>) => {
+function useCanvasDragMouseMove(options: WorkflowCanvasDragCommitOptions & {
+  dragRefs: WorkflowCanvasDragRefs;
+}): (event: ReactMouseEvent<HTMLElement>) => void {
+  const { canvasRef, dragRefs, dragState, setDragPreview, viewport } = options;
+  const queueMove = useQueuedCanvasNodeMove(dragRefs, setDragPreview);
+
+  return useCallback((event: ReactMouseEvent<HTMLElement>) => {
     handleCanvasMouseMove({
       event,
       dragState,
       canvas: canvasRef.current,
       viewport,
-      onQueueMove: (nodeID, position) => {
-        committedMoveRef.current = { nodeID, position };
-        queueNodeMove({
-          nodeID,
-          position,
-          frameRequestRef,
-          pendingMoveRef,
-          onMoveNode: (previewNodeID, previewPosition) => {
-            setDragPreview({
-              nodeID: previewNodeID,
-              position: previewPosition,
-            });
-          },
+      onQueueMove: queueMove,
+    });
+  }, [canvasRef, dragState, queueMove, viewport]);
+}
+
+function useQueuedCanvasNodeMove(
+  dragRefs: WorkflowCanvasDragRefs,
+  setDragPreview: Dispatch<SetStateAction<PendingNodeMove | undefined>>,
+): (nodeID: string, position: WorkflowCanvasPosition) => void {
+  const { committedMoveRef, frameRequestRef, pendingMoveRef } = dragRefs;
+
+  return useCallback((nodeID, position) => {
+    committedMoveRef.current = { nodeID, position };
+    queueNodeMove({
+      nodeID,
+      position,
+      frameRequestRef,
+      pendingMoveRef,
+      onMoveNode: (previewNodeID, previewPosition) => {
+        setDragPreview({
+          nodeID: previewNodeID,
+          position: previewPosition,
         });
       },
     });
-  }, [canvasRef, dragState, setDragPreview, viewport]);
-
-  return { onDragMouseMove, releaseDrag };
+  }, [committedMoveRef, frameRequestRef, pendingMoveRef, setDragPreview]);
 }
 
 function useCancelQueuedMoveOnUnmount(frameRequestRef: MutableRefObject<number | undefined>): void {
