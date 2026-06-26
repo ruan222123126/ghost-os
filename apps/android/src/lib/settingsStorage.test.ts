@@ -24,6 +24,7 @@ describe("settingsStorage", () => {
       bridgeUrl: "http://localhost:9000",
       connectionMode: "http",
       persistComputerSessionsEnabled: false,
+      remoteExecutionEnabled: false,
     });
   });
 
@@ -39,6 +40,7 @@ describe("settingsStorage", () => {
         connectionMode: "http",
       },
       persistComputerSessionsEnabled: true,
+      remoteExecutionEnabled: false,
     };
 
     saveSettings(settings);
@@ -49,6 +51,7 @@ describe("settingsStorage", () => {
       bridgeUrl: "http://localhost:9000",
       connectionMode: "http",
       persistComputerSessionsEnabled: true,
+      remoteExecutionEnabled: false,
       lastSuccessfulConnection: {
         apiToken: "old-token",
         bridgeUrl: "http://localhost:8000",

@@ -16,7 +16,7 @@ import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
 import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
 import { useMobileSessions } from "./hooks/useMobileSessions";
-import type { AgentPayload, MobileConversationMessage, StatusMessage } from "./mobileTypes";
+import type { AgentPayload, ConfigPayload, MobileConversationMessage, ProviderListPayload, StatusMessage, StoredSettings } from "./mobileTypes";
 import "./App.css";
 import "./components/mobileChat/Messages.css";
 import "./components/mobileChat/ToolCards.css";
@@ -33,6 +33,25 @@ function displayRuntime(config: ReturnType<typeof useMobileBridge>["config"]): s
   return config?.provider || config?.model || "Bridge Runtime";
 }
 
+function resolveLocalProvider(providerList: ProviderListPayload | undefined, settings: StoredSettings) {
+  return providerList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
+    ?? providerList?.providers.find((provider) => !provider.deleted_at);
+}
+
+function buildLocalRuntimeConfig(
+  providerList: ProviderListPayload | undefined,
+  settings: StoredSettings,
+): ConfigPayload | undefined {
+  const provider = resolveLocalProvider(providerList, settings);
+  if (!provider) {
+    return undefined;
+  }
+  return {
+    model: settings.localModel?.trim() || provider.models?.[0]?.trim() || "",
+    provider: provider.name,
+  };
+}
+
 function assistantMessageStatus(): StatusMessage {
   return { tone: "success", text: "回复已返回" };
 }
@@ -40,6 +59,7 @@ function assistantMessageStatus(): StatusMessage {
 function App() {
   const {
     activateProvider,
+    appendSessionMessages,
     bridgeUrl,
     config,
     connectBridge,
@@ -51,6 +71,7 @@ function App() {
     getFullSession,
     getSession,
     host,
+    localProviderList,
     providerList,
     refreshProviders,
     refreshSkills,
@@ -81,13 +102,20 @@ function App() {
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [pinnedHistoryIds, setPinnedHistoryIds] = useState<string[]>([]);
+  const localRuntimeConfig = useMemo(() => buildLocalRuntimeConfig(localProviderList, settings), [localProviderList, settings]);
+  const chatConfig = settings.remoteExecutionEnabled ? config : localRuntimeConfig;
+  const chatProviderList = settings.remoteExecutionEnabled ? providerList : localProviderList;
   const mobileSessions = useMobileSessions({
     bridgeConnected: Boolean(config),
+    appendSessionMessages,
     computerSessionSyncScope: `${settings.connectionMode}:${bridgeUrl}:${settings.pairing?.deviceId ?? ""}:${settings.pairing?.pcId ?? ""}:${settings.pairing?.signalingUrl ?? ""}`,
     getFullSession,
     getSession,
     pinnedHistoryIds,
     persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
+    sendAvailable: settings.remoteExecutionEnabled
+      ? Boolean(config)
+      : Boolean(localRuntimeConfig?.provider && localRuntimeConfig?.model),
     sendAgentMessage,
     sessions,
     sessionsLoaded,
@@ -95,7 +123,7 @@ function App() {
   });
   const displayStatus = mobileSessions.activeStatus.tone === "idle" ? status : mobileSessions.activeStatus;
   const canSend = isNonEmptyMessage(message) && mobileSessions.canSend;
-  const runtimeLabel = useMemo(() => displayRuntime(config), [config]);
+  const runtimeLabel = useMemo(() => displayRuntime(chatConfig), [chatConfig]);
   const isModalOpen = isSidebarOpen || isSearchOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
   const {
@@ -216,8 +244,8 @@ function App() {
       <div className="mobile-chat-content" aria-hidden={isModalOpen} inert={isModalOpen ? true : undefined}>
         <ChatHeader
           runtimeLabel={runtimeLabel}
-          config={config}
-          providerList={providerList}
+          config={chatConfig}
+          providerList={chatProviderList}
           status={displayStatus}
           hasConversation={hasLocalConversation}
           runtimeMenuOpen={isRuntimeMenuOpen}
@@ -264,12 +292,12 @@ function App() {
         <ChatComposer
           value={message}
           disabled={!canSend}
-          canStop={mobileSessions.canStop}
+          canStop={settings.remoteExecutionEnabled && mobileSessions.canStop}
           loading={mobileSessions.activeStatus.tone === "loading"}
           onSubmit={sendMessage}
-          onStop={async () => {
+          onStop={settings.remoteExecutionEnabled ? async () => {
             await mobileSessions.stopCurrentRun();
-          }}
+          } : undefined}
           onChange={setMessage}
           onOpenSettings={openSettings}
         />
@@ -278,10 +306,11 @@ function App() {
       <MobileSettingsPanel
         open={isSettingsOpen}
         settings={settings}
-        config={config}
+        config={chatConfig}
         computerSessionPersistStatus={mobileSessions.computerSessionPersistStatus}
         connectionStatus={connectionStatus}
         providerList={providerList}
+        localProviderList={localProviderList}
         onClose={() => setIsSettingsOpen(false)}
         onConnect={connectBridge}
         onActivateProvider={activateProvider}

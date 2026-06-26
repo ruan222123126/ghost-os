@@ -82,6 +82,9 @@ func ValidateRecord(cfg Record) (Record, error) {
 		Type:                       normalizedType,
 		BaseURL:                    strings.TrimSpace(cfg.BaseURL),
 		APIKey:                     cloneOptionalStringPointer(cfg.APIKey),
+		ProviderID:                 strings.TrimSpace(cfg.ProviderID),
+		UpdatedAt:                  strings.TrimSpace(cfg.UpdatedAt),
+		DeletedAt:                  strings.TrimSpace(cfg.DeletedAt),
 		Models:                     NormalizeModels(cfg.Models),
 		ContextWindowTokens:        NormalizePositiveInt(cfg.ContextWindowTokens),
 		ResponseReserveTokens:      NormalizePositiveInt(cfg.ResponseReserveTokens),
@@ -221,6 +224,9 @@ type normalizeFileRecordInput struct {
 	RawType                       llm.Provider
 	BaseURL                       string
 	APIKey                        *string
+	ProviderID                    string
+	UpdatedAt                     string
+	DeletedAt                     string
 	Models                        []string
 	RawContextWindowTokens        int
 	RawResponseReserveTokens      int
@@ -250,6 +256,9 @@ func normalizeFileRecord(input normalizeFileRecordInput) (Record, bool) {
 		Type:                       normalizedType,
 		BaseURL:                    trimmedBaseURL,
 		APIKey:                     normalizedAPIKey,
+		ProviderID:                 strings.TrimSpace(input.ProviderID),
+		UpdatedAt:                  strings.TrimSpace(input.UpdatedAt),
+		DeletedAt:                  strings.TrimSpace(input.DeletedAt),
 		Models:                     normalizedModels,
 		ContextWindowTokens:        NormalizePositiveInt(input.RawContextWindowTokens),
 		ResponseReserveTokens:      NormalizePositiveInt(input.RawResponseReserveTokens),

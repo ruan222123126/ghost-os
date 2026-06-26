@@ -255,7 +255,7 @@ func normalizeAgentExecutionError(err error) (ServiceErrorKind, error) {
 
 // executeAgentAction 执行一次 Agent 回合，并处理“等待人工回答”的中断状态。
 func (s *bridgeService) executeAgentAction(ctx context.Context, params agentParams, traceID string) (ServiceResult, error) {
-	return s.executeAgentActionWithRuntimeOverrides(ctx, params, nil, traceID)
+	return s.executeAgentActionWithRuntimeOverrides(ctx, params, params.RuntimeOverrides, traceID)
 }
 
 func (s *bridgeService) executeAgentActionWithRuntimeOverrides(

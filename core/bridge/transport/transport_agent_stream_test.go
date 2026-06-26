@@ -134,6 +134,54 @@ func TestHandleAgentStreamReturnsHeadersAndEvents(t *testing.T) {
 	}
 }
 
+func TestHandleAgentStreamPassesRuntimeOverrides(t *testing.T) {
+	var capturedRootModel string
+	streamExecutor := func(
+		ctx context.Context,
+		_ string,
+		_ string,
+		traceID string,
+		store bridgeconfig.Store,
+		_ *session.Store,
+		sink streaming.Sink,
+	) (string, string, error) {
+		cfg, err := store.Config()
+		if err != nil {
+			return "", "", err
+		}
+		capturedRootModel = cfg.Provider.Model
+		sessionID := "session-stream-runtime"
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, sessionID, 1, mustAppAssistantStepID(t, 1), streaming.EventMessage, map[string]any{
+			"text":       "ok",
+			"session_id": sessionID,
+		})); err != nil {
+			return "", "", err
+		}
+		if _, err := sink.Emit(ctx, mustAppEvent(t, traceID, sessionID, 1, "", streaming.EventDone, map[string]any{
+			"session_id":    sessionID,
+			"session_ended": false,
+		})); err != nil {
+			return "", "", err
+		}
+		return "ok", sessionID, nil
+	}
+	handler, _ := newTestHandlerWithStreamExecutor(t, nil, streamExecutor)
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent/stream",
+		`{"message":"hello","runtime_overrides":{"provider_name":"openai","model":"gpt-5.4"},"trace_id":"trace-runtime-stream"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if capturedRootModel != "gpt-5.4" {
+		t.Fatalf("unexpected runtime override model: got %q want %q", capturedRootModel, "gpt-5.4")
+	}
+}
+
 func TestHandleAgentStreamTreatsProPrefixAsStandardMessage(t *testing.T) {
 	streamExecutor := func(
 		ctx context.Context,

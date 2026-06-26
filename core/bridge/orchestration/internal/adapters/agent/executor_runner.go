@@ -8,6 +8,7 @@ import (
 	"ghost-os/bridge/orchestration/internal/app/agentturn"
 	"ghost-os/bridge/session"
 	"ghost-os/bridge/streaming"
+	"ghost-os/bridge/taskdefs"
 )
 
 type ExecutorFunc func(
@@ -65,6 +66,22 @@ func (r *ExecutorRunner) RunTurn(
 	return r.executor(ctx, message, sessionID, traceID, r.store, r.sessionStore)
 }
 
+func (r *ExecutorRunner) RunTurnWithOverrides(
+	ctx context.Context,
+	message string,
+	sessionID string,
+	traceID string,
+	runtimeOverrides *taskdefs.TaskRuntimeOverrides,
+) (string, string, error) {
+	store, err := r.storeWithRuntimeOverrides(runtimeOverrides)
+	if err != nil {
+		return "", "", err
+	}
+	cloned := *r
+	cloned.store = store
+	return cloned.RunTurn(ctx, message, sessionID, traceID)
+}
+
 func (r *ExecutorRunner) RunTurnStream(
 	ctx context.Context,
 	message string,
@@ -81,6 +98,23 @@ func (r *ExecutorRunner) RunTurnStream(
 	return r.RunTurn(ctx, message, sessionID, traceID)
 }
 
+func (r *ExecutorRunner) RunTurnStreamWithOverrides(
+	ctx context.Context,
+	message string,
+	sessionID string,
+	traceID string,
+	sink streaming.Sink,
+	runtimeOverrides *taskdefs.TaskRuntimeOverrides,
+) (string, string, error) {
+	store, err := r.storeWithRuntimeOverrides(runtimeOverrides)
+	if err != nil {
+		return "", "", err
+	}
+	cloned := *r
+	cloned.store = store
+	return cloned.RunTurnStream(ctx, message, sessionID, traceID, sink)
+}
+
 func (r *ExecutorRunner) WithRequestRuntimeOptions(options *agentturn.RequestRuntimeOptions) any {
 	if r == nil || options == nil {
 		return r
@@ -88,4 +122,16 @@ func (r *ExecutorRunner) WithRequestRuntimeOptions(options *agentturn.RequestRun
 	cloned := *r
 	cloned.store = bridgeconfig.WithProjectRootOverride(r.store, options.ProjectRoot)
 	return &cloned
+}
+
+func (r *ExecutorRunner) storeWithRuntimeOverrides(
+	runtimeOverrides *taskdefs.TaskRuntimeOverrides,
+) (bridgeconfig.Store, error) {
+	if r == nil {
+		return nil, errors.New("agent runner is not configured")
+	}
+	if runtimeOverrides == nil {
+		return r.store, nil
+	}
+	return r.store.WithRuntimeOverrides(runtimeOverrides.ProviderName, runtimeOverrides.Model)
 }

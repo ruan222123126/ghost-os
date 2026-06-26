@@ -190,6 +190,10 @@ func (s *Service) ExecuteSessionGetAction(params SessionGetParams, traceID strin
 	return s.inner.executeSessionGetAction(params, traceID)
 }
 
+func (s *Service) ExecuteSessionAppendAction(req SessionAppendRequest, traceID string) (ServiceResult, error) {
+	return s.inner.executeSessionAppendAction(req, traceID)
+}
+
 func (s *Service) ExecuteSessionDeleteAction(params SessionIDParams, traceID string) (ServiceResult, error) {
 	return s.inner.executeSessionDeleteAction(params, traceID)
 }

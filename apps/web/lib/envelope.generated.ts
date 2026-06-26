@@ -1,7 +1,7 @@
 // CODE GENERATED. DO NOT EDIT. Source: core/shared/schema.json
 // Source: core/shared/schema.json (https://ghost-os.dev/schemas/bus-envelope.schema.json)
 
-export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_GET' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
+export type BusAction = 'AGENT_SEND' | 'AGENT_STOP' | 'HUMAN_RESPONSE' | 'SESSIONS_LIST' | 'SESSIONS_SEARCH' | 'SESSION_GET' | 'SESSION_APPEND' | 'CONFIG_GET' | 'CONFIG_UPDATE' | 'CONFIG_PROVIDERS_GET' | 'CONFIG_PROVIDER_CREATE' | 'CONFIG_PROVIDER_UPDATE' | 'CONFIG_PROVIDER_DELETE' | 'SKILL_LIST' | 'SKILL_UPDATE' | 'SKILL_DELETE' | 'TASK_CREATE' | 'TASK_LIST' | 'TASK_GET' | 'TASK_UPDATE' | 'TASK_RUN_NOW' | 'TASK_STOP' | 'TASK_LOGS' | 'TASK_DELETE';
 export type BusStatus = 'success' | 'error';
 
 export interface ApiRequest<TParams extends object> {
@@ -38,6 +38,7 @@ export interface AgentRequest {
   images?: SessionImageContent[];
   session_id?: string;
   project_root?: string;
+  runtime_overrides?: TaskRuntimeOverrides;
   trace_id?: string;
 }
 
@@ -316,6 +317,26 @@ export interface SessionTurnDraft {
   item_order: string[];
 }
 
+export interface SessionAppendMessage {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface SessionAppendRequest {
+  session_id: string;
+  expected_head?: number | null;
+  title?: string;
+  messages: SessionAppendMessage[];
+  trace_id?: string;
+}
+
+export interface SessionAppendResponse {
+  session_id: string;
+  status: 'appended' | 'conflict';
+  message_count: number;
+  updated_at: string;
+}
+
 export interface BridgeConfig {
   provider: string;
   provider_type: 'openai' | 'anthropic' | 'custom' | 'codex';
@@ -390,6 +411,9 @@ export interface ProviderConfig {
   name: string;
   type: 'openai' | 'anthropic' | 'custom' | 'codex';
   base_url: string;
+  provider_id: string;
+  updated_at: string;
+  deleted_at?: string;
   models?: string[];
   context_window_tokens?: number;
   response_reserve_tokens?: number;
@@ -415,6 +439,9 @@ export interface TaskRunCardStartedPayload {
 export interface ProviderConfigInput {
   name: string;
   type: 'openai' | 'anthropic' | 'custom' | 'codex';
+  provider_id?: string;
+  updated_at?: string;
+  deleted_at?: string;
   base_url?: string;
   api_key?: string;
   models?: string[];
@@ -431,9 +458,25 @@ export interface TaskRunCardEventPayload {
   source_event: AgentStreamEvent;
 }
 
+export interface ProviderSyncRecord {
+  provider_id: string;
+  updated_at: string;
+  deleted_at?: string;
+  name?: string;
+  type?: 'openai' | 'anthropic' | 'custom' | 'codex';
+  base_url?: string;
+  models?: string[];
+  context_window_tokens?: number;
+  response_reserve_tokens?: number;
+  model_context_window_tokens?: Record<string, number>;
+  model_response_reserve_tokens?: Record<string, number>;
+  api_key_set?: boolean;
+}
+
 export interface ProviderListResponse {
   providers: ProviderConfig[];
   active_provider: string;
+  provider_sync_records?: ProviderSyncRecord[];
 }
 
 export interface TaskRunCardFinishedPayload {
@@ -589,6 +632,9 @@ export interface WorkflowLoopNode {
 
 export interface ProviderBusDeleteRequest {
   name: string;
+  provider_id?: string;
+  updated_at?: string;
+  deleted_at?: string;
   trace_id?: string;
 }
 

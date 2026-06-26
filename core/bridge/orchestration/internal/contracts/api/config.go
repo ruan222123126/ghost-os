@@ -61,6 +61,9 @@ type ProviderConfigResponse struct {
 	Name                       string         `json:"name"`
 	Type                       string         `json:"type"`
 	BaseURL                    string         `json:"base_url"`
+	ProviderID                 string         `json:"provider_id"`
+	UpdatedAt                  string         `json:"updated_at"`
+	DeletedAt                  string         `json:"deleted_at,omitempty"`
 	Models                     []string       `json:"models,omitempty"`
 	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
 	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
@@ -72,6 +75,9 @@ type ProviderConfigResponse struct {
 type ProviderConfigInput struct {
 	Name                       string         `json:"name"`
 	Type                       string         `json:"type"`
+	ProviderID                 string         `json:"provider_id,omitempty"`
+	UpdatedAt                  string         `json:"updated_at,omitempty"`
+	DeletedAt                  string         `json:"deleted_at,omitempty"`
 	BaseURL                    *string        `json:"base_url,omitempty"`
 	APIKey                     *string        `json:"api_key,omitempty"`
 	Models                     []string       `json:"models,omitempty"`
@@ -82,9 +88,25 @@ type ProviderConfigInput struct {
 	TraceID                    string         `json:"trace_id,omitempty"`
 }
 
+type ProviderSyncRecordResponse struct {
+	ProviderID                 string         `json:"provider_id"`
+	UpdatedAt                  string         `json:"updated_at"`
+	DeletedAt                  string         `json:"deleted_at,omitempty"`
+	Name                       string         `json:"name,omitempty"`
+	Type                       string         `json:"type,omitempty"`
+	BaseURL                    string         `json:"base_url,omitempty"`
+	Models                     []string       `json:"models,omitempty"`
+	ContextWindowTokens        int            `json:"context_window_tokens,omitempty"`
+	ResponseReserveTokens      int            `json:"response_reserve_tokens,omitempty"`
+	ModelContextWindowTokens   map[string]int `json:"model_context_window_tokens,omitempty"`
+	ModelResponseReserveTokens map[string]int `json:"model_response_reserve_tokens,omitempty"`
+	APIKeySet                  bool           `json:"api_key_set,omitempty"`
+}
+
 type ProviderListResponse struct {
-	Providers      []ProviderConfigResponse `json:"providers"`
-	ActiveProvider string                   `json:"active_provider"`
+	Providers           []ProviderConfigResponse     `json:"providers"`
+	ActiveProvider      string                       `json:"active_provider"`
+	ProviderSyncRecords []ProviderSyncRecordResponse `json:"provider_sync_records,omitempty"`
 }
 
 type ProviderBusUpdateRequest struct {
@@ -94,8 +116,11 @@ type ProviderBusUpdateRequest struct {
 }
 
 type ProviderBusDeleteRequest struct {
-	Name    string `json:"name"`
-	TraceID string `json:"trace_id,omitempty"`
+	Name       string `json:"name"`
+	ProviderID string `json:"provider_id,omitempty"`
+	UpdatedAt  string `json:"updated_at,omitempty"`
+	DeletedAt  string `json:"deleted_at,omitempty"`
+	TraceID    string `json:"trace_id,omitempty"`
 }
 
 type SetActiveProviderRequest struct {

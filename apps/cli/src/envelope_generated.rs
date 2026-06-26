@@ -57,6 +57,8 @@ pub struct AgentRequest {
     #[serde(default)]
     pub project_root: Option<String>,
     #[serde(default)]
+    pub runtime_overrides: Option<TaskRuntimeOverrides>,
+    #[serde(default)]
     pub trace_id: Option<String>,
 }
 
@@ -455,6 +457,32 @@ pub struct SessionTurnDraft {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionAppendMessage {
+    pub role: String,
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionAppendRequest {
+    pub session_id: String,
+    #[serde(default)]
+    pub expected_head: Option<i64>,
+    #[serde(default)]
+    pub title: Option<String>,
+    pub messages: Vec<SessionAppendMessage>,
+    #[serde(default)]
+    pub trace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct SessionAppendResponse {
+    pub session_id: String,
+    pub status: String,
+    pub message_count: i64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct BridgeConfig {
     pub provider: String,
     pub provider_type: String,
@@ -562,6 +590,10 @@ pub struct ProviderConfig {
     #[serde(rename = "type")]
     pub r#type: String,
     pub base_url: String,
+    pub provider_id: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
     #[serde(default)]
     pub models: Option<Vec<String>>,
     #[serde(default)]
@@ -603,6 +635,12 @@ pub struct ProviderConfigInput {
     #[serde(rename = "type")]
     pub r#type: String,
     #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
+    #[serde(default)]
     pub base_url: Option<String>,
     #[serde(default)]
     pub api_key: Option<String>,
@@ -629,9 +667,38 @@ pub struct TaskRunCardEventPayload {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct ProviderSyncRecord {
+    pub provider_id: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "type")]
+    pub r#type: Option<String>,
+    #[serde(default)]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub models: Option<Vec<String>>,
+    #[serde(default)]
+    pub context_window_tokens: Option<i64>,
+    #[serde(default)]
+    pub response_reserve_tokens: Option<i64>,
+    #[serde(default)]
+    pub model_context_window_tokens: Option<BTreeMap<String, i64>>,
+    #[serde(default)]
+    pub model_response_reserve_tokens: Option<BTreeMap<String, i64>>,
+    #[serde(default)]
+    pub api_key_set: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct ProviderListResponse {
     pub providers: Vec<ProviderConfig>,
     pub active_provider: String,
+    #[serde(default)]
+    pub provider_sync_records: Option<Vec<ProviderSyncRecord>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
@@ -859,6 +926,12 @@ pub struct WorkflowLoopNode {
 #[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
 pub struct ProviderBusDeleteRequest {
     pub name: String,
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub deleted_at: Option<String>,
     #[serde(default)]
     pub trace_id: Option<String>,
 }

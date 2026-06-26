@@ -32,6 +32,7 @@ type DefaultHandlers struct {
 	SessionsList         TraceHandler
 	SessionsSearch       TypedHandler[api.SessionSearchParams]
 	SessionGet           TypedHandler[api.SessionGetParams]
+	SessionAppend        TypedHandler[api.SessionAppendRequest]
 	SkillList            TraceHandler
 	SkillUpdate          TypedHandler[SkillUpdateParams]
 	SkillDelete          TypedHandler[SkillIDParams]
@@ -76,6 +77,7 @@ func registerSessionActions(router *Router, handlers DefaultHandlers) {
 	RegisterTrace(router, bus.ActionSessionsList, handlers.SessionsList)
 	RegisterTyped(router, bus.ActionSessionsSearch, handlers.SessionsSearch)
 	RegisterTyped(router, bus.ActionSessionGet, handlers.SessionGet)
+	RegisterTyped(router, bus.ActionSessionAppend, handlers.SessionAppend)
 }
 
 func registerSkillActions(router *Router, handlers DefaultHandlers) {

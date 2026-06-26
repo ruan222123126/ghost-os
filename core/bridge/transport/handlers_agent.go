@@ -42,11 +42,12 @@ func (t *transport) handleAgent(w http.ResponseWriter, r *http.Request) {
 
 	traceID := resolveTraceID(req.TraceID, r)
 	result, err := t.usecases.agent.Send(r.Context(), bridgeorchestration.AgentParams{
-		Mode:        req.Mode,
-		Message:     req.Message,
-		Images:      req.Images,
-		SessionID:   req.SessionID,
-		ProjectRoot: req.ProjectRoot,
+		Mode:             req.Mode,
+		Message:          req.Message,
+		Images:           req.Images,
+		SessionID:        req.SessionID,
+		ProjectRoot:      req.ProjectRoot,
+		RuntimeOverrides: req.RuntimeOverrides,
 	}, traceID)
 	respondServiceContractActionResult(w, traceID, bridgeorchestration.BusActionAgentSend, result, err)
 }
@@ -113,11 +114,12 @@ func (t *transport) handleAgentStream(w http.ResponseWriter, r *http.Request) {
 
 	traceID := resolveTraceID(req.TraceID, r)
 	params := bridgeorchestration.AgentParams{
-		Mode:        req.Mode,
-		Message:     req.Message,
-		Images:      req.Images,
-		SessionID:   req.SessionID,
-		ProjectRoot: req.ProjectRoot,
+		Mode:             req.Mode,
+		Message:          req.Message,
+		Images:           req.Images,
+		SessionID:        req.SessionID,
+		ProjectRoot:      req.ProjectRoot,
+		RuntimeOverrides: req.RuntimeOverrides,
 	}
 	prepared, result, err := t.usecases.agent.PrepareStream(r.Context(), params, traceID)
 	if err != nil {

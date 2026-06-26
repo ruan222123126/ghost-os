@@ -7,6 +7,7 @@ const (
 	ActionSessionsList         = "SESSIONS_LIST"
 	ActionSessionsSearch       = "SESSIONS_SEARCH"
 	ActionSessionGet           = "SESSION_GET"
+	ActionSessionAppend        = "SESSION_APPEND"
 	ActionConfigGet            = "CONFIG_GET"
 	ActionConfigUpdate         = "CONFIG_UPDATE"
 	ActionConfigProvidersGet   = "CONFIG_PROVIDERS_GET"

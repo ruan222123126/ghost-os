@@ -12,6 +12,13 @@ import {
 } from "../lib/mobileAgentStreamRuntime";
 import type { MobileAgentStreamProjector } from "../lib/mobileAgentStreamRuntime";
 import { loadMobileCredential } from "../lib/mobileCredentials";
+import { sendLocalLLMMessage } from "../lib/mobileLocalLLM";
+import {
+  createOrUpdateLocalProvider,
+  deleteLocalProvider as deleteStoredLocalProvider,
+  exportLocalProvider,
+  loadLocalProviderList,
+} from "../lib/mobileLocalProviders";
 import { parseSessionDetail, parseSessionMetadataList } from "../lib/sessionPayloadParser";
 import { MobileWebRTCBridge } from "../lib/mobileWebRTC";
 import { loadSettings, normalizeBridgeUrl, saveSettings } from "../lib/settingsStorage";
@@ -19,6 +26,7 @@ import type {
   AgentPayload,
   ConfigPayload,
   HostProfile,
+  MobileConversationMessage,
   ProviderConfigInputPayload,
   ProviderListPayload,
   SessionDetail,
@@ -29,6 +37,7 @@ import type {
   StoredSettings,
   TaskPayload,
   UnknownTaskPayload,
+  ProviderConfigPayload,
 } from "../mobileTypes";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
@@ -37,6 +46,7 @@ const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
 interface SendAgentMessageOptions {
   message: string;
+  history: MobileConversationMessage[];
   onReply: (reply: AgentPayload) => void;
   onSessionId: (sessionId: string) => void;
   onStatus: (status: StatusMessage) => void;
@@ -46,6 +56,7 @@ interface SendAgentMessageOptions {
 }
 
 interface SendAgentMessageResult {
+  mode?: "local" | "remote";
   ok: boolean;
   reply?: AgentPayload;
   sessionId?: string;
@@ -60,6 +71,19 @@ interface StopAgentRunResult {
   ok: boolean;
   sessionId?: string;
   status?: "stopped" | "not_running";
+}
+
+interface AppendSessionMessagesInput {
+  expectedHead?: number;
+  messages: MobileConversationMessage[];
+  sessionId: string;
+  title: string;
+}
+
+interface AppendSessionMessagesResult {
+  messageCount: number;
+  status: "appended" | "conflict";
+  updatedAt: string;
 }
 
 interface AgentStopPayload {
@@ -153,9 +177,50 @@ function stringsEqualIgnoreCase(left: string, right: string): boolean {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
 
-function firstProviderModel(providerList: ProviderListPayload | undefined, providerName: string): string | undefined {
-  const provider = providerList?.providers.find((item) => stringsEqualIgnoreCase(item.name, providerName));
-  return provider?.models?.map((item) => item.trim()).find(Boolean);
+function withLocalProviderSelection(
+  providerList: ProviderListPayload | undefined,
+  settings: StoredSettings,
+): ProviderListPayload | undefined {
+  if (!providerList) {
+    return undefined;
+  }
+  const activeProvider = providerList.providers.find((provider) => provider.provider_id === settings.localProviderId)
+    ?? providerList.providers.find((provider) => !provider.deleted_at);
+  return {
+    ...providerList,
+    active_provider: activeProvider?.name || "",
+    active_provider_id: activeProvider?.provider_id,
+  };
+}
+
+function mergeLocalProvidersWithRemote(
+  localProviderList: ProviderListPayload | undefined,
+  remoteProviderList: ProviderListPayload | undefined,
+): ProviderListPayload | undefined {
+  if (!localProviderList && !remoteProviderList) {
+    return undefined;
+  }
+
+  const merged = new Map<string, ProviderConfigPayload>();
+  for (const provider of localProviderList?.providers ?? []) {
+    merged.set(provider.provider_id, provider);
+  }
+  for (const provider of remoteProviderList?.providers ?? []) {
+    const current = merged.get(provider.provider_id);
+    if (!current || provider.updated_at >= current.updated_at) {
+      merged.set(provider.provider_id, {
+        ...provider,
+        sync_state: "synced",
+      });
+    }
+  }
+
+  return {
+    active_provider: remoteProviderList?.active_provider || localProviderList?.active_provider || "",
+    active_provider_id: remoteProviderList?.active_provider_id || localProviderList?.active_provider_id,
+    provider_sync_records: remoteProviderList?.provider_sync_records ?? localProviderList?.provider_sync_records,
+    providers: [...merged.values()],
+  };
 }
 
 function escapeRegExp(value: string): string {
@@ -198,6 +263,7 @@ export function useMobileBridge() {
   const [host, setHost] = useState<HostProfile>();
   const [config, setConfig] = useState<ConfigPayload>();
   const [providerList, setProviderList] = useState<ProviderListPayload>();
+  const [localProviderList, setLocalProviderList] = useState<ProviderListPayload>();
   const [skillList, setSkillList] = useState<SkillPayload[]>();
   const [skillListError, setSkillListError] = useState("");
   const [taskList, setTaskList] = useState<TaskPayload[]>();
@@ -241,6 +307,16 @@ export function useMobileBridge() {
   useEffect(() => {
     saveSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    void loadLocalProviderList()
+      .then((payload) => {
+        setLocalProviderList(payload);
+      })
+      .catch((error: unknown) => {
+        console.error("[useMobileBridge] load local providers failed", error);
+      });
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -316,6 +392,69 @@ export function useMobileBridge() {
     return payload;
   }, [requestBridge]);
 
+  const syncLocalProvidersToRemote = useCallback(
+    async (remote: ProviderListPayload): Promise<void> => {
+      const local = await loadLocalProviderList();
+      const remoteById = new Map((remote.provider_sync_records ?? []).map((record) => [record.provider_id, record]));
+
+      for (const provider of local.providers) {
+        const remoteRecord = remoteById.get(provider.provider_id);
+        if (remoteRecord && remoteRecord.updated_at >= provider.updated_at) {
+          continue;
+        }
+
+        const exported = await exportLocalProvider(provider.provider_id);
+        if (exported.deleted_at) {
+          await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_DELETE", {
+            deleted_at: exported.deleted_at,
+            name: exported.name,
+            provider_id: exported.provider_id,
+            updated_at: exported.updated_at,
+          });
+          continue;
+        }
+
+        if (remoteRecord) {
+          await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_UPDATE", {
+            name: exported.name,
+            provider: { ...exported } as Record<string, unknown>,
+          });
+          continue;
+        }
+
+        await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_CREATE", { ...exported });
+      }
+    },
+    [requestBridge],
+  );
+
+  const syncRemoteProvidersToLocal = useCallback(async (remote: ProviderListPayload): Promise<void> => {
+    const local = await loadLocalProviderList();
+    const localById = new Map(local.providers.map((provider) => [provider.provider_id, provider]));
+
+    for (const record of remote.provider_sync_records ?? []) {
+      const localProvider = localById.get(record.provider_id);
+      if (localProvider && localProvider.updated_at > record.updated_at) {
+        continue;
+      }
+
+      await createOrUpdateLocalProvider({
+        base_url: record.base_url,
+        deleted_at: record.deleted_at,
+        model_context_window_tokens: record.model_context_window_tokens,
+        model_response_reserve_tokens: record.model_response_reserve_tokens,
+        models: record.models,
+        name: record.name || localProvider?.name || record.provider_id,
+        provider_id: record.provider_id,
+        response_reserve_tokens: record.response_reserve_tokens,
+        type: record.type ?? localProvider?.type ?? "openai",
+        updated_at: record.updated_at,
+      });
+    }
+
+    setLocalProviderList(await loadLocalProviderList());
+  }, []);
+
   const loadSkills = useCallback(async (): Promise<SkillPayload[]> => {
     setSkillListError("");
     const payload = await requestBridge<SkillPayload[]>("SKILL_LIST", {});
@@ -340,22 +479,48 @@ export function useMobileBridge() {
     return configPayload;
   }, [loadProviders, requestBridge]);
 
+  const refreshLocalProviders = useCallback(async (): Promise<ProviderListPayload> => {
+    const payload = await loadLocalProviderList();
+    setLocalProviderList(payload);
+    return payload;
+  }, []);
+
   const refreshProviders = useCallback(async (): Promise<boolean> => {
     setStatus({ tone: "loading", text: "供应商刷新中" });
     try {
-      await loadProviders();
+      await Promise.all([
+        refreshLocalProviders(),
+        connectionStatus.tone === "success" ? loadProviders() : Promise.resolve(undefined),
+      ]);
       setStatus({ tone: "success", text: "供应商已刷新" });
       return true;
     } catch (error) {
       setStatus({ tone: "error", text: errorMessage(error) });
       return false;
     }
-  }, [loadProviders]);
+  }, [connectionStatus.tone, loadProviders, refreshLocalProviders]);
 
-  const syncConfigAfterProviderWrite = useCallback(async (): Promise<void> => {
-    const payload = await requestBridge<ConfigPayload>("CONFIG_GET", {});
-    setConfig(payload);
-  }, [requestBridge]);
+  const syncProvidersBidirectionally = useCallback(async (): Promise<void> => {
+    if (connectionStatus.tone !== "success") {
+      return;
+    }
+    const remote = await loadProviders();
+    await syncLocalProvidersToRemote(remote);
+    const refreshedRemote = await loadProviders();
+    await syncRemoteProvidersToLocal(refreshedRemote);
+  }, [connectionStatus.tone, loadProviders, syncLocalProvidersToRemote, syncRemoteProvidersToLocal]);
+
+  useEffect(() => {
+    if (connectionStatus.tone === "success") {
+      void syncProvidersBidirectionally().catch((error: unknown) => {
+        console.error("[useMobileBridge] provider sync failed", error);
+      });
+      return;
+    }
+    setSettings((current) => (current.remoteExecutionEnabled
+      ? { ...current, remoteExecutionEnabled: false }
+      : current));
+  }, [connectionStatus.tone, syncProvidersBidirectionally]);
 
   const refreshSkills = useCallback(async (): Promise<boolean> => {
     setStatus({ tone: "loading", text: "技能刷新中" });
@@ -498,53 +663,40 @@ export function useMobileBridge() {
 
   const createProvider = useCallback(
     async (provider: ProviderConfigInputPayload): Promise<boolean> => {
-      setStatus({ tone: "loading", text: "供应商保存中" });
-      try {
-        const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_CREATE", { ...provider });
-        setProviderList(payload);
-        await syncConfigAfterProviderWrite();
-        setStatus({ tone: "success", text: "供应商已新增" });
-        return true;
-      } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
-        return false;
-      }
+      setStatus({ tone: "loading", text: "本地供应商保存中" });
+      const payload = await createOrUpdateLocalProvider(provider);
+      setLocalProviderList(payload);
+      setStatus({ tone: "success", text: "本地供应商已新增" });
+      return true;
     },
-    [requestBridge, syncConfigAfterProviderWrite],
+    [],
   );
 
   const updateProvider = useCallback(
     async (name: string, provider: ProviderConfigInputPayload): Promise<boolean> => {
-      setStatus({ tone: "loading", text: "供应商保存中" });
-      try {
-        const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_UPDATE", { name, provider });
-        setProviderList(payload);
-        await syncConfigAfterProviderWrite();
-        setStatus({ tone: "success", text: "供应商已保存" });
-        return true;
-      } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
-        return false;
-      }
+      void name;
+      setStatus({ tone: "loading", text: "本地供应商保存中" });
+      const payload = await createOrUpdateLocalProvider(provider);
+      setLocalProviderList(payload);
+      setStatus({ tone: "success", text: "本地供应商已保存" });
+      return true;
     },
-    [requestBridge, syncConfigAfterProviderWrite],
+    [],
   );
 
   const deleteProvider = useCallback(
     async (name: string): Promise<boolean> => {
-      setStatus({ tone: "loading", text: "供应商删除中" });
-      try {
-        const payload = await requestBridge<ProviderListPayload>("CONFIG_PROVIDER_DELETE", { name });
-        setProviderList(payload);
-        await syncConfigAfterProviderWrite();
-        setStatus({ tone: "success", text: "供应商已删除" });
-        return true;
-      } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
+      setStatus({ tone: "loading", text: "本地供应商删除中" });
+      const providerId = localProviderList?.providers.find((item) => item.name === name)?.provider_id;
+      if (!providerId) {
         return false;
       }
+      const payload = await deleteStoredLocalProvider(providerId);
+      setLocalProviderList(payload);
+      setStatus({ tone: "success", text: "本地供应商已删除" });
+      return true;
     },
-    [requestBridge, syncConfigAfterProviderWrite],
+    [localProviderList?.providers],
   );
 
   const activateProvider = useCallback(
@@ -553,24 +705,19 @@ export function useMobileBridge() {
       if (!trimmed) {
         return false;
       }
-      setStatus({ tone: "loading", text: "供应商切换中" });
-      try {
-        const params: Record<string, unknown> = { provider: trimmed };
-        const firstModel = firstProviderModel(providerList, trimmed);
-        if (config?.model_selection_enabled !== false && firstModel) {
-          params.model = firstModel;
-        }
-        const configPayload = await requestBridge<ConfigPayload>("CONFIG_UPDATE", params);
-        setConfig(configPayload);
-        await loadProviders();
-        setStatus({ tone: "success", text: "供应商已激活" });
-        return true;
-      } catch (error) {
-        setStatus({ tone: "error", text: errorMessage(error) });
+      const activeProvider = localProviderList?.providers.find((provider) => stringsEqualIgnoreCase(provider.name, trimmed));
+      if (!activeProvider) {
         return false;
       }
+      setSettings((current) => ({
+        ...current,
+        localModel: current.localModel?.trim() || activeProvider.models?.[0]?.trim() || "",
+        localProviderId: activeProvider.provider_id,
+      }));
+      setStatus({ tone: "success", text: "本地供应商已激活" });
+      return true;
     },
-    [config?.model_selection_enabled, loadProviders, providerList, requestBridge],
+    [localProviderList?.providers],
   );
 
   const refreshSessions = useCallback(async (): Promise<SessionMetadata[]> => {
@@ -663,6 +810,33 @@ export function useMobileBridge() {
     [requestBridge],
   );
 
+  const appendSessionMessages = useCallback(
+    async (input: AppendSessionMessagesInput): Promise<AppendSessionMessagesResult> => {
+      const payload = await requestBridge<{
+        message_count: number;
+        status: "appended" | "conflict";
+        updated_at: string;
+      }>("SESSION_APPEND", {
+        expected_head: input.expectedHead,
+        messages: input.messages.map((message) => ({
+          role: message.role,
+          text: message.text,
+        })),
+        session_id: input.sessionId,
+        title: input.title,
+      });
+      if (payload.status === "appended") {
+        refreshSessionsInBackground();
+      }
+      return {
+        messageCount: payload.message_count,
+        status: payload.status,
+        updatedAt: payload.updated_at,
+      };
+    },
+    [refreshSessionsInBackground, requestBridge],
+  );
+
   const connectBridge = useCallback(async (): Promise<void> => {
     setConnectionStatus({ tone: "loading", text: "连接中" });
     try {
@@ -747,6 +921,11 @@ export function useMobileBridge() {
       if (!trimmed) {
         return false;
       }
+      if (!settings.remoteExecutionEnabled) {
+        setSettings((current) => ({ ...current, localModel: trimmed }));
+        setStatus({ tone: "success", text: "本地模型已切换" });
+        return true;
+      }
       if (config?.model === trimmed) {
         return true;
       }
@@ -763,7 +942,7 @@ export function useMobileBridge() {
         return false;
       }
     },
-    [config?.model, loadProviders, requestBridge],
+    [config?.model, loadProviders, requestBridge, settings.remoteExecutionEnabled],
   );
 
   const sendAgentMessage = useCallback(
@@ -771,11 +950,61 @@ export function useMobileBridge() {
       const traceId = options.traceId?.trim() || createTraceId("android-agent-stream");
       const requestId = options.requestId?.trim() || createTraceId("android-agent-stream-request");
       const initialSessionId = options.sessionId?.trim() || "";
+      if (!settings.remoteExecutionEnabled) {
+        const localProvider = localProviderList?.providers.find((provider) => provider.provider_id === settings.localProviderId)
+          ?? localProviderList?.providers.find((provider) => !provider.deleted_at);
+        const model = settings.localModel?.trim() || localProvider?.models?.[0]?.trim() || "";
+        if (!localProvider || !model) {
+          options.onStatus({ tone: "error", text: "请先配置本地 provider 和模型" });
+          return { ok: false };
+        }
+        options.onStatus({ tone: "loading", text: "本地生成中" });
+        try {
+          const history = options.history.map((message) => ({
+            role: message.role,
+            text: message.text,
+          }));
+          const response = await sendLocalLLMMessage({
+            history,
+            model,
+            provider: localProvider,
+            sessionId: initialSessionId || `mobile-${requestId}`,
+            traceId,
+          });
+          const sessionId = initialSessionId || `mobile-${requestId}`;
+          options.onSessionId(sessionId);
+          options.onReply({
+            message: response.message,
+            session_ended: false,
+            session_id: sessionId,
+          });
+          options.onStatus({ tone: "success", text: "回复已返回" });
+          return {
+            mode: "local",
+            ok: true,
+            reply: {
+              message: response.message,
+              session_ended: false,
+              session_id: sessionId,
+            },
+            sessionId,
+          };
+        } catch (error) {
+          options.onStatus({ tone: "error", text: errorMessage(error) });
+          return { ok: false };
+        }
+      }
       const runtime = createMobileAgentStreamRuntime(initialSessionId);
-      const params = {
+      const params: Record<string, unknown> = {
         message: options.message,
         ...(initialSessionId ? { session_id: initialSessionId } : {}),
       };
+      if (config?.provider && config?.model) {
+        params.runtime_overrides = {
+          model: config.model,
+          provider_name: config.provider,
+        };
+      }
       const projector: MobileAgentStreamProjector = {
         commitReply: (nextRuntime) => {
           options.onReply(createAgentPayloadFromRuntime(nextRuntime));
@@ -818,6 +1047,7 @@ export function useMobileBridge() {
           options.onStatus({ tone: "success", text: result.sessionEnded ? "会话已结束" : "回复已返回" });
         }
         return {
+          mode: "remote",
           ok: true,
           reply: createAgentPayloadFromRuntime(runtime),
           sessionId: runtime.sessionId || resolvedSessionId,
@@ -827,7 +1057,18 @@ export function useMobileBridge() {
         return { ok: false };
       }
     },
-    [apiToken, bridgeUrl, refreshSessionsInBackground, settings.connectionMode],
+    [
+      apiToken,
+      bridgeUrl,
+      config?.model,
+      config?.provider,
+      localProviderList?.providers,
+      refreshSessionsInBackground,
+      settings.connectionMode,
+      settings.localModel,
+      settings.localProviderId,
+      settings.remoteExecutionEnabled,
+    ],
   );
 
   const stopAgentRun = useCallback(
@@ -864,6 +1105,7 @@ export function useMobileBridge() {
 
   return {
     activateProvider,
+    appendSessionMessages,
     bridgeUrl,
     config,
     connectBridge,
@@ -874,8 +1116,13 @@ export function useMobileBridge() {
     getFullSession,
     getSession,
     host,
-    providerList,
+    providerList: mergeLocalProvidersWithRemote(
+      withLocalProviderSelection(localProviderList, settings),
+      providerList,
+    ),
+    localProviderList: withLocalProviderSelection(localProviderList, settings),
     refreshProviders,
+    refreshLocalProviders,
     refreshSkills,
     refreshTasks,
     runTaskNow,

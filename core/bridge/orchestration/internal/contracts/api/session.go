@@ -126,3 +126,23 @@ type SessionDetail struct {
 	TokenCount   int                `json:"token_count"`
 	TurnDraft    *SessionTurnDraft  `json:"turn_draft,omitempty"`
 }
+
+type SessionAppendMessage struct {
+	Role string `json:"role"`
+	Text string `json:"text"`
+}
+
+type SessionAppendRequest struct {
+	SessionID    string                 `json:"session_id"`
+	ExpectedHead *int                   `json:"expected_head,omitempty"`
+	Title        string                 `json:"title,omitempty"`
+	Messages     []SessionAppendMessage `json:"messages"`
+	TraceID      string                 `json:"trace_id,omitempty"`
+}
+
+type SessionAppendResponse struct {
+	SessionID    string `json:"session_id"`
+	Status       string `json:"status"`
+	MessageCount int    `json:"message_count"`
+	UpdatedAt    string `json:"updated_at"`
+}

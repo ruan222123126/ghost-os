@@ -223,6 +223,23 @@ func (s *bridgeService) runPreparedAgentTurnStream(
 	if err != nil {
 		return "", "", err
 	}
+	if prepared.RuntimeOverrides != nil {
+		if hasAgentInputImages(prepared.UserInput) {
+			return "", "", errRuntimeOverrideWithImages
+		}
+		runnerWithOverrides, ok := runner.(SessionTurnStreamRunnerWithOverrides)
+		if !ok {
+			return "", "", errRuntimeOverrideRunnerRequired
+		}
+		return runnerWithOverrides.RunTurnStreamWithOverrides(
+			ctx,
+			prepared.Message,
+			prepared.SessionID,
+			traceID,
+			sink,
+			prepared.RuntimeOverrides,
+		)
+	}
 	if hasAgentInputImages(prepared.UserInput) {
 		runner, ok := runner.(StructuredSessionTurnRunner)
 		if !ok {
@@ -241,7 +258,7 @@ func (s *bridgeService) prepareAgentStreamAction(
 	if err := ctx.Err(); err != nil {
 		return PreparedAgentStream{}, ServiceResult{}, bus.WrapError(ServiceErrorConflict, err)
 	}
-	prepared, err := s.agentTurnService().Prepare(params, nil, traceID)
+	prepared, err := s.agentTurnService().Prepare(params, params.RuntimeOverrides, traceID)
 	if err != nil {
 		return PreparedAgentStream{}, ServiceResult{}, err
 	}

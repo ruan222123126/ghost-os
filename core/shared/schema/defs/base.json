@@ -9,6 +9,7 @@
         "SESSIONS_LIST",
         "SESSIONS_SEARCH",
         "SESSION_GET",
+        "SESSION_APPEND",
         "CONFIG_GET",
         "CONFIG_UPDATE",
         "CONFIG_PROVIDERS_GET",

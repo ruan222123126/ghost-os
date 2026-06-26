@@ -23,6 +23,7 @@ type Store interface {
 	PublicSnapshot() (bridgeconfig.Snapshot, error)
 	Update(bridgeconfig.UpdateRequest) error
 	ListProviders() ([]bridgeconfig.ProviderRecord, error)
+	ListProviderSyncRecords() ([]bridgeconfig.ProviderRecord, error)
 	AddProvider(bridgeconfig.ProviderRecord) error
 	UpdateProvider(string, bridgeconfig.ProviderRecord) error
 	DeleteProvider(string) error
@@ -107,9 +108,14 @@ func (s Service) providerListPayload() (api.ProviderListResponse, error) {
 	if err != nil {
 		return api.ProviderListResponse{}, err
 	}
+	syncRecords, err := s.Store.ListProviderSyncRecords()
+	if err != nil {
+		return api.ProviderListResponse{}, err
+	}
 	return api.ProviderListResponse{
-		Providers:      BuildProviderConfigResponses(providers),
-		ActiveProvider: s.Store.Snapshot().Provider,
+		Providers:           BuildProviderConfigResponses(providers),
+		ActiveProvider:      s.Store.Snapshot().Provider,
+		ProviderSyncRecords: BuildProviderSyncRecordResponses(syncRecords),
 	}, nil
 }
 
@@ -125,6 +131,9 @@ func providerRecordFromInput(req api.ProviderConfigInput) bridgeconfig.ProviderR
 		Type:                       llm.Provider(req.Type),
 		BaseURL:                    StringValue(req.BaseURL),
 		APIKey:                     CloneOptionalStringPointer(req.APIKey),
+		ProviderID:                 strings.TrimSpace(req.ProviderID),
+		UpdatedAt:                  strings.TrimSpace(req.UpdatedAt),
+		DeletedAt:                  strings.TrimSpace(req.DeletedAt),
 		Models:                     req.Models,
 		ContextWindowTokens:        req.ContextWindowTokens,
 		ResponseReserveTokens:      req.ResponseReserveTokens,
@@ -144,12 +153,40 @@ func BuildProviderConfigResponses(providers []bridgeconfig.ProviderRecord) []api
 			Name:                       provider.Name,
 			Type:                       string(provider.Type),
 			BaseURL:                    provider.BaseURL,
+			ProviderID:                 provider.ProviderID,
+			UpdatedAt:                  provider.UpdatedAt,
+			DeletedAt:                  provider.DeletedAt,
 			Models:                     append([]string(nil), provider.Models...),
 			APIKeySet:                  strings.TrimSpace(StringValue(provider.APIKey)) != "",
 			ContextWindowTokens:        provider.ContextWindowTokens,
 			ResponseReserveTokens:      provider.ResponseReserveTokens,
 			ModelContextWindowTokens:   CloneModelTokenOverrides(provider.ModelContextWindowTokens),
 			ModelResponseReserveTokens: CloneModelTokenOverrides(provider.ModelResponseReserveTokens),
+		})
+	}
+	return out
+}
+
+func BuildProviderSyncRecordResponses(providers []bridgeconfig.ProviderRecord) []api.ProviderSyncRecordResponse {
+	if len(providers) == 0 {
+		return []api.ProviderSyncRecordResponse{}
+	}
+
+	out := make([]api.ProviderSyncRecordResponse, 0, len(providers))
+	for _, provider := range providers {
+		out = append(out, api.ProviderSyncRecordResponse{
+			ProviderID:                 provider.ProviderID,
+			UpdatedAt:                  provider.UpdatedAt,
+			DeletedAt:                  provider.DeletedAt,
+			Name:                       provider.Name,
+			Type:                       string(provider.Type),
+			BaseURL:                    provider.BaseURL,
+			Models:                     append([]string(nil), provider.Models...),
+			ContextWindowTokens:        provider.ContextWindowTokens,
+			ResponseReserveTokens:      provider.ResponseReserveTokens,
+			ModelContextWindowTokens:   CloneModelTokenOverrides(provider.ModelContextWindowTokens),
+			ModelResponseReserveTokens: CloneModelTokenOverrides(provider.ModelResponseReserveTokens),
+			APIKeySet:                  strings.TrimSpace(StringValue(provider.APIKey)) != "",
 		})
 	}
 	return out

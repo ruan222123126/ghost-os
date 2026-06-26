@@ -13,6 +13,7 @@ const (
 	ActionList                 = "SESSIONS_LIST"
 	ActionSearch               = "SESSIONS_SEARCH"
 	ActionGet                  = "SESSION_GET"
+	ActionAppend               = "SESSION_APPEND"
 	ActionDelete               = "SESSION_DELETE"
 	ActionSources              = "SESSION_SOURCES"
 	ActionSidebarPartitionsGet = "SESSION_PARTITIONS_GET"
@@ -127,6 +128,22 @@ func (s Service) Get(params api.SessionGetParams, traceID string) (api.SessionDe
 
 	payload := sessionturn.BuildSessionDetailPayload(BuildDetailInput(sess, page), params.Before == nil)
 	s.log(traceID, ActionGet, "success", nil)
+	return payload, nil
+}
+
+func (s Service) Append(req api.SessionAppendRequest, traceID string) (api.SessionAppendResponse, error) {
+	store, err := s.requireSessionStore()
+	if err != nil {
+		s.log(traceID, ActionAppend, "error", err)
+		return api.SessionAppendResponse{}, err
+	}
+
+	payload, err := AppendSession(store, req)
+	if err != nil {
+		s.log(traceID, ActionAppend, "error", err)
+		return api.SessionAppendResponse{}, err
+	}
+	s.log(traceID, ActionAppend, "success", nil)
 	return payload, nil
 }
 

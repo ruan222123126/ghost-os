@@ -256,6 +256,85 @@ func TestBusSessionGetRejectsInvalidParams(t *testing.T) {
 	}
 }
 
+func TestBusSessionAppendAppendsMessages(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	sess := session.NewSession("system")
+	sess.ID = "session-append"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSION_APPEND","params":{"session_id":"session-append","expected_head":2,"messages":[{"role":"assistant","text":"world"}]},"trace_id":"trace-session-append"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["status"] != "appended" {
+		t.Fatalf("unexpected append status: %#v", payload)
+	}
+	loaded, err := sessionStore.Load("session-append")
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.MessageCount != 3 {
+		t.Fatalf("unexpected message count: got %d want 3", loaded.MessageCount)
+	}
+	if loaded.Messages[2].Text != "world" {
+		t.Fatalf("unexpected appended message: %+v", loaded.Messages[2])
+	}
+}
+
+func TestBusSessionAppendReturnsConflictOnHeadMismatch(t *testing.T) {
+	handler, sessionStore := newTestHandlerWithStore(t, nil)
+
+	sess := session.NewSession("system")
+	sess.ID = "session-append-conflict"
+	sess.AddMessage(llm.Message{Role: llm.RoleUser, Text: "hello"})
+	if err := sessionStore.Save(sess); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/bus",
+		`{"action":"SESSION_APPEND","params":{"session_id":"session-append-conflict","expected_head":1,"messages":[{"role":"assistant","text":"world"}]},"trace_id":"trace-session-append-conflict"}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+
+	body := decodeResponseBody(t, recorder)
+	payload, ok := body.Payload.(map[string]any)
+	if !ok {
+		t.Fatalf("unexpected payload type: %T", body.Payload)
+	}
+	if payload["status"] != "conflict" {
+		t.Fatalf("unexpected append status: %#v", payload)
+	}
+	loaded, err := sessionStore.Load("session-append-conflict")
+	if err != nil {
+		t.Fatalf("load session: %v", err)
+	}
+	if loaded.MessageCount != 2 {
+		t.Fatalf("expected no appended messages on conflict, got %d", loaded.MessageCount)
+	}
+}
+
 func TestHandleSessionsSearchMatchesTitle(t *testing.T) {
 	handler, sessionStore := newTestHandlerWithStore(t, nil)
 

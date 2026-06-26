@@ -5,12 +5,14 @@ import { hasTauriRuntime } from "./bridgeBus";
 export const MOBILE_CONVERSATIONS_STORAGE_KEY = "ghost-os-mobile.conversations.v1";
 
 interface ConversationUpsert {
+  bridgeMessageCount?: number;
   id: string;
   title: string;
   messages: MobileConversationMessage[];
   createdAt?: string;
   preserveExistingTitle?: boolean;
   sourceMessageCount?: number;
+  syncedMessageCount?: number;
   updatedAt?: string;
 }
 
@@ -93,7 +95,8 @@ export function upsertStoredMobileConversation(
     created_at: upsert.createdAt?.trim() || existing?.created_at || now,
     id,
     messages: upsert.messages,
-    source_message_count: upsert.sourceMessageCount,
+    source_message_count: upsert.bridgeMessageCount ?? upsert.sourceMessageCount ?? existing?.source_message_count,
+    synced_message_count: upsert.syncedMessageCount ?? existing?.synced_message_count,
     title: upsert.preserveExistingTitle ? existingTitle || incomingTitle || id : incomingTitle || existingTitle || id,
     updated_at: upsert.updatedAt?.trim() || now,
   };
@@ -123,6 +126,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
   const createdAt = asTrimmedString(record.created_at);
   const updatedAt = asTrimmedString(record.updated_at);
   const sourceMessageCount = asOptionalInteger(record.source_message_count);
+  const syncedMessageCount = asOptionalInteger(record.synced_message_count);
   if (!id || !createdAt || !updatedAt) {
     return null;
   }
@@ -132,6 +136,7 @@ function normalizeConversation(value: unknown): StoredMobileConversation | null 
     id,
     messages: normalizeMessages(record.messages, id),
     ...(sourceMessageCount === undefined ? {} : { source_message_count: sourceMessageCount }),
+    ...(syncedMessageCount === undefined ? {} : { synced_message_count: syncedMessageCount }),
     title: title || id,
     updated_at: updatedAt,
   };

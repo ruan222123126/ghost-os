@@ -19,12 +19,20 @@ func (s *store) AddProvider(cfg ProviderRecord) error {
 	if err != nil {
 		return err
 	}
+	syncState, err := loadProviderSyncState(configPath)
+	if err != nil {
+		return err
+	}
 	patch, err := providers.Add(providerStateFromFileConfig(fileCfg), providerConfigFromRecord(cfg))
 	if err != nil {
 		return err
 	}
 	applyProviderPatchToFileConfig(&fileCfg, patch)
-	return s.persistLocked(configPath, fileCfg)
+	syncState = upsertProviderSyncEntry(syncState, "", cfg.Name, cfg.ProviderID, cfg.UpdatedAt, false)
+	if err := s.persistLocked(configPath, fileCfg); err != nil {
+		return err
+	}
+	return writeProviderSyncState(configPath, syncState)
 }
 
 func (s *store) UpdateProvider(name string, cfg ProviderRecord) error {
@@ -35,12 +43,20 @@ func (s *store) UpdateProvider(name string, cfg ProviderRecord) error {
 	if err != nil {
 		return err
 	}
+	syncState, err := loadProviderSyncState(configPath)
+	if err != nil {
+		return err
+	}
 	patch, err := providers.Update(providerStateFromFileConfig(fileCfg), name, providerConfigFromRecord(cfg))
 	if err != nil {
 		return err
 	}
 	applyProviderPatchToFileConfig(&fileCfg, patch)
-	return s.persistLocked(configPath, fileCfg)
+	syncState = upsertProviderSyncEntry(syncState, name, cfg.Name, cfg.ProviderID, cfg.UpdatedAt, false)
+	if err := s.persistLocked(configPath, fileCfg); err != nil {
+		return err
+	}
+	return writeProviderSyncState(configPath, syncState)
 }
 
 func (s *store) DeleteProvider(name string) error {
@@ -51,12 +67,20 @@ func (s *store) DeleteProvider(name string) error {
 	if err != nil {
 		return err
 	}
+	syncState, err := loadProviderSyncState(configPath)
+	if err != nil {
+		return err
+	}
 	patch, err := providers.Delete(providerStateFromFileConfig(fileCfg), name)
 	if err != nil {
 		return err
 	}
 	applyProviderPatchToFileConfig(&fileCfg, patch)
-	return s.persistLocked(configPath, fileCfg)
+	syncState = upsertProviderSyncEntry(syncState, name, name, "", "", true)
+	if err := s.persistLocked(configPath, fileCfg); err != nil {
+		return err
+	}
+	return writeProviderSyncState(configPath, syncState)
 }
 
 func (s *store) SetActiveProvider(name string) error {

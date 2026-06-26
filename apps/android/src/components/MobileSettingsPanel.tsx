@@ -21,6 +21,7 @@ interface MobileSettingsPanelProps {
   config: ConfigPayload | undefined;
   computerSessionPersistStatus: StatusMessage;
   connectionStatus: StatusMessage;
+  localProviderList?: ProviderListPayload;
   open: boolean;
   providerList: ProviderListPayload | undefined;
   onActivateProvider: (name: string) => Promise<boolean>;
@@ -115,6 +116,10 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
     props.onSettingsChange((current) => ({ ...current, persistComputerSessionsEnabled: enabled }));
   }
 
+  function setRemoteExecutionEnabled(enabled: boolean): void {
+    props.onSettingsChange((current) => ({ ...current, remoteExecutionEnabled: enabled }));
+  }
+
   function setConnectionMode(mode: StoredSettings["connectionMode"]): void {
     props.onSettingsChange((current) => ({ ...current, connectionMode: mode }));
   }
@@ -176,7 +181,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
           ) : view === "providers" ? (
             <MobileProviderSettings
               config={props.config}
-              providerList={props.providerList}
+              providerList={props.localProviderList ?? props.providerList}
               onActivateProvider={props.onActivateProvider}
               onCreateProvider={props.onCreateProvider}
               onDeleteProvider={props.onDeleteProvider}
@@ -207,14 +212,17 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               connectionSublabel={connectionSublabel(props.settings)}
               persistComputerSessionsEnabled={props.settings.persistComputerSessionsEnabled}
               persistComputerSessionsStatus={props.computerSessionPersistStatus}
+              remoteExecutionEnabled={props.settings.remoteExecutionEnabled}
+              remoteExecutionLocked={props.connectionStatus.tone !== "success"}
               taskDisabled={taskEntryDisabled(props.connectionStatus)}
               taskSublabel={taskSublabel(props.connectionStatus, props.taskList, props.taskListError)}
-              providerDisabled={providerEntryDisabled(props.connectionStatus, props.providerList)}
-              providerSublabel={providerSublabel(props.config, props.connectionStatus, props.providerList)}
+              providerDisabled={providerEntryDisabled(props.localProviderList)}
+              providerSublabel={providerSublabel(props.config, props.connectionStatus, props.localProviderList)}
               skillDisabled={skillEntryDisabled(props.connectionStatus)}
               skillSublabel={skillSublabel(props.connectionStatus, props.skillList, props.skillListError)}
               onSetAutoConnectEnabled={setAutoConnectEnabled}
               onSetPersistComputerSessionsEnabled={setPersistComputerSessionsEnabled}
+              onSetRemoteExecutionEnabled={setRemoteExecutionEnabled}
               onOpenConnection={() => setView("connection")}
               onOpenTasks={() => setView("tasks")}
               onOpenProviders={() => setView("providers")}
@@ -263,6 +271,8 @@ function SettingsRoot(props: {
   providerSublabel: string;
   persistComputerSessionsEnabled: boolean;
   persistComputerSessionsStatus: StatusMessage;
+  remoteExecutionEnabled: boolean;
+  remoteExecutionLocked: boolean;
   skillDisabled: boolean;
   skillSublabel: string;
   taskDisabled: boolean;
@@ -273,6 +283,7 @@ function SettingsRoot(props: {
   onOpenTasks: () => void;
   onSetAutoConnectEnabled: (enabled: boolean) => void;
   onSetPersistComputerSessionsEnabled: (enabled: boolean) => void;
+  onSetRemoteExecutionEnabled: (enabled: boolean) => void;
 }) {
   return (
     <>
@@ -290,6 +301,14 @@ function SettingsRoot(props: {
             label="是否持久化电脑会话内容"
             sublabel={props.persistComputerSessionsStatus.text}
             onChange={props.onSetPersistComputerSessionsEnabled}
+          />
+          <SettingsSwitchRow
+            checked={props.remoteExecutionEnabled}
+            disabled={props.remoteExecutionLocked}
+            icon={Server}
+            label="远程运行"
+            sublabel={props.remoteExecutionLocked ? "仅连接成功后可开启" : "开启后跟随电脑端模型"}
+            onChange={props.onSetRemoteExecutionEnabled}
           />
           <SettingsButton icon={Link2} label="连接" sublabel={props.connectionSublabel} onClick={props.onOpenConnection} />
           <SettingsButton
@@ -331,6 +350,7 @@ function SettingsSwitchRow(props: {
   label: string;
   onChange: (checked: boolean) => void;
   sublabel?: string;
+  disabled?: boolean;
 }) {
   const Icon = props.icon;
 
@@ -340,6 +360,7 @@ function SettingsSwitchRow(props: {
       type="button"
       role="switch"
       aria-checked={props.checked}
+      disabled={props.disabled}
       onClick={() => props.onChange(!props.checked)}
     >
       <span className="mobile-settings-auto-connect-copy">
@@ -541,11 +562,8 @@ function connectionSublabel(settings: StoredSettings): string {
   return settings.pairing ? `WebRTC / ${settings.pairing.pcId}` : "WebRTC / 未配对";
 }
 
-function providerEntryDisabled(
-  connectionStatus: StatusMessage,
-  providerList: ProviderListPayload | undefined,
-): boolean {
-  return connectionStatus.tone !== "success" || !providerList;
+function providerEntryDisabled(providerList: ProviderListPayload | undefined): boolean {
+  return !providerList;
 }
 
 function skillEntryDisabled(connectionStatus: StatusMessage): boolean {
@@ -558,12 +576,9 @@ function taskEntryDisabled(connectionStatus: StatusMessage): boolean {
 
 function providerSublabel(
   config: ConfigPayload | undefined,
-  connectionStatus: StatusMessage,
+  _connectionStatus: StatusMessage,
   providerList: ProviderListPayload | undefined,
 ): string {
-  if (connectionStatus.tone !== "success") {
-    return "未连接";
-  }
   if (!providerList) {
     return "加载中";
   }

@@ -8,6 +8,7 @@ import (
 	"ghost-os/bridge/config/internal/providers"
 	configruntime "ghost-os/bridge/config/internal/runtime"
 	"ghost-os/bridge/llm"
+	"ghost-os/bridge/taskdefs"
 )
 
 var (
@@ -58,6 +59,17 @@ func (s *store) RuntimeConfig() runtimeConfig {
 	return s.runtimeSnapshot()
 }
 
+func (s *store) WithRuntimeOverrides(providerName string, model string) (Store, error) {
+	req := taskdefs.TaskRuntimeOverrides{}
+	if trimmed := strings.TrimSpace(providerName); trimmed != "" {
+		req.ProviderName = trimmed
+	}
+	if trimmed := strings.TrimSpace(model); trimmed != "" {
+		req.Model = trimmed
+	}
+	return withRuntimeOverridesStore{Store: s, overrides: &req}, nil
+}
+
 // Snapshot 返回可直接暴露给前端的安全配置视图。
 func (s *store) Snapshot() Snapshot {
 	return snapshotFromRuntimeConfig(s.runtimeSnapshot())
@@ -105,14 +117,17 @@ func defaultChatPathForProvider(provider llm.Provider) string {
 }
 
 func (s *store) ListProviders() ([]ProviderRecord, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	fileCfg, _, err := s.loadStoredFileConfigLocked()
-	if err != nil {
-		return nil, err
-	}
-	return providerRecordsFromConfigs(normalizeProviderConfigs(fileCfg.Providers, stringValue(fileCfg.Model))), nil
+	return s.listProvidersLocked(false)
+}
+
+func (s *store) ListProviderSyncRecords() ([]ProviderRecord, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.listProvidersLocked(true)
 }
 
 func (s *store) SystemPrompts() (SystemPromptFiles, error) {
@@ -135,6 +150,11 @@ type projectRootOverrideStore struct {
 	projectRoot string
 }
 
+type withRuntimeOverridesStore struct {
+	Store
+	overrides *taskdefs.TaskRuntimeOverrides
+}
+
 func WithProjectRootOverride(store Store, projectRoot string) Store {
 	if store == nil {
 		return nil
@@ -155,5 +175,60 @@ func (s projectRootOverrideStore) Config() (Config, error) {
 		return Config{}, err
 	}
 	cfg.ProjectRoot = s.projectRoot
+	return cfg, nil
+}
+
+func (s withRuntimeOverridesStore) Config() (Config, error) {
+	if s.Store == nil {
+		return Config{}, errors.New("config store is nil")
+	}
+	cfg, err := s.Store.Config()
+	if err != nil {
+		return Config{}, err
+	}
+	normalized, err := appRuntimeOverridesToConfig(cfg, s.overrides, s.Store)
+	if err != nil {
+		return Config{}, err
+	}
+	return normalized, nil
+}
+
+func appRuntimeOverridesToConfig(
+	cfg Config,
+	overrides *taskdefs.TaskRuntimeOverrides,
+	store Store,
+) (Config, error) {
+	if overrides == nil {
+		return cfg, nil
+	}
+	if providerName := strings.TrimSpace(overrides.ProviderName); providerName != "" {
+		providers, err := store.ListProviders()
+		if err != nil {
+			return Config{}, err
+		}
+		index := -1
+		for candidateIndex, provider := range providers {
+			if strings.EqualFold(strings.TrimSpace(provider.Name), providerName) {
+				index = candidateIndex
+				break
+			}
+		}
+		if index >= 0 {
+			provider := providers[index]
+			cfg.Provider.Type = provider.Type
+			cfg.Provider.APIKey = stringValue(provider.APIKey)
+			cfg.Provider.BaseURL = provider.BaseURL
+			cfg.Provider.ContextWindowTokens = provider.ContextWindowTokens
+			cfg.Provider.ResponseReserveTokens = provider.ResponseReserveTokens
+			cfg.Provider.ModelContextWindowTokens = cloneModelTokenOverrides(provider.ModelContextWindowTokens)
+			cfg.Provider.ModelResponseReserveTokens = cloneModelTokenOverrides(provider.ModelResponseReserveTokens)
+		}
+	}
+	if model := strings.TrimSpace(overrides.Model); model != "" {
+		cfg.Provider.Model = model
+	}
+	if overrides.MaxTurns != nil {
+		cfg.MaxTurns = *overrides.MaxTurns
+	}
 	return cfg, nil
 }

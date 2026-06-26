@@ -32,6 +32,7 @@ type SessionUsecase interface {
 	Search(query string, limit int, traceID string) (bridgeorchestration.ServiceResult, error)
 	Sources(traceID string) (bridgeorchestration.ServiceResult, error)
 	Get(params bridgeorchestration.SessionGetParams, traceID string) (bridgeorchestration.ServiceResult, error)
+	Append(req bridgeorchestration.SessionAppendRequest, traceID string) (bridgeorchestration.ServiceResult, error)
 	Delete(params bridgeorchestration.SessionIDParams, traceID string) (bridgeorchestration.ServiceResult, error)
 	ListPartitions(traceID string) (bridgeorchestration.ServiceResult, error)
 	SavePartitions(
@@ -228,6 +229,13 @@ func (a orchestrationSessionAdapter) Get(
 	traceID string,
 ) (bridgeorchestration.ServiceResult, error) {
 	return a.service.ExecuteSessionGetAction(params, traceID)
+}
+
+func (a orchestrationSessionAdapter) Append(
+	req bridgeorchestration.SessionAppendRequest,
+	traceID string,
+) (bridgeorchestration.ServiceResult, error) {
+	return a.service.ExecuteSessionAppendAction(req, traceID)
 }
 
 func (a orchestrationSessionAdapter) Delete(

@@ -152,6 +152,42 @@ func TestAgentEndpointPassesSessionIDAndReturnsIt(t *testing.T) {
 	}
 }
 
+func TestAgentEndpointPassesRuntimeOverrides(t *testing.T) {
+	var capturedStore bridgeconfig.Store
+	handler := newTestHandler(t, func(
+		_ context.Context,
+		_ string,
+		_ string,
+		_ string,
+		store bridgeconfig.Store,
+		_ *session.Store,
+	) (string, string, error) {
+		capturedStore = store
+		return "ok", "session-runtime", nil
+	})
+
+	recorder := serveRequest(
+		handler,
+		http.MethodPost,
+		"/api/agent",
+		`{"message":"hello","runtime_overrides":{"provider_name":"openai","model":"gpt-5.4"}}`,
+		map[string]string{"Content-Type": "application/json"},
+	)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("unexpected status: got %d want %d body=%s", recorder.Code, http.StatusOK, recorder.Body.String())
+	}
+	if capturedStore == nil {
+		t.Fatal("expected runtime override request to provide a config store")
+	}
+	cfg, err := capturedStore.Config()
+	if err != nil {
+		t.Fatalf("Config(): %v", err)
+	}
+	if cfg.Provider.Model != "gpt-5.4" {
+		t.Fatalf("unexpected runtime override model: got %q want %q", cfg.Provider.Model, "gpt-5.4")
+	}
+}
+
 func TestAgentEndpointRejectsEmptyMessageWhenSessionIDIsPresent(t *testing.T) {
 	const sessionID = "session-continue-1"
 	handler := newTestHandler(t, func(_ context.Context, message string, requestSessionID string, _ string, _ bridgeconfig.Store, _ *session.Store) (string, string, error) {

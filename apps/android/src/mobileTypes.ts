@@ -28,8 +28,11 @@ export interface StoredSettings {
   bridgeUrl: string;
   connectionMode: ConnectionMode;
   lastSuccessfulConnection?: StoredConnectionSnapshot;
+  localProviderId?: string;
+  localModel?: string;
   pairing?: MobilePairingInfo;
   persistComputerSessionsEnabled: boolean;
+  remoteExecutionEnabled: boolean;
 }
 
 export interface ConfigPayload {
@@ -49,12 +52,16 @@ export interface ProviderConfigPayload {
   name: string;
   type: ProviderType;
   base_url: string;
+  provider_id: string;
+  updated_at: string;
+  deleted_at?: string;
   models?: string[];
   context_window_tokens?: number;
   response_reserve_tokens?: number;
   model_context_window_tokens?: Record<string, number>;
   model_response_reserve_tokens?: Record<string, number>;
   api_key_set: boolean;
+  sync_state?: "local" | "synced";
 }
 
 export type ProviderType = "openai" | "anthropic" | "custom" | "codex";
@@ -62,6 +69,9 @@ export type ProviderType = "openai" | "anthropic" | "custom" | "codex";
 export interface ProviderConfigInputPayload {
   name: string;
   type: ProviderType;
+  provider_id?: string;
+  updated_at?: string;
+  deleted_at?: string;
   base_url?: string;
   api_key?: string;
   models?: string[];
@@ -71,9 +81,26 @@ export interface ProviderConfigInputPayload {
   model_response_reserve_tokens?: Record<string, number>;
 }
 
+export interface ProviderSyncRecordPayload {
+  provider_id: string;
+  updated_at: string;
+  deleted_at?: string;
+  name?: string;
+  type?: ProviderType;
+  base_url?: string;
+  models?: string[];
+  context_window_tokens?: number;
+  response_reserve_tokens?: number;
+  model_context_window_tokens?: Record<string, number>;
+  model_response_reserve_tokens?: Record<string, number>;
+  api_key_set?: boolean;
+}
+
 export interface ProviderListPayload {
   providers: ProviderConfigPayload[];
   active_provider: string;
+  active_provider_id?: string;
+  provider_sync_records?: ProviderSyncRecordPayload[];
 }
 
 export type SkillSource = "repo" | "user";
@@ -257,6 +284,7 @@ export interface StoredMobileConversation {
   updated_at: string;
   messages: MobileConversationMessage[];
   source_message_count?: number;
+  synced_message_count?: number;
 }
 
 export interface StatusMessage {

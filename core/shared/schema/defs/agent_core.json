@@ -56,6 +56,10 @@
           "type": "string",
           "description": "Optional per-request project root override. Applies only to this request and is not persisted."
         },
+        "runtime_overrides": {
+          "$ref": "./tasks.json#/$defs/taskRuntimeOverrides",
+          "description": "Optional per-request runtime overrides. Applies only to this request and is not persisted."
+        },
         "trace_id": {
           "type": "string",
           "description": "Optional. Client-provided trace identifier echoed back via X-Trace-ID and event envelopes."

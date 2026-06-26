@@ -177,6 +177,15 @@
         "sessionDetail": {
             "$ref": "./schema/defs/session_history.json#/$defs/sessionDetail"
         },
+        "sessionAppendMessage": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionAppendMessage"
+        },
+        "sessionAppendRequest": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionAppendRequest"
+        },
+        "sessionAppendResponse": {
+            "$ref": "./schema/defs/session_history.json#/$defs/sessionAppendResponse"
+        },
         "bridgeConfig": {
             "$ref": "./schema/defs/config_runtime.json#/$defs/bridgeConfig"
         },
@@ -185,6 +194,9 @@
         },
         "providerConfig": {
             "$ref": "./schema/defs/config_provider.json#/$defs/providerConfig"
+        },
+        "providerSyncRecord": {
+            "$ref": "./schema/defs/config_provider.json#/$defs/providerSyncRecord"
         },
         "providerConfigInput": {
             "$ref": "./schema/defs/config_provider.json#/$defs/providerConfigInput"

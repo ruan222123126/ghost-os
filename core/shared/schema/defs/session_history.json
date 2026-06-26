@@ -456,6 +456,93 @@
         "rust": { "name": "SessionDetail" },
         "kotlin": { "name": "SessionDetail" }
       }
+    },
+    "sessionAppendMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "text"
+      ],
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": [
+            "user",
+            "assistant"
+          ]
+        },
+        "text": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 182,
+        "go": { "name": "sessionAppendMessage" },
+        "ts": { "name": "SessionAppendMessage" },
+        "rust": { "name": "SessionAppendMessage" },
+        "kotlin": { "name": "SessionAppendMessage" }
+      }
+    },
+    "sessionAppendRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "messages"
+      ],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "expected_head": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "null" }
+          ]
+        },
+        "title": { "type": "string" },
+        "messages": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sessionAppendMessage"
+          }
+        },
+        "trace_id": { "type": "string" }
+      },
+      "x-codegen": {
+        "order": 183,
+        "go": { "name": "sessionAppendRequest" },
+        "ts": { "name": "SessionAppendRequest" },
+        "rust": { "name": "SessionAppendRequest" },
+        "kotlin": { "name": "SessionAppendRequest" }
+      }
+    },
+    "sessionAppendResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_id",
+        "status",
+        "message_count",
+        "updated_at"
+      ],
+      "properties": {
+        "session_id": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": [
+            "appended",
+            "conflict"
+          ]
+        },
+        "message_count": { "type": "integer", "minimum": 0 },
+        "updated_at": { "type": "string", "minLength": 1 }
+      },
+      "x-codegen": {
+        "order": 184,
+        "go": { "name": "sessionAppendResponse" },
+        "ts": { "name": "SessionAppendResponse" },
+        "rust": { "name": "SessionAppendResponse" },
+        "kotlin": { "name": "SessionAppendResponse" }
+      }
     }
   }
 }

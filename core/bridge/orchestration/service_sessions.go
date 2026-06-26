@@ -72,6 +72,19 @@ func (s *bridgeService) executeSessionGetAction(params sessionGetParams, traceID
 	return bus.ResultSuccess(detail), nil
 }
 
+func (s *bridgeService) executeSessionAppendAction(req sessionAppendRequest, traceID string) (ServiceResult, error) {
+	usecase, err := s.sessionUsecase()
+	if err != nil {
+		return ServiceResult{}, err
+	}
+
+	payload, err := usecase.Append(req, traceID)
+	if err != nil {
+		return ServiceResult{}, bus.WrapError(mapSessionAppErrorKind(err), err)
+	}
+	return bus.ResultSuccess(payload), nil
+}
+
 func (s *bridgeService) executeSessionSourcesAction(traceID string) (ServiceResult, error) {
 	usecase, err := s.sessionSourcesUsecase(traceID)
 	if err != nil {
@@ -196,6 +209,9 @@ func mapSessionAppErrorKind(err error) ServiceErrorKind {
 		errors.Is(err, appsessions.ErrInvalidSessionSearchQuery),
 		errors.Is(err, appsessions.ErrUnsupportedSidebarPartitionVersion),
 		errors.Is(err, appsessions.ErrInvalidSessionPageQuery),
+		errors.Is(err, appsessions.ErrSessionAppendRoleInvalid),
+		errors.Is(err, appsessions.ErrSessionAppendTextRequired),
+		errors.Is(err, appsessions.ErrSessionAppendMessagesRequired),
 		errors.Is(err, appsessions.ErrArtifactIDRequired),
 		errors.Is(err, appsessions.ErrInvalidArtifactSessionID),
 		errors.Is(err, appsessions.ErrInvalidArtifactID):

@@ -9,7 +9,10 @@ const defaultSettings: StoredSettings = {
   autoConnectEnabled: false,
   bridgeUrl: DEFAULT_BRIDGE_URL,
   connectionMode: "webrtc",
+  localProviderId: "",
+  localModel: "",
   persistComputerSessionsEnabled: false,
+  remoteExecutionEnabled: false,
 };
 
 export function loadSettings(): StoredSettings {
@@ -27,8 +30,11 @@ export function loadSettings(): StoredSettings {
       bridgeUrl: parsed.bridgeUrl?.trim() || DEFAULT_BRIDGE_URL,
       connectionMode,
       lastSuccessfulConnection: normalizeLastSuccessfulConnection(parsed.lastSuccessfulConnection),
+      localProviderId: parsed.localProviderId?.trim() || "",
+      localModel: parsed.localModel?.trim() || "",
       pairing: normalizePairing(parsed.pairing),
       persistComputerSessionsEnabled: parsed.persistComputerSessionsEnabled === true,
+      remoteExecutionEnabled: parsed.remoteExecutionEnabled === true,
     };
   } catch {
     return { ...defaultSettings };
@@ -44,8 +50,11 @@ export function saveSettings(settings: StoredSettings): void {
       bridgeUrl: settings.bridgeUrl,
       connectionMode: settings.connectionMode,
       lastSuccessfulConnection: normalizeLastSuccessfulConnection(settings.lastSuccessfulConnection),
+      localProviderId: settings.localProviderId?.trim() || "",
+      localModel: settings.localModel?.trim() || "",
       pairing: settings.pairing,
       persistComputerSessionsEnabled: settings.persistComputerSessionsEnabled,
+      remoteExecutionEnabled: settings.remoteExecutionEnabled,
     }),
   );
 }

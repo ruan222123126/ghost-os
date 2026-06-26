@@ -4,6 +4,7 @@ const (
 	ActionSessionsList         = "SESSIONS_LIST"
 	ActionSessionsSearch       = "SESSIONS_SEARCH"
 	ActionSessionGet           = "SESSION_GET"
+	ActionSessionAppend        = "SESSION_APPEND"
 	ActionSessionDelete        = "SESSION_DELETE"
 	ActionSessionSources       = "SESSION_SOURCES"
 	ActionSessionPartitionsGet = "SESSION_PARTITIONS_GET"

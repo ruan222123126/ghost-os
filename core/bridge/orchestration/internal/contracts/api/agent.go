@@ -1,25 +1,29 @@
 package api
 
+import "ghost-os/bridge/taskdefs"
+
 type AssistantSessionEndSignalPayload struct {
 	Signal  string `json:"signal"`
 	Message string `json:"message"`
 }
 
 type AgentRequest struct {
-	Mode        string                `json:"mode,omitempty"`
-	Message     string                `json:"message,omitempty"`
-	Images      []SessionImageContent `json:"images,omitempty"`
-	SessionID   string                `json:"session_id,omitempty"`
-	ProjectRoot string                `json:"project_root,omitempty"`
-	TraceID     string                `json:"trace_id,omitempty"`
+	Mode             string                         `json:"mode,omitempty"`
+	Message          string                         `json:"message,omitempty"`
+	Images           []SessionImageContent          `json:"images,omitempty"`
+	SessionID        string                         `json:"session_id,omitempty"`
+	ProjectRoot      string                         `json:"project_root,omitempty"`
+	RuntimeOverrides *taskdefs.TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
+	TraceID          string                         `json:"trace_id,omitempty"`
 }
 
 type AgentParams struct {
-	Mode        string                `json:"mode,omitempty"`
-	Message     string                `json:"message,omitempty"`
-	Images      []SessionImageContent `json:"images,omitempty"`
-	SessionID   string                `json:"session_id,omitempty"`
-	ProjectRoot string                `json:"project_root,omitempty"`
+	Mode             string                         `json:"mode,omitempty"`
+	Message          string                         `json:"message,omitempty"`
+	Images           []SessionImageContent          `json:"images,omitempty"`
+	SessionID        string                         `json:"session_id,omitempty"`
+	ProjectRoot      string                         `json:"project_root,omitempty"`
+	RuntimeOverrides *taskdefs.TaskRuntimeOverrides `json:"runtime_overrides,omitempty"`
 }
 
 type AskHumanOption struct {

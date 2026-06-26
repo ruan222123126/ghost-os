@@ -11,6 +11,8 @@ const BRIDGE_AGENT_STREAM_PATH: &str = "api/agent/stream";
 const BRIDGE_AGENT_STREAM_CHUNK_EVENT: &str = "bridge-agent-stream-chunk";
 const BRIDGE_BUS_PATH: &str = "api/bus";
 const MOBILE_CONVERSATIONS_FILE: &str = "mobile-conversations.v1.json";
+const MOBILE_LOCAL_PROVIDERS_FILE: &str = "mobile-local-providers.v1.json";
+const MOBILE_LOCAL_PROVIDER_SECRETS_FILE: &str = "mobile-local-provider-secrets.v1.json";
 const REQUEST_TIMEOUT_SECS: u64 = 60;
 const SSE_CONTENT_TYPE: &str = "text/event-stream";
 
@@ -40,6 +42,7 @@ struct BridgeAgentStreamCommand {
     api_token: Option<String>,
     message: String,
     request_id: String,
+    runtime_overrides: Option<Value>,
     session_id: Option<String>,
     trace_id: String,
 }
@@ -54,6 +57,8 @@ struct BridgeBusEnvelope<'a> {
 #[derive(Serialize)]
 struct BridgeAgentStreamBody<'a> {
     message: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_overrides: Option<&'a Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     session_id: Option<&'a str>,
     trace_id: &'a str,
@@ -71,6 +76,129 @@ struct BridgeBusResponse {
 struct BridgeAgentStreamChunk {
     request_id: String,
     chunk: Vec<u8>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalProviderState {
+    providers: Vec<MobileLocalProviderRecord>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalProviderRecord {
+    name: String,
+    #[serde(rename = "type")]
+    provider_type: String,
+    base_url: String,
+    provider_id: String,
+    updated_at: String,
+    deleted_at: Option<String>,
+    models: Vec<String>,
+    context_window_tokens: Option<u64>,
+    response_reserve_tokens: Option<u64>,
+    model_context_window_tokens: Option<BTreeMap<String, u64>>,
+    model_response_reserve_tokens: Option<BTreeMap<String, u64>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalProviderListPayload {
+    providers: Vec<MobileLocalProviderPayload>,
+    active_provider: String,
+    provider_sync_records: Vec<MobileLocalProviderPayload>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalProviderPayload {
+    name: String,
+    #[serde(rename = "type")]
+    provider_type: String,
+    base_url: String,
+    provider_id: String,
+    updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_window_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_reserve_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_context_window_tokens: Option<BTreeMap<String, u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_response_reserve_tokens: Option<BTreeMap<String, u64>>,
+    api_key_set: bool,
+    sync_state: &'static str,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalProviderUpsertRequest {
+    name: String,
+    #[serde(rename = "type")]
+    provider_type: String,
+    provider_id: Option<String>,
+    updated_at: Option<String>,
+    deleted_at: Option<String>,
+    base_url: Option<String>,
+    api_key: Option<String>,
+    models: Option<Vec<String>>,
+    context_window_tokens: Option<u64>,
+    response_reserve_tokens: Option<u64>,
+    model_context_window_tokens: Option<BTreeMap<String, u64>>,
+    model_response_reserve_tokens: Option<BTreeMap<String, u64>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalProviderExportPayload {
+    name: String,
+    #[serde(rename = "type")]
+    provider_type: String,
+    provider_id: String,
+    updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+    base_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    api_key: Option<String>,
+    models: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_window_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_reserve_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_context_window_tokens: Option<BTreeMap<String, u64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_response_reserve_tokens: Option<BTreeMap<String, u64>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalLLMMessage {
+    role: String,
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalLLMSendRequest {
+    history: Vec<MobileLocalLLMMessage>,
+    model: String,
+    provider_id: String,
+    session_id: String,
+    trace_id: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MobileLocalLLMSendResponse {
+    message: String,
+    provider_id: String,
+    model: String,
 }
 
 #[tauri::command]
@@ -139,6 +267,7 @@ async fn bridge_agent_stream(
         .filter(|value| !value.is_empty());
     let body = BridgeAgentStreamBody {
         message,
+        runtime_overrides: request.runtime_overrides.as_ref(),
         session_id,
         trace_id,
     };
@@ -208,6 +337,111 @@ fn mobile_conversations_save(
 ) -> Result<(), String> {
     let path = mobile_conversations_path(&app)?;
     write_mobile_conversations(&path, &conversations)
+}
+
+#[tauri::command]
+fn mobile_local_provider_list(app: tauri::AppHandle) -> Result<MobileLocalProviderListPayload, String> {
+    let state = read_mobile_local_provider_state(&mobile_local_providers_path(&app)?)?;
+    let secrets = read_mobile_local_provider_secrets(&mobile_local_provider_secrets_path(&app)?)?;
+    Ok(build_mobile_local_provider_payload(state, &secrets))
+}
+
+#[tauri::command]
+fn mobile_local_provider_upsert(
+    app: tauri::AppHandle,
+    provider: MobileLocalProviderUpsertRequest,
+) -> Result<MobileLocalProviderListPayload, String> {
+    let providers_path = mobile_local_providers_path(&app)?;
+    let secrets_path = mobile_local_provider_secrets_path(&app)?;
+    let mut state = read_mobile_local_provider_state(&providers_path)?;
+    let mut secrets = read_mobile_local_provider_secrets(&secrets_path)?;
+    upsert_mobile_local_provider(&mut state, &mut secrets, provider)?;
+    write_mobile_local_provider_state(&providers_path, &state)?;
+    write_mobile_local_provider_secrets(&secrets_path, &secrets)?;
+    Ok(build_mobile_local_provider_payload(state, &secrets))
+}
+
+#[tauri::command]
+fn mobile_local_provider_delete(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> Result<MobileLocalProviderListPayload, String> {
+    let providers_path = mobile_local_providers_path(&app)?;
+    let secrets_path = mobile_local_provider_secrets_path(&app)?;
+    let mut state = read_mobile_local_provider_state(&providers_path)?;
+    let secrets = read_mobile_local_provider_secrets(&secrets_path)?;
+    let target = provider_id.trim();
+    if target.is_empty() {
+        return Err("provider_id is required".to_string());
+    }
+    let deleted_at = current_timestamp();
+    for record in state.providers.iter_mut() {
+        if record.provider_id == target {
+            record.updated_at = deleted_at.clone();
+            record.deleted_at = Some(deleted_at.clone());
+        }
+    }
+    write_mobile_local_provider_state(&providers_path, &state)?;
+    Ok(build_mobile_local_provider_payload(state, &secrets))
+}
+
+#[tauri::command]
+fn mobile_local_provider_export(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> Result<MobileLocalProviderExportPayload, String> {
+    let providers_path = mobile_local_providers_path(&app)?;
+    let secrets_path = mobile_local_provider_secrets_path(&app)?;
+    let state = read_mobile_local_provider_state(&providers_path)?;
+    let secrets = read_mobile_local_provider_secrets(&secrets_path)?;
+    let target = provider_id.trim();
+    if target.is_empty() {
+        return Err("provider_id is required".to_string());
+    }
+    let provider = state
+        .providers
+        .into_iter()
+        .find(|provider| provider.provider_id == target)
+        .ok_or_else(|| format!("local provider not found: {target}"))?;
+    Ok(MobileLocalProviderExportPayload {
+        name: provider.name,
+        provider_type: provider.provider_type,
+        provider_id: provider.provider_id.clone(),
+        updated_at: provider.updated_at,
+        deleted_at: provider.deleted_at,
+        base_url: provider.base_url,
+        api_key: secrets.get(provider.provider_id.trim()).cloned(),
+        models: provider.models,
+        context_window_tokens: provider.context_window_tokens,
+        response_reserve_tokens: provider.response_reserve_tokens,
+        model_context_window_tokens: provider.model_context_window_tokens,
+        model_response_reserve_tokens: provider.model_response_reserve_tokens,
+    })
+}
+
+#[tauri::command]
+async fn mobile_local_llm_send(
+    app: tauri::AppHandle,
+    request: MobileLocalLLMSendRequest,
+) -> Result<MobileLocalLLMSendResponse, String> {
+    let state = read_mobile_local_provider_state(&mobile_local_providers_path(&app)?)?;
+    let secrets = read_mobile_local_provider_secrets(&mobile_local_provider_secrets_path(&app)?)?;
+    let provider = state
+        .providers
+        .iter()
+        .find(|provider| provider.provider_id == request.provider_id.trim() && provider.deleted_at.is_none())
+        .cloned()
+        .ok_or_else(|| format!("local provider not found: {}", request.provider_id.trim()))?;
+    let api_key = secrets
+        .get(request.provider_id.trim())
+        .cloned()
+        .ok_or_else(|| format!("local provider secret not found: {}", request.provider_id.trim()))?;
+    let message = send_mobile_local_llm_request(&provider, &api_key, &request).await?;
+    Ok(MobileLocalLLMSendResponse {
+        message,
+        model: request.model.trim().to_string(),
+        provider_id: request.provider_id.trim().to_string(),
+    })
 }
 
 fn bridge_bus_url(base_url: &str) -> Result<reqwest::Url, String> {
@@ -379,6 +613,22 @@ fn mobile_conversations_path(app: &tauri::AppHandle) -> Result<PathBuf, String> 
     Ok(dir.join(MOBILE_CONVERSATIONS_FILE))
 }
 
+fn mobile_local_providers_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("resolve local provider directory failed: {err}"))?;
+    Ok(dir.join(MOBILE_LOCAL_PROVIDERS_FILE))
+}
+
+fn mobile_local_provider_secrets_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let dir = app
+        .path()
+        .app_config_dir()
+        .map_err(|err| format!("resolve local provider secrets directory failed: {err}"))?;
+    Ok(dir.join(MOBILE_LOCAL_PROVIDER_SECRETS_FILE))
+}
+
 fn read_mobile_conversations(path: &Path) -> Result<Vec<Value>, String> {
     match fs::read_to_string(path) {
         Ok(raw) => {
@@ -406,6 +656,260 @@ fn write_mobile_conversations(path: &Path, conversations: &[Value]) -> Result<()
         .map_err(|err| format!("encode mobile conversations failed: {err}"))?;
     fs::write(path, encoded).map_err(|err| format!("write mobile conversations failed: {err}"))?;
     set_private_file_permissions(path, "mobile conversations")
+}
+
+fn read_mobile_local_provider_state(path: &Path) -> Result<MobileLocalProviderState, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) => {
+            if raw.trim().is_empty() {
+                return Ok(MobileLocalProviderState::default());
+            }
+            serde_json::from_str(&raw).map_err(|err| format!("decode local providers failed: {err}"))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(MobileLocalProviderState::default()),
+        Err(err) => Err(format!("read local providers failed: {err}")),
+    }
+}
+
+fn write_mobile_local_provider_state(
+    path: &Path,
+    state: &MobileLocalProviderState,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("create local provider directory failed: {err}"))?;
+    }
+    let encoded = serde_json::to_vec_pretty(state).map_err(|err| format!("encode local providers failed: {err}"))?;
+    fs::write(path, encoded).map_err(|err| format!("write local providers failed: {err}"))?;
+    set_private_file_permissions(path, "local providers")
+}
+
+fn read_mobile_local_provider_secrets(path: &Path) -> Result<BTreeMap<String, String>, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) => {
+            if raw.trim().is_empty() {
+                return Ok(BTreeMap::new());
+            }
+            serde_json::from_str(&raw).map_err(|err| format!("decode local provider secrets failed: {err}"))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
+        Err(err) => Err(format!("read local provider secrets failed: {err}")),
+    }
+}
+
+fn write_mobile_local_provider_secrets(
+    path: &Path,
+    secrets: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|err| format!("create local provider secrets directory failed: {err}"))?;
+    }
+    let encoded = serde_json::to_vec_pretty(secrets)
+        .map_err(|err| format!("encode local provider secrets failed: {err}"))?;
+    fs::write(path, encoded).map_err(|err| format!("write local provider secrets failed: {err}"))?;
+    set_private_file_permissions(path, "local provider secrets")
+}
+
+fn build_mobile_local_provider_payload(
+    state: MobileLocalProviderState,
+    secrets: &BTreeMap<String, String>,
+) -> MobileLocalProviderListPayload {
+    let sync_records = state
+        .providers
+        .into_iter()
+        .map(|record| mobile_local_provider_payload(record, secrets))
+        .collect::<Vec<_>>();
+    let providers = sync_records
+        .iter()
+        .filter(|record| record.deleted_at.is_none())
+        .cloned()
+        .collect::<Vec<_>>();
+    MobileLocalProviderListPayload {
+        providers,
+        active_provider: String::new(),
+        provider_sync_records: sync_records,
+    }
+}
+
+fn mobile_local_provider_payload(
+    record: MobileLocalProviderRecord,
+    secrets: &BTreeMap<String, String>,
+) -> MobileLocalProviderPayload {
+    MobileLocalProviderPayload {
+        api_key_set: secrets
+            .get(record.provider_id.trim())
+            .map(|secret| !secret.trim().is_empty())
+            .unwrap_or(false),
+        base_url: record.base_url,
+        context_window_tokens: record.context_window_tokens,
+        deleted_at: record.deleted_at,
+        model_context_window_tokens: record.model_context_window_tokens,
+        model_response_reserve_tokens: record.model_response_reserve_tokens,
+        models: record.models,
+        name: record.name,
+        provider_id: record.provider_id,
+        provider_type: record.provider_type,
+        response_reserve_tokens: record.response_reserve_tokens,
+        sync_state: "local",
+        updated_at: record.updated_at,
+    }
+}
+
+fn upsert_mobile_local_provider(
+    state: &mut MobileLocalProviderState,
+    secrets: &mut BTreeMap<String, String>,
+    provider: MobileLocalProviderUpsertRequest,
+) -> Result<(), String> {
+    let name = provider.name.trim();
+    if name.is_empty() {
+        return Err("provider name is required".to_string());
+    }
+    let provider_id = provider
+        .provider_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(new_local_provider_id);
+    let updated_at = provider
+        .updated_at
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(current_timestamp);
+    let base_url = provider.base_url.unwrap_or_default().trim().to_string();
+    let provider_type = provider.provider_type.trim().to_string();
+    let mut next = MobileLocalProviderRecord {
+        name: name.to_string(),
+        provider_type,
+        base_url,
+        provider_id: provider_id.clone(),
+        updated_at,
+        deleted_at: provider.deleted_at.filter(|value| !value.trim().is_empty()),
+        models: provider.models.unwrap_or_default(),
+        context_window_tokens: provider.context_window_tokens,
+        response_reserve_tokens: provider.response_reserve_tokens,
+        model_context_window_tokens: provider.model_context_window_tokens,
+        model_response_reserve_tokens: provider.model_response_reserve_tokens,
+    };
+    let mut replaced = false;
+    for record in state.providers.iter_mut() {
+        if record.provider_id == provider_id
+            || record.name.trim().eq_ignore_ascii_case(name)
+        {
+            *record = next.clone();
+            replaced = true;
+            break;
+        }
+    }
+    if !replaced {
+        state.providers.insert(0, next);
+    }
+    if let Some(secret) = provider.api_key {
+        let normalized = secret.trim().to_string();
+        if normalized.is_empty() {
+            secrets.remove(provider_id.trim());
+        } else {
+            secrets.insert(provider_id, normalized);
+        }
+    }
+    Ok(())
+}
+
+fn new_local_provider_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
+fn current_timestamp() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
+async fn send_mobile_local_llm_request(
+    provider: &MobileLocalProviderRecord,
+    api_key: &str,
+    request: &MobileLocalLLMSendRequest,
+) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .build()
+        .map_err(|err| format!("create local LLM client failed: {err}"))?;
+    let provider_type = provider.provider_type.trim().to_ascii_lowercase();
+    if provider_type == "anthropic" {
+        let url = bridge_api_url(&provider.base_url, "v1/messages")?;
+        let messages = request
+            .history
+            .iter()
+            .map(|message| {
+                serde_json::json!({
+                    "role": message.role,
+                    "content": message.text,
+                })
+            })
+            .collect::<Vec<_>>();
+        let response = client
+            .post(url)
+            .header("x-api-key", api_key.trim())
+            .header("anthropic-version", "2023-06-01")
+            .json(&serde_json::json!({
+                "max_tokens": 2048,
+                "messages": messages,
+                "model": request.model,
+            }))
+            .send()
+            .await
+            .map_err(|err| format!("local anthropic request failed: {err}"))?;
+        let body = response
+            .json::<Value>()
+            .await
+            .map_err(|err| format!("decode local anthropic response failed: {err}"))?;
+        return Ok(
+            body.get("content")
+                .and_then(Value::as_array)
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.get("text").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join("")
+                })
+                .filter(|text| !text.trim().is_empty())
+                .ok_or_else(|| "local anthropic response did not include text".to_string())?,
+        );
+    }
+
+    let url = bridge_api_url(&provider.base_url, "chat/completions")?;
+    let messages = request
+        .history
+        .iter()
+        .map(|message| {
+            serde_json::json!({
+                "role": message.role,
+                "content": message.text,
+            })
+        })
+        .collect::<Vec<_>>();
+    let response = client
+        .post(url)
+        .header("Authorization", format!("Bearer {}", api_key.trim()))
+        .json(&serde_json::json!({
+            "messages": messages,
+            "model": request.model,
+        }))
+        .send()
+        .await
+        .map_err(|err| format!("local LLM request failed: {err}"))?;
+    let body = response
+        .json::<Value>()
+        .await
+        .map_err(|err| format!("decode local LLM response failed: {err}"))?;
+    body.get("choices")
+        .and_then(Value::as_array)
+        .and_then(|items| items.first())
+        .and_then(|choice| choice.get("message"))
+        .and_then(|message| message.get("content"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| "local LLM response did not include assistant content".to_string())
 }
 
 fn read_mobile_credentials(path: &PathBuf) -> Result<BTreeMap<String, String>, String> {
@@ -573,7 +1077,12 @@ pub fn run() {
             mobile_credential_load,
             mobile_credential_delete,
             mobile_conversations_load,
-            mobile_conversations_save
+            mobile_conversations_save,
+            mobile_local_provider_list,
+            mobile_local_provider_upsert,
+            mobile_local_provider_delete,
+            mobile_local_provider_export,
+            mobile_local_llm_send
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

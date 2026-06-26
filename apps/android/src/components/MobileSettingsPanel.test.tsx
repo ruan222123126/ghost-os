@@ -16,6 +16,7 @@ describe("MobileSettingsPanel", () => {
         config={undefined}
         computerSessionPersistStatus={{ tone: "idle", text: "未开启" }}
         connectionStatus={{ tone: "idle", text: "未连接" }}
+        localProviderList={undefined}
         providerList={undefined}
         onActivateProvider={vi.fn()}
         onClose={vi.fn()}
@@ -59,5 +60,6 @@ function baseSettings(): StoredSettings {
     bridgeUrl: "http://127.0.0.1:8080",
     connectionMode: "http",
     persistComputerSessionsEnabled: false,
+    remoteExecutionEnabled: false,
   };
 }

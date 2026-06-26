@@ -25,6 +25,9 @@ type Record struct {
 	Type                       llm.Provider
 	BaseURL                    string
 	APIKey                     *string
+	ProviderID                 string
+	UpdatedAt                  string
+	DeletedAt                  string
 	Models                     []string
 	ContextWindowTokens        int
 	ResponseReserveTokens      int
