@@ -39,16 +39,39 @@ interface UseConfigProvidersResult {
 }
 
 type ProvidersApi = ReturnType<typeof useProvidersApi>;
+type ProvidersCopy = ReturnType<typeof useWebLocale>['copy'];
+type ProvidersDispatch = Dispatch<ProvidersAction>;
+
+interface ProviderMutationOptions {
+  api: ProvidersApi;
+  copy: ProvidersCopy;
+  dispatch: ProvidersDispatch;
+  state: ProvidersState;
+}
+
+interface ProviderActionBundleOptions {
+  activate: UseConfigProvidersActions['activate'];
+  deleteByName: UseConfigProvidersActions['delete'];
+  dispatch: ProvidersDispatch;
+  refresh: UseConfigProvidersActions['refresh'];
+  submit: UseConfigProvidersActions['submit'];
+}
 
 export function useConfigProviders(options: UseConfigProvidersOptions): UseConfigProvidersResult {
   const { copy } = useWebLocale();
   const api = useProvidersApi(options);
   const [state, dispatch] = useReducer(providersReducer, undefined, createInitialProvidersState);
   const refresh = useRefreshProviders(api, copy, dispatch);
-  const submit = useSubmitProvider(api, copy, state, dispatch);
-  const activate = useActivateProvider(api, copy, state, dispatch);
-  const deleteByName = useDeleteProvider(api, copy, state, dispatch);
-  const actions = useProviderActionBundle(dispatch, refresh, submit, activate, deleteByName);
+  const submit = useSubmitProvider({ api, copy, dispatch, state });
+  const activate = useActivateProvider({ api, copy, dispatch, state });
+  const deleteByName = useDeleteProvider({ api, copy, dispatch, state });
+  const actions = useProviderActionBundle({
+    activate,
+    deleteByName,
+    dispatch,
+    refresh,
+    submit,
+  });
 
   useEffect(() => {
     if (options.open) {
@@ -61,8 +84,8 @@ export function useConfigProviders(options: UseConfigProvidersOptions): UseConfi
 
 function useRefreshProviders(
   api: ProvidersApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  dispatch: Dispatch<ProvidersAction>,
+  copy: ProvidersCopy,
+  dispatch: ProvidersDispatch,
 ) {
   return useCallback(async (): Promise<boolean> => {
     dispatch({ type: 'load_start' });
@@ -79,12 +102,9 @@ function useRefreshProviders(
   }, [api, copy.system.failedToLoadProviders, dispatch]);
 }
 
-function useSubmitProvider(
-  api: ProvidersApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: ProvidersState,
-  dispatch: Dispatch<ProvidersAction>,
-) {
+function useSubmitProvider(options: ProviderMutationOptions) {
+  const { api, copy, dispatch, state } = options;
+
   return useCallback(async (): Promise<boolean> => {
     dispatch({ type: 'mutate_start' });
     try {
@@ -104,12 +124,9 @@ function useSubmitProvider(
   }, [api, copy.system.failedToSaveProvider, dispatch, state.editor, state.editorMode, state.editingName]);
 }
 
-function useActivateProvider(
-  api: ProvidersApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: ProvidersState,
-  dispatch: Dispatch<ProvidersAction>,
-) {
+function useActivateProvider(options: ProviderMutationOptions) {
+  const { api, copy, dispatch, state } = options;
+
   return useCallback(async (name: string): Promise<void> => {
     dispatch({ type: 'mutate_start' });
     try {
@@ -127,12 +144,9 @@ function useActivateProvider(
   }, [api, copy.system.failedToSwitchProvider, dispatch, state.providers]);
 }
 
-function useDeleteProvider(
-  api: ProvidersApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: ProvidersState,
-  dispatch: Dispatch<ProvidersAction>,
-) {
+function useDeleteProvider(options: ProviderMutationOptions) {
+  const { api, copy, dispatch, state } = options;
+
   return useCallback(async (name: string): Promise<void> => {
     dispatch({ type: 'mutate_start' });
     try {
@@ -148,13 +162,9 @@ function useDeleteProvider(
   }, [api, copy.system.failedToDeleteProvider, dispatch, state.editingName]);
 }
 
-function useProviderActionBundle(
-  dispatch: Dispatch<ProvidersAction>,
-  refresh: UseConfigProvidersActions['refresh'],
-  submit: UseConfigProvidersActions['submit'],
-  activate: UseConfigProvidersActions['activate'],
-  deleteByName: UseConfigProvidersActions['delete'],
-): UseConfigProvidersActions {
+function useProviderActionBundle(options: ProviderActionBundleOptions): UseConfigProvidersActions {
+  const { activate, deleteByName, dispatch, refresh, submit } = options;
+
   return useMemo(() => ({
     refresh,
     submit,
