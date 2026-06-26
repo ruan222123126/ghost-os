@@ -1,15 +1,22 @@
 import type {
   OrchestrationDefinition,
+  OrchestrationAgentNode,
+  OrchestrationEdge,
+  OrchestrationGroupNode,
+  OrchestrationNode,
   OrchestrationTaskPayload,
 } from '@/lib/types';
+import {
+  buildOrchestrationNodePositionMap,
+  fallbackOrchestrationNodePosition,
+  type OrchestrationNodePosition,
+} from '@/lib/orchestration-editor/draftLayout';
 import { cloneOrchestrationTaskRuntimeOverrides } from '@/lib/workflow-editor/agentRuntime';
 import {
   DECIMAL_RADIX,
   DEFAULT_INTERVAL_SECONDS,
   DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
   MIN_INTERVAL_SECONDS,
-  NODE_X_GAP,
-  NODE_Y_BASE,
 } from '@/lib/workflow-editor/constants';
 import type {
   OrchestrationCreatePayload,
@@ -19,9 +26,6 @@ import type {
   WorkflowCanvasNodeDraft,
   WorkflowUpdatePayload,
 } from '@/lib/workflow-editor/types';
-
-const GROUP_MEMBER_Y_GAP = 150;
-const GROUP_LANE_Y = NODE_Y_BASE + 140;
 
 export function createEmptyOrchestrationDraft(mode: 'create' | 'edit' = 'create'): WorkflowCanvasDraft {
   return {
@@ -51,12 +55,12 @@ export function orchestrationTaskToDraft(task: OrchestrationTaskPayload): Workfl
 
 export function orchestrationDefinitionToDraft(input: OrchestrationDefinitionImport): WorkflowCanvasDraft {
   const normalized = normalizeOrchestrationDefinition(input.orchestration);
-  const layout = buildNodePositionMap(normalized);
+  const layout = buildOrchestrationNodePositionMap(normalized);
   return {
     mode: 'create',
     schedule: scheduleDraftFromTask(input.scheduleType, input.intervalSeconds, input.cronExpr),
-    nodes: normalized.nodes.map((node) => buildDraftNode(node, layout.get(node.id) ?? fallbackPosition(node.id))),
-    edges: normalized.edges.map((edge, index) => buildDraftEdge(edge.from_node_id, edge.to_node_id, edge.kind, index + 1)),
+    nodes: normalized.nodes.map((node) => buildDraftNode(node, layout.get(node.id) ?? fallbackOrchestrationNodePosition(node.id))),
+    edges: normalized.edges.map((edge, index) => buildDraftEdge(edge, index + 1)),
   };
 }
 
@@ -96,28 +100,14 @@ export function draftToOrchestrationUpdatePayload(
   };
 }
 
-function buildDraftNode(node: OrchestrationDefinition['nodes'][number], position: { x: number; y: number }): WorkflowCanvasNodeDraft {
+function buildDraftNode(node: OrchestrationNode, position: OrchestrationNodePosition): WorkflowCanvasNodeDraft {
   return {
     id: node.id,
     type: node.type,
     position,
     ui: { toolArgumentsMode: 'kv' },
-    agent: node.type === 'agent'
-      ? {
-        title: node.agent?.title ?? '',
-        message: node.agent?.message ?? '',
-        runtime_overrides: cloneOrchestrationTaskRuntimeOverrides(node.agent?.runtime_overrides),
-      }
-      : undefined,
-    group: node.type === 'group'
-      ? {
-        title: node.group?.title ?? '',
-        shared_context: node.group?.shared_context ?? '',
-        speaking_mode: node.group?.speaking_mode ?? 'sequential',
-        owner_agent_id: node.group?.owner_agent_id ?? '',
-        max_rounds: node.group?.max_rounds ?? DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
-      }
-      : undefined,
+    agent: buildDraftAgentPayload(node),
+    group: buildDraftGroupPayload(node),
   };
 }
 
@@ -128,22 +118,54 @@ function buildOrchestrationNode(node: WorkflowCanvasNodeDraft): OrchestrationDef
   return {
     id: node.id,
     type: node.type,
-    group: node.type === 'group'
-      ? {
-        title: node.group?.title ?? '',
-        shared_context: node.group?.shared_context ?? '',
-        speaking_mode: node.group?.speaking_mode ?? 'sequential',
-        owner_agent_id: node.group?.owner_agent_id ?? '',
-        max_rounds: node.group?.max_rounds ?? DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
-      }
-      : undefined,
-    agent: node.type === 'agent'
-      ? {
-        title: node.agent?.title ?? '',
-        message: node.agent?.message ?? '',
-        runtime_overrides: cloneOrchestrationTaskRuntimeOverrides(node.agent?.runtime_overrides),
-      }
-      : undefined,
+    group: buildOrchestrationGroupPayload(node),
+    agent: buildOrchestrationAgentPayload(node),
+  };
+}
+
+function buildDraftAgentPayload(node: OrchestrationNode): WorkflowCanvasNodeDraft['agent'] {
+  return node.type === 'agent' ? buildAgentPayload(node.agent) : undefined;
+}
+
+function buildDraftGroupPayload(node: OrchestrationNode): WorkflowCanvasNodeDraft['group'] {
+  return node.type === 'group' ? buildGroupPayload(node.group) : undefined;
+}
+
+function buildOrchestrationAgentPayload(node: WorkflowCanvasNodeDraft): OrchestrationAgentNode | undefined {
+  return node.type === 'agent' ? buildAgentPayload(node.agent) : undefined;
+}
+
+function buildOrchestrationGroupPayload(node: WorkflowCanvasNodeDraft): OrchestrationGroupNode | undefined {
+  return node.type === 'group' ? buildGroupPayload(node.group) : undefined;
+}
+
+function buildAgentPayload(
+  agent?: OrchestrationAgentNode | WorkflowCanvasNodeDraft['agent'],
+): OrchestrationAgentNode {
+  const { title = '', message = '', runtime_overrides } = agent ?? {};
+  return {
+    title,
+    message,
+    runtime_overrides: cloneOrchestrationTaskRuntimeOverrides(runtime_overrides),
+  };
+}
+
+function buildGroupPayload(
+  group?: OrchestrationGroupNode | WorkflowCanvasNodeDraft['group'],
+): OrchestrationGroupNode {
+  const {
+    title = '',
+    shared_context = '',
+    speaking_mode = 'sequential',
+    owner_agent_id = '',
+    max_rounds = DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
+  } = group ?? {};
+  return {
+    title,
+    shared_context,
+    speaking_mode,
+    owner_agent_id,
+    max_rounds,
   };
 }
 
@@ -180,38 +202,13 @@ function isOrchestrationDraftNode(
   return node?.type === 'group' || node?.type === 'agent';
 }
 
-function buildDraftEdge(fromNodeID: string, toNodeID: string, kind: 'control' | 'member', index: number): WorkflowCanvasEdgeDraft {
-  return { id: `edge-${index}-${fromNodeID}-${toNodeID}-${kind}`, from_node_id: fromNodeID, to_node_id: toNodeID, kind };
-}
-
-function buildNodePositionMap(definition: OrchestrationDefinition): Map<string, { x: number; y: number }> {
-  const positions = new Map<string, { x: number; y: number }>();
-  const controlNext = new Map<string, string>();
-  for (const edge of definition.edges) {
-    if (edge.kind === 'control') {
-      controlNext.set(edge.from_node_id, edge.to_node_id);
-    }
-  }
-  let currentID = findEntryGroupID(definition);
-  let index = 0;
-  while (currentID && !positions.has(currentID)) {
-    positions.set(currentID, { x: index * NODE_X_GAP, y: GROUP_LANE_Y });
-    currentID = controlNext.get(currentID) ?? '';
-    index += 1;
-  }
-  for (const node of definition.nodes.filter((item) => item.type === 'group')) {
-    const base = positions.get(node.id) ?? fallbackPosition(node.id);
-    const members = definition.edges.filter((edge) => edge.kind === 'member' && edge.to_node_id === node.id);
-    members.forEach((edge, memberIndex) => {
-      if (!positions.has(edge.from_node_id)) {
-        positions.set(edge.from_node_id, {
-          x: base.x,
-          y: base.y - GROUP_MEMBER_Y_GAP * (memberIndex + 1),
-        });
-      }
-    });
-  }
-  return positions;
+function buildDraftEdge(edge: OrchestrationEdge, index: number): WorkflowCanvasEdgeDraft {
+  return {
+    id: `edge-${index}-${edge.from_node_id}-${edge.to_node_id}-${edge.kind}`,
+    from_node_id: edge.from_node_id,
+    to_node_id: edge.to_node_id,
+    kind: edge.kind,
+  };
 }
 
 function resolveEdgeKind(
@@ -260,33 +257,9 @@ function parseIntervalSeconds(raw: string): number {
   return parsed;
 }
 
-function fallbackPosition(nodeID: string): { x: number; y: number } {
-  const seed = Math.max(nodeID.length, 1);
-  return { x: seed * NODE_X_GAP, y: GROUP_LANE_Y };
-}
-
 function normalizeOrchestrationDefinition(definition: OrchestrationDefinition): OrchestrationDefinition {
   return {
     nodes: definition.nodes.map((node) => ({ ...node })),
     edges: definition.edges.map((edge) => ({ ...edge })),
   };
-}
-
-function findEntryGroupID(definition: OrchestrationDefinition): string {
-  const groupIDs = new Set(
-    definition.nodes
-      .filter((node) => node.type === 'group')
-      .map((node) => node.id),
-  );
-  const controlTargets = new Set(
-    definition.edges
-      .filter((edge) => edge.kind === 'control' && groupIDs.has(edge.to_node_id))
-      .map((edge) => edge.to_node_id),
-  );
-  for (const node of definition.nodes) {
-    if (node.type === 'group' && !controlTargets.has(node.id)) {
-      return node.id;
-    }
-  }
-  return definition.nodes.find((node) => node.type === 'group')?.id ?? '';
 }
