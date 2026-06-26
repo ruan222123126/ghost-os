@@ -10,6 +10,13 @@ const MIGRATION_GROUP_Y = 220;
 const MIGRATION_GROUP_X_GAP = 320;
 const MIGRATION_MEMBER_Y = 60;
 
+interface MigratedAgentNodeOptions {
+  sourceNode: WorkflowCanvasNodeDraft;
+  agentID: string;
+  sequence: number;
+  x: number;
+}
+
 export async function migrateLegacyOrchestrations(): Promise<boolean> {
   const records = listLegacyOrchestrationRecords();
   if (records.length === 0) {
@@ -29,11 +36,12 @@ function migrateLegacyDraft(legacyDraft: WorkflowCanvasDraft): WorkflowCanvasDra
   const edges: WorkflowCanvasDraft['edges'] = [];
   let previousControlID = '';
   agents.forEach((agentNode, index) => {
-    const groupID = `migrated-group-${index + 1}`;
-    const agentID = `migrated-agent-${index + 1}`;
-    const x = (index + 1) * MIGRATION_GROUP_X_GAP;
-    nodes.push(buildMigratedGroupNode(groupID, index, x));
-    nodes.push(buildMigratedAgentNode(agentNode, agentID, index, x));
+    const sequence = index + 1;
+    const groupID = `migrated-group-${sequence}`;
+    const agentID = `migrated-agent-${sequence}`;
+    const x = sequence * MIGRATION_GROUP_X_GAP;
+    nodes.push(buildMigratedGroupNode(groupID, sequence, x));
+    nodes.push(buildMigratedAgentNode({ sourceNode: agentNode, agentID, sequence, x }));
     if (previousControlID) {
       edges.push({ id: `edge-control-${previousControlID}-${groupID}`, from_node_id: previousControlID, to_node_id: groupID, kind: 'control' });
     }
@@ -43,14 +51,14 @@ function migrateLegacyDraft(legacyDraft: WorkflowCanvasDraft): WorkflowCanvasDra
   return { ...legacyDraft, nodes, edges, selectedNodeId: undefined };
 }
 
-function buildMigratedGroupNode(groupID: string, index: number, x: number): WorkflowCanvasNodeDraft {
+function buildMigratedGroupNode(groupID: string, sequence: number, x: number): WorkflowCanvasNodeDraft {
   return {
     id: groupID,
     type: 'group',
     position: { x, y: MIGRATION_GROUP_Y },
     ui: { toolArgumentsMode: 'kv' },
     group: {
-      title: `${DEFAULT_ORCHESTRATION_GROUP_TITLE_PREFIX} ${index + 1}`,
+      title: `${DEFAULT_ORCHESTRATION_GROUP_TITLE_PREFIX} ${sequence}`,
       shared_context: '',
       speaking_mode: 'sequential',
       max_rounds: MIGRATION_GROUP_MAX_ROUNDS,
@@ -58,14 +66,15 @@ function buildMigratedGroupNode(groupID: string, index: number, x: number): Work
   };
 }
 
-function buildMigratedAgentNode(sourceNode: WorkflowCanvasNodeDraft, agentID: string, index: number, x: number): WorkflowCanvasNodeDraft {
+function buildMigratedAgentNode(options: MigratedAgentNodeOptions): WorkflowCanvasNodeDraft {
+  const { sourceNode, agentID, sequence, x } = options;
   return {
     id: agentID,
     type: 'agent',
     position: { x, y: MIGRATION_MEMBER_Y },
     ui: { toolArgumentsMode: 'kv' },
     agent: {
-      title: `${DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX} ${index + 1}`,
+      title: `${DEFAULT_ORCHESTRATION_AGENT_TITLE_PREFIX} ${sequence}`,
       message: sourceNode.agent?.message ?? '',
       runtime_overrides: cloneOrchestrationTaskRuntimeOverrides(sourceNode.agent?.runtime_overrides),
     },
