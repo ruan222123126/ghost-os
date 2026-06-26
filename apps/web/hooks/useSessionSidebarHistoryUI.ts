@@ -6,8 +6,18 @@ import { type DropTargetState } from '@/components/SessionSidebarHistoryPartitio
 import { resolveContextMenuStyle } from '@/components/sessionSidebarHistoryMenuUtils';
 import { UNCLASSIFIED_PARTITION_ID } from '@/lib/sessionSidebarPartitions';
 import { isSystemSessionPartitionID } from '@/lib/sessionSidebarSessionSources';
+import {
+  closePartitionCreateDialog,
+  createPartitionFromInput,
+  dragOverPartition,
+  dragOverSession,
+  dropSessionOnPartition,
+  openPartitionContextMenu,
+  openPartitionCreateDialog,
+  resetSessionDrag,
+  startSessionDrag,
+} from './sessionSidebarHistoryUIActions';
 
-const SESSION_DRAG_MIME = 'application/x-ghost-session-id';
 const STATUS_TIMEOUT_MS = 1800;
 const PARTITION_MENU_ACTION_HEIGHT = 116;
 const PARTITION_MENU_CREATE_ONLY_HEIGHT = 48;
@@ -68,6 +78,13 @@ interface DragState {
   onDragEndSession: () => void;
 }
 
+interface ResetMenuWhenClosedOptions {
+  isOpen: boolean;
+  setContextMenu: (value: ContextMenuState | undefined) => void;
+  setCreateDialogOpen: (value: boolean) => void;
+  setCreateError: (value: string) => void;
+}
+
 export function useSessionSidebarHistoryUI(
   options: UseSessionSidebarHistoryUIOptions,
 ): UseSessionSidebarHistoryUIResult {
@@ -104,34 +121,28 @@ function usePartitionMenuState(options: UseSessionSidebarHistoryUIOptions): Part
   const [statusMessage, setStatusMessage] = useState('');
 
   useAutoClearStatus(statusMessage, setStatusMessage);
-  useResetMenuWhenClosed(options.isOpen, setContextMenu, setCreateDialogOpen, setCreateError);
+  useResetMenuWhenClosed({
+    isOpen: options.isOpen,
+    setContextMenu,
+    setCreateDialogOpen,
+    setCreateError,
+  });
 
   const onOpenContextMenu = (event: MouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('[data-session-item="true"]')) {
-      return;
-    }
-    event.preventDefault();
-    const partitionID = target.closest<HTMLElement>('[data-partition-item="true"]')?.dataset.partitionId?.trim() ?? '';
-    const partitionName = target.closest<HTMLElement>('[data-partition-item="true"]')?.dataset.partitionName?.trim() ?? '';
-    setContextMenu({
-      x: event.clientX,
-      y: event.clientY,
-      partitionID,
-      partitionName,
-    });
+    openPartitionContextMenu(event, setContextMenu);
   };
 
   const onCreatePartition = () => {
-    const result = options.addPartition(partitionNameInput);
-    if (!result.ok) {
-      setCreateError(options.createErrorText(result.error));
-      return;
-    }
-    setPartitionNameInput('');
-    setCreateError('');
-    setCreateDialogOpen(false);
-    setStatusMessage(options.createSuccessText(result.createdName ?? ''));
+    createPartitionFromInput({
+      addPartition: options.addPartition,
+      createErrorText: options.createErrorText,
+      createSuccessText: options.createSuccessText,
+      input: partitionNameInput,
+      setCreateDialogOpen,
+      setCreateError,
+      setPartitionNameInput,
+      setStatusMessage,
+    });
   };
 
   return {
@@ -145,13 +156,10 @@ function usePartitionMenuState(options: UseSessionSidebarHistoryUIOptions): Part
     onChangePartitionName: setPartitionNameInput,
     closeContextMenu: () => setContextMenu(undefined),
     openCreateDialog: () => {
-      setContextMenu(undefined);
-      setCreateError('');
-      setCreateDialogOpen(true);
+      openPartitionCreateDialog(setContextMenu, setCreateError, setCreateDialogOpen);
     },
     closeCreateDialog: () => {
-      setCreateDialogOpen(false);
-      setCreateError('');
+      closePartitionCreateDialog(setCreateDialogOpen, setCreateError);
     },
   };
 }
@@ -177,17 +185,14 @@ function useAutoClearStatus(
     if (!statusMessage) {
       return;
     }
-    const timer = window.setTimeout(() => setStatusMessage(''), STATUS_TIMEOUT_MS);
-    return () => window.clearTimeout(timer);
+    const timer = setTimeout(() => setStatusMessage(''), STATUS_TIMEOUT_MS);
+    return () => clearTimeout(timer);
   }, [statusMessage, setStatusMessage]);
 }
 
-function useResetMenuWhenClosed(
-  isOpen: boolean,
-  setContextMenu: (value: ContextMenuState | undefined) => void,
-  setCreateDialogOpen: (value: boolean) => void,
-  setCreateError: (value: string) => void,
-) {
+function useResetMenuWhenClosed(options: ResetMenuWhenClosedOptions) {
+  const { isOpen, setContextMenu, setCreateDialogOpen, setCreateError } = options;
+
   useEffect(() => {
     if (isOpen) {
       return;
@@ -205,45 +210,28 @@ function useSessionDragState(
   const [dropTarget, setDropTarget] = useState<DropTargetState>();
 
   const onDragStartSession = (event: DragEvent<HTMLDivElement>, sessionID: string) => {
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData(SESSION_DRAG_MIME, sessionID);
-    setDraggingSessionID(sessionID);
-    setDropTarget(undefined);
+    startSessionDrag({ event, sessionID, setDraggingSessionID, setDropTarget });
   };
 
   const onDragOverSession = (event: DragEvent<HTMLDivElement>, partitionID: string, itemIndex: number) => {
-    if (!draggingSessionID) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const insertIndex = event.clientY < bounds.top + bounds.height / 2 ? itemIndex : itemIndex + 1;
-    setDropTarget({ partitionID, insertIndex });
+    dragOverSession({ draggingSessionID, event, itemIndex, partitionID, setDropTarget });
   };
 
   const onDragOverPartition = (event: DragEvent<HTMLDivElement>, partitionID: string, itemCount: number) => {
-    if (!draggingSessionID) {
-      return;
-    }
-    event.preventDefault();
-    const insertIndex = itemCount === 0 ? 0 : itemCount;
-    if (!dropTarget || dropTarget.partitionID !== partitionID || dropTarget.insertIndex !== insertIndex) {
-      setDropTarget({ partitionID, insertIndex });
-    }
+    dragOverPartition({ draggingSessionID, dropTarget, event, itemCount, partitionID, setDropTarget });
   };
 
   const onDropPartition = (event: DragEvent<HTMLDivElement>, partitionID: string, itemCount: number) => {
-    if (!draggingSessionID) {
-      return;
-    }
-    event.preventDefault();
-    const fallback = event.dataTransfer.getData(SESSION_DRAG_MIME).trim();
-    const sessionID = fallback || draggingSessionID;
-    const index = dropTarget?.partitionID === partitionID ? dropTarget.insertIndex : itemCount;
-    moveSession(sessionID, partitionID, index);
-    setDraggingSessionID('');
-    setDropTarget(undefined);
+    dropSessionOnPartition({
+      draggingSessionID,
+      dropTarget,
+      event,
+      itemCount,
+      moveSession,
+      partitionID,
+      setDraggingSessionID,
+      setDropTarget,
+    });
   };
 
   return {
@@ -253,9 +241,6 @@ function useSessionDragState(
     onDragOverSession,
     onDragOverPartition,
     onDropPartition,
-    onDragEndSession: () => {
-      setDraggingSessionID('');
-      setDropTarget(undefined);
-    },
+    onDragEndSession: () => resetSessionDrag(setDraggingSessionID, setDropTarget),
   };
 }
