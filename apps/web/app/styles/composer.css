@@ -346,8 +346,6 @@
 }
 
 .composer-skill-item {
-  display: grid;
-  gap: 3px;
   width: 100%;
   padding: 10px 12px;
   border: none;
@@ -372,16 +370,6 @@
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.composer-skill-item-description {
-  display: -webkit-box;
-  overflow: hidden;
-  color: rgb(107 114 128);
-  font-size: 12px;
-  line-height: 1.35;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 .composer-skill-status {

@@ -112,6 +112,7 @@ describe('components/ChatComposer', () => {
 
     expect(refreshSkills).toHaveBeenCalledTimes(1);
     expect(harness.skillMenuItem('release_flow')).toBeTruthy();
+    expect(harness.skillDescriptionNodes()).toEqual([]);
 
     act(() => {
       harness.skillMenuItem('release_flow').props.onClick();
@@ -268,6 +269,7 @@ function renderComposerHarness(options: {
     plusButton: () => renderer.root.findByProps({ className: 'composer-plus-btn' }),
     selectedSkillButton: () => renderer.root.findByProps({ className: 'composer-selected-skill' }),
     selectedSkillButtons: () => renderer.root.findAllByProps({ className: 'composer-selected-skill' }),
+    skillDescriptionNodes: () => renderer.root.findAllByProps({ className: 'composer-skill-item-description' }),
     skillMenuItem: (label: string) => findButtonContainingText(renderer, label),
     submissions,
     textarea: () => renderer.root.findByType('textarea'),

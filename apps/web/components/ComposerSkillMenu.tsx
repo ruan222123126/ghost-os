@@ -52,7 +52,6 @@ export const ComposerSkillMenu: FC<ComposerSkillMenuProps> = ({
               onClick={() => onSelect(skill)}
             >
               <span className="composer-skill-item-name">{skill.name}</span>
-              <span className="composer-skill-item-description">{skill.description}</span>
             </button>
           ))}
         </div>
