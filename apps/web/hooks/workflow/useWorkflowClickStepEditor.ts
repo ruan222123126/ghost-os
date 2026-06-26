@@ -4,24 +4,21 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
   type Dispatch,
   type SetStateAction,
 } from 'react';
-import { getMousePosition } from '@/lib/api/tools/mousePosition';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { ScreenControlComposerStep } from '@/lib/workflow-editor';
 import {
   CLICK_COORDINATE_SOURCE_FIND_ICON,
-  CLICK_MOUSE_POLL_MS,
-  applyMousePositionToState,
   buildInitialEditorState,
   buildSavedClickStep,
   buildStepTag,
   type ClickEditorState,
 } from '@/components/workflow/workflowClickStepEditorHelpers';
+import { useWorkflowClickCaptureControls } from '@/hooks/workflow/useWorkflowClickCaptureControls';
 
 interface UseWorkflowClickStepEditorOptions {
   canUseFindIconReference: boolean;
@@ -47,6 +44,30 @@ interface UseWorkflowClickStepEditorResult {
   titleID: string;
 }
 
+interface ClickEditorFormState {
+  captureActive: boolean;
+  captureLoading: boolean;
+  errorText: string;
+  saving: boolean;
+  setCaptureActive: Dispatch<SetStateAction<boolean>>;
+  setCaptureLoading: Dispatch<SetStateAction<boolean>>;
+  setErrorText: Dispatch<SetStateAction<string>>;
+  setSaving: Dispatch<SetStateAction<boolean>>;
+  setState: Dispatch<SetStateAction<ClickEditorState>>;
+  state: ClickEditorState;
+}
+
+interface SaveClickActionOptions {
+  canUseFindIconReference: boolean;
+  fallbackError: string;
+  onSave: (stepIndex: number, step: ScreenControlComposerStep) => void;
+  setErrorText: (value: string) => void;
+  setSaving: (value: boolean) => void;
+  state: ClickEditorState;
+  step: ScreenControlComposerStep;
+  stepIndex: number;
+}
+
 const CLICK_EDITOR_TITLE_ID = 'workflow-screen-click-editor-title';
 
 export function useWorkflowClickStepEditor(
@@ -54,143 +75,72 @@ export function useWorkflowClickStepEditor(
 ): UseWorkflowClickStepEditorResult {
   const { locale, copy } = useWebLocale();
   const initial = useMemo(() => buildInitialEditorState(options.step), [options.step]);
-  const [state, setState] = useState<ClickEditorState>(initial);
-  const [saving, setSaving] = useState(false);
-  const [errorText, setErrorText] = useState('');
-  const [captureActive, setCaptureActive] = useState(false);
-  const [captureLoading, setCaptureLoading] = useState(false);
-  const captureSnapshotRef = useRef<ClickEditorState | null>(null);
-  const capturePendingRef = useRef(false);
-
-  useEffect(() => {
-    setState(initial);
-    setErrorText('');
-    setCaptureActive(false);
-    setCaptureLoading(false);
-    captureSnapshotRef.current = null;
-  }, [initial]);
-
-  const stopCapture = useCallback(() => {
-    setCaptureActive(false);
-    setCaptureLoading(false);
-    capturePendingRef.current = false;
-  }, []);
-
-  const restoreCaptureSnapshot = useCallback(() => {
-    const snapshot = captureSnapshotRef.current;
-    if (snapshot) {
-      setState(snapshot);
-    }
-  }, []);
-
-  const cancelCapture = useCallback(() => {
-    restoreCaptureSnapshot();
-    stopCapture();
-  }, [restoreCaptureSnapshot, stopCapture]);
-
-  const failCapture = useCallback((error: unknown) => {
-    restoreCaptureSnapshot();
-    stopCapture();
-    setErrorText(toErrorMessage(error, copy.system.genericRequestFailed));
-  }, [copy.system.genericRequestFailed, restoreCaptureSnapshot, stopCapture]);
-
-  const pollMousePosition = useCallback(async () => {
-    if (capturePendingRef.current) {
-      return;
-    }
-    capturePendingRef.current = true;
-    setCaptureLoading(true);
-    try {
-      const position = await getMousePosition();
-      setState((current) => applyMousePositionToState(current, position));
-      setErrorText('');
-    } catch (error) {
-      failCapture(error);
-      return;
-    } finally {
-      capturePendingRef.current = false;
-      setCaptureLoading(false);
-    }
-  }, [failCapture]);
-
-  useCapturePolling(captureActive, pollMousePosition);
-  useCaptureKeyboard(captureActive, stopCapture, cancelCapture);
-
-  const startCapture = useCallback(() => {
-    captureSnapshotRef.current = state;
-    setErrorText('');
-    setCaptureActive(true);
-  }, [state]);
-
-  const saveClick = useCallback(() => {
-    handleSaveClick({
-      step: options.step,
-      stepIndex: options.stepIndex,
-      state,
-      canUseFindIconReference: options.canUseFindIconReference,
-      onSave: options.onSave,
-      setSaving,
-      setErrorText,
-      fallbackError: copy.system.genericRequestFailed,
-    });
-  }, [copy.system.genericRequestFailed, options, state]);
+  const formState = useClickEditorFormState(initial);
+  const startCapture = useWorkflowClickCaptureControls({
+    captureActive: formState.captureActive,
+    fallbackError: copy.system.genericRequestFailed,
+    resetSignal: initial,
+    setCaptureActive: formState.setCaptureActive,
+    setCaptureLoading: formState.setCaptureLoading,
+    setErrorText: formState.setErrorText,
+    setState: formState.setState,
+    state: formState.state,
+  });
+  const saveClick = useSaveClickAction({
+    step: options.step,
+    stepIndex: options.stepIndex,
+    state: formState.state,
+    canUseFindIconReference: options.canUseFindIconReference,
+    onSave: options.onSave,
+    setSaving: formState.setSaving,
+    setErrorText: formState.setErrorText,
+    fallbackError: copy.system.genericRequestFailed,
+  });
 
   return {
     canUseFindIconReference: options.canUseFindIconReference,
-    captureActive,
-    captureLoading,
+    captureActive: formState.captureActive,
+    captureLoading: formState.captureLoading,
     closeAria: copy.workflow.clickEditorCloseAria,
-    errorText,
+    errorText: formState.errorText,
     locale,
     onSave: saveClick,
     onStartCapture: startCapture,
-    onStateChange: setState,
-    saving,
-    state,
+    onStateChange: formState.setState,
+    saving: formState.saving,
+    state: formState.state,
     stepTag: buildStepTag(options.stepIndex),
     title: copy.workflow.clickEditorTitle,
     titleID: CLICK_EDITOR_TITLE_ID,
   };
 }
 
-function useCapturePolling(
-  captureActive: boolean,
-  pollMousePosition: () => Promise<void>,
-): void {
-  useEffect(() => {
-    if (!captureActive) {
-      return undefined;
-    }
-    void pollMousePosition();
-    const timer = window.setInterval(() => {
-      void pollMousePosition();
-    }, CLICK_MOUSE_POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [captureActive, pollMousePosition]);
-}
+function useClickEditorFormState(initial: ClickEditorState): ClickEditorFormState {
+  const [state, setState] = useState<ClickEditorState>(initial);
+  const [saving, setSaving] = useState(false);
+  const [errorText, setErrorText] = useState('');
+  const [captureActive, setCaptureActive] = useState(false);
+  const [captureLoading, setCaptureLoading] = useState(false);
 
-function useCaptureKeyboard(
-  captureActive: boolean,
-  stopCapture: () => void,
-  cancelCapture: () => void,
-): void {
   useEffect(() => {
-    if (!captureActive) {
-      return undefined;
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        stopCapture();
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        cancelCapture();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [cancelCapture, captureActive, stopCapture]);
+    setState(initial);
+    setErrorText('');
+    setCaptureActive(false);
+    setCaptureLoading(false);
+  }, [initial]);
+
+  return {
+    captureActive,
+    captureLoading,
+    errorText,
+    saving,
+    setCaptureActive,
+    setCaptureLoading,
+    setErrorText,
+    setSaving,
+    setState,
+    state,
+  };
 }
 
 function handleSaveClick(options: {
@@ -219,3 +169,8 @@ function handleSaveClick(options: {
   }
 }
 
+function useSaveClickAction(options: SaveClickActionOptions): () => void {
+  return useCallback(() => {
+    handleSaveClick(options);
+  }, [options]);
+}
