@@ -11,6 +11,7 @@ import {
   SCRIPT_EXEC_TOOL,
   supportsPromotedActionTitle,
 } from '@/lib/toolNames';
+import { parseInlineArgs } from './inlineArgs';
 
 const SUMMARY_LIMIT = 80;
 const SUMMARY_TRUNCATE_AT = 77;
@@ -32,6 +33,23 @@ export const ACTION_ORDER = ['list', 'load', 'unload', 'read', 'write', 'edit', 
 export type ActionKind = typeof ACTION_ORDER[number];
 export interface ActionItem { kind: ActionKind; text: string; }
 interface LineDelta { added?: number; removed?: number; }
+interface DiffLineCountState { added: number; removed: number; inHunk: boolean; }
+type DirectActionBuilder = (args?: RecordValue) => ActionItem | undefined;
+
+const DIRECT_ACTION_BUILDERS: Record<string, DirectActionBuilder> = {
+  [SCRIPT_EXEC_TOOL]: (args) => ({ kind: 'run', text: truncateSummary(readString(args, 'script')) }),
+  codex_cli: (args) => ({ kind: 'codex', text: formatCodexTarget(args) }),
+  read_file: (args) => ({ kind: 'read', text: formatPath(readString(args, 'path')) }),
+  list_files: (args) => ({ kind: 'list', text: formatPath(readString(args, 'path')) || '.' }),
+  write_file: (args) => ({ kind: 'write', text: appendDelta(formatPath(readString(args, 'path')), resolveWriteDelta(undefined, args)) }),
+  apply_diff: (args) => ({ kind: 'edit', text: appendDelta(formatPath(readString(args, 'path')), resolveEditDelta(undefined, args)) }),
+  bash_exec: (args) => ({ kind: 'run', text: truncateSummary(readString(args, 'command') || readString(args, 'cmd')) }),
+  screen_action: buildScreenAction,
+  screen_control: buildScreenAction,
+  fetch_webpage: (args) => ({ kind: 'web', text: truncateSummary(formatWebTarget(readString(args, 'url'))) }),
+  web_search: (args) => ({ kind: 'web', text: truncateSummary(readString(args, 'query')) }),
+  search_files: (args) => ({ kind: 'search', text: truncateSummary(readString(args, 'query')) }),
+};
 
 export {
   parseRecord,
@@ -40,46 +58,11 @@ export {
   readString,
   type RecordValue,
 } from './records';
+export { parseInlineArgs } from './inlineArgs';
 export { normalizeToolName, supportsPromotedActionTitle } from '@/lib/toolNames';
 
 export function buildDirectAction(toolName: string, args?: RecordValue): ActionItem | undefined {
-  if (!toolName) return undefined;
-  if (toolName === SCRIPT_EXEC_TOOL) {
-    return { kind: 'run', text: truncateSummary(readString(args, 'script')) };
-  }
-  if (toolName === 'codex_cli') {
-    return { kind: 'codex', text: formatCodexTarget(args) };
-  }
-  if (toolName === 'read_file') {
-    return { kind: 'read', text: formatPath(readString(args, 'path')) };
-  }
-  if (toolName === 'list_files') {
-    return { kind: 'list', text: formatPath(readString(args, 'path')) || '.' };
-  }
-  if (toolName === 'write_file') {
-    const delta = resolveWriteDelta(undefined, args);
-    return { kind: 'write', text: appendDelta(formatPath(readString(args, 'path')), delta) };
-  }
-  if (toolName === 'apply_diff') {
-    const delta = resolveEditDelta(undefined, args);
-    return { kind: 'edit', text: appendDelta(formatPath(readString(args, 'path')), delta) };
-  }
-  if (toolName === 'bash_exec') {
-    return { kind: 'run', text: truncateSummary(readString(args, 'command') || readString(args, 'cmd')) };
-  }
-  if (toolName === 'screen_action' || toolName === 'screen_control') {
-    return buildScreenAction(args);
-  }
-  if (toolName === 'fetch_webpage') {
-    return { kind: 'web', text: truncateSummary(formatWebTarget(readString(args, 'url'))) };
-  }
-  if (toolName === 'web_search') {
-    return { kind: 'web', text: truncateSummary(readString(args, 'query')) };
-  }
-  if (toolName === 'search_files') {
-    return { kind: 'search', text: truncateSummary(readString(args, 'query')) };
-  }
-  return undefined;
+  return DIRECT_ACTION_BUILDERS[toolName]?.(args);
 }
 
 function buildScreenAction(args?: RecordValue): ActionItem | undefined {
@@ -136,55 +119,51 @@ function resolveEditDelta(writeChange?: RecordValue, args?: RecordValue): LineDe
 
 function countUnifiedDiffDelta(diffText: string): LineDelta {
   if (!diffText.trim()) return {};
-  let added = 0;
-  let removed = 0;
-  let inHunk = false;
+  const state: DiffLineCountState = { added: 0, removed: 0, inHunk: false };
   for (const line of diffText.split(/\r?\n/)) {
-    if (line.startsWith('@@')) {
-      inHunk = true;
-      continue;
-    }
-    if (!inHunk || line.startsWith('\\')) {
-      continue;
-    }
-    if (line.startsWith('+')) {
-      added += 1;
-      continue;
-    }
-    if (line.startsWith('-')) {
-      removed += 1;
-    }
+    countUnifiedDiffLine(state, line);
   }
+  return lineDeltaFromCounts(state);
+}
+
+function countUnifiedDiffLine(state: DiffLineCountState, line: string): void {
+  if (line.startsWith('@@')) {
+    state.inHunk = true;
+    return;
+  }
+  if (shouldIgnoreDiffLine(state, line)) {
+    return;
+  }
+  if (isAddedDiffLine(line)) {
+    state.added += 1;
+    return;
+  }
+  if (isRemovedDiffLine(line)) {
+    state.removed += 1;
+  }
+}
+
+function shouldIgnoreDiffLine(state: DiffLineCountState, line: string): boolean {
+  return !state.inHunk || line.startsWith('\\');
+}
+
+function isAddedDiffLine(line: string): boolean {
+  return line.startsWith('+');
+}
+
+function isRemovedDiffLine(line: string): boolean {
+  return line.startsWith('-');
+}
+
+function lineDeltaFromCounts(state: DiffLineCountState): LineDelta {
   return {
-    added: added || undefined,
-    removed: removed || undefined,
+    added: positiveCount(state.added),
+    removed: positiveCount(state.removed),
   };
 }
 
-export function parseInlineArgs(toolName: string, argsText: string): RecordValue {
-  const firstLiteral = readFirstQuotedLiteral(argsText);
-  const args: RecordValue = {};
-  if (toolName === 'list_files' || toolName === 'read_file' || toolName === 'write_file' || toolName === 'apply_diff') {
-    const path = readNamedQuotedArg(argsText, 'path') || firstLiteral;
-    if (path) args.path = path;
-  }
-  if (toolName === 'write_file') {
-    const content = readNamedQuotedArg(argsText, 'content');
-    if (content) args.content = content;
-  }
-  if (toolName === 'bash_exec') {
-    args.command = readNamedQuotedArg(argsText, 'command') || firstLiteral;
-  }
-  if (toolName === 'fetch_webpage') {
-    args.url = readNamedQuotedArg(argsText, 'url') || firstLiteral;
-  }
-  if (toolName === 'web_search') {
-    args.query = readNamedQuotedArg(argsText, 'query') || firstLiteral;
-  }
-  if (toolName === 'search_files') {
-    args.query = readNamedQuotedArg(argsText, 'query') || firstLiteral;
-  }
-  return args;
+function positiveCount(value: number): number | undefined {
+  return value > 0 ? value : undefined;
 }
 
 export function parseScriptExecScriptActions(rawText?: string): ActionItem[] {
@@ -204,17 +183,6 @@ export function parseScriptExecScriptActions(rawText?: string): ActionItem[] {
     if (action) actions.push(action);
   }
   return actions;
-}
-
-function readNamedQuotedArg(argsText: string, name: string): string {
-  const pattern = new RegExp(`${name}\\s*=\\s*(['"])(.*?)\\1`, 's');
-  const match = argsText.match(pattern);
-  return match?.[2]?.trim() || '';
-}
-
-function readFirstQuotedLiteral(argsText: string): string {
-  const match = argsText.match(/^\s*(['"])(.*?)\1/s);
-  return match?.[2]?.trim() || '';
 }
 
 function appendDelta(baseText: string, delta: LineDelta): string {
