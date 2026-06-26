@@ -11,6 +11,18 @@ import {
 } from '@/lib/sessionSidebarPartitionsModel';
 import { sortSessionIDsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
 
+interface SessionPartitionMeta {
+  id: string;
+  name: string;
+}
+
+interface SessionPartitionViewContext {
+  byID: Map<string, SessionMetadata>;
+  grouped: Record<string, string[]>;
+  matchesSearch: SessionSearchMatcher;
+  query: string;
+}
+
 export {
   LEGACY_SESSION_PARTITION_STORAGE_KEY,
   SESSION_PARTITION_VERSION,
@@ -91,31 +103,11 @@ export function sanitizeSessionPartitionStore(
 
 export function buildSessionPartitionViews(input: BuildSessionPartitionViewsInput): SessionPartitionView[] {
   const sanitized = sanitizeSessionPartitionStore(input.store, input.sessions);
-  const partitionMetas = [
-    { id: UNCLASSIFIED_PARTITION_ID, name: input.unclassifiedName },
-    ...sanitized.partitions,
-  ];
-
-  const byID = new Map(input.sessions.map((session) => [session.id, session]));
-  const grouped = buildOrderedSessionIDsByPartition(input.sessions, sanitized, partitionMetas.map((meta) => meta.id));
-  const query = input.searchQuery.trim().toLowerCase();
-  const hideEmpty = query.length > 0;
-  const matchesSearch = input.matchesSearch ?? defaultSessionSearchMatcher;
-
+  const partitionMetas = buildSessionPartitionMetas(input.unclassifiedName, sanitized.partitions);
+  const context = buildSessionPartitionViewContext(input, sanitized, partitionMetas);
   return partitionMetas
-    .map((meta) => {
-      const partitionMatches = partitionNameMatches(meta.name, query);
-      const sessions = (grouped[meta.id] ?? [])
-        .map((sessionID) => byID.get(sessionID))
-        .filter((session): session is SessionMetadata => Boolean(session))
-        .filter((session) => partitionMatches || matchesSearch(session, query));
-      return {
-        id: meta.id,
-        name: meta.name,
-        sessions,
-      };
-    })
-    .filter((view) => !hideEmpty || view.sessions.length > 0);
+    .map((meta) => buildSessionPartitionView(meta, context))
+    .filter((view) => shouldKeepSessionPartitionView(view, context.query));
 }
 
 export function partitionNameMatches(name: string, normalizedQuery: string): boolean {
@@ -161,6 +153,62 @@ function buildPartitionIDSet(partitions: SessionPartition[]): Set<string> {
     ids.add(partition.id);
   }
   return ids;
+}
+
+function buildSessionPartitionMetas(
+  unclassifiedName: string,
+  partitions: SessionPartition[],
+): SessionPartitionMeta[] {
+  return [
+    { id: UNCLASSIFIED_PARTITION_ID, name: unclassifiedName },
+    ...partitions,
+  ];
+}
+
+function buildSessionPartitionViewContext(
+  input: BuildSessionPartitionViewsInput,
+  store: SessionPartitionStoreV1,
+  partitionMetas: SessionPartitionMeta[],
+): SessionPartitionViewContext {
+  return {
+    byID: new Map(input.sessions.map((session) => [session.id, session])),
+    grouped: buildOrderedSessionIDsByPartition(input.sessions, store, partitionMetas.map((meta) => meta.id)),
+    matchesSearch: input.matchesSearch ?? defaultSessionSearchMatcher,
+    query: input.searchQuery.trim().toLowerCase(),
+  };
+}
+
+function buildSessionPartitionView(
+  meta: SessionPartitionMeta,
+  context: SessionPartitionViewContext,
+): SessionPartitionView {
+  return {
+    id: meta.id,
+    name: meta.name,
+    sessions: visibleSessionsForPartition(meta, context),
+  };
+}
+
+function visibleSessionsForPartition(
+  meta: SessionPartitionMeta,
+  context: SessionPartitionViewContext,
+): SessionMetadata[] {
+  const partitionMatches = partitionNameMatches(meta.name, context.query);
+  const sessions: SessionMetadata[] = [];
+  for (const sessionID of context.grouped[meta.id] ?? []) {
+    const session = context.byID.get(sessionID);
+    if (!session) {
+      continue;
+    }
+    if (partitionMatches || context.matchesSearch(session, context.query)) {
+      sessions.push(session);
+    }
+  }
+  return sessions;
+}
+
+function shouldKeepSessionPartitionView(view: SessionPartitionView, query: string): boolean {
+  return !query || view.sessions.length > 0;
 }
 
 function pruneAssignments(
