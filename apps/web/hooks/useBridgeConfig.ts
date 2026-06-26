@@ -1,18 +1,12 @@
 // React hook for reading and updating bridge runtime configuration.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { updateConfig } from '@/lib/api/config/api';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { BridgeConfig, ConfigUpdate, ProviderConfig, ProviderModelOption } from '@/lib/types';
-import {
-  buildProviderModelOptions,
-  resolveActiveModelOption,
-  stringsEqualIgnoreCase,
-} from '@/hooks/bridgeConfigModelOptions';
+import { useBridgeModelControls } from '@/hooks/bridgeConfigModelControls';
 import { useBridgeConfigLoaders } from '@/hooks/useBridgeConfigLoaders';
-
-const defaultModel = 'gpt-4o';
 
 interface UseBridgeConfigOptions {
   autoRefresh?: boolean;
@@ -33,9 +27,87 @@ interface UseBridgeConfigResult {
   refreshConfig: () => Promise<void>;
 }
 
+type BridgeConfigCopy = ReturnType<typeof useWebLocale>['copy'];
+type BridgeConfigLoaders = ReturnType<typeof useBridgeConfigLoaders>;
+type SaveConfigAction = UseBridgeConfigResult['saveConfig'];
+
+interface BridgeConfigStore {
+  config: BridgeConfig | null;
+  configLoading: boolean;
+  configLoadError: string;
+  modelOptionsLoading: boolean;
+  mountedRef: MutableRefObject<boolean>;
+  providerLoadError: string;
+  providers: ProviderConfig[];
+  saveConfigError: string;
+  savingConfig: boolean;
+  setConfig: (config: BridgeConfig) => void;
+  setConfigLoadError: (error: string) => void;
+  setConfigLoading: (loading: boolean) => void;
+  setModelOptionsLoading: (loading: boolean) => void;
+  setProviderLoadError: (error: string) => void;
+  setProviders: (providers: ProviderConfig[]) => void;
+  setSaveConfigError: (error: string) => void;
+  setSavingConfig: (saving: boolean) => void;
+}
+
+interface SaveBridgeConfigOptions {
+  copy: BridgeConfigCopy;
+  mountedRef: MutableRefObject<boolean>;
+  setConfig: (config: BridgeConfig) => void;
+  setSaveConfigError: (error: string) => void;
+  setSavingConfig: (saving: boolean) => void;
+}
+
 export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridgeConfigResult {
   const { copy } = useWebLocale();
   const { autoRefresh = false } = options;
+  const store = useBridgeConfigStore();
+  const loaders = useBridgeConfigLoaders({
+    autoRefresh,
+    mountedRef: store.mountedRef,
+    loadConfigFallbackMessage: copy.system.failedToLoadConfig,
+    loadProvidersFallbackMessage: copy.system.failedToLoadProviders,
+    setConfig: store.setConfig,
+    setProviders: store.setProviders,
+    setConfigLoading: store.setConfigLoading,
+    setModelOptionsLoading: store.setModelOptionsLoading,
+    setConfigLoadError: store.setConfigLoadError,
+    setProviderLoadError: store.setProviderLoadError,
+  });
+  const configError = useConfigError(store);
+  const saveConfig = useSaveBridgeConfig({
+    copy,
+    mountedRef: store.mountedRef,
+    setConfig: store.setConfig,
+    setSaveConfigError: store.setSaveConfigError,
+    setSavingConfig: store.setSavingConfig,
+  });
+  const refreshConfig = useRefreshBridgeConfig(loaders);
+  const model = useBridgeModelControls({
+    config: store.config,
+    loadProviders: loaders.loadProviders,
+    providers: store.providers,
+    saveConfig,
+  });
+
+  return {
+    config: store.config,
+    configLoading: store.configLoading,
+    savingConfig: store.savingConfig,
+    configError,
+    modelOptionsLoading: store.modelOptionsLoading,
+    modelValue: model.modelValue,
+    activeModelOption: model.activeModelOption,
+    modelOptions: model.modelOptions,
+    saveConfig,
+    selectModel: model.selectModel,
+    selectActiveModel: model.selectActiveModel,
+    refreshConfig,
+  };
+}
+
+function useBridgeConfigStore(): BridgeConfigStore {
   const [config, setConfig] = useState<BridgeConfig | null>(null);
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
@@ -45,20 +117,32 @@ export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridge
   const [providerLoadError, setProviderLoadError] = useState('');
   const [saveConfigError, setSaveConfigError] = useState('');
   const mountedRef = useRef(true);
-  const loaders = useBridgeConfigLoaders({
-    autoRefresh,
+
+  return {
+    config,
+    configLoading,
+    configLoadError,
+    modelOptionsLoading,
     mountedRef,
-    loadConfigFallbackMessage: copy.system.failedToLoadConfig,
-    loadProvidersFallbackMessage: copy.system.failedToLoadProviders,
+    providerLoadError,
+    providers,
+    saveConfigError,
+    savingConfig,
     setConfig,
-    setProviders,
+    setConfigLoadError,
     setConfigLoading,
     setModelOptionsLoading,
-    setConfigLoadError,
     setProviderLoadError,
-  });
+    setProviders,
+    setSaveConfigError,
+    setSavingConfig,
+  };
+}
 
-  const configError = useMemo(() => {
+function useConfigError(store: Pick<BridgeConfigStore, 'configLoadError' | 'providerLoadError' | 'saveConfigError'>): string {
+  const { configLoadError, providerLoadError, saveConfigError } = store;
+
+  return useMemo(() => {
     if (saveConfigError) {
       return saveConfigError;
     }
@@ -67,8 +151,12 @@ export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridge
     }
     return providerLoadError;
   }, [configLoadError, providerLoadError, saveConfigError]);
+}
 
-  const saveConfig = useCallback(async (update: ConfigUpdate): Promise<boolean> => {
+function useSaveBridgeConfig(options: SaveBridgeConfigOptions): SaveConfigAction {
+  const { copy, mountedRef, setConfig, setSaveConfigError, setSavingConfig } = options;
+
+  return useCallback(async (update: ConfigUpdate): Promise<boolean> => {
     setSavingConfig(true);
     setSaveConfigError('');
     try {
@@ -88,65 +176,13 @@ export function useBridgeConfig(options: UseBridgeConfigOptions = {}): UseBridge
         setSavingConfig(false);
       }
     }
-  }, [copy.system.failedToSaveConfig]);
+  }, [copy.system.failedToSaveConfig, mountedRef, setConfig, setSaveConfigError, setSavingConfig]);
+}
 
-  const modelSelectionEnabled = config?.model_selection_enabled ?? true;
+function useRefreshBridgeConfig(loaders: BridgeConfigLoaders): UseBridgeConfigResult['refreshConfig'] {
+  const { loadConfig, loadProviders } = loaders;
 
-  const selectModel = useCallback((model: string) => {
-    if (!modelSelectionEnabled || !config || model === config.model) {
-      return;
-    }
-    void saveConfig({ model });
-  }, [config, modelSelectionEnabled, saveConfig]);
-
-  const refreshConfig = useCallback(async (): Promise<void> => {
-    await Promise.all([loaders.loadConfig(), loaders.loadProviders()]);
-  }, [loaders]);
-
-  const modelValue = useMemo(() => config?.model ?? defaultModel, [config]);
-  const modelOptions = useMemo(() => buildProviderModelOptions(config, providers), [config, providers]);
-  const activeModelOption = useMemo(
-    () => resolveActiveModelOption(config, modelOptions),
-    [config, modelOptions],
-  );
-
-  const selectActiveModel = useCallback(async (option: ProviderModelOption): Promise<boolean> => {
-    if (!modelSelectionEnabled) {
-      return false;
-    }
-    if (!option.model.trim()) {
-      return false;
-    }
-
-    if (
-      config
-      && stringsEqualIgnoreCase(option.providerName, config.provider)
-      && stringsEqualIgnoreCase(option.model, config.model)
-    ) {
-      return true;
-    }
-
-    const saved = await saveConfig({ provider: option.providerName, model: option.model });
-    if (!saved) {
-      return false;
-    }
-
-    await loaders.loadProviders(true);
-    return true;
-  }, [config, loaders, modelSelectionEnabled, saveConfig]);
-
-  return {
-    config,
-    configLoading,
-    savingConfig,
-    configError,
-    modelOptionsLoading,
-    modelValue,
-    activeModelOption,
-    modelOptions,
-    saveConfig,
-    selectModel,
-    selectActiveModel,
-    refreshConfig,
-  };
+  return useCallback(async (): Promise<void> => {
+    await Promise.all([loadConfig(), loadProviders()]);
+  }, [loadConfig, loadProviders]);
 }
