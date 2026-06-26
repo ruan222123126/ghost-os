@@ -89,20 +89,28 @@ function findLoopNodePair(
     return undefined;
   }
 
-  const startNode = nodes.find(
-    (node) => node.type === 'loop'
-      && node.loop?.loop_id === normalizedLoopID
-      && node.loop?.role === LOOP_ROLE_START,
-  );
-  const endNode = nodes.find(
-    (node) => node.type === 'loop'
-      && node.loop?.loop_id === normalizedLoopID
-      && node.loop?.role === LOOP_ROLE_END,
-  );
+  const startNode = findLoopRoleNode(nodes, normalizedLoopID, LOOP_ROLE_START);
+  const endNode = findLoopRoleNode(nodes, normalizedLoopID, LOOP_ROLE_END);
   if (!startNode || !endNode) {
     return undefined;
   }
   return { startNode, endNode };
+}
+
+function findLoopRoleNode(
+  nodes: WorkflowCanvasNodeDraft[],
+  loopID: string,
+  role: typeof LOOP_ROLE_START | typeof LOOP_ROLE_END,
+): WorkflowCanvasNodeDraft | undefined {
+  return nodes.find((node) => isLoopRoleNode(node, loopID, role));
+}
+
+function isLoopRoleNode(
+  node: WorkflowCanvasNodeDraft,
+  loopID: string,
+  role: typeof LOOP_ROLE_START | typeof LOOP_ROLE_END,
+): boolean {
+  return node.type === 'loop' && node.loop?.loop_id === loopID && node.loop.role === role;
 }
 
 function cloneLoopPair(loopPair: LoopNodePair, loopIDs: RequiredLoopIDs): LoopNodePair {
@@ -167,23 +175,49 @@ function cloneNodeForDuplicate(
     ...node,
     ...patch,
     ui: cloneNodeUI(node.ui),
-    start: node.start ? { inputs: cloneInputs(node.start.inputs) } : undefined,
-    tool: node.tool
-      ? {
-        ...node.tool,
-        arguments: cloneRecord(node.tool.arguments),
-      }
-      : undefined,
-    llm: node.llm ? { ...node.llm } : undefined,
-    agent: node.agent
-      ? {
-        ...node.agent,
-        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
-      }
-      : undefined,
-    if: node.if ? { ...node.if } : undefined,
-    loop: patch.loop ?? (node.loop ? { ...node.loop } : undefined),
+    start: cloneStartPayload(node),
+    tool: cloneToolPayload(node),
+    llm: cloneLLMPayload(node),
+    agent: cloneAgentPayload(node),
+    if: cloneIfPayload(node),
+    loop: patch.loop ?? cloneLoopPayload(node),
   };
+}
+
+function cloneStartPayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['start'] {
+  return node.start ? { inputs: cloneInputs(node.start.inputs) } : undefined;
+}
+
+function cloneToolPayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['tool'] {
+  if (!node.tool) {
+    return undefined;
+  }
+  return {
+    ...node.tool,
+    arguments: cloneRecord(node.tool.arguments),
+  };
+}
+
+function cloneLLMPayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['llm'] {
+  return node.llm ? { ...node.llm } : undefined;
+}
+
+function cloneAgentPayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['agent'] {
+  if (!node.agent) {
+    return undefined;
+  }
+  return {
+    ...node.agent,
+    runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
+  };
+}
+
+function cloneIfPayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['if'] {
+  return node.if ? { ...node.if } : undefined;
+}
+
+function cloneLoopPayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['loop'] {
+  return node.loop ? { ...node.loop } : undefined;
 }
 
 function offsetPosition(position: WorkflowCanvasPosition): WorkflowCanvasPosition {

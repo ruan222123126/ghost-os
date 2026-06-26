@@ -9,6 +9,25 @@ export interface WorkflowAgentRuntimeCatalog {
   tools: ToolPayload[];
 }
 
+interface WorkflowAgentRuntimeValidationContext {
+  providers: ProviderConfig[];
+  enabledToolNames: Set<string>;
+  errors: string[];
+}
+
+interface WorkflowAgentRuntimeNodeValidation {
+  nodeID: string;
+  overrides: TaskRuntimeOverrides;
+  context: WorkflowAgentRuntimeValidationContext;
+}
+
+interface WorkflowAgentProviderModelValidation {
+  nodeID: string;
+  providerName: string;
+  model: string;
+  context: WorkflowAgentRuntimeValidationContext;
+}
+
 export function enabledWorkflowAgentToolNames(tools: ToolPayload[]): string[] {
   return normalizeWorkflowAgentToolNames(tools.filter((tool) => tool.enabled).map((tool) => tool.name.trim()));
 }
@@ -131,65 +150,99 @@ export function validateWorkflowAgentRuntimeNodes(
   if (!catalog) {
     return;
   }
-  const enabledToolNames = new Set(enabledWorkflowAgentToolNames(catalog.tools));
+  const context = {
+    providers: catalog.providers,
+    enabledToolNames: new Set(enabledWorkflowAgentToolNames(catalog.tools)),
+    errors,
+  };
   for (const node of nodes) {
-    validateWorkflowAgentRuntimeNode(node, catalog.providers, enabledToolNames, errors);
+    validateWorkflowAgentRuntimeNode(node, context);
   }
 }
 
 function validateWorkflowAgentRuntimeNode(
   node: WorkflowCanvasNodeDraft,
-  providers: ProviderConfig[],
-  enabledToolNames: Set<string>,
-  errors: string[],
+  context: WorkflowAgentRuntimeValidationContext,
 ): void {
   if (node.type !== 'agent' || !node.agent?.runtime_overrides) {
     return;
   }
   const overrides = node.agent.runtime_overrides;
-  const providerName = overrides.provider_name?.trim() ?? '';
-  const model = overrides.model?.trim() ?? '';
-  if ((providerName.length > 0 || model.length > 0) && (providerName.length === 0 || model.length === 0)) {
-    errors.push(`workflow agent node "${node.id}" provider_name and model must be set together`);
-  }
-  if (providerName.length > 0) {
-    validateWorkflowAgentProviderModel(node.id, providerName, model, providers, errors);
-  }
-  if (overrides.max_turns !== undefined && (!Number.isInteger(overrides.max_turns) || overrides.max_turns < 1)) {
-    errors.push(`workflow agent node "${node.id}" max_turns must be > 0`);
-  }
-  validateWorkflowAgentTools(node.id, overrides, enabledToolNames, errors);
+  validateWorkflowAgentRuntime({
+    nodeID: node.id,
+    overrides,
+    context,
+  });
 }
 
-function validateWorkflowAgentProviderModel(
-  nodeID: string,
-  providerName: string,
-  model: string,
-  providers: ProviderConfig[],
-  errors: string[],
-): void {
-  const provider = providers.find((item) => item.name.trim() === providerName);
+function validateWorkflowAgentRuntime(input: WorkflowAgentRuntimeNodeValidation): void {
+  validateWorkflowAgentProviderModelPair(input);
+  validateWorkflowAgentMaxTurns(input);
+  validateWorkflowAgentTools(input);
+}
+
+function validateWorkflowAgentProviderModelPair(input: WorkflowAgentRuntimeNodeValidation): void {
+  const { context, nodeID, overrides } = input;
+  const providerName = overrides.provider_name?.trim() ?? '';
+  const model = overrides.model?.trim() ?? '';
+  if (hasPartialProviderModelSelection(providerName, model)) {
+    context.errors.push(`workflow agent node "${nodeID}" provider_name and model must be set together`);
+  }
+  if (hasProviderModelSelection(providerName)) {
+    validateWorkflowAgentProviderModel({
+      nodeID,
+      providerName,
+      model,
+      context,
+    });
+  }
+}
+
+function hasPartialProviderModelSelection(providerName: string, model: string): boolean {
+  return hasProviderModelSelection(providerName) !== hasProviderModelSelection(model);
+}
+
+function hasProviderModelSelection(value: string): boolean {
+  return value.length > 0;
+}
+
+function validateWorkflowAgentMaxTurns(input: WorkflowAgentRuntimeNodeValidation): void {
+  const { context, nodeID, overrides } = input;
+  if (!isValidWorkflowAgentMaxTurns(overrides.max_turns)) {
+    context.errors.push(`workflow agent node "${nodeID}" max_turns must be > 0`);
+  }
+}
+
+function isValidWorkflowAgentMaxTurns(maxTurns: number | undefined): boolean {
+  return maxTurns === undefined || (Number.isInteger(maxTurns) && maxTurns >= 1);
+}
+
+function validateWorkflowAgentProviderModel(input: WorkflowAgentProviderModelValidation): void {
+  const { context, model, nodeID, providerName } = input;
+  const provider = context.providers.find((item) => item.name.trim() === providerName);
   if (!provider) {
-    errors.push(`workflow agent node "${nodeID}" provider_name "${providerName}" is not available`);
+    context.errors.push(`workflow agent node "${nodeID}" provider_name "${providerName}" is not available`);
     return;
   }
   const models = new Set((provider.models ?? []).map((item) => item.trim()).filter((item) => item.length > 0));
   if (!models.has(model)) {
-    errors.push(`workflow agent node "${nodeID}" model "${model}" is not available for provider "${providerName}"`);
+    context.errors.push(`workflow agent node "${nodeID}" model "${model}" is not available for provider "${providerName}"`);
   }
 }
 
-function validateWorkflowAgentTools(
-  nodeID: string,
-  overrides: TaskRuntimeOverrides,
-  enabledToolNames: Set<string>,
-  errors: string[],
-): void {
-  for (const toolName of overrides.tool_allowlist ?? []) {
+function validateWorkflowAgentTools(input: WorkflowAgentRuntimeNodeValidation): void {
+  for (const toolName of input.overrides.tool_allowlist ?? []) {
     const normalized = toolName.trim();
-    if (normalized.length === 0 || enabledToolNames.has(normalized)) {
+    if (isAllowedWorkflowAgentTool(normalized, input.context.enabledToolNames)) {
       continue;
     }
-    errors.push(`workflow agent node "${nodeID}" tool_allowlist contains disabled or unavailable tool "${normalized}"`);
+    input.context.errors.push(`workflow agent node "${input.nodeID}" tool_allowlist contains disabled or unavailable tool "${normalized}"`);
   }
+}
+
+function isAllowedWorkflowAgentTool(
+  toolName: string,
+  enabledToolNames: ReadonlySet<string>,
+): boolean {
+  return toolName.length === 0 || enabledToolNames.has(toolName);
 }
