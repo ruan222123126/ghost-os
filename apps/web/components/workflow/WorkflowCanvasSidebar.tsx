@@ -1,6 +1,11 @@
 'use client';
 
 import { nodeLibraryForCopy } from '@/components/workflow/workflowNodeMeta';
+import {
+  IconPanelLeftClose,
+  IconPanelLeftOpen,
+  IconSettings,
+} from '@/components/workflow/WorkflowCanvasSidebarIcons';
 import { localizeWorkflowValidationError } from '@/lib/i18n/workflowValidation';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { WebLocale } from '@/lib/i18n/locale';
@@ -24,49 +29,42 @@ interface WorkflowCanvasSidebarProps {
   onSave: () => void;
 }
 
+interface SidebarTopProps {
+  isOpen: boolean;
+  workflowCopy: WorkflowCopy;
+  onOpenSettings: () => void;
+  onToggle: () => void;
+}
+
+interface NodeLibraryProps {
+  isOpen: boolean;
+  nodeLibrary: WorkflowNodeLibraryItem[];
+  workflowCopy: WorkflowCopy;
+  onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => void;
+}
+
+interface SidebarFooterProps {
+  autosaveLabel: string;
+  autosaveState: AutosaveState;
+  isOpen: boolean;
+  workflowCopy: WorkflowCopy;
+  onBack: () => void;
+  onSave: () => void;
+}
+
+interface ResolveAutosaveLabelOptions {
+  copy: WorkflowCopy;
+  locale: WebLocale;
+  localizeValidationError: (message: string, locale: WebLocale) => string;
+  state: AutosaveState;
+}
+
+type WorkflowNodeLibraryItem = ReturnType<typeof nodeLibraryForCopy>[number];
+
 const DEFAULT_NEW_NODE_POSITION: WorkflowCanvasPosition = { x: 350, y: 250 };
 
-function IconPanelLeftClose(props: { size?: number }) {
-  const { size = 20 } = props;
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M3.5 4.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M3.5 15.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M8.2 4.5v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M12.7 7.2l-2.5 2.8 2.5 2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconPanelLeftOpen(props: { size?: number }) {
-  const { size = 20 } = props;
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M3.5 4.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M3.5 15.5h13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M8.2 4.5v11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      <path d="M10.2 7.2l2.5 2.8-2.5 2.8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconSettings(props: { size?: number }) {
-  const { size = 18 } = props;
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path
-        d="M10 3.25 11.35 2.5l1.1 1.9 1.6.4 1.55-1.15 1.4 1.4-1.15 1.55.4 1.6 1.9 1.1-.75 1.35.75 1.35-1.9 1.1-.4 1.6 1.15 1.55-1.4 1.4-1.55-1.15-1.6.4-1.1 1.9L10 16.75l-1.35.75-1.1-1.9-1.6-.4-1.55 1.15-1.4-1.4 1.15-1.55-.4-1.6-1.9-1.1.75-1.35-.75-1.35 1.9-1.1.4-1.6L3 5.05l1.4-1.4 1.55 1.15 1.6-.4 1.1-1.9L10 3.25Z"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-      <circle cx="10" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.3" />
-    </svg>
-  );
-}
-
 export function WorkflowCanvasSidebar(props: WorkflowCanvasSidebarProps) {
-  const { copy, locale } = useWebLocale();
+  const { locale } = useWebLocale();
   const {
     isOpen,
     autosaveState,
@@ -81,90 +79,154 @@ export function WorkflowCanvasSidebar(props: WorkflowCanvasSidebarProps) {
   } = props;
   const nodeLibrary = nodeLibraryForCopy(workflowCopy, nodeLibraryTypes);
   const resolveValidationError = localizeValidationError ?? localizeWorkflowValidationError;
+  const autosaveLabel = resolveAutosaveLabel({
+    state: autosaveState,
+    copy: workflowCopy,
+    locale,
+    localizeValidationError: resolveValidationError,
+  });
 
   return (
     <aside className={`workflow-arch-sidebar ${isOpen ? 'workflow-arch-sidebar--open' : ''}`}>
-      <div className="workflow-arch-sidebar-top">
-        <div className="workflow-arch-sidebar-controls">
-          <button
-            type="button"
-            className="workflow-arch-toggle"
-            onClick={onToggle}
-            aria-label={isOpen ? workflowCopy.sidebarCollapseAria : workflowCopy.sidebarExpandAria}
-          >
-            {isOpen ? <IconPanelLeftClose /> : <IconPanelLeftOpen />}
-          </button>
-          <button
-            type="button"
-            className={isOpen ? 'workflow-arch-toggle workflow-arch-settings-trigger' : 'workflow-arch-toggle workflow-arch-settings-trigger workflow-arch-settings-trigger--hidden'}
-            onClick={onOpenSettings}
-            aria-label={workflowCopy.sidebarOpenSettingsAria}
-          >
-            <IconSettings />
-          </button>
-        </div>
-        <div className={`workflow-arch-sidebar-title ${isOpen ? 'workflow-arch-sidebar-title--open' : ''}`}>
-          <h1>
-            {workflowCopy.sidebarTitleMain}
-            <br />
-            <span>{workflowCopy.sidebarTitleSub}</span>
-          </h1>
-          <p>{workflowCopy.sidebarLibraryTitle}</p>
-        </div>
-      </div>
-
-      <div className="workflow-arch-library">
-        {nodeLibrary.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            className="workflow-arch-library-item"
-            title={isOpen ? undefined : item.label}
-            onClick={() => onAddNode(item.id, DEFAULT_NEW_NODE_POSITION)}
-          >
-            <span
-              className={isOpen ? 'workflow-arch-library-initial workflow-arch-library-initial--hidden' : 'workflow-arch-library-initial'}
-              aria-hidden
-            >
-              {item.label.slice(0, 1)}
-            </span>
-            <span className={`workflow-arch-library-copy ${isOpen ? 'workflow-arch-library-copy--open' : ''}`}>
-              <strong>{item.label}</strong>
-              <small>{workflowCopy.sidebarAddToFlow}</small>
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="workflow-arch-sidebar-footer">
-        <button
-          type="button"
-          className={`workflow-arch-save-status workflow-arch-save-status--${autosaveState.phase}`}
-          onClick={onSave}
-          aria-label={workflowCopy.sidebarSaveAria(resolveAutosaveLabel(autosaveState, workflowCopy, locale, resolveValidationError))}
-          title={resolveAutosaveLabel(autosaveState, workflowCopy, locale, resolveValidationError)}
-          aria-live="polite"
-        >
-          <span className="workflow-arch-save-status-dot" aria-hidden />
-          <p>{resolveAutosaveLabel(autosaveState, workflowCopy, locale, resolveValidationError)}</p>
-        </button>
-        <button type="button" className="workflow-arch-footer-action" onClick={onBack}>
-          <span aria-hidden>←</span>
-          <span className={isOpen ? 'workflow-arch-footer-copy workflow-arch-footer-copy--open' : 'workflow-arch-footer-copy'}>
-            {workflowCopy.sidebarReturn}
-          </span>
-        </button>
-      </div>
+      <SidebarTop
+        isOpen={isOpen}
+        workflowCopy={workflowCopy}
+        onOpenSettings={onOpenSettings}
+        onToggle={onToggle}
+      />
+      <NodeLibrary
+        isOpen={isOpen}
+        nodeLibrary={nodeLibrary}
+        workflowCopy={workflowCopy}
+        onAddNode={onAddNode}
+      />
+      <SidebarFooter
+        autosaveLabel={autosaveLabel}
+        autosaveState={autosaveState}
+        isOpen={isOpen}
+        workflowCopy={workflowCopy}
+        onBack={onBack}
+        onSave={onSave}
+      />
     </aside>
   );
 }
 
-function resolveAutosaveLabel(
-  state: AutosaveState,
-  copy: WorkflowCopy,
-  locale: WebLocale,
-  localizeValidationError: (message: string, locale: WebLocale) => string,
-): string {
+function SidebarTop(props: SidebarTopProps) {
+  const { isOpen, workflowCopy, onOpenSettings, onToggle } = props;
+
+  return (
+    <div className="workflow-arch-sidebar-top">
+      <div className="workflow-arch-sidebar-controls">
+        <button
+          type="button"
+          className="workflow-arch-toggle"
+          onClick={onToggle}
+          aria-label={isOpen ? workflowCopy.sidebarCollapseAria : workflowCopy.sidebarExpandAria}
+        >
+          {isOpen ? <IconPanelLeftClose /> : <IconPanelLeftOpen />}
+        </button>
+        <button
+          type="button"
+          className={settingsTriggerClass(isOpen)}
+          onClick={onOpenSettings}
+          aria-label={workflowCopy.sidebarOpenSettingsAria}
+        >
+          <IconSettings />
+        </button>
+      </div>
+      <div className={sidebarTitleClass(isOpen)}>
+        <h1>
+          {workflowCopy.sidebarTitleMain}
+          <br />
+          <span>{workflowCopy.sidebarTitleSub}</span>
+        </h1>
+        <p>{workflowCopy.sidebarLibraryTitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function NodeLibrary(props: NodeLibraryProps) {
+  const { isOpen, nodeLibrary, workflowCopy, onAddNode } = props;
+
+  return (
+    <div className="workflow-arch-library">
+      {nodeLibrary.map((item) => (
+        <NodeLibraryButton
+          key={item.id}
+          isOpen={isOpen}
+          item={item}
+          workflowCopy={workflowCopy}
+          onAddNode={onAddNode}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NodeLibraryButton(props: {
+  isOpen: boolean;
+  item: WorkflowNodeLibraryItem;
+  workflowCopy: WorkflowCopy;
+  onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => void;
+}) {
+  const { isOpen, item, workflowCopy, onAddNode } = props;
+
+  return (
+    <button
+      type="button"
+      className="workflow-arch-library-item"
+      title={isOpen ? undefined : item.label}
+      onClick={() => onAddNode(item.id, DEFAULT_NEW_NODE_POSITION)}
+    >
+      <span className={libraryInitialClass(isOpen)} aria-hidden>
+        {item.label.slice(0, 1)}
+      </span>
+      <span className={libraryCopyClass(isOpen)}>
+        <strong>{item.label}</strong>
+        <small>{workflowCopy.sidebarAddToFlow}</small>
+      </span>
+    </button>
+  );
+}
+
+function SidebarFooter(props: SidebarFooterProps) {
+  const {
+    autosaveLabel,
+    autosaveState,
+    isOpen,
+    workflowCopy,
+    onBack,
+    onSave,
+  } = props;
+
+  return (
+    <div className="workflow-arch-sidebar-footer">
+      <button
+        type="button"
+        className={`workflow-arch-save-status workflow-arch-save-status--${autosaveState.phase}`}
+        onClick={onSave}
+        aria-label={workflowCopy.sidebarSaveAria(autosaveLabel)}
+        title={autosaveLabel}
+        aria-live="polite"
+      >
+        <span className="workflow-arch-save-status-dot" aria-hidden />
+        <p>{autosaveLabel}</p>
+      </button>
+      <button type="button" className="workflow-arch-footer-action" onClick={onBack}>
+        <span aria-hidden>←</span>
+        <span className={footerCopyClass(isOpen)}>
+          {workflowCopy.sidebarReturn}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function resolveAutosaveLabel(options: ResolveAutosaveLabelOptions): string {
+  const { state, copy, locale, localizeValidationError } = options;
+
   if (state.phase === 'saving') {
     return copy.autosaveSaving;
   }
@@ -181,4 +243,39 @@ function resolveAutosaveLabel(
     return copy.autosaveValidationBlocked;
   }
   return copy.autosaveIdle;
+}
+
+function settingsTriggerClass(isOpen: boolean): string {
+  if (isOpen) {
+    return 'workflow-arch-toggle workflow-arch-settings-trigger';
+  }
+  return 'workflow-arch-toggle workflow-arch-settings-trigger workflow-arch-settings-trigger--hidden';
+}
+
+function sidebarTitleClass(isOpen: boolean): string {
+  if (isOpen) {
+    return 'workflow-arch-sidebar-title workflow-arch-sidebar-title--open';
+  }
+  return 'workflow-arch-sidebar-title';
+}
+
+function libraryInitialClass(isOpen: boolean): string {
+  if (isOpen) {
+    return 'workflow-arch-library-initial workflow-arch-library-initial--hidden';
+  }
+  return 'workflow-arch-library-initial';
+}
+
+function libraryCopyClass(isOpen: boolean): string {
+  if (isOpen) {
+    return 'workflow-arch-library-copy workflow-arch-library-copy--open';
+  }
+  return 'workflow-arch-library-copy';
+}
+
+function footerCopyClass(isOpen: boolean): string {
+  if (isOpen) {
+    return 'workflow-arch-footer-copy workflow-arch-footer-copy--open';
+  }
+  return 'workflow-arch-footer-copy';
 }
