@@ -53,6 +53,53 @@ interface WorkflowCanvasWorkbenchProps {
 }
 
 export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
+  const model = useWorkflowCanvasWorkbenchModel(props);
+
+  return (
+    <main className="workflow-arch-root">
+      <div className="workflow-arch-watermark">{model.defaults.workflowCopy.watermark}</div>
+      <WorkbenchSidebarPanel
+        defaults={model.defaults}
+        isOpen={model.isSidebarOpen}
+        onToggle={model.toggleSidebar}
+        onOpenSettings={model.openSettings}
+        workbench={props}
+      />
+      <WorkbenchStagePanel defaults={model.defaults} workbench={props} />
+      <WorkbenchPropertiesPanel
+        defaults={model.defaults}
+        onClose={model.closePropertiesPanel}
+        selectedNode={model.selectedNode}
+        workbench={props}
+      />
+      <WorkbenchSettingsPanel
+        defaults={model.defaults}
+        open={model.isSettingsOpen}
+        onClose={model.closeSettings}
+        workbench={props}
+      />
+    </main>
+  );
+}
+
+interface WorkflowCanvasWorkbenchDefaults {
+  presetError: string;
+  presetLoading: boolean;
+  workflowCopy: WorkflowCopy;
+}
+
+interface WorkflowCanvasWorkbenchModel {
+  closePropertiesPanel: () => void;
+  closeSettings: () => void;
+  defaults: WorkflowCanvasWorkbenchDefaults;
+  isSettingsOpen: boolean;
+  isSidebarOpen: boolean;
+  openSettings: () => void;
+  selectedNode?: WorkflowCanvasNodeDraft;
+  toggleSidebar: () => void;
+}
+
+function useWorkflowCanvasWorkbenchModel(props: WorkflowCanvasWorkbenchProps): WorkflowCanvasWorkbenchModel {
   const { copy } = useWebLocale();
   const defaults = resolveWorkbenchDefaults(props, copy.workflow);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -76,37 +123,16 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
     props.onSelectNode(undefined);
   }
 
-  return (
-    <main className="workflow-arch-root">
-      <div className="workflow-arch-watermark">{defaults.workflowCopy.watermark}</div>
-      <WorkbenchSidebarPanel
-        defaults={defaults}
-        isOpen={isSidebarOpen}
-        onToggle={toggleSidebar}
-        onOpenSettings={openSettings}
-        workbench={props}
-      />
-      <WorkbenchStagePanel defaults={defaults} workbench={props} />
-      <WorkbenchPropertiesPanel
-        defaults={defaults}
-        onClose={closePropertiesPanel}
-        selectedNode={selectedNode}
-        workbench={props}
-      />
-      <WorkbenchSettingsPanel
-        defaults={defaults}
-        open={isSettingsOpen}
-        onClose={closeSettings}
-        workbench={props}
-      />
-    </main>
-  );
-}
-
-interface WorkflowCanvasWorkbenchDefaults {
-  presetError: string;
-  presetLoading: boolean;
-  workflowCopy: WorkflowCopy;
+  return {
+    closePropertiesPanel,
+    closeSettings,
+    defaults,
+    isSettingsOpen,
+    isSidebarOpen,
+    openSettings,
+    selectedNode,
+    toggleSidebar,
+  };
 }
 
 interface WorkbenchPanelProps {
