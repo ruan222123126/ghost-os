@@ -1,6 +1,7 @@
 'use client';
 
 import type { MouseEvent } from 'react';
+import { WorkflowCanvasNodeSummary } from '@/components/workflow/WorkflowCanvasNodeSummary';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { WorkflowCanvasNodeDraft, WorkflowEditorKind, WorkflowNodeType } from '@/lib/workflow-editor';
 
@@ -24,6 +25,32 @@ interface WorkflowCanvasNodeProps {
   onClickTargetPort: (event: MouseEvent<HTMLDivElement>, nodeID: string) => void;
 }
 
+interface WorkflowCanvasNodeInputPortProps {
+  nodeID: string;
+  targetable: boolean;
+  visible: boolean;
+  onClickTargetPort: (event: MouseEvent<HTMLDivElement>, nodeID: string) => void;
+}
+
+interface WorkflowCanvasNodeOutputPortProps {
+  active: boolean;
+  nodeID: string;
+  visible: boolean;
+  onClickSourcePort: (event: MouseEvent<HTMLDivElement>, nodeID: string) => void;
+}
+
+interface WorkflowCanvasNodeMouseDownOptions {
+  event: MouseEvent<HTMLElement>;
+  nodeID: string;
+  onStartDrag: (event: MouseEvent<HTMLElement>, nodeID: string) => void;
+}
+
+interface WorkflowCanvasNodeClickOptions {
+  event: MouseEvent<HTMLElement>;
+  nodeID: string;
+  onSelectNode: (nodeID: string) => void;
+}
+
 const PRIMARY_MOUSE_BUTTON = 0;
 
 export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
@@ -41,154 +68,126 @@ export function WorkflowCanvasNode(props: WorkflowCanvasNodeProps) {
     onClickSourcePort,
     onClickTargetPort,
   } = props;
-  const selectedClass = selected
-    ? 'workflow-arch-node--selected'
-    : 'workflow-arch-node--idle';
-  const sourceActive = connectingSourceNodeID === node.id;
-
-  const showInputPort = canShowInputPort(editorKind, node);
-  const showOutputPort = canShowOutputPort(editorKind, node);
+  const nodeID = node.id;
   const headerTitle = resolveNodeHeader(node, metadata.label);
 
   return (
     <article
-      className={`workflow-arch-node ${selectedClass}`}
+      className={`workflow-arch-node ${nodeSelectionClass(selected)}`}
       style={{ transform: `translate(${node.position.x}px, ${node.position.y}px)` }}
-      onMouseDown={(event) => {
-        if (event.button !== PRIMARY_MOUSE_BUTTON) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        onStartDrag(event, node.id);
-      }}
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelectNode(node.id);
-      }}
-      onContextMenu={(event) => onOpenContextMenu(event, node.id)}
+      onMouseDown={(event) => handleNodeMouseDown({ event, nodeID, onStartDrag })}
+      onClick={(event) => handleNodeClick({ event, nodeID, onSelectNode })}
+      onContextMenu={(event) => onOpenContextMenu(event, nodeID)}
     >
-      <div className={`workflow-arch-node-topline ${selected ? 'workflow-arch-node-topline--active' : ''}`} />
+      <div className={nodeToplineClass(selected)} />
       <header className="workflow-arch-node-header">
         <span>{headerTitle}</span>
       </header>
-      <div className="workflow-arch-node-body">{renderNodeSummary(node, copy, locale)}</div>
+      <div className="workflow-arch-node-body">
+        <WorkflowCanvasNodeSummary node={node} workflowCopy={copy.workflow} locale={locale} />
+      </div>
 
-      {showInputPort ? (
-        <div
-          className="workflow-arch-port workflow-arch-port--input"
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => onClickTargetPort(event, node.id)}
-        >
-          <span className={targetable ? 'workflow-arch-port-dot workflow-arch-port-dot--targetable' : 'workflow-arch-port-dot'} />
-        </div>
-      ) : null}
-
-      {showOutputPort ? (
-        <div
-          className="workflow-arch-port workflow-arch-port--output"
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => onClickSourcePort(event, node.id)}
-        >
-          <span className={sourceActive ? 'workflow-arch-port-dot workflow-arch-port-dot--active' : 'workflow-arch-port-dot'} />
-        </div>
-      ) : null}
+      <WorkflowCanvasNodeInputPort
+        nodeID={nodeID}
+        targetable={targetable}
+        visible={canShowInputPort(editorKind, node)}
+        onClickTargetPort={onClickTargetPort}
+      />
+      <WorkflowCanvasNodeOutputPort
+        active={connectingSourceNodeID === nodeID}
+        nodeID={nodeID}
+        visible={canShowOutputPort(editorKind, node)}
+        onClickSourcePort={onClickSourcePort}
+      />
     </article>
   );
 }
 
-function renderNodeSummary(
-  node: WorkflowCanvasNodeDraft,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  locale: string,
-) {
-  if (node.type === 'start') {
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeInputConfiguration}</p>
-        <p>{startNodeSummary(locale)}</p>
-      </div>
-    );
+function WorkflowCanvasNodeInputPort(props: WorkflowCanvasNodeInputPortProps) {
+  const { nodeID, targetable, visible, onClickTargetPort } = props;
+
+  if (!visible) {
+    return null;
   }
-  if (node.type === 'llm') {
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeInferenceParameters}</p>
-        <p>{node.llm?.prompt?.trim() ? copy.workflow.nodePromptDefined : copy.workflow.nodeAwaitingPrompt}</p>
-      </div>
-    );
-  }
-  if (node.type === 'agent') {
-    const role = node.agent?.message?.trim();
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeExecutionIdentity}</p>
-        {node.agent?.title?.trim() ? <p>{node.agent.title.trim()}</p> : null}
-        <p>{role ? copy.workflow.nodeRole(role) : copy.workflow.nodeUndefinedRole}</p>
-      </div>
-    );
-  }
-  if (node.type === 'group') {
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeGroupConfiguration}</p>
-        <p>{node.group?.title?.trim() || copy.workflow.nodeGroupPending}</p>
-        <p>{copy.workflow.nodeGroupRounds(node.group?.max_rounds ?? 0, node.group?.speaking_mode ?? 'sequential')}</p>
-      </div>
-    );
-  }
-  if (node.type === 'tool') {
-    const toolName = node.tool?.tool_name?.trim();
-    const argumentCount = Object.keys(node.tool?.arguments ?? {}).length;
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeToolConfiguration}</p>
-        <p>{toolName ? copy.workflow.nodeToolSelected(toolName) : copy.workflow.nodeToolUnset}</p>
-        <p>{copy.workflow.nodeToolArguments(argumentCount)}</p>
-      </div>
-    );
-  }
-  if (node.type === 'if') {
-    const operator = node.if?.operator ?? 'equals';
-    const trueNodeID = node.if?.true_node_id?.trim();
-    const falseNodeID = node.if?.false_node_id?.trim();
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeConditionalBranch}</p>
-        <p>
-          {trueNodeID && falseNodeID
-            ? copy.workflow.nodeBranchResolved(operator, trueNodeID, falseNodeID)
-            : copy.workflow.nodeBranchPending(operator)}
-        </p>
-      </div>
-    );
-  }
-  if (node.type === 'loop') {
-    const role = node.loop?.role ?? 'start';
-    const loopID = node.loop?.loop_id?.trim();
-    return (
-      <div className="workflow-arch-summary">
-        <p className="workflow-arch-summary-label">{copy.workflow.nodeLoopSegment}</p>
-        <p>{loopID ? copy.workflow.nodeLoopResolved(role, loopID) : copy.workflow.nodeLoopPending(role)}</p>
-      </div>
-    );
-  }
-  if (node.type === 'end') {
-    return <p className="workflow-arch-terminus">{copy.workflow.terminus}</p>;
-  }
+
   return (
-    <div className="workflow-arch-summary">
-      <p className="workflow-arch-summary-label">{copy.workflow.nodeSystemCapabilities}</p>
-      <p>{copy.workflow.nodeStandardToolsActive}</p>
+    <div
+      className="workflow-arch-port workflow-arch-port--input"
+      onMouseDown={stopMouseEventPropagation}
+      onClick={(event) => onClickTargetPort(event, nodeID)}
+    >
+      <span className={inputPortDotClass(targetable)} />
     </div>
   );
 }
 
-function startNodeSummary(locale: string): string {
-  if (locale === 'zh-CN') {
-    return '通用变量已关闭';
+function WorkflowCanvasNodeOutputPort(props: WorkflowCanvasNodeOutputPortProps) {
+  const { active, nodeID, visible, onClickSourcePort } = props;
+
+  if (!visible) {
+    return null;
   }
-  return 'General variables disabled';
+
+  return (
+    <div
+      className="workflow-arch-port workflow-arch-port--output"
+      onMouseDown={stopMouseEventPropagation}
+      onClick={(event) => onClickSourcePort(event, nodeID)}
+    >
+      <span className={outputPortDotClass(active)} />
+    </div>
+  );
+}
+
+function handleNodeMouseDown(options: WorkflowCanvasNodeMouseDownOptions): void {
+  const { event, nodeID, onStartDrag } = options;
+
+  if (event.button !== PRIMARY_MOUSE_BUTTON) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  onStartDrag(event, nodeID);
+}
+
+function handleNodeClick(options: WorkflowCanvasNodeClickOptions): void {
+  const { event, nodeID, onSelectNode } = options;
+
+  event.stopPropagation();
+  onSelectNode(nodeID);
+}
+
+function stopMouseEventPropagation(event: MouseEvent<HTMLElement>): void {
+  event.stopPropagation();
+}
+
+function nodeSelectionClass(selected: boolean): string {
+  if (selected) {
+    return 'workflow-arch-node--selected';
+  }
+  return 'workflow-arch-node--idle';
+}
+
+function nodeToplineClass(selected: boolean): string {
+  if (selected) {
+    return 'workflow-arch-node-topline workflow-arch-node-topline--active';
+  }
+  return 'workflow-arch-node-topline';
+}
+
+function inputPortDotClass(targetable: boolean): string {
+  if (targetable) {
+    return 'workflow-arch-port-dot workflow-arch-port-dot--targetable';
+  }
+  return 'workflow-arch-port-dot';
+}
+
+function outputPortDotClass(active: boolean): string {
+  if (active) {
+    return 'workflow-arch-port-dot workflow-arch-port-dot--active';
+  }
+  return 'workflow-arch-port-dot';
 }
 
 function resolveNodeHeader(node: WorkflowCanvasNodeDraft, fallback: string): string {
