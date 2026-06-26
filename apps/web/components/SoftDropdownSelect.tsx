@@ -17,6 +17,11 @@ interface SoftDropdownSelectProps {
   testId?: string;
 }
 
+interface DropdownDisplayState {
+  selectedLabel: string;
+  triggerText: string;
+}
+
 const TRIGGER_CLASS = 'flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-left text-sm text-gray-900 shadow-sm transition-colors duration-200 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent disabled:cursor-not-allowed disabled:opacity-60';
 const PANEL_BASE_CLASS = 'absolute left-0 top-full z-10 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 text-sm shadow-lg transition-opacity duration-150';
 const PANEL_OPEN_CLASS = 'visible opacity-100';
@@ -31,12 +36,10 @@ export function SoftDropdownSelect(props: SoftDropdownSelectProps) {
   const listboxID = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const selectedOption = useMemo(
-    () => options.find((option) => option.value === value),
-    [options, value],
+  const displayState = useMemo(
+    () => buildDropdownDisplayState({ options, placeholder, value }),
+    [options, placeholder, value],
   );
-  const selectedLabel = selectedOption?.label ?? value;
-  const triggerText = selectedOption?.label ?? (placeholder || value);
 
   useDismissDropdown(open, rootRef, () => setOpen(false));
 
@@ -45,7 +48,7 @@ export function SoftDropdownSelect(props: SoftDropdownSelectProps) {
       <HiddenNativeSelect
         testId={testId}
         value={value}
-        selectedLabel={selectedLabel}
+        selectedLabel={displayState.selectedLabel}
         options={options}
         disabled={disabled}
         onChange={onChange}
@@ -59,31 +62,35 @@ export function SoftDropdownSelect(props: SoftDropdownSelectProps) {
         className={TRIGGER_CLASS}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="truncate pr-4">{triggerText}</span>
+        <span className="truncate pr-4">{displayState.triggerText}</span>
         <span className={`transform transition-transform duration-200 ${open ? 'rotate-180' : ''}`} aria-hidden="true">
           <ChevronDownIcon />
         </span>
       </button>
-      <ul
-        id={listboxID}
-        role="listbox"
-        aria-hidden={!open}
-        className={`${PANEL_BASE_CLASS} ${open ? PANEL_OPEN_CLASS : PANEL_CLOSED_CLASS}`}
-      >
-        {options.map((option) => (
-          <DropdownOption
-            key={option.value}
-            option={option}
-            selected={option.value === value}
-            onSelect={(nextValue) => {
-              onChange(nextValue);
-              setOpen(false);
-            }}
-          />
-        ))}
-      </ul>
+      <DropdownOptionsList
+        listboxID={listboxID}
+        open={open}
+        options={options}
+        value={value}
+        onSelect={(nextValue) => {
+          onChange(nextValue);
+          setOpen(false);
+        }}
+      />
     </div>
   );
+}
+
+function buildDropdownDisplayState(input: {
+  value: string;
+  options: readonly DropdownSelectOption[];
+  placeholder: string;
+}): DropdownDisplayState {
+  const selectedOption = input.options.find((option) => option.value === input.value);
+  return {
+    selectedLabel: selectedOption?.label ?? input.value,
+    triggerText: selectedOption?.label ?? (input.placeholder || input.value),
+  };
 }
 
 function HiddenNativeSelect(props: {
@@ -114,6 +121,34 @@ function HiddenNativeSelect(props: {
         </option>
       ))}
     </select>
+  );
+}
+
+function DropdownOptionsList(props: {
+  listboxID: string;
+  open: boolean;
+  options: readonly DropdownSelectOption[];
+  value: string;
+  onSelect: (value: string) => void;
+}) {
+  const { listboxID, open, options, value, onSelect } = props;
+
+  return (
+    <ul
+      id={listboxID}
+      role="listbox"
+      aria-hidden={!open}
+      className={`${PANEL_BASE_CLASS} ${open ? PANEL_OPEN_CLASS : PANEL_CLOSED_CLASS}`}
+    >
+      {options.map((option) => (
+        <DropdownOption
+          key={option.value}
+          option={option}
+          selected={option.value === value}
+          onSelect={onSelect}
+        />
+      ))}
+    </ul>
   );
 }
 

@@ -3,6 +3,8 @@ import type { WorkflowNodeMeta } from '@/components/workflow/WorkflowCanvasNode'
 import type { WebCopy } from '@/lib/i18n/messages';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 
+type WorkflowNodeLabelKey = keyof WorkflowCopy['nodeLabels'];
+
 const NODE_GLYPH_MAP: Record<WorkflowNodeType, string> = {
   start: '⚡',
   end: '✕',
@@ -12,6 +14,17 @@ const NODE_GLYPH_MAP: Record<WorkflowNodeType, string> = {
   tool: '⌁',
   if: '?',
   loop: '↻',
+};
+
+const NODE_LABEL_KEY_MAP: Record<WorkflowNodeType, WorkflowNodeLabelKey> = {
+  start: 'start',
+  end: 'end',
+  agent: 'agent',
+  group: 'group',
+  llm: 'llm',
+  tool: 'tool',
+  if: 'if',
+  loop: 'loop',
 };
 
 const NODE_LIBRARY_ORDER: WorkflowNodeType[] = [
@@ -46,26 +59,5 @@ export function metadataForNodeType(
 
 function labelByType(copy: WorkflowCopy | WebCopy, type: WorkflowNodeType): string {
   const labels = 'workflow' in copy ? copy.workflow.nodeLabels : copy.nodeLabels;
-  if (type === 'start') {
-    return labels.start;
-  }
-  if (type === 'end') {
-    return labels.end;
-  }
-  if (type === 'agent') {
-    return labels.agent;
-  }
-  if (type === 'group') {
-    return labels.group;
-  }
-  if (type === 'llm') {
-    return labels.llm;
-  }
-  if (type === 'tool') {
-    return labels.tool;
-  }
-  if (type === 'if') {
-    return labels.if;
-  }
-  return labels.loop;
+  return labels[NODE_LABEL_KEY_MAP[type]];
 }
