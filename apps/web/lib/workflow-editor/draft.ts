@@ -137,41 +137,99 @@ function buildWorkflowNode(node: WorkflowCanvasNodeDraft): WorkflowNode {
   return {
     id: node.id,
     type: node.type,
-    start: node.type === 'start' ? { inputs: cloneInputs(node.start?.inputs) } : undefined,
-    tool: node.type === 'tool'
-      ? {
-        tool_name: node.tool?.tool_name ?? '',
-        arguments: cloneObject(node.tool?.arguments),
-      }
-      : undefined,
-    llm: node.type === 'llm'
-      ? {
-        prompt: node.llm?.prompt ?? '',
-        system_prompt: node.llm?.system_prompt,
-      }
-      : undefined,
-    agent: node.type === 'agent'
-      ? {
-        message: node.agent?.message ?? '',
-        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent?.runtime_overrides),
-      }
-      : undefined,
-    if: node.type === 'if'
-      ? {
-        source_node_id: node.if?.source_node_id?.trim() || undefined,
-        operator: node.if?.operator ?? 'equals',
-        value: node.if?.value ?? '',
-        true_node_id: node.if?.true_node_id ?? '',
-        false_node_id: node.if?.false_node_id ?? '',
-      }
-      : undefined,
-    loop: node.type === 'loop'
-      ? {
-        max_iterations: normalizeLoopIterations(loopIterations),
-        body_node_id: node.loop?.body_node_id ?? '',
-        exit_node_id: node.loop?.exit_node_id ?? '',
-      }
-      : undefined,
+    start: buildStartWorkflowNodePayload(node),
+    tool: buildToolWorkflowNodePayload(node),
+    llm: buildLLMWorkflowNodePayload(node),
+    agent: buildAgentWorkflowNodePayload(node),
+    if: buildIfWorkflowNodePayload(node),
+    loop: buildLoopWorkflowNodePayload(node, loopIterations),
+  };
+}
+
+function buildStartWorkflowNodePayload(node: WorkflowCanvasNodeDraft): WorkflowNode['start'] {
+  return node.type === 'start' ? { inputs: cloneInputs(node.start?.inputs) } : undefined;
+}
+
+function buildToolWorkflowNodePayload(node: WorkflowCanvasNodeDraft): WorkflowNode['tool'] {
+  if (node.type !== 'tool') {
+    return undefined;
+  }
+  return {
+    tool_name: node.tool?.tool_name ?? '',
+    arguments: cloneObject(node.tool?.arguments),
+  };
+}
+
+function buildLLMWorkflowNodePayload(node: WorkflowCanvasNodeDraft): WorkflowNode['llm'] {
+  if (node.type !== 'llm') {
+    return undefined;
+  }
+  return {
+    prompt: node.llm?.prompt ?? '',
+    system_prompt: node.llm?.system_prompt,
+  };
+}
+
+function buildAgentWorkflowNodePayload(node: WorkflowCanvasNodeDraft): WorkflowNode['agent'] {
+  if (node.type !== 'agent') {
+    return undefined;
+  }
+  return {
+    message: node.agent?.message ?? '',
+    runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent?.runtime_overrides),
+  };
+}
+
+function buildIfWorkflowNodePayload(node: WorkflowCanvasNodeDraft): WorkflowNode['if'] {
+  if (node.type !== 'if') {
+    return undefined;
+  }
+  const ifConfig = node.if;
+  return {
+    source_node_id: workflowIfSourceNodeID(ifConfig),
+    operator: workflowIfOperator(ifConfig),
+    value: workflowIfValue(ifConfig),
+    true_node_id: workflowIfTrueNodeID(ifConfig),
+    false_node_id: workflowIfFalseNodeID(ifConfig),
+  };
+}
+
+function workflowIfSourceNodeID(ifConfig: WorkflowCanvasNodeDraft['if']): string | undefined {
+  const trimmed = ifConfig?.source_node_id?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+function workflowIfOperator(ifConfig: WorkflowCanvasNodeDraft['if']): NonNullable<WorkflowNode['if']>['operator'] {
+  return ifConfig?.operator ?? 'equals';
+}
+
+function workflowIfValue(ifConfig: WorkflowCanvasNodeDraft['if']): string {
+  return optionalText(ifConfig?.value);
+}
+
+function workflowIfTrueNodeID(ifConfig: WorkflowCanvasNodeDraft['if']): string {
+  return optionalText(ifConfig?.true_node_id);
+}
+
+function workflowIfFalseNodeID(ifConfig: WorkflowCanvasNodeDraft['if']): string {
+  return optionalText(ifConfig?.false_node_id);
+}
+
+function optionalText(value: string | undefined): string {
+  return value ?? '';
+}
+
+function buildLoopWorkflowNodePayload(
+  node: WorkflowCanvasNodeDraft,
+  loopIterations: number,
+): WorkflowNode['loop'] {
+  if (node.type !== 'loop') {
+    return undefined;
+  }
+  return {
+    max_iterations: normalizeLoopIterations(loopIterations),
+    body_node_id: node.loop?.body_node_id ?? '',
+    exit_node_id: node.loop?.exit_node_id ?? '',
   };
 }
 
