@@ -35,20 +35,38 @@ interface CaptureControlRefs {
   snapshotRef: CaptureSnapshotRef;
 }
 
+interface ClickCaptureSessionControls {
+  cancelCapture: () => void;
+  pollMousePosition: () => Promise<void>;
+  stopCapture: () => void;
+}
+
 export function useWorkflowClickCaptureControls(
   options: WorkflowClickCaptureControlsOptions,
 ): () => void {
+  const refs = useCaptureControlRefs(options.resetSignal);
+  const controls = useClickCaptureSessionControls(options, refs);
+  useClickCaptureEffects(options.captureActive, controls);
+
+  return useStartClickCapture({
+    setCaptureActive: options.setCaptureActive,
+    setErrorText: options.setErrorText,
+    snapshotRef: refs.snapshotRef,
+    state: options.state,
+  });
+}
+
+function useClickCaptureSessionControls(
+  options: WorkflowClickCaptureControlsOptions,
+  refs: CaptureControlRefs,
+): ClickCaptureSessionControls {
   const {
-    captureActive,
     fallbackError,
-    resetSignal,
     setCaptureActive,
     setCaptureLoading,
     setErrorText,
     setState,
-    state,
   } = options;
-  const refs = useCaptureControlRefs(resetSignal);
   const stopCapture = useStopClickCapture({ refs, setCaptureActive, setCaptureLoading });
   const restoreCaptureSnapshot = useRestoreCaptureSnapshot(refs.snapshotRef, setState);
   const cancelCapture = useCancelClickCapture(restoreCaptureSnapshot, stopCapture);
@@ -66,15 +84,15 @@ export function useWorkflowClickCaptureControls(
     setState,
   });
 
-  useCapturePolling(captureActive, pollMousePosition);
-  useCaptureKeyboard(captureActive, stopCapture, cancelCapture);
+  return { cancelCapture, pollMousePosition, stopCapture };
+}
 
-  return useStartClickCapture({
-    setCaptureActive,
-    setErrorText,
-    snapshotRef: refs.snapshotRef,
-    state,
-  });
+function useClickCaptureEffects(
+  captureActive: boolean,
+  controls: ClickCaptureSessionControls,
+): void {
+  useCapturePolling(captureActive, controls.pollMousePosition);
+  useCaptureKeyboard(captureActive, controls.stopCapture, controls.cancelCapture);
 }
 
 function useCaptureControlRefs(resetSignal: ClickEditorState): CaptureControlRefs {
