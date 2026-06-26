@@ -23,6 +23,19 @@ interface WorkflowScreenControlComposerModalProps {
   onUpdateStep: (index: number, step: ScreenControlComposerStep) => void;
 }
 
+interface ComposerQueuePanelProps {
+  steps: ScreenControlComposerStep[];
+  onMove: (index: number, direction: 'up' | 'down') => void;
+  onRemove: (index: number) => void;
+  onUpdateStep: (index: number, step: ScreenControlComposerStep) => void;
+}
+
+interface ComposerStepEditing {
+  action: 'find_icon' | 'click';
+  index: number;
+  step: ScreenControlComposerStep;
+}
+
 export function WorkflowScreenControlComposerModal(props: WorkflowScreenControlComposerModalProps) {
   const { open } = props;
   const [mounted, setMounted] = useState(false);
@@ -83,23 +96,14 @@ function ComposerActionsPanel(props: { onAppend: (action: ScreenControlAtomicAct
   );
 }
 
-function ComposerQueuePanel(props: {
-  steps: ScreenControlComposerStep[];
-  onMove: (index: number, direction: 'up' | 'down') => void;
-  onRemove: (index: number) => void;
-  onUpdateStep: (index: number, step: ScreenControlComposerStep) => void;
-}) {
+function ComposerQueuePanel(props: ComposerQueuePanelProps) {
   const { copy } = useWebLocale();
   const { steps, onMove, onRemove, onUpdateStep } = props;
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const editingStep = editingIndex === null ? undefined : steps[editingIndex];
-  const editingAction = editingStep ? normalizeScreenControlComposerAction(editingStep.action) : undefined;
+  const editing = resolveComposerStepEditing(steps, editingIndex);
 
   useEffect(() => {
-    if (editingIndex === null) {
-      return;
-    }
-    if (editingIndex < 0 || editingIndex >= steps.length || !isEditableComposerAction(steps[editingIndex]?.action)) {
+    if (editingIndex !== null && !resolveComposerStepEditing(steps, editingIndex)) {
       setEditingIndex(null);
     }
   }, [editingIndex, steps]);
@@ -107,49 +111,89 @@ function ComposerQueuePanel(props: {
   return (
     <section className="workflow-arch-screen-composer-queue">
       <h4>{copy.workflow.screenComposerQueueTitle}</h4>
-      {steps.length === 0 ? (
-        <p className="workflow-arch-screen-composer-empty">{copy.workflow.screenComposerEmpty}</p>
-      ) : (
-        <ol className="workflow-arch-screen-composer-step-list">
-          {steps.map((step, index) => (
-            <ScreenComposerStepRow
-              key={`${step.action}-${index}`}
-              step={step}
-              index={index}
-              total={steps.length}
-              onMove={onMove}
-              onRemove={onRemove}
-              onEdit={() => setEditingIndex(index)}
-            />
-          ))}
-        </ol>
-      )}
-      {editingStep && editingAction === 'find_icon' ? (
-        <WorkflowFindIconStepEditorModal
-          open
-          stepIndex={editingIndex ?? 0}
-          step={editingStep}
-          onClose={() => setEditingIndex(null)}
-          onSave={(index, step) => {
-            onUpdateStep(index, step);
-            setEditingIndex(null);
-          }}
-        />
-      ) : null}
-      {editingStep && editingAction === 'click' ? (
-        <WorkflowClickStepEditorModal
-          open
-          stepIndex={editingIndex ?? 0}
-          step={editingStep}
-          canUseFindIconReference={hasEarlierFindIconStep(steps, editingIndex ?? 0)}
-          onClose={() => setEditingIndex(null)}
-          onSave={(index, step) => {
-            onUpdateStep(index, step);
-            setEditingIndex(null);
-          }}
-        />
-      ) : null}
+      <ScreenComposerStepList
+        steps={steps}
+        emptyText={copy.workflow.screenComposerEmpty}
+        onMove={onMove}
+        onRemove={onRemove}
+        onEdit={setEditingIndex}
+      />
+      <ComposerStepEditor
+        editing={editing}
+        steps={steps}
+        onClose={() => setEditingIndex(null)}
+        onSave={(index, step) => {
+          onUpdateStep(index, step);
+          setEditingIndex(null);
+        }}
+      />
     </section>
+  );
+}
+
+function ScreenComposerStepList(props: {
+  steps: ScreenControlComposerStep[];
+  emptyText: string;
+  onMove: (index: number, direction: 'up' | 'down') => void;
+  onRemove: (index: number) => void;
+  onEdit: (index: number) => void;
+}) {
+  const { steps, emptyText, onMove, onRemove, onEdit } = props;
+
+  if (steps.length === 0) {
+    return <p className="workflow-arch-screen-composer-empty">{emptyText}</p>;
+  }
+
+  return (
+    <ol className="workflow-arch-screen-composer-step-list">
+      {steps.map((step, index) => (
+        <ScreenComposerStepRow
+          key={`${step.action}-${index}`}
+          step={step}
+          index={index}
+          total={steps.length}
+          onMove={onMove}
+          onRemove={onRemove}
+          onEdit={() => onEdit(index)}
+        />
+      ))}
+    </ol>
+  );
+}
+
+function ComposerStepEditor(props: {
+  editing: ComposerStepEditing | undefined;
+  steps: ScreenControlComposerStep[];
+  onClose: () => void;
+  onSave: (index: number, step: ScreenControlComposerStep) => void;
+}) {
+  const { editing, steps, onClose, onSave } = props;
+
+  if (!editing) {
+    return null;
+  }
+
+  if (editing.action === 'find_icon') {
+    return (
+      <WorkflowFindIconStepEditorModal
+        open
+        stepIndex={editing.index}
+        step={editing.step}
+        onClose={onClose}
+        onSave={onSave}
+      />
+    );
+  }
+
+  return (
+    <WorkflowClickStepEditorModal
+      open
+      stepIndex={editing.index}
+      step={editing.step}
+      canUseFindIconReference={hasEarlierFindIconStep(steps, editing.index)}
+      onClose={onClose}
+      onSave={onSave}
+    />
   );
 }
 
@@ -186,12 +230,34 @@ function ScreenComposerStepRow(props: {
   );
 }
 
-function isEditableComposerAction(action: ScreenControlAtomicAction | undefined): boolean {
+function resolveComposerStepEditing(
+  steps: ScreenControlComposerStep[],
+  editingIndex: number | null,
+): ComposerStepEditing | undefined {
+  if (editingIndex === null) {
+    return undefined;
+  }
+  const step = steps[editingIndex];
+  const action = editableComposerAction(step?.action);
+  if (!step || !action) {
+    return undefined;
+  }
+  return {
+    action,
+    index: editingIndex,
+    step,
+  };
+}
+
+function editableComposerAction(action: ScreenControlAtomicAction | undefined): ComposerStepEditing['action'] | undefined {
   if (!action) {
-    return false;
+    return undefined;
   }
   const normalized = normalizeScreenControlComposerAction(action);
-  return normalized === 'find_icon' || normalized === 'click';
+  if (normalized === 'find_icon' || normalized === 'click') {
+    return normalized;
+  }
+  return undefined;
 }
 
 function hasEarlierFindIconStep(steps: ScreenControlComposerStep[], stepIndex: number): boolean {
