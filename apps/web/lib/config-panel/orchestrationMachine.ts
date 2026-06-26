@@ -32,6 +32,20 @@ export type OrchestrationAction =
   | { type: 'remove_orchestration'; id: string }
   | { type: 'clear_feedback' };
 
+type OrchestrationActionReducer = (
+  state: OrchestrationState,
+  action: OrchestrationAction,
+) => OrchestrationState | null;
+
+const ORCHESTRATION_ACTION_REDUCERS: OrchestrationActionReducer[] = [
+  reduceOrchestrationLoadAction,
+  reduceOrchestrationViewAction,
+  reduceOrchestrationCreateAction,
+  reduceOrchestrationRunAction,
+  reduceOrchestrationFeedbackAction,
+  reduceOrchestrationListAction,
+];
+
 export function createInitialOrchestrationState(): OrchestrationState {
   return {
     view: 'list',
@@ -49,6 +63,19 @@ export function orchestrationReducer(
   state: OrchestrationState,
   action: OrchestrationAction,
 ): OrchestrationState {
+  for (const reduceAction of ORCHESTRATION_ACTION_REDUCERS) {
+    const nextState = reduceAction(state, action);
+    if (nextState) {
+      return nextState;
+    }
+  }
+  return state;
+}
+
+function reduceOrchestrationLoadAction(
+  state: OrchestrationState,
+  action: OrchestrationAction,
+): OrchestrationState | null {
   switch (action.type) {
     case 'load_start':
       return { ...state, loading: true };
@@ -56,34 +83,86 @@ export function orchestrationReducer(
       return { ...state, loading: false, orchestrations: action.orchestrations, error: '' };
     case 'load_error':
       return { ...state, loading: false, error: action.error, success: '' };
+    default:
+      return null;
+  }
+}
+
+function reduceOrchestrationViewAction(
+  state: OrchestrationState,
+  action: OrchestrationAction,
+): OrchestrationState | null {
+  switch (action.type) {
     case 'enter_create':
       return { ...state, view: 'create', name: '', error: '', success: '' };
     case 'cancel_create':
       return { ...state, view: 'list', name: '', error: '', success: '' };
     case 'set_name':
       return { ...state, name: action.name };
+    default:
+      return null;
+  }
+}
+
+function reduceOrchestrationCreateAction(
+  state: OrchestrationState,
+  action: OrchestrationAction,
+): OrchestrationState | null {
+  switch (action.type) {
     case 'create_start':
       return { ...state, submitting: true, error: '', success: '' };
     case 'create_success':
       return { ...state, view: 'list', submitting: false, name: '' };
     case 'create_error':
       return { ...state, submitting: false, error: action.error, success: '' };
+    default:
+      return null;
+  }
+}
+
+function reduceOrchestrationRunAction(
+  state: OrchestrationState,
+  action: OrchestrationAction,
+): OrchestrationState | null {
+  switch (action.type) {
     case 'run_start':
       return { ...state, runningOrchestrationID: action.id, error: '', success: '' };
     case 'run_error':
       return { ...state, runningOrchestrationID: '', error: action.error, success: '' };
     case 'run_finish':
       return { ...state, runningOrchestrationID: '' };
+    default:
+      return null;
+  }
+}
+
+function reduceOrchestrationFeedbackAction(
+  state: OrchestrationState,
+  action: OrchestrationAction,
+): OrchestrationState | null {
+  switch (action.type) {
     case 'set_success':
       return { ...state, error: '', success: action.success };
     case 'set_error':
       return { ...state, error: action.error, success: '' };
+    case 'clear_feedback':
+      return { ...state, error: '', success: '' };
+    default:
+      return null;
+  }
+}
+
+function reduceOrchestrationListAction(
+  state: OrchestrationState,
+  action: OrchestrationAction,
+): OrchestrationState | null {
+  switch (action.type) {
     case 'replace_orchestration':
       return { ...state, orchestrations: replaceOrchestration(state.orchestrations, action.orchestration) };
     case 'remove_orchestration':
       return { ...state, orchestrations: removeOrchestration(state.orchestrations, action.id) };
-    case 'clear_feedback':
-      return { ...state, error: '', success: '' };
+    default:
+      return null;
   }
 }
 
