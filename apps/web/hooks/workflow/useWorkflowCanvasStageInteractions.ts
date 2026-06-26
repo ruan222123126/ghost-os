@@ -72,19 +72,18 @@ interface WorkflowCanvasRenderState {
   worldTransform: { transform: string };
 }
 
-interface StageInteractionResultOptions {
-  closeContextMenu: () => void;
-  connectingSourceNodeID?: string;
-  nodeContextMenu?: WorkflowNodeContextMenuState;
+interface WorkflowCanvasInteractionState {
+  connectionState: WorkflowCanvasConnectionState;
+  dragState: WorkflowCanvasDragState;
   onCanvasMouseMove: (event: ReactMouseEvent<HTMLElement>) => void;
-  onOpenContextMenu: (event: ReactMouseEvent<HTMLElement>, nodeID: string) => void;
-  refs: WorkflowCanvasRefs;
   releaseInteractions: () => void;
-  renderState: WorkflowCanvasRenderState;
-  setConnectingSourceNodeID: Dispatch<SetStateAction<string | undefined>>;
-  setDragState: (state?: DragState) => void;
-  viewport: CanvasViewport;
   viewportInteractions: ReturnType<typeof useWorkflowCanvasViewportInteractions>;
+}
+
+interface StageInteractionResultOptions {
+  interactionState: WorkflowCanvasInteractionState;
+  refs: WorkflowCanvasRefs;
+  renderState: WorkflowCanvasRenderState;
 }
 
 interface WorkflowCanvasConnectionState extends ReturnType<typeof useWorkflowNodeContextMenu> {
@@ -102,49 +101,25 @@ interface WorkflowCanvasDragState {
 export function useWorkflowCanvasStageInteractions(
   options: UseWorkflowCanvasStageInteractionsOptions,
 ): UseWorkflowCanvasStageInteractionsResult {
-  const { draft, onMoveNode, onSelectNode } = options;
   const refs = useWorkflowCanvasRefs();
-  const connectionState = useWorkflowCanvasConnectionState({ draft, onSelectNode });
-  const viewportInteractions = useWorkflowCanvasViewportInteractions({
-    canvasRef: refs.canvasRef,
-    clearContextMenu: connectionState.clearContextMenu,
-    onSelectNode,
-    setConnectingSourceNodeID: connectionState.setConnectingSourceNodeID,
+  const interactionState = useWorkflowCanvasInteractionState({ ...options, refs });
+
+  useWorkflowCanvasBackground({
+    ...refs,
+    viewport: interactionState.viewportInteractions.viewport,
   });
-  const dragState = useWorkflowCanvasDragState({
-    canvasRef: refs.canvasRef,
-    onMoveNode,
-    viewport: viewportInteractions.viewport,
-  });
-  const onCanvasMouseMove = useWorkflowCanvasMouseMove(
-    viewportInteractions.onPanMouseMove,
-    dragState.onDragMouseMove,
-  );
-  useWorkflowCanvasBackground({ ...refs, viewport: viewportInteractions.viewport });
+
   const renderState = useWorkflowCanvasRenderState({
-    draft,
-    dragPreview: dragState.dragPreview,
-    isPanning: viewportInteractions.isPanning,
-    viewport: viewportInteractions.viewport,
+    draft: options.draft,
+    dragPreview: interactionState.dragState.dragPreview,
+    isPanning: interactionState.viewportInteractions.isPanning,
+    viewport: interactionState.viewportInteractions.viewport,
   });
-  const releaseInteractions = useWorkflowCanvasReleaseInteractions(
-    dragState.releaseDrag,
-    viewportInteractions.releasePan,
-  );
 
   return buildStageInteractionResult({
-    closeContextMenu: connectionState.closeContextMenu,
-    connectingSourceNodeID: connectionState.connectingSourceNodeID,
-    nodeContextMenu: connectionState.nodeContextMenu,
-    onCanvasMouseMove,
-    onOpenContextMenu: connectionState.onOpenContextMenu,
+    interactionState,
     refs,
-    releaseInteractions,
     renderState,
-    setConnectingSourceNodeID: connectionState.setConnectingSourceNodeID,
-    setDragState: dragState.setDragState,
-    viewport: viewportInteractions.viewport,
-    viewportInteractions,
   });
 }
 
@@ -167,6 +142,40 @@ function useWorkflowCanvasConnectionState(options: {
     setConnectingSourceNodeID,
   });
   return { ...contextMenu, connectingSourceNodeID, setConnectingSourceNodeID };
+}
+
+function useWorkflowCanvasInteractionState(options: UseWorkflowCanvasStageInteractionsOptions & {
+  refs: WorkflowCanvasRefs;
+}): WorkflowCanvasInteractionState {
+  const { draft, onMoveNode, onSelectNode, refs } = options;
+  const connectionState = useWorkflowCanvasConnectionState({ draft, onSelectNode });
+  const viewportInteractions = useWorkflowCanvasViewportInteractions({
+    canvasRef: refs.canvasRef,
+    clearContextMenu: connectionState.clearContextMenu,
+    onSelectNode,
+    setConnectingSourceNodeID: connectionState.setConnectingSourceNodeID,
+  });
+  const dragState = useWorkflowCanvasDragState({
+    canvasRef: refs.canvasRef,
+    onMoveNode,
+    viewport: viewportInteractions.viewport,
+  });
+  const onCanvasMouseMove = useWorkflowCanvasMouseMove(
+    viewportInteractions.onPanMouseMove,
+    dragState.onDragMouseMove,
+  );
+  const releaseInteractions = useWorkflowCanvasReleaseInteractions(
+    dragState.releaseDrag,
+    viewportInteractions.releasePan,
+  );
+
+  return {
+    connectionState,
+    dragState,
+    onCanvasMouseMove,
+    releaseInteractions,
+    viewportInteractions,
+  };
 }
 
 function useWorkflowCanvasDragState(options: {
@@ -232,39 +241,50 @@ function useWorkflowCanvasRenderState(options: {
 function buildStageInteractionResult(
   options: StageInteractionResultOptions,
 ): UseWorkflowCanvasStageInteractionsResult {
-  const {
-    closeContextMenu,
-    connectingSourceNodeID,
-    nodeContextMenu,
-    onCanvasMouseMove,
-    onOpenContextMenu,
-    refs,
-    releaseInteractions,
-    renderState,
-    setConnectingSourceNodeID,
-    setDragState,
-    viewport,
-    viewportInteractions,
-  } = options;
+  return {
+    ...buildStageRefsResult(options.refs),
+    ...buildStageRenderResult(options.renderState),
+    ...buildStageConnectionResult(options.interactionState.connectionState),
+    ...buildStageEventResult(options.interactionState),
+  };
+}
+
+function buildStageRefsResult(refs: WorkflowCanvasRefs) {
   return {
     canvasRef: refs.canvasRef,
     backgroundCanvasRef: refs.backgroundCanvasRef,
-    viewport,
+  };
+}
+
+function buildStageRenderResult(renderState: WorkflowCanvasRenderState) {
+  return {
     renderDraft: renderState.renderDraft,
     nodeMap: renderState.nodeMap,
     canvasClassName: renderState.canvasClassName,
     worldTransform: renderState.worldTransform,
-    connectingSourceNodeID,
-    nodeContextMenu,
-    setDragState,
-    setConnectingSourceNodeID,
-    closeContextMenu,
+  };
+}
+
+function buildStageConnectionResult(connectionState: WorkflowCanvasConnectionState) {
+  return {
+    connectingSourceNodeID: connectionState.connectingSourceNodeID,
+    nodeContextMenu: connectionState.nodeContextMenu,
+    setConnectingSourceNodeID: connectionState.setConnectingSourceNodeID,
+    closeContextMenu: connectionState.closeContextMenu,
+    onOpenContextMenu: connectionState.onOpenContextMenu,
+  };
+}
+
+function buildStageEventResult(interactionState: WorkflowCanvasInteractionState) {
+  const { dragState, onCanvasMouseMove, releaseInteractions, viewportInteractions } = interactionState;
+  return {
+    viewport: viewportInteractions.viewport,
+    setDragState: dragState.setDragState,
     onCanvasMouseDown: viewportInteractions.onCanvasMouseDown,
     onCanvasMouseMove,
     onCanvasMouseUp: releaseInteractions,
     onCanvasMouseLeave: releaseInteractions,
     onCanvasWheel: viewportInteractions.onCanvasWheel,
     onCanvasClick: viewportInteractions.onCanvasClick,
-    onOpenContextMenu,
   };
 }
