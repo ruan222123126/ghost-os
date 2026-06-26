@@ -40,6 +40,15 @@ interface StreamSummary {
   result: AgentStreamResult;
 }
 
+type EventSessionIDResolver = (event: AgentStreamEvent) => string | undefined;
+
+const PAYLOAD_SESSION_ID_RESOLVERS: Partial<Record<AgentStreamEvent['type'], EventSessionIDResolver>> = {
+  run_started: (event) => parseAgentRunStartedPayload(event.payload).session_id,
+  message: (event) => parseAgentStreamMessagePayload(event.payload).session_id,
+  done: (event) => parseAgentDonePayload(event.payload).session_id,
+  error: (event) => parseAgentErrorPayload(event.payload).session_id,
+};
+
 export interface StreamAgentMessageOptions {
   images?: AgentRequest['images'];
   message: string;
@@ -244,20 +253,10 @@ function updateStreamSummary(summary: StreamSummary, event: AgentStreamEvent): v
 }
 
 function resolveSessionID(event: AgentStreamEvent): string | undefined {
-  if (event.session_id?.trim()) {
-    return event.session_id.trim();
-  }
+  return normalizeSessionID(event.session_id)
+    || normalizeSessionID(PAYLOAD_SESSION_ID_RESOLVERS[event.type]?.(event));
+}
 
-  switch (event.type) {
-    case 'run_started':
-      return parseAgentRunStartedPayload(event.payload).session_id?.trim() || undefined;
-    case 'message':
-      return parseAgentStreamMessagePayload(event.payload).session_id?.trim() || undefined;
-    case 'done':
-      return parseAgentDonePayload(event.payload).session_id?.trim() || undefined;
-    case 'error':
-      return parseAgentErrorPayload(event.payload).session_id?.trim() || undefined;
-    default:
-      return undefined;
-  }
+function normalizeSessionID(value?: string): string | undefined {
+  return value?.trim() || undefined;
 }
