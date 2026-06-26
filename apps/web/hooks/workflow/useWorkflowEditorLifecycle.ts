@@ -37,59 +37,11 @@ interface WorkflowEditorLifecycleOptions {
 }
 
 export function useWorkflowEditorLifecycle(options: WorkflowEditorLifecycleOptions): void {
-  const {
-    mode,
-    taskID,
-    copy,
-    autosaveController,
-    runtimeRef,
-    draft,
-    currentSnapshot,
-    isLoading,
-    snapshotErrorMessage,
-    validationErrors,
-    agentNormalizationEnabled,
-    agentRuntimeReady,
-    enabledToolNames,
-    setDraft,
-    setActionError,
-    setPhase,
-  } = options;
-
-  useWorkflowBootstrap({
-    mode,
-    taskID,
-    copy,
-    autosaveController,
-    runtimeRef,
-    setDraft,
-    setActionError,
-    setPhase,
-  });
-  useSeedAutosaveBaseline({
-    currentSnapshot,
-    autosaveController,
-    runtimeRef,
-  });
-  useDraftPersistence({
-    draft,
-    isLoading,
-    runtimeRef,
-  });
-  useAutosaveSchedule({
-    autosaveController,
-    currentSnapshot,
-    isLoading,
-    snapshotErrorMessage,
-    validationErrors,
-  });
-  useWorkflowAgentNormalization({
-    draft,
-    agentNormalizationEnabled,
-    agentRuntimeReady,
-    enabledToolNames,
-    setDraft,
-  });
+  useWorkflowBootstrap(options);
+  useSeedAutosaveBaseline(options);
+  useDraftPersistence(options);
+  useAutosaveSchedule(options);
+  useWorkflowAgentNormalization(options);
 }
 
 function useWorkflowAgentNormalization(options: {
@@ -108,11 +60,7 @@ function useWorkflowAgentNormalization(options: {
   } = options;
 
   useEffect(() => {
-    if (!agentNormalizationEnabled || !agentRuntimeReady) {
-      return;
-    }
-    const selectedNode = draft.nodes.find((node) => node.id === draft.selectedNodeId);
-    if (selectedNode?.type !== 'agent' || selectedNode.agent?.runtime_overrides) {
+    if (!shouldNormalizeSelectedAgent({ draft, agentNormalizationEnabled, agentRuntimeReady })) {
       return;
     }
     setDraft((state) => {
@@ -120,4 +68,17 @@ function useWorkflowAgentNormalization(options: {
       return normalized === state ? state : normalized;
     });
   }, [agentNormalizationEnabled, agentRuntimeReady, draft.nodes, draft.selectedNodeId, enabledToolNames, setDraft]);
+}
+
+function shouldNormalizeSelectedAgent(options: {
+  draft: WorkflowCanvasDraft;
+  agentNormalizationEnabled: boolean;
+  agentRuntimeReady: boolean;
+}): boolean {
+  const { draft, agentNormalizationEnabled, agentRuntimeReady } = options;
+  if (!agentNormalizationEnabled || !agentRuntimeReady) {
+    return false;
+  }
+  const selectedNode = draft.nodes.find((node) => node.id === draft.selectedNodeId);
+  return selectedNode?.type === 'agent' && !selectedNode.agent?.runtime_overrides;
 }
