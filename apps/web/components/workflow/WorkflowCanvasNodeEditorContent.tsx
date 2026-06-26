@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { IfEditor, LoopEditor } from '@/components/workflow/WorkflowCanvasConditionalEditor';
 import { WorkflowCanvasAgentNodeEditor } from '@/components/workflow/WorkflowCanvasAgentNodeEditor';
 import { WorkflowCanvasGroupNodeEditor } from '@/components/workflow/WorkflowCanvasGroupNodeEditor';
@@ -30,7 +31,56 @@ interface WorkflowCanvasNodeEditorContentProps {
   onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
 }
 
+type NodeEditorRenderer = (props: WorkflowCanvasNodeEditorContentProps) => ReactNode;
+
+const NODE_EDITOR_RENDERERS: Partial<Record<WorkflowCanvasNodeDraft['type'], NodeEditorRenderer>> = {
+  agent: renderAgentEditor,
+  group: renderGroupEditor,
+  if: renderIfEditor,
+  llm: renderLLMEditor,
+  loop: renderLoopEditor,
+  start: renderStartEditor,
+  tool: renderToolEditor,
+};
+
 export function WorkflowCanvasNodeEditorContent(props: WorkflowCanvasNodeEditorContentProps) {
+  const renderEditor = NODE_EDITOR_RENDERERS[props.selectedNode.type] ?? renderEndEditor;
+  return renderEditor(props);
+}
+
+function renderStartEditor() {
+  return <StartEditor />;
+}
+
+function renderLLMEditor(props: WorkflowCanvasNodeEditorContentProps) {
+  return (
+    <LLMEditor
+      editorKind={props.editorKind}
+      selectedNode={props.selectedNode}
+      onUpdateNode={props.onUpdateNode}
+    />
+  );
+}
+
+function renderIfEditor(props: WorkflowCanvasNodeEditorContentProps) {
+  return <IfEditor editorKind={props.editorKind} selectedNode={props.selectedNode} onUpdateNode={props.onUpdateNode} />;
+}
+
+function renderLoopEditor(props: WorkflowCanvasNodeEditorContentProps) {
+  return <LoopEditor editorKind={props.editorKind} selectedNode={props.selectedNode} onUpdateNode={props.onUpdateNode} />;
+}
+
+function renderToolEditor(props: WorkflowCanvasNodeEditorContentProps) {
+  return (
+    <WorkflowCanvasToolNodeEditor
+      editorKind={props.editorKind}
+      selectedNode={props.selectedNode}
+      onUpdateNode={props.onUpdateNode}
+    />
+  );
+}
+
+function renderAgentEditor(props: WorkflowCanvasNodeEditorContentProps) {
   const {
     agentRuntimeCatalog,
     agentRuntimeError,
@@ -39,43 +89,36 @@ export function WorkflowCanvasNodeEditorContent(props: WorkflowCanvasNodeEditorC
     presetError,
     presetLoading,
     presets,
-    draft,
     selectedNode,
     onUpdateNode,
   } = props;
-  if (selectedNode.type === 'start') {
-    return <StartEditor />;
-  }
-  if (selectedNode.type === 'llm') {
-    return <LLMEditor editorKind={editorKind} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
-  }
-  if (selectedNode.type === 'if') {
-    return <IfEditor editorKind={editorKind} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
-  }
-  if (selectedNode.type === 'loop') {
-    return <LoopEditor editorKind={editorKind} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
-  }
-  if (selectedNode.type === 'tool') {
-    return <WorkflowCanvasToolNodeEditor editorKind={editorKind} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
-  }
-  if (selectedNode.type === 'agent') {
-    return (
-      <WorkflowCanvasAgentNodeEditor
-        editorKind={editorKind}
-        selectedNode={selectedNode}
-        agentRuntimeCatalog={agentRuntimeCatalog}
-        agentRuntimeLoading={agentRuntimeLoading}
-        agentRuntimeError={agentRuntimeError}
-        presets={presets}
-        presetLoading={presetLoading}
-        presetError={presetError}
-        onUpdateNode={onUpdateNode}
-      />
-    );
-  }
-  if (selectedNode.type === 'group') {
-    return <WorkflowCanvasGroupNodeEditor draft={draft} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />;
-  }
+
+  return (
+    <WorkflowCanvasAgentNodeEditor
+      editorKind={editorKind}
+      selectedNode={selectedNode}
+      agentRuntimeCatalog={agentRuntimeCatalog}
+      agentRuntimeLoading={agentRuntimeLoading}
+      agentRuntimeError={agentRuntimeError}
+      presets={presets}
+      presetLoading={presetLoading}
+      presetError={presetError}
+      onUpdateNode={onUpdateNode}
+    />
+  );
+}
+
+function renderGroupEditor(props: WorkflowCanvasNodeEditorContentProps) {
+  return (
+    <WorkflowCanvasGroupNodeEditor
+      draft={props.draft}
+      selectedNode={props.selectedNode}
+      onUpdateNode={props.onUpdateNode}
+    />
+  );
+}
+
+function renderEndEditor() {
   return <EndEditor />;
 }
 
@@ -98,33 +141,88 @@ function LLMEditor(props: {
 
   return (
     <div className="workflow-arch-prop-group">
-      <label className="workflow-arch-field-label workflow-arch-field-label--centered">{copy.workflow.llmModelConfiguration}</label>
+      <LLMModelField label={copy.workflow.llmModelConfiguration} />
+      <LLMSystemPromptField
+        editorKind={editorKind}
+        selectedNode={selectedNode}
+        label={copy.workflow.llmSystemDirectives}
+        placeholder={copy.workflow.llmSystemPromptPlaceholder}
+        onUpdateNode={onUpdateNode}
+      />
+      <LLMPromptField
+        editorKind={editorKind}
+        selectedNode={selectedNode}
+        label={copy.workflow.llmPrompt}
+        placeholder={copy.workflow.llmPromptPlaceholder}
+        onUpdateNode={onUpdateNode}
+      />
+      <WorkflowRuntimeVariableHint editorKind={editorKind} text={copy.workflow.runtimeVariableHint} />
+    </div>
+  );
+}
+
+function LLMModelField(props: { label: string }) {
+  return (
+    <>
+      <label className="workflow-arch-field-label workflow-arch-field-label--centered">{props.label}</label>
       <select>
         <option>Engine: GPT-4o-Mini</option>
         <option>Engine: Claude 3.5 Sonnet</option>
         <option>Engine: Llama 3 70B</option>
       </select>
-      <label className="workflow-arch-field-label">{copy.workflow.llmSystemDirectives}</label>
+    </>
+  );
+}
+
+function LLMSystemPromptField(props: {
+  editorKind: WorkflowEditorKind;
+  selectedNode: WorkflowCanvasNodeDraft;
+  label: string;
+  placeholder: string;
+  onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
+}) {
+  return (
+    <>
+      <label className="workflow-arch-field-label">{props.label}</label>
       <WorkflowTemplateEnabledField
-        editorKind={editorKind}
+        editorKind={props.editorKind}
         mode="textarea"
         rows={6}
-        value={selectedNode.llm?.system_prompt ?? ''}
-        placeholder={copy.workflow.llmSystemPromptPlaceholder}
-        onChange={(value) => onUpdateNode(withLLMSystemPrompt(selectedNode, value))}
+        value={props.selectedNode.llm?.system_prompt ?? ''}
+        placeholder={props.placeholder}
+        onChange={(value) => props.onUpdateNode(withLLMSystemPrompt(props.selectedNode, value))}
       />
-      <label className="workflow-arch-field-label">{copy.workflow.llmPrompt}</label>
+    </>
+  );
+}
+
+function LLMPromptField(props: {
+  editorKind: WorkflowEditorKind;
+  selectedNode: WorkflowCanvasNodeDraft;
+  label: string;
+  placeholder: string;
+  onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
+}) {
+  return (
+    <>
+      <label className="workflow-arch-field-label">{props.label}</label>
       <WorkflowTemplateEnabledField
-        editorKind={editorKind}
+        editorKind={props.editorKind}
         mode="textarea"
         rows={8}
-        value={selectedNode.llm?.prompt ?? ''}
-        placeholder={copy.workflow.llmPromptPlaceholder}
-        onChange={(value) => onUpdateNode(withLLMPrompt(selectedNode, value))}
+        value={props.selectedNode.llm?.prompt ?? ''}
+        placeholder={props.placeholder}
+        onChange={(value) => props.onUpdateNode(withLLMPrompt(props.selectedNode, value))}
       />
-      {editorKind === 'workflow' ? <p className="workflow-arch-field-note">{copy.workflow.runtimeVariableHint}</p> : null}
-    </div>
+    </>
   );
+}
+
+function WorkflowRuntimeVariableHint(props: { editorKind: WorkflowEditorKind; text: string }) {
+  if (props.editorKind !== 'workflow') {
+    return null;
+  }
+  return <p className="workflow-arch-field-note">{props.text}</p>;
 }
 
 function EndEditor() {
