@@ -81,6 +81,53 @@ describe('hooks/chat/useChatState', () => {
     });
     expect(latest!.backgroundCompletedSessionIds.has('session-a')).toBe(false);
   });
+
+  it('migrates active run, stop pending, and history sync refs between sessions', async () => {
+    let latest: ChatStateProbeState | null = null;
+    const renderer = TestRenderer.create(
+      React.createElement(ChatStateProbe, {
+        currentSessionId: 'draft-session',
+        onRender: (state) => {
+          latest = state;
+        },
+      }),
+    );
+
+    await act(async () => {
+      latest!.setActiveRun('draft-session', { sessionId: 'draft-session', traceId: 'trace-1' });
+      latest!.setStopPending('draft-session', true);
+      latest!.beginHistorySync('draft-session');
+    });
+
+    await act(async () => {
+      latest!.migrateSessionState('draft-session', 'resolved-session');
+    });
+
+    await act(async () => {
+      renderer.update(
+        React.createElement(ChatStateProbe, {
+          currentSessionId: 'resolved-session',
+          onRender: (state) => {
+            latest = state;
+          },
+        }),
+      );
+    });
+
+    expect(latest!.activeRun).toEqual({ sessionId: 'resolved-session', traceId: 'trace-1' });
+    expect(latest!.getActiveRun('draft-session')).toBeNull();
+    expect(latest!.getActiveRun('resolved-session')).toEqual({ sessionId: 'resolved-session', traceId: 'trace-1' });
+    expect(latest!.getStopPending('draft-session')).toBe(false);
+    expect(latest!.getStopPending('resolved-session')).toBe(true);
+    expect(latest!.stopPending).toBe(true);
+    expect(latest!.historySyncing).toBe(true);
+
+    await act(async () => {
+      latest!.endHistorySync('resolved-session');
+    });
+
+    expect(latest!.historySyncing).toBe(false);
+  });
 });
 
 function ChatStateProbe(props: {

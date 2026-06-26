@@ -38,6 +38,14 @@ type ChatSessionsStateAction =
     sessionId: string;
   };
 
+interface RuntimeRefsMove {
+  activeRuns: Record<string, ActiveAgentRun>;
+  fromKey: string;
+  historySyncCounts: Record<string, number>;
+  stopPending: Record<string, boolean>;
+  toKey: string;
+}
+
 export function useChatState(currentSessionId: string): ChatStateControls {
   const [state, dispatch] = useReducer(chatSessionsReducer, undefined, createInitialChatSessionsState);
   const activeRunsRef = useRef<Record<string, ActiveAgentRun>>({});
@@ -111,7 +119,13 @@ export function useChatState(currentSessionId: string): ChatStateControls {
     if (!toKey || fromKey === toKey) {
       return;
     }
-    moveRuntimeRefs(activeRunsRef.current, stopPendingRef.current, historySyncCountsRef.current, fromKey, toKey);
+    moveRuntimeRefs({
+      activeRuns: activeRunsRef.current,
+      fromKey,
+      historySyncCounts: historySyncCountsRef.current,
+      stopPending: stopPendingRef.current,
+      toKey,
+    });
     dispatch({ type: 'migrate_session_state', fromSessionId: fromKey, toSessionId: toKey });
   }, []);
 
@@ -383,13 +397,9 @@ function resolveMigratedState(state: ChatStateStore, sessionId: string): ChatSta
   };
 }
 
-function moveRuntimeRefs(
-  activeRuns: Record<string, ActiveAgentRun>,
-  stopPending: Record<string, boolean>,
-  historySyncCounts: Record<string, number>,
-  fromKey: string,
-  toKey: string,
-): void {
+function moveRuntimeRefs(options: RuntimeRefsMove): void {
+  const { activeRuns, fromKey, historySyncCounts, stopPending, toKey } = options;
+
   const activeRun = activeRuns[fromKey];
   if (activeRun) {
     activeRuns[toKey] = { ...activeRun, sessionId: toKey };
