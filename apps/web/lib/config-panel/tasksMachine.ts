@@ -43,6 +43,16 @@ export type TasksAction =
   | { type: 'run_error'; error: string }
   | { type: 'run_finish' };
 
+type TasksActionReducer = (state: TasksState, action: TasksAction) => TasksState | null;
+
+const TASK_ACTION_REDUCERS: TasksActionReducer[] = [
+  reduceLoadAction,
+  reduceEditorAction,
+  reduceMutationAction,
+  reduceTaskListAction,
+  reduceRunAction,
+];
+
 export function createInitialTasksState(config: BridgeConfig | null): TasksState {
   return {
     view: 'list',
@@ -59,6 +69,16 @@ export function createInitialTasksState(config: BridgeConfig | null): TasksState
 }
 
 export function tasksReducer(state: TasksState, action: TasksAction): TasksState {
+  for (const reduceAction of TASK_ACTION_REDUCERS) {
+    const nextState = reduceAction(state, action);
+    if (nextState) {
+      return nextState;
+    }
+  }
+  return state;
+}
+
+function reduceLoadAction(state: TasksState, action: TasksAction): TasksState | null {
   switch (action.type) {
     case 'load_start':
       return { ...state, loading: true };
@@ -66,6 +86,13 @@ export function tasksReducer(state: TasksState, action: TasksAction): TasksState
       return { ...state, loading: false, tasks: action.tasks, error: '' };
     case 'load_error':
       return { ...state, loading: false, error: action.error, success: '' };
+    default:
+      return null;
+  }
+}
+
+function reduceEditorAction(state: TasksState, action: TasksAction): TasksState | null {
+  switch (action.type) {
     case 'enter_create':
       return enterCreateTask(state, action.editor);
     case 'enter_edit':
@@ -76,6 +103,13 @@ export function tasksReducer(state: TasksState, action: TasksAction): TasksState
       return { ...state, editor: { ...state.editor, ...action.patch } };
     case 'replace_editor':
       return { ...state, editor: action.editor };
+    default:
+      return null;
+  }
+}
+
+function reduceMutationAction(state: TasksState, action: TasksAction): TasksState | null {
+  switch (action.type) {
     case 'mutate_start':
       return { ...state, saving: true, error: '', success: '' };
     case 'mutate_error':
@@ -86,10 +120,24 @@ export function tasksReducer(state: TasksState, action: TasksAction): TasksState
       return { ...state, error: action.error, success: '' };
     case 'set_success':
       return { ...state, error: '', success: action.success };
+    default:
+      return null;
+  }
+}
+
+function reduceTaskListAction(state: TasksState, action: TasksAction): TasksState | null {
+  switch (action.type) {
     case 'upsert_task':
       return { ...state, tasks: upsertTask(state.tasks, action.task) };
     case 'remove_task':
       return { ...state, tasks: removeTask(state.tasks, action.id) };
+    default:
+      return null;
+  }
+}
+
+function reduceRunAction(state: TasksState, action: TasksAction): TasksState | null {
+  switch (action.type) {
     case 'run_start':
       return runStart(state, action.id);
     case 'run_api_done':
@@ -98,6 +146,8 @@ export function tasksReducer(state: TasksState, action: TasksAction): TasksState
       return { ...state, saving: false, runningTaskID: '', error: action.error, success: '' };
     case 'run_finish':
       return { ...state, saving: false, runningTaskID: '' };
+    default:
+      return null;
   }
 }
 
