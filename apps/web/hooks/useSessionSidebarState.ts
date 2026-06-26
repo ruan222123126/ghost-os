@@ -15,6 +15,11 @@ interface UseSessionSidebarStateResult {
   openSidebar: () => void;
 }
 
+interface SidebarToggleTransition {
+  nextOpen: boolean;
+  shouldClearSearch: boolean;
+}
+
 export function useSessionSidebarState(): UseSessionSidebarStateResult {
   const [isOpen, setIsOpen] = useState(true);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -22,9 +27,7 @@ export function useSessionSidebarState(): UseSessionSidebarStateResult {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
-    if (isOpen && isSearchVisible) {
-      searchInputRef.current?.focus();
-    }
+    focusSearchInput(isOpen, isSearchVisible, searchInputRef);
   }, [isOpen, isSearchVisible]);
 
   const closeSearch = () => {
@@ -42,21 +45,11 @@ export function useSessionSidebarState(): UseSessionSidebarStateResult {
   };
 
   const toggleSearch = () => {
-    if (isSearchVisible) {
-      closeSearch();
-      return;
-    }
-    openSearch();
+    toggleSearchVisibility(isSearchVisible, openSearch, closeSearch);
   };
 
   const toggleSidebar = () => {
-    setIsOpen((open) => {
-      const nextOpen = !open;
-      if (!nextOpen) {
-        clearSearch();
-      }
-      return nextOpen;
-    });
+    toggleSidebarVisibility(isOpen, setIsOpen, clearSearch);
   };
 
   return {
@@ -70,5 +63,50 @@ export function useSessionSidebarState(): UseSessionSidebarStateResult {
     closeSearch,
     setSearchQuery,
     openSidebar: () => setIsOpen(true),
+  };
+}
+
+function focusSearchInput(
+  isOpen: boolean,
+  isSearchVisible: boolean,
+  searchInputRef: RefObject<HTMLInputElement>,
+): void {
+  if (isOpen && isSearchVisible) {
+    searchInputRef.current?.focus();
+  }
+}
+
+function toggleSidebarVisibility(
+  isOpen: boolean,
+  setIsOpen: (value: boolean) => void,
+  clearSearch: () => void,
+): void {
+  const transition = resolveSidebarToggle(isOpen);
+  setIsOpen(transition.nextOpen);
+  clearSearchWhenNeeded(transition.shouldClearSearch, clearSearch);
+}
+
+function toggleSearchVisibility(
+  isSearchVisible: boolean,
+  openSearch: () => void,
+  closeSearch: () => void,
+): void {
+  if (isSearchVisible) {
+    closeSearch();
+    return;
+  }
+  openSearch();
+}
+
+function clearSearchWhenNeeded(shouldClearSearch: boolean, clearSearch: () => void): void {
+  if (shouldClearSearch) {
+    clearSearch();
+  }
+}
+
+function resolveSidebarToggle(isOpen: boolean): SidebarToggleTransition {
+  return {
+    nextOpen: !isOpen,
+    shouldClearSearch: isOpen,
   };
 }
