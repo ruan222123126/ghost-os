@@ -38,20 +38,26 @@ export interface OrchestrationGroupOutput {
 }
 
 export function OrchestrationRoundsBlock(props: { output: OrchestrationGroupOutput }) {
-  const grouped = new Map<number, OrchestrationMemberResult[]>();
-  for (const item of props.output.member_results) {
-    const round = item.round ?? 0;
-    grouped.set(round, [...(grouped.get(round) ?? []), item]);
-  }
+  const grouped = groupMemberResultsByRound(props.output.member_results);
+
   return (
     <div className="rounded-[8px] border border-[#E5E5E5] bg-[#FAFAFA] p-2">
       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#737373]">
         rounds: {props.output.completed_rounds ?? 0}
       </p>
       {props.output.dispatch_results?.length ? <OrchestrationDispatchList dispatchResults={props.output.dispatch_results} /> : null}
-      {[...grouped.entries()].map(([round, items]) => <OrchestrationRound key={round} round={round} items={items} />)}
+      {grouped.map(([round, items]) => <OrchestrationRound key={round} round={round} items={items} />)}
     </div>
   );
+}
+
+function groupMemberResultsByRound(items: OrchestrationMemberResult[]): Array<[number, OrchestrationMemberResult[]]> {
+  const grouped = new Map<number, OrchestrationMemberResult[]>();
+  for (const item of items) {
+    const round = item.round ?? 0;
+    grouped.set(round, [...(grouped.get(round) ?? []), item]);
+  }
+  return [...grouped.entries()];
 }
 
 function OrchestrationDispatchList(props: { dispatchResults: OrchestrationDispatchResult[] }) {
@@ -65,24 +71,64 @@ function OrchestrationDispatchList(props: { dispatchResults: OrchestrationDispat
 function OrchestrationDispatchCard(props: { dispatch: OrchestrationDispatchResult; index: number }) {
   const { dispatch, index } = props;
   const transcriptEntries = transcriptEntriesForRound(dispatch.private_transcript, dispatch.round);
+
   return (
     <details className="rounded-[8px] border border-[#E5E5E5] bg-white p-2" open>
       <summary className="cursor-pointer list-none text-[12px] text-[#111111]">
-        dispatch {dispatch.round ?? index + 1}: {dispatch.action ?? 'unknown'}
-        {dispatch.order ? ` [${dispatch.order}]` : ''}
+        {formatDispatchSummary(dispatch, index)}
       </summary>
       <div className="mt-2 space-y-1 text-[12px] text-[#111111]">
-        {dispatch.instruction ? <p className="whitespace-pre-wrap">instruction: {dispatch.instruction}</p> : null}
-        {dispatch.owner_visible !== undefined ? <p>owner_visible: {String(dispatch.owner_visible)}</p> : null}
-        {dispatch.private_deliveries?.map((delivery, indexValue) => (
-          <p key={`delivery-${indexValue}`} className="whitespace-pre-wrap">
-            private_send: {delivery.content ?? ''}
-          </p>
-        ))}
-        {transcriptEntries.length ? <OrchestrationTranscriptBlock entries={transcriptEntries} /> : null}
+        <DispatchInstructionLine instruction={dispatch.instruction} />
+        <DispatchOwnerVisibleLine ownerVisible={dispatch.owner_visible} />
+        <PrivateDeliveriesList deliveries={dispatch.private_deliveries} />
+        <MaybeTranscriptBlock entries={transcriptEntries} />
       </div>
     </details>
   );
+}
+
+function formatDispatchSummary(dispatch: OrchestrationDispatchResult, index: number): string {
+  const round = dispatch.round ?? index + 1;
+  const action = dispatch.action ?? 'unknown';
+  const order = dispatch.order ? ` [${dispatch.order}]` : '';
+  return `dispatch ${round}: ${action}${order}`;
+}
+
+function DispatchInstructionLine(props: { instruction?: string }) {
+  if (!props.instruction) {
+    return null;
+  }
+  return <p className="whitespace-pre-wrap">instruction: {props.instruction}</p>;
+}
+
+function DispatchOwnerVisibleLine(props: { ownerVisible?: boolean }) {
+  if (props.ownerVisible === undefined) {
+    return null;
+  }
+  return <p>owner_visible: {String(props.ownerVisible)}</p>;
+}
+
+function PrivateDeliveriesList(props: { deliveries?: OrchestrationPrivateDelivery[] }) {
+  if (!props.deliveries?.length) {
+    return null;
+  }
+
+  return (
+    <>
+      {props.deliveries.map((delivery, indexValue) => (
+        <p key={`delivery-${indexValue}`} className="whitespace-pre-wrap">
+          private_send: {delivery.content ?? ''}
+        </p>
+      ))}
+    </>
+  );
+}
+
+function MaybeTranscriptBlock(props: { entries: OrchestrationTranscriptEntry[] }) {
+  if (props.entries.length === 0) {
+    return null;
+  }
+  return <OrchestrationTranscriptBlock entries={props.entries} />;
 }
 
 function OrchestrationTranscriptBlock(props: { entries: OrchestrationTranscriptEntry[] }) {
@@ -138,30 +184,60 @@ export function parseOrchestrationGroupOutput(value: unknown): OrchestrationGrou
   if (!Array.isArray(record.member_results)) {
     return undefined;
   }
+
   return {
-    completed_rounds: typeof record.completed_rounds === 'number' ? record.completed_rounds : undefined,
-    owner_agent_id: typeof record.owner_agent_id === 'string' ? record.owner_agent_id : undefined,
-    owner_session_id: typeof record.owner_session_id === 'string' ? record.owner_session_id : undefined,
+    completed_rounds: numberField(record, 'completed_rounds'),
+    owner_agent_id: stringField(record, 'owner_agent_id'),
+    owner_session_id: stringField(record, 'owner_session_id'),
     member_results: toObjectArray(record.member_results) as OrchestrationMemberResult[],
-    dispatch_results: Array.isArray(record.dispatch_results)
-      ? toObjectArray(record.dispatch_results).map((item) => ({
-        round: typeof item.round === 'number' ? item.round : undefined,
-        action: typeof item.action === 'string' ? item.action : undefined,
-        order: typeof item.order === 'string' ? item.order : undefined,
-        instruction: typeof item.instruction === 'string' ? item.instruction : undefined,
-        participant_ids: Array.isArray(item.participant_ids)
-          ? item.participant_ids.filter((value): value is string => typeof value === 'string')
-          : undefined,
-        owner_visible: typeof item.owner_visible === 'boolean' ? item.owner_visible : undefined,
-        private_deliveries: Array.isArray(item.private_deliveries)
-          ? toObjectArray(item.private_deliveries) as OrchestrationPrivateDelivery[]
-          : undefined,
-        private_transcript: Array.isArray(item.private_transcript)
-          ? toObjectArray(item.private_transcript) as OrchestrationTranscriptEntry[]
-          : undefined,
-      }))
-      : undefined,
+    dispatch_results: parseDispatchResults(record.dispatch_results),
   };
+}
+
+function parseDispatchResults(value: unknown): OrchestrationDispatchResult[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return toObjectArray(value).map(parseDispatchResult);
+}
+
+function parseDispatchResult(item: Record<string, unknown>): OrchestrationDispatchResult {
+  return {
+    round: numberField(item, 'round'),
+    action: stringField(item, 'action'),
+    order: stringField(item, 'order'),
+    instruction: stringField(item, 'instruction'),
+    participant_ids: stringArrayField(item.participant_ids),
+    owner_visible: booleanField(item, 'owner_visible'),
+    private_deliveries: objectArrayField<OrchestrationPrivateDelivery>(item.private_deliveries),
+    private_transcript: objectArrayField<OrchestrationTranscriptEntry>(item.private_transcript),
+  };
+}
+
+function stringField(record: Record<string, unknown>, key: string): string | undefined {
+  return typeof record[key] === 'string' ? record[key] : undefined;
+}
+
+function numberField(record: Record<string, unknown>, key: string): number | undefined {
+  return typeof record[key] === 'number' ? record[key] : undefined;
+}
+
+function booleanField(record: Record<string, unknown>, key: string): boolean | undefined {
+  return typeof record[key] === 'boolean' ? record[key] : undefined;
+}
+
+function stringArrayField(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+function objectArrayField<T extends object>(value: unknown): T[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return toObjectArray(value) as T[];
 }
 
 function toObjectArray(value: unknown): Array<Record<string, unknown>> {

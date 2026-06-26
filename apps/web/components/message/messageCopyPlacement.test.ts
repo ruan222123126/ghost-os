@@ -10,7 +10,12 @@ describe('components/message/messageCopyPlacement', () => {
       buildMessageRow({ id: 'tool-1', kind: 'tool', content: 'tool output' }),
     ];
 
-    expect(shouldPlaceAssistantCopyInline(rows[0], 0, rows.length, (index) => rows[index])).toBe(true);
+    expect(shouldPlaceAssistantCopyInline({
+      currentRow: rows[0],
+      currentIndex: 0,
+      rowCount: rows.length,
+      getRowAtIndex: (index) => rows[index],
+    })).toBe(true);
   });
 
   it('returns false when the next visible message is a new assistant reply', () => {
@@ -20,7 +25,12 @@ describe('components/message/messageCopyPlacement', () => {
       buildMessageRow({ id: 'tool-1', kind: 'tool', content: 'late tool' }),
     ];
 
-    expect(shouldPlaceAssistantCopyInline(rows[0], 0, rows.length, (index) => rows[index])).toBe(false);
+    expect(shouldPlaceAssistantCopyInline({
+      currentRow: rows[0],
+      currentIndex: 0,
+      rowCount: rows.length,
+      getRowAtIndex: (index) => rows[index],
+    })).toBe(false);
   });
 });
 

@@ -1,11 +1,15 @@
 import type { MessageListRow } from '@/lib/chat-view/types';
 
-export function shouldPlaceAssistantCopyInline(
-  currentRow: MessageListRow,
-  currentIndex: number,
-  rowCount: number,
-  getRowAtIndex: (index: number) => MessageListRow,
-): boolean {
+interface AssistantCopyPlacementInput {
+  currentRow: MessageListRow;
+  currentIndex: number;
+  rowCount: number;
+  getRowAtIndex: (index: number) => MessageListRow;
+}
+
+export function shouldPlaceAssistantCopyInline(input: AssistantCopyPlacementInput): boolean {
+  const { currentRow, currentIndex, rowCount, getRowAtIndex } = input;
+
   if (currentRow.kind !== 'message' || currentRow.message.kind !== 'assistant') {
     return false;
   }

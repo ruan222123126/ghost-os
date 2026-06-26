@@ -171,12 +171,12 @@ export const MessageList: FC<MessageListProps> = ({
       >
         {virtualItems.map((virtualItem) => {
           const row = rows[virtualItem.index];
-          const hasTrailingTool = shouldPlaceAssistantCopyInline(
-            row,
-            virtualItem.index,
+          const hasTrailingTool = shouldPlaceAssistantCopyInline({
+            currentRow: row,
+            currentIndex: virtualItem.index,
             rowCount,
-            (index) => rows[index],
-          );
+            getRowAtIndex: (index) => rows[index],
+          });
 
           return (
             <div

@@ -31,26 +31,49 @@ export interface RuntimeFormState {
   webSearchExaAPIKey: string;
 }
 
+const DEFAULT_RUNTIME_FORM_STATE: RuntimeFormState = {
+  provider: '',
+  model: '',
+  projectRoot: '',
+  maxTurns: String(DEFAULT_MAX_TURNS),
+  taskExecutionTimeoutMS: String(DEFAULT_TASK_EXECUTION_TIMEOUT_MS),
+  llmCompletionRetryCount: String(DEFAULT_LLM_COMPLETION_RETRY_COUNT),
+  llmCompletionRetryIntervalMS: String(DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS),
+  sessionHumanLogFullEnabled: false,
+  sessionSystemPromptVisibleEnabled: true,
+  assistantMarkdownEnabled: true,
+  toolCallCompactOutputEnabled: false,
+  memoryModeEnabled: false,
+  microcompactEnabled: false,
+  sessionTitleMode: DEFAULT_SESSION_TITLE_MODE,
+  webSearchTavilyURL: '',
+  webSearchExaURL: '',
+  webSearchTavilyAPIKey: '',
+  webSearchExaAPIKey: '',
+};
+
 export function createRuntimeFormState(config: BridgeConfig | null): RuntimeFormState {
+  if (!config) {
+    return { ...DEFAULT_RUNTIME_FORM_STATE };
+  }
+
   return {
-    provider: config?.provider ?? '',
-    model: config?.model ?? '',
-    projectRoot: config?.project_root ?? '',
-    maxTurns: String(config?.max_turns ?? DEFAULT_MAX_TURNS),
-    taskExecutionTimeoutMS: String(
-      config?.task_execution_timeout_ms ?? DEFAULT_TASK_EXECUTION_TIMEOUT_MS,
-    ),
-    llmCompletionRetryCount: String(config?.llm_completion_retry_count ?? DEFAULT_LLM_COMPLETION_RETRY_COUNT),
-    llmCompletionRetryIntervalMS: String(config?.llm_completion_retry_interval_ms ?? DEFAULT_LLM_COMPLETION_RETRY_INTERVAL_MS),
-    sessionHumanLogFullEnabled: config?.session_human_log_full_enabled ?? false,
-    sessionSystemPromptVisibleEnabled: config?.session_system_prompt_visible_enabled ?? true,
-    assistantMarkdownEnabled: config?.assistant_markdown_enabled ?? true,
-    toolCallCompactOutputEnabled: config?.tool_call_compact_output_enabled ?? false,
-    memoryModeEnabled: config?.memory_mode_enabled ?? false,
-    microcompactEnabled: config?.microcompact_enabled ?? false,
-    sessionTitleMode: config?.session_title_mode ?? DEFAULT_SESSION_TITLE_MODE,
-    webSearchTavilyURL: config?.web_search_tavily_url ?? '',
-    webSearchExaURL: config?.web_search_exa_url ?? '',
+    provider: config.provider,
+    model: config.model,
+    projectRoot: config.project_root,
+    maxTurns: String(config.max_turns),
+    taskExecutionTimeoutMS: String(config.task_execution_timeout_ms),
+    llmCompletionRetryCount: String(config.llm_completion_retry_count),
+    llmCompletionRetryIntervalMS: String(config.llm_completion_retry_interval_ms),
+    sessionHumanLogFullEnabled: config.session_human_log_full_enabled,
+    sessionSystemPromptVisibleEnabled: config.session_system_prompt_visible_enabled,
+    assistantMarkdownEnabled: config.assistant_markdown_enabled,
+    toolCallCompactOutputEnabled: config.tool_call_compact_output_enabled,
+    memoryModeEnabled: config.memory_mode_enabled,
+    microcompactEnabled: config.microcompact_enabled,
+    sessionTitleMode: config.session_title_mode,
+    webSearchTavilyURL: config.web_search_tavily_url,
+    webSearchExaURL: config.web_search_exa_url,
     webSearchTavilyAPIKey: '',
     webSearchExaAPIKey: '',
   };
