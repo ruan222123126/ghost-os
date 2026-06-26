@@ -25,6 +25,21 @@ interface LoopPairTopology {
   incomingToEnd: WorkflowCanvasEdgeDraft[];
 }
 
+interface LoopNodePairEntry {
+  loopID: string;
+  role: string | undefined;
+  node: WorkflowCanvasNodeDraft;
+}
+
+interface CompileLoopPairInput {
+  loopID: string;
+  startNode: WorkflowCanvasNodeDraft;
+  endNode: WorkflowCanvasNodeDraft;
+  edges: WorkflowCanvasEdgeDraft[];
+}
+
+interface ResolveLoopPairTopologyInput extends CompileLoopPairInput {}
+
 export function compileLoopPairsForTransport(
   nodes: WorkflowCanvasNodeDraft[],
   edges: WorkflowCanvasEdgeDraft[],
@@ -36,7 +51,12 @@ export function compileLoopPairsForTransport(
     if (!pair.start || !pair.end) {
       throw new Error(`loop "${loopID}" must contain one start node and one end node`);
     }
-    const compiledEdges = compileSingleLoopPair(loopID, pair.start, pair.end, transportEdges);
+    const compiledEdges = compileSingleLoopPair({
+      loopID,
+      startNode: pair.start,
+      endNode: pair.end,
+      edges: transportEdges,
+    });
     transportEdges.splice(0, transportEdges.length, ...compiledEdges);
   }
   return {
@@ -48,39 +68,53 @@ export function compileLoopPairsForTransport(
 function indexLoopNodePairs(nodes: WorkflowCanvasNodeDraft[]): Map<string, LoopNodePair> {
   const pairs = new Map<string, LoopNodePair>();
   for (const node of nodes) {
-    if (node.type !== 'loop') {
+    const entry = loopNodePairEntry(node);
+    if (!entry) {
       continue;
     }
-    const loopID = node.loop?.loop_id?.trim() ?? '';
-    if (loopID.length === 0) {
-      throw new Error(`loop node "${node.id}" requires loop_id`);
-    }
-    const pair = pairs.get(loopID) ?? {};
-    if (node.loop?.role === LOOP_ROLE_END) {
-      if (pair.end) {
-        throw new Error(`loop "${loopID}" has multiple end nodes`);
-      }
-      pair.end = node;
-    } else {
-      if (pair.start) {
-        throw new Error(`loop "${loopID}" has multiple start nodes`);
-      }
-      pair.start = node;
-    }
-    pairs.set(loopID, pair);
+    recordLoopNodePair(pairs, entry);
   }
   return pairs;
 }
 
-function compileSingleLoopPair(
+function loopNodePairEntry(node: WorkflowCanvasNodeDraft): LoopNodePairEntry | undefined {
+  if (node.type !== 'loop') {
+    return undefined;
+  }
+  const loopID = node.loop?.loop_id?.trim() ?? '';
+  if (loopID.length === 0) {
+    throw new Error(`loop node "${node.id}" requires loop_id`);
+  }
+  return { loopID, role: node.loop?.role, node };
+}
+
+function recordLoopNodePair(pairs: Map<string, LoopNodePair>, entry: LoopNodePairEntry): void {
+  const pair = pairs.get(entry.loopID) ?? {};
+  if (entry.role === LOOP_ROLE_END) {
+    assertLoopNodeSlotEmpty(pair.end, entry.loopID, 'end');
+    pair.end = entry.node;
+  } else {
+    assertLoopNodeSlotEmpty(pair.start, entry.loopID, 'start');
+    pair.start = entry.node;
+  }
+  pairs.set(entry.loopID, pair);
+}
+
+function assertLoopNodeSlotEmpty(
+  existing: WorkflowCanvasNodeDraft | undefined,
   loopID: string,
-  startNode: WorkflowCanvasNodeDraft,
-  endNode: WorkflowCanvasNodeDraft,
-  edges: WorkflowCanvasEdgeDraft[],
-): WorkflowCanvasEdgeDraft[] {
+  role: 'start' | 'end',
+): void {
+  if (existing) {
+    throw new Error(`loop "${loopID}" has multiple ${role} nodes`);
+  }
+}
+
+function compileSingleLoopPair(input: CompileLoopPairInput): WorkflowCanvasEdgeDraft[] {
+  const { edges, endNode, loopID, startNode } = input;
   const originalStartNodeID = startNode.id;
   assertLoopPairIDs(loopID, startNode.id, endNode.id);
-  const topology = resolveLoopPairTopology(loopID, startNode, endNode, edges);
+  const topology = resolveLoopPairTopology(input);
 
   startNode.id = loopID;
   startNode.loop = {
@@ -109,12 +143,8 @@ function assertLoopPairIDs(loopID: string, startNodeID: string, endNodeID: strin
   }
 }
 
-function resolveLoopPairTopology(
-  loopID: string,
-  startNode: WorkflowCanvasNodeDraft,
-  endNode: WorkflowCanvasNodeDraft,
-  edges: WorkflowCanvasEdgeDraft[],
-): LoopPairTopology {
+function resolveLoopPairTopology(input: ResolveLoopPairTopologyInput): LoopPairTopology {
+  const { edges, endNode, loopID, startNode } = input;
   const startOutgoing = collectOutgoingEdges(edges, startNode.id);
   const endOutgoing = collectOutgoingEdges(edges, endNode.id);
   const incomingToEnd = collectIncomingEdges(edges, endNode.id);
@@ -199,17 +229,54 @@ function resolveLoopIterations(...values: Array<number | undefined>): number {
 function cloneNode(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft {
   return {
     ...node,
-    ui: { ...node.ui },
-    start: node.start ? { inputs: node.start.inputs?.map((input) => ({ ...input })) } : undefined,
-    tool: node.tool ? { ...node.tool, arguments: node.tool.arguments ? { ...node.tool.arguments } : undefined } : undefined,
-    llm: node.llm ? { ...node.llm } : undefined,
-    agent: node.agent
-      ? {
-        ...node.agent,
-        runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
-      }
-      : undefined,
-    if: node.if ? { ...node.if } : undefined,
-    loop: node.loop ? { ...node.loop } : undefined,
+    ui: cloneNodeUI(node),
+    start: cloneStartNodePayload(node),
+    tool: cloneToolNodePayload(node),
+    llm: cloneLLMNodePayload(node),
+    agent: cloneAgentNodePayload(node),
+    if: cloneIfNodePayload(node),
+    loop: cloneLoopNodePayload(node),
   };
+}
+
+function cloneNodeUI(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['ui'] {
+  return { ...node.ui };
+}
+
+function cloneStartNodePayload(
+  node: WorkflowCanvasNodeDraft,
+): WorkflowCanvasNodeDraft['start'] {
+  return node.start ? { inputs: node.start.inputs?.map((input) => ({ ...input })) } : undefined;
+}
+
+function cloneToolNodePayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['tool'] {
+  if (!node.tool) {
+    return undefined;
+  }
+  return {
+    ...node.tool,
+    arguments: node.tool.arguments ? { ...node.tool.arguments } : undefined,
+  };
+}
+
+function cloneLLMNodePayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['llm'] {
+  return node.llm ? { ...node.llm } : undefined;
+}
+
+function cloneAgentNodePayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['agent'] {
+  if (!node.agent) {
+    return undefined;
+  }
+  return {
+    ...node.agent,
+    runtime_overrides: cloneWorkflowTaskRuntimeOverrides(node.agent.runtime_overrides),
+  };
+}
+
+function cloneIfNodePayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['if'] {
+  return node.if ? { ...node.if } : undefined;
+}
+
+function cloneLoopNodePayload(node: WorkflowCanvasNodeDraft): WorkflowCanvasNodeDraft['loop'] {
+  return node.loop ? { ...node.loop } : undefined;
 }
