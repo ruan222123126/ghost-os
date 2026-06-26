@@ -22,6 +22,17 @@ import { resolveToolCallArgs } from './toolCalls';
 
 const ACTION_SAMPLE_LIMIT = 2;
 
+type SummaryActionCollector = (tool: ToolChatMessage) => ActionItem[];
+
+const SUMMARY_ACTION_COLLECTORS: SummaryActionCollector[] = [
+  collectRawOutputReportActions,
+  collectContentReportActions,
+  collectContentScriptActions,
+  collectRawScriptActions,
+  collectToolSearchActions,
+  collectDirectToolAction,
+];
+
 export function buildToolDetailSummary(tool: ToolChatMessage): string {
   const actions = collectSummaryActions(tool);
   if (actions.length === 0) {
@@ -45,31 +56,37 @@ export function buildToolDetailError(tool: ToolChatMessage): string {
 }
 
 function collectSummaryActions(tool: ToolChatMessage): ActionItem[] {
-  const outputReportActions = collectScriptExecReportActions(tool.rawOutput);
-  if (outputReportActions.length > 0) {
-    return outputReportActions;
+  for (const collect of SUMMARY_ACTION_COLLECTORS) {
+    const actions = collect(tool);
+    if (actions.length > 0) {
+      return actions;
+    }
   }
+  return [];
+}
 
-  const contentReportActions = collectScriptExecReportActions(tool.content);
-  if (contentReportActions.length > 0) {
-    return contentReportActions;
-  }
+function collectRawOutputReportActions(tool: ToolChatMessage): ActionItem[] {
+  return collectScriptExecReportActions(tool.rawOutput);
+}
 
-  const contentScriptActions = collectScriptArgActions(tool.content);
-  if (contentScriptActions.length > 0) {
-    return contentScriptActions;
-  }
+function collectContentReportActions(tool: ToolChatMessage): ActionItem[] {
+  return collectScriptExecReportActions(tool.content);
+}
 
-  const rawScriptActions = collectScriptArgActions(tool.rawOutput);
-  if (rawScriptActions.length > 0) {
-    return rawScriptActions;
-  }
+function collectContentScriptActions(tool: ToolChatMessage): ActionItem[] {
+  return collectScriptArgActions(tool.content);
+}
 
+function collectRawScriptActions(tool: ToolChatMessage): ActionItem[] {
+  return collectScriptArgActions(tool.rawOutput);
+}
+
+function collectToolSearchActions(tool: ToolChatMessage): ActionItem[] {
   const toolSearchAction = buildToolSearchAction(tool);
-  if (toolSearchAction) {
-    return [toolSearchAction];
-  }
+  return toolSearchAction ? [toolSearchAction] : [];
+}
 
+function collectDirectToolAction(tool: ToolChatMessage): ActionItem[] {
   const toolName = normalizeToolName(tool.toolName);
   if (!toolName) {
     return [];

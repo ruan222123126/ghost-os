@@ -19,6 +19,18 @@ const SCREEN_ACTION_LABELS = {
   screen: '截取屏幕',
 } as const;
 
+type PlainActionTitleBuilder = (action: FormattedToolAction) => string;
+
+const PLAIN_ACTION_TITLE_BUILDERS: Record<string, PlainActionTitleBuilder> = {
+  web_search: buildWebActionTitle,
+  fetch_webpage: buildWebActionTitle,
+  codex_cli: buildCodexActionTitle,
+  search_files: buildSearchActionTitle,
+  sfind: buildSkillActionTitle,
+  screen_action: buildScreenActionTitle,
+  screen_control: buildScreenActionTitle,
+};
+
 export function buildToolCardViewModel(
   tool: ToolChatMessage,
   options: ToolCardViewModelOptions = {},
@@ -91,22 +103,8 @@ function buildPlainActionTitle(action: FormattedToolAction, tool: ToolChatMessag
   }
 
   const toolName = normalizeToolName(tool.toolName);
-  if ((toolName === 'web_search' || toolName === 'fetch_webpage') && action.actionKind === 'web') {
-    return joinLabelAndTarget('网络搜索', action.actionText);
-  }
-  if (toolName === 'codex_cli' && action.actionKind === 'codex') {
-    return joinLabelAndTarget('调用codex', action.actionText);
-  }
-  if (toolName === 'search_files' && action.actionKind === 'search') {
-    return buildKeywordSearchTitle(action.actionText);
-  }
-  if (toolName === 'sfind' && isSkillToolAction(action)) {
-    return joinLabelAndTarget(SKILL_ACTION_LABELS[action.actionKind], action.actionText);
-  }
-  if ((toolName === 'screen_action' || toolName === 'screen_control') && isScreenToolAction(action)) {
-    return joinLabelAndTarget(SCREEN_ACTION_LABELS[action.actionKind], action.actionText);
-  }
-  return '';
+  const buildTitle = PLAIN_ACTION_TITLE_BUILDERS[toolName];
+  return buildTitle ? buildTitle(action) : '';
 }
 
 function buildFileActionTitle(action: FormattedToolAction): string {
@@ -120,6 +118,41 @@ function buildFileActionTitle(action: FormattedToolAction): string {
 function buildKeywordSearchTitle(rawTarget?: string): string {
   const target = rawTarget?.trim() || '';
   return target ? `搜索 ${target}（关键词）` : '搜索（关键词）';
+}
+
+function buildWebActionTitle(action: FormattedToolAction): string {
+  if (action.actionKind !== 'web') {
+    return '';
+  }
+  return joinLabelAndTarget('网络搜索', action.actionText);
+}
+
+function buildCodexActionTitle(action: FormattedToolAction): string {
+  if (action.actionKind !== 'codex') {
+    return '';
+  }
+  return joinLabelAndTarget('调用codex', action.actionText);
+}
+
+function buildSearchActionTitle(action: FormattedToolAction): string {
+  if (action.actionKind !== 'search') {
+    return '';
+  }
+  return buildKeywordSearchTitle(action.actionText);
+}
+
+function buildSkillActionTitle(action: FormattedToolAction): string {
+  if (!isSkillToolAction(action)) {
+    return '';
+  }
+  return joinLabelAndTarget(SKILL_ACTION_LABELS[action.actionKind], action.actionText);
+}
+
+function buildScreenActionTitle(action: FormattedToolAction): string {
+  if (!isScreenToolAction(action)) {
+    return '';
+  }
+  return joinLabelAndTarget(SCREEN_ACTION_LABELS[action.actionKind], action.actionText);
 }
 
 function joinLabelAndTarget(label: string, rawTarget?: string): string {
