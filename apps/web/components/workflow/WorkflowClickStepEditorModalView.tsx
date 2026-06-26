@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { CloseButton } from '@/components/CloseButton';
 import type { WebLocale } from '@/lib/i18n/locale';
 import {
+  CLICK_COORDINATE_SOURCE_MANUAL,
   type ClickEditorState,
 } from '@/components/workflow/workflowClickStepEditorHelpers';
 import {
@@ -45,75 +46,99 @@ interface ClickEditorText {
   captureHint: string;
   coordinateHint: string;
 }
+
+interface ClickEditorFormFieldsProps {
+  canUseFindIconReference: boolean;
+  captureActive: boolean;
+  captureLoading: boolean;
+  errorText: string;
+  state: ClickEditorState;
+  text: ClickEditorText;
+  onStartCapture: () => void;
+  onStateChange: (next: ClickEditorState) => void;
+}
+
+interface ClickEditorStatePatchProps {
+  state: ClickEditorState;
+  onStatePatch: (patch: Partial<ClickEditorState>) => void;
+}
+
 export function WorkflowClickStepEditorModalView(props: WorkflowClickStepEditorModalViewProps) {
-  const {
-    locale,
-    closeAria,
-    titleID,
-    title,
-    stepTag,
-    errorText,
-    state,
-    canUseFindIconReference,
-    saving,
-    captureActive,
-    captureLoading,
-    onClose,
-    onSave,
-    onStartCapture,
-    onStateChange,
-  } = props;
-  const text = viewText(locale);
+  const text = viewText(props.locale);
 
   return (
-    <ClickEditorShell closeAria={closeAria} onClose={onClose} titleID={titleID}>
+    <ClickEditorShell closeAria={props.closeAria} onClose={props.onClose} titleID={props.titleID}>
       <section className="relative z-[1] flex w-full max-w-[420px] flex-col bg-white shadow-[0_24px_64px_rgba(0,0,0,0.24)]">
         <ClickEditorHeader
-          closeAria={closeAria}
-          onClose={onClose}
-          titleID={titleID}
-          title={title}
-          stepTag={stepTag}
+          closeAria={props.closeAria}
+          onClose={props.onClose}
+          titleID={props.titleID}
+          title={props.title}
+          stepTag={props.stepTag}
         />
-        <div className="space-y-6 p-6">
-          {state.coordinateSource === 'manual' ? (
-            <ClickEditorPositionTypeField
-              value={state.positionType}
-              onChange={(value) => onStateChange({ ...state, positionType: value })}
-            />
-          ) : null}
-          <ClickEditorCoordinateFields
-            coordinateSource={state.coordinateSource}
-            canUseFindIconReference={canUseFindIconReference}
-            x={state.x}
-            y={state.y}
-            captureActive={captureActive}
-            captureLoading={captureLoading}
-            manualLabel={text.manualCoordinates}
-            findIconLabel={text.findIconReference}
-            unavailableHint={text.findIconUnavailable}
-            referenceHint={text.findIconReferenceHint}
-            captureReady={text.captureReady}
-            captureHint={text.captureHint}
-            coordinateHint={text.coordinateHint}
-            pickMouse={text.pickMouse}
-            onCoordinateSourceChange={(value) => onStateChange({ ...state, coordinateSource: value })}
-            onStartCapture={onStartCapture}
-            onXChange={(value) => onStateChange({ ...state, x: value })}
-            onYChange={(value) => onStateChange({ ...state, y: value })}
-          />
-          {errorText ? <p className="text-[11px] text-red-600">{errorText}</p> : null}
-        </div>
+        <ClickEditorFormFields
+          canUseFindIconReference={props.canUseFindIconReference}
+          captureActive={props.captureActive}
+          captureLoading={props.captureLoading}
+          errorText={props.errorText}
+          state={props.state}
+          text={text}
+          onStartCapture={props.onStartCapture}
+          onStateChange={props.onStateChange}
+        />
         <ClickEditorFooter
           text={text}
-          saving={saving}
-          captureActive={captureActive}
-          onClose={onClose}
-          onSave={onSave}
+          saving={props.saving}
+          captureActive={props.captureActive}
+          onClose={props.onClose}
+          onSave={props.onSave}
         />
       </section>
     </ClickEditorShell>
   );
+}
+
+function ClickEditorFormFields(props: ClickEditorFormFieldsProps) {
+  const onStatePatch = (patch: Partial<ClickEditorState>) => props.onStateChange({ ...props.state, ...patch });
+
+  return (
+    <div className="space-y-6 p-6">
+      <ClickEditorPositionTypeSection state={props.state} onStatePatch={onStatePatch} />
+      <ClickEditorCoordinateFields
+        coordinateSource={props.state.coordinateSource}
+        canUseFindIconReference={props.canUseFindIconReference}
+        x={props.state.x}
+        y={props.state.y}
+        captureActive={props.captureActive}
+        captureLoading={props.captureLoading}
+        text={props.text}
+        onCoordinateSourceChange={(coordinateSource) => onStatePatch({ coordinateSource })}
+        onStartCapture={props.onStartCapture}
+        onXChange={(x) => onStatePatch({ x })}
+        onYChange={(y) => onStatePatch({ y })}
+      />
+      <ClickEditorErrorText errorText={props.errorText} />
+    </div>
+  );
+}
+
+function ClickEditorPositionTypeSection(props: ClickEditorStatePatchProps) {
+  if (props.state.coordinateSource !== CLICK_COORDINATE_SOURCE_MANUAL) {
+    return null;
+  }
+  return (
+    <ClickEditorPositionTypeField
+      value={props.state.positionType}
+      onChange={(positionType) => props.onStatePatch({ positionType })}
+    />
+  );
+}
+
+function ClickEditorErrorText(props: { errorText: string }) {
+  if (!props.errorText) {
+    return null;
+  }
+  return <p className="text-[11px] text-red-600">{props.errorText}</p>;
 }
 
 function ClickEditorShell(props: ClickEditorShellProps) {

@@ -21,18 +21,22 @@ interface CoordinateEditorFieldsProps {
   y: string;
   captureActive: boolean;
   captureLoading: boolean;
-  manualLabel: string;
-  findIconLabel: string;
-  unavailableHint: string;
-  referenceHint: string;
-  captureReady: string;
-  captureHint: string;
-  coordinateHint: string;
-  pickMouse: string;
+  text: CoordinateEditorText;
   onCoordinateSourceChange: (value: ClickCoordinateSource) => void;
   onStartCapture: () => void;
   onXChange: (value: string) => void;
   onYChange: (value: string) => void;
+}
+
+interface CoordinateEditorText {
+  captureHint: string;
+  captureReady: string;
+  coordinateHint: string;
+  findIconReference: string;
+  findIconReferenceHint: string;
+  findIconUnavailable: string;
+  manualCoordinates: string;
+  pickMouse: string;
 }
 
 export function ClickEditorPositionTypeField(props: PositionTypeFieldProps) {
@@ -56,63 +60,105 @@ export function ClickEditorPositionTypeField(props: PositionTypeFieldProps) {
 }
 
 export function ClickEditorCoordinateFields(props: CoordinateEditorFieldsProps) {
-  const {
-    coordinateSource,
-    canUseFindIconReference,
-    x,
-    y,
-    captureActive,
-    captureLoading,
-    manualLabel,
-    findIconLabel,
-    unavailableHint,
-    referenceHint,
-    captureReady,
-    captureHint,
-    coordinateHint,
-    pickMouse,
-    onCoordinateSourceChange,
-    onStartCapture,
-    onXChange,
-    onYChange,
-  } = props;
-  const manual = coordinateSource === CLICK_COORDINATE_SOURCE_MANUAL;
-
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
-        <label className="block text-xs font-medium text-gray-700">坐标来源</label>
-        <select
-          value={coordinateSource}
-          onChange={(event) => onCoordinateSourceChange(event.target.value === CLICK_COORDINATE_SOURCE_FIND_ICON ? CLICK_COORDINATE_SOURCE_FIND_ICON : CLICK_COORDINATE_SOURCE_MANUAL)}
-          className="h-10 w-full cursor-pointer appearance-none border border-gray-200 bg-white px-3 text-sm outline-none transition-colors hover:border-gray-300 focus:border-black focus:ring-1 focus:ring-black"
-        >
-          <option value={CLICK_COORDINATE_SOURCE_MANUAL}>{manualLabel}</option>
-          {canUseFindIconReference ? <option value={CLICK_COORDINATE_SOURCE_FIND_ICON}>{findIconLabel}</option> : null}
-        </select>
-        <p className="text-[11px] text-gray-500">{canUseFindIconReference ? referenceHint : unavailableHint}</p>
-      </div>
-      {manual ? (
-        <>
-          <div className="flex items-center justify-between gap-3">
-            <label className="block text-xs font-medium text-gray-700">坐标参数</label>
-            <button
-              type="button"
-              onClick={onStartCapture}
-              disabled={captureActive || captureLoading}
-              className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700 transition-colors hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              {captureActive ? captureReady : pickMouse}
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <CoordinateInput axis="X" value={x} onChange={onXChange} />
-            <CoordinateInput axis="Y" value={y} onChange={onYChange} />
-          </div>
-          <p className="text-[11px] text-gray-500">{captureActive ? captureHint : coordinateHint}</p>
-        </>
-      ) : null}
+      <CoordinateSourceField
+        canUseFindIconReference={props.canUseFindIconReference}
+        coordinateSource={props.coordinateSource}
+        text={props.text}
+        onChange={props.onCoordinateSourceChange}
+      />
+      <ManualCoordinateFields
+        active={props.coordinateSource === CLICK_COORDINATE_SOURCE_MANUAL}
+        captureActive={props.captureActive}
+        captureLoading={props.captureLoading}
+        text={props.text}
+        x={props.x}
+        y={props.y}
+        onStartCapture={props.onStartCapture}
+        onXChange={props.onXChange}
+        onYChange={props.onYChange}
+      />
     </div>
+  );
+}
+
+function CoordinateSourceField(props: {
+  canUseFindIconReference: boolean;
+  coordinateSource: ClickCoordinateSource;
+  text: CoordinateEditorText;
+  onChange: (value: ClickCoordinateSource) => void;
+}) {
+  const { canUseFindIconReference, coordinateSource, text, onChange } = props;
+  return (
+    <div className="space-y-2">
+      <label className="block text-xs font-medium text-gray-700">坐标来源</label>
+      <select
+        value={coordinateSource}
+        onChange={(event) => onChange(parseCoordinateSourceOption(event.target.value))}
+        className="h-10 w-full cursor-pointer appearance-none border border-gray-200 bg-white px-3 text-sm outline-none transition-colors hover:border-gray-300 focus:border-black focus:ring-1 focus:ring-black"
+      >
+        <option value={CLICK_COORDINATE_SOURCE_MANUAL}>{text.manualCoordinates}</option>
+        {canUseFindIconReference ? <option value={CLICK_COORDINATE_SOURCE_FIND_ICON}>{text.findIconReference}</option> : null}
+      </select>
+      <p className="text-[11px] text-gray-500">
+        {canUseFindIconReference ? text.findIconReferenceHint : text.findIconUnavailable}
+      </p>
+    </div>
+  );
+}
+
+function ManualCoordinateFields(props: {
+  active: boolean;
+  captureActive: boolean;
+  captureLoading: boolean;
+  text: CoordinateEditorText;
+  x: string;
+  y: string;
+  onStartCapture: () => void;
+  onXChange: (value: string) => void;
+  onYChange: (value: string) => void;
+}) {
+  const { active, captureActive, captureLoading, text, x, y, onStartCapture, onXChange, onYChange } = props;
+  if (!active) {
+    return null;
+  }
+  return (
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <label className="block text-xs font-medium text-gray-700">坐标参数</label>
+        <CaptureMouseButton
+          captureActive={captureActive}
+          captureLoading={captureLoading}
+          text={text}
+          onStartCapture={onStartCapture}
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <CoordinateInput axis="X" value={x} onChange={onXChange} />
+        <CoordinateInput axis="Y" value={y} onChange={onYChange} />
+      </div>
+      <p className="text-[11px] text-gray-500">{captureActive ? text.captureHint : text.coordinateHint}</p>
+    </>
+  );
+}
+
+function CaptureMouseButton(props: {
+  captureActive: boolean;
+  captureLoading: boolean;
+  text: CoordinateEditorText;
+  onStartCapture: () => void;
+}) {
+  const { captureActive, captureLoading, text, onStartCapture } = props;
+  return (
+    <button
+      type="button"
+      onClick={onStartCapture}
+      disabled={captureActive || captureLoading}
+      className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700 transition-colors hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      {captureActive ? text.captureReady : text.pickMouse}
+    </button>
   );
 }
 
@@ -132,4 +178,11 @@ function CoordinateInput(props: { axis: 'X' | 'Y'; value: string; onChange: (val
       />
     </div>
   );
+}
+
+function parseCoordinateSourceOption(value: string): ClickCoordinateSource {
+  if (value === CLICK_COORDINATE_SOURCE_FIND_ICON) {
+    return CLICK_COORDINATE_SOURCE_FIND_ICON;
+  }
+  return CLICK_COORDINATE_SOURCE_MANUAL;
 }
