@@ -9,6 +9,8 @@ import { validateOrchestrationDraft } from '@/lib/orchestration-editor/validatio
 import {
   availableWorkflowAgentToolNames,
   type AutosaveState,
+  type WorkflowAgentRuntimeCatalog,
+  type WorkflowCanvasDraft,
 } from '@/lib/workflow-editor';
 import {
   buildOrchestrationWorkflowCopy,
@@ -28,6 +30,21 @@ import {
 import { useOrchestrationEditorLifecycle } from './useOrchestrationEditorLifecycle';
 import { useOrchestrationPresetCatalog } from './useOrchestrationPresetCatalog';
 
+interface OrchestrationControllerResultOptions {
+  core: ReturnType<typeof useOrchestrationEditorCore>;
+  draftActions: ReturnType<typeof useOrchestrationDraftActions>;
+  onSave: () => Promise<void>;
+  onBack: () => void;
+}
+
+interface OrchestrationDerivedOptions {
+  draft: WorkflowCanvasDraft;
+  copy: UseOrchestrationEditorControllerOptions['copy'];
+  locale: UseOrchestrationEditorControllerOptions['locale'];
+  agentRuntimeState: ReturnType<typeof useWorkflowAgentRuntimeCatalog>;
+  presetState: ReturnType<typeof useOrchestrationPresetCatalog>;
+}
+
 export function useOrchestrationEditorController(
   options: UseOrchestrationEditorControllerOptions,
 ): UseOrchestrationEditorControllerResult {
@@ -35,19 +52,24 @@ export function useOrchestrationEditorController(
   const core = useOrchestrationEditorCore(options);
   const draftActions = useOrchestrationDraftActions({
     locale: options.locale,
-    toolNames: core.toolNames,
+    toolNames: core.derived.toolNames,
     setDraft: core.setDraft,
   });
   const handleSave = useOrchestrationSaveAction({
     copy: options.copy,
     locale: options.locale,
     autosaveController: core.autosaveController,
-    snapshotBuild: core.snapshotBuild,
-    validationErrors: core.validationErrors,
+    snapshotBuild: core.derived.snapshotBuild,
+    validationErrors: core.derived.validationErrors,
     setActionError: core.setActionError,
   });
   const handleBack = useOrchestrationBackAction(router);
-  return buildControllerResult(core, draftActions, handleSave, handleBack);
+  return buildControllerResult({
+    core,
+    draftActions,
+    onSave: handleSave,
+    onBack: handleBack,
+  });
 }
 
 function useOrchestrationEditorCore(options: UseOrchestrationEditorControllerOptions) {
@@ -59,16 +81,13 @@ function useOrchestrationEditorCore(options: UseOrchestrationEditorControllerOpt
   const draftRef = useRef(draft);
   const agentRuntimeState = useWorkflowAgentRuntimeCatalog();
   const presetState = useOrchestrationPresetCatalog(copy.system.failedToLoadPresets);
-  const toolNames = useMemo(
-    () => availableWorkflowAgentToolNames(agentRuntimeState.catalog?.tools ?? []),
-    [agentRuntimeState.catalog?.tools],
-  );
-  const validation = useMemo(() => validateOrchestrationDraft(draft, {
-    agentRuntimeCatalog: agentRuntimeState.catalog,
-    presets: presetState.loading ? undefined : presetState.presets,
-  }), [agentRuntimeState.catalog, draft, presetState.loading, presetState.presets]);
-  const snapshotBuild = useMemo(() => buildOrchestrationAutosaveSnapshot(draft), [draft]);
-  const workflowCopy = useMemo(() => buildOrchestrationWorkflowCopy(copy.workflow, locale), [copy.workflow, locale]);
+  const derived = useOrchestrationEditorDerived({
+    draft,
+    copy,
+    locale,
+    agentRuntimeState,
+    presetState,
+  });
   const autosaveController = useOrchestrationAutosaveController({ orchestrationID, draftRef, setAutosaveState });
 
   useOrchestrationEditorLifecycle({
@@ -78,36 +97,77 @@ function useOrchestrationEditorCore(options: UseOrchestrationEditorControllerOpt
     draftRef,
     draft,
     phase,
-    currentSnapshot: snapshotBuild.snapshot,
-    snapshotErrorMessage: snapshotBuild.errorMessage,
-    validationErrors: validation.errors,
+    currentSnapshot: derived.snapshotBuild.snapshot,
+    snapshotErrorMessage: derived.snapshotBuild.errorMessage,
+    validationErrors: derived.validationErrors,
     setActionError,
     setDraft,
     setPhase,
   });
 
-  return { phase, draft, autosaveState, actionError, validationErrors: validation.errors, agentRuntimeState, presetState, workflowCopy, toolNames, snapshotBuild, autosaveController, setDraft, setActionError };
+  return {
+    phase,
+    draft,
+    autosaveState,
+    actionError,
+    agentRuntimeState,
+    presetState,
+    derived,
+    autosaveController,
+    setDraft,
+    setActionError,
+  };
 }
 
-function buildControllerResult(
-  core: ReturnType<typeof useOrchestrationEditorCore>,
-  draftActions: ReturnType<typeof useOrchestrationDraftActions>,
-  onSave: () => Promise<void>,
-  onBack: () => void,
-): UseOrchestrationEditorControllerResult {
+function useOrchestrationEditorDerived(options: OrchestrationDerivedOptions) {
+  const { draft, copy, locale, agentRuntimeState, presetState } = options;
+  const toolNames = useOrchestrationToolNames(agentRuntimeState.catalog);
+  const validationErrors = useOrchestrationValidationErrors({
+    draft,
+    agentRuntimeState,
+    presetState,
+  });
+  const snapshotBuild = useMemo(() => buildOrchestrationAutosaveSnapshot(draft), [draft]);
+  const workflowCopy = useMemo(() => buildOrchestrationWorkflowCopy(copy.workflow, locale), [copy.workflow, locale]);
+
+  return { toolNames, validationErrors, snapshotBuild, workflowCopy };
+}
+
+function useOrchestrationToolNames(catalog: WorkflowAgentRuntimeCatalog | undefined): string[] {
+  return useMemo(
+    () => availableWorkflowAgentToolNames(catalog?.tools ?? []),
+    [catalog?.tools],
+  );
+}
+
+function useOrchestrationValidationErrors(options: {
+  draft: WorkflowCanvasDraft;
+  agentRuntimeState: ReturnType<typeof useWorkflowAgentRuntimeCatalog>;
+  presetState: ReturnType<typeof useOrchestrationPresetCatalog>;
+}): string[] {
+  const { draft, agentRuntimeState, presetState } = options;
+  const validation = useMemo(() => validateOrchestrationDraft(draft, {
+    agentRuntimeCatalog: agentRuntimeState.catalog,
+    presets: presetState.loading ? undefined : presetState.presets,
+  }), [agentRuntimeState.catalog, draft, presetState.loading, presetState.presets]);
+  return validation.errors;
+}
+
+function buildControllerResult(options: OrchestrationControllerResultOptions): UseOrchestrationEditorControllerResult {
+  const { core, draftActions, onSave, onBack } = options;
   return {
     phase: core.phase,
     draft: core.draft,
     autosaveState: core.autosaveState,
     actionError: core.actionError,
-    validationErrors: core.validationErrors,
+    validationErrors: core.derived.validationErrors,
     agentRuntimeCatalog: core.agentRuntimeState.catalog,
     agentRuntimeLoading: core.agentRuntimeState.loading,
     agentRuntimeError: core.agentRuntimeState.error,
     presets: core.presetState.presets,
     presetLoading: core.presetState.loading,
     presetError: core.presetState.error,
-    workflowCopy: core.workflowCopy,
+    workflowCopy: core.derived.workflowCopy,
     localizeValidationError: localizeOrchestrationValidationError,
     ...draftActions,
     onSave,

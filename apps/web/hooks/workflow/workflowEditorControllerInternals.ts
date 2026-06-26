@@ -42,6 +42,13 @@ interface WorkflowBootstrapOptions {
   setPhase: Dispatch<SetStateAction<'loading' | 'ready'>>;
 }
 
+interface PersistWorkflowSnapshotOptions {
+  snapshot: AutosaveSnapshot<WorkflowUpdatePayload>;
+  runtimeRef: MutableRefObject<WorkflowEditorControllerRuntime>;
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>;
+  router: ReturnType<typeof useRouter>;
+}
+
 export interface WorkflowEditorControllerRuntime {
   taskID?: string;
   routeReplaced: boolean;
@@ -171,11 +178,9 @@ export function useAutosaveSchedule(options: {
 }
 
 export async function persistWorkflowSnapshot(
-  snapshot: AutosaveSnapshot<WorkflowUpdatePayload>,
-  runtimeRef: MutableRefObject<WorkflowEditorControllerRuntime>,
-  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
-  router: ReturnType<typeof useRouter>,
+  options: PersistWorkflowSnapshotOptions,
 ) {
+  const { snapshot, runtimeRef, setDraft, router } = options;
   const existingTaskID = runtimeRef.current.taskID;
   if (existingTaskID) {
     await updateTask(existingTaskID, snapshot.payload);

@@ -11,6 +11,7 @@ import {
 } from '@/lib/workflow-editor';
 import type {
   AutosaveState,
+  WorkflowAgentRuntimeCatalog,
   WorkflowCanvasDraft,
   WorkflowUpdatePayload,
 } from '@/lib/workflow-editor';
@@ -33,6 +34,21 @@ import {
   useWorkflowSaveAction,
 } from './useWorkflowEditorActions';
 import { useWorkflowEditorBackAction } from './useWorkflowEditorBackAction';
+
+interface WorkflowControllerResultOptions {
+  core: ReturnType<typeof useWorkflowEditorCore>;
+  importActions: ReturnType<typeof useWorkflowImportActions>;
+  draftActions: ReturnType<typeof useWorkflowDraftActions>;
+  onSave: () => Promise<void>;
+  onBack: () => void;
+}
+
+interface EditableWorkflowDraftOptions {
+  draft: WorkflowCanvasDraft;
+  agentNormalizationEnabled: boolean;
+  agentRuntimeReady: boolean;
+  enabledToolNames: string[];
+}
 
 export function useWorkflowEditorController(
   options: UseWorkflowEditorControllerOptions,
@@ -65,7 +81,13 @@ export function useWorkflowEditorController(
     setAgentNormalizationEnabled: core.setAgentNormalizationEnabled,
   });
   const handleBack = useWorkflowEditorBackAction(router);
-  return buildControllerResult(core, importActions, draftActions, handleSave, handleBack);
+  return buildControllerResult({
+    core,
+    importActions,
+    draftActions,
+    onSave: handleSave,
+    onBack: handleBack,
+  });
 }
 
 function useWorkflowEditorCore(
@@ -84,7 +106,7 @@ function useWorkflowEditorCore(
   const persistSnapshotRef = useRef<(snapshot: AutosaveSnapshot<WorkflowUpdatePayload>) => Promise<void>>(async () => undefined);
 
   persistSnapshotRef.current = async (snapshot) =>
-    persistWorkflowSnapshot(snapshot, runtimeRef, setDraft, router);
+    persistWorkflowSnapshot({ snapshot, runtimeRef, setDraft, router });
 
   const autosaveController = useAutosaveController(persistSnapshotRef, setAutosaveState);
   useWorkflowEditorLifecycle({
@@ -114,20 +136,16 @@ function useWorkflowEditorDerived(
   agentNormalizationEnabled: boolean,
   agentRuntimeState: ReturnType<typeof useWorkflowAgentRuntimeCatalog>,
 ) {
-  const agentRuntimeReady = agentRuntimeState.catalog !== undefined;
-  const enabledToolNames = useMemo(
-    () => enabledWorkflowAgentToolNames(agentRuntimeState.catalog?.tools ?? []),
-    [agentRuntimeState.catalog?.tools],
-  );
-  const editableDraft = useMemo(() => {
-    if (!agentNormalizationEnabled || !agentRuntimeReady) {
-      return draft;
-    }
-    return normalizeWorkflowDraftAgentNodes(draft, enabledToolNames);
-  }, [agentNormalizationEnabled, agentRuntimeReady, draft, enabledToolNames]);
-  const validation = useMemo(() => validateWorkflowDraft(editableDraft, {
-    agentRuntimeCatalog: agentRuntimeState.catalog,
-  }), [agentRuntimeState.catalog, editableDraft]);
+  const catalog = agentRuntimeState.catalog;
+  const agentRuntimeReady = catalog !== undefined;
+  const enabledToolNames = useEnabledWorkflowToolNames(catalog);
+  const editableDraft = useEditableWorkflowDraft({
+    draft,
+    agentNormalizationEnabled,
+    agentRuntimeReady,
+    enabledToolNames,
+  });
+  const validation = useWorkflowDraftValidation(editableDraft, catalog);
   const snapshotBuild = useMemo(() => buildAutosaveSnapshot(editableDraft), [editableDraft]);
 
   return {
@@ -138,13 +156,34 @@ function useWorkflowEditorDerived(
   };
 }
 
-function buildControllerResult(
-  core: ReturnType<typeof useWorkflowEditorCore>,
-  importActions: ReturnType<typeof useWorkflowImportActions>,
-  draftActions: ReturnType<typeof useWorkflowDraftActions>,
-  onSave: () => Promise<void>,
-  onBack: () => void,
-): UseWorkflowEditorControllerResult {
+function useEnabledWorkflowToolNames(catalog: WorkflowAgentRuntimeCatalog | undefined): string[] {
+  return useMemo(
+    () => enabledWorkflowAgentToolNames(catalog?.tools ?? []),
+    [catalog?.tools],
+  );
+}
+
+function useEditableWorkflowDraft(options: EditableWorkflowDraftOptions): WorkflowCanvasDraft {
+  const { draft, agentNormalizationEnabled, agentRuntimeReady, enabledToolNames } = options;
+  return useMemo(() => {
+    if (!agentNormalizationEnabled || !agentRuntimeReady) {
+      return draft;
+    }
+    return normalizeWorkflowDraftAgentNodes(draft, enabledToolNames);
+  }, [agentNormalizationEnabled, agentRuntimeReady, draft, enabledToolNames]);
+}
+
+function useWorkflowDraftValidation(
+  editableDraft: WorkflowCanvasDraft,
+  catalog: WorkflowAgentRuntimeCatalog | undefined,
+) {
+  return useMemo(() => validateWorkflowDraft(editableDraft, {
+    agentRuntimeCatalog: catalog,
+  }), [catalog, editableDraft]);
+}
+
+function buildControllerResult(options: WorkflowControllerResultOptions): UseWorkflowEditorControllerResult {
+  const { core, importActions, draftActions, onSave, onBack } = options;
   return {
     phase: core.phase,
     draft: core.draft,
