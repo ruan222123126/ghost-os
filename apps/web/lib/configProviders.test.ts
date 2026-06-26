@@ -11,6 +11,8 @@ describe('lib/configProviders', () => {
       name: 'deepseekv4',
       type: 'custom',
       base_url: 'https://api.deepseek.com/v1',
+      provider_id: 'deepseekv4',
+      updated_at: '2026-01-01T00:00:00Z',
       models: ['deepseek-v4-pro'],
       context_window_tokens: 1000000,
       api_key_set: true,

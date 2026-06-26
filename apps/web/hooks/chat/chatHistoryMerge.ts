@@ -1,8 +1,28 @@
-import type { ChatMessage, ToolChatMessage, UserChatMessage } from '@/lib/types';
+import type { ChatMessage, SessionDetail, ToolChatMessage, UserChatMessage } from '@/lib/types';
 
 interface EquivalentPair {
   previousIndex: number;
   latestIndex: number;
+}
+
+interface HistoryPageStateTarget {
+  setHasOlderHistory: (sessionId: string, value: boolean) => void;
+  setNextHistoryBefore: (sessionId: string, value: number | null) => void;
+}
+
+interface MessageRange {
+  messages: ChatMessage[];
+  start: number;
+  end: number;
+}
+
+export function applyHistoryPageState(
+  detail: SessionDetail,
+  sessionId: string,
+  target: HistoryPageStateTarget,
+): void {
+  target.setHasOlderHistory(sessionId, detail.page.has_more_before);
+  target.setNextHistoryBefore(sessionId, detail.page.next_before ?? null);
 }
 
 export function mergeLatestCommittedMessages(previous: ChatMessage[], latest: ChatMessage[]): ChatMessage[] {
@@ -12,6 +32,15 @@ export function mergeLatestCommittedMessages(previous: ChatMessage[], latest: Ch
 
   const pairs = buildEquivalentPairs(previous, latest);
   return mergeMessagesByPairs(previous, latest, pairs);
+}
+
+export function prependUniqueCommittedMessages(previous: ChatMessage[], older: ChatMessage[]): ChatMessage[] {
+  if (older.length === 0) {
+    return previous;
+  }
+
+  const olderIDs = new Set(older.map((message) => message.id));
+  return [...older, ...previous.filter((message) => !olderIDs.has(message.id))];
 }
 
 function buildEquivalentPairs(previous: ChatMessage[], latest: ChatMessage[]): EquivalentPair[] {
@@ -65,40 +94,46 @@ function mergeMessagesByPairs(
   let latestIndex = 0;
 
   for (const pair of pairs) {
-    appendPreservedPreviousMessages(merged, previous, previousIndex, pair.previousIndex);
-    appendLatestMessages(merged, latest, latestIndex, pair.latestIndex);
+    appendPreservedPreviousMessages(merged, {
+      messages: previous,
+      start: previousIndex,
+      end: pair.previousIndex,
+    });
+    appendLatestMessages(merged, {
+      messages: latest,
+      start: latestIndex,
+      end: pair.latestIndex,
+    });
     merged.push(latest[pair.latestIndex]);
     previousIndex = pair.previousIndex + 1;
     latestIndex = pair.latestIndex + 1;
   }
 
-  appendPreservedPreviousMessages(merged, previous, previousIndex, previous.length);
-  appendLatestMessages(merged, latest, latestIndex, latest.length);
+  appendPreservedPreviousMessages(merged, {
+    messages: previous,
+    start: previousIndex,
+    end: previous.length,
+  });
+  appendLatestMessages(merged, {
+    messages: latest,
+    start: latestIndex,
+    end: latest.length,
+  });
   return merged;
 }
 
-function appendPreservedPreviousMessages(
-  merged: ChatMessage[],
-  previous: ChatMessage[],
-  start: number,
-  end: number,
-): void {
-  for (let index = start; index < end; index += 1) {
-    const message = previous[index];
+function appendPreservedPreviousMessages(merged: ChatMessage[], range: MessageRange): void {
+  for (let index = range.start; index < range.end; index += 1) {
+    const message = range.messages[index];
     if (shouldPreserveUnmatchedPreviousMessage(message)) {
       merged.push(message);
     }
   }
 }
 
-function appendLatestMessages(
-  merged: ChatMessage[],
-  latest: ChatMessage[],
-  start: number,
-  end: number,
-): void {
-  for (let index = start; index < end; index += 1) {
-    merged.push(latest[index]);
+function appendLatestMessages(merged: ChatMessage[], range: MessageRange): void {
+  for (let index = range.start; index < range.end; index += 1) {
+    merged.push(range.messages[index]);
   }
 }
 

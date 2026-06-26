@@ -1,10 +1,13 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { getSession } from '@/lib/api/sessions/api';
 import { mapSessionMessagesToChat } from '@/lib/chatMessages';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ChatMessage, SessionDetail } from '@/lib/types';
-import { mergeLatestCommittedMessages } from './chatHistoryMerge';
+import {
+  applyHistoryPageState,
+  mergeLatestCommittedMessages,
+  prependUniqueCommittedMessages,
+} from './chatHistoryMerge';
 import { useChatHistoryRecovery } from './useChatHistoryRecovery';
 import type { ChatStateControls } from './types';
 
@@ -53,6 +56,10 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     endHistorySync,
     getNextHistoryBefore,
   } = options;
+  const historyPageStateTarget = useMemo(() => ({
+    setHasOlderHistory,
+    setNextHistoryBefore,
+  }), [setHasOlderHistory, setNextHistoryBefore]);
   const { recoverTurnDraft, stopRecoveredRun } = useChatHistoryRecovery({
     applyRuntimeActions,
     beginHistorySync,
@@ -69,7 +76,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
 
   const hydrateSessionHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
-    applyHistoryPage(detail, detail.id, setHasOlderHistory, setNextHistoryBefore);
+    applyHistoryPageState(detail, detail.id, historyPageStateTarget);
     clearPendingQuestions(detail.id);
     setCommittedMessages(detail.id, mapSessionMessagesToChat(detail.id, detail.messages));
     if (detail.turn_draft) {
@@ -86,25 +93,24 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     clearPendingQuestions,
     clearStreamingState,
     hydrateTurnDraft,
+    historyPageStateTarget,
     recoverTurnDraft,
     setActiveRun,
     setCommittedMessages,
-    setHasOlderHistory,
     setLoading,
-    setNextHistoryBefore,
     setStopPending,
     stopRecoveredRun,
   ]);
 
   const syncRecentHistory = useCallback(async (sessionId: string) => {
     const detail = await getSession(sessionId, { limit: HISTORY_PAGE_LIMIT });
-    applyHistoryPage(detail, detail.id, setHasOlderHistory, setNextHistoryBefore);
+    applyHistoryPageState(detail, detail.id, historyPageStateTarget);
     const latest = mapSessionMessagesToChat(detail.id, detail.messages);
     setCommittedMessages(detail.id, (previous) => {
       return mergeLatestCommittedMessages(previous, latest);
     });
     hydrateTurnDraft(detail.id, detail.turn_draft ?? null);
-  }, [hydrateTurnDraft, setCommittedMessages, setHasOlderHistory, setNextHistoryBefore]);
+  }, [historyPageStateTarget, hydrateTurnDraft, setCommittedMessages]);
 
   const loadSessionHistory = useCallback(async (sessionId: string) => {
     const id = sessionId.trim();
@@ -167,7 +173,7 @@ export function useChatHistory(options: UseChatHistoryOptions) {
         before: nextHistoryBefore,
         limit: HISTORY_PAGE_LIMIT,
       });
-      applyHistoryPage(detail, detail.id, setHasOlderHistory, setNextHistoryBefore);
+      applyHistoryPageState(detail, detail.id, historyPageStateTarget);
       const older = mapSessionMessagesToChat(detail.id, detail.messages);
       setCommittedMessages(detail.id, (previous) => {
         return prependUniqueCommittedMessages(previous, older);
@@ -181,11 +187,10 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     copy.system.genericRequestFailed,
     clearChatError,
     getNextHistoryBefore,
+    historyPageStateTarget,
     setChatError,
     setCommittedMessages,
-    setHasOlderHistory,
     setLoadingOlderHistory,
-    setNextHistoryBefore,
   ]);
 
   return {
@@ -194,23 +199,4 @@ export function useChatHistory(options: UseChatHistoryOptions) {
     loadSessionHistory,
     loadOlderHistory,
   };
-}
-
-function applyHistoryPage(
-  detail: SessionDetail,
-  sessionId: string,
-  setHasOlderHistory: ChatStateControls['setHasOlderHistory'],
-  setNextHistoryBefore: ChatStateControls['setNextHistoryBefore'],
-): void {
-  setHasOlderHistory(sessionId, detail.page.has_more_before);
-  setNextHistoryBefore(sessionId, detail.page.next_before ?? null);
-}
-
-function prependUniqueCommittedMessages(previous: ChatMessage[], older: ChatMessage[]): ChatMessage[] {
-  if (older.length === 0) {
-    return previous;
-  }
-
-  const olderIDs = new Set(older.map((message) => message.id));
-  return [...older, ...previous.filter((message) => !olderIDs.has(message.id))];
 }

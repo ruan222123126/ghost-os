@@ -73,12 +73,20 @@ describe('lib/config-panel/providersMachine', () => {
 });
 
 function buildProvider(overrides: Partial<ProviderConfig>): ProviderConfig {
+  const name = overrides.name ?? 'openai';
+
   return {
-    name: 'openai',
-    type: 'openai',
-    base_url: 'https://api.openai.com/v1',
-    models: [],
-    api_key_set: false,
-    ...overrides,
+    name,
+    type: overrides.type ?? 'openai',
+    base_url: overrides.base_url ?? 'https://api.openai.com/v1',
+    provider_id: overrides.provider_id ?? name,
+    updated_at: overrides.updated_at ?? '2026-01-01T00:00:00Z',
+    deleted_at: overrides.deleted_at,
+    models: overrides.models ?? [],
+    context_window_tokens: overrides.context_window_tokens,
+    response_reserve_tokens: overrides.response_reserve_tokens,
+    model_context_window_tokens: overrides.model_context_window_tokens,
+    model_response_reserve_tokens: overrides.model_response_reserve_tokens,
+    api_key_set: overrides.api_key_set ?? false,
   };
 }

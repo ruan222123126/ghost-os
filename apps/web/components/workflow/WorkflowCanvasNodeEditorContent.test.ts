@@ -283,6 +283,8 @@ function createProvider(): ProviderConfig {
     name: 'openai-main',
     type: 'openai',
     base_url: 'https://api.openai.com/v1',
+    provider_id: 'openai-main',
+    updated_at: '2026-01-01T00:00:00Z',
     models: ['gpt-5.4'],
     api_key_set: true,
   };

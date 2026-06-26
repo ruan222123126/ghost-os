@@ -1,11 +1,20 @@
 import type { BridgeConfig } from '@/lib/types';
-import { buildSecretPlaceholder, type RuntimeFormState } from '@/components/config/runtimeSettingsForm';
+import type { RuntimeFormState } from '@/components/config/runtimeSettingsForm';
 import {
   Card,
   SelectField,
   TextField,
   ToggleField,
 } from '@/components/config/runtimeSettingsFieldComponents';
+import {
+  booleanFieldPatch,
+  buildCommonNumberFieldSpecs,
+  buildSessionToggleSpecs,
+  buildWebSearchFieldSpecs,
+  localize,
+  stringFieldPatch,
+  type RuntimeSettingsLocale,
+} from '@/components/config/runtimeSettingsSectionSpecs';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 interface SectionProps {
@@ -18,8 +27,6 @@ interface ConfigSectionProps extends SectionProps {
   config: BridgeConfig | null;
 }
 
-type RuntimeSettingsLocale = ReturnType<typeof useWebLocale>['locale'];
-
 export function CommonSettingsSection(props: SectionProps & {
   locale: RuntimeSettingsLocale;
   onLocaleChange: (value: string) => void;
@@ -30,6 +37,7 @@ export function CommonSettingsSection(props: SectionProps & {
     { value: 'zh-CN', label: copy.settings.languageOptionZh },
     { value: 'en-US', label: copy.settings.languageOptionEn },
   ] as const;
+  const numberFields = buildCommonNumberFieldSpecs(copy.settings);
 
   return (
     <Card title={copy.settings.runtimeCommonTitle} copy={copy.settings.runtimeCommonCopy}>
@@ -40,38 +48,17 @@ export function CommonSettingsSection(props: SectionProps & {
         onChange={onLocaleChange}
         options={languageOptions}
       />
-      <TextField
-        label={copy.settings.runtimeMaxTurnsLabel}
-        description={copy.settings.runtimeMaxTurnsDescription}
-        value={formState.maxTurns}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ maxTurns: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeTaskExecutionTimeoutMSLabel}
-        description={copy.settings.runtimeTaskExecutionTimeoutMSDescription}
-        value={formState.taskExecutionTimeoutMS}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ taskExecutionTimeoutMS: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeLLMCompletionRetryCountLabel}
-        description={copy.settings.runtimeLLMCompletionRetryCountDescription}
-        value={formState.llmCompletionRetryCount}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ llmCompletionRetryCount: value })}
-      />
-      <TextField
-        label={copy.settings.runtimeLLMCompletionRetryIntervalMSLabel}
-        description={copy.settings.runtimeLLMCompletionRetryIntervalMSDescription}
-        value={formState.llmCompletionRetryIntervalMS}
-        disabled={controlsDisabled}
-        type="number"
-        onChange={(value) => onChange({ llmCompletionRetryIntervalMS: value })}
-      />
+      {numberFields.map((field) => (
+        <TextField
+          key={field.field}
+          label={field.label}
+          description={field.description}
+          value={formState[field.field]}
+          disabled={controlsDisabled}
+          type="number"
+          onChange={(value) => onChange(stringFieldPatch(field.field, value))}
+        />
+      ))}
     </Card>
   );
 }
@@ -117,78 +104,37 @@ export function SessionSection(props: SectionProps) {
   const { locale, copy } = useWebLocale();
   const { formState, controlsDisabled, onChange } = props;
   const isZh = locale === 'zh-CN';
+  const sessionToggleSpecs = buildSessionToggleSpecs(isZh);
   const titleModeOptions = [
-    { value: 'session_id', label: isZh ? '会话 ID' : 'Session ID' },
-    { value: 'first_message', label: isZh ? '首条消息' : 'First Message' },
-    { value: 'ai_generated', label: isZh ? 'AI 生成' : 'AI Generated' },
+    { value: 'session_id', label: localize(isZh, '会话 ID', 'Session ID') },
+    { value: 'first_message', label: localize(isZh, '首条消息', 'First Message') },
+    { value: 'ai_generated', label: localize(isZh, 'AI 生成', 'AI Generated') },
   ] as const;
 
   return (
     <Card title={copy.settings.runtimeSessionTitle} copy={copy.settings.runtimeSessionCopy}>
       <SelectField
-        label={isZh ? '会话标题策略' : 'Session Title Strategy'}
-        description={isZh
-          ? '只影响新建会话。AI 生成会在后台运行，聊天不会等待标题。'
-          : 'Only affects new sessions. AI-generated titles run in the background without blocking chat.'}
+        label={localize(isZh, '会话标题策略', 'Session Title Strategy')}
+        description={localize(
+          isZh,
+          '只影响新建会话。AI 生成会在后台运行，聊天不会等待标题。',
+          'Only affects new sessions. AI-generated titles run in the background without blocking chat.',
+        )}
         value={formState.sessionTitleMode}
         disabled={controlsDisabled}
         options={titleModeOptions}
         onChange={(value) => onChange({ sessionTitleMode: value as RuntimeFormState['sessionTitleMode'] })}
       />
-      <ToggleField
-        label={isZh ? 'Assistant Markdown 渲染' : 'Assistant Markdown Rendering'}
-        description={isZh
-          ? '关闭后，assistant 文本始终按纯文本显示，不进行 Markdown 解析。'
-          : 'When disabled, assistant messages are always shown as plain text without Markdown parsing.'}
-        checked={formState.assistantMarkdownEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ assistantMarkdownEnabled: checked })}
-      />
-      <ToggleField
-        label={isZh ? '显示系统提示词' : 'Show System Prompt'}
-        description={isZh
-          ? '关闭后，会话首条 system 提示词不再显示在消息区，但仍保留在真实会话历史里。'
-          : 'When disabled, the first system prompt is hidden from the message list but still kept in session history.'}
-        checked={formState.sessionSystemPromptVisibleEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ sessionSystemPromptVisibleEnabled: checked })}
-      />
-      <ToggleField
-        label={isZh ? '精简工具调用输出' : 'Compact Tool Call Output'}
-        description={isZh
-          ? '启用后，工具详情仅显示 step 序列与失败 error 行。'
-          : 'When enabled, tool details only show ordered steps plus a failure error line.'}
-        checked={formState.toolCallCompactOutputEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ toolCallCompactOutputEnabled: checked })}
-      />
-      <ToggleField
-        label={isZh ? '记忆模式' : 'Memory Mode'}
-        description={isZh
-          ? '启用后仅确保当天记忆文档存在，不再向系统提示词注入 Memory 段。'
-          : 'When enabled, only ensures today\'s memory file exists and no longer injects a Memory section into the system prompt.'}
-        checked={formState.memoryModeEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ memoryModeEnabled: checked })}
-      />
-      <ToggleField
-        label={isZh ? 'Microcompact 请求压缩' : 'Microcompact Request Compression'}
-        description={isZh
-          ? '启用后，请求前会压缩较旧的高膨胀工具结果视图，但不会改写会话持久化历史。'
-          : 'When enabled, older high-expansion tool-result spans are compacted before requests without rewriting persisted session history.'}
-        checked={formState.microcompactEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ microcompactEnabled: checked })}
-      />
-      <ToggleField
-        label={isZh ? '会话人类日志（完整工具输出）' : 'Session Human Log (Full Tool Output)'}
-        description={isZh
-          ? '启用后，工具消息将以完整 output/error 写入会话 markdown 日志。'
-          : 'When enabled, tool messages are written with full output/error in session markdown logs.'}
-        checked={formState.sessionHumanLogFullEnabled}
-        disabled={controlsDisabled}
-        onChange={(checked) => onChange({ sessionHumanLogFullEnabled: checked })}
-      />
+      {sessionToggleSpecs.map((toggle) => (
+        <ToggleField
+          key={toggle.field}
+          label={toggle.label}
+          description={toggle.description}
+          checked={formState[toggle.field]}
+          disabled={controlsDisabled}
+          onChange={(checked) => onChange(booleanFieldPatch(toggle.field, checked))}
+        />
+      ))}
     </Card>
   );
 }
@@ -197,45 +143,23 @@ export function WebSearchSection(props: ConfigSectionProps) {
   const { locale, copy } = useWebLocale();
   const { formState, controlsDisabled, onChange, config } = props;
   const isZh = locale === 'zh-CN';
+  const fields = buildWebSearchFieldSpecs({ config, isZh, locale });
 
   return (
     <Card title={copy.settings.runtimeWebSearchTitle} copy={copy.settings.runtimeWebSearchCopy}>
-      <TextField
-        label={isZh ? 'Tavily 自定义 URL' : 'Tavily Custom URL'}
-        description={isZh ? '可选 Tavily 端点覆盖。' : 'Optional Tavily endpoint override.'}
-        value={formState.webSearchTavilyURL}
-        disabled={controlsDisabled}
-        mono
-        placeholder={isZh ? '留空使用 Tavily 官方端点' : 'Leave blank to use the official Tavily endpoint'}
-        onChange={(value) => onChange({ webSearchTavilyURL: value })}
-      />
-      <TextField
-        label={isZh ? 'Tavily API Key' : 'Tavily API Key'}
-        description={isZh ? '留空会保留当前已保存 key。' : 'Blank keeps currently saved key.'}
-        value={formState.webSearchTavilyAPIKey}
-        disabled={controlsDisabled}
-        type="password"
-        placeholder={buildSecretPlaceholder(config?.web_search_tavily_api_key_set, isZh ? 'Tavily key' : 'Tavily key', locale)}
-        onChange={(value) => onChange({ webSearchTavilyAPIKey: value })}
-      />
-      <TextField
-        label={isZh ? 'Exa 自定义 URL' : 'Exa Custom URL'}
-        description={isZh ? '可选 Exa 端点覆盖。' : 'Optional Exa endpoint override.'}
-        value={formState.webSearchExaURL}
-        disabled={controlsDisabled}
-        mono
-        placeholder={isZh ? '留空使用 Exa 官方端点' : 'Leave blank to use the official Exa endpoint'}
-        onChange={(value) => onChange({ webSearchExaURL: value })}
-      />
-      <TextField
-        label={isZh ? 'Exa API Key' : 'Exa API Key'}
-        description={isZh ? '留空会保留当前已保存 key。' : 'Blank keeps currently saved key.'}
-        value={formState.webSearchExaAPIKey}
-        disabled={controlsDisabled}
-        type="password"
-        placeholder={buildSecretPlaceholder(config?.web_search_exa_api_key_set, isZh ? 'Exa key' : 'Exa key', locale)}
-        onChange={(value) => onChange({ webSearchExaAPIKey: value })}
-      />
+      {fields.map((field) => (
+        <TextField
+          key={field.field}
+          label={field.label}
+          description={field.description}
+          value={formState[field.field]}
+          disabled={controlsDisabled}
+          type={field.type}
+          mono={field.mono}
+          placeholder={field.placeholder}
+          onChange={(value) => onChange(stringFieldPatch(field.field, value))}
+        />
+      ))}
     </Card>
   );
 }
