@@ -92,6 +92,25 @@ describe('lib/server/bridge', () => {
     expect(headers.get('X-API-Token')).toBe('config-token');
   });
 
+  it('falls back to bridge config when env token is the example placeholder', async () => {
+    const configPath = path.join(os.tmpdir(), `ghost-os-web-placeholder-auth-${Date.now()}.toml`);
+    writeFileSync(configPath, 'api_token = "config-token"\n', 'utf8');
+    process.env.GHOST_API_TOKEN = 'change-me';
+    process.env.GHOST_CONFIG_PATH = configPath;
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    );
+
+    await forwardBridge({ path: '/api/config', method: 'GET' });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = new Headers(init.headers);
+    expect(headers.get('X-API-Token')).toBe('config-token');
+  });
+
   it('does not inject bridge auth when request and env token are both absent', async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ status: 'success', payload: { ok: true }, error: '' }), {

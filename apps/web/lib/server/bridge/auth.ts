@@ -1,5 +1,7 @@
 import { readBridgeAPIToken } from './config';
 
+const placeholderAPITokens = new Set(['change-me']);
+
 function hasAuthHeaders(headers: Headers): boolean {
   return headers.has('X-API-Token') || headers.has('Authorization');
 }
@@ -23,7 +25,7 @@ function forwardedAuthHeaders(request?: Request): Headers | undefined {
 
 async function configuredBridgeToken(): Promise<string | undefined> {
   const envToken = process.env.GHOST_API_TOKEN?.trim();
-  if (envToken) {
+  if (envToken && !placeholderAPITokens.has(envToken.toLowerCase())) {
     return envToken;
   }
   return readBridgeAPIToken();
