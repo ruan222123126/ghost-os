@@ -4,95 +4,76 @@ import { useChatQuestionActions } from './useChatQuestionActions';
 import { useChatRunControl } from './useChatRunControl';
 import { useChatState } from './useChatState';
 import { useChatStreamController } from './useChatStreamController';
-import type { UseBridgeChatOptions, UseBridgeChatResult } from './types';
+import type { ChatStateControls, UseBridgeChatOptions, UseBridgeChatResult } from './types';
+
+interface BridgeChatResultOptions {
+  actions: {
+    answerQuestion: UseBridgeChatResult['answerQuestion'];
+    cancelQuestion: UseBridgeChatResult['cancelQuestion'];
+    loadOlderHistory: UseBridgeChatResult['loadOlderHistory'];
+    loadSessionHistory: UseBridgeChatResult['loadSessionHistory'];
+    sendChatMessage: UseBridgeChatResult['sendChatMessage'];
+    stopCurrentRun: UseBridgeChatResult['stopCurrentRun'];
+  };
+  clearMessages: UseBridgeChatResult['clearMessages'];
+  state: ChatStateControls;
+}
 
 export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResult {
   const state = useChatState(options.currentSessionId);
-  const currentSessionIdRef = useRef(options.currentSessionId);
-
-  useEffect(() => {
-    currentSessionIdRef.current = options.currentSessionId;
-  }, [options.currentSessionId]);
-
-  const {
-    loadOlderHistory,
-    loadSessionHistory,
-    syncRecentHistory,
-  } = useChatHistory({
-    clearChatError: state.clearChatError,
-    clearPendingQuestions: state.clearPendingQuestions,
-    clearStreamingState: state.clearStreamingState,
-    applyRuntimeActions: state.applyRuntimeActions,
-    hydrateTurnDraft: state.hydrateTurnDraft,
-    replaceWithErrorMessage: state.replaceWithErrorMessage,
-    setCommittedMessages: state.setCommittedMessages,
-    setHasOlderHistory: state.setHasOlderHistory,
-    setHistoryLoading: state.setHistoryLoading,
-    setLoadingOlderHistory: state.setLoadingOlderHistory,
-    setNextHistoryBefore: state.setNextHistoryBefore,
-    setChatError: state.setChatError,
-    setActiveRun: state.setActiveRun,
-    setLoading: state.setLoading,
-    setStopPending: state.setStopPending,
-    beginHistorySync: state.beginHistorySync,
-    endHistorySync: state.endHistorySync,
-    getNextHistoryBefore: state.getNextHistoryBefore,
-  });
+  const currentSessionIdRef = useCurrentSessionIdRef(options.currentSessionId);
+  const getCurrentSessionId = useCallback(() => currentSessionIdRef.current, [currentSessionIdRef]);
+  const { loadOlderHistory, loadSessionHistory, syncRecentHistory } = useChatHistory(state);
   const { runAgentStream, runHumanStream } = useChatStreamController({
-    applyRuntimeActions: state.applyRuntimeActions,
-    endHistorySync: state.endHistorySync,
-    getCurrentSessionId: () => currentSessionIdRef.current,
-    migrateSessionState: state.migrateSessionState,
+    ...state,
+    getCurrentSessionId,
     onSessionResolved: options.onSessionResolved,
-    setChatError: state.setChatError,
-    beginHistorySync: state.beginHistorySync,
     syncRecentHistory,
   });
   const { sendChatMessage, stopCurrentRun } = useChatRunControl({
-    appendErrorMessage: state.appendErrorMessage,
-    appendCommittedMessages: state.appendCommittedMessages,
-    beginHistorySync: state.beginHistorySync,
-    clearChatError: state.clearChatError,
-    clearStreamingState: state.clearStreamingState,
+    ...state,
     currentSessionId: options.currentSessionId,
-    endHistorySync: state.endHistorySync,
-    getCurrentSessionId: () => currentSessionIdRef.current,
-    getActiveRun: state.getActiveRun,
-    getStopPending: state.getStopPending,
-    hasPendingQuestionInSession: state.hasPendingQuestionInSession,
-    markBackgroundCompleted: state.markBackgroundCompleted,
-    migrateSessionState: state.migrateSessionState,
+    getCurrentSessionId,
     onSessionResolved: options.onSessionResolved,
     runAgentStream,
-    resolveActiveRunSessionId: state.resolveActiveRunSessionId,
-    setActiveRun: state.setActiveRun,
-    setLoading: state.setLoading,
-    setStopPending: state.setStopPending,
-    setChatError: state.setChatError,
     syncRecentHistory,
   });
   const { answerQuestion, cancelQuestion } = useChatQuestionActions({
-    appendCommittedMessages: state.appendCommittedMessages,
-    appendErrorMessage: state.appendErrorMessage,
-    clearChatError: state.clearChatError,
-    clearStreamingState: state.clearStreamingState,
-    pendingQuestions: state.pendingQuestions,
+    ...state,
     runHumanStream,
-    getCurrentSessionId: () => currentSessionIdRef.current,
-    getStopPending: state.getStopPending,
-    hasPendingQuestionInSession: state.hasPendingQuestionInSession,
-    markBackgroundCompleted: state.markBackgroundCompleted,
-    removePendingQuestion: state.removePendingQuestion,
-    resolveActiveRunSessionId: state.resolveActiveRunSessionId,
-    setActiveRun: state.setActiveRun,
-    setChatError: state.setChatError,
-    setLoading: state.setLoading,
-    setStopPending: state.setStopPending,
+    getCurrentSessionId,
   });
   const loadOlderCurrentSessionHistory = useCallback(async () => {
     await loadOlderHistory(options.currentSessionId);
   }, [loadOlderHistory, options.currentSessionId]);
+  const clearMessages = useCallback((sessionId = options.currentSessionId) => {
+    state.clearMessages(sessionId);
+  }, [options.currentSessionId, state]);
 
+  return buildBridgeChatResult({
+    actions: {
+      answerQuestion,
+      cancelQuestion,
+      loadOlderHistory: loadOlderCurrentSessionHistory,
+      loadSessionHistory,
+      sendChatMessage,
+      stopCurrentRun,
+    },
+    clearMessages,
+    state,
+  });
+}
+
+function useCurrentSessionIdRef(currentSessionId: string) {
+  const currentSessionIdRef = useRef(currentSessionId);
+  useEffect(() => {
+    currentSessionIdRef.current = currentSessionId;
+  }, [currentSessionId]);
+  return currentSessionIdRef;
+}
+
+function buildBridgeChatResult(options: BridgeChatResultOptions): UseBridgeChatResult {
+  const { actions, clearMessages, state } = options;
   return {
     committedMessages: state.committedMessages,
     streamingAssistantSegments: state.streamingAssistantSegments,
@@ -109,13 +90,13 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
     hasPendingQuestion: state.pendingQuestions.length > 0,
     canStop: state.loading && state.activeRun !== null && !state.stopPending,
     hasOlderHistory: state.hasOlderHistory,
-    sendChatMessage,
-    stopCurrentRun,
-    answerQuestion,
-    cancelQuestion,
-    loadSessionHistory,
-    loadOlderHistory: loadOlderCurrentSessionHistory,
-    clearMessages: (sessionId = options.currentSessionId) => state.clearMessages(sessionId),
+    sendChatMessage: actions.sendChatMessage,
+    stopCurrentRun: actions.stopCurrentRun,
+    answerQuestion: actions.answerQuestion,
+    cancelQuestion: actions.cancelQuestion,
+    loadSessionHistory: actions.loadSessionHistory,
+    loadOlderHistory: actions.loadOlderHistory,
+    clearMessages,
     backgroundCompletedSessionIds: state.backgroundCompletedSessionIds,
     clearBackgroundCompletion: state.clearBackgroundCompletion,
     dropSessionState: state.dropSessionState,
