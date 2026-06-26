@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import {
   WorkflowCanvasNodeContextMenu,
 } from '@/components/workflow/WorkflowCanvasNodeContextMenu';
@@ -33,15 +34,49 @@ interface WorkflowCanvasStageProps {
   onDeleteNode: (nodeID: string) => void;
 }
 
+interface WorkflowCanvasStageModel {
+  interactions: WorkflowCanvasStageInteractions;
+  locale: WebLocale;
+  localizeValidationError: (message: string, locale: WebLocale) => string;
+  localizedWorkflowCopy: WorkflowCopy;
+}
+
+interface WorkflowCanvasStageShellProps {
+  children: ReactNode;
+  interactions: WorkflowCanvasStageInteractions;
+}
+
 export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
+  const model = useWorkflowCanvasStageModel(props);
+
+  return (
+    <WorkflowCanvasStageShell interactions={model.interactions}>
+      <WorkflowCanvasStageContent model={model} stage={props} />
+    </WorkflowCanvasStageShell>
+  );
+}
+
+type WorkflowCanvasStageInteractions = ReturnType<typeof useWorkflowCanvasStageInteractions>;
+
+function useWorkflowCanvasStageModel(props: WorkflowCanvasStageProps): WorkflowCanvasStageModel {
   const { copy, locale } = useWebLocale();
   const localizeValidationError = props.localizeValidationError ?? localizeWorkflowValidationError;
-
   const interactions = useWorkflowCanvasStageInteractions({
     draft: props.draft,
     onMoveNode: props.onMoveNode,
     onSelectNode: props.onSelectNode,
   });
+
+  return {
+    interactions,
+    locale,
+    localizeValidationError,
+    localizedWorkflowCopy: copy.workflow,
+  };
+}
+
+function WorkflowCanvasStageShell(props: WorkflowCanvasStageShellProps) {
+  const { children, interactions } = props;
 
   return (
     <section
@@ -55,32 +90,44 @@ export function WorkflowCanvasStage(props: WorkflowCanvasStageProps) {
       onClick={interactions.onCanvasClick}
     >
       <canvas ref={interactions.backgroundCanvasRef} className="workflow-arch-background-canvas" />
-      <WorkflowCanvasStageWorld
-        editorKind={props.editorKind}
-        interactions={interactions}
-        workflowCopy={props.workflowCopy}
-        onConnectNodes={props.onConnectNodes}
-        onDeleteEdge={props.onDeleteEdge}
-        onSelectNode={props.onSelectNode}
-      />
-      <WorkflowCanvasNodeContextMenu
-        menu={interactions.nodeContextMenu}
-        onClose={interactions.closeContextMenu}
-        onCopyNode={props.onDuplicateNode}
-        onDeleteNode={props.onDeleteNode}
-      />
-      <WorkflowStageActionError actionError={props.actionError} stageSaveFailed={copy.workflow.stageSaveFailed} />
-      <WorkflowStageValidationErrors
-        locale={locale}
-        validationErrors={props.validationErrors}
-        workflowCopy={copy.workflow}
-        localizeValidationError={localizeValidationError}
-      />
+      {children}
     </section>
   );
 }
 
-type WorkflowCanvasStageInteractions = ReturnType<typeof useWorkflowCanvasStageInteractions>;
+function WorkflowCanvasStageContent(props: {
+  model: WorkflowCanvasStageModel;
+  stage: WorkflowCanvasStageProps;
+}) {
+  const { interactions, locale, localizedWorkflowCopy, localizeValidationError } = props.model;
+  const { stage } = props;
+
+  return (
+    <>
+      <WorkflowCanvasStageWorld
+        editorKind={stage.editorKind}
+        interactions={interactions}
+        workflowCopy={stage.workflowCopy}
+        onConnectNodes={stage.onConnectNodes}
+        onDeleteEdge={stage.onDeleteEdge}
+        onSelectNode={stage.onSelectNode}
+      />
+      <WorkflowCanvasNodeContextMenu
+        menu={interactions.nodeContextMenu}
+        onClose={interactions.closeContextMenu}
+        onCopyNode={stage.onDuplicateNode}
+        onDeleteNode={stage.onDeleteNode}
+      />
+      <WorkflowStageActionError actionError={stage.actionError} stageSaveFailed={localizedWorkflowCopy.stageSaveFailed} />
+      <WorkflowStageValidationErrors
+        locale={locale}
+        validationErrors={stage.validationErrors}
+        workflowCopy={localizedWorkflowCopy}
+        localizeValidationError={localizeValidationError}
+      />
+    </>
+  );
+}
 
 interface WorkflowCanvasStageWorldProps {
   editorKind: WorkflowEditorKind;
