@@ -92,8 +92,9 @@ export function useWorkflowFindIconStepEditor(
   const [testResult, setTestResult] = useState<FindIconTestResult>('idle');
   const [errorText, setErrorText] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resetActions = { setState, setErrorText, setPreview, setTesting, setTestResult };
 
-  useFindIconEditorResetState(initial, setState, setErrorText, setPreview, setTesting, setTestResult);
+  useFindIconEditorResetState({ initial, ...resetActions });
   useFindIconEditorPreviewCleanup(preview);
 
   const handlers = useFindIconEditorHandlers({
@@ -160,7 +161,7 @@ function useFindIconEditorHandlers(options: FindIconEditorHandlerOptions) {
       });
     },
     onRemoveImage: () => {
-      clearFindIconTemplateSelection(fileInputRef, setState, setPreview, setErrorText);
+      clearFindIconTemplateSelection({ fileInputRef, setState, setPreview, setErrorText });
       setTesting(false);
       setTestResult('idle');
     },
@@ -281,4 +282,3 @@ async function handleSaveFindIcon(options: {
     setSaving(false);
   }
 }
-

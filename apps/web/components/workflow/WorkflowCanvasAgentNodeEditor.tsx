@@ -53,18 +53,23 @@ export function WorkflowCanvasAgentNodeEditor(props: WorkflowCanvasAgentNodeEdit
   const overrides = editorKind === 'orchestration'
     ? cloneOrchestrationTaskRuntimeOverrides(selectedNode.agent?.runtime_overrides) ?? {}
     : cloneWorkflowTaskRuntimeOverrides(selectedNode.agent?.runtime_overrides) ?? {};
-  const toolOptions = buildToolOptions(
-    agentRuntimeCatalog?.tools ?? [],
-    overrides.tool_allowlist ?? [],
-    copy.workflow,
-    editorKind === 'orchestration',
-  );
+  const toolOptions = buildToolOptions({
+    tools: agentRuntimeCatalog?.tools ?? [],
+    selectedNames: overrides.tool_allowlist ?? [],
+    copy: copy.workflow,
+    showAllTools: editorKind === 'orchestration',
+  });
   const toolOrder = toolOrderForEditor(
     agentRuntimeCatalog?.tools ?? [],
     editorKind === 'orchestration',
   );
   const providerOptions = buildProviderOptions(agentRuntimeCatalog, overrides.provider_name ?? '', copy.workflow);
-  const modelOptions = buildModelOptions(agentRuntimeCatalog, overrides.provider_name ?? '', overrides.model ?? '', copy.workflow);
+  const modelOptions = buildModelOptions({
+    catalog: agentRuntimeCatalog,
+    providerName: overrides.provider_name ?? '',
+    currentValue: overrides.model ?? '',
+    copy: copy.workflow,
+  });
   const presetOptions = buildPresetOptions(presets, overrides.preset_id ?? '', copy.workflow);
   const systemPromptLocked = editorKind === 'orchestration' && (overrides.preset_id?.trim().length ?? 0) > 0;
   const toolStatusText = agentRuntimeLoading

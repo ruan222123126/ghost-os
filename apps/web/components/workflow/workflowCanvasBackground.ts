@@ -7,6 +7,22 @@ const GRID_MINOR_COLOR = 'rgb(0 0 0 / 0.06)';
 const GRID_MAJOR_COLOR = 'rgb(0 0 0 / 0.12)';
 const GRID_LINE_WIDTH = 1;
 
+interface GridAxisDrawOptions {
+  context: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+  start: number;
+  step: number;
+  vertical: boolean;
+  color: string;
+}
+
+interface GridDrawArea {
+  context: CanvasRenderingContext2D;
+  width: number;
+  height: number;
+}
+
 export function drawWorkflowCanvasBackground(
   background: HTMLCanvasElement,
   canvas: HTMLDivElement,
@@ -32,32 +48,61 @@ export function drawWorkflowCanvasBackground(
   context.clearRect(0, 0, rect.width, rect.height);
   context.fillStyle = GRID_BACKGROUND_COLOR;
   context.fillRect(0, 0, rect.width, rect.height);
-  drawGridLines(context, rect.width, rect.height, viewport);
+  drawGridLines({
+    context,
+    width: rect.width,
+    height: rect.height,
+  }, viewport);
 }
 
 function drawGridLines(
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
+  area: GridDrawArea,
   viewport: CanvasViewport,
 ) {
+  const { context, width, height } = area;
   const minorStep = GRID_BASE_SIZE * viewport.scale;
   const majorStep = minorStep * GRID_MAJOR_FACTOR;
-  drawGridAxis(context, width, height, normalizeGridOffset(viewport.offsetX, minorStep), minorStep, true, GRID_MINOR_COLOR);
-  drawGridAxis(context, width, height, normalizeGridOffset(viewport.offsetY, minorStep), minorStep, false, GRID_MINOR_COLOR);
-  drawGridAxis(context, width, height, normalizeGridOffset(viewport.offsetX, majorStep), majorStep, true, GRID_MAJOR_COLOR);
-  drawGridAxis(context, width, height, normalizeGridOffset(viewport.offsetY, majorStep), majorStep, false, GRID_MAJOR_COLOR);
+  drawGridAxis({
+    context,
+    width,
+    height,
+    start: normalizeGridOffset(viewport.offsetX, minorStep),
+    step: minorStep,
+    vertical: true,
+    color: GRID_MINOR_COLOR,
+  });
+  drawGridAxis({
+    context,
+    width,
+    height,
+    start: normalizeGridOffset(viewport.offsetY, minorStep),
+    step: minorStep,
+    vertical: false,
+    color: GRID_MINOR_COLOR,
+  });
+  drawGridAxis({
+    context,
+    width,
+    height,
+    start: normalizeGridOffset(viewport.offsetX, majorStep),
+    step: majorStep,
+    vertical: true,
+    color: GRID_MAJOR_COLOR,
+  });
+  drawGridAxis({
+    context,
+    width,
+    height,
+    start: normalizeGridOffset(viewport.offsetY, majorStep),
+    step: majorStep,
+    vertical: false,
+    color: GRID_MAJOR_COLOR,
+  });
 }
 
-function drawGridAxis(
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  start: number,
-  step: number,
-  vertical: boolean,
-  color: string,
-) {
+function drawGridAxis(options: GridAxisDrawOptions) {
+  const { context, width, height, start, step, vertical, color } = options;
+
   context.beginPath();
   context.strokeStyle = color;
   context.lineWidth = GRID_LINE_WIDTH;

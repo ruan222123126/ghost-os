@@ -8,14 +8,25 @@ import type {
   FindIconTestResult,
 } from '@/components/workflow/WorkflowFindIconStepEditorModalView';
 
-export function useFindIconEditorResetState(
-  initial: FindIconEditorPanelState,
-  setState: Dispatch<SetStateAction<FindIconEditorPanelState>>,
-  setErrorText: (value: string) => void,
-  setPreview: Dispatch<SetStateAction<FindIconEditorPreview | null>>,
-  setTesting: (value: boolean) => void,
-  setTestResult: (value: FindIconTestResult) => void,
-) {
+interface FindIconEditorResetOptions {
+  initial: FindIconEditorPanelState;
+  setState: Dispatch<SetStateAction<FindIconEditorPanelState>>;
+  setErrorText: (value: string) => void;
+  setPreview: Dispatch<SetStateAction<FindIconEditorPreview | null>>;
+  setTesting: (value: boolean) => void;
+  setTestResult: (value: FindIconTestResult) => void;
+}
+
+interface ClearFindIconTemplateOptions {
+  fileInputRef: RefObject<HTMLInputElement>;
+  setState: Dispatch<SetStateAction<FindIconEditorPanelState>>;
+  setPreview: Dispatch<SetStateAction<FindIconEditorPreview | null>>;
+  setErrorText: (value: string) => void;
+}
+
+export function useFindIconEditorResetState(options: FindIconEditorResetOptions) {
+  const { initial, setState, setErrorText, setPreview, setTesting, setTestResult } = options;
+
   useEffect(() => {
     setState(initial);
     setErrorText('');
@@ -32,12 +43,9 @@ export function useFindIconEditorPreviewCleanup(preview: FindIconEditorPreview |
   useEffect(() => () => revokeFindIconPreviewURL(preview), [preview]);
 }
 
-export function clearFindIconTemplateSelection(
-  fileInputRef: RefObject<HTMLInputElement>,
-  setState: Dispatch<SetStateAction<FindIconEditorPanelState>>,
-  setPreview: Dispatch<SetStateAction<FindIconEditorPreview | null>>,
-  setErrorText: (value: string) => void,
-) {
+export function clearFindIconTemplateSelection(options: ClearFindIconTemplateOptions) {
+  const { fileInputRef, setState, setPreview, setErrorText } = options;
+
   setState((current) => ({ ...current, templatePath: '', templateName: '' }));
   setErrorText('');
   setPreview((current) => {

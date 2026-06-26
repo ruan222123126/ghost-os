@@ -12,6 +12,20 @@ export interface SelectOption {
   value: string;
 }
 
+interface BuildModelOptionsInput {
+  catalog: WorkflowAgentRuntimeCatalog | undefined;
+  providerName: string;
+  currentValue: string;
+  copy: WorkflowCopy;
+}
+
+interface BuildToolOptionsInput {
+  tools: ToolPayload[];
+  selectedNames: string[];
+  copy: WorkflowCopy;
+  showAllTools: boolean;
+}
+
 export function buildProviderOptions(
   catalog: WorkflowAgentRuntimeCatalog | undefined,
   currentValue: string,
@@ -28,12 +42,8 @@ export function buildProviderOptions(
   return withCurrentDisabledOption(mapped, currentValue, copy.agentProviderUnavailable);
 }
 
-export function buildModelOptions(
-  catalog: WorkflowAgentRuntimeCatalog | undefined,
-  providerName: string,
-  currentValue: string,
-  copy: WorkflowCopy,
-): SelectOption[] {
+export function buildModelOptions(input: BuildModelOptionsInput): SelectOption[] {
+  const { catalog, providerName, currentValue, copy } = input;
   const provider = (catalog?.providers ?? []).find((item) => item.name === providerName);
   const mapped = (provider?.models ?? []).map((model) => ({
     value: model,
@@ -59,12 +69,8 @@ export function buildPresetOptions(
   return withCurrentDisabledOption(mapped, currentValue, copy.agentPresetUnavailable);
 }
 
-export function buildToolOptions(
-  tools: ToolPayload[],
-  selectedNames: string[],
-  copy: WorkflowCopy,
-  showAllTools: boolean,
-): SelectOption[] {
+export function buildToolOptions(input: BuildToolOptionsInput): SelectOption[] {
+  const { tools, selectedNames, copy, showAllTools } = input;
   const visible = showAllTools ? tools : tools.filter((tool) => tool.enabled);
   const mapped = visible
     .slice()
