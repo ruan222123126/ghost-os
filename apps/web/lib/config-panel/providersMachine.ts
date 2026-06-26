@@ -35,6 +35,17 @@ export type ProvidersAction =
   | { type: 'set_saving'; saving: boolean }
   | { type: 'set_error'; error: string };
 
+type ProvidersActionReducer = (
+  state: ProvidersState,
+  action: ProvidersAction,
+) => ProvidersState | null;
+
+const PROVIDERS_ACTION_REDUCERS: ProvidersActionReducer[] = [
+  reduceProviderLoadAction,
+  reduceProviderEditorAction,
+  reduceProviderMutationAction,
+];
+
 export function createInitialProvidersState(): ProvidersState {
   return {
     view: 'list',
@@ -53,6 +64,19 @@ export function providersReducer(
   state: ProvidersState,
   action: ProvidersAction,
 ): ProvidersState {
+  for (const reduceAction of PROVIDERS_ACTION_REDUCERS) {
+    const nextState = reduceAction(state, action);
+    if (nextState) {
+      return nextState;
+    }
+  }
+  return state;
+}
+
+function reduceProviderLoadAction(
+  state: ProvidersState,
+  action: ProvidersAction,
+): ProvidersState | null {
   switch (action.type) {
     case 'load_start':
       return { ...state, loading: true };
@@ -60,6 +84,16 @@ export function providersReducer(
       return applyProviderList(state, action.payload);
     case 'load_error':
       return { ...state, loading: false, error: action.error };
+    default:
+      return null;
+  }
+}
+
+function reduceProviderEditorAction(
+  state: ProvidersState,
+  action: ProvidersAction,
+): ProvidersState | null {
+  switch (action.type) {
     case 'enter_create':
       return enterCreateProvider(state);
     case 'enter_edit':
@@ -70,6 +104,16 @@ export function providersReducer(
       return { ...state, editor: { ...state.editor, ...action.patch } };
     case 'select_provider_type':
       return selectProviderType(state, action.providerType);
+    default:
+      return null;
+  }
+}
+
+function reduceProviderMutationAction(
+  state: ProvidersState,
+  action: ProvidersAction,
+): ProvidersState | null {
+  switch (action.type) {
     case 'mutate_start':
       return { ...state, saving: true, error: '' };
     case 'mutate_error':
@@ -78,6 +122,8 @@ export function providersReducer(
       return { ...state, saving: action.saving };
     case 'set_error':
       return { ...state, error: action.error };
+    default:
+      return null;
   }
 }
 
