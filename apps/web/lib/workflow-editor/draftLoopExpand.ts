@@ -9,6 +9,18 @@ import {
 import type { WorkflowCanvasNodeSource } from '@/lib/workflow-editor/draftNodeSource';
 
 type WorkflowNodeToCanvasSource = (node: WorkflowNode) => WorkflowCanvasNodeSource;
+type WorkflowEdge = WorkflowDefinition['edges'][number];
+type WorkflowEdges = WorkflowDefinition['edges'];
+type WorkflowLoopPayload = NonNullable<WorkflowNode['loop']>;
+type LoopNodeMap = Map<string, WorkflowLoopPayload>;
+type LoopBackSources = Map<string, Set<string>>;
+
+interface ReachableQueueOptions {
+  blockedID: string;
+  nextNodeIDs?: string[];
+  queue: string[];
+  reachable: Set<string>;
+}
 
 export function expandLoopPairsForDraft(
   workflow: WorkflowDefinition,
@@ -17,7 +29,7 @@ export function expandLoopPairsForDraft(
   nodes: WorkflowCanvasNodeSource[];
   edges: WorkflowDefinition['edges'];
 } {
-  const loopNodes = new Map<string, NonNullable<WorkflowNode['loop']>>();
+  const loopNodes: LoopNodeMap = new Map();
   const outgoing = buildOutgoingMap(workflow.edges);
   const nodes: WorkflowCanvasNodeSource[] = [];
   for (const node of workflow.nodes) {
@@ -37,7 +49,7 @@ export function expandLoopPairsForDraft(
 
 function buildLoopStartNodeSource(
   loopID: string,
-  loop: NonNullable<WorkflowNode['loop']>,
+  loop: WorkflowLoopPayload,
 ): WorkflowCanvasNodeSource {
   return {
     id: loopStartNodeID(loopID),
@@ -62,59 +74,93 @@ function buildLoopEndNodeSource(loopID: string): WorkflowCanvasNodeSource {
 }
 
 function rewriteLoopEdgesForDraft(
-  edges: WorkflowDefinition['edges'],
-  loopNodes: Map<string, NonNullable<WorkflowNode['loop']>>,
+  edges: WorkflowEdges,
+  loopNodes: LoopNodeMap,
   outgoing: Map<string, string[]>,
-): WorkflowDefinition['edges'] {
+): WorkflowEdges {
   const loopBackSources = collectLoopBackSources(loopNodes, edges, outgoing);
-  const rewritten: WorkflowDefinition['edges'] = [];
+  const rewritten: WorkflowEdges = [];
   for (const edge of edges) {
-    const fromLoop = loopNodes.get(edge.from_node_id);
-    if (fromLoop) {
-      if (edge.to_node_id === fromLoop.body_node_id) {
-        rewritten.push({
-          from_node_id: loopStartNodeID(edge.from_node_id),
-          to_node_id: fromLoop.body_node_id,
-        });
-      }
-      continue;
-    }
-    const toLoop = loopNodes.get(edge.to_node_id);
-    if (!toLoop) {
-      rewritten.push(edge);
-      continue;
-    }
-    const loopID = edge.to_node_id;
-    const isLoopBack = loopBackSources.get(loopID)?.has(edge.from_node_id) ?? false;
-    rewritten.push({
-      from_node_id: edge.from_node_id,
-      to_node_id: isLoopBack ? loopEndNodeID(loopID) : loopStartNodeID(loopID),
-    });
+    rewritten.push(...rewriteLoopEdgeForDraft(edge, loopNodes, loopBackSources));
   }
   for (const [loopID, loop] of loopNodes.entries()) {
-    rewritten.push({ from_node_id: loopEndNodeID(loopID), to_node_id: loop.exit_node_id });
+    rewritten.push(buildLoopExitEdge(loopID, loop));
   }
   return dedupeWorkflowEdges(rewritten);
 }
 
+function rewriteLoopEdgeForDraft(
+  edge: WorkflowEdge,
+  loopNodes: LoopNodeMap,
+  loopBackSources: LoopBackSources,
+): WorkflowEdges {
+  const fromLoop = loopNodes.get(edge.from_node_id);
+  if (fromLoop) {
+    return rewriteLoopSourceEdge(edge, fromLoop);
+  }
+
+  if (!loopNodes.has(edge.to_node_id)) {
+    return [edge];
+  }
+
+  return [rewriteLoopTargetEdge(edge, loopBackSources)];
+}
+
+function rewriteLoopSourceEdge(edge: WorkflowEdge, loop: WorkflowLoopPayload): WorkflowEdges {
+  if (edge.to_node_id !== loop.body_node_id) {
+    return [];
+  }
+
+  return [{
+    from_node_id: loopStartNodeID(edge.from_node_id),
+    to_node_id: loop.body_node_id,
+  }];
+}
+
+function rewriteLoopTargetEdge(edge: WorkflowEdge, loopBackSources: LoopBackSources): WorkflowEdge {
+  const loopID = edge.to_node_id;
+  return {
+    from_node_id: edge.from_node_id,
+    to_node_id: isLoopBackSource(edge, loopBackSources) ? loopEndNodeID(loopID) : loopStartNodeID(loopID),
+  };
+}
+
+function buildLoopExitEdge(loopID: string, loop: WorkflowLoopPayload): WorkflowEdge {
+  return { from_node_id: loopEndNodeID(loopID), to_node_id: loop.exit_node_id };
+}
+
+function isLoopBackSource(edge: WorkflowEdge, loopBackSources: LoopBackSources): boolean {
+  return loopBackSources.get(edge.to_node_id)?.has(edge.from_node_id) ?? false;
+}
+
 function collectLoopBackSources(
-  loopNodes: Map<string, NonNullable<WorkflowNode['loop']>>,
-  edges: WorkflowDefinition['edges'],
+  loopNodes: LoopNodeMap,
+  edges: WorkflowEdges,
   outgoing: Map<string, string[]>,
-): Map<string, Set<string>> {
-  const loopBackSources = new Map<string, Set<string>>();
+): LoopBackSources {
+  const loopBackSources: LoopBackSources = new Map();
   for (const [loopID, loop] of loopNodes.entries()) {
-    const incoming = edges
-      .filter((edge) => edge.to_node_id === loopID)
-      .map((edge) => edge.from_node_id)
-      .filter((sourceID) => sourceID !== loopID);
     const reachableFromBody = collectReachableNodes(outgoing, loop.body_node_id, loopID);
     loopBackSources.set(
       loopID,
-      new Set(incoming.filter((sourceID) => reachableFromBody.has(sourceID))),
+      collectReachableLoopIncomingSources(edges, loopID, reachableFromBody),
     );
   }
   return loopBackSources;
+}
+
+function collectReachableLoopIncomingSources(
+  edges: WorkflowEdges,
+  loopID: string,
+  reachableFromBody: Set<string>,
+): Set<string> {
+  const sources = new Set<string>();
+  for (const edge of edges) {
+    if (edge.to_node_id === loopID && edge.from_node_id !== loopID && reachableFromBody.has(edge.from_node_id)) {
+      sources.add(edge.from_node_id);
+    }
+  }
+  return sources;
 }
 
 function collectReachableNodes(
@@ -126,20 +172,42 @@ function collectReachableNodes(
   const queue = [startID];
   while (queue.length > 0) {
     const nodeID = queue.shift();
-    if (!nodeID || nodeID === blockedID || reachable.has(nodeID)) {
+    if (!shouldVisitReachableNode(nodeID, blockedID, reachable)) {
       continue;
     }
     reachable.add(nodeID);
-    for (const nextID of outgoing.get(nodeID) ?? []) {
-      if (nextID !== blockedID && !reachable.has(nextID)) {
-        queue.push(nextID);
-      }
-    }
+    enqueueReachableNextNodes({
+      blockedID,
+      nextNodeIDs: outgoing.get(nodeID),
+      queue,
+      reachable,
+    });
   }
   return reachable;
 }
 
-function buildOutgoingMap(edges: WorkflowDefinition['edges']): Map<string, string[]> {
+function shouldVisitReachableNode(
+  nodeID: string | undefined,
+  blockedID: string,
+  reachable: Set<string>,
+): nodeID is string {
+  if (!nodeID) {
+    return false;
+  }
+  return nodeID !== blockedID && !reachable.has(nodeID);
+}
+
+function enqueueReachableNextNodes(options: ReachableQueueOptions): void {
+  const { blockedID, nextNodeIDs, queue, reachable } = options;
+
+  for (const nextID of nextNodeIDs ?? []) {
+    if (nextID !== blockedID && !reachable.has(nextID)) {
+      queue.push(nextID);
+    }
+  }
+}
+
+function buildOutgoingMap(edges: WorkflowEdges): Map<string, string[]> {
   const outgoing = new Map<string, string[]>();
   for (const edge of edges) {
     outgoing.set(edge.from_node_id, [...(outgoing.get(edge.from_node_id) ?? []), edge.to_node_id]);
@@ -147,9 +215,9 @@ function buildOutgoingMap(edges: WorkflowDefinition['edges']): Map<string, strin
   return outgoing;
 }
 
-function dedupeWorkflowEdges(edges: WorkflowDefinition['edges']): WorkflowDefinition['edges'] {
+function dedupeWorkflowEdges(edges: WorkflowEdges): WorkflowEdges {
   const seen = new Set<string>();
-  const unique: WorkflowDefinition['edges'] = [];
+  const unique: WorkflowEdges = [];
   for (const edge of edges) {
     const key = `${edge.from_node_id}->${edge.to_node_id}`;
     if (seen.has(key)) {
