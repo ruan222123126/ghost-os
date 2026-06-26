@@ -3,7 +3,7 @@ import {
   countSessionsInPartitionViews,
   limitPartitionViewsBySessionCount,
 } from './SessionSidebarFlatList';
-import { buildSearchDialogOriginStyle, buildSessionSearchResults, mergeSessionSearchResults } from './SessionSearchDialog';
+import { buildSearchDialogMotionTarget, buildSessionSearchResults, mergeSessionSearchResults } from './SessionSearchDialog';
 import type { SessionMetadata } from '@/lib/types';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 
@@ -176,11 +176,14 @@ describe('components/SessionSidebar', () => {
     ]);
   });
 
-  it('places the search dialog animation origin at the trigger center', () => {
-    expect(buildSearchDialogOriginStyle({
+  it('builds the search dialog shrink target from the trigger center', () => {
+    expect(buildSearchDialogMotionTarget({
       dialogRect: { left: 180, top: 96, width: 640, height: 360 },
       triggerRect: { left: 272, top: 20, width: 40, height: 40 },
-    })).toEqual({ transformOrigin: '112px -56px' });
+    })).toEqual({
+      closedTransform: 'translate3d(-208px, -236px, 0) scale(0.18)',
+      transformOrigin: 'center center',
+    });
   });
 });
 

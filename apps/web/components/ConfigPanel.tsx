@@ -1,6 +1,6 @@
 'use client';
 
-import type { FC } from 'react';
+import type { CSSProperties, FC } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   SettingsNavigation,
@@ -19,6 +19,14 @@ import { useWebLocale } from '@/lib/i18n/provider';
 import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
 
 const CONFIG_PANEL_TRANSITION_MS = 300;
+const CONFIG_PANEL_CLOSED_TRANSFORM = [
+  'translate3d(',
+  'calc(var(--settings-panel-origin-x, 48px) - 50vw),',
+  'calc(var(--settings-panel-origin-y, calc(100vh - 40px)) - 50vh),',
+  '0',
+  ')',
+  'scale(0.18)',
+].join(' ');
 
 export interface ConfigPanelProps {
   open: boolean;
@@ -143,9 +151,10 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 
       <section
         data-testid="config-panel-shell"
-        className={`relative z-10 flex h-[80vh] min-h-[600px] w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-300 ease-in-out ${
-          visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+        className={`relative z-10 flex h-[80vh] min-h-[600px] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-300 ease-in-out ${
+          visible ? 'opacity-100' : 'opacity-0'
         }`}
+        style={configPanelShellStyle(visible)}
       >
         <CloseButton
           onClick={onClose}
@@ -201,4 +210,11 @@ function requestTransitionFrame(callback: () => void): () => void {
 
   const frame = window.requestAnimationFrame(callback);
   return () => window.cancelAnimationFrame(frame);
+}
+
+function configPanelShellStyle(visible: boolean): CSSProperties {
+  return {
+    transform: visible ? 'translate3d(0, 0, 0) scale(1)' : CONFIG_PANEL_CLOSED_TRANSFORM,
+    transformOrigin: 'center center',
+  };
 }

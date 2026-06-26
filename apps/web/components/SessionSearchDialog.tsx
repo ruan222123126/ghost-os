@@ -19,7 +19,12 @@ import type { SessionMetadata } from '@/lib/types';
 import type { SessionPartitionView } from '@/lib/sessionSidebarPartitions';
 
 const SEARCH_DIALOG_ANIMATION_MS = 500;
-const SEARCH_DIALOG_DEFAULT_ORIGIN = '50% 0%';
+const SEARCH_DIALOG_CLOSED_SCALE = 0.18;
+const SEARCH_DIALOG_OPEN_TRANSFORM = 'translate3d(0, 0, 0) scale(1)';
+const SEARCH_DIALOG_DEFAULT_MOTION_TARGET: SearchDialogMotionTarget = {
+  closedTransform: `translate3d(0, -56px, 0) scale(${SEARCH_DIALOG_CLOSED_SCALE})`,
+  transformOrigin: 'center center',
+};
 
 interface SessionSearchDialogProps {
   open: boolean;
@@ -52,9 +57,7 @@ export const SessionSearchDialog: FC<SessionSearchDialogProps> = ({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState(open);
   const [expanded, setExpanded] = useState(false);
-  const [originStyle, setOriginStyle] = useState<CSSProperties>({
-    transformOrigin: SEARCH_DIALOG_DEFAULT_ORIGIN,
-  });
+  const [motionTarget, setMotionTarget] = useState<SearchDialogMotionTarget>(SEARCH_DIALOG_DEFAULT_MOTION_TARGET);
   const sessionSearch = useSessionSearch({
     open,
     query,
@@ -77,7 +80,7 @@ export const SessionSearchDialog: FC<SessionSearchDialogProps> = ({
       return;
     }
 
-    setOriginStyle(buildSearchDialogOriginStyle({
+    setMotionTarget(buildSearchDialogMotionTarget({
       dialogRect: readElementLayoutRect(dialogRef.current),
       triggerRect: triggerRef.current?.getBoundingClientRect(),
     }));
@@ -144,10 +147,10 @@ export const SessionSearchDialog: FC<SessionSearchDialogProps> = ({
         aria-label={copy.chat.sidebarSearchAria}
         className={`w-full max-w-[640px] overflow-hidden rounded-[24px] bg-white shadow-[0_10px_40px_-10px_rgba(0,0,0,0.2)] transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-transform ${
           expanded
-            ? 'translate-y-0 scale-100 opacity-100'
-            : 'pointer-events-none scale-[0.18] opacity-0'
+            ? 'opacity-100'
+            : 'pointer-events-none opacity-0'
         }`}
-        style={originStyle}
+        style={buildSearchDialogMotionStyle({ expanded, target: motionTarget })}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex h-[64px] items-center px-4">
@@ -217,17 +220,37 @@ interface SearchDialogRect {
   height: number;
 }
 
-export function buildSearchDialogOriginStyle(input: {
+interface SearchDialogMotionTarget {
+  closedTransform: string;
+  transformOrigin: string;
+}
+
+export function buildSearchDialogMotionTarget(input: {
   dialogRect?: SearchDialogRect | null;
   triggerRect?: SearchDialogRect | null;
-}): CSSProperties {
+}): SearchDialogMotionTarget {
   if (!input.dialogRect || !input.triggerRect) {
-    return { transformOrigin: SEARCH_DIALOG_DEFAULT_ORIGIN };
+    return SEARCH_DIALOG_DEFAULT_MOTION_TARGET;
   }
 
-  const originX = input.triggerRect.left + input.triggerRect.width / 2 - input.dialogRect.left;
-  const originY = input.triggerRect.top + input.triggerRect.height / 2 - input.dialogRect.top;
-  return { transformOrigin: `${originX}px ${originY}px` };
+  const dialogCenterX = input.dialogRect.left + input.dialogRect.width / 2;
+  const dialogCenterY = input.dialogRect.top + input.dialogRect.height / 2;
+  const triggerCenterX = input.triggerRect.left + input.triggerRect.width / 2;
+  const triggerCenterY = input.triggerRect.top + input.triggerRect.height / 2;
+  return {
+    closedTransform: `translate3d(${triggerCenterX - dialogCenterX}px, ${triggerCenterY - dialogCenterY}px, 0) scale(${SEARCH_DIALOG_CLOSED_SCALE})`,
+    transformOrigin: 'center center',
+  };
+}
+
+function buildSearchDialogMotionStyle(input: {
+  expanded: boolean;
+  target: SearchDialogMotionTarget;
+}): CSSProperties {
+  return {
+    transform: input.expanded ? SEARCH_DIALOG_OPEN_TRANSFORM : input.target.closedTransform,
+    transformOrigin: input.target.transformOrigin,
+  };
 }
 
 function readElementLayoutRect(element: HTMLElement | null): SearchDialogRect | null {

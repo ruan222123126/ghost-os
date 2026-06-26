@@ -1,6 +1,6 @@
 'use client';
 
-import type { FC } from 'react';
+import type { FC, MouseEvent } from 'react';
 import { useWebLocale } from '@/lib/i18n/provider';
 
 interface SidebarSettingsButtonProps {
@@ -27,12 +27,16 @@ export const SidebarSettingsButton: FC<SidebarSettingsButtonProps> = ({ collapse
 function ButtonContent(props: SidebarSettingsButtonProps) {
   const { collapsed, onClick } = props;
   const { copy } = useWebLocale();
+  const handleClick = (event: MouseEvent<HTMLButtonElement>) => {
+    updateSettingsPanelOrigin(event.currentTarget);
+    onClick();
+  };
 
   return (
     <div className="mt-auto border-t border-black/10 px-3 py-3">
       <button
         type="button"
-        onClick={onClick}
+        onClick={handleClick}
         className={`group flex items-center justify-center gap-2 overflow-hidden bg-white text-black transition-colors hover:bg-black hover:text-white ${
           collapsed ? 'mx-auto h-10 w-10' : 'w-full px-4 py-3'
         }`}
@@ -53,4 +57,14 @@ function ButtonContent(props: SidebarSettingsButtonProps) {
       </button>
     </div>
   );
+}
+
+function updateSettingsPanelOrigin(trigger: HTMLButtonElement) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const rect = trigger.getBoundingClientRect();
+  document.documentElement.style.setProperty('--settings-panel-origin-x', `${rect.left + rect.width / 2}px`);
+  document.documentElement.style.setProperty('--settings-panel-origin-y', `${rect.top + rect.height / 2}px`);
 }
