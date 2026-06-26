@@ -79,53 +79,25 @@ export function WorkflowCanvasWorkbench(props: WorkflowCanvasWorkbenchProps) {
   return (
     <main className="workflow-arch-root">
       <div className="workflow-arch-watermark">{defaults.workflowCopy.watermark}</div>
-      <WorkflowCanvasSidebar
+      <WorkbenchSidebarPanel
+        defaults={defaults}
         isOpen={isSidebarOpen}
-        autosaveState={props.autosaveState}
-        workflowCopy={defaults.workflowCopy}
-        nodeLibraryTypes={props.nodeLibraryTypes}
-        localizeValidationError={props.localizeValidationError}
         onToggle={toggleSidebar}
-        onAddNode={props.onAddNode}
         onOpenSettings={openSettings}
-        onBack={props.onBack}
-        onSave={props.onSave}
+        workbench={props}
       />
-      <WorkflowCanvasStage
-        editorKind={props.editorKind}
-        draft={props.draft}
-        actionError={props.actionError}
-        validationErrors={props.validationErrors}
-        workflowCopy={defaults.workflowCopy}
-        localizeValidationError={props.localizeValidationError}
-        onSelectNode={props.onSelectNode}
-        onMoveNode={props.onMoveNode}
-        onConnectNodes={props.onConnectNodes}
-        onDeleteEdge={props.onDeleteEdge}
-        onDuplicateNode={props.onDuplicateNode}
-        onDeleteNode={props.onDeleteNode}
-      />
-      <WorkflowCanvasPropertiesPanel
-        editorKind={props.editorKind}
-        draft={props.draft}
-        selectedNode={selectedNode}
-        agentRuntimeCatalog={props.agentRuntimeCatalog}
-        agentRuntimeLoading={props.agentRuntimeLoading}
-        agentRuntimeError={props.agentRuntimeError}
-        presets={props.presets}
-        presetLoading={defaults.presetLoading}
-        presetError={defaults.presetError}
+      <WorkbenchStagePanel defaults={defaults} workbench={props} />
+      <WorkbenchPropertiesPanel
+        defaults={defaults}
         onClose={closePropertiesPanel}
-        onUpdateNode={props.onUpdateNode}
-        onDeleteNode={props.onDeleteNode}
+        selectedNode={selectedNode}
+        workbench={props}
       />
-      <WorkflowCanvasSettingsModal
+      <WorkbenchSettingsPanel
+        defaults={defaults}
         open={isSettingsOpen}
-        schedule={props.draft.schedule}
-        importControls={props.importControls}
-        workflowCopy={defaults.workflowCopy}
         onClose={closeSettings}
-        onScheduleChange={props.onScheduleChange}
+        workbench={props}
       />
     </main>
   );
@@ -135,6 +107,99 @@ interface WorkflowCanvasWorkbenchDefaults {
   presetError: string;
   presetLoading: boolean;
   workflowCopy: WorkflowCopy;
+}
+
+interface WorkbenchPanelProps {
+  defaults: WorkflowCanvasWorkbenchDefaults;
+  workbench: WorkflowCanvasWorkbenchProps;
+}
+
+interface WorkbenchSidebarPanelProps extends WorkbenchPanelProps {
+  isOpen: boolean;
+  onOpenSettings: () => void;
+  onToggle: () => void;
+}
+
+function WorkbenchSidebarPanel(props: WorkbenchSidebarPanelProps) {
+  const { defaults, isOpen, onOpenSettings, onToggle, workbench } = props;
+  return (
+    <WorkflowCanvasSidebar
+      isOpen={isOpen}
+      autosaveState={workbench.autosaveState}
+      workflowCopy={defaults.workflowCopy}
+      nodeLibraryTypes={workbench.nodeLibraryTypes}
+      localizeValidationError={workbench.localizeValidationError}
+      onToggle={onToggle}
+      onAddNode={workbench.onAddNode}
+      onOpenSettings={onOpenSettings}
+      onBack={workbench.onBack}
+      onSave={workbench.onSave}
+    />
+  );
+}
+
+function WorkbenchStagePanel(props: WorkbenchPanelProps) {
+  const { defaults, workbench } = props;
+  return (
+    <WorkflowCanvasStage
+      editorKind={workbench.editorKind}
+      draft={workbench.draft}
+      actionError={workbench.actionError}
+      validationErrors={workbench.validationErrors}
+      workflowCopy={defaults.workflowCopy}
+      localizeValidationError={workbench.localizeValidationError}
+      onSelectNode={workbench.onSelectNode}
+      onMoveNode={workbench.onMoveNode}
+      onConnectNodes={workbench.onConnectNodes}
+      onDeleteEdge={workbench.onDeleteEdge}
+      onDuplicateNode={workbench.onDuplicateNode}
+      onDeleteNode={workbench.onDeleteNode}
+    />
+  );
+}
+
+interface WorkbenchPropertiesPanelProps extends WorkbenchPanelProps {
+  onClose: () => void;
+  selectedNode?: WorkflowCanvasNodeDraft;
+}
+
+function WorkbenchPropertiesPanel(props: WorkbenchPropertiesPanelProps) {
+  const { defaults, onClose, selectedNode, workbench } = props;
+  return (
+    <WorkflowCanvasPropertiesPanel
+      editorKind={workbench.editorKind}
+      draft={workbench.draft}
+      selectedNode={selectedNode}
+      agentRuntimeCatalog={workbench.agentRuntimeCatalog}
+      agentRuntimeLoading={workbench.agentRuntimeLoading}
+      agentRuntimeError={workbench.agentRuntimeError}
+      presets={workbench.presets}
+      presetLoading={defaults.presetLoading}
+      presetError={defaults.presetError}
+      onClose={onClose}
+      onUpdateNode={workbench.onUpdateNode}
+      onDeleteNode={workbench.onDeleteNode}
+    />
+  );
+}
+
+interface WorkbenchSettingsPanelProps extends WorkbenchPanelProps {
+  onClose: () => void;
+  open: boolean;
+}
+
+function WorkbenchSettingsPanel(props: WorkbenchSettingsPanelProps) {
+  const { defaults, onClose, open, workbench } = props;
+  return (
+    <WorkflowCanvasSettingsModal
+      open={open}
+      schedule={workbench.draft.schedule}
+      importControls={workbench.importControls}
+      workflowCopy={defaults.workflowCopy}
+      onClose={onClose}
+      onScheduleChange={workbench.onScheduleChange}
+    />
+  );
 }
 
 function resolveWorkbenchDefaults(
