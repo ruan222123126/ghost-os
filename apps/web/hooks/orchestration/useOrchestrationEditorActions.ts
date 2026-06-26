@@ -47,33 +47,115 @@ interface OrchestrationSaveActionOptions {
   setActionError: Dispatch<SetStateAction<string>>;
 }
 
+interface OrchestrationAddNodeActionOptions {
+  locale: WebLocale;
+  toolNames: string[];
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>;
+}
+
 export function useOrchestrationDraftActions(options: OrchestrationDraftActionOptions) {
   const { locale, toolNames, setDraft } = options;
+  const onScheduleChange = useOrchestrationScheduleChangeAction(setDraft);
+  const onAddNode = useOrchestrationAddNodeAction({ locale, toolNames, setDraft });
+  const onSelectNode = useOrchestrationSelectNodeAction(setDraft);
+  const onMoveNode = useOrchestrationMoveNodeAction(setDraft);
+  const onConnectNodes = useOrchestrationConnectNodesAction(setDraft);
+  const onDeleteEdge = useOrchestrationDeleteEdgeAction(setDraft);
+  const onDuplicateNode = useOrchestrationDuplicateNodeAction(setDraft);
+  const onUpdateNode = useOrchestrationUpdateNodeAction(setDraft);
+  const onDeleteNode = useOrchestrationDeleteNodeAction(setDraft);
+
   return {
-    onScheduleChange: (patch: Partial<WorkflowCanvasDraft['schedule']>) =>
-      setDraft((state) => ({ ...state, schedule: { ...state.schedule, ...patch } })),
-    onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => {
-      setDraft((state) => addOrchestrationNode(state, {
-        type,
-        position,
-        source: buildDefaultOrchestrationNodeSource({
-          draft: state,
-          type,
-          toolNames,
-          locale,
-        }),
-      }));
-    },
-    onSelectNode: (nodeID?: string) => setDraft((state) => ({ ...state, selectedNodeId: nodeID })),
-    onMoveNode: (nodeID: string, position: WorkflowCanvasPosition) =>
-      setDraft((state) => moveOrchestrationNode(state, nodeID, position)),
-    onConnectNodes: (sourceNodeID: string, targetNodeID: string) =>
-      setDraft((state) => connectOrchestrationDraftNodes(state, sourceNodeID, targetNodeID)),
-    onDeleteEdge: (edgeID: string) => setDraft((state) => removeOrchestrationEdge(state, edgeID)),
-    onDuplicateNode: (nodeID: string) => setDraft((state) => duplicateOrchestrationNode(state, nodeID)),
-    onUpdateNode: (node: WorkflowCanvasNodeDraft) => setDraft((state) => updateOrchestrationNode(state, node)),
-    onDeleteNode: (nodeID: string) => setDraft((state) => removeOrchestrationNode(state, nodeID)),
+    onScheduleChange,
+    onAddNode,
+    onSelectNode,
+    onMoveNode,
+    onConnectNodes,
+    onDeleteEdge,
+    onDuplicateNode,
+    onUpdateNode,
+    onDeleteNode,
   };
+}
+
+function useOrchestrationScheduleChangeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((patch: Partial<WorkflowCanvasDraft['schedule']>) => {
+    setDraft((state) => ({ ...state, schedule: { ...state.schedule, ...patch } }));
+  }, [setDraft]);
+}
+
+function useOrchestrationAddNodeAction(options: OrchestrationAddNodeActionOptions) {
+  const { locale, toolNames, setDraft } = options;
+  return useCallback((type: WorkflowNodeType, position: WorkflowCanvasPosition) => {
+    setDraft((state) => addOrchestrationNode(state, {
+      type,
+      position,
+      source: buildDefaultOrchestrationNodeSource({
+        draft: state,
+        type,
+        toolNames,
+        locale,
+      }),
+    }));
+  }, [locale, setDraft, toolNames]);
+}
+
+function useOrchestrationSelectNodeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((nodeID?: string) => {
+    setDraft((state) => ({ ...state, selectedNodeId: nodeID }));
+  }, [setDraft]);
+}
+
+function useOrchestrationMoveNodeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((nodeID: string, position: WorkflowCanvasPosition) => {
+    setDraft((state) => moveOrchestrationNode(state, nodeID, position));
+  }, [setDraft]);
+}
+
+function useOrchestrationConnectNodesAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((sourceNodeID: string, targetNodeID: string) => {
+    setDraft((state) => connectOrchestrationDraftNodes(state, sourceNodeID, targetNodeID));
+  }, [setDraft]);
+}
+
+function useOrchestrationDeleteEdgeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((edgeID: string) => {
+    setDraft((state) => removeOrchestrationEdge(state, edgeID));
+  }, [setDraft]);
+}
+
+function useOrchestrationDuplicateNodeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((nodeID: string) => {
+    setDraft((state) => duplicateOrchestrationNode(state, nodeID));
+  }, [setDraft]);
+}
+
+function useOrchestrationUpdateNodeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((node: WorkflowCanvasNodeDraft) => {
+    setDraft((state) => updateOrchestrationNode(state, node));
+  }, [setDraft]);
+}
+
+function useOrchestrationDeleteNodeAction(
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>,
+) {
+  return useCallback((nodeID: string) => {
+    setDraft((state) => removeOrchestrationNode(state, nodeID));
+  }, [setDraft]);
 }
 
 export function useOrchestrationSaveAction(options: OrchestrationSaveActionOptions) {
