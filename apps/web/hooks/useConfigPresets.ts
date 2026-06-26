@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useReducer } from 'react';
+import { useCallback, useEffect, useReducer, type Dispatch } from 'react';
 import {
   activatePreset,
   createPreset,
@@ -49,6 +49,9 @@ type ConfigPresetsAction =
   | { type: 'delete_success'; presetID: string }
   | { type: 'activate_success' }
   | { type: 'mutate_error'; error: string };
+
+type ConfigPresetsCopy = ReturnType<typeof useWebLocale>['copy'];
+type ConfigPresetsDispatch = Dispatch<ConfigPresetsAction>;
 
 export const initialConfigPresetsState: ConfigPresetsState = {
   presets: [],
@@ -124,62 +127,17 @@ export function useConfigPresets(options: UseConfigPresetsOptions): UseConfigPre
   const { copy } = useWebLocale();
   const { open } = options;
   const [state, dispatch] = useReducer(configPresetsReducer, initialConfigPresetsState);
-
-  const refreshPresets = useCallback(async () => {
-    dispatch({ type: 'load_start' });
-    try {
-      const payload = await listPresets();
-      dispatch({ type: 'load_success', presets: payload });
-    } catch (error) {
-      dispatch({ type: 'load_error', error: toErrorMessage(error, copy.system.failedToLoadPresets) });
-    }
-  }, [copy.system.failedToLoadPresets]);
+  const refreshPresets = useRefreshPresets(copy, dispatch);
+  const createPresetEntry = useCreatePresetEntry(copy, dispatch);
+  const updatePresetEntry = useUpdatePresetEntry(copy, dispatch);
+  const deletePresetEntry = useDeletePresetEntry(copy, dispatch);
+  const activatePresetEntry = useActivatePresetEntry(copy, dispatch);
 
   useEffect(() => {
     if (open) {
       ignorePromise(refreshPresets());
     }
   }, [open, refreshPresets]);
-
-  const createPresetEntry = useCallback(async (input: PresetCreateRequest) => {
-    dispatch({ type: 'mutate_start' });
-    try {
-      const preset = await createPreset(input);
-      dispatch({ type: 'create_success', preset });
-    } catch (error) {
-      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToCreatePreset) });
-    }
-  }, [copy.system.failedToCreatePreset]);
-
-  const updatePresetEntry = useCallback(async (id: string, input: PresetUpdateRequest) => {
-    dispatch({ type: 'mutate_start' });
-    try {
-      const preset = await updatePreset(id, input);
-      dispatch({ type: 'update_success', preset });
-    } catch (error) {
-      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToUpdatePreset) });
-    }
-  }, [copy.system.failedToUpdatePreset]);
-
-  const deletePresetEntry = useCallback(async (id: string) => {
-    dispatch({ type: 'mutate_start' });
-    try {
-      await deletePreset(id);
-      dispatch({ type: 'delete_success', presetID: id });
-    } catch (error) {
-      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToDeletePreset) });
-    }
-  }, [copy.system.failedToDeletePreset]);
-
-  const activatePresetEntry = useCallback(async (id: string) => {
-    dispatch({ type: 'mutate_start' });
-    try {
-      await activatePreset(id);
-      dispatch({ type: 'activate_success' });
-    } catch (error) {
-      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToActivatePreset) });
-    }
-  }, [copy.system.failedToActivatePreset]);
 
   return {
     presets: state.presets,
@@ -192,4 +150,64 @@ export function useConfigPresets(options: UseConfigPresetsOptions): UseConfigPre
     deletePresetByID: deletePresetEntry,
     activatePresetByID: activatePresetEntry,
   };
+}
+
+function useRefreshPresets(copy: ConfigPresetsCopy, dispatch: ConfigPresetsDispatch) {
+  return useCallback(async () => {
+    dispatch({ type: 'load_start' });
+    try {
+      const payload = await listPresets();
+      dispatch({ type: 'load_success', presets: payload });
+    } catch (error) {
+      dispatch({ type: 'load_error', error: toErrorMessage(error, copy.system.failedToLoadPresets) });
+    }
+  }, [copy.system.failedToLoadPresets, dispatch]);
+}
+
+function useCreatePresetEntry(copy: ConfigPresetsCopy, dispatch: ConfigPresetsDispatch) {
+  return useCallback(async (input: PresetCreateRequest) => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      const preset = await createPreset(input);
+      dispatch({ type: 'create_success', preset });
+    } catch (error) {
+      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToCreatePreset) });
+    }
+  }, [copy.system.failedToCreatePreset, dispatch]);
+}
+
+function useUpdatePresetEntry(copy: ConfigPresetsCopy, dispatch: ConfigPresetsDispatch) {
+  return useCallback(async (id: string, input: PresetUpdateRequest) => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      const preset = await updatePreset(id, input);
+      dispatch({ type: 'update_success', preset });
+    } catch (error) {
+      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToUpdatePreset) });
+    }
+  }, [copy.system.failedToUpdatePreset, dispatch]);
+}
+
+function useDeletePresetEntry(copy: ConfigPresetsCopy, dispatch: ConfigPresetsDispatch) {
+  return useCallback(async (id: string) => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      await deletePreset(id);
+      dispatch({ type: 'delete_success', presetID: id });
+    } catch (error) {
+      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToDeletePreset) });
+    }
+  }, [copy.system.failedToDeletePreset, dispatch]);
+}
+
+function useActivatePresetEntry(copy: ConfigPresetsCopy, dispatch: ConfigPresetsDispatch) {
+  return useCallback(async (id: string) => {
+    dispatch({ type: 'mutate_start' });
+    try {
+      await activatePreset(id);
+      dispatch({ type: 'activate_success' });
+    } catch (error) {
+      dispatch({ type: 'mutate_error', error: toErrorMessage(error, copy.system.failedToActivatePreset) });
+    }
+  }, [copy.system.failedToActivatePreset, dispatch]);
 }
