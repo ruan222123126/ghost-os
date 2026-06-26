@@ -45,6 +45,8 @@ const SESSION_DETAIL_PAGE_LIMIT = 100;
 const SESSION_FULL_PAGE_LIMIT = 200;
 const UNSUPPORTED_SKILL_MANAGEMENT_TEXT = "电脑端不支持技能管理";
 
+type TaskRunScope = "user" | "orchestration";
+
 interface SendAgentMessageOptions {
   message: string;
   history: MobileConversationMessage[];
@@ -711,15 +713,16 @@ export function useMobileBridge() {
   );
 
   const runTaskNow = useCallback(
-    async (id: string): Promise<boolean> => {
+    async (id: string, scope: TaskRunScope = "user"): Promise<boolean> => {
       if (runningTaskId) {
         return false;
       }
+      const isOrchestration = scope === "orchestration";
       setRunningTaskId(id);
-      setStatus({ tone: "loading", text: "任务启动中" });
+      setStatus({ tone: "loading", text: isOrchestration ? "编排启动中" : "任务启动中" });
       try {
-        await requestBridge<unknown>("TASK_RUN_NOW", { id, scope: "user", start_only: true });
-        setStatus({ tone: "success", text: "任务已启动" });
+        await requestBridge<unknown>("TASK_RUN_NOW", { id, scope, start_only: true });
+        setStatus({ tone: "success", text: isOrchestration ? "编排已启动" : "任务已启动" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });

@@ -29,7 +29,7 @@ describe("MobileOrchestrationSettings", () => {
   });
 
   it("shows orchestration cards with schedule, node counts, and errors", () => {
-    renderOrchestrationSettings({
+    const { container } = renderOrchestrationSettings({
       orchestrations: [
         orchestrationTask({ id: "orchestration-1", last_error: "orchestration failure" }),
         orchestrationTask({ id: "orchestration-2", enabled: false, name: "夜间检查" }),
@@ -39,21 +39,26 @@ describe("MobileOrchestrationSettings", () => {
     expect(screen.getByText("1/2 已启用")).toBeTruthy();
     expect(screen.getAllByText("编排任务")).toHaveLength(2);
     expect(screen.getByText("客服编排")).toBeTruthy();
-    expect(screen.getByText("orchestration-1")).toBeTruthy();
     expect(screen.getAllByText("每 300 秒")).toHaveLength(2);
     expect(screen.getAllByText("分组 1 / Agent 2")).toHaveLength(2);
     expect(screen.getAllByText("连接 2")).toHaveLength(2);
     expect(screen.getByText("orchestration failure")).toBeTruthy();
+    expect(container.textContent).not.toContain("orchestration-1");
+    expect(container.textContent).not.toContain("orchestration-2");
   });
 
-  it("allows toggle and delete only", async () => {
+  it("allows run, toggle, and delete", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const props = propsWith({ orchestrations: [orchestrationTask({ enabled: false })] });
     render(<MobileOrchestrationSettings {...props} />);
 
-    expect(screen.queryByRole("button", { name: "运行" })).toBeNull();
     expect(screen.queryByRole("button", { name: /编辑/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /新增/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "运行" }));
+    await waitFor(() => {
+      expect(props.onRunOrchestrationNow).toHaveBeenCalledWith("orchestration-1");
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "启用" }));
     await waitFor(() => {
@@ -76,8 +81,10 @@ function propsWith(overrides: Partial<MobileOrchestrationSettingsPropsForTest> =
   return {
     loadError: "",
     orchestrations: [],
+    runningTaskId: "",
     onDeleteOrchestration: vi.fn(async () => true),
     onRefreshOrchestrations: vi.fn(async () => true),
+    onRunOrchestrationNow: vi.fn(async () => true),
     onSetOrchestrationEnabled: vi.fn(async () => true),
     ...overrides,
   };
@@ -86,8 +93,10 @@ function propsWith(overrides: Partial<MobileOrchestrationSettingsPropsForTest> =
 interface MobileOrchestrationSettingsPropsForTest {
   loadError: string;
   orchestrations: OrchestrationTaskPayload[] | undefined;
+  runningTaskId: string;
   onDeleteOrchestration: (id: string) => Promise<boolean>;
   onRefreshOrchestrations: () => Promise<boolean>;
+  onRunOrchestrationNow: (id: string) => Promise<boolean>;
   onSetOrchestrationEnabled: (id: string, enabled: boolean) => Promise<boolean>;
 }
 

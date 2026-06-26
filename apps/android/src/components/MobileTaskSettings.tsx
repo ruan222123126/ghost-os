@@ -78,7 +78,7 @@ function TaskCard(props: {
   running: boolean;
   task: TaskPayload;
   onDelete: (task: TaskPayload) => void;
-  onRun: (task: AgentMessageTaskPayload) => void;
+  onRun: (task: TaskPayload) => void;
   onToggle: (task: TaskPayload) => void;
 }) {
   const { busy, running, task } = props;
@@ -90,7 +90,6 @@ function TaskCard(props: {
         <div className="mobile-settings-loop-badges">
           <span>{task.enabled ? "已启用" : "已停用"}</span>
           <span>{taskTypeLabel(task)}</span>
-          <code>{task.id}</code>
         </div>
         <p className="mobile-settings-loop-message">{primaryTaskText(task)}</p>
         <p className="mobile-settings-loop-meta">{formatSchedule(task)}</p>
@@ -105,17 +104,15 @@ function TaskCard(props: {
         {task.last_error ? <p className="mobile-settings-loop-last-error">{task.last_error}</p> : null}
       </div>
       <div className="mobile-settings-loop-actions">
-        {workflowTask ? null : (
-          <button type="button" disabled={busy || running} onClick={() => props.onRun(task)}>
-            <Play className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.7} />
-            {running ? "运行中" : "运行"}
-          </button>
-        )}
+        <button type="button" disabled={busy || running} onClick={() => props.onRun(task)}>
+          <Play className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.7} />
+          {running ? "运行中" : "运行"}
+        </button>
         <button type="button" disabled={busy} onClick={() => props.onToggle(task)}>
           <Power className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.7} />
           {task.enabled ? "停用" : "启用"}
         </button>
-        <button type="button" aria-label={`删除任务 ${task.id}`} disabled={busy} onClick={() => props.onDelete(task)}>
+        <button type="button" aria-label={`删除${taskTypeLabel(task)}`} disabled={busy} onClick={() => props.onDelete(task)}>
           <Trash2 className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.7} />
         </button>
       </div>
@@ -159,7 +156,7 @@ async function deleteTask(
   setError: (error: string) => void,
   onDeleteTask: (id: string) => Promise<boolean>,
 ): Promise<void> {
-  if (!window.confirm(`删除任务 ${task.id}？`)) {
+  if (!window.confirm(`删除${taskTypeLabel(task)}？`)) {
     return;
   }
   await runTaskAction(setBusy, setError, () => onDeleteTask(task.id), "任务删除失败");

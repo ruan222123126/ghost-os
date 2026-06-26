@@ -466,11 +466,12 @@ describe("useMobileBridge", () => {
     });
   });
 
-  it("setOrchestrationEnabled and deleteOrchestration send orchestration-scoped task actions", async () => {
+  it("setOrchestrationEnabled, runTaskNow, and deleteOrchestration send orchestration-scoped task actions", async () => {
     useHTTPSettings();
     const { result } = renderHook(() => useMobileBridge());
 
     await result.current.setOrchestrationEnabled("orchestration-1", false);
+    await result.current.runTaskNow("orchestration-1", "orchestration");
     await result.current.deleteOrchestration("orchestration-1");
 
     expect(lastBridgeBusRequest("TASK_UPDATE")?.params).toEqual({
@@ -478,11 +479,15 @@ describe("useMobileBridge", () => {
       scope: "orchestration",
       enabled: false,
     });
+    expect(lastBridgeBusRequest("TASK_RUN_NOW")?.params).toEqual({
+      id: "orchestration-1",
+      scope: "orchestration",
+      start_only: true,
+    });
     expect(lastBridgeBusRequest("TASK_DELETE")?.params).toEqual({
       id: "orchestration-1",
       scope: "orchestration",
     });
-    expect(bridgeBusRequests().some((request) => request.action === "TASK_RUN_NOW")).toBe(false);
     expect(bridgeBusRequests().some((request) => request.action === "TASK_CREATE")).toBe(false);
   });
 });

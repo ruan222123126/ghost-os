@@ -106,18 +106,12 @@
   gap: 8px;
 }
 
-.mobile-settings-loop-badges span,
-.mobile-settings-loop-badges code {
+.mobile-settings-loop-badges span {
   min-width: 0;
   border-radius: 999px;
   padding: 4px 8px;
-  color: #52525b;
-  background: #ffffff;
   font-size: 12px;
   line-height: 1;
-}
-
-.mobile-settings-loop-badges span {
   flex: 0 0 auto;
   color: #166534;
   background: #dcfce7;
@@ -126,13 +120,6 @@
 .mobile-settings-loop-card:not(.is-enabled) .mobile-settings-loop-badges span {
   color: #52525b;
   background: #e4e4e7;
-}
-
-.mobile-settings-loop-badges code {
-  overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mobile-settings-loop-message {

@@ -38,7 +38,7 @@ interface MobileSettingsPanelProps {
   onRefreshOrchestrations: () => Promise<boolean>;
   onRefreshSkills: () => Promise<boolean>;
   onRefreshTasks: () => Promise<boolean>;
-  onRunTaskNow: (id: string) => Promise<boolean>;
+  onRunTaskNow: (id: string, scope?: "user" | "orchestration") => Promise<boolean>;
   onSettingsChange: Dispatch<SetStateAction<StoredSettings>>;
   onSetTaskEnabled: (id: string, enabled: boolean) => Promise<boolean>;
   onSetOrchestrationEnabled: (id: string, enabled: boolean) => Promise<boolean>;
@@ -217,8 +217,10 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
             <MobileOrchestrationSettings
               loadError={props.orchestrationListError}
               orchestrations={props.orchestrationList}
+              runningTaskId={props.runningTaskId}
               onDeleteOrchestration={props.onDeleteOrchestration}
               onRefreshOrchestrations={props.onRefreshOrchestrations}
+              onRunOrchestrationNow={(id) => props.onRunTaskNow(id, "orchestration")}
               onSetOrchestrationEnabled={props.onSetOrchestrationEnabled}
             />
           ) : (

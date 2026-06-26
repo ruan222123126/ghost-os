@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { Power, RefreshCw, Trash2 } from "lucide-react";
+import { Play, Power, RefreshCw, Trash2 } from "lucide-react";
 import type { OrchestrationTaskPayload } from "../mobileTypes";
 import "./MobileTaskSettings.css";
 
 interface MobileOrchestrationSettingsProps {
   loadError: string;
   orchestrations: OrchestrationTaskPayload[] | undefined;
+  runningTaskId: string;
   onDeleteOrchestration: (id: string) => Promise<boolean>;
   onRefreshOrchestrations: () => Promise<boolean>;
+  onRunOrchestrationNow: (id: string) => Promise<boolean>;
   onSetOrchestrationEnabled: (id: string, enabled: boolean) => Promise<boolean>;
 }
 
@@ -58,8 +60,16 @@ export function MobileOrchestrationSettings(props: MobileOrchestrationSettingsPr
               key={orchestration.id}
               busy={busy}
               orchestration={orchestration}
+              running={props.runningTaskId === orchestration.id}
               onDelete={(target) =>
                 void deleteOrchestration(target, setBusy, setActionError, props.onDeleteOrchestration)}
+              onRun={(target) =>
+                void runOrchestrationAction(
+                  setBusy,
+                  setActionError,
+                  () => props.onRunOrchestrationNow(target.id),
+                  "编排启动失败",
+                )}
               onToggle={(target) =>
                 void runOrchestrationAction(
                   setBusy,
@@ -78,10 +88,12 @@ export function MobileOrchestrationSettings(props: MobileOrchestrationSettingsPr
 function OrchestrationCard(props: {
   busy: boolean;
   orchestration: OrchestrationTaskPayload;
+  running: boolean;
   onDelete: (task: OrchestrationTaskPayload) => void;
+  onRun: (task: OrchestrationTaskPayload) => void;
   onToggle: (task: OrchestrationTaskPayload) => void;
 }) {
-  const { busy, orchestration } = props;
+  const { busy, orchestration, running } = props;
   const nodeCounts = orchestrationNodeCounts(orchestration);
 
   return (
@@ -90,7 +102,6 @@ function OrchestrationCard(props: {
         <div className="mobile-settings-loop-badges">
           <span>{orchestration.enabled ? "已启用" : "已停用"}</span>
           <span>编排任务</span>
-          <code>{orchestration.id}</code>
         </div>
         <p className="mobile-settings-loop-message">{orchestration.name}</p>
         <p className="mobile-settings-loop-meta">{formatSchedule(orchestration)}</p>
@@ -101,6 +112,10 @@ function OrchestrationCard(props: {
         {orchestration.last_error ? <p className="mobile-settings-loop-last-error">{orchestration.last_error}</p> : null}
       </div>
       <div className="mobile-settings-loop-actions">
+        <button type="button" disabled={busy || running} onClick={() => props.onRun(orchestration)}>
+          <Play className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.7} />
+          {running ? "运行中" : "运行"}
+        </button>
         <button type="button" disabled={busy} onClick={() => props.onToggle(orchestration)}>
           <Power className="mobile-settings-icon" aria-hidden={true} strokeWidth={1.7} />
           {orchestration.enabled ? "停用" : "启用"}

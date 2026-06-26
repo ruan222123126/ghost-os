@@ -25,7 +25,7 @@ describe("MobileTaskSettings", () => {
   });
 
   it("shows text, loop, and workflow task cards", () => {
-    renderTaskSettings({
+    const { container } = renderTaskSettings({
       tasks: [
         agentTask({ id: "text-1", agent_mode: "single", message: "普通文本任务" }),
         agentTask({ id: "loop-1", agent_mode: "relay", runtime_overrides: { preset_id: "preset-1" } }),
@@ -42,27 +42,34 @@ describe("MobileTaskSettings", () => {
     expect(screen.getByText("工作流步骤：2")).toBeTruthy();
     expect(screen.getByText("由工作流编辑器管理")).toBeTruthy();
     expect(screen.getByText("workflow failure")).toBeTruthy();
+    expect(container.textContent).not.toContain("text-1");
+    expect(container.textContent).not.toContain("loop-1");
+    expect(container.textContent).not.toContain("workflow-1");
   });
 
-  it("allows workflow tasks to toggle and delete only", async () => {
+  it("allows workflow tasks to run, toggle, and delete", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     const props = propsWith({ tasks: [workflowTask({ id: "workflow-1", enabled: false })] });
     render(<MobileTaskSettings {...props} />);
 
-    expect(screen.queryByRole("button", { name: "运行" })).toBeNull();
     expect(screen.queryByRole("button", { name: /编辑/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "新增任务" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "运行" }));
+    await waitFor(() => {
+      expect(props.onRunTaskNow).toHaveBeenCalledWith("workflow-1");
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "启用" }));
     await waitFor(() => {
       expect(props.onSetTaskEnabled).toHaveBeenCalledWith("workflow-1", true);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "删除任务 workflow-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除工作流任务" }));
     await waitFor(() => {
       expect(props.onDeleteTask).toHaveBeenCalledWith("workflow-1");
     });
-    expect(confirm).toHaveBeenCalledWith("删除任务 workflow-1？");
+    expect(confirm).toHaveBeenCalledWith("删除工作流任务？");
   });
 
   it("allows non-workflow tasks to run, toggle, and delete", async () => {
@@ -80,11 +87,11 @@ describe("MobileTaskSettings", () => {
       expect(props.onSetTaskEnabled).toHaveBeenCalledWith("loop-1", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "删除任务 loop-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "删除循环任务" }));
     await waitFor(() => {
       expect(props.onDeleteTask).toHaveBeenCalledWith("loop-1");
     });
-    expect(confirm).toHaveBeenCalledWith("删除任务 loop-1？");
+    expect(confirm).toHaveBeenCalledWith("删除循环任务？");
   });
 });
 
