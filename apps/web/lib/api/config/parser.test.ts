@@ -92,6 +92,8 @@ describe('lib/api/config/parser', () => {
           name: 'crs',
           type: 'custom',
           base_url: 'https://lldai.online/openai',
+          provider_id: 'provider-crs',
+          updated_at: '2026-06-26T00:00:00Z',
           models: ['gpt-5.4'],
           context_window_tokens: 1000000,
           api_key_set: true,
@@ -121,6 +123,8 @@ describe('lib/api/config/parser', () => {
           name: 'deepseekv4',
           type: 'custom',
           base_url: 'https://api.deepseek.com/v1',
+          provider_id: 'provider-deepseekv4',
+          updated_at: '2026-06-26T00:00:00Z',
           models: ['deepseek-v4-pro'],
           context_window_tokens: 1000000,
           api_key_set: true,
@@ -129,6 +133,50 @@ describe('lib/api/config/parser', () => {
     });
 
     expect(parsed.providers[0].context_window_tokens).toBe(1000000);
+  });
+
+  it('parses provider sync records from provider lists', () => {
+    const parsed = parseProviderListResponse({
+      active_provider: 'crs',
+      providers: [
+        {
+          name: 'crs',
+          type: 'custom',
+          base_url: 'https://lldai.online/openai',
+          provider_id: 'provider-crs',
+          updated_at: '2026-06-26T00:00:00Z',
+          api_key_set: true,
+        },
+      ],
+      provider_sync_records: [
+        {
+          provider_id: 'provider-crs',
+          updated_at: '2026-06-26T00:00:00Z',
+          name: 'crs',
+          type: 'custom',
+          base_url: 'https://lldai.online/openai',
+          models: ['gpt-5.4'],
+          api_key_set: true,
+        },
+      ],
+    });
+
+    expect(parsed.provider_sync_records).toEqual([
+      {
+        provider_id: 'provider-crs',
+        updated_at: '2026-06-26T00:00:00Z',
+        deleted_at: undefined,
+        name: 'crs',
+        type: 'custom',
+        base_url: 'https://lldai.online/openai',
+        models: ['gpt-5.4'],
+        context_window_tokens: undefined,
+        response_reserve_tokens: undefined,
+        model_context_window_tokens: undefined,
+        model_response_reserve_tokens: undefined,
+        api_key_set: true,
+      },
+    ]);
   });
 
   it('parses system prompt payloads and rejects unknown fields', () => {
