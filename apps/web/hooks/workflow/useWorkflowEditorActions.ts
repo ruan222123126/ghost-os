@@ -52,6 +52,9 @@ interface WorkflowEditorSaveActionOptions {
   setAgentNormalizationEnabled: Dispatch<SetStateAction<boolean>>;
 }
 
+type AddWorkflowNodeAction = (type: WorkflowNodeType, position: WorkflowCanvasPosition) => void;
+type SelectWorkflowNodeAction = (nodeID?: string) => void;
+
 export function useWorkflowImportActions(options: WorkflowEditorImportActionOptions) {
   const {
     copy,
@@ -121,6 +124,48 @@ function buildWorkflowScheduleActions(options: WorkflowEditorDraftActionOptions)
 }
 
 function buildWorkflowCreationActions(options: WorkflowEditorDraftActionOptions) {
+  return {
+    onAddNode: buildAddWorkflowNodeAction(options),
+    onSelectNode: buildSelectWorkflowNodeAction(options),
+  };
+}
+
+function buildAddWorkflowNodeAction(options: WorkflowEditorDraftActionOptions): AddWorkflowNodeAction {
+  const {
+    agentRuntimeReady,
+    enabledToolNames,
+    setDraft,
+    setAgentNormalizationEnabled,
+  } = options;
+
+  return (type, position) => {
+    setAgentNormalizationEnabled(true);
+    setDraft((state) => addWorkflowNodeWithGeneratedID({
+      state,
+      type,
+      position,
+      source: buildNewWorkflowNodeSource(type, agentRuntimeReady, enabledToolNames),
+    }));
+  };
+}
+
+function buildNewWorkflowNodeSource(
+  type: WorkflowNodeType,
+  agentRuntimeReady: boolean,
+  enabledToolNames: string[],
+): Partial<WorkflowCanvasNodeDraft> | undefined {
+  if (type !== 'agent' || !agentRuntimeReady) {
+    return undefined;
+  }
+  return {
+    agent: {
+      message: '',
+      runtime_overrides: defaultWorkflowAgentRuntimeOverrides(enabledToolNames),
+    },
+  };
+}
+
+function buildSelectWorkflowNodeAction(options: WorkflowEditorDraftActionOptions): SelectWorkflowNodeAction {
   const {
     draft,
     agentRuntimeReady,
@@ -129,36 +174,18 @@ function buildWorkflowCreationActions(options: WorkflowEditorDraftActionOptions)
     setAgentNormalizationEnabled,
   } = options;
 
-  return {
-    onAddNode: (type: WorkflowNodeType, position: WorkflowCanvasPosition) => {
+  return (nodeID) => {
+    const selectedNode = draft.nodes.find((node) => node.id === nodeID);
+    const shouldNormalize = selectedNode?.type === 'agent';
+    if (shouldNormalize) {
       setAgentNormalizationEnabled(true);
-      setDraft((state) => addWorkflowNodeWithGeneratedID({
-        state,
-        type,
-        position,
-        source: type === 'agent' && agentRuntimeReady
-          ? {
-            agent: {
-              message: '',
-              runtime_overrides: defaultWorkflowAgentRuntimeOverrides(enabledToolNames),
-            },
-          }
-          : undefined,
-      }));
-    },
-    onSelectNode: (nodeID?: string) => {
-      const selectedNode = draft.nodes.find((node) => node.id === nodeID);
-      if (selectedNode?.type === 'agent') {
-        setAgentNormalizationEnabled(true);
-      }
-      setDraft((state) => {
-        const next = { ...state, selectedNodeId: nodeID };
-        if (!agentRuntimeReady || selectedNode?.type !== 'agent') {
-          return next;
-        }
-        return normalizeDraftIfReady(next, agentRuntimeReady, enabledToolNames);
-      });
-    },
+    }
+    setDraft((state) => {
+      const next = { ...state, selectedNodeId: nodeID };
+      return shouldNormalize
+        ? normalizeDraftIfReady(next, agentRuntimeReady, enabledToolNames)
+        : next;
+    });
   };
 }
 
