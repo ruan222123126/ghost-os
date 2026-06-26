@@ -1,40 +1,42 @@
-import type { ChatCopy } from '@/lib/i18n/messages/chat';
-import type { SessionSourceAssignment as SharedSessionSourceAssignment } from '@/lib/types';
-import {
-  UNCLASSIFIED_PARTITION_ID,
-  partitionNameMatches,
-  type SessionSearchMatcher,
-  type SessionPartitionView,
-} from '@/lib/sessionSidebarPartitions';
 import { collectHiddenSessionIDsFromRun } from '@/lib/sessionSidebarSourceHiddenSessions';
-import { compareSessionsByRecentActivity } from '@/lib/sessionSidebarSessionSort';
-import type { SessionMetadata, TaskRunLog } from '@/lib/types';
+import {
+  SOURCE_CHILD_PARTITION_SEPARATOR,
+  SOURCE_ORDER,
+  SOURCE_PARTITION_IDS,
+  SOURCE_PRIORITY,
+  type CollectSessionSourceAssignmentsOptions,
+  type SessionSourceAssignments,
+  type SessionSourceKind,
+  type SessionSourceOwner,
+  type SessionSourceResolution,
+} from '@/lib/sessionSidebarSourceTypes';
+import type {
+  SessionSourceAssignment as SharedSessionSourceAssignment,
+  TaskRunLog,
+} from '@/lib/types';
 
-export type SessionSourceKind = 'workflow' | 'orchestration' | 'loop' | 'task';
-export interface SessionSourceAssignment {
-  kind: SessionSourceKind;
-  ownerID: string;
-  ownerName: string;
+export { mergeSessionSourcePartitionViews } from '@/lib/sessionSidebarSourcePartitionViews';
+export { SOURCE_PARTITION_IDS } from '@/lib/sessionSidebarSourceTypes';
+export type {
+  CollectSessionSourceAssignmentsOptions,
+  SessionSourceAssignment,
+  SessionSourceAssignments,
+  SessionSourceKind,
+  SessionSourceResolution,
+} from '@/lib/sessionSidebarSourceTypes';
+
+interface SessionSourceCandidate {
+  sessionID: string;
+  source: SessionSourceKind;
+  owner: SessionSourceOwner;
 }
 
-export type SessionSourceAssignments = Record<string, SessionSourceAssignment>;
-
-export interface SessionSourceResolution {
+interface SessionSourceCollectionContext {
   assignments: SessionSourceAssignments;
-  hiddenSessionIDs: string[];
+  hiddenSessionIDs: Set<string>;
+  loopTaskIDs: ReadonlySet<string>;
+  sourceNamesByID: Record<string, string>;
 }
-
-export interface CollectSessionSourceAssignmentsOptions {
-  sourceNamesByID?: Record<string, string>;
-  loopTaskIDs?: string[];
-}
-
-export const SOURCE_PARTITION_IDS: Record<SessionSourceKind, string> = {
-  workflow: '__source_workflow__',
-  orchestration: '__source_orchestration__',
-  loop: '__source_loop__',
-  task: '__source_task__',
-};
 
 export function sessionSourceAssignmentsFromPayload(
   assignments: Record<string, SharedSessionSourceAssignment>,
@@ -49,15 +51,6 @@ export function sessionSourceAssignmentsFromPayload(
   }
   return normalized;
 }
-
-const SOURCE_CHILD_PARTITION_SEPARATOR = '::';
-const SOURCE_ORDER: readonly SessionSourceKind[] = ['workflow', 'orchestration', 'loop', 'task'];
-const SOURCE_PRIORITY: Record<SessionSourceKind, number> = {
-  workflow: 4,
-  orchestration: 3,
-  loop: 2,
-  task: 1,
-};
 
 export function isSystemSessionPartitionID(partitionID: string): boolean {
   const id = partitionID.trim();
@@ -80,19 +73,14 @@ export function collectSessionSourceResolution(
 ): SessionSourceResolution {
   const assignments: SessionSourceAssignments = {};
   const hiddenSessionIDs = new Set<string>();
-  const loopTaskIDs = new Set(options.loopTaskIDs ?? []);
+  const context = {
+    assignments,
+    hiddenSessionIDs,
+    loopTaskIDs: new Set(options.loopTaskIDs ?? []),
+    sourceNamesByID: options.sourceNamesByID ?? {},
+  };
   for (const run of runs) {
-    const source = sourceKindFromRun(run, loopTaskIDs);
-    if (!source) {
-      continue;
-    }
-    const owner = sourceOwnerFromRun(run, options.sourceNamesByID ?? {});
-    for (const sessionID of sessionIDsFromRun(run)) {
-      assignSessionSource(assignments, sessionID, source, owner);
-    }
-    for (const sessionID of collectHiddenSessionIDsFromRun(run, source)) {
-      addSessionID(hiddenSessionIDs, sessionID);
-    }
+    collectSessionSourceRun(run, context);
   }
   return {
     assignments,
@@ -100,132 +88,21 @@ export function collectSessionSourceResolution(
   };
 }
 
-export function mergeSessionSourcePartitionViews(input: {
-  manualViews: SessionPartitionView[];
-  sessions: SessionMetadata[];
-  sourceAssignments: SessionSourceAssignments;
-  hiddenSessionIDs?: string[];
-  searchQuery: string;
-  copy: ChatCopy;
-  matchesSearch?: SessionSearchMatcher;
-}): SessionPartitionView[] {
-  const sourceSessionIDs = new Set(Object.keys(input.sourceAssignments));
-  const hiddenSessionIDs = new Set(input.hiddenSessionIDs ?? []);
-  const hideEmptyManual = input.searchQuery.trim().length > 0;
-  const manualViews = input.manualViews
-    .map((view) => ({
-      ...view,
-      sessions: view.sessions.filter((session) => {
-        return !sourceSessionIDs.has(session.id) && !hiddenSessionIDs.has(session.id);
-      }),
-    }))
-    .filter((view) => !hideEmptyManual || view.sessions.length > 0);
-  const unclassifiedView = manualViews.find((view) => view.id === UNCLASSIFIED_PARTITION_ID);
-  const customViews = manualViews.filter((view) => view.id !== UNCLASSIFIED_PARTITION_ID);
-
-  return [
-    ...(unclassifiedView ? [unclassifiedView] : []),
-    ...buildSystemViews(input),
-    ...customViews,
-  ];
-}
-
-function buildSystemViews(input: {
-  sessions: SessionMetadata[];
-  sourceAssignments: SessionSourceAssignments;
-  searchQuery: string;
-  copy: ChatCopy;
-  matchesSearch?: SessionSearchMatcher;
-}): SessionPartitionView[] {
-  const query = input.searchQuery.trim().toLowerCase();
-  const matchesSearch = input.matchesSearch ?? defaultSessionSearchMatcher;
-  return SOURCE_ORDER
-    .map((kind) => buildSystemView(input, kind, query, matchesSearch))
-    .filter((view) => view.sessions.length > 0);
-}
-
-function buildSystemView(
-  input: {
-    sessions: SessionMetadata[];
-    sourceAssignments: SessionSourceAssignments;
-    copy: ChatCopy;
-  },
-  kind: SessionSourceKind,
-  query: string,
-  matchesSearch: SessionSearchMatcher,
-): SessionPartitionView {
-  const name = systemPartitionName(kind, input.copy);
-  const parentMatches = partitionNameMatches(name, query);
-  const childPartitions = buildSystemChildPartitions({
-    kind,
-    sessions: input.sessions,
-    assignments: input.sourceAssignments,
-    query,
-    parentMatches,
-    matchesSearch,
-  });
-  const sessions = sortSystemSessions(childPartitions.flatMap((partition) => partition.sessions));
-  return {
-    id: SOURCE_PARTITION_IDS[kind],
-    name,
-    readOnly: true,
-    sessions,
-    childPartitions,
-  };
-}
-
-function buildSystemChildPartitions(input: {
-  kind: SessionSourceKind;
-  sessions: SessionMetadata[];
-  assignments: SessionSourceAssignments;
-  query: string;
-  parentMatches: boolean;
-  matchesSearch: SessionSearchMatcher;
-}): SessionPartitionView[] {
-  const groups = new Map<string, { name: string; sessions: SessionMetadata[] }>();
-  for (const session of input.sessions) {
-    const assignment = input.assignments[session.id];
-    if (!assignment || assignment.kind !== input.kind) {
-      continue;
-    }
-    const ownerID = assignment.ownerID.trim() || input.kind;
-    const group = groups.get(ownerID) ?? { name: assignment.ownerName.trim() || ownerID, sessions: [] };
-    group.sessions.push(session);
-    groups.set(ownerID, group);
+function collectSessionSourceRun(
+  run: TaskRunLog,
+  context: SessionSourceCollectionContext,
+): void {
+  const source = sourceKindFromRun(run, context.loopTaskIDs);
+  if (!source) {
+    return;
   }
-
-  return [...groups.entries()]
-    .map(([ownerID, group]) => {
-      const childMatches = partitionNameMatches(group.name, input.query);
-      const sessions = sortSystemSessions(group.sessions.filter((session) => {
-        return input.parentMatches || childMatches || input.matchesSearch(session, input.query);
-      }));
-      return {
-        id: sourceChildPartitionID(input.kind, ownerID),
-        name: group.name,
-        readOnly: true,
-        sessions,
-      };
-    })
-    .filter((partition) => partition.sessions.length > 0);
-}
-
-function sortSystemSessions(sessions: SessionMetadata[]): SessionMetadata[] {
-  return sessions
-    .sort(compareSessionsByRecentActivity);
-}
-
-function systemPartitionName(kind: SessionSourceKind, copy: ChatCopy): string {
-  if (kind === 'workflow') {
-    return copy.sidebarPartitionWorkflow;
+  const owner = sourceOwnerFromRun(run, context.sourceNamesByID);
+  for (const sessionID of sessionIDsFromRun(run)) {
+    assignSessionSource(context.assignments, { sessionID, source, owner });
   }
-  if (kind === 'orchestration') {
-    return copy.sidebarPartitionOrchestration;
+  for (const sessionID of collectHiddenSessionIDsFromRun(run, source)) {
+    addSessionID(context.hiddenSessionIDs, sessionID);
   }
-  if (kind === 'loop') {
-    return copy.sidebarPartitionLoop;
-  }
-  return copy.sidebarPartitionTask;
 }
 
 function sourceKindFromRun(
@@ -244,7 +121,7 @@ function sourceKindFromRun(
 function sourceOwnerFromRun(
   run: TaskRunLog,
   sourceNamesByID: Record<string, string>,
-): { id: string; name: string } {
+): SessionSourceOwner {
   const id = run.task_id.trim();
   const name = sourceNamesByID[id]?.trim() ?? '';
   return {
@@ -261,26 +138,20 @@ function sessionIDsFromRun(run: TaskRunLog): string[] {
 
 function assignSessionSource(
   assignments: SessionSourceAssignments,
-  sessionID: string,
-  source: SessionSourceKind,
-  owner: { id: string; name: string },
+  candidate: SessionSourceCandidate,
 ): void {
-  const id = sessionID.trim();
+  const id = candidate.sessionID.trim();
   if (!id) {
     return;
   }
   const existing = assignments[id];
-  if (!existing || SOURCE_PRIORITY[source] > SOURCE_PRIORITY[existing.kind]) {
+  if (!existing || SOURCE_PRIORITY[candidate.source] > SOURCE_PRIORITY[existing.kind]) {
     assignments[id] = {
-      kind: source,
-      ownerID: owner.id,
-      ownerName: owner.name,
+      kind: candidate.source,
+      ownerID: candidate.owner.id,
+      ownerName: candidate.owner.name,
     };
   }
-}
-
-function sourceChildPartitionID(kind: SessionSourceKind, ownerID: string): string {
-  return `${SOURCE_PARTITION_IDS[kind]}${SOURCE_CHILD_PARTITION_SEPARATOR}${encodeURIComponent(ownerID)}`;
 }
 
 function addSessionID(ids: Set<string>, value: unknown): void {
@@ -291,11 +162,4 @@ function addSessionID(ids: Set<string>, value: unknown): void {
   if (id) {
     ids.add(id);
   }
-}
-
-function defaultSessionSearchMatcher(
-  session: SessionMetadata,
-  normalizedQuery: string,
-): boolean {
-  return !normalizedQuery || session.id.toLowerCase().includes(normalizedQuery);
 }

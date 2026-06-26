@@ -1,4 +1,4 @@
-import type { SessionSourceKind } from '@/lib/sessionSidebarSessionSources';
+import type { SessionSourceKind } from '@/lib/sessionSidebarSourceTypes';
 import type { TaskRunLog } from '@/lib/types';
 
 export function collectHiddenSessionIDsFromRun(
