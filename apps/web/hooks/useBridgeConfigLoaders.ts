@@ -23,74 +23,82 @@ interface UseBridgeConfigLoadersResult {
   loadProviders: (silent?: boolean) => Promise<void>;
 }
 
+interface MountedResourceLoaderOptions<T> {
+  fallbackMessage: string;
+  load: () => Promise<T>;
+  mountedRef: MutableRefObject<boolean>;
+  setError: (error: string) => void;
+  setLoading: (loading: boolean) => void;
+  silent: boolean;
+  store: (value: T) => void;
+}
+
 export function useBridgeConfigLoaders(
   options: UseBridgeConfigLoadersOptions,
 ): UseBridgeConfigLoadersResult {
+  const loadConfig = useConfigLoader(options);
+  const loadProviders = useProvidersLoader(options);
+
+  useInitialBridgeConfigLoad(options.mountedRef, loadConfig, loadProviders);
+  useAutoRefreshBridgeConfig(options.autoRefresh, loadConfig, loadProviders);
+
+  return {
+    loadConfig,
+    loadProviders,
+  };
+}
+
+function useConfigLoader(
+  options: UseBridgeConfigLoadersOptions,
+): UseBridgeConfigLoadersResult['loadConfig'] {
   const {
-    autoRefresh,
     mountedRef,
     loadConfigFallbackMessage,
-    loadProvidersFallbackMessage,
     setConfig,
-    setProviders,
     setConfigLoading,
-    setModelOptionsLoading,
     setConfigLoadError,
+  } = options;
+
+  return useCallback(async (silent = false): Promise<void> => {
+    await loadMountedResource({
+      fallbackMessage: loadConfigFallbackMessage,
+      load: getConfig,
+      mountedRef,
+      setError: setConfigLoadError,
+      setLoading: setConfigLoading,
+      silent,
+      store: setConfig,
+    });
+  }, [
+    loadConfigFallbackMessage,
+    mountedRef,
+    setConfig,
+    setConfigLoadError,
+    setConfigLoading,
+  ]);
+}
+
+function useProvidersLoader(
+  options: UseBridgeConfigLoadersOptions,
+): UseBridgeConfigLoadersResult['loadProviders'] {
+  const {
+    mountedRef,
+    loadProvidersFallbackMessage,
+    setProviders,
+    setModelOptionsLoading,
     setProviderLoadError,
   } = options;
 
-  const loadConfig = useCallback(async (silent = false): Promise<void> => {
-    if (!silent) {
-      setConfigLoading(true);
-    }
-
-    try {
-      const loaded = await getConfig();
-      if (!mountedRef.current) {
-        return;
-      }
-      setConfig(loaded);
-      setConfigLoadError('');
-    } catch (error) {
-      if (!mountedRef.current || silent) {
-        return;
-      }
-      setConfigLoadError(toErrorMessage(error, loadConfigFallbackMessage));
-    } finally {
-      if (mountedRef.current && !silent) {
-        setConfigLoading(false);
-      }
-    }
-  }, [
-    loadConfigFallbackMessage,
-    mountedRef,
-    setConfig,
-    setConfigLoadError,
-    setConfigLoading,
-  ]);
-
-  const loadProviders = useCallback(async (silent = false): Promise<void> => {
-    if (!silent) {
-      setModelOptionsLoading(true);
-    }
-
-    try {
-      const loaded = await getProviders();
-      if (!mountedRef.current) {
-        return;
-      }
-      setProviders(loaded.providers);
-      setProviderLoadError('');
-    } catch (error) {
-      if (!mountedRef.current || silent) {
-        return;
-      }
-      setProviderLoadError(toErrorMessage(error, loadProvidersFallbackMessage));
-    } finally {
-      if (mountedRef.current && !silent) {
-        setModelOptionsLoading(false);
-      }
-    }
+  return useCallback(async (silent = false): Promise<void> => {
+    await loadMountedResource({
+      fallbackMessage: loadProvidersFallbackMessage,
+      load: getProviders,
+      mountedRef,
+      setError: setProviderLoadError,
+      setLoading: setModelOptionsLoading,
+      silent,
+      store: (loaded) => setProviders(loaded.providers),
+    });
   }, [
     loadProvidersFallbackMessage,
     mountedRef,
@@ -98,27 +106,37 @@ export function useBridgeConfigLoaders(
     setProviderLoadError,
     setProviders,
   ]);
+}
 
+function useInitialBridgeConfigLoad(
+  mountedRef: MutableRefObject<boolean>,
+  loadConfig: UseBridgeConfigLoadersResult['loadConfig'],
+  loadProviders: UseBridgeConfigLoadersResult['loadProviders'],
+): void {
   useEffect(() => {
     mountedRef.current = true;
-    ignorePromise(Promise.all([loadConfig(), loadProviders()]));
+    ignorePromise(loadBridgeConfigResources(loadConfig, loadProviders));
     return () => {
       mountedRef.current = false;
     };
   }, [loadConfig, loadProviders, mountedRef]);
+}
 
+function useAutoRefreshBridgeConfig(
+  autoRefresh: boolean,
+  loadConfig: UseBridgeConfigLoadersResult['loadConfig'],
+  loadProviders: UseBridgeConfigLoadersResult['loadProviders'],
+): void {
   useEffect(() => {
     if (!autoRefresh) {
       return;
     }
 
     const refresh = () => {
-      ignorePromise(Promise.all([loadConfig(true), loadProviders(true)]));
+      ignorePromise(loadBridgeConfigResources(loadConfig, loadProviders, true));
     };
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refresh();
-      }
+      refreshWhenVisible(refresh);
     };
 
     window.addEventListener('focus', refresh);
@@ -129,9 +147,44 @@ export function useBridgeConfigLoaders(
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [autoRefresh, loadConfig, loadProviders]);
+}
 
-  return {
-    loadConfig,
-    loadProviders,
-  };
+function loadBridgeConfigResources(
+  loadConfig: UseBridgeConfigLoadersResult['loadConfig'],
+  loadProviders: UseBridgeConfigLoadersResult['loadProviders'],
+  silent = false,
+): Promise<void[]> {
+  return Promise.all([loadConfig(silent), loadProviders(silent)]);
+}
+
+function refreshWhenVisible(refresh: () => void): void {
+  if (document.visibilityState === 'visible') {
+    refresh();
+  }
+}
+
+async function loadMountedResource<T>(options: MountedResourceLoaderOptions<T>): Promise<void> {
+  const { fallbackMessage, load, mountedRef, setError, setLoading, silent, store } = options;
+
+  if (!silent) {
+    setLoading(true);
+  }
+
+  try {
+    const loaded = await load();
+    if (!mountedRef.current) {
+      return;
+    }
+    store(loaded);
+    setError('');
+  } catch (error) {
+    if (!mountedRef.current || silent) {
+      return;
+    }
+    setError(toErrorMessage(error, fallbackMessage));
+  } finally {
+    if (mountedRef.current && !silent) {
+      setLoading(false);
+    }
+  }
 }
