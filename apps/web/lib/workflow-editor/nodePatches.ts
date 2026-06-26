@@ -10,6 +10,7 @@ const EMPTY_SYSTEM_PROMPT = '';
 const EMPTY_TOOL_NAME = '';
 const DEFAULT_GROUP_SPEAKING_MODE = 'sequential' as const;
 const DEFAULT_GROUP_MAX_ROUNDS = DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS;
+type WorkflowGroupDraft = NonNullable<WorkflowCanvasNodeDraft['group']>;
 
 export function withLLMPrompt(node: WorkflowCanvasNodeDraft, prompt: string): WorkflowCanvasNodeDraft {
   return { ...node, llm: { prompt, system_prompt: node.llm?.system_prompt ?? EMPTY_SYSTEM_PROMPT } };
@@ -57,18 +58,27 @@ export function withAgentRuntimeOverrides(
 
 export function withGroupNode(
   node: WorkflowCanvasNodeDraft,
-  patch: Partial<NonNullable<WorkflowCanvasNodeDraft['group']>>,
+  patch: Partial<WorkflowGroupDraft>,
 ): WorkflowCanvasNodeDraft {
+  const group = node.group;
   return {
     ...node,
     group: {
-      title: patch.title ?? node.group?.title ?? '',
-      shared_context: patch.shared_context ?? node.group?.shared_context ?? '',
-      speaking_mode: patch.speaking_mode ?? node.group?.speaking_mode ?? DEFAULT_GROUP_SPEAKING_MODE,
-      owner_agent_id: patch.owner_agent_id ?? node.group?.owner_agent_id ?? '',
-      max_rounds: patch.max_rounds ?? node.group?.max_rounds ?? DEFAULT_GROUP_MAX_ROUNDS,
+      title: groupFieldValue(patch.title, group?.title, ''),
+      shared_context: groupFieldValue(patch.shared_context, group?.shared_context, ''),
+      speaking_mode: groupFieldValue(
+        patch.speaking_mode,
+        group?.speaking_mode,
+        DEFAULT_GROUP_SPEAKING_MODE,
+      ),
+      owner_agent_id: groupFieldValue(patch.owner_agent_id, group?.owner_agent_id, ''),
+      max_rounds: groupFieldValue(patch.max_rounds, group?.max_rounds, DEFAULT_GROUP_MAX_ROUNDS),
     },
   };
+}
+
+function groupFieldValue<T>(patchValue: T | undefined, currentValue: T | undefined, defaultValue: T): T {
+  return patchValue ?? currentValue ?? defaultValue;
 }
 
 export function withToolName(node: WorkflowCanvasNodeDraft, toolName: string): WorkflowCanvasNodeDraft {

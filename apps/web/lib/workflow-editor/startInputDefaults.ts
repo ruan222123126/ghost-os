@@ -8,32 +8,50 @@ export type StartInputDefaultErrorCode =
   | 'START_INPUT_DEFAULT_ARRAY';
 const NUMBER_INPUT_TEXT_PATTERN = /^-?(?:\d+)?(?:\.\d*)?$/;
 
-export function parseStartInputDefault(inputType: WorkflowInputType, rawValue: string): unknown {
-  if (inputType === 'string') {
-    return rawValue;
-  }
-  if (inputType === 'number') {
-    const trimmed = rawValue.trim();
-    if (trimmed.length === 0) {
-      throw new StartInputDefaultError('START_INPUT_DEFAULT_NUMBER');
-    }
-    const parsedNumber = Number(trimmed);
-    if (!Number.isFinite(parsedNumber)) {
-      throw new StartInputDefaultError('START_INPUT_DEFAULT_NUMBER');
-    }
-    return parsedNumber;
-  }
-  if (inputType === 'boolean') {
-    return rawValue === 'true';
-  }
+type StartInputDefaultParser = (rawValue: string) => unknown;
 
-  const parsedJSON = parseJSONInput(rawValue);
-  if (inputType === 'object') {
-    if (!parsedJSON || typeof parsedJSON !== 'object' || Array.isArray(parsedJSON)) {
-      throw new StartInputDefaultError('START_INPUT_DEFAULT_OBJECT');
-    }
-    return parsedJSON;
+const START_INPUT_DEFAULT_PARSERS = {
+  string: parseStringInputDefault,
+  number: parseNumberInputDefault,
+  boolean: parseBooleanInputDefault,
+  object: parseObjectInputDefault,
+  array: parseArrayInputDefault,
+} satisfies Record<WorkflowInputType, StartInputDefaultParser>;
+
+export function parseStartInputDefault(inputType: WorkflowInputType, rawValue: string): unknown {
+  return START_INPUT_DEFAULT_PARSERS[inputType](rawValue);
+}
+
+function parseStringInputDefault(rawValue: string): string {
+  return rawValue;
+}
+
+function parseNumberInputDefault(rawValue: string): number {
+  const trimmed = rawValue.trim();
+  if (trimmed.length === 0) {
+    throw new StartInputDefaultError('START_INPUT_DEFAULT_NUMBER');
   }
+  const parsedNumber = Number(trimmed);
+  if (!Number.isFinite(parsedNumber)) {
+    throw new StartInputDefaultError('START_INPUT_DEFAULT_NUMBER');
+  }
+  return parsedNumber;
+}
+
+function parseBooleanInputDefault(rawValue: string): boolean {
+  return rawValue === 'true';
+}
+
+function parseObjectInputDefault(rawValue: string): unknown {
+  const parsedJSON = parseJSONInput(rawValue);
+  if (!parsedJSON || typeof parsedJSON !== 'object' || Array.isArray(parsedJSON)) {
+    throw new StartInputDefaultError('START_INPUT_DEFAULT_OBJECT');
+  }
+  return parsedJSON;
+}
+
+function parseArrayInputDefault(rawValue: string): unknown[] {
+  const parsedJSON = parseJSONInput(rawValue);
   if (!Array.isArray(parsedJSON)) {
     throw new StartInputDefaultError('START_INPUT_DEFAULT_ARRAY');
   }

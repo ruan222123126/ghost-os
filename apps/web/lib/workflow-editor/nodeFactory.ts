@@ -14,6 +14,24 @@ import {
 const NEW_NODE_X_GAP = 260;
 const NEW_NODE_Y = 250;
 
+type NodePayloadFactory = (
+  source: Partial<WorkflowCanvasNodeDraft> | undefined,
+) => Pick<
+  WorkflowCanvasNodeDraft,
+  'start' | 'tool' | 'llm' | 'agent' | 'group' | 'if' | 'loop'
+>;
+
+const NODE_PAYLOAD_FACTORIES = {
+  start: (source) => ({ start: source?.start ?? { inputs: [] } }),
+  end: () => ({}),
+  tool: (source) => ({ tool: source?.tool ?? { tool_name: '', arguments: {} } }),
+  llm: (source) => ({ llm: source?.llm ?? { prompt: '', system_prompt: '' } }),
+  agent: (source) => ({ agent: source?.agent ?? { message: '', title: '' } }),
+  group: (source) => ({ group: source?.group ?? buildDefaultGroupConfig() }),
+  if: (source) => ({ if: source?.if ?? buildDefaultIfConfig() }),
+  loop: (source) => ({ loop: source?.loop ?? buildDefaultLoopConfig() }),
+} satisfies Record<WorkflowNodeType, NodePayloadFactory>;
+
 export interface CreateDraftNodeInput {
   id: string;
   type: WorkflowNodeType;
@@ -36,26 +54,16 @@ export function createDraftNode(input: CreateDraftNodeInput): WorkflowCanvasNode
     type,
     position: source?.position ?? createDefaultNodePosition(index),
     ui: buildNodeUI(source?.ui),
-    start: type === 'start' ? source?.start ?? { inputs: [] } : undefined,
-    tool: type === 'tool' ? source?.tool ?? { tool_name: '', arguments: {} } : undefined,
-    llm: type === 'llm' ? source?.llm ?? { prompt: '', system_prompt: '' } : undefined,
-    agent: type === 'agent' ? source?.agent ?? { message: '', title: '' } : undefined,
-    group: type === 'group'
-      ? source?.group ?? {
-        title: '',
-        shared_context: '',
-        speaking_mode: 'sequential',
-        max_rounds: DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
-      }
-      : undefined,
-    if: type === 'if' ? source?.if ?? buildDefaultIfConfig() : undefined,
-    loop: type === 'loop'
-      ? source?.loop ?? {
-        role: LOOP_ROLE_START,
-        loop_id: '',
-        max_iterations: DEFAULT_LOOP_MAX_ITERATIONS,
-      }
-      : undefined,
+    ...NODE_PAYLOAD_FACTORIES[type](source),
+  };
+}
+
+function buildDefaultGroupConfig(): NonNullable<WorkflowCanvasNodeDraft['group']> {
+  return {
+    title: '',
+    shared_context: '',
+    speaking_mode: 'sequential',
+    max_rounds: DEFAULT_ORCHESTRATION_GROUP_MAX_ROUNDS,
   };
 }
 
@@ -66,6 +74,14 @@ function buildDefaultIfConfig(): NonNullable<WorkflowCanvasNodeDraft['if']> {
     value: '',
     true_node_id: '',
     false_node_id: '',
+  };
+}
+
+function buildDefaultLoopConfig(): NonNullable<WorkflowCanvasNodeDraft['loop']> {
+  return {
+    role: LOOP_ROLE_START,
+    loop_id: '',
+    max_iterations: DEFAULT_LOOP_MAX_ITERATIONS,
   };
 }
 
