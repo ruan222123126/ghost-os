@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { FormEvent, RefObject } from "react";
+import type { CSSProperties, FormEvent, RefObject } from "react";
 import { COMPOSER_MENU_OPTIONS } from "./data";
 import { IconButton, UiIcon } from "./icons";
 import "./ChatComposer.css";
@@ -19,6 +19,10 @@ const COMPOSER_TEXTAREA_COLLAPSED_HEIGHT_PX = 52;
 const COMPOSER_TEXTAREA_MAX_HEIGHT_PX = 200;
 const TEXTAREA_SCROLL_HEIGHT_EPSILON_PX = 1;
 
+type ComposerDockStyle = CSSProperties & {
+  "--composer-keyboard-inset": string;
+};
+
 export function ChatComposer(props: ChatComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lineMeasureRef = useRef<HTMLTextAreaElement>(null);
@@ -30,6 +34,10 @@ export function ChatComposer(props: ChatComposerProps) {
   const showAction = hasValue || showStop;
   const wrapsPastSingleLine = useSingleLineOverflow(lineMeasureRef, props.value);
   const isMultiLine = props.value.includes("\n") || wrapsPastSingleLine;
+  const keyboardInset = useKeyboardInset(focused);
+  const dockStyle: ComposerDockStyle = {
+    "--composer-keyboard-inset": `${keyboardInset}px`,
+  };
 
   useAutosizeTextarea(textareaRef, props.value, isMultiLine);
   useCloseComposerMenu(composerRef, menuOpen, setMenuOpen);
@@ -60,7 +68,7 @@ export function ChatComposer(props: ChatComposerProps) {
   }
 
   return (
-    <form ref={composerRef} className="composer-dock" onSubmit={(event) => void handleSubmit(event)}>
+    <form ref={composerRef} className="composer-dock" style={dockStyle} onSubmit={(event) => void handleSubmit(event)}>
       {menuOpen ? (
         <div className="composer-attachment-menu" role="menu" aria-label="添加内容">
           {COMPOSER_MENU_OPTIONS.map((option) => (
@@ -135,6 +143,53 @@ export function ChatComposer(props: ChatComposerProps) {
       </div>
     </form>
   );
+}
+
+function useKeyboardInset(active: boolean) {
+  const [inset, setInset] = useState(0);
+
+  useLayoutEffect(() => {
+    if (!active) {
+      setInset(0);
+      return;
+    }
+
+    const visualViewport = window.visualViewport;
+    if (!visualViewport) {
+      return;
+    }
+    const viewport: VisualViewport = visualViewport;
+
+    let animationFrame: number | undefined;
+
+    function updateInset(): void {
+      if (animationFrame !== undefined) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+
+      animationFrame = window.requestAnimationFrame(() => {
+        animationFrame = undefined;
+        const nextInset = Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop));
+        setInset((current) => (current === nextInset ? current : nextInset));
+      });
+    }
+
+    updateInset();
+    viewport.addEventListener("resize", updateInset);
+    viewport.addEventListener("scroll", updateInset);
+    window.addEventListener("orientationchange", updateInset);
+
+    return () => {
+      if (animationFrame !== undefined) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      viewport.removeEventListener("resize", updateInset);
+      viewport.removeEventListener("scroll", updateInset);
+      window.removeEventListener("orientationchange", updateInset);
+    };
+  }, [active]);
+
+  return inset;
 }
 
 function useCloseComposerMenu(

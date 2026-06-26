@@ -1,7 +1,7 @@
 .composer-dock {
   position: fixed;
   right: 0;
-  bottom: 0;
+  bottom: var(--composer-keyboard-inset, 0px);
   left: 0;
   z-index: 10;
   padding: 16px 16px max(22px, env(safe-area-inset-bottom));
