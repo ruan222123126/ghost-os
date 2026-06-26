@@ -148,8 +148,8 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         <button
           type="button"
           onClick={createNewChat}
-          className={`group flex items-center justify-center gap-2 overflow-hidden bg-transparent text-black transition-colors hover:bg-white ${
-            sidebarState.isOpen ? 'w-full px-4 py-3' : `mx-auto ${iconButtonClassName}`
+          className={`group flex items-center justify-center overflow-hidden bg-transparent text-black transition-colors hover:bg-white ${
+            sidebarState.isOpen ? 'w-full gap-2 px-4 py-3' : `mx-auto gap-0 ${iconButtonClassName}`
           }`}
         >
           <span className="grid flex-shrink-0 place-items-center">

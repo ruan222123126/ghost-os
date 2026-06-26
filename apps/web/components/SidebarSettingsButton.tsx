@@ -37,8 +37,8 @@ function ButtonContent(props: SidebarSettingsButtonProps) {
       <button
         type="button"
         onClick={handleClick}
-        className={`group flex items-center justify-center gap-2 overflow-hidden bg-white text-black transition-colors hover:bg-black hover:text-white ${
-          collapsed ? 'mx-auto h-10 w-10' : 'w-full px-4 py-3'
+        className={`group flex items-center justify-center overflow-hidden bg-white text-black transition-colors hover:bg-black hover:text-white ${
+          collapsed ? 'mx-auto h-10 w-10 gap-0 p-0' : 'w-full gap-2 px-4 py-3'
         }`}
         aria-label={copy.chat.sidebarOpenSettingsAria}
         aria-haspopup="dialog"
