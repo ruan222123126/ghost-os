@@ -1,6 +1,6 @@
 'use client';
 
-import { WorkflowVariableAutocompleteField } from '@/components/workflow/WorkflowVariableAutocompleteField';
+import { WorkflowTemplateEnabledField } from '@/components/workflow/WorkflowTemplateEnabledField';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { WorkflowCanvasNodeDraft, WorkflowEditorKind } from '@/lib/workflow-editor';
 import {
@@ -41,9 +41,38 @@ interface IfStartEditorFieldsProps {
   onPatch: (patch: Partial<NonNullable<WorkflowCanvasNodeDraft['if']>>) => void;
 }
 
+interface IfEditorFieldProps {
+  config: NonNullable<WorkflowCanvasNodeDraft['if']>;
+  onPatch: (patch: Partial<NonNullable<WorkflowCanvasNodeDraft['if']>>) => void;
+}
+
+interface LoopEditorFieldProps {
+  config: NonNullable<WorkflowCanvasNodeDraft['loop']>;
+  selectedNode: WorkflowCanvasNodeDraft;
+  onUpdateNode: (node: WorkflowCanvasNodeDraft) => void;
+}
+
 function IfStartEditorFields(props: IfStartEditorFieldsProps) {
-  const { copy } = useWebLocale();
   const { editorKind, config, requiresValue, onPatch } = props;
+
+  return (
+    <>
+      <IfSourceNodeField config={config} onPatch={onPatch} />
+      <IfOperatorField config={config} onPatch={onPatch} />
+      <IfCompareValueField
+        editorKind={editorKind}
+        config={config}
+        visible={requiresValue}
+        onPatch={onPatch}
+      />
+      <IfTargetNodeFields config={config} onPatch={onPatch} />
+    </>
+  );
+}
+
+function IfSourceNodeField(props: IfEditorFieldProps) {
+  const { copy } = useWebLocale();
+  const { config, onPatch } = props;
 
   return (
     <>
@@ -54,6 +83,16 @@ function IfStartEditorFields(props: IfStartEditorFieldsProps) {
         placeholder={copy.workflow.ifSourceNodePlaceholder}
         onChange={(event) => onPatch({ source_node_id: event.target.value })}
       />
+    </>
+  );
+}
+
+function IfOperatorField(props: IfEditorFieldProps) {
+  const { copy } = useWebLocale();
+  const { config, onPatch } = props;
+
+  return (
+    <>
       <label className="workflow-arch-field-label">{copy.workflow.ifOperator}</label>
       <select
         value={config.operator}
@@ -63,26 +102,41 @@ function IfStartEditorFields(props: IfStartEditorFieldsProps) {
           <option key={operator} value={operator}>{operator}</option>
         ))}
       </select>
-      {requiresValue ? (
-        <>
-          <label className="workflow-arch-field-label">{copy.workflow.ifCompareValue}</label>
-          {editorKind === 'workflow' ? (
-            <WorkflowVariableAutocompleteField
-              mode="input"
-              value={config.value ?? ''}
-              placeholder={copy.workflow.ifComparePlaceholder}
-              onChange={(value) => onPatch({ value })}
-            />
-          ) : (
-            <input
-              type="text"
-              value={config.value ?? ''}
-              placeholder={copy.workflow.ifComparePlaceholder}
-              onChange={(event) => onPatch({ value: event.target.value })}
-            />
-          )}
-        </>
-      ) : null}
+    </>
+  );
+}
+
+function IfCompareValueField(props: IfEditorFieldProps & {
+  editorKind: WorkflowEditorKind;
+  visible: boolean;
+}) {
+  const { copy } = useWebLocale();
+  const { editorKind, config, visible, onPatch } = props;
+
+  if (!visible) {
+    return null;
+  }
+
+  return (
+    <>
+      <label className="workflow-arch-field-label">{copy.workflow.ifCompareValue}</label>
+      <WorkflowTemplateEnabledField
+        editorKind={editorKind}
+        mode="input"
+        value={config.value ?? ''}
+        placeholder={copy.workflow.ifComparePlaceholder}
+        onChange={(value) => onPatch({ value })}
+      />
+    </>
+  );
+}
+
+function IfTargetNodeFields(props: IfEditorFieldProps) {
+  const { copy } = useWebLocale();
+  const { config, onPatch } = props;
+
+  return (
+    <>
       <label className="workflow-arch-field-label">{copy.workflow.ifTrueNodeID}</label>
       <input
         type="text"
@@ -102,17 +156,28 @@ function IfStartEditorFields(props: IfStartEditorFieldsProps) {
 }
 
 export function LoopEditor(props: WorkflowCanvasConditionalEditorProps) {
-  const { copy } = useWebLocale();
   const { selectedNode, onUpdateNode } = props;
   const config = selectedNode.loop ?? {
     role: LOOP_ROLE_START,
     loop_id: '',
     max_iterations: DEFAULT_LOOP_MAX_ITERATIONS,
   };
-  const loopID = config.loop_id?.trim() ?? '';
 
   return (
     <div className="workflow-arch-prop-group">
+      <LoopIdentityFields config={config} />
+      <LoopRoleFields config={config} selectedNode={selectedNode} onUpdateNode={onUpdateNode} />
+    </div>
+  );
+}
+
+function LoopIdentityFields(props: { config: NonNullable<WorkflowCanvasNodeDraft['loop']> }) {
+  const { copy } = useWebLocale();
+  const { config } = props;
+  const loopID = config.loop_id?.trim() ?? '';
+
+  return (
+    <>
       <label className="workflow-arch-field-label">{copy.workflow.loopRole}</label>
       <input type="text" value={config.role} readOnly disabled />
       <label className="workflow-arch-field-label">{copy.workflow.loopID}</label>
@@ -122,25 +187,30 @@ export function LoopEditor(props: WorkflowCanvasConditionalEditorProps) {
         readOnly
         disabled
       />
-      {config.role === LOOP_ROLE_START ? (
-        <>
-          <label className="workflow-arch-field-label">{copy.workflow.loopMaxIterations}</label>
-          <input
-            type="number"
-            min={1}
-            value={config.max_iterations ?? DEFAULT_LOOP_MAX_ITERATIONS}
-            onChange={(event) => {
-              const value = Number.parseInt(event.target.value, 10);
-              onUpdateNode(withLoopPatch(selectedNode, {
-                max_iterations: Number.isFinite(value) && value > 0 ? value : DEFAULT_LOOP_MAX_ITERATIONS,
-              }));
-            }}
-          />
-        </>
-      ) : (
-        <p className="workflow-arch-summary-label">{copy.workflow.loopEndSummary}</p>
-      )}
-    </div>
+    </>
+  );
+}
+
+function LoopRoleFields(props: LoopEditorFieldProps) {
+  const { copy } = useWebLocale();
+  const { config, selectedNode, onUpdateNode } = props;
+
+  if (config.role !== LOOP_ROLE_START) {
+    return <p className="workflow-arch-summary-label">{copy.workflow.loopEndSummary}</p>;
+  }
+
+  return (
+    <>
+      <label className="workflow-arch-field-label">{copy.workflow.loopMaxIterations}</label>
+      <input
+        type="number"
+        min={1}
+        value={config.max_iterations ?? DEFAULT_LOOP_MAX_ITERATIONS}
+        onChange={(event) => onUpdateNode(withLoopPatch(selectedNode, {
+          max_iterations: parseLoopMaxIterations(event.target.value),
+        }))}
+      />
+    </>
   );
 }
 
@@ -182,4 +252,12 @@ function buildDefaultIfConfig(): NonNullable<WorkflowCanvasNodeDraft['if']> {
     true_node_id: '',
     false_node_id: '',
   };
+}
+
+function parseLoopMaxIterations(rawValue: string): number {
+  const value = Number.parseInt(rawValue, 10);
+  if (Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  return DEFAULT_LOOP_MAX_ITERATIONS;
 }
