@@ -40,6 +40,23 @@ interface ConnectNodesOptions {
   targetNodeID: string;
 }
 
+interface LoopNodePair {
+  endNode: WorkflowCanvasNodeDraft;
+  startNode: WorkflowCanvasNodeDraft;
+}
+
+interface LoopNodePairPositions {
+  endPosition: WorkflowCanvasPosition;
+  startPosition: WorkflowCanvasPosition;
+}
+
+interface CreateLoopNodeOptions {
+  id: string;
+  index: number;
+  loopId: string;
+  position: WorkflowCanvasPosition;
+}
+
 export type AddNodeOptions = AddRegularNodeOptions | AddLoopNodePairOptions;
 
 export function addNode(draft: WorkflowCanvasDraft, options: AddNodeOptions): WorkflowCanvasDraft {
@@ -182,15 +199,52 @@ function addLoopNodePair(
   options: AddLoopNodePairOptions,
 ): WorkflowCanvasDraft {
   assertLoopNodeIDsAvailable(draft, options);
-  const index = draft.nodes.length;
-  const startPosition = options.position ?? createDefaultNodePosition(index);
-  const endPosition = createNextNodePosition(startPosition);
-  const startNode = createDraftNode({
-    id: options.startNodeId,
-    type: 'loop',
-    index,
-    source: {
+  const pair = buildLoopNodePair(draft.nodes.length, options);
+
+  return {
+    ...draft,
+    nodes: [...draft.nodes, pair.startNode, pair.endNode],
+    selectedNodeId: pair.startNode.id,
+  };
+}
+
+function buildLoopNodePair(index: number, options: AddLoopNodePairOptions): LoopNodePair {
+  const { startPosition, endPosition } = buildLoopNodePairPositions(index, options.position);
+
+  return {
+    startNode: createLoopStartNode({
+      id: options.startNodeId,
+      index,
+      loopId: options.loopId,
       position: startPosition,
+    }),
+    endNode: createLoopEndNode({
+      id: options.endNodeId,
+      index: index + 1,
+      loopId: options.loopId,
+      position: endPosition,
+    }),
+  };
+}
+
+function buildLoopNodePairPositions(
+  index: number,
+  position: WorkflowCanvasPosition | undefined,
+): LoopNodePairPositions {
+  const startPosition = position ?? createDefaultNodePosition(index);
+  return {
+    startPosition,
+    endPosition: createNextNodePosition(startPosition),
+  };
+}
+
+function createLoopStartNode(options: CreateLoopNodeOptions): WorkflowCanvasNodeDraft {
+  return createDraftNode({
+    id: options.id,
+    type: 'loop',
+    index: options.index,
+    source: {
+      position: options.position,
       loop: {
         role: LOOP_ROLE_START,
         loop_id: options.loopId,
@@ -198,24 +252,21 @@ function addLoopNodePair(
       },
     },
   });
-  const endNode = createDraftNode({
-    id: options.endNodeId,
+}
+
+function createLoopEndNode(options: CreateLoopNodeOptions): WorkflowCanvasNodeDraft {
+  return createDraftNode({
+    id: options.id,
     type: 'loop',
-    index: index + 1,
+    index: options.index,
     source: {
-      position: endPosition,
+      position: options.position,
       loop: {
         role: LOOP_ROLE_END,
         loop_id: options.loopId,
       },
     },
   });
-
-  return {
-    ...draft,
-    nodes: [...draft.nodes, startNode, endNode],
-    selectedNodeId: startNode.id,
-  };
 }
 
 function assertNodeIDAvailable(draft: WorkflowCanvasDraft, nodeID: string, label: string): void {
