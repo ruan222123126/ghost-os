@@ -22,6 +22,13 @@ interface WorkflowCanvasNodeContextMenuProps {
   onClose: () => void;
 }
 
+interface NodeContextMenuAction {
+  danger: boolean;
+  key: 'copy' | 'delete';
+  label: string;
+  onSelect: () => void;
+}
+
 export function WorkflowCanvasNodeContextMenu(props: WorkflowCanvasNodeContextMenuProps) {
   const { copy } = useWebLocale();
   const { menu, onCopyNode, onDeleteNode, onClose } = props;
@@ -31,6 +38,50 @@ export function WorkflowCanvasNodeContextMenu(props: WorkflowCanvasNodeContextMe
   if (!menu) {
     return null;
   }
+
+  const actions = buildContextMenuActions({ copy, menu, onClose, onCopyNode, onDeleteNode });
+  return (
+    <WorkflowCanvasNodeContextMenuContent actions={actions} menuStyle={menuStyle} onClose={onClose} />
+  );
+}
+
+function buildContextMenuActions(options: {
+  copy: ReturnType<typeof useWebLocale>['copy'];
+  menu: WorkflowNodeContextMenuState;
+  onClose: () => void;
+  onCopyNode: (nodeID: string) => void;
+  onDeleteNode: (nodeID: string) => void;
+}): NodeContextMenuAction[] {
+  const { copy, menu, onClose, onCopyNode, onDeleteNode } = options;
+
+  return [
+    {
+      danger: false,
+      key: 'copy',
+      label: copy.workflow.contextCopy,
+      onSelect: () => {
+        onCopyNode(menu.nodeID);
+        onClose();
+      },
+    },
+    {
+      danger: true,
+      key: 'delete',
+      label: copy.workflow.contextDelete,
+      onSelect: () => {
+        onDeleteNode(menu.nodeID);
+        onClose();
+      },
+    },
+  ];
+}
+
+function WorkflowCanvasNodeContextMenuContent(props: {
+  actions: NodeContextMenuAction[];
+  menuStyle: CSSProperties;
+  onClose: () => void;
+}) {
+  const { actions, menuStyle, onClose } = props;
 
   return (
     <>
@@ -42,28 +93,26 @@ export function WorkflowCanvasNodeContextMenu(props: WorkflowCanvasNodeContextMe
         onMouseDown={(event) => event.stopPropagation()}
         onContextMenu={(event) => event.preventDefault()}
       >
-        <button
-          type="button"
-          className="workflow-arch-node-menu-button"
-          onClick={() => {
-            onCopyNode(menu.nodeID);
-            onClose();
-          }}
-        >
-          {copy.workflow.contextCopy}
-        </button>
-        <button
-          type="button"
-          className="workflow-arch-node-menu-button workflow-arch-node-menu-button--danger"
-          onClick={() => {
-            onDeleteNode(menu.nodeID);
-            onClose();
-          }}
-        >
-          {copy.workflow.contextDelete}
-        </button>
+        {actions.map((action) => (
+          <WorkflowCanvasNodeContextMenuButton action={action} key={action.key} />
+        ))}
       </div>
     </>
+  );
+}
+
+function WorkflowCanvasNodeContextMenuButton(props: {
+  action: NodeContextMenuAction;
+}) {
+  const { action } = props;
+  const className = action.danger
+    ? 'workflow-arch-node-menu-button workflow-arch-node-menu-button--danger'
+    : 'workflow-arch-node-menu-button';
+
+  return (
+    <button type="button" className={className} onClick={action.onSelect}>
+      {action.label}
+    </button>
   );
 }
 
