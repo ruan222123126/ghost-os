@@ -2,6 +2,7 @@
 
 import { CloseButton } from '@/components/CloseButton';
 import { WorkflowCanvasNodeEditorContent } from '@/components/workflow/WorkflowCanvasNodeEditorContent';
+import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PresetPayload } from '@/lib/types';
 import type {
@@ -27,85 +28,119 @@ interface WorkflowCanvasPropertiesPanelProps {
   onDeleteNode: (nodeID: string) => void;
 }
 
+interface PropertiesPanelContentProps extends Omit<WorkflowCanvasPropertiesPanelProps, 'selectedNode'> {
+  copy: WorkflowCopy;
+  selectedNode: WorkflowCanvasNodeDraft;
+}
+
+interface PropertiesPanelNodeEditorProps extends Omit<PropertiesPanelContentProps, 'copy' | 'onClose' | 'onDeleteNode'> {}
+
 export function WorkflowCanvasPropertiesPanel(props: WorkflowCanvasPropertiesPanelProps) {
   const { copy } = useWebLocale();
-  const {
-    agentRuntimeCatalog,
-    agentRuntimeError,
-    agentRuntimeLoading,
-    draft,
-    editorKind,
-    presetError,
-    presetLoading,
-    presets,
-    selectedNode,
-    onClose,
-    onUpdateNode,
-    onDeleteNode,
-  } = props;
-  const allowDelete = !isProtectedBoundaryNode(selectedNode);
-
   return (
-    <aside className={`workflow-arch-properties ${selectedNode ? 'workflow-arch-properties--open' : ''}`}>
-      {selectedNode ? (
-        <>
-          <section className="workflow-arch-properties-head">
-            <div>
-              <h2>{copy.workflow.propertiesTitle}</h2>
-              <p>{copy.workflow.propertiesUUID}: {selectedNode.id}</p>
-            </div>
-            <CloseButton className="shrink-0" onClick={onClose} aria-label={copy.workflow.closePropertiesAria} />
-          </section>
-          <section className="workflow-arch-properties-pill">
-            <span />
-            <strong>{labelOfNodeType(selectedNode.type, copy.workflow)}</strong>
-          </section>
-          <section className="workflow-arch-properties-content">
-            <WorkflowCanvasNodeEditorContent
-              editorKind={editorKind}
-              draft={draft}
-              selectedNode={selectedNode}
-              agentRuntimeCatalog={agentRuntimeCatalog}
-              agentRuntimeLoading={agentRuntimeLoading}
-              agentRuntimeError={agentRuntimeError}
-              presets={presets}
-              presetLoading={presetLoading}
-              presetError={presetError}
-              onUpdateNode={onUpdateNode}
-            />
-          </section>
-          {allowDelete ? (
-            <section className="workflow-arch-properties-footer">
-              <button type="button" className="workflow-arch-danger-button" onClick={() => onDeleteNode(selectedNode.id)}>
-                <span aria-hidden>⌫</span>
-                {copy.workflow.deleteInstance}
-              </button>
-            </section>
-          ) : null}
-        </>
+    <aside className={propertiesPanelClassName(props.selectedNode)}>
+      {props.selectedNode ? (
+        <PropertiesPanelContent {...props} copy={copy.workflow} selectedNode={props.selectedNode} />
       ) : null}
     </aside>
   );
 }
 
+function PropertiesPanelContent(props: PropertiesPanelContentProps) {
+  const allowDelete = !isProtectedBoundaryNode(props.selectedNode);
+
+  return (
+    <>
+      <PropertiesPanelHeader copy={props.copy} selectedNode={props.selectedNode} onClose={props.onClose} />
+      <PropertiesPanelTypePill copy={props.copy} selectedNode={props.selectedNode} />
+      <PropertiesPanelNodeEditor {...props} />
+      <PropertiesPanelDeleteFooter
+        allowDelete={allowDelete}
+        copy={props.copy}
+        selectedNode={props.selectedNode}
+        onDeleteNode={props.onDeleteNode}
+      />
+    </>
+  );
+}
+
+function PropertiesPanelNodeEditor(props: PropertiesPanelNodeEditorProps) {
+  return (
+    <section className="workflow-arch-properties-content">
+      <WorkflowCanvasNodeEditorContent
+        editorKind={props.editorKind}
+        draft={props.draft}
+        selectedNode={props.selectedNode}
+        agentRuntimeCatalog={props.agentRuntimeCatalog}
+        agentRuntimeLoading={props.agentRuntimeLoading}
+        agentRuntimeError={props.agentRuntimeError}
+        presets={props.presets}
+        presetLoading={props.presetLoading}
+        presetError={props.presetError}
+        onUpdateNode={props.onUpdateNode}
+      />
+    </section>
+  );
+}
+
+function PropertiesPanelHeader(props: {
+  copy: WorkflowCopy;
+  selectedNode: WorkflowCanvasNodeDraft;
+  onClose: () => void;
+}) {
+  return (
+    <section className="workflow-arch-properties-head">
+      <div>
+        <h2>{props.copy.propertiesTitle}</h2>
+        <p>{props.copy.propertiesUUID}: {props.selectedNode.id}</p>
+      </div>
+      <CloseButton className="shrink-0" onClick={props.onClose} aria-label={props.copy.closePropertiesAria} />
+    </section>
+  );
+}
+
+function PropertiesPanelTypePill(props: { copy: WorkflowCopy; selectedNode: WorkflowCanvasNodeDraft }) {
+  return (
+    <section className="workflow-arch-properties-pill">
+      <span />
+      <strong>{labelOfNodeType(props.selectedNode.type, props.copy)}</strong>
+    </section>
+  );
+}
+
+function PropertiesPanelDeleteFooter(props: {
+  allowDelete: boolean;
+  copy: WorkflowCopy;
+  selectedNode: WorkflowCanvasNodeDraft;
+  onDeleteNode: (nodeID: string) => void;
+}) {
+  if (!props.allowDelete) {
+    return null;
+  }
+  return (
+    <section className="workflow-arch-properties-footer">
+      <button type="button" className="workflow-arch-danger-button" onClick={() => props.onDeleteNode(props.selectedNode.id)}>
+        <span aria-hidden>⌫</span>
+        {props.copy.deleteInstance}
+      </button>
+    </section>
+  );
+}
+
+function propertiesPanelClassName(selectedNode?: WorkflowCanvasNodeDraft): string {
+  return `workflow-arch-properties ${selectedNode ? 'workflow-arch-properties--open' : ''}`;
+}
+
 function labelOfNodeType(
   type: WorkflowCanvasNodeDraft['type'],
-  copy: ReturnType<typeof useWebLocale>['copy']['workflow'],
+  copy: WorkflowCopy,
 ): string {
-  if (type === 'tool') {
-    return copy.labelToolUse;
-  }
-  if (type === 'llm') {
-    return copy.labelLLMModel;
-  }
-  if (type === 'if') {
-    return copy.labelIfBranch;
-  }
-  if (type === 'loop') {
-    return copy.labelLoop;
-  }
-  if (type === 'group') {
-    return copy.labelGroup;
-  }
-  return type.toUpperCase();
+  const labels: Partial<Record<WorkflowCanvasNodeDraft['type'], string>> = {
+    group: copy.labelGroup,
+    if: copy.labelIfBranch,
+    llm: copy.labelLLMModel,
+    loop: copy.labelLoop,
+    tool: copy.labelToolUse,
+  };
+  return labels[type] ?? type.toUpperCase();
 }
