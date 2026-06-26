@@ -29,6 +29,28 @@ export interface OrchestrationSectionMachine {
 }
 
 type OrchestrationApi = ReturnType<typeof useOrchestrationApi>;
+type OrchestrationCopy = ReturnType<typeof useWebLocale>['copy'];
+type OrchestrationDispatch = Dispatch<OrchestrationAction>;
+
+interface OrchestrationMutationOptions {
+  api: OrchestrationApi;
+  copy: OrchestrationCopy;
+  dispatch: OrchestrationDispatch;
+}
+
+interface CreateOrchestrationOptions extends OrchestrationMutationOptions {
+  refresh: () => Promise<boolean>;
+  state: OrchestrationState;
+}
+
+interface OrchestrationActionBundleOptions {
+  deleteByID: OrchestrationSectionActions['deleteByID'];
+  dispatch: OrchestrationDispatch;
+  refresh: OrchestrationSectionActions['refresh'];
+  runByID: OrchestrationSectionActions['runByID'];
+  setEnabledByID: OrchestrationSectionActions['setEnabledByID'];
+  submitCreate: OrchestrationSectionActions['submitCreate'];
+}
 
 export function useOrchestrationSectionState(): OrchestrationSectionMachine {
   const { copy } = useWebLocale();
@@ -39,11 +61,18 @@ export function useOrchestrationSectionState(): OrchestrationSectionMachine {
     createInitialOrchestrationState,
   );
   const refresh = useRefreshOrchestrations(api, copy, dispatch);
-  const submitCreate = useSubmitCreate(api, copy, state, refresh, dispatch);
-  const runByID = useRunOrchestration(api, copy, state, refresh, dispatch);
+  const submitCreate = useSubmitCreate({ api, copy, dispatch, refresh, state });
+  const runByID = useRunOrchestration({ api, copy, dispatch, refresh, state });
   const setEnabledByID = useSetOrchestrationEnabled(api, copy, dispatch);
   const deleteByID = useDeleteOrchestration(api, copy, dispatch);
-  const actions = useOrchestrationActionBundle(dispatch, refresh, submitCreate, runByID, setEnabledByID, deleteByID);
+  const actions = useOrchestrationActionBundle({
+    deleteByID,
+    dispatch,
+    refresh,
+    runByID,
+    setEnabledByID,
+    submitCreate,
+  });
 
   useEffect(() => {
     ignorePromise(refresh());
@@ -54,8 +83,8 @@ export function useOrchestrationSectionState(): OrchestrationSectionMachine {
 
 function useRefreshOrchestrations(
   api: OrchestrationApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  dispatch: Dispatch<OrchestrationAction>,
+  copy: OrchestrationCopy,
+  dispatch: OrchestrationDispatch,
 ) {
   return useCallback(async (): Promise<boolean> => {
     dispatch({ type: 'load_start' });
@@ -73,13 +102,9 @@ function useRefreshOrchestrations(
   }, [api, copy.system.failedToLoadOrchestration, dispatch]);
 }
 
-function useSubmitCreate(
-  api: OrchestrationApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: OrchestrationState,
-  refresh: () => Promise<boolean>,
-  dispatch: Dispatch<OrchestrationAction>,
-) {
+function useSubmitCreate(options: CreateOrchestrationOptions) {
+  const { api, copy, dispatch, refresh, state } = options;
+
   return useCallback(async (): Promise<void> => {
     if (!state.name.trim()) {
       dispatch({ type: 'create_error', error: copy.settings.orchestrationNameRequired });
@@ -96,13 +121,9 @@ function useSubmitCreate(
   }, [api, copy, dispatch, refresh, state.name]);
 }
 
-function useRunOrchestration(
-  api: OrchestrationApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: OrchestrationState,
-  refresh: () => Promise<boolean>,
-  dispatch: Dispatch<OrchestrationAction>,
-) {
+function useRunOrchestration(options: CreateOrchestrationOptions) {
+  const { api, copy, dispatch, refresh, state } = options;
+
   return useCallback(async (id: string): Promise<void> => {
     if (state.runningOrchestrationID) {
       return;
@@ -122,8 +143,8 @@ function useRunOrchestration(
 
 function useSetOrchestrationEnabled(
   api: OrchestrationApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  dispatch: Dispatch<OrchestrationAction>,
+  copy: OrchestrationCopy,
+  dispatch: OrchestrationDispatch,
 ) {
   return useCallback(async (id: string, enabled: boolean): Promise<void> => {
     dispatch({ type: 'clear_feedback' });
@@ -138,8 +159,8 @@ function useSetOrchestrationEnabled(
 
 function useDeleteOrchestration(
   api: OrchestrationApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  dispatch: Dispatch<OrchestrationAction>,
+  copy: OrchestrationCopy,
+  dispatch: OrchestrationDispatch,
 ) {
   return useCallback(async (id: string): Promise<void> => {
     dispatch({ type: 'clear_feedback' });
@@ -153,13 +174,10 @@ function useDeleteOrchestration(
 }
 
 function useOrchestrationActionBundle(
-  dispatch: Dispatch<OrchestrationAction>,
-  refresh: OrchestrationSectionActions['refresh'],
-  submitCreate: OrchestrationSectionActions['submitCreate'],
-  runByID: OrchestrationSectionActions['runByID'],
-  setEnabledByID: OrchestrationSectionActions['setEnabledByID'],
-  deleteByID: OrchestrationSectionActions['deleteByID'],
+  options: OrchestrationActionBundleOptions,
 ): OrchestrationSectionActions {
+  const { deleteByID, dispatch, refresh, runByID, setEnabledByID, submitCreate } = options;
+
   return useMemo(() => ({
     refresh,
     submitCreate,
