@@ -6,6 +6,12 @@ export interface LiveTaskRunCard extends TaskRunCard {
   source_events: AgentStreamEvent[];
 }
 
+export interface ApplyCardEventOptions {
+  cardID: string;
+  event: AgentStreamEvent;
+  sourceSessionId?: string;
+}
+
 export function hydrateLiveTaskRunCards(
   cards: TaskRunCard[] | undefined,
 ): LiveTaskRunCard[] {
@@ -86,18 +92,16 @@ export function applyStartedCard(
 
 export function applyCardEvent(
   cards: LiveTaskRunCard[],
-  cardID: string,
-  event: AgentStreamEvent,
-  sourceSessionId?: string,
+  options: ApplyCardEventOptions,
 ): LiveTaskRunCard[] {
   return cards.map((card) => {
-    if (card.card_id !== cardID) {
+    if (card.card_id !== options.cardID) {
       return card;
     }
     return {
       ...card,
-      live_source_session_id: sourceSessionId?.trim() || card.live_source_session_id,
-      source_events: mergeCardSourceEvents(card.source_events, [event]),
+      live_source_session_id: options.sourceSessionId?.trim() || card.live_source_session_id,
+      source_events: mergeCardSourceEvents(card.source_events, [options.event]),
     };
   });
 }

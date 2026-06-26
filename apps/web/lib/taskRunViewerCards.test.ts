@@ -29,16 +29,20 @@ describe('taskRunViewerCards', () => {
       kind: 'workflow_llm',
       started_at: '2026-05-30T00:00:03Z',
     });
-    cards = applyCardEvent(cards, 'card-3', {
-      id: 'evt-1',
-      step_id: 'turn-1-assistant',
-      trace_id: 'trace-1',
-      session_id: 'session-1',
-      turn: 1,
-      type: 'message',
-      payload: { text: 'hello', session_id: 'session-1' },
-      at: '2026-05-30T00:00:03Z',
-    }, 'session-1');
+    cards = applyCardEvent(cards, {
+      cardID: 'card-3',
+      event: {
+        id: 'evt-1',
+        step_id: 'turn-1-assistant',
+        trace_id: 'trace-1',
+        session_id: 'session-1',
+        turn: 1,
+        type: 'message',
+        payload: { text: 'hello', session_id: 'session-1' },
+        at: '2026-05-30T00:00:03Z',
+      },
+      sourceSessionId: 'session-1',
+    });
     cards = applyFinishedCard(cards, {
       card_id: 'card-3',
       status: 'success',
@@ -76,16 +80,20 @@ describe('taskRunViewerCards', () => {
       card_id: 'card-1',
       kind: 'workflow_agent',
       started_at: '2026-05-30T00:00:01Z',
-    }]), 'card-1', {
-      id: 'evt-1',
-      step_id: 'turn-1-assistant',
-      trace_id: 'trace-1',
-      session_id: 'session-live',
-      turn: 1,
-      type: 'completion_delta',
-      payload: { kind: 'text', text: 'hello' },
-      at: '2026-05-30T00:00:02Z',
-    }, 'session-live');
+    }]), {
+      cardID: 'card-1',
+      event: {
+        id: 'evt-1',
+        step_id: 'turn-1-assistant',
+        trace_id: 'trace-1',
+        session_id: 'session-live',
+        turn: 1,
+        type: 'completion_delta',
+        payload: { kind: 'text', text: 'hello' },
+        at: '2026-05-30T00:00:02Z',
+      },
+      sourceSessionId: 'session-live',
+    });
 
     const next = mergeLiveTaskRunCards(current, [{
       card_id: 'card-1',

@@ -253,7 +253,11 @@ function applyViewerEvent(cards: LiveTaskRunCard[], event: { type: string; paylo
     }
     case 'task_run_card_event': {
       const payload = parseTaskRunCardEventPayload(event.payload);
-      return applyCardEvent(cards, payload.card_id, payload.source_event, payload.source_session_id);
+      return applyCardEvent(cards, {
+        cardID: payload.card_id,
+        event: payload.source_event,
+        sourceSessionId: payload.source_session_id,
+      });
     }
     case 'task_run_card_finished': {
       const payload = parseTaskRunCardFinishedPayload(event.payload);
