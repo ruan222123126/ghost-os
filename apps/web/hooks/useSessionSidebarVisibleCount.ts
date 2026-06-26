@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 
 const SESSION_VISIBLE_BATCH = 30;
 const SESSION_LOAD_MORE_THRESHOLD_PX = 160;
@@ -14,6 +22,26 @@ export function useSessionSidebarVisibleCount(options: {
 }): number {
   const { scrollElementRef, totalSessions, resetKey, focusSessionIndex } = options;
   const [visibleCount, setVisibleCount] = useState(0);
+
+  useResetVisibleSessionCount({ resetKey, setVisibleCount, totalSessions });
+  useFocusedVisibleSessionCount({ focusSessionIndex, setVisibleCount, totalSessions });
+  useLoadMoreVisibleSessions({
+    scrollElementRef,
+    setVisibleCount,
+    totalSessions,
+    visibleCount,
+    resetKey,
+  });
+
+  return visibleCount;
+}
+
+function useResetVisibleSessionCount(options: {
+  resetKey: string;
+  setVisibleCount: Dispatch<SetStateAction<number>>;
+  totalSessions: number;
+}): void {
+  const { resetKey, setVisibleCount, totalSessions } = options;
   const resetKeyRef = useRef(resetKey);
 
   useEffect(() => {
@@ -25,7 +53,15 @@ export function useSessionSidebarVisibleCount(options: {
       }
       return clampVisibleSessionCount(current, totalSessions);
     });
-  }, [resetKey, totalSessions]);
+  }, [resetKey, setVisibleCount, totalSessions]);
+}
+
+function useFocusedVisibleSessionCount(options: {
+  focusSessionIndex?: number;
+  setVisibleCount: Dispatch<SetStateAction<number>>;
+  totalSessions: number;
+}): void {
+  const { focusSessionIndex, setVisibleCount, totalSessions } = options;
 
   useEffect(() => {
     if (focusSessionIndex === undefined || focusSessionIndex < 0) {
@@ -35,26 +71,28 @@ export function useSessionSidebarVisibleCount(options: {
       const focusedCount = resolveFocusedVisibleSessionCount(focusSessionIndex, totalSessions);
       return focusedCount > current ? focusedCount : current;
     });
-  }, [focusSessionIndex, totalSessions]);
+  }, [focusSessionIndex, setVisibleCount, totalSessions]);
+}
+
+function useLoadMoreVisibleSessions(options: {
+  resetKey: string;
+  scrollElementRef: RefObject<HTMLDivElement>;
+  setVisibleCount: Dispatch<SetStateAction<number>>;
+  totalSessions: number;
+  visibleCount: number;
+}): void {
+  const { resetKey, scrollElementRef, setVisibleCount, totalSessions, visibleCount } = options;
 
   const maybeLoadMore = useCallback(() => {
     const scrollElement = scrollElementRef.current;
-    if (!scrollElement || visibleCount >= totalSessions) {
-      return;
-    }
-
-    const remainingDistance = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
-    if (remainingDistance > SESSION_LOAD_MORE_THRESHOLD_PX) {
+    if (!shouldLoadMoreVisibleSessions(scrollElement, visibleCount, totalSessions)) {
       return;
     }
 
     setVisibleCount((current) => {
-      if (current >= totalSessions) {
-        return current;
-      }
-      return Math.min(totalSessions, current + SESSION_VISIBLE_BATCH);
+      return resolveNextVisibleSessionCount(current, totalSessions);
     });
-  }, [scrollElementRef, totalSessions, visibleCount]);
+  }, [scrollElementRef, setVisibleCount, totalSessions, visibleCount]);
 
   useEffect(() => {
     const scrollElement = scrollElementRef.current;
@@ -71,8 +109,29 @@ export function useSessionSidebarVisibleCount(options: {
   useEffect(() => {
     maybeLoadMore();
   }, [maybeLoadMore, visibleCount]);
+}
 
-  return visibleCount;
+function shouldLoadMoreVisibleSessions(
+  scrollElement: HTMLDivElement | null,
+  visibleCount: number,
+  totalSessions: number,
+): boolean {
+  if (!scrollElement || visibleCount >= totalSessions) {
+    return false;
+  }
+
+  return getRemainingScrollDistance(scrollElement) <= SESSION_LOAD_MORE_THRESHOLD_PX;
+}
+
+function getRemainingScrollDistance(scrollElement: HTMLDivElement): number {
+  return scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+}
+
+function resolveNextVisibleSessionCount(current: number, totalSessions: number): number {
+  if (current >= totalSessions) {
+    return current;
+  }
+  return Math.min(totalSessions, current + SESSION_VISIBLE_BATCH);
 }
 
 function resolveInitialVisibleSessionCount(totalSessions: number): number {
