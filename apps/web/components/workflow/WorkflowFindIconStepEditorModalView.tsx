@@ -47,9 +47,31 @@ interface FindIconImageFieldProps {
   onRemoveImage: () => void;
   onTest: () => void;
 }
+interface FindIconEditorPanelBodyProps {
+  state: FindIconEditorPanelState;
+  uploading: boolean;
+  testing: boolean;
+  testResult: FindIconTestResult;
+  errorText: string;
+  preview: FindIconEditorPreview | null;
+  fileInputRef: RefObject<HTMLInputElement>;
+  onPickAction: (hover: boolean) => void;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+  onRemoveImage: () => void;
+  onTest: () => void;
+}
 interface FindIconActionFieldProps {
   hoverAfterMatch: boolean;
   onPickAction: (hover: boolean) => void;
+}
+interface FindIconImageCardProps {
+  hasTemplate: boolean;
+  previewURL: string | undefined;
+  templateName: string;
+  templatePath: string;
+  uploading: boolean;
+  onOpenFile: () => void;
+  onRemoveImage: () => void;
 }
 export function FindIconEditorShell(props: FindIconEditorShellProps) {
   const { closeAria, titleID, onClose, children } = props;
@@ -66,54 +88,58 @@ export function FindIconEditorShell(props: FindIconEditorShellProps) {
   );
 }
 export function FindIconEditorPanel(props: FindIconEditorPanelProps) {
-  const {
-    closeAria,
-    titleID,
-    stepTag,
-    state,
-    uploading,
-    saving,
-    testing,
-    testResult,
-    errorText,
-    preview,
-    fileInputRef,
-    onClose,
-    onPickAction,
-    onSave,
-    onUpload,
-    onRemoveImage,
-    onTest,
-  } = props;
   return (
     <section className="relative z-[1] flex w-full max-w-[400px] flex-col bg-white shadow-[0_24px_64px_rgba(0,0,0,0.24)]">
       <FindIconEditorHeader
-        closeAria={closeAria}
-        titleID={titleID}
-        stepTag={stepTag}
-        onClose={onClose}
+        closeAria={props.closeAria}
+        titleID={props.titleID}
+        stepTag={props.stepTag}
+        onClose={props.onClose}
       />
-      <div className="space-y-7 p-6">
-        <FindIconImageField
-          state={state}
-          uploading={uploading}
-          testing={testing}
-          testResult={testResult}
-          preview={preview}
-          fileInputRef={fileInputRef}
-          onUpload={onUpload}
-          onRemoveImage={onRemoveImage}
-          onTest={onTest}
-        />
-        <FindIconActionField
-          hoverAfterMatch={state.hoverAfterMatch}
-          onPickAction={onPickAction}
-        />
-        {errorText ? <p className="text-[11px] text-red-600">{errorText}</p> : null}
-      </div>
-      <FindIconEditorFooter saving={saving} onClose={onClose} onSave={onSave} />
+      <FindIconEditorPanelBody
+        state={props.state}
+        uploading={props.uploading}
+        testing={props.testing}
+        testResult={props.testResult}
+        errorText={props.errorText}
+        preview={props.preview}
+        fileInputRef={props.fileInputRef}
+        onPickAction={props.onPickAction}
+        onUpload={props.onUpload}
+        onRemoveImage={props.onRemoveImage}
+        onTest={props.onTest}
+      />
+      <FindIconEditorFooter saving={props.saving} onClose={props.onClose} onSave={props.onSave} />
     </section>
   );
+}
+function FindIconEditorPanelBody(props: FindIconEditorPanelBodyProps) {
+  return (
+    <div className="space-y-7 p-6">
+      <FindIconImageField
+        state={props.state}
+        uploading={props.uploading}
+        testing={props.testing}
+        testResult={props.testResult}
+        preview={props.preview}
+        fileInputRef={props.fileInputRef}
+        onUpload={props.onUpload}
+        onRemoveImage={props.onRemoveImage}
+        onTest={props.onTest}
+      />
+      <FindIconActionField
+        hoverAfterMatch={props.state.hoverAfterMatch}
+        onPickAction={props.onPickAction}
+      />
+      <FindIconErrorText errorText={props.errorText} />
+    </div>
+  );
+}
+function FindIconErrorText(props: { errorText: string }) {
+  if (!props.errorText) {
+    return null;
+  }
+  return <p className="text-[11px] text-red-600">{props.errorText}</p>;
 }
 function FindIconEditorHeader(props: {
   closeAria: string;
@@ -166,30 +192,8 @@ function FindIconImageField(props: FindIconImageFieldProps) {
   const hasTemplate = state.templatePath.trim().length > 0;
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <label className="block text-xs font-medium text-gray-700">目标图像</label>
-        <div className="flex items-center justify-end gap-2">
-          <span className={`min-w-8 text-[11px] font-bold ${testResultClassName(testResult)}`}>
-            {testResultText(testResult)}
-          </span>
-          <button
-            type="button"
-            onClick={onTest}
-            disabled={testing}
-            className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700 transition-colors hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-45"
-          >
-            {testing ? '识别中…' : '测试'}
-          </button>
-        </div>
-      </div>
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={onUpload}
-        accept="image/*"
-        disabled={uploading}
-        className="hidden"
-      />
+      <FindIconImageFieldHeader testing={testing} testResult={testResult} onTest={onTest} />
+      <FindIconFileInput fileInputRef={fileInputRef} uploading={uploading} onUpload={onUpload} />
       <FindIconImageCard
         hasTemplate={hasTemplate}
         previewURL={preview?.url}
@@ -205,48 +209,120 @@ function FindIconImageField(props: FindIconImageFieldProps) {
     </div>
   );
 }
-function FindIconImageCard(props: {
-  hasTemplate: boolean;
-  previewURL: string | undefined;
-  templateName: string;
-  templatePath: string;
-  uploading: boolean;
-  onOpenFile: () => void;
-  onRemoveImage: () => void;
+function FindIconImageFieldHeader(props: {
+  testing: boolean;
+  testResult: FindIconTestResult;
+  onTest: () => void;
 }) {
-  const { hasTemplate, previewURL, templateName, templatePath, uploading, onOpenFile, onRemoveImage } = props;
-  const className = hasTemplate
-    ? 'relative h-36 w-full border border-gray-200 bg-gray-50'
-    : 'relative h-36 w-full cursor-pointer border border-dashed border-gray-300 bg-gray-50/50 transition-all hover:border-black hover:bg-gray-100';
   return (
-    <div onClick={() => (!hasTemplate && !uploading ? onOpenFile() : undefined)} className={className}>
+    <div className="flex items-center justify-between">
+      <label className="block text-xs font-medium text-gray-700">目标图像</label>
+      <div className="flex items-center justify-end gap-2">
+        <span className={`min-w-8 text-[11px] font-bold ${testResultClassName(props.testResult)}`}>
+          {testResultText(props.testResult)}
+        </span>
+        <button
+          type="button"
+          onClick={props.onTest}
+          disabled={props.testing}
+          className="border border-gray-300 bg-white px-3 py-1.5 text-[11px] font-bold text-gray-700 transition-colors hover:border-black hover:text-black disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          {props.testing ? '识别中…' : '测试'}
+        </button>
+      </div>
+    </div>
+  );
+}
+function FindIconFileInput(props: {
+  fileInputRef: RefObject<HTMLInputElement>;
+  uploading: boolean;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <input
+      type="file"
+      ref={props.fileInputRef}
+      onChange={props.onUpload}
+      accept="image/*"
+      disabled={props.uploading}
+      className="hidden"
+    />
+  );
+}
+function FindIconImageCard(props: FindIconImageCardProps) {
+  const { hasTemplate, previewURL, templateName, templatePath, uploading, onOpenFile, onRemoveImage } = props;
+  return (
+    <div onClick={() => openEmptyImageCard(hasTemplate, uploading, onOpenFile)} className={findIconImageCardClassName(hasTemplate)}>
       {hasTemplate ? (
-        <>
-          {previewURL ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewURL} alt="预览图" className="absolute inset-0 h-full w-full object-contain p-4" />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center px-4 text-center">
-              <span className="text-sm font-bold text-gray-700">{templateName || '已上传模板'}</span>
-              <span className="mt-1 break-all text-[10px] text-gray-400">{templatePath}</span>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={onRemoveImage}
-            className="absolute right-2 top-2 z-10 border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-400 shadow-sm transition-all hover:border-black hover:text-black"
-          >
-            移除图片
-          </button>
-        </>
+        <FindIconTemplatePreviewCard
+          previewURL={previewURL}
+          templateName={templateName}
+          templatePath={templatePath}
+          onRemoveImage={onRemoveImage}
+        />
       ) : (
-        <div className="pointer-events-none flex h-full flex-col items-center justify-center text-gray-500">
-          <span className="text-sm font-bold tracking-tight">{uploading ? '上传中…' : '选择图像'}</span>
-          <span className="mt-1 text-[10px] text-gray-400">仅支持 PNG, JPG</span>
-        </div>
+        <FindIconEmptyImageCard uploading={uploading} />
       )}
     </div>
   );
+}
+function FindIconTemplatePreviewCard(props: {
+  previewURL: string | undefined;
+  templateName: string;
+  templatePath: string;
+  onRemoveImage: () => void;
+}) {
+  return (
+    <>
+      <FindIconTemplatePreviewContent
+        previewURL={props.previewURL}
+        templateName={props.templateName}
+        templatePath={props.templatePath}
+      />
+      <button
+        type="button"
+        onClick={props.onRemoveImage}
+        className="absolute right-2 top-2 z-10 border border-gray-200 bg-white px-2 py-1 text-[10px] font-bold text-gray-400 shadow-sm transition-all hover:border-black hover:text-black"
+      >
+        移除图片
+      </button>
+    </>
+  );
+}
+function FindIconTemplatePreviewContent(props: {
+  previewURL: string | undefined;
+  templateName: string;
+  templatePath: string;
+}) {
+  if (props.previewURL) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={props.previewURL} alt="预览图" className="absolute inset-0 h-full w-full object-contain p-4" />;
+  }
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-4 text-center">
+      <span className="text-sm font-bold text-gray-700">{props.templateName || '已上传模板'}</span>
+      <span className="mt-1 break-all text-[10px] text-gray-400">{props.templatePath}</span>
+    </div>
+  );
+}
+function FindIconEmptyImageCard(props: { uploading: boolean }) {
+  return (
+    <div className="pointer-events-none flex h-full flex-col items-center justify-center text-gray-500">
+      <span className="text-sm font-bold tracking-tight">{props.uploading ? '上传中…' : '选择图像'}</span>
+      <span className="mt-1 text-[10px] text-gray-400">仅支持 PNG, JPG</span>
+    </div>
+  );
+}
+function findIconImageCardClassName(hasTemplate: boolean): string {
+  if (hasTemplate) {
+    return 'relative h-36 w-full border border-gray-200 bg-gray-50';
+  }
+  return 'relative h-36 w-full cursor-pointer border border-dashed border-gray-300 bg-gray-50/50 transition-all hover:border-black hover:bg-gray-100';
+}
+function openEmptyImageCard(hasTemplate: boolean, uploading: boolean, onOpenFile: () => void): void {
+  if (!hasTemplate && !uploading) {
+    onOpenFile();
+  }
 }
 function FindIconActionField(props: FindIconActionFieldProps) {
   const { hoverAfterMatch, onPickAction } = props;
