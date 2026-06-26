@@ -57,6 +57,26 @@ interface ClickEditorFormState {
   state: ClickEditorState;
 }
 
+interface ClickEditorRuntimeActions {
+  saveClick: () => void;
+  startCapture: () => void;
+}
+
+interface ClickEditorRuntimeOptions {
+  copy: ReturnType<typeof useWebLocale>['copy'];
+  formState: ClickEditorFormState;
+  initial: ClickEditorState;
+  options: UseWorkflowClickStepEditorOptions;
+}
+
+interface ClickEditorResultOptions {
+  actions: ClickEditorRuntimeActions;
+  copy: ReturnType<typeof useWebLocale>['copy'];
+  formState: ClickEditorFormState;
+  locale: ReturnType<typeof useWebLocale>['locale'];
+  options: UseWorkflowClickStepEditorOptions;
+}
+
 interface SaveClickActionOptions {
   canUseFindIconReference: boolean;
   fallbackError: string;
@@ -76,9 +96,17 @@ export function useWorkflowClickStepEditor(
   const { locale, copy } = useWebLocale();
   const initial = useMemo(() => buildInitialEditorState(options.step), [options.step]);
   const formState = useClickEditorFormState(initial);
+  const actions = useClickEditorRuntimeActions({ copy, formState, initial, options });
+
+  return buildClickEditorResult({ actions, copy, formState, locale, options });
+}
+
+function useClickEditorRuntimeActions(params: ClickEditorRuntimeOptions): ClickEditorRuntimeActions {
+  const { copy, formState, initial, options } = params;
+  const fallbackError = copy.system.genericRequestFailed;
   const startCapture = useWorkflowClickCaptureControls({
     captureActive: formState.captureActive,
-    fallbackError: copy.system.genericRequestFailed,
+    fallbackError,
     resetSignal: initial,
     setCaptureActive: formState.setCaptureActive,
     setCaptureLoading: formState.setCaptureLoading,
@@ -87,15 +115,21 @@ export function useWorkflowClickStepEditor(
     state: formState.state,
   });
   const saveClick = useSaveClickAction({
+    canUseFindIconReference: options.canUseFindIconReference,
+    fallbackError,
+    onSave: options.onSave,
+    setErrorText: formState.setErrorText,
+    setSaving: formState.setSaving,
+    state: formState.state,
     step: options.step,
     stepIndex: options.stepIndex,
-    state: formState.state,
-    canUseFindIconReference: options.canUseFindIconReference,
-    onSave: options.onSave,
-    setSaving: formState.setSaving,
-    setErrorText: formState.setErrorText,
-    fallbackError: copy.system.genericRequestFailed,
   });
+
+  return { saveClick, startCapture };
+}
+
+function buildClickEditorResult(params: ClickEditorResultOptions): UseWorkflowClickStepEditorResult {
+  const { actions, copy, formState, locale, options } = params;
 
   return {
     canUseFindIconReference: options.canUseFindIconReference,
@@ -104,8 +138,8 @@ export function useWorkflowClickStepEditor(
     closeAria: copy.workflow.clickEditorCloseAria,
     errorText: formState.errorText,
     locale,
-    onSave: saveClick,
-    onStartCapture: startCapture,
+    onSave: actions.saveClick,
+    onStartCapture: actions.startCapture,
     onStateChange: formState.setState,
     saving: formState.saving,
     state: formState.state,
@@ -143,16 +177,7 @@ function useClickEditorFormState(initial: ClickEditorState): ClickEditorFormStat
   };
 }
 
-function handleSaveClick(options: {
-  canUseFindIconReference: boolean;
-  fallbackError: string;
-  onSave: (stepIndex: number, step: ScreenControlComposerStep) => void;
-  setErrorText: (value: string) => void;
-  setSaving: (value: boolean) => void;
-  state: ClickEditorState;
-  step: ScreenControlComposerStep;
-  stepIndex: number;
-}): void {
+function handleSaveClick(options: SaveClickActionOptions): void {
   const { step, stepIndex, state, canUseFindIconReference, onSave, setSaving, setErrorText, fallbackError } = options;
   setSaving(true);
   setErrorText('');
@@ -170,7 +195,18 @@ function handleSaveClick(options: {
 }
 
 function useSaveClickAction(options: SaveClickActionOptions): () => void {
+  const { canUseFindIconReference, fallbackError, onSave, setErrorText, setSaving, state, step, stepIndex } = options;
+
   return useCallback(() => {
-    handleSaveClick(options);
-  }, [options]);
+    handleSaveClick({
+      canUseFindIconReference,
+      fallbackError,
+      onSave,
+      setErrorText,
+      setSaving,
+      state,
+      step,
+      stepIndex,
+    });
+  }, [canUseFindIconReference, fallbackError, onSave, setErrorText, setSaving, state, step, stepIndex]);
 }
