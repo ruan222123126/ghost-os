@@ -1,4 +1,4 @@
-import { buildAssistantMessage, buildErrorMessage } from '@/lib/chatMessages';
+import { buildAssistantMessage, buildErrorMessage, mapSessionMessagesToChat } from '@/lib/chatMessages';
 import { buildChatViewProjection } from '@/lib/chat-view/messageRows';
 import type { StreamingMessageRow } from '@/lib/chat-view/types';
 import { createInitialChatState, chatStateReducer } from '@/lib/chat-store/reducer';
@@ -7,11 +7,14 @@ import {
   createChatRuntimeState,
   createChatRuntimeStateFromDraft,
 } from '@/lib/chatRuntime/runtimeState';
-import { mapSessionMessagesToChat } from '@/lib/chatMessages';
-import type { ChatMessage, SessionDetail, SessionMessage } from '@/lib/types';
+import { sessionMessagesForCard } from '@/lib/taskRunViewerSessionMessages';
+import type { ChatMessage, SessionDetail } from '@/lib/types';
 import { isSummaryOnlyCard, resolveCardSourceSessionId, type LiveTaskRunCard } from '@/lib/taskRunViewerCards';
 
 const ACTIVE_VIEWER_TOOL_STATUSES = new Set(['pending', 'running', 'in_progress']);
+
+type TaskRunOutputState = ReturnType<typeof createInitialChatState>;
+type TaskRunOutputProjection = ReturnType<typeof buildChatViewProjection>;
 
 export interface TaskRunCardOutput {
   committedMessages: ChatMessage[];
@@ -30,45 +33,16 @@ export function buildTaskRunCardOutput(
   }
 
   const state = buildSessionOutputState(card, sessionForCardOutput(card, session));
-  const pendingQuestions = shouldShowPendingQuestions(card)
-    ? state.pendingQuestionState.order
-      .map((questionId) => state.pendingQuestionState.questionsById[questionId])
-      .filter(Boolean)
-      .map((question) => ({
-        id: question.id,
-        kind: 'question' as const,
-        content: question.content,
-        questionId: question.questionId,
-        selectionMode: question.selectionMode,
-        options: question.options,
-      }))
-    : [];
-  const includeActiveStreamingContent = !isTerminalCard(card);
+  return outputFromProjection(
+    buildTaskRunOutputProjection(card, state),
+    pendingQuestionMessagesForCard(card, state),
+  );
+}
 
-  const projection = buildChatViewProjection({
-    committedMessages: state.committedMessages,
-    loading: false,
-    pendingQuestions: [],
-    showSystemPromptMessages: false,
-    streamingAssistantSegments: includeActiveStreamingContent
-      ? state.streamingAssistantState.order
-        .map((segmentId) => state.streamingAssistantState.segmentsById[segmentId])
-        .filter(Boolean)
-      : [],
-    streamingThinkingSegments: includeActiveStreamingContent
-      ? state.streamingThinkingState.order
-        .map((segmentId) => state.streamingThinkingState.segmentsById[segmentId])
-        .filter(Boolean)
-      : [],
-    activeStreamingThinkingId: includeActiveStreamingContent
-      ? state.streamingThinkingState.activeSegmentId || null
-      : null,
-    streamingItemOrder: state.streamingItemOrder,
-    streamingTools: state.streamingToolState.order
-      .map((toolId) => state.streamingToolState.toolsById[toolId])
-      .filter((tool) => Boolean(tool) && isCompletedViewerToolStatus(tool.toolStatus)),
-  });
-
+function outputFromProjection(
+  projection: TaskRunOutputProjection,
+  pendingQuestions: ChatMessage[],
+): TaskRunCardOutput {
   return {
     committedMessages: projection.visibleCommittedMessages
       .filter(shouldIncludeViewerMessage)
@@ -83,6 +57,58 @@ export function buildTaskRunCardOutput(
       })),
     ),
   };
+}
+
+function buildTaskRunOutputProjection(
+  card: LiveTaskRunCard,
+  state: TaskRunOutputState,
+): TaskRunOutputProjection {
+  const includeStreamingContent = !isTerminalCard(card);
+
+  return buildChatViewProjection({
+    committedMessages: state.committedMessages,
+    loading: false,
+    pendingQuestions: [],
+    showSystemPromptMessages: false,
+    streamingAssistantSegments: includeStreamingContent
+      ? orderedRecordValues(state.streamingAssistantState.order, state.streamingAssistantState.segmentsById)
+      : [],
+    streamingThinkingSegments: includeStreamingContent
+      ? orderedRecordValues(state.streamingThinkingState.order, state.streamingThinkingState.segmentsById)
+      : [],
+    activeStreamingThinkingId: includeStreamingContent
+      ? state.streamingThinkingState.activeSegmentId || null
+      : null,
+    streamingItemOrder: state.streamingItemOrder,
+    streamingTools: completedViewerTools(state),
+  });
+}
+
+function pendingQuestionMessagesForCard(card: LiveTaskRunCard, state: TaskRunOutputState): ChatMessage[] {
+  if (!shouldShowPendingQuestions(card)) {
+    return [];
+  }
+
+  return orderedRecordValues(state.pendingQuestionState.order, state.pendingQuestionState.questionsById)
+    .map((question) => ({
+      id: question.id,
+      kind: 'question' as const,
+      content: question.content,
+      questionId: question.questionId,
+      selectionMode: question.selectionMode,
+      options: question.options,
+    }));
+}
+
+function completedViewerTools(state: TaskRunOutputState) {
+  return orderedRecordValues(state.streamingToolState.order, state.streamingToolState.toolsById)
+    .filter((tool) => isCompletedViewerToolStatus(tool.toolStatus));
+}
+
+function orderedRecordValues<T>(order: string[], valuesById: Record<string, T | undefined>): T[] {
+  return order
+    .map((id) => valuesById[id])
+    .filter((value): value is T => Boolean(value));
 }
 
 function sessionForCardOutput(
@@ -192,61 +218,6 @@ function resolveSessionID(card: LiveTaskRunCard, session: SessionDetail | null):
 
 function resolveTraceID(card: LiveTaskRunCard): string {
   return card.source_events.at(-1)?.trace_id?.trim() || card.card_id;
-}
-
-function sessionMessagesForCard(
-  card: LiveTaskRunCard,
-  messages: SessionMessage[],
-): SessionMessage[] {
-  if (isPositiveInteger(card.round)) {
-    const roundMessages = sessionMessagesForUserTurn(messages, card.round);
-    if (roundMessages.length > 0) {
-      return roundMessages;
-    }
-  }
-  if (hasMultipleUserTurns(messages)) {
-    return [];
-  }
-  return messages;
-}
-
-function sessionMessagesForUserTurn(
-  messages: SessionMessage[],
-  targetTurn: number,
-): SessionMessage[] {
-  let currentTurn = 0;
-  const selected: SessionMessage[] = [];
-  for (const message of messages) {
-    if (message.role === 'user') {
-      currentTurn += 1;
-    }
-    if (currentTurn === targetTurn) {
-      selected.push(message);
-      continue;
-    }
-    if (currentTurn > targetTurn) {
-      break;
-    }
-  }
-  return selected;
-}
-
-function hasMultipleUserTurns(messages: SessionMessage[]): boolean {
-  let count = 0;
-  for (const message of messages) {
-    if (message.role !== 'user') {
-      continue;
-    }
-    count += 1;
-    if (count > 1) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function isPositiveInteger(value: unknown): value is number {
-  return Number.isInteger(value) && Number(value) > 0;
 }
 
 function shouldUseSummaryFallback(
