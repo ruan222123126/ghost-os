@@ -27,7 +27,9 @@ import type {
   ConfigPayload,
   HostProfile,
   MobileConversationMessage,
+  OrchestrationTaskPayload,
   ProviderConfigInputPayload,
+  ProviderConfigPayload,
   ProviderListPayload,
   SessionDetail,
   SessionMetadata,
@@ -37,7 +39,6 @@ import type {
   StoredSettings,
   TaskPayload,
   UnknownTaskPayload,
-  ProviderConfigPayload,
 } from "../mobileTypes";
 
 const SESSION_DETAIL_PAGE_LIMIT = 100;
@@ -247,10 +248,22 @@ function filterUserTasks(tasks: Array<TaskPayload | UnknownTaskPayload>): TaskPa
   return tasks.filter(isUserTask);
 }
 
-function upsertTask(
-  current: TaskPayload[] | undefined,
-  task: TaskPayload,
-): TaskPayload[] {
+function isOrchestrationTask(
+  task: OrchestrationTaskPayload | TaskPayload | UnknownTaskPayload,
+): task is OrchestrationTaskPayload {
+  return task.task_kind === "orchestration";
+}
+
+function filterOrchestrationTasks(
+  tasks: Array<OrchestrationTaskPayload | TaskPayload | UnknownTaskPayload>,
+): OrchestrationTaskPayload[] {
+  return tasks.filter(isOrchestrationTask);
+}
+
+function upsertById<TItem extends { id: string }>(
+  current: TItem[] | undefined,
+  task: TItem,
+): TItem[] {
   const existing = current ?? [];
   if (existing.some((item) => item.id === task.id)) {
     return existing.map((item) => (item.id === task.id ? task : item));
@@ -268,6 +281,8 @@ export function useMobileBridge() {
   const [skillListError, setSkillListError] = useState("");
   const [taskList, setTaskList] = useState<TaskPayload[]>();
   const [taskListError, setTaskListError] = useState("");
+  const [orchestrationList, setOrchestrationList] = useState<OrchestrationTaskPayload[]>();
+  const [orchestrationListError, setOrchestrationListError] = useState("");
   const [runningTaskId, setRunningTaskId] = useState("");
   const [sessions, setSessions] = useState<SessionMetadata[]>([]);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
@@ -338,6 +353,8 @@ export function useMobileBridge() {
     setSkillListError("");
     setTaskList(undefined);
     setTaskListError("");
+    setOrchestrationList(undefined);
+    setOrchestrationListError("");
     setRunningTaskId("");
     setSessions([]);
     setSessionsLoaded(false);
@@ -464,8 +481,22 @@ export function useMobileBridge() {
 
   const loadTasks = useCallback(async (): Promise<TaskPayload[]> => {
     setTaskListError("");
-    const payload = filterUserTasks(await requestBridge<Array<TaskPayload | UnknownTaskPayload>>("TASK_LIST", { scope: "user" }));
+    const payload = filterUserTasks(
+      await requestBridge<Array<TaskPayload | UnknownTaskPayload>>("TASK_LIST", { scope: "user" }),
+    );
     setTaskList(payload);
+    return payload;
+  }, [requestBridge]);
+
+  const loadOrchestrations = useCallback(async (): Promise<OrchestrationTaskPayload[]> => {
+    setOrchestrationListError("");
+    const payload = filterOrchestrationTasks(
+      await requestBridge<Array<OrchestrationTaskPayload | TaskPayload | UnknownTaskPayload>>(
+        "TASK_LIST",
+        { scope: "orchestration" },
+      ),
+    );
+    setOrchestrationList(payload);
     return payload;
   }, [requestBridge]);
 
@@ -553,6 +584,20 @@ export function useMobileBridge() {
     }
   }, [loadTasks]);
 
+  const refreshOrchestrations = useCallback(async (): Promise<boolean> => {
+    setStatus({ tone: "loading", text: "编排刷新中" });
+    try {
+      await loadOrchestrations();
+      setStatus({ tone: "success", text: "编排已刷新" });
+      return true;
+    } catch (error) {
+      const text = `编排列表加载失败：${errorMessage(error)}`;
+      setOrchestrationListError(text);
+      setStatus({ tone: "error", text });
+      return false;
+    }
+  }, [loadOrchestrations]);
+
   const refreshSkillsAfterConnect = useCallback((): void => {
     void loadSkills().catch((error: unknown) => {
       const text = skillListErrorText(error);
@@ -571,6 +616,14 @@ export function useMobileBridge() {
       setTaskListError(text);
     });
   }, [loadTasks]);
+
+  const refreshOrchestrationsAfterConnect = useCallback((): void => {
+    void loadOrchestrations().catch((error: unknown) => {
+      const text = `编排列表加载失败：${errorMessage(error)}`;
+      console.error("[useMobileBridge] load orchestrations after connect failed", error);
+      setOrchestrationListError(text);
+    });
+  }, [loadOrchestrations]);
 
   const updateSkill = useCallback(
     async (id: string, enabled: boolean): Promise<boolean> => {
@@ -610,11 +663,35 @@ export function useMobileBridge() {
       try {
         const payload = await requestBridge<TaskPayload>("TASK_UPDATE", { id, scope: "user", enabled });
         if (isUserTask(payload)) {
-          setTaskList((current) => upsertTask(current, payload));
+          setTaskList((current) => upsertById(current, payload));
         } else {
           setTaskList((current) => current?.map((item) => (item.id === id ? { ...item, enabled } : item)));
         }
         setStatus({ tone: "success", text: enabled ? "任务已启用" : "任务已停用" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const setOrchestrationEnabled = useCallback(
+    async (id: string, enabled: boolean): Promise<boolean> => {
+      setStatus({ tone: "loading", text: enabled ? "编排启用中" : "编排停用中" });
+      try {
+        const payload = await requestBridge<OrchestrationTaskPayload>("TASK_UPDATE", {
+          id,
+          scope: "orchestration",
+          enabled,
+        });
+        if (isOrchestrationTask(payload)) {
+          setOrchestrationList((current) => upsertById(current, payload));
+        } else {
+          setOrchestrationList((current) => current?.map((item) => (item.id === id ? { ...item, enabled } : item)));
+        }
+        setStatus({ tone: "success", text: enabled ? "编排已启用" : "编排已停用" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
@@ -652,6 +729,22 @@ export function useMobileBridge() {
         await requestBridge<unknown>("TASK_DELETE", { id, scope: "user" });
         setTaskList((current) => current?.filter((item) => item.id !== id));
         setStatus({ tone: "success", text: "任务已删除" });
+        return true;
+      } catch (error) {
+        setStatus({ tone: "error", text: errorMessage(error) });
+        return false;
+      }
+    },
+    [requestBridge],
+  );
+
+  const deleteOrchestration = useCallback(
+    async (id: string): Promise<boolean> => {
+      setStatus({ tone: "loading", text: "编排删除中" });
+      try {
+        await requestBridge<unknown>("TASK_DELETE", { id, scope: "orchestration" });
+        setOrchestrationList((current) => current?.filter((item) => item.id !== id));
+        setStatus({ tone: "success", text: "编排已删除" });
         return true;
       } catch (error) {
         setStatus({ tone: "error", text: errorMessage(error) });
@@ -859,6 +952,7 @@ export function useMobileBridge() {
       setConnectionStatus({ tone: "success", text: connectedStatusText(settings.connectionMode) });
       refreshSkillsAfterConnect();
       refreshTasksAfterConnect();
+      refreshOrchestrationsAfterConnect();
       refreshSessionsAfterConnect();
     } catch (error) {
       connectedTargetRef.current = undefined;
@@ -870,6 +964,8 @@ export function useMobileBridge() {
       setSkillListError("");
       setTaskList(undefined);
       setTaskListError("");
+      setOrchestrationList(undefined);
+      setOrchestrationListError("");
       setRunningTaskId("");
       setSessions([]);
       setSessionsLoaded(false);
@@ -880,6 +976,7 @@ export function useMobileBridge() {
     bridgeUrl,
     refreshSkillsAfterConnect,
     refreshTasksAfterConnect,
+    refreshOrchestrationsAfterConnect,
     refreshRuntimeConfig,
     refreshSessionsAfterConnect,
     settings,
@@ -1111,6 +1208,7 @@ export function useMobileBridge() {
     connectBridge,
     connectionStatus,
     createProvider,
+    deleteOrchestration,
     deleteProvider,
     deleteTask,
     getFullSession,
@@ -1121,8 +1219,11 @@ export function useMobileBridge() {
       providerList,
     ),
     localProviderList: withLocalProviderSelection(localProviderList, settings),
+    orchestrationList,
+    orchestrationListError,
     refreshProviders,
     refreshLocalProviders,
+    refreshOrchestrations,
     refreshSkills,
     refreshTasks,
     runTaskNow,
@@ -1133,6 +1234,7 @@ export function useMobileBridge() {
     sessionsLoaded,
     setSettings,
     setStatus,
+    setOrchestrationEnabled,
     setTaskEnabled,
     settings,
     skillList,

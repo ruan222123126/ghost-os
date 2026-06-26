@@ -1,6 +1,6 @@
 import type { ComponentType, Dispatch, FormEvent, ReactNode, SetStateAction } from "react";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Database, Globe, Key, Link2, RefreshCw, Server, Sparkles, Trash2, Wifi } from "lucide-react";
+import { ArrowLeft, Database, Globe, Key, Link2, RefreshCw, Server, Sparkles, Trash2, Wifi, Workflow } from "lucide-react";
 import { deleteMobileCredential, saveMobileCredential } from "../lib/mobileCredentials";
 import { hasTurnServer, parsePairingUri } from "../lib/mobileWebRTC";
 import type {
@@ -10,8 +10,10 @@ import type {
   SkillPayload,
   StatusMessage,
   StoredSettings,
+  OrchestrationTaskPayload,
   TaskPayload,
 } from "../mobileTypes";
+import { MobileOrchestrationSettings } from "./MobileOrchestrationSettings";
 import { MobileTaskSettings } from "./MobileTaskSettings";
 import { MobileProviderSettings } from "./MobileProviderSettings";
 import { MobileSkillSettings } from "./MobileSkillSettings";
@@ -28,26 +30,31 @@ interface MobileSettingsPanelProps {
   onClose: () => void;
   onConnect: () => Promise<void>;
   onCreateProvider: (provider: ProviderConfigInputPayload) => Promise<boolean>;
+  onDeleteOrchestration: (id: string) => Promise<boolean>;
   onDeleteProvider: (name: string) => Promise<boolean>;
   onDeleteSkill: (id: string) => Promise<boolean>;
   onDeleteTask: (id: string) => Promise<boolean>;
   onRefreshProviders: () => Promise<boolean>;
+  onRefreshOrchestrations: () => Promise<boolean>;
   onRefreshSkills: () => Promise<boolean>;
   onRefreshTasks: () => Promise<boolean>;
   onRunTaskNow: (id: string) => Promise<boolean>;
   onSettingsChange: Dispatch<SetStateAction<StoredSettings>>;
   onSetTaskEnabled: (id: string, enabled: boolean) => Promise<boolean>;
+  onSetOrchestrationEnabled: (id: string, enabled: boolean) => Promise<boolean>;
   onUpdateSkill: (id: string, enabled: boolean) => Promise<boolean>;
   onUpdateProvider: (name: string, provider: ProviderConfigInputPayload) => Promise<boolean>;
   runningTaskId: string;
   settings: StoredSettings;
   skillList: SkillPayload[] | undefined;
   skillListError: string;
+  orchestrationList: OrchestrationTaskPayload[] | undefined;
+  orchestrationListError: string;
   taskList: TaskPayload[] | undefined;
   taskListError: string;
 }
 
-type SettingsView = "root" | "connection" | "providers" | "skills" | "tasks";
+type SettingsView = "root" | "connection" | "providers" | "skills" | "tasks" | "orchestrations";
 
 export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
   const [view, setView] = useState<SettingsView>("root");
@@ -206,10 +213,24 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onRunTaskNow={props.onRunTaskNow}
               onSetTaskEnabled={props.onSetTaskEnabled}
             />
+          ) : view === "orchestrations" ? (
+            <MobileOrchestrationSettings
+              loadError={props.orchestrationListError}
+              orchestrations={props.orchestrationList}
+              onDeleteOrchestration={props.onDeleteOrchestration}
+              onRefreshOrchestrations={props.onRefreshOrchestrations}
+              onSetOrchestrationEnabled={props.onSetOrchestrationEnabled}
+            />
           ) : (
             <SettingsRoot
               autoConnectEnabled={props.settings.autoConnectEnabled}
               connectionSublabel={connectionSublabel(props.settings)}
+              orchestrationDisabled={taskEntryDisabled(props.connectionStatus)}
+              orchestrationSublabel={taskSublabel(
+                props.connectionStatus,
+                props.orchestrationList,
+                props.orchestrationListError,
+              )}
               persistComputerSessionsEnabled={props.settings.persistComputerSessionsEnabled}
               persistComputerSessionsStatus={props.computerSessionPersistStatus}
               remoteExecutionEnabled={props.settings.remoteExecutionEnabled}
@@ -224,6 +245,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               onSetPersistComputerSessionsEnabled={setPersistComputerSessionsEnabled}
               onSetRemoteExecutionEnabled={setRemoteExecutionEnabled}
               onOpenConnection={() => setView("connection")}
+              onOpenOrchestrations={() => setView("orchestrations")}
               onOpenTasks={() => setView("tasks")}
               onOpenProviders={() => setView("providers")}
               onOpenSkills={() => setView("skills")}
@@ -267,6 +289,8 @@ function SettingsButton(props: {
 function SettingsRoot(props: {
   autoConnectEnabled: boolean;
   connectionSublabel: string;
+  orchestrationDisabled: boolean;
+  orchestrationSublabel: string;
   providerDisabled: boolean;
   providerSublabel: string;
   persistComputerSessionsEnabled: boolean;
@@ -278,6 +302,7 @@ function SettingsRoot(props: {
   taskDisabled: boolean;
   taskSublabel: string;
   onOpenConnection: () => void;
+  onOpenOrchestrations: () => void;
   onOpenProviders: () => void;
   onOpenSkills: () => void;
   onOpenTasks: () => void;
@@ -331,6 +356,13 @@ function SettingsRoot(props: {
             sublabel={props.taskSublabel}
             disabled={props.taskDisabled}
             onClick={props.onOpenTasks}
+          />
+          <SettingsButton
+            icon={Workflow}
+            label="编排"
+            sublabel={props.orchestrationSublabel}
+            disabled={props.orchestrationDisabled}
+            onClick={props.onOpenOrchestrations}
           />
         </div>
       </SettingsSection>
@@ -387,6 +419,8 @@ function titleForView(view: SettingsView): string {
       return "技能";
     case "tasks":
       return "任务";
+    case "orchestrations":
+      return "编排";
     case "root":
       return "设置";
   }
@@ -603,9 +637,9 @@ function skillSublabel(connectionStatus: StatusMessage, skillList: SkillPayload[
   return `${enabledCount}/${skillList.length} 已启用`;
 }
 
-function taskSublabel(
+function taskSublabel<TTask extends { enabled: boolean }>(
   connectionStatus: StatusMessage,
-  taskList: TaskPayload[] | undefined,
+  taskList: TTask[] | undefined,
   error: string,
 ): string {
   if (connectionStatus.tone !== "success") {

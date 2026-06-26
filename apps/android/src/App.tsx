@@ -65,6 +65,7 @@ function App() {
     connectBridge,
     connectionStatus,
     createProvider,
+    deleteOrchestration,
     deleteProvider,
     deleteSkill,
     deleteTask,
@@ -72,7 +73,10 @@ function App() {
     getSession,
     host,
     localProviderList,
+    orchestrationList,
+    orchestrationListError,
     providerList,
+    refreshOrchestrations,
     refreshProviders,
     refreshSkills,
     refreshTasks,
@@ -83,6 +87,7 @@ function App() {
     sessions,
     sessionsLoaded,
     setSettings,
+    setOrchestrationEnabled,
     setTaskEnabled,
     settings,
     skillList,
@@ -315,20 +320,25 @@ function App() {
         onConnect={connectBridge}
         onActivateProvider={activateProvider}
         onCreateProvider={createProvider}
+        onDeleteOrchestration={deleteOrchestration}
         onDeleteProvider={deleteProvider}
         onDeleteSkill={deleteSkill}
         onDeleteTask={deleteTask}
         onRefreshProviders={refreshProviders}
+        onRefreshOrchestrations={refreshOrchestrations}
         onRefreshSkills={refreshSkills}
         onRefreshTasks={refreshTasks}
         onRunTaskNow={runTaskNow}
         onSettingsChange={setSettings}
+        onSetOrchestrationEnabled={setOrchestrationEnabled}
         onSetTaskEnabled={setTaskEnabled}
         onUpdateSkill={updateSkill}
         onUpdateProvider={updateProvider}
         runningTaskId={runningTaskId}
         skillListError={skillListError}
         skillList={skillList}
+        orchestrationList={orchestrationList}
+        orchestrationListError={orchestrationListError}
         taskListError={taskListError}
         taskList={taskList}
       />

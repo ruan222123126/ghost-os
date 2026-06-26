@@ -179,6 +179,58 @@ export interface WorkflowTaskPayload {
   last_error?: string;
 }
 
+export type OrchestrationNodeType = "group" | "agent";
+export type OrchestrationEdgeKind = "control" | "member";
+export type OrchestrationSpeakingMode = "sequential" | "parallel" | "owner";
+
+export interface OrchestrationGroupNodePayload {
+  title: string;
+  shared_context?: string;
+  speaking_mode: OrchestrationSpeakingMode;
+  owner_agent_id?: string;
+  max_rounds: number;
+}
+
+export interface OrchestrationAgentNodePayload {
+  title: string;
+  message: string;
+  runtime_overrides?: TaskRuntimeOverridesPayload;
+}
+
+export interface OrchestrationNodePayload {
+  id: string;
+  type: OrchestrationNodeType;
+  group?: OrchestrationGroupNodePayload;
+  agent?: OrchestrationAgentNodePayload;
+}
+
+export interface OrchestrationEdgePayload {
+  from_node_id: string;
+  to_node_id: string;
+  kind: OrchestrationEdgeKind;
+}
+
+export interface OrchestrationDefinitionPayload {
+  nodes: OrchestrationNodePayload[];
+  edges: OrchestrationEdgePayload[];
+}
+
+export interface OrchestrationTaskPayload {
+  id: string;
+  name: string;
+  task_kind: "orchestration";
+  orchestration: OrchestrationDefinitionPayload;
+  schedule_type: TaskScheduleType;
+  interval_seconds?: number;
+  cron_expr?: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_run_at?: string;
+  next_run_at?: string;
+  last_error?: string;
+}
+
 export type TaskPayload = AgentMessageTaskPayload | WorkflowTaskPayload;
 
 export type UnknownTaskPayload = {

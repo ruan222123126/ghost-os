@@ -2,7 +2,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentMessageTaskPayload, WorkflowTaskPayload } from "../mobileTypes";
+import type { AgentMessageTaskPayload, OrchestrationTaskPayload, WorkflowTaskPayload } from "../mobileTypes";
 import { useMobileBridge } from "./useMobileBridge";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -303,7 +303,7 @@ describe("useMobileBridge", () => {
     }
   });
 
-  it("requests the user task list after bridge connection succeeds", async () => {
+  it("requests user and orchestration task lists after bridge connection succeeds", async () => {
     window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify({
@@ -320,7 +320,8 @@ describe("useMobileBridge", () => {
     await waitFor(() => {
       expect(bridgeBusRequests().some((request) => request.action === "TASK_LIST")).toBe(true);
     });
-    expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params).toEqual({ scope: "user" });
+    expect(bridgeBusRequests().filter((request) => request.action === "TASK_LIST").map((request) => request.params))
+      .toEqual([{ scope: "user" }, { scope: "orchestration" }]);
   });
 
   it("refreshTasks requests user tasks and keeps agent message and workflow tasks", async () => {
@@ -378,6 +379,58 @@ describe("useMobileBridge", () => {
       scope: "user",
     });
   });
+
+  it("refreshOrchestrations requests orchestration tasks only", async () => {
+    useHTTPSettings();
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "TASK_LIST"
+          ? [
+            orchestrationTask({ id: "orchestration-1" }),
+            orchestrationTask({ id: "orchestration-2", enabled: false }),
+            loopTask({ id: "loop-1" }),
+            { id: "unknown-1", task_kind: "unknown" },
+          ]
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.refreshOrchestrations();
+
+    expect(bridgeBusRequests().find((request) => request.action === "TASK_LIST")?.params)
+      .toEqual({ scope: "orchestration" });
+    await waitFor(() => {
+      expect(result.current.orchestrationList?.map((task) => task.id)).toEqual(["orchestration-1", "orchestration-2"]);
+    });
+  });
+
+  it("setOrchestrationEnabled and deleteOrchestration send orchestration-scoped task actions", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.setOrchestrationEnabled("orchestration-1", false);
+    await result.current.deleteOrchestration("orchestration-1");
+
+    expect(lastBridgeBusRequest("TASK_UPDATE")?.params).toEqual({
+      id: "orchestration-1",
+      scope: "orchestration",
+      enabled: false,
+    });
+    expect(lastBridgeBusRequest("TASK_DELETE")?.params).toEqual({
+      id: "orchestration-1",
+      scope: "orchestration",
+    });
+    expect(bridgeBusRequests().some((request) => request.action === "TASK_RUN_NOW")).toBe(false);
+    expect(bridgeBusRequests().some((request) => request.action === "TASK_CREATE")).toBe(false);
+  });
 });
 
 interface BridgeBusRequest {
@@ -423,6 +476,9 @@ function payloadForAction(action: string, params: Record<string, unknown> = {}):
     case "TASK_LIST":
       return [];
     case "TASK_UPDATE":
+      if (params.scope === "orchestration") {
+        return orchestrationTaskFromParams(params);
+      }
       return loopTaskFromParams(params);
     case "TASK_RUN_NOW":
     case "TASK_DELETE":
@@ -500,6 +556,45 @@ function workflowTask(overrides: Partial<WorkflowTaskPayload> = {}): WorkflowTas
   };
 }
 
+function orchestrationTask(overrides: Partial<OrchestrationTaskPayload> = {}): OrchestrationTaskPayload {
+  return {
+    id: "orchestration-1",
+    name: "客服编排",
+    task_kind: "orchestration",
+    orchestration: {
+      nodes: [
+        {
+          id: "group-1",
+          type: "group",
+          group: {
+            title: "一线",
+            shared_context: "",
+            speaking_mode: "sequential",
+            max_rounds: 4,
+          },
+        },
+        {
+          id: "agent-1",
+          type: "agent",
+          agent: {
+            title: "分析",
+            message: "分析问题",
+          },
+        },
+      ],
+      edges: [
+        { from_node_id: "group-1", to_node_id: "agent-1", kind: "member" },
+      ],
+    },
+    schedule_type: "interval",
+    interval_seconds: 300,
+    enabled: true,
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: "2026-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
 function loopTaskFromParams(params: Record<string, unknown>): AgentMessageTaskPayload {
   const cronExpr = typeof params.cron_expr === "string" ? params.cron_expr : undefined;
   const intervalSeconds = typeof params.interval_seconds === "number" ? params.interval_seconds : undefined;
@@ -510,6 +605,13 @@ function loopTaskFromParams(params: Record<string, unknown>): AgentMessageTaskPa
     schedule_type: cronExpr ? "cron" : "interval",
     cron_expr: cronExpr,
     interval_seconds: cronExpr ? undefined : intervalSeconds ?? 300,
+    enabled: typeof params.enabled === "boolean" ? params.enabled : true,
+  });
+}
+
+function orchestrationTaskFromParams(params: Record<string, unknown>): OrchestrationTaskPayload {
+  return orchestrationTask({
+    id: typeof params.id === "string" ? params.id : "orchestration-created",
     enabled: typeof params.enabled === "boolean" ? params.enabled : true,
   });
 }
