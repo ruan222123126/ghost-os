@@ -5,6 +5,7 @@ import { headers } from 'next/headers';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import { resolveInitialLocale } from '@/lib/i18n/locale';
 import 'katex/dist/katex.min.css';
+import 'markstream-react/index.css';
 import './globals.css';
 import './styles/primitives.css';
 import './styles/shell.css';

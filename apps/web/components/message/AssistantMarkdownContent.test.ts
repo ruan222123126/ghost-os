@@ -4,9 +4,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 jest.mock('next/dynamic', () => ({
   __esModule: true,
   default: () => {
-    return ({ content }: { content: string }) => React.createElement(
+    return ({ content, final }: { content: string; final?: boolean }) => React.createElement(
       'div',
-      { className: 'mock-dynamic-markdown' },
+      { className: 'mock-dynamic-markdown', 'data-final': String(final) },
       content,
     );
   },
@@ -38,6 +38,7 @@ describe('components/message/AssistantMarkdownContent', () => {
 
     expect(html).toContain('assistant-markdown');
     expect(html).toContain('mock-dynamic-markdown');
+    expect(html).toContain('data-final="true"');
   });
 
   it('keeps raw HTML content on the plain text path', () => {

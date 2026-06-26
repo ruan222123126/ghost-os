@@ -135,6 +135,7 @@ const AssistantMessageRow: FC<{
             <AssistantMarkdownContent
               content={message.content}
               enabled={assistantMarkdownEnabled}
+              final={!message.inProgress}
               showCopyButton={showCopyButton}
             />
           </div>

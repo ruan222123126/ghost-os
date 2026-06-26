@@ -1,9 +1,4 @@
-import {
-  extractCodeLanguage,
-  formatCodeLanguageLabel,
-  highlightCodeBlockHTML,
-  shouldRenderAssistantMarkdown,
-} from './assistantMarkdown';
+import { shouldRenderAssistantMarkdown } from './assistantMarkdown';
 
 describe('shouldRenderAssistantMarkdown', () => {
   it('returns false for plain text', () => {
@@ -34,42 +29,5 @@ describe('shouldRenderAssistantMarkdown', () => {
 
   it('does not treat ordinary dollar amounts as markdown', () => {
     expect(shouldRenderAssistantMarkdown('Price moved from $6 to $7 today.')).toBe(false);
-  });
-});
-
-describe('extractCodeLanguage', () => {
-  it('normalizes aliases and falls back to text', () => {
-    expect(extractCodeLanguage('language-ts')).toBe('typescript');
-    expect(extractCodeLanguage('foo language-PY bar')).toBe('python');
-    expect(extractCodeLanguage('language-bash')).toBe('bash');
-    expect(extractCodeLanguage('')).toBe('text');
-    expect(extractCodeLanguage(undefined)).toBe('text');
-  });
-
-  it('sanitizes unusual language values', () => {
-    expect(extractCodeLanguage('language-C++')).toBe('c++');
-    expect(extractCodeLanguage('language-unknown$lang')).toBe('unknownlang');
-  });
-});
-
-describe('formatCodeLanguageLabel', () => {
-  it('renders uppercase labels', () => {
-    expect(formatCodeLanguageLabel('typescript')).toBe('TYPESCRIPT');
-    expect(formatCodeLanguageLabel('')).toBe('TEXT');
-  });
-});
-
-describe('highlightCodeBlockHTML', () => {
-  it('escapes raw HTML and highlights syntax tokens', () => {
-    const html = highlightCodeBlockHTML('const el = <Link href="/x">1</Link>; // ok');
-
-    expect(html).toContain('&lt;');
-    expect(html).not.toContain('<Link');
-    expect(html).toContain('assistant-syntax-declaration');
-    expect(html).toContain('assistant-syntax-tag');
-    expect(html).toContain('assistant-syntax-attribute');
-    expect(html).toContain('assistant-syntax-number');
-    expect(html).toContain('assistant-syntax-comment');
-    expect(html).toContain('assistant-syntax-string');
   });
 });

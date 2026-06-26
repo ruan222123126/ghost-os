@@ -15,6 +15,7 @@ import { MessageRow } from './MessageRow';
 type AssistantMarkdownMockProps = {
   content: string;
   enabled?: boolean;
+  final?: boolean;
   showCopyButton?: boolean;
 };
 
@@ -123,6 +124,7 @@ describe('components/message/MessageRow', () => {
     expect(assistantMarkdownMock).toHaveBeenCalledWith(expect.objectContaining({
       content: '# title',
       enabled: false,
+      final: true,
       showCopyButton: true,
     }));
   });
@@ -147,6 +149,7 @@ describe('components/message/MessageRow', () => {
     expect(html).not.toContain('message-draft-flag');
     expect(assistantMarkdownMock).toHaveBeenCalledWith(expect.objectContaining({
       content: 'partial answer',
+      final: false,
       showCopyButton: false,
     }));
   });
