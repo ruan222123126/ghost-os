@@ -40,20 +40,31 @@ interface UseLiveRunViewerResult {
 
 export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunViewerResult {
   const { run } = options;
+  const { cards, streamError } = useLiveRunCards(run);
+  const { followLatest, selectedCard, selectCard } = useLiveRunSelection(cards, run.run_id);
+  const { output, sourceSessionError } = useLiveRunOutput(selectedCard, run.run_id);
+
+  return {
+    cards,
+    followLatest,
+    output,
+    selectedCard,
+    selectCard,
+    sourceSessionError,
+    streamError,
+  };
+}
+
+function useLiveRunCards(run: TaskRunLog): {
+  cards: LiveTaskRunCard[];
+  streamError: string;
+} {
   const [cards, setCards] = useState<LiveTaskRunCard[]>(() => hydrateLiveTaskRunCards(run.run_cards));
-  const [followLatest, setFollowLatest] = useState(true);
-  const [selectedCardId, setSelectedCardId] = useState('');
   const [streamError, setStreamError] = useState('');
-  const [sourceSessionError, setSourceSessionError] = useState('');
-  const [sourceSessions, setSourceSessions] = useState<Record<string, SessionDetail>>({});
 
   useEffect(() => {
     setCards([]);
-    setFollowLatest(true);
-    setSelectedCardId('');
     setStreamError('');
-    setSourceSessionError('');
-    setSourceSessions({});
   }, [run.run_id]);
 
   useEffect(() => {
@@ -89,37 +100,58 @@ export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunVi
     return () => controller.abort();
   }, [run.session_id_output]);
 
+  return { cards, streamError };
+}
+
+function useLiveRunSelection(cards: LiveTaskRunCard[], runID: string): {
+  followLatest: boolean;
+  selectedCard: LiveTaskRunCard | null;
+  selectCard: (cardId: string) => void;
+} {
+  const [followLatest, setFollowLatest] = useState(true);
+  const [selectedCardId, setSelectedCardId] = useState('');
+
+  useEffect(() => {
+    setFollowLatest(true);
+    setSelectedCardId('');
+  }, [runID]);
+
   const selectedCard = useMemo(() => {
-    if (!cards.length) {
-      return null;
-    }
-    if (selectedCardId) {
-      const matched = cards.find((card) => card.card_id === selectedCardId);
-      if (matched) {
-        return matched;
-      }
-    }
-    return latestActiveCard(cards) ?? latestCreatedCard(cards);
+    return resolveSelectedCard(cards, selectedCardId);
   }, [cards, selectedCardId]);
 
   useEffect(() => {
-    if (!cards.length) {
-      if (selectedCardId) {
-        setSelectedCardId('');
-      }
-      return;
-    }
-    if (!followLatest || isStickyTerminalCard(selectedCard)) {
-      return;
-    }
-    const next = latestActiveCard(cards) ?? latestCreatedCard(cards);
-    if (next && next.card_id !== selectedCardId) {
-      setSelectedCardId(next.card_id);
-    }
+    syncSelectedCard({
+      cards,
+      followLatest,
+      selectedCard,
+      selectedCardId,
+      setSelectedCardId,
+    });
   }, [cards, followLatest, selectedCard, selectedCardId]);
 
+  const selectCard = useCallback((cardId: string) => {
+    setSelectedCardId(cardId);
+    const latest = latestCreatedCard(cards);
+    setFollowLatest(Boolean(latest && latest.card_id === cardId));
+  }, [cards]);
+
+  return { followLatest, selectedCard, selectCard };
+}
+
+function useLiveRunOutput(selectedCard: LiveTaskRunCard | null, runID: string): {
+  output: TaskRunCardOutput;
+  sourceSessionError: string;
+} {
+  const [sourceSessionError, setSourceSessionError] = useState('');
+  const [sourceSessions, setSourceSessions] = useState<Record<string, SessionDetail>>({});
   const selectedSessionId = useMemo(() => resolveSelectedSessionId(selectedCard), [selectedCard]);
-  const refreshToken = `${selectedSessionId}:${selectedCard?.status ?? ''}:${selectedCard?.finished_at ?? ''}`;
+  const refreshToken = `${runID}:${selectedSessionId}:${selectedCard?.status ?? ''}:${selectedCard?.finished_at ?? ''}`;
+
+  useEffect(() => {
+    setSourceSessionError('');
+    setSourceSessions({});
+  }, [runID]);
 
   useEffect(() => {
     if (!selectedSessionId) {
@@ -148,26 +180,56 @@ export function useLiveRunViewer(options: UseLiveRunViewerOptions): UseLiveRunVi
     };
   }, [refreshToken, selectedSessionId]);
 
-  const selectCard = useCallback((cardId: string) => {
-    setSelectedCardId(cardId);
-    const latest = latestCreatedCard(cards);
-    setFollowLatest(Boolean(latest && latest.card_id === cardId));
-  }, [cards]);
-
   const output = useMemo(
     () => buildTaskRunCardOutput(selectedCard, selectedSessionId ? sourceSessions[selectedSessionId] ?? null : null),
     [selectedCard, selectedSessionId, sourceSessions],
   );
 
-  return {
-    cards,
-    followLatest,
-    output,
-    selectedCard,
-    selectCard,
-    sourceSessionError,
-    streamError,
-  };
+  return { output, sourceSessionError };
+}
+
+function resolveSelectedCard(cards: LiveTaskRunCard[], selectedCardId: string): LiveTaskRunCard | null {
+  if (!cards.length) {
+    return null;
+  }
+
+  const matched = selectedCardId
+    ? cards.find((card) => card.card_id === selectedCardId)
+    : null;
+
+  return matched ?? latestActiveCard(cards) ?? latestCreatedCard(cards);
+}
+
+function syncSelectedCard(options: {
+  cards: LiveTaskRunCard[];
+  followLatest: boolean;
+  selectedCard: LiveTaskRunCard | null;
+  selectedCardId: string;
+  setSelectedCardId: (value: string) => void;
+}): void {
+  const { cards, followLatest, selectedCard, selectedCardId, setSelectedCardId } = options;
+
+  if (!cards.length) {
+    clearSelectedCardId(selectedCardId, setSelectedCardId);
+    return;
+  }
+  if (!followLatest || isStickyTerminalCard(selectedCard)) {
+    return;
+  }
+
+  const next = latestActiveCard(cards) ?? latestCreatedCard(cards);
+  if (next && next.card_id !== selectedCardId) {
+    setSelectedCardId(next.card_id);
+  }
+}
+
+function clearSelectedCardId(
+  selectedCardId: string,
+  setSelectedCardId: (value: string) => void,
+): void {
+  if (selectedCardId) {
+    setSelectedCardId('');
+  }
 }
 
 function applyViewerEvent(cards: LiveTaskRunCard[], event: { type: string; payload: unknown }): LiveTaskRunCard[] {
