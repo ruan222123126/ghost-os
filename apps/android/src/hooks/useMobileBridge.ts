@@ -553,6 +553,15 @@ export function useMobileBridge() {
       : current));
   }, [connectionStatus.tone, syncProvidersBidirectionally]);
 
+  const selectedLocalProviderList = useMemo(
+    () => withLocalProviderSelection(localProviderList, settings),
+    [localProviderList, settings],
+  );
+  const mergedProviderList = useMemo(
+    () => mergeLocalProvidersWithRemote(selectedLocalProviderList, providerList),
+    [providerList, selectedLocalProviderList],
+  );
+
   const refreshSkills = useCallback(async (): Promise<boolean> => {
     setStatus({ tone: "loading", text: "技能刷新中" });
     try {
@@ -767,29 +776,45 @@ export function useMobileBridge() {
 
   const updateProvider = useCallback(
     async (name: string, provider: ProviderConfigInputPayload): Promise<boolean> => {
-      void name;
+      const existingProvider = mergedProviderList?.providers.find((item) => stringsEqualIgnoreCase(item.name, name));
       setStatus({ tone: "loading", text: "本地供应商保存中" });
-      const payload = await createOrUpdateLocalProvider(provider);
+      const payload = await createOrUpdateLocalProvider({
+        ...provider,
+        provider_id: provider.provider_id ?? existingProvider?.provider_id,
+      });
       setLocalProviderList(payload);
       setStatus({ tone: "success", text: "本地供应商已保存" });
       return true;
     },
-    [],
+    [mergedProviderList?.providers],
   );
 
   const deleteProvider = useCallback(
     async (name: string): Promise<boolean> => {
       setStatus({ tone: "loading", text: "本地供应商删除中" });
-      const providerId = localProviderList?.providers.find((item) => item.name === name)?.provider_id;
-      if (!providerId) {
+      const provider = mergedProviderList?.providers.find((item) => stringsEqualIgnoreCase(item.name, name));
+      if (!provider) {
         return false;
       }
-      const payload = await deleteStoredLocalProvider(providerId);
+      const hasLocalProvider = localProviderList?.providers.some((item) => item.provider_id === provider.provider_id);
+      const payload = hasLocalProvider
+        ? await deleteStoredLocalProvider(provider.provider_id)
+        : await createOrUpdateLocalProvider({
+          base_url: provider.base_url,
+          deleted_at: new Date().toISOString(),
+          model_context_window_tokens: provider.model_context_window_tokens,
+          model_response_reserve_tokens: provider.model_response_reserve_tokens,
+          models: provider.models,
+          name: provider.name,
+          provider_id: provider.provider_id,
+          response_reserve_tokens: provider.response_reserve_tokens,
+          type: provider.type,
+        });
       setLocalProviderList(payload);
       setStatus({ tone: "success", text: "本地供应商已删除" });
       return true;
     },
-    [localProviderList?.providers],
+    [localProviderList?.providers, mergedProviderList?.providers],
   );
 
   const activateProvider = useCallback(
@@ -798,7 +823,7 @@ export function useMobileBridge() {
       if (!trimmed) {
         return false;
       }
-      const activeProvider = localProviderList?.providers.find((provider) => stringsEqualIgnoreCase(provider.name, trimmed));
+      const activeProvider = mergedProviderList?.providers.find((provider) => stringsEqualIgnoreCase(provider.name, trimmed));
       if (!activeProvider) {
         return false;
       }
@@ -810,7 +835,7 @@ export function useMobileBridge() {
       setStatus({ tone: "success", text: "本地供应商已激活" });
       return true;
     },
-    [localProviderList?.providers],
+    [mergedProviderList?.providers],
   );
 
   const refreshSessions = useCallback(async (): Promise<SessionMetadata[]> => {
@@ -1214,11 +1239,8 @@ export function useMobileBridge() {
     getFullSession,
     getSession,
     host,
-    providerList: mergeLocalProvidersWithRemote(
-      withLocalProviderSelection(localProviderList, settings),
-      providerList,
-    ),
-    localProviderList: withLocalProviderSelection(localProviderList, settings),
+    providerList: mergedProviderList,
+    localProviderList: selectedLocalProviderList,
     orchestrationList,
     orchestrationListError,
     refreshProviders,

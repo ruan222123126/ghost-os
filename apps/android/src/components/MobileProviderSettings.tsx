@@ -22,6 +22,7 @@ interface MobileProviderSettingsProps {
 
 interface ProviderEditorState {
   name: string;
+  providerId: string;
   providerType: ProviderType;
   baseURL: string;
   apiKey: string;
@@ -45,6 +46,7 @@ const PROVIDER_TYPE_OPTIONS: Array<{
 
 const EMPTY_EDITOR: ProviderEditorState = {
   name: "",
+  providerId: "",
   providerType: "openai",
   baseURL: "",
   apiKey: "",
@@ -60,7 +62,7 @@ export function MobileProviderSettings(props: MobileProviderSettingsProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const providers = props.providerList?.providers ?? [];
-  const activeProvider = props.providerList?.active_provider || props.config?.provider || "";
+  const activeProvider = props.config?.provider || props.providerList?.active_provider || "";
 
   function startCreate(): void {
     setEditor({ ...EMPTY_EDITOR });
@@ -337,6 +339,7 @@ function ProviderField(props: { children: ReactNode; label: string }) {
 function editorFromProvider(provider: ProviderConfigPayload): ProviderEditorState {
   return {
     name: provider.name,
+    providerId: provider.provider_id,
     providerType: provider.type,
     baseURL: provider.base_url,
     apiKey: "",
@@ -368,6 +371,9 @@ function providerInputFromEditor(editor: ProviderEditorState): ProviderConfigInp
   }
   if (editor.baseURL.trim()) {
     input.base_url = editor.baseURL.trim();
+  }
+  if (editor.providerId.trim()) {
+    input.provider_id = editor.providerId.trim();
   }
   if (editor.apiKey.trim()) {
     input.api_key = editor.apiKey.trim();

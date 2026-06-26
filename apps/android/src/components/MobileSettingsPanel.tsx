@@ -188,7 +188,7 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
           ) : view === "providers" ? (
             <MobileProviderSettings
               config={props.config}
-              providerList={props.localProviderList ?? props.providerList}
+              providerList={props.providerList}
               onActivateProvider={props.onActivateProvider}
               onCreateProvider={props.onCreateProvider}
               onDeleteProvider={props.onDeleteProvider}
@@ -237,8 +237,8 @@ export function MobileSettingsPanel(props: MobileSettingsPanelProps) {
               remoteExecutionLocked={props.connectionStatus.tone !== "success"}
               taskDisabled={taskEntryDisabled(props.connectionStatus)}
               taskSublabel={taskSublabel(props.connectionStatus, props.taskList, props.taskListError)}
-              providerDisabled={providerEntryDisabled(props.localProviderList)}
-              providerSublabel={providerSublabel(props.config, props.connectionStatus, props.localProviderList)}
+              providerDisabled={providerEntryDisabled(props.providerList)}
+              providerSublabel={providerSublabel(props.config, props.providerList)}
               skillDisabled={skillEntryDisabled(props.connectionStatus)}
               skillSublabel={skillSublabel(props.connectionStatus, props.skillList, props.skillListError)}
               onSetAutoConnectEnabled={setAutoConnectEnabled}
@@ -331,8 +331,8 @@ function SettingsRoot(props: {
             checked={props.remoteExecutionEnabled}
             disabled={props.remoteExecutionLocked}
             icon={Server}
-            label="远程运行"
-            sublabel={props.remoteExecutionLocked ? "仅连接成功后可开启" : "开启后跟随电脑端模型"}
+            label="跟随电脑模型"
+            sublabel={remoteExecutionSublabel(props.remoteExecutionEnabled, props.remoteExecutionLocked)}
             onChange={props.onSetRemoteExecutionEnabled}
           />
           <SettingsButton icon={Link2} label="连接" sublabel={props.connectionSublabel} onClick={props.onOpenConnection} />
@@ -610,17 +610,23 @@ function taskEntryDisabled(connectionStatus: StatusMessage): boolean {
 
 function providerSublabel(
   config: ConfigPayload | undefined,
-  _connectionStatus: StatusMessage,
   providerList: ProviderListPayload | undefined,
 ): string {
   if (!providerList) {
     return "加载中";
   }
-  const provider = providerList.active_provider || config?.provider || "";
+  const provider = config?.provider || providerList.active_provider || "";
   if (provider && config?.model) {
     return `${provider} / ${config.model}`;
   }
   return provider || "未激活";
+}
+
+function remoteExecutionSublabel(enabled: boolean, locked: boolean): string {
+  if (locked) {
+    return "连接电脑后可开启";
+  }
+  return enabled ? "使用电脑端当前激活模型" : "可在手机端自行选择模型";
 }
 
 function skillSublabel(connectionStatus: StatusMessage, skillList: SkillPayload[] | undefined, error: string): string {

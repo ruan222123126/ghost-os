@@ -18,6 +18,8 @@ export interface LocalProviderExportPayload extends ProviderConfigInputPayload {
   updated_at: string;
 }
 
+type ProviderRecordInput = Partial<ProviderConfigInputPayload & ProviderConfigPayload> & Record<string, unknown>;
+
 function nowISO(): string {
   return new Date().toISOString();
 }
@@ -33,7 +35,9 @@ export async function createOrUpdateLocalProvider(
   provider: ProviderConfigInputPayload,
 ): Promise<ProviderListPayload> {
   if (hasTauriRuntime()) {
-    return normalizeProviderList(await invoke<unknown>("mobile_local_provider_upsert", { provider }));
+    return normalizeProviderList(
+      await invoke<unknown>("mobile_local_provider_upsert", { provider: providerInputForTauri(provider) }),
+    );
   }
 
   const state = readLocalProviderState();
@@ -75,7 +79,7 @@ export async function exportLocalProvider(providerId: string): Promise<LocalProv
     throw new Error("provider_id is required");
   }
   if (hasTauriRuntime()) {
-    return invoke<LocalProviderExportPayload>("mobile_local_provider_export", { providerId: trimmed });
+    return normalizeLocalProviderExport(await invoke<unknown>("mobile_local_provider_export", { providerId: trimmed }));
   }
   const record = readLocalProviderState().records.find((provider) => provider.provider_id === trimmed);
   if (!record) {
@@ -120,14 +124,20 @@ function writeLocalProviderState(state: LocalProviderState): void {
 }
 
 function normalizeProviderList(value: unknown): ProviderListPayload {
-  const records = isProviderListPayload(value)
-    ? normalizeProviderRecords(value.provider_sync_records ?? value.providers)
-    : value && typeof value === "object" && !Array.isArray(value) && "records" in value
-      ? normalizeProviderRecords((value as { records?: unknown[] }).records ?? [])
+  const record = objectRecord(value);
+  const syncRecords = record
+    ? (record.provider_sync_records ?? record.providerSyncRecords)
+    : undefined;
+  const providers = record?.providers;
+  const records = isProviderListPayload(value) || providers || syncRecords
+    ? normalizeProviderRecords(syncRecords ?? providers)
+    : record && "records" in record
+      ? normalizeProviderRecords(record.records)
       : [];
 
   return {
-    active_provider: "",
+    active_provider: stringField(record, "active_provider", "activeProvider"),
+    active_provider_id: optionalStringField(record, "active_provider_id", "activeProviderId"),
     provider_sync_records: records.map(providerToSyncRecord),
     providers: records.filter((record) => !record.deleted_at),
   };
@@ -138,34 +148,61 @@ function normalizeProviderRecords(value: unknown): ProviderConfigPayload[] {
     return [];
   }
   const current = value
-    .map((item) => normalizeProviderRecord(item as Partial<ProviderConfigInputPayload & ProviderConfigPayload>, []))
+    .map((item) => normalizeProviderRecord(item, []))
     .filter((item) => Boolean(item.provider_id && item.name));
   return current;
 }
 
 function normalizeProviderRecord(
-  input: Partial<ProviderConfigInputPayload & ProviderConfigPayload>,
+  value: unknown,
   existing: ProviderConfigPayload[],
 ): ProviderConfigPayload {
-  const providerID = input.provider_id?.trim()
-    || findExistingProviderID(existing, input.name?.trim() || "")
+  const input = providerRecordInput(value);
+  const name = stringField(input, "name");
+  const providerID = stringField(input, "provider_id", "providerId")
+    || findExistingProviderID(existing, name)
     || crypto.randomUUID();
-  const deletedAt = input.deleted_at?.trim() || undefined;
-  const updatedAt = input.updated_at?.trim() || nowISO();
+  const deletedAt = optionalStringField(input, "deleted_at", "deletedAt");
+  const updatedAt = stringField(input, "updated_at", "updatedAt") || nowISO();
   return {
-    api_key_set: input.api_key?.trim() ? true : input.api_key_set === true,
-    base_url: input.base_url?.trim() || "",
-    context_window_tokens: input.context_window_tokens,
+    api_key_set: Boolean(stringField(input, "api_key", "apiKey")) || booleanField(input, "api_key_set", "apiKeySet"),
+    base_url: stringField(input, "base_url", "baseUrl"),
+    context_window_tokens: optionalNumberField(input, "context_window_tokens", "contextWindowTokens"),
     deleted_at: deletedAt,
-    model_context_window_tokens: input.model_context_window_tokens,
-    model_response_reserve_tokens: input.model_response_reserve_tokens,
-    models: input.models?.map((item) => item.trim()).filter(Boolean),
-    name: input.name?.trim() || "",
+    model_context_window_tokens: optionalNumberRecordField(input, "model_context_window_tokens", "modelContextWindowTokens"),
+    model_response_reserve_tokens: optionalNumberRecordField(
+      input,
+      "model_response_reserve_tokens",
+      "modelResponseReserveTokens",
+    ),
+    models: stringArrayField(input, "models"),
+    name,
     provider_id: providerID,
-    response_reserve_tokens: input.response_reserve_tokens,
-    sync_state: input.sync_state ?? "local",
-    type: input.type ?? "openai",
+    response_reserve_tokens: optionalNumberField(input, "response_reserve_tokens", "responseReserveTokens"),
+    sync_state: syncStateField(input),
+    type: providerTypeField(input),
     updated_at: updatedAt,
+  };
+}
+
+function normalizeLocalProviderExport(value: unknown): LocalProviderExportPayload {
+  const provider = normalizeProviderRecord(value, []);
+  const input = providerRecordInput(value);
+  const apiKey = stringField(input, "api_key", "apiKey");
+  const contextWindowTokens = optionalNumberField(input, "context_window_tokens", "contextWindowTokens");
+  return {
+    base_url: provider.base_url,
+    deleted_at: provider.deleted_at,
+    model_context_window_tokens: provider.model_context_window_tokens,
+    model_response_reserve_tokens: provider.model_response_reserve_tokens,
+    models: provider.models,
+    name: provider.name,
+    provider_id: provider.provider_id,
+    response_reserve_tokens: provider.response_reserve_tokens,
+    type: provider.type,
+    updated_at: provider.updated_at,
+    ...(contextWindowTokens === undefined ? {} : { context_window_tokens: contextWindowTokens }),
+    ...(apiKey ? { api_key: apiKey } : {}),
   };
 }
 
@@ -196,4 +233,100 @@ function findExistingProviderID(records: ProviderConfigPayload[], name: string):
 
 function isProviderListPayload(value: unknown): value is ProviderListPayload {
   return Boolean(value && typeof value === "object" && !Array.isArray(value) && "providers" in value);
+}
+
+function providerInputForTauri(provider: ProviderConfigInputPayload): Record<string, unknown> {
+  return {
+    apiKey: provider.api_key,
+    baseUrl: provider.base_url,
+    contextWindowTokens: provider.context_window_tokens,
+    deletedAt: provider.deleted_at,
+    modelContextWindowTokens: provider.model_context_window_tokens,
+    modelResponseReserveTokens: provider.model_response_reserve_tokens,
+    models: provider.models,
+    name: provider.name,
+    providerId: provider.provider_id,
+    responseReserveTokens: provider.response_reserve_tokens,
+    type: provider.type,
+    updatedAt: provider.updated_at,
+  };
+}
+
+function providerRecordInput(value: unknown): ProviderRecordInput {
+  return (objectRecord(value) ?? {}) as ProviderRecordInput;
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  return value as Record<string, unknown>;
+}
+
+function stringField(record: Record<string, unknown> | undefined, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        return trimmed;
+      }
+    }
+  }
+  return "";
+}
+
+function optionalStringField(record: Record<string, unknown> | undefined, ...keys: string[]): string | undefined {
+  return stringField(record, ...keys) || undefined;
+}
+
+function booleanField(record: Record<string, unknown>, ...keys: string[]): boolean {
+  return keys.some((key) => record[key] === true);
+}
+
+function optionalNumberField(record: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
+function stringArrayField(record: Record<string, unknown>, key: string): string[] | undefined {
+  const value = record[key];
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
+}
+
+function optionalNumberRecordField(record: Record<string, unknown>, ...keys: string[]): Record<string, number> | undefined {
+  for (const key of keys) {
+    const value = objectRecord(record[key]);
+    if (!value) {
+      continue;
+    }
+    const entries = Object.entries(value).filter((entry): entry is [string, number] =>
+      typeof entry[1] === "number" && Number.isFinite(entry[1]),
+    );
+    if (entries.length > 0) {
+      return Object.fromEntries(entries);
+    }
+  }
+  return undefined;
+}
+
+function providerTypeField(record: Record<string, unknown>): ProviderConfigPayload["type"] {
+  const value = stringField(record, "type", "provider_type", "providerType");
+  if (value === "anthropic" || value === "codex" || value === "custom" || value === "openai") {
+    return value;
+  }
+  return "openai";
+}
+
+function syncStateField(record: Record<string, unknown>): ProviderConfigPayload["sync_state"] {
+  const value = stringField(record, "sync_state", "syncState");
+  return value === "synced" ? "synced" : "local";
 }

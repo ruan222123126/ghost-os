@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentMessageTaskPayload, OrchestrationTaskPayload, WorkflowTaskPayload } from "../mobileTypes";
@@ -324,6 +324,60 @@ describe("useMobileBridge", () => {
       .toEqual([{ scope: "user" }, { scope: "orchestration" }]);
   });
 
+  it("syncs remote providers to local after connect even when model following is off", async () => {
+    window.localStorage.setItem(
+      SETTINGS_STORAGE_KEY,
+      JSON.stringify({
+        apiToken: "token",
+        bridgeUrl: "http://100.80.12.34:8080",
+        connectionMode: "http",
+        remoteExecutionEnabled: false,
+      }),
+    );
+    vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
+      if (command !== "bridge_bus_request") {
+        return {};
+      }
+
+      const request = bridgeBusRequestFromArgs(args);
+      return {
+        error: "",
+        payload: request.action === "CONFIG_PROVIDERS_GET"
+          ? remoteProviderListPayload()
+          : payloadForAction(request.action, request.params),
+        status: "success",
+      };
+    });
+
+    const { result } = renderHook(() => useMobileBridge());
+
+    await result.current.connectBridge();
+
+    await waitFor(() => {
+      expect(bridgeBusRequests().some((request) => request.action === "CONFIG_PROVIDERS_GET")).toBe(true);
+    });
+    await waitFor(() => {
+      expect(result.current.localProviderList?.providers[0]).toMatchObject({
+        name: "Remote OpenAI",
+        provider_id: "remote-provider-1",
+      });
+    });
+  });
+
+  it("switches the local model without updating computer config when model following is off", async () => {
+    useHTTPSettings();
+    const { result } = renderHook(() => useMobileBridge());
+
+    await act(async () => {
+      await result.current.switchModel(" phone-model ");
+    });
+
+    await waitFor(() => {
+      expect(storedSettings().localModel).toBe("phone-model");
+    });
+    expect(bridgeBusRequests().some((request) => request.action === "CONFIG_UPDATE")).toBe(false);
+  });
+
   it("refreshTasks requests user tasks and keeps agent message and workflow tasks", async () => {
     useHTTPSettings();
     vi.mocked(invoke).mockImplementation(async (command: string, args?: unknown) => {
@@ -486,6 +540,31 @@ function payloadForAction(action: string, params: Record<string, unknown> = {}):
     default:
       return {};
   }
+}
+
+function remoteProviderListPayload(): Record<string, unknown> {
+  return {
+    active_provider: "Remote OpenAI",
+    active_provider_id: "remote-provider-1",
+    providers: [{
+      api_key_set: true,
+      base_url: "https://api.openai.com/v1",
+      models: ["gpt-4o"],
+      name: "Remote OpenAI",
+      provider_id: "remote-provider-1",
+      type: "openai",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    }],
+    provider_sync_records: [{
+      api_key_set: true,
+      base_url: "https://api.openai.com/v1",
+      models: ["gpt-4o"],
+      name: "Remote OpenAI",
+      provider_id: "remote-provider-1",
+      type: "openai",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    }],
+  };
 }
 
 function sessionDetailPayload(messages: Array<Record<string, unknown>>, hasMoreBefore: boolean): Record<string, unknown> {
