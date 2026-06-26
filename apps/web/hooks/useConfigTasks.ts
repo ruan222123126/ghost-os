@@ -18,8 +18,7 @@ import {
 } from '@/lib/configTasks';
 import { ignorePromise, toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { TaskPatchRequest } from '@/lib/types';
-import type { AgentMessageTaskPayload, BridgeConfig, TaskPayload } from '@/lib/types';
+import type { AgentMessageTaskPayload, BridgeConfig, TaskPatchRequest, TaskPayload } from '@/lib/types';
 
 interface UseConfigTasksOptions {
   open: boolean;
@@ -49,6 +48,39 @@ interface UseConfigTasksResult {
 }
 
 type TasksApi = ReturnType<typeof useTasksApi>;
+type TasksCopy = ReturnType<typeof useWebLocale>['copy'];
+type TasksDispatch = Dispatch<TasksAction>;
+
+interface TaskMutationOptions {
+  api: TasksApi;
+  copy: TasksCopy;
+  dispatch: TasksDispatch;
+  state: TasksState;
+}
+
+interface TaskEditorMutationOptions extends TaskMutationOptions {
+  createEditor: () => TasksState['editor'];
+}
+
+interface TaskRunMutationOptions extends TaskMutationOptions {
+  refresh: () => Promise<boolean>;
+}
+
+interface TaskActionBundleOptions extends Pick<
+  UseConfigTasksActions,
+  'refresh' | 'runNow' | 'selectTaskType' | 'setEnabled' | 'submit'
+> {
+  copy: TasksCopy;
+  createEditor: () => TasksState['editor'];
+  deleteByID: UseConfigTasksActions['delete'];
+  dispatch: TasksDispatch;
+}
+
+interface TaskErrorOptions extends Pick<TaskMutationOptions, 'copy' | 'dispatch'> {
+  actionType?: 'mutate_error' | 'run_error';
+  error: unknown;
+  fallback: string;
+}
 
 function isAgentMessageTask(task: TaskPayload): task is AgentMessageTaskPayload {
   return task.task_kind === 'agent_message';
@@ -60,22 +92,12 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
   const [state, dispatch] = useReducer(tasksReducer, options.config, createInitialTasksState);
   const createEditor = useCallback(() => createTaskEditorState(options.config), [options.config]);
   const refresh = useRefreshTasks(api, copy, dispatch);
-  const submit = useSubmitTask(api, copy, state, createEditor, dispatch);
+  const submit = useSubmitTask({ api, copy, createEditor, dispatch, state });
   const setEnabled = useSetTaskEnabled(api, copy, dispatch);
-  const runNow = useRunTaskNow(api, copy, state, refresh, dispatch);
-  const deleteByID = useDeleteTask(api, copy, state, createEditor, dispatch);
+  const runNow = useRunTaskNow({ api, copy, dispatch, refresh, state });
+  const deleteByID = useDeleteTask({ api, copy, createEditor, dispatch, state });
   const selectTaskType = useSelectTaskType(options.config, state, dispatch);
-  const actions = useTaskActionBundle(
-    dispatch,
-    createEditor,
-    copy,
-    refresh,
-    submit,
-    setEnabled,
-    runNow,
-    deleteByID,
-    selectTaskType,
-  );
+  const actions = useTaskActionBundle({ copy, createEditor, deleteByID, dispatch, refresh, runNow, selectTaskType, setEnabled, submit });
 
   useEffect(() => {
     if (options.open) {
@@ -88,8 +110,8 @@ export function useConfigTasks(options: UseConfigTasksOptions): UseConfigTasksRe
 
 function useRefreshTasks(
   api: TasksApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  dispatch: Dispatch<TasksAction>,
+  copy: TasksCopy,
+  dispatch: TasksDispatch,
 ) {
   return useCallback(async (): Promise<boolean> => {
     dispatch({ type: 'load_start' });
@@ -106,13 +128,9 @@ function useRefreshTasks(
   }, [api, copy, dispatch]);
 }
 
-function useSubmitTask(
-  api: TasksApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: TasksState,
-  createEditor: () => TasksState['editor'],
-  dispatch: Dispatch<TasksAction>,
-) {
+function useSubmitTask(options: TaskEditorMutationOptions) {
+  const { api, copy, createEditor, dispatch, state } = options;
+
   return useCallback(async (): Promise<boolean> => {
     dispatch({ type: 'mutate_start' });
     try {
@@ -124,7 +142,7 @@ function useSubmitTask(
       dispatch({ type: 'exit_editor', editor: createEditor() });
       return true;
     } catch (error) {
-      dispatchTaskError(dispatch, error, copy.system.failedToSaveTask, copy);
+      dispatchTaskError({ copy, dispatch, error, fallback: copy.system.failedToSaveTask });
       return false;
     }
   }, [api, copy, createEditor, dispatch, state.editingTaskID, state.editor, state.editorMode]);
@@ -132,8 +150,8 @@ function useSubmitTask(
 
 function useSetTaskEnabled(
   api: TasksApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  dispatch: Dispatch<TasksAction>,
+  copy: TasksCopy,
+  dispatch: TasksDispatch,
 ) {
   return useCallback(async (id: string, enabled: boolean): Promise<void> => {
     dispatch({ type: 'mutate_start' });
@@ -142,30 +160,26 @@ function useSetTaskEnabled(
       dispatch({ type: 'upsert_task', task: await api.updateTask(id, payload) });
       dispatch({ type: 'set_saving', saving: false });
     } catch (error) {
-      dispatchTaskError(dispatch, error, copy.system.failedToUpdateTask, copy);
+      dispatchTaskError({ copy, dispatch, error, fallback: copy.system.failedToUpdateTask });
     }
   }, [api, copy, dispatch]);
 }
 
-function useRunTaskNow(
-  api: TasksApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: TasksState,
-  refresh: () => Promise<boolean>,
-  dispatch: Dispatch<TasksAction>,
-) {
-  return useCallback(async (id: string, options?: RunTaskOptions): Promise<boolean> => {
+function useRunTaskNow(options: TaskRunMutationOptions) {
+  const { api, copy, dispatch, refresh, state } = options;
+
+  return useCallback(async (id: string, runOptions?: RunTaskOptions): Promise<boolean> => {
     if (state.runningTaskID) {
       return false;
     }
     dispatch({ type: 'run_start', id });
     try {
       await api.runTaskNow(id);
-      dispatch({ type: 'run_api_done', success: options?.reportSuccess ? copy.settings.tasksRunStarted : '' });
+      dispatch({ type: 'run_api_done', success: runOptions?.reportSuccess ? copy.settings.tasksRunStarted : '' });
       await refresh();
       return true;
     } catch (error) {
-      dispatchTaskError(dispatch, error, copy.system.failedToRunTask, copy, 'run_error');
+      dispatchTaskError({ actionType: 'run_error', copy, dispatch, error, fallback: copy.system.failedToRunTask });
       return false;
     } finally {
       dispatch({ type: 'run_finish' });
@@ -173,13 +187,9 @@ function useRunTaskNow(
   }, [api, copy, dispatch, refresh, state.runningTaskID]);
 }
 
-function useDeleteTask(
-  api: TasksApi,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  state: TasksState,
-  createEditor: () => TasksState['editor'],
-  dispatch: Dispatch<TasksAction>,
-) {
+function useDeleteTask(options: TaskEditorMutationOptions) {
+  const { api, copy, createEditor, dispatch, state } = options;
+
   return useCallback(async (id: string): Promise<void> => {
     dispatch({ type: 'mutate_start' });
     try {
@@ -190,7 +200,7 @@ function useDeleteTask(
       }
       dispatch({ type: 'set_saving', saving: false });
     } catch (error) {
-      dispatchTaskError(dispatch, error, copy.system.failedToDeleteTask, copy);
+      dispatchTaskError({ copy, dispatch, error, fallback: copy.system.failedToDeleteTask });
     }
   }, [api, copy, createEditor, dispatch, state.editingTaskID]);
 }
@@ -198,7 +208,7 @@ function useDeleteTask(
 function useSelectTaskType(
   config: BridgeConfig | null,
   state: TasksState,
-  dispatch: Dispatch<TasksAction>,
+  dispatch: TasksDispatch,
 ) {
   return useCallback((taskType: TaskEditorType): void => {
     if (state.editorMode !== 'create' || state.editor.taskType === taskType) {
@@ -211,17 +221,9 @@ function useSelectTaskType(
   }, [config, dispatch, state.editor, state.editorMode]);
 }
 
-function useTaskActionBundle(
-  dispatch: Dispatch<TasksAction>,
-  createEditor: () => TasksState['editor'],
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  refresh: UseConfigTasksActions['refresh'],
-  submit: UseConfigTasksActions['submit'],
-  setEnabled: UseConfigTasksActions['setEnabled'],
-  runNow: UseConfigTasksActions['runNow'],
-  deleteByID: UseConfigTasksActions['delete'],
-  selectTaskType: UseConfigTasksActions['selectTaskType'],
-): UseConfigTasksActions {
+function useTaskActionBundle(options: TaskActionBundleOptions): UseConfigTasksActions {
+  const { copy, createEditor, deleteByID, dispatch, refresh, runNow, selectTaskType, setEnabled, submit } = options;
+
   return useMemo(() => ({
     refresh,
     submit,
@@ -252,7 +254,7 @@ function useTaskActionBundle(
 
 function startEditTextTask(
   task: TaskPayload,
-  dispatch: Dispatch<TasksAction>,
+  dispatch: TasksDispatch,
   unsupportedMessage: string,
 ) {
   if (!isAgentMessageTask(task)) {
@@ -265,20 +267,16 @@ function startEditTextTask(
   dispatch({ type: 'enter_edit', task });
 }
 
-function dispatchTaskError(
-  dispatch: Dispatch<TasksAction>,
-  error: unknown,
-  fallback: string,
-  copy: ReturnType<typeof useWebLocale>['copy'],
-  actionType: 'mutate_error' | 'run_error' = 'mutate_error',
-) {
+function dispatchTaskError(options: TaskErrorOptions) {
+  const { actionType = 'mutate_error', copy, dispatch, error, fallback } = options;
+
   dispatch({ type: actionType, error: taskErrorMessage(error, fallback, copy) });
 }
 
 function taskErrorMessage(
   error: unknown,
   fallback: string,
-  copy: ReturnType<typeof useWebLocale>['copy'],
+  copy: TasksCopy,
 ): string {
   return localizeTaskEditorError(toErrorMessage(error, fallback), copy);
 }
