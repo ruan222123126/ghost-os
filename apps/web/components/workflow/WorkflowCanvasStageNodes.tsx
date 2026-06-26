@@ -43,6 +43,12 @@ interface WorkflowCanvasStageNodeItemProps {
   selected: boolean;
 }
 
+interface WorkflowCanvasStageNodeLayerProps {
+  context: WorkflowCanvasStageNodeContext;
+  nodes: WorkflowCanvasNodeDraft[];
+  selectedNodeID?: string;
+}
+
 interface WorkflowCanvasStageNodeContext {
   editorKind: WorkflowEditorKind;
   workflowCopy: WorkflowCopy;
@@ -59,43 +65,45 @@ interface WorkflowCanvasStageNodeContext {
 }
 
 export function WorkflowCanvasStageNodes(props: WorkflowCanvasStageNodesProps) {
-  const {
-    draft,
-    editorKind,
-    workflowCopy,
-    nodeMap,
-    canvasRef,
-    viewport,
-    connectingSourceNodeID,
-    onSelectNode,
-    onOpenContextMenu,
-    onConnectNodes,
-    onChangeDragState,
-    onChangeConnectingSourceNodeID,
-  } = props;
-  const context: WorkflowCanvasStageNodeContext = {
-    editorKind,
-    workflowCopy,
-    nodeMap,
-    canvasRef,
-    viewport,
-    connectingSourceNodeID,
-    sourceNode: findConnectingSourceNode(draft.nodes, connectingSourceNodeID),
-    onSelectNode,
-    onOpenContextMenu,
-    onConnectNodes,
-    onChangeDragState,
-    onChangeConnectingSourceNodeID,
+  const context = buildStageNodeContext(props);
+
+  return (
+    <WorkflowCanvasStageNodeLayer
+      context={context}
+      nodes={props.draft.nodes}
+      selectedNodeID={props.draft.selectedNodeId}
+    />
+  );
+}
+
+function buildStageNodeContext(props: WorkflowCanvasStageNodesProps): WorkflowCanvasStageNodeContext {
+  return {
+    canvasRef: props.canvasRef,
+    connectingSourceNodeID: props.connectingSourceNodeID,
+    editorKind: props.editorKind,
+    nodeMap: props.nodeMap,
+    onChangeConnectingSourceNodeID: props.onChangeConnectingSourceNodeID,
+    onChangeDragState: props.onChangeDragState,
+    onConnectNodes: props.onConnectNodes,
+    onOpenContextMenu: props.onOpenContextMenu,
+    onSelectNode: props.onSelectNode,
+    sourceNode: findConnectingSourceNode(props.draft.nodes, props.connectingSourceNodeID),
+    viewport: props.viewport,
+    workflowCopy: props.workflowCopy,
   };
+}
+
+function WorkflowCanvasStageNodeLayer(props: WorkflowCanvasStageNodeLayerProps) {
+  const { context, nodes, selectedNodeID } = props;
 
   return (
     <div className="workflow-arch-node-layer">
-      {draft.nodes.map((node) => (
+      {nodes.map((node) => (
         <WorkflowCanvasStageNodeItem
           key={node.id}
           context={context}
           node={node}
-          selected={draft.selectedNodeId === node.id}
+          selected={selectedNodeID === node.id}
         />
       ))}
     </div>
