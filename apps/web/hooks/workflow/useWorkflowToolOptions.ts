@@ -19,88 +19,158 @@ interface UseWorkflowToolOptionsResult {
   error: string;
 }
 
+interface WorkflowToolCatalogState {
+  error: string;
+  loading: boolean;
+  tools: ToolPayload[];
+}
+
+interface WorkflowToolOptionLabels {
+  disabled: (name: string) => string;
+  unavailable: (name: string) => string;
+}
+
+interface WorkflowToolCatalogLoadResult {
+  error?: string;
+  tools?: ToolPayload[];
+}
+
+interface WorkflowToolCatalogSetters {
+  setError: (value: string) => void;
+  setTools: (value: ToolPayload[]) => void;
+}
+
+interface EnabledToolOptions {
+  names: Set<string>;
+  options: WorkflowToolOption[];
+}
+
 export function useWorkflowToolOptions(currentToolName: string): UseWorkflowToolOptionsResult {
   const { copy } = useWebLocale();
+  const catalog = useWorkflowToolCatalog(copy.system.failedToLoadTools);
+
+  return {
+    options: useMemo(
+      () => buildWorkflowToolOptions({
+        tools: catalog.tools,
+        currentToolName,
+        labels: {
+          disabled: copy.workflow.toolNameDisabled,
+          unavailable: copy.workflow.toolNameUnavailable,
+        },
+      }),
+      [catalog.tools, copy.workflow.toolNameDisabled, copy.workflow.toolNameUnavailable, currentToolName],
+    ),
+    loading: catalog.loading,
+    error: catalog.error,
+  };
+}
+
+function useWorkflowToolCatalog(fallbackError: string): WorkflowToolCatalogState {
   const [tools, setTools] = useState<ToolPayload[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError('');
-      try {
-        const payload = await listTools();
-        if (!cancelled) {
-          setTools(payload);
-        }
-      } catch (cause) {
-        if (!cancelled) {
-          setError(toErrorMessage(cause, copy.system.failedToLoadTools));
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+    setLoading(true);
+    setError('');
+    void loadWorkflowToolCatalog(fallbackError).then((result) => {
+      if (cancelled) {
+        return;
       }
-    };
-    void load();
+      applyWorkflowToolCatalogResult(result, { setTools, setError });
+      setLoading(false);
+    });
     return () => {
       cancelled = true;
     };
-  }, [copy.system.failedToLoadTools]);
+  }, [fallbackError]);
 
   return {
-    options: useMemo(
-      () => buildWorkflowToolOptions({
-        tools,
-        currentToolName,
-        disabledLabel: copy.workflow.toolNameDisabled,
-        unavailableLabel: copy.workflow.toolNameUnavailable,
-      }),
-      [copy.workflow.toolNameDisabled, copy.workflow.toolNameUnavailable, currentToolName, tools],
-    ),
-    loading,
     error,
+    loading,
+    tools,
   };
 }
 
-function buildWorkflowToolOptions(options: {
+async function loadWorkflowToolCatalog(fallbackError: string): Promise<WorkflowToolCatalogLoadResult> {
+  try {
+    return { tools: await listTools() };
+  } catch (cause) {
+    return { error: toErrorMessage(cause, fallbackError) };
+  }
+}
+
+function applyWorkflowToolCatalogResult(
+  result: WorkflowToolCatalogLoadResult,
+  setters: WorkflowToolCatalogSetters,
+): void {
+  if (result.tools !== undefined) {
+    setters.setTools(result.tools);
+  }
+  if (result.error !== undefined) {
+    setters.setError(result.error);
+  }
+}
+
+export function buildWorkflowToolOptions(options: {
   tools: ToolPayload[];
   currentToolName: string;
-  disabledLabel: (name: string) => string;
-  unavailableLabel: (name: string) => string;
+  labels: WorkflowToolOptionLabels;
 }): WorkflowToolOption[] {
-  const { tools, currentToolName, disabledLabel, unavailableLabel } = options;
+  const enabledTools = buildEnabledToolOptions(options.tools);
+  const normalizedCurrent = normalizeToolName(options.currentToolName);
+  if (!shouldPrependCurrentTool(normalizedCurrent, enabledTools.names)) {
+    return enabledTools.options;
+  }
+  return [
+    buildUnavailableCurrentToolOption(normalizedCurrent, options.tools, options.labels),
+    ...enabledTools.options,
+  ];
+}
+
+function buildEnabledToolOptions(tools: ToolPayload[]): EnabledToolOptions {
   const orderedTools = tools
     .filter((tool) => tool.enabled)
     .sort((left, right) => left.name.localeCompare(right.name));
-  const names = new Set<string>();
-  const mapped = orderedTools.map((tool) => {
-    names.add(tool.name);
-    return {
-      name: tool.name,
-      label: tool.name,
-      disabled: false,
-      inputSchema: tool.input_schema,
-    };
-  });
+  return {
+    names: new Set(orderedTools.map((tool) => tool.name)),
+    options: orderedTools.map(buildEnabledToolOption),
+  };
+}
 
-  const normalizedCurrent = currentToolName.trim();
-  if (normalizedCurrent.length === 0 || names.has(normalizedCurrent)) {
-    return mapped;
-  }
+function buildEnabledToolOption(tool: ToolPayload): WorkflowToolOption {
+  return {
+    name: tool.name,
+    label: tool.name,
+    disabled: false,
+    inputSchema: tool.input_schema,
+  };
+}
 
-  const disabledTool = tools.find((tool) => tool.name === normalizedCurrent && !tool.enabled);
-  const missingLabel = disabledTool ? disabledLabel(normalizedCurrent) : unavailableLabel(normalizedCurrent);
-  return [
-    {
-      name: normalizedCurrent,
-      label: missingLabel,
-      disabled: true,
-      inputSchema: undefined,
-    },
-    ...mapped,
-  ];
+function buildUnavailableCurrentToolOption(
+  toolName: string,
+  tools: ToolPayload[],
+  labels: WorkflowToolOptionLabels,
+): WorkflowToolOption {
+  const label = hasDisabledTool(tools, toolName) ? labels.disabled(toolName) : labels.unavailable(toolName);
+  return {
+    name: toolName,
+    label,
+    disabled: true,
+    inputSchema: undefined,
+  };
+}
+
+function shouldPrependCurrentTool(currentToolName: string, enabledToolNames: Set<string>): boolean {
+  return currentToolName.length > 0 && !enabledToolNames.has(currentToolName);
+}
+
+function hasDisabledTool(tools: ToolPayload[], toolName: string): boolean {
+  return tools.some((tool) => tool.name === toolName && !tool.enabled);
+}
+
+function normalizeToolName(toolName: string): string {
+  return toolName.trim();
 }
