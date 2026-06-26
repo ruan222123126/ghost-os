@@ -59,6 +59,7 @@ export function AssistantReply(props: AssistantReplyProps) {
   const thinkingText = props.reply?.thinking ?? "";
   const hasThinkingText = thinkingText.trim().length > 0;
   const thinkingActive = props.status.tone === "loading" && hasThinkingText;
+  const replyFinal = props.status.tone !== "loading";
   const thinkingStartedAtMs = useThinkingStartedAtMs(thinkingActive);
   const [thinkingPanelOpen, toggleThinkingPanel] = useThinkingPanelOpen(thinkingText, replyMessage);
 
@@ -92,7 +93,11 @@ export function AssistantReply(props: AssistantReplyProps) {
         ) : (
           <>
             {replyMessage ? (
-              <AssistantMarkdownContent content={replyMessage} />
+              <AssistantMarkdownContent
+                content={replyMessage}
+                final={replyFinal}
+                showCopyButton={replyFinal}
+              />
             ) : hasThinkingText ? null : (
               <p>{props.status.text}</p>
             )}

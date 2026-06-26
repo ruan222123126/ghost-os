@@ -1,12 +1,26 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AssistantReply } from "./Messages";
 import type { AgentPayload, StatusMessage } from "../../mobileTypes";
 
 const successStatus: StatusMessage = { tone: "success", text: "回复已返回" };
 
+const markdownMock = vi.hoisted(() => (
+  vi.fn((_: { content: string; final?: boolean; showCopyButton?: boolean }) => null)
+));
+
+vi.mock("./AssistantMarkdownContent", () => ({
+  AssistantMarkdownContent: (props: { content: string; final?: boolean; showCopyButton?: boolean }) => (
+    markdownMock(props)
+  ),
+}));
+
 describe("AssistantReply", () => {
+  beforeEach(() => {
+    markdownMock.mockClear();
+  });
+
   it("keeps completed thinking collapsed until the user opens it", () => {
     render(
       <AssistantReply
@@ -52,6 +66,21 @@ describe("AssistantReply", () => {
 
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("/repo")).toBeTruthy();
+  });
+
+  it("passes streaming state to markdown renderer", () => {
+    render(
+      <AssistantReply
+        reply={agentReply({ message: "partial" })}
+        status={{ tone: "loading", text: "正在回复" }}
+      />,
+    );
+
+    expect(markdownMock).toHaveBeenCalledWith(expect.objectContaining({
+      content: "partial",
+      final: false,
+      showCopyButton: false,
+    }));
   });
 });
 

@@ -212,7 +212,7 @@
   font-weight: 650;
 }
 
-.assistant-markdown-link {
+.assistant-markdown .link-node {
   color: #1a73e8;
   text-decoration: underline;
   text-underline-offset: 2px;
@@ -224,101 +224,6 @@
   background: #f8fafc;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
   white-space: break-spaces;
-}
-
-.assistant-code-block {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  margin: 12px 0;
-  border: 1px solid #f3f4f6;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04);
-}
-
-.assistant-code-header {
-  min-width: 0;
-  min-height: 42px;
-  border-bottom: 1px solid #f3f4f6;
-  padding: 8px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: #ffffff;
-}
-
-.assistant-code-language {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #6b7280;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
-  font-size: 0.75rem;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.assistant-code-block pre {
-  min-width: 0;
-  max-width: 100%;
-  margin: 0;
-  padding: 18px;
-  overflow-x: auto;
-  background: rgb(249 250 251 / 0.72);
-  word-break: normal;
-  overflow-wrap: normal;
-}
-
-.assistant-code-block code {
-  display: block;
-  min-width: max-content;
-  padding: 0;
-  color: #1f2937;
-  background: transparent;
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", monospace;
-  font-size: 0.84rem;
-  line-height: 1.7;
-  white-space: pre;
-  word-break: normal;
-  overflow-wrap: normal;
-}
-
-.assistant-syntax-control {
-  color: #7e22ce;
-}
-
-.assistant-syntax-declaration,
-.assistant-syntax-tag {
-  color: #1d4ed8;
-}
-
-.assistant-syntax-type {
-  color: #0e7490;
-}
-
-.assistant-syntax-function {
-  color: #ea580c;
-}
-
-.assistant-syntax-attribute {
-  color: #2563eb;
-}
-
-.assistant-syntax-number {
-  color: #dc2626;
-}
-
-.assistant-syntax-comment {
-  color: #6b7280;
-  font-style: italic;
-}
-
-.assistant-syntax-string {
-  color: #15803d;
 }
 
 .copy-button {
@@ -407,7 +312,7 @@
     background: #1e1f20;
   }
 
-  .assistant-markdown-link {
+  .assistant-markdown .link-node {
     color: #8ab4f8;
   }
 

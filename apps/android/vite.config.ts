@@ -4,9 +4,35 @@ import react from "@vitejs/plugin-react";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+const disabledMarkstreamOptionalPeers = [
+  "@antv/infographic",
+  "@terrastruct/d2",
+  "mermaid",
+  "stream-markdown",
+  "stream-monaco",
+] as const;
+const disabledMarkstreamOptionalPeerId = "\0disabled-markstream-optional-peer";
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "disable-markstream-optional-peers",
+      resolveId(source) {
+        if (disabledMarkstreamOptionalPeers.includes(source as (typeof disabledMarkstreamOptionalPeers)[number])) {
+          return disabledMarkstreamOptionalPeerId;
+        }
+        return null;
+      },
+      load(id) {
+        if (id === disabledMarkstreamOptionalPeerId) {
+          return "export default undefined;";
+        }
+        return null;
+      },
+    },
+  ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

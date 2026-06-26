@@ -17,6 +17,7 @@ import { useChatFeedScroll } from "./hooks/useChatFeedScroll";
 import { useMobileBridge } from "./hooks/useMobileBridge";
 import { useMobileSessions } from "./hooks/useMobileSessions";
 import type { AgentPayload, ConfigPayload, MobileConversationMessage, ProviderListPayload, StatusMessage, StoredSettings } from "./mobileTypes";
+import "markstream-react/index.css";
 import "./App.css";
 import "./components/mobileChat/Messages.css";
 import "./components/mobileChat/ToolCards.css";
