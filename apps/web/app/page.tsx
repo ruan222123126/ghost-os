@@ -127,21 +127,19 @@ const HomePage: FC = () => {
         </div>
       </main>
 
-      {controller.showConfig ? (
-        <ConfigPanel
-          open={controller.showConfig}
-          initialTab={controller.settingsTabFromQuery ?? 'general'}
-          loading={controller.configLoading}
-          saving={controller.savingConfig}
-          config={controller.config}
-          error={controller.configError}
-          onClose={controller.closeConfig}
-          onOpenWorkflowCreate={controller.openWorkflowCreate}
-          onOpenWorkflowEdit={controller.openWorkflowEdit}
-          onSave={controller.saveConfig}
-          onReload={controller.refreshConfig}
-        />
-      ) : null}
+      <ConfigPanel
+        open={controller.showConfig}
+        initialTab={controller.settingsTabFromQuery ?? 'general'}
+        loading={controller.configLoading}
+        saving={controller.savingConfig}
+        config={controller.config}
+        error={controller.configError}
+        onClose={controller.closeConfig}
+        onOpenWorkflowCreate={controller.openWorkflowCreate}
+        onOpenWorkflowEdit={controller.openWorkflowEdit}
+        onSave={controller.saveConfig}
+        onReload={controller.refreshConfig}
+      />
 
       {showBootLoading ? <GlobalLoadingOverlay /> : null}
     </>

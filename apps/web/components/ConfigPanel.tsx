@@ -18,6 +18,8 @@ import { useConfigTools } from '@/hooks/useConfigTools';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { BridgeConfig, ConfigUpdate, WorkflowTaskPayload } from '@/lib/types';
 
+const CONFIG_PANEL_TRANSITION_MS = 300;
+
 export interface ConfigPanelProps {
   open: boolean;
   initialTab?: SettingsTab;
@@ -49,6 +51,8 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 }) => {
   const { copy } = useWebLocale();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [present, setPresent] = useState(open);
+  const [visible, setVisible] = useState(open);
   const providersMachine = useConfigProviders({
     open,
     onReloadConfig: onReload,
@@ -66,6 +70,24 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
       setActiveTab(initialTab);
     }
   }, [initialTab, open]);
+
+  useEffect(() => {
+    if (open) {
+      setPresent(true);
+      if (visible) {
+        return undefined;
+      }
+      return requestTransitionFrame(() => setVisible(true));
+    }
+
+    setVisible(false);
+    if (!present) {
+      return undefined;
+    }
+
+    const timeout = setTimeout(() => setPresent(false), CONFIG_PANEL_TRANSITION_MS);
+    return () => clearTimeout(timeout);
+  }, [open, present, visible]);
 
   const tabError = useMemo(() => {
     return resolveConfigPanelTabError({
@@ -97,17 +119,33 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
 
   const tabSuccess = activeTab === 'tasks' ? tasksMachine.state.success : '';
 
-  if (!open) {
+  if (!present) {
     return null;
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-      <button type="button" className="absolute inset-0 bg-gray-300/45" onClick={onClose} aria-label={copy.settings.closeSettingsAria} />
+    <div
+      className={`fixed inset-0 z-40 flex items-center justify-center p-4 ${
+        visible ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
+      <button
+        type="button"
+        className={`absolute inset-0 bg-gray-300/45 transition-opacity duration-300 ease-in-out ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        onClick={onClose}
+        aria-label={copy.settings.closeSettingsAria}
+      />
 
       <section
         data-testid="config-panel-shell"
-        className="relative z-10 flex h-[80vh] min-h-[600px] w-full max-w-4xl overflow-hidden rounded-2xl bg-white shadow-xl"
+        className={`relative z-10 flex h-[80vh] min-h-[600px] w-full max-w-4xl transform overflow-hidden rounded-2xl bg-white shadow-xl transition-all duration-300 ease-in-out ${
+          visible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+        }`}
       >
         <CloseButton
           onClick={onClose}
@@ -154,3 +192,13 @@ export const ConfigPanel: FC<ConfigPanelProps> = ({
     </div>
   );
 };
+
+function requestTransitionFrame(callback: () => void): () => void {
+  if (typeof window === 'undefined') {
+    const timeout = setTimeout(callback, 0);
+    return () => clearTimeout(timeout);
+  }
+
+  const frame = window.requestAnimationFrame(callback);
+  return () => window.cancelAnimationFrame(frame);
+}
