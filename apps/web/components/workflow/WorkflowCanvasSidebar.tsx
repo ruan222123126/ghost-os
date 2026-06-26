@@ -11,6 +11,7 @@ import { useWebLocale } from '@/lib/i18n/provider';
 import type { WebLocale } from '@/lib/i18n/locale';
 import type { WorkflowCopy } from '@/lib/i18n/messages/workflow';
 import type {
+  AutosavePhase,
   AutosaveState,
   WorkflowCanvasPosition,
   WorkflowNodeType,
@@ -52,6 +53,11 @@ interface SidebarFooterProps {
   onSave: () => void;
 }
 
+interface WorkflowCanvasSidebarModel {
+  autosaveLabel: string;
+  nodeLibrary: WorkflowNodeLibraryItem[];
+}
+
 interface ResolveAutosaveLabelOptions {
   copy: WorkflowCopy;
   locale: WebLocale;
@@ -60,56 +66,60 @@ interface ResolveAutosaveLabelOptions {
 }
 
 type WorkflowNodeLibraryItem = ReturnType<typeof nodeLibraryForCopy>[number];
+type AutosaveLabelResolver = (options: ResolveAutosaveLabelOptions) => string;
+
+const AUTOSAVE_LABEL_RESOLVERS: Record<AutosavePhase, AutosaveLabelResolver> = {
+  blocked: resolveBlockedAutosaveLabel,
+  error: resolveErrorAutosaveLabel,
+  idle: ({ copy }) => copy.autosaveIdle,
+  saved: ({ copy }) => copy.autosaveSaved,
+  saving: ({ copy }) => copy.autosaveSaving,
+};
 
 const DEFAULT_NEW_NODE_POSITION: WorkflowCanvasPosition = { x: 350, y: 250 };
 
 export function WorkflowCanvasSidebar(props: WorkflowCanvasSidebarProps) {
-  const { locale } = useWebLocale();
-  const {
-    isOpen,
-    autosaveState,
-    workflowCopy,
-    nodeLibraryTypes,
-    localizeValidationError,
-    onToggle,
-    onAddNode,
-    onOpenSettings,
-    onBack,
-    onSave,
-  } = props;
-  const nodeLibrary = nodeLibraryForCopy(workflowCopy, nodeLibraryTypes);
-  const resolveValidationError = localizeValidationError ?? localizeWorkflowValidationError;
-  const autosaveLabel = resolveAutosaveLabel({
-    state: autosaveState,
-    copy: workflowCopy,
-    locale,
-    localizeValidationError: resolveValidationError,
-  });
+  const model = useWorkflowCanvasSidebarModel(props);
 
   return (
-    <aside className={`workflow-arch-sidebar ${isOpen ? 'workflow-arch-sidebar--open' : ''}`}>
+    <aside className={sidebarClass(props.isOpen)}>
       <SidebarTop
-        isOpen={isOpen}
-        workflowCopy={workflowCopy}
-        onOpenSettings={onOpenSettings}
-        onToggle={onToggle}
+        isOpen={props.isOpen}
+        workflowCopy={props.workflowCopy}
+        onOpenSettings={props.onOpenSettings}
+        onToggle={props.onToggle}
       />
       <NodeLibrary
-        isOpen={isOpen}
-        nodeLibrary={nodeLibrary}
-        workflowCopy={workflowCopy}
-        onAddNode={onAddNode}
+        isOpen={props.isOpen}
+        nodeLibrary={model.nodeLibrary}
+        workflowCopy={props.workflowCopy}
+        onAddNode={props.onAddNode}
       />
       <SidebarFooter
-        autosaveLabel={autosaveLabel}
-        autosaveState={autosaveState}
-        isOpen={isOpen}
-        workflowCopy={workflowCopy}
-        onBack={onBack}
-        onSave={onSave}
+        autosaveLabel={model.autosaveLabel}
+        autosaveState={props.autosaveState}
+        isOpen={props.isOpen}
+        workflowCopy={props.workflowCopy}
+        onBack={props.onBack}
+        onSave={props.onSave}
       />
     </aside>
   );
+}
+
+function useWorkflowCanvasSidebarModel(props: WorkflowCanvasSidebarProps): WorkflowCanvasSidebarModel {
+  const { locale } = useWebLocale();
+  const resolveValidationError = props.localizeValidationError ?? localizeWorkflowValidationError;
+
+  return {
+    autosaveLabel: resolveAutosaveLabel({
+      state: props.autosaveState,
+      copy: props.workflowCopy,
+      locale,
+      localizeValidationError: resolveValidationError,
+    }),
+    nodeLibrary: nodeLibraryForCopy(props.workflowCopy, props.nodeLibraryTypes),
+  };
 }
 
 function SidebarTop(props: SidebarTopProps) {
@@ -225,24 +235,31 @@ function SidebarFooter(props: SidebarFooterProps) {
 }
 
 function resolveAutosaveLabel(options: ResolveAutosaveLabelOptions): string {
-  const { state, copy, locale, localizeValidationError } = options;
+  return AUTOSAVE_LABEL_RESOLVERS[options.state.phase](options);
+}
 
-  if (state.phase === 'saving') {
-    return copy.autosaveSaving;
+function resolveErrorAutosaveLabel(options: ResolveAutosaveLabelOptions): string {
+  return trimmedMessage(options.state) ?? options.copy.autosaveErrorRetry;
+}
+
+function resolveBlockedAutosaveLabel(options: ResolveAutosaveLabelOptions): string {
+  const message = trimmedMessage(options.state);
+  if (!message) {
+    return options.copy.autosaveValidationBlocked;
   }
-  if (state.phase === 'saved') {
-    return copy.autosaveSaved;
+  return options.localizeValidationError(message, options.locale);
+}
+
+function trimmedMessage(state: AutosaveState): string | undefined {
+  const message = state.message?.trim();
+  return message || undefined;
+}
+
+function sidebarClass(isOpen: boolean): string {
+  if (isOpen) {
+    return 'workflow-arch-sidebar workflow-arch-sidebar--open';
   }
-  if (state.phase === 'error') {
-    return state.message?.trim() || copy.autosaveErrorRetry;
-  }
-  if (state.phase === 'blocked') {
-    if (state.message?.trim()) {
-      return localizeValidationError(state.message, locale);
-    }
-    return copy.autosaveValidationBlocked;
-  }
-  return copy.autosaveIdle;
+  return 'workflow-arch-sidebar';
 }
 
 function settingsTriggerClass(isOpen: boolean): string {
