@@ -33,19 +33,23 @@ function ButtonContent(props: SidebarSettingsButtonProps) {
       <button
         type="button"
         onClick={onClick}
-        className={`group flex items-center justify-center gap-2 bg-white text-black transition-colors hover:bg-black hover:text-white ${
+        className={`group flex items-center justify-center gap-2 overflow-hidden bg-white text-black transition-colors hover:bg-black hover:text-white ${
           collapsed ? 'mx-auto h-10 w-10' : 'w-full px-4 py-3'
         }`}
         aria-label={copy.chat.sidebarOpenSettingsAria}
         aria-haspopup="dialog"
         title={copy.chat.sidebarSettingsTitle}
       >
-        <IconSettings />
-        {collapsed ? null : (
-          <span className="text-xs font-bold uppercase tracking-tighter text-neutral-500 transition-colors group-hover:text-white">
-            {copy.chat.sidebarSettingsTitle}
-          </span>
-        )}
+        <span className="flex-shrink-0">
+          <IconSettings />
+        </span>
+        <span
+          className={`whitespace-nowrap text-xs font-bold uppercase tracking-tighter text-neutral-500 transition-all duration-300 group-hover:text-white ${
+            collapsed ? 'max-w-0 opacity-0' : 'max-w-[100px] opacity-100'
+          }`}
+        >
+          {copy.chat.sidebarSettingsTitle}
+        </span>
       </button>
     </div>
   );

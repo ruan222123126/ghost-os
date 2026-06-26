@@ -145,14 +145,20 @@ export const SessionSidebar: FC<SessionSidebarProps> = ({
         <button
           type="button"
           onClick={createNewChat}
-          className={`group flex items-center justify-center gap-2 bg-transparent text-black transition-colors hover:bg-white ${
+          className={`group flex items-center justify-center gap-2 overflow-hidden bg-transparent text-black transition-colors hover:bg-white ${
             sidebarState.isOpen ? 'w-full px-4 py-3' : 'mx-auto h-10 w-10'
           }`}
         >
-          <IconPlus />
-          {sidebarState.isOpen ? (
-            <span className="text-xs font-bold uppercase tracking-tighter text-neutral-500 group-hover:text-black">{copy.chat.sidebarNewChat}</span>
-          ) : null}
+          <span className="flex-shrink-0">
+            <IconPlus />
+          </span>
+          <span
+            className={`whitespace-nowrap text-xs font-bold uppercase tracking-tighter text-neutral-500 transition-all duration-300 group-hover:text-black ${
+              sidebarState.isOpen ? 'max-w-[100px] opacity-100' : 'max-w-0 opacity-0'
+            }`}
+          >
+            {copy.chat.sidebarNewChat}
+          </span>
         </button>
       </div>
 
