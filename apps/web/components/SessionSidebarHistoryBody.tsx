@@ -86,6 +86,24 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   const visiblePartitionViews = useMemo(() => {
     return limitPartitionViewsBySessionCount(partitionViews, visibleSessionCount, collapsedPartitionIDs);
   }, [collapsedPartitionIDs, partitionViews, visibleSessionCount]);
+  const rows = useMemo(() => {
+    if (loading || empty) {
+      return [];
+    }
+    return buildPartitionSessionRows({
+      partitionViews: visiblePartitionViews,
+      draggingSessionID: dragState.draggingSessionID,
+      dropTarget: dragState.dropTarget,
+      collapsedPartitionIDs,
+    });
+  }, [
+    collapsedPartitionIDs,
+    dragState.draggingSessionID,
+    dragState.dropTarget,
+    empty,
+    loading,
+    visiblePartitionViews,
+  ]);
 
   if (loading) {
     return (
@@ -100,13 +118,6 @@ export const SessionSidebarHistoryBody: FC<SessionSidebarHistoryBodyProps> = ({
   if (empty) {
     return <div className="border border-black/10 bg-white px-3 py-3 text-xs text-neutral-600">{copy.sidebarNoSessions}</div>;
   }
-
-  const rows = buildPartitionSessionRows({
-    partitionViews: visiblePartitionViews,
-    draggingSessionID: dragState.draggingSessionID,
-    dropTarget: dragState.dropTarget,
-    collapsedPartitionIDs,
-  });
 
   return (
     <SessionSidebarVirtualRows
