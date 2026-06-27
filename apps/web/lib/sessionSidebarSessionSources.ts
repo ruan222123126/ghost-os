@@ -97,6 +97,12 @@ function collectSessionSourceRun(
     return;
   }
   const owner = sourceOwnerFromRun(run, context.sourceNamesByID);
+  if (!isVisibleSessionSourceRun(run)) {
+    for (const sessionID of runSessionIDs(run, source)) {
+      addSessionID(context.hiddenSessionIDs, sessionID);
+    }
+    return;
+  }
   for (const sessionID of sessionIDsFromRun(run)) {
     assignSessionSource(context.assignments, { sessionID, source, owner });
   }
@@ -133,6 +139,23 @@ function sourceOwnerFromRun(
 function sessionIDsFromRun(run: TaskRunLog): string[] {
   const ids = new Set<string>();
   addSessionID(ids, run.session_id_output);
+  return [...ids];
+}
+
+function isVisibleSessionSourceRun(run: TaskRunLog): boolean {
+  return run.status === 'success'
+    || run.status === 'incomplete'
+    || run.status === 'cancelled'
+    || run.status === 'error'
+    || run.status === 'skipped';
+}
+
+function runSessionIDs(run: TaskRunLog, source: SessionSourceKind): string[] {
+  const ids = new Set<string>();
+  addSessionID(ids, run.session_id_output);
+  for (const sessionID of collectHiddenSessionIDsFromRun(run, source)) {
+    addSessionID(ids, sessionID);
+  }
   return [...ids];
 }
 

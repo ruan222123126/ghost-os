@@ -95,6 +95,69 @@ describe('lib/sessionSidebarSessionSources', () => {
     });
   });
 
+  it('hides unfinished task run sessions until they reach a terminal status', () => {
+    const resolution = collectSessionSourceResolution([
+      runLog({
+        task_kind: 'agent_message',
+        status: 'running',
+        session_id_output: 'running-session',
+      }),
+      runLog({
+        task_kind: 'agent_message',
+        status: 'awaiting_human',
+        session_id_output: 'awaiting-session',
+      }),
+      runLog({
+        task_kind: 'agent_message',
+        status: 'success',
+        session_id_output: 'done-session',
+      }),
+    ]);
+
+    expect(assignmentKinds(resolution.assignments)).toEqual({ 'done-session': 'task' });
+    expect(resolution.hiddenSessionIDs.sort()).toEqual(['awaiting-session', 'running-session']);
+  });
+
+  it('shows error and cancelled task sessions as completed history entries', () => {
+    const resolution = collectSessionSourceResolution([
+      runLog({
+        task_kind: 'agent_message',
+        status: 'error',
+        session_id_output: 'error-session',
+      }),
+      runLog({
+        task_kind: 'agent_message',
+        status: 'cancelled',
+        session_id_output: 'cancelled-session',
+      }),
+    ]);
+
+    expect(assignmentKinds(resolution.assignments)).toEqual({
+      'cancelled-session': 'task',
+      'error-session': 'task',
+    });
+    expect(resolution.hiddenSessionIDs).toEqual([]);
+  });
+
+  it('hides unfinished workflow display and child execution sessions', () => {
+    const resolution = collectSessionSourceResolution([
+      runLog({
+        task_kind: 'workflow',
+        status: 'running',
+        session_id_output: 'workflow-display',
+        node_results: [{
+          node_id: 'agent',
+          node_type: 'agent',
+          status: 'running',
+          output: { session_id_output: 'workflow-agent' },
+        }],
+      }),
+    ]);
+
+    expect(resolution.assignments).toEqual({});
+    expect(resolution.hiddenSessionIDs.sort()).toEqual(['workflow-agent', 'workflow-display']);
+  });
+
   it('keeps unclassified first and removes sourced or hidden execution sessions from manual views', () => {
     const sourceAndChatSessions = sessions();
     const hiddenExecutionSession = session('orchestration-member-session', '2026-05-09T00:45:00Z');

@@ -176,8 +176,9 @@ func (s *bridgeService) sessionUsecase() (appsessions.Service, error) {
 		return appsessions.Service{}, err
 	}
 	return appsessions.Service{
-		Store:  store,
-		Logger: serviceActionLogger{},
+		Store:     store,
+		TaskStore: s.taskStore(),
+		Logger:    serviceActionLogger{},
 	}, nil
 }
 

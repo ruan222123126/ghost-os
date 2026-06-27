@@ -44,6 +44,12 @@ func BuildSessionSourceResolution(tasks []SessionSourceTask) (SessionSourceResol
 			if source.Kind == "" {
 				continue
 			}
+			if !isVisibleSessionSourceRun(run) {
+				for _, sessionID := range runSessionIDs(run, source.Kind) {
+					addSessionSourceID(hiddenSessionIDs, sessionID)
+				}
+				continue
+			}
 			assignRunOutputSession(&resolution, run.SessionIDOutput, source)
 			for _, sessionID := range hiddenSessionIDsFromRun(run, source.Kind) {
 				addSessionSourceID(hiddenSessionIDs, sessionID)
@@ -172,6 +178,28 @@ func assignRunOutputSession(
 		OwnerID:   source.OwnerID,
 		OwnerName: source.OwnerName,
 	}
+}
+
+func isVisibleSessionSourceRun(run bridgeTasks.RunLog) bool {
+	switch strings.TrimSpace(run.Status) {
+	case bridgeTasks.RunStatusSuccess,
+		bridgeTasks.RunStatusIncomplete,
+		bridgeTasks.RunStatusCancelled,
+		bridgeTasks.RunStatusError,
+		bridgeTasks.RunStatusSkipped:
+		return true
+	default:
+		return false
+	}
+}
+
+func runSessionIDs(run bridgeTasks.RunLog, sourceKind string) []string {
+	ids := map[string]struct{}{}
+	addSessionSourceID(ids, run.SessionIDOutput)
+	for _, sessionID := range hiddenSessionIDsFromRun(run, sourceKind) {
+		addSessionSourceID(ids, sessionID)
+	}
+	return mapKeys(ids)
 }
 
 func hiddenSessionIDsFromRun(run bridgeTasks.RunLog, sourceKind string) []string {

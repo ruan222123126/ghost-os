@@ -64,6 +64,13 @@ func (s Service) List(traceID string) ([]api.SessionMetadata, error) {
 		return nil, err
 	}
 
+	hiddenSessionIDs, err := s.hiddenSessionIDSet()
+	if err != nil {
+		s.log(traceID, ActionList, "error", err)
+		return nil, err
+	}
+	summaries = filterHiddenSessionMetadata(summaries, hiddenSessionIDs)
+
 	metadata := make([]api.SessionMetadata, 0, len(summaries))
 	for _, summary := range summaries {
 		metadata = append(metadata, sessionturn.BuildSessionMetadataPayload(BuildMetadataInput(summary)))
@@ -80,11 +87,22 @@ func (s Service) Search(query string, limit int, traceID string) ([]api.SessionM
 		return nil, err
 	}
 
-	matches, err := store.SearchMetadata(query, limit)
+	hiddenSessionIDs, err := s.hiddenSessionIDSet()
 	if err != nil {
 		s.log(traceID, ActionSearch, "error", err)
 		return nil, err
 	}
+	searchLimit := limit
+	if len(hiddenSessionIDs) > 0 && limit > 0 {
+		searchLimit = 0
+	}
+	matches, err := store.SearchMetadata(query, searchLimit)
+	if err != nil {
+		s.log(traceID, ActionSearch, "error", err)
+		return nil, err
+	}
+	matches = filterHiddenSessionMetadata(matches, hiddenSessionIDs)
+	matches = limitSessionMetadata(matches, limit)
 	metadata := make([]api.SessionMetadata, 0, len(matches))
 	for _, summary := range matches {
 		metadata = append(metadata, sessionturn.BuildSessionMetadataPayload(BuildMetadataInput(summary)))
@@ -233,6 +251,59 @@ func (s Service) requireSessionStore() (Store, error) {
 
 func (s Service) taskStore() TaskStore {
 	return s.TaskStore
+}
+
+func (s Service) hiddenSessionIDSet() (map[string]struct{}, error) {
+	if s.TaskStore == nil {
+		return nil, nil
+	}
+	tasks, err := LoadSessionSourceTasks(s.TaskStore)
+	if err != nil {
+		return nil, err
+	}
+	resolution, err := BuildSessionSourceResolution(tasks)
+	if err != nil {
+		return nil, err
+	}
+	return stringSet(resolution.HiddenSessionIDs), nil
+}
+
+func filterHiddenSessionMetadata(
+	metadata []session.SessionMetadata,
+	hiddenSessionIDs map[string]struct{},
+) []session.SessionMetadata {
+	if len(metadata) == 0 || len(hiddenSessionIDs) == 0 {
+		return metadata
+	}
+	filtered := make([]session.SessionMetadata, 0, len(metadata))
+	for _, item := range metadata {
+		if _, hidden := hiddenSessionIDs[item.ID]; hidden {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered
+}
+
+func limitSessionMetadata(metadata []session.SessionMetadata, limit int) []session.SessionMetadata {
+	if limit <= 0 || len(metadata) <= limit {
+		return metadata
+	}
+	return metadata[:limit]
+}
+
+func stringSet(values []string) map[string]struct{} {
+	if len(values) == 0 {
+		return nil
+	}
+	set := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			set[trimmed] = struct{}{}
+		}
+	}
+	return set
 }
 
 func (s Service) log(traceID string, action string, status string, err error) {
