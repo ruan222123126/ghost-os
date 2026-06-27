@@ -1,5 +1,5 @@
 import type { FC, RefObject } from 'react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { QuestionInput } from '@/components/QuestionInput';
 import type {
   AssistantChatMessage,
@@ -81,8 +81,8 @@ function useUserMessageOverflow(
   contentRef: RefObject<HTMLDivElement>,
 ) {
   const [expanded, setExpanded] = useState(false);
-  const [overflowing, setOverflowing] = useState(false);
-  const collapsed = overflowing && !expanded;
+  const [overflowing, setOverflowing] = useState<boolean | null>(null);
+  const collapsed = overflowing !== false && !expanded;
   const measureOverflow = useCallback(() => {
     const content = contentRef.current;
     if (!content) {
@@ -94,15 +94,18 @@ function useUserMessageOverflow(
     setOverflowing(content.scrollHeight > collapsedHeight + USER_MESSAGE_HEIGHT_EPSILON);
   }, [contentRef]);
 
-  useEffect(() => {
+  useClientLayoutEffect(() => {
     setExpanded(false);
+    setOverflowing(null);
     measureOverflow();
     window.addEventListener('resize', measureOverflow);
     return () => window.removeEventListener('resize', measureOverflow);
   }, [measureOverflow, message.content, message.id]);
 
-  return { collapsed, expanded, overflowing, setExpanded };
+  return { collapsed, expanded, overflowing: overflowing === true, setExpanded };
 }
+
+const useClientLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 function shouldShowAssistantCopyButton(message: AssistantChatMessage): boolean {
   return Boolean(message.content) && !message.inProgress;
