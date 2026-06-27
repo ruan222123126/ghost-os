@@ -286,6 +286,7 @@ const HomePageChatPanel: FC<{
     : undefined;
   const composerNode = (
     <HomePageComposer
+      canEnableCodexMode={Boolean(config)}
       loading={loading}
       inputDisabled={inputDisabled}
       savingConfig={savingConfig}
@@ -370,6 +371,7 @@ const HomePageChatPanel: FC<{
 };
 
 const HomePageComposer: FC<{
+  canEnableCodexMode: boolean;
   loading: HomePageController['loading'];
   inputDisabled: HomePageController['inputDisabled'];
   savingConfig: HomePageController['savingConfig'];
@@ -382,6 +384,7 @@ const HomePageComposer: FC<{
   stopCurrentRun: HomePageController['stopCurrentRun'];
   onSelectModel?: HomePageController['selectActiveModel'];
 }> = ({
+  canEnableCodexMode,
   loading,
   inputDisabled,
   savingConfig,
@@ -397,6 +400,7 @@ const HomePageComposer: FC<{
   return (
     <ChatInput
       loading={loading}
+      canEnableCodexMode={canEnableCodexMode}
       disabled={inputDisabled || savingConfig}
       awaitingQuestion={hasPendingQuestion}
       modelLoading={modelOptionsLoading || savingConfig}

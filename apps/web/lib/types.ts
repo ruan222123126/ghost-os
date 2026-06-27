@@ -40,6 +40,9 @@ export type {
   AgentErrorPayload,
   AgentRequest,
   AgentStopRequest,
+  ExternalAgentRequest,
+  ExternalAgentResponse,
+  ExternalAgentStopParams,
   AgentSendAwaitingHumanResponse,
   AgentSendResponse,
   AgentStopResponsePayload,
@@ -93,6 +96,8 @@ export type {
 
 export type { TaskRunCard } from '@/lib/taskRunCards';
 export type SessionTurnDraft = SharedSessionTurnDraft;
+export type AgentRuntimeType = 'ghost' | 'codex';
+export type ExternalCodexPermissionMode = 'read-only' | 'default' | 'safe-yolo' | 'yolo';
 
 export interface UserChatMessage {
   id: string;
@@ -196,6 +201,7 @@ export interface ChatImageDraft {
 }
 
 export interface ChatSendInput {
+  agentRuntime?: AgentRuntimeType;
   message: string;
   images: ChatImageDraft[];
   selectedSkill?: ChatSelectedSkill;

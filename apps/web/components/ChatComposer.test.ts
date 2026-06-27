@@ -1,7 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestInstance } from 'react-test-renderer';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
-import type { ChatSelectedSkill, SkillPayload } from '@/lib/types';
+import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from '@/lib/types';
 import { ChatComposer } from './ChatComposer';
 
 describe('components/ChatComposer', () => {
@@ -57,6 +57,7 @@ describe('components/ChatComposer', () => {
     });
 
     expect(harness.menuItem('File')).toBeTruthy();
+    expect(harness.menuItem('Feature')).toBeTruthy();
     expect(harness.menuItem('Skill')).toBeTruthy();
   });
 
@@ -93,6 +94,48 @@ describe('components/ChatComposer', () => {
     expect(harness.menuItem('Skill').props.disabled).toBe(true);
     expect(harness.menuItem('Skill').props.onClick).toBeUndefined();
     expect(fileInputClick).not.toHaveBeenCalled();
+  });
+
+  it('opens the feature panel from the plus menu and toggles codex mode', () => {
+    const harness = renderComposerHarness({ canEnableCodexMode: true });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+    act(() => {
+      harness.menuItem('Feature').props.onClick();
+    });
+
+    expect(harness.runtimeButton('Ghost').props['aria-pressed']).toBe(true);
+    expect(harness.runtimeButton('Codex').props['aria-pressed']).toBe(false);
+
+    act(() => {
+      harness.runtimeButton('Codex').props.onClick();
+    });
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+    act(() => {
+      harness.menuItem('Feature').props.onClick();
+    });
+
+    expect(harness.runtimeButton('Ghost').props['aria-pressed']).toBe(false);
+    expect(harness.runtimeButton('Codex').props['aria-pressed']).toBe(true);
+  });
+
+  it('disables codex mode in the feature menu when unavailable', () => {
+    const harness = renderComposerHarness();
+
+    act(() => {
+      harness.plusButton().props.onClick();
+    });
+    act(() => {
+      harness.menuItem('Feature').props.onClick();
+    });
+
+    expect(harness.runtimeButton('Codex').props.disabled).toBe(true);
+    expect(harness.statusNode('Codex is unavailable right now')).toBeTruthy();
   });
 
   it('opens the skill panel from the plus menu and pins the selected skill', () => {
@@ -188,10 +231,59 @@ describe('components/ChatComposer', () => {
       await pendingSubmit.promise;
     });
   });
+
+  it('keeps the composer expanded when the compact row would still wrap', async () => {
+    const harness = renderComposerHarness({
+      initialValue: 'line one\nline two',
+      textareaLayout: {
+        actualHeight: 40,
+        compactHeight: 64,
+        compactWidth: 240,
+        multilineHeight: 64,
+      },
+    });
+
+    expect(harness.composerRowClassName()).toContain('is-expanded');
+
+    await act(async () => {
+      harness.textarea().props.onChange({ target: { value: 'fits after expansion but wraps in compact layout' } });
+    });
+
+    expect(harness.composerRowClassName()).toContain('is-expanded');
+  });
+
+  it('collapses the composer once the compact row fits a single line', async () => {
+    const harness = renderComposerHarness({
+      initialValue: 'line one\nline two',
+      textareaLayout: {
+        actualHeight: 40,
+        compactHeight: 40,
+        compactWidth: 240,
+        multilineHeight: 64,
+      },
+    });
+
+    expect(harness.composerRowClassName()).toContain('is-expanded');
+
+    await act(async () => {
+      harness.textarea().props.onChange({ target: { value: 'short' } });
+    });
+
+    expect(harness.composerRowClassName()).not.toContain('is-expanded');
+  });
 });
 
+interface ComposerTextareaLayoutMock {
+  actualHeight: number;
+  compactHeight: number;
+  compactWidth: number;
+  multilineHeight: number;
+}
+
 function renderComposerHarness(options: {
+  canEnableCodexMode?: boolean;
   fileInputClick?: () => void;
+  initialAgentRuntime?: AgentRuntimeType;
   initialValue?: string;
   initialSelectedSkill?: ChatSelectedSkill;
   onSubmit?: (value: string) => Promise<void> | void;
@@ -200,11 +292,14 @@ function renderComposerHarness(options: {
   onSelectSkill?: boolean;
   skills?: SkillPayload[];
   textareaFocus?: (options?: FocusOptions) => void;
+  textareaLayout?: ComposerTextareaLayoutMock;
 } = {}) {
   const submissions: string[] = [];
   let renderer!: TestRenderer.ReactTestRenderer;
   const {
+    canEnableCodexMode = false,
     fileInputClick,
+    initialAgentRuntime = 'ghost',
     initialSelectedSkill = null,
     initialValue = '',
     onRefreshSkills,
@@ -212,14 +307,21 @@ function renderComposerHarness(options: {
     onSelectSkill = false,
     skills = [],
   } = options;
+  let renderedValue = initialValue;
+  const textareaStyle = { height: '', width: '' };
+  const textareaLayout = options.textareaLayout ? createTextareaLayoutMock(options.textareaLayout) : null;
 
   function Harness() {
+    const [agentRuntime, setAgentRuntime] = React.useState<AgentRuntimeType>(initialAgentRuntime);
     const [value, setValue] = React.useState(initialValue);
     const [selectedSkill, setSelectedSkill] = React.useState<ChatSelectedSkill | null>(initialSelectedSkill);
+    renderedValue = value;
     return React.createElement(
       WebLocaleProvider,
       { initialLocale: 'en-US' },
       React.createElement(ChatComposer, {
+        agentRuntime,
+        canEnableCodexMode,
         value,
         onChange: setValue,
         onSubmit: async () => {
@@ -233,6 +335,7 @@ function renderComposerHarness(options: {
         onClearSelectedSkill: () => setSelectedSkill(null),
         onRefreshSkills,
         onSelectFiles,
+        onSwitchAgentRuntime: setAgentRuntime,
         onSelectSkill: onSelectSkill
           ? (skill: SkillPayload) => setSelectedSkill({ id: skill.id, name: skill.name })
           : undefined,
@@ -245,9 +348,15 @@ function renderComposerHarness(options: {
       createNodeMock: (element) => {
         if (element.type === 'textarea') {
           return {
+            closest: textareaLayout ? () => textareaLayout.row : undefined,
             focus: options.textareaFocus ?? jest.fn(),
-            scrollHeight: 0,
-            style: {},
+            get scrollHeight() {
+              return getTextareaScrollHeight(textareaStyle, renderedValue, options.textareaLayout);
+            },
+            get value() {
+              return renderedValue;
+            },
+            style: textareaStyle,
           };
         }
 
@@ -264,16 +373,67 @@ function renderComposerHarness(options: {
 
   return {
     form: () => renderer.root.findByType('form'),
+    composerRowClassName: () => findComposerRow(renderer).props.className as string,
     menuItem: (label: string) => findButtonContainingText(renderer, label),
     menuItems: () => renderer.root.findAllByProps({ role: 'menuitem' }),
     plusButton: () => renderer.root.findByProps({ className: 'composer-plus-btn' }),
+    runtimeButton: (label: string) => findButtonContainingText(renderer, label),
     selectedSkillButton: () => renderer.root.findByProps({ className: 'composer-selected-skill' }),
     selectedSkillButtons: () => renderer.root.findAllByProps({ className: 'composer-selected-skill' }),
     skillDescriptionNodes: () => renderer.root.findAllByProps({ className: 'composer-skill-item-description' }),
     skillMenuItem: (label: string) => findButtonContainingText(renderer, label),
+    statusNode: (text: string) => findNodeContainingText(renderer, text),
     submissions,
     textarea: () => renderer.root.findByType('textarea'),
   };
+}
+
+function createTextareaLayoutMock(layout: ComposerTextareaLayoutMock) {
+  const attachmentWidth = 40;
+  const actionsWidth = 72;
+  const columnGap = 4;
+  const rowWidth = layout.compactWidth + attachmentWidth + actionsWidth + columnGap * 2;
+  const attachment = createElementWidthMock(attachmentWidth);
+  const actions = createElementWidthMock(actionsWidth);
+
+  return {
+    row: {
+      ...createElementWidthMock(rowWidth),
+      querySelector: (selector: string) => {
+        if (selector === '.composer-attachment-anchor') {
+          return attachment;
+        }
+        if (selector === '.composer-actions') {
+          return actions;
+        }
+        return null;
+      },
+    },
+  };
+}
+
+function createElementWidthMock(width: number) {
+  return {
+    clientWidth: width,
+    offsetWidth: width,
+    getBoundingClientRect: () => ({ width }),
+  };
+}
+
+function getTextareaScrollHeight(
+  textareaStyle: { width: string },
+  value: string,
+  layout?: ComposerTextareaLayoutMock,
+) {
+  if (!layout) {
+    return 0;
+  }
+  if (value.includes('\n')) {
+    return layout.multilineHeight;
+  }
+  return textareaStyle.width === `${layout.compactWidth}px`
+    ? layout.compactHeight
+    : layout.actualHeight;
 }
 
 function buildSkill(overrides: Partial<SkillPayload> = {}): SkillPayload {
@@ -288,6 +448,16 @@ function buildSkill(overrides: Partial<SkillPayload> = {}): SkillPayload {
   };
 }
 
+function findComposerRow(renderer: TestRenderer.ReactTestRenderer): ReactTestInstance {
+  const row = renderer.root
+    .findAll((node) => typeof node.props.className === 'string' && node.props.className.startsWith('composer-row'))
+    .at(0);
+  if (!row) {
+    throw new Error('Composer row not found');
+  }
+  return row;
+}
+
 function findButtonContainingText(renderer: TestRenderer.ReactTestRenderer, text: string): ReactTestInstance {
   const button = renderer.root.findAllByType('button').find((node) => flattenChildrenText(node.props.children).includes(text));
   if (!button) {
@@ -295,6 +465,15 @@ function findButtonContainingText(renderer: TestRenderer.ReactTestRenderer, text
   }
 
   return button;
+}
+
+function findNodeContainingText(renderer: TestRenderer.ReactTestRenderer, text: string): ReactTestInstance {
+  const node = renderer.root.findAll((current) => flattenChildrenText(current.props.children).includes(text)).at(0);
+  if (!node) {
+    throw new Error(`Node not found: ${text}`);
+  }
+
+  return node;
 }
 
 function flattenChildrenText(children: unknown): string {

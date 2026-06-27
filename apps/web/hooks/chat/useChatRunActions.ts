@@ -1,11 +1,11 @@
 import { useCallback } from 'react';
-import { stopAgent } from '@/lib/api/agent/api';
+import { stopAgent, stopExternalAgent } from '@/lib/api/agent/api';
 import { createClientTraceId } from '@/lib/api/trace';
 import { draftImagesToChatImages, draftImagesToSessionImages } from '@/lib/chatImageDrafts';
 import { buildUserMessage } from '@/lib/chatMessages';
 import { isAbortError, isAgentRunCancellationMessage, toErrorMessage } from '@/lib/errors';
 import { buildAgentMessageWithSelectedSkill } from '@/lib/selectedSkillMessage';
-import type { ChatSendInput } from '@/lib/types';
+import type { AgentRuntimeType, ChatSendInput, ExternalCodexPermissionMode } from '@/lib/types';
 import type {
   ChatStateControls,
   ChatStreamRunResult,
@@ -19,8 +19,12 @@ export interface UseChatRunActionsOptions {
   beginHistorySync: ChatStateControls['beginHistorySync'];
   clearChatError: ChatStateControls['clearChatError'];
   clearStreamingState: ChatStateControls['clearStreamingState'];
+  codexImagesUnsupportedText: string;
+  codexUnavailableText: string;
   currentSessionId: UseBridgeChatOptions['currentSessionId'];
   endHistorySync: ChatStateControls['endHistorySync'];
+  externalCodexPermissionMode?: ExternalCodexPermissionMode;
+  externalProjectRoot?: string;
   getCurrentSessionId: () => string;
   getActiveRun: ChatStateControls['getActiveRun'];
   getStopPending: ChatStateControls['getStopPending'];
@@ -45,6 +49,7 @@ interface UseStopCurrentRunOptions extends UseChatRunActionsOptions {
 interface AgentRunContext {
   abortController: AbortController;
   agentMessage: string;
+  runtime: AgentRuntimeType;
   sessionId: string;
   traceId: string;
 }
@@ -115,7 +120,7 @@ function useSendChatMessage(options: UseChatRunActionsOptions) {
 
     const context = beginAgentRun(input, options);
     try {
-      const result = await runAgentStream(buildStreamRunInput(input, context));
+      const result = await runAgentStream(buildStreamRunInput(input, context, options));
       markCompletedRunIfNeeded(result, context, options);
     } catch (error) {
       handleAgentRunError(error, context, options);
@@ -152,10 +157,11 @@ function beginAgentRun(input: ChatSendInput, options: UseChatRunActionsOptions):
   const sessionId = options.currentSessionId.trim();
   const traceId = createClientTraceId('agent-run');
   const abortController = new AbortController();
+  const runtime = resolveAgentRuntime(input.agentRuntime);
   options.clearChatError(sessionId);
   options.clearStreamingState(sessionId);
   options.setStopPending(sessionId, false);
-  options.setActiveRun(sessionId, { abortController, sessionId, traceId });
+  options.setActiveRun(sessionId, { abortController, runtime, sessionId, traceId });
   options.appendCommittedMessages(sessionId, [buildUserMessage(input.message, {
     id: `local:user:${traceId}`,
     images: draftImagesToChatImages(input.images),
@@ -166,13 +172,38 @@ function beginAgentRun(input: ChatSendInput, options: UseChatRunActionsOptions):
   return {
     abortController,
     agentMessage: buildAgentMessageWithSelectedSkill(input),
+    runtime,
     sessionId,
     traceId,
   };
 }
 
-function buildStreamRunInput(input: ChatSendInput, context: AgentRunContext): StreamAgentRunInput {
+function buildStreamRunInput(
+  input: ChatSendInput,
+  context: AgentRunContext,
+  options: UseChatRunActionsOptions,
+): StreamAgentRunInput {
+  if (context.runtime === 'codex') {
+    if (input.images.length > 0) {
+      throw new Error(options.codexImagesUnsupportedText);
+    }
+    if (!options.externalCodexPermissionMode) {
+      throw new Error(options.codexUnavailableText);
+    }
+
+    return {
+      agentRuntime: 'codex',
+      message: context.agentMessage,
+      permissionMode: options.externalCodexPermissionMode,
+      projectRoot: options.externalProjectRoot,
+      sessionId: context.sessionId || undefined,
+      signal: context.abortController.signal,
+      traceId: context.traceId,
+    };
+  }
+
   return {
+    agentRuntime: 'ghost',
     images: draftImagesToSessionImages(input.images),
     message: context.agentMessage,
     sessionId: context.sessionId || undefined,
@@ -214,7 +245,9 @@ async function stopActiveAgentRun(
   run: NonNullable<ReturnType<ChatStateControls['getActiveRun']>>,
   options: UseStopCurrentRunOptions,
 ): Promise<StopRunResult> {
-  const response = await stopAgent(run.sessionId || undefined, run.traceId || undefined);
+  const response = run.runtime === 'codex'
+    ? await stopExternalAgent(run.sessionId)
+    : await stopAgent(run.sessionId || undefined, run.traceId || undefined);
   run.abortController?.abort();
   const targetSessionId = resolveStopSessionId(response.session_id, run.sessionId);
   if (targetSessionId && targetSessionId !== run.sessionId) {
@@ -273,4 +306,8 @@ function resolveStopSessionId(stoppedSessionId?: string, activeSessionId?: strin
     return trimmedStoppedSessionId;
   }
   return activeSessionId?.trim() ?? '';
+}
+
+function resolveAgentRuntime(runtime?: AgentRuntimeType): AgentRuntimeType {
+  return runtime === 'codex' ? 'codex' : 'ghost';
 }

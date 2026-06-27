@@ -4,6 +4,7 @@ import type { ChatRuntimeAction } from '@/lib/chatRuntime/actions';
 import type {
   ChatMessage,
   ChatSendInput,
+  ExternalCodexPermissionMode,
   PendingQuestionMessage,
   SessionImageContent,
   SessionTurnDraft,
@@ -45,12 +46,17 @@ export interface UseBridgeChatResult {
 
 export interface UseBridgeChatOptions {
   currentSessionId: string;
+  externalCodexPermissionMode?: ExternalCodexPermissionMode;
+  externalProjectRoot?: string;
   onSessionResolved?: (sessionId: string) => void;
 }
 
 export interface StreamAgentRunInput {
+  agentRuntime: AgentRuntimeType;
   images?: SessionImageContent[];
   message: string;
+  permissionMode?: ExternalCodexPermissionMode;
+  projectRoot?: string;
   sessionId?: string;
   signal?: AbortSignal;
   traceId: string;

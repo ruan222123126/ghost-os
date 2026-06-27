@@ -1,6 +1,8 @@
 import type {
   AgentRequest,
   AgentStreamEvent,
+  ExternalAgentRequest,
+  ExternalCodexPermissionMode,
   HumanResponseRequest,
 } from '@/lib/types';
 import { createClientTraceId } from '@/lib/api/trace';
@@ -58,6 +60,16 @@ export interface StreamAgentMessageOptions {
   traceId?: string;
 }
 
+export interface StreamExternalAgentMessageOptions {
+  message: string;
+  onEvent: (event: AgentStreamEvent) => void | Promise<void>;
+  permissionMode: ExternalCodexPermissionMode;
+  projectRoot?: string;
+  sessionId?: string;
+  signal?: AbortSignal;
+  traceId: string;
+}
+
 export interface StreamHumanResponseOptions {
   answer: string;
   cancelled?: boolean;
@@ -84,6 +96,30 @@ export async function streamMessage(options: StreamAgentMessageOptions): Promise
     body,
     onEvent: options.onEvent,
     path: '/api/agent/stream',
+    signal: options.signal,
+  });
+}
+
+export async function streamExternalMessage(options: StreamExternalAgentMessageOptions): Promise<AgentStreamResult> {
+  const body: ExternalAgentRequest = {
+    message: options.message,
+    permission_mode: options.permissionMode,
+    provider: 'codex',
+  };
+  if (options.projectRoot?.trim()) {
+    body.project_root = options.projectRoot.trim();
+  }
+  if (options.sessionId?.trim()) {
+    body.session_id = options.sessionId.trim();
+  }
+
+  return streamAgentRequest({
+    body,
+    headers: {
+      'X-Trace-ID': options.traceId.trim(),
+    },
+    onEvent: options.onEvent,
+    path: '/api/external-agent/stream',
     signal: options.signal,
   });
 }

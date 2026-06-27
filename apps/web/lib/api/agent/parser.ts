@@ -13,6 +13,7 @@ import type {
   AgentToolCallFinishedPayload,
   AgentToolCallStartedPayload,
   AssistantSessionEndSignal,
+  ExternalAgentResponse,
 } from '@/lib/types';
 import {
   defineStringEnumValues,
@@ -115,6 +116,19 @@ export function parseAgentStopResponse(payload: unknown): AgentStopResponsePaylo
     status: expectStringEnum(record.status, STOP_STATUSES, 'agent stop response.status'),
     message: expectString(record.message, 'agent stop response.message'),
     session_id: parseOptionalString(record.session_id, 'agent stop response.session_id'),
+  };
+}
+
+export function parseExternalAgentResponse(payload: unknown): ExternalAgentResponse {
+  const record = expectRecord(payload, 'external agent response');
+
+  return {
+    status: expectString(record.status, 'external agent response.status'),
+    provider: parseOptionalString(record.provider, 'external agent response.provider'),
+    session_id: parseOptionalString(record.session_id, 'external agent response.session_id'),
+    thread_id: parseOptionalString(record.thread_id, 'external agent response.thread_id'),
+    turn_id: parseOptionalString(record.turn_id, 'external agent response.turn_id'),
+    permission_mode: parseOptionalString(record.permission_mode, 'external agent response.permission_mode'),
   };
 }
 

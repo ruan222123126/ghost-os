@@ -1,6 +1,6 @@
 import React from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
-import { stopAgent } from '@/lib/api/agent/api';
+import { stopAgent, stopExternalAgent } from '@/lib/api/agent/api';
 import { WebLocaleProvider } from '@/lib/i18n/provider';
 import type { ChatMessage } from '@/lib/types';
 import type { StreamAgentRunInput } from './types';
@@ -8,9 +8,11 @@ import { useChatRunControl } from './useChatRunControl';
 
 jest.mock('@/lib/api/agent/api', () => ({
   stopAgent: jest.fn(),
+  stopExternalAgent: jest.fn(),
 }));
 
 const mockedStopAgent = stopAgent as jest.MockedFunction<typeof stopAgent>;
+const mockedStopExternalAgent = stopExternalAgent as jest.MockedFunction<typeof stopExternalAgent>;
 
 describe('hooks/chat/useChatRunControl', () => {
   beforeEach(() => {
@@ -90,6 +92,62 @@ describe('hooks/chat/useChatRunControl', () => {
     expect(streamedRuns[0].message).toContain('do not call sfind just to load or verify it');
     expect(streamedRuns[0].message).toContain('release_flow');
     expect(streamedRuns[0].message).toContain('ship release');
+  });
+
+  it('routes codex messages through the external agent stream', async () => {
+    const streamedRuns: StreamAgentRunInput[] = [];
+    let latestState: HookRenderState | null = null;
+
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef: { current: null },
+            beginHistorySync: () => undefined,
+            clearChatError: () => undefined,
+            clearStreamingState: () => undefined,
+            currentSessionId: '',
+            endHistorySync: () => undefined,
+            externalCodexPermissionMode: 'safe-yolo',
+            externalProjectRoot: '/workspace/project',
+            onRender: (state) => {
+              latestState = state;
+            },
+            onSessionResolved: () => undefined,
+            runAgentStream: async (run) => {
+              streamedRuns.push(run);
+              return { sessionId: 'session-codex', terminalType: 'done' };
+            },
+            setActiveRun: () => undefined,
+            setChatError: () => undefined,
+            setLoading: () => undefined,
+            setStopPending: () => undefined,
+            stopPendingRef: { current: false },
+            syncRecentHistory: async () => undefined,
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await latestState!.sendChatMessage({
+        agentRuntime: 'codex',
+        images: [],
+        message: 'ship release',
+      });
+    });
+
+    expect(streamedRuns).toEqual([
+      expect.objectContaining({
+        agentRuntime: 'codex',
+        message: 'ship release',
+        permissionMode: 'safe-yolo',
+        projectRoot: '/workspace/project',
+      }),
+    ]);
   });
 
   it('syncs persisted history for the stopped session before clearing streaming state', async () => {
@@ -244,6 +302,62 @@ describe('hooks/chat/useChatRunControl', () => {
       'setStopPending:session-stop:false',
     ]);
   });
+
+  it('stops codex runs through the external agent stop action', async () => {
+    const abortController = new AbortController();
+    const activeRunRef: ActiveRunRef = {
+      current: {
+        abortController,
+        runtime: 'codex',
+        sessionId: 'session-codex',
+        traceId: 'trace-codex',
+      },
+    };
+    mockedStopExternalAgent.mockResolvedValue({
+      status: 'idle',
+      provider: 'codex',
+      session_id: 'session-codex',
+    });
+
+    let latestState: HookRenderState | null = null;
+    await act(async () => {
+      TestRenderer.create(
+        React.createElement(
+          WebLocaleProvider,
+          { initialLocale: 'en-US' },
+          React.createElement(HookProbe, {
+            activeRunRef,
+            beginHistorySync: () => undefined,
+            clearChatError: () => undefined,
+            clearStreamingState: () => undefined,
+            currentSessionId: 'session-codex',
+            endHistorySync: () => undefined,
+            onRender: (state) => {
+              latestState = state;
+            },
+            onSessionResolved: () => undefined,
+            setActiveRun: (sessionId, value) => {
+              activeRunRef.current = value;
+            },
+            setChatError: () => undefined,
+            setLoading: () => undefined,
+            setStopPending: () => undefined,
+            stopPendingRef: { current: false },
+            syncRecentHistory: async () => undefined,
+          }),
+        ),
+      );
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await latestState!.stopCurrentRun();
+    });
+
+    expect(mockedStopExternalAgent).toHaveBeenCalledWith('session-codex');
+    expect(mockedStopAgent).not.toHaveBeenCalled();
+    expect(abortController.signal.aborted).toBe(true);
+  });
 });
 
 function HookProbe(props: {
@@ -254,6 +368,8 @@ function HookProbe(props: {
   clearStreamingState: () => void;
   currentSessionId: string;
   endHistorySync: (sessionId: string) => void;
+  externalCodexPermissionMode?: 'read-only' | 'default' | 'safe-yolo' | 'yolo';
+  externalProjectRoot?: string;
   onRender: (state: HookRenderState) => void;
   onSessionResolved: (sessionId: string) => void;
   runAgentStream?: (run: StreamAgentRunInput) => Promise<{ sessionId: string; terminalType: 'awaiting_human' | 'done' | '' }>;
@@ -272,6 +388,8 @@ function HookProbe(props: {
     clearStreamingState: () => props.clearStreamingState(),
     currentSessionId: props.currentSessionId,
     endHistorySync: props.endHistorySync,
+    externalCodexPermissionMode: props.externalCodexPermissionMode,
+    externalProjectRoot: props.externalProjectRoot,
     getCurrentSessionId: () => props.currentSessionId,
     getActiveRun: () => props.activeRunRef.current,
     getStopPending: () => props.stopPendingRef.current,
@@ -300,6 +418,7 @@ type HookRenderState = ReturnType<typeof useChatRunControl>;
 interface ActiveRunRef {
   current: {
     abortController?: AbortController;
+    runtime?: 'ghost' | 'codex';
     sessionId: string;
     traceId: string;
   } | null;

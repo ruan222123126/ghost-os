@@ -4,7 +4,7 @@ import type { FC, KeyboardEvent, ReactNode, RefObject } from 'react';
 import { ComposerSkillMenu } from '@/components/ComposerSkillMenu';
 import { ComposerToolbar } from '@/components/ComposerToolbar';
 import { ignorePromise } from '@/lib/errors';
-import type { ChatSelectedSkill, SkillPayload } from '@/lib/types';
+import type { AgentRuntimeType, ChatSelectedSkill, SkillPayload } from '@/lib/types';
 
 export interface ComposerActionState {
   disabled: boolean;
@@ -15,16 +15,24 @@ export interface ComposerActionState {
 
 export interface ComposerInputRowProps {
   action: ComposerActionState;
+  agentRuntime: AgentRuntimeType;
   attachmentMenuOpen: boolean;
   ariaLabel: string;
+  codexModeDescription: string;
+  codexModeTitle: string;
+  codexToggleEnabled: boolean;
   disabled: boolean;
   expanded: boolean;
+  featureMenuOpen: boolean;
+  featureMenuTitle: string;
   onClearSelectedSkill?: () => void;
   onActionClick: () => void;
   onAttachmentClick: () => void;
   onFileClick: () => void;
+  onFeatureClick: () => void;
   onRefreshSkills?: () => Promise<void> | void;
   onSelectSkill?: (skill: SkillPayload) => void;
+  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
   onSkillClick: () => void;
   onChange: (value: string) => void;
   onCompositionEnd: () => void;
@@ -48,8 +56,12 @@ export interface ComposerInputRowProps {
   attachmentAriaLabel: string;
   attachmentDisabled: boolean;
   fileDisabled: boolean;
+  fileUnavailableLabel: string;
   attachmentTitle: string;
+  codexRuntimeLabel: string;
+  ghostRuntimeLabel: string;
   menuFileLabel: string;
+  menuFeatureLabel: string;
   menuSkillLabel: string;
   selectedSkillClearLabel?: string;
   menuUnavailableLabel: string;
@@ -58,16 +70,24 @@ export interface ComposerInputRowProps {
 
 export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   action,
+  agentRuntime,
   attachmentMenuOpen,
   ariaLabel,
+  codexModeDescription,
+  codexModeTitle,
+  codexToggleEnabled,
   disabled,
   expanded,
+  featureMenuOpen,
+  featureMenuTitle,
   onClearSelectedSkill,
   onActionClick,
   onAttachmentClick,
   onFileClick,
+  onFeatureClick,
   onRefreshSkills,
   onSelectSkill,
+  onSwitchAgentRuntime,
   onSkillClick,
   onChange,
   onCompositionEnd,
@@ -92,8 +112,12 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
   attachmentAriaLabel,
   attachmentDisabled,
   fileDisabled,
+  fileUnavailableLabel,
   attachmentTitle,
+  codexRuntimeLabel,
+  ghostRuntimeLabel,
   menuFileLabel,
+  menuFeatureLabel,
   menuSkillLabel,
   menuUnavailableLabel,
   value,
@@ -106,7 +130,7 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
         <button
           type="button"
           className="composer-plus-btn"
-          aria-expanded={attachmentMenuOpen || skillMenuOpen}
+          aria-expanded={attachmentMenuOpen || skillMenuOpen || featureMenuOpen}
           aria-haspopup="menu"
           aria-label={attachmentAriaLabel}
           title={attachmentTitle}
@@ -131,10 +155,26 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
         {attachmentMenuOpen ? (
           <AttachmentMenu
             onFileClick={fileDisabled ? undefined : onFileClick}
+            onFeatureClick={onSwitchAgentRuntime ? onFeatureClick : undefined}
             onSkillClick={onSelectSkill ? onSkillClick : undefined}
             fileLabel={menuFileLabel}
+            featureLabel={menuFeatureLabel}
+            fileUnavailableLabel={fileUnavailableLabel}
             skillLabel={menuSkillLabel}
             unavailableLabel={menuUnavailableLabel}
+          />
+        ) : null}
+
+        {featureMenuOpen ? (
+          <ComposerFeatureMenu
+            agentRuntime={agentRuntime}
+            codexModeDescription={codexModeDescription}
+            codexModeTitle={codexModeTitle}
+            codexRuntimeLabel={codexRuntimeLabel}
+            codexToggleEnabled={codexToggleEnabled}
+            ghostRuntimeLabel={ghostRuntimeLabel}
+            onSwitchAgentRuntime={onSwitchAgentRuntime}
+            title={featureMenuTitle}
           />
         ) : null}
 
@@ -186,14 +226,20 @@ export const ComposerInputRow: FC<ComposerInputRowProps> = ({
 
 function AttachmentMenu({
   onFileClick,
+  onFeatureClick,
   onSkillClick,
   fileLabel,
+  featureLabel,
+  fileUnavailableLabel,
   skillLabel,
   unavailableLabel,
 }: {
   onFileClick?: () => void;
+  onFeatureClick?: () => void;
   onSkillClick?: () => void;
   fileLabel: string;
+  featureLabel: string;
+  fileUnavailableLabel: string;
   skillLabel: string;
   unavailableLabel: string;
 }) {
@@ -205,7 +251,15 @@ function AttachmentMenu({
           <span className="composer-attachment-menu-label">{fileLabel}</span>
         </button>
       ) : (
-        <DisabledAttachmentMenuItem icon="file" label={fileLabel} unavailableLabel={unavailableLabel} />
+        <DisabledAttachmentMenuItem icon="file" label={fileLabel} unavailableLabel={fileUnavailableLabel} />
+      )}
+      {onFeatureClick ? (
+        <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onFeatureClick}>
+          <AttachmentMenuIcon kind="feature" />
+          <span className="composer-attachment-menu-label">{featureLabel}</span>
+        </button>
+      ) : (
+        <DisabledAttachmentMenuItem icon="feature" label={featureLabel} unavailableLabel={unavailableLabel} />
       )}
       {onSkillClick ? (
         <button type="button" className="composer-attachment-menu-item" role="menuitem" onClick={onSkillClick}>
@@ -224,7 +278,7 @@ function DisabledAttachmentMenuItem({
   label,
   unavailableLabel,
 }: {
-  icon: 'file' | 'skill';
+  icon: 'feature' | 'file' | 'skill';
   label: string;
   unavailableLabel: string;
 }) {
@@ -243,11 +297,61 @@ function DisabledAttachmentMenuItem({
   );
 }
 
-function AttachmentMenuIcon({ kind }: { kind: 'file' | 'skill' }) {
+function AttachmentMenuIcon({ kind }: { kind: 'feature' | 'file' | 'skill' }) {
   return (
     <span className="composer-attachment-menu-icon" aria-hidden="true">
-      {kind === 'file' ? <FileIcon /> : <SkillIcon />}
+      {kind === 'feature' ? <FeatureIcon /> : kind === 'file' ? <FileIcon /> : <SkillIcon />}
     </span>
+  );
+}
+
+function ComposerFeatureMenu({
+  agentRuntime,
+  codexModeDescription,
+  codexModeTitle,
+  codexRuntimeLabel,
+  codexToggleEnabled,
+  ghostRuntimeLabel,
+  onSwitchAgentRuntime,
+  title,
+}: {
+  agentRuntime: AgentRuntimeType;
+  codexModeDescription: string;
+  codexModeTitle: string;
+  codexRuntimeLabel: string;
+  codexToggleEnabled: boolean;
+  ghostRuntimeLabel: string;
+  onSwitchAgentRuntime?: (runtime: AgentRuntimeType) => void;
+  title: string;
+}) {
+  const codexModeEnabled = agentRuntime === 'codex';
+
+  return (
+    <div className="composer-feature-menu" role="menu" aria-label={title}>
+      <div className="composer-skill-menu-head">
+        <span>{title}</span>
+      </div>
+      <div className="composer-feature-mode-switch" role="group" aria-label={codexModeTitle}>
+        <button
+          className={!codexModeEnabled ? 'is-active' : ''}
+          type="button"
+          aria-pressed={!codexModeEnabled}
+          onClick={() => onSwitchAgentRuntime?.('ghost')}
+        >
+          {ghostRuntimeLabel}
+        </button>
+        <button
+          className={codexModeEnabled ? 'is-active' : ''}
+          type="button"
+          aria-pressed={codexModeEnabled}
+          disabled={!codexToggleEnabled}
+          onClick={() => onSwitchAgentRuntime?.('codex')}
+        >
+          {codexRuntimeLabel}
+        </button>
+      </div>
+      <div className="composer-feature-status" role="status">{codexModeDescription}</div>
+    </div>
   );
 }
 
@@ -283,6 +387,31 @@ function FileIcon() {
         d="M7.4 10.8L10.95 7.25C11.8 6.4 13.15 6.4 14 7.25C14.85 8.1 14.85 9.45 14 10.3L9.25 15.05C7.95 16.35 5.85 16.35 4.55 15.05C3.25 13.75 3.25 11.65 4.55 10.35L9.4 5.5C11.15 3.75 14 3.75 15.75 5.5C17.5 7.25 17.5 10.1 15.75 11.85L11.1 16.5"
         stroke="currentColor"
         strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+    </svg>
+  );
+}
+
+function FeatureIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path
+        d="M10 4.25L10.9 7.1L13.75 8L10.9 8.9L10 11.75L9.1 8.9L6.25 8L9.1 7.1L10 4.25Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+      <path
+        d="M14.5 11.75L15.05 13.45L16.75 14L15.05 14.55L14.5 16.25L13.95 14.55L12.25 14L13.95 13.45L14.5 11.75Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.55"
+      />
+      <path
+        d="M5.5 11.5L5.95 12.95L7.4 13.4L5.95 13.85L5.5 15.3L5.05 13.85L3.6 13.4L5.05 12.95L5.5 11.5Z"
+        stroke="currentColor"
         strokeLinejoin="round"
         strokeWidth="1.55"
       />

@@ -33,6 +33,8 @@ export function useBridgeChat(options: UseBridgeChatOptions): UseBridgeChatResul
   const { sendChatMessage, stopCurrentRun } = useChatRunControl({
     ...state,
     currentSessionId: options.currentSessionId,
+    externalCodexPermissionMode: options.externalCodexPermissionMode,
+    externalProjectRoot: options.externalProjectRoot,
     getCurrentSessionId,
     onSessionResolved: options.onSessionResolved,
     runAgentStream,
@@ -88,7 +90,7 @@ function buildBridgeChatResult(options: BridgeChatResultOptions): UseBridgeChatR
     loadingOlderHistory: state.loadingOlderHistory,
     chatError: state.chatError,
     hasPendingQuestion: state.pendingQuestions.length > 0,
-    canStop: state.loading && state.activeRun !== null && !state.stopPending,
+    canStop: canStopActiveRun(state.activeRun, state.loading, state.stopPending),
     hasOlderHistory: state.hasOlderHistory,
     sendChatMessage: actions.sendChatMessage,
     stopCurrentRun: actions.stopCurrentRun,
@@ -102,4 +104,20 @@ function buildBridgeChatResult(options: BridgeChatResultOptions): UseBridgeChatR
     dropSessionState: state.dropSessionState,
     shouldLoadSessionHistory: state.shouldLoadSessionHistory,
   };
+}
+
+function canStopActiveRun(
+  activeRun: ChatStateControls['activeRun'],
+  loading: boolean,
+  stopPending: boolean,
+): boolean {
+  if (!loading || !activeRun || stopPending) {
+    return false;
+  }
+
+  if (activeRun.runtime === 'codex') {
+    return activeRun.sessionId.trim().length > 0;
+  }
+
+  return true;
 }

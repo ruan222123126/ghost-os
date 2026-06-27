@@ -128,11 +128,13 @@ export function useHomePageController(): HomePageController {
   const router = useRouter();
   const settings = useSettingsPanelState(router);
   const sessions = useSessions({ autoRefresh: true });
+  const config = useBridgeConfig({ autoRefresh: !settings.showConfig });
   const chat = useBridgeChat({
     currentSessionId: sessions.currentSessionId,
+    externalCodexPermissionMode: config.config?.external_codex_permission_mode,
+    externalProjectRoot: config.config?.project_root,
     onSessionResolved: sessions.setCurrentSessionId,
   });
-  const config = useBridgeConfig({ autoRefresh: !settings.showConfig });
   const actions = useHomePageActions(sessions, chat);
   const derived = buildDerivedHomeState({
     chat,

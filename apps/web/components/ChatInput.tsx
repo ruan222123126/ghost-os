@@ -11,11 +11,12 @@ import { useComposerSkills } from '@/hooks/useComposerSkills';
 import { createChatImageDrafts } from '@/lib/chatImageDrafts';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
-import type { ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
+import type { AgentRuntimeType, ChatImageDraft, ChatSelectedSkill, ChatSendInput, ProviderModelOption } from '@/lib/types';
 
 interface ChatInputProps {
   loading: boolean;
   canStop?: boolean;
+  canEnableCodexMode?: boolean;
   disabled: boolean;
   awaitingQuestion?: boolean;
   modelLoading?: boolean;
@@ -29,6 +30,7 @@ interface ChatInputProps {
 export const ChatInput: FC<ChatInputProps> = ({
   loading,
   canStop = false,
+  canEnableCodexMode = false,
   disabled,
   awaitingQuestion = false,
   modelLoading = false,
@@ -40,14 +42,20 @@ export const ChatInput: FC<ChatInputProps> = ({
 }) => {
   const { copy } = useWebLocale();
   const [draft, setDraft] = useState('');
+  const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>('ghost');
   const [pendingImages, setPendingImages] = useState<ChatImageDraft[]>([]);
   const [imageError, setImageError] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<ChatSelectedSkill | null>(null);
   const { skillError, skills, skillsLoading, refreshSkills } = useComposerSkills();
   const canSubmit = draft.trim().length > 0 || pendingImages.length > 0 || selectedSkill !== null;
+  const codexModeEnabled = agentRuntime === 'codex';
+  const codexModeBlockedByImages = pendingImages.length > 0;
+  const codexModeDisabledMessage = codexModeBlockedByImages
+    ? copy.chat.composerCodexImagesUnsupported
+    : copy.chat.composerCodexUnavailable;
 
   const handleSubmit = useCallback(async () => {
-    const input = buildChatSendInput(draft, pendingImages, selectedSkill);
+    const input = buildChatSendInput(draft, pendingImages, selectedSkill, agentRuntime);
     if (!canSubmitChatInput(input)) {
       return;
     }
@@ -68,7 +76,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       setSelectedSkill(previousSkill);
       throw error;
     }
-  }, [draft, onSend, pendingImages, selectedSkill]);
+  }, [agentRuntime, draft, onSend, pendingImages, selectedSkill]);
 
   const handleSelectFiles = useCallback(async (files: FileList) => {
     try {
@@ -87,10 +95,14 @@ export const ChatInput: FC<ChatInputProps> = ({
 
   return (
     <ChatComposer
+      agentRuntime={agentRuntime}
+      canEnableCodexMode={canEnableCodexMode && !codexModeBlockedByImages}
+      codexModeDisabledMessage={codexModeDisabledMessage}
       value={draft}
       onChange={setDraft}
       onSubmit={handleSubmit}
       onStop={onStop}
+      onSwitchAgentRuntime={setAgentRuntime}
       onSelectFiles={handleSelectFiles}
       sending={loading}
       canStop={canStop}
@@ -108,7 +120,7 @@ export const ChatInput: FC<ChatInputProps> = ({
       onRefreshSkills={refreshSkills}
       onSelectSkill={(skill) => setSelectedSkill({ id: skill.id, name: skill.name })}
       hint={buildHint(copy, imageError, pendingImages)}
-      toolbar={onSelectModel ? (
+      toolbar={onSelectModel && !codexModeEnabled ? (
         <ModelSelector
           value={activeModel}
           options={availableModels}
@@ -126,8 +138,10 @@ function buildChatSendInput(
   message: string,
   images: ChatImageDraft[],
   selectedSkill: ChatSelectedSkill | null,
+  agentRuntime: AgentRuntimeType,
 ): ChatSendInput {
   const input: ChatSendInput = {
+    agentRuntime,
     message: message.trim(),
     images,
   };

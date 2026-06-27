@@ -296,9 +296,26 @@
   bottom: calc(100% + 8px);
   left: 0;
   z-index: 22;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   width: min(320px, calc(100vw - 44px));
   max-height: min(360px, 52vh);
+  padding: 10px;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 18px;
+  background: rgb(255 255 255);
+  box-shadow: 0 16px 36px rgb(15 23 42 / 0.14);
+  overflow: hidden;
+}
+
+.composer-feature-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 22;
+  display: flex;
+  flex-direction: column;
+  width: min(320px, calc(100vw - 44px));
   padding: 10px;
   border: 1px solid rgb(229 231 235);
   border-radius: 18px;
@@ -318,6 +335,55 @@
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.composer-feature-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-feature-mode-switch button {
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgb(229 231 235);
+  border-radius: 999px;
+  background: rgb(249 250 251);
+  color: rgb(75 85 99);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.composer-feature-mode-switch button:hover:not(:disabled),
+.composer-feature-mode-switch button:focus-visible:not(:disabled) {
+  border-color: rgb(209 213 219);
+  background: rgb(243 244 246);
+  color: rgb(17 24 39);
+  outline: none;
+}
+
+.composer-feature-mode-switch button.is-active {
+  border-color: rgb(17 24 39);
+  background: rgb(17 24 39);
+  color: rgb(255 255 255);
+}
+
+.composer-feature-mode-switch button:disabled {
+  opacity: 0.46;
+  cursor: not-allowed;
+}
+
+.composer-feature-status {
+  padding: 12px 2px 2px;
+  color: rgb(107 114 128);
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .composer-skill-refresh {
@@ -340,8 +406,10 @@
 
 .composer-skill-list {
   display: grid;
+  flex: 1 1 auto;
   gap: 4px;
   min-height: 0;
+  overscroll-behavior: contain;
   overflow-y: auto;
 }
 

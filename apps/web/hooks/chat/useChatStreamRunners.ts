@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { streamHumanResponse, streamMessage } from '@/lib/api/agent/stream';
+import { streamExternalMessage, streamHumanResponse, streamMessage } from '@/lib/api/agent/stream';
 import { resolveEventSessionId } from '@/lib/chat-stream/sessionEvent';
 import { projectAgentEvent } from '@/lib/chatRuntime/eventProjector';
 import { createChatRuntimeState } from '@/lib/chatRuntime/runtimeState';
@@ -123,17 +123,28 @@ function useAgentStreamRunner(options: StreamRunnerOptions) {
     const runtime = createChatRuntimeState(run.traceId, run.sessionId);
     let terminalType: ChatStreamRunResult['terminalType'] = '';
     try {
-      const result = await streamMessage({
-        images: run.images,
-        message: run.message,
-        onEvent: async (event) => {
-          terminalType = resolveTerminalType(terminalType, event);
-          applyEvent(runtime, event);
-        },
-        sessionId: run.sessionId,
-        signal: run.signal,
-        traceId: run.traceId,
-      });
+      const handleEvent = async (event: AgentStreamEvent) => {
+        terminalType = resolveTerminalType(terminalType, event);
+        applyEvent(runtime, event);
+      };
+      const result = run.agentRuntime === 'codex'
+        ? await streamExternalMessage({
+          message: run.message,
+          onEvent: handleEvent,
+          permissionMode: run.permissionMode ?? 'default',
+          projectRoot: run.projectRoot,
+          sessionId: run.sessionId,
+          signal: run.signal,
+          traceId: run.traceId,
+        })
+        : await streamMessage({
+          images: run.images,
+          message: run.message,
+          onEvent: handleEvent,
+          sessionId: run.sessionId,
+          signal: run.signal,
+          traceId: run.traceId,
+        });
       return {
         sessionId: syncSession(runtime, result.sessionId || runtime.sessionId),
         terminalType,

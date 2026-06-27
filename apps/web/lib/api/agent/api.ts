@@ -2,9 +2,11 @@ import type {
   AgentStopRequest,
   AgentStopResponsePayload,
   ApiRequest,
+  ExternalAgentResponse,
+  ExternalAgentStopParams,
 } from '@/lib/types';
 import { requestJSON } from '@/lib/api/client';
-import { parseAgentStopResponse } from '@/lib/api/agent/parser';
+import { parseAgentStopResponse, parseExternalAgentResponse } from '@/lib/api/agent/parser';
 import { createClientTraceId } from '@/lib/api/trace';
 
 export async function stopAgent(
@@ -24,6 +26,22 @@ export async function stopAgent(
   }, parseAgentStopResponse);
 }
 
+export async function stopExternalAgent(
+  sessionId: string,
+): Promise<ExternalAgentResponse> {
+  const params = buildExternalAgentStopParams(sessionId);
+  const body: ApiRequest<ExternalAgentStopParams> = {
+    action: 'EXTERNAL_AGENT_STOP',
+    params,
+    trace_id: createClientTraceId('external-agent-stop'),
+  };
+
+  return requestJSON('/api/bus', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }, parseExternalAgentResponse);
+}
+
 function buildAgentStopParams(
   sessionId?: string,
   traceId?: string,
@@ -41,6 +59,14 @@ function buildAgentStopParams(
     throw new Error('session_id or trace_id is required');
   }
   return params;
+}
+
+function buildExternalAgentStopParams(sessionId: string): ExternalAgentStopParams {
+  const normalizedSessionId = normalizeOptionalId(sessionId);
+  if (!normalizedSessionId) {
+    throw new Error('session_id is required');
+  }
+  return { session_id: normalizedSessionId };
 }
 
 function normalizeOptionalId(value?: string): string {
