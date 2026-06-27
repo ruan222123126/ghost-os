@@ -11,6 +11,11 @@ interface ConnectivityInput {
   errors: string[];
 }
 
+interface BoundaryNodes {
+  endNode: WorkflowCanvasNodeDraft;
+  startNode: WorkflowCanvasNodeDraft;
+}
+
 interface CycleWalkContext {
   outgoing: Map<string, string[]>;
   nodeMap: Map<string, WorkflowCanvasNodeDraft>;
@@ -21,20 +26,36 @@ interface CycleWalkContext {
 }
 
 export function validateConnectivity(input: ConnectivityInput): void {
-  const { errors, incoming, nodes, outgoing } = input;
+  const boundaryNodes = findBoundaryNodes(input.nodes);
+  if (!boundaryNodes) {
+    return;
+  }
+
+  validateReachableFromStart(input, boundaryNodes.startNode);
+  validateCanReachEnd(input, boundaryNodes.endNode);
+}
+
+function findBoundaryNodes(nodes: WorkflowCanvasNodeDraft[]): BoundaryNodes | undefined {
   const startNode = nodes.find((node) => node.type === START_NODE_TYPE);
   const endNode = nodes.find((node) => node.type === END_NODE_TYPE);
   if (!startNode || !endNode) {
-    return;
+    return undefined;
   }
-  const fromStart = walkGraph(startNode.id, outgoing);
-  if (fromStart.size !== nodes.length) {
-    errors.push('workflow must be fully connected from start node');
+  return { endNode, startNode };
+}
+
+function validateReachableFromStart(input: ConnectivityInput, startNode: WorkflowCanvasNodeDraft): void {
+  const fromStart = walkGraph(startNode.id, input.outgoing);
+  if (fromStart.size !== input.nodes.length) {
+    input.errors.push('workflow must be fully connected from start node');
   }
-  const toEnd = walkGraph(endNode.id, incoming);
-  for (const node of nodes) {
+}
+
+function validateCanReachEnd(input: ConnectivityInput, endNode: WorkflowCanvasNodeDraft): void {
+  const toEnd = walkGraph(endNode.id, input.incoming);
+  for (const node of input.nodes) {
     if (!toEnd.has(node.id)) {
-      errors.push(`workflow node "${node.id}" cannot reach end node`);
+      input.errors.push(`workflow node "${node.id}" cannot reach end node`);
     }
   }
 }
@@ -60,23 +81,7 @@ export function pathExists(
   startID: string,
   targetID: string,
 ): boolean {
-  if (startID === targetID) {
-    return true;
-  }
-  const seen = new Set<string>();
-  const queue = [startID];
-  while (queue.length > 0) {
-    const nodeID = queue.shift();
-    if (!nodeID || seen.has(nodeID)) {
-      continue;
-    }
-    if (nodeID === targetID) {
-      return true;
-    }
-    seen.add(nodeID);
-    queue.push(...(adjacency.get(nodeID) ?? []));
-  }
-  return false;
+  return walkGraph(startID, adjacency).has(targetID);
 }
 
 function createCycleWalkContext(
@@ -139,11 +144,21 @@ function walkGraph(startID: string, adjacency: Map<string, string[]>): Set<strin
   const queue = [startID];
   while (queue.length > 0) {
     const nodeID = queue.shift();
-    if (!nodeID || seen.has(nodeID)) {
+    if (!shouldVisitGraphNode(nodeID, seen)) {
       continue;
     }
     seen.add(nodeID);
     queue.push(...(adjacency.get(nodeID) ?? []));
   }
   return seen;
+}
+
+function shouldVisitGraphNode(
+  nodeID: string | undefined,
+  seen: Set<string>,
+): nodeID is string {
+  if (!nodeID) {
+    return false;
+  }
+  return !seen.has(nodeID);
 }
