@@ -45,6 +45,16 @@ interface LoopPairCycleInput {
   errors: string[];
 }
 
+interface IfBranchTargets {
+  falseID: string;
+  trueID: string;
+}
+
+interface CompleteLoopPair {
+  end: WorkflowCanvasNodeDraft;
+  start: WorkflowCanvasNodeDraft;
+}
+
 export function validateWorkflowGraphRules(
   nodes: WorkflowCanvasNodeDraft[],
   graph: WorkflowGraphData,
@@ -160,13 +170,18 @@ function validateIfNodeEdgeTargets(
   errors: string[],
 ): void {
   for (const node of nodes) {
-    const ifConfig = node.type === 'if' ? node.if : undefined;
-    if (!ifConfig) {
-      continue;
-    }
-    if (ifEdgeTargetsMismatch(ifConfig, outgoing.get(node.id) ?? [])) {
-      errors.push(`workflow if node "${node.id}" outgoing edges must match true_node_id/false_node_id`);
-    }
+    validateIfNodeEdgeTarget(node, outgoing.get(node.id) ?? [], errors);
+  }
+}
+
+function validateIfNodeEdgeTarget(
+  node: WorkflowCanvasNodeDraft,
+  outgoingIDs: string[],
+  errors: string[],
+): void {
+  const ifConfig = node.type === 'if' ? node.if : undefined;
+  if (ifConfig && ifEdgeTargetsMismatch(ifConfig, outgoingIDs)) {
+    errors.push(`workflow if node "${node.id}" outgoing edges must match true_node_id/false_node_id`);
   }
 }
 
@@ -174,10 +189,30 @@ function ifEdgeTargetsMismatch(
   ifConfig: NonNullable<WorkflowCanvasNodeDraft['if']>,
   outgoingIDs: string[],
 ): boolean {
+  const targets = resolveIfBranchTargets(ifConfig);
+  if (!targets) {
+    return false;
+  }
   const outgoingSet = new Set(outgoingIDs);
-  const trueID = ifConfig.true_node_id?.trim() ?? '';
-  const falseID = ifConfig.false_node_id?.trim() ?? '';
-  return Boolean(trueID && falseID && (!outgoingSet.has(trueID) || !outgoingSet.has(falseID)));
+  return !outgoingSet.has(targets.trueID) || !outgoingSet.has(targets.falseID);
+}
+
+function resolveIfBranchTargets(
+  ifConfig: NonNullable<WorkflowCanvasNodeDraft['if']>,
+): IfBranchTargets | undefined {
+  const targets = {
+    trueID: normalizeIfBranchTarget(ifConfig.true_node_id),
+    falseID: normalizeIfBranchTarget(ifConfig.false_node_id),
+  };
+  return hasCompleteIfBranchTargets(targets) ? targets : undefined;
+}
+
+function normalizeIfBranchTarget(targetID: string | undefined): string {
+  return targetID?.trim() ?? '';
+}
+
+function hasCompleteIfBranchTargets(targets: IfBranchTargets): boolean {
+  return targets.trueID.length > 0 && targets.falseID.length > 0;
 }
 
 function validateLoopPairs(
@@ -187,22 +222,51 @@ function validateLoopPairs(
 ): void {
   const pairs = collectLoopPairs(nodes);
   for (const [loopID, pair] of pairs.entries()) {
-    if (pair.startCount !== 1 || pair.endCount !== 1 || !pair.start || !pair.end) {
-      errors.push(`loop "${loopID}" must contain one start node and one end node`);
-      continue;
-    }
-    const expectedStartID = `${loopID}-${LOOP_ROLE_START}`;
-    const expectedEndID = `${loopID}-${LOOP_ROLE_END}`;
-    if (pair.start.id !== expectedStartID || pair.end.id !== expectedEndID) {
-      errors.push(`loop "${loopID}" must use fixed node ids "${expectedStartID}" and "${expectedEndID}"`);
-    }
-    validateLoopPairCycle({
-      loopID,
-      start: pair.start,
-      end: pair.end,
-      outgoing,
-      errors,
-    });
+    validateLoopPair({ loopID, pair, outgoing, errors });
+  }
+}
+
+function validateLoopPair(input: {
+  loopID: string;
+  pair: LoopPair;
+  outgoing: Map<string, string[]>;
+  errors: string[];
+}): void {
+  const completePair = resolveCompleteLoopPair(input.loopID, input.pair, input.errors);
+  if (!completePair) {
+    return;
+  }
+  validateLoopPairIDs(input.loopID, completePair, input.errors);
+  validateLoopPairCycle({
+    loopID: input.loopID,
+    start: completePair.start,
+    end: completePair.end,
+    outgoing: input.outgoing,
+    errors: input.errors,
+  });
+}
+
+function resolveCompleteLoopPair(
+  loopID: string,
+  pair: LoopPair,
+  errors: string[],
+): CompleteLoopPair | undefined {
+  if (pair.startCount === 1 && pair.endCount === 1 && pair.start && pair.end) {
+    return { start: pair.start, end: pair.end };
+  }
+  errors.push(`loop "${loopID}" must contain one start node and one end node`);
+  return undefined;
+}
+
+function validateLoopPairIDs(
+  loopID: string,
+  pair: CompleteLoopPair,
+  errors: string[],
+): void {
+  const expectedStartID = `${loopID}-${LOOP_ROLE_START}`;
+  const expectedEndID = `${loopID}-${LOOP_ROLE_END}`;
+  if (pair.start.id !== expectedStartID || pair.end.id !== expectedEndID) {
+    errors.push(`loop "${loopID}" must use fixed node ids "${expectedStartID}" and "${expectedEndID}"`);
   }
 }
 
@@ -222,23 +286,35 @@ function loopPairEntry(node: WorkflowCanvasNodeDraft): LoopPairEntry | undefined
   if (node.type !== 'loop') {
     return undefined;
   }
-  const loopID = node.loop?.loop_id?.trim() ?? '';
+  const loopID = loopPairID(node);
   if (!loopID) {
     return undefined;
   }
   return { loopID, role: node.loop?.role, node };
 }
 
+function loopPairID(node: WorkflowCanvasNodeDraft): string {
+  return node.loop?.loop_id?.trim() ?? '';
+}
+
 function recordLoopPair(pairs: Map<string, LoopPair>, entry: LoopPairEntry): void {
   const pair = pairs.get(entry.loopID) ?? { startCount: 0, endCount: 0 };
   if (entry.role === LOOP_ROLE_END) {
-    pair.endCount += 1;
-    pair.end = pair.end ?? entry.node;
+    recordLoopPairEnd(pair, entry.node);
   } else {
-    pair.startCount += 1;
-    pair.start = pair.start ?? entry.node;
+    recordLoopPairStart(pair, entry.node);
   }
   pairs.set(entry.loopID, pair);
+}
+
+function recordLoopPairEnd(pair: LoopPair, node: WorkflowCanvasNodeDraft): void {
+  pair.endCount += 1;
+  pair.end = pair.end ?? node;
+}
+
+function recordLoopPairStart(pair: LoopPair, node: WorkflowCanvasNodeDraft): void {
+  pair.startCount += 1;
+  pair.start = pair.start ?? node;
 }
 
 function validateLoopPairCycle(input: LoopPairCycleInput): void {
