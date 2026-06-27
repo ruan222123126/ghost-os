@@ -10,6 +10,7 @@ import {
   MoreActionSheet,
   ScrollDownButton,
 } from "./components/MobileChatHome";
+import { MobileConnectionPanel } from "./components/MobileConnectionPanel";
 import { MobileSearchPage } from "./components/MobileSearchPage";
 import { MobileSettingsPanel } from "./components/MobileSettingsPanel";
 import { useBodyScrollLock } from "./hooks/useBodyScrollLock";
@@ -85,7 +86,6 @@ function App() {
     getFullSession,
     getSession,
     host,
-    localProviderList,
     orchestrationList,
     orchestrationListError,
     providerList,
@@ -118,6 +118,7 @@ function App() {
   const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeType>("ghost");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isConnectionOpen, setIsConnectionOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRuntimeMenuOpen, setIsRuntimeMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -157,7 +158,7 @@ function App() {
     () => displayRuntime(agentRuntime, agentRuntime === "codex" ? config : chatConfig),
     [agentRuntime, chatConfig, config],
   );
-  const isModalOpen = isSidebarOpen || isSearchOpen || isSettingsOpen || isMoreMenuOpen;
+  const isModalOpen = isSidebarOpen || isSearchOpen || isConnectionOpen || isSettingsOpen || isMoreMenuOpen;
   const hasLocalConversation = mobileSessions.hasConversation;
   const {
     handleScroll,
@@ -199,6 +200,7 @@ function App() {
 
   function openSidebar(): void {
     setIsSearchOpen(false);
+    setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSettingsOpen(false);
@@ -206,6 +208,7 @@ function App() {
   }
 
   function openSearch(): void {
+    setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSettingsOpen(false);
@@ -215,15 +218,26 @@ function App() {
 
   function openSettings(): void {
     setIsSearchOpen(false);
+    setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSidebarOpen(false);
     setIsSettingsOpen(true);
   }
 
+  function openConnection(): void {
+    setIsSearchOpen(false);
+    setIsRuntimeMenuOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsSidebarOpen(false);
+    setIsSettingsOpen(false);
+    setIsConnectionOpen(true);
+  }
+
   function startNewSession(): void {
     setMessage("");
     mobileSessions.startNewSession();
+    setIsConnectionOpen(false);
     setIsRuntimeMenuOpen(false);
     setIsMoreMenuOpen(false);
     setIsSidebarOpen(false);
@@ -294,6 +308,7 @@ function App() {
           onCloseRuntimeMenu={() => setIsRuntimeMenuOpen(false)}
           onSwitchModel={switchModel}
           onSwitchAgentRuntime={setAgentRuntime}
+          onOpenConnection={openConnection}
           onOpenMoreMenu={() => {
             setIsRuntimeMenuOpen(false);
             setIsMoreMenuOpen(true);
@@ -346,17 +361,23 @@ function App() {
         />
       </div>
 
-      <MobileSettingsPanel
-        open={isSettingsOpen}
+      <MobileConnectionPanel
+        open={isConnectionOpen}
         settings={settings}
-        config={chatConfig}
-        codexPermissionMode={config?.external_codex_permission_mode}
         computerSessionPersistStatus={mobileSessions.computerSessionPersistStatus}
         connectionStatus={connectionStatus}
-        providerList={providerList}
-        localProviderList={localProviderList}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={() => setIsConnectionOpen(false)}
         onConnect={connectBridge}
+        onSettingsChange={setSettings}
+      />
+
+      <MobileSettingsPanel
+        open={isSettingsOpen}
+        config={chatConfig}
+        codexPermissionMode={config?.external_codex_permission_mode}
+        connectionStatus={connectionStatus}
+        providerList={providerList}
+        onClose={() => setIsSettingsOpen(false)}
         onActivateProvider={activateProvider}
         onCreateProvider={createProvider}
         onDeleteOrchestration={deleteOrchestration}
@@ -368,7 +389,6 @@ function App() {
         onRefreshSkills={refreshSkills}
         onRefreshTasks={refreshTasks}
         onRunTaskNow={runTaskNow}
-        onSettingsChange={setSettings}
         onSetOrchestrationEnabled={setOrchestrationEnabled}
         onSetTaskEnabled={setTaskEnabled}
         onUpdateSkill={updateSkill}

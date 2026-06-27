@@ -9,6 +9,7 @@ export type UiIconName =
   | "file-text"
   | "image"
   | "lightbulb"
+  | "link"
   | "menu"
   | "more"
   | "paperclip"

@@ -25,13 +25,14 @@ interface ChatHeaderProps {
   onCloseRuntimeMenu: () => void;
   onSwitchAgentRuntime: (runtime: AgentRuntimeType) => void;
   onSwitchModel: (model: string) => Promise<boolean>;
+  onOpenConnection: () => void;
   onOpenMoreMenu: () => void;
   onNewSession: () => void;
 }
 
 type HeaderRuntimeSelectorProps = Omit<
   ChatHeaderProps,
-  "hasConversation" | "onOpenSidebar" | "onOpenMoreMenu" | "onNewSession"
+  "hasConversation" | "onOpenSidebar" | "onOpenConnection" | "onOpenMoreMenu" | "onNewSession"
 >;
 
 function HeaderRuntimeSelector(props: HeaderRuntimeSelectorProps) {
@@ -111,7 +112,7 @@ export function ChatHeader(props: ChatHeaderProps) {
         {showHomeRuntimeSelector ? <HeaderRuntimeSelector {...props} /> : null}
       </div>
       <div className="header-right">
-        <IconButton label="新会话" icon="edit" onClick={props.onNewSession} />
+        <IconButton label="连接" icon="link" onClick={props.onOpenConnection} />
       </div>
     </header>
   );
