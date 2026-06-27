@@ -52,7 +52,7 @@ export function ChatComposer(props: ChatComposerProps) {
   const featureMenuOpen = menuView === "features";
   const skillMenuOpen = menuView === "skills";
   const codexModeEnabled = props.agentRuntime === "codex";
-  const codexModeToggleEnabled = Boolean(props.onSwitchAgentRuntime) && (codexModeEnabled || props.canEnableCodexMode === true);
+  const codexModeToggleEnabled = codexModeEnabled || props.canEnableCodexMode === true;
   const codexModeDescription = codexModeEnabled
     ? "已开启，当前发送到 Codex"
     : codexModeToggleEnabled
@@ -116,17 +116,17 @@ export function ChatComposer(props: ChatComposerProps) {
     textareaRef.current?.focus();
   }
 
-  function handleToggleCodexMode(): void {
-    if (!props.onSwitchAgentRuntime) {
+  function handleSwitchAgentRuntime(runtime: AgentRuntimeType): void {
+    if (!props.onSwitchAgentRuntime || runtime === props.agentRuntime) {
+      textareaRef.current?.focus();
       return;
     }
 
-    const nextRuntime: AgentRuntimeType = codexModeEnabled ? "ghost" : "codex";
-    if (nextRuntime === "codex" && props.canEnableCodexMode !== true) {
+    if (runtime === "codex" && props.canEnableCodexMode !== true) {
       return;
     }
 
-    props.onSwitchAgentRuntime(nextRuntime);
+    props.onSwitchAgentRuntime(runtime);
     setMenuView(null);
     textareaRef.current?.focus();
   }
@@ -159,22 +159,26 @@ export function ChatComposer(props: ChatComposerProps) {
           <div className="composer-skill-menu-head">
             <span>功能</span>
           </div>
-          <button
-            type="button"
-            className="composer-feature-item"
-            role="menuitemcheckbox"
-            aria-checked={codexModeEnabled}
-            disabled={!codexModeToggleEnabled}
-            onClick={handleToggleCodexMode}
-          >
-            <span className="composer-feature-item-copy">
-              <span className="composer-feature-item-name">Codex 模式</span>
-              <span className="composer-feature-item-desc">{codexModeDescription}</span>
-            </span>
-            <span className={`composer-feature-switch ${codexModeEnabled ? "is-active" : ""}`}>
-              {codexModeEnabled ? "开" : "关"}
-            </span>
-          </button>
+          <div className="composer-feature-mode-switch" role="group" aria-label="Codex 模式">
+            <button
+              className={!codexModeEnabled ? "is-active" : ""}
+              type="button"
+              aria-pressed={!codexModeEnabled}
+              onClick={() => handleSwitchAgentRuntime("ghost")}
+            >
+              Ghost
+            </button>
+            <button
+              className={codexModeEnabled ? "is-active" : ""}
+              type="button"
+              aria-pressed={codexModeEnabled}
+              disabled={!codexModeToggleEnabled}
+              onClick={() => handleSwitchAgentRuntime("codex")}
+            >
+              Codex
+            </button>
+          </div>
+          <div className="composer-feature-status" role="status">{codexModeDescription}</div>
         </div>
       ) : null}
 

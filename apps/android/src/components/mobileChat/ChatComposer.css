@@ -326,66 +326,55 @@
   line-height: 1.5;
 }
 
-.composer-feature-item {
-  width: 100%;
-  border-radius: 16px;
-  padding: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  color: #111827;
-  background: transparent;
-  text-align: left;
-  transition:
-    background 140ms ease,
-    opacity 140ms ease;
-}
-
-.composer-feature-item:hover,
-.composer-feature-item:focus-visible {
-  background: #f3f4f6;
-}
-
-.composer-feature-item:disabled {
-  opacity: 0.48;
-}
-
-.composer-feature-item-copy {
-  min-width: 0;
+.composer-feature-mode-switch {
   display: grid;
-  gap: 4px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.composer-feature-item-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.92rem;
-  font-weight: 650;
+.composer-feature-mode-switch button {
+  min-width: 0;
+  min-height: 48px;
+  border-radius: 18px;
+  padding: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #6b7280;
+  background: transparent;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease,
+    opacity 180ms ease;
 }
 
-.composer-feature-item-desc {
+.composer-feature-mode-switch button.is-active {
+  color: #111827;
+  background: #ffffff;
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.composer-feature-mode-switch button:hover {
+  color: #374151;
+}
+
+.composer-feature-mode-switch button:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.composer-feature-status {
+  padding: 12px 4px 2px;
   color: #6b7280;
   font-size: 0.8rem;
-  line-height: 1.4;
-}
-
-.composer-feature-switch {
-  min-width: 38px;
-  border-radius: 999px;
-  padding: 6px 10px;
-  flex: 0 0 auto;
-  color: #6b7280;
-  background: #f3f4f6;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-align: center;
-}
-
-.composer-feature-switch.is-active {
-  color: #2046a8;
-  background: #e7efff;
+  line-height: 1.45;
 }
 
 .send-button {
@@ -514,32 +503,33 @@
 
   .composer-skill-refresh:hover,
   .composer-skill-refresh:focus-visible,
-  .composer-feature-item:hover,
-  .composer-feature-item:focus-visible,
   .composer-skill-item:hover,
   .composer-skill-item:focus-visible {
     color: #e8eaed;
     background: #282a2c;
   }
 
-  .composer-feature-item-name,
   .composer-skill-item-name {
     color: #e8eaed;
   }
 
-  .composer-feature-item-desc,
-  .composer-skill-status {
+  .composer-feature-mode-switch button {
     color: #a3a7ad;
   }
 
-  .composer-feature-switch {
-    color: #c9d1d9;
-    background: #2b2d30;
+  .composer-feature-mode-switch button.is-active {
+    color: #e8eaed;
+    background: #282a2c;
+    box-shadow: none;
   }
 
-  .composer-feature-switch.is-active {
-    color: #dbe4ff;
-    background: #27304a;
+  .composer-feature-mode-switch button:hover {
+    color: #e8eaed;
+  }
+
+  .composer-feature-status,
+  .composer-skill-status {
+    color: #a3a7ad;
   }
 
   .send-button {

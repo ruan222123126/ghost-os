@@ -113,14 +113,16 @@ describe("ChatComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole("menuitemcheckbox", { name: /Codex 模式/ }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("false");
 
-    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Codex 模式/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Codex" }));
 
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole("menuitemcheckbox", { name: /Codex 模式/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("button", { name: "Ghost" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Codex" }).getAttribute("aria-pressed")).toBe("true");
   });
 
   it("disables codex mode in the feature menu when the bridge is unavailable", () => {
@@ -129,7 +131,7 @@ describe("ChatComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: "添加内容" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "功能" }));
 
-    expect(screen.getByRole<HTMLButtonElement>("menuitemcheckbox", { name: /Codex 模式/ }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Codex" }).disabled).toBe(true);
     expect(screen.getByText("连接电脑后可用")).toBeTruthy();
   });
 
