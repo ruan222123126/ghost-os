@@ -1,5 +1,6 @@
 'use client';
 
+import { BodyPortal } from '@/components/BodyPortal';
 import { CloseButton } from '@/components/CloseButton';
 import { useWebLocale } from '@/lib/i18n/provider';
 import type { PromptLibraryItem, ToolPayload } from '@/lib/types';
@@ -31,6 +32,7 @@ export function PresetEditor(props: {
   const nameInvalid = editor.draft.name.trim() === '';
 
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <button
         type="button"
@@ -56,6 +58,7 @@ export function PresetEditor(props: {
         />
       </div>
     </div>
+    </BodyPortal>
   );
 }
 

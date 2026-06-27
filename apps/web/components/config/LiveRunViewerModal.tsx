@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { BodyPortal } from '@/components/BodyPortal';
 import { MessageRow } from '@/components/message/MessageRow';
 import { IconPanelLeftClose, IconPanelLeftOpen, IconX } from '@/components/sessionSidebarIcons';
 import { useLiveRunViewer } from '@/hooks/config/useLiveRunViewer';
@@ -47,6 +48,7 @@ export function LiveRunViewerModal(props: LiveRunViewerModalProps) {
   }, [autoScroll, outputSignature]);
 
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-3 sm:p-6" role="dialog" aria-modal="true">
       <button type="button" className="absolute inset-0 bg-black/20 backdrop-blur-[2px]" onClick={onClose} aria-label={copy.settings.tasksLogsClose} />
       <section className="relative z-[91] flex h-[90vh] w-full max-w-[1480px] flex-col overflow-hidden rounded-[16px] border border-[#E5E5E5] bg-[#FAFAFA] font-sans text-[#333333] shadow-2xl shadow-black/10">
@@ -107,6 +109,7 @@ export function LiveRunViewerModal(props: LiveRunViewerModalProps) {
         `}</style>
       </section>
     </div>
+    </BodyPortal>
   );
 }
 

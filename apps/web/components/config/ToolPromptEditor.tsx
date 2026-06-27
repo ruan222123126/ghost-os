@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { BodyPortal } from '@/components/BodyPortal';
 import { CloseButton } from '@/components/CloseButton';
 import { ignorePromise } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -38,6 +39,7 @@ export function ToolPromptEditor(props: ToolPromptEditorProps) {
   const dirty = promptDirty || sandboxMemoryDirty;
 
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
       <div
         className="w-full max-w-3xl rounded-[20px] border border-[#E5E5E5] bg-white p-6 shadow-2xl"
@@ -105,6 +107,7 @@ export function ToolPromptEditor(props: ToolPromptEditorProps) {
         </div>
       </div>
     </div>
+    </BodyPortal>
   );
 }
 

@@ -2,6 +2,7 @@
 
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef, useState } from 'react';
+import { BodyPortal } from '@/components/BodyPortal';
 import { CloseButton } from '@/components/CloseButton';
 import { toErrorMessage } from '@/lib/errors';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -102,7 +103,7 @@ export function TaskLogsModal(props: TaskLogsModalProps) {
   };
 
   return (
-    <>
+    <BodyPortal>
       <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" role="dialog" aria-modal="true">
         <button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onClick={onClose} aria-label={copy.settings.tasksLogsClose} />
         <section className="relative z-[81] flex h-[78vh] w-full max-w-[900px] flex-col overflow-hidden rounded-[18px] border border-[#E5E5E5] bg-white shadow-2xl">
@@ -123,7 +124,7 @@ export function TaskLogsModal(props: TaskLogsModalProps) {
           onClose={() => setViewerTarget(null)}
         />
       ) : null}
-    </>
+    </BodyPortal>
   );
 }
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { BodyPortal } from '@/components/BodyPortal';
 import { CloseButton } from '@/components/CloseButton';
 import { SoftDropdownSelect } from '@/components/SoftDropdownSelect';
 import { useWebLocale } from '@/lib/i18n/provider';
@@ -89,6 +90,7 @@ export function PromptLibraryEditor(props: {
   const nameInvalid = editor.draft.name.trim() === '';
 
   return (
+    <BodyPortal>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 px-4 py-6" onClick={onClose}>
       <div
         className="w-full max-w-3xl rounded-[20px] border border-[#E5E5E5] bg-white p-6 shadow-2xl"
@@ -110,6 +112,7 @@ export function PromptLibraryEditor(props: {
         />
       </div>
     </div>
+    </BodyPortal>
   );
 }
 
