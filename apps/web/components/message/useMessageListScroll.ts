@@ -13,13 +13,16 @@ import { useMessageListPostSendFocus } from './useMessageListPostSendFocus';
 const LOAD_OLDER_TRIGGER_ROWS = 5;
 
 interface PrependAnchor {
+  firstVisibleCommittedMessageId: string | null;
   scrollHeight: number;
   scrollTop: number;
+  visibleCommittedMessageCount: number;
 }
 
 export interface UseMessageListScrollOptions {
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
   firstVirtualItemIndex: number | null;
+  firstVisibleCommittedMessageId: string | null;
   hasOlderHistory: boolean;
   loadingOlderHistory: boolean;
   loadOlderHistory: () => Promise<void>;
@@ -169,12 +172,14 @@ function useAutoFollowTracking(
 function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
   const {
     firstVirtualItemIndex,
+    firstVisibleCommittedMessageId,
     hasOlderHistory,
     loadOlderHistory,
     loadingOlderHistory,
     olderLoadPendingRef,
     prependAnchorRef,
     scrollElementRef,
+    visibleCommittedMessageCount,
   } = options;
   const handleLoadOlderHistory = useCallback(async () => {
     if (loadingOlderHistory || olderLoadPendingRef.current) {
@@ -184,7 +189,12 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
       return;
     }
 
-    capturePrependAnchor(scrollElementRef.current, prependAnchorRef);
+    capturePrependAnchor({
+      container: scrollElementRef.current,
+      firstVisibleCommittedMessageId,
+      prependAnchorRef,
+      visibleCommittedMessageCount,
+    });
     olderLoadPendingRef.current = true;
     try {
       await loadOlderHistory();
@@ -192,12 +202,14 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
       olderLoadPendingRef.current = false;
     }
   }, [
+    firstVisibleCommittedMessageId,
     hasOlderHistory,
     loadOlderHistory,
     loadingOlderHistory,
     olderLoadPendingRef,
     prependAnchorRef,
     scrollElementRef,
+    visibleCommittedMessageCount,
   ]);
 
   useEffect(() => {
@@ -211,8 +223,15 @@ function useOlderHistoryLoading(options: UseOlderHistoryLoadingOptions) {
 
 function usePrependAnchorRestore(options: PrependAnchorRestoreOptions) {
   useLayoutEffect(() => {
-    restorePrependAnchor(options.scrollElementRef.current, options.prependAnchorRef);
+    restorePrependAnchor({
+      container: options.scrollElementRef.current,
+      firstVisibleCommittedMessageId: options.firstVisibleCommittedMessageId,
+      loadingOlderHistory: options.loadingOlderHistory,
+      prependAnchorRef: options.prependAnchorRef,
+      visibleCommittedMessageCount: options.visibleCommittedMessageCount,
+    });
   }, [
+    options.firstVisibleCommittedMessageId,
     options.loadingOlderHistory,
     options.prependAnchorRef,
     options.scrollElementRef,
@@ -277,26 +296,55 @@ function shouldLoadOlderHistory(options: {
     && options.firstVirtualItemIndex <= LOAD_OLDER_TRIGGER_ROWS;
 }
 
-function capturePrependAnchor(
-  container: HTMLDivElement | null,
-  prependAnchorRef: MutableRefObject<PrependAnchor | null>,
-) {
+function capturePrependAnchor(options: {
+  container: HTMLDivElement | null;
+  firstVisibleCommittedMessageId: string | null;
+  prependAnchorRef: MutableRefObject<PrependAnchor | null>;
+  visibleCommittedMessageCount: number;
+}) {
+  const {
+    container,
+    firstVisibleCommittedMessageId,
+    prependAnchorRef,
+    visibleCommittedMessageCount,
+  } = options;
   if (!container) {
     return;
   }
 
   prependAnchorRef.current = {
+    firstVisibleCommittedMessageId,
     scrollHeight: container.scrollHeight,
     scrollTop: container.scrollTop,
+    visibleCommittedMessageCount,
   };
 }
 
-function restorePrependAnchor(
-  container: HTMLDivElement | null,
-  prependAnchorRef: MutableRefObject<PrependAnchor | null>,
-) {
+function restorePrependAnchor(options: {
+  container: HTMLDivElement | null;
+  firstVisibleCommittedMessageId: string | null;
+  loadingOlderHistory: boolean;
+  prependAnchorRef: MutableRefObject<PrependAnchor | null>;
+  visibleCommittedMessageCount: number;
+}) {
+  const {
+    container,
+    firstVisibleCommittedMessageId,
+    loadingOlderHistory,
+    prependAnchorRef,
+    visibleCommittedMessageCount,
+  } = options;
   const anchor = prependAnchorRef.current;
   if (!anchor || !container) {
+    return;
+  }
+  if (loadingOlderHistory) {
+    return;
+  }
+  const hasPrependedVisibleMessages = visibleCommittedMessageCount > anchor.visibleCommittedMessageCount
+    && firstVisibleCommittedMessageId !== anchor.firstVisibleCommittedMessageId;
+  if (!hasPrependedVisibleMessages) {
+    prependAnchorRef.current = null;
     return;
   }
 

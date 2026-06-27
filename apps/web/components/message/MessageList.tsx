@@ -82,6 +82,7 @@ export const MessageList: FC<MessageListProps> = ({
   const { scrollElementRef, trailingSpacerPx } = useMessageListScroll({
     rowVirtualizer,
     firstVirtualItemIndex: virtualItems[0]?.index ?? null,
+    firstVisibleCommittedMessageId: visibleCommittedMessages[0]?.id ?? null,
     hasOlderHistory,
     layoutSignature,
     loadOlderHistory,
