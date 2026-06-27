@@ -81,41 +81,109 @@ export function useAutosaveController(
 }
 
 export function useWorkflowBootstrap(options: WorkflowBootstrapOptions) {
-  const { mode, taskID, copy, autosaveController, runtimeRef, setDraft, setActionError, setPhase } = options;
+  useCreateWorkflowBootstrap(options);
+  useEditWorkflowBootstrap(options);
+}
+
+function useCreateWorkflowBootstrap(options: WorkflowBootstrapOptions) {
+  const { mode, setDraft, setPhase } = options;
   useEffect(() => {
-    if (mode === 'create') {
-      hydrateCreateDraft(setDraft);
-      setPhase('ready');
+    if (mode !== 'create') {
+      return;
+    }
+    hydrateCreateDraft(setDraft);
+    setPhase('ready');
+  }, [mode, setDraft, setPhase]);
+}
+
+function useEditWorkflowBootstrap(options: WorkflowBootstrapOptions) {
+  const { mode, taskID, copy, autosaveController, runtimeRef, setDraft, setActionError, setPhase } = options;
+  const failureMessage = copy.system.failedToLoadWorkflowTask;
+  useEffect(() => {
+    if (mode !== 'edit') {
       return;
     }
     if (!taskID) {
-      setActionError(copy.system.failedToLoadWorkflowTask);
-      setPhase('ready');
+      handleMissingEditTaskID({ failureMessage, setActionError, setPhase });
       return;
     }
-    let cancelled = false;
-    setPhase('loading');
-    setActionError('');
-    void hydrateEditDraft({
+
+    return startEditDraftHydration({
       taskID,
       autosaveController,
       runtimeRef,
       setDraft,
-      onError: (error) => {
-        if (!cancelled) {
-          setActionError(toErrorMessage(error, copy.system.failedToLoadWorkflowTask));
-        }
-      },
-      onFinally: () => {
-        if (!cancelled) {
-          setPhase('ready');
-        }
-      },
+      setActionError,
+      setPhase,
+      failureMessage,
     });
-    return () => {
-      cancelled = true;
-    };
-  }, [autosaveController, copy.system.failedToLoadWorkflowTask, mode, runtimeRef, setActionError, setDraft, setPhase, taskID]);
+  }, [autosaveController, failureMessage, mode, runtimeRef, setActionError, setDraft, setPhase, taskID]);
+}
+
+function handleMissingEditTaskID(options: {
+  failureMessage: string;
+  setActionError: Dispatch<SetStateAction<string>>;
+  setPhase: Dispatch<SetStateAction<'loading' | 'ready'>>;
+}) {
+  const { failureMessage, setActionError, setPhase } = options;
+  setActionError(failureMessage);
+  setPhase('ready');
+}
+
+function startEditDraftHydration(options: {
+  taskID: string;
+  autosaveController: AutosaveController<WorkflowUpdatePayload>;
+  runtimeRef: MutableRefObject<WorkflowEditorControllerRuntime>;
+  setDraft: Dispatch<SetStateAction<WorkflowCanvasDraft>>;
+  setActionError: Dispatch<SetStateAction<string>>;
+  setPhase: Dispatch<SetStateAction<'loading' | 'ready'>>;
+  failureMessage: string;
+}) {
+  const { taskID, autosaveController, runtimeRef, setDraft, setActionError, setPhase, failureMessage } = options;
+  let cancelled = false;
+  const isCancelled = () => cancelled;
+  setPhase('loading');
+  setActionError('');
+  void hydrateEditDraft({
+    taskID,
+    autosaveController,
+    runtimeRef,
+    setDraft,
+    onError: (error) => handleEditDraftHydrationError({
+      error,
+      failureMessage,
+      isCancelled,
+      setActionError,
+    }),
+    onFinally: () => handleEditDraftHydrationFinally({ isCancelled, setPhase }),
+  });
+  return () => {
+    cancelled = true;
+  };
+}
+
+function handleEditDraftHydrationError(options: {
+  error: unknown;
+  failureMessage: string;
+  isCancelled: () => boolean;
+  setActionError: Dispatch<SetStateAction<string>>;
+}) {
+  const { error, failureMessage, isCancelled, setActionError } = options;
+  if (isCancelled()) {
+    return;
+  }
+  setActionError(toErrorMessage(error, failureMessage));
+}
+
+function handleEditDraftHydrationFinally(options: {
+  isCancelled: () => boolean;
+  setPhase: Dispatch<SetStateAction<'loading' | 'ready'>>;
+}) {
+  const { isCancelled, setPhase } = options;
+  if (isCancelled()) {
+    return;
+  }
+  setPhase('ready');
 }
 
 export function useSeedAutosaveBaseline(options: {
