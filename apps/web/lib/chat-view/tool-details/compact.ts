@@ -22,7 +22,8 @@ export function buildToolDetailCompact(tool: ToolChatMessage): string {
   if (dispatchDetails) {
     return dispatchDetails;
   }
-  if (normalizeToolName(tool.toolName) === 'bash_exec') {
+  const normalizedToolName = normalizeToolName(tool.toolName);
+  if (normalizedToolName === 'bash_exec' || normalizedToolName === 'codex_exec') {
     return buildBashExecCompact(tool);
   }
   const details: string[] = [];

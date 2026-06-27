@@ -39,6 +39,10 @@ type DirectActionBuilder = (args?: RecordValue) => ActionItem | undefined;
 const DIRECT_ACTION_BUILDERS: Record<string, DirectActionBuilder> = {
   [SCRIPT_EXEC_TOOL]: (args) => ({ kind: 'run', text: truncateSummary(readString(args, 'script')) }),
   codex_cli: (args) => ({ kind: 'codex', text: formatCodexTarget(args) }),
+  codex_exec: (args) => ({ kind: 'run', text: truncateSummary(readString(args, 'command') || readString(args, 'cmd')) }),
+  codex_patch: (args) => ({ kind: 'edit', text: formatCodexPatchTarget(args) }),
+  codex_mcp: (args) => ({ kind: 'codex', text: formatCodexMCPLabel(args) }),
+  codex_approval: (args) => ({ kind: 'codex', text: formatCodexApprovalLabel(args) }),
   read_file: (args) => ({ kind: 'read', text: formatPath(readString(args, 'path')) }),
   list_files: (args) => ({ kind: 'list', text: formatPath(readString(args, 'path')) || '.' }),
   write_file: (args) => ({ kind: 'write', text: appendDelta(formatPath(readString(args, 'path')), resolveWriteDelta(undefined, args)) }),
@@ -209,6 +213,110 @@ function formatCodexTarget(args?: RecordValue): string {
   const prompt = truncateSummary(readString(args, 'prompt'));
   const parts = [op, prompt].filter(Boolean);
   return truncateSummary(parts.join(' '));
+}
+
+function formatCodexPatchTarget(args?: RecordValue): string {
+  return truncateSummary(summarizeCodexPatchChanges(args?.changes));
+}
+
+function summarizeCodexPatchChanges(value: unknown): string {
+  const targets = Array.from(new Set(collectCodexPatchTargets(value).filter(Boolean)));
+  if (targets.length === 0) {
+    return '';
+  }
+  if (targets.length <= 2) {
+    return targets.join(', ');
+  }
+  return `${targets.slice(0, 2).join(', ')} +${targets.length - 2}`;
+}
+
+function collectCodexPatchTargets(value: unknown): string[] {
+  if (typeof value === 'string') {
+    const pathText = formatPath(value);
+    return pathText ? [pathText] : [];
+  }
+  if (Array.isArray(value)) {
+    const targets: string[] = [];
+    for (const item of value) {
+      targets.push(...collectCodexPatchTargets(item));
+    }
+    return targets;
+  }
+  if (!isRecordValue(value)) {
+    return [];
+  }
+
+  const directTargets = [
+    readString(value, 'path'),
+    readString(value, 'file'),
+    readString(value, 'target'),
+    readString(value, 'new_path'),
+    readString(value, 'old_path'),
+  ]
+    .map((item) => formatPath(item))
+    .filter(Boolean);
+  if (directTargets.length > 0) {
+    return directTargets;
+  }
+
+  const nestedTargets: string[] = [];
+  const nestedChanges = readUnknownRecordArray(value.changes);
+  for (const change of nestedChanges) {
+    nestedTargets.push(...collectCodexPatchTargets(change));
+  }
+  return nestedTargets;
+}
+
+function formatCodexMCPLabel(args?: RecordValue): string {
+  return truncateSummary(joinNonEmpty([
+    readFirstString(args, ['name', 'tool_name', 'toolName', 'tool']),
+    readFirstString(args, ['server_name', 'serverName']),
+  ], ' '));
+}
+
+function formatCodexApprovalLabel(args?: RecordValue): string {
+  const command = truncateSummary(readString(args, 'command') || readString(args, 'cmd'));
+  if (command) {
+    return `批准命令 ${command}`;
+  }
+
+  const patchTarget = formatCodexPatchTarget(args);
+  if (patchTarget) {
+    return `批准补丁 ${patchTarget}`;
+  }
+
+  const prompt = truncateSummary(readString(args, 'prompt') || readString(args, 'message'));
+  if (prompt) {
+    return prompt;
+  }
+
+  const tool = readFirstString(args, ['tool', 'kind']);
+  return tool ? `批准 ${tool}` : '审批';
+}
+
+function readFirstString(value: RecordValue | undefined, keys: string[]): string {
+  for (const key of keys) {
+    const text = readString(value, key);
+    if (text) {
+      return text;
+    }
+  }
+  return '';
+}
+
+function joinNonEmpty(parts: string[], separator: string): string {
+  return parts.filter(Boolean).join(separator);
+}
+
+function readUnknownRecordArray(value: unknown): RecordValue[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(isRecordValue);
+}
+
+function isRecordValue(value: unknown): value is RecordValue {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function formatPath(rawPath: string): string {

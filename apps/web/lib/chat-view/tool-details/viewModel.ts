@@ -25,6 +25,8 @@ const PLAIN_ACTION_TITLE_BUILDERS: Record<string, PlainActionTitleBuilder> = {
   web_search: buildWebActionTitle,
   fetch_webpage: buildWebActionTitle,
   codex_cli: buildCodexActionTitle,
+  codex_mcp: buildCodexMCPActionTitle,
+  codex_approval: buildCodexApprovalTitle,
   search_files: buildSearchActionTitle,
   sfind: buildSkillActionTitle,
   screen_action: buildScreenActionTitle,
@@ -132,6 +134,20 @@ function buildCodexActionTitle(action: FormattedToolAction): string {
     return '';
   }
   return joinLabelAndTarget('调用codex', action.actionText);
+}
+
+function buildCodexMCPActionTitle(action: FormattedToolAction): string {
+  if (action.actionKind !== 'codex') {
+    return '';
+  }
+  return joinLabelAndTarget('调用MCP', action.actionText);
+}
+
+function buildCodexApprovalTitle(action: FormattedToolAction): string {
+  if (action.actionKind !== 'codex') {
+    return '';
+  }
+  return action.actionText?.trim() || '等待批准';
 }
 
 function buildSearchActionTitle(action: FormattedToolAction): string {

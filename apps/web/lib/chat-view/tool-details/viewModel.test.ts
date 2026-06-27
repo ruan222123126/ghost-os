@@ -113,6 +113,19 @@ describe('lib/chat-view/tool-details/viewModel', () => {
     });
 
     expect(buildToolCardViewModel({
+      id: 'tool-codex-mcp',
+      kind: 'tool',
+      content: 'ok',
+      toolInput: JSON.stringify({ name: 'github' }),
+      toolName: 'codex_mcp',
+      toolStatus: 'success',
+    })).toMatchObject({
+      title: '调用MCP github',
+      titleMode: 'plain',
+      showTerminalIcon: false,
+    });
+
+    expect(buildToolCardViewModel({
       id: 'tool-sfind',
       kind: 'tool',
       content: '',
@@ -133,6 +146,41 @@ describe('lib/chat-view/tool-details/viewModel', () => {
       toolStatus: 'success',
     })).toMatchObject({
       title: '搜索 bridge runtime selector（关键词）',
+      titleMode: 'plain',
+      showTerminalIcon: false,
+    });
+  });
+
+  it('shows codex exec commands and patch targets instead of generic codex titles', () => {
+    expect(buildToolCardViewModel({
+      id: 'tool-codex-exec',
+      kind: 'tool',
+      content: '/media/ruan/Files/ghost-os',
+      toolCallId: 'call-codex-exec-1',
+      toolCalls: [
+        {
+          id: 'call-codex-exec-1',
+          name: 'codex_exec',
+          arguments: { command: 'pwd' },
+        },
+      ],
+      toolName: 'codex_exec',
+      toolStatus: 'success',
+    })).toMatchObject({
+      title: 'pwd',
+      titleMode: 'status',
+      showTerminalIcon: true,
+    });
+
+    expect(buildToolCardViewModel({
+      id: 'tool-codex-patch',
+      kind: 'tool',
+      content: 'completed',
+      toolInput: JSON.stringify({ changes: 'README.md' }),
+      toolName: 'codex_patch',
+      toolStatus: 'success',
+    })).toMatchObject({
+      title: '编辑文件 README.md',
       titleMode: 'plain',
       showTerminalIcon: false,
     });

@@ -209,6 +209,43 @@ describe('lib/chat-view/tool-details/format', () => {
     expect(formatToolAction(tool)).toEqual({ text: 'which agent-browser', variant: 'command' });
   });
 
+  it('uses tool call arguments for codex_exec title after history-style output-only hydration', () => {
+    const tool = buildToolMessage({
+      toolName: 'codex_exec',
+      toolCallId: 'call-codex-exec-1',
+      toolCalls: [
+        {
+          id: 'call-codex-exec-1',
+          name: 'codex_exec',
+          arguments: { command: 'rg --files -g README.md' },
+        },
+      ],
+      content: 'apps/android/README.md',
+      rawOutput: 'apps/android/README.md',
+    });
+
+    expect(formatToolAction(tool)).toEqual({ text: 'rg --files -g README.md', variant: 'command' });
+  });
+
+  it('promotes codex patch targets into readable edit actions', () => {
+    expect(formatToolAction(buildToolMessage({
+      toolName: 'codex_patch',
+      toolInput: JSON.stringify({
+        changes: [
+          { path: '/tmp/main.go' },
+          { new_path: '/tmp/app.ts' },
+          'README.md',
+        ],
+      }),
+      content: 'completed',
+    }))).toEqual({
+      actionKind: 'edit',
+      actionText: '/tmp/main.go, /tmp/app.ts +1',
+      text: 'edit /tmp/main.go, /tmp/app.ts +1',
+      variant: 'action',
+    });
+  });
+
   it('includes search query in summary for search_files', () => {
     const details = formatToolDetails(buildToolMessage({
       toolName: 'search_files',

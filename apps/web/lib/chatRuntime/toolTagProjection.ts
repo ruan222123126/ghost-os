@@ -89,7 +89,10 @@ function projectToolTagEvent(
 
 function buildPendingToolAction(input: PendingToolActionInput): ChatRuntimeAction {
   const { content, id, toolName, traceId } = input;
-  const toolInput = normalizeToolName(toolName) === 'bash_exec' ? content : '';
+  const normalizedToolName = normalizeToolName(toolName);
+  const toolInput = normalizedToolName === 'bash_exec' || normalizedToolName === 'codex_exec'
+    ? content
+    : '';
   return {
     type: 'upsert_streaming_tool',
     tool: {

@@ -177,7 +177,8 @@ function buildCompactOutputPreview(tool: ToolChatMessage): string[] {
 }
 
 function resolveBashExecCommand(tool: ToolChatMessage): string {
-  if (normalizeToolName(tool.toolName) !== 'bash_exec') {
+  const normalizedToolName = normalizeToolName(tool.toolName);
+  if (normalizedToolName !== 'bash_exec' && normalizedToolName !== 'codex_exec') {
     return '';
   }
 
