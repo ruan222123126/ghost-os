@@ -222,7 +222,7 @@ func clearTurnDraftBeforeCommit(sess *session.Session, runErr error) {
 	if sess == nil || sess.TurnDraft == nil {
 		return
 	}
-	if runErr != nil {
+	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		return
 	}
 	sess.ClearTurnDraft(time.Now().UTC())

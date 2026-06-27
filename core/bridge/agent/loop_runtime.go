@@ -125,6 +125,9 @@ func (state agentRunState) maxTurnsExceeded(ctx context.Context, lastTurn int, m
 }
 
 func (state agentRunState) terminalRunError(ctx context.Context, turn int, runErr error) error {
+	if errors.Is(runErr, context.Canceled) {
+		return context.Canceled
+	}
 	stepID, err := streaming.AssistantStepID(turn)
 	if err != nil {
 		return err

@@ -338,14 +338,8 @@ func TestRunTurnStreamInputPersistsAssistantDraftOnCancel(t *testing.T) {
 	if loaded.AssistantDraft.Text != "partial answer" {
 		t.Fatalf("unexpected assistant draft: %q", loaded.AssistantDraft.Text)
 	}
-	if loaded.TurnDraft == nil {
-		t.Fatal("expected turn_draft to persist on cancellation")
-	}
-	if loaded.TurnDraft.Status != session.TurnDraftStatusError {
-		t.Fatalf("unexpected turn_draft status after cancellation: %+v", loaded.TurnDraft)
-	}
-	if !strings.Contains(loaded.TurnDraft.Error, context.Canceled.Error()) {
-		t.Fatalf("unexpected turn_draft error after cancellation: %+v", loaded.TurnDraft)
+	if loaded.TurnDraft != nil {
+		t.Fatalf("expected turn_draft to clear on cancellation, got %+v", loaded.TurnDraft)
 	}
 }
 

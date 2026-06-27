@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -97,12 +98,16 @@ func (s *observedSSEStreamSink) Emit(ctx context.Context, event streaming.Event)
 }
 
 func (s *observedSSEStreamSink) shouldEmitFallbackError(err error) bool {
-	if err == nil {
+	if err == nil || isStreamCancellationError(err) {
 		return false
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return !s.hasErrorEvent
+}
+
+func isStreamCancellationError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, bridgeorchestration.ErrRunCancelled)
 }
 
 func (s *observedSSEStreamSink) markErrorEvent() {

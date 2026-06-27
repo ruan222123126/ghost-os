@@ -71,7 +71,7 @@ func (c *Client) streamJSON(
 	if err := ensureStreamResponseStatus(resp); err != nil {
 		return err
 	}
-	return scanSSEPayload(resp.Body, lineHandler)
+	return scanSSEPayload(ctx, resp.Body, lineHandler)
 }
 
 func (c *Client) newJSONRequest(ctx context.Context, opts jsonRequestOptions) (*http.Request, error) {
@@ -111,7 +111,7 @@ type sseDataCollector struct {
 	dataLines   []string
 }
 
-func scanSSEPayload(body io.Reader, lineHandler func([]byte) error) error {
+func scanSSEPayload(ctx context.Context, body io.Reader, lineHandler func([]byte) error) error {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, sseScannerInitialBuffer), sseScannerMaxBuffer)
 
@@ -128,6 +128,9 @@ func scanSSEPayload(body io.Reader, lineHandler func([]byte) error) error {
 		}
 	}
 	if err := scanner.Err(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 		return fmt.Errorf("stream interrupted: %w", err)
 	}
 	if err := collector.flush(); err != nil && !errors.Is(err, errSSEStreamDone) {

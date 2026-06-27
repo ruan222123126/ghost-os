@@ -191,6 +191,34 @@ func TestRunStreamEmitsErrorEventOnFatalFailure(t *testing.T) {
 	}
 }
 
+func TestRunStreamDoesNotEmitErrorEventOnCancellation(t *testing.T) {
+	completer := newFakeCompleter(newStopResponse("done"))
+	sink := newRecordingEventSink()
+	agent := newTestAgent(completer, newFakeToolCatalog(), 1)
+	agent.SetBeforeCompletionHook(func(_ context.Context, _ int, _ *History) error {
+		return context.Canceled
+	})
+
+	_, err := agent.RunMessageStreamWithTraceID(
+		context.Background(),
+		llm.Message{Role: llm.RoleUser, Text: "hello"},
+		"trace-cancel",
+		sink,
+	)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: got %v want %v", err, context.Canceled)
+	}
+	if err.Error() != context.Canceled.Error() {
+		t.Fatalf("cancellation should not keep completion wrapper: %v", err)
+	}
+	if len(sink.events) != 1 {
+		t.Fatalf("unexpected event count: got %d want 1", len(sink.events))
+	}
+	if sink.events[0].Type != streaming.EventRunStarted {
+		t.Fatalf("unexpected event type: got %q want %q", sink.events[0].Type, streaming.EventRunStarted)
+	}
+}
+
 func TestRunStreamUsesStreamingCompleterAndEmitsCompletionDeltas(t *testing.T) {
 	completer := &fakeStreamingCompleter{
 		streamResponses: []*llm.CompletionResponse{newStopResponse("Hello world")},

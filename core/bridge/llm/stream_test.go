@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -53,6 +54,28 @@ func TestStreamJSONParsesSSEFrames(t *testing.T) {
 	if lines[0] != "{\"n\":1}" || lines[1] != "{\"n\":2}" {
 		t.Fatalf("unexpected lines: %#v", lines)
 	}
+}
+
+func TestScanSSEPayloadReturnsContextCancellationWithoutStreamWrapper(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := scanSSEPayload(ctx, cancelingReader{}, func(_ []byte) error {
+		t.Fatal("line handler should not be called")
+		return nil
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: got %v want %v", err, context.Canceled)
+	}
+	if strings.Contains(err.Error(), "stream interrupted") {
+		t.Fatalf("cancellation should not be wrapped as stream interruption: %v", err)
+	}
+}
+
+type cancelingReader struct{}
+
+func (cancelingReader) Read(_ []byte) (int, error) {
+	return 0, context.Canceled
 }
 
 func TestCompleteStreamOpenAITextDeltas(t *testing.T) {
