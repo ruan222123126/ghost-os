@@ -37,6 +37,7 @@ type ClientFactory func(ClientConfig) CodexClient
 
 type ClientConfig struct {
 	CodexPath string
+	NodePath  string
 	CWD       string
 }
 

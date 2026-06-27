@@ -279,6 +279,49 @@ func TestManagerStopInterruptsCurrentTurn(t *testing.T) {
 	}
 }
 
+func TestManagerRuntimeForSessionPassesConfiguredExecutionPaths(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("GHOST_CONFIG_PATH", filepath.Join(tempDir, "config.toml"))
+	t.Setenv("GHOST_PROVIDER", "custom")
+	t.Setenv("GHOST_BASE_URL", "https://initial.example/v1")
+	t.Setenv("GHOST_PROJECT_ROOT", tempDir)
+	t.Setenv("GHOST_TASKS_PATH", filepath.Join(tempDir, "tasks"))
+	t.Setenv("GHOST_PROMPTS_DIR", filepath.Join(tempDir, "prompts"))
+	t.Setenv("GHOST_CODEX_CLI_PATH", "/opt/codex/bin/codex")
+	t.Setenv("GHOST_NODE_BIN_PATH", "/opt/node/bin/node")
+
+	configStore, err := bridgeconfig.NewStoreFromEnv()
+	if err != nil {
+		t.Fatalf("NewStoreFromEnv: %v", err)
+	}
+	sessionStore, err := session.NewStore(filepath.Join(tempDir, "sessions"))
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	var captured ClientConfig
+	manager := NewManager(configStore, sessionStore)
+	manager.ClientFactory = func(cfg ClientConfig) CodexClient {
+		captured = cfg
+		return newFakeCodexClient()
+	}
+	t.Cleanup(manager.Close)
+
+	cfg, err := configStore.Config()
+	if err != nil {
+		t.Fatalf("Config: %v", err)
+	}
+	if _, err := manager.runtimeForSession("session-1", cfg, filepath.Join(tempDir, "project")); err != nil {
+		t.Fatalf("runtimeForSession: %v", err)
+	}
+	if captured.CodexPath != "/opt/codex/bin/codex" {
+		t.Fatalf("unexpected codex path: got %q", captured.CodexPath)
+	}
+	if captured.NodePath != "/opt/node/bin/node" {
+		t.Fatalf("unexpected node path: got %q", captured.NodePath)
+	}
+}
+
 func newExternalAgentTestManager(t *testing.T) (*Manager, *session.Store, *fakeCodexClient) {
 	t.Helper()
 

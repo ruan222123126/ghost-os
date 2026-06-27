@@ -140,7 +140,11 @@ func (m *Manager) runtimeForSession(sessionID string, cfg bridgeconfig.Config, c
 		factory = DefaultClientFactory
 	}
 	runtime := &runtimeSession{
-		client:  factory(ClientConfig{CodexPath: cfg.CodexCLIPath, CWD: cwd}),
+		client: factory(ClientConfig{
+			CodexPath: cfg.CodexCLIPath,
+			NodePath:  cfg.NodeBinPath,
+			CWD:       cwd,
+		}),
 		pending: make(map[string]chan string),
 	}
 	m.sessions[sessionID] = runtime

@@ -81,16 +81,17 @@ func (c *appServerClient) Connect(ctx context.Context) error {
 		c.mu.Unlock()
 		return nil
 	}
-	command := strings.TrimSpace(c.cfg.CodexPath)
-	if command == "" {
-		command = "codex"
+	launchSpec, err := resolveCodexLaunchSpec(c.cfg.CodexPath, c.cfg.NodePath)
+	if err != nil {
+		c.mu.Unlock()
+		return fmt.Errorf("prepare codex app-server launch: %w", err)
 	}
-	cmd := exec.Command(command, "app-server", "--stdio")
+	cmd := exec.Command(launchSpec.executablePath, "app-server", "--stdio")
 	cmd.Dir = strings.TrimSpace(c.cfg.CWD)
 	if cmd.Dir == "" {
 		cmd.Dir = "."
 	}
-	cmd.Env = codexEnv()
+	cmd.Env = codexEnv(launchSpec.pathOverride)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -135,22 +136,48 @@ func (c *appServerClient) Connect(ctx context.Context) error {
 	return c.notify("initialized", nil)
 }
 
-func codexEnv() []string {
+func codexEnv(pathOverride string) []string {
 	env := os.Environ()
 	hasRustLog := false
+	hasPath := false
 	for i, item := range env {
-		if strings.HasPrefix(item, "RUST_LOG=") {
+		if matchesEnvKey(item, "RUST_LOG") {
 			hasRustLog = true
 			if !strings.Contains(item, "codex_core::rollout::list=") {
-				env[i] = item + ",codex_core::rollout::list=off"
+				env[i] = envAssignment("RUST_LOG", envValue(item)+",codex_core::rollout::list=off")
 			}
-			break
+			continue
+		}
+		if pathOverride != "" && matchesEnvKey(item, "PATH") {
+			hasPath = true
+			env[i] = envAssignment(envKey(item), pathOverride)
 		}
 	}
 	if !hasRustLog {
 		env = append(env, "RUST_LOG=codex_core::rollout::list=off")
 	}
+	if pathOverride != "" && !hasPath {
+		env = append(env, envAssignment("PATH", pathOverride))
+	}
 	return env
+}
+
+func matchesEnvKey(item string, key string) bool {
+	return strings.EqualFold(envKey(item), key)
+}
+
+func envKey(item string) string {
+	key, _, _ := strings.Cut(item, "=")
+	return key
+}
+
+func envValue(item string) string {
+	_, value, _ := strings.Cut(item, "=")
+	return value
+}
+
+func envAssignment(key string, value string) string {
+	return key + "=" + value
 }
 
 func (c *appServerClient) StartThread(ctx context.Context, opts ThreadOptions) (ThreadResult, error) {
