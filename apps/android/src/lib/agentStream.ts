@@ -57,6 +57,7 @@ export interface AgentAwaitingHumanStreamPayload {
 export interface AgentStreamApprovalPayload {
   id?: string;
   kind?: string;
+  payload?: Record<string, unknown>;
   tool?: string;
 }
 
@@ -294,6 +295,9 @@ function parseAgentStreamApprovalPayload(payload: unknown): AgentStreamApprovalP
   return {
     id: parseOptionalString(record.id, "agent awaiting_human payload.approval.id"),
     kind: parseOptionalString(record.kind, "agent awaiting_human payload.approval.kind"),
+    payload: record.payload === undefined
+      ? undefined
+      : expectRecord(record.payload, "agent awaiting_human payload.approval.payload"),
     tool: parseOptionalString(record.tool, "agent awaiting_human payload.approval.tool"),
   };
 }

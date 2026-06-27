@@ -66,6 +66,8 @@ export function projectAwaitingHumanApproval(
   upsertToolCard(runtime, {
     approvalId,
     approvalKind: payload.approval?.kind,
+    approvalPayload: payload.approval?.payload,
+    approvalPrompt: payload.prompt,
     id: cardId,
     input: payload.prompt,
     status: "pending",

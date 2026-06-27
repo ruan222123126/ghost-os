@@ -102,6 +102,18 @@ describe("mobile tool card view model", () => {
     });
 
     expect(buildMobileToolCardViewModel({
+      id: "tool-codex-mcp",
+      input: JSON.stringify({ name: "github" }),
+      output: "ok",
+      status: "success",
+      toolName: "codex_mcp",
+    })).toMatchObject({
+      title: "调用MCP github",
+      titleMode: "plain",
+      showTerminalIcon: false,
+    });
+
+    expect(buildMobileToolCardViewModel({
       id: "tool-sfind",
       output: JSON.stringify({ action: "load", items: [{ name: "release_flow" }] }),
       status: "success",
@@ -132,6 +144,49 @@ describe("mobile tool card view model", () => {
       title: "截取屏幕",
       titleMode: "plain",
       showTerminalIcon: false,
+    });
+  });
+
+  it("shows codex exec commands and patch targets instead of generic codex titles", () => {
+    expect(buildMobileToolCardViewModel({
+      id: "tool-codex-exec",
+      input: JSON.stringify({ command: "pwd" }),
+      output: "/media/ruan/Files/ghost-os",
+      status: "success",
+      toolName: "codex_exec",
+    })).toMatchObject({
+      title: "pwd",
+      titleMode: "status",
+      showTerminalIcon: true,
+    });
+
+    expect(buildMobileToolCardViewModel({
+      id: "tool-codex-patch",
+      input: JSON.stringify({ changes: "README.md" }),
+      status: "success",
+      toolName: "codex_patch",
+    })).toMatchObject({
+      title: "编辑文件 README.md",
+      titleMode: "plain",
+      showTerminalIcon: false,
+    });
+  });
+
+  it("shows approval cards with dynamic codex titles and waiting details", () => {
+    expect(buildMobileToolCardViewModel({
+      approvalId: "approval-1",
+      approvalPayload: { command: "go test ./..." },
+      approvalPrompt: "Approve command execution",
+      id: "tool-approval",
+      status: "pending",
+      toolName: "codex_approval",
+    })).toMatchObject({
+      title: "批准命令 go test ./...",
+      details: "Approve command execution",
+      statusLabel: "WAITING",
+      titleMode: "plain",
+      showTerminalIcon: false,
+      tone: "running",
     });
   });
 

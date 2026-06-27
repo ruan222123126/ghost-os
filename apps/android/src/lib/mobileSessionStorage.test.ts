@@ -40,6 +40,12 @@ describe("mobileSessionStorage", () => {
     expect(invoke).toHaveBeenCalledWith("mobile_conversations_save", { conversations: [storedConversation()] });
     expect(window.localStorage.getItem(MOBILE_CONVERSATIONS_STORAGE_KEY)).toBeTruthy();
   });
+
+  it("preserves approval tool metadata when loading stored conversations", () => {
+    window.localStorage.setItem(MOBILE_CONVERSATIONS_STORAGE_KEY, JSON.stringify([storedConversationWithApprovalTool()]));
+
+    expect(loadStoredMobileConversations()).toEqual([storedConversationWithApprovalTool()]);
+  });
 });
 
 function storedConversation() {
@@ -47,6 +53,36 @@ function storedConversation() {
     created_at: "2026-01-01T00:00:00.000Z",
     id: "session-1",
     messages: [],
+    title: "Session 1",
+    updated_at: "2026-01-02T00:00:00.000Z",
+  };
+}
+
+function storedConversationWithApprovalTool() {
+  return {
+    created_at: "2026-01-01T00:00:00.000Z",
+    id: "session-1",
+    messages: [
+      {
+        id: "session-1:assistant:1",
+        role: "assistant",
+        sessionId: "session-1",
+        text: "",
+        tools: [
+          {
+            approvalId: "approval-1",
+            approvalKind: "exec",
+            approvalPayload: { command: "go test ./..." },
+            approvalPrompt: "Approve command execution",
+            id: "tool-approval-1",
+            input: "Approve command execution",
+            status: "pending",
+            toolCallId: "approval:approval-1",
+            toolName: "codex_approval",
+          },
+        ],
+      },
+    ],
     title: "Session 1",
     updated_at: "2026-01-02T00:00:00.000Z",
   };

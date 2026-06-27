@@ -210,7 +210,13 @@ function normalizeTool(value: unknown): MobileToolCard | null {
   }
 
   return {
+    approvalDecision: asApprovalDecision(record.approvalDecision),
     id,
+    approvalId: asString(record.approvalId),
+    approvalInFlight: asBoolean(record.approvalInFlight),
+    approvalKind: asString(record.approvalKind),
+    approvalPayload: asRecord(record.approvalPayload),
+    approvalPrompt: asString(record.approvalPrompt),
     error: asString(record.error),
     input: asString(record.input),
     output: asString(record.output),
@@ -251,6 +257,25 @@ function asString(value: unknown): string | undefined {
 
 function asOptionalInteger(value: unknown): number | undefined {
   return Number.isInteger(value) && typeof value === "number" && value >= 0 ? value : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function asApprovalDecision(value: unknown): MobileToolCard["approvalDecision"] {
+  return value === "approved"
+    || value === "approved_for_session"
+    || value === "denied"
+    || value === "abort"
+    ? value
+    : undefined;
 }
 
 function asToolStatus(value: unknown): MobileToolCardStatus | undefined {

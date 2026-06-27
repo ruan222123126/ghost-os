@@ -46,7 +46,8 @@ const SKILL_ACTION_LABELS = { load: "加载技能", unload: "卸载技能" } as 
 const SCREEN_ACTION_LABELS = { screen: "截取屏幕" } as const;
 const TOOL_ALIASES: Record<string, string> = {
   apply_diff: "apply_diff", bash: "bash_exec", bash_exec: "bash_exec",
-  codex: "codex_cli", codex_cli: "codex_cli", edit: "apply_diff",
+  codex: "codex_cli", codex_cli: "codex_cli", codex_exec: "codex_exec",
+  codex_patch: "codex_patch", codex_mcp: "codex_mcp", codex_approval: "codex_approval", edit: "apply_diff",
   fetch_web: "fetch_webpage", fetch_webpage: "fetch_webpage", patch: "apply_diff",
   read: "read_file", read_file: "read_file", run: "bash_exec",
   screen_action: "screen_action", screen_control: "screen_control",
@@ -56,7 +57,8 @@ const TOOL_ALIASES: Record<string, string> = {
   write: "write_file", write_file: "write_file",
 };
 const PROMOTED_ACTION_TOOL_NAMES = new Set([
-  "apply_diff", "bash_exec", "codex_cli", "fetch_webpage", "list_files", "read_file",
+  "apply_diff", "bash_exec", "codex_cli", "codex_exec", "codex_patch", "codex_mcp", "codex_approval",
+  "fetch_webpage", "list_files", "read_file",
   "screen_action", "screen_control", "search_files", "sfind", "web_search", "write_file",
 ]);
 
@@ -64,30 +66,19 @@ export function buildMobileToolCardViewModel(
   tool: MobileToolCard,
   options: MobileToolCardViewModelOptions = {},
 ): MobileToolCardViewModel {
-  if (tool.approvalId) {
-    const tone = getMobileToolTone(tool.status);
-    return {
-      details: tool.input?.trim() || "Codex 请求审批",
-      showTerminalIcon: false,
-      statusLabel: "WAITING",
-      title: "Codex 审批",
-      titleMode: "plain",
-      tone,
-    };
-  }
-
   const action = formatToolAction(tool);
   const tone = getMobileToolTone(tool.status);
   const plainTitle = buildPlainActionTitle(action, tool);
-  const details = formatToolCardDetails(tool);
+  const details = resolveToolCardDetails(tool, tone, options);
+  const isApproval = Boolean(tool.approvalId);
 
   return {
-    title: plainTitle || buildToolCardTitle(action, options),
+    title: plainTitle || buildToolCardTitle(action, tool, options),
     tone,
-    statusLabel: getMobileToolStatusLabel(tone, tool.status),
-    details: details || options.preparingDetails || "正在准备工具输出…",
-    titleMode: plainTitle ? "plain" : "status",
-    showTerminalIcon: !plainTitle,
+    statusLabel: resolveToolStatusLabel(tool, tone),
+    details,
+    titleMode: isApproval || plainTitle ? "plain" : "status",
+    showTerminalIcon: isApproval ? false : !plainTitle,
   };
 }
 
@@ -149,7 +140,14 @@ function formatToolAction(tool: MobileToolCard): FormattedToolAction {
   };
 }
 
-function buildToolCardTitle(action: FormattedToolAction, options: MobileToolCardViewModelOptions): string {
+function buildToolCardTitle(
+  action: FormattedToolAction,
+  tool: MobileToolCard,
+  options: MobileToolCardViewModelOptions,
+): string {
+  if (tool.approvalId) {
+    return action.variant === "default" ? "等待批准" : action.text || "等待批准";
+  }
   if (action.text === TOOL_FALLBACK_TITLE) {
     return options.fallbackTitle ?? TOOL_FALLBACK_TITLE;
   }
@@ -168,6 +166,12 @@ function buildPlainActionTitle(action: FormattedToolAction, tool: MobileToolCard
   }
   if (toolName === "codex_cli" && action.actionKind === "codex") {
     return joinLabelAndTarget("调用codex", action.actionText);
+  }
+  if (toolName === "codex_mcp" && action.actionKind === "codex") {
+    return joinLabelAndTarget("调用MCP", action.actionText);
+  }
+  if (toolName === "codex_approval" && action.actionKind === "codex") {
+    return action.actionText?.trim() || "等待批准";
   }
   if (toolName === "search_files" && action.actionKind === "search") {
     return buildKeywordSearchTitle(action.actionText);
@@ -197,8 +201,41 @@ function formatToolCardDetails(tool: MobileToolCard): string {
   return details.join("\n");
 }
 
+function resolveToolCardDetails(
+  tool: MobileToolCard,
+  tone: MobileToolTone,
+  options: MobileToolCardViewModelOptions,
+): string {
+  if (tool.approvalId) {
+    return tool.approvalPrompt?.trim() || tool.input?.trim() || "Codex 请求审批";
+  }
+  const details = formatToolCardDetails(tool);
+  if (details) {
+    return details;
+  }
+  if (tone === "running") {
+    return options.preparingDetails || "正在准备工具输出…";
+  }
+  return "";
+}
+
+function resolveToolStatusLabel(tool: MobileToolCard, tone: MobileToolTone): string {
+  if (tool.approvalId) {
+    return "WAITING";
+  }
+  return getMobileToolStatusLabel(tone, tool.status);
+}
+
+function resolveToolActionArgs(tool: MobileToolCard): RecordValue | undefined {
+  if (normalizeToolName(tool.toolName) === "codex_approval" && tool.approvalPayload) {
+    return tool.approvalPayload;
+  }
+  return parseRecord(tool.input) || parseRecord(tool.output);
+}
+
 function resolveBashExecCommand(tool: MobileToolCard): string {
-  if (normalizeToolName(tool.toolName) !== "bash_exec") {
+  const normalizedToolName = normalizeToolName(tool.toolName);
+  if (normalizedToolName !== "bash_exec" && normalizedToolName !== "codex_exec") {
     return "";
   }
   return readBashExecCommand(tool.input) || readBashExecCommand(tool.output);
@@ -225,12 +262,24 @@ function resolvePromotedToolAction(tool: MobileToolCard): ActionItem | undefined
   if (toolName === "sfind") {
     return buildSkillAction(parseRecord(tool.output) || parseRecord(tool.input));
   }
-  return buildDirectAction(toolName, parseRecord(tool.input) || parseRecord(tool.output));
+  return buildDirectAction(toolName, resolveToolActionArgs(tool));
 }
 
 function buildDirectAction(toolName: string, args?: RecordValue): ActionItem | undefined {
   if (toolName === "codex_cli") {
     return { kind: "codex", text: formatCodexTarget(args) };
+  }
+  if (toolName === "codex_exec") {
+    return { kind: "run", text: truncateSummary(readString(args, "command") || readString(args, "cmd")) };
+  }
+  if (toolName === "codex_patch") {
+    return { kind: "edit", text: formatCodexPatchTarget(args) };
+  }
+  if (toolName === "codex_mcp") {
+    return { kind: "codex", text: formatCodexMCPLabel(args) };
+  }
+  if (toolName === "codex_approval") {
+    return { kind: "codex", text: formatCodexApprovalLabel(args) };
   }
   if (toolName === "read_file") {
     return { kind: "read", text: formatPath(readString(args, "path")) };
@@ -404,6 +453,31 @@ function readFirstItemName(payload?: RecordValue): string {
   return readString(firstItem as RecordValue | undefined, "name");
 }
 
+function readFirstString(value: RecordValue | undefined, keys: string[]): string {
+  for (const key of keys) {
+    const text = readString(value, key);
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function joinNonEmpty(parts: string[], separator: string): string {
+  return parts.filter(Boolean).join(separator);
+}
+
+function readUnknownRecordArray(value: unknown): RecordValue[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(isRecordValue);
+}
+
+function isRecordValue(value: unknown): value is RecordValue {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function collectUniqueOutputParts(values: Array<string | undefined>): string[] {
   const outputParts: string[] = [];
   for (const value of values) {
@@ -430,6 +504,84 @@ function firstNonEmptyLine(...values: Array<string | undefined>): string {
 
 function formatCodexTarget(args?: RecordValue): string {
   return truncateSummary([readString(args, "op"), readString(args, "prompt")].filter(Boolean).join(" "));
+}
+
+function formatCodexPatchTarget(args?: RecordValue): string {
+  return truncateSummary(summarizeCodexPatchChanges(args?.changes));
+}
+
+function summarizeCodexPatchChanges(value: unknown): string {
+  const targets = Array.from(new Set(collectCodexPatchTargets(value).filter(Boolean)));
+  if (targets.length === 0) {
+    return "";
+  }
+  if (targets.length <= 2) {
+    return targets.join(", ");
+  }
+  return `${targets.slice(0, 2).join(", ")} +${targets.length - 2}`;
+}
+
+function collectCodexPatchTargets(value: unknown): string[] {
+  if (typeof value === "string") {
+    const pathText = formatPath(value);
+    return pathText ? [pathText] : [];
+  }
+  if (Array.isArray(value)) {
+    const targets: string[] = [];
+    for (const item of value) {
+      targets.push(...collectCodexPatchTargets(item));
+    }
+    return targets;
+  }
+  if (!isRecordValue(value)) {
+    return [];
+  }
+
+  const directTargets = [
+    readString(value, "path"),
+    readString(value, "file"),
+    readString(value, "target"),
+    readString(value, "new_path"),
+    readString(value, "old_path"),
+  ]
+    .map((item) => formatPath(item))
+    .filter(Boolean);
+  if (directTargets.length > 0) {
+    return directTargets;
+  }
+
+  const nestedTargets: string[] = [];
+  for (const change of readUnknownRecordArray(value.changes)) {
+    nestedTargets.push(...collectCodexPatchTargets(change));
+  }
+  return nestedTargets;
+}
+
+function formatCodexMCPLabel(args?: RecordValue): string {
+  return truncateSummary(joinNonEmpty([
+    readFirstString(args, ["name", "tool_name", "toolName", "tool"]),
+    readFirstString(args, ["server_name", "serverName"]),
+  ], " "));
+}
+
+function formatCodexApprovalLabel(args?: RecordValue): string {
+  const command = truncateSummary(readString(args, "command") || readString(args, "cmd"));
+  if (command) {
+    return `批准命令 ${command}`;
+  }
+
+  const patchTarget = formatCodexPatchTarget(args);
+  if (patchTarget) {
+    return `批准补丁 ${patchTarget}`;
+  }
+
+  const prompt = truncateSummary(readString(args, "prompt") || readString(args, "message"));
+  if (prompt) {
+    return prompt;
+  }
+
+  const tool = readFirstString(args, ["tool", "kind"]);
+  return tool ? `批准 ${tool}` : "审批";
 }
 
 function formatWebTarget(rawURL: string): string {

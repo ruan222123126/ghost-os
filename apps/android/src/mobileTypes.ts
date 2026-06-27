@@ -341,6 +341,8 @@ export interface MobileToolCard {
   approvalId?: string;
   approvalInFlight?: boolean;
   approvalKind?: string;
+  approvalPayload?: Record<string, unknown>;
+  approvalPrompt?: string;
 }
 
 export interface StoredMobileConversation {

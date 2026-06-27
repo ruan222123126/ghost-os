@@ -107,6 +107,43 @@ describe("mobile agent stream runtime", () => {
       },
     ]);
   });
+
+  it("captures codex approval payloads for awaiting human cards", () => {
+    const { runtime, statuses } = projectEvents([
+      event("awaiting_human", {
+        approval: {
+          id: "approval-1",
+          kind: "exec",
+          payload: {
+            command: "go test ./...",
+          },
+          tool: "codex_exec",
+        },
+        prompt: "Approve command execution",
+        question_id: "approval-1",
+        tool: "codex_approval",
+        tool_call_id: "approval:approval-1",
+      }),
+    ]);
+
+    expect(createAgentPayloadFromRuntime(runtime).tools).toEqual([
+      {
+        approvalId: "approval-1",
+        approvalKind: "exec",
+        approvalPayload: {
+          command: "go test ./...",
+        },
+        approvalPrompt: "Approve command execution",
+        id: "stream-tool:trace-1:approval:approval-1",
+        input: "Approve command execution",
+        status: "pending",
+        toolCallId: "approval:approval-1",
+        toolName: "codex_approval",
+        traceId: "trace-1",
+      },
+    ]);
+    expect(statuses[statuses.length - 1]).toEqual({ tone: "success", text: "等待用户输入" });
+  });
 });
 
 function projectEvents(events: AgentStreamEvent[]) {
